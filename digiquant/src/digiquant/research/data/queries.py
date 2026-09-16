@@ -1,7 +1,10 @@
-"""Read structured price/technical + macro values from Supabase for the research agent.
+"""Read structured price/technical + macro values for the research agent.
 
-These return compact, token-budgeted JSON (latest snapshot + a short recent window),
-not full history. Selected technical columns only — the model gets signal, not noise.
+Market history is moving to the versioned R2 cache (#3780): price technicals are
+R2-only since #4053; the remaining readers here keep their Supabase bodies for
+now. These return compact, token-budgeted JSON (latest snapshot + a short recent
+window), not full history. Selected technical columns only — the model gets
+signal, not noise.
 """
 
 from __future__ import annotations
@@ -74,6 +77,19 @@ def _resolve_r2_as_of(as_of: date | None) -> str:
     return str(_r2_manifest()["as_of"])
 
 
+class UnknownTickerError(LookupError):
+    """No sealed R2 generation for this ticker — absent, not a fault.
+
+    Raised by :func:`r2_close_rows` and friends so a caller that needs the series
+    cannot silently read an empty window. Callers where an absent ticker is a
+    legitimate state (the forecast-outcome reference/maturity lookups) catch this
+    specifically, rather than every ``LookupError`` — a ``KeyError`` from a
+    malformed manifest entry is a real fault and must keep failing loud.
+
+    A ``LookupError`` subclass so existing broad catchers keep working (#4120).
+    """
+
+
 def _r2_generation_window(
     *,
     tickers: list[str] | tuple[str, ...],
@@ -105,7 +121,11 @@ def _r2_generation_window(
 
     import polars as pl
 
-    from digiquant.data.prices.r2_history import latest_pointer_key, normalize_ticker
+    from digiquant.data.prices.r2_history import (
+        is_missing_object_error,
+        latest_pointer_key,
+        normalize_ticker,
+    )
     from digiquant.mcp_server import _get_r2_store
 
     manifest = _r2_manifest()
@@ -125,15 +145,17 @@ def _r2_generation_window(
             else:
                 try:
                     gen_key = store.read_latest(latest_pointer_key(ticker))
-                except KeyError:
-                    raise LookupError(f"unknown ticker {ticker!r}") from None
+                except Exception as exc:
+                    if not is_missing_object_error(exc):
+                        raise
+                    raise UnknownTickerError(f"unknown ticker {ticker!r}") from None
                 sha: str | None = None
                 for cand in datasets.values():
                     if isinstance(cand, dict) and cand.get("object") == gen_key:
                         sha = cand.get("sha256")
                         break
                 if sha is None:
-                    raise LookupError(f"unknown ticker {ticker!r}")
+                    raise UnknownTickerError(f"unknown ticker {ticker!r}")
                 payload = store.get_generation(gen_key, str(sha))
             frame = pl.read_parquet(io.BytesIO(payload))
             frame = frame.with_columns(pl.col("date").cast(pl.Date)).sort("date")
@@ -162,13 +184,51 @@ def r2_close_rows(
     date — settled generations never hold an unformed bar, so no live fetch is
     needed for lookback math). Mirrors the ``_read_r2_window`` manifest lookup
     (verbatim ticker, then normalized; ``latest`` pointer fallback). Raises
-    ``LookupError`` for an unknown ticker and ``ValueError`` for a non-v1
+    :class:`UnknownTickerError` for an unknown ticker and ``ValueError`` for a non-v1
     manifest — both fail loud, never an empty window. Null closes are passed
     through (callers coerce, mirroring the Supabase ``numeric``-as-string path).
     """
     return _r2_generation_window(
         tickers=tickers, since=since, until=until, columns=("date", "ticker", "close")
     )
+
+
+def r2_close_rows_tolerant(
+    *,
+    tickers: list[str] | tuple[str, ...],
+    since: date | str,
+    until: date | str,
+    context: str,
+) -> list[dict[str, Any]]:
+    """``r2_close_rows`` for callers whose contract is to drop absent tickers.
+
+    ``r2_close_rows`` is deliberately all-or-nothing: the first ticker without a
+    sealed generation raises :class:`UnknownTickerError` and the whole batch is
+    lost. Callers that document "a missing ticker reads as no signal" — triage
+    price deltas, NAV interval returns, sector relative strength — cannot use
+    that, since one unsealed ticker would otherwise fail the research graph or
+    the book. Re-ask per ticker on that error and log what was dropped, so the
+    coverage gap stays visible instead of a signal quietly flattening
+    (#4136, #4139).
+    """
+    try:
+        return list(r2_close_rows(tickers=tickers, since=since, until=until))
+    except UnknownTickerError:
+        pass
+    rows: list[dict[str, Any]] = []
+    dropped: list[str] = []
+    for ticker in tickers:
+        try:
+            rows.extend(r2_close_rows(tickers=[ticker], since=since, until=until))
+        except UnknownTickerError:
+            dropped.append(ticker)
+    if dropped:
+        logger.warning(
+            "%s: no sealed R2 generation for %s; treating as no signal",
+            context,
+            ", ".join(sorted(dropped)),
+        )
+    return rows
 
 
 def r2_ohlcv_rows(
@@ -240,29 +300,19 @@ def get_price_technicals(
 
     ``window`` is newest-first, length <= lookback. ``latest`` is window[0] or {}.
     ``as_of`` bounds rows to ``date <= as_of`` (look-ahead-safe for historical
-    reads); omit it for "latest available" (Supabase) or the manifest watermark
-    (R2 backend — never wall-clock).
+    reads); omit it for the manifest watermark (never wall-clock).
 
-    Under ``DIGIQUANT_MARKET_DATA_BACKEND=r2`` the rows are recomputed
-    indicators over the sealed R2 generation (``_read_r2_window``), projected
-    onto :data:`TECHNICAL_COLUMNS` with ISO date strings — the same envelope
-    shape as the Supabase body. An unknown ticker returns the empty
-    latest/window (Supabase parity — a missing ticker is not an outage).
+    R2 is the only path (#4053): the rows are recomputed indicators over the
+    sealed R2 generation (``_read_r2_window``), projected onto
+    :data:`TECHNICAL_COLUMNS` with ISO date strings. ``client`` is kept for
+    caller-signature stability and is never read. An unknown ticker returns the
+    empty latest/window (a missing ticker is not an outage).
     """
-    if r2_backend_enabled():
-        return _r2_price_technicals(ticker=ticker, lookback=lookback, as_of=as_of)
-    query = (
-        client.table("price_technicals").select(",".join(TECHNICAL_COLUMNS)).eq("ticker", ticker)
-    )
-    if as_of is not None:
-        query = query.lte("date", as_of.isoformat())
-    resp = query.order("date", desc=True).limit(lookback).execute()
-    rows = getattr(resp, "data", None) or []
-    return {"ticker": ticker, "latest": rows[0] if rows else {}, "window": rows}
+    return _r2_price_technicals(ticker=ticker, lookback=lookback, as_of=as_of)
 
 
 def _r2_price_technicals(*, ticker: str, lookback: int, as_of: date | None) -> dict[str, Any]:
-    """R2 branch of :func:`get_price_technicals` (see it for the contract)."""
+    """The sole :func:`get_price_technicals` read path (#4053; see it for the contract)."""
     from digiquant.mcp_server import _read_r2_window
 
     try:
@@ -388,6 +438,7 @@ def get_market_context(
             # first) — no bulk first-seen pass needed on this path.
         else:
             since = (run_date - timedelta(days=price_window_days)).isoformat()
+            # Retired: migration 127 drops price_technicals (#4053) — R2 only above.
             resp = (
                 client.table("price_technicals")
                 .select(",".join(("ticker", *TECHNICAL_COLUMNS)))
@@ -464,6 +515,7 @@ def get_market_breadth(
     rows: list[dict[str, Any]] = []
     start = 0
     while True:
+        # Retired: migration 127 drops price_technicals (#4053) — R2 only above.
         resp = (
             client.table("price_technicals")
             .select("ticker,date,pct_vs_sma50,pct_vs_sma200")
@@ -537,13 +589,23 @@ def get_sector_relative_strength(
         return {}
     since = (run_date - timedelta(days=lookback_days)).isoformat()
     if r2_backend_enabled():
-        rows = r2_close_rows(tickers=tickers, since=since, until=run_date)
+        # A dropped sector ETF just contributes nothing; a dropped *benchmark*
+        # makes compute_relative_strength return {} (its own missing-benchmark
+        # contract). {} is the right outcome here — the warning names it, and an
+        # unsealed benchmark must not abort the research graph (#4139).
+        rows = r2_close_rows_tolerant(
+            tickers=tickers,
+            since=since,
+            until=run_date,
+            context="sector relative strength",
+        )
         if not rows:
             return {}
         return compute_relative_strength(pl.DataFrame(rows), benchmark=benchmark, as_of=run_date)
     rows: list[dict[str, Any]] = []
     start = 0
     while True:
+        # Retired: migration 127 drops price_history (#4053) — R2 only above.
         resp = (
             client.table("price_history")
             .select("date,ticker,close")
@@ -620,6 +682,7 @@ def get_etf_flows_proxy(
     rows: list[dict[str, Any]] = []
     start = 0
     while True:
+        # Retired: migration 127 drops price_history (#4053) — R2 only above.
         resp = (
             client.table("price_history")
             .select("date,ticker,close,volume")
@@ -763,6 +826,7 @@ def get_return_correlations(
         frame = pairwise_return_correlations(pl.DataFrame(rows))
         return frame if not frame.is_empty() else None
     try:
+        # Retired: migration 127 drops price_history (#4053) — R2 only above.
         resp = (
             client.table("price_history")
             .select("date,ticker,close")
@@ -830,130 +894,41 @@ _MAX_QUERY_ROWS = 500
 # otherwise read a NON-whitelisted table through an embedded select.
 _SAFE_COLUMNS_RE = re.compile(r"^(\*|[A-Za-z_][A-Za-z0-9_]*(\s*,\s*[A-Za-z_][A-Za-z0-9_]*)*)$")
 
-# Per-table column allowlists for the two market-data tables agents confuse (#3771).
-# Enforced inside ``query_data`` so MCP ``digiquant_query_data`` and the in-process
-# dispatcher share one choke point (the dispatcher-only close guard missed MCP).
-PRICE_HISTORY_COLUMNS: frozenset[str] = frozenset(
-    {"date", "ticker", "open", "high", "low", "close", "volume"}
-)
-# Migration 007 columns minus ``bb_middle`` (dropped in 035 — duplicate of sma_20).
-PRICE_TECHNICALS_COLUMNS: frozenset[str] = frozenset(
-    {
-        "date",
-        "ticker",
-        "sma_20",
-        "sma_50",
-        "sma_200",
-        "ema_12",
-        "ema_26",
-        "ema_50",
-        "pct_vs_sma20",
-        "pct_vs_sma50",
-        "pct_vs_sma200",
-        "adx_14",
-        "dmi_plus",
-        "dmi_minus",
-        "rsi_7",
-        "rsi_14",
-        "rsi_21",
-        "macd",
-        "macd_signal",
-        "macd_hist",
-        "roc_5",
-        "roc_10",
-        "roc_21",
-        "atr_14",
-        "atr_pct",
-        "bb_upper",
-        "bb_lower",
-        "bb_pct_b",
-        "bb_bandwidth",
-        "hist_vol_21",
-        "stoch_k",
-        "stoch_d",
-        "zscore_50",
-        "zscore_200",
-    }
-)
-_TABLE_COLUMN_ALLOWLISTS: dict[str, frozenset[str]] = {
-    "price_history": PRICE_HISTORY_COLUMNS,
-    "price_technicals": PRICE_TECHNICALS_COLUMNS,
-}
-# Non-technical OHLCV (and volume) — never on price_technicals.
-_OHLCV_COLUMNS: frozenset[str] = frozenset({"open", "high", "low", "close", "volume"})
-# Technical indicator columns — never on price_history (date/ticker shared).
-_TECHNICAL_INDICATOR_COLUMNS: frozenset[str] = PRICE_TECHNICALS_COLUMNS - {"date", "ticker"}
+# Every column-bearing argument is shape-checked to a bare identifier: ``columns``
+# via :data:`_SAFE_COLUMNS_RE`, and order/filter keys via :data:`_BARE_COLUMN_RE`.
+# Together they keep PostgREST relationship syntax (e.g. "*,decision_log(*)") from
+# reaching a NON-whitelisted table through *any* argument, not just ``columns``.
+_BARE_COLUMN_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
 
 
-def _referenced_query_columns(
+def _filter_column_names(
     *,
-    columns: str,
-    eq: dict[str, Any] | None,
-    gte: dict[str, Any] | None,
-    lte: dict[str, Any] | None,
-    in_: dict[str, list[Any] | tuple[Any, ...]] | None,
-    order: str | None,
+    eq: dict[str, Any] | None = None,
+    gte: dict[str, Any] | None = None,
+    lte: dict[str, Any] | None = None,
+    in_: dict[str, list[Any] | tuple[Any, ...]] | None = None,
+    order: str | None = None,
 ) -> list[str]:
-    """Collect explicit column names from select/order/filter args (``*`` adds none)."""
-    found: list[str] = []
-    seen: set[str] = set()
+    """Central enumeration of the columns ``query_data`` filters/sorts on.
 
-    def _add(name: str) -> None:
-        key = name.strip().lower()
-        if not key or key in seen:
-            return
-        seen.add(key)
-        found.append(key)
-
-    safe = (columns or "*").strip()
-    if safe != "*":
-        for part in safe.split(","):
-            _add(part)
-    if order:
-        _add(str(order))
+    Each filter arg is coerced through ``dict()`` (mirroring ``_eq_for_query`` and
+    the connector) so mapping-convertible forms such as a list of pairs cannot
+    smuggle a column past the bare-column shape check. Single place to extend when
+    ``query_data`` grows a filter operator (#3959).
+    """
+    names: list[str] = []
     for filt in (eq, gte, lte, in_):
-        if isinstance(filt, dict):
-            for key in filt:
-                _add(str(key))
-    return found
-
-
-def _column_allowlist_error(table: str, bad: str) -> str:
-    """Fail-fast redirect when a column belongs on the sibling market-data table."""
-    if table == "price_technicals" and bad in _OHLCV_COLUMNS:
-        return (
-            f"price_technicals has no {bad!r} column (OHLCV lives on price_history). "
-            "Query price_history for open/high/low/close/volume."
-        )
-    if table == "price_history" and (bad in _TECHNICAL_INDICATOR_COLUMNS or bad.startswith("sma_")):
-        return (
-            f"price_history has no {bad!r} column (technicals live on price_technicals). "
-            "Query price_technicals for sma_*/rsi_*/macd/… indicators."
-        )
-    allowed = sorted(_TABLE_COLUMN_ALLOWLISTS[table])
-    return f"column {bad!r} is not allowed on {table}; choose from {allowed}"
-
-
-def _validate_table_columns(
-    table: str,
-    *,
-    columns: str,
-    eq: dict[str, Any] | None,
-    gte: dict[str, Any] | None,
-    lte: dict[str, Any] | None,
-    in_: dict[str, list[Any] | tuple[Any, ...]] | None,
-    order: str | None,
-) -> str | None:
-    """Return an error string if any referenced column is outside the table allowlist."""
-    allow = _TABLE_COLUMN_ALLOWLISTS.get(table)
-    if allow is None:
-        return None
-    for col in _referenced_query_columns(
-        columns=columns, eq=eq, gte=gte, lte=lte, in_=in_, order=order
-    ):
-        if col not in allow:
-            return _column_allowlist_error(table, col)
-    return None
+        if filt is None:
+            continue
+        try:
+            mapping = dict(filt)
+        except (TypeError, ValueError):
+            # Not mapping-like (e.g. a bare string/int); the connector rejects it.
+            continue
+        names.extend(str(key).strip() for key in mapping)
+    if order is not None:
+        names.append(str(order).strip())
+    return names
 
 
 def _eq_for_query(table: str, eq: dict[str, Any] | None) -> dict[str, Any] | None:
@@ -991,9 +966,12 @@ def query_data(
     omits it, so overlay same-date rows cannot seed house research. Pass
     ``eq={"workspace_id": ...}`` to read another book.
 
-    ``price_history`` / ``price_technicals`` enforce column allowlists (#3771):
-    OHLCV on technicals (and technicals on history) fail fast with a redirect.
-    ``columns="*"`` is allowed; explicit select/order/filter keys are checked.
+    Market history (``price_history`` / ``price_technicals`` /
+    ``macro_series_observations``) is not readable here (#3780): the table
+    allowlist refuses it and the dedicated R2-backed tools own those reads.
+    Explicit columns, ``order``, and filter keys are shape-checked to bare column
+    names (:data:`_BARE_COLUMN_RE`) so no argument can smuggle PostgREST
+    relationship syntax.
     """
     tables = (allowed_tables & ALLOWED_READ_TABLES) if allowed_tables else ALLOWED_READ_TABLES
     if table not in tables:
@@ -1002,13 +980,15 @@ def query_data(
     if not _SAFE_COLUMNS_RE.fullmatch(safe_columns):
         # Block PostgREST relationship/embedding syntax that could reach other tables.
         return {"error": "columns must be '*' or a comma-separated list of plain column names"}
-    # Per-table allowlists (#3771): catch cross-table column mistakes before Supabase 42703.
-    # ``*`` is allowed; explicit columns + order + eq/gte/lte/in_ keys are validated.
-    col_err = _validate_table_columns(
-        table, columns=safe_columns, eq=eq, gte=gte, lte=lte, in_=in_, order=order
-    )
-    if col_err is not None:
-        return {"error": col_err}
+    # Filter/order keys are equally column-bearing: reject PostgREST syntax there too.
+    for col_name in _filter_column_names(eq=eq, gte=gte, lte=lte, in_=in_, order=order):
+        if not _BARE_COLUMN_RE.fullmatch(col_name):
+            return {
+                "error": (
+                    f"filter/order column {col_name!r} must be a bare column name "
+                    "(no PostgREST relationship or operator syntax)"
+                )
+            }
     from digibase.connectors.supabase import SupabaseConnector
 
     capped = max(1, min(int(limit), _MAX_QUERY_ROWS))

@@ -35,6 +35,8 @@ import {
 import { Avatar, AvatarImage, AvatarFallback } from "./ui/avatar";
 import { TooltipIconButton } from "./tooltip-icon-button";
 import { useAttachmentSrc } from "./use-attachment-src";
+import { useSkinChrome } from "@/components/stock/skin-chrome";
+import { PAGE_CONTEXT_ATTACHMENT_NAME } from "@/lib/embed-page-context-messages";
 import { cn } from "@/lib/utils";
 
 type AttachmentPreviewProps = {
@@ -109,6 +111,9 @@ const AttachmentUI: FC = () => {
   const aui = useAui();
   const isComposer = aui.attachment.source !== "message";
 
+  const { pageContext } = useSkinChrome();
+  const attachmentName = useAuiState((s) => s.attachment.name);
+
   const isImage = useAuiState((s) => s.attachment.type === "image");
   const typeLabel = useAuiState((s) => {
     const type = s.attachment.type;
@@ -141,6 +146,12 @@ const AttachmentUI: FC = () => {
       ? (s.attachment.status.message ?? "Upload failed")
       : undefined,
   );
+
+  // Hooks above — safe to bail. The attachment stays on the runtime so its
+  // file part still reaches the model; only the chip is suppressed.
+  if (pageContext === "silent" && attachmentName === PAGE_CONTEXT_ATTACHMENT_NAME) {
+    return null;
+  }
 
   return (
     <TooltipProvider>

@@ -12,6 +12,31 @@ Mirrors :mod:`tests.dq.research.conftest`. The full portfolio test set runs in
 
 from __future__ import annotations
 
+import logging
+
+import pytest
+
+
+@pytest.fixture(autouse=True)
+def _restore_root_logger():
+    """``chain.cli_main`` configures process-wide logging; keep that inside the test.
+
+    ``_configure_cli_logging`` calls ``logging.basicConfig``, which sets the root
+    level and installs a handler. That is right for a CLI entry point and wrong to
+    leak into every later test, where it changes which records ``caplog`` can see.
+    """
+    root = logging.getLogger()
+    saved_handlers = list(root.handlers)
+    saved_level = root.level
+    try:
+        yield
+    finally:
+        for handler in list(root.handlers):
+            root.removeHandler(handler)
+        for handler in saved_handlers:
+            root.addHandler(handler)
+        root.setLevel(saved_level)
+
 
 def _digigraph_importable() -> bool:
     try:

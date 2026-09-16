@@ -21,6 +21,9 @@ concurrency:
   group: ${{ github.workflow }}-pr-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
+permissions:
+  contents: read
+
 jobs:
   docs-and-agents-init:
     name: doc-links + agents-init

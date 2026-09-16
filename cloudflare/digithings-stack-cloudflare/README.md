@@ -1,9 +1,26 @@
 # digithings Profile A stack on Cloudflare Containers
 
 **Human gate — infra/network:** this Worker publishes `graph.digithings.ai`
-(digigraph) and `key.digithings.ai` (digikey) on the public internet. APIs still
-require digikey JWT / BFF token exchange. Secrets only via
-`npx wrangler secret put` — never commit values.
+(digigraph), `key.digithings.ai` (digikey), and `search.digithings.ai`
+(digisearch, new external route #4063 — owner-approved for CI web grounding) on
+the public internet. APIs still require auth: digikey JWT / BFF token exchange;
+on the search route, APIs need a digikey JWT (`digisearch:query`, or
+`digisearch:ingest` for `/ingest`), e.g. `POST /v1/orchestrator_invoke` for the
+CI pipeline. Auth-exempt on every host is only the shared service allowlist —
+`/health`, `/healthz`, `/metrics`, `/docs`, `/redoc`, `/openapi.json`, plus
+OPTIONS preflights (CORS is enforced separately) — and the Worker-served paths
+`/_stack/meta`, `/v1/market/tickers|closes`, `/_stack/key/*` (proxied to
+digikey). `/_stack/mcp/zammad/*` (the read-only OCC Zammad MCP, proxied to
+the stack container's :8770) is **not** auth-exempt: it requires `x-digi-mcp-key`
+matching the `MCP_EDGE_KEY` secret or returns a fail-closed 401.
+Secrets only via `npx wrangler secret put` — never commit values. Operator
+secrets currently required: `MCP_EDGE_KEY` (edge key for the OCC MCP path; set
+with `printf '%s' "$VALUE" | npx wrangler secret put MCP_EDGE_KEY`; rotate by
+re-putting the secret and updating the `token` in the occ entry of
+`DIGICHAT_EMBED_TENANTS`; the Worker reads the secret per request, so the edge
+rotates instantly, while a running digichat Container keeps start-time env values
+until recycled — bump the rebuild marker in `Dockerfile.digichat-cloudflare`
+when a rotation must reach a live instance).
 
 One **multi-process** Cloudflare Container replaces Mac Docker Compose +
 `*.trycloudflare.com` quick tunnels for production digichat.
@@ -12,13 +29,14 @@ One **multi-process** Cloudflare Container replaces Mac Docker Compose +
 |---|---|---|
 | `graph.digithings.ai` | digigraph `:8000` | Chat brain (OpenAI-compatible) |
 | `key.digithings.ai` | digikey `:8005` | JWT + BFF token exchange |
-| _(loopback only)_ | digisearch `:8002` | RAG / `occ_help` |
+| `search.digithings.ai` | digisearch `:8002` | RAG / `occ_help`; hosted web grounding for the CI book pipeline — requires digikey JWT `digisearch:query` |
 | _(loopback only)_ | digivault `:8004` | Vault notes |
 | _(loopback only)_ | LiteLLM `:4000` | LLM router |
 | _(loopback only)_ | Redis `:6379` | digikey blocklist |
-| _(loopback only)_ | digisearch-mcp `:8765` | RAG MCP (fail-loud backend gate) |
-| _(loopback only)_ | digivault-mcp `:8769` | vault-notes MCP (4 vault-local tools) |
+| _(key-gated edge)_ | digisearch-mcp `:8765` | RAG MCP (fail-loud backend gate); edge route `/_stack/mcp/digisearch/*` (x-digi-mcp-key) |
+| _(key-gated edge)_ | digivault-mcp `:8769` | vault MCP (search_notes/search_tag/backlinks/lint; write `create_note` needs `DIGIVAULT_MCP_WRITE=1`) |
 | _(loopback only)_ | digigraph-mcp `:8766` | orchestrator MCP (`DIGI_MCP_REQUIRE_AUTH=1`, stack JWKS) |
+| _(container only)_ | zammad-mcp `:8770` | read-only OCC Zammad MCP; external paths are the key-gated `/_stack/mcp/*` edge routes |
 
 ```text
 Pages digithings.ai/chat[/occ]
@@ -26,10 +44,19 @@ Pages digithings.ai/chat[/occ]
        → https://graph.digithings.ai   (this Worker → digigraph)
        → https://key.digithings.ai     (this Worker → digikey)
             digigraph → 127.0.0.1 digisearch / digivault / LiteLLM
+
+CI (Pipeline: digiquant research)
+  → https://search.digithings.ai/v1/orchestrator_invoke  (JWT digisearch:query)
 ```
 
 Mac Compose + quick tunnels remain **dev-only** — see
 [`infra/digichat-digithings/README.md`](../../infra/digichat-digithings/README.md).
+
+Read-only market data (#4013): `GET /v1/market/tickers` and
+`GET /v1/market/closes?tickers=A,B&from=YYYY-MM-DD&to=YYYY-MM-DD` (max 25
+tickers per request) are served by the Worker itself from the `MARKET_DATA`
+R2 binding (`digithings-archive`); browser CORS is allowlisted via the
+`MARKET_DATA_ALLOWED_ORIGINS` var.
 
 ## Prerequisites
 
@@ -38,6 +65,11 @@ Mac Compose + quick tunnels remain **dev-only** — see
 - `npx wrangler login`
 - Provider keys for LiteLLM (e.g. `GROQ_API_KEY`)
 - Stable `DIGIKEY_PRIVATE_KEY_PEM` (do **not** use ephemeral keys in prod)
+- A durable Postgres database for digikey's API keys + JWT revocation state
+  (`DIGIKEY_DATABASE_URL`). It is **required** — digikey refuses to start
+  without it, because the Container's `/data` is ephemeral and a fallback there
+  wipes every issued key on instance replacement — that is what 401'd the daily
+  digiquant book run (#4080).
 
 ## Deploy
 
@@ -52,6 +84,12 @@ npm install
 npx wrangler secret put DIGIKEY_PRIVATE_KEY_PEM
 npx wrangler secret put DIGIKEY_BFF_TOKEN
 npx wrangler secret put DIGIKEY_ADMIN_TOKEN   # optional
+# Durable key store (#4080) — required, not optional: there is no fallback, so
+# digikey will not start until this is set. Once set, re-issue the digiquant
+# service key, because keys minted into the old SQLite store do not exist in the
+# new database:
+#   see docs/ops/digiquant-digikey-service-key.md
+npx wrangler secret put DIGIKEY_DATABASE_URL
 npx wrangler secret put GROQ_API_KEY
 # optional: OPENROUTER_API_KEY OPENAI_API_KEY LITELLM_PROXY_API_KEY
 # house Cheaper Inference (default when set): CHEAPERINFERENCE_API_KEY
@@ -83,10 +121,11 @@ printf '%s' "$VALUE" | env -u CLOUDFLARE_API_TOKEN npx wrangler secret put R2_SE
 The `env -u CLOUDFLARE_API_TOKEN` prefix is load-bearing: that variable doubles as
 wrangler's own auth token, so leaving it exported makes wrangler authenticate as the
 Vectorize/D1-scoped secret instead of your login session (auth error 10000) — see the
-trap documented in `wrangler.toml:116-129`.
+trap documented in `wrangler.toml:150-177`.
 
-Custom domains `graph.digithings.ai` / `key.digithings.ai` are declared in
-`wrangler.toml`. First deploy may take several minutes (image build + provision).
+Custom domains `graph.digithings.ai` / `key.digithings.ai` /
+`search.digithings.ai` are declared in `wrangler.toml`. First deploy may take
+several minutes (image build + provision).
 
 ## Retarget digichat
 
@@ -156,12 +195,14 @@ supervisorctl start digisearch
 
 Do **not** point digichat at `*.trycloudflare.com` tunnels.
 
-1. Confirm workers.dev health (also kept after custom domains — `workers_dev = true`):
-   - `https://digithings-stack.<account>.workers.dev/healthz` → digigraph
-   - `https://digithings-stack.<account>.workers.dev/_stack/key/healthz` → digikey
-2. Custom domains `graph.digithings.ai` / `key.digithings.ai` are already declared
-   as `[[routes]]` in `wrangler.toml` (human gate — public backends). Redeploy if
-   you change routes.
+1. Confirm the stack is healthy on the custom domains (`workers_dev = false`):
+   - `https://graph.digithings.ai/healthz` → digigraph
+   - `https://key.digithings.ai/healthz` → digikey
+   - `https://search.digithings.ai/health` → digisearch (auth-exempt allowlist
+     path; every API call needs a digikey JWT scoped `digisearch:query`)
+2. Custom domains `graph.digithings.ai` / `key.digithings.ai` /
+   `search.digithings.ai` are already declared as `[[routes]]` in
+   `wrangler.toml` (human gate — public backends). Redeploy if you change routes.
 3. Retarget digichat Worker secrets to `https://graph.digithings.ai` /
    `https://key.digithings.ai` (same `DIGIKEY_BFF_TOKEN` as the stack).
 
@@ -170,14 +211,10 @@ Until step 3, leave existing digichat secrets; Mac tunnels may still be required
 ## Smoke (backends only)
 
 ```bash
-# workers.dev
-curl -sf https://digithings-stack.<account>.workers.dev/_stack/meta
-curl -sf https://digithings-stack.<account>.workers.dev/healthz
-curl -sf https://digithings-stack.<account>.workers.dev/_stack/key/healthz
-
-# custom domains (declared in wrangler.toml)
+# custom domains (declared in wrangler.toml; the only ingress)
 curl -sf https://graph.digithings.ai/healthz
 curl -sf https://key.digithings.ai/healthz
+curl -sf https://search.digithings.ai/health   # auth-exempt allowlist path; APIs need a scoped JWT
 ```
 
 Do **not** treat `/chat` UI E2E as done here — leave for a smoke agent.
@@ -195,12 +232,12 @@ Ollama in this path unless you need them.
 |---|---|---|
 | digikey `:8005` | edge | JWT / BFF |
 | digigraph `:8000` | edge | Chat brain (`research_rag`) |
-| digisearch `:8002` | loopback | RAG |
+| digisearch `:8002` | edge | RAG |
 | digivault `:8004` | loopback | Notes |
 | LiteLLM `:4000` | loopback | LLM router |
 | Redis `:6379` | loopback | digikey blocklist |
-| digisearch-mcp `:8765` | loopback | RAG MCP (fail-loud backend gate) |
-| digivault-mcp `:8769` | loopback | vault-notes MCP (4 vault-local tools) |
+| digisearch-mcp `:8765` | key-gated edge | RAG MCP (fail-loud backend gate); `/_stack/mcp/digisearch/*` |
+| digivault-mcp `:8769` | key-gated edge | vault MCP (search_notes/search_tag/backlinks/lint; `create_note` with `DIGIVAULT_MCP_WRITE=1`) |
 | digigraph-mcp `:8766` | loopback | orchestrator MCP (`DIGI_MCP_REQUIRE_AUTH=1`, stack JWKS) |
 
 hosted `:8765` `web_search` uses the embedded ddgs fallback (no searxng sidecar in-stack);

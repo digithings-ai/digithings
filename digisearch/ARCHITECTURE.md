@@ -166,6 +166,13 @@ As of the March 2026 codebase snapshot, the following modules are implemented an
 ### REST Endpoints
 
 All paths under the FastAPI app in `server.py`. Base URL: `http://digisearch:8002`.
+Hosted: the same server is reachable publicly as `https://search.digithings.ai`
+via the `cloudflare/digithings-stack-cloudflare` Worker (#4063 — new external
+route, owner-approved for CI web grounding). Auth is unchanged: every route
+outside the shared `_PUBLIC_PATHS` allowlist — `/health`, `/healthz`, `/metrics`,
+`/docs`, `/redoc`, `/openapi.json` — requires a digikey JWT via `DigiAuthMiddleware`
+(`digisearch:query`, or `digisearch:ingest` for `/ingest`); OPTIONS preflights are
+auth-exempt (CORS is enforced separately).
 
 #### `GET /health` and `GET /healthz`
 
@@ -194,7 +201,7 @@ Key request fields:
 | `index_name` | `str` | Default: `"default"` |
 | `top_k` | `int` | 1–100; default 10 |
 | `mode` | `str` | `keyword` \| `vector` \| `hybrid` (validated). Backend capability hint — see [query.mode semantics](#querymode-semantics) |
-| `filter` | `str?` | Raw OData (only when `allow_raw_filter` is on) |
+| `filter` | `str?` | Raw OData — rejected (HTTP 400) unless the index config sets `allow_raw_filter: true` |
 | `filters` | `list[dict]?` | Structured: `[{field, op, value}]` |
 | `columns` | `list[str]?` | Metadata fields to return |
 | `facets` | `list[str]?` | Azure facet expressions |
@@ -272,7 +279,7 @@ Returns 3 or 4 tools:
 
 #### `POST /v1/orchestrator_invoke`
 
-Auth required (`digisearch:query` scope). Rate limited: 10 req/min.
+Auth required (`digisearch:query` scope). Rate limited: 10 req/min per IP; token-bearing callers get 6× on their own token with a 6× per-IP ceiling (`DIGISEARCH_AUTH_RATE_LIMIT_MULTIPLIER` / `DIGISEARCH_IP_CEILING_MULTIPLIER`, #4106).
 
 Dispatches one named tool: `digisearch`, `digisearch_fetch_all`, `digisearch_research_delegate`, or `web_search`. The hub calls this to execute search without importing digisearch Python code directly.
 
@@ -282,11 +289,13 @@ Auth required. Rate limited: 10 req/min.
 
 Directly invokes the internal LangGraph pipeline (`plan → retrieve → aggregate`). Requires `digisearch[agent]` install. Returns `{service, error, trace, query, index_name, total, backend, results, rag_sources, formatted_context}`.
 
+Request: `ResearchTurnRequest {user_message, index_name, top_k, mode, filter?, filters?, session_id?, workspace_id?}`. Raw `filter` is rejected (HTTP 400) unless the index config sets `allow_raw_filter: true`. When `workspace_id` is set it is injected as a mandatory `workspace_id eq …` structured filter into the retrieve step, identical to `POST /query` (#3909).
+
 #### `POST /v1/web_search`
 
 Auth required (`digisearch:query` scope via the default `digisearch_path_scopes` fallthrough). Rate limited: 30 req/min (default bucket).
 
-Proprietary web search (#3853). Request `WebSearchRequest {query, include_domains (max 5), exclude_domains (max 20), max_results (1–10, default 4), recency_days (1–365, default 7; mapped onto provider recency filters — searxng day/month/year with a week mapping to month — omitted when null)}`; response `WebSearchResponse {query, results [{url, title, snippet, score, engine}], provider}`. `run_web_search` tries the searxng sidecar first, fails over to embedded ddgs (`DIGISEARCH_WEB_SEARCH_BACKEND=auto|searxng|ddgs`, sidecar URL from `DIGISEARCH_SEARXNG_URL`), then enriches up to `fetch_max_pages` (default 3) hits by fetching via composed digifetch (`HttpFetcher` + `with_retry` + `RateLimiter`) and extracting markdown (trafilatura primary with `favor_precision` + `deduplicate`, readability fallback). Fetch/extract failures keep the original search snippet — enrichment never fails the response. No new port: served by the existing digisearch HTTP app.
+Proprietary web search (#3853). Request `WebSearchRequest {query, include_domains (max 5), exclude_domains (max 20), max_results (1–10, default 4), recency_days (1–365, default 7; mapped onto provider recency filters — searxng day/month/year with a week mapping to month — omitted when null)}`; response `WebSearchResponse {query, results [{url, title, snippet, score, engine}], provider}`. The orchestrator `web_search` invoke maps its `arguments` onto the same model field-for-field — including `recency_days`, which is omitted when the caller does not set it so the default window stays in force, and rejected as `ok: false` naming the field when out of range (#4165). `run_web_search` tries the searxng sidecar first, fails over to embedded ddgs (`DIGISEARCH_WEB_SEARCH_BACKEND=auto|searxng|ddgs`, sidecar URL from `DIGISEARCH_SEARXNG_URL`), then enriches up to `fetch_max_pages` (default 3) hits by fetching via composed digifetch (`HttpFetcher` + `with_retry` + `RateLimiter`) and extracting markdown (trafilatura primary with `favor_precision` + `deduplicate`, readability fallback). The fetch is SSRF-guarded by digifetch (#3934): http/https only, internal/metadata addresses refused, and every redirect hop re-validated (no auto-follow) with the operator `DIGISEARCH_FETCH_ALLOWED_HOSTS` allowlist as the explicit escape hatch. Fetch/extract failures keep the original search snippet — enrichment never fails the response. No new port: served by the existing digisearch HTTP app.
 
 ### MCP Tools
 
@@ -294,11 +303,17 @@ MCP server runs on port 8765 via `FastMCP` (`mcp_server.py`). Transport: streama
 
 | Tool | Description | Optional |
 |------|-------------|----------|
-| `digisearch_query` | Search documents; returns formatted string of hits with score and content preview | No |
+| `semantic` | Semantic search over documents; returns formatted hits with score and content preview | No |
 | `web_search` | Search the public web; returns JSON `WebSearchResponse` (#3853) | Yes (`digisearch[web-search]`) |
-| `digisearch_research_turn` | Composite research turn (plan → retrieve → aggregate) with citations | Yes (`digisearch[agent]`) |
+| `search_strategies` | Filtered semantic search over the research library | No |
+| `research_turn` | Composite research turn (plan → retrieve → aggregate) with citations | Yes (`digisearch[agent]`) |
 
-Tool parameters for `digisearch_query`: `text`, `index_name`, `top_k`, `mode`.
+These are the names the MCP server advertises. digigraph prefixes the operator
+server id (`{id}_{tool}`, `mcp_client.prefixed_tool_name`), so the model calls
+`digisearch_semantic`, `digisearch_web_search`, `digisearch_search_strategies`,
+and `digisearch_research_turn`.
+
+Tool parameters for `semantic`: `text`, `index_name`, `top_k`, `mode`.
 
 The `digisearch mcp` CLI builds a real `DigiSearch` client first
 (`DigiSearchConfig.from_config` when `--config` is passed, else
@@ -670,7 +685,7 @@ When `DIGISEARCH_RERANK_ENABLED` is truthy and `Query.skip_rerank` is false, `_m
 
 Azure is registered first (preferred), then Vectorize, then Chroma, stub last. Adding a new backend requires only calling `register_backend()` at import time. There is no configuration-driven selection — the first configured backend wins.
 
-**Weakness:** if Azure is misconfigured (credentials present but wrong), the Azure backend raises, logs a warning, returns `None`, and silently falls through to Chroma. Operators may not notice that a production query is served by the wrong backend. Vectorize is deliberately exempt from this fall-through — see below.
+**Fail-loud backends:** Azure (first) and Chroma (last) are optional local backends, but once one is *configured* a serving failure must not be silently answered from a different corpus. A failing `query_azure()` / `ChromaBackend.query()` now raises `SearchBackendError` (`indexes/backends/backend_errors.py`); `_stub.py`'s `_azure_backend` / `_chroma_backend` wrappers re-raise instead of returning `None`, and `SearchBackendError` is deliberately absent from `_BACKEND_ERRORS`, so `query_index` cannot swallow it and fall through (#3909). Only the "not configured" and optional-dependency-`ImportError` paths still return `None` so the router continues. Vectorize has the same contract via its own `VectorizeBackendError` — see below. A healthy backend with no matches still returns an empty result (not an error).
 
 #### Vectorize (remote index)
 
@@ -706,8 +721,9 @@ refuses to upsert under a different model) both live in `vectorize_sync.py`,
 not in `VectorizeBackend` itself — a chunk added through the generic
 `POST /ingest` → `route_add_chunks` path is not stamped or checked this way.
 
-Second, unlike `ChromaBackend.query`, which catches its errors and returns
-`[]`, a Vectorize failure propagates. `VectorizeBackend.query()` raises a plain
+Second, a Vectorize failure propagates rather than collapsing into an empty
+result — the same fail-loud contract Chroma/Azure now follow via
+`SearchBackendError` (#3909). `VectorizeBackend.query()` raises a plain
 `RuntimeError` on an HTTP error status or an HTTP-200-with-`success: false`
 body; `_vectorize_backend` then wraps *any* exception from that call —
 including an `ImportError` while importing `VectorizeBackend` itself — as
@@ -825,9 +841,11 @@ When `workspace_id` is set on `POST /query`, the server injects a mandatory stru
 
 Callers omitting `workspace_id` receive unscoped results (single-tenant default). Multi-tenant deployments should require `workspace_id` at the BFF layer.
 
+The research path is scoped the same way (#3909): `POST /v1/research_turn`, the `digisearch_research_delegate` orchestrator tool, and the `digisearch_research_turn` MCP tool all accept `workspace_id`, carry it on `ResearchTurnState`, and inject the mandatory `workspace_id eq …` clause in the retrieve step.
+
 ### Filter injection risks
 
-**Raw OData path:** `POST /query` accepts a `filter` string when `allow_raw_filter=True` is set in the index config. The `filter_validator.py` applies:
+**Raw OData path:** `POST /query`, `POST /v1/research_turn`, and the orchestrator invoke paths that feed them reject a raw `filter` (HTTP 400) when the configured index does not set `allow_raw_filter: true` (#3909); previously only the Azure backend re-gated it. When enabled, `filter_validator.py` applies:
 
 1. Blocked pattern regex: rejects `exec(`, `eval(`, `<script`, `javascript:`, `data:`
 2. Character allowlist: rejects non-OData characters including newlines
@@ -851,7 +869,9 @@ CORS is installed via the shared `digibase.cors.install_cors(app, service="digis
 
 ### Rate limiting
 
-Per-IP rate limiting is implemented in-process (not via a proxy). The limiter uses `threading.Lock` and `collections.deque` — correct for sync workers but not robust under async or multi-process deployments. IP extraction respects `X-Forwarded-For` but does not validate the hop count, which means a caller can supply a fake IP in `X-Forwarded-For` to bypass per-IP limits.
+Limiting is implemented in-process (not via a proxy). The limiter uses `threading.Lock` and `collections.deque` — correct for sync workers but not robust under async or multi-process deployments. IP extraction respects `X-Forwarded-For` but does not validate the hop count, which means a caller can supply a fake IP in `X-Forwarded-For` to bypass per-IP limits.
+
+The limiter is registered so that it runs **before** `DigiAuthMiddleware` (the correlation-id middleware wraps both) and keys anonymous requests on the client IP. A caller presenting a bearer token is budgeted on that token instead (`tok:<sha256[:16]>`, never the raw credential), at `DIGISEARCH_AUTH_RATE_LIMIT_MULTIPLIER`× the path budget, on top of a coarse per-IP ceiling of `DIGISEARCH_IP_CEILING_MULTIPLIER`× the path budget on its own `ipceil:` counter — so a client rotating tokens is capped at one token's budget per IP without consuming the anonymous budget. A header-bearing client is therefore admitted 6× as often as an anonymous one (10 → 60 req/60 s on `/v1/orchestrator_invoke`) before auth rejects it; those requests still fail auth, so this bounds work rather than granting access. This exists because the daily digiquant book run grounds every research segment from one GitHub-runner IP through `POST /v1/orchestrator_invoke`; the shared 10 req/60 s IP bucket 429'd mid-run and digigraph collapsed the 429 into "web_search returned no rows", failing the book three times (#4106).
 
 ---
 
@@ -971,9 +991,9 @@ The contract is versioned by `{"tools": [...], "version": 1}` in the tools respo
 
 ### digiclaw MCP attachment
 
-digiclaw may attach to the digisearch MCP server at `http://127.0.0.1:8765/mcp` (loopback, `digisearch-mcp` Docker profile). Tools available: `digisearch_query`, `web_search` (when `[web-search]` is installed), `digisearch_research_turn` (when `[agent]` is installed).
+digiclaw may attach to the digisearch MCP server at `http://127.0.0.1:8765/mcp` (loopback in standalone/Docker profiles; in the Cloudflare stack the process binds 0.0.0.0 and is reachable only through the key-gated `/_stack/mcp/digisearch/*` edge route). Tools available: `semantic`, `web_search` (when `[web-search]` is installed), `search_strategies`, `research_turn` (when `[agent]` is installed). digigraph sees the same tools prefixed as `digisearch_semantic`, `digisearch_web_search`, `digisearch_search_strategies`, and `digisearch_research_turn` (`{id}_{tool}`).
 
-MCP clients (Langflow, IDE tools) attach to the same server. There is no per-client auth on the MCP server itself — access control is purely at network level (loopback binding).
+MCP clients (Langflow, IDE tools) attach to the same server. There is no per-client auth on the MCP server itself — access control is at network level (loopback binding, or the secret-gated edge route in the stack).
 
 ### digiflow integration
 
@@ -1114,6 +1134,7 @@ Live verification record (2026-09-11, #3859 Task 10 — honest not-measured + wh
 | `DIGISEARCH_RERANK_PROVIDER` | `bge` | `bge` (`BAAI/bge-reranker-v2-m3`) or `cohere` (`rerank-multilingual-v3.0`) when rerank is enabled |
 | `DIGISEARCH_WEB_SEARCH_BACKEND` | `auto` | `auto` (searxng→ddgs failover) \| `searxng` \| `ddgs` (#3853) |
 | `DIGISEARCH_SEARXNG_URL` | `http://127.0.0.1:8080` | searxng sidecar base URL (compose sets `http://searxng:8080` in-container; #3853) |
+| `DIGISEARCH_FETCH_ALLOWED_HOSTS` | _(unset)_ | Comma-separated operator-trusted hostnames exempted from the digifetch SSRF address refusal (e.g. an egress proxy). Also accepted per-call via `WebSearchConfig.fetch_allowed_hosts`; passed to `HttpFetcher(allowed_hosts=…)` (#3934) |
 | `DIGISEARCH_WEB_SEARCH_LIVE` | _(unset)_ | Set `1` to run the live-sampled leg of `digisearch/tests/test_web_search_eval.py` (real backends, p50 fetch+extract < 5s); default runs fully mocked offline (#3853) |
 | `DIGISEARCH_CACHE_PATH` | `.digisearch_embed_cache.db` | SQLite embedding cache path |
 | `DIGISEARCH_EMBED` | `1` (on when unset) | Set `0` to skip pipeline-level embed on ingest |
@@ -1127,6 +1148,8 @@ Live verification record (2026-09-11, #3859 Task 10 — honest not-measured + wh
 | `COHERE_API_KEY` | _(unset)_ | Cohere key for CohereEmbedder / CohereReranker |
 | `DIGI_CORS_ORIGINS` / `DIGISEARCH_CORS_ORIGINS` | (empty) | Comma-separated CORS allowed origins; legacy `DIGI_ALLOWED_ORIGINS` still honored |
 | `DIGI_DISABLE_RATE_LIMIT` | `0` | Disable per-IP rate limiting (testing) |
+| `DIGISEARCH_AUTH_RATE_LIMIT_MULTIPLIER` | `6` | Multiple of a path's budget granted to a caller presenting a bearer token, keyed on the token (#4106) |
+| `DIGISEARCH_IP_CEILING_MULTIPLIER` | `6` | Coarse per-IP ceiling for token-bearing traffic, as a multiple of the path budget, on its own counter (#4106) |
 | `DIGIKEY_JWKS_URL` | _(required)_ | digikey JWKS endpoint for JWT validation |
 | `DIGIKEY_ISSUER` | _(required)_ | JWT issuer |
 | `DIGIKEY_AUDIENCE` | _(required)_ | JWT audience |
@@ -1162,6 +1185,8 @@ The current graph is minimal: `node_plan` validates input, `node_retrieve` calls
 - **Azure:** inject an OData filter clause `(workspace_id eq '{workspace_id}')` for all queries
 - **Vectorize:** `VectorizeBackend.query()` raises `VectorizeBackendError` when filters / `workspace_id` are present (#2219 fail-loud). Full fix: translate `Query.filters` into Vectorize metadata `filter`, register filterable fields as metadata indexes at index creation, or keep routing to a per-workspace index and omit filters
 - **Stub:** filter post-retrieval by `chunk.metadata.get("workspace_id")`
+
+The research path (`POST /v1/research_turn`, orchestrator `digisearch_research_delegate`, MCP `digisearch_research_turn`) applies the same server-side `workspace_id` injection as `POST /query` (#3909).
 
 Without this, `workspace_id` is decorative on backends that neither filter nor fail closed.
 

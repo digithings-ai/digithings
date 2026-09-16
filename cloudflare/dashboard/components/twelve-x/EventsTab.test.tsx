@@ -295,3 +295,13 @@ describe('day grouping is viewer-local, not UTC (#1753)', () => {
     }
   });
 });
+
+// The dedicated terminal entry lives in the sidebar now (#4204); the
+// twelve-x macro surfaces must not carry their own Gloomberb links.
+describe('EventsTab — no Gloomberb shortcut (#4204)', () => {
+  it('does not link the macro calendar header out to Gloomberb', () => {
+    const html = render({});
+    expect(html).not.toContain('gloomberb-terminal-link');
+    expect(html).not.toContain('term.gloom.sh');
+  });
+});

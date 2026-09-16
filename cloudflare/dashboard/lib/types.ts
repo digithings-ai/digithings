@@ -177,6 +177,8 @@ export interface NavChartPoint {
   contract?: string | null;
   /** Tip day return when present on `public_accounting_nav_history`. */
   day_return_pct?: number | null;
+  /** Migration 123 (#3767): true on the first row after a legacy↔finalized flip. */
+  series_seam?: boolean | null;
 }
 
 /** One historical position row for sleeve / time-series aggregation. */
@@ -445,8 +447,6 @@ export interface DashboardData {
   /** Fallback for calendar baseline vs delta when document rows omit `run_type`. */
   snapshot_run_type_by_date: Record<string, 'baseline' | 'delta'>;
   benchmarks: BenchmarkHistoryMap;
-  /** Distinct tickers in price_history (view); sorted with majors first. */
-  price_history_tickers: string[];
   calculated: CalculatedMetrics;
   /** Short context bullets derived from the snapshot JSONB digest. */
   snapshot_context_bullets: string[];

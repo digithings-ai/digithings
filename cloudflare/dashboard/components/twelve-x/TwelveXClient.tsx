@@ -35,6 +35,7 @@ import {
 } from '@/lib/twelve-x/fetch';
 import { selectLatestCompleteConsensus } from '@/lib/twelve-x/consensus-derive';
 import { isTwelveXConfigured } from '@/lib/twelve-x/supabase';
+import { netCarriedIdeas } from '@/lib/twelve-x/trade-history';
 import type {
   FxBriefRow,
   FxConfluenceSnapshotRow,
@@ -50,11 +51,14 @@ import type {
 } from '@/lib/twelve-x/types';
 import TodayTab from './TodayTab';
 import BriefsIndex from './BriefsIndex';
+import IdeaCardsIndex from './IdeaCardsIndex';
+import IdeaPanel from './IdeaPanel';
 import ConsensusTab from './ConsensusTab';
 import EventsTab from './EventsTab';
 import HowItWorksTab from './HowItWorksTab';
 import MatrixTab from './MatrixTab';
 import TradesTab from './TradesTab';
+import TrackRecordTab from './TrackRecordTab';
 import BriefPanel from './BriefPanel';
 import TwelveXHeading from './TwelveXHeading';
 import { TwelveXProvider, type TwelveXContextValue, type CrossLink, type TwelveXTab } from './context';
@@ -132,6 +136,9 @@ export function TwelveXUnavailable({ configured }: { configured: boolean }) {
 /** A brief drill-down target: the source_file key plus the run that owns it. */
 export type BriefTarget = { sourceFile: string; runDate: string | null };
 
+/** A trade-idea drill-down target: the board that published it plus its rank. */
+export type IdeaTarget = { runDate: string; rank: number };
+
 interface TwelveXData {
   digest: DigestData;
   consensusSeries: FxConsensusSnapshotRow[];
@@ -149,13 +156,15 @@ interface TwelveXData {
   researchBriefs: FxBriefRow[];
   divergenceByCurrency: Record<string, FxConsensusDivergence>;
   ideaEval: FxIdeaEvalRow[];
+  /** Raw (un-netted) eval rows for the track-record tab's honest carried count. */
+  ideaEvalRaw: FxIdeaEvalRow[];
   consensusEval: FxConsensusEvalRow[];
 }
 
 export function resolveTab(urlTab: string | null): TwelveXTab {
   if (urlTab === 'consensus') return 'consensus';
   if (urlTab === 'trades') return 'trades';
-  if (urlTab === 'track-record') return 'trades'; // Legacy redirect
+  if (urlTab === 'track-record') return 'track-record';
   if (urlTab === 'intelligence') return 'consensus'; // Legacy redirect
   if (urlTab === 'events') return 'events';
   if (urlTab === 'matrix') return 'matrix';
@@ -179,7 +188,8 @@ function readParam(key: string): string | null {
 function syncUrl(
   tab: TwelveXTab,
   brief: BriefTarget | null,
-  view: 'briefs' | null = null,
+  view: 'briefs' | 'ideas' | null = null,
+  idea: IdeaTarget | null = null,
 ): void {
   if (typeof window === 'undefined') return;
   const p = new URLSearchParams();
@@ -189,6 +199,10 @@ function syncUrl(
     if (brief.runDate) p.set('briefDate', brief.runDate);
   }
   if (view) p.set('view', view);
+  if (idea) {
+    p.set('idea', idea.runDate);
+    p.set('ideaRank', String(idea.rank));
+  }
   const qs = p.toString();
   const url = qs ? `${window.location.pathname}?${qs}` : window.location.pathname;
   window.history.replaceState(window.history.state, '', url);
@@ -214,7 +228,8 @@ export default function TwelveXClient() {
   // update, which React does write out.
   const [tab, setTabState] = useState<TwelveXTab>('today');
   const [brief, setBrief] = useState<BriefTarget | null>(null);
-  const [view, setView] = useState<'briefs' | null>(null);
+  const [view, setView] = useState<'briefs' | 'ideas' | null>(null);
+  const [idea, setIdea] = useState<IdeaTarget | null>(null);
 
   useEffect(() => {
     /* eslint-disable react-hooks/set-state-in-effect -- the cascade is the
@@ -225,6 +240,12 @@ export default function TwelveXClient() {
     const sourceFile = readParam('brief');
     if (sourceFile) setBrief({ sourceFile, runDate: readParam('briefDate') });
     if (readParam('view') === 'briefs') setView('briefs');
+    if (readParam('view') === 'ideas') setView('ideas');
+    const ideaRunDate = readParam('idea');
+    const ideaRank = Number(readParam('ideaRank'));
+    if (ideaRunDate && Number.isInteger(ideaRank) && ideaRank > 0) {
+      setIdea({ runDate: ideaRunDate, rank: ideaRank });
+    }
     /* eslint-enable react-hooks/set-state-in-effect */
   }, []);
 
@@ -238,34 +259,58 @@ export default function TwelveXClient() {
     (next: TwelveXTab) => {
       setTabState(next);
       setView(null);
-      syncUrl(next, brief, null);
+      syncUrl(next, brief, null, idea);
     },
-    [brief]
+    [brief, idea]
   );
 
   const openBrief = useCallback(
     (sourceFile: string, runDate: string | null) => {
       const next = { sourceFile, runDate };
       setBrief(next);
-      syncUrl(tab, next, view);
+      syncUrl(tab, next, view, idea);
     },
-    [tab, view]
+    [tab, view, idea]
   );
 
   const closeBrief = useCallback(() => {
     setBrief(null);
-    syncUrl(tab, null, view);
-  }, [tab, view]);
+    syncUrl(tab, null, view, idea);
+  }, [tab, view, idea]);
 
   const openBriefsIndex = useCallback(() => {
     setView('briefs');
-    syncUrl(tab, brief, 'briefs');
-  }, [tab, brief]);
+    syncUrl(tab, brief, 'briefs', idea);
+  }, [tab, brief, idea]);
 
   const closeBriefsIndex = useCallback(() => {
     setView(null);
-    syncUrl(tab, brief, null);
-  }, [tab, brief]);
+    syncUrl(tab, brief, null, idea);
+  }, [tab, brief, idea]);
+
+  const openIdea = useCallback(
+    (runDate: string, rank: number) => {
+      const next = { runDate, rank };
+      setIdea(next);
+      syncUrl(tab, brief, view, next);
+    },
+    [tab, brief, view]
+  );
+
+  const closeIdea = useCallback(() => {
+    setIdea(null);
+    syncUrl(tab, brief, view, null);
+  }, [tab, brief, view]);
+
+  const openIdeasIndex = useCallback(() => {
+    setView('ideas');
+    syncUrl(tab, brief, 'ideas', idea);
+  }, [tab, brief, idea]);
+
+  const closeIdeasIndex = useCallback(() => {
+    setView(null);
+    syncUrl(tab, brief, null, idea);
+  }, [tab, brief, idea]);
 
   // Cross-surface navigation (removed: drillToProvenance — Intelligence merged into Consensus drilldown)
 
@@ -281,7 +326,7 @@ export default function TwelveXClient() {
           upcomingEvents,
           matrix,
           researchBriefs,
-          ideaEval,
+          ideaEvalRaw,
           consensusEval,
           tradeIdeaArchive,
         ] = await Promise.all([
@@ -291,10 +336,13 @@ export default function TwelveXClient() {
           getUpcomingEvents(),
           getMatrix(),
           getBriefs(30),
-          getIdeaEval(),
+          getIdeaEval({ netCarried: false }),
           getConsensusEval(),
           getTradeIdeaArchive(),
         ]);
+        // The raw rows are a superset: net the carried boards locally so the
+        // page fetches fx_idea_eval once instead of twice.
+        const ideaEval = netCarriedIdeas(ideaEvalRaw);
         const opinionsDate = intelligence[0]?.run_date ?? digest?.run_date ?? null;
         const intelRunDate = intelligence[0]?.run_date ?? undefined;
         const [eventOpinions, intelligenceWhy] = await Promise.all([
@@ -329,6 +377,7 @@ export default function TwelveXClient() {
           researchBriefs,
           divergenceByCurrency,
           ideaEval,
+          ideaEvalRaw,
           consensusEval,
           tradeIdeaArchive,
         });
@@ -391,17 +440,22 @@ export default function TwelveXClient() {
           setEventFocus({ externalId: l.externalId ?? null, name: l.eventName });
           syncUrl('events', brief, view);
           break;
+        case 'ideas':
+          setTabState('today');
+          setView('ideas');
+          syncUrl('today', brief, 'ideas', idea);
+          break;
         case 'tab':
           setTab(l.tab);
           break;
       }
     },
-    [brief, view, openBrief, setTab]
+    [brief, view, idea, openBrief, setTab]
   );
 
   const ctx = useMemo<TwelveXContextValue>(
-    () => ({ runDate: canonicalRunDate, crossLink, openBrief, watchlist }),
-    [canonicalRunDate, crossLink, openBrief, watchlist]
+    () => ({ runDate: canonicalRunDate, crossLink, openBrief, openIdea, watchlist }),
+    [canonicalRunDate, crossLink, openBrief, openIdea, watchlist]
   );
 
   // How-it-works is fully static and must stay reachable while the feed loads
@@ -431,6 +485,17 @@ export default function TwelveXClient() {
             ideas={data?.tradeIdeaArchive ?? []}
             ideaEval={data?.ideaEval ?? []}
             consensusEval={data?.consensusEval ?? []}
+            onOpenIdea={openIdea}
+          />
+        );
+      case 'track-record':
+        return (
+          <TrackRecordTab
+            ideas={data?.tradeIdeaArchive ?? []}
+            ideaEvalRaw={data?.ideaEvalRaw ?? []}
+            consensusEval={data?.consensusEval ?? []}
+            divergenceByCurrency={data?.divergenceByCurrency ?? {}}
+            series={data?.consensusSeries ?? []}
           />
         );
       case 'events':
@@ -446,7 +511,13 @@ export default function TwelveXClient() {
       case 'matrix':
         return <MatrixTab cells={data?.matrix ?? []} onOpenBrief={openBrief} />;
       default:
-        return view === 'briefs' ? (
+        return view === 'ideas' ? (
+          <IdeaCardsIndex
+            ideas={data?.tradeIdeaArchive ?? []}
+            ideaEval={data?.ideaEval ?? []}
+            onBack={closeIdeasIndex}
+          />
+        ) : view === 'briefs' ? (
           <BriefsIndex
             briefs={data?.researchBriefs ?? []}
             defaultDate={canonicalRunDate}
@@ -482,6 +553,16 @@ export default function TwelveXClient() {
           sourceFile={brief?.sourceFile ?? null}
           runDate={brief?.runDate ?? null}
           onClose={closeBrief}
+        />
+
+        {/* Slide-over trade-idea panel — same chrome, lifecycle detail. */}
+        <IdeaPanel
+          open={!!idea}
+          runDate={idea?.runDate ?? null}
+          rank={idea?.rank ?? null}
+          ideas={data?.tradeIdeaArchive ?? []}
+          ideaEval={data?.ideaEval ?? []}
+          onClose={closeIdea}
         />
       </TwelveXProvider>
     </div>

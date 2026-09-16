@@ -76,11 +76,11 @@ export {
   type DigichatLauncherProps,
 } from "./components/chat/DigichatLauncher";
 export { ChatMarkdown, type ChatMarkdownProps } from "./components/chat/ChatMarkdown";
-export {
-  ChatMarkdownSource,
-  type ChatMarkdownSourceProps,
-  type CodeBlockOverride,
-} from "./components/chat/ChatMarkdownSource";
+// ChatMarkdownSource is internal to ChatMarkdown — not part of the public
+// barrel (#3819). The legacy family stays exported for its remaining
+// consumers: ChatMarkdown (dashboard SafeMarkdown styling shell, digichat-ui
+// MiniMarkdown) and the ChatToolCallStatus type (digichat-ui activity view).
+// No new adoption; ChatThinking/ChatToolCall components have no importers.
 export { ChatMermaidBlock, type ChatMermaidBlockProps } from "./components/chat/ChatMermaidBlock";
 export { ChatCodeBlock, ChatCopyButton, type ChatCodeBlockProps, type ChatCopyButtonProps } from "./components/chat/ChatCodeBlock";
 export { ChatToolCall, type ChatToolCallProps, type ChatToolCallStatus, type ChatToolCallLine } from "./components/chat/ChatToolCall";
@@ -108,6 +108,13 @@ export {
   CHAT_RESPONSE_HOLD_MS,
   type ChatResponseLoaderProps,
 } from "./components/terminal/ChatResponseLoader";
+
+// digichat boot loader — the default embed warm-up animation (composer-outline
+// cube field). Styles: @digithings/web/styles/digichat-boot-loader.css.
+export {
+  DigichatBootLoader,
+  type DigichatBootLoaderProps,
+} from "./components/chat/DigichatBootLoader";
 
 // controls layer (#1419)
 export { Button, type ButtonProps, type ButtonDress, type ButtonReferenceVariant, type ButtonChatVariant, type ButtonChatSize } from "./components/controls/Button";
@@ -472,6 +479,14 @@ export {
 
 export { modules, edges, moduleById, type ModuleNode, type StackItem, type Tier } from "./data/modules";
 export { subsystems, subsystemById, type Subsystem } from "./data/subsystems";
+export {
+  GLOOMBERB_ATTRIBUTION,
+  GLOOMBERB_DELAY_NOTICE,
+  GLOOMBERB_TERMINAL_URL,
+  gloomberbTickerUrl,
+  readGloomberbAttribution,
+  type GloomberbAttribution,
+} from "./lib/gloomberb";
 
 // chrome (command palette) + symbols (brand marks) promotions (#1548)
 export {

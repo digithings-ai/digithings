@@ -28,8 +28,9 @@ tab. Its command band uses the same compact as-of stamp as Holdings and shows on
 benchmark-relative headline (**Excess return** = Rp − Rb); Relative gain was a
 duplicate alias and was removed. Open-book **Unrealized** prefers stored `unrealized_pnl_pct` /
 `since_entry_return_pct`, else derives from `entry_price` vs `current_price`, and
-when the nightly metrics stamp is missing fills the mark from `price_history`
-(AS OF = that close date). Fail closed to `—` without basis or mark — never invent
+when the nightly metrics stamp is missing fills the mark from the market API
+(`GET /v1/market/closes`, AS OF = that close date; empty when
+`NEXT_PUBLIC_MARKET_DATA_URL` is unset — #4053, R2-API-only, no Supabase fallback). Fail closed to `—` without basis or mark — never invent
 P&L. Ledger lists every `OPEN` / `ADD` / `EXIT` / `TRIM` fill with avg entry, fill
 price, and realized % vs average entry for sells (sold weight from
 `prev_weight_pct − weight_pct`). Fail closed without fill price or cost basis —
@@ -45,7 +46,9 @@ evidence" until at least two buckets each have 10 independent decisions. Audit
 preserves every raw row and raw alpha while rendering 25 rows per page. CASH remains outside holding
 counts and position charts, but its allocation effect is included in headline active return
 so the decomposition reconciles to portfolio return minus benchmark return.
-Performance fetches the populated approved benchmark universe from `price_history`,
+Performance fetches the benchmark universe from the market API
+(`GET /v1/market/tickers`, R2-backed; an empty answer falls back to the
+benchmark keys — #4053, R2-API-only, no Supabase fallback),
 aligns each series to the NAV dates, defaults to SPY, and recomputes benchmark and
 excess return when the comparison changes.
 The dashboard keeps its finance-tearsheet variants and shell print rules app-side at the
@@ -55,7 +58,9 @@ Performance SSOT (#3580 / #3604): one accounting NAV series and one committed
 book date. Canonical metric-source matrix (source, date, units, null/fallback,
 stale/provenance) lives in [`lib/TABLES.md`](lib/TABLES.md) § Performance SSOT.
 Condensed: NAV / day / since-inception from the **tip** of
-`public_accounting_nav_history`; alpha/IR need ≥20 overlapping daily pairs;
+`public_accounting_nav_history` (chained across source runs with each row's own
+day return, calendar gaps ≤4 days forward-filled — #4014); alpha/IR need ≥20
+overlapping daily pairs;
 invested % is the tip (unclamped); live Brief marks are a `live marks` overlay
 and must never wear a `finalized accounting` badge; metrics↔NAV lag is
 symmetric (`metrics lag` / `nav lag`).
@@ -180,9 +185,19 @@ Holdings.
 `/portfolio/performance` applies the same flat grammar to the shared
 finance-tearsheet primitives. Its command band, contribution chart, position
 ledgers, and PDF action remain presentation over `nav_history`, `positions`,
-`portfolio_metrics`, `position_attribution`, `position_events`, and
-`price_history`. Contribution bars contain only tickers in the latest positive-weight
-book; the exact NAV return and selected benchmark remain separate line layers.
+`portfolio_metrics`, `position_attribution`,
+`public_daily_realized_attribution`, `position_events`, and the R2 market API
+(the `price_history` table was dropped in migration 127, #4053).
+Contribution bars read the finalized per-ticker daily contribution from
+`public_daily_realized_attribution` (#3956) so they no longer depend on
+`positions.current_price` enrichment arriving on time, falling back to the
+weight-times-mark accrual when the view yields no usable rows for the plotted
+window (days before the first finalized row stay flat; rows that sit entirely
+outside the window are not usable). The view publishes price/fee contribution
+only — cash (dividends, interest) is not included, so bars do not reconcile to
+the NAV day return. Bars contain only
+tickers in the latest positive-weight book; the exact NAV return and selected
+benchmark remain separate line layers.
 Portfolio presentation changes must not introduce a second query path or replace
 that persisted truth model. Narrow finance chart panes reduce date axes to endpoint
 labels while preserving the complete print view.
@@ -244,13 +259,17 @@ so the current conversation survives the next open.
 
 The panel iframes digichat `/embed?layout=embed` with page-context
 (`digichat:page-context`) for the visible dashboard DOM — structurally
-sanitized **HTML** (preferred, ≤12k chars) plus visible text (≤8k). The sender
-walks the live DOM (computed style, `hidden` / `inert` / `aria-hidden`,
-password/autofill controls) and honors `data-digichat-private` opt-out regions;
-the embed receiver re-allowlists the HTML. Nothing is rendered for it in the
-panel (#3590); the model receives HTML+text via the existing prompt-prefix path
-(screenshot/vision multimodal deferred). Same contract as digichat `widget.js`
-(#3421 / #3602), implemented in-React so CSP stays `script-src 'self'`.
+sanitized **HTML** (preferred, ≤12k chars) plus visible text (≤8k), sent on
+open and then only when the page signature changes (route/query or sanitized
+content, ~500ms debounced, deduped by signature). The sender walks the live DOM
+(computed style, `hidden` / `inert` / `aria-hidden`, password/autofill
+controls) and honors `data-digichat-private` opt-out regions; the embed
+receiver re-allowlists the HTML. The embed can opt out for a deployment by
+including `pageContext: "off"` on its `digichat:ready` payload. Nothing is
+rendered for it in the panel (#3590); the model receives HTML+text via the
+existing prompt-prefix path (screenshot/vision multimodal deferred). Same
+contract as digichat `widget.js` (#3421 / #3602), implemented in-React so CSP
+stays `script-src 'self'`.
 
 On by default (#3638): unset env uses origin `https://digithings.ai` and host
 `digiquant.io`. Kill with `NEXT_PUBLIC_DIGICHAT_POPUP=0`. Origin must be in the

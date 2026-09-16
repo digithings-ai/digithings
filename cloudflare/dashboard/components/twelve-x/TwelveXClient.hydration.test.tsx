@@ -58,6 +58,7 @@ vi.mock('./EventsTab', () => stub('events'));
 vi.mock('./HowItWorksTab', () => stub('how-it-works'));
 vi.mock('./MatrixTab', () => stub('matrix'));
 vi.mock('./TradesTab', () => stub('trades'));
+vi.mock('./TrackRecordTab', () => stub('track-record'));
 vi.mock('./BriefPanel', () => stub('brief-panel'));
 vi.mock('./TwelveXHeading', () => stub('heading'));
 vi.mock('./useWatchlist', () => ({ useWatchlist: () => null }));
@@ -119,9 +120,9 @@ describe('TwelveXClient deep-link hydration', () => {
     expect(activeTabs(open.container)).toEqual(['Trades']);
   });
 
-  it('follows a legacy param to the tab it redirects to', async () => {
+  it('keeps ?tab=track-record resolvable with no tab chrome (hidden scoreboard)', async () => {
     open = await hydrateAt('?tab=track-record');
-    expect(activeTabs(open.container)).toEqual(['Trades']);
+    expect(activeTabs(open.container)).toEqual([]);
   });
 
   it('stays on Today with no tab param', async () => {

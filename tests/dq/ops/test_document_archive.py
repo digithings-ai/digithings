@@ -9,7 +9,11 @@ import datetime
 import json
 import uuid
 
-from digiquant.ops.checkpoint_archive import archive_documents
+import pytest
+
+pytestmark = pytest.mark.unit
+
+from digiquant.ops.checkpoint_archive import archive_documents  # noqa: E402
 
 
 class _Result:
@@ -31,6 +35,7 @@ class _DocQuery:
         self._patch = None
         self._pending_insert = None
         self._range = None
+        self._order_cols = []
 
     def select(self, *args):
         self._cols = args
@@ -38,6 +43,11 @@ class _DocQuery:
 
     def eq(self, col, val):
         self._filters.append((col, val))
+        return self
+
+    def order(self, *cols):
+        """Mirror postgrest-py's variadic .order(); production orders one at a time."""
+        self._order_cols.extend(cols)
         return self
 
     def range(self, start, end):
@@ -103,6 +113,9 @@ class _DocQuery:
             }
         )
         rows = list(self._matched())
+        if self._order_cols:
+            cols = self._order_cols
+            rows.sort(key=lambda r: tuple(r.get(c) for c in cols))
         if self._range is not None:
             start, end = self._range
             rows = rows[start : end + 1]

@@ -6,6 +6,11 @@
  * useLivePortfolio (#1461/#1462) — reads the public portfolio book +
  * NAV series once, then values it live via {@link useLivePrices}.
  *
+ * Benchmark history (`LANDING_BENCHMARK_TICKER`) reads the R2 market API
+ * (`NEXT_PUBLIC_MARKET_DATA_URL`, required in prod — #4053). Unset means an
+ * empty benchmark series, never a Supabase fallback: the retired price-history
+ * table is dropped in migration 127, so a fallback read would 404, not degrade.
+ *
  *   - `public_portfolio_positions` — latest-date book (privacy-allowlisted:
  *     performance only, never rationale / PM notes / thesis).
  *   - `public_accounting_nav_history` — curated NAV (#2599): finalized accounting
@@ -15,9 +20,9 @@
  *     silently re-point to `public_nav_history` in the browser.
  *
  * Live valuation uses a symbol's quote ONLY when it is a real (non-stale) tick;
- * otherwise the leg falls back to `current_price` (or a stale
- * `public_price_latest` seed when the book has not stamped a mark yet — #3447)
- * and stays flat. With no live ticks (dormant feed / market closed)
+ * otherwise the leg falls back to `current_price` (or a stale R2 closes seed
+ * when the book has not stamped a mark yet — #3447) and stays flat. With no
+ * live ticks (dormant feed / market closed)
  * `liveTotalValue` equals the published `latestNav`. CASH and any priceless
  * leg contribute flat.
  *
@@ -44,10 +49,12 @@ import {
   ACCOUNTING_NAV_VIEW,
   AccountingNavContractError,
 } from "./accounting-nav-contract";
+import { currentNavRun } from "./nav-seam";
+import { fetchBenchmarkHistory } from "./market-data";
 
 const POSITION_COLUMNS =
   "ticker, name, category, sector_bucket, weight_pct, entry_price, entry_date, current_price, day_change_pct, unrealized_pnl_pct, since_entry_return_pct, metrics_as_of";
-const NAV_COLUMNS = "date, nav, cash_pct, invested_pct, day_return_pct, source, contract";
+const NAV_COLUMNS = "date, nav, cash_pct, invested_pct, day_return_pct, source, contract, series_seam";
 const LANDING_BENCHMARK_TICKER = "SPY";
 
 export function useLivePortfolio(options: UseLivePortfolioOptions = {}): LivePortfolioResult {
@@ -96,25 +103,8 @@ export function useLivePortfolio(options: UseLivePortfolioOptions = {}): LivePor
 
           const firstDate = navPoints[0]?.date;
           if (firstDate) {
-            const benchRes = await client
-              .from("price_history")
-              .select("date, close")
-              .eq("ticker", LANDING_BENCHMARK_TICKER)
-              .gte("date", firstDate)
-              .order("date", { ascending: true });
-            if (!cancelled && !benchRes.error && Array.isArray(benchRes.data)) {
-              setBenchmarkHistory(
-                benchRes.data
-                  .map((r) => {
-                    const date = typeof r.date === "string" ? r.date : null;
-                    const price = typeof r.close === "number" ? r.close : Number(r.close);
-                    return date && Number.isFinite(price) ? { date, price } : null;
-                  })
-                  .filter((p): p is { date: string; price: number } => p !== null),
-              );
-            } else if (!cancelled) {
-              setBenchmarkHistory([]);
-            }
+            const history = await fetchBenchmarkHistory(LANDING_BENCHMARK_TICKER, firstDate);
+            if (!cancelled) setBenchmarkHistory(history);
           } else {
             setBenchmarkHistory([]);
           }
@@ -181,7 +171,9 @@ export function useLivePortfolio(options: UseLivePortfolioOptions = {}): LivePor
     });
     return computeLivePerformanceKpis({
       positions: kpiPositions,
-      navHistory: nav.map((n) => ({ date: n.date, nav: n.nav })),
+      // #3767 / #3935: rebase on the current source run so the live-overlay
+      // inception and the β/IR estimator never cross a legacy→finalized seam.
+      navHistory: currentNavRun(nav).map((n) => ({ date: n.date, nav: n.nav })),
       benchmarkHistory,
       benchmarkTicker: benchmarkHistory.length ? LANDING_BENCHMARK_TICKER : null,
     });

@@ -1,7 +1,8 @@
 """Immutable versioned market-data generations in R2 (#3780).
 
-Mirrors the checkpoint archiver ordering verbatim: put -> get -> SHA-256
-compare -> registry -> swap pointer. Never overwrites a generation in place:
+Mirrors the checkpoint archiver ordering, with the registry conflict check
+ahead of the write: registry lookup -> put -> SHA-256 read-back verify ->
+registry insert -> swap pointer. Never overwrites a generation in place:
 each refresh writes a NEW object keyed by generation
 (``price/{TICKER}/{as_of}.parquet``); the prior generation stays readable
 until the next successful refresh swaps the ``latest`` pointer.
@@ -30,6 +31,7 @@ SOURCE_TABLE_PRICE = "market-data/price"
 SOURCE_TABLE_MACRO = "market-data/macro"
 
 RegistryInsert = Callable[[str, dict[str, Any], str, str, int], None]
+RegistryLookup = Callable[[str], str | None]
 
 
 def normalize_ticker(ticker: str) -> str:
@@ -55,6 +57,46 @@ def macro_key(source: str, series: str, as_of: str) -> str:
 def macro_latest_pointer_key(source: str, series: str) -> str:
     """Pointer object naming the newest sealed macro generation."""
     return f"market-data/macro/{source}__{series}/latest"
+
+
+#: S3/R2 error codes that mean "this object key does not exist".
+_MISSING_OBJECT_CODES = frozenset({"NoSuchKey", "404", "NotFound"})
+
+#: Bucket-level (not object-level) errors: loud, never a pointer miss. A
+#: missing/misconfigured bucket shares HTTP 404 with ``NoSuchKey``, so it must
+#: be excluded by code *before* the status fallback or a bucket outage would
+#: read as an unknown ticker/series.
+_BUCKET_LEVEL_CODES = frozenset({"NoSuchBucket"})
+
+
+def is_missing_object_error(exc: BaseException) -> bool:
+    """True only when *exc* means the object key does not exist.
+
+    The real R2 backend surfaces a missing pointer/generation as a boto3
+    ``ClientError`` (``NoSuchKey``/404), not the ``KeyError`` a dict-like store
+    would raise (``R2Backend.get`` -> ``download_fileobj``). Pointer-miss
+    fail-soft (unknown ticker/series -> ``LookupError``/empty) must recognize
+    both shapes *without* importing botocore (an archiver-only optional dep),
+    so this classifies off the exception's ``response`` payload instead.
+
+    Deliberately conservative: bucket-level (``NoSuchBucket``) and
+    credential/network/5xx faults carry other codes (or no ``response``) and
+    return ``False`` so callers keep propagating them rather than reporting a
+    misconfiguration or transient outage as an unknown series.
+    """
+    if isinstance(exc, (KeyError, FileNotFoundError)):
+        return True
+    response = getattr(exc, "response", None)
+    if not isinstance(response, dict):
+        return False
+    error = response.get("Error")
+    code = error.get("Code") if isinstance(error, dict) else None
+    if str(code) in _BUCKET_LEVEL_CODES:
+        return False
+    if str(code) in _MISSING_OBJECT_CODES:
+        return True
+    meta = response.get("ResponseMetadata")
+    return bool(isinstance(meta, dict) and meta.get("HTTPStatusCode") == 404)
 
 
 def build_manifest(
@@ -93,9 +135,15 @@ class R2HistoryStore:
     never this class, for generation enumeration.
     """
 
-    def __init__(self, backend: StorageBackend, registry_insert: RegistryInsert) -> None:
+    def __init__(
+        self,
+        backend: StorageBackend,
+        registry_insert: RegistryInsert,
+        registry_lookup: RegistryLookup | None = None,
+    ) -> None:
         self._backend = backend
         self._registry_insert = registry_insert
+        self._registry_lookup = registry_lookup
 
     def put_generation(
         self,
@@ -105,14 +153,22 @@ class R2HistoryStore:
         source_key: dict[str, Any] | None = None,
         rows: int = -1,
     ) -> Generation:
-        """Store one immutable generation: put -> verify -> registry.
+        """Store one immutable generation: registry pre-check -> put -> verify -> registry.
 
-        Raises :class:`ArchiveVerifyError` before any registry write when the
-        read-back hash mismatches, and propagates registry conflicts (same key,
-        different bytes) so callers never swap a pointer to a failed write.
+        The registry is consulted before the object write, so a same-key
+        conflict (different bytes) raises :class:`ArchiveVerifyError` while the
+        existing generation is still untouched -- R2 generations are immutable
+        (``scripts/refresh_market_data_r2.py``). Same-sha re-puts stay
+        idempotent, and the read-back mismatch guard still runs before any
+        registry write. Without a configured lookup the pre-check is skipped
+        (read-only stores never put).
         """
         key_source = dict(source_key) if source_key is not None else {}
         digest = hashlib.sha256(payload).hexdigest()
+        if self._registry_lookup is not None:
+            existing = self._registry_lookup(key)
+            if existing is not None and existing != digest:
+                raise ArchiveVerifyError(f"archive pointer conflict for {key}: existing row kept")
         self._backend.put(key, payload)
         if hashlib.sha256(self._backend.get(key)).hexdigest() != digest:
             raise ArchiveVerifyError(f"read-back mismatch for {key}; pointer untouched")
@@ -172,8 +228,10 @@ __all__ = [
     "Generation",
     "R2HistoryStore",
     "RegistryInsert",
+    "RegistryLookup",
     "build_manifest",
     "generation_key",
+    "is_missing_object_error",
     "latest_pointer_key",
     "macro_key",
     "macro_latest_pointer_key",

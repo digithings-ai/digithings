@@ -11,7 +11,8 @@
 name: market-data-refresh
 on:
   schedule:
-    - cron: "0 13 * * *"
+    - cron: "0 13 * * *"    # morning: crypto + previous-settled equity bars
+    - cron: "30 21 * * *"   # evening: settled US close before the 22:00 research-metrics run (#4013 D4)
   workflow_dispatch: {}
 permissions:
   contents: read
@@ -28,10 +29,21 @@ jobs:
       R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
       R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
       FRED_API_KEY: ${{ secrets.FRED_API_KEY }}
-      CORE_POSTGRES_URI: ${{ secrets.CORE_POSTGRES_URI }}
+      # transition (#3979): fall back to the pre-#3860 secret names until the
+      # repo secret is renamed; drop the fallback once CORE_POSTGRES_URI exists.
+      CORE_POSTGRES_URI: ${{ secrets.CORE_POSTGRES_URI || secrets.DIGI_CHECKPOINTER_POSTGRES_URI || secrets.MARKET_DATA_POSTGRES_URI }}
+      # FX mirror (#4150): refresh_market_data_r2.py mirrors sealed Yahoo-FX
+      # generations back into core macro_series_observations — twelve-x reads
+      # that table for pair fixes. Without core creds the mirror is inert
+      # (fail-soft by design), so pass them here.
+      CORE_SUPABASE_URL: ${{ secrets.CORE_SUPABASE_URL || secrets.SUPABASE_URL }}
+      CORE_SUPABASE_SERVICE_KEY: ${{ secrets.CORE_SUPABASE_SERVICE_KEY || secrets.SUPABASE_SERVICE_ROLE_KEY }}
     steps:
       - uses: actions/checkout@v4
-      - run: uv sync --frozen --package digiquant --extra research
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+      - run: uv sync --frozen --package digiquant --extra prices --extra research
       - run: uv run --frozen --no-sync python scripts/refresh_market_data_r2.py --manifest-out /tmp/market-data-refresh.json
       - uses: actions/upload-artifact@v4
         with:

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { buildPerformanceTearsheet } from './observability-queries';
-import type { TableRow } from './database.types';
+import type { TableRow, ViewRow } from './database.types';
 
 const position = (
   date: string,
@@ -42,6 +42,21 @@ const attribution = (
   total_attribution_pct: contribution - 0.4,
   metrics_as_of: date,
   created_at: null,
+});
+
+const realized = (
+  date: string,
+  ticker: string,
+  contribution: number
+): ViewRow<'public_daily_realized_attribution'> => ({
+  date,
+  ticker,
+  contribution_pct: contribution,
+  benchmark_return_pct: 0.2,
+  opening_equity: 100,
+  closing_equity: 100 + contribution,
+  contract: 'daily_realized_attribution',
+  period_status: 'final',
 });
 
 const metrics: TableRow<'portfolio_metrics'> = {
@@ -479,5 +494,544 @@ describe('buildPerformanceTearsheet', () => {
 
     expect(result.currentHoldings[0].unrealizedReturnPct).toBeCloseTo(2.417848, 5);
     expect(result.currentHoldings[0].attributionDate).toBe('2026-08-25');
+  });
+
+  it('chains legacy and finalized runs without drawing the Sep-8 jump (#3767 / #4014)', () => {
+    const nav = [
+      { date: '2026-09-06', nav: 100, cash_pct: 20, invested_pct: 80 },
+      { date: '2026-09-07', nav: 99.92, cash_pct: 20, invested_pct: 80 },
+      { date: '2026-09-08', nav: 110.74928206, cash_pct: 20, invested_pct: 80 },
+      { date: '2026-09-09', nav: 111.84928206, cash_pct: 20, invested_pct: 80 },
+    ];
+    const result = buildPerformanceTearsheet({
+      nav,
+      positions: [],
+      metrics: null,
+      attribution: [],
+      accountingNav: [
+        {
+          date: '2026-09-06',
+          nav: 100,
+          cash_pct: 20,
+          invested_pct: 80,
+          day_return_pct: null,
+          source: 'legacy_nav_history',
+          contract: 'legacy_estimate',
+          series_seam: false,
+        },
+        {
+          date: '2026-09-07',
+          nav: 99.92,
+          cash_pct: 20,
+          invested_pct: 80,
+          day_return_pct: null,
+          source: 'legacy_nav_history',
+          contract: 'legacy_estimate',
+          series_seam: false,
+        },
+        {
+          date: '2026-09-08',
+          nav: 110.74928206,
+          cash_pct: 20,
+          invested_pct: 80,
+          day_return_pct: null,
+          source: 'finalized_accounting',
+          contract: 'finalized_accounting',
+          series_seam: true,
+        },
+        {
+          date: '2026-09-09',
+          nav: 111.84928206,
+          cash_pct: 20,
+          invested_pct: 80,
+          day_return_pct: null,
+          source: 'finalized_accounting',
+          contract: 'finalized_accounting',
+          series_seam: false,
+        },
+      ],
+    });
+
+    // Every row plots; the seam row carries flat instead of bridging 99.92 to
+    // 110.75, so the legacy history stays visible without the phantom jump.
+    expect(result.navSeries.map((point) => point.date)).toEqual([
+      '2026-09-06',
+      '2026-09-07',
+      '2026-09-08',
+      '2026-09-09',
+    ]);
+    expect(result.navSeries[0].returnPct).toBe(0);
+    expect(result.navSeries[1].returnPct).toBeCloseTo(-0.08, 5);
+    expect(result.navSeries[2].returnPct).toBeCloseTo(-0.08, 5);
+    const chained = result.navSeries.at(-1)!.returnPct;
+    // ~+0.91% chained from the legacy base — never the +10.8% basis bridge.
+    expect(chained).toBeCloseTo(0.9124, 3);
+    expect(chained).toBeLessThan(2);
+    // The KPI and chart agree across the whole series again (#3935 / #4014).
+    expect(result.netReturnPct).toBeCloseTo(chained, 5);
+    expect(result.inceptionDate).toBe('2026-09-06');
+  });
+
+  it("splices runs with each row's own day return instead of the basis jump (#4014)", () => {
+    const result = buildPerformanceTearsheet({
+      nav: [
+        { date: '2026-09-07', nav: 99.92, cash_pct: 20, invested_pct: 80 },
+        { date: '2026-09-08', nav: 110.74928206, cash_pct: 18.16, invested_pct: 81.84 },
+        { date: '2026-09-09', nav: 110.27496181, cash_pct: 18.24, invested_pct: 81.76 },
+      ],
+      positions: [],
+      metrics: null,
+      attribution: [],
+      events: [],
+      accountingNav: [
+        {
+          date: '2026-09-07',
+          nav: 99.92,
+          cash_pct: 20,
+          invested_pct: 80,
+          day_return_pct: 0,
+          source: 'legacy_nav_history',
+          contract: 'legacy_estimate',
+          series_seam: false,
+        },
+        {
+          date: '2026-09-08',
+          nav: 110.74928206,
+          cash_pct: 18.16,
+          invested_pct: 81.84,
+          day_return_pct: -1.102422,
+          source: 'finalized_accounting',
+          contract: 'finalized_accounting',
+          series_seam: true,
+        },
+        {
+          date: '2026-09-09',
+          nav: 110.27496181,
+          cash_pct: 18.24,
+          invested_pct: 81.76,
+          day_return_pct: -0.428283,
+          source: 'finalized_accounting',
+          contract: 'finalized_accounting',
+          series_seam: false,
+        },
+      ],
+    });
+
+    expect(result.navSeries.map((point) => point.date)).toEqual([
+      '2026-09-07',
+      '2026-09-08',
+      '2026-09-09',
+    ]);
+    // The seam row applies the finalized period's own return, not the +10.8%
+    // level jump the stitched view shows between the two bases.
+    expect(result.navSeries[1].returnPct).toBeCloseTo(-1.102422, 5);
+    expect(result.navSeries[2].returnPct).toBeCloseTo(-1.526, 2);
+  });
+
+  it('forward-fills weekend gaps so the plotted series stays continuous (#4014)', () => {
+    const result = buildPerformanceTearsheet({
+      nav: [
+        { date: '2026-09-04', nav: 100.886423, cash_pct: 20, invested_pct: 80 },
+        { date: '2026-09-08', nav: 100.362022, cash_pct: 20, invested_pct: 80 },
+      ],
+      positions: [],
+      metrics: null,
+      attribution: [],
+      events: [],
+    });
+
+    expect(result.navSeries.map((point) => point.date)).toEqual([
+      '2026-09-04',
+      '2026-09-05',
+      '2026-09-06',
+      '2026-09-07',
+      '2026-09-08',
+    ]);
+    expect(result.navSeries.slice(0, 4).map((point) => point.returnPct)).toEqual([0, 0, 0, 0]);
+    expect(result.navSeries.at(-1)!.returnPct).toBeCloseTo(-0.5198, 3);
+  });
+
+  it('leaves long book gaps as a jump instead of inventing flat days (#4014)', () => {
+    const result = buildPerformanceTearsheet({
+      nav: [
+        { date: '2026-06-23', nav: 100, cash_pct: 25, invested_pct: 75 },
+        { date: '2026-08-26', nav: 98.5, cash_pct: 25, invested_pct: 75 },
+      ],
+      positions: [],
+      metrics: null,
+      attribution: [],
+      events: [],
+    });
+    // 64 missing days — a missing book run, not a weekend; no fill points.
+    expect(result.navSeries.map((point) => point.date)).toEqual(['2026-06-23', '2026-08-26']);
+    expect(result.navSeries.at(-1)!.returnPct).toBeCloseTo(-1.5, 6);
+  });
+
+  it('drops an implausible accounting step instead of drawing a cliff (#4014)', () => {
+    const result = buildPerformanceTearsheet({
+      nav: [
+        { date: '2026-08-24', nav: 101.327006, cash_pct: 20, invested_pct: 80 },
+        { date: '2026-08-25', nav: 3.35208926, cash_pct: 20, invested_pct: 80 },
+        { date: '2026-08-26', nav: 15.13, cash_pct: 20, invested_pct: 80 },
+        { date: '2026-08-27', nav: 102.477988, cash_pct: 20, invested_pct: 80 },
+      ],
+      positions: [],
+      metrics: null,
+      attribution: [],
+      events: [],
+      accountingNav: [
+        {
+          date: '2026-08-24',
+          nav: 101.327006,
+          cash_pct: 20,
+          invested_pct: 80,
+          day_return_pct: 0.2822,
+          source: 'legacy_nav_history',
+          contract: 'legacy_estimate',
+          series_seam: false,
+        },
+        {
+          date: '2026-08-25',
+          nav: 3.35208926,
+          cash_pct: 20,
+          invested_pct: 80,
+          day_return_pct: 3252.08926,
+          source: 'finalized_accounting',
+          contract: 'finalized_accounting',
+          series_seam: true,
+        },
+        {
+          date: '2026-08-26',
+          nav: 15.13,
+          cash_pct: 20,
+          invested_pct: 80,
+          day_return_pct: 0,
+          source: 'finalized_accounting',
+          contract: 'finalized_accounting',
+          series_seam: false,
+        },
+        {
+          date: '2026-08-27',
+          nav: 102.477988,
+          cash_pct: 20,
+          invested_pct: 80,
+          day_return_pct: -0.436605,
+          source: 'finalized_accounting',
+          contract: 'finalized_accounting',
+          series_seam: false,
+        },
+      ],
+    });
+
+    expect(result.navSeries.map((point) => point.date)).toEqual([
+      '2026-08-24',
+      '2026-08-25',
+      '2026-08-26',
+      '2026-08-27',
+    ]);
+    // The 0.10 → 3.35 opening period is a funding artifact, not a +3252% return.
+    expect(result.navSeries.every((point) => Math.abs(point.returnPct) < 1)).toBe(true);
+    expect(result.navSeries.map((point) => point.returnPct)).toEqual([
+      0,
+      0,
+      0,
+      -0.436605,
+    ]);
+  });
+
+  it('draws per-asset contribution from daily realized attribution when marks are stale', () => {
+    const result = buildPerformanceTearsheet({
+      nav: [
+        { date: '2026-09-08', nav: 110.74928206, cash_pct: 18.16, invested_pct: 81.84 },
+        { date: '2026-09-09', nav: 110.27496181, cash_pct: 18.24, invested_pct: 81.76 },
+        { date: '2026-09-10', nav: 109.6668758, cash_pct: 18.34, invested_pct: 81.66 },
+      ],
+      // Marks stop at the last enriched date; the realized view stays current.
+      positions: [position('2026-09-10', 'AAA', 60), position('2026-09-10', 'BBB', 40)],
+      metrics: null,
+      attribution: [],
+      events: [],
+      realizedAttribution: [
+        realized('2026-09-08', 'AAA', 0.1),
+        realized('2026-09-08', 'BBB', 0.2),
+        realized('2026-09-09', 'AAA', -0.3),
+        realized('2026-09-09', 'BBB', 0.1),
+        realized('2026-09-10', 'AAA', -0.2),
+        realized('2026-09-10', 'BBB', -0.4),
+      ],
+    });
+
+    expect(result.contributionSeries.map((point) => point.contributions.AAA)).toEqual([
+      0, -0.3, -0.5,
+    ]);
+    expect(result.contributionSeries.map((point) => point.contributions.BBB)).toEqual([
+      0, 0.1, -0.3,
+    ]);
+  });
+
+  it('prefers realized daily attribution over weight-times-price marks', () => {
+    const first = { ...position('2026-07-01', 'AAA', 20), current_price: 100 };
+    const latest = { ...position('2026-07-17', 'AAA', 20), current_price: 110 };
+    const result = buildPerformanceTearsheet({
+      nav: [
+        { date: '2026-07-01', nav: 100, cash_pct: 20, invested_pct: 80 },
+        { date: '2026-07-17', nav: 106, cash_pct: 20, invested_pct: 80 },
+      ],
+      positions: [first, latest],
+      metrics,
+      attribution: [],
+      events: [],
+      // Marks alone would produce [0, 2]; realized says +0.5.
+      realizedAttribution: [realized('2026-07-01', 'AAA', 4), realized('2026-07-17', 'AAA', 0.5)],
+    });
+
+    expect(result.contributionSeries.map((point) => point.contributions.AAA)).toEqual([0, 0.5]);
+  });
+
+  it('keeps realized contribution keys scoped to the current book', () => {
+    const result = buildPerformanceTearsheet({
+      nav: [
+        { date: '2026-09-09', nav: 100, cash_pct: 20, invested_pct: 80 },
+        { date: '2026-09-10', nav: 101, cash_pct: 20, invested_pct: 80 },
+      ],
+      positions: [position('2026-09-10', 'AAA', 100)],
+      metrics: null,
+      attribution: [],
+      events: [],
+      realizedAttribution: [
+        realized('2026-09-09', 'AAA', 0.1),
+        realized('2026-09-09', 'GONE', 9),
+        realized('2026-09-10', 'AAA', 0.2),
+        realized('2026-09-10', 'GONE', 9),
+      ],
+    });
+
+    expect(Object.keys(result.contributionSeries[1].contributions)).toEqual(['AAA']);
+  });
+
+  it('drops an unanchored realized contribution instead of poisoning later bars', () => {
+    const result = buildPerformanceTearsheet({
+      nav: [
+        { date: '2026-08-24', nav: 101.327006, cash_pct: 15, invested_pct: 85 },
+        { date: '2026-08-25', nav: 101.769942, cash_pct: 14.86, invested_pct: 85.14 },
+        { date: '2026-08-26', nav: 102.5, cash_pct: 14.9, invested_pct: 85.1 },
+        { date: '2026-08-27', nav: 102.477988, cash_pct: 14.9, invested_pct: 85.1 },
+      ],
+      positions: [position('2026-08-27', 'AAA', 60), position('2026-08-27', 'BBB', 40)],
+      metrics: null,
+      attribution: [],
+      events: [],
+      // The 2026-08-25 tip opened on $0.10 of cash and published ±1,700 pp as a
+      // final row (#4102). One degenerate period must not inflate every later bar.
+      realizedAttribution: [
+        realized('2026-08-25', 'AAA', 1723.62303),
+        realized('2026-08-25', 'BBB', 1242.04761),
+        realized('2026-08-26', 'AAA', 0.1),
+        realized('2026-08-27', 'AAA', -0.2),
+      ],
+    });
+
+    expect(result.contributionSource).toBe('realized');
+    // Without the limit the poisoned day would carry 1723.62303 into the run.
+    expect(result.contributionSeries.map((point) => point.contributions.AAA)).toEqual([
+      0, 0, 0.1, -0.1,
+    ]);
+    // The dropped ticker never registers, so it cannot render as a flat zero.
+    expect(Object.keys(result.contributionSeries[2].contributions)).toEqual(['AAA']);
+    expect(result.contributionStartsOn).toBe('2026-08-26');
+  });
+
+  it('reports the first finalized day when attribution starts inside the window', () => {
+    const result = buildPerformanceTearsheet({
+      nav: [
+        { date: '2026-08-24', nav: 101.327006, cash_pct: 15, invested_pct: 85 },
+        { date: '2026-08-25', nav: 101.769942, cash_pct: 14.86, invested_pct: 85.14 },
+        { date: '2026-08-26', nav: 102.477988, cash_pct: 14.9, invested_pct: 85.1 },
+      ],
+      positions: [position('2026-08-26', 'AAA', 100)],
+      metrics: null,
+      attribution: [],
+      events: [],
+      realizedAttribution: [realized('2026-08-26', 'AAA', 0.4)],
+    });
+
+    expect(result.contributionSource).toBe('realized');
+    expect(result.contributionStartsOn).toBe('2026-08-26');
+    expect(result.contributionSeries[0].t).toBe('2026-08-24');
+  });
+
+  it('falls back to weight-times-price marks when realized attribution is empty', () => {
+    const first = { ...position('2026-07-01', 'AAA', 20), current_price: 100 };
+    const latest = { ...position('2026-07-17', 'AAA', 20), current_price: 110 };
+    const result = buildPerformanceTearsheet({
+      nav: [
+        { date: '2026-07-01', nav: 100, cash_pct: 20, invested_pct: 80 },
+        { date: '2026-07-17', nav: 106, cash_pct: 20, invested_pct: 80 },
+      ],
+      positions: [first, latest],
+      metrics,
+      attribution: [],
+      events: [],
+      realizedAttribution: [],
+    });
+
+    expect(result.contributionSeries.map((point) => point.contributions.AAA)).toEqual([0, 2]);
+  });
+
+  it('keeps pre-coverage days flat when the realized view starts mid-run', () => {
+    const result = buildPerformanceTearsheet({
+      nav: [
+        { date: '2026-09-08', nav: 100, cash_pct: 20, invested_pct: 80 },
+        { date: '2026-09-09', nav: 101, cash_pct: 20, invested_pct: 80 },
+        { date: '2026-09-10', nav: 102, cash_pct: 20, invested_pct: 80 },
+      ],
+      positions: [position('2026-09-10', 'AAA', 100)],
+      metrics: null,
+      attribution: [],
+      events: [],
+      realizedAttribution: [
+        realized('2026-09-09', 'AAA', 0.4),
+        realized('2026-09-10', 'AAA', 0.6),
+      ],
+    });
+
+    // No finalized row for day one: the bar stays flat at the base rather than
+    // switching back to the weight-times-mark series mid-window.
+    expect(result.contributionSeries.map((point) => point.contributions.AAA)).toEqual([
+      0, 0.4, 1,
+    ]);
+  });
+
+  it('skips realized rows with a null contribution value', () => {
+    const result = buildPerformanceTearsheet({
+      nav: [
+        { date: '2026-09-09', nav: 100, cash_pct: 20, invested_pct: 80 },
+        { date: '2026-09-10', nav: 101, cash_pct: 20, invested_pct: 80 },
+      ],
+      positions: [position('2026-09-10', 'AAA', 100)],
+      metrics: null,
+      attribution: [],
+      events: [],
+      realizedAttribution: [
+        { ...realized('2026-09-09', 'AAA', 0), contribution_pct: null },
+        realized('2026-09-10', 'AAA', 0.5),
+      ],
+    });
+
+    expect(result.contributionSeries.map((point) => point.contributions.AAA)).toEqual([0, 0.5]);
+  });
+
+  it('falls back to marks when realized rows only cover dates outside the plotted run', () => {
+    const result = buildPerformanceTearsheet({
+      nav: [
+        { date: '2026-09-05', nav: 99.92, cash_pct: 18, invested_pct: 82 },
+        { date: '2026-09-08', nav: 110.74928206, cash_pct: 18.16, invested_pct: 81.84 },
+        { date: '2026-09-09', nav: 110.27496181, cash_pct: 18.24, invested_pct: 81.76 },
+        { date: '2026-09-10', nav: 109.6668758, cash_pct: 18.34, invested_pct: 81.66 },
+      ],
+      accountingNav: [
+        {
+          date: '2026-09-05',
+          nav: 99.92,
+          cash_pct: 18,
+          invested_pct: 82,
+          day_return_pct: null,
+          source: 'legacy_nav_history',
+          contract: 'legacy_estimate',
+          series_seam: false,
+        },
+        {
+          date: '2026-09-08',
+          nav: 110.74928206,
+          cash_pct: 18.16,
+          invested_pct: 81.84,
+          day_return_pct: null,
+          source: 'finalized_accounting',
+          contract: 'finalized_accounting',
+          series_seam: true,
+        },
+        {
+          date: '2026-09-09',
+          nav: 110.27496181,
+          cash_pct: 18.24,
+          invested_pct: 81.76,
+          day_return_pct: null,
+          source: 'finalized_accounting',
+          contract: 'finalized_accounting',
+          series_seam: false,
+        },
+        {
+          date: '2026-09-10',
+          nav: 109.6668758,
+          cash_pct: 18.34,
+          invested_pct: 81.66,
+          day_return_pct: null,
+          source: 'finalized_accounting',
+          contract: 'finalized_accounting',
+          series_seam: false,
+        },
+      ],
+      positions: [
+        { ...position('2026-09-08', 'AAA', 100), current_price: 100 },
+        { ...position('2026-09-10', 'AAA', 100), current_price: 110 },
+      ],
+      metrics: null,
+      attribution: [],
+      events: [],
+      // The view stopped at the prior run: rows exist but none fall inside the
+      // plotted post-seam window. A flat-zero realized series must not starve
+      // the marks accrual (which prices AAA +10%).
+      realizedAttribution: [
+        realized('2026-09-04', 'AAA', 0.5),
+        realized('2026-09-05', 'AAA', 0.5),
+      ],
+    });
+
+    expect(result.navSeries.map((point) => point.date)).toEqual([
+      '2026-09-05',
+      '2026-09-06',
+      '2026-09-07',
+      '2026-09-08',
+      '2026-09-09',
+      '2026-09-10',
+    ]);
+    expect(result.contributionSeries.map((point) => point.contributions.AAA)).toEqual([
+      0, 0, 0, 0, 0, 10,
+    ]);
+    expect(result.contributionSource).toBe('marks');
+  });
+
+  it('badges the marks fallback when the realized attribution read failed', () => {
+    const result = buildPerformanceTearsheet({
+      nav: [
+        { date: '2026-09-09', nav: 100, cash_pct: 20, invested_pct: 80 },
+        { date: '2026-09-10', nav: 101, cash_pct: 20, invested_pct: 80 },
+      ],
+      positions: [position('2026-09-10', 'AAA', 100)],
+      metrics: null,
+      attribution: [],
+      events: [],
+      realizedAttribution: [],
+      realizedAttributionDegraded: true,
+    });
+
+    expect(result.contributionSource).toBe('marks_degraded');
+  });
+
+  it('badges a truncated realized read even when rows were rendered', () => {
+    const result = buildPerformanceTearsheet({
+      nav: [
+        { date: '2026-09-09', nav: 100, cash_pct: 20, invested_pct: 80 },
+        { date: '2026-09-10', nav: 101, cash_pct: 20, invested_pct: 80 },
+      ],
+      positions: [position('2026-09-10', 'AAA', 100)],
+      metrics: null,
+      attribution: [],
+      events: [],
+      realizedAttribution: [realized('2026-09-10', 'AAA', 0.5)],
+      realizedAttributionDegraded: true,
+    });
+
+    expect(result.contributionSource).toBe('realized_truncated');
   });
 });

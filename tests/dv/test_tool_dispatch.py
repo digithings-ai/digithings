@@ -19,6 +19,11 @@ from digivault.orchestrator_tools import (
 )
 from digivault.tool_dispatch import (
     DISPATCH_TOOL_NAMES,
+    MCP_TOOL_BACKLINKS,
+    MCP_TOOL_CREATE_NOTE,
+    MCP_TOOL_LINT,
+    MCP_TOOL_SEARCH_NOTES,
+    MCP_TOOL_SEARCH_TAG,
     RUNTIME_ONLY_TOOL_NAMES,
     TOOL_VAULT_BACKLINKS,
     TOOL_VAULT_CREATE_NOTE,
@@ -54,7 +59,15 @@ def test_orchestrator_reexports_match_tool_dispatch() -> None:
 
 def test_mcp_discovery_matches_vault_handler_set() -> None:
     """MCP discovery list must equal the vault-local runtime dispatch set (#1188)."""
-    assert mcp_tool_names() == frozenset(VAULT_HANDLERS)
+    assert mcp_tool_names() == frozenset(
+        {
+            MCP_TOOL_SEARCH_TAG,
+            MCP_TOOL_BACKLINKS,
+            MCP_TOOL_LINT,
+            MCP_TOOL_CREATE_NOTE,
+            MCP_TOOL_SEARCH_NOTES,
+        }
+    )
     # FastMCP keeps tools on the tool manager; names must match our registry.
     managed = digivault_mcp._tool_manager.list_tools()
     discovered = {t.name for t in managed}
@@ -109,7 +122,7 @@ def test_mcp_search_tag_returns_slim_array(tmp_path: Path) -> None:
 
     fake = _FakeMcp()
     register_mcp_tools(fake, lambda: vault)
-    raw = fake.tools[TOOL_VAULT_SEARCH_TAG]("doc")  # type: ignore[operator]
+    raw = fake.tools[MCP_TOOL_SEARCH_TAG]("doc")  # type: ignore[operator]
     assert isinstance(raw, str)
     payload = json.loads(raw)
     assert isinstance(payload, list)
@@ -189,3 +202,32 @@ def test_dispatch_create_note_duplicate_returns_error(tmp_path: Path) -> None:
     )
     assert result.ok is False
     assert result.error == "Note already exists: 'exists'"
+
+
+def test_mcp_search_notes_reads_the_local_vault(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import json
+
+    from digivault.tool_dispatch import register_mcp_tools
+
+    class _FakeMcp:
+        def __init__(self) -> None:
+            self.tools: dict[str, object] = {}
+
+        def tool(self, *, name: str):
+            def deco(fn):
+                self.tools[name] = fn
+                return fn
+
+            return deco
+
+    root = tmp_path / "vault"
+    (root / "sub").mkdir(parents=True)
+    (root / "sub" / "n.md").write_text("alpha body", encoding="utf-8")
+    monkeypatch.setenv("DIGIVAULT_ROOT", str(root))
+    fake = _FakeMcp()
+    register_mcp_tools(fake, lambda: Vault(root))
+    assert fake.tools["search_notes"]("alpha", "") == "[digivault error: path_prefix is required]"
+    payload = json.loads(fake.tools["search_notes"]("alpha", "sub"))
+    assert payload["hits"]

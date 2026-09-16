@@ -28,8 +28,8 @@ describe("DigichatConfigSchema", () => {
     expect(cfg.deployment?.chrome.mode).toBe("embed");
     expect(cfg.deployment?.persistence).toBe("none");
     expect(cfg.deployment?.auth).toBe("anonymous");
-    expect(cfg.deployment?.features.reasoning).toBe("collapsed");
-    expect(cfg.deployment?.features.toolCalls).toBe("collapsed");
+    expect(cfg.deployment?.features.view).toBe("balanced");
+    expect(cfg.deployment?.features.thinking).toBe("auto");
     expect(cfg.deployment?.chrome.defaultLanguage).toBe("en");
     expect(cfg.deployment?.chrome.transcript.userAlign).toBe("right");
     expect(cfg.deployment?.chrome.skin).toBe("base");
@@ -37,9 +37,41 @@ describe("DigichatConfigSchema", () => {
     expect(cfg.deployment?.models.available).toEqual([]);
     expect(cfg.deployment?.gate.activityDetail).toBe("labels");
     expect(cfg.deployment?.features.attachments).toBe(true);
+    expect(cfg.deployment?.features.pageContext).toBe("visible");
   });
 
-  it("coerces reasoning/toolCalls booleans", () => {
+  it("accepts pageContext modes and fails closed on unknown values", () => {
+    const silent = parseDigichatConfig({
+      version: 1,
+      deployment: {
+        slug: "acme",
+        backend: { type: "digigraph" },
+        features: { pageContext: "silent" },
+      },
+    });
+    expect(silent.deployment?.features.pageContext).toBe("silent");
+    const off = parseDigichatConfig({
+      version: 1,
+      deployment: {
+        slug: "acme",
+        backend: { type: "digigraph" },
+        features: { pageContext: "off" },
+      },
+    });
+    expect(off.deployment?.features.pageContext).toBe("off");
+    expect(() =>
+      parseDigichatConfig({
+        version: 1,
+        deployment: {
+          slug: "acme",
+          backend: { type: "digigraph" },
+          features: { pageContext: "hidden" },
+        },
+      }),
+    ).toThrow(/pageContext/);
+  });
+
+  it("folds legacy reasoning/toolCalls disclosure keys onto view/thinking", () => {
     const cfg = parseDigichatConfig({
       version: 1,
       deployment: {
@@ -48,17 +80,28 @@ describe("DigichatConfigSchema", () => {
         features: { reasoning: true, toolCalls: false },
       },
     });
-    expect(cfg.deployment?.features.reasoning).toBe("collapsed");
-    expect(cfg.deployment?.features.toolCalls).toBe("off");
-  });
+    expect(cfg.deployment?.features.view).toBe("hidden");
+    expect(cfg.deployment?.features.thinking).toBe("collapsed");
 
-  it("accepts disclosure enums and cli.enabled", () => {
-    const cfg = parseDigichatConfig({
+    const expanded = parseDigichatConfig({
       version: 1,
       deployment: {
         slug: "acme",
         backend: { type: "digigraph" },
         features: { reasoning: "expanded", toolCalls: "locked_open" },
+      },
+    });
+    expect(expanded.deployment?.features.view).toBe("detailed");
+    expect(expanded.deployment?.features.thinking).toBe("open");
+  });
+
+  it("accepts view/thinking modes and cli.enabled", () => {
+    const cfg = parseDigichatConfig({
+      version: 1,
+      deployment: {
+        slug: "acme",
+        backend: { type: "digigraph" },
+        features: { view: "detailed", thinking: "open" },
         chrome: { defaultLanguage: "de", transcript: { userAlign: "left" } },
         models: {
           default: "gpt-4o-mini",
@@ -68,8 +111,8 @@ describe("DigichatConfigSchema", () => {
         cli: { enabled: true },
       },
     });
-    expect(cfg.deployment?.features.reasoning).toBe("expanded");
-    expect(cfg.deployment?.features.toolCalls).toBe("locked_open");
+    expect(cfg.deployment?.features.view).toBe("detailed");
+    expect(cfg.deployment?.features.thinking).toBe("open");
     expect(cfg.deployment?.chrome.defaultLanguage).toBe("de");
     expect(cfg.deployment?.chrome.transcript.userAlign).toBe("left");
     expect(cfg.deployment?.cli.enabled).toBe(true);
@@ -211,6 +254,7 @@ describe("DigichatConfigSchema", () => {
     expect(welcomeTitle(cfg.deployment?.chrome.welcome)).toBe("Ask about this page.");
     expect(cfg.deployment?.chrome.mode).toBe("modal");
     expect(cfg.deployment?.features.attachments).toBe(false);
+    expect(cfg.deployment?.features.pageContext).toBe("silent");
     expect(cfg.deployment?.gate.requiredPlanTier).toBe("desk");
     expect(cfg.deployment?.gate.showByok).toBe(true);
     expect(cfg.deployment?.gate.llmAccess).toBe("operator");
@@ -233,9 +277,10 @@ describe("DigichatConfigSchema", () => {
     );
     const dt = digithings.hosts?.["digithings.ai"];
     expect(dt?.chrome.skin).toBe("digichat");
-    expect(welcomeTitle(dt?.chrome.welcome)).toBe("Ask about digithings.");
+    expect(welcomeTitle(dt?.chrome.welcome)).toBe("Ask about digithings");
     expect(dt?.backend).toEqual({
       type: "digigraph",
+      digisearchIndex: "digithings_docs",
       vaultPathPrefix: "clients/digithings",
     });
     expect(dt?.tools?.allowUserToggle).toBe(true);
@@ -279,7 +324,15 @@ describe("DigichatConfigSchema", () => {
     ]);
     expect(occHost?.tools?.catalog.find((t) => t.id === "web_search")?.default).toBe(true);
     expect(occHost?.gate?.webSearch).toBe(true);
-    expect(allowedForceTools(occHost)).toEqual(["digisearch", "digivault"]);
+    expect(occHost?.mcp?.allowUserServers).toBe(false);
+    expect(occHost?.mcp?.servers.map((s) => s.id)).toEqual([
+      "zammad",
+      "digisearch",
+      "digivault",
+    ]);
+    expect(occHost?.mcp?.servers[0]?.tokenEnv).toBe("ZAMMAD_API_TOKEN");
+    expect(occHost?.mcp?.servers[0]?.authHeader).toBe("Authorization");
+    expect(allowedForceTools(occHost)).toEqual(["digisearch", "digivault", "zammad"]);
   });
 
   it("parses operator MCP servers on the DataTap example without leaking URLs", () => {

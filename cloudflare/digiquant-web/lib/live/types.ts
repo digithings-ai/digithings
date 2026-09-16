@@ -4,8 +4,9 @@
  * Two browser lanes feed these shapes (see digiquant/supabase/README.md):
  *   - crypto  → Coinbase's public keyless WS (per-product ticker stream)
  *   - equities → Supabase Realtime `postgres_changes` on `public.prices_live`
- * with a daily-close SEED/fallback from the `public_price_latest` view so
- * values exist before the first tick and when a lane is dark.
+ * with a daily-close SEED/fallback from the R2 market API (`/v1/market/closes`
+ * via `seedFromWorker`, #4053) so values exist before the first tick and when
+ * a lane is dark.
  *
  * The two consumer lanes (StockTicker tape + dashboard live portfolio section)
  * build against these types — treat them as the contract.
@@ -46,26 +47,26 @@ export type LivePriceMap = Record<string, LiveQuote>;
 /** Options for {@link useLivePrices}. */
 export interface UseLivePricesOptions {
   /**
-   * Symbols to seed from `public_price_latest` and surface in the map
-   * (equities AND crypto, uppercase — "SPY", "BTC-USD"). When non-empty it
-   * also bounds the map: `prices_live` rows outside this set (∪
-   * cryptoProductIds) are ignored. Empty/omitted = accept every row.
+   * Symbols to seed from the R2 market API and surface in the map (equities
+   * AND crypto, uppercase — "SPY", "BTC-USD"). When non-empty it also bounds
+   * the map: `prices_live` rows outside this set (∪ cryptoProductIds) are
+   * ignored. Empty/omitted = accept every row.
    */
   symbols?: string[];
   /**
    * Coinbase product_ids to stream live from the public WS, e.g.
    * `["BTC-USD","ETH-USD","SOL-USD"]`. Streams regardless of Supabase config —
    * this is the keyless lane and never touches the Supabase client. These are
-   * also seeded from `public_price_latest` (which carries the `-USD` closes),
-   * so crypto shows a stale value before Coinbase connects / when it is dark —
-   * no need to also list them in `symbols`.
+   * also seeded from the R2 market API (which carries the `-USD` closes), so
+   * crypto shows a stale value before Coinbase connects / when it is dark — no
+   * need to also list them in `symbols`.
    */
   cryptoProductIds?: string[];
   /**
-   * Test seam / explicit override: the Supabase client to use for the seed
-   * SELECT and the equity `postgres_changes` subscription. Defaults to the
-   * module singleton (which is `null` when the public env vars are unset). Pass
-   * `null` to force the equity+seed lanes dark (crypto still streams).
+   * Test seam / explicit override: the Supabase client to use for the equity
+   * `postgres_changes` subscription. Defaults to the module singleton (which is
+   * `null` when the public env vars are unset). Pass `null` to force the equity
+   * lane dark (the seed is a plain fetch, crypto still streams).
    */
   client?: SupabaseClient | null;
 }
@@ -108,6 +109,8 @@ export interface NavPoint {
   source?: string | null;
   /** finalized_accounting | legacy_estimate */
   contract?: string | null;
+  /** Migration 123 (#3767): true on the first row after a legacy↔finalized flip. */
+  seriesSeam?: boolean | null;
 }
 
 /** Return shape of {@link useLivePortfolio}. */

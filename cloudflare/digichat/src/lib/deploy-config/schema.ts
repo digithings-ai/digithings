@@ -11,6 +11,12 @@ import {
   LANGUAGES,
 } from "@/lib/languages";
 import { THREAD_SKINS, DEFAULT_THREAD_SKIN } from "@/lib/thread-skins";
+import {
+  DEFAULT_THINKING_MODE,
+  DEFAULT_VIEW_MODE,
+  THINKING_MODES,
+  VIEW_MODES,
+} from "@/lib/view-modes";
 
 const SLUG = /^[a-z0-9][a-z0-9-]*$/;
 const HEX_COLOR = /^#[0-9a-fA-F]{6}$/;
@@ -27,6 +33,14 @@ const ThreadSkinInputSchema = z.preprocess(
 );
 export const GateModeSchema = z.enum(["turn_limited", "ungated", "trial_form"]);
 export const ActivityDetailSchema = z.enum(["off", "labels", "full"]);
+/**
+ * Host-page context injection from the popup widget (`digichat:page-context`):
+ * - `off` — ignore incoming page-context messages entirely (no listener).
+ * - `silent` — the snapshot still reaches the model, but no attachment chip.
+ * - `visible` — current behavior: chip in composer and sent message.
+ * Deployment-configured; parents see the mode on `digichat:ready`.
+ */
+export const PageContextModeSchema = z.enum(["off", "silent", "visible"]);
 export const LlmAccessSchema = z.enum([
   "free_then_byok",
   "byok_only",
@@ -86,16 +100,10 @@ export const DisclosureModeSchema = z.enum([
 ]);
 export type DisclosureMode = z.infer<typeof DisclosureModeSchema>;
 
-function coerceDisclosureMode(value: unknown): unknown {
-  if (value === true) return "collapsed";
-  if (value === false) return "off";
-  return value;
-}
-
-const DisclosureModeInputSchema = z.preprocess(
-  coerceDisclosureMode,
-  DisclosureModeSchema,
-);
+/** Chain-of-thought view mode (reasoning + tool calls). See view-modes.ts. */
+export const ViewModeSchema = z.enum(VIEW_MODES);
+/** Reasoning-only override on top of the view mode. */
+export const ThinkingModeSchema = z.enum(THINKING_MODES);
 
 export const AccentSchema = z.object({
   color: z.string().regex(HEX_COLOR, "must be #rrggbb"),
@@ -147,18 +155,57 @@ export const ChromeSchema = z
   })
   .strict();
 
-export const FeaturesSchema = z
-  .object({
-    attachments: z.boolean().default(true),
-    dictation: z.boolean().default(false),
-    speech: z.boolean().default(false),
-    reasoning: DisclosureModeInputSchema.default("collapsed"),
-    toolCalls: DisclosureModeInputSchema.default("collapsed"),
-    sources: z.boolean().default(true),
-    modelPicker: z.boolean().default(false),
-    branchPicker: z.boolean().default(true),
-  })
-  .strict();
+/**
+ * Legacy `features.reasoning` / `features.toolCalls` disclosure keys fold
+ * forward onto the view-mode pair so older YAML keeps loading. Per-field:
+ * a new-style value always wins; a legacy value maps to the closest mode
+ * (toolCalls off→hidden / expanded→detailed / collapsed→compact; reasoning
+ * expanded→thinking open, anything else→pinned collapsed).
+ */
+function foldLegacyDisclosure(value: unknown): unknown {
+  if (value == null || typeof value !== "object" || Array.isArray(value)) {
+    return value;
+  }
+  const record = { ...(value as Record<string, unknown>) };
+  const toolCalls = record.toolCalls;
+  const reasoning = record.reasoning;
+  delete record.toolCalls;
+  delete record.reasoning;
+  if (record.view == null && toolCalls !== undefined) {
+    record.view =
+      toolCalls === false || toolCalls === "off"
+        ? "hidden"
+        : toolCalls === "expanded" || toolCalls === "locked_open"
+          ? "detailed"
+          : "compact";
+  }
+  if (record.thinking == null && reasoning !== undefined) {
+    record.thinking =
+      reasoning === "expanded" || reasoning === "locked_open"
+        ? "open"
+        : "collapsed";
+  }
+  return record;
+}
+
+export const FeaturesSchema = z.preprocess(
+  foldLegacyDisclosure,
+  z
+    .object({
+      attachments: z.boolean().default(true),
+      dictation: z.boolean().default(false),
+      speech: z.boolean().default(false),
+      /** Chain-of-thought disclosure for reasoning + tool calls. */
+      view: ViewModeSchema.default(DEFAULT_VIEW_MODE),
+      /** Reasoning-only override on top of `view`. */
+      thinking: ThinkingModeSchema.default(DEFAULT_THINKING_MODE),
+      sources: z.boolean().default(true),
+      modelPicker: z.boolean().default(false),
+      branchPicker: z.boolean().default(true),
+      pageContext: PageContextModeSchema.default("visible"),
+    })
+    .strict(),
+);
 
 export const ModelsSchema = z
   .object({
@@ -221,7 +268,7 @@ export const McpServerSchema = z
   .object({
     id: z
       .string()
-      .regex(/^[a-z0-9][a-z0-9_-]{0,63}$/, "mcp server id must be lowercase slug"),
+      .regex(/^[a-z0-9][a-z0-9-]{0,63}$/, "mcp server id must be a lowercase slug without underscores"),
     /** BFF-only URL — never projected to the browser */
     url: z.string().url(),
     label: z.string().optional(),
@@ -238,6 +285,12 @@ export const McpServerSchema = z
      * from this when `token` is unset (#3841).
      */
     tokenEnv: z.string().optional(),
+    /**
+     * MCP setup values applied when this server's tools are registered (e.g.
+     * the digisearch index name or the digivault path prefix). Forwarded
+     * verbatim to digigraph; the model never sees or supplies them.
+     */
+    setup: z.record(z.string(), z.string()).optional(),
     /**
      * Custom outbound header name for the resolved token, e.g. "X-API-Key".
      * Defaults to `Authorization: Bearer <token>` when unset. Operator-only —
@@ -305,11 +358,12 @@ export const DeploymentSchema = z
       attachments: true,
       dictation: false,
       speech: false,
-      reasoning: "collapsed",
-      toolCalls: "collapsed",
+      view: DEFAULT_VIEW_MODE,
+      thinking: DEFAULT_THINKING_MODE,
       sources: true,
       modelPicker: false,
       branchPicker: true,
+      pageContext: "visible",
     }),
     models: ModelsSchema.default({ available: [] }),
     cli: CliSchema.default({ enabled: false }),
@@ -351,6 +405,7 @@ export type ThreadSkin = z.infer<typeof ThreadSkinSchema>;
 export type PersistenceMode = z.infer<typeof PersistenceSchema>;
 export type AuthMode = z.infer<typeof AuthModeSchema>;
 export type UserAlign = z.infer<typeof UserAlignSchema>;
+export type PageContextMode = z.infer<typeof PageContextModeSchema>;
 export type DigichatDeployment = z.infer<typeof DeploymentSchema>;
 export type DigichatConfig = z.infer<typeof DigichatConfigSchema>;
 export type ToolCatalogEntry = z.infer<typeof ToolCatalogEntrySchema>;

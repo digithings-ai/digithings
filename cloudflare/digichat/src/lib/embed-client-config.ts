@@ -13,6 +13,8 @@
 
 import { isFirstPartyEmbedHost } from "@/lib/embed-first-party";
 import { getTenantSuggestionPool } from "@/lib/embed-suggestion-pools";
+import type { PageContextMode } from "@/lib/deploy-config/schema";
+import type { ThinkingMode, ViewMode } from "@/lib/view-modes";
 import {
   resolveEmbedTenantByHost,
   type EmbedLlmAccess,
@@ -42,6 +44,12 @@ export type EmbedTenantClientConfig = {
   placeholder?: string;
   /** User file picker. JSON omit / unresolved-tenant omit stays off except DEFAULT. */
   attachments?: boolean;
+  /**
+   * Popup page-context mode (see schema.ts). Omit = "visible" (legacy chip).
+   * `off` stops the embed from listening for `digichat:page-context`; `silent`
+   * injects the snapshot into the model without rendering an attachment chip.
+   */
+  pageContext?: PageContextMode;
   lockedContact?: string;
   showByok?: boolean;
   layout?: "page" | "embed";
@@ -49,6 +57,10 @@ export type EmbedTenantClientConfig = {
   showLanguageSelector?: boolean;
   /** Tenant allows opt-in web search UI (#3420). Default false. */
   webSearch?: boolean;
+  /** Chain-of-thought view mode (reasoning + tool calls). Omit = deploy default. */
+  view?: ViewMode;
+  /** Reasoning-only override on top of `view`. Omit = deploy default. */
+  thinking?: ThinkingMode;
   /** Catalog entries — no MCP URLs */
   tools?: { catalog: Array<{ id: string; default?: boolean; label?: string }> };
   /** Operator MCP ids/labels only */
@@ -78,20 +90,21 @@ export const DEFAULT_EMBED_TENANT_CONFIG: EmbedTenantClientConfig = {
   theme: "dark",
   skin: BASELINE_EMBED_SKIN,
   accent: null,
-  attribution: false,
+  attribution: true,
   welcome: BASELINE_EMBED_WELCOME,
   welcomeBody: [...BASELINE_EMBED_WELCOME_BODY],
   placeholder: BASELINE_EMBED_PLACEHOLDER,
   suggestions: [...BASELINE_EMBED_SUGGESTIONS],
   attachments: true,
-  showByok: true,
+  pageContext: "visible",
+  showByok: false,
   layout: "embed",
   showLanguageSelector: false,
-  webSearch: true,
-  // Baseline operator surface: no pinned servers, but the user-server form is
-  // open (same as the deploy-path default). The bridge projects this with
-  // strict ===true passthroughs, so the keys must be present here.
-  mcp: { servers: [], allowUserServers: true, allowAddForm: true },
+  webSearch: false,
+  // Least-privilege fallback: no pinned servers and the user-server form stays
+  // closed until a resolved deployment/host opts in. The bridge projects this
+  // with strict ===true passthroughs, so the keys must be present here.
+  mcp: { servers: [], allowUserServers: false, allowAddForm: false },
 };
 
 /** Registry entry → client-safe config. Copies declared fields only; `token`
@@ -113,6 +126,7 @@ export function toEmbedClientConfig(cfg: EmbedTenantConfig): EmbedTenantClientCo
     placeholder: cfg.placeholder,
     lockedContact: cfg.lockedContact,
     attachments: cfg.attachments === true,
+    pageContext: cfg.pageContext ?? "visible",
     showByok: cfg.showByok ?? false,
     layout: cfg.layout ?? "embed",
     llmAccess: cfg.llmAccess,
@@ -124,6 +138,8 @@ export function toEmbedClientConfig(cfg: EmbedTenantConfig): EmbedTenantClientCo
     // an enabled tenant pairs with the default-on user pref before digichat
     // sends X-Digi-Enable-Web-Search.
     webSearch: cfg.webSearch === true,
+    view: cfg.view,
+    thinking: cfg.thinking,
     tools: cfg.tools,
     mcp: cfg.mcp
       ? {
@@ -149,20 +165,28 @@ export function toEmbedClientConfig(cfg: EmbedTenantConfig): EmbedTenantClientCo
  * embed-chat-tenant.ts; the authorization rule here is deliberately identical
  * to it — a registered host alone is never enough for a customer tenant, only
  * the matching per-tenant token unlocks the real config (#1339) — because this
- * path discloses the same fields to the same anonymous visitor. An unknown host
- * or a wrong/absent token yields the baseline defaults, never a partial tenant.
+ * path discloses the same fields to the same anonymous visitor. A first-party
+ * host additionally needs a first-party `originHost` (browser-attested
+ * `Origin`/`Referer`), never `?host=` alone. An unknown host or a wrong/absent
+ * token yields the baseline defaults, never a partial tenant.
  */
 export function resolveEmbedClientConfigFromParams(
   token: string | undefined,
   host: string | undefined,
+  originHost?: string | null,
 ): EmbedTenantClientConfig {
   const registered = resolveEmbedTenantByHost(host);
   if (!registered) return DEFAULT_EMBED_TENANT_CONFIG;
-  if (isFirstPartyEmbedHost(host)) return toEmbedClientConfig(registered);
   const trimmedToken = token?.trim();
-  return trimmedToken && trimmedToken === registered.token
-    ? toEmbedClientConfig(registered)
-    : DEFAULT_EMBED_TENANT_CONFIG;
+  if (trimmedToken && trimmedToken === registered.token) {
+    return toEmbedClientConfig(registered);
+  }
+  // First-party tokenless paint requires a first-party browser-attested origin
+  // too — `?host=`/`X-Embed-Host` alone is display-only and must not unlock it.
+  if (isFirstPartyEmbedHost(host) && isFirstPartyEmbedHost(originHost)) {
+    return toEmbedClientConfig(registered);
+  }
+  return DEFAULT_EMBED_TENANT_CONFIG;
 }
 
 /**

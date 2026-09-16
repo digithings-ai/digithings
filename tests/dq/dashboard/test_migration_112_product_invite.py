@@ -24,10 +24,6 @@ def test_migration_is_the_only_112() -> None:
     assert sorted(MIGRATIONS_DIR.glob("112_*.sql")) == [MIGRATION_PATH]
 
 
-def test_does_not_reuse_reserved_111() -> None:
-    assert list(MIGRATIONS_DIR.glob("111_*.sql")) == []
-
-
 def test_creates_hashed_invite_tables(sql: str) -> None:
     for table in (
         "product_invite_codes",

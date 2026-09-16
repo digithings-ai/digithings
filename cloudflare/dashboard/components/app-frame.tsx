@@ -6,6 +6,7 @@ import Sidebar from '@/components/sidebar';
 import MobileAppBar from '@/components/mobile-app-bar';
 import CommandPalette from '@/components/command-palette';
 import DigichatPopup from '@/components/digichat-popup';
+import FxHubOnlyGuard from '@/components/fx-hub-only-guard';
 import DbUnavailable from '@/components/db-unavailable';
 import { useDashboard } from '@/lib/dashboard-context';
 import { isDbExempt } from '@/lib/nav';
@@ -36,7 +37,9 @@ export default function AppFrame({ children }: { children: ReactNode }) {
       <main className="flex min-h-0 min-w-0 flex-1 flex-col overflow-y-auto max-h-screen">
         <MobileAppBar />
         <CommandPalette />
-        <div className="flex min-h-0 flex-1 flex-col">{gated ? <DbUnavailable /> : children}</div>
+        <div className="flex min-h-0 flex-1 flex-col">
+          {gated ? <DbUnavailable /> : <FxHubOnlyGuard>{children}</FxHubOnlyGuard>}
+        </div>
       </main>
       {/* Desk+ research/portfolio digichat popup (#3422); no-ops when env off. */}
       <DigichatPopup />

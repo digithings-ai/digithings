@@ -61,6 +61,115 @@ describe("parseEmbedTenants", () => {
     expect(reg.get("datatapstream.com")?.skin).toBe("base");
   });
 
+  it("keeps operator MCP servers from the env registry", () => {
+    const reg = parseEmbedTenants(
+      JSON.stringify({
+        "occ.digithings.ai": {
+          slug: "occ",
+          backend: {
+            type: "digigraph",
+            digisearchIndex: "occ_help",
+            vaultPathPrefix: "clients/online-compliance-center",
+          },
+          gateMode: "ungated",
+          token: "first-party-unused",
+          mcp: {
+            servers: [
+              {
+                id: "zammad",
+                url: "http://zammad-mcp:8770/mcp",
+                label: "Zammad tickets",
+                default: true,
+                token: "edge-test-token",
+                authHeader: "x-digi-mcp-key",
+              },
+              {
+                id: "digivault",
+                url: "http://digivault-mcp:8769/mcp",
+                label: "Knowledge vault",
+                default: true,
+                setup: { path_prefix: "clients/online-compliance-center" },
+              },
+            ],
+            allowUserServers: false,
+            allowAddForm: false,
+          },
+        },
+      }),
+    );
+    expect(reg.get("occ.digithings.ai")?.mcp).toEqual({
+      servers: [
+        {
+          id: "zammad",
+          url: "http://zammad-mcp:8770/mcp",
+          label: "Zammad tickets",
+          default: true,
+          token: "edge-test-token",
+          authHeader: "x-digi-mcp-key",
+        },
+        {
+          id: "digivault",
+          url: "http://digivault-mcp:8769/mcp",
+          label: "Knowledge vault",
+          default: true,
+          setup: { path_prefix: "clients/online-compliance-center" },
+        },
+      ],
+      allowUserServers: false,
+      allowAddForm: false,
+    });
+  });
+
+  it("rejects malformed MCP setup values", () => {
+    const withMcp = (mcp: unknown) =>
+      JSON.stringify({
+        "occ.digithings.ai": {
+          slug: "occ",
+          backend: { type: "digigraph" },
+          gateMode: "ungated",
+          token: "t",
+          mcp,
+        },
+      });
+    expect(() =>
+      parseEmbedTenants(
+        withMcp({ servers: [{ id: "v", url: "http://v.test/mcp", setup: ["x"] }] }),
+      ),
+    ).toThrow(/mcp\.servers\[0\]\.setup must be an object/);
+    expect(() =>
+      parseEmbedTenants(
+        withMcp({ servers: [{ id: "v", url: "http://v.test/mcp", setup: { n: 1 } }] }),
+      ),
+    ).toThrow(/mcp\.servers\[0\]\.setup\.n must be a string/);
+    // An empty map is legal and simply omitted (no setup to forward).
+    const reg = parseEmbedTenants(
+      withMcp({ servers: [{ id: "v", url: "http://v.test/mcp", setup: {} }] }),
+    );
+    expect(reg.get("occ.digithings.ai")?.mcp?.servers[0]).toEqual({
+      id: "v",
+      url: "http://v.test/mcp",
+    });
+  });
+
+  it("rejects malformed MCP server entries", () => {
+    const withMcp = (mcp: unknown) =>
+      JSON.stringify({
+        "occ.digithings.ai": {
+          slug: "occ",
+          backend: { type: "digigraph" },
+          gateMode: "ungated",
+          token: "t",
+          mcp,
+        },
+      });
+    expect(() =>
+      parseEmbedTenants(withMcp({ servers: [{ id: "BAD ID", url: "http://x.test/mcp" }] })),
+    ).toThrow(/mcp\.servers\[0\]\.id/);
+    expect(() => parseEmbedTenants(withMcp({ servers: [{ id: "zammad", url: "  " }] }))).toThrow(
+      /mcp\.servers\[0\]\.url/,
+    );
+  });
+
   it("defaults unset skin to digichat for first-party hosts, base otherwise", () => {
     const reg = parseEmbedTenants(
       JSON.stringify({
@@ -137,7 +246,7 @@ describe("parseEmbedTenants", () => {
     ).toThrow(/skin/);
   });
 
-  it("defaults theme to dark and attribution to false when omitted", () => {
+  it("defaults theme to dark and attribution to true when omitted", () => {
     const reg = parseEmbedTenants(
       JSON.stringify({
         "example.com": {
@@ -149,7 +258,7 @@ describe("parseEmbedTenants", () => {
       })
     );
     expect(reg.get("example.com")?.theme).toBe("dark");
-    expect(reg.get("example.com")?.attribution).toBe(false);
+    expect(reg.get("example.com")?.attribution).toBe(true);
   });
 
   it("parses digigraph corpus routing fields for OCC-style tenants", () => {
@@ -356,6 +465,24 @@ describe("parseEmbedTenants", () => {
       }),
     );
     expect(reg.get("example.com")?.gateMode).toBe("trial_form");
+  });
+
+  it("accepts view/thinking modes and rejects unknown values", () => {
+    const entry = (keys: Record<string, unknown>) =>
+      JSON.stringify({
+        "example.com": {
+          slug: "example",
+          backend: { type: "digigraph" },
+          gateMode: "turn_limited",
+          token: "t",
+          ...keys,
+        },
+      });
+    const reg = parseEmbedTenants(entry({ view: "detailed", thinking: "open" }));
+    expect(reg.get("example.com")?.view).toBe("detailed");
+    expect(reg.get("example.com")?.thinking).toBe("open");
+    expect(() => parseEmbedTenants(entry({ view: "expanded" }))).toThrow(/view/);
+    expect(() => parseEmbedTenants(entry({ thinking: "yes" }))).toThrow(/thinking/);
   });
 
   it("throws on an invalid gateMode or theme", () => {
@@ -597,6 +724,48 @@ describe("parseEmbedTenants", () => {
       }),
     );
     expect(registry.get("example.com")?.showLanguageSelector).toBeUndefined();
+  });
+
+  it("accepts pageContext off/silent/visible and leaves it undefined when unset", () => {
+    const registry = parseEmbedTenants(
+      JSON.stringify({
+        "example.com": {
+          slug: "example",
+          backend: { type: "digigraph" },
+          gateMode: "ungated",
+          token: "t",
+          pageContext: "silent",
+        },
+      }),
+    );
+    expect(registry.get("example.com")?.pageContext).toBe("silent");
+    const unset = parseEmbedTenants(
+      JSON.stringify({
+        "example.org": {
+          slug: "example",
+          backend: { type: "digigraph" },
+          gateMode: "ungated",
+          token: "t",
+        },
+      }),
+    );
+    expect(unset.get("example.org")?.pageContext).toBeUndefined();
+  });
+
+  it("rejects an unknown pageContext", () => {
+    expect(() =>
+      parseEmbedTenants(
+        JSON.stringify({
+          "example.com": {
+            slug: "example",
+            backend: { type: "digigraph" },
+            gateMode: "ungated",
+            token: "t",
+            pageContext: "hidden",
+          },
+        }),
+      ),
+    ).toThrow(/pageContext must be "off", "silent", or "visible"/);
   });
 
   it("accepts a gate block with an https consumeUrl", () => {

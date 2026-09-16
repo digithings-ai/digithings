@@ -5,8 +5,18 @@ import { act, createElement } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+const entitlementMock = vi.hoisted(() => ({
+  planTier: 'desk' as const,
+  canFxHub: false,
+}));
+
 vi.mock('@/lib/use-entitlement', () => ({
-  usePlanTier: () => 'desk',
+  usePlanTier: () => entitlementMock.planTier,
+  useCanAccessProduct: () => entitlementMock.canFxHub,
+}));
+
+vi.mock('next/navigation', () => ({
+  usePathname: () => '/',
 }));
 
 import DigichatPopup from './digichat-popup';
@@ -18,6 +28,7 @@ import {
   DIGICHAT_UPGRADE_CTA_HREF,
   DIGICHAT_UPGRADE_CTA_LABEL,
   DIGICHAT_UPGRADE_TITLE,
+  PAGE_CONTEXT_RESEND_DEBOUNCE_MS,
   type DigichatPopupConfig,
 } from '@/lib/digichat-popup';
 
@@ -51,6 +62,7 @@ describe('DigichatPopup', () => {
       root.unmount();
     });
     container.remove();
+    entitlementMock.canFxHub = false;
     vi.useRealTimers();
   });
 
@@ -94,6 +106,25 @@ describe('DigichatPopup', () => {
       btn.click();
     });
     expect(document.body.querySelector('#digichat-popup-iframe')).toBeNull();
+  });
+
+  it('opens the iframe for an fx_hub product grantee on the free tier (#3662)', () => {
+    entitlementMock.canFxHub = true;
+    act(() => {
+      root.render(
+        createElement(DigichatPopup, { tier: 'free', config: CFG }),
+      );
+    });
+    const btn = document.body.querySelector(
+      '.digichat-launcher__trigger',
+    ) as HTMLButtonElement;
+    act(() => {
+      btn.click();
+    });
+    expect(document.body.querySelector('#digichat-popup-iframe')).not.toBeNull();
+    expect(
+      document.body.querySelector('[data-testid="digichat-upgrade-cta"]'),
+    ).toBeNull();
   });
 
   it('renders launcher for Desk+ when config is present', () => {
@@ -208,6 +239,170 @@ describe('DigichatPopup', () => {
       ([message]) => (message as { type?: string }).type === DIGICHAT_PAGE_CONTEXT,
     );
     expect(pageContextCalls).toHaveLength(1);
+  });
+
+  it('resends page context when the observed page content changes', async () => {
+    const main = document.createElement('main');
+    main.innerHTML = '<h1>House book</h1>';
+    document.body.appendChild(main);
+    try {
+      act(() => {
+        root.render(createElement(DigichatPopup, { tier: 'desk', config: CFG }));
+      });
+      const trigger = document.body.querySelector(
+        '.digichat-launcher__trigger',
+      ) as HTMLButtonElement;
+      act(() => trigger.click());
+      const iframe = document.body.querySelector(
+        '#digichat-popup-iframe',
+      ) as HTMLIFrameElement;
+      const postMessage = vi.spyOn(iframe.contentWindow!, 'postMessage');
+      act(() => {
+        window.dispatchEvent(
+          new MessageEvent('message', {
+            origin: CFG.origin,
+            data: { type: DIGICHAT_READY },
+          }),
+        );
+      });
+      const contextCalls = () =>
+        postMessage.mock.calls.filter(
+          ([message]) =>
+            (message as { type?: string }).type === DIGICHAT_PAGE_CONTEXT,
+        );
+      expect(contextCalls()).toHaveLength(1);
+      expect((contextCalls()[0][0] as { text: string }).text).toContain(
+        'House book',
+      );
+
+      act(() => {
+        main.innerHTML = '<h1>Portfolio</h1>';
+      });
+      await act(async () => {});
+      act(() => {
+        vi.advanceTimersByTime(PAGE_CONTEXT_RESEND_DEBOUNCE_MS);
+      });
+      expect(contextCalls()).toHaveLength(2);
+      expect((contextCalls()[1][0] as { text: string }).text).toContain(
+        'Portfolio',
+      );
+    } finally {
+      main.remove();
+    }
+  });
+
+  it('does not resend page context while open when the signature is unchanged', async () => {
+    act(() => {
+      root.render(createElement(DigichatPopup, { tier: 'desk', config: CFG }));
+    });
+    const trigger = document.body.querySelector(
+      '.digichat-launcher__trigger',
+    ) as HTMLButtonElement;
+    act(() => trigger.click());
+    const iframe = document.body.querySelector(
+      '#digichat-popup-iframe',
+    ) as HTMLIFrameElement;
+    const postMessage = vi.spyOn(iframe.contentWindow!, 'postMessage');
+    act(() => {
+      window.dispatchEvent(
+        new MessageEvent('message', {
+          origin: CFG.origin,
+          data: { type: DIGICHAT_READY },
+        }),
+      );
+    });
+    await act(async () => {
+      window.dispatchEvent(new Event('popstate'));
+    });
+    act(() => {
+      vi.advanceTimersByTime(PAGE_CONTEXT_RESEND_DEBOUNCE_MS);
+    });
+    const pageContextCalls = postMessage.mock.calls.filter(
+      ([message]) => (message as { type?: string }).type === DIGICHAT_PAGE_CONTEXT,
+    );
+    expect(pageContextCalls).toHaveLength(1);
+  });
+
+  it('stops sending while closed and sends once again on reopen', () => {
+    act(() => {
+      root.render(createElement(DigichatPopup, { tier: 'desk', config: CFG }));
+    });
+    const trigger = document.body.querySelector(
+      '.digichat-launcher__trigger',
+    ) as HTMLButtonElement;
+    act(() => trigger.click());
+    const iframe = document.body.querySelector(
+      '#digichat-popup-iframe',
+    ) as HTMLIFrameElement;
+    const postMessage = vi.spyOn(iframe.contentWindow!, 'postMessage');
+    act(() => {
+      window.dispatchEvent(
+        new MessageEvent('message', {
+          origin: CFG.origin,
+          data: { type: DIGICHAT_READY },
+        }),
+      );
+    });
+    const pageContextCalls = () =>
+      postMessage.mock.calls.filter(
+        ([message]) =>
+          (message as { type?: string }).type === DIGICHAT_PAGE_CONTEXT,
+      );
+    expect(pageContextCalls()).toHaveLength(1);
+
+    const close = document.body.querySelector(
+      '.digichat-launcher__close',
+    ) as HTMLButtonElement;
+    act(() => close.click());
+    act(() => vi.advanceTimersByTime(340));
+    expect(pageContextCalls()).toHaveLength(1);
+
+    const reopened = document.body.querySelector(
+      '.digichat-launcher__trigger',
+    ) as HTMLButtonElement;
+    act(() => reopened.click());
+    expect(pageContextCalls()).toHaveLength(2);
+  });
+
+  it('never sends page context when digichat:ready asks pageContext off', async () => {
+    const main = document.createElement('main');
+    main.innerHTML = '<h1>House book</h1>';
+    document.body.appendChild(main);
+    try {
+      act(() => {
+        root.render(createElement(DigichatPopup, { tier: 'desk', config: CFG }));
+      });
+      const trigger = document.body.querySelector(
+        '.digichat-launcher__trigger',
+      ) as HTMLButtonElement;
+      act(() => trigger.click());
+      const iframe = document.body.querySelector(
+        '#digichat-popup-iframe',
+      ) as HTMLIFrameElement;
+      const postMessage = vi.spyOn(iframe.contentWindow!, 'postMessage');
+      act(() => {
+        window.dispatchEvent(
+          new MessageEvent('message', {
+            origin: CFG.origin,
+            data: { type: DIGICHAT_READY, pageContext: 'off' },
+          }),
+        );
+      });
+      act(() => {
+        main.innerHTML = '<h1>Portfolio</h1>';
+      });
+      await act(async () => {});
+      act(() => {
+        vi.advanceTimersByTime(PAGE_CONTEXT_RESEND_DEBOUNCE_MS);
+      });
+      const pageContextCalls = postMessage.mock.calls.filter(
+        ([message]) =>
+          (message as { type?: string }).type === DIGICHAT_PAGE_CONTEXT,
+      );
+      expect(pageContextCalls).toHaveLength(0);
+    } finally {
+      main.remove();
+    }
   });
 
   it('renders nothing when config is null', () => {

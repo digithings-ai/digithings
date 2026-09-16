@@ -11,6 +11,7 @@ from typing import Any  # score:allow untyped any — used for dict shape typing
 
 from digigraph.graph.pipeline_builder import NodeSpec, PipelinePhase
 
+from digiquant.data.gloomberb.agent_tools import EQUITY_TOOLS
 from digiquant.research.phases._node_factory import (
     InputsBuilder,
     SegmentNodeSpec,
@@ -40,6 +41,9 @@ _EQUITY_SPEC = SegmentNodeSpec(
     phase_outputs_field="phase5_outputs",
     use_data_tools=True,
     extra_context_keys=("macro",),
+    # #4146: company facts + analyst views via the digifetch family (enrichment
+    # only; session-gated names drop out without GLOOMBERB_SESSION_COOKIE).
+    digifetch_tools=EQUITY_TOOLS,
 )
 
 
@@ -95,6 +99,7 @@ def _sector_spec(sector: SectorConfig) -> SegmentNodeSpec:
         phase_outputs_field="phase5_outputs",
         use_data_tools=True,
         extra_context_keys=("equity", "macro"),
+        digifetch_tools=EQUITY_TOOLS,
     )
 
 

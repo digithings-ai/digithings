@@ -39,6 +39,8 @@ export type ToolGroupRootProps = Omit<
     open?: boolean;
     onOpenChange?: (open: boolean) => void;
     defaultOpen?: boolean;
+    /** Open while this group is still streaming, auto-close on completion. */
+    streamingOpen?: boolean;
   };
 
 function ToolGroupRoot({
@@ -47,21 +49,25 @@ function ToolGroupRoot({
   open: controlledOpen,
   onOpenChange: controlledOnOpenChange,
   defaultOpen = false,
+  streamingOpen = false,
   children,
   ...props
 }: ToolGroupRootProps) {
   const collapsibleRef = useRef<HTMLDivElement>(null);
-  const [uncontrolledOpen, setUncontrolledOpen] = useState(defaultOpen);
+  const [initialOpen] = useState(defaultOpen);
+  const [userOpen, setUserOpen] = useState<boolean | null>(null);
   const lockScroll = useScrollLock(collapsibleRef, ANIMATION_DURATION);
 
   const isControlled = controlledOpen !== undefined;
-  const isOpen = isControlled ? controlledOpen : uncontrolledOpen;
+  const isOpen = isControlled
+    ? controlledOpen
+    : (userOpen ?? (streamingOpen || initialOpen));
 
   const handleOpenChange = useCallback(
     (open: boolean) => {
       lockScroll();
       if (!isControlled) {
-        setUncontrolledOpen(open);
+        setUserOpen(open);
       }
       controlledOnOpenChange?.(open);
     },
@@ -95,13 +101,15 @@ function ToolGroupRoot({
 function ToolGroupTrigger({
   count,
   active = false,
+  label,
   className,
   ...props
 }: React.ComponentProps<typeof CollapsibleTrigger> & {
   count: number;
   active?: boolean;
+  label?: string;
 }) {
-  const label = `${count} tool ${count === 1 ? "call" : "calls"}`;
+  const text = label ?? `${count} tool ${count === 1 ? "call" : "calls"}`;
 
   return (
     <CollapsibleTrigger
@@ -130,7 +138,7 @@ function ToolGroupTrigger({
           active && "shimmer motion-reduce:animate-none",
         )}
       >
-        {label}
+        {text}
       </span>
       <span
         data-slot="tool-group-trigger-chevron"

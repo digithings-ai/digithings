@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import logging
 import os
 import time as _time
@@ -81,47 +82,129 @@ _RATE_LIMITS: dict[str, tuple[int, int]] = {
 }
 _DEFAULT_RATE_LIMIT = (30, 60)
 _UNLIMITED_PATHS = {"/health", "/healthz"}
+#: Multiple of a path's budget granted to a caller presenting a bearer token.
+#: The budget is keyed on the token, not the IP, so one runner (every digiquant
+#: book-run grounding call arrives from a single GitHub-runner IP) cannot
+#: exhaust another service's allowance. #4106
+_AUTH_RATE_LIMIT_MULTIPLIER = 6
+#: Coarse per-IP ceiling for token-bearing traffic, as a multiple of the path
+#: budget. It equals the token multiplier so a client rotating tokens is capped
+#: at one token's budget per IP — the pre-auth admit rate for a header-bearing
+#: client rises 6x (10 -> 60 req/60s on ``/v1/orchestrator_invoke``), not 24x,
+#: while the pipeline still gets the headroom it needs. #4106
+_IP_CEILING_MULTIPLIER = 6
+#: Guard against a nonsense env value silently disabling a ceiling. #4106
+_MAX_MULTIPLIER = 1000
+#: Windows are pruned once the table grows past this, so the new token key space
+#: cannot grow without bound. #4106
+_RL_MAX_KEYS = 4096
+_DISABLE_VALUES = ("1", "true", "yes")
 
 
-def _rl_check(request: Request, max_req: int, window: int) -> JSONResponse | None:
-    if os.environ.get("DIGI_DISABLE_RATE_LIMIT", "").lower() in ("1", "true", "yes"):
-        return None
+def _env_multiplier(name: str, default: int) -> int:
+    """Read a positive integer multiplier from ``name``, falling back to ``default``."""
+    raw = os.environ.get(name, "").strip()
+    if not raw:
+        return default
+    try:
+        value = int(raw)
+    except ValueError:
+        logger.warning("%s=%r is not an integer; using %d", name, raw, default)
+        return default
+    if value < 1 or value > _MAX_MULTIPLIER:
+        logger.warning(
+            "%s=%r must be between 1 and %d; using %d", name, raw, _MAX_MULTIPLIER, default
+        )
+        return default
+    return value
+
+
+def _client_ip(request: Request) -> str:
+    """First ``X-Forwarded-For`` hop, else the socket peer (``unknown`` if neither)."""
     xff = request.headers.get("X-Forwarded-For")
-    ip = (
-        xff.split(",")[0].strip() if xff else (request.client.host if request.client else "unknown")
-    )
-    if ip == "testclient":
+    if xff:
+        return xff.split(",")[0].strip()
+    return request.client.host if request.client else "unknown"
+
+
+def _bearer_bucket(request: Request) -> str | None:
+    """Opaque window key for the presented bearer token, or None when absent.
+
+    The limiter runs before ``DigiAuthMiddleware`` (middleware added last runs
+    outermost), so the token is not verified here — only hashed, so a raw
+    credential never becomes an in-memory key. An unverifiable token still meets
+    the auth 401 and the per-IP ceiling below.
+    """
+    header = request.headers.get("Authorization", "")
+    scheme, _, token = header.partition(" ")
+    token = token.strip()
+    if scheme.lower() != "bearer" or not token:
         return None
+    return f"tok:{hashlib.sha256(token.encode('utf-8')).hexdigest()[:16]}"
+
+
+def _rl_exceeded(key: str, max_req: int, window: int) -> bool:
+    """Record one hit for ``key``; True when the window is already full."""
     now = _time.monotonic()
     cutoff = now - window
     with _rl_lock:
-        if ip not in _rl_windows:
-            _rl_windows[ip] = _deque()
-        q = _rl_windows[ip]
+        if len(_rl_windows) > _RL_MAX_KEYS:
+            for stale in [k for k, dq in _rl_windows.items() if not dq or dq[-1] < cutoff]:
+                _rl_windows.pop(stale, None)
+        q = _rl_windows.setdefault(key, _deque())
         while q and q[0] < cutoff:
             q.popleft()
         if len(q) >= max_req:
-            return json_error_response(
-                status_code=429,
-                code="rate_limit_exceeded",
-                message=f"Rate limit exceeded: {max_req} requests per {window}s.",
-                request=request,
-                service="digisearch",
-                headers={"Retry-After": str(window)},
-            )
+            return True
         q.append(now)
-    return None
+    return False
+
+
+def _rl_too_many(request: Request, max_req: int, window: int) -> JSONResponse:
+    return json_error_response(
+        status_code=429,
+        code="rate_limit_exceeded",
+        message=f"Rate limit exceeded: {max_req} requests per {window}s.",
+        request=request,
+        service="digisearch",
+        headers={"Retry-After": str(window)},
+    )
 
 
 @app.middleware("http")
 async def rate_limit(request: Request, call_next):
-    """Per-IP rate limiting. /query: 10/min; /ingest: 30/min; others: 30/min."""
+    """Identity-aware rate limiting. /query: 10/min; /ingest: 30/min; others: 30/min.
+
+    Anonymous callers are limited per IP. Callers presenting a bearer token get a
+    larger budget keyed on that token (``DIGISEARCH_AUTH_RATE_LIMIT_MULTIPLIER``),
+    on top of a coarse per-IP ceiling (``DIGISEARCH_IP_CEILING_MULTIPLIER``) on a
+    separate counter that bounds a client rotating tokens without consuming the
+    anonymous budget. #4106
+    """
     path = request.url.path
-    if path not in _UNLIMITED_PATHS:
-        max_req, window = _RATE_LIMITS.get(path, _DEFAULT_RATE_LIMIT)
-        result = _rl_check(request, max_req, window)
-        if result is not None:
-            return result
+    if path in _UNLIMITED_PATHS:
+        return await call_next(request)
+    if os.environ.get("DIGI_DISABLE_RATE_LIMIT", "").lower() in _DISABLE_VALUES:
+        return await call_next(request)
+    ip = _client_ip(request)
+    if ip == "testclient":
+        return await call_next(request)
+    max_req, window = _RATE_LIMITS.get(path, _DEFAULT_RATE_LIMIT)
+    bucket = _bearer_bucket(request)
+    if bucket is not None:
+        ceiling = max_req * _env_multiplier(
+            "DIGISEARCH_IP_CEILING_MULTIPLIER", _IP_CEILING_MULTIPLIER
+        )
+        if _rl_exceeded(f"ipceil:{ip}", ceiling, window):
+            return _rl_too_many(request, ceiling, window)
+        budget = max_req * _env_multiplier(
+            "DIGISEARCH_AUTH_RATE_LIMIT_MULTIPLIER", _AUTH_RATE_LIMIT_MULTIPLIER
+        )
+        if _rl_exceeded(bucket, budget, window):
+            return _rl_too_many(request, budget, window)
+        return await call_next(request)
+    if _rl_exceeded(f"ip:{ip}", max_req, window):
+        return _rl_too_many(request, max_req, window)
     return await call_next(request)
 
 
@@ -275,6 +358,13 @@ class ResearchTurnRequest(BaseModel):
         description="Structured filters [{field, op, value}]",
     )
     session_id: str | None = Field(default=None, description="Optional session id for tracing")
+    workspace_id: str | None = Field(
+        default=None,
+        description=(
+            "Optional tenant/workspace id. Injected as a mandatory structured filter "
+            "so the research path is scoped like POST /query (enterprise)."
+        ),
+    )
 
     @field_validator("mode", mode="before")
     @classmethod
@@ -323,10 +413,32 @@ def azure_status() -> dict[str, bool | str]:
         return {"configured": True, "reachable": False, "message": str(e)[:200]}
 
 
+def _reject_raw_filter_if_disallowed(filter_raw: str | None, index_name: str | None) -> None:
+    """Reject a raw OData filter for an index that has not opted in (#3909).
+
+    Only the Azure backend re-gated raw ``filter``; every other backend passed it
+    through. Raw OData is opt-in per ``digisearch/AGENTS.md``, so the server refuses
+    it up front with HTTP 400 regardless of which backend would serve the query.
+    """
+    if not filter_raw or not str(filter_raw).strip():
+        return
+    from digisearch.core.config import index_allows_raw_filter
+
+    if not index_allows_raw_filter(index_name):
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                f"raw filter not allowed for index {index_name or 'default'!r}: "
+                "set allow_raw_filter=true in the index config, or use structured filters"
+            ),
+        )
+
+
 def _build_query_filters(req: QueryRequest) -> dict[str, Any]:
     """Build Query.filters from request: either raw odata or structured list."""
     from digisearch.core.workspace_filter import build_query_filters
 
+    _reject_raw_filter_if_disallowed(req.filter, req.index_name)
     try:
         workspace_id = (
             req.workspace_id.strip() if req.workspace_id and req.workspace_id.strip() else None
@@ -521,6 +633,8 @@ def _query_request_from_digisearch_args(
     response_mode = str(args.get("response_mode") or "full")
     summarize_raw = args.get("summarize_if_over")
     summarize_if_over = int(summarize_raw) if isinstance(summarize_raw, int) else None
+    workspace_raw = args.get("workspace_id")
+    workspace_id = str(workspace_raw).strip() if workspace_raw else None
     return QueryRequest(
         text=qtext or "",
         index_name=idx,
@@ -537,6 +651,7 @@ def _query_request_from_digisearch_args(
         skip=skip,
         include_total_count=include_total_count,
         skip_rerank=skip_rerank,
+        workspace_id=workspace_id,
     )
 
 
@@ -708,14 +823,17 @@ def api_orchestrator_invoke(req: OrchestratorInvokeRequest) -> OrchestratorInvok
         top_raw = args.get("top_k", 10)
         top_k = int(top_raw) if isinstance(top_raw, int) else 10
         filt_raw = args.get("filter")
+        filt = str(filt_raw).strip() if filt_raw else None
+        _reject_raw_filter_if_disallowed(filt, idx)
         payload = {
             "user_message": msg,
             "index_name": idx,
             "top_k": top_k,
             "mode": str(args.get("mode") or "hybrid"),
-            "filter": str(filt_raw).strip() if filt_raw else None,
+            "filter": filt,
             "filters": args.get("filters") if isinstance(args.get("filters"), list) else None,
             "session_id": args.get("session_id"),
+            "workspace_id": args.get("workspace_id"),
         }
         body = run_research_turn(payload)
         return OrchestratorInvokeResponse(
@@ -745,13 +863,19 @@ def api_orchestrator_invoke(req: OrchestratorInvokeRequest) -> OrchestratorInvok
         max_results = _coerce_web_search_max_results(args.get("max_results", 4))
         if max_results is None:
             return OrchestratorInvokeResponse(ok=False, error="max_results must be an integer 1-10")
+        web_kwargs: dict[str, Any] = {
+            "query": qtext,
+            "include_domains": [str(d) for d in include],
+            "exclude_domains": [str(d) for d in exclude],
+            "max_results": max_results,
+        }
+        # Absent (or null) keeps the model default window (7). Anything present
+        # is validated by the model (1-365 / int) and rejected as a clean
+        # ok:False rather than a silent fallback to the default (#4165).
+        if args.get("recency_days") is not None:
+            web_kwargs["recency_days"] = args["recency_days"]
         try:
-            web_req = WebSearchRequest(
-                query=qtext,
-                include_domains=[str(d) for d in include],
-                exclude_domains=[str(d) for d in exclude],
-                max_results=max_results,
-            )
+            web_req = WebSearchRequest(**web_kwargs)
         except ValidationError as e:
             from digisearch.web_search.models import summarize_validation_error
 
@@ -782,6 +906,7 @@ def api_research_turn(req: ResearchTurnRequest) -> ResearchTurnOutput:
             status_code=503,
             detail=f"Install digisearch[agent] for /v1/research_turn: {e}",
         ) from e
+    _reject_raw_filter_if_disallowed(req.filter, req.index_name)
     return ResearchTurnOutput.model_validate(run_research_turn(req.model_dump(mode="json")))
 
 

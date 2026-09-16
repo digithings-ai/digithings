@@ -6,7 +6,7 @@
 
 import type { DigichatDeployment } from "./schema";
 
-const MCP_ID = /^[a-z0-9][a-z0-9_-]{0,63}$/;
+const MCP_ID = /^[a-z0-9][a-z0-9-]{0,63}$/;
 const METADATA_HOSTS = new Set([
   "169.254.169.254",
   "100.100.100.200",
@@ -142,6 +142,19 @@ export function isAllowedMcpServerUrl(raw: string): boolean {
   return !hostnameIsBlocked(u.hostname);
 }
 
+/**
+ * Session client URLs must be https. Parse rather than string-match so a valid
+ * mixed-case scheme (`HTTPS://host`) is accepted — WHATWG lowercases `protocol`,
+ * matching the `new URL`-based `isAllowedMcpServerUrl` check.
+ */
+function isHttpsUrl(raw: string): boolean {
+  try {
+    return new URL(raw).protocol === "https:";
+  } catch {
+    return false;
+  }
+}
+
 export type McpServerForward = {
   id: string;
   url: string;
@@ -149,6 +162,12 @@ export type McpServerForward = {
   token?: string;
   /** Custom outbound header name for `token`, e.g. "X-API-Key" (#3841). */
   authHeader?: string;
+  /**
+   * MCP setup values applied when this server's tools are registered (e.g.
+   * the digisearch index name or the digivault path prefix). Forwarded to
+   * digigraph; the model never sees or supplies them.
+   */
+  setup?: Record<string, string>;
 };
 
 export type McpSessionOverlayItem = {
@@ -165,6 +184,12 @@ export type McpUpstreamServer = {
   token?: string;
   /** Operator-only — session overlay can never set this (#3841). */
   authHeader?: string;
+  /**
+   * MCP setup values applied when this server's tools are registered (e.g.
+   * the digisearch index name or the digivault path prefix). Forwarded to
+   * digigraph; the model never sees or supplies them.
+   */
+  setup?: Record<string, string>;
 };
 
 const MCP_AUTH = new Set(["none", "bearer", "oauth"]);
@@ -184,7 +209,7 @@ export function resolveMcpOAuthResourceUrl(opts: {
   if (op?.url) return op.url;
   if (!opts.allowUserServers) return "";
   const url = opts.clientUrl.trim();
-  if (!url.startsWith("https://") || !isAllowedMcpServerUrl(url)) return "";
+  if (!isHttpsUrl(url) || !isAllowedMcpServerUrl(url)) return "";
   return url;
 }
 
@@ -204,6 +229,7 @@ export function operatorMcpServersForUpstream(
       row.token = token;
       if (s.authHeader?.trim()) row.authHeader = s.authHeader.trim();
     }
+    if (s.setup && Object.keys(s.setup).length) row.setup = { ...s.setup };
     out.push(row);
   }
   return out;
@@ -263,6 +289,7 @@ export function mergeMcpSessionOverlay(opts: {
     const row: McpUpstreamServer = { id: s.id, url: s.url };
     if (s.token) row.token = s.token;
     if (s.authHeader) row.authHeader = s.authHeader;
+    if (s.setup) row.setup = { ...s.setup };
     return row;
   });
   const byId = new Map(out.map((s) => [s.id, s]));
@@ -276,7 +303,7 @@ export function mergeMcpSessionOverlay(opts: {
     }
     if (!opts.allowSessionUrls) continue;
     const url = (item.url ?? "").trim();
-    if (!url.startsWith("https://") || !isAllowedMcpServerUrl(url)) continue;
+    if (!isHttpsUrl(url) || !isAllowedMcpServerUrl(url)) continue;
     if (sessionCount >= MAX_SESSION_SERVERS) continue;
     sessionCount += 1;
     const row: McpUpstreamServer = { id: item.id, url };
@@ -294,10 +321,14 @@ export function mcpUpstreamHeaderValue(
   if (!servers.length) return undefined;
   const json = JSON.stringify(
     servers.map((s) => {
-      const row: Record<string, string> = { id: s.id, url: s.url };
+      const row: Record<string, string | Record<string, string>> = {
+        id: s.id,
+        url: s.url,
+      };
       if (s.auth) row.auth = s.auth;
       if (s.token) row.token = s.token;
       if (s.authHeader) row.authHeader = s.authHeader;
+      if (s.setup && Object.keys(s.setup).length) row.setup = s.setup;
       return row;
     }),
   );

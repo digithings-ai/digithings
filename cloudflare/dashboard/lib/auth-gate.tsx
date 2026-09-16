@@ -7,7 +7,9 @@ import { AppShellProvider } from '@/components/app-shell-context';
 import AppFrame from '@/components/app-frame';
 import { LoginScreen } from '@/components/login-screen';
 import { useAuth } from '@/lib/auth-context';
+import { hasPendingInvite } from '@/lib/invite-stash';
 import { useInviteLink } from '@/lib/invite-link';
+import { useAccessPending } from '@/lib/use-entitlement';
 
 /** Exact auth routes (Next usePathname strips basePath). */
 const AUTH_PATHS = new Set(['/login', '/signup', '/auth/callback']);
@@ -80,14 +82,16 @@ function AuthLoadingScreen() {
  *   can finish).
  * - Flag on + not yet mounted → full shell (prerender-safe; static export keeps <h1>).
  * - Flag on + mounted + loading → loading screen (never empty chrome).
- * - Flag on + mounted + no session → LoginScreen.
+ * - Flag on + mounted + no session → LoginScreen (signup-first if a pending
+ *   invite is in the URL/stash, sign-in otherwise).
  * - Flag on + mounted + session → AppProviders + children.
  */
 export function AuthGate({ children }: { children: ReactNode }) {
   const { authEnabled, session, loading } = useAuth();
   const pathname = usePathname();
   const mounted = useHasMounted();
-  useInviteLink();
+  const { pending: invitePending } = useInviteLink();
+  const accessPending = useAccessPending();
 
   if (!authEnabled) {
     return <AppProviders>{children}</AppProviders>;
@@ -115,7 +119,15 @@ export function AuthGate({ children }: { children: ReactNode }) {
   }
 
   if (!session) {
-    return <LoginScreen />;
+    // An invite link is how a visitor without an account arrives — default
+    // them to signup, not sign-in, so the link is one click, not two.
+    return <LoginScreen initialMode={hasPendingInvite() ? 'signup' : 'signin'} />;
+  }
+
+  // Hold the shell until `my_access` (and any stashed invite redeem) settle:
+  // a 12x FX-Hub-only invitee must never flash the full DigiQuant chrome.
+  if (accessPending || invitePending) {
+    return <AuthLoadingScreen />;
   }
 
   return <AppProviders>{children}</AppProviders>;

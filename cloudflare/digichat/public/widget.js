@@ -16,9 +16,11 @@
  * Opens a bottom-right panel that iframes /embed?layout=embed. Same tenant
  * registry / RAG corpus as full-page embed. When data-page-context=1, after
  * digichat:ready the launcher posts a structurally sanitized HTML snapshot of
- * already-visible DOM (plus visible text) — never scrapes hidden/password
- * controls or `data-digichat-private` regions. Keep the walk in sync with
- * `src/lib/page-context-sanitize.ts` (#3602).
+ * already-visible DOM (plus visible text) on open, then only when the page
+ * signature changes (route/query or sanitized content, debounced) — never
+ * scrapes hidden/password controls or `data-digichat-private` regions. The
+ * embed can opt out with `pageContext: "off"` on the ready payload. Keep the
+ * walk in sync with `src/lib/page-context-sanitize.ts` (#3602).
  */
 (function () {
   "use strict";
@@ -82,6 +84,8 @@
   if (accent && !/^#[0-9a-fA-F]{6}$/.test(accent)) accent = "";
   var pageContextOn =
     attr("data-page-context") === "1" || attr("data-page-context").toLowerCase() === "true";
+  // Keep in sync with PAGE_CONTEXT_RESEND_DEBOUNCE_MS in the dashboard popup.
+  var PAGE_CONTEXT_RESEND_DEBOUNCE_MS = 500;
   // Keep in sync with DEFAULT_POPUP_PAGE_CONTEXT_MAX_CHARS /
   // MAX_PAGE_CONTEXT_TEXT_CHARS (8k) — embed rejects longer text.
   var maxChars = parseInt(attr("data-page-context-max-chars") || "8000", 10);
@@ -271,6 +275,32 @@
     return { html: html, text: text };
   }
 
+  /** Deterministic FNV-1a 32-bit hex digest over `html\u0000text`. */
+  function hashPageContext(html, text) {
+    var input = html + "\u0000" + text;
+    var hash = 0x811c9dc5;
+    for (var i = 0; i < input.length; i++) {
+      hash ^= input.charCodeAt(i);
+      // hash *= 16777619 in 32-bit space (FNV prime, no float overflow).
+      hash =
+        (hash +
+          ((hash << 1) + (hash << 4) + (hash << 7) + (hash << 8) + (hash << 24))) >>>
+        0;
+    }
+    return ("00000000" + hash.toString(16)).slice(-8);
+  }
+
+  /** Change key for the rendered page: route + query + content digest. */
+  function pageContextSignature(html, text) {
+    return (
+      window.location.pathname +
+      "|" +
+      window.location.search +
+      "|" +
+      hashPageContext(html, text)
+    );
+  }
+
   /** Best-effort viewport capture; fails soft (CORS / tainted canvas). */
   function captureScreenshot(cb, visibleText) {
     try {
@@ -367,7 +397,12 @@
 
     var open = false;
     var iframeLoaded = false;
-    var pageContextSent = false;
+    var iframeReady = false;
+    var pageContextSig = null;
+    var pageContextOff = false;
+    var screenshotSent = false;
+    var pageContextObserver = null;
+    var pageContextTimer = null;
 
     var root = document.createElement("div");
     root.id = ROOT_ID;
@@ -432,13 +467,15 @@
     document.body.appendChild(root);
 
     function sendPageContext() {
-      if (!pageContextOn || pageContextSent) return;
+      if (!pageContextOn || pageContextOff) return;
       var win = iframe.contentWindow;
       if (!win) return;
       var ctx = extractPageContext();
       var text = ctx.text;
       var html = ctx.html;
-      captureScreenshot(function (shot) {
+      var sig = pageContextSignature(html, text);
+      if (pageContextSig === sig) return;
+      function post(shot) {
         var payload = {
           type: PAGE_CONTEXT,
           text: text,
@@ -448,11 +485,54 @@
         if (shot) payload.screenshotDataUrl = shot;
         try {
           win.postMessage(payload, origin);
-          pageContextSent = true;
+          pageContextSig = sig;
+          screenshotSent = true;
         } catch (e) {
           /* ignore — allow retry on next ready */
         }
-      }, text);
+      }
+      // Screenshot only on the first send of an open; later resends are text +
+      // HTML so the canvas data URL is not re-rendered on every mutation.
+      if (screenshotSent) {
+        post(undefined);
+        return;
+      }
+      captureScreenshot(post, text);
+    }
+
+    function schedulePageContext() {
+      if (pageContextTimer !== null) clearTimeout(pageContextTimer);
+      pageContextTimer = setTimeout(function () {
+        pageContextTimer = null;
+        if (open && iframeReady && !pageContextOff) sendPageContext();
+      }, PAGE_CONTEXT_RESEND_DEBOUNCE_MS);
+    }
+
+    function startPageContextObserver() {
+      if (pageContextObserver || !pageContextOn || pageContextOff) return;
+      if (typeof MutationObserver === "undefined") return;
+      var watchRoot = document.querySelector("main") || document.body;
+      if (!watchRoot) return;
+      pageContextObserver = new MutationObserver(schedulePageContext);
+      pageContextObserver.observe(watchRoot, {
+        childList: true,
+        subtree: true,
+        characterData: true,
+      });
+      window.addEventListener("popstate", schedulePageContext);
+      schedulePageContext();
+    }
+
+    function stopPageContextObserver() {
+      if (pageContextObserver) {
+        pageContextObserver.disconnect();
+        pageContextObserver = null;
+      }
+      window.removeEventListener("popstate", schedulePageContext);
+      if (pageContextTimer !== null) {
+        clearTimeout(pageContextTimer);
+        pageContextTimer = null;
+      }
     }
 
     function setOpen(next) {
@@ -465,6 +545,14 @@
         iframe.src = buildSrc();
         iframeLoaded = true;
       }
+      if (open) {
+        // Fresh open: allow one context post, with screenshot.
+        pageContextSig = null;
+        screenshotSent = false;
+        startPageContextObserver();
+      } else {
+        stopPageContextObserver();
+      }
     }
 
     btn.addEventListener("click", function () {
@@ -475,7 +563,13 @@
       if (ev.origin !== origin) return;
       var data = ev.data;
       if (!data || data.type !== READY) return;
-      sendPageContext();
+      iframeReady = true;
+      if (data.pageContext === "off") {
+        pageContextOff = true;
+        stopPageContextObserver();
+        return;
+      }
+      if (open) sendPageContext();
     });
 
     document.addEventListener("keydown", function (ev) {

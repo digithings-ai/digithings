@@ -4,6 +4,7 @@ import {
   assembleMatrix,
   boardColumn,
   calendarWindow,
+  getIdeaEval,
   getTodayEvents,
   getUpcomingEvents,
   localDateKey,
@@ -13,12 +14,14 @@ import {
   getTradeIdeas,
   getTradeIdeaArchive,
   getTradeIdeaHistory,
+  getFxFixSeries,
 } from './fetch';
 import type {
   FxBriefRow,
   FxConfluenceSnapshotRow,
   FxConsensusSnapshotRow,
   FxEconomicCalendarRow,
+  FxIdeaEvalRow,
   FxLedgerRow,
   MatrixCell,
 } from './types';
@@ -40,6 +43,14 @@ const tradeIdeasDb = vi.hoisted(() => ({
   gte: [] as [string, string][],
   lte: [] as [string, string][],
   order: [] as [string, unknown][],
+}));
+
+const ideaEvalDb = vi.hoisted(() => ({
+  rows: [] as Partial<FxIdeaEvalRow>[],
+}));
+
+const macroDb = vi.hoisted(() => ({
+  rows: [] as { series_id: string; obs_date: string; value: number | null }[],
 }));
 
 vi.mock('./supabase', () => {
@@ -75,10 +86,23 @@ vi.mock('./supabase', () => {
     };
     return builder;
   };
+  const makeIdeaEvalBuilder = (): TradeIdeasBuilder => {
+    const builder: TradeIdeasBuilder = {
+      select: () => builder,
+      eq: () => builder,
+      gte: () => builder,
+      lte: () => builder,
+      order: () => builder,
+      then: (onFulfilled) =>
+        Promise.resolve(onFulfilled({ data: ideaEvalDb.rows, error: null })),
+    };
+    return builder;
+  };
   return {
     isTwelveXConfigured: () => true,
     twelveXSupabase: {
       from: (table: string): TradeIdeasBuilder => {
+        if (table === 'fx_idea_eval') return makeIdeaEvalBuilder();
         if (table !== 'fx_trade_ideas_snapshot') throw new Error(`unexpected table: ${table}`);
         return makeBuilder();
       },
@@ -87,12 +111,14 @@ vi.mock('./supabase', () => {
 });
 
 vi.mock('../supabase', () => {
-  type Payload = { data: { event_date: string }[] | null; error: unknown };
+  type Payload = { data: unknown[] | null; error: unknown };
   interface CalendarBuilder {
     select: (columns: string) => CalendarBuilder;
     order: (column: string, options?: unknown) => CalendarBuilder;
     gte: (column: string, value: string) => CalendarBuilder;
     lte: (column: string, value: string) => CalendarBuilder;
+    in: (column: string, values: string[]) => CalendarBuilder;
+    limit: (count: number) => CalendarBuilder;
     then: <T>(onFulfilled: (payload: Payload) => T) => Promise<T>;
   }
   const makeBuilder = (): CalendarBuilder => {
@@ -110,6 +136,8 @@ vi.mock('../supabase', () => {
         bounds.hi = value;
         return builder;
       },
+      in: () => builder,
+      limit: () => builder,
       // PostgREST applies .gte/.lte SERVER-side, so a row outside the requested window
       // never reaches the client. Emulating that is what makes these tests fail on a
       // wrong bound instead of passing on a fake that returns everything.
@@ -125,10 +153,39 @@ vi.mock('../supabase', () => {
     };
     return builder;
   };
+  const makeMacroBuilder = (): CalendarBuilder => {
+    let ids: string[] = [];
+    let lo = '';
+    const builder: CalendarBuilder = {
+      select: () => builder,
+      order: () => builder,
+      gte: (column, value) => {
+        if (column === 'obs_date') lo = value;
+        return builder;
+      },
+      lte: () => builder,
+      in: (_column, values) => {
+        ids = values;
+        return builder;
+      },
+      limit: () => builder,
+      then: (onFulfilled) =>
+        Promise.resolve(
+          onFulfilled({
+            data: macroDb.rows.filter(
+              (r) => ids.includes(r.series_id) && r.obs_date >= lo,
+            ),
+            error: null,
+          }),
+        ),
+    };
+    return builder;
+  };
   return {
     isSupabaseConfigured: () => true,
     supabase: {
       from: (table: string): CalendarBuilder => {
+        if (table === 'macro_series_observations') return makeMacroBuilder();
         if (table !== 'economic_calendar') throw new Error(`unexpected table: ${table}`);
         return makeBuilder();
       },
@@ -187,6 +244,71 @@ describe('getTradeIdeaHistory', () => {
     await getTradeIdeaHistory(10, '2026-08-20');
     expect(tradeIdeasDb.gte).toEqual([['run_date', '2026-08-10']]);
     expect(tradeIdeasDb.lte).toEqual([['run_date', '2026-08-20']]);
+  });
+});
+
+describe('getIdeaEval netCarried option', () => {
+  const carried = (run_date: string): Partial<FxIdeaEvalRow> => ({
+    run_date,
+    rank: 1,
+    horizon_days: 0,
+    pair: 'EUR/USD',
+    direction: 'long',
+    status: 'carried',
+    as_of: '2026-06-26T00:00:00Z',
+  });
+
+  beforeEach(() => {
+    ideaEvalDb.rows = [carried('2026-06-19'), carried('2026-06-26')];
+  });
+
+  afterEach(() => {
+    ideaEvalDb.rows = [];
+  });
+
+  it('nets same-axis carried boards by default (Trades board)', async () => {
+    const rows = await getIdeaEval();
+    expect(rows).toHaveLength(1);
+    expect(rows[0].run_date).toBe('2026-06-26');
+  });
+
+  it('returns raw rows with netCarried:false (honest track-record carried count)', async () => {
+    const rows = await getIdeaEval({ netCarried: false });
+    expect(rows).toHaveLength(2);
+    expect(rows.filter((r) => r.status === 'carried')).toHaveLength(2);
+  });
+});
+
+describe('getFxFixSeries', () => {
+  beforeEach(() => {
+    macroDb.rows = [
+      { series_id: 'FX/EUR', obs_date: '2026-06-16', value: 1.1 },
+      { series_id: 'FX/EUR', obs_date: '2026-06-17', value: 1.2 },
+      { series_id: 'FX/JPY', obs_date: '2026-06-16', value: 150 },
+      { series_id: 'FX/JPY', obs_date: '2026-06-17', value: 151 },
+      { series_id: 'VIXCLS', obs_date: '2026-06-17', value: 15 },
+    ];
+  });
+
+  afterEach(() => {
+    macroDb.rows = [];
+  });
+
+  it('composes direct and derived pair histories from native series', async () => {
+    const out = await getFxFixSeries(['EUR/USD', 'EUR/JPY', 'BTC/USD'], 5000);
+    expect(out['EUR/USD']).toEqual([
+      { date: '2026-06-16', fix: 1.1 },
+      { date: '2026-06-17', fix: 1.2 },
+    ]);
+    expect(out['EUR/JPY'][0].fix).toBeCloseTo(165, 10);
+    // Outside the pair universe → anchors-only fallback upstream.
+    expect(out['BTC/USD']).toEqual([]);
+  });
+
+  it('returns empty series when the table has no coverage', async () => {
+    macroDb.rows = [];
+    const out = await getFxFixSeries(['EUR/USD'], 5000);
+    expect(out['EUR/USD']).toEqual([]);
   });
 });
 

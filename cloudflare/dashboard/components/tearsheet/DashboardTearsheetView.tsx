@@ -303,6 +303,8 @@ export function PerformanceTearsheetView({
       <PortfolioContributionChart
         points={data.contributionSeries}
         benchmark={benchmark}
+        source={data.contributionSource}
+        startsOn={data.contributionStartsOn}
       />
 
       <OpenHoldingsPanel rows={data.currentHoldings} />

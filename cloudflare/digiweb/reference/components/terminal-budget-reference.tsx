@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useInView, useReducedMotion } from "motion/react";
+import { Badge } from "@digithings/web/ui";
 
 type Line = {
   text: string;
@@ -41,6 +42,8 @@ const LINE_COLOR: Record<Line["kind"], string> = {
  * illustrative context-budget sidebar that lights up each module as its line
  * lands. Explicitly labelled example data, not live; reduced motion renders the
  * finished session with no typing.
+ *
+ * Wave 1: the "example data" label is the stock kit Badge (outline).
  */
 export function TerminalBudgetReference() {
   const reduced = useReducedMotion();
@@ -131,7 +134,7 @@ export function TerminalBudgetReference() {
         </article>
 
         <aside className="budget-shell" aria-label="Illustrative budget sidebar">
-          <p className="badge">Example data · not live</p>
+          <Badge variant="outline">Example data · not live</Badge>
           <p className="budget-title">Context</p>
           <p className="budget-value">{(contextUsed / 1000).toFixed(1)}k / 32k tokens</p>
           <ul>

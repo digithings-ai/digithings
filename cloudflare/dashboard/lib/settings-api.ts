@@ -383,6 +383,7 @@ export type RedeemInviteResult = {
   ok: true;
   already_granted: boolean;
   product_key: string;
+  plan_floor: string | null;
 };
 
 export async function redeemInvite(
@@ -390,4 +391,23 @@ export async function redeemInvite(
   payload: { code: string; product_key?: string; workspace_id?: string },
 ): Promise<RedeemInviteResult> {
   return request<RedeemInviteResult>(opts, 'POST', '/settings/access/redeem-invite', payload);
+}
+
+export type TwelveXSessionResult = {
+  ok: true;
+  access_token: string;
+  refresh_token: string;
+  expires_in: number;
+};
+
+/**
+ * Mint a session in the SEPARATE twelve-x Supabase project for the caller,
+ * gated on client_product_grants(product_key='fx_hub'). twelve-x has no
+ * login of its own — see lib/twelve-x/session.ts for how the result is used
+ * and AUTH.md's "twelve-x is a SEPARATE Supabase project" section for why.
+ */
+export async function getTwelveXSession(
+  opts: SettingsApiOptions,
+): Promise<TwelveXSessionResult> {
+  return request<TwelveXSessionResult>(opts, 'GET', '/settings/access/twelvex-session');
 }

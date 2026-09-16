@@ -221,6 +221,7 @@ def _last_closes(*, client: SupabaseClient, tickers: set[str], run_date: date) -
                 latest[ticker] = (day, close)
         return {ticker: close for ticker, (_, close) in latest.items()}
     for start in range(0, len(ordered), _CLOSE_TICKER_BATCH):
+        # Retired: migration 127 drops price_history (#4053) — R2 only above.
         resp = _execute(
             client.table(_PRICE_HISTORY)
             .select("date, ticker, close")

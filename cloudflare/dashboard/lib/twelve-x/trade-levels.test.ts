@@ -8,7 +8,10 @@ import {
   parseEvidence,
   parseTradeLevels,
   provenanceChipLabel,
+  evidenceDetail,
+  evidenceSourceLabel,
   evidenceStanceClass,
+  evidenceSummary,
 } from './trade-levels';
 import type { FxTradeIdeaRow, FxTradeLevel } from './types';
 
@@ -22,6 +25,13 @@ const broker: FxTradeLevel = {
   value: '1.18',
   provenance: 'broker_quoted',
   source_ref: 'ING.pdf',
+};
+
+const engineComputed: FxTradeLevel = {
+  value: '1.1077',
+  provenance: 'computed',
+  source_ref:
+    'computed:atr14@2026-08-05T00:00:00|k=1.52598365|reg=1.017322434|br=pivot|piv=2|rr=1.5|src=base',
 };
 
 describe('parseTradeLevels', () => {
@@ -51,6 +61,35 @@ describe('provenanceChipLabel', () => {
 
   it('labels computed vol refs', () => {
     expect(provenanceChipLabel(computed)).toBe('computed, 1.5×20d vol off 31 Jul fix');
+  });
+
+  it('labels digiquant engine atr refs with the structural branch', () => {
+    expect(provenanceChipLabel(engineComputed)).toBe('computed, 1.52598365×14d atr pivot');
+  });
+
+  it('labels engine donchian and atr branches', () => {
+    expect(
+      provenanceChipLabel({
+        ...engineComputed,
+        source_ref:
+          'computed:atr14@na|k=1.5|reg=1|br=donchian|piv=2|rr=1.5|src=base',
+      }),
+    ).toBe('computed, 1.5×14d atr donchian');
+    expect(
+      provenanceChipLabel({
+        ...engineComputed,
+        source_ref: 'computed:atr14@na|k=1.5|reg=1|br=atr|piv=2|rr=1.5|src=base',
+      }),
+    ).toBe('computed, 1.5×14d atr');
+  });
+
+  it('falls back to computed for unrecognised or incomplete refs', () => {
+    expect(provenanceChipLabel({ ...engineComputed, source_ref: 'computed:atr14@na' })).toBe(
+      'computed',
+    );
+    expect(
+      provenanceChipLabel({ ...engineComputed, source_ref: 'computed:ema20@na|k=1' }),
+    ).toBe('computed');
   });
 
   it('labels bank trade', () => {
@@ -83,6 +122,28 @@ describe('parseEvidence + stance class', () => {
 
   it('drops malformed rows', () => {
     expect(parseEvidence([{ statement: 'x' }])).toEqual([]);
+  });
+});
+
+describe('evidence display labels', () => {
+  it('labels known sources and title-cases unknown slugs', () => {
+    expect(evidenceSourceLabel('smart-bias-tracker')).toBe('Smart Bias');
+    expect(evidenceSourceLabel('dmx-overview')).toBe('DMX overview');
+    expect(evidenceSourceLabel('bank_flows-feed')).toBe('Bank Flows Feed');
+  });
+
+  it('splits Smart Bias statements into summary and detail', () => {
+    const statement =
+      'PMT Smart Bias weak bearish for EUR (week of 2026-09-06); factors: GDP_Sentiment=bullish; banks: 3/11 bullish';
+    expect(evidenceSummary(statement)).toBe(
+      'PMT Smart Bias weak bearish for EUR (week of 2026-09-06)',
+    );
+    expect(evidenceDetail(statement)).toBe('factors: GDP_Sentiment=bullish; banks: 3/11 bullish');
+  });
+
+  it('returns the whole statement as summary when there is no detail tail', () => {
+    expect(evidenceSummary('Retail 78% long USD/JPY')).toBe('Retail 78% long USD/JPY');
+    expect(evidenceDetail('Retail 78% long USD/JPY')).toBeNull();
   });
 });
 
@@ -180,6 +241,34 @@ describe('buildIdeaDetailModel', () => {
     expect(model.evidenceRows[0].statement).toBe('Retail 78% long USD/JPY');
     expect(model.evidenceRows[0].stance).toBe('contradicts');
     expect(model.evidenceRows[0].className).toContain('warn');
+    expect(model.evidenceRows[0].summary).toBe('Retail 78% long USD/JPY');
+    expect(model.evidenceRows[0].detail).toBeNull();
+    expect(model.evidenceRows[0].sourceLabel).toBe('DMX overview');
+    expect(model.evidenceRows[0].instrument).toBe('USD/JPY');
+  });
+
+  it('folds Smart Bias factor and desk tallies into a detail tail', () => {
+    const model = buildIdeaDetailModel({
+      ...LEVELS_IDEA,
+      evidence: [
+        {
+          source_slug: 'smart-bias-tracker',
+          instrument: 'EUR',
+          as_of: '2026-09-06T00:00:00Z',
+          statement:
+            'PMT Smart Bias weak bearish for EUR (week of 2026-09-06); factors: Trend_Sentiment=range; banks: 3/11 bullish',
+          stance: 'supports',
+          snapshot_id: '00000000-0000-0000-0000-000000000003',
+        },
+      ],
+    });
+    expect(model.evidenceRows[0].summary).toBe(
+      'PMT Smart Bias weak bearish for EUR (week of 2026-09-06)',
+    );
+    expect(model.evidenceRows[0].detail).toContain('banks: 3/11 bullish');
+    expect(model.evidenceRows[0].sourceLabel).toBe('Smart Bias');
+    expect(model.evidenceRows[0].instrument).toBe('EUR');
+    expect(model.evidenceRows[0].className).toContain('accent');
   });
 
   it('orders long ladder Target → Entry → Stop', () => {

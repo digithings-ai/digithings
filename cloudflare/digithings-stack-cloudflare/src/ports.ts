@@ -5,6 +5,13 @@ export const DIGIGRAPH_PORT = 8000;
 export const DIGIKEY_PORT = 8005;
 
 /**
+ * digisearch edge port inside the Profile A stack Container. Hosted on
+ * search.digithings.ai (#4063) for CI web grounding, behind a digikey JWT
+ * scoped `digisearch:query` — never anonymous.
+ */
+export const DIGISEARCH_PORT = 8002;
+
+/**
  * digiquant-mcp market-data edge port (dedicated Container, #3780 Task 8).
  * Matches DIGIQUANT_MCP_PORT in digiquant/Dockerfile.mcp and the
  * streamable-http default in digiquant/src/digiquant/mcp_server.py.
@@ -23,9 +30,11 @@ export const MCP_CONTAINER_ID = "mcp-v1";
 
 /** Single Durable Object / Container id for the shared Profile A stack.
  * Bump the suffix when a deploy must force a new Firecracker instance
- * (old DO can keep a stale image until sleepAfter expires).
+ * (old DO can keep a stale image until sleepAfter expires) — e.g. v15,
+ * to pick up the rotated DIGIKEY_ADMIN_TOKEN, since the container reads
+ * worker env only when the instance starts.
  */
-export const SHARED_STACK_CONTAINER_ID = "shared-v14";
+export const SHARED_STACK_CONTAINER_ID = "shared-v15";
 
 /**
  * Map public hostname → container port.
@@ -38,6 +47,9 @@ export function portForHostname(hostname: string): number | null {
   }
   if (host === "key.digithings.ai" || host.startsWith("key.")) {
     return DIGIKEY_PORT;
+  }
+  if (host === "search.digithings.ai" || host.startsWith("search.")) {
+    return DIGISEARCH_PORT;
   }
   // wrangler.dev / workers.dev fallback: path-prefix routing not used;
   // default to digigraph so /healthz works on the workers.dev URL.

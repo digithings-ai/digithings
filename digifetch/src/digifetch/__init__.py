@@ -16,7 +16,8 @@ Public API
 - :class:`RateLimiter` — minimum-interval polite-scraping gate.
 - :class:`HttpFetcher`, :class:`FetchResult`, :class:`DownloadResult`,
   :func:`cookies_from_playwright`, :data:`DEFAULT_TIMEOUT`,
-  :class:`DownloadTooLargeError` — the non-browser fetch/download seam.
+  :class:`DownloadTooLargeError`, :class:`SsrfBlockedError` — the non-browser
+  fetch/download seam (SSRF-guarded; see :mod:`digifetch.ssrf`).
 - :func:`browser_session`, :class:`BrowserConfig`, :class:`Page`,
   :class:`BrowserContext`, :class:`BrowserNotAvailableError` — the headless
   browser seam (requires the ``digifetch[browser]`` extra).
@@ -44,6 +45,7 @@ from digifetch.http import (
 )
 from digifetch.ratelimit import RateLimiter
 from digifetch.retry import RetryPolicy, with_retry
+from digifetch.ssrf import SsrfBlockedError
 
 if TYPE_CHECKING:
     # Type-checkers see these eagerly; at runtime they resolve lazily via
@@ -84,6 +86,7 @@ __all__ = [
     "Page",
     "RateLimiter",
     "RetryPolicy",
+    "SsrfBlockedError",
     "__version__",
     "browser_session",
     "cookies_from_playwright",

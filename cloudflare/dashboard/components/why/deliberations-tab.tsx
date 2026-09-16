@@ -1,7 +1,8 @@
 'use client';
 
 import { useState } from 'react';
-import { Calendar, FileText, GitBranch, Scale, TrendingUp } from 'lucide-react';
+import { ArrowUpRight, Calendar, FileText, GitBranch, Scale, TrendingUp } from 'lucide-react';
+import { gloomberbTickerUrl } from '@digithings/web';
 import DocumentExpandInline from '@/components/library/DocumentExpandInline';
 import { SafeMarkdown } from '@/components/SafeMarkdown';
 import { canonicalPmTitle } from '@/components/portfolio/tabs/palette-and-format';
@@ -228,6 +229,21 @@ export function DeliberationsPanel({ docs }: { docs: PipelineTickerDoc[] }) {
             <div key={d.ticker} className="px-5 py-4 space-y-3">
               <div className="flex items-baseline gap-3">
                 <span className="font-mono text-sm font-semibold text-accent">{d.ticker}</span>
+                {/* Per-covered-ticker Gloomberb shortcut (#4193). Blank tickers render no
+                    anchor — `?ticker=` would fall back to the terminal's default symbol. */}
+                {d.ticker.trim() ? (
+                  <a
+                    href={gloomberbTickerUrl(d.ticker)}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    data-testid={`gloomberb-link-${d.ticker}`}
+                    className="inline-flex items-center text-ink-mute hover:text-accent focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-accent/50"
+                    title={`Open ${d.ticker} in Gloomberb`}
+                    aria-label={`Open ${d.ticker} in Gloomberb (opens in a new tab)`}
+                  >
+                    <ArrowUpRight size={12} aria-hidden />
+                  </a>
+                ) : null}
                 {stance ? <span className={`text-xs font-medium capitalize ${stanceColor}`}>{stance}</span> : null}
                 {delta ? <span className="text-xs text-ink-mute">conviction Δ {sign}</span> : null}
               </div>

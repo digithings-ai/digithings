@@ -4,18 +4,9 @@ import { X } from 'lucide-react';
 import { Sheet, SheetClose, SheetContent, SheetTitle } from '@digithings/web';
 
 import type { ConsensusCurrencyRow } from '@/lib/twelve-x/consensus-view';
+import { fmtNEff } from '@/lib/twelve-x/format';
 import type { FxBriefRow, IntelligenceWhyItem } from '@/lib/twelve-x/types';
-
-function deskDirectionClasses(direction: string): { card: string; label: string } {
-  const normalized = direction.trim().toLowerCase();
-  if (normalized === 'bullish' || normalized === 'long' || normalized === 'buy') {
-    return { card: 'border-accent/30 bg-accent/[0.05]', label: 'text-accent' };
-  }
-  if (normalized === 'bearish' || normalized === 'short' || normalized === 'sell') {
-    return { card: 'border-warn/30 bg-warn/[0.05]', label: 'text-warn' };
-  }
-  return { card: 'border-hair bg-surface', label: 'text-ink-soft' };
-}
+import OppositionLedger from './OppositionLedger';
 
 /**
  * The loaded currency drilldown content (consensus metrics, confluence, desk
@@ -42,9 +33,7 @@ export function CurrencyDrilldownPanelBody({
   const confluenceScore = intelligenceItem?.score ?? null;
   const components = intelligenceItem?.components;
   const consensus = intelligenceItem?.consensus;
-  const activeDesks = (intelligenceItem?.desks ?? []).filter(
-    (desk) => desk.classification.trim().toLowerCase() === 'active',
-  );
+  const desks = intelligenceItem?.desks ?? [];
 
   const formatScore = (v: number | null) => (v !== null && Number.isFinite(v) ? v.toFixed(2) : '—');
   const formatPct = (v: number | null) =>
@@ -114,6 +103,14 @@ export function CurrencyDrilldownPanelBody({
               <dt className="text-ink-mute">Tilt</dt>
               <dd className="font-mono text-ink">{formatScore(consensus.tilt)}</dd>
             </div>
+            <div>
+              <dt className="text-ink-mute">Confidence</dt>
+              <dd className="font-mono text-ink">{formatPct(consensus.confidence)}</dd>
+            </div>
+            <div>
+              <dt className="text-ink-mute">Effective n</dt>
+              <dd className="font-mono text-ink">{fmtNEff(consensus.n_eff)}</dd>
+            </div>
           </dl>
         </div>
       )}
@@ -151,33 +148,8 @@ export function CurrencyDrilldownPanelBody({
         </div>
       </div>
 
-      {/* Scrollable desk opinions */}
-      {activeDesks.length > 0 && (
-        <div className="space-y-3">
-          <h4 className="text-xs font-semibold uppercase tracking-wider text-ink-mute">
-            Desk Opinions
-          </h4>
-          <div className="max-h-48 space-y-2 overflow-y-auto overscroll-contain pr-1 pb-1">
-            {activeDesks.map((desk, i) => {
-              const directionClasses = deskDirectionClasses(desk.direction);
-              return (
-                <div
-                  key={i}
-                  className={`rounded-none border p-3 text-sm ${directionClasses.card}`}
-                >
-                  <div className="flex items-center justify-between">
-                    <span className="font-medium text-ink">{desk.broker}</span>
-                    <span className={`text-xs capitalize ${directionClasses.label}`}>
-                      {desk.direction}
-                    </span>
-                  </div>
-                  {desk.reason && <p className="mt-1 text-xs text-ink-mute">{desk.reason}</p>}
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      )}
+      {/* Full deliberation ledger — every lifecycle class, not just active */}
+      {desks.length > 0 && <OppositionLedger desks={desks} />}
 
       {/* Scrollable relevant briefs */}
       {relevantBriefs.length > 0 && (

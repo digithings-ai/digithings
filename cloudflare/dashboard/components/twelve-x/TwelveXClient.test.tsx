@@ -7,11 +7,11 @@ import { TWELVE_X_TABS, TwelveXUnavailable, resolveTab } from './TwelveXClient';
 import type { TwelveXTab } from './context';
 
 /* ----------------------------------------------------------------------- */
-/* The workspace tab set (4 visible tabs — Intelligence merged into Consensus) */
+/* The workspace tab set (7 visible tabs — Intelligence merged into Consensus) */
 /* ----------------------------------------------------------------------- */
 
 describe('TwelveXClient tab set', () => {
-  it('exposes exactly six tabs', () => {
+  it('exposes exactly seven tabs', () => {
     expect(TWELVE_X_TABS).toHaveLength(6);
   });
 
@@ -49,17 +49,14 @@ describe('TwelveXClient tab set', () => {
 /* ----------------------------------------------------------------------- */
 
 describe('resolveTab', () => {
-  it('routes each of the six tab params to its tab', () => {
+  it('routes each of the seven tab params to its tab', () => {
     expect(resolveTab('today')).toBe('today');
     expect(resolveTab('consensus')).toBe('consensus');
     expect(resolveTab('trades')).toBe('trades');
+    expect(resolveTab('track-record')).toBe('track-record');
     expect(resolveTab('matrix')).toBe('matrix');
     expect(resolveTab('events')).toBe('events');
     expect(resolveTab('how-it-works')).toBe('how-it-works');
-  });
-
-  it('redirects legacy track-record param to trades', () => {
-    expect(resolveTab('track-record')).toBe('trades');
   });
 
   it('redirects legacy intelligence param to consensus', () => {

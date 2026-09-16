@@ -2,8 +2,9 @@
 """Standalone current-book lookback refresh (Pillar 3B, #726 / #2598).
 
 Computes the single-benchmark trailing-window diagnostic for one date and upserts it to
-``current_book_lookback``: reads the booked ``positions`` weights, each holding's trailing-
-window return + the benchmark's return from ``price_history``, runs the pure
+``current_book_lookback``: reads the booked ``positions`` weights and each holding's
+trailing-window return + the benchmark's return from the sealed R2 generations (#4053),
+runs the pure
 :func:`digiquant.research.attribution.compute_current_book_lookback`, and writes the
 rows. Decoupled from the research pipeline so it can run on its own daily cron after EOD
 prices land. Idempotent (upsert on ``(date, ticker)``).
@@ -17,9 +18,10 @@ Usage::
 
     python digiquant/scripts/research/refresh_attribution.py [--date YYYY-MM-DD] [--window-days N]
 
-Env: ``SUPABASE_URL`` + ``SUPABASE_SERVICE_ROLE_KEY``. Reads house ``positions`` +
-price_history (filters ``workspace_id`` so overlay same-date weights cannot seed
-the lookback), writes current_book_lookback (migrations 040 + 073 must be applied).
+Env: ``SUPABASE_URL`` + ``SUPABASE_SERVICE_ROLE_KEY`` (positions + write) and the R2
+credentials for the market read. Reads house ``positions`` + sealed R2 closes (filters
+``workspace_id`` so overlay same-date weights cannot seed the lookback), writes
+current_book_lookback (migrations 040 + 073 must be applied).
 Exit 0 = clean (no positions for the date is success); 1 = hard failure; 2 = bad ``--date``.
 """
 
@@ -50,6 +52,7 @@ def _ensure_importable() -> None:
 
 _ensure_importable()
 from digiquant.dashboard.tenancy import house_workspace_id  # noqa: E402
+from digiquant.research.data.queries import r2_close_rows  # noqa: E402
 
 
 def _house_id() -> str:
@@ -77,27 +80,17 @@ def _opt_float(value: Any) -> float | None:
 
 
 def _window_return(client: Any, ticker: str, start_iso: str, end_iso: str) -> float | None:
-    """Return over ``[start_iso, end_iso]`` from price_history (latest/earliest − 1).
+    """Return over ``[start_iso, end_iso]`` from the sealed R2 generations.
 
-    Look-ahead-guarded (``.lte(end)``). ``None`` when fewer than two closes are available.
+    ``None`` when fewer than two closes are available or the ticker has no
+    generation (a missing ticker is an unpriced holding, not an outage — parity
+    with the retired Supabase row-miss; the benchmark miss skips the date).
     """
-    resp = (
-        client.table("price_history")
-        .select("date,close")
-        .eq("ticker", ticker)
-        .gte("date", start_iso)
-        .lte("date", end_iso)
-        .order("date", desc=False)
-        .limit(400)
-        .execute()
-    )
-    # Keep 0.0 (only drop None) so a bad non-positive close at either end trips the guard
-    # below rather than being silently skipped (which would compute a return off wrong rows).
-    closes = [
-        c
-        for c in (_opt_float(r.get("close")) for r in (getattr(resp, "data", None) or []))
-        if c is not None
-    ]
+    try:
+        rows = r2_close_rows(tickers=[ticker], since=start_iso, until=end_iso)
+    except LookupError:
+        return None
+    closes = [c for c in (_opt_float(r.get("close")) for r in rows) if c is not None]
     if len(closes) < 2 or closes[0] <= 0 or closes[-1] <= 0:
         return None
     return closes[-1] / closes[0] - 1.0

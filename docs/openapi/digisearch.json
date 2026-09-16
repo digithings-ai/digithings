@@ -789,6 +789,18 @@
             "minLength": 1,
             "title": "User Message",
             "type": "string"
+          },
+          "workspace_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Optional tenant/workspace id. Injected as a mandatory structured filter so the research path is scoped like POST /query (enterprise).",
+            "title": "Workspace Id"
           }
         },
         "required": [

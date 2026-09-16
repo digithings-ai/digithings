@@ -20,6 +20,13 @@ import {
   type SmartBiasJoinRow,
 } from './divergence';
 import { netCarriedIdeas } from './trade-history';
+import {
+  composeFixSeries,
+  normalizeFixPair,
+  pairFixSpec,
+  type FxFixPoint,
+  type PairFixSpec,
+} from './level-vs-fix';
 import type {
   ConfluenceCatalyst,
   ConsensusDelta,
@@ -592,19 +599,25 @@ export async function getTradeIdeaArchive(): Promise<FxTradeIdeaRow[]> {
 }
 
 /** Idea lifecycle eval rows. Eval tables only — no core FX. */
-export async function getIdeaEval(): Promise<FxIdeaEvalRow[]> {
+export async function getIdeaEval(
+  opts: { netCarried?: boolean } = {},
+): Promise<FxIdeaEvalRow[]> {
   if (!isTwelveXConfigured() || !twelveXSupabase) return [];
   const rows = await querySupabase<FxIdeaEvalRow[]>((sb) =>
     sb
       .from('fx_idea_eval')
       .select(
-        'run_date, rank, horizon_days, pair, direction, status, entry_date, exit_date, entry_fix, exit_fix, ret, hold_return, sigma_entry, hit, directional_win, significant_hit, n_sessions, as_of, bias_verdict, max_favorable, max_adverse, decisive_session, entry_fill_session, stop_price, target_prices, level_outcome',
+        'run_date, rank, horizon_days, pair, direction, status, entry_date, exit_date, entry_fix, exit_fix, ret, hold_return, sigma_entry, hit, directional_win, significant_hit, n_sessions, as_of, bias_verdict, max_favorable, max_adverse, decisive_session, entry_fill_session, stop_price, target_prices, level_outcome, verdict_reason, outcome, grade_basis, closed_by',
       )
       .eq('horizon_days', 0)
       .order('run_date', { ascending: true })
       .order('rank', { ascending: true }),
   );
-  return netCarriedIdeas(rows ?? []);
+  // netCarried:false returns the RAW rows — the track-record tab needs the
+  // un-netted carried boards so carriedCount stays honest. Default stays
+  // netted for the Trades board.
+  const { netCarried = true } = opts;
+  return netCarried ? netCarriedIdeas(rows ?? []) : (rows ?? []);
 }
 
 /** Consensus jump + accuracy eval rows. Eval tables only — no core FX / raw PMT. */
@@ -621,6 +634,62 @@ export async function getConsensusEval(timeframe: Timeframe = 'medium'): Promise
       .order('currency', { ascending: true }),
   );
   return rows ?? [];
+}
+
+/* ------------------------------------------------------------------ *
+ * Level-vs-fix (macro_series_observations via the MAIN client)
+ * ------------------------------------------------------------------ */
+
+interface MacroSeriesObservationRow {
+  series_id: string;
+  obs_date: string;
+  value: number | null;
+}
+
+/**
+ * Daily fix histories for FX pairs, composed from the native `FX/…` series in
+ * the shared `macro_series_observations` table (same pair specs as the
+ * twelve-x eval job's `fx_rates`). Pairs with no spec or no table coverage
+ * map to `[]` — callers fall back to the entry/exit anchors. All-empty when
+ * the main dashboard client is unconfigured.
+ */
+export async function getFxFixSeries(
+  pairs: string[],
+  windowDays = 90,
+): Promise<Record<string, FxFixPoint[]>> {
+  const empty: Record<string, FxFixPoint[]> = {};
+  for (const pair of pairs) empty[normalizeFixPair(pair)] = [];
+  if (!isSupabaseConfigured() || !supabase) return empty;
+  const specs = new Map<string, PairFixSpec>();
+  for (const pair of pairs) {
+    const spec = pairFixSpec(pair);
+    if (spec) specs.set(normalizeFixPair(pair), spec);
+  }
+  if (specs.size === 0) return empty;
+  const seriesIds = [...new Set([...specs.values()].flatMap((s) => s.seriesIds))];
+  const since = new Date();
+  since.setUTCDate(since.getUTCDate() - windowDays);
+  const sinceDate = since.toISOString().slice(0, 10);
+  const rows = await queryMainSupabase<MacroSeriesObservationRow[]>((sb) =>
+    sb
+      .from('macro_series_observations')
+      .select('series_id, obs_date, value')
+      .in('series_id', seriesIds)
+      .gte('obs_date', sinceDate)
+      .order('obs_date', { ascending: true })
+      .limit(10000),
+  );
+  const bySeries: Record<string, FxFixPoint[]> = {};
+  for (const row of rows ?? []) {
+    const value = row.value === null || row.value === undefined ? NaN : Number(row.value);
+    if (!Number.isFinite(value)) continue;
+    const list = bySeries[row.series_id] ?? [];
+    list.push({ date: row.obs_date, fix: value });
+    bySeries[row.series_id] = list;
+  }
+  const out: Record<string, FxFixPoint[]> = { ...empty };
+  for (const [pair, spec] of specs) out[pair] = composeFixSeries(spec, bySeries);
+  return out;
 }
 
 /** Today's research briefs for a run_date, pre-sorted for the slideshow. */

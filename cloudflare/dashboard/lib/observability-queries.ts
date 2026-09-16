@@ -31,6 +31,7 @@ import type { TableRow, ViewRow } from './database.types';
 import type { ResearchRunDiagnostics, BenchmarkHistoryMap } from './types';
 import type {
   BenchmarkComparison,
+  PerformanceContributionSource,
   PerformanceTearsheet,
   PerformanceHoldingRow,
   PortfolioReturnPoint,
@@ -39,9 +40,12 @@ import type { ContributionReturnPoint } from '@digithings/web';
 import { DASHBOARD_BENCHMARK_TICKERS } from './benchmark-tickers';
 import {
   ACCOUNTING_NAV_VIEW,
+  PUBLIC_REALIZED_ATTRIBUTION_VIEW,
   AccountingNavContractError,
   accountingNavToHistoryShape,
+  chainNavContinuity,
   type AccountingNavRow,
+  type NavContinuityRow,
 } from './accounting-views';
 import {
   averageEntryAsOf,
@@ -50,6 +54,7 @@ import {
   soldWeightPct,
 } from './position-event-economics';
 import { houseBook } from './house-workspace';
+import { fetchMarketCloses } from './market-data';
 import { isCashTicker } from './book-reconciliation';
 import { committedBookDate } from './dashboard-ssot';
 import {
@@ -62,6 +67,8 @@ const DECISION_PAGE_SIZE = 1000;
 const DECISION_MAX_ROWS = 50000;
 const PERFORMANCE_HISTORY_LIMIT = 5000;
 const ATTRIBUTION_LIMIT = 5000;
+const ATTRIBUTION_PAGE_SIZE = 1000;
+const ATTRIBUTION_MAX_ROWS = 50000;
 
 export interface ObservabilityData {
   decisions: TableRow<'decision_log'>[];
@@ -108,6 +115,52 @@ async function fetchDecisionHistory(): Promise<TableRow<'decision_log'>[]> {
     if (!page.ok || page.rows.length < DECISION_PAGE_SIZE) break;
   }
   return decisions;
+}
+
+/**
+ * Collect a paged read into one array (#3983).
+ *
+ * `fetchPage` receives inclusive PostgREST `.range()` offsets. Stops at the
+ * first error or short page. `truncated` is true when `maxRows` was exhausted
+ * on full pages, so callers can flag understated data instead of rendering it
+ * silently.
+ */
+export async function collectPagedRows<T>(
+  pageSize: number,
+  maxRows: number,
+  fetchPage: (from: number, to: number) => Promise<{ rows: T[]; ok: boolean }>
+): Promise<{ rows: T[]; ok: boolean; truncated: boolean }> {
+  const rows: T[] = [];
+  for (let offset = 0; offset < maxRows; offset += pageSize) {
+    const page = await fetchPage(offset, offset + pageSize - 1);
+    rows.push(...page.rows);
+    if (!page.ok) return { rows, ok: false, truncated: false };
+    if (page.rows.length < pageSize) return { rows, ok: true, truncated: false };
+  }
+  return { rows, ok: true, truncated: true };
+}
+
+/**
+ * Page the realized view from the plotted-window start (#3956 / #3983).
+ * Orders by date then ticker so page boundaries are deterministic.
+ */
+function fetchRealizedAttribution(fromDate: string) {
+  return collectPagedRows<ViewRow<'public_daily_realized_attribution'>>(
+    ATTRIBUTION_PAGE_SIZE,
+    ATTRIBUTION_MAX_ROWS,
+    (from, to) =>
+      safeSelect<ViewRow<'public_daily_realized_attribution'>>(
+        'public_daily_realized_attribution',
+        (sb) =>
+          sb
+            .from(PUBLIC_REALIZED_ATTRIBUTION_VIEW)
+            .select('*')
+            .gte('date', fromDate)
+            .order('date', { ascending: false })
+            .order('ticker', { ascending: true })
+            .range(from, to)
+      )
+  );
 }
 
 export async function fetchObservabilityData(): Promise<ObservabilityData> {
@@ -270,7 +323,8 @@ function latestCloseByTicker(
 
 /**
  * When the nightly metrics refresh did not stamp `current_price` /
- * `unrealized_pnl_pct` (sync-only book rows), fill the mark from `price_history`
+ * `unrealized_pnl_pct` (sync-only book rows), fill the mark from the market API
+ * (fetchMarketCloses)
  * so open-book unrealized can derive from entry vs close. Never invent a mark.
  */
 function applyHoldingMarks(
@@ -344,19 +398,59 @@ function periodReturnPct(values: number[]): number | null {
   return roundPct((last / first - 1) * 100);
 }
 
-function buildPortfolioReturnSeries(
-  nav: TableRow<'nav_history'>[]
-): PortfolioReturnPoint[] {
-  const sorted = [...nav].sort((a, b) => a.date.localeCompare(b.date));
-  const baseline = sorted.find((row) => Number.isFinite(row.nav) && row.nav > 0)?.nav;
-  if (baseline == null) return [];
-  return sorted
-    .filter((row) => Number.isFinite(row.nav) && row.nav > 0)
-    .map((row) => ({
-      date: row.date,
-      nav: row.nav,
-      returnPct: roundPct((row.nav / baseline - 1) * 100),
-    }));
+/** Gaps up to this many calendar days are non-trading stretches (weekend/holiday). */
+const CONTINUITY_MAX_FILL_DAYS = 4;
+
+function nextIsoDate(date: string): string {
+  const [year, month, day] = date.split('-').map(Number);
+  return new Date(Date.UTC(year, month - 1, day + 1)).toISOString().slice(0, 10);
+}
+
+function calendarDaysBetween(start: string, end: string): number {
+  return Math.round(
+    (Date.parse(`${end}T00:00:00Z`) - Date.parse(`${start}T00:00:00Z`)) / 86_400_000
+  );
+}
+
+/**
+ * Plot-ready NAV series for the tearsheet + Brief charts (#4014).
+ *
+ * Chains the accounting source runs onto one base-100 index (see
+ * {@link chainNavContinuity}) and forward-fills calendar gaps of up to
+ * `CONTINUITY_MAX_FILL_DAYS` from the last index value, so weekends and
+ * holidays stay continuous; longer gaps are missing book runs and are left as
+ * a jump rather than invented flat days.
+ */
+function buildContinuityNavSeries(rows: ReadonlyArray<NavContinuityRow>): PortfolioReturnPoint[] {
+  const chained = chainNavContinuity(rows);
+  if (chained.length === 0) return [];
+  const points: PortfolioReturnPoint[] = [];
+  for (let position = 0; position < chained.length; position += 1) {
+    const point = chained[position];
+    if (position > 0) {
+      const previous = chained[position - 1];
+      const gap = calendarDaysBetween(previous.date, point.date);
+      if (gap > 1 && gap - 1 <= CONTINUITY_MAX_FILL_DAYS) {
+        for (
+          let cursor = nextIsoDate(previous.date);
+          cursor < point.date;
+          cursor = nextIsoDate(cursor)
+        ) {
+          points.push({
+            date: cursor,
+            nav: roundPct(previous.nav),
+            returnPct: roundPct(previous.nav - 100),
+          });
+        }
+      }
+    }
+    points.push({
+      date: point.date,
+      nav: roundPct(point.nav),
+      returnPct: roundPct(point.nav - 100),
+    });
+  }
+  return points;
 }
 
 function buildBenchmarkComparisons(
@@ -469,6 +563,97 @@ function buildPositionContributionSeries(
   }));
 }
 
+/**
+ * Upper bound on a believable single-day per-ticker contribution, in percentage
+ * points (#4102). An unlevered base-100 book can in principle exceed 100 pp on a
+ * >100% single-day move, so this is a sanity bound rather than an invariant:
+ * rows beyond it mean the period's equity base could not anchor its P&L — the
+ * 2026-08-25 tip opened on $0.10 of cash and published ±1,723 pp as a final row —
+ * so they are treated as missing instead of being accumulated into every later
+ * day's bar.
+ */
+const REALIZED_DAILY_CONTRIBUTION_LIMIT_PP = 100;
+
+/**
+ * Cumulative per-asset contribution from finalized accounting (#3956).
+ *
+ * `daily_realized_attribution` publishes each ticker's daily contribution in
+ * percentage points — price, fees, and slippage only. Cash (dividends,
+ * interest) is booked to the period's `cash_contribution` and is **not**
+ * published by the view, so these bars do not reconcile to the NAV day return;
+ * the difference is cash. The tearsheet still no longer depends on the position
+ * marks the nightly refresh may not have written yet. Day one is the base (0),
+ * matching the weight-times-mark series. Days before the first finalized row
+ * render flat at 0 — the view is final-only, consistent with the current
+ * accounting run the NAV line already plots. Returns no points when no row lands
+ * in the plotted run (#3983): rows from a prior finalized run must not render as
+ * an all-zero series that suppresses the marks fallback.
+ *
+ * Rows beyond {@link REALIZED_DAILY_CONTRIBUTION_LIMIT_PP} in a single day are
+ * dropped as unanchored (#4102), so one degenerate period cannot inflate every
+ * later cumulative bar, and `startsOn` reports the first plotted contribution so
+ * the surface can say when finalized accounting begins.
+ */
+function buildRealizedContributionSeries(
+  navSeries: PortfolioReturnPoint[],
+  realized: ViewRow<'public_daily_realized_attribution'>[],
+  tickers: Set<string>
+): { points: ContributionReturnPoint[]; startsOn: string | null } {
+  if (navSeries.length === 0 || realized.length === 0 || tickers.size === 0) {
+    return { points: [], startsOn: null };
+  }
+  const byTicker = new Map<string, Map<string, number>>();
+  for (const row of realized) {
+    const ticker = row.ticker.toUpperCase();
+    if (!tickers.has(ticker)) continue;
+    const value = row.contribution_pct;
+    if (value == null || !Number.isFinite(value)) continue;
+    if (Math.abs(value) > REALIZED_DAILY_CONTRIBUTION_LIMIT_PP) continue;
+    let byDate = byTicker.get(ticker);
+    if (!byDate) {
+      byDate = new Map<string, number>();
+      byTicker.set(ticker, byDate);
+    }
+    byDate.set(row.date, value);
+  }
+  if (byTicker.size === 0) return { points: [], startsOn: null };
+  const cumulativeByTicker = new Map<string, number[]>();
+  let hasPlottedContribution = false;
+  let startsOn: string | null = null;
+  for (const [ticker, byDate] of byTicker) {
+    const cumulative: number[] = [];
+    let running = 0;
+    navSeries.forEach((point, index) => {
+      // Index 0 is the base row (always 0) — never counts as coverage.
+      const contribution = index > 0 ? byDate.get(point.date) : undefined;
+      if (contribution != null) {
+        running += contribution;
+        hasPlottedContribution = true;
+        if (startsOn === null || point.date < startsOn) startsOn = point.date;
+      }
+      cumulative.push(roundPct(running));
+    });
+    cumulativeByTicker.set(ticker, cumulative);
+  }
+  // Rows from a prior finalized run can sit entirely before the plotted window
+  // (e.g. across a trailing seam). All-zero cumulatives would then suppress the
+  // marks accrual and present missing attribution as a flat zero — leave the
+  // realized source unusable so the caller falls back.
+  if (!hasPlottedContribution) return { points: [], startsOn: null };
+  return {
+    points: navSeries.map((point, index) => ({
+      t: point.date,
+      returnPct: point.returnPct,
+      contributions: Object.fromEntries(
+        [...cumulativeByTicker.entries()]
+          .sort(([left], [right]) => left.localeCompare(right))
+          .map(([ticker, values]) => [ticker, values[index]])
+      ),
+    })),
+    startsOn,
+  };
+}
+
 function latestPositionByTicker(
   positions: TableRow<'positions'>[]
 ): Map<string, TableRow<'positions'>> {
@@ -492,6 +677,10 @@ export function buildPerformanceTearsheet(args: {
   positions: TableRow<'positions'>[];
   metrics: TableRow<'portfolio_metrics'> | null;
   attribution: TableRow<'position_attribution'>[];
+  /** Finalized per-ticker daily contribution rows from the public view (#3956). */
+  realizedAttribution?: ViewRow<'public_daily_realized_attribution'>[];
+  /** True when that read errored or hit the paging cap (#3983). */
+  realizedAttributionDegraded?: boolean;
   events?: TableRow<'position_events'>[];
   benchmarkPrices?: Array<{ ticker?: string; date: string; close: number }>;
   /** Latest closes for open-book tickers when positions rows lack marks. */
@@ -502,8 +691,33 @@ export function buildPerformanceTearsheet(args: {
   snapshotDate?: string | null;
 }): PerformanceTearsheet {
   const navAsc = [...args.nav].sort((a, b) => a.date.localeCompare(b.date));
-  const inceptionDate = navAsc[0]?.date ?? null;
-  const navSeries = buildPortfolioReturnSeries(navAsc);
+  // #3767 / #4014: carry the curated seam marker (and day return) onto every
+  // plotted row, then chain the runs — never bridge legacy estimates to
+  // finalized accounting (the false Sep-8 ~+10% jump), never hide the history.
+  const seamByDate = new Map(
+    (args.accountingNav ?? []).map((row) => [
+      row.date,
+      {
+        source: row.source,
+        series_seam: row.series_seam === true,
+        day_return_pct: row.day_return_pct ?? null,
+      },
+    ])
+  );
+  const navSeries = buildContinuityNavSeries(
+    navAsc.map((row) => {
+      const seam = seamByDate.get(row.date);
+      return {
+        date: row.date,
+        nav: row.nav,
+        source: seam?.source ?? null,
+        series_seam: seam?.series_seam ?? false,
+        day_return_pct: seam?.day_return_pct ?? null,
+      };
+    })
+  );
+  // Chained across runs, so the chart and the since-inception KPI agree.
+  const inceptionDate = navSeries[0]?.date ?? navAsc[0]?.date ?? null;
   const currentSnapshot = latestDateRows(args.positions);
   const marksByTicker = latestCloseByTicker(args.holdingMarks ?? []);
   const currentPositions = currentSnapshot.rows
@@ -595,6 +809,19 @@ export function buildPerformanceTearsheet(args: {
     positions: args.positions,
     holdingsAsOf,
   });
+  const realized = buildRealizedContributionSeries(
+    navSeries,
+    args.realizedAttribution ?? [],
+    currentTickers
+  );
+  const realizedSeries = realized.points;
+  const contributionSource: PerformanceContributionSource = realizedSeries.length
+    ? args.realizedAttributionDegraded
+      ? 'realized_truncated'
+      : 'realized'
+    : args.realizedAttributionDegraded
+      ? 'marks_degraded'
+      : 'marks';
 
   return {
     currentNav: navAsc.at(-1)?.nav ?? null,
@@ -609,11 +836,11 @@ export function buildPerformanceTearsheet(args: {
     holdingsAsOf,
     generatedAt: args.metrics?.generated_at ?? null,
     navSeries,
-    contributionSeries: buildPositionContributionSeries(
-      navSeries,
-      args.positions,
-      currentTickers
-    ),
+    contributionSeries: realizedSeries.length
+      ? realizedSeries
+      : buildPositionContributionSeries(navSeries, args.positions, currentTickers),
+    contributionSource,
+    contributionStartsOn: realizedSeries.length ? realized.startsOn : null,
     currentHoldings,
     historicalHoldings,
     ...ssot,
@@ -717,7 +944,7 @@ export async function getPerformanceBundle(
   }
   const navRows = (navQuery.data ?? []) as AccountingNavRow[];
 
-  const [positionsRes, metricsRes, attributionRes, eventsRes] = await Promise.all([
+  const [positionsRes, metricsRes, attributionRes, realizedRes, eventsRes] = await Promise.all([
     safeSelect<TableRow<'positions'>>('positions', (sb) =>
       houseBook(sb, 'positions')
         .order('date', { ascending: false })
@@ -733,6 +960,9 @@ export async function getPerformanceBundle(
         .order('date', { ascending: false })
         .limit(ATTRIBUTION_LIMIT)
     ),
+    navRows.length
+      ? fetchRealizedAttribution(navRows[0].date)
+      : Promise.resolve({ rows: [], ok: true as const, truncated: false }),
     safeSelect<TableRow<'position_events'>>('position_events', (sb) =>
       houseBook(sb, 'position_events')
         .in('event', ['EXIT', 'TRIM'])
@@ -740,6 +970,13 @@ export async function getPerformanceBundle(
         .limit(PERFORMANCE_HISTORY_LIMIT)
     ),
   ]);
+
+  if (realizedRes.truncated) {
+    console.error(
+      `Supabase public_daily_realized_attribution hit the ${ATTRIBUTION_MAX_ROWS}-row ` +
+        'paging cap; contribution bars may understate older days.'
+    );
+  }
 
   const navHistory: TableRow<'nav_history'>[] = navRows.map((row) => {
     const shaped = accountingNavToHistoryShape(row);
@@ -761,25 +998,23 @@ export async function getPerformanceBundle(
         .map((row) => row.ticker.toUpperCase())
     ),
   ];
+  // Marks share the plotted NAV window: the market API answers a date window
+  // (#4053, R2-only — no Supabase fallback).
+  const markWindowFloor = navWindow[0]?.date ?? '';
+  const markWindowCeiling = navWindow.at(-1)?.date ?? '';
   const [benchmarkMap, holdingMarksRes] = await Promise.all([
     navWindow.length >= 2
       ? fetchComparablePriceHistory(
           [...DASHBOARD_BENCHMARK_TICKERS],
-          navWindow[0].date,
-          navWindow.at(-1)!.date
+          markWindowFloor,
+          markWindowCeiling
         )
       : Promise.resolve({} as BenchmarkHistoryMap),
     openTickers.length
-      ? safeSelect<Pick<TableRow<'price_history'>, 'ticker' | 'date' | 'close'>>(
-          'holding mark price_history',
-          (sb) =>
-            sb
-              .from('price_history')
-              .select('ticker,date,close')
-              .in('ticker', openTickers)
-              .order('date', { ascending: false })
-              .limit(Math.max(openTickers.length * 40, 200))
-        )
+      ? fetchMarketCloses(openTickers, markWindowFloor, markWindowCeiling).then((rows) => ({
+          rows,
+          ok: true as const,
+        }))
       : Promise.resolve({ rows: [], ok: true as const }),
   ]);
   const benchmarkPrices = Object.entries(benchmarkMap).flatMap(([ticker, series]) =>
@@ -796,6 +1031,8 @@ export async function getPerformanceBundle(
     positions: positionsRes.rows,
     metrics: metricsRow,
     attribution: attributionRes.rows,
+    realizedAttribution: realizedRes.rows,
+    realizedAttributionDegraded: !realizedRes.ok || realizedRes.truncated,
     events: eventsRes.rows,
     benchmarkPrices,
     holdingMarks: holdingMarksRes.rows,

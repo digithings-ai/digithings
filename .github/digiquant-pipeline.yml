@@ -8,7 +8,7 @@ env:
   # House default: CHEAPERINFERENCE_API_KEY (GHA secret) → Cheaper Inference for
   # mapped pins; unmapped pins raise (no fallback).
   # DIGI_HOUSE_UPSTREAM=openrouter forces OpenRouter. See docs/providers/cheaperinference.md.
-  OLYMPUS_MODEL_TIER: "cheap"
+  DIGIQUANT_MODEL_TIER: "cheap"
   # Explicit (redundant when secret is set); use "openrouter" to force OR.
   DIGI_HOUSE_UPSTREAM: "cheaperinference"
 
@@ -22,7 +22,7 @@ env:
   # Tool-round budget for Olympus research-agent calls (#3299). High but finite:
   # cheap models need room for data-tool grounding; the cap stays to bound cost.
   # digigraph chat keeps its own max_tool_rounds=4 — do not reuse this there.
-  OLYMPUS_MAX_TOOL_ROUNDS: "24"
+  DIGIQUANT_MAX_TOOL_ROUNDS: "24"
 
   # Fail-soft feature flags — outages degrade signal, never block the run.
   DIGIQUANT_ONCHAIN_POSITIONING: "1"   # Hyperdash cohort GraphQL (#801)
@@ -31,15 +31,15 @@ env:
   # Market-data serving layer (#3780, Task 7b second cutover): "r2" routes
   # the MCP price/macro tools + pipeline reads through the versioned R2 cache
   # sealed at as_of, and stops the Supabase writers (`digiquant prices`
-  # refuses covered writes under this flag). Rollback = flip back to
-  # "supabase" (readers fall back to the Supabase bodies, writers resume).
-  # Merge default is "supabase": the live backfill has NOT run yet (R2 is
-  # empty), so "r2" would break the daily pipeline on merge. Flip to "r2"
-  # only post-merge, supervised, once the backfill has landed.
+  # refuses covered writes under this flag). Set to r2 2026-09-14 (#4013);
+  # supersedes the Supabase market-data writer path. 127 (#4053) then dropped
+  # the tables: this flag is no longer a rollback lever — rollback =
+  # restore-from-generation + replay. macro_series_observations and
+  # trading_calendar are NOT dropped and stay Supabase-backed.
   # Standing exception: `fetch-macro --sources fedprob` keeps writing
   # macro_series_observations under "r2" (prediction-market odds have no R2
   # generation; get_fed_rate_probabilities stays Supabase-backed).
-  DIGIQUANT_MARKET_DATA_BACKEND: "supabase"
+  DIGIQUANT_MARKET_DATA_BACKEND: "r2"
 
   DIGI_CHECKPOINTER: postgres          # Resume on retry (#665); degrades if URI absent
   LANGSMITH_TRACING: "true"            # Required for traces; key alone is insufficient (#687)

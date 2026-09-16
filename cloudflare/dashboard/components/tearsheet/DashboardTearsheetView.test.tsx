@@ -215,6 +215,27 @@ describe('contribution chart presentation', () => {
     expect(out).not.toContain('Portfolio attribution');
     expect(out).not.toContain('aria-hidden="true" style="background-color');
   });
+
+  it('flags a degraded marks fallback on the contribution chart', () => {
+    const out = html({ ...sample, contributionSource: 'marks_degraded' });
+    expect(out).toContain('data-testid="contribution-source-note"');
+    expect(out).toContain('Finalized attribution unavailable');
+  });
+
+  it('flags a truncated realized series without claiming it is unavailable', () => {
+    const out = html({ ...sample, contributionSource: 'realized_truncated' });
+    expect(out).toContain('data-testid="contribution-source-note"');
+    expect(out).toContain('truncated at the read cap');
+    expect(out).not.toContain('Finalized attribution unavailable');
+  });
+
+  it('keeps the contribution chrome quiet for realized and marks sources', () => {
+    for (const source of ['realized', 'marks'] as const) {
+      expect(html({ ...sample, contributionSource: source })).not.toContain(
+        'data-testid="contribution-source-note"'
+      );
+    }
+  });
 });
 
 describe('performance SSOT chrome (#3604)', () => {

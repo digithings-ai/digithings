@@ -955,6 +955,28 @@ describe("mapFoundryEvent MCP items (#3861)", () => {
     });
   });
 
+  it("treats a JSON null MCP output as no result, not the string 'null'", () => {
+    expect(
+      mapFoundryEvent({
+        type: "response.output_item.done",
+        item: {
+          type: "mcp_call",
+          name: "datatap__list_connections",
+          arguments: "{}",
+          output: "null",
+        },
+      })
+    ).toEqual({
+      type: "activity",
+      span: {
+        operation: "execute_tool",
+        toolName: "datatap__list_connections",
+        status: "completed",
+        label: "datatap__list_connections",
+      },
+    });
+  });
+
   it("leaves mcp_approval_request unmapped (server-side auto-approve)", () => {
     expect(
       mapFoundryEvent({
@@ -1048,5 +1070,53 @@ describe("mapFoundryEvent call_id correlation (#3861)", () => {
     expect((call as { span: { callId?: string } }).span.callId).toBe("call_xyz");
     expect((output as { span: { callId?: string } }).span.callId).toBe("call_xyz");
     expect((mcp as { span: { callId?: string } }).span.callId).toBe("call_m");
+  });
+
+  it("suppresses late message annotations once the search output has streamed", () => {
+    const state = { sawSearchOutput: false };
+    const added = mapFoundryEvent(
+      {
+        type: "response.output_item.added",
+        item: { type: "azure_ai_search_call", call_id: "call_1" },
+      },
+      state
+    );
+    const call = mapFoundryEvent(
+      {
+        type: "response.output_item.done",
+        item: { type: "azure_ai_search_call", call_id: "call_1", arguments: JSON.stringify({ query: "Bob" }) },
+      },
+      state
+    );
+    const output = mapFoundryEvent(
+      {
+        type: "response.output_item.done",
+        item: {
+          type: "azure_ai_search_call_output",
+          call_id: "call_1",
+          output: JSON.stringify({ documents: [{ id: "d1", content: "hello" }] }),
+        },
+      },
+      state
+    );
+    expect(state.sawSearchOutput).toBe(true);
+    expect(added?.type).toBe("activity");
+    expect(call?.type).toBe("activity");
+    expect(output?.type).toBe("activity");
+
+    // The message item is the turn's LAST event. Its non-opaque annotations
+    // already streamed through the search row's result, so no second row.
+    const message = {
+      type: "response.output_item.done",
+      item: {
+        type: "message",
+        content: [
+          { annotations: [{ type: "url_citation", url: "https://datatap.stream/docs", title: "DataTap docs" }] },
+        ],
+      },
+    } as const;
+    expect(mapFoundryEvent(message, state)).toBeNull();
+    // Stateless callers (and native file_search agents) keep the old behavior.
+    expect(mapFoundryEvent(message)?.type).toBe("activity");
   });
 });

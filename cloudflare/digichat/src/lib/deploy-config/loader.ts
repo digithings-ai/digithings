@@ -28,6 +28,7 @@ import {
   BASELINE_EMBED_WELCOME_BODY,
 } from "@/lib/baseline-embed";
 import { parseEmbedTenants, type EmbedTenantConfig } from "@/lib/embed-tenants";
+import { DEFAULT_THINKING_MODE, DEFAULT_VIEW_MODE } from "@/lib/view-modes";
 import {
   isThreadSkin,
   defaultThreadSkinForTenant,
@@ -101,11 +102,12 @@ export function embedTenantToDeployment(cfg: EmbedTenantConfig): DigichatDeploym
       attachments: cfg.attachments === true,
       dictation: false,
       speech: false,
-      reasoning: "collapsed",
-      toolCalls: "collapsed",
+      view: cfg.view ?? DEFAULT_VIEW_MODE,
+      thinking: cfg.thinking ?? DEFAULT_THINKING_MODE,
       sources: true,
       modelPicker: false,
       branchPicker: true,
+      pageContext: cfg.pageContext ?? "visible",
     },
     models: {
       ...(cfg.models?.default ? { default: cfg.models.default } : {}),
@@ -149,7 +151,7 @@ export function deploymentToEmbedTenant(dep: DigichatDeployment): EmbedTenantCon
     theme: dep.chrome.theme,
     skin: dep.chrome.skin,
     accent: dep.chrome.accent,
-    attribution: dep.chrome.attribution === true,
+    attribution: dep.chrome.attribution !== false,
     title: dep.chrome.title,
     welcome: welcomeTitle(dep.chrome.welcome),
     welcomeBody: welcomeBodyLines(dep.chrome.welcome),
@@ -160,6 +162,9 @@ export function deploymentToEmbedTenant(dep: DigichatDeployment): EmbedTenantCon
     showByok: dep.gate.showByok,
     showLanguageSelector: dep.gate.showLanguageSelector,
     attachments: dep.features.attachments === true,
+    pageContext: dep.features.pageContext,
+    view: dep.features.view,
+    thinking: dep.features.thinking,
     webSearch:
       dep.gate.webSearch === true ||
       dep.tools?.catalog?.some((t) => t.id === "web_search") === true,
@@ -364,12 +369,14 @@ export function loadDigichatConfig(opts: LoadDigichatConfigOptions = {}): Digich
             allowPicker: true,
           },
           backend: { type: "digigraph" },
-          mcp: { servers: [], allowUserServers: true, allowAddForm: true },
+          // Least-privilege fallback: the unconfigured container opts into
+          // nothing; BYOK / user MCP / web search require an explicit config.
+          mcp: { servers: [], allowUserServers: false, allowAddForm: false },
           gate: {
             mode: "ungated",
             activityDetail: "labels",
-            showByok: true,
-            webSearch: true,
+            showByok: false,
+            webSearch: false,
           },
         },
       },

@@ -86,6 +86,20 @@ export interface BenchmarkComparison {
 
 export type PerformanceReturnsSource = 'persisted' | 'derived' | 'mixed' | 'unavailable';
 
+/**
+ * Provenance of the per-asset contribution bars (#3956 / #3983).
+ *
+ * - `realized` — finalized daily realized attribution, complete at read time
+ * - `marks` — weight×mark accrual; the realized view had no usable in-window rows
+ * - `marks_degraded` — marks fallback after the realized read errored or truncated
+ * - `realized_truncated` — realized rows rendered, but the read hit its paging cap
+ */
+export type PerformanceContributionSource =
+  | 'realized'
+  | 'marks'
+  | 'marks_degraded'
+  | 'realized_truncated';
+
 export type PerformanceNavContract = 'finalized_accounting' | 'legacy_estimate' | 'empty';
 
 export interface PerformanceTearsheet {
@@ -102,6 +116,18 @@ export interface PerformanceTearsheet {
   generatedAt: string | null;
   navSeries: PortfolioReturnPoint[];
   contributionSeries: ContributionReturnPoint[];
+  /**
+   * Where `contributionSeries` came from (#3983). Optional for fixtures that
+   * only exercise chart/KPI math; production `getPerformanceBundle` always sets it.
+   */
+  contributionSource?: PerformanceContributionSource;
+  /**
+   * First date the realized contribution series actually carries a point (#4102).
+   * Finalized accounting starts mid-history, so the bars begin here rather than at
+   * the plotted window's first date; the chart says so instead of implying the
+   * earlier days contributed nothing.
+   */
+  contributionStartsOn?: string | null;
   currentHoldings: PerformanceHoldingRow[];
   historicalHoldings: PerformanceHoldingRow[];
   /**

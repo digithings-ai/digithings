@@ -13,6 +13,8 @@ import {
   sinceInceptionPctFromNav,
 } from '@digithings/web';
 import {
+  chainNavContinuity,
+  currentNavRun,
   navSeriesContractLabel,
   type AccountingNavRow,
 } from './accounting-views';
@@ -161,12 +163,14 @@ export function crossesNavSeam(tip: NavPoint, prior: NavPoint | null): boolean {
 }
 
 function derivedDayReturnPct(tip: NavPoint, prior: NavPoint | null): number | null {
+  // #3767: a seam row starts a new source run. Neither a stored nor a derived
+  // session return across the flip is honest — return null before the stored
+  // value can bypass the guard.
+  if (crossesNavSeam(tip, prior)) return null;
   if (tip.day_return_pct != null && Number.isFinite(tip.day_return_pct)) {
     return tip.day_return_pct;
   }
   if (!prior || !(prior.nav > 0)) return null;
-  // #3767: never derive a day return across a legacy↔finalized seam.
-  if (crossesNavSeam(tip, prior)) return null;
   const gap = calendarDaysBetween(prior.date, tip.date);
   if (gap == null || gap < 1 || gap > MAX_DAY_RETURN_GAP_DAYS) return null;
   return (tip.nav / prior.nav - 1) * 100;
@@ -190,13 +194,22 @@ export function persistedHeadlinesFromNav(
   const sorted = [...nav]
     .filter((row) => finiteNav(row.nav))
     .sort((a, b) => a.date.localeCompare(b.date));
-  const first = sorted[0] ?? null;
+  // #3767 / #4014: chain the source runs instead of truncating to the current
+  // one — since-inception spans the tracked history without the phantom seam
+  // jump, and it stays in step with the Tearsheet's chained chart series.
+  const chained = chainNavContinuity(sorted);
+  const first = chained[0] ?? null;
+  const chainTip = chained.at(-1) ?? null;
   const tip = sorted.at(-1) ?? null;
+  // Day-return predecessor stays the immediately adjacent date in the full
+  // series so a seam at the tip is still detected (and refused).
   const prior = sorted.length >= 2 ? sorted[sorted.length - 2] : null;
 
-  // Match Tearsheet `periodReturnPct`: need ≥2 finite NAV points for since-inception %.
+  // Match the Tearsheet's chained series: need ≥2 finite NAV points.
   const sinceInceptionPct =
-    sorted.length >= 2 && first && tip ? sinceInceptionPctFromNav(first.nav, tip.nav) : null;
+    chained.length >= 2 && first && chainTip
+      ? sinceInceptionPctFromNav(first.nav, chainTip.nav)
+      : null;
 
   const invested = resolveInvestedPct({
     tipInvestedPct: tip?.invested_pct ?? null,
@@ -218,16 +231,24 @@ export function persistedHeadlinesFromNav(
  * Excess / alpha / IR from persisted NAV + benchmark (no live overlay).
  * Sparse or late-starting (paginated) benchmark series still render when the
  * remaining overlapping daily pairs meet {@link MIN_OVERLAP_DAYS}.
+ *
+ * #3767 / #3935: rebased on the current source run — the seam day must never
+ * enter the β/IR daily-return estimator nor the excess window.
  */
 export function persistedInsightMetrics(
-  nav: ReadonlyArray<{ date: string; nav: number }>,
+  nav: ReadonlyArray<{
+    date: string;
+    nav: number;
+    source?: string | null;
+    series_seam?: boolean | null;
+  }>,
   benchmarkHistory: ReadonlyArray<{ date: string; price: number }> | undefined
 ): {
   excessReturnPct: number | null;
   alphaPct: number | null;
   informationRatio: number | null;
 } {
-  const sorted = [...nav].filter((row) => finiteNav(row.nav));
+  const sorted = currentNavRun(nav).filter((row) => finiteNav(row.nav));
   if (sorted.length < 2 || !benchmarkHistory?.length) {
     return { excessReturnPct: null, alphaPct: null, informationRatio: null };
   }

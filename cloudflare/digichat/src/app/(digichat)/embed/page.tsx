@@ -26,7 +26,10 @@
  */
 
 import { resolveEmbedHostParamOrReferer } from "@/lib/embed-client-config";
-import { resolveEmbedClientConfigForPaint } from "@/lib/embed-chat-tenant";
+import {
+  embedOriginHostOf,
+  resolveEmbedClientConfigForPaint,
+} from "@/lib/embed-chat-tenant";
 import { parseEmbedThemeParam } from "@/lib/embed-theme-messages";
 import { headers } from "next/headers";
 import EmbedClient from "./embed-client";
@@ -77,6 +80,7 @@ export default async function EmbedPage({
   const initialTenantCfg = resolveEmbedClientConfigForPaint(
     first(params.token),
     resolveEmbedHostParamOrReferer(first(params.host), referer),
+    embedOriginHostOf(hdrs),
   );
   const urlTheme = parseEmbedThemeParam(first(params.theme));
   const paintTheme = urlTheme ?? initialTenantCfg.theme;

@@ -8,6 +8,7 @@ injected session (no network).
 
 from __future__ import annotations
 
+import uuid
 from datetime import date
 from pathlib import Path
 from typing import Any  # score:allow untyped any — fake HTTP session / JSON bodies
@@ -18,6 +19,7 @@ from digiquant.data.onchain.coinmetrics import (
     COINMETRICS_BASE_URL,
     LICENSE_NOTE,
     CoinMetricsClient,
+    _result_from_frame,
     asset_metrics_rows_to_frame,
     fetch_coinmetrics_catalog,
     fetch_coinmetrics_series,
@@ -165,13 +167,18 @@ class TestCoinMetricsClient:
         _url, kwargs = session.calls[0]
         assert "api_key" not in kwargs["params"]
 
-    def test_custom_base_url_used_for_request(self) -> None:
+    def test_client_refuses_untrusted_base_url(self) -> None:
+        with pytest.raises(ValueError, match="not allowlisted"):
+            CoinMetricsClient(session=_FakeSession(), base_url="https://evil.example.com/v4")
+
+    def test_fetch_function_refuses_attacker_base_url_without_fetch(self) -> None:
         session = _FakeSession(body=_mvrv_payload())
-        CoinMetricsClient(
-            session=session, base_url="https://custom.example.com/v4"
-        ).fetch("CapMVRVCur", asset="btc")
-        url, _kwargs = session.calls[0]
-        assert url.startswith("https://custom.example.com/v4")
+        result = fetch_coinmetrics_series(
+            "CapMVRVCur", session=session, base_url="http://169.254.169.254/latest/meta-data"
+        )
+        assert result.error is not None
+        assert "refusing untrusted base_url" in result.error
+        assert session.calls == []
 
 
 class TestCoinMetricsCatalog:
@@ -202,8 +209,146 @@ class TestCoinMetricsCatalog:
         assert result.error is not None
         assert result.has_data is False
 
-    def test_fetch_catalog_env_kill_switch_skips_network(self, monkeypatch: pytest.MonkeyPatch) -> None:
+    def test_fetch_catalog_env_kill_switch_skips_network(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         monkeypatch.setenv("DIGIQUANT_COINMETRICS_FETCH", "0")
         result = fetch_coinmetrics_catalog("btc")
         assert result.error is not None
         assert "disabled" in (result.error or "")
+
+    def test_catalog_refuses_attacker_base_url_without_fetch(self) -> None:
+        session = _FakeSession(body={"data": []})
+        result = fetch_coinmetrics_catalog(
+            "btc", session=session, base_url="https://evil.example.com/v4"
+        )
+        assert result.error is not None
+        assert "refusing untrusted base_url" in result.error
+        assert session.calls == []
+
+
+class TestCachePathTraversalGuard:
+    """#3947: asset/metric reach a cache filename, so both must be safe slugs.
+
+    On the unguarded base an asset like ``../../evil`` writes
+    ``evil_CapMVRVCur.parquet`` two directories above ``cache_dir``. Each
+    rejection test pins both halves: a fail-soft error is returned *and* no
+    file lands outside the cache directory.
+    """
+
+    @pytest.mark.parametrize(
+        "bad_asset",
+        [
+            "../../evil",
+            "../../../evil",
+            "..",
+            "a/b",
+            "/tmp/evil",
+            "btc\\evil",
+            "..\\evil",
+            "btc_..",
+        ],
+    )
+    def test_asset_traversal_is_rejected_without_write(
+        self, tmp_path: Path, bad_asset: str
+    ) -> None:
+        session = _FakeSession(body=_mvrv_payload())
+        result = CoinMetricsClient(session=session, cache_dir=tmp_path).fetch(
+            "CapMVRVCur", asset=bad_asset
+        )
+        assert result.error is not None
+        assert result.path is None
+        assert session.calls == []
+        assert not list(tmp_path.rglob("*.parquet"))
+
+    @pytest.mark.parametrize(
+        "bad_metric",
+        [
+            "../../evil",
+            "../../../evil",
+            "..",
+            "a/b",
+            "/tmp/evil",
+            "CapMVRVCur/..",
+            "CapMVRVCur\\evil",
+        ],
+    )
+    def test_metric_traversal_is_rejected_without_write(
+        self, tmp_path: Path, bad_metric: str
+    ) -> None:
+        session = _FakeSession(body=_mvrv_payload())
+        result = CoinMetricsClient(session=session, cache_dir=tmp_path).fetch(
+            bad_metric, asset="btc"
+        )
+        assert result.error is not None
+        assert result.path is None
+        assert session.calls == []
+        assert not list(tmp_path.rglob("*.parquet"))
+
+    def test_asset_traversal_cannot_escape_cache_dir(self, tmp_path: Path) -> None:
+        token = uuid.uuid4().hex
+        session = _FakeSession(body=_mvrv_payload())
+        result = CoinMetricsClient(session=session, cache_dir=tmp_path).fetch(
+            "CapMVRVCur", asset=f"../../evil_{token}"
+        )
+        assert result.error is not None
+        assert result.path is None
+        assert not (tmp_path.parent.parent / f"evil_{token}_CapMVRVCur.parquet").exists()
+
+    def test_metric_traversal_cannot_escape_cache_dir(self, tmp_path: Path) -> None:
+        token = uuid.uuid4().hex
+        session = _FakeSession(body=_mvrv_payload())
+        result = CoinMetricsClient(session=session, cache_dir=tmp_path).fetch(
+            f"../../../evil_{token}", asset="btc"
+        )
+        assert result.error is not None
+        assert result.path is None
+        assert not (tmp_path.parent / f"evil_{token}.parquet").exists()
+
+    def test_absolute_asset_path_is_rejected(self, tmp_path: Path) -> None:
+        session = _FakeSession(body=_mvrv_payload())
+        absolute_asset = str(tmp_path.parent / "escaped")
+        result = CoinMetricsClient(session=session, cache_dir=tmp_path).fetch(
+            "CapMVRVCur", asset=absolute_asset
+        )
+        assert result.error is not None
+        assert result.path is None
+        assert not (tmp_path.parent / "escaped_CapMVRVCur.parquet").exists()
+
+    @pytest.mark.parametrize("bad", ["", " ", "eth,btc"])
+    def test_empty_or_comma_asset_still_fail_soft(self, tmp_path: Path, bad: str) -> None:
+        session = _FakeSession(body=_mvrv_payload())
+        result = CoinMetricsClient(session=session, cache_dir=tmp_path).fetch(
+            "CapMVRVCur", asset=bad
+        )
+        assert result.error is not None
+        assert result.path is None
+
+    @pytest.mark.parametrize("bad", ["", " ", "CapMVRVCur,PriceUSD"])
+    def test_empty_or_comma_metric_still_fail_soft(self, tmp_path: Path, bad: str) -> None:
+        session = _FakeSession(body=_mvrv_payload())
+        result = CoinMetricsClient(session=session, cache_dir=tmp_path).fetch(bad, asset="btc")
+        assert result.error is not None
+        assert result.path is None
+
+    def test_normal_series_still_writes_inside_cache_dir(self, tmp_path: Path) -> None:
+        session = _FakeSession(body=_mvrv_payload())
+        result = CoinMetricsClient(session=session, cache_dir=tmp_path).fetch(
+            "CapMVRVCur", asset="btc"
+        )
+        assert result.error is None
+        assert result.path is not None
+        written = Path(result.path)
+        assert written.exists()
+        assert written.parent == tmp_path.resolve()
+        assert written.name == "btc_CapMVRVCur.parquet"
+
+    def test_internal_writer_refuses_traversal_bypassing_client_boundary(
+        self, tmp_path: Path
+    ) -> None:
+        token = uuid.uuid4().hex
+        frame = asset_metrics_rows_to_frame(_mvrv_payload(), metric="CapMVRVCur")
+        result = _result_from_frame(f"../../evil_{token}", "CapMVRVCur", frame, cache_dir=tmp_path)
+        assert result.error is not None
+        assert result.path is None
+        assert not (tmp_path.parent.parent / f"evil_{token}_CapMVRVCur.parquet").exists()

@@ -29,6 +29,44 @@ def _tool_names(server) -> set[str]:
 
 READ_TOOLS_EXTRA = {"digiquant_list_coinmetrics_catalog"}
 
+#: The 33 digifetch x Gloomberb enrichment reads (#4069, #4110) are read-scope
+#: only, default-ON behind GLOOMBERB_ENABLED.
+DIGIFETCH_TOOLS = {
+    "digifetch_quote",
+    "digifetch_quotes_batch",
+    "digifetch_price_history",
+    "digifetch_ticker_financials",
+    "digifetch_options_chain",
+    "digifetch_sec_filings",
+    "digifetch_holders",
+    "digifetch_analyst_research",
+    "digifetch_corporate_actions",
+    "digifetch_earnings_calendar",
+    "digifetch_exchange_rate",
+    "digifetch_search",
+    "digifetch_news",
+    "digifetch_econ_calendar",
+    "digifetch_econ_series",
+    "digifetch_yield_curve",
+    "digifetch_cds",
+    "digifetch_research_search",
+    "digifetch_congress_trades",
+    "digifetch_transcripts",
+    "digifetch_statements",
+    "digifetch_ticker_tweets",
+    "digifetch_tweet_search",
+    "digifetch_venues",
+    "digifetch_screener",
+    "digifetch_13f_funds",
+    "digifetch_13f_holdings",
+    "digifetch_shiller",
+    "digifetch_proxy_statements",
+    "digifetch_filing_events",
+    "digifetch_risk_reports",
+    "digifetch_short_interest",
+    "digifetch_equity_diagnostic",
+}
+
 COMPUTE_TOOLS = {
     "digiquant_run_backtest",
     "digiquant_run_optimize",
@@ -109,7 +147,20 @@ def test_read_scope_includes_coinmetrics_catalog():
 
 
 @pytest.mark.unit
+def test_read_scope_includes_trade_levels():
+    # Track E (#137): causal levels are a pure read/compute surface.
+    assert "digiquant_get_trade_levels" in READ_SCOPE_TOOLS
+    assert "digiquant_get_trade_levels" not in COMPUTE_TOOLS
+
+
+@pytest.mark.unit
+def test_read_scope_includes_digifetch_family():
+    assert DIGIFETCH_TOOLS <= set(READ_SCOPE_TOOLS)
+    assert not (DIGIFETCH_TOOLS & COMPUTE_TOOLS)
+
+
+@pytest.mark.unit
 def test_tool_counts_pin_post_3855_surface():
-    assert len(READ_SCOPE_TOOLS) == 9
+    assert len(READ_SCOPE_TOOLS) == 43
     assert len(COMPUTE_TOOLS) == 14
-    assert len(_tool_names(create_mcp_server())) == 23
+    assert len(_tool_names(create_mcp_server())) == 57

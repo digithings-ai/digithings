@@ -91,9 +91,35 @@ BacktestEngine with zero-fee, same-bar fills:
   rebuilds the causal schedule + bars from Supabase and compares engine NAV
   vs `nav_history` (non-zero exit on breach). Reads page by last-seen-key
   cursor over a deterministic `(date, ticker)` order (#3803) — never offsets —
-  and refuses to verify or `--write` from a truncated/unstable page.
+  and refuses to verify or `--write` from a truncated/unstable page. The engine
+  value is the NAV SSOT — a provisional arithmetic-chain row may exist briefly
+  before `--write` overwrites it; see
+  [HOUSE_BOOK_SCOPE.md](../../docs/ops/HOUSE_BOOK_SCOPE.md#nav_history-write-order-provisional-window).
 
-## 8. External Links
+## 8. Levels-engine ATR parity harness (Track E, #137)
+
+`tests/dq/data/test_levels_nautilus.py` checks the causal levels engine
+(`digiquant/data/prices/levels.py`) against Nautilus's own primitives. It is
+**engine-free by design** — the indicator/object layer only, never a
+`BacktestEngine` — so it cannot trip the Linux SIGABRT from #42 (that needs a
+second in-process Rust engine). It is gated on the `nautilus` extra
+(`pytest.importorskip`) and listed in `tests/dq/conftest.py` `collect_ignore`
+for the plain lane, plus the `test-nautilus.yml` invocation and the
+`nautilus_smoke` filter in `scripts/ci_paths.yaml`.
+
+- **ATR parity:** `_primitives.atr(length)` must equal
+  `AverageTrueRange(length, MovingAverageType.WILDER)` fed bar-by-bar
+  (`update_raw(high, low, close)`) to `min_periods` and beyond, within `1e-9`.
+  The online indicator only sees past bars, so parity is also a causality
+  proof for the batch ATR. Note the **default** `MovingAverageType.SIMPLE` is a
+  simple mean of true range and will *not* match — use `WILDER`.
+- **Causality:** `augment()` at row *i* equals a recompute over `df[:i+1]` for
+  every derivation column.
+- **Bracket geometry:** stop / ladder prices survive `Price.from_str` and the
+  long stop is below entry while rungs ascend (short mirrored).
+- **Trail:** `trail_stop()` only ratchets with the position, never against it.
+
+## 9. External Links
 
 - [Official docs](https://nautilustrader.io/docs/latest/)
 - [Concepts](https://nautilustrader.io/docs/latest/concepts)

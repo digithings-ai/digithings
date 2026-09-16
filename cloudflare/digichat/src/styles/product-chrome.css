@@ -29,16 +29,35 @@
   text-decoration: underline;
 }
 
+/* The credit sits below the thread, outside its palette scope: mirror the
+   chat canvas at the shell so the strip reads as one surface with the
+   transcript (no band edge, no hairline) and paint the attribution with it. */
+.dc-embed-shell [data-thread-skin="digichat"] {
+  --term-bg: #08090b;
+}
+
+:root[data-theme="light"] .dc-embed-shell [data-thread-skin="digichat"] {
+  --term-bg: #f1f0eb;
+}
+
 .dc-attribution {
-  border-top: 1px solid var(--border);
-  padding: 0.5rem 0.75rem;
+  padding: 0.25rem 0.75rem 0.5rem;
   text-align: center;
   font-size: 0.68rem;
-  color: var(--muted-foreground);
+  color: color-mix(in oklch, var(--muted-foreground) 55%, transparent);
+}
+
+/* Only the digichat skin mirrors the chat canvas onto the strip: the credit
+   sits below the thread, outside its palette scope, so the shell carries
+   --term-bg (dark + light) and the strip paints it to read as one surface
+   with the transcript (no band edge, no hairline). Other skins keep the
+   transparent strip so a light embed never gets a near-black band. */
+.dc-embed-shell [data-thread-skin="digichat"] .dc-attribution {
+  background: var(--term-bg);
 }
 
 .dc-attribution a {
-  color: var(--primary);
+  color: color-mix(in oklch, var(--muted-foreground) 75%, transparent);
   text-decoration: underline;
 }
 
@@ -70,6 +89,61 @@
 .dc-embed-shell {
   position: relative;
   z-index: 0;
+}
+
+/* digichat-skin embed: the shell shares the thread canvas (--surface) so the
+   composer row, turn counter, and attribution have no white band beneath. */
+.dc-embed-shell[data-skin-canvas="1"] {
+  background: #f1f0eb;
+}
+
+:root[data-theme="dark"] .dc-embed-shell[data-skin-canvas="1"] {
+  background: #121417;
+}
+
+/* Collapse the sticky thread footer's bottom padding (was 24px) so the
+   in-flow turn counter hugs the composer; no overlap with its background. */
+.dc-embed-shell[data-skin-canvas="1"] .aui-thread-viewport-footer {
+  padding-bottom: 0;
+}
+
+/* Terminal block caret: Chromium parses caret-shape but still paints the thin
+   OS caret, so hide that everywhere and promote the painted block overlay to
+   the tenant accent while the composer is focused (same metrics as the
+   reference chatbot.css overlay). */
+.dc-embed-shell [data-thread-skin] .aui-composer-input {
+  caret-color: transparent;
+}
+
+.dc-embed-shell [data-thread-skin] .aui-block-caret {
+  --caret-pad-left: 0.375rem;
+  display: none;
+  position: absolute;
+  width: 1ch;
+  height: 1.375rem;
+  left: calc(var(--caret-col, 0) * 1ch + var(--caret-pad-left));
+  top: calc(var(--caret-row, 0) * 1.375rem + var(--caret-pad-top, 0.2rem));
+  background: var(--tenant-accent, var(--accent, var(--primary)));
+  font-family: var(--font-mono);
+  font-size: 0.88rem;
+  pointer-events: none;
+  animation: aui-caret-blink 1.06s steps(1) infinite;
+}
+
+.dc-embed-shell [data-thread-skin] .aui-composer-input:focus + .aui-block-caret,
+.dc-embed-shell [data-thread-skin] .aui-composer-input-wrap:focus-within .aui-block-caret {
+  display: block;
+}
+
+.dc-embed-shell [data-thread-skin] [data-layout="expanded"] .aui-block-caret {
+  --caret-pad-left: 0.625rem;
+  --caret-pad-top: 0.2rem;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dc-embed-shell [data-thread-skin] .aui-block-caret {
+    animation: none;
+  }
 }
 
 .dc-embed-shell[data-wide="1"] {

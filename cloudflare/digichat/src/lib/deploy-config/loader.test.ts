@@ -321,10 +321,44 @@ deployment:
       allowPicker: true,
     });
     expect(cfg.deployment?.chrome.suggestions).toEqual(BASELINE_EMBED_SUGGESTIONS);
-    expect(cfg.deployment?.mcp?.allowUserServers).toBe(true);
-    expect(cfg.deployment?.mcp?.allowAddForm).toBe(true);
-    expect(cfg.deployment?.gate.webSearch).toBe(true);
-    expect(cfg.deployment?.gate.showByok).toBe(true);
+    // Least-privilege fallback: an unconfigured container must not expose BYOK,
+    // user MCP servers, or web search to anonymous visitors (regression #3852).
+    expect(cfg.deployment?.mcp?.allowUserServers).toBe(false);
+    expect(cfg.deployment?.mcp?.allowAddForm).toBe(false);
+    expect(cfg.deployment?.gate.webSearch).toBe(false);
+    expect(cfg.deployment?.gate.showByok).toBe(false);
+  });
+
+  it("keeps BYOK, user MCP servers, and web search when a deployment explicitly enables them", () => {
+    const cfg = loadDigichatConfig({
+      fileContents: `
+version: 1
+deployment:
+  slug: configured
+  chrome:
+    mode: embed
+    theme: dark
+  persistence: none
+  auth: anonymous
+  backend:
+    type: digigraph
+  mcp:
+    servers: []
+    allowUserServers: true
+    allowAddForm: true
+  gate:
+    mode: turn_limited
+    activityDetail: labels
+    showByok: true
+    webSearch: true
+`,
+      env: {},
+    });
+    const client = toDigichatClientConfig(cfg.deployment!);
+    expect(client.mcp.allowUserServers).toBe(true);
+    expect(client.mcp.allowAddForm).toBe(true);
+    expect(client.gate.webSearch).toBe(true);
+    expect(client.gate.showByok).toBe(true);
   });
 });
 
@@ -445,10 +479,47 @@ describe("embed tenant round-trip", () => {
       attribution: true,
       activityDetail: "labels",
       webSearch: false,
+      pageContext: "silent",
     };
-    const back = deploymentToEmbedTenant(embedTenantToDeployment(original));
+    const dep = embedTenantToDeployment(original);
+    expect(dep.features.pageContext).toBe("silent");
+    const back = deploymentToEmbedTenant(dep);
     expect(back.backend).toEqual(original.backend);
     expect(back.token).toBe("tok");
+    expect(back.pageContext).toBe("silent");
+  });
+
+  it("defaults pageContext to visible when the tenant omits it", () => {
+    const dep = embedTenantToDeployment({
+      slug: "plain",
+      token: "t",
+      backend: { type: "digigraph" },
+      gateMode: "ungated",
+      theme: "dark",
+      attribution: false,
+      activityDetail: "labels",
+    });
+    expect(dep.features.pageContext).toBe("visible");
+    expect(deploymentToEmbedTenant(dep).pageContext).toBe("visible");
+  });
+
+  it("preserves view/thinking through the embed-tenant round trip", () => {
+    const dep = embedTenantToDeployment({
+      slug: "datatap-dev",
+      token: "t",
+      backend: { type: "digigraph" },
+      gateMode: "ungated",
+      theme: "light",
+      attribution: false,
+      activityDetail: "labels",
+      view: "detailed",
+      thinking: "open",
+    });
+    expect(dep.features.view).toBe("detailed");
+    expect(dep.features.thinking).toBe("open");
+    const back = deploymentToEmbedTenant(dep);
+    expect(back.view).toBe("detailed");
+    expect(back.thinking).toBe("open");
   });
 
   it("preserves requiredPlanTier through YAML converters (#3662)", () => {
@@ -527,6 +598,7 @@ describe("matchHostDeployment", () => {
       expect.arrayContaining(["digisearch", "digivault", "web_search"]),
     );
     expect(client.features.attachments).toBe(false);
+    expect(client.features.pageContext).toBe("visible");
     expect(cfg.hosts!["digithings.ai"]!.gate.activityDetail).toBe("full");
     expect(tenant.activityDetail).toBe("full");
     expect(cfg.hosts!["digithings.ai"]!.backend.vaultPathPrefix).toBe("clients/digithings");

@@ -2,7 +2,8 @@
 
 import { useState } from "react";
 
-import { Skeleton, SkeletonGroup } from "@digithings/web";
+import { Button } from "@digithings/web/ui";
+import { Skeleton, SkeletonGroup, Switch } from "@digithings/web";
 
 /**
  * Skeleton loading states — placeholder shapes with a shimmer sweep that stand
@@ -11,7 +12,11 @@ import { Skeleton, SkeletonGroup } from "@digithings/web";
  * the monochrome default); money colors only appear in the loaded state where
  * they mean something. A toggle replays the load. Reduced motion drops the
  * shimmer and shows a static placeholder. Consumes the shared <Skeleton/> and
- * <SkeletonGroup/> primitives from @digithings/web.
+ * <SkeletonGroup/> primitives from @digithings/web, and the replay toggle is
+ * the controls-layer <Switch/> (the stock kit has no switch yet — ruled
+ * W3–4); the hand-built `.sk-toggle*` dress is gone.
+ *
+ * Wave 1: the loaded-state action is the stock kit Button (ghost).
  */
 const METRICS = [
   { k: "CAGR", v: "+44.9%", tone: "up" },
@@ -32,19 +37,16 @@ export function SkeletonReference() {
         only show once there&apos;s a number to color. Replay the load below.
       </p>
 
-      <div className="mt-[1.2rem]">
-        <button
-          type="button"
-          className={`sk-toggle${loading ? " on" : ""}`}
-          role="switch"
-          aria-checked={loading}
-          onClick={() => setLoading((v) => !v)}
-        >
-          <span className="sk-toggle-track" aria-hidden="true">
-            <span className="sk-toggle-knob" />
-          </span>
+      <div className="mt-[1.2rem] flex items-center gap-[0.55rem]">
+        <Switch
+          checked={loading}
+          onCheckedChange={setLoading}
+          name="replay-load"
+          aria-label="Replay the load"
+        />
+        <span className="font-mono text-[0.72rem] text-ink-soft">
           {loading ? "loading" : "loaded"}
-        </button>
+        </span>
       </div>
 
       <SkeletonGroup busy={loading} className="mt-[1.1rem] flex flex-col gap-[1rem]">
@@ -71,9 +73,9 @@ export function SkeletonReference() {
                 <p className="m-0 font-mono text-[0.9rem] text-ink">trend_xsec</p>
                 <p className="m-0 font-mono text-[0.72rem] text-ink-mute">cross-sectional momentum</p>
               </div>
-              <button type="button" className="btn-ghost">
+              <Button type="button" variant="ghost">
                 View tearsheet
-              </button>
+              </Button>
             </>
           )}
         </article>

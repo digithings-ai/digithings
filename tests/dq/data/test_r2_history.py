@@ -1,7 +1,7 @@
 """Unit tests for digiquant.data.prices.r2_history (#3780, Task 2).
 
-Immutable versioned market-data generations in R2: put -> read-back SHA-256
-verify -> registry insert -> pointer swap. Never overwrites in place.
+Immutable versioned market-data generations in R2: registry pre-check -> put ->
+read-back SHA-256 verify -> registry insert -> pointer swap. Never overwrites in place.
 Also pins the Task 2 scoping invariant: checkpoint evict/reconcile never
 touch market-data/ rows.
 """
@@ -83,6 +83,12 @@ class FakeRegistry:
             }
         )
 
+    def lookup(self, r2_key: str) -> str | None:
+        for row in self.rows:
+            if row["r2_key"] == r2_key:
+                return str(row["sha256"])
+        return None
+
 
 @pytest.fixture
 def fakes() -> tuple[Any, FakeR2, FakeRegistry]:
@@ -90,7 +96,7 @@ def fakes() -> tuple[Any, FakeR2, FakeRegistry]:
 
     r2 = FakeR2()
     registry = FakeRegistry()
-    return R2HistoryStore(r2, registry), r2, registry
+    return R2HistoryStore(r2, registry, registry.lookup), r2, registry
 
 
 def test_put_generation_verifies_before_pointer(fakes: Any) -> None:
@@ -128,11 +134,15 @@ def test_put_generation_registers_pointer_on_success(fakes: Any) -> None:
 
 
 def test_put_generation_conflict_raises_for_different_bytes(fakes: Any) -> None:
-    store, _, _ = fakes
+    store, r2, _ = fakes
     key = "market-data/price/SPY/2026-09-08.parquet"
     store.put_generation(key, b"v1", "market-data/price", {"ticker": "SPY"})
     with pytest.raises(ArchiveVerifyError):
         store.put_generation(key, b"v2-different", "market-data/price", {"ticker": "SPY"})
+    # Generations are immutable: the conflict must be detected BEFORE the
+    # object write, so the existing bytes survive and only the first put runs.
+    assert r2.objects[key] == b"v1"
+    assert r2.puts == [key]
 
 
 def test_get_generation_rejects_corruption(fakes: Any) -> None:
@@ -159,6 +169,41 @@ def test_key_grammar() -> None:
         macro_key("FRED", "DGS10", "2026-09-08")
         == "market-data/macro/FRED__DGS10/2026-09-08.parquet"
     )
+
+
+class _BotoClientError(Exception):
+    """boto3/botocore ``ClientError`` shape (code + HTTP status), no import needed."""
+
+    def __init__(self, code: str = "NoSuchKey", status: int = 404) -> None:
+        super().__init__(f"An error occurred ({code}) when calling the GetObject operation")
+        self.response = {
+            "Error": {"Code": code, "Message": "The specified key does not exist."},
+            "ResponseMetadata": {"HTTPStatusCode": status},
+        }
+
+
+def test_is_missing_object_error_recognizes_dict_like_and_boto_misses() -> None:
+    from digiquant.data.prices.r2_history import is_missing_object_error
+
+    assert is_missing_object_error(KeyError("market-data/price/FOO/latest"))
+    assert is_missing_object_error(FileNotFoundError("market-data/manifest.json"))
+    assert is_missing_object_error(_BotoClientError("NoSuchKey", 404))
+    assert is_missing_object_error(_BotoClientError("NotFound", 404))
+    assert is_missing_object_error(_BotoClientError("404", 404))
+
+
+def test_is_missing_object_error_does_not_swallow_backend_faults() -> None:
+    """Credential/network/5xx faults must propagate, not read as unknown series."""
+    from digiquant.data.prices.r2_history import is_missing_object_error
+
+    assert not is_missing_object_error(_BotoClientError("AccessDenied", 403))
+    assert not is_missing_object_error(_BotoClientError("ServiceUnavailable", 503))
+    assert not is_missing_object_error(_BotoClientError("SlowDown", 429))
+    assert not is_missing_object_error(RuntimeError("missing R2 credentials"))
+    assert not is_missing_object_error(ConnectionError("simulated disconnect"))
+    # Bucket-level misconfiguration shares HTTP 404 with NoSuchKey but must be
+    # loud, never read as an unknown ticker/series (#3951 F2).
+    assert not is_missing_object_error(_BotoClientError("NoSuchBucket", 404))
 
 
 def test_manifest_round_trip(fakes: Any) -> None:

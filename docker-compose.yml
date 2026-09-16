@@ -30,13 +30,16 @@ services:
       - DIGIKEY_DATABASE_URL=${DIGIKEY_DATABASE_URL:-sqlite:////data/digikey.db}
       - DIGIKEY_ISSUER=${DIGIKEY_ISSUER:-http://digikey:8005}
       - DIGIKEY_BLOCKLIST_REDIS_URL=${DIGIKEY_BLOCKLIST_REDIS_URL:-redis://digikey-blocklist-redis:6379/0}
-      # Set DIGIKEY_REQUIRE_BLOCKLIST=1 in production so auth fails closed without Redis.
-      - DIGIKEY_REQUIRE_BLOCKLIST=${DIGIKEY_REQUIRE_BLOCKLIST:-0}
+      # Fail closed by default: auth must not silently skip revocation when Redis is
+      # unreachable. Local dev without Redis sets DIGIKEY_REQUIRE_BLOCKLIST=0 explicitly.
+      - DIGIKEY_REQUIRE_BLOCKLIST=${DIGIKEY_REQUIRE_BLOCKLIST:-1}
       - DIGIKEY_LITELLM_PROXY_KEY=${DIGIKEY_LITELLM_PROXY_KEY:-${LITELLM_MASTER_KEY:-}}
       - DIGIKEY_ADMIN_TOKEN=${DIGIKEY_ADMIN_TOKEN:-}
       - DIGIKEY_BFF_TOKEN=${DIGIKEY_BFF_TOKEN:-}
       - DIGIKEY_ALLOW_DEV_GLOBAL=${DIGIKEY_ALLOW_DEV_GLOBAL:-0}
-      - DIGIKEY_ALLOW_EPHEMERAL_KEY=${DIGIKEY_ALLOW_EPHEMERAL_KEY:-1}
+      # Production default is 0: require DIGIKEY_PRIVATE_KEY_PEM so JWKS is stable across
+      # restarts. Local Docker dev opts in explicitly with DIGIKEY_ALLOW_EPHEMERAL_KEY=1.
+      - DIGIKEY_ALLOW_EPHEMERAL_KEY=${DIGIKEY_ALLOW_EPHEMERAL_KEY:-0}
       - PYTHONUNBUFFERED=1
       - DIGI_OTEL_ENDPOINT=${DIGI_OTEL_ENDPOINT:-}
       - OTEL_EXPORTER_OTLP_ENDPOINT=${OTEL_EXPORTER_OTLP_ENDPOINT:-}
@@ -337,9 +340,11 @@ services:
   # house pins over to OmniRoute. See docs/providers/omniroute.md.
   #
   # Compose interpolates env for EVERY service at `docker compose config`,
-  # including inactive profiles — never use ${VAR:?} here or compose-validate
-  # fails without OMNIROUTE_AUTH_PASSWORD. Require the password only when the
-  # profile actually starts (omniroute-auth-guard below).
+  # including inactive profiles — a `${VAR:?}` here must be seeded in
+  # .env.example or compose-validate fails (the digichat AUTH_SECRET / grafana
+  # GRAFANA_ADMIN_PASSWORD required vars are; OMNIROUTE_AUTH_PASSWORD
+  # deliberately is not, because there is no safe placeholder for it). Require
+  # the password only when the profile actually starts (omniroute-auth-guard below).
   omniroute-auth-guard:
     image: busybox:1.36
     container_name: digi-omniroute-auth-guard
@@ -380,8 +385,8 @@ services:
   # ─── digisearch MCP server (optional: run with docker compose --profile digisearch-mcp up) ───
   digisearch-mcp:
     build:
-      context: ./digisearch
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: digisearch/Dockerfile
     image: digi-digisearch:latest
     container_name: digi-digisearch-mcp
     profiles:
@@ -423,6 +428,34 @@ services:
       # Loopback by default; set DIGIVAULT_MCP_HOST in .env for published-port access.
     volumes:
       - digivault_data:/data/vault
+
+  # ─── zammad-mcp: read-only Zammad helpdesk MCP for the OCC embed (profile: zammad-mcp) ───
+  # Operator MCP server for the occ tenant (config/examples/occ-embed.yaml,
+  # `mcp.servers[].url: http://zammad-mcp:8770/mcp`): URLs stay on the BFF, the
+  # token travels as the raw Authorization value via tokenEnv (#3841). The
+  # dotless name is dialable by digigraph's remote-MCP guard; loopback is not
+  # (#3879). Zammad has no Bearer scheme — auth rides as `Token token=<x>`.
+  zammad-mcp:
+    build:
+      context: .
+      dockerfile: scripts/zammad_mcp/Dockerfile.mcp
+    image: digi-zammad-mcp:latest
+    container_name: digi-zammad-mcp
+    profiles:
+      - zammad-mcp
+    ports:
+      - "127.0.0.1:8770:8770"
+    env_file:
+      - .env
+    environment:
+      - PYTHONUNBUFFERED=1
+      - ZAMMAD_BASE_URL=${ZAMMAD_BASE_URL:-https://ticket.sitaas.de}
+      # ZAMMAD_API_TOKEN arrives via env_file (.env): the raw token or the full
+      # `Token token=<x>` header value. Server-side only — never committed.
+      - ZAMMAD_MCP_HOST=0.0.0.0
+      # digigraph dials `http://zammad-mcp:8770/mcp`; FastMCP's DNS-rebinding
+      # guard rejects the non-localhost Host header unless it is allowlisted.
+      - ZAMMAD_MCP_ALLOWED_HOSTS=zammad-mcp
 
   # ─── Phase 3: Heartbeat (run with: docker compose --profile heartbeat up) ───
   heartbeat:
@@ -493,8 +526,13 @@ services:
       - .env
     environment:
       - NODE_ENV=production
-      - AUTH_TRUST_HOST=${AUTH_TRUST_HOST:-true}
-      - AUTH_SECRET=${AUTH_SECRET:-change-me-use-openssl-rand-base64-32}
+      # Deny-by-default. Set AUTH_TRUST_HOST=true in .env ONLY when digichat is
+      # behind a trusted reverse proxy that sets X-Forwarded-Host; always pin
+      # AUTH_URL to the public origin as well (see cloudflare/digichat/ARCHITECTURE.md §6).
+      - AUTH_TRUST_HOST=${AUTH_TRUST_HOST:-false}
+      # Required: no predictable fallback. Local dev gets a placeholder from
+      # .env.example; production must generate one: openssl rand -base64 32
+      - AUTH_SECRET=${AUTH_SECRET:?set AUTH_SECRET (openssl rand -base64 32)}
       # Must match the origin you open in the browser (host + publish port).
       - AUTH_URL=${AUTH_URL:-http://127.0.0.1:${DIGICHAT_PUBLISH_PORT:-3005}}
       - DIGICHAT_DATABASE_URL=postgresql://digichat:${DIGICHAT_POSTGRES_PASSWORD:-digichat}@digichat-db:5432/digichat
@@ -556,8 +594,10 @@ services:
     ports:
       - "127.0.0.1:3001:3000"
     environment:
+      # No admin/admin fallback: Grafana refuses to start without a password.
+      # Set GRAFANA_ADMIN_PASSWORD in .env before `make up-observability`.
       - GF_SECURITY_ADMIN_USER=${GRAFANA_ADMIN_USER:-admin}
-      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_ADMIN_PASSWORD:-admin}
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_ADMIN_PASSWORD:?set GRAFANA_ADMIN_PASSWORD (observability profile)}
       - GF_USERS_ALLOW_SIGN_UP=false
       - GF_ANALYTICS_REPORTING_ENABLED=false
     volumes:

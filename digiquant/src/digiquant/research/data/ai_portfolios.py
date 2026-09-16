@@ -9,6 +9,7 @@ empty results, and tool errors all raise :exc:`DashboardWebSearchError`.
 
 from __future__ import annotations
 
+import logging
 from datetime import date
 from functools import lru_cache
 from pathlib import Path
@@ -20,6 +21,8 @@ import yaml
 
 # simulator must patch this binding too — it escapes the web_grounding patch (from-import).
 from digiquant.research.data.web_grounding import DashboardWebSearchError, call_web_search_tool
+
+logger = logging.getLogger(__name__)
 
 _CONFIG = Path(__file__).resolve().parent.parent / "config" / "ai_portfolio_accounts.yaml"
 
@@ -33,24 +36,20 @@ def _config() -> dict[str, Any]:
         return yaml.safe_load(f) or {}
 
 
-def _build_query(accounts: list[dict[str, Any]], run_date: date, recency_days: int) -> str:
-    roster = "; ".join(
-        f"@{a['handle']} ({a.get('model', '?')}, {a.get('type', 'portfolio')}, "
-        f"weight={a.get('weight', 'low')})"
-        for a in accounts
-    )
+def _build_query(accounts: list[dict[str, Any]], recency_days: int) -> str:
+    """A *search query*, not an instruction prompt.
+
+    digisearch's ``web_search`` is a pure search: it returns result rows and
+    :func:`web_grounding.call_web_search_tool` formats them into the summary, so
+    "summarize each account, cite every URL, then roll up sectors" scaffolding
+    would only dilute the query and return worse rows. It must also stay inside
+    the request's 500-char cap — the prompt-shaped version this replaces ran to
+    ~1130 chars against the shipped roster and failed every book run (#4163).
+    """
+    handles = " ".join(f"@{a['handle']}" for a in accounts)
     return (
-        f"As of {run_date.isoformat()}, search the web and X (Twitter) for the LATEST posts "
-        f"(last {recency_days} days) from each of these AI-run investment accounts: {roster}.\n\n"
-        "For EACH account that posted in-window, summarize: current/added/trimmed holdings with "
-        "NAMED tickers, direction (long/add/trim/exit), any stated conviction, overall stance "
-        "(risk-on/off), and the date. Cite each claim with the specific post URL — do not "
-        "report a holding you cannot cite. If an account did not post in-window or has no equity "
-        "holdings, say so explicitly (do not infer).\n\n"
-        "Then give a CROSS-ACCOUNT read: consensus tickers (named by 2+ accounts), notable "
-        "divergences, and the implied SECTOR tilt (roll the stock picks up to sectors, e.g. "
-        "semis/software/energy). Weight higher-conviction, higher-activity accounts more; flag "
-        "low-follower or stale accounts as weak. Bullet points; keep it tight."
+        f"latest X posts last {recency_days} days from AI-run portfolio accounts "
+        f"{handles} - holdings, tickers, buys, trims, portfolio changes"
     )
 
 
@@ -73,7 +72,15 @@ def fetch_ai_portfolio_grounding(
         raise DashboardWebSearchError(
             "alt-ai-portfolios: no tracked accounts in ai_portfolio_accounts.yaml"
         )
-    recency = int(cfg.get("recency_days", 7))
+    raw_recency = cfg.get("recency_days", 7)
+    try:
+        recency = int(raw_recency)
+    except (TypeError, ValueError):
+        logger.warning(
+            "recency_days=%r is not an integer; using the default of 7",
+            raw_recency,
+        )
+        recency = 7
     try:
         max_results = int(cfg.get("max_search_results", 8) or 8)
     except (TypeError, ValueError):
@@ -81,9 +88,10 @@ def fetch_ai_portfolio_grounding(
     max_results = max(1, min(max_results, 10))
     try:
         tool_out = call_web_search_tool(
-            query=_build_query(accounts, run_date, recency),
+            query=_build_query(accounts, recency),
             include_domains=list(_X_DOMAINS),
             max_results=max_results,
+            recency_days=recency,
         )
     except DashboardWebSearchError:
         raise

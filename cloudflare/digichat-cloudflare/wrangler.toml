@@ -64,7 +64,12 @@ new_sqlite_classes = ["DigiChatContainer"]
 # Never use Mac Compose / *.trycloudflare.com quick tunnels in production.
 
 [vars]
-DIGICHAT_EMBED_ENABLED = "1"
+# Legacy generic anonymous embed is intentionally NOT set (OFF). A stock deploy
+# must not grant `/embed` to unregistered hosts. To opt in for a dedicated legacy
+# deployment (no DIGICHAT_EMBED_TENANTS), add:
+#   DIGICHAT_LEGACY_EMBED_ENABLED = "1"
+# The Worker forwards it to the Container (deprecated alias DIGICHAT_EMBED_ENABLED
+# is also honored). With tenants configured the flag is ignored.
 DIGICHAT_REQUIRE_ROOT_AUTH = "0"
 DIGICHAT_EMBED_HOSTS = "digithings.ai,www.digithings.ai,occ.digithings.ai"
 # Profile A: digisearch/digivault are loopback inside digithings-stack; digichat

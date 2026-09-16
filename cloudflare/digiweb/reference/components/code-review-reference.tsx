@@ -4,7 +4,10 @@
  * color domain, deliberately never the saturated up/down money hues, which stay
  * reserved for P&L. Mono throughout, with a line gutter and a review status.
  * Static data — a display template, no diffing engine.
+ *
+ * Wave 1: the review status chip is the stock kit Badge (outline).
  */
+import { Badge } from "@digithings/web/ui";
 type Line =
   | { kind: "ctx"; old: number; now: number; text: string }
   | { kind: "add"; now: number; text: string }
@@ -43,7 +46,7 @@ export function CodeReviewReference() {
           <span className="inline-flex items-center gap-[0.6rem] text-[0.68rem]">
             <span className="rv-add-count">+{added}</span>
             <span className="rv-del-count">−{removed}</span>
-            <span className="rv-chip">changes requested</span>
+            <Badge variant="outline">changes requested</Badge>
           </span>
         </header>
         <div className="rv-diff" role="table" aria-label="Unified diff">

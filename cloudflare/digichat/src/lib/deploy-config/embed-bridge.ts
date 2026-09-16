@@ -50,6 +50,9 @@ export function clientConfigFromEmbedTenant(
     features: {
       ...base.features,
       attachments: embed.attachments === true,
+      pageContext: embed.pageContext ?? base.features.pageContext,
+      view: embed.view ?? base.features.view,
+      thinking: embed.thinking ?? base.features.thinking,
     },
     models: {
       ...(embed.models?.default ? { default: embed.models.default } : base.models),

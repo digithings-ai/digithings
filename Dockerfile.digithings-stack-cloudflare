@@ -1,9 +1,10 @@
 # Profile A stack image for digithings Cloudflare Containers.
 # Build context: monorepo root.
 # Runs digikey + digigraph + digisearch + digivault + LiteLLM (+ redis) under supervisord.
-# Edge ports: digigraph :8000, digikey :8005. Other services are loopback-only.
+# Edge ports: digigraph :8000, digikey :8005, digisearch :8002. Other services
+# are loopback-only.
 #
-# HUMAN GATE — infra/network: public graph/key hostnames; secrets via wrangler only.
+# HUMAN GATE — infra/network: public graph/key/search hostnames; secrets via wrangler only.
 
 FROM python:3.12-slim
 
@@ -43,6 +44,10 @@ COPY digigraph/pyproject.toml ./digigraph/
 COPY digigraph/src ./digigraph/src
 RUN uv pip install --system -e "./digigraph[mcp]"
 
+COPY digifetch/pyproject.toml digifetch/ARCHITECTURE.md ./digifetch/
+COPY digifetch/src ./digifetch/src
+RUN uv pip install --system -e "./digifetch"
+
 COPY digisearch/pyproject.toml digisearch/ARCHITECTURE.md ./digisearch/
 COPY digisearch/src ./digisearch/src
 COPY digisearch/seeds ./digisearch/seeds
@@ -60,8 +65,24 @@ COPY infra/digichat-release/config /app/config
 # House Cheaper Inference overlay + merge script (boot-time merge when key set)
 COPY config/litellm.cheaperinference.yaml /app/config/litellm.cheaperinference.yaml
 COPY scripts/merge_litellm_cheaperinference.py /app/scripts/merge_litellm_cheaperinference.py
+# Read-only Zammad MCP for the OCC help chat (supervisord [program:zammad-mcp];
+# deps `mcp` + `httpx` already present via digigraph[mcp]).
+COPY scripts/zammad_mcp ./scripts/zammad_mcp
 COPY cloudflare/digithings-stack-cloudflare/container/supervisor/supervisord.conf \
      /etc/supervisor/conf.d/digithings.conf
+# Rebuild marker: wrangler tags the container image from this Dockerfile, so a
+# context-only change (e.g. entrypoint.sh) must bump this comment to rebuild.
+# Rebuild marker v7 (2026-09-16): bakes #4223's config-driven hosted MCP changes
+# (entrypoint.sh, digigraph/src, infra/digichat-release/config/digiproject.yaml).
+# Rebuild marker v6 (2026-09-16): forces a full rebuild for digigraph/src-only
+# changes (wrangler caches the build context by Dockerfile hash).
+# Rebuild marker v5 (2026-09-16): bakes the zammad__* tools into the digiproject
+# allowlist (agents.allowed_tools) so digigraph exposes them in the OCC chat.
+# Rebuild marker v4 (2026-09-16): ships the mcp 1.9.x transport-security guard so
+# zammad-mcp binds :8770 under supervisord instead of crash-looping.
+# Rebuild marker v3 (2026-09-15): ships the FastMCP 1.9.3-compatible zammad server
+# (no `from __future__ import annotations`); container instances keep their start-time env,
+# so force a fresh image (and with it a fresh instance) when secrets/env must land.
 COPY cloudflare/digithings-stack-cloudflare/container/entrypoint.sh /entrypoint.sh
 COPY cloudflare/digithings-stack-cloudflare/container/seed_chroma.sh /seed_chroma.sh
 COPY cloudflare/digithings-stack-cloudflare/container/start_digikey.sh /start_digikey.sh
@@ -70,5 +91,5 @@ COPY cloudflare/digithings-stack-cloudflare/container/seed /seed
 RUN chmod +x /entrypoint.sh /seed_chroma.sh /start_digikey.sh /start_digisearch.sh \
     && mkdir -p /data/chroma /data/vault /data/digikey /var/log/supervisor
 
-EXPOSE 8000 8005
+EXPOSE 8000 8002 8005
 ENTRYPOINT ["/entrypoint.sh"]

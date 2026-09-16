@@ -5,21 +5,23 @@ import type { ReactNode } from 'react';
 
 import type { WatchlistApi } from './useWatchlist';
 
-/** The six twelve-x workspace tabs (How it works is the static explainer). */
-export type TwelveXTab = 'today' | 'consensus' | 'trades' | 'events' | 'matrix' | 'how-it-works';
+/** The seven twelve-x workspace tabs (How it works is the static explainer). */
+export type TwelveXTab = 'today' | 'consensus' | 'trades' | 'track-record' | 'events' | 'matrix' | 'how-it-works';
 
 /** A cross-surface navigation intent fired from any tab. */
 export type CrossLink =
   | { kind: 'currency'; currency: string }
   | { kind: 'brief'; sourceFile: string; runDate: string | null }
   | { kind: 'event'; eventName: string | null; externalId?: string | null }
-  | { kind: 'tab'; tab: TwelveXTab };
+  | { kind: 'tab'; tab: TwelveXTab }
+  | { kind: 'ideas' };
 
 /** Shared workspace plumbing every tab can reach via `useTwelveX()`. */
 export interface TwelveXContextValue {
   runDate: string | null;
   crossLink: (l: CrossLink) => void;
   openBrief: (sourceFile: string, runDate: string | null) => void;
+  openIdea: (runDate: string, rank: number) => void;
   watchlist: WatchlistApi;
 }
 

@@ -25,9 +25,12 @@ from collections.abc import Iterable, Mapping
 from typing import (
     Any,  # score:allow untyped any — Playwright cookie dicts are untyped (browser optional)
 )
+from urllib.parse import urljoin, urlparse
 
 import httpx
 from pydantic import BaseModel, ConfigDict
+
+from digifetch.ssrf import validate_fetch_url
 
 logger = logging.getLogger(__name__)
 
@@ -39,6 +42,18 @@ DEFAULT_TIMEOUT: httpx.Timeout = httpx.Timeout(connect=5.0, read=30.0, write=10.
 # Conservative default cap on a single download (32 MiB). Research PDFs are well
 # under this; the cap prevents a misbehaving/poisoned URL from exhausting memory.
 DEFAULT_MAX_BYTES = 32 * 1024 * 1024
+
+# Redirects are never auto-followed: each hop is re-validated by the SSRF guard
+# before it is requested. This caps how many hops one fetch may take.
+MAX_REDIRECTS = 5
+
+_REDIRECT_STATUSES = frozenset({301, 302, 303, 307, 308})
+
+
+def _url_origin(url: str) -> tuple[str, str, int | None]:
+    """(scheme, host, port) identity used for same-origin redirect decisions."""
+    parsed = urlparse(url)
+    return (parsed.scheme.lower(), (parsed.hostname or "").lower(), parsed.port)
 
 
 class FetchResult(BaseModel):
@@ -106,6 +121,18 @@ class HttpFetcher:
     client this fetcher *created*; an injected ``client=`` is owned by the caller
     and is left open (the caller closes it). Retry/backoff is applied by
     *wrapping* a method call in :func:`digifetch.retry.with_retry`.
+
+    **SSRF guard.** Neither :meth:`fetch` nor :meth:`download` auto-follows
+    redirects. Every URL — the original and each redirect hop — is validated by
+    :func:`digifetch.ssrf.validate_fetch_url` (http/https only; loopback,
+    link-local, RFC1918, CGNAT, ``0.0.0.0`` and metadata addresses refused)
+    before a request is sent, and hops are capped at :data:`MAX_REDIRECTS`. Pass
+    ``allowed_hosts`` for operator-trusted internal hosts.
+
+    **Redirect cookies.** Per-call ``cookies`` (the Playwright hand-off seam)
+    are host-agnostic, so they are forwarded only while the hop stays on the
+    original origin; a cross-origin redirect drops them instead of leaking a
+    session credential.
     """
 
     def __init__(
@@ -115,6 +142,7 @@ class HttpFetcher:
         headers: Mapping[str, str] | None = None,
         cookies: Mapping[str, str] | None = None,
         max_bytes: int = DEFAULT_MAX_BYTES,
+        allowed_hosts: Iterable[str] | None = None,
         transport: httpx.BaseTransport | None = None,
         client: httpx.Client | None = None,
     ) -> None:
@@ -126,6 +154,10 @@ class HttpFetcher:
             cookies:   Default cookies (e.g. from :func:`cookies_from_playwright`).
             max_bytes: Hard cap on a single download body; exceeding it raises
                        :class:`DownloadTooLargeError`.
+            allowed_hosts: Operator-trusted hostnames (exact, case-insensitive)
+                       exempted from the SSRF address refusal. Read no env here —
+                       the caller passes this in (``digisearch`` sources it from
+                       ``DIGISEARCH_FETCH_ALLOWED_HOSTS``).
             transport: Optional ``httpx`` transport for the client this fetcher
                        builds (tests inject ``httpx.MockTransport`` to exercise
                        the real header/cookie/timeout path without a socket).
@@ -133,8 +165,14 @@ class HttpFetcher:
             client:    Inject a fully pre-built ``httpx.Client``. When given, the
                        client owns its own ``headers`` / ``cookies`` / ``timeout``
                        — the corresponding constructor args are NOT re-applied.
+                       Redirects are still driven manually with per-request
+                       ``follow_redirects=False``, so an injected client cannot
+                       bypass the SSRF guard.
         """
         self._max_bytes = max_bytes
+        self._allowed_hosts = tuple(
+            h.strip().lower() for h in (allowed_hosts or ()) if h and h.strip()
+        )
         if client is not None:
             self._client = client
             self._owns_client = False
@@ -144,9 +182,13 @@ class HttpFetcher:
                 headers=dict(headers) if headers else None,
                 cookies=dict(cookies) if cookies else None,
                 transport=transport,
-                follow_redirects=True,
+                follow_redirects=False,
             )
             self._owns_client = True
+
+    def _validate(self, url: str) -> None:
+        """Refuse *url* unless it passes the SSRF guard (raises :class:`SsrfBlockedError`)."""
+        validate_fetch_url(url, allowed_hosts=self._allowed_hosts)
 
     def __enter__(self) -> HttpFetcher:
         return self
@@ -176,23 +218,48 @@ class HttpFetcher:
         → it raises on a 4xx/5xx (``raise_for_status``) and returns a typed
         :class:`FetchResult`. Per-call ``headers``/``cookies`` merge over the
         fetcher defaults.
+
+        Redirects are followed manually (bounded by :data:`MAX_REDIRECTS`) and
+        each hop is re-validated by the SSRF guard before it is requested.
+        Per-call ``cookies`` are forwarded **only to same-origin hops**; a hop
+        to another origin drops them (session cookies must not leak across
+        hosts). The client-level cookie jar, if any, follows httpx's own
+        domain-scoped rules.
         """
-        response = self._client.request(
-            method,
-            url,
-            params=dict(params) if params else None,
-            data=dict(data) if data else None,
-            json=json,
-            headers=dict(headers) if headers else None,
-            cookies=dict(cookies) if cookies else None,
-        )
-        response.raise_for_status()
-        return FetchResult(
-            status_code=response.status_code,
-            url=str(response.url),
-            text=response.text,
-            content_type=response.headers.get("content-type", ""),
-        )
+        origin = _url_origin(url)
+        current_url = url
+        current_method = method
+        for _ in range(MAX_REDIRECTS + 1):
+            self._validate(current_url)
+            hop_cookies = cookies if _url_origin(current_url) == origin else None
+            response = self._client.request(
+                current_method,
+                current_url,
+                params=dict(params) if params else None,
+                data=dict(data) if data else None,
+                json=json,
+                headers=dict(headers) if headers else None,
+                cookies=dict(hop_cookies) if hop_cookies else None,
+                follow_redirects=False,
+            )
+            if response.status_code in _REDIRECT_STATUSES:
+                location = response.headers.get("location")
+                if location:
+                    current_url = urljoin(str(response.url), location)
+                    # 303 always becomes GET; 301/302 downgrade a body-bearing
+                    # method to GET (browser semantics). 307/308 preserve it.
+                    if response.status_code == 303 or current_method not in ("GET", "HEAD"):
+                        current_method, data, json = "GET", None, None
+                    params = None
+                    continue
+            response.raise_for_status()
+            return FetchResult(
+                status_code=response.status_code,
+                url=str(response.url),
+                text=response.text,
+                content_type=response.headers.get("content-type", ""),
+            )
+        raise httpx.TooManyRedirects(f"exceeded {MAX_REDIRECTS} redirects fetching {url}")
 
     def download(
         self,
@@ -208,29 +275,50 @@ class HttpFetcher:
         payload is buffered. Returns raw bytes in a typed :class:`DownloadResult`
         for hand-off to a site-specific parser (pdfplumber, etc.).
 
+        Redirects are followed manually (bounded by :data:`MAX_REDIRECTS`) and
+        each hop is re-validated by the SSRF guard before it is requested.
+        Per-call ``cookies`` are forwarded only to same-origin hops, exactly as
+        in :meth:`fetch`.
+
         Raises:
             DownloadTooLargeError: if the body exceeds ``max_bytes``.
             httpx.HTTPStatusError: on a 4xx/5xx response.
+            SsrfBlockedError: if a URL or redirect hop is refused by the guard.
         """
-        with self._client.stream(
-            method,
-            url,
-            headers=dict(headers) if headers else None,
-            cookies=dict(cookies) if cookies else None,
-        ) as response:
-            response.raise_for_status()
-            chunks: list[bytes] = []
-            total = 0
-            for chunk in response.iter_bytes():
-                total += len(chunk)
-                if total > self._max_bytes:
-                    raise DownloadTooLargeError(
-                        f"download from {url} exceeded {self._max_bytes} bytes"
-                    )
-                chunks.append(chunk)
-            return DownloadResult(
-                status_code=response.status_code,
-                url=str(response.url),
-                content=b"".join(chunks),
-                content_type=response.headers.get("content-type", ""),
-            )
+        origin = _url_origin(url)
+        current_url = url
+        current_method = method
+        for _ in range(MAX_REDIRECTS + 1):
+            self._validate(current_url)
+            hop_cookies = cookies if _url_origin(current_url) == origin else None
+            with self._client.stream(
+                current_method,
+                current_url,
+                headers=dict(headers) if headers else None,
+                cookies=dict(hop_cookies) if hop_cookies else None,
+                follow_redirects=False,
+            ) as response:
+                if response.status_code in _REDIRECT_STATUSES:
+                    location = response.headers.get("location")
+                    if location:
+                        current_url = urljoin(str(response.url), location)
+                        if response.status_code == 303 or current_method not in ("GET", "HEAD"):
+                            current_method = "GET"
+                        continue
+                response.raise_for_status()
+                chunks: list[bytes] = []
+                total = 0
+                for chunk in response.iter_bytes():
+                    total += len(chunk)
+                    if total > self._max_bytes:
+                        raise DownloadTooLargeError(
+                            f"download from {url} exceeded {self._max_bytes} bytes"
+                        )
+                    chunks.append(chunk)
+                return DownloadResult(
+                    status_code=response.status_code,
+                    url=str(response.url),
+                    content=b"".join(chunks),
+                    content_type=response.headers.get("content-type", ""),
+                )
+        raise httpx.TooManyRedirects(f"exceeded {MAX_REDIRECTS} redirects downloading {url}")

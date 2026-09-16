@@ -22,6 +22,7 @@
     "./styles/chat-aui.css": "./src/styles/chat-aui.css",
     "./styles/chatbot.css": "./src/styles/chatbot.css",
     "./styles/digichat-launcher.css": "./src/styles/digichat-launcher.css",
+    "./styles/digichat-boot-loader.css": "./src/styles/digichat-boot-loader.css",
     "./chat/thread": "./src/components/chat/DigichatThread.tsx",
     "./chat/thread-list": "./src/components/chat/DigichatThreadList.tsx",
     "./chat/launcher": "./src/components/chat/DigichatLauncher.tsx",
@@ -39,10 +40,12 @@
     "./styles/command-palette.css": "./src/styles/command-palette.css",
     "./styles/account-auth.css": "./src/styles/account-auth.css",
     "./data/modules": "./src/data/modules.ts",
-    "./data/subsystems": "./src/data/subsystems.ts"
+    "./data/subsystems": "./src/data/subsystems.ts",
+    "./ui": "./src/ui/index.ts"
   },
   "scripts": {
-    "test": "vitest run"
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit"
   },
   "peerDependencies": {
     "@assistant-ui/react": "^0.15.18",
@@ -56,6 +59,7 @@
     "beautiful-mermaid": "^1.1.3",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
+    "dompurify": "^3.4.15",
     "heat-graph": "^0.0.17",
     "katex": "^0.16.47",
     "lightweight-charts": "^5.2.0",
@@ -76,6 +80,7 @@
     "@types/react": "^19.2.14",
     "@types/react-dom": "^19.2.3",
     "happy-dom": "^20.11.1",
+    "jsdom": "^29.1.1",
     "typescript": "^6.0.2",
     "vitest": "^4.1.0"
   }

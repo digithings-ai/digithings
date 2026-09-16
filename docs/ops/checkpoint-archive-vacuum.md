@@ -61,7 +61,7 @@ SELECT relname AS table_name,
        pg_size_pretty(pg_total_relation_size('public.' || relname)) AS total_size
   FROM (VALUES ('checkpoints'), ('checkpoint_writes'),
                ('checkpoint_blobs'), ('documents'),
-               ('archive_objects')) AS t(relname));
+               ('archive_objects')) AS t(relname);
 
 -- Whole-DB size (may stay flat — see FSM note above):
 SELECT pg_size_pretty(pg_database_size(current_database())) AS db_size;
@@ -76,25 +76,32 @@ SELECT relname, n_live_tup, n_dead_tup, last_vacuum, last_autovacuum
 
 Record the three outputs; the gate below automates the first two.
 
-## Workflow size gate (advisory)
+## Size-relief gate (operator-run)
 
-`scripts/digiquant_checkpoint_size_gate.py` is the read-only gate check:
-per-table plus whole-DB sizes against `--threshold-mb` (default 500,
-the free-tier quota). It is deliberately **fail-open**: exits 0 on DB
-errors unless `--strict` is passed, so it can never fail the archive.
-`--strict` exists for one-shot operator verification runs, not for the
-scheduled path.
+`scripts/digiquant_checkpoint_size_gate.py` compares a **pre-archive** per-table
+snapshot with the current one and **fails when the gated tables did not shrink**
+(#3968, fixing the #3832 behaviour where a 450 MB DB with zero relief passed).
+The whole-DB `--threshold-mb` ceiling (default 500, the free-tier quota) is kept
+only as a secondary guard.
 
-Pending follow-up: wire it as a trailing step in
-`pipeline-checkpoint-archive.yml` with `continue-on-error: true` (plus an
-optional `threshold-mb` dispatch input) — that edit needs a token with
-`workflow` scope and could not land from the authoring session. Until
-then, run it by hand after the archive:
+It is deliberately **not** a trailing step in `pipeline-checkpoint-archive.yml`:
+the 13:30 archive only creates dead tuples, and plain VACUUM (05:50 pg_cron) is
+what makes the space reusable, so relief is not measurable until ~16h later and
+a same-run gate would false-fail. The workflow *does* capture the pre-archive
+snapshot (artifact `checkpoint-size-pre-snapshot`) so the comparison has a
+baseline. Compare by hand after the next morning's vacuum:
 
 ```bash
+# after downloading the artifact to /tmp/checkpoint-size-pre.json
 CORE_POSTGRES_URI=<read-only-uri> \
-  python scripts/digiquant_checkpoint_size_gate.py --threshold-mb 500
+  python scripts/digiquant_checkpoint_size_gate.py \
+    --pre-snapshot /tmp/checkpoint-size-pre.json --min-relief-mb 1 --strict
 ```
+
+Exit codes: `0` relief observed, `1` no relief or ceiling exceeded, `2` gate
+breach or (only with `--strict`) a DB read error. Without `--strict` a DB error
+is reported on stderr and skipped (fail-open), so use `--strict` for a real
+verdict.
 
 ## What "relief verified" looks like
 

@@ -69,7 +69,10 @@ import {
   PARENT_GATE_TIMEOUT_MS,
   resolveGateFallbackCard,
 } from "@/lib/embed-trial-messages";
-import { EMBED_TRIAL_TURN_LIMIT } from "@/lib/embed-turn-limits";
+import {
+  EMBED_TRIAL_TURN_LIMIT,
+  formatEmbedTurnCounter,
+} from "@/lib/embed-turn-limits";
 import { buildEmbedAccentStyle } from "@/lib/embed-accent-style";
 import { useEmbedUiParams } from "@/hooks/use-embed-ui-params";
 import type { EmbedUiParams } from "@/lib/embed-ui-params";
@@ -82,7 +85,7 @@ import { resolveAttributionPlacement, resolveEmbedUiFlags, shouldRenderEmbedBran
 import { DEFAULT_LANGUAGE_CODE, tryResolveLanguageInput } from "@/lib/languages";
 import { applyEmbedSeed } from "@/lib/embed-seed-apply";
 import {
-  READY_MESSAGE,
+  buildReadyMessage,
   isAllowedSeedParentOrigin,
   parseSeedMessage,
   resolveReadyTargetOrigin,
@@ -292,14 +295,15 @@ function EmbedPageInner({ initialTenantCfg }: { initialTenantCfg: EmbedTenantCli
   // [data-theme] sync above, just targeting an ancestor instead of <html>).
   useEffect(() => {
     document.querySelector(".dc-embed-shell")?.setAttribute("data-wide", urlColors.wide ? "1" : "0");
-  }, [urlColors.wide]);
+    document.querySelector(".dc-embed-shell")?.setAttribute("data-skin-canvas", tenantCfg.skin === "digichat" ? "1" : "0");
+  }, [urlColors.wide, tenantCfg.skin]);
 
   return (
     <>
       <style>{ACCENT_CSS}</style>
       {urlColors.wide ? null : <div className="dc-grain" aria-hidden />}
       <div
-        className={`${effectiveTheme === "light" ? "light" : "dark"} ${brandAccentActive ? "" : `accent-${accent}`} relative z-10 flex min-h-0 flex-1 flex-col ${urlColors.wide ? "" : "bg-background"} text-foreground`}
+        className={`${effectiveTheme === "light" ? "light" : "dark"} ${brandAccentActive ? "" : `accent-${accent}`} relative z-10 flex min-h-0 flex-1 flex-col ${urlColors.wide || tenantCfg.skin === "digichat" ? "" : "bg-background"} text-foreground`}
         style={accentStyle}
       >
         <EmbedChat
@@ -346,8 +350,12 @@ function EmbedChat({
     () => clientConfigFromEmbedTenant(tenantCfg),
     [tenantCfg],
   );
+  /** Deploy `features.pageContext` — off / silent / visible (default). */
+  const pageContextMode = stockClient.features.pageContext;
   const [chatPrefs, setChatPrefs] = useState<EmbedChatPrefs>(() => ({
     ...DEFAULT_EMBED_CHAT_PREFS,
+    view: stockClient.features.view,
+    thinking: stockClient.features.thinking,
     extra: extraOffFromCatalog(catalogToolsFromClient(stockClient)),
   }));
   const [composerMenu, setComposerMenu] = useState<null | ComposerMenuKind>(null);
@@ -697,8 +705,8 @@ function EmbedChat({
       });
       return;
     }
-    window.parent.postMessage(READY_MESSAGE, target);
-  }, []);
+    window.parent.postMessage(buildReadyMessage(pageContextMode), target);
+  }, [pageContextMode]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -739,8 +747,18 @@ function EmbedChat({
   // Popup widget (#3421): accept visible-page context from the immediate parent
   // after digichat:ready. Not first-party-only — registered third-party hosts
   // describe their own already-visible DOM (no behind-auth scrape).
+  //
+  // features.pageContext `off`: no listener at all — `digichat:page-context`
+  // messages are ignored even if the parent keeps sending them.
   useEffect(() => {
     if (typeof window === "undefined") return;
+    if (pageContextMode === "off") {
+      // Drop any snapshot that arrived before the config resolved. Deferred
+      // out of the effect body — react-hooks/set-state-in-effect.
+      pageContextRef.current = null;
+      queueMicrotask(() => setPageContextAttached(false));
+      return;
+    }
     const ancestorOrigins =
       "ancestorOrigins" in window.location ? window.location.ancestorOrigins : null;
     const parentOrigin = resolveReadyTargetOrigin({
@@ -757,7 +775,7 @@ function EmbedChat({
     };
     window.addEventListener("message", onMessage);
     return () => window.removeEventListener("message", onMessage);
-  }, []);
+  }, [pageContextMode]);
 
   // The upstream conversation id is the useful handle (it maps to the real backend
   // conversation); fall back to nothing rather than blocking the gate.
@@ -959,7 +977,9 @@ function EmbedChat({
         });
       },
       takePendingPageContextAttachment: () =>
-        pageContextCreateAttachment(pageContextRef.current),
+        pageContextCreateAttachment(
+          pageContextMode === "off" ? null : pageContextRef.current,
+        ),
     }),
     [
       gate.locked,
@@ -970,6 +990,7 @@ function EmbedChat({
       llmAccess,
       byokIsSet,
       accent,
+      pageContextMode,
     ],
   );
 
@@ -1001,6 +1022,7 @@ function EmbedChat({
         const resolved = tryResolveLanguageInput(code) ?? DEFAULT_LANGUAGE_CODE;
         setChatPrefs((p) => ({ ...p, language: resolved }));
       },
+      setView: (mode) => setChatPrefs((p) => ({ ...p, view: mode })),
       setThinking: (value) => setChatPrefs((p) => ({ ...p, thinking: value })),
       setModel: (id) => setChatPrefs((p) => ({ ...p, model: id })),
       setEffort: (effort) => setChatPrefs((p) => ({ ...p, effort: effort })),
@@ -1008,6 +1030,8 @@ function EmbedChat({
         setChatPrefs({
           ...DEFAULT_EMBED_CHAT_PREFS,
           language: DEFAULT_LANGUAGE_CODE,
+          view: stockClient.features.view,
+          thinking: stockClient.features.thinking,
           extra: extraOffFromCatalog(catalogTools),
         }),
       tenantAllowsWeb,
@@ -1041,6 +1065,12 @@ function EmbedChat({
       openEffort: () => {
         setComposerMenu("effort");
       },
+      openView: () => {
+        setComposerMenu("view");
+      },
+      openThinking: () => {
+        setComposerMenu("thinking");
+      },
       openLanguage: () => {
         setComposerMenu("language");
       },
@@ -1049,6 +1079,8 @@ function EmbedChat({
         setChatPrefs({
           ...DEFAULT_EMBED_CHAT_PREFS,
           language: DEFAULT_LANGUAGE_CODE,
+          view: stockClient.features.view,
+          thinking: stockClient.features.thinking,
           extra: extraOffFromCatalog(catalogTools),
         });
         chat.reset?.();
@@ -1057,6 +1089,8 @@ function EmbedChat({
         setChatPrefs({
           ...DEFAULT_EMBED_CHAT_PREFS,
           language: DEFAULT_LANGUAGE_CODE,
+          view: stockClient.features.view,
+          thinking: stockClient.features.thinking,
           extra: extraOffFromCatalog(catalogTools),
         });
         chat.reset?.();
@@ -1079,6 +1113,8 @@ function EmbedChat({
       stockClient.mcp.allowUserServers,
       stockClient.mcp.allowAddForm,
       stockClient.mcp.servers,
+      stockClient.features.view,
+      stockClient.features.thinking,
     ],
   );
 
@@ -1126,6 +1162,15 @@ function EmbedChat({
     </p>
   ) : null;
 
+  const turnCounterSlot = isTrialForm ? (
+    <p
+      className="dc-turn-counter relative z-10 mx-auto w-full max-w-2xl select-none pb-1 pt-1.5 pr-3 text-right text-xs font-normal leading-none tabular-nums tracking-wide text-muted-foreground"
+      data-testid="embed-turn-counter"
+    >
+      {formatEmbedTurnCounter(gate.turns, gate.limit)}
+    </p>
+  ) : null;
+
   // turn_limited: only raise paywall when the visitor asks past the free
   // limit (gateRequest.requested). Showing it on gate.locked alone replaced
   // the Thread after the third answer — so they could never type the fourth
@@ -1156,6 +1201,7 @@ function EmbedChat({
       <div className="flex h-dvh flex-col" data-chrome-mode="embed" data-thread-skin={stockClient.chrome.skin}>
         {headerSlot}
         <div className="flex flex-1 items-center justify-center p-4">{gateForm}</div>
+        {turnCounterSlot}
         {footerSlot}
       </div>
     );
@@ -1203,6 +1249,7 @@ function EmbedChat({
                 {handshakeError}
               </div>
             ) : null}
+            {turnCounterSlot}
             {footerSlot}
           </>
         }
@@ -1257,7 +1304,17 @@ function PageContextComposerBridge({
     if (consumedTsRef.current === contextTs) return;
     if (addedTsRef.current === contextTs) return;
     addedTsRef.current = contextTs;
-    void aui.composer.addAttachment(attachment);
+    // A newer snapshot REPLACES the previous page-context chip — appending
+    // stacked one chip per parent post instead of one current snapshot.
+    void (async () => {
+      const existing = aui.composer.getState().attachments ?? [];
+      for (const a of existing) {
+        if (a.name === attachment.name) {
+          await aui.composer.attachment({ id: a.id }).remove();
+        }
+      }
+      await aui.composer.addAttachment(attachment);
+    })();
   }, [attachment, contextTs, aui]);
   return null;
 }

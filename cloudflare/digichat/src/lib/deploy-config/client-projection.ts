@@ -7,11 +7,12 @@ import type {
   AuthMode,
   ChromeMode,
   DigichatDeployment,
-  DisclosureMode,
+  PageContextMode,
   PersistenceMode,
   ToolCatalogEntry,
   UserAlign,
 } from "./schema";
+import type { ThinkingMode, ViewMode } from "@/lib/view-modes";
 import { welcomeBodyLines, welcomeTitle } from "./schema";
 import {
   BASELINE_EMBED_PLACEHOLDER,
@@ -27,11 +28,12 @@ export type DigichatClientFeatures = {
   attachments: boolean;
   dictation: boolean;
   speech: boolean;
-  reasoning: DisclosureMode;
-  toolCalls: DisclosureMode;
+  view: ViewMode;
+  thinking: ThinkingMode;
   sources: boolean;
   modelPicker: boolean;
   branchPicker: boolean;
+  pageContext: PageContextMode;
 };
 
 export type DigichatClientChrome = {
@@ -114,7 +116,7 @@ export const DEFAULT_CLIENT_CONFIG: DigichatClientConfig = {
     placeholder: BASELINE_EMBED_PLACEHOLDER,
     suggestions: [...BASELINE_EMBED_SUGGESTIONS],
     accent: null,
-    attribution: false,
+    attribution: true,
     defaultLanguage: DEFAULT_LANGUAGE_CODE,
     transcript: { userAlign: "right" },
   },
@@ -124,11 +126,12 @@ export const DEFAULT_CLIENT_CONFIG: DigichatClientConfig = {
     attachments: true,
     dictation: false,
     speech: false,
-    reasoning: "collapsed",
-    toolCalls: "collapsed",
+    view: "balanced",
+    thinking: "auto",
     sources: true,
     modelPicker: false,
     branchPicker: true,
+    pageContext: "visible",
   },
   models: {
     default: "deepseek/deepseek-v4-flash",
@@ -142,13 +145,15 @@ export const DEFAULT_CLIENT_CONFIG: DigichatClientConfig = {
   },
   cli: { enabled: false },
   tools: { allowUserToggle: true, catalog: [] },
-  mcp: { servers: [], allowUserServers: true, allowAddForm: true },
+  // Least-privilege fallback: an unconfigured container must not expose BYOK,
+  // user MCP servers, or web search. A resolved deployment opts in explicitly.
+  mcp: { servers: [], allowUserServers: false, allowAddForm: false },
   gate: {
     mode: "turn_limited",
     activityDetail: "labels",
-    showByok: true,
+    showByok: false,
     showLanguageSelector: false,
-    webSearch: true,
+    webSearch: false,
   },
   backendType: "digigraph",
 };
@@ -186,7 +191,7 @@ export function toDigichatClientConfig(dep: DigichatDeployment): DigichatClientC
       suggestions: dep.chrome.suggestions,
       placeholder: dep.chrome.placeholder,
       accent: dep.chrome.accent ?? null,
-      attribution: dep.chrome.attribution === true,
+      attribution: dep.chrome.attribution !== false,
       defaultLanguage: dep.chrome.defaultLanguage ?? DEFAULT_LANGUAGE_CODE,
       transcript: {
         userAlign: dep.chrome.transcript?.userAlign ?? "right",
