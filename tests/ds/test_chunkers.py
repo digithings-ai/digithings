@@ -219,7 +219,9 @@ def test_real_markdown_file_chunking_matches_recorded_fingerprint() -> None:
     Hashes only (count still 59) re-recorded for #4063 (hosted search.digithings.ai route note in the REST Endpoints section, including its auth-exempt-allowlist wording fix) — fixture prose only; RecursiveChunker unchanged.
     Re-recorded at count 60 for #4106 (identity-aware rate limiting: the rate-limiting section,
     the /v1/orchestrator_invoke entry, and two env-table rows in ARCHITECTURE.md) — fixture
-    prose only; RecursiveChunker unchanged."""
+    prose only; RecursiveChunker unchanged.
+    Hashes only (count still 60) re-recorded for #4165 (orchestrator web_search recency_days
+    mapping note in ARCHITECTURE.md) — fixture prose only; RecursiveChunker unchanged."""
     arch_path = Path(__file__).resolve().parents[2] / "digisearch" / "ARCHITECTURE.md"
     content = arch_path.read_text(encoding="utf-8")
     doc = Document(id="arch", content=content, source=str(arch_path), doc_type="md")
@@ -240,8 +242,8 @@ def test_real_markdown_file_chunking_matches_recorded_fingerprint() -> None:
         "e446cea04444b3a8",
         "565775fa5f1edb55",
         "3397054ac68eb462",
-        "eb1de724829c28c4",
-        "741851b07bc404f6",
+        "6372b7bb50ed142a",
+        "dace1a11e10bae3d",
         "f5694c994b90e40c",
         "2f102978f3f92316",
         "16584e006bbec980",

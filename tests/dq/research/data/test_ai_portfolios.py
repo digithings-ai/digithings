@@ -125,6 +125,26 @@ def test_an_operator_recency_days_change_reaches_the_tool_call(
 
 
 @pytest.mark.unit
+def test_a_non_integer_recency_days_warns_and_falls_back(
+    monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    """A malformed yaml value must not traceback out of the pre-pass: warn and
+    use the default window, matching web_grounding's config path (#4165)."""
+    seen: dict[str, Any] = {}
+    _tool_ok(monkeypatch, seen)
+    monkeypatch.setattr(
+        ai_portfolios,
+        "_config",
+        lambda: {"accounts": [{"handle": "grkportfolio"}], "recency_days": "seven"},
+    )
+    with caplog.at_level("WARNING", logger="digiquant.research.data.ai_portfolios"):
+        ai_portfolios.fetch_ai_portfolio_grounding(model="cheap", run_date=date(2026, 6, 9))
+    assert seen["recency_days"] == 7
+    assert "last 7 days" in seen["query"]
+    assert "recency_days" in caplog.text
+
+
+@pytest.mark.unit
 def test_fetch_ai_portfolio_grounding_raises_on_empty(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
