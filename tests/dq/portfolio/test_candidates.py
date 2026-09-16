@@ -36,6 +36,17 @@ def _row(ticker: str, **overrides):
     return base
 
 
+def _install_technicals(monkeypatch: pytest.MonkeyPatch, rows: list[dict]) -> None:
+    """Stub the R2 technicals seam (#4053) — get_price_technicals is R2-only now."""
+    by_ticker = {row["ticker"]: row for row in rows}
+
+    def fake(*, client, ticker, lookback, as_of):
+        latest = by_ticker.get(ticker) or by_ticker.get(ticker.upper(), {})
+        return {"ticker": ticker, "latest": latest, "window": [latest] if latest else []}
+
+    monkeypatch.setattr("digiquant.research.data.queries.get_price_technicals", fake)
+
+
 class TestScore:
     def test_trend_and_momentum_rank_higher(self) -> None:
         strong = score_technicals(_row("A", roc_21=8.0, adx_14=30.0))
@@ -55,12 +66,13 @@ class TestScore:
 
 
 class TestSelectFocusTickers:
-    def test_top_scored_candidates_selected(self) -> None:
+    def test_top_scored_candidates_selected(self, monkeypatch: pytest.MonkeyPatch) -> None:
         rows = [
             _row("WIN", roc_21=9.0, adx_14=30.0),
             _row("MID", roc_21=2.0),
             _row("LOSE", pct_vs_sma50=-3.0, pct_vs_sma200=-5.0, roc_21=-8.0),
         ]
+        _install_technicals(monkeypatch, rows)
         focus = select_focus_tickers(
             client=_client(rows),
             watchlist=["LOSE", "MID", "WIN"],
@@ -71,9 +83,10 @@ class TestSelectFocusTickers:
         scored = [t for t in focus if t in ("WIN", "MID", "LOSE")]
         assert scored == ["WIN", "MID"]
 
-    def test_holdings_always_included_and_first(self) -> None:
+    def test_holdings_always_included_and_first(self, monkeypatch: pytest.MonkeyPatch) -> None:
         holdings = load_portfolio_holdings()
         assert holdings, "config/portfolio.json should declare positions"
+        _install_technicals(monkeypatch, [_row("WIN")])
         focus = select_focus_tickers(
             client=_client([_row("WIN")]),
             watchlist=["WIN"],
@@ -82,11 +95,15 @@ class TestSelectFocusTickers:
         )
         assert focus[: len(holdings)] == holdings
 
-    def test_fails_soft_to_watchlist_head(self) -> None:
+    def test_fails_soft_to_watchlist_head(self, monkeypatch: pytest.MonkeyPatch) -> None:
         class _Exploding(FakeSupabaseClient):
             def table(self, name: str):  # duck-typed fake
                 raise RuntimeError("boom")
 
+        def _boom(**kwargs):
+            raise RuntimeError("boom")
+
+        monkeypatch.setattr("digiquant.research.data.queries.get_price_technicals", _boom)
         focus = select_focus_tickers(
             client=_Exploding(canned_reads={}),
             watchlist=["A", "B", "C"],
@@ -95,7 +112,8 @@ class TestSelectFocusTickers:
         )
         assert "A" in focus and "B" in focus
 
-    def test_tickers_without_technicals_are_skipped(self) -> None:
+    def test_tickers_without_technicals_are_skipped(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        _install_technicals(monkeypatch, [_row("KNOWN")])
         focus = select_focus_tickers(
             client=_client([_row("KNOWN")]),
             watchlist=["KNOWN", "UNKNOWN"],
@@ -105,7 +123,8 @@ class TestSelectFocusTickers:
         assert "KNOWN" in focus
         assert "UNKNOWN" not in focus
 
-    def test_duplicate_watchlist_entries_are_deduped(self) -> None:
+    def test_duplicate_watchlist_entries_are_deduped(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        _install_technicals(monkeypatch, [_row("WIN")])
         focus = select_focus_tickers(
             client=_client([_row("WIN")]),
             watchlist=["WIN", "WIN", "WIN"],
@@ -114,11 +133,17 @@ class TestSelectFocusTickers:
         )
         assert focus.count("WIN") == 1
 
-    def test_top_n_zero_skips_scoring_and_returns_holdings(self) -> None:
+    def test_top_n_zero_skips_scoring_and_returns_holdings(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         class _MustNotQuery(FakeSupabaseClient):
             def table(self, name: str):  # duck-typed fake
                 raise AssertionError("scoring query should not run when top_n=0")
 
+        def _must_not_run(**kwargs):
+            raise AssertionError("scoring query should not run when top_n=0")
+
+        monkeypatch.setattr("digiquant.research.data.queries.get_price_technicals", _must_not_run)
         focus = select_focus_tickers(
             client=_MustNotQuery(canned_reads={}),
             watchlist=["A", "B"],

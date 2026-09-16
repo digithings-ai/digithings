@@ -1,7 +1,10 @@
-"""Read structured price/technical + macro values from Supabase for the research agent.
+"""Read structured price/technical + macro values for the research agent.
 
-These return compact, token-budgeted JSON (latest snapshot + a short recent window),
-not full history. Selected technical columns only — the model gets signal, not noise.
+Market history is moving to the versioned R2 cache (#3780): price technicals are
+R2-only since #4053; the remaining readers here keep their Supabase bodies for
+now. These return compact, token-budgeted JSON (latest snapshot + a short recent
+window), not full history. Selected technical columns only — the model gets
+signal, not noise.
 """
 
 from __future__ import annotations
@@ -74,6 +77,19 @@ def _resolve_r2_as_of(as_of: date | None) -> str:
     return str(_r2_manifest()["as_of"])
 
 
+class UnknownTickerError(LookupError):
+    """No sealed R2 generation for this ticker — absent, not a fault.
+
+    Raised by :func:`r2_close_rows` and friends so a caller that needs the series
+    cannot silently read an empty window. Callers where an absent ticker is a
+    legitimate state (the forecast-outcome reference/maturity lookups) catch this
+    specifically, rather than every ``LookupError`` — a ``KeyError`` from a
+    malformed manifest entry is a real fault and must keep failing loud.
+
+    A ``LookupError`` subclass so existing broad catchers keep working (#4120).
+    """
+
+
 def _r2_generation_window(
     *,
     tickers: list[str] | tuple[str, ...],
@@ -132,14 +148,14 @@ def _r2_generation_window(
                 except Exception as exc:
                     if not is_missing_object_error(exc):
                         raise
-                    raise LookupError(f"unknown ticker {ticker!r}") from None
+                    raise UnknownTickerError(f"unknown ticker {ticker!r}") from None
                 sha: str | None = None
                 for cand in datasets.values():
                     if isinstance(cand, dict) and cand.get("object") == gen_key:
                         sha = cand.get("sha256")
                         break
                 if sha is None:
-                    raise LookupError(f"unknown ticker {ticker!r}")
+                    raise UnknownTickerError(f"unknown ticker {ticker!r}")
                 payload = store.get_generation(gen_key, str(sha))
             frame = pl.read_parquet(io.BytesIO(payload))
             frame = frame.with_columns(pl.col("date").cast(pl.Date)).sort("date")
@@ -168,13 +184,51 @@ def r2_close_rows(
     date — settled generations never hold an unformed bar, so no live fetch is
     needed for lookback math). Mirrors the ``_read_r2_window`` manifest lookup
     (verbatim ticker, then normalized; ``latest`` pointer fallback). Raises
-    ``LookupError`` for an unknown ticker and ``ValueError`` for a non-v1
+    :class:`UnknownTickerError` for an unknown ticker and ``ValueError`` for a non-v1
     manifest — both fail loud, never an empty window. Null closes are passed
     through (callers coerce, mirroring the Supabase ``numeric``-as-string path).
     """
     return _r2_generation_window(
         tickers=tickers, since=since, until=until, columns=("date", "ticker", "close")
     )
+
+
+def r2_close_rows_tolerant(
+    *,
+    tickers: list[str] | tuple[str, ...],
+    since: date | str,
+    until: date | str,
+    context: str,
+) -> list[dict[str, Any]]:
+    """``r2_close_rows`` for callers whose contract is to drop absent tickers.
+
+    ``r2_close_rows`` is deliberately all-or-nothing: the first ticker without a
+    sealed generation raises :class:`UnknownTickerError` and the whole batch is
+    lost. Callers that document "a missing ticker reads as no signal" — triage
+    price deltas, NAV interval returns, sector relative strength — cannot use
+    that, since one unsealed ticker would otherwise fail the research graph or
+    the book. Re-ask per ticker on that error and log what was dropped, so the
+    coverage gap stays visible instead of a signal quietly flattening
+    (#4136, #4139).
+    """
+    try:
+        return list(r2_close_rows(tickers=tickers, since=since, until=until))
+    except UnknownTickerError:
+        pass
+    rows: list[dict[str, Any]] = []
+    dropped: list[str] = []
+    for ticker in tickers:
+        try:
+            rows.extend(r2_close_rows(tickers=[ticker], since=since, until=until))
+        except UnknownTickerError:
+            dropped.append(ticker)
+    if dropped:
+        logger.warning(
+            "%s: no sealed R2 generation for %s; treating as no signal",
+            context,
+            ", ".join(sorted(dropped)),
+        )
+    return rows
 
 
 def r2_ohlcv_rows(
@@ -246,29 +300,19 @@ def get_price_technicals(
 
     ``window`` is newest-first, length <= lookback. ``latest`` is window[0] or {}.
     ``as_of`` bounds rows to ``date <= as_of`` (look-ahead-safe for historical
-    reads); omit it for "latest available" (Supabase) or the manifest watermark
-    (R2 backend — never wall-clock).
+    reads); omit it for the manifest watermark (never wall-clock).
 
-    Under ``DIGIQUANT_MARKET_DATA_BACKEND=r2`` the rows are recomputed
-    indicators over the sealed R2 generation (``_read_r2_window``), projected
-    onto :data:`TECHNICAL_COLUMNS` with ISO date strings — the same envelope
-    shape as the Supabase body. An unknown ticker returns the empty
-    latest/window (Supabase parity — a missing ticker is not an outage).
+    R2 is the only path (#4053): the rows are recomputed indicators over the
+    sealed R2 generation (``_read_r2_window``), projected onto
+    :data:`TECHNICAL_COLUMNS` with ISO date strings. ``client`` is kept for
+    caller-signature stability and is never read. An unknown ticker returns the
+    empty latest/window (a missing ticker is not an outage).
     """
-    if r2_backend_enabled():
-        return _r2_price_technicals(ticker=ticker, lookback=lookback, as_of=as_of)
-    query = (
-        client.table("price_technicals").select(",".join(TECHNICAL_COLUMNS)).eq("ticker", ticker)
-    )
-    if as_of is not None:
-        query = query.lte("date", as_of.isoformat())
-    resp = query.order("date", desc=True).limit(lookback).execute()
-    rows = getattr(resp, "data", None) or []
-    return {"ticker": ticker, "latest": rows[0] if rows else {}, "window": rows}
+    return _r2_price_technicals(ticker=ticker, lookback=lookback, as_of=as_of)
 
 
 def _r2_price_technicals(*, ticker: str, lookback: int, as_of: date | None) -> dict[str, Any]:
-    """R2 branch of :func:`get_price_technicals` (see it for the contract)."""
+    """The sole :func:`get_price_technicals` read path (#4053; see it for the contract)."""
     from digiquant.mcp_server import _read_r2_window
 
     try:
@@ -394,6 +438,7 @@ def get_market_context(
             # first) — no bulk first-seen pass needed on this path.
         else:
             since = (run_date - timedelta(days=price_window_days)).isoformat()
+            # Retired: migration 127 drops price_technicals (#4053) — R2 only above.
             resp = (
                 client.table("price_technicals")
                 .select(",".join(("ticker", *TECHNICAL_COLUMNS)))
@@ -470,6 +515,7 @@ def get_market_breadth(
     rows: list[dict[str, Any]] = []
     start = 0
     while True:
+        # Retired: migration 127 drops price_technicals (#4053) — R2 only above.
         resp = (
             client.table("price_technicals")
             .select("ticker,date,pct_vs_sma50,pct_vs_sma200")
@@ -543,13 +589,23 @@ def get_sector_relative_strength(
         return {}
     since = (run_date - timedelta(days=lookback_days)).isoformat()
     if r2_backend_enabled():
-        rows = r2_close_rows(tickers=tickers, since=since, until=run_date)
+        # A dropped sector ETF just contributes nothing; a dropped *benchmark*
+        # makes compute_relative_strength return {} (its own missing-benchmark
+        # contract). {} is the right outcome here — the warning names it, and an
+        # unsealed benchmark must not abort the research graph (#4139).
+        rows = r2_close_rows_tolerant(
+            tickers=tickers,
+            since=since,
+            until=run_date,
+            context="sector relative strength",
+        )
         if not rows:
             return {}
         return compute_relative_strength(pl.DataFrame(rows), benchmark=benchmark, as_of=run_date)
     rows: list[dict[str, Any]] = []
     start = 0
     while True:
+        # Retired: migration 127 drops price_history (#4053) — R2 only above.
         resp = (
             client.table("price_history")
             .select("date,ticker,close")
@@ -626,6 +682,7 @@ def get_etf_flows_proxy(
     rows: list[dict[str, Any]] = []
     start = 0
     while True:
+        # Retired: migration 127 drops price_history (#4053) — R2 only above.
         resp = (
             client.table("price_history")
             .select("date,ticker,close,volume")
@@ -769,6 +826,7 @@ def get_return_correlations(
         frame = pairwise_return_correlations(pl.DataFrame(rows))
         return frame if not frame.is_empty() else None
     try:
+        # Retired: migration 127 drops price_history (#4053) — R2 only above.
         resp = (
             client.table("price_history")
             .select("date,ticker,close")

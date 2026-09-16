@@ -52,7 +52,10 @@ COPY config/byok-providers.json ./config/byok-providers.json
 RUN if [ -f digigraph/src/digigraph/tools/analytics/visualization/echarts/package-lock.json ]; then \
       cd digigraph/src/digigraph/tools/analytics/visualization/echarts && npm ci --omit=dev; \
     fi
-RUN uv pip install --system -e "./digigraph"
+# [mcp] extra: the remote-MCP client (orchestration/mcp_client.py) imports the
+# `mcp` package; without it every X-Digi-Mcp-Servers server fails with
+# "No module named 'mcp'". The stack-container image already ships it.
+RUN uv pip install --system -e "./digigraph[mcp]"
 
 EXPOSE 8000
 CMD ["uvicorn", "digigraph.server:app", "--host", "0.0.0.0", "--port", "8000"]

@@ -67,7 +67,7 @@ class ExaPageOutOfRangeError(ValueError):
 
 
 class WebSearchData(BaseModel):
-    """Orchestrator/MCP payload for a ``digisearch_web_search`` invoke."""
+    """Orchestrator payload for a ``digisearch_web_search`` invoke."""
 
     model_config = {"extra": "ignore"}
 

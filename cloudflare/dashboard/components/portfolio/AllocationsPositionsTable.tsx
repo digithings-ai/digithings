@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { ArrowUpRight } from 'lucide-react';
+import { gloomberbTickerUrl } from '@digithings/web';
 import { pnlColor } from '@/components/ui';
 import type { BookReconciliation } from '@/lib/book-reconciliation';
 import { formatQuoteAge, valuePosition, type Valuation } from '@/lib/live-valuation';
@@ -115,8 +116,28 @@ export default function AllocationsPositionsTable(props: {
                         }`}
                       >
                         <td className="max-w-[13rem] py-3 pl-2 pr-2 md:pl-4">
-                          <span className="block font-mono font-semibold text-ink">
-                            {p.ticker}
+                          <span className="flex items-center gap-1.5">
+                            <span className="font-mono font-semibold text-ink">{p.ticker}</span>
+                            {/*
+                              Gloomberb shortcut (#4193) — `tickerKey` is the uppercased
+                              symbol, so a lowercase book ticker still deep-links as the
+                              dossier link above does (helper: @digithings/web). A blank
+                              symbol renders no anchor: the helper would hand the terminal
+                              `?ticker=`, which silently falls back to its default symbol.
+                            */}
+                            {tickerKey.trim() ? (
+                              <a
+                                href={gloomberbTickerUrl(tickerKey)}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                data-testid={`gloomberb-link-${tickerKey}`}
+                                className="inline-flex items-center text-ink-mute hover:text-accent focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-accent/50"
+                                title={`Open ${p.ticker} in Gloomberb`}
+                                aria-label={`Open ${p.ticker} in Gloomberb (opens in a new tab)`}
+                              >
+                                <ArrowUpRight size={12} aria-hidden />
+                              </a>
+                            ) : null}
                           </span>
                           {p.name.trim().toUpperCase() !== p.ticker.trim().toUpperCase() ? (
                             <span

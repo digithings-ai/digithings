@@ -282,13 +282,26 @@ def test_real_markdown_file_chunking_matches_recorded_fingerprint() -> None:
     ledger notes, research-mode watch digests, effort-normalized spend scoring,
     and the re-measured anchor receipt pointer in ARCHITECTURE.md) — fixture
     prose only; RecursiveChunker unchanged.
+    Hashes only (count still 59) re-recorded for #4063 (hosted search.digithings.ai route note in the REST Endpoints section, including its auth-exempt-allowlist wording fix) — fixture prose only; RecursiveChunker unchanged.
+    Re-recorded at count 60 for #4106 (identity-aware rate limiting: the rate-limiting section,
+    the /v1/orchestrator_invoke entry, and two env-table rows in ARCHITECTURE.md) — fixture
+    prose only; RecursiveChunker unchanged.
+    Hashes only (count still 60) re-recorded for #4165 (orchestrator web_search recency_days
+    mapping note in ARCHITECTURE.md) — fixture prose only; RecursiveChunker unchanged.
+    Hashes only (count still 60) for the hosted-MCP docs pass: the digisearch MCP tool-table rows (digisearch_query -> semantic, digisearch_research_turn -> research_turn) and     the digiclaw attachment prose in ARCHITECTURE.md — fixture prose only.
+    Re-recorded at count 61 for #4246 (MCP tool-table naming corrections plus merged
+    develop prose in ARCHITECTURE.md) — fixture prose only; RecursiveChunker unchanged.
+    Re-recorded at count 115 for the promotion sync union (module/digisearch <- develop):
+    MCP tool-name absorption (`digisearch_web_search` -> `exa_web_search`,
+    `digisearch_research_turn` -> `research_turn`) plus conflict-resolution prose in
+    ARCHITECTURE.md — fixture prose only; RecursiveChunker unchanged.
     """
     arch_path = Path(__file__).resolve().parents[2] / "digisearch" / "ARCHITECTURE.md"
     content = arch_path.read_text(encoding="utf-8")
     doc = Document(id="arch", content=content, source=str(arch_path), doc_type="md")
     chunks = RecursiveChunker().chunk(doc)
 
-    assert len(chunks) == 114
+    assert len(chunks) == 115
     assert all(len(c.content) <= 2000 for c in chunks)
     hashes = [hashlib.sha256(c.content.encode()).hexdigest()[:16] for c in chunks]
     assert hashes == [
@@ -298,23 +311,23 @@ def test_real_markdown_file_chunking_matches_recorded_fingerprint() -> None:
         "cea76b9e90df056e",
         "6f61da3b9ed54d44",
         "5c87a98eae4b4c24",
-        "5c44b3a1c81aaae0",
+        "c2e2b64819e95c57",
         "5fc146dcd98ed469",
         "6bb725ee96409565",
         "2496b0331a6908ca",
         "e7597b9d03630def",
-        "3280ddb5f7ce73ee",
-        "71c75006a73bbb9b",
-        "0035aa02c8d4c789",
+        "cc37bd8b485e1402",
+        "a08f56ac9059ac1b",
+        "a06a6367c5f045a2",
         "b959e75c8c4b124a",
         "a94797156eb57efd",
         "58efb49707626f90",
         "cd6a3f2ea2f1a0d0",
         "7e8464fe6a6cc067",
-        "805b4f2eb13bd3fd",
-        "9e59c09159a62591",
-        "1103ffe080b90ed4",
-        "a18beb19efb240aa",
+        "461131751799a611",
+        "f2ac9438877a85b7",
+        "4523b0e9d213163a",
+        "3850f4956a4c3be9",
         "7973399b6e155051",
         "e0ed75d4b266835e",
         "5e1cdcae7ee033f5",
@@ -342,9 +355,9 @@ def test_real_markdown_file_chunking_matches_recorded_fingerprint() -> None:
         "6de35d68bea0e990",
         "c5776a6b47ee3e04",
         "3aed1b59bbde9920",
-        "cd75df0bdf136bd3",
-        "5236bbbddc296b54",
-        "0221d840d8073811",
+        "4ab2c79477f613db",
+        "bce989da61996c0f",
+        "02e5c79864269cd2",
         "f5694c994b90e40c",
         "2f102978f3f92316",
         "d201d5cef8605cdf",
@@ -377,16 +390,17 @@ def test_real_markdown_file_chunking_matches_recorded_fingerprint() -> None:
         "66ce13f7ba2fafdc",
         "26ca223dcbe8b403",
         "ac5eea8b8b2f7820",
-        "5aea3310a60020c2",
-        "2df16a717e45cd20",
-        "c01731fed9b486f9",
-        "ae1e6da2f77138e0",
-        "c945e162a543358e",
-        "96c4e4c20cd1b0a1",
-        "79e1479908a647a2",
-        "5881d77c9811fa5d",
-        "4e43fa537ada9659",
-        "f86cd7836b6e8e7e",
+        "d3566df46fb1e726",
+        "c0e9eb6706ab60cc",
+        "676a486feb21ee54",
+        "c68c6371a8457ff8",
+        "112fe01c18768a54",
+        "cdf4f0c7a56c56e7",
+        "8200c214c753f6dd",
+        "2c221fc487c50f69",
+        "a261a5a8ca75360c",
+        "473965a9eeeb864d",
+        "70c3d41e152ffa11",
         "81d310410772fb3e",
         "5e6a02ac4bf32f0f",
         "e8874754e8823dbd",
@@ -395,11 +409,11 @@ def test_real_markdown_file_chunking_matches_recorded_fingerprint() -> None:
         "9496728548f7cd2a",
         "3a05c94596483aed",
         "0f567a2b684efdf4",
-        "fae259f9afca4fea",
+        "5668e90c11bf9127",
         "05bb8905105bc94e",
         "d922a9899a8996a2",
-        "a6cd8423606c58f1",
-        "482754fb154988ce",
+        "166b840aa01714e1",
+        "6ffeafba73e75348",
         "79ae674b8661ea64",
         "fc586dc7c2348d1e",
         "ac8dbe83a57bf4f4",

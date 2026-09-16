@@ -1,10 +1,17 @@
-"""Supabase upsert helpers for price_history / price_technicals / macro_series_observations.
+"""Supabase upsert helpers for price_history / price_technicals / macro_series_observations
+/ fx_intraday_observations.
+
+Migration 127 drops ``price_history`` / ``price_technicals`` (#4053): the two
+price helpers below are retained only as the flag-off body and cannot succeed
+against the post-drop schema. ``macro_series_observations`` stays, and
+``fx_intraday_observations`` (migration 130) is the twelve-x grading feed.
 
 Preserves the column contracts research still reads:
 
 * ``price_history`` — ``{date, ticker, open, high, low, close, volume}``
 * ``price_technicals`` — ``{date, ticker, <TECHNICAL_COLUMNS>}``
 * ``macro_series_observations`` — ``{source, series_id, obs_date, value, unit, meta?}``
+* ``fx_intraday_observations`` — ``{source, series_id, interval, ts, open, high, low, close}``
 
 All audit payloads are passed through
 :func:`digibase.audit.redact_mapping` before being emitted (per CLAUDE.md).
@@ -194,6 +201,36 @@ def upsert_macro_observations(
     return UpsertResult(table="macro_series_observations", rows=total)
 
 
+def upsert_fx_intraday_observations(
+    client: SupabaseLike,
+    rows: list[dict[str, Any]],
+    *,
+    chunk: int = DEFAULT_CHUNK,
+) -> UpsertResult:
+    """Upsert intraday FX candles on ``(source, series_id, interval, ts)``.
+
+    ``interval`` is the yfinance bar length ('1h', '5m', …) and is part of the
+    key because coarser and finer bars share their :00 opens — a 5m upsert must
+    not overwrite the 1h candle at the same ``ts``. Yahoo re-serves the trailing
+    partial candle on every refresh, so re-running the writer replaces the same
+    key's OHLC with the settled values instead of accumulating duplicates.
+    """
+    if not rows:
+        return UpsertResult(table="fx_intraday_observations", rows=0)
+    total = 0
+    for batch in _chunks(rows, chunk):
+        _call_with_retry(
+            lambda b=batch: (
+                client.table("fx_intraday_observations")
+                .upsert(b, on_conflict="source,series_id,interval,ts")
+                .execute()
+            )
+        )
+        total += len(batch)
+    _emit_audit("fx_intraday_observations", total)
+    return UpsertResult(table="fx_intraday_observations", rows=total)
+
+
 def _emit_audit(table: str, rows: int) -> None:
     """Redacted audit record hook — structured for downstream log sinks.
 
@@ -220,6 +257,7 @@ __all__ = [
     "build_supabase_client",
     "ohlcv_to_price_history_rows",
     "technicals_to_rows",
+    "upsert_fx_intraday_observations",
     "upsert_instruments",
     "upsert_macro_observations",
     "upsert_price_history",

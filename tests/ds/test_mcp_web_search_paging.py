@@ -1,4 +1,4 @@
-"""Paging on the shallow recall path: ``digisearch_web_search`` (#4234, #4241).
+"""Paging on the shallow recall path: ``exa_web_search`` (#4234, #4241).
 
 EXA ``POST /search`` has no offset parameter and caps ``numResults`` upstream
 (the 1-100 bound pinned by ``monitors/models.py`` / #4123), so paging is a
@@ -50,7 +50,7 @@ def _exa(monkeypatch):
 def test_tool_is_registered_with_offset(_exa):
     pytest.importorskip("mcp.server.fastmcp")
     tool = next(
-        t for t in mcp_server.mcp._tool_manager.list_tools() if t.name == "digisearch_web_search"
+        t for t in mcp_server.mcp._tool_manager.list_tools() if t.name == "exa_web_search"
     )
     assert "offset" in tool.parameters["properties"]
 
@@ -58,7 +58,7 @@ def test_tool_is_registered_with_offset(_exa):
 def test_default_call_output_is_byte_identical(_exa, monkeypatch):
     seen: dict = {}
     _patch_exa_post(monkeypatch, _page_results(8), seen)
-    output = mcp_server.digisearch_web_search("blog post about AI")
+    output = mcp_server.exa_web_search("blog post about AI")
     expected = web_exa.format_web_results(web_exa.exa_search("blog post about AI"))
     assert output == expected
     assert seen["payloads"][0] == seen["payloads"][1]
@@ -69,8 +69,8 @@ def test_default_call_output_is_byte_identical(_exa, monkeypatch):
 def test_page2_is_deterministic_and_non_overlapping(_exa, monkeypatch):
     seen: dict = {}
     _patch_exa_post(monkeypatch, _page_results(16), seen)
-    page1 = mcp_server.digisearch_web_search("q", num_results=8)
-    page2 = mcp_server.digisearch_web_search("q", num_results=8, offset=8)
+    page1 = mcp_server.exa_web_search("q", num_results=8)
+    page2 = mcp_server.exa_web_search("q", num_results=8, offset=8)
     for i in range(1, 9):
         assert page1.count(f"https://example.com/{i}\n") == 1
         assert f"https://example.com/{i}\n" not in page2
@@ -83,7 +83,7 @@ def test_page2_is_deterministic_and_non_overlapping(_exa, monkeypatch):
 def test_page_past_the_cap_is_an_explicit_error(_exa, monkeypatch):
     seen: dict = {}
     _patch_exa_post(monkeypatch, _page_results(100), seen)
-    out = mcp_server.digisearch_web_search("q", num_results=8, offset=100)
+    out = mcp_server.exa_web_search("q", num_results=8, offset=100)
     assert out.startswith("[digisearch web search error:")
     assert "off" in out and "100" in out
     assert "payloads" not in seen
@@ -92,7 +92,7 @@ def test_page_past_the_cap_is_an_explicit_error(_exa, monkeypatch):
 def test_window_clipped_by_the_cap_errors_before_any_post(_exa, monkeypatch):
     seen: dict = {}
     _patch_exa_post(monkeypatch, _page_results(100), seen)
-    out = mcp_server.digisearch_web_search("q", num_results=8, offset=95)
+    out = mcp_server.exa_web_search("q", num_results=8, offset=95)
     assert out.startswith("[digisearch web search error:")
     assert "cap" in out
     assert "payloads" not in seen
@@ -101,7 +101,7 @@ def test_window_clipped_by_the_cap_errors_before_any_post(_exa, monkeypatch):
 def test_empty_page_past_the_result_count_is_explicit(_exa, monkeypatch):
     seen: dict = {}
     _patch_exa_post(monkeypatch, _page_results(3), seen)
-    out = mcp_server.digisearch_web_search("q", num_results=8, offset=8)
+    out = mcp_server.exa_web_search("q", num_results=8, offset=8)
     assert "offset 8" in out
     assert "No EXA results found" not in out  # generic message reserved for the unpaged call
 
@@ -122,7 +122,7 @@ def test_http_page2_matches_mcp_page2(_exa, monkeypatch):
     )
     assert resp.status_code == 200, resp.text
     http_urls = [r["url"] for r in resp.json()["results"]]
-    out = mcp_server.digisearch_web_search("q", num_results=8, offset=8)
+    out = mcp_server.exa_web_search("q", num_results=8, offset=8)
     assert http_urls == [f"https://example.com/{i}" for i in range(9, 17)]
     for url in http_urls:
         assert f"{url}\n" in out

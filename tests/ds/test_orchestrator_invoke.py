@@ -363,6 +363,55 @@ def test_orchestrator_invoke_web_search_coerces_int_like(
 
 
 @pytest.mark.unit
+def test_orchestrator_invoke_web_search_forwards_recency_days(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A hub-supplied ``recency_days`` must reach the request, not fall back to 7 (#4165)."""
+    seen = _fake_web_search_run(monkeypatch)
+    r = client.post(
+        "/v1/orchestrator_invoke",
+        json={"tool": "web_search", "arguments": {"query": "etf flows", "recency_days": 30}},
+    )
+    assert r.status_code == 200
+    assert r.json().get("ok") is True
+    assert seen and seen[0].recency_days == 30
+
+
+@pytest.mark.unit
+def test_orchestrator_invoke_web_search_defaults_recency_days_when_omitted(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    seen = _fake_web_search_run(monkeypatch)
+    r = client.post(
+        "/v1/orchestrator_invoke",
+        json={"tool": "web_search", "arguments": {"query": "etf flows"}},
+    )
+    assert r.status_code == 200
+    assert r.json().get("ok") is True
+    assert seen and seen[0].recency_days == 7
+
+
+@pytest.mark.unit
+def test_orchestrator_invoke_web_search_rejects_bad_recency_days(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    seen = _fake_web_search_run(monkeypatch)
+    for bad in (0, 400, "garbage"):
+        r = client.post(
+            "/v1/orchestrator_invoke",
+            json={
+                "tool": "web_search",
+                "arguments": {"query": "etf flows", "recency_days": bad},
+            },
+        )
+        assert r.status_code == 200, bad
+        body = r.json()
+        assert body.get("ok") is False, bad
+        assert "recency_days" in (body.get("error") or ""), bad
+    assert seen == []
+
+
+@pytest.mark.unit
 def test_orchestrator_invoke_web_search_rejects_bad_max_results(
     client: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:

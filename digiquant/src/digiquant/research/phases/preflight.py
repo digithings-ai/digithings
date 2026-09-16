@@ -162,6 +162,7 @@ def _refresh_stale_technicals(
             "(DIGIQUANT_MARKET_DATA_BACKEND=r2 owns freshness via R2)"
         )
         return False
+    # Retired: migration 127 drops price_technicals (#4053) — flag-off write path only.
     tickers = list(config.watchlist)
     if not tickers:
         return False

@@ -1,10 +1,10 @@
-"""R2 market-data reads for the NAV replay price fetch (#4013, Phase A Task 4).
+"""R2-only market reads for the NAV replay price fetch (#4053 Task 4).
 
-``verify_nav_replay._fetch_price_rows`` returns sealed R2 OHLCV rows when
-``DIGIQUANT_MARKET_DATA_BACKEND=r2`` and keeps the #3990 unscoped Supabase
-keyset fetch (``workspace_scoped=False`` + ``tickers``) otherwise. The rows
-flow through the same ``_rows_from_inception`` clip and row-dict shape the
-#3995 envelope repair and #4002 grid alignment consume.
+``verify_nav_replay._fetch_price_rows`` returns sealed R2 OHLCV rows — the
+R2 seam is the sole path, and the retired ``DIGIQUANT_MARKET_DATA_BACKEND``
+flag cannot divert it. The rows flow through the same ``_rows_from_inception``
+clip and row-dict shape the #3995 envelope repair and #4002 grid alignment
+consume.
 
 Loaded via ``importlib.util`` like the other script-level tests
 (``digiquant/scripts/`` is not an installed package).
@@ -40,7 +40,7 @@ def _load(name: str, filename: str) -> Any:
 vnr = _load("verify_nav_replay_r2", "verify_nav_replay.py")
 
 
-def test_price_rows_come_from_r2_when_enabled(r2_market) -> None:
+def test_price_rows_come_from_r2(r2_market) -> None:
     r2_market(
         {
             "GLD": [
@@ -60,7 +60,8 @@ def test_price_rows_come_from_r2_when_enabled(r2_market) -> None:
     assert rows and rows[0]["ticker"] == "GLD" and rows[0]["close"] is not None
 
 
-def test_price_rows_fall_back_to_supabase_when_disabled(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_price_rows_ignore_the_retired_backend_flag(monkeypatch: pytest.MonkeyPatch) -> None:
+    """With the flag off the fetcher still reads the R2 seam — no Supabase fallback (#4053)."""
     monkeypatch.setenv("DIGIQUANT_MARKET_DATA_BACKEND", "supabase")
     calls: list[tuple] = []
 
@@ -78,19 +79,17 @@ def test_price_rows_fall_back_to_supabase_when_disabled(monkeypatch: pytest.Monk
             }
         ]
 
-    monkeypatch.setattr(vnr, "_fetch_table", fake_fetch)
+    monkeypatch.setattr("digiquant.research.data.queries.r2_ohlcv_rows", fake_fetch)
     rows = vnr._fetch_price_rows(object(), "house-id", ["GLD"], date(2026, 9, 1))
-    assert rows and calls and calls[0][0][1] == "price_history"
+    assert rows and calls and calls[0][1]["tickers"] == ["GLD"]
 
 
 def test_price_rows_accept_the_iso_inception_main_passes(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """``main()`` hands over ``args.inception_date`` (an ISO string), not a ``date``."""
-    monkeypatch.setenv("DIGIQUANT_MARKET_DATA_BACKEND", "supabase")
     monkeypatch.setattr(
-        vnr,
-        "_fetch_table",
+        "digiquant.research.data.queries.r2_ohlcv_rows",
         lambda *args, **kwargs: [
             {"date": "2026-06-23", "ticker": "OLD", "close": 1},
             {"date": "2026-07-17", "ticker": "GLD", "close": 2},

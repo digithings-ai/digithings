@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { m, useReducedMotion } from "motion/react";
+import { Button } from "@digithings/web/ui";
 import { modules } from "@digithings/web";
 
 /**
@@ -16,6 +17,8 @@ import { modules } from "@digithings/web";
  * disagreed with both of those. The displayed hex value is read from the
  * live --accent-<module> custom property rather than a hardcoded literal, so
  * it can never drift from tokens.css.
+ *
+ * Wave 1: the preview actions are the stock kit Button — default and ghost.
  */
 const LIVERIES = modules
   .filter((mod) => mod.tier !== "roadmap")
@@ -79,12 +82,10 @@ export function LiverySwitcher() {
           <span className="font-mono text-[0.68rem] uppercase tracking-[0.08em] text-ink-mute">{activeLivery.label} / accent</span>
           <span className="font-mono text-[0.9rem] text-accent">{activeHex}</span>
           <div className="flex w-full items-center gap-[0.6rem]">
-            <button type="button" className="btn-primary">
-              Primary action
-            </button>
-            <button type="button" className="btn-ghost">
+            <Button type="button">Primary action</Button>
+            <Button type="button" variant="ghost">
               Secondary
-            </button>
+            </Button>
             <span className="livery-preview-pulse" aria-hidden="true" />
           </div>
         </m.div>

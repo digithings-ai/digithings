@@ -166,6 +166,13 @@ As of the March 2026 codebase snapshot, the following modules are implemented an
 ### REST Endpoints
 
 All paths under the FastAPI app in `server.py`. Base URL: `http://digisearch:8002`.
+Hosted: the same server is reachable publicly as `https://search.digithings.ai`
+via the `cloudflare/digithings-stack-cloudflare` Worker (#4063 — new external
+route, owner-approved for CI web grounding). Auth is unchanged: every route
+outside the shared `_PUBLIC_PATHS` allowlist — `/health`, `/healthz`, `/metrics`,
+`/docs`, `/redoc`, `/openapi.json` — requires a digikey JWT via `DigiAuthMiddleware`
+(`digisearch:query`, or `digisearch:ingest` for `/ingest`); OPTIONS preflights are
+auth-exempt (CORS is enforced separately).
 
 #### `GET /health` and `GET /healthz`
 
@@ -310,7 +317,7 @@ are wired as three parts (R12): the `TOOL_DIGISEARCH_WEBSETS_*` constants +
 
 #### `POST /v1/orchestrator_invoke`
 
-Auth required (`digisearch:query` scope). Rate limited: 10 req/min.
+Auth required (`digisearch:query` scope). Rate limited: 10 req/min per IP; token-bearing callers get 6× on their own token with a 6× per-IP ceiling (`DIGISEARCH_AUTH_RATE_LIMIT_MULTIPLIER` / `DIGISEARCH_IP_CEILING_MULTIPLIER`, #4106).
 
 Dispatches one named tool: `digisearch`, `digisearch_fetch_all`, `digisearch_research_delegate`, `web_search`, or the monitor/webset tools above. The hub calls this to execute search without importing digisearch Python code directly. Webset dispatch failures are `ok=false` with the stable code in `error` (`code: message`) — never a 4xx — so a missing webset or invalid criteria stays readable to the hub.
 
@@ -331,7 +338,7 @@ synthesis-model traffic on web-grounded segments" policy remains in force for
 every existing caller (including the digigraph delegate default); it is
 **superseded only for explicitly requested web turns** (R5). No new port and
 no new service: the branch rides `POST /v1/research_turn`, MCP
-`digisearch_research_turn` (`source`/`effort` only — `output_schema` is
+`research_turn` (`source`/`effort` only — `output_schema` is
 deferred, R7) and the orchestrator `digisearch_research_delegate` manifest
 (`source`/`effort`/`output_schema`).
 
@@ -462,7 +469,7 @@ prerequisites absent in this env):
 
 Auth required (`digisearch:query` scope via the default `digisearch_path_scopes` fallthrough). Rate limited: 30 req/min (default bucket).
 
-Proprietary web search (#3853). Request `WebSearchRequest {query, include_domains (max 5), exclude_domains (max 20), max_results (1–10, default 4), recency_days (1–365, default 7; mapped onto provider recency filters — searxng day/month/year with a week mapping to month — omitted when null)}`; response `WebSearchResponse {query, results [{url, title, snippet, score, engine}], provider}`. `run_web_search` tries the searxng sidecar first, fails over to embedded ddgs (`DIGISEARCH_WEB_SEARCH_BACKEND=auto|searxng|ddgs`, sidecar URL from `DIGISEARCH_SEARXNG_URL`), then enriches up to `fetch_max_pages` (default 3) hits by fetching via composed digifetch (`HttpFetcher` + `with_retry` + `RateLimiter`) and extracting markdown (trafilatura primary with `favor_precision` + `deduplicate`, readability fallback). The fetch is SSRF-guarded by digifetch (#3934): http/https only, internal/metadata addresses refused, and every redirect hop re-validated (no auto-follow) with the operator `DIGISEARCH_FETCH_ALLOWED_HOSTS` allowlist as the explicit escape hatch. Fetch/extract failures keep the original search snippet — enrichment never fails the response. Provider failures (429 / 5xx / connection / timeout) are soft in-envelope errors (#4192): HTTP 200 `WebSearchErrorResponse {ok: false, error, retryable, status_code}` (`status_code` null when the provider exposed none; a ddgs rate limit maps to 429) — never a 500. `retryable`/`status_code` surface throttling distinctly so callers can back off; the orchestrator `web_search` tool mirrors the same hints on `OrchestratorInvokeResponse`. No new port: served by the existing digisearch HTTP app.
+Proprietary web search (#3853). Request `WebSearchRequest {query, include_domains (max 5), exclude_domains (max 20), max_results (1–10, default 4), recency_days (1–365, default 7; mapped onto provider recency filters — searxng day/month/year with a week mapping to month — omitted when null)}`; response `WebSearchResponse {query, results [{url, title, snippet, score, engine}], provider}`. The orchestrator `web_search` invoke maps its `arguments` onto the same model field-for-field — including `recency_days`, which is omitted when the caller does not set it so the default window stays in force, and rejected as `ok: false` naming the field when out of range (#4165). `run_web_search` tries the searxng sidecar first, fails over to embedded ddgs (`DIGISEARCH_WEB_SEARCH_BACKEND=auto|searxng|ddgs`, sidecar URL from `DIGISEARCH_SEARXNG_URL`), then enriches up to `fetch_max_pages` (default 3) hits by fetching via composed digifetch (`HttpFetcher` + `with_retry` + `RateLimiter`) and extracting markdown (trafilatura primary with `favor_precision` + `deduplicate`, readability fallback). The fetch is SSRF-guarded by digifetch (#3934): http/https only, internal/metadata addresses refused, and every redirect hop re-validated (no auto-follow) with the operator `DIGISEARCH_FETCH_ALLOWED_HOSTS` allowlist as the explicit escape hatch. Fetch/extract failures keep the original search snippet — enrichment never fails the response. Provider failures (429 / 5xx / connection / timeout) are soft in-envelope errors (#4192): HTTP 200 `WebSearchErrorResponse {ok: false, error, retryable, status_code}` (`status_code` null when the provider exposed none; a ddgs rate limit maps to 429) — never a 500. `retryable`/`status_code` surface throttling distinctly so callers can back off; the orchestrator `web_search` tool mirrors the same hints on `OrchestratorInvokeResponse`. No new port: served by the existing digisearch HTTP app.
 
 #### Optional EXA live web search (`digisearch/web_exa.py`)
 
@@ -477,7 +484,7 @@ default:** every entry point fails closed without `EXA_API_KEY` (503 / disabled 
 | `POST /v1/web_contents` | Known-URL fetch (`text`/`highlights`/`summary`) |
 | `POST /v1/web_answer` | Grounded answer with citations |
 | Orchestrator `digisearch_web_search` | Advertised in the manifest only when `EXA_API_KEY` is set; dispatched via `POST /v1/orchestrator_invoke`. `offset` is in the manifest schema and forwarded by the invoke branch; an out-of-range page is `ok:false` carrying the explicit cap error, never a truncated page (#4241) |
-| MCP `digisearch_web_search` | `query`, `search_type`, `num_results`, `category`, `offset` → formatted text. `offset` pages the recall set (client-side slice of one enlarged window, `numResults = offset + num_results`, because EXA `POST /search` has no offset); cap `EXA_MAX_RESULTS` = 100 pinned by the monitors 1-100 bound; a page reaching past the cap errors explicitly (never a silent truncated page) and a page past the query's result count returns an explicit empty page (#4234) |
+| MCP `exa_web_search` | `query`, `search_type`, `num_results`, `category`, `offset` → formatted text. `offset` pages the recall set (client-side slice of one enlarged window, `numResults = offset + num_results`, because EXA `POST /search` has no offset); cap `EXA_MAX_RESULTS` = 100 pinned by the monitors 1-100 bound; a page reaching past the cap errors explicitly (never a silent truncated page) and a page past the query's result count returns an explicit empty page (#4234) |
 
 Auth: same `digisearch:query` scope via `DigiAuthMiddleware` (default path rule; no digikey change).
 
@@ -505,8 +512,10 @@ All routes below are auth-gated through the local `_digisearch_path_scopes`
 wrapper, which delegates everything except the webhook back to the landed
 `digisearch_path_scopes` — the monitor paths hit its `digisearch:query`
 fallthrough, so CRUD is **not** `digisearch:ingest` (R1, no digikey change).
-Rate limits are per-IP (R10): CRUD and runs 30/min, trigger / tick / exa_webhook
-10/min.
+Rate limits follow the platform identity-aware limiter (#4106; R10): anonymous
+callers are keyed per IP — CRUD and runs 30/min, trigger / tick / exa_webhook
+10/min — while bearer-token callers get the 6x token budget and 6x per-IP
+ceiling (`DIGISEARCH_AUTH_RATE_LIMIT_MULTIPLIER` / `DIGISEARCH_IP_CEILING_MULTIPLIER`).
 
 | Method + path | Success | Error codes | Notes |
 |----------------|---------|-------------|-------|
@@ -900,10 +909,11 @@ MCP server runs on port 8765 via `FastMCP` (`mcp_server.py`). Transport: streama
 
 | Tool | Description | Optional |
 |------|-------------|----------|
-| `digisearch_query` | Search documents; returns formatted string of hits with score and content preview | No |
+| `semantic` | Semantic search over documents; returns formatted hits with score and content preview | No |
 | `web_search` | Search the public web; returns JSON `WebSearchResponse` (#3853) | Yes (`digisearch[web-search]`) |
-| `digisearch_research_turn` | Composite research turn (plan → retrieve → aggregate, or the #4064 web branch with `source=web\|auto`) with citations; `source`/`effort` passthrough (`output_schema` deferred, R7) | Yes (`digisearch[agent]`) |
-| `digisearch_web_search` | Live web search via EXA; disabled message without `EXA_API_KEY` | Yes (`EXA_API_KEY`) |
+| `search_strategies` | Filtered semantic search over the research library | No |
+| `research_turn` | Composite research turn (plan → retrieve → aggregate, or the #4064 web branch with `source=web\|auto`) with citations; `source`/`effort` passthrough (`output_schema` deferred, R7) | Yes (`digisearch[agent]`) |
+| `exa_web_search` | Live web search via EXA; disabled message without `EXA_API_KEY` | Yes (`EXA_API_KEY`) |
 | `monitors_create_watch` | Create a scheduled web-search watch (`schedule_cron` or `interval_seconds` ≥ 60; cron wins when both); returns `{watch, delivery_secret}` JSON — the secret appears here only | No |
 | `monitors_list_watches` | List watches newest-updated first as `{"watches": [...]}` JSON | No |
 | `monitors_trigger_watch` | Run one watch turn now (`mode` `manual`\|`poll`); returns the JSON `MonitorRun`, failed turns included | No |
@@ -934,7 +944,13 @@ process (#4170) — one reference-counted per-process install shared by
 concurrent streamable-http MCP client sessions (stdio: the process), torn down
 on the last exit (#4189). See § Phase D websets for the async lifecycle.
 
-Tool parameters for `digisearch_query`: `text`, `index_name`, `top_k`, `mode`.
+These are the names the MCP server advertises. digigraph prefixes the operator
+server id (`{id}_{tool}`, `mcp_client.prefixed_tool_name`), so the model calls
+`digisearch_semantic`, `digisearch_web_search`, `digisearch_search_strategies`,
+and `digisearch_research_turn` — plus `digisearch_exa_web_search` and the
+`digisearch_monitors_*` / `digisearch_websets_*` families from the Phase C/D surfaces.
+
+Tool parameters for `semantic`: `text`, `index_name`, `top_k`, `mode`.
 
 The `digisearch mcp` CLI builds a real `DigiSearch` client first
 (`DigiSearchConfig.from_config` when `--config` is passed, else
@@ -1653,7 +1669,7 @@ When `workspace_id` is set on `POST /query`, the server injects a mandatory stru
 
 Callers omitting `workspace_id` receive unscoped results (single-tenant default). Multi-tenant deployments should require `workspace_id` at the BFF layer.
 
-The research path is scoped the same way (#3909): `POST /v1/research_turn`, the `digisearch_research_delegate` orchestrator tool, and the `digisearch_research_turn` MCP tool all accept `workspace_id`, carry it on `ResearchTurnState`, and inject the mandatory `workspace_id eq …` clause in the retrieve step.
+The research path is scoped the same way (#3909): `POST /v1/research_turn`, the `digisearch_research_delegate` orchestrator tool, and the `research_turn` MCP tool all accept `workspace_id`, carry it on `ResearchTurnState`, and inject the mandatory `workspace_id eq …` clause in the retrieve step.
 
 ### Filter injection risks
 
@@ -1681,7 +1697,9 @@ CORS is installed via the shared `digibase.cors.install_cors(app, service="digis
 
 ### Rate limiting
 
-Per-IP rate limiting is implemented in-process (not via a proxy). The limiter uses `threading.Lock` and `collections.deque` — correct for sync workers but not robust under async or multi-process deployments. IP extraction respects `X-Forwarded-For` but does not validate the hop count, which means a caller can supply a fake IP in `X-Forwarded-For` to bypass per-IP limits.
+Limiting is implemented in-process (not via a proxy). The limiter uses `threading.Lock` and `collections.deque` — correct for sync workers but not robust under async or multi-process deployments. IP extraction respects `X-Forwarded-For` but does not validate the hop count, which means a caller can supply a fake IP in `X-Forwarded-For` to bypass per-IP limits.
+
+The limiter is registered so that it runs **before** `DigiAuthMiddleware` (the correlation-id middleware wraps both) and keys anonymous requests on the client IP. A caller presenting a bearer token is budgeted on that token instead (`tok:<sha256[:16]>`, never the raw credential), at `DIGISEARCH_AUTH_RATE_LIMIT_MULTIPLIER`× the path budget, on top of a coarse per-IP ceiling of `DIGISEARCH_IP_CEILING_MULTIPLIER`× the path budget on its own `ipceil:` counter — so a client rotating tokens is capped at one token's budget per IP without consuming the anonymous budget. A header-bearing client is therefore admitted 6× as often as an anonymous one (10 → 60 req/60 s on `/v1/orchestrator_invoke`) before auth rejects it; those requests still fail auth, so this bounds work rather than granting access. This exists because the daily digiquant book run grounds every research segment from one GitHub-runner IP through `POST /v1/orchestrator_invoke`; the shared 10 req/60 s IP bucket 429'd mid-run and digigraph collapsed the 429 into "web_search returned no rows", failing the book three times (#4106).
 
 ---
 
@@ -1801,9 +1819,9 @@ The contract is versioned by `{"tools": [...], "version": 1}` in the tools respo
 
 ### digiclaw MCP attachment
 
-digiclaw may attach to the digisearch MCP server at `http://127.0.0.1:8765/mcp` (loopback, `digisearch-mcp` Docker profile). Tools available: `digisearch_query`, `web_search` (when `[web-search]` is installed), `digisearch_research_turn` (when `[agent]` is installed).
+digiclaw may attach to the digisearch MCP server at `http://127.0.0.1:8765/mcp` (loopback in standalone/Docker profiles; in the Cloudflare stack the process binds 0.0.0.0 and is reachable only through the key-gated `/_stack/mcp/digisearch/*` edge route). Tools available: `semantic`, `web_search` (when `[web-search]` is installed), `search_strategies`, `research_turn` (when `[agent]` is installed), plus `exa_web_search` (with `EXA_API_KEY`) and the `monitors_*` / `websets_*` chat surfaces (§ MCP Tools). digigraph sees the same tools prefixed as `digisearch_semantic`, `digisearch_web_search`, `digisearch_search_strategies`, and `digisearch_research_turn` — plus `digisearch_exa_web_search` and the `digisearch_monitors_*` / `digisearch_websets_*` families (`{id}_{tool}`).
 
-MCP clients (Langflow, IDE tools) attach to the same server. There is no per-client auth on the MCP server itself — access control is purely at network level (loopback binding).
+MCP clients (Langflow, IDE tools) attach to the same server. There is no per-client auth on the MCP server itself — access control is at network level (loopback binding, or the secret-gated edge route in the stack).
 
 ### digiclaw monitor tick (#4065)
 
@@ -1979,6 +1997,8 @@ Live verification record (2026-09-11, #3859 Task 10 — honest not-measured + wh
 | `COHERE_API_KEY` | _(unset)_ | Cohere key for CohereEmbedder / CohereReranker |
 | `DIGI_CORS_ORIGINS` / `DIGISEARCH_CORS_ORIGINS` | (empty) | Comma-separated CORS allowed origins; legacy `DIGI_ALLOWED_ORIGINS` still honored |
 | `DIGI_DISABLE_RATE_LIMIT` | `0` | Disable per-IP rate limiting (testing) |
+| `DIGISEARCH_AUTH_RATE_LIMIT_MULTIPLIER` | `6` | Multiple of a path's budget granted to a caller presenting a bearer token, keyed on the token (#4106) |
+| `DIGISEARCH_IP_CEILING_MULTIPLIER` | `6` | Coarse per-IP ceiling for token-bearing traffic, as a multiple of the path budget, on its own counter (#4106) |
 | `DIGIKEY_JWKS_URL` | _(required)_ | digikey JWKS endpoint for JWT validation |
 | `DIGIKEY_ISSUER` | _(required)_ | JWT issuer |
 | `DIGIKEY_AUDIENCE` | _(required)_ | JWT audience |
@@ -2046,7 +2066,7 @@ In the current implementation, `_digisearch_client` is only set by calling `crea
 
 The `digisearch[agent]` optional extra installs `langgraph` and enables:
 
-- `digisearch_research_turn` MCP tool
+- `research_turn` MCP tool
 - `digisearch_research_delegate` orchestrator tool
 - `POST /v1/research_turn` REST endpoint
 - The `agent/pipeline.py` LangGraph: `plan → retrieve → aggregate` (corpus) and `plan → web_retrieve → web_aggregate` (Phase B web branch, `source=web|auto`; #4064)
@@ -2064,7 +2084,7 @@ The corpus graph is still minimal: `node_plan` validates input, `node_retrieve` 
 - **Vectorize:** `VectorizeBackend.query()` raises `VectorizeBackendError` when filters / `workspace_id` are present (#2219 fail-loud). Full fix: translate `Query.filters` into Vectorize metadata `filter`, register filterable fields as metadata indexes at index creation, or keep routing to a per-workspace index and omit filters
 - **Stub:** filter post-retrieval by `chunk.metadata.get("workspace_id")`
 
-The research path (`POST /v1/research_turn`, orchestrator `digisearch_research_delegate`, MCP `digisearch_research_turn`) applies the same server-side `workspace_id` injection as `POST /query` (#3909).
+The research path (`POST /v1/research_turn`, orchestrator `digisearch_research_delegate`, MCP `research_turn`) applies the same server-side `workspace_id` injection as `POST /query` (#3909).
 
 Without this, `workspace_id` is decorative on backends that neither filter nor fail closed.
 

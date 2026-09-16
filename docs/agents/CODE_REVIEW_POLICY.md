@@ -36,6 +36,24 @@ Cursor slugs). Quality of fit first; cost second; latency never overrides either
 
 Do not run every lens at opus on a tiny diff. Do not leave review `model` unset under an expensive orchestrator (inheritance tax).
 
+## Severity is blast radius
+
+Grade a finding by what breaks when it fires — not by diff size, and not by how confident the reviewer is that it *will* fire.
+
+This grades a **finding**, not Cursor's Low/Medium/High risk label and not the retired `risk:*` family ([AGENTS.md § Review coverage](../../AGENTS.md#review-coverage-the-gate-before-production) explains why that axis is unreliable; the coverage gate stays path-based).
+
+**A boot path has no fallback, so a defect there is blocking at any size.** Treat these as blocking — never Low, Nit, or Medium:
+
+- an unguarded command under `set -e` / `set -eu` in a container entrypoint or PID-1 script **before** `exec` — one failing redirect aborts startup, PID 1 exits, and every endpoint 503s
+- a startup check that can refuse to start a service (`create_engine`, config validation, a required env var)
+- anything that turns a served endpoint into a crash loop
+
+A failed best-effort feature is Low; a failed `exec` is the whole instance. (#4149: a `/etc/hosts` write in the stack entrypoint was reviewed as **Low**, shipped, and took digikey — and therefore every pipeline run — down for 25 minutes.)
+
+**"Could not verify" never lowers severity.** State plainly what you could not exercise, and keep the grade the mechanism supports. An unverifiable finding whose *mechanism* is verified is retained and labelled unverified, not dropped — "defaulting to refuted when unsure" applies to the claim, not to whether it happened to be reproducible. For an ordinary service-scope finding with whole-service blast radius, Medium is the floor; for a boot-path defect, Medium is **not** enough and it stays blocking. The **findings comment** must record what was unverified — the coverage gate reads the comment, not the PR body. A finding downgraded *because* the reviewer could not reproduce it is how #4138's review passed a landmine.
+
+The inverse also holds: a finding labelled Low whose failure mode is fatal on a boot path is misgraded. Reclassify it instead of accepting it.
+
 ## What not to do
 
 - Do not maintain a bespoke “org CodeRabbit clone” skill.

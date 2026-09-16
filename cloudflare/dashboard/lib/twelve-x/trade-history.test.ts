@@ -165,7 +165,7 @@ describe('displayableTradeHistory / tradeResult', () => {
 });
 
 describe('lifecycle mapping', () => {
-  it("maps 'carried' to live and 'dropped' to closed-and-hidden", () => {
+  it("maps 'carried' to live and 'dropped' to a visible closed row", () => {
     const rows = assembleTradeHistory(
       [
         idea({ run_date: '2026-07-24', rank: 1 }),
@@ -197,8 +197,8 @@ describe('lifecycle mapping', () => {
     expect(liveRow?.lifecycle).toBe('live');
     expect(liveRow && tradeResult(liveRow)).toBe('live');
     expect(droppedRow?.lifecycle).toBe('closed');
-    expect(droppedRow && tradeResult(droppedRow)).toBeNull();
-    expect(displayableTradeHistory(rows)).toHaveLength(1);
+    expect(droppedRow && tradeResult(droppedRow)).toBe('closed');
+    expect(displayableTradeHistory(rows)).toHaveLength(2);
   });
 });
 

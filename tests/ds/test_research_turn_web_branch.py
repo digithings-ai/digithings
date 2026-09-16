@@ -712,7 +712,7 @@ def test_mcp_research_turn_forwards_source_and_effort(monkeypatch):
         return {"service": "digisearch"}
 
     monkeypatch.setattr(mcp_server, "_run_research_turn", fake_run)
-    out = mcp_server.digisearch_research_turn(user_message="q", source="web", effort="thorough")
+    out = mcp_server.research_turn(user_message="q", source="web", effort="thorough")
     assert seen["source"] == "web"
     assert seen["effort"] == "thorough"
     assert '"service": "digisearch"' in out

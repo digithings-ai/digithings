@@ -15,11 +15,13 @@ import {
   type SessionMcpConfig,
 } from "@/components/stock/embed-mcp-flow";
 import { tryResolveLanguageInput } from "@/lib/languages";
+import { isThinkingMode, isViewMode } from "@/lib/view-modes";
 
 export const SESSION_TOOL_NAMES = [
   "session_set_language",
   "session_set_model",
   "session_set_effort",
+  "session_set_view",
   "session_set_thinking",
   "session_toggle_tool",
   "session_upsert_mcp",
@@ -84,11 +86,27 @@ export function applySessionTool(
     api.setEffort(effort);
     return { ok: true, message: `Effort set to ${effort}.` };
   }
+  if (name === "session_set_view") {
+    const mode = str(args, "mode", "view").toLowerCase();
+    if (!isViewMode(mode)) {
+      return { ok: false, message: "View must be hidden, compact, balanced, or detailed." };
+    }
+    api.setView(mode);
+    return { ok: true, message: `View set to ${mode}.` };
+  }
   if (name === "session_set_thinking") {
+    const mode = str(args, "mode", "thinking", "value").toLowerCase();
+    if (isThinkingMode(mode)) {
+      api.setThinking(mode);
+      return { ok: true, message: `Thinking ${mode}.` };
+    }
+    // Back-compat with the boolean-era contract.
     const enabled = bool(args, "enabled") ?? bool(args, "thinking");
-    if (enabled === undefined) return { ok: false, message: "Missing enabled." };
-    api.setThinking(enabled);
-    return { ok: true, message: enabled ? "Thinking on." : "Thinking off." };
+    if (enabled === undefined) {
+      return { ok: false, message: "Thinking must be auto, collapsed, or open." };
+    }
+    api.setThinking(enabled ? "open" : "collapsed");
+    return { ok: true, message: enabled ? "Thinking open." : "Thinking collapsed." };
   }
   if (name === "session_toggle_tool") {
     const id = str(args, "id", "tool").toLowerCase();

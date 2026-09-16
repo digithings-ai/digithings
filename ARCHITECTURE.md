@@ -112,8 +112,8 @@ MCP (Model Context Protocol) is the standard for tool discovery and invocation a
 |-----------|-------------------|-----------|--------------------------|-----------------|
 | **digigraph** | `python -m digigraph.mcp_server` (install: `pip install -e "digigraph[mcp]"`); in the cloudflare stack, loopback `:8766` inside `DigiStackContainer` via the `digigraph-mcp` supervisord program (no public route yet) | 8766 (streamable-http) or stdio | `workflow`, `chat`, `thread_state`, `list_orchestrator_tools`, `list_orchestrator_tools_detailed` | digiclaw (Phase 2), IDE plugins, Claude Desktop |
 | **digiquant** | `python -m digiquant.mcp_server` | 8767 (streamable-http) or stdio | `digiquant_run_pipeline`, `digiquant_list_strategies`, `run_backtest`, `run_optimize`, `run_validation` | digigraph (invokes via HTTP orchestrator), power-user IDE |
-| **digisearch** | `docker compose --profile digisearch-mcp up` → container port 8765; in the cloudflare stack, loopback `:8765` inside `DigiStackContainer` via the `digisearch-mcp` supervisord program (no public route yet) | 8765 (streamable-http) | `digisearch_query`, `digisearch_fetch_all`, `digisearch_research_turn` (with `digisearch[agent]`), `digisearch_research_delegate` | digigraph (invokes via HTTP orchestrator), Langflow, IDE |
-| **digivault** | `docker compose --profile digivault-mcp up` → container port 8769; in the cloudflare stack, loopback `:8769` inside `DigiStackContainer` via the `digivault-mcp` supervisord program (no public route yet) | 8769 (streamable-http) | `digivault_search_tag`, `digivault_backlinks`, `digivault_lint`, `digivault_create_note` (`digivault_search_notes` / `digivault_get_note` stay orchestrator-only) | digigraph (invokes via HTTP orchestrator), IDE |
+| **digisearch** | `docker compose --profile digisearch-mcp up` → container port 8765; in the cloudflare stack, `:8765` inside `DigiStackContainer` via the `digisearch-mcp` supervisord program, reachable only through the key-gated `/_stack/mcp/digisearch/*` edge route | 8765 (streamable-http) | `semantic`, `digisearch_fetch_all`, `research_turn` (with `digisearch[agent]`), `digisearch_research_delegate` | digigraph (invokes via HTTP orchestrator), Langflow, IDE |
+| **digivault** | `docker compose --profile digivault-mcp up` → container port 8769; in the cloudflare stack, `:8769` inside `DigiStackContainer` via the `digivault-mcp` supervisord program, reachable only through the key-gated `/_stack/mcp/digivault/*` edge route | 8769 (streamable-http) | `digivault_search_notes`, `digivault_search_tag`, `digivault_backlinks`, `digivault_lint` (`digivault_create_note` only when `DIGIVAULT_MCP_WRITE=1`) | digigraph (invokes via HTTP orchestrator), IDE |
 
 **Design notes:**
 
@@ -532,7 +532,7 @@ The default Docker Compose deployment is designed for a single machine (develope
 | LangGraph `MemorySaver` (default) | In-process Python dict | Thread state lost on restart; no cross-instance sharing |
 | Chroma local volume | `digisearch_chroma` Docker volume on single host | Cannot be shared across digisearch replicas |
 | LiteLLM local cache | `type: local` in `litellm.yaml` | Per-process disk cache; not shared with other LiteLLM instances |
-| digikey SQLite (default) | `sqlite:////data/digikey.db` in container | Not suitable for multiple digikey replicas; switch to Postgres |
+| digikey SQLite (dev/Compose only) | `sqlite:////data/digikey.db` on a Compose volume | Not suitable for multiple digikey replicas, and not durable on the Cloudflare Container (ephemeral disk); use Postgres |
 
 ### Kubernetes Target Architecture
 
@@ -582,7 +582,7 @@ graph TD
 | LangGraph checkpointer | `MemorySaver` (in-process) | Postgres (`DIGI_CHECKPOINTER=postgres`) | Set `CORE_POSTGRES_URI`; install `langgraph-checkpoint-postgres` |
 | digigraph rate limiting | Per-process dict | Redis-backed (`digibase` rate limiter) | Wire `REDIS_URL` to digigraph; implement distributed rate limiter (Phase 2) |
 | digisearch vector store | Chroma local volume | Azure AI Search or Qdrant Cloud | Set `AZURE_SEARCH_*` env vars; Chroma is dev/test only |
-| digikey storage | SQLite default | Postgres (required for multi-replica) | Set `DIGIKEY_DATABASE_URL=postgresql://...` |
+| digikey storage | Postgres (required) | Postgres (required for multi-replica) | Set `DIGIKEY_DATABASE_URL=postgresql://...`; required with no fallback, because a Container-local SQLite file is wiped on instance replacement (#4080) |
 | LiteLLM cache | Local disk | Redis (`type: redis` in litellm.yaml) | Set `REDIS_URL`; use `litellm-cache` profile → K8s Redis StatefulSet |
 | Secrets | `.env` file | K8s Secrets → env injection | Migrate all `*_KEY`, `*_TOKEN`, `*_PASSWORD` vars to K8s Secrets |
 | digibase credential broker | Not shipped | Central K8s service | Phase 1 digibase service: manages Postgres/Redis connection grants per tenant |

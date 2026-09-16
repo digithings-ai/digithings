@@ -133,44 +133,10 @@
   color: var(--ink-mute);
 }
 
-.deck-alert-status {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  font-family: var(--font-mono);
-  font-size: 0.68rem;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-  color: var(--ink);
-}
-
-.deck-alert-dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 0;
-  flex-shrink: 0;
-  background: var(--ink-mute);
-}
-
-.deck-alert-status.down .deck-alert-dot {
-  background: var(--down);
-  box-shadow: 0 0 9px color-mix(in srgb, var(--down) 44%, transparent);
-}
-
-.deck-alert-status.up .deck-alert-dot {
-  background: var(--up);
-  box-shadow: 0 0 9px color-mix(in srgb, var(--up) 44%, transparent);
-}
-
-.deck-alert-time {
-  margin-left: auto;
-  color: var(--ink-mute);
-}
-
-.deck-alert h3 {
-  margin-top: 0.8rem;
-  font-size: 1.2rem;
-}
+/* .deck-alert* deleted in wave 1 (T6): the deck's alert card is the stock kit
+   `Alert` (`@digithings/web/ui`) — `tone="down"` → `destructive`, `"up"` →
+   `default` — composed in deck-cards.tsx. The old up/down status dot (a
+   money-token glow on non-P&L status) leaves with it. */
 
 /* Pricing + comparison matrix — promoted to @digithings/web (#1415).
    Structure/behavior live in web/src/components/pricing/Pricing.tsx and
@@ -247,70 +213,9 @@
   display: none;
 }
 
-.cr-card:focus-visible {
-  outline: 2px solid color-mix(in srgb, var(--accent) 60%, transparent);
-  outline-offset: 2px;
-}
-
-.cr-card {
-  scroll-snap-align: start;
-  flex: 0 0 16.5rem;
-  border: 1px solid var(--hair);
-  border-radius: 0;
-  background: var(--surface);
-  padding: 1.1rem;
-  user-select: none;
-}
-
-/* .cr-card-head + .cr-version → utilities in changelog-rail-reference.tsx.
-   .cr-tag stays CSS: it pairs with .cr-tag-feature / -breaking (specificity tie
-   + two-color mix borders). */
-
-.cr-tag {
-  font-family: var(--font-mono);
-  font-size: 0.56rem;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-  padding: 0.15rem 0.45rem;
-  border-radius: 0;
-  border: 1px solid var(--hair);
-  color: var(--ink-mute);
-}
-
-.cr-tag-feature {
-  color: var(--up);
-  border-color: color-mix(in srgb, var(--up) 40%, var(--hair));
-}
-
-.cr-tag-breaking {
-  color: var(--down);
-  border-color: color-mix(in srgb, var(--down) 40%, var(--hair));
-}
-
-/* .cr-date + .cr-title → utilities in changelog-rail-reference.tsx */
-
-.cr-card ul {
-  margin: 0.7rem 0 0;
-  padding: 0;
-  list-style: none;
-  display: grid;
-  gap: 0.4rem;
-}
-
-.cr-card li {
-  position: relative;
-  padding-left: 1rem;
-  font-size: 0.82rem;
-  color: var(--ink-soft);
-}
-
-.cr-card li::before {
-  content: "+";
-  position: absolute;
-  left: 0;
-  font-family: var(--font-mono);
-  color: var(--ink-mute);
-}
+/* .cr-card* deleted in wave 1 (T6): the release card is the stock kit `Card`
+   (`@digithings/web/ui`) — rail mechanics (flex basis, snap, select-none) and
+   the list grammar are call-site utilities in changelog-rail-reference.tsx. */
 
 /* Stat counter — promoted to @digithings/web (#1415): the <StatCounter/>
    primitive (components/metrics/StatCounter.tsx) carries the utilities; the

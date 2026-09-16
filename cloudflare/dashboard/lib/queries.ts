@@ -32,7 +32,6 @@ import type {
   PositionHistoryRow,
   PipelineObservabilityBundle,
   PipelineTickerDoc,
-  PositionPriceChartData,
   AnalystPayload,
   AnalystEvidence,
   TickerCoverage,
@@ -67,7 +66,7 @@ import { ledgerEventEconomics } from './position-event-economics';
 import { thesisIdEquals } from './thesis-id';
 import type { ThesisVehicleRow } from './thesis-story';
 import { houseBook } from './house-workspace';
-import { fetchMarketCloses, isMarketDataConfigured } from './market-data';
+import { fetchMarketCloses, type MarketClose } from './market-data';
 
 /** Coerce a jsonb column that should be a string[] into one, tolerating null/non-arrays. */
 function asStringArray(v: unknown): string[] {
@@ -585,6 +584,22 @@ export async function fetchTickerDossier(ticker: string): Promise<TickerDossier>
 }
 
 /**
+ * Ticker universe (#4053): the R2 archive via the market API. When it answers
+ * empty, fall back to the benchmark keys so ticker surfaces still enumerate.
+ */
+export function resolveTickerUniverse(
+  marketTickers: string[],
+  benchmarks: BenchmarkHistoryMap
+): string[] {
+  if (marketTickers.length > 0) return sortTickerUniverse(marketTickers);
+  const fb = new Set<string>(Object.keys(benchmarks));
+  for (const t of DASHBOARD_BENCHMARK_TICKERS) {
+    fb.add(t);
+  }
+  return sortTickerUniverse([...fb]);
+}
+
+/**
  * Distinct union of every ticker known to the dashboard's per-ticker surfaces
  * (`positions`, `decision_log`, analyst documents via `documents.sector`, and
  * `analyst_coverage`) — feeds the command palette's "Tickers" group and any
@@ -732,7 +747,7 @@ export async function getFullDashboardData(): Promise<DashboardData> {
 
   const [
     snapshotRes, positionsRes, instrumentsRes, thesesRes, navRes,
-    metricsRes, docsRes, deltaDocsRes, changelogDocsRes, tickerViewRes, snapshotRunTypesRes,
+    metricsRes, docsRes, deltaDocsRes, changelogDocsRes, snapshotRunTypesRes,
     pmRebalanceRes,
   ] = await Promise.all([
     // maybeSingle: empty RLS (or no Sunday run) must not 406/PGRST116 — Brief
@@ -763,7 +778,6 @@ export async function getFullDashboardData(): Promise<DashboardData> {
       .ilike('document_key', 'research-changelog/%')
       .order('date', { ascending: false })
       .limit(400),
-    supabase.from('price_history_tickers').select('ticker'),
     supabase.from('daily_snapshots').select('date, run_type').order('date', { ascending: false }).limit(500),
     // Fetch the latest pm-rebalance doc upfront so it is available before
     // proposedPositions is computed (the late fetchPipelineObservabilityForDate
@@ -806,9 +820,6 @@ export async function getFullDashboardData(): Promise<DashboardData> {
   for (const row of changelogRows) {
     if (!row?.date) continue;
     research_changelog_by_date[row.date] = parseResearchChangelogPayload(row.payload);
-  }
-  if (tickerViewRes.error) {
-    console.warn('Supabase price_history_tickers view (apply migration 018 if missing):', tickerViewRes.error);
   }
   if (snapshotRunTypesRes.error) {
     console.error('Supabase daily_snapshots run_type query:', snapshotRunTypesRes.error);
@@ -967,18 +978,6 @@ export async function getFullDashboardData(): Promise<DashboardData> {
     benchMax,
   );
 
-  const tickerViewRows = (tickerViewRes.data ?? []) as { ticker: string }[];
-  let price_history_tickers: string[] = [];
-  if (!tickerViewRes.error && tickerViewRows.length > 0) {
-    price_history_tickers = sortTickerUniverse(tickerViewRows.map((r) => r.ticker));
-  } else {
-    const fb = new Set<string>(Object.keys(benchmarks));
-    for (const t of DASHBOARD_BENCHMARK_TICKERS) {
-      fb.add(t);
-    }
-    price_history_tickers = sortTickerUniverse([...fb]);
-  }
-
   const theses: Thesis[] = currentTheses.map(mapThesisRow);
 
   const docs: Doc[] = rawDocs.map((d) => ({
@@ -1114,7 +1113,7 @@ export async function getFullDashboardData(): Promise<DashboardData> {
         })
     : currentPositions;
 
-  // Fill position prices/P&L from price_history when positions table is sparse.
+  // Fill position prices/P&L from the market API (#4053, R2-only).
   const posTickers = [...new Set(effectiveCurrentPositions.map((p) => p.ticker))];
   const entryDatesByTicker = new Map(
     effectiveCurrentPositions
@@ -1122,23 +1121,11 @@ export async function getFullDashboardData(): Promise<DashboardData> {
       .filter(([, d]) => !!d)
   );
 
-  const priceRows: Pick<TableRow<'price_history'>, 'date' | 'ticker' | 'close'>[] =
+  const priceRows: MarketClose[] =
     posTickers.length
-      ? isMarketDataConfigured()
-        ? // Market API (#4013): a recent 90-day window; closeOnOrAfter uses it
-          // for live marks and entry dates that fall inside the window.
-          await fetchMarketCloses(posTickers, subtractIsoDaysForChart(todayUtc, 90), todayUtc)
-        : await querySupabase<
-            Pick<TableRow<'price_history'>, 'date' | 'ticker' | 'close'>[]
-          >((sb) =>
-            sb
-              .from('price_history')
-              .select('date, ticker, close')
-              .in('ticker', posTickers)
-              // fetch a small recent window + any entry dates
-              .order('date', { ascending: false })
-              .limit(5000)
-          )
+      ? // A recent 90-day window; closeOnOrAfter uses it for live marks and
+        // entry dates that fall inside the window.
+        await fetchMarketCloses(posTickers, subtractIsoDaysForChart(todayUtc, 90), todayUtc)
       : [];
 
   const closesByTicker = new Map<string, Array<{ date: string; close: number }>>();
@@ -1207,7 +1194,7 @@ export async function getFullDashboardData(): Promise<DashboardData> {
   const positions: Position[] = effectiveCurrentPositions.map((p) => {
     const identity = resolveInstrumentIdentity(p, instrumentByTicker);
     return {
-    // Prices: prefer explicit position fields; else derive from price_history
+    // Prices: prefer explicit position fields; else derive from the market API (fetchMarketCloses)
     ticker: p.ticker,
     name: identity.name,
     instrument: identity.instrument,
@@ -1432,7 +1419,6 @@ export async function getFullDashboardData(): Promise<DashboardData> {
     research_changelog_by_date,
     snapshot_run_type_by_date,
     benchmarks,
-    price_history_tickers,
     server_portfolio_metrics,
     calculated: {
       // Return null (not 0) when the portfolio_metrics row is absent so the UI
@@ -1579,14 +1565,10 @@ export function collectThesisRelatedDocLinks(
   return out.sort((a, b) => b.date.localeCompare(a.date) || a.document_key.localeCompare(b.document_key));
 }
 
-const COMPARABLE_PAGE = 1000;
-const COMPARABLE_MAX_ROWS = 80000;
-
 /**
  * Load close prices for NAV comparables (date window inclusive).
  *
- * Market API (#4013) when `NEXT_PUBLIC_MARKET_DATA_URL` is set, else
- * `price_history` via Supabase — paginated past PostgREST default row limits.
+ * Market API only (#4053, R2-only) — no Supabase fallback.
  */
 export async function fetchComparablePriceHistory(
   tickers: string[],
@@ -1596,56 +1578,15 @@ export async function fetchComparablePriceHistory(
   const norm = [...new Set(tickers.map((t) => String(t).toUpperCase().trim()).filter(Boolean))];
   if (norm.length === 0) return {};
 
-  if (isMarketDataConfigured()) {
-    const rows = await fetchMarketCloses(norm, minDate, maxDate);
-    const out: BenchmarkHistoryMap = {};
-    for (const row of rows) {
-      const series = (out[row.ticker] ??= { current: null, history: [] });
-      series.history.push({ date: row.date, price: Number(row.close) });
-    }
-    for (const bData of Object.values(out)) {
-      // Batched per-25 requests are not globally ordered; charts expect ascending dates.
-      bData.history.sort((a, b) => a.date.localeCompare(b.date));
-      if (bData.history.length) {
-        bData.current = bData.history[bData.history.length - 1].price;
-      }
-    }
-    return out;
-  }
-
-  if (!isSupabaseConfigured() || !supabase) return {};
-
-  type Ph = Pick<TableRow<'price_history'>, 'date' | 'ticker' | 'close'>;
-  const all: Ph[] = [];
-  let offset = 0;
-  while (offset < COMPARABLE_MAX_ROWS) {
-    const { data, error } = await supabase
-      .from('price_history')
-      .select('date, ticker, close')
-      .in('ticker', norm)
-      .gte('date', minDate)
-      .lte('date', maxDate)
-      .order('date', { ascending: true })
-      .range(offset, offset + COMPARABLE_PAGE - 1);
-
-    if (error) {
-      console.error('fetchComparablePriceHistory:', error);
-      break;
-    }
-    const chunk = (data ?? []) as Ph[];
-    all.push(...chunk);
-    if (chunk.length < COMPARABLE_PAGE) break;
-    offset += COMPARABLE_PAGE;
-  }
-
+  const rows = await fetchMarketCloses(norm, minDate, maxDate);
   const out: BenchmarkHistoryMap = {};
-  for (const row of all) {
-    if (!out[row.ticker]) {
-      out[row.ticker] = { current: null, history: [] };
-    }
-    out[row.ticker].history.push({ date: row.date, price: Number(row.close) });
+  for (const row of rows) {
+    const series = (out[row.ticker] ??= { current: null, history: [] });
+    series.history.push({ date: row.date, price: Number(row.close) });
   }
   for (const bData of Object.values(out)) {
+    // Batched per-25 requests are not globally ordered; charts expect ascending dates.
+    bData.history.sort((a, b) => a.date.localeCompare(b.date));
     if (bData.history.length) {
       bData.current = bData.history[bData.history.length - 1].price;
     }
@@ -1653,188 +1594,13 @@ export async function fetchComparablePriceHistory(
   return out;
 }
 
-/** Page size for position chart queries (PostgREST caps single responses). */
-const POSITION_CHART_PAGE = 1000;
-/** Safety cap so a pathological range cannot fetch unbounded rows. */
-const POSITION_CHART_MAX_PRICE_ROWS = 25000;
-
-const positionPriceChartCache = new Map<string, PositionPriceChartData>();
-
-/**
- * Infer the trading venue from a ticker symbol.
- * Crypto tickers trade 24/7 (always a trading day); all others default to NYSE.
- */
-function venueForTicker(ticker: string): string {
-  const t = ticker.toUpperCase().trim();
-  // Common crypto patterns: BTC-USD, ETH-USD, BTC/USD, BTCUSD, etc.
-  const cryptoSuffixes = ['-USD', '/USD', 'USDT', 'USDC'];
-  const cryptoBases = ['BTC', 'ETH', 'SOL', 'DOGE', 'XRP', 'ADA', 'DOT', 'AVAX', 'MATIC', 'LTC'];
-  if (cryptoSuffixes.some((s) => t.includes(s))) return 'CRYPTO';
-  if (cryptoBases.some((b) => t.startsWith(b))) return 'CRYPTO';
-  return 'NYSE';
-}
-
-/**
- * Fetch trading_calendar rows for a date range and venue, returning a Set of
- * trading-day date strings. Falls back gracefully if the table is unavailable.
- */
-async function fetchTradingDays(
-  startDate: string,
-  endDate: string,
-  venue: string
-): Promise<Set<string>> {
-  if (!supabase) return new Set();
-  const tradingDays = new Set<string>();
-  const PAGE = 1000;
-  let offset = 0;
-  const MAX = 3000; // ~8 years of trading days; far beyond any chart window
-  while (offset < MAX) {
-    const { data, error } = await supabase
-      .from('trading_calendar')
-      .select('date, is_trading_day')
-      .eq('venue', venue)
-      .gte('date', startDate)
-      .lte('date', endDate)
-      .eq('is_trading_day', true)
-      .range(offset, offset + PAGE - 1);
-    if (error) {
-      console.warn('fetchTradingDays trading_calendar query:', error);
-      break;
-    }
-    const chunk = (data ?? []) as Array<{ date: string; is_trading_day: boolean }>;
-    for (const row of chunk) {
-      if (row.is_trading_day) tradingDays.add(row.date);
-    }
-    if (chunk.length < PAGE) break;
-    offset += PAGE;
-  }
-  return tradingDays;
-}
-
-/**
- * Load daily closes for one ticker from `fromDate` through `maxDate` (inclusive)
- * plus `position_events` in that window (for chart markers). Paginates so the
- * full window is returned — a plain `.limit(2000)` previously kept only the
- * oldest slice and cut off recent prices.
- * Results are memoized in-memory for the session (price + contribution charts).
- */
+/** Subtract calendar days from an ISO date string (chart lookback windows). */
 function subtractIsoDaysForChart(iso: string, days: number): string {
   const parts = iso.split('-').map(Number);
   if (parts.length < 3) return iso;
   const [y, m, d] = parts;
   const t = Date.UTC(y, m - 1, d);
   return new Date(t - days * 86400000).toISOString().slice(0, 10);
-}
-
-export async function fetchPositionPriceChart(
-  ticker: string,
-  fromDate: string,
-  maxDate?: string
-): Promise<PositionPriceChartData> {
-  const t = String(ticker).toUpperCase().trim();
-  if (!isSupabaseConfigured() || !supabase) {
-    throw new Error(
-      'Supabase is not configured. Set NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY.'
-    );
-  }
-  if (!t || !fromDate?.trim()) {
-    return { priceHistory: [], events: [] };
-  }
-
-  const end = (maxDate && maxDate.trim()) || new Date().toISOString().slice(0, 10);
-  /** If `fromDate` is after `end` (e.g. future-dated OPEN events), widen lookback so the query is valid. */
-  let safeFrom = fromDate.trim();
-  if (safeFrom > end) {
-    safeFrom = subtractIsoDaysForChart(end, 730);
-  }
-  const cacheKey = `${t}|${safeFrom}|${end}`;
-  const hit = positionPriceChartCache.get(cacheKey);
-  if (hit) return hit;
-
-  type EvPick = Pick<
-    TableRow<'position_events'>,
-    'date' | 'event' | 'price' | 'reason' | 'weight_pct' | 'prev_weight_pct'
-  >;
-  type PhPick = Pick<TableRow<'price_history'>, 'date' | 'close'>;
-
-  const priceRows: PhPick[] = [];
-  let phOffset = 0;
-  while (phOffset < POSITION_CHART_MAX_PRICE_ROWS) {
-    const { data, error } = await supabase
-      .from('price_history')
-      .select('date, close')
-      .eq('ticker', t)
-      .gte('date', safeFrom)
-      .lte('date', end)
-      .order('date', { ascending: true })
-      .range(phOffset, phOffset + POSITION_CHART_PAGE - 1);
-
-    if (error) {
-      console.error('fetchPositionPriceChart price_history:', error);
-      break;
-    }
-    const chunk = (data ?? []) as PhPick[];
-    priceRows.push(...chunk);
-    if (chunk.length < POSITION_CHART_PAGE) break;
-    phOffset += POSITION_CHART_PAGE;
-  }
-
-  const evRows: EvPick[] = [];
-  let evOffset = 0;
-  const EVENT_MAX = 8000;
-  while (evOffset < EVENT_MAX) {
-    const { data, error } = await houseBook(
-      supabase,
-      'position_events',
-      'date, event, price, reason, weight_pct, prev_weight_pct',
-    )
-      .eq('ticker', t)
-      .gte('date', safeFrom)
-      .lte('date', end)
-      .order('date', { ascending: true })
-      .range(evOffset, evOffset + POSITION_CHART_PAGE - 1);
-
-    if (error) {
-      console.error('fetchPositionPriceChart position_events:', error);
-      break;
-    }
-    const chunk = (data ?? []) as EvPick[];
-    evRows.push(...chunk);
-    if (chunk.length < POSITION_CHART_PAGE) break;
-    evOffset += POSITION_CHART_PAGE;
-  }
-
-  // Fetch trading calendar in parallel with event fetch for this ticker's venue.
-  // If the table is unavailable or empty, we default all rows to is_trading_day=true
-  // so charts degrade gracefully without errors.
-  const venue = venueForTicker(t);
-  const tradingDays = await fetchTradingDays(safeFrom, end, venue);
-
-  const priceHistory = priceRows.map((row) => ({
-    date: row.date,
-    close: Number(row.close),
-    // When the trading_calendar table has no data (empty set), default to true
-    // so existing chart behaviour is preserved.
-    is_trading_day: tradingDays.size === 0 ? true : tradingDays.has(row.date),
-  }));
-
-  const events = evRows.map((row) => ({
-    date: row.date,
-    event: row.event,
-    price: row.price != null ? Number(row.price) : null,
-    reason: row.reason ?? null,
-    weight_pct: row.weight_pct != null ? Number(row.weight_pct) : null,
-    prev_weight_pct: row.prev_weight_pct != null ? Number(row.prev_weight_pct) : null,
-    // weight_change_pct column dropped (#714) — derive at read time.
-    weight_change_pct:
-      row.weight_pct != null && row.prev_weight_pct != null
-        ? Number(row.weight_pct) - Number(row.prev_weight_pct)
-        : null,
-  }));
-
-  const result = { priceHistory, events };
-  positionPriceChartCache.set(cacheKey, result);
-  return result;
 }
 
 /** Resolve markdown + structured view for the Research Library. */

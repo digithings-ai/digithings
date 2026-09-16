@@ -1,5 +1,9 @@
 """One-time backfill: Supabase market tables -> versioned R2 generations (#3780).
 
+Spent: migration 127 drops its Supabase source tables (#4053), so this script
+can only run against a pre-drop snapshot now. Rollback after 127 is
+restore-from-generation + replay, not a re-run of this backfill.
+
 Reads via direct-PG ONLY (never PostgREST: every statement runs under the
 authenticator role's 8s ``statement_timeout``), paginated by (ticker, date).
 Resume-safe: generations already recorded in the manifest are skipped; every
@@ -319,6 +323,24 @@ def _pg_registry_insert(uri: str, connect: Any = None) -> Any:
     return insert
 
 
+def _pg_registry_lookup(uri: str, connect: Any = None) -> Any:
+    """``archive_objects`` sha lookup over direct-PG (None when unregistered)."""
+    connector = connect or _pg_connect
+    holder: dict[str, Any] = {}
+
+    def lookup(r2_key: str) -> str | None:
+        if holder.get("conn") is None:
+            holder["conn"] = connector(uri)
+        cur = holder["conn"].cursor()
+        cur.execute("SELECT sha256 FROM archive_objects WHERE r2_key = %s", (r2_key,))
+        found = cur.fetchall()
+        if not found:
+            return None
+        return str(found[0][0])
+
+    return lookup
+
+
 def _is_missing_manifest_error(exc: Exception) -> bool:
     """True only for a never-written manifest (fresh backfill).
 
@@ -372,7 +394,11 @@ def main(argv: list[str] | None = None) -> int:
         access_key=access,
         secret_key=secret,
     )
-    store = R2HistoryStore(backend, _pg_registry_insert(args.postgres_uri))
+    store = R2HistoryStore(
+        backend,
+        _pg_registry_insert(args.postgres_uri),
+        _pg_registry_lookup(args.postgres_uri),
+    )
     try:
         manifest = store.read_manifest()
         print(f"loaded manifest {MANIFEST_KEY} as_of={manifest.get('as_of')}")

@@ -150,7 +150,7 @@
     width: 1ch;
     height: 1.375rem;
     left: calc(var(--caret-col, 0) * 1ch + var(--caret-pad-left));
-    top: calc(var(--caret-row, 0) * 1.375rem + 0.2rem);
+    top: calc(var(--caret-row, 0) * 1.375rem + var(--caret-pad-top, 0px));
     background: var(--ink);
     font-family: var(--font-mono);
     font-size: 0.88rem;
@@ -173,6 +173,7 @@
     [data-layout="expanded"]
     .aui-block-caret {
     --caret-pad-left: 0.625rem;
+    --caret-pad-top: 0.2rem;
   }
 
   @media (prefers-reduced-motion: reduce) {
@@ -304,6 +305,7 @@
   .aui-composer-dictate,
   .aui-thread-scroll-to-bottom,
   .aui-assistant-action-bar-root button,
+  .aui-branch-picker-root button,
   .aui-user-action-bar-root button,
   .aui-code-header-root button,
   .aui-attachment-chip-remove,
@@ -318,6 +320,7 @@
   .aui-composer-dictate,
   .aui-thread-scroll-to-bottom,
   .aui-assistant-action-bar-root button,
+  .aui-branch-picker-root button,
   .aui-user-action-bar-root button,
   .aui-code-header-root button,
   .aui-attachment-chip-remove,
@@ -334,6 +337,7 @@
   .aui-composer-dictate,
   .aui-thread-scroll-to-bottom,
   .aui-assistant-action-bar-root button,
+  .aui-branch-picker-root button,
   .aui-user-action-bar-root button,
   .aui-code-header-root button,
   .aui-attachment-chip-remove
@@ -345,6 +349,7 @@
   .aui-composer-dictate,
   .aui-thread-scroll-to-bottom,
   .aui-assistant-action-bar-root button,
+  .aui-branch-picker-root button,
   .aui-user-action-bar-root button,
   .aui-code-header-root button,
   .aui-attachment-chip-remove,
@@ -364,6 +369,7 @@
   .aui-composer-dictate,
   .aui-thread-scroll-to-bottom,
   .aui-assistant-action-bar-root button,
+  .aui-branch-picker-root button,
   .aui-user-action-bar-root button,
   .aui-code-header-root button,
   .aui-attachment-chip-remove
@@ -374,6 +380,7 @@
   .aui-composer-dictate,
   .aui-thread-scroll-to-bottom,
   .aui-assistant-action-bar-root button,
+  .aui-branch-picker-root button,
   .aui-user-action-bar-root button,
   .aui-code-header-root button,
   .aui-attachment-chip-remove
@@ -384,6 +391,7 @@
   .aui-composer-dictate,
   .aui-thread-scroll-to-bottom,
   .aui-assistant-action-bar-root button,
+  .aui-branch-picker-root button,
   .aui-user-action-bar-root button,
   .aui-code-header-root button,
   .aui-attachment-chip-remove
@@ -394,6 +402,7 @@
   .aui-composer-dictate,
   .aui-thread-scroll-to-bottom,
   .aui-assistant-action-bar-root button,
+  .aui-branch-picker-root button,
   .aui-user-action-bar-root button,
   .aui-code-header-root button,
   .aui-attachment-chip-remove
@@ -415,6 +424,7 @@
   .aui-composer-dictate,
   .aui-thread-scroll-to-bottom,
   .aui-assistant-action-bar-root button,
+  .aui-branch-picker-root button,
   .aui-user-action-bar-root button,
   .aui-code-header-root button,
   .aui-attachment-chip-remove
@@ -426,6 +436,7 @@
   .aui-composer-dictate,
   .aui-thread-scroll-to-bottom,
   .aui-assistant-action-bar-root button,
+  .aui-branch-picker-root button,
   .aui-user-action-bar-root button,
   .aui-code-header-root button,
   .aui-attachment-chip-remove,
@@ -693,12 +704,15 @@
 }
 
 :is(.aui-theme-stage, [data-thread-skin="digichat"]) .aui-assistant-action-bar-root button,
-:is(.aui-theme-stage, [data-thread-skin="digichat"]) .aui-user-action-bar-root button {
+:is(.aui-theme-stage, [data-thread-skin="digichat"]) .aui-user-action-bar-root button,
+:is(.aui-theme-stage, [data-thread-skin="digichat"]) .aui-branch-picker-root button {
   color: var(--ink-mute);
 }
 
 :is(.aui-theme-stage, [data-thread-skin="digichat"]) .aui-assistant-action-bar-root button:hover,
 :is(.aui-theme-stage, [data-thread-skin="digichat"]) .aui-user-action-bar-root button:hover,
+:is(.aui-theme-stage, [data-thread-skin="digichat"]) .aui-branch-picker-root button:hover,
+:is(.aui-theme-stage, [data-thread-skin="digichat"]) .aui-branch-picker-root button:focus-visible,
 :is(.aui-theme-stage, [data-thread-skin="digichat"]) .aui-assistant-action-bar-root button[data-state="open"] {
   background: transparent;
   color: var(--ink);

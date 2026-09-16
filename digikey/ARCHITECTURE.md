@@ -314,7 +314,7 @@ _private_key, _kid = load_or_create_signing_key()
 
 ### SQLAlchemy DB schema
 
-Single table: `digikey_api_keys`. Engine is initialized lazily at first use via `db.py`. SQLite uses `check_same_thread=False` to allow access from FastAPI's async thread pool. Postgres uses the default pool. `pool_pre_ping=True` reconnects stale connections.
+Tables: `digikey_api_keys`, `digikey_jti_issued`, `digikey_user_profile_pointers`. The engine is created on first use via `db.py`, and `init_db()` runs the JTI migration plus `create_all` at server startup. SQLite uses `check_same_thread=False` to allow access from FastAPI's async thread pool. Postgres uses the default pool. `pool_pre_ping=True` reconnects stale connections.
 
 ### Scope matching (wildcards)
 
@@ -369,7 +369,7 @@ Keys with `kind=dev_global` carry `scopes=["*"]` — full access to all services
 
 ### SQLite single-writer bottleneck
 
-The default `DIGIKEY_DATABASE_URL` is `sqlite:////data/digikey.db`. SQLite has a global write lock. Under concurrent load, key creation and token exchange (which reads the DB) will serialize. For production deployments with any significant token exchange rate, Postgres is required.
+SQLite — a local file, or a mounted volume in the Compose stack — has a global write lock. Under concurrent load, key creation and token exchange (which reads the DB) will serialize. For production deployments with any significant token exchange rate, Postgres is required.
 
 Additionally, SQLite's `check_same_thread=False` allows cross-thread access but does not address the write lock. FastAPI runs handlers in a thread pool. Under load, this will cause lock contention.
 
@@ -500,7 +500,7 @@ digichat depends on `digikey` and `digigraph` being healthy.
 
 | Variable | Default | Required | Purpose |
 |----------|---------|----------|---------|
-| `DIGIKEY_DATABASE_URL` | — | Yes | Postgres or SQLite URL |
+| `DIGIKEY_DATABASE_URL` | — | Yes | Postgres or SQLite URL. Required with no fallback: on the Cloudflare Container the `/data` disk is ephemeral, so a synthesized SQLite default would silently lose issued keys and revocation state (#4080) |
 | `DIGIKEY_PRIVATE_KEY_PEM` | — | Prod: Yes | PEM private key for RS256 signing |
 | `DIGIKEY_ALLOW_EPHEMERAL_KEY` | `0` (compose: `0`) | Dev only | Generate ephemeral key if PEM not set (set `1` for local dev only) |
 | `DIGIKEY_KEY_ID` | `digikey-1` | No | `kid` in JWKS and JWT header |

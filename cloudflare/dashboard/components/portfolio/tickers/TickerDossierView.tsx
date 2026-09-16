@@ -3,7 +3,7 @@
 import { useMemo, useState } from 'react';
 import Link from 'next/link';
 import { ArrowLeft, ArrowUpRight } from 'lucide-react';
-import { Button } from '@digithings/web';
+import { Button, gloomberbTickerUrl } from '@digithings/web';
 import { useDashboard } from '@/lib/dashboard-context';
 import { useAsyncData } from '@/lib/hooks/use-async-data';
 import { fetchTickerDossier } from '@/lib/queries';
@@ -255,6 +255,15 @@ export default function TickerDossierView({
               </span>
             </div>
             {companyName ? <p className="text-sm text-ink-soft">{companyName}</p> : null}
+            <a
+              href={gloomberbTickerUrl(ticker)}
+              target="_blank"
+              rel="noopener noreferrer"
+              data-testid="gloomberb-link"
+              className="inline-flex items-center gap-1 text-xs text-accent hover:underline"
+            >
+              Open in Gloomberb <ArrowUpRight size={14} aria-hidden />
+            </a>
             <div className="mt-1 flex items-center gap-2">
               <span className="text-sm font-medium capitalize text-ink">
                 {currentStance || 'No current view'}

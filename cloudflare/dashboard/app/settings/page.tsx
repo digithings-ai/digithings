@@ -11,6 +11,8 @@ import { NotifyTab } from '@/components/settings/notify-tab';
 import { BillingTab } from '@/components/settings/billing-tab';
 import { RemainingHopStatus } from '@/components/settings/remaining-hop-status';
 import { subpageTabButtonClass, SubpageStickyTabBar } from '@/components/subpage-tab-bar';
+import { FxHubAccount } from '@/components/settings/fx-hub-account';
+import { useFxHubOnlyInvitee } from '@/lib/fx-hub-only';
 import { useDashboard } from '@/lib/dashboard-context';
 import { useAppShell } from '@/components/app-shell-context';
 import { dataSourceHost } from '@/lib/data-source-host';
@@ -29,6 +31,7 @@ export default function SettingsPage() {
   const { openCommandPalette } = useAppShell();
   const { session } = useAuth();
   const tier = usePlanTier();
+  const { canFxHub, fxHubOnlyInvitee } = useFxHubOnlyInvitee();
   const tabs = useMemo(() => settingsTabsVisible(tier), [tier]);
   const visibleIds = useMemo(() => tabs.map((item) => item.id), [tabs]);
   const meta = data?.portfolio?.meta ?? null;
@@ -72,6 +75,26 @@ export default function SettingsPage() {
     if (!token) return null;
     return { accessToken: token };
   }, [session?.access_token]);
+
+  if (fxHubOnlyInvitee) {
+    return (
+      <div className={`${SUBPAGE_MAX} py-6 md:py-8 space-y-6`}>
+        <header className="space-y-2">
+          <p className="acct-settings-kicker">
+            fx hub <span className="text-ink-mute">· account</span>
+          </p>
+          <h1 className="font-display text-3xl tracking-tight text-ink">Your account.</h1>
+          <p className="acct-settings-copy">
+            Your FX Hub profile: invite status and sign-out only. Desk settings do not apply to
+            this product.
+          </p>
+        </header>
+        <div className="acct-settings-panel max-w-2xl" data-testid="settings-fx-hub-account">
+          <FxHubAccount fxHubGranted={canFxHub} />
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className={`${SUBPAGE_MAX} py-6 md:py-8 space-y-6`}>

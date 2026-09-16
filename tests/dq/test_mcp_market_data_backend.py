@@ -37,12 +37,19 @@ def test_technicals_r2_backend_returns_asof_envelope(monkeypatch):
     assert out["rows"][0]["date"] == "2024-12-31"
 
 
-def test_technicals_supabase_default_path(monkeypatch):
+def test_technicals_serves_r2_without_the_flag(monkeypatch):
+    """The retired Supabase body is gone (#4053): R2 serves with the flag unset too."""
     monkeypatch.delenv("DIGIQUANT_MARKET_DATA_BACKEND", raising=False)
-    payload = json.dumps({"ticker": "SPY", "latest": {}, "window": []})
-    monkeypatch.setattr(mcp, "_supabase_technicals", lambda ticker, lookback: payload)
+    monkeypatch.setattr(mcp, "_read_manifest", lambda: {"version": 1, "as_of": "2024-12-31"})
+
+    def _window(ticker, as_of, manifest=None, return_stale=False):
+        rows = [{"date": "2024-12-31", "close": 1.0}]
+        return (rows, False) if return_stale else rows
+
+    monkeypatch.setattr(mcp, "_read_r2_window", _window)
     out = json.loads(mcp.digiquant_get_price_technicals("SPY", lookback=20, as_of="2024-12-31"))
-    assert out["ticker"] == "SPY"
+    assert out["as_of"] == "2024-12-31"
+    assert out["rows"][0]["date"] == "2024-12-31"
 
 
 def test_technicals_r2_manifest_version_mismatch(monkeypatch):

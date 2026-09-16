@@ -7,12 +7,12 @@ import type {
   AuthMode,
   ChromeMode,
   DigichatDeployment,
-  DisclosureMode,
   PageContextMode,
   PersistenceMode,
   ToolCatalogEntry,
   UserAlign,
 } from "./schema";
+import type { ThinkingMode, ViewMode } from "@/lib/view-modes";
 import { welcomeBodyLines, welcomeTitle } from "./schema";
 import {
   BASELINE_EMBED_PLACEHOLDER,
@@ -28,8 +28,8 @@ export type DigichatClientFeatures = {
   attachments: boolean;
   dictation: boolean;
   speech: boolean;
-  reasoning: DisclosureMode;
-  toolCalls: DisclosureMode;
+  view: ViewMode;
+  thinking: ThinkingMode;
   sources: boolean;
   modelPicker: boolean;
   branchPicker: boolean;
@@ -116,7 +116,7 @@ export const DEFAULT_CLIENT_CONFIG: DigichatClientConfig = {
     placeholder: BASELINE_EMBED_PLACEHOLDER,
     suggestions: [...BASELINE_EMBED_SUGGESTIONS],
     accent: null,
-    attribution: false,
+    attribution: true,
     defaultLanguage: DEFAULT_LANGUAGE_CODE,
     transcript: { userAlign: "right" },
   },
@@ -126,8 +126,8 @@ export const DEFAULT_CLIENT_CONFIG: DigichatClientConfig = {
     attachments: true,
     dictation: false,
     speech: false,
-    reasoning: "collapsed",
-    toolCalls: "collapsed",
+    view: "balanced",
+    thinking: "auto",
     sources: true,
     modelPicker: false,
     branchPicker: true,
@@ -191,7 +191,7 @@ export function toDigichatClientConfig(dep: DigichatDeployment): DigichatClientC
       suggestions: dep.chrome.suggestions,
       placeholder: dep.chrome.placeholder,
       accent: dep.chrome.accent ?? null,
-      attribution: dep.chrome.attribution === true,
+      attribution: dep.chrome.attribution !== false,
       defaultLanguage: dep.chrome.defaultLanguage ?? DEFAULT_LANGUAGE_CODE,
       transcript: {
         userAlign: dep.chrome.transcript?.userAlign ?? "right",

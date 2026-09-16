@@ -137,6 +137,54 @@ describe('TradesTab', () => {
     expect(html).not.toContain('<option value="all">All pairs</option>');
   });
 
+  it('shows bookkeeper-dropped rows with their close reason', () => {
+    const droppedIdea: FxTradeIdeaRow = {
+      run_date: '2026-07-22',
+      rank: 1,
+      pair: 'GBP/USD',
+      direction: 'short',
+      title: 'GBP/USD short',
+      thesis: 'thesis',
+      catalyst: 'BoE',
+      levels: [],
+      citations: [],
+      as_of: '2026-07-22T00:00:00Z',
+    };
+    const droppedEval: FxIdeaEvalRow = {
+      run_date: '2026-07-22',
+      rank: 1,
+      horizon_days: 0,
+      pair: 'GBP/USD',
+      direction: 'short',
+      status: 'dropped',
+      entry_date: '2026-07-22',
+      exit_date: '2026-07-30',
+      entry_fix: 1.27,
+      exit_fix: null,
+      ret: null,
+      hold_return: null,
+      sigma_entry: null,
+      hit: null,
+      directional_win: null,
+      significant_hit: null,
+      n_sessions: 6,
+      as_of: '2026-07-30T00:00:00Z',
+      verdict_reason: 'thesis dead',
+    };
+    const html = renderToStaticMarkup(
+      createElement(TradesTab, {
+        ideas: [...ideas, droppedIdea],
+        ideaEval: [...ideaEval, droppedEval],
+      }),
+    );
+
+    expect(html).toContain('Status');
+    expect(html).toContain('CLOSED');
+    expect(html).toContain('title="thesis dead"');
+    expect(html).toContain('Superseded');
+    expect(html).toContain('Dropped');
+  });
+
   it('renders a continuation marker for badged rows and nothing extra otherwise', () => {
     const plain = renderToStaticMarkup(
       createElement(TradesTab, { ideas, ideaEval }),
@@ -150,6 +198,55 @@ describe('TradesTab', () => {
       createElement(TradesTab, { ideas, ideaEval: badgedEval }),
     );
     expect(badged).toContain('· cont. since 2026-07-06');
+  });
+
+  it('shows a bookkeeper-dropped row with its close reason and the close tally', () => {
+    const droppedIdea: FxTradeIdeaRow = {
+      run_date: '2026-07-22',
+      rank: 1,
+      pair: 'GBP/USD',
+      direction: 'short',
+      title: 'GBP/USD short',
+      thesis: 'thesis',
+      catalyst: 'BoE',
+      levels: [],
+      citations: [],
+      as_of: '2026-07-22T00:00:00Z',
+    };
+    const droppedEval: FxIdeaEvalRow = {
+      run_date: '2026-07-22',
+      rank: 1,
+      horizon_days: 0,
+      pair: 'GBP/USD',
+      direction: 'short',
+      status: 'dropped',
+      entry_date: '2026-07-22',
+      exit_date: '2026-07-27',
+      entry_fix: 1.27,
+      exit_fix: null,
+      ret: null,
+      hold_return: -0.003,
+      sigma_entry: 0.004,
+      hit: null,
+      directional_win: null,
+      significant_hit: null,
+      n_sessions: 3,
+      as_of: '2026-07-27T00:00:00Z',
+      verdict_reason: 'thesis dead',
+    };
+    const html = renderToStaticMarkup(
+      createElement(TradesTab, {
+        ideas: [...ideas, droppedIdea],
+        ideaEval: [...ideaEval, droppedEval],
+      }),
+    );
+
+    expect(html).toContain('Status');
+    expect(html).toContain('CLOSED');
+    expect(html).toContain('title="thesis dead"');
+    expect(html).toContain('Superseded');
+    expect(html).toContain('Dropped');
+    expect(html).toContain('-0.3%');
   });
 });
 

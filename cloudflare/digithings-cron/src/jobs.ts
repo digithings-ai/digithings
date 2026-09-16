@@ -150,6 +150,12 @@ export const JOBS: readonly Job[] = [
     "primemarket_session_heartbeat.yml",
   ),
   wd("twelve-x-session-catchup", "52 * * * MON-FRI", TWELVE_X, "session_catchup.yml"),
+  // dry_run must be false: workflow defaults dispatch to dry_run=true and only
+  // forced live on the old GHA schedule event. Pre-prune R2 dump stays on so the
+  // transient market-context tables are always recoverable.
+  wd("twelve-x-archive-maintenance", "30 2 * * *", TWELVE_X, "archive_maintenance.yml", {
+    inputs: { dry_run: "false", dump_before_prune: "true" },
+  }),
 ];
 
 /** Exact cron-string match; one trigger may map to multiple jobs. */
