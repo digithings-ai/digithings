@@ -523,7 +523,7 @@ git commit -m "feat(digiweb): wave 0 proof route — stock shadcn in the Instrum
 ### Task 6: Canon docs
 
 **Files:**
-- Modify: `cloudflare/digiweb/MIGRATION.md`, `cloudflare/digiweb/ARCHITECTURE.md`, `cloudflare/digiweb/MANIFEST.json`
+- Modify: `cloudflare/digiweb/MIGRATION.md`, `cloudflare/digiweb/ARCHITECTURE.md` (~~`cloudflare/digiweb/MANIFEST.json`~~ — struck 2026-09-16: generated file, see Step 2)
 
 **Interfaces:**
 - Consumes: Tasks 1–5 as shipped.
@@ -533,15 +533,24 @@ git commit -m "feat(digiweb): wave 0 proof route — stock shadcn in the Instrum
 
 Document: the vendored set lives in `@digithings/web` (`src/ui/`, Base UI base); add components by running `npx shadcn@latest add <name>` inside `cloudflare/digiweb/web` (never vendored into an app); consumers add `@source "../../web/src/ui";`; the token bridge lives in `web-theme.css`'s single `@theme inline` block (link spec §3.2); `--color-primary` is ink/paper — never accent.
 
-- [ ] **Step 2: ARCHITECTURE.md + MANIFEST.json**
+- [ ] **Step 2: ARCHITECTURE.md family map**
 
-Add a `ui` family row to MANIFEST.json (components: button, card, dialog, input) and the corresponding paragraph in ARCHITECTURE.md's family map (source of truth: `web/src/ui/index.ts`).
+Add the `ui` family paragraph + row to ARCHITECTURE.md's family map (source of
+truth: `web/src/ui/index.ts`).
+
+~~Add a `ui` family row to MANIFEST.json (components: button, card, dialog,
+input).~~ — struck 2026-09-16: `MANIFEST.json` is generated
+("do not hand-edit") by `scripts/build-manifest.mjs`, which indexes only
+`reference/components` (walking past `components/ui`) and currently mis-maps
+route-grouped family pages — a regen today yields 5 families vs the committed
+15. A hand-added row would be dropped by the next regen. Generator fix +
+package-family indexing tracked in #4225.
 
 - [ ] **Step 3: Commit**
 
 ```bash
-git add cloudflare/digiweb/MIGRATION.md cloudflare/digiweb/ARCHITECTURE.md cloudflare/digiweb/MANIFEST.json
-git commit -m "docs(digiweb): wave 0 canon — vendored ui kit contract in MIGRATION/ARCHITECTURE/MANIFEST"
+git add cloudflare/digiweb/MIGRATION.md cloudflare/digiweb/ARCHITECTURE.md
+git commit -m "docs(digiweb): wave 0 canon — vendored ui kit contract in MIGRATION/ARCHITECTURE"
 ```
 
 ---
