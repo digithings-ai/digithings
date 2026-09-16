@@ -244,6 +244,13 @@ jobs:
           done
           echo "::warning::digikey warm-up did not succeed; pipeline will exchange for a token itself"
 
+      # #4198: fail fast when the search provider is down — every research
+      # phase grounds on web_search, so running without it only burns hours
+      # before the same failure. One cheap probe; DIGISEARCH_URL is job-level.
+      - name: Pre-flight web_search health check
+        timeout-minutes: 5
+        run: uv run --frozen --no-sync python -m digiquant web-search healthcheck
+
       - name: Run digiquant research pipeline
         id: run
         # 3×70m attempts + 20m backoff. Under the 240m job so the outcome step still runs.
