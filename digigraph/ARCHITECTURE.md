@@ -56,7 +56,7 @@ The following is built and functional as of this architecture review (March 2026
 | Logical provider-call purpose and lineage | Built | `llm_client.py`, `usage.py`, `graph/research_agent.py`, `digillm` contracts |
 | Planning executor (topo-sort + parallel steps) | Built | `planning/executor.py` |
 | Graphiti graph memory | **Not built** | Phase 2 roadmap |
-| Operator remote MCP (trusted BFF `X-Digi-Mcp-Servers`) | **Built** | `orchestration/mcp_client.py`; YAML + SSRF-guarded session overlay in digichat; connect-time DNS validation/pinning (#3879) |
+| Operator remote MCP (trusted BFF `X-Digi-Mcp-Servers`) | **Built** | `orchestration/mcp_client.py`; YAML + SSRF-guarded session overlay in digichat; connect-time DNS validation/pinning (#3879); tool failures surface `BaseExceptionGroup` sub-exceptions in the `mcp_call_failed` message |
 | Auth-bound checkpoints (per-key RBAC) | **Not built** | Phase 2 roadmap |
 | OpenAI Responses API | **Not built** | Phase 2 roadmap |
 
