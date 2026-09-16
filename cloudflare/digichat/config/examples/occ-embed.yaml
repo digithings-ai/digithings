@@ -50,6 +50,18 @@ hosts:
           default: true
           tokenEnv: ZAMMAD_API_TOKEN
           authHeader: Authorization
+        - id: digisearch
+          url: http://digisearch-mcp:8765/mcp
+          label: Help search
+          default: true
+          setup:
+            index_name: occ_help
+        - id: digivault
+          url: http://digivault-mcp:8769/mcp
+          label: Knowledge vault
+          default: true
+          setup:
+            path_prefix: clients/online-compliance-center
     gate:
       mode: ungated
       activityDetail: labels

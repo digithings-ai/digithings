@@ -8,6 +8,7 @@ from unittest.mock import patch
 import pytest
 from digigraph.models import WorkflowRequest
 from digigraph.orchestration.mcp_client import (
+    call_prefixed_tool,
     expand_mcp_disabled_tokens,
     is_allowed_mcp_url,
     merge_mcp_servers,
@@ -72,18 +73,18 @@ def test_parse_mcp_servers_env_and_merge_header_wins() -> None:
 
 @pytest.mark.unit
 def test_prefixed_tool_names() -> None:
-    assert prefixed_tool_name("datatap", "list_pipelines") == "datatap__list_pipelines"
-    assert split_prefixed_tool_name("datatap__list_pipelines") == ("datatap", "list_pipelines")
+    assert prefixed_tool_name("datatap", "list_pipelines") == "datatap_list_pipelines"
+    assert split_prefixed_tool_name("datatap_list_pipelines") == ("datatap", "list_pipelines")
     assert split_prefixed_tool_name("digisearch") is None
 
 
 @pytest.mark.unit
 def test_expand_mcp_disabled_tokens() -> None:
-    extra = ["datatap__a", "datatap__b", "other__x"]
+    extra = ["datatap_a", "datatap_b", "other_x"]
     assert expand_mcp_disabled_tokens(["datatap", "rm -rf"], extra) == frozenset(
-        {"datatap__a", "datatap__b"}
+        {"datatap_a", "datatap_b"}
     )
-    assert expand_mcp_disabled_tokens(["other"], extra) == frozenset({"other__x"})
+    assert expand_mcp_disabled_tokens(["other"], extra) == frozenset({"other_x"})
 
 
 @pytest.mark.unit
@@ -223,7 +224,7 @@ def test_call_prefixed_tool_passes_server_with_token() -> None:
         "digigraph.orchestration.mcp_client._call_tool_blocking",
         return_value={"ok": True},
     ) as call:
-        call_prefixed_tool("s__echo", {"q": "hi"}, servers)
+        call_prefixed_tool("s_echo", {"q": "hi"}, servers)
     call.assert_called_once_with(servers[0], "echo", {"q": "hi"})
 
 
@@ -311,7 +312,7 @@ def test_get_tools_merges_prefixed_mcp_tools() -> None:
         {
             "type": "function",
             "function": {
-                "name": "datatap__echo",
+                "name": "datatap_echo",
                 "description": "echo",
                 "parameters": {"type": "object", "properties": {}},
             },
@@ -324,7 +325,7 @@ def test_get_tools_merges_prefixed_mcp_tools() -> None:
         index_config={},
         state={},
         extra_mcp_servers=[{"id": "datatap", "url": "https://mcp.example/mcp"}],
-        allowed_tool_names=frozenset({"datatap__echo"}),
+        allowed_tool_names=frozenset({"datatap_echo"}),
     )
     with patch(
         "digigraph.orchestration.mcp_client.openai_tools_for_servers",
@@ -336,7 +337,7 @@ def test_get_tools_merges_prefixed_mcp_tools() -> None:
         fn = t.get("function") if isinstance(t, dict) else None
         if isinstance(fn, dict) and fn.get("name"):
             names.append(fn["name"])
-    assert "datatap__echo" in names
+    assert "datatap_echo" in names
     ctx = ToolContext(
         session_id="s",
         run_data_dir=None,
@@ -344,16 +345,51 @@ def test_get_tools_merges_prefixed_mcp_tools() -> None:
         index_config={},
         state={},
         extra_mcp_servers=[{"id": "datatap", "url": "https://mcp.example/mcp"}],
-        allowed_tool_names=frozenset({"datatap__echo"}),
+        allowed_tool_names=frozenset({"datatap_echo"}),
     )
     with patch(
         "digigraph.orchestration.mcp_client.call_prefixed_tool",
         return_value={"ok": True, "text": "pong"},
     ) as call:
-        out = execute("datatap__echo", {"q": "hi"}, ctx)
+        out = execute("datatap_echo", {"q": "hi"}, ctx)
     call.assert_called_once_with(
-        "datatap__echo",
+        "datatap_echo",
         {"q": "hi"},
         [{"id": "datatap", "url": "https://mcp.example/mcp"}],
     )
     assert out == {"ok": True, "text": "pong"}
+
+
+@pytest.mark.unit
+def test_parse_mcp_servers_json_preserves_setup() -> None:
+    servers = parse_mcp_servers_json(
+        '[{"id": "digisearch", "url": "http://digisearch-mcp:8765/mcp",'
+        ' "setup": {"index_name": "occ_help"}}]'
+    )
+    assert servers[0]["setup"] == '{"index_name": "occ_help"}'
+
+
+@pytest.mark.unit
+def test_call_prefixed_tool_injects_setup() -> None:
+    servers = [
+        {
+            "id": "digisearch",
+            "url": "http://digisearch-mcp:8765/mcp",
+            "setup": '{"index_name": "occ_help"}',
+        }
+    ]
+    with patch(
+        "digigraph.orchestration.mcp_client._call_tool_blocking",
+        return_value={"ok": True},
+    ) as call:
+        out = call_prefixed_tool(
+            "digisearch_digisearch_query",
+            {"index_name": "wrong", "text": "q"},
+            servers,
+        )
+    call.assert_called_once_with(
+        servers[0],
+        "digisearch_query",
+        {"index_name": "occ_help", "text": "q"},
+    )
+    assert out == {"ok": True}

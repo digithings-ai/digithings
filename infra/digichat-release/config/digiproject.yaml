@@ -34,9 +34,9 @@ agents:
     - digivault_search_notes
     - digivault_get_note
     # Read-only Zammad ticket tools via the secret-gated edge route (/_stack/mcp/zammad).
-    - zammad__search_tickets
-    - zammad__get_ticket
-    - zammad__ticket_report
+    - zammad_search_tickets
+    - zammad_get_ticket
+    - zammad_ticket_report
     # Present so request opt-in can activate it; stripped unless enable_web_search (#3420).
     - web_search
   # research_brief still false below — web_search is never ambient on corpus RAG.
