@@ -32,7 +32,7 @@
 - Create: `cloudflare/digiweb/web/vitest.config.ts`, `cloudflare/digiweb/web/components.json`, `cloudflare/digiweb/web/src/lib/utils.ts` (+test), `cloudflare/digiweb/web/src/ui/*` (+barrel), `cloudflare/digiweb/reference/app/(gallery)/ui/page.tsx`
 - Modify: `cloudflare/digiweb/web/src/styles/web-theme.css` (+contract test), `cloudflare/digiweb/reference/app/globals.css`
 - Delete: `cloudflare/digiweb/reference/components/ui/{avatar,button,collapsible,dialog,skeleton,textarea}.tsx` (6 verified-dead files; `tooltip.tsx` + `dot-matrix.tsx` shim stay — load-bearing for `gallery-thread.source.test.ts`)
-- Docs: `cloudflare/digiweb/MIGRATION.md`, `cloudflare/digiweb/ARCHITECTURE.md`, `cloudflare/digiweb/MANIFEST.json`
+- Docs: `cloudflare/digiweb/MIGRATION.md`, `cloudflare/digiweb/ARCHITECTURE.md` (~~`MANIFEST.json`~~ — generated file, see Task 6 Step 2)
 
 ---
 
