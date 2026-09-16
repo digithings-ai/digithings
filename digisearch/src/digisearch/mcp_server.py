@@ -228,12 +228,23 @@ def digisearch_web_search(
     category: str | None = None,
     include_domains: list[str] | None = None,
     exclude_domains: list[str] | None = None,
+    offset: int = 0,
 ) -> str:
     """Live web search via EXA (alternative to the owned corpus).
 
     Dormant without EXA_API_KEY — returns a disabled message instead of failing.
     search_type: instant|fast|auto|deep-lite|deep|deep-reasoning.
     include_domains/exclude_domains restrict or drop hits by domain.
+
+    Paging: EXA ``POST /search`` has no offset parameter and caps ``numResults``
+    at :attr:`digisearch.web_exa.EXA_MAX_RESULTS` (100). ``offset`` returns the
+    client-side page ``results[offset : offset + num_results]`` of one enlarged
+    search window (``numResults = offset + num_results``); call it repeatedly to
+    walk the result set, e.g. ``offset=0, 8, 16, ...`` with the default page size.
+    A page reaching past the cap (``offset + num_results > 100``) returns an
+    explicit error — never a silently truncated page. A page past the query's
+    result count (still within the cap) returns an explicit empty page.
+    ``offset=0`` (the default) is byte-identical to the unpaged call.
     """
     from digisearch import web_exa
 
@@ -241,11 +252,15 @@ def digisearch_web_search(
         return "EXA web search is disabled (EXA_API_KEY is not set)."
     if search_type not in web_exa.VALID_SEARCH_TYPES:
         return f"[digisearch web search error: invalid search_type: {search_type!r}]"
+    requested = 0
     try:
+        requested = max(1, min(int(num_results), web_exa.EXA_MAX_RESULTS))
+        start = int(offset)
         data = web_exa.exa_search(
             query,
             search_type=search_type,  # type: ignore[arg-type]
-            num_results=max(1, min(int(num_results), 100)),
+            num_results=requested,
+            offset=start,
             category=category,
             include_domains=include_domains,
             exclude_domains=exclude_domains,
@@ -253,7 +268,14 @@ def digisearch_web_search(
     except (web_exa.ExaError, ValueError) as e:
         logger.error("digisearch web search failed: %s", e)
         return f"[digisearch web search error: {e}]"
-    return web_exa.format_web_results(data)
+    if start > 0 and not data.results and not data.output:
+        return (
+            f"No EXA results at offset {start} (window [{start}, {start + requested}) is past "
+            f"the query's result count, within the {web_exa.EXA_MAX_RESULTS}-result EXA cap)."
+        )
+    # The landed 10-result render cap stays the default; an explicit page larger
+    # than it must render whole or paging would silently truncate.
+    return web_exa.format_web_results(data, max_items=max(10, requested))
 
 
 # --- Phase C monitors (§4.7, #4065) -------------------------------------------------

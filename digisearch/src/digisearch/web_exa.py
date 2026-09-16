@@ -34,6 +34,15 @@ EXA_API_BASE = "https://api.exa.ai"
 EXA_ENV_VAR = "EXA_API_KEY"
 EXA_TIMEOUT_S = 30.0
 
+#: Upstream ``numResults`` cap for ``POST /search``. EXA has no offset
+#: parameter, so paging is a client-side slice of one enlarged window and this
+#: is the hard ceiling for that window. Pinned in-repo by the monitors model's
+#: 1-100 bound (``digisearch.monitors.models.Watch.num_results``, R6) asserted
+#: in ``tests/ds/test_monitors_models.py::test_num_results_bounds_are_exa_cap``
+#: and mirrored by the orchestrator manifest's "1-100" description; the #4123
+#: live-pin reconciliation did not move it.
+EXA_MAX_RESULTS = 100
+
 ExaSearchType = Literal["instant", "fast", "auto", "deep-lite", "deep", "deep-reasoning"]
 
 VALID_SEARCH_TYPES: frozenset[str] = frozenset(
@@ -47,6 +56,14 @@ class ExaNotConfiguredError(RuntimeError):
 
 class ExaError(RuntimeError):
     """Raised on EXA transport / API errors (status, payload)."""
+
+
+class ExaPageOutOfRangeError(ValueError):
+    """Raised when a paging window reaches past :data:`EXA_MAX_RESULTS`.
+
+    A ``ValueError`` subclass so every existing ``except ValueError`` call site
+    keeps handling callers' out-of-range requests as invalid input.
+    """
 
 
 class WebSearchData(BaseModel):
@@ -106,6 +123,7 @@ def exa_search(
     *,
     search_type: ExaSearchType = "auto",
     num_results: int = 8,
+    offset: int = 0,
     category: str | None = None,
     contents_highlights: bool = True,
     contents_text: bool = False,
@@ -121,13 +139,32 @@ def exa_search(
     system_prompt: str | None = None,
     api_key: str | None = None,
 ) -> WebSearchData:
-    """Run ``POST /search`` against EXA and return native results + synthesis."""
+    """Run ``POST /search`` against EXA and return native results + synthesis.
+
+    Paging: EXA has no offset parameter and caps ``numResults`` upstream
+    (:data:`EXA_MAX_RESULTS`, currently 100), so ``offset`` selects the
+    client-side slice ``results[offset : offset + num_results]`` of one enlarged
+    window fetched with ``numResults = offset + num_results``. ``offset=0`` is
+    the unpaged call. A window reaching past the cap — ``offset + num_results >
+    EXA_MAX_RESULTS``, including ``offset >= EXA_MAX_RESULTS`` — raises
+    :class:`ExaPageOutOfRangeError` before any request: pages beyond the cap are
+    unreachable and are never silently truncated.
+    """
     q = (query or "").strip()
     if not q:
         raise ValueError("query is required")
     if search_type not in VALID_SEARCH_TYPES:
         raise ValueError(f"invalid search_type: {search_type!r}")
-    n = max(1, min(int(num_results), 100))
+    n = max(1, min(int(num_results), EXA_MAX_RESULTS))
+    start = int(offset)
+    if start < 0:
+        raise ValueError("offset must be >= 0")
+    if start + n > EXA_MAX_RESULTS:
+        raise ExaPageOutOfRangeError(
+            f"requested window [{start}, {start + n}) exceeds the EXA numResults cap "
+            f"({EXA_MAX_RESULTS}); results past the cap are unreachable — lower num_results "
+            f"or start at an earlier offset"
+        )
     key = _api_key(api_key)
     contents: dict[str, Any] = {}
     if contents_highlights:
@@ -140,7 +177,7 @@ def exa_search(
         contents["maxAgeHours"] = int(max_age_hours)
     if livecrawl == "preferred" and "maxAgeHours" not in contents:
         contents["maxAgeHours"] = 0
-    payload: dict[str, Any] = {"query": q, "type": search_type, "numResults": n}
+    payload: dict[str, Any] = {"query": q, "type": search_type, "numResults": start + n}
     if category:
         payload["category"] = category
     if contents:
@@ -161,8 +198,11 @@ def exa_search(
     results = data.get("results") if isinstance(data.get("results"), list) else []
     output = data.get("output") if isinstance(data.get("output"), dict) else None
     cost = data.get("costDollars") if isinstance(data.get("costDollars"), dict) else None
+    # Slice after filtering non-dict rows so ``offset`` counts the results the
+    # caller actually sees.
+    window = [r for r in results if isinstance(r, dict)]
     return WebSearchData(
-        results=[r for r in results if isinstance(r, dict)],
+        results=window[start:],
         output=output,
         search_type=str(data.get("searchType") or data.get("resolvedSearchType") or search_type),
         cost_dollars=cost,

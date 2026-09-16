@@ -465,7 +465,7 @@ default:** every entry point fails closed without `EXA_API_KEY` (503 / disabled 
 | `POST /v1/web_contents` | Known-URL fetch (`text`/`highlights`/`summary`) |
 | `POST /v1/web_answer` | Grounded answer with citations |
 | Orchestrator `digisearch_web_search` | Advertised in the manifest only when `EXA_API_KEY` is set; dispatched via `POST /v1/orchestrator_invoke` |
-| MCP `digisearch_web_search` | `query`, `search_type`, `num_results`, `category` → formatted text |
+| MCP `digisearch_web_search` | `query`, `search_type`, `num_results`, `category`, `offset` → formatted text. `offset` pages the recall set (client-side slice of one enlarged window, `numResults = offset + num_results`, because EXA `POST /search` has no offset); cap `EXA_MAX_RESULTS` = 100 pinned by the monitors 1-100 bound; a page reaching past the cap errors explicitly (never a silent truncated page) and a page past the query's result count returns an explicit empty page (#4234) |
 
 Auth: same `digisearch:query` scope via `DigiAuthMiddleware` (default path rule; no digikey change).
 

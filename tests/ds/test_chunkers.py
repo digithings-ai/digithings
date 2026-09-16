@@ -267,6 +267,8 @@ def test_real_markdown_file_chunking_matches_recorded_fingerprint() -> None:
     Hashes only (count still 111) re-recorded for the #4226 review-fix wave
     (re-delivery cap/full-ladder wording in ARCHITECTURE.md) — fixture prose
     only; RecursiveChunker unchanged.
+    Hashes only (count still 111) re-recorded for #4234 (shallow-recall paging
+    row in ARCHITECTURE.md) — fixture prose only; RecursiveChunker unchanged.
     Hashes only (count still 111) re-recorded for #4192 (web_search provider
     soft-error envelope sentence in ARCHITECTURE.md) — fixture prose only;
     RecursiveChunker unchanged.
@@ -300,8 +302,8 @@ def test_real_markdown_file_chunking_matches_recorded_fingerprint() -> None:
         "c86663a520afa724",
         "7e8464fe6a6cc067",
         "805b4f2eb13bd3fd",
-        "44ec568505a0232f",
-        "e1cbdda23bdfbf37",
+        "74e1fdd756cc9dc8",
+        "decc6483e87f6403",
         "7973399b6e155051",
         "e0ed75d4b266835e",
         "5e1cdcae7ee033f5",
