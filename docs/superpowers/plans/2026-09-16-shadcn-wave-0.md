@@ -29,9 +29,9 @@
 
 **Files touched overall:**
 - Modify: `cloudflare/digiweb/web/tsconfig.json`, `cloudflare/digiweb/web/package.json`
-- Create: `cloudflare/digiweb/web/vitest.config.ts`, `cloudflare/digiweb/web/components.json`, `cloudflare/digiweb/web/src/lib/utils.ts` (+test), `cloudflare/digiweb/web/src/ui/*` (+barrel), `cloudflare/digiweb/web/src/components/dot-matrix.tsx`, `cloudflare/digiweb/reference/app/(gallery)/ui/page.tsx`
-- Modify: `cloudflare/digiweb/web/src/styles/web-theme.css` (+contract test), `cloudflare/digiweb/reference/app/globals.css`, `cloudflare/digiweb/reference/components/chatbot/chatbot-thread-list.tsx`, `cloudflare/digiweb/reference/components/chatbot/cube-matrix-legend.tsx`
-- Delete: `cloudflare/digiweb/reference/components/ui/*`
+- Create: `cloudflare/digiweb/web/vitest.config.ts`, `cloudflare/digiweb/web/components.json`, `cloudflare/digiweb/web/src/lib/utils.ts` (+test), `cloudflare/digiweb/web/src/ui/*` (+barrel), `cloudflare/digiweb/reference/app/(gallery)/ui/page.tsx`
+- Modify: `cloudflare/digiweb/web/src/styles/web-theme.css` (+contract test), `cloudflare/digiweb/reference/app/globals.css`
+- Delete: `cloudflare/digiweb/reference/components/ui/{avatar,button,collapsible,dialog,skeleton,textarea}.tsx` (6 verified-dead files; `tooltip.tsx` + `dot-matrix.tsx` shim stay — load-bearing for `gallery-thread.source.test.ts`)
 - Docs: `cloudflare/digiweb/MIGRATION.md`, `cloudflare/digiweb/ARCHITECTURE.md`, `cloudflare/digiweb/MANIFEST.json`
 
 ---
@@ -346,16 +346,15 @@ git commit -m "feat(digiweb): shadcn token bridge in web-theme.css (@theme inlin
 **Files:**
 - Create (CLI-generated): `cloudflare/digiweb/web/src/ui/button.tsx`, `card.tsx`, `dialog.tsx`, `input.tsx`
 - Create: `cloudflare/digiweb/web/src/ui/index.ts` (barrel)
-- Create (moved): `cloudflare/digiweb/web/src/components/dot-matrix.tsx`
 - Modify: `cloudflare/digiweb/web/package.json` (exports)
-- Modify: `cloudflare/digiweb/reference/app/globals.css` (`@source` lines)
-- Modify: `cloudflare/digiweb/reference/components/chatbot/chatbot-thread-list.tsx`, `cube-matrix-legend.tsx` (DotMatrix import)
-- Delete: `cloudflare/digiweb/reference/components/ui/` (8 files)
+- Modify: `cloudflare/digiweb/web/src/styles/web-theme.css` + `web-theme.test.ts` (Step 8b addendum)
+- Modify: `cloudflare/digiweb/reference/app/globals.css` (`@source` line; Step 8b stale-bridge removal)
+- Delete: `cloudflare/digiweb/reference/components/ui/` — only the 6 verified-dead files (`avatar`, `button`, `collapsible`, `dialog`, `skeleton`, `textarea`); `tooltip.tsx` + `dot-matrix.tsx` stay
 - Test: `cloudflare/digiweb/web/src/ui/ui.render.test.tsx`
 
 **Interfaces:**
 - Consumes: `cn` from `@/lib/utils` (Task 1) and the token contract (Task 3); consumers render `Button`/`Card`/`Dialog`/`Input` unmodified — zero per-component styling.
-- Produces: `@digithings/web/ui` (barrel export: `Button`, `Card`, `Dialog`, `Input`, plus each component's sub-parts); `@digithings/web/dot-matrix` (`DotMatrix`), replacing `reference/components/ui/dot-matrix.tsx`.
+- Produces: `@digithings/web/ui` (barrel export: `Button`, `Card`, `Dialog`, `Input`, plus each component's sub-parts). No `./dot-matrix` export — `DotMatrix` already ships as `./chat/dot-matrix`, and the reference shim re-exports it (load-bearing for `gallery-thread.source.test.ts`).
 
 - [ ] **Step 1: Generate the components on Base UI**
 
@@ -454,12 +453,12 @@ npm --workspace @digithings/web run typecheck
 cd cloudflare/digiweb/reference && npm run lint && npm run typecheck
 ```
 
-Expected: all green (web suite ≈46 files/318 tests plus the 3 new files; reference 0 errors). The reference dev/build proof is Task 5.
+Expected: web suite 49 files/327 tests green; web `typecheck` stays pre-existing red (30 errors, 0 in `src/ui/` — see Task 1/4 rulings); reference lint + typecheck 0 errors. The reference dev/build proof is Task 5.
 
 - [ ] **Step 10: Commit**
 
 ```bash
-git add cloudflare/digiweb/web/src/ui cloudflare/digiweb/web/src/components/dot-matrix.tsx cloudflare/digiweb/web/package.json cloudflare/digiweb/reference/app/globals.css cloudflare/digiweb/reference/components/chatbot/chatbot-thread-list.tsx cloudflare/digiweb/reference/components/chatbot/cube-matrix-legend.tsx
+git add cloudflare/digiweb/web/src/ui cloudflare/digiweb/web/src/styles/web-theme.css cloudflare/digiweb/web/src/styles/web-theme.test.ts cloudflare/digiweb/web/package.json cloudflare/digiweb/reference/app/globals.css
 git commit -m "feat(digiweb): vendored shadcn ui set in @digithings/web + reference rewire — wave 0"
 ```
 
@@ -536,7 +535,7 @@ Document: the vendored set lives in `@digithings/web` (`src/ui/`, Base UI base);
 
 - [ ] **Step 2: ARCHITECTURE.md + MANIFEST.json**
 
-Add a `ui` family row to MANIFEST.json (components: button, card, dialog, input + dot-matrix under components/) and the corresponding paragraph in ARCHITECTURE.md's family map (source of truth: `web/src/ui/index.ts`).
+Add a `ui` family row to MANIFEST.json (components: button, card, dialog, input) and the corresponding paragraph in ARCHITECTURE.md's family map (source of truth: `web/src/ui/index.ts`).
 
 - [ ] **Step 3: Commit**
 
@@ -555,10 +554,9 @@ git commit -m "docs(digiweb): wave 0 canon — vendored ui kit contract in MIGRA
 - Consumes: branch `docs/shadcn-migration-design` (spec commit `975da610e`) and the wave-0 branch.
 - Produces: spec on `develop`, wave-0 PR merged referencing epic #4206.
 
-- [ ] **Step 1: Branch and push the wave-0 work**
+- [ ] **Step 1: Push the wave-0 branch** (it already exists locally on this worktree with all task commits)
 
 ```bash
-git checkout -b feat/shadcn-wave-0
 git push -u origin feat/shadcn-wave-0
 ```
 
@@ -589,6 +587,6 @@ After CI is green: run the in-session fresh-context review (`/review <PR>`) per 
 
 ## Self-Review
 
-- **Spec coverage:** §3.1 (one vendored set, package components.json, `./ui` export, `@source`, reference `components/ui` deleted) → Tasks 2+4. §3.2 (bridge in `web-theme.css`, exact rows) → Task 3. §3.3 (preset: style lyra, Lucide, r=0, JetBrains in config) → Tasks 2+3 (app font swap deliberately Wave 1). §5 Wave 0 exit criteria (stock components in skin, preview screenshots, vitest, canon guard) → Tasks 4–5. §9 Q1/Q2 → Global Constraints + Task 2. §9 Q6 (epic referenced) → header + Task 7.
+- **Spec coverage:** §3.1 (one vendored set, package components.json, `./ui` export, `@source`, reference `components/ui` partially retired — 6 dead files; the tooltip parity specimen + dot-matrix shim stay) → Tasks 2+4. §3.2 (bridge in `web-theme.css`, exact rows) → Task 3. §3.3 (preset: style lyra, Lucide, r=0, JetBrains in config) → Tasks 2+3 (app font swap deliberately Wave 1). §5 Wave 0 exit criteria (stock components in skin, preview screenshots, vitest, canon guard) → Tasks 4–5. §9 Q1/Q2 → Global Constraints + Task 2. §9 Q6 (epic referenced) → header + Task 7.
 - **Placeholder scan:** no TBD/TODO; every code step carries its content; CLI-schema step is a probe (CLI-authoritative) rather than a guess, with an explicit fallback.
-- **Type consistency:** `cn` path `@/lib/utils` matches what `shadcn add` writes and Task 1 provides; exports `./ui` + `./dot-matrix` match Task 4 imports in reference; test file paths match the alias config.
+- **Type consistency:** `cn` path `@/lib/utils` matches what `shadcn add` writes and Task 1 provides; the `./ui` export (Task 4) and the pre-existing `./chat/dot-matrix` subpath match what the reference consumes; test file paths match the alias config.
