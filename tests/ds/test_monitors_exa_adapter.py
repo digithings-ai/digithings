@@ -284,19 +284,22 @@ def test_exa_run_malformed_output_container_fails_closed():
 
 @pytest.mark.unit
 def test_exa_run_non_terminal_status_fails_closed():
-    with pytest.raises(ExaAdapterError) as ei:
-        exa_run_to_monitor_run(watch_id="w1", exa_payload=_payload(status="running", output=None))
-    assert ei.value.code == "exa_run_status_unknown"
+    for status in ("running", "cancelled", "queued"):
+        with pytest.raises(ExaAdapterError) as ei:
+            exa_run_to_monitor_run(watch_id="w1", exa_payload=_payload(status=status, output=None))
+        assert ei.value.code == "exa_run_status_unknown"
 
 
 @pytest.mark.unit
 def test_exa_event_is_non_terminal_reads_the_nested_run():
+    """Non-terminal is exclusion: everything but completed/failed/error (#4184)."""
     created = _payload(status="running", output=None)
     created["type"] = "monitor.run.created"
     assert exa_event_is_non_terminal(created) is True
-    assert exa_event_is_non_terminal(_payload()) is False
-    assert exa_event_is_non_terminal(_payload(status="failed")) is False
-    assert exa_event_is_non_terminal(_payload(status="weird")) is False
+    for terminal in ("completed", "failed", "error"):
+        assert exa_event_is_non_terminal(_payload(status=terminal)) is False, terminal
+    for non_terminal in ("running", "cancelled", "queued", "weird", "RUNNING"):
+        assert exa_event_is_non_terminal(_payload(status=non_terminal)) is True, non_terminal
     with pytest.raises(ExaAdapterError) as ei:
         exa_event_is_non_terminal(_payload(status=None))
     assert ei.value.code == "exa_payload_invalid"

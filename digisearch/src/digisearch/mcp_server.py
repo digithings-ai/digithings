@@ -296,6 +296,9 @@ def monitors_create_watch(
     digiclaw grammar) or ``interval_seconds`` (>= 60); cron wins when both are
     given. The watch is named after the query. ``delivery_mode`` other than
     ``poll`` needs targets, which this surface cannot set, so those are rejected.
+    This surface creates oss watches only: an EXA-backed watch (``backend``,
+    delivery targets, remote ``webhookSecret`` provisioning) is created through
+    ``POST /v1/monitors``, which can express both.
     """
     store = _monitor_store_or_none()
     if store is None:
