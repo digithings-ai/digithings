@@ -145,6 +145,11 @@ describe('VehicleExpressionRow — Gloomberb shortcut', () => {
     expect(anchor).toContain('target="_blank"');
     expect(anchor).toContain('rel="noopener noreferrer"');
     expect(html).toContain('Open in Gloomberb');
+    // The arrow idiom, not the external-link glyph (#4204).
+    const block =
+      html.match(/<a[^>]*data-testid="gloomberb-link-BRK\.B"[\s\S]*?<\/a>/)?.[0] ?? '';
+    expect(block).toContain('lucide-arrow-up-right');
+    expect(block).not.toContain('lucide-external-link');
   });
 
   // A blank symbol must not render an anchor: `?ticker=` makes the terminal fall

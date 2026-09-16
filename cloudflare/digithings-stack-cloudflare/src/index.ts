@@ -307,7 +307,7 @@ export default {
     // Read-only Zammad MCP for the OCC embed, reached over a secret-gated edge
     // path. The container-internal `zammad-mcp` name cannot be resolved in the
     // Cloudflare runtime (/etc/hosts is read-only, so the entrypoint alias is
-    // skipped), so digraph dials this public HTTPS path instead; the embed
+    // skipped), so digigraph dials this public HTTPS path instead; the embed
     // tenant entry carries the matching x-digi-mcp-key (#3841 authHeader).
     // Fail closed: no secret configured -> 401.
     if (url.pathname.startsWith(`${MCP_EDGE_PREFIX}/`)) {

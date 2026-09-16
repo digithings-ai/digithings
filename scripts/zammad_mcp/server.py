@@ -31,8 +31,10 @@ def _allowed_host_patterns(raw: str) -> list[str]:
     Entries without a port get ``:*`` appended, so the compose service name
     ``zammad-mcp`` matches the ``zammad-mcp:8770`` Host header digigraph
     sends. FastMCP matches exact hosts and a literal ``:*`` suffix only, so
-    entries with any other wildcard are dropped. DNS-rebinding protection
-    stays on either way.
+    entries with any other wildcard are dropped. Whether FastMCP actually
+    enforces the allowlist depends on the mcp build — versions without a
+    ``transport_security`` setting accept the configuration but ignore it
+    (see ``run_mcp``).
     """
     patterns: list[str] = []
     for item in raw.split(","):

@@ -43,6 +43,12 @@ export interface TradeHistoryRow {
   verdictReason?: string | null;
   /** Level-touch verdict (target | stop | both | neither | no_entry). */
   levelOutcome?: string | null;
+  /** Lifecycle grade once ended: right/wrong (migration 032); null while live. */
+  outcome?: string | null;
+  /** measured = filled, graded at the touched level or exit close; directional = never filled. */
+  gradeBasis?: string | null;
+  /** What ended the idea: target | stop | both | drop | successor (migration 032). */
+  closedBy?: string | null;
   /** 0.5σ excursion verdict while live (right | wrong | inconclusive). */
   /** True when a later board on this axis moved this row's stop or target. */
   levelsUpdated?: boolean;
@@ -183,6 +189,8 @@ export function biasLabel(direction: string): string {
 export function tradeResult(row: TradeHistoryRow): TradeResult | null {
   if (row.lifecycle === 'no_data' || row.lifecycle === 'unscored') return null;
   if (row.lifecycle === 'live') return 'live';
+  if (row.outcome === 'right') return 'right';
+  if (row.outcome === 'wrong') return 'wrong';
   if (row.directionalWin === true) return 'right';
   if (row.directionalWin === false) return 'wrong';
   // Dropped / superseded closes keep a Close reason even without a verdict —
@@ -242,6 +250,9 @@ export function assembleTradeHistory(
           evalStatus: ev?.status ?? null,
           verdictReason: ev?.verdict_reason ?? null,
           levelOutcome: ev?.level_outcome ?? null,
+          outcome: ev?.outcome ?? null,
+          gradeBasis: ev?.grade_basis ?? null,
+          closedBy: ev?.closed_by ?? null,
           } satisfies TradeHistoryRow;
     })
     .sort((a, b) => b.runDate.localeCompare(a.runDate) || a.rank - b.rank);
@@ -408,21 +419,16 @@ export interface TradeCloseReason {
   detail?: string;
 }
 
-const LEVEL_OUTCOME_LABELS: Record<string, string> = {
-  target: 'Target hit',
-  stop: 'Stop hit',
-  both: 'Target + stop hit',
-};
-
 /**
- * Why a trade left the live book: the observed level-touch verdict when one
- * exists, the successor clock for resolutions, the bookkeeper rationale for
- * drops, and a no-data fallback for missing rates (12x desk ask).
+ * One-word Status for the Trades table plus the narrative `detail` for the
+ * sidebar/tooltip: the observed level-touch verdict when one exists, the
+ * successor clock for resolutions, the bookkeeper rationale for drops, and a
+ * no-data fallback for missing rates (12x desk ask).
  */
 export function closeReason(row: TradeHistoryRow): TradeCloseReason {
   if (row.lifecycle === 'live') return { kind: 'live', label: 'Live' };
   if (row.evalStatus === 'missing_rates' || row.lifecycle === 'no_data') {
-    return { kind: 'no-data', label: 'No data — missing rates' };
+    return { kind: 'no-data', label: 'No data', detail: 'Missing rates' };
   }
   if (row.lifecycle === 'unscored') return { kind: 'no-data', label: 'Unscored' };
 
@@ -430,28 +436,52 @@ export function closeReason(row: TradeHistoryRow): TradeCloseReason {
   if (level === 'target' || level === 'stop' || level === 'both') {
     return {
       kind: level,
-      label: LEVEL_OUTCOME_LABELS[level],
+      label: level === 'target' ? 'Target' : level === 'stop' ? 'Stop' : 'Both',
       detail: row.exitDate ? `Closed ${row.exitDate}` : undefined,
     };
   }
-  if (row.evalStatus === 'dropped') {
+  if (row.evalStatus === 'dropped' || row.closedBy === 'drop') {
     return {
       kind: 'dropped',
-      label: row.verdictReason ? `Dropped — ${row.verdictReason}` : 'Dropped by bookkeeper',
+      label: 'Dropped',
+      detail: row.verdictReason || 'Dropped by bookkeeper',
     };
   }
   if (level === 'no_entry') {
     return {
       kind: 'superseded',
-      label: 'Never filled — superseded',
-      detail: row.exitDate ? `Superseded ${row.exitDate}` : undefined,
+      label: 'Superseded',
+      detail: row.exitDate
+        ? `Never filled — superseded ${row.exitDate}`
+        : 'Never filled — superseded',
     };
   }
   return {
     kind: 'superseded',
-    label: 'Superseded by next board',
-    detail: row.exitDate ? `Superseded ${row.exitDate}` : undefined,
+    label: 'Superseded',
+    detail: row.exitDate ? `Superseded ${row.exitDate}` : 'Superseded by next board',
   };
+}
+
+/** How a closed (or live) trade's signed return should be presented. */
+export interface TradeFinalResult {
+  /** Signed fraction vs entry (e.g. 0.0058 = +0.6%). */
+  pct: number;
+  /** Grading basis once ended; null while live or on legacy rows. */
+  basis: 'measured' | 'directional' | null;
+  live: boolean;
+}
+
+/**
+ * The final metric for the Impact column: what the trade actually resulted in.
+ * Live rows carry the mark-to-market return so far; ended rows carry the
+ * measured (filled) or directional (never filled) return at close.
+ */
+export function finalResult(row: TradeHistoryRow): TradeFinalResult | null {
+  if (row.holdReturn === null || !Number.isFinite(row.holdReturn)) return null;
+  const basis =
+    row.gradeBasis === 'measured' || row.gradeBasis === 'directional' ? row.gradeBasis : null;
+  return { pct: row.holdReturn, basis, live: row.lifecycle === 'live' };
 }
 
 /**
