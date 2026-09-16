@@ -1391,9 +1391,7 @@ class GloomberbClient:
                 return self._error_envelope(TranscriptsEnvelope, result)
             data, warnings = result
             if parsed.transcript_id:
-                row = self._normalize(
-                    nz.normalize_transcript_detail, data, parsed.transcript_id
-                )
+                row = self._normalize(nz.normalize_transcript_detail, data, parsed.transcript_id)
                 if isinstance(row, DigifetchError):
                     return self._error_envelope(TranscriptsEnvelope, row)
                 rows = [row]

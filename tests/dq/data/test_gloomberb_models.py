@@ -553,9 +553,7 @@ def test_saved_searches_models_are_parameterless_and_permissive() -> None:
     with pytest.raises(ValidationError):
         SavedSearchesInput(limit=5)  # type: ignore[call-arg]
 
-    row = SavedSearch(
-        id="s1", name="AI capex", query="AI capex", created_at="2026-09-01T00:00:00Z"
-    )
+    row = SavedSearch(id="s1", name="AI capex", query="AI capex", created_at="2026-09-01T00:00:00Z")
     assert row.name == "AI capex"
     assert row.query == "AI capex"
     result = SavedSearchesResult(searches=[row])
