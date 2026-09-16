@@ -58,6 +58,7 @@
 @source "../../web/src/components/icons.tsx";
 /* The terminal loaders' specimen markup now lives in the package too. */
 @source "../../web/src/components/terminal";
+@source "../../web/src/ui";
 
 /* Shared base for every design-reference page. Family-specific styles live
    next to their page (app/<family>/<family>.css) — keep this file small. */
@@ -628,27 +629,4 @@ html {
     height: 0;
     }
   }
-}
-
-/* assistant-ui Thread uses shadcn token names. Point them at digiweb tokens
-   so theme/livery toggles restyle the registry Thread without a second palette. */
-@theme inline {
-  --color-background: var(--bg);
-  --color-foreground: var(--ink);
-  --color-card: var(--surface);
-  --color-card-foreground: var(--ink);
-  --color-popover: var(--surface);
-  --color-popover-foreground: var(--ink);
-  --color-primary: var(--accent);
-  --color-primary-foreground: var(--on-accent);
-  --color-secondary: var(--surface-2);
-  --color-secondary-foreground: var(--ink);
-  --color-muted: var(--surface);
-  --color-muted-foreground: var(--ink-mute);
-  --color-accent-foreground: var(--on-accent);
-  --color-destructive: var(--danger);
-  --color-border: var(--hair);
-  --color-input: var(--hair);
-  --color-ring: var(--accent);
-  --color-input-background: var(--surface);
 }

@@ -140,6 +140,21 @@ rows), takes `ReactNode` labels, and accepts `linkPanels={false}` to omit
 `aria-controls` when the consumer owns no panel ids (wrapper-adaption cases
 like the dashboard's subpage tab bar).
 
+Wave 0 of the shadcn migration (#4206) added the **`ui`** family — the first
+*vendored* package family (stock shadcn/ui on Base UI, `base-lyra` preset),
+with no sheet of its own (all utilities, same bridge):
+
+| Family | Components | CSS subpath |
+| ------ | ---------- | ----------- |
+| `ui` | Button (+ `buttonVariants`), Card (+ Header/Title/Description/Action/Content/Footer), Dialog (+ Trigger/Close/Content/…), Input — barrel `web/src/ui/index.ts`, export `@digithings/web/ui` | — (utility-only; consumers add `@source "../../web/src/ui"`) |
+
+Refresh it with `npx shadcn@latest add <name>` inside `cloudflare/digiweb/web`
+(the `components.json` there is authoritative); local deltas stay limited to
+import adaptations (`cn` from `@/lib/utils`, sibling `./button`). The kit is
+not in `MANIFEST.json` — that file is generated from the reference app, and
+package-family indexing is tracked in #4225; discovery is the barrel and
+[MIGRATION.md](MIGRATION.md).
+
 Page-level dashboard composition is specified by
 `reference/components/dashboard-workspace-reference.tsx` on the Finance page.
 Its `dw-*` grammar is deliberately reference-only: a command band establishes
