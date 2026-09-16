@@ -1,5 +1,48 @@
 # Changelog
 
+## [2.1.0](https://github.com/digithings-ai/digithings/compare/digichat-v2.0.0...digichat-v2.1.0) (2026-09-16)
+
+
+### Features
+
+* **dashboard:** FX-Hub-only single view for 12x invitees + digichat proof for fx_hub grantees ([ea47a81](https://github.com/digithings-ai/digithings/commit/ea47a815e0db33f88f4a130b6419d6092655dc6f))
+* **dashboard:** FX-Hub-only single view for 12x invitees + digichat proof for fx_hub grantees ([8fbc332](https://github.com/digithings-ai/digithings/commit/8fbc332fa1a21906bc5eb8a17b4e2b22921facbc))
+* **digichat:** base assistant-ui parity, timing diagnostics, silent page context, focus fixes ([2b3fa66](https://github.com/digithings-ai/digithings/commit/2b3fa66746e7f8cce897da473fa7aa3e7fdd628e))
+* **digichat:** base assistant-ui parity, timing diagnostics, silent page context, focus fixes ([d33fe83](https://github.com/digithings-ai/digithings/commit/d33fe83574939bf4804d51ddd297ca2a25fc8312))
+* **digichat:** DataTap trial embed — used/limit counter, single-row Foundry tool calls, painted block caret ([2501bec](https://github.com/digithings-ai/digithings/commit/2501bec4643716078e5bc17297216b98dcad4e47))
+* **digichat:** painted terminal block caret in tenant accent (hide native slim caret) ([5c2d6c3](https://github.com/digithings-ai/digithings/commit/5c2d6c31f046e1c12fee7ee8bb9e6eadce38e9e1))
+* **digichat:** painted terminal block caret in tenant accent (hide native slim caret) ([7d05c8d](https://github.com/digithings-ai/digithings/commit/7d05c8d48430657e1c029c9fbc43911c4f079a75))
+* **digichat:** show remaining free/trial question counter on trial_form embeds ([6fea518](https://github.com/digithings-ai/digithings/commit/6fea518d32f81f1c4b1ac251cde7ec7f56b6c991))
+* **website:** surface Gloomberb deep links + attribution in dashboard and digichat ([#4098](https://github.com/digithings-ai/digithings/issues/4098)) ([#4130](https://github.com/digithings-ai/digithings/issues/4130)) ([be5f3fe](https://github.com/digithings-ai/digithings/commit/be5f3fe62d24f8003c20dcd56c4bdc2572f85c11))
+* **zammad:** read-only ticket MCP for the OCC help chat ([2c496f7](https://github.com/digithings-ai/digithings/commit/2c496f7a437caefb0160ed56e134597251127986))
+* **zammad:** read-only ticket MCP for the OCC help chat ([8a1ff22](https://github.com/digithings-ai/digithings/commit/8a1ff22242bd214f467202d3c8c6c9ad94a190b2))
+
+
+### Bug Fixes
+
+* **digichat:** align + track the block caret, brighten branch-picker cubes, blend the default attribution footer ([321419f](https://github.com/digithings-ai/digithings/commit/321419ff78ad6bc6d1176029789a85e083001cbe))
+* **digichat:** caret alignment + tracking, branch-picker cube chrome, blended default attribution footer ([61e05dc](https://github.com/digithings-ai/digithings/commit/61e05dcbb21435e474ce032d6c724170f3a7d31e))
+* **digichat:** carry operator MCP servers through the env tenant registry ([50312e2](https://github.com/digithings-ai/digithings/commit/50312e23a142053bc88730a157cf7f5dae056d4f))
+* **digichat:** carry operator MCP servers through the env tenant registry ([b504ca4](https://github.com/digithings-ai/digithings/commit/b504ca4261349c0b3a0e348f60ac2f8f48e7e006))
+* **digichat:** default legacy embed off and require verifiable first-party embed proof ([9526a46](https://github.com/digithings-ai/digithings/commit/9526a46a32d865bcfd786417284bae0ab4719a5a))
+* **digichat:** default legacy embed off and require verifiable first-party proof ([65beb71](https://github.com/digithings-ai/digithings/commit/65beb71c089bb56784ab17ebab5027852659b37c)), closes [#3895](https://github.com/digithings-ai/digithings/issues/3895)
+* **digichat:** fail an effectively empty digigraph 200 stream ([a0b2427](https://github.com/digithings-ai/digithings/commit/a0b2427efdaa94e50fd9055be2cf1d26d6561fa5)), closes [#3910](https://github.com/digithings-ai/digithings/issues/3910)
+* **digichat:** fail closed on unconfigured/unmatched embed defaults ([296dd3e](https://github.com/digithings-ai/digithings/commit/296dd3e731118b5bca4e09a7eba287477401ae96)), closes [#3957](https://github.com/digithings-ai/digithings/issues/3957)
+* **digichat:** key the light shell token on [data-theme] only ([f3f8611](https://github.com/digithings-ai/digithings/commit/f3f8611d608ac6f65542aa2fdd7a067ffe2323fe))
+* **digichat:** mark unreturned streamed tool rows failed, not completed ([8c55d65](https://github.com/digithings-ai/digithings/commit/8c55d65f0fbe503096c1030099251b2574d5c82b))
+* **digichat:** mark unreturned streamed tool rows failed, not completed ([252a28a](https://github.com/digithings-ai/digithings/commit/252a28a2b8fa2fef20e1ece6f9aa2f96b4046c30)), closes [#3955](https://github.com/digithings-ai/digithings/issues/3955)
+* **digichat:** render isError tool rows as failed, not success ([bed350c](https://github.com/digithings-ai/digithings/commit/bed350cdd25b40a6dee4fea4ab7143f15227888d))
+* **digichat:** restore dropped wide-mode brace + scope the credit strip paint ([703d5f8](https://github.com/digithings-ai/digithings/commit/703d5f84d8681a8b48dbe342ed343c0ca18d12e0))
+* **digichat:** single tool row per Foundry search call, suppress late annotation row; counter hugs composer, borderless attribution ([3ad06d0](https://github.com/digithings-ai/digithings/commit/3ad06d02622e8a1057c06d9af07272fa4050483c))
+* **digichat:** surface upstream failures as stream errors, not fake replies ([8034b71](https://github.com/digithings-ai/digithings/commit/8034b71b0921d1fa51cac396af147119906f61ab))
+* **digichat:** surface upstream failures as stream errors, not fake replies ([3d44651](https://github.com/digithings-ai/digithings/commit/3d4465187bf5843655ba7fa156a861072dc308ce)), closes [#3910](https://github.com/digithings-ai/digithings/issues/3910)
+* **digichat:** treat X-Digi-Mcp-* headers as credentials in redirect guard ([f1a1396](https://github.com/digithings-ai/digithings/commit/f1a1396edb9dbe393591c3fb0bb9e37df40cf271))
+* **digichat:** treat X-Digi-Mcp-* headers as credentials in redirect guard ([dba8486](https://github.com/digithings-ai/digithings/commit/dba84863a94993491389cfd3cc7902cdf7a0c119)), closes [#3933](https://github.com/digithings-ai/digithings/issues/3933)
+* **digichat:** trial counter counts up (used/limit) per pre-2.0 DataTap flow ([e27a9de](https://github.com/digithings-ai/digithings/commit/e27a9de96a32ac316f61721ffd56fb352f5f6ec6))
+* **digigraph:** scope SSE usage totals per stream, not process-global ([9580edc](https://github.com/digithings-ai/digithings/commit/9580edced903914316958b645f269f46486c6232))
+* **digigraph:** scope SSE usage totals per stream, not process-global ([b6d6d69](https://github.com/digithings-ai/digithings/commit/b6d6d69ee7a2092d4fa1e03c8e2ad891e217f87e)), closes [#3982](https://github.com/digithings-ai/digithings/issues/3982)
+* **root:** require compose secrets, disable workers.dev default ([#3921](https://github.com/digithings-ai/digithings/issues/3921)) ([#3924](https://github.com/digithings-ai/digithings/issues/3924)) ([12568b4](https://github.com/digithings-ai/digithings/commit/12568b4b85e8ba785cbace9e129c8e8bd89c2bff))
+
 ## [2.0.0](https://github.com/digithings-ai/digithings/compare/digichat-v1.5.0...digichat-v2.0.0) (2026-09-08)
 
 
