@@ -24,8 +24,9 @@ caller argument): reads are filtered beneath that vault subdirectory and
 An absent or blank prefix keeps the historical whole-vault behaviour.
 """
 
-from __future__ import annotations
-
+# No `from __future__ import annotations`: the stack image ships FastMCP 1.9.3,
+# which calls issubclass() on raw annotations — PEP 563 string annotations crash
+# every @mcp.tool() at import (Dockerfile.digithings-stack-cloudflare marker v8).
 from collections.abc import Callable, Mapping
 from typing import Any  # score:allow untyped any — tool argument maps are arbitrary JSON
 
