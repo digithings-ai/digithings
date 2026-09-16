@@ -264,11 +264,11 @@ def test_search_only_wraps_hard_provider_error_as_not_retryable(monkeypatch):
 
 
 def test_search_only_wraps_ddgs_ratelimit_as_429_retryable(monkeypatch):
-    """Pin the installed ddgs exception the 2026-09-15 incident raised (#4192).
+    """Pin ddgs 9.0.x ``RatelimitException`` -> 429/retryable (#4192).
 
     ddgs carries no HTTP response, so the classifier keys off the exception
-    *name*. A ddgs bump that renames ``RatelimitException`` must fail this test
-    instead of silently downgrading a rate limit to a hard failure.
+    *name*. ddgs >=9.1 no longer raises this class (failed searches surface as
+    ``DDGSException``, pinned below), so this covers the legacy deployed pin.
     """
     import pytest
 
@@ -295,3 +295,38 @@ def test_search_only_wraps_ddgs_timeout_as_retryable(monkeypatch):
         run_web_search(WebSearchRequest(query="etf"), config=WebSearchConfig(backend="auto"))
     assert excinfo.value.status_code is None
     assert excinfo.value.retryable is True
+
+
+def test_search_only_wraps_ddgs_hard_failure_as_not_retryable(monkeypatch):
+    """ddgs >=9.1 collapses failed searches (even provider 429s) into this."""
+    import pytest
+
+    from digisearch.web_search.models import WebSearchProviderError, WebSearchRequest
+
+    ddgs_error = pytest.importorskip("ddgs.exceptions").DDGSException
+    _provider_raising(monkeypatch, lambda: ddgs_error("No results found."))
+    with pytest.raises(WebSearchProviderError) as excinfo:
+        run_web_search(WebSearchRequest(query="etf"), config=WebSearchConfig(backend="auto"))
+    assert excinfo.value.status_code is None
+    assert excinfo.value.retryable is False
+    assert "No results found." in str(excinfo.value)
+
+
+def test_search_only_scrubs_provider_url_credentials(monkeypatch):
+    """Provider URL userinfo and query tokens must not leak into the error."""
+    import pytest
+
+    from digisearch.web_search.models import WebSearchProviderError, WebSearchRequest
+
+    secret_url = (
+        "Client error '429 Too Many Requests' for url "
+        "'http://user:s3cr3t@searxng.internal:8080/search?q=etf&token=abc123'"
+    )
+    _provider_raising(monkeypatch, lambda: RuntimeError(secret_url))
+    with pytest.raises(WebSearchProviderError) as excinfo:
+        run_web_search(WebSearchRequest(query="etf"), config=WebSearchConfig(backend="auto"))
+    message = str(excinfo.value)
+    assert "s3cr3t" not in message
+    assert "token=abc123" not in message
+    assert "429 Too Many Requests" in message
+    assert "***@searxng.internal" in message

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import re
 import threading
 from typing import Literal
 
@@ -83,11 +84,28 @@ def _limiter_for(min_interval_s: float) -> RateLimiter:
 _RETRYABLE_STATUSES = frozenset({408, 425, 429, 500, 502, 503, 504})
 
 
+#: Credentials and tokens in a provider URL must never reach a caller-visible
+#: error string: httpx embeds the full request URL (userinfo, query) in
+#: ``HTTPStatusError``/``TransportError`` text.
+_URL_USERINFO_RE = re.compile(r"([a-zA-Z][a-zA-Z0-9+.\-]*://)[^/@\s]+@")
+_URL_QUERY_RE = re.compile(r"\?[^\s'\"`)]*")
+
+
+def _scrub_provider_detail(text: str) -> str:
+    """Strip URL userinfo and query strings (secrets) from provider text."""
+    text = _URL_USERINFO_RE.sub(r"\1***@", text)
+    return _URL_QUERY_RE.sub("?<redacted>", text)
+
+
 def _provider_failure_fields(exc: Exception) -> tuple[int | None, bool]:
     """Best-effort ``(upstream_status, retryable)`` for a provider exception.
 
     httpx failures expose a response/status; ddgs failures do not, so classify
     those by name (the web-search extra is optional and stays un-imported here).
+    ``RatelimitException`` is a *raised* ddgs failure only in 9.0.x — ddgs
+    >=9.1 collapses non-200 provider responses (including 429s) into
+    ``DDGSException("No results found.")``, which carries no status and is
+    reported as a non-retryable hard failure rather than guessed at.
     """
     if isinstance(exc, httpx.HTTPStatusError):
         status = exc.response.status_code
@@ -99,11 +117,16 @@ def _provider_failure_fields(exc: Exception) -> tuple[int | None, bool]:
         return status, status in _RETRYABLE_STATUSES
     name = type(exc).__name__.lower()
     if "ratelimit" in name or "rate_limit" in name:
-        # ddgs raises RatelimitException without an HTTP response; 429 is its
-        # HTTP meaning, so surface it as the status hint.
+        # ddgs 9.0.x raised RatelimitException without an HTTP response; 429 is
+        # its HTTP meaning, so surface it as the status hint. Newer ddgs
+        # versions no longer raise it (see the DDGSException branch below).
         return 429, True
     if "timeout" in name or isinstance(exc, OSError):
         return None, True
+    if "ddgsexception" in name:
+        # ddgs >=9.1 raises this for any failed search, even a provider 429.
+        # No status is recoverable, so retryability is not guessed.
+        return None, False
     return None, False
 
 
@@ -121,7 +144,7 @@ def _search_only(req: WebSearchRequest, config: WebSearchConfig) -> WebSearchRes
     if last is None:  # pragma: no cover - ``order`` is never empty
         raise WebSearchProviderError("all web-search backends failed")
     status, retryable = _provider_failure_fields(last)
-    detail = str(last) or type(last).__name__
+    detail = _scrub_provider_detail(str(last) or type(last).__name__)
     if status is not None and str(status) not in detail:
         detail = f"{detail} (HTTP {status})"
     raise WebSearchProviderError(

@@ -444,6 +444,42 @@ describe("useEmbedDigiChat prepareSendMessagesRequest — X-Digi-Language", () =
   });
 });
 
+describe("useEmbedDigiChat prepareSendMessagesRequest — reload turn mode (#4248)", () => {
+  it("arms X-Digi-Turn-Mode: regenerate for a runtime reload", async () => {
+    const { unmount } = renderHookLocally(() => useEmbedDigiChat(baseEmbedOptions({})));
+    const config = readCapturedTransportConfig();
+    if (!config) {
+      throw new Error("AssistantChatTransport was never constructed by useEmbedDigiChat");
+    }
+
+    const result = await config.prepareSendMessagesRequest({
+      messages: [],
+      body: undefined,
+      trigger: "regenerate-message",
+    });
+    expect(new Headers(result.headers).get("X-Digi-Turn-Mode")).toBe("regenerate");
+    unmount();
+  });
+
+  it("does not arm regenerate when the host forbids client turn mutation", async () => {
+    const { unmount } = renderHookLocally(() =>
+      useEmbedDigiChat(baseEmbedOptions({ allowClientTurnMutation: false })),
+    );
+    const config = readCapturedTransportConfig();
+    if (!config) {
+      throw new Error("AssistantChatTransport was never constructed by useEmbedDigiChat");
+    }
+
+    const result = await config.prepareSendMessagesRequest({
+      messages: [],
+      body: undefined,
+      trigger: "regenerate-message",
+    });
+    expect(new Headers(result.headers).has("X-Digi-Turn-Mode")).toBe(false);
+    unmount();
+  });
+});
+
 describe("useEmbedDigiChat prepareSendMessagesRequest — X-Digi-Force-Tool", () => {
   beforeEach(() => {
     takePendingForceTool("https://example.com");

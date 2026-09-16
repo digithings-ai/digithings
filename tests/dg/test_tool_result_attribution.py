@@ -227,3 +227,43 @@ def test_attribution_block_larger_than_the_cap_is_dropped_entirely() -> None:
     rendered = _render_clipped_tool_result(raw)
     assert len(json.dumps(rendered)) <= _MAX_TOOL_RESULT_CHARS
     assert rendered == {"truncated": True, "preview": "… [truncated]"}
+
+
+@pytest.mark.unit
+def test_partial_top_level_match_does_not_shadow_nested_richer_block() -> None:
+    """A lone top-level ``source_url`` must not hide the nested §7 block.
+
+    Precedence fix (review follow-up): the walk used to return on the first
+    partial key match, so ``{"source_url": …, "data": {block}}`` hoisted only
+    ``source_url`` and the rendered record lost the attribution.
+    """
+    raw = {
+        "source_url": _SOURCE_URL,
+        "data": {
+            "attribution": _ATTRIBUTION,
+            "delay_notice": _DELAY_NOTICE,
+        },
+    }
+    rendered = _render_clipped_tool_result(raw)
+    assert rendered["attribution"] == _ATTRIBUTION
+    assert rendered["delay_notice"] == _DELAY_NOTICE
+
+
+@pytest.mark.unit
+def test_non_string_top_level_key_does_not_shadow_hoisted_block() -> None:
+    """A shadowing non-string key must not replace the validated block.
+
+    ``{**clipped_result, **block}`` mirrors the fit-path merge: a top-level
+    ``attribution`` that is not a usable string (e.g. a list) must not win
+    over the string the hoisted §7 block carries.
+    """
+    raw = {
+        "attribution": ["not-a-string"],
+        "nested": {
+            "attribution": _ATTRIBUTION,
+            "delay_notice": _DELAY_NOTICE,
+        },
+    }
+    rendered = _render_clipped_tool_result(raw)
+    assert rendered["attribution"] == _ATTRIBUTION
+    assert rendered["delay_notice"] == _DELAY_NOTICE
