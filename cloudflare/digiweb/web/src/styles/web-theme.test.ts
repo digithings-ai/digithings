@@ -35,6 +35,7 @@ describe("web-theme shadcn token contract", () => {
       ["--color-border", "var(--hair)"],
       ["--color-input", "var(--hair)"],
       ["--color-ring", "color-mix(in srgb, var(--accent) 40%, transparent)"],
+      ["--color-input-background", "var(--surface)"],
     ];
     const contractNames = [
       ...pairs.map(([name]) => name),

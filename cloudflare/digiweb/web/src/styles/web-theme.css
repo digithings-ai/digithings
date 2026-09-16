@@ -67,6 +67,7 @@
   --color-border: var(--hair);
   --color-input: var(--hair);
   --color-ring: color-mix(in srgb, var(--accent) 40%, transparent);
+  --color-input-background: var(--surface);
   --color-chart-1: var(--ink);
   --color-chart-2: var(--accent);
   --color-chart-3: var(--ink-soft);
