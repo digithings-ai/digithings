@@ -3,6 +3,8 @@
 from digisearch.web_search.citation import Citation, normalize_url
 from digisearch.web_search.models import (
     WebSearchConfigError,
+    WebSearchErrorResponse,
+    WebSearchProviderError,
     WebSearchRequest,
     WebSearchResponse,
     WebSearchResult,
@@ -12,6 +14,8 @@ from digisearch.web_search.models import (
 __all__ = [
     "Citation",
     "WebSearchConfigError",
+    "WebSearchErrorResponse",
+    "WebSearchProviderError",
     "WebSearchRequest",
     "WebSearchResponse",
     "WebSearchResult",
