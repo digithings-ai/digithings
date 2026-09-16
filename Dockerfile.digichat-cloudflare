@@ -62,4 +62,6 @@ USER nextjs
 EXPOSE 3000
 ENV PORT=3000
 ENV HOSTNAME=0.0.0.0
+# Rebuild marker v4 (2026-09-15): container instances keep their start-time env,
+# so bump this comment when a Worker secret change must reach a running instance.
 CMD ["node", "cloudflare/digichat/scripts/trusted-proxy-server.mjs"]
