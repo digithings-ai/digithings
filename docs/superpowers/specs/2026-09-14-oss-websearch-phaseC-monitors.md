@@ -290,6 +290,7 @@ class MonitorRun(BaseModel):
                                                # num_results_clamped_from entry when R6 clamps) /
                                                # recency_days (always None for monitors, R5) / domains
                                                # / bridge target when the watch sets one (#4249)
+                                               # / answer_mode+effort only on research runs (#4250)
     results_all: list[dict[str, Any]]          # WebSearchData result dicts, as returned
     results_new: list[dict[str, Any]]          # dedup survivors only
     dedup_stats: dict[str, int]                # {seen, new, changed, unchanged}
@@ -504,7 +505,9 @@ num_results?, category?, include_domains?, exclude_domains?, delivery_mode?) -> 
 `monitors_trigger_watch(watch_id, mode?) -> str` (JSON `MonitorRun`),
 `monitors_get_runs(watch_id, limit?) -> str`. Fail-closed without a
 reachable store or backend exactly like `digisearch_web_search` returns its
-disabled string without `EXA_API_KEY`.
+disabled string without `EXA_API_KEY`. The `bridge` and `answer_mode` opt-ins
+(#4249/#4250) are deliberately **operator-HTTP-only**: the MCP surface has no
+update tool, so it exposes neither (the shipped defaults are unchanged).
 
 Orchestrator manifest additions (`orchestrator_tools.py`):
 `TOOL_DIGISEARCH_MONITORS_TRIGGER = "digisearch_monitors_trigger"` and

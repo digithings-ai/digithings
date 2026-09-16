@@ -288,7 +288,6 @@ def test_run_watch_snapshot_records_oss_clamp(monkeypatch, tmp_path):
         "recency_days": None,
         "include_domains": ["a.com"],
         "exclude_domains": ["b.com"],
-        "answer_mode": "recall",
         "num_results": 10,
         "num_results_clamped_from": 25,
     }
@@ -821,5 +820,38 @@ def test_run_watch_recall_mode_has_no_digest(monkeypatch, tmp_path):
     run = mod.run_watch(watch.watch_id, store=store)
 
     assert run.digest is None
-    assert run.query_snapshot["answer_mode"] == "recall"
+    assert "answer_mode" not in run.query_snapshot
     assert "effort" not in run.query_snapshot
+
+
+@pytest.mark.unit
+def test_run_watch_bridge_through_the_real_seam(monkeypatch, tmp_path):
+    """Runner → service → store for real (no seam stubs): pins the wiring kwargs."""
+    from digisearch.monitors import runner as mod
+    from digisearch.websets import service as websets_service
+
+    monkeypatch.setenv("DIGISEARCH_WEBSETS_DB", str(tmp_path / "websets.sqlite3"))
+    webset = websets_service.create_webset(
+        query="etf flows",
+        count=3,
+        criteria=[{"name": "etf", "rule": "mentions ETF flows"}],
+    )
+    store = MonitorStore(db_path=str(tmp_path / "m.sqlite3"))
+    watch = _make_watch(store, bridge={"webset_id": webset.id})
+    monkeypatch.setattr(mod, "_invoke_shallow_recall", lambda **k: _recall_data())
+    monkeypatch.setattr(mod, "deliver", lambda run, watch, **k: [])
+
+    run = mod.run_watch(watch.watch_id, store=store)
+
+    assert run.bridge is not None
+    assert run.bridge.ok is True
+    assert run.bridge.duplicate is False
+    search_id = run.bridge.search_id
+    assert search_id is not None
+    searches = websets_service.get_webset(webset.id).searches
+    assert [s.id for s in searches] == [webset.searches[0].id, search_id]
+
+    # Repeating the handoff of the SAME run is a duplicate through the real seam.
+    receipt = mod.handoff(run, store.get_watch(watch.watch_id))
+    assert receipt is not None
+    assert (receipt.ok, receipt.duplicate, receipt.search_id) == (True, True, search_id)

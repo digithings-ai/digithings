@@ -493,9 +493,10 @@ def _query_snapshot(watch: Watch, *, exa_configured: bool) -> dict[str, Any]:
         "recency_days": None,
         "include_domains": list(watch.include_domains),
         "exclude_domains": list(watch.exclude_domains),
-        "answer_mode": watch.answer_mode,
     }
-    if watch.answer_mode == "research":
+    if watch.answer_mode != "recall":
+        # Gated so recall-mode snapshots stay byte-identical to v1 (#4250).
+        snapshot["answer_mode"] = watch.answer_mode
         snapshot["effort"] = watch.effort
     if watch.bridge is not None:
         snapshot["bridge"] = {"webset_id": watch.bridge.webset_id}

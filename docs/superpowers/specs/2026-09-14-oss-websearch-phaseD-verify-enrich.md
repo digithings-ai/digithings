@@ -23,7 +23,7 @@ Scope of the erratum: **docs + fixtures only, no production code**.
 | R5 | Store concurrency exactly per Phase C: one connection per instance/thread, WAL + `busy_timeout=5000`, no module `threading.Lock` |
 | R6 | Store home keeps `DIGISEARCH_WEBSETS_DB` + `{DIGI_WORKSPACE}` and adopts Phase C's cwd fallback |
 | R7 | 3-attempt / 5s-25s delivery + `webhook_deliveries` ledger kept; Phase C signing core shared so `X-digi-signature` is byte-identical |
-| R8 | POLL-ONLY v1: webset tick-driver wording struck; monitors are created/listed/triggered manually; scheduled driver deferred (follow-up) |
+| R8 | ~~POLL-ONLY v1: webset tick-driver wording struck; monitors are created/listed/triggered manually; scheduled driver deferred (follow-up)~~ **SUPERSEDED 2026-09-16 (#4221/#4249)**: the shared tick driver landed — monitors are tick-driven with a `paused` switch; the C↔D bridge landed too (Erratum T1) |
 | R9 | Fixtures vendored (this commit); spec references the vendored paths |
 | R10 | MCP tool names unprefixed `websets_*`; orchestrator manifest keeps prefixed `digisearch_websets_*` |
 | R11 | Items newest-first (UI pagination); events oldest-first for append-only tailing with explicit `after=` semantics (justified in § Interfaces) |
@@ -58,6 +58,10 @@ contract (one envelope, one retry owner, one idempotency ledger):
 - **EXA watches reject `bridge`** at the config gate
   (`bridge_exa_unsupported`): remote EXA monitors are translated by the
   webhook adapter and never run `run_watch`.
+- **Operator-HTTP-only.** The bridge (and the research-mode opt-in, #4250) is
+  configured through the Phase C HTTP monitor routes; the MCP monitor tools
+  expose neither (no MCP update tool exists), so shipped defaults stay
+  unchanged on that surface.
 
 ## Goal
 
@@ -212,7 +216,7 @@ conventions — lowercase, no `Digi` prefix):
 | search | `WebsetSearch` | `id` (`wss_` + uuid4-hex), `webset_id`, `query`, `count` (1–100, default 10 — target **verified** items for this search, NOT a result-page size; see `max_results` note below), `status`: `running` \| `idle` \| `failed` \| `cancelled` (flag I6 resolved: `cancel_webset` settles every non-terminal search as `cancelled`), `criteria` (1–5 rules), `verification_mode: "llm" \| "rules" = "llm"` (the generation's mode — T7 carry: refresh generations inherit it so a `rules` webset never silently switches to `llm`), `backend: "oss" \| "exa" = "oss"` (R4 label) |
 | item | `WebsetItem` | `id` (`wsi_` + uuid4-hex), `webset_id`, `url`, `title`, `verification`: `pending` \| `verified` \| `rejected` (`pending` is in-flight/queued only — settled at candidate-pass end, § Verification gate), `criteria_results[]` (verdict + reasoning + references per rule), `enrichments{field: EnrichedField}` (per-field value + citations + terminal status), `created_at` |
 | enrichment | `EnrichmentDef` | `id` (`wse_` + uuid4-hex), `name`, `type`: `text` \| `number` \| `date` \| `url` \| `email` \| `phone` \| `options` \| `company_profile`, `description`, `options[]` (only for `options`), `status` |
-| webset monitor | `WebsetMonitor` | `id` (`wsm_…`, prefix kept), `object="webset_monitor"`, `webset_id`, `interval_seconds >= 60` (aligned with Phase C `WatchSchedule.interval_seconds`; `cadence_s` struck), `webhook_url`, `created_at`. POLL-ONLY v1 (R8): the interval is recorded schedule metadata for the deferred driver, never executed on a tick; v1 monitor ops are create/list/trigger-manually. There is deliberately **no `status`/`paused` field** — with no scheduled driver a pause state has no observable effect (flag I4 resolved); the `active\|paused` lifecycle belongs to the deferred driver follow-up (§ Tasks, re-scoped sequence note). A webset monitor is explicitly NOT a Phase C `Watch` (R7e; bare `Monitor` is banned — it collides with the Phase C `Watch`/`MonitorRun` family) |
+| webset monitor | `WebsetMonitor` | `id` (`wsm_…`, prefix kept), `object="webset_monitor"`, `webset_id`, `interval_seconds >= 60` (aligned with Phase C `WatchSchedule.interval_seconds`; `cadence_s` struck), `webhook_url`, `paused` (default `false`), `created_at`. TICK-DRIVEN v1 (R8 superseded — see Erratum T1): the shared driver's tick loop honors `interval_seconds` and skips a paused monitor; the manual `trigger_monitor` route always refreshes on demand. A webset monitor is explicitly NOT a Phase C `Watch` (R7e; bare `Monitor` is banned — it collides with the Phase C `Watch`/`MonitorRun` family) |
 | event | `WebsetEvent` | `id`, `webset_id`, `type`: `item.created` \| `item.enriched` \| `webset.idle` \| `webset.failed`, `payload`, `created_at` (append-only log; delivery state lives in `webhook_deliveries`, never on event rows) |
 
 - `Citation{url, title="", excerpt=""}` (`extra="forbid"`) is owned by the shared
@@ -574,20 +578,20 @@ def create_monitor(
 ) -> WebsetMonitor:
     """Record a refresh cadence on a webset.
 
-    POLL-ONLY v1 (R8): no scheduled tick driver executes `interval_seconds` in this
-    phase — the value is stored schedule metadata for the deferred driver follow-up,
-    and refreshes happen only via `trigger_monitor` (manual). Phase C watches are
-    never created, addressed, or notified here."""
+    TICK-DRIVEN v1 (#4221; R8 superseded — see Erratum T1): the shared driver's
+    tick loop executes `interval_seconds` and skips a paused monitor;
+    `trigger_monitor` always refreshes on demand. Phase C watches are never
+    created, addressed, or notified here."""
 
 def list_monitors(webset_id: str, *, store: WebsetStore | None = None) -> list[WebsetMonitor]:
-    """List a webset's monitors newest-created first (poll-only v1 operator surface)."""
+    """List a webset's monitors newest-created first (operator surface)."""
 
 def trigger_monitor(
     webset_id: str, monitor_id: str, *, store: WebsetStore | None = None
 ) -> Webset:
     """Manually refresh: start a new settling pass as a new `WebsetSearch`
     generation that re-runs the webset's searches against the current candidate
-    set (the v1 substitute for the deferred tick driver). Webset status never
+    set (the driver's refresh path, also reachable on demand). Webset status never
     goes backwards — after first completion it stays `idle`, and the refresh is
     observed via the new search's status + events, not via a webset status
     flip. The new generation inherits the latest search's `verification_mode`
@@ -683,12 +687,12 @@ POST /v1/websets/{webset_id}/enrichments                # 30/min
   -> 201 {enrichment} | 400 (>10) code enrichment_limit_exceeded
 DELETE /v1/websets/{webset_id}/enrichments/{enrichment_id}  # 30/min -> 204
 POST /v1/websets/{webset_id}/monitors                   # 10/min
-  body: {interval_seconds >= 60 (metadata; poll-only v1), webhook_url https}
+  body: {interval_seconds >= 60 (driver cadence), webhook_url https}
   -> 201 {webset_monitor}
 GET /v1/websets/{webset_id}/monitors                    # 30/min
-  -> 200 {monitors} (poll-only v1 operator surface)
+  -> 200 {monitors} (operator surface)
 POST /v1/websets/{webset_id}/monitors/{monitor_id}/trigger  # 10/min
-  -> 202 {webset} (manual refresh; the v1 substitute for the deferred tick driver)
+  -> 202 {webset} (manual refresh; the driver's own refresh path)
 GET /v1/websets/{webset_id}/events?after=&limit=        # 30/min
   -> 200 {events, next_cursor} (cursor-paged, OLDEST-first after `after`; see § Interfaces)
 POST /v1/websets/{webset_id}/webhooks                   # 10/min
@@ -762,8 +766,9 @@ in the `webhook_deliveries` ledger table keyed by `(webhook_id, event_id)`
 (a UNIQUE/PK on the pair; INSERT-or-ignore on retry, so resumed delivery cannot
 double-record) — the `events` table is append-only and event rows are NEVER
 mutated, so "recorded on the event row" is struck. No retries past
-ledger-recorded terminal failure. POLL-ONLY v1 (R8): there is no scheduled tick
-to re-fire delivery — a re-run is the manual `trigger_monitor` call.
+ledger-recorded terminal failure. A re-run is the manual `trigger_monitor`
+call; the shared tick driver (#4221) refreshes on cadence, and neither path
+re-fires terminal deliveries.
 
 ## Async lifecycle (no precedent — spec'd concretely here)
 
@@ -877,7 +882,7 @@ implementers follow it verbatim:
   | Error shape | `digibase.errors` codes | same envelope + webset codes listed above | ALIGNED |
   | Store handle | `DIGISEARCH_MONITORS_DB` → `{DIGI_WORKSPACE}/…monitors.sqlite3` → `./.digisearch/monitors.sqlite3` | `DIGISEARCH_WEBSETS_DB` → `{DIGI_WORKSPACE}/…websets.sqlite3` → `./.digisearch/websets.sqlite3` | ALIGNED (convention + volume + cwd fallback, R6) |
   | Store concurrency | one connection per instance/thread, WAL + `busy_timeout=5000`, no in-process lock (`store.py:20-25,159-166`) | same (R5) | ALIGNED |
-  | Monitor lifecycle | scheduled tick via `POST /v1/monitors/tick` (`server.py:1376-1382`, `digiclaw/monitors_tick.py:30`) | POLL-ONLY v1: manual `trigger_monitor`; tick driver deferred | DIVERGED (R8): no scheduled driver in this phase; follow-up named in § Tasks |
+  | Monitor lifecycle | scheduled tick via `POST /v1/monitors/tick` (`server.py:1376-1382`, `digiclaw/monitors_tick.py:30`) | same: the shared tick driver refreshes due, unpaused monitors (`websets/driver.py`, #4221); manual `trigger_monitor` stays | ALIGNED (#4221 resolved the R8 divergence) |
 
 ## Global Constraints
 
@@ -945,13 +950,12 @@ scratch and appear nowhere in code, tests, or docstrings.
 fixture vendoring (this commit, no code) → T1 models → T2 store → T3 verify →
 T4 enrich (needs T0 fixtures) → T5a runner + events → T5b webhook delivery +
 ledger (**HUMAN GATE**, R13) → T6 service + export → T7 HTTP/MCP/orchestrator +
-EXA shim → T8 live verification record. Deferred follow-ups (explicitly out of
-v1): the scheduled webset tick driver (R8; Phase C's landed driver is
-`digiclaw/monitors_tick.py:30` → `POST /v1/monitors/tick`, `server.py:1376-1382`
-— a websets equivalent is a separate issue), recall paging (R3), and EXA-websets
-shim live validation (Pro-key dependent; tracked by the #4123 live-pin
-precedent). The `WebsetMonitor` `active|paused` lifecycle is deferred with the
-driver (flag I4).
+EXA shim → T8 live verification record. Deferred follow-ups (landed since):
+the scheduled webset tick driver landed as the shared `websets/driver.py` tick
+loop (#4221; R8 superseded — see Erratum T1); recall paging (R3) and
+EXA-websets shim live validation (Pro-key dependent; tracked by the #4123
+live-pin precedent) remain deferred. The `WebsetMonitor` `paused` switch
+landed with the driver, resolving flag I4.
 
 ### Task 1: Models + per-field citation shapes
 
@@ -964,7 +968,7 @@ driver (flag I4).
   site is the shared atom, `assert EnrichedField.model_fields["citations"]`
   annotates that type), a `CompanyEntity` with 2 funding rounds
   plus `provenance` entries per scalar, and a `WebsetMonitor` (bare
-  `Monitor` import must fail; no `status`/`paused` field exists);
+  `Monitor` import must fail; `paused` defaults `false`);
   assert `model_dump(mode="json")` round-trips, `EnrichedField` with empty
   citations validates as `unresolved`, `count` outside 1..100 is rejected,
   the `backend` label defaults to `"oss"`, and ids match
@@ -1127,8 +1131,8 @@ to the sidecar, never `ingest_url`, never `run_web_search`).
   connection per instance and needs **no in-process lock**, R5);
   `backfill_enrichment(webset_id, enrichment_id)` for the
   `add_enrichment` path (§ Interfaces). Fan-out target is the webset itself:
-  **poll-only v1** — no scheduled tick driver and no Phase C `Watch` is
-  addressed here (R8; residual risk 6 closed by this sentence).
+  no Phase C `Watch` is addressed here (R8 superseded — cadence runs through
+  the shared tick driver, #4221; residual risk 6 closed by this sentence).
 - [ ] Step 3: run `pytest tests/ds/test_websets_runner.py -m unit -v` →
   PASS + ruff clean.
 
@@ -1168,9 +1172,10 @@ outbound delivery to caller-controlled URLs (new external network exposure).**
   `count=0`/`count=101` is rejected); `get_webset`
   round-trips; `add_search` attaches a second search; `add_enrichment`
   11th raises; `remove_enrichment` retains resolved values;
-  `create_monitor` returns a `WebsetMonitor` with no `status`/`paused` field
-  (and `Monitor` is unimportable — I4/R8); `list_monitors` returns it;
-  `trigger_monitor` re-runs the searches (manual refresh, poll-only v1);
+  `create_monitor` returns a `WebsetMonitor` with `paused` defaulting `false`
+  (and `Monitor` is unimportable — I4/R8);
+  `list_monitors` returns it;
+  `trigger_monitor` re-runs the searches (manual refresh);
   `add_webhook` returns a one-time secret;
   `rotate_webhook_secret` overlaps the old secret 24h; `list_events`
   cursor-pages OLDEST-first with `after=`;
@@ -1245,8 +1250,9 @@ outbound delivery to caller-controlled URLs (new external network exposure).**
 
 - [ ] Step 1: stack up, create a 5-count company webset
   (`query="agtech robotics startups Series A 2024-2026"`, 2 criteria,
-  3 enrichments incl. `company_profile`), poll to `idle` (poll-only v1 —
-  refresh is the manual `trigger_monitor`, no tick driver), confirm the
+  3 enrichments incl. `company_profile`), poll to `idle` (cadence runs through
+  the shared tick driver, #4221; the manual `trigger_monitor` route also
+  refreshes), confirm the
   `item.created/item.enriched` multiset + `webset.idle`-last (never an
   exact sequence).
 - [ ] Step 2: confirm funding totals against the vendored s5 EXA sample
