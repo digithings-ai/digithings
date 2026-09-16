@@ -17,9 +17,9 @@ The install guard is a **per-running-loop** lock (#4202): the lock is reused
 only while the running loop is unchanged, so a process that opens a fresh loop
 per window (two sequential ``asyncio.run`` calls, for example) installs,
 resumes, and tears down cleanly in each. Concurrent installs on *different*
-event loops in one process remain unsupported: entering while an install is
-active on another loop raises ``RuntimeError`` instead of corrupting the
-reference count.
+event loops in one process remain unsupported: entering while an install on
+another loop is active or still starting up raises ``RuntimeError`` instead of
+corrupting the reference count.
 
 The install lifetime is therefore the install window (first entry to last
 exit), not the lifespan invocation:
@@ -214,14 +214,18 @@ async def webset_task_lifespan(_app: object | None = None) -> AsyncIterator[None
 
     The install guard is a per-running-loop lock (#4202): sequential windows on
     fresh event loops each install, resume, and tear down cleanly, while
-    entering this context manager concurrently from a different event loop than
-    an active install raises ``RuntimeError`` (one process must use one event
-    loop at a time).
+    entering this context manager from a different event loop than a live
+    install — active or still starting up — raises ``RuntimeError`` (one
+    process must use one event loop at a time).
     """
     global _active, _stop, _supervisor, _supervisor_loop
     running_loop = asyncio.get_running_loop()
     async with _install_lock_for_running_loop():
-        if _active > 0 and _supervisor_loop is not running_loop:
+        if (
+            _supervisor_loop is not None
+            and _supervisor_loop is not running_loop
+            and (_active > 0 or (_supervisor is not None and not _supervisor.done()))
+        ):
             raise RuntimeError(
                 "webset driver is already installed on another event loop; "
                 "one process must use one event loop"

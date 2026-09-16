@@ -11,7 +11,8 @@ window is fresh, and the #4202 loop-safe install guard: sequential
 ``asyncio.run`` windows across event loops install/tear down cleanly, a
 supervisor that dies before ready clears the driver state for the next window, a
 dead supervisor at depth ≥ 1 re-installs fresh, and a concurrent install on a
-different event loop raises ``RuntimeError``.
+different event loop raises ``RuntimeError`` — whether it is reference-counted
+or still starting up.
 
 ``@pytest.mark.unit`` on every test.
 """
@@ -487,6 +488,75 @@ def test_concurrent_install_on_another_event_loop_raises(monkeypatch):
     assert driver._active == 0
     assert driver._supervisor is None
     assert driver._stop is None
+
+
+@pytest.mark.unit
+def test_cross_loop_entry_during_install_startup_raises(monkeypatch):
+    """#4202: a second loop entering while the first is mid-install must also fail.
+
+    The holder is parked inside the startup resume, so the seam is already
+    installed and the supervisor is alive while ``_active`` is still 0 — the
+    window where a guard that only checked ``_active`` let a second loop
+    double-install and overwrite the supervisor references.
+    """
+    resumes: list[int] = []
+    installed: list[Any] = []
+    monkeypatch.setattr(service_module, "set_scheduler", installed.append)
+
+    resume_started = threading.Event()
+    release = threading.Event()
+    outcome: list[Exception] = []
+
+    async def _slow_resume(task_group: asyncio.TaskGroup) -> None:
+        resumes.append(1)
+        resume_started.set()
+        await asyncio.to_thread(release.wait, 20)
+
+    monkeypatch.setattr(driver, "_resume_incomplete_websets", _slow_resume)
+
+    async def _holder() -> None:
+        async with driver.webset_task_lifespan(None):
+            pass
+
+    def _run_holder() -> None:
+        asyncio.run(_holder())
+
+    def _second_loop() -> None:
+        async def _attempt() -> None:
+            async with driver.webset_task_lifespan(None):
+                pass
+
+        try:
+            asyncio.run(_attempt())
+        except Exception as exc:
+            outcome.append(exc)
+
+    holder = threading.Thread(target=_run_holder, daemon=True)
+    holder.start()
+    assert resume_started.wait(20)
+
+    assert driver._active == 0
+    assert driver._supervisor is not None
+    assert not driver._supervisor.done()
+    assert isinstance(installed[-1], driver.WebsetTaskScheduler)
+
+    worker = threading.Thread(target=_second_loop, daemon=True)
+    worker.start()
+    worker.join(timeout=20)
+    release.set()
+    holder.join(timeout=20)
+
+    assert not worker.is_alive()
+    assert not holder.is_alive()
+    assert len(outcome) == 1
+    assert isinstance(outcome[0], RuntimeError)
+    assert "another event loop" in str(outcome[0])
+    assert resumes == [1]
+    assert installed[-1] is None
+    assert driver._active == 0
+    assert driver._supervisor is None
+    assert driver._stop is None
+    assert driver._supervisor_loop is None
 
 
 # ── AC2: startup resume ───────────────────────────────────────────────────────

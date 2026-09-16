@@ -250,6 +250,10 @@ def test_real_markdown_file_chunking_matches_recorded_fingerprint() -> None:
     Re-recorded at count 109 for #4202 (per-window / per-running-loop webset
     driver install wording in ARCHITECTURE.md) — fixture prose only;
     RecursiveChunker unchanged.
+    Hashes only (count still 109) re-recorded for the #4202 fix wave
+    (cross-loop install startup guard + the `websets/driver.py` module-map row
+    reworded to per-install-window semantics) — fixture prose only;
+    RecursiveChunker unchanged.
     """
     arch_path = Path(__file__).resolve().parents[2] / "digisearch" / "ARCHITECTURE.md"
     content = arch_path.read_text(encoding="utf-8")
@@ -334,8 +338,8 @@ def test_real_markdown_file_chunking_matches_recorded_fingerprint() -> None:
         "ea4b9c63695d2f69",
         "367d6f1945838ddd",
         "4187a3ee58add217",
-        "01f256208a140f34",
-        "19fbb7c0db259870",
+        "290f4da5ff7aca14",
+        "59f90a800d366aa9",
         "3ec5f2b1fce1b494",
         "66ce13f7ba2fafdc",
         "26ca223dcbe8b403",
