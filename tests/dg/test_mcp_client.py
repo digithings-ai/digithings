@@ -118,10 +118,7 @@ def test_http_overwrites_body_mcp_servers(monkeypatch: pytest.MonkeyPatch) -> No
 
 @pytest.mark.unit
 def test_parse_mcp_servers_json_keeps_auth_token() -> None:
-    raw = (
-        '[{"id":"linear","url":"https://mcp.linear.app/mcp",'
-        '"auth":"oauth","token":"tok"}]'
-    )
+    raw = '[{"id":"linear","url":"https://mcp.linear.app/mcp","auth":"oauth","token":"tok"}]'
     assert parse_mcp_servers_json(raw) == [
         {
             "id": "linear",
@@ -168,9 +165,7 @@ def test_parse_mcp_servers_json_drops_malformed_auth_header() -> None:
         '"token":"tok","authHeader":"bad header!"}]'
     )
     parsed = parse_mcp_servers_json(raw)
-    assert parsed == [
-        {"id": "datatap", "url": "https://mcp.datatap.example/mcp", "token": "tok"}
-    ]
+    assert parsed == [{"id": "datatap", "url": "https://mcp.datatap.example/mcp", "token": "tok"}]
     assert "authHeader" not in parsed[0]
 
 
