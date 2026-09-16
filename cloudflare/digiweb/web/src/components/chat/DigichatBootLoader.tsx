@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, type CSSProperties } from "react";
 
 /**
  * DigichatBootLoader — the default DigiChat loading animation.
@@ -436,6 +436,10 @@ export interface DigichatBootLoaderProps {
   placeholder?: string;
   /** Accessible status text (visually hidden). */
   label?: string;
+  /** Chat accent for the loader cursor; falls back to the accent/ink chain. */
+  accent?: string;
+  /** Render the attach plus glyph in the mock composer; mirrors the tenant attachments flag. */
+  showAttachment?: boolean;
   className?: string;
 }
 
@@ -447,6 +451,8 @@ export function DigichatBootLoader({
   suggestions = DEFAULT_SUGGESTIONS,
   placeholder = DEFAULT_PLACEHOLDER,
   label = "Loading chat",
+  accent,
+  showAttachment = true,
   className,
 }: DigichatBootLoaderProps) {
   const [reduced, setReduced] = useState(false);
@@ -537,7 +543,11 @@ export function DigichatBootLoader({
   const instant = reduced;
 
   return (
-    <div className={className ? `dboot ${className}` : "dboot"}>
+    <div
+      className={className ? `dboot ${className}` : "dboot"}
+      data-attach={showAttachment ? "1" : "0"}
+      style={accent ? ({ "--dboot-caret": accent } as CSSProperties) : undefined}
+    >
       <span className="dboot-sr" role="status">
         {label}
       </span>
@@ -593,9 +603,11 @@ export function DigichatBootLoader({
             data-visible={lineUp ? "true" : "false"}
             data-solid={solid || instant ? "true" : "false"}
           />
-          <span className="dboot-plus" data-pop={pop || instant ? "true" : "false"}>
-            <Glyph cells={PLUS_CELLS} className="dboot-glyph" />
-          </span>
+          {showAttachment ? (
+            <span className="dboot-plus" data-pop={pop || instant ? "true" : "false"}>
+              <Glyph cells={PLUS_CELLS} className="dboot-glyph" />
+            </span>
+          ) : null}
         </div>
       </div>
     </div>
