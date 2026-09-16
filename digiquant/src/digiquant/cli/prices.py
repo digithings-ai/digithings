@@ -585,7 +585,11 @@ def fetch_macro_cmd(
     type=str,
     default="1h",
     show_default=True,
-    help="yfinance candle interval; FX 1h bars cap at 730d of history.",
+    help=(
+        "yfinance candle interval, persisted per row to "
+        "fx_intraday_observations.interval; FX 1h bars cap at 730d of history, "
+        "5m at 60d."
+    ),
 )
 @click.option(
     "--period",
@@ -601,9 +605,11 @@ def fetch_fx_intraday_cmd(interval: str, period: str, dry_run: bool, supabase: b
 
     The twelve-x trade grader reads this table with the core service key to
     order stop-vs-target touches inside a day, which the daily close cannot
-    express. Deliberately exempt from the R2 writers-stop: intraday candles
-    have no R2 generation and no Supabase-side reader to migrate — the same
-    argument as fedprob in fetch-macro_cmd.
+    express. ``--interval`` is persisted on every row (part of the upsert key),
+    so a 5m and a 1h candle coexist at the same bar OPEN. Deliberately exempt
+    from the R2 writers-stop: intraday candles have no R2 generation and no
+    Supabase-side reader to migrate — the same argument as fedprob in
+    fetch-macro_cmd.
     """
     from digiquant.data.prices.macro_ingest import fetch_fx_intraday
     from digiquant.data.prices.supabase_writer import (
@@ -616,6 +622,7 @@ def fetch_fx_intraday_cmd(interval: str, period: str, dry_run: bool, supabase: b
         {
             "source": "yahoo",
             "series_id": c.series_id,
+            "interval": interval,
             "ts": c.ts.isoformat(),
             "open": c.open,
             "high": c.high,

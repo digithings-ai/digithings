@@ -444,6 +444,8 @@ def test_fetch_fx_intraday_one_batched_download_defaults_to_1h_730d(monkeypatch)
     eur = next(c for c in candles if c.series_id == "FX/EUR" and c.ts.hour == 13)
     assert eur.close == pytest.approx(100.5)
     assert eur.open == pytest.approx(100.0)
+    # Every candle is stamped with the requested bar length (upsert-key member).
+    assert {c.interval for c in candles} == {"1h"}
 
 
 @pytest.mark.unit
@@ -465,6 +467,7 @@ def test_fetch_fx_intraday_passes_interval_period_and_custom_symbols(monkeypatch
     assert captured["period"] == "60d"
     assert captured["ohlc"] is True
     assert {c.series_id for c in candles} == {"FX/EUR"}
+    assert {c.interval for c in candles} == {"30m"}
 
 
 @pytest.mark.unit
@@ -512,10 +515,11 @@ def test_fx_intraday_payload_drops_missing_or_non_finite_ohlc() -> None:
             "close": [1.09, 1.09, 1.09, float("inf")],
         }
     )
-    candles = fx_intraday_payload_to_candles(payload, YAHOO_FX_DEFAULT)
+    candles = fx_intraday_payload_to_candles(payload, YAHOO_FX_DEFAULT, interval="5m")
 
     assert len(candles) == 1
     assert candles[0].series_id == "FX/EUR"
+    assert candles[0].interval == "5m"
 
 
 @pytest.mark.unit

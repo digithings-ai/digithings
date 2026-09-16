@@ -11,7 +11,7 @@ Preserves the column contracts research still reads:
 * ``price_history`` — ``{date, ticker, open, high, low, close, volume}``
 * ``price_technicals`` — ``{date, ticker, <TECHNICAL_COLUMNS>}``
 * ``macro_series_observations`` — ``{source, series_id, obs_date, value, unit, meta?}``
-* ``fx_intraday_observations`` — ``{source, series_id, ts, open, high, low, close}``
+* ``fx_intraday_observations`` — ``{source, series_id, interval, ts, open, high, low, close}``
 
 All audit payloads are passed through
 :func:`digibase.audit.redact_mapping` before being emitted (per CLAUDE.md).
@@ -207,11 +207,13 @@ def upsert_fx_intraday_observations(
     *,
     chunk: int = DEFAULT_CHUNK,
 ) -> UpsertResult:
-    """Upsert intraday FX candles on ``(source, series_id, ts)``.
+    """Upsert intraday FX candles on ``(source, series_id, interval, ts)``.
 
-    Yahoo re-serves the trailing partial candle on every refresh, so re-running
-    the writer replaces the same row's OHLC with the settled values instead of
-    accumulating duplicates.
+    ``interval`` is the yfinance bar length ('1h', '5m', …) and is part of the
+    key because coarser and finer bars share their :00 opens — a 5m upsert must
+    not overwrite the 1h candle at the same ``ts``. Yahoo re-serves the trailing
+    partial candle on every refresh, so re-running the writer replaces the same
+    key's OHLC with the settled values instead of accumulating duplicates.
     """
     if not rows:
         return UpsertResult(table="fx_intraday_observations", rows=0)
@@ -220,7 +222,7 @@ def upsert_fx_intraday_observations(
         _call_with_retry(
             lambda b=batch: (
                 client.table("fx_intraday_observations")
-                .upsert(b, on_conflict="source,series_id,ts")
+                .upsert(b, on_conflict="source,series_id,interval,ts")
                 .execute()
             )
         )

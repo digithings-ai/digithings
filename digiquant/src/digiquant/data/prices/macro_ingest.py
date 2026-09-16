@@ -11,7 +11,8 @@ issue #328 and their fetchers removed in the deslop pass (WS4b).
 
 :func:`fetch_fx_intraday` pulls Yahoo intraday OHLC candles for the separate
 ``fx_intraday_observations`` table (twelve-x trade grading); its series ids
-match the daily convention exactly.
+match the daily convention exactly and every candle carries its bar length
+(``interval``) so 5m and 1h bars can coexist on the same timestamp grid.
 
 Each daily fetcher returns a list of row dicts matching the
 ``macro_series_observations`` Supabase schema exactly:
@@ -89,12 +90,16 @@ class CandleObservation:
     """One ``fx_intraday_observations`` row (intraday OHLC candle).
 
     ``ts`` is the candle OPEN instant in UTC — yfinance indexes intraday bars
-    by their start. ``series_id`` reuses the daily ``FX/<CUR>`` ids so both
-    tables join on it, and the OHLC values stay in Yahoo's native quote
-    direction per pair (see :data:`YAHOO_FX_DEFAULT`).
+    by their start. ``interval`` is the requested yfinance bar length ('1h',
+    '5m', …) and is part of the table's upsert key, because coarser and finer
+    bars share their :00 opens and would otherwise overwrite each other.
+    ``series_id`` reuses the daily ``FX/<CUR>`` ids so both tables join on it,
+    and the OHLC values stay in Yahoo's native quote direction per pair (see
+    :data:`YAHOO_FX_DEFAULT`).
     """
 
     series_id: str
+    interval: str
     ts: datetime
     open: float
     high: float
@@ -571,11 +576,16 @@ def fetch_fx_yahoo(
 def fx_intraday_payload_to_candles(
     payload,
     yahoo_to_series: dict[str, dict[str, str]],
+    *,
+    interval: str,
 ) -> list[CandleObservation]:
     """Convert a long-format OHLC frame into :class:`CandleObservation` rows.
 
     ``payload`` is the ``pl.DataFrame`` returned by :func:`_yahoo_fx_download`
     with ``ohlc=True`` — columns ``(ts, yahoo_symbol, open, high, low, close)``.
+    ``interval`` is the requested yfinance bar length and is stamped on every
+    candle (the frame itself does not carry it); it is keyword-only so the
+    caller cannot silently persist candles under the wrong bar length.
     Timestamps are normalized to tz-aware UTC and rows with any missing or
     non-finite OHLC value are dropped (defensive: the download seam already
     filters them, but a hand-built payload must not poison the contract).
@@ -598,6 +608,7 @@ def fx_intraday_payload_to_candles(
         candles.append(
             CandleObservation(
                 series_id=cfg["series_id"],
+                interval=interval,
                 ts=ts,
                 open=open_,
                 high=high,
@@ -618,11 +629,12 @@ def fetch_fx_intraday(
 
     One batched yfinance download for ``symbols`` (defaults to
     :data:`YAHOO_FX_DEFAULT`). ``interval``/``period`` are passed straight to
-    yfinance; ``1h`` bars cap at ``730d`` of history. Rows whose OHLC is
-    missing or non-finite are dropped, every ``ts`` is a tz-aware UTC
-    datetime, and ``series_id`` values match the daily :func:`fetch_fx_yahoo`
-    convention exactly so consumers can join the two tables on
-    ``(source, series_id)``.
+    yfinance; ``1h`` bars cap at ``730d`` of history (``5m`` at ``60d``). Every
+    candle is stamped with the requested ``interval`` so bars of different
+    lengths can share a ``ts``. Rows whose OHLC is missing or non-finite are
+    dropped, every ``ts`` is a tz-aware UTC datetime, and ``series_id`` values
+    match the daily :func:`fetch_fx_yahoo` convention exactly so consumers can
+    join the two tables on ``(source, series_id)``.
     """
     yahoo_to_series = symbols or YAHOO_FX_DEFAULT
     if not yahoo_to_series:
@@ -630,7 +642,7 @@ def fetch_fx_intraday(
     payload = _yahoo_fx_download(
         list(yahoo_to_series.keys()), interval=interval, period=period, ohlc=True
     )
-    return fx_intraday_payload_to_candles(payload, yahoo_to_series)
+    return fx_intraday_payload_to_candles(payload, yahoo_to_series, interval=interval)
 
 
 def dedupe_observation_rows(rows: list[MacroObservation]) -> list[MacroObservation]:
