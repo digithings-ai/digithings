@@ -199,3 +199,99 @@ def test_search_web_delegates_to_search_only(monkeypatch):
     monkeypatch.setattr(mod, "_search_only", fake_search_only)
     resp = mod.search_web(WebSearchRequest(query="q"))
     assert resp.provider == "searxng" and seen["query"] == "q"
+
+
+def _provider_raising(monkeypatch, exc):
+    """Point every failover provider at a fake raising ``exc()`` (#4192)."""
+    from digisearch.web_search import service as svc
+
+    class _Down:
+        name = "down"
+
+        def search(self, req):
+            raise exc()
+
+    monkeypatch.setattr(svc, "SearXNGWebSearchProvider", lambda **k: _Down())
+    monkeypatch.setattr(svc, "DdgsWebSearchProvider", lambda *a, **k: _Down())
+
+
+def test_search_only_wraps_provider_429_with_status_and_retryable(monkeypatch):
+    import httpx
+    import pytest
+
+    from digisearch.web_search.models import WebSearchProviderError, WebSearchRequest
+
+    request = httpx.Request("GET", "https://searxng.invalid/search")
+    response = httpx.Response(429, request=request, text="Too Many Requests")
+    _provider_raising(
+        monkeypatch,
+        lambda: httpx.HTTPStatusError(
+            "Client error '429 Too Many Requests'", request=request, response=response
+        ),
+    )
+    with pytest.raises(WebSearchProviderError) as excinfo:
+        run_web_search(WebSearchRequest(query="etf"), config=WebSearchConfig(backend="auto"))
+    assert excinfo.value.status_code == 429
+    assert excinfo.value.retryable is True
+    assert "all web-search backends failed" in str(excinfo.value)
+    assert "429" in str(excinfo.value)
+
+
+def test_search_only_wraps_connection_error_as_retryable(monkeypatch):
+    import httpx
+    import pytest
+
+    from digisearch.web_search.models import WebSearchProviderError, WebSearchRequest
+
+    _provider_raising(monkeypatch, lambda: httpx.ConnectError("connection refused"))
+    with pytest.raises(WebSearchProviderError) as excinfo:
+        run_web_search(WebSearchRequest(query="etf"), config=WebSearchConfig(backend="auto"))
+    assert excinfo.value.status_code is None
+    assert excinfo.value.retryable is True
+
+
+def test_search_only_wraps_hard_provider_error_as_not_retryable(monkeypatch):
+    import pytest
+
+    from digisearch.web_search.models import WebSearchProviderError, WebSearchRequest
+
+    _provider_raising(monkeypatch, lambda: ValueError("provider exploded"))
+    with pytest.raises(WebSearchProviderError) as excinfo:
+        run_web_search(WebSearchRequest(query="etf"), config=WebSearchConfig(backend="auto"))
+    assert excinfo.value.status_code is None
+    assert excinfo.value.retryable is False
+    assert isinstance(excinfo.value, RuntimeError)
+
+
+def test_search_only_wraps_ddgs_ratelimit_as_429_retryable(monkeypatch):
+    """Pin the installed ddgs exception the 2026-09-15 incident raised (#4192).
+
+    ddgs carries no HTTP response, so the classifier keys off the exception
+    *name*. A ddgs bump that renames ``RatelimitException`` must fail this test
+    instead of silently downgrading a rate limit to a hard failure.
+    """
+    import pytest
+
+    from digisearch.web_search.models import WebSearchProviderError, WebSearchRequest
+
+    ratelimit = pytest.importorskip("ddgs.exceptions").RatelimitException
+    _provider_raising(monkeypatch, ratelimit)
+    with pytest.raises(WebSearchProviderError) as excinfo:
+        run_web_search(WebSearchRequest(query="etf"), config=WebSearchConfig(backend="auto"))
+    assert excinfo.value.status_code == 429
+    assert excinfo.value.retryable is True
+    assert "429" in str(excinfo.value)
+
+
+def test_search_only_wraps_ddgs_timeout_as_retryable(monkeypatch):
+    """Pin ddgs ``TimeoutException`` -> retryable, with no status hint (#4192)."""
+    import pytest
+
+    from digisearch.web_search.models import WebSearchProviderError, WebSearchRequest
+
+    timeout = pytest.importorskip("ddgs.exceptions").TimeoutException
+    _provider_raising(monkeypatch, timeout)
+    with pytest.raises(WebSearchProviderError) as excinfo:
+        run_web_search(WebSearchRequest(query="etf"), config=WebSearchConfig(backend="auto"))
+    assert excinfo.value.status_code is None
+    assert excinfo.value.retryable is True
