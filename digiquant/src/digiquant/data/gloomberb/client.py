@@ -1369,29 +1369,42 @@ class GloomberbClient:
             return self._disabled(TranscriptsEnvelope)
 
         def produce() -> TranscriptsEnvelope:
-            raw = self._request_json(
-                "GET",
-                ENDPOINTS["transcripts"],
-                params={"ticker": parsed.ticker, "limit": str(parsed.limit)},
-                gated=True,
-                pro_gated=True,
-            )
+            if parsed.transcript_id:
+                path = f"{ENDPOINTS['transcripts']}/{quote(parsed.transcript_id, safe='')}"
+                raw = self._request_json("GET", path, gated=True, pro_gated=True)
+            else:
+                raw = self._request_json(
+                    "GET",
+                    ENDPOINTS["transcripts"],
+                    params={"ticker": parsed.ticker, "limit": str(parsed.limit)},
+                    gated=True,
+                    pro_gated=True,
+                )
             if isinstance(raw, DigifetchError):
                 return self._error_envelope(TranscriptsEnvelope, raw)
             result = self._data_or_error(raw, "Cloud transcripts are unavailable")
             if isinstance(result, DigifetchError):
                 return self._error_envelope(TranscriptsEnvelope, result)
             data, warnings = result
-            rows = self._normalize(nz.normalize_transcripts, data)
-            if isinstance(rows, DigifetchError):
-                return self._error_envelope(TranscriptsEnvelope, rows)
-            # The live list payload wraps its rows under `calls`; `transcripts`
-            # is accepted for a wrapped variant.
-            list_rows = (
-                (data.get("calls") or data.get("transcripts"))
-                if isinstance(data, Mapping)
-                else data
-            )
+            if parsed.transcript_id:
+                row = self._normalize(
+                    nz.normalize_transcript_detail, data, parsed.transcript_id
+                )
+                if isinstance(row, DigifetchError):
+                    return self._error_envelope(TranscriptsEnvelope, row)
+                rows = [row]
+                list_rows: Any = data
+            else:
+                rows = self._normalize(nz.normalize_transcripts, data)
+                if isinstance(rows, DigifetchError):
+                    return self._error_envelope(TranscriptsEnvelope, rows)
+                # The live list payload wraps its rows under `calls`; `transcripts`
+                # is accepted for a wrapped variant.
+                list_rows = (
+                    (data.get("calls") or data.get("transcripts"))
+                    if isinstance(data, Mapping)
+                    else data
+                )
             fresh = self._freshness(
                 raw,
                 data,

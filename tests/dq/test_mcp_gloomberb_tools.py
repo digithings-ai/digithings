@@ -1513,3 +1513,19 @@ def test_entitlement_note_is_surfaced_in_mcp_and_manifest() -> None:
         assert note in tool.description, name
         assert rows[name].get("entitlement") == expected, name
         assert note in rows[name]["function"]["description"], name
+
+
+def test_transcripts_detail_mode_maps_the_wrapped_payload(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        assert request.url.path == "/cloud/transcripts/t1"
+        return httpx.Response(200, json={"companyName": "Apple Inc."})
+
+    _patch_client(monkeypatch, handler, session_cookie="gloomberb.session_token=test")
+    payload = json.loads(_mcp("digifetch_transcripts")(None, 20, "t1"))
+    row = payload["data"]["transcripts"][0]
+    assert row["id"] == "t1"
+    assert row["company_name"] == "Apple Inc."
+    assert payload["attribution"] == GLOOMBERB_ATTRIBUTION
+    assert "source_url" not in payload

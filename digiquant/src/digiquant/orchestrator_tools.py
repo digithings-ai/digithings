@@ -672,16 +672,18 @@ def build_digifetch_transcripts_tool() -> dict[str, Any]:
                 "Earnings-call transcripts (Gloomberb Cloud; session-gated, "
                 "requires Gloomberb Pro). Requires GLOOMBERB_SESSION_COOKIE and "
                 "a Pro plan — a free session's 'Pro plan required' body maps to "
-                "typed pro_required, never an empty success. Adds a "
-                "term.gloom.sh deep link for ticker."
+                "typed pro_required, never an empty success. ticker lists a "
+                "listing's calls; transcript_id (from a list row) fetches one "
+                "call's detail — provide exactly one. Adds a term.gloom.sh "
+                "deep link for ticker."
             ),
             "parameters": {
                 "type": "object",
                 "properties": {
                     "ticker": {"type": "string"},
                     "limit": {"type": "integer", "default": 20},
+                    "transcript_id": {"type": "string"},
                 },
-                "required": ["ticker"],
             },
         },
     }

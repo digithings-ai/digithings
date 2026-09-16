@@ -1234,18 +1234,33 @@ def create_mcp_server(
         return _gloomberb_envelope_json(envelope)
 
     @_maybe_tool("digifetch_transcripts")
-    def digifetch_transcripts(ticker: str, limit: int = 20) -> str:
+    def digifetch_transcripts(
+        ticker: str | None = None,
+        limit: int = 20,
+        transcript_id: str | None = None,
+    ) -> str:
         """Earnings-call transcripts (Gloomberb Cloud; session-gated, requires Pro).
 
-        Requires GLOOMBERB_SESSION_COOKIE **and** a Gloomberb Pro plan. A free
+        Two modes; provide exactly one target. `ticker` lists that listing's
+        calls; `transcript_id` (from a list row) fetches one call's detail.
+        Requires GLOOMBERB_SESSION_COOKIE **and** a Gloomberb Pro plan: a free
         (email-verified) session answers a "Pro plan required" body, mapped to
         a typed `pro_required` with the upstream text - never an empty
-        success. Carries a term.gloom.sh deep link for `ticker`.
+        success. List mode carries a term.gloom.sh deep link for `ticker`;
+        detail mode has no link unless `ticker` is known from the payload.
         """
         try:
-            envelope = _build_gloomberb_client().transcripts({"ticker": ticker, "limit": limit})
+            envelope = _build_gloomberb_client().transcripts(
+                {"ticker": ticker, "limit": limit, "transcript_id": transcript_id}
+            )
         except Exception as exc:  # surface as JSON to the caller, never crash
             return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
+        # Detail mode has no ticker argument, but the row can carry one — the
+        # spec's "or the payload carries one" deep-link rule. Kept in `ticker`
+        # so the parity test still reads the deep-link field from `symbol=ticker`.
+        if ticker is None:
+            rows = getattr(envelope.data, "transcripts", None) or []
+            ticker = rows[0].ticker if rows else None
         return _gloomberb_envelope_json(envelope, symbol=ticker)
 
     @_maybe_tool("digifetch_statements")

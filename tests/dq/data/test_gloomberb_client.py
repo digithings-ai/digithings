@@ -2170,3 +2170,43 @@ def test_cache_bounds_and_eviction_still_hold_with_the_session_key() -> None:
     client.quote({"symbol": "AAPL"})
     assert len(calls) == 4  # the expired entry did not serve
     assert client.cache_size == 1  # expired entries evicted on access
+
+
+def test_transcripts_detail_mode_fetches_by_id_and_requires_pro() -> None:
+    seen: dict[str, str] = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen["path"] = request.url.path
+        return httpx.Response(
+            200,
+            json={
+                "transcript": {
+                    "companyName": "Apple Inc.",
+                    "callAt": "2026-08-01T16:30:00Z",
+                }
+            },
+        )
+
+    denied = make_client(handler).transcripts({"transcript_id": "t1"})
+    assert denied.data.code == "auth_required"  # type: ignore[union-attr]
+    assert seen == {}
+
+    allowed = make_client(handler, session_cookie="token").transcripts({"transcript_id": "t1"})
+    assert seen["path"] == "/cloud/transcripts/t1"
+    row = allowed.data.transcripts[0]  # type: ignore[union-attr]
+    assert row.id == "t1"
+    assert row.company_name == "Apple Inc."
+
+
+def test_transcripts_rejects_two_targets_before_any_request() -> None:
+    calls: list[int] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        calls.append(1)
+        return httpx.Response(200, json={"calls": []})
+
+    result = make_client(handler, session_cookie="token").transcripts(
+        {"ticker": "AAPL", "transcript_id": "t1"}
+    )
+    assert result.data.code == "invalid_input"  # type: ignore[union-attr]
+    assert calls == []
