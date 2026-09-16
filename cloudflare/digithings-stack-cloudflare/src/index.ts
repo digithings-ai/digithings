@@ -311,7 +311,10 @@ export default {
       if (!expected || !provided || provided !== expected) {
         return new Response("digithings-stack: unauthorized", { status: 401 });
       }
-      const stripped = url.pathname.slice(ZAMMAD_MCP_PUBLIC_PATH.length) || "/";
+      let stripped = url.pathname.slice(ZAMMAD_MCP_PUBLIC_PATH.length) || "/";
+      if (!stripped.endsWith("/")) {
+        stripped += "/";
+      }
       const target = new URL(url.toString());
       target.pathname = stripped;
       const forwarded = new Request(target.toString(), request);
