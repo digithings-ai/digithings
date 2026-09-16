@@ -6,13 +6,14 @@ own handler table. The OpenAI-style orchestrator manifest stays in
 ``orchestrator_tools.py`` and re-exports these name constants (documented
 re-export chain ending here).
 
-Runtime backends that need HTTP / D1 / tenant context (``digivault_search_notes``,
-``digivault_get_note``) register into this same dispatch table via
-:func:`register_runtime_handler` from ``server.py`` at import time. MCP
-discovery is driven by :func:`mcp_tool_names`, which equals the vault-local
-handler set (filesystem tools); the full runtime dispatch set is
-:func:`dispatch_tool_names` (vault + runtime). Tests assert both surfaces stay
-aligned with ``ORCHESTRATOR_TOOL_NAMES`` / the OpenAI manifest.
+Runtime backends that need HTTP / D1 / tenant context register into this same
+dispatch table via :func:`register_runtime_handler` from ``server.py`` at
+import time. MCP discovery is driven by :func:`mcp_tool_names`, which advertises
+the vault-local handler set (filesystem tools) plus ``search_notes`` (required
+``path_prefix``; D1 -> local -> Supabase); ``get_note`` stays orchestrator-only,
+and the full runtime dispatch set is :func:`dispatch_tool_names` (vault +
+runtime). Tests assert both surfaces stay aligned with ``ORCHESTRATOR_TOOL_NAMES``
+/ the OpenAI manifest.
 """
 
 from __future__ import annotations
@@ -259,7 +260,11 @@ def register_mcp_tools(mcp: Any, open_vault: Callable[[], Vault]) -> frozenset[s
                 hits = _open_supabase_store().search(query, limit=limit, path_prefix=prefix)
         except Exception as exc:
             return f"[digivault error: {exc}]"
-        return _mcp_result({"hits": [h.model_dump(mode="json") for h in hits]})
+        return _mcp_result(
+            ToolDispatchResult(
+                ok=True, data={"hits": [h.model_dump(mode="json") for h in hits]}
+            )
+        )
 
     @mcp.tool(name=MCP_TOOL_SEARCH_TAG)
     def digivault_search_tag(tag: str) -> str:

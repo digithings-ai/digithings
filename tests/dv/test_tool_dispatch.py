@@ -202,3 +202,35 @@ def test_dispatch_create_note_duplicate_returns_error(tmp_path: Path) -> None:
     )
     assert result.ok is False
     assert result.error == "Note already exists: 'exists'"
+
+
+def test_mcp_search_notes_reads_the_local_vault(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import json
+
+    from digivault.tool_dispatch import register_mcp_tools
+
+    class _FakeMcp:
+        def __init__(self) -> None:
+            self.tools: dict[str, object] = {}
+
+        def tool(self, *, name: str):
+            def deco(fn):
+                self.tools[name] = fn
+                return fn
+
+            return deco
+
+    root = tmp_path / "vault"
+    (root / "sub").mkdir(parents=True)
+    (root / "sub" / "n.md").write_text("alpha body", encoding="utf-8")
+    monkeypatch.setenv("DIGIVAULT_ROOT", str(root))
+    fake = _FakeMcp()
+    register_mcp_tools(fake, lambda: Vault(root))
+    assert (
+        fake.tools["search_notes"]("alpha", "")
+        == "[digivault error: path_prefix is required]"
+    )
+    payload = json.loads(fake.tools["search_notes"]("alpha", "sub"))
+    assert payload["hits"]

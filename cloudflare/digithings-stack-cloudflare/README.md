@@ -236,8 +236,8 @@ Ollama in this path unless you need them.
 | digivault `:8004` | loopback | Notes |
 | LiteLLM `:4000` | loopback | LLM router |
 | Redis `:6379` | loopback | digikey blocklist |
-| digisearch-mcp `:8765` | loopback | RAG MCP (fail-loud backend gate) |
-| digivault-mcp `:8769` | loopback | vault-notes MCP (4 vault-local tools) |
+| digisearch-mcp `:8765` | key-gated edge | RAG MCP (fail-loud backend gate); `/_stack/mcp/digisearch/*` |
+| digivault-mcp `:8769` | key-gated edge | vault MCP (search_notes/search_tag/backlinks/lint; `create_note` with `DIGIVAULT_MCP_WRITE=1`) |
 | digigraph-mcp `:8766` | loopback | orchestrator MCP (`DIGI_MCP_REQUIRE_AUTH=1`, stack JWKS) |
 
 hosted `:8765` `web_search` uses the embedded ddgs fallback (no searxng sidecar in-stack);

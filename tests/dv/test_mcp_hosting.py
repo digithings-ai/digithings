@@ -1,8 +1,9 @@
-"""digivault MCP hosting pin: the 4-tool MCP boundary + VaultError laziness.
+"""digivault MCP hosting pin: the 5-tool MCP surface + VaultError laziness.
 
-MCP exposes exactly the four vault-local tools; ``digivault_search_notes`` /
-``digivault_get_note`` stay orchestrator-only. A missing ``DIGIVAULT_ROOT``
-must fail loud at tool-call time (``_open_vault``), never at import time.
+MCP exposes the four vault-local tools plus ``search_notes`` (required
+``path_prefix``); ``digivault_get_note`` stays orchestrator-only. A missing
+``DIGIVAULT_ROOT`` must fail loud at tool-call time (``_open_vault``), never at
+import time.
 """
 
 from __future__ import annotations
