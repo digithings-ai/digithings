@@ -1,5 +1,5 @@
 // Source pins for the secret-gated Zammad MCP edge path (#4174):
-// digraph dials https://graph.digithings.ai/_stack/mcp/zammad/mcp because the
+// digigraph dials https://graph.digithings.ai/_stack/mcp/zammad/mcp because the
 // container-internal `zammad-mcp` name cannot be resolved there (/etc/hosts is
 // read-only and the entrypoint alias is skipped). The route must stay
 // fail-closed, and the in-container program must keep its 0.0.0.0 bind.
