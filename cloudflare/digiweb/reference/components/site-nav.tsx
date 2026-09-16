@@ -24,6 +24,7 @@ const PAGES = [
   { href: "/", label: "Foundations" },
   { href: "/iterate", label: "Iterate" },
   { href: "/controls", label: "Controls" },
+  { href: "/ui", label: "UI kit" },
   { href: "/layout-patterns", label: "Layout" },
   { href: "/typography", label: "Typography" },
   { href: "/data", label: "Data" },
