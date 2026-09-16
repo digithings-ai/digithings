@@ -228,13 +228,17 @@ def test_real_markdown_file_chunking_matches_recorded_fingerprint() -> None:
     Re-recorded at count 100 for #4123 (EXA live pin: `exa_adapter.py` module-map
     row + pinned-shapes paragraph in ARCHITECTURE.md) — fixture prose only;
     RecursiveChunker unchanged.
+    Re-recorded at count 102 for #4170 (shared webset driver docs:
+    `websets/driver.py` module-map row + FastMCP-lifespan / MCP-process-driving
+    resolution notes in ARCHITECTURE.md) — fixture prose only; RecursiveChunker
+    unchanged.
     """
     arch_path = Path(__file__).resolve().parents[2] / "digisearch" / "ARCHITECTURE.md"
     content = arch_path.read_text(encoding="utf-8")
     doc = Document(id="arch", content=content, source=str(arch_path), doc_type="md")
     chunks = RecursiveChunker().chunk(doc)
 
-    assert len(chunks) == 100
+    assert len(chunks) == 102
     assert all(len(c.content) <= 2000 for c in chunks)
     hashes = [hashlib.sha256(c.content.encode()).hexdigest()[:16] for c in chunks]
     assert hashes == [
@@ -266,19 +270,20 @@ def test_real_markdown_file_chunking_matches_recorded_fingerprint() -> None:
         "80845022b2a31639",
         "7af3cdc7d42ec69e",
         "78f3776581e1eaf1",
-        "ac8360d02c86e775",
-        "51a1bc05c78b8178",
-        "6566c834df865165",
+        "aa924885a2a48bdc",
+        "8e641e27bfee4936",
+        "16e13007e80dab2c",
+        "7090bb1895cf01fc",
         "f72fb524bae160b6",
         "a45fa09bea0e8e51",
         "a73404f288469603",
-        "5b442a8e6f3d05d4",
+        "95dd096e8d7aa670",
         "6de35d68bea0e990",
         "c5776a6b47ee3e04",
         "3aed1b59bbde9920",
         "cd75df0bdf136bd3",
-        "8073886ccefe0be6",
-        "06560323c42c4962",
+        "7bbcff0de578bc73",
+        "877cfb0918c9f5f6",
         "f5694c994b90e40c",
         "2f102978f3f92316",
         "d201d5cef8605cdf",
@@ -304,8 +309,9 @@ def test_real_markdown_file_chunking_matches_recorded_fingerprint() -> None:
         "9d7b263a74bc8726",
         "367d6f1945838ddd",
         "4187a3ee58add217",
-        "6dd7e1ff8128c024",
-        "5fa5abc98008e40d",
+        "125d31d225ad9516",
+        "19fbb7c0db259870",
+        "d076b4a30ca15a31",
         "66ce13f7ba2fafdc",
         "26ca223dcbe8b403",
         "d5e8de001fd3bc4d",

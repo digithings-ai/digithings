@@ -586,14 +586,18 @@ webset reaches `idle`. Every route is thin over the T6 service facade
 (`digisearch.websets.service`) — no pipeline logic lives in `server.py`.
 
 **Async lifecycle.** No endpoint blocks on the build: `POST /v1/websets` and
-the refresh routes return 202 and schedule the pass on the server lifespan
-`asyncio.TaskGroup` (registry `WEBSET_TASKS`, done-callback per run; a bare
-`asyncio.create_task` is never used). The lifespan installs the scheduler on the
-service facade at startup (`set_scheduler`), re-schedules the startup-resume
-union (websets still `running` ∪ websets holding a non-terminal `running`
-search) as registry-tracked runs under each webset's persisted
-`verification_mode`, and on shutdown undoes the seam first and then cancels
-every tracked run/backfill. `Webset.status` never goes backwards: `idle` is
+the refresh routes return 202 and schedule the pass on the shared driver's
+lifespan `asyncio.TaskGroup` (`websets/driver.py`; registry `WEBSET_TASKS`,
+done-callback per run; a bare `asyncio.create_task` is never used). Both serving
+entrypoints carry the same driver lifespan — the FastAPI app lifespan
+(`server._lifespan`, after its backend gate) and the FastMCP server lifespan
+(`mcp_server.mcp`) — so an MCP-only process drives its own runs (#4170). The
+driver installs the scheduler on the service facade at startup
+(`set_scheduler`), re-schedules the startup-resume union (websets still
+`running` ∪ websets holding a non-terminal `running` search) as
+registry-tracked runs under each webset's persisted `verification_mode`, and
+on shutdown undoes the seam first and then cancels every tracked run/backfill.
+`Webset.status` never goes backwards: `idle` is
 sticky after the first completion, and a refresh (`add_search` /
 `trigger_monitor`) runs as a new `WebsetSearch` generation observed through the
 new row + events. Terminal `cancelled`/`failed` websets refuse new searches,
@@ -687,12 +691,16 @@ precedent).
 (poll-only v1: monitor interval is metadata; refreshes are manual
 `trigger_monitor` calls — still deferred, no tracking issue yet), recall paging
 (count is reached by query diversification, `max_results ≤ 10` per call),
-automated webhook re-delivery after a failed delivery, EXA-websets live
-validation + wiring (Pro key; tracked by the #4123 live-pin precedent), and
-driving a webset created through the standalone MCP process (#4170) — MCP tools
-share the service facade, but the run scheduler is installed by the HTTP
-lifespan, so an MCP-only process leaves the webset `running` until an HTTP
-process resumes it.
+automated webhook re-delivery after a failed delivery, and EXA-websets live
+validation + wiring (Pro key; tracked by the #4123 live-pin precedent).
+
+**MCP-process driving is wired (#4170).** Both entrypoints carry the shared
+`websets/driver.py` lifespan: the FastAPI app lifespan installs it for the HTTP
+serving window and the FastMCP server lifespan (`mcp_server.mcp`) installs it
+for an MCP-only process, so a webset created or refreshed through the
+standalone MCP tools is driven in-process through the same service facade,
+runner, and per-process `WEBSET_TASKS` registry (HTTP and MCP processes stay
+independent).
 
 **Phase D live verification record (2026-09-15, #4066 Task 8 — not measured,
 live stack absent in this env):**
@@ -764,8 +772,9 @@ keeps `digisearch_websets_*`) and wrap the same T6 service facade the HTTP
 routes use, with the same fail-closed disabled string when the webset store
 cannot be opened. They are the deliberate v1 chat surface: enrichment
 add/remove, webhook secrets, monitors, and cancel stay HTTP-only operator ops.
-See § Phase D websets for the async lifecycle and the deferred MCP-process
-driving note.
+The FastMCP instance carries the shared driver lifespan
+(`websets/driver.py`), so these tools drive their own runs in an MCP-only
+process (#4170). See § Phase D websets for the async lifecycle.
 
 Tool parameters for `digisearch_query`: `text`, `index_name`, `top_k`, `mode`.
 
@@ -1384,6 +1393,7 @@ no-new-provider discipline as Phase C. One-line responsibilities:
 | `websets/verify.py` | `verify_item` (llm + offline rules modes) and the fail-closed settlement of still-pending items at candidate-pass end |
 | `websets/enrich.py` | `enrich_item` (8 typed fields, per-field citations), funding reconciliation (ECB snapshot), entity merge, `company_profile_field` |
 | `websets/runner.py` | `AsyncioRunner` (semaphore 4, per-item containment, semaphore-aware cancellation), `run_webset_async`, `backfill_enrichment`, `schedule_webset_task` + `WEBSET_TASKS` |
+| `websets/driver.py` | Shared process driver (`webset_task_lifespan`, `WebsetTaskScheduler`): installs the scheduler seam, re-schedules the startup-resume union, cancels tracked runs/backfills on shutdown — carried by both the FastAPI and FastMCP lifespans (#4170) |
 | `websets/events.py` | Event emit helpers, the shared Phase C signing core, `append_event` fan-out through `deliver_webhook` (3 attempts, 5s/25s) + ledger recording, public `verify_webhook_signature` |
 | `websets/export.py` | `export_json` (per-field citations) and `export_csv` (polars) |
 | `websets/service.py` | The sync facade the HTTP/MCP/orchestrator surfaces call (create/get/items/counts/add_search/add_enrichment/remove/monitors/webhooks/events/cancel/export) + the scheduler seam |
@@ -1402,12 +1412,14 @@ event while a new `add_search`/backfill/`trigger_monitor` generation can
 legitimately re-emit terminal events. Item `verification` and the enrichment
 names are real columns for filtered listing.
 
-**Execution model.** The HTTP lifespan owns one `asyncio.TaskGroup` +
-`WEBSET_TASKS`; the service facade schedules through the `set_scheduler` seam
-(no bare `asyncio.create_task`, no awaiting a run inline) and all store I/O
-inside the runner crosses through one dedicated worker thread (the store is
-thread-bound). Startup resume, the terminal-status gate, `verification_mode`
-threading, and the deferred items are documented in § Phase D websets.
+**Execution model.** The shared driver (`websets/driver.py`) owns one
+`asyncio.TaskGroup` + `WEBSET_TASKS` per process — installed by the HTTP
+lifespan and the FastMCP lifespan alike (#4170); the service facade schedules
+through the `set_scheduler` seam (no bare `asyncio.create_task`, no awaiting a
+run inline) and all store I/O inside the runner crosses through one dedicated
+worker thread (the store is thread-bound). Startup resume, the terminal-status
+gate, `verification_mode` threading, and the deferred items are documented in
+§ Phase D websets.
 
 ---
 

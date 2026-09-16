@@ -5,13 +5,11 @@
 
 from __future__ import annotations
 
-import asyncio
 import json
 import logging
 import os
 import re
 import secrets
-import sqlite3
 import time as _time
 from collections import deque as _deque
 from collections.abc import AsyncIterator
@@ -65,6 +63,7 @@ from digisearch.search._stub import query_index
 from digisearch.web_exa import WebSearchData
 from digisearch.web_search.models import WebSearchConfigError, WebSearchRequest, WebSearchResponse
 from digisearch.websets import service as websets_service
+from digisearch.websets.driver import webset_task_lifespan
 from digisearch.websets.models import (
     EnrichmentDef,
     Webset,
@@ -72,15 +71,7 @@ from digisearch.websets.models import (
     WebsetItem,
     WebsetSearch,
 )
-from digisearch.websets.runner import (
-    WEBSET_TASKS,
-    backfill_enrichment,
-    guard_webset_task,
-    schedule_webset_task,
-)
 from digisearch.websets.service import WebsetServiceError
-from digisearch.websets.store import WebsetStoreError
-from digisearch.websets.store import get_store as get_webset_store
 
 configure_logging()
 
@@ -126,51 +117,7 @@ def _digisearch_path_scopes(method: str, path: str) -> list[str] | None:
     return digisearch_path_scopes(method, path)
 
 
-# --- Phase D websets: lifespan-owned scheduler (§ Async lifecycle, #4066) ----
-
-
-class _WebsetTaskScheduler:
-    """Lifespan-owned ``WebsetScheduler``: runs are TaskGroup children.
-
-    Installed on the service facade at startup (``set_scheduler``) so every
-    route/service schedule ends up in the lifespan TaskGroup:
-
-    - ``schedule_run`` delegates to ``runner.schedule_webset_task``, which owns
-      the ``WEBSET_TASKS`` registry entry, the ``(webset_id, ok|error)``
-      done-callback, and the single-drive guard;
-    - ``schedule_backfill`` opens a tracked ``runner.backfill_enrichment`` task
-      (the ``add_enrichment`` drain path);
-    - ``cancel_all`` cancels every tracked task first so a clean shutdown never
-      hangs on an in-flight pass (spec § Async lifecycle: a selected webset at
-      boot is an orphan).
-    """
-
-    def __init__(self, task_group: asyncio.TaskGroup) -> None:
-        self._task_group = task_group
-        self._backfills: set[asyncio.Task[list[WebsetItem] | None]] = set()
-
-    def schedule_run(self, webset_id: str, *, verification_mode: str = "llm") -> None:
-        schedule_webset_task(self._task_group, webset_id, verification_mode=verification_mode)
-
-    def schedule_backfill(self, webset_id: str, enrichment_id: str) -> None:
-        task = self._task_group.create_task(
-            guard_webset_task(
-                backfill_enrichment(webset_id, enrichment_id),
-                webset_id=webset_id,
-                kind="backfill",
-            )
-        )
-        self._backfills.add(task)
-        task.add_done_callback(self._backfills.discard)
-
-    def cancel_all(self) -> None:
-        for task in [*WEBSET_TASKS.values(), *self._backfills]:
-            task.cancel()
-
-
-def _load_incomplete_websets() -> list[Webset]:
-    """Startup-resume selector query, run on a worker thread by the lifespan."""
-    return get_webset_store().list_incomplete_websets()
+# --- Phase D websets: the shared websets/driver.py owns the lifespan schedule --
 
 
 def _require_real_search_backend() -> None:
@@ -178,46 +125,18 @@ def _require_real_search_backend() -> None:
     require_real_search_backend()
 
 
-async def _resume_incomplete_websets(task_group: asyncio.TaskGroup) -> None:
-    """Re-schedule every orphaned webset as a registry-tracked run.
-
-    § Async lifecycle: the selector is the store's union of websets still
-    ``running`` and websets holding a non-terminal ``running`` search; each
-    selected webset is re-scheduled via ``run_webset_async`` (here through
-    ``schedule_webset_task``, so the run is visible in ``WEBSET_TASKS`` like
-    every other pass) under its persisted ``verification_mode``. The store
-    query runs on a worker thread because the sqlite connection is thread-bound.
-    A store that cannot be opened must not block startup: the routes will
-    surface the same fault per request.
-    """
-    try:
-        incomplete = await asyncio.to_thread(_load_incomplete_websets)
-    except (OSError, sqlite3.Error, WebsetStoreError) as exc:
-        logger.warning("webset startup resume skipped; store unavailable: %s", exc)
-        return
-    for webset in incomplete:
-        logger.info("webset startup resume scheduled webset_id=%s", webset.id)
-        schedule_webset_task(task_group, webset.id, verification_mode=webset.verification_mode)
-
-
 @asynccontextmanager
 async def _lifespan(_app: FastAPI) -> AsyncIterator[None]:
-    """App lifespan: fail-closed backend gate + webset TaskGroup ownership.
+    """App lifespan: fail-closed backend gate + shared webset driver.
 
-    The TaskGroup wraps the whole serving window, so route-scheduled runs and
-    backfills stay cancelable at shutdown; ``set_scheduler`` is undone first so
-    no new work can be scheduled mid-teardown.
+    The driver's TaskGroup wraps the whole serving window, so route-scheduled
+    runs and backfills stay cancelable at shutdown; ``set_scheduler`` is undone
+    first so no new work can be scheduled mid-teardown. The same driver backs
+    the standalone MCP process (#4170).
     """
     _require_real_search_backend()
-    async with asyncio.TaskGroup() as task_group:
-        scheduler = _WebsetTaskScheduler(task_group)
-        websets_service.set_scheduler(scheduler)
-        await _resume_incomplete_websets(task_group)
-        try:
-            yield
-        finally:
-            websets_service.set_scheduler(None)
-            scheduler.cancel_all()
+    async with webset_task_lifespan(_app):
+        yield
 
 
 app = FastAPI(

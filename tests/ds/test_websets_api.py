@@ -40,6 +40,7 @@ from typing import Any
 import polars as pl
 import pytest
 from digisearch.web_search.models import WebSearchRequest, WebSearchResponse, WebSearchResult
+from digisearch.websets import driver as driver_module
 from digisearch.websets import runner as runner_module
 from digisearch.websets import service
 from digisearch.websets.enrich import ENRICH_MODEL_ENV
@@ -693,7 +694,7 @@ def test_lifespan_scheduler_drives_to_idle(monkeypatch, tmp_path):
 
     db = tmp_path / "websets.sqlite3"
     monkeypatch.setenv("DIGISEARCH_WEBSETS_DB", str(db))
-    monkeypatch.setattr(srv, "get_webset_store", lambda: WebsetStore(db_path=str(db)))
+    monkeypatch.setattr(driver_module, "get_webset_store", lambda: WebsetStore(db_path=str(db)))
     monkeypatch.setattr(runner_module, "search_web", _RecallStub([_URL_A, _URL_B]))
     monkeypatch.setattr(runner_module, "fetch_markdown", _FetchStub(_MARKDOWN))
     client = TestClient(srv.app, headers=auth_headers())
@@ -713,16 +714,15 @@ def test_lifespan_scheduler_drives_to_idle(monkeypatch, tmp_path):
 @pytest.mark.unit
 def test_startup_resume_tolerates_store_error(monkeypatch):
     """A store fault in the resume selector must not block startup (§ docstring)."""
-    import digisearch.server as srv
 
     def _boom() -> Any:
         raise WebsetStoreError("ledger locked", code="store_locked")
 
-    monkeypatch.setattr(srv, "get_webset_store", _boom)
+    monkeypatch.setattr(driver_module, "get_webset_store", _boom)
 
     async def _run() -> None:
         async with asyncio.TaskGroup() as group:
-            await srv._resume_incomplete_websets(group)
+            await driver_module._resume_incomplete_websets(group)
 
     asyncio.run(_run())  # no raise: startup resume only logs and returns
 
