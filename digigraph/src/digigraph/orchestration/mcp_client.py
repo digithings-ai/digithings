@@ -38,7 +38,7 @@ import httpx
 
 log = logging.getLogger(__name__)
 
-_ID_RE = re.compile(r"^[a-z0-9][a-z0-9_-]{0,63}$")
+_ID_RE = re.compile(r"^[a-z0-9][a-z0-9-]{0,63}$")
 _METADATA_HOSTS = frozenset(
     {
         "169.254.169.254",

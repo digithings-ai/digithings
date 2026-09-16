@@ -219,14 +219,9 @@ def execute(name: str, args: dict[str, Any], context: ToolContext) -> str | dict
     # which has no handler-side availability check. Native ``web_search``
     # keeps its own handler gate, so only the proxied suffix is denied here.
     if is_proxied_web_search_tool(name) and not context.state.get("enable_web_search"):
-        return {
-            "error": "tool_not_allowed",
-            "tool": name,
-            "message": (
-                f"Tool {name!r} requires web search to be enabled for this session. "
-                "Set enable_web_search on the request (X-Digi-Enable-Web-Search)."
-            ),
-        }
+        from digigraph.orchestration.web_search_tools import web_search_disabled_payload
+
+        return web_search_disabled_payload(name)
     if context.allowed_tool_names is not None and name not in context.allowed_tool_names:
         from digigraph.audit import audit_log
 

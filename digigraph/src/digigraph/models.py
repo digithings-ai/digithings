@@ -265,7 +265,7 @@ class McpServerRef(BaseModel):
     # (context.py) but dumped by its wire alias `authHeader` (workflow.py).
     model_config = ConfigDict(extra="forbid", populate_by_name=True)
 
-    id: str = Field(..., min_length=1, max_length=64, pattern=r"^[a-z0-9][a-z0-9_-]{0,63}$")
+    id: str = Field(..., min_length=1, max_length=64, pattern=r"^[a-z0-9][a-z0-9-]{0,63}$")
     url: str = Field(..., min_length=1, max_length=2048)
     auth: str | None = Field(None, max_length=16)
     token: str | None = Field(None, max_length=4096)

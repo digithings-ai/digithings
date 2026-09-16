@@ -8,8 +8,9 @@
 # service-image build must not drag in.)
 # Serves FastMCP streamable-http via digivault.mcp_server:run_mcp on :8769
 # with the [service] extra. Filesystem vault only (DIGIVAULT_ROOT);
-# search_notes/get_note stay orchestrator-only and are never registered
-# here (tool_dispatch.py). Container platforms that publish the port set
+# search_notes is registered here too (required path_prefix; D1 -> local ->
+# Supabase) while get_note stays orchestrator-only (tool_dispatch.py).
+# Container platforms that publish the port set
 # DIGIVAULT_MCP_HOST at deploy time (all-interfaces bind); the code default
 # stays loopback.
 FROM python:3.12-slim

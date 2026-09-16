@@ -461,3 +461,40 @@ def test_mcp_setup_survives_http_boundary(monkeypatch: pytest.MonkeyPatch) -> No
         "search_tag",
         {"tag": "guide", "path_prefix": "clients/acme"},
     )
+
+
+@pytest.mark.unit
+def test_mcp_web_search_denied_without_opt_in() -> None:
+    ctx = ToolContext(
+        session_id="s",
+        run_data_dir=None,
+        index_name="default",
+        index_config={},
+        state={},
+        extra_mcp_servers=[{"id": "digisearch", "url": "https://mcp.example/mcp"}],
+        allowed_tool_names=frozenset({"digisearch_web_search"}),
+    )
+    out = execute("digisearch_web_search", {"query": "x"}, ctx)
+    assert isinstance(out, dict)
+    assert out.get("error") == "tool_not_allowed"
+    assert out.get("tool") == "digisearch_web_search"
+
+
+@pytest.mark.unit
+def test_mcp_web_search_allowed_with_opt_in() -> None:
+    ctx = ToolContext(
+        session_id="s",
+        run_data_dir=None,
+        index_name="default",
+        index_config={},
+        state={"enable_web_search": True},
+        extra_mcp_servers=[{"id": "digisearch", "url": "https://mcp.example/mcp"}],
+        allowed_tool_names=frozenset({"digisearch_web_search"}),
+    )
+    with patch(
+        "digigraph.orchestration.mcp_client.call_prefixed_tool",
+        return_value={"ok": True},
+    ) as call:
+        out = execute("digisearch_web_search", {"query": "x"}, ctx)
+    call.assert_called_once()
+    assert out == {"ok": True}

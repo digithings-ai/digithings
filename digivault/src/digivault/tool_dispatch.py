@@ -11,8 +11,10 @@ Runtime backends that need HTTP / D1 / tenant context (``digivault_search_notes`
 :func:`register_runtime_handler` from ``server.py`` at import time. MCP
 discovery is driven by :func:`mcp_tool_names`, which advertises the MCP surface
 name of every vault-local handler (``search_tag``, … — digigraph then prefixes
-the operator server id to get ``digivault_search_tag``); the full runtime
-dispatch set is :func:`dispatch_tool_names` (vault + runtime). Tests assert both
+the operator server id to get ``digivault_search_tag``) plus ``search_notes``
+(the runtime-backed full-text search; required ``path_prefix``; D1 -> local ->
+Supabase); ``get_note`` stays orchestrator-only, and the full runtime dispatch
+set is :func:`dispatch_tool_names` (vault + runtime). Tests assert both
 surfaces stay aligned with ``ORCHESTRATOR_TOOL_NAMES`` / the OpenAI manifest.
 
 Vault-local handlers honour an optional ``path_prefix`` argument (an operator
@@ -222,12 +224,14 @@ MCP_TOOL_SEARCH_TAG = "search_tag"
 MCP_TOOL_BACKLINKS = "backlinks"
 MCP_TOOL_LINT = "lint"
 MCP_TOOL_CREATE_NOTE = "create_note"
+MCP_TOOL_SEARCH_NOTES = "search_notes"
 
 _MCP_SURFACE_NAMES: dict[str, str] = {
     TOOL_VAULT_SEARCH_TAG: MCP_TOOL_SEARCH_TAG,
     TOOL_VAULT_BACKLINKS: MCP_TOOL_BACKLINKS,
     TOOL_VAULT_LINT: MCP_TOOL_LINT,
     TOOL_VAULT_CREATE_NOTE: MCP_TOOL_CREATE_NOTE,
+    TOOL_VAULT_SEARCH_NOTES: MCP_TOOL_SEARCH_NOTES,
 }
 
 
@@ -293,6 +297,38 @@ def register_mcp_tools(mcp: Any, open_vault: Callable[[], Vault]) -> frozenset[s
         ]
         return _json.dumps(slim)
 
+    @mcp.tool(name=MCP_TOOL_SEARCH_NOTES)
+    def search_notes(query: str, path_prefix: str, limit: int = 10) -> str:
+        """Full-text search across the vault notes under a path prefix (required)."""
+        import os
+
+        from digivault.local_search import search_local_vault
+        from digivault.server import (
+            _d1_configured,
+            _load_d1_database_map,
+            _open_d1_store,
+            _open_supabase_store,
+        )
+
+        prefix = (path_prefix or "").strip()
+        if not prefix:
+            return "[digivault error: path_prefix is required]"
+        if not (query or "").strip():
+            return "[digivault error: query is required]"
+        try:
+            if _d1_configured():
+                _load_d1_database_map()
+                hits = _open_d1_store(prefix).search(query, limit=limit, path_prefix=prefix)
+            elif (os.environ.get("DIGIVAULT_ROOT") or "").strip():
+                hits = search_local_vault(open_vault(), query, limit=limit, path_prefix=prefix)
+            else:
+                hits = _open_supabase_store().search(query, limit=limit, path_prefix=prefix)
+        except Exception as exc:
+            return f"[digivault error: {exc}]"
+        return _mcp_result(
+            ToolDispatchResult(ok=True, data={"hits": [h.model_dump(mode="json") for h in hits]})
+        )
+
     # ``path_prefix`` is declared on every handler so digigraph's MCP client can
     # inject the operator ``setup.path_prefix`` value as a tool kwarg (FastMCP
     # silently drops kwargs the signature does not declare). The client merges
@@ -341,6 +377,10 @@ def register_mcp_tools(mcp: Any, open_vault: Callable[[], Vault]) -> frozenset[s
         name: str, title: str | None = None, body: str = "", path_prefix: str | None = None
     ) -> str:
         """Create a new markdown note in the vault with optional title and body."""
+        import os
+
+        if os.environ.get("DIGIVAULT_MCP_WRITE") != "1":
+            return "[digivault error: write tools are disabled on this MCP surface]"
         try:
             vault = open_vault()
         except VaultError as e:
@@ -352,5 +392,11 @@ def register_mcp_tools(mcp: Any, open_vault: Callable[[], Vault]) -> frozenset[s
 
     # Bind references so ruff doesn't flag the nested defs as unused — FastMCP
     # holds them via the decorator; we only need the names for the return set.
-    _ = (digivault_search_tag, digivault_backlinks, digivault_lint, digivault_create_note)
+    _ = (
+        digivault_search_tag,
+        digivault_backlinks,
+        digivault_lint,
+        digivault_create_note,
+        search_notes,
+    )
     return mcp_tool_names()

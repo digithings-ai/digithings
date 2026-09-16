@@ -44,6 +44,14 @@ describe("MCP edge paths", () => {
     expect(source).toContain("switchPort(forwarded, port)");
     expect(source).toContain("getContainer(workerEnv.STACK, SHARED_STACK_CONTAINER_ID)");
   });
+
+  it("supports per-server edge keys with the shared key as fallback", () => {
+    expect(source).toContain("MCP_EDGE_KEYS");
+    expect(source).toContain(
+      "function mcpEdgeKeyFor(serverId: string, workerEnv: Env): string {",
+    );
+    expect(source).toContain("const expected = mcpEdgeKeyFor(serverId, workerEnv);");
+  });
 });
 
 describe("in-container MCP program binds", () => {

@@ -125,13 +125,25 @@ def test_lint_scoped_to_prefix(tmp_path: Path) -> None:
     assert whole["note_count"] == 3
 
 
-def test_create_note_lands_beneath_prefix(tmp_path: Path) -> None:
+def test_create_note_lands_beneath_prefix(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    # Upstream gates MCP writes behind DIGIVAULT_MCP_WRITE (#4223 follow-ups);
+    # this test exercises the scoped write path, so opt the surface in.
+    monkeypatch.setenv("DIGIVAULT_MCP_WRITE", "1")
     surface = _surface(tmp_path)
     raw = surface[MCP_TOOL_CREATE_NOTE]("fresh", title="Fresh", path_prefix=PREFIX)  # type: ignore[operator]
     created = json.loads(raw)
     assert created["rel_path"] == f"{PREFIX}/fresh.md"
     assert (tmp_path / PREFIX / "fresh.md").is_file()
     assert not (tmp_path / "fresh.md").exists()
+
+
+def test_create_note_mcp_surface_refuses_without_write_env(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.delenv("DIGIVAULT_MCP_WRITE", raising=False)
+    raw = _surface(tmp_path)[MCP_TOOL_CREATE_NOTE]("blocked")  # type: ignore[operator]
+    assert "write tools are disabled" in raw
+    assert not (tmp_path / "blocked.md").exists()
 
 
 def test_create_note_rejects_traversal_prefix(tmp_path: Path) -> None:
