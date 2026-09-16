@@ -1,7 +1,8 @@
 'use client';
 
 import { useMemo, useState } from 'react';
-import { CalendarClock } from 'lucide-react';
+import { CalendarClock, ExternalLink } from 'lucide-react';
+import { GLOOMBERB_TERMINAL_URL } from '@digithings/web';
 import type {
   FxConfluenceSnapshotRow,
   FxConsensusDivergence,
@@ -184,6 +185,17 @@ export default function TodayTab({
       <section className="oly-slab p-4">
         <header className="mb-3 flex items-baseline gap-2">
           <TwelveXSectionHeading>Today&rsquo;s timeline</TwelveXSectionHeading>
+          {/* Terminal root, not a macro deeplink — no stable macro form exists (#4193). */}
+          <a
+            href={GLOOMBERB_TERMINAL_URL}
+            target="_blank"
+            rel="noopener noreferrer"
+            data-testid="gloomberb-terminal-link"
+            className="inline-flex items-center gap-1 text-xs text-accent hover:underline focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-accent/50"
+            title="Open the Gloomberb terminal (opens in a new tab)"
+          >
+            Gloomberb terminal <ExternalLink size={12} aria-hidden />
+          </a>
           <span className="ml-auto font-mono text-[10px] text-ink-mute">00:00 – 24:00</span>
         </header>
         {timelineEvents.length === 0 ? (

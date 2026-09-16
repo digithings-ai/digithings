@@ -295,3 +295,17 @@ describe('day grouping is viewer-local, not UTC (#1753)', () => {
     }
   });
 });
+
+describe('EventsTab — Gloomberb macro shortcut (#4193)', () => {
+  it('links the macro calendar header to the terminal root, never an invented deeplink', () => {
+    const html = render({});
+    expect(html).toContain('data-testid="gloomberb-terminal-link"');
+    expect(html).toContain('href="https://term.gloom.sh/"');
+    const anchor = html.match(/<a[^>]*data-testid="gloomberb-terminal-link"[^>]*>/)?.[0] ?? '';
+    expect(anchor).toContain('target="_blank"');
+    expect(anchor).toContain('rel="noopener noreferrer"');
+    // No `?ticker=` (or any other query) — the hosted terminal has no stable
+    // macro deeplink, so the link must not pretend to be one.
+    expect(anchor).not.toContain('?');
+  });
+});

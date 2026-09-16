@@ -38,6 +38,27 @@ describe('DeliberationsPanel', () => {
     const docs: PipelineTickerDoc[] = [{ document_key: 'x', ticker: 'X', payload: { foo: 'bar' } }];
     expect(renderToStaticMarkup(createElement(DeliberationsPanel, { docs }))).toBe('');
   });
+
+  // #4193 — coverage: the per-ticker debate ledger deep-links each ticker.
+  it('links every debate ticker out to the Gloomberb terminal', () => {
+    const docs: PipelineTickerDoc[] = [
+      {
+        document_key: 'deliberation/NVDA',
+        ticker: 'NVDA',
+        payload: {
+          net_stance: 'bullish',
+          bull_thesis: 'Datacenter capex compounding.',
+          bear_thesis: 'Valuation rich into earnings.',
+        },
+      },
+    ];
+    const html = renderToStaticMarkup(createElement(DeliberationsPanel, { docs }));
+    expect(html).toContain('data-testid="gloomberb-link-NVDA"');
+    expect(html).toContain('href="https://term.gloom.sh/?ticker=NVDA"');
+    const anchor = html.match(/<a[^>]*data-testid="gloomberb-link-NVDA"[^>]*>/)?.[0] ?? '';
+    expect(anchor).toContain('target="_blank"');
+    expect(anchor).toContain('rel="noopener noreferrer"');
+  });
 });
 
 describe('sortDocsByDateDesc', () => {

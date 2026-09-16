@@ -1,7 +1,8 @@
 'use client';
 
 import Link from 'next/link';
-import { ChevronRight, ArrowUpRight } from 'lucide-react';
+import { ChevronRight, ArrowUpRight, ExternalLink } from 'lucide-react';
+import { gloomberbTickerUrl } from '@digithings/web';
 import type { Position } from '@/lib/types';
 import type { DecisionLogRow } from '@/lib/holdings-decisions';
 import type { PlanTier } from '@/lib/entitlements';
@@ -184,6 +185,16 @@ export function VehicleExpressionRow({
           >
             Open deliberation <ArrowUpRight size={12} aria-hidden />
           </Link>
+          {/* Cover every vehicle, not just the held ones (#4193). */}
+          <a
+            href={gloomberbTickerUrl(ticker)}
+            target="_blank"
+            rel="noopener noreferrer"
+            data-testid={`gloomberb-link-${ticker}`}
+            className="inline-flex items-center gap-1 text-ink-soft hover:text-ink hover:underline focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-accent/50"
+          >
+            Open in Gloomberb <ExternalLink size={12} aria-hidden />
+          </a>
         </div>
       </div>
     </details>
