@@ -71,9 +71,7 @@ def apply_web_search_opt_in(
         # Do not union — only activate a tool the operator already allowlisted.
         return names
     return frozenset(
-        n
-        for n in names
-        if n != WEB_SEARCH_TOOL_NAME and not n.endswith(f"_{WEB_SEARCH_TOOL_NAME}")
+        n for n in names if n != WEB_SEARCH_TOOL_NAME and not n.endswith(f"_{WEB_SEARCH_TOOL_NAME}")
     )
 
 

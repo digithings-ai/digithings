@@ -261,9 +261,7 @@ def register_mcp_tools(mcp: Any, open_vault: Callable[[], Vault]) -> frozenset[s
         except Exception as exc:
             return f"[digivault error: {exc}]"
         return _mcp_result(
-            ToolDispatchResult(
-                ok=True, data={"hits": [h.model_dump(mode="json") for h in hits]}
-            )
+            ToolDispatchResult(ok=True, data={"hits": [h.model_dump(mode="json") for h in hits]})
         )
 
     @mcp.tool(name=MCP_TOOL_SEARCH_TAG)
@@ -313,5 +311,11 @@ def register_mcp_tools(mcp: Any, open_vault: Callable[[], Vault]) -> frozenset[s
 
     # Bind references so ruff doesn't flag the nested defs as unused — FastMCP
     # holds them via the decorator; we only need the names for the return set.
-    _ = (digivault_search_tag, digivault_backlinks, digivault_lint, digivault_create_note, search_notes)
+    _ = (
+        digivault_search_tag,
+        digivault_backlinks,
+        digivault_lint,
+        digivault_create_note,
+        search_notes,
+    )
     return mcp_tool_names()
