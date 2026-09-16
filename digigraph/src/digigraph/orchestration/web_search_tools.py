@@ -141,7 +141,9 @@ def _call_digisearch_web_search(
     )
     if not isinstance(inv, dict):
         raise DigisearchHubError("digisearch web_search returned a non-object response")
-    if not inv.get("ok"):
+    # #4198: only a real JSON ``true`` counts as success — a malformed envelope whose
+    # ``ok`` is a truthy non-boolean (e.g. ``"false"``) must fail the pre-flight gate.
+    if inv.get("ok") is not True:
         raise DigisearchHubError(
             f"digisearch web_search failed: {inv.get('error') or 'unknown error'}"
         )

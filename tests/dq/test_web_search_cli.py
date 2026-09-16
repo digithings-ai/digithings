@@ -252,21 +252,18 @@ def test_check_web_search_health_raises_on_no_rows(
         check_web_search_health()
 
 
-def test_chain_guard_fails_hard_when_web_search_is_unhealthy(
-    monkeypatch: pytest.MonkeyPatch,
+def test_healthcheck_fails_on_truthy_non_boolean_ok(
+    digisearch_env: str, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """The research-stage guard is the one deliberate fail-hard gate (#4198)."""
-    from digiquant.portfolio import chain
+    """A malformed envelope must not pass: only a real JSON ``true`` is healthy.
 
-    def _unhealthy(*, timeout_s: float = 25.0) -> WebSearchHealth:
-        raise WebSearchHealthError(
-            "web_search pre-flight failed: tool=web_search "
-            f"endpoint={_ENDPOINT} elapsed=0.10s error=provider down"
-        )
+    The guard call site itself is pinned in tests/dq/portfolio/test_chain_safety_net.py
+    — this file must not import digiquant.portfolio.chain, because the digiquant CI
+    lane has no openai/digillm runtime deps.
+    """
+    _patch_hub(monkeypatch, {"ok": "false", "data": {"results": [_HIT]}})
 
-    monkeypatch.setattr(
-        "digiquant.research.data.web_search_health.check_web_search_health", _unhealthy
-    )
+    result = _invoke_cli()
 
-    with pytest.raises(WebSearchHealthError):
-        chain._guard_web_search_health()
+    assert result.exit_code != 0
+    assert "digisearch web_search failed" in _out(result)
