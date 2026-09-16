@@ -4,6 +4,16 @@ import { describe, expect, it } from "vitest";
 
 const css = readFileSync(path.resolve(__dirname, "web-theme.css"), "utf8");
 
+const chartNames = [
+  "--color-chart-1",
+  "--color-chart-2",
+  "--color-chart-3",
+  "--color-chart-4",
+  "--color-chart-5",
+];
+
+const radiusNames = ["--radius-sm", "--radius-md", "--radius-lg", "--radius-xl"];
+
 describe("web-theme shadcn token contract", () => {
   it("maps every shadcn token onto design tokens", () => {
     const pairs: [string, string][] = [
@@ -19,20 +29,28 @@ describe("web-theme shadcn token contract", () => {
       ["--color-secondary-foreground", "var(--ink)"],
       ["--color-muted", "var(--surface)"],
       ["--color-muted-foreground", "var(--ink-soft)"],
-      ["--color-accent", "var(--surface-2)"],
-      ["--color-accent-foreground", "var(--ink)"],
+      ["--color-accent", "var(--accent)"],
+      ["--color-accent-foreground", "var(--on-accent)"],
       ["--color-destructive", "var(--down)"],
       ["--color-border", "var(--hair)"],
       ["--color-input", "var(--hair)"],
       ["--color-ring", "color-mix(in srgb, var(--accent) 40%, transparent)"],
     ];
+    const contractNames = [
+      ...pairs.map(([name]) => name),
+      ...chartNames,
+      ...radiusNames,
+    ];
+    for (const name of contractNames) {
+      expect(css.match(new RegExp(`${name}\\s*:`, "g"))?.length).toBe(1);
+    }
     for (const [name, value] of pairs) {
       expect(css).toContain(`${name}: ${value};`);
     }
   });
 
   it("flattens shadcn radii to zero (Instrument Panel law)", () => {
-    for (const radius of ["--radius-sm", "--radius-md", "--radius-lg", "--radius-xl"]) {
+    for (const radius of radiusNames) {
       expect(css).toContain(`${radius}: 0;`);
     }
   });

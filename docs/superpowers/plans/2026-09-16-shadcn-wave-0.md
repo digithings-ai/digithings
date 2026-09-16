@@ -225,6 +225,16 @@ import { describe, expect, it } from "vitest";
 
 const css = readFileSync(path.resolve(__dirname, "web-theme.css"), "utf8");
 
+const chartNames = [
+  "--color-chart-1",
+  "--color-chart-2",
+  "--color-chart-3",
+  "--color-chart-4",
+  "--color-chart-5",
+];
+
+const radiusNames = ["--radius-sm", "--radius-md", "--radius-lg", "--radius-xl"];
+
 describe("web-theme shadcn token contract", () => {
   it("maps every shadcn token onto design tokens", () => {
     const pairs: [string, string][] = [
@@ -240,20 +250,28 @@ describe("web-theme shadcn token contract", () => {
       ["--color-secondary-foreground", "var(--ink)"],
       ["--color-muted", "var(--surface)"],
       ["--color-muted-foreground", "var(--ink-soft)"],
-      ["--color-accent", "var(--surface-2)"],
-      ["--color-accent-foreground", "var(--ink)"],
+      ["--color-accent", "var(--accent)"],
+      ["--color-accent-foreground", "var(--on-accent)"],
       ["--color-destructive", "var(--down)"],
       ["--color-border", "var(--hair)"],
       ["--color-input", "var(--hair)"],
       ["--color-ring", "color-mix(in srgb, var(--accent) 40%, transparent)"],
     ];
+    const contractNames = [
+      ...pairs.map(([name]) => name),
+      ...chartNames,
+      ...radiusNames,
+    ];
+    for (const name of contractNames) {
+      expect(css.match(new RegExp(`${name}\\s*:`, "g"))?.length).toBe(1);
+    }
     for (const [name, value] of pairs) {
       expect(css).toContain(`${name}: ${value};`);
     }
   });
 
   it("flattens shadcn radii to zero (Instrument Panel law)", () => {
-    for (const radius of ["--radius-sm", "--radius-md", "--radius-lg", "--radius-xl"]) {
+    for (const radius of radiusNames) {
       expect(css).toContain(`${radius}: 0;`);
     }
   });
@@ -288,8 +306,10 @@ In `cloudflare/digiweb/web/src/styles/web-theme.css`, append these lines INSIDE 
   --color-secondary-foreground: var(--ink);
   --color-muted: var(--surface);
   --color-muted-foreground: var(--ink-soft);
-  --color-accent: var(--surface-2);
-  --color-accent-foreground: var(--ink);
+  /* Brand --color-accent is intentionally held (owned by the row at the top of
+     this block); shadcn's subtle accent role + brand-alias rename defer to the
+     Wave 2/3 alias sweep. */
+  --color-accent-foreground: var(--on-accent);
   --color-destructive: var(--down);
   --color-border: var(--hair);
   --color-input: var(--hair);
@@ -305,7 +325,7 @@ In `cloudflare/digiweb/web/src/styles/web-theme.css`, append these lines INSIDE 
   --radius-xl: 0;
 ```
 
-Note: `--color-primary` is ink/paper, never an accent fill (differs from the reference app's old local bridge at `globals.css` L633–654, which the package bridge supersedes). `--color-chart-*` is the neutral starting ramp; Wave 2's chart audit (spec §9 Q4) owns the final values.
+Note: `--color-primary` is ink/paper, never an accent fill (differs from the reference app's old local bridge at `globals.css` L633–654, which the package bridge supersedes). `--color-chart-*` is the neutral starting ramp; Wave 2's chart audit (spec §9 Q4) owns the final values. The brand `--color-accent` is held — the pre-existing row earlier in the block owns the name; shadcn's subtle "accent" surface role and any brand-alias rename are deferred to the Wave 2/3 alias sweep.
 
 - [ ] **Step 4: Run test to verify it passes**
 
