@@ -222,13 +222,15 @@ def test_real_markdown_file_chunking_matches_recorded_fingerprint() -> None:
     prose only; RecursiveChunker unchanged.
     Hashes only (count still 60) re-recorded for #4165 (orchestrator web_search recency_days
     mapping note in ARCHITECTURE.md) — fixture prose only; RecursiveChunker unchanged.
-    Hashes only (count still 60) for the hosted-MCP docs pass: the digisearch MCP tool-table rows (digisearch_query -> semantic, digisearch_research_turn -> research_turn) and the digiclaw attachment prose in ARCHITECTURE.md — fixture prose only."""
+    Hashes only (count still 60) for the hosted-MCP docs pass: the digisearch MCP tool-table rows (digisearch_query -> semantic, digisearch_research_turn -> research_turn) and     the digiclaw attachment prose in ARCHITECTURE.md — fixture prose only.
+    Re-recorded at count 61 for #4246 (MCP tool-table naming corrections plus merged
+    develop prose in ARCHITECTURE.md) — fixture prose only; RecursiveChunker unchanged."""
     arch_path = Path(__file__).resolve().parents[2] / "digisearch" / "ARCHITECTURE.md"
     content = arch_path.read_text(encoding="utf-8")
     doc = Document(id="arch", content=content, source=str(arch_path), doc_type="md")
     chunks = RecursiveChunker().chunk(doc)
 
-    assert len(chunks) == 60
+    assert len(chunks) == 61
     assert all(len(c.content) <= 2000 for c in chunks)
     hashes = [hashlib.sha256(c.content.encode()).hexdigest()[:16] for c in chunks]
     assert hashes == [
@@ -244,7 +246,8 @@ def test_real_markdown_file_chunking_matches_recorded_fingerprint() -> None:
         "565775fa5f1edb55",
         "3397054ac68eb462",
         "6372b7bb50ed142a",
-        "21f02ed46c3d48c1",
+        "17c933642bae6fea",
+        "34d51fa16bda3eeb",
         "f5694c994b90e40c",
         "2f102978f3f92316",
         "16584e006bbec980",
@@ -275,8 +278,8 @@ def test_real_markdown_file_chunking_matches_recorded_fingerprint() -> None:
         "8200c214c753f6dd",
         "2c221fc487c50f69",
         "a261a5a8ca75360c",
-        "3bafcf4aae0fe5df",
-        "27773e41fb0a48c2",
+        "7d57046badea2854",
+        "50b42145065d7d4e",
         "5dbc6c5291de10ab",
         "e8874754e8823dbd",
         "472ca1370eb9ef1a",
