@@ -22,6 +22,7 @@ export type SlashId =
   | "byok"
   | "models"
   | "effort"
+  | "view"
   | "thinking"
   | "sessions"
   | "compact"
@@ -68,6 +69,31 @@ export const EFFORT_CHOICES: readonly { value: EffortCode; label: string }[] = E
 
 export function isEffortCode(value: string): value is EffortCode {
   return (EFFORT_CODES as readonly string[]).includes(value.trim().toLowerCase());
+}
+
+export const VIEW_CODES = ["hidden", "compact", "balanced", "detailed"] as const;
+export type ViewCode = (typeof VIEW_CODES)[number];
+const VIEW_LABELS: Record<ViewCode, string> = {
+  hidden: "Hidden \u00b7 answer only",
+  compact: "Compact \u00b7 closed",
+  balanced: "Balanced \u00b7 collapse when done",
+  detailed: "Detailed \u00b7 stays open",
+};
+export const VIEW_CHOICES: readonly { value: ViewCode; label: string }[] = VIEW_CODES.map(
+  (code) => ({ value: code, label: VIEW_LABELS[code] }),
+);
+
+export function isViewCode(value: string): value is ViewCode {
+  return (VIEW_CODES as readonly string[]).includes(value.trim().toLowerCase());
+}
+
+export const THINKING_CODES = ["auto", "collapsed", "open"] as const;
+export type ThinkingCode = (typeof THINKING_CODES)[number];
+export const THINKING_CHOICES: readonly { value: ThinkingCode; label: string }[] =
+  THINKING_CODES.map((code) => ({ value: code, label: code.charAt(0).toUpperCase() + code.slice(1) }));
+
+export function isThinkingCode(value: string): value is ThinkingCode {
+  return (THINKING_CODES as readonly string[]).includes(value.trim().toLowerCase());
 }
 
 export const SLASH_CATEGORIES: readonly { id: SlashCategory; label: string }[] = [
@@ -148,11 +174,21 @@ export const SLASH_COMMANDS: readonly SlashDef[] = [
     category: "setup",
   },
   {
+    id: "view",
+    names: ["/view"],
+    needsArg: false,
+    hint: "hidden / compact / balanced / detailed",
+    choiceOptions: VIEW_CHOICES,
+    kind: "client",
+    category: "setup",
+  },
+  {
     id: "thinking",
     names: ["/thinking"],
     needsArg: false,
-    hint: "Show or hide reasoning",
-    kind: "toggle",
+    hint: "auto / collapsed / open",
+    choiceOptions: THINKING_CHOICES,
+    kind: "client",
     category: "setup",
   },
   {
