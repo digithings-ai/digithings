@@ -565,6 +565,64 @@ def test_verification_mode_persists_and_threads_through_refreshes(api):
     ]
 
 
+@pytest.mark.unit
+def test_backfill_generation_keeps_rules_mode_for_a_monitor_refresh(api):
+    """A backfill generation must not reset a ``rules`` webset to ``llm``.
+
+    The reviewer-reproduced flip: the runner's ``_open_generation`` built the
+    backfill's ``WebsetSearch`` without ``verification_mode`` (model default
+    ``llm``), so the later ``trigger_monitor`` inherited ``llm`` from that
+    generation instead of the webset's persisted ``rules``.
+    """
+    client, scheduler = api
+    created = _create(client, verification_mode="rules", criteria=_RULES_CRITERIA)
+
+    enrichment = client.post(
+        f"/v1/websets/{created['id']}/enrichments",
+        json={"name": "blurb", "type": "text"},
+    )
+    assert enrichment.status_code == 201, enrichment.text
+
+    after_backfill = client.get(f"/v1/websets/{created['id']}").json()
+    assert [s["verification_mode"] for s in after_backfill["searches"]] == ["rules", "rules"]
+
+    monitor = client.post(f"/v1/websets/{created['id']}/monitors", json={"interval_seconds": 60})
+    assert monitor.status_code == 201, monitor.text
+    triggered = client.post(f"/v1/websets/{created['id']}/monitors/{monitor.json()['id']}/trigger")
+    assert triggered.status_code == 202, triggered.text
+
+    stored = client.get(f"/v1/websets/{created['id']}").json()
+    assert stored["searches"][-1]["verification_mode"] == "rules"
+    assert scheduler.runs == [(created["id"], "rules"), (created["id"], "rules")]
+    assert len(scheduler.backfills) == 1
+
+
+@pytest.mark.unit
+def test_webhook_bogus_event_kind_is_422_not_500(api):
+    """An unknown ``events`` kind is caller input, not a server fault.
+
+    ``WebsetWebhookRequest.events`` is ``list[str]`` while ``WebhookConfig.events``
+    is ``list[EventKind]``, so the service-level pydantic ``ValidationError`` used
+    to escape the route's ``WebsetServiceError`` catch into the generic 500
+    handler. The route now maps it to the sibling routes' 422 envelope.
+    """
+    client, _ = api
+    created = _create(client)
+
+    bogus = client.post(
+        f"/v1/websets/{created['id']}/webhooks",
+        json={"url": _URL_PUBLIC, "events": ["bogus.kind"]},
+    )
+    assert bogus.status_code == 422, bogus.text
+    assert bogus.json()["error"]["code"] == "validation_error"
+
+    valid = client.post(
+        f"/v1/websets/{created['id']}/webhooks",
+        json={"url": _URL_PUBLIC, "events": ["item.created"]},
+    )
+    assert valid.status_code == 201, valid.text
+
+
 _INTERNAL_CODES = (
     "webset_not_settled",
     "transition_invalid",

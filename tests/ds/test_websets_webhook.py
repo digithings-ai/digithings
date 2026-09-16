@@ -20,7 +20,12 @@ Covered:
 - per-target failure isolation (one bad target cannot abort the rest and
   nothing raises out of the delivery path) plus secret/URL redaction in ledger
   errors;
-- the append-only event rows are never mutated by delivery.
+- the append-only event rows are never mutated by delivery;
+- the append-path wiring: ``append_event`` (the single event writer every
+  emitter routes through) fans the stored event out to the webset's subscribed
+  webhooks — signed POST on subscription, zero egress without one, a failed
+  delivery recorded in the ledger without raising, and one failing target not
+  aborting the remaining targets.
 
 Offline: ``httpx.MockTransport`` and the ``_sleep`` / ``_client_for`` seams,
 real sqlite files under ``tmp_path``. ``@pytest.mark.unit`` on every test.
@@ -603,3 +608,92 @@ def test_store_fault_listing_webhooks_returns_no_rows(monkeypatch, tmp_path, cap
     messages = " ".join(record.getMessage() for record in caplog.records)
     assert "OperationalError" in messages
     assert _SECRET not in messages
+
+
+# ── append-path wiring (delivery fans out from the single event writer) ───────
+
+
+def _emit_idle(store: WebsetStore, webset_id: str) -> WebsetEvent:
+    """Append ``webset.idle`` through the production emitter (not the store)."""
+    search = store.add_search(
+        WebsetSearch(
+            webset_id=webset_id,
+            query="photonics startups",
+            criteria=[VerificationCriterion(name="photonics", rule="photonics startup")],
+        )
+    )
+    return mod.emit_webset_idle(store, webset_id, search.id)
+
+
+@pytest.mark.unit
+def test_append_event_delivers_to_subscribed_webhook_with_a_verifiable_signature(
+    monkeypatch, tmp_path
+):
+    store = _store(tmp_path)
+    webset = _webset(store)
+    webhook = _webhook(store, webset.id, _URL_GOOD)
+    seen: list[httpx.Request] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen.append(request)
+        return httpx.Response(200)
+
+    _patch_transport(monkeypatch, handler)
+    event = _emit_idle(store, webset.id)
+
+    assert len(seen) == 1
+    assert seen[0].method == "POST"
+    body = seen[0].read()
+    signature = seen[0].headers["x-digi-signature"]
+    assert mod.verify_webhook_signature(webhook, body, signature) is True
+    payload = json.loads(body.decode("utf-8"))
+    assert payload["webset_id"] == webset.id
+    assert payload["event"]["id"] == event.id
+    row = store.get_webhook_delivery(webhook.webhook_id, event.id)
+    assert row is not None and row.ok is True
+
+
+@pytest.mark.unit
+def test_append_event_without_subscribers_makes_no_request(monkeypatch, tmp_path):
+    store = _store(tmp_path)
+    webset = _webset(store)
+    calls: list[int] = []
+
+    _patch_transport(monkeypatch, lambda request: calls.append(1) or httpx.Response(200))
+    _emit_idle(store, webset.id)
+
+    assert calls == []
+
+
+@pytest.mark.unit
+def test_append_event_records_a_failed_delivery_and_does_not_raise(monkeypatch, tmp_path, sleeps):
+    store = _store(tmp_path)
+    webset = _webset(store)
+    webhook = _webhook(store, webset.id, _URL_BAD)
+
+    _patch_transport(monkeypatch, lambda request: httpx.Response(503))
+    event = _emit_idle(store, webset.id)  # must not raise
+
+    row = store.get_webhook_delivery(webhook.webhook_id, event.id)
+    assert row is not None and row.ok is False and row.status_code == 503
+    assert sleeps == [5.0, 25.0]
+
+
+@pytest.mark.unit
+def test_append_event_isolates_one_failing_target_from_the_others(monkeypatch, tmp_path, sleeps):
+    store = _store(tmp_path)
+    webset = _webset(store)
+    bad_hook = _webhook(store, webset.id, _URL_BAD)
+    good_hook = _webhook(store, webset.id, _URL_GOOD)
+    calls: list[str] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        calls.append(str(request.url))
+        return httpx.Response(500 if str(request.url) == _URL_BAD else 200)
+
+    _patch_transport(monkeypatch, handler)
+    event = _emit_idle(store, webset.id)  # must not raise
+
+    assert store.get_webhook_delivery(bad_hook.webhook_id, event.id).ok is False
+    assert store.get_webhook_delivery(good_hook.webhook_id, event.id).ok is True
+    assert calls == [_URL_BAD, _URL_BAD, _URL_BAD, _URL_GOOD]

@@ -716,7 +716,13 @@ class AsyncioRunner:
     # -- generations --------------------------------------------------------
 
     async def _open_generation(self, state: _PassState, search_id: str | None) -> str | None:
-        """A re-settling flow runs as a new ``WebsetSearch`` generation (§ Async lifecycle)."""
+        """A re-settling flow runs as a new ``WebsetSearch`` generation (§ Async lifecycle).
+
+        The generation inherits the latest search's persisted ``verification_mode``
+        (fallback: the webset's). Without it the model default (``llm``) would be
+        written, and a later ``trigger_monitor`` — which inherits from the latest
+        generation — would silently flip a ``rules`` webset to ``llm``.
+        """
         if search_id is not None:
             await self._store.call(lambda store: store.get_search(state.webset_id, search_id))
             return search_id
@@ -730,6 +736,7 @@ class AsyncioRunner:
                     query=latest.query,
                     count=latest.count,
                     criteria=latest.criteria,
+                    verification_mode=latest.verification_mode or state.webset.verification_mode,
                 )
             )
         )

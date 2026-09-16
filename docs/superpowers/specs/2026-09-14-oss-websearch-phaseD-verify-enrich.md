@@ -70,7 +70,10 @@ synthesis/grounding, real-time (sub-second) answers, corpus ingest writes.
   searxng→ddgs failover inside `_search_only` (`service.py:80-91`); a sidecar outage
   fails over to ddgs — never silently to EXA (no EXA fallback path exists on the OSS
   leg). Domain bias uses the landed `include_domains` / `exclude_domains` fields
-  (`web_search/models.py:26-27`).
+  (`web_search/models.py:26-27`). **Deferred in v1:** the runner issues plain
+  query-diversified `search_web` calls and passes no domain bias — biasing recall
+  through `include_domains` (caller config + funding-press domains) is the
+  company-recall-quality follow-up, not implemented on this branch.
 - **CONSUMES — Phase B (structured synthesis with grounding):** verification
   verdicts and enrichment extraction use the Phase B structured-output path
   (schema-pinned LLM extraction whose outputs carry citations). The landed output
@@ -292,7 +295,9 @@ and MUST NOT be referenced by code or tests). The OSS path reproduces this as:
 1. Candidate generation via `search_web(WebSearchRequest)` with company-domain
    bias (`include_domains` from the caller's enrichment config +
    funding-press domains) and query diversification to reach `count` (R3) — no
-   EXA `category` param on the OSS path.
+   EXA `category` param on the OSS path. **Deferred in v1:** the runner passes
+   no `include_domains`; recall is plain query diversification only (the
+   company-recall-quality follow-up named in § Consumes).
 2. Fetch each candidate page with `fetch_markdown` only (non-indexing, R2);
    already-fetched pages are reused rather than refetched.
 3. Structured extraction (Phase B) into `CompanyEntity` mirroring the EXA

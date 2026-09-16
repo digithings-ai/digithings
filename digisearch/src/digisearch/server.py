@@ -2053,11 +2053,19 @@ def api_list_webset_events(
 def api_add_webset_webhook(
     webset_id: str, req: WebsetWebhookRequest, request: Request
 ) -> dict[str, Any] | JSONResponse:
-    """Register a webhook; the server-generated secret appears in this response only."""
+    """Register a webhook; the server-generated secret appears in this response only.
+
+    An unknown ``events`` kind is caller input: ``WebsetWebhookRequest.events`` is
+    ``list[str]`` while ``WebhookConfig.events`` is ``list[EventKind]``, so the
+    service's pydantic ``ValidationError`` maps to 422 here (the sibling routes'
+    ``validation_error`` envelope) instead of escaping into the generic 500.
+    """
     try:
         webhook = websets_service.add_webhook(webset_id, url=req.url, events=req.events)
     except WebsetServiceError as exc:
         return _webset_service_error(request, exc)
+    except ValidationError as exc:
+        return _webset_error(request, 422, "validation_error", str(exc))
     return webhook.model_dump(mode="json")
 
 

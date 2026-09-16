@@ -576,7 +576,30 @@ re-selected by startup resume forever.
 
 `verification_mode` (`llm` default | `rules`) is persisted on the webset and
 each search generation: `add_search` and `trigger_monitor` inherit it, so a
-`rules` webset never silently switches to `llm` on a refresh.
+`rules` webset never silently switches to `llm` on a refresh. The runner's
+backfill generations (`add_enrichment`) persist the inherited mode too, so a
+backfill cannot reset a `rules` webset to the model default.
+
+**Library-only in v1.** The enricher's cross-page company merge
+(`merge_company_entities` / `reconcile_funding_history` in `websets/enrich.py`)
+and the spec's targeted second extraction pass (a re-fetch or follow-up
+`search_web` when a field is still unresolved) have no runner caller: the
+runner drives single-page `enrich_item` on the one already-fetched
+`fetch_markdown` text, so a `company_profile` is built from its own item page
+only and an unresolved field is not re-attempted on a second page in v1.
+
+**Webhook delivery is wired.** `POST /v1/websets/{webset_id}/webhooks`
+registers a signed target; the single event writer (`websets/events.py`
+`append_event`) fans every stored event out to the webset's active, subscribed
+`WebhookConfig` entries (`deliver_webhook`) after the append — one POST of
+`{event, webset_id, delivered_at}` signed with the shared Phase C core
+(byte-identical `X-digi-signature`), 3 attempts with the pinned 5s/25s
+backoff, 429/5xx retried and any other 4xx final. Delivery state lives in the
+`webhook_deliveries` ledger keyed `(webhook_id, event_id)`: per-target
+failures become recorded `failed` rows and never raise out of the append path,
+and the ledger turns a duplicate re-append into a no-op (no second POST).
+`verify_webhook_signature` is a public helper (rotation-overlap acceptance)
+for webhook consumers; it deliberately has no production caller.
 
 ##### Webset HTTP routes
 
@@ -601,7 +624,7 @@ the parameterized paths are matched most-specific-first (creation/refresh
 | `GET /v1/websets/{webset_id}/monitors` | 200 `{"monitors": [...]}` | `webset_not_found` (404) | Newest-created first |
 | `POST /v1/websets/{webset_id}/monitors/{monitor_id}/trigger` | 202 `Webset` | `webset_not_found` / `monitor_not_found` (404), `webset_terminal` (409) | Manual refresh; the v1 substitute for the deferred tick driver |
 | `GET /v1/websets/{webset_id}/events` | 200 `{"events", "next_cursor"}` | `webset_not_found` (404), `cursor_not_found` (404) | OLDEST-first append-only tail; `after` = last seen event id |
-| `POST /v1/websets/{webset_id}/webhooks` | 201 `WebhookConfig` | `webset_not_found` (404), `webhook_url_required` / `webhook_url_private` (422) | Secret-once: the server-generated secret is in this response; there is no read route |
+| `POST /v1/websets/{webset_id}/webhooks` | 201 `WebhookConfig` | `webset_not_found` (404), `webhook_url_required` / `webhook_url_private` / `validation_error` (422) | Secret-once: the server-generated secret is in this response; there is no read route. An unknown `events` kind maps to the 422 `validation_error` envelope, never a 500 |
 | `POST /v1/websets/{webset_id}/webhooks/{webhook_id}/rotate` | 200 `WebhookConfig` | `webset_not_found` / `webhook_not_found` (404) | New secret + 24h `previous_expires_at` overlap |
 | `POST /v1/websets/{webset_id}/cancel` | 200 `Webset` | `webset_not_found` (404) | Settles non-terminal searches `cancelled`; an already-`idle` webset stays `idle` (sticky) |
 | `GET /v1/websets/{webset_id}/export?format=csv\|json` | 200 file (`text/csv` / `application/json`) | `webset_not_found` (404), `validation_error` (422, unknown format) | Verified items only; CSV via polars, JSON keeps per-field citations |
@@ -649,15 +672,19 @@ live stack absent in this env):**
 
 - Live leg: **not measurable here.** `DIGISEARCH_WEBSETS_LIVE=1 pytest
   tests/ds/test_websets_live.py -m unit -k live -x` fails at the harness's own
-  prerequisite gate: `DIGISEARCH_VERIFY_MODEL` / `DIGISEARCH_ENRICH_MODEL`
-  unset, no digillm provider key, no searxng sidecar (`127.0.0.1:8080`
-  connection refused), and no digisearch HTTP process (`:8002`). With the model
-  ids unset, verification settles every item `rejected` and enrichment settles
-  every field `unresolved` (fail-closed), so a gated run here would measure
-  nothing — the harness refuses it rather than recording a vacuous pass.
+  prerequisite gate, which asserts exactly `DIGISEARCH_VERIFY_MODEL` /
+  `DIGISEARCH_ENRICH_MODEL` (both unset). Separately confirmed in this env: no
+  digillm provider key, no searxng sidecar (`127.0.0.1:8080` connection
+  refused), and no digisearch HTTP process (`:8002`). With the model ids unset,
+  verification settles every item `rejected` and enrichment settles every field
+  `unresolved` (fail-closed), so a gated run here would measure nothing — the
+  harness refuses it rather than recording a vacuous pass.
 - How to measure: provision a search backend + `DIGISEARCH_VERIFY_MODEL` /
   `DIGISEARCH_ENRICH_MODEL` + a provider key, then run the gated command above.
-  It drives the brief's 5-count company webset
+  It drives the service/runner path in-process (`service.create_webset` +
+  `run_webset_async`; assertions read `service.get_webset` / `list_events` /
+  `list_items` / `export_webset` — not the HTTP poll surface) for the brief's
+  5-count company webset
   (`query="agtech robotics startups Series A 2024-2026"`, 2 criteria, 3
   enrichments incl. `company_profile`), asserts the event multiset +
   `webset.idle`-last (never an exact sequence), records the live-vs-s5 funding
@@ -1330,7 +1357,7 @@ no-new-provider discipline as Phase C. One-line responsibilities:
 | `websets/verify.py` | `verify_item` (llm + offline rules modes) and the fail-closed settlement of still-pending items at candidate-pass end |
 | `websets/enrich.py` | `enrich_item` (8 typed fields, per-field citations), funding reconciliation (ECB snapshot), entity merge, `company_profile_field` |
 | `websets/runner.py` | `AsyncioRunner` (semaphore 4, per-item containment, semaphore-aware cancellation), `run_webset_async`, `backfill_enrichment`, `schedule_webset_task` + `WEBSET_TASKS` |
-| `websets/events.py` | Event emit helpers, the shared Phase C signing core, `deliver_webhook` (3 attempts, 5s/25s) + ledger recording |
+| `websets/events.py` | Event emit helpers, the shared Phase C signing core, `append_event` fan-out through `deliver_webhook` (3 attempts, 5s/25s) + ledger recording, public `verify_webhook_signature` |
 | `websets/export.py` | `export_json` (per-field citations) and `export_csv` (polars) |
 | `websets/service.py` | The sync facade the HTTP/MCP/orchestrator surfaces call (create/get/items/counts/add_search/add_enrichment/remove/monitors/webhooks/events/cancel/export) + the scheduler seam |
 | `websets/providers/exa_websets.py` | Dormant EXA Pro shim: OSS⇄EXA translation for create/read/refresh, `ExaWebsetsProRequiredError(ExaError)` |

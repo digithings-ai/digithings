@@ -13,7 +13,7 @@ stored here.
   Orchard $26.4M); the only scrub is the EXA `image` field, set to `null` because the
   LinkedIn media URLs it carried embed signed query tokens. Live re-validation was **not
   performed** by the Phase D Task 8 record (no live stack/EXA key in that env — see
-  `digisearch/ARCHITECTURE.md` § Phase D websets live record); re-check the sample against
+  `digisearch/ARCHITECTURE.md` § Phase D live verification record); re-check the sample against
   a keyed `/search` call when the live record is re-run.
 - `exa_401_pro_required.json` — frozen from the spec quote (`401: Upgrade to a Pro plan`)
   and the landed adapter/tests convention; the raw live body was observed but not

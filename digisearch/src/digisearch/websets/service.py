@@ -28,9 +28,11 @@ is banned, § Async lifecycle — the server lifespan owns the TaskGroup and the
   ``WebsetSearch`` (T6 review carry); refresh schedules (``add_search`` /
   ``trigger_monitor``) inherit the webset's / latest generation's mode, so a
   ``rules`` webset never silently switches to ``llm``.
-- Webhook delivery is deliberately **not** wired here: T5b's delivery path is
-  only reachable once ``add_webhook`` enforces the Phase C SSRF/private-IP
-  rejection below (the R13 human gate).
+- Webhook delivery is wired in the event writer, not here: every event append
+  fans out through ``websets/events.deliver_webhook`` (per-target ledger rows,
+  never raising). ``add_webhook`` below enforces the Phase C SSRF/private-IP
+  rejection **before** a target is stored, so no delivery can reach a private
+  address (the R13 human gate).
 
 Error-code mapping (stable codes surfaced to the HTTP/MCP tier)
 ---------------------------------------------------------------
@@ -467,8 +469,11 @@ def trigger_monitor(webset_id: str, monitor_id: str, *, store: WebsetStore | Non
     """Manually refresh: open a new search generation (the v1 tick-driver substitute).
 
     The new generation inherits the latest search's persisted
-    ``verification_mode``; a terminal (``cancelled``/``failed``) webset is
-    rejected with ``webset_terminal``.
+    ``verification_mode`` — straight inheritance: ``WebsetSearch.verification_mode``
+    is never empty (a non-optional ``VerificationMode``), so there is no
+    fallback to prefer, and every generation (including the runner's backfill
+    generations) is persisted carrying the webset's mode. A terminal
+    (``cancelled``/``failed``) webset is rejected with ``webset_terminal``.
     """
     store = _store_or_default(store)
     webset = _require_webset(store, webset_id)
@@ -480,7 +485,7 @@ def trigger_monitor(webset_id: str, monitor_id: str, *, store: WebsetStore | Non
             code="search_not_found",
         )
     latest = webset.searches[-1]
-    mode = latest.verification_mode or webset.verification_mode
+    mode = latest.verification_mode
     _call(
         store.add_search,
         WebsetSearch(

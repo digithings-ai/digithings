@@ -15,14 +15,18 @@ delivery/consumer body (ids, urls, titles, field names, reasoning) and never a
 full page body.
 
 Webhook fan-out and the ``webhook_deliveries`` ledger are Task 5b (human gate,
-R13) and extend this module: :func:`deliver_webhook` consumes the append-only
-event stream and POSTs ``{event, webset_id, delivered_at}`` to every subscribed,
-active webhook of the event's webset, signing with the shared Phase C core
+R13) and **wired into the append path here**: :func:`append_event` fans every
+stored event out through :func:`deliver_webhook`, which POSTs
+``{event, webset_id, delivered_at}`` to every subscribed, active webhook of the
+event's webset, signing with the shared Phase C core
 (:func:`~digisearch.monitors.delivery.sign_webhook_body`) so
 ``X-digi-signature`` is byte-identical across both egresses (R7). Delivery state
 lives only in the ledger (INSERT-or-ignore on ``(webhook_id, event_id)``);
 event rows are never mutated, and a per-target failure is a recorded ``failed``
-row with a redacted error — never an exception out of the delivery path.
+row with a redacted error — never an exception out of the append/delivery path.
+Re-appending a duplicate (same generation dedup key) re-runs delivery, which the
+ledger turns into a no-op for already-recorded targets — so a crash between the
+append and its fan-out is recoverable, without ever double-POSTing a target.
 
 Rotation overlap (R7, divergence from Phase C's immediate rotate):
 :func:`verify_webhook_signature` accepts a webhook's ``previous_secret`` only
@@ -71,13 +75,30 @@ _sleep = time.sleep
 
 
 def append_event(store: WebsetStore, event: WebsetEvent) -> WebsetEvent:
-    """Append one event through the store's INSERT-or-ignore path.
+    """Append one event through the store's INSERT-or-ignore path, then fan it out.
 
     Returns the canonical stored row: a duplicate within a generation returns
     the first stored event instead of appending a second one (the
-    ``(webset_id, dedup_key)`` UNIQUE index).
+    ``(webset_id, dedup_key)`` UNIQUE index). The fan-out uses the T5b delivery
+    contract (:func:`deliver_webhook`): one signed POST per subscribed, active
+    webhook; per-target failures persist ledger rows and never raise, and the
+    ledger keeps a re-appended duplicate from double-POSTing a target.
     """
-    return store.append_event(event)
+    stored = store.append_event(event)
+    try:
+        deliver_webhook(store, stored)
+    except Exception:
+        # Belt-and-braces for "never raise out of the append path":
+        # deliver_webhook contains every target/ledger fault itself; an escape
+        # here means a containment regression and must still not fail the
+        # append that produced the event (the ledger's INSERT-or-ignore means a
+        # later delivery re-reads whatever was persisted).
+        logger.exception(
+            "webset webhook fan-out escaped containment webset_id=%s event_id=%s",
+            stored.webset_id,
+            stored.id,
+        )
+    return stored
 
 
 def list_events(
