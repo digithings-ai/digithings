@@ -10,7 +10,13 @@ set -eu
 DATA_CHROMA="${CHROMA_PATH:-/data/chroma}"
 DATA_VAULT="${DIGIVAULT_ROOT:-/data/vault}"
 
-mkdir -p "$DATA_CHROMA" "$DATA_VAULT" /data/digikey /var/log/supervisor
+# Required storage. Unlike the vault seed below, the stack cannot serve without
+# these, so this one stays fail-fast — but deliberately, with a legible message,
+# rather than letting `set -e` abort PID 1 on a bare shell error (#4156).
+if ! mkdir -p "$DATA_CHROMA" "$DATA_VAULT" /data/digikey /var/log/supervisor; then
+  echo "digithings-stack: FATAL cannot create required data dirs (chroma, vault, digikey, supervisor logs)" >&2
+  exit 1
+fi
 
 # Stable digikey issuer defaults for CF custom domains (overridable via envVars).
 export DIGIKEY_ISSUER="${DIGIKEY_ISSUER:-https://key.digithings.ai}"
@@ -160,21 +166,28 @@ fi
 # Copy vault seed notes. Files named seed-*.md are always refreshed from the
 # image (dogfood corpus). Other filenames are copied only if missing so
 # operator / docs_onboard notes are never overwritten.
+#
+# Best-effort: the seed corpus is dogfood content, so a failed copy degrades the
+# vault rather than the service. Unguarded it would abort PID 1 before
+# `exec supervisord` and take digikey/digigraph down with it (#4149, #4156).
 for client_dir in /seed/vault/clients/*; do
   [ -d "$client_dir" ] || continue
   client=$(basename "$client_dir")
-  mkdir -p "$DATA_VAULT/clients/$client"
+  mkdir -p "$DATA_VAULT/clients/$client" \
+    || echo "digithings-stack: WARN cannot create vault client dir: $client" >&2
   for f in "$client_dir"/*; do
     [ -f "$f" ] || continue
     base=$(basename "$f")
     dest="$DATA_VAULT/clients/$client/$base"
     case "$base" in
       seed-*.md|seed-*.markdown)
-        cp "$f" "$dest"
+        cp "$f" "$dest" \
+          || echo "digithings-stack: WARN cannot refresh vault seed: $base" >&2
         ;;
       *)
         if [ ! -f "$dest" ]; then
-          cp "$f" "$dest"
+          cp "$f" "$dest" \
+            || echo "digithings-stack: WARN cannot seed vault note: $base" >&2
         fi
         ;;
     esac
