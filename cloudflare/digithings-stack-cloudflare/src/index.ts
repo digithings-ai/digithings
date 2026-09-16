@@ -13,11 +13,13 @@
  *   /healthz            → digigraph
  *   /_stack/key/*       → digikey (strip prefix)
  *
- * /_stack/mcp/zammad/* → zammad-mcp :8770 (secret-gated edge path; requires the
- * x-digi-mcp-key header matching MCP_EDGE_KEY — fail-closed 401 otherwise).
+ * /_stack/mcp/{zammad,digisearch,digivault}/* → in-container MCP servers on
+ * :8770/:8765/:8769 (secret-gated edge paths; require the x-digi-mcp-key header
+ * matching MCP_EDGE_KEY — fail-closed 401 otherwise).
  * mcp.digithings.ai stays reserved and answers only behind its JWT gate.)
  *
- * digivault / LiteLLM are loopback-only inside the Container. digisearch binds
+ * zammad-mcp / digisearch-mcp / digivault-mcp bind 0.0.0.0 inside the Container
+ * for those edge routes; LiteLLM stays loopback-only. digisearch also binds
  * 0.0.0.0:8002 (container/start_digisearch.sh) so the Worker can reach it at the
  * container network address for its public route; in-container callers keep
  * using DIGISEARCH_URL=http://127.0.0.1:8002 (0.0.0.0 includes loopback).
@@ -265,8 +267,13 @@ export interface Env {
   MARKET_DATA_ALLOWED_ORIGINS?: string;
 }
 
-const ZAMMAD_MCP_PORT = 8770;
-const ZAMMAD_MCP_PUBLIC_PATH = "/_stack/mcp/zammad";
+/** Secret-gated MCP edge paths (`/_stack/mcp/<id>/…`) → in-container ports. */
+const MCP_EDGE_PREFIX = "/_stack/mcp";
+const MCP_EDGE_SERVERS: Record<string, number> = {
+  zammad: 8770,
+  digisearch: 8765,
+  digivault: 8769,
+};
 
 function rewriteKeyStackPath(request: Request): Request {
   const url = new URL(request.url);
@@ -303,24 +310,27 @@ export default {
     // skipped), so digigraph dials this public HTTPS path instead; the embed
     // tenant entry carries the matching x-digi-mcp-key (#3841 authHeader).
     // Fail closed: no secret configured -> 401.
-    if (
-      url.pathname === ZAMMAD_MCP_PUBLIC_PATH ||
-      url.pathname.startsWith(`${ZAMMAD_MCP_PUBLIC_PATH}/`)
-    ) {
-      const expected = workerEnv.MCP_EDGE_KEY?.trim();
-      const provided = request.headers.get("x-digi-mcp-key")?.trim();
-      if (!expected || !provided || provided !== expected) {
-        return new Response("digithings-stack: unauthorized", { status: 401 });
+    if (url.pathname.startsWith(`${MCP_EDGE_PREFIX}/`)) {
+      const rest = url.pathname.slice(MCP_EDGE_PREFIX.length + 1);
+      const slash = rest.indexOf("/");
+      const serverId = slash === -1 ? rest : rest.slice(0, slash);
+      const port = MCP_EDGE_SERVERS[serverId];
+      if (typeof port === "number") {
+        const expected = workerEnv.MCP_EDGE_KEY?.trim();
+        const provided = request.headers.get("x-digi-mcp-key")?.trim();
+        if (!expected || !provided || provided !== expected) {
+          return new Response("digithings-stack: unauthorized", { status: 401 });
+        }
+        let stripped = slash === -1 ? "/" : rest.slice(slash);
+        if (!stripped.endsWith("/")) {
+          stripped += "/";
+        }
+        const target = new URL(url.toString());
+        target.pathname = stripped;
+        const forwarded = new Request(target.toString(), request);
+        const container = getContainer(workerEnv.STACK, SHARED_STACK_CONTAINER_ID);
+        return container.fetch(switchPort(forwarded, port));
       }
-      let stripped = url.pathname.slice(ZAMMAD_MCP_PUBLIC_PATH.length) || "/";
-      if (!stripped.endsWith("/")) {
-        stripped += "/";
-      }
-      const target = new URL(url.toString());
-      target.pathname = stripped;
-      const forwarded = new Request(target.toString(), request);
-      const container = getContainer(workerEnv.STACK, SHARED_STACK_CONTAINER_ID);
-      return container.fetch(switchPort(forwarded, ZAMMAD_MCP_PORT));
     }
 
     // Read-only R2 market data (#4013 Task 8): public JSON for browser surfaces

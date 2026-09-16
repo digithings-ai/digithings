@@ -20,14 +20,21 @@ from digivault.vault import VaultError
 
 @pytest.mark.unit
 def test_mcp_tool_names_is_exactly_the_four_vault_local_tools():
+    from digivault.tool_dispatch import (
+        MCP_TOOL_BACKLINKS,
+        MCP_TOOL_CREATE_NOTE,
+        MCP_TOOL_LINT,
+        MCP_TOOL_SEARCH_TAG,
+    )
+
     assert mcp_tool_names() == {
-        "digivault_search_tag",
-        "digivault_backlinks",
-        "digivault_lint",
-        "digivault_create_note",
+        MCP_TOOL_SEARCH_TAG,
+        MCP_TOOL_BACKLINKS,
+        MCP_TOOL_LINT,
+        MCP_TOOL_CREATE_NOTE,
     }
-    assert "digivault_search_notes" not in mcp_tool_names()
-    assert "digivault_get_note" not in mcp_tool_names()
+    assert "search_notes" not in mcp_tool_names()
+    assert "get_note" not in mcp_tool_names()
 
 
 @pytest.mark.unit

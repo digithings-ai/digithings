@@ -19,6 +19,10 @@ from digivault.orchestrator_tools import (
 )
 from digivault.tool_dispatch import (
     DISPATCH_TOOL_NAMES,
+    MCP_TOOL_BACKLINKS,
+    MCP_TOOL_CREATE_NOTE,
+    MCP_TOOL_LINT,
+    MCP_TOOL_SEARCH_TAG,
     RUNTIME_ONLY_TOOL_NAMES,
     TOOL_VAULT_BACKLINKS,
     TOOL_VAULT_CREATE_NOTE,
@@ -54,7 +58,14 @@ def test_orchestrator_reexports_match_tool_dispatch() -> None:
 
 def test_mcp_discovery_matches_vault_handler_set() -> None:
     """MCP discovery list must equal the vault-local runtime dispatch set (#1188)."""
-    assert mcp_tool_names() == frozenset(VAULT_HANDLERS)
+    assert mcp_tool_names() == frozenset(
+        {
+            MCP_TOOL_SEARCH_TAG,
+            MCP_TOOL_BACKLINKS,
+            MCP_TOOL_LINT,
+            MCP_TOOL_CREATE_NOTE,
+        }
+    )
     # FastMCP keeps tools on the tool manager; names must match our registry.
     managed = digivault_mcp._tool_manager.list_tools()
     discovered = {t.name for t in managed}
@@ -109,7 +120,7 @@ def test_mcp_search_tag_returns_slim_array(tmp_path: Path) -> None:
 
     fake = _FakeMcp()
     register_mcp_tools(fake, lambda: vault)
-    raw = fake.tools[TOOL_VAULT_SEARCH_TAG]("doc")  # type: ignore[operator]
+    raw = fake.tools[MCP_TOOL_SEARCH_TAG]("doc")  # type: ignore[operator]
     assert isinstance(raw, str)
     payload = json.loads(raw)
     assert isinstance(payload, list)

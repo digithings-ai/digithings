@@ -151,9 +151,25 @@ def clear_runtime_handlers() -> None:
     _RUNTIME_HANDLERS.clear()
 
 
+# MCP surface names: clean verbs the chat sees prefixed with the operator
+# server id (e.g. digivault_search_tag). The canonical dispatch ids keep the
+# service prefix; these are the names MCP discovery advertises.
+MCP_TOOL_SEARCH_TAG = "search_tag"
+MCP_TOOL_BACKLINKS = "backlinks"
+MCP_TOOL_LINT = "lint"
+MCP_TOOL_CREATE_NOTE = "create_note"
+
+_MCP_SURFACE_NAMES: dict[str, str] = {
+    TOOL_VAULT_SEARCH_TAG: MCP_TOOL_SEARCH_TAG,
+    TOOL_VAULT_BACKLINKS: MCP_TOOL_BACKLINKS,
+    TOOL_VAULT_LINT: MCP_TOOL_LINT,
+    TOOL_VAULT_CREATE_NOTE: MCP_TOOL_CREATE_NOTE,
+}
+
+
 def mcp_tool_names() -> frozenset[str]:
-    """Names MCP discovery must advertise — equals the vault-local handler set."""
-    return frozenset(VAULT_HANDLERS)
+    """Names MCP discovery must advertise — the MCP surface name of each vault-local tool."""
+    return frozenset(_MCP_SURFACE_NAMES.values())
 
 
 def dispatch_tool_names() -> frozenset[str]:
@@ -213,7 +229,7 @@ def register_mcp_tools(mcp: Any, open_vault: Callable[[], Vault]) -> frozenset[s
         ]
         return _json.dumps(slim)
 
-    @mcp.tool(name=TOOL_VAULT_SEARCH_TAG)
+    @mcp.tool(name=MCP_TOOL_SEARCH_TAG)
     def digivault_search_tag(tag: str) -> str:
         """Find vault notes carrying a given tag (without '#'). Use to locate docs by topic."""
         try:
@@ -224,7 +240,7 @@ def register_mcp_tools(mcp: Any, open_vault: Callable[[], Vault]) -> frozenset[s
             dispatch_vault_tool(TOOL_VAULT_SEARCH_TAG, {"tag": tag}, vault)
         )
 
-    @mcp.tool(name=TOOL_VAULT_BACKLINKS)
+    @mcp.tool(name=MCP_TOOL_BACKLINKS)
     def digivault_backlinks(name: str) -> str:
         """List notes that link to a given note (its backlinks)."""
         try:
@@ -233,7 +249,7 @@ def register_mcp_tools(mcp: Any, open_vault: Callable[[], Vault]) -> frozenset[s
             return f"[digivault error: {e}]"
         return _mcp_result(dispatch_vault_tool(TOOL_VAULT_BACKLINKS, {"name": name}, vault))
 
-    @mcp.tool(name=TOOL_VAULT_LINT)
+    @mcp.tool(name=MCP_TOOL_LINT)
     def digivault_lint() -> str:
         """Validate the vault: unresolved wikilinks, missing frontmatter, orphans, tags."""
         try:
@@ -242,7 +258,7 @@ def register_mcp_tools(mcp: Any, open_vault: Callable[[], Vault]) -> frozenset[s
             return f"[digivault error: {e}]"
         return _mcp_result(dispatch_vault_tool(TOOL_VAULT_LINT, {}, vault))
 
-    @mcp.tool(name=TOOL_VAULT_CREATE_NOTE)
+    @mcp.tool(name=MCP_TOOL_CREATE_NOTE)
     def digivault_create_note(name: str, title: str | None = None, body: str = "") -> str:
         """Create a new markdown note in the vault with optional title and body."""
         try:
