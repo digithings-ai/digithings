@@ -136,9 +136,9 @@ def _call_digisearch_web_search(
         "max_results": max_results,
     }
     if recency_days is not None:
-        # Omitted when unset: digisearch's WebSearchRequest defaults to 7, while
-        # an explicit ``None`` means "no recency window" and would widen every
-        # search for callers that never asked (#4165).
+        # Omitted when unset: digisearch's WebSearchRequest defaults to 7, so a
+        # caller that never asked keeps the default window — the hub skips a
+        # JSON null rather than forwarding it (#4165).
         arguments["recency_days"] = recency_days
     inv = invoke_digisearch_tool(
         _digisearch_service_base(),

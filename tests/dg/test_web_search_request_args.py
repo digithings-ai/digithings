@@ -3,8 +3,8 @@
 ``recency_days`` is a real field on digisearch's ``WebSearchRequest`` (default 7),
 but the hub call dropped it: an operator raising the config to 30 kept searching
 7 days while the query text claimed otherwise. The key is omitted when unset so
-digisearch's own default applies — never sent as an explicit ``None``, which the
-model reads as "no recency window" and would silently widen every search.
+digisearch's own default applies — the hub skips a JSON null rather than
+forwarding it, so neither absent nor null can widen the window.
 """
 
 from __future__ import annotations
@@ -54,7 +54,7 @@ def test_recency_days_reaches_the_hub_arguments(monkeypatch: pytest.MonkeyPatch)
 
 
 def test_recency_days_is_omitted_when_unset(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Absent means "digisearch default (7)"; an explicit None would drop the window."""
+    """Absent means "digisearch default (7)"; null is skipped by the hub, not forwarded."""
     captured = _capture_arguments(monkeypatch)
     web_search_tools.call_digisearch_web_search("news", context=_context())
     assert "recency_days" not in captured
