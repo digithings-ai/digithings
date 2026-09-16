@@ -1,7 +1,7 @@
 /**
  * Gloomberb candlestick mark — monochrome adaptation of the Gloomberb mark
- * (source gloom-sh/gloomberb, MIT), drawn in currentColor; used to link to
- * the Gloomberb terminal.
+ * (source gloom-sh/gloomberb, MIT; Copyright (c) 2026 Gloomberb Contributors),
+ * drawn in currentColor; used to link to the Gloomberb terminal.
  */
 
 export function GloomberbMark({ size = 18, className }: { size?: number; className?: string }) {

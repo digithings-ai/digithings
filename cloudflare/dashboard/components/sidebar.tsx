@@ -139,6 +139,7 @@ export default function Sidebar() {
       href={GLOOMBERB_TERMINAL_URL}
       target="_blank"
       rel="noopener noreferrer"
+      aria-label="Gloomberb Terminal (opens in a new tab)"
       data-testid="sidebar-gloomberb-link"
       className={`
         flex items-center gap-3 py-3 text-sm font-medium transition-all
@@ -241,10 +242,15 @@ export default function Sidebar() {
           )}
           <TooltipProvider delay={200}>
             {primary.map(renderLink)}
-            <div className="mt-auto pt-4 border-t border-hair/60">
-              {demoted.map(renderLink)}
-              {renderGloomberbLink()}
-            </div>
+            {showGloomberb || demoted.length > 0 ? (
+              <div
+                data-testid="sidebar-bottom-tools"
+                className="mt-auto pt-4 border-t border-hair/60"
+              >
+                {demoted.map(renderLink)}
+                {renderGloomberbLink()}
+              </div>
+            ) : null}
           </TooltipProvider>
         </nav>
 

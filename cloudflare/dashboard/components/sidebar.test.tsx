@@ -5,9 +5,12 @@ import { beforeEach, describe, it, expect, vi } from 'vitest';
 // Deterministic static render: stub the router, the app-shell context, and the
 // leaf chrome so the test exercises only the nav composition.
 vi.mock('next/navigation', () => ({ usePathname: () => '/' }));
+
+const shellMock = vi.hoisted(() => ({ sidebarCollapsed: false }));
+
 vi.mock('@/components/app-shell-context', () => ({
   useAppShell: () => ({
-    sidebarCollapsed: false,
+    sidebarCollapsed: shellMock.sidebarCollapsed,
     toggleSidebar: () => {},
     mobileNavOpen: false,
     setMobileNavOpen: () => {},
@@ -60,6 +63,7 @@ import Sidebar from './sidebar';
 
 describe('Sidebar', () => {
   beforeEach(() => {
+    shellMock.sidebarCollapsed = false;
     authMock.authEnabled = false;
     authMock.session = null;
     authMock.user = null;
@@ -90,10 +94,13 @@ describe('Sidebar', () => {
     const html = renderToStaticMarkup(createElement(Sidebar));
     expect(html).toContain('Gloomberb Terminal');
     expect(html).toContain('data-testid="sidebar-gloomberb-link"');
+    expect(html).toContain('data-testid="sidebar-bottom-tools"');
     const anchor = html.match(/<a[^>]*data-testid="sidebar-gloomberb-link"[^>]*>/)?.[0] ?? '';
     expect(anchor).toContain('href="https://term.gloom.sh/"');
     expect(anchor).toContain('target="_blank"');
     expect(anchor).toContain('rel="noopener noreferrer"');
+    // New-tab cue on the accessible name; the visible label stays plain.
+    expect(anchor).toContain('aria-label="Gloomberb Terminal (opens in a new tab)"');
     // The brand mark, decorative and monochrome (currentColor, no brand hexes).
     const block =
       html.match(/<a[^>]*data-testid="sidebar-gloomberb-link"[\s\S]*?<\/a>/)?.[0] ?? '';
@@ -104,6 +111,19 @@ describe('Sidebar', () => {
     expect(block).not.toContain('linearGradient');
     expect(block).not.toContain('gloomberb-mark-green-body');
     expect(block).not.toMatch(/#[0-9a-fA-F]{3}/);
+  });
+
+  // Collapsed rail (desktop icon mode): the label goes sr-only and the shared
+  // Tooltip trigger carries the name instead (#4204 review).
+  it('collapsed rail: the Gloomberb entry keeps its tooltip trigger and sr-only label', () => {
+    shellMock.sidebarCollapsed = true;
+    const html = renderToStaticMarkup(createElement(Sidebar));
+    const block =
+      html.match(/<a[^>]*data-testid="sidebar-gloomberb-link"[\s\S]*?<\/a>/)?.[0] ?? '';
+    expect(block).not.toBe('');
+    expect(block).toContain('data-slot="tooltip-trigger"');
+    expect(block).toContain('md:justify-center md:px-3');
+    expect(block).toContain('md:sr-only');
   });
 
   it('flag off: does not render identity/sign-out chrome', () => {
@@ -131,9 +151,12 @@ describe('Sidebar', () => {
     for (const label of ['Brief', 'Portfolio', 'Pipeline']) {
       expect(html).not.toContain(label);
     }
-    // Single-view contract: the terminal entry is a destination like any other.
+    // Single-view contract: the terminal entry is a destination like any other
+    // — and with no demoted items either, its bordered tools band is omitted
+    // whole rather than left as a stray hairline (#4204 review).
     expect(html).not.toContain('Gloomberb Terminal');
     expect(html).not.toContain('sidebar-gloomberb-link');
+    expect(html).not.toContain('sidebar-bottom-tools');
   });
 
   it('a paying free-tier-on-paper but plan_floor-elevated account is unaffected', () => {
