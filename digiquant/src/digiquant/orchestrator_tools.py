@@ -798,6 +798,24 @@ def build_digifetch_venues_tool() -> dict[str, Any]:
     }
 
 
+def build_digifetch_saved_searches_tool() -> dict[str, Any]:
+    return {
+        "type": "function",
+        "function": {
+            "name": "digifetch_saved_searches",
+            "description": (
+                "The signed-in session's saved searches (Gloomberb Cloud; "
+                "session-gated). Requires GLOOMBERB_SESSION_COOKIE - without it "
+                "the call is a typed auth_required with no request. No "
+                "parameters; rows carry the saved-search id/name/query and "
+                "unknown fields are preserved. Enrichment only: the platform's "
+                "data is delayed."
+            ),
+            "parameters": {"type": "object", "properties": {}},
+        },
+    }
+
+
 def build_digifetch_screener_tool() -> dict[str, Any]:
     return {
         "type": "function",
@@ -1563,6 +1581,7 @@ def build_orchestrator_tool_manifest() -> list[dict[str, Any]]:
         build_digifetch_risk_reports_tool(),
         build_digifetch_short_interest_tool(),
         build_digifetch_equity_diagnostic_tool(),
+        build_digifetch_saved_searches_tool(),
         build_digiquant_fit_btc_power_law_tool(),
         build_digiquant_build_sdca_risk_index_tool(),
         build_digiquant_fetch_bitview_series_tool(),

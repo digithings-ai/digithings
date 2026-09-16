@@ -100,6 +100,8 @@ from .models import (
     ResearchSearchInput,
     RiskReportsEnvelope,
     RiskReportsInput,
+    SavedSearchesEnvelope,
+    SavedSearchesInput,
     ScreenerEnvelope,
     ScreenerInput,
     SearchEnvelope,
@@ -243,6 +245,8 @@ ENDPOINTS: dict[str, str] = {
     "risk_reports": "/public/risks",
     "short_interest": "/market/short-interest",
     "equity_diagnostic": "/research/equity-diagnostic",
+    # coverage expansion (#4110 phase 4a)
+    "saved_searches": "/cloud/search/saved",
 }
 
 _TRUTHY_ENV_VALUES = frozenset({"1", "true", "yes", "on"})
@@ -1585,6 +1589,44 @@ class GloomberbClient:
             )
 
         return self._cached("venues", parsed, produce)
+
+    # -- coverage expansion (#4110 phase 4a) --------------------------------
+
+    def saved_searches(
+        self, request: SavedSearchesInput | Mapping[str, Any] | None = None
+    ) -> SavedSearchesEnvelope:
+        """The signed-in session's saved searches (session-gated).
+
+        Without ``GLOOMBERB_SESSION_COOKIE`` this returns a typed
+        ``auth_required`` and makes no request (zero-HTTP gate).
+        """
+        parsed = self._validate_input(SavedSearchesInput, request or {})
+        if isinstance(parsed, DigifetchError):
+            return self._error_envelope(SavedSearchesEnvelope, parsed)
+        if not self._enabled:
+            return self._disabled(SavedSearchesEnvelope)
+
+        def produce() -> SavedSearchesEnvelope:
+            raw = self._request_json("GET", ENDPOINTS["saved_searches"], gated=True)
+            if isinstance(raw, DigifetchError):
+                return self._error_envelope(SavedSearchesEnvelope, raw)
+            result = self._data_or_error(raw, "Cloud saved searches are unavailable")
+            if isinstance(result, DigifetchError):
+                return self._error_envelope(SavedSearchesEnvelope, result)
+            data, warnings = result
+            normalized = self._normalize(nz.normalize_saved_searches, data)
+            if isinstance(normalized, DigifetchError):
+                return self._error_envelope(SavedSearchesEnvelope, normalized)
+            fresh = self._freshness(raw, data)
+            return SavedSearchesEnvelope(
+                data=normalized,
+                fetched_at=self._now(),
+                stale=fresh.stale,
+                delay_note=fresh.delay_note,
+                warnings=warnings,
+            )
+
+        return self._cached("saved_searches", parsed, produce)
 
     def screener(self, request: ScreenerInput | Mapping[str, Any]) -> ScreenerEnvelope:
         """Market screener (session-gated; **requires Gloomberb Pro**).

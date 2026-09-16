@@ -2210,3 +2210,29 @@ def test_transcripts_rejects_two_targets_before_any_request() -> None:
     )
     assert result.data.code == "invalid_input"  # type: ignore[union-attr]
     assert calls == []
+
+
+def test_saved_searches_is_session_gated_and_maps_rows() -> None:
+    calls: list[int] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        calls.append(1)
+        assert request.url.path == "/cloud/search/saved"
+        return httpx.Response(200, json={"searches": [{"id": "s1", "name": "AI capex"}]})
+
+    denied = make_client(handler).saved_searches()
+    assert denied.data.code == "auth_required"  # type: ignore[union-attr]
+    assert calls == []
+
+    allowed = make_client(handler, session_cookie="token").saved_searches()
+    assert allowed.data.searches[0].name == "AI capex"  # type: ignore[union-attr]
+    assert calls == [1]
+
+
+def test_saved_searches_401_maps_to_auth_required() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(401, json={"message": "Unauthorized"})
+
+    result = make_client(handler, session_cookie="token").saved_searches()
+    assert result.data.code == "auth_required"  # type: ignore[union-attr]
+    assert result.data.retryable is False  # type: ignore[union-attr]

@@ -531,6 +531,7 @@ READ_SCOPE_TOOLS: frozenset[str] = frozenset(
         "digifetch_risk_reports",
         "digifetch_short_interest",
         "digifetch_equity_diagnostic",
+        "digifetch_saved_searches",
     }
 )
 
@@ -1341,6 +1342,22 @@ def create_mcp_server(
         """
         try:
             envelope = _build_gloomberb_client().venues()
+        except Exception as exc:  # surface as JSON to the caller, never crash
+            return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
+        return _gloomberb_envelope_json(envelope)
+
+    @_maybe_tool("digifetch_saved_searches")
+    def digifetch_saved_searches() -> str:
+        """The signed-in session's saved searches (Gloomberb Cloud; session-gated).
+
+        Requires GLOOMBERB_SESSION_COOKIE; without it the envelope is a typed
+        `auth_required` and no request is made. No parameters; rows carry the
+        saved-search id/name/query and unknown fields are preserved. Enrichment
+        only: the platform's data is delayed - pair with a live web search when
+        recency matters.
+        """
+        try:
+            envelope = _build_gloomberb_client().saved_searches()
         except Exception as exc:  # surface as JSON to the caller, never crash
             return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
         return _gloomberb_envelope_json(envelope)
