@@ -794,8 +794,17 @@ const AssistantMessage: FC = () => {
         data-slot="aui_assistant-message-footer"
         className={cn("col-start-1 flex items-center", ACTION_BAR_HEIGHT)}
       >
-        <BranchPicker />
-        <AssistantActionBar />
+        <AuiIf
+          condition={(s) =>
+            !(
+              s.message.status?.type === "incomplete" &&
+              s.message.status.reason === "error"
+            )
+          }
+        >
+          <BranchPicker />
+          <AssistantActionBar />
+        </AuiIf>
       </div>
     </MessagePrimitive.Root>
   );
