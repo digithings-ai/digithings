@@ -358,7 +358,7 @@ describe("parseEmbedTenants", () => {
     expect(reg.get("example.com")?.gateMode).toBe("trial_form");
   });
 
-  it("accepts reasoning/toolCalls disclosure modes and rejects unknown values", () => {
+  it("accepts view/thinking modes and rejects unknown values", () => {
     const entry = (keys: Record<string, unknown>) =>
       JSON.stringify({
         "example.com": {
@@ -369,11 +369,11 @@ describe("parseEmbedTenants", () => {
           ...keys,
         },
       });
-    const reg = parseEmbedTenants(entry({ reasoning: "collapsed", toolCalls: "expanded" }));
-    expect(reg.get("example.com")?.reasoning).toBe("collapsed");
-    expect(reg.get("example.com")?.toolCalls).toBe("expanded");
-    expect(() => parseEmbedTenants(entry({ reasoning: "open" }))).toThrow(/reasoning/);
-    expect(() => parseEmbedTenants(entry({ toolCalls: "yes" }))).toThrow(/toolCalls/);
+    const reg = parseEmbedTenants(entry({ view: "detailed", thinking: "open" }));
+    expect(reg.get("example.com")?.view).toBe("detailed");
+    expect(reg.get("example.com")?.thinking).toBe("open");
+    expect(() => parseEmbedTenants(entry({ view: "expanded" }))).toThrow(/view/);
+    expect(() => parseEmbedTenants(entry({ thinking: "yes" }))).toThrow(/thinking/);
   });
 
   it("throws on an invalid gateMode or theme", () => {

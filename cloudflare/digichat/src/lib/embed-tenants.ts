@@ -13,7 +13,13 @@
  */
 
 import type { ActivityDetail } from "@/lib/chat-activity";
-import type { DisclosureMode, PageContextMode } from "@/lib/deploy-config/schema";
+import type { PageContextMode } from "@/lib/deploy-config/schema";
+import {
+  THINKING_MODES,
+  VIEW_MODES,
+  type ThinkingMode,
+  type ViewMode,
+} from "@/lib/view-modes";
 import {
   defaultThreadSkinForTenant,
   isThreadSkin,
@@ -22,12 +28,6 @@ import {
 } from "@/lib/thread-skins";
 
 const PAGE_CONTEXT_MODES: readonly PageContextMode[] = ["off", "silent", "visible"];
-const DISCLOSURE_MODES: readonly DisclosureMode[] = [
-  "off",
-  "collapsed",
-  "expanded",
-  "locked_open",
-];
 
 /**
  * digichat Node backends: digigraph (digithings stack) or foundry (client Azure).
@@ -112,16 +112,16 @@ export type EmbedTenantConfig = {
    */
   webSearch?: boolean;
   /**
-   * Reasoning block disclosure for this tenant's embeds (digichat skin).
-   * "collapsed" (default via deploy config) streams the thinking block and
-   * closes it when the turn finishes; "expanded"/"locked_open" keep it open.
+   * Chain-of-thought view mode for this tenant's embeds (digichat skin):
+   * hidden / compact / balanced / detailed. `balanced` (default) opens
+   * reasoning + tool groups while they stream and collapses them when done.
    */
-  reasoning?: DisclosureMode;
+  view?: ViewMode;
   /**
-   * Tool-call group disclosure for this tenant's embeds. "expanded" leaves the
-   * called-tools list open by default; "locked_open" also disables collapsing.
+   * Reasoning-only override on top of `view`: auto (follow the view mode),
+   * collapsed (pinned closed), open (pinned expanded).
    */
-  toolCalls?: DisclosureMode;
+  thinking?: ThinkingMode;
   /** page = full content chrome inside iframe; embed = compact iframe child. */
   layout?: "page" | "embed";
   /**
@@ -343,11 +343,11 @@ function validateEntry(hostKey: string, value: unknown): EmbedTenantConfig {
   if (v.webSearch !== undefined && typeof v.webSearch !== "boolean") {
     throw new Error(`${ctx}: webSearch must be a boolean`);
   }
-  if (v.reasoning !== undefined && !DISCLOSURE_MODES.includes(v.reasoning as DisclosureMode)) {
-    throw new Error(`${ctx}: reasoning must be "off", "collapsed", "expanded", or "locked_open"`);
+  if (v.view !== undefined && !VIEW_MODES.includes(v.view as ViewMode)) {
+    throw new Error(`${ctx}: view must be "hidden", "compact", "balanced", or "detailed"`);
   }
-  if (v.toolCalls !== undefined && !DISCLOSURE_MODES.includes(v.toolCalls as DisclosureMode)) {
-    throw new Error(`${ctx}: toolCalls must be "off", "collapsed", "expanded", or "locked_open"`);
+  if (v.thinking !== undefined && !THINKING_MODES.includes(v.thinking as ThinkingMode)) {
+    throw new Error(`${ctx}: thinking must be "auto", "collapsed", or "open"`);
   }
   if (v.attachments !== undefined && typeof v.attachments !== "boolean") {
     throw new Error(`${ctx}: attachments must be a boolean`);
@@ -421,11 +421,9 @@ function validateEntry(hostKey: string, value: unknown): EmbedTenantConfig {
     showLanguageSelector:
       typeof v.showLanguageSelector === "boolean" ? v.showLanguageSelector : undefined,
     webSearch: typeof v.webSearch === "boolean" ? v.webSearch : undefined,
-    reasoning: DISCLOSURE_MODES.includes(v.reasoning as DisclosureMode)
-      ? (v.reasoning as DisclosureMode)
-      : undefined,
-    toolCalls: DISCLOSURE_MODES.includes(v.toolCalls as DisclosureMode)
-      ? (v.toolCalls as DisclosureMode)
+    view: VIEW_MODES.includes(v.view as ViewMode) ? (v.view as ViewMode) : undefined,
+    thinking: THINKING_MODES.includes(v.thinking as ThinkingMode)
+      ? (v.thinking as ThinkingMode)
       : undefined,
     attachments: typeof v.attachments === "boolean" ? v.attachments : undefined,
     pageContext: PAGE_CONTEXT_MODES.includes(v.pageContext as PageContextMode)

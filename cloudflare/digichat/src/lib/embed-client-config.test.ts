@@ -193,7 +193,7 @@ describe("toEmbedClientConfig", () => {
     expect(toEmbedClientConfig(silent.get("example.com")!).pageContext).toBe("silent");
   });
 
-  it("carries reasoning/toolCalls disclosure modes into the client config and bridge features", () => {
+  it("carries view/thinking modes into the client config and bridge features", () => {
     const registry = parseEmbedTenants(
       JSON.stringify({
         "example.com": {
@@ -202,17 +202,17 @@ describe("toEmbedClientConfig", () => {
           gateMode: "ungated",
           attribution: false,
           token: "t",
-          reasoning: "collapsed",
-          toolCalls: "expanded",
+          view: "detailed",
+          thinking: "open",
         },
       }),
     );
     const cfg = toEmbedClientConfig(registry.get("example.com")!);
-    expect(cfg.reasoning).toBe("collapsed");
-    expect(cfg.toolCalls).toBe("expanded");
+    expect(cfg.view).toBe("detailed");
+    expect(cfg.thinking).toBe("open");
     const projected = clientConfigFromEmbedTenant(cfg);
-    expect(projected.features.reasoning).toBe("collapsed");
-    expect(projected.features.toolCalls).toBe("expanded");
+    expect(projected.features.view).toBe("detailed");
+    expect(projected.features.thinking).toBe("open");
   });
 
   it("strips operator MCP URLs from the client projection", () => {

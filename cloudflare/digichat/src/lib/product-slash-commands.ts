@@ -7,6 +7,8 @@ import type { Unstable_SlashCommand } from "@assistant-ui/react";
 import {
   catalogToolSlashDef,
   isEffortCode,
+  isThinkingCode,
+  isViewCode,
   parseSlashInput,
   type SlashDef,
   type SlashVisibility,
@@ -141,8 +143,10 @@ export function buildProductSlashCommands(api: EmbedChatPrefsApi): Unstable_Slas
       description = toggleHint(prefs.digisearch, "knowledge base", "disabled this session");
     } else if (def.id === "digivault") {
       description = toggleHint(prefs.vault, "vault notes", "disabled this session");
+    } else if (def.id === "view") {
+      description = `View: ${prefs.view}`;
     } else if (def.id === "thinking") {
-      description = toggleHint(prefs.thinking, "reasoning visible", "reasoning hidden");
+      description = `Thinking: ${prefs.thinking}`;
     } else if (def.id === "lang") {
       description = `Reply language (${languageLabel(prefs.language)})`;
     } else if (def.id === "models") {
@@ -188,9 +192,18 @@ export function executeSlashDef(def: SlashDef, arg: string, api: EmbedChatPrefsA
     case "digivault":
       api.setVault(!api.prefs.vault);
       return;
-    case "thinking":
-      api.setThinking(!api.prefs.thinking);
+    case "view": {
+      const mode = arg.trim().toLowerCase();
+      if (isViewCode(mode)) api.setView(mode);
+      else api.openView();
       return;
+    }
+    case "thinking": {
+      const mode = arg.trim().toLowerCase();
+      if (isThinkingCode(mode)) api.setThinking(mode);
+      else api.openThinking();
+      return;
+    }
     case "lang": {
       if (!arg) {
         api.openLanguage();
