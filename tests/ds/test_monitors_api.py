@@ -27,6 +27,9 @@ from tests.digi_test_jwt import auth_headers
 
 pytestmark = pytest.mark.unit
 
+# An address literal keeps the delivery validator offline (no getaddrinfo).
+_PUBLIC_HOOK = "https://93.184.216.34/hook"
+
 
 @pytest.fixture(autouse=True)
 def _stub_shallow_recall(monkeypatch):
@@ -39,6 +42,25 @@ def _stub_shallow_recall(monkeypatch):
         lambda **kwargs: WebSearchData.model_validate(
             {"results": [{"url": "https://example.com/a", "title": "A", "text": "alpha"}]}
         ),
+    )
+
+
+_REMOTE_EXA_SECRET = "e" * 32
+
+
+@pytest.fixture(autouse=True)
+def _stub_exa_provisioning(monkeypatch):
+    """Keep every monitor test offline at the remote EXA create boundary (#4184)."""
+    from digisearch.monitors import provisioning as provisioning_mod
+
+    monkeypatch.setattr(
+        provisioning_mod,
+        "create_exa_monitor",
+        lambda **kwargs: {
+            "id": "exa_mon_1",
+            "status": "active",
+            "webhookSecret": _REMOTE_EXA_SECRET,
+        },
     )
 
 
@@ -122,6 +144,102 @@ def test_datatap_watch_rejected(monkeypatch, tmp_path):
 
 
 @pytest.mark.unit
+def test_create_exa_provisions_remote_monitor_end_to_end(monkeypatch, tmp_path):
+    """#4184: backend=exa provisions remotely, then persists id + remote secret."""
+    _patch_monitor_store(monkeypatch, tmp_path)
+    from digisearch.monitors import provisioning as provisioning_mod
+    from digisearch.monitors.store import MonitorStore
+
+    seen: dict = {}
+
+    def fake_create(**kwargs):
+        seen.update(kwargs)
+        return {"id": "exa_mon_42", "status": "active", "webhookSecret": "s" * 32}
+
+    monkeypatch.setattr(provisioning_mod, "create_exa_monitor", fake_create)
+    c = _monitor_client()
+    created = _create_watch(
+        c, backend="exa", schedule={"mode": "interval", "interval_seconds": 86400}
+    )
+
+    assert seen == {
+        "query": "etf flows",
+        "webhook_url": _PUBLIC_HOOK,
+        "schedule": "1d",
+        "api_key": None,
+    }
+    wid = created["watch"]["watch_id"]
+    assert created["watch"]["exa_monitor_id"] == "exa_mon_42"
+    assert created["delivery_secret"] == "s" * 32
+
+    stored = MonitorStore(db_path=str(tmp_path / "m.sqlite3"))
+    assert stored.get_watch(wid).exa_monitor_id == "exa_mon_42"
+    assert stored.get_delivery_secret(wid) == "s" * 32
+    assert "delivery_secret" not in c.get(f"/v1/monitors/{wid}").text  # R8
+
+
+@pytest.mark.unit
+def test_create_exa_refuses_cron_and_missing_webhook_target(monkeypatch, tmp_path):
+    """#4184: EXA cannot express a cron, and its create needs a webhook URL."""
+    _patch_monitor_store(monkeypatch, tmp_path)
+    c = _monitor_client()
+
+    cron = c.post(
+        "/v1/monitors",
+        json={
+            "name": "etf",
+            "query": "etf flows",
+            "backend": "exa",
+            "schedule": {"mode": "cron", "cron": "0 0 * * *"},
+            "delivery": {"mode": "poll", "targets": [{"kind": "webhook", "url": _PUBLIC_HOOK}]},
+        },
+    )
+    assert cron.status_code == 422, cron.text
+    assert cron.json()["error"]["code"] == "exa_schedule_unsupported"
+
+    no_target = c.post(
+        "/v1/monitors",
+        json={
+            "name": "etf",
+            "query": "etf flows",
+            "backend": "exa",
+            "schedule": {"mode": "interval", "interval_seconds": 3600},
+        },
+    )
+    assert no_target.status_code == 422, no_target.text
+    assert no_target.json()["error"]["code"] == "exa_webhook_target_missing"
+    assert c.get("/v1/monitors").json()["watches"] == []
+
+
+@pytest.mark.unit
+def test_patch_rotate_refused_on_exa_backed_watch(monkeypatch, tmp_path):
+    """#4184: a locally minted secret would break EXA signature verification."""
+    _patch_monitor_store(monkeypatch, tmp_path)
+    from digisearch.monitors.store import MonitorStore
+
+    c = _monitor_client()
+    created = _create_watch(c, backend="exa")
+    wid = created["watch"]["watch_id"]
+
+    refused = c.patch(f"/v1/monitors/{wid}", json={"rotate_delivery_secret": True})
+    assert refused.status_code == 409, refused.text
+    assert refused.json()["error"]["code"] == "exa_secret_rotate_unsupported"
+    stored = MonitorStore(db_path=str(tmp_path / "m.sqlite3"))
+    assert stored.get_delivery_secret(wid) == created["delivery_secret"]  # untouched
+
+    renamed = c.patch(f"/v1/monitors/{wid}", json={"name": "renamed"})
+    assert renamed.status_code == 200, renamed.text
+    assert renamed.json()["name"] == "renamed"
+
+    oss = _create_watch(c)
+    rotated = c.patch(
+        f"/v1/monitors/{oss['watch']['watch_id']}", json={"rotate_delivery_secret": True}
+    )
+    assert rotated.status_code == 200, rotated.text
+    assert rotated.json()["delivery_secret"] != oss["delivery_secret"]
+
+
+@pytest.mark.unit
 def test_exa_webhook_exempt_but_secret_gated(monkeypatch, tmp_path):
     _patch_monitor_store(monkeypatch, tmp_path)
     import digisearch.server as srv
@@ -199,6 +317,12 @@ def _create_watch(client: TestClient, **overrides: object) -> dict:
         "query": "etf flows",
         "schedule": {"mode": "interval", "interval_seconds": 3600},
     }
+    if overrides.get("backend") == "exa" and "delivery" not in overrides:
+        # #4184: an exa watch is provisioned remotely and needs a webhook target.
+        body["delivery"] = {
+            "mode": "poll",
+            "targets": [{"kind": "webhook", "url": _PUBLIC_HOOK}],
+        }
     body.update(overrides)
     r = client.post("/v1/monitors", json=body)
     assert r.status_code == 201, r.text
@@ -517,6 +641,49 @@ def test_exa_webhook_non_terminal_event_acks_without_persisting(monkeypatch, tmp
     assert r.status_code == 200, r.text
     assert r.json() == {"acknowledged": True}
     assert c.get(f"/v1/monitors/{wid}/runs").json()["runs"] == []
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize("status", ["cancelled", "queued", "some_future_status"])
+def test_exa_webhook_broadened_non_terminal_status_acks_without_persisting(
+    monkeypatch, tmp_path, status
+):
+    """#4184: any parseable non-terminal status acks 200 — EXA retries non-2xx forever."""
+    _patch_monitor_store(monkeypatch, tmp_path)
+    import digisearch.server as srv
+
+    c = _monitor_client()
+    created = _create_watch(c, backend="exa")
+    wid = created["watch"]["watch_id"]
+
+    body, headers = _signed_delivery(_event(status=status, output=None), created["delivery_secret"])
+    anon = TestClient(srv.app)
+    r = anon.post(
+        "/v1/monitors/exa_webhook",
+        content=body,
+        headers={**headers, "Content-Type": "application/json"},
+    )
+    assert r.status_code == 200, r.text
+    assert r.json() == {"acknowledged": True}
+    assert c.get(f"/v1/monitors/{wid}/runs").json()["runs"] == []
+
+
+@pytest.mark.unit
+def test_exa_webhook_missing_status_stays_fail_closed(monkeypatch, tmp_path):
+    """#4184: the broadened predicate never widens to a malformed envelope."""
+    _patch_monitor_store(monkeypatch, tmp_path)
+    import digisearch.server as srv
+
+    created = _create_watch(_monitor_client(), backend="exa")
+    body, headers = _signed_delivery(_event(status=None, output=None), created["delivery_secret"])
+    anon = TestClient(srv.app)
+    r = anon.post(
+        "/v1/monitors/exa_webhook",
+        content=body,
+        headers={**headers, "Content-Type": "application/json"},
+    )
+    assert r.status_code == 422, r.text
+    assert r.json()["error"]["code"] == "exa_payload_invalid"
 
 
 @pytest.mark.unit

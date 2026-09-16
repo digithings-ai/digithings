@@ -30,7 +30,9 @@ running; on completion it is ``{"results": [{"id","url","publishedDate",
 "title","author?","image?"}], "content": "<answer with [n] markers>",
 "grounding": [{"field","citations","confidence"}]}``. Non-terminal events ARE
 delivered (``monitor.run.created`` with run ``status: "running"``), so the
-inbound route acks them 200 without persisting a run row.
+inbound route acks any parseable non-terminal status 200 without persisting a
+run row (EXA retries non-2xx indefinitely; an unknown-status 422 was an endless
+retry loop).
 
 Delivery signature (live-verified 4/4, ``signature-check.txt``): header
 ``exa-signature: t=<unix>,v1=<hex>`` where ``v1 = HMAC-SHA256(secret,
@@ -56,7 +58,8 @@ stable ``code``:
   ``status``) or that carries a malformed nested container (present-but-wrong
   ``data.output`` / ``data.output.results``).
 - ``exa_run_status_unknown`` — a non-terminal remote run status (e.g.
-  ``running``); the route acks the pinned non-terminal event without persisting.
+  ``running``, ``cancelled``) passed to :func:`exa_run_to_monitor_run`; the
+  inbound route acks any parseable non-terminal status without persisting.
 - ``exa_monitor_id_missing`` — the nested run has no ``monitorId``.
 - ``exa_webhook_rejected`` — remote 4xx naming the ``[webhook…]`` field family;
   the message is preserved verbatim.
@@ -86,10 +89,9 @@ Secret handling (R8 ↔ EXA): EXA returns the one-time 32-char per-monitor
 deliveries with the watch's STORED per-monitor secret
 (``MonitorStore.get_delivery_secret``) and fails closed 401
 ``exa_bad_signature`` when it is missing — no static shared-secret fallback.
-The landed HTTP/MCP watch-create paths do not yet call EXA remotely, so
-persisting the remote secret at create is deliberate deferred wiring: a caller
-that creates a remote monitor must pair it with ``MonitorStore.set_delivery_secret``
-until that path lands.
+The HTTP watch-create path provisions EXA remotely through
+``monitors/provisioning.py`` and persists the returned secret at create; the
+MCP create surface remains OSS-only (see its docstring).
 
 ``create_exa_monitor`` runs the landed :func:`validate_delivery` gate FIRST, so
 a webhook EXA would reject (missing, non-https, or private target) fails before
@@ -139,7 +141,6 @@ _RunStatus = Literal["ok", "no_change", "failed"]
 
 _COMPLETED = "completed"
 _FAILED_STATUSES = frozenset({"failed", "error"})
-_RUNNING = "running"
 
 # Stable status text recorded when EXA fails a run without a failReason.
 _EXA_RUN_FAILED = "exa_run_failed"
@@ -204,16 +205,17 @@ def verify_exa_signature(
 def exa_event_is_non_terminal(exa_payload: dict[str, Any]) -> bool:
     """True when a delivery announces a run that has not finished.
 
-    The pinned non-terminal delivery is ``monitor.run.created`` with run
-    ``status: "running"``; the inbound route acks those 200 without persisting.
-    The nested run status is the authoritative signal — an event ``type`` alone
+    Non-terminal is defined by exclusion: any parseable run status that is
+    neither ``completed`` nor a failed status (``failed``/``error``) — so
+    ``running``, ``cancelled``, ``queued``, and any future EXA status are all
+    non-terminal, and the inbound route acks them 200 without persisting (EXA
+    retries non-2xx, so rejecting an unknown status would retry forever). The
+    nested run status is the authoritative signal — an event ``type`` alone
     never suppresses a terminal run. A malformed envelope or missing/blank
-    status fails ``exa_payload_invalid``; any other status returns ``False`` so
-    the translation call raises ``exa_run_status_unknown`` (fail closed) or
-    persists the terminal run.
+    status still fails ``exa_payload_invalid`` (fail closed, 422).
     """
     _, run = _event_envelope(exa_payload)
-    return _normalized_status(run) == _RUNNING
+    return _normalized_status(run) not in {_COMPLETED, *_FAILED_STATUSES}
 
 
 def exa_run_to_monitor_run(*, watch_id: str, exa_payload: dict[str, Any]) -> MonitorRun:

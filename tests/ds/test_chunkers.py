@@ -235,13 +235,16 @@ def test_real_markdown_file_chunking_matches_recorded_fingerprint() -> None:
     Hashes only (count still 102) re-recorded for the #4170 follow-up docs
     correction (per-session MCP lifespan caveat + #4189 citation across
     ARCHITECTURE.md) — fixture prose only; RecursiveChunker unchanged.
+    Re-recorded at count 105 for #4184 (`monitors/provisioning.py` module-map
+    rows + EXA provisioning / rotation-refusal / broadened-non-terminal-ack
+    docs in ARCHITECTURE.md) — fixture prose only; RecursiveChunker unchanged.
     """
     arch_path = Path(__file__).resolve().parents[2] / "digisearch" / "ARCHITECTURE.md"
     content = arch_path.read_text(encoding="utf-8")
     doc = Document(id="arch", content=content, source=str(arch_path), doc_type="md")
     chunks = RecursiveChunker().chunk(doc)
 
-    assert len(chunks) == 102
+    assert len(chunks) == 105
     assert all(len(c.content) <= 2000 for c in chunks)
     hashes = [hashlib.sha256(c.content.encode()).hexdigest()[:16] for c in chunks]
     assert hashes == [
@@ -267,12 +270,14 @@ def test_real_markdown_file_chunking_matches_recorded_fingerprint() -> None:
         "9ce2b59017d82c91",
         "ef0f58a96ed218c0",
         "0e77d003d55f7ea9",
-        "f549b7a076a86393",
-        "493865ec43d9fef8",
-        "ec2848f93cd9c95f",
-        "80845022b2a31639",
+        "016048733f31d53f",
+        "cf899d5d38a192e2",
+        "866bf2f65945a727",
+        "b1f7e47e77dbce93",
+        "ebd46ff18db018b4",
         "7af3cdc7d42ec69e",
-        "78f3776581e1eaf1",
+        "2a938dc090252417",
+        "507a7ce716be2ad1",
         "aa924885a2a48bdc",
         "13e56068a3dbb881",
         "767113eb8e027a2b",
@@ -297,7 +302,7 @@ def test_real_markdown_file_chunking_matches_recorded_fingerprint() -> None:
         "28bb2eddea9813a5",
         "0f38ad6f707a76af",
         "c64d3417a2a5f62c",
-        "79c88f65458093ad",
+        "a1105ad47fefbf1b",
         "819ebadc3320ecc2",
         "10832c167583db90",
         "3442051d624d3623",
@@ -308,8 +313,9 @@ def test_real_markdown_file_chunking_matches_recorded_fingerprint() -> None:
         "2ec8256cb4695f07",
         "16bea1bbfea529fc",
         "00bffb9020b848f5",
-        "f3195dfc3d6d0f6a",
-        "9d7b263a74bc8726",
+        "0813ccac568b8df8",
+        "8c4f082527d91953",
+        "ea4b9c63695d2f69",
         "367d6f1945838ddd",
         "4187a3ee58add217",
         "cea61babea9674b7",
@@ -317,8 +323,8 @@ def test_real_markdown_file_chunking_matches_recorded_fingerprint() -> None:
         "7d49f202ff0c492a",
         "66ce13f7ba2fafdc",
         "26ca223dcbe8b403",
-        "d5e8de001fd3bc4d",
-        "c0007642568a1098",
+        "ac5eea8b8b2f7820",
+        "5aea3310a60020c2",
         "2df16a717e45cd20",
         "c01731fed9b486f9",
         "ae1e6da2f77138e0",
@@ -338,8 +344,8 @@ def test_real_markdown_file_chunking_matches_recorded_fingerprint() -> None:
         "0f567a2b684efdf4",
         "fae259f9afca4fea",
         "05bb8905105bc94e",
-        "9c8ee0778b8a41a4",
-        "8f49c9a8592249bb",
+        "d922a9899a8996a2",
+        "a6cd8423606c58f1",
         "482754fb154988ce",
         "79ae674b8661ea64",
         "fc586dc7c2348d1e",

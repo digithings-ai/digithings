@@ -484,16 +484,16 @@ Rate limits are per-IP (R10): CRUD and runs 30/min, trigger / tick / exa_webhook
 
 | Method + path | Success | Error codes | Notes |
 |----------------|---------|-------------|-------|
-| `POST /v1/monitors` | 201 `{"watch": …, "delivery_secret": …}` | config codes (422) | Validated before persistence; the one-time secret is in this response only (R8) |
+| `POST /v1/monitors` | 201 `{"watch": …, "delivery_secret": …}` | config codes (422), `exa_schedule_unsupported` / `exa_webhook_target_missing` (422), `exa_webhook_secret_missing` / `exa_monitor_id_missing` / `exa_api_error` (502) | Validated before persistence; the one-time secret is in this response only (R8). `backend="exa"` is provisioned remote-first (#4184): the remote monitor is created first (interval period mapped exactly; a webhook delivery target is required), its one-time `webhookSecret` becomes the watch secret, and the watch is persisted with `exa_monitor_id` only after EXA answered — nothing is stored when provisioning fails, and a local persist failure compensates by deleting the remote |
 | `GET /v1/monitors` | 200 `{"watches": [...]}` | — | Optional `?workspace_id=` filter |
 | `GET /v1/monitors/{watch_id}` | 200 `Watch` | `watch_not_found` (404) | Never returns the secret |
-| `PATCH /v1/monitors/{watch_id}` | 200 `Watch`, or `{"watch": …, "delivery_secret": …}` when rotating | `watch_not_found` (404), `validation_error` / config codes (422) | Partial patch; merging is top-level (a nested object replaces the whole nested object) |
+| `PATCH /v1/monitors/{watch_id}` | 200 `Watch`, or `{"watch": …, "delivery_secret": …}` when rotating | `watch_not_found` (404), `validation_error` / config codes (422), `exa_secret_rotate_unsupported` (409) | Partial patch; merging is top-level (a nested object replaces the whole nested object). Rotation is refused for `backend="exa"` watches — their secret is EXA's per-monitor `webhookSecret`, so a locally minted replacement would break signature verification; re-create the watch to rotate |
 | `DELETE /v1/monitors/{watch_id}` | 200 `{"deleted": watch_id}` | `watch_not_found` (404) | Runs are retained |
 | `POST /v1/monitors/{watch_id}/trigger` | 201 `MonitorRun` | `watch_not_found` (404) | Body `{"mode": "manual"\|"poll"}` (default `manual`); a failed turn still returns its persisted `status="failed"` run rather than a 5xx |
 | `GET /v1/monitors/{watch_id}/runs` | 200 `{"runs": [...], "next_cursor": …}` | `run_not_found` (404, unknown cursor) | `limit` 1–100 (default 20); `cursor` is the last `run_id` of the previous page |
 | `GET /v1/monitors/{watch_id}/runs/{run_id}` | 200 `MonitorRun` | `run_not_found` (404) | — |
 | `POST /v1/monitors/tick` | 200 `{"runs": [...]}` | — | Runs every due + enabled watch once (digiclaw wake-up clock, §4.8) |
-| `POST /v1/monitors/exa_webhook` | 201 `MonitorRun` (200 `{"acknowledged": true}` for a non-terminal delivery; 200 stored run for a duplicate delivery) | `exa_bad_signature` (401), `exa_payload_invalid` (400/422), `exa_monitor_id_missing` / `exa_run_status_unknown` (422), `watch_not_found` (404), `watch_backend_mismatch` (409) | Auth-exempt but per-watch-secret-gated: the delivery's `exa-signature` (`t=<unix>,v1=<hex>`, `HMAC-SHA256(per-monitor webhookSecret, f"{t}.{body}")`, ±300 s) is verified with the resolved watch's stored secret (`get_delivery_secret`); a valid signature translates the nested event envelope through the live-pinned (#4123) EXA adapter and persists the canonical run (watch resolved by `data.monitorId` → `exa_monitor_id`, datatap excluded). Non-terminal `monitor.run.created` deliveries ack without a run row; a redelivered terminal run answers 200 with the stored run, never 409 |
+| `POST /v1/monitors/exa_webhook` | 201 `MonitorRun` (200 `{"acknowledged": true}` for a non-terminal delivery; 200 stored run for a duplicate delivery) | `exa_bad_signature` (401), `exa_payload_invalid` (400/422), `exa_monitor_id_missing` (422), `watch_not_found` (404), `watch_backend_mismatch` (409) | Auth-exempt but per-watch-secret-gated: the delivery's `exa-signature` (`t=<unix>,v1=<hex>`, `HMAC-SHA256(per-monitor webhookSecret, f"{t}.{body}")`, ±300 s) is verified with the resolved watch's stored secret (`get_delivery_secret`); a valid signature translates the nested event envelope through the live-pinned (#4123) EXA adapter and persists the canonical run (watch resolved by `data.monitorId` → `exa_monitor_id`, datatap excluded). Any parseable non-terminal run status (`running`, `cancelled`, `queued`, …) acks without a run row — EXA retries non-2xx indefinitely; a redelivered terminal run answers 200 with the stored run, never 409 |
 
 | Error code | HTTP | Raised by |
 |------------|------|-----------|
@@ -507,11 +507,17 @@ Rate limits are per-IP (R10): CRUD and runs 30/min, trigger / tick / exa_webhook
 | `run_exists` | 409 | Duplicate `run_id` (store-level; internal) |
 | `exa_bad_signature` | 401 | Missing watch delivery secret, missing `exa-signature`, malformed/stale/future `t`, or HMAC mismatch — fail closed |
 | `exa_payload_invalid` | 400/422 | Webhook body is not valid JSON (400), not a JSON object (422), or is not the pinned nested event envelope / carries a missing-or-blank run `status` or a malformed `data.output.results` container (422) |
-| `exa_monitor_id_missing` | 422 | The nested run has no `monitorId` — the target watch cannot be resolved |
-| `exa_run_status_unknown` | 422 | The nested run status is neither terminal (`completed`/`failed`/`error`) nor the pinned non-terminal `running` (which the route acks 200 without persisting) |
+| `exa_monitor_id_missing` | 422 / 502 | Webhook route: the nested run has no `monitorId` — the target watch cannot be resolved (422). EXA watch create: the remote answer carried no `id`, so the watch cannot be linked (502, nothing persisted) |
+| `exa_run_status_unknown` | — (adapter) | `exa_run_to_monitor_run` called directly with a non-terminal run status; the webhook route acks every parseable non-terminal status 200 without persisting, so it never reaches translation |
+| `exa_schedule_unsupported` | 422 | EXA watch create: `schedule.mode="cron"` (EXA interval triggers cannot express a cron), or `interval_seconds` not exactly divisible by 86400/3600/60 — EXA periods are exact units (`"1d"`/`"1h"`/`"1m"`) only, never rounded |
+| `exa_webhook_target_missing` | 422 | EXA watch create: no delivery target of kind `webhook` with a non-blank URL — EXA returns a `webhookSecret` only for a webhook-bound monitor |
+| `exa_secret_rotate_unsupported` | 409 | `PATCH {"rotate_delivery_secret": true}` on a `backend="exa"` watch — its secret is EXA's per-monitor `webhookSecret`; re-create the watch to rotate |
+| `exa_webhook_secret_missing` | 502 | EXA watch create: the remote answer carried no non-blank `webhookSecret`; the just-created remote monitor is best-effort deleted and nothing is persisted |
+| `exa_api_error` | 502 | EXA watch create: any `ExaAdapterError` other than `exa_request_invalid` (upstream/transport/key failure); the watch is not persisted |
+| `exa_request_invalid` | 422 | EXA watch create: local caller input the adapter rejects (blank query/schedule). Every other adapter failure maps to 502 `exa_api_error` |
 | `watch_backend_mismatch` | 409 | The webhook-resolved watch is not `backend="exa"` (misconfiguration; nothing persisted) |
-| `exa_not_configured` | — (adapter) | EXA adapter create/delete: no explicit key and no `EXA_API_KEY` — the EXA monitor backend is disabled (never a silent OSS fallback) |
-| `exa_tier_gated` | — (adapter) | EXA adapter create/delete: EXA answered 401/403 (paywall / unauthorized key tier) — fail closed |
+| `exa_not_configured` | — (adapter; 502 `exa_api_error` at watch create) | EXA adapter create/delete: no explicit key and no `EXA_API_KEY` — the EXA monitor backend is disabled (never a silent OSS fallback) |
+| `exa_tier_gated` | — (adapter; 502 `exa_api_error` at watch create) | EXA adapter create/delete: EXA answered 401/403 (paywall / unauthorized key tier) — fail closed |
 
 Custom codes ride the shared digibase envelope — read `body["error"]["code"]`,
 never a top-level `body["code"]`. Validation messages are EXA-identical:
@@ -546,11 +552,31 @@ EXA's extra rule is theirs. Evidence: `.superpowers/sdd/4123-exa-shape-pin/
 {spike-output-3,signature-check}.txt`.
 
 **Secret contract (R8).** Create returns the per-watch delivery secret once as
-`{"watch": …, "delivery_secret": …}` (`secrets.token_hex(32)`); `PATCH
+`{"watch": …, "delivery_secret": …}`; on the OSS path it is a server-minted
+`secrets.token_hex(32)`, and on the EXA path it is EXA's one-time per-monitor
+`webhookSecret`, captured by the remote-first create (#4184). `PATCH
 {"rotate_delivery_secret": true}` mints a fresh one in the same shape and
-rotates only on the literal `true` (truthy strings/numbers do not). The secret
-lives in a dedicated nullable `secret` column, never in the watch body, so
-`GET`/list reads and stored run bodies are secret-free.
+rotates only on the literal `true` (truthy strings/numbers do not); rotation is
+refused 409 `exa_secret_rotate_unsupported` for `backend="exa"` watches, whose
+secret must keep matching EXA's signature — re-create the watch to rotate. The
+secret lives in a dedicated nullable `secret` column, never in the watch body,
+so `GET`/list reads and stored run bodies are secret-free.
+
+**EXA provisioning (#4184).** `POST /v1/monitors` with `backend="exa"` goes
+through `monitors/provisioning.py` and is remote-first + fail-closed: the
+schedule must be an interval whose seconds are exactly divisible by
+86400/3600/60 (→ `"Nd"`/`"Nh"`/`"Nm"`; a cron or inexact interval is 422
+`exa_schedule_unsupported`), the watch must carry a webhook delivery target
+(422 `exa_webhook_target_missing` — EXA returns a `webhookSecret` only for a
+webhook-bound monitor), and `create_exa_monitor` runs before anything local is
+written. A remote answer without a non-blank `webhookSecret` (502
+`exa_webhook_secret_missing`) or `id` (502 `exa_monitor_id_missing`), and any
+other adapter failure (502 `exa_api_error`; `exa_request_invalid` stays 422),
+persists nothing and best-effort deletes the just-created remote monitor; a
+local persist failure also deletes the remote monitor before the original error
+is re-raised, so a broken store cannot orphan a monitor. The stored watch
+carries `exa_monitor_id`, and the inbound webhook verifies against the remote
+secret with no out-of-band `set_delivery_secret` step.
 
 **Delivery (R13).** Fan-out happens only for `status="ok"` runs whose watch
 delivery mode is not `poll`. Webhook/slack targets receive the exact
@@ -1091,6 +1117,9 @@ digisearch/src/digisearch/
 │   ├── exa_adapter.py         # live-pinned (#4123) EXA monitor adapter: nested event-envelope
 │                              # run translation (exa_run_to_monitor_run), per-monitor secret
 │                              # verification (verify_exa_signature), create/delete helpers
+│   ├── provisioning.py        # (#4184) create_watch_provisioned: oss local mint / exa
+│                              # remote-first create (exact period mapping, remote
+│                              # webhookSecret + monitor id, best-effort compensation)
 │   └── validation.py          # shared create/update config gate (datatap, timezone, cron, delivery)
 │
 └── dev/
@@ -1327,6 +1356,7 @@ One-line responsibilities:
 | `monitors/runner.py` | One watch turn (`run_watch`), the scheduler entry (`tick_due_watches`), due evaluation (`is_due`), and the `deliver` seam |
 | `monitors/delivery.py` | `validate_delivery` create/update gate + webhook/slack/email fan-out with per-target receipts |
 | `monitors/validation.py` | The shared create/update decision (`watch_config_error`) used by both the HTTP and MCP surfaces |
+| `monitors/provisioning.py` | (#4184) `create_watch_provisioned`: the OSS path keeps the local secret mint byte-for-byte; `backend="exa"` is remote-first (exact interval period mapping, webhook target required, EXA's `webhookSecret` + monitor id required, best-effort remote delete on any later failure) |
 
 **Storage.** One SQLite file (`sqlite3` stdlib), resolved explicit path →
 `DIGISEARCH_MONITORS_DB` → `{DIGI_WORKSPACE}/.digisearch/monitors.sqlite3` →
@@ -1490,10 +1520,13 @@ presented value is never logged or echoed. A valid signature translates the
 NESTED event envelope through the live-pinned (#4123) Task 8c EXA adapter:
 `data.monitorId` resolves the watch by `exa_monitor_id` (datatap excluded;
 `watch_not_found` otherwise, `watch_backend_mismatch` when the watch is not
-`backend="exa"`), non-terminal `monitor.run.created` deliveries are acked 200
-without a run row, and a redelivered terminal run answers 200 with the stored
+`backend="exa"`), deliveries whose run status is non-terminal (`running`,
+`cancelled`, `queued`, or any future parseable status that is neither
+`completed` nor `failed`/`error`) are acked 200 without a run row (EXA retries
+non-2xx indefinitely, so an unknown-status rejection was an endless retry
+loop), and a redelivered terminal run answers 200 with the stored
 run (never 409 — EXA retries non-2xx). Untranslatable payloads are rejected
-(`exa_payload_invalid` / `exa_monitor_id_missing` / `exa_run_status_unknown`)
+(`exa_payload_invalid` / `exa_monitor_id_missing`)
 rather than accepted as empty.
 
 ### Multi-tenant isolation
@@ -1869,15 +1902,17 @@ require digisearch to be reachable from the internet; expose it via Cloudflare
 Tunnel or Tailscale per `SECURITY.md` (never a public port), with webhook/slack
 targets validated as public https URLs at create/update and re-resolved at
 delivery time. The inbound EXA result webhook authenticates with the watch's
-stored per-monitor secret (EXA's one-time `webhookSecret`, rotated with `PATCH
-{"rotate_delivery_secret": true}`), verified as the `exa-signature` `t.body`
+stored per-monitor secret (EXA's one-time `webhookSecret`, captured at
+`POST /v1/monitors` create for `backend="exa"` watches — #4184 — and never
+rotatable locally: `PATCH {"rotate_delivery_secret": true}` is refused 409 for
+them), verified as the `exa-signature` `t.body`
 HMAC (#4123); a valid signature translates the nested payload via the
 live-pinned Task 8c adapter and persists the run to the monitor store, while
-non-terminal deliveries are acked without persisting. Persisting a remote
-create's `webhookSecret` automatically is deferred wiring — the landed HTTP/MCP
-create paths do not call EXA remotely — so until that path lands, pair a remote
-`create_exa_monitor` call with `MonitorStore.set_delivery_secret` out of band.
-Poll + manual trigger remains the portable route for EXA-backed watches.
+any parseable non-terminal status is acked without persisting. The remote-first
+create persists the `webhookSecret` itself, so no out-of-band
+`MonitorStore.set_delivery_secret` step is needed for watches created through
+the HTTP route. Poll + manual trigger remains the portable route for EXA-backed
+watches.
 
 ### MCP server startup
 

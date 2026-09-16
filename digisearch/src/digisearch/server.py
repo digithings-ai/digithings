@@ -38,6 +38,7 @@ from digisearch.monitors.exa_adapter import (
     verify_exa_signature,
 )
 from digisearch.monitors.models import MonitorRun, Watch
+from digisearch.monitors.provisioning import WatchProvisioningError, create_watch_provisioned
 from digisearch.monitors.runner import MonitorRunError, run_watch, tick_due_watches
 from digisearch.monitors.store import MonitorStore, MonitorStoreError, get_store
 from digisearch.monitors.validation import DATATAP_WORKSPACE_ID, watch_config_error
@@ -1476,14 +1477,25 @@ class MonitorTriggerRequest(BaseModel):
 
 @app.post("/v1/monitors", status_code=201, response_model=None)
 def api_create_monitor(watch: Watch, request: Request) -> dict[str, Any] | JSONResponse:
-    """Create a watch. The response carries the one-time delivery secret (R8)."""
+    """Create a watch. The response carries the one-time delivery secret (R8).
+
+    ``backend="exa"`` is provisioned REMOTE FIRST through
+    :func:`digisearch.monitors.provisioning.create_watch_provisioned`: the
+    remote monitor is created (interval period mapped exactly; a webhook
+    delivery target is required), the EXA-returned ``webhookSecret`` is
+    persisted as the watch's delivery secret, and only then is the watch
+    stored — a provisioning failure maps through
+    :class:`WatchProvisioningError` into the shared monitor error envelope and
+    persists nothing. ``backend="oss"`` keeps the local mint path unchanged.
+    """
     invalid = _validate_watch_config(watch, request)
     if invalid is not None:
         return invalid
     store = get_monitor_store()
-    created = store.create_watch(watch)
-    secret = secrets.token_hex(32)
-    store.set_delivery_secret(created.watch_id, secret)
+    try:
+        created, secret = create_watch_provisioned(store, watch)
+    except WatchProvisioningError as exc:
+        return _monitor_error(request, exc.status_code, exc.code, exc.message)
     return {"watch": created.model_dump(mode="json"), "delivery_secret": secret}
 
 
@@ -1510,13 +1522,28 @@ def api_get_monitor(watch_id: str, request: Request) -> dict[str, Any] | JSONRes
 def api_update_monitor(
     watch_id: str, patch: dict[str, Any], request: Request
 ) -> dict[str, Any] | JSONResponse:
-    """Apply a partial patch; ``{"rotate_delivery_secret": true}`` mints a new secret (R8)."""
+    """Apply a partial patch; ``{"rotate_delivery_secret": true}`` mints a new secret (R8).
+
+    Rotation is refused (409 ``exa_secret_rotate_unsupported``) for an
+    ``backend="exa"`` watch: its delivery secret is EXA's per-monitor
+    ``webhookSecret``, so a locally minted replacement would silently break
+    ``exa-signature`` verification. Re-create the watch to rotate.
+    """
     store = get_monitor_store()
     rotate = patch.pop("rotate_delivery_secret", False) is True
     try:
         current = store.get_watch(watch_id)
     except MonitorStoreError as exc:
         return _store_error(request, exc)
+    if rotate and current.backend == "exa":
+        return _monitor_error(
+            request,
+            409,
+            "exa_secret_rotate_unsupported",
+            f"Watch {watch_id!r} is backed by a remote EXA monitor; its delivery secret "
+            "is EXA's per-monitor webhookSecret and cannot be rotated locally. "
+            "Delete and re-create the watch to rotate.",
+        )
     if patch:
         try:
             candidate = Watch.model_validate({**current.model_dump(mode="json"), **patch})
@@ -1625,12 +1652,17 @@ async def api_exa_webhook(request: Request) -> dict[str, Any] | JSONResponse:
     persistence, and the resolved watch must be ``backend="exa"`` (a mismatch
     is a misconfiguration: 409 ``watch_backend_mismatch``, nothing persisted).
 
-    Non-terminal deliveries (``monitor.run.created``, run ``status: "running"``)
-    are acked 200 ``{"acknowledged": true}`` without persisting; terminal
-    deliveries translate (Task 8c adapter) into the canonical ``MonitorRun``
-    and persist it — 201 on first store, and an idempotent 200 with the stored
-    run on redelivery (EXA retries non-2xx, so ``run_exists`` must never answer
-    409). Translation and store failures use the shared fail-closed envelope.
+    Non-terminal deliveries are acked 200 ``{"acknowledged": true}`` without
+    persisting. That set is defined by exclusion in the adapter: ``running``,
+    ``cancelled``, ``queued``, and any future parseable status that is neither
+    ``completed`` nor ``failed``/``error`` (EXA retries non-2xx indefinitely, so
+    answering anything but 2xx for an unknown non-terminal status retries
+    forever); a malformed envelope or missing/blank run status still fails
+    closed 422. Terminal deliveries translate (Task 8c adapter) into the
+    canonical ``MonitorRun`` and persist it — 201 on first store, and an
+    idempotent 200 with the stored run on redelivery (``run_exists`` must never
+    answer 409). Translation and store failures use the shared fail-closed
+    envelope.
     """
     raw_body = await request.body()
     try:
@@ -1681,6 +1713,11 @@ async def api_exa_webhook(request: Request) -> dict[str, Any] | JSONResponse:
         )
     try:
         if exa_event_is_non_terminal(payload):
+            logger.info(
+                "exa webhook: acked non-terminal delivery for watch %s (status=%r)",
+                watch.watch_id,
+                payload["data"]["status"],
+            )
             return {"acknowledged": True}
     except ExaAdapterError as exc:
         return _monitor_error(request, 422, exc.code, str(exc))
