@@ -123,3 +123,45 @@ describe('VehicleExpressionRow — no nested glass-card', () => {
     expect(html).not.toContain('locked-surface');
   });
 });
+
+// #4193 — coverage: every vehicle expressing the thesis gets the external
+// shortcut, held or not.
+describe('VehicleExpressionRow — Gloomberb shortcut', () => {
+  it('links the vehicle ticker out to the terminal beside the internal deep links', () => {
+    const html = renderToStaticMarkup(
+      createElement(VehicleExpressionRow, {
+        ticker: 'BRK.B',
+        rationale: null,
+        candidateRank: null,
+        position: null,
+        latestDecision: null,
+        dossierHref: '/portfolio/tickers?ticker=BRK.B',
+        deliberationHref: '/pipeline',
+      }),
+    );
+    expect(html).toContain('data-testid="gloomberb-link-BRK.B"');
+    expect(html).toContain('href="https://term.gloom.sh/?ticker=BRK.B"');
+    const anchor = html.match(/<a[^>]*data-testid="gloomberb-link-BRK.B"[^>]*>/)?.[0] ?? '';
+    expect(anchor).toContain('target="_blank"');
+    expect(anchor).toContain('rel="noopener noreferrer"');
+    expect(html).toContain('Open in Gloomberb');
+  });
+
+  // A blank symbol must not render an anchor: `?ticker=` makes the terminal fall
+  // back to its default listing, which would read as this vehicle's ticker.
+  it('renders no Gloomberb link when the ticker is blank', () => {
+    const html = renderToStaticMarkup(
+      createElement(VehicleExpressionRow, {
+        ticker: '   ',
+        rationale: null,
+        candidateRank: null,
+        position: null,
+        latestDecision: null,
+        dossierHref: '/portfolio/tickers?ticker=',
+        deliberationHref: '/pipeline',
+      }),
+    );
+    expect(html).not.toContain('gloomberb-link');
+    expect(html).not.toContain('term.gloom.sh');
+  });
+});
