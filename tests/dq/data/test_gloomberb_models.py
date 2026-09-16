@@ -6,6 +6,8 @@ bounds, and the shared envelope/error contract.
 
 from __future__ import annotations
 
+from datetime import date
+
 import pytest
 from pydantic import ValidationError
 
@@ -102,6 +104,60 @@ def test_price_history_requires_explicit_range_for_non_daily() -> None:
 def test_price_history_rejects_unknown_resolution() -> None:
     with pytest.raises(ValidationError):
         PriceHistoryInput(symbol="AAPL", resolution="2h", range="1M")  # type: ignore[arg-type]
+
+
+def test_price_history_date_window_bypasses_the_range_cap() -> None:
+    # #4100: an explicit window replaces the range dimension, so the §5.2
+    # resolution x range caps do not apply (the client sends rangeKey=ALL).
+    request = PriceHistoryInput(
+        symbol="AAPL", resolution="1wk", start_date="2015-01-01", end_date="2026-01-01"
+    )
+    assert request.range is None
+    assert request.start_date is not None and request.start_date.isoformat() == "2015-01-01"
+    assert request.end_date is not None and request.end_date.isoformat() == "2026-01-01"
+    # An open-ended window is legal on either side.
+    start_only = PriceHistoryInput(symbol="AAPL", resolution="1wk", start_date="2015-01-01")
+    assert start_only.range is None and start_only.end_date is None
+    end_only = PriceHistoryInput(symbol="AAPL", resolution="1d", end_date="2020-01-02")
+    assert end_only.range is None and end_only.start_date is None
+    # The 1d no-range default is untouched when no window is given.
+    assert PriceHistoryInput(symbol="AAPL", resolution="1d").range == "5Y"
+
+
+def test_price_history_date_window_and_range_are_mutually_exclusive() -> None:
+    with pytest.raises(ValidationError, match="mutually exclusive"):
+        PriceHistoryInput(symbol="AAPL", resolution="1wk", range="5Y", start_date="2015-01-01")
+    with pytest.raises(ValidationError, match="mutually exclusive"):
+        PriceHistoryInput(symbol="AAPL", resolution="1d", range="6M", end_date="2015-01-01")
+
+
+def test_price_history_date_window_rejects_reversed_and_malformed_dates() -> None:
+    with pytest.raises(ValidationError, match="on or before"):
+        PriceHistoryInput(
+            symbol="AAPL", resolution="1wk", start_date="2026-01-01", end_date="2015-01-01"
+        )
+    with pytest.raises(ValidationError):
+        PriceHistoryInput(symbol="AAPL", resolution="1wk", start_date="2015-1-1")
+    with pytest.raises(ValidationError):
+        PriceHistoryInput(symbol="AAPL", resolution="1wk", start_date="2015-13-01")
+
+
+def test_price_history_date_window_accepts_a_single_day_window() -> None:
+    request = PriceHistoryInput(
+        symbol="AAPL", resolution="1wk", start_date="2015-01-01", end_date="2015-01-01"
+    )
+    assert request.start_date == request.end_date
+    # A real `date` (e.g. an internal caller) is accepted as well.
+    assert PriceHistoryInput(
+        symbol="AAPL", resolution="1wk", start_date=date(2015, 1, 1)
+    ).start_date == date(2015, 1, 1)
+
+
+def test_price_history_date_window_rejects_coerced_timestamps() -> None:
+    # A bare `date` field would silently coerce these (#4100 review F3).
+    for bad in (1420070400.0, 1420070400, 0, "2015-01-01T00:00:00"):
+        with pytest.raises(ValidationError, match="ISO YYYY-MM-DD"):
+            PriceHistoryInput(symbol="AAPL", resolution="1wk", start_date=bad)
 
 
 def test_quotes_batch_bounds() -> None:

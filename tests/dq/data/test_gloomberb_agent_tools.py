@@ -259,6 +259,32 @@ def test_dispatcher_uses_the_ticker_field_for_the_deep_link() -> None:
     assert filings["source_url"] == "https://term.gloom.sh/?ticker=AAPL"
 
 
+def test_dispatcher_routes_a_price_history_date_window() -> None:
+    seen: dict[str, str] = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen["url"] = str(request.url)
+        return _envelope(
+            [{"date": "2015-01-05T00:00:00.000Z", "close": 100.0}],
+            currency="USD",
+            providerMeta={"provider": "yahoo"},
+        )
+
+    execute = build_digifetch_tool_dispatcher(client=make_client(handler))
+    payload = json.loads(
+        execute(
+            "digifetch_price_history",
+            {"symbol": "AAPL", "resolution": "1wk", "start_date": "2015-01-01"},
+        )
+    )
+    assert "interval=1week" in seen["url"]
+    assert "rangeKey=ALL" in seen["url"]
+    assert "startDate=2015-01-01" in seen["url"]
+    assert payload["data"]["bars"][0]["close"] == 100.0
+    assert payload["source_url"] == "https://term.gloom.sh/?ticker=AAPL"
+    assert payload["attribution"] == GLOOMBERB_ATTRIBUTION
+
+
 def test_dispatcher_does_not_attribute_the_yahoo_earnings_calendar() -> None:
     client = make_client(_sweep_handler, earnings_provider=lambda symbol: [])
     execute = build_digifetch_tool_dispatcher(client=client)
