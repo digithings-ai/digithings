@@ -1,7 +1,8 @@
 """Shared webset driver (#4170) and its per-process ref-counted install (#4189).
 
-Offline only: every store/runner seam is monkeypatched and no real store file is
-opened. Pins the shared lifespan install/teardown protocol (AC1), the
+Offline only: store/runner seams are monkeypatched fakes, except the tick
+integration test, which opens a real sqlite store under ``tmp_path``. Pins the
+shared lifespan install/teardown protocol (AC1), the
 startup-resume scheduling + store-failure tolerance (AC2), the unchanged
 scheduler delegation incl. the ``WEBSET_TASKS`` dedupe (AC3), the FastMCP
 lifespan wiring (AC4), the #4189 ref-counting: overlapping sessions share one
@@ -14,8 +15,8 @@ dead supervisor at depth ≥ 1 re-installs fresh, and a concurrent install on a
 different event loop raises ``RuntimeError`` — whether it is reference-counted
 or still starting up. The scheduled tick loop (#4221) is pinned at the end:
 first-sight anchoring / interval due-ness with an injected clock, paused and
-active-run skips, per-monitor and per-pass containment, prompt stop-event exit,
-and the install-window-only lifetime.
+active-run skips, per-monitor and per-pass containment, prompt stop-event exit
+before and mid-pass, and the install-window-only lifetime.
 
 ``@pytest.mark.unit`` on every test.
 """
@@ -100,6 +101,17 @@ class _Clock:
         self.now = now
 
     def __call__(self) -> float:
+        return self.now
+
+
+class _JumpingClock:
+    """Fake monotonic clock that advances 100s on every read (anchors, then due)."""
+
+    def __init__(self) -> None:
+        self.now = 0.0
+
+    def __call__(self) -> float:
+        self.now += 100.0
         return self.now
 
 
@@ -1013,6 +1025,36 @@ def test_tick_loop_returns_promptly_when_stop_is_set(monkeypatch):
 
 
 @pytest.mark.unit
+def test_tick_loop_stop_mid_pass_skips_remaining_monitors(monkeypatch):
+    """A stop set while refreshing one monitor ends the pass and the loop.
+
+    Three due monitors: the first refresh signals teardown, the per-monitor
+    check skips the other two, and ``_tick_loop`` exits instead of running on.
+    """
+    monitors = [_monitor(f"ws_{suffix}", interval=60) for suffix in ("a", "b", "c")]
+    store = _FakeStore(monitors=monitors)
+    monkeypatch.setattr(driver, "get_webset_store", lambda: store)
+    monkeypatch.setattr(driver, "_now", _JumpingClock())
+    monkeypatch.setattr(driver, "WEBSET_TICK_SECONDS", 0.01)
+    stop = asyncio.Event()
+    calls: list[tuple[str, str]] = []
+
+    def _trigger(webset_id: str, monitor_id: str) -> None:
+        calls.append((webset_id, monitor_id))
+        stop.set()  # teardown lands mid-pass; the next monitor must not fire
+
+    monkeypatch.setattr(service_module, "trigger_monitor", _trigger)
+
+    async def _run() -> None:
+        loop_task = asyncio.create_task(driver._tick_loop(stop))
+        await asyncio.wait_for(loop_task, timeout=1.0)
+        assert not loop_task.cancelled()
+
+    asyncio.run(_run())
+    assert calls == [("ws_a", monitors[0].id)]
+
+
+@pytest.mark.unit
 def test_tick_loop_contains_a_raising_pass(monkeypatch):
     """A pass-level escape is contained: the install survives and tears down."""
     passes: list[int] = []
@@ -1081,14 +1123,6 @@ def test_tick_refreshes_through_the_real_service_path(monkeypatch, tmp_path):
     monkeypatch.setenv("DIGISEARCH_WEBSETS_DB", str(db))
     monkeypatch.setattr(runner_module, "run_webset_async", _never)
     monkeypatch.setattr(driver, "WEBSET_TICK_SECONDS", 0.01)
-
-    class _JumpingClock:
-        def __init__(self) -> None:
-            self.now = 0.0
-
-        def __call__(self) -> float:
-            self.now += 100.0
-            return self.now
 
     monkeypatch.setattr(driver, "_now", _JumpingClock())
 
