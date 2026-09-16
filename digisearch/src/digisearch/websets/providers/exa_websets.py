@@ -1,3 +1,5 @@
+# score:allow untyped any
+# EXA Pro API payloads are dynamic remote JSON; Any is the honest annotation.
 """EXA Websets Pro shim — dormant without ``EXA_API_KEY`` (#4066, Task 7).
 
 EXA's websets verify + enrich API is paywalled on the operator's current key

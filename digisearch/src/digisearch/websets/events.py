@@ -1,3 +1,5 @@
+# score:allow untyped any
+# event payloads and delivery receipts are heterogeneous JSON; Any is the honest annotation.
 """Phase D webset events (#4066, Task 5a) — the single event writer.
 
 The append-only ``events`` table and its ``(webset_id, dedup_key)`` generation

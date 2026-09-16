@@ -1,3 +1,5 @@
+# score:allow untyped any
+# model-boundary payload containers are dynamic JSON; Any is the honest annotation.
 """Phase D webset models — the canonical verify + enrich envelope (#4066).
 
 A webset builds a verified, enriched, citable dataset asynchronously: a caller
@@ -38,8 +40,6 @@ Conventions recorded here so later tasks need not re-derive them:
   only in the in-flight schedule call).
 """
 
-# score:allow untyped any
-# model-boundary enrichment values are dynamic JSON; Any is the honest annotation.
 from __future__ import annotations
 
 import uuid

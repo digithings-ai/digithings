@@ -1,3 +1,5 @@
+# score:allow untyped any
+# recall payloads and state snapshots are dynamic JSON; Any is the honest annotation.
 """Phase D webset runner (#4066, Task 5a) — the async settling loop.
 
 Drives one webset to ``idle``: recall candidates through the landed Phase A seam

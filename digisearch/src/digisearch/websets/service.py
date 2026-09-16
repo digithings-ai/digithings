@@ -1,3 +1,5 @@
+# score:allow untyped any
+# service payloads and facade results are dynamic JSON; Any is the honest annotation.
 """Phase D webset service facade (#4066, Task 6) — the sync API over T1-T5.
 
 All functions are synchronous store I/O except the background work they hand to

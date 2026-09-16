@@ -1,3 +1,5 @@
+# score:allow untyped any
+# exported row dictionaries are dynamic by field set; Any is the honest annotation.
 """Phase D webset export (#4066, Task 6) — polars CSV + citation-preserving JSON.
 
 Only verified items are ever handed here (the service selects

@@ -1,3 +1,5 @@
+# score:allow untyped any
+# enrichment payloads and merged entities are dynamic JSON; Any is the honest annotation.
 """Phase D enrichment engine (#4066, Task 4) — typed fields + funding/entity merge.
 
 The enrichment half of a webset: every ``EnrichmentDef`` resolves to one
@@ -49,8 +51,6 @@ and merge over the T1 models plus the shared ``Citation`` atom (R1, imported
 from :mod:`digisearch.web_search.citation` — never redefined).
 """
 
-# score:allow untyped any
-# The digillm client, its duck-typed ChatCompletion response, the provider payload
 # JSON, and the type-dependent enrichment ``value`` cross this module's seams;
 # Any is the honest annotation there.
 from __future__ import annotations

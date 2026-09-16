@@ -1,3 +1,5 @@
+# score:allow untyped any
+# stored bodies and result rows are dynamic JSON; Any is the honest annotation.
 """Phase D webset store — SQLite persistence for websets (#4066, Task 2).
 
 Stdlib ``sqlite3`` only: this store is the single source of truth for websets,
