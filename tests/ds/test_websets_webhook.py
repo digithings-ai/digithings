@@ -32,9 +32,13 @@ Covered:
 - a due failed row is re-attempted through the same body builder and in-call
   3-attempt/5s-25s POST core, always signed with the webhook's *current* secret
   (asserted after a rotation);
-- failures step the pinned 5m/30m/2h/6h ladder, and the cap-many failure
-  exhausts the row (``next_attempt_at=None``) so the due selector never offers
-  it again;
+- failures step the full pinned 5m/30m/2h/6h ladder: five timed re-deliveries,
+  the first four arming 300/1800/7200/21600 seconds, and the fifth exhausting
+  the row (``next_attempt_at=None``) so the due selector never offers it again;
+- a fault escaping the POST core (client construction included) is contained
+  and recorded as a counted, redacted failed attempt like the one-shot path;
+  a non-not-found ``WebsetStoreError`` from a lookup or the ledger update
+  propagates without touching the row;
 - a webhook that is inactive/unsubscribed, or a webhook/event that no longer
   exists, is exhausted once without a POST; a missing secret records the
   fail-closed ``webhook_secret_missing`` outcome with no egress.
@@ -63,7 +67,7 @@ from digisearch.websets.models import (
     WebsetEvent,
     WebsetSearch,
 )
-from digisearch.websets.store import WebsetStore
+from digisearch.websets.store import WebsetStore, WebsetStoreError
 
 pytestmark = pytest.mark.unit
 
@@ -781,7 +785,7 @@ def test_redeliver_success_updates_the_row_and_signs_with_the_current_secret(
 
 @pytest.mark.unit
 def test_redeliver_failure_steps_the_pinned_ladder_then_exhausts(monkeypatch, tmp_path, sleeps):
-    assert mod._WEBHOOK_REDELIVERY_ATTEMPTS == 4
+    assert mod._WEBHOOK_REDELIVERY_ATTEMPTS == 5
     assert mod._WEBHOOK_REDELIVERY_BACKOFF_S == (300.0, 1800.0, 7200.0, 21600.0)
     store = _store(tmp_path)
     webset = _webset(store)
@@ -801,6 +805,10 @@ def test_redeliver_failure_steps_the_pinned_ladder_then_exhausts(monkeypatch, tm
     assert (row.attempts, row.next_attempt_at) == (3, now + timedelta(seconds=7200))
     now = row.next_attempt_at
     row = mod.redeliver_webhook(store, row, now=now)
+    # The cap sits one past the ladder, so the fourth (final) rung schedules.
+    assert (row.attempts, row.next_attempt_at) == (4, now + timedelta(seconds=21600))
+    now = row.next_attempt_at
+    row = mod.redeliver_webhook(store, row, now=now)
 
     assert row.ok is False and row.status_code == 500 and row.error == "HTTP 500"
     assert row.attempts == mod._WEBHOOK_REDELIVERY_ATTEMPTS
@@ -808,6 +816,9 @@ def test_redeliver_failure_steps_the_pinned_ladder_then_exhausts(monkeypatch, tm
     assert row.recorded_at == _delivery(store, webhook.webhook_id, event.id).recorded_at
     # The in-call 3-attempt/5s-25s retry core is preserved on every re-delivery.
     assert sleeps == [5.0, 25.0] * mod._WEBHOOK_REDELIVERY_ATTEMPTS
+    # All four rungs are reachable: 300 + 1800 + 7200 + 21600 = 8h35m of
+    # scheduled waits before exhaustion, well inside the 24h secret overlap.
+    assert sum(mod._WEBHOOK_REDELIVERY_BACKOFF_S) == 30900.0
     # Exhausted rows never become due again, however far the clock runs.
     assert store.list_due_webhook_deliveries(now=_T0 + timedelta(days=365)) == []
 
@@ -875,3 +886,101 @@ def test_redeliver_missing_secret_fails_closed_and_stays_on_the_ladder(monkeypat
     assert row.ok is False and row.status_code is None and row.error == "webhook_secret_missing"
     assert row.attempts == 1
     assert row.next_attempt_at == _T0 + timedelta(seconds=300)
+
+
+@pytest.mark.unit
+def test_redeliver_client_construction_fault_records_a_counted_redacted_attempt(
+    monkeypatch, tmp_path
+):
+    """An unexpected POST-core fault is contained like the one-shot path (#4226).
+
+    ``_client_for`` (client construction) sits outside ``_attempt_delivery``'s
+    internal try, so without containment the fault would escape and leave the
+    row ``attempts=0``/``next_attempt_at=NULL`` — re-offered every pass with no
+    ladder accounting. It must instead be recorded as a counted failed attempt
+    with a redacted error.
+    """
+    store = _store(tmp_path)
+    webset = _webset(store)
+    event = _event(store, webset.id)
+    webhook = _webhook(store, webset.id, _URL_GOOD)
+    _record_failed(store, webhook.webhook_id, event.id)
+
+    def boom(timeout_s):
+        raise RuntimeError(f"client exploded for {webhook.url} with {_SECRET}")
+
+    monkeypatch.setattr(mod, "_client_for", boom)
+    row = mod.redeliver_webhook(store, _delivery(store, webhook.webhook_id, event.id), now=_T0)
+
+    assert row.ok is False and row.status_code is None
+    # Redacted exactly like the delivery ledger (R8): no URL, no secret.
+    assert row.error == "RuntimeError: client exploded for <target> with <redacted>"
+    # Counted like any other failed re-delivery: on the ladder, not exhausted.
+    assert row.attempts == 1
+    assert row.next_attempt_at == _T0 + timedelta(seconds=300)
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize(
+    ("method", "code"),
+    [("get_event", "event_not_stored"), ("get_webhook", "store_locked")],
+)
+def test_redeliver_non_not_found_lookup_error_propagates_and_leaves_the_row(
+    monkeypatch, tmp_path, method, code
+):
+    """Only the not-found lookups exhaust; any other store fault propagates.
+
+    A transient store fault must not terminally burn the row: the exception
+    escapes to the driver's per-row containment, the ledger is not written, and
+    the row stays due for a later pass.
+    """
+    store = _store(tmp_path)
+    webset = _webset(store)
+    event = _event(store, webset.id)
+    webhook = _webhook(store, webset.id, _URL_GOOD)
+    _record_failed(store, webhook.webhook_id, event.id)
+    delivery = _delivery(store, webhook.webhook_id, event.id)
+    updates: list[tuple] = []
+    real_update = store.update_webhook_delivery
+
+    def spy_update(*args, **kwargs):
+        updates.append((args, kwargs))
+        return real_update(*args, **kwargs)
+
+    def boom(*args, **kwargs):
+        raise WebsetStoreError("ledger locked", code=code)
+
+    monkeypatch.setattr(store, "update_webhook_delivery", spy_update)
+    monkeypatch.setattr(store, method, boom)
+    with pytest.raises(WebsetStoreError) as excinfo:
+        mod.redeliver_webhook(store, delivery, now=_T0)
+
+    assert excinfo.value.code == code
+    assert updates == []  # no exhaustion, no in-place update
+    assert store.get_webhook_delivery(webhook.webhook_id, event.id) == delivery
+    assert store.list_due_webhook_deliveries(now=_T0) == [delivery]
+
+
+@pytest.mark.unit
+def test_redeliver_ledger_update_error_propagates_and_does_not_exhaust(monkeypatch, tmp_path):
+    """A ledger write fault escapes to the caller's containment, row unchanged."""
+    store = _store(tmp_path)
+    webset = _webset(store)
+    event = _event(store, webset.id)
+    webhook = _webhook(store, webset.id, _URL_GOOD)
+    _record_failed(store, webhook.webhook_id, event.id)
+    delivery = _delivery(store, webhook.webhook_id, event.id)
+
+    _patch_transport(monkeypatch, lambda request: httpx.Response(200))
+
+    def boom(*args, **kwargs):
+        raise WebsetStoreError("ledger locked", code="store_locked")
+
+    monkeypatch.setattr(store, "update_webhook_delivery", boom)
+    with pytest.raises(WebsetStoreError) as excinfo:
+        mod.redeliver_webhook(store, delivery, now=_T0)
+
+    assert excinfo.value.code == "store_locked"
+    # The row keeps attempts=0/next_attempt_at=None: still due, never exhausted.
+    assert store.get_webhook_delivery(webhook.webhook_id, event.id) == delivery
+    assert store.list_due_webhook_deliveries(now=_T0) == [delivery]

@@ -41,12 +41,14 @@ loop (``websets/driver.py``). It rebuilds the byte-identical
 through the same :func:`_attempt_delivery` core (the in-call 3-attempt/5s-25s
 backoff is preserved), always signing with the webhook's *current* secret so a
 retry after rotation is accepted under the 24h overlap. Retries are bounded —
-``_WEBHOOK_REDELIVERY_ATTEMPTS`` attempts on the pinned
-``_WEBHOOK_REDELIVERY_BACKOFF_S`` ladder — and each outcome updates the same
-ledger row in place; an exhausted row keeps a terminal failed row that the due
-selector never offers again. :func:`deliver_webhook`'s one-shot semantics are
-unchanged (its "a recorded terminal failure is final" contract governs the
-append path; re-delivery is the loop explicitly driving failed rows).
+five timed attempts (``_WEBHOOK_REDELIVERY_ATTEMPTS``) stepping the full pinned
+``_WEBHOOK_REDELIVERY_BACKOFF_S`` ladder (300/1800/7200/21600 seconds, so the
+fifth failure terminates the row ≈8h35m after the first) — and each outcome
+updates the same ledger row in place; an exhausted row keeps a terminal failed
+row that the due selector never offers again. :func:`deliver_webhook`'s
+one-shot semantics are unchanged (its "a recorded terminal failure is final"
+contract governs the append path; re-delivery is the loop explicitly driving
+failed rows).
 """
 
 from __future__ import annotations
@@ -89,7 +91,10 @@ _DEFAULT_TIMEOUT_S = 10.0
 #: from the ladder while that incremented count stays below
 #: ``_WEBHOOK_REDELIVERY_ATTEMPTS``; the cap-many failure exhausts the row
 #: (``next_attempt_at = None``), which the due selector then never offers again.
-_WEBHOOK_REDELIVERY_ATTEMPTS = 4
+#: The cap sits one past the ladder, so every pinned rung is reachable: attempts
+#: 1..4 arm 300/1800/7200/21600 seconds, and the fifth failure — the only one
+#: with no rung left — terminates the row ≈8h35m after the first.
+_WEBHOOK_REDELIVERY_ATTEMPTS = 5
 _WEBHOOK_REDELIVERY_BACKOFF_S: tuple[float, ...] = (300.0, 1800.0, 7200.0, 21600.0)
 
 #: Stable ledger error for a webhook whose server-generated secret is missing.
@@ -487,13 +492,17 @@ def redeliver_webhook(
     row): success stores ``ok=True``, the status, ``error=None`` and
     ``next_attempt_at=None`` (done). Failure stores ``attempts + 1`` and, while
     that count stays below ``_WEBHOOK_REDELIVERY_ATTEMPTS``, the next due moment
-    from the pinned ladder; at the cap the row is exhausted
-    (``next_attempt_at=None``) and stays a terminal failed ledger row. A
-    webhook/event that is gone, or a webhook that is inactive or no longer
+    from the pinned ladder — the cap is one past its four rungs, so every wait
+    schedules and only the fifth failure exhausts the row
+    (``next_attempt_at=None``); the row then stays a terminal failed ledger row.
+    A webhook/event that is gone, or a webhook that is inactive or no longer
     subscribed, is exhausted once without a POST; a missing secret records the
     fail-closed ``webhook_secret_missing`` outcome exactly like the one-shot
     path (no egress). Store faults other than the not-found lookups propagate
-    to the caller's per-row containment. Returns the updated ledger row.
+    to the caller's per-row containment; an unexpected fault out of the POST
+    core (client construction included) is contained here and recorded as a
+    counted, redacted failed attempt, mirroring :func:`deliver_webhook`.
+    Returns the updated ledger row.
     """
     moment = _as_utc(now or datetime.now(UTC))
     try:
@@ -510,14 +519,23 @@ def redeliver_webhook(
         return _exhaust_delivery(store, delivery, _WEBHOOK_MISSING)
     if not webhook.active or event.type not in webhook.events:
         return _exhaust_delivery(store, delivery, _WEBHOOK_INACTIVE)
-    payload = _delivery_body(event, moment)
-    if not webhook.secret:
-        # Fail closed exactly like the one-shot path: nothing is POSTed (signing
-        # with "" would send an unverifiable request); the attempt is recorded
-        # and the bounded schedule still applies, so the row exhausts on its own.
-        ok, status_code, error = False, None, _SECRET_MISSING
-    else:
-        ok, status_code, error = _attempt_delivery(webhook, payload, timeout_s=timeout_s)
+    try:
+        payload = _delivery_body(event, moment)
+        if not webhook.secret:
+            # Fail closed exactly like the one-shot path: nothing is POSTed
+            # (signing with "" would send an unverifiable request); the attempt
+            # is recorded and the bounded schedule still applies, so the row
+            # exhausts on its own.
+            ok, status_code, error = False, None, _SECRET_MISSING
+        else:
+            ok, status_code, error = _attempt_delivery(webhook, payload, timeout_s=timeout_s)
+    except Exception as exc:  # containment boundary: the fault still costs an attempt
+        # Broad containment mirrors deliver_webhook: a fault out of the payload
+        # build or the POST core (client construction included) is a counted,
+        # redacted failure, never an escape that leaves the row unscheduled and
+        # re-offered forever.
+        ok, status_code = False, None
+        error = redact_error(exc, secret=webhook.secret, target_url=webhook.url)
     attempts = delivery.attempts + 1
     if ok:
         return store.update_webhook_delivery(

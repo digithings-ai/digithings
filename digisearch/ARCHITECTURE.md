@@ -726,11 +726,13 @@ rebuilds the same `{event, webset_id, delivered_at}` body from the stored event
 and reuses the one-shot POST core (3 in-call attempts, 5s/25s backoff) — always
 signing with the webhook's **current** secret, so a retry after rotation lands
 inside the 24h previous-secret overlap. Retries are bounded:
-`_WEBHOOK_REDELIVERY_ATTEMPTS = 4` timed attempts stepping the pinned
-`(300, 1800, 7200, 21600)`-second ladder, and the cap-count failure exhausts the
-row (`next_attempt_at = NULL`), which the due selector never offers again — the
-ledger keeps a terminal failed row. A webhook that is inactive or no longer
-subscribed, or a webhook/event that is gone, is exhausted once with no POST; a
+`_WEBHOOK_REDELIVERY_ATTEMPTS = 5` timed re-deliveries stepping the pinned
+`(300, 1800, 7200, 21600)`-second ladder — the cap sits one past its four
+rungs, so each wait schedules (5m, 30m, 2h, then 6h) and the fifth failure
+exhausts the row (`next_attempt_at = NULL`) ≈8h35m after the first, which the
+due selector never offers again — the ledger keeps a terminal failed row. A
+webhook that is inactive or no longer subscribed, or a webhook/event that is
+gone, is exhausted once with no POST; a
 missing secret records the fail-closed `webhook_secret_missing` outcome. Success
 flips the same ledger row `ok=True` (no new event append, no extra POST outside
 the bounded retry). Rows are processed serially with a per-pass in-flight guard,
@@ -1510,7 +1512,7 @@ no-new-provider discipline as Phase C. One-line responsibilities:
 | `websets/enrich.py` | `enrich_item` (8 typed fields, per-field citations), funding reconciliation (ECB snapshot), entity merge, `company_profile_field` |
 | `websets/runner.py` | `AsyncioRunner` (semaphore 4, per-item containment, semaphore-aware cancellation), `run_webset_async`, `backfill_enrichment`, `schedule_webset_task` + `WEBSET_TASKS` |
 | `websets/driver.py` | Shared in-process driver (`webset_task_lifespan`, `WebsetTaskScheduler`): installs the scheduler seam per install window (first entry to last exit), reference-counted across concurrent invocations — first entry installs + runs the startup-resume union, last exit cancels tracked runs/backfills, and a later window reinstalls + re-resumes; concurrent HTTP/MCP sessions share one install (#4170/#4189); carried by both the FastAPI and FastMCP lifespans; runs the scheduled tick loop (`WEBSET_TICK_SECONDS`, in-process `last_tick`) and the webhook re-delivery loop (`WEBSET_REDELIVERY_SECONDS`, due failed ledger rows) in the same TaskGroup (#4221, #4226) |
-| `websets/events.py` | Event emit helpers, the shared Phase C signing core, `append_event` fan-out through `deliver_webhook` (3 attempts, 5s/25s) + ledger recording, `redeliver_webhook` (bounded 4-attempt re-drive on the pinned backoff ladder, current-secret signing, #4226), public `verify_webhook_signature` |
+| `websets/events.py` | Event emit helpers, the shared Phase C signing core, `append_event` fan-out through `deliver_webhook` (3 attempts, 5s/25s) + ledger recording, `redeliver_webhook` (bounded 5-attempt re-drive stepping the full pinned 5m/30m/2h/6h ladder, current-secret signing, #4226), public `verify_webhook_signature` |
 | `websets/export.py` | `export_json` (per-field citations) and `export_csv` (polars) |
 | `websets/service.py` | The sync facade the HTTP/MCP/orchestrator surfaces call (create/get/items/counts/add_search/add_enrichment/remove/monitors/webhooks/events/cancel/export) + the scheduler seam |
 | `websets/providers/exa_websets.py` | Dormant EXA Pro shim: OSS⇄EXA translation for create/read/refresh, `ExaWebsetsProRequiredError(ExaError)` |

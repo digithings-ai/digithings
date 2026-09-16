@@ -121,8 +121,10 @@ _MAX_ENRICHMENTS = 10
 #: Re-delivery cap, mirrored from ``websets.events._WEBHOOK_REDELIVERY_ATTEMPTS``
 #: (kept in both modules to avoid a store -> events import cycle; a test pins
 #: the equality). A failed row stops being due once ``attempts`` reaches it, so
-#: an exhausted row (``next_attempt_at NULL``) is never offered again.
-_MAX_DELIVERY_ATTEMPTS = 4
+#: an exhausted row (``next_attempt_at NULL``) is never offered again. The cap
+#: sits one past the events ladder's four rungs, so the final 21600s wait is
+#: still offered before a row exhausts.
+_MAX_DELIVERY_ATTEMPTS = 5
 
 _EVENT_KINDS = frozenset(get_args(EventKind))
 _EVENT_ID_RE = re.compile(r"[0-9a-f]{32}")

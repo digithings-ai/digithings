@@ -264,6 +264,9 @@ def test_real_markdown_file_chunking_matches_recorded_fingerprint() -> None:
     Re-recorded at count 111 for #4226 (automated webhook re-delivery paragraph,
     retired deferral entry, and module-map rows in ARCHITECTURE.md) — fixture
     prose only; RecursiveChunker unchanged.
+    Hashes only (count still 111) re-recorded for the #4226 review-fix wave
+    (re-delivery cap/full-ladder wording in ARCHITECTURE.md) — fixture prose
+    only; RecursiveChunker unchanged.
     """
     arch_path = Path(__file__).resolve().parents[2] / "digisearch" / "ARCHITECTURE.md"
     content = arch_path.read_text(encoding="utf-8")
@@ -312,7 +315,7 @@ def test_real_markdown_file_chunking_matches_recorded_fingerprint() -> None:
         "73d141db4779c6b1",
         "3ba5f0d98d67de27",
         "d43b29499a454968",
-        "59eb01f23f62bbb7",
+        "0fdafef266e479fd",
         "4d46ce009fe0a623",
         "bed41ccd5021ddf1",
         "d168142221e6f74f",
@@ -351,7 +354,7 @@ def test_real_markdown_file_chunking_matches_recorded_fingerprint() -> None:
         "367d6f1945838ddd",
         "4187a3ee58add217",
         "85cad0d45c341571",
-        "ad036e7ad0c3a864",
+        "d22113bcc2f23495",
         "3ec5f2b1fce1b494",
         "66ce13f7ba2fafdc",
         "26ca223dcbe8b403",
