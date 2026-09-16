@@ -118,10 +118,7 @@ def test_http_overwrites_body_mcp_servers(monkeypatch: pytest.MonkeyPatch) -> No
 
 @pytest.mark.unit
 def test_parse_mcp_servers_json_keeps_auth_token() -> None:
-    raw = (
-        '[{"id":"linear","url":"https://mcp.linear.app/mcp",'
-        '"auth":"oauth","token":"tok"}]'
-    )
+    raw = '[{"id":"linear","url":"https://mcp.linear.app/mcp","auth":"oauth","token":"tok"}]'
     assert parse_mcp_servers_json(raw) == [
         {
             "id": "linear",
@@ -168,9 +165,7 @@ def test_parse_mcp_servers_json_drops_malformed_auth_header() -> None:
         '"token":"tok","authHeader":"bad header!"}]'
     )
     parsed = parse_mcp_servers_json(raw)
-    assert parsed == [
-        {"id": "datatap", "url": "https://mcp.datatap.example/mcp", "token": "tok"}
-    ]
+    assert parsed == [{"id": "datatap", "url": "https://mcp.datatap.example/mcp", "token": "tok"}]
     assert "authHeader" not in parsed[0]
 
 
@@ -392,4 +387,41 @@ def test_call_prefixed_tool_injects_setup() -> None:
         "semantic",
         {"index_name": "occ_help", "text": "q"},
     )
+    assert out == {"ok": True}
+
+
+@pytest.mark.unit
+def test_mcp_web_search_denied_without_opt_in() -> None:
+    ctx = ToolContext(
+        session_id="s",
+        run_data_dir=None,
+        index_name="default",
+        index_config={},
+        state={},
+        extra_mcp_servers=[{"id": "digisearch", "url": "https://mcp.example/mcp"}],
+        allowed_tool_names=frozenset({"digisearch_web_search"}),
+    )
+    out = execute("digisearch_web_search", {"query": "x"}, ctx)
+    assert isinstance(out, dict)
+    assert out.get("error") == "tool_not_allowed"
+    assert out.get("tool") == "digisearch_web_search"
+
+
+@pytest.mark.unit
+def test_mcp_web_search_allowed_with_opt_in() -> None:
+    ctx = ToolContext(
+        session_id="s",
+        run_data_dir=None,
+        index_name="default",
+        index_config={},
+        state={"enable_web_search": True},
+        extra_mcp_servers=[{"id": "digisearch", "url": "https://mcp.example/mcp"}],
+        allowed_tool_names=frozenset({"digisearch_web_search"}),
+    )
+    with patch(
+        "digigraph.orchestration.mcp_client.call_prefixed_tool",
+        return_value={"ok": True},
+    ) as call:
+        out = execute("digisearch_web_search", {"query": "x"}, ctx)
+    call.assert_called_once()
     assert out == {"ok": True}

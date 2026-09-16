@@ -70,7 +70,9 @@ def apply_web_search_opt_in(
     if enable_web_search:
         # Do not union — only activate a tool the operator already allowlisted.
         return names
-    return frozenset(n for n in names if n != WEB_SEARCH_TOOL_NAME)
+    return frozenset(
+        n for n in names if n != WEB_SEARCH_TOOL_NAME and not n.endswith(f"_{WEB_SEARCH_TOOL_NAME}")
+    )
 
 
 def allowed_tool_names_for_workflow(
