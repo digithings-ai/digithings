@@ -345,7 +345,7 @@ print(r.json()["sharpe_ratio"])`,
     run: {
       compose: "docker compose up -d digisearch",
       standalone: "uvicorn digisearch.server:app",
-      mcp: "digisearch mcp   (FastMCP streamable-http: digisearch_query, digisearch_research_turn)",
+      mcp: "digisearch mcp   (FastMCP streamable-http: semantic, research_turn)",
     },
     env: [
       { name: "CHROMA_PATH", description: "Persistent Chroma directory (activates the Chroma backend)." },
@@ -416,8 +416,8 @@ for hit in r.json()["results"]:
       },
     ],
     mcp: [
-      { name: "digisearch_query", description: "Search documents; returns formatted hits with score + preview." },
-      { name: "digisearch_research_turn", description: "Composite research turn with citations (needs digisearch[agent])." },
+      { name: "semantic", description: "Search documents; returns formatted hits with score + preview." },
+      { name: "research_turn", description: "Composite research turn with citations (needs digisearch[agent])." },
     ],
   },
 

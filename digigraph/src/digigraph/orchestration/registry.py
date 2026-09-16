@@ -200,6 +200,7 @@ def get_tools(
 def execute(name: str, args: dict[str, Any], context: ToolContext) -> str | dict[str, Any]:
     """Dispatch to the handler for the given tool name. Returns handler result (str or dict)."""
     from digigraph.orchestration.mcp_client import call_prefixed_tool, split_prefixed_tool_name
+    from digigraph.orchestration.web_search_tools import WEB_SEARCH_TOOL_NAME
 
     split = split_prefixed_tool_name(name)
     is_extra = bool(
@@ -236,6 +237,14 @@ def execute(name: str, args: dict[str, Any], context: ToolContext) -> str | dict
             ),
         }
     if is_extra and not has_tool(name):
+        if (
+            split is not None
+            and (split[1] == WEB_SEARCH_TOOL_NAME or split[1].endswith(f"_{WEB_SEARCH_TOOL_NAME}"))
+            and not context.state.get("enable_web_search")
+        ):
+            from digigraph.orchestration.web_search_tools import web_search_disabled_payload
+
+            return web_search_disabled_payload(name)
         return call_prefixed_tool(name, args, context.extra_mcp_servers or [])
     _, _, handler, _ = _tools[name]
     return handler(args, context)

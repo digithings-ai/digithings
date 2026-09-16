@@ -66,7 +66,11 @@ const MCP_SCOPED_VARS = new Set([
 // `MCP_EDGE_KEY` gates the Worker's /_stack/mcp/zammad edge path; the stack
 // container's zammad-mcp process reads its own ZAMMAD_API_TOKEN, never this
 // key, so it stays Worker-scoped too.
-const WORKER_SCOPED_VARS = new Set(["MARKET_DATA_ALLOWED_ORIGINS", "MCP_EDGE_KEY"]);
+const WORKER_SCOPED_VARS = new Set([
+  "MARKET_DATA_ALLOWED_ORIGINS",
+  "MCP_EDGE_KEY",
+  "MCP_EDGE_KEYS",
+]);
 
 // Deliberately throws rather than returning an empty match -- a re-indented
 // `envVars = { ... };` (or `Env { ... }`) block must fail loudly, not silently

@@ -402,6 +402,12 @@ def _run_document_rag_path(
         extra_names = extra_tool_names_for_servers(mcp_servers)
         disabled_extra = expand_mcp_disabled_tokens(state.get("disabled_tools"), extra_names)
         live_extra = frozenset(n for n in extra_names if n not in disabled_extra)
+        if not state.get("enable_web_search"):
+            from digigraph.orchestration.web_search_tools import WEB_SEARCH_TOOL_NAME
+
+            live_extra = frozenset(
+                n for n in live_extra if not n.endswith(f"_{WEB_SEARCH_TOOL_NAME}")
+            )
         if disabled_extra and context.allowed_tool_names is None:
             context.allowed_tool_names = frozenset(list_tool_names()) | live_extra
         elif live_extra and context.allowed_tool_names is not None:
