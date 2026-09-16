@@ -584,8 +584,11 @@ def _call_tool_blocking(server: dict[str, str], tool: str, args: dict[str, Any])
     try:
         return _run_async(_call_tool_async(server, tool, args))
     except Exception as exc:
-        log.warning("remote MCP call failed for %s: %s", tool, exc)
-        return {"error": "mcp_call_failed", "tool": tool, "message": str(exc)}
+        detail = str(exc)
+        if isinstance(exc, BaseExceptionGroup):
+            detail = "; ".join(f"{type(e).__name__}: {e}" for e in exc.exceptions)
+        log.warning("remote MCP call failed for %s: %s", tool, detail)
+        return {"error": "mcp_call_failed", "tool": tool, "message": detail}
 
 
 async def _list_tools_async(server: dict[str, str]) -> list[dict[str, Any]]:

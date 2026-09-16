@@ -9,8 +9,15 @@ on the search route, APIs need a digikey JWT (`digisearch:query`, or
 CI pipeline. Auth-exempt on every host is only the shared service allowlist —
 `/health`, `/healthz`, `/metrics`, `/docs`, `/redoc`, `/openapi.json`, plus
 OPTIONS preflights (CORS is enforced separately) — and the Worker-served paths
-`/_stack/meta`, `/v1/market/tickers|closes`, and `/_stack/key/*` (proxied to
-digikey). Secrets only via `npx wrangler secret put` — never commit values.
+`/_stack/meta`, `/v1/market/tickers|closes`, `/_stack/key/*` (proxied to
+digikey), and `/_stack/mcp/zammad/*` (the read-only OCC Zammad MCP, proxied to
+the stack container's :8770; secret-gated — requests must carry
+`x-digi-mcp-key` matching the `MCP_EDGE_KEY` secret or get a fail-closed 401).
+Secrets only via `npx wrangler secret put` — never commit values. Operator
+secrets currently required: `MCP_EDGE_KEY` (edge key for the OCC MCP path; set
+with `printf '%s' "$VALUE" | npx wrangler secret put MCP_EDGE_KEY`; rotate by
+re-putting the secret and updating the `token` in the occ entry of
+`DIGICHAT_EMBED_TENANTS`).
 
 One **multi-process** Cloudflare Container replaces Mac Docker Compose +
 `*.trycloudflare.com` quick tunnels for production digichat.

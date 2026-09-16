@@ -135,7 +135,7 @@ All three adapters (`IBAdapterStub`, `AlpacaAdapterStub`, `QuantConnectAdapterSt
 | `tearsheet_page.py` | Tearsheet HTML page layout + CSS/JS (#1185) |
 | `tearsheet_data.py` | Unified `TearsheetData` schema + `from_pine`/`from_nautilus` adapters; emits the JSON consumed by the React strategy-tearsheet library (`cloudflare/digiquant-web` `/strategies` routes on digiquant.io) |
 | `strategy_aliases.py` | Canonical alias → registry-name map + `resolve_param_spec_name` (SDCA `btc_sdca` → `sdca` for optimize specs) (#1185) |
-| `cli/` | `digiquant backtest | optimize | export | strategy | prices | policy-replay` CLI |
+| `cli/` | `digiquant backtest | optimize | export | strategy | prices | web-search | policy-replay` CLI |
 
 ---
 
@@ -2726,6 +2726,14 @@ separately so research nodes never pay the per-ticker decision-artifact token ta
   (logged; `relaxed_domains: true` on the tool result) before failing (#4086),
   because the hosted `ddgs` provider can only post-filter, not bias, by domain.
   There is no synthesis fallback and no fail-soft flag.
+- Fail-fast web_search pre-flight (#4198): `python -m digiquant web-search healthcheck`
+  (`cli/web_search.py`, backed by `research/data/web_search_health.py`) makes one cheap live
+  probe through the real hub path — fixed minimal query, no domain allowlist, `max_results=1`,
+  short timeout. Healthy means `ok: true` **and** a non-empty result set; anything else exits
+  non-zero with the tool name, endpoint, elapsed seconds and the underlying error. The daily
+  pipeline runs it immediately before the research pipeline (primary gate), and
+  `run_research_then_portfolio` re-checks in-process for research-enabled runs (second line of
+  defence — the deliberate fail-hard exception; #3859 policy unchanged).
 
 ### portfolio (thesis-aware portfolio loop)
 

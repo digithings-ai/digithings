@@ -72,6 +72,12 @@ COPY cloudflare/digithings-stack-cloudflare/container/supervisor/supervisord.con
      /etc/supervisor/conf.d/digithings.conf
 # Rebuild marker: wrangler tags the container image from this Dockerfile, so a
 # context-only change (e.g. entrypoint.sh) must bump this comment to rebuild.
+# Rebuild marker v6 (2026-09-16): forces a full rebuild for digigraph/src-only
+# changes (wrangler caches the build context by Dockerfile hash).
+# Rebuild marker v5 (2026-09-16): bakes the zammad__* tools into the digiproject
+# allowlist (agents.allowed_tools) so digraph exposes them in the OCC chat.
+# Rebuild marker v4 (2026-09-16): ships the mcp 1.9.x transport-security guard so
+# zammad-mcp binds :8770 under supervisord instead of crash-looping.
 # Rebuild marker v3 (2026-09-15): ships the FastMCP 1.9.3-compatible zammad server
 # (no `from __future__ import annotations`); container instances keep their start-time env,
 # so force a fresh image (and with it a fresh instance) when secrets/env must land.
