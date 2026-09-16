@@ -56,6 +56,10 @@ ALLOWLIST = {
     # mirroring tokens.css module accents.
     "cloudflare/digiweb/reference/components/livery-store.ts",
     "cloudflare/digiweb/reference/components/livery-switcher.tsx",
+    # Gloomberb brand mark (#4204): a faithful inline copy of the MIT-licensed
+    # terminal logo — the candlestick gradients are brand hues by definition,
+    # not a palette escape. Decorative; the consuming link carries the label.
+    "cloudflare/dashboard/components/gloomberb-mark.tsx",
 }
 
 TEST_FILE = re.compile(r"(\.test\.|\.spec\.|/__tests__/|/test/)")

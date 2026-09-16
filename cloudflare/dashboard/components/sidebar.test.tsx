@@ -85,7 +85,7 @@ describe('Sidebar', () => {
   });
 
   // The dedicated terminal entry (#4204): a flat external link in the nav's
-  // bottom tools area — label, destination, and new-tab hardening.
+  // bottom tools area — label, destination, new-tab hardening, brand mark.
   it('renders the dedicated Gloomberb Terminal entry', () => {
     const html = renderToStaticMarkup(createElement(Sidebar));
     expect(html).toContain('Gloomberb Terminal');
@@ -94,6 +94,13 @@ describe('Sidebar', () => {
     expect(anchor).toContain('href="https://term.gloom.sh/"');
     expect(anchor).toContain('target="_blank"');
     expect(anchor).toContain('rel="noopener noreferrer"');
+    // The brand mark, decorative, not a generic arrow glyph.
+    const block =
+      html.match(/<a[^>]*data-testid="sidebar-gloomberb-link"[\s\S]*?<\/a>/)?.[0] ?? '';
+    expect(block).toContain('class="gloomberb-mark shrink-0"');
+    expect(block).toContain('viewBox="0 0 512 512"');
+    expect(block).toContain('aria-hidden="true"');
+    expect(block).toContain('gloomberb-mark-green-body');
   });
 
   it('flag off: does not render identity/sign-out chrome', () => {

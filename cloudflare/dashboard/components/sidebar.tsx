@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useEffect, useState } from 'react';
-import { ArrowUpRight, ChevronLeft, ChevronRight, LogOut, Search } from 'lucide-react';
+import { ChevronLeft, ChevronRight, LogOut, Search } from 'lucide-react';
 import {
   GLOOMBERB_TERMINAL_URL,
   Tooltip,
@@ -12,6 +12,7 @@ import {
   TooltipTrigger,
 } from '@digithings/web';
 import { DashboardMark } from '@/components/dashboard-mark';
+import { GloomberbMark } from '@/components/gloomberb-mark';
 import { useAppShell } from '@/components/app-shell-context';
 import SidebarSettings from '@/components/sidebar-settings';
 import { useAuth } from '@/lib/auth-context';
@@ -145,7 +146,7 @@ export default function Sidebar() {
         text-ink-mute hover:text-ink-soft hover:bg-ink/[0.02]
       `}
     >
-      <ArrowUpRight size={18} className="shrink-0" aria-hidden />
+      <GloomberbMark size={18} className="shrink-0" />
       <span className={`qn-sidebar-label ${sidebarCollapsed ? 'md:sr-only' : ''}`}>
         Gloomberb Terminal
       </span>
