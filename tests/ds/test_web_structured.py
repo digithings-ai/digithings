@@ -548,6 +548,70 @@ def test_structured_synthesis_g2_multi_field_fixture_keeps_citations(monkeypatch
     assert data.output["content"] == content
 
 
+# ── structured_synthesis: supplied-pages seam (#4084) ─────────────────────────
+
+
+def test_structured_synthesis_supplied_pages_skips_retrieval(monkeypatch):
+    import digillm.client as digillm_client
+    from digisearch.web import structured as mod
+    from digisearch.web.grounding_models import WebResearchConfig
+
+    def explode(*args: Any, **kwargs: Any) -> None:
+        raise AssertionError("_retrieve_cited must not run when pages are supplied")
+
+    monkeypatch.setattr(mod, "_retrieve_cited", explode)
+    monkeypatch.setattr(mod, "_live", explode)
+    monkeypatch.setattr(mod, "_fetch", explode)
+    monkeypatch.setattr(mod, "_rank", explode)
+    payload = {
+        "content": {"round": "Series A"},
+        "grounding": [
+            {
+                "field": "round",
+                "citations": [{"url": "https://a.com/1", "title": "A"}],
+                "confidence": "high",
+            }
+        ],
+    }
+    pages = [_page("https://a.com/1", "A", markdown="page body")]
+    monkeypatch.setenv("DIGISEARCH_SYNTHESIS_MODEL", "openai/gpt-4o-mini")
+    monkeypatch.setattr(digillm_client, "completion", lambda *a, **k: _synthesis(payload))
+
+    data, usage = mod.structured_synthesis(
+        "q", output_schema={"required": ["round"]}, config=WebResearchConfig(), pages=pages
+    )
+
+    assert data.output["content"] == {"round": "Series A"}
+    assert data.results == [
+        {
+            "title": "A",
+            "url": "https://a.com/1",
+            "snippet": "page body",
+            "score": 0.0,
+            "engine": "",
+        }
+    ]
+    assert data.cost_dollars["breakdown"] == {"searches": 0, "pages_fetched": 0, "llm_calls": 1}
+    assert usage.searches == 0
+    assert usage.pages_fetched == 0
+    assert usage.pages_cited == 1
+    assert usage.llm_calls == 1
+    assert usage.rerank_ms == 0
+    assert usage.total_ms == usage.synthesis_ms
+
+
+def test_structured_synthesis_empty_supplied_pages_fails_hard(monkeypatch):
+    from digisearch.web import structured as mod
+    from digisearch.web.grounding_models import WebResearchError
+
+    monkeypatch.setattr(
+        mod, "_retrieve_cited", lambda q, cfg: pytest.fail("must not retrieve when pages are given")
+    )
+    with pytest.raises(WebResearchError) as excinfo:
+        mod.structured_synthesis("q", output_schema={"required": []}, pages=[])
+    assert "no citable sources" in str(excinfo.value)
+
+
 # ── module discipline pins ────────────────────────────────────────────────────
 
 

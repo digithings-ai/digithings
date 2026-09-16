@@ -3,7 +3,10 @@
 Retrieval reuses the Task 3 seams (``_live`` / ``_fetch`` / ``_rank``) and
 synthesis reuses the landed Task 3/4 monoliths; this module only wires them,
 maps web hits onto the corpus citation shape, and rebuilds the turn's
-results/usage/cost from the hits this branch actually retrieved. Fail-hard:
+results/usage/cost from the hits this branch actually retrieved. Exactly one
+search/fetch/rank round runs per turn (#4084): ``web_retrieve`` stores the
+cited pages as ``web_pages`` and ``web_aggregate`` feeds them back through the
+monoliths' ``pages=`` seam, so synthesis never retrieves again. Fail-hard:
 any :class:`WebResearchError` becomes ``state.error`` plus a failed trace step,
 never a citation-free answer.
 """
@@ -128,7 +131,7 @@ def _formatted_line(rank: int, hit: dict[str, Any]) -> str:
 
 
 def node_web_retrieve(state: ResearchTurnState) -> dict[str, Any]:
-    """Search/fetch/rank the live web; store cited hits plus retrieval usage."""
+    """Search/fetch/rank the live web; store cited hits + pages plus retrieval usage."""
     if state.error:
         return {}
     question = str(state.user_message).strip()
@@ -157,6 +160,7 @@ def node_web_retrieve(state: ResearchTurnState) -> dict[str, Any]:
     usage = finalize_usage(timer, searches=1, pages_fetched=len(pages), pages_cited=len(cited))
     return {
         "web_hits": web_hits,
+        "web_pages": [page.model_dump(mode="json") for page in cited],
         "usage": usage.model_dump(mode="json"),
         "trace": [
             ResearchTurnTraceStep(
@@ -171,18 +175,24 @@ def node_web_retrieve(state: ResearchTurnState) -> dict[str, Any]:
 
 
 def node_web_aggregate(state: ResearchTurnState) -> dict[str, Any]:
-    """Synthesize the grounded answer, then rebuild results/citations/accounting."""
+    """Synthesize from the retrieved pages, then rebuild results/citations/accounting.
+
+    The cited pages come from ``state.web_pages`` (written by
+    :func:`node_web_retrieve`) and are passed to the synthesis monoliths
+    through their ``pages=`` seam — no second search/fetch/rank round.
+    """
     if state.error:
         return {}
     question = str(state.user_message).strip()
     try:
         cfg = resolve_web_config(effort=state.effort, cited_top_n=state.cited_top_n)
+        cited_pages = [FetchedPage.model_validate(page) for page in state.web_pages or []]
         if state.output_schema:
             data, synthesis = structured_synthesis(
-                question, output_schema=state.output_schema, config=cfg
+                question, output_schema=state.output_schema, config=cfg, pages=cited_pages
             )
         else:
-            data, synthesis = grounded_answer(question, config=cfg)
+            data, synthesis = grounded_answer(question, config=cfg, pages=cited_pages)
     except WebResearchError as exc:
         logger.debug("web_aggregate failed: %s", exc)
         return _web_step_failure("web_aggregate", str(exc))

@@ -401,26 +401,50 @@ def verify_grounding(
 
 
 def structured_synthesis(
-    question: str, *, output_schema: dict[str, Any], config: WebResearchConfig | None = None
+    question: str,
+    *,
+    output_schema: dict[str, Any],
+    config: WebResearchConfig | None = None,
+    pages: list[FetchedPage] | None = None,
 ) -> tuple[WebSearchData, TurnUsage]:
     """Run structured web research and return the envelope plus per-turn usage.
 
     Retrieval is the Task 3 chain (``_retrieve_cited``); synthesis is one
     wrapped-schema digillm call whose verified result becomes
-    ``output={"content", "grounding", "text"}``. Raises
-    :class:`WebResearchError` on any dependency failure, zero cited pages, a
-    missing required key, or an unusable model payload. Usage travels as the
-    explicit second tuple element — ``WebSearchData`` is ``extra="ignore"``
-    and drops extras.
+    ``output={"content", "grounding", "text"}``. ``pages`` is the optional
+    pre-retrieved seam: when supplied, ``_retrieve_cited`` is skipped entirely
+    and those pages are the cited set, so usage reports ``searches=0``,
+    ``pages_fetched=0``, ``pages_cited=len(pages)``, ``llm_calls=1``. ``None``
+    runs the retrieval chain unchanged. Raises :class:`WebResearchError` on any
+    dependency failure, zero cited pages, a missing required key, or an
+    unusable model payload. Usage travels as the explicit second tuple
+    element — ``WebSearchData`` is ``extra="ignore"`` and drops extras.
     """
     cfg = config or EFFORT_PRESETS[EffortMode.FAST]
     timer = start_clock()
 
-    # ``_retrieve_cited`` is one opaque block (search + fetch + rank); its
-    # time lands in ``rerank_ms``, the citation-producing stage.
-    started = time.perf_counter()
-    cited, cited_urls = _retrieve_cited(question, cfg)
-    record_stage(timer, "rerank_ms", int((time.perf_counter() - started) * 1000))
+    if pages is not None:
+        cited = list(pages)
+        if not cited:
+            raise WebResearchError(
+                f"web research found no citable sources for {question!r} (0 supplied page(s))"
+            )
+        searches = 0
+        pages_fetched = 0
+        pages_cited = len(cited)
+    else:
+        # ``_retrieve_cited`` is one opaque block (search + fetch + rank); its
+        # time lands in ``rerank_ms``, the citation-producing stage.
+        started = time.perf_counter()
+        cited, cited_urls = _retrieve_cited(question, cfg)
+        record_stage(timer, "rerank_ms", int((time.perf_counter() - started) * 1000))
+        # ``_retrieve_cited`` returns only the ranked pages (fetch-stage totals
+        # and the search-surface score/engine are not re-exposed), so
+        # ``pages_fetched`` counts cited pages and the results rows carry
+        # neutral score/engine.
+        searches = 1
+        pages_fetched = len(cited)
+        pages_cited = len(cited_urls)
 
     started = time.perf_counter()
     content, grounding, text = _synthesize_structured(question, cited, output_schema, cfg)
@@ -430,14 +454,11 @@ def structured_synthesis(
     # even if the synthesizer is replaced.
     _require_required_keys(content, output_schema)
 
-    # ``_retrieve_cited`` returns only the ranked pages (fetch-stage totals and
-    # the search-surface score/engine are not re-exposed), so ``pages_fetched``
-    # counts cited pages and the results rows carry neutral score/engine.
     usage = finalize_usage(
         timer,
-        searches=1,
-        pages_fetched=len(cited),
-        pages_cited=len(cited_urls),
+        searches=searches,
+        pages_fetched=pages_fetched,
+        pages_cited=pages_cited,
         llm_calls=1,
     )
     results: list[dict[str, Any]] = [
@@ -461,6 +482,8 @@ def structured_synthesis(
             "text": text,
         },
         search_type=f"web-{cfg.effort.value}",
-        cost_dollars=estimate_cost(searches=1, pages_fetched=len(cited), llm_calls=1).model_dump(),
+        cost_dollars=estimate_cost(
+            searches=searches, pages_fetched=pages_fetched, llm_calls=1
+        ).model_dump(),
     )
     return data, usage

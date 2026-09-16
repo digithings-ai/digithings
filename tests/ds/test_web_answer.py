@@ -553,6 +553,64 @@ def test_grounded_answer_insufficient_path_keeps_cited_sources(monkeypatch):
     assert usage.llm_calls == 1
 
 
+# ── grounded_answer: supplied-pages seam (#4084) ──────────────────────────────
+
+
+def test_grounded_answer_supplied_pages_skips_retrieval(monkeypatch):
+    from digisearch.web import answer as mod
+    from digisearch.web.grounding_models import WebResearchConfig
+
+    def explode(*args: Any, **kwargs: Any) -> None:
+        raise AssertionError("retrieval seams must not run when pages are supplied")
+
+    monkeypatch.setattr(mod, "_live", explode)
+    monkeypatch.setattr(mod, "_fetch", explode)
+    monkeypatch.setattr(mod, "_rank", explode)
+    supplied = [
+        _page("https://a.com/1", "A", markdown="alpha body"),
+        _page("https://b.com/2", "B"),
+    ]
+    seen: dict[str, Any] = {}
+
+    def fake_synthesize(q: str, pages: list[FetchedPage], cfg: Any) -> tuple[str, dict[str, int]]:
+        seen["pages"] = pages
+        return "answer [1][2]", {"llm_calls": 1}
+
+    monkeypatch.setattr(mod, "_synthesize", fake_synthesize)
+
+    data, usage = mod.grounded_answer("q", config=WebResearchConfig(), pages=supplied)
+
+    assert seen["pages"] == supplied  # the cited set is exactly the supplied pages, in order
+    assert data.output == {"text": "answer [1][2]"}
+    assert [r["url"] for r in data.results] == ["https://a.com/1", "https://b.com/2"]
+    assert data.results[0] == {
+        "title": "A",
+        "url": "https://a.com/1",
+        "snippet": "alpha body",
+        "score": 0.0,
+        "engine": "",
+    }
+    assert data.cost_dollars["breakdown"] == {"searches": 0, "pages_fetched": 0, "llm_calls": 1}
+    assert usage.searches == 0
+    assert usage.pages_fetched == 0
+    assert usage.pages_cited == 2
+    assert usage.llm_calls == 1
+    assert (usage.search_ms, usage.fetch_ms, usage.rerank_ms) == (0, 0, 0)
+    assert usage.total_ms == usage.synthesis_ms
+
+
+def test_grounded_answer_empty_supplied_pages_fails_hard(monkeypatch):
+    from digisearch.web import answer as mod
+    from digisearch.web.grounding_models import WebResearchError
+
+    monkeypatch.setattr(
+        mod, "_synthesize", lambda *a, **k: pytest.fail("must not synthesize without pages")
+    )
+    with pytest.raises(WebResearchError) as excinfo:
+        mod.grounded_answer("q", pages=[])
+    assert "no citable sources" in str(excinfo.value)
+
+
 # ── module discipline pins ────────────────────────────────────────────────────
 
 
