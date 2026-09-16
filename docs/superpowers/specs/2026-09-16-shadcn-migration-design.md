@@ -6,7 +6,7 @@
 > `docs/superpowers/plans/2026-09-16-shadcn-wave-1.md` (to be written).
 
 - **Date:** 2026-09-16
-- **Status:** draft — for owner review (open decisions in §9 must be answered before Wave 1)
+- **Status:** draft — for owner review (Q1 font resolved 2026-09-16: JetBrains Mono; remaining decisions in §9 must be answered before Wave 1)
 - **Owner decision (m0398, verbatim):** "proceed then with this library with
   Shadzian [shadcn]. … I would want to lean on it as much as possible for all
   things from components to elements to animations. I prefer if we just use what
@@ -114,7 +114,7 @@ block — mapping each onto design tokens:
 | `--ring` | accent ring | `color-mix(in srgb, var(--accent) 40%, transparent)` |
 | `--destructive` | `--down` | `#E5533E` (money domain — only for true destructive, not P&L semantics) |
 | `--radius` (+ `--radius-sm/md/lg/xl`) | `0` | all zero (DESIGN.md) |
-| `--font-sans` / `--font-mono` | design mono stack | §9 Q1 decides Geist vs JetBrains |
+| `--font-sans` / `--font-mono` / `--font-display` | **JetBrains Mono** | owner decision 2026-09-16 (§9 Q1): JetBrains Mono ships as the family, weights incl. Light; matches the Lyra preset |
 
 Rules baked in: the block lives inside the existing `@theme inline`; it reads
 **theme/livery vars**, never literal colors except the sanctioned money/diff
@@ -210,7 +210,7 @@ unaffected).
 
 | Risk | Mitigation |
 |---|---|
-| Radix vs Base UI base drift (shadcn default moved to Base UI; both are already deps) | §9 Q2 pins one base in `components.json`; run `shadcn diff` before large adds |
+| Radix vs Base UI base drift (shadcn default moved to Base UI; both are already deps) | **Base UI pinned** (§9 Q2, owner 2026-09-16); whole vendored set re-added on it; run `shadcn diff` before large adds |
 | Bridge fight between shadcn theme block and scoped liveries | exactly one `@theme inline`; test livery switch explicitly in Wave 0 |
 | Regressions in shared sheets break digichat embeds | digichat suites in every wave gate; no edits to chat family css unless required |
 | Copy-paste set grows unmanaged | MANIFEST.json registry added in WS2; `shadcn diff` job in Wave 3+ |
@@ -218,13 +218,22 @@ unaffected).
 
 ## 9. Open decisions (owner input needed before Wave 1)
 
-1. **Font:** keep **Geist Mono** (DESIGN.md shipping choice) or adopt the
-   preset's **JetBrains Mono** everywhere? (Recommend: keep Geist Mono; Lyra
-   supplies geometry/tokens, font stays canon. One-line change either way.)
-2. **Base:** pin shadcn base to **Base UI** (new shadcn default, already a dep
-   at 1.3.0) or stay **Radix** (`radix-ui` 1.6.7, what the 8 vendored files
-   use)? (Recommend: Base UI for the new vendored set — only 8 files to
-   re-add; assistant-ui keeps its own internals regardless.)
+1. **Font — resolved (owner, 2026-09-16):** adopt **JetBrains Mono** as the
+   shipping family: "we could move to JetBrains. It's a pretty popular font
+   lately and it's more in use for terminal. There is a light JetBrains
+   version. It's a big font family, so I'd go to JetBrains for a couple."
+   → `--font-sans`/`--font-mono`/`--font-display` move from Geist Mono to
+   JetBrains Mono; load the weight ramp the design needs (Light for muted/
+   secondary surfaces, Regular body, Medium/Bold chrome and headings); the
+   Lyra preset already assumes this family.
+2. **Base — resolved (owner, 2026-09-16):** pin to **Base UI**, shadcn's
+   default base: "I'd move to base UI if that's what the package uses. I want
+   to try to pin things to what we used to have. I'd rather use the full stack
+   from the package." → `components.json` pins the Base UI base and the whole
+   vendored set is re-added against it (replacing the 8 Radix-era `new-york`
+   files); no mixed bases. Assistant UI keeps its own internals regardless.
+   Implication: `radix-ui` stays only as long as assistant-ui/deps need it;
+   no new Radix primitives from us.
 3. **Blocks first cut:** confirm sidebar, command palette, data table, charts,
    login/OTP for Wave 2–3; anything else ranked above?
 4. **Charts:** confirm shadcn Chart/Recharts for general charts while
