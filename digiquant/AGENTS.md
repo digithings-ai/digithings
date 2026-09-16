@@ -478,7 +478,7 @@ and [`docs/adr/0021-digiquant-supabase-project-topology.md`](../docs/adr/0021-di
 It is the **only** place the `api.gloom.sh` URL/site logic lives — `digifetch`
 stays a generic transport engine (no URLs, no env reads).
 
-- **33 tools, read scope, default ON.** `digifetch_quote`, `digifetch_quotes_batch`,
+- **34 tools, read scope, default ON.** `digifetch_quote`, `digifetch_quotes_batch`,
   `digifetch_price_history`, `digifetch_ticker_financials`, `digifetch_options_chain`,
   `digifetch_sec_filings`, `digifetch_holders`, `digifetch_analyst_research`,
   `digifetch_corporate_actions`, `digifetch_earnings_calendar`,
@@ -491,7 +491,9 @@ stays a generic transport engine (no URLs, no env reads).
   `digifetch_13f_funds`, `digifetch_13f_holdings`, and the #4110 phase-3
   cohort `digifetch_shiller`, `digifetch_proxy_statements`,
   `digifetch_filing_events`, `digifetch_risk_reports`,
-  `digifetch_short_interest`, `digifetch_equity_diagnostic` are registered in
+  `digifetch_short_interest`, `digifetch_equity_diagnostic`, and the #4110
+  phase-4a `digifetch_saved_searches` (`digifetch_transcripts` also gained a
+  `transcript_id` detail mode) are registered in
   `mcp_server.py` (`_maybe_tool`, `READ_SCOPE_TOOLS`) and listed in
   `orchestrator_tools.py`. Keep them read-scope; the family is default-ON behind
   `GLOOMBERB_ENABLED` — only `1`/`true`/`yes`/`on` enable it, and any other value
@@ -615,7 +617,8 @@ stays a generic transport engine (no URLs, no env reads).
   credit conditions (FRED composition over `digifetch_econ_series`), treasury
   auctions (fiscaldata), prediction markets (local model), scanner (websocket).
   See ARCHITECTURE §5 for the full list; the per-transcript detail route
-  (`/cloud/transcripts/{id}`) remains a candidate extension.
+  (`/cloud/transcripts/{id}`) is `digifetch_transcripts`' `transcript_id` mode,
+  and `digifetch_saved_searches` covers `/cloud/search/saved`.
 - **Entitlements (#4110 phase 5).** Every digifetch tool declares exactly one
   entitlement in `data/gloomberb/entitlements.py` (`TOOL_ENTITLEMENTS`):
   `free` (anonymous), `session` (`GLOOMBERB_SESSION_COOKIE` required; without

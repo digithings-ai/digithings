@@ -88,6 +88,7 @@ TOOL_ENTITLEMENTS: dict[str, Entitlement] = {
     "digifetch_ticker_tweets": "session",
     "digifetch_tweet_search": "session",
     "digifetch_short_interest": "session",
+    "digifetch_saved_searches": "session",
     # preview — session required; a free session gets a labeled preview
     "digifetch_equity_diagnostic": "preview",
     # pro — session + Gloomberb Pro; a free session gets pro_required

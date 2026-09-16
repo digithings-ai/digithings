@@ -69,6 +69,8 @@ DIGIFETCH_TOOLS = {
     "digifetch_risk_reports",
     "digifetch_short_interest",
     "digifetch_equity_diagnostic",
+    # coverage expansion (#4110 phase 4a)
+    "digifetch_saved_searches",
 }
 
 #: Tools whose payload carries a term.gloom.sh deep link (one listing).
@@ -449,8 +451,8 @@ def _sweep_handler(request: httpx.Request) -> httpx.Response:
     raise AssertionError(f"unexpected Gloomberb path {path!r}")
 
 
-def test_all_33_tools_registered_in_full_and_read_scope() -> None:
-    assert len(DIGIFETCH_TOOLS) == 33
+def test_all_34_tools_registered_in_full_and_read_scope() -> None:
+    assert len(DIGIFETCH_TOOLS) == 34
     assert DIGIFETCH_TOOLS <= _names()
     assert DIGIFETCH_TOOLS <= _names(scope="read")
 
@@ -1409,6 +1411,7 @@ def test_declared_entitlements_match_the_gate_behavior() -> None:
         "digifetch_ticker_tweets",
         "digifetch_tweet_search",
         "digifetch_short_interest",
+        "digifetch_saved_searches",
     }
 
 
@@ -1513,3 +1516,48 @@ def test_entitlement_note_is_surfaced_in_mcp_and_manifest() -> None:
         assert note in tool.description, name
         assert rows[name].get("entitlement") == expected, name
         assert note in rows[name]["function"]["description"], name
+
+
+def test_transcripts_detail_mode_maps_the_wrapped_payload(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        assert request.url.path == "/cloud/transcripts/t1"
+        return httpx.Response(200, json={"companyName": "Apple Inc."})
+
+    _patch_client(monkeypatch, handler, session_cookie="gloomberb.session_token=test")
+    payload = json.loads(_mcp("digifetch_transcripts")(None, 20, "t1"))
+    row = payload["data"]["transcripts"][0]
+    assert row["id"] == "t1"
+    assert row["company_name"] == "Apple Inc."
+    assert payload["attribution"] == GLOOMBERB_ATTRIBUTION
+    assert "source_url" not in payload
+
+
+def test_saved_searches_without_cookie_is_auth_required_without_request(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    calls: list[int] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        calls.append(1)
+        return _envelope({"searches": []})
+
+    _patch_client(monkeypatch, handler)
+    payload = json.loads(_mcp("digifetch_saved_searches")())
+    assert payload["data"]["code"] == "auth_required"
+    assert calls == []
+    assert payload["attribution"] == GLOOMBERB_ATTRIBUTION
+    assert payload["delay_notice"] == GLOOMBERB_DELAY_NOTICE
+    assert "source_url" not in payload
+
+
+def test_saved_searches_maps_rows_with_a_session(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json={"searches": [{"id": "s1", "name": "AI capex"}]})
+
+    _patch_client(monkeypatch, handler, session_cookie="gloomberb.session_token=test")
+    payload = json.loads(_mcp("digifetch_saved_searches")())
+    assert payload["data"]["searches"][0]["name"] == "AI capex"

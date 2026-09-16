@@ -1,6 +1,6 @@
 # Gloomberb session-cookie runbook (#4099)
 
-Eleven of the 33 `digifetch_*` tools read Gloomberb's session-gated endpoints and
+Twelve of the 34 `digifetch_*` tools read Gloomberb's session-gated endpoints and
 need a Gloomberb session cookie supplied as `GLOOMBERB_SESSION_COOKIE`; the other
 22 are anonymous and keep working with no cookie at all. This runbook covers the
 free-account signup, the cookie extraction, where the cookie is placed per
@@ -10,7 +10,7 @@ is absent. It is a follow-up to #4069 (the family landed in PR #4085).
 ## What happens without the cookie
 
 The absent-cookie path is a **supported state**, not a failure: the 22 free tools
-are unaffected, and the 11 gated tools answer a typed error instead of touching
+are unaffected, and the 12 gated tools answer a typed error instead of touching
 the network.
 
 - **Gated tools return `auth_required` with no HTTP request.** When
@@ -32,20 +32,20 @@ the network.
   cookie is unset, `available_digifetch_tools` drops the session/preview/pro
   tools (and the whole family when the kill switch is off) so a pipeline LLM is
   never handed a tool that can only error (`agent_tools.py:261-292`). The MCP
-  surface registers all 33 and answers the typed error per call.
+  surface registers all 34 and answers the typed error per call.
 
 ## Which tools need it
 
-11 of the 33 `digifetch_*` tools are cookie-gated, each carrying one
-entitlement (`entitlements.py:58-96`), as of 2026-09-16:
+12 of the 34 `digifetch_*` tools are cookie-gated, each carrying one
+entitlement (`entitlements.py:58-97`), as of 2026-09-16:
 
 | Entitlement | Tools |
 |---|---|
-| `session` (8) | `digifetch_holders`, `digifetch_analyst_research`, `digifetch_corporate_actions`, `digifetch_research_search`, `digifetch_statements`, `digifetch_ticker_tweets`, `digifetch_tweet_search`, `digifetch_short_interest` |
+| `session` (9) | `digifetch_holders`, `digifetch_analyst_research`, `digifetch_corporate_actions`, `digifetch_research_search`, `digifetch_statements`, `digifetch_ticker_tweets`, `digifetch_tweet_search`, `digifetch_short_interest`, `digifetch_saved_searches` |
 | `preview` (1) | `digifetch_equity_diagnostic` — a free session still gets a labeled `access="preview"` report instead of a hard gate |
 | `pro` (2) | `digifetch_transcripts`, `digifetch_screener` — a free session is gated with `pro_required` |
 
-The family total is **33 tools, 22 of them free** as of 2026-09-16; a rename or a
+The family total is **34 tools, 22 of them free** as of 2026-09-16; a rename or a
 new gated tool updates this doc in the same change (the repo-level test in
 `tests/scripts/test_gloomberb_session_cookie_runbook.py` fails otherwise).
 
