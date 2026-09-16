@@ -12,10 +12,10 @@
     "hyparquet": "^1"
   },
   "devDependencies": {
-    "@cloudflare/containers": "^0.0.30",
+    "@cloudflare/containers": "^0.3.7",
     "@cloudflare/workers-types": "^4.20250801.0",
     "typescript": "^5.8.0",
     "vitest": "^4.1.0",
-    "wrangler": "^4.28.0"
+    "wrangler": "^4.133.0"
   }
 }
