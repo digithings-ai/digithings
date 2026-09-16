@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { ChevronRight, ArrowUpRight, ExternalLink } from 'lucide-react';
+import { ChevronRight, ArrowUpRight } from 'lucide-react';
 import { gloomberbTickerUrl } from '@digithings/web';
 import type { Position } from '@/lib/types';
 import type { DecisionLogRow } from '@/lib/holdings-decisions';
@@ -195,7 +195,7 @@ export function VehicleExpressionRow({
               data-testid={`gloomberb-link-${ticker}`}
               className="inline-flex items-center gap-1 text-ink-soft hover:text-ink hover:underline focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-accent/50"
             >
-              Open in Gloomberb <ExternalLink size={12} aria-hidden />
+              Open in Gloomberb <ArrowUpRight size={12} aria-hidden />
             </a>
           ) : null}
         </div>
