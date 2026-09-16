@@ -23,13 +23,14 @@ name: "Pipeline: digiquant prices"
 #   * fedprob ingest (pipeline-digiquant.yml) + bitview ingest
 #     (pipeline-digiquant-onchain.yml) — untouched; FEDPROB/* + bitview rows
 #     have no R2 home and the daily pipeline still reads them from Supabase.
+#   * fx-candles → 1h (730d) + 5m (60d) intraday FX candles every 2h
+#     (fx_intraday_observations is the twelve-x trade-grading feed and has no
+#     R2 read path either, so this job stays ungated like fedprob).
 #
 #   PAUSED (`if: run_writers`, re-enable with a manual dispatch + the flag):
-#   * fx-refresh → Yahoo FX daily rows + 1h/5m candles (no R2 read path serves
-#     them and no prod Supabase reader consumes the daily rows; the candles
-#     (fx_intraday_observations, migrations 130/131) are the twelve-x
-#     trade-grading feed and have no R2 home at all. The market-data-refresh
-#     cron keeps the
+#   * fx-refresh → Yahoo FX daily rows (no R2 read path serves them and no prod
+#     Supabase reader consumes the daily rows. The market-data-refresh cron
+#     keeps the
 #     `yahoo__FX/*` R2 generations fresh from vendors for when the read path
 #     lands; rollback serves the frozen rows stale).
 #   * eod-macro fetch-macro (fred,yahoo) → macro rows (FRED readers are R2;
@@ -55,18 +56,20 @@ name: "Pipeline: digiquant prices"
 # -f run_writers=true`, or revert the `run_writers` gates to resume cadence.
 
 # Scheduled price ingest via the migrated digiquant.data.prices
-# package (issue #149, Wave 1 Unit E). Four separate jobs:
+# package (issue #149, Wave 1 Unit E). Five separate jobs:
 #
 #   * intraday  — RETIRED as a writer (#4053; kept as a no-op landing pad so
 #                 the Worker's 15-min dispatch still lands — clock removal is
 #                 a follow-up; same-day opens now live-fetch)
 #   * at-open   — position_events at the 09:30 ET open (13:40 + 14:40 UTC, one gated out)
-#   * fx-refresh — latest Yahoo daily FX candle + 1h/5m candles every 2h through
-#                 the FX week (the candles feed twelve-x trade grading)
+#   * fx-refresh — latest Yahoo daily FX candle every 2h through the FX week
+#                 (paused — writers-stop)
+#   * fx-candles — 1h/5m intraday candles every 2h (the twelve-x grading feed;
+#                 ungated)
 #   * eod-macro — once per weekday at 21:27 UTC, after the close in both ET offsets,
 #                 and because FRED is day-delayed.
 #
-# All four jobs are triggerable manually via workflow_dispatch.
+# All five jobs are triggerable manually via workflow_dispatch.
 #
 # DST (#1775) — every deadline here is an America/New_York wall-clock event (09:30
 # open, 16:00 close) but GitHub cron is fixed UTC, and the offset moves an hour twice
@@ -93,7 +96,7 @@ on:
         type: choice
         options: [intraday, eod-macro, at-open, fx-refresh]
       run_writers:
-        description: 'Run the paused Supabase market-table writers (fetch-macro fred/yahoo, fetch-fx-intraday). Default false = writes stay paused; KEPT steps (calendar sync) always run.'
+        description: 'Run the paused Supabase market-table writers (fetch-macro fred/yahoo). Default false = writes stay paused; KEPT steps (calendar sync + fx-candles) always run.'
         required: false
         default: false
         type: boolean
@@ -162,11 +165,37 @@ jobs:
             --manifest digiquant/src/digiquant/research/config/macro_series.yaml \
             --latest-only \
             --supabase
+
+  fx-candles:
+    name: Refresh intraday FX candles for twelve-x grading
+    # KEPT on cadence — deliberately NOT run_writers-gated like fx-refresh: the
+    # twelve-x grader walks these candles to order stop-vs-target touches, they
+    # have no R2 read path, and pausing them would silently degrade grading to
+    # daily bars. Dispatched every 2h through the FX week via mode=fx-refresh.
+    if: |
+      github.event_name == 'workflow_dispatch' && github.event.inputs.mode == 'fx-refresh'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    concurrency:
+      group: digiquant-fx-candles
+      cancel-in-progress: false
+    env:
+      CORE_SUPABASE_URL: ${{ secrets.CORE_SUPABASE_URL || secrets.SUPABASE_URL }}
+      CORE_SUPABASE_SERVICE_KEY: ${{ secrets.CORE_SUPABASE_SERVICE_KEY || secrets.SUPABASE_SERVICE_ROLE_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+      - name: Install from lockfile
+        run: uv sync --frozen --package digiquant --extra prices
       - name: Upsert Yahoo 1h FX candles (twelve-x grading)
         # fx_intraday_observations (migration 130): the twelve-x grader walks a
         # day's candles to order stop-vs-target touches, which the daily close
-        # cannot express. Gated by the job-level run_writers `if` like the
-        # fetch-macro step above; same CORE_SUPABASE_* env.
+        # cannot express. Ungated on purpose (this job carries no run_writers
+        # `if`); same CORE_SUPABASE_* env as the paused fx-refresh job.
         run: |
           uv run --frozen --no-sync python -m digiquant prices fetch-fx-intraday \
             --supabase
@@ -174,8 +203,7 @@ jobs:
         # The grader prefers the finest interval that covers the window, and 5m
         # depth is <= 60 days — this step keeps recent same-day touch ordering
         # current (migration 131 makes 5m rows coexist with the 1h ones on the
-        # same ts grid), while the 1h step above backstops older windows. Same
-        # run_writers gate + CORE_SUPABASE_* env.
+        # same ts grid), while the 1h step above backstops older windows.
         run: |
           uv run --frozen --no-sync python -m digiquant prices fetch-fx-intraday \
             --interval 5m \

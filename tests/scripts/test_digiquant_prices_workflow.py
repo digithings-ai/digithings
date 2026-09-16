@@ -43,9 +43,10 @@ def test_any_remaining_supabase_market_write_is_run_writers_gated() -> None:
     """No Supabase market write runs on cadence (#4053).
 
     The intraday fetch-quotes writer retired with the stripped job; the market
-    writers that remain (fx-refresh's fetch-macro + fetch-fx-intraday steps and
-    the eod-macro fetch-macro step) are the run_writers-gated paused remainder
-    and must stay gated.
+    writers that remain (fx-refresh's fetch-macro step and the eod-macro
+    fetch-macro step) are the run_writers-gated paused remainder and must stay
+    gated. The intraday candle writer lives in its own ungated fx-candles job —
+    see test_intraday_candles_job_is_ungated.
 
     ``sync-calendar --supabase`` writes ``trading_calendar`` (not a market table)
     and stays on cadence — it is deliberately not matched here.
@@ -53,7 +54,6 @@ def test_any_remaining_supabase_market_write_is_run_writers_gated() -> None:
     spec = _spec()
     market_writers = (
         "fetch-macro",
-        "fetch-fx-intraday",
         "fetch-quotes",
         "compute-technicals",
     )
@@ -68,3 +68,24 @@ def test_any_remaining_supabase_market_write_is_run_writers_gated() -> None:
                     f"{job_name}/{step.get('name')}: ungated Supabase market write "
                     "on cadence (#4053)"
                 )
+
+
+def test_intraday_candles_job_is_ungated() -> None:
+    """fx-candles is KEPT on cadence: the grader's feed has no R2 alternative.
+
+    Unlike the paused fx-refresh job, the candle writes must not carry the
+    run_writers gate — twelve-x grading walks these candles to order
+    stop-vs-target touches, they have no R2 read path, and a paused feed would
+    silently degrade grading to daily bars. Dispatched with the same
+    mode=fx-refresh trigger.
+    """
+    spec = _spec()
+    job = spec["jobs"]["fx-candles"]
+    assert "run_writers" not in str(job.get("if", "")), (
+        "fx-candles must stay ungated (KEPT) — the twelve-x grading feed has no "
+        "R2 alternative (#4231)"
+    )
+    runs = " ".join(str(s.get("run", "")) for s in job.get("steps", []) or [])
+    assert runs.count("fetch-fx-intraday") == 2
+    assert "--interval 5m" in runs
+
