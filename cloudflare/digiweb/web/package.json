@@ -42,7 +42,8 @@
     "./data/subsystems": "./src/data/subsystems.ts"
   },
   "scripts": {
-    "test": "vitest run"
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit"
   },
   "peerDependencies": {
     "@assistant-ui/react": "^0.15.18",
