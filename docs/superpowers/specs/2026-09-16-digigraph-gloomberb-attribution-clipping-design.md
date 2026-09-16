@@ -298,19 +298,30 @@ separately from the raw result (`digillm/src/digillm/client.py:2173-2179`).
 | Scalar string cap | 2,000 chars (unchanged) | `workflow.py:121` |
 | Total record cap | 12,000 chars (unchanged) | `workflow.py:115` |
 | Truncation marker | `"… [truncated]"` (unchanged) | `workflow.py:714` |
-| Truncation preview budget | initial slice `12_000 - 100 - len(json.dumps(attribution))` (`12_000 - 100` when no block is present), then shrunk in 64-char steps until `len(json.dumps(record)) <= 12_000` | new, same cap |
+| Truncation preview budget | initial slice `12_000 - 100 - len(json.dumps(block))` (`12_000 - 100` when no block is present), then shrunk in 64-char steps until `len(json.dumps(record)) <= 12_000` | new, same cap |
+| §7 fit / drop order | enforce the cap on the **merged** record unconditionally; when the full block does not fit, drop `source_url` first, then `delay_notice`, then the block entirely | new |
 | Extraction walk depth / breadth | 3 levels / 64 values per mapping or sequence | new |
 | JSON-parse guard | parse a string only when `'"attribution"' in value` | new |
 | Digichat record value cap | 300 chars (unchanged) | `chat-activity.ts:30,220` |
 | Digichat record cap | 12,000 chars (unchanged) | `chat-activity.ts:40` |
 
-The preview budget accounts for the hoisted block and is enforced on the
+The emitted record is **always** within the total record cap —
+`len(json.dumps(emitted)) <= 12_000` — enforced on the merged record, not only
+inside the pre-existing "clipped payload exceeds 12,000" branch. The cap check
+runs after the §7 block is attached, so a payload that is itself ≤ 12,000 can
+no longer be pushed over the cap by a hoisted block (pre-review, a 11,887-char
+clip plus a 142-char block emitted 12,029 with no `truncated` flag).
+`source_url` is the optional deep link and usually the largest key, so it is
+dropped before `delay_notice`; the canonical attribution string and the delay
+notice (§7's load-bearing strings) are kept while the cap allows, and a block
+that cannot fit at all is dropped in favour of a `{truncated, preview}` record.
+The preview budget accounts for the surviving block and is enforced on the
 **re-serialized record** (`len(json.dumps(...))`), not on the raw preview
 slice: the slice is JSON text whose quote characters escape again when the
 record is serialized, so a slice-only budget can exceed the cap (the plan's
 50-row fixture emits 12,023 chars pre-fix). A record over 12,000 chars would
 be replaced wholesale by digichat's sanitizer (`chat-activity.ts:230-234`),
-dropping the keys; the §7 keys are never trimmed.
+dropping the keys.
 
 ---
 
@@ -379,6 +390,17 @@ Success = all three green plus the digigraph suite unchanged.
   which the plan replaces. The plan pins the total with an assertion. If a
   future cap change breaks the budget, the fallback is to shorten the preview
   further (the cap is on the record, not the preview).
+- **Cap enforced only inside the >12k branch (review finding, fixed).** The
+  first cut ran the budget + shrink loop only when the *clipped payload*
+  exceeded 12,000, so an already-≤-cap payload whose nested §7 block was
+  hoisted after the check emitted 12,029 chars with no `truncated` flag — the
+  front-side re-truncation above, triggered by the fix itself. The check is now
+  unconditional on the merged record, and a pathological block (e.g. a 20k
+  `source_url`) is shed richest-first (§5 drop order) instead of emptying the
+  preview and breaking the shrink loop. Pinned by
+  `test_nested_attribution_on_under_cap_payload_stays_within_the_cap`,
+  `test_pathological_attribution_block_is_dropped_before_the_cap_is_exceeded`,
+  and `test_pathological_attribution_block_with_oversized_payload_keeps_cap`.
 - **Parse cost.** Extraction parses a string only when it contains
   `"attribution"`; Digifetch envelopes append the block last, so large
   payloads pay one `json.loads` of an already-serialized string. If that ever

@@ -75,6 +75,8 @@ from .models import (
     RiskReport,
     RiskReportsResult,
     RiskSummary,
+    SavedSearch,
+    SavedSearchesResult,
     ScreenerResult,
     ScreenerRow,
     SecFiling,
@@ -1023,6 +1025,22 @@ def normalize_transcripts(raw: Any) -> list[Transcript]:
     return [Transcript.model_validate(dict(entry)) for entry in _rows(raw, "calls")]
 
 
+def normalize_transcript_detail(raw: Any, fallback_id: str) -> Transcript:
+    """Map ``/cloud/transcripts/{id}`` to one row (shape probe-pending).
+
+    Accepts a wrapped ``{"transcript": {...}}`` or a bare object; the requested
+    id supplies ``id`` when the payload omits it and a non-mapping payload
+    (unexpected wire shape) still yields a typed row. Unknown fields — the
+    transcript body included — stay extras; nothing is dropped.
+    """
+    payload: Any = raw
+    if isinstance(raw, Mapping) and isinstance(raw.get("transcript"), Mapping):
+        payload = raw["transcript"]
+    merged: dict[str, Any] = dict(payload) if isinstance(payload, Mapping) else {}
+    merged.setdefault("id", fallback_id)
+    return Transcript.model_validate(merged)
+
+
 # ---------------------------------------------------------------------------
 # Coverage-expansion mappers (#4110 phase 2)
 # ---------------------------------------------------------------------------
@@ -1115,6 +1133,20 @@ def normalize_venues(raw: Mapping[str, Any]) -> VenuesResult:
         checked_at=_int_or_none(raw.get("checkedAt")),
         refresh_at=_int_or_none(raw.get("refreshAt")),
         venues=[Venue.model_validate(dict(entry)) for entry in _rows(raw.get("venues"), "venues")],
+    )
+
+
+def normalize_saved_searches(raw: Any) -> SavedSearchesResult:
+    """Map ``/cloud/search/saved`` rows (bare array or a wrapped key).
+
+    The live envelope key is ``searches`` (probe-verified 2026-09-16); ``saved``
+    is retained as an unverified fallback. Unknown row fields stay extras.
+    """
+    payload: Any = raw
+    if isinstance(raw, Mapping):
+        payload = raw.get("searches") or raw.get("saved")
+    return SavedSearchesResult(
+        searches=[SavedSearch.model_validate(dict(entry)) for entry in _rows(payload, "searches")]
     )
 
 
