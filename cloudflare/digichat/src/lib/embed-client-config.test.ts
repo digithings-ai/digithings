@@ -193,6 +193,28 @@ describe("toEmbedClientConfig", () => {
     expect(toEmbedClientConfig(silent.get("example.com")!).pageContext).toBe("silent");
   });
 
+  it("carries reasoning/toolCalls disclosure modes into the client config and bridge features", () => {
+    const registry = parseEmbedTenants(
+      JSON.stringify({
+        "example.com": {
+          slug: "example",
+          backend: { type: "digigraph" },
+          gateMode: "ungated",
+          attribution: false,
+          token: "t",
+          reasoning: "collapsed",
+          toolCalls: "expanded",
+        },
+      }),
+    );
+    const cfg = toEmbedClientConfig(registry.get("example.com")!);
+    expect(cfg.reasoning).toBe("collapsed");
+    expect(cfg.toolCalls).toBe("expanded");
+    const projected = clientConfigFromEmbedTenant(cfg);
+    expect(projected.features.reasoning).toBe("collapsed");
+    expect(projected.features.toolCalls).toBe("expanded");
+  });
+
   it("strips operator MCP URLs from the client projection", () => {
     const cfg = toEmbedClientConfig({
       slug: "datatap",

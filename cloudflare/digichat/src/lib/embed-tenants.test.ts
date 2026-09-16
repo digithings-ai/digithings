@@ -358,6 +358,24 @@ describe("parseEmbedTenants", () => {
     expect(reg.get("example.com")?.gateMode).toBe("trial_form");
   });
 
+  it("accepts reasoning/toolCalls disclosure modes and rejects unknown values", () => {
+    const entry = (keys: Record<string, unknown>) =>
+      JSON.stringify({
+        "example.com": {
+          slug: "example",
+          backend: { type: "digigraph" },
+          gateMode: "turn_limited",
+          token: "t",
+          ...keys,
+        },
+      });
+    const reg = parseEmbedTenants(entry({ reasoning: "collapsed", toolCalls: "expanded" }));
+    expect(reg.get("example.com")?.reasoning).toBe("collapsed");
+    expect(reg.get("example.com")?.toolCalls).toBe("expanded");
+    expect(() => parseEmbedTenants(entry({ reasoning: "open" }))).toThrow(/reasoning/);
+    expect(() => parseEmbedTenants(entry({ toolCalls: "yes" }))).toThrow(/toolCalls/);
+  });
+
   it("throws on an invalid gateMode or theme", () => {
     expect(() =>
       parseEmbedTenants(

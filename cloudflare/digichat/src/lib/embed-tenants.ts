@@ -13,7 +13,7 @@
  */
 
 import type { ActivityDetail } from "@/lib/chat-activity";
-import type { PageContextMode } from "@/lib/deploy-config/schema";
+import type { DisclosureMode, PageContextMode } from "@/lib/deploy-config/schema";
 import {
   defaultThreadSkinForTenant,
   isThreadSkin,
@@ -22,6 +22,12 @@ import {
 } from "@/lib/thread-skins";
 
 const PAGE_CONTEXT_MODES: readonly PageContextMode[] = ["off", "silent", "visible"];
+const DISCLOSURE_MODES: readonly DisclosureMode[] = [
+  "off",
+  "collapsed",
+  "expanded",
+  "locked_open",
+];
 
 /**
  * digichat Node backends: digigraph (digithings stack) or foundry (client Azure).
@@ -105,6 +111,17 @@ export type EmbedTenantConfig = {
    * X-Digi-Enable-Web-Search.
    */
   webSearch?: boolean;
+  /**
+   * Reasoning block disclosure for this tenant's embeds (digichat skin).
+   * "collapsed" (default via deploy config) streams the thinking block and
+   * closes it when the turn finishes; "expanded"/"locked_open" keep it open.
+   */
+  reasoning?: DisclosureMode;
+  /**
+   * Tool-call group disclosure for this tenant's embeds. "expanded" leaves the
+   * called-tools list open by default; "locked_open" also disables collapsing.
+   */
+  toolCalls?: DisclosureMode;
   /** page = full content chrome inside iframe; embed = compact iframe child. */
   layout?: "page" | "embed";
   /**
@@ -326,6 +343,12 @@ function validateEntry(hostKey: string, value: unknown): EmbedTenantConfig {
   if (v.webSearch !== undefined && typeof v.webSearch !== "boolean") {
     throw new Error(`${ctx}: webSearch must be a boolean`);
   }
+  if (v.reasoning !== undefined && !DISCLOSURE_MODES.includes(v.reasoning as DisclosureMode)) {
+    throw new Error(`${ctx}: reasoning must be "off", "collapsed", "expanded", or "locked_open"`);
+  }
+  if (v.toolCalls !== undefined && !DISCLOSURE_MODES.includes(v.toolCalls as DisclosureMode)) {
+    throw new Error(`${ctx}: toolCalls must be "off", "collapsed", "expanded", or "locked_open"`);
+  }
   if (v.attachments !== undefined && typeof v.attachments !== "boolean") {
     throw new Error(`${ctx}: attachments must be a boolean`);
   }
@@ -398,6 +421,12 @@ function validateEntry(hostKey: string, value: unknown): EmbedTenantConfig {
     showLanguageSelector:
       typeof v.showLanguageSelector === "boolean" ? v.showLanguageSelector : undefined,
     webSearch: typeof v.webSearch === "boolean" ? v.webSearch : undefined,
+    reasoning: DISCLOSURE_MODES.includes(v.reasoning as DisclosureMode)
+      ? (v.reasoning as DisclosureMode)
+      : undefined,
+    toolCalls: DISCLOSURE_MODES.includes(v.toolCalls as DisclosureMode)
+      ? (v.toolCalls as DisclosureMode)
+      : undefined,
     attachments: typeof v.attachments === "boolean" ? v.attachments : undefined,
     pageContext: PAGE_CONTEXT_MODES.includes(v.pageContext as PageContextMode)
       ? (v.pageContext as PageContextMode)

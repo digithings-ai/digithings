@@ -740,7 +740,7 @@ const AssistantMessage: FC = () => {
                   <ReasoningRoot
                     variant="ghost"
                     streaming={running}
-                    defaultOpen={running || reasoningMode === "expanded" || locked}
+                    defaultOpen={reasoningMode === "expanded" || locked}
                     {...(locked ? { open: true, onOpenChange: () => {} } : {})}
                   >
                     <ReasoningTrigger active={running} disabled={locked} />

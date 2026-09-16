@@ -13,7 +13,7 @@
 
 import { isFirstPartyEmbedHost } from "@/lib/embed-first-party";
 import { getTenantSuggestionPool } from "@/lib/embed-suggestion-pools";
-import type { PageContextMode } from "@/lib/deploy-config/schema";
+import type { DisclosureMode, PageContextMode } from "@/lib/deploy-config/schema";
 import {
   resolveEmbedTenantByHost,
   type EmbedLlmAccess,
@@ -56,6 +56,10 @@ export type EmbedTenantClientConfig = {
   showLanguageSelector?: boolean;
   /** Tenant allows opt-in web search UI (#3420). Default false. */
   webSearch?: boolean;
+  /** Reasoning block disclosure for this tenant (digichat skin). Omit = deploy default. */
+  reasoning?: DisclosureMode;
+  /** Tool-call group disclosure for this tenant. Omit = deploy default. */
+  toolCalls?: DisclosureMode;
   /** Catalog entries — no MCP URLs */
   tools?: { catalog: Array<{ id: string; default?: boolean; label?: string }> };
   /** Operator MCP ids/labels only */
@@ -133,6 +137,8 @@ export function toEmbedClientConfig(cfg: EmbedTenantConfig): EmbedTenantClientCo
     // an enabled tenant pairs with the default-on user pref before digichat
     // sends X-Digi-Enable-Web-Search.
     webSearch: cfg.webSearch === true,
+    reasoning: cfg.reasoning,
+    toolCalls: cfg.toolCalls,
     tools: cfg.tools,
     mcp: cfg.mcp
       ? {
