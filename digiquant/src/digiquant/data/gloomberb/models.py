@@ -26,6 +26,7 @@ dropped. Input models forbid unknown fields so a typo fails loudly.
 
 from __future__ import annotations
 
+import re
 from datetime import date, datetime, timezone
 from typing import Annotated, Any, Generic, Literal, TypeVar  # score:allow untyped any — wire JSON
 
@@ -273,6 +274,12 @@ DEFAULT_RANGE: Range = "5Y"
 # seconds is year ~5138; today's millisecond timestamps are ~10**12+).
 EPOCH_SECONDS_CEILING = 100_000_000_000
 
+# Strict ISO calendar date (`YYYY-MM-DD`). Shared by the 13F date fields and
+# the #4100 price-history window; a bare pydantic `date` parse is deliberately
+# not trusted, because it also coerces numeric timestamps (1420070400.0 ->
+# 2015-01-01) and midnight datetime strings.
+_ISO_DATE_PATTERN = r"^\d{4}-\d{2}-\d{2}$"
+
 Symbol = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=32)]
 CurrencyCode = Annotated[
     str,
@@ -378,14 +385,69 @@ class QuotesBatchInput(_InputModel):
 
 
 class PriceHistoryInput(_InputModel):
+    """One chart-history read (§5.2 caps, plus the #4100 date window).
+
+    ``range`` is the contract dimension: capped per resolution and rejected
+    (never clamped) outside the table. ``start_date``/``end_date`` are the
+    #4100 widening escape hatch: an explicit ISO window is **mutually
+    exclusive** with ``range`` and bypasses the caps — the client maps it to
+    the probe-verified ``rangeKey=ALL`` + ``startDate``/``endDate`` upstream
+    combination, which serves weekly bars beyond Cloud's declared 5Y (live:
+    610 bars back to 2015-01-05). Only the weekly (``1wk``) window path is
+    probe-verified; intraday windows are allowed but upstream-unverified.
+    Either end may be omitted (open-ended window); the caller's dates bound
+    the read instead of a range key.
+    """
+
     symbol: Symbol
     resolution: Resolution
     # None means "contract default": resolved to 5Y for 1d only. Never clamped.
     range: Range | None = None
+    start_date: date | None = None
+    end_date: date | None = None
     exchange: str | None = None
+
+    @field_validator("start_date", "end_date", mode="before")
+    @classmethod
+    def _only_strict_iso_dates(cls, value: object) -> object:
+        """Accept only ``YYYY-MM-DD`` strings (or a real ``date``).
+
+        Pydantic's bare ``date`` parse would also coerce numeric timestamps
+        (``1420070400.0`` -> 2015-01-01) and midnight datetime strings, which
+        would silently reinterpret a raw-dict caller's window; this gate keeps
+        the contract strict (#4100 review F3).
+        """
+        if value is None:
+            return None
+        if isinstance(value, date) and not isinstance(value, datetime):
+            return value
+        if isinstance(value, str):
+            candidate = value.strip()
+            if re.fullmatch(_ISO_DATE_PATTERN, candidate):
+                return candidate
+        raise ValueError(
+            f"must be an ISO YYYY-MM-DD date string (or date); got {type(value).__name__} {value!r}"
+        )
 
     @model_validator(mode="after")
     def _enforce_resolution_range_caps(self) -> PriceHistoryInput:
+        if self.start_date is not None or self.end_date is not None:
+            if self.range is not None:
+                raise ValueError(
+                    "start_date/end_date and range are mutually exclusive: an "
+                    "explicit date window replaces the range key (the client "
+                    "sends rangeKey=ALL with it)"
+                )
+            if (
+                self.start_date is not None
+                and self.end_date is not None
+                and self.start_date > self.end_date
+            ):
+                raise ValueError(
+                    f"start_date must be on or before end_date "
+                    f"(got {self.start_date.isoformat()} > {self.end_date.isoformat()})"
+                )
+            return self
         cap = RESOLUTION_MAX_RANGE[self.resolution]
         if self.range is None:
             if self.resolution != "1d":
@@ -592,7 +654,7 @@ class ScreenerInput(_InputModel):
 Cusip = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=12)]
 # ISO date only; the upstream answers 500/400 for malformed values such as
 # 2026-6-1, so the contract rejects them before any request.
-DateIso = Annotated[str, StringConstraints(strip_whitespace=True, pattern=r"^\d{4}-\d{2}-\d{2}$")]
+DateIso = Annotated[str, StringConstraints(strip_whitespace=True, pattern=_ISO_DATE_PATTERN)]
 # Live-verified 13F quarter token: 2026Q2 (a dashed 2026-Q2 is rejected upstream).
 Quarter13F = Annotated[
     str,

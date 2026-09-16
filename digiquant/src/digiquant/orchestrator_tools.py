@@ -244,7 +244,12 @@ def build_digifetch_price_history_tool() -> dict[str, Any]:
                 "OHLCV bars for one listing (Gloomberb Cloud). Caps per "
                 "resolution: 5m→1wk, 15m→1mo, 1h→3mo, 1d→5y (default), "
                 "1wk→5y, 1mo→all-time; out-of-contract requests return typed "
-                "invalid_input (never clamped)."
+                "invalid_input (never clamped). For windows beyond the caps "
+                "(e.g. 1wk back to 2015) pass start_date/end_date (ISO "
+                "YYYY-MM-DD, mutually exclusive with range) — the request is "
+                "sent as rangeKey=ALL + startDate/endDate. Only the 1wk "
+                "window is probe-verified; intraday windows are allowed but "
+                "upstream-unverified."
             ),
             "parameters": {
                 "type": "object",
@@ -258,6 +263,17 @@ def build_digifetch_price_history_tool() -> dict[str, Any]:
                         "type": "string",
                         "enum": ["1D", "1W", "1M", "3M", "6M", "1Y", "5Y", "ALL"],
                         "description": "Defaults to 5Y for resolution=1d only",
+                    },
+                    "start_date": {
+                        "type": "string",
+                        "description": (
+                            "ISO YYYY-MM-DD window start; mutually exclusive "
+                            "with range, widens past the resolution cap"
+                        ),
+                    },
+                    "end_date": {
+                        "type": "string",
+                        "description": ("ISO YYYY-MM-DD window end; mutually exclusive with range"),
                     },
                     "exchange": {"type": "string"},
                 },

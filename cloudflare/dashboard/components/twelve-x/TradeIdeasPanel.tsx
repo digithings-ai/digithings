@@ -94,6 +94,11 @@ export function ideaDetailBlocksClass(hasLevels: boolean, hasEvidence: boolean):
 
 export function IdeaDetail({ idea }: { idea: FxTradeIdeaRow }) {
   const { status, riskRewardLabel, levelRows, evidenceRows } = buildIdeaDetailModel(idea);
+  const [openEvidence, setOpenEvidence] = useState<number[]>([]);
+  const toggleEvidenceDetail = (index: number) =>
+    setOpenEvidence((open) =>
+      open.includes(index) ? open.filter((i) => i !== index) : [...open, index],
+    );
   const desks = contributingDesks(idea.citations);
   const showLevels = levelRows.length > 0;
   const showEvidence = evidenceRows.length > 0;
@@ -128,13 +133,42 @@ export function IdeaDetail({ idea }: { idea: FxTradeIdeaRow }) {
           {showEvidence ? (
             <div className="space-y-1">
               <p className="text-[11px] text-ink-soft">Market evidence</p>
-              {evidenceRows.map((row) => (
+              {evidenceRows.map((row, index) => (
                 <div
-                  key={row.statement}
-                  className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5 text-[11px]"
+                  key={`${index}-${row.instrument}-${row.statement}`}
+                  className="space-y-0.5 text-[11px]"
                 >
-                  <span className={row.className}>{row.statement}</span>
-                  <span className="font-mono text-[10px] text-ink-mute">{row.stance}</span>
+                  <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
+                    <ProvenanceChip label={`${row.sourceLabel} · ${row.instrument}`} />
+                    <span className={row.className}>{row.summary}</span>
+                    <span className="font-mono text-[10px] text-ink-mute">{row.stance}</span>
+                    {row.detail ? (
+                      <span
+                        role="button"
+                        tabIndex={0}
+                        className="cursor-pointer font-mono text-[10px] text-ink-mute underline decoration-dotted hover:text-accent"
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          toggleEvidenceDetail(index);
+                        }}
+                        onKeyDown={(event) => {
+                          if (event.key === 'Enter' || event.key === ' ') {
+                            event.preventDefault();
+                            event.stopPropagation();
+                            toggleEvidenceDetail(index);
+                          }
+                        }}
+                        aria-expanded={openEvidence.includes(index)}
+                      >
+                        {openEvidence.includes(index) ? 'hide detail' : 'detail'}
+                      </span>
+                    ) : null}
+                  </div>
+                  {row.detail && openEvidence.includes(index) ? (
+                    <p className="font-mono text-[10px] leading-relaxed text-ink-mute">
+                      {row.detail}
+                    </p>
+                  ) : null}
                 </div>
               ))}
             </div>

@@ -630,9 +630,14 @@ def test_overlay_beliefs_fold_skips_when_research_crashes_before_preflight(
         ),
         portfolio=PortfolioGraphDeps(),
     )
-    with patch(
-        "digiquant.portfolio.chain.build_research_graph",
-        return_value=_BoomResearchGraph(),
+    with (
+        # #4198: stub the fail-hard web_search pre-flight gate; this test pins the
+        # overlay beliefs-fold skip when research crashes, not the live search probe.
+        patch("digiquant.portfolio.chain._guard_web_search_health", lambda: None),
+        patch(
+            "digiquant.portfolio.chain.build_research_graph",
+            return_value=_BoomResearchGraph(),
+        ),
     ):
         run_research_then_portfolio(
             research_input=ResearchInput(run_date=_RUN),

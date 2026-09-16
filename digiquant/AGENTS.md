@@ -506,7 +506,10 @@ stays a generic transport engine (no URLs, no env reads).
 - **Enrichment only, never a pipeline primary.** 15-minute free-tier delay, rate
   limits, and the §5.2 caps (5m→1wk … 1wk→5y, 1mo→all-time) disqualify Cloud as a
   source of record. Contract violations are **rejected** (`invalid_input`), never
-  clamped. Do not rewire prices/history/technicals onto it.
+  clamped. `digifetch_price_history`'s explicit `start_date`/`end_date` window
+  (ISO `YYYY-MM-DD`, mutually exclusive with `range`, #4100) widens history reads
+  past the caps by sending `rangeKey=ALL` + `startDate`/`endDate`; the
+  delay/rate limits still stand. Do not rewire prices/history/technicals onto it.
 - **Envelope contract.** Every call returns `DigifetchEnvelope[T]` with `data`
   either the payload or a typed `DigifetchError` (`auth_required` / `pro_required` /
   `not_found` / `rate_limited` / `upstream_error` / `invalid_input`); tools never raise. Keep the
