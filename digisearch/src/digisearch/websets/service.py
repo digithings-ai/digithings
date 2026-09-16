@@ -17,9 +17,10 @@ The facade never opens an ``asyncio`` task itself (bare ``asyncio.create_task``
 is banned, § Async lifecycle — the server lifespan owns the TaskGroup and the
 ``WEBSET_TASKS`` registry). Instead:
 
-- :class:`WebsetScheduler` is the process-level seam the server lifespan installs
-  once (``set_scheduler``); the default is a logging no-op so offline callers —
-  tests, CLI, scripts — can drive runs explicitly via
+- :class:`WebsetScheduler` is the process-wide seam the serving lifespan
+  installs once per invocation (``set_scheduler``: HTTP serving window, MCP
+  client session, or MCP process — #4170/#4189); the default is a logging no-op
+  so offline callers — tests, CLI, scripts — can drive runs explicitly via
   ``runner.run_webset_async`` / ``runner.backfill_enrichment``.
 - ``create_webset`` / ``add_search`` / ``trigger_monitor`` call
   ``schedule_run``; ``add_enrichment`` calls ``schedule_backfill`` (the def is

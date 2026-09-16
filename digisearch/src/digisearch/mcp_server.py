@@ -23,6 +23,7 @@ from digisearch.research_search import search_strategies as _search_strategies_i
 from digisearch.search._stub import query_index
 from digisearch.web_search.models import summarize_validation_error
 from digisearch.websets import service as websets_service
+from digisearch.websets.driver import webset_task_lifespan
 from digisearch.websets.export import export_csv, export_json
 from digisearch.websets.models import VerificationState
 from digisearch.websets.service import WebsetServiceError
@@ -35,6 +36,7 @@ logger = logging.getLogger(__name__)
 mcp = FastMCP(
     "digisearch",
     json_response=True,
+    lifespan=webset_task_lifespan,
 )
 
 DIGISEARCH_INDEX = os.environ.get("DIGISEARCH_INDEX", "default")
@@ -427,8 +429,12 @@ def websets_create(
     poll ``websets_get`` / ``websets_events`` until ``idle``, then
     ``websets_export``. ``criteria_json`` is a JSON array of ``{name, rule}``
     (1-5 rules); ``enrichments_json`` is a JSON array of ``{name, type, ...}``.
-    Runs are driven by the HTTP service's scheduler, so in an MCP-only process
-    the created webset stays ``running`` until an HTTP process resumes it.
+    The MCP server drives its own runs through the shared in-process driver
+    (same service facade, runner, and ``WEBSET_TASKS`` registry as the HTTP
+    lifespan), so the webset settles without an HTTP process (#4170). The
+    driver is installed for the MCP client session on streamable-http (for the
+    process on stdio); overlapping streamable-http sessions are tracked in
+    https://github.com/digithings-ai/digithings/issues/4189.
     """
     store = _webset_store_or_none()
     if store is None:
@@ -484,8 +490,9 @@ def websets_add_search(webset_id: str, query: str, count: int = 10) -> str:
 
     Returns JSON ``{"id", "object", "status"}`` for the new search; the refresh
     is observed through the webset's new search row + events. The refresh is
-    driven by the HTTP service's scheduler, so in an MCP-only process it stays
-    ``running`` until an HTTP process resumes it.
+    driven by the shared in-process driver, so it settles without an HTTP
+    process (#4170); the install lasts per MCP client session on
+    streamable-http (per process on stdio).
     """
     store = _webset_store_or_none()
     if store is None:
