@@ -99,6 +99,30 @@ def test_v1_web_search_rate_limit_is_retryable(
 
 
 @pytest.mark.unit
+def test_v1_web_search_ddgs_ratelimit_is_soft_envelope(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Pin the real incident mode: installed ddgs ``RatelimitException`` -> 200.
+
+    The deployed free ``ddgs`` fallback raised this on 2026-09-15 and escaped as
+    an HTTP 500. ddgs exposes no HTTP response, so the service classifies by
+    exception name; a ddgs rename/refactor must fail here, not silently turn a
+    rate limit into a hard failure (or a 500).
+    """
+    ratelimit = pytest.importorskip("ddgs.exceptions").RatelimitException
+    _down_every_provider(monkeypatch, ratelimit)
+    r = client.post("/v1/web_search", json={"query": "etf flows"})
+    assert r.status_code == 200
+    body = r.json()
+    assert set(body) == {"ok", "error", "retryable", "status_code"}
+    assert body["ok"] is False
+    assert body["retryable"] is True
+    assert body["status_code"] == 429
+    assert "429" in body["error"]
+    assert "RatelimitException" in body["error"]
+
+
+@pytest.mark.unit
 def test_v1_web_search_success_shape_unchanged(
     client: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
