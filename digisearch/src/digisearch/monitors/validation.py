@@ -47,6 +47,15 @@ def watch_config_error(watch: Watch) -> tuple[int, str, str] | None:
             "bridge_exa_unsupported",
             "bridge is OSS-local-only: backend='exa' watches run remote EXA monitors.",
         )
+    if watch.backend == "exa" and watch.answer_mode == "research":
+        # The Phase B research turn is the OSS web branch only; EXA's remote
+        # monitor runs (and reports) its own search shape (#4250).
+        return (
+            _HTTP_UNPROCESSABLE,
+            "research_exa_unsupported",
+            "answer_mode='research' is OSS-local-only: "
+            "backend='exa' watches run remote EXA monitors.",
+        )
     try:
         ZoneInfo(watch.schedule.timezone)
     except (ZoneInfoNotFoundError, ValueError):

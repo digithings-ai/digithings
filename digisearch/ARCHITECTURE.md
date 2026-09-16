@@ -479,7 +479,12 @@ configured and the OSS seam otherwise, and the `backend` a watch declares is
 recorded on each of its runs. A watch may carry a `bridge` target
 (`{"webset_id"}`, #4249): every `ok` run then hands one search generation to
 that Phase D webset in-process, idempotent per run through the websets store's
-ledger (see § Phase D websets). Monitors are off end-to-end for the `datatap`
+ledger (see § Phase D websets). A watch may also set
+`answer_mode="research"` (#4250): the turn becomes the full Phase B research
+turn (OSS-local-only, lazily imported `digisearch[agent]`) and the run carries a
+cited `MonitorDigest` — `ok` then means a digest was produced, with URL novelty
+living only in `results_new`/`dedup_stats` (`effort` applies to research mode
+only). Monitors are off end-to-end for the `datatap`
 workspace: create/update reject it and the tick skips it.
 
 ##### Monitor HTTP routes

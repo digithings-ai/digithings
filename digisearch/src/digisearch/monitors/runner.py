@@ -27,6 +27,15 @@ run idempotent, and this turn is the single retry owner: a bridge failure is
 recorded as a ``BridgeReceipt(ok=False)`` on the returned run — it never flips
 the run's status — so the next ``ok`` run re-attempts the handoff.
 
+Research mode (#4250) swaps the turn: ``answer_mode="research"`` runs the full
+Phase B research turn for the watch query (the optional ``digisearch[agent]``
+layer, lazily imported) and stores a cited ``MonitorDigest`` on the run. The
+turn's hits still flow through the SAME ``dedup_results`` pass (URL identity via
+``normalize_url``), but status semantics diverge by design: ``ok`` means a
+digest was produced — URL novelty for research runs lives only in
+``results_new``/``dedup_stats``, so a fresh digest delivers/bridges even when no
+URL is new. Recall mode is byte-identical to v1.
+
 Fail-hard semantics: any recall exception persists a ``status="failed"`` run
 with ``error=str(exc)`` and re-raises ``MonitorRunError`` carrying the persisted
 ``run_id``. A delivery-enabled run whose stored secret is ``None`` (see
@@ -59,10 +68,17 @@ from zoneinfo import ZoneInfo
 from digiclaw.cron import parse_cron
 
 from digisearch.monitors.dedup import dedup_results
-from digisearch.monitors.models import BridgeReceipt, DeliveryReceipt, MonitorRun, Watch
+from digisearch.monitors.models import (
+    BridgeReceipt,
+    DeliveryReceipt,
+    MonitorDigest,
+    MonitorRun,
+    Watch,
+)
 from digisearch.monitors.store import MonitorStore, get_store, new_ulid
 from digisearch.monitors.validation import DATATAP_WORKSPACE_ID
 from digisearch.web_exa import ExaSearchType, WebSearchData, exa_search, is_exa_configured
+from digisearch.web_search.citation import Citation, normalize_url
 from digisearch.web_search.models import WebSearchRequest, WebSearchResponse
 from digisearch.web_search.service import search_web
 
@@ -124,15 +140,19 @@ def run_watch(
     exa_configured = is_exa_configured()
     query_snapshot = _query_snapshot(watch, exa_configured=exa_configured)
 
+    digest: MonitorDigest | None = None
     try:
-        data = _invoke_shallow_recall(
-            query=watch.query,
-            search_type=watch.search_type,
-            num_results=watch.num_results,
-            category=watch.category,
-            include_domains=watch.include_domains,
-            exclude_domains=watch.exclude_domains,
-        )
+        if watch.answer_mode == "research":
+            digest, data = _invoke_research_digest(watch, watch_id=watch_id)
+        else:
+            data = _invoke_shallow_recall(
+                query=watch.query,
+                search_type=watch.search_type,
+                num_results=watch.num_results,
+                category=watch.category,
+                include_domains=watch.include_domains,
+                exclude_domains=watch.exclude_domains,
+            )
     except Exception as exc:
         run = MonitorRun(
             run_id=new_ulid(),
@@ -158,7 +178,12 @@ def run_watch(
     results_new, dedup_stats = dedup_results(
         results_all, store.seen_fingerprints(watch_id), watch.dedup
     )
-    status: _RunStatus = "ok" if results_new else "no_change"
+    if watch.answer_mode == "research":
+        # Divergence by design (#4250): a produced digest is the ok signal;
+        # URL novelty lives only in results_new/dedup_stats.
+        status: _RunStatus = "ok" if digest is not None and digest.answer else "no_change"
+    else:
+        status = "ok" if results_new else "no_change"
 
     error: str | None = None
     deliver_after_persist = status == "ok" and watch.delivery.mode != "poll"
@@ -189,6 +214,7 @@ def run_watch(
         results_new=results_new,
         dedup_stats=dedup_stats,
         cost_dollars=data.cost_dollars,
+        digest=digest,
         error=error,
     )
     store.append_run(run)
@@ -394,6 +420,65 @@ def _oss_response_to_data(resp: WebSearchResponse) -> WebSearchData:
     return WebSearchData(results=[result.model_dump() for result in resp.results])
 
 
+def _invoke_research_digest(watch: Watch, *, watch_id: str) -> tuple[MonitorDigest, WebSearchData]:
+    """Run the Phase B research turn in-process and adapt its output (#4250).
+
+    Always the OSS Phase B web branch (``source="web"``): research mode is
+    OSS-local-only and rejected on EXA watches at the config gate. The turn is
+    the optional ``digisearch[agent]`` layer, so it is imported lazily — a
+    missing extra surfaces as the call raising ImportError inside
+    :func:`run_watch`'s failure path. A turn-reported ``error`` is raised too:
+    a failed turn persists a failed run, never an empty digest.
+    """
+    from digisearch.agent import run_research_turn
+
+    turn = run_research_turn(
+        {
+            "user_message": watch.query,
+            "source": "web",
+            "effort": watch.effort,
+            "index_name": "default",
+            "session_id": f"watch:{watch_id}",
+        }
+    )
+    if turn.get("error"):
+        raise RuntimeError(f"research turn failed: {turn['error']}")
+    web_output = dict(turn.get("web_output") or {})
+    rows = [row for row in (turn.get("results") or []) if isinstance(row, dict)]
+    digest = MonitorDigest(
+        answer=str(web_output.get("text") or "").strip(),
+        citations=_digest_citations(rows),
+        effort=watch.effort,
+    )
+    return digest, WebSearchData(
+        results=[dict(row) for row in rows],
+        output=web_output,
+        cost_dollars=turn.get("cost_dollars"),
+    )
+
+
+def _digest_citations(rows: list[dict[str, Any]]) -> list[Citation]:
+    """Cited hit rows → ``Citation``s, deduped on ``normalize_url`` identity (#4250)."""
+    citations: list[Citation] = []
+    seen: set[str] = set()
+    for row in rows:
+        url = str(row.get("url") or "")
+        if not url:
+            continue
+        identity = normalize_url(url)
+        if identity in seen:
+            continue
+        seen.add(identity)
+        citations.append(
+            Citation(
+                url=url,
+                title=str(row.get("title") or ""),
+                excerpt=str(row.get("snippet") or ""),
+            )
+        )
+    return citations
+
+
 def _oss_clamped_num_results(num_results: int) -> int:
     """Clamp to the landed OSS ``max_results`` bound (R6)."""
     return min(num_results, _OSS_MAX_RESULTS)
@@ -408,7 +493,10 @@ def _query_snapshot(watch: Watch, *, exa_configured: bool) -> dict[str, Any]:
         "recency_days": None,
         "include_domains": list(watch.include_domains),
         "exclude_domains": list(watch.exclude_domains),
+        "answer_mode": watch.answer_mode,
     }
+    if watch.answer_mode == "research":
+        snapshot["effort"] = watch.effort
     if watch.bridge is not None:
         snapshot["bridge"] = {"webset_id": watch.bridge.webset_id}
     if exa_configured:

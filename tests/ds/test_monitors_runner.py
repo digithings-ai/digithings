@@ -288,6 +288,7 @@ def test_run_watch_snapshot_records_oss_clamp(monkeypatch, tmp_path):
         "recency_days": None,
         "include_domains": ["a.com"],
         "exclude_domains": ["b.com"],
+        "answer_mode": "recall",
         "num_results": 10,
         "num_results_clamped_from": 25,
     }
@@ -681,3 +682,144 @@ def test_run_watch_bridge_skipped_without_bridge_or_on_no_change(monkeypatch, tm
     assert second.status == "no_change" and second.bridge is None
     assert plain_run.status == "ok" and plain_run.bridge is None
     assert calls == [("ws_bridge", bridged.watch_id, first.run_id)]
+
+
+# ── research-mode watches (#4250) ────────────────────────────────────────────
+
+
+def _research_turn_stub(monkeypatch, **overrides) -> list[tuple[str, str, str]]:
+    """Patch the Phase B turn import; return recorded (query, effort, session) calls."""
+    turn: dict = {
+        "error": None,
+        "results": [
+            {
+                "url": "https://a.com/1",
+                "title": "A",
+                "snippet": "alpha",
+                "score": 0.9,
+                "engine": "searxng",
+                "metadata": {"evidence_tier": "External"},
+            },
+            {"url": "https://b.com/2/", "title": "B", "snippet": "beta"},
+        ],
+        "web_output": {"text": "Synthesized answer [1]."},
+        "cost_dollars": {
+            "total": 0.0,
+            "provider": "web-oss",
+            "breakdown": {"searches": 1, "pages_fetched": 3, "llm_calls": 1},
+            "note": "oss-synthesis; llm spend metered in digillm telemetry, not here",
+        },
+    }
+    turn.update(overrides)
+    calls: list[tuple[str, str, str]] = []
+    import digisearch.agent as agent_mod
+
+    monkeypatch.setattr(
+        agent_mod,
+        "run_research_turn",
+        lambda payload: calls.append(
+            (payload["user_message"], payload["effort"], payload["session_id"])
+        )
+        or turn,
+    )
+    return calls
+
+
+@pytest.mark.unit
+def test_run_watch_research_mode_builds_cited_digest(monkeypatch, tmp_path):
+    from digisearch.monitors import runner as mod
+
+    store = MonitorStore(db_path=str(tmp_path / "m.sqlite3"))
+    watch = _make_watch(store, answer_mode="research", effort="thorough")
+    calls = _research_turn_stub(monkeypatch)
+    monkeypatch.setattr(mod, "deliver", lambda run, watch, **k: [])
+
+    run = mod.run_watch(watch.watch_id, store=store)
+
+    assert run.status == "ok"
+    assert run.digest is not None
+    assert run.digest.answer == "Synthesized answer [1]."
+    assert run.digest.effort == "thorough"
+    assert [c.url for c in run.digest.citations] == ["https://a.com/1", "https://b.com/2/"]
+    assert [c.title for c in run.digest.citations] == ["A", "B"]
+    assert run.digest.citations[1].excerpt == "beta"
+    assert run.query_snapshot["answer_mode"] == "research"
+    assert run.query_snapshot["effort"] == "thorough"
+    assert calls == [("etf flows", "thorough", f"watch:{watch.watch_id}")]
+    assert run.cost_dollars is not None and run.cost_dollars["provider"] == "web-oss"
+    # The digest is built before persist: the stored body carries it.
+    stored = store.get_run(watch.watch_id, run.run_id)
+    assert stored.digest is not None and stored.digest.answer == "Synthesized answer [1]."
+
+
+@pytest.mark.unit
+def test_run_watch_research_mode_ok_on_fresh_digest_without_new_urls(monkeypatch, tmp_path):
+    """Divergence by design: a repeat turn stays ok (digest); URL novelty only dedups."""
+    from digisearch.monitors import runner as mod
+
+    store = MonitorStore(db_path=str(tmp_path / "m.sqlite3"))
+    watch = _make_watch(store, answer_mode="research")
+    _research_turn_stub(monkeypatch)
+    monkeypatch.setattr(mod, "deliver", lambda run, watch, **k: [])
+
+    first = mod.run_watch(watch.watch_id, store=store)
+    second = mod.run_watch(watch.watch_id, store=store)
+
+    assert first.status == "ok" and second.status == "ok"
+    assert second.results_new == []
+    assert second.dedup_stats["unchanged"] == 2
+    assert second.digest is not None and second.digest.answer
+
+
+@pytest.mark.unit
+def test_run_watch_research_mode_failure_persists_failed(monkeypatch, tmp_path):
+    from digisearch.monitors import runner as mod
+
+    store = MonitorStore(db_path=str(tmp_path / "m.sqlite3"))
+    watch = _make_watch(store, answer_mode="research")
+    _research_turn_stub(monkeypatch, error="web_retrieve exploded")
+
+    with pytest.raises(mod.MonitorRunError) as ei:
+        mod.run_watch(watch.watch_id, store=store)
+
+    stored = store.get_run(watch.watch_id, ei.value.run_id)
+    assert stored.status == "failed"
+    assert stored.error is not None and "web_retrieve exploded" in stored.error
+    assert stored.digest is None
+
+
+@pytest.mark.unit
+def test_digest_citations_dedupe_on_normalized_url(monkeypatch, tmp_path):
+    from digisearch.monitors import runner as mod
+
+    store = MonitorStore(db_path=str(tmp_path / "m.sqlite3"))
+    watch = _make_watch(store, answer_mode="research")
+    _research_turn_stub(
+        monkeypatch,
+        results=[
+            {"url": "https://A.com/1", "title": "A", "snippet": "alpha"},
+            {"url": "https://a.com/1/", "title": "A dup", "snippet": "alpha"},
+            {"url": "", "title": "empty"},
+        ],
+    )
+    monkeypatch.setattr(mod, "deliver", lambda run, watch, **k: [])
+
+    run = mod.run_watch(watch.watch_id, store=store)
+
+    assert run.digest is not None
+    assert [c.url for c in run.digest.citations] == ["https://A.com/1"]
+
+
+@pytest.mark.unit
+def test_run_watch_recall_mode_has_no_digest(monkeypatch, tmp_path):
+    from digisearch.monitors import runner as mod
+
+    store = MonitorStore(db_path=str(tmp_path / "m.sqlite3"))
+    watch = _make_watch(store)
+    _stub_pipeline(monkeypatch)
+
+    run = mod.run_watch(watch.watch_id, store=store)
+
+    assert run.digest is None
+    assert run.query_snapshot["answer_mode"] == "recall"
+    assert "effort" not in run.query_snapshot
