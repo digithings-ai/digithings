@@ -44,6 +44,7 @@ from digiquant.data.gloomberb.normalizers import (  # noqa: E402
     normalize_research_hits,
     normalize_research_search,
     normalize_risk_reports,
+    normalize_saved_searches,
     normalize_screener,
     normalize_search_results,
     normalize_sec_documents,
@@ -51,6 +52,7 @@ from digiquant.data.gloomberb.normalizers import (  # noqa: E402
     normalize_shiller,
     normalize_short_interest,
     normalize_statements,
+    normalize_transcript_detail,
     normalize_transcripts,
     normalize_tweets,
     normalize_venues,
@@ -1075,3 +1077,36 @@ def test_normalize_risk_reports_rejects_malformed_payloads() -> None:
         normalize_risk_reports(None, "report")
     with pytest.raises(ValueError):
         normalize_risk_reports({"id": "r1", "ticker": "AAPL"}, "report")
+
+
+def test_normalize_transcript_detail_accepts_wrapped_bare_and_fallback_id() -> None:
+    wrapped = {
+        "transcript": {"id": "t1", "companyName": "Apple Inc.", "callAt": "2026-08-01T16:30:00Z"}
+    }
+    row = normalize_transcript_detail(wrapped, "t1")
+    assert row.id == "t1"
+    assert row.company_name == "Apple Inc."
+    assert row.call_at == "2026-08-01T16:30:00Z"
+
+    bare = normalize_transcript_detail({"companyName": "Apple Inc."}, "t9")
+    assert bare.id == "t9"
+
+    assert normalize_transcript_detail("not-a-mapping", "t2").id == "t2"
+
+    extra = normalize_transcript_detail({"id": "t3", "segments": [{"speaker": "Tim"}]}, "t3")
+    assert extra.model_dump()["segments"] == [{"speaker": "Tim"}]
+
+
+def test_normalize_saved_searches_accepts_wrapped_and_bare_shapes() -> None:
+    wrapped = {"searches": [{"id": "s1", "name": "AI capex", "query": "AI capex"}]}
+    rows = normalize_saved_searches(wrapped)
+    assert rows.searches[0].id == "s1"
+    assert rows.searches[0].name == "AI capex"
+
+    bare = [{"id": "s2", "query": "rates"}]
+    assert normalize_saved_searches(bare).searches[0].query == "rates"
+
+    assert normalize_saved_searches({"saved": []}).searches == []
+    assert normalize_saved_searches(None).searches == []
+    extra = normalize_saved_searches({"searches": [{"id": "s3", "pinned": True}]})
+    assert extra.searches[0].model_dump()["pinned"] is True
