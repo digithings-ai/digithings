@@ -281,9 +281,9 @@ jobs:
           LANGSMITH_API_KEY: ${{ secrets.LANGSMITH_API_KEY }}
           LANGSMITH_PROJECT: digiquant-baseline
           # WP10.1 (#2758): post-H9 immutable shadow allocation JSON under artifacts/
-          # (uploaded below). Export is fail-soft; disable with OLYMPUS_SHADOW_ARTIFACT_MODE=off.
-          OLYMPUS_SHADOW_ARTIFACT_MODE: export
-          OLYMPUS_SHADOW_ARTIFACT_DIR: artifacts
+          # (uploaded below). Export is fail-soft; disable with DIGIQUANT_SHADOW_ARTIFACT_MODE=off.
+          DIGIQUANT_SHADOW_ARTIFACT_MODE: export
+          DIGIQUANT_SHADOW_ARTIFACT_DIR: artifacts
         run: |
           mkdir -p artifacts
           set -o pipefail
@@ -301,7 +301,7 @@ jobs:
             # is identical across these attempts and stays the resume handle, so the attempt
             # number is the only thing that can distinguish them. Exported (not an assignment
             # prefix on CMD) because CMD is invoked through a pipe into `tee`.
-            export OLYMPUS_ATTEMPT="${attempt}"
+            export DIGIQUANT_ATTEMPT="${attempt}"
             CMD=(uv run --frozen --no-sync python -m digiquant.portfolio.chain
                  --cadence daily
                  --run-date "${RUN_DATE}"

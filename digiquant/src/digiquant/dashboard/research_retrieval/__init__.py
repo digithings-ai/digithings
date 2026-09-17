@@ -17,7 +17,7 @@ WP11.2 H5 publish:
 (one base bundle per H5-attempted ticker before the provider call).
 WP11.3 deterministic H6 selection:
 :mod:`digiquant.dashboard.research_retrieval.planner`
-(``H6Selection`` reasons/features/budget; ``OLYMPUS_H6_SELECTION_MODE``).
+(``H6Selection`` reasons/features/budget; ``DIGIQUANT_H6_SELECTION_MODE``).
 WP11.4 bounded H6 missing-fact amendment:
 :mod:`digiquant.dashboard.research_retrieval.h6_amendment`
 (one validated proposal → targeted retrieval → append-only amendment; no generic H6 search).
@@ -33,14 +33,14 @@ WP14.1 role context compiler:
 (``ContextCapsule`` / ``ContextManifest`` / role allowlists; models + compiler only — WP14.2+ wiring).
 WP14.2 blinded H5/H6 context wiring:
 :mod:`digiquant.dashboard.research_retrieval.context_wiring`
-(``OLYMPUS_CONTEXT_COMPILER_MODE`` off|shadow|enforce beside incumbent provider inputs).
+(``DIGIQUANT_CONTEXT_COMPILER_MODE`` off|shadow|enforce beside incumbent provider inputs).
 WP14.3 H7 decision context wiring:
 :mod:`digiquant.dashboard.research_retrieval.h7_decision_context`
 (typed mandate/calibration/contribution/risk/authorization/forecast sections;
 :mod:`digiquant.dashboard.research_retrieval.h7_prerequisites` preflight snapshot).
 WP14.4 drill-down manifest pinning:
 :mod:`digiquant.dashboard.research_retrieval.tools`
-(``OLYMPUS_RETRIEVAL_MANIFEST_MODE`` off|shadow|enforce; pre-call manifest persist +
+(``DIGIQUANT_RETRIEVAL_MANIFEST_MODE`` off|shadow|enforce; pre-call manifest persist +
 WP1 token linkage via :class:`~digiquant.dashboard.research_retrieval.store.RoleRetrievalManifestStore`).
 """
 
@@ -75,7 +75,7 @@ from digiquant.dashboard.research_retrieval.context import (
     role_context_policy_content_hash,
 )
 from digiquant.dashboard.research_retrieval.context_wiring import (
-    OLYMPUS_CONTEXT_COMPILER_MODE_ENV,
+    DIGIQUANT_CONTEXT_COMPILER_MODE_ENV,
     ContextCompilerMode,
     RoleContextWireResult,
     changed_evidence_ids_from_bundle,
@@ -89,7 +89,7 @@ from digiquant.dashboard.research_retrieval.context_wiring import (
     wire_h7_phase_inputs,
 )
 from digiquant.dashboard.research_retrieval.evidence_bundle import (
-    OLYMPUS_EVIDENCE_BUNDLE_WRITER_ENV,
+    DIGIQUANT_EVIDENCE_BUNDLE_WRITER_ENV,
     EvidenceConflict,
     H5EvidenceBundleBuild,
     H5EvidenceFact,
@@ -156,7 +156,7 @@ from digiquant.dashboard.research_retrieval.pin import (
 )
 from digiquant.dashboard.research_retrieval.planner import (
     H6_SELECTION_PROMPT_FORBIDDEN_KEYS,
-    OLYMPUS_H6_SELECTION_MODE_ENV,
+    DIGIQUANT_H6_SELECTION_MODE_ENV,
     AttentionBudgetEstimate,
     AttentionContextManifest,
     AttentionDecision,
@@ -227,7 +227,7 @@ from digiquant.dashboard.research_retrieval.store import (
     role_context_manifest_record_id,
 )
 from digiquant.dashboard.research_retrieval.tools import (
-    OLYMPUS_RETRIEVAL_MANIFEST_MODE_ENV,
+    DIGIQUANT_RETRIEVAL_MANIFEST_MODE_ENV,
     RESEARCH_TOOLS,
     build_research_tool_dispatcher,
     link_manifest_provider_tokens,
@@ -318,10 +318,10 @@ __all__ = [
     "LoadedResearchState",
     "MissingEvidenceField",
     "MissingFactRequest",
-    "OLYMPUS_EVIDENCE_BUNDLE_WRITER_ENV",
-    "OLYMPUS_CONTEXT_COMPILER_MODE_ENV",
-    "OLYMPUS_H6_SELECTION_MODE_ENV",
-    "OLYMPUS_RETRIEVAL_MANIFEST_MODE_ENV",
+    "DIGIQUANT_EVIDENCE_BUNDLE_WRITER_ENV",
+    "DIGIQUANT_CONTEXT_COMPILER_MODE_ENV",
+    "DIGIQUANT_H6_SELECTION_MODE_ENV",
+    "DIGIQUANT_RETRIEVAL_MANIFEST_MODE_ENV",
     "PatchMode",
     "PatchTargetKind",
     "PersistedAttentionDecision",

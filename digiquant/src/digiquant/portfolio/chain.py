@@ -114,7 +114,7 @@ class DiagnosticsDeps:
     attempt: int = 1
 
 
-OUTER_ATTEMPT_ENV = "OLYMPUS_ATTEMPT"
+OUTER_ATTEMPT_ENV = "DIGIQUANT_ATTEMPT"
 
 
 def _outer_attempt() -> int:

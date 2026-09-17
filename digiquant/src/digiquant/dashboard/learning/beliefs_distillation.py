@@ -8,7 +8,7 @@ lessons into a same-date ``documents`` row (``document_key=beliefs``,
 * **short** (default daily) — today's unfolded lessons + yesterday's beliefs body,
   cheap model, tight token budget; empty-lesson days carry prior with one paragraph.
 * **full** — ``refresh_scope=beliefs`` operator rewrite, or unfolded backlog above
-  ``OLYMPUS_BELIEFS_BACKLOG`` (default 20).
+  ``DIGIQUANT_BELIEFS_BACKLOG`` (default 20).
 """
 
 from __future__ import annotations
@@ -80,7 +80,7 @@ class BeliefsBlob(BaseModel):
 
 
 def beliefs_backlog_threshold() -> int:
-    """``OLYMPUS_BELIEFS_BACKLOG`` env override; default 20."""
+    """``DIGIQUANT_BELIEFS_BACKLOG`` env override; default 20."""
     raw = env_lookup(BELIEFS_BACKLOG).strip()
     if not raw:
         return DEFAULT_BELIEFS_BACKLOG
@@ -96,7 +96,7 @@ def resolve_beliefs_fold_mode(
     """Choose short daily fold vs full rewrite.
 
     ``refresh_scope=beliefs`` is the operator full rewrite. An unfolded resolved
-    backlog above ``OLYMPUS_BELIEFS_BACKLOG`` is the additional full-fold trigger
+    backlog above ``DIGIQUANT_BELIEFS_BACKLOG`` is the additional full-fold trigger
     (catch-up after missed daily folds). Every other house invocation is short.
     """
     if refresh_scope == "beliefs":

@@ -150,7 +150,7 @@ def missing_execution_sync_apply_env_names(environ: Mapping[str, str] | None = N
 
 
 def format_execution_sync_not_configured(missing: Sequence[str]) -> str:
-    return "KAIROS_SYNC_NOT_CONFIGURED: " + ", ".join(missing)
+    return "DIGIQUANT_SYNC_NOT_CONFIGURED: " + ", ".join(missing)
 
 
 def load_execution_sync_targets(client: object) -> list[SyncTarget]:
@@ -174,7 +174,7 @@ def _parse_args(argv: list[str] | None) -> argparse.Namespace:
     parser.add_argument(
         "--check",
         action="store_true",
-        help="Exit 2 with KAIROS_SYNC_NOT_CONFIGURED when admin store env is empty",
+        help="Exit 2 with DIGIQUANT_SYNC_NOT_CONFIGURED when admin store env is empty",
     )
     parser.add_argument(
         "--dry-run",

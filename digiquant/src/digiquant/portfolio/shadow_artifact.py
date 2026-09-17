@@ -155,7 +155,7 @@ class ShadowAllocationArtifact(ShadowContractModel):
 
 
 def resolve_shadow_artifact_mode() -> ShadowArtifactMode:
-    """Read ``OLYMPUS_SHADOW_ARTIFACT_MODE``; unknown values fall back to export."""
+    """Read ``DIGIQUANT_SHADOW_ARTIFACT_MODE``; unknown values fall back to export."""
     raw = (
         env_lookup(_SHADOW_ARTIFACT_MODE_ENV, default=ShadowArtifactMode.EXPORT.value)
         .strip()
