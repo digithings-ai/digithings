@@ -7,17 +7,28 @@
  * (name, path, family) is derived from the filesystem + which family page imports
  * the component; the human summary is the component's leading /** *\/ docblock.
  *
- * Run:  node cloudflare/digiweb/scripts/build-manifest.mjs
+ * Run:  node cloudflare/digiweb/scripts/build-manifest.mjs [out.json]
  * No dependencies — plain Node ESM + regex parsing.
  */
 import { readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
-import { dirname, join, relative } from "node:path";
+import { dirname, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const DIGIWEB = dirname(dirname(fileURLToPath(import.meta.url)));
 const REF = join(DIGIWEB, "reference");
 const COMPONENTS = join(REF, "components");
 const APP = join(REF, "app");
+
+/**
+ * Package families — sources under `@digithings/web` that have no reference-app
+ * importer. The gallery proves the shadcn kit with `@digithings/web/ui`, not a
+ * `@/components/*` path, so no page maps it and the reference walk's
+ * `components/ui` skip leaves it unindexed (#4225).
+ */
+const PACKAGE_FAMILIES = [{ dir: join(DIGIWEB, "web", "src", "ui"), family: "ui" }];
+
+/** Output path: MANIFEST.json at the digiweb root unless one is passed (tests). */
+const OUT = resolve(process.argv[2] ?? join(DIGIWEB, "MANIFEST.json"));
 
 /** Recursively list files under `dir` matching `ext`. */
 function walk(dir, ext, out = []) {
@@ -36,11 +47,20 @@ function walk(dir, ext, out = []) {
   return out;
 }
 
-/** Family for each page: app/page.tsx → foundations; app/<fam>/page.tsx → <fam>. */
+/**
+ * Family for each page: app/page.tsx → foundations; app/<fam>/page.tsx → <fam>.
+ *
+ * Next.js route groups — `(gallery)`, `(chatbot)` — are organisational only and
+ * are never a family, so every `(...)` segment is dropped before the first real
+ * segment is read. Without this, `app/(gallery)/<fam>/page.tsx` bucketed all of
+ * the gallery under `(gallery)` (#4225).
+ */
 function pageFamily(pagePath) {
   const rel = relative(APP, pagePath);
-  const dir = dirname(rel);
-  return dir === "." ? "foundations" : dir.split("/")[0];
+  const segments = dirname(rel)
+    .split("/")
+    .filter((s) => s !== "." && !s.startsWith("("));
+  return segments[0] ?? "foundations";
 }
 
 /** Resolve a `@/components/...` import specifier to an absolute component path. */
@@ -124,10 +144,15 @@ function exportNames(src) {
  * component's identity, so match against it and fall back to first-found.
  */
 function primaryName(names, id) {
-  const pascal = id.split("-").map((s) => s.charAt(0).toUpperCase() + s.slice(1)).join("");
+  const pascal = pascalCase(id);
   return (
     names.find((n) => n === pascal) ?? names.find((n) => n.endsWith(pascal)) ?? names[0]
   );
+}
+
+/** `dropdown-menu` → `DropdownMenu`. */
+function pascalCase(id) {
+  return id.split("-").map((s) => s.charAt(0).toUpperCase() + s.slice(1)).join("");
 }
 
 /**
@@ -176,6 +201,28 @@ for (const file of walk(COMPONENTS, ".tsx").sort()) {
   });
 }
 
+// 3. Package families. Indexed one row per source file, named after the file,
+//    with `path` relative to the digiweb root (e.g. web/src/ui/button.tsx).
+for (const { dir, family } of PACKAGE_FAMILIES) {
+  for (const file of walk(dir, ".tsx").sort()) {
+    const base = file.split("/").pop();
+    if (base.endsWith(".test.tsx") || base.endsWith(".d.ts")) continue;
+    const id = base.replace(/\.tsx$/, "");
+    const src = readFileSync(file, "utf8");
+    const names = exportNames(src).filter((n) => /^[A-Z]/.test(n));
+    total += 1;
+    const summary = docSummary(src);
+    if (summary) described += 1;
+    (families[family] ||= []).push({
+      name: primaryName(names, id) ?? pascalCase(id),
+      id,
+      path: relative(DIGIWEB, file),
+      summary,
+      ...(names.length > 1 ? { exports: names } : {}),
+    });
+  }
+}
+
 for (const list of Object.values(families)) list.sort((a, b) => a.id.localeCompare(b.id));
 
 const manifest = {
@@ -186,8 +233,8 @@ const manifest = {
   families: Object.fromEntries(Object.keys(families).sort().map((k) => [k, families[k]])),
 };
 
-writeFileSync(join(DIGIWEB, "MANIFEST.json"), JSON.stringify(manifest, null, 2) + "\n");
+writeFileSync(OUT, JSON.stringify(manifest, null, 2) + "\n");
 console.log(
-  `MANIFEST.json: ${total} components across ${manifest.counts.families} families, ` +
+  `${relative(process.cwd(), OUT)}: ${total} components across ${manifest.counts.families} families, ` +
     `${described} described (${Math.round((described / total) * 100)}% docblock coverage).`,
 );

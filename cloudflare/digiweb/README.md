@@ -29,7 +29,8 @@ surface is assembled from the same tokens, livery, motion laws, and components.
 digiweb is built to be read by coding agents, not just people:
 
 - **[`MANIFEST.json`](MANIFEST.json)** — a machine-readable index of every
-  component in the reference: name, path, family, and a one-line purpose.
+  reference component, plus the `ui` kit sourced from `web/src/ui`: name, path,
+  family, and a one-line purpose.
   Regenerate it with `node scripts/build-manifest.mjs` after adding a component.
 - **[`ASSISTANT_UI_ELEMENTS.md`](ASSISTANT_UI_ELEMENTS.md)** — full assistant-ui
   elements catalog (slug → purpose → `shadcn add` → digichat attach kind). Not
