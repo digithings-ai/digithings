@@ -156,6 +156,7 @@ WEIGHT_PARAM_BY_NAME: dict[str, str] = {
     "adx": "adx_weight",
     "stochastic": "stochastic_weight",
     "vol_regime": "vol_regime_weight",
+    "halving_cycle": "halving_cycle_weight",
 }
 
 # User-facing labels. The fallback (``name.replace("_", " ")``) covers every
@@ -181,6 +182,7 @@ INDICATOR_DISPLAY_NAMES: dict[str, str] = {
     "adx": "ADX (trend strength)",
     "stochastic": "Stochastic %K",
     "vol_regime": "volatility regime (short/long vol ratio)",
+    "halving_cycle": "halving-cycle position",
 }
 
 
@@ -253,6 +255,20 @@ class SdcaCompositeWeights(BaseModel):
     # the objective (dead end #21). Kept as a declared field for
     # provenance/reproducibility only -- not a live candidate.
     vol_regime: float = Field(0.0, ge=0.0)
+    # cos(2*pi*phase) halving-cycle position (calendar-derived, no price/
+    # volume/on-chain input at all -- a structurally different signal class
+    # from every other candidate in this catalog). Cleared Stage 1 solo-
+    # validation 2026-09-18 (scripts/run_halving_cycle_solo_validation.py,
+    # best cycle_length=1317.6d/phase_shift=+0.30, combined=140.42 vs 0.00
+    # noise baseline -- confirmed not an edge-of-grid artifact by widening
+    # the phase-shift grid). Research-only, unvalidated past Stage 1 pending
+    # Stage 2 fixed-baseline reweight. REJECTED at Stage 2
+    # (scripts/run_halving_cycle_stage2_fixed_baseline.py): any positive
+    # weight on top of the fixed baseline monotonically degrades the
+    # objective, same pattern as adx/stochastic/vol_regime (dead end #22).
+    # Kept as a declared field for provenance/reproducibility only -- not a
+    # live candidate.
+    halving_cycle: float = Field(0.0, ge=0.0)
 
     @model_validator(mode="after")
     def _at_least_one_positive(self) -> SdcaCompositeWeights:
@@ -282,6 +298,7 @@ class SdcaCompositeWeights(BaseModel):
             ("adx", self.adx),
             ("stochastic", self.stochastic),
             ("vol_regime", self.vol_regime),
+            ("halving_cycle", self.halving_cycle),
         )
 
     def enabled_extras(self) -> dict[str, float]:
@@ -342,6 +359,7 @@ def composite_weights_from_params(params: Mapping[str, float | int | str]) -> Sd
         adx=float(params.get("adx_weight", 0.0)),
         stochastic=float(params.get("stochastic_weight", 0.0)),
         vol_regime=float(params.get("vol_regime_weight", 0.0)),
+        halving_cycle=float(params.get("halving_cycle_weight", 0.0)),
     )
 
 
@@ -375,6 +393,7 @@ def parse_indicator_weights_json(raw: str) -> SdcaCompositeWeights:
         adx=float(payload.get("adx", 0.0)),
         stochastic=float(payload.get("stochastic", 0.0)),
         vol_regime=float(payload.get("vol_regime", 0.0)),
+        halving_cycle=float(payload.get("halving_cycle", 0.0)),
     )
 
 
