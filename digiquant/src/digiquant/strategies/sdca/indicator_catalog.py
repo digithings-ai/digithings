@@ -153,6 +153,8 @@ WEIGHT_PARAM_BY_NAME: dict[str, str] = {
     "weekly_monthly_rsi": "weekly_monthly_rsi_weight",
     "weekly_monthly_macd": "weekly_monthly_macd_weight",
     "fast_crash_vol": "fast_crash_vol_weight",
+    "adx": "adx_weight",
+    "stochastic": "stochastic_weight",
 }
 
 # User-facing labels. The fallback (``name.replace("_", " ")``) covers every
@@ -175,6 +177,8 @@ INDICATOR_DISPLAY_NAMES: dict[str, str] = {
     "weekly_monthly_rsi": "weekly+monthly RSI",
     "weekly_monthly_macd": "weekly+monthly log-MACD",
     "fast_crash_vol": "fast-crash volatility",
+    "adx": "ADX (trend strength)",
+    "stochastic": "Stochastic %K",
 }
 
 
@@ -226,6 +230,18 @@ class SdcaCompositeWeights(BaseModel):
     # realized-vol z, sign-flipped. Research-only, unvalidated: not yet in
     # EXTRA_INDICATOR_NAMES/settings.json pending the Phase B solo-validation gate.
     fast_crash_vol: float = Field(0.0, ge=0.0)
+    # Wilder-smoothed(40) ADX (trend strength), derived from BTC OHLC high/low
+    # -- the first indicator in this catalog not derived from close alone.
+    # Cleared Stage 1 solo-validation 2026-09-17
+    # (scripts/run_adx_stochastic_solo_validation.py). Research-only,
+    # unvalidated past Stage 1: not yet wired into build_extra_indicators
+    # (no ExtraIndicatorSources high/low plumbing yet) or settings.json
+    # pending Stage 2-4 of the Phase B playbook.
+    adx: float = Field(0.0, ge=0.0)
+    # Stochastic %K(9) (mean-reversion), same OHLC high/low origin as adx.
+    # Cleared Stage 1 solo-validation 2026-09-17. Research-only, unvalidated
+    # past Stage 1 -- see adx's comment above.
+    stochastic: float = Field(0.0, ge=0.0)
 
     @model_validator(mode="after")
     def _at_least_one_positive(self) -> SdcaCompositeWeights:
@@ -252,6 +268,8 @@ class SdcaCompositeWeights(BaseModel):
             ("weekly_monthly_rsi", self.weekly_monthly_rsi),
             ("weekly_monthly_macd", self.weekly_monthly_macd),
             ("fast_crash_vol", self.fast_crash_vol),
+            ("adx", self.adx),
+            ("stochastic", self.stochastic),
         )
 
     def enabled_extras(self) -> dict[str, float]:
@@ -309,6 +327,8 @@ def composite_weights_from_params(params: Mapping[str, float | int | str]) -> Sd
         weekly_monthly_rsi=float(params.get("weekly_monthly_rsi_weight", 0.0)),
         weekly_monthly_macd=float(params.get("weekly_monthly_macd_weight", 0.0)),
         fast_crash_vol=float(params.get("fast_crash_vol_weight", 0.0)),
+        adx=float(params.get("adx_weight", 0.0)),
+        stochastic=float(params.get("stochastic_weight", 0.0)),
     )
 
 
@@ -339,6 +359,8 @@ def parse_indicator_weights_json(raw: str) -> SdcaCompositeWeights:
         weekly_monthly_rsi=float(payload.get("weekly_monthly_rsi", 0.0)),
         weekly_monthly_macd=float(payload.get("weekly_monthly_macd", 0.0)),
         fast_crash_vol=float(payload.get("fast_crash_vol", 0.0)),
+        adx=float(payload.get("adx", 0.0)),
+        stochastic=float(payload.get("stochastic", 0.0)),
     )
 
 
