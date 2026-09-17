@@ -82,6 +82,10 @@ describe("ChatEmbedShell contracts", () => {
     // Curated per-host copy rides into both the iframe URL and the loader.
     expect(src).toContain("Ask about digithings");
     expect(src).toContain("Ask about Online Compliance Center");
+    // The curated copy also rides the iframe URL (?welcome=/?suggestions=).
+    expect(src).toContain('url.searchParams.set("welcome"');
+    expect(src).toContain('url.searchParams.set("suggestions"');
+    expect(src).toContain('welcomeBody=""');
   });
 
   it("keeps the boot overlay transparent so .grain/.glow show through while loading", async () => {

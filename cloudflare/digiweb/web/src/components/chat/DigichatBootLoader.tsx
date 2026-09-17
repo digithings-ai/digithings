@@ -493,6 +493,28 @@ export function DigichatBootLoader({
     [],
   );
 
+  const typingStartedRef = useRef(false);
+
+  // Type from mount; the ready-driven park (handleParked via onParked) keeps
+  // the cube field alive until the embed is ready, then plays the
+  // grid/solid/pop settle. Running the whole settle at mount used to hide the
+  // contour ~280ms in and leave a static mock composer on a cold start.
+  const startTyping = useCallback(() => {
+    if (typingStartedRef.current) return;
+    typingStartedRef.current = true;
+    const schedule = (ms: number, fn: () => void) => {
+      timeoutsRef.current.push(window.setTimeout(fn, ms));
+    };
+    schedule(SETTLE.PLACEHOLDER, () => setPlaceholderTyping(true));
+    schedule(SETTLE.SEND, () => setSendBuilding(true));
+    schedule(SETTLE.WELCOME, () => setWelcomeTyping(true));
+    schedule(SETTLE.CHIPS, () => {
+      setChipsVisible(true);
+      setChipsTyping(true);
+    });
+    schedule(SETTLE.BODY, () => setBodyTyping(true));
+  }, []);
+
   const handleParked = useCallback(() => {
     if (settleStartedRef.current) return;
     settleStartedRef.current = true;
@@ -525,9 +547,9 @@ export function DigichatBootLoader({
     // Type from mount, not from ready: gating the sequence on ready let the
     // host crossfade (ChatEmbedShell, keyed on embedReady) hide the typed
     // welcome + examples before they played -- datatap types during the load.
-    // handleParked is idempotent, so the ready-time finish() -> onParked call
-    // below stays a no-op.
-    handleParked();
+    // The park-driven settle (handleParked via onParked) stays on the ready
+    // edge so the cube contour keeps sweeping through the load.
+    startTyping();
     const observer = new ResizeObserver(() => engine.rebuild());
     observer.observe(wrap);
     return () => {
@@ -535,7 +557,7 @@ export function DigichatBootLoader({
       engine.destroy();
       engineRef.current = null;
     };
-  }, [handleParked, reduced]);
+  }, [startTyping, reduced]);
 
   useEffect(() => {
     if (!ready) return;

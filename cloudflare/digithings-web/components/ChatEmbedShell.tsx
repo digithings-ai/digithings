@@ -42,7 +42,7 @@ export const EMBED_SHELL_COPY: Record<
   [OCC_CHAT_EMBED_HOST]: {
     welcome: "Ask about Online Compliance Center",
     suggestions: [
-      "How do I file a compliance report?",
+      "How do I file a support ticket?",
       "Search the help articles for onboarding",
       "Show my open Zammad tickets",
       "What is our data retention policy?",
@@ -361,6 +361,9 @@ export function ChatEmbedShell({
             // The same strings ride the iframe URL (embedSrc) so the ready
             // hero matches what the loader typed.
             welcome={EMBED_SHELL_COPY[embedHost]?.welcome}
+            // Live tenants carry no welcomeBody, so the ready hero has no body
+            // line; keep the loader silent on it too or the handoff swaps copy.
+            welcomeBody=""
             suggestions={EMBED_SHELL_COPY[embedHost]?.suggestions}
             ready={embedReady}
             onSettled={() => setSequenceDone(true)}
