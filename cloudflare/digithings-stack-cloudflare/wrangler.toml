@@ -210,15 +210,10 @@ DIGISMITH_URL = ""
 # #4053: containers must read the R2 market seam — 127 drops the Supabase tables.
 DIGIQUANT_MARKET_DATA_BACKEND = "r2"
 OPENAI_API_BASE = "http://127.0.0.1:4000/v1"
-DIGI_CONFIG_PATH = "/app/config"
-DIGI_PROJECT_CONFIG = "/app/config/digiproject.yaml"
-# Belt-and-suspenders with digiproject.yaml (research_rag, no backtest agent).
-DIGI_WORKFLOW_PROFILE = "research_rag"
-# Fallback only: tool_policy.py prefers agents.allowed_tools from the baked
-# digiproject.yaml and reads this ONLY when that config fails to load. Keep the
-# two in sync anyway -- a stale value here silently drops a tool on the one path
-# where nothing else can, and the model gets a refusal mid-loop (#2295).
-DIGI_ALLOWED_TOOLS = "digisearch,digivault_search_notes,digivault_get_note"
+# DIGI_CONFIG_PATH / DIGI_PROJECT_CONFIG / DIGI_WORKFLOW_PROFILE / DIGI_ALLOWED_TOOLS are
+# deliberately NOT set here: src/index.ts forwards an explicit envVars whitelist and does
+# not include them, so container/entrypoint.sh's defaults are the live values. Setting them
+# here would be inert (and the old DIGI_ALLOWED_TOOLS value here was stale vs that default).
 DIGI_LLM_MODE = "test"
 CHROMA_PATH = "/data/chroma"
 DIGIVAULT_ROOT = "/data/vault"
