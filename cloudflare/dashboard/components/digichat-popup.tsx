@@ -7,9 +7,9 @@
  *
  * Baseline (free/brief) sees the same launcher but an upgrade CTA panel with
  * chat disabled (#3662) — never an iframe, so non-entitled tiers never burn
- * turns and never meet the free-3 gate. FX Hub product grantees (the 12x
- * invite path) are the exception: they open the chat, with a desk-equivalent
- * plan proof minted server-side.
+ * turns and never meet the free-3 gate. FX Hub-only grantees (the 12x invite
+ * list) see nothing at all: they are not on the DigiQuant pipeline
+ * subscription, so the popup never renders for them.
  */
 
 import { DigichatLauncher } from '@digithings/web';
@@ -104,9 +104,12 @@ export default function DigichatPopup({
     };
   }, [baseConfig, configOverride]);
 
-  // Desk+ opens the iframe; FX Hub product grantees (the 12x invite path) get
-  // the same popup — the server mints a desk-equivalent plan proof for them.
-  const entitled = canUseDigichatPopup(tier) || canFxHub;
+  // Desk+ opens the iframe. FX Hub-only grantees (the 12x invite list) are not
+  // on the DigiQuant pipeline subscription, so they get no launcher at all —
+  // the popup must never appear for them.
+  const tierEntitled = canUseDigichatPopup(tier);
+  const fxHubOnly = canFxHub && !tierEntitled;
+  const entitled = tierEntitled;
   const [open, setOpen] = useState(false);
   const [iframeSrc, setIframeSrc] = useState('');
   const iframeRef = useRef<HTMLIFrameElement>(null);
@@ -244,7 +247,7 @@ export default function DigichatPopup({
     return () => window.removeEventListener('message', onMessage);
   }, [config, iframeSrc, open, sendPageContext, entitled, tier, accessToken]);
 
-  if (!config) return null;
+  if (!config || fxHubOnly) return null;
 
   return (
     <div data-digichat-popup="1" aria-live="polite">
