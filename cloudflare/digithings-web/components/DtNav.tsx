@@ -10,6 +10,7 @@
  */
 import Link from "next/link";
 import { NavShell, GitHubGlyph } from "@digithings/web";
+import { buttonVariants } from "@digithings/web/ui";
 import { Brand, DT_NAV_PRIMARY } from "@/app/_nav";
 import { DigiChatMark } from "@digithings/digichat-ui";
 
@@ -37,7 +38,7 @@ export function DtNav({ autoHide }: { autoHide?: "scroll" | "hover" }) {
         actions={
           <>
             <a
-              className="btn-icon"
+              className={buttonVariants({ variant: "ghost", size: "icon-sm" })}
               href="https://github.com/digithings-ai"
               target="_blank"
               rel="noopener noreferrer"
@@ -46,7 +47,7 @@ export function DtNav({ autoHide }: { autoHide?: "scroll" | "hover" }) {
               <GitHubGlyph />
             </a>
             {/* Desktop twin of the sheet CTA below — same destination, plain
-                wordmark-style link rather than a solid `.btn-primary` pill: next
+                wordmark-style link rather than a solid kit primary-button pill: next
                 to the quiet GitHub glyph and inline links, a filled button read
                 as a bright, standoffish box. `.dc-nav-cta` (globals.css) is
                 just icon + label in the theme's own ink tone, no button chrome.
@@ -54,7 +55,7 @@ export function DtNav({ autoHide }: { autoHide?: "scroll" | "hover" }) {
                 to the hamburger, so narrow viewports keep the sheet button as
                 the only digichat entry. */}
             <Link
-              className="dc-nav-cta max-[880px]:hidden"
+              className="dc-nav-cta max-[880px]:hidden!"
               href="/chat"
               aria-label="Ask digichat"
             >
@@ -64,7 +65,11 @@ export function DtNav({ autoHide }: { autoHide?: "scroll" | "hover" }) {
           </>
         }
         cta={
-          <Link className="btn btn-primary" href="/chat" aria-label="Ask digichat">
+          <Link
+            className={buttonVariants({ variant: "default" })}
+            href="/chat"
+            aria-label="Ask digichat"
+          >
             <DigiChatMark size={18} />
             Ask digichat
           </Link>

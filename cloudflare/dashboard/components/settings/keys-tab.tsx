@@ -14,14 +14,16 @@ import {
   SettingsLoadError,
 } from './settings-load-error';
 import {
+  Alert,
+  AlertDescription,
+  Button,
+  Input,
   Select,
+  SelectContent,
   SelectItem,
-  SelectItemIndicator,
-  SelectPopup,
   SelectTrigger,
   SelectValue,
-} from '@digithings/web';
-import { Alert, AlertDescription, Button, Input } from '@digithings/web/ui';
+} from '@digithings/web/ui';
 
 export type KeysTabProps = {
   api: SettingsApiOptions | null;
@@ -149,14 +151,13 @@ export function KeysTab({
               {(value) => PROVIDERS.find((p) => p.id === value)?.label ?? ''}
             </SelectValue>
           </SelectTrigger>
-          <SelectPopup>
+          <SelectContent>
             {PROVIDERS.map((p) => (
               <SelectItem key={p.id} value={p.id}>
                 {p.label}
-                <SelectItemIndicator />
               </SelectItem>
             ))}
-          </SelectPopup>
+          </SelectContent>
         </Select>
         <Input
           type="password"

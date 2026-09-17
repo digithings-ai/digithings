@@ -127,6 +127,8 @@ Wrong vocabulary causes routing mistakes (wrong component folder, wrong AGENTS.m
 
 The quality bar is **review**, not a self-score. Use `/review` / in-session review / `review-and-ship` and the hatches in [CODE_REVIEW_POLICY.md](docs/agents/CODE_REVIEW_POLICY.md). Those cover security, quality, optimization, and accuracy. Do not use the CodeRabbit Cursor plugin `code-review` skill.
 
+**Every review run produces a review file.** Whatever the venue — `/review`, an in-session or fresh-context review, `review-and-ship`, or a subagent reviewer — write the findings to a durable file so they can be worked through and re-checked: `review-<subject>.md` beside the plan or ledger the review belongs to (for SDD work, `.superpowers/sdd/<plan>/review-*.md`). The file carries the reviewer, the subject (commit/PR), the verdict, severity counts, and file:line evidence. A review that exists only in chat is not review coverage, and findings that cannot be re-read cannot be driven to closure.
+
 `make score` and [`docs/scoring/`](docs/scoring/) remain an optional human/CI tool. Do not treat them as an agent pre-flight or a substitute for review.
 
 **Presentation-only frontend** (`cloudflare/digiweb/design/**`, `**.css`, static marketing pages): iterate on **one branch off `develop`** with a live preview (`.claude/launch.json` dev servers) and open a single PR when the look is approved. `cloudflare/**` is excluded from the optional `score` CI filter. Gates that still apply: gitleaks (secrets), app builds, the digithings deploy build-check. (See #1310.)

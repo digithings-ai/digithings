@@ -1,15 +1,18 @@
 "use client"
 
-// Thin re-export of the shared @digithings/web Label (#1419), pinned to
+// Thin adapter over the canonical kit Label (@digithings/web/ui), pinned to
 // dress="chat" so the rendered look stays exactly digichat's current
 // shadcn-derived dress (incl. the .group data-disabled / .peer:disabled
-// dimming combinators).
+// dimming combinators). The chat tone lives in
+// @digithings/web/styles/controls-core.css (.ctl-label-chat).
 
-import { Label as ControlLabel } from "@digithings/web"
-import type { LabelProps as ControlLabelProps } from "@digithings/web"
+import { Label as KitLabel } from "@digithings/web/ui"
+import type { ComponentProps } from "react"
 
-function Label(props: Omit<ControlLabelProps, "dress">) {
-  return <ControlLabel dress="chat" {...props} />
+type LabelProps = Omit<ComponentProps<typeof KitLabel>, "dress">
+
+function Label(props: LabelProps) {
+  return <KitLabel dress="chat" {...props} />
 }
 
 export { Label }

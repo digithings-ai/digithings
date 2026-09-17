@@ -37,16 +37,28 @@ const buttonVariants = cva(
   }
 )
 
+export type ButtonDress = "default" | "chat";
+
 function Button({
   className,
   variant = "default",
   size = "default",
+  dress = "default",
   ...props
-}: ButtonPrimitive.Props & VariantProps<typeof buttonVariants>) {
+}: ButtonPrimitive.Props &
+  VariantProps<typeof buttonVariants> & { dress?: ButtonDress }) {
+  // dress="chat" emits the digichat chat-dress classes (styles/controls-core.css)
+  // instead of the kit utilities. The variant/size enums are identical, so the
+  // digichat wrapper can pin dress="chat" and keep its rendered look exactly.
+  const classes =
+    dress === "chat"
+      ? cn(`ctl-btn-chat ctl-btn-chat--${variant} ctl-btn-chat--size-${size}`, className)
+      : cn(buttonVariants({ variant, size, className }));
+
   return (
     <ButtonPrimitive
       data-slot="button"
-      className={cn(buttonVariants({ variant, size, className }))}
+      className={classes}
       {...props}
     />
   )
