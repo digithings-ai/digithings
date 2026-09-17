@@ -56,6 +56,6 @@ jobs:
 
       - name: Sync docs/vision → public.architecture_notes
         env:
-          CORE_SUPABASE_URL: ${{ secrets.CORE_SUPABASE_URL || secrets.SUPABASE_URL }}
-          CORE_SUPABASE_SERVICE_KEY: ${{ secrets.CORE_SUPABASE_SERVICE_KEY || secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          CORE_SUPABASE_URL: ${{ secrets.CORE_SUPABASE_URL }}
+          CORE_SUPABASE_SERVICE_KEY: ${{ secrets.CORE_SUPABASE_SERVICE_KEY }}
         run: uv run --frozen --no-sync python scripts/sync_architecture_vault.py
