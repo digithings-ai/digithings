@@ -247,7 +247,7 @@ compose-local searxng via `DIGISEARCH_SEARXNG_URL` remains for dev.
 
 **Omitted on purpose:** digiquant, digismith HTTP, Ollama, heartbeat.
 
-digigraph chat-only env (set in `wrangler.toml` / entrypoint / bundle compose):
+digigraph chat-only env (entrypoint / bundle compose; `DIGIQUANT_URL` is a `wrangler.toml` var):
 
 - `DIGI_PROJECT_CONFIG=/app/config/digiproject.yaml` — `research_rag`, research only,
   tools `digisearch` + `digisearch_semantic` + `digisearch_web_search` +
