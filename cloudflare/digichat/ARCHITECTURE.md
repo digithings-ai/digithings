@@ -174,12 +174,12 @@ rect because `@digithings/digichat-ui` session.css still ships an 8px
 accent-tinted pill.
 
 **Shared controls layer** (`src/components/ui/*` — #1419, wave-3 re-point):
-ten of the fifteen shadcn-derived wrappers are now thin adapters over the
+nine of the fourteen shadcn-derived wrappers are now thin adapters over the
 canonical kit (`@digithings/web/ui`) or the `@digithings/web` controls family
 (`button`, `badge`, `card`, `input`, `label` pin `dress="chat"` over the kit —
-the kit's wave-3 `dress` axis emits the `ctl-*-chat` classes; `avatar`,
-`collapsible`, `dropdown-menu`, `sheet`, `tooltip` re-export bare — the shared
-default skin is digichat's dress). Import sites are unchanged
+the kit's wave-3 `dress` axis emits the `ctl-*-chat` classes; `collapsible`,
+`dropdown-menu`, `sheet`, `tooltip` re-export bare — the shared default skin is
+digichat's dress). Import sites are unchanged
 (`@/components/ui/<x>`). `globals.css` imports
 `@digithings/web/styles/controls-core.css` + `controls-overlay.css` before
 the digichat-ui sheets and `@source`s the shared controls directory

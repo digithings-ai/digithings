@@ -266,11 +266,11 @@ function StrategyCardSkeleton({ strategyId }: { strategyId: string }) {
         )}
       </KpiStrip>
 
-      <div className="ts-mode-bar dqss-preview-mode" aria-hidden="true" />
+      <div className="ts-mode-bar" aria-hidden="true" />
 
       <section className="ts-panel ts-tab-stack dqss-preview-panel" aria-label="Loading">
         <div className="dqss-preview-pane">
-          <div className="dqss-preview-pane-layer dqss-preview-chart-pane">
+          <div className="dqss-preview-pane-layer">
             <div className="ts-chart dqss-preview-chart">
               <div className="dqss-chart-skeleton" aria-hidden="true" />
             </div>
@@ -457,7 +457,7 @@ const StrategyTearsheetCard = memo(function StrategyTearsheetCard({
         )}
       </KpiStrip>
 
-      <div className="ts-mode-bar dqss-preview-mode">
+      <div className="ts-mode-bar">
         <SegToggle
           label="Tearsheet view"
           value={mode}
@@ -475,7 +475,7 @@ const StrategyTearsheetCard = memo(function StrategyTearsheetCard({
       >
         <div className="dqss-preview-pane">
           {mode === "charts" ? (
-            <div className="dqss-preview-pane-layer dqss-preview-chart-pane">
+            <div className="dqss-preview-pane-layer">
               <div className="ts-chart dqss-preview-chart">
                 {chartLoading ? (
                   <div className="dqss-chart-skeleton" aria-hidden="true" />

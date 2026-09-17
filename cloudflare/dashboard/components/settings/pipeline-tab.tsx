@@ -18,7 +18,7 @@ import {
   SETTINGS_LOAD_ERROR_MESSAGE,
   SettingsLoadError,
 } from './settings-load-error';
-import { Alert, AlertDescription, Button, Input, Label } from '@digithings/web/ui';
+import { Alert, AlertDescription, Button, Checkbox, Input, Label, Switch } from '@digithings/web/ui';
 import {
   STAGE_LABELS,
   STAGES,
@@ -321,16 +321,13 @@ export function PipelineTab({
                     const id = `pipeline-stage-${day}-${stage}`;
                     return (
                       <td key={day} className="border border-hair px-2 py-1.5 text-center">
-                        <input
+                        <Checkbox
                           id={id}
-                          type="checkbox"
-                          role="switch"
-                          aria-checked={checked}
                           aria-label={`${STAGE_LABELS[stage]} on ${WEEKDAY_LABELS[day]}`}
                           checked={checked}
-                          onChange={() => onToggleStage(day, stage)}
+                          onCheckedChange={() => onToggleStage(day, stage)}
                           data-testid={`pipeline-stage-${day}-${stage}`}
-                          className="h-4 w-4 accent-ink"
+                          className="mx-auto"
                         />
                       </td>
                     );
@@ -398,20 +395,17 @@ export function PipelineTab({
           )}
         </div>
 
-        <Label className="flex items-center justify-between gap-3 border border-hair bg-term-bg/40 px-3 py-2">
+        <div className="flex select-none items-center justify-between gap-3 border border-hair bg-term-bg/40 px-3 py-2">
           <span className="text-sm text-ink-soft">Respect early close</span>
-          <input
-            type="checkbox"
-            role="switch"
-            aria-checked={policy.respect_early_close}
+          <Switch
             checked={policy.respect_early_close}
-            onChange={(e) =>
-              setPolicy((prev) => ({ ...prev, respect_early_close: e.target.checked }))
+            onCheckedChange={(value) =>
+              setPolicy((prev) => ({ ...prev, respect_early_close: value }))
             }
+            aria-label="Respect early close"
             data-testid="pipeline-respect-early-close"
-            className="h-4 w-4 accent-ink"
           />
-        </Label>
+        </div>
 
         <Label className="block space-y-1">
           <span className="text-[10px] font-medium uppercase tracking-widest text-ink-mute">

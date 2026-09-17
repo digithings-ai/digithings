@@ -10,10 +10,9 @@ import {
   oauthCallbackErrorFromLocation,
   oauthPkceCodeFromLocation,
 } from '@/lib/supabase';
+import { AUTH_CALLBACK_SETTLE_MS } from './settle';
 
 const SIGN_IN_FAILED = 'Sign-in did not complete. Return to login and try again.';
-
-export const AUTH_CALLBACK_SETTLE_MS = 8_000;
 
 function callbackErrorMessage(): string | null {
   if (typeof window === 'undefined') return null;

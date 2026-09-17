@@ -187,7 +187,7 @@ export function AuthCard({
             <OAuthButtons pending={pending} onOAuth={onOAuth} stretch={false} />
             <button
               type="submit"
-              className="btn-primary acct-auth-submit"
+              className="acct-auth-submit"
               disabled={busy}
               data-testid="login-email-submit"
             >
@@ -209,7 +209,7 @@ export function AuthCard({
           {fields}
           <button
             type="submit"
-            className="btn-primary acct-auth-submit-block"
+            className="acct-auth-submit-block"
             disabled={busy}
             data-testid="login-email-submit"
           >
@@ -235,7 +235,7 @@ export function AuthCard({
             <OAuthButtons pending={pending} onOAuth={onOAuth} stretch={false} />
             <button
               type="submit"
-              className="btn-primary acct-auth-submit"
+              className="acct-auth-submit"
               disabled={busy}
               data-testid="login-email-submit"
             >

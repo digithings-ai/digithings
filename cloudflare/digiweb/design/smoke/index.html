@@ -16,7 +16,9 @@
        primitives above are unaffected by the [data-theme] font/color layer. */
     .site-demo { font-family: var(--font-sans); color: var(--ink); }
     .site-demo .label { color: var(--ink-mute); }
-    #smoke-theme-toggle { position: fixed; top: var(--space-4); right: var(--space-4); z-index: 10; }
+    /* Fixture-local CTA look (the retired site.css .btn family); site buttons
+       now come from the kit `buttonVariants` in React. */
+    #smoke-theme-toggle { position: fixed; top: var(--space-4); right: var(--space-4); z-index: 10; padding: 0.5rem 0.95rem; border: 1px solid var(--hair-2); border-radius: 0; background: transparent; color: var(--ink); font-family: var(--font-mono); font-size: 0.88rem; cursor: pointer; }
     body {
       margin: 0;
       padding: var(--space-5);
@@ -67,7 +69,7 @@
   </style>
 </head>
 <body>
-  <button id="smoke-theme-toggle" class="btn btn-sm btn-ghost" type="button">toggle theme</button>
+  <button id="smoke-theme-toggle" type="button">toggle theme</button>
   <h1>design smoke</h1>
   <p>Minimal isolated examples of each new primitive. Review each section.</p>
 
@@ -390,7 +392,7 @@ await client.chat.send("hello");</code></pre>
           <li>Bring your own key</li>
           <li>Community support</li>
         </ul>
-        <div class="pricing__cta"><a class="btn btn-ghost" href="#" onclick="return false;">Read the docs</a></div>
+        <div class="pricing__cta"><a class="closing-cta__secondary" href="#" onclick="return false;">Read the docs</a></div>
       </div>
       <div class="pricing__tier pricing__tier--featured">
         <div class="pricing__name">Managed</div>
@@ -401,7 +403,7 @@ await client.chat.send("hello");</code></pre>
           <li>Managed upgrades</li>
           <li>Hosted tracing (digismith)</li>
         </ul>
-        <div class="pricing__cta"><a class="btn btn-primary" href="#" onclick="return false;">Join the waitlist</a></div>
+        <div class="pricing__cta"><a class="closing-cta__secondary" href="#" onclick="return false;">Join the waitlist</a></div>
       </div>
       <div class="pricing__tier">
         <div class="pricing__name">Enterprise</div>
@@ -412,7 +414,7 @@ await client.chat.send("hello");</code></pre>
           <li>SLA + priority support</li>
           <li>Deployment assistance</li>
         </ul>
-        <div class="pricing__cta"><a class="btn btn-ghost" href="#" onclick="return false;">Contact us</a></div>
+        <div class="pricing__cta"><a class="closing-cta__secondary" href="#" onclick="return false;">Contact us</a></div>
       </div>
     </div>
     <table class="pricing-table" style="margin-top: var(--space-4);">
@@ -452,7 +454,7 @@ await client.chat.send("hello");</code></pre>
         <h2 class="closing-cta__title">Build your agent stack in the open.</h2>
         <p class="closing-cta__sub">Open-core orchestration, quant, RAG, and chat — self-hosted or bring your own key.</p>
         <div class="closing-cta__actions">
-          <a class="btn btn-primary" href="#" onclick="return false;">Start building</a>
+          <a class="closing-cta__secondary" href="#" onclick="return false;">Start building</a>
           <a class="closing-cta__secondary" href="#" onclick="return false;">Read the architecture <span aria-hidden="true">&rarr;</span></a>
         </div>
       </div>
@@ -462,7 +464,7 @@ await client.chat.send("hello");</code></pre>
         <h2 class="closing-cta__title">One graph, research to execution.</h2>
         <p class="closing-cta__sub">Backtest, optimize, and route strategies on NautilusTrader — research to execution.</p>
         <div class="closing-cta__actions">
-          <a class="btn btn-primary" href="#" onclick="return false;">Open dashboard</a>
+          <a class="closing-cta__secondary" href="#" onclick="return false;">Open dashboard</a>
           <a class="closing-cta__secondary" href="#" onclick="return false;">Browse strategies <span aria-hidden="true">&rarr;</span></a>
         </div>
       </div>

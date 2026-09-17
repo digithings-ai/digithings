@@ -47,7 +47,7 @@ export function DtNav({ autoHide }: { autoHide?: "scroll" | "hover" }) {
               <GitHubGlyph />
             </a>
             {/* Desktop twin of the sheet CTA below — same destination, plain
-                wordmark-style link rather than a solid `.btn-primary` pill: next
+                wordmark-style link rather than a solid kit primary-button pill: next
                 to the quiet GitHub glyph and inline links, a filled button read
                 as a bright, standoffish box. `.dc-nav-cta` (globals.css) is
                 just icon + label in the theme's own ink tone, no button chrome.
@@ -55,7 +55,7 @@ export function DtNav({ autoHide }: { autoHide?: "scroll" | "hover" }) {
                 to the hamburger, so narrow viewports keep the sheet button as
                 the only digichat entry. */}
             <Link
-              className="dc-nav-cta max-[880px]:hidden"
+              className="dc-nav-cta max-[880px]:hidden!"
               href="/chat"
               aria-label="Ask digichat"
             >

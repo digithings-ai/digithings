@@ -17,8 +17,7 @@ and `controls-overlay.css` (behavioral controls). The kit parts carry the
 | `card.tsx` | `ui/card` + parts | `dress="chat"` on root | Full 7-part shape, `size` `"default" \| "sm"`, `data-slot`/`data-size` hooks. Parts inherit the dress through the kit's Card context. |
 | `input.tsx` | `ui/input` | `dress="chat"` | Same `@base-ui/react/input` primitive underneath. |
 | `label.tsx` | `ui/label` | `dress="chat"` | `.group data-disabled` / `.peer:disabled` dimming kept (unlayered rules). |
-| `avatar.tsx` | `Avatar` family | none (single dress) | Image/Fallback/Badge/Group/GroupCount; currently no digichat call sites (kept for surface compat). |
-| `collapsible.tsx` | `Collapsible` family | none (unstyled passthrough) | Identical to the old wrapper. |
+| `collapsible.tsx` | `Collapsible` family | none (unstyled passthrough) | Re-exports the controls `Collapsible` (the kit copy is not used here); identical to the old wrapper. |
 | `dropdown-menu.tsx` | `DropdownMenu` family (15 names) | none — default skin IS the chat dress | `skin="reference"` stays available on `DropdownMenuContent`. |
 | `sheet.tsx` | `Sheet` family | none — single skin is the chat dress | Historical export surface kept: `SheetPortal`/`SheetOverlay` exist upstream but were never exported here. |
 | `tooltip.tsx` | `Tooltip` family | none — default skin IS the chat dress | Provider `delay` defaults to 0; `skin="reference"` available on `TooltipContent`. |

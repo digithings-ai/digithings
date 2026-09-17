@@ -49,7 +49,7 @@ is irrelevant to resolution — every other frontend imports them the same way:
 | Package | Directory | Provides |
 | ------- | --------- | -------- |
 | `@digithings/design` | `design/` | `tokens.css` — the palette/type/motion tokens every surface uses |
-| `@digithings/web` | `web/` | shared React layer (NavShell, `SocialRow` / `DIGITHINGS_SOCIALS`, DocsLayout/CodeTabs/EndpointDoc, Pricing/PricingMatrix, NumberedStages, PerfMetrics/StatCounter, TerminalManifest, RepoActivity, the chat family including `DigichatLauncher`, the controls layer [`dress` axis], the conviction primitives, Terminal, emblems, graph, ThemeProvider, MotionProvider, `AuthCard`, module data) + `styles/web-theme.css`, **the single `@theme inline` Tailwind bridge** |
+| `@digithings/web` | `web/` | shared React layer (NavShell, `SocialRow` / `DIGITHINGS_SOCIALS`, DocsLayout/CodeTabs/EndpointDoc, Pricing/PricingMatrix, NumberedStages, PerfMetrics/StatCounter, TerminalManifest, RepoActivity, the chat family including `DigichatLauncher`, the vendored shadcn kit `ui/` (**canonical**, `dress` axis) plus the residual controls layer, the conviction primitives, Terminal, emblems, graph, ThemeProvider, MotionProvider, `AuthCard`, module data) + `styles/web-theme.css`, **the single `@theme inline` Tailwind bridge** |
 
 `SocialRow` (`web/src/components/SocialRow.tsx`, dress in `./styles/nav-shell.css`)
 is the quiet company-profile utility row: the same borderless `.btn-icon`
@@ -140,13 +140,22 @@ rows), takes `ReactNode` labels, and accepts `linkPanels={false}` to omit
 `aria-controls` when the consumer owns no panel ids (wrapper-adaption cases
 like the dashboard's subpage tab bar).
 
-Wave 0 of the shadcn migration (#4206) added the **`ui`** family — the first
-*vendored* package family (stock shadcn/ui on Base UI, `base-lyra` preset),
-with no sheet of its own (all utilities, same bridge):
+Waves 0–3 of the shadcn migration (#4206) built the **`ui`** family — the
+first *vendored* package family (stock shadcn/ui on Base UI, `base-lyra`
+preset), with no sheet of its own (all utilities, same bridge). After wave 3 it
+is **the only primitive source** for every part it covers; the controls layer
+survives only where the kit has no equivalent.
 
 | Family | Components | CSS subpath |
 | ------ | ---------- | ----------- |
-| `ui` | Button (+ `buttonVariants`), Card (+ Header/Title/Description/Action/Content/Footer), Dialog (+ Trigger/Close/Content/…), Input — barrel `web/src/ui/index.ts`, export `@digithings/web/ui` | — (utility-only; consumers add `@source "../../web/src/ui"`) |
+| `ui` | Alert, Badge, Button (+ `buttonVariants`), Card (+ parts), Checkbox, Collapsible, Dialog (+ parts), DropdownMenu (+ parts), Input, Label, Select (+ parts), Separator, Sheet (+ parts), Switch, Table (+ parts), Tabs, Textarea, Tooltip (+ parts), Spinner — barrel `web/src/ui/index.ts`, export `@digithings/web/ui` | — (utility-only; consumers add `@source "../../web/src/ui"`) |
+
+The five parts digichat needed a chat tone for carry the `dress="chat"` axis
+(Button/Card/Badge/Input/Label), which emits the existing `ctl-*-chat` classes
+from `styles/controls-core.css` instead of the kit utilities; `Card` propagates
+`dress` to its parts through a context. Kit Table separators resolve to
+`border-border` (the hairline token), and the kit's focus fills use the neutral
+`secondary` surface (not the brand accent).
 
 Refresh it with `npx shadcn@latest add <name>` inside `cloudflare/digiweb/web`
 (the `components.json` there is authoritative); local deltas stay limited to

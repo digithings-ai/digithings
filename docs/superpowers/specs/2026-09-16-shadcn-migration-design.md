@@ -170,6 +170,19 @@ overrides); no new app-local families; every removal proves no consumer.
   tables/charts. Each app is its own PR (one-hop into `develop`).
 - **Wave 3 — shells + blocks (WS5, WS6):** sidebar/command palette/toasts;
   motion & view-transition pass.
+  **Landed 2026-09-17 (#4206, branch `feat/shadcn-wave-3`):** the kit
+  (`@digithings/web/ui`) became the single primitive source — Table + Select
+  vendored (T1b), the kit declared canonical for every overlapping controls
+  part, and the sweep re-pointed the reference, digichat, digithings-web,
+  digiquant-web, and dashboard onto it (T2–T5). `dress="reference"|"chat"`
+  moved onto the kit parts (Card propagating the dress via context) so the five
+  digichat wrappers are one-line adapters (T9). T6 close-out retired the last
+  zero-consumer dress families (`.btn`, `.ts-chip`, the dead `.acct-*` set, the
+  dead `dqss-preview-*` hooks) and the controls Card/Input React copies; the
+  controls layer survives only where the kit has no equivalent (Table
+  `numeric`/`density`, Select composition, and the un-promoted
+  EmptyState/Skeleton/NavButtons/Selection/DatePager/Badge/Field/Label/
+  Collapsible parts). Auth (`digikey/`) and live-trading paths untouched.
 - **Wave 4 — marketing + cleanup (WS7, WS8):** block-by-block, owner-approved;
   dead css, families json, docs final.
 
