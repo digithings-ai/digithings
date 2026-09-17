@@ -55,7 +55,13 @@ new_sqlite_classes = ["DigiChatContainer"]
 #   DIGICHAT_PLAN_PROOF_SECRET
 #   DIGICHAT_DASHBOARD_SUPABASE_URL
 #   DIGICHAT_DASHBOARD_SUPABASE_ANON_KEY
-# Optional: DIGICHAT_DATABASE_URL if you enable Auth.js / conversations DB
+# Optional: DIGICHAT_DATABASE_URL if you enable Auth.js / conversations DB.
+# It is deliberately NOT forwarded to the Container. This Cloudflare deployment
+# is DB-less (no Postgres instance or secret), so digichat falls back to
+# localStorage and /api/health reports `database: skipped`. The Worker forwards
+# no such var, and the Env/envVars parity test pins that absence (audit D5,
+# issue #4314) -- enabling Postgres means adding the secret, the Env member, the
+# envVars entry, and removing it from that test's DOCUMENTED_NOT_FORWARDED.
 #
 # digigraph + LiteLLM + digikey + digivault + digisearch are NOT inside this
 # Container — deploy cloudflare/digithings-stack-cloudflare and point secrets at:
