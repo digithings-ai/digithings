@@ -81,9 +81,11 @@ Before writing new UI, check `cloudflare/digiweb/MANIFEST.json` (106 components,
 15 families) and `@digithings/web` exports: NavShell, Footer/Colophon,
 DocsLayout/CodeTabs/EndpointDoc, Pricing/PricingMatrix, NumberedStages,
 PerfMetrics/StatCounter, TerminalManifest, RepoActivity, the chat family (ChatTranscript/
-ChatMessage/ChatMarkdown/ChatToolCall/…), the controls layer (Button/Badge/
-Card/Input/Label/Avatar/DropdownMenu/Sheet/Tooltip/Collapsible on the `dress`
-axis), the vendored shadcn kit (`@digithings/web/ui`, below), Terminal,
+ChatMessage/ChatMarkdown/ChatToolCall/…), the vendored shadcn kit
+(`@digithings/web/ui`, below — the **canonical primitive source**), the
+residual controls layer (Table/Select/Sheet/Dialog/DropdownMenu/Tooltip/
+EmptyState/Skeleton/NavButtons/Selection/DatePager/Badge/Field/Label on the
+`dress` axis — kept only where the kit has no equivalent), Terminal,
 Emblem/StackRow, ModuleCard, Reveal/Stagger/HeroEntrance,
 useScrollyFeatures/ScrollyRail. Motion always via `m` under `MotionProvider`
 (LazyMotion `domAnimation` `strict` — a raw `motion.*` element creator throws).
@@ -110,9 +112,16 @@ kit has **no CSS file of its own**.
 - **`--color-primary` is ink/paper — never the accent.** Accent stays a
   livery/scoped signal; primary is the neutral action.
 
-Until later waves migrate it, the `dress`-axis controls layer above remains
-for surfaces that need its `dress="reference"|"chat"` variants; new work
-should start from the kit where the component exists there. Proof route:
+Wave 3 finished the promotion: every app and the reference now consume the kit
+where it covers the part, and the controls copies that lost their last consumer
+were deleted (Card/Input React copies at T6; the digichat wrappers that needed
+the chat tone are one-line adapters pinning `dress="chat"`). The kit reproduces
+the controls layer's `dress="reference"|"chat"` axis, so a consumer that needs
+the chat tone passes `dress="chat"` rather than importing a second copy. New
+work starts from the kit wherever the part exists there; the controls layer is
+now a keep-list (Table for `numeric`/`density`, Select for `SelectPopup`
+composition, EmptyState/Skeleton/NavButtons/Selection/DatePager/Badge/Field/
+Label, and the Collapsible that digichat still re-exports). Proof route:
 `reference/app/(gallery)/ui/page.tsx` (dark, light, and a scoped livery).
 
 ## Promotion playbook (v2 — the #1414 epic shape)
@@ -129,11 +138,20 @@ New UI is born in the reference, promoted, then adopted — never built app-loca
 3. **Adopt**: apps swap markup onto the primitive. **API compatibility beats
    aesthetic purity** — where the reference dress and an app's shipped dress
    differ, give the primitive a variant/`dress` axis that reproduces the app's
-   look EXACTLY (see the controls layer's `dress="reference"|"chat"`), and
+   look EXACTLY (see the controls layer's `dress="reference"|"chat"` and the
+   kit's `dress="chat"`), and
    record the reference-vs-app delta for a product ruling. Where a primitive
    can't express the app's behavior, do NOT force it — keep the local code and
    write the gap into a ledger (`digichat-ui/ARCHITECTURE.md`,
    `digichat/CONTROLS.md` are the precedents).
+
+   **The kit wins wherever it covers the part.** `@digithings/web/ui` is the
+   canonical home for every part it ships — promote into `web/src/ui/` there,
+   and prefer adding a `dress`/`skin` axis to the kit part over keeping a second
+   app-local or controls copy. The controls layer is now a keep-list for parts
+   the kit cannot express (`Table` `numeric`/`density`, `SelectPopup`
+   composition, and the un-promoted EmptyState/Skeleton/NavButtons/Selection/
+   DatePager/Badge/Field/Label/Collapsible set).
 
 ### The cascade-layering contract (bitten twice — read this)
 

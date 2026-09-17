@@ -2,10 +2,9 @@
 
 from __future__ import annotations
 
-import logging
 import os
+import re
 import threading
-import time
 from typing import Literal
 
 import httpx
@@ -22,8 +21,6 @@ from digisearch.web_search.models import (
     WebSearchResult,
 )
 from digisearch.web_search.searxng_provider import SearXNGWebSearchProvider
-
-logger = logging.getLogger(__name__)
 
 
 class WebSearchConfig(BaseModel):
@@ -86,15 +83,21 @@ def _limiter_for(min_interval_s: float) -> RateLimiter:
 #: Upstream statuses worth retrying: throttling, transient timeouts, 5xx.
 _RETRYABLE_STATUSES = frozenset({408, 425, 429, 500, 502, 503, 504})
 
-#: Bounded attempts for the provider failover. The public scrapers behind ddgs
-#: intermittently raise ``DDGSException("No results found.")`` for a valid query
-#: — an anti-bot/CAPTCHA blip, not a definitive empty result: on 2026-09-17 five
-#: of fifteen identical hosted ``orchestrator_invoke`` calls failed that way and
-#: five others returned four rows (#4297). A single flaky attempt must not abort
-#: a caller's run, so a *transient* failure gets more passes before it is
-#: reported. An exhausted failover still raises — never a silent empty result.
-_SEARCH_ATTEMPTS = 3
-_SEARCH_RETRY_BACKOFF_S = 0.5
+
+#: Credentials and tokens in a provider URL must never reach a caller-visible
+#: error string: httpx embeds the full request URL (userinfo, query) in
+#: ``HTTPStatusError``/``TransportError`` text.
+_URL_USERINFO_RE = re.compile(r"([a-zA-Z][a-zA-Z0-9+.\-]*://)[^/@\s]+@")
+#: Scheme-less userinfo (e.g. ``httpx.Proxy("user:pass@host")`` error text).
+_URL_BARE_USERINFO_RE = re.compile(r"[^\s/@:]+:[^\s/@:]+@")
+_URL_QUERY_RE = re.compile(r"\?[^\s'\"`)]*")
+
+
+def _scrub_provider_detail(text: str) -> str:
+    """Strip URL userinfo and query strings (secrets) from provider text."""
+    text = _URL_USERINFO_RE.sub(r"\1***@", text)
+    text = _URL_BARE_USERINFO_RE.sub("***@", text)
+    return _URL_QUERY_RE.sub("?<redacted>", text)
 
 
 def _provider_failure_fields(exc: Exception) -> tuple[int | None, bool]:
@@ -102,6 +105,10 @@ def _provider_failure_fields(exc: Exception) -> tuple[int | None, bool]:
 
     httpx failures expose a response/status; ddgs failures do not, so classify
     those by name (the web-search extra is optional and stays un-imported here).
+    ``RatelimitException`` is a *raised* ddgs failure only in 9.0.x — ddgs
+    >=9.1 collapses non-200 provider responses (including 429s) into
+    ``DDGSException("No results found.")``, which carries no status and is
+    reported as a non-retryable hard failure rather than guessed at.
     """
     if isinstance(exc, httpx.HTTPStatusError):
         status = exc.response.status_code
@@ -113,51 +120,34 @@ def _provider_failure_fields(exc: Exception) -> tuple[int | None, bool]:
         return status, status in _RETRYABLE_STATUSES
     name = type(exc).__name__.lower()
     if "ratelimit" in name or "rate_limit" in name:
-        # ddgs raises RatelimitException without an HTTP response; 429 is its
-        # HTTP meaning, so surface it as the status hint.
+        # ddgs 9.0.x raised RatelimitException without an HTTP response; 429 is
+        # its HTTP meaning, so surface it as the status hint. Newer ddgs
+        # versions no longer raise it (see the DDGSException branch below).
         return 429, True
-    if name == "ddgsexception":
-        # ddgs raises DDGSException when its engines yield no parseable rows (or
-        # when a single engine errors and nothing aggregates) — an intermittent
-        # scrape failure, not a definitive "this query has no results" (#4297).
-        # Classify it transient so the failover retries it instead of failing a
-        # caller's run hard on a blip; ``TimeoutException``/``RatelimitException``
-        # are already covered by the branches around this one.
-        return None, True
     if "timeout" in name or isinstance(exc, OSError):
         return None, True
+    if "ddgsexception" in name:
+        # ddgs >=9.1 raises this for any failed search, even a provider 429.
+        # No status is recoverable, so retryability is not guessed.
+        return None, False
     return None, False
 
 
 def _search_only(req: WebSearchRequest, config: WebSearchConfig) -> WebSearchResponse:
-    order = [config.backend] if config.backend in ("searxng", "ddgs") else ["searxng", "ddgs"]
     last: Exception | None = None
-    status: int | None = None
-    retryable = False
-    for attempt in range(1, _SEARCH_ATTEMPTS + 1):
-        for name in order:
-            try:
-                if name == "searxng":
-                    return SearXNGWebSearchProvider(base_url=config.searxng_url).search(req)
-                return DdgsWebSearchProvider().search(req)
-            except Exception as exc:
-                last = exc
-                continue
-        if last is None:  # pragma: no cover - ``order`` is never empty
-            break
-        status, retryable = _provider_failure_fields(last)
-        if not retryable or attempt >= _SEARCH_ATTEMPTS:
-            break
-        logger.info(
-            "all web-search backends failed (%s); retrying attempt %d/%d",
-            last,
-            attempt + 1,
-            _SEARCH_ATTEMPTS,
-        )
-        time.sleep(_SEARCH_RETRY_BACKOFF_S * attempt)
+    order = [config.backend] if config.backend in ("searxng", "ddgs") else ["searxng", "ddgs"]
+    for name in order:
+        try:
+            if name == "searxng":
+                return SearXNGWebSearchProvider(base_url=config.searxng_url).search(req)
+            return DdgsWebSearchProvider().search(req)
+        except Exception as exc:
+            last = exc
+            continue
     if last is None:  # pragma: no cover - ``order`` is never empty
         raise WebSearchProviderError("all web-search backends failed")
-    detail = str(last) or type(last).__name__
+    status, retryable = _provider_failure_fields(last)
+    detail = _scrub_provider_detail(str(last) or type(last).__name__)
     if status is not None and str(status) not in detail:
         detail = f"{detail} (HTTP {status})"
     raise WebSearchProviderError(

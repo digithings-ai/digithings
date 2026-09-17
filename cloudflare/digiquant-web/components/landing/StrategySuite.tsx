@@ -37,6 +37,7 @@ import {
   toneClass,
   viewWindowForPreset,
 } from "@digithings/web";
+import { Badge, Card, buttonVariants } from "@digithings/web/ui";
 import { AssetLogoFor } from "@/components/tearsheet/asset-logo";
 import { CurrentPosition } from "@/components/tearsheet/current-position";
 import { LiveMetricsBadge } from "@/components/tearsheet/live-metrics";
@@ -265,11 +266,11 @@ function StrategyCardSkeleton({ strategyId }: { strategyId: string }) {
         )}
       </KpiStrip>
 
-      <div className="ts-mode-bar dqss-preview-mode" aria-hidden="true" />
+      <div className="ts-mode-bar" aria-hidden="true" />
 
       <section className="ts-panel ts-tab-stack dqss-preview-panel" aria-label="Loading">
         <div className="dqss-preview-pane">
-          <div className="dqss-preview-pane-layer dqss-preview-chart-pane">
+          <div className="dqss-preview-pane-layer">
             <div className="ts-chart dqss-preview-chart">
               <div className="dqss-chart-skeleton" aria-hidden="true" />
             </div>
@@ -312,7 +313,7 @@ function UnpublishedStrategyCard({ strategyId }: { strategyId: string }) {
         appear after the operator publishes this backtest.
       </p>
       <p className="dqss-preview-footer">
-        <Link className="dqss-full" href={`/strategies/${strategyId}`}>
+        <Link className={buttonVariants({ variant: "link" }) + " dqss-full"} href={`/strategies/${strategyId}`}>
           View full tearsheet ↗
         </Link>
       </p>
@@ -322,9 +323,11 @@ function UnpublishedStrategyCard({ strategyId }: { strategyId: string }) {
 
 /**
  * One tearsheet preview card body — header, current position, KPIs,
- * chart/table toggle. Rendered inside a <DeckCard className="dqss-card">
- * (the deck card element carries the .dqss-card dress + container queries);
- * the width probe rides the header, which spans the card's content box.
+ * chart/table toggle. Rendered inside a kit <Card> carried by a
+ * <DeckCard className="dqss-card"> (the deck card element keeps the
+ * container context + compact grammar; the Card element itself is the
+ * surface); the width probe rides the header, which spans the card's
+ * content box.
  */
 const StrategyTearsheetCard = memo(function StrategyTearsheetCard({
   entry,
@@ -394,7 +397,9 @@ const StrategyTearsheetCard = memo(function StrategyTearsheetCard({
           </h3>
           <div className="ts-meta">
             <LiveMetricsBadge generatedAt={data?.generated_at ?? entry.generated_at} />
-            <span className="ts-chip">{symbol}</span>
+            <Badge variant="outline" className="border-accent-weak bg-accent-weak">
+              {symbol}
+            </Badge>
             <StrategyTypeChip strategy={entry.strategy} kind={data?.kind ?? entry.kind} />
             <SignalDelayChip days={data?.signal_delay_days ?? entry.signal_delay_days} />
             {dca ? <BacktestOnlyChip /> : null}
@@ -452,7 +457,7 @@ const StrategyTearsheetCard = memo(function StrategyTearsheetCard({
         )}
       </KpiStrip>
 
-      <div className="ts-mode-bar dqss-preview-mode">
+      <div className="ts-mode-bar">
         <SegToggle
           label="Tearsheet view"
           value={mode}
@@ -470,7 +475,7 @@ const StrategyTearsheetCard = memo(function StrategyTearsheetCard({
       >
         <div className="dqss-preview-pane">
           {mode === "charts" ? (
-            <div className="dqss-preview-pane-layer dqss-preview-chart-pane">
+            <div className="dqss-preview-pane-layer">
               <div className="ts-chart dqss-preview-chart">
                 {chartLoading ? (
                   <div className="dqss-chart-skeleton" aria-hidden="true" />
@@ -504,7 +509,7 @@ const StrategyTearsheetCard = memo(function StrategyTearsheetCard({
       </section>
 
       <p className="dqss-preview-footer">
-        <Link className="dqss-full" href={`/strategies/${entry.strategy}`}>
+        <Link className={buttonVariants({ variant: "link" }) + " dqss-full"} href={`/strategies/${entry.strategy}`}>
           View full tearsheet ↗
         </Link>
       </p>
@@ -543,7 +548,10 @@ export function StrategySuite() {
               clear the pipeline.
             </p>
           </div>
-          <Link href="/strategies" className="dqss-library-pill">
+          <Link
+            href="/strategies"
+            className={buttonVariants({ variant: "outline", size: "lg" }) + " dqss-library-pill"}
+          >
             Full strategy library
             <span className="dqss-library-arrow" aria-hidden="true">
               →
@@ -570,13 +578,15 @@ export function StrategySuite() {
             const slot = suiteSlotState(indexResolved, entry);
             return (
               <DeckCard key={id} className="dqss-card">
-                {slot === "ready" && entry ? (
-                  <StrategyTearsheetCard entry={entry} />
-                ) : slot === "unpublished" ? (
-                  <UnpublishedStrategyCard strategyId={id} />
-                ) : (
-                  <StrategyCardSkeleton strategyId={id} />
-                )}
+                <Card className="gap-0 px-[clamp(0.9rem,2.2cqi,1.25rem)] pt-[clamp(0.85rem,2cqi,1.15rem)] pb-[clamp(0.95rem,2cqi,1.2rem)]">
+                  {slot === "ready" && entry ? (
+                    <StrategyTearsheetCard entry={entry} />
+                  ) : slot === "unpublished" ? (
+                    <UnpublishedStrategyCard strategyId={id} />
+                  ) : (
+                    <StrategyCardSkeleton strategyId={id} />
+                  )}
+                </Card>
               </DeckCard>
             );
           })}

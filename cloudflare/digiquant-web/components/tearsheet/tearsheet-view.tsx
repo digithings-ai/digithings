@@ -47,6 +47,7 @@ import {
   type TradeLogRow,
   type ViewWindow,
 } from "@digithings/web";
+import { Badge, Button } from "@digithings/web/ui";
 import { AssetLogoFor } from "./asset-logo";
 import { CurrentPosition, TradeReturnCell } from "./current-position";
 import { LiveMetricsBadge } from "./live-metrics";
@@ -141,7 +142,9 @@ function TearsheetUnavailable({ slug, message }: { slug: string; message: string
           </h1>
           {dca ? (
             <div className="ts-meta">
-              <span className="ts-chip">{symbol}</span>
+              <Badge variant="outline" className="border-accent-weak bg-accent-weak">
+                {symbol}
+              </Badge>
               <StrategyTypeChip strategy={slug} />
               <SignalDelayChip days={3} detail="full" />
               <BacktestOnlyChip />
@@ -517,7 +520,9 @@ export function TearsheetView({ slug }: { slug: string }) {
           </h1>
           <div className="ts-meta">
             <LiveMetricsBadge generatedAt={data.generated_at} />
-            <span className="ts-chip">{data.symbol}</span>
+            <Badge variant="outline" className="border-accent-weak bg-accent-weak">
+              {data.symbol}
+            </Badge>
             <StrategyTypeChip strategy={slug} kind={data.kind} />
             <SignalDelayChip days={data.signal_delay_days} detail="full" />
             {dcaBook ? <BacktestOnlyChip /> : null}
@@ -525,8 +530,9 @@ export function TearsheetView({ slug }: { slug: string }) {
           </div>
         </div>
         <div className="ts-header-actions">
-          <button
-            className="btn btn-ghost btn-sm btn-icon"
+          <Button
+            variant="ghost"
+            size="icon-sm"
             type="button"
             onClick={handlePrint}
             aria-label="Download tearsheet as PDF"
@@ -535,7 +541,7 @@ export function TearsheetView({ slug }: { slug: string }) {
             <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
               <path d="M12 3v12m0 0l-4-4m4 4l4-4M5 21h14" />
             </svg>
-          </button>
+          </Button>
         </div>
       </header>
 

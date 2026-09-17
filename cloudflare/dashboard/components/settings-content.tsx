@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { Database, Search } from 'lucide-react';
+import { Button, buttonVariants } from '@digithings/web/ui';
 import { useDashboardTheme } from '@/components/theme-provider';
 import { AsOfBadge } from '@/components/shared/as-of-badge';
 import { normalizePathname } from '@/lib/pathname';
@@ -92,36 +93,39 @@ export function SettingsContent({
         <p className="text-[10px] font-medium text-ink-mute mb-2">Appearance</p>
         <div className="flex flex-col gap-1.5">
           <div className="grid grid-cols-3 border border-hair overflow-hidden text-xs">
-            <button
+            <Button
               type="button"
+              variant="ghost"
               aria-pressed={theme === 'auto'}
               onClick={() => setTheme('auto')}
-              className={`px-2 py-2 font-medium transition-colors ${
+              className={`h-auto rounded-none px-2 py-2 font-medium transition-colors ${
                 theme === 'auto' ? 'bg-accent/20 text-accent' : 'text-ink-mute hover:bg-ink/[0.04]'
               }`}
             >
               Auto
-            </button>
-            <button
+            </Button>
+            <Button
               type="button"
+              variant="ghost"
               aria-pressed={theme === 'dark'}
               onClick={() => setTheme('dark')}
-              className={`px-2 py-2 font-medium border-l border-hair transition-colors ${
+              className={`h-auto rounded-none border-l border-hair px-2 py-2 font-medium transition-colors ${
                 theme === 'dark' ? 'bg-accent/20 text-accent' : 'text-ink-mute hover:bg-ink/[0.04]'
               }`}
             >
               Dark
-            </button>
-            <button
+            </Button>
+            <Button
               type="button"
+              variant="ghost"
               aria-pressed={theme === 'light'}
               onClick={() => setTheme('light')}
-              className={`px-2 py-2 font-medium border-l border-hair transition-colors ${
+              className={`h-auto rounded-none border-l border-hair px-2 py-2 font-medium transition-colors ${
                 theme === 'light' ? 'bg-accent/20 text-accent' : 'text-ink-mute hover:bg-ink/[0.04]'
               }`}
             >
               Light
-            </button>
+            </Button>
           </div>
         </div>
       </div>
@@ -172,20 +176,21 @@ export function SettingsContent({
             </>
           )}
           {onOpenPalette ? (
-            <button
+            <Button
               type="button"
+              variant="ghost"
               onClick={() => {
                 onOpenPalette();
                 onNavigate?.();
               }}
-              className="flex w-full items-center gap-2 px-3 py-2 text-xs font-medium text-ink-soft hover:bg-ink/[0.04] hover:text-ink transition-colors"
+              className="h-auto w-full flex items-center justify-start gap-2 rounded-none px-3 py-2 text-xs font-medium text-ink-soft hover:bg-ink/[0.04] hover:text-ink transition-colors"
             >
               <Search size={14} className="shrink-0 text-ink-mute" aria-hidden />
               <span>Search</span>
               <kbd className="ml-auto font-mono px-1.5 py-0.5 rounded border border-hair bg-bg text-ink">
                 ⌘K
               </kbd>
-            </button>
+            </Button>
           ) : null}
           {fxHubOnlyInvitee ? null : (
             <Link
@@ -204,7 +209,7 @@ export function SettingsContent({
           <Link
             href="/settings"
             onClick={onNavigate}
-            className="mt-2 flex items-center gap-2 px-3 py-2 text-sm font-medium text-ink-soft border border-hair hover:bg-ink/[0.04] hover:text-ink transition-colors"
+            className={`${buttonVariants({ variant: 'outline' })} mt-2 h-auto w-full justify-start gap-2 px-3 py-2 text-sm font-medium text-ink-soft hover:bg-ink/[0.04] hover:text-ink transition-colors`}
           >
             All settings
           </Link>

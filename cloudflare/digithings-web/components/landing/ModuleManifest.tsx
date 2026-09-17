@@ -6,6 +6,7 @@ import {
   type ModuleNode,
   type TerminalManifestRow,
 } from "@digithings/web";
+import { Button } from "@digithings/web/ui";
 import { writeHandoff } from "@/lib/chatHandoff";
 import { moduleActivity } from "@/lib/repoActivity";
 
@@ -83,14 +84,16 @@ export function ModuleManifest() {
       onSelect={setSel}
       aria-label="digithings module manifest"
       footer={
-        <button
+        <Button
           type="button"
-          className="mt-auto cursor-pointer self-end rounded-none border border-hair bg-transparent px-[0.6rem] py-[0.3rem] font-mono text-[0.78rem] text-ink-soft transition-colors hover:bg-accent-weak hover:text-ink"
+          variant="outline"
+          size="xs"
+          className="mt-auto self-end font-mono text-[0.78rem] text-ink-soft"
           onClick={() => askAbout(selMod)}
         >
           ask <span className="text-ink">digi</span>
           <span className="text-accent">chat</span> →
-        </button>
+        </Button>
       }
     />
   );

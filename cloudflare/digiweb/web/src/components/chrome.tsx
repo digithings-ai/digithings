@@ -1,9 +1,8 @@
 "use client";
 /** Shared nav, footer, and module card. Brand + links are passed in so both
  *  marketing apps reuse the same chrome. */
-import { useRef, useState, type ReactNode } from "react";
+import { useRef, type ReactNode } from "react";
 import { m, useScroll, useTransform } from "motion/react";
-import { ThemeToggle } from "./ThemeProvider";
 import { Emblem } from "./emblems";
 import { StackRow } from "./StackLogo";
 import { type ModuleNode } from "../data/modules";
@@ -28,31 +27,6 @@ export type NavItem = NavLink | NavGroup;
 /** Discriminates the NavItem union on the one field only a group carries. */
 export function isNavGroup(item: NavItem): item is NavGroup {
   return "items" in item;
-}
-
-export function Nav({ brand, links, mark }: { brand: ReactNode; links: NavLink[]; mark?: ReactNode }) {
-  const [open, setOpen] = useState(false);
-  return (
-    <header className="site-nav">
-      <div className="wrap nav-inner">
-        <a className="brand" href="/" aria-label="home">{mark}{brand}</a>
-        <nav className={`nav-links${open ? " open" : ""}`} aria-label="Primary">
-          {links.map((l) => (
-            <a key={l.href + l.label} href={l.href} className={l.cta ? "btn btn-sm" : undefined}
-              target={l.external ? "_blank" : undefined} rel={l.external ? "noopener noreferrer" : undefined}
-              onClick={() => setOpen(false)}>
-              {l.label}{l.external && <span className="ext" aria-hidden="true"> ↗</span>}
-            </a>
-          ))}
-        </nav>
-        <div className="nav-tail">
-          <ThemeToggle />
-          <button className="nav-toggle" aria-label="Toggle navigation" aria-expanded={open}
-            onClick={() => setOpen((v) => !v)}><span /><span /></button>
-        </div>
-      </div>
-    </header>
-  );
 }
 
 export function Footer({

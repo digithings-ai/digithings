@@ -9,6 +9,7 @@ import {
 } from "react";
 import Link from "next/link";
 import { Lock } from "lucide-react";
+import { Button, Input, Label } from "@digithings/web/ui";
 import { AuthContext } from "@/lib/auth-context";
 import {
   useCanAccessProduct,
@@ -133,35 +134,35 @@ export function ClientProductGate({
             onSubmit={(event) => void onRedeem(event)}
             data-testid="client-product-invite-form"
           >
-            <label
-              className="block font-mono text-[0.62rem] uppercase tracking-[0.08em] text-ink-mute"
-              htmlFor="fx-hub-invite"
-            >
-              Team invite code
-            </label>
-            <input
-              id="fx-hub-invite"
-              name="invite"
-              type="text"
-              autoComplete="off"
-              spellCheck={false}
-              value={code}
-              onChange={(event) => setCode(event.target.value)}
-              placeholder="Paste the code the operator shared"
-              className="acct-input w-full max-w-md"
-              data-testid="client-product-invite-input"
-            />
-            <button
+            <Label className="block space-y-1" htmlFor="fx-hub-invite">
+              <span className="block font-mono text-[0.62rem] uppercase tracking-[0.08em] text-ink-mute">
+                Team invite code
+              </span>
+              <Input
+                id="fx-hub-invite"
+                name="invite"
+                type="text"
+                autoComplete="off"
+                spellCheck={false}
+                value={code}
+                onChange={(event) => setCode(event.target.value)}
+                placeholder="Paste the code the operator shared"
+                className="h-auto w-full max-w-md border-hair bg-term-bg/50 px-3 py-2 font-mono text-sm text-ink"
+                data-testid="client-product-invite-input"
+              />
+            </Label>
+            <Button
               type="submit"
+              variant="ghost"
               disabled={pending}
-              className="btn-ghost"
+              className="h-auto justify-start px-0 text-sm font-medium text-ink hover:bg-transparent"
               data-testid="client-product-invite-submit"
             >
               {pending ? "Checking…" : "Redeem invite"}
-            </button>
+            </Button>
           </form>
           {error ? (
-            <p className="acct-error" role="alert">
+            <p className="mt-1.5 font-mono text-[0.68rem] text-danger" role="alert">
               {error}
             </p>
           ) : null}

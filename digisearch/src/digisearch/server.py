@@ -1260,7 +1260,9 @@ def api_orchestrator_invoke(req: OrchestratorInvokeRequest) -> OrchestratorInvok
             return OrchestratorInvokeResponse(ok=False, error=f"invalid web_search config: {e}")
         except WebSearchProviderError as e:
             # Provider failures are soft in-envelope errors, never a 500 that
-            # can cancel a caller's run (#4192).
+            # can cancel a caller's run (#4192). The envelope is HTTP-ok, so
+            # log here to keep provider outages visible to operators.
+            logger.warning("web_search provider failure: %s", e)
             return OrchestratorInvokeResponse(
                 ok=False,
                 error=str(e),
@@ -1297,7 +1299,7 @@ def api_orchestrator_invoke(req: OrchestratorInvokeRequest) -> OrchestratorInvok
             data = web_exa.exa_search(
                 qtext,
                 search_type=stype,  # type: ignore[arg-type]
-                num_results=int(n_raw) if isinstance(n_raw, int) else 8,
+                num_results=n_raw if isinstance(n_raw, int) and not isinstance(n_raw, bool) else 8,
                 offset=start,
                 category=args.get("category"),
                 contents_text=bool(args.get("contents_text", False)),
@@ -1409,6 +1411,9 @@ def v1_web_search(req: WebSearchRequest) -> WebSearchResponse | WebSearchErrorRe
             detail=f"invalid web_search config: {e}",
         ) from e
     except WebSearchProviderError as e:
+        # HTTP 200 soft envelope; log so the failure is still visible to
+        # status-based monitoring (a 5xx no longer surfaces it).
+        logger.warning("web_search provider failure: %s", e)
         return WebSearchErrorResponse(
             error=str(e),
             retryable=e.retryable,

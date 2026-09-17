@@ -10,7 +10,7 @@ import httpx
 import pytest
 
 from scripts.zammad_mcp import formatting
-from scripts.zammad_mcp.client import ZammadClient, ZammadError
+from scripts.zammad_mcp.client import ZammadClient, ZammadError, keyword_terms
 
 pytestmark = pytest.mark.unit
 
@@ -282,8 +282,8 @@ def test_server_registers_read_only_tools():
 
     sync_names = {tool.name for tool in server.mcp._tool_manager.list_tools()}
     async_names = {tool.name for tool in asyncio.run(server.mcp.list_tools())}
-    assert sync_names == {"search_tickets", "get_ticket", "ticket_report"}
-    assert async_names == {"search_tickets", "get_ticket", "ticket_report"}
+    assert sync_names == {"search_tickets", "list_tickets", "get_ticket", "ticket_report"}
+    assert async_names == {"search_tickets", "list_tickets", "get_ticket", "ticket_report"}
 
 
 class PagedTransport:
@@ -410,3 +410,277 @@ def test_run_mcp_allowlists_env_hosts(monkeypatch):
         assert server.mcp.settings.transport_security.enable_dns_rebinding_protection is True
     finally:
         allowed[:] = before
+
+
+class NumberLookupTransport:
+    """Serve GET /tickets/{number} as a 404, then answer the search lookup."""
+
+    def __init__(
+        self,
+        number: int,
+        rows: list[dict[str, Any]],
+        resolved: dict[str, Any] | None = None,
+    ) -> None:
+        self.number = number
+        self.rows = rows
+        self.resolved = resolved
+        self.calls: list[dict[str, Any]] = []
+
+    def __call__(self, url, params=None, headers=None, timeout=None):
+        self.calls.append({"url": url, "params": params, "headers": headers, "timeout": timeout})
+        if url.endswith(f"/api/v1/tickets/{self.number}"):
+            raise ZammadError("Zammad HTTP 404: not found")
+        if url.endswith("/api/v1/tickets/search"):
+            return self.rows
+        if self.resolved is not None and url.endswith(f"/api/v1/tickets/{self.resolved['id']}"):
+            return self.resolved
+        raise AssertionError(f"unexpected url {url}")
+
+
+class StatusTransport:
+    def __init__(self, status: int) -> None:
+        self.status = status
+        self.calls: list[dict[str, Any]] = []
+
+    def __call__(self, url, params=None, headers=None, timeout=None):
+        self.calls.append({"url": url, "params": params, "headers": headers, "timeout": timeout})
+        raise ZammadError(f"Zammad HTTP {self.status}: error")
+
+
+def test_keyword_terms_keeps_plain_words():
+    assert keyword_terms("Rechnung Zahlung") == ["Rechnung", "Zahlung"]
+
+
+def test_keyword_terms_extracts_field_values_and_strips_noise():
+    terms = keyword_terms('state.name:open AND article.body:"big invoice" ~rechnung*')
+    assert terms == ["open", "big", "invoice", "rechnung"]
+
+
+def test_keyword_terms_drops_short_stopword_and_duplicate_terms():
+    assert keyword_terms("invoice ~INVOICE* and to or") == ["invoice"]
+    assert keyword_terms("a I ?") == []
+    assert keyword_terms("one two three four five six seven") == [
+        "one",
+        "two",
+        "three",
+        "four",
+        "five",
+    ]
+
+
+def test_search_tickets_accepts_records_and_objects_envelopes():
+    client, _ = make_client({"records": [TICKET, "junk"], "total_count": 1})
+    assert client.search_tickets("x") == [TICKET]
+    client, _ = make_client({"objects": [TICKET]})
+    assert client.search_tickets("x") == [TICKET]
+
+
+def test_search_tickets_by_terms_merges_dedupes_and_limits():
+    oldest = dict(TICKET, id=1, updated_at="2026-09-12T00:00:00.000Z")
+    newest = dict(TICKET, id=2, updated_at="2026-09-16T00:00:00.000Z")
+    middle = dict(TICKET, id=3, updated_at="2026-09-14T00:00:00.000Z")
+    transport = PagedTransport([[oldest, newest], [dict(TICKET, id=2), middle]])
+    client = ZammadClient(base_url=BASE, token=TOKEN, get_json=transport)
+    rows = client.search_tickets_by_terms(["rechnung", "zahlung"], limit=2)
+    assert [row["id"] for row in rows] == [2, 3]
+    assert transport.calls[0]["params"] == {"query": "rechnung", "limit": 2, "expand": "true"}
+    assert transport.calls[1]["params"] == {"query": "zahlung", "limit": 2, "expand": "true"}
+
+
+def test_search_tickets_by_terms_sorts_rows_without_timestamp_last():
+    missing = dict(TICKET, id=1, updated_at="")
+    dated = dict(TICKET, id=2, updated_at="2026-09-01T00:00:00.000Z")
+    transport = PagedTransport([[missing, dated]])
+    client = ZammadClient(base_url=BASE, token=TOKEN, get_json=transport)
+    rows = client.search_tickets_by_terms(["rechnung"], limit=5)
+    assert [row["id"] for row in rows] == [2, 1]
+
+
+def test_get_ticket_hash_number_resolves_through_search_first():
+    searched = dict(TICKET, id=999, number="231", title="Number-first ticket")
+    transport = NumberLookupTransport(231, [searched], searched)
+    client = ZammadClient(base_url=BASE, token=TOKEN, get_json=transport)
+    assert client.get_ticket("#231") == searched
+    assert transport.calls[0]["url"].endswith("/api/v1/tickets/search")
+    assert transport.calls[0]["params"] == {"query": "231", "limit": 50, "expand": "true"}
+    assert [call["url"].rsplit("/", 1)[-1] for call in transport.calls] == ["search", "999"]
+
+
+def test_get_ticket_missing_hash_number_raises_without_id_lookup():
+    transport = NumberLookupTransport(99999, [dict(TICKET, id=1, number="28312")])
+    client = ZammadClient(base_url=BASE, token=TOKEN, get_json=transport)
+    with pytest.raises(ZammadError, match="no ticket with number 99999"):
+        client.get_ticket("#99999")
+    assert len(transport.calls) == 1
+    assert transport.calls[0]["url"].endswith("/api/v1/tickets/search")
+
+
+def test_get_ticket_resolves_ticket_number_after_404():
+    resolved = dict(TICKET, id=999, title="Resolved by number")
+    transport = NumberLookupTransport(28312, [dict(TICKET, id=999)], resolved)
+    client = ZammadClient(base_url=BASE, token=TOKEN, get_json=transport)
+    assert client.get_ticket("28312") == resolved
+    assert [call["url"].rsplit("/", 1)[-1] for call in transport.calls] == [
+        "28312",
+        "search",
+        "999",
+    ]
+
+
+def test_get_ticket_reraises_404_when_number_lookup_finds_nothing():
+    transport = NumberLookupTransport(28312, [])
+    client = ZammadClient(base_url=BASE, token=TOKEN, get_json=transport)
+    with pytest.raises(ZammadError, match="404"):
+        client.get_ticket("28312")
+    assert len(transport.calls) == 2
+
+
+def test_get_ticket_does_not_look_up_numbers_on_other_errors():
+    transport = StatusTransport(403)
+    client = ZammadClient(base_url=BASE, token=TOKEN, get_json=transport)
+    with pytest.raises(ZammadError, match="403"):
+        client.get_ticket(231)
+    assert len(transport.calls) == 1
+
+
+def test_format_search_results_notes_keyword_fallback():
+    empty = formatting.format_search_results("state.name:open", [], fallback_terms=["open"])
+    assert empty == 'No tickets matched: "state.name:open" (also tried keywords: open)'
+    found = formatting.format_search_results("big invoice", [TICKET], fallback_terms=["big"])
+    assert found.splitlines()[0] == (
+        'Found 1 ticket(s) for: "big invoice" (matched via keywords: big)'
+    )
+
+
+def test_server_search_falls_back_to_keywords(monkeypatch):
+    pytest.importorskip("mcp.server.fastmcp")
+    from scripts.zammad_mcp import server
+
+    class StubClient:
+        def __init__(self) -> None:
+            self.calls: list[tuple[str, Any]] = []
+
+        def search_tickets(self, query: str, limit: int = 10) -> list[dict[str, Any]]:
+            self.calls.append(("query", query))
+            return []
+
+        def search_tickets_by_terms(
+            self, terms: list[str], limit: int = 10
+        ) -> list[dict[str, Any]]:
+            self.calls.append(("terms", list(terms)))
+            return [dict(TICKET, id=7)]
+
+    stub = StubClient()
+    monkeypatch.setattr(server, "_client", lambda: stub)
+    out = server.search_tickets("state.name:open")
+    assert 'Found 1 ticket(s) for: "state.name:open" (matched via keywords: open)' in out
+    assert stub.calls == [("query", "state.name:open"), ("terms", ["open"])]
+
+
+def test_server_search_skips_fallback_for_single_keyword(monkeypatch):
+    pytest.importorskip("mcp.server.fastmcp")
+    from scripts.zammad_mcp import server
+
+    class StubClient:
+        def search_tickets(self, query: str, limit: int = 10) -> list[dict[str, Any]]:
+            return [TICKET]
+
+        def search_tickets_by_terms(
+            self, terms: list[str], limit: int = 10
+        ) -> list[dict[str, Any]]:
+            raise AssertionError("fallback should not run")
+
+    monkeypatch.setattr(server, "_client", lambda: StubClient())
+    out = server.search_tickets("rechnung")
+    assert out.splitlines()[0] == 'Found 1 ticket(s) for: "rechnung"'
+
+
+def test_keyword_terms_strips_hash_from_numbers():
+    terms = keyword_terms("Bitte Ticket #28312 pruefen")
+    assert "28312" in terms
+    assert "#28312" not in terms
+
+
+def test_keyword_terms_drops_german_function_words():
+    assert keyword_terms("Paket ist zu spat") == ["Paket", "spat"]
+
+
+def test_list_tickets_page_sorts_newest_updated_first_and_slices():
+    older = dict(TICKET, id=1, number="1", updated_at="2026-01-01T00:00:00.000Z")
+    newer = dict(TICKET, id=2, number="2", updated_at="2026-02-01T00:00:00.000Z")
+    transport = PagedTransport([[older, newer]])
+    client = ZammadClient(base_url=BASE, token=TOKEN, get_json=transport)
+    assert [t["id"] for t in client.list_tickets_page(page=1, per_page=1)] == [2]
+    assert [t["id"] for t in client.list_tickets_page(page=2, per_page=1)] == [1]
+    assert client.list_tickets_page(page=3, per_page=1) == []
+
+
+def test_list_tickets_page_clamps_page_and_page_size():
+    tickets = [dict(TICKET, id=i, number=str(i)) for i in range(1, 5)]
+    transport = PagedTransport([tickets])
+    client = ZammadClient(base_url=BASE, token=TOKEN, get_json=transport)
+    assert len(client.list_tickets_page(page=0, per_page=2)) == 2
+    assert len(client.list_tickets_page(page=1, per_page=0)) == 1
+
+
+def test_list_tickets_page_rejects_bad_numbers_without_http_call():
+    transport = PagedTransport([[dict(TICKET, id=1)]])
+    client = ZammadClient(base_url=BASE, token=TOKEN, get_json=transport)
+    with pytest.raises(ZammadError, match="page must be an integer"):
+        client.list_tickets_page(page="many")
+    with pytest.raises(ZammadError, match="per_page must be an integer"):
+        client.list_tickets_page(per_page="many")
+    assert transport.calls == []
+
+
+def test_format_ticket_list_empty_and_page_hint():
+    assert formatting.format_ticket_list([], page=1) == "No tickets visible to this token."
+    assert formatting.format_ticket_list([], page=2) == "No tickets on page 2; try earlier pages."
+
+
+def test_format_ticket_list_pages_and_trailer():
+    out = formatting.format_ticket_list([dict(TICKET), dict(TICKET, id=232)], page=2, per_page=2)
+    lines = out.splitlines()
+    assert lines[0] == "Visible tickets (page 2, 2 shown):"
+    assert lines[1].startswith("- id 231 #28312 [open] Example ticket subject")
+    assert lines[-2] == "Page is full; continue with page 3."
+    assert lines[-1] == "Read a full conversation with get_ticket(id or #number)."
+
+
+def test_server_lists_browsable_tickets(monkeypatch):
+    pytest.importorskip("mcp.server.fastmcp")
+    from scripts.zammad_mcp import server
+
+    class StubClient:
+        def list_tickets_page(self, page=1, per_page=50):
+            assert (page, per_page) == (2, 5)
+            return [dict(TICKET, id=1, number="1", title="Hallo Welt")]
+
+    monkeypatch.setattr(server, "_client", lambda: StubClient())
+    out = server.list_tickets(page=2, per_page=5)
+    assert out.splitlines()[0] == "Visible tickets (page 2, 1 shown):"
+    assert "Hallo Welt" in out
+
+
+def test_format_ticket_list_clamps_page_and_page_size():
+    tickets = [dict(TICKET, id=i, number=str(i)) for i in range(1, 101)]
+    out = formatting.format_ticket_list(tickets, page=0, per_page=500)
+    lines = out.splitlines()
+    assert lines[0] == "Visible tickets (page 1, 100 shown):"
+    assert lines[-2] == "Page is full; continue with page 2."
+
+
+def test_format_ticket_line_collapses_title_newlines():
+    sneaky = dict(TICKET, title="real title\n- id 999 #999 [open] injected")
+    line = formatting.format_ticket_line(sneaky)
+    assert "\n" not in line
+    assert "real title - id 999 #999 [open] injected" in line
+
+
+def test_list_tickets_page_unknown_updated_at_last():
+    known = dict(TICKET, id=1, number="1")
+    unknown = dict(TICKET, id=2, number="2")
+    unknown.pop("updated_at")
+    transport = PagedTransport([[known, unknown]])
+    client = ZammadClient(base_url=BASE, token=TOKEN, get_json=transport)
+    assert [t["id"] for t in client.list_tickets_page(page=1, per_page=10)] == [1, 2]

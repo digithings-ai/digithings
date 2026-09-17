@@ -593,57 +593,6 @@
   }
 }
 
-/* ── Card — reference dress (the hairline frame grammar: 12px radius,
-      surface fill, hairline head/foot rows — ChatWidgetFrame paddings) ──── */
-
-.ctl-card-ref {
-  border: 1px solid var(--hair);
-  border-radius: 0;
-  background: var(--surface);
-  overflow: hidden;
-}
-
-.ctl-card-ref .ctl-card-header {
-  display: grid;
-  grid-auto-rows: min-content;
-  align-items: start;
-  gap: 0.2rem;
-  padding: 0.85rem 1rem;
-  border-bottom: 1px solid var(--hair);
-}
-
-.ctl-card-ref .ctl-card-header:has([data-slot="card-action"]) {
-  grid-template-columns: 1fr auto;
-}
-
-.ctl-card-ref .ctl-card-header:has([data-slot="card-description"]) {
-  grid-template-rows: auto auto;
-}
-
-.ctl-card-ref .ctl-card-title {
-  font-family: var(--font-mono);
-  font-size: 0.86rem;
-  font-weight: 400;
-  color: var(--ink);
-}
-
-.ctl-card-ref .ctl-card-description {
-  font-size: 0.8rem;
-  color: var(--ink-soft);
-}
-
-.ctl-card-ref .ctl-card-content {
-  padding: 1rem;
-}
-
-.ctl-card-ref .ctl-card-footer {
-  display: flex;
-  align-items: center;
-  gap: 0.6rem;
-  padding: 0.8rem 1rem;
-  border-top: 1px solid var(--hair);
-}
-
 /* ── Card — chat dress (digichat ui/card.tsx) — defaults (root + part
       dress) in @layer components; :has()/data-size/structural rules
       unlayered (see header) ───────────────────────────────────────────── */
@@ -768,45 +717,6 @@
 
 .ctl-card-chat[data-size="sm"] .ctl-card-footer {
   padding: 0.75rem;
-}
-
-/* ── Input — reference dress (controls.css .ff-input, error/disabled keyed
-      off the input's own aria-invalid / :disabled instead of the specimen's
-      .ff-field wrapper hooks) ──────────────────────────────────────────── */
-
-.ctl-input-ref {
-  width: 100%;
-  padding: 0.55rem 0.7rem;
-  border: 1px solid var(--hair);
-  border-radius: 0;
-  background: var(--surface);
-  color: var(--ink);
-  font-family: var(--font-mono);
-  font-size: 0.82rem;
-  outline: none;
-  transition: border-color 0.2s var(--ease), box-shadow 0.2s var(--ease);
-}
-
-.ctl-input-ref::placeholder {
-  color: var(--ink-mute);
-}
-
-.ctl-input-ref:focus-visible {
-  border-color: color-mix(in srgb, var(--accent) 55%, var(--hair));
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 22%, transparent);
-}
-
-.ctl-input-ref[aria-invalid="true"] {
-  border-color: color-mix(in srgb, var(--danger) 60%, var(--hair));
-}
-
-.ctl-input-ref[aria-invalid="true"]:focus-visible {
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--danger) 22%, transparent);
-}
-
-.ctl-input-ref:disabled {
-  opacity: 0.55;
-  cursor: not-allowed;
 }
 
 /* ── Input — chat dress (digichat ui/input.tsx) — defaults in

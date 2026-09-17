@@ -160,6 +160,9 @@
   --surface-2: #171A1E;
   --hair:      rgba(255, 255, 255, 0.09);
   --hair-2:    rgba(255, 255, 255, 0.15);
+  /* Escalation alias for interactive borders (controls tables/pagination) and
+     DESIGN.md's card hover; previously referenced 17× in CSS with 0 definitions. */
+  --hair-strong: var(--hair-2);
 
   --ink:       #ECEEF0;
   --ink-soft:  #9AA0A6;
@@ -212,6 +215,8 @@
   --surface-2: #F4F4F1;
   --hair:      rgba(10, 15, 20, 0.10);
   --hair-2:    rgba(10, 15, 20, 0.18);
+  /* See the dark-theme --hair-strong comment above. */
+  --hair-strong: var(--hair-2);
 
   --ink:       #14181B;
   --ink-soft:  #5C636A;

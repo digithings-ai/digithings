@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { Reveal } from "@digithings/web";
+import { buttonVariants } from "@digithings/web/ui";
 import { DtFooter } from "@/components/DtFooter";
 import { PageHead, RuledList, RuledRow } from "../_company/prose";
 import { ContactMailto } from "@digithings/web";
@@ -123,13 +124,17 @@ export default function ServicesPage() {
               </p>
             </Reveal>
             <div className="flex flex-wrap gap-[0.8rem]">
-              <ContactMailto email={DT_CONTACT_EMAIL} className="btn btn-primary" subject="digithings%20services%20inquiry">
+              <ContactMailto
+                email={DT_CONTACT_EMAIL}
+                className={buttonVariants({ variant: "default" })}
+                subject="digithings%20services%20inquiry"
+              >
                 Email about a project <span aria-hidden="true">→</span>
               </ContactMailto>
-              <Link className="btn btn-ghost" href="/docs">
+              <Link className={buttonVariants({ variant: "ghost" })} href="/docs">
                 Read the docs
               </Link>
-              <Link className="btn btn-ghost" href="/security">
+              <Link className={buttonVariants({ variant: "ghost" })} href="/security">
                 Review security
               </Link>
             </div>

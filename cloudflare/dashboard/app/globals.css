@@ -1,5 +1,10 @@
 @import "tailwindcss";
 @plugin "@tailwindcss/typography";
+/* tw-animate-css BEFORE the token/theme imports (T1 ordering ruling): the
+   vendored kit's Dialog/overlay parts carry `animate-in`/`animate-out`
+   utilities, and the keyframes must land in the base cascade before
+   web-theme.css and the family sheets. */
+@import "tw-animate-css";
 
 /* ── digithings design canon ─────────────────────────────────────────────
    tokens.css declares the [data-theme] semantic tokens; web-theme.css is THE
@@ -10,7 +15,10 @@
    grammars this dashboard reuses. */
 @import "@digithings/design/tokens.css";
 @import "@digithings/web/styles/web-theme.css";
-/* Shared controls dress (Badge — F4 #1450). Imported PLAINLY on purpose:
+/* Shared controls dress (Select/Sheet/Dialog/Table parts the kit lacks).
+   Wave-2 (#4206): the F4 Badge shim moved to the kit Badge, but the controls
+   layer still dresses Select/Sheet/Dialog/Table/EmptyState/Skeleton here.
+   Imported PLAINLY on purpose:
    controls-core.css manages its own layering (defaults in @layer components,
    state/structural rules unlayered — see its header). No @source needed:
    the controls carry no Tailwind utilities. */
@@ -19,8 +27,9 @@
    account-auth.css is token-only and manages its own rules. */
 @import "@digithings/web/styles/account-auth.css";
 /* Account surfaces (login / signup / session / settings) — grammar from
-   digiweb/reference/app/account/account.css. Imported after controls-core so
-   .acct-btn-block can override .btn-* display. */
+   digiweb/reference/app/account/account.css. Wave-2 (#4206) pruned the
+   superseded button/field/divider/toggle dress; the remaining `.acct-*`
+   layout/type rules are consumed by login/callback/settings/sidebar. */
 @import "./account-surfaces.css";
 /* NumberedStages spine/node art (system → How it works, F4 #1450). */
 @import "@digithings/web/styles/stages.css";
@@ -77,6 +86,11 @@
 /* Tailwind never scans package sources — generate the token utilities the
    shared controls carry (MIGRATION.md rule 3). */
 @source "../../digiweb/web/src/components/controls";
+
+/* Tailwind never scans package sources — the vendored kit primitives
+   (Button/Input/Label/Alert/Card/Badge/Sheet/Dialog) render here after the
+   wave-2 adoption (MIGRATION.md rule 3). */
+@source "../../digiweb/web/src/ui";
 
 /* Tailwind never scans package sources — the ⌘K palette shell and the brand
    marks/wordmark render here (MIGRATION.md rule 3, #1548). */
@@ -150,41 +164,33 @@ html.light {
 .qn-up   { color: var(--up); }
 .qn-down { color: var(--down); }
 
-/* ── Scroll reveals (MotionLayer adds html.motion-on only when motion is OK) ── */
-html.motion-on .oly-slab,
+/* ── Scroll reveals (MotionLayer adds html.motion-on only when motion is OK) ──
+   Wave-2 (#4206): the reveal hook is the `data-reveal` attribute only — the
+   retired `.oly-slab` class no longer participates (call sites ride the kit
+   `Card`). */
 html.motion-on [data-reveal] {
   opacity: 0;
   transform: translateY(12px);
   transition: opacity 0.55s cubic-bezier(0.22, 1, 0.36, 1), transform 0.55s cubic-bezier(0.22, 1, 0.36, 1);
   will-change: opacity, transform;
 }
-html.motion-on .oly-slab.reveal-in,
 html.motion-on [data-reveal].reveal-in {
   opacity: 1;
   transform: none;
 }
 
 @media (prefers-reduced-motion: reduce) {
-  html.motion-on .oly-slab,
   html.motion-on [data-reveal] { opacity: 1 !important; transform: none !important; transition: none !important; }
 }
 
 /* ── Surface system (BLEND v0.1 tonal slab) ────────────────────────────
    dashboards are instrument-density tonal slabs: `--surface` fill,
-   1px `--hair` border, radius 0. Hover lifts the hairline to `--hair-2`.
-   Depth is reserved for floating overlays; content panels stay shadowless.
-   `backdrop-blur` is used ONLY on sticky/overlay chrome (nav, mobile app
-   bar, command palette, sidebar) — never on content cards.
-   `.glass-card` is retired — twelve-x call sites must switch to `.oly-slab`. */
-.oly-slab {
-  background: var(--surface);
-  border: 1px solid var(--hair);
-  border-radius: 0;
-  transition: border-color 0.2s ease;
-}
-.oly-slab:hover {
-  border-color: var(--hair-2);
-}
+   1px `--hair` border, radius 0. Depth is reserved for floating overlays;
+   content panels stay shadowless. `backdrop-blur` is used ONLY on
+   sticky/overlay chrome (nav, mobile app bar, command palette, sidebar) —
+   never on content cards. Wave-2 (#4206): `.oly-slab` is retired — content
+   boxes ride the kit `Card` (same `--surface` fill / hairline / radius 0)
+   with `data-reveal` as the motion hook. */
 
 /* ── Recharts override (quant-native, token-driven) ────────────────────── */
 /* px below: recharts renders SVG text — geometric px, not root type. */

@@ -1,7 +1,18 @@
 "use client";
 
 import { useMemo } from "react";
-import { SegToggle, fmtNum, fmtPct, toneClass } from "@digithings/web";
+import {
+  SegToggle,
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+  fmtNum,
+  fmtPct,
+  toneClass,
+} from "@digithings/web";
 import { fmtRatio } from "./stats";
 import {
   PIVOT_LABELS,
@@ -164,42 +175,46 @@ function PivotStatsGrid({
   return (
     <div
       className={
-        "ts-table-wrap ts-pivot-wrap" + (compact ? " ts-pivot-wrap-compact" : " ts-table-scroll")
+        "ctl-table-scroll ts-pivot-wrap" + (compact ? " ts-pivot-wrap-compact" : " ts-table-scroll")
       }
     >
-      <table className={"ts-table ts-pivot-table" + (compact ? " ts-pivot-table-compact" : "")}>
-        <thead>
-          <tr>
-            <th scope="col" className="ts-pivot-metric-col">
-              Metric
-            </th>
+      <Table
+        className={"ts-pivot-table" + (compact ? " ts-pivot-table-compact" : "")}
+        density={compact ? "compact" : "default"}
+      >
+        <TableHeader>
+          <TableRow>
+            <TableHead className="ts-pivot-metric-col sticky top-0 bg-surface">Metric</TableHead>
             {columns.map(({ slice }) => (
-              <th
+              <TableHead
                 key={slice.id}
-                scope="col"
-                className="ts-num ts-pivot-col"
+                numeric
+                className="ts-pivot-col sticky top-0 bg-surface"
                 aria-label={slice.id === "full" ? "Full period" : undefined}
               >
                 {slice.id === "full" ? "" : slice.label}
-              </th>
+              </TableHead>
             ))}
-          </tr>
-        </thead>
-        <tbody>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
           {metricRows.map((row) => (
-            <tr key={row.key}>
-              <th scope="row" className="ts-pivot-metric-col">
+            <TableRow key={row.key}>
+              <TableHead
+                scope="row"
+                className="ts-pivot-metric-col border-b-hair text-left text-[0.88rem] font-normal normal-case tracking-normal text-ink-soft"
+              >
                 {row.label}
-              </th>
+              </TableHead>
               {columns.map(({ slice, metrics }) => (
-                <td key={slice.id} className="ts-num ts-pivot-col">
+                <TableCell key={slice.id} numeric className="ts-pivot-col">
                   {row.cell(metrics)}
-                </td>
+                </TableCell>
               ))}
-            </tr>
+            </TableRow>
           ))}
-        </tbody>
-      </table>
+        </TableBody>
+      </Table>
     </div>
   );
 }

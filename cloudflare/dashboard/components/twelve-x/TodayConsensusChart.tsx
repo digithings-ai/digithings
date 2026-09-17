@@ -1,6 +1,7 @@
 'use client';
 
 import { useMemo } from 'react';
+import { Card } from '@digithings/web/ui';
 import { deriveConsensusRows } from '@/lib/twelve-x/consensus-view';
 import { currencyColor, scoreColorClass } from '@/lib/twelve-x/consensus-bar';
 import { fmtSigned } from '@/lib/twelve-x/format';
@@ -54,7 +55,7 @@ export function TodayConsensusChart({ series }: TodayConsensusChartProps) {
   const hasData = rows.length > 0;
 
   return (
-    <section className="oly-slab flex flex-1 flex-col p-4">
+    <Card data-reveal className="flex flex-1 flex-col p-4">
       <div className="mb-3.5">
         <TwelveXSectionHeading>Consensus</TwelveXSectionHeading>
       </div>
@@ -125,7 +126,7 @@ export function TodayConsensusChart({ series }: TodayConsensusChartProps) {
           </div>
         </>
       )}
-    </section>
+    </Card>
   );
 }
 

@@ -16,6 +16,19 @@ from digisearch.search._stub import _first_env
 
 logger = logging.getLogger(__name__)
 
+_LEGACY_WARNED: set[str] = set()
+
+
+def _warn_legacy_env(canonical: str, *legacy: str) -> None:
+    if os.environ.get(canonical, "").strip():
+        return
+    for name in legacy:
+        if os.environ.get(name, "").strip():
+            if name not in _LEGACY_WARNED:
+                _LEGACY_WARNED.add(name)
+                logger.warning("Using deprecated env var %s; set %s instead", name, canonical)
+            return
+
 
 def require_real_search_backend() -> None:
     """Fail unless Vectorize, Azure, Chroma, or DIGISEARCH_ALLOW_STUB=1 is set."""
@@ -30,6 +43,8 @@ def require_real_search_backend() -> None:
     # Canonical-first, legacy-fallback (#2239 credential rename) -- same precedence
     # `_vectorize_backend` uses, so this startup gate can never disagree with the
     # backend it's gating.
+    _warn_legacy_env("CLOUDFLARE_ACCOUNT_ID", "VECTORIZE_ACCOUNT_ID", "D1_ACCOUNT_ID")
+    _warn_legacy_env("CLOUDFLARE_API_TOKEN", "VECTORIZE_API_TOKEN", "D1_API_TOKEN")
     if _first_env("CLOUDFLARE_ACCOUNT_ID", "VECTORIZE_ACCOUNT_ID", "D1_ACCOUNT_ID") and _first_env(
         "CLOUDFLARE_API_TOKEN", "VECTORIZE_API_TOKEN", "D1_API_TOKEN"
     ):

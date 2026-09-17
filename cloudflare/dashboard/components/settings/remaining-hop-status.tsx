@@ -122,7 +122,7 @@ export function RemainingHopStatus({
 
   return (
     <div className="space-y-2" data-testid="remaining-hop-status">
-      <p className="acct-settings-kicker text-ink-mute">Remaining hops</p>
+      <p className="font-mono text-[0.72rem] tracking-[0.02em] text-ink-mute">Remaining hops</p>
       <p className="text-xs text-ink-mute">
         Member-scoped Settings reads only. House <span className="font-mono">active</span> without
         a Stripe subscription boolean does not prove checkout. Brief or Desk Stripe does not prove

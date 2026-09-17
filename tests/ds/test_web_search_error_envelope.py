@@ -84,6 +84,39 @@ def test_v1_web_search_provider_failure_is_soft_envelope(
 
 
 @pytest.mark.unit
+def test_v1_web_search_error_scrubs_provider_url_credentials(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Provider URL userinfo and query tokens must not reach the envelope."""
+    secret_url = (
+        "Client error '429 Too Many Requests' for url "
+        "'http://user:s3cr3t@searxng.internal:8080/search?q=etf&token=abc123'"
+    )
+    _down_every_provider(monkeypatch, lambda: RuntimeError(secret_url))
+    r = client.post("/v1/web_search", json={"query": "etf flows"})
+    body = r.json()
+    assert body["ok"] is False
+    assert "s3cr3t" not in body["error"]
+    assert "token=abc123" not in body["error"]
+
+
+@pytest.mark.unit
+def test_v1_web_search_provider_failure_logs_warning(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """The HTTP 200 soft envelope must still leave an operator-visible log."""
+    import logging
+
+    _down_every_provider(monkeypatch, lambda: _http_status_error(429))
+    with caplog.at_level(logging.WARNING, logger="digisearch.server"):
+        r = client.post("/v1/web_search", json={"query": "etf flows"})
+    assert r.json()["ok"] is False
+    assert any("web_search provider failure" in record.getMessage() for record in caplog.records)
+
+
+@pytest.mark.unit
 def test_v1_web_search_rate_limit_is_retryable(
     client: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -102,12 +135,11 @@ def test_v1_web_search_rate_limit_is_retryable(
 def test_v1_web_search_ddgs_ratelimit_is_soft_envelope(
     client: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """Pin the real incident mode: installed ddgs ``RatelimitException`` -> 200.
+    """Pin ddgs 9.0.x ``RatelimitException`` -> 200 soft envelope.
 
     The deployed free ``ddgs`` fallback raised this on 2026-09-15 and escaped as
-    an HTTP 500. ddgs exposes no HTTP response, so the service classifies by
-    exception name; a ddgs rename/refactor must fail here, not silently turn a
-    rate limit into a hard failure (or a 500).
+    an HTTP 500. ddgs >=9.1 masks failed searches as ``DDGSException`` instead,
+    so this pins the legacy class the incident actually raised.
     """
     ratelimit = pytest.importorskip("ddgs.exceptions").RatelimitException
     _down_every_provider(monkeypatch, ratelimit)

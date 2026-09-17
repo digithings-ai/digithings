@@ -2,8 +2,8 @@
 
 import type { FormEvent } from "react";
 
-import { Button as LayerButton } from "@digithings/web";
-import { Input, Label } from "@digithings/web/ui";
+import { Spinner } from "@digithings/web";
+import { Button, Input, Label } from "@digithings/web/ui";
 
 /**
  * Payment band — a checkout pairing: card form on the left, plan receipt on the
@@ -11,12 +11,11 @@ import { Input, Label } from "@digithings/web/ui";
  * spends full ink; the loading state reuses the house spinner button rather than
  * anything bespoke. An interactive display template.
  *
- * Wave 1: card fields are the stock kit — Input/Label from
- * `@digithings/web/ui`; the block field spacing is call-site grammar. The
- * button pair stays on the `@digithings/web` controls layer: the processing
- * state needs its `loading` spinner, so both actions wear that one dress
- * rather than mixing generations inside the row. The old field dress is
- * gone.
+ * Wave 1 / wave 3: card fields and both actions are the stock kit —
+ * Input/Label/Button from `@digithings/web/ui`; the block field spacing is
+ * call-site grammar. The kit has no `loading` prop, so the processing state
+ * is the wave-2 idiom: `disabled` plus the inline spinner span (same as
+ * buttons-cta-reference). The old field dress is gone.
  */
 
 function preventSubmit(event: FormEvent<HTMLFormElement>) {
@@ -105,10 +104,11 @@ export function PaymentBand() {
             </div>
           </div>
           <div className="mt-[1.2rem] flex flex-wrap items-center gap-[0.8rem]">
-            <LayerButton type="submit">Pay $165.56</LayerButton>
-            <LayerButton type="button" loading disabled>
+            <Button type="submit">Pay $165.56</Button>
+            <Button type="button" disabled>
+              <Spinner />
               Processing…
-            </LayerButton>
+            </Button>
           </div>
         </form>
 

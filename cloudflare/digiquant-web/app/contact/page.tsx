@@ -8,6 +8,7 @@ import {
   MANAGED_CONTACT_SUBJECT,
 } from "../_contact";
 import { ContactMailto } from "@digithings/web";
+import { buttonVariants } from "@digithings/web/ui";
 import { SiteNav } from "@/components/landing/SiteNav";
 import { AmbientMesh } from "@/components/landing/AmbientMesh";
 import { CloneRepoButton } from "@/components/landing/CloneRepoButton";
@@ -72,7 +73,7 @@ export default function ContactPage() {
                   features={[...CONTACT_MANAGED_FEATURES]}
                   cta={
                     <ContactMailto
-                      className="btn btn-primary"
+                      className={buttonVariants({ variant: "default" })}
                       email={MANAGED_CONTACT_EMAIL}
                       subject={MANAGED_CONTACT_SUBJECT}
                     >

@@ -95,7 +95,7 @@
         "name": "ModuleCardReference",
         "id": "module-card",
         "path": "reference/components/chrome/module-card-reference.tsx",
-        "summary": "Module card \u2014 the landing-page module tile from @digithings/web, the sibling of Nav/Footer/Colophon in the shared chrome file."
+        "summary": "Module card \u2014 the landing-page module tile from @digithings/web, the sibling of NavShell/Footer/Colophon in the shared chrome file."
       },
       {
         "name": "NavMenuReference",

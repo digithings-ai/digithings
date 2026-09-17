@@ -1,6 +1,7 @@
 'use client';
 
 import { useMemo, useState } from 'react';
+import { Card } from '@digithings/web/ui';
 import {
   LEAN_BAND,
   STRONG_BAND,
@@ -110,9 +111,9 @@ export function ConsensusDataTable({
 
   if (rows.length === 0) {
     return (
-      <div className="oly-slab p-8 text-center text-sm text-ink-mute">
+      <Card data-reveal className="gap-0 p-8 text-center text-sm text-ink-mute">
         No consensus data available.
-      </div>
+      </Card>
     );
   }
 
@@ -140,7 +141,7 @@ export function ConsensusDataTable({
         })}
       </div>
 
-      <div className="oly-slab overflow-hidden p-0">
+      <Card data-reveal className="gap-0 overflow-hidden p-0">
         <div className="overflow-x-auto">
           <table className="w-full min-w-[880px] border-collapse">
             <thead>
@@ -313,7 +314,7 @@ export function ConsensusDataTable({
             </tbody>
           </table>
         </div>
-      </div>
+      </Card>
     </div>
   );
 }

@@ -7,6 +7,7 @@ import {
   type NumberedStage,
   type OdometerStat,
 } from "@digithings/web";
+import { buttonVariants } from "@digithings/web/ui";
 import { DtFooter } from "@/components/DtFooter";
 import { Mono, PageHead, RuledList, RuledRow } from "../_company/prose";
 import { DtNav } from "@/components/DtNav";
@@ -368,14 +369,14 @@ export default function QualityPage() {
             </p>
             <div className="mt-[2rem] flex flex-wrap gap-[0.8rem]">
               <a
-                className="btn btn-primary"
+                className={buttonVariants({ variant: "default" })}
                 href="https://github.com/digithings-ai/digithings/tree/main/docs/scoring"
                 target="_blank"
                 rel="noopener noreferrer"
               >
                 Read the rubrics <span aria-hidden="true">→</span>
               </a>
-              <Link className="btn btn-ghost" href="/docs">
+              <Link className={buttonVariants({ variant: "ghost" })} href="/docs">
                 API reference
               </Link>
             </div>
