@@ -68,6 +68,14 @@ export function digithingsCsp(frameSrc = frameSrcForCsp()) {
  * deliberately wider than the /* policy below — scoped to /openwiki/* only so
  * the rest of the site keeps the strict self-hosted posture. The export's own
  * <meta> CSP is patched at build time to match these font directives.
+ *
+ * /openwiki/* matches both this rule and the more pervasive /* rule, and
+ * Cloudflare joins inherited headers: without the detach below the browser
+ * enforces the INTERSECTION of both CSPs, so the strict /* policy (no jsDelivr)
+ * silently blocks the visualizer's scripts and leaves #graph empty (#4206).
+ * `! Content-Security-Policy` removes the /* header for these paths before this
+ * rule's own CSP is attached — Cloudflare Pages' documented detach syntax
+ * (developers.cloudflare.com/pages/configuration/headers/#detach-a-header).
  */
 export function openwikiCsp() {
   return [
@@ -103,6 +111,9 @@ export function renderCloudflareHeaders(frameSrc = frameSrcForCsp()) {
     "# X-Frame-Options: DENY still blocks third parties framing digithings.ai itself.",
     "# /openwiki/* is the openwiki visualizer static export (#3696): pinned jsDelivr",
     "# scripts (SRI) + Google Fonts only; the rest of the site keeps the /* policy.",
+    "# /openwiki/* inherits /* and Cloudflare joins headers, so the browser would",
+    "# enforce the INTERSECTION of both CSPs and block jsDelivr. Detach the",
+    "# inherited CSP first (documented `!` syntax), then attach the wiki policy.",
     "/*",
     "  X-Content-Type-Options: nosniff",
     "  X-Frame-Options: DENY",
@@ -111,6 +122,7 @@ export function renderCloudflareHeaders(frameSrc = frameSrcForCsp()) {
     `  Content-Security-Policy: ${csp}`,
     "",
     "/openwiki/*",
+    "  ! Content-Security-Policy",
     "  X-Content-Type-Options: nosniff",
     "  X-Frame-Options: DENY",
     "  Referrer-Policy: strict-origin-when-cross-origin",

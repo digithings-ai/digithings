@@ -3,6 +3,7 @@
 import { useState, type FormEvent } from 'react';
 import { useRouter } from 'next/navigation';
 import { AuthCard, type AuthOAuthProvider } from '@digithings/web';
+import { Card } from '@digithings/web/ui';
 import { useAuth } from '@/lib/auth-context';
 import { formatAuthError, SIGNUP_SESSION_MISSING_COPY } from '@/lib/auth-errors';
 import { dashboardBasePath } from '@/lib/supabase';
@@ -69,14 +70,14 @@ export function LoginScreen({ initialMode = 'signin' }: { initialMode?: LoginScr
   }
 
   return (
-    <div className="acct-login-shell qn-blueprint-bg">
+    <div className="qn-blueprint-bg flex min-h-screen flex-col items-center justify-center p-6 text-ink">
       {!authEnabled ? (
-        <div className="acct-login-card">
+        <Card className="w-full max-w-[380px] gap-0 border border-hair p-5 ring-0">
           <p className="font-mono text-[0.68rem] text-ink-mute">
             App auth is off. Set <code>NEXT_PUBLIC_DASHBOARD_AUTH=1</code> at build time to enable
             login.
           </p>
-        </div>
+        </Card>
       ) : (
         <AuthCard
           layout="compact"

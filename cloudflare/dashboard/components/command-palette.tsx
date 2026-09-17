@@ -25,6 +25,7 @@ import {
   CommandPalette as CommandPaletteShell,
   type CommandPaletteGroup,
 } from '@digithings/web';
+import { Button } from '@digithings/web/ui';
 import { useDashboard } from '@/lib/dashboard-context';
 import { useAppShell } from '@/components/app-shell-context';
 import { buildPipelineHref, DIGEST_DOCUMENT_KEYS } from '@/lib/pipeline-links';
@@ -411,14 +412,16 @@ export default function CommandPalette() {
       emptyMessage="No matches"
       inputLeading={<Search size={16} className="text-ink-mute shrink-0" aria-hidden />}
       inputTrailing={
-        <button
+        <Button
           type="button"
+          variant="ghost"
+          size="icon-sm"
           onClick={closeCommandPalette}
-          className="p-1.5 text-ink-mute hover:text-ink hover:bg-ink/[0.07]"
+          className="text-ink-mute hover:bg-ink/[0.07] hover:text-ink"
           aria-label="Close"
         >
           <X size={16} />
-        </button>
+        </Button>
       }
     />
   );

@@ -308,7 +308,7 @@ hooks-install:
 digiquant-cron-check:
 	python scripts/digiquant_cron_check.py
 
-# Run gitleaks locally against the working tree. Mirrors the CI scan so
+# Run gitleaks locally across git history. Mirrors the CI scan so
 # developers can reproduce findings before pushing.
 #   Install:  brew install gitleaks   OR   go install github.com/gitleaks/gitleaks/v8@latest
 # The CI job uses the same .gitleaks.toml config at repo root.
@@ -318,3 +318,11 @@ secrets-scan:
 	  exit 127; \
 	}
 	@gitleaks detect --source . --config .gitleaks.toml --redact --verbose --no-banner
+
+# Compare the repo secret list (`gh secret list`) with every `secrets.*` read
+# under .github/. Reads with no repo-level secret are informational (they usually
+# resolve at org or environment level); a repo secret nothing reads exits 1.
+# Local check only — deliberately not a CI gate.
+.PHONY: secrets-audit
+secrets-audit:
+	python3 scripts/secrets_audit.py --strict

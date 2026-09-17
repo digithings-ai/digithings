@@ -1,5 +1,7 @@
 'use client';
 
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@digithings/web/ui';
+
 type Op = { op?: string; path?: string; value?: unknown; reason?: string };
 
 function previewValue(v: unknown): string {
@@ -58,30 +60,32 @@ export default function DeltaRequestDocumentView({ payload }: { payload: Record<
       ) : null}
 
       {ops.length > 0 ? (
-        <div className="overflow-x-auto">
+        <div>
           <h3 className="text-xs font-semibold text-ink-mute uppercase tracking-wider mb-2">Operations</h3>
-          <table className="w-full text-left text-xs border-collapse min-w-[640px]">
-            <thead>
-              <tr className="border-b border-hair text-ink-mute">
-                <th className="py-2 pr-2 font-medium">Op</th>
-                <th className="py-2 pr-2 font-medium">Path</th>
-                <th className="py-2 pr-2 font-medium">Value (preview)</th>
-                <th className="py-2 font-medium">Reason</th>
-              </tr>
-            </thead>
-            <tbody>
+          <Table className="min-w-[640px]">
+            <TableHeader>
+              <TableRow className="border-hair hover:bg-transparent">
+                <TableHead className="text-ink-mute">Op</TableHead>
+                <TableHead className="text-ink-mute">Path</TableHead>
+                <TableHead className="text-ink-mute">Value (preview)</TableHead>
+                <TableHead className="text-ink-mute">Reason</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
               {ops.map((o, i) => (
-                <tr key={i} className="border-b border-hair/60 align-top">
-                  <td className="py-2 pr-2 font-mono text-accent whitespace-nowrap">{o.op ?? '—'}</td>
-                  <td className="py-2 pr-2 font-mono text-[11px] text-ink-soft break-all">{o.path ?? '—'}</td>
-                  <td className="py-2 pr-2 font-mono text-[10px] text-ink-mute break-all max-w-[240px]">
+                <TableRow key={i} className="border-hair/60 align-top hover:bg-transparent">
+                  <TableCell className="font-mono text-accent whitespace-nowrap">{o.op ?? '—'}</TableCell>
+                  <TableCell className="font-mono text-[11px] text-ink-soft break-all whitespace-normal">
+                    {o.path ?? '—'}
+                  </TableCell>
+                  <TableCell className="font-mono text-[10px] text-ink-mute break-all whitespace-normal max-w-[240px]">
                     {previewValue(o.value)}
-                  </td>
-                  <td className="py-2 text-ink-soft whitespace-pre-wrap">{o.reason ?? '—'}</td>
-                </tr>
+                  </TableCell>
+                  <TableCell className="text-ink-soft whitespace-pre-wrap">{o.reason ?? '—'}</TableCell>
+                </TableRow>
               ))}
-            </tbody>
-          </table>
+            </TableBody>
+          </Table>
         </div>
       ) : (
         <p className="text-ink-mute text-xs">No operations in this delta request.</p>

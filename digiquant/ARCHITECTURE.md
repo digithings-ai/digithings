@@ -380,11 +380,12 @@ refresh cron applies); `curl -sI https://api.stlouisfed.org` → HTTP 301 to the
 API docs. Re-run both before first deploy; a 429 storm behind shared egress
 means backing off the overlap window, not widening it.
 
-Warm policy (min-instances-1 equivalent): `sleepAfter = "24h"` on the container
-class, backed by the daily `market-data-refresh` cron health ping against the
-enabled custom-domain route (once live):
+Cold-start policy: `sleepAfter = "15m"` on the container class, so the container
+may sleep after 15 minutes idle. A cold start only pays the FastMCP import,
+never a data load. The daily `market-data-refresh` cron keeps R2 fresh and never
+touches the container; once the custom-domain route is enabled it can be pinged
+manually:
 `curl -sS https://mcp.digithings.ai/mcp -H 'Accept: application/json'`.
-A cold start only pays the FastMCP import, never a data load.
 
 Per-component secrets (`wrangler secret put`, never committed): `FRED_API_KEY`
 plus the four R2 names `R2_ACCOUNT_ID` / `R2_BUCKET` / `R2_ACCESS_KEY_ID` /

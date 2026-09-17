@@ -576,6 +576,8 @@ old app-local `@theme` palette (`--color-bg-primary`, `--color-text-primary`,
 palette. The only app-local custom props left in `globals.css` are non-utility
 depth cues (`--shadow-overlay`) and the next/font family re-declarations that
 route the canon font tokens to the self-hosted Geist Mono face — no color
-palette and no serif display face. Dashboard panels use `.oly-slab` (tonal
-`--surface` + hairline, radius 0). See [`../digiweb/MIGRATION.md`](../digiweb/MIGRATION.md) for
+palette and no serif display face. Dashboard panels ride the vendored kit
+`Card` (`@digithings/web/ui`, tonal `--surface` + hairline, radius 0) with
+`data-reveal` as the scroll-reveal hook (wave 2, #4206). See
+[`../digiweb/MIGRATION.md`](../digiweb/MIGRATION.md) for
 the canon wiring and the `@theme inline` bridge rule.

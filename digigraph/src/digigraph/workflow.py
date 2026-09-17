@@ -193,10 +193,15 @@ def _extract_attribution(value: Any, _depth: int = 0) -> dict[str, str]:
     """
     if _depth > _MAX_ATTRIBUTION_WALK_DEPTH:
         return {}
+    partial: dict[str, str] = {}
     if isinstance(value, dict):
         found = _attribution_from_mapping(value)
-        if found:
+        if "attribution" in found:
             return found
+        # A partial hoist (e.g. only ``source_url``) must not shadow a richer
+        # nested block (#4131 review): keep walking, remember the partial as a
+        # fallback, and prefer the first match carrying the canonical key.
+        partial = found
         items = list(value.values())
     elif isinstance(value, list):
         items = list(value)
@@ -212,9 +217,11 @@ def _extract_attribution(value: Any, _depth: int = 0) -> dict[str, str]:
         return {}
     for item in items[:_MAX_ATTRIBUTION_WALK_ITEMS]:
         found = _extract_attribution(item, _depth + 1)
-        if found:
+        if "attribution" in found:
             return found
-    return {}
+        if found and not partial:
+            partial = found
+    return partial
 
 
 def _attribution_variants(attribution: dict[str, str]) -> list[dict[str, str]]:
@@ -295,7 +302,9 @@ def _render_clipped_tool_result(result_data: dict[str, Any]) -> Any | None:
         # The payload fits as-is; keep the richest §7 subset that fits with it.
         if isinstance(clipped_result, dict) and attribution:
             for block in variants:
-                candidate = {**block, **clipped_result}
+                # Validated string keys win collisions: a non-string top-level
+                # key in the payload must not shadow the hoisted block (#4131).
+                candidate = {**clipped_result, **block}
                 if _fits_tool_result_cap(candidate):
                     return candidate
         return clipped_result

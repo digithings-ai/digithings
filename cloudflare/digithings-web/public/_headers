@@ -4,6 +4,9 @@
 # X-Frame-Options: DENY still blocks third parties framing digithings.ai itself.
 # /openwiki/* is the openwiki visualizer static export (#3696): pinned jsDelivr
 # scripts (SRI) + Google Fonts only; the rest of the site keeps the /* policy.
+# /openwiki/* inherits /* and Cloudflare joins headers, so the browser would
+# enforce the INTERSECTION of both CSPs and block jsDelivr. Detach the
+# inherited CSP first (documented `!` syntax), then attach the wiki policy.
 /*
   X-Content-Type-Options: nosniff
   X-Frame-Options: DENY
@@ -12,6 +15,7 @@
   Content-Security-Policy: default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self' data:; connect-src 'self' https://api.github.com; worker-src 'self' blob:; frame-src https://digithings.ai; frame-ancestors 'none'; base-uri 'self'; form-action 'self'; object-src 'none'
 
 /openwiki/*
+  ! Content-Security-Policy
   X-Content-Type-Options: nosniff
   X-Frame-Options: DENY
   Referrer-Policy: strict-origin-when-cross-origin

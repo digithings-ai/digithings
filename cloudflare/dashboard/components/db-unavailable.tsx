@@ -1,6 +1,7 @@
 'use client';
 
 import { EmptyState } from '@digithings/web';
+import { Button } from '@digithings/web/ui';
 import { SUBPAGE_MAX } from '@/components/layout-constants';
 
 /**
@@ -15,8 +16,9 @@ import { SUBPAGE_MAX } from '@/components/layout-constants';
  * #1548: the card is the promoted @digithings/web EmptyState — variant="error"
  * (semantic; the glass dresses carry no glyph disc, so no down tint shows) in
  * the dress="glass-display" cut (API name; the surface is a tonal slab, not
- * glass). Title uses font-display (mono voice). The `.oly-slab` surface is
- * the call-site class so MotionLayer's reveal hook keeps firing.
+ * glass). Title uses font-display (mono voice). The promoted EmptyState
+ * carries its own tonal-slab box, so the retired `.oly-slab` layer was
+ * redundant; the reveal hook is now the `data-reveal` attribute.
  *
  * Copy fix (full-UI-suite critique, P2): this used to say "It'll reconnect
  * automatically", but dbStatus (lib/dashboard-context.tsx) is set once from a
@@ -31,7 +33,8 @@ export default function DbUnavailable() {
       <EmptyState
         variant="error"
         dress="glass-display"
-        className="oly-slab mx-auto max-w-md"
+        className="mx-auto max-w-md"
+        data-reveal
         title="Live data is temporarily unavailable"
         body={
           <>
@@ -40,13 +43,14 @@ export default function DbUnavailable() {
           </>
         }
         action={
-          <button
+          <Button
             type="button"
+            variant="outline"
             onClick={() => window.location.reload()}
-            className="mt-5 inline-flex items-center border border-hair px-4 py-2 text-sm font-medium text-accent transition-colors hover:bg-ink/[0.06]"
+            className="mt-5 h-auto border-hair px-4 py-2 text-sm text-accent"
           >
             Retry
-          </button>
+          </Button>
         }
       />
     </div>

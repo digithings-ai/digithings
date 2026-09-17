@@ -39,6 +39,7 @@ type PrepareSendMessagesRequestResult = { headers: Record<string, string>; body:
 type PrepareSendMessagesRequestFn = (args: {
   messages: UIMessage[];
   body?: unknown;
+  trigger?: "submit-message" | "regenerate-message";
 }) => PrepareSendMessagesRequestResult | Promise<PrepareSendMessagesRequestResult>;
 
 let capturedTransportConfig: { prepareSendMessagesRequest: PrepareSendMessagesRequestFn } | undefined;
@@ -440,6 +441,42 @@ describe("useEmbedDigiChat prepareSendMessagesRequest — X-Digi-Language", () =
     const second = await config.prepareSendMessagesRequest({ messages: [], body: undefined });
     expect(new Headers(second.headers).get("X-Digi-Language")).toBe("de");
 
+    unmount();
+  });
+});
+
+describe("useEmbedDigiChat prepareSendMessagesRequest — reload turn mode (#4248)", () => {
+  it("arms X-Digi-Turn-Mode: regenerate for a runtime reload", async () => {
+    const { unmount } = renderHookLocally(() => useEmbedDigiChat(baseEmbedOptions({})));
+    const config = readCapturedTransportConfig();
+    if (!config) {
+      throw new Error("AssistantChatTransport was never constructed by useEmbedDigiChat");
+    }
+
+    const result = await config.prepareSendMessagesRequest({
+      messages: [],
+      body: undefined,
+      trigger: "regenerate-message",
+    });
+    expect(new Headers(result.headers).get("X-Digi-Turn-Mode")).toBe("regenerate");
+    unmount();
+  });
+
+  it("does not arm regenerate when the host forbids client turn mutation", async () => {
+    const { unmount } = renderHookLocally(() =>
+      useEmbedDigiChat(baseEmbedOptions({ allowClientTurnMutation: false })),
+    );
+    const config = readCapturedTransportConfig();
+    if (!config) {
+      throw new Error("AssistantChatTransport was never constructed by useEmbedDigiChat");
+    }
+
+    const result = await config.prepareSendMessagesRequest({
+      messages: [],
+      body: undefined,
+      trigger: "regenerate-message",
+    });
+    expect(new Headers(result.headers).has("X-Digi-Turn-Mode")).toBe(false);
     unmount();
   });
 });

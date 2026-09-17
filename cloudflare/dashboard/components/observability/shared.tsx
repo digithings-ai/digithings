@@ -2,6 +2,7 @@
 
 import type { ReactNode } from 'react';
 import { EmptyState as WebEmptyState } from '@digithings/web';
+import { Card } from '@digithings/web/ui';
 
 /** Percent points → "+3.20%" / "-1.50%" / "—" for null. */
 export function fmtPct(v: number | null | undefined, digits = 2): string {
@@ -35,17 +36,18 @@ export function StatTile({
   flat?: boolean;
 }) {
   return (
-    <div
-      className={flat
-        ? 'flex flex-col gap-1 border-b border-r border-hair p-4'
-        : 'oly-slab flex flex-col gap-1 p-4'}
+    <Card
+      data-reveal={flat ? undefined : true}
+      className={`gap-0 flex flex-col gap-1 p-4 ${
+        flat ? 'border-b border-r border-hair bg-transparent ring-0' : ''
+      }`}
     >
       <span className="text-xs text-ink-mute">{label}</span>
       <span className={`text-xl font-semibold tabular-nums ${color ?? 'text-ink'}`}>
         {value}
       </span>
       {sub ? <span className="text-xs text-ink-mute">{sub}</span> : null}
-    </div>
+    </Card>
   );
 }
 
@@ -63,23 +65,27 @@ export function SectionCard({
   flat?: boolean;
 }) {
   return (
-    <div
-      className={`${flat ? 'border-b border-hair py-5' : 'oly-slab p-5'} flex flex-col gap-4 ${className ?? ''}`}
+    <Card
+      data-reveal={flat ? undefined : true}
+      className={`gap-0 flex flex-col gap-4 ${
+        flat ? 'border-b border-hair bg-transparent py-5 ring-0' : 'p-5'
+      } ${className ?? ''}`}
     >
       <div className="flex flex-col gap-0.5">
         <h2 className="text-sm font-semibold text-ink">{title}</h2>
         {subtitle ? <p className="text-xs text-ink-mute">{subtitle}</p> : null}
       </div>
       {children}
-    </div>
+    </Card>
   );
 }
 
 /**
  * Thin shim over the promoted @digithings/web EmptyState (#1548): dress="glass"
  * is the API name (type/spacing only — it must not look like glass). The
- * `.oly-slab` surface is the call-site class so MotionLayer's reveal hook
- * keeps firing. The local title/message/note API is preserved for consumers
+ * promoted part carries its own `.ctl-empty` box, so the retired `.oly-slab`
+ * layer was redundant; the reveal hook is the `data-reveal` attribute.
+ * The local title/message/note API is preserved for consumers
  * (AttributionTab, DecisionScorecardTab, SystemStatus).
  */
 export function EmptyState({
@@ -97,7 +103,8 @@ export function EmptyState({
   return (
     <WebEmptyState
       dress="glass"
-      className={flat ? 'border-y border-hair' : 'oly-slab'}
+      className={flat ? 'border-y border-hair' : ''}
+      data-reveal
       title={title}
       body={message}
       note={note}

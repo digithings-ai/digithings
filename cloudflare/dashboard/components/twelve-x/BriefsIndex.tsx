@@ -1,6 +1,7 @@
 'use client';
 
 import { useMemo, useState } from 'react';
+import { Card } from '@digithings/web/ui';
 import { ArrowLeft } from 'lucide-react';
 import { DatePager } from '@digithings/web';
 import type { FxBriefRow } from '@/lib/twelve-x/types';
@@ -121,20 +122,24 @@ export default function BriefsIndex({
       </header>
 
       {dayBriefs.length === 0 ? (
-        <div className="oly-slab p-10 text-center text-sm text-ink-mute">
+        <Card data-reveal className="gap-0 p-10 text-center text-sm text-ink-mute">
           {activeDate
             ? `No research briefs for ${activeDate}.`
             : 'No research briefs in this window yet.'}
-        </div>
+        </Card>
       ) : (
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
           {dayBriefs.map((b, i) => (
-            <button
+            <Card
               key={`${b.source_file}-${b.run_date}-${i}`}
-              type="button"
-              className="oly-slab p-4 text-left transition-colors hover:border-accent/50"
-              onClick={() => openBrief(b.source_file, b.run_date)}
+              data-reveal
+              className="gap-0 p-0 transition-colors hover:ring-accent/50"
             >
+              <button
+                type="button"
+                className="block w-full p-4 text-left"
+                onClick={() => openBrief(b.source_file, b.run_date)}
+              >
               <div className="flex min-w-0 items-center gap-2 text-[11px] text-ink-mute">
                 <span className="min-w-0 truncate font-semibold text-ink-soft">
                   {b.broker_name ?? 'Unknown desk'}
@@ -147,7 +152,8 @@ export default function BriefsIndex({
                 {b.document_title ?? b.source_file}
               </p>
               {b.central_thesis ? <p className="mt-1 line-clamp-3 text-xs text-ink-soft">{b.central_thesis}</p> : null}
-            </button>
+              </button>
+            </Card>
           ))}
         </div>
       )}

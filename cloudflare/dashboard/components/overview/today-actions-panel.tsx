@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { useMemo, useState } from 'react';
 import { ArrowRight, ArrowDownRight, ArrowUpRight, XCircle, PlusCircle, ListChecks } from 'lucide-react';
+import { Card } from '@digithings/web/ui';
 import { EVENT_COLORS, withAlpha } from '@/lib/chart-colors';
 import { usablePmRationale } from '@/lib/pm-rationale';
 import { isMaterialRebalanceAction } from '@/lib/rebalance-actions';
@@ -134,10 +135,11 @@ export function TodayActionsPanel({
   }, [actions]);
 
   return (
-    <div
-      className={
-        bare ? 'border border-hair/70 overflow-hidden' : 'oly-slab p-0 overflow-hidden'
-      }
+    <Card
+      data-reveal={bare ? undefined : true}
+      className={`gap-0 overflow-hidden p-0 ${
+        bare ? 'border border-hair/70 bg-transparent ring-0' : ''
+      }`}
     >
       {!bare && (
         <div className="px-5 py-3.5 border-b border-hair bg-term-bg flex items-center justify-between">
@@ -212,6 +214,6 @@ export function TodayActionsPanel({
           )}
         </div>
       )}
-    </div>
+    </Card>
   );
 }

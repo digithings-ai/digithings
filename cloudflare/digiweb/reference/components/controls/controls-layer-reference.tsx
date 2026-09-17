@@ -2,31 +2,33 @@
 
 import {
   Badge,
+  GitHubGlyph,
+  Spinner,
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@digithings/web";
+import {
   Button,
   Card,
   CardContent,
   CardFooter,
   CardHeader,
   CardTitle,
-  GitHubGlyph,
   Input,
   Label,
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from "@digithings/web";
+} from "@digithings/web/ui";
 
 /**
- * Controls layer — the shipped @digithings/web control atoms in their
- * reference dress, the primitives the marketing sites and digichat both
- * consume. Everything below is the promoted layer, not a local copy: Button
- * (primary/ghost/quiet/danger/icon + loading), Badge (the tier/tone labels),
- * Input + Label, a Card frame, and a Tooltip in its reference skin. The core
- * atoms wear the controls-core.css dress; the tooltip wears the
- * controls-overlay.css skin — so this one specimen keeps both shared sheets
- * (and the controls @source) live in the catalog. Dress is keyed off
- * data-slot/aria state in the shared CSS, so the call sites carry no styling.
+ * Controls layer — the shared control atoms the marketing sites and digichat
+ * consume. Wave 3: Button (primary→default, ghost, quiet→outline,
+ * danger→destructive, icon→ghost size=icon, loading→disabled+inline spinner),
+ * Input + Label and the Card frame are the canonical kit parts
+ * (`@digithings/web/ui`). Badge (accent/warn/up/down tone labels) and the
+ * reference-skin Tooltip stay on the controls layer — the kit carries neither
+ * the semantic badge tones nor a `skin` prop yet (see the Task-1b gap list in
+ * the wave-3 SDD dir). This specimen keeps the controls sheets live.
  */
 export function ControlsLayerReference() {
   return (
@@ -35,11 +37,11 @@ export function ControlsLayerReference() {
         <p className="kicker">{"// controls layer"}</p>
         <h2 className="title">The shipped atoms, reference dress.</h2>
         <p className="section-copy">
-          <code>Button</code>, <code>Badge</code>, <code>Card</code>, <code>Input</code>,{" "}
-          <code>Label</code> and <code>Tooltip</code> from <code>@digithings/web</code> — the same
-          primitives digichat re-exports under its chat dress. Here they wear the reference dress
-          (the default), so the catalog demos exactly what ships. Behavior comes from{" "}
-          <code>@base-ui/react</code>; every rule lives in the shared controls sheets.
+          <code>Button</code>, <code>Card</code>, <code>Input</code> and <code>Label</code> from{" "}
+          <code>@digithings/web/ui</code> — the canonical kit. <code>Badge</code> (accent / warn /
+          up / down tones) and the reference-skin <code>Tooltip</code> still come from{" "}
+          <code>@digithings/web</code>: the kit carries neither the semantic badge tones nor a{" "}
+          <code>skin</code> prop yet. Behavior comes from <code>@base-ui/react</code> either way.
         </p>
 
         <div className="mt-[1.4rem]">
@@ -47,14 +49,15 @@ export function ControlsLayerReference() {
             button
           </p>
           <div className="flex flex-wrap items-center gap-[0.9rem]">
-            <Button variant="primary">Deploy strategy</Button>
+            <Button variant="default">Deploy strategy</Button>
             <Button variant="ghost">Preview</Button>
-            <Button variant="quiet">Cancel</Button>
-            <Button variant="danger">Halt live</Button>
-            <Button loading disabled>
+            <Button variant="outline">Cancel</Button>
+            <Button variant="destructive">Halt live</Button>
+            <Button disabled>
+              <Spinner />
               Backtesting…
             </Button>
-            <Button variant="icon" aria-label="View on GitHub">
+            <Button variant="ghost" size="icon" aria-label="View on GitHub">
               <GitHubGlyph />
             </Button>
           </div>

@@ -72,56 +72,66 @@ export function RepoHeatmap({
         aria-label={`${grouped(total)} contributions in ${range}.`}
       >
         <div className="ra-heat-body">
-          <div className="ra-heat-months" aria-hidden="true">
-            <HeatGraph.MonthLabels>
-              {({ label, totalWeeks }) => (
-                <span
-                  key={`${label.month}-${label.column}`}
-                  className="ra-heat-month"
-                  style={{ left: `${(label.column / totalWeeks) * 100}%` }}
-                >
-                  {HeatGraph.MONTH_SHORT[label.month]}
-                </span>
-              )}
-            </HeatGraph.MonthLabels>
-          </div>
-          <div className="ra-heat-row">
-            <div className="ra-heat-days" aria-hidden="true">
-              <HeatGraph.DayLabels>
-                {({ label }) => {
-                  const name = HeatGraph.DAY_SHORT[label.dayOfWeek];
-                  if (!DAY_LABELS.has(name)) return <span key={label.row} className="ra-heat-day" />;
+          {/* One max-content frame holds the month row, the cell row and the
+              legend, so the month-label coordinate space is exactly the grid
+              width. Without it .ra-heat-months spans the full body width while
+              .ra-heat-grid is only max-content wide, and the %-positioned
+              labels drift right of their columns (last label ~172px past the
+              last cell at 1440). The frame is max-content at every viewport;
+              .ra-heat-body scrolls when it does not fit. */}
+          <div className="ra-heat-frame">
+            <div className="ra-heat-months" aria-hidden="true">
+              <HeatGraph.MonthLabels>
+                {({ label, totalWeeks }) => (
+                  <span
+                    key={`${label.month}-${label.column}`}
+                    className="ra-heat-month"
+                    style={{ left: `${(label.column / totalWeeks) * 100}%` }}
+                  >
+                    {HeatGraph.MONTH_SHORT[label.month]}
+                  </span>
+                )}
+              </HeatGraph.MonthLabels>
+            </div>
+            <div className="ra-heat-row">
+              <div className="ra-heat-days" aria-hidden="true">
+                <HeatGraph.DayLabels>
+                  {({ label }) => {
+                    const name = HeatGraph.DAY_SHORT[label.dayOfWeek];
+                    if (!DAY_LABELS.has(name))
+                      return <span key={label.row} className="ra-heat-day" />;
+                    return (
+                      <span key={label.row} className="ra-heat-day">
+                        {name}
+                      </span>
+                    );
+                  }}
+                </HeatGraph.DayLabels>
+              </div>
+              <HeatGraph.Grid className="ra-heat-grid">
+                {({ cell }) => {
+                  const date = cell.date.toISOString().slice(0, 10);
+                  const n = cell.count;
                   return (
-                    <span key={label.row} className="ra-heat-day">
-                      {name}
-                    </span>
+                    <HeatGraph.Cell
+                      key={`${cell.column}-${cell.row}`}
+                      className="ra-heat-cell"
+                      data-level={cell.level}
+                      title={`${date} — ${n} contribution${n === 1 ? "" : "s"}`}
+                    />
                   );
                 }}
-              </HeatGraph.DayLabels>
+              </HeatGraph.Grid>
             </div>
-            <HeatGraph.Grid className="ra-heat-grid">
-              {({ cell }) => {
-                const date = cell.date.toISOString().slice(0, 10);
-                const n = cell.count;
-                return (
-                  <HeatGraph.Cell
-                    key={`${cell.column}-${cell.row}`}
-                    className="ra-heat-cell"
-                    data-level={cell.level}
-                    title={`${date} — ${n} contribution${n === 1 ? "" : "s"}`}
-                  />
-                );
-              }}
-            </HeatGraph.Grid>
-          </div>
-          <div className="ra-heat-foot">
-            <span />
-            <div className="ra-heat-legend" aria-hidden="true">
-              <span>Less</span>
-              <HeatGraph.Legend>
-                {() => <HeatGraph.LegendLevel className="ra-heat-cell" />}
-              </HeatGraph.Legend>
-              <span>More</span>
+            <div className="ra-heat-foot">
+              <span />
+              <div className="ra-heat-legend" aria-hidden="true">
+                <span>Less</span>
+                <HeatGraph.Legend>
+                  {() => <HeatGraph.LegendLevel className="ra-heat-cell" />}
+                </HeatGraph.Legend>
+                <span>More</span>
+              </div>
             </div>
           </div>
         </div>

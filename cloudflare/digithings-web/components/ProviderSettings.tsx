@@ -1,6 +1,25 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useState } from "react";
+import {
+  Alert,
+  AlertDescription,
+  Button,
+  Input,
+  Label,
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+} from "@digithings/web/ui";
+import {
+  Select,
+  SelectItem,
+  SelectItemIndicator,
+  SelectPopup,
+  SelectTrigger,
+  SelectValue,
+} from "@digithings/web";
 import {
   PROVIDER_LABELS,
   PROVIDER_MODELS,
@@ -23,7 +42,10 @@ const KEY_PLACEHOLDERS: Record<ProviderId, string> = {
   xai: "xai-…",
 };
 
-function ProviderSettingsForm({
+/** The panel body: note, provider picker, key field, model picker, test
+ *  result, actions. Exported for the contract test — the kit `Sheet` around
+ *  it portals (client-mount only), so server-render assertions run here. */
+export function ProviderSettingsForm({
   storedKey,
   storedProvider,
   storedModel,
@@ -101,38 +123,50 @@ function ProviderSettingsForm({
   }, [onClear, onClose]);
 
   const providers = Object.keys(PROVIDER_MODELS) as ProviderId[];
+  const models = PROVIDER_MODELS[inputProvider];
 
   return (
     <>
-      <p className="dc-settings-note">
+      <p className="mb-4 mt-0 border border-hair bg-ink/[0.04] px-[0.6rem] py-2 text-[0.72rem] leading-[1.45] text-ink-mute">
         Your key stays in this browser only. It is sent per request to route your chat — never
         stored on our servers.
       </p>
 
-      <div className="dc-settings-field">
-        <span className="dc-settings-label">Provider</span>
-        <div className="dc-settings-providers">
-          {providers.map((p) => (
-            <button
-              key={p}
-              type="button"
-              className={`dc-settings-provider${inputProvider === p ? " is-active" : ""}`}
-              onClick={() => handleProviderChange(p)}
-            >
-              {PROVIDER_LABELS[p]}
-            </button>
-          ))}
+      <div className="mb-[0.85rem]">
+        <span className="mb-[0.35rem] block text-[0.68rem] uppercase tracking-[0.06em] text-ink-mute">
+          Provider
+        </span>
+        <div className="flex flex-wrap gap-[0.35rem]" role="group" aria-label="Provider">
+          {providers.map((p) => {
+            const active = inputProvider === p;
+            return (
+              <Button
+                key={p}
+                type="button"
+                size="xs"
+                variant={active ? "secondary" : "outline"}
+                aria-pressed={active}
+                className={active ? "border-ink/30 text-ink" : "text-ink-soft"}
+                onClick={() => handleProviderChange(p)}
+              >
+                {PROVIDER_LABELS[p]}
+              </Button>
+            );
+          })}
         </div>
       </div>
 
-      <div className="dc-settings-field">
-        <label className="dc-settings-label" htmlFor="dc-byok-key">
+      <div className="mb-[0.85rem]">
+        <Label
+          htmlFor="dc-byok-key"
+          className="mb-[0.35rem] block text-[0.68rem] uppercase tracking-[0.06em] text-ink-mute"
+        >
           API key
-        </label>
-        <div className="dc-settings-keyrow">
-          <input
+        </Label>
+        <div className="flex items-center gap-[0.35rem]">
+          <Input
             id="dc-byok-key"
-            className="dc-settings-input"
+            className="flex-1"
             type={showKey ? "text" : "password"}
             value={inputKey}
             onChange={(e) => {
@@ -147,44 +181,61 @@ function ProviderSettingsForm({
             autoComplete="off"
             spellCheck={false}
           />
-          <button
+          <Button
             type="button"
-            className="dc-settings-ghost"
+            size="xs"
+            variant="outline"
+            className="text-ink-soft"
             onClick={() => setShowKey((v) => !v)}
             aria-label={showKey ? "Hide key" : "Show key"}
           >
             {showKey ? "hide" : "show"}
-          </button>
+          </Button>
         </div>
         {validationError ? (
-          <p className="dc-settings-error" role="alert">
-            {validationError}
-          </p>
+          <Alert variant="destructive" className="mt-[0.35rem]">
+            <AlertDescription>{validationError}</AlertDescription>
+          </Alert>
         ) : null}
       </div>
 
-      <div className="dc-settings-field">
-        <label className="dc-settings-label" htmlFor="dc-byok-model">
-          Model
-        </label>
-        <select
-          id="dc-byok-model"
-          className="dc-settings-select"
-          value={inputModel}
-          onChange={(e) => setInputModel(e.target.value)}
+      <div className="mb-[0.85rem]">
+        <Label
+          htmlFor="dc-byok-model"
+          className="mb-[0.35rem] block text-[0.68rem] uppercase tracking-[0.06em] text-ink-mute"
         >
-          {PROVIDER_MODELS[inputProvider].map((m) => (
-            <option key={m.id} value={m.id}>
-              {m.label}
-            </option>
-          ))}
-        </select>
+          Model
+        </Label>
+        <Select
+          value={inputModel}
+          onValueChange={(value) => {
+            if (value != null) setInputModel(String(value));
+          }}
+        >
+          <SelectTrigger id="dc-byok-model" className="w-full">
+            <SelectValue>
+              {(value) => models.find((m) => m.id === value)?.label ?? ""}
+            </SelectValue>
+          </SelectTrigger>
+          <SelectPopup>
+            {models.map((m) => (
+              <SelectItem key={m.id} value={m.id}>
+                {m.label}
+                <SelectItemIndicator />
+              </SelectItem>
+            ))}
+          </SelectPopup>
+        </Select>
       </div>
 
       {testResult ? (
         <p
-          className={testResult.ok ? "dc-settings-test-ok" : "dc-settings-error"}
           role="status"
+          className={
+            testResult.ok
+              ? "mt-[0.35rem] text-[0.72rem] text-accent"
+              : "mt-[0.35rem] text-[0.72rem] text-danger"
+          }
         >
           {testResult.ok
             ? `Key verified${testResult.model ? ` · ${testResult.model}` : ""}.`
@@ -192,28 +243,42 @@ function ProviderSettingsForm({
         </p>
       ) : null}
 
-      <div className="dc-settings-actions">
-        <button
+      <div className="mt-2 flex flex-wrap gap-[0.4rem]">
+        <Button
           type="button"
-          className="dc-settings-ghost"
+          size="sm"
+          variant="outline"
+          className="text-ink-soft"
           onClick={() => void handleTest()}
           disabled={testing || !inputKey.trim()}
         >
           {testing ? "testing…" : "test key"}
-        </button>
-        <button type="button" className="dc-settings-primary" onClick={handleSave}>
+        </Button>
+        <Button type="button" size="sm" onClick={handleSave}>
           {isSet ? "update" : "save"}
-        </button>
+        </Button>
         {isSet ? (
-          <button type="button" className="dc-settings-ghost" onClick={handleClear}>
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            className="text-ink-soft"
+            onClick={handleClear}
+          >
             use free pool
-          </button>
+          </Button>
         ) : null}
       </div>
     </>
   );
 }
 
+/**
+ * BYOK panel — the kit `Sheet` (Base UI Dialog) replacing the hand-built
+ * slide-over. Base UI owns the backdrop dismissal, Escape, focus trap +
+ * focus return, and page scroll lock; `SheetContent`'s stock close button
+ * replaces the old `.dc-settings-close`.
+ */
 export function ProviderSettings({
   open,
   onClose,
@@ -233,48 +298,32 @@ export function ProviderSettings({
   onSave: (key: string, provider: ProviderId, model: string) => void;
   onClear: () => void;
 }) {
-  useEffect(() => {
-    if (!open) return;
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [open, onClose]);
-
-  if (!open) return null;
-
   const formKey = `${storedKey}:${storedProvider}:${storedModel}`;
 
   return (
-    <div className="dc-settings-backdrop" role="presentation" onClick={onClose}>
-      <aside
-        className="dc-settings-panel"
-        role="dialog"
-        aria-labelledby="dc-settings-title"
-        aria-modal="true"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <header className="dc-settings-head">
-          <h2 id="dc-settings-title" className="dc-settings-title">
-            Bring your own key
-          </h2>
-          <button type="button" className="dc-settings-close" onClick={onClose} aria-label="Close">
-            ×
-          </button>
-        </header>
-
-        <ProviderSettingsForm
-          key={formKey}
-          storedKey={storedKey}
-          storedProvider={storedProvider}
-          storedModel={storedModel}
-          isSet={isSet}
-          onSave={onSave}
-          onClear={onClear}
-          onClose={onClose}
-        />
-      </aside>
-    </div>
+    <Sheet
+      open={open}
+      onOpenChange={(next) => {
+        if (!next) onClose();
+      }}
+    >
+      <SheetContent side="right">
+        <SheetHeader>
+          <SheetTitle>Bring your own key</SheetTitle>
+        </SheetHeader>
+        <div className="min-h-0 flex-1 overflow-y-auto px-4 pb-4">
+          <ProviderSettingsForm
+            key={formKey}
+            storedKey={storedKey}
+            storedProvider={storedProvider}
+            storedModel={storedModel}
+            isSet={isSet}
+            onSave={onSave}
+            onClear={onClear}
+            onClose={onClose}
+          />
+        </div>
+      </SheetContent>
+    </Sheet>
   );
 }

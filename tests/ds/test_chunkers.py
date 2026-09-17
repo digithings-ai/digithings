@@ -295,17 +295,13 @@ def test_real_markdown_file_chunking_matches_recorded_fingerprint() -> None:
     MCP tool-name absorption (`digisearch_web_search` -> `exa_web_search`,
     `digisearch_research_turn` -> `research_turn`) plus conflict-resolution prose in
     ARCHITECTURE.md — fixture prose only; RecursiveChunker unchanged.
-
-    Re-recorded at count 116 for #4297 (bounded ddgs empty-scrape retry sentence
-    in ARCHITECTURE.md §3 web_search prose) — fixture prose only;
-    RecursiveChunker unchanged.
     """
     arch_path = Path(__file__).resolve().parents[2] / "digisearch" / "ARCHITECTURE.md"
     content = arch_path.read_text(encoding="utf-8")
     doc = Document(id="arch", content=content, source=str(arch_path), doc_type="md")
     chunks = RecursiveChunker().chunk(doc)
 
-    assert len(chunks) == 116
+    assert len(chunks) == 115
     assert all(len(c.content) <= 2000 for c in chunks)
     hashes = [hashlib.sha256(c.content.encode()).hexdigest()[:16] for c in chunks]
     assert hashes == [
@@ -328,8 +324,7 @@ def test_real_markdown_file_chunking_matches_recorded_fingerprint() -> None:
         "58efb49707626f90",
         "cd6a3f2ea2f1a0d0",
         "7e8464fe6a6cc067",
-        "ac28b210c436fceb",
-        "480ca2e3df2a94ec",
+        "461131751799a611",
         "f2ac9438877a85b7",
         "4523b0e9d213163a",
         "3850f4956a4c3be9",

@@ -272,6 +272,18 @@
   padding-bottom: 0.15rem;
 }
 
+/* The graph's coordinate frame: max-content, so it is exactly as wide as the
+   widest row (days column + gap + grid). Month labels are %-positioned inside
+   .ra-heat-months, which sits in this frame — giving them the same width as
+   the grid instead of the full body width. Without the frame .ra-heat-months
+   bound to the body's width and every month label drifted right of its column
+   (the last one by ~172px at 1440). Never cap this with max-width: the body
+   owns horizontal scrolling; capping would shrink the label space and
+   reintroduce the drift on narrow viewports. */
+.ra-heat-frame {
+  width: max-content;
+}
+
 .ra-heat-months {
   position: relative;
   height: 1rem;

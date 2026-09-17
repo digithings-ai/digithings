@@ -99,7 +99,7 @@ Cursor-style linked feature cells. Mobile-first: single column, 2×2 from
 | `.bento__cell--span-2` | Optional wide cell spanning both columns. |
 | `.bento__kicker` / `.bento__title` / `.bento__body` | Mono eyebrow, heading, body copy. |
 | `.bento__thumb` | Optional image/thumbnail slot — rounds to `--r-md`, clips overflow. |
-| `.bento__cta` | Arrow-suffix link text (`Learn more →`); the `span[aria-hidden]` arrow translates on `.bento__cell:hover`, matching `.btn`'s hover idiom. |
+| `.bento__cta` | Arrow-suffix link text (`Learn more →`); the `span[aria-hidden]` arrow translates on `.bento__cell:hover`, matching the kit Button hover idiom. |
 
 Works unscoped in both themes. Same deferred-React-wrapper note as ProductFrame (#1195).
 
@@ -313,7 +313,7 @@ inside a `.bento__cell`.
 | `.capability-card` | Flat card surface with hover lift (`--duration-hover`/`--ease-glide`). |
 | `.capability-card__preview` | Optional media slot — takes an `<img>`, a `.product-frame` child, or a `.term` snippet; rounds to `--r-md`, clips overflow. |
 | `.capability-card__title` / `.capability-card__body` | Heading + body copy. |
-| `.capability-card__cta` | `Explore →` arrow link; the `span[aria-hidden]` arrow translates on card hover, matching `.btn`/`.bento__cta`. |
+| `.capability-card__cta` | `Explore →` arrow link; the `span[aria-hidden]` arrow translates on card hover, matching the kit Button/`.bento__cta`. |
 
 Works unscoped in both themes. Same deferred-React-wrapper note as ProductFrame (#1195).
 
@@ -351,8 +351,8 @@ TrustStrip and ChangelogBand.
 ## `ClosingCtaBand` (CSS-only, EVOLUTION.md Phase E)
 
 Graphite/Cursor **pre-footer conversion band** — a full-width centered section
-placed directly above the footer: one literal headline, one primary `.btn`, and
-an optional mono secondary link. Compose with `.reveal-up` (above) for a
+placed directly above the footer: one literal headline, one primary kit
+`Button` (React), and an optional mono secondary link. Compose with `.reveal-up` (above) for a
 scroll-in enter; reduced motion is already honored by the shared block. Copy
 tone follows [`../references/scans/copy-patterns.md`](../references/scans/copy-patterns.md)
 (literal verbs, no hype). Landing-page wiring is [#1227](https://github.com/digithings-ai/digithings/issues/1227) — this primitive owns only the markup/CSS contract.
@@ -363,7 +363,7 @@ tone follows [`../references/scans/copy-patterns.md`](../references/scans/copy-p
     <h2 class="closing-cta__title">Build your agent stack in the open.</h2>
     <p class="closing-cta__sub">Open-core orchestration, quant, RAG, and chat.</p>
     <div class="closing-cta__actions">
-      <a class="btn btn-primary" href="https://github.com/digithings-ai">Start building</a>
+      <!-- primary action: the kit <Button variant="default"> in React -->
       <a class="closing-cta__secondary" href="/architecture">Read the architecture <span aria-hidden="true">&rarr;</span></a>
     </div>
   </div>
@@ -376,8 +376,8 @@ tone follows [`../references/scans/copy-patterns.md`](../references/scans/copy-p
 |------|---------|-------|
 | `.closing-cta__title` | Headline | Literal, reads best ≤ ~20ch. |
 | `.closing-cta__sub` | Optional one-line support | ≤ ~48ch; omit for a bare title. |
-| `.closing-cta__actions` → `.btn.btn-primary` | Primary label + `href` | The single, literal action (e.g. "Start building", "Open dashboard"). |
-| `.closing-cta__secondary` | Optional secondary label + `href` | Mono, arrow-suffix; the `span[aria-hidden]` translates on hover, matching `.btn`/`.bento__cta`. |
+| `.closing-cta__actions` → kit `Button variant="default"` | Primary label + `href` | The single, literal action (e.g. "Start building", "Open dashboard"). |
+| `.closing-cta__secondary` | Optional secondary label + `href` | Mono, arrow-suffix; the `span[aria-hidden]` translates on hover, matching the kit Button/`.bento__cta`. |
 
 **Copy variants** (shown in `cloudflare/digiweb/design/smoke/index.html`):
 
@@ -392,7 +392,7 @@ tone follows [`../references/scans/copy-patterns.md`](../references/scans/copy-p
 | `.closing-cta__inner` | `max-width: var(--wrap-wide)` centered column (title / sub / actions), gap-stacked. |
 | `.closing-cta__title` | Clamped display headline, `max-width: 20ch`. |
 | `.closing-cta__sub` | Muted one-line support, `max-width: 48ch`. |
-| `.closing-cta__actions` | Wrapping, centered row of the primary `.btn` + optional secondary. |
+| `.closing-cta__actions` | Wrapping, centered row of the primary action + optional secondary. |
 | `.closing-cta__secondary` | Mono arrow-suffix link; hover tints `--ink` and nudges the arrow. |
 
 CSS-only, both themes. Same deferred-React-wrapper note as ProductFrame (#1195).
@@ -447,7 +447,7 @@ tiers: **Self-hosted (MIT)** · **Managed (future)** · **Enterprise (contact)**
     <div class="pricing__price">Free <small>· MIT</small></div>
     <p class="pricing__desc">Run the full stack on your own infrastructure.</p>
     <ul class="pricing__features"><li>All core services</li><li>Bring your own key</li></ul>
-    <div class="pricing__cta"><a class="btn btn-ghost" href="/docs">Read the docs</a></div>
+    <div class="pricing__cta"><a class="closing-cta__secondary" href="/docs">Read the docs</a></div>
   </div>
   <div class="pricing__tier pricing__tier--featured"><!-- Managed --></div>
   <div class="pricing__tier"><!-- Enterprise --></div>
@@ -466,7 +466,7 @@ tiers: **Self-hosted (MIT)** · **Managed (future)** · **Enterprise (contact)**
 | Class | Role |
 |-------|------|
 | `.pricing` | Grid — 1 column below 768px, `repeat(3, 1fr)` at `min-width: 768px`; `max-width: var(--wrap-wide)`. |
-| `.pricing__tier` | Flat `--surface` card; `.pricing__cta .btn` pins to the bottom, full-width. |
+| `.pricing__tier` | Flat `--surface` card; `.pricing__cta` pins the app-supplied CTA (kit `Button`) to the bottom. |
 | `.pricing__tier--featured` | Highlighted tier — `--accent` border + ring. |
 | `.pricing__name` / `.pricing__price` / `.pricing__desc` | Mono tier label, display price (`<small>` for cadence/licence), muted blurb. |
 | `.pricing__features` | Check-bulleted list — `✓` in `--up` via `::before`. |

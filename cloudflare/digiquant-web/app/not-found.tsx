@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { Footer } from "@digithings/web";
+import { buttonVariants } from "@digithings/web/ui";
 import { DQ_FOOTER, DQ_FOOTER_META } from "./_nav";
 import { SiteNav } from "@/components/landing/SiteNav";
 
@@ -23,10 +24,10 @@ export default function NotFound() {
               fastest way back.
             </p>
             <div className="flex flex-wrap gap-[0.8rem]">
-              <Link className="btn btn-primary" href="/">
+              <Link className={buttonVariants({ variant: "default" })} href="/">
                 Back to top
               </Link>
-              <Link className="btn btn-ghost" href="/strategies">
+              <Link className={buttonVariants({ variant: "ghost" })} href="/strategies">
                 Browse strategies
               </Link>
             </div>

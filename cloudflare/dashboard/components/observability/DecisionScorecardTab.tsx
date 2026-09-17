@@ -15,6 +15,7 @@ import { computeDecisionScorecard } from '@/lib/decision-scorecard';
 import type { TableRow } from '@/lib/database.types';
 import { EmptyState, SectionCard, StatTile, fmtPct, signColorClass } from './shared';
 import { useChartColors, withAlpha } from '@/lib/chart-colors';
+import { Button } from '@digithings/web/ui';
 
 // Buckets use |conviction| thresholds (magnitude), matching decision-scorecard.ts and backtest.py:
 //   low    |conv| < 2
@@ -35,13 +36,15 @@ function ReasoningExpander({ thesis, reflection }: { thesis: string | null; refl
   }
   return (
     <div className="flex flex-col gap-1">
-      <button
+      <Button
+        variant="link"
+        size="xs"
         onClick={() => setOpen((v) => !v)}
-        className="text-xs text-ink-soft underline underline-offset-2 decoration-dotted hover:text-ink text-left"
+        className="h-auto justify-start p-0 text-xs text-ink-soft underline underline-offset-2 decoration-dotted hover:text-ink text-left"
         aria-expanded={open}
       >
         {open ? 'hide' : 'show reasoning'}
-      </button>
+      </Button>
       {open && (
         <div className="flex flex-col gap-2 text-xs mt-1 max-w-prose">
           {thesis && (
