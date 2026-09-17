@@ -1,5 +1,6 @@
 'use client';
 
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@digithings/web/ui';
 import { SafeMarkdown } from '@/components/SafeMarkdown';
 
 function asRecord(value: unknown): Record<string, unknown> | null {
@@ -44,24 +45,22 @@ export default function BiasRowDocumentView({
   return (
     <div className="space-y-4 text-sm">
       <h3 className="text-xs font-semibold text-ink-mute uppercase tracking-wider">Bias row</h3>
-      <div className="overflow-x-auto border border-hair">
-        <table className="w-full text-xs">
-          <thead>
-            <tr className="text-ink-mute text-left border-b border-hair bg-term-bg/80">
-              <th className="px-2 py-2 font-medium">Slot</th>
-              <th className="px-2 py-2 font-medium">Value</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-hair">
-            {rows.map(([label, value]) => (
-              <tr key={label} className="hover:bg-ink/[0.02]">
-                <td className="px-2 py-1.5 text-ink-mute whitespace-nowrap">{label}</td>
-                <td className="px-2 py-1.5 text-ink-soft">{value}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+      <Table className="border border-hair">
+        <TableHeader>
+          <TableRow className="border-hair bg-term-bg/80 hover:bg-term-bg/80">
+            <TableHead className="text-ink-mute">Slot</TableHead>
+            <TableHead className="text-ink-mute">Value</TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {rows.map(([label, value]) => (
+            <TableRow key={label} className="hover:bg-ink/[0.02]">
+              <TableCell className="text-ink-mute whitespace-nowrap">{label}</TableCell>
+              <TableCell className="text-ink-soft">{value}</TableCell>
+            </TableRow>
+          ))}
+        </TableBody>
+      </Table>
       {notes ? (
         <div>
           <h3 className="text-xs font-semibold text-ink-mute uppercase tracking-wider mb-2">Notes</h3>
