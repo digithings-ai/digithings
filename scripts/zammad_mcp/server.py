@@ -92,8 +92,9 @@ def list_tickets(page: int = 1, per_page: int = 50) -> str:
     English and search is a literal substring match, so an English keyword
     will not find German text; browsing returns titles in their original
     language. Reading German tickets directly is fine — pull a full
-    conversation with get_ticket. Newest updated first; keep going while a
-    page comes back full.
+    conversation with get_ticket. Newest updated first, covering the 500
+    most recently updated visible tickets; keep going while a page comes
+    back full.
     """
     try:
         tickets = _client().list_tickets_page(page=page, per_page=per_page)
