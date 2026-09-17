@@ -125,8 +125,11 @@ describe('SubpageStickyTabBar — TabStrip-backed desktop row (button tabs)', ()
     const html = renderButtonBar();
     expect(html.match(/aria-selected="true"/g)).toHaveLength(1);
     expect(html.match(/aria-selected="false"/g)).toHaveLength(1);
-    expect(html.match(/role="tab"[^>]*tabindex="0"/g)).toHaveLength(1);
-    expect(html.match(/role="tab"[^>]*tabindex="-1"/g)).toHaveLength(1);
+    const tabs = html.match(/<button[^>]*role="tab"[^>]*>/g) ?? [];
+    expect(tabs).toHaveLength(2);
+    const tabindexes = tabs.map((tab) => tab.match(/tabindex="(-?\d+)"/)?.[1]);
+    expect(tabindexes.filter((value) => value === '0')).toHaveLength(1);
+    expect(tabindexes.filter((value) => value === '-1')).toHaveLength(1);
   });
 
   it('omits aria-controls — the legacy children own no panel ids', () => {
