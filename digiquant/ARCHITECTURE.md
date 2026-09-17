@@ -2107,7 +2107,19 @@ entry until that cutover. Prompt / structured-output walk for the same pass:
   untouched. **WP5 Gate-2 follow-up (#2797):** outcomes stamp `horizon_sessions`;
   cohort attach filters residuals to the subject horizon; migration 087 adds
   `UNIQUE (effective_forecast_id, maturity_session)` and refuses wall-clock
-  `as_of` when knowledge cutoff is missing.
+  `as_of` when knowledge cutoff is missing. **Canonical outcome hashing + repair
+  (#4298):** `ForecastOutcome` hashes return fractions at fixed 8dp
+  (`canonical_return_fraction`, shared `forecast_outcome_hash_payload` between
+  writer and validator) so Postgres `numeric` trailing-zero loss cannot change the
+  digest; `list_resolved_outcomes_as_of` fails loud with
+  `ForecastOutcomeIntegrityError` rather than silently skipping a stale row, and
+  `scripts/research/repair_forecast_outcome_hashes.py` rewrites stale
+  `content_hash`/`outcome_id` (privileged direct PG; append-only trigger disabled
+  within one transaction). That rewrite changes `outcome_id` (its UUID5 input), so
+  any `olympus_forecast_calibrations.outcome_ids` entries citing the pre-repair
+  UUID are left stale: the array is not a foreign key and no runtime path joins on
+  it, so this does not break a run, but it is a documented lineage-only decision
+  (see the repair script docstring) rather than a live reference.
   **Risk policy contracts (#2692 / WP6.2, #2803):** frozen models in
   `portfolio/models/risk_policy.py` (`RiskPolicy`, `CovarianceSnapshot`, provenance
   leaves, explicit Phase 1 unavailable factor/stress/tail capabilities) plus pure
