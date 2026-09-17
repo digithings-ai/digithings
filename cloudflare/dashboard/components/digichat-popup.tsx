@@ -13,6 +13,7 @@
  */
 
 import { DigichatLauncher } from '@digithings/web';
+import { buttonVariants } from '@digithings/web/ui';
 import { usePathname } from 'next/navigation';
 import {
   useCallback,
@@ -281,7 +282,7 @@ export default function DigichatPopup({
             <p className="text-sm opacity-70">{DIGICHAT_UPGRADE_BODY}</p>
             <a
               href={DIGICHAT_UPGRADE_CTA_HREF}
-              className="text-sm font-medium underline underline-offset-4"
+              className={`${buttonVariants({ variant: 'link' })} h-auto justify-start px-0 text-sm font-medium underline`}
             >
               {DIGICHAT_UPGRADE_CTA_LABEL}
             </a>
