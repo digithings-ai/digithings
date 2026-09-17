@@ -112,9 +112,9 @@ export function ChatEmbedShell({
   /** Only when iframe never loads — cannot deliver parent-error postMessage. */
   const [shellLoadError, setShellLoadError] = useState<string | null>(null);
   const [embedReady, setEmbedReady] = useState(false);
-  // The boot overlay drops on the loader's own schedule (settle + typewriter),
-  // not the moment digichat:ready arrives -- otherwise the cube field would
-  // vanish mid-parks. Reset with embedReady when the origin effect re-runs.
+  // The boot overlay crossfades out once digichat:ready lands (see opacity
+  // below) and unmounts on the loader's own settle schedule, so the cube
+  // field never sits painted over an already-interactive iframe.
   const [bootSettled, setBootSettled] = useState(false);
   // Defer iframe src until after mount so we can read the real parent theme
   // (themeInitScript already flipped data-theme) and avoid a wrong-mode flash.
@@ -281,12 +281,19 @@ export function ChatEmbedShell({
 
       {showBoot ? (
         <div
-          aria-busy="true"
+          aria-busy={!embedReady}
           aria-live="polite"
+          aria-hidden={embedReady}
           style={{
             position: "absolute",
             inset: 0,
             zIndex: 1,
+            opacity: embedReady ? 0 : 1,
+            // Crossfade the loader out once the chat is ready: the settle
+            // choreography would otherwise keep painting over the already-
+            // interactive iframe (the ready frame is revealed at embedReady).
+            transition: "opacity 320ms ease",
+            pointerEvents: embedReady ? "none" : "auto",
             // Transparent, not var(--bg) -- same reasoning as the shell div above.
             // This used to fill solid on the (mistaken) assumption that it was the
             // only thing standing between a pre-ready iframe and a flash of
@@ -299,9 +306,9 @@ export function ChatEmbedShell({
           }}
         >
           <DigichatBootLoader
-            // The overlay drops only after the loader parks + types in; the
-            // iframe's opacity (below) is keyed on embedReady alone, so the
-            // ready frame is already painted underneath while it settles.
+            // The overlay crossfades out when embedReady flips (see the
+            // opacity style above) and unmounts once the loader settles; the
+            // ready frame is already painted underneath while it fades.
             ready={embedReady}
             onSettled={() => setBootSettled(true)}
             // The loader paints straight onto the transparent overlay (no
@@ -326,6 +333,7 @@ export function ChatEmbedShell({
             backgroundColor: "transparent",
             colorScheme: shellTheme,
             opacity: embedReady ? 1 : 0,
+            transition: "opacity 320ms ease",
             position: "relative",
             zIndex: 0,
           }}
