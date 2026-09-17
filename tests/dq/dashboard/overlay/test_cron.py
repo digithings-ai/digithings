@@ -532,7 +532,7 @@ class _ProfileClient:
         self._rows = rows
 
     def table(self, name: str) -> _ProfileQuery:
-        assert name == "olympus_profile_config"
+        assert name == "profile_config"
         return _ProfileQuery(self._rows)
 
 
