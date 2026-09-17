@@ -171,6 +171,18 @@ class ZammadClient:
         except (TypeError, ValueError) as exc:
             raise ZammadError("limit must be an integer") from exc
 
+    def _coerce_page(self, page: int) -> int:
+        try:
+            return max(1, int(page))
+        except (TypeError, ValueError) as exc:
+            raise ZammadError("page must be an integer") from exc
+
+    def _coerce_page_size(self, per_page: int) -> int:
+        try:
+            return max(1, min(int(per_page), PAGE_SIZE))
+        except (TypeError, ValueError) as exc:
+            raise ZammadError("per_page must be an integer") from exc
+
     def _search_rows(self, payload: Any) -> list[dict[str, Any]]:
         rows: Any = payload
         if isinstance(payload, dict):
@@ -304,3 +316,17 @@ class ZammadClient:
                 break
             page += 1
         return tickets[:cap]
+
+    def list_tickets_page(self, page: int = 1, per_page: int = 50) -> list[dict[str, Any]]:
+        """One page of visible tickets, newest updated first. Read-only.
+
+        The list endpoint orders by id (oldest first), so the full visible
+        list is fetched (up to ``MAX_REPORT_TICKETS``), sorted by
+        ``updated_at`` and sliced here: recent conversations come first.
+        """
+        page_number = self._coerce_page(page)
+        page_size = self._coerce_page_size(per_page)
+        tickets = self.list_tickets(MAX_REPORT_TICKETS)
+        tickets.sort(key=_updated_sort_key, reverse=True)
+        start = (page_number - 1) * page_size
+        return tickets[start : start + page_size]

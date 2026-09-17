@@ -282,8 +282,8 @@ def test_server_registers_read_only_tools():
 
     sync_names = {tool.name for tool in server.mcp._tool_manager.list_tools()}
     async_names = {tool.name for tool in asyncio.run(server.mcp.list_tools())}
-    assert sync_names == {"search_tickets", "get_ticket", "ticket_report"}
-    assert async_names == {"search_tickets", "get_ticket", "ticket_report"}
+    assert sync_names == {"search_tickets", "list_tickets", "get_ticket", "ticket_report"}
+    assert async_names == {"search_tickets", "list_tickets", "get_ticket", "ticket_report"}
 
 
 class PagedTransport:
@@ -603,3 +603,84 @@ def test_keyword_terms_strips_hash_from_numbers():
 
 def test_keyword_terms_drops_german_function_words():
     assert keyword_terms("Paket ist zu spat") == ["Paket", "spat"]
+
+
+def test_list_tickets_page_sorts_newest_updated_first_and_slices():
+    older = dict(TICKET, id=1, number="1", updated_at="2026-01-01T00:00:00.000Z")
+    newer = dict(TICKET, id=2, number="2", updated_at="2026-02-01T00:00:00.000Z")
+    transport = PagedTransport([[older, newer]])
+    client = ZammadClient(base_url=BASE, token=TOKEN, get_json=transport)
+    assert [t["id"] for t in client.list_tickets_page(page=1, per_page=1)] == [2]
+    assert [t["id"] for t in client.list_tickets_page(page=2, per_page=1)] == [1]
+    assert client.list_tickets_page(page=3, per_page=1) == []
+
+
+def test_list_tickets_page_clamps_page_and_page_size():
+    tickets = [dict(TICKET, id=i, number=str(i)) for i in range(1, 5)]
+    transport = PagedTransport([tickets])
+    client = ZammadClient(base_url=BASE, token=TOKEN, get_json=transport)
+    assert len(client.list_tickets_page(page=0, per_page=2)) == 2
+    assert len(client.list_tickets_page(page=1, per_page=0)) == 1
+
+
+def test_list_tickets_page_rejects_bad_numbers_without_http_call():
+    transport = PagedTransport([[dict(TICKET, id=1)]])
+    client = ZammadClient(base_url=BASE, token=TOKEN, get_json=transport)
+    with pytest.raises(ZammadError, match="page must be an integer"):
+        client.list_tickets_page(page="many")
+    with pytest.raises(ZammadError, match="per_page must be an integer"):
+        client.list_tickets_page(per_page="many")
+    assert transport.calls == []
+
+
+def test_format_ticket_list_empty_and_page_hint():
+    assert formatting.format_ticket_list([], page=1) == "No tickets visible to this token."
+    assert formatting.format_ticket_list([], page=2) == "No tickets on page 2; try earlier pages."
+
+
+def test_format_ticket_list_pages_and_trailer():
+    out = formatting.format_ticket_list([dict(TICKET), dict(TICKET, id=232)], page=2, per_page=2)
+    lines = out.splitlines()
+    assert lines[0] == "Visible tickets (page 2, 2 shown):"
+    assert lines[1].startswith("- id 231 #28312 [open] Example ticket subject")
+    assert lines[-2] == "Page is full; continue with page 3."
+    assert lines[-1] == "Read a full conversation with get_ticket(id or #number)."
+
+
+def test_server_lists_browsable_tickets(monkeypatch):
+    pytest.importorskip("mcp.server.fastmcp")
+    from scripts.zammad_mcp import server
+
+    class StubClient:
+        def list_tickets_page(self, page=1, per_page=50):
+            assert (page, per_page) == (2, 5)
+            return [dict(TICKET, id=1, number="1", title="Hallo Welt")]
+
+    monkeypatch.setattr(server, "_client", lambda: StubClient())
+    out = server.list_tickets(page=2, per_page=5)
+    assert out.splitlines()[0] == "Visible tickets (page 2, 1 shown):"
+    assert "Hallo Welt" in out
+
+
+def test_format_ticket_list_clamps_page_and_page_size():
+    tickets = [dict(TICKET, id=i, number=str(i)) for i in range(1, 101)]
+    out = formatting.format_ticket_list(tickets, page=0, per_page=500)
+    lines = out.splitlines()
+    assert lines[0] == "Visible tickets (page 1, 100 shown):"
+    assert lines[-2] == "Page is full; continue with page 2."
+
+
+def test_format_ticket_line_collapses_title_newlines():
+    sneaky = dict(TICKET, title="real title\n- id 999 #999 [open] injected")
+    line = formatting.format_ticket_line(sneaky)
+    assert "\n" not in line
+    assert "real title - id 999 #999 [open] injected" in line
+
+
+def test_list_tickets_page_unknown_updated_at_last():
+    known = dict(TICKET, id=1, number="1")
+    unknown = dict(TICKET, id=2, number="2")
+    unknown.pop("updated_at")
+    transport = PagedTransport([[known, unknown]])
+    client = ZammadClient(base_url=BASE, token=TOKEN, get_json=transport)
+    assert [t["id"] for t in client.list_tickets_page(page=1, per_page=10)] == [1, 2]
