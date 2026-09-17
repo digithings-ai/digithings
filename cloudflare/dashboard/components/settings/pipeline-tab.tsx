@@ -18,7 +18,23 @@ import {
   SETTINGS_LOAD_ERROR_MESSAGE,
   SettingsLoadError,
 } from './settings-load-error';
-import { Alert, AlertDescription, Button, Checkbox, Input, Label, Switch } from '@digithings/web/ui';
+import {
+  Alert,
+  AlertDescription,
+  Button,
+  Checkbox,
+  Input,
+  Label,
+  Switch,
+  Table,
+  TableBody,
+  TableCaption,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+  TableRowHeader,
+} from '@digithings/web/ui';
 import {
   STAGE_LABELS,
   STAGES,
@@ -286,57 +302,51 @@ export function PipelineTab({
             closed.
           </p>
         </div>
-        <div className="overflow-x-auto">
-          <table className="w-full min-w-[28rem] border-collapse text-sm">
-            <caption className="sr-only">
-              Enable research, deliberation, and execution by weekday
-            </caption>
-            <thead>
-              <tr>
-                <th scope="col" className="border border-hair px-2 py-1.5 text-left text-ink-mute">
-                  Stage
-                </th>
-                {WEEKDAYS.map((day) => (
-                  <th
-                    key={day}
-                    scope="col"
-                    className="border border-hair px-2 py-1.5 text-center text-ink-mute"
-                  >
-                    {WEEKDAY_LABELS[day]}
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {STAGES.map((stage) => (
-                <tr key={stage}>
-                  <th
-                    scope="row"
-                    className="border border-hair px-2 py-1.5 text-left font-medium text-ink"
-                  >
-                    {STAGE_LABELS[stage]}
-                  </th>
-                  {WEEKDAYS.map((day) => {
-                    const checked = schedule[day][stage];
-                    const id = `pipeline-stage-${day}-${stage}`;
-                    return (
-                      <td key={day} className="border border-hair px-2 py-1.5 text-center">
-                        <Checkbox
-                          id={id}
-                          aria-label={`${STAGE_LABELS[stage]} on ${WEEKDAY_LABELS[day]}`}
-                          checked={checked}
-                          onCheckedChange={() => onToggleStage(day, stage)}
-                          data-testid={`pipeline-stage-${day}-${stage}`}
-                          className="mx-auto"
-                        />
-                      </td>
-                    );
-                  })}
-                </tr>
+        <Table className="min-w-[28rem] border-collapse text-sm">
+          <TableCaption className="sr-only">
+            Enable research, deliberation, and execution by weekday
+          </TableCaption>
+          <TableHeader>
+            <TableRow className="border-0 hover:bg-transparent">
+              <TableHead className="h-auto border border-hair px-2 py-1.5 text-left font-normal text-ink-mute">
+                Stage
+              </TableHead>
+              {WEEKDAYS.map((day) => (
+                <TableHead
+                  key={day}
+                  className="h-auto border border-hair px-2 py-1.5 text-center font-normal text-ink-mute"
+                >
+                  {WEEKDAY_LABELS[day]}
+                </TableHead>
               ))}
-            </tbody>
-          </table>
-        </div>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {STAGES.map((stage) => (
+              <TableRow key={stage} className="border-0 hover:bg-transparent">
+                <TableRowHeader className="border border-hair px-2 py-1.5 text-left text-ink">
+                  {STAGE_LABELS[stage]}
+                </TableRowHeader>
+                {WEEKDAYS.map((day) => {
+                  const checked = schedule[day][stage];
+                  const id = `pipeline-stage-${day}-${stage}`;
+                  return (
+                    <TableCell key={day} className="border border-hair px-2 py-1.5 text-center">
+                      <Checkbox
+                        id={id}
+                        aria-label={`${STAGE_LABELS[stage]} on ${WEEKDAY_LABELS[day]}`}
+                        checked={checked}
+                        onCheckedChange={() => onToggleStage(day, stage)}
+                        data-testid={`pipeline-stage-${day}-${stage}`}
+                        className="mx-auto"
+                      />
+                    </TableCell>
+                  );
+                })}
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
       </section>
 
       <section
