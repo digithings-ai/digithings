@@ -58,7 +58,8 @@ vi.mock('@/lib/supabase', async () => {
   };
 });
 
-import AuthCallbackPage, { AUTH_CALLBACK_SETTLE_MS } from './page';
+import AuthCallbackPage from './page';
+import { AUTH_CALLBACK_SETTLE_MS } from './settle';
 
 describe('AuthCallbackPage', () => {
   let container: HTMLDivElement;

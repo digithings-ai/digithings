@@ -57,12 +57,14 @@ describe('NotifyTab', () => {
     });
     expect(getFn).toHaveBeenCalledOnce();
     const email = el.querySelector('[data-testid="notify-email"]') as HTMLInputElement;
-    const digest = el.querySelector('[data-testid="notify-digest"]') as HTMLInputElement;
-    const execution = el.querySelector('[data-testid="notify-execution"]') as HTMLInputElement;
+    const digest = el.querySelector('[data-testid="notify-digest"]') as HTMLElement;
+    const execution = el.querySelector('[data-testid="notify-execution"]') as HTMLElement;
     const hour = el.querySelector('[data-testid="notify-hour"]') as HTMLInputElement;
     expect(email.value).toBe('pm@example.com');
-    expect(digest.checked).toBe(true);
-    expect(execution.checked).toBe(true);
+    // Kit Switch is a Base UI button (role="switch"), not a native input: its
+    // state is exposed as aria-checked / data-checked rather than `.checked`.
+    expect(digest.getAttribute('aria-checked')).toBe('true');
+    expect(execution.getAttribute('aria-checked')).toBe('true');
     expect(hour.value).toBe('9');
     expect(patchFn).not.toHaveBeenCalled();
   });
@@ -137,7 +139,7 @@ describe('NotifyTab', () => {
       await Promise.resolve();
     });
     const email = el.querySelector('[data-testid="notify-email"]') as HTMLInputElement;
-    const digest = el.querySelector('[data-testid="notify-digest"]') as HTMLInputElement;
+    const digest = el.querySelector('[data-testid="notify-digest"]') as HTMLElement;
     await act(async () => {
       const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set;
       setter?.call(email, 'pm@example.com');

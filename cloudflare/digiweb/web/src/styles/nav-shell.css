@@ -380,10 +380,10 @@
   padding-bottom: max(1rem, env(safe-area-inset-bottom));
   pointer-events: auto;
 }
-.nav-shell-sheet-cta .btn {
-  width: auto;
-  justify-content: center;
-}
+/* No descendant dress here any more: the CTA arrives as a kit-buttonVariants
+   link (digithings) or a kit <Button/> (digiquant), both already `inline-flex
+   shrink-0 justify-center` — the old `.nav-shell-sheet-cta .btn { width:auto;
+   justify-content:center }` shim was only for the retired `.btn` pill. */
 
 /* ── breakpoints (identical to the app navs this supersedes) ────────────── */
 @media (min-width: 881px) {

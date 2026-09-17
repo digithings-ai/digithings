@@ -14,6 +14,7 @@ import {
   type BillingInterval,
   type PaidCheckoutTier,
 } from '@/lib/pricing-catalog';
+import { Button } from '@digithings/web/ui';
 
 export type BillingTabProps = {
   api: SettingsApiOptions | null;
@@ -122,34 +123,28 @@ export function BillingTab({
         role="group"
         aria-label="Billing interval"
       >
-        <button
+        <Button
           type="button"
+          variant={interval === 'monthly' ? 'default' : 'ghost'}
           aria-pressed={interval === 'monthly'}
           disabled={busy || lastError?.code === 'PRICE_NOT_CONFIGURED'}
           onClick={() => setInterval('monthly')}
-          className={
-            interval === 'monthly'
-              ? 'bg-ink px-3 py-1.5 text-sm font-medium text-bg disabled:opacity-50'
-              : 'px-3 py-1.5 text-sm font-medium text-ink-soft hover:bg-ink/[0.04] disabled:opacity-50'
-          }
+          className={`h-auto px-3 py-1.5 text-sm${interval === 'monthly' ? '' : ' text-ink-soft'}`}
           data-testid="billing-interval-monthly"
         >
           Monthly
-        </button>
-        <button
+        </Button>
+        <Button
           type="button"
+          variant={interval === 'annual' ? 'default' : 'ghost'}
           aria-pressed={interval === 'annual'}
           disabled={busy || lastError?.code === 'PRICE_NOT_CONFIGURED'}
           onClick={() => setInterval('annual')}
-          className={
-            interval === 'annual'
-              ? 'bg-ink px-3 py-1.5 text-sm font-medium text-bg disabled:opacity-50'
-              : 'px-3 py-1.5 text-sm font-medium text-ink-soft hover:bg-ink/[0.04] disabled:opacity-50'
-          }
+          className={`h-auto px-3 py-1.5 text-sm${interval === 'annual' ? '' : ' text-ink-soft'}`}
           data-testid="billing-interval-annual"
         >
           {annualToggleLabel()}
-        </button>
+        </Button>
       </div>
       {lastError?.code === 'PRICE_NOT_CONFIGURED' && (
         <p className="text-sm text-ink-soft" data-testid="billing-annual-error">
@@ -197,33 +192,31 @@ export function BillingTab({
                   </p>
                 ) : null}
               </div>
-              <button
+              <Button
                 type="button"
+                variant={primary ? 'default' : 'outline'}
                 disabled={busy}
                 onClick={() => void startCheckout(plan.id)}
-                className={
-                  primary
-                    ? 'w-full border border-ink bg-ink px-3 py-1.5 text-sm font-medium text-bg disabled:opacity-50'
-                    : 'w-full border border-hair px-3 py-1.5 text-sm font-medium text-ink-soft hover:bg-ink/[0.04] disabled:opacity-50'
-                }
+                className={`h-auto w-full px-3 py-1.5 text-sm${primary ? '' : ' text-ink-soft'}`}
                 data-testid={`billing-checkout-${plan.id}`}
               >
                 Upgrade to {plan.name}
-              </button>
+              </Button>
             </div>
           );
         })}
       </div>
 
-      <button
+      <Button
         type="button"
+        variant="outline"
         disabled={busy}
         onClick={() => void openPortal()}
-        className="border border-hair px-3 py-1.5 text-sm font-medium text-ink-soft hover:bg-ink/[0.04] disabled:opacity-50"
+        className="h-auto px-3 py-1.5 text-sm text-ink-soft"
         data-testid="billing-portal"
       >
         Customer portal
-      </button>
+      </Button>
 
       {message ? (
         <p className="text-sm text-ink-soft" role="status" data-testid="billing-message">

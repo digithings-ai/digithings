@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { Button } from '@digithings/web/ui';
 
 /**
  * Structured fallback for documents with a payload but no useful markdown (#1679):
@@ -36,13 +37,14 @@ function Node({ value, depth }: { value: unknown; depth: number }) {
   if (isCollection && !deepBranchOpen) {
     const itemCount = Array.isArray(value) ? value.length : Object.keys(value).length;
     return (
-      <button
+      <Button
         type="button"
+        variant="outline"
         onClick={() => setDeepBranchOpen(true)}
-        className="border border-hair px-2.5 py-1.5 font-mono text-xs text-accent transition-colors hover:border-accent/50"
+        className="h-auto rounded-none border-hair px-2.5 py-1.5 font-mono text-xs text-accent hover:border-accent/50"
       >
         Show nested details · {itemCount} {itemCount === 1 ? 'item' : 'items'}
-      </button>
+      </Button>
     );
   }
 
@@ -60,13 +62,14 @@ function Node({ value, depth }: { value: unknown; depth: number }) {
           ))}
         </ul>
         {remaining > 0 ? (
-          <button
+          <Button
             type="button"
+            variant="outline"
             onClick={() => setVisibleCount((count) => count + COLLECTION_PAGE_SIZE)}
-            className="mt-2 border border-hair px-2.5 py-1.5 font-mono text-xs text-accent transition-colors hover:border-accent/50"
+            className="mt-2 h-auto rounded-none border-hair px-2.5 py-1.5 font-mono text-xs text-accent hover:border-accent/50"
           >
             Show {Math.min(COLLECTION_PAGE_SIZE, remaining)} more · {remaining} remaining
-          </button>
+          </Button>
         ) : null}
       </div>
     );
@@ -91,13 +94,14 @@ function Node({ value, depth }: { value: unknown; depth: number }) {
           ))}
         </dl>
         {remaining > 0 ? (
-          <button
+          <Button
             type="button"
+            variant="outline"
             onClick={() => setVisibleCount((count) => count + COLLECTION_PAGE_SIZE)}
-            className="mt-3 border border-hair px-2.5 py-1.5 font-mono text-xs text-accent transition-colors hover:border-accent/50"
+            className="mt-3 h-auto rounded-none border-hair px-2.5 py-1.5 font-mono text-xs text-accent hover:border-accent/50"
           >
             Show {Math.min(COLLECTION_PAGE_SIZE, remaining)} more · {remaining} remaining
-          </button>
+          </Button>
         ) : null}
       </div>
     );

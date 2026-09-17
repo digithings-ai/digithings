@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { ChevronDown, ChevronRight } from 'lucide-react';
+import { Button } from '@digithings/web/ui';
 import { SafeMarkdown } from '@/components/SafeMarkdown';
 import { buildPipelineHref } from '@/lib/pipeline-links';
 import { cleanMemoProse } from '@/lib/render-pipeline-payloads';
@@ -507,14 +508,16 @@ function DebateRoundBlock({ round }: { round: DebateRound }) {
 
   return (
     <div className="border border-hair overflow-hidden">
-      <button
+      <Button
         type="button"
+        variant="ghost"
+        aria-expanded={open}
         onClick={() => setOpen(!open)}
-        className="flex items-center gap-2 w-full text-left px-4 py-2 bg-term-bg/60 hover:bg-term-bg text-sm font-medium"
+        className="h-auto w-full justify-start gap-2 rounded-none px-4 py-2 text-left text-sm font-medium bg-term-bg/60 hover:bg-term-bg"
       >
         {open ? <ChevronDown size={16} className="shrink-0" /> : <ChevronRight size={16} className="shrink-0" />}
         {label}
-      </button>
+      </Button>
       {open ? (
         <div className="px-4 py-3 grid gap-3 md:grid-cols-2 border-t border-hair">
           <div>
@@ -539,14 +542,16 @@ function RoundBlock({ round }: { round: Round }) {
 
   return (
     <div className="border border-hair overflow-hidden">
-      <button
+      <Button
         type="button"
+        variant="ghost"
+        aria-expanded={open}
         onClick={() => setOpen(!open)}
-        className="flex items-center gap-2 w-full text-left px-4 py-2 bg-term-bg/60 hover:bg-term-bg text-sm font-medium"
+        className="h-auto w-full justify-start gap-2 rounded-none px-4 py-2 text-left text-sm font-medium bg-term-bg/60 hover:bg-term-bg"
       >
         {open ? <ChevronDown size={16} className="shrink-0" /> : <ChevronRight size={16} className="shrink-0" />}
         {label}
-      </button>
+      </Button>
       {open ? (
         <div className="px-4 py-3 space-y-4 border-t border-hair">
           {sections.map((sec, si) => (

@@ -1,10 +1,11 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
 import { CalendarClock, ExternalLink, Globe, Users, X } from 'lucide-react';
+import { Sheet, SheetContent } from '@digithings/web';
 
 import type { FxEconomicCalendarRow } from '@/lib/twelve-x/types';
 import type { MatchedOpinions } from './EventsTab';
+import { detailPanelSheetSizeClass } from '@/components/DetailPanelHeaderActions';
 
 /** Impact → trader-facing RISK level + .fin-* color. Severity is chrome, not P&L (F5): high uses --warn. */
 function riskLevel(impact: string): { label: string; text: string; dot: string } {
@@ -29,11 +30,17 @@ function hasValue(v: string | null | undefined): v is string {
 
 /**
  * Right-side slide-over for a single calendar event, opened from both the Events
- * list and the timeline. Mirrors BriefPanel's slide-over (scrim + right panel,
- * Esc-to-close, body scroll-lock, reduced-motion-aware entrance slide).
- * Prop-driven: the parent owns the open state (`event != null` ⇒ open) and
- * passes the already-matched broker opinions so this panel renders the same
- * desk-commentary shape the list/timeline derive.
+ * list and the timeline.
+ *
+ * Wave-2 (#4206): the hand-rolled scrim + right panel + window Escape listener
+ * + body scroll-lock are now the shared @digithings/web Sheet (Base UI Dialog),
+ * exactly like its siblings BriefPanel / BrokerProfilePanel: side/right
+ * geometry, Escape + backdrop dismissal, focus trap, scroll lock, and the
+ * dashboard's black/50 scrim redress. `EventDetailBody` is the exported content
+ * half for the SSR contract test (the popup lives in a portal that never
+ * renders under static SSR). Prop-driven: the parent owns the open state
+ * (`event != null` ⇒ open) and passes the already-matched broker opinions so
+ * this panel renders the same desk-commentary shape the list/timeline derive.
  */
 export default function EventDetailPanel({
   event,
@@ -49,182 +56,173 @@ export default function EventDetailPanel({
    *  opinions' run_date (from EventsTab's runDate prop). */
   onOpenBrief?: ((sourceFile: string, runDate: string) => void) | undefined;
 }) {
-  const open = event != null;
-  const handleClose = useCallback(() => onClose(), [onClose]);
-
-  // Mount flag driving the entrance slide (mirrors BriefPanel's Sheet, whose
-  // entrance is a reduced-motion-aware translate; this hand-rolled overlay has
-  // no Base UI transition primitive, so we fake the same one-motion-moment by
-  // flipping this a frame after open so the transition has a starting state.
-  const [entered, setEntered] = useState(false);
-  useEffect(() => {
-    const id = requestAnimationFrame(() => setEntered(open));
-    return () => cancelAnimationFrame(id);
-  }, [open]);
-
-  // Close on Escape while open.
-  useEffect(() => {
-    if (!open) return;
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') handleClose();
-    };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [open, handleClose]);
-
-  // Lock body scroll while the panel is open (mirrors BriefPanel / the nav drawer).
-  useEffect(() => {
-    if (!open) return;
-    const prev = document.body.style.overflow;
-    document.body.style.overflow = 'hidden';
-    return () => {
-      document.body.style.overflow = prev;
-    };
-  }, [open]);
-
   if (!event) return null;
 
+  return (
+    <Sheet open onOpenChange={(next) => (next ? undefined : onClose())}>
+      {/* The `!` overrides fight the sheet's deliberately unlayered per-side
+          geometry (75% / 24rem cap) and same-layer base dress — this panel
+          keeps its shipped full-bleed-mobile / max-w-xl / term-bg look
+          (MIGRATION.md cascade-layering contract). The scrim re-dress is
+          app-wide in globals.css. */}
+      <SheetContent
+        side="right"
+        showCloseButton={false}
+        aria-label="Event detail"
+        className={`${detailPanelSheetSizeClass('default')} gap-0! bg-term-bg! shadow-2xl!`}
+      >
+        <EventDetailBody
+          event={event}
+          opinions={opinions}
+          onClose={onClose}
+          onOpenBrief={onOpenBrief}
+        />
+      </SheetContent>
+    </Sheet>
+  );
+}
+
+export function EventDetailBody({
+  event,
+  opinions,
+  onClose,
+  onOpenBrief,
+}: {
+  event: FxEconomicCalendarRow;
+  opinions: MatchedOpinions | null;
+  onClose?: () => void;
+  onOpenBrief?: ((sourceFile: string, runDate: string) => void) | undefined;
+}) {
   const risk = riskLevel(event.impact);
   const time = formatLocalTime(event.event_datetime_utc) ?? event.event_time ?? null;
   const hasOpinions = Boolean(opinions && opinions.mentions > 0);
 
   return (
-    <div className="fixed inset-0 z-50" role="dialog" aria-modal="true" aria-label="Event detail">
-      {/* Scrim */}
-      <button
-        type="button"
-        aria-label="Close event detail"
-        onClick={handleClose}
-        className="absolute inset-0 bg-black/50 backdrop-blur-[2px]"
-      />
-
-      {/* Panel */}
-      <div
-        className={`absolute inset-y-0 right-0 flex w-full max-w-xl flex-col border-l border-hair bg-term-bg shadow-2xl transition-transform duration-200 ease-in-out motion-reduce:transition-none motion-reduce:translate-x-0 ${entered ? 'translate-x-0' : 'translate-x-10'}`}
-      >
-        {/* Grab bar — phone-only affordance hinting the sheet is dismissable. */}
-        <div className="flex shrink-0 justify-center pt-2 sm:hidden" aria-hidden>
-          <span className="h-1 w-9 bg-ink/20" />
-        </div>
-        <div className="flex items-start gap-3 border-b border-hair px-5 py-4">
-          <CalendarClock size={18} className="mt-0.5 shrink-0 text-accent" aria-hidden />
-          <div className="min-w-0 flex-1">
-            <h2 className="text-base font-semibold leading-snug text-ink">
-              {event.event_name}
-            </h2>
-            <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px]">
-              <span className="flex items-center gap-1 font-mono uppercase text-ink-mute">
-                <Globe size={11} aria-hidden />
-                {event.country}
-              </span>
-              <span className={`flex items-center gap-1.5 font-medium ${risk.text}`}>
-                <span className={`h-2 w-2 rounded-full ${risk.dot}`} aria-hidden />
-                {risk.label}
-              </span>
-              {time ? (
-                <span className="font-mono tabular-nums text-ink-soft">{time}</span>
-              ) : null}
-            </div>
+    <>
+      {/* Grab bar — phone-only affordance hinting the sheet is dismissable. */}
+      <div className="flex shrink-0 justify-center pt-2 sm:hidden" aria-hidden>
+        <span className="h-1 w-9 bg-ink/20" />
+      </div>
+      <div className="flex items-start gap-3 border-b border-hair px-5 py-4">
+        <CalendarClock size={18} className="mt-0.5 shrink-0 text-accent" aria-hidden />
+        <div className="min-w-0 flex-1">
+          <h2 className="text-base font-semibold leading-snug text-ink">
+            {event.event_name}
+          </h2>
+          <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px]">
+            <span className="flex items-center gap-1 font-mono uppercase text-ink-mute">
+              <Globe size={11} aria-hidden />
+              {event.country}
+            </span>
+            <span className={`flex items-center gap-1.5 font-medium ${risk.text}`}>
+              <span className={`h-2 w-2 rounded-full ${risk.dot}`} aria-hidden />
+              {risk.label}
+            </span>
+            {time ? (
+              <span className="font-mono tabular-nums text-ink-soft">{time}</span>
+            ) : null}
           </div>
+        </div>
+        {onClose ? (
           <button
             type="button"
-            onClick={handleClose}
+            onClick={onClose}
             aria-label="Close"
             className="-mr-1.5 -mt-1.5 flex h-11 w-11 shrink-0 items-center justify-center rounded-none text-ink-mute transition-colors hover:bg-ink/[0.06] hover:text-ink sm:h-9 sm:w-9"
           >
             <X size={18} aria-hidden />
           </button>
+        ) : null}
+      </div>
+
+      <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-5 pt-4 pb-[max(1rem,env(safe-area-inset-bottom))]">
+        {/* Prior · Forecast · Actual */}
+        <div className="grid grid-cols-3 gap-2">
+          {(
+            [
+              ['Prior', event.prior, 'text-ink-soft'],
+              ['Forecast', event.forecast, 'text-ink-soft'],
+              ['Actual', event.actual, 'text-ink'],
+            ] as const
+          ).map(([label, value, valueClass]) => (
+            <div
+              key={label}
+              className="rounded-none border border-hair bg-ink/[0.02] px-3 py-2"
+            >
+              <div className="text-[10px] font-semibold uppercase tracking-wider text-ink-mute">
+                {label}
+              </div>
+              <div className={`mt-0.5 font-mono text-sm tabular-nums ${valueClass}`}>
+                {hasValue(value) ? value : '—'}
+              </div>
+            </div>
+          ))}
         </div>
 
-        <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-5 pt-4 pb-[max(1rem,env(safe-area-inset-bottom))]">
-          {/* Prior · Forecast · Actual */}
-          <div className="grid grid-cols-3 gap-2">
-            {(
-              [
-                ['Prior', event.prior, 'text-ink-soft'],
-                ['Forecast', event.forecast, 'text-ink-soft'],
-                ['Actual', event.actual, 'text-ink'],
-              ] as const
-            ).map(([label, value, valueClass]) => (
-              <div
-                key={label}
-                className="rounded-none border border-hair bg-ink/[0.02] px-3 py-2"
-              >
-                <div className="text-[10px] font-semibold uppercase tracking-wider text-ink-mute">
-                  {label}
-                </div>
-                <div className={`mt-0.5 font-mono text-sm tabular-nums ${valueClass}`}>
-                  {hasValue(value) ? value : '—'}
-                </div>
-              </div>
-            ))}
-          </div>
-
-          {/* What desks said */}
-          <div>
-            <h3 className="mb-2 flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wider text-ink-mute">
-              <Users size={12} aria-hidden />
-              What desks said
-              {hasOpinions ? (
-                <span className="tabular-nums text-ink-soft">
-                  · {opinions!.mentions} mention{opinions!.mentions === 1 ? '' : 's'}
-                </span>
-              ) : null}
-            </h3>
-
+        {/* What desks said */}
+        <div>
+          <h3 className="mb-2 flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wider text-ink-mute">
+            <Users size={12} aria-hidden />
+            What desks said
             {hasOpinions ? (
-              <div className="space-y-2">
-                {opinions!.brokers.length > 0 ? (
-                  <p className="text-xs text-ink-mute">
-                    Cited by{' '}
-                    <span className="text-ink-soft">{opinions!.brokers.join(', ')}</span>.
-                  </p>
-                ) : null}
-                {opinions!.citations.length > 0 ? (
-                  opinions!.citations.map((c, i) => (
-                    <div
-                      key={`${c.broker}-${c.source_file}-${i}`}
-                      className="rounded-none border border-hair bg-ink/[0.02] p-3"
-                    >
-                      <div className="mb-1.5 flex items-center justify-between gap-2">
-                        <span className="font-mono text-xs font-semibold text-ink">
-                          {c.broker || 'Unknown desk'}
-                        </span>
-                        {onOpenBrief && c.source_file && opinions?.runDate ? (
-                          <button
-                            type="button"
-                            onClick={() => onOpenBrief(c.source_file, opinions.runDate!)}
-                            className="inline-flex items-center gap-1 text-[11px] font-medium text-accent hover:underline"
-                            title={`Open ${c.broker} brief (${c.source_file})`}
-                          >
-                            Open brief <ExternalLink size={10} aria-hidden />
-                          </button>
-                        ) : null}
-                      </div>
-                      {c.expected_outcome ? (
-                        <p className="text-xs leading-snug text-ink-soft">
-                          <span className="text-ink-mute">Expected: </span>
-                          {c.expected_outcome}
-                        </p>
-                      ) : null}
-                      {c.fx_impact ? (
-                        <p className="mt-1 text-xs leading-snug text-ink-soft">
-                          <span className="text-ink-mute">FX impact: </span>
-                          {c.fx_impact}
-                        </p>
+              <span className="tabular-nums text-ink-soft">
+                · {opinions!.mentions} mention{opinions!.mentions === 1 ? '' : 's'}
+              </span>
+            ) : null}
+          </h3>
+
+          {hasOpinions ? (
+            <div className="space-y-2">
+              {opinions!.brokers.length > 0 ? (
+                <p className="text-xs text-ink-mute">
+                  Cited by{' '}
+                  <span className="text-ink-soft">{opinions!.brokers.join(', ')}</span>.
+                </p>
+              ) : null}
+              {opinions!.citations.length > 0 ? (
+                opinions!.citations.map((c, i) => (
+                  <div
+                    key={`${c.broker}-${c.source_file}-${i}`}
+                    className="rounded-none border border-hair bg-ink/[0.02] p-3"
+                  >
+                    <div className="mb-1.5 flex items-center justify-between gap-2">
+                      <span className="font-mono text-xs font-semibold text-ink">
+                        {c.broker || 'Unknown desk'}
+                      </span>
+                      {onOpenBrief && c.source_file && opinions?.runDate ? (
+                        <button
+                          type="button"
+                          onClick={() => onOpenBrief(c.source_file, opinions.runDate!)}
+                          className="inline-flex items-center gap-1 text-[11px] font-medium text-accent hover:underline"
+                          title={`Open ${c.broker} brief (${c.source_file})`}
+                        >
+                          Open brief <ExternalLink size={10} aria-hidden />
+                        </button>
                       ) : null}
                     </div>
-                  ))
-                ) : (
-                  <p className="text-xs text-ink-mute">No broker detail available.</p>
-                )}
-              </div>
-            ) : (
-              <p className="text-xs text-ink-mute">No desk commentary for this event yet.</p>
-            )}
-          </div>
+                    {c.expected_outcome ? (
+                      <p className="text-xs leading-snug text-ink-soft">
+                        <span className="text-ink-mute">Expected: </span>
+                        {c.expected_outcome}
+                      </p>
+                    ) : null}
+                    {c.fx_impact ? (
+                      <p className="mt-1 text-xs leading-snug text-ink-soft">
+                        <span className="text-ink-mute">FX impact: </span>
+                        {c.fx_impact}
+                      </p>
+                    ) : null}
+                  </div>
+                ))
+              ) : (
+                <p className="text-xs text-ink-mute">No broker detail available.</p>
+              )}
+            </div>
+          ) : (
+            <p className="text-xs text-ink-mute">No desk commentary for this event yet.</p>
+          )}
         </div>
       </div>
-    </div>
+    </>
   );
 }

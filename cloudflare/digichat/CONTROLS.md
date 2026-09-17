@@ -1,24 +1,23 @@
 # digichat controls ledger (#1419)
 
-State of `src/components/ui/*` after the E4 adoption: which wrappers became
-thin re-exports of the shared `@digithings/web` controls layer, which stayed
-local, and every known rendered-look delta for browser QA. Companion to the
-E3 ledger pattern; the shared controls themselves live in
-`cloudflare/digiweb/web/src/components/controls/` with dress CSS in
-`cloudflare/digiweb/web/src/styles/controls-core.css` (static atoms) and
-`controls-overlay.css` (behavioral controls).
+State of `src/components/ui/*` after the E4 adoption and the wave-3 kit
+re-point: which wrappers are thin adapters over the canonical kit
+(`@digithings/web/ui`), which stayed local, and every known rendered-look
+delta for browser QA. Companion to the E3 ledger pattern; the chat dress CSS
+lives in `cloudflare/digiweb/web/src/styles/controls-core.css` (static atoms)
+and `controls-overlay.css` (behavioral controls). The kit parts carry the
+`dress="chat"` axis (wave-3 Important 1) that emits exactly those classes.
 
-## Swapped — thin re-exports of `@digithings/web`
+## Swapped — thin adapters over the kit (`@digithings/web/ui`)
 
-| ui/ file | Shared control | Pin | Notes |
+| ui/ file | Kit part | Pin | Notes |
 |---|---|---|---|
-| `button.tsx` | `Button` | `dress="chat"` | digichat variant/size enums verbatim (`ButtonChatVariant`/`ButtonChatSize`). `buttonVariants` cva export dropped — zero importers (grep-verified). |
-| `badge.tsx` | `Badge` | `dress="chat"` | useRender `render` prop + `{ slot, variant }` state preserved. `badgeVariants` export dropped — zero importers. |
-| `card.tsx` | `Card` + parts | `dress="chat"` on root | Full 7-part shape, `size` `"default" \| "sm"`, `data-slot`/`data-size` hooks. |
-| `input.tsx` | `Input` | `dress="chat"` | Same `@base-ui/react/input` primitive underneath. |
-| `label.tsx` | `Label` | `dress="chat"` | `.group data-disabled` / `.peer:disabled` dimming kept (unlayered rules). |
-| `avatar.tsx` | `Avatar` family | none (single dress) | Image/Fallback/Badge/Group/GroupCount; currently no digichat call sites (kept for surface compat). |
-| `collapsible.tsx` | `Collapsible` family | none (unstyled passthrough) | Identical to the old wrapper. |
+| `button.tsx` | `ui/button` | `dress="chat"` | digichat variant/size enums verbatim (`ButtonChatVariant`/`ButtonChatSize`) — identical to the kit's. `buttonVariants` cva export dropped — zero importers (grep-verified). |
+| `badge.tsx` | `ui/badge` | `dress="chat"` | useRender `render` prop + `{ slot, variant }` state preserved. `badgeVariants` export dropped — zero importers. |
+| `card.tsx` | `ui/card` + parts | `dress="chat"` on root | Full 7-part shape, `size` `"default" \| "sm"`, `data-slot`/`data-size` hooks. Parts inherit the dress through the kit's Card context. |
+| `input.tsx` | `ui/input` | `dress="chat"` | Same `@base-ui/react/input` primitive underneath. |
+| `label.tsx` | `ui/label` | `dress="chat"` | `.group data-disabled` / `.peer:disabled` dimming kept (unlayered rules). |
+| `collapsible.tsx` | `Collapsible` family | none (unstyled passthrough) | Re-exports the controls `Collapsible` (the kit copy is not used here); identical to the old wrapper. |
 | `dropdown-menu.tsx` | `DropdownMenu` family (15 names) | none — default skin IS the chat dress | `skin="reference"` stays available on `DropdownMenuContent`. |
 | `sheet.tsx` | `Sheet` family | none — single skin is the chat dress | Historical export surface kept: `SheetPortal`/`SheetOverlay` exist upstream but were never exported here. |
 | `tooltip.tsx` | `Tooltip` family | none — default skin IS the chat dress | Provider `delay` defaults to 0; `skin="reference"` available on `TooltipContent`. |

@@ -48,8 +48,9 @@ export interface NavShellProps {
   /** App CTA for the narrow-viewport sheet (e.g. digiquant / Ask digichat button). */
   cta?: ReactNode;
   /** Extra tail actions between the theme toggle and the hamburger
-   *  (e.g. a `.btn-icon` GitHub link) — kept a slot so the primitive carries
-   *  no hardcoded external URLs. */
+   *  (e.g. a GitHub link dressed with `buttonVariants({ variant: "ghost",
+   *  size: "icon-sm" })` from §ui) — kept a slot so the primitive carries no
+   *  hardcoded external URLs. */
   actions?: ReactNode;
   /** Render the shared ThemeToggle in the tail cluster. Default true. */
   showThemeToggle?: boolean;

@@ -108,23 +108,20 @@ describe('DigichatPopup', () => {
     expect(document.body.querySelector('#digichat-popup-iframe')).toBeNull();
   });
 
-  it('opens the iframe for an fx_hub product grantee on the free tier (#3662)', () => {
+  it('renders nothing for an fx_hub-only grantee on the free tier (12x invite)', () => {
     entitlementMock.canFxHub = true;
     act(() => {
       root.render(
         createElement(DigichatPopup, { tier: 'free', config: CFG }),
       );
     });
-    const btn = document.body.querySelector(
-      '.digichat-launcher__trigger',
-    ) as HTMLButtonElement;
-    act(() => {
-      btn.click();
-    });
-    expect(document.body.querySelector('#digichat-popup-iframe')).not.toBeNull();
+    // No launcher, no upgrade CTA, no iframe — FX Hub-only viewers are not on
+    // the DigiQuant pipeline subscription (#3662 reversed for the 12x invite).
+    expect(document.body.querySelector('.digichat-launcher__trigger')).toBeNull();
     expect(
       document.body.querySelector('[data-testid="digichat-upgrade-cta"]'),
     ).toBeNull();
+    expect(document.body.querySelector('#digichat-popup-iframe')).toBeNull();
   });
 
   it('renders launcher for Desk+ when config is present', () => {

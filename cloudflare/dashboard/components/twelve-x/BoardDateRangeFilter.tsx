@@ -5,7 +5,8 @@
  * Reuses DigiWeb DatePager calendar chrome (`.nb-cal`) — click start, then end.
  * No shared date-range picker exists in digiweb/dashboard yet.
  */
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useMemo, useState } from 'react';
+import { Dialog, DialogContent } from '@digithings/web';
 
 const WEEKDAYS = ['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'] as const;
 
@@ -107,7 +108,6 @@ export default function BoardDateRangeFilter({
   const [open, setOpen] = useState(false);
   /** First click while building a new range; null when idle. */
   const [pendingStart, setPendingStart] = useState<string | null>(null);
-  const rootRef = useRef<HTMLDivElement | null>(null);
 
   const allowed = useMemo(() => new Set(boards), [boards]);
   const sortedAsc = useMemo(() => [...boards].sort((a, b) => a.localeCompare(b)), [boards]);
@@ -120,18 +120,6 @@ export default function BoardDateRangeFilter({
     m: new Date().getUTCMonth() + 1,
   };
   const [view, setView] = useState(initial);
-
-  useEffect(() => {
-    if (!open) return;
-    const onDoc = (e: MouseEvent) => {
-      if (!rootRef.current?.contains(e.target as Node)) {
-        setOpen(false);
-        setPendingStart(null);
-      }
-    };
-    document.addEventListener('mousedown', onDoc);
-    return () => document.removeEventListener('mousedown', onDoc);
-  }, [open]);
 
   const openPicker = () => {
     const p = parseIso(anchorIso);
@@ -198,7 +186,7 @@ export default function BoardDateRangeFilter({
       : 'Click start date, then end date';
 
   return (
-    <div ref={rootRef} className="relative">
+    <div className="relative">
       <div className="flex items-center gap-1">
         <button
           type="button"
@@ -226,34 +214,40 @@ export default function BoardDateRangeFilter({
           </button>
         ) : null}
       </div>
-      {open ? (
-        <div
-          role="dialog"
+      <Dialog
+        open={open}
+        onOpenChange={(next) => {
+          setOpen(next);
+          if (!next) setPendingStart(null);
+        }}
+      >
+        <DialogContent
           aria-label="Board date range"
           data-testid="board-date-range-calendar"
-          className="nb-cal ctl-pop absolute left-0 top-full z-50 mt-1"
+          className="w-auto [&_.ctl-dialog-card]:w-auto"
         >
-          <div className="nb-cal-head">
-            <button
-              type="button"
-              className="nb-cal-nav"
-              aria-label="Previous month"
-              disabled={!canPrevMonth}
-              onClick={() => setView((v) => shiftMonth(v.y, v.m, -1))}
-            >
-              <ChevronLeftIcon />
-            </button>
-            <div className="nb-cal-title">{monthLabel(view.y, view.m)}</div>
-            <button
-              type="button"
-              className="nb-cal-nav"
-              aria-label="Next month"
-              disabled={!canNextMonth}
-              onClick={() => setView((v) => shiftMonth(v.y, v.m, 1))}
-            >
-              <ChevronRightIcon />
-            </button>
-          </div>
+          <div className="nb-cal">
+            <div className="nb-cal-head">
+              <button
+                type="button"
+                className="nb-cal-nav"
+                aria-label="Previous month"
+                disabled={!canPrevMonth}
+                onClick={() => setView((v) => shiftMonth(v.y, v.m, -1))}
+              >
+                <ChevronLeftIcon />
+              </button>
+              <div className="nb-cal-title">{monthLabel(view.y, view.m)}</div>
+              <button
+                type="button"
+                className="nb-cal-nav"
+                aria-label="Next month"
+                disabled={!canNextMonth}
+                onClick={() => setView((v) => shiftMonth(v.y, v.m, 1))}
+              >
+                <ChevronRightIcon />
+              </button>
+            </div>
           <p className="mb-2 text-center font-mono text-[10px] text-ink-mute">{hint}</p>
           <div className="nb-cal-weekdays" aria-hidden>
             {WEEKDAYS.map((w) => (
@@ -299,8 +293,9 @@ export default function BoardDateRangeFilter({
               </div>
             ))}
           </div>
-        </div>
-      ) : null}
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

@@ -18,6 +18,7 @@ import {
   SETTINGS_LOAD_ERROR_MESSAGE,
   SettingsLoadError,
 } from './settings-load-error';
+import { Alert, AlertDescription, Button, Checkbox, Input, Label, Switch } from '@digithings/web/ui';
 import {
   STAGE_LABELS,
   STAGES,
@@ -228,38 +229,38 @@ export function PipelineTab({
         </p>
       ) : null}
 
-      <label className="block space-y-1">
+      <Label className="block space-y-1">
         <span className="text-[10px] font-medium uppercase tracking-widest text-ink-mute">
           Watchlist tickers
         </span>
-        <input
-          className="w-full border border-hair bg-term-bg/50 px-3 py-2 text-sm font-mono text-ink"
+        <Input
+          className="h-auto w-full border-hair bg-term-bg/50 px-3 py-2 text-sm font-mono text-ink"
           value={watchlist}
           onChange={(e) => setWatchlist(e.target.value)}
           placeholder="AAPL, MSFT"
           data-testid="pipeline-watchlist"
         />
-      </label>
+      </Label>
 
-      <label className="block space-y-1">
+      <Label className="block space-y-1">
         <span className="text-[10px] font-medium uppercase tracking-widest text-ink-mute">
           Themes
         </span>
-        <input
-          className="w-full border border-hair bg-term-bg/50 px-3 py-2 text-sm text-ink"
+        <Input
+          className="h-auto w-full border-hair bg-term-bg/50 px-3 py-2 text-sm text-ink"
           value={themes}
           onChange={(e) => setThemes(e.target.value)}
           placeholder="ai, energy"
           data-testid="pipeline-themes"
         />
-      </label>
+      </Label>
 
-      <label className="block space-y-1">
+      <Label className="block space-y-1">
         <span className="text-[10px] font-medium uppercase tracking-widest text-ink-mute">
           Research budget (USD)
         </span>
-        <input
-          className="w-full border border-hair bg-term-bg/50 px-3 py-2 text-sm font-mono text-ink"
+        <Input
+          className="h-auto w-full border-hair bg-term-bg/50 px-3 py-2 text-sm font-mono text-ink"
           value={budget}
           onChange={(e) => setBudget(e.target.value)}
           placeholder="Leave blank for none"
@@ -269,7 +270,7 @@ export function PipelineTab({
         <p className="text-xs text-ink-mute">
           Hard stop for overlay LLM spend (BYOK). House budget never pays for overlay research.
         </p>
-      </label>
+      </Label>
 
       <section className="space-y-2" data-testid="pipeline-schedule-grid" aria-labelledby="pipeline-schedule-heading">
         <div>
@@ -320,16 +321,13 @@ export function PipelineTab({
                     const id = `pipeline-stage-${day}-${stage}`;
                     return (
                       <td key={day} className="border border-hair px-2 py-1.5 text-center">
-                        <input
+                        <Checkbox
                           id={id}
-                          type="checkbox"
-                          role="switch"
-                          aria-checked={checked}
                           aria-label={`${STAGE_LABELS[stage]} on ${WEEKDAY_LABELS[day]}`}
                           checked={checked}
-                          onChange={() => onToggleStage(day, stage)}
+                          onCheckedChange={() => onToggleStage(day, stage)}
                           data-testid={`pipeline-stage-${day}-${stage}`}
-                          className="h-4 w-4 accent-ink"
+                          className="mx-auto"
                         />
                       </td>
                     );
@@ -397,27 +395,24 @@ export function PipelineTab({
           )}
         </div>
 
-        <label className="flex items-center justify-between gap-3 border border-hair bg-term-bg/40 px-3 py-2">
+        <div className="flex select-none items-center justify-between gap-3 border border-hair bg-term-bg/40 px-3 py-2">
           <span className="text-sm text-ink-soft">Respect early close</span>
-          <input
-            type="checkbox"
-            role="switch"
-            aria-checked={policy.respect_early_close}
+          <Switch
             checked={policy.respect_early_close}
-            onChange={(e) =>
-              setPolicy((prev) => ({ ...prev, respect_early_close: e.target.checked }))
+            onCheckedChange={(value) =>
+              setPolicy((prev) => ({ ...prev, respect_early_close: value }))
             }
+            aria-label="Respect early close"
             data-testid="pipeline-respect-early-close"
-            className="h-4 w-4 accent-ink"
           />
-        </label>
+        </div>
 
-        <label className="block space-y-1">
+        <Label className="block space-y-1">
           <span className="text-[10px] font-medium uppercase tracking-widest text-ink-mute">
             Preferred venues
           </span>
-          <input
-            className="w-full border border-hair bg-term-bg/50 px-3 py-2 text-sm font-mono text-ink"
+          <Input
+            className="h-auto w-full border-hair bg-term-bg/50 px-3 py-2 text-sm font-mono text-ink"
             value={venuesInput}
             onChange={(e) => setVenuesInput(e.target.value)}
             placeholder="Empty = no preference filter"
@@ -428,31 +423,31 @@ export function PipelineTab({
             Optional venue preference list. Empty leaves routing unconstrained; the calendar still
             applies to whatever venue is chosen.
           </p>
-        </label>
+        </Label>
       </section>
 
-      <button
+      <Button
         type="button"
         disabled={saving}
         onClick={() => void onSave()}
-        className="border border-ink bg-ink px-3 py-1.5 text-sm font-medium text-bg disabled:opacity-50"
+        className="h-auto px-3 py-1.5 text-sm"
         data-testid="pipeline-save"
       >
         {saving ? 'Saving…' : 'Save pipeline knobs'}
-      </button>
+      </Button>
 
       {conflict ? (
-        <p className="text-sm text-warn" role="alert" data-testid="pipeline-conflict">
-          Profile changed elsewhere — reload and try again.
-        </p>
+        <Alert data-testid="pipeline-conflict" className="border-warn/40 text-warn">
+          <AlertDescription>Profile changed elsewhere — reload and try again.</AlertDescription>
+        </Alert>
       ) : null}
       {loadError ? (
         <SettingsLoadError message={loadError} onRetry={() => void hydrate()} />
       ) : null}
       {error ? (
-        <p className="text-sm text-down" role="alert" data-testid="pipeline-error">
-          {error}
-        </p>
+        <Alert variant="destructive" data-testid="pipeline-error">
+          <AlertDescription>{error}</AlertDescription>
+        </Alert>
       ) : null}
       {savedVersion ? (
         <p className="text-sm text-ink-mute" data-testid="pipeline-saved">

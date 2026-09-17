@@ -39,7 +39,7 @@ export class DigiChatContainer extends Container {
     DIGICHAT_REQUIRE_ROOT_AUTH: workerVars.DIGICHAT_REQUIRE_ROOT_AUTH ?? "0",
     DIGICHAT_EMBED_HOSTS:
       workerVars.DIGICHAT_EMBED_HOSTS ??
-      "digithings.ai,www.digithings.ai,occ.digithings.ai",
+      "digithings.ai,www.digithings.ai,occ.digithings.ai,digiquant.io,www.digiquant.io",
     DIGICHAT_AUTO_MIGRATE: workerVars.DIGICHAT_AUTO_MIGRATE ?? "0",
     DIGICHAT_TRUSTED_PROXIES: workerVars.DIGICHAT_TRUSTED_PROXIES ?? "",
     // Profile A: digisearch lives loopback in digithings-stack; only probe digigraph.
