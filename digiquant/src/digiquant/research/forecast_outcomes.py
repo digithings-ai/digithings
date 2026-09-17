@@ -162,6 +162,26 @@ def _session_close_utc(session: date) -> datetime:
     )
 
 
+# R2 generations store OHLCV as float64 by design, so a stored close such as
+# ``10.380000114440918`` is the correct float rendering, not corrupt data.
+# ``PositivePrice`` caps at ``decimal_places=8``, so the raw float keeps binary
+# noise past the model's money precision and trips ``decimal_max_places`` (#4296).
+_PRICE_QUANTUM = Decimal("0.00000001")
+
+
+def _quantize_price(value: Decimal) -> Decimal:
+    """Round a raw price to the price-model money precision (#4296).
+
+    ``Decimal(str(raw))`` on an R2 float64 close yields a 15-place Decimal
+    (``10.380000114440918``) that ``SessionPriceSnapshot.price`` rejects, which
+    aborted ``preflight.reflect`` for the whole house research run. Normalizing
+    here — at the raw-price ingress every forecast snapshot shares — gives each
+    consumer a value the models accept. This is a normalization, not a
+    swallowed ``ValidationError``, and it never skips a matured outcome.
+    """
+    return value.quantize(_PRICE_QUANTUM)
+
+
 def _fetch_session_close(
     *,
     client: SupabaseClient,
@@ -200,7 +220,7 @@ def _fetch_session_close(
     if raw is None:
         return None
     try:
-        price = Decimal(str(raw))
+        price = _quantize_price(Decimal(str(raw)))
     except (ArithmeticError, ValueError):
         return None
     if price <= 0:
