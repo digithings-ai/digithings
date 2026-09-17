@@ -10,6 +10,7 @@ search, retrieval, and a status report. No writes, by design.
 |------|--------------|
 | `search_tickets(query, limit=10)` | Zammad ticket search. Plain keywords always work; field syntax (`state.name:open`, `group.name:Sitaas`) only works when the instance has Elasticsearch — without it those queries silently match nothing. When the raw query returns no tickets, the tool retries the extracted keywords one by one and the header says `matched via keywords: ...` |
 | `get_ticket(ticket_id)` | One ticket with its articles; takes the internal id (`231`) or the displayed ticket number (`#28312`), and resolves a number through search when the id lookup 404s. Relation names resolved via `expand=true` |
+| `list_tickets(page=1, per_page=50)` | Browse the visible tickets page by page, newest updated first (the Zammad list API is id-ordered; this tool re-sorts by `updated_at`). Use it when keyword search misses: tickets mix German and English and search is a literal substring match, so read titles in their original language and pull threads with `get_ticket` |
 | `ticket_report()` | Status report across all visible tickets: unresolved vs closed, by state/group/priority, updated in the last 7 days |
 
 Every request is a GET. The token only ever leaves this process as the

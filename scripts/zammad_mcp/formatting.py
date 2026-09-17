@@ -152,6 +152,20 @@ def format_search_results(
     return "\n".join(lines)
 
 
+def format_ticket_list(tickets: list[dict[str, Any]], page: int = 1, per_page: int = 50) -> str:
+    """Render one page of the visible ticket list for the model."""
+    if not tickets:
+        if page > 1:
+            return f"No tickets on page {page}; try earlier pages."
+        return "No tickets visible to this token."
+    lines = [f"Visible tickets (page {page}, {len(tickets)} shown):"]
+    lines.extend(format_ticket_line(ticket) for ticket in tickets)
+    if len(tickets) == per_page:
+        lines.append(f"Page is full; continue with page {page + 1}.")
+    lines.append("Read a full conversation with get_ticket(id or #number).")
+    return "\n".join(lines)
+
+
 _EXTRA_FIELDS = (
     ("impact", "impact"),
     ("environment", "environment"),
