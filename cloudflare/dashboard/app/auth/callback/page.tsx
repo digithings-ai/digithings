@@ -3,16 +3,16 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
+import { buttonVariants, Card } from '@digithings/web/ui';
 import { DashboardMark } from '@/components/dashboard-mark';
 import {
   getSupabaseClient,
   oauthCallbackErrorFromLocation,
   oauthPkceCodeFromLocation,
 } from '@/lib/supabase';
+import { AUTH_CALLBACK_SETTLE_MS } from './settle';
 
 const SIGN_IN_FAILED = 'Sign-in did not complete. Return to login and try again.';
-
-export const AUTH_CALLBACK_SETTLE_MS = 8_000;
 
 function callbackErrorMessage(): string | null {
   if (typeof window === 'undefined') return null;
@@ -106,9 +106,9 @@ export default function AuthCallbackPage() {
   }, [client, router]);
 
   return (
-    <div className="acct-login-shell qn-blueprint-bg">
-      <div className="acct-login-card">
-        <div className="acct-login-mark">
+    <div className="qn-blueprint-bg flex min-h-screen flex-col items-center justify-center p-6 text-ink">
+      <Card className="w-full max-w-[380px] gap-0 border border-hair p-5 ring-0">
+        <div className="mb-[0.85rem]">
           <DashboardMark className="shrink-0" />
         </div>
         <p className="font-mono text-[0.72rem] tracking-[0.02em] text-ink">
@@ -118,11 +118,14 @@ export default function AuthCallbackPage() {
           {message}
         </p>
         {failed ? (
-          <Link href="/login/" className="btn-ghost acct-btn-block text-center">
+          <Link
+            href="/login/"
+            className={`${buttonVariants({ variant: 'outline' })} mt-[1.1rem] block h-auto w-full px-[1.3rem] py-[0.62rem] text-center font-mono text-[0.78rem] tracking-[0.02em]`}
+          >
             Return to sign in
           </Link>
         ) : null}
-      </div>
+      </Card>
     </div>
   );
 }

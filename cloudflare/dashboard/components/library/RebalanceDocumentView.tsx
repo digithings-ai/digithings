@@ -1,5 +1,6 @@
 'use client';
 
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@digithings/web/ui';
 import { SafeMarkdown } from '@/components/SafeMarkdown';
 import { cleanMemoProse, summarizeRecommendedPortfolio } from '@/lib/render-pipeline-payloads';
 
@@ -144,58 +145,64 @@ export default function RebalanceDocumentView({
         ) : null}
 
         {liveWeights.length > 0 ? (
-          <div className="overflow-x-auto">
+          <div>
             <h3 className="text-xs font-semibold text-ink-mute uppercase tracking-wider mb-2">
               Recommended weights
             </h3>
-            <table className="w-full text-left text-xs border-collapse">
-              <thead>
-                <tr className="border-b border-hair text-ink-mute">
-                  <th className="py-2 pr-3 font-medium">Ticker</th>
-                  <th className="py-2 font-medium text-right">Target %</th>
-                </tr>
-              </thead>
-              <tbody>
+            <Table>
+              <TableHeader>
+                <TableRow className="border-hair hover:bg-transparent">
+                  <TableHead className="text-ink-mute">Ticker</TableHead>
+                  <TableHead className="text-ink-mute text-right">Target %</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
                 {liveWeights.map((w, i) => (
-                  <tr key={i} className="border-b border-hair/60">
-                    <td className="py-2 pr-3 font-mono text-accent">{w.ticker ?? '—'}</td>
+                  <TableRow key={i} className="border-hair/60 hover:bg-transparent">
+                    <TableCell className="font-mono text-accent">{w.ticker ?? '—'}</TableCell>
                     {/* Live shape: `target_pct`; fixture / test payloads: `weight_pct`. */}
-                    <td className="py-2 text-right tabular-nums">{pct(w.target_pct ?? w.weight_pct)}</td>
-                  </tr>
+                    <TableCell className="text-right tabular-nums">
+                      {pct(w.target_pct ?? w.weight_pct)}
+                    </TableCell>
+                  </TableRow>
                 ))}
-              </tbody>
-            </table>
+              </TableBody>
+            </Table>
           </div>
         ) : null}
 
         {liveActions.length > 0 ? (
-          <div className="overflow-x-auto">
+          <div>
             <h3 className="text-xs font-semibold text-ink-mute uppercase tracking-wider mb-2">Actions</h3>
-            <table className="w-full text-left text-xs border-collapse">
-              <thead>
-                <tr className="border-b border-hair text-ink-mute">
-                  <th className="py-2 pr-3 font-medium">Ticker</th>
-                  <th className="py-2 pr-3 font-medium">Action</th>
-                  <th className="py-2 pr-3 font-medium text-right">Current</th>
-                  <th className="py-2 pr-3 font-medium text-right">Target</th>
-                  <th className="py-2 font-medium">Rationale</th>
-                </tr>
-              </thead>
-              <tbody>
+            <Table>
+              <TableHeader>
+                <TableRow className="border-hair hover:bg-transparent">
+                  <TableHead className="text-ink-mute">Ticker</TableHead>
+                  <TableHead className="text-ink-mute">Action</TableHead>
+                  <TableHead className="text-ink-mute text-right">Current</TableHead>
+                  <TableHead className="text-ink-mute text-right">Target</TableHead>
+                  <TableHead className="text-ink-mute">Rationale</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
                 {liveActions.map((a, i) => (
-                  <tr key={i} className="border-b border-hair/60 align-top">
-                    <td className="py-2 pr-3 font-mono text-accent">{a.ticker ?? '—'}</td>
-                    <td className={`py-2 pr-3 font-medium ${actionClass(a.action)}`}>{a.action ?? '—'}</td>
-                    <td className="py-2 pr-3 text-right tabular-nums">{pct(a.current_pct)}</td>
+                  <TableRow key={i} className="border-hair/60 align-top hover:bg-transparent">
+                    <TableCell className="font-mono text-accent">{a.ticker ?? '—'}</TableCell>
+                    <TableCell className={`font-medium ${actionClass(a.action)}`}>
+                      {a.action ?? '—'}
+                    </TableCell>
+                    <TableCell className="text-right tabular-nums">{pct(a.current_pct)}</TableCell>
                     {/* Live shape: `target_pct`; fixture / test payloads: `recommended_pct`. */}
-                    <td className="py-2 pr-3 text-right tabular-nums">{pct(a.target_pct ?? a.recommended_pct)}</td>
-                    <td className="py-2 text-ink-soft whitespace-pre-wrap">
+                    <TableCell className="text-right tabular-nums">
+                      {pct(a.target_pct ?? a.recommended_pct)}
+                    </TableCell>
+                    <TableCell className="text-ink-soft whitespace-pre-wrap">
                       {cleanMemoProse(a.rationale ?? '—')}
-                    </td>
-                  </tr>
+                    </TableCell>
+                  </TableRow>
                 ))}
-              </tbody>
-            </table>
+              </TableBody>
+            </Table>
           </div>
         ) : null}
       </div>
@@ -240,36 +247,36 @@ export default function RebalanceDocumentView({
       ) : null}
 
       {legacyRows.length > 0 ? (
-        <div className="overflow-x-auto">
+        <div>
           <h3 className="text-xs font-semibold text-ink-mute uppercase tracking-wider mb-2">Rebalance table</h3>
-          <table className="w-full text-left text-xs border-collapse">
-            <thead>
-              <tr className="border-b border-hair text-ink-mute">
-                <th className="py-2 pr-3 font-medium">Ticker</th>
-                <th className="py-2 pr-3 font-medium text-right">Current</th>
-                <th className="py-2 pr-3 font-medium text-right">Target</th>
-                <th className="py-2 pr-3 font-medium text-right">Δ</th>
-                <th className="py-2 pr-3 font-medium">Action</th>
-                <th className="py-2 pr-3 font-medium">Urgency</th>
-                <th className="py-2 font-medium">Rationale</th>
-              </tr>
-            </thead>
-            <tbody>
+          <Table>
+            <TableHeader>
+              <TableRow className="border-hair hover:bg-transparent">
+                <TableHead className="text-ink-mute">Ticker</TableHead>
+                <TableHead className="text-ink-mute text-right">Current</TableHead>
+                <TableHead className="text-ink-mute text-right">Target</TableHead>
+                <TableHead className="text-ink-mute text-right">Δ</TableHead>
+                <TableHead className="text-ink-mute">Action</TableHead>
+                <TableHead className="text-ink-mute">Urgency</TableHead>
+                <TableHead className="text-ink-mute">Rationale</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
               {legacyRows.map((r, i) => (
-                <tr key={i} className="border-b border-hair/60 align-top">
-                  <td className="py-2 pr-3 font-mono text-accent">{r.ticker ?? '—'}</td>
-                  <td className="py-2 pr-3 text-right tabular-nums">{pct(r.current_pct)}</td>
-                  <td className="py-2 pr-3 text-right tabular-nums">{pct(r.recommended_pct)}</td>
-                  <td className="py-2 pr-3 text-right tabular-nums">{pct(r.change_pct)}</td>
-                  <td className="py-2 pr-3">{r.action ?? '—'}</td>
-                  <td className="py-2 pr-3">{r.urgency ?? '—'}</td>
-                  <td className="py-2 text-ink-soft whitespace-pre-wrap">
+                <TableRow key={i} className="border-hair/60 align-top hover:bg-transparent">
+                  <TableCell className="font-mono text-accent">{r.ticker ?? '—'}</TableCell>
+                  <TableCell className="text-right tabular-nums">{pct(r.current_pct)}</TableCell>
+                  <TableCell className="text-right tabular-nums">{pct(r.recommended_pct)}</TableCell>
+                  <TableCell className="text-right tabular-nums">{pct(r.change_pct)}</TableCell>
+                  <TableCell>{r.action ?? '—'}</TableCell>
+                  <TableCell>{r.urgency ?? '—'}</TableCell>
+                  <TableCell className="text-ink-soft whitespace-pre-wrap">
                     {cleanMemoProse(r.rationale ?? '—')}
-                  </td>
-                </tr>
+                  </TableCell>
+                </TableRow>
               ))}
-            </tbody>
-          </table>
+            </TableBody>
+          </Table>
         </div>
       ) : null}
     </div>

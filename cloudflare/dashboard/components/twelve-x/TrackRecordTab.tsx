@@ -1,6 +1,7 @@
 'use client';
 
 import { useMemo } from 'react';
+import { Card } from '@digithings/web/ui';
 import { History } from 'lucide-react';
 import type {
   FxConsensusDivergence,
@@ -91,7 +92,7 @@ export default function TrackRecordTab({
 
       <BankVsQuantPanel divergenceByCurrency={divergenceByCurrency} consensusRows={consensusRows} />
 
-      <section className="oly-slab space-y-2 p-5" data-testid="track-record-divergence-accuracy">
+      <Card data-reveal className="gap-0 space-y-2 p-5" data-testid="track-record-divergence-accuracy">
         <p className="font-mono text-xs font-medium uppercase tracking-[0.08em] text-ink-soft">
           Divergent-call accuracy
         </p>
@@ -103,9 +104,9 @@ export default function TrackRecordTab({
           <WilsonStat label="Divergent now" interval={divAccuracy.divergent} />
           <WilsonStat label="Aligned now" interval={divAccuracy.aligned} />
         </div>
-      </section>
+      </Card>
 
-      <section className="oly-slab space-y-2 p-5" data-testid="track-record-carried">
+      <Card data-reveal className="gap-0 space-y-2 p-5" data-testid="track-record-carried">
         <p className="font-mono text-xs font-medium uppercase tracking-[0.08em] text-ink-soft">
           Open ideas · {carried.length}
         </p>
@@ -130,7 +131,7 @@ export default function TrackRecordTab({
             ))}
           </ul>
         )}
-      </section>
+      </Card>
 
       <section className="space-y-3" data-testid="track-record-recent">
         <p className="px-1 font-mono text-xs font-medium uppercase tracking-[0.08em] text-ink-soft">
@@ -140,9 +141,10 @@ export default function TrackRecordTab({
           <p className="px-1 text-sm text-ink-mute">No scored ideas with published levels yet.</p>
         ) : (
           recentRows.map(({ idea, evalRow }) => (
-            <div
+            <Card
               key={`${idea.run_date}-${idea.rank}`}
-              className="oly-slab space-y-2 p-5"
+              data-reveal
+              className="gap-0 space-y-2 p-5"
             >
               <div className="flex flex-wrap items-baseline gap-x-3 gap-y-0.5 text-xs">
                 <span className="font-mono text-ink-mute">{idea.run_date}</span>
@@ -154,7 +156,7 @@ export default function TrackRecordTab({
                 <span className="min-w-0 flex-1 truncate text-ink-mute">{idea.title}</span>
               </div>
               <LevelFixSection idea={idea} evalRow={evalRow} />
-            </div>
+            </Card>
           ))
         )}
       </section>

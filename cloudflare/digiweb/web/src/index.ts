@@ -29,7 +29,6 @@ export {
 } from "./components/account/AuthCard";
 export { ScrollyGraph, GraphSVG } from "./components/graph";
 export {
-  Nav,
   Footer,
   Colophon,
   ModuleCard,
@@ -50,6 +49,9 @@ export {
   isSamePageHashHref,
 } from "./navigation/hashScroll";
 export { Terminal, type TermLine } from "./components/Terminal";
+// Spinner — the canonical inline loading glyph (replaces the hand-rolled
+// `size-[11px] … border-current/30` span copied across reference specimens).
+export { Spinner, type SpinnerProps } from "./components/Spinner";
 
 // promoted primitives (#1415)
 export { Pricing, PricingTierCard, PrecisionTable, type PricingProps, type PricingTierCardProps, type PrecisionTableProps } from "./components/pricing/Pricing";
@@ -119,8 +121,6 @@ export {
 // controls layer (#1419)
 export { Button, type ButtonProps, type ButtonDress, type ButtonReferenceVariant, type ButtonChatVariant, type ButtonChatSize } from "./components/controls/Button";
 export { Badge, type BadgeProps, type BadgeDress, type BadgeReferenceVariant, type BadgeChatVariant } from "./components/controls/Badge";
-export { Card, CardHeader, CardTitle, CardDescription, CardAction, CardContent, CardFooter, type CardProps, type CardDress, type CardSize } from "./components/controls/Card";
-export { Input, type InputProps, type InputDress } from "./components/controls/Input";
 export { Label, type LabelProps, type LabelDress } from "./components/controls/Label";
 export { Avatar, AvatarImage, AvatarFallback, AvatarBadge, AvatarGroup, AvatarGroupCount, type AvatarProps, type AvatarImageProps, type AvatarFallbackProps, type AvatarSize } from "./components/controls/Avatar";
 export {

@@ -19,4 +19,4 @@ export function shouldProxyToDigiChat(pathname: string): boolean {
 }
 
 /** Single Durable Object / Container name for all marketing tenants. */
-export const SHARED_DIGICHAT_CONTAINER_ID = "shared-v6";
+export const SHARED_DIGICHAT_CONTAINER_ID = "shared-v7";

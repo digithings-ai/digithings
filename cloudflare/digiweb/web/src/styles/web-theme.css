@@ -13,6 +13,14 @@
    and scoped overrides never reach the utility. Apps must not declare their
    own bridge — extend this one.
    ========================================================================== */
+
+/* Overlay state variants — the kit's Collapsible/Dialog/Sheet/Menu emit
+   `data-open`/`data-closed` (Base UI attrs, Radix `data-state`). Declared on
+   the bridge so consumers need no local copy. */
+@custom-variant data-open (&:where([data-state="open"], [data-open]:not([data-open="false"])));
+
+@custom-variant data-closed (&:where([data-state="closed"], [data-closed]:not([data-closed="false"])));
+
 @theme inline {
   --color-bg: var(--bg);
   --color-surface: var(--surface);
@@ -77,6 +85,20 @@
   --radius-md: 0;
   --radius-lg: 0;
   --radius-xl: 0;
+
+  /* Collapsible height animation. The Base UI panel exposes
+     --collapsible-panel-height (the kit's Collapsible); the Radix var stays
+     first for Radix consumers. Caveat: tw-animate-css declares the same
+     keyframes WITHOUT the Base UI var, so an app importing it after this
+     bridge (reference, digichat) still needs its local copy to win. */
+  @keyframes collapsible-down {
+    from { height: 0; }
+    to { height: var(--radix-collapsible-content-height, var(--collapsible-panel-height, auto)); }
+  }
+  @keyframes collapsible-up {
+    from { height: var(--radix-collapsible-content-height, var(--collapsible-panel-height, auto)); }
+    to { height: 0; }
+  }
 }
 
 /* Base element defaults shared by the React apps.

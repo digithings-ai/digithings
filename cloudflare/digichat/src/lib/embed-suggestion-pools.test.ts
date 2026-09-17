@@ -1,6 +1,8 @@
 import { describe, expect, it, vi } from "vitest";
 import {
   DATATAPSTREAM_SUGGESTION_POOL,
+  DIGITHINGS_SUGGESTION_POOL,
+  OCC_SUGGESTION_POOL,
   getTenantSuggestionPool,
   pickRandomEmbedSuggestions,
 } from "./embed-suggestion-pools";
@@ -14,6 +16,15 @@ describe("getTenantSuggestionPool", () => {
 
   it("returns undefined for unknown slugs", () => {
     expect(getTenantSuggestionPool("embed")).toBeUndefined();
+  });
+
+  it("returns the curated digithings pool for digithings + digithings-ai slugs", () => {
+    expect(getTenantSuggestionPool("digithings")).toEqual([...DIGITHINGS_SUGGESTION_POOL]);
+    expect(getTenantSuggestionPool("digithings-ai")).toEqual([...DIGITHINGS_SUGGESTION_POOL]);
+  });
+
+  it("returns the curated occ pool for occ slug", () => {
+    expect(getTenantSuggestionPool("occ")).toEqual([...OCC_SUGGESTION_POOL]);
   });
 });
 

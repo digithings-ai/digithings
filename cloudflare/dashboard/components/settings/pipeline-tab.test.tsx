@@ -131,8 +131,10 @@ describe('PipelineTab', () => {
     await flush();
     const mondayResearch = el.querySelector(
       '[data-testid="pipeline-stage-monday-research"]',
-    ) as HTMLInputElement | null;
-    expect(mondayResearch?.checked).toBe(true);
+    ) as HTMLElement | null;
+    // Kit Checkbox is a Base UI button (role="checkbox"), not a native input: its
+    // state is exposed as aria-checked / data-checked rather than `.checked`.
+    expect(mondayResearch?.getAttribute('aria-checked')).toBe('true');
     expect(el.querySelector('[data-testid="pipeline-market-session"]')?.textContent).toMatch(
       /NYSE/,
     );

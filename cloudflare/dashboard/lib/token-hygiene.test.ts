@@ -39,7 +39,7 @@ describe('canon token hygiene (#1402)', () => {
     expect(offenders).toEqual([]);
   });
 
-  it('dashboard core has no glass-card class (tonal slabs are .oly-slab)', () => {
+  it('dashboard core has no glass-card class (tonal slabs ride the kit Card)', () => {
     const appFiles = walk(join(__dirname, '..', 'app'));
     const core = [...files, ...appFiles].filter((f) => !/\.test\.tsx?$/.test(f));
     const offenders = core.filter((f) => {

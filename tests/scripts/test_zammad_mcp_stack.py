@@ -81,3 +81,25 @@ def test_stack_container_env_passes_the_zammad_token():
 
 def test_wrangler_documents_the_zammad_secret():
     assert "ZAMMAD_API_TOKEN" in WRANGLER.read_text()
+
+
+def test_digiproject_allowlist_excludes_zammad():
+    """The website digichat must not offer Zammad from the shared allowlist.
+
+    OCC reaches the read-only ticket tools per request instead, through the
+    live MCP union over X-Digi-Mcp-Servers (tool_policy.apply_mcp_extra_tools).
+    """
+    digiproject = REPO_ROOT / "infra" / "digichat-release" / "config" / "digiproject.yaml"
+    assert "zammad" not in _code_lines(digiproject)
+
+
+def test_entrypoint_allowed_tools_fallback_excludes_zammad():
+    """The container's real DIGI_ALLOWED_TOOLS fallback stays in sync (#2306)."""
+    exports = [
+        line
+        for line in _code_lines(ENTRYPOINT).splitlines()
+        if line.startswith("export DIGI_ALLOWED_TOOLS=")
+    ]
+    assert exports, "expected the DIGI_ALLOWED_TOOLS export"
+    for line in exports:
+        assert "zammad" not in line

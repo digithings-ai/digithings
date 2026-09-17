@@ -83,10 +83,18 @@ Every pull request and every push to `develop`/`main` runs
 - **Local reproduction.** `make secrets-scan` runs the same config against
   the working tree. Install gitleaks via `brew install gitleaks` or
   `go install github.com/gitleaks/gitleaks/v8@latest`.
-- **Allowlist policy.** `tests/`, `.env.example`, top-level and `docs/**/*.md`
-  markdown, and `scripts/claude-hooks/fixtures/` are allowlisted because they
-  only contain placeholder values, fake/ephemeral fixtures, or
-  vendor-published example tokens (e.g. `AKIAIOSFODNN7EXAMPLE`). Adding a new
+- **Secret-list drift.** `make secrets-audit` cross-checks the repo secret list
+  (`gh secret list`) against every `secrets.*` read under `.github/`, and exits
+  non-zero when a repo secret is never read. Reads with no repo-level secret are
+  listed as informational — they usually resolve at org or environment level.
+  It is a local check, not a CI gate.
+- **Allowlist policy.** `tests/`, top-level and `docs/**/*.md` markdown, and
+  `scripts/claude-hooks/fixtures/` are allowlisted because they only contain
+  placeholder values, fake/ephemeral fixtures, or vendor-published example
+  tokens (e.g. `AKIAIOSFODNN7EXAMPLE`). Example templates are deliberately
+  **not** path-allowlisted: the root `.env.example` stays scanned, and the
+  placeholder values it carries (`replace-with-…`, `your-…-here`, `<…>`) are
+  filtered by the value patterns in `.gitleaks.toml`. Adding a new
   allowlist entry requires a comment in `.gitleaks.toml` justifying why the
   match is safe, and reviewers are expected to push back on entries that
   broaden the allowlist without a clear fixture/example rationale.

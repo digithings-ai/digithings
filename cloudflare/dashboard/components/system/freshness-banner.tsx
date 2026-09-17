@@ -1,5 +1,6 @@
 'use client';
 
+import { Card } from '@digithings/web/ui';
 import { AsOfBadge } from '@/components/shared/as-of-badge';
 import type { ResearchRunDiagnostics } from '@/lib/types';
 
@@ -19,7 +20,10 @@ export function FreshnessBanner({ latest }: { latest: ResearchRunDiagnostics }) 
       ? `${latest.segments_ok ?? 0}/${latest.segments_total} segments`
       : null;
   return (
-    <div className="oly-slab flex flex-wrap items-center gap-x-3 gap-y-1 p-4">
+    <Card
+      data-reveal
+      className="flex flex-row flex-wrap items-center gap-x-3 gap-y-1 gap-0 p-4"
+    >
       <span className="inline-block h-2 w-2 shrink-0 rounded-full bg-accent" aria-hidden />
       <span className="font-mono text-xs text-ink md:text-sm">
         Last successful run{' '}
@@ -28,6 +32,6 @@ export function FreshnessBanner({ latest }: { latest: ResearchRunDiagnostics }) 
         {segs ? <span className="tabular-nums text-ink-soft"> · {segs}</span> : null}
       </span>
       <AsOfBadge date={latest.run_date} createdAt={latest.created_at} />
-    </div>
+    </Card>
   );
 }

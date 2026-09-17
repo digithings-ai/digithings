@@ -2,7 +2,7 @@ import { ModuleCard, moduleById, type ModuleNode } from "@digithings/web";
 
 /**
  * Module card — the landing-page module tile from @digithings/web, the sibling
- * of Nav/Footer/Colophon in the shared chrome file. One card per module: the
+ * of NavShell/Footer/Colophon in the shared chrome file. One card per module: the
  * module emblem in its own accent, a tier badge, the name and role, and a
  * compact stack row. Neither marketing home renders a module grid today (both
  * compose their own index rows), so this is the tile for any surface that

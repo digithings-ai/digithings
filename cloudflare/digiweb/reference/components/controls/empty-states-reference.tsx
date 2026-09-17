@@ -6,7 +6,8 @@
  * the down colour. Static display templates. Consumes the shared <EmptyState/>
  * primitive from @digithings/web (each variant carries its default glyph).
  */
-import { Button, EmptyState, type EmptyStateVariant } from "@digithings/web";
+import { EmptyState, type EmptyStateVariant } from "@digithings/web";
+import { Button } from "@digithings/web/ui";
 
 const STATES: {
   id: EmptyStateVariant;
@@ -54,7 +55,7 @@ export function EmptyStatesReference() {
             variant={s.id}
             title={s.title}
             body={s.msg}
-            action={<Button variant={s.primary ? "primary" : "ghost"}>{s.action}</Button>}
+            action={<Button variant={s.primary ? "default" : "ghost"}>{s.action}</Button>}
           />
         ))}
       </div>

@@ -1,6 +1,7 @@
 'use client';
 
 import { useMemo, useState } from 'react';
+import { Card } from '@digithings/web/ui';
 import type { FxConsensusDivergence } from '@/lib/twelve-x/types';
 import type { ConsensusCurrencyRow } from '@/lib/twelve-x/consensus-view';
 import { currencyColor } from '@/lib/twelve-x/consensus-bar';
@@ -63,17 +64,17 @@ export function BankVsQuantPanel({
 
   if (rows.length === 0) {
     return (
-      <section className="oly-slab p-5" data-testid="bank-vs-quant">
+      <Card data-reveal className="gap-0 p-5" data-testid="bank-vs-quant">
         <p className="font-mono text-xs font-medium uppercase tracking-[0.08em] text-ink-soft">
           Bank vs quant
         </p>
         <p className="mt-2 text-sm text-ink-mute">No street-vs-quant reads for this run.</p>
-      </section>
+      </Card>
     );
   }
 
   return (
-    <section className="oly-slab space-y-2 p-5" data-testid="bank-vs-quant">
+    <Card data-reveal className="gap-0 space-y-2 p-5" data-testid="bank-vs-quant">
       <p className="font-mono text-xs font-medium uppercase tracking-[0.08em] text-ink-soft">
         Bank vs quant · {rows.filter((r) => r.isDivergent).length} divergent
       </p>
@@ -144,7 +145,7 @@ export function BankVsQuantPanel({
         divergence={selected}
         onClose={() => setSelectedCcy(null)}
       />
-    </section>
+    </Card>
   );
 }
 

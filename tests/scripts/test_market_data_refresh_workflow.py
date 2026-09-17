@@ -670,12 +670,7 @@ def test_workflow_secrets_wired() -> None:
         assert name in env, name
     # Recorded deviation (Task 6 report): the store seam needs the direct-PG
     # registry insert, so the workflow wires one extra secret past the brief pins.
-    # #3979: the pre-#3860 names are a transitional fallback until the repo
-    # secret itself is renamed; the env var the reader sees stays CORE_POSTGRES_URI.
-    assert env["CORE_POSTGRES_URI"] == (
-        "${{ secrets.CORE_POSTGRES_URI || secrets.DIGI_CHECKPOINTER_POSTGRES_URI"
-        " || secrets.MARKET_DATA_POSTGRES_URI }}"
-    )
+    assert env["CORE_POSTGRES_URI"] == "${{ secrets.CORE_POSTGRES_URI }}"
 
 
 def test_workflow_runs_refresh_and_uploads_manifest() -> None:

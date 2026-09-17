@@ -1,6 +1,7 @@
 'use client';
 
 import { useMemo, useState } from 'react';
+import { Badge, Card } from '@digithings/web/ui';
 import { ChevronDown, ChevronRight } from 'lucide-react';
 import type { FxTradeIdeaRow, FxConfluenceSnapshotRow } from '@/lib/twelve-x/types';
 import {
@@ -47,9 +48,12 @@ function contributingDesks(citations: unknown[]): string[] {
 
 function ProvenanceChip({ label }: { label: string }) {
   return (
-    <span className="rounded-none border border-hair bg-surface/50 px-1 font-mono text-[10px] text-ink-mute">
+    <Badge
+      variant="outline"
+      className="border-hair bg-surface/50 px-1 font-mono text-[10px] text-ink-mute"
+    >
       {label}
-    </span>
+    </Badge>
   );
 }
 
@@ -258,19 +262,19 @@ export default function TradeIdeasPanel({
 
   if (ideas.length === 0) {
     return (
-      <section className="oly-slab p-5">
+      <Card data-reveal className="gap-0 p-5">
         <header className="mb-2 flex items-baseline gap-2">
           <TwelveXSectionHeading>Today&rsquo;s trade ideas</TwelveXSectionHeading>
         </header>
         <p className="text-sm text-ink-mute">No curated trade idea for today yet.</p>
-      </section>
+      </Card>
     );
   }
 
   const [top, ...rest] = ideas;
 
   return (
-    <section className="oly-slab flex flex-col gap-3 p-5">
+    <Card data-reveal className="flex flex-col gap-3 p-5">
       <header className="flex items-baseline gap-2">
         <TwelveXSectionHeading>Today&rsquo;s trade ideas</TwelveXSectionHeading>
         <span className="font-mono text-[10px] text-ink-mute">· {ideas.length}</span>
@@ -378,6 +382,6 @@ export default function TradeIdeasPanel({
           ) : null}
         </div>
       ) : null}
-    </section>
+    </Card>
   );
 }

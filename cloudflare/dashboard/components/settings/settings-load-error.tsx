@@ -1,5 +1,7 @@
 'use client';
 
+import { Alert, AlertDescription, Button } from '@digithings/web/ui';
+
 export const SETTINGS_LOAD_ERROR_MESSAGE = 'Unable to load settings.';
 
 export type SettingsLoadErrorProps = {
@@ -28,22 +30,26 @@ export function SettingsLoadError({
   testId = 'settings-load-error',
   tone = 'error',
 }: SettingsLoadErrorProps) {
-  const textClass = tone === 'soft' ? 'text-warn' : 'text-down';
+  const soft = tone === 'soft';
   return (
-    <div
+    <Alert
       data-testid={testId}
-      role="alert"
-      className="flex items-start justify-between gap-4 border border-hair bg-term-bg/40 px-3 py-2"
+      className={`flex items-start justify-between gap-4 bg-term-bg/40 px-3 py-2 ${
+        soft ? 'border-warn/40' : 'border-down/40'
+      }`}
     >
-      <p className={`text-sm ${textClass}`}>{message}</p>
-      <button
+      <AlertDescription className={`text-sm ${soft ? 'text-warn' : 'text-down'}`}>
+        {message}
+      </AlertDescription>
+      <Button
         type="button"
+        variant="outline"
         onClick={onRetry}
         data-testid={`${testId}-retry`}
-        className="shrink-0 border border-hair px-3 py-1.5 text-xs font-medium text-ink hover:bg-ink/[0.04]"
+        className="h-auto shrink-0 border-hair px-3 py-1.5 text-xs text-ink"
       >
         Retry
-      </button>
-    </div>
+      </Button>
+    </Alert>
   );
 }

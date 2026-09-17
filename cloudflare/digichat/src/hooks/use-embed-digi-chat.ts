@@ -258,7 +258,7 @@ export function useEmbedDigiChat({
     () =>
       new AssistantChatTransport({
         api: p("/api/chat"),
-        prepareSendMessagesRequest: ({ messages, body }) => {
+        prepareSendMessagesRequest: ({ messages, body, trigger }) => {
           const urlAuth = readEmbedUrlAuth();
           const effectiveToken = urlAuth.token ?? token;
           const effectiveHost = urlAuth.host ?? host;
@@ -324,6 +324,10 @@ export function useEmbedDigiChat({
           const turnMode = takePendingTurnMode(embedHost);
           if (turnMode) {
             headers["X-Digi-Turn-Mode"] = turnMode;
+          } else if (trigger === "regenerate-message" && allowClientTurnMutation) {
+            // Runtime-initiated reload (e.g. the error card's Retry) must arm
+            // the same turn mode host-driven redo uses (#4248).
+            headers["X-Digi-Turn-Mode"] = "regenerate";
           }
           headers["X-Digi-Run-Id"] = crypto.randomUUID();
           // Send-time unlock check — transport is frozen on first render (#1339),
@@ -383,6 +387,7 @@ export function useEmbedDigiChat({
         getMcpSession,
         getEffort,
         getPlanProof,
+        allowClientTurnMutation,
       ],
   );
 

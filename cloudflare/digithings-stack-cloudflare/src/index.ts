@@ -50,8 +50,8 @@ export class DigiStackContainer extends Container {
    * behind the Chroma seed wait) are waited on per-request in fetch() instead.
    */
   requiredPorts = [DIGIGRAPH_PORT];
-  /** Keep warm — multi-process cold start is expensive. */
-  sleepAfter = "2h";
+  /** Cold starts are seamless (#4323), so keep the idle window short. */
+  sleepAfter = "15m";
 
   /**
    * Runtime env for supervisord processes. Secrets from `wrangler secret put`;
@@ -160,11 +160,10 @@ export class DigiQuantMcpContainer extends Container {
   defaultPort = DIGIQUANT_MCP_PORT;
   requiredPorts = [DIGIQUANT_MCP_PORT];
   /**
-   * Warm policy (min-instances-1 equivalent): daily reads plus the
-   * market-data-refresh cron backup ping keep this alive. A cold start only
-   * pays the FastMCP import, never a data load (R2 is the cache).
+   * Cold-start policy: a cold start pays only the FastMCP import, never a data
+   * load (R2 is the cache), so the container may sleep freely.
    */
-  sleepAfter = "24h";
+  sleepAfter = "15m";
 
   /**
    * Runtime env for the MCP process. Secrets from `wrangler secret put`.

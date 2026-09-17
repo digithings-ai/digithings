@@ -113,6 +113,20 @@ describe("pageContext feature projection", () => {
   });
 });
 
+describe("page-layout embeds keep embed chrome (#3733)", () => {
+  it("maps layout page to embed mode so the full-app catalog bar stays out", () => {
+    const page = {
+      slug: "test",
+      gateMode: "ungated",
+      theme: "dark",
+      accent: null,
+      attribution: false,
+      layout: "page",
+    } as EmbedTenantClientConfig;
+    expect(clientConfigFromEmbedTenant(page).chrome.mode).toBe("embed");
+  });
+});
+
 describe("baseline embed models catalog (Cheaper Inference default)", () => {
   it("ships the 4-slug catalog with deepseek default and an enabled picker", () => {
     expect(DEFAULT_CLIENT_CONFIG.models).toEqual({

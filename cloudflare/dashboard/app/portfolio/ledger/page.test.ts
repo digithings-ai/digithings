@@ -1,6 +1,15 @@
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+
+// The page reads its tier from `usePlanTier()` (production: the session). The
+// tier axis is injected here by mocking the hook, matching the pattern in
+// app/portfolio/performance/page.test.ts and app/portfolio/attribution/page.test.ts.
+const plan = vi.hoisted(() => ({ tier: 'free' as 'free' | 'brief' | 'enterprise' }));
+
+vi.mock('@/lib/use-entitlement', () => ({
+  usePlanTier: () => plan.tier,
+}));
 
 vi.mock('next/link', () => ({
   default: ({ children, href, className }: { children?: unknown; href?: string; className?: string }) =>
@@ -32,6 +41,10 @@ import PortfolioLedgerPage from '@/app/portfolio/ledger/page';
 import { useDashboard } from '@/lib/dashboard-context';
 
 describe('PortfolioLedgerPage tier gate', () => {
+  beforeEach(() => {
+    plan.tier = 'free';
+  });
+
   it('Observer: LockedSurface before loading (fail-closed; never PageSkeleton)', () => {
     vi.mocked(useDashboard).mockReturnValue({
       data: null,
@@ -40,9 +53,7 @@ describe('PortfolioLedgerPage tier gate', () => {
       dbStatus: 'ok',
     } as ReturnType<typeof useDashboard>);
 
-    const html = renderToStaticMarkup(
-      createElement(PortfolioLedgerPage, { tier: 'free' }),
-    );
+    const html = renderToStaticMarkup(createElement(PortfolioLedgerPage));
     expect(html).toContain('ledger-locked');
     expect(html).toContain('locked-surface');
     expect(html).not.toContain('page-skeleton');
@@ -57,14 +68,13 @@ describe('PortfolioLedgerPage tier gate', () => {
       dbStatus: 'ok',
     } as unknown as ReturnType<typeof useDashboard>);
 
-    const html = renderToStaticMarkup(
-      createElement(PortfolioLedgerPage, { tier: 'free' }),
-    );
+    const html = renderToStaticMarkup(createElement(PortfolioLedgerPage));
     expect(html).toContain('locked-surface');
     expect(html).not.toContain('No position events recorded yet');
   });
 
   it('Brief: loads body (skeleton while dashboard loading)', () => {
+    plan.tier = 'brief';
     vi.mocked(useDashboard).mockReturnValue({
       data: null,
       loading: true,
@@ -72,9 +82,21 @@ describe('PortfolioLedgerPage tier gate', () => {
       dbStatus: 'ok',
     } as ReturnType<typeof useDashboard>);
 
-    const html = renderToStaticMarkup(
-      createElement(PortfolioLedgerPage, { tier: 'brief' }),
-    );
+    const html = renderToStaticMarkup(createElement(PortfolioLedgerPage));
+    expect(html).toContain('page-skeleton');
+    expect(html).not.toContain('locked-surface');
+  });
+
+  it('Enterprise: also loads body (tier axis drives the gate, not a prop)', () => {
+    plan.tier = 'enterprise';
+    vi.mocked(useDashboard).mockReturnValue({
+      data: null,
+      loading: true,
+      error: null,
+      dbStatus: 'ok',
+    } as ReturnType<typeof useDashboard>);
+
+    const html = renderToStaticMarkup(createElement(PortfolioLedgerPage));
     expect(html).toContain('page-skeleton');
     expect(html).not.toContain('locked-surface');
   });

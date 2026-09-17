@@ -34,7 +34,10 @@ export function clientConfigFromEmbedTenant(
     slug: embed.slug || base.slug,
     chrome: {
       ...base.chrome,
-      mode: embed.layout === "page" ? "app" : "embed",
+      // Page-layout embeds stay embeds: "app" chrome renders the full-app
+      // tool-catalog top bar (product-shell) that belongs to the standalone
+      // digichat app, not the website embed (#3733).
+      mode: "embed",
       theme: embed.theme,
       skin: embed.skin ?? defaultThreadSkinForTenant({ slug: embed.slug }),
       title: embed.title,

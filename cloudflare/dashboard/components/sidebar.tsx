@@ -11,6 +11,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from '@digithings/web';
+import { Alert, AlertDescription, Button } from '@digithings/web/ui';
 import { DashboardMark } from '@/components/dashboard-mark';
 import { GloomberbMark } from '@/components/gloomberb-mark';
 import { useAppShell } from '@/components/app-shell-context';
@@ -203,42 +204,45 @@ export default function Sidebar() {
             <div className="flex items-center gap-2.5 min-w-0" aria-label="digiquant">
               <DashboardMark className="shrink-0" />
             </div>
-            <button
+            <Button
               type="button"
+              variant="ghost"
               onClick={toggleSidebar}
-              className="hidden md:flex p-2 text-ink-mute hover:text-ink hover:bg-ink/[0.06] border border-hair shrink-0"
+              className="hidden h-auto shrink-0 rounded-none border border-hair p-2 text-ink-mute hover:bg-ink/[0.06] hover:text-ink md:inline-flex"
               aria-label="Collapse sidebar"
             >
               <ChevronLeft size={18} />
-            </button>
+            </Button>
           </div>
           <div
             className={`${sidebarCollapsed ? 'hidden md:flex' : 'hidden'} flex-col items-center gap-3 w-full py-1`}
           >
             <DashboardMark className="shrink-0" />
-            <button
+            <Button
               type="button"
+              variant="ghost"
               onClick={toggleSidebar}
-              className="p-2 text-ink-mute hover:text-ink hover:bg-ink/[0.06] border border-hair"
+              className="h-auto rounded-none border border-hair p-2 text-ink-mute hover:bg-ink/[0.06] hover:text-ink"
               aria-label="Expand sidebar"
             >
               <ChevronRight size={18} />
-            </button>
+            </Button>
           </div>
         </div>
 
         <nav aria-label="Primary" className="flex-1 py-4 flex flex-col">
           {sidebarCollapsed ? null : (
-            <button
+            <Button
               type="button"
+              variant="ghost"
               onClick={openCommandPalette}
-              className="hidden md:flex items-center gap-2 mx-6 mb-1 border border-hair px-3 py-1.5 text-xs text-ink-mute hover:text-ink-soft hover:bg-ink/[0.03] transition-colors"
+              className="mx-6 mb-1 hidden h-auto items-center justify-start gap-2 rounded-none border border-hair px-3 py-1.5 text-xs text-ink-mute hover:bg-ink/[0.03] hover:text-ink-soft md:inline-flex"
               aria-label="Search"
             >
               <Search size={14} className="shrink-0" />
               <span className="flex-1 text-left">Search…</span>
               <kbd className="font-mono text-[10px] text-ink-mute">⌘K</kbd>
-            </button>
+            </Button>
           )}
           <TooltipProvider delay={200}>
             {primary.map(renderLink)}
@@ -271,21 +275,24 @@ export default function Sidebar() {
                 {identityLabel}
               </p>
               <p className={`acct-session-meta ${sidebarCollapsed ? 'md:sr-only' : ''}`}>signed in</p>
-              <button
+              <Button
                 type="button"
+                variant="ghost"
                 onClick={() => void handleSignOut()}
-                className={`btn-ghost inline-flex items-center justify-center gap-2 px-3 py-1.5 text-xs ${
+                className={`h-auto gap-2 rounded-none border border-hair px-3 py-1.5 text-xs text-ink hover:border-accent/50 ${
                   sidebarCollapsed ? 'md:justify-center md:px-2' : ''
                 }`}
                 aria-label="Sign out"
               >
                 <LogOut size={14} className="shrink-0" />
                 <span className={sidebarCollapsed ? 'md:sr-only' : ''}>Sign out</span>
-              </button>
+              </Button>
               {signOutError ? (
-                <p className="acct-error" role="alert">
-                  {signOutError}
-                </p>
+                <Alert variant="destructive" className="px-2 py-1">
+                  <AlertDescription className="font-mono text-[0.68rem]">
+                    {signOutError}
+                  </AlertDescription>
+                </Alert>
               ) : null}
             </div>
           ) : null}

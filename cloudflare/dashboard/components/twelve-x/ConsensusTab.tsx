@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { Card } from '@digithings/web/ui';
 import { LineChart as LineChartIcon } from 'lucide-react';
 import {
   CartesianGrid,
@@ -211,7 +212,7 @@ export default function ConsensusTab({
 
       {view === 'charts' ? (
         <div className="space-y-5">
-          <div className="oly-slab space-y-3 p-4 md:p-5" data-chart="line">
+          <Card data-reveal className="gap-0 space-y-3 p-4 md:p-5" data-chart="line">
             <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
               <h3 className="text-xs font-semibold text-ink-mute uppercase tracking-wider">
                 Consensus score over time
@@ -331,7 +332,7 @@ export default function ConsensusTab({
                 Not enough consensus history to chart.
               </div>
             )}
-          </div>
+          </Card>
         </div>
       ) : null}
 

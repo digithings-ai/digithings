@@ -1,9 +1,9 @@
 'use client';
 
+import { SignedConvictionBadge } from '@digithings/web';
 import { SafeMarkdown } from '@/components/SafeMarkdown';
 import { parseAnalystPayload } from '@/lib/queries';
 import { Badge } from '@/components/ui';
-import { SignedConvictionBadge } from '@/components/shared/signed-conviction-badge';
 import AnalystDossierCard from '@/components/portfolio/tickers/AnalystDossierCard';
 
 /**

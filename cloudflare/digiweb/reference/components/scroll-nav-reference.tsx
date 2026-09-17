@@ -2,7 +2,7 @@
 
 import { useRef, useState } from "react";
 import { m, useMotionValueEvent, useReducedMotion, useScroll } from "motion/react";
-import { Button as LayerButton } from "@digithings/web";
+import { Button } from "@digithings/web/ui";
 
 const LINKS = ["Product", "Pricing", "Docs", "Changelog"];
 
@@ -13,9 +13,8 @@ const LINKS = ["Product", "Pricing", "Docs", "Changelog"];
  * frame's own scroll so the bar pins inside it; reduced motion drops the
  * slide transition.
  *
- * Wave 1: the sign-in affordance stays on the controls-layer Button
- * (`variant="quiet"`) — an inline nav link benefitting from the quiet parity
- * the stock kit has no borderless-muted variant for (the T4 ruling).
+ * Wave 3: the sign-in affordance is the kit Button `variant="outline"`
+ * (wave-2 variant map: `.btn-quiet → outline`).
  */
 export function ScrollNavReference() {
   const stageRef = useRef<HTMLDivElement | null>(null);
@@ -63,9 +62,9 @@ export function ScrollNavReference() {
               <li key={link}>{link}</li>
             ))}
           </ul>
-          <LayerButton variant="quiet" type="button" className="ml-auto">
+          <Button variant="outline" type="button" className="ml-auto">
             Sign in
-          </LayerButton>
+          </Button>
         </m.div>
 
         <div
