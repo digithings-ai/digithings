@@ -41,6 +41,14 @@ paths = [
   # deployable code; never pushed to public remotes (see CLAUDE.md).
   '''^projects/[^/]+/vault/''',
 
+  # History-only path: the pre-migration research example template lived here
+  # (file absent at HEAD, present in history). It carries the same three real
+  # free-tier data-API keys (FRED / CoinGecko / Alpha Vantage) as the live path
+  # below; the owner confirmed those keys dead/rotated (2026-06-18). Kept so a
+  # full-history scan (`make secrets-scan`) does not re-report the nine findings
+  # the base config already suppressed. NOT a generic fixture.
+  '''^apps/digiquant-atlas/config/mcp\.secrets\.env\.example$''',
+
   # digithings-mcp research example template: three real free-tier data-API keys
   # (FRED / CoinGecko / Alpha Vantage) sit in git history at this path, which the
   # owner confirmed dead/rotated (2026-06-18); no live credential remains.
