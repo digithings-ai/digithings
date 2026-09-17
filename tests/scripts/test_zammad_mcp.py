@@ -496,10 +496,23 @@ def test_search_tickets_by_terms_sorts_rows_without_timestamp_last():
     assert [row["id"] for row in rows] == [2, 1]
 
 
-def test_get_ticket_accepts_hash_prefixed_id():
-    client, transport = make_client(dict(TICKET, state="closed"))
-    assert client.get_ticket("#231")["id"] == 231
-    assert transport.calls[0]["url"] == f"{BASE}/api/v1/tickets/231"
+def test_get_ticket_hash_number_resolves_through_search_first():
+    searched = dict(TICKET, id=999, number="231", title="Number-first ticket")
+    transport = NumberLookupTransport(231, [searched], searched)
+    client = ZammadClient(base_url=BASE, token=TOKEN, get_json=transport)
+    assert client.get_ticket("#231") == searched
+    assert transport.calls[0]["url"].endswith("/api/v1/tickets/search")
+    assert transport.calls[0]["params"] == {"query": "231", "limit": 50, "expand": "true"}
+    assert [call["url"].rsplit("/", 1)[-1] for call in transport.calls] == ["search", "999"]
+
+
+def test_get_ticket_missing_hash_number_raises_without_id_lookup():
+    transport = NumberLookupTransport(99999, [dict(TICKET, id=1, number="28312")])
+    client = ZammadClient(base_url=BASE, token=TOKEN, get_json=transport)
+    with pytest.raises(ZammadError, match="no ticket with number 99999"):
+        client.get_ticket("#99999")
+    assert len(transport.calls) == 1
+    assert transport.calls[0]["url"].endswith("/api/v1/tickets/search")
 
 
 def test_get_ticket_resolves_ticket_number_after_404():
@@ -535,7 +548,7 @@ def test_format_search_results_notes_keyword_fallback():
     assert empty == 'No tickets matched: "state.name:open" (also tried keywords: open)'
     found = formatting.format_search_results("big invoice", [TICKET], fallback_terms=["big"])
     assert found.splitlines()[0] == (
-        'Found 1 ticket(s) for: "big invoice" (matched as keywords: big)'
+        'Found 1 ticket(s) for: "big invoice" (matched via keywords: big)'
     )
 
 
@@ -560,7 +573,7 @@ def test_server_search_falls_back_to_keywords(monkeypatch):
     stub = StubClient()
     monkeypatch.setattr(server, "_client", lambda: stub)
     out = server.search_tickets("state.name:open")
-    assert 'Found 1 ticket(s) for: "state.name:open" (matched as keywords: open)' in out
+    assert 'Found 1 ticket(s) for: "state.name:open" (matched via keywords: open)' in out
     assert stub.calls == [("query", "state.name:open"), ("terms", ["open"])]
 
 
@@ -580,3 +593,13 @@ def test_server_search_skips_fallback_for_single_keyword(monkeypatch):
     monkeypatch.setattr(server, "_client", lambda: StubClient())
     out = server.search_tickets("rechnung")
     assert out.splitlines()[0] == 'Found 1 ticket(s) for: "rechnung"'
+
+
+def test_keyword_terms_strips_hash_from_numbers():
+    terms = keyword_terms("Bitte Ticket #28312 pruefen")
+    assert "28312" in terms
+    assert "#28312" not in terms
+
+
+def test_keyword_terms_drops_german_function_words():
+    assert keyword_terms("Paket ist zu spat") == ["Paket", "spat"]

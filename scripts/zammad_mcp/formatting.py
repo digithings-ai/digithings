@@ -146,7 +146,7 @@ def format_search_results(
         return f'No tickets matched: "{query}"'
     header = f'Found {len(tickets)} ticket(s) for: "{query}"'
     if fallback_terms:
-        header += f" (matched as keywords: {', '.join(fallback_terms)})"
+        header += f" (matched via keywords: {', '.join(fallback_terms)})"
     lines = [header]
     lines.extend(format_ticket_line(ticket) for ticket in tickets)
     return "\n".join(lines)

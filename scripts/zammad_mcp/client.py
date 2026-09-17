@@ -27,8 +27,44 @@ JsonGetter = Callable[..., Any]
 
 _FIELD_QUERY_RE = re.compile(r"[A-Za-z_][A-Za-z0-9_.]*:(\([^)]*\)|\"(?:[^\"\\]|\\.)*\"|\S+)")
 _KEYWORD_NOISE_RE = re.compile(r"[~*()\"']")
-_TERM_TRIM = ".,;:!?[]{}<>"
-_KEYWORD_STOPWORDS = frozenset({"and", "or", "not", "to"})
+_TERM_TRIM = ".,;:!?[]{}<>#"
+_KEYWORD_STOPWORDS = frozenset(
+    {
+        "and",
+        "or",
+        "not",
+        "to",
+        "der",
+        "die",
+        "das",
+        "dem",
+        "den",
+        "des",
+        "ein",
+        "eine",
+        "einer",
+        "eines",
+        "einem",
+        "einen",
+        "ist",
+        "und",
+        "oder",
+        "zu",
+        "zur",
+        "zum",
+        "am",
+        "im",
+        "in",
+        "an",
+        "auf",
+        "für",
+        "fuer",
+        "mit",
+        "von",
+        "vom",
+        "bei",
+    }
+)
 
 
 class ZammadError(RuntimeError):
@@ -187,38 +223,51 @@ class ZammadClient:
             raise ZammadError("ticket id must be a positive integer")
         return tid
 
-    def _resolve_ticket_number(self, tid: int, exc: ZammadError) -> int | None:
-        """Map a ticket number (shown as ``#28312``) to its internal id.
-
-        The show endpoint only serves internal ids, so a lookup by ticket
-        number returns 404; a number search finds the real id instead.
-        """
-        if "HTTP 404" not in str(exc):
-            return None
+    def _lookup_ticket_number(self, number: object) -> int | None:
+        """Map a ticket number (shown as ``#28312``) to its internal id."""
         try:
-            rows = self.search_tickets(str(tid), limit=MAX_SEARCH_LIMIT)
+            rows = self.search_tickets(str(number), limit=MAX_SEARCH_LIMIT)
         except ZammadError:
             return None
         for row in rows:
-            if str(row.get("number")) == str(tid):
+            if str(row.get("number")) == str(number):
                 resolved = row.get("id")
                 if isinstance(resolved, int) and resolved > 0:
                     return resolved
         return None
 
-    def get_ticket(self, ticket_id: int | str) -> dict[str, Any]:
-        """Fetch one ticket by internal id or ticket number. Read-only."""
-        tid = self._coerce_id(ticket_id)
-        try:
-            payload = self._get(f"/api/v1/tickets/{tid}", {"expand": "true"})
-        except ZammadError as exc:
-            resolved = self._resolve_ticket_number(tid, exc)
-            if resolved is None:
-                raise
-            payload = self._get(f"/api/v1/tickets/{resolved}", {"expand": "true"})
+    def _fetch_ticket(self, tid: int) -> dict[str, Any]:
+        payload = self._get(f"/api/v1/tickets/{tid}", {"expand": "true"})
         if not isinstance(payload, dict):
             raise ZammadError("unexpected Zammad ticket payload")
         return payload
+
+    def get_ticket(self, ticket_id: int | str) -> dict[str, Any]:
+        """Fetch one ticket by internal id or ticket number. Read-only.
+
+        A ``#``-prefixed value is the number shown in results (``#28312``)
+        and is resolved by number first. A bare number is tried as the
+        internal id first and falls back to a number search on 404.
+        """
+        raw = str(ticket_id).strip()
+        if raw.startswith("#"):
+            number = raw.lstrip("#").strip()
+            if not number.isdigit():
+                raise ZammadError("ticket id must be a positive integer")
+            resolved = self._lookup_ticket_number(number)
+            if resolved is None:
+                raise ZammadError(f"no ticket with number {number}")
+            return self._fetch_ticket(resolved)
+        tid = self._coerce_id(ticket_id)
+        try:
+            return self._fetch_ticket(tid)
+        except ZammadError as exc:
+            if "HTTP 404" not in str(exc):
+                raise
+            resolved = self._lookup_ticket_number(tid)
+            if resolved is None:
+                raise
+            return self._fetch_ticket(resolved)
 
     def get_articles(self, ticket_id: int | str) -> list[dict[str, Any]]:
         """Fetch a ticket's articles (oldest first). Read-only."""
