@@ -123,12 +123,17 @@
    [data-theme] tokens only → light/dark safe.
    ========================================================================== */
 :root {
-  --dq-nav-h: 62px;
-  /* the shared NavShell (nav-shell.css) reads its own height token —
-     alias it to the app knob so anchors/scroll-padding stay in sync */
-  --nav-shell-h: var(--dq-nav-h);
+  /* --nav-shell-h is the shared NavShell/nav-shell.css height knob (its
+     fallback is the same 62px). --dq-nav-h is this app's historical alias for
+     the many `pt-[var(--dq-nav-h)]` page paddings and anchor offsets;
+     digiquant-web declares the same direction. Keep the canonical value on
+     --nav-shell-h so the two can never drift. (Wave-3 T2 audit: the alias is
+     a token, not a class family — migrating every consumer would touch
+     digiquant-web/digichat-ui outside this task's scope for no visual gain.) */
+  --nav-shell-h: 62px;
+  --dq-nav-h: var(--nav-shell-h);
   /* the shared docs shell (docs.css) reads its own offset token */
-  --docs-nav-h: var(--dq-nav-h);
+  --docs-nav-h: var(--nav-shell-h);
 }
 
 /* /chat, /chat/occ (chat/page.tsx, chat/occ/page.tsx): DtNav there is

@@ -14,14 +14,17 @@ import {
   type SettingsApiOptions,
 } from '@/lib/settings-api';
 import {
+  Alert,
+  AlertDescription,
+  Button,
+  Input,
+  Label,
   Select,
+  SelectContent,
   SelectItem,
-  SelectItemIndicator,
-  SelectPopup,
   SelectTrigger,
   SelectValue,
-} from '@digithings/web';
-import { Alert, AlertDescription, Button, Input, Label } from '@digithings/web/ui';
+} from '@digithings/web/ui';
 import {
   SETTINGS_LOAD_ERROR_MESSAGE,
   SettingsLoadError,
@@ -366,14 +369,13 @@ function SelectField({
         >
           <SelectValue />
         </SelectTrigger>
-        <SelectPopup>
+        <SelectContent>
           {options.map((o) => (
             <SelectItem key={o} value={o}>
               {o}
-              <SelectItemIndicator />
             </SelectItem>
           ))}
-        </SelectPopup>
+        </SelectContent>
       </Select>
     </Label>
   );

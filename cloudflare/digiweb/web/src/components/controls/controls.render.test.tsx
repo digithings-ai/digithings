@@ -11,7 +11,6 @@ import { Avatar, AvatarFallback, AvatarGroup, AvatarGroupCount } from "./Avatar"
 import { Badge } from "./Badge";
 import { Breadcrumbs } from "./Breadcrumbs";
 import { Button } from "./Button";
-import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "./Card";
 import {
   Dialog,
   DialogClose,
@@ -24,7 +23,6 @@ import {
 } from "./Dialog";
 import { EmptyState } from "./EmptyState";
 import { Field } from "./Field";
-import { Input } from "./Input";
 import { Label } from "./Label";
 import { DatePager, formatDatePagerLabel } from "./DatePager";
 import { IconButton, Pager, PagerPage, SegmentedControl } from "./NavButtons";
@@ -102,37 +100,8 @@ describe("Badge", () => {
   });
 });
 
-describe("Card", () => {
-  it("renders the digichat part shape with data-slot/data-size hooks", () => {
-    const html = renderToStaticMarkup(
-      <Card dress="chat" size="sm" className="p-8">
-        <CardHeader>
-          <CardTitle>Sign in</CardTitle>
-        </CardHeader>
-        <CardContent>body</CardContent>
-        <CardFooter>foot</CardFooter>
-      </Card>
-    );
-    expect(html).toContain("ctl-card-chat p-8");
-    expect(html).toContain('data-size="sm"');
-    expect(html).toContain('data-slot="card-header"');
-    expect(html).toContain("ctl-card-title");
-    expect(html).toContain('data-slot="card-footer"');
-  });
-
-  it("defaults to the reference hairline-frame dress", () => {
-    expect(renderToStaticMarkup(<Card />)).toContain("ctl-card-ref");
-  });
-});
-
-describe("Input / Label", () => {
+describe("Label", () => {
   it("renders both dresses and passes props through", () => {
-    const ref = renderToStaticMarkup(<Input type="email" placeholder="you@desk.tld" />);
-    expect(ref).toContain("ctl-input-ref");
-    expect(ref).toContain('type="email"');
-    const chat = renderToStaticMarkup(<Input dress="chat" aria-invalid readOnly value="x" />);
-    expect(chat).toContain("ctl-input-chat");
-    expect(chat).toContain('aria-invalid="true"');
     const label = renderToStaticMarkup(<Label htmlFor="dg">digigraph base URL</Label>);
     expect(label).toContain("ctl-label-ref");
     expect(label).toContain('for="dg"');

@@ -16,4 +16,7 @@ export function embedOriginForChat(
 
 export function digithingsCsp(frameSrc?: string): string;
 
+/** CSP for the /openwiki/* visualizer export (#3696). */
+export function openwikiCsp(): string;
+
 export function renderCloudflareHeaders(frameSrc?: string): string;

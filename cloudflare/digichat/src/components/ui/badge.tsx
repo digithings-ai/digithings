@@ -1,16 +1,17 @@
-// Thin re-export of the shared @digithings/web Badge (#1419), pinned to
+// Thin adapter over the canonical kit Badge (@digithings/web/ui), pinned to
 // dress="chat" so the rendered look stays exactly digichat's current
 // shadcn-derived dress (variant enum verbatim, useRender `render` prop and
-// { slot, variant } state preserved). The old local cva `badgeVariants`
-// export is gone — no call site imported it (see CONTROLS.md).
+// { slot, variant } state preserved). The chat tone lives in
+// @digithings/web/styles/controls-core.css (.ctl-badge-chat*). The old local
+// cva `badgeVariants` export is gone — no call site imported it (see CONTROLS.md).
 
-import { Badge as ControlBadge } from "@digithings/web"
-import type { BadgeProps as ControlBadgeProps } from "@digithings/web"
+import { Badge as KitBadge } from "@digithings/web/ui"
+import type { ComponentProps } from "react"
 
-type BadgeProps = Omit<Extract<ControlBadgeProps, { dress: "chat" }>, "dress">
+type BadgeProps = Omit<ComponentProps<typeof KitBadge>, "dress">
 
 function Badge(props: BadgeProps) {
-  return <ControlBadge dress="chat" {...props} />
+  return <KitBadge dress="chat" {...props} />
 }
 
 export { Badge }

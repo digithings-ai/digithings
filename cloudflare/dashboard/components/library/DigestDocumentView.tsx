@@ -3,15 +3,17 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import type { Change } from 'diff';
 import { diffLines, diffWords } from 'diff';
-import { ChevronDown, List } from 'lucide-react';
+import { List } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
+import { Button, Input } from '@digithings/web/ui';
 import {
   fetchDigestDiffContext,
   loadDigestLibraryDiff,
   type DigestCompareKind,
   type DigestDiffContext,
 } from '@/lib/queries';
+import { ComparePresetSelect, type ComparePreset } from './ComparePresetSelect';
 
 type ViewScope = 'current' | 'difference';
 type DiffLayout = 'inline' | 'split';
@@ -128,112 +130,11 @@ function segmentOuterClass() {
 }
 
 function segmentBtnClass(active: boolean) {
-  return `px-3 py-1.5 text-xs font-medium border transition-colors ${
+  return `h-auto rounded-none px-3 py-1.5 font-medium transition-colors ${
     active
-      ? 'border-accent/40 bg-accent/15 text-accent'
-      : 'border-transparent text-ink-mute hover:text-ink hover:bg-ink/[0.06]'
+      ? 'bg-accent/15 text-accent'
+      : 'text-ink-mute hover:text-ink hover:bg-ink/[0.06]'
   }`;
-}
-
-function DigestCompareDropdown({
-  context,
-  compareKind,
-  customCompareDate,
-  canComparePrevious,
-  canCompareBaseline,
-  onSelectPreset,
-}: {
-  context: DigestDiffContext;
-  compareKind: DigestCompareKind;
-  customCompareDate: string;
-  canComparePrevious: boolean;
-  canCompareBaseline: boolean;
-  onSelectPreset: (k: 'previous_digest' | 'delta_baseline') => void;
-}) {
-  const [open, setOpen] = useState(false);
-  const rootRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    if (!open) return;
-    const onDoc = (e: MouseEvent) => {
-      if (rootRef.current && !rootRef.current.contains(e.target as Node)) {
-        setOpen(false);
-      }
-    };
-    document.addEventListener('mousedown', onDoc);
-    return () => document.removeEventListener('mousedown', onDoc);
-  }, [open]);
-
-  const summaryLabel =
-    compareKind === 'custom_date' && /^\d{4}-\d{2}-\d{2}$/.test(customCompareDate.trim())
-      ? `Custom (${customCompareDate.trim()})`
-      : compareKind === 'delta_baseline'
-        ? comparePresetLabel('delta_baseline', context)
-        : comparePresetLabel('previous_digest', context);
-
-  return (
-    <div ref={rootRef} className="relative">
-      <button
-        type="button"
-        onClick={() => setOpen((o) => !o)}
-        className="inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium border border-hair bg-term-bg text-ink-soft hover:border-accent/40 hover:text-ink transition-colors"
-        aria-expanded={open ? 'true' : 'false'}
-        aria-haspopup="listbox"
-      >
-        <span className="max-w-[min(100vw-8rem,14rem)] truncate">{summaryLabel}</span>
-        <ChevronDown size={14} className={`opacity-70 shrink-0 transition-transform ${open ? 'rotate-180' : ''}`} />
-      </button>
-      {open && (
-        <div className="absolute left-0 top-full z-[60] mt-1 w-[min(100vw-2rem,20rem)] border border-hair bg-term-bg shadow-xl overflow-hidden">
-          <div role="listbox" aria-label="Compare digest to" className="max-h-52 overflow-y-auto py-1">
-            <button
-              type="button"
-              role="option"
-              aria-selected={compareKind === 'previous_digest' ? 'true' : 'false'}
-              disabled={!canComparePrevious}
-              onClick={() => {
-                if (!canComparePrevious) return;
-                onSelectPreset('previous_digest');
-                setOpen(false);
-              }}
-              className={`w-full text-left px-3 py-1.5 text-xs transition-colors ${
-                !canComparePrevious
-                  ? 'text-ink-mute opacity-40 cursor-not-allowed'
-                  : compareKind === 'previous_digest'
-                    ? 'bg-accent/15 text-accent'
-                    : 'text-ink-soft hover:bg-ink/[0.06] hover:text-ink'
-              }`}
-            >
-              {comparePresetLabel('previous_digest', context)}
-            </button>
-            <button
-              type="button"
-              role="option"
-              aria-selected={compareKind === 'delta_baseline' ? 'true' : 'false'}
-              disabled={!canCompareBaseline}
-              onClick={() => {
-                if (!canCompareBaseline) return;
-                onSelectPreset('delta_baseline');
-                setOpen(false);
-              }}
-              className={`w-full text-left px-3 py-1.5 text-xs transition-colors ${
-                !canCompareBaseline
-                  ? 'text-ink-mute opacity-40 cursor-not-allowed'
-                  : compareKind === 'delta_baseline'
-                    ? 'bg-accent/15 text-accent'
-                    : 'text-ink-soft hover:bg-ink/[0.06] hover:text-ink'
-              }`}
-            >
-              {comparePresetLabel('delta_baseline', context)}
-            </button>
-          </div>
-          <p className="text-[10px] text-ink-mute px-2.5 py-1.5 border-t border-hair bg-term-bg/80">
-            Previous or baseline — or use the date field beside this menu for a custom snapshot.
-          </p>
-        </div>
-      )}
-    </div>
-  );
 }
 
 export default function DigestDocumentView({
@@ -330,8 +231,10 @@ export default function DigestDocumentView({
   const toolbar = context ? (
     <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center">
       <div className={segmentOuterClass()}>
-        <button
+        <Button
           type="button"
+          variant="ghost"
+          aria-pressed={viewScope === 'current'}
           className={segmentBtnClass(viewScope === 'current')}
           onClick={() => {
             setViewScope('current');
@@ -340,9 +243,11 @@ export default function DigestDocumentView({
           }}
         >
           Current
-        </button>
-        <button
+        </Button>
+        <Button
           type="button"
+          variant="ghost"
+          aria-pressed={viewScope === 'difference'}
           className={segmentBtnClass(viewScope === 'difference')}
           onClick={() => {
             preferPreviousRef.current = true;
@@ -350,38 +255,61 @@ export default function DigestDocumentView({
           }}
         >
           Difference
-        </button>
+        </Button>
       </div>
 
       {viewScope === 'difference' ? (
         <>
           <div className={segmentOuterClass()}>
-            <button type="button" className={segmentBtnClass(diffLayout === 'inline')} onClick={() => setDiffLayout('inline')}>
-              Inline
-            </button>
-            <button
+            <Button
               type="button"
+              variant="ghost"
+              aria-pressed={diffLayout === 'inline'}
+              className={segmentBtnClass(diffLayout === 'inline')}
+              onClick={() => setDiffLayout('inline')}
+            >
+              Inline
+            </Button>
+            <Button
+              type="button"
+              variant="ghost"
+              aria-pressed={diffLayout === 'split'}
               className={segmentBtnClass(diffLayout === 'split')}
               onClick={() => setDiffLayout('split')}
             >
               Side by side
-            </button>
+            </Button>
           </div>
           <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-end">
-            <DigestCompareDropdown
-              context={context}
-              compareKind={compareKind}
-              customCompareDate={customCompareDate}
-              canComparePrevious={canComparePrevious}
-              canCompareBaseline={canCompareBaseline}
-              onSelectPreset={(k) => {
-                setCompareKind(k);
+            <ComparePresetSelect
+              summaryLabel={
+                compareKind === 'custom_date' && /^\d{4}-\d{2}-\d{2}$/.test(customCompareDate.trim())
+                  ? `Custom (${customCompareDate.trim()})`
+                  : compareKind === 'delta_baseline'
+                    ? comparePresetLabel('delta_baseline', context)
+                    : comparePresetLabel('previous_digest', context)
+              }
+              value={
+                compareKind === 'delta_baseline'
+                  ? 'delta_baseline'
+                  : compareKind === 'previous_digest'
+                    ? 'previous'
+                    : null
+              }
+              canPrevious={canComparePrevious}
+              canBaseline={canCompareBaseline}
+              previousLabel={comparePresetLabel('previous_digest', context)}
+              baselineLabel={comparePresetLabel('delta_baseline', context)}
+              hint="Previous or baseline — or use the date field beside this menu for a custom snapshot."
+              ariaLabel="Compare digest to"
+              onSelectPreset={(preset: ComparePreset) => {
+                setCompareKind(preset === 'delta_baseline' ? 'delta_baseline' : 'previous_digest');
                 setCustomCompareDate('');
               }}
             />
             <label className="flex flex-col gap-0.5 min-w-[10.5rem]">
               <span className="text-[10px] uppercase tracking-wider text-ink-mute">Or compare to date</span>
-              <input
+              <Input
                 type="date"
                 value={customCompareDate}
                 onChange={(e) => {
@@ -391,7 +319,7 @@ export default function DigestDocumentView({
                   else if (canComparePrevious) setCompareKind('previous_digest');
                   else if (canCompareBaseline) setCompareKind('delta_baseline');
                 }}
-                className="border border-hair bg-term-bg px-2 py-1.5 text-xs text-ink font-mono focus:outline-none focus:ring-1 focus:ring-inset focus:ring-accent/30"
+                className="h-auto rounded-none border-hair bg-term-bg py-1.5 font-mono text-ink focus-visible:ring-accent/30"
                 aria-label="Compare digest to a custom snapshot date"
               />
             </label>
@@ -469,22 +397,23 @@ export default function DigestDocumentView({
             </div>
             <div className="flex flex-wrap gap-1.5">
               {digestToc.map((t) => (
-                <button
+                <Button
                   key={t.id}
                   type="button"
+                  variant="outline"
                   onClick={() => {
                     const el = document.getElementById(t.id);
                     el?.scrollIntoView({ behavior: 'smooth', block: 'start' });
                   }}
-                  className={`text-left text-xs px-2 py-1 border transition-colors max-w-[min(100%,14rem)] truncate ${
+                  className={`h-auto justify-start rounded-none px-2 py-1 text-left max-w-[min(100%,14rem)] truncate ${
                     t.level === 3
-                      ? 'border-hair/70 bg-term-bg/80 text-ink-mute hover:border-accent/35'
+                      ? 'border-hair/70 bg-term-bg/80 text-ink-mute font-normal hover:border-accent/35'
                       : 'border-hair bg-term-bg text-ink-soft hover:border-accent/40 hover:text-ink'
                   }`}
                   title={t.text}
                 >
                   {t.text}
-                </button>
+                </Button>
               ))}
             </div>
           </nav>

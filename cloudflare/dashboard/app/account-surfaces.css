@@ -5,72 +5,11 @@
    to carry for the login card / session rail is gone — auth buttons ride the
    package's own `.acct-auth-submit` dress (AuthCard) and the kit Button
    (sidebar sign-out), and the callback's CTA uses the kit's `buttonVariants`.
-   `.acct-field`, `.acct-divider`, `.acct-strength-seg` and `.acct-btn-block`
-   were zero-consumer after the swaps. `.acct-input`/`.acct-input-error`/
-   `.acct-error` stay: `client-product-gate.tsx` still consumes them (its
-   swap is not part of this task). */
-
-.acct-login-shell {
-  min-height: 100vh;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  padding: 1.5rem;
-  color: var(--ink);
-}
-
-.acct-login-card {
-  width: 100%;
-  max-width: 380px;
-  border: 1px solid var(--hair);
-  border-radius: 0;
-  background: var(--surface);
-  padding: 1.2rem;
-}
-
-.acct-login-mark {
-  margin-bottom: 0.85rem;
-}
-
-.acct-input {
-  width: 100%;
-  margin-top: 0.35rem;
-  font-family: var(--font-mono);
-  font-size: 0.8rem;
-  color: var(--ink);
-  background: var(--bg);
-  border: 1px solid var(--hair);
-  border-radius: 0;
-  padding: 0.55rem 0.7rem;
-  transition: border-color 0.2s var(--ease), box-shadow 0.2s var(--ease);
-}
-
-.acct-input::placeholder {
-  color: var(--ink-mute);
-}
-
-.acct-input:focus-visible {
-  outline: none;
-  border-color: color-mix(in srgb, var(--accent) 60%, var(--hair));
-  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 50%, transparent);
-}
-
-.acct-input-error,
-.acct-input-error:focus-visible {
-  border-color: var(--danger);
-}
-
-.acct-input-error:focus-visible {
-  box-shadow: 0 0 0 2px color-mix(in srgb, var(--danger) 45%, transparent);
-}
-
-.acct-error {
-  margin-top: 0.45rem;
-  font-family: var(--font-mono);
-  font-size: 0.68rem;
-  color: var(--danger);
-}
+   `.acct-field`, `.acct-divider`, `.acct-strength-seg`, `.acct-btn-block`,
+   `.acct-login-shell`, `.acct-login-card`, `.acct-login-mark`, `.acct-input`,
+   `.acct-input-error` and `.acct-error` were zero-consumer after the T5a/T5b
+   swaps and were deleted in the wave-3 close-out (T6). `.acct-session-*`
+   still serves the sidebar session rail. */
 
 .acct-session-rail {
   display: flex;
@@ -94,24 +33,4 @@
   text-transform: uppercase;
   letter-spacing: 0.08em;
   color: var(--ink-mute);
-}
-
-.acct-settings-kicker {
-  font-family: var(--font-mono);
-  font-size: 0.72rem;
-  letter-spacing: 0.02em;
-  color: var(--ink);
-}
-
-.acct-settings-copy {
-  max-width: 46ch;
-  font-size: 0.88rem;
-  line-height: 1.45;
-  color: var(--ink-soft);
-}
-
-.acct-settings-panel {
-  border: 1px solid var(--hair);
-  background: var(--surface);
-  padding: 1.1rem 1.2rem;
 }

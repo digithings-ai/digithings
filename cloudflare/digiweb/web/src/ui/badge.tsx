@@ -26,18 +26,27 @@ const badgeVariants = cva(
   }
 )
 
+export type BadgeDress = "default" | "chat";
+
 function Badge({
   className,
   variant = "default",
+  dress = "default",
   render,
   ...props
-}: useRender.ComponentProps<"span"> & VariantProps<typeof badgeVariants>) {
+}: useRender.ComponentProps<"span"> &
+  VariantProps<typeof badgeVariants> & { dress?: BadgeDress }) {
+  // dress="chat" emits the digichat chat-dress classes (styles/controls-core.css)
+  // instead of the kit utilities; the variant enum is identical.
+  const classes =
+    dress === "chat"
+      ? cn(`ctl-badge-chat ctl-badge-chat--${variant}`, className)
+      : cn(badgeVariants({ variant }), className);
+
   return useRender({
     defaultTagName: "span",
     props: mergeProps<"span">(
-      {
-        className: cn(badgeVariants({ variant }), className),
-      },
+      { className: classes },
       props
     ),
     render,

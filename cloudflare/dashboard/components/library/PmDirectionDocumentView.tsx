@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@digithings/web/ui';
 import { SafeMarkdown } from '@/components/SafeMarkdown';
 import { isSupabaseConfigured, supabase } from '@/lib/supabase';
 import {
@@ -133,39 +134,37 @@ export default function PmDirectionDocumentView({
       </div>
 
       {rows.length ? (
-        <div className="overflow-x-auto">
-          <table className="w-full text-left text-xs border-collapse">
-            <thead>
-              <tr className="border-b border-hair text-ink-mute">
-                <th className="py-2 pr-3 font-medium">Ticker</th>
-                <th className="py-2 pr-3 font-medium">Action</th>
-                <th className="py-2 pr-3 font-medium text-right">Rank</th>
-                <th className="py-2 pr-3 font-medium text-right">Confidence</th>
-                <th className="py-2 font-medium">Narrative</th>
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map((row) => {
-                const action = actionForRow(row, context);
-                return (
-                  <tr key={row.ticker} className="border-b border-hair/60 align-top">
-                    <td className="py-2 pr-3 font-mono text-accent">{row.ticker}</td>
-                    <td className={`py-2 pr-3 font-medium ${actionClass(action)}`}>
-                      {labelPmAction(action)}
-                    </td>
-                    <td className="py-2 pr-3 text-right tabular-nums">{row.convictionRank}</td>
-                    <td className="py-2 pr-3 text-right tabular-nums">
-                      {formatPmConfidence(row.confidence)}
-                    </td>
-                    <td className="py-2 text-ink-soft whitespace-pre-wrap">
-                      {row.narrative ?? '—'}
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
+        <Table>
+          <TableHeader>
+            <TableRow className="border-hair hover:bg-transparent">
+              <TableHead className="text-ink-mute">Ticker</TableHead>
+              <TableHead className="text-ink-mute">Action</TableHead>
+              <TableHead className="text-ink-mute text-right">Rank</TableHead>
+              <TableHead className="text-ink-mute text-right">Confidence</TableHead>
+              <TableHead className="text-ink-mute">Narrative</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {rows.map((row) => {
+              const action = actionForRow(row, context);
+              return (
+                <TableRow key={row.ticker} className="border-hair/60 align-top hover:bg-transparent">
+                  <TableCell className="font-mono text-accent">{row.ticker}</TableCell>
+                  <TableCell className={`font-medium ${actionClass(action)}`}>
+                    {labelPmAction(action)}
+                  </TableCell>
+                  <TableCell className="text-right tabular-nums">{row.convictionRank}</TableCell>
+                  <TableCell className="text-right tabular-nums">
+                    {formatPmConfidence(row.confidence)}
+                  </TableCell>
+                  <TableCell className="text-ink-soft whitespace-pre-wrap">
+                    {row.narrative ?? '—'}
+                  </TableCell>
+                </TableRow>
+              );
+            })}
+          </TableBody>
+        </Table>
       ) : null}
     </div>
   );

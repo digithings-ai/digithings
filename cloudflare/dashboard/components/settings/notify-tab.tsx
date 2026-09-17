@@ -14,7 +14,7 @@ import {
   SETTINGS_LOAD_ERROR_MESSAGE,
   SettingsLoadError,
 } from './settings-load-error';
-import { Button, Input, Label } from '@digithings/web/ui';
+import { Button, Input, Label, Switch } from '@digithings/web/ui';
 
 export type NotifyTabProps = {
   api: SettingsApiOptions | null;
@@ -259,17 +259,17 @@ function Toggle({
   testId?: string;
 }) {
   return (
-    <Label className="flex items-start justify-between gap-3 border border-hair bg-term-bg/40 px-3 py-2">
+    <div className="flex select-none items-start justify-between gap-3 border border-hair bg-term-bg/40 px-3 py-2">
       <div className="space-y-0.5">
         <span className="text-sm text-ink">{label}</span>
         <span className="text-xs text-ink-mute">{description}</span>
       </div>
-      <input
-        type="checkbox"
+      <Switch
         checked={checked}
-        onChange={(e) => onChange(e.target.checked)}
+        onCheckedChange={onChange}
+        aria-label={label}
         data-testid={testId}
       />
-    </Label>
+    </div>
   );
 }
