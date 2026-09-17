@@ -59,17 +59,22 @@ jobs:
           # (ephemeral=0 + fail-closed). Do not rely on the compose default here.
           DIGIKEY_ALLOW_EPHEMERAL_KEY: "1"
           DIGIKEY_REQUIRE_BLOCKLIST: "0"
+          # The dev_global gate is enforced by the *server* at exchange time
+          # (digikey/src/digikey/server.py:319), so the opt-in has to be in the
+          # service env. Setting it on the mint step's `exec` would only reach
+          # that one CLI process and the exchange would 403.
+          DIGIKEY_ALLOW_DEV_GLOBAL: "1"
         run: |
           cp .env.example .env
           docker compose up -d --wait digigraph digiquant digisearch digikey
 
       # Protected-route tests need a digikey JWT. Mint one from the stack this job
       # just started and exchange it at /v1/oauth/token. A stored JWT would expire
-      # and would have to be rotated by hand; dev_global keys are opt-in, so pass
-      # the flag to this exec only.
+      # and would have to be rotated by hand; the dev_global opt-in lives on the
+      # service env (see Start stack).
       - name: Mint a digikey JWT for protected routes
         run: |
-          KEY=$(docker compose exec -T -e DIGIKEY_ALLOW_DEV_GLOBAL=1 digikey \
+          KEY=$(docker compose exec -T digikey \
             python -m digikey.cli issue-key \
             --tenant default --label ci-e2e --scopes '*' --kind dev_global \
             | sed -n 's/^api_key=//p')
