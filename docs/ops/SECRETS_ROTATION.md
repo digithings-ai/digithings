@@ -18,7 +18,7 @@ risk ids R1–R13). No value is ever printed here; every literal below is masked
 **A running Container is not replaced when a new Worker version deploys.** It keeps the environment it
 booted with until the instance is recycled. Evidence: `cloudflare/digithings-stack-cloudflare/README.md:18-23`
 ("a running digichat Container keeps start-time env values until recycled"); `sleepAfter` is `15m`
-(`cloudflare/digichat-cloudflare/src/index.ts:26`), `2h` for the stack sibling (`cloudflare/digithings-stack-cloudflare/src/index.ts:54`),
+(`cloudflare/digichat-cloudflare/src/index.ts:26`), `15m` for the stack sibling (`cloudflare/digithings-stack-cloudflare/src/index.ts:54`),
 `24h` for the MCP container (`:167`). So a re-`put` secret looks rotated in `secret list` while the old value stays live — R5.
 
 **The lever that works today: bump the container id.** Change `SHARED_DIGICHAT_CONTAINER_ID`
