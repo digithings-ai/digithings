@@ -36,7 +36,7 @@ replace a warm instance. Prefer the `SHARED_*_CONTAINER_ID` bump, and treat the 
 **The `envVars` whitelist is the only path into the container.** A secret `put` on the Worker but absent from the
 Container's `envVars` never reaches the process — silently. The digichat whitelist is `cloudflare/digichat-cloudflare/src/index.ts:32-56`;
 the stack whitelists are `DigiStackContainer` (`cloudflare/digithings-stack-cloudflare/src/index.ts:60-112`)
-and `DigiQuantMcpContainer` (`:177-185`). Known silent drops: on digichat,
+and `DigiQuantMcpContainer` (`:176-184`). Known silent drops: on digichat,
 `DIGICHAT_DATABASE_URL` (`wrangler.toml:58`), `CHEAPERINFERENCE_API_KEY`, `OPENROUTER_API_KEY`; on the stack,
 `DIGI_CONFIG_PATH`, `DIGI_PROJECT_CONFIG`, `DIGI_WORKFLOW_PROFILE`, `DIGI_ALLOWED_TOOLS` are no longer
 `[vars]` — the `container/entrypoint.sh` defaults are the live values (`wrangler.toml:214-217`) (R4).

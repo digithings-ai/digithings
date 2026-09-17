@@ -21,7 +21,7 @@ The stack has three disjoint secret surfaces and no system of record:
   surfaces"). Each Container receives only what its Worker's `envVars` whitelist
   forwards — the stack Worker runs two: `DigiStackContainer`
   (`cloudflare/digithings-stack-cloudflare/src/index.ts:60-112`) and
-  `DigiQuantMcpContainer` (`:177-185`) — and a secret that is `put` but absent
+  `DigiQuantMcpContainer` (`:176-184`) — and a secret that is `put` but absent
   from `envVars` is a silent drop (R4).
 - **GitHub.** 72 workflows, only 4 declare `environment: production`
   (`SECRETS_INVENTORY.md:158`); ~42 repo secrets + 6 vars, repo-scoped, so any
