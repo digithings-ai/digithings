@@ -13,6 +13,7 @@
  * Desktop: teal mark only. Sheet: Open dashboard.
  */
 import { NavShell, GitHubGlyph, DigiquantMark } from "@digithings/web";
+import { buttonVariants } from "@digithings/web/ui";
 import { Brand, DQ_NAV_PRIMARY } from "@/app/_nav";
 
 export function SiteNav() {
@@ -24,7 +25,7 @@ export function SiteNav() {
       actions={
         <>
           <a
-            className="btn btn-ghost btn-sm btn-icon"
+            className={buttonVariants({ variant: "ghost", size: "icon-sm" })}
             href="https://github.com/digithings-ai"
             target="_blank"
             rel="noopener noreferrer"
@@ -43,7 +44,11 @@ export function SiteNav() {
         </>
       }
       cta={
-        <a className="btn btn-primary dq-cta" href="/dashboard/" aria-label="Open the dashboard">
+        <a
+          className={buttonVariants({ variant: "default" }) + " dq-cta"}
+          href="/dashboard/"
+          aria-label="Open the dashboard"
+        >
           <DigiquantMark size={18} />
           <span>Open dashboard</span>
         </a>

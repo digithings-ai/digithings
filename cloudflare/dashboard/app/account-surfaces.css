@@ -1,7 +1,14 @@
 /* Account surfaces consumed from the digiweb account family (login, signup,
-   session, settings). Token-only; class prefix `.acct-`. Button dress is the
-   reference `.btn-*` grammar (reference/app/globals.css) — dashboard does not
-   load that sheet. */
+   session, settings). Token-only; class prefix `.acct-`.
+
+   Wave-2 (#4206) pruning: the reference `.btn-*` button dress this sheet used
+   to carry for the login card / session rail is gone — auth buttons ride the
+   package's own `.acct-auth-submit` dress (AuthCard) and the kit Button
+   (sidebar sign-out), and the callback's CTA uses the kit's `buttonVariants`.
+   `.acct-field`, `.acct-divider`, `.acct-strength-seg` and `.acct-btn-block`
+   were zero-consumer after the swaps. `.acct-input`/`.acct-input-error`/
+   `.acct-error` stay: `client-product-gate.tsx` still consumes them (its
+   swap is not part of this task). */
 
 .acct-login-shell {
   min-height: 100vh;
@@ -11,43 +18,6 @@
   justify-content: center;
   padding: 1.5rem;
   color: var(--ink);
-}
-
-.acct-login-card .btn-primary,
-.acct-login-card .btn-ghost,
-.acct-session-rail .btn-ghost {
-  font-family: var(--font-mono);
-  font-size: 0.78rem;
-  letter-spacing: 0.02em;
-  border-radius: 0;
-  padding: 0.62rem 1.3rem;
-  cursor: pointer;
-  border: 1px solid transparent;
-  text-align: center;
-}
-
-.acct-login-card .btn-primary {
-  background: var(--ink);
-  color: var(--bg);
-  border-color: var(--ink);
-}
-
-.acct-login-card .btn-primary:disabled,
-.acct-login-card .btn-ghost:disabled {
-  opacity: 0.4;
-  cursor: not-allowed;
-}
-
-.acct-login-card .btn-ghost,
-.acct-session-rail .btn-ghost {
-  background: transparent;
-  color: var(--ink);
-  border-color: var(--hair);
-}
-
-.acct-login-card .btn-ghost:hover,
-.acct-session-rail .btn-ghost:hover {
-  border-color: color-mix(in srgb, var(--accent) 50%, var(--hair));
 }
 
 .acct-login-card {
@@ -61,10 +31,6 @@
 
 .acct-login-mark {
   margin-bottom: 0.85rem;
-}
-
-.acct-field {
-  margin-top: 0.85rem;
 }
 
 .acct-input {
@@ -104,39 +70,6 @@
   font-family: var(--font-mono);
   font-size: 0.68rem;
   color: var(--danger);
-}
-
-.acct-btn-block {
-  display: block;
-  width: 100%;
-  margin-top: 1.1rem;
-}
-
-.acct-divider {
-  display: flex;
-  align-items: center;
-  gap: 0.7rem;
-  margin: 1rem 0;
-  font-family: var(--font-mono);
-  font-size: 0.62rem;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-  color: var(--ink-mute);
-}
-
-.acct-divider::before,
-.acct-divider::after {
-  content: "";
-  height: 1px;
-  flex: 1;
-  background: var(--hair);
-}
-
-.acct-strength-seg {
-  height: 3px;
-  border-radius: 0;
-  background: color-mix(in srgb, var(--ink-mute) 22%, transparent);
-  transition: background 0.25s var(--ease);
 }
 
 .acct-session-rail {
@@ -181,11 +114,4 @@
   border: 1px solid var(--hair);
   background: var(--surface);
   padding: 1.1rem 1.2rem;
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .acct-input,
-  .acct-strength-seg {
-    transition: none !important;
-  }
 }

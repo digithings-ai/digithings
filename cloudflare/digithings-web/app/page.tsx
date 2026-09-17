@@ -12,6 +12,7 @@ import {
   type StackItem,
 } from "@digithings/web";
 import { ContactMailto } from "@digithings/web";
+import { buttonVariants } from "@digithings/web/ui";
 import { DT_CONTACT_EMAIL } from "@/app/_nav";
 import { DtFooter } from "@/components/DtFooter";
 import { DtNav } from "@/components/DtNav";
@@ -175,7 +176,7 @@ export default function Home() {
               <span className="prompt">$</span>
               git clone https://github.com/digithings-ai/digithings.git
             </p>
-            <a className="btn btn-primary" href="/chat">
+            <a className={buttonVariants({ variant: "default" })} href="/chat">
               Ask digichat
             </a>
             <a className="dqhero-scroll-label" href="#metrics">
@@ -330,10 +331,18 @@ export default function Home() {
               </p>
             </div>
             <div className="mt-[2rem] flex flex-wrap justify-center gap-[0.8rem]">
-              <ContactMailto email={DT_CONTACT_EMAIL} className="btn btn-primary" subject="digithings%20inquiry">
+              <ContactMailto
+                email={DT_CONTACT_EMAIL}
+                className={buttonVariants({ variant: "default" })}
+                subject="digithings%20inquiry"
+              >
                 Email us <span aria-hidden="true">→</span>
               </ContactMailto>
-              <ContactMailto email={DT_CONTACT_EMAIL} className="btn btn-ghost" subject="digithings%20enterprise">
+              <ContactMailto
+                email={DT_CONTACT_EMAIL}
+                className={buttonVariants({ variant: "ghost" })}
+                subject="digithings%20enterprise"
+              >
                 Enterprise
               </ContactMailto>
             </div>

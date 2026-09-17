@@ -37,6 +37,7 @@ import {
   toneClass,
   viewWindowForPreset,
 } from "@digithings/web";
+import { Badge, Card } from "@digithings/web/ui";
 import { AssetLogoFor } from "@/components/tearsheet/asset-logo";
 import { CurrentPosition } from "@/components/tearsheet/current-position";
 import { LiveMetricsBadge } from "@/components/tearsheet/live-metrics";
@@ -322,9 +323,11 @@ function UnpublishedStrategyCard({ strategyId }: { strategyId: string }) {
 
 /**
  * One tearsheet preview card body — header, current position, KPIs,
- * chart/table toggle. Rendered inside a <DeckCard className="dqss-card">
- * (the deck card element carries the .dqss-card dress + container queries);
- * the width probe rides the header, which spans the card's content box.
+ * chart/table toggle. Rendered inside a kit <Card> carried by a
+ * <DeckCard className="dqss-card"> (the deck card element keeps the
+ * container context + compact grammar; the Card element itself is the
+ * surface); the width probe rides the header, which spans the card's
+ * content box.
  */
 const StrategyTearsheetCard = memo(function StrategyTearsheetCard({
   entry,
@@ -394,7 +397,9 @@ const StrategyTearsheetCard = memo(function StrategyTearsheetCard({
           </h3>
           <div className="ts-meta">
             <LiveMetricsBadge generatedAt={data?.generated_at ?? entry.generated_at} />
-            <span className="ts-chip">{symbol}</span>
+            <Badge variant="outline" className="border-accent-weak bg-accent-weak">
+              {symbol}
+            </Badge>
             <StrategyTypeChip strategy={entry.strategy} kind={data?.kind ?? entry.kind} />
             <SignalDelayChip days={data?.signal_delay_days ?? entry.signal_delay_days} />
             {dca ? <BacktestOnlyChip /> : null}
@@ -570,13 +575,15 @@ export function StrategySuite() {
             const slot = suiteSlotState(indexResolved, entry);
             return (
               <DeckCard key={id} className="dqss-card">
-                {slot === "ready" && entry ? (
-                  <StrategyTearsheetCard entry={entry} />
-                ) : slot === "unpublished" ? (
-                  <UnpublishedStrategyCard strategyId={id} />
-                ) : (
-                  <StrategyCardSkeleton strategyId={id} />
-                )}
+                <Card className="gap-0 px-[clamp(0.9rem,2.2cqi,1.25rem)] pt-[clamp(0.85rem,2cqi,1.15rem)] pb-[clamp(0.95rem,2cqi,1.2rem)]">
+                  {slot === "ready" && entry ? (
+                    <StrategyTearsheetCard entry={entry} />
+                  ) : slot === "unpublished" ? (
+                    <UnpublishedStrategyCard strategyId={id} />
+                  ) : (
+                    <StrategyCardSkeleton strategyId={id} />
+                  )}
+                </Card>
               </DeckCard>
             );
           })}

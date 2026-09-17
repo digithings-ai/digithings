@@ -1,6 +1,7 @@
 'use client';
 
 import { useMemo, useState } from 'react';
+import { Card } from '@digithings/web/ui';
 import { Grid3x3 } from 'lucide-react';
 
 import { MATRIX_COLUMNS } from '@/lib/twelve-x/types';
@@ -61,7 +62,7 @@ export default function MatrixTab({
       </p>
 
       {hasData ? (
-        <div className="oly-slab overflow-hidden p-0">
+        <Card data-reveal className="gap-0 overflow-hidden p-0">
           <div className="overflow-x-auto">
             <div role="table" className="min-w-[760px] text-sm" aria-label="Broker by currency view matrix">
               {/* Header row */}
@@ -193,11 +194,11 @@ export default function MatrixTab({
             </span>
             <span className="ml-auto">Brighter = higher conviction · a pair sits under its base ccy</span>
           </div>
-        </div>
+        </Card>
       ) : (
-        <div className="oly-slab p-10 text-center text-sm text-ink-mute">
+        <Card data-reveal className="gap-0 p-10 text-center text-sm text-ink-mute">
           No desk views available in the recent window.
-        </div>
+        </Card>
       )}
 
       {/* Single-broker drill-in: click a desk label → its full standing-view profile. */}

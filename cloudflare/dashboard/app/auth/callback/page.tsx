@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
+import { buttonVariants } from '@digithings/web/ui';
 import { DashboardMark } from '@/components/dashboard-mark';
 import {
   getSupabaseClient,
@@ -118,7 +119,10 @@ export default function AuthCallbackPage() {
           {message}
         </p>
         {failed ? (
-          <Link href="/login/" className="btn-ghost acct-btn-block text-center">
+          <Link
+            href="/login/"
+            className={`${buttonVariants({ variant: 'outline' })} mt-[1.1rem] block h-auto w-full px-[1.3rem] py-[0.62rem] text-center font-mono text-[0.78rem] tracking-[0.02em]`}
+          >
             Return to sign in
           </Link>
         ) : null}

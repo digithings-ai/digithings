@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { GitHubGlyph } from "@digithings/web";
+import { Button, buttonVariants } from "@digithings/web/ui";
 
 export const DIGIQUANT_GITHUB_ROOT = "https://github.com/digithings-ai/digithings";
 export const DIGIQUANT_REPO_URL = `${DIGIQUANT_GITHUB_ROOT}/tree/develop/digiquant`;
@@ -9,7 +10,7 @@ export const DIGIQUANT_CLONE_CMD = `git clone ${DIGIQUANT_GITHUB_ROOT}.git`;
 
 type CopyStatus = "idle" | "copied" | "failed";
 
-export function CloneRepoButton({ className = "btn btn-ghost" }: { className?: string }) {
+export function CloneRepoButton() {
   const [status, setStatus] = useState<CopyStatus>("idle");
   // Tracks the one pending "reset to idle" timer so a second click's status
   // cannot be cut short by the FIRST click's still-scheduled timeout (review
@@ -54,9 +55,10 @@ export function CloneRepoButton({ className = "btn btn-ghost" }: { className?: s
 
   return (
     <div className="flex w-full justify-start gap-[0.5rem]">
-      <button
+      <Button
         type="button"
-        className={`${className} min-w-[6.35rem] justify-center px-[0.85rem] font-mono text-[0.72rem] normal-case tracking-normal`.trim()}
+        variant="ghost"
+        className="min-w-[6.35rem] justify-center px-[0.85rem] font-mono text-[0.72rem] normal-case tracking-normal"
         onClick={onCopy}
         aria-label={
           status === "copied"
@@ -69,9 +71,9 @@ export function CloneRepoButton({ className = "btn btn-ghost" }: { className?: s
         <span className="whitespace-nowrap">
           {status === "copied" ? "Copied!" : status === "failed" ? "Copy failed" : "git clone"}
         </span>
-      </button>
+      </Button>
       <a
-        className="btn btn-ghost btn-icon min-w-[3.125rem] flex-none px-[0.65rem]"
+        className={buttonVariants({ variant: "ghost", size: "icon-sm" }) + " min-w-[3.125rem] flex-none px-[0.65rem]"}
         href={DIGIQUANT_REPO_URL}
         target="_blank"
         rel="noopener noreferrer"

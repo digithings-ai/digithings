@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Image from "next/image";
 import Link from "next/link";
 import { Reveal } from "@digithings/web";
+import { buttonVariants } from "@digithings/web/ui";
 import { DtFooter } from "@/components/DtFooter";
 import { PageHead } from "../_company/prose";
 import { ContactMailto } from "@digithings/web";
@@ -133,17 +134,21 @@ export default function TeamPage() {
             </Reveal>
             <div className="flex flex-wrap gap-[0.8rem]">
               <a
-                className="btn btn-primary"
+                className={buttonVariants({ variant: "default" })}
                 href="https://github.com/digithings-ai/digithings"
                 target="_blank"
                 rel="noopener noreferrer"
               >
                 Contribute on GitHub <span aria-hidden="true">→</span>
               </a>
-              <Link className="btn btn-ghost" href="/services">
+              <Link className={buttonVariants({ variant: "ghost" })} href="/services">
                 View services
               </Link>
-              <ContactMailto email={DT_CONTACT_EMAIL} className="btn btn-ghost" subject="digithings%20inquiry">
+              <ContactMailto
+                email={DT_CONTACT_EMAIL}
+                className={buttonVariants({ variant: "ghost" })}
+                subject="digithings%20inquiry"
+              >
                 Contact digithings
               </ContactMailto>
             </div>

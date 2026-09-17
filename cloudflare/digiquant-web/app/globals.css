@@ -6,7 +6,15 @@
    every margin utility in the app — utilities live in @layer utilities,
    and unlayered author CSS outranks all layers. */
 @import "@digithings/design/site/site.css" layer(components);
+/* Overlay animation utilities (the kit's Sheet/Dialog/Collapsible dress).
+   BEFORE the web-theme bridge on purpose: tw-animate-css carries its own
+   collapsible keyframes without the Base UI --collapsible-panel-height
+   fallback, and the kit's Base UI-aware pair must stay source-last so it
+   wins the Lightning CSS last-wins dedupe (wave-2 T1 ruling, same order as
+   digithings-web). */
+@import "tw-animate-css";
 @import "@digithings/web/styles/web-theme.css";
+@import "@digithings/web/styles/controls-core.css";
 @import "@digithings/web/styles/nav-shell.css";
 @import "@digithings/web/styles/pricing.css";
 /* Homepage expressive grammar (#1450 F2 adoption) — imported PLAINLY (no
@@ -44,6 +52,9 @@
 @source "../../digiweb/web/src/components/symbols";
 /* … and the shared ContactMailto's pending dim. */
 @source "../../digiweb/web/src/components/contact";
+/* … and the vendored shadcn kit (Button/Badge/Card/…) now importable as
+   @digithings/web/ui. */
+@source "../../digiweb/web/src/ui";
 
 :root[data-theme] {
   --font-sans: var(--font-geist-mono), ui-monospace, monospace;
@@ -148,12 +159,10 @@ html {
    (TerminalMark, _nav.tsx), so it follows ink through [data-theme] without a
    theme-swapped pair. The old .brand-mark / .brand-mark-{dark,light} trio went
    with the QR marks.
-   @layer components so token utilities in TSX can locally re-dress them. */
-@layer components {
-  /* icon-only buttons (nav GitHub, tearsheet download): square, glyph centred */
-  .btn-icon { padding-inline: 0.5rem; display: inline-flex; align-items: center; justify-content: center; }
-  .btn-icon svg { display: block; }
-}
+   (.btn-icon deleted in wave 2 T3: the nav GitHub link and the tearsheet
+   print button are the kit `Button`/`buttonVariants`, whose own icon-size
+   dress covers them; the package's nav-shell.css .btn-icon stays for its
+   other consumers.) */
 
 /* Dashboard mark CTA (NavShell sheet slot + desktop tail). */
 .dq-cta { display: inline-flex; align-items: center; gap: 0.45rem; }
@@ -310,8 +319,10 @@ html.no-js .dqhero-cta { opacity: 1; transform: none; }
   transform: translateX(52px) translateY(8px);
 }
 .dqpipe-step.is-visible { opacity: 1; transform: none; }
-.dqpipe-card { position: relative; width: min(100%, 340px); background: var(--surface); border: 1px solid var(--hair); border-radius: 0; padding: 1.25rem 1.3rem 1.15rem; display: flex; flex-direction: column; gap: 0.45rem; }
-.dqpipe-step.is-exec .dqpipe-card { background: linear-gradient(180deg, var(--accent-weak), var(--surface)); }
+/* .dqpipe-card deleted in wave 2 T3: the step card is the kit `Card`
+   (`@digithings/web/ui`) — width, padding and gap are call-site utilities in
+   ResearchPipeline.tsx, and the exec step's accent wash rides the same
+   call site. Only the step/rail mechanics above stay app CSS. */
 .dqpipe-rail {
   position: absolute; top: 1.6rem; width: 12px; height: 12px; border-radius: 50%;
   border: 2px solid var(--hair-2); background: var(--bg);
@@ -475,27 +486,24 @@ html.no-js .dqhero-cta { opacity: 1; transform: none; }
 .dqss-library-pill:hover .dqss-library-arrow {
   transform: translateX(3px);
 }
-/* The card dress, worn by the DeckCard element itself. Opaque surface + 1px
-   hairline + radius and deliberately NO box-shadow — the deck canon's seam is
-   the next opaque card covering this one (deck.css). overflow:hidden only
-   clips this card's own rounded corners; there is no stack clip box. */
+/* The deck card keeps ONLY the inline-size container context (the compact
+   grammar and @container ladder below read it) and neutralises the deck-card
+   surface default: in wave 2 T3 the card BOX is the kit `Card`
+   (`@digithings/web/ui`) rendered inside the DeckCard — opaque surface +
+   hairline ring, padding and gap as call-site utilities in StrategySuite.tsx.
+   The deck's seam contract is unchanged: the next opaque Card covering this
+   one IS the seam, and sticky positioning stays on the .deck-card element. */
 .dqss-card {
   container-type: inline-size;
   container-name: dqss-card;
-  display: flex;
-  flex-direction: column;
-  height: auto;
-  min-height: 0;
-  border: 1px solid var(--hair);
-  border-radius: 0;
-  background: linear-gradient(180deg, var(--surface), var(--surface-2));
-  overflow: hidden;
-  padding: clamp(0.85rem, 2cqi, 1.15rem) clamp(0.9rem, 2.2cqi, 1.25rem) clamp(0.95rem, 2cqi, 1.2rem);
+  padding: 0;
+  border: 0;
+  background: none;
 }
 .dqss-card .ts-header { margin-bottom: clamp(0.75rem, 2cqi, 1rem); padding-bottom: clamp(0.65rem, 1.5cqi, 0.85rem); align-items: flex-start; border-bottom: 1px solid var(--hair); }
 .dqss-card .ts-h1 { font-size: clamp(1.1rem, 0.85rem + 1.4cqi, 1.55rem); margin-bottom: clamp(0.4rem, 1cqi, 0.55rem); }
 .dqss-card .ts-meta-text { font-size: clamp(0.62rem, 0.55rem + 0.35cqi, 0.78rem); }
-.dqss-card .ts-chip { font-size: clamp(0.64rem, 0.58rem + 0.25cqi, 0.74rem); padding: 0.16rem 0.52rem; }
+.dqss-card [data-slot="badge"] { font-size: clamp(0.64rem, 0.58rem + 0.25cqi, 0.74rem); padding: 0.16rem 0.52rem; }
 
 .dqss-card .ts-position {
   margin-bottom: 0;
@@ -712,8 +720,12 @@ html.no-js .dqhero-cta { opacity: 1; transform: none; }
    deliberate ink tint rising into the hairline panel; the digiquant phosphor
    stays reserved for the terminal moments below (cmdline, init codeblock).
    Surface fallback first: without color-mix() the bloom drops and the
-   poster stays a plain hairline panel. */
-.sub-poster { position: relative; border: 1px solid var(--hair); border-radius: 0; overflow: hidden; padding: 4.5rem 1.6rem 1.4rem; margin-bottom: 2rem; background: var(--surface); background: radial-gradient(130% 95% at 50% 115%, color-mix(in srgb, var(--accent) 15%, transparent), transparent 62%), var(--surface); }
+   poster stays a plain hairline panel.
+   The poster BOX is the kit `Card` (wave 2 T3, subsystems/[id]/page.tsx):
+   surface, hairline ring, padding, overflow and relative positioning are
+   call-site utilities there. This rule keeps only the livery bloom — the one
+   art layer Card has no variant for — over the Card's surface. */
+.sub-poster { background-image: radial-gradient(130% 95% at 50% 115%, color-mix(in srgb, var(--accent) 15%, transparent), transparent 62%); }
 .sub-poster .sub-regmark { position: absolute; top: 0.7rem; left: 0.8rem; font-family: var(--font-mono); font-weight: 300; color: var(--ink-mute); font-size: 0.8rem; user-select: none; }
 .sub-poster-name { font-family: var(--font-display); font-style: normal; font-weight: 400; font-size: clamp(3rem, 8vw, 5rem); line-height: 0.95; letter-spacing: -0.02em; color: var(--ink); text-transform: lowercase; margin: 0; }
 .sub-poster-epithet { font-family: var(--font-mono); font-size: 0.68rem; letter-spacing: 0.14em; color: var(--accent); color: color-mix(in srgb, var(--accent) 75%, var(--ink)); margin-top: 0.8rem; }

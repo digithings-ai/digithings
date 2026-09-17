@@ -164,8 +164,10 @@ describe('ProfileTab (happy-dom)', () => {
     });
     expect(getFn).toHaveBeenCalledOnce();
     expect(onVersionSaved).toHaveBeenCalledWith('tip-v1');
-    const risk = el.querySelector('[data-testid="risk-tolerance"]') as HTMLSelectElement;
-    expect(risk?.value).toBe('aggressive');
+    // The controls-layer Select renders a trigger button whose value slot is
+    // the picked label (there is no native select to read `.value` from).
+    const risk = el.querySelector('[data-testid="risk-tolerance"]');
+    expect(risk?.textContent).toContain('aggressive');
     const horizon = el.querySelector('[data-testid="horizon-years"]') as HTMLInputElement;
     expect(horizon?.value).toBe('20');
     const inputs = Array.from(el.querySelectorAll('input'));

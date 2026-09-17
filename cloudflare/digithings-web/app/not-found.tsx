@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { buttonVariants } from "@digithings/web/ui";
 import { DtNav } from "@/components/DtNav";
 import { DtFooter } from "@/components/DtFooter";
 import { PageHead } from "./_company/prose";
@@ -21,10 +22,10 @@ export default function NotFound() {
         <section className="section">
           <div className="wrap">
             <div className="flex flex-wrap gap-[0.8rem]">
-              <Link className="btn btn-primary" href="/">
+              <Link className={buttonVariants({ variant: "default" })} href="/">
                 Back to top
               </Link>
-              <Link className="btn btn-ghost" href="/docs">
+              <Link className={buttonVariants({ variant: "ghost" })} href="/docs">
                 Browse the docs
               </Link>
             </div>
