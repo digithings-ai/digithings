@@ -17,6 +17,11 @@ import {
   DropdownMenuTrigger,
   Input,
   Label,
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
   Separator,
   Sheet,
   SheetContent,
@@ -25,6 +30,12 @@ import {
   TabsContent,
   TabsList,
   TabsTrigger,
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
   Textarea,
   Tooltip,
   TooltipContent,
@@ -76,6 +87,31 @@ describe("vendored ui kit renders server-side", () => {
     expect(html).toContain("live");
   });
 
+  it("Table composes header, body, row and cells", () => {
+    const html = renderToStaticMarkup(
+      <Table>
+        <TableHeader>
+          <TableRow>
+            <TableHead>Ticker</TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          <TableRow>
+            <TableCell>AAPL</TableCell>
+          </TableRow>
+        </TableBody>
+      </Table>,
+    );
+    expect(html).toContain('data-slot="table"');
+    expect(html).toContain('data-slot="table-container"');
+    expect(html).toContain('data-slot="table-header"');
+    expect(html).toContain('data-slot="table-body"');
+    expect(html).toContain('data-slot="table-row"');
+    expect(html).toContain('data-slot="table-head"');
+    expect(html).toContain('data-slot="table-cell"');
+    expect(html).toContain("AAPL");
+  });
+
   it("Alert composes parts", () => {
     const html = renderToStaticMarkup(
       <Alert>
@@ -125,6 +161,22 @@ describe("vendored ui kit renders server-side", () => {
     );
     expect(closed).toContain('data-slot="collapsible-trigger"');
     expect(closed).not.toContain('data-slot="collapsible-content"');
+  });
+
+  it("Select renders its trigger; content is portal-only", () => {
+    const html = renderToStaticMarkup(
+      <Select defaultValue="aapl">
+        <SelectTrigger>
+          <SelectValue placeholder="Ticker" />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem value="aapl">AAPL</SelectItem>
+        </SelectContent>
+      </Select>,
+    );
+    expect(html).toContain('data-slot="select-trigger"');
+    expect(html).not.toContain('data-slot="select-content"');
+    expect(typeof SelectContent).toBe("function");
   });
 
   // Sheet, DropdownMenu and Tooltip content render through Base UI portals,

@@ -2,7 +2,6 @@
 
 import type { FormEvent } from "react";
 
-import { Button as LayerButton } from "@digithings/web";
 import { Button, Input, Label, Separator } from "@digithings/web/ui";
 
 /**
@@ -10,13 +9,13 @@ import { Button, Input, Label, Separator } from "@digithings/web/ui";
  * error. OAuth first is Google filled, GitHub outline, then email under a
  * hairline. An interactive display template.
  *
- * Wave 1: fields are the stock kit — Input/Label/Separator/Button from
- * `@digithings/web/ui`; the mono micro-caps label type, the block-button
+ * Wave 1 / wave 3: fields are the stock kit — Input/Label/Separator/Button
+ * from `@digithings/web/ui`; the mono micro-caps label type, the block-button
  * width/margins, and the error tone are the reference's call-site grammar.
- * The quiet "Forgot password?" control stays on the `@digithings/web`
- * controls layer, whose Button carries the ruled `variant="quiet"` dress.
- * The old input/field/divider/error/forgot/block-button dress is gone; the
- * error state rides the input's own `aria-invalid` treatment.
+ * The quiet "Forgot password?" control is the kit Button `variant="outline"`
+ * (wave-2 variant map: `.btn-quiet → outline`). The old
+ * input/field/divider/error/forgot/block-button dress is gone; the error
+ * state rides the input's own `aria-invalid` treatment.
  */
 
 function preventSubmit(event: FormEvent<HTMLFormElement>) {
@@ -157,9 +156,9 @@ export function LoginCard() {
             <Button type="button" variant="outline" className="mt-[1.1rem] w-full">
               Continue with SSO
             </Button>
-            <LayerButton type="button" variant="quiet" className="mt-2 w-full">
+            <Button type="button" variant="outline" className="mt-2 w-full">
               Forgot password?
-            </LayerButton>
+            </Button>
           </form>
         </div>
 
@@ -223,9 +222,9 @@ export function LoginCard() {
             <Button type="button" variant="outline" className="mt-[1.1rem] w-full">
               Continue with SSO
             </Button>
-            <LayerButton type="button" variant="quiet" className="mt-2 w-full">
+            <Button type="button" variant="outline" className="mt-2 w-full">
               Forgot password?
-            </LayerButton>
+            </Button>
           </form>
         </div>
       </div>
