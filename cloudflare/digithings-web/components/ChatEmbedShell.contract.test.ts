@@ -73,9 +73,15 @@ describe("ChatEmbedShell contracts", () => {
     expect(src).toContain("digichat:ready");
     expect(src).toContain("opacity: embedReady ? 1 : 0");
     expect(src).toContain('backgroundColor: "transparent"');
-    // The overlay drops on the loader's settle callback, not on ready itself.
+    // The overlay drops only after the typed welcome + examples finish: the
+    // loader's settle callback sets sequenceDone, and the fade waits for
+    // ready + sequenceDone so a fast handshake cannot cut the copy mid-type.
     expect(src).toContain("showBoot = !shellLoadError && !bootSettled");
-    expect(src).toContain("onSettled={() => setBootSettled(true)}");
+    expect(src).toContain("onSettled={() => setSequenceDone(true)}");
+    expect(src).toContain("const overlayFaded = embedReady && sequenceDone");
+    // Curated per-host copy rides into both the iframe URL and the loader.
+    expect(src).toContain("Ask about digithings");
+    expect(src).toContain("Ask about Online Compliance Center");
   });
 
   it("keeps the boot overlay transparent so .grain/.glow show through while loading", async () => {

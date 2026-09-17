@@ -20,6 +20,36 @@ export const DEFAULT_CHAT_EMBED_HOST = "digithings.ai";
 /** Virtual first-party host for digithings.ai/chat/occ (client #1). */
 export const OCC_CHAT_EMBED_HOST = "occ.digithings.ai";
 
+/**
+ * Curated first-paint copy per host: the boot loader types it while the
+ * container wakes, and the same strings ride the iframe URL so the ready hero
+ * matches the loader it replaces. Keep every example a single line — the
+ * chips render one row each.
+ */
+export const EMBED_SHELL_COPY: Record<
+  string,
+  { welcome: string; suggestions: string[] }
+> = {
+  [DEFAULT_CHAT_EMBED_HOST]: {
+    welcome: "Ask about digithings",
+    suggestions: [
+      "What is digigraph?",
+      "Search the docs for NautilusTrader",
+      "How do I run the stack locally?",
+      "Summarize the digithings architecture",
+    ],
+  },
+  [OCC_CHAT_EMBED_HOST]: {
+    welcome: "Ask about Online Compliance Center",
+    suggestions: [
+      "How do I file a compliance report?",
+      "Search the help articles for onboarding",
+      "Show my open Zammad tickets",
+      "What is our data retention policy?",
+    ],
+  },
+};
+
 export type EmbedShellTheme = "light" | "dark";
 
 export type EmbedParentErrorCode = "ready_timeout" | "embed_unloadable";
@@ -74,6 +104,12 @@ function embedSrc(origin: string, embedHost: string, theme: EmbedShellTheme): st
   // Full-page host, not a narrow widget — drop digichat-ui's 1080px reading
   // column so the session fills the shell (see .dc-session--wide).
   url.searchParams.set("wide", "1");
+  const copy = EMBED_SHELL_COPY[embedHost];
+  if (copy) {
+    url.searchParams.set("welcome", copy.welcome);
+    // Pipe-separated per embed-ui-params (a JSON array also parses).
+    url.searchParams.set("suggestions", copy.suggestions.join("|"));
+  }
   return url.toString();
 }
 
@@ -112,10 +148,13 @@ export function ChatEmbedShell({
   /** Only when iframe never loads — cannot deliver parent-error postMessage. */
   const [shellLoadError, setShellLoadError] = useState<string | null>(null);
   const [embedReady, setEmbedReady] = useState(false);
-  // The boot overlay crossfades out once digichat:ready lands (see opacity
-  // below) and unmounts on the loader's own settle schedule, so the cube
-  // field never sits painted over an already-interactive iframe.
+  // The boot overlay crossfades out once digichat:ready lands AND the typed
+  // welcome/examples sequence has played, then unmounts (showBoot), so the
+  // copy always finishes before the real hero replaces it.
   const [bootSettled, setBootSettled] = useState(false);
+  // Typing finished (the loader's settle callback). Fading at ready alone cut
+  // the typed welcome/examples off mid-word (datatap types during the load).
+  const [sequenceDone, setSequenceDone] = useState(false);
   // Defer iframe src until after mount so we can read the real parent theme
   // (themeInitScript already flipped data-theme) and avoid a wrong-mode flash.
   const [src, setSrc] = useState("");
@@ -164,6 +203,7 @@ export function ChatEmbedShell({
       setShellLoadError(null);
       setEmbedReady(false);
       setBootSettled(false);
+      setSequenceDone(false);
     });
 
     function onMessage(ev: MessageEvent) {
@@ -211,6 +251,15 @@ export function ChatEmbedShell({
     };
   }, [targetOrigin]);
 
+  // Hold the overlay for the crossfade once ready AND the typed copy has
+  // played, then unmount it. A late ready keeps the overlay docked rather
+  // than revealing an unpainted iframe mid-sequence.
+  useEffect(() => {
+    if (!embedReady || !sequenceDone) return;
+    const t = window.setTimeout(() => setBootSettled(true), 360);
+    return () => window.clearTimeout(t);
+  }, [embedReady, sequenceDone]);
+
   if (configError) {
     return (
       <p className="dc-page" style={{ padding: "2rem" }}>
@@ -220,6 +269,7 @@ export function ChatEmbedShell({
   }
 
   const showBoot = !shellLoadError && !bootSettled;
+  const overlayFaded = embedReady && sequenceDone;
 
   return (
     <div
@@ -281,19 +331,19 @@ export function ChatEmbedShell({
 
       {showBoot ? (
         <div
-          aria-busy={!embedReady}
+          aria-busy={!overlayFaded}
           aria-live="polite"
-          aria-hidden={embedReady}
+          aria-hidden={overlayFaded}
           style={{
             position: "absolute",
             inset: 0,
             zIndex: 1,
-            opacity: embedReady ? 0 : 1,
-            // Crossfade the loader out once the chat is ready: the settle
-            // choreography would otherwise keep painting over the already-
-            // interactive iframe (the ready frame is revealed at embedReady).
+            opacity: overlayFaded ? 0 : 1,
+            // Crossfade only after the typed sequence has played AND the
+            // iframe is ready; fading at ready alone cut the typed copy off
+            // mid-word. Unmount happens via showBoot once the fade ran.
             transition: "opacity 320ms ease",
-            pointerEvents: embedReady ? "none" : "auto",
+            pointerEvents: overlayFaded ? "none" : "auto",
             // Transparent, not var(--bg) -- same reasoning as the shell div above.
             // This used to fill solid on the (mistaken) assumption that it was the
             // only thing standing between a pre-ready iframe and a flash of
@@ -306,11 +356,14 @@ export function ChatEmbedShell({
           }}
         >
           <DigichatBootLoader
-            // The overlay crossfades out when embedReady flips (see the
-            // opacity style above) and unmounts once the loader settles; the
-            // ready frame is already painted underneath while it fades.
+            // Types the curated copy while the container wakes; the overlay
+            // above crossfades once ready + settled and unmounts on the fade.
+            // The same strings ride the iframe URL (embedSrc) so the ready
+            // hero matches what the loader typed.
+            welcome={EMBED_SHELL_COPY[embedHost]?.welcome}
+            suggestions={EMBED_SHELL_COPY[embedHost]?.suggestions}
             ready={embedReady}
-            onSettled={() => setBootSettled(true)}
+            onSettled={() => setSequenceDone(true)}
             // The loader paints straight onto the transparent overlay (no
             // background of its own), so .grain/.glow keep showing through.
             className="dc-embed-boot"

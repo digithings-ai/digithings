@@ -522,6 +522,12 @@ export function DigichatBootLoader({
     const engine = createBorderEngine({ wrap, svg: grid, onParked: handleParked });
     engineRef.current = engine;
     engine.start();
+    // Type from mount, not from ready: gating the sequence on ready let the
+    // host crossfade (ChatEmbedShell, keyed on embedReady) hide the typed
+    // welcome + examples before they played -- datatap types during the load.
+    // handleParked is idempotent, so the ready-time finish() -> onParked call
+    // below stays a no-op.
+    handleParked();
     const observer = new ResizeObserver(() => engine.rebuild());
     observer.observe(wrap);
     return () => {
