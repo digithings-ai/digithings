@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { Settings } from 'lucide-react';
 import { usePathname } from 'next/navigation';
-import { Dialog, DialogContent } from '@digithings/web';
+import { Dialog, DialogContent } from '@digithings/web/ui';
 import { useAppShell } from '@/components/app-shell-context';
 import { SettingsContent } from '@/components/settings-content';
 import { useDashboard } from '@/lib/dashboard-context';
@@ -15,10 +15,15 @@ import { normalizePathname } from '@/lib/pathname';
  *
  * Wave-2 (#4206): the hand-rolled anchored popover (measured position,
  * scroll/resize listeners, outside-mousedown + window Escape dismissal,
- * manual portal) is now the shared @digithings/web Dialog (Base UI): modal
- * scrim, Escape + backdrop dismissal, focus trap, scroll lock, and
- * `role="dialog"` with the same aria-label. The trigger keeps its shipped
- * dress and its `/settings` special case (close nav instead of opening).
+ * manual portal) became a centered modal Dialog (Base UI): scrim, Escape +
+ * backdrop dismissal, focus trap, scroll lock, `role="dialog"`.
+ *
+ * Wave-3 (#4206, T5b): the Dialog is now the canonical kit
+ * `@digithings/web/ui` Dialog (T1b: kit ui/* is canonical for every
+ * overlapping part) — the owner-blessed centered idiom and 280px sizing are
+ * preserved; only the dress source changed (kit tokens vs the retired
+ * `ctl-dialog-*` controls skin). The trigger keeps its shipped dress and its
+ * `/settings` special case (close nav instead of opening).
  */
 export default function SidebarSettings({ sidebarCollapsed }: { sidebarCollapsed: boolean }) {
   const pathname = usePathname();
@@ -57,7 +62,7 @@ export default function SidebarSettings({ sidebarCollapsed }: { sidebarCollapsed
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent
           aria-label="Settings"
-          className="[&_.ctl-dialog-card]:max-h-[min(70vh,520px)] [&_.ctl-dialog-card]:w-[min(280px,calc(100vw-2rem))] [&_.ctl-dialog-card]:max-w-[280px] [&_.ctl-dialog-card]:overflow-y-auto"
+          className="max-h-[min(70vh,520px)] w-[min(280px,calc(100vw-2rem))] max-w-[280px] gap-0 overflow-y-auto sm:max-w-[280px]"
         >
           <SettingsContent
             variant="popover"

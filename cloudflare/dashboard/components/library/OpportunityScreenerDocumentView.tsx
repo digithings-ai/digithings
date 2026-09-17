@@ -1,5 +1,6 @@
 'use client';
 
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@digithings/web/ui';
 import { SafeMarkdown } from '@/components/SafeMarkdown';
 
 /** Loose row shape for opportunity_screen / screener JSON variants. */
@@ -77,36 +78,38 @@ export default function OpportunityScreenerDocumentView({
       {rows.length > 0 && columns.length > 0 ? (
         <div>
           <h3 className="text-xs font-semibold text-ink-mute uppercase tracking-wider mb-3">Universe scores</h3>
-          <div className="overflow-x-auto border border-hair">
-            <table className="w-full text-xs min-w-[480px]">
-              <thead>
-                <tr className="text-ink-mute text-left border-b border-hair bg-term-bg/80">
-                  {columns.map((c) => (
-                    <th key={c} className="px-2 py-2 font-medium capitalize whitespace-nowrap">
-                      {c.replace(/_/g, ' ')}
-                    </th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-hair">
-                {rows.map((row, i) => (
-                  <tr key={i} className="hover:bg-ink/[0.02]">
-                    {columns.map((c) => {
-                      const v = row[c];
-                      const isNum =
-                        typeof v === 'number' ||
-                        (typeof v === 'string' && v.trim() !== '' && !Number.isNaN(Number(v)));
-                      return (
-                        <td key={c} className="px-2 py-1.5 text-ink-soft max-w-[220px] truncate" title={str(v)}>
-                          {isNum ? num(v) : str(v)}
-                        </td>
-                      );
-                    })}
-                  </tr>
+          <Table className="min-w-[480px] border border-hair">
+            <TableHeader>
+              <TableRow className="border-hair bg-term-bg/80 hover:bg-term-bg/80">
+                {columns.map((c) => (
+                  <TableHead key={c} className="text-ink-mute capitalize">
+                    {c.replace(/_/g, ' ')}
+                  </TableHead>
                 ))}
-              </tbody>
-            </table>
-          </div>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {rows.map((row, i) => (
+                <TableRow key={i} className="hover:bg-ink/[0.02]">
+                  {columns.map((c) => {
+                    const v = row[c];
+                    const isNum =
+                      typeof v === 'number' ||
+                      (typeof v === 'string' && v.trim() !== '' && !Number.isNaN(Number(v)));
+                    return (
+                      <TableCell
+                        key={c}
+                        className="text-ink-soft max-w-[220px] truncate"
+                        title={str(v)}
+                      >
+                        {isNum ? num(v) : str(v)}
+                      </TableCell>
+                    );
+                  })}
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
         </div>
       ) : null}
       {body.notes != null && String(body.notes).trim() ? (

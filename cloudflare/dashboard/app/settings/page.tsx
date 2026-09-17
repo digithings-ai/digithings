@@ -80,16 +80,19 @@ export default function SettingsPage() {
     return (
       <div className={`${SUBPAGE_MAX} py-6 md:py-8 space-y-6`}>
         <header className="space-y-2">
-          <p className="acct-settings-kicker">
+          <p className="font-mono text-[0.72rem] tracking-[0.02em] text-ink">
             fx hub <span className="text-ink-mute">· account</span>
           </p>
           <h1 className="font-display text-3xl tracking-tight text-ink">Your account.</h1>
-          <p className="acct-settings-copy">
+          <p className="max-w-[46ch] text-[0.88rem] leading-[1.45] text-ink-soft">
             Your FX Hub profile: invite status and sign-out only. Desk settings do not apply to
             this product.
           </p>
         </header>
-        <div className="acct-settings-panel max-w-2xl" data-testid="settings-fx-hub-account">
+        <div
+          className="max-w-2xl border border-hair bg-surface p-[1.1rem_1.2rem]"
+          data-testid="settings-fx-hub-account"
+        >
           <FxHubAccount fxHubGranted={canFxHub} />
         </div>
       </div>
@@ -99,11 +102,11 @@ export default function SettingsPage() {
   return (
     <div className={`${SUBPAGE_MAX} py-6 md:py-8 space-y-6`}>
       <header className="space-y-2">
-        <p className="acct-settings-kicker">
+        <p className="font-mono text-[0.72rem] tracking-[0.02em] text-ink">
           dashboard <span className="text-ink-mute">· settings</span>
         </p>
         <h1 className="font-display text-3xl tracking-tight text-ink">The desk, not the product.</h1>
-        <p className="acct-settings-copy">
+        <p className="max-w-[46ch] text-[0.88rem] leading-[1.45] text-ink-soft">
           Notifications and billing on every plan. Pipeline, keys, and brokers only appear when this
           workspace can use them.
         </p>
@@ -123,7 +126,7 @@ export default function SettingsPage() {
         ))}
       </SubpageStickyTabBar>
 
-      <div className="acct-settings-panel max-w-2xl" id={activeTab}>
+      <div className="max-w-2xl border border-hair bg-surface p-[1.1rem_1.2rem]" id={activeTab}>
         {activeTab === 'profile' ? (
           <ProfileTab
             api={api}

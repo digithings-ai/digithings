@@ -37,7 +37,7 @@ import {
   toneClass,
   viewWindowForPreset,
 } from "@digithings/web";
-import { Badge, Card } from "@digithings/web/ui";
+import { Badge, Card, buttonVariants } from "@digithings/web/ui";
 import { AssetLogoFor } from "@/components/tearsheet/asset-logo";
 import { CurrentPosition } from "@/components/tearsheet/current-position";
 import { LiveMetricsBadge } from "@/components/tearsheet/live-metrics";
@@ -266,11 +266,11 @@ function StrategyCardSkeleton({ strategyId }: { strategyId: string }) {
         )}
       </KpiStrip>
 
-      <div className="ts-mode-bar dqss-preview-mode" aria-hidden="true" />
+      <div className="ts-mode-bar" aria-hidden="true" />
 
       <section className="ts-panel ts-tab-stack dqss-preview-panel" aria-label="Loading">
         <div className="dqss-preview-pane">
-          <div className="dqss-preview-pane-layer dqss-preview-chart-pane">
+          <div className="dqss-preview-pane-layer">
             <div className="ts-chart dqss-preview-chart">
               <div className="dqss-chart-skeleton" aria-hidden="true" />
             </div>
@@ -313,7 +313,7 @@ function UnpublishedStrategyCard({ strategyId }: { strategyId: string }) {
         appear after the operator publishes this backtest.
       </p>
       <p className="dqss-preview-footer">
-        <Link className="dqss-full" href={`/strategies/${strategyId}`}>
+        <Link className={buttonVariants({ variant: "link" }) + " dqss-full"} href={`/strategies/${strategyId}`}>
           View full tearsheet ↗
         </Link>
       </p>
@@ -457,7 +457,7 @@ const StrategyTearsheetCard = memo(function StrategyTearsheetCard({
         )}
       </KpiStrip>
 
-      <div className="ts-mode-bar dqss-preview-mode">
+      <div className="ts-mode-bar">
         <SegToggle
           label="Tearsheet view"
           value={mode}
@@ -475,7 +475,7 @@ const StrategyTearsheetCard = memo(function StrategyTearsheetCard({
       >
         <div className="dqss-preview-pane">
           {mode === "charts" ? (
-            <div className="dqss-preview-pane-layer dqss-preview-chart-pane">
+            <div className="dqss-preview-pane-layer">
               <div className="ts-chart dqss-preview-chart">
                 {chartLoading ? (
                   <div className="dqss-chart-skeleton" aria-hidden="true" />
@@ -509,7 +509,7 @@ const StrategyTearsheetCard = memo(function StrategyTearsheetCard({
       </section>
 
       <p className="dqss-preview-footer">
-        <Link className="dqss-full" href={`/strategies/${entry.strategy}`}>
+        <Link className={buttonVariants({ variant: "link" }) + " dqss-full"} href={`/strategies/${entry.strategy}`}>
           View full tearsheet ↗
         </Link>
       </p>
@@ -548,7 +548,10 @@ export function StrategySuite() {
               clear the pipeline.
             </p>
           </div>
-          <Link href="/strategies" className="dqss-library-pill">
+          <Link
+            href="/strategies"
+            className={buttonVariants({ variant: "outline", size: "lg" }) + " dqss-library-pill"}
+          >
             Full strategy library
             <span className="dqss-library-arrow" aria-hidden="true">
               →
