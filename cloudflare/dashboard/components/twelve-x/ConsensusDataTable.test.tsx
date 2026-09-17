@@ -138,14 +138,18 @@ describe('ConsensusDataTable component', () => {
     expect(rows).toHaveLength(G10_CURRENCIES.length);
   });
 
-  it('renders filter buttons (All/Bullish/Bearish/Strong)', () => {
+  it('renders the shared SegmentedControl filter group (All/Bullish/Bearish/Strong)', () => {
     const series = tenCurrencySeries();
     const latest = latestFrom(series);
     const html = render(series, latest);
-    expect(html).toContain('data-filter="all"');
-    expect(html).toContain('data-filter="bullish"');
-    expect(html).toContain('data-filter="bearish"');
-    expect(html).toContain('data-filter="strong"');
+    // The filter chips are the canonical shared SegmentedControl (role="group"
+    // + aria-pressed segments) rather than raw buttons (#4306).
+    expect(html).toContain('data-slot="segmented"');
+    expect(html).toContain('role="group"');
+    expect(html).toContain('aria-label="Filter rows"');
+    for (const label of ['All', 'Bullish', 'Bearish', 'Strong']) {
+      expect(html).toContain(`>${label}</button>`);
+    }
   });
 
   it('labels the trailing five-run score as Average', () => {
@@ -160,7 +164,8 @@ describe('ConsensusDataTable component', () => {
     const series = tenCurrencySeries();
     const latest = latestFrom(series);
     const html = render(series, latest, EMPTY_DELTAS, 'bullish');
-    expect(html).toMatch(/data-filter="bullish"[^>]*aria-pressed="true"/);
+    // The Bullish segment is the pressed one (aria-pressed lives on the segment).
+    expect(html).toMatch(/aria-pressed="true"[^>]*>Bullish<\/button>/);
   });
 
   it('renders currency in canonical order', () => {

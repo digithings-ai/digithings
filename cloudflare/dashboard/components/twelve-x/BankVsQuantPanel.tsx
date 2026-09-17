@@ -1,7 +1,16 @@
 'use client';
 
 import { useMemo, useState } from 'react';
-import { Card } from '@digithings/web/ui';
+import {
+  Button,
+  Card,
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@digithings/web/ui';
 import type { FxConsensusDivergence } from '@/lib/twelve-x/types';
 import type { ConsensusCurrencyRow } from '@/lib/twelve-x/consensus-view';
 import { currencyColor } from '@/lib/twelve-x/consensus-bar';
@@ -78,67 +87,69 @@ export function BankVsQuantPanel({
       <p className="font-mono text-xs font-medium uppercase tracking-[0.08em] text-ink-soft">
         Bank vs quant · {rows.filter((r) => r.isDivergent).length} divergent
       </p>
-      <div className="overflow-x-auto">
-        <table className="w-full min-w-[560px] border-collapse text-xs">
-          <thead>
-            <tr className="border-b border-hair text-[10px] uppercase tracking-wider text-ink-mute">
-              <th className="px-3 py-2 text-left font-medium">Currency</th>
-              <th className="px-3 py-2 text-left font-medium">Street</th>
-              <th className="px-3 py-2 text-left font-medium">Quant (PMT)</th>
-              <th className="px-3 py-2 text-right font-medium">Gap</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-hair">
-            {rows.map((row) => (
-              <tr key={row.currency}>
-                <td className="whitespace-nowrap px-3 py-2">
-                  <button
-                    type="button"
-                    onClick={() => setSelectedCcy(row.currency)}
-                    className="text-left hover:underline"
-                    title={row.label || row.currency}
+      <Table className="min-w-[560px]">
+        <TableHeader>
+          <TableRow className="text-[10px] uppercase tracking-wider text-ink-mute">
+            <TableHead className="px-3 py-2 text-ink-mute">Currency</TableHead>
+            <TableHead className="px-3 py-2 text-ink-mute">Street</TableHead>
+            <TableHead className="px-3 py-2 text-ink-mute">Quant (PMT)</TableHead>
+            <TableHead numeric className="px-3 py-2 text-ink-mute">
+              Gap
+            </TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {rows.map((row) => (
+            <TableRow key={row.currency}>
+              <TableCell className="px-3 py-2">
+                <Button
+                  type="button"
+                  variant="link"
+                  size="xs"
+                  onClick={() => setSelectedCcy(row.currency)}
+                  className="h-auto justify-start gap-0 p-0 text-left"
+                  title={row.label || row.currency}
+                >
+                  <span
+                    className="font-mono font-semibold text-[13px]"
+                    style={{ color: currencyColor(row.currency) }}
                   >
-                    <span
-                      className="font-mono font-semibold text-[13px]"
-                      style={{ color: currencyColor(row.currency) }}
-                    >
-                      {row.currency}
+                    {row.currency}
+                  </span>
+                  {row.isDivergent ? (
+                    <span className="ml-1.5 border border-warn px-1 font-mono text-[10px] text-warn">
+                      DIV
                     </span>
-                    {row.isDivergent ? (
-                      <span className="ml-1.5 border border-warn px-1 font-mono text-[10px] text-warn">
-                        DIV
-                      </span>
-                    ) : null}
-                  </button>
-                </td>
-                <td className="px-3 py-2">
-                  <div className="flex items-center gap-2">
-                    <div className="flex min-w-[100px] flex-1">
-                      <ConsensusScoreBar value={row.streetScore} />
-                    </div>
-                    <span className="font-mono tabular-nums text-ink-soft">
-                      {fmtSigned(row.streetScore)}
-                    </span>
+                  ) : null}
+                </Button>
+              </TableCell>
+              <TableCell className="px-3 py-2">
+                <div className="flex items-center gap-2">
+                  <div className="flex min-w-[100px] flex-1">
+                    <ConsensusScoreBar value={row.streetScore} />
                   </div>
-                </td>
-                <td className="px-3 py-2">
-                  <div className="flex items-center gap-2">
-                    <div className="flex min-w-[100px] flex-1">
-                      <ConsensusScoreBar value={row.quantScore} />
-                    </div>
-                    <span className="font-mono tabular-nums text-ink-soft">
-                      {fmtSigned(row.quantScore)}
-                    </span>
+                  <span className="font-mono tabular-nums text-ink-soft">
+                    {fmtSigned(row.streetScore)}
+                  </span>
+                </div>
+              </TableCell>
+              <TableCell className="px-3 py-2">
+                <div className="flex items-center gap-2">
+                  <div className="flex min-w-[100px] flex-1">
+                    <ConsensusScoreBar value={row.quantScore} />
                   </div>
-                </td>
-                <td className="whitespace-nowrap px-3 py-2 text-right font-mono tabular-nums text-ink">
-                  {row.gap.toFixed(2)}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+                  <span className="font-mono tabular-nums text-ink-soft">
+                    {fmtSigned(row.quantScore)}
+                  </span>
+                </div>
+              </TableCell>
+              <TableCell numeric className="px-3 py-2 font-mono text-ink">
+                {row.gap.toFixed(2)}
+              </TableCell>
+            </TableRow>
+          ))}
+        </TableBody>
+      </Table>
 
       <DivergencePanel
         open={!!selected}

@@ -2,6 +2,7 @@
 
 import { Clock, ExternalLink, X } from 'lucide-react';
 import { Sheet, SheetContent, SheetTitle } from '@digithings/web';
+import { Button } from '@digithings/web/ui';
 
 import type { MatrixCell } from '@/lib/twelve-x/types';
 import { directionStyle } from '@/lib/twelve-x/matrix-format';
@@ -48,14 +49,16 @@ export function MatrixCellHistoryPanelBody({
             <span className="tabular-nums">{totalViews} views</span> over recent window
           </div>
         </div>
-        <button
+        <Button
           type="button"
+          variant="ghost"
+          size="icon"
           onClick={onClose}
           aria-label="Close"
-          className="-mr-1.5 -mt-1.5 flex h-11 w-11 shrink-0 items-center justify-center rounded-none text-ink-mute transition-colors hover:bg-ink/[0.06] hover:text-ink sm:h-9 sm:w-9"
+          className="-mr-1.5 -mt-1.5 h-11 w-11 shrink-0 text-ink-mute hover:bg-ink/[0.06] hover:text-ink sm:h-9 sm:w-9"
         >
-          <X size={18} aria-hidden />
-        </button>
+          <X size={18} aria-hidden className="size-[18px]" />
+        </Button>
       </div>
 
       <div className="min-h-0 flex-1 space-y-2 overflow-y-auto px-5 pt-4 pb-[max(1rem,env(safe-area-inset-bottom))]">
@@ -92,13 +95,15 @@ export function MatrixCellHistoryPanelBody({
                 <p className="mt-1 text-xs leading-snug text-ink-soft">{view.rationale}</p>
               ) : null}
 
-              <button
+              <Button
                 type="button"
+                variant="link"
+                size="xs"
                 onClick={() => onOpenBrief(view.source_file, view.run_date)}
-                className="mt-2 inline-flex items-center gap-1 text-[11px] font-medium text-accent hover:underline"
+                className="mt-2 h-auto gap-1 p-0 text-[11px] font-medium text-accent"
               >
-                Open brief <ExternalLink size={11} aria-hidden />
-              </button>
+                Open brief <ExternalLink size={11} aria-hidden className="size-3" />
+              </Button>
             </div>
           );
         })}

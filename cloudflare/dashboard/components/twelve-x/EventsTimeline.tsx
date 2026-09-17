@@ -1,6 +1,7 @@
 'use client';
 
 import { useLayoutEffect, useRef, useState } from 'react';
+import { SegmentedControl } from '@digithings/web';
 import { eventInstant, eventLocalDateKey } from '@/lib/twelve-x/fetch';
 import type { FxEconomicCalendarRow } from '@/lib/twelve-x/types';
 
@@ -264,21 +265,16 @@ export default function EventsTimeline({ events, mode, day, onSelect, selectable
       {mode === 'multi' ? (
         <div className="flex flex-wrap items-center gap-2.5">
           <span className="text-[11px] uppercase tracking-[0.08em] text-ink-mute">Scale</span>
-          <div className="inline-flex overflow-hidden rounded-none border border-hair text-[11px]">
-            {(['day', 'hour'] as const).map((s) => (
-              <button
-                key={s}
-                type="button"
-                onClick={() => setScale(s)}
-                aria-pressed={scale === s}
-                className={`px-2.5 py-1 capitalize transition-colors ${
-                  scale === s ? 'bg-accent/20 text-accent' : 'text-ink-mute hover:text-ink-soft'
-                }`}
-              >
-                {s}
-              </button>
-            ))}
-          </div>
+          <SegmentedControl
+            options={[
+              { value: 'day', label: 'Day' },
+              { value: 'hour', label: 'Hour' },
+            ]}
+            value={scale}
+            onChange={setScale}
+            dress="accent"
+            aria-label="Timeline scale"
+          />
           <span className="ml-auto inline-flex flex-wrap gap-3 text-[11px] text-ink-mute" aria-hidden>
             <span className="inline-flex items-center gap-1.5">
               <span className="h-2 w-2 rounded-full bg-warn" /> High
