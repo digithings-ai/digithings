@@ -107,7 +107,7 @@ digichat forwards `X-Digi-Corpus-Index` / `X-Digi-Vault-Prefix`; digigraph
 `corpus_routing` applies them to digisearch / digivault tools.
 
 The OCC tenant also gets the read-only Zammad ticket MCP (`search_tickets` /
-`get_ticket` / `ticket_report`) via the `mcp.servers` entry in the live tenant
+`list_tickets` / `get_ticket` / `ticket_report`) via the `mcp.servers` entry in the live tenant
 JSON below. `zammad-mcp` is not a separate Cloudflare container — it runs as a
 program inside the `digithings-stack` container (see
 [`scripts/zammad_mcp/README.md`](../../scripts/zammad_mcp/README.md), §

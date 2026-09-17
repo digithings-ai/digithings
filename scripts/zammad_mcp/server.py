@@ -17,6 +17,7 @@ from scripts.zammad_mcp.client import ZammadClient, ZammadError, keyword_terms
 from scripts.zammad_mcp.formatting import (
     format_search_results,
     format_ticket_detail,
+    format_ticket_list,
     format_ticket_report,
 )
 
@@ -62,6 +63,11 @@ def search_tickets(query: str, limit: int = 10) -> str:
     ``tags:``, AND/OR) only works when the Zammad instance has
     Elasticsearch; otherwise it silently matches nothing. For "what's open
     or closed", prefer ticket_report.
+
+    Tickets here are written in German and English; a keyword only matches
+    the words actually stored in a ticket, so English terms never find
+    German text. When a search comes back empty, retry with German wording
+    or browse with list_tickets and read the tickets directly.
     """
     client = _client()
     try:
@@ -76,6 +82,25 @@ def search_tickets(query: str, limit: int = 10) -> str:
     except ZammadError as exc:
         return f"zammad error: {exc}"
     return format_search_results(query, tickets, fallback_terms=fallback_terms)
+
+
+@mcp.tool()
+def list_tickets(page: int = 1, per_page: int = 50) -> str:
+    """Browse the visible Zammad tickets page by page (read-only).
+
+    Use this when keyword search misses. Tickets are written in German and
+    English and search is a literal substring match, so an English keyword
+    will not find German text; browsing returns titles in their original
+    language. Reading German tickets directly is fine — pull a full
+    conversation with get_ticket. Newest updated first, covering the 500
+    most recently updated visible tickets; keep going while a page comes
+    back full.
+    """
+    try:
+        tickets = _client().list_tickets_page(page=page, per_page=per_page)
+    except ZammadError as exc:
+        return f"zammad error: {exc}"
+    return format_ticket_list(tickets, page=page, per_page=per_page)
 
 
 @mcp.tool()
