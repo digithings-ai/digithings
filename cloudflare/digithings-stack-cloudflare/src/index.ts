@@ -50,8 +50,8 @@ export class DigiStackContainer extends Container {
    * behind the Chroma seed wait) are waited on per-request in fetch() instead.
    */
   requiredPorts = [DIGIGRAPH_PORT];
-  /** Keep warm — multi-process cold start is expensive. */
-  sleepAfter = "2h";
+  /** Cold starts are seamless (#4323), so keep the idle window short. */
+  sleepAfter = "15m";
 
   /**
    * Runtime env for supervisord processes. Secrets from `wrangler secret put`;
