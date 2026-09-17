@@ -160,11 +160,10 @@ export class DigiQuantMcpContainer extends Container {
   defaultPort = DIGIQUANT_MCP_PORT;
   requiredPorts = [DIGIQUANT_MCP_PORT];
   /**
-   * Warm policy (min-instances-1 equivalent): daily reads plus the
-   * market-data-refresh cron backup ping keep this alive. A cold start only
-   * pays the FastMCP import, never a data load (R2 is the cache).
+   * Cold-start policy: a cold start pays only the FastMCP import, never a data
+   * load (R2 is the cache), so the container may sleep freely.
    */
-  sleepAfter = "24h";
+  sleepAfter = "15m";
 
   /**
    * Runtime env for the MCP process. Secrets from `wrangler secret put`.
