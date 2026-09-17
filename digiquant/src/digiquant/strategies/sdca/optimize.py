@@ -28,7 +28,10 @@ from digiquant.strategies.sdca.indicator_catalog import (
     load_date_value_frame,
     missing_extra_names,
 )
-from digiquant.strategies.sdca.price_oscillators import SdcaOscillatorSpec, price_oscillator_z_vectors
+from digiquant.strategies.sdca.price_oscillators import (
+    SdcaOscillatorSpec,
+    price_oscillator_z_vectors,
+)
 from digiquant.strategies.sdca.risk_model import RiskModel
 from digiquant.strategies.sdca.walk_forward import (
     SENSITIVITY_SPIKE_PCT,
@@ -218,6 +221,12 @@ def load_sdca_extra_sources(root: Path | str | None) -> ExtraIndicatorSources:
     onchain_addr_ratio_path = _coinmetrics_path(
         ("ONCHAIN_ADDR_RATIO.csv", "COINMETRICS_ADRACTCNT.csv"), "btc_AdrActCnt"
     )
+    # alternative.me's own client caches under data/onchain/fear_greed/
+    # (sibling of data/price-history/), same layout as Bitview/CoinMetrics.
+    fear_greed_path = _first_existing(base, ("FEAR_GREED.csv", "FNG.csv"))
+    if fear_greed_path is None:
+        cache = base.parent / "onchain" / "fear_greed" / "fear_greed.parquet"
+        fear_greed_path = cache if cache.exists() else None
     m2_dates, m2_values = load_date_value_frame(m2_path) if m2_path else (None, None)
     eth_dates, eth_close = load_date_value_frame(eth_path) if eth_path else (None, None)
     dxy_dates, dxy_values = load_date_value_frame(dxy_path) if dxy_path else (None, None)
@@ -236,6 +245,9 @@ def load_sdca_extra_sources(root: Path | str | None) -> ExtraIndicatorSources:
     onchain_addr_ratio_dates, onchain_addr_ratio_values = (
         load_date_value_frame(onchain_addr_ratio_path) if onchain_addr_ratio_path else (None, None)
     )
+    fear_greed_dates, fear_greed_values = (
+        load_date_value_frame(fear_greed_path) if fear_greed_path else (None, None)
+    )
     return ExtraIndicatorSources(
         m2_dates=m2_dates,
         m2_values=m2_values,
@@ -253,6 +265,8 @@ def load_sdca_extra_sources(root: Path | str | None) -> ExtraIndicatorSources:
         onchain_rhodl_values=onchain_rhodl_values,
         onchain_addr_ratio_dates=onchain_addr_ratio_dates,
         onchain_addr_ratio_values=onchain_addr_ratio_values,
+        fear_greed_dates=fear_greed_dates,
+        fear_greed_values=fear_greed_values,
     )
 
 
@@ -278,6 +292,8 @@ def drop_extras_missing_sources(
         payload["onchain_rhodl"] = 0.0
     if payload["onchain_addr_ratio"] > 0.0 and sources.onchain_addr_ratio_dates is None:
         payload["onchain_addr_ratio"] = 0.0
+    if payload["fear_greed"] > 0.0 and sources.fear_greed_dates is None:
+        payload["fear_greed"] = 0.0
     return SdcaCompositeWeights(**payload)
 
 
@@ -322,6 +338,7 @@ def load_sdca_extra_z(
         onchain_puell=1.0 if sources.onchain_puell_dates is not None else 0.0,
         onchain_rhodl=1.0 if sources.onchain_rhodl_dates is not None else 0.0,
         onchain_addr_ratio=1.0 if sources.onchain_addr_ratio_dates is not None else 0.0,
+        fear_greed=1.0 if sources.fear_greed_dates is not None else 0.0,
     )
     extra.update(extra_z_vectors(date_s, price_s, weights, sources, oscillators=oscillators))
     return extra
