@@ -753,6 +753,35 @@ it("surfaces delta.digigraph_error as a stream error for BYOK handoff", async ()
   });
 });
 
+it("settles the reasoning part when the turn errors mid-stream", async () => {
+  vi.spyOn(globalThis, "fetch").mockResolvedValue(
+    new Response(
+      [
+        `data: ${JSON.stringify({ choices: [{ delta: { reasoning_content: "Checking the corpus" } }] })}\n\n`,
+        `data: ${JSON.stringify({ choices: [{ delta: { digigraph_error: { code: "upstream_error", message: "boom" } } }] })}\n\n`,
+        "data: [DONE]\n\n",
+      ].join(""),
+      { status: 200, headers: { "content-type": "text/event-stream" } },
+    ),
+  );
+
+  const res = await createDigigraphTraceStreamResponse({
+    messages: [userMessage("hi")],
+    digigraphBaseUrl: "https://digigraph.internal",
+    upstreamHeaders: {},
+    responseHeaders: {},
+    activityDetail: "off",
+  });
+  const body = await new Response(res.body).text();
+
+  expect(body).toContain("upstream_error");
+  const reasoningEnd = body.indexOf("reasoning-end");
+  const errorIndex = body.indexOf('"errorText"');
+  expect(reasoningEnd).toBeGreaterThan(-1);
+  expect(errorIndex).toBeGreaterThan(-1);
+  expect(reasoningEnd).toBeLessThan(errorIndex);
+});
+
 it("strips Open WebUI tool dumps from streamed answer text", async () => {
   vi.spyOn(globalThis, "fetch").mockResolvedValue(
     new Response(
