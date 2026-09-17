@@ -212,7 +212,9 @@ def forecast_outcome_hash_payload(
             None if maturity_snapshot is None else maturity_snapshot.model_dump(mode="json")
         ),
         "forecast_mean_return": (
-            None if forecast_mean_return is None else canonical_return_fraction(forecast_mean_return)
+            None
+            if forecast_mean_return is None
+            else canonical_return_fraction(forecast_mean_return)
         ),
         "realized_return": (
             None if realized_return is None else canonical_return_fraction(realized_return)

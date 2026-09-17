@@ -60,7 +60,6 @@ class ForecastOutcomeIntegrityError(RuntimeError):
     """
 
 
-
 @dataclass(frozen=True)
 class OutcomeResolveResult:
     """Counts from one :func:`resolve_matured_forecast_outcomes` pass."""

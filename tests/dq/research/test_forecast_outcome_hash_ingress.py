@@ -174,7 +174,9 @@ class TestPrefixHashGuard:
 
     def test_daily_reader_fails_loud_instead_of_skipping(self) -> None:
         """The house reflect path must not silently drop a stale persisted row."""
-        with pytest.raises(fo.ForecastOutcomeIntegrityError, match="repair_forecast_outcome_hashes"):
+        with pytest.raises(
+            fo.ForecastOutcomeIntegrityError, match="repair_forecast_outcome_hashes"
+        ):
             _ingress(_stale_row())
 
 
