@@ -133,11 +133,21 @@ def format_ticket_line(ticket: dict[str, Any]) -> str:
     return f"{head} | {tail}" if tail else head
 
 
-def format_search_results(query: str, tickets: list[dict[str, Any]]) -> str:
+def format_search_results(
+    query: str,
+    tickets: list[dict[str, Any]],
+    fallback_terms: list[str] | None = None,
+) -> str:
     """Render a search response for the model."""
     if not tickets:
+        if fallback_terms:
+            tried = ", ".join(fallback_terms)
+            return f'No tickets matched: "{query}" (also tried keywords: {tried})'
         return f'No tickets matched: "{query}"'
-    lines = [f'Found {len(tickets)} ticket(s) for: "{query}"']
+    header = f'Found {len(tickets)} ticket(s) for: "{query}"'
+    if fallback_terms:
+        header += f" (matched as keywords: {', '.join(fallback_terms)})"
+    lines = [header]
     lines.extend(format_ticket_line(ticket) for ticket in tickets)
     return "\n".join(lines)
 

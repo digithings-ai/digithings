@@ -11,6 +11,7 @@ committed.
 from __future__ import annotations
 
 import os
+import re
 from typing import Any, Callable
 
 import httpx
@@ -19,12 +20,51 @@ DEFAULT_BASE_URL = "https://ticket.sitaas.de"
 MAX_SEARCH_LIMIT = 50
 MAX_REPORT_TICKETS = 500
 PAGE_SIZE = 100
+MAX_KEYWORD_TERMS = 5
+MIN_KEYWORD_LENGTH = 2
 
 JsonGetter = Callable[..., Any]
+
+_FIELD_QUERY_RE = re.compile(r"[A-Za-z_][A-Za-z0-9_.]*:(\([^)]*\)|\"(?:[^\"\\]|\\.)*\"|\S+)")
+_KEYWORD_NOISE_RE = re.compile(r"[~*()\"']")
+_TERM_TRIM = ".,;:!?[]{}<>"
+_KEYWORD_STOPWORDS = frozenset({"and", "or", "not", "to"})
 
 
 class ZammadError(RuntimeError):
     """Raised for configuration, transport, or response errors."""
+
+
+def keyword_terms(query: str) -> list[str]:
+    """Extract plain keywords from a Zammad search query.
+
+    Without Elasticsearch, ticket search only matches the whole query string
+    as one substring, so field syntax (``state.name:open``) and long
+    multi-word phrases silently match nothing. Field values are kept so a
+    caller can retry the terms one by one.
+    """
+    stripped = _FIELD_QUERY_RE.sub(lambda match: f" {match.group(1)} ", query or "")
+    stripped = _KEYWORD_NOISE_RE.sub(" ", stripped)
+    terms: list[str] = []
+    seen: set[str] = set()
+    for raw in stripped.split():
+        term = raw.strip(_TERM_TRIM)
+        if len(term) < MIN_KEYWORD_LENGTH:
+            continue
+        lowered = term.lower()
+        if lowered in _KEYWORD_STOPWORDS or lowered in seen:
+            continue
+        seen.add(lowered)
+        terms.append(term)
+        if len(terms) >= MAX_KEYWORD_TERMS:
+            break
+    return terms
+
+
+def _updated_sort_key(ticket: dict[str, Any]) -> str:
+    """Sort key for merged keyword results: newest first, unknown last."""
+    value = ticket.get("updated_at")
+    return str(value) if value else ""
 
 
 def _http_get_json(
@@ -89,40 +129,93 @@ class ZammadClient:
             timeout=self.timeout,
         )
 
+    def _coerce_limit(self, limit: int) -> int:
+        try:
+            return max(1, min(int(limit), MAX_SEARCH_LIMIT))
+        except (TypeError, ValueError) as exc:
+            raise ZammadError("limit must be an integer") from exc
+
+    def _search_rows(self, payload: Any) -> list[dict[str, Any]]:
+        rows: Any = payload
+        if isinstance(payload, dict):
+            rows = None
+            for key in ("tickets", "records", "objects"):
+                value = payload.get(key)
+                if isinstance(value, list):
+                    rows = value
+                    break
+        if not isinstance(rows, list):
+            raise ZammadError("unexpected Zammad search payload")
+        return [row for row in rows if isinstance(row, dict)]
+
     def search_tickets(self, query: str, limit: int = 10) -> list[dict[str, Any]]:
         """Search tickets (Zammad ticket search syntax). Read-only."""
         cleaned = (query or "").strip()
         if not cleaned:
             raise ZammadError("search requires a non-empty query")
-        try:
-            capped = max(1, min(int(limit), MAX_SEARCH_LIMIT))
-        except (TypeError, ValueError) as exc:
-            raise ZammadError("limit must be an integer") from exc
+        capped = self._coerce_limit(limit)
         payload = self._get(
             "/api/v1/tickets/search",
             {"query": cleaned, "limit": capped, "expand": "true"},
         )
-        if isinstance(payload, dict):
-            rows = payload.get("tickets")
-        else:
-            rows = payload
-        if not isinstance(rows, list):
-            raise ZammadError("unexpected Zammad search payload")
-        return [row for row in rows if isinstance(row, dict)]
+        return self._search_rows(payload)
+
+    def search_tickets_by_terms(self, terms: list[str], limit: int = 10) -> list[dict[str, Any]]:
+        """Search each keyword separately and merge the matches. Read-only.
+
+        Search semantics differ by instance: multi-word queries and field
+        syntax only work with Elasticsearch. Term-by-term search is the
+        fallback for instances that only do a substring match.
+        """
+        capped = self._coerce_limit(limit)
+        merged: dict[Any, dict[str, Any]] = {}
+        for term in terms[:MAX_KEYWORD_TERMS]:
+            for row in self.search_tickets(term, limit=capped):
+                key = row.get("id")
+                if key is None or key in merged:
+                    continue
+                merged[key] = row
+        ordered = sorted(merged.values(), key=_updated_sort_key, reverse=True)
+        return ordered[:capped]
 
     def _coerce_id(self, ticket_id: int | str) -> int:
         try:
-            tid = int(ticket_id)
+            tid = int(str(ticket_id).strip().lstrip("#"))
         except (TypeError, ValueError) as exc:
             raise ZammadError("ticket id must be a positive integer") from exc
         if tid < 1:
             raise ZammadError("ticket id must be a positive integer")
         return tid
 
+    def _resolve_ticket_number(self, tid: int, exc: ZammadError) -> int | None:
+        """Map a ticket number (shown as ``#28312``) to its internal id.
+
+        The show endpoint only serves internal ids, so a lookup by ticket
+        number returns 404; a number search finds the real id instead.
+        """
+        if "HTTP 404" not in str(exc):
+            return None
+        try:
+            rows = self.search_tickets(str(tid), limit=MAX_SEARCH_LIMIT)
+        except ZammadError:
+            return None
+        for row in rows:
+            if str(row.get("number")) == str(tid):
+                resolved = row.get("id")
+                if isinstance(resolved, int) and resolved > 0:
+                    return resolved
+        return None
+
     def get_ticket(self, ticket_id: int | str) -> dict[str, Any]:
-        """Fetch one ticket by id, with relation names expanded. Read-only."""
+        """Fetch one ticket by internal id or ticket number. Read-only."""
         tid = self._coerce_id(ticket_id)
-        payload = self._get(f"/api/v1/tickets/{tid}", {"expand": "true"})
+        try:
+            payload = self._get(f"/api/v1/tickets/{tid}", {"expand": "true"})
+        except ZammadError as exc:
+            resolved = self._resolve_ticket_number(tid, exc)
+            if resolved is None:
+                raise
+            payload = self._get(f"/api/v1/tickets/{resolved}", {"expand": "true"})
         if not isinstance(payload, dict):
             raise ZammadError("unexpected Zammad ticket payload")
         return payload

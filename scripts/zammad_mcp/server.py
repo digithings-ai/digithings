@@ -13,7 +13,7 @@ import os
 
 from mcp.server.fastmcp import FastMCP
 
-from scripts.zammad_mcp.client import ZammadClient, ZammadError
+from scripts.zammad_mcp.client import ZammadClient, ZammadError, keyword_terms
 from scripts.zammad_mcp.formatting import (
     format_search_results,
     format_ticket_detail,
@@ -53,23 +53,43 @@ def _client() -> ZammadClient:
 def search_tickets(query: str, limit: int = 10) -> str:
     """Search Zammad tickets (read-only).
 
-    Uses Zammad's ticket search syntax, e.g. ``state.name:open``,
-    ``group.name:Sitaas``, ``priority.name:"2 normal"``, ``owner.email:``,
-    ``article.body:term``, ``tags:``. Combine terms with AND/OR.
+    Plain words always work: a query matches ticket title, number, and
+    article body/from/to/subject as a substring. Multi-word queries are
+    first matched as one phrase, then retried keyword by keyword.
+
+    Field syntax (``state.name:open``, ``group.name:Sitaas``,
+    ``priority.name:"2 normal"``, ``owner.email:``, ``article.body:term``,
+    ``tags:``, AND/OR) only works when the Zammad instance has
+    Elasticsearch; otherwise it silently matches nothing. For "what's open
+    or closed", prefer ticket_report.
     """
+    client = _client()
     try:
-        tickets = _client().search_tickets(query, limit=limit)
+        tickets = client.search_tickets(query, limit=limit)
+        fallback_terms: list[str] = []
+        cleaned = (query or "").strip()
+        if not tickets and cleaned:
+            terms = keyword_terms(cleaned)
+            if terms and terms != [cleaned]:
+                fallback_terms = terms
+                tickets = client.search_tickets_by_terms(terms, limit=limit)
     except ZammadError as exc:
         return f"zammad error: {exc}"
-    return format_search_results(query, tickets)
+    return format_search_results(query, tickets, fallback_terms=fallback_terms)
 
 
 @mcp.tool()
-def get_ticket(ticket_id: int) -> str:
-    """Fetch one Zammad ticket with all of its articles (read-only)."""
+def get_ticket(ticket_id: int | str) -> str:
+    """Fetch one Zammad ticket with all of its articles (read-only).
+
+    Accepts the internal id (``231``) or the ticket number shown as
+    ``#28312``; a number is resolved to its internal id automatically.
+    """
+    client = _client()
     try:
-        ticket = _client().get_ticket(ticket_id)
-        articles = _client().get_articles(ticket_id)
+        ticket = client.get_ticket(ticket_id)
+        resolved_id = ticket.get("id") or ticket_id
+        articles = client.get_articles(resolved_id)
     except ZammadError as exc:
         return f"zammad error: {exc}"
     return format_ticket_detail(ticket, articles)
