@@ -4,11 +4,12 @@
  * metrics add context, and a flat hairline ledger carries the working detail.
  * Static data, token-only dress.
  *
- * Wave 1 (T6): the ledger is the controls-layer kit `Table`
- * (`@digithings/web`), and the whole component's `dw-*` grammar — which had
- * no CSS owner anywhere in the app (every `dw-*` token was dead at the call
- * site, the `.dw-table` ledger included) — is rewritten with token-backed
- * utilities that mirror the styled `.pw-*` sibling on the same page family.
+ * Wave 1 (T6): the ledger is the kit `Table`, and the whole component's
+ * `dw-*` grammar — which had no CSS owner anywhere in the app (every `dw-*`
+ * token was dead at the call site, the `.dw-table` ledger included) — is
+ * rewritten with token-backed utilities that mirror the styled `.pw-*`
+ * sibling on the same page family. Wave 4: the last controls-layer Table
+ * import was re-pointed onto `@digithings/web/ui`.
  */
 
 import {
@@ -18,7 +19,7 @@ import {
   TableHead,
   TableHeader,
   TableRow,
-} from "@digithings/web";
+} from "@digithings/web/ui";
 
 const DECISIONS = [
   {

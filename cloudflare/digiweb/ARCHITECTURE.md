@@ -144,7 +144,12 @@ Waves 0–3 of the shadcn migration (#4206) built the **`ui`** family — the
 first *vendored* package family (stock shadcn/ui on Base UI, `base-lyra`
 preset), with no sheet of its own (all utilities, same bridge). After wave 3 it
 is **the only primitive source** for every part it covers; the controls layer
-survives only where the kit has no equivalent.
+survives only where the kit has no equivalent. Wave 4's W4-P1 closed three of
+those gaps — Table `numeric`/`density` and the new `TableRowHeader`
+(`<th scope="row">`), Select composition (`SelectPopup` + exported
+`SelectItemIndicator`), and the Badge `neutral`/`accent`/`warn`/`up`/`down`
+tones — so the consumers still pinned to `components/controls/*` for those
+parts can move onto the kit.
 
 | Family | Components | CSS subpath |
 | ------ | ---------- | ----------- |

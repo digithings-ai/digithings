@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { tabId, tabPanelId } from "@digithings/web";
+import { Button } from "@digithings/web/ui";
 
 const INSTALL = [
   { id: "docker", label: "docker", code: "docker compose up -d" },
@@ -28,14 +29,15 @@ function CopyButton({ text, k, copied, onCopy }: {
 }) {
   const is = copied === k;
   return (
-    <button
+    <Button
       type="button"
-      className={`cs-copy${is ? " is-copied" : ""}`}
+      variant="ghost"
+      className={`cs-copy h-auto hover:bg-transparent${is ? " is-copied" : ""}`}
       onClick={() => onCopy(k, text)}
       aria-label={is ? "Copied" : "Copy to clipboard"}
     >
       {is ? "copied ✓" : "copy"}
-    </button>
+    </Button>
   );
 }
 
@@ -67,10 +69,11 @@ export function CodeSampleReference() {
           aria-label="Install method"
         >
           {INSTALL.map((t) => (
-            <button
+            <Button
               key={t.id}
               type="button"
               role="tab"
+              variant="ghost"
               id={tabId("Install method", t.id)}
               aria-selected={t.id === tab}
               // Every tab controls the SAME single panel below (its content
@@ -80,11 +83,11 @@ export function CodeSampleReference() {
               // would reference a panel id that never exists in the DOM for
               // any tab besides the active one.
               aria-controls={tabPanelId("Install method", tab)}
-              className={`cs-tab${t.id === tab ? " on" : ""}`}
+              className={`cs-tab h-auto hover:bg-transparent${t.id === tab ? " on" : ""}`}
               onClick={() => setTab(t.id)}
             >
               {t.label}
-            </button>
+            </Button>
           ))}
           <CopyButton text={active.code} k="install" copied={copied} onCopy={onCopy} />
         </div>

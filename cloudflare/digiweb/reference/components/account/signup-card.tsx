@@ -2,18 +2,18 @@
 
 import { useState, type FormEvent } from "react";
 
-import { Checkbox } from "@digithings/web";
-import { Button, Input, Label, Separator } from "@digithings/web/ui";
+import { Button, Checkbox, Input, Label, Separator } from "@digithings/web/ui";
 
 /**
  * Sign-up — the account-creation card, same grammar as sign-in with a live
  * password-strength meter and OAuth fallbacks (Google / GitHub) under a hairline.
  *
  * Wave 1: fields are the stock kit — Input/Label/Separator/Button from
- * `@digithings/web/ui`; the terms row pairs a `@digithings/web` controls-layer
- * Checkbox with a Label (the form-fields grammar). The strength meter keeps
- * its four-segment grid on call-site utilities; the terms/checkbox dress and
- * the `.acct-*` field dress are gone.
+ * `@digithings/web/ui`; the terms row pairs a Label with a Checkbox (the
+ * form-fields grammar). The strength meter keeps its four-segment grid on
+ * call-site utilities; the terms/checkbox dress and the `.acct-*` field dress
+ * are gone. Wave 4: the terms Checkbox is the stock kit
+ * (`@digithings/web/ui`, Base UI), not the controls layer.
  */
 
 const STRENGTH_WORDS = ["", "weak", "fair", "good", "strong"] as const;

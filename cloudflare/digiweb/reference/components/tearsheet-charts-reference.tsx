@@ -12,6 +12,7 @@
  * SVG is what makes the export crisp.
  */
 import { useCallback, useMemo, useState } from "react";
+import { Button } from "@digithings/web/ui";
 import {
   CandlestickChart,
   ChartLegend,
@@ -170,9 +171,11 @@ export function TearsheetChartsReference() {
         <span className="inline-block rounded-none border border-hair px-[0.6rem] py-[0.15rem] font-mono text-[0.58rem] uppercase tracking-[0.08em] text-ink-mute">
           Example data · not live
         </span>
-        <button
+        <Button
           type="button"
-          className="ts-reset ml-auto"
+          variant="outline"
+          size="sm"
+          className="ts-header-actions ml-auto h-auto font-normal"
           onClick={() =>
             runTearsheetPrint({
               documentTitle: "finance-tearsheet specimen — digiweb",
@@ -181,7 +184,7 @@ export function TearsheetChartsReference() {
           }
         >
           Download PDF
-        </button>
+        </Button>
       </div>
 
       <KpiStrip primary ariaLabel="Headline performance">

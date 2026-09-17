@@ -1,7 +1,6 @@
 "use client";
 
 import {
-  Badge,
   GitHubGlyph,
   Spinner,
   Tooltip,
@@ -10,6 +9,7 @@ import {
   TooltipTrigger,
 } from "@digithings/web";
 import {
+  Badge,
   Button,
   Card,
   CardContent,
@@ -25,10 +25,11 @@ import {
  * consume. Wave 3: Button (primary→default, ghost, quiet→outline,
  * danger→destructive, icon→ghost size=icon, loading→disabled+inline spinner),
  * Input + Label and the Card frame are the canonical kit parts
- * (`@digithings/web/ui`). Badge (accent/warn/up/down tone labels) and the
- * reference-skin Tooltip stay on the controls layer — the kit carries neither
- * the semantic badge tones nor a `skin` prop yet (see the Task-1b gap list in
- * the wave-3 SDD dir). This specimen keeps the controls sheets live.
+ * (`@digithings/web/ui`). Wave 4: Badge joined the kit — W4-P1 added the
+ * token-backed `neutral`/`accent`/`warn`/`up`/`down` tones, so this specimen
+ * now renders the canonical kit chip (flat, not the old mono/uppercase
+ * hairline `.ctl-badge-ref` dress). The reference-skin Tooltip stays on the
+ * controls layer — the kit has no `skin` prop yet.
  */
 export function ControlsLayerReference() {
   return (
@@ -37,10 +38,10 @@ export function ControlsLayerReference() {
         <p className="kicker">{"// controls layer"}</p>
         <h2 className="title">The shipped atoms, reference dress.</h2>
         <p className="section-copy">
-          <code>Button</code>, <code>Card</code>, <code>Input</code> and <code>Label</code> from{" "}
-          <code>@digithings/web/ui</code> — the canonical kit. <code>Badge</code> (accent / warn /
-          up / down tones) and the reference-skin <code>Tooltip</code> still come from{" "}
-          <code>@digithings/web</code>: the kit carries neither the semantic badge tones nor a{" "}
+          <code>Button</code>, <code>Card</code>, <code>Input</code>, <code>Label</code> and{" "}
+          <code>Badge</code> (neutral / accent / warn / up / down tones) from{" "}
+          <code>@digithings/web/ui</code> — the canonical kit. The reference-skin{" "}
+          <code>Tooltip</code> still comes from <code>@digithings/web</code>: the kit has no{" "}
           <code>skin</code> prop yet. Behavior comes from <code>@base-ui/react</code> either way.
         </p>
 
@@ -68,7 +69,7 @@ export function ControlsLayerReference() {
             badge
           </p>
           <div className="flex flex-wrap items-center gap-[0.6rem]">
-            <Badge>neutral</Badge>
+            <Badge variant="neutral">neutral</Badge>
             <Badge variant="accent">core</Badge>
             <Badge variant="warn">roadmap</Badge>
             <Badge variant="up">+2.4%</Badge>

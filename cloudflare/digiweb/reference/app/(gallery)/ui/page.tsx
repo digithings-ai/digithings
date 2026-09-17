@@ -95,9 +95,9 @@ export default function UiProofPage() {
         <p className="kicker">{"// input"}</p>
         <h2 className="title">Search field.</h2>
         <div className="mt-[1.2rem] flex max-w-[26rem] flex-col gap-1.5">
-          <label className="kicker" htmlFor="proof-search">
+          <Label className="kicker" htmlFor="proof-search">
             Ticker
-          </label>
+          </Label>
           <Input id="proof-search" placeholder="Search tickers" />
         </div>
       </section>
@@ -297,9 +297,9 @@ export default function UiProofPage() {
           <Button variant="outline">Outline</Button>
         </div>
         <div className="mt-[1.2rem] flex max-w-[26rem] flex-col gap-1.5">
-          <label className="kicker" htmlFor="proof-livery-search">
+          <Label className="kicker" htmlFor="proof-livery-search">
             Ticker
-          </label>
+          </Label>
           <Input id="proof-livery-search" placeholder="Search tickers" />
         </div>
       </section>

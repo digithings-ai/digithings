@@ -3,6 +3,7 @@
 import { useRef, useState } from "react";
 import { m, useReducedMotion } from "motion/react";
 import { Emblem, modules } from "@digithings/web";
+import { Button } from "@digithings/web/ui";
 
 /**
  * Feature picker — one viewport that tours the modules: pick one from the rail
@@ -53,24 +54,25 @@ export function FeaturePickerReference() {
 
       <div className="fp-tabs" role="tablist" aria-label="Modules">
         {TOUR.map((mod, i) => (
-          <button
+          <Button
             key={mod.id}
             id={`fp-tab-${mod.id}`}
             ref={(el) => {
-              tabRefs.current[i] = el;
+              tabRefs.current[i] = el as HTMLButtonElement | null;
             }}
             type="button"
             role="tab"
+            variant="ghost"
             aria-selected={mod.id === active}
             aria-controls="fp-panel"
             tabIndex={mod.id === active ? 0 : -1}
-            className={`fp-tab accent-${mod.id}${mod.id === active ? " on" : ""}`}
+            className={`fp-tab h-auto accent-${mod.id}${mod.id === active ? " on" : ""}`}
             onClick={() => setActive(mod.id)}
             onKeyDown={(e) => onTabKeyDown(e, i)}
           >
             <Emblem id={mod.id} size={22} />
             <span>{mod.name}</span>
-          </button>
+          </Button>
         ))}
       </div>
 
