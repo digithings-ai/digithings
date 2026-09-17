@@ -38,6 +38,22 @@ describe("RepoHeatmap GitHub-style contributions", () => {
     expect(html).toMatch(/More/);
   });
 
+  it("wraps the month row, cell row and legend in one max-content frame", () => {
+    const html = renderToStaticMarkup(
+      <RepoHeatmap pulls={PULLS} weeks={4} end={new Date("2026-08-24T07:15:49Z")} />,
+    );
+    // The month labels are %-positioned, so their coordinate space must be the
+    // grid width, not the wider scroll body — .ra-heat-frame gives them that
+    // (repo-activity.css). All three rows live inside the one frame, in order.
+    const frameAt = html.indexOf('class="ra-heat-frame"');
+    expect(frameAt).toBeGreaterThan(-1);
+    for (const part of ["ra-heat-months", "ra-heat-row", "ra-heat-grid", "ra-heat-foot"]) {
+      expect(html.indexOf(part)).toBeGreaterThan(frameAt);
+    }
+    expect(html.indexOf("ra-heat-months")).toBeLessThan(html.indexOf("ra-heat-grid"));
+    expect(html.indexOf("ra-heat-grid")).toBeLessThan(html.indexOf("ra-heat-foot"));
+  });
+
   it("renders a full grid of square cells with categorical levels", () => {
     const html = renderToStaticMarkup(
       <RepoHeatmap pulls={PULLS} weeks={4} end={new Date("2026-08-24T07:15:49Z")} />,

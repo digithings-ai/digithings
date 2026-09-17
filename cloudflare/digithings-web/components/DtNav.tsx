@@ -10,6 +10,7 @@
  */
 import Link from "next/link";
 import { NavShell, GitHubGlyph } from "@digithings/web";
+import { buttonVariants } from "@digithings/web/ui";
 import { Brand, DT_NAV_PRIMARY } from "@/app/_nav";
 import { DigiChatMark } from "@digithings/digichat-ui";
 
@@ -37,7 +38,7 @@ export function DtNav({ autoHide }: { autoHide?: "scroll" | "hover" }) {
         actions={
           <>
             <a
-              className="btn-icon"
+              className={buttonVariants({ variant: "ghost", size: "icon-sm" })}
               href="https://github.com/digithings-ai"
               target="_blank"
               rel="noopener noreferrer"
@@ -64,7 +65,11 @@ export function DtNav({ autoHide }: { autoHide?: "scroll" | "hover" }) {
           </>
         }
         cta={
-          <Link className="btn btn-primary" href="/chat" aria-label="Ask digichat">
+          <Link
+            className={buttonVariants({ variant: "default" })}
+            href="/chat"
+            aria-label="Ask digichat"
+          >
             <DigiChatMark size={18} />
             Ask digichat
           </Link>

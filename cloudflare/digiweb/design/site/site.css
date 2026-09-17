@@ -72,7 +72,19 @@ a { color: inherit; text-decoration: none; }
 .theme-toggle:hover { color: var(--ink); border-color: var(--hair-2); transform: translateY(-1px); }
 .theme-toggle svg { width: 17px; height: 17px; }
 
-/* ── buttons ────────────────────────────────────────────────────────── */
+/* ── buttons — DEPRECATED LEGACY ALIAS ──────────────────────────────────
+   The kit `buttonVariants` (@digithings/web/ui) is the canonical button
+   dress; wave-3 T2 migrated the last live consumer (digithings-web DtNav)
+   onto it. These rules stay only as the token alias for the two shared
+   components that still carry `.btn*` strings but are rendered by apps that
+   do NOT import this sheet — `components/chrome.tsx` `Nav` (an unused export)
+   and `components/account/AuthCard.tsx` (`.btn-primary`, already dressed by
+   the account styles). They resolve to the same `--ink`/`--bg` pair that
+   `buttonVariants`' `bg-primary`/`text-primary-foreground` compile to, so
+   `.btn-primary` ≡ `variant="default"`. Variant map for any new call site:
+   primary→default, ghost→ghost, sm→size="sm". Zero consumers among
+   site.css importers (digithings-web, digiquant-web) — retire with `Nav`
+   in the wave-3 close-out (Task 6). */
 .btn { display: inline-flex; align-items: center; gap: 0.5rem; font-family: var(--font-mono); font-size: 0.95rem; font-weight: 500; padding: 0.72rem 1.25rem; border-radius: 0; border: 1px solid var(--hair-2); cursor: pointer; white-space: nowrap; transition: transform 0.18s var(--ease), background 0.18s var(--ease), border-color 0.18s var(--ease), box-shadow 0.18s var(--ease); }
 .btn span[aria-hidden] { transition: transform 0.18s var(--ease); }
 .btn:hover span[aria-hidden] { transform: translateX(3px); }

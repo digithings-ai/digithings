@@ -90,7 +90,16 @@
 .doc-code:hover .docs-code-copy,
 .doc-code .docs-code-copy:focus-visible { opacity: 1; }
 
-/* ── field tables: row hairlines need combinators + a two-token mix ─────── */
+/* ── field tables: row hairlines need combinators + a two-token mix ───────
+   Wave-3 T2 re-audit: kept, not migrated to the canonical kit <Table/>.
+   The kit Table is a header/density component (p-2 cells, full-strength
+   `border-b`, text-xs) — Task 1b gap 6 records that it has no `density` or
+   `numeric` API, and this field table needs 0.3rem/0 top-biased density,
+   a 60%-mix hairline with no border on the last row, a nowrap name/type
+   pair beside a wrapping full-width description, and no header row. It is
+   the only consumer (docs/Endpoint.tsx:70). Migrating would mean overriding
+   every kit cell with counter-utilities — a re-style, not a promotion — so
+   it stays family CSS until kit Table grows the density/numeric API. */
 .doc-fields td {
   padding: 0.3rem 0.6rem 0.3rem 0;
   vertical-align: top;
