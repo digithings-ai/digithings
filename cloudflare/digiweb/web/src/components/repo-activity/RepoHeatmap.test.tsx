@@ -1,3 +1,6 @@
+// @vitest-environment happy-dom
+import { readFileSync } from "node:fs";
+import path from "node:path";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 
@@ -44,14 +47,23 @@ describe("RepoHeatmap GitHub-style contributions", () => {
     );
     // The month labels are %-positioned, so their coordinate space must be the
     // grid width, not the wider scroll body — .ra-heat-frame gives them that
-    // (repo-activity.css). All three rows live inside the one frame, in order.
-    const frameAt = html.indexOf('class="ra-heat-frame"');
-    expect(frameAt).toBeGreaterThan(-1);
+    // (repo-activity.css). Assert real DOM nesting (not substring order): the
+    // month/row/grid/foot nodes must all be descendants of the single frame, so
+    // an empty sibling frame can no longer satisfy this.
+    const container = document.createElement("div");
+    container.innerHTML = html;
+    const frame = container.querySelector(".ra-heat-frame");
+    expect(frame).toBeTruthy();
     for (const part of ["ra-heat-months", "ra-heat-row", "ra-heat-grid", "ra-heat-foot"]) {
-      expect(html.indexOf(part)).toBeGreaterThan(frameAt);
+      expect(frame!.querySelector(`.${part}`)).toBeTruthy();
     }
-    expect(html.indexOf("ra-heat-months")).toBeLessThan(html.indexOf("ra-heat-grid"));
-    expect(html.indexOf("ra-heat-grid")).toBeLessThan(html.indexOf("ra-heat-foot"));
+    // …and the frame really is the shared width container: without this rule
+    // the %-positioned month row spans the wider scroll body (the 172px drift).
+    const css = readFileSync(
+      path.resolve(process.cwd(), "src/styles/repo-activity.css"),
+      "utf8",
+    );
+    expect(css).toMatch(/\.ra-heat-frame\s*\{[^}]*width:\s*max-content/);
   });
 
   it("renders a full grid of square cells with categorical levels", () => {

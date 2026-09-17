@@ -76,8 +76,18 @@ describe('BrokersTab', () => {
     );
     expect(html).toContain('settings-brokers-tab');
     // Kit Select content is portal-only (T1b), so SSR renders the trigger, not
-    // the option rows (the retired controls SelectPopup rendered inline).
-    expect(html).toContain('data-testid="broker-select"');
+    // the option rows (the retired controls SelectPopup rendered inline). The
+    // trigger label comes from the SelectValue mapper
+    // (`value === 'ibkr' ? 'IBKR (beta)' : 'Alpaca'`, brokers-tab.tsx), so parse
+    // the SSR output and assert the default (alpaca) label on the trigger — a
+    // bare `toContain('Alpaca')` would also match the surrounding copy, and the
+    // option rows never appear server-side.
+    const host = document.createElement('div');
+    host.innerHTML = html;
+    const trigger = host.querySelector('[data-testid="broker-select"]');
+    expect(trigger).toBeTruthy();
+    expect(trigger?.textContent).toContain('Alpaca');
+    expect(trigger?.textContent).not.toContain('IBKR');
     expect(html).toContain('brokers-fills');
     expect(html).not.toContain(secret);
   });

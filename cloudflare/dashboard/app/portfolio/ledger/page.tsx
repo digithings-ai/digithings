@@ -7,7 +7,7 @@ import { SUBPAGE_MAX } from '@/components/layout-constants';
 import { EmptyState } from '@digithings/web';
 import { LockedSurface } from '@/components/locked-surface';
 import { useDashboard } from '@/lib/dashboard-context';
-import { can, type PlanTier } from '@/lib/entitlements';
+import { can } from '@/lib/entitlements';
 import { usePlanTier } from '@/lib/use-entitlement';
 
 /**
@@ -17,14 +17,8 @@ import { usePlanTier } from '@/lib/use-entitlement';
  * Tier: `house_weights_nav` (Baseline+). Fail-closed: LockedSurface renders
  * before loading/error chrome so Observer never waits on the book payload.
  */
-export default function PortfolioLedgerPage({
-  tier: tierOverride,
-}: {
-  /** Test override; production reads the session. */
-  tier?: PlanTier;
-} = {}) {
-  const sessionTier = usePlanTier();
-  const tier = tierOverride ?? sessionTier;
+export default function PortfolioLedgerPage() {
+  const tier = usePlanTier();
 
   // Fail-closed first — both orders (locked-then-loading / loading-then-locked).
   // Dashboard fetch stays in LedgerBody so Observer never hits loading chrome.

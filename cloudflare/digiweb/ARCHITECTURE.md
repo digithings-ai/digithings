@@ -148,7 +148,7 @@ survives only where the kit has no equivalent.
 
 | Family | Components | CSS subpath |
 | ------ | ---------- | ----------- |
-| `ui` | Alert, Badge, Button (+ `buttonVariants`), Card (+ parts), Checkbox, Collapsible, Dialog (+ parts), DropdownMenu (+ parts), Input, Label, Select (+ parts), Separator, Sheet (+ parts), Switch, Table (+ parts), Tabs, Textarea, Tooltip (+ parts), Spinner — barrel `web/src/ui/index.ts`, export `@digithings/web/ui` | — (utility-only; consumers add `@source "../../web/src/ui"`) |
+| `ui` | Alert, Badge, Button (+ `buttonVariants`), Card (+ parts), Checkbox, Collapsible, Dialog (+ parts), DropdownMenu (+ parts), Input, Label, Select (+ parts), Separator, Sheet (+ parts), Switch, Table (+ parts), Tabs, Textarea, Tooltip (+ parts) — barrel `web/src/ui/index.ts`, export `@digithings/web/ui` | — (utility-only; consumers add `@source "../../web/src/ui"`) |
 
 The five parts digichat needed a chat tone for carry the `dress="chat"` axis
 (Button/Card/Badge/Input/Label), which emits the existing `ctl-*-chat` classes
@@ -156,6 +156,10 @@ from `styles/controls-core.css` instead of the kit utilities; `Card` propagates
 `dress` to its parts through a context. Kit Table separators resolve to
 `border-border` (the hairline token), and the kit's focus fills use the neutral
 `secondary` surface (not the brand accent).
+
+`Spinner` is **not** part of the `ui` family: it lives in the main barrel
+(`web/src/index.ts` → `./components/Spinner`, export `@digithings/web`), so
+`import { Spinner } from '@digithings/web/ui'` is a build error.
 
 Refresh it with `npx shadcn@latest add <name>` inside `cloudflare/digiweb/web`
 (the `components.json` there is authoritative); local deltas stay limited to

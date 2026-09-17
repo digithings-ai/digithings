@@ -16,8 +16,13 @@
        primitives above are unaffected by the [data-theme] font/color layer. */
     .site-demo { font-family: var(--font-sans); color: var(--ink); }
     .site-demo .label { color: var(--ink-mute); }
-    /* Fixture-local CTA look (the retired site.css .btn family); site buttons
-       now come from the kit `buttonVariants` in React. */
+    /* Fixture-local CTA looks (the retired site.css .btn family); site buttons
+       now come from the kit `buttonVariants` in React. `.smoke-cta-primary` is
+       the kit's default dress (bg-primary → --ink, text-primary-foreground →
+       --bg, web-theme.css) so the fixture still demos a primary CTA; the
+       `.btn*` family stays retired. */
+    .smoke-cta-primary { display: inline-flex; align-items: center; gap: 0.5rem; font-family: var(--font-mono); font-size: 0.95rem; font-weight: 500; padding: 0.72rem 1.25rem; border: 1px solid var(--ink); border-radius: 0; background: var(--ink); color: var(--bg); white-space: nowrap; transition: transform 0.18s var(--ease); }
+    .smoke-cta-primary:hover { transform: translateY(-2px); }
     #smoke-theme-toggle { position: fixed; top: var(--space-4); right: var(--space-4); z-index: 10; padding: 0.5rem 0.95rem; border: 1px solid var(--hair-2); border-radius: 0; background: transparent; color: var(--ink); font-family: var(--font-mono); font-size: 0.88rem; cursor: pointer; }
     body {
       margin: 0;
@@ -403,7 +408,7 @@ await client.chat.send("hello");</code></pre>
           <li>Managed upgrades</li>
           <li>Hosted tracing (digismith)</li>
         </ul>
-        <div class="pricing__cta"><a class="closing-cta__secondary" href="#" onclick="return false;">Join the waitlist</a></div>
+        <div class="pricing__cta"><a class="smoke-cta-primary" href="#" onclick="return false;">Join the waitlist</a></div>
       </div>
       <div class="pricing__tier">
         <div class="pricing__name">Enterprise</div>
@@ -454,7 +459,7 @@ await client.chat.send("hello");</code></pre>
         <h2 class="closing-cta__title">Build your agent stack in the open.</h2>
         <p class="closing-cta__sub">Open-core orchestration, quant, RAG, and chat — self-hosted or bring your own key.</p>
         <div class="closing-cta__actions">
-          <a class="closing-cta__secondary" href="#" onclick="return false;">Start building</a>
+          <a class="smoke-cta-primary" href="#" onclick="return false;">Start building</a>
           <a class="closing-cta__secondary" href="#" onclick="return false;">Read the architecture <span aria-hidden="true">&rarr;</span></a>
         </div>
       </div>
@@ -464,7 +469,7 @@ await client.chat.send("hello");</code></pre>
         <h2 class="closing-cta__title">One graph, research to execution.</h2>
         <p class="closing-cta__sub">Backtest, optimize, and route strategies on NautilusTrader — research to execution.</p>
         <div class="closing-cta__actions">
-          <a class="closing-cta__secondary" href="#" onclick="return false;">Open dashboard</a>
+          <a class="smoke-cta-primary" href="#" onclick="return false;">Open dashboard</a>
           <a class="closing-cta__secondary" href="#" onclick="return false;">Browse strategies <span aria-hidden="true">&rarr;</span></a>
         </div>
       </div>

@@ -70,7 +70,7 @@ export default function InputsDocumentView({
           {rows.map(([label, value]) => (
             <TableRow key={label} className="hover:bg-ink/[0.02]">
               <TableCell className="text-ink-mute whitespace-nowrap">{label}</TableCell>
-              <TableCell className="text-ink-soft">{value}</TableCell>
+              <TableCell className="text-ink-soft whitespace-normal">{value}</TableCell>
             </TableRow>
           ))}
         </TableBody>
