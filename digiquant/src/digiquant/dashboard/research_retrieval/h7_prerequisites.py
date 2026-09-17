@@ -9,7 +9,10 @@ from uuid import UUID
 
 from digiquant.dashboard.research_retrieval.h7_decision_context import H7PrerequisiteSnapshot
 from digiquant.dashboard.temporal import require_utc_datetime
-from digiquant.research.forecast_outcomes import list_resolved_outcomes_as_of
+from digiquant.research.forecast_outcomes import (
+    ForecastOutcomeIntegrityError,
+    list_resolved_outcomes_as_of,
+)
 from digiquant.research.supabase_io import SupabaseClient
 
 logger = logging.getLogger(__name__)
@@ -100,6 +103,11 @@ def build_h7_prerequisite_snapshot(
                     if eid and eid not in resolved_effective
                 ]
                 unresolved_ids = tuple(sorted(set(unresolved)))
+            except ForecastOutcomeIntegrityError:
+                # #4298: a stale persisted digest must fail preflight loud with the
+                # named error (outcome_id + repair tool) — never fall through to a
+                # snapshot that silently omits the matured cohort.
+                raise
             except Exception as exc:
                 logger.debug("H7 prerequisites: forecast outcomes load failed (%s)", exc)
 
