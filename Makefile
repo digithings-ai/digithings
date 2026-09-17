@@ -319,9 +319,10 @@ secrets-scan:
 	}
 	@gitleaks detect --source . --config .gitleaks.toml --redact --verbose --no-banner
 
-# Compare the repo secret list (`gh secret list`) with every `secrets.*` read
-# under .github/. Reads with no repo-level secret are informational (they usually
-# resolve at org or environment level); a repo secret nothing reads exits 1.
+# Match every `secrets.*` read under .github/ against each level (repo secret, repo
+# variable, org secret, environment secret) and report `dead`, `not repo-level`,
+# `unresolved` and `repo-over-org`. `--strict` exits 1 on a dead repo secret;
+# `--strict-unresolved` does the same for a read no level defines.
 # Local check only — deliberately not a CI gate.
 .PHONY: secrets-audit
 secrets-audit:
