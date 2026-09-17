@@ -20,6 +20,7 @@ from digiquant.strategies.sdca.crash_override import apply_crash_override
 from digiquant.strategies.sdca.curve import AccumDistCurve
 from digiquant.strategies.sdca.curve_shape import SdcaCurveShape
 from digiquant.strategies.sdca.indicator_catalog import fast_crash_vol_z
+from digiquant.strategies.sdca.price_oscillators import SdcaOscillatorSpec
 from digiquant.strategies.sdca.risk_index import build_risk_index
 from digiquant.strategies.sdca.risk_model import RiskModel
 from digiquant.strategies.sdca.walk_forward import SdcaTrialMetrics
@@ -38,6 +39,7 @@ def evaluate_sdca_trial_curve_sim(
     initial_cash: float = DEFAULT_TRIAL_CASH,
     composite_rolling_window: int | None = None,
     composite_rolling_min_samples: int | None = None,
+    oscillators: SdcaOscillatorSpec | None = None,
     crash_override_enabled: bool = False,
     crash_override_window: int = 14,
     crash_override_min_samples: int = 7,
@@ -51,6 +53,13 @@ def evaluate_sdca_trial_curve_sim(
     of ``SdcaTrialEvaluator``'s Protocol signature, so bind it with
     ``functools.partial`` before passing this evaluator into Stage A /
     walk-forward search, the same way callers already bind ``initial_cash``.
+
+    ``oscillators`` likewise forwards to ``build_risk_index`` (default
+    ``SdcaOscillatorSpec()``'s production periods) so a period search's
+    frozen construction periods (e.g. ``power_law_trend_window``) can be
+    tested through walk-forward, not just through ``load_frozen_index``'s
+    single-shot index build. Bind it with ``functools.partial`` the same
+    way as ``composite_rolling_window``.
 
     ``crash_override_*`` (default: disabled, a no-op) applies
     ``crash_override.apply_crash_override`` to the finalized composite risk,
@@ -70,6 +79,7 @@ def evaluate_sdca_trial_curve_sim(
         risk_model,
         extra_indicators=list(extra_indicators) if extra_indicators is not None else None,
         power_law_weight=power_law_weight,
+        oscillators=oscillators,
         composite_rolling_window=composite_rolling_window,
         composite_rolling_min_samples=composite_rolling_min_samples,
     )
