@@ -197,7 +197,7 @@ describe("POST /api/plan-proof", () => {
     }
   });
 
-  it("mints a desk-equivalent proof for fx_hub product grantees (#3662)", async () => {
+  it("returns 403 plan_tier_required for fx_hub-only free claims, never minting a desk proof (#4305)", async () => {
     const jsonResponse = (payload: unknown, status = 200) =>
       ({
         ok: status >= 200 && status < 300,
@@ -217,24 +217,18 @@ describe("POST /api/plan-proof", () => {
     vi.stubGlobal("fetch", fetchMock);
 
     const res = await POST(makeReq({ authorization: "Bearer sess-token" }));
-    expect(res.status).toBe(200);
-    const body = (await res.json()) as { proof: string; tier: string };
-    expect(body.tier).toBe("desk");
+    expect(res.status).toBe(403);
+    const body = (await res.json()) as { error: string; proof?: string };
+    expect(body.error).toBe("plan_tier_required");
+    expect(body.proof).toBeUndefined();
 
-    const { verifyPlanProof } = await import("@/lib/plan-proof");
-    expect(verifyPlanProof(body.proof, PLAN_PROOF_SECRET)).toBe("desk");
-
-    expect(fetchMock).toHaveBeenCalledWith(
-      `${SUPABASE_URL}/rest/v1/rpc/my_access`,
-      expect.objectContaining({
-        method: "POST",
-        headers: expect.objectContaining({
-          Authorization: "Bearer sess-token",
-          apikey: ANON_KEY,
-          "Content-Type": "application/json",
-        }),
-      }),
-    );
+    // The product-grant fallback is gone server-side: an fx_hub grant must
+    // never be consulted, so it can never mint a chat-eligible proof.
+    expect(
+      fetchMock.mock.calls.some(([input]) =>
+        String(input).includes("/rest/v1/rpc/my_access"),
+      ),
+    ).toBe(false);
   });
 
   it("still returns 403 when free claims lack the fx_hub product grant", async () => {

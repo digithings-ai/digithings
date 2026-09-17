@@ -13,9 +13,9 @@
  * Response: { proof: "<base64url-signed-token>", exp: <ms-epoch>, tier: "desk"|... }
  *
  * Flow: verify embed tenant → verify Supabase access token via /auth/v1/user →
- * read app_metadata.plan_tier → mint HMAC for that claims tier only. FX Hub
- * invitees (12x) without a paid tier fall back to a product-grant check
- * (my_access) and mint the desk-equivalent proof.
+ * read app_metadata.plan_tier → mint HMAC for that claims tier only. Desk+
+ * claims only: free/brief and FX Hub-only invitees (12x) receive
+ * `403 plan_tier_required` — a product grant never mints a chat-eligible proof.
  * DIGICHAT_PLAN_PROOF_SECRET never reaches the client.
  */
 
@@ -25,8 +25,6 @@ import {
   signPlanProof,
   isProofEligibleTier,
   resolvePlanTierFromDashboardAccessToken,
-  hasFxHubProductFromDashboardAccessToken,
-  FX_HUB_PROOF_TIER,
   type ProofEligibleTier,
 } from "@/lib/plan-proof";
 
@@ -80,21 +78,14 @@ export async function POST(req: Request): Promise<NextResponse> {
   }
 
   // Claims only — never trust body.tier / X-Embed-Plan-Tier / ?plan_tier=.
+  // Desk+ claims only (#4305): no product-grant fallback, so an fx_hub-only
+  // invitee cannot mint a desk proof and reach the chat route.
   const claimsTier = await resolvePlanTierFromDashboardAccessToken(accessToken, {
     supabaseUrl,
     anonKey,
   });
-  let proofTier: ProofEligibleTier | null =
+  const proofTier: ProofEligibleTier | null =
     claimsTier && isProofEligibleTier(claimsTier) ? claimsTier : null;
-  // FX Hub invitees (12x) carry a product grant instead of a paid plan tier;
-  // mint them the desk-equivalent operator-funded embed proof.
-  if (!proofTier) {
-    const hasFxHub = await hasFxHubProductFromDashboardAccessToken(
-      accessToken,
-      { supabaseUrl, anonKey },
-    );
-    proofTier = hasFxHub ? FX_HUB_PROOF_TIER : null;
-  }
   if (!proofTier) {
     return NextResponse.json(
       {
