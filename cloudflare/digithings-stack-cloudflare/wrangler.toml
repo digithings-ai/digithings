@@ -91,9 +91,10 @@ instance_type = "standard-2"
 # Single replica by design (max_instances = 1 + one pinned Durable Object id
 # MCP_CONTAINER_ID in src/ports.ts): the MCP read path assumes a single replica
 # (in-memory 900s TTL keyed by as_of + manifest version).
-# Warm policy (min-instances-1 equivalent): sleepAfter = "24h" on the class in
-# src/index.ts, with the daily market-data-refresh cron as backup warm ping
-# (against the enabled custom-domain route, once live):
+# Cold-start policy: sleepAfter = "15m" on the class in src/index.ts. A cold
+# start pays only the FastMCP import, never a data load (R2 is the cache); the
+# daily market-data-refresh cron keeps R2 fresh and never touches the container.
+# Once the custom-domain route is enabled it can be pinged manually:
 #   curl -sS https://mcp.digithings.ai/mcp -H 'Accept: application/json'
 # Egress verified 2026-09-10: query1.finance.yahoo.com reachable (HTTP 429 =
 # Yahoo rate-limit, i.e. egress works; same retry/backoff as the cron applies),
