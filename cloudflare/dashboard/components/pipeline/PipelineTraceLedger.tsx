@@ -11,6 +11,15 @@ import {
   Wrench,
   X,
 } from 'lucide-react';
+import { SegmentedControl } from '@digithings/web';
+import {
+  Button,
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+  Input,
+  Label,
+} from '@digithings/web/ui';
 import { fetchPipelineTrace } from '@/lib/pipeline-trace';
 import type {
   PipelineRunEvent,
@@ -151,14 +160,14 @@ function EmptyTrace({ state, date }: { state: Exclude<PipelineTraceResult['state
 function TraceEvent({ event }: { event: PipelineRunEvent }) {
   const needsAttention = event.status === 'error' || event.retry_count > 0;
   return (
-    <details
+    <Collapsible
       data-testid="pipeline-trace-event"
-      open={needsAttention || undefined}
+      defaultOpen={needsAttention || undefined}
       className={`group border-b border-hair last:border-b-0 ${
         event.status === 'error' ? 'bg-down/[0.04]' : needsAttention ? 'bg-warn/[0.04]' : ''
       }`}
     >
-      <summary className="grid min-h-14 cursor-pointer list-none grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-3 px-2 py-2.5 marker:hidden hover:bg-accent/[0.03] md:grid-cols-[3.25rem_auto_minmax(0,1fr)_auto] md:px-3">
+      <CollapsibleTrigger className="grid min-h-14 w-full grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-3 px-2 py-2.5 text-left hover:bg-accent/[0.03] md:grid-cols-[3.25rem_auto_minmax(0,1fr)_auto] md:px-3">
         <span className="hidden font-mono text-[0.65rem] tabular-nums text-ink-mute md:block">
           #{String(event.sequence).padStart(3, '0')}
         </span>
@@ -199,12 +208,12 @@ function TraceEvent({ event }: { event: PipelineRunEvent }) {
           <ChevronDown
             size={14}
             aria-hidden
-            className="text-ink-mute transition-transform group-open:rotate-180"
+            className="text-ink-mute transition-transform group-data-open:rotate-180"
           />
         </span>
-      </summary>
+      </CollapsibleTrigger>
 
-      <div className="grid gap-x-6 gap-y-3 border-t border-hair/70 bg-surface/50 px-4 py-3 text-xs md:grid-cols-2 md:px-[4.75rem]">
+      <CollapsibleContent className="grid gap-x-6 gap-y-3 border-t border-hair/70 bg-surface/50 px-4 py-3 text-xs md:grid-cols-2 md:px-[4.75rem]">
         <div>
           <span className="block font-mono text-[0.62rem] font-semibold uppercase text-ink-mute">
             Input
@@ -227,8 +236,8 @@ function TraceEvent({ event }: { event: PipelineRunEvent }) {
             {event.document_key}
           </div>
         ) : null}
-      </div>
-    </details>
+      </CollapsibleContent>
+    </Collapsible>
   );
 }
 
@@ -276,14 +285,15 @@ export function PipelineTraceView({
             {stage !== 'all' ? ` · ${traceStageLabel(stage)}` : ''}
           </p>
         </div>
-        <button
+        <Button
           type="button"
+          variant="outline"
           aria-label="Close call trace"
           onClick={onClose}
-          className="flex h-11 w-11 shrink-0 items-center justify-center border border-hair text-ink-mute transition-colors hover:text-ink md:h-8 md:w-8"
+          className="h-11 w-11 shrink-0 border-hair bg-transparent text-ink-mute hover:bg-transparent hover:text-ink dark:bg-transparent dark:hover:bg-transparent md:h-8 md:w-8"
         >
           <X size={18} aria-hidden />
-        </button>
+        </Button>
       </header>
 
       {result.state !== 'available' ? (
@@ -291,75 +301,58 @@ export function PipelineTraceView({
       ) : (
         <>
           <div className="space-y-3 border-b border-hair px-3 py-3 md:px-5">
-            <label className="relative block">
+            <Label className="relative block">
               <span className="sr-only">Search call trace</span>
               <Search
                 size={15}
                 aria-hidden
                 className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-ink-mute"
               />
-              <input
+              <Input
                 type="search"
                 value={query}
                 onChange={(event) => setQuery(event.target.value)}
                 placeholder="Search phases, operations, models, tools, or artifacts"
-                className="h-10 w-full border border-hair bg-surface pl-9 pr-3 font-mono text-xs text-ink outline-none transition-colors placeholder:text-ink-mute/70 focus:border-accent"
+                className="h-10 w-full border-hair bg-surface pl-9 pr-3 font-mono text-xs text-ink placeholder:text-ink-mute/70 focus:border-accent focus-visible:border-accent"
               />
-            </label>
-            <div
-              className="flex flex-wrap gap-1"
+            </Label>
+            <SegmentedControl
               aria-label="Pipeline stage filter"
-            >
-              {pipelineStageFilters().map((value) => (
-                <button
-                  key={value}
-                  type="button"
-                  aria-pressed={stage === value}
-                  onClick={() => setStage(value)}
-                  className={`h-8 border px-2.5 font-mono text-[0.62rem] transition-colors ${
-                    stage === value
-                      ? 'border-accent/40 bg-accent/10 text-accent'
-                      : 'border-hair text-ink-mute hover:text-ink'
-                  }`}
-                >
-                  {value === 'all' ? 'All stages' : traceStageLabel(value)}
-                </button>
-              ))}
-            </div>
+              dress="accent"
+              options={pipelineStageFilters().map((value) => ({
+                value,
+                label: value === 'all' ? 'All stages' : traceStageLabel(value),
+              }))}
+              value={stage}
+              onChange={setStage}
+            />
             <div className="flex flex-wrap items-center justify-between gap-2">
-              <div className="inline-flex border border-hair bg-surface p-0.5" aria-label="Call type filter">
-                {([
+              <SegmentedControl
+                aria-label="Call type filter"
+                dress="accent"
+                options={([
                   ['all', 'All'],
                   ['model_call', 'Models'],
                   ['search_call', 'Search'],
                   ['tool_call', 'Tools'],
-                ] as const).map(([value, label]) => (
-                  <button
-                    key={value}
-                    type="button"
-                    aria-pressed={kind === value}
-                    onClick={() => setKind(value)}
-                    className={`h-8 px-2.5 font-mono text-[0.65rem] transition-colors ${
-                      kind === value ? 'bg-accent/10 text-accent' : 'text-ink-mute hover:text-ink'
-                    }`}
-                  >
-                    {label}
-                  </button>
-                ))}
-              </div>
-              <button
+                ] as const).map(([value, label]) => ({ value, label }))}
+                value={kind}
+                onChange={setKind}
+              />
+              <Button
                 type="button"
+                variant="outline"
                 aria-pressed={attention === 'issues'}
                 onClick={() => setAttention(attention === 'issues' ? 'all' : 'issues')}
-                className={`inline-flex h-9 items-center gap-2 border px-3 font-mono text-[0.65rem] transition-colors ${
+                className={`h-9 gap-2 px-3 font-mono text-[0.65rem] ${
                   attention === 'issues'
-                    ? 'border-warn/40 bg-warn/[0.08] text-warn'
-                    : 'border-hair text-ink-mute hover:text-ink'
+                    ? 'border-warn/40 bg-warn/[0.08] text-warn hover:bg-warn/[0.12] hover:text-warn dark:bg-warn/[0.08] dark:hover:bg-warn/[0.12]'
+                    : 'border-hair bg-transparent text-ink-mute hover:bg-transparent hover:text-ink dark:bg-transparent dark:hover:bg-transparent'
                 }`}
               >
                 <AlertTriangle size={13} aria-hidden />
-                Retries & errors
-              </button>
+                Retries &amp; errors
+              </Button>
             </div>
           </div>
 
@@ -422,18 +415,19 @@ export function PipelineTraceView({
 
             {remaining > 0 ? (
               <div className="flex justify-center border-t border-hair pt-4">
-                <button
+                <Button
                   type="button"
+                  variant="outline"
                   onClick={() =>
                     setPagination({
                       key: filterKey,
                       limit: nextTracePageLimit(visibleLimit, filtered.length),
                     })
                   }
-                  className="h-9 border border-hair px-4 font-mono text-xs text-ink transition-colors hover:border-accent/50 hover:text-accent"
+                  className="h-9 border-hair bg-transparent px-4 font-mono text-xs text-ink hover:border-accent/50 hover:bg-transparent hover:text-accent dark:bg-transparent dark:hover:bg-transparent"
                 >
                   Load {Math.min(TRACE_UI_PAGE_SIZE, remaining)} more · {remaining} remaining
-                </button>
+                </Button>
               </div>
             ) : null}
           </div>
@@ -475,14 +469,15 @@ export default function PipelineTraceLedger({
             <h2 className="font-display text-xl text-ink">Call trace</h2>
             <p className="mt-0.5 font-mono text-xs text-ink-mute">Loading · {date}</p>
           </div>
-          <button
+          <Button
             type="button"
+            variant="outline"
             aria-label="Close call trace"
             onClick={onClose}
-            className="flex h-11 w-11 items-center justify-center border border-hair text-ink-mute md:h-8 md:w-8"
+            className="h-11 w-11 shrink-0 border-hair bg-transparent text-ink-mute hover:bg-transparent hover:text-ink dark:bg-transparent dark:hover:bg-transparent md:h-8 md:w-8"
           >
             <X size={18} aria-hidden />
-          </button>
+          </Button>
         </header>
         <p className="m-auto font-mono text-xs text-ink-mute" role="status">Loading call trace…</p>
       </aside>
