@@ -1,7 +1,7 @@
 'use client';
 
 import { useMemo } from 'react';
-import { Card } from '@digithings/web/ui';
+import { Button, Card } from '@digithings/web/ui';
 import { ArrowLeft } from 'lucide-react';
 
 import { assembleTradeHistory, biasLabel } from '@/lib/twelve-x/trade-history';
@@ -33,13 +33,15 @@ export default function IdeaCardsIndex({
   return (
     <section className="flex flex-col gap-4">
       <header className="flex min-w-0 flex-wrap items-center gap-3">
-        <button
+        <Button
           type="button"
-          className="flex items-center gap-1 text-xs text-accent hover:underline"
+          variant="link"
+          size="xs"
+          className="h-auto justify-start gap-1 p-0 text-xs text-accent"
           onClick={onBack}
         >
           <ArrowLeft size={14} /> Today
-        </button>
+        </Button>
         <h2 className="text-base font-semibold text-ink">Live trade ideas</h2>
         <span className="font-mono text-[10px] text-ink-mute">
           {liveRows.length} {liveRows.length === 1 ? 'idea' : 'ideas'}
@@ -59,9 +61,10 @@ export default function IdeaCardsIndex({
               data-reveal
               className="gap-0 p-0 transition-colors hover:ring-accent/50"
             >
-              <button
+              <Button
                 type="button"
-                className="block w-full p-4 text-left"
+                variant="ghost"
+                className="block h-auto w-full justify-start whitespace-normal rounded-none p-4 text-left text-xs font-normal hover:bg-transparent"
                 onClick={() => openIdea(row.runDate, row.rank)}
               >
               <div className="flex min-w-0 items-center gap-2 text-[11px] text-ink-mute">
@@ -80,7 +83,7 @@ export default function IdeaCardsIndex({
                 {row.continuedFrom ? ` · cont. since ${row.continuedFrom}` : ''}
                 {row.levelsUpdated ? ' · updated' : ''}
               </p>
-              </button>
+              </Button>
             </Card>
           ))}
         </div>

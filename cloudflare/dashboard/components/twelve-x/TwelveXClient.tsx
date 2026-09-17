@@ -10,6 +10,7 @@ import {
   Workflow,
 } from 'lucide-react';
 import { EmptyState } from '@digithings/web';
+import { Button } from '@digithings/web/ui';
 
 import { SUBPAGE_MAX } from '@/components/layout-constants';
 import { SubpageStickyTabBar, subpageTabButtonClass } from '@/components/subpage-tab-bar';
@@ -118,13 +119,14 @@ export function TwelveXUnavailable({ configured }: { configured: boolean }) {
           }
           action={
             configured ? (
-              <button
+              <Button
                 type="button"
+                variant="outline"
                 onClick={() => window.location.reload()}
-                className="mt-5 inline-flex items-center border border-hair px-4 py-2 text-sm font-medium text-accent transition-colors hover:bg-ink/[0.06]"
+                className="mt-5 h-auto items-center border-hair px-4 py-2 text-sm font-medium text-accent transition-colors hover:bg-ink/[0.06]"
               >
                 Retry
-              </button>
+              </Button>
             ) : undefined
           }
         />

@@ -13,6 +13,14 @@ import {
   ShieldCheck,
 } from 'lucide-react';
 
+import {
+  Button,
+  Table,
+  TableBody,
+  TableCell,
+  TableRow,
+  TableRowHeader,
+} from '@digithings/web/ui';
 import { LEAN_BAND, SCORE_MAX, STRONG_BAND } from '@/lib/twelve-x/consensus-bar';
 import { G10_CURRENCIES } from '@/lib/twelve-x/types';
 import { useTwelveX } from './context';
@@ -237,13 +245,15 @@ export default function HowItWorksTab() {
               <p className="mt-3 text-sm leading-relaxed text-ink-soft">{s.what}</p>
               <p className="mt-3 text-xs leading-relaxed text-ink-mute">{s.read}</p>
               {s.tab ? (
-                <button
+                <Button
                   type="button"
+                  variant="link"
+                  size="xs"
                   onClick={() => crossLink({ kind: 'tab', tab: s.tab as TwelveXTab })}
-                  className="mt-3 inline-flex items-center gap-1 text-xs font-medium text-accent hover:underline"
+                  className="mt-3 inline-flex h-auto items-center gap-1 p-0 text-xs font-medium text-accent"
                 >
                   See it live → {s.tabLabel}
-                </button>
+                </Button>
               ) : null}
             </li>
           ))}
@@ -253,20 +263,18 @@ export default function HowItWorksTab() {
       {/* What's captured per brief */}
       <section className="border-y border-hair">
         <SectionHeader icon={Newspaper} title="What's captured in every brief" meta="one row per currency / pair view" />
-        <div className="overflow-x-auto">
-          <table className="w-full min-w-[36rem] text-left text-sm">
-            <tbody className="divide-y divide-hair">
-              {BRIEF_FIELDS.map((f) => (
-                <tr key={f.field}>
-                  <th scope="row" className="w-40 whitespace-nowrap px-5 py-3 align-top font-mono text-xs font-semibold uppercase text-ink-mute">
-                    {f.field}
-                  </th>
-                  <td className="px-5 py-3 leading-relaxed text-ink-soft">{f.body}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+        <Table className="min-w-[36rem] text-left text-sm">
+          <TableBody className="divide-y divide-hair">
+            {BRIEF_FIELDS.map((f) => (
+              <TableRow key={f.field} className="border-b-0 hover:bg-transparent">
+                <TableRowHeader className="w-40 whitespace-nowrap px-5 py-3 align-top font-mono text-xs font-semibold uppercase text-ink-mute">
+                  {f.field}
+                </TableRowHeader>
+                <TableCell className="px-5 py-3 leading-relaxed text-ink-soft">{f.body}</TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
         <div className="flex flex-wrap items-center gap-x-6 gap-y-2 border-t border-hair px-5 py-3">
           <span className="font-mono text-xs uppercase text-ink-mute">Directions</span>
           <span className="text-sm text-ink-soft">{VIEW_LEGEND.directions.join('  ·  ')}</span>
@@ -289,13 +297,15 @@ export default function HowItWorksTab() {
           <p className="text-sm leading-relaxed text-ink-soft">{EVENTS_STAGE.what}</p>
           <div>
             <p className="text-xs leading-relaxed text-ink-mute">{EVENTS_STAGE.read}</p>
-            <button
+            <Button
               type="button"
+              variant="link"
+              size="xs"
               onClick={() => crossLink({ kind: 'tab', tab: 'events' })}
-              className="mt-3 inline-flex items-center gap-1 text-xs font-medium text-accent hover:underline"
+              className="mt-3 inline-flex h-auto items-center gap-1 p-0 text-xs font-medium text-accent"
             >
               See it live → Events
-            </button>
+            </Button>
           </div>
         </div>
       </section>

@@ -1,7 +1,7 @@
 'use client';
 
 import { useMemo, useState } from 'react';
-import { Card } from '@digithings/web/ui';
+import { Button, Card } from '@digithings/web/ui';
 import { CalendarClock } from 'lucide-react';
 import type {
   FxConfluenceSnapshotRow,
@@ -88,15 +88,17 @@ export default function TodayTab({
 
       {disputeCount > 0 ? (
         <p className="px-1 text-sm text-ink-soft">
-          <button
+          <Button
             type="button"
+            variant="link"
+            size="xs"
             data-disputes-line="true"
-            className="text-left text-accent hover:underline"
+            className="h-auto justify-start p-0 text-left text-sm text-accent"
             onClick={() => setHighlightDisputed((v) => !v)}
           >
             The data disputes {disputeCount} of today&rsquo;s calls
             {disputeCount === 1 ? '' : 's'}.
-          </button>
+          </Button>
         </p>
       ) : null}
 
@@ -121,13 +123,15 @@ export default function TodayTab({
                 {briefs.length} {briefs.length === 1 ? 'brief' : 'briefs'}
               </span>
               {briefs.length > 0 ? (
-                <button
+                <Button
                   type="button"
-                  className="text-[11px] text-accent hover:underline"
+                  variant="link"
+                  size="xs"
+                  className="h-auto p-0 text-[11px] text-accent"
                   onClick={onSeeAllBriefs}
                 >
                   see all →
-                </button>
+                </Button>
               ) : null}
             </header>
 
@@ -148,9 +152,10 @@ export default function TodayTab({
                   {briefDateGroups.map(({ dateKey, dateBriefs }) =>
                     dateBriefs.map((b, n) => (
                       <li key={`${b.source_file}-${b.run_date}-${n}`} className="shrink-0">
-                        <button
+                        <Button
                           type="button"
-                          className="w-full rounded-none border border-hair bg-term-bg p-3 text-left transition-colors hover:border-accent/50"
+                          variant="ghost"
+                          className="block h-auto w-full justify-start whitespace-normal rounded-none border border-hair bg-term-bg p-3 text-left text-xs font-normal transition-colors hover:border-accent/50 hover:bg-term-bg"
                           onClick={() => openBrief(b.source_file, b.run_date)}
                         >
                           <div className="flex min-w-0 items-center gap-2 text-[11px] text-ink-mute">
@@ -170,7 +175,7 @@ export default function TodayTab({
                               {b.central_thesis}
                             </p>
                           ) : null}
-                        </button>
+                        </Button>
                       </li>
                     )),
                   )}

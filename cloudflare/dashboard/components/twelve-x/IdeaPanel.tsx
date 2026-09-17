@@ -3,6 +3,7 @@
 import { useMemo, useState } from 'react';
 import { FileText, Target } from 'lucide-react';
 import { Sheet, SheetContent, SheetTitle } from '@digithings/web';
+import { Button } from '@digithings/web/ui';
 
 import DetailPanelHeaderActions, {
   detailPanelSheetSizeClass,
@@ -180,14 +181,16 @@ export function IdeaPanelBody({
             {citations.map((c, i) => (
               <li key={`${c.source_file ?? c.broker}-${i}`}>
                 {c.source_file ? (
-                  <button
+                  <Button
                     type="button"
-                    className="text-left text-xs text-accent hover:underline"
+                    variant="link"
+                    size="xs"
+                    className="h-auto justify-start p-0 text-left text-xs text-accent"
                     onClick={() => openBrief(c.source_file as string, null)}
                     title={c.broker ? `${c.broker} — ${c.source_file}` : c.source_file}
                   >
                     {c.broker ?? c.source_file}
-                  </button>
+                  </Button>
                 ) : (
                   <span className="text-xs text-ink-soft">{c.broker}</span>
                 )}

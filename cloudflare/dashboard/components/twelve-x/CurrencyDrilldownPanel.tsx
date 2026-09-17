@@ -2,6 +2,7 @@
 
 import { X } from 'lucide-react';
 import { Sheet, SheetClose, SheetContent, SheetTitle } from '@digithings/web';
+import { Button } from '@digithings/web/ui';
 
 import type { ConsensusCurrencyRow } from '@/lib/twelve-x/consensus-view';
 import { fmtNEff } from '@/lib/twelve-x/format';
@@ -159,16 +160,17 @@ export function CurrencyDrilldownPanelBody({
           </h4>
           <div className="max-h-48 space-y-2 overflow-y-auto overscroll-contain pr-1 pb-1">
             {relevantBriefs.map((brief) => (
-              <button
+              <Button
                 key={`${brief.source_file}-${brief.run_date}`}
                 type="button"
+                variant="ghost"
                 onClick={() => onOpenBrief(brief.source_file, brief.run_date)}
-                className="w-full rounded-none border border-hair bg-surface p-3 text-left text-sm transition-colors hover:border-accent hover:bg-surface/80"
+                className="block h-auto w-full justify-start whitespace-normal rounded-none border border-hair bg-surface p-3 text-left text-sm font-normal transition-colors hover:border-accent hover:bg-surface/80"
               >
                 <div className="font-medium text-ink">{brief.broker_name}</div>
                 <div className="mt-1 text-xs text-ink-mute">{brief.central_thesis}</div>
                 <div className="mt-1 font-mono text-xs text-ink-soft">{brief.source_file}</div>
-              </button>
+              </Button>
             ))}
           </div>
         </div>

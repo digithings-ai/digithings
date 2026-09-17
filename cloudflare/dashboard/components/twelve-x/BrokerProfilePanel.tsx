@@ -3,6 +3,7 @@
 import { useMemo } from 'react';
 import { Building2, ExternalLink, X } from 'lucide-react';
 import { Sheet, SheetContent } from '@digithings/web';
+import { Button } from '@digithings/web/ui';
 
 import { MATRIX_COLUMNS } from '@/lib/twelve-x/types';
 import type { MatrixCell } from '@/lib/twelve-x/types';
@@ -127,14 +128,16 @@ export function BrokerProfileBody({
           </div>
         </div>
         {onClose ? (
-          <button
+          <Button
             type="button"
+            variant="ghost"
+            size="icon"
             onClick={onClose}
             aria-label="Close"
             className="-mr-1.5 -mt-1.5 flex h-11 w-11 shrink-0 items-center justify-center rounded-none text-ink-mute transition-colors hover:bg-ink/[0.06] hover:text-ink sm:h-9 sm:w-9"
           >
             <X size={18} aria-hidden />
-          </button>
+          </Button>
         ) : null}
       </div>
 
@@ -186,13 +189,15 @@ export function BrokerProfileBody({
                   </p>
                 ) : null}
 
-                <button
+                <Button
                   type="button"
+                  variant="link"
+                  size="xs"
                   onClick={() => onOpenBrief(v.source_file, v.run_date)}
-                  className="mt-2 inline-flex items-center gap-1 text-[11px] font-medium text-accent hover:underline"
+                  className="mt-2 inline-flex h-auto items-center gap-1 p-0 text-[11px] font-medium text-accent"
                 >
                   Open brief <ExternalLink size={11} aria-hidden />
-                </button>
+                </Button>
               </div>
             );
           })

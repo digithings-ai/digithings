@@ -2,6 +2,7 @@
 
 import { CalendarClock, ExternalLink, Globe, Users, X } from 'lucide-react';
 import { Sheet, SheetContent } from '@digithings/web';
+import { Button } from '@digithings/web/ui';
 
 import type { FxEconomicCalendarRow } from '@/lib/twelve-x/types';
 import type { MatchedOpinions } from './EventsTab';
@@ -124,14 +125,16 @@ export function EventDetailBody({
           </div>
         </div>
         {onClose ? (
-          <button
+          <Button
             type="button"
+            variant="ghost"
+            size="icon"
             onClick={onClose}
             aria-label="Close"
             className="-mr-1.5 -mt-1.5 flex h-11 w-11 shrink-0 items-center justify-center rounded-none text-ink-mute transition-colors hover:bg-ink/[0.06] hover:text-ink sm:h-9 sm:w-9"
           >
             <X size={18} aria-hidden />
-          </button>
+          </Button>
         ) : null}
       </div>
 
@@ -190,14 +193,16 @@ export function EventDetailBody({
                         {c.broker || 'Unknown desk'}
                       </span>
                       {onOpenBrief && c.source_file && opinions?.runDate ? (
-                        <button
+                        <Button
                           type="button"
+                          variant="link"
+                          size="xs"
                           onClick={() => onOpenBrief(c.source_file, opinions.runDate!)}
-                          className="inline-flex items-center gap-1 text-[11px] font-medium text-accent hover:underline"
+                          className="inline-flex h-auto items-center gap-1 p-0 text-[11px] font-medium text-accent"
                           title={`Open ${c.broker} brief (${c.source_file})`}
                         >
                           Open brief <ExternalLink size={10} aria-hidden />
-                        </button>
+                        </Button>
                       ) : null}
                     </div>
                     {c.expected_outcome ? (
