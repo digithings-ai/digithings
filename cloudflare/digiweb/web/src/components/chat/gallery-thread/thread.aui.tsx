@@ -660,14 +660,28 @@ const AssistantWorkingIndicator: FC = () => {
       (part) => part.type === "tool-call" && part.status.type === "running",
     ),
   );
+  const connecting = useAuiState((s) =>
+    s.message.parts.some(
+      (part) =>
+        part.type === "data" &&
+        part.name === "connection" &&
+        (part.data as { state?: string } | undefined)?.state === "connecting",
+    ),
+  );
   if (toolRunning) return null;
   return (
-    <span data-slot="aui_assistant-message-indicator">
+    <span
+      data-slot="aui_assistant-message-indicator"
+      className="flex items-center gap-2"
+    >
       <DotMatrix
         state="loading"
         label="Assistant is working"
         className="size-3.5"
       />
+      {connecting ? (
+        <span className="text-sm text-muted-foreground">Connecting…</span>
+      ) : null}
     </span>
   );
 };
