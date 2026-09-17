@@ -75,7 +75,9 @@ describe('BrokersTab', () => {
       }),
     );
     expect(html).toContain('settings-brokers-tab');
-    expect(html).toContain('IBKR (beta)');
+    // Kit Select content is portal-only (T1b), so SSR renders the trigger, not
+    // the option rows (the retired controls SelectPopup rendered inline).
+    expect(html).toContain('data-testid="broker-select"');
     expect(html).toContain('brokers-fills');
     expect(html).not.toContain(secret);
   });

@@ -95,23 +95,3 @@
   letter-spacing: 0.08em;
   color: var(--ink-mute);
 }
-
-.acct-settings-kicker {
-  font-family: var(--font-mono);
-  font-size: 0.72rem;
-  letter-spacing: 0.02em;
-  color: var(--ink);
-}
-
-.acct-settings-copy {
-  max-width: 46ch;
-  font-size: 0.88rem;
-  line-height: 1.45;
-  color: var(--ink-soft);
-}
-
-.acct-settings-panel {
-  border: 1px solid var(--hair);
-  background: var(--surface);
-  padding: 1.1rem 1.2rem;
-}

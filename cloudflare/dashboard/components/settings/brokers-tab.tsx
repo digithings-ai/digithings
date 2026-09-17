@@ -22,14 +22,16 @@ import {
   SettingsLoadError,
 } from './settings-load-error';
 import {
+  Alert,
+  AlertDescription,
+  Button,
+  Input,
   Select,
+  SelectContent,
   SelectItem,
-  SelectItemIndicator,
-  SelectPopup,
   SelectTrigger,
   SelectValue,
-} from '@digithings/web';
-import { Alert, AlertDescription, Button, Input } from '@digithings/web/ui';
+} from '@digithings/web/ui';
 
 export type BrokersTabProps = {
   api: SettingsApiOptions | null;
@@ -219,16 +221,10 @@ export function BrokersTab({
                 {(value) => (value === 'ibkr' ? 'IBKR (beta)' : 'Alpaca')}
               </SelectValue>
             </SelectTrigger>
-            <SelectPopup>
-              <SelectItem value="alpaca">
-                Alpaca
-                <SelectItemIndicator />
-              </SelectItem>
-              <SelectItem value="ibkr">
-                IBKR (beta)
-                <SelectItemIndicator />
-              </SelectItem>
-            </SelectPopup>
+            <SelectContent>
+              <SelectItem value="alpaca">Alpaca</SelectItem>
+              <SelectItem value="ibkr">IBKR (beta)</SelectItem>
+            </SelectContent>
           </Select>
         </div>
         {broker === 'ibkr' ? (
