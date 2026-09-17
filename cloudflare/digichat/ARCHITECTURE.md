@@ -880,9 +880,11 @@ list when the provider requires one. PaywallCard / ChatShell still use `ByokCliF
 (tools ON + English — not localStorage); catalog and auth toggles persist to
 localStorage. No sign-in is required for these session prefs.
 
-**Operator MCP (`mcp.servers` in deploy YAML).** Each `{ id, url, label?, default? }` is
-forwarded by the BFF as `X-Digi-Mcp-Servers` (JSON `{id,url,auth?,token?,authHeader?}`). **Operator URLs never reach the
-browser** (`toDigichatClientConfig` / `toEmbedClientConfig` strip `url`/`token`/`tokenEnv`/`authHeader`, keeping only
+**Operator MCP (`mcp.servers` in deploy YAML).** Each `{ id, url, label?, default?, setup? }` is
+forwarded by the BFF as `X-Digi-Mcp-Servers` (JSON `{id,url,auth?,token?,authHeader?,setup?}`). `setup` is the
+operator's tool-registration values (digisearch `index_name`, digivault `path_prefix`); digigraph merges it over the
+model's tool args. **Operator URLs never reach the
+browser** (`toDigichatClientConfig` / `toEmbedClientConfig` strip `url`/`token`/`tokenEnv`/`authHeader`/`setup`, keeping only
 `id`/`label`/`default`). An operator server may set a static `token` (inline) or `tokenEnv` (resolved from the
 deploy environment by `loader.ts`, inline `token` wins if both are set) plus an optional `authHeader` — the outbound
 header name for that token, e.g. `X-API-Key` for MCP servers that don't speak `Authorization: Bearer` (DataTap's,
@@ -1324,7 +1326,7 @@ with document snippets/bodies at `activityDetail: full`. Generic (non-retrieval)
 tool output is `{ input…, result, durationMs }` where `result` is the clipped MCP
 payload — the `tool_result` trace arrives the moment the tool returns, so the row
 completes mid-stream with its args + JSON Result pane (no per-tool UI;
-`ToolFallback` renders both). When that result carries the Gloomberb §7 attribution block (`attribution` plus optional `delay_notice` / `source_url`), the first-party gallery thread also renders the attribution line — canonical string, delay notice, and the `term.gloom.sh` deep link — beneath the JSON Result pane; unattributed payloads (and off-terminal `source_url` values) render nothing extra. On the Foundry path the started row opens on
+`ToolFallback` renders both). When that result carries the Gloomberb §7 attribution block (`attribution` plus optional `delay_notice` / `source_url`), the first-party gallery thread also renders the attribution line — canonical string, delay notice, and the `term.gloom.sh` deep link — beneath the JSON Result pane; unattributed payloads (and off-terminal `source_url` values) render nothing extra. The digichat-vendored stock fallback (`(baseline)/stock/tool-fallback.aui.tsx`, used by the `base`/`chatgpt` skins and the `/baseline` preview) renders the same line through the same helper (#4098). On the Foundry path the started row opens on
 `output_item.added` with the tool name; args arrive on the completed
 `mcp_call` item. `toolResult` passes the `labels` detail gate
 untouched (tenant's own tool output for the tenant's own user). Vault search `rag_sources` traces map through `mapDigivaultSearchNotes` (not the digisearch retrieve-with-no-docs path). A failed vault invoke is `execute_tool`/`failed`, never `{ hitCount: 0 }`. The website-like dogfood host

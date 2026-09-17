@@ -216,19 +216,92 @@ def test_real_markdown_file_chunking_matches_recorded_fingerprint() -> None:
     Hashes only (count still 57) re-recorded for #3871 (tool-only cost-win rewrite + searxng floats-on-latest owner decision in ARCHITECTURE.md) — fixture prose only; RecursiveChunker unchanged.
     Re-recorded at count 58 for #3909 (backend fail-loud + research workspace scoping + raw filter gate docs in ARCHITECTURE.md) — fixture prose only; RecursiveChunker unchanged.
     Re-recorded at count 59 for #3934 (SSRF fetch-guard paragraph in the web_search section + DIGISEARCH_FETCH_ALLOWED_HOSTS env-table row in ARCHITECTURE.md) — fixture prose only; RecursiveChunker unchanged.
+    Re-recorded at count 60 for #4055 (POST /ingest/url subsection + URL-ingest clause in the POST /ingest section of ARCHITECTURE.md), re-recorded again over the union with the #4059 module/digisearch sync (Azure workspace-scoping fix prose) — fixture prose only; RecursiveChunker unchanged.
+    Re-recorded at count 67 for #4064 (Phase B web-branch ARCH section in ARCHITECTURE.md) — fixture prose only; RecursiveChunker unchanged.
+    Re-recorded at count 80 for #4065 (Phase C monitors ARCH section + ops record) — fixture prose only; RecursiveChunker unchanged.
+    Hashes only (count still 80) re-recorded for #4065 (Phase C docs corrections) — fixture prose only; RecursiveChunker unchanged.
+    Re-recorded at count 82 for #4065 (Task 8c EXA adapter + webhook translation docs in ARCHITECTURE.md) — fixture prose only; RecursiveChunker unchanged.
+    Re-recorded at count 83 for #4065 (final-review docs touches: exa_adapter.py module-map row + #4123 pin citation in ARCHITECTURE.md) — fixture prose only; RecursiveChunker unchanged.
+    Re-recorded at count 93 for #4066 (Phase D websets ARCH section + orchestrator/MCP tool docs in ARCHITECTURE.md) — fixture prose only; RecursiveChunker unchanged.
+    Re-recorded at count 96 for #4066 (Phase D live-record block + EXA-shim human-precondition / MCP-driver (#4170) deferral notes + webset env-table rows in ARCHITECTURE.md) — fixture prose only; RecursiveChunker unchanged.
+    Re-recorded at count 97 for #4066 (final-review docs wave: wired-webhook-delivery paragraph + library-only v1 enrich scope + live-record wording corrections in ARCHITECTURE.md) — fixture prose only; RecursiveChunker unchanged.
+    Re-recorded at count 100 for #4123 (EXA live pin: `exa_adapter.py` module-map
+    row + pinned-shapes paragraph in ARCHITECTURE.md) — fixture prose only;
+    RecursiveChunker unchanged.
+    Re-recorded at count 102 for #4170 (shared webset driver docs:
+    `websets/driver.py` module-map row + FastMCP-lifespan / MCP-process-driving
+    resolution notes in ARCHITECTURE.md) — fixture prose only; RecursiveChunker
+    unchanged.
+    Hashes only (count still 102) re-recorded for the #4170 follow-up docs
+    correction (per-session MCP lifespan caveat + #4189 citation across
+    ARCHITECTURE.md) — fixture prose only; RecursiveChunker unchanged.
+    Re-recorded at count 105 for #4184 (`monitors/provisioning.py` module-map
+    rows + EXA provisioning / rotation-refusal / broadened-non-terminal-ack
+    docs in ARCHITECTURE.md) — fixture prose only; RecursiveChunker unchanged.
+    Hashes only (count still 105) re-recorded for #4189 (per-process
+    reference-counted MCP webset driver wording in ARCHITECTURE.md) — fixture
+    prose only; RecursiveChunker unchanged.
+    Re-recorded at count 107 for #4196 (watch-backend-immutable /
+    remote-presence rotation guard / best-effort remote DELETE notes in
+    ARCHITECTURE.md) — fixture prose only; RecursiveChunker unchanged.
+    Re-recorded at count 108 for #4196 (server-owned `exa_monitor_id` note
+    + `monitor_exa_monitor_id_immutable` row in ARCHITECTURE.md) — fixture
+    prose only; RecursiveChunker unchanged.
+    Re-recorded at count 109 for #4202 (per-window / per-running-loop webset
+    driver install wording in ARCHITECTURE.md) — fixture prose only;
+    RecursiveChunker unchanged.
+    Hashes only (count still 109) re-recorded for the #4202 fix wave
+    (cross-loop install startup guard + the `websets/driver.py` module-map row
+    reworded to per-install-window semantics) — fixture prose only;
+    RecursiveChunker unchanged.
+    Hashes only (count still 109) re-recorded for #4084 (web-branch
+    `pages=` single-retrieval-round wording replacing the old double-retrieval
+    limitation note in ARCHITECTURE.md) — fixture prose only; RecursiveChunker
+    unchanged.
+    Re-recorded at count 110 for #4221 (scheduled webset tick driver paragraph
+    + monitor pause route/table rows in ARCHITECTURE.md) — fixture prose only;
+    RecursiveChunker unchanged.
+    Re-recorded at count 111 for #4226 (automated webhook re-delivery paragraph,
+    retired deferral entry, and module-map rows in ARCHITECTURE.md) — fixture
+    prose only; RecursiveChunker unchanged.
+    Hashes only (count still 111) re-recorded for the #4226 review-fix wave
+    (re-delivery cap/full-ladder wording in ARCHITECTURE.md) — fixture prose
+    only; RecursiveChunker unchanged.
+    Hashes only (count still 111) re-recorded for #4234 (shallow-recall paging
+    row in ARCHITECTURE.md) — fixture prose only; RecursiveChunker unchanged.
+    Hashes only (count still 111) re-recorded for #4192 (web_search provider
+    soft-error envelope sentence in ARCHITECTURE.md) — fixture prose only;
+    RecursiveChunker unchanged.
+    Re-recorded at count 112 for #4241 (offset rows in the EXA web-search table
+    + monitors recall-path offset sentence in ARCHITECTURE.md) — fixture prose
+    only; RecursiveChunker unchanged.
+    Re-recorded at count 113 for the #4241 docs note (EXA hosted Websets API
+    subscription surface in ARCHITECTURE.md) — fixture prose only;
+    RecursiveChunker unchanged.
+    Re-recorded at count 114 for the #4249–#4252 docs wave (C↔D bridge + bridge
+    ledger notes, research-mode watch digests, effort-normalized spend scoring,
+    and the re-measured anchor receipt pointer in ARCHITECTURE.md) — fixture
+    prose only; RecursiveChunker unchanged.
     Hashes only (count still 59) re-recorded for #4063 (hosted search.digithings.ai route note in the REST Endpoints section, including its auth-exempt-allowlist wording fix) — fixture prose only; RecursiveChunker unchanged.
     Re-recorded at count 60 for #4106 (identity-aware rate limiting: the rate-limiting section,
     the /v1/orchestrator_invoke entry, and two env-table rows in ARCHITECTURE.md) — fixture
     prose only; RecursiveChunker unchanged.
     Hashes only (count still 60) re-recorded for #4165 (orchestrator web_search recency_days
     mapping note in ARCHITECTURE.md) — fixture prose only; RecursiveChunker unchanged.
-    Hashes only (count still 60) for the hosted-MCP docs pass: the digisearch MCP tool-table rows (digisearch_query -> semantic, digisearch_research_turn -> research_turn) and the digiclaw attachment prose in ARCHITECTURE.md — fixture prose only."""
+    Hashes only (count still 60) for the hosted-MCP docs pass: the digisearch MCP tool-table rows (digisearch_query -> semantic, digisearch_research_turn -> research_turn) and     the digiclaw attachment prose in ARCHITECTURE.md — fixture prose only.
+    Re-recorded at count 61 for #4246 (MCP tool-table naming corrections plus merged
+    develop prose in ARCHITECTURE.md) — fixture prose only; RecursiveChunker unchanged.
+    Re-recorded at count 115 for the promotion sync union (module/digisearch <- develop):
+    MCP tool-name absorption (`digisearch_web_search` -> `exa_web_search`,
+    `digisearch_research_turn` -> `research_turn`) plus conflict-resolution prose in
+    ARCHITECTURE.md — fixture prose only; RecursiveChunker unchanged.
+    """
     arch_path = Path(__file__).resolve().parents[2] / "digisearch" / "ARCHITECTURE.md"
     content = arch_path.read_text(encoding="utf-8")
     doc = Document(id="arch", content=content, source=str(arch_path), doc_type="md")
     chunks = RecursiveChunker().chunk(doc)
 
-    assert len(chunks) == 60
+    assert len(chunks) == 115
     assert all(len(c.content) <= 2000 for c in chunks)
     hashes = [hashlib.sha256(c.content.encode()).hexdigest()[:16] for c in chunks]
     assert hashes == [
@@ -240,21 +313,62 @@ def test_real_markdown_file_chunking_matches_recorded_fingerprint() -> None:
         "5c87a98eae4b4c24",
         "c2e2b64819e95c57",
         "5fc146dcd98ed469",
-        "e446cea04444b3a8",
-        "565775fa5f1edb55",
-        "3397054ac68eb462",
-        "6372b7bb50ed142a",
-        "21f02ed46c3d48c1",
+        "6bb725ee96409565",
+        "2496b0331a6908ca",
+        "e7597b9d03630def",
+        "cc37bd8b485e1402",
+        "a08f56ac9059ac1b",
+        "a06a6367c5f045a2",
+        "b959e75c8c4b124a",
+        "a94797156eb57efd",
+        "58efb49707626f90",
+        "cd6a3f2ea2f1a0d0",
+        "7e8464fe6a6cc067",
+        "461131751799a611",
+        "f2ac9438877a85b7",
+        "4523b0e9d213163a",
+        "3850f4956a4c3be9",
+        "7973399b6e155051",
+        "e0ed75d4b266835e",
+        "5e1cdcae7ee033f5",
+        "866bf2f65945a727",
+        "62e24ed27153c8a1",
+        "0ab88c4d28e41b7d",
+        "ebd46ff18db018b4",
+        "7af3cdc7d42ec69e",
+        "a3b047cd3ed1947b",
+        "35d304250e94973f",
+        "7de224687f0a43ea",
+        "8685a691c30714f9",
+        "ce691515430dae1f",
+        "73d141db4779c6b1",
+        "167b81ebf198af11",
+        "cd07a7d19166471f",
+        "d43b29499a454968",
+        "0fdafef266e479fd",
+        "4d46ce009fe0a623",
+        "bed41ccd5021ddf1",
+        "d168142221e6f74f",
+        "a73404f288469603",
+        "c04217b55eeb446e",
+        "8f4e8eebefd18c3d",
+        "6de35d68bea0e990",
+        "c5776a6b47ee3e04",
+        "3aed1b59bbde9920",
+        "4ab2c79477f613db",
+        "bce989da61996c0f",
+        "02e5c79864269cd2",
         "f5694c994b90e40c",
         "2f102978f3f92316",
-        "16584e006bbec980",
+        "d201d5cef8605cdf",
         "5c929ad2654944ce",
         "80578aa2dbbb641d",
         "1f9fe54a7f6c6f25",
         "20b66fa9abe4d235",
         "28bb2eddea9813a5",
-        "58293316545c38e4",
-        "89a85863f85af2a2",
+        "0f38ad6f707a76af",
+        "c64d3417a2a5f62c",
+        "a1105ad47fefbf1b",
         "819ebadc3320ecc2",
         "10832c167583db90",
         "3442051d624d3623",
@@ -265,27 +379,41 @@ def test_real_markdown_file_chunking_matches_recorded_fingerprint() -> None:
         "2ec8256cb4695f07",
         "16bea1bbfea529fc",
         "00bffb9020b848f5",
-        "078cbca3f2c3b3e1",
-        "148ff3553b0c7caa",
-        "222dabb58df09011",
-        "40a2d522cf14328c",
+        "0813ccac568b8df8",
+        "8c4f082527d91953",
+        "ea4b9c63695d2f69",
+        "367d6f1945838ddd",
+        "4187a3ee58add217",
+        "85cad0d45c341571",
+        "d22113bcc2f23495",
+        "3ec5f2b1fce1b494",
+        "66ce13f7ba2fafdc",
+        "26ca223dcbe8b403",
+        "ac5eea8b8b2f7820",
+        "d3566df46fb1e726",
+        "c0e9eb6706ab60cc",
+        "676a486feb21ee54",
         "c68c6371a8457ff8",
         "112fe01c18768a54",
         "cdf4f0c7a56c56e7",
         "8200c214c753f6dd",
         "2c221fc487c50f69",
         "a261a5a8ca75360c",
-        "3bafcf4aae0fe5df",
-        "27773e41fb0a48c2",
-        "5dbc6c5291de10ab",
+        "473965a9eeeb864d",
+        "70c3d41e152ffa11",
+        "81d310410772fb3e",
+        "5e6a02ac4bf32f0f",
         "e8874754e8823dbd",
         "472ca1370eb9ef1a",
         "a3987db99f2b72c5",
         "9496728548f7cd2a",
-        "225997a88a741b37",
-        "84ef27f40a4227fb",
-        "a0c3eeac2a656b2f",
-        "482754fb154988ce",
+        "3a05c94596483aed",
+        "0f567a2b684efdf4",
+        "5668e90c11bf9127",
+        "05bb8905105bc94e",
+        "d922a9899a8996a2",
+        "166b840aa01714e1",
+        "6ffeafba73e75348",
         "79ae674b8661ea64",
         "fc586dc7c2348d1e",
         "ac8dbe83a57bf4f4",

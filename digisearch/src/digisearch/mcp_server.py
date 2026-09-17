@@ -1,18 +1,35 @@
 """digisearch MCP server. Exposes document search as MCP tools for digigraph/digiflow."""
 
-from __future__ import annotations
-
+# score:allow untyped any
+# MCP tool payloads carry heterogeneous JSON; Any is the honest annotation.
+# No `from __future__ import annotations`: the stack image ships FastMCP 1.9.3,
+# which calls issubclass() on raw annotations — PEP 563 string annotations crash
+# every @mcp.tool() at import (Dockerfile.digithings-stack-cloudflare marker v8).
+import json
 import logging
 import os
-from typing import Any
+import secrets
+import sqlite3
+from typing import Any, Literal
 
 from mcp.server.fastmcp import FastMCP
 from pydantic import ValidationError
 
 from digisearch.core.models import Query
 from digisearch.logging import configure_logging
+from digisearch.monitors.models import DeliveryConfig, Watch, WatchSchedule
+from digisearch.monitors.store import MonitorStore, MonitorStoreError, get_store
+from digisearch.monitors.validation import watch_config_error
 from digisearch.research_search import search_strategies as _search_strategies_impl
 from digisearch.search._stub import query_index
+from digisearch.web_search.models import summarize_validation_error
+from digisearch.websets import service as websets_service
+from digisearch.websets.driver import webset_task_lifespan
+from digisearch.websets.export import export_csv, export_json
+from digisearch.websets.models import VerificationState
+from digisearch.websets.service import WebsetServiceError
+from digisearch.websets.store import WebsetStore
+from digisearch.websets.store import get_store as get_webset_store
 
 configure_logging()
 logger = logging.getLogger(__name__)
@@ -20,6 +37,7 @@ logger = logging.getLogger(__name__)
 mcp = FastMCP(
     "digisearch",
     json_response=True,
+    lifespan=webset_task_lifespan,
 )
 
 DIGISEARCH_INDEX = os.environ.get("DIGISEARCH_INDEX", "default")
@@ -180,19 +198,423 @@ try:
         top_k: int = 10,
         mode: str = "hybrid",
         workspace_id: str | None = None,
+        source: str = "corpus",
+        effort: str = "fast",
     ) -> str:
-        """Composite research turn (plan → retrieve → aggregate) with citations for hub/trace parity."""
+        """Composite research turn (plan → retrieve → aggregate) with citations for hub/trace parity.
+
+        ``source`` defaults to ``corpus``; pass ``web`` or ``auto`` to run the
+        OSS web branch (``effort``: fast | thorough).
+        """
         payload = {
             "user_message": user_message,
             "index_name": index_name or DIGISEARCH_INDEX or "default",
             "top_k": top_k,
             "mode": mode,
             "workspace_id": workspace_id,
+            "source": source,
+            "effort": effort,
         }
         return _json.dumps(_run_research_turn(payload), indent=2)
 
 except ImportError:
-    logger.info("digisearch_research_turn MCP tool omitted (install digisearch[agent])")
+    logger.info("research_turn MCP tool omitted (install digisearch[agent])")
+
+
+@mcp.tool()
+def exa_web_search(
+    query: str,
+    search_type: str = "auto",
+    num_results: int = 8,
+    category: str | None = None,
+    include_domains: list[str] | None = None,
+    exclude_domains: list[str] | None = None,
+    offset: int = 0,
+) -> str:
+    """Live web search via EXA (alternative to the owned corpus).
+
+    Dormant without EXA_API_KEY — returns a disabled message instead of failing.
+    search_type: instant|fast|auto|deep-lite|deep|deep-reasoning.
+    include_domains/exclude_domains restrict or drop hits by domain.
+
+    Paging: EXA ``POST /search`` has no offset parameter and caps ``numResults``
+    at :attr:`digisearch.web_exa.EXA_MAX_RESULTS` (100). ``offset`` returns the
+    client-side page ``results[offset : offset + num_results]`` of one enlarged
+    search window (``numResults = offset + num_results``); call it repeatedly to
+    walk the result set, e.g. ``offset=0, 8, 16, ...`` with the default page size.
+    A page reaching past the cap (``offset + num_results > 100``) returns an
+    explicit error — never a silently truncated page. A page past the query's
+    result count (still within the cap) returns an explicit empty page.
+    ``offset=0`` (the default) is byte-identical to the unpaged call.
+    """
+    from digisearch import web_exa
+
+    if not web_exa.is_exa_configured():
+        return "EXA web search is disabled (EXA_API_KEY is not set)."
+    if search_type not in web_exa.VALID_SEARCH_TYPES:
+        return f"[digisearch web search error: invalid search_type: {search_type!r}]"
+    requested = 0
+    try:
+        requested = max(1, min(int(num_results), web_exa.EXA_MAX_RESULTS))
+        start = int(offset)
+        data = web_exa.exa_search(
+            query,
+            search_type=search_type,  # type: ignore[arg-type]
+            num_results=requested,
+            offset=start,
+            category=category,
+            include_domains=include_domains,
+            exclude_domains=exclude_domains,
+        )
+    except (web_exa.ExaError, ValueError) as e:
+        logger.error("digisearch web search failed: %s", e)
+        return f"[digisearch web search error: {e}]"
+    if start > 0 and not data.results and not data.output:
+        return (
+            f"No EXA results at offset {start} (window [{start}, {start + requested}) is past "
+            f"the query's result count, within the {web_exa.EXA_MAX_RESULTS}-result EXA cap)."
+        )
+    # The landed 10-result render cap stays the default; an explicit page larger
+    # than it must render whole or paging would silently truncate.
+    return web_exa.format_web_results(data, max_items=max(10, requested))
+
+
+# --- Phase C monitors (§4.7, #4065) -------------------------------------------------
+#
+# Four MCP tools over the same store/runner the HTTP routes use. Fail-closed
+# shape of `exa_web_search`: without a reachable store the tools return a
+# disabled message instead of raising. Create/update-time validation goes
+# through `watch_config_error` — the same gate the HTTP API applies — because a
+# watch with an unparseable cron would raise inside `is_due` at tick time, where
+# `tick_due_watches` swallows the failure per watch and it would silently never
+# run.
+
+_MONITORS_DISABLED = "digisearch monitors are disabled (monitor store is unavailable)."
+
+
+def _monitor_store_or_none() -> MonitorStore | None:
+    """Open the monitor store, or fail closed with ``None`` when unreachable."""
+    try:
+        return get_store()
+    except (OSError, sqlite3.Error) as e:
+        logger.error("digisearch monitor store unavailable: %s", e)
+        return None
+
+
+@mcp.tool()
+def monitors_create_watch(
+    query: str,
+    schedule_cron: str | None = None,
+    interval_seconds: int | None = None,
+    num_results: int = 8,
+    category: str | None = None,
+    include_domains: list[str] | None = None,
+    exclude_domains: list[str] | None = None,
+    delivery_mode: Literal["poll", "webhook", "fanout"] = "poll",
+) -> str:
+    """Create a scheduled web-search watch. Returns JSON {watch, delivery_secret}.
+
+    The one-time ``delivery_secret`` (used to verify delivery HMACs) appears in
+    this response only — never on list/read. Provide ``schedule_cron`` (5-field
+    digiclaw grammar) or ``interval_seconds`` (>= 60); cron wins when both are
+    given. The watch is named after the query. ``delivery_mode`` other than
+    ``poll`` needs targets, which this surface cannot set, so those are rejected.
+    This surface creates oss watches only: an EXA-backed watch (``backend``,
+    delivery targets, remote ``webhookSecret`` provisioning) is created through
+    ``POST /v1/monitors``, which can express both.
+    """
+    store = _monitor_store_or_none()
+    if store is None:
+        return _MONITORS_DISABLED
+    text = query.strip()
+    if not text:
+        return "[monitors create error: query is required]"
+    if not schedule_cron and interval_seconds is None:
+        return "[monitors create error: schedule_cron or interval_seconds is required]"
+    try:
+        # Both WatchSchedule constructions stay inside this try: the interval
+        # floor (ge=60) and the cron-required validator raise pydantic
+        # ValidationError, which must flatten to the documented string, not escape.
+        if schedule_cron:
+            schedule = WatchSchedule(mode="cron", cron=schedule_cron)
+        else:
+            schedule = WatchSchedule(mode="interval", interval_seconds=interval_seconds)
+        watch = Watch(
+            name=text[:120],
+            query=text,
+            num_results=num_results,
+            category=category,
+            include_domains=include_domains or [],
+            exclude_domains=exclude_domains or [],
+            schedule=schedule,
+            delivery=DeliveryConfig(mode=delivery_mode),
+        )
+    except ValidationError as e:
+        return f"[monitors create error: {summarize_validation_error(e)}]"
+    failure = watch_config_error(watch)
+    if failure is not None:
+        _, code, message = failure
+        return f"[monitors create error: {code}: {message}]"
+    created = store.create_watch(watch)
+    secret = secrets.token_hex(32)
+    store.set_delivery_secret(created.watch_id, secret)
+    return json.dumps(
+        {"watch": created.model_dump(mode="json"), "delivery_secret": secret}, indent=2
+    )
+
+
+@mcp.tool()
+def monitors_list_watches() -> str:
+    """List scheduled watches newest-updated first as JSON {"watches": [...]}."""
+    store = _monitor_store_or_none()
+    if store is None:
+        return _MONITORS_DISABLED
+    watches = store.list_watches()
+    return json.dumps({"watches": [watch.model_dump(mode="json") for watch in watches]}, indent=2)
+
+
+@mcp.tool()
+def monitors_trigger_watch(watch_id: str, mode: Literal["manual", "poll"] = "manual") -> str:
+    """Run one watch turn now and return its JSON MonitorRun.
+
+    A failed turn is still persisted and returned with ``status="failed"``
+    (mirrors ``POST /v1/monitors/{watch_id}/trigger``).
+    """
+    store = _monitor_store_or_none()
+    if store is None:
+        return _MONITORS_DISABLED
+    try:
+        from digisearch.monitors.runner import MonitorRunError, run_watch
+    except ImportError as e:
+        return f"[monitors unavailable: install digisearch[web-search] for monitors: {e}]"
+    try:
+        run = run_watch(watch_id, trigger=mode, store=store)
+    except MonitorStoreError as e:
+        return f"[monitors trigger error: {e.code}: {e}]"
+    except MonitorRunError as e:
+        run = store.get_run(watch_id, e.run_id)
+    return json.dumps(run.model_dump(mode="json"), indent=2)
+
+
+@mcp.tool()
+def monitors_get_runs(watch_id: str, limit: int = 20) -> str:
+    """List stored runs for one watch, newest first, as JSON {"runs", "next_cursor"}."""
+    store = _monitor_store_or_none()
+    if store is None:
+        return _MONITORS_DISABLED
+    try:
+        runs, next_cursor = store.list_runs(watch_id, limit=limit)
+    except MonitorStoreError as e:
+        return f"[monitors runs error: {e.code}: {e}]"
+    return json.dumps(
+        {"runs": [run.model_dump(mode="json") for run in runs], "next_cursor": next_cursor},
+        indent=2,
+    )
+
+
+# --- Phase D websets (#4066, R10) ---------------------------------------------
+#
+# Six unprefixed ``websets_*`` tools over the same T6 service facade the HTTP
+# routes use (the manifest keeps the prefixed ``digisearch_websets_*`` names).
+# The async-first contract holds here too: ``websets_create`` /
+# ``websets_add_search`` return ids while the run is scheduled — the chat surface
+# polls ``websets_get`` / ``websets_events``. Enrichment add/remove, webhook
+# secrets, monitors, and cancel are deliberate HTTP-only v1 operator ops.
+# Fail-closed shape of ``exa_web_search``: without a reachable store the
+# tools return a disabled string instead of raising.
+
+_WEBSETS_DISABLED = "digisearch websets are disabled (webset store is unavailable)."
+
+
+def _webset_store_or_none() -> WebsetStore | None:
+    """Open the webset store, or fail closed with ``None`` when unreachable."""
+    try:
+        return get_webset_store()
+    except (OSError, sqlite3.Error) as e:
+        logger.error("digisearch webset store unavailable: %s", e)
+        return None
+
+
+def _websets_error(op: str, exc: Exception) -> str:
+    """Flatten a facade failure to the documented string (stable code included)."""
+    if isinstance(exc, WebsetServiceError):
+        return f"[websets {op} error: {exc.code}: {exc}]"
+    return f"[websets {op} error: {exc}]"
+
+
+@mcp.tool()
+def websets_create(
+    query: str,
+    count: int = 10,
+    criteria_json: str = "",
+    enrichments_json: str = "",
+) -> str:
+    """Create a verified + enriched dataset (webset) asynchronously.
+
+    Returns JSON ``{"id", "object", "status"}`` immediately (status ``running``);
+    poll ``websets_get`` / ``websets_events`` until ``idle``, then
+    ``websets_export``. ``criteria_json`` is a JSON array of ``{name, rule}``
+    (1-5 rules); ``enrichments_json`` is a JSON array of ``{name, type, ...}``.
+    The MCP server drives its own runs through the shared in-process driver
+    (same service facade, runner, and ``WEBSET_TASKS`` registry as the HTTP
+    lifespan), so the webset settles without an HTTP process (#4170). The
+    driver install is per process and reference-counted (#4189): concurrent
+    streamable-http MCP client sessions share one install, and a session's exit
+    neither uninstalls the seam nor cancels another session's runs.
+    """
+    store = _webset_store_or_none()
+    if store is None:
+        return _WEBSETS_DISABLED
+    text = query.strip()
+    if not text:
+        return "[websets create error: query is required]"
+    try:
+        criteria = json.loads(criteria_json) if criteria_json.strip() else []
+        enrichments = json.loads(enrichments_json) if enrichments_json.strip() else None
+    except ValueError as e:
+        return f"[websets create error: criteria_json/enrichments_json is not valid JSON: {e}]"
+    if not isinstance(criteria, list):
+        return "[websets create error: criteria_json must be a JSON array]"
+    if enrichments is not None and not isinstance(enrichments, list):
+        return "[websets create error: enrichments_json must be a JSON array]"
+    try:
+        webset = websets_service.create_webset(
+            query=text,
+            count=count,
+            criteria=criteria,
+            enrichments=enrichments,
+            store=store,
+        )
+    except (WebsetServiceError, ValidationError) as e:
+        return _websets_error("create", e)
+    return json.dumps({"id": webset.id, "object": webset.object, "status": webset.status})
+
+
+@mcp.tool()
+def websets_get(webset_id: str) -> str:
+    """Return one webset's status/search generations + item counts, as JSON.
+
+    ``counts`` carries verified/pending/rejected item counts.
+    """
+    store = _webset_store_or_none()
+    if store is None:
+        return _WEBSETS_DISABLED
+    try:
+        webset = websets_service.get_webset(webset_id, store=store)
+        counts = websets_service.count_items(webset_id, store=store)
+    except WebsetServiceError as e:
+        return _websets_error("get", e)
+    return json.dumps(
+        {"webset": webset.model_dump(mode="json"), "counts": counts},
+        indent=2,
+    )
+
+
+@mcp.tool()
+def websets_add_search(webset_id: str, query: str, count: int = 10) -> str:
+    """Attach a follow-up search generation to a running/idle webset (async).
+
+    Returns JSON ``{"id", "object", "status"}`` for the new search; the refresh
+    is observed through the webset's new search row + events. The refresh is
+    driven by the shared in-process driver, so it settles without an HTTP
+    process (#4170); the install lasts per MCP client session on
+    streamable-http (per process on stdio).
+    """
+    store = _webset_store_or_none()
+    if store is None:
+        return _WEBSETS_DISABLED
+    text = query.strip()
+    if not text:
+        return "[websets add_search error: query is required]"
+    try:
+        search = websets_service.add_search(webset_id, query=text, count=count, store=store)
+    except (WebsetServiceError, ValidationError) as e:
+        return _websets_error("add_search", e)
+    return json.dumps({"id": search.id, "object": "webset_search", "status": search.status})
+
+
+@mcp.tool()
+def websets_list_items(
+    webset_id: str,
+    verification: VerificationState | None = None,
+    limit: int = 20,
+    cursor: str | None = None,
+) -> str:
+    """List a webset's items NEWEST-first as compact text.
+
+    Optional ``verification`` filter (verified | rejected | pending). The last
+    line is ``next_cursor: <id>`` when more items exist — pass it back as
+    ``cursor`` to page.
+    """
+    store = _webset_store_or_none()
+    if store is None:
+        return _WEBSETS_DISABLED
+    try:
+        items, next_cursor = websets_service.list_items(
+            webset_id, verification=verification, limit=limit, cursor=cursor, store=store
+        )
+    except WebsetServiceError as e:
+        return _websets_error("list_items", e)
+    if not items:
+        return "No webset items."
+    lines: list[str] = []
+    for item in items:
+        lines.append(f"[{item.verification}] {item.url} — {item.title or '(no title)'}")
+        for name, field in item.enrichments.items():
+            lines.append(f"  {name}: {field.value!r} ({field.status})")
+    if next_cursor:
+        lines.append(f"next_cursor: {next_cursor}")
+    return "\n".join(lines)
+
+
+@mcp.tool()
+def websets_events(webset_id: str, after: str | None = None, limit: int = 50) -> str:
+    """Tail a webset's append-only event log OLDEST-first as compact text.
+
+    ``after`` is the last seen event id; only strictly newer events are
+    returned. The last line is ``next_cursor: <id>`` when more events exist.
+    """
+    store = _webset_store_or_none()
+    if store is None:
+        return _WEBSETS_DISABLED
+    try:
+        events, next_cursor = websets_service.list_events(
+            webset_id, after=after, limit=limit, store=store
+        )
+    except WebsetServiceError as e:
+        return _websets_error("events", e)
+    if not events:
+        return "No webset events."
+    lines = [
+        f"{event.created_at.isoformat() if event.created_at else ''} {event.type} "
+        f"search={event.search_id} item={event.item_id or '-'}"
+        for event in events
+    ]
+    if next_cursor:
+        lines.append(f"next_cursor: {next_cursor}")
+    return "\n".join(lines)
+
+
+@mcp.tool()
+def websets_export(webset_id: str, format: str = "json") -> str:
+    """Export a webset's verified items as CSV or citation-preserving JSON text.
+
+    Caps at 200 rows in chat; rejected audit rows are never exported.
+    """
+    store = _webset_store_or_none()
+    if store is None:
+        return _WEBSETS_DISABLED
+    fmt = format.strip().lower()
+    if fmt not in ("csv", "json"):
+        return f"[websets export error: format must be csv or json, got {format!r}]"
+    try:
+        webset = websets_service.get_webset(webset_id, store=store)
+        items, _cursor = websets_service.list_items(
+            webset_id, verification="verified", limit=200, store=store
+        )
+    except WebsetServiceError as e:
+        return _websets_error("export", e)
+    return export_csv(webset, items) if fmt == "csv" else export_json(webset, items)
 
 
 def run_mcp(

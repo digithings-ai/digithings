@@ -129,7 +129,18 @@ When `stream: true` in `POST /v1/chat/completions`:
      `error`), the queued clipped `arguments`, and a size-capped `result`
      (`_clip_tool_result`, 12_000-char JSON cap with truncated preview) — so the
      BFF row shows args + JSON result and completes the moment the tool returns
-     instead of lingering until end-of-stream. The
+     instead of lingering until end-of-stream. When the raw result carries the §7
+     attribution block (`attribution` / `delay_notice` / `source_url`, appended
+     last by digiquant's `gloomberb_envelope_json`), those keys are hoisted out of
+     the clip and attached ahead of the emitted `result` — structured envelope or
+     the MCP `{"ok": true, "text": …}` wrapper alike — because a string scalar is
+     cut at 2,000 chars with no key structure left to read, and the digichat
+     attribution line (#4130) reads them off the result object (#4131). The
+     12_000-char cap is enforced on the merged record unconditionally; when the
+     full block does not fit, `source_url` is dropped first, then
+     `delay_notice`, and the truncated preview budget shrinks by whatever
+     survives and is measured on the re-serialized record — so the emitted
+     record never exceeds the cap while looking untruncated. The
      `round_boundary` event marks the end of a digillm tool round: `round_idx` is the
      zero-based round number, and `narration` is the assistant text produced that round
      (with `stream_deltas`, content deltas were already emitted; without streaming,
@@ -487,7 +498,7 @@ START
                                                                └─ optimize enabled → optimize → END
 ```
 
-Retrieval is model-driven by default: `research_node` (document RAG path) hands the full tool set to `run_tools` with a `max_tool_rounds=4` budget and lets the model decide whether and when to call `digisearch` / `digivault_search_notes`. After a locate, `auto_load_notes` (`retrieval.py`) calls `digivault_get_note` (batch ≤20 vault paths) so the model synthesizes from full notes instead of asking permission to read what it already found. `RagSourceItem.body` is stamped only on get_note (`include_body=True`, cap `MAX_RAG_SOURCE_BODY_CHARS`) and overlaid onto duplicate locate keys in `merge_loaded_notes` / `merge_rag_sources_accumulator`; WorkflowState strips `body` before checkpoint so the pane reads the stream, not graph state. Slash `/digisearch` and `/digivault` on the public embed set `force_tool` / `X-Digi-Force-Tool`: `last_user_turn()` (`chat_prompt.py`) extracts the current user string from the flattened `User:` / `Assistant:` transcript so the tool `query` is that turn, not the whole history. The locate is injected *before* the LLM turn **only when** `allowed_tool_names` is unrestricted (`None`) or includes the resolved tool — otherwise tenants with an allowlist would still get a started `tool_call` / Searching… row and a deny blob in `force_tool_messages` even though `execute()` would refuse the call. Extra operator MCP server ids (`X-Digi-Mcp-Servers`) are **not** injected: `research_node` prepends a user hint and sets `tool_choice="required"` so the model must call `{id}__*` tools. Then `run_tools` synthesizes with `tool_choice="auto"` after a catalog locate (even when `require_tool_calls` is set). `agents.always_retrieve_tools` is dead configuration — `DigiProjectConfig.get_always_retrieve_tools()` still exists and still parses the key, but nothing calls it, since the prefetch it used to gate was removed. All shipped `digiproject.yaml` files have had the key dropped. If the model calls no tools (and no force-tool ran), `run_tools` runs a single streamed completion (no tool rounds). **`max_tool_rounds=4` bounds tool-calling rounds, not completions outright**: `digillm.client.run_tools` (`digillm/src/digillm/client.py:2138-2147`) fires one additional tool-free completion when the round budget is exhausted and the model still hasn't produced final content, so a fully-exhausted budget costs up to **5** completions, not 4.
+Retrieval is model-driven by default: `research_node` (document RAG path) hands the full tool set to `run_tools` with a `max_tool_rounds=4` budget and lets the model decide whether and when to call `digisearch` / `digivault_search_notes`. After a locate, `auto_load_notes` (`retrieval.py`) calls `digivault_get_note` (batch ≤20 vault paths) so the model synthesizes from full notes instead of asking permission to read what it already found. `RagSourceItem.body` is stamped only on get_note (`include_body=True`, cap `MAX_RAG_SOURCE_BODY_CHARS`) and overlaid onto duplicate locate keys in `merge_loaded_notes` / `merge_rag_sources_accumulator`; WorkflowState strips `body` before checkpoint so the pane reads the stream, not graph state. Slash `/digisearch` and `/digivault` on the public embed set `force_tool` / `X-Digi-Force-Tool`: `last_user_turn()` (`chat_prompt.py`) extracts the current user string from the flattened `User:` / `Assistant:` transcript so the tool `query` is that turn, not the whole history. The locate is injected *before* the LLM turn **only when** `allowed_tool_names` is unrestricted (`None`) or includes the resolved tool — otherwise tenants with an allowlist would still get a started `tool_call` / Searching… row and a deny blob in `force_tool_messages` even though `execute()` would refuse the call. Extra operator MCP server ids (`X-Digi-Mcp-Servers`) are **not** injected: `research_node` prepends a user hint and sets `tool_choice="required"` so the model must call `{id}_*` tools. Then `run_tools` synthesizes with `tool_choice="auto"` after a catalog locate (even when `require_tool_calls` is set). `agents.always_retrieve_tools` is dead configuration — `DigiProjectConfig.get_always_retrieve_tools()` still exists and still parses the key, but nothing calls it, since the prefetch it used to gate was removed. All shipped `digiproject.yaml` files have had the key dropped. If the model calls no tools (and no force-tool ran), `run_tools` runs a single streamed completion (no tool rounds). **`max_tool_rounds=4` bounds tool-calling rounds, not completions outright**: `digillm.client.run_tools` (`digillm/src/digillm/client.py:2138-2147`) fires one additional tool-free completion when the round budget is exhausted and the model still hasn't produced final content, so a fully-exhausted budget costs up to **5** completions, not 4.
 
 `agents.research_brief` (default `true`; env `DIGI_RESEARCH_BRIEF=0/1` overrides) controls whether `build_research_subgraph()` wires `research_brief_builder` after `research_inner`. When false, the subgraph ends when the answer stream completes — dogfood chat uses this to avoid a post-answer `completion_text` latency tax.
 
@@ -663,14 +674,14 @@ An allowlist of `[]` (empty list) blocks all tools, forcing research-only mode. 
 coerced to unrestricted by a falsy check.
 
 `WorkflowRequest.disabled_tools` (`X-Digi-Disabled-Tools`) then subtracts catalog
-search/vault aliases **and** extra operator MCP server ids (`id` and `id__*`).
+search/vault aliases **and** extra operator MCP server ids (`id` and `id_*`).
 Unknown tokens are ignored. If `force_tool` is set, that locate / MCP id is
 unioned back so a one-shot `/digisearch <query>` still runs when the session
 toggle is off.
 
 Operator MCP tools are listed from Streamable HTTP servers declared by the
 trusted BFF (`X-Digi-Mcp-Servers`, optionally merged with `DIGI_MCP_SERVERS`).
-Names are prefixed `{server_id}__{tool}`. `Authorization: Bearer` is
+Names are prefixed `{server_id}_{tool}` (`mcp_client.prefixed_tool_name`). `Authorization: Bearer` is
 passed into `streamablehttp_client` by default when the BFF overlay includes a
 token. An operator-only `authHeader` (deploy YAML `mcp.servers[].authHeader`,
 #3841) sends the token under that header name instead — e.g. `X-API-Key` for

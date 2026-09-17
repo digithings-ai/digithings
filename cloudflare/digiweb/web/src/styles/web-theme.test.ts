@@ -43,7 +43,7 @@ describe("web-theme shadcn token contract", () => {
       ["--color-muted-foreground", "var(--ink-soft)"],
       ["--color-accent", "var(--accent)"],
       ["--color-accent-foreground", "var(--on-accent)"],
-      ["--color-destructive", "var(--down)"],
+      ["--color-destructive", "var(--danger)"],
       ["--color-border", "var(--hair)"],
       ["--color-input", "var(--hair)"],
       ["--color-ring", "color-mix(in srgb, var(--accent) 40%, transparent)"],
