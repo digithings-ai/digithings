@@ -54,6 +54,19 @@ def _first_env(*names: str) -> str:
     return ""
 
 
+_LEGACY_WARNED: set[str] = set()
+
+
+def _warn_legacy_env(canonical: str, *legacy: str) -> None:
+    if os.environ.get(canonical, "").strip():
+        return
+    for name in legacy:
+        if name not in _LEGACY_WARNED and os.environ.get(name, "").strip():
+            _LEGACY_WARNED.add(name)
+            logger.warning("Using deprecated env var %s; set %s instead", name, canonical)
+            return
+
+
 def register_backend(fn: _BackendFn) -> _BackendFn:
     """Register a search backend. Backends are tried in registration order."""
     _backends.append(fn)
@@ -102,6 +115,8 @@ def _vectorize_backend(query: Query, index_name: str) -> SearchResponse | None:
     name, so referencing `VectorizeBackendError` in the `except` clause would raise
     `UnboundLocalError` instead if it were imported from the same failing module.
     """
+    _warn_legacy_env("CLOUDFLARE_ACCOUNT_ID", "VECTORIZE_ACCOUNT_ID", "D1_ACCOUNT_ID")
+    _warn_legacy_env("CLOUDFLARE_API_TOKEN", "VECTORIZE_API_TOKEN", "D1_API_TOKEN")
     account_id = _first_env("CLOUDFLARE_ACCOUNT_ID", "VECTORIZE_ACCOUNT_ID", "D1_ACCOUNT_ID")
     api_token = _first_env("CLOUDFLARE_API_TOKEN", "VECTORIZE_API_TOKEN", "D1_API_TOKEN")
     if not account_id or not api_token:
@@ -299,6 +314,8 @@ def route_add_chunks(index_name: str, chunks: list[Chunk]) -> str | None:
     if not chunks:
         return None
 
+    _warn_legacy_env("CLOUDFLARE_ACCOUNT_ID", "VECTORIZE_ACCOUNT_ID", "D1_ACCOUNT_ID")
+    _warn_legacy_env("CLOUDFLARE_API_TOKEN", "VECTORIZE_API_TOKEN", "D1_API_TOKEN")
     vectorize_account = _first_env("CLOUDFLARE_ACCOUNT_ID", "VECTORIZE_ACCOUNT_ID", "D1_ACCOUNT_ID")
     vectorize_token = _first_env("CLOUDFLARE_API_TOKEN", "VECTORIZE_API_TOKEN", "D1_API_TOKEN")
     if vectorize_account and vectorize_token:

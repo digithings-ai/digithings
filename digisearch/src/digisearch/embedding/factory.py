@@ -75,10 +75,25 @@ def _first_env(*names: str) -> str:
     return ""
 
 
+_LEGACY_WARNED: set[str] = set()
+
+
+def _warn_legacy_env(canonical: str, *legacy: str) -> None:
+    if os.environ.get(canonical, "").strip():
+        return
+    for name in legacy:
+        if name not in _LEGACY_WARNED and os.environ.get(name, "").strip():
+            _LEGACY_WARNED.add(name)
+            logger.warning("Using deprecated env var %s; set %s instead", name, canonical)
+            return
+
+
 def vector_backend_configured() -> bool:
     """True when Chroma or Vectorize credentials/paths are present."""
     if os.environ.get("CHROMA_PATH") or os.environ.get("CHROMA_HOST"):
         return True
+    _warn_legacy_env("CLOUDFLARE_ACCOUNT_ID", "VECTORIZE_ACCOUNT_ID", "D1_ACCOUNT_ID")
+    _warn_legacy_env("CLOUDFLARE_API_TOKEN", "VECTORIZE_API_TOKEN", "D1_API_TOKEN")
     account = _first_env("CLOUDFLARE_ACCOUNT_ID", "VECTORIZE_ACCOUNT_ID", "D1_ACCOUNT_ID")
     token = _first_env("CLOUDFLARE_API_TOKEN", "VECTORIZE_API_TOKEN", "D1_API_TOKEN")
     return bool(account and token)
