@@ -8,6 +8,7 @@ import {
   Button,
   Card,
   CardContent,
+  Checkbox,
   Collapsible,
   CollapsibleContent,
   CollapsibleTrigger,
@@ -26,6 +27,7 @@ import {
   Sheet,
   SheetContent,
   SheetTrigger,
+  Switch,
   Tabs,
   TabsContent,
   TabsList,
@@ -85,6 +87,43 @@ describe("vendored ui kit renders server-side", () => {
     const html = renderToStaticMarkup(<Badge>live</Badge>);
     expect(html).toContain('data-slot="badge"');
     expect(html).toContain("live");
+  });
+
+  it("Checkbox renders its root and (when checked) the indicator", () => {
+    const checked = renderToStaticMarkup(<Checkbox defaultChecked aria-label="Enable" />);
+    expect(checked).toContain('data-slot="checkbox"');
+    expect(checked).toContain('data-slot="checkbox-indicator"');
+    const unchecked = renderToStaticMarkup(<Checkbox aria-label="Enable" />);
+    expect(unchecked).toContain('data-slot="checkbox"');
+  });
+
+  it("Switch renders its root, size hook and thumb", () => {
+    const html = renderToStaticMarkup(<Switch size="sm" aria-label="Toggle" />);
+    expect(html).toContain('data-slot="switch"');
+    expect(html).toContain('data-slot="switch-thumb"');
+    expect(html).toContain('data-size="sm"');
+  });
+
+  it("dress=\"chat\" emits the digichat ctl-*-chat dress classes", () => {
+    expect(
+      renderToStaticMarkup(
+        <Button dress="chat" variant="outline" size="sm">
+          Go
+        </Button>,
+      ),
+    ).toContain("ctl-btn-chat--outline ctl-btn-chat--size-sm");
+    expect(renderToStaticMarkup(<Badge dress="chat" variant="secondary">x</Badge>)).toContain(
+      "ctl-badge-chat--secondary",
+    );
+    expect(renderToStaticMarkup(<Input dress="chat" />)).toContain("ctl-input-chat");
+    expect(renderToStaticMarkup(<Label dress="chat">L</Label>)).toContain("ctl-label-chat");
+    const card = renderToStaticMarkup(
+      <Card dress="chat">
+        <CardContent>body</CardContent>
+      </Card>,
+    );
+    expect(card).toContain("ctl-card-chat");
+    expect(card).toContain("ctl-card-content");
   });
 
   it("Table composes header, body, row and cells", () => {
@@ -163,7 +202,7 @@ describe("vendored ui kit renders server-side", () => {
     expect(closed).not.toContain('data-slot="collapsible-content"');
   });
 
-  it("Select renders its trigger; content is portal-only", () => {
+  it("Select composes its trigger, selected value and icon; content is portal-only", () => {
     const html = renderToStaticMarkup(
       <Select defaultValue="aapl">
         <SelectTrigger>
@@ -171,12 +210,19 @@ describe("vendored ui kit renders server-side", () => {
         </SelectTrigger>
         <SelectContent>
           <SelectItem value="aapl">AAPL</SelectItem>
+          <SelectItem value="msft">MSFT</SelectItem>
         </SelectContent>
       </Select>,
     );
+    // The trigger composes in SSR: the value slot renders the selected value,
+    // and the chevron icon is mounted. The item list lives in the portal, which
+    // react-dom/server omits — so the unselected item's label must be absent.
     expect(html).toContain('data-slot="select-trigger"');
+    expect(html).toContain('data-slot="select-value"');
+    expect(html).toContain("aapl");
+    expect(html).toMatch(/<svg/);
+    expect(html).not.toContain("MSFT");
     expect(html).not.toContain('data-slot="select-content"');
-    expect(typeof SelectContent).toBe("function");
   });
 
   // Sheet, DropdownMenu and Tooltip content render through Base UI portals,

@@ -50,6 +50,9 @@ export {
   isSamePageHashHref,
 } from "./navigation/hashScroll";
 export { Terminal, type TermLine } from "./components/Terminal";
+// Spinner — the canonical inline loading glyph (replaces the hand-rolled
+// `size-[11px] … border-current/30` span copied across reference specimens).
+export { Spinner, type SpinnerProps } from "./components/Spinner";
 
 // promoted primitives (#1415)
 export { Pricing, PricingTierCard, PrecisionTable, type PricingProps, type PricingTierCardProps, type PrecisionTableProps } from "./components/pricing/Pricing";

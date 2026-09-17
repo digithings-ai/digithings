@@ -2,6 +2,7 @@
 
 import type { FormEvent } from "react";
 
+import { Spinner } from "@digithings/web";
 import { Button, Input, Label } from "@digithings/web/ui";
 
 /**
@@ -105,10 +106,7 @@ export function PaymentBand() {
           <div className="mt-[1.2rem] flex flex-wrap items-center gap-[0.8rem]">
             <Button type="submit">Pay $165.56</Button>
             <Button type="button" disabled>
-              <span
-                aria-hidden="true"
-                className="size-[11px] shrink-0 animate-spin rounded-full border-2 border-current/30 border-t-current motion-reduce:animate-none"
-              />
+              <Spinner />
               Processing…
             </Button>
           </div>

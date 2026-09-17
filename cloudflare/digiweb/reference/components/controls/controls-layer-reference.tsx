@@ -3,6 +3,7 @@
 import {
   Badge,
   GitHubGlyph,
+  Spinner,
   Tooltip,
   TooltipContent,
   TooltipProvider,
@@ -53,10 +54,7 @@ export function ControlsLayerReference() {
             <Button variant="outline">Cancel</Button>
             <Button variant="destructive">Halt live</Button>
             <Button disabled>
-              <span
-                aria-hidden="true"
-                className="size-[11px] shrink-0 animate-spin rounded-full border-2 border-current/30 border-t-current motion-reduce:animate-none"
-              />
+              <Spinner />
               Backtesting…
             </Button>
             <Button variant="ghost" size="icon" aria-label="View on GitHub">
