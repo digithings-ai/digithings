@@ -38,10 +38,10 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     env:
-      CORE_SUPABASE_URL: ${{ secrets.CORE_SUPABASE_URL || secrets.SUPABASE_URL }}
-      CORE_SUPABASE_SERVICE_KEY: ${{ secrets.CORE_SUPABASE_SERVICE_KEY || secrets.SUPABASE_SERVICE_ROLE_KEY }}
-      SUPABASE_URL: ${{ secrets.CORE_SUPABASE_URL || secrets.SUPABASE_URL }}
-      SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.CORE_SUPABASE_SERVICE_KEY || secrets.SUPABASE_SERVICE_ROLE_KEY }}
+      CORE_SUPABASE_URL: ${{ secrets.CORE_SUPABASE_URL }}
+      CORE_SUPABASE_SERVICE_KEY: ${{ secrets.CORE_SUPABASE_SERVICE_KEY }}
+      SUPABASE_URL: ${{ secrets.CORE_SUPABASE_URL }}
+      SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.CORE_SUPABASE_SERVICE_KEY }}
       MAILGUN_API_KEY: ${{ secrets.MAILGUN_API_KEY }}
       MAILGUN_DOMAIN: ${{ secrets.MAILGUN_DOMAIN }}
       NOTIFY_FROM: ${{ secrets.NOTIFY_FROM }}
