@@ -15,9 +15,12 @@ from datetime import UTC, date, datetime
 from decimal import Decimal
 from typing import (
     Any,  # score:allow untyped any — duck-typed Supabase client / row dicts
+    Mapping,
     Sequence,
 )
 from uuid import UUID
+
+from pydantic import ValidationError
 
 from digiquant.dashboard.temporal import require_utc_datetime
 from digiquant.portfolio.models.forecast import (
@@ -32,6 +35,7 @@ from digiquant.portfolio.models.forecast_calibration import (
     OutcomeStatus,
     SessionPriceSnapshot,
     forecast_outcome_content_hash,
+    forecast_outcome_hash_payload,
     forecast_outcome_id,
 )
 from digiquant.research.data.queries import r2_backend_enabled
@@ -44,6 +48,16 @@ OUTCOMES = "olympus_forecast_outcomes"
 DEFAULT_VENUE = "NYSE"
 # US equity cash close proxy when price_history has no observation timestamp.
 _SESSION_CLOSE_HOUR_UTC = 20
+
+
+class ForecastOutcomeIntegrityError(RuntimeError):
+    """A persisted resolved outcome no longer matches its canonical digest (#4298).
+
+    Raised by :func:`list_resolved_outcomes_as_of` instead of silently dropping the
+    row: a daily house reflect that quietly skips a matured label is worse than a
+    loud failure. Repair the stored row with
+    ``digiquant/scripts/research/repair_forecast_outcome_hashes.py``.
+    """
 
 
 @dataclass(frozen=True)
@@ -467,24 +481,24 @@ def _build_resolved_outcome(
         "event_time": event_time,
         "known_at": known_at,
     }
-    payload = {
-        "base_forecast_id": str(draft["base_forecast_id"]),
-        "effective_forecast_id": str(draft["effective_forecast_id"]),
-        "ticker": draft["ticker"],
-        "horizon_sessions": horizon_sessions,
-        "reference_session": reference_session.isoformat(),
-        "maturity_session": maturity_session.isoformat(),
-        "reference_snapshot": reference_snapshot.model_dump(mode="json"),
-        "maturity_snapshot": maturity_snapshot.model_dump(mode="json"),
-        "forecast_mean_return": str(forecast_mean_return),
-        "realized_return": str(realized),
-        "signed_residual": str(residual),
-        "positive_label": positive,
-        "status": OutcomeStatus.RESOLVED.value,
-        "unavailable_reason": None,
-        "event_time": event_time.isoformat(),
-        "known_at": known_at.isoformat(),
-    }
+    payload = forecast_outcome_hash_payload(
+        base_forecast_id=base.forecast_id,
+        effective_forecast_id=effective_id,
+        ticker=ticker.strip().upper(),
+        horizon_sessions=horizon_sessions,
+        reference_session=reference_session,
+        maturity_session=maturity_session,
+        reference_snapshot=reference_snapshot,
+        maturity_snapshot=maturity_snapshot,
+        forecast_mean_return=forecast_mean_return,
+        realized_return=realized,
+        signed_residual=residual,
+        positive_label=positive,
+        status=OutcomeStatus.RESOLVED,
+        unavailable_reason=None,
+        event_time=event_time,
+        known_at=known_at,
+    )
     content_hash = forecast_outcome_content_hash(payload=payload)
     outcome_id = forecast_outcome_id(
         effective_forecast_id=effective_id,
@@ -701,7 +715,9 @@ def list_resolved_outcomes_as_of(
     """Exact rows with ``status=resolved`` and ``known_at <= cutoff`` (no latest lookup).
 
     Used by WP5.4 shadow calibration attach. Late-known rows are invisible.
-    Invalid rows are skipped rather than inventing labels.
+    A row that fails canonical validation raises
+    :class:`ForecastOutcomeIntegrityError` rather than being silently skipped:
+    dropping a matured label would quietly shrink the calibration cohort (#4298).
     """
     cutoff = require_utc_datetime(knowledge_cutoff_at, field_name="knowledge_cutoff_at")
     resp = (
@@ -720,19 +736,130 @@ def list_resolved_outcomes_as_of(
         payload = {k: row[k] for k in _OUTCOME_FIELDS if k in row}
         try:
             out.append(ForecastOutcome.model_validate(payload))
-        except Exception as exc:
-            logger.warning(
-                "forecast outcomes: skip invalid resolved row (%s: %s)",
-                type(exc).__name__,
-                exc,
-            )
+        except ValidationError as exc:
+            raise ForecastOutcomeIntegrityError(
+                f"forecast outcome {row.get('outcome_id')!r} failed canonical validation: {exc}. "
+                "Repair stored hashes with "
+                "digiquant/scripts/research/repair_forecast_outcome_hashes.py"
+            ) from exc
     return sorted(out, key=lambda o: (o.known_at, str(o.outcome_id)))
+
+
+@dataclass(frozen=True)
+class ForecastOutcomeHashRepair:
+    """One stored outcome whose digest no longer matches the canonical payload."""
+
+    outcome_id: str
+    repaired_outcome_id: str
+    recorded_content_hash: str
+    repaired_content_hash: str
+
+
+@dataclass(frozen=True)
+class ForecastOutcomeHashRepairPlan:
+    """Dry-run result: rows to rewrite plus rows that are genuinely corrupt."""
+
+    repairs: tuple[ForecastOutcomeHashRepair, ...] = field(default_factory=tuple)
+    unrepairable: tuple[str, ...] = field(default_factory=tuple)
+
+    @property
+    def ok(self) -> bool:
+        return not self.unrepairable
+
+
+def _outcome_source_fields(row: Mapping[str, Any]) -> dict[str, Any]:
+    """Coerce one persisted row into constructor-ready field values.
+
+    PostgREST returns ``numeric`` as JSON numbers (Python float) and ``jsonb``
+    snapshots as nested objects; a direct psycopg read returns ``Decimal`` /
+    ``date`` / ``datetime`` / ``UUID`` natively. Normalize both shapes.
+    """
+    fields: dict[str, Any] = {
+        name: row[name] for name in ForecastOutcome.model_fields if name in row
+    }
+    for snapshot_key in ("reference_snapshot", "maturity_snapshot"):
+        value = fields.get(snapshot_key)
+        if isinstance(value, Mapping):
+            fields[snapshot_key] = SessionPriceSnapshot.model_validate(dict(value))
+    for decimal_key in ("forecast_mean_return", "realized_return", "signed_residual"):
+        value = fields.get(decimal_key)
+        if value is not None and not isinstance(value, Decimal):
+            fields[decimal_key] = Decimal(str(value))
+    for session_key in ("reference_session", "maturity_session"):
+        value = fields.get(session_key)
+        if isinstance(value, str):
+            fields[session_key] = date.fromisoformat(value)
+    for instant_key in ("event_time", "known_at"):
+        value = fields.get(instant_key)
+        if isinstance(value, str):
+            fields[instant_key] = _parse_known_at(value)
+    status = fields.get("status")
+    if status is not None and not isinstance(status, OutcomeStatus):
+        fields["status"] = OutcomeStatus(str(status))
+    for uuid_key in ("outcome_id", "base_forecast_id", "effective_forecast_id"):
+        value = fields.get(uuid_key)
+        if isinstance(value, str):
+            fields[uuid_key] = UUID(value)
+    return fields
+
+
+def plan_forecast_outcome_hash_repairs(
+    *,
+    rows: Sequence[Mapping[str, Any]],
+) -> ForecastOutcomeHashRepairPlan:
+    """Plan idempotent digest repairs for stored outcome rows (#4298).
+
+    Pure and read-only: rebuild each row's canonical payload from its stored
+    fields, recompute ``content_hash`` and ``outcome_id``, and re-validate the
+    result. A row that still fails validation after recomputation is genuinely
+    corrupt (bad residual/snapshot/ordering) and is reported under
+    ``unrepairable`` — never rewritten. Rows already canonical are omitted, so a
+    second pass after an applied repair returns an empty plan.
+    """
+    repairs: list[ForecastOutcomeHashRepair] = []
+    unrepairable: list[str] = []
+    for row in rows:
+        fields = _outcome_source_fields(row)
+        recorded_id = str(fields.get("outcome_id") or "")
+        recorded_hash = str(fields.get("content_hash") or "")
+        try:
+            constructed = ForecastOutcome.model_construct(**fields)
+            repaired_hash = forecast_outcome_content_hash(payload=constructed._hash_payload())
+            repaired_id = forecast_outcome_id(
+                effective_forecast_id=constructed.effective_forecast_id,
+                maturity_session=constructed.maturity_session,
+                content_hash=repaired_hash,
+            )
+            # Genuinely corrupt rows raise here and are never rewritten.
+            ForecastOutcome.model_validate(
+                {**fields, "outcome_id": repaired_id, "content_hash": repaired_hash}
+            )
+        except Exception as exc:
+            unrepairable.append(
+                f"{recorded_id or '<missing outcome_id>'}: {type(exc).__name__}: {exc}"
+            )
+            continue
+        if recorded_id == str(repaired_id) and recorded_hash == repaired_hash:
+            continue
+        repairs.append(
+            ForecastOutcomeHashRepair(
+                outcome_id=recorded_id,
+                repaired_outcome_id=str(repaired_id),
+                recorded_content_hash=recorded_hash,
+                repaired_content_hash=repaired_hash,
+            )
+        )
+    return ForecastOutcomeHashRepairPlan(repairs=tuple(repairs), unrepairable=tuple(unrepairable))
 
 
 __all__ = [
     "DEFAULT_VENUE",
     "OUTCOMES",
+    "ForecastOutcomeHashRepair",
+    "ForecastOutcomeHashRepairPlan",
+    "ForecastOutcomeIntegrityError",
     "OutcomeResolveResult",
     "list_resolved_outcomes_as_of",
+    "plan_forecast_outcome_hash_repairs",
     "resolve_matured_forecast_outcomes",
 ]
