@@ -28,7 +28,7 @@ Rebuilt from four read-only sweeps (cloudflare / python / plumbing / docs) plus 
 
 **Local `.env` / `.dev.vars`.** Gitignored, dev only. Root `.env` (`.gitignore:31`), `cloudflare/digichat/.env.local`, `cloudflare/digithings-web/.dev.vars` (nested `.gitignore`), `.local/secrets/digithings-byok.env` (`.gitignore:34`), `projects/*/.env`.
 
-**Plaintext literal committed in config.** A real value committed to a gitleaks-allowlisted path. The allowlist ([`.gitleaks.toml:14`](../../.gitleaks.toml)) is why they are unscanned. Two exist: the FRED / CoinGecko / Alpha Vantage keys and the `local-dev-unused-first-party` embed token.
+**Plaintext literal committed in config.** A real value committed to the repo. Two exist: the FRED / CoinGecko / Alpha Vantage keys, in a gitleaks-allowlisted path ([`.gitleaks.toml:14`](../../.gitleaks.toml)); and the `local-dev-unused-first-party` embed token, which the allowlist does **not** cover — the default ruleset simply does not detect it.
 
 ## Inventory
 
@@ -69,7 +69,7 @@ Rebuilt from four read-only sweeps (cloudflare / python / plumbing / docs) plus 
 | `ZAMMAD_API_TOKEN` | stack `src/index.ts:111` | stack `wrangler.toml:150`; `docker-compose.yml:459` | no — write-only | read-only Zammad MCP 401 | stack Worker + `.env` | raw token or `Token token=` |
 | `MAILGUN_API_KEY` · `MAILGUN_DOMAIN` · `NOTIFY_FROM` | `execution-cron-check.yml:45-47`; `digiquant/.../staging_secrets.py:24` | GH repo secrets | n/a | notification email stops | GH + `.env` | domain/from kept as secrets (R? see f) |
 | `DIGISEARCH_SMTP_USER` · `DIGISEARCH_SMTP_PASS` | `digisearch/src/digisearch/monitors/delivery.py:320` | `.env.example:109` | yes (`.env`) | monitor email delivery fails | local `.env` | |
-| `COINGECKO_API_KEY` · `ALPHA_VANTAGE_API_KEY` · `SEC_EDGAR_USER_AGENT` | `digiquant/.../research ingest` | `digiquant/src/digiquant/research/config/mcp.secrets.env.example:7-12` | n/a | research ingest fails | committed example, gitleaks-allowlisted | `plaintext-literal`; owner-confirmed dead 2026-06-18 |
+| `FRED_API_KEY` · `COINGECKO_API_KEY` · `ALPHA_VANTAGE_API_KEY` · `SEC_EDGAR_USER_AGENT` | `digiquant/.../research ingest` | `digiquant/src/digiquant/research/config/mcp.secrets.env.example:5-12` | n/a | research ingest fails | committed example, gitleaks-allowlisted | `plaintext-literal`; owner-confirmed dead 2026-06-18 |
 | `OMNIROUTE_API_KEY` · `OMNIROUTE_AUTH_PASSWORD` | `docker-compose.yml:358,384-385` | `.env.example:14-15` | yes (`.env`) | omniroute profile breaks | local `.env` | vendor default forbidden |
 
 ### (c) infrastructure tokens (Cloudflare / Supabase / DB)
@@ -82,7 +82,7 @@ Rebuilt from four read-only sweeps (cloudflare / python / plumbing / docs) plus 
 | `CORE_SUPABASE_URL` · `SUPABASE_URL` | `digibase/src/digibase/connectors/supabase.py:112`; many pipelines | GH repo secret; `.env` | n/a | Supabase/PostgREST access breaks | GH + `.env` | canonical + legacy alias |
 | `CORE_SUPABASE_SERVICE_KEY` · `SUPABASE_SERVICE_ROLE_KEY` · `CORE_SUPABASE_ANON_KEY` | `digibase/.../supabase.py:113`; `digisearch`, `digivault`, `digiquant` | GH repo secret; `.env` | n/a | full DB read/write | GH + `.env` (multi-service) | service key = full access |
 | `DIGICHAT_DASHBOARD_SUPABASE_URL` · `DIGICHAT_DASHBOARD_SUPABASE_ANON_KEY` | `cloudflare/digichat-cloudflare/src/index.ts:53-55` | `cloudflare/digichat-cloudflare/wrangler.toml:56-57` | no — write-only | dashboard token verify | digichat Worker + dashboard `NEXT_PUBLIC_*` | anon key is publishable |
-| `CORE_POSTGRES_URI` · `DIGI_CHECKPOINTER_POSTGRES_URI` · `MARKET_DATA_POSTGRES_URI` | `db-migrate.yml:114`; `digigraph/.../graph.py:179` | GH repo secret | n/a | migrations + checkpointer fail | GH only (transitional aliases) | see [core-postgres-uri secret](core-postgres-uri-secret.md) |
+| `CORE_POSTGRES_URI` | `db-migrate.yml:114`; `digigraph/.../graph.py:179` | GH repo secret | n/a | migrations + checkpointer fail | GH only | see [core-postgres-uri secret](core-postgres-uri-secret.md) |
 | `DIGIKEY_DATABASE_URL` | stack `src/index.ts:72`; `digikey/src/digikey/db.py:38` | stack `wrangler.toml:139` | no — write-only | **digikey refuses to start when unset** (#4080) | stack Worker only | carries Postgres password |
 | `DIGICHAT_POSTGRES_PASSWORD` · `DIGICHAT_DATABASE_URL` | `docker-compose.yml:514`; stack `wrangler.toml:58` (inert) | `infra/digichat-release/.env.profile-a.example:21` | yes (profile env) | digichat conversations DB; Auth.js | compose + profiles | `DIGICHAT_DATABASE_URL` not forwarded (R4) |
 | `DIGISEARCH_DATABASE_URL` · `DIGISEARCH_PGVECTOR_URL` | `digisearch/src/digisearch/retrieval/pgvector.py:27` | `.env.example` | yes (`.env`) | pgvector retrieval fails | local `.env` | DSN carries DB creds |
@@ -135,7 +135,7 @@ Rebuilt from four read-only sweeps (cloudflare / python / plumbing / docs) plus 
 
 **R2 — dev bypass flags (`DIGIKEY_ALLOW_DEV_GLOBAL`, `DIGIKEY_ALLOW_EPHEMERAL_KEY`) silently weaken auth if set in prod.** Severity: critical. Evidence: `digikey/src/digikey/settings.py:12`, `crypto_keys.py:65`, stack `wrangler.toml:203-204` (`"0"`), `scripts/run_stack_local.sh:76,78` (`1`). Why: `dev_global` mints `*`-scope keys; ephemeral key rotates JWKS on restart, breaking cross-instance verification. Action: assert `0` at deploy; keep the fail-closed default.
 
-**R3 — real API keys are committed in a gitleaks-allowlisted example.** Severity: high. Evidence: `digiquant/src/digiquant/research/config/mcp.secrets.env.example:5,7,9,12` (non-placeholder literals, masked `***`), `.gitleaks.toml:49-55` (owner-confirmed dead 2026-06-18), `infra/digichat-release/compose.profile-a-bundle.override.yml:11` (`local-dev-unused-first-party`). Why: the allowlist exempts these paths from scanning, so a live value would never be detected; liveness is unverifiable here. Action: confirm-dead or rotate; reduce the allowlist to placeholder-shaped values only.
+**R3 — real API keys are committed in a gitleaks-allowlisted example.** Severity: high. Evidence: `digiquant/src/digiquant/research/config/mcp.secrets.env.example:5-12` (non-placeholder literals, masked `***`), `.gitleaks.toml:52-57` (owner-confirmed dead 2026-06-18), `infra/digichat-release/compose.profile-a-bundle.override.yml:11` (`local-dev-unused-first-party`). Why: the research-example allowlist exempts that one path from scanning, so a live value there would never be detected; the compose-override token is not allowlisted at all — the default ruleset does not detect it. Liveness of both is unverifiable here. Action: confirm-dead or rotate; reduce the allowlist to placeholder-shaped values only.
 
 **R4 — the container `envVars` whitelist drops secrets silently.** Severity: high. Evidence: digichat `src/index.ts:32-56` vs `wrangler.toml:50-58` — `DIGICHAT_DATABASE_URL`, `CHEAPERINFERENCE_API_KEY`, `OPENROUTER_API_KEY` are `put` on the Worker but never forwarded. Why: an operator rotates a key, the secret list shows it, and the process never sees it. Action: add a test asserting every Worker secret name appears in `envVars` or is documented inert.
 
