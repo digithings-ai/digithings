@@ -30,9 +30,9 @@ import {
   CopyActionIcon,
 } from "./action-icons";
 import { TooltipIconButton } from "./tooltip-icon-button";
-import { Button } from "./ui/button";
+import { Button } from "../../../ui/button";
 import { DotMatrix } from "../DotMatrix";
-import { Skeleton } from "./ui/skeleton";
+import { Skeleton } from "../../../components/controls/Skeleton";
 import { cn } from "./cn";
 import {
   ActionBarMorePrimitive,
@@ -227,16 +227,16 @@ const ThreadHistorySkeleton: FC = () => (
     className="animate-in fade-in fill-mode-both flex flex-col gap-y-6 [animation-delay:150ms] [animation-duration:200ms]"
   >
     <span className="sr-only">Loading conversation</span>
-    <Skeleton className="ml-auto h-9 w-2/5 rounded-xl motion-reduce:animate-none" />
+    <Skeleton variant="block" className="ml-auto h-9 w-2/5 rounded-xl motion-reduce:animate-none" />
     <div className="flex flex-col gap-y-2">
-      <Skeleton className="h-4 w-11/12 motion-reduce:animate-none" />
-      <Skeleton className="h-4 w-4/5 motion-reduce:animate-none" />
-      <Skeleton className="h-4 w-3/5 motion-reduce:animate-none" />
+      <Skeleton variant="line" className="h-4 w-11/12 motion-reduce:animate-none" />
+      <Skeleton variant="line" className="h-4 w-4/5 motion-reduce:animate-none" />
+      <Skeleton variant="line" className="h-4 w-3/5 motion-reduce:animate-none" />
     </div>
-    <Skeleton className="ml-auto h-9 w-1/3 rounded-xl motion-reduce:animate-none" />
+    <Skeleton variant="block" className="ml-auto h-9 w-1/3 rounded-xl motion-reduce:animate-none" />
     <div className="flex flex-col gap-y-2">
-      <Skeleton className="h-4 w-10/12 motion-reduce:animate-none" />
-      <Skeleton className="h-4 w-2/3 motion-reduce:animate-none" />
+      <Skeleton variant="line" className="h-4 w-10/12 motion-reduce:animate-none" />
+      <Skeleton variant="line" className="h-4 w-2/3 motion-reduce:animate-none" />
     </div>
   </div>
 );
@@ -625,7 +625,7 @@ const ComposerSendControls: FC = () => {
       </AuiIf>
       <AuiIf condition={(s) => s.thread.isRunning}>
         <ComposerPrimitive.Cancel asChild>
-          <Button
+          <Button dress="chat"
             type="button"
             variant="default"
             size="icon"
@@ -960,7 +960,7 @@ const EditComposer: FC = () => {
         />
         <div className="aui-edit-composer-footer mx-2.5 mb-2.5 flex items-center gap-1.5 self-end">
           <ComposerPrimitive.Cancel asChild>
-            <Button
+            <Button dress="chat"
               variant="ghost"
               size="sm"
               className="h-8 rounded-full px-3.5"
@@ -969,7 +969,7 @@ const EditComposer: FC = () => {
             </Button>
           </ComposerPrimitive.Cancel>
           <ComposerPrimitive.Send asChild>
-            <Button size="sm" className="h-8 rounded-full px-3.5">
+            <Button dress="chat" size="sm" className="h-8 rounded-full px-3.5">
               Update
             </Button>
           </ComposerPrimitive.Send>

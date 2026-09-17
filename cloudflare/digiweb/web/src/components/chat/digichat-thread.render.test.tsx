@@ -331,7 +331,7 @@ describe("DigichatThread", () => {
     await act(async () => {});
     const group = host.querySelector('[data-slot="tool-group-root"]');
     expect(group).toBeTruthy();
-    expect(group?.getAttribute("data-state")).toBe("closed");
+    expect(group?.hasAttribute("data-closed")).toBe(true);
     const label = group?.querySelector('[data-slot="tool-group-trigger-label"]');
     expect(label?.textContent).toContain("2 tool calls");
     unmount();
@@ -346,8 +346,8 @@ describe("DigichatThread", () => {
     expect(
       host
         .querySelector('[data-slot="tool-group-root"]')
-        ?.getAttribute("data-state"),
-    ).toBe("open");
+        ?.hasAttribute("data-open"),
+    ).toBe(true);
     unmount();
   });
 
@@ -369,7 +369,7 @@ describe("DigichatThread", () => {
     await act(async () => {});
     const reasoning = host.querySelector('[data-slot="reasoning-root"]');
     expect(reasoning).toBeTruthy();
-    expect(reasoning?.getAttribute("data-state")).toBe("closed");
+    expect(reasoning?.hasAttribute("data-closed")).toBe(true);
     unmount();
   });
 
