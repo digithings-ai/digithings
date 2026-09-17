@@ -85,6 +85,13 @@ def _resolve_uri(explicit: str | None) -> str:
     )
 
 
+def _status_label(*, apply: bool, repairs: int) -> str:
+    """Accurate run outcome: ``--apply`` with nothing to do is NOT a dry run."""
+    if not apply:
+        return "dry_run"
+    return "applied" if repairs else "no_changes"
+
+
 def main(argv: list[str] | None = None) -> int:
     load_repo_env()
     parser = argparse.ArgumentParser(
@@ -164,7 +171,7 @@ def main(argv: list[str] | None = None) -> int:
         ],
         "unrepairable": list(plan.unrepairable),
         "apply": args.apply,
-        "status": "applied" if args.apply and plan.repairs else "dry_run",
+        "status": _status_label(apply=args.apply, repairs=len(plan.repairs)),
     }
     print(json.dumps(payload, indent=2, sort_keys=True))
     return 0 if plan.ok else 3

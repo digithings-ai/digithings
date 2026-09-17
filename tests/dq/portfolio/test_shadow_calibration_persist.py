@@ -401,3 +401,68 @@ class TestH7BoundaryAttach:
             portfolio.calibrated_forecasts["AAPL"]["status"]
             == CalibrationArtifactStatus.UNAVAILABLE.value
         )
+
+
+class TestH7OutcomeIntegrityFailsLoud:
+    """#4298: a stale persisted digest must fail H7, not empty the cohort.
+
+    The reader raises ``ForecastOutcomeIntegrityError``; the H7 caller used to
+    catch ``Exception`` twice (inner load + outer attach) and return an empty
+    cohort, neutralizing the fail-loud contract. These exercise the *caller*,
+    not the reader in isolation.
+    """
+
+    def test_stale_row_fails_loud_from_attach(self) -> None:
+        from digiquant.portfolio.phases.h7_pm_direction import _attach_shadow_calibration
+        from digiquant.research import forecast_outcomes as fo
+
+        from tests.dq.research.test_forecast_outcome_hash_ingress import _stale_row
+        from tests.fixtures.fake_supabase import FakeSupabaseClient
+
+        client = FakeSupabaseClient(canned_reads={fo.OUTCOMES: [_stale_row()]})
+
+        with pytest.raises(
+            fo.ForecastOutcomeIntegrityError,
+            match="repair_forecast_outcome_hashes",
+        ):
+            _attach_shadow_calibration(_state_with_effective(), client=client)
+
+    def test_healthy_row_still_builds_shadow_attachment(self) -> None:
+        from digiquant.portfolio.phases.h7_pm_direction import _attach_shadow_calibration
+        from digiquant.research import forecast_outcomes as fo
+
+        from tests.dq.research.test_forecast_outcome_hash_ingress import (
+            _build_outcome,
+            _postgrest_numeric_roundtrip,
+        )
+        from tests.fixtures.fake_supabase import FakeSupabaseClient
+
+        row = _postgrest_numeric_roundtrip(fo._outcome_row(_build_outcome()))
+        client = FakeSupabaseClient(canned_reads={fo.OUTCOMES: [row]})
+
+        attachment = _attach_shadow_calibration(_state_with_effective(), client=client)
+
+        # One resolved outcome is visible, so the cohort is non-empty (AVAILABLE,
+        # not an empty-cohort UNAVAILABLE) — the guard did not empty a healthy load.
+        assert len(attachment.calibrations) == 1
+        assert attachment.calibrations[0].status is CalibrationArtifactStatus.AVAILABLE
+        assert attachment.calibrations[0].sample_count == 1
+
+    def test_transient_load_failure_still_degrades(self) -> None:
+        from digiquant.portfolio.phases.h7_pm_direction import _attach_shadow_calibration
+
+        class _BrokenClient:
+            def table(self, _name: str) -> object:
+                raise RuntimeError("transient backend failure")
+
+        attachment = _attach_shadow_calibration(
+            _state_with_effective(),
+            client=_BrokenClient(),  # type: ignore[arg-type]
+        )
+
+        # A transient load failure keeps the pre-existing fail-soft (typed
+        # empty-cohort unavailable) — the guard only makes the named integrity
+        # error loud.
+        assert len(attachment.calibrations) == 1
+        assert attachment.calibrations[0].status is CalibrationArtifactStatus.UNAVAILABLE
+        assert attachment.calibrations[0].unavailable_reason == "empty_cohort"

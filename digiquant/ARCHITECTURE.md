@@ -2114,7 +2114,11 @@ entry until that cutover. Prompt / structured-output walk for the same pass:
   `ForecastOutcomeIntegrityError` rather than silently skipping a stale row, and
   `scripts/research/repair_forecast_outcome_hashes.py` rewrites stale
   `content_hash`/`outcome_id` (privileged direct PG; append-only trigger disabled
-  within one transaction).
+  within one transaction). That rewrite changes `outcome_id` (its UUID5 input), so
+  any `olympus_forecast_calibrations.outcome_ids` entries citing the pre-repair
+  UUID are left stale: the array is not a foreign key and no runtime path joins on
+  it, so this does not break a run, but it is a documented lineage-only decision
+  (see the repair script docstring) rather than a live reference.
   **Risk policy contracts (#2692 / WP6.2, #2803):** frozen models in
   `portfolio/models/risk_policy.py` (`RiskPolicy`, `CovarianceSnapshot`, provenance
   leaves, explicit Phase 1 unavailable factor/stress/tail capabilities) plus pure
