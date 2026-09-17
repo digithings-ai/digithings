@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { AnimatePresence, m, useReducedMotion } from "motion/react";
+import { Button } from "../../ui";
 
 /**
  * ToastStack — the corner notification stack promoted from the design
@@ -152,14 +153,20 @@ export function ToastStack({
               <p className="toast-title">{t.title}</p>
               {t.message ? <p className="toast-msg">{t.message}</p> : null}
               {t.action ? (
-                <button type="button" className="toast-action" onClick={t.action.onClick}>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  className="toast-action h-auto inline-block border-0 bg-transparent p-0 text-[0.74rem] font-normal hover:bg-transparent hover:text-ink"
+                  onClick={t.action.onClick}
+                >
                   {t.action.label}
-                </button>
+                </Button>
               ) : null}
             </div>
-            <button
+            <Button
               type="button"
-              className="toast-close"
+              variant="ghost"
+              className="toast-close h-auto w-auto border-0 bg-transparent p-[0.15rem] hover:bg-transparent"
               aria-label="Dismiss"
               onClick={() => onDismiss(t.id)}
             >
@@ -174,7 +181,7 @@ export function ToastStack({
               >
                 <path d="M6 6l12 12M18 6L6 18" />
               </svg>
-            </button>
+            </Button>
             {t.ttlMs && !reduced ? (
               <span
                 className="toast-progress"

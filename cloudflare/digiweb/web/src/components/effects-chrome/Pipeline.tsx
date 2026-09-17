@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { Button } from "../../ui";
 
 /**
  * Pipeline — the dashboard's workflow visualization promoted from the
@@ -99,10 +100,11 @@ export function Pipeline({ columns, summary, defaultSelectedId, onSelect, classN
             <div className={`pl-col flex flex-col gap-[0.5rem]${col.kind === "parallel" ? " pl-col--par" : ""}`}>
               {col.label ? <span className="pl-col-tag">{col.label}</span> : null}
               {col.nodes.map((n) => (
-                <button
+                <Button
                   key={n.id}
                   type="button"
-                  className={`pl-node pl-node--${n.status}${sel && n.id === sel.id ? " is-sel" : ""}`}
+                  variant="ghost"
+                  className={`pl-node h-auto items-stretch justify-start border-hair bg-surface px-[0.7rem] py-[0.6rem] font-normal whitespace-normal hover:bg-transparent pl-node--${n.status}${sel && n.id === sel.id ? " is-sel" : ""}`}
                   aria-pressed={sel ? n.id === sel.id : false}
                   onClick={() => {
                     setSelId(n.id);
@@ -127,7 +129,7 @@ export function Pipeline({ columns, summary, defaultSelectedId, onSelect, classN
                     <span>{n.ms}</span>
                     <span className="pl-node-tok">{n.tokens} tok</span>
                   </span>
-                </button>
+                </Button>
               ))}
             </div>
             {i < columns.length - 1 ? (
