@@ -93,8 +93,8 @@ instance_type = "standard-2"
 # (in-memory 900s TTL keyed by as_of + manifest version).
 # Cold-start policy: sleepAfter = "15m" on the class in src/index.ts. A cold
 # start pays only the FastMCP import, never a data load (R2 is the cache); the
-# daily market-data-refresh cron stays a health ping
-# (against the enabled custom-domain route, once live):
+# daily market-data-refresh cron keeps R2 fresh and never touches the container.
+# Once the custom-domain route is enabled it can be pinged manually:
 #   curl -sS https://mcp.digithings.ai/mcp -H 'Accept: application/json'
 # Egress verified 2026-09-10: query1.finance.yahoo.com reachable (HTTP 429 =
 # Yahoo rate-limit, i.e. egress works; same retry/backoff as the cron applies),

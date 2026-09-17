@@ -382,8 +382,9 @@ means backing off the overlap window, not widening it.
 
 Cold-start policy: `sleepAfter = "15m"` on the container class, so the container
 may sleep after 15 minutes idle. A cold start only pays the FastMCP import,
-never a data load. The daily `market-data-refresh` cron stays a health ping
-against the enabled custom-domain route (once live):
+never a data load. The daily `market-data-refresh` cron keeps R2 fresh and never
+touches the container; once the custom-domain route is enabled it can be pinged
+manually:
 `curl -sS https://mcp.digithings.ai/mcp -H 'Accept: application/json'`.
 
 Per-component secrets (`wrangler secret put`, never committed): `FRED_API_KEY`
