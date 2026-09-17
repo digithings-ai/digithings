@@ -37,7 +37,7 @@ import {
   toneClass,
   viewWindowForPreset,
 } from "@digithings/web";
-import { Badge, Card } from "@digithings/web/ui";
+import { Badge, Card, buttonVariants } from "@digithings/web/ui";
 import { AssetLogoFor } from "@/components/tearsheet/asset-logo";
 import { CurrentPosition } from "@/components/tearsheet/current-position";
 import { LiveMetricsBadge } from "@/components/tearsheet/live-metrics";
@@ -313,7 +313,7 @@ function UnpublishedStrategyCard({ strategyId }: { strategyId: string }) {
         appear after the operator publishes this backtest.
       </p>
       <p className="dqss-preview-footer">
-        <Link className="dqss-full" href={`/strategies/${strategyId}`}>
+        <Link className={buttonVariants({ variant: "link" }) + " dqss-full"} href={`/strategies/${strategyId}`}>
           View full tearsheet ↗
         </Link>
       </p>
@@ -509,7 +509,7 @@ const StrategyTearsheetCard = memo(function StrategyTearsheetCard({
       </section>
 
       <p className="dqss-preview-footer">
-        <Link className="dqss-full" href={`/strategies/${entry.strategy}`}>
+        <Link className={buttonVariants({ variant: "link" }) + " dqss-full"} href={`/strategies/${entry.strategy}`}>
           View full tearsheet ↗
         </Link>
       </p>
@@ -548,7 +548,10 @@ export function StrategySuite() {
               clear the pipeline.
             </p>
           </div>
-          <Link href="/strategies" className="dqss-library-pill">
+          <Link
+            href="/strategies"
+            className={buttonVariants({ variant: "outline", size: "lg" }) + " dqss-library-pill"}
+          >
             Full strategy library
             <span className="dqss-library-arrow" aria-hidden="true">
               →

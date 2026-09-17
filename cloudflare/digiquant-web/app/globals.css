@@ -455,18 +455,24 @@ html.no-js .dqhero-cta { opacity: 1; transform: none; }
 .dqss-intro-copy { max-width: 52ch; }
 .dqss-intro .dq-sub { margin-bottom: 0; }
 .dqss-intro .dqss-library-pill { flex-shrink: 0; margin-bottom: 0.3rem; }
+/* Control dress migrated onto the kit Button (`buttonVariants({variant:
+   "outline", size:"lg"})`) in wave 3 T3 — the last button-shaped <a> in
+   digiquant-web. This class now carries only the sanctioned art the kit's
+   outline variant does not express: the accent color-mix wash + border
+   (MIGRATION.md "two-color color-mix() stays CSS"), the mono clamp metrics,
+   the pill's own padding/gap and height:auto (so the kit's fixed `h-9` step
+   does not shrink the pre-migration pill), and the shadow ink. Display /
+   alignment / radius / border-width / nowrap / focus ring / active translate
+   all come from the kit now. */
 .dqss-library-pill {
-  display: inline-flex;
-  align-items: center;
+  height: auto;
   gap: 0.45rem;
   font-family: var(--font-mono);
   font-size: clamp(0.72rem, 2vw, 0.8rem);
   letter-spacing: 0.02em;
   color: var(--accent);
-  text-decoration: none;
   padding: 0.55rem 1.05rem;
-  border-radius: 0;
-  border: 1px solid color-mix(in srgb, var(--accent) 42%, transparent);
+  border-color: color-mix(in srgb, var(--accent) 42%, transparent);
   background: color-mix(in srgb, var(--accent) 10%, var(--surface));
   /* rgba(0,0,0,…) box-shadows here and on the deck cards below are shadow
      ink, not brand color — sanctioned literals (site.css .term precedent) */
@@ -683,7 +689,12 @@ html.no-js .dqhero-cta { opacity: 1; transform: none; }
   letter-spacing: 0.04em;
   color: var(--ink-mute);
 }
-.dqss-full { display: inline-block; margin-top: 0.15rem; font-family: var(--font-mono); font-size: 0.72rem; color: var(--ink-mute); opacity: 0.9; }
+/* Link affordance migrated onto the kit Button (`buttonVariants({variant:
+   "link"})`) in wave 3 T3; this class keeps only the app art the kit link
+   variant does not carry — the mono metrics, the ink-mute base and the
+   ink-mute→accent hover (token colors; MIGRATION.md "stays CSS"). Layout
+   (inline-flex + hover underline) is the kit's now. */
+.dqss-full { margin-top: 0.15rem; font-family: var(--font-mono); font-size: 0.72rem; color: var(--ink-mute); opacity: 0.9; }
 .dqss-full:hover { color: var(--accent); text-decoration: underline; }
 
 @container dqss-card (max-width: 559px) {
