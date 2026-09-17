@@ -13,10 +13,11 @@
  * Response: { proof: "<base64url-signed-token>", exp: <ms-epoch>, tier: "desk"|... }
  *
  * Flow: verify embed tenant → verify Supabase access token via /auth/v1/user →
- * read app_metadata.plan_tier → mint HMAC for that claims tier only. Desk+
- * claims only: free/brief and FX Hub-only invitees (12x) receive
- * `403 plan_tier_required` — a product grant never mints a chat-eligible proof.
- * DIGICHAT_PLAN_PROOF_SECRET never reaches the client.
+ * read app_metadata.plan_tier → fall back to the effective tier from the
+ * my_access RPC (max(plan_tier, plan_floor)) → mint an HMAC for a Desk+ tier
+ * only. Free/brief claims and FX Hub-only invitees without a desk floor
+ * receive `403 plan_tier_required` — a product grant never mints a
+ * chat-eligible proof. DIGICHAT_PLAN_PROOF_SECRET never reaches the client.
  */
 
 import { NextResponse } from "next/server";
@@ -24,6 +25,7 @@ import { resolveVerifiedEmbedTenant } from "@/lib/embed-chat-tenant";
 import {
   signPlanProof,
   isProofEligibleTier,
+  resolveEffectivePlanTierFromDashboardAccessToken,
   resolvePlanTierFromDashboardAccessToken,
   type ProofEligibleTier,
 } from "@/lib/plan-proof";
@@ -77,15 +79,24 @@ export async function POST(req: Request): Promise<NextResponse> {
     );
   }
 
-  // Claims only — never trust body.tier / X-Embed-Plan-Tier / ?plan_tier=.
-  // Desk+ claims only (#4305): no product-grant fallback, so an fx_hub-only
-  // invitee cannot mint a desk proof and reach the chat route.
+  // Claims first — never trust body.tier / X-Embed-Plan-Tier / ?plan_tier=.
+  // Fall back to the effective tier (max(plan_tier, plan_floor) via my_access)
+  // so desk-floor invitees can chat, while free/brief and FX Hub-only grants
+  // without a desk floor still get 403 (#4305).
   const claimsTier = await resolvePlanTierFromDashboardAccessToken(accessToken, {
     supabaseUrl,
     anonKey,
   });
-  const proofTier: ProofEligibleTier | null =
+  let proofTier: ProofEligibleTier | null =
     claimsTier && isProofEligibleTier(claimsTier) ? claimsTier : null;
+  if (!proofTier) {
+    const effectiveTier = await resolveEffectivePlanTierFromDashboardAccessToken(
+      accessToken,
+      { supabaseUrl, anonKey },
+    );
+    proofTier =
+      effectiveTier && isProofEligibleTier(effectiveTier) ? effectiveTier : null;
+  }
   if (!proofTier) {
     return NextResponse.json(
       {
