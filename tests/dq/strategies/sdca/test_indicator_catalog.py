@@ -20,6 +20,7 @@ from digiquant.strategies.sdca.indicator_catalog import (
     composite_weights_from_params,
     dxy_z,
     extra_indicators_for_window,
+    fear_greed_z,
     load_date_value_frame,
     m2_liquidity_z,
     onchain_addr_ratio_z,
@@ -31,6 +32,7 @@ from digiquant.strategies.sdca.indicator_catalog import (
     rs_eth_confluence_z,
     rs_eth_z,
 )
+from digiquant.strategies.sdca.power_law_zscore import power_law_z_score
 from digiquant.strategies.sdca.price_oscillators import (
     SdcaOscillatorSpec,
     macd_confluence_z,
@@ -38,7 +40,6 @@ from digiquant.strategies.sdca.price_oscillators import (
     sma_band_confluence_z,
 )
 from digiquant.strategies.sdca.risk_index import build_risk_index
-from digiquant.strategies.sdca.power_law_zscore import power_law_z_score
 
 pytestmark = pytest.mark.unit
 
@@ -148,6 +149,24 @@ class TestNamedExtras:
         tail = [v for v in z.to_list() if v is not None]
         assert tail
         assert sum(tail) / len(tail) < 0
+
+    def test_fear_greed_rising_greed_is_negative_z(self) -> None:
+        n = 50
+        dates = _dates(n)
+        fng = pl.Series([20.0 + i for i in range(n)])
+        z = fear_greed_z(dates, dates, fng, window=10, min_samples=8)
+        tail = [v for v in z.to_list() if v is not None]
+        assert tail
+        assert sum(tail) / len(tail) < 0
+
+    def test_fear_greed_falling_fear_is_positive_z(self) -> None:
+        n = 50
+        dates = _dates(n)
+        fng = pl.Series([80.0 - i for i in range(n)])
+        z = fear_greed_z(dates, dates, fng, window=10, min_samples=8)
+        tail = [v for v in z.to_list() if v is not None]
+        assert tail
+        assert sum(tail) / len(tail) > 0
 
     def test_onchain_mvrv_rising_is_negative_z(self) -> None:
         n = 50

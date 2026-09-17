@@ -32,6 +32,16 @@ prices BTC against network usage — CoinMetrics' daily active-address count
 computed here rather than fetched pre-derived. Research-only until it
 clears the Phase B playbook (see ``RESEARCH_STATE.md``).
 
+``fear_greed`` is a different signal class again: every extra above is
+price- or on-chain-derived; this is a pure **sentiment** read — the
+alternative.me Crypto Fear & Greed Index (0=extreme fear, 100=extreme
+greed; ``data/onchain/fear_greed.py``). Historically read as contrarian
+(extreme fear near lows, extreme greed near highs), so it's sign-flipped
+the same way as ``dxy_z``: elevated ("greed") → sell-favorable (−z),
+depressed ("fear") → buy-favorable (+z). Single-window like ``m2``/``dxy``
+(no comparably fast rotation to confluence against). Research-only until
+it clears the Phase B solo-validation gate (``RESEARCH_STATE.md``).
+
 ``fast_crash_vol`` is a different signal class again: every extra above is a
 slow/structural valuation or on-chain read that lags a sharp price move by
 construction. This is deliberately fast instead — a short-window (default 14
@@ -101,6 +111,7 @@ MACRO_INDICATOR_NAMES: tuple[str, ...] = (
     "onchain_puell",
     "onchain_rhodl",
     "onchain_addr_ratio",
+    "fear_greed",
 )
 PRICE_OSCILLATOR_NAMES: tuple[str, ...] = (
     "weekly_rsi",
@@ -133,6 +144,7 @@ WEIGHT_PARAM_BY_NAME: dict[str, str] = {
     "onchain_puell": "onchain_puell_weight",
     "onchain_rhodl": "onchain_rhodl_weight",
     "onchain_addr_ratio": "onchain_addr_ratio_weight",
+    "fear_greed": "fear_greed_weight",
     "weekly_rsi": "weekly_rsi_weight",
     "weekly_macd": "weekly_macd_weight",
     "sma_band": "sma_band_weight",
@@ -154,6 +166,7 @@ INDICATOR_DISPLAY_NAMES: dict[str, str] = {
     "onchain_puell": "on-chain Puell Multiple",
     "onchain_rhodl": "on-chain RHODL Ratio",
     "onchain_addr_ratio": "on-chain price/active-address ratio",
+    "fear_greed": "Fear & Greed Index",
     "weekly_rsi": "weekly RSI",
     "weekly_macd": "weekly log-MACD",
     "sma_band": "SMA band",
@@ -190,6 +203,9 @@ class SdcaCompositeWeights(BaseModel):
     # signal, not a price-derived valuation transform like the four above.
     # Research-only until validated via the Phase B playbook.
     onchain_addr_ratio: float = Field(0.0, ge=0.0)
+    # alternative.me Fear & Greed Index -- pure sentiment, not price/on-chain
+    # derived. Research-only until validated via the Phase B playbook.
+    fear_greed: float = Field(0.0, ge=0.0)
     weekly_rsi: float = Field(0.0, ge=0.0)
     weekly_macd: float = Field(0.0, ge=0.0)
     sma_band: float = Field(0.0, ge=0.0)
@@ -227,6 +243,7 @@ class SdcaCompositeWeights(BaseModel):
             ("onchain_puell", self.onchain_puell),
             ("onchain_rhodl", self.onchain_rhodl),
             ("onchain_addr_ratio", self.onchain_addr_ratio),
+            ("fear_greed", self.fear_greed),
             ("weekly_rsi", self.weekly_rsi),
             ("weekly_macd", self.weekly_macd),
             ("sma_band", self.sma_band),
@@ -267,6 +284,8 @@ class ExtraIndicatorSources(BaseModel):
     onchain_rhodl_values: pl.Series | None = None
     onchain_addr_ratio_dates: pl.Series | None = None
     onchain_addr_ratio_values: pl.Series | None = None
+    fear_greed_dates: pl.Series | None = None
+    fear_greed_values: pl.Series | None = None
 
 
 def composite_weights_from_params(params: Mapping[str, float | int | str]) -> SdcaCompositeWeights:
@@ -281,6 +300,7 @@ def composite_weights_from_params(params: Mapping[str, float | int | str]) -> Sd
         onchain_puell=float(params.get("onchain_puell_weight", 0.0)),
         onchain_rhodl=float(params.get("onchain_rhodl_weight", 0.0)),
         onchain_addr_ratio=float(params.get("onchain_addr_ratio_weight", 0.0)),
+        fear_greed=float(params.get("fear_greed_weight", 0.0)),
         weekly_rsi=float(params.get("weekly_rsi_weight", 0.0)),
         weekly_macd=float(params.get("weekly_macd_weight", 0.0)),
         sma_band=float(params.get("sma_band_weight", 0.0)),
@@ -310,6 +330,7 @@ def parse_indicator_weights_json(raw: str) -> SdcaCompositeWeights:
         onchain_puell=float(payload.get("onchain_puell", 0.0)),
         onchain_rhodl=float(payload.get("onchain_rhodl", 0.0)),
         onchain_addr_ratio=float(payload.get("onchain_addr_ratio", 0.0)),
+        fear_greed=float(payload.get("fear_greed", 0.0)),
         weekly_rsi=float(payload.get("weekly_rsi", 0.0)),
         weekly_macd=float(payload.get("weekly_macd", 0.0)),
         sma_band=float(payload.get("sma_band", 0.0)),
@@ -554,6 +575,21 @@ def onchain_addr_ratio_z(
     )
 
 
+def fear_greed_z(
+    dates: pl.Series,
+    fear_greed_dates: pl.Series,
+    fear_greed_values: pl.Series,
+    *,
+    window: int = DEFAULT_ROLLING_WINDOW,
+    min_samples: int = _MIN_SAMPLES,
+) -> pl.Series:
+    """alternative.me Fear & Greed (0-100), rolling-z, sign-flipped -- see
+    module docstring. Same shape as ``dxy_z``: elevated ("greed") -> -z.
+    """
+    aligned = align_to_dates(dates, fear_greed_dates, fear_greed_values, forward_fill=True)
+    return (-causal_rolling_z(aligned, window=window, min_samples=min_samples)).alias("fear_greed")
+
+
 def fast_crash_vol_z(
     dates: pl.Series,
     btc_price: pl.Series,
@@ -758,6 +794,23 @@ def build_extra_indicators(
                 weight=enabled["onchain_addr_ratio"],
             )
         )
+    if "fear_greed" in enabled:
+        fg_dates = _require_pair(
+            sources.fear_greed_dates, sources.fear_greed_values, "fear_greed"
+        )
+        extras.append(
+            IndicatorWeight(
+                name="fear_greed",
+                z=fear_greed_z(
+                    dates,
+                    fg_dates,
+                    sources.fear_greed_values,  # type: ignore[arg-type]
+                    window=window,
+                    min_samples=min_samples,
+                ),
+                weight=enabled["fear_greed"],
+            )
+        )
     if allowlist is None or "weekly_rsi" in allowlist:
         extras.append(
             IndicatorWeight(
@@ -951,6 +1004,7 @@ def sources_from_optional_paths(
     onchain_asopr_path: Path | str | None = None,
     onchain_puell_path: Path | str | None = None,
     onchain_rhodl_path: Path | str | None = None,
+    fear_greed_path: Path | str | None = None,
     eth_dates: pl.Series | None = None,
     eth_close: pl.Series | None = None,
 ) -> ExtraIndicatorSources:
@@ -973,6 +1027,9 @@ def sources_from_optional_paths(
     onchain_rhodl_dates = onchain_rhodl_values = None
     if onchain_rhodl_path is not None:
         onchain_rhodl_dates, onchain_rhodl_values = load_date_value_frame(onchain_rhodl_path)
+    fear_greed_dates = fear_greed_values = None
+    if fear_greed_path is not None:
+        fear_greed_dates, fear_greed_values = load_date_value_frame(fear_greed_path)
     return ExtraIndicatorSources(
         m2_dates=m2_dates,
         m2_values=m2_values,
@@ -988,6 +1045,8 @@ def sources_from_optional_paths(
         onchain_puell_values=onchain_puell_values,
         onchain_rhodl_dates=onchain_rhodl_dates,
         onchain_rhodl_values=onchain_rhodl_values,
+        fear_greed_dates=fear_greed_dates,
+        fear_greed_values=fear_greed_values,
     )
 
 
@@ -1056,6 +1115,7 @@ __all__ = [
     "extra_indicators_for_window",
     "extra_z_vectors",
     "fast_crash_vol_z",
+    "fear_greed_z",
     "indicator_display_name",
     "load_date_value_frame",
     "m2_liquidity_z",
