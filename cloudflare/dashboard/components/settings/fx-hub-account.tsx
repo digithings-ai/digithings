@@ -1,6 +1,7 @@
 'use client';
 
 import { LogOut } from 'lucide-react';
+import { Button } from '@digithings/web/ui';
 import { useAuth } from '@/lib/auth-context';
 
 /**
@@ -32,17 +33,18 @@ export function FxHubAccount({ fxHubGranted }: { fxHubGranted: boolean }) {
           {fxHubGranted ? 'Invite redeemed — active' : 'No FX Hub grant on this account'}
         </span>
       </div>
-      <button
+      <Button
         type="button"
+        variant="ghost"
         onClick={() => {
           void signOut();
         }}
-        className="flex w-full items-center gap-2 px-3 py-2.5 text-xs font-medium text-ink-soft hover:bg-ink/[0.04] hover:text-ink transition-colors"
+        className="h-auto w-full justify-start gap-2 rounded-none px-3 py-2.5 text-xs font-medium text-ink-soft hover:bg-ink/[0.04] hover:text-ink transition-colors"
         data-testid="fx-hub-sign-out"
       >
         <LogOut size={14} className="shrink-0 text-ink-mute" aria-hidden />
         <span>Sign out</span>
-      </button>
+      </Button>
     </div>
   );
 }

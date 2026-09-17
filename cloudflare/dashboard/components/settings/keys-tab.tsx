@@ -13,6 +13,17 @@ import {
   SETTINGS_LOAD_ERROR_MESSAGE,
   SettingsLoadError,
 } from './settings-load-error';
+import {
+  Alert,
+  AlertDescription,
+  Button,
+  Input,
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@digithings/web/ui';
 
 export type KeysTabProps = {
   api: SettingsApiOptions | null;
@@ -126,36 +137,47 @@ export function KeysTab({
         <p className="text-[10px] font-medium uppercase tracking-widest text-ink-mute">
           Provider API key
         </p>
-        <select
-          className="border border-hair bg-term-bg/50 px-3 py-2 text-sm text-ink"
+        <Select
           value={provider}
-          onChange={(e) => setProvider(e.target.value as LlmProviderName)}
-          data-testid="keys-provider-select"
+          onValueChange={(next) => {
+            if (typeof next === 'string') setProvider(next as LlmProviderName);
+          }}
         >
-          {PROVIDERS.map((p) => (
-            <option key={p.id} value={p.id}>
-              {p.label}
-            </option>
-          ))}
-        </select>
-        <input
+          <SelectTrigger
+            className="h-auto border-hair bg-term-bg/50 px-3 py-2 text-sm text-ink"
+            data-testid="keys-provider-select"
+          >
+            <SelectValue>
+              {(value) => PROVIDERS.find((p) => p.id === value)?.label ?? ''}
+            </SelectValue>
+          </SelectTrigger>
+          <SelectContent>
+            {PROVIDERS.map((p) => (
+              <SelectItem key={p.id} value={p.id}>
+                {p.label}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <Input
           type="password"
-          className="w-full border border-hair bg-term-bg/50 px-3 py-2 text-sm font-mono text-ink"
+          className="h-auto w-full border-hair bg-term-bg/50 px-3 py-2 text-sm font-mono text-ink"
           placeholder="API key"
           value={secret}
           onChange={(e) => setSecret(e.target.value)}
           autoComplete="off"
           data-testid="keys-secret"
         />
-        <button
+        <Button
           type="button"
+          variant="outline"
           disabled={busy || !secret}
           onClick={() => void onConnect()}
-          className="border border-hair px-3 py-1.5 text-sm font-medium text-ink-soft hover:bg-ink/[0.04] disabled:opacity-50"
+          className="h-auto px-3 py-1.5 text-sm text-ink-soft"
           data-testid="keys-connect"
         >
           Save key
-        </button>
+        </Button>
         <p className="text-xs text-ink-mute">
           Model routing follows the sealed provider via digillm. A free-form model picker lands
           after a ProfileConfig contract bump — see SETTINGS-IA.
@@ -166,9 +188,9 @@ export function KeysTab({
         <SettingsLoadError message={loadError} onRetry={() => void refresh()} />
       ) : null}
       {error ? (
-        <p className="text-sm text-down" role="alert" data-testid="keys-error">
-          {error}
-        </p>
+        <Alert variant="destructive" data-testid="keys-error">
+          <AlertDescription>{error}</AlertDescription>
+        </Alert>
       ) : null}
 
       <div className="space-y-2" data-testid="keys-list">
@@ -195,14 +217,15 @@ export function KeysTab({
                   </p>
                 </div>
                 {row.status === 'active' ? (
-                  <button
+                  <Button
                     type="button"
-                    className="text-xs text-ink-soft underline-offset-2 hover:underline"
+                    variant="link"
+                    className="h-auto p-0 text-xs text-ink-soft underline-offset-2"
                     onClick={() => void onRevoke(row.id)}
                     data-testid="keys-revoke"
                   >
                     Revoke
-                  </button>
+                  </Button>
                 ) : null}
               </li>
             ))}

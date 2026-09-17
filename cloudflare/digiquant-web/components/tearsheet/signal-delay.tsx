@@ -1,6 +1,8 @@
+import { Badge } from "@digithings/web/ui";
+
 /** Published strategies run live on a deliberate N-day signal delay so the
- *  model can't be front-run off the tearsheet (#1462). Rendered as the family
- *  `ts-chip` pill with simple copy ("Signals delayed 3 days" / "Signals +3d
+ *  model can't be front-run off the tearsheet (#1462). Rendered as the kit
+ *  Badge with simple copy ("Signals delayed 3 days" / "Signals +3d
  *  delayed"); a short tooltip rides `title` + `aria-label`.
  *  Absent / 0 days => no chip (back-compat with pre-1.2 sheets). */
 
@@ -19,12 +21,13 @@ export function SignalDelayChip({
   const label = detail === "full" ? `Signals delayed ${days} ${unit}` : `Signals +${days}d delayed`;
   const tip = `Signals are delayed ${days} ${unit} (backtest; not a live strategy)`;
   return (
-    <span
-      className={"ts-chip" + (className ? ` ${className}` : "")}
+    <Badge
+      variant="outline"
+      className={"border-accent-weak bg-accent-weak" + (className ? ` ${className}` : "")}
       title={tip}
       aria-label={tip}
     >
       {label}
-    </span>
+    </Badge>
   );
 }

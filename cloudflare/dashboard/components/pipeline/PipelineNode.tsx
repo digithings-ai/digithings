@@ -1,6 +1,7 @@
 'use client';
 
 import { AlertTriangle, ChevronDown, ChevronRight, CircleDashed, FileText, GitFork, Info } from 'lucide-react';
+import { Badge } from '@/components/ui';
 import { pipelineNodeRunStatusLabel } from '@/lib/pipeline-layout';
 import type { LaidOutNode, PipelineNodeRunStatus } from '@/lib/pipeline-layout';
 
@@ -106,9 +107,12 @@ export default function PipelineNode({
 
         {/* count badge — accent chrome only, softened (no font-bold) */}
         {count != null && (
-          <span className="flex-shrink-0 bg-accent/15 px-1.5 py-px font-mono text-xs tabular-nums text-accent">
+          <Badge
+            variant="blue"
+            className="h-auto flex-shrink-0 bg-accent/15 px-1.5 py-px font-mono tabular-nums"
+          >
             {count}
-          </span>
+          </Badge>
         )}
 
         {/* expand chevron */}

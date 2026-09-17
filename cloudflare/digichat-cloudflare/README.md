@@ -83,7 +83,7 @@ Domains & Routes) for `/embed*`, `/api/chat*`, `/api/embed*`, `/api/byok*`, `/ap
     "skin": "digichat",
     "llmAccess": "free_then_byok",
     "activityDetail": "full",
-    "attribution": false,
+    "attribution": true,
     "token": "unused-for-first-party",
     "backend": { "type": "digigraph" }
   },

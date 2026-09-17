@@ -1,6 +1,7 @@
 'use client';
 
 import { useMemo } from 'react';
+import { Card } from '@digithings/web/ui';
 import { ArrowLeft } from 'lucide-react';
 
 import { assembleTradeHistory, biasLabel } from '@/lib/twelve-x/trade-history';
@@ -46,19 +47,23 @@ export default function IdeaCardsIndex({
       </header>
 
       {liveRows.length === 0 ? (
-        <div className="oly-slab p-10 text-center text-sm text-ink-mute">
+        <Card data-reveal className="gap-0 p-10 text-center text-sm text-ink-mute">
           No live trade ideas right now — everything has closed. The Trades table keeps the full
           history.
-        </div>
+        </Card>
       ) : (
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
           {liveRows.map((row) => (
-            <button
+            <Card
               key={`${row.runDate}-${row.rank}`}
-              type="button"
-              className="oly-slab p-4 text-left transition-colors hover:border-accent/50"
-              onClick={() => openIdea(row.runDate, row.rank)}
+              data-reveal
+              className="gap-0 p-0 transition-colors hover:ring-accent/50"
             >
+              <button
+                type="button"
+                className="block w-full p-4 text-left"
+                onClick={() => openIdea(row.runDate, row.rank)}
+              >
               <div className="flex min-w-0 items-center gap-2 text-[11px] text-ink-mute">
                 <span className="min-w-0 truncate font-semibold text-ink-soft">{row.pair}</span>
                 <span className="shrink-0 uppercase">· {biasLabel(row.direction)}</span>
@@ -75,7 +80,8 @@ export default function IdeaCardsIndex({
                 {row.continuedFrom ? ` · cont. since ${row.continuedFrom}` : ''}
                 {row.levelsUpdated ? ' · updated' : ''}
               </p>
-            </button>
+              </button>
+            </Card>
           ))}
         </div>
       )}

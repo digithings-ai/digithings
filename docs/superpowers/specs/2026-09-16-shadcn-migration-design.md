@@ -170,6 +170,37 @@ overrides); no new app-local families; every removal proves no consumer.
   tables/charts. Each app is its own PR (one-hop into `develop`).
 - **Wave 3 — shells + blocks (WS5, WS6):** sidebar/command palette/toasts;
   motion & view-transition pass.
+  **Implemented on `feat/shadcn-wave-3` (#4206), unmerged as of 2026-09-17:**
+  the kit
+  (`@digithings/web/ui`) became the single primitive source — Table + Select
+  vendored (T1b), the kit declared canonical for every overlapping controls
+  part, and the sweep re-pointed the reference, digichat, digithings-web,
+  digiquant-web, and dashboard onto it (T2–T5). `dress="reference"|"chat"`
+  moved onto the kit parts (Card propagating the dress via context) so the five
+  digichat wrappers are one-line adapters (T9). T6 close-out retired the last
+  zero-consumer dress families (`.btn`, `.ts-chip`, the dead `.acct-*` set, the
+  dead `dqss-preview-*` hooks) and the controls Card/Input React copies; the
+  controls layer survives only where the kit has no equivalent (Table
+  `numeric`/`density`, Select composition, and the un-promoted
+  EmptyState/Skeleton/NavButtons/Selection/DatePager/Badge/Field/Label/
+  Collapsible parts). Auth (`digikey/`) and live-trading paths untouched.
+  **Accepted scope reduction (2026-09-17).** The Goal ("no native buttons/
+  inputs/selects left in app code") is **not** met and is reduced here rather
+  than left unowned: wave 3 migrated the file sets named in Tasks 3–5 only, and
+  the remaining raw controls in `cloudflare/dashboard` are tracked in **#4306**.
+  Measured on this tip with
+  `grep -rn '<button\b' cloudflare/dashboard --include='*.tsx'`: 94 `<button`
+  (87 outside tests), 9 `<label`, 5 `<select` (3 real render sites —
+  `components/portfolio/DecisionAudit.tsx:92,108`,
+  `components/tearsheet/DashboardTearsheetView.tsx:227`; the other 2 are test
+  assertions), 4 `<input`. Largest `<button>` clusters:
+  `twelve-x/ConsensusDataTable.tsx` 10, `pipeline/PipelineTraceLedger.tsx` 6,
+  `twelve-x/TradeIdeasPanel.tsx` 5, `twelve-x/BoardDateRangeFilter.tsx` 5.
+  Deliberate exemptions: `SubpageStickyTabBar`'s contract requires a raw
+  `<button>` child, the sidebar-settings trigger keeps its shipped dress,
+  `PipelineNode`'s root is a token-only `<div role="button">`, and
+  `cloudflare/digithings-web`'s SwaggerExplorer renders third-party swagger
+  chrome.
 - **Wave 4 — marketing + cleanup (WS7, WS8):** block-by-block, owner-approved;
   dead css, families json, docs final.
 

@@ -1,7 +1,7 @@
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
-import BrokerProfilePanel from './BrokerProfilePanel';
+import BrokerProfilePanel, { BrokerProfileBody } from './BrokerProfilePanel';
 import type { MatrixCell } from '@/lib/twelve-x/types';
 
 function cell(partial: Partial<MatrixCell> & { broker: string; column: MatrixCell['column'] }): MatrixCell {
@@ -22,12 +22,19 @@ const CELLS: MatrixCell[] = [
   cell({ broker: 'Meridian FX', column: 'JPY', direction: 'watch', conviction: 'low', currency: 'JPY' }),
 ];
 
-function render(broker: string | null) {
+/**
+ * SSR-only test (node env, renderToStaticMarkup). The panel chrome now rides
+ * the shared @digithings/web Sheet, whose popup lives in a Base UI portal that
+ * never renders under static SSR — so the content assertions target the
+ * exported BrokerProfileBody directly (same split as BriefPanel), and the
+ * closed-state assertion targets the panel shell. Live open/close semantics
+ * (Escape, backdrop, scroll lock, focus) are Base UI's, verified with CDP.
+ */
+function renderBody(broker: string): string {
   return renderToStaticMarkup(
-    createElement(BrokerProfilePanel, {
+    createElement(BrokerProfileBody, {
       broker,
       cells: CELLS,
-      onClose: () => {},
       onOpenBrief: () => {},
     }),
   );
@@ -35,12 +42,19 @@ function render(broker: string | null) {
 
 describe('BrokerProfilePanel', () => {
   it('renders nothing when no broker is selected', () => {
-    expect(render(null)).toBe('');
+    const html = renderToStaticMarkup(
+      createElement(BrokerProfilePanel, {
+        broker: null,
+        cells: CELLS,
+        onClose: () => {},
+        onOpenBrief: () => {},
+      }),
+    );
+    expect(html).toBe('');
   });
 
-  it('renders only the focused broker’s views (a slide-over dialog)', () => {
-    const html = render('research Macro');
-    expect(html).toContain('role="dialog"');
+  it('renders the sheet body with only the focused broker’s views', () => {
+    const html = renderBody('research Macro');
     expect(html).toContain('research Macro');
     // research's two instruments show; Meridian's JPY view must NOT leak in.
     expect(html).toContain('USD');
@@ -49,7 +63,7 @@ describe('BrokerProfilePanel', () => {
   });
 
   it('shows the desk’s rationale, key facts, signal and target levels', () => {
-    const html = render('research Macro');
+    const html = renderBody('research Macro');
     expect(html).toContain('Dollar smile intact');
     expect(html).toContain('Real yields rising');
     expect(html).toContain('Add on dips');
@@ -57,19 +71,19 @@ describe('BrokerProfilePanel', () => {
   });
 
   it('tallies the net tilt across the desk’s views (1 bull / 1 bear here)', () => {
-    const html = render('research Macro');
+    const html = renderBody('research Macro');
     expect(html).toContain('2 views');
     expect(html).toContain('1 bull');
     expect(html).toContain('1 bear');
   });
 
   it('offers an open-brief affordance per view', () => {
-    const html = render('research Macro');
+    const html = renderBody('research Macro');
     expect(html).toContain('Open brief');
   });
 
   it('handles a broker with no views gracefully', () => {
-    const html = render('Nonexistent Desk');
+    const html = renderBody('Nonexistent Desk');
     expect(html).toContain('No standing views from this desk');
   });
 });

@@ -44,9 +44,6 @@
   .ts-h1 { font-family: var(--font-sans); font-size: clamp(1.7rem, 3.6vw, 2.6rem); font-weight: 600; letter-spacing: -0.03em; line-height: 1.05; color: var(--ink); margin: 0 0 0.85rem; }
   .ts-meta { display: flex; align-items: center; gap: 0.55rem; flex-wrap: wrap; }
   .ts-meta-text { color: var(--ink-mute); font-size: 0.85rem; font-family: var(--font-mono); }
-
-  .ts-chip { display: inline-flex; align-items: center; font-family: var(--font-mono); font-size: 0.76rem; letter-spacing: 0.02em; color: var(--ink); border: 1px solid var(--accent-weak); background: var(--accent-weak); border-radius: 0; padding: 0.22rem 0.65rem; }
-  .ts-chip-soft { color: var(--ink-soft); border-color: var(--hair); background: var(--surface); }
 }
 
 .ts-back:hover { color: var(--accent); }
@@ -803,10 +800,6 @@
     border: 1px solid var(--hair) !important;
   }
   .ts-position-live { border-color: var(--hair) !important; }
-  .ts-chip {
-    background: var(--surface) !important;
-    border-color: var(--hair) !important;
-  }
   .ts-trade-open { background: var(--surface) !important; }
 
   .ts-grid-2 { grid-template-columns: 1fr 1fr; }

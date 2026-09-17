@@ -1,6 +1,7 @@
 'use client';
 
 import { useMemo, useState } from 'react';
+import { Card } from '@digithings/web/ui';
 import { CalendarClock } from 'lucide-react';
 import type {
   FxConfluenceSnapshotRow,
@@ -113,7 +114,7 @@ export default function TodayTab({
         </div>
 
         <div className="min-w-0 lg:relative lg:self-stretch">
-          <section className="oly-slab flex max-h-[32rem] min-h-[28rem] min-w-0 flex-col overflow-hidden p-4 lg:absolute lg:inset-0 lg:max-h-none lg:min-h-0">
+          <Card data-reveal className="flex max-h-[32rem] min-h-[28rem] min-w-0 flex-col gap-0 overflow-hidden p-4 lg:absolute lg:inset-0 lg:max-h-none lg:min-h-0">
             <header className="mb-3 flex shrink-0 items-baseline gap-2">
               <TwelveXSectionHeading>Broker briefs</TwelveXSectionHeading>
               <span className="ml-auto font-mono text-[10px] text-ink-mute">
@@ -176,12 +177,12 @@ export default function TodayTab({
                 </ul>
               </div>
             )}
-          </section>
+          </Card>
         </div>
       </div>
 
       {/* Full-width single-day timeline (replaces the old compact events tile). */}
-      <section className="oly-slab p-4">
+      <Card data-reveal className="gap-0 p-4">
         <header className="mb-3 flex items-baseline gap-2">
           <TwelveXSectionHeading>Today&rsquo;s timeline</TwelveXSectionHeading>
           <span className="ml-auto font-mono text-[10px] text-ink-mute">00:00 – 24:00</span>
@@ -191,7 +192,7 @@ export default function TodayTab({
         ) : (
           <EventsTimeline events={timelineEvents} mode="single" day={today} />
         )}
-      </section>
+      </Card>
     </div>
   );
 }

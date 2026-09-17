@@ -176,20 +176,22 @@ describe('DailySnapshotPanel — empty / error states', () => {
 
 describe('DailySnapshotPanel — opt-in flat presentation', () => {
   it('preserves card defaults while allowing embedded flat states', () => {
-    expect(render(createElement(SnapshotSkeleton))).toContain('oly-slab');
-    expect(render(createElement(SnapshotSkeleton, { flat: true }))).not.toContain('oly-slab');
+    // Wave-2: slabs are the kit Card; flat mode neutralizes the frame.
+    expect(render(createElement(SnapshotSkeleton))).toContain('data-slot="card"');
+    expect(render(createElement(SnapshotSkeleton))).toContain('bg-card');
+    expect(render(createElement(SnapshotSkeleton, { flat: true }))).not.toContain('bg-card');
     expect(render(createElement(SnapshotSkeleton))).not.toContain('glass-card');
 
     expect(
       render(createElement(SnapshotErrorBanner, { message: 'offline', onRetry: () => undefined })),
-    ).toContain('oly-slab');
+    ).toContain('ring-danger/30');
     expect(
       render(createElement(SnapshotErrorBanner, {
         message: 'offline',
         onRetry: () => undefined,
         flat: true,
       })),
-    ).not.toContain('oly-slab');
+    ).toContain('ring-0');
     expect(
       render(createElement(SnapshotErrorBanner, {
         message: 'offline',
@@ -198,10 +200,10 @@ describe('DailySnapshotPanel — opt-in flat presentation', () => {
       })),
     ).not.toContain('text-down');
 
-    expect(render(createElement(SnapshotEmptyBanner, { reason: 'no_recent_row' }))).toContain('oly-slab');
+    expect(render(createElement(SnapshotEmptyBanner, { reason: 'no_recent_row' }))).toContain('ring-hair');
     expect(
       render(createElement(SnapshotEmptyBanner, { reason: 'no_recent_row', flat: true })),
-    ).not.toContain('oly-slab');
+    ).toContain('ring-0');
     expect(render(createElement(SnapshotEmptyBanner, { reason: 'no_recent_row' }))).not.toContain('glass-card');
   });
 

@@ -145,8 +145,12 @@ describe('AttributionTab — stat tile labels', () => {
   });
 
   it('uses flat sections when embedded without changing the default card presentation', () => {
-    expect(render(rows)).toContain('oly-slab');
-    expect(render(rows, '2026-06-17', true)).not.toContain('oly-slab');
+    // Wave-2: the box is the kit Card. Flat mode neutralizes its frame with
+    // call-site utilities (bg-transparent ring-0), so `bg-card` only appears
+    // on the default presentation.
+    expect(render(rows)).toContain('data-slot="card"');
+    expect(render(rows)).toContain('bg-card');
+    expect(render(rows, '2026-06-17', true)).not.toContain('bg-card');
     expect(render(rows)).not.toContain('glass-card');
   });
 });

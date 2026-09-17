@@ -1,21 +1,24 @@
-// Thin re-export of the shared @digithings/web Card family (#1419). The
-// root pins dress="chat" so the rendered look stays exactly digichat's
-// current shadcn-derived dress (size "default" | "sm", data-slot/data-size
-// hooks preserved); the part components carry no dress of their own.
+// Thin adapter over the canonical kit Card family (@digithings/web/ui). The
+// root pins dress="chat" so the rendered look stays exactly digichat's current
+// shadcn-derived dress (size "default" | "sm", data-slot/data-size hooks
+// preserved); the parts inherit the dress through the kit's Card context. The
+// chat tone lives in @digithings/web/styles/controls-core.css (.ctl-card-chat*).
 
 import {
-  Card as ControlCard,
+  Card as KitCard,
   CardAction,
   CardContent,
   CardDescription,
   CardFooter,
   CardHeader,
   CardTitle,
-} from "@digithings/web"
-import type { CardProps as ControlCardProps } from "@digithings/web"
+} from "@digithings/web/ui"
+import type { ComponentProps } from "react"
 
-function Card(props: Omit<ControlCardProps, "dress">) {
-  return <ControlCard dress="chat" {...props} />
+type CardProps = Omit<ComponentProps<typeof KitCard>, "dress">
+
+function Card(props: CardProps) {
+  return <KitCard dress="chat" {...props} />
 }
 
 export {

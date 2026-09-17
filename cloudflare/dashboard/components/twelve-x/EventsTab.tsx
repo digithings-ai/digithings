@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Card } from '@digithings/web/ui';
 import { CalendarClock, ChevronRight, Globe, Users } from 'lucide-react';
 import { eventLocalDateKey, hasResolvedTime } from '@/lib/twelve-x/fetch';
 import type {
@@ -292,6 +293,18 @@ function EventRow({
   );
 }
 
+/** Open-state derivation for the event-detail slide-over: resolve a calendar
+ *  event by id (`null`/empty ⇒ closed, unmatched id ⇒ closed). Pure and
+ *  SSR-safe — consumed by the initial seed and both view selectors, and
+ *  unit-tested positively so the open wiring is not only covered live. */
+export function eventById(
+  events: readonly FxEconomicCalendarRow[],
+  id: string | number | null | undefined,
+): FxEconomicCalendarRow | null {
+  if (id == null || id === '') return null;
+  return events.find((e) => String(e.id) === String(id)) ?? null;
+}
+
 export default function EventsTab({
   events,
   opinions,
@@ -420,8 +433,8 @@ export default function EventsTab({
   // The event whose detail slide-over is open, or null. Opened from both the List
   // and the Timeline so the two views surface the identical event-detail popup.
   // Seeded from initialSelectedId so the open state is renderable under SSR tests.
-  const [selected, setSelected] = useState<FxEconomicCalendarRow | null>(
-    () => events.find((e) => String(e.id) === initialSelectedId) ?? null,
+  const [selected, setSelected] = useState<FxEconomicCalendarRow | null>(() =>
+    eventById(events, initialSelectedId),
   );
 
   // Map the full upcoming window to the reusable timeline's event shape, shared
@@ -489,7 +502,7 @@ export default function EventsTab({
         grouped.length > 0 ? (
           <div className="space-y-4">
             {grouped.map(([dateStr, rows]) => (
-              <div key={dateStr} className="oly-slab overflow-hidden p-0">
+              <Card key={dateStr} data-reveal className="gap-0 overflow-hidden p-0">
                 <div className="flex items-center gap-3 border-b border-hair bg-term-bg px-4 py-2.5">
                   <h3 className="text-xs font-semibold uppercase tracking-wider text-ink-soft">
                     {formatDateLabel(dateStr)}
@@ -507,27 +520,27 @@ export default function EventsTab({
                     />
                   ))}
                 </div>
-              </div>
+              </Card>
             ))}
           </div>
         ) : (
-          <div className="oly-slab p-10 text-center text-sm text-ink-mute">{EMPTY_COPY}</div>
+          <Card data-reveal className="gap-0 p-10 text-center text-sm text-ink-mute">{EMPTY_COPY}</Card>
         )
       ) : null}
 
       {view === 'timeline' ? (
-        <div className="oly-slab p-4">
+        <Card data-reveal className="gap-0 p-4">
           {timelineEvents.length > 0 ? (
             <EventsTimeline
               events={timelineEvents}
               mode="multi"
               selectableIds={selectableIds}
-              onSelect={(id) => setSelected(events.find((e) => String(e.id) === id) ?? null)}
+              onSelect={(id) => setSelected(eventById(events, id))}
             />
           ) : (
             <p className="text-sm text-ink-mute">{EMPTY_COPY}</p>
           )}
-        </div>
+        </Card>
       ) : null}
 
       <EventDetailPanel

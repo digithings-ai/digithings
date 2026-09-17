@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { Card } from '@digithings/web/ui';
 import { Skeleton, SkeletonGroup } from '@digithings/web';
 import { Badge, SectionTitle } from '@/components/ui';
 import { SafeMarkdown } from '@/components/SafeMarkdown';
@@ -136,13 +137,15 @@ interface SnapshotPresentationProps {
 }
 
 export function SnapshotSkeleton({ flat = false }: SnapshotPresentationProps) {
-  return (
+  const bars = (
     <SkeletonGroup
       data-testid="snapshot-loading"
       aria-label="Loading daily investment brief"
-      className={flat
-        ? 'flex flex-col gap-4 border-y border-hair bg-surface px-5 py-6'
-        : 'oly-slab p-6 flex flex-col gap-4'}
+      className={
+        flat
+          ? 'flex flex-col gap-4 border-y border-hair bg-surface px-5 py-6'
+          : 'flex flex-col gap-4 p-6'
+      }
     >
       <Skeleton className="h-3 w-40" />
       <Skeleton className="h-6 w-3/4" />
@@ -151,6 +154,12 @@ export function SnapshotSkeleton({ flat = false }: SnapshotPresentationProps) {
         <Skeleton variant="block" className="h-20 w-full" />
       </div>
     </SkeletonGroup>
+  );
+  if (flat) return bars;
+  return (
+    <Card data-reveal className="gap-0 p-0">
+      {bars}
+    </Card>
   );
 }
 
@@ -164,12 +173,15 @@ export function SnapshotErrorBanner({
   flat?: boolean;
 }) {
   return (
-    <section
+    <Card
       data-testid="snapshot-error"
       role="alert"
-      className={flat
-        ? 'border-y border-warn/40 bg-warn/5 px-5 py-5'
-        : 'oly-slab p-5 border-danger/30 bg-danger/5'}
+      data-reveal={flat ? undefined : true}
+      className={`gap-0 ${
+        flat
+          ? 'rounded-none border-y border-warn/40 bg-warn/5 px-5 py-5 ring-0'
+          : 'bg-danger/5 p-5 ring-danger/30'
+      }`}
     >
       <div className="flex items-start justify-between gap-4">
         <div className="min-w-0">
@@ -190,7 +202,7 @@ export function SnapshotErrorBanner({
           Retry
         </button>
       </div>
-    </section>
+    </Card>
   );
 }
 
@@ -206,12 +218,15 @@ export function SnapshotEmptyBanner({
       ? 'Supabase credentials are not configured. Set NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY.'
       : 'No daily investment brief has been published for today or yesterday yet. Check back after the next pipeline run.';
   return (
-    <section
+    <Card
       data-testid="snapshot-empty"
       role="status"
-      className={flat
-        ? 'border-y border-hair bg-term-bg/40 px-5 py-5'
-        : 'oly-slab p-5 border-hair bg-term-bg/40'}
+      data-reveal={flat ? undefined : true}
+      className={`gap-0 ${
+        flat
+          ? 'rounded-none border-y border-hair bg-term-bg/40 px-5 py-5 ring-0'
+          : 'bg-term-bg/40 p-5 ring-hair'
+      }`}
     >
       {flat ? (
         <h3 className="mb-3 font-display text-xl text-ink">No brief available</h3>
@@ -219,7 +234,7 @@ export function SnapshotEmptyBanner({
         <SectionTitle>No brief available</SectionTitle>
       )}
       <p className="text-sm text-ink-soft">{message}</p>
-    </section>
+    </Card>
   );
 }
 
@@ -243,10 +258,11 @@ function SnapshotContent({
   return (
     <section data-testid="snapshot-present" className="space-y-4">
       {stale && (
-        <div
+        <Card
           data-testid="snapshot-stale-banner"
           role="status"
-          className="oly-slab p-4 border-warn/40 bg-warn/5 flex items-center justify-between gap-3"
+          data-reveal
+          className="flex-row items-center justify-between gap-3 bg-warn/5 p-4 ring-warn/40"
         >
           <div>
             <p className="text-sm font-semibold text-warn">Stale brief</p>
@@ -256,10 +272,10 @@ function SnapshotContent({
             </p>
           </div>
           <Badge variant="amber">stale</Badge>
-        </div>
+        </Card>
       )}
 
-      <article className="oly-slab p-6 space-y-5">
+      <Card data-reveal className="gap-0 p-6 space-y-5">
         <header className="flex flex-wrap items-baseline justify-between gap-3">
           <div className="min-w-0">
             <p className="text-[10px] font-semibold uppercase tracking-widest text-ink-mute">
@@ -348,7 +364,7 @@ function SnapshotContent({
             <RiskList items={digest.risk_radar ?? []} />
           </>
         )}
-      </article>
+      </Card>
     </section>
   );
 }

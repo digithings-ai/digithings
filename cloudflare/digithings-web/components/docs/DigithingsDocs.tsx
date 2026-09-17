@@ -3,6 +3,10 @@ import Link from "next/link";
 import { Fragment, useState, type ReactNode } from "react";
 import {
   modules,
+  Table,
+  TableBody,
+  TableCell,
+  TableRow,
   type ModuleNode,
   StackRow,
   Emblem,
@@ -13,6 +17,7 @@ import {
   DocsCodeBlock,
   Reveal,
 } from "@digithings/web";
+import { Badge, Button, buttonVariants } from "@digithings/web/ui";
 import { apiDocs, type ModuleApiDoc, type Endpoint } from "@/lib/apiDocs";
 import { guides, type Block } from "@/lib/sharedDocs";
 import { guideToMarkdown, moduleToMarkdown } from "@/lib/docsSerializers";
@@ -150,9 +155,10 @@ const PAGE_MD = [
 function CopyMd({ text, label }: { text: string; label: string }) {
   const [copied, setCopied] = useState(false);
   return (
-    <button
+    <Button
       type="button"
-      className="docs-copy"
+      variant="outline"
+      size="sm"
       aria-label={label}
       onClick={() =>
         navigator.clipboard?.writeText(text).then(
@@ -166,7 +172,7 @@ function CopyMd({ text, label }: { text: string; label: string }) {
     >
       <span aria-hidden="true">{copied ? "✓ " : "⌘ "}</span>
       {copied ? "copied" : label}
-    </button>
+    </Button>
   );
 }
 
@@ -198,7 +204,9 @@ function ModuleDoc({ m }: { m: ModuleNode }) {
           </h2>
           <span className="doc-mod-role">{m.role}</span>
         </div>
-        <span className={`doc-badge${isRoad ? " is-road" : ""}`}>{m.tier}</span>
+        <Badge variant="outline" className={isRoad ? "text-ink-mute" : undefined}>
+          {m.tier}
+        </Badge>
         <CopyMd text={moduleToMarkdown(m)} label="Markdown" />
       </Reveal>
 
@@ -218,18 +226,18 @@ function ModuleDoc({ m }: { m: ModuleNode }) {
           <h3>Authentication</h3>
           {d.authNote && <p className="doc-summary">{d.authNote}</p>}
           {d.scopes && d.scopes.length > 0 && (
-            <table className="doc-fields w-full border-collapse text-[0.84rem]">
-              <tbody>
+            <Table>
+              <TableBody>
                 {d.scopes.map((s) => (
-                  <tr key={s.scope}>
-                    <td className="whitespace-nowrap">
+                  <TableRow key={s.scope}>
+                    <TableCell className="whitespace-nowrap">
                       <code className="dc-code-inline">{s.scope}</code>
-                    </td>
-                    <td className="w-full leading-[1.5] text-ink-soft">{s.grants}</td>
-                  </tr>
+                    </TableCell>
+                    <TableCell className="w-full leading-[1.5] text-ink-soft">{s.grants}</TableCell>
+                  </TableRow>
                 ))}
-              </tbody>
-            </table>
+              </TableBody>
+            </Table>
           )}
         </section>
       )}
@@ -247,22 +255,22 @@ function ModuleDoc({ m }: { m: ModuleNode }) {
       {d.env && d.env.length > 0 && (
         <section className="doc-block">
           <h3>Configuration</h3>
-          <table className="doc-fields w-full border-collapse text-[0.84rem]">
-            <tbody>
+          <Table>
+            <TableBody>
               {d.env.map((e) => (
-                <tr key={e.name}>
-                  <td className="whitespace-nowrap">
+                <TableRow key={e.name}>
+                  <TableCell className="whitespace-nowrap">
                     <code className="dc-code-inline">{e.name}</code>
                     {e.required && <span className="ml-[0.15rem] text-down" title="required">*</span>}
-                  </td>
-                  <td className="whitespace-nowrap font-mono text-[0.78rem] text-ink-mute">
+                  </TableCell>
+                  <TableCell className="whitespace-nowrap font-mono text-[0.78rem] text-ink-mute">
                     {e.def ? e.def : "—"}
-                  </td>
-                  <td className="w-full leading-[1.5] text-ink-soft">{e.description}</td>
-                </tr>
+                  </TableCell>
+                  <TableCell className="w-full leading-[1.5] text-ink-soft">{e.description}</TableCell>
+                </TableRow>
               ))}
-            </tbody>
-          </table>
+            </TableBody>
+          </Table>
         </section>
       )}
 
@@ -375,7 +383,7 @@ export function DigithingsDocs() {
         actions: (
           <div className="flex flex-wrap items-center gap-[0.55rem]">
             <CopyMd text={PAGE_MD} label="Copy all as Markdown" />
-            <Link className="docs-copy" href="/docs/api/">
+            <Link className={buttonVariants({ variant: "outline", size: "sm" })} href="/docs/api/">
               OpenAPI explorer <span aria-hidden="true">→</span>
             </Link>
           </div>

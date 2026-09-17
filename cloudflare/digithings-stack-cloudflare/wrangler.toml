@@ -91,9 +91,10 @@ instance_type = "standard-2"
 # Single replica by design (max_instances = 1 + one pinned Durable Object id
 # MCP_CONTAINER_ID in src/ports.ts): the MCP read path assumes a single replica
 # (in-memory 900s TTL keyed by as_of + manifest version).
-# Warm policy (min-instances-1 equivalent): sleepAfter = "24h" on the class in
-# src/index.ts, with the daily market-data-refresh cron as backup warm ping
-# (against the enabled custom-domain route, once live):
+# Cold-start policy: sleepAfter = "15m" on the class in src/index.ts. A cold
+# start pays only the FastMCP import, never a data load (R2 is the cache); the
+# daily market-data-refresh cron keeps R2 fresh and never touches the container.
+# Once the custom-domain route is enabled it can be pinged manually:
 #   curl -sS https://mcp.digithings.ai/mcp -H 'Accept: application/json'
 # Egress verified 2026-09-10: query1.finance.yahoo.com reachable (HTTP 429 =
 # Yahoo rate-limit, i.e. egress works; same retry/backoff as the cron applies),
@@ -210,15 +211,10 @@ DIGISMITH_URL = ""
 # #4053: containers must read the R2 market seam — 127 drops the Supabase tables.
 DIGIQUANT_MARKET_DATA_BACKEND = "r2"
 OPENAI_API_BASE = "http://127.0.0.1:4000/v1"
-DIGI_CONFIG_PATH = "/app/config"
-DIGI_PROJECT_CONFIG = "/app/config/digiproject.yaml"
-# Belt-and-suspenders with digiproject.yaml (research_rag, no backtest agent).
-DIGI_WORKFLOW_PROFILE = "research_rag"
-# Fallback only: tool_policy.py prefers agents.allowed_tools from the baked
-# digiproject.yaml and reads this ONLY when that config fails to load. Keep the
-# two in sync anyway -- a stale value here silently drops a tool on the one path
-# where nothing else can, and the model gets a refusal mid-loop (#2295).
-DIGI_ALLOWED_TOOLS = "digisearch,digivault_search_notes,digivault_get_note"
+# DIGI_CONFIG_PATH / DIGI_PROJECT_CONFIG / DIGI_WORKFLOW_PROFILE / DIGI_ALLOWED_TOOLS are
+# deliberately NOT set here: src/index.ts forwards an explicit envVars whitelist and does
+# not include them, so container/entrypoint.sh's defaults are the live values. Setting them
+# here would be inert (and the old DIGI_ALLOWED_TOOLS value here was stale vs that default).
 DIGI_LLM_MODE = "test"
 CHROMA_PATH = "/data/chroma"
 DIGIVAULT_ROOT = "/data/vault"
