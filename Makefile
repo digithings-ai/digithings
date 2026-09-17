@@ -318,3 +318,11 @@ secrets-scan:
 	  exit 127; \
 	}
 	@gitleaks detect --source . --config .gitleaks.toml --redact --verbose --no-banner
+
+# Compare the repo secret list (`gh secret list`) with every `secrets.*` read
+# under .github/. Reads with no repo-level secret are informational (they usually
+# resolve at org or environment level); a repo secret nothing reads exits 1.
+# Local check only — deliberately not a CI gate.
+.PHONY: secrets-audit
+secrets-audit:
+	python3 scripts/secrets_audit.py --strict

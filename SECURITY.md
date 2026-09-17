@@ -83,6 +83,11 @@ Every pull request and every push to `develop`/`main` runs
 - **Local reproduction.** `make secrets-scan` runs the same config against
   the working tree. Install gitleaks via `brew install gitleaks` or
   `go install github.com/gitleaks/gitleaks/v8@latest`.
+- **Secret-list drift.** `make secrets-audit` cross-checks the repo secret list
+  (`gh secret list`) against every `secrets.*` read under `.github/`, and exits
+  non-zero when a repo secret is never read. Reads with no repo-level secret are
+  listed as informational — they usually resolve at org or environment level.
+  It is a local check, not a CI gate.
 - **Allowlist policy.** `tests/`, top-level and `docs/**/*.md` markdown, and
   `scripts/claude-hooks/fixtures/` are allowlisted because they only contain
   placeholder values, fake/ephemeral fixtures, or vendor-published example
