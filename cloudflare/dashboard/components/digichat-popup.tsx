@@ -7,9 +7,10 @@
  *
  * Baseline (free/brief) sees the same launcher but an upgrade CTA panel with
  * chat disabled (#3662) — never an iframe, so non-entitled tiers never burn
- * turns and never meet the free-3 gate. FX Hub-only grantees (the 12x invite
- * list) see nothing at all: they are not on the DigiQuant pipeline
- * subscription, so the popup never renders for them.
+ * turns and never meet the free-3 gate. Free-tier FX Hub-only grantees (the
+ * 12x invite list) see nothing at all: they are not on the DigiQuant pipeline
+ * subscription, so the popup never renders for them. A grant on a paying tier
+ * still renders normally (#4305 — free-only, matching lib/fx-hub-only.ts).
  */
 
 import { DigichatLauncher } from '@digithings/web';
@@ -105,11 +106,14 @@ export default function DigichatPopup({
     };
   }, [baseConfig, configOverride]);
 
-  // Desk+ opens the iframe. FX Hub-only grantees (the 12x invite list) are not
-  // on the DigiQuant pipeline subscription, so they get no launcher at all —
-  // the popup must never appear for them.
+  // Desk+ opens the iframe. FX Hub-only grantees (the 12x invite list) are
+  // free-tier invitees not on the DigiQuant pipeline subscription, so the
+  // popup must never appear for them. The grant alone is not the signal — a
+  // paying Brief subscriber with an fx_hub grant keeps the launcher and the
+  // upgrade CTA. Matches the canonical free-only definition in
+  // lib/fx-hub-only.ts (#4305).
   const tierEntitled = canUseDigichatPopup(tier);
-  const fxHubOnly = canFxHub && !tierEntitled;
+  const fxHubOnly = canFxHub && tier === 'free';
   const entitled = tierEntitled;
   const [open, setOpen] = useState(false);
   const [iframeSrc, setIframeSrc] = useState('');

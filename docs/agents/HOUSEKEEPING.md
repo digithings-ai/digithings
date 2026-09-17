@@ -33,6 +33,7 @@ the broader delegation framework.
 |---|---|---|---|
 | Broken internal doc links | `pipeline-maintenance.yml` — `doc-links` job | weekly Mon 08:00 UTC | Runs `python3 scripts/check_doc_links.py`, files `[housekeeping] Broken internal doc links — <date>` if any found |
 | `agents.yml` ↔ `.claude/` drift | `pipeline-maintenance.yml` — `agents-drift` job | weekly Mon 08:00 UTC | Runs `make agents-init --check`, files an issue if regeneration is needed |
+| Per-module `ARCHITECTURE.md` drift | `pipeline-maintenance.yml` — `architecture-drift` job | weekly Mon 08:00 UTC | Runs `scripts/check_architecture_drift.py`: flags modules whose public-interface paths moved ≥3d after their `ARCHITECTURE.md` did (last 30d), one tracker issue for **human** triage. Advisory only — never edits docs |
 | Doc-link check on every PR | `ci-docs.yml` | on PR | Same check as above, gates PRs with broken links |
 
 ## Security
@@ -92,7 +93,6 @@ Tracked as issues (see #3533):
 - **Token validity monitoring** — no active test that credentials haven't expired; failure signal is correlated scheduled failures. → #3522
 - **npm audit for `cloudflare/`** — only Python CVEs are scanned today. → #3523
 - **ADR numbering audit** — no check that `docs/adr/NNNN-*.md` files are sequentially numbered or without duplicates. → #3524
-- **Per-module ARCHITECTURE.md drift** — no check that module architecture docs are updated when the module's public interface changes. → #3525
 
 ## Reference
 

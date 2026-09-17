@@ -83,11 +83,16 @@ Every pull request and every push to `develop`/`main` runs
 - **Local reproduction.** `make secrets-scan` runs the same config against
   the working tree. Install gitleaks via `brew install gitleaks` or
   `go install github.com/gitleaks/gitleaks/v8@latest`.
-- **Secret-list drift.** `make secrets-audit` cross-checks the repo secret list
-  (`gh secret list`) against every `secrets.*` read under `.github/`, and exits
-  non-zero when a repo secret is never read. Reads with no repo-level secret are
-  listed as informational — they usually resolve at org or environment level.
-  It is a local check, not a CI gate.
+- **Secret-list drift.** `make secrets-audit` matches every `secrets.*` read under
+  `.github/` against each level a name can live at — repo secret, repo variable, org
+  secret, environment secret — and reports `dead` (a repo secret nothing reads),
+  `not repo-level` (defined at another level), `unresolved` (defined nowhere, so Actions
+  substitutes an empty string), `repo-over-org` (defined at both, where the repo copy
+  silently wins) and `env-over-repo` (defined at both, where a job that declares that
+  environment reads the environment copy). `--strict` exits non-zero on `dead`;
+  `--strict-unresolved` does the same for `unresolved`. Both refuse to pass when a level
+  could not be read. Passing `--secrets-file` keeps the whole run offline. It is a local
+  check, not a CI gate.
 - **Allowlist policy.** `tests/`, top-level and `docs/**/*.md` markdown, and
   `scripts/claude-hooks/fixtures/` are allowlisted because they only contain
   placeholder values, fake/ephemeral fixtures, or vendor-published example
