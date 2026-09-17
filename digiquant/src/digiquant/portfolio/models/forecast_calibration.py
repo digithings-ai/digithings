@@ -15,7 +15,7 @@ from __future__ import annotations
 
 import hashlib
 import json
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 from decimal import Decimal
 from enum import StrEnum
 from typing import Annotated, TypeAlias
@@ -157,6 +157,79 @@ def calibrated_forecast_id(
     )
 
 
+# ``ReturnFraction`` is ``decimal_places=8`` — the canonical spelling of a return
+# is its fixed 8-decimal-place form. Postgres ``numeric`` does not preserve
+# trailing zeros, so a value persisted as ``0.03250000`` reads back through
+# PostgREST as the JSON number ``0.0325`` (Python float) and re-``str()``s to
+# ``0.0325``. Hashing the quantized spelling makes write-time and read-time
+# digests agree regardless of that loss (#4298).
+_RETURN_FRACTION_QUANTUM = Decimal("0.00000001")
+
+
+def canonical_return_fraction(value: Decimal) -> str:
+    """Canonical 8dp string spelling of a return fraction for outcome hashes."""
+    return str(value.quantize(_RETURN_FRACTION_QUANTUM))
+
+
+def forecast_outcome_hash_payload(
+    *,
+    base_forecast_id: UUID,
+    effective_forecast_id: UUID,
+    ticker: str,
+    horizon_sessions: int,
+    reference_session: date,
+    maturity_session: date,
+    reference_snapshot: SessionPriceSnapshot | None,
+    maturity_snapshot: SessionPriceSnapshot | None,
+    forecast_mean_return: Decimal | None,
+    realized_return: Decimal | None,
+    signed_residual: Decimal | None,
+    positive_label: bool | None,
+    status: OutcomeStatus,
+    unavailable_reason: str | None,
+    event_time: datetime,
+    known_at: datetime,
+) -> dict[str, object]:
+    """Canonical digest payload shared by the writer and the validator.
+
+    The writer (:func:`digiquant.research.forecast_outcomes._build_resolved_outcome`)
+    and :meth:`ForecastOutcome._hash_payload` must build byte-identical payloads:
+    two duplicated builders is exactly how a write-time digest and a read-time
+    recompute drift apart (#4298). Return fields are canonicalized to fixed 8dp so
+    the persisted ``numeric`` read-back cannot change the digest.
+    """
+    return {
+        "base_forecast_id": str(base_forecast_id),
+        "effective_forecast_id": str(effective_forecast_id),
+        "ticker": ticker,
+        "horizon_sessions": horizon_sessions,
+        "reference_session": reference_session.isoformat(),
+        "maturity_session": maturity_session.isoformat(),
+        "reference_snapshot": (
+            None if reference_snapshot is None else reference_snapshot.model_dump(mode="json")
+        ),
+        "maturity_snapshot": (
+            None if maturity_snapshot is None else maturity_snapshot.model_dump(mode="json")
+        ),
+        "forecast_mean_return": (
+            None
+            if forecast_mean_return is None
+            else canonical_return_fraction(forecast_mean_return)
+        ),
+        "realized_return": (
+            None if realized_return is None else canonical_return_fraction(realized_return)
+        ),
+        "signed_residual": (
+            None if signed_residual is None else canonical_return_fraction(signed_residual)
+        ),
+        "positive_label": positive_label,
+        "status": status.value,
+        "unavailable_reason": unavailable_reason,
+        "event_time": event_time.isoformat(),
+        "known_at": known_at.isoformat(),
+    }
+
+
 class ForecastOutcome(ForecastCalibrationModel):
     """Immutable prospective market label for one base/effective forecast.
 
@@ -275,38 +348,24 @@ class ForecastOutcome(ForecastCalibrationModel):
         return self
 
     def _hash_payload(self) -> dict[str, object]:
-        return {
-            "base_forecast_id": str(self.base_forecast_id),
-            "effective_forecast_id": str(self.effective_forecast_id),
-            "ticker": self.ticker,
-            "horizon_sessions": self.horizon_sessions,
-            "reference_session": self.reference_session.isoformat(),
-            "maturity_session": self.maturity_session.isoformat(),
-            "reference_snapshot": (
-                None
-                if self.reference_snapshot is None
-                else self.reference_snapshot.model_dump(mode="json")
-            ),
-            "maturity_snapshot": (
-                None
-                if self.maturity_snapshot is None
-                else self.maturity_snapshot.model_dump(mode="json")
-            ),
-            "forecast_mean_return": (
-                None if self.forecast_mean_return is None else str(self.forecast_mean_return)
-            ),
-            "realized_return": (
-                None if self.realized_return is None else str(self.realized_return)
-            ),
-            "signed_residual": (
-                None if self.signed_residual is None else str(self.signed_residual)
-            ),
-            "positive_label": self.positive_label,
-            "status": self.status.value,
-            "unavailable_reason": self.unavailable_reason,
-            "event_time": self.event_time.isoformat(),
-            "known_at": self.known_at.isoformat(),
-        }
+        return forecast_outcome_hash_payload(
+            base_forecast_id=self.base_forecast_id,
+            effective_forecast_id=self.effective_forecast_id,
+            ticker=self.ticker,
+            horizon_sessions=self.horizon_sessions,
+            reference_session=self.reference_session,
+            maturity_session=self.maturity_session,
+            reference_snapshot=self.reference_snapshot,
+            maturity_snapshot=self.maturity_snapshot,
+            forecast_mean_return=self.forecast_mean_return,
+            realized_return=self.realized_return,
+            signed_residual=self.signed_residual,
+            positive_label=self.positive_label,
+            status=self.status,
+            unavailable_reason=self.unavailable_reason,
+            event_time=self.event_time,
+            known_at=self.known_at,
+        )
 
 
 class ForecastCalibration(ForecastCalibrationModel):
@@ -551,8 +610,10 @@ __all__ = [
     "SessionPriceSnapshot",
     "calibrated_forecast_content_hash",
     "calibrated_forecast_id",
+    "canonical_return_fraction",
     "forecast_calibration_content_hash",
     "forecast_calibration_id",
     "forecast_outcome_content_hash",
+    "forecast_outcome_hash_payload",
     "forecast_outcome_id",
 ]

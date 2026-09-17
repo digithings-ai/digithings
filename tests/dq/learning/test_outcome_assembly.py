@@ -36,6 +36,7 @@ from digiquant.portfolio.models.forecast_calibration import (
     ForecastOutcome,
     OutcomeStatus,
     SessionPriceSnapshot,
+    canonical_return_fraction,
     forecast_outcome_content_hash,
     forecast_outcome_id,
 )
@@ -137,9 +138,9 @@ def _outcome_payload(**overrides: object) -> dict[str, object]:
             if draft.get("maturity_snapshot") is None
             else draft["maturity_snapshot"].model_dump(mode="json")  # type: ignore[union-attr]
         ),
-        "forecast_mean_return": str(draft["forecast_mean_return"]),
-        "realized_return": str(draft["realized_return"]),
-        "signed_residual": str(draft["signed_residual"]),
+        "forecast_mean_return": canonical_return_fraction(draft["forecast_mean_return"]),
+        "realized_return": canonical_return_fraction(draft["realized_return"]),
+        "signed_residual": canonical_return_fraction(draft["signed_residual"]),
         "positive_label": draft["positive_label"],
         "status": draft["status"].value
         if isinstance(draft["status"], OutcomeStatus)
