@@ -163,9 +163,10 @@ def _warn_legacy_env(canonical: str, *legacy: str) -> None:
     if os.environ.get(canonical, "").strip():
         return
     for name in legacy:
-        if name not in _LEGACY_WARNED and os.environ.get(name, "").strip():
-            _LEGACY_WARNED.add(name)
-            logger.warning("Using deprecated env var %s; set %s instead", name, canonical)
+        if os.environ.get(name, "").strip():
+            if name not in _LEGACY_WARNED:
+                _LEGACY_WARNED.add(name)
+                logger.warning("Using deprecated env var %s; set %s instead", name, canonical)
             return
 
 
