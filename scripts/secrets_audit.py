@@ -10,7 +10,7 @@ compares them in seconds:
     python scripts/secrets_audit.py --strict   # exit 1 when a repo secret is never read
     python scripts/secrets_audit.py --secrets-file names.txt --variables-file vars.txt
 
-Four findings, in increasing order of how long they hide:
+Five findings, in increasing order of how long they hide:
 
 - `dead` — a repo secret nothing reads
 - `not repo-level` — a read defined at another level (repo variable, org or
@@ -19,6 +19,8 @@ Four findings, in increasing order of how long they hide:
   a typo is invisible until a pipeline fails somewhere downstream
 - `repo-over-org` — defined at both repo and org level, where the repo copy silently
   wins: two places to rotate and only one of them load-bearing
+- `env-over-repo` — defined as both a repo secret and an environment secret: two live
+  values, and a job that declares that environment reads the environment copy
 
 Deliberately not a CI gate: a read with no repo-level secret is normal here, so only
 `--strict` (dead) and `--strict-unresolved` fail, and neither runs in CI. Passing
@@ -136,10 +138,11 @@ class Levels(NamedTuple):
     explained: set[str]
     unresolved: set[str]
     shadowed: set[str]
+    env_over_repo: set[str]
 
 
 def classify_levels(reads: set[str], surface: Surface) -> Levels:
-    """Split reads into defined-at-another-level, defined-nowhere, repo-shadows-org."""
+    """Split reads into defined-at-another-level, defined-nowhere, and shadowing pairs."""
     levels = {name: surface.levels_of(name) for name in reads}
     return Levels(
         explained={name for name, where in levels.items() if where and "repo secret" not in where},
@@ -149,11 +152,16 @@ def classify_levels(reads: set[str], surface: Surface) -> Levels:
             for name, where in levels.items()
             if "repo secret" in where and "org secret" in where
         },
+        env_over_repo={
+            name
+            for name, where in levels.items()
+            if "repo secret" in where and any(level.endswith("env secret") for level in where)
+        },
     )
 
 
-def _gh_json(cmd: list[str], root: Path) -> object | None:
-    """Parsed `gh` JSON, or None with a one-line reason on stderr."""
+def _gh_stdout(cmd: list[str], root: Path) -> str | None:
+    """`gh` stdout, or None with a one-line reason on stderr."""
     try:
         result = subprocess.run(cmd, capture_output=True, text=True, check=False, cwd=root)
     except FileNotFoundError:
@@ -164,12 +172,32 @@ def _gh_json(cmd: list[str], root: Path) -> object | None:
         detail = result.stderr.strip() or result.stdout.strip()
         print(f"secrets_audit: `{' '.join(cmd)}` failed: {detail}", file=sys.stderr)
         return None
+    return result.stdout
 
+
+def _gh_json(cmd: list[str], root: Path) -> object | None:
+    """Parsed `gh` JSON, or None with a one-line reason on stderr."""
+    stdout = _gh_stdout(cmd, root)
+    if stdout is None:
+        return None
     try:
-        return json.loads(result.stdout or "[]")
+        return json.loads(stdout or "[]")
     except json.JSONDecodeError as exc:
         print(f"secrets_audit: could not parse `{' '.join(cmd)}` output: {exc}", file=sys.stderr)
         return None
+
+
+def _gh_names(cmd: list[str], root: Path) -> set[str] | None:
+    """Names from a `--jq` listing that prints one name per line, or None with a reason.
+
+    Paginated object endpoints (`orgs/<org>/actions/secrets`, a repo's environments)
+    concatenate one JSON object per page, which `json.loads` cannot read past page
+    one — so those callers ask `gh` for the `name` fields directly instead.
+    """
+    stdout = _gh_stdout(cmd, root)
+    if stdout is None:
+        return None
+    return {line.strip() for line in stdout.splitlines() if line.strip()}
 
 
 def _names(payload: object) -> set[str] | None:
@@ -216,33 +244,45 @@ def repo_variable_names(root: Path) -> set[str] | None:
 
 def org_secret_names(org: str, root: Path) -> set[str] | None:
     """Org-level secret names, or None when the list cannot be obtained."""
-    payload = _gh_json(["gh", "api", "--paginate", f"orgs/{org}/actions/secrets"], root)
-    if not isinstance(payload, dict):
-        return None
-    return _names(payload.get("secrets"))
+    return _gh_names(
+        ["gh", "api", "--paginate", "--jq", ".secrets[].name", f"orgs/{org}/actions/secrets"],
+        root,
+    )
 
 
 def environment_secret_names(root: Path, repo: str) -> dict[str, set[str]] | None:
     """Environment name -> secret names, or None when the lists cannot be obtained."""
-    payload = _gh_json(["gh", "api", "--paginate", f"repos/{repo}/environments"], root)
-    if not isinstance(payload, dict):
+    environments = _gh_names(
+        [
+            "gh",
+            "api",
+            "--paginate",
+            "--jq",
+            ".environments[].name",
+            f"repos/{repo}/environments",
+        ],
+        root,
+    )
+    if environments is None:
         return None
 
-    environments: dict[str, set[str]] = {}
-    for entry in payload.get("environments") or []:
-        name = entry.get("name") if isinstance(entry, dict) else None
-        if not isinstance(name, str):
-            return None
-        secrets = _gh_json(
-            ["gh", "api", "--paginate", f"repos/{repo}/environments/{name}/secrets"], root
+    found: dict[str, set[str]] = {}
+    for name in sorted(environments):
+        secrets = _gh_names(
+            [
+                "gh",
+                "api",
+                "--paginate",
+                "--jq",
+                ".secrets[].name",
+                f"repos/{repo}/environments/{name}/secrets",
+            ],
+            root,
         )
-        if not isinstance(secrets, dict):
+        if secrets is None:
             return None
-        found = _names(secrets.get("secrets"))
-        if found is None:
-            return None
-        environments[name] = found
-    return environments
+        found[name] = secrets
+    return found
 
 
 def repo_slug(root: Path) -> str | None:
@@ -306,10 +346,17 @@ def main(argv: list[str] | None = None) -> int:
 
     repo_secrets = repo_secret_names(args.root, args.secrets_file)
     if repo_secrets is None:
-        reads = set().union(*by_file.values()) if by_file else set()
+        reads = (set().union(*by_file.values()) if by_file else set()) - IMPLICIT_SECRETS
         print(f"secrets_audit: repo secret list unavailable, {len(reads)} referenced names")
         print(f"referenced: {_fmt(reads)}")
-        return 1 if args.strict else 0
+        if args.strict or args.strict_unresolved:
+            print(
+                "secrets_audit: --strict and --strict-unresolved need the list of repo "
+                "secrets; `gh` could not provide it",
+                file=sys.stderr,
+            )
+            return 1
+        return 0
 
     if args.secrets_file is not None:
         surface = Surface(
@@ -351,6 +398,7 @@ def main(argv: list[str] | None = None) -> int:
         print(f"not repo-level: {_fmt(levels.explained)}")
         print(f"unresolved: {_fmt(levels.unresolved)}")
         print(f"repo-over-org: {_fmt(levels.shadowed)}")
+        print(f"env-over-repo: {_fmt(levels.env_over_repo)}")
 
     if args.verbose:
         for rel, names in sorted(by_file.items()):

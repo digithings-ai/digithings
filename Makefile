@@ -321,8 +321,8 @@ secrets-scan:
 
 # Match every `secrets.*` read under .github/ against each level (repo secret, repo
 # variable, org secret, environment secret) and report `dead`, `not repo-level`,
-# `unresolved` and `repo-over-org`. `--strict` exits 1 on a dead repo secret;
-# `--strict-unresolved` does the same for a read no level defines.
+# `unresolved`, `repo-over-org` and `env-over-repo`. `--strict` exits 1 on a dead repo
+# secret; `--strict-unresolved` does the same for a read no level defines.
 # Local check only — deliberately not a CI gate.
 .PHONY: secrets-audit
 secrets-audit:

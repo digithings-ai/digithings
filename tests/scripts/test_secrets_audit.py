@@ -247,14 +247,22 @@ def _run_levels(files: dict[str, Path], tmp_path: Path, *extra: str) -> subproce
 @pytest.mark.unit
 def test_classify_levels_splits_explained_unresolved_and_shadowed(audit: object) -> None:
     surface = audit.Surface(
-        repo_secrets={"REPO_ONLY", "DUPLICATED"},
+        repo_secrets={"REPO_ONLY", "DUPLICATED", "ENV_AND_REPO"},
         repo_variables={"VAR_BACKED"},
         org_secrets={"ORG_BACKED", "DUPLICATED"},
-        environment_secrets={"production": {"ENV_BACKED"}},
+        environment_secrets={"production": {"ENV_BACKED", "ENV_AND_REPO"}},
     )
 
     levels = audit.classify_levels(
-        {"REPO_ONLY", "VAR_BACKED", "ORG_BACKED", "ENV_BACKED", "DUPLICATED", "PHANTOM"},
+        {
+            "REPO_ONLY",
+            "VAR_BACKED",
+            "ORG_BACKED",
+            "ENV_BACKED",
+            "DUPLICATED",
+            "ENV_AND_REPO",
+            "PHANTOM",
+        },
         surface,
     )
 
@@ -262,6 +270,7 @@ def test_classify_levels_splits_explained_unresolved_and_shadowed(audit: object)
     assert levels.explained == {"VAR_BACKED", "ORG_BACKED", "ENV_BACKED"}
     assert levels.unresolved == {"PHANTOM"}
     assert levels.shadowed == {"DUPLICATED"}
+    assert levels.env_over_repo == {"ENV_AND_REPO"}
 
 
 @pytest.mark.unit
@@ -320,3 +329,42 @@ def test_cli_strict_unresolved_needs_every_level_and_fails_on_phantom(tmp_path: 
     )
     assert offline.returncode == 1
     assert "needs every level" in offline.stderr
+
+
+@pytest.mark.unit
+def test_cli_reports_env_over_repo_shadowing(tmp_path: Path) -> None:
+    files = _level_fixture(tmp_path, ["REPO_ONLY", "ENV_AND_REPO"])
+    files["secrets"].write_text("REPO_ONLY\nENV_AND_REPO\n", encoding="utf-8")
+    files["env"].write_text("production:ENV_BACKED\nproduction:ENV_AND_REPO\n", encoding="utf-8")
+
+    result = _run_levels(files, tmp_path)
+
+    assert result.returncode == 0, result.stderr
+    assert "env-over-repo: ENV_AND_REPO" in result.stdout
+
+
+@pytest.mark.unit
+def test_cli_strict_flags_fail_when_repo_list_is_unavailable(tmp_path: Path) -> None:
+    _level_fixture(tmp_path, ["REPO_ONLY"])
+    no_path = {"PATH": ""}
+
+    for flag in ("--strict", "--strict-unresolved"):
+        result = subprocess.run(
+            [sys.executable, str(_SCRIPT), "--root", str(tmp_path), flag],
+            capture_output=True,
+            text=True,
+            check=False,
+            env=no_path,
+        )
+        assert result.returncode == 1, f"{flag} passed without a repo secret list"
+        assert "could not provide it" in result.stderr
+
+    plain = subprocess.run(
+        [sys.executable, str(_SCRIPT), "--root", str(tmp_path)],
+        capture_output=True,
+        text=True,
+        check=False,
+        env=no_path,
+    )
+    assert plain.returncode == 0, plain.stderr
+    assert "repo secret list unavailable" in plain.stdout
