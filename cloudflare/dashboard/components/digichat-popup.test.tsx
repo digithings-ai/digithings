@@ -124,6 +124,30 @@ describe('DigichatPopup', () => {
     expect(document.body.querySelector('#digichat-popup-iframe')).toBeNull();
   });
 
+  it('renders upgrade CTA, no iframe, for a Brief subscriber with an fx_hub grant (#4305)', () => {
+    entitlementMock.canFxHub = true;
+    act(() => {
+      root.render(
+        createElement(DigichatPopup, { tier: 'brief', config: CFG }),
+      );
+    });
+    // fx_hub gating is free-only: a paying Brief subscriber keeps the popup
+    // and its upgrade CTA — never the fx_hub-only hidden state.
+    const btn = document.body.querySelector(
+      '.digichat-launcher__trigger',
+    ) as HTMLButtonElement;
+    expect(btn).not.toBeNull();
+    act(() => {
+      btn.click();
+    });
+    const cta = document.body.querySelector(
+      '[data-testid="digichat-upgrade-cta"]',
+    );
+    expect(cta).not.toBeNull();
+    expect(cta?.textContent).toContain(DIGICHAT_UPGRADE_TITLE);
+    expect(document.body.querySelector('#digichat-popup-iframe')).toBeNull();
+  });
+
   it('renders launcher for Desk+ when config is present', () => {
     act(() => {
       root.render(createElement(DigichatPopup, { tier: 'desk', config: CFG }));
