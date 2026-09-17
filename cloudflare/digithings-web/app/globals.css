@@ -244,6 +244,12 @@ html.no-js .dqhero-cta { opacity: 1; transform: none; }
    away once digichat itself loads. */
 .tl-boot.dc-embed-boot { background: transparent; }
 
+/* The boot dock mirrors the real composer: the loader's dboot default caps at
+   42rem (sized for the pre-wide DataTap port), while this embed runs the
+   thread full width (layout=page, wide=1) -- match it so the cube contour
+   traces the same box the real textarea occupies on handoff. */
+.dboot.dc-embed-boot .dboot-dock { max-width: none; width: 100%; }
+
 
 /* Landing / module cards continue below */
 

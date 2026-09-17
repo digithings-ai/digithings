@@ -71,7 +71,7 @@ new_sqlite_classes = ["DigiChatContainer"]
 # The Worker forwards it to the Container (deprecated alias DIGICHAT_EMBED_ENABLED
 # is also honored). With tenants configured the flag is ignored.
 DIGICHAT_REQUIRE_ROOT_AUTH = "0"
-DIGICHAT_EMBED_HOSTS = "digithings.ai,www.digithings.ai,occ.digithings.ai"
+DIGICHAT_EMBED_HOSTS = "digithings.ai,www.digithings.ai,occ.digithings.ai,digiquant.io,www.digiquant.io"
 # Profile A: digisearch/digivault are loopback inside digithings-stack; digichat
 # only talks to digigraph (+ digikey for bff_session). Do not probe digisearch
 # / digiquant / digismith from /api/health (defaults would be unreachable).

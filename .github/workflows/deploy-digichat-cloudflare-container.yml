@@ -164,15 +164,8 @@ jobs:
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           workingDirectory: cloudflare/digichat-cloudflare
           command: deploy --message digichat-v${{ steps.version.outputs.version }}
-          # Sync house-default upstream key into the Worker/Container env (same
-          # pattern as deploy-digithings-cron.yml → GH_DISPATCH_TOKEN).
-          # Only non-empty Actions secrets — empty optional names fail the action.
-          secrets: |
-            CHEAPERINFERENCE_API_KEY
-            OPENROUTER_API_KEY
-        env:
-          CHEAPERINFERENCE_API_KEY: ${{ secrets.CHEAPERINFERENCE_API_KEY }}
-          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+          # No upstream provider secrets here: the digichat Worker's envVars whitelist
+          # does not forward OPENROUTER_API_KEY / CHEAPERINFERENCE_API_KEY (digithings-stack owns them).
           # Do not set wrangler-action `with.wranglerVersion` to 4.28.0 — that
           # CLI rejects `deploy --message` (run 34213316753). Omit the pin so
           # `npx --no-install wrangler` uses the workspace install from

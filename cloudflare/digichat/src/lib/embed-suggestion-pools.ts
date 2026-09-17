@@ -13,8 +13,31 @@ export const DATATAPSTREAM_SUGGESTION_POOL = [
   "What are the API rate limits?",
 ] as const;
 
+/** digithings.ai — docs search, digivault, web search. One line per chip. */
+export const DIGITHINGS_SUGGESTION_POOL = [
+  "What is digigraph?",
+  "Search the docs for NautilusTrader",
+  "How do I run the stack locally?",
+  "Summarize the digithings architecture",
+  "What tools can you use?",
+  "Search the vault for architecture notes",
+] as const;
+
+/** occ.digithings.ai — help corpus, knowledge vault, Zammad tickets. */
+export const OCC_SUGGESTION_POOL = [
+  "How do I file a support ticket?",
+  "Search the help articles for onboarding",
+  "Show my open Zammad tickets",
+  "What is our data retention policy?",
+  "Summarize the open Zammad tickets",
+  "Check the status of my Zammad tickets",
+] as const;
+
 const TENANT_SUGGESTION_POOLS: Record<string, readonly string[]> = {
   datatapstream: DATATAPSTREAM_SUGGESTION_POOL,
+  digithings: DIGITHINGS_SUGGESTION_POOL,
+  "digithings-ai": DIGITHINGS_SUGGESTION_POOL,
+  occ: OCC_SUGGESTION_POOL,
 };
 
 /** Full suggestion pool for a tenant slug, when the registry entry omits `suggestions`. */
