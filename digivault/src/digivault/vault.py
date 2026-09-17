@@ -28,6 +28,21 @@ from digivault.models import LintReport, Note, ValidationIssue, VaultConfig
 MANIFEST_NAME = ".digivault.yml"
 
 
+def _rel_path_in_scope(rel_path: str, scope: str) -> bool:
+    """True when vault-relative *rel_path* is *scope* or below (blank scope = all).
+
+    Mirrors :func:`tool_dispatch.resolve_vault_prefix`'s path-component boundary
+    rule: ``clients/acme`` must never match ``clients/acme-evil/…``. Used to keep
+    scoped reads and writes prefix-neutral — a caller scoped to one corpus must
+    not have its result (or a lint message) change because a note exists in
+    another corpus (#4256).
+    """
+    if not scope:
+        return True
+    stem = rel_path[:-3] if rel_path.endswith(".md") else rel_path
+    return stem == scope or rel_path.startswith(f"{scope}/")
+
+
 def _normalize_tags(value: Any) -> tuple[str, ...]:
     """Coerce a frontmatter 'tags' value into a normalized tuple of tag strings."""
     if value is None:
@@ -296,14 +311,40 @@ class Vault:
         frontmatter: dict[str, Any] | None = None,
         body: str = "",
         subdir: str = "",
+        scope: str = "",
     ) -> Note:
-        """Create a new note ``<subdir>/<name>.md``. Fails if the name exists."""
+        """Create a new note ``<subdir>/<name>.md``. Fails if the name exists.
+
+        *scope* narrows the "already exists" check (and the write target) to one
+        corpus: a scoped caller can create ``<scope>/<name>.md`` even when the
+        same stem lives under a different prefix, and is never told about that
+        out-of-scope note. Blank keeps the historical whole-vault behaviour.
+        """
         return self.write_note(
             name,
             frontmatter=frontmatter,
             body=body,
             subdir=subdir,
             overwrite=False,
+            scope=scope,
+        )
+
+    def _scoped_rel_path(self, stem: str, scope: str) -> str | None:
+        """Return the rel_path for *stem* that lies under *scope*, else ``None``.
+
+        A blank *scope* means whole-vault: the indexed note's path (or ``None``).
+        With a scope, the indexed note counts only when it is in scope; otherwise
+        a duplicate file of the same stem inside the scope is used, and a stem
+        that exists solely outside the scope is invisible (returns ``None``).
+        """
+        note = self._notes.get(stem)
+        if not scope:
+            return note.rel_path if note is not None else None
+        if note is not None and _rel_path_in_scope(note.rel_path, scope):
+            return note.rel_path
+        return next(
+            (path for path in self._duplicates.get(stem, ()) if _rel_path_in_scope(path, scope)),
+            None,
         )
 
     def write_note(
@@ -314,6 +355,7 @@ class Vault:
         body: str = "",
         subdir: str = "",
         overwrite: bool = False,
+        scope: str = "",
     ) -> Note:
         """Create or optionally overwrite a note ``<subdir>/<name>.md``.
 
@@ -321,17 +363,23 @@ class Vault:
         and raises if the stem already exists. When True, replaces the on-disk
         file and incrementally refreshes the affected link graph so idempotent
         ingest re-runs can upsert by slug without rescanning the whole vault.
+
+        *scope* (blank = whole vault) binds the collision check to one corpus so
+        an out-of-scope duplicate stem neither blocks the write nor leaks its
+        existence: ``corpusA/secret.md`` is creatable while ``corpusB/secret.md``
+        exists, and returns the same result as if that sibling did not (#4256).
         """
         self._require_writable()
         clean = name.strip()
         if not clean or "/" in clean or clean.startswith("."):
             raise VaultError(f"Invalid note name: {name!r}")
-        if clean in self._notes and not overwrite:
+        existing = self._scoped_rel_path(clean, scope)
+        if existing is not None and not overwrite:
             raise VaultError(f"Note already exists: {clean!r}")
-        if clean in self._notes and overwrite:
+        if existing is not None:
             # Prefer the existing relative path so a re-run does not create a
             # duplicate stem under a different subdir.
-            rel = self._notes[clean].rel_path
+            rel = existing
         else:
             rel = f"{subdir.strip('/')}/{clean}.md" if subdir.strip("/") else f"{clean}.md"
         path = self._safe_path(rel)
@@ -417,12 +465,21 @@ class Vault:
         return self._notes[clean_new]
 
     # ── validation ─────────────────────────────────────────────────────────
-    def lint(self) -> LintReport:
-        """Validate: unresolved links, missing frontmatter, disallowed tags, orphans, dup stems."""
+    def lint(self, *, scope: str = "") -> LintReport:
+        """Validate: unresolved links, missing frontmatter, disallowed tags, orphans, dup stems.
+
+        *scope* (blank = whole vault) restricts both the per-note issues and the
+        duplicate-stem detector to one corpus, so a scoped caller can never see a
+        path — or learn of a stem — outside its prefix (#4256). Foreign-lookup
+        duplicates are reported only when two or more colliding files are *inside*
+        the scope, and the message names only those in-scope paths.
+        """
         issues: list[ValidationIssue] = []
         names = set(self._notes)
         for name in sorted(self._notes):
             note = self._notes[name]
+            if not _rel_path_in_scope(note.rel_path, scope):
+                continue
             for link in note.outlinks:
                 if link.target not in names:
                     issues.append(
@@ -460,17 +517,27 @@ class Vault:
                     )
                 )
         for stem, paths in sorted(self._duplicates.items()):
+            scoped_paths = [path for path in paths if _rel_path_in_scope(path, scope)]
+            if len(scoped_paths) < 2:
+                # Fewer than two colliding files inside the scope: nothing to
+                # report, and never name an out-of-scope path.
+                continue
             issues.append(
                 ValidationIssue(
-                    note=paths[0],
+                    note=scoped_paths[0],
                     kind="duplicate_note",
                     message=(
-                        f"note stem '{stem}' is shared by {len(paths)} files "
-                        f"({', '.join(paths)}); only the first is indexed"
+                        f"note stem '{stem}' is shared by {len(scoped_paths)} files "
+                        f"({', '.join(scoped_paths)}); only the first is indexed"
                     ),
                 )
             )
-        return LintReport(ok=not issues, note_count=len(self._notes), issues=tuple(issues))
+        note_count = (
+            len(self._notes)
+            if not scope
+            else sum(1 for n in self._notes.values() if _rel_path_in_scope(n.rel_path, scope))
+        )
+        return LintReport(ok=not issues, note_count=note_count, issues=tuple(issues))
 
 
 class FilesystemStore(Vault):
