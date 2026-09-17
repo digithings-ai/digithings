@@ -199,6 +199,11 @@ export async function createDigigraphTraceStreamResponse(opts: {
         textOpen = false;
         textSeq += 1;
       };
+
+      // Settle on EVERY exit (error, abort, contract failure), not just the
+      // success tail: a part left streaming keeps the thinking animation
+      // parked above the final state (foundry wraps the same way).
+      try {
       const bodyPayload: Record<string, unknown> = {
         model,
         messages: coreMessagesToDigigraphOpenAi(coreMessages),
@@ -234,7 +239,7 @@ export async function createDigigraphTraceStreamResponse(opts: {
         });
       } catch (err) {
         if (err instanceof CredentialRedirectError) {
-          console.error(`[digigraph] ${err.message}`);
+          console.error(`[digigraph] credential redirect refused: ${err.message}`);
           closeText();
           throw new DigigraphStreamContractError(DIGIGRAPH_UNAVAILABLE_MESSAGE);
         }
@@ -266,7 +271,9 @@ export async function createDigigraphTraceStreamResponse(opts: {
         throw new DigigraphStreamContractError(DIGIGRAPH_UNAVAILABLE_MESSAGE);
       }
       if (!res.body) {
-        console.error(`[digigraph] upstream ${res.status} returned an empty body`);
+        console.error(
+          `[digigraph] upstream ${res.status} returned an empty body (reason=empty_body)`
+        );
         closeText();
         throw new DigigraphStreamContractError(DIGIGRAPH_UNAVAILABLE_MESSAGE);
       }
@@ -376,13 +383,16 @@ export async function createDigigraphTraceStreamResponse(opts: {
       // not misclassified as empty.
       if (!textEmitted && activityCtx.seq === 0) {
         console.error(
-          `[digigraph] upstream ${res.status} streamed no text or activity`
+          `[digigraph] upstream ${res.status} streamed no text or activity (content-type=${res.headers.get("content-type") ?? "none"}; reason=empty_stream)`
         );
         closeText();
         throw new DigigraphStreamContractError(DIGIGRAPH_UNAVAILABLE_MESSAGE);
       }
-      finishStandardActivity(writer, activityCtx);
-      closeText();
+      } finally {
+        // Idempotent when the turn already settled on the success path.
+        finishStandardActivity(writer, activityCtx);
+        closeText();
+      }
     },
   });
 

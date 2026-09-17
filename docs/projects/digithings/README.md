@@ -51,7 +51,7 @@ via `docker-compose.override.yml`.
 ```bash
 DIGICHAT_REQUIRE_ROOT_AUTH=0
 DIGICHAT_EMBED_HOSTS=digithings.ai,www.digithings.ai
-DIGICHAT_EMBED_TENANTS='{"digithings.ai":{"slug":"digithings","aliases":["www.digithings.ai"],"gateMode":"ungated","showByok":true,"showStatusBar":true,"layout":"page","activityDetail":"full","attribution":false,"token":"<schema-required>","backend":{"type":"digigraph"}}}'
+DIGICHAT_EMBED_TENANTS='{"digithings.ai":{"slug":"digithings","aliases":["www.digithings.ai"],"gateMode":"ungated","showByok":true,"showStatusBar":true,"layout":"page","activityDetail":"full","attribution":true,"token":"<schema-required>","backend":{"type":"digigraph"}}}'
 ```
 
 digiquant.io is **crawl-only** unless a human later requests iframing digithings

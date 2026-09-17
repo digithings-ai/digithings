@@ -93,11 +93,11 @@
 
 /* digichat-skin embed: the shell shares the thread canvas (--surface) so the
    composer row, turn counter, and attribution have no white band beneath. */
-.dc-embed-shell[data-skin-canvas="1"] {
+.dc-embed-shell[data-skin-canvas="1"]:not([data-wide="1"]) {
   background: #f1f0eb;
 }
 
-:root[data-theme="dark"] .dc-embed-shell[data-skin-canvas="1"] {
+:root[data-theme="dark"] .dc-embed-shell[data-skin-canvas="1"]:not([data-wide="1"]) {
   background: #121417;
 }
 
