@@ -21,6 +21,8 @@ import {
   Select,
   SelectContent,
   SelectItem,
+  SelectItemIndicator,
+  SelectPopup,
   SelectTrigger,
   SelectValue,
   Separator,
@@ -38,6 +40,7 @@ import {
   TableHead,
   TableHeader,
   TableRow,
+  TableRowHeader,
   Textarea,
   Tooltip,
   TooltipContent,
@@ -87,6 +90,24 @@ describe("vendored ui kit renders server-side", () => {
     const html = renderToStaticMarkup(<Badge>live</Badge>);
     expect(html).toContain('data-slot="badge"');
     expect(html).toContain("live");
+  });
+
+  it("Badge tone variants render the token-backed reference tones", () => {
+    expect(renderToStaticMarkup(<Badge variant="neutral">flat</Badge>)).toContain(
+      "text-ink-mute",
+    );
+    expect(renderToStaticMarkup(<Badge variant="accent">core</Badge>)).toContain(
+      "border-accent-weak text-accent",
+    );
+    expect(renderToStaticMarkup(<Badge variant="warn">roadmap</Badge>)).toContain(
+      "text-warn",
+    );
+    expect(renderToStaticMarkup(<Badge variant="up">+2.4%</Badge>)).toContain(
+      "border-up/40 text-up",
+    );
+    expect(renderToStaticMarkup(<Badge variant="down">−1.1%</Badge>)).toContain(
+      "border-down/40 text-down",
+    );
   });
 
   it("Checkbox renders its root and (when checked) the indicator", () => {
@@ -149,6 +170,54 @@ describe("vendored ui kit renders server-side", () => {
     expect(html).toContain('data-slot="table-head"');
     expect(html).toContain('data-slot="table-cell"');
     expect(html).toContain("AAPL");
+  });
+
+  it("Table numeric cells right-align with tabular figures", () => {
+    const html = renderToStaticMarkup(
+      <Table>
+        <TableHeader>
+          <TableRow>
+            <TableHead numeric>size</TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          <TableRow>
+            <TableCell numeric>1.20</TableCell>
+          </TableRow>
+        </TableBody>
+      </Table>,
+    );
+    expect(html).toContain("text-right tabular-nums");
+  });
+
+  it("Table density=compact emits the density hook and compact padding", () => {
+    const html = renderToStaticMarkup(
+      <Table density="compact">
+        <TableBody>
+          <TableRow>
+            <TableCell>1.20</TableCell>
+          </TableRow>
+        </TableBody>
+      </Table>,
+    );
+    expect(html).toContain('data-density="compact"');
+    expect(html).toContain("[data-slot=table-cell]]:py-1");
+  });
+
+  it("TableRowHeader renders a scoped row header inside a body row", () => {
+    const html = renderToStaticMarkup(
+      <Table>
+        <TableBody>
+          <TableRow>
+            <TableRowHeader>BTC-PERP</TableRowHeader>
+            <TableCell>1.20</TableCell>
+          </TableRow>
+        </TableBody>
+      </Table>,
+    );
+    expect(html).toContain('data-slot="table-row-header"');
+    expect(html).toMatch(/<th[^>]*scope="row"/);
+    expect(html).toContain("BTC-PERP");
   });
 
   it("Alert composes parts", () => {
@@ -223,6 +292,32 @@ describe("vendored ui kit renders server-side", () => {
     expect(html).toMatch(/<svg/);
     expect(html).not.toContain("MSFT");
     expect(html).not.toContain('data-slot="select-content"');
+  });
+
+  it("SelectPopup composes items inline and SelectItemIndicator renders its check", () => {
+    const html = renderToStaticMarkup(
+      <Select defaultValue="aapl" defaultOpen>
+        <SelectTrigger>
+          <SelectValue placeholder="Ticker" />
+        </SelectTrigger>
+        <SelectPopup>
+          <SelectItem value="aapl">
+            AAPL
+            <SelectItemIndicator />
+          </SelectItem>
+          <SelectItem value="msft">MSFT</SelectItem>
+        </SelectPopup>
+      </Select>,
+    );
+    // Unlike the stock portal-only SelectContent, the controls-parity
+    // SelectPopup renders its positioner/popup inline, so the open list is
+    // visible to react-dom/server.
+    expect(html).toContain('data-slot="select-trigger"');
+    expect(html).toContain('data-slot="select-popup"');
+    expect(html).toContain('data-slot="select-item"');
+    expect(html).toContain('data-slot="select-item-indicator"');
+    expect(html).toContain("AAPL");
+    expect(html).toContain("MSFT");
   });
 
   // Sheet, DropdownMenu and Tooltip content render through Base UI portals,
