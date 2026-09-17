@@ -50,6 +50,18 @@ describe("DocumentPane", () => {
     expect(html).toContain("a paper scan");
   });
 
+  it("renders the close control as the shared kit IconButton (#4306)", () => {
+    const html = renderToStaticMarkup(
+      <DocumentPane
+        hit={{ title: "Auth plane", path: "clients/digithings/auth__p001" }}
+        onClose={() => {}}
+      />,
+    );
+    expect(html).toContain('data-slot="icon-button"');
+    expect(html).toContain('aria-label="Close document"');
+    expect(html).toContain("dc-doc-pane-close");
+  });
+
   it("falls back to readableSnippet for a get_note-shaped hit without body", () => {
     // Live digigraph RagSourceItem shape before/without wire body: doc_id + snippet.
     // Locks the non-http path rule and makes a regression to excerpt-only visible
