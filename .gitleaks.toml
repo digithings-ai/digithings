@@ -20,10 +20,6 @@ paths = [
   # canned payloads under tests/fixtures/. No production secrets live here.
   '''^tests/''',
 
-  # Template .env — contains only keys and empty/placeholder values. Enforced
-  # by convention; a real .env is gitignored.
-  '''^\.env\.example$''',
-
   # Documentation commonly includes example tokens, JWT structure samples,
   # and curl snippets with obviously-fake bearer values (e.g. "sk-your-key").
   '''^docs/.*\.md$''',
@@ -45,25 +41,35 @@ paths = [
   # deployable code; never pushed to public remotes (see CLAUDE.md).
   '''^projects/[^/]+/vault/''',
 
-  # The deleted apps/digiquant-atlas file moved into the still-live digiquant
-  # research example template. Both paths contain the same real free-tier data-API
-  # keys (FRED / CoinGecko / Alpha Vantage), which the owner confirmed are
-  # dead/rotated (2026-06-18); no live credential remains. History can't be
-  # rewritten cheaply, so only the two exact paths are allowlisted. NOT generic
-  # fixtures — see SECURITY.md "Secrets scanning".
-  '''^apps/digiquant-atlas/config/mcp\.secrets\.env\.example$''',
+  # digithings-mcp research example template: three real free-tier data-API keys
+  # (FRED / CoinGecko / Alpha Vantage) sit in git history at this path, which the
+  # owner confirmed dead/rotated (2026-06-18); no live credential remains.
+  # History can't be rewritten cheaply, so this one exact path stays allowlisted.
+  # NOT a generic fixture — see SECURITY.md "Secrets scanning".
   '''^digiquant/src/digiquant/research/config/mcp\.secrets\.env\.example$''',
 ]
 
-# Known-safe example/dummy tokens that gitleaks' default rules flag. Each
-# entry must be a canonical AWS/GitHub/etc. "EXAMPLE" value published by the
-# vendor, never a real leaked secret.
+# Known-safe values that gitleaks' default rules flag. Either a canonical
+# AWS/GitHub/etc. "EXAMPLE" value published by the vendor — never a real leaked
+# secret — or obvious placeholder text from a template. Matching placeholders
+# here keeps example/template files scanned instead of needing a path exemption.
 regexes = [
   # AWS documentation example access key id (literally "AKIAIOSFODNN7EXAMPLE").
   '''AKIAIOSFODNN7EXAMPLE''',
   # AWS documentation example secret (literally
   # "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY").
   '''wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY''',
+  # Template placeholders: e.g. `AUTH_SECRET=replace-with-openssl-rand-base64-32`
+  # (root .env.example:240,278).
+  '''replace-with-''',
+  # Template placeholders: e.g. `your-api-key-here`.
+  '''your-.*-here''',
+  # LiteLLM's documented no-auth loopback marker.
+  '''sk-no-key-required''',
+  # Conventional "change me" placeholder.
+  '''changeme''',
+  # Angle-bracket placeholders, e.g. `<slug>`, `<your-api-key>`, `<uuid>`.
+  '''<[A-Za-z0-9][A-Za-z0-9 _./:@-]*>''',
 ]
 
 # Commit-level allowlist. Entries must be full SHAs with a dated comment
