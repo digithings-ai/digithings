@@ -96,6 +96,71 @@ def _canonical_json(payload: object) -> str:
     return json.dumps(payload, sort_keys=True, separators=(",", ":"), default=str)
 
 
+# ``ReturnFraction`` is ``decimal_places=8`` — the canonical spelling of a return
+# is its fixed 8-decimal-place form. Postgres ``numeric`` does not preserve
+# trailing zeros, so a value persisted as ``0.03250000`` reads back through
+# PostgREST as the JSON number ``0.0325`` (Python float) and re-``str()``s to
+# ``0.0325``. Hashing the quantized spelling makes write-time and read-time
+# digests agree regardless of that loss (#4298). Calibration metrics share the
+# convention because their contracts are likewise 8-decimal-place Decimals.
+_RETURN_FRACTION_QUANTUM = Decimal("0.00000001")
+
+
+def canonical_return_fraction(value: Decimal) -> str:
+    """Canonical 8dp string spelling of a Decimal field for artifact hashes."""
+    return str(value.quantize(_RETURN_FRACTION_QUANTUM))
+
+
+# Decimal-valued payload keys for the calibration artifacts. Keeping the list by
+# key (rather than rebuilding every payload at one call site) lets the writer,
+# the model validator, and tests all funnel through the same hash helpers and
+# still hash the same canonical spelling.
+_FORECAST_CALIBRATION_DECIMAL_SCALARS = (
+    "equivalent_sample_size",
+    "bias",
+    "dispersion",
+    "brier_score",
+    "log_score",
+    "reliability",
+)
+_CALIBRATED_FORECAST_DECIMAL_SCALARS = (
+    "expected_gross_return",
+    "forecast_error_std",
+    "calibrated_positive_probability",
+    "reliability_weight",
+)
+_CALIBRATED_FORECAST_DECIMAL_SEQUENCES = ("downside_quantiles",)
+
+
+def _canonicalize_payload_decimals(
+    payload: dict[str, object],
+    *,
+    scalar_keys: tuple[str, ...],
+    sequence_keys: tuple[str, ...] = (),
+) -> dict[str, object]:
+    """Return a copy of ``payload`` with Decimal-valued fields canonicalized.
+
+    Payloads are assembled by several call sites (the model validators, the
+    calibrator, tests) which spell Decimals with ``str()``. Hashing the fixed
+    8dp spelling here, in the one place every call site shares, keeps a
+    write-time digest and a PostgREST float read-back recompute identical
+    without duplicating a canonical builder at each site.
+    """
+    canonical = dict(payload)
+    for key in scalar_keys:
+        value = canonical.get(key)
+        if value is not None:
+            canonical[key] = canonical_return_fraction(Decimal(value))  # type: ignore[arg-type]
+    for key in sequence_keys:
+        value = canonical.get(key)
+        if value is not None:
+            canonical[key] = [
+                canonical_return_fraction(Decimal(item))
+                for item in value  # type: ignore[union-attr]
+            ]
+    return canonical
+
+
 def forecast_outcome_content_hash(*, payload: dict[str, object]) -> str:
     """SHA-256 over canonical JSON of outcome economic identity fields."""
     return hashlib.sha256(_canonical_json(payload).encode("utf-8")).hexdigest()
@@ -118,7 +183,11 @@ def forecast_outcome_id(
 
 def forecast_calibration_content_hash(*, payload: dict[str, object]) -> str:
     """SHA-256 over canonical JSON of calibration cohort/metrics identity."""
-    return hashlib.sha256(_canonical_json(payload).encode("utf-8")).hexdigest()
+    canonical = _canonicalize_payload_decimals(
+        payload,
+        scalar_keys=_FORECAST_CALIBRATION_DECIMAL_SCALARS,
+    )
+    return hashlib.sha256(_canonical_json(canonical).encode("utf-8")).hexdigest()
 
 
 def forecast_calibration_id(
@@ -138,7 +207,12 @@ def forecast_calibration_id(
 
 def calibrated_forecast_content_hash(*, payload: dict[str, object]) -> str:
     """SHA-256 over canonical JSON of calibrated-forecast shadow fields."""
-    return hashlib.sha256(_canonical_json(payload).encode("utf-8")).hexdigest()
+    canonical = _canonicalize_payload_decimals(
+        payload,
+        scalar_keys=_CALIBRATED_FORECAST_DECIMAL_SCALARS,
+        sequence_keys=_CALIBRATED_FORECAST_DECIMAL_SEQUENCES,
+    )
+    return hashlib.sha256(_canonical_json(canonical).encode("utf-8")).hexdigest()
 
 
 def calibrated_forecast_id(
@@ -155,20 +229,6 @@ def calibrated_forecast_id(
         _CALIBRATED_FORECAST_ID_NAMESPACE,
         f"{effective_forecast_id}:{cal_key}:{content_hash.strip()}",
     )
-
-
-# ``ReturnFraction`` is ``decimal_places=8`` — the canonical spelling of a return
-# is its fixed 8-decimal-place form. Postgres ``numeric`` does not preserve
-# trailing zeros, so a value persisted as ``0.03250000`` reads back through
-# PostgREST as the JSON number ``0.0325`` (Python float) and re-``str()``s to
-# ``0.0325``. Hashing the quantized spelling makes write-time and read-time
-# digests agree regardless of that loss (#4298).
-_RETURN_FRACTION_QUANTUM = Decimal("0.00000001")
-
-
-def canonical_return_fraction(value: Decimal) -> str:
-    """Canonical 8dp string spelling of a return fraction for outcome hashes."""
-    return str(value.quantize(_RETURN_FRACTION_QUANTUM))
 
 
 def forecast_outcome_hash_payload(
