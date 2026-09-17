@@ -124,18 +124,27 @@ const UPSTREAM_MAX_ATTEMPTS = 4;
 // while the container boots; retry until the instance is up.
 const UPSTREAM_RETRY_DELAYS_MS = [2000, 5000, 8000];
 
+function retryDelayMs(attempt: number): number {
+  const index = Math.min(attempt - 1, UPSTREAM_RETRY_DELAYS_MS.length - 1);
+  return UPSTREAM_RETRY_DELAYS_MS[index] ?? 0;
+}
+
 /** Abort-aware sleep so Stop stays responsive between cold-start retries. */
 function abortableSleep(ms: number, signal?: AbortSignal): Promise<void> {
   return new Promise((resolve) => {
-    const timer = setTimeout(resolve, ms);
-    signal?.addEventListener(
-      "abort",
-      () => {
-        clearTimeout(timer);
-        resolve();
-      },
-      { once: true },
-    );
+    if (signal?.aborted) {
+      resolve();
+      return;
+    }
+    const onAbort = () => {
+      clearTimeout(timer);
+      resolve();
+    };
+    const timer = setTimeout(() => {
+      signal?.removeEventListener("abort", onAbort);
+      resolve();
+    }, ms);
+    signal?.addEventListener("abort", onAbort, { once: true });
   });
 }
 
@@ -275,14 +284,14 @@ export async function createDigigraphTraceStreamResponse(opts: {
           if (attempt >= UPSTREAM_MAX_ATTEMPTS || opts.signal?.aborted) {
             throw err;
           }
-          await abortableSleep(UPSTREAM_RETRY_DELAYS_MS[attempt - 1], opts.signal);
+          await abortableSleep(retryDelayMs(attempt), opts.signal);
           continue;
         }
         if (res.status === 503 && attempt < UPSTREAM_MAX_ATTEMPTS) {
           if (res.body) {
             await res.body.cancel().catch(() => {});
           }
-          await abortableSleep(UPSTREAM_RETRY_DELAYS_MS[attempt - 1], opts.signal);
+          await abortableSleep(retryDelayMs(attempt), opts.signal);
           continue;
         }
         break;

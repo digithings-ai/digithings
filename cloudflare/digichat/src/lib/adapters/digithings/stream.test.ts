@@ -1254,3 +1254,35 @@ it("keeps the unavailable error when the upstream stays cold after retries", asy
     vi.useRealTimers();
   }
 });
+
+it("stops the retry when the request is aborted during a cold-start wait", async () => {
+  vi.useFakeTimers();
+  try {
+    const controller = new AbortController();
+    const fetchSpy = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValue(new Response("stack container not ready", { status: 503 }));
+    vi.spyOn(console, "error").mockImplementation(() => {});
+
+    const pendingBody = (async () => {
+      const res = await createDigigraphTraceStreamResponse({
+        messages: [userMessage("hi")],
+        digigraphBaseUrl: "https://digigraph.internal",
+        upstreamHeaders: {},
+        responseHeaders: {},
+        activityDetail: "full",
+        signal: controller.signal,
+      });
+      return new Response(res.body).text();
+    })();
+    await vi.advanceTimersByTimeAsync(100);
+    controller.abort();
+    await vi.runAllTimersAsync();
+    const body = await pendingBody;
+
+    expect(fetchSpy).toHaveBeenCalledTimes(1);
+    expect(errorTextFrom(body)).toBeTruthy();
+  } finally {
+    vi.useRealTimers();
+  }
+});
