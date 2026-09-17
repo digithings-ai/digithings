@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import importlib.util
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -125,3 +126,76 @@ def test_cli_clean_tree_reports_no_drift(tmp_path: Path) -> None:
     assert result.returncode == 0, result.stderr
     assert "dead: none" in result.stdout
     assert "not repo-level: none" in result.stdout
+
+
+@pytest.mark.unit
+def test_reads_ignore_commented_out_names(audit: object, tmp_path: Path) -> None:
+    workflows = tmp_path / ".github" / "workflows"
+    workflows.mkdir(parents=True)
+    (workflows / "a.yml").write_text(
+        "env:\n"
+        "  # A: ${{ secrets.COMMENTED_OUT }}\n"
+        "  B: ${{ secrets.LIVE_ONE }}  # was ${{ secrets.TRAILING_COMMENT }}\n"
+        "  C: secrets.BARE_NOT_AN_EXPRESSION\n",
+        encoding="utf-8",
+    )
+
+    assert audit.reads_in((workflows / "a.yml").read_text(encoding="utf-8")) == {"LIVE_ONE"}
+
+
+@pytest.mark.unit
+def test_cli_strict_ignores_unmanaged_reads(tmp_path: Path) -> None:
+    workflows = tmp_path / ".github" / "workflows"
+    workflows.mkdir(parents=True)
+    (workflows / "a.yml").write_text(
+        "env:\n  A: ${{ secrets.ONLY_ONE }}\n  B: ${{ secrets.MISSING_ONE }}\n",
+        encoding="utf-8",
+    )
+    names = tmp_path / "names.txt"
+    names.write_text("ONLY_ONE\n", encoding="utf-8")
+
+    strict = subprocess.run(
+        [
+            sys.executable,
+            str(_SCRIPT),
+            "--root",
+            str(tmp_path),
+            "--secrets-file",
+            str(names),
+            "--strict",
+        ],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+    assert strict.returncode == 0, strict.stderr
+    assert "MISSING_ONE" in strict.stdout
+
+
+@pytest.mark.unit
+def test_cli_strict_fails_when_secret_list_unavailable(tmp_path: Path) -> None:
+    workflows = tmp_path / ".github" / "workflows"
+    workflows.mkdir(parents=True)
+    (workflows / "a.yml").write_text("env:\n  A: ${{ secrets.ONLY_ONE }}\n", encoding="utf-8")
+    no_path = {**os.environ, "PATH": ""}
+
+    plain = subprocess.run(
+        [sys.executable, str(_SCRIPT), "--root", str(tmp_path)],
+        capture_output=True,
+        text=True,
+        check=False,
+        env=no_path,
+    )
+    assert plain.returncode == 0, plain.stderr
+    assert "repo secret list unavailable" in plain.stdout
+
+    strict = subprocess.run(
+        [sys.executable, str(_SCRIPT), "--root", str(tmp_path), "--strict"],
+        capture_output=True,
+        text=True,
+        check=False,
+        env=no_path,
+    )
+    assert strict.returncode == 1
+    assert "repo secret list unavailable" in strict.stdout

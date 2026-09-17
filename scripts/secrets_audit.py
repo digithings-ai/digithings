@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
 """Audit the repo secret surface: GitHub secrets vs the names workflows read.
 
-A secret name lives in three places — GitHub (repo, org, or environment level),
-the `.github/**/*.yml` files that read it, and `docs/ops/SECRETS_INVENTORY.md` —
-and they drift apart silently. This reports that drift in seconds:
+A secret name lives in GitHub (repo, org, or environment level) and in the
+`.github/**/*.yml` files that read it; `docs/ops/SECRETS_INVENTORY.md` is the
+hand-kept map of that same surface. The first two drift apart silently, so this
+compares them in seconds:
 
     python scripts/secrets_audit.py            # asks `gh secret list` for repo secrets
     python scripts/secrets_audit.py --strict   # exit 1 when a repo secret is never read
@@ -26,12 +27,33 @@ from typing import NamedTuple
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 
+EXPRESSION_RE = re.compile(r"\$\{\{(.*?)\}\}")
+
 SECRET_READ_RE = re.compile(r"secrets\.([A-Za-z_][A-Za-z0-9_]*)")
 
 GITHUB_YAML_GLOBS: tuple[str, ...] = (".github/**/*.yml", ".github/**/*.yaml")
 
 # Provided by Actions itself, not a secret anyone has to manage.
 IMPLICIT_SECRETS: frozenset[str] = frozenset({"GITHUB_TOKEN"})
+
+
+def reads_in(text: str) -> set[str]:
+    """Secret names one YAML file reads.
+
+    Only names inside `${{ ... }}` count, and a trailing comment is removed first,
+    so a commented-out read is not mistaken for a live one.
+    """
+    found: set[str] = set()
+    for raw in text.splitlines():
+        masked = list(raw)
+        for match in EXPRESSION_RE.finditer(raw):
+            for index in range(*match.span()):
+                masked[index] = "\x00"
+        comment = "".join(masked).find("#")
+        line = raw if comment == -1 else raw[:comment]
+        for expression in EXPRESSION_RE.findall(line):
+            found.update(SECRET_READ_RE.findall(expression))
+    return found
 
 
 class Report(NamedTuple):
@@ -50,7 +72,7 @@ def extract_secret_reads(root: Path) -> dict[str, set[str]]:
             if not path.is_file():
                 continue
             text = path.read_text(encoding="utf-8", errors="replace")
-            by_file[path.relative_to(root).as_posix()] = set(SECRET_READ_RE.findall(text))
+            by_file[path.relative_to(root).as_posix()] = reads_in(text)
     return by_file
 
 
@@ -129,7 +151,7 @@ def main(argv: list[str] | None = None) -> int:
         reads = set().union(*by_file.values()) if by_file else set()
         print(f"secrets_audit: repo secret list unavailable, {len(reads)} referenced names")
         print(f"referenced: {_fmt(reads)}")
-        return 0
+        return 1 if args.strict else 0
 
     report = classify(by_file, repo_secrets)
     print(
