@@ -155,6 +155,7 @@ WEIGHT_PARAM_BY_NAME: dict[str, str] = {
     "fast_crash_vol": "fast_crash_vol_weight",
     "adx": "adx_weight",
     "stochastic": "stochastic_weight",
+    "vol_regime": "vol_regime_weight",
 }
 
 # User-facing labels. The fallback (``name.replace("_", " ")``) covers every
@@ -179,6 +180,7 @@ INDICATOR_DISPLAY_NAMES: dict[str, str] = {
     "fast_crash_vol": "fast-crash volatility",
     "adx": "ADX (trend strength)",
     "stochastic": "Stochastic %K",
+    "vol_regime": "volatility regime (short/long vol ratio)",
 }
 
 
@@ -242,6 +244,15 @@ class SdcaCompositeWeights(BaseModel):
     # Cleared Stage 1 solo-validation 2026-09-17. Research-only, unvalidated
     # past Stage 1 -- see adx's comment above.
     stochastic: float = Field(0.0, ge=0.0)
+    # log(short_vol/long_vol) volatility-regime compression/expansion ratio,
+    # close-only. Cleared Stage 1 solo-validation 2026-09-18
+    # (scripts/run_vol_regime_solo_validation.py, best short=60/long=180,
+    # combined=71.11 vs 0.00 noise baseline), then REJECTED at Stage 2
+    # (scripts/run_vol_regime_stage2_fixed_baseline.py): any positive weight
+    # on top of the fixed power_law/m2/dxy baseline monotonically degrades
+    # the objective (dead end #21). Kept as a declared field for
+    # provenance/reproducibility only -- not a live candidate.
+    vol_regime: float = Field(0.0, ge=0.0)
 
     @model_validator(mode="after")
     def _at_least_one_positive(self) -> SdcaCompositeWeights:
@@ -270,6 +281,7 @@ class SdcaCompositeWeights(BaseModel):
             ("fast_crash_vol", self.fast_crash_vol),
             ("adx", self.adx),
             ("stochastic", self.stochastic),
+            ("vol_regime", self.vol_regime),
         )
 
     def enabled_extras(self) -> dict[str, float]:
@@ -329,6 +341,7 @@ def composite_weights_from_params(params: Mapping[str, float | int | str]) -> Sd
         fast_crash_vol=float(params.get("fast_crash_vol_weight", 0.0)),
         adx=float(params.get("adx_weight", 0.0)),
         stochastic=float(params.get("stochastic_weight", 0.0)),
+        vol_regime=float(params.get("vol_regime_weight", 0.0)),
     )
 
 
@@ -361,6 +374,7 @@ def parse_indicator_weights_json(raw: str) -> SdcaCompositeWeights:
         fast_crash_vol=float(payload.get("fast_crash_vol", 0.0)),
         adx=float(payload.get("adx", 0.0)),
         stochastic=float(payload.get("stochastic", 0.0)),
+        vol_regime=float(payload.get("vol_regime", 0.0)),
     )
 
 
