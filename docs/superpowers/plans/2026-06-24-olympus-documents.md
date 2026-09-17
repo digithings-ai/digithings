@@ -3,7 +3,7 @@
 > **For agentic workers:** REQUIRED SUB-SKILL: superpowers:subagent-driven-development or superpowers:executing-plans. Steps use checkbox (- [ ]) syntax.
 **Goal:** Defer the standalone Documents archive — delete the duplicate per-day reader (`ResearchClient` + Knowledge Base + MiniCalendar/accordion browser), hand the doc-rendering stack to Pipeline untouched, move cross-day discovery into the command palette (document search keyed off `document_key`, deep-linking to Pipeline nodes), repoint stale `/research?...&docKey` links, and leave a one-line faceted-archive stub gated behind `distinct-dates > 1`.
 **Architecture:** The doc-rendering stack (`DocumentExpandInline` + `LibraryDocumentBody` + per-type views + `use-library-document`) is shared by Portfolio/AnalysisTab and stays in place — Pipeline (Surface 1, separate build) mounts it. This plan removes the *archive surface* that duplicated it: the 556-line `ResearchClient`, `KnowledgeBasePanel`, and the MiniCalendar/per-date-accordion browse. `research-doc-categorize.ts` and `research-manifest.ts` survive as libs for a future archive but lose their only consumer. Cross-day discovery becomes a pure `buildDocumentSearchItems(docs, query)` helper folded into the Phase-0-re-authored command palette, deep-linking via the locked `buildPipelineHref` grammar.
-**Tech Stack:** Next.js 16 static export (`output:export`, `basePath /olympus`), React 19, Tailwind v4 `@theme` tokens, lucide-react, Supabase. Tests are VITEST (node environment, run from `frontend/olympus`).
+**Tech Stack:** Next.js 16 static export (`output:export`, `basePath /olympus`), React 19, Tailwind v4 `@theme` tokens, lucide-react, Supabase. Tests are VITEST (node environment, run from `cloudflare/olympus`).
 ## Global Constraints
 - **Static export:** `output:export`, `basePath /olympus`. No server components with dynamic params beyond the existing `Suspense`+`useSearchParams` pattern. Routes that disappear become client redirects, never 404s.
 - **Tailwind v4 tokens only:** dark-first; cyan-phosphor `--accent #3DD6C4`; Instrument Serif `--font-display`; Geist sans/mono; `glass-card`; semantic `text-fin-green/red/amber`; `bg-bg-primary/secondary/glass`; `border-border-subtle`; `text-text-primary/secondary/muted`.
@@ -11,7 +11,7 @@
 - **Empty-state discipline:** the faceted-archive stub is gated on a data predicate (`distinct dates > 1`) and **does not render at all** until then — it is *absent*, not narrating its emptiness. Do not ship an empty faceted table or a single-day accordion.
 - **Vitest stays green:** the repo's 150+ plumbing tests + page-level tests must pass. New logic is pure functions tested in `lib/` (node env, no jsdom). Page-level tests for deleted surfaces are deleted/updated in the same task that deletes the surface.
 - **Conventional commits:** `feat|fix|refactor|chore(olympus): …`. Every change traces to a GitHub issue (note `Fixes #<N>` placeholders where a backend issue must be filed).
-- **Lint:** TS — follow existing eslint/prettier conventions in `frontend/olympus` (ruff is Python-only; do not run it here).
+- **Lint:** TS — follow existing eslint/prettier conventions in `cloudflare/olympus` (ruff is Python-only; do not run it here).
 ---
 
 ## Phase 0 dependencies (consumed, NOT defined here)
@@ -40,7 +40,7 @@ commandPaletteOpen: boolean; openCommandPalette(): void; closeCommandPalette(): 
 **Pre-flight check (do this before Task 1).** Phase 0 may have landed `buildCommandItems`/`buildPipelineHref` or not, depending on merge order. If `lib/pipeline-links.ts` or the `buildCommandItems` export is missing, STOP and surface it — do not redefine the contract here. Verify:
 
 ```bash
-cd frontend/olympus
+cd cloudflare/olympus
 test -f lib/pipeline-links.ts && grep -q 'export function buildPipelineHref' lib/pipeline-links.ts && echo "pipeline-links OK" || echo "MISSING pipeline-links — Phase 0 not landed"
 grep -q 'export function buildCommandItems' components/command-palette.tsx && echo "buildCommandItems OK" || echo "MISSING buildCommandItems — Phase 0 not landed"
 grep -q 'openCommandPalette' components/app-shell-context.tsx && echo "shell palette control OK" || echo "MISSING shell palette control — Phase 0 not landed"
@@ -124,11 +124,11 @@ If the redirects in `legacy-spa-redirect.tsx` already point `/research`→`/pipe
   ```
 - [ ] Run it — expect PASS already (this is a characterization test of existing behavior; if any case FAILS the lib differs from the spec's understanding — stop and reconcile):
   ```bash
-  cd frontend/olympus && npx vitest run lib/research-doc-categorize.test.ts
+  cd cloudflare/olympus && npx vitest run lib/research-doc-categorize.test.ts
   ```
 - [ ] Delete the archive surface and its exclusive child:
   ```bash
-  cd frontend/olympus && git rm app/research/ResearchClient.tsx components/research/KnowledgeBasePanel.tsx
+  cd cloudflare/olympus && git rm app/research/ResearchClient.tsx components/research/KnowledgeBasePanel.tsx
   ```
 - [ ] Rewrite `app/research/page.tsx` to a client redirect to `/pipeline` (no surface to render anymore). Replace the entire file:
   ```tsx
@@ -141,19 +141,19 @@ If the redirects in `legacy-spa-redirect.tsx` already point `/research`→`/pipe
 - [ ] Verify `app/library/page.tsx` lands on `/pipeline`. Read it; if it still re-exports `LibraryToResearchRedirectPage` (i.e. Phase 0 did not retarget it), it now forwards to a redirect-to-`/pipeline` — acceptable (one hop). If Phase 0 added a `LibraryToPipelineRedirectPage`, switch the import to it. Do not introduce a new redirect component here if Phase 0 already owns one (Task 4 adds `ResearchToPipelineRedirectPage` if it is missing).
 - [ ] Build-check that nothing else imported the deleted files (the grep below must be empty):
   ```bash
-  cd frontend/olympus && grep -rn "ResearchClient\|KnowledgeBasePanel" --include="*.tsx" --include="*.ts" . | grep -v node_modules
+  cd cloudflare/olympus && grep -rn "ResearchClient\|KnowledgeBasePanel" --include="*.tsx" --include="*.ts" . | grep -v node_modules
   ```
 - [ ] Confirm the retained shared components still have live importers (must each print ≥1 NON-deleted caller — Portfolio/AnalysisTab):
   ```bash
-  cd frontend/olympus && grep -rln "DocumentExpandInline\|useLibraryDocument\|library/MiniCalendar" --include="*.tsx" --include="*.ts" . | grep -v node_modules
+  cd cloudflare/olympus && grep -rln "DocumentExpandInline\|useLibraryDocument\|library/MiniCalendar" --include="*.tsx" --include="*.ts" . | grep -v node_modules
   ```
 - [ ] Run the full suite to confirm no page-level test referenced the deleted surface (none does per the test inventory, but confirm):
   ```bash
-  cd frontend/olympus && npx vitest run
+  cd cloudflare/olympus && npx vitest run
   ```
 - [ ] Commit:
   ```bash
-  cd frontend/olympus && git add -A && git commit -m "refactor(olympus): retire the Documents archive surface (defer behind distinct-dates>1)
+  cd cloudflare/olympus && git add -A && git commit -m "refactor(olympus): retire the Documents archive surface (defer behind distinct-dates>1)
 
 Delete ResearchClient (556-line MiniCalendar + carry-forward browser) and the
 empty Knowledge Base tab; /research and /library redirect to /pipeline. Per-day
@@ -267,7 +267,7 @@ Claude-Session: https://claude.ai/code/session_01JvfyP2WatQhVSBS45HPys2"
   ```
 - [ ] Run it — expect FAIL (module does not exist):
   ```bash
-  cd frontend/olympus && npx vitest run lib/document-search.test.ts
+  cd cloudflare/olympus && npx vitest run lib/document-search.test.ts
   ```
 - [ ] Implement `lib/document-search.ts` with the real matcher + deep-link build:
   ```ts
@@ -347,11 +347,11 @@ Claude-Session: https://claude.ai/code/session_01JvfyP2WatQhVSBS45HPys2"
   ```
 - [ ] Run it — expect PASS:
   ```bash
-  cd frontend/olympus && npx vitest run lib/document-search.test.ts
+  cd cloudflare/olympus && npx vitest run lib/document-search.test.ts
   ```
 - [ ] Commit:
   ```bash
-  cd frontend/olympus && git add lib/document-search.ts lib/document-search.test.ts && git commit -m "feat(olympus): cross-day document search for the command palette
+  cd cloudflare/olympus && git add lib/document-search.ts lib/document-search.test.ts && git commit -m "feat(olympus): cross-day document search for the command palette
 
 buildDocumentSearchItems(docs, query) matches ticker/segment/title against
 documents and deep-links each hit to its Pipeline node via the locked grammar.
@@ -454,7 +454,7 @@ Claude-Session: https://claude.ai/code/session_01JvfyP2WatQhVSBS45HPys2"
   ```
 - [ ] Run it — expect FAIL (`filterCommandItems` not exported yet):
   ```bash
-  cd frontend/olympus && npx vitest run components/command-palette.test.ts
+  cd cloudflare/olympus && npx vitest run components/command-palette.test.ts
   ```
 - [ ] Implement in `components/command-palette.tsx`:
   - Add imports at the top: `import { FileText } from 'lucide-react';` (add to the existing lucide import block if not present) and `import type { Doc } from '@/lib/types';` and `import { buildDocumentSearchItems } from '@/lib/document-search';`.
@@ -467,7 +467,7 @@ Claude-Session: https://claude.ai/code/session_01JvfyP2WatQhVSBS45HPys2"
     (Remove the old inline filter/sort block that this replaces.)
 - [ ] Run it — expect PASS:
   ```bash
-  cd frontend/olympus && npx vitest run components/command-palette.test.ts
+  cd cloudflare/olympus && npx vitest run components/command-palette.test.ts
   ```
 - [ ] Update the palette input placeholder so document search is discoverable. Change the search `<input>` `placeholder` from the Phase-0 value to:
   ```tsx
@@ -475,11 +475,11 @@ Claude-Session: https://claude.ai/code/session_01JvfyP2WatQhVSBS45HPys2"
   ```
 - [ ] Run the full suite (the palette change is shared shell — confirm nothing else broke):
   ```bash
-  cd frontend/olympus && npx vitest run
+  cd cloudflare/olympus && npx vitest run
   ```
 - [ ] Commit:
   ```bash
-  cd frontend/olympus && git add components/command-palette.tsx components/command-palette.test.ts && git commit -m "feat(olympus): palette searches documents by ticker/segment, deep-links to Pipeline
+  cd cloudflare/olympus && git add components/command-palette.tsx components/command-palette.test.ts && git commit -m "feat(olympus): palette searches documents by ticker/segment, deep-links to Pipeline
 
 filterCommandItems appends live document hits (buildDocumentSearchItems) after
 the static command matches when the query is non-empty. Cross-day discovery for
@@ -553,15 +553,15 @@ Claude-Session: https://claude.ai/code/session_01JvfyP2WatQhVSBS45HPys2"
   Add at the top of the file: `import { buildPipelineHref, stageForDocumentKey } from '@/lib/pipeline-links';`. Also retarget `LibraryToResearchInner` to forward to `/pipeline` directly (so `/library` is one hop, not two) by replacing its body with the same `buildPipelineHref({ date, stage, node: docKey })` form, and rename the export to `LibraryToPipelineRedirectPage` (update `app/library/page.tsx`'s import). **If Phase 0 already did all of this, skip this whole step.**
 - [ ] Verify no `/research?` or `&docKey=` hrefs remain outside Portfolio's own in-page state (the grep should show only `PortfolioShellInner.tsx` / `portfolio-research-links.ts` / `portfolio-url-state.ts` — all intentional in-page Portfolio state, NOT cross-surface navigation):
   ```bash
-  cd frontend/olympus && grep -rn "/research?\|docKey=" --include="*.tsx" --include="*.ts" . | grep -v node_modules | grep -v "buildResearchStripLinks\|PortfolioShellInner\|portfolio-url-state"
+  cd cloudflare/olympus && grep -rn "/research?\|docKey=" --include="*.tsx" --include="*.ts" . | grep -v node_modules | grep -v "buildResearchStripLinks\|PortfolioShellInner\|portfolio-url-state"
   ```
 - [ ] Run the full suite:
   ```bash
-  cd frontend/olympus && npx vitest run
+  cd cloudflare/olympus && npx vitest run
   ```
 - [ ] Commit:
   ```bash
-  cd frontend/olympus && git add -A && git commit -m "fix(olympus): repoint thesis 'Related PM documents' links to Pipeline nodes
+  cd cloudflare/olympus && git add -A && git commit -m "fix(olympus): repoint thesis 'Related PM documents' links to Pipeline nodes
 
 ThesisDetailPageInner's related-doc links used the retired /research?...&docKey
 form; rebuild them with buildPipelineHref + stageForDocumentKey so they open the
@@ -626,7 +626,7 @@ Claude-Session: https://claude.ai/code/session_01JvfyP2WatQhVSBS45HPys2"
   ```
 - [ ] Run it — expect FAIL (module missing):
   ```bash
-  cd frontend/olympus && npx vitest run lib/document-archive-gate.test.ts
+  cd cloudflare/olympus && npx vitest run lib/document-archive-gate.test.ts
   ```
 - [ ] Implement `lib/document-archive-gate.ts`:
   ```ts
@@ -655,15 +655,15 @@ Claude-Session: https://claude.ai/code/session_01JvfyP2WatQhVSBS45HPys2"
   ```
 - [ ] Run it — expect PASS:
   ```bash
-  cd frontend/olympus && npx vitest run lib/document-archive-gate.test.ts
+  cd cloudflare/olympus && npx vitest run lib/document-archive-gate.test.ts
   ```
 - [ ] Final full-suite run to confirm the whole Documents surface is green:
   ```bash
-  cd frontend/olympus && npx vitest run
+  cd cloudflare/olympus && npx vitest run
   ```
 - [ ] Commit:
   ```bash
-  cd frontend/olympus && git add lib/document-archive-gate.ts lib/document-archive-gate.test.ts && git commit -m "chore(olympus): credible deferral stub for the faceted Documents archive
+  cd cloudflare/olympus && git add lib/document-archive-gate.ts lib/document-archive-gate.test.ts && git commit -m "chore(olympus): credible deferral stub for the faceted Documents archive
 
 shouldShowDocumentArchive(docs) is the named, unit-tested predicate a future
 cross-day archive gates on (distinct dates > 1). False on today's single-day DB,

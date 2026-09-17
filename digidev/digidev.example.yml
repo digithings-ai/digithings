@@ -91,7 +91,7 @@ human_gates:
 # "Human-Approved-By: <name>" trailer.
 # Anchor directory fragments to your backend source roots: a bare "/live/"
 # also matches unrelated paths (e.g. design screenshots under
-# frontend/**/references/**/live/) and produces false positives.
+# cloudflare/**/references/**/live/) and produces false positives.
 live_trading_regex: "(live_trading|execute_trade|place_order|(^|/)src/(.*/)?live[/.])"
 
 # ── Protected paths ───────────────────────────────────────────────────────────

@@ -57,6 +57,17 @@ surface (fail-fast, no fallback chain). `python -m digillm.mcp_server`
 (`[mcp]` extra) exposes the serializable slice (`complete`); `run_tools` /
 `structured_completion` stay library-only (callable / model class).
 
+### MCP hosting (loopback only — no stack slot)
+
+digillm rides inside digigraph via library calls (digigraph imports
+`digillm.completion` / `run_tools` in-process) — it is not a separately deployed
+service. `python -m digillm.mcp_server` (default `127.0.0.1:8768`, `DIGILLM_MCP_PORT`
+override) exists for trusted local clients and stdio (`--stdio` for Claude Desktop);
+a wider bind needs gateway auth since callers spend the operator key. There is
+intentionally no supervisord program, no stack slot, and no Worker route for digillm.
+A future stack program would need its own edge-auth design first — explicitly out
+of scope.
+
 ### Provider telemetry contracts
 
 `NodeRunRecord`, `ProviderCallRecord`, and `ProviderAttemptRecord` separate graph work, one
@@ -207,10 +218,18 @@ chat_completion(
   the #802 curated candidate pool silently never fired for it either.
 - **Empty-response self-heal.** A 200-OK with no usable output (empty `choices` /
   blank content and no `tool_calls`) is treated as a transient provider hiccup and
-  retried with a short backoff (`DIGILLM_EMPTY_RETRY_MAX` / `DIGILLM_EMPTY_RETRY_DELAY`).
-  Provider errors surface to the caller — there is no fallback chain. Empty
-  retries re-ask the same model. A persistent blank is returned unchanged
-  (callers stay graceful).
+  retried with a short backoff (`DIGILLM_EMPTY_RETRY_MAX` / `DIGILLM_EMPTY_RETRY_BACKOFF`).
+   Provider errors surface to the caller — there is no fallback chain. Empty
+   retries re-ask the same model. A persistent blank is returned unchanged
+   (callers stay graceful).
+- **Banned models (#3078).** `completion` and `run_tools` reject banned ids
+  (`ollama/qwen3:8b`) with `ValueError` before any provider call — digillm is
+  the central source of truth, so a routing layer above it can never silently
+  run a forbidden model.
+- **Same-tool error breaker (#3078).** `run_tools` raises `RuntimeError` after
+  `DIGILLM_SAME_TOOL_ERROR_LIMIT` (default 2) *consecutive* same-tool+same-error
+  failures instead of feeding another identical error back to the model. Any
+  successful tool call resets the streak.
 
 ### `chat_completion_with_tools`
 
@@ -357,8 +376,29 @@ stale timeout and falsify the cache's "recreated when env changes" contract.
 
 The silence budget for one `completion` is the product of three layers, not this
 value alone: the SDK's own `max_retries=2` (3 HTTP attempts) x `_create_with_retry`'s
-12 attempts, each attempt bounded by the read timeout. Lowering
+`DIGILLM_PROVIDER_MAX_ATTEMPTS` attempts (default 12; the daily pipeline sets 2 —
+one retry only, #3078), each attempt bounded by the read timeout. Lowering
 `DIGILLM_REQUEST_TIMEOUT_SECONDS` is the only single-knob way to shrink that product.
+Orthogonal to the budget, `DIGILLM_MAX_CONCURRENT_CALLS` (default 8) caps how many
+logical calls may be in flight at once — burst smoothing for fan-out stages, not
+a time bound (#3738).
+
+**The fail-fast budgets are workflow-owned, not library defaults.** The daily
+digiquant pipeline pins `DIGILLM_PROVIDER_MAX_ATTEMPTS=2`,
+`DIGILLM_EMPTY_RETRY_MAX=1`, and `DIGILLM_MAX_CONCURRENT_CALLS=8`
+(`.github/workflows/pipeline-digiquant.yml`). The library defaults (12 / 4 / 8)
+preserve the historical non-pipeline behaviour, so a local
+`python -m digiquant.portfolio.chain` run without that env gets much longer retry
+budgets than the #3078/#3737 fail-fast intent. For local parity, export the pins:
+
+```bash
+export DIGILLM_PROVIDER_MAX_ATTEMPTS=2
+export DIGILLM_EMPTY_RETRY_MAX=1
+export DIGILLM_MAX_CONCURRENT_CALLS=8
+```
+
+`apply_digiquant_house_env()` (`digigraph/src/digigraph/model_config.py`) sets the
+house model-routing base, not these budgets — it does not cover this gap.
 
 ### Usage observer contract
 
@@ -381,7 +421,7 @@ plain contextvar setters and reads them when building clients.
 
 | Setter | Reads in | Effect |
 |--------|----------|--------|
-| `set_proxy_key(token)` / `reset_proxy_key(tok)` (or `with proxy_key(token):`) | `get_client()` default path | Per-request LiteLLM proxy / bearer key. Priority: proxy override → `LITELLM_PROXY_API_KEY` → `OPENAI_API_KEY`. |
+| `set_proxy_key(token)` / `reset_proxy_key(tok)` (or `with proxy_key(token):`) | `get_client()` default path | Per-request LiteLLM proxy / bearer key. Priority: proxy override → `LITELLM_PROXY_API_KEY` → `OPENAI_API_KEY` → dev sentinel (declared trusted LiteLLM base only; see env table). |
 | `set_byok(api_key, base_url=...)` / `reset_byok(tok)` (or `with byok(api_key, base_url):`) | `get_client()` / `_create_with_retry` | Bring-your-own-key. With a **declared** LiteLLM proxy (`OPENAI_API_BASE` on the trusted-proxy allowlist), the LiteLLM client is reused and the user's key/base go in `extra_body` (clientside credentials) together with `cache: {no-cache, no-store}`. Without a declared proxy, returns an **uncached** client at the user's endpoint (prefixed BYOK against the vendor URL). Always **bypasses the in-process response cache**. |
 | `clear_byok()` | same var, no token | Drops the override token-free — for a thread running inside a `copy_context()` snapshot, which inherits the binding but not the reset token. Use `reset_byok` in the frame that bound it; clearing there would strand that frame's token. |
 | `detach_provider_call_context()` | `_provider_call_metadata`, no token | Drops the inherited logical-call metadata — for a fan-out worker running inside a `copy_context()` snapshot, which would otherwise share the caller's *mutable* `ProviderCallContextHandle` with every sibling. Restores what a worker with an empty context saw **for this var only**. |
@@ -452,13 +492,13 @@ digismith on the path) plus `LANGSMITH_API_KEY` to enable spans.
 |-----|---------|---------|
 | `OPENAI_API_KEY` / `OPENAI_API_BASE` | default client | Endpoint + key for non-prefixed models (LiteLLM / Ollama / OpenRouter / OpenAI). LiteLLM pass-through only when the base is a declared trusted proxy. |
 | `DIGILLM_TRUSTED_LITELLM_BASES` | default client | Comma-separated `OPENAI_API_BASE` allowlist that **replaces** the documented `:4000` defaults (`127.0.0.1`, `localhost`, `[::1]`, `litellm`, `host.docker.internal`). Unset → those defaults. |
-| `LITELLM_PROXY_API_KEY` | default client | Proxy bearer key (below per-request override, above `OPENAI_API_KEY`). |
+| `LITELLM_PROXY_API_KEY` | default client | Proxy bearer key (below per-request override, above `OPENAI_API_KEY`). When neither this nor `OPENAI_API_KEY` is set, a **declared trusted LiteLLM base** (`OPENAI_API_BASE` on the allowlist) gets the dev sentinel `sk-no-key-required` so the documented no-key loopback stack works; a direct/vendor base still raises `RuntimeError` (#3788 / #3939). |
 | `XAI_API_KEY`, `GEMINI_API_KEY`, `GROQ_API_KEY`, `OPENROUTER_API_KEY` | provider clients | Keys for the corresponding `provider/` prefixes. |
 | `DIGILLM_REQUEST_TIMEOUT_SECONDS` | all clients | Read/write/pool timeout per HTTP attempt (default 600, = the OpenAI SDK default). Read once at import. |
 | `DIGILLM_CONNECT_TIMEOUT_SECONDS` | all clients | Connect timeout (default 5, = the OpenAI SDK default). Separate from the above so a wider read timeout cannot silently widen connect. |
 | `DIGI_LLM_CACHE_TTL_SECONDS` | response cache | Response-cache TTL (default 3600). |
 | `DIGI_TOOL_MESSAGE_MAX_CHARS` | tool loop | Cap on tool-result text injected into the next turn (default 12000). |
-| `DIGILLM_EMPTY_RETRY_MAX` / `DIGILLM_EMPTY_RETRY_DELAY` | `completion` | Empty-response self-heal: retry count (default 2) + backoff seconds (default 2.0). |
+| `DIGILLM_EMPTY_RETRY_MAX` / `DIGILLM_EMPTY_RETRY_BACKOFF` | `completion` | Empty-response self-heal: retry count (default 4, raised in #814) + backoff seconds (default 5.0). `DIGILLM_EMPTY_RETRY_DELAY` is a back-compat alias for `..._BACKOFF`. |
 
 ## Tests and CI
 

@@ -160,20 +160,19 @@ def test_missing_economics_are_not_copied_from_base() -> None:
         ForecastTerms.model_validate(filled)
 
 
-def test_invalid_probability_sum_still_rejects_after_unwrap() -> None:
+def test_invalid_probability_sum_fails_hard_after_unwrap() -> None:
+    """Invalid amendment economics raise — never absorbed into a REJECTED fallback (#3078)."""
     analyst, state = _analyst()
     nested = sample_forecast_terms_dict()
     nested["bull_probability"] = "0.30"
-    effective, amendment = _resolve_from_debate(
-        state=state,
-        ticker="GLD",
-        analyst=analyst,
-        amendment_terms_raw={"terms": nested},
-        amendment_reason="invalid probabilities",
-    )
-    assert amendment is None
-    assert effective is not None
-    assert effective.amendment_outcome is AmendmentOutcome.REJECTED
+    with pytest.raises(ValidationError):
+        _resolve_from_debate(
+            state=state,
+            ticker="GLD",
+            analyst=analyst,
+            amendment_terms_raw={"terms": nested},
+            amendment_reason="invalid probabilities",
+        )
 
 
 def test_unwrap_skips_when_required_fields_already_present() -> None:

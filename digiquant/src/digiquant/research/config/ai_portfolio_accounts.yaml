@@ -35,6 +35,7 @@ accounts:
     type: portfolio
     weight: low
 
+# Recency window forwarded to digisearch's `web_search` request (clamped to 1-365).
 recency_days: 7
 # Per-source live-search billing; 16 -> 8 halves this pre-pass's search cost.
 max_search_results: 8

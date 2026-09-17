@@ -21,7 +21,7 @@ has RLS enabled with exactly one policy, ``FOR SELECT``, and no write policy at 
 policy = deny), and postgres_changes events are replayed from the WAL rather than accepted
 from clients, so there is no path for a browser to inject one.
 
-Why assert on source text from pytest: ``frontend/digiquant-web`` has NO test runner. Its
+Why assert on source text from pytest: ``cloudflare/digiquant-web`` has NO test runner. Its
 ``package.json`` defines only dev/build/start/lint, the tree contains zero test files, and
 ``next.config.mjs`` sets ``eslint.ignoreDuringBuilds = true``. The deleted
 ``test_migration_062.py`` held ``test_subscriber_joins_a_private_channel`` — the only
@@ -51,7 +51,7 @@ import pytest
 pytestmark = pytest.mark.unit
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
-_LIVE_DIR = _REPO_ROOT / "frontend" / "digiquant-web" / "lib" / "live"
+_LIVE_DIR = _REPO_ROOT / "cloudflare" / "digiquant-web" / "lib" / "live"
 _HOOK_TS = _LIVE_DIR / "useLivePrices.ts"
 _TRANSFORMS_TS = _LIVE_DIR / "quote-transforms.ts"
 _BARREL_TS = _LIVE_DIR / "index.ts"

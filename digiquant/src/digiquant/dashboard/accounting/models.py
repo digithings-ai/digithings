@@ -84,6 +84,7 @@ class QualityReason(StrEnum):
     BENCHMARK_BOUNDARY_MISMATCH = "benchmark_boundary_mismatch"
     RESIDUAL_EXCEEDED = "residual_exceeded"
     ZERO_OPENING_EQUITY = "zero_opening_equity"
+    DEGENERATE_OPENING_EQUITY = "degenerate_opening_equity"
     NEGATIVE_QUANTITY = "negative_quantity"
     CORPORATE_ACTION_IGNORED = "corporate_action_ignored"
     OPEN_GAP = "open_gap"

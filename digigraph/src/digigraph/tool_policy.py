@@ -13,6 +13,33 @@ from digigraph.project_config import DigiProjectConfig
 # only unioned when the request explicitly enables it.
 WEB_SEARCH_TOOL_NAME = "web_search"
 
+# Remote MCP tools are registered as ``{server_id}_{tool}``
+# (``mcp_client.prefixed_tool_name``), so a digisearch MCP server exposes its
+# web-search tool as ``digisearch_web_search``. It is the same capability as
+# the native tool and must obey the same request opt-in (#4223 review).
+_WEB_SEARCH_MCP_SUFFIX = f"_{WEB_SEARCH_TOOL_NAME}"
+
+
+def is_web_search_tool(name: str) -> bool:
+    """True for ``web_search`` and its MCP-proxied form ``{server_id}_web_search``."""
+    return name == WEB_SEARCH_TOOL_NAME or name.endswith(_WEB_SEARCH_MCP_SUFFIX)
+
+
+def is_proxied_web_search_tool(name: str) -> bool:
+    """True only for the MCP-proxied form ``{server_id}_web_search`` (native excluded).
+
+    The execute-level opt-out gate uses this: the native ``web_search`` handler
+    already checks ``state["enable_web_search"]`` itself, while the MCP proxy
+    forwards to a remote tool with no such handler-side check (#4246 review).
+    """
+    return name.endswith(_WEB_SEARCH_MCP_SUFFIX)
+
+
+def strip_web_search_tools(names: frozenset[str]) -> frozenset[str]:
+    """Drop ``web_search`` and every MCP-proxied ``{id}_web_search`` from an allowlist."""
+    return frozenset(n for n in names if not is_web_search_tool(n))
+
+
 # Catalog ids / slash aliases → orchestrator tools to strip (#3733).
 _DISABLE_TOOL_ALIASES: dict[str, frozenset[str]] = {
     "digisearch": frozenset({"digisearch", "digisearch_fetch_all"}),
@@ -56,21 +83,63 @@ def apply_web_search_opt_in(
     *,
     enable_web_search: bool,
 ) -> frozenset[str] | None:
-    """Activate or strip ``web_search`` within an already-authoritative allowlist.
+    """Activate or strip web search within an already-authoritative allowlist.
 
     Request opt-in must **never** escalate past the operator/project allowlist
-    (#3420 review): if ``web_search`` is not already permitted, enabling the
+    (#3420 review): if web search is not already permitted, enabling the
     header/body flag does nothing. When the allowlist includes ``web_search``
-    and the request opts out (default), strip it so the model cannot call web.
+    or an MCP-proxied ``{id}_web_search`` and the request opts out (default),
+    strip both so the model cannot reach the public web through either path.
     Unrestricted sessions (``None``) stay unrestricted — the ``web`` skill
-    ``when`` predicate and tool handler still require ``enable_web_search``.
+    ``when`` predicate and tool handler still require ``enable_web_search``;
+    the MCP-proxied tool has no such handler gate, so
+    :func:`apply_mcp_extra_tools` materializes the allowlist instead.
     """
     if names is None:
         return None
     if enable_web_search:
         # Do not union — only activate a tool the operator already allowlisted.
         return names
-    return frozenset(n for n in names if n != WEB_SEARCH_TOOL_NAME)
+    return strip_web_search_tools(names)
+
+
+def apply_mcp_extra_tools(
+    names: frozenset[str] | None,
+    extra_names: frozenset[str],
+    disabled_extra: frozenset[str],
+    *,
+    enable_web_search: bool,
+) -> frozenset[str] | None:
+    """Fold discovered remote-MCP tool names into an allowlist, web-search gated.
+
+    Single policy point for ``research_node``'s MCP-extra union: subtract the
+    disabled MCP tokens, then drop MCP-proxied web-search tools unless the
+    request opted in.
+    Unrestricted sessions (``None``) stay unrestricted **unless** a gate forces
+    a concrete allowlist — the existing disabled-token fallback, or a
+    discovered ``{id}_web_search`` with no opt-in, which would otherwise be
+    admitted by the unrestricted ``None`` because the MCP proxy has no
+    handler-side availability check. The concrete fallback is
+    ``list_tool_names() | live``, the same shape the disabled-token path uses.
+    """
+    live = frozenset(n for n in extra_names if n not in disabled_extra)
+    gated = False
+    if not enable_web_search:
+        stripped = strip_web_search_tools(live)
+        gated = stripped != live
+        live = stripped
+        # The base allowlist normally arrives already stripped by
+        # apply_web_search_opt_in; strip again so this function is safe to call
+        # with either input order (and never re-admits a proxied tool).
+        if names is not None:
+            names = strip_web_search_tools(names)
+    if names is not None:
+        return names | live if live else names
+    if disabled_extra or gated:
+        from digigraph.orchestration.registry import list_tool_names
+
+        return frozenset(list_tool_names()) | live
+    return None
 
 
 def allowed_tool_names_for_workflow(

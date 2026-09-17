@@ -15,7 +15,8 @@ license = { text = "MIT" }
 # live in [ingestion]. This lets consumers `pip install digisearch[ingestion]`
 # (or just the base) and import e.g. digisearch.ingestion.parsers.pdf WITHOUT
 # pulling fastapi/uvicorn/mcp/typer/digikey. See ARCHITECTURE.md §"Lazy package
-# surface and install extras". The running service installs [server,ingestion].
+# surface and install extras". The running service installs
+# [server,ingestion,azure,chroma,web-search].
 dependencies = [
     "polars>=1.0",
     "pydantic>=2",
@@ -37,6 +38,9 @@ server = [
     "mcp>=1.0,<2",
     "typer>=0.12",
     "digikey>=0.1.0",
+    # Monitor schedules reuse the digiclaw 5-field cron grammar by import
+    # (parse_cron/CronExpression.matches) — copying it is forbidden (R4).
+    "digiclaw>=0.1.0",
     "python-json-logger>=2.0",
 ]
 chroma = ["chromadb>=0.4"]
@@ -65,6 +69,18 @@ ingestion = [
 ]
 agent = ["langgraph>=0.2"]
 edgar-corpus = ["datasets>=3.0"]
+# Proprietary web-search stack (#3853). All optional: the searxng provider needs
+# only base httpx; ddgs is the embedded fallback; digifetch (workspace sibling,
+# installed alongside digibase/digikey in the service image) powers fetch with
+# retry + rate limiting; trafilatura (+readability-lxml and markdownify
+# fallback) powers fetch -> extract enrichment in web_search/service.
+web-search = [
+    "digifetch>=0.1.0",
+    "ddgs>=9.0",
+    "trafilatura>=2.0",
+    "readability-lxml>=0.8",
+    "markdownify>=1.0",
+]
 # dev folds in [server] + [ingestion] so every CI/dev install (and pip-audit's
 # [dev] row) exercises and audits the full shipped surface, not just the light
 # base. Keep this in sync when adding runtime/parser deps.
@@ -80,6 +96,7 @@ all = [
     "digisearch[agent]",
     "digisearch[pgvector]",
     "digisearch[lightrag]",
+    "digisearch[web-search]",
 ]
 
 [project.scripts]
@@ -122,7 +139,8 @@ select = ["E4", "E7", "E9", "F", "I", "DTZ", "RUF100"]
 # Monorepo tests live at repo root tests/ds/; from digisearch/: `pytest` picks these up; or `make test-unit` from repo root.
 #
 # pythonpath must list the repo root plus every workspace sibling that src/digisearch or
-# tests/ds imports directly (digibase, digikey) -- not just "src". Reason: when pytest is
+# tests/ds imports directly (digibase, digikey, digiclaw, digifetch) -- not just "src".
+# Reason: when pytest is
 # invoked with no path args from *inside* digisearch/ (e.g. `cd digisearch && uv run
 # pytest -m unit`), its rootdir/config search starts at cwd and stops at the first
 # ancestor with a recognized config -- this file -- so it never walks up to the
@@ -134,4 +152,4 @@ select = ["E4", "E7", "E9", "F", "I", "DTZ", "RUF100"]
 # editable copy -- see digigraph's fix for the full root-cause writeup. Listing them
 # here is both the fix and the safety net.
 testpaths = ["../tests/ds"]
-pythonpath = ["..", "src", "../digibase/src", "../digikey/src"]
+pythonpath = ["..", "src", "../digibase/src", "../digikey/src", "../digiclaw/src", "../digifetch/src"]

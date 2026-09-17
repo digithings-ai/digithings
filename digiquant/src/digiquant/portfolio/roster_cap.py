@@ -13,7 +13,7 @@ _DEFAULT_MIN_NEW = 1
 
 
 def configured_max_analysts() -> int:
-    """``ATLAS_MAX_ANALYSTS`` as an int; ``0`` (or unset/malformed) means *no cap*.
+    """``DIGIQUANT_MAX_ANALYSTS`` as an int; ``0`` (or unset/malformed) means *no cap*.
 
     Single reader for the env var so the cap in force, the roster telemetry, and the
     H4 node's static baseline can never disagree — before #1767 three call sites
@@ -23,7 +23,9 @@ def configured_max_analysts() -> int:
     try:
         return int(raw)
     except ValueError:
-        logger.warning("roster_cap: ignoring malformed ATLAS_MAX_ANALYSTS=%r; treating as 0", raw)
+        logger.warning(
+            "roster_cap: ignoring malformed DIGIQUANT_MAX_ANALYSTS=%r; treating as 0", raw
+        )
         return 0
 
 
@@ -52,7 +54,7 @@ def capped_tickers(
     adaptive_max_analysts: int | None = None,
     candidate_priority: Sequence[str] = (),
 ) -> list[str]:
-    """Apply ``ATLAS_MAX_ANALYSTS`` while preserving the held-ticker invariant (#936).
+    """Apply ``DIGIQUANT_MAX_ANALYSTS`` while preserving the held-ticker invariant (#936).
 
     **Cap invariant (#1767):** ``len(result) <= max(max_analysts, len(held_in_order))``.
     The prior book is the *only* sanctioned overshoot — #936 forbids dropping a holding,
@@ -68,7 +70,7 @@ def capped_tickers(
     whole H3 thesis-vehicle map as ``held``, is why the cap never capped anything.
 
     ``adaptive_max_analysts`` (optional): when not None, overrides the
-    ATLAS_MAX_ANALYSTS environment variable as the analyst cap. When None,
+    DIGIQUANT_MAX_ANALYSTS environment variable as the analyst cap. When None,
     falls back to the env var.
 
     ``candidate_priority`` (optional, #1767): preferred order for *non-held* candidates
@@ -89,12 +91,12 @@ def capped_tickers(
     if len(held_in_order) >= max_analysts:
         # #936 wins over the cap, but only by exactly the width of the book. Reserving
         # new-candidate slots on top (the pre-#1767 behaviour) compounds a breach that
-        # is already forced — raising ATLAS_MAX_ANALYSTS is the operator's lever.
+        # is already forced — raising DIGIQUANT_MAX_ANALYSTS is the operator's lever.
         logger.warning(
-            "portfolio roster cap: %d held tickers meet or exceed ATLAS_MAX_ANALYSTS=%d; "
+            "portfolio roster cap: %d held tickers meet or exceed DIGIQUANT_MAX_ANALYSTS=%d; "
             "keeping ALL held (over budget) so no prior-book holding is dropped (#936), "
             "and reserving NO new-candidate slots — the cap is never widened beyond the "
-            "book (#1767). Raise ATLAS_MAX_ANALYSTS to restore exploration: %s",
+            "book (#1767). Raise DIGIQUANT_MAX_ANALYSTS to restore exploration: %s",
             len(held_in_order),
             max_analysts,
             ", ".join(held_in_order),
@@ -106,7 +108,7 @@ def capped_tickers(
     if min_new > budget:
         logger.info(
             "portfolio roster cap: explore floor min_new=%d exceeds the %d candidate slots "
-            "left under ATLAS_MAX_ANALYSTS=%d; clamped to %d (#1767 — the floor never "
+            "left under DIGIQUANT_MAX_ANALYSTS=%d; clamped to %d (#1767 — the floor never "
             "widens the cap).",
             min_new,
             budget,
@@ -116,7 +118,7 @@ def capped_tickers(
     kept = set(held_in_order) | set(kept_candidates)
     prioritised = len(kept_candidates) - len(set(kept_candidates) - set(candidate_priority))
     logger.info(
-        "portfolio roster capped to %d/%d tickers (ATLAS_MAX_ANALYSTS=%d): %d held + "
+        "portfolio roster capped to %d/%d tickers (DIGIQUANT_MAX_ANALYSTS=%d): %d held + "
         "%d candidates (%d of them prioritised)",
         len(kept),
         len(tickers),

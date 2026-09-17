@@ -8,7 +8,7 @@ import logging
 import os
 import threading
 from queue import Empty, Queue
-from typing import Any
+from typing import Any, get_args
 
 from digibase.cors import install_cors
 from digibase.errors import json_error_response, register_fastapi_error_handlers
@@ -382,6 +382,26 @@ def _normalize_symbols(raw: Any) -> list[str]:
     return []
 
 
+def _digifetch_error_message(payload: dict[str, Any]) -> str | None:
+    """Typed error message when a digifetch envelope's ``data`` is a ``DigifetchError``.
+
+    The dispatcher's only envelope producer serializes a typed error as exactly
+    ``code`` / ``message`` / ``retryable`` with ``code`` from the §5.3
+    ``ErrorCode`` vocabulary (#4097); no success payload matches that signature,
+    so the check distinguishes the two without re-validating the payload.
+    """
+    from digiquant.data.gloomberb.models import ErrorCode
+
+    data = payload.get("data")
+    if (
+        isinstance(data, dict)
+        and {"code", "message", "retryable"} <= set(data)
+        and data["code"] in get_args(ErrorCode)
+    ):
+        return str(data["message"])
+    return None
+
+
 @v1.post("/orchestrator_invoke")
 def v1_orchestrator_invoke(req: OrchestratorInvokeRequest) -> dict[str, Any]:
     """Execute one digiquant orchestrator tool (digigraph hub dispatch)."""
@@ -598,9 +618,27 @@ def v1_orchestrator_invoke(req: OrchestratorInvokeRequest) -> dict[str, Any]:
                 timeout=float(args.get("timeout") or 30.0),
                 start=(int(args["start"]) if args.get("start") is not None else None),
                 end=(int(args["end"]) if args.get("end") is not None else None),
+                allow_derived=bool(args.get("allow_derived", False)),
             )
         )
         if payload.get("error") and not payload.get("series"):
+            return {"ok": False, "error": str(payload["error"]), "data": payload}
+        return {"ok": True, "service": "digiquant", "tool": tool, "data": payload}
+
+    if tool == "digiquant_get_trade_levels":
+        from digiquant.mcp_server import digiquant_get_trade_levels
+
+        payload = json.loads(
+            digiquant_get_trade_levels(
+                direction=str(args.get("direction") or ""),
+                ohlc_json=args.get("ohlc_json"),
+                pair=args.get("pair"),
+                ticker=args.get("ticker"),
+                config_json=args.get("config_json"),
+                cache_dir=args.get("cache_dir"),
+            )
+        )
+        if payload.get("error"):
             return {"ok": False, "error": str(payload["error"]), "data": payload}
         return {"ok": True, "service": "digiquant", "tool": tool, "data": payload}
 
@@ -706,6 +744,34 @@ def v1_orchestrator_invoke(req: OrchestratorInvokeRequest) -> dict[str, Any]:
             "tool": tool,
             "data": summary.model_dump(mode="json"),
         }
+
+    if tool.startswith("digifetch_"):
+        # digifetch x Gloomberb family (#4097): one shared in-process dispatcher
+        # with the MCP + pipeline-agent surfaces, so hub callers get the same §7
+        # attribution envelope. Gated names are deliberately *accepted* here
+        # (unlike the pipeline's advertised-subset filter): with no
+        # GLOOMBERB_SESSION_COOKIE the dispatcher answers the typed
+        # auth_required/pro_required envelope with no request, never a 400.
+        from digiquant.data.gloomberb.agent_tools import (
+            DIGIFETCH_DISPATCH,
+            build_digifetch_tool_dispatcher,
+        )
+
+        if tool in DIGIFETCH_DISPATCH:
+            payload = json.loads(build_digifetch_tool_dispatcher()(tool, args))
+            error = _digifetch_error_message(payload)
+            if error is None and payload.get("error"):
+                # Client-fault path: the dispatcher answers {"error": ...}, not an envelope.
+                error = str(payload["error"])
+            if error is not None:
+                return {
+                    "ok": False,
+                    "service": "digiquant",
+                    "tool": tool,
+                    "error": error,
+                    "data": payload,
+                }
+            return {"ok": True, "service": "digiquant", "tool": tool, "data": payload}
 
     raise HTTPException(status_code=400, detail=f"Unknown orchestrator tool: {tool!r}")
 

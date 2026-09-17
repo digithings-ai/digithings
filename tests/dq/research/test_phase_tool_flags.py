@@ -3,11 +3,14 @@ from __future__ import annotations
 from datetime import date, datetime
 
 import pytest
+from digiquant.data.gloomberb import EQUITY_TOOLS, MACRO_TOOLS
 from digiquant.research.phases import _node_factory
 from digiquant.research.phases.phase1_altdata import _SPECS as ALT_SPECS
 from digiquant.research.phases.phase2_institutional import _SPECS as INST_SPECS
 from digiquant.research.phases.phase3_macro import _SPEC as MACRO
 from digiquant.research.phases.phase4_assetclass import _SPECS as ASSET_SPECS
+from digiquant.research.phases.phase5_equities import _EQUITY_SPEC, _sector_spec
+from digiquant.research.sectors_config import load_sectors
 
 
 @pytest.mark.unit
@@ -37,7 +40,8 @@ def test_alt_phases_grounding_modes():
             continue
         assert spec.use_data_tools is False, spec.segment_slug
         assert spec.live_search or spec.ai_portfolios, spec.segment_slug
-    # alt-ai-portfolios uses OpenRouter web search; the rest use live_search grounding.
+    # alt-ai-portfolios uses the tool-only web_search grounding pre-pass;
+    # the rest use live_search grounding.
     assert by_slug["alt-ai-portfolios"].ai_portfolios is True
     assert by_slug["alt-ai-portfolios"].live_search is False
     assert by_slug["alt-sentiment-news"].live_search is True
@@ -48,6 +52,28 @@ def test_inst_phases_use_live_search_only():
     for spec in INST_SPECS:
         assert spec.live_search is True, spec.segment_slug
         assert spec.use_data_tools is False, spec.segment_slug
+
+
+# --- #4146: digifetch family flags (curated subset per phase) -----------------
+
+
+@pytest.mark.unit
+def test_macro_uses_the_macro_digifetch_subset():
+    assert MACRO.digifetch_tools == MACRO_TOOLS
+
+
+@pytest.mark.unit
+def test_equity_and_sector_specs_use_the_equity_digifetch_subset():
+    assert _EQUITY_SPEC.digifetch_tools == EQUITY_TOOLS
+    sectors = load_sectors()
+    assert sectors
+    assert _sector_spec(sectors[0]).digifetch_tools == EQUITY_TOOLS
+
+
+@pytest.mark.unit
+def test_other_research_specs_stay_digifetch_free():
+    for spec in (*ALT_SPECS, *INST_SPECS, *ASSET_SPECS):
+        assert spec.digifetch_tools is None, spec.segment_slug
 
 
 @pytest.mark.unit
@@ -66,18 +92,18 @@ def test_build_grounding_respects_kill_switch(monkeypatch):
         "digiquant.research.data.web_grounding.fetch_web_grounding",
         lambda **_k: {"summary": "x", "sources": [], "as_of": "2026-06-08"},
     )
-    monkeypatch.setenv("ATLAS_DATA_TOOLS", "0")
+    monkeypatch.setenv("DIGIQUANT_RESEARCH_DATA_TOOLS", "0")
     tools, execute_tool, grounding = _node_factory.build_grounding(
         use_data_tools=True,
         live_search=True,
         run_date=date(2026, 6, 8),
         model="openrouter/openrouter/auto",
     )
-    # ATLAS_DATA_TOOLS disables Supabase data tools only; live_search pre-pass is independent.
+    # DIGIQUANT_RESEARCH_DATA_TOOLS disables Supabase data tools only; live_search pre-pass is independent.
     assert tools is None and execute_tool is None
     assert grounding is not None
 
-    monkeypatch.setenv("ATLAS_DATA_TOOLS", "1")
+    monkeypatch.setenv("DIGIQUANT_RESEARCH_DATA_TOOLS", "1")
     tools, execute_tool, grounding = _node_factory.build_grounding(
         use_data_tools=True,
         live_search=True,
@@ -92,7 +118,7 @@ def test_options_segment_makes_no_paid_search(monkeypatch):
     # Phase D PR-1 (#708): with use_data_tools=True and live_search=False, the
     # options segment must never fire a paid web_search — web_grounding is None
     # regardless of whether the Supabase client is available.
-    monkeypatch.setenv("ATLAS_DATA_TOOLS", "1")
+    monkeypatch.setenv("DIGIQUANT_RESEARCH_DATA_TOOLS", "1")
     monkeypatch.setattr(_node_factory, "_research_data_client", object)
 
     def _fail(**_k):  # a paid web_search call here would be the bug
@@ -124,7 +150,7 @@ def test_macro_series_yaml_has_volatility_complex():
 def test_build_grounding_degrades_when_client_unavailable(monkeypatch):
     # A missing/broken Supabase client must not crash the phase: data tools are
     # dropped, but web grounding (which needs no Supabase client) still works.
-    monkeypatch.setenv("ATLAS_DATA_TOOLS", "1")
+    monkeypatch.setenv("DIGIQUANT_RESEARCH_DATA_TOOLS", "1")
     monkeypatch.setattr(
         "digiquant.research.data.web_grounding.fetch_web_grounding",
         lambda **_k: {"summary": "x", "sources": [], "as_of": "2026-06-08"},
@@ -167,8 +193,8 @@ def _stub_freshness(monkeypatch, value):
 def test_macro_fallback_skips_paid_search_when_layer_fresh(monkeypatch):
     # Fresh ingested FRED layer → the fallback web_search must NOT fire; the
     # segment grounds on data tools alone. This is the Phase D cost cut.
-    monkeypatch.setenv("ATLAS_DATA_TOOLS", "1")
-    monkeypatch.delenv("ATLAS_MACRO_STALE_DAYS", raising=False)
+    monkeypatch.setenv("DIGIQUANT_RESEARCH_DATA_TOOLS", "1")
+    monkeypatch.delenv("DIGIQUANT_MACRO_STALE_DAYS", raising=False)
     monkeypatch.setattr(_node_factory, "_research_data_client", object)
     _stub_freshness(monkeypatch, date(2026, 6, 12))  # 1 day stale → fresh
 
@@ -190,8 +216,8 @@ def test_macro_fallback_skips_paid_search_when_layer_fresh(monkeypatch):
 @pytest.mark.unit
 def test_macro_fallback_fires_paid_search_when_layer_stale(monkeypatch):
     # Stale ingested layer (older than the window) → fall through to paid search.
-    monkeypatch.setenv("ATLAS_DATA_TOOLS", "1")
-    monkeypatch.delenv("ATLAS_MACRO_STALE_DAYS", raising=False)
+    monkeypatch.setenv("DIGIQUANT_RESEARCH_DATA_TOOLS", "1")
+    monkeypatch.delenv("DIGIQUANT_MACRO_STALE_DAYS", raising=False)
     monkeypatch.setattr(_node_factory, "_research_data_client", object)
     _stub_freshness(monkeypatch, date(2026, 5, 1))  # >7 days stale
     monkeypatch.setattr(
@@ -214,7 +240,7 @@ def test_macro_fallback_fires_paid_search_when_layer_stale(monkeypatch):
 def test_macro_fallback_fires_when_layer_unknown_or_probe_errors(monkeypatch, freshness):
     # Empty table (None) or a probe error both fail-soft to "stale" → paid search
     # fires, so grounding is never silently dropped.
-    monkeypatch.setenv("ATLAS_DATA_TOOLS", "1")
+    monkeypatch.setenv("DIGIQUANT_RESEARCH_DATA_TOOLS", "1")
     monkeypatch.setattr(_node_factory, "_research_data_client", object)
     _stub_freshness(monkeypatch, freshness)
     monkeypatch.setattr(
@@ -234,13 +260,13 @@ def test_macro_fallback_fires_when_layer_unknown_or_probe_errors(monkeypatch, fr
 
 @pytest.mark.unit
 def test_ingested_macro_stale_threshold_and_env_override(monkeypatch):
-    monkeypatch.setenv("ATLAS_DATA_TOOLS", "1")
+    monkeypatch.setenv("DIGIQUANT_RESEARCH_DATA_TOOLS", "1")
     monkeypatch.setattr(_node_factory, "_research_data_client", object)
     _stub_freshness(monkeypatch, date(2026, 6, 7))  # age = 6 days vs run 2026-06-13
     run = date(2026, 6, 13)
-    monkeypatch.delenv("ATLAS_MACRO_STALE_DAYS", raising=False)
+    monkeypatch.delenv("DIGIQUANT_MACRO_STALE_DAYS", raising=False)
     assert _node_factory._ingested_macro_stale(run) is False  # 6 <= 7 default
-    monkeypatch.setenv("ATLAS_MACRO_STALE_DAYS", "3")
+    monkeypatch.setenv("DIGIQUANT_MACRO_STALE_DAYS", "3")
     assert _node_factory._ingested_macro_stale(run) is True  # 6 > 3
 
 
@@ -250,8 +276,8 @@ def test_ingested_macro_stale_normalizes_datetime_freshness(monkeypatch):
     # date, so _parse_date returns it unchanged). _ingested_macro_stale must
     # normalize it — `date - datetime` would otherwise raise outside the try and
     # defeat fail-soft. Should compute age cleanly, not crash.
-    monkeypatch.setenv("ATLAS_DATA_TOOLS", "1")
-    monkeypatch.delenv("ATLAS_MACRO_STALE_DAYS", raising=False)
+    monkeypatch.setenv("DIGIQUANT_RESEARCH_DATA_TOOLS", "1")
+    monkeypatch.delenv("DIGIQUANT_MACRO_STALE_DAYS", raising=False)
     monkeypatch.setattr(_node_factory, "_research_data_client", object)
     _stub_freshness(monkeypatch, datetime(2026, 6, 12, 16, 30))  # 1 day before run
     assert _node_factory._ingested_macro_stale(date(2026, 6, 13)) is False
@@ -260,7 +286,7 @@ def test_ingested_macro_stale_normalizes_datetime_freshness(monkeypatch):
 @pytest.mark.unit
 def test_ingested_macro_stale_when_data_tools_disabled(monkeypatch):
     # Kill-switch off → can't read the ingested layer → treat as stale (paid path).
-    monkeypatch.setenv("ATLAS_DATA_TOOLS", "0")
+    monkeypatch.setenv("DIGIQUANT_RESEARCH_DATA_TOOLS", "0")
     assert _node_factory._ingested_macro_stale(date(2026, 6, 13)) is True
 
 
@@ -268,7 +294,7 @@ def test_ingested_macro_stale_when_data_tools_disabled(monkeypatch):
 def test_non_fallback_live_search_ignores_freshness(monkeypatch):
     # A plain live_search segment (live_search_is_fallback=False) must always fire
     # web_search regardless of ingested-layer freshness — the gate is opt-in.
-    monkeypatch.setenv("ATLAS_DATA_TOOLS", "1")
+    monkeypatch.setenv("DIGIQUANT_RESEARCH_DATA_TOOLS", "1")
     monkeypatch.setattr(_node_factory, "_research_data_client", object)
     _stub_freshness(monkeypatch, date(2026, 6, 13))  # perfectly fresh
 

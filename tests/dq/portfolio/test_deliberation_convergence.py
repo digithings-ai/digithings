@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import json
-from datetime import date
+from datetime import UTC, date, datetime
 from typing import (
     Any,  # score:allow untyped any — scored-lint: heterogeneous fake-row / fixture dicts
 )
@@ -18,12 +18,18 @@ from digiquant.portfolio.models.deliberation import (
     DeliberationSummary,
     DeliberationTurn,
 )
+from digiquant.portfolio.models.forecast import (
+    ForecastTerms,
+    PriceAnchor,
+    PriceAnchorStatus,
+)
 from digiquant.portfolio.payloads import deliberation_summaries
 from digiquant.portfolio.phases import h6_deliberation
 from digiquant.portfolio.phases.h6_deliberation import (
     build_h6_deliberation,
     build_h6_from_state,
 )
+from digiquant.portfolio.phases.portfolio_common import materialize_forecast_assessment
 from digiquant.research.state import (
     FocusRosterEntry,
     PhasePortfolioState,
@@ -31,6 +37,10 @@ from digiquant.research.state import (
     ResearchConfigBundle,
     ResearchState,
 )
+
+from tests.dq.portfolio.phase1_e2e_fixtures import sample_forecast_terms_dict
+
+_CUTOFF = datetime(2026, 6, 20, 18, 0, tzinfo=UTC)
 
 
 def _state() -> ResearchState:
@@ -96,7 +106,7 @@ class TestDeliberationConvergence:
     def test_max_rounds_forces_convergence_with_phase_error(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        monkeypatch.setenv("ATLAS_DELIBERATION_MAX_ROUNDS", "1")
+        monkeypatch.setenv("DIGIQUANT_DELIBERATION_MAX_ROUNDS", "1")
         compiled = build_pipeline(ResearchState, [build_h6_deliberation(["AAPL"], held={"AAPL"})])
 
         def fake(_m: str, msgs: list[dict[str, Any]], **_: Any) -> str:
@@ -139,10 +149,10 @@ class TestDeliberationConvergence:
     def test_min_rounds_one_allows_instant_pm_convergence(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        # The floor is opt-out: ATLAS_DELIBERATION_MIN_ROUNDS=1 restores the cheap quiet path
+        # The floor is opt-out: DIGIQUANT_DELIBERATION_MIN_ROUNDS=1 restores the cheap quiet path
         # — a PM that converges on its first turn returns WITHOUT an analyst turn. (The
         # default floor is 2, exercised by the test below.)
-        monkeypatch.setenv("ATLAS_DELIBERATION_MIN_ROUNDS", "1")
+        monkeypatch.setenv("DIGIQUANT_DELIBERATION_MIN_ROUNDS", "1")
         compiled = build_pipeline(ResearchState, [build_h6_deliberation(["AAPL"], held={"AAPL"})])
         calls: list[str] = []
 
@@ -175,7 +185,7 @@ class TestDeliberationConvergence:
         # With the floor raised to 2, a PM that wants to converge on round 1 is forced to
         # record its challenge and the analyst must respond before convergence is honored —
         # no more round-1 rubber-stamp (#945).
-        monkeypatch.setenv("ATLAS_DELIBERATION_MIN_ROUNDS", "2")
+        monkeypatch.setenv("DIGIQUANT_DELIBERATION_MIN_ROUNDS", "2")
         compiled = build_pipeline(ResearchState, [build_h6_deliberation(["AAPL"], held={"AAPL"})])
         calls: list[str] = []
 
@@ -269,6 +279,53 @@ class TestDeliberationFailureCarry:
         # The PhaseError shape the research portfolio-density gate counts stays untouched.
         assert out["errors"][0].phase == "portfolio_h6_deliberation"
         assert out["errors"][0].message.startswith("deliberation LLM failed")
+
+    def test_invalid_amendment_degrades_ticker_not_chain(self) -> None:
+        # #3738 — the loop succeeded but the amendment economics are invalid
+        # (probabilities sum to 0.7). The hard-fail raise in _resolve_from_debate
+        # must degrade this ticker to carried + PhaseError, never kill the chain.
+        state = _state()
+        terms = ForecastTerms.model_validate(sample_forecast_terms_dict())
+        assessment = materialize_forecast_assessment(
+            ticker="AAPL",
+            terms=terms,
+            source_run_id="run-h6-invalid",
+            provider_invocation_id="inv-h6",
+            prompt_version="pv-test",
+            artifact_version="av-test",
+            price_anchor=PriceAnchor(
+                status=PriceAnchorStatus.UNAVAILABLE,
+                unavailable_reason="test",
+            ),
+            effective_at=_CUTOFF,
+            known_at=_CUTOFF,
+        )
+        state.phase_portfolio.asset_analysts["AAPL"]["forecast_assessment"] = assessment.model_dump(
+            mode="json"
+        )
+        summary = DeliberationSummary(
+            ticker="AAPL",
+            converged=True,
+            conclusion="aligned on buy",
+            net_stance="bullish",
+            conviction_delta=1,
+            transcript=[],
+        )
+        bad_terms = sample_forecast_terms_dict()
+        bad_terms["bear_probability"] = "0.20"
+        bad_terms["base_probability"] = "0.30"
+        bad_terms["bull_probability"] = "0.20"
+        with patch.object(
+            h6_deliberation,
+            "run_deliberation_loop",
+            return_value=(summary, bad_terms, None),
+        ):
+            out = self._run_h6(state)
+        degraded = out["phase_portfolio"].deliberation_summaries["AAPL"]
+        assert degraded["carried"] is True
+        assert degraded["carry_reason"] == "llm_failure"
+        assert degraded["converged"] is False
+        assert out["errors"][0].phase == "portfolio_h6_deliberation"
 
     def test_fingerprint_skip_carry_is_labelled_benign(self) -> None:
         state = _state()
@@ -367,7 +424,7 @@ class TestH6SelectionWiring:
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         monkeypatch.setenv("OLYMPUS_H6_SELECTION_MODE", "enforce")
-        monkeypatch.setenv("ATLAS_DELIBERATION_MIN_ROUNDS", "2")
+        monkeypatch.setenv("DIGIQUANT_DELIBERATION_MIN_ROUNDS", "2")
         compiled = build_pipeline(ResearchState, [build_h6_deliberation(["AAPL"], held={"AAPL"})])
         calls: list[str] = []
 

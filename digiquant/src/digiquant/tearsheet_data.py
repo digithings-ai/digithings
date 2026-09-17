@@ -4,10 +4,10 @@ The Pine-faithful validation backtester (``scripts/validation/pine_backtest.py``
 and the production NautilusTrader engine (``digiquant.backtest``) produce very
 different native shapes. This module defines a single ``TearsheetData`` model
 that both adapt into, so the standalone HTML/JS renderer in
-``frontend/digiquant/`` has exactly one shape to consume.
+``cloudflare/digiquant/`` has exactly one shape to consume.
 
 Serialize with ``TearsheetData.to_json()`` and drop the result next to the
-renderer (``frontend/digiquant/strategies/<strategy>.json``).
+renderer (``cloudflare/digiquant/strategies/<strategy>.json``).
 """
 
 from __future__ import annotations

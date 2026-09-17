@@ -36,7 +36,7 @@ What this module provides:
 
 Hard constraints honored:
 - Imports nothing from the real ``supabase`` Python client.
-- No file I/O, no network. ``ATLAS_MAX_ANALYSTS`` is honored when set
+- No file I/O, no network. ``DIGIQUANT_MAX_ANALYSTS`` is honored when set
   (phase 7C / 7C-D / debate caps respect it as in production).
 - Every default response is the smallest valid Pydantic body; tests
   that care about specific values supply ``overrides``.
@@ -412,6 +412,11 @@ DEFAULT_RESPONSES: dict[str, FixtureResponse] = {
         "conservative_case": "synthetic conservative",
         "key_tension": "synthetic tension",
     },
+    # H4.5 coverage director (#3739) — the per-call default below refreshes
+    # every rostered ticker so simulated runs preserve pre-H4.5 behavior
+    # (full H4 roster flows to H5). Static entry must exist or the
+    # dispatcher raises KeyError before reaching the per-call default.
+    "CoverageDirective": {"refresh": [], "explore": [], "skip": []},
     # H7 PM direction (no weights)
     "PMDirectionMemo": {
         "schema_version": "1.0",
@@ -793,6 +798,17 @@ def simulate_chat_completion(
             )
         if schema == "DebateSummary":
             return _debate_summary_body(ticker=str(inputs.get("ticker", "AAPL")))
+        if schema == "CoverageDirective":
+            h4_roster = inputs.get("h4_roster") or []
+            return {
+                "refresh": [
+                    {"ticker": str(row.get("ticker", "")).upper(), "reason": "simulated refresh"}
+                    for row in h4_roster
+                    if isinstance(row, dict) and str(row.get("ticker") or "").strip()
+                ],
+                "explore": [],
+                "skip": [],
+            }
         if schema == "PMDirectionMemo":
             roster = inputs.get("focus_roster") or ["AAPL"]
             return {
@@ -920,7 +936,46 @@ def seed_supabase_client(
 
 
 # ──────────────────────────────────────────────────────────────────────────
-# 4. End-to-end harness
+# 5. Canned web grounding (tool-boundary stub, #3859)
+# ──────────────────────────────────────────────────────────────────────────
+# Pipeline grounding is tool-only: a requested live search must succeed or
+# raise DashboardWebSearchError — there is no synthesis fallback. Simulated
+# runs must never reach the live web_search tool, so simulated_pipeline
+# patches the grounding tool boundary below to return this canned
+# {summary, sources, as_of} grounding (same shape as the phase7d pm-skill
+# fixture). Canned grounding lives only in tests/simulator — never in
+# production paths. build_grounding needs no direct patch: it delegates to
+# the fetch functions above at call time. ai_portfolios needs its own patch:
+# it binds call_web_search_tool via a top-level from-import, which escapes
+# the web_grounding patch.
+
+CANNED_TOOL_SEARCH: dict[str, Any] = {
+    "summary": "- canned",
+    "sources": ["https://u"],
+    "as_of": "2026-06-13",
+}
+
+
+def _canned_fetch_web_grounding(**kwargs: Any) -> dict[str, Any]:
+    """Stand-in for ``fetch_web_grounding`` returning canned grounding."""
+    return dict(CANNED_TOOL_SEARCH)
+
+
+def _canned_call_web_search_tool(**kwargs: Any) -> dict[str, Any]:
+    """Stand-in for ``call_web_search_tool`` returning canned tool output."""
+    return {
+        "summary": str(CANNED_TOOL_SEARCH["summary"]),
+        "sources": list(CANNED_TOOL_SEARCH["sources"]),
+    }
+
+
+def _canned_fetch_ai_portfolio_grounding(**kwargs: Any) -> dict[str, Any]:
+    """Stand-in for ``fetch_ai_portfolio_grounding`` returning canned grounding."""
+    return dict(CANNED_TOOL_SEARCH)
+
+
+# ──────────────────────────────────────────────────────────────────────────
+# 6. End-to-end harness
 # ──────────────────────────────────────────────────────────────────────────
 
 
@@ -975,14 +1030,19 @@ class SimulationRun:
             portfolio=self.portfolio_deps or PortfolioGraphDeps(),
             publish=None,
         )
+        phases = build_portfolio_phases_thesis(
+            watchlist=list(research_input.watchlist),
+            deps=chain_deps.portfolio,
+        )
+        # Slice by phase name, not fixed index — phases insert between H4/H5 (#3739).
+        h5_end = next(
+            i for i, phase in enumerate(phases) if phase.name == "portfolio_h5_asset_analyst"
+        )
         state = _invoke_research_then_portfolio_phases(
             research_input,
             chain_deps,
             self.config_bundle,
-            portfolio_phases=build_portfolio_phases_thesis(
-                watchlist=list(research_input.watchlist),
-                deps=chain_deps.portfolio,
-            )[:5],
+            portfolio_phases=phases[: h5_end + 1],
         )
         return ResearchState.model_validate(state) if isinstance(state, dict) else state
 
@@ -996,13 +1056,17 @@ class SimulationRun:
             portfolio=self.portfolio_deps or PortfolioGraphDeps(),
             publish=self.publish_deps,
         )
+        phases = build_portfolio_phases_thesis(
+            watchlist=list(state.config.watchlist),
+            deps=chain_deps.portfolio,
+        )
+        h6_start = next(
+            i for i, phase in enumerate(phases) if phase.name == "portfolio_h6_deliberation"
+        )
         resume = _invoke_portfolio_phases_from(
             state,
             chain_deps,
-            build_portfolio_phases_thesis(
-                watchlist=list(state.config.watchlist),
-                deps=chain_deps.portfolio,
-            )[5:],  # H6–H9
+            phases[h6_start:],  # H6–H9
         )
         return ResearchState.model_validate(resume) if isinstance(resume, dict) else resume
 
@@ -1116,7 +1180,7 @@ def simulated_pipeline(
     replace_canned_defaults: bool = False,
     evidence_bundle_store: EvidenceBundleStore | None = None,
 ) -> Iterator[SimulationRun]:
-    """Patch chat_completion + thread a fake client through every dep slot.
+    """Patch chat_completion + the grounding tool boundary + thread a fake client.
 
     Parameters
     ----------
@@ -1215,6 +1279,22 @@ def simulated_pipeline(
         patch(
             "digiquant.portfolio.phases.thesis_common.load_skill_edit",
             side_effect=_simulator_portfolio_load_skill_edit,
+        ),
+        patch(
+            "digiquant.research.data.web_grounding.fetch_web_grounding",
+            side_effect=_canned_fetch_web_grounding,
+        ),
+        patch(
+            "digiquant.research.data.web_grounding.call_web_search_tool",
+            side_effect=_canned_call_web_search_tool,
+        ),
+        patch(
+            "digiquant.research.data.ai_portfolios.call_web_search_tool",
+            side_effect=_canned_call_web_search_tool,
+        ),
+        patch(
+            "digiquant.research.data.ai_portfolios.fetch_ai_portfolio_grounding",
+            side_effect=_canned_fetch_ai_portfolio_grounding,
         ),
     ):
         yield run

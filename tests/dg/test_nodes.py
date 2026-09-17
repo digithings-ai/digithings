@@ -71,8 +71,9 @@ class TestResearchNode:
                 m.side_effect = RuntimeError("API down")
                 out = research_node({"prompt": "mean reversion on tech"})
         assert out["research_note"] == "error"
-        assert out.get("error") == "Research failed. Please try again shortly."
-        assert "API down" not in out.get("error", "")
+        assert "API down" in out.get("error", "")
+        assert "Research failed" not in out.get("error", "")
+        assert out.get("error_code") == "llm_error"
 
     def test_empty_prompt_returns_error(self) -> None:
         """Empty prompt returns error; no defaults."""
@@ -137,12 +138,16 @@ class TestResearchNode:
         assert "[Current session datasets:" not in user_msg
         assert user_msg == "analyse AAPL"
 
-    def test_stream_callback_from_state_rag_path_calls_it(self) -> None:
+    def test_stream_callback_from_state_rag_path_calls_it(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         """RAG path emits tool_call/tool_result via get_stream_writer() now, captured
         through the graph's own stream_mode="custom" channel — not injected via state."""
         from digigraph.graph.state import WorkflowState
         from langgraph.graph import END, START, StateGraph
 
+        # Handlers fail loud without a configured base (invoke itself is mocked).
+        monkeypatch.setenv("DIGISEARCH_URL", "http://digisearch-test:8002")
         with patch("digigraph.graph.research._digisearch_available", return_value=True):
             with patch(
                 "digigraph.graph.research._load_research_settings",

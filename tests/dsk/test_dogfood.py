@@ -39,7 +39,7 @@ _MODULES = {
     "digifetch": "digifetch",
     "digillm": "digillm",
     "digiskills": "digiskills",
-    "digichat": "frontend/digichat",
+    "digichat": "cloudflare/digichat",
 }
 
 
@@ -76,4 +76,8 @@ def test_dogfood_compiles_each_module(module: str, tmp_path: Path) -> None:
     assert manifest.name == module
     assert body.strip()
     for doc in docs:
-        assert (package_dir / "references" / doc.name).is_file()
+        ref_path = package_dir / "references" / doc.name
+        assert ref_path.is_file()
+        # Full source content carried through verbatim — a silent truncation
+        # would drop this substring even if the warning list were wrong.
+        assert doc.read_text(encoding="utf-8") in ref_path.read_text(encoding="utf-8")

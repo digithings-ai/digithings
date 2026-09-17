@@ -81,6 +81,49 @@ def test_load_tenant_prefix_map_keeps_usable_entries_despite_one_bad_sibling() -
     assert _load_tenant_prefix_map(raw) == {"digithings": "clients/digithings"}
 
 
+@pytest.mark.parametrize("empty_prefix", ["/", "///", "   ", ".md"])
+def test_load_tenant_prefix_map_treats_empty_normalized_prefix_as_unusable(
+    empty_prefix: str,
+) -> None:
+    """A vaultPathPrefix that normalizes to empty ('/', '///', '   ', '.md') is
+    mapped-but-unusable, not a valid empty mapping. Storing `""` let
+    `mapped_tenant_path_prefix` return a non-None empty prefix that
+    `server._tenant_scoped_vault_root` conflated with "map unset" and turned back
+    into the SHARED root — the #3915 review's HIGH fail-open. Normalize first: a
+    lone such entry yields zero usable mappings, the same "set but broken" error as
+    invalid JSON."""
+    raw = f'{{"digithings": {{"vaultPathPrefix": "{empty_prefix}"}}}}'
+    with pytest.raises(TenantCorpusMapError):
+        _load_tenant_prefix_map(raw)
+
+
+@pytest.mark.parametrize("empty_prefix", ["/", "///", "   ", ".md"])
+def test_load_tenant_prefix_map_drops_empty_normalized_prefix_but_keeps_siblings(
+    empty_prefix: str,
+) -> None:
+    """Alongside valid entries the empty-prefix tenant is simply dropped — absent
+    from the map (403 on lookup), never mapped to "" (shared-root fallback)."""
+    raw = (
+        f'{{"digithings": {{"vaultPathPrefix": "{empty_prefix}"}},'
+        ' "occ": {"vaultPathPrefix": "clients/online-compliance-center"}}'
+    )
+    assert _load_tenant_prefix_map(raw) == {"occ": "clients/online-compliance-center"}
+
+
+@pytest.mark.parametrize("empty_prefix", ["/", "///", "   ", ".md"])
+def test_mapped_tenant_path_prefix_refuses_empty_normalized_entry(empty_prefix: str) -> None:
+    """The exact filesystem-route path: a known tenant whose entry normalizes to
+    empty must be refused (403), never handed an empty prefix that the caller turns
+    back into the shared root."""
+    raw = (
+        f'{{"digithings": {{"vaultPathPrefix": "{empty_prefix}"}},'
+        ' "occ": {"vaultPathPrefix": "clients/online-compliance-center"}}'
+    )
+    with pytest.raises(HTTPException) as exc:
+        mapped_tenant_path_prefix("digithings", raw_map=raw)
+    assert exc.value.status_code == 403
+
+
 def test_load_tenant_prefix_map_lowercases_the_slug_key() -> None:
     raw = '{"DigiThings": {"vaultPathPrefix": "clients/digithings"}}'
     assert _load_tenant_prefix_map(raw) == {"digithings": "clients/digithings"}

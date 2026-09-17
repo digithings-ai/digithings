@@ -26,6 +26,10 @@ COPY digikey/pyproject.toml digikey/README.md ./digikey/
 COPY digikey/src ./digikey/src
 RUN uv pip install --system -e "./digikey"
 
+COPY digifetch/pyproject.toml digifetch/ARCHITECTURE.md ./digifetch/
+COPY digifetch/src ./digifetch/src
+RUN uv pip install --system -e "./digifetch"
+
 COPY digiquant/pyproject.toml ./
 COPY digiquant/src ./src
 COPY digiquant/data ./data

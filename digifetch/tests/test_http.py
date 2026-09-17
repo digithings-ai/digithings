@@ -167,3 +167,57 @@ def test_fetch_composed_with_retry_recovers_from_transient_error() -> None:
 
     assert result.text == "ok"
     assert calls["n"] == 2  # failed once, retried, succeeded
+
+
+# ── redirect cookie scoping ───────────────────────────────────────────────────
+
+
+def test_redirect_drops_per_call_cookies_on_cross_origin_hop() -> None:
+    seen: list[tuple[str, str | None]] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen.append((str(request.url), request.headers.get("cookie")))
+        if request.url.host == "one.example":
+            return httpx.Response(302, headers={"location": "https://two.example/final"})
+        return httpx.Response(200, text="ok")
+
+    with _fetcher(handler, allowed_hosts=["one.example", "two.example"]) as f:
+        result = f.fetch("https://one.example/start", cookies={"session": "secret"})
+
+    assert result.text == "ok"
+    assert seen[0] == ("https://one.example/start", "session=secret")
+    assert seen[1][0] == "https://two.example/final"
+    assert seen[1][1] is None
+
+
+def test_redirect_keeps_per_call_cookies_on_same_origin_hop() -> None:
+    seen: list[tuple[str, str | None]] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen.append((str(request.url), request.headers.get("cookie")))
+        if request.url.path == "/start":
+            return httpx.Response(302, headers={"location": "https://one.example/final"})
+        return httpx.Response(200, text="ok")
+
+    with _fetcher(handler, allowed_hosts=["one.example"]) as f:
+        result = f.fetch("https://one.example/start", cookies={"session": "secret"})
+
+    assert result.text == "ok"
+    assert seen[1] == ("https://one.example/final", "session=secret")
+
+
+def test_download_redirect_drops_per_call_cookies_on_cross_origin_hop() -> None:
+    seen: list[tuple[str, str | None]] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen.append((str(request.url), request.headers.get("cookie")))
+        if request.url.host == "one.example":
+            return httpx.Response(302, headers={"location": "https://two.example/final"})
+        return httpx.Response(200, content=b"bytes")
+
+    with _fetcher(handler, allowed_hosts=["one.example", "two.example"]) as f:
+        result = f.download("https://one.example/doc", cookies={"session": "secret"})
+
+    assert result.content == b"bytes"
+    assert seen[0][1] == "session=secret"
+    assert seen[1][1] is None

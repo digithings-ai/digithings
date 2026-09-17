@@ -1,6 +1,6 @@
 """Roster-width contributor for the ``atlas_run_diagnostics.breakdown`` jsonb (#1767).
 
-``ATLAS_MAX_ANALYSTS`` was bypassed for the entire observed lifetime of the pipeline and
+``DIGIQUANT_MAX_ANALYSTS`` was bypassed for the entire observed lifetime of the pipeline and
 **no column recorded roster width**, so a 1.6× cap breach (39 dispatched analysts against
 a configured cap of 25 on 2026-07-31) was invisible in the database and the 4.9× cost
 swing it produced got attributed to prompt growth. Width therefore has to be recorded,
@@ -36,7 +36,7 @@ BREAKDOWN_KEY = "roster"
 def roster_breakdown(state: ResearchState) -> dict[str, Any]:
     """``{"roster": {...}}`` — H4 focus-roster width by reason, plus the cap in force.
 
-    ``over_cap`` compares width against the **static** ``ATLAS_MAX_ANALYSTS``, not the
+    ``over_cap`` compares width against the **static** ``DIGIQUANT_MAX_ANALYSTS``, not the
     regime-adaptive budget: a stress-regime budget below the static cap is a deliberate
     tightening, whereas exceeding the static cap is the #1767 breach. ``0`` means no cap
     is configured, in which case no width can be a breach.

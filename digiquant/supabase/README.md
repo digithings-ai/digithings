@@ -4,7 +4,7 @@ The single Supabase CLI project dir for the suite-wide **`core`** backend (dashb
 portfolio, market data, strategy store — see
 [ADR 0021](../../docs/adr/0021-digiquant-supabase-project-topology.md)). There is exactly
 **one** migration chain: the numbered files under [`migrations/`](migrations/) —
-`001`–`065` at time of writing, with `037`, `038` and `059` never used and `062`
+`001`–`125` at time of writing, with `037`, `038` and `059` never used and `062`
 **burned — see below, do not reuse it**; new work appends the next unused prefix. [`SCHEMA.md`](SCHEMA.md) inventories the live
 tables and views.
 
@@ -14,14 +14,25 @@ a numeric prefix. It runs as the first step of `test-digiquant.yml` (the
 `digiquant/**` path filter covers this directory) and locally via `make
 supabase-migrations-check`. It does **not** check ordering, and it does not compare
 against the live schema — `olympus_schema_migrations` is what records what prod has
-actually applied.
+actually applied. A duplicate prefix is now a **hard failure with no exemptions**,
+in both this guard and `db-migrate.yml`.
 
-**The one grandfathered collision: `025`.** `025_thesis_daily_fields.sql` and
-`025_trading_calendar.sql` both exist and were both applied on 2026-06-26.
-`db-migrate.yml` keys the ledger on the *full filename*, so renumbering either one
-mints a new ledger key for a file prod already ran. They are exempted by exact
-basename in the guard's `GRANDFATHERED_DUPES`; a third `025` still fails. Don't add
-to that list — take the next free prefix instead.
+**The `025` collision is resolved (#3923).** `025_thesis_daily_fields.sql` and
+`025_trading_calendar.sql` were both applied on 2026-06-26 and both recorded in
+`olympus_schema_migrations` under those names. `db-migrate.yml` keys the ledger on
+the *full filename*, so renumbering either one mints a new ledger key for a file
+prod already ran. The calendar migration was chosen to move because it is fully
+idempotent (`CREATE TABLE`/`CREATE INDEX IF NOT EXISTS`, `DROP POLICY IF EXISTS`
+then `CREATE POLICY`), so a replay under its new key is safe; it is now
+`111_trading_calendar.sql`. **It had to land below `116`, not at the end of the
+chain**: `116_authenticated_read_public_reference.sql` runs `DROP`/`CREATE POLICY
+... ON public.trading_calendar`, so the creator must sort before it — a fresh apply
+at `126` died at `116` with `relation "public.trading_calendar" does not exist`.
+`111` is a genuine top-level gap (`113` is `cutover/`, not in the auto-applied set).
+`025_thesis_daily_fields.sql` stays put — it logically follows
+`024_thesis_deliberation_first_class` and is pinned by
+`tests/dq/research/test_migration_025.py`. Do not add an exemption list back; use
+the next free prefix (and check it does not precede a consumer) for new work.
 
 **`062` is burned, not merely free (#1807).** `037`, `038` and `059` were never written.
 `062` was. `062_realtime_broadcast_authorization.sql` tried to add RLS policies to
@@ -191,8 +202,9 @@ Outside extended US market hours (13:00–01:00 UTC, Mon–Fri) a caller gets
 gets `200 {"dormant": true}`; and a caller that loses the claim gets
 `200 {"skipped": "not claimed"}`. All three exit 200 so schedulers never see failures for
 expected idle states. In the market-closed windows the frontend values positions from the
-`public_price_latest` view — the latest daily close per ticker from `price_history`,
-which the `pipeline-digiquant-prices.yml` job keeps fed.
+R2 market-data API (`/v1/market/closes`, Yahoo Finance daily + archive); the
+`public_price_latest` view and its `price_history` source were **dropped in migration 127
+(#4053)** — this paragraph is historical for pre-drop deploys.
 
 **`skipped` is a signal in the cron log.** pg_cron fires every 60s against a 50s window, so a
 legitimate scheduled run always claims: in cron-only steady state `net._http_response` should
@@ -351,7 +363,7 @@ event per upserted row**, not one message per run.
 
 **Live quotes** — subscribe to Realtime `postgres_changes` on `public.prices_live` with the
 anon client. This is the live shape from
-[`frontend/digiquant-web/lib/live/useLivePrices.ts`](../../frontend/digiquant-web/lib/live/useLivePrices.ts),
+[`cloudflare/digiquant-web/lib/live/useLivePrices.ts`](../../cloudflare/digiquant-web/lib/live/useLivePrices.ts),
 which is the reference implementation; read the two warnings under it before adapting.
 
 ```ts
@@ -394,8 +406,9 @@ advancing when the market is quiet). `DELETE` events carry only the primary key 
 Migration `063`, the publisher and the subscriber are one change in three files, and the
 order they reach production is load-bearing. A browser subscribing to `postgres_changes` on
 a table the project does not yet carry simply receives **no events** — there is no error
-`useLivePrices` can surface, so the tape silently degrades to `public_price_latest` daily
-closes marked `stale`. A dark live feed with nothing logged anywhere.
+`useLivePrices` can surface, so the tape silently degrades to daily closes marked `stale`
+(pre-127 that was the `public_price_latest` view; since migration 127 the R2 market API
+serves the closes). A dark live feed with nothing logged anywhere.
 
 1. **Apply migration `063` and verify it.** Unlike the withdrawn `062`, this one applies as
    `postgres`: `public.prices_live` and the `supabase_realtime` publication are both owned
@@ -446,7 +459,7 @@ allowlist (performance metrics only, never research notes — user ruling 2026-0
 |---|---|
 | `public_portfolio_positions` | Latest-date positions: ticker, name, category, sector, weight, entry/current price, day/unrealized/since-entry returns. **Excludes** rationale, PM notes, thesis id, conviction, stops/targets/horizon. |
 | `public_nav_history` | NAV series + cash/invested % + derived daily return. |
-| `public_price_latest` | Latest daily close per ticker — the valuation fallback outside market hours (`prices-live` is live, not dormant, since 2026-07-13). |
+| `public_price_latest` | *(dropped in migration 127, #4053)* — was latest daily close per ticker; browsers read the R2 market API now. |
 
 ## What is public on purpose, what is locked (#1462 rulings, 2026-07-10)
 

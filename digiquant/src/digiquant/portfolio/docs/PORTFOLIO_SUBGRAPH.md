@@ -150,7 +150,7 @@ Each per-ticker deliberation node is itself a **cyclic LangGraph sub-graph** wit
 
 ### 2.2 Safety cap
 
-- `MAX_ROUNDS = 6`, overrideable via env `ATLAS_DELIBERATION_MAX_ROUNDS` (int).
+- `MAX_ROUNDS = 6`, overrideable via env `DIGIQUANT_DELIBERATION_MAX_ROUNDS` (int).
 - On cap hit: the node sets `meta.escalated = True`, records `meta.cap_reason = "max_rounds"`, forces `meta.converged = True` with the last analyst recommendation as the final stance, and emits a warning into `state.errors` (retryable=False) that Phase 9 evolution surfaces in the post-mortem.
 
 ### 2.3 Recess semantics

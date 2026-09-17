@@ -4,7 +4,7 @@
 set -e
 
 MIGRATIONS_DIR="supabase/migrations"
-TYPES_FILE="frontend/lib/database.types.ts"
+TYPES_FILE="cloudflare/lib/database.types.ts"
 
 if [[ ! -d "$MIGRATIONS_DIR" ]]; then
   echo "❌ Missing: $MIGRATIONS_DIR" >&2; exit 1
@@ -51,7 +51,7 @@ if [[ "$sql_count" -ne "$ts_count" ]]; then
   echo "⚠️  DRIFT DETECTED — $sql_count SQL tables vs $ts_count TS types"
   echo "   Missing from TS: $(comm -23 <(echo "$sql_tables") <(echo "$ts_tables") | tr '\n' ' ')"
   echo "   Missing from SQL: $(comm -13 <(echo "$sql_tables") <(echo "$ts_tables") | tr '\n' ' ')"
-  echo "   Update frontend/lib/database.types.ts to reflect the current schema."
+  echo "   Update cloudflare/lib/database.types.ts to reflect the current schema."
   exit 1
 fi
 

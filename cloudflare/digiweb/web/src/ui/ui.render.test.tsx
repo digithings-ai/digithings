@@ -1,0 +1,172 @@
+import { renderToStaticMarkup } from "react-dom/server";
+import { describe, expect, it } from "vitest";
+import {
+  Alert,
+  AlertDescription,
+  AlertTitle,
+  Badge,
+  Button,
+  Card,
+  CardContent,
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+  Input,
+  Label,
+  Separator,
+  Sheet,
+  SheetContent,
+  SheetTrigger,
+  Tabs,
+  TabsContent,
+  TabsList,
+  TabsTrigger,
+  Textarea,
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "./index";
+
+describe("vendored ui kit renders server-side", () => {
+  it("Button keeps the shadcn data-slot contract", () => {
+    const html = renderToStaticMarkup(<Button>Run</Button>);
+    expect(html).toContain('data-slot="button"');
+    expect(html).toContain("Run");
+  });
+
+  it("Card composes parts", () => {
+    const html = renderToStaticMarkup(
+      <Card>
+        <CardContent>body</CardContent>
+      </Card>,
+    );
+    expect(html).toContain('data-slot="card"');
+    expect(html).toContain("body");
+  });
+
+  it("Input renders with the input slot", () => {
+    const html = renderToStaticMarkup(<Input placeholder="ticker" />);
+    expect(html).toContain('data-slot="input"');
+  });
+
+  it("Textarea renders with the textarea slot", () => {
+    const html = renderToStaticMarkup(<Textarea placeholder="notes" />);
+    expect(html).toContain('data-slot="textarea"');
+  });
+
+  it("Label renders with the label slot", () => {
+    const html = renderToStaticMarkup(<Label htmlFor="ticker">Ticker</Label>);
+    expect(html).toContain('data-slot="label"');
+    expect(html).toContain('for="ticker"');
+  });
+
+  it("Separator renders with the separator slot", () => {
+    const html = renderToStaticMarkup(<Separator />);
+    expect(html).toContain('data-slot="separator"');
+  });
+
+  it("Badge renders with the badge slot", () => {
+    const html = renderToStaticMarkup(<Badge>live</Badge>);
+    expect(html).toContain('data-slot="badge"');
+    expect(html).toContain("live");
+  });
+
+  it("Alert composes parts", () => {
+    const html = renderToStaticMarkup(
+      <Alert>
+        <AlertTitle>Heads up</AlertTitle>
+        <AlertDescription>body</AlertDescription>
+      </Alert>,
+    );
+    expect(html).toContain('data-slot="alert"');
+    expect(html).toContain('data-slot="alert-title"');
+    expect(html).toContain('data-slot="alert-description"');
+  });
+
+  it("Tabs renders list, triggers and the active panel", () => {
+    const html = renderToStaticMarkup(
+      <Tabs defaultValue="one">
+        <TabsList>
+          <TabsTrigger value="one">One</TabsTrigger>
+          <TabsTrigger value="two">Two</TabsTrigger>
+        </TabsList>
+        <TabsContent value="one">Panel one</TabsContent>
+        <TabsContent value="two">Panel two</TabsContent>
+      </Tabs>,
+    );
+    expect(html).toContain('data-slot="tabs"');
+    expect(html).toContain('data-slot="tabs-list"');
+    expect(html).toContain('data-slot="tabs-trigger"');
+    expect(html).toContain("Panel one");
+    expect(html).not.toContain("Panel two");
+  });
+
+  it("Collapsible renders its panel only while open", () => {
+    const open = renderToStaticMarkup(
+      <Collapsible defaultOpen>
+        <CollapsibleTrigger>More</CollapsibleTrigger>
+        <CollapsibleContent>Body</CollapsibleContent>
+      </Collapsible>,
+    );
+    expect(open).toContain('data-slot="collapsible"');
+    expect(open).toContain('data-slot="collapsible-trigger"');
+    expect(open).toContain('data-slot="collapsible-content"');
+
+    const closed = renderToStaticMarkup(
+      <Collapsible>
+        <CollapsibleTrigger>More</CollapsibleTrigger>
+        <CollapsibleContent>Body</CollapsibleContent>
+      </Collapsible>,
+    );
+    expect(closed).toContain('data-slot="collapsible-trigger"');
+    expect(closed).not.toContain('data-slot="collapsible-content"');
+  });
+
+  // Sheet, DropdownMenu and Tooltip content render through Base UI portals,
+  // which react-dom/server omits; only their triggers can be asserted as
+  // markup, and the content parts are asserted as exported symbols instead.
+  it("Tooltip renders its trigger; content is portal-only", () => {
+    const html = renderToStaticMarkup(
+      <TooltipProvider>
+        <Tooltip>
+          <TooltipTrigger>Hover</TooltipTrigger>
+          <TooltipContent>Tip body</TooltipContent>
+        </Tooltip>
+      </TooltipProvider>,
+    );
+    expect(html).toContain('data-slot="tooltip-trigger"');
+    expect(html).not.toContain('data-slot="tooltip-content"');
+    expect(typeof TooltipContent).toBe("function");
+  });
+
+  it("Sheet renders its trigger; content is portal-only", () => {
+    const html = renderToStaticMarkup(
+      <Sheet>
+        <SheetTrigger>Open</SheetTrigger>
+        <SheetContent>Panel body</SheetContent>
+      </Sheet>,
+    );
+    expect(html).toContain('data-slot="sheet-trigger"');
+    expect(html).not.toContain('data-slot="sheet-content"');
+    expect(typeof SheetContent).toBe("function");
+  });
+
+  it("DropdownMenu renders its trigger; content is portal-only", () => {
+    const html = renderToStaticMarkup(
+      <DropdownMenu>
+        <DropdownMenuTrigger>Menu</DropdownMenuTrigger>
+        <DropdownMenuContent>
+          <DropdownMenuItem>Item</DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>,
+    );
+    expect(html).toContain('data-slot="dropdown-menu-trigger"');
+    expect(html).not.toContain('data-slot="dropdown-menu-content"');
+    expect(typeof DropdownMenuContent).toBe("function");
+  });
+});

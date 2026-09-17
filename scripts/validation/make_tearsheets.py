@@ -24,9 +24,9 @@ from pine_backtest import run_backtest, summarize, write_trades_csv  # noqa: E40
 DATA_DIR = Path("digiquant/data/validation")
 OUT_DIR = Path("digiquant/results/validation")
 # Published tearsheet JSON consumed by the React strategy-tearsheet library in
-# frontend/digiquant-web (the /strategies routes on digiquant.io).
-PUBLISH_DIR = Path("frontend/digiquant-web/public/strategies")
-DATA_SOURCE = "dashboard price_history table (Yahoo Finance, daily)"
+# cloudflare/digiquant-web (the /strategies routes on digiquant.io).
+PUBLISH_DIR = Path("cloudflare/digiquant-web/public/strategies")
+DATA_SOURCE = "Yahoo Finance daily OHLCV CSV snapshots (data/price-history exports)"
 # The Slapper family was optimized on 2018-onward data; earlier bars only warm
 # up the indicators. Gating the traded window here keeps the tearsheet honest.
 START_DATE = "2018-01-01"
@@ -152,8 +152,8 @@ TradingView results for each strategy.
 
 ## Methodology (what this matches, and what to check)
 
-- **Data:** daily OHLCV pulled from the **dashboard `price_history` table** (Yahoo
-  Finance `BTC-USD`/`ETH-USD`/`SOL-USD`, sourced by the daily pipeline). ⚠️ If your
+- **Data:** daily OHLCV from **local Yahoo Finance CSV snapshots** (`BTC-USD`/`ETH-USD`/
+  `SOL-USD`, exported from the daily pipeline). ⚠️ If your
   TradingView chart used a different feed (e.g. Binance, INDEX, BNC:BLX, Coinbase),
   candles — and therefore signals — will differ.
 - **Execution model (Pine-faithful):** fills at the **signal bar's close**

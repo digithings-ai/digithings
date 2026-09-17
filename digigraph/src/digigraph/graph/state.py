@@ -46,6 +46,8 @@ class WorkflowState(TypedDict, total=False):
     error: str | None
     # Stable digichat contract code (e.g. free_quota_exceeded); set with error.
     error_code: str | None
+    # Optional sanitized provider dump for the embed error disclosure.
+    error_detail: str | None
     # Session datasets: ref -> { ref, profile }. No reducer; last writer wins per key.
     stored_datasets: dict[str, dict[str, Any]]
     # Workflow profile: full_stack | research_rag | quant_backtest | plan_execute (set at invoke).
@@ -63,6 +65,7 @@ class WorkflowState(TypedDict, total=False):
     force_tool: str | None
     # Operator MCP servers for this turn (BFF header). Must be declared so a
     # prior tenant's URLs cannot stick on the checkpoint (#3736 / CWE-639).
+    # ``token`` is in-request only — stripped before checkpointer write (#3794).
     mcp_servers: list[dict[str, str]]
     # Raw catalog disable tokens (including extra MCP ids). Same sticky-key rule.
     disabled_tools: list[str] | None

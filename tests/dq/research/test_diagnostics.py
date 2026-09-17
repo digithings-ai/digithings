@@ -293,7 +293,7 @@ def test_strict_gate_degrades_a_single_failed_segment_without_asking_for_a_retry
 
 
 def test_retry_signal_still_fires_on_the_legacy_share_rule() -> None:
-    # Above ATLAS_DEGRADED_RUN_PCT the legacy gate trips as it always has, so CI retries.
+    # Above DIGIQUANT_DEGRADED_RUN_PCT the legacy gate trips as it always has, so CI retries.
     state = _prod_shaped_state(failed=20, phase_portfolio=_committed_book())
     s = diagnostics.summarize_run(state)
     assert s.status == "degraded"

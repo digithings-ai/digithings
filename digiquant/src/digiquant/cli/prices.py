@@ -35,6 +35,47 @@ def prices() -> None:
 # ─── Shared helpers ───────────────────────────────────────────────────────
 
 
+def _supabase_writes_disabled() -> bool:
+    """True when the R2 market-data cache is authoritative (#3780, Task 7b cutover).
+
+    ``DIGIQUANT_MARKET_DATA_BACKEND=r2`` stops the Supabase writers: the daily
+    refresh lands in R2 generations via ``scripts/refresh_market_data_r2.py``
+    instead. Migration 127 has since dropped ``price_history`` /
+    ``price_technicals`` (#4053), so there is no Supabase rollback left —
+    unsetting the flag no longer re-enables these writes. ``fetch-macro
+    --sources fedprob`` is exempt (see :func:`_macro_write_covered_by_r2`) —
+    prediction-market odds have no R2 generation and the macro table stays.
+
+    Thin alias over :func:`digiquant.research.data.queries.r2_backend_enabled`
+    (the single canonical flag read); kept under this name for the writer
+    call sites and their tests.
+    """
+    from digiquant.research.data.queries import r2_backend_enabled
+
+    return r2_backend_enabled()
+
+
+def _refuse_supabase_write(command: str) -> None:
+    """Fail LOUD when a writer runs under the R2 backend (never skip silently)."""
+    raise click.ClickException(
+        f"{command}: Supabase market-data writes are stopped "
+        "(DIGIQUANT_MARKET_DATA_BACKEND=r2); the R2 refresh owns this table now. "
+        "Migration 127 dropped price_history/price_technicals (#4053) — this "
+        "command is retired, and unsetting the flag does not restore it."
+    )
+
+
+# Sources whose rows land in R2 generations (FRED backfill + Yahoo FX refresh).
+# ``fedprob`` (Kalshi/Polymarket snapshots read by get_fed_rate_probabilities)
+# has no R2 home, so fedprob-only runs keep writing Supabase under r2.
+_R2_COVERED_MACRO_SOURCES = frozenset({"fred", "yahoo"})
+
+
+def _macro_write_covered_by_r2(sources_set: set[str]) -> bool:
+    """True when a fetch-macro run writes any R2-owned source (gate scope)."""
+    return bool(_R2_COVERED_MACRO_SOURCES & {s.strip() for s in sources_set})
+
+
 def _parse_iso_option(value: str | None, flag: str) -> date | None:
     """Parse an optional ISO-date CLI option, surfacing a UsageError (not a traceback)."""
     if value is None or not value.strip():
@@ -118,6 +159,8 @@ def fetch_quotes_cmd(
 
     universe = _resolve_universe(tickers, watchlist, include_sectors)
 
+    if supabase and not dry_run and _supabase_writes_disabled():
+        _refuse_supabase_write("fetch-quotes")
     click.echo(f"fetch-quotes: {len(universe)} tickers | dry_run={dry_run}")
     frames = incremental_update(universe, cache_dir=cache_dir, bulk_period=period, dry_run=dry_run)
     click.echo(f"  fetched: {len(frames)}")
@@ -209,6 +252,8 @@ def compute_technicals_cmd(
 
     client = None
     if supabase and not dry_run:
+        if _supabase_writes_disabled():
+            _refuse_supabase_write("compute-technicals")
         client = build_supabase_client(
             os.environ.get("CORE_SUPABASE_URL", os.environ.get("SUPABASE_URL")),
             os.environ.get(
@@ -374,6 +419,8 @@ def recompute_technicals_cmd(
     since_d = _parse_iso_option(since, "--since")
     if since_d is not None and since_d > as_of_d:
         raise click.UsageError(f"--since ({since_d}) must be on or before --as-of ({as_of_d})")
+    if not dry_run and _supabase_writes_disabled():
+        _refuse_supabase_write("recompute-technicals")
 
     client = build_supabase_client(
         os.environ.get("CORE_SUPABASE_URL", os.environ.get("SUPABASE_URL")),
@@ -458,6 +505,11 @@ def fetch_macro_cmd(
     sources_set = {s.strip() for s in sources.split(",") if s.strip()}
     if backfill and latest_only:
         raise click.UsageError("--backfill and --latest-only are mutually exclusive")
+    if supabase and not dry_run and _supabase_writes_disabled():
+        if _macro_write_covered_by_r2(sources_set):
+            _refuse_supabase_write("fetch-macro")
+        # fedprob-only runs fall through: prediction-market odds have no R2
+        # generation (get_fed_rate_probabilities stays Supabase-backed).
     mani = MacroManifest.from_yaml(manifest)
 
     # Validate FRED creds up-front so --dry-run'd FRED fails fast before the
@@ -522,6 +574,81 @@ def fetch_macro_cmd(
         raise click.ClickException("Supabase credentials not set.")
     res = upsert_macro_observations(client, all_rows)
     click.echo(f"  upserted {res.rows} rows into macro_series_observations")
+
+
+# ─── fetch-fx-intraday ───────────────────────────────────────────────────
+
+
+@prices.command("fetch-fx-intraday")
+@click.option(
+    "--interval",
+    type=str,
+    default="1h",
+    show_default=True,
+    help=(
+        "yfinance candle interval, persisted per row to "
+        "fx_intraday_observations.interval; FX 1h bars cap at 730d of history, "
+        "5m at 60d."
+    ),
+)
+@click.option(
+    "--period",
+    type=str,
+    default="730d",
+    show_default=True,
+    help="yfinance lookback window for the candle download.",
+)
+@click.option("--dry-run", is_flag=True)
+@click.option("--supabase", is_flag=True)
+def fetch_fx_intraday_cmd(interval: str, period: str, dry_run: bool, supabase: bool) -> None:
+    """Ingest intraday FX candles (Yahoo) into fx_intraday_observations.
+
+    The twelve-x trade grader reads this table with the core service key to
+    order stop-vs-target touches inside a day, which the daily close cannot
+    express. ``--interval`` is persisted on every row (part of the upsert key),
+    so a 5m and a 1h candle coexist at the same bar OPEN. Deliberately exempt
+    from the R2 writers-stop: intraday candles have no R2 generation and no
+    Supabase-side reader to migrate — the same argument as fedprob in
+    fetch-macro_cmd.
+    """
+    from digiquant.data.prices.macro_ingest import fetch_fx_intraday
+    from digiquant.data.prices.supabase_writer import (
+        build_supabase_client,
+        upsert_fx_intraday_observations,
+    )
+
+    candles = fetch_fx_intraday(interval=interval, period=period)
+    rows = [
+        {
+            "source": "yahoo",
+            "series_id": c.series_id,
+            "interval": interval,
+            "ts": c.ts.isoformat(),
+            "open": c.open,
+            "high": c.high,
+            "low": c.low,
+            "close": c.close,
+        }
+        for c in candles
+    ]
+    click.echo(f"fx intraday: {len(rows)} candles (interval={interval}, period={period})")
+
+    if dry_run or not supabase:
+        # Dry-run: print a compact summary by series (mirrors fetch-macro).
+        summary: dict[str, int] = {}
+        for r in rows:
+            summary[r["series_id"]] = summary.get(r["series_id"], 0) + 1
+        click.echo(json.dumps(summary, indent=2))
+        return
+
+    client = build_supabase_client(
+        os.environ.get("CORE_SUPABASE_URL", os.environ.get("SUPABASE_URL")),
+        os.environ.get("CORE_SUPABASE_SERVICE_KEY", os.environ.get("SUPABASE_SERVICE_ROLE_KEY")),
+    )
+    if client is None:
+        raise click.ClickException("Supabase credentials not set.")
+    res = upsert_fx_intraday_observations(client, rows)
+    click.echo(f"  upserted {res.rows} rows into fx_intraday_observations")
 
 
 # ─── sync-calendar ───────────────────────────────────────────────────────

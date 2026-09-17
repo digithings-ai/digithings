@@ -3,9 +3,6 @@ type: behavior-guide
 title: digichat Auth and Chat
 description: digichat login, digikey token exchange, streaming chat route with regen/edit, and conversation persistence.
 tags: [digichat, auth, chat, bff]
-verified:
-  - by: openwiki/0.5.0
-    at: 2026-09-07T22:38:58.074Z
 sources:
   - id: openwiki-source-89092abbe1894e77dc33d695
     resource: repo://digikey/ARCHITECTURE.md
@@ -16,6 +13,9 @@ sources:
   - id: openwiki-source-bd578238e83e5e4c284f525e
     resource: repo://frontend/digichat/src/auth.ts
 generated: { by: "opencode", at: "2026-09-07T22:38:58.074Z" }
+verified:
+  - by: openwiki/0.5.0
+    at: 2026-09-09T14:37:17.158Z
 ---
 
 # digichat Auth and Chat

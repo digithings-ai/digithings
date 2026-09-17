@@ -44,5 +44,5 @@ globs:
   - digifetch/ARCHITECTURE.md
   - digifetch/AGENTS.md
   - digillm/ARCHITECTURE.md
-  - frontend/digichat/ARCHITECTURE.md
-  - frontend/digichat/AGENTS.md
+  - cloudflare/digichat/ARCHITECTURE.md
+  - cloudflare/digichat/AGENTS.md

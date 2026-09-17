@@ -2,7 +2,7 @@
 
 Turns market state (VIX term structure + breadth + cross-sectional return
 dispersion) into a dispatch budget for H4's focus roster, with a fail-soft
-fallback to the static ATLAS_MAX_ANALYSTS cap. See
+fallback to the static DIGIQUANT_MAX_ANALYSTS cap. See
 docs/superpowers/specs/2026-06-23-adaptive-two-track-dispatch-design.md.
 """
 

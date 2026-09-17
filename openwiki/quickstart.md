@@ -3,9 +3,6 @@ type: quickstart
 title: digithings Quickstart
 description: Task-routing map for the digithings wiki — which section answers which question — plus the digismith tracing quickstart.
 tags: [digithings, quickstart, routing]
-verified:
-  - by: openwiki/0.5.0
-    at: 2026-09-07T22:38:58.074Z
 sources:
   - id: openwiki-source-4b2266e051b2270b6ec5aa4f
     resource: repo://BRANCHING.md
@@ -34,6 +31,9 @@ sources:
   - id: openwiki-source-a49bd70bd0f6d776441b838b
     resource: repo://docs/agents/CODE_REVIEW_POLICY.md
 generated: { by: "opencode", at: "2026-09-07T22:38:58.074Z" }
+verified:
+  - by: openwiki/0.5.0
+    at: 2026-09-09T14:37:17.158Z
 ---
 
 # digithings Quickstart

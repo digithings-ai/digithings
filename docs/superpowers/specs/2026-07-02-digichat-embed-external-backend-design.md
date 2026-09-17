@@ -28,7 +28,7 @@ Make `/embed`'s backend and access policy **per-tenant configuration** rather th
 
 ## Current state (what this builds on)
 
-**digichat side** (`frontend/digichat`):
+**digichat side** (`cloudflare/digichat`):
 
 - `/embed` (`src/app/embed/page.tsx`): iframe-ready unauthenticated chat. Client-side free-turn gate (`src/lib/embed-gate.ts`, `EMBED_FREE_TURN_LIMIT = 3`, localStorage per host origin) with a BYOK paywall card. Accent is a closed enum (`digithings | digiquant | digichat`) via `?accent=` query param. Messages render as plain-text bubbles — no markdown, no trace parts.
 - `POST /api/chat` (`src/app/api/chat/route.ts`): resolves embed requests via `resolveEmbedChatTenant()` (`src/lib/embed-chat-tenant.ts`) to the fixed identity `{tenantSlug: "embed", ownerUserSub: "embed:anonymous"}`, then unconditionally builds a digigraph client. Rate limiting: shared BFF bucket (30/min) plus per-IP embed limiter (10/min, PR #1280).
@@ -154,7 +154,7 @@ The embed page needs `gateMode`, `accent`, and `attribution` before the first me
 
 ## Sequencing dependency (important)
 
-`frontend/digichat` is **not deployed anywhere today** — Epic #1248 Phase 3 (container hosting + Cloudflare Route cutover to `digithings.ai/chat`) is still open and human-gated. DataTapStream cannot embed a page that isn't served. Until Phase 3 lands (or an interim deployment of the digichat container exists), datatap-web keeps its current custom `ChatPanel`; the migration follow-up in that repo is blocked on a live embed URL. This spec's work is still fully buildable and testable now (local + CI), and makes the embed ready the moment Phase 3 ships.
+`cloudflare/digichat` is **not deployed anywhere today** — Epic #1248 Phase 3 (container hosting + Cloudflare Route cutover to `digithings.ai/chat`) is still open and human-gated. DataTapStream cannot embed a page that isn't served. Until Phase 3 lands (or an interim deployment of the digichat container exists), datatap-web keeps its current custom `ChatPanel`; the migration follow-up in that repo is blocked on a live embed URL. This spec's work is still fully buildable and testable now (local + CI), and makes the embed ready the moment Phase 3 ships.
 
 ## Testing
 
@@ -167,7 +167,7 @@ The embed page needs `gateMode`, `accent`, and `attribution` before the first me
   - Rate limiting: regression test that the per-IP limiter fires on an external-relay tenant.
 - **Existing suites stay green** (`route.test.ts`, `embed-ip-rate-limit.test.ts`).
 - **Manual E2E:** run digichat locally with `DIGICHAT_EMBED_TENANTS` pointing at the live DataTapStream relay; a local test page iframes `/embed`; verify streamed answer, trace box content (file-search queries + cited sources), conversation continuity across turns, no paywall at turn 4, accent + attribution rendering.
-- Repo gates: `make score` (all dimensions), human review (network exposure), `frontend/digichat/ARCHITECTURE.md` updated (new sections: embed tenant registry, external relay adapter, revised embed security analysis).
+- Repo gates: `make score` (all dimensions), human review (network exposure), `cloudflare/digichat/ARCHITECTURE.md` updated (new sections: embed tenant registry, external relay adapter, revised embed security analysis).
 
 ## Process
 

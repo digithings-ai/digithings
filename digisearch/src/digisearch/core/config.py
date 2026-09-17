@@ -110,3 +110,26 @@ def get_index_config_path() -> Path | None:
     if not path.is_absolute():
         path = Path.cwd() / path
     return path if path.exists() else None
+
+
+def index_allows_raw_filter(index_name: str | None = None) -> bool:
+    """Whether the configured index opts into raw OData filters (deny by default).
+
+    Precedence mirrors the backends: the single-index YAML at
+    ``DIGISEARCH_INDEX_CONFIG`` wins (that is what Azure's ``_get_index_config``
+    reads), then the named entry under ``DIGISEARCH_CONFIG_PATH``'s ``indexes``
+    list. Unset/unknown index -> ``False`` so raw OData must be explicitly opted in
+    per ``digisearch/AGENTS.md``.
+    """
+    path = get_index_config_path()
+    if path:
+        cfg = load_index_config(path)
+        if cfg:
+            return bool(cfg.get("allow_raw_filter", False))
+    cfg_env = os.environ.get("DIGISEARCH_CONFIG_PATH")
+    if cfg_env:
+        conf = DigiSearchConfig.from_config(cfg_env)
+        entry = conf.get_index_config((index_name or "default").strip() or "default")
+        if isinstance(entry, dict):
+            return bool(entry.get("allow_raw_filter", False))
+    return False

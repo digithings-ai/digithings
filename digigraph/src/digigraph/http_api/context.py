@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from typing import Any  # score:allow untyped any — Starlette headers / request extras
 
 from fastapi import HTTPException, Request
@@ -25,6 +26,26 @@ def _hget(headers: Any, *keys: str) -> str:
         if raw and str(raw).strip():
             return str(raw)
     return ""
+
+
+def _mcp_setup(raw: Any) -> dict[str, str] | None:
+    """Decode a parsed-header ``setup`` value into the ``McpServerRef`` mapping.
+
+    ``parse_mcp_servers_json`` keeps each server row flat (``dict[str, str]``),
+    so ``setup`` arrives JSON-encoded; the model field is a mapping. Malformed
+    or non-object values are dropped rather than failing the turn.
+    """
+    if isinstance(raw, dict):
+        return {str(k): str(v) for k, v in raw.items()}
+    if not raw:
+        return None
+    try:
+        decoded = json.loads(raw)
+    except (TypeError, json.JSONDecodeError):
+        return None
+    if not isinstance(decoded, dict):
+        return None
+    return {str(k): str(v) for k, v in decoded.items()}
 
 
 def _digi_fields_from_request(http_request: Request) -> dict[str, Any]:
@@ -73,20 +94,23 @@ def _digi_fields_from_request(http_request: Request) -> dict[str, Any]:
         corpus_map=corpus_map,
     )
     # Same CWE-639 class as digi_subject: when DIGI_TENANT_CORPUS_MAP is configured,
-    # digisearch_index / vault_path_prefix / research_system_prompt_override must be
-    # written unconditionally so a client body value cannot survive into graph state
-    # (digisearch has no server-side tenant→index bind; digivault does for prefixes).
+    # digisearch_index / vault_path_prefix must be written unconditionally so a client
+    # body value cannot survive into graph state (digisearch has no server-side
+    # tenant→index bind; digivault does for prefixes).
+    # research_system_prompt_override is written unconditionally for the same reason:
+    # the research system prompt is operator-configured only (digiproject.yaml
+    # agents.research_system_prompt or the tenant corpus map). A client body value
+    # must never become it — an unmapped tenant (or the map-unset single-tenant path)
+    # clears to None rather than letting a caller inject its own system prompt.
+    updates["research_system_prompt_override"] = corpus.research_system_prompt
     if corpus_map:
         updates["digisearch_index"] = corpus.digisearch_index
         updates["vault_path_prefix"] = corpus.vault_path_prefix
-        updates["research_system_prompt_override"] = corpus.research_system_prompt
     else:
         if corpus.digisearch_index:
             updates["digisearch_index"] = corpus.digisearch_index
         if corpus.vault_path_prefix:
             updates["vault_path_prefix"] = corpus.vault_path_prefix
-        if corpus.research_system_prompt:
-            updates["research_system_prompt_override"] = corpus.research_system_prompt
     # Per-request response language (X-Digi-Language) — a per-request signal, not a
     # tenant-derived value, so it's read directly rather than via resolve_corpus_override.
     # The raw header is never interpolated: resolve_language_directive / apply_language_preference
@@ -115,6 +139,8 @@ def _digi_fields_from_request(http_request: Request) -> dict[str, Any]:
             url=s["url"],
             auth=s.get("auth") or None,
             token=s.get("token") or None,
+            auth_header=s.get("authHeader") or None,
+            setup=_mcp_setup(s.get("setup")),
         )
         for s in mcp_servers
     ]

@@ -16,7 +16,7 @@ fi
 
 # Live-trading path regex (always block, even on task/* branches). The
 # directory fragment is anchored to digiquant — a bare '/live[/.]' also matched
-# design screenshots under frontend/**/references/**/live/ (false positives).
+# design screenshots under cloudflare/**/references/**/live/ (false positives).
 live_trading_regex='(live_trading|execute_trade|place_order|(^|/)digiquant/(.*/)?live[/.])'
 
 # Fast pre-check: skip the Python parse for commands with no write-implying tokens.

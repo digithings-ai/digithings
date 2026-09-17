@@ -8,6 +8,7 @@ from unittest.mock import patch
 import pytest
 from digigraph.models import WorkflowRequest
 from digigraph.orchestration.mcp_client import (
+    call_prefixed_tool,
     expand_mcp_disabled_tokens,
     is_allowed_mcp_url,
     merge_mcp_servers,
@@ -72,18 +73,18 @@ def test_parse_mcp_servers_env_and_merge_header_wins() -> None:
 
 @pytest.mark.unit
 def test_prefixed_tool_names() -> None:
-    assert prefixed_tool_name("datatap", "list_pipelines") == "datatap__list_pipelines"
-    assert split_prefixed_tool_name("datatap__list_pipelines") == ("datatap", "list_pipelines")
+    assert prefixed_tool_name("datatap", "list_pipelines") == "datatap_list_pipelines"
+    assert split_prefixed_tool_name("datatap_list_pipelines") == ("datatap", "list_pipelines")
     assert split_prefixed_tool_name("digisearch") is None
 
 
 @pytest.mark.unit
 def test_expand_mcp_disabled_tokens() -> None:
-    extra = ["datatap__a", "datatap__b", "other__x"]
+    extra = ["datatap_a", "datatap_b", "other_x"]
     assert expand_mcp_disabled_tokens(["datatap", "rm -rf"], extra) == frozenset(
-        {"datatap__a", "datatap__b"}
+        {"datatap_a", "datatap_b"}
     )
-    assert expand_mcp_disabled_tokens(["other"], extra) == frozenset({"other__x"})
+    assert expand_mcp_disabled_tokens(["other"], extra) == frozenset({"other_x"})
 
 
 @pytest.mark.unit
@@ -117,10 +118,7 @@ def test_http_overwrites_body_mcp_servers(monkeypatch: pytest.MonkeyPatch) -> No
 
 @pytest.mark.unit
 def test_parse_mcp_servers_json_keeps_auth_token() -> None:
-    raw = (
-        '[{"id":"linear","url":"https://mcp.linear.app/mcp",'
-        '"auth":"oauth","token":"tok"}]'
-    )
+    raw = '[{"id":"linear","url":"https://mcp.linear.app/mcp","auth":"oauth","token":"tok"}]'
     assert parse_mcp_servers_json(raw) == [
         {
             "id": "linear",
@@ -145,6 +143,74 @@ def test_mcp_cache_key_changes_with_token_and_omits_raw_secret() -> None:
 
 
 @pytest.mark.unit
+def test_parse_mcp_servers_json_keeps_valid_auth_header() -> None:
+    raw = (
+        '[{"id":"datatap","url":"https://mcp.datatap.example/mcp",'
+        '"token":"tok","authHeader":"X-API-Key"}]'
+    )
+    assert parse_mcp_servers_json(raw) == [
+        {
+            "id": "datatap",
+            "url": "https://mcp.datatap.example/mcp",
+            "token": "tok",
+            "authHeader": "X-API-Key",
+        }
+    ]
+
+
+@pytest.mark.unit
+def test_parse_mcp_servers_json_drops_malformed_auth_header() -> None:
+    raw = (
+        '[{"id":"datatap","url":"https://mcp.datatap.example/mcp",'
+        '"token":"tok","authHeader":"bad header!"}]'
+    )
+    parsed = parse_mcp_servers_json(raw)
+    assert parsed == [{"id": "datatap", "url": "https://mcp.datatap.example/mcp", "token": "tok"}]
+    assert "authHeader" not in parsed[0]
+
+
+@pytest.mark.unit
+def test_mcp_http_headers_uses_custom_auth_header_when_present() -> None:
+    from digigraph.orchestration.mcp_client import mcp_http_headers
+
+    default = {"id": "s", "url": "https://mcp.example/mcp", "token": "tok"}
+    assert mcp_http_headers(default) == {"Authorization": "Bearer tok"}
+
+    custom = {
+        "id": "datatap",
+        "url": "https://mcp.datatap.example/mcp",
+        "token": "tenant-static-key",
+        "authHeader": "X-API-Key",
+    }
+    assert mcp_http_headers(custom) == {"X-API-Key": "tenant-static-key"}
+
+    no_token = {"id": "s", "url": "https://mcp.example/mcp", "authHeader": "X-API-Key"}
+    assert mcp_http_headers(no_token) is None
+
+    malformed_header = {
+        "id": "s",
+        "url": "https://mcp.example/mcp",
+        "token": "tok",
+        "authHeader": "bad header!",
+    }
+    assert mcp_http_headers(malformed_header) == {"Authorization": "Bearer tok"}
+
+
+@pytest.mark.unit
+def test_mcp_cache_key_changes_with_auth_header() -> None:
+    from digigraph.orchestration.mcp_client import mcp_list_cache_key
+
+    bearer = {"id": "s", "url": "https://mcp.example/mcp", "token": "tok"}
+    custom = {
+        "id": "s",
+        "url": "https://mcp.example/mcp",
+        "token": "tok",
+        "authHeader": "X-API-Key",
+    }
+    assert mcp_list_cache_key(bearer) != mcp_list_cache_key(custom)
+
+
+@pytest.mark.unit
 def test_call_prefixed_tool_passes_server_with_token() -> None:
     from digigraph.orchestration.mcp_client import call_prefixed_tool
 
@@ -153,7 +219,7 @@ def test_call_prefixed_tool_passes_server_with_token() -> None:
         "digigraph.orchestration.mcp_client._call_tool_blocking",
         return_value={"ok": True},
     ) as call:
-        call_prefixed_tool("s__echo", {"q": "hi"}, servers)
+        call_prefixed_tool("s_echo", {"q": "hi"}, servers)
     call.assert_called_once_with(servers[0], "echo", {"q": "hi"})
 
 
@@ -176,6 +242,27 @@ def test_http_mcp_servers_keep_token(monkeypatch: pytest.MonkeyPatch) -> None:
     assert copied.mcp_servers is not None
     assert copied.mcp_servers[0].token == "tok"
     assert copied.mcp_servers[0].auth == "oauth"
+
+
+@pytest.mark.unit
+def test_http_mcp_servers_keep_auth_header(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("DIGI_MCP_SERVERS", raising=False)
+    from digigraph.http_api.context import _with_digi_request_context
+
+    req = WorkflowRequest(prompt="hi")
+    request = SimpleNamespace(
+        state=SimpleNamespace(digi_bearer=None, digi_auth=None),
+        headers={
+            "X-Digi-Mcp-Servers": (
+                '[{"id":"datatap","url":"https://mcp.datatap.example/mcp",'
+                '"token":"tenant-static-key","authHeader":"X-API-Key"}]'
+            ),
+        },
+    )
+    copied = _with_digi_request_context(request, req)
+    assert copied.mcp_servers is not None
+    assert copied.mcp_servers[0].token == "tenant-static-key"
+    assert copied.mcp_servers[0].auth_header == "X-API-Key"
 
 
 @pytest.mark.unit
@@ -220,7 +307,7 @@ def test_get_tools_merges_prefixed_mcp_tools() -> None:
         {
             "type": "function",
             "function": {
-                "name": "datatap__echo",
+                "name": "datatap_echo",
                 "description": "echo",
                 "parameters": {"type": "object", "properties": {}},
             },
@@ -233,7 +320,7 @@ def test_get_tools_merges_prefixed_mcp_tools() -> None:
         index_config={},
         state={},
         extra_mcp_servers=[{"id": "datatap", "url": "https://mcp.example/mcp"}],
-        allowed_tool_names=frozenset({"datatap__echo"}),
+        allowed_tool_names=frozenset({"datatap_echo"}),
     )
     with patch(
         "digigraph.orchestration.mcp_client.openai_tools_for_servers",
@@ -245,7 +332,7 @@ def test_get_tools_merges_prefixed_mcp_tools() -> None:
         fn = t.get("function") if isinstance(t, dict) else None
         if isinstance(fn, dict) and fn.get("name"):
             names.append(fn["name"])
-    assert "datatap__echo" in names
+    assert "datatap_echo" in names
     ctx = ToolContext(
         session_id="s",
         run_data_dir=None,
@@ -253,16 +340,161 @@ def test_get_tools_merges_prefixed_mcp_tools() -> None:
         index_config={},
         state={},
         extra_mcp_servers=[{"id": "datatap", "url": "https://mcp.example/mcp"}],
-        allowed_tool_names=frozenset({"datatap__echo"}),
+        allowed_tool_names=frozenset({"datatap_echo"}),
     )
     with patch(
         "digigraph.orchestration.mcp_client.call_prefixed_tool",
         return_value={"ok": True, "text": "pong"},
     ) as call:
-        out = execute("datatap__echo", {"q": "hi"}, ctx)
+        out = execute("datatap_echo", {"q": "hi"}, ctx)
     call.assert_called_once_with(
-        "datatap__echo",
+        "datatap_echo",
         {"q": "hi"},
         [{"id": "datatap", "url": "https://mcp.example/mcp"}],
     )
     assert out == {"ok": True, "text": "pong"}
+
+
+@pytest.mark.unit
+def test_parse_mcp_servers_json_preserves_setup() -> None:
+    servers = parse_mcp_servers_json(
+        '[{"id": "digisearch", "url": "http://digisearch-mcp:8765/mcp",'
+        ' "setup": {"index_name": "occ_help"}}]'
+    )
+    assert servers[0]["setup"] == '{"index_name": "occ_help"}'
+
+
+@pytest.mark.unit
+def test_call_prefixed_tool_injects_setup() -> None:
+    servers = [
+        {
+            "id": "digisearch",
+            "url": "http://digisearch-mcp:8765/mcp",
+            "setup": '{"index_name": "occ_help"}',
+        }
+    ]
+    with patch(
+        "digigraph.orchestration.mcp_client._call_tool_blocking",
+        return_value={"ok": True},
+    ) as call:
+        out = call_prefixed_tool(
+            "digisearch_semantic",
+            {"index_name": "wrong", "text": "q"},
+            servers,
+        )
+    call.assert_called_once_with(
+        servers[0],
+        "semantic",
+        {"index_name": "occ_help", "text": "q"},
+    )
+    assert out == {"ok": True}
+
+
+@pytest.mark.unit
+def test_call_prefixed_tool_setup_path_prefix_wins_over_model_arg() -> None:
+    """Operator setup.path_prefix must override a model-supplied value (#4223 review)."""
+    servers = [
+        {
+            "id": "digivault",
+            "url": "http://digivault-mcp:8769/mcp",
+            "setup": '{"path_prefix": "clients/acme"}',
+        }
+    ]
+    with patch(
+        "digigraph.orchestration.mcp_client._call_tool_blocking",
+        return_value={"ok": True},
+    ) as call:
+        call_prefixed_tool(
+            "digivault_search_tag",
+            {"tag": "guide", "path_prefix": "clients/other"},
+            servers,
+        )
+    call.assert_called_once_with(
+        servers[0],
+        "search_tag",
+        {"tag": "guide", "path_prefix": "clients/acme"},
+    )
+
+
+@pytest.mark.unit
+def test_mcp_setup_survives_http_boundary(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Operator ``setup`` survives header → McpServerRef → state → tool call (#4246 review).
+
+    The HTTP boundary rebuilt ``McpServerRef`` field-by-field and silently
+    dropped ``setup``, so digivault's ``path_prefix`` (and digisearch's
+    ``index_name``) never reached :func:`call_prefixed_tool` in production.
+    """
+    monkeypatch.delenv("DIGI_MCP_SERVERS", raising=False)
+    from digigraph.http_api.context import _digi_fields_from_request, _with_digi_request_context
+
+    request = SimpleNamespace(
+        state=SimpleNamespace(digi_bearer=None, digi_auth=None),
+        headers={
+            "X-Digi-Mcp-Servers": (
+                '[{"id":"digivault","url":"http://digivault-mcp:8769/mcp",'
+                '"setup":{"path_prefix":"clients/acme"}}]'
+            )
+        },
+    )
+    refs = _digi_fields_from_request(request)["mcp_servers"]
+    assert refs
+    assert refs[0].setup == {"path_prefix": "clients/acme"}
+
+    copied = _with_digi_request_context(request, WorkflowRequest(prompt="hi"))
+    assert copied.mcp_servers is not None
+    assert copied.mcp_servers[0].setup == {"path_prefix": "clients/acme"}
+
+    # workflow.py projects refs with model_dump(exclude_none=True, by_alias=True)
+    # into graph state; research.py hands that list to execute → call_prefixed_tool.
+    state_servers = [r.model_dump(exclude_none=True, by_alias=True) for r in copied.mcp_servers]
+    with patch(
+        "digigraph.orchestration.mcp_client._call_tool_blocking",
+        return_value={"ok": True},
+    ) as call:
+        call_prefixed_tool(
+            "digivault_search_tag",
+            {"tag": "guide", "path_prefix": "clients/other"},
+            state_servers,
+        )
+    call.assert_called_once_with(
+        state_servers[0],
+        "search_tag",
+        {"tag": "guide", "path_prefix": "clients/acme"},
+    )
+
+
+@pytest.mark.unit
+def test_mcp_web_search_denied_without_opt_in() -> None:
+    ctx = ToolContext(
+        session_id="s",
+        run_data_dir=None,
+        index_name="default",
+        index_config={},
+        state={},
+        extra_mcp_servers=[{"id": "digisearch", "url": "https://mcp.example/mcp"}],
+        allowed_tool_names=frozenset({"digisearch_web_search"}),
+    )
+    out = execute("digisearch_web_search", {"query": "x"}, ctx)
+    assert isinstance(out, dict)
+    assert out.get("error") == "tool_not_allowed"
+    assert out.get("tool") == "digisearch_web_search"
+
+
+@pytest.mark.unit
+def test_mcp_web_search_allowed_with_opt_in() -> None:
+    ctx = ToolContext(
+        session_id="s",
+        run_data_dir=None,
+        index_name="default",
+        index_config={},
+        state={"enable_web_search": True},
+        extra_mcp_servers=[{"id": "digisearch", "url": "https://mcp.example/mcp"}],
+        allowed_tool_names=frozenset({"digisearch_web_search"}),
+    )
+    with patch(
+        "digigraph.orchestration.mcp_client.call_prefixed_tool",
+        return_value={"ok": True},
+    ) as call:
+        out = execute("digisearch_web_search", {"query": "x"}, ctx)
+    call.assert_called_once()
+    assert out == {"ok": True}

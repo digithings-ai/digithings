@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import logging
 import uuid
 from queue import Full, Queue
@@ -11,6 +12,7 @@ from typing import Any
 from digigraph.audit import audit_log as dg_audit_log
 from digigraph.boundaries import GRAPH_RUNTIME_ERRORS, PROJECT_CONFIG_ERRORS
 from digigraph.graph import build_workflow_graph
+from digigraph.llm_errors import EMPTY_RESULT
 from digigraph.models import WorkflowRequest, WorkflowResult
 from digigraph.project_config import DigiProjectConfig
 from digigraph.thread_scope import workflow_thread_id
@@ -27,6 +29,292 @@ __all__ = [
 ]
 
 logger = logging.getLogger(__name__)
+
+_RETRIEVAL_TOOL_NAMES = frozenset(
+    {
+        "digisearch",
+        "digisearch_fetch_all",
+        "digisearch_research_delegate",
+        "digivault_search_notes",
+        "digivault_get_note",
+        "web_search",
+    }
+)
+
+# digiquant's BacktestResult.status vocabulary: "ok" and "partial" are completed
+# backtests (partial = valid PnL, an optional metric missing), "error" is a failure.
+_SUCCESSFUL_BACKTEST_STATUSES = frozenset({"ok", "partial"})
+
+# Honest non-success for a run that produced neither assistant text nor a backtest
+# result. Never replace this with a synthetic "Research completed" message.
+_EMPTY_RUN_MESSAGE = "Workflow produced no result: no assistant response and no backtest result."
+
+
+def _backtest_success(backtest: dict[str, Any]) -> bool:
+    """Honest success for a digiquant ``BacktestResult`` (#3877).
+
+    ``partial`` is a *completed* backtest whose optional metrics are incomplete —
+    success-with-warnings, never a failure. ``error`` is always a failure. Prefer
+    digiquant's derived ``success`` boolean (``status != "error"``) when present;
+    fall back to the status vocabulary for older payloads.
+    """
+    status = str(backtest.get("status") or "unknown").strip().lower()
+    derived = backtest.get("success")
+    if isinstance(derived, bool):
+        return derived and status != "error"
+    return status in _SUCCESSFUL_BACKTEST_STATUSES
+
+
+def _backtest_message(backtest: dict[str, Any]) -> str:
+    """Summarise a backtest without claiming a degraded/failed run fully completed."""
+    status = str(backtest.get("status") or "unknown").strip().lower()
+    summary = (
+        f"{backtest.get('strategy_name', '')} on {backtest.get('symbols', [])}. "
+        f"Total return: {backtest.get('total_return_pct', 0):.2f}%, "
+        f"trades: {backtest.get('num_trades', 0)}."
+    )
+    detail = str(backtest.get("message") or "").strip()
+    if status == "partial":
+        msg = f"Backtest completed (partial): {summary}"
+        if detail:
+            msg += f" Warning: {detail}"
+    elif status == "error":
+        msg = f"Backtest failed: {summary}"
+        if detail:
+            msg += f" {detail}"
+    elif status == "ok":
+        msg = f"Backtest completed: {summary}"
+        if detail:
+            msg += f" {detail}"
+    else:
+        msg = f"Backtest status {status!r}: {summary}"
+        if detail:
+            msg += f" {detail}"
+    return msg
+
+
+def _clip_tool_arguments(args: dict[str, Any]) -> dict[str, Any]:
+    """Size-capped MCP args for the BFF tool-row UI (never a raw prompt dump)."""
+    clipped: dict[str, Any] = {}
+    for i, (key, val) in enumerate(args.items()):
+        if i >= 16 or not isinstance(key, str) or not key.strip():
+            continue
+        if isinstance(val, str):
+            clipped[key] = val[:300]
+        elif isinstance(val, bool):
+            clipped[key] = val
+        elif isinstance(val, int | float):
+            clipped[key] = val
+        elif isinstance(val, list):
+            items = [item[:300] for item in val if isinstance(item, str) and item.strip()][:20]
+            if items:
+                clipped[key] = items
+    return clipped
+
+
+_MAX_TOOL_RESULT_CHARS = 12_000
+
+
+def _clip_scalar(val: Any) -> Any | None:
+    if isinstance(val, str):
+        stripped = val.strip()
+        return stripped[:2000] or None
+    if isinstance(val, bool):
+        return val
+    if isinstance(val, int | float):
+        return val if abs(val) != float("inf") and val == val else None
+    return None
+
+
+def _clip_tool_result(result: Any, _depth: int = 0) -> Any | None:
+    """Size-capped tool result for the generic BFF tool-row UI.
+
+    Generic MCP tools (unlike retrieval tools) had no completion trace, so the
+    BFF left their rows "running" until end-of-stream with no result to show.
+    Scalars pass (capped); lists/dicts recurse two levels with item/key caps —
+    enough for typical MCP payloads (list of flat records). Anything deeper
+    (nested blobs, None) is dropped so output stays JSON-safe.
+    """
+    if _depth > 2:
+        return _clip_scalar(result)
+    if isinstance(result, dict):
+        out: dict[str, Any] = {}
+        for i, (key, val) in enumerate(result.items()):
+            if i >= 32 or not isinstance(key, str) or not key.strip():
+                continue
+            if key == "rag_sources":
+                continue
+            clipped = _clip_tool_result(val, _depth + 1)
+            if clipped is None:
+                continue
+            if isinstance(clipped, str) and not clipped.strip():
+                continue
+            out[key.strip()] = clipped
+        return out or None
+    if isinstance(result, list):
+        out_list: list[Any] = []
+        for item in result[:50]:
+            clipped = _clip_tool_result(item, _depth + 1)
+            if clipped is None:
+                continue
+            if isinstance(clipped, str) and not clipped.strip():
+                continue
+            out_list.append(clipped)
+        return out_list or None
+    return _clip_scalar(result)
+
+
+# §7 attribution keys appended to digifetch_* payloads
+# (digiquant/src/digiquant/data/gloomberb/agent_tools.py::gloomberb_envelope_json).
+# Hoisted out of the size-capped result so the digichat attribution line (#4130)
+# still renders when the payload is clipped (#4131).
+_ATTRIBUTION_KEYS = ("attribution", "delay_notice", "source_url")
+_MAX_ATTRIBUTION_WALK_DEPTH = 3
+_MAX_ATTRIBUTION_WALK_ITEMS = 64
+
+
+def _attribution_from_mapping(value: dict[str, Any]) -> dict[str, str]:
+    out: dict[str, str] = {}
+    for key in _ATTRIBUTION_KEYS:
+        item = value.get(key)
+        if isinstance(item, str) and item.strip():
+            out[key] = item
+    return out
+
+
+def _extract_attribution(value: Any, _depth: int = 0) -> dict[str, str]:
+    """Find the §7 attribution block on a raw tool result (#4131).
+
+    Handles a structured envelope and the MCP client's opaque wrapper
+    (``orchestration/mcp_client.py``: ``{"ok": true, "text": "<json>"}``): the
+    envelope appends the block LAST (``gloomberb_envelope_json``), so the
+    wrapper's 2,000-char scalar cap cuts it before any reader sees a key.
+    Bounded walk; malformed JSON is skipped, never raised.
+    """
+    if _depth > _MAX_ATTRIBUTION_WALK_DEPTH:
+        return {}
+    partial: dict[str, str] = {}
+    if isinstance(value, dict):
+        found = _attribution_from_mapping(value)
+        if "attribution" in found:
+            return found
+        # A partial hoist (e.g. only ``source_url``) must not shadow a richer
+        # nested block (#4131 review): keep walking, remember the partial as a
+        # fallback, and prefer the first match carrying the canonical key.
+        partial = found
+        items = list(value.values())
+    elif isinstance(value, list):
+        items = list(value)
+    elif isinstance(value, str):
+        if '"attribution"' not in value:
+            return {}
+        try:
+            parsed = json.loads(value)
+        except (TypeError, ValueError):
+            return {}
+        return _extract_attribution(parsed, _depth + 1)
+    else:
+        return {}
+    for item in items[:_MAX_ATTRIBUTION_WALK_ITEMS]:
+        found = _extract_attribution(item, _depth + 1)
+        if "attribution" in found:
+            return found
+        if found and not partial:
+            partial = found
+    return partial
+
+
+def _attribution_variants(attribution: dict[str, str]) -> list[dict[str, str]]:
+    """The §7 block, richest first, for fitting inside the record cap.
+
+    ``source_url`` is the optional deep link and usually the largest key, so it
+    is dropped before ``delay_notice``: #4131 exists to keep the canonical
+    attribution string and the delay notice visible, and both are kept while
+    the cap allows. An empty block is always the last variant.
+    """
+    if not attribution:
+        return [{}]
+    variants = [dict(attribution)]
+    without_url = {k: v for k, v in attribution.items() if k != "source_url"}
+    if without_url != attribution:
+        variants.append(without_url)
+    without_notice = {k: v for k, v in without_url.items() if k != "delay_notice"}
+    if without_notice not in variants:
+        variants.append(without_notice)
+    return variants
+
+
+def _fits_tool_result_cap(record: Any) -> bool:
+    try:
+        return len(json.dumps(record)) <= _MAX_TOOL_RESULT_CHARS
+    except (TypeError, ValueError):
+        return False
+
+
+def _truncated_tool_result(serialized: str, block: dict[str, str]) -> dict[str, Any] | None:
+    """A ``{block…, truncated, preview}`` record within the cap, or ``None``.
+
+    The slice is JSON text: its quote characters escape again when the record
+    is re-serialized, so measure the record, not the slice, and shrink until it
+    fits. ``None`` means even an empty preview overflows with this block.
+    """
+    budget = _MAX_TOOL_RESULT_CHARS - 100 - (len(json.dumps(block)) if block else 0)
+    preview = serialized[: max(budget, 0)]
+    while True:
+        record = {**block, "truncated": True, "preview": preview + "… [truncated]"}
+        if _fits_tool_result_cap(record):
+            return record
+        if not preview:
+            return None
+        preview = preview[:-64]
+
+
+def _render_clipped_tool_result(result_data: dict[str, Any]) -> Any | None:
+    """Render a generic tool result for the trace, preserving §7 provenance.
+
+    The §7 keys are hoisted from the raw result before the clip and attached
+    ahead of it: the digichat attribution line (#4130) reads them off the
+    emitted result (``cloudflare/digiweb/web/src/lib/gloomberb.ts``), and the
+    scalar cap leaves no key structure to read once a string is cut. The
+    emitted record is always within ``_MAX_TOOL_RESULT_CHARS`` — including the
+    already-≤-cap payload whose hoisted block alone would push it over — so
+    digichat's sanitizer never replaces it wholesale. When the full block does
+    not fit, ``source_url`` is dropped first (see ``_attribution_variants``),
+    then ``delay_notice``; a record that still overflows is emitted with
+    ``truncated``/``preview`` rather than silently exceeding the cap.
+    """
+    attribution = _extract_attribution(result_data)
+    clipped_result = _clip_tool_result(result_data)
+    if clipped_result is None:
+        return None
+    variants = _attribution_variants(attribution)
+    try:
+        serialized = json.dumps(clipped_result)
+    except (TypeError, ValueError):
+        rendered: Any = {"preview": str(clipped_result)[:2000]}
+        for block in variants:
+            candidate = {**block, **rendered}
+            if _fits_tool_result_cap(candidate):
+                return candidate
+        return rendered
+
+    if len(serialized) <= _MAX_TOOL_RESULT_CHARS:
+        # The payload fits as-is; keep the richest §7 subset that fits with it.
+        if isinstance(clipped_result, dict) and attribution:
+            for block in variants:
+                # Validated string keys win collisions: a non-string top-level
+                # key in the payload must not shadow the hoisted block (#4131).
+                candidate = {**clipped_result, **block}
+                if _fits_tool_result_cap(candidate):
+                    return candidate
+        return clipped_result
+
+    for block in variants:
+        record = _truncated_tool_result(serialized, block)
+        if record is not None:
+            return record
+    # No §7 block fits even with an empty preview; drop it and still stay capped.
+    return {"truncated": True, "preview": "… [truncated]"}
 
 
 def _audit_digi_kwargs(req: WorkflowRequest) -> dict[str, str]:
@@ -90,7 +378,7 @@ def _initial_graph_state(req: WorkflowRequest, workflow_id: str) -> dict[str, An
     initial["enable_web_search"] = bool(req.enable_web_search)
     # Unconditional — empty list must clear a prior tenant's MCP URLs.
     initial["mcp_servers"] = [
-        s.model_dump(exclude_none=True)
+        s.model_dump(exclude_none=True, by_alias=True)
         if hasattr(s, "model_dump")
         else {"id": s["id"], "url": s["url"]}
         for s in (req.mcp_servers or [])
@@ -214,12 +502,9 @@ def _workflow_result_from_state(final: dict) -> WorkflowResult:
     cfg = DigiProjectConfig.load()
     has_backtest = "backtest" in cfg.get_enabled_agents()
     if has_backtest and backtest:
-        status = backtest.get("status", "unknown")
-        success = status == "ok"
-        msg = (
-            f"Backtest completed: {backtest.get('strategy_name', '')} on {backtest.get('symbols', [])}. "
-            f"Total return: {backtest.get('total_return_pct', 0):.2f}%, trades: {backtest.get('num_trades', 0)}."
-        )
+        # Honest mapping: partial is completed-with-warnings, error is a failure.
+        success = _backtest_success(backtest)
+        msg = _backtest_message(backtest)
         if opt_res:
             msg += (
                 f" Optimization: best_params={opt_res.get('best_params', {})}, "
@@ -245,14 +530,28 @@ def _workflow_result_from_state(final: dict) -> WorkflowResult:
         )
     research_response = final.get("research_response")
     if research_response:
-        msg = research_response
-    else:
-        strategy = final.get("strategy_name")
-        symbols = final.get("symbols", [])
-        msg = f"Research completed: strategy={strategy}, symbols={symbols}. No backtest (digiquant not in project)."
+        return WorkflowResult(
+            success=True,
+            message=research_response,
+            backtest_result=None,
+            optimize_result=opt_res if isinstance(opt_res, dict) else None,
+            optimize_error=str(opt_err) if opt_err else None,
+            research_brief=final.get("research_brief")
+            if isinstance(final.get("research_brief"), dict)
+            else None,
+            rag_sources=final.get("rag_sources")
+            if isinstance(final.get("rag_sources"), list)
+            else None,
+            profiling_questions=final.get("profiling_questions")
+            if isinstance(final.get("profiling_questions"), list)
+            else None,
+        )
+    # Neither assistant text nor a backtest result: an empty run. Report the
+    # honest non-success instead of fabricating "Research completed: …".
     return WorkflowResult(
-        success=True,
-        message=msg,
+        success=False,
+        message=_EMPTY_RUN_MESSAGE,
+        error_code=EMPTY_RESULT,
         backtest_result=None,
         optimize_result=opt_res if isinstance(opt_res, dict) else None,
         optimize_error=str(opt_err) if opt_err else None,
@@ -348,6 +647,34 @@ def _emit_event(
             continue
 
 
+def _tool_result_error(data: dict[str, Any]) -> str | None:
+    """Surface a failed vault/search invoke instead of a fake zero-hit retrieve."""
+    if data.get("ok") is False:
+        err = data.get("error")
+        if isinstance(err, str) and err.strip():
+            return err.strip()
+        content = data.get("content")
+        if isinstance(content, str) and content.strip():
+            return content.strip()[:500]
+        return "tool failed"
+    content = data.get("content")
+    if not isinstance(content, str):
+        return None
+    text = content.strip()
+    if not text.startswith("{"):
+        return None
+    try:
+        parsed = json.loads(text)
+    except json.JSONDecodeError:
+        return None
+    if isinstance(parsed, dict) and parsed.get("ok") is False:
+        err = parsed.get("error")
+        if isinstance(err, str) and err.strip():
+            return err.strip()
+        return "tool failed"
+    return None
+
+
 def run_digigraph_workflow_streaming(
     req: WorkflowRequest,
     event_queue: Queue,
@@ -366,6 +693,7 @@ def run_digigraph_workflow_streaming(
 
     workflow_id = str(uuid.uuid4())
     content_streamed = False
+    pending_tool_args: dict[str, list[dict[str, Any]]] = {}
     trace_ctx = {
         "workflow_id": workflow_id,
         "request_id": req.request_id,
@@ -402,6 +730,11 @@ def run_digigraph_workflow_streaming(
                 }
                 if tool_query:
                     tool_payload["query"] = tool_query
+                if args:
+                    clipped = _clip_tool_arguments(args)
+                    if clipped:
+                        tool_payload["arguments"] = clipped
+                        pending_tool_args.setdefault(name.strip(), []).append(clipped)
                 emit(
                     (
                         "trace",
@@ -463,38 +796,79 @@ def run_digigraph_workflow_streaming(
                     ).model_dump(),
                 )
             )
-        if event_type == "tool_result" and isinstance(data, dict) and "rag_sources" in data:
+        if event_type == "tool_result" and isinstance(data, dict):
             # Fire on any retrieval tool's result, hit or miss. "rag_sources" is a key
             # only retrieval handlers set on their return dict (digisearch,
             # digisearch_fetch_all, digivault_search_notes, digivault_get_note,
             # digisearch_research_delegate) — present even when empty on a zero-hit
-            # search. Non-retrieval tools (visualization_agent, digistore_list, todo,
-            # ...) never set this key, so they still never produce a trace here.
-            # Gating on truthiness (as before) meant a zero-hit search never got a
-            # trace event at all: "searched, found nothing" and "never searched"
-            # looked identical downstream. hit_count/query (set by research.py's
-            # execute_search wrapper) are forwarded when present so the browser can
-            # tell the two apart.
-            rag_payload: dict[str, Any] = {
-                "sources": data["rag_sources"],
-                "tool": data.get("name", "digisearch"),
-            }
-            if "query" in data:
-                rag_payload["query"] = data["query"]
-            if "hit_count" in data:
-                rag_payload["hit_count"] = data["hit_count"]
-            emit(
-                (
-                    "trace",
-                    TraceEventV1(
-                        type="rag_sources",
-                        workflow_id=trace_ctx["workflow_id"],
-                        request_id=trace_ctx["request_id"],
-                        session_id=trace_ctx["session_id"],
-                        payload=rag_payload,
-                    ).model_dump(),
+            # search. String error returns omit the key; still emit a completion
+            # trace so the BFF does not leave Allow/Deny on the started row.
+            tool_name = data.get("name")
+            name = tool_name.strip() if isinstance(tool_name, str) and tool_name.strip() else ""
+            has_sources = "rag_sources" in data
+            if has_sources or name in _RETRIEVAL_TOOL_NAMES:
+                sources = data.get("rag_sources") if has_sources else []
+                if not isinstance(sources, list):
+                    sources = []
+                rag_payload: dict[str, Any] = {
+                    "sources": sources,
+                    "tool": name or data.get("name", "digisearch"),
+                }
+                queued = pending_tool_args.get(name) if name else None
+                if queued:
+                    rag_payload["arguments"] = queued.pop(0)
+                if "query" in data:
+                    rag_payload["query"] = data["query"]
+                if "hit_count" in data:
+                    rag_payload["hit_count"] = data["hit_count"]
+                err = _tool_result_error(data)
+                if err:
+                    rag_payload["error"] = err[:500]
+                    rag_payload["status"] = "failed"
+                emit(
+                    (
+                        "trace",
+                        TraceEventV1(
+                            type="rag_sources",
+                            workflow_id=trace_ctx["workflow_id"],
+                            request_id=trace_ctx["request_id"],
+                            session_id=trace_ctx["session_id"],
+                            payload=rag_payload,
+                        ).model_dump(),
+                    )
                 )
-            )
+            elif name:
+                # Generic (non-retrieval) tool completion — e.g. MCP tools.
+                # Previously only retrieval tools emitted a completion trace,
+                # so the BFF left every other tool row "running" until
+                # end-of-stream with an empty output. Emit a clipped result
+                # so the row completes the moment the tool returns.
+                failed = bool(data.get("error")) or data.get("status") == "failed"
+                generic_payload: dict[str, Any] = {
+                    "tool": name,
+                    "status": "failed" if failed else "completed",
+                }
+                queued = pending_tool_args.get(name)
+                if queued:
+                    generic_payload["arguments"] = queued.pop(0)
+                if "query" in data and isinstance(data["query"], str) and data["query"].strip():
+                    generic_payload["query"] = data["query"].strip()
+                result_data = {k: v for k, v in data.items() if k != "name"}
+                rendered = _render_clipped_tool_result(result_data)
+                if rendered is not None:
+                    generic_payload["result"] = rendered
+                emit(
+                    (
+                        "trace",
+                        TraceEventV1(
+                            type="tool_result",
+                            workflow_id=trace_ctx["workflow_id"],
+                            request_id=trace_ctx["request_id"],
+                            session_id=trace_ctx["session_id"],
+                            payload=generic_payload,
+                        ).model_dump(),
+                    )
+                )
         emit((event_type, data))
 
     dg_audit_log(
@@ -572,7 +946,14 @@ def run_digigraph_workflow_streaming(
             },
             **_audit_digi_kwargs(req),
         )
-        emit(("content", f"Error: {e!s}"))
+        from digigraph.llm_errors import LLM_ERROR, sanitize_user_facing_error
+
+        message = sanitize_user_facing_error(str(e), limit=280) or "The workflow failed."
+        detail = sanitize_user_facing_error(str(e))
+        payload: dict[str, str] = {"code": LLM_ERROR, "message": message}
+        if detail and detail != message:
+            payload["detail"] = detail
+        emit(("error", payload))
         emit(("done", None))
         return
 
@@ -584,15 +965,20 @@ def run_digigraph_workflow_streaming(
     )
     error = final.get("error")
     if error:
-        err_code = final.get("error_code")
-        if err_code:
-            emit(
-                (
-                    "error",
-                    {"code": str(err_code), "message": str(error)},
-                )
-            )
-        emit(("content", f"Error: {error}"))
+        from digigraph.llm_errors import LLM_ERROR, sanitize_user_facing_error
+
+        err_code = str(final.get("error_code") or LLM_ERROR)
+        message = sanitize_user_facing_error(str(error), limit=280) or "The request failed."
+        payload: dict[str, str] = {"code": err_code, "message": message}
+        detail_raw = final.get("error_detail")
+        detail = sanitize_user_facing_error(str(detail_raw)) if detail_raw else None
+        if not detail:
+            extra = sanitize_user_facing_error(str(error))
+            if extra and extra != message:
+                detail = extra
+        if detail and detail != message:
+            payload["detail"] = detail
+        emit(("error", payload))
         emit(("done", None))
         return
 
@@ -600,18 +986,13 @@ def run_digigraph_workflow_streaming(
     if research_response and not content_streamed:
         emit(("content", str(research_response)))
     elif not research_response and not content_streamed:
-        strategy = final.get("strategy_name")
-        symbols = final.get("symbols", [])
-        fallback = (
-            f"Research completed: strategy={strategy}, symbols={symbols}. "
-            "No assistant text was streamed; check backtest or tool results."
-        )
         backtest = final.get("backtest_result")
         if backtest:
-            fallback = (
-                f"Backtest completed: {backtest.get('strategy_name', '')} "
-                f"on {backtest.get('symbols', [])}. "
-                f"Return: {backtest.get('total_return_pct', 0):.2f}%."
-            )
-        emit(("content", fallback))
+            # A real backtest result is a genuine result: summarise it honestly
+            # (partial/error are surfaced as such, never as "completed" success).
+            emit(("content", _backtest_message(backtest)))
+        else:
+            # No assistant text and no backtest result: an empty run. Emit the
+            # honest error channel instead of fabricating a completion message.
+            emit(("error", {"code": EMPTY_RESULT, "message": _EMPTY_RUN_MESSAGE}))
     emit(("done", None))

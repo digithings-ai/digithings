@@ -1,11 +1,11 @@
 """Product `chrome.skin: digichat` @imports gallery chatbot.css outside web/.
 
-The Cloudflare Container / GHCR image COPY `frontend/digiweb/web` and
-`frontend/digiweb/design` only. Without the gallery sheet in the build
+The Cloudflare Container / GHCR image COPY `cloudflare/digiweb/web` and
+`cloudflare/digiweb/design` only. Without the gallery sheet in the build
 context, `next build` fails (deploy after #3715, 2026-09-08):
 
     Can't resolve '../../../reference/app/(chatbot)/chatbot/chatbot.css'
-    in '/app/frontend/digiweb/web/src/styles'
+    in '/app/cloudflare/digiweb/web/src/styles'
 """
 
 from __future__ import annotations
@@ -17,11 +17,11 @@ import pytest
 pytestmark = pytest.mark.unit
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-GALLERY_CSS = "frontend/digiweb/reference/app/(chatbot)/chatbot/chatbot.css"
+GALLERY_CSS = "cloudflare/digiweb/reference/app/(chatbot)/chatbot/chatbot.css"
 PRODUCT_IMPORT = "../../../reference/app/(chatbot)/chatbot/chatbot.css"
 DOCKERFILES = (
     "Dockerfile.digichat-cloudflare",
-    "frontend/digichat/Dockerfile",
+    "cloudflare/digichat/Dockerfile",
 )
 
 
@@ -30,7 +30,7 @@ def test_gallery_chatbot_css_exists() -> None:
 
 
 def test_product_skin_imports_gallery_sheet_not_a_fork() -> None:
-    text = (REPO_ROOT / "frontend/digiweb/web/src/styles/chatbot.css").read_text(
+    text = (REPO_ROOT / "cloudflare/digiweb/web/src/styles/chatbot.css").read_text(
         encoding="utf-8"
     )
     assert PRODUCT_IMPORT in text

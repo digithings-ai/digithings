@@ -1,4 +1,4 @@
-"""ATLAS_MAX_ANALYSTS is actually enforced, and thesis vehicles are prioritised (#1767).
+"""DIGIQUANT_MAX_ANALYSTS is actually enforced, and thesis vehicles are prioritised (#1767).
 
 Before this fix ``compute_focus_roster`` passed ``active_held ∪ every thesis-map ticker``
 as ``held``, so on any day the H3 vehicle map was populated the protected set exceeded the
@@ -44,7 +44,7 @@ class TestCapIsEnforced:
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         """8 held + 40 thesis vehicles under a cap of 30 must yield 30, not 48."""
-        monkeypatch.setenv("ATLAS_MAX_ANALYSTS", "30")
+        monkeypatch.setenv("DIGIQUANT_MAX_ANALYSTS", "30")
         monkeypatch.setenv("PORTFOLIO_HELD_GATE", "off")
         watchlist, held, mappings = _prod_shape()
 
@@ -56,7 +56,7 @@ class TestCapIsEnforced:
         )
 
         assert len(roster) == 30, (
-            f"cap bypassed: {len(roster)} analysts dispatched against ATLAS_MAX_ANALYSTS=30"
+            f"cap bypassed: {len(roster)} analysts dispatched against DIGIQUANT_MAX_ANALYSTS=30"
         )
         # Every held name still survives — the cap must not be paid for out of #936.
         assert held.issubset({e.ticker for e in roster})
@@ -69,7 +69,7 @@ class TestCapIsEnforced:
         Held = 29 under a cap of 30 with an explore floor of 8: the pre-#1767 branch
         computed ``budget = max(30 - 29, 8) = 8`` and returned 37.
         """
-        monkeypatch.setenv("ATLAS_MAX_ANALYSTS", "30")
+        monkeypatch.setenv("DIGIQUANT_MAX_ANALYSTS", "30")
         held = [f"H{i:02d}" for i in range(29)]
         tickers = held + [f"N{i:02d}" for i in range(20)]
 
@@ -81,7 +81,7 @@ class TestCapIsEnforced:
 
     def test_explore_floor_is_clamped_not_expanding(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """A dispersion-regime explore floor above the budget must not widen the cap."""
-        monkeypatch.setenv("ATLAS_MAX_ANALYSTS", "4")
+        monkeypatch.setenv("DIGIQUANT_MAX_ANALYSTS", "4")
         kept = capped_tickers([f"T{i}" for i in range(10)], held=(), min_new=8)
         assert len(kept) == 4
 
@@ -92,19 +92,19 @@ class TestCapIsEnforced:
 
         Pre-#1767 this returned 4 (3 held + 1 reserved new candidate) under a cap of 3.
         """
-        monkeypatch.setenv("ATLAS_MAX_ANALYSTS", "3")
+        monkeypatch.setenv("DIGIQUANT_MAX_ANALYSTS", "3")
         held = {"SPY", "IJR", "XLP"}
         kept = capped_tickers(["SPY", "IJR", "XLP", "NEW1", "NEW2"], held=held, min_new=1)
         assert kept == ["SPY", "IJR", "XLP"]
 
     def test_uncapped_and_under_cap_paths_untouched(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.setenv("ATLAS_MAX_ANALYSTS", "0")
+        monkeypatch.setenv("DIGIQUANT_MAX_ANALYSTS", "0")
         assert capped_tickers(["A", "B", "C"], held={"A"}) == ["A", "B", "C"]
-        monkeypatch.setenv("ATLAS_MAX_ANALYSTS", "5")
+        monkeypatch.setenv("DIGIQUANT_MAX_ANALYSTS", "5")
         assert capped_tickers(["A", "B", "C"], held={"A"}) == ["A", "B", "C"]
 
     def test_malformed_env_is_treated_as_no_cap(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.setenv("ATLAS_MAX_ANALYSTS", "thirty")
+        monkeypatch.setenv("DIGIQUANT_MAX_ANALYSTS", "thirty")
         assert configured_max_analysts() == 0
         assert capped_tickers(["A", "B", "C"], held=()) == ["A", "B", "C"]
 
@@ -136,7 +136,7 @@ class TestThesisPrioritisation:
 
         Flat truncation would spend all three on T0 and leave two theses uncovered.
         """
-        monkeypatch.setenv("ATLAS_MAX_ANALYSTS", "3")
+        monkeypatch.setenv("DIGIQUANT_MAX_ANALYSTS", "3")
         mappings = [
             (f"T{thesis}", f"V{thesis}{rank}", "") for thesis in range(3) for rank in range(3)
         ]
@@ -156,7 +156,7 @@ class TestThesisPrioritisation:
     def test_thesis_vehicles_outrank_technical_picks_within_the_budget(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        monkeypatch.setenv("ATLAS_MAX_ANALYSTS", "2")
+        monkeypatch.setenv("DIGIQUANT_MAX_ANALYSTS", "2")
         roster = compute_focus_roster(
             watchlist=["TECH1", "TECH2", "GLD", "TLT"],
             held=set(),
@@ -169,7 +169,7 @@ class TestThesisPrioritisation:
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         """Priority decides *which* candidates survive, never the dispatch order."""
-        monkeypatch.setenv("ATLAS_MAX_ANALYSTS", "3")
+        monkeypatch.setenv("DIGIQUANT_MAX_ANALYSTS", "3")
         watchlist = ["AAA", "GLD", "BBB", "TLT", "CCC"]
         roster = compute_focus_roster(
             watchlist=watchlist,
@@ -189,7 +189,7 @@ class TestCapDropsAreVisible:
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         """A vehicle the cap dropped must not be labelled "not thesis-mapped"."""
-        monkeypatch.setenv("ATLAS_MAX_ANALYSTS", "1")
+        monkeypatch.setenv("DIGIQUANT_MAX_ANALYSTS", "1")
         mappings = [("T1", "GLD", ""), ("T2", "TLT", "")]
         watchlist = ["GLD", "TLT"]
 
@@ -262,7 +262,7 @@ class TestRosterBreakdownContributor:
     ) -> None:
         from digiquant.portfolio.roster_diagnostics import roster_breakdown
 
-        monkeypatch.setenv("ATLAS_MAX_ANALYSTS", "30")
+        monkeypatch.setenv("DIGIQUANT_MAX_ANALYSTS", "30")
         payload = roster_breakdown(self._state(5))["roster"]
         assert payload == {
             "width": 5,
@@ -276,7 +276,7 @@ class TestRosterBreakdownContributor:
     def test_breakdown_flags_a_breach(self, monkeypatch: pytest.MonkeyPatch) -> None:
         from digiquant.portfolio.roster_diagnostics import roster_breakdown
 
-        monkeypatch.setenv("ATLAS_MAX_ANALYSTS", "3")
+        monkeypatch.setenv("DIGIQUANT_MAX_ANALYSTS", "3")
         assert roster_breakdown(self._state(5))["roster"]["over_cap"] is True
 
     def test_breakdown_never_flags_a_breach_without_a_cap(
@@ -284,7 +284,7 @@ class TestRosterBreakdownContributor:
     ) -> None:
         from digiquant.portfolio.roster_diagnostics import roster_breakdown
 
-        monkeypatch.setenv("ATLAS_MAX_ANALYSTS", "0")
+        monkeypatch.setenv("DIGIQUANT_MAX_ANALYSTS", "0")
         payload = roster_breakdown(self._state(5))["roster"]
         assert payload["max_analysts"] == 0
         assert payload["over_cap"] is False

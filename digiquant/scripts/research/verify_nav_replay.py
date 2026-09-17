@@ -1,7 +1,7 @@
 """Verify recorded house NAV against an independent Nautilus schedule replay.
 
-Rebuilds the house book from ``positions`` book weights + ``price_history``
-OHLCV (real volumes), runs the hardened schedule replay
+Rebuilds the house book from ``positions`` book weights + sealed R2 market
+OHLCV (real volumes, #4053), runs the hardened schedule replay
 (``digiquant.dashboard.replay``, schema 2.0, causal-fill convention), and
 compares the engine NAV path against recorded ``nav_history``.
 
@@ -22,7 +22,9 @@ Requires ``nautilus_trader`` (``digiquant[nautilus]``) and Supabase env —
 (see ``digiquant/src/digiquant/research/config/supabase.env``).
 
 Read-only unless ``--write``: SELECTs Group A tables pinned to the house
-workspace. ``--write`` upserts ``nav_history`` (house-pinned) only.
+workspace. ``--write`` upserts ``nav_history`` (house-pinned) only. All
+fetches use cursor pagination over a deterministic ``(date, ticker)`` order
+(#3803) and refuse to verify or write from a truncated/unstable page.
 """
 
 from __future__ import annotations
@@ -33,6 +35,13 @@ import sys
 from datetime import date, datetime, timezone
 from decimal import Decimal
 from pathlib import Path
+from typing import TYPE_CHECKING, Any  # score:allow untyped any — duck-typed Supabase client
+
+if TYPE_CHECKING:  # pragma: no cover - annotation-only import
+    from digiquant.research.supabase_io import SupabaseClient
+
+_MAX_ROWS = 1000  # PostgREST [api].max_rows (digiquant/supabase/config.toml); page cap.
+_MAX_PAGES = 10_000  # runaway-fetch guard: ~10M rows, far beyond any book table.
 
 FAIL_TOL_BP = 25.0  # breach: engine vs recorded daily return differs by >25bp.
 # Rationale: the restatement replay matched to <1e-6, but this guard compares
@@ -41,6 +50,16 @@ FAIL_TOL_BP = 25.0  # breach: engine vs recorded daily return differs by >25bp.
 # real methodology breaks (e.g. stale-book scale errors), not dust.
 WARN_TOL_BP = 1.0  # warning band: integer-lot quantization noise lives here
 SCALED_NOTIONAL_USD = 100_000_000.0  # scaled cash so integer lots ≈ arithmetic chain
+# Deploy at most this share of NAV per book date. Integer-lot sizing plus split
+# fills can execute a few ticks past the sizing close; on a fully-invested book
+# that drift overdraws cash and halts the whole replay (#4005). The reserve is
+# ~$250k at the scaled notional and costs a fraction of a basis point per day.
+FILL_DRIFT_CAP = Decimal("0.9975")
+
+
+def _rows_from_inception(rows: list[dict], inception_date: str) -> list[dict]:
+    """Drop rows dated before ``inception_date`` (pre-cutover books, #3695/#4005)."""
+    return [r for r in rows if str(r.get("date") or "") >= inception_date]
 
 
 def _load_env() -> None:
@@ -76,25 +95,158 @@ def _get_client():
     return create_client(url, key)
 
 
+def _fetch_key(row: dict, has_ticker: bool) -> tuple[str, ...]:
+    """Sort/fetch cursor for one row: ``(date, ticker)`` or ``(date,)``.
+
+    A blank fallback for a missing key (the old ``str(row.get(...) or "")``)
+    collides with a real key and turns corrupt input into a bogus duplicate-key
+    pagination error — so a projection that requires a key refuses a row without
+    one instead.
+    """
+    day = str(row.get("date") or "")
+    if not day:
+        raise RuntimeError("row is missing its date — cannot build a pagination cursor")
+    if not has_ticker:
+        return (day,)
+    ticker = row.get("ticker")
+    if ticker is None or not str(ticker).strip():
+        raise RuntimeError(f"row for date {day} is missing its ticker — refusing the fetch")
+    return (day, str(ticker))
+
+
+def _keyset_term(has_ticker: bool, last_key: tuple[str, ...]) -> str:
+    """PostgREST seek past ``last_key`` in ``(date[, ticker])`` order.
+
+    Returns the inner OR expression (no outer ``or(...)``) so it can be passed
+    straight to ``.or_()`` alongside any other predicate.
+    """
+    day = last_key[0]
+    if not has_ticker:
+        return f"date.gt.{day}"
+    return f"date.gt.{day},and(date.eq.{day},ticker.gt.{last_key[1]})"
+
+
 def _fetch_table(
-    sb, table: str, house_id: str, cols: str, or_null_workspace: bool = False
+    sb,
+    table: str,
+    house_id: str,
+    cols: str,
+    workspace_scoped: bool = True,
+    tickers: list[str] | None = None,
+    page_size: int = _MAX_ROWS,
+    max_rows: int = _MAX_ROWS,
 ) -> list[dict]:
+    """Fetch every row of ``table`` with keyset (seek) pagination (#3803, #3948).
+
+    Ordering is deterministic — ``(date, ticker)`` when the projection carries
+    ``ticker``, else ``(date,)`` — and each page seeks strictly past the last
+    key it saw (``date > d OR (date = d AND ticker > t)``), never on an offset:
+    a concurrent book upsert between pages can neither shift rows out of the
+    series nor duplicate them into the weight schedule that ``--write`` persists
+    as truth.
+
+    The request size is bounded by the server's configured ``max_rows`` cap
+    (PostgREST ``[api].max_rows``, mirrored by ``_MAX_ROWS``). A page that comes
+    back the full requested size means "there may be more" and the cursor
+    advances; only a short page ends the loop. Asking for more than the cap
+    raises instead of accepting a server-clamped page — the #3948 bug, where a
+    boundary-widened ``limit(page_size + boundary_seen)`` exceeded the cap,
+    ``len(page) < page_size + boundary_seen`` looked like "done", and the loop
+    broke *before* the stall guard, silently dropping 1001 rows.
+
+    Fail-closed: a page out of order, duplicate keys within a page, a missing
+    required key, a stalled cursor, or more than ``_MAX_PAGES`` pages raises
+    ``RuntimeError`` instead of returning a truncated series. Callers must not
+    write NAV from a partial fetch.
+
+    ``workspace_scoped=False`` is for market/reference tables that carry no
+    ``workspace_id`` column: applying a workspace predicate there raises
+    PostgREST 42703 and kills the fetch (#3990).
+
+    ``tickers`` narrows a market-data scan to the book the replay will trade
+    (#4002): the house book spans a few dozen tickers while the price table
+    holds hundreds of thousands of rows, and fetching the whole table every
+    night is both slow and pointless. The caller keeps history back to
+    ``--inception-date`` (clipped in ``main``, #4005); within that window a
+    ticker's latest pre-grid close can seed the forward-fill for a grid that
+    starts on a non-trading day.
+    """
+    selected = {c.strip() for c in cols.split(",")}
+    has_ticker = "ticker" in selected
+    if page_size > max_rows:
+        raise RuntimeError(
+            f"{table}: page_size={page_size} exceeds max_rows={max_rows} — "
+            "refusing a request the server would silently clamp"
+        )
     rows: list[dict] = []
-    page_size = 1000
-    offset = 0
+    seen: set[tuple[str, ...]] = set()
+    last_key: tuple[str, ...] | None = None
+    pages = 0
     while True:
+        pages += 1
+        if pages > _MAX_PAGES:
+            raise RuntimeError(f"{table}: exceeded {_MAX_PAGES} pages — refusing a runaway fetch")
         query = sb.table(table).select(cols).order("date")
-        if or_null_workspace:
-            # Omitted workspace_id = house (HOUSE_BOOK_SCOPE.md): match both.
-            query = query.or_(f"workspace_id.eq.{house_id},workspace_id.is.null")
-        else:
+        if has_ticker:
+            query = query.order("ticker")
+        if workspace_scoped:
             query = query.eq("workspace_id", house_id)
-        page = query.range(offset, offset + page_size - 1).execute().data or []
-        rows.extend(page)
+        if tickers:
+            query = query.in_("ticker", list(tickers))
+        if last_key is not None:
+            if has_ticker:
+                query = query.or_(_keyset_term(True, last_key))
+            else:
+                query = query.gt("date", last_key[0])
+        page = query.limit(page_size).execute().data or []
+
+        keys = [_fetch_key(r, has_ticker) for r in page]
+        if any(a > b for a, b in zip(keys, keys[1:])):
+            raise RuntimeError(
+                f"{table}: page arrived out of (date,ticker) order — "
+                "pagination is unstable, refusing the fetch"
+            )
+        if len(page) and len(set(keys)) < len(keys):
+            raise RuntimeError(
+                f"{table}: duplicate (date,ticker) keys within one page — "
+                "pagination is unstable, refusing the fetch"
+            )
+        fresh = [(r, k) for r, k in zip(page, keys) if k not in seen]
+        for r, k in fresh:
+            seen.add(k)
+            rows.append(r)
+        # Stall guard runs before any break: a page that yields no new key
+        # means the cursor did not advance (e.g. a server ignoring the seek),
+        # and breaking here would silently drop the rest of the table.
+        if page and not fresh:
+            raise RuntimeError(
+                f"{table}: pagination stalled at {last_key} "
+                f"(page_size={page_size}) — refusing a truncated fetch"
+            )
         if len(page) < page_size:
             break
-        offset += page_size
+        last_key = keys[-1]
     return rows
+
+
+def _fetch_price_rows(
+    sb: SupabaseClient, house_id: str, book_tickers: list[str], inception: date | str
+) -> list[dict[str, Any]]:
+    """OHLCV rows for the replay from the sealed R2 generations (#4053: R2 only).
+
+    ``inception`` is the ``--inception-date`` value — ``main`` passes the parsed
+    ISO string, callers may pass a ``date``; both clip through the same
+    :func:`_rows_from_inception` guard (#4005).
+    """
+    # Imported per call (cached in sys.modules afterwards) so loading the module needs no
+    # digiquant import at module scope, matching fill-entry-prices.py.
+    from digiquant.research.data.queries import r2_ohlcv_rows
+
+    inception_date = inception.isoformat() if isinstance(inception, date) else str(inception)
+    # UTC, not local: the seal is a UTC date and `date.today()` tripped DTZ011.
+    today = datetime.now(timezone.utc).date().isoformat()
+    rows = r2_ohlcv_rows(tickers=book_tickers, since=inception_date, until=today)
+    return _rows_from_inception(rows, inception_date)
 
 
 def build_request(price_rows, position_rows, nav_rows):
@@ -104,27 +256,6 @@ def build_request(price_rows, position_rows, nav_rows):
         PortfolioReplayRequest,
         ScheduledTargetWeights,
         TargetWeight,
-    )
-
-    closes: dict[tuple[str, str], Decimal] = {}
-    volumes: dict[tuple[str, str], Decimal] = {}
-    per_ticker: dict[str, list[OhlcvBar]] = {}
-    for r in price_rows:
-        d = str(r["date"])
-        closes[(d, r["ticker"])] = Decimal(str(r["close"]))
-        volumes[(d, r["ticker"])] = Decimal(str(r.get("volume") or 0))
-        per_ticker.setdefault(r["ticker"], []).append(
-            OhlcvBar(
-                ts=datetime.fromisoformat(d).replace(tzinfo=timezone.utc),
-                open=Decimal(str(r["open"])),
-                high=Decimal(str(r["high"])),
-                low=Decimal(str(r["low"])),
-                close=Decimal(str(r["close"])),
-                volume=Decimal(str(r.get("volume") or 0)),
-            )
-        )
-    series = tuple(
-        InstrumentBarSeries(ticker=t, bars=tuple(per_ticker[t])) for t in sorted(per_ticker)
     )
 
     book_by_date: dict[str, dict[str, Decimal]] = {}
@@ -138,14 +269,109 @@ def build_request(price_rows, position_rows, nav_rows):
     for d in sorted(book_by_date):
         weights = book_by_date[d]
         gross = sum(weights.values())
-        if gross > 1:  # day-one style over-allocation: pro-rata normalize (locked decision)
-            weights = {t: w / gross for t, w in weights.items()}
+        # Over-allocation (broken pre-cutover books) pro-rata normalizes (locked
+        # decision); near-full deployment also keeps the fill-drift reserve so
+        # integer-lot fills and split partial fills can never overdraw the
+        # account and halt the replay (#4005).
+        if gross > FILL_DRIFT_CAP:
+            weights = {t: w * FILL_DRIFT_CAP / gross for t, w in weights.items()}
         schedule.append(
             ScheduledTargetWeights(
                 effective_date=date.fromisoformat(d),
                 weights=tuple(TargetWeight(ticker=t, weight=w) for t, w in sorted(weights.items())),
             )
         )
+
+    grid = sorted(book_by_date)
+    schedule_tickers = sorted({t for entry in book_by_date.values() for t in entry})
+    if not grid or not schedule_tickers:
+        raise ValueError("position rows carry no book tickers/dates; refusing an empty replay grid")
+
+    closes: dict[tuple[str, str], Decimal] = {}
+    volumes: dict[tuple[str, str], Decimal] = {}
+    bars_by_ticker: dict[str, dict[str, OhlcvBar]] = {}
+    repaired = 0
+    for r in price_rows:
+        ticker = r["ticker"]
+        if ticker not in schedule_tickers:
+            continue
+        d = str(r["date"])
+        open_ = Decimal(str(r["open"]))
+        high = Decimal(str(r["high"]))
+        low = Decimal(str(r["low"]))
+        close = Decimal(str(r["close"]))
+        # Fail loudly on non-finite bounds before any comparison: Postgres
+        # ``numeric`` stores NaN/Infinity, and widening would otherwise
+        # launder low=+Inf / high=-Inf into a finite, valid-looking bar.
+        # Decimal NaN comparisons raise InvalidOperation, so is_finite()
+        # must come first (#3994 review).
+        if not (open_.is_finite() and high.is_finite() and low.is_finite() and close.is_finite()):
+            raise ValueError(
+                f"{ticker} {d}: non-finite OHLC value "
+                f"(open={open_}, high={high}, low={low}, close={close}) "
+                "— refusing to build a bar"
+            )
+        # Vendor bars can violate their own envelope: float-ULP close/low ties
+        # and open>high cents. Widen the envelope instead of aborting the
+        # nightly refresh; close is never rewritten (#3995). A stored
+        # high<low is repaired the same way rather than rejected: the
+        # observed prices are the evidence.
+        repaired_high = max(high, open_, close)
+        repaired_low = min(low, open_, close)
+        if repaired_high != high or repaired_low != low:
+            repaired += 1
+        closes[(d, ticker)] = close
+        volumes[(d, ticker)] = Decimal(str(r.get("volume") or 0))
+        bars_by_ticker.setdefault(ticker, {})[d] = OhlcvBar(
+            ts=datetime.fromisoformat(d).replace(tzinfo=timezone.utc),
+            open=open_,
+            high=repaired_high,
+            low=repaired_low,
+            close=close,
+            volume=Decimal(str(r.get("volume") or 0)),
+        )
+    if repaired:
+        print(f"WARN: widened OHLC bounds on {repaired} bar(s) (#3995)")
+
+    # The strict contract needs one shared grid across instruments (#4002):
+    # walk each schedule ticker over the book dates and forward-fill a missing
+    # bar flat at the last close (volume 0) so a weekend/holiday book executes
+    # on the last mark instead of aborting the refresh. A ticker's latest bar
+    # *before* the grid seeds the first book date, so a grid that starts on a
+    # non-trading day still fills from the Friday close.
+    series_bars: dict[str, list[OhlcvBar]] = {}
+    filled = 0
+    for ticker in schedule_tickers:
+        by_date = bars_by_ticker.get(ticker, {})
+        earlier = [d for d in by_date if d < grid[0]]
+        prior: OhlcvBar | None = by_date[max(earlier)] if earlier else None
+        bars: list[OhlcvBar] = []
+        for d in grid:
+            bar = by_date.get(d)
+            if bar is None:
+                if prior is None:
+                    raise ValueError(
+                        f"{ticker}: no market bar at or before {d} "
+                        "(cannot forward-fill a series before its first bar)"
+                    )
+                bar = OhlcvBar(
+                    ts=datetime.fromisoformat(d).replace(tzinfo=timezone.utc),
+                    open=prior.close,
+                    high=prior.close,
+                    low=prior.close,
+                    close=prior.close,
+                    volume=Decimal("0"),
+                )
+                filled += 1
+            prior = bar
+            bars.append(bar)
+        series_bars[ticker] = bars
+    if filled:
+        print(f"WARN: forward-filled {filled} missing bar(s) on the book grid (#4002)")
+
+    series = tuple(
+        InstrumentBarSeries(ticker=t, bars=tuple(series_bars[t])) for t in schedule_tickers
+    )
 
     return (
         PortfolioReplayRequest(
@@ -293,17 +519,33 @@ def main() -> int:
     sb = _get_client()
     house_id = str(house_workspace_id())
 
-    price_rows = _fetch_table(
-        sb,
-        "price_history",
-        house_id,
-        "date,ticker,open,high,low,close,volume",
-        or_null_workspace=True,
-    )
-    position_rows = _fetch_table(sb, "positions", house_id, "date,ticker,weight_pct")
-    nav_rows = _fetch_table(sb, "nav_history", house_id, "date,nav")
+    try:
+        position_rows = _fetch_table(sb, "positions", house_id, "date,ticker,weight_pct")
+        nav_rows = _fetch_table(sb, "nav_history", house_id, "date,nav")
+        # Only the verified window enters the replay: pre-cutover books are
+        # unreliable (#3695) and their broken gross weights trip the engine
+        # (#4005).
+        position_rows = _rows_from_inception(position_rows, args.inception_date)
+        book_tickers = sorted(
+            {str(r["ticker"]) for r in position_rows if r.get("ticker") != "CASH"}
+        )
+        # The replay only trades the book (#4002): scan just those tickers, not
+        # every row of the market table.
+        price_rows = (
+            _fetch_price_rows(sb, house_id, book_tickers, args.inception_date)
+            if book_tickers
+            else []
+        )
+    except RuntimeError as exc:
+        # Unstable/truncated pagination (#3803): never verify — and never
+        # `--write` — against a partial series.
+        print(f"FAIL: {exc}")
+        return 2
     if not position_rows or not nav_rows:
         print("SKIP: no house positions/nav_history rows readable")
+        return 1
+    if not price_rows:
+        print("SKIP: no sealed R2 rows for the book tickers")
         return 1
 
     request, _closes, recorded = build_request(price_rows, position_rows, nav_rows)

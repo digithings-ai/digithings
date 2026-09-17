@@ -398,7 +398,7 @@ def _env_gated_evaluator(env_var: str):
     Used for segments whose delta-run value is marginal enough to skip by
     default (saving an LLM call) but that an operator may want to force on via
     an env flag. Truthy = set to anything other than ``0`` / ``false`` / empty
-    (matches the ``ATLAS_DATA_TOOLS`` kill-switch convention).
+    (matches the ``DIGIQUANT_RESEARCH_DATA_TOOLS`` kill-switch convention).
     """
 
     def _check(_state: ResearchState, _segment: str) -> tuple[bool, str]:

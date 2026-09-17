@@ -52,7 +52,7 @@ class TestBuildPortfolioPhasesThesis:
         assert graph is not None
 
     def test_held_survives_h5_fan_out(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.setenv("ATLAS_MAX_ANALYSTS", "3")
+        monkeypatch.setenv("DIGIQUANT_MAX_ANALYSTS", "3")
         watchlist = ["AAA", "BBB", "SPY", "CCC", "IJR", "XLP"]
         held = {"SPY", "IJR", "XLP"}
         phases = build_portfolio_phases_thesis(watchlist=watchlist, held=held)
@@ -72,7 +72,7 @@ class TestBuildPortfolioPhasesThesis:
         from digiquant.portfolio.phases.h5_asset_analyst import build_h5_from_state
         from digiquant.research.state import ResearchConfigBundle
 
-        monkeypatch.setenv("ATLAS_MAX_ANALYSTS", "2")
+        monkeypatch.setenv("DIGIQUANT_MAX_ANALYSTS", "2")
         state = ResearchState(
             run_type="delta",
             run_date=__import__("datetime").date(2026, 6, 20),

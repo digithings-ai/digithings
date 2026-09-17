@@ -53,6 +53,11 @@ jobs:
         run: uv sync --frozen --all-packages --all-extras
 
       - name: Start stack
+        env:
+          # test-only explicit opt-in: compose defaults are now prod-safe
+          # (ephemeral=0 + fail-closed). Do not rely on the compose default here.
+          DIGIKEY_ALLOW_EPHEMERAL_KEY: "1"
+          DIGIKEY_REQUIRE_BLOCKLIST: "0"
         run: |
           cp .env.example .env
           docker compose up -d --wait digigraph digiquant digisearch digikey

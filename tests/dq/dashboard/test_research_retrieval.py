@@ -795,3 +795,117 @@ class TestRetrievalTransientRetry:
         )
         assert "error" in out
         assert client.retry_attempts["attempts"] == 3  # type: ignore[attr-defined]
+
+
+class _FakeArchiveStore:
+    """In-memory StorageBackend double for archive read-through tests (#3792)."""
+
+    def __init__(self) -> None:
+        self.objects: dict[str, bytes] = {}
+
+    def put(self, key: str, data: bytes) -> None:
+        self.objects[key] = data
+
+    def get(self, key: str) -> bytes:
+        return self.objects[key]
+
+    def delete(self, key: str) -> None:
+        del self.objects[key]
+
+    def list_keys(self, prefix: str) -> list[str]:
+        return sorted(k for k in self.objects if k.startswith(prefix))
+
+
+def _seed_document_pointer(
+    client: FakeSupabaseClient,
+    store: _FakeArchiveStore,
+    *,
+    workspace: str,
+    key: str,
+    date_str: str,
+    payload: dict[str, object],
+) -> None:
+    """Archive *payload* into *store* and register the pointer row (#3792)."""
+    import hashlib
+    import json
+
+    from digiquant.ops.checkpoint_archive import compress_payload
+    from digiquant.ops.checkpoint_archive import document_key as archive_document_key
+
+    raw = json.dumps(payload, sort_keys=True).encode("utf-8")
+    stored = compress_payload(raw)
+    r2_key = archive_document_key(workspace, date_str, key)
+    store.put(r2_key, stored)
+    client.canned_reads.setdefault("archive_objects", []).append(
+        {
+            "source_table": "documents",
+            "source_key": {
+                "workspace_id": workspace,
+                "document_key": key,
+                "date": date_str,
+            },
+            "r2_key": r2_key,
+            "sha256": hashlib.sha256(stored).hexdigest(),
+            "size": len(stored),
+            "owner": "house",
+        }
+    )
+
+
+@pytest.mark.unit
+class TestQueryResearchArchiveReadthrough:
+    """Archived older versions read through R2 instead of degrading as missing (#3792)."""
+
+    def test_archived_fallback_reads_through_r2(self) -> None:
+        house = str(house_workspace_id())
+        payload = {"headline": "archived Thu macro"}
+        client = FakeSupabaseClient(
+            canned_reads={
+                "documents": [
+                    {
+                        "date": "2026-06-18",
+                        "document_key": "macro",
+                        "payload": None,
+                    }
+                ]
+            }
+        )
+        store = _FakeArchiveStore()
+        _seed_document_pointer(
+            client,
+            store,
+            workspace=house,
+            key="macro",
+            date_str="2026-06-18",
+            payload=payload,
+        )
+        out = query_research(
+            client,
+            run_date=date(2026, 6, 20),
+            document_key="macro",
+            as_of_date=date(2026, 6, 19),
+            store=store,
+        )
+        assert out["payload"] == payload
+        assert out["as_of_date"] == "2026-06-18"
+
+    def test_archived_fallback_without_pointer_stays_missing(self) -> None:
+        client = FakeSupabaseClient(
+            canned_reads={
+                "documents": [
+                    {
+                        "date": "2026-06-18",
+                        "document_key": "macro",
+                        "payload": None,
+                    }
+                ]
+            }
+        )
+        out = query_research(
+            client,
+            run_date=date(2026, 6, 20),
+            document_key="macro",
+            as_of_date=date(2026, 6, 19),
+            store=_FakeArchiveStore(),
+        )
+        assert out == {"error": "no research row found for 'macro' as of 2026-06-19"}

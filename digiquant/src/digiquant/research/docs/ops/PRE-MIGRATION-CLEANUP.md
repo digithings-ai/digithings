@@ -91,7 +91,7 @@ For a clean export to digithings, **`archive/`**, **`docs/archive/`**, and incid
 
 ## 7. Definition of done (pre-migration)
 
-- **Single story** for “what ships to digithings”: `frontend/`, `supabase/`, `scripts/`, `skills/`, `templates/`, `config/` (examples + non-secret), `cowork/`, `docs/` (trimmed), CI workflows — **no** parallel `archive/` documentation trees.
+- **Single story** for “what ships to digithings”: `cloudflare/`, `supabase/`, `scripts/`, `skills/`, `templates/`, `config/` (examples + non-secret), `cowork/`, `docs/` (trimmed), CI workflows — **no** parallel `archive/` documentation trees.
 - **No reliance** on committed scratch under `data/`.
 - **Protected list** maintained at [PROTECTED-SCRIPTS.md](PROTECTED-SCRIPTS.md); **skills audit** at [SKILLS-AUDIT.md](SKILLS-AUDIT.md).
 - **Migration roadmap** filed as [MIGRATION-ROADMAP-DIGITHINGS.md](MIGRATION-ROADMAP-DIGITHINGS.md) and ready to open as PR context in digithings.

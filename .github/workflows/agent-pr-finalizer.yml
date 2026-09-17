@@ -9,7 +9,7 @@
 # widen because fix_via is still branch-aware — only cursor/* PRs get the
 # Cursor-agent fix-dispatch path (scripts/finalize_agent_prs.py:evaluate_pr), everything
 # else just gets a "needs fix" comment with no automated remediation attempted.
-# Production clock: Cloudflare Worker digithings-cron (frontend/digithings-cron). Schedule removed #3579.
+# Production clock: Cloudflare Worker digithings-cron (cloudflare/digithings-cron). Schedule removed #3579.
 name: "Agent: PR finalizer"
 
 on:

@@ -12,7 +12,7 @@ from typing import Any  # score:allow untyped any — fake OpenAI client dict sh
 from unittest.mock import MagicMock, patch
 
 import pytest
-from openai import Timeout
+from openai import BadRequestError, Timeout
 from openai.types.chat import ChatCompletion
 from openai.types.chat import ChatCompletionMessage as OpenAIMessage
 from openai.types.chat.chat_completion import Choice
@@ -1367,6 +1367,51 @@ def test_stream_deltas_emits_content_and_returns_joined() -> None:
     assert kwargs["stream"] is True
 
 
+def _bad_request(message: str) -> BadRequestError:
+    """A 400-shaped OpenAI error; only the message and status matter to the client."""
+    response = MagicMock()
+    response.status_code = 400
+    return BadRequestError(message, response=response, body=None)
+
+
+def test_stream_falls_back_without_stream_options_on_a_400_that_names_it() -> None:
+    """Strict endpoints that 400 on ``stream_options`` get one retry without the field."""
+    reject = _bad_request("Unrecognized request argument supplied: stream_options")
+    fake_client = MagicMock()
+    fake_client.chat.completions.create.side_effect = [reject, [_stream_chunk("hi")]]
+    with patch.object(client_mod, "get_client_for_model", return_value=fake_client):
+        out = digillm.run_tools(
+            "gpt-4o-mini",
+            [{"role": "user", "content": "hi"}],
+            [],
+            execute_tool=lambda *_: "",
+            stream_deltas=True,
+        )
+    assert out == "hi"
+    calls = fake_client.chat.completions.create.call_args_list
+    assert [call.kwargs.get("stream_options") for call in calls] == [
+        {"include_usage": True},
+        None,
+    ]
+
+
+def test_stream_400_that_does_not_name_stream_options_propagates() -> None:
+    """An unrelated 400 is not silently retried without the usage request."""
+    reject = _bad_request("Unrecognized request argument supplied: temperature")
+    fake_client = MagicMock()
+    fake_client.chat.completions.create.side_effect = reject
+    with patch.object(client_mod, "get_client_for_model", return_value=fake_client):
+        with pytest.raises(BadRequestError, match="temperature"):
+            digillm.run_tools(
+                "gpt-4o-mini",
+                [{"role": "user", "content": "hi"}],
+                [],
+                execute_tool=lambda *_: "",
+                stream_deltas=True,
+            )
+    assert fake_client.chat.completions.create.call_count == 1
+
+
 def test_stream_deltas_emits_reasoning_then_content() -> None:
     """reasoning_content chunks surface as ('reasoning', delta); content as ('content', delta)."""
     chunks = [
@@ -1605,7 +1650,8 @@ def test_normalize_tool_arguments_repairs_bad_json() -> None:
     assert json.loads(client_mod._normalize_tool_arguments('{"a": 1')) == {"a": 1}
     assert client_mod._normalize_tool_arguments("") == "{}"
     assert json.loads(client_mod._normalize_tool_arguments('{"a": 1,}')) == {"a": 1}
-    assert client_mod._normalize_tool_arguments("not json at all") == "{}"
+    with pytest.raises(ValueError, match="could not be repaired"):
+        client_mod._normalize_tool_arguments("not json at all")
 
 
 # ── Retry ────────────────────────────────────────────────────────────────────
@@ -1664,7 +1710,9 @@ def test_optional_nonnegative_int_rejects_bool_as_unavailable() -> None:
     assert client_mod._optional_nonnegative_int(3) == 3
 
 
-def test_sdk_hidden_retries_remain_enabled_and_opaque() -> None:
+def test_sdk_hidden_retries_remain_enabled_and_opaque(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     """Attempt telemetry observes SDK create calls, not the SDK's internal HTTP retries.
 
     We deliberately omit ``max_retries`` so the SDK default applies. Pin that default to the
@@ -1674,6 +1722,7 @@ def test_sdk_hidden_retries_remain_enabled_and_opaque() -> None:
     """
     from openai._constants import DEFAULT_MAX_RETRIES
 
+    monkeypatch.setenv("OPENAI_API_KEY", "sk-test")
     made = _capture_client_kwargs(digillm.get_client)
     assert len(made) == 1
     assert "max_retries" not in made[0]

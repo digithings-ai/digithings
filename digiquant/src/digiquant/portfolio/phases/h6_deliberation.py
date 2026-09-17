@@ -175,7 +175,7 @@ def _maybe_attempt_missing_fact_amendment(
 
 
 def deliberation_max_rounds() -> int:
-    """``ATLAS_DELIBERATION_MAX_ROUNDS`` env override; default 6."""
+    """``DIGIQUANT_DELIBERATION_MAX_ROUNDS`` env override; default 6."""
     raw = env_lookup(DELIBERATION_MAX_ROUNDS).strip()
     if not raw:
         return DEFAULT_DELIBERATION_MAX_ROUNDS
@@ -186,7 +186,7 @@ def deliberation_max_rounds() -> int:
 
 
 def deliberation_min_rounds() -> int:
-    """``ATLAS_DELIBERATION_MIN_ROUNDS`` env override; default 2.
+    """``DIGIQUANT_DELIBERATION_MIN_ROUNDS`` env override; default 2.
 
     The PM may not register convergence before this many rounds. The floor of 2 forces at
     least one real challenge + analyst response, stopping the round-1 rubber-stamp the
@@ -306,46 +306,31 @@ def _resolve_from_debate(
             ),
             None,
         )
-    try:
-        payload = unwrap_forecast_terms_payload(amendment_terms_raw)
-        if not isinstance(payload, dict):
-            raise TypeError("amendment terms must be an object")
-        terms = ForecastTerms.model_validate(fill_forecast_tenor_from_base(payload, base.terms))
-        amendment = materialize_forecast_amendment(
+    # Hard fail (#3078): invalid amendment economics propagate to the caller —
+    # never absorbed into a REJECTED fallback that would silently keep trading
+    # on the stale base while the run reports success.
+    payload = unwrap_forecast_terms_payload(amendment_terms_raw)
+    if not isinstance(payload, dict):
+        raise TypeError("amendment terms must be an object")
+    terms = ForecastTerms.model_validate(fill_forecast_tenor_from_base(payload, base.terms))
+    amendment = materialize_forecast_amendment(
+        base=base,
+        terms=terms,
+        reason=amendment_reason or "h6_challenge_revision",
+        source_run_id=str(state.run_id),
+        provider_invocation_id=f"h6:{ticker}:{state.run_id}",
+        effective_at=cutoff,
+        known_at=cutoff,
+    )
+    return (
+        resolve_effective_forecast(
             base=base,
-            terms=terms,
-            reason=amendment_reason or "h6_challenge_revision",
-            source_run_id=str(state.run_id),
-            provider_invocation_id=f"h6:{ticker}:{state.run_id}",
-            effective_at=cutoff,
+            amendment=amendment,
+            amendment_outcome=AmendmentOutcome.ACCEPTED,
             known_at=cutoff,
-        )
-        return (
-            resolve_effective_forecast(
-                base=base,
-                amendment=amendment,
-                amendment_outcome=AmendmentOutcome.ACCEPTED,
-                known_at=cutoff,
-            ),
-            amendment,
-        )
-    except Exception as exc:
-        logger.warning(
-            "H6 amendment for %s rejected (%s: %s); preserving base forecast",
-            ticker,
-            type(exc).__name__,
-            exc,
-        )
-        return (
-            resolve_effective_forecast(
-                base=base,
-                amendment=None,
-                amendment_outcome=AmendmentOutcome.REJECTED,
-                degradation_reason="amendment_rejected",
-                known_at=cutoff,
-            ),
-            None,
-        )
+        ),
+        amendment,
+    )
 
 
 def _portfolio_phase_inputs(state: PortfolioState, ticker: str) -> dict[str, Any]:
@@ -509,7 +494,7 @@ def run_deliberation_loop(
     evidence_bundle_store: EvidenceBundleStore | None = None,
     research_state_store: ResearchStateStore | None = None,
 ) -> tuple[DeliberationSummary, dict[str, Any] | None, H6AmendmentResult | None]:
-    """PM↔analyst loop until ``converged=true`` or ``ATLAS_DELIBERATION_MAX_ROUNDS`` cap.
+    """PM↔analyst loop until ``converged=true`` or ``DIGIQUANT_DELIBERATION_MAX_ROUNDS`` cap.
 
     Returns the summary, the last analyst-proposed complete ``forecast_amendment``
     terms dict (or ``None``), and optional WP11.4 evidence-amendment provenance.
@@ -585,7 +570,7 @@ def run_deliberation_loop(
         )
         # #945: the PM may not converge before ``min_rounds`` (default 2) — forcing at least
         # one challenge + analyst response so the debate isn't a round-1 rubber-stamp. Set
-        # ATLAS_DELIBERATION_MIN_ROUNDS=1 to restore the instant-convergence quiet path.
+        # DIGIQUANT_DELIBERATION_MIN_ROUNDS=1 to restore the instant-convergence quiet path.
         if converged_signal and round_number >= min_rounds:
             close = (pm_turn.conclusion or pm_turn.challenge).strip()
             transcript.append(
@@ -889,6 +874,46 @@ def _h6_node_factory(
                 evidence_bundle_store=evidence_bundle_store,
                 research_state_store=research_state_store,
             )
+            # Inside the degrade-ticker try (#3738): the hard-fail raise in
+            # _resolve_from_debate must carry this ticker, never kill the chain.
+            effective, amendment = _resolve_from_debate(
+                state=state,
+                ticker=ticker,
+                analyst=analyst,
+                amendment_terms_raw=amendment_terms,
+                # Registry reason stays short: conclusion lives on the deliberation
+                # document itself; using it here tripped the 2000-char CHECK (#3299).
+                amendment_reason="h6_challenge_revision",
+            )
+            summary = _attach_evidence_amendment(
+                summary,
+                base_bundle=base_bundle,
+                amendment_result=evidence_amendment,
+            )
+            summary = _attach_forecast_lineage(
+                summary,
+                effective=effective,
+                amendment=amendment,
+            )
+            summary = _attach_selection(summary, selection)
+            result: dict[str, Any] = {
+                "phase_portfolio": PhasePortfolioState(
+                    deliberation_summaries={ticker: summary.model_dump(mode="json")}
+                )
+            }
+            if summary.escalated:
+                result["errors"] = [
+                    PhaseError(
+                        phase=PHASE_NAME,
+                        node=f"{NODE_ID}-{ticker}",
+                        message=(
+                            f"H6 deliberation for {ticker} hit max_rounds cap "
+                            f"({summary.cap_reason or 'max_rounds'})"
+                        ),
+                        retryable=False,
+                    )
+                ]
+            return result
         except Exception as exc:  # LLM-output failure degrades this ticker, never the chain (#1665)
             stance_map = {"buy": "bullish", "sell": "bearish"}
             logger.warning(
@@ -935,44 +960,6 @@ def _h6_node_factory(
                     )
                 ],
             }
-        effective, amendment = _resolve_from_debate(
-            state=state,
-            ticker=ticker,
-            analyst=analyst,
-            amendment_terms_raw=amendment_terms,
-            # Registry reason stays short: conclusion lives on the deliberation
-            # document itself; using it here tripped the 2000-char CHECK (#3299).
-            amendment_reason="h6_challenge_revision",
-        )
-        summary = _attach_evidence_amendment(
-            summary,
-            base_bundle=base_bundle,
-            amendment_result=evidence_amendment,
-        )
-        summary = _attach_forecast_lineage(
-            summary,
-            effective=effective,
-            amendment=amendment,
-        )
-        summary = _attach_selection(summary, selection)
-        result: dict[str, Any] = {
-            "phase_portfolio": PhasePortfolioState(
-                deliberation_summaries={ticker: summary.model_dump(mode="json")}
-            )
-        }
-        if summary.escalated:
-            result["errors"] = [
-                PhaseError(
-                    phase=PHASE_NAME,
-                    node=f"{NODE_ID}-{ticker}",
-                    message=(
-                        f"H6 deliberation for {ticker} hit max_rounds cap "
-                        f"({summary.cap_reason or 'max_rounds'})"
-                    ),
-                    retryable=False,
-                )
-            ]
-        return result
 
     return _node
 

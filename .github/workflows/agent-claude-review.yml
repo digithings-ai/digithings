@@ -27,7 +27,7 @@ on:
       - '.github/PULL_REQUEST_TEMPLATE.md'
       # Presentation-only surfaces — /code-review rarely adds value on CSS /
       # shared design system, and design iteration pushes frequently (#1310).
-      - 'frontend/digiweb/design/**'
+      - 'cloudflare/digiweb/design/**'
       - '**.css'
 
 concurrency:

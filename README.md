@@ -33,6 +33,7 @@ Flagship vertical: **quantitative finance** — a "hedge-fund in a box" where on
 | [**ROADMAP.md**](ROADMAP.md) | Phased plan |
 | [**ARCHITECTURE.md**](ARCHITECTURE.md) | System diagram and interfaces |
 | [**SECURITY.md**](SECURITY.md) | Threat model, non-negotiable defaults, reporting |
+| [**docs/LICENSING.md**](docs/LICENSING.md) | Third-party license inventory, copyleft decisions, audit step |
 | [**AGENTS.md**](AGENTS.md) | Canonical rules for AI coding agents |
 | [**CLAUDE.md**](CLAUDE.md) | Pointer at AGENTS.md (Claude Code loader) |
 | [**CONTRIBUTING.md**](CONTRIBUTING.md) | How to contribute |
@@ -75,7 +76,7 @@ make pull-ghcr && make up-ghcr
 
 See [`docs/templates/self-host/README.md`](docs/templates/self-host/README.md) and [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md). FastAPI Swagger: `http://127.0.0.1:<port>/docs`.
 
-**LLM routing:** house traffic is service → digillm → LiteLLM (`OPENAI_API_BASE`). digiquant phase pins in `config/digiquant_models.yaml` are unprefixed OpenRouter slugs listed in `config/litellm.yaml`. Set `OPENROUTER_API_KEY` on the LiteLLM process (sign up at https://openrouter.ai). `openrouter/auto` is reserved for diagnostic scripts, not phase routing. Grounding uses unprefixed `:online` / `perplexity/*` slugs via `get_grounding_model()`. Optional OmniRoute is off by default — see `docs/providers/omniroute.md`. See `config/model_modes.yaml` and `.env.example`.
+**LLM routing:** house traffic is service → digillm → LiteLLM (`OPENAI_API_BASE`). digiquant phase pins in `config/digiquant_models.yaml` are unprefixed OpenRouter slugs listed in `config/litellm.yaml`. Set `OPENROUTER_API_KEY` on the LiteLLM process (sign up at https://openrouter.ai). `openrouter/auto` is reserved for diagnostic scripts, not phase routing. Grounding is tool-only via the first-party digisearch `web_search` tool — no synthesis-model pins. Optional OmniRoute is off by default — see `docs/providers/omniroute.md`. See `config/model_modes.yaml` and `.env.example`.
 
 **Stack + digichat web UI** (http://127.0.0.1:3005):
 

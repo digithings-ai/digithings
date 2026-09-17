@@ -5,6 +5,7 @@ from __future__ import annotations
 import logging
 from typing import Any  # score:allow untyped any — LangGraph state update dicts
 
+from digisearch.agent import web_branch
 from digisearch.agent.citations import rag_sources_from_hits
 from digisearch.agent.pipeline_models import (
     ResearchTurnOutput,
@@ -15,6 +16,7 @@ from digisearch.core.models import Query
 from digisearch.core.standard_hits import normalize_query_hit
 from digisearch.core.workspace_filter import build_query_filters
 from digisearch.search._stub import query_index
+from digisearch.web.grounding_models import WebResearchError
 
 logger = logging.getLogger(__name__)
 
@@ -61,7 +63,9 @@ def node_retrieve(state: ResearchTurnState) -> dict[str, Any]:
             filters=build_query_filters(
                 filter_raw=state.filter,
                 filters_struct=state.filters,
+                workspace_id=state.workspace_id,
             ),
+            workspace_id=(state.workspace_id or "").strip() or None,
         )
         idx = str(state.index_name or "default")
         response = query_index(q, index_name=idx)
@@ -106,11 +110,19 @@ def node_aggregate(state: ResearchTurnState) -> dict[str, Any]:
 
 
 def _route_after_plan(state: ResearchTurnState) -> str:
-    return END if state.error else "retrieve"
+    if state.error:
+        return END
+    if state.source in {"web", "auto"}:
+        return "web_retrieve"
+    return "retrieve"
 
 
 def _route_after_retrieve(state: ResearchTurnState) -> str:
     return END if state.error else "aggregate"
+
+
+def _route_after_web_retrieve(state: ResearchTurnState) -> str:
+    return END if state.error else "web_aggregate"
 
 
 def _build_graph() -> Any:
@@ -120,10 +132,20 @@ def _build_graph() -> Any:
     g.add_node("plan", node_plan)
     g.add_node("retrieve", node_retrieve)
     g.add_node("aggregate", node_aggregate)
+    g.add_node("web_retrieve", web_branch.node_web_retrieve)
+    g.add_node("web_aggregate", web_branch.node_web_aggregate)
     g.add_edge(START, "plan")
-    g.add_conditional_edges("plan", _route_after_plan, {"retrieve": "retrieve", END: END})
+    g.add_conditional_edges(
+        "plan",
+        _route_after_plan,
+        {"retrieve": "retrieve", "web_retrieve": "web_retrieve", END: END},
+    )
     g.add_conditional_edges("retrieve", _route_after_retrieve, {"aggregate": "aggregate", END: END})
+    g.add_conditional_edges(
+        "web_retrieve", _route_after_web_retrieve, {"web_aggregate": "web_aggregate", END: END}
+    )
     g.add_edge("aggregate", END)
+    g.add_edge("web_aggregate", END)
     return g.compile()
 
 
@@ -136,6 +158,11 @@ def _state_from_initial(initial: dict[str, Any]) -> ResearchTurnState:
         filter=initial.get("filter"),
         filters=initial.get("filters"),
         session_id=initial.get("session_id"),
+        workspace_id=initial.get("workspace_id"),
+        source=str(initial.get("source") or "corpus"),
+        effort=str(initial.get("effort") or "fast"),
+        output_schema=initial.get("output_schema"),
+        cited_top_n=initial.get("cited_top_n"),
         service="digisearch",
         trace=[],
     )
@@ -157,6 +184,9 @@ def _output_from_state(out: ResearchTurnState | dict[str, Any]) -> ResearchTurnO
         results=list(state.results or []),
         rag_sources=list(state.rag_sources or []),
         formatted_context=state.formatted_context or "",
+        web_output=state.web_output,
+        cost_dollars=state.cost_dollars,
+        usage=state.usage,
     )
 
 
@@ -165,5 +195,22 @@ def run_research_turn(initial: dict[str, Any]) -> dict[str, Any]:
     if StateGraph is None:
         raise ImportError("digisearch[agent] is not installed (requires langgraph).")
     graph = _build_graph()
-    out = graph.invoke(_state_from_initial(initial))
+    try:
+        out = graph.invoke(_state_from_initial(initial))
+    except WebResearchError as exc:
+        logger.debug("research turn web branch failed: %s", exc)
+        failed = _state_from_initial(initial).model_copy(
+            update={
+                "error": str(exc),
+                "trace": [
+                    ResearchTurnTraceStep(
+                        step="web_retrieve",
+                        status="failed",
+                        service="digisearch",
+                        detail=str(exc),
+                    )
+                ],
+            }
+        )
+        return _output_from_state(failed).model_dump(mode="json")
     return _output_from_state(out).model_dump(mode="json")

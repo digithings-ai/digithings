@@ -197,6 +197,9 @@ def test_terminating_crash_is_recorded_in_the_diagnostics_row_then_reraised() ->
         diagnostics=DiagnosticsDeps(client=_FakeClient(), run_id="r1"),
     )
     with (
+        # #4198: stub the fail-hard web_search pre-flight gate; this test pins the
+        # terminating-crash diagnostics path, not the live search probe.
+        patch("digiquant.portfolio.chain._guard_web_search_health", lambda: None),
         patch("digiquant.portfolio.chain.build_research_graph", side_effect=KeyboardInterrupt),
         patch("digiquant.research.diagnostics.write_row", _capture),
         pytest.raises(KeyboardInterrupt),
@@ -207,3 +210,28 @@ def test_terminating_crash_is_recorded_in_the_diagnostics_row_then_reraised() ->
 
     assert written["errors"] == [("chain", "terminal")]
     assert written["status"] == "failed"
+
+
+def test_research_enabled_run_invokes_web_search_guard_before_the_graph() -> None:
+    """#4198: the web_search pre-flight gate runs before the research graph builds.
+
+    ``build_research_graph`` is patched to halt with ``KeyboardInterrupt``; had the
+    guard not run first, the recorded calls would be empty.
+    """
+    calls: list[str] = []
+
+    with (
+        patch(
+            "digiquant.portfolio.chain._guard_web_search_health",
+            lambda: calls.append("guard"),
+        ),
+        patch(
+            "digiquant.portfolio.chain.build_research_graph",
+            side_effect=KeyboardInterrupt,
+        ),
+        pytest.raises(KeyboardInterrupt),
+    ):
+        run_research_then_portfolio(
+            research_input=ResearchInput(run_date=date(2026, 6, 12)), deps=_chain_deps()
+        )
+    assert calls == ["guard"]

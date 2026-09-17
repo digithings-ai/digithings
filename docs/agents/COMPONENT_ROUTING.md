@@ -12,8 +12,8 @@ When editing paths under **Prefix**, read the **Doc** row first, then run **Test
 | `digikey/` | [digikey/AGENTS.md](../../digikey/AGENTS.md) | [digikey/ARCHITECTURE.md](../../digikey/ARCHITECTURE.md) | 8005 | `pytest tests/dk/ -m unit -v --tb=short` |
 | `digibase/` | [digibase/AGENTS.md](../../digibase/AGENTS.md) | [digibase/ARCHITECTURE.md](../../digibase/ARCHITECTURE.md) | TBD (library today) | `pytest tests/db tests/integration/test_request_id_hops.py -m unit -v --tb=short` |
 | `digiskills/` | [digiskills/AGENTS.md](../../digiskills/AGENTS.md) | [digiskills/ARCHITECTURE.md](../../digiskills/ARCHITECTURE.md) | — (library) | `pytest tests/dsk/ -m unit -v --tb=short` |
-| `digichat/` | [frontend/digichat/AGENTS.md](../../frontend/digichat/AGENTS.md) | [frontend/digichat/ARCHITECTURE.md](../../frontend/digichat/ARCHITECTURE.md) | 3005 (profile) | `npm run test --workspace digichat` |
-| `frontend/dashboard/` | — | [frontend/dashboard/README.md](../../frontend/dashboard/README.md) | static export | `cd frontend/dashboard && npm run lint && npm run test && npm run build` (not in `make test-unit`; see `test-dashboard.yml`) |
+| `digichat/` | [cloudflare/digichat/AGENTS.md](../../cloudflare/digichat/AGENTS.md) | [cloudflare/digichat/ARCHITECTURE.md](../../cloudflare/digichat/ARCHITECTURE.md) | 3005 (profile) | `npm run test --workspace digichat` |
+| `cloudflare/dashboard/` | — | [cloudflare/dashboard/README.md](../../cloudflare/dashboard/README.md) | static export | `cd cloudflare/dashboard && npm run lint && npm run test && npm run build` (not in `make test-unit`; see `test-dashboard.yml`) |
 | `website/` | [AGENTS.md](../../AGENTS.md) (starfield note) | — | static | manual / visual |
 | `config/` | — | [config/MODELS.md](../../config/MODELS.md) | LiteLLM 4000 | stack integration |
 | `tests/fixtures/` | — | — | — | Shared doubles (e.g. `FakeSupabaseClient` in `fake_supabase.py`) |

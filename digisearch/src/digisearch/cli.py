@@ -46,6 +46,23 @@ def ingest(
     typer.echo(f"Total chunks: {total}")
 
 
+@app.command("ingest-url")
+def ingest_url_cmd(
+    url: str = typer.Argument(..., help="URL to fetch and ingest"),
+    index: str = typer.Option("default", "--index", "-i", help="Index name"),
+) -> None:
+    """Fetch one URL and ingest it into an index (thin adapter over ingest_url)."""
+    from digisearch.pipeline.ingest import IngestError
+    from digisearch.pipeline.url_ingest import ingest_url
+
+    try:
+        result = ingest_url(url, index_name=index)
+    except IngestError as exc:
+        typer.echo(f"URL ingest failed: {exc.message}", err=True)
+        raise typer.Exit(code=1) from exc
+    typer.echo(f"Ingested {result.doc_id}: {result.chunks_created} chunks")
+
+
 @app.command("ingest-batch")
 def ingest_batch(
     index: str = typer.Option("default", "--index", "-i", help="Index name"),
@@ -116,12 +133,20 @@ def serve(
 @app.command()
 def mcp(
     config: Path | None = typer.Option(None, "--config", "-c"),
-    port: int = typer.Option(8765, "--port", "-p"),
+    port: int | None = typer.Option(None, "--port", "-p"),
 ) -> None:
-    """Start MCP server."""
-    from digisearch.mcp_server import run_mcp
+    """Start MCP server (real backend only; fails loud without one)."""
+    import os
 
-    run_mcp(port=port)
+    from digisearch.client import DigiSearch
+    from digisearch.core.config import DigiSearchConfig
+    from digisearch.mcp_server import create_mcp_with_indexes, run_mcp
+
+    resolved = port if port is not None else int(os.environ.get("DIGISEARCH_MCP_PORT", "8765"))
+    cfg = DigiSearchConfig.from_config(config) if config else DigiSearchConfig.from_env()
+    client: DigiSearch = DigiSearch(cfg)
+    create_mcp_with_indexes(client)
+    run_mcp(port=resolved)
 
 
 index_app = typer.Typer(help="Index operations")

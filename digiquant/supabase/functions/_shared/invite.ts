@@ -12,12 +12,34 @@ export const INVITE_ATTEMPT_WINDOW_MS = 60 * 60 * 1000;
 export const INVITE_MAX_ATTEMPTS = 8;
 export const INVITE_MIN_CODE_LENGTH = 10;
 
+/** Rank order for entitlement_grants.plan_floor (migration 115) — higher wins. */
+const PLAN_TIER_RANK: Record<string, number> = {
+  brief: 1,
+  desk: 2,
+  studio: 3,
+  enterprise: 4,
+};
+
+export function isKnownPlanFloor(raw: unknown): raw is string {
+  return typeof raw === "string" && raw in PLAN_TIER_RANK;
+}
+
+/** True when `candidate` should replace `current` (candidate outranks it, or current is unset). */
+export function planFloorOutranks(candidate: string, current: string | null): boolean {
+  if (!current) return true;
+  return (PLAN_TIER_RANK[candidate] ?? 0) > (PLAN_TIER_RANK[current] ?? 0);
+}
+
 export type InviteCodeRow = {
   id: string;
   code_hash: string;
   max_redemptions: number | null;
   redemption_count: number;
   revoked_at: string | null;
+  /** Tiered invites: a code can carry a plan_floor bump alongside its
+   *  product grant — e.g. an fx_hub code that also raises the redeemer to
+   *  'desk'. Null means "product grant only, no tier bump". */
+  plan_floor: string | null;
 };
 
 export type InviteStore = {
@@ -31,6 +53,13 @@ export type InviteStore = {
   listActiveCodes(productKey: string): Promise<InviteCodeRow[]>;
   hasGrant(email: string, productKey: string): Promise<boolean>;
   insertGrant(email: string, productKey: string, note: string): Promise<void>;
+  /** Raise the caller's entitlement_grants.plan_floor if `planFloor` outranks
+   *  their current one (never downgrades). No-op if not implemented. */
+  upsertPlanFloor?(email: string, planFloor: string, note: string): Promise<void>;
+  /** Best-effort mirror of an fx_hub grant into the separate twelve-x project
+   *  (fx-hub-grant-sync Edge Function) — RLS there has no other way to know
+   *  who is granted. No-op if not implemented or the product isn't fx_hub. */
+  syncExternalGrant?(email: string, productKey: string): Promise<void>;
   recordRedemption(row: {
     invite_code_id: string | null;
     product_key: string;
@@ -52,6 +81,7 @@ export type RedeemOk = {
   ok: true;
   alreadyGranted: boolean;
   productKey: string;
+  planFloor: string | null;
 };
 
 export type RedeemErr = {
@@ -149,10 +179,11 @@ export async function redeemProductInvite(args: {
 
   const presented = await sha256Hex(code);
   const envHash = (args.envHash ?? "").trim().toLowerCase();
-  let matched: { id: string | null; source: "env" | "table" } | null = null;
+  let matched: { id: string | null; source: "env" | "table"; planFloor: string | null } | null =
+    null;
 
   if (envHash && timingSafeEqualHex(presented, envHash)) {
-    matched = { id: null, source: "env" };
+    matched = { id: null, source: "env", planFloor: null };
   } else {
     const rows = await args.store.listActiveCodes(productKey);
     for (const row of rows) {
@@ -164,7 +195,11 @@ export async function redeemProductInvite(args: {
         continue;
       }
       if (timingSafeEqualHex(presented, row.code_hash)) {
-        matched = { id: row.id, source: "table" };
+        matched = {
+          id: row.id,
+          source: "table",
+          planFloor: isKnownPlanFloor(row.plan_floor) ? row.plan_floor : null,
+        };
         break;
       }
     }
@@ -179,9 +214,23 @@ export async function redeemProductInvite(args: {
 
   if (!matched) return invalid();
 
+  // A plan_floor bump applies whether or not the product grant is new — a
+  // repeat redemption of a higher-tier code should still raise the tier.
+  if (matched.planFloor) {
+    try {
+      await args.store.upsertPlanFloor?.(
+        email,
+        matched.planFloor,
+        "redeemed via tiered product invite",
+      );
+    } catch {
+      // Tier bump is best-effort — the product grant below is the real gate.
+    }
+  }
+
   const already = await args.store.hasGrant(email, productKey);
   if (already) {
-    return { ok: true, alreadyGranted: true, productKey };
+    return { ok: true, alreadyGranted: true, productKey, planFloor: matched.planFloor };
   }
 
   await args.store.insertGrant(
@@ -201,6 +250,15 @@ export async function redeemProductInvite(args: {
     await args.store.incrementRedemptionCount(matched.id);
   }
 
+  if (productKey === FX_HUB_PRODUCT) {
+    try {
+      await args.store.syncExternalGrant?.(email, productKey);
+    } catch {
+      // Best-effort — the source-of-truth grant (client_product_grants) already landed.
+      // The twelve-x mirror can be backfilled manually if this keeps failing.
+    }
+  }
+
   const sentDate = now.toISOString().slice(0, 10);
   try {
     await args.store.recordAdminAudit?.({
@@ -213,5 +271,5 @@ export async function redeemProductInvite(args: {
     // Audit is best-effort — grant already landed.
   }
 
-  return { ok: true, alreadyGranted: false, productKey };
+  return { ok: true, alreadyGranted: false, productKey, planFloor: matched.planFloor };
 }

@@ -16,6 +16,7 @@ from typing import (
 from digigraph.graph.pipeline_builder import NodeSpec
 
 from digiquant.dashboard.research_retrieval.store import EvidenceBundleStore, ResearchStateStore
+from digiquant.portfolio.phases.coverage_director import build_coverage_director
 from digiquant.portfolio.phases.h1_thesis_review import build_h1_thesis_review
 from digiquant.portfolio.phases.h2_market_thesis_exploration import (
     build_h2_market_thesis_exploration,
@@ -120,6 +121,7 @@ def build_portfolio_phases_thesis(
     phases.append(build_h2_market_thesis_exploration(client=thesis_client))
     phases.append(build_h3_thesis_vehicle_map(client=thesis_client))
     phases.append(build_h4_opportunity_screener(client=thesis_client))
+    phases.append(build_coverage_director(client=shared_client))
     phases.append(
         build_h5_from_state(
             client=thesis_client,

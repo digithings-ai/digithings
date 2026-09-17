@@ -1,0 +1,136 @@
+/* Account page — login, sign-up, payment, settings, profile templates.
+   Wave 1: the control dress that the stock kit now owns is gone — inputs,
+   fields, selects, dividers, toggles, segments, setting tabs, strength
+   segments, the terms row, the error/quiet-button overrides, and the old
+   focus/motion resets. What remains is the page's own layout: the payment
+   form frame, plan receipt rows, settings rows and copy, the danger row,
+   and the profile stat/activity blocks. */
+
+/* ---------- payment band ---------- */
+
+.acct-pay-form {
+  background: var(--surface);
+  border: 1px solid var(--hair);
+  border-radius: 0;
+  padding: 1.2rem;
+}
+
+.acct-plan-items {
+  list-style: none;
+  margin: 0.9rem 0 0;
+  padding: 0;
+  font-family: var(--font-mono);
+  font-size: 0.76rem;
+  color: var(--ink-soft);
+}
+
+.acct-plan-items li {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.5rem 0;
+  border-top: 1px solid var(--hair);
+}
+
+/* ---------- settings ---------- */
+
+.acct-setting-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 1rem;
+  align-items: center;
+  padding: 1rem 1.1rem;
+}
+
+.acct-setting-row + .acct-setting-row {
+  border-top: 1px solid var(--hair);
+}
+
+.acct-setting-desc {
+  margin-top: 0.18rem;
+  font-size: 0.78rem;
+  color: var(--ink-soft);
+  max-width: 46ch;
+}
+
+.acct-setting-tab-note {
+  margin: 0.55rem 1.1rem 0.2rem;
+  font-size: 0.78rem;
+  color: var(--ink-soft);
+  max-width: 52ch;
+}
+
+.acct-danger {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 1rem;
+  flex-wrap: wrap;
+  padding: 1rem 1.1rem 1.1rem;
+  border-top: 1px solid var(--hair);
+}
+
+.acct-danger .acct-setting-desc {
+  margin-top: 0.3rem;
+}
+
+/* ---------- profile ---------- */
+
+.acct-stat-strip {
+  margin-top: 1.1rem;
+  display: flex;
+  flex-wrap: wrap;
+  border-top: 1px solid var(--hair);
+  border-bottom: 1px solid var(--hair);
+  font-family: var(--font-mono);
+  font-size: 0.78rem;
+  color: var(--ink-mute);
+}
+
+.acct-stat-strip span {
+  padding: 0.7rem 1.2rem 0.7rem 0;
+}
+
+.acct-stat-strip span + span {
+  border-left: 1px solid var(--hair);
+  padding-left: 1.2rem;
+}
+
+.acct-stat-strip strong {
+  font-weight: 500;
+  color: var(--ink);
+}
+
+.acct-activity {
+  list-style: none;
+  margin: 0.3rem 0 0;
+  padding: 0;
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+}
+
+.acct-activity li {
+  display: grid;
+  grid-template-columns: 8.5rem minmax(0, 1fr);
+  gap: 0.8rem;
+  padding: 0.55rem 0;
+  border-bottom: 1px solid var(--hair);
+}
+
+.acct-activity li:last-child {
+  border-bottom: 0;
+}
+
+/* ---------- responsive ---------- */
+
+@media (max-width: 900px) {
+  .acct-setting-row {
+    grid-template-columns: 1fr;
+    align-items: start;
+  }
+
+  .acct-activity li {
+    grid-template-columns: 1fr;
+    gap: 0.15rem;
+  }
+}

@@ -39,12 +39,15 @@ def test_query_data_inherits_in_process_allowlist():
     NOT added here — exposing every published doc externally is a separate
     security decision (human gate), out of scope for this wiring.
     """
-    from digiquant.research.data.queries import ALLOWED_READ_TABLES
+    from digiquant.research.data.queries import ALLOWED_READ_TABLES, MARKET_TABLES_REMOVED
 
     for table in ("positions", "nav_history", "theses"):
         assert table in ALLOWED_READ_TABLES
     for blocked in ("decision_log", "atlas_run_diagnostics", "documents"):
         assert blocked not in ALLOWED_READ_TABLES
+    # #3780 Task 7: market history left the generic reader for the R2 cache.
+    for removed in MARKET_TABLES_REMOVED:
+        assert removed not in ALLOWED_READ_TABLES
 
 
 @pytest.mark.unit

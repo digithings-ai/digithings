@@ -15,6 +15,8 @@ import pytest
 from click.testing import CliRunner
 from digiquant.cli.prices import (
     compute_technicals_cmd,
+    fetch_fx_intraday_cmd,
+    fetch_macro_cmd,
     fetch_quotes_cmd,
     recompute_technicals_cmd,
 )
@@ -289,3 +291,198 @@ def test_recompute_technicals_needs_a_universe() -> None:
     result = CliRunner().invoke(recompute_technicals_cmd, [])
     assert result.exit_code != 0
     assert "Provide --watchlist or --tickers" in result.output
+
+
+# ─── R2 cutover writers-stop, second attempt (#3780, Task 7b) ─────────────
+# The Task 7 fix round reverted the stop to dual-write (bulk readers were
+# still Supabase-only). With every reader on the R2 seams, the writers stop
+# again: covered sources refuse LOUD under r2. fedprob is the documented
+# exception — prediction-market odds have no R2 generation, so fedprob-only
+# runs keep writing Supabase under r2.
+
+
+def test_supabase_writers_refuse_under_r2_backend(
+    monkeypatch: pytest.MonkeyPatch, tmp_path
+) -> None:
+    """Under DIGIQUANT_MARKET_DATA_BACKEND=r2 the writers fail LOUD (never silent)."""
+    monkeypatch.setenv("DIGIQUANT_MARKET_DATA_BACKEND", "r2")
+    runner = CliRunner()
+    manifest = tmp_path / "macro_series.yaml"
+    manifest.write_text("fred:\n  series: []\n")
+    cases = [
+        (fetch_quotes_cmd, ["--tickers", "SPY", "--supabase"]),
+        (
+            compute_technicals_cmd,
+            ["--tickers", "SPY", "--supabase", "--cache-dir", str(tmp_path)],
+        ),
+        (recompute_technicals_cmd, ["--tickers", "SPY"]),
+        (
+            fetch_macro_cmd,
+            ["--manifest", str(manifest), "--supabase", "--sources", "fred"],
+        ),
+        (
+            fetch_macro_cmd,
+            ["--manifest", str(manifest), "--supabase"],
+        ),  # default fred,yahoo
+        (
+            fetch_macro_cmd,
+            ["--manifest", str(manifest), "--supabase", "--sources", "fred,fedprob"],
+        ),  # mixed runs still refuse (fred is R2-owned)
+    ]
+    for cmd, args in cases:
+        result = runner.invoke(cmd, args)
+        assert result.exit_code != 0, (cmd.name, result.output)
+        assert "writes are stopped" in result.output, (cmd.name, result.output)
+
+
+def test_fetch_macro_fedprob_only_proceeds_under_r2_backend(
+    monkeypatch: pytest.MonkeyPatch, tmp_path
+) -> None:
+    """fedprob-only runs are exempt: no R2 generation exists for them."""
+    monkeypatch.setenv("DIGIQUANT_MARKET_DATA_BACKEND", "r2")
+    runner = CliRunner()
+    manifest = tmp_path / "macro_series.yaml"
+    manifest.write_text("fred:\n  series: []\n")
+    with (
+        patch(f"{_WRITER}.build_supabase_client", return_value=Mock()),
+        patch(f"{_WRITER}.upsert_macro_observations", return_value=Mock(rows=2)),
+        patch(
+            "digiquant.data.prices.fed_probabilities.fetch_fed_prob_kalshi",
+            return_value=[],
+        ),
+        patch(
+            "digiquant.data.prices.fed_probabilities.fetch_fed_prob_polymarket",
+            return_value=[],
+        ),
+    ):
+        result = runner.invoke(
+            fetch_macro_cmd,
+            ["--manifest", str(manifest), "--supabase", "--sources", "fedprob"],
+        )
+    assert result.exit_code == 0, result.output
+
+
+def test_supabase_writers_stay_active_by_default(tmp_path, monkeypatch) -> None:
+    """Without the flag the gates are inert (dry-run paths exit zero, no network)."""
+    from digiquant.cli.prices import _supabase_writes_disabled
+
+    monkeypatch.delenv("DIGIQUANT_MARKET_DATA_BACKEND", raising=False)
+    assert _supabase_writes_disabled() is False  # flag default is supabase
+    runner = CliRunner()
+    result = runner.invoke(
+        fetch_quotes_cmd, ["--tickers", "SPY", "--dry-run", "--cache-dir", str(tmp_path)]
+    )
+    assert result.exit_code == 0, result.output
+    with (
+        patch(f"{_WRITER}.build_supabase_client", return_value=Mock()),
+        patch(
+            f"{_REFRESH}.recompute_technicals_from_history",
+            return_value=RefreshResult(1, 0, rows_computed=4, history_rows_read=40),
+        ),
+    ):
+        result = runner.invoke(
+            recompute_technicals_cmd, ["--tickers", "SPY", "--dry-run", "--as-of", "2026-03-01"]
+        )
+    assert result.exit_code == 0, result.output
+
+
+# ─── fetch-fx-intraday (twelve-x grading candles) ─────────────────────────
+
+_FETCH_INTRADAY = "digiquant.data.prices.macro_ingest.fetch_fx_intraday"
+
+
+def _fake_candles(interval: str = "1h"):
+    from datetime import UTC, datetime
+
+    from digiquant.data.prices.macro_ingest import CandleObservation
+
+    return [
+        CandleObservation(
+            series_id="FX/EUR",
+            interval=interval,
+            ts=datetime(2025, 4, 1, 13, tzinfo=UTC),
+            open=1.08,
+            high=1.10,
+            low=1.07,
+            close=1.09,
+        ),
+        CandleObservation(
+            series_id="FX/EUR",
+            interval=interval,
+            ts=datetime(2025, 4, 1, 14, tzinfo=UTC),
+            open=1.09,
+            high=1.11,
+            low=1.08,
+            close=1.10,
+        ),
+    ]
+
+
+def test_fetch_fx_intraday_dry_run_summarizes_without_credentials() -> None:
+    with patch(_FETCH_INTRADAY, return_value=_fake_candles()):
+        result = CliRunner().invoke(fetch_fx_intraday_cmd, ["--dry-run"])
+
+    assert result.exit_code == 0, result.output
+    assert "fx intraday: 2 candles" in result.output
+    assert '"FX/EUR": 2' in result.output
+
+
+def test_fetch_fx_intraday_upserts_candles_as_rows() -> None:
+    with (
+        patch(_FETCH_INTRADAY, return_value=_fake_candles()),
+        patch(f"{_WRITER}.build_supabase_client", return_value=Mock()),
+        patch(f"{_WRITER}.upsert_fx_intraday_observations", return_value=Mock(rows=2)) as upsert,
+    ):
+        result = CliRunner().invoke(
+            fetch_fx_intraday_cmd, ["--supabase", "--interval", "30m", "--period", "60d"]
+        )
+
+    assert result.exit_code == 0, result.output
+    assert "upserted 2 rows into fx_intraday_observations" in result.output
+    rows = upsert.call_args.args[1]
+    assert rows[0] == {
+        "source": "yahoo",
+        "series_id": "FX/EUR",
+        "interval": "30m",
+        "ts": "2025-04-01T13:00:00+00:00",
+        "open": 1.08,
+        "high": 1.10,
+        "low": 1.07,
+        "close": 1.09,
+    }
+    assert {r["interval"] for r in rows} == {"30m"}
+
+
+def test_fetch_fx_intraday_defaults_interval_to_1h_in_rows() -> None:
+    """--interval is the single source of truth: the default '1h' is persisted."""
+    with (
+        patch(_FETCH_INTRADAY, return_value=_fake_candles("5m")) as fetch,
+        patch(f"{_WRITER}.build_supabase_client", return_value=Mock()),
+        patch(f"{_WRITER}.upsert_fx_intraday_observations", return_value=Mock(rows=2)) as upsert,
+    ):
+        result = CliRunner().invoke(fetch_fx_intraday_cmd, ["--supabase"])
+
+    assert result.exit_code == 0, result.output
+    assert fetch.call_args.kwargs["interval"] == "1h"
+    rows = upsert.call_args.args[1]
+    assert {r["interval"] for r in rows} == {"1h"}
+
+
+def test_fetch_fx_intraday_help_documents_persisted_interval() -> None:
+    """The --interval help must say the value is persisted, not config-only."""
+    result = CliRunner().invoke(fetch_fx_intraday_cmd, ["--help"])
+
+    assert result.exit_code == 0, result.output
+    assert "persisted" in result.output
+    assert "fx_intraday_observations.interval" in result.output
+
+
+def test_fetch_fx_intraday_requires_credentials() -> None:
+    with (
+        patch(_FETCH_INTRADAY, return_value=_fake_candles()),
+        patch(f"{_WRITER}.build_supabase_client", return_value=None),
+    ):
+        result = CliRunner().invoke(fetch_fx_intraday_cmd, ["--supabase"])
+
+    assert result.exit_code != 0
+    assert "Supabase credentials not set" in result.output

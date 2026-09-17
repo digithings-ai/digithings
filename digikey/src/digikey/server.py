@@ -265,21 +265,38 @@ def oauth_token(body: TokenRequest, request: Request) -> TokenResponse:
             if pointer is not None:
                 profile_id = pointer.profile_id
                 profile_version = pointer.profile_version
-        token, _jti = issue_access_token(
-            _private_key,
-            kid=_kid,
-            sub=f"bff:{subject}",
-            tenant_slug=tenant_slug,
-            scopes=scopes,
-            key_pub=None,
-            project_id=(body.project_id or "").strip() or None,
-            project_config_ref=(body.project_config_ref or "").strip() or None,
-            principal_kind="bff_session",
-            audience=body.audience,
-            ttl_sec=ttl,
-            profile_id=profile_id,
-            profile_version=profile_version,
-        )
+            token, jti = issue_access_token(
+                _private_key,
+                kid=_kid,
+                sub=f"bff:{subject}",
+                tenant_slug=tenant_slug,
+                scopes=scopes,
+                key_pub=None,
+                project_id=(body.project_id or "").strip() or None,
+                project_config_ref=(body.project_config_ref or "").strip() or None,
+                principal_kind="bff_session",
+                audience=body.audience,
+                ttl_sec=ttl,
+                profile_id=profile_id,
+                profile_version=profile_version,
+            )
+            # An untracked BFF jti can never be revoked or rehydrated, so refuse
+            # to emit the token if the durable record can't be written. Mirrors
+            # the api_key path. See ADR-0007 / #3917.
+            try:
+                session.add(
+                    JtiIssuedRow(
+                        jti=jti,
+                        api_key_id=None,
+                        subject=subject,
+                        exp=int(time.time()) + ttl,
+                    )
+                )
+                session.commit()
+            except Exception as e:
+                session.rollback()
+                logger.error("jti_issued insert failed; refusing to issue BFF token: %s", e)
+                raise HTTPException(status_code=503, detail="token issuance unavailable") from e
         llm_key = (os.environ.get("DIGIKEY_LITELLM_PROXY_KEY") or "").strip() or None
         return TokenResponse(access_token=token, expires_in=ttl, litellm_proxy_api_key=llm_key)
 
@@ -382,6 +399,74 @@ def admin_revoke_key(key_id: str, request: Request) -> RevokeResponse:
             session.rollback()
             logger.error("revoke blocklist write failed: %s", e)
             raise HTTPException(status_code=503, detail="auth_backend_unavailable") from e
+        session.commit()
+    return RevokeResponse(revoked=True, jtis_invalidated=written)
+
+
+class RevokeSessionBody(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    subject: str = Field(..., min_length=1, max_length=256)
+
+    @field_validator("subject")
+    @classmethod
+    def _subject_nonblank(cls, value: str) -> str:
+        slug = value.strip()
+        if not slug:
+            raise ValueError("subject must not be blank")
+        return slug
+
+
+@app.post(
+    "/v1/admin/bff-sessions/revoke",
+    response_model=RevokeResponse,
+    dependencies=[Depends(rate_limit_dependency)],
+    tags=["admin"],
+    summary="Revoke BFF sessions for a subject",
+)
+def admin_revoke_bff_subject(body: RevokeSessionBody, request: Request) -> RevokeResponse:
+    """Blocklist all live BFF JWTs for a subject (#3917).
+
+    BFF sessions have no ``digikey_api_keys`` row, so this mirrors the API-key
+    revoke endpoint for subject principals. Durable via
+    ``JtiIssuedRow.revoked_at`` so ``rehydrate_blocklist_from_db`` can restore
+    the entries after a Redis restart. Idempotent: already-revoked rows are
+    skipped on the next call.
+
+    Scope: ``JtiIssuedRow`` has no tenant column, so this revokes the subject
+    across the whole deployment. Subjects are unique and the endpoint is gated
+    on ``DIGIKEY_ADMIN_TOKEN``, so this cannot be used cross-tenant by a
+    non-admin. (F2)
+
+    Limitation: this blocks tokens already issued. It does not stop a caller
+    holding ``DIGIKEY_BFF_TOKEN`` from minting a fresh JWT for the same subject;
+    rotate the BFF secret to fully cut off a compromised BFF credential. (F3)
+    """
+    _require_admin(request)
+    subject = body.subject.strip()
+    sf = session_factory()
+    now_ts = int(time.time())
+    with sf() as session:
+        live = list(
+            session.scalars(
+                select(JtiIssuedRow).where(
+                    JtiIssuedRow.subject == subject,
+                    JtiIssuedRow.revoked_at.is_(None),
+                    JtiIssuedRow.exp > now_ts,
+                )
+            )
+        )
+        entries = [(r.jti, r.exp - now_ts) for r in live]
+        try:
+            written = blocklist.write_blocklist_bulk(entries)
+        except blocklist.BlocklistUnavailable as e:
+            # Fail-closed: don't mark rows revoked if the blocklist write failed,
+            # or rehydrate would treat an un-delivered revocation as done.
+            session.rollback()
+            logger.error("bff revoke blocklist write failed: %s", e)
+            raise HTTPException(status_code=503, detail="auth_backend_unavailable") from e
+        for r in live:
+            r.revoked_at = utcnow()
         session.commit()
     return RevokeResponse(revoked=True, jtis_invalidated=written)
 

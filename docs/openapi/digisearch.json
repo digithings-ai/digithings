@@ -1,6 +1,442 @@
 {
   "components": {
     "schemas": {
+      "BridgeReceipt": {
+        "description": "Outcome of one C\u2192D handoff attempt (#4249).\n\n``duplicate=True`` means the ``(watch_id, run_id, webset_id)`` ledger\nalready recorded the search and this delivery returned it unchanged (a\nrepeat of the same run never opens a second generation).",
+        "properties": {
+          "duplicate": {
+            "default": false,
+            "title": "Duplicate",
+            "type": "boolean"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          },
+          "ok": {
+            "title": "Ok",
+            "type": "boolean"
+          },
+          "search_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Search Id"
+          },
+          "webset_id": {
+            "title": "Webset Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "webset_id",
+          "ok"
+        ],
+        "title": "BridgeReceipt",
+        "type": "object"
+      },
+      "Citation": {
+        "additionalProperties": false,
+        "description": "A cited web source: url plus an optional display title and excerpt.",
+        "properties": {
+          "excerpt": {
+            "default": "",
+            "title": "Excerpt",
+            "type": "string"
+          },
+          "title": {
+            "default": "",
+            "title": "Title",
+            "type": "string"
+          },
+          "url": {
+            "title": "Url",
+            "type": "string"
+          }
+        },
+        "required": [
+          "url"
+        ],
+        "title": "Citation",
+        "type": "object"
+      },
+      "CriterionResult": {
+        "description": "Verdict for one criterion: pass/fail + reasoning + grounding references.\n\n``criterion`` is the full rule that was evaluated, so each result is a\nself-contained audit record; ``references`` is ``list[Citation]`` (the\nshared atom, R1) with ``title`` defaulting to ``\"\"`` and ``excerpt``\ncarrying the supporting quote. Rejected items retain the failing reasons;\nthe fail-closed settlement writes one synthetic result per criterion with\n``passed=False`` and empty references (flag I9).",
+        "properties": {
+          "criterion": {
+            "$ref": "#/components/schemas/VerificationCriterion"
+          },
+          "passed": {
+            "title": "Passed",
+            "type": "boolean"
+          },
+          "reasoning": {
+            "default": "",
+            "title": "Reasoning",
+            "type": "string"
+          },
+          "references": {
+            "items": {
+              "$ref": "#/components/schemas/Citation"
+            },
+            "title": "References",
+            "type": "array"
+          }
+        },
+        "required": [
+          "criterion",
+          "passed"
+        ],
+        "title": "CriterionResult",
+        "type": "object"
+      },
+      "DedupRule": {
+        "additionalProperties": false,
+        "description": "How a run decides which results are new (Task 3).",
+        "properties": {
+          "match": {
+            "default": "url_content",
+            "enum": [
+              "url",
+              "url_content"
+            ],
+            "title": "Match",
+            "type": "string"
+          },
+          "similarity_threshold": {
+            "default": 0.9,
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Similarity Threshold",
+            "type": "number"
+          }
+        },
+        "title": "DedupRule",
+        "type": "object"
+      },
+      "DeliveryConfig": {
+        "additionalProperties": false,
+        "description": "Delivery mode and destinations. ``poll`` (the default) stores runs only.",
+        "properties": {
+          "mode": {
+            "default": "poll",
+            "enum": [
+              "poll",
+              "webhook",
+              "fanout"
+            ],
+            "title": "Mode",
+            "type": "string"
+          },
+          "targets": {
+            "items": {
+              "$ref": "#/components/schemas/DeliveryTarget"
+            },
+            "maxItems": 5,
+            "title": "Targets",
+            "type": "array"
+          }
+        },
+        "title": "DeliveryConfig",
+        "type": "object"
+      },
+      "DeliveryReceipt": {
+        "description": "Outcome of one delivery attempt (Task 5).",
+        "properties": {
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          },
+          "ok": {
+            "title": "Ok",
+            "type": "boolean"
+          },
+          "status_code": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Status Code"
+          },
+          "target_kind": {
+            "title": "Target Kind",
+            "type": "string"
+          }
+        },
+        "required": [
+          "target_kind",
+          "ok"
+        ],
+        "title": "DeliveryReceipt",
+        "type": "object"
+      },
+      "DeliveryTarget": {
+        "additionalProperties": false,
+        "description": "One delivery destination. ``url`` is webhook/slack; ``email_to`` email.",
+        "properties": {
+          "email_to": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Email To"
+          },
+          "kind": {
+            "enum": [
+              "webhook",
+              "slack",
+              "email"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Url"
+          }
+        },
+        "required": [
+          "kind"
+        ],
+        "title": "DeliveryTarget",
+        "type": "object"
+      },
+      "EnrichedField": {
+        "description": "One enrichment field's value plus its citations (auditable by construction).\n\n``citations`` is mandatory on success: a field with an empty ``value`` or\nempty ``citations`` validates as ``unresolved`` (downgraded here rather than\nleft to callers) and ``error`` carries the reasoning; nothing is ever\nsilently filled. An explicit ``skipped`` \u2014 never attempted because the\nwebset was cancelled/failed first \u2014 is preserved. ``value`` is ``Any``\nbecause the shape is type-dependent (text/number/ISO date/option/entity\npayload); ``EnrichmentDef.type`` documents what to expect, and ``0``/\n``False`` are values, never emptiness.",
+        "properties": {
+          "citations": {
+            "items": {
+              "$ref": "#/components/schemas/Citation"
+            },
+            "title": "Citations",
+            "type": "array"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          },
+          "status": {
+            "default": "resolved",
+            "enum": [
+              "resolved",
+              "unresolved",
+              "skipped"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "value": {
+            "title": "Value"
+          }
+        },
+        "title": "EnrichedField",
+        "type": "object"
+      },
+      "EnrichmentDef": {
+        "additionalProperties": false,
+        "description": "A typed per-item enrichment request (max 10 active per webset).\n\n``options`` is populated only for ``type=\"options\"`` (enforced here: an\n``options`` def needs a non-empty choice list, and no other type may carry\none). ``status`` tracks the attach/backfill lifecycle: ``running`` while the\ndef is being attached or backfilled (``add_enrichment``), ``idle`` once\nsettled, ``failed`` when that run failed.",
+        "properties": {
+          "description": {
+            "default": "",
+            "title": "Description",
+            "type": "string"
+          },
+          "id": {
+            "pattern": "^wse_[0-9a-f]{32}$",
+            "title": "Id",
+            "type": "string"
+          },
+          "name": {
+            "maxLength": 120,
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          },
+          "options": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Options",
+            "type": "array"
+          },
+          "status": {
+            "default": "running",
+            "enum": [
+              "running",
+              "idle",
+              "failed"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "type": {
+            "enum": [
+              "text",
+              "number",
+              "date",
+              "url",
+              "email",
+              "phone",
+              "options",
+              "company_profile"
+            ],
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "type"
+        ],
+        "title": "EnrichmentDef",
+        "type": "object"
+      },
+      "ExaWebSearchRequest": {
+        "description": "Request for POST /v1/digisearch_web_search (EXA live web search, optional provider).",
+        "properties": {
+          "category": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Category"
+          },
+          "contents_text": {
+            "default": false,
+            "title": "Contents Text",
+            "type": "boolean"
+          },
+          "exclude_domains": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Exclude Domains"
+          },
+          "include_domains": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Include Domains"
+          },
+          "num_results": {
+            "default": 8,
+            "maximum": 100.0,
+            "minimum": 1.0,
+            "title": "Num Results",
+            "type": "integer"
+          },
+          "offset": {
+            "default": 0,
+            "description": "Page start over one enlarged EXA window (EXA POST /search has no offset), so `results[offset : offset + num_results]` come from a single window fetched with `numResults = offset + num_results`. `offset + num_results` must stay within EXA_MAX_RESULTS (100): a page past the cap is rejected 400, never silently truncated. `offset=0` (default) is the unpaged call.",
+            "minimum": 0.0,
+            "title": "Offset",
+            "type": "integer"
+          },
+          "output_schema": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Output Schema"
+          },
+          "query": {
+            "description": "Natural-language web query.",
+            "title": "Query",
+            "type": "string"
+          },
+          "search_type": {
+            "default": "auto",
+            "description": "instant|fast|auto|deep-lite|deep|deep-reasoning.",
+            "title": "Search Type",
+            "type": "string"
+          },
+          "system_prompt": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "System Prompt"
+          }
+        },
+        "required": [
+          "query"
+        ],
+        "title": "ExaWebSearchRequest",
+        "type": "object"
+      },
       "FunctionParametersSchema": {
         "properties": {
           "properties": {
@@ -135,6 +571,261 @@
         "title": "IngestResponse",
         "type": "object"
       },
+      "IngestUrlRequest": {
+        "additionalProperties": false,
+        "description": "Request body for POST /ingest/url.",
+        "properties": {
+          "index_name": {
+            "default": "default",
+            "title": "Index Name",
+            "type": "string"
+          },
+          "metadata": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Document metadata (evidence_tier, doi_or_arxiv, etc.). Merged after sidecar YAML.",
+            "title": "Metadata"
+          },
+          "source_url": {
+            "description": "URL to fetch and ingest",
+            "minLength": 1,
+            "title": "Source Url",
+            "type": "string"
+          }
+        },
+        "required": [
+          "source_url"
+        ],
+        "title": "IngestUrlRequest",
+        "type": "object"
+      },
+      "MonitorDigest": {
+        "additionalProperties": false,
+        "description": "Cited answer stored on a research-mode run (#4250).\n\n``citations`` dedupe on ``normalize_url`` identity so one page is cited\nonce; ``answer`` is the Phase B synthesis text (inline ``[n]`` markers).",
+        "properties": {
+          "answer": {
+            "title": "Answer",
+            "type": "string"
+          },
+          "citations": {
+            "items": {
+              "$ref": "#/components/schemas/Citation"
+            },
+            "title": "Citations",
+            "type": "array"
+          },
+          "effort": {
+            "default": "fast",
+            "enum": [
+              "fast",
+              "thorough"
+            ],
+            "title": "Effort",
+            "type": "string"
+          }
+        },
+        "required": [
+          "answer"
+        ],
+        "title": "MonitorDigest",
+        "type": "object"
+      },
+      "MonitorRun": {
+        "additionalProperties": false,
+        "description": "Canonical run envelope \u2014 backend is a label, never a shape fork.\n\nOSS runs are born in this shape; EXA runs are translated into it by\n``exa_adapter`` (Task 8). Status semantics: ``ok`` = new content found and\nstored/delivered; ``no_change`` = turn succeeded but dedup removed\neverything (delivery skipped, run still persisted); ``failed`` = the turn\nraised or the backend errored (``error`` set, delivery skipped).\n\n``delivery`` and ``bridge`` receipts are attached to the RETURNED run only:\nthe append-only store cannot rewrite the already-persisted body, so stored\nruns keep both lists empty. ``digest`` is different: a research-mode run\nbuilds it before persist, so the stored body carries it.",
+        "properties": {
+          "backend": {
+            "default": "oss",
+            "enum": [
+              "oss",
+              "exa"
+            ],
+            "title": "Backend",
+            "type": "string"
+          },
+          "bridge": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/BridgeReceipt"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "cost_dollars": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cost Dollars"
+          },
+          "dedup_stats": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "title": "Dedup Stats",
+            "type": "object"
+          },
+          "delivery": {
+            "items": {
+              "$ref": "#/components/schemas/DeliveryReceipt"
+            },
+            "title": "Delivery",
+            "type": "array"
+          },
+          "digest": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/MonitorDigest"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          },
+          "finished_at": {
+            "format": "date-time",
+            "title": "Finished At",
+            "type": "string"
+          },
+          "query_snapshot": {
+            "additionalProperties": true,
+            "title": "Query Snapshot",
+            "type": "object"
+          },
+          "results_all": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Results All",
+            "type": "array"
+          },
+          "results_new": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Results New",
+            "type": "array"
+          },
+          "run_id": {
+            "title": "Run Id",
+            "type": "string"
+          },
+          "started_at": {
+            "format": "date-time",
+            "title": "Started At",
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "ok",
+              "no_change",
+              "failed"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "trigger": {
+            "enum": [
+              "schedule",
+              "manual",
+              "poll",
+              "exa_webhook"
+            ],
+            "title": "Trigger",
+            "type": "string"
+          },
+          "watch_id": {
+            "title": "Watch Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "run_id",
+          "watch_id",
+          "status",
+          "trigger",
+          "started_at",
+          "finished_at",
+          "query_snapshot",
+          "results_all",
+          "results_new",
+          "dedup_stats"
+        ],
+        "title": "MonitorRun",
+        "type": "object"
+      },
+      "MonitorRunsData": {
+        "description": "Payload for the ``digisearch_monitors_runs`` orchestrator tool (Task 7).",
+        "properties": {
+          "next_cursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Cursor"
+          },
+          "runs": {
+            "items": {
+              "$ref": "#/components/schemas/MonitorRun"
+            },
+            "title": "Runs",
+            "type": "array"
+          }
+        },
+        "required": [
+          "runs"
+        ],
+        "title": "MonitorRunsData",
+        "type": "object"
+      },
+      "MonitorTriggerRequest": {
+        "additionalProperties": false,
+        "description": "Request body for POST /v1/monitors/{watch_id}/trigger.",
+        "properties": {
+          "mode": {
+            "default": "manual",
+            "enum": [
+              "manual",
+              "poll"
+            ],
+            "title": "Mode",
+            "type": "string"
+          }
+        },
+        "title": "MonitorTriggerRequest",
+        "type": "object"
+      },
       "OpenAIToolDict": {
         "description": "OpenAI function-tool dict returned by ``POST /v1/orchestrator_tools``.",
         "properties": {
@@ -213,7 +904,7 @@
             "title": "Default Index Name"
           },
           "tool": {
-            "description": "digisearch | digisearch_fetch_all | digisearch_research_delegate",
+            "description": "digisearch | digisearch_fetch_all | digisearch_research_delegate | web_search | digisearch_web_search",
             "title": "Tool",
             "type": "string"
           }
@@ -239,6 +930,36 @@
                 "$ref": "#/components/schemas/ResearchTurnOutput"
               },
               {
+                "$ref": "#/components/schemas/WebSearchResponse"
+              },
+              {
+                "$ref": "#/components/schemas/WebSearchData"
+              },
+              {
+                "$ref": "#/components/schemas/MonitorRun"
+              },
+              {
+                "$ref": "#/components/schemas/MonitorRunsData"
+              },
+              {
+                "$ref": "#/components/schemas/Webset"
+              },
+              {
+                "$ref": "#/components/schemas/WebsetSearch"
+              },
+              {
+                "$ref": "#/components/schemas/WebsetGetData"
+              },
+              {
+                "$ref": "#/components/schemas/WebsetItemsData"
+              },
+              {
+                "$ref": "#/components/schemas/WebsetEventsData"
+              },
+              {
+                "$ref": "#/components/schemas/WebsetExportData"
+              },
+              {
                 "type": "null"
               }
             ],
@@ -259,6 +980,17 @@
             "title": "Ok",
             "type": "boolean"
           },
+          "retryable": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Retryable"
+          },
           "service": {
             "anyOf": [
               {
@@ -269,6 +1001,17 @@
               }
             ],
             "title": "Service"
+          },
+          "status_code": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Status Code"
           },
           "tool": {
             "anyOf": [
@@ -643,6 +1386,18 @@
             ],
             "title": "Backend"
           },
+          "cost_dollars": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cost Dollars"
+          },
           "error": {
             "anyOf": [
               {
@@ -713,6 +1468,30 @@
             },
             "title": "Trace",
             "type": "array"
+          },
+          "usage": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Usage"
+          },
+          "web_output": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Web Output"
           }
         },
         "title": "ResearchTurnOutput",
@@ -722,6 +1501,25 @@
         "additionalProperties": false,
         "description": "Request for POST /v1/research_turn (composite retrieval + citations).",
         "properties": {
+          "cited_top_n": {
+            "anyOf": [
+              {
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Explicit cited-source cap; wins over the effort preset when set.",
+            "title": "Cited Top N"
+          },
+          "effort": {
+            "default": "fast",
+            "description": "fast | thorough \u2014 web branch effort preset (validated by the branch).",
+            "title": "Effort",
+            "type": "string"
+          },
           "filter": {
             "anyOf": [
               {
@@ -762,6 +1560,19 @@
             "title": "Mode",
             "type": "string"
           },
+          "output_schema": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Optional JSON schema for structured web synthesis (web branch only).",
+            "title": "Output Schema"
+          },
           "session_id": {
             "anyOf": [
               {
@@ -773,6 +1584,17 @@
             ],
             "description": "Optional session id for tracing",
             "title": "Session Id"
+          },
+          "source": {
+            "default": "corpus",
+            "description": "corpus | web | auto. Defaults to corpus; the web branch runs only when web or auto is explicitly requested.",
+            "enum": [
+              "corpus",
+              "web",
+              "auto"
+            ],
+            "title": "Source",
+            "type": "string"
           },
           "top_k": {
             "default": 10,
@@ -786,6 +1608,18 @@
             "minLength": 1,
             "title": "User Message",
             "type": "string"
+          },
+          "workspace_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Optional tenant/workspace id. Injected as a mandatory structured filter so the research path is scoped like POST /query (enterprise).",
+            "title": "Workspace Id"
           }
         },
         "required": [
@@ -847,6 +1681,47 @@
         "title": "ResearchTurnTraceStep",
         "type": "object"
       },
+      "UrlIngestResult": {
+        "additionalProperties": false,
+        "description": "Outcome of one successful URL ingest.",
+        "properties": {
+          "chunks_created": {
+            "minimum": 0.0,
+            "title": "Chunks Created",
+            "type": "integer"
+          },
+          "doc_id": {
+            "title": "Doc Id",
+            "type": "string"
+          },
+          "extractor": {
+            "default": "trafilatura",
+            "title": "Extractor",
+            "type": "string"
+          },
+          "final_url": {
+            "title": "Final Url",
+            "type": "string"
+          },
+          "index_name": {
+            "title": "Index Name",
+            "type": "string"
+          },
+          "source_url": {
+            "title": "Source Url",
+            "type": "string"
+          }
+        },
+        "required": [
+          "doc_id",
+          "chunks_created",
+          "index_name",
+          "source_url",
+          "final_url"
+        ],
+        "title": "UrlIngestResult",
+        "type": "object"
+      },
       "ValidationError": {
         "properties": {
           "ctx": {
@@ -885,6 +1760,1167 @@
           "type"
         ],
         "title": "ValidationError",
+        "type": "object"
+      },
+      "VerificationCriterion": {
+        "additionalProperties": false,
+        "description": "One natural-language admission rule (1-5 rules per search).\n\n``rule`` is the rule text evaluated at the verify seam\n(``websets/verify.py``); ``description`` is an optional human note. The\n``rules`` verification mode maps these onto the landed ``domain`` /\n``keyword`` / ``recency`` rule kinds \u2014 this model carries the text only.",
+        "properties": {
+          "description": {
+            "default": "",
+            "title": "Description",
+            "type": "string"
+          },
+          "name": {
+            "maxLength": 120,
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          },
+          "rule": {
+            "maxLength": 500,
+            "minLength": 1,
+            "title": "Rule",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "rule"
+        ],
+        "title": "VerificationCriterion",
+        "type": "object"
+      },
+      "Watch": {
+        "additionalProperties": false,
+        "description": "A scheduled web-search watch.\n\nBackend notes:\n\n- ``search_type`` and ``category`` are EXA-only: they are ignored on the\n  OSS path (``WebSearchRequest`` has no such fields).\n- ``num_results`` is the EXA 1-100 cap (R6). The OSS seam clamps to\n  ``min(num_results, 10)`` and records ``num_results_clamped_from`` in the\n  run's ``query_snapshot``; this model keeps the EXA bound so one shape\n  spans both backends.\n- Monitors pin ``recency_days=None`` at the runner seam (R5): no rolling\n  window is baked into this model, so the landed ``WebSearchRequest``\n  default of 7 days is never silently inherited.\n- There is deliberately no ``delivery_secret`` field (R8): the secret is\n  generated server-side and returned only in create/rotate responses.\n- ``exa_monitor_id`` identifies the remote EXA monitor and is required\n  once ``backend=\"exa\"`` (enforced by the Task 8 create path).\n- ``bridge`` is the C\u2192D handoff switch (#4249): when set, every ``ok`` run\n  opens one search generation on the named webset through the websets\n  store's idempotency ledger. It is OSS-local-only \u2014 EXA watches reject it\n  at the config gate (remote monitors never hand off).\n- ``answer_mode`` (#4250) selects the turn behind each run: ``recall``\n  (default) is the Phase B shallow-recall leg byte-identical to v1;\n  ``research`` runs the full Phase B research turn and stores a cited\n  ``MonitorDigest`` on the run. ``effort`` (``fast``/``thorough``) applies\n  to ``research`` only. Both are OSS-local-only \u2014 EXA watches reject\n  ``research`` at the config gate.",
+        "properties": {
+          "answer_mode": {
+            "default": "recall",
+            "enum": [
+              "recall",
+              "research"
+            ],
+            "title": "Answer Mode",
+            "type": "string"
+          },
+          "backend": {
+            "default": "oss",
+            "enum": [
+              "oss",
+              "exa"
+            ],
+            "title": "Backend",
+            "type": "string"
+          },
+          "bridge": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/WatchBridge"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "category": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Category"
+          },
+          "created_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Created At"
+          },
+          "dedup": {
+            "$ref": "#/components/schemas/DedupRule"
+          },
+          "delivery": {
+            "$ref": "#/components/schemas/DeliveryConfig"
+          },
+          "effort": {
+            "default": "fast",
+            "enum": [
+              "fast",
+              "thorough"
+            ],
+            "title": "Effort",
+            "type": "string"
+          },
+          "exa_monitor_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Exa Monitor Id"
+          },
+          "exclude_domains": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 20,
+            "title": "Exclude Domains",
+            "type": "array"
+          },
+          "include_domains": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 5,
+            "title": "Include Domains",
+            "type": "array"
+          },
+          "name": {
+            "maxLength": 120,
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          },
+          "num_results": {
+            "default": 8,
+            "maximum": 100.0,
+            "minimum": 1.0,
+            "title": "Num Results",
+            "type": "integer"
+          },
+          "query": {
+            "maxLength": 500,
+            "minLength": 1,
+            "title": "Query",
+            "type": "string"
+          },
+          "schedule": {
+            "$ref": "#/components/schemas/WatchSchedule"
+          },
+          "search_type": {
+            "default": "auto",
+            "title": "Search Type",
+            "type": "string"
+          },
+          "updated_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Updated At"
+          },
+          "watch_id": {
+            "default": "",
+            "title": "Watch Id",
+            "type": "string"
+          },
+          "workspace_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Workspace Id"
+          }
+        },
+        "required": [
+          "name",
+          "query",
+          "schedule"
+        ],
+        "title": "Watch",
+        "type": "object"
+      },
+      "WatchBridge": {
+        "additionalProperties": false,
+        "description": "C\u2192D handoff target (#4249): hand an ``ok`` run to this webset.",
+        "properties": {
+          "webset_id": {
+            "minLength": 1,
+            "title": "Webset Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "webset_id"
+        ],
+        "title": "WatchBridge",
+        "type": "object"
+      },
+      "WatchSchedule": {
+        "additionalProperties": false,
+        "description": "When a watch runs.\n\n``cron`` uses the same 5-field grammar as ``digiclaw/cron.py`` (grammar\nvalidation happens at the runner seam, not here). ``interval_seconds``\nmirrors digiclaw's continuous sleep; the ``ge=60`` floor is deliberately\nstricter than digiclaw's own ``ge=1``.",
+        "properties": {
+          "cron": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cron"
+          },
+          "enabled": {
+            "default": true,
+            "title": "Enabled",
+            "type": "boolean"
+          },
+          "interval_seconds": {
+            "anyOf": [
+              {
+                "minimum": 60.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Interval Seconds"
+          },
+          "mode": {
+            "enum": [
+              "cron",
+              "interval"
+            ],
+            "title": "Mode",
+            "type": "string"
+          },
+          "timezone": {
+            "default": "UTC",
+            "title": "Timezone",
+            "type": "string"
+          }
+        },
+        "required": [
+          "mode"
+        ],
+        "title": "WatchSchedule",
+        "type": "object"
+      },
+      "WebAnswerRequest": {
+        "description": "Request for POST /v1/web_answer (EXA grounded answer).",
+        "properties": {
+          "question": {
+            "description": "Question to answer from the live web.",
+            "title": "Question",
+            "type": "string"
+          }
+        },
+        "required": [
+          "question"
+        ],
+        "title": "WebAnswerRequest",
+        "type": "object"
+      },
+      "WebContentsRequest": {
+        "description": "Request for POST /v1/web_contents (EXA page fetch for known URLs).",
+        "properties": {
+          "highlight_query": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Highlight Query"
+          },
+          "highlights": {
+            "default": false,
+            "title": "Highlights",
+            "type": "boolean"
+          },
+          "summary": {
+            "default": false,
+            "title": "Summary",
+            "type": "boolean"
+          },
+          "text": {
+            "default": true,
+            "title": "Text",
+            "type": "boolean"
+          },
+          "urls": {
+            "description": "Known URLs to fetch.",
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 50,
+            "minItems": 1,
+            "title": "Urls",
+            "type": "array"
+          }
+        },
+        "required": [
+          "urls"
+        ],
+        "title": "WebContentsRequest",
+        "type": "object"
+      },
+      "WebSearchData": {
+        "description": "Orchestrator payload for a ``digisearch_web_search`` invoke.",
+        "properties": {
+          "cost_dollars": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cost Dollars"
+          },
+          "output": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Output"
+          },
+          "results": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Results",
+            "type": "array"
+          },
+          "search_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Search Type"
+          }
+        },
+        "title": "WebSearchData",
+        "type": "object"
+      },
+      "WebSearchErrorResponse": {
+        "description": "Soft error envelope for provider failures on POST /v1/web_search (#4192).\n\nProvider 429/5xx/connection/timeout failures come back as HTTP 200 with\nthis shape (never a 500). ``retryable``/``status_code`` let callers such as\ndigiquant back off on throttling instead of failing the run hard.",
+        "properties": {
+          "error": {
+            "title": "Error",
+            "type": "string"
+          },
+          "ok": {
+            "const": false,
+            "default": false,
+            "title": "Ok",
+            "type": "boolean"
+          },
+          "retryable": {
+            "default": false,
+            "title": "Retryable",
+            "type": "boolean"
+          },
+          "status_code": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Status Code"
+          }
+        },
+        "required": [
+          "error"
+        ],
+        "title": "WebSearchErrorResponse",
+        "type": "object"
+      },
+      "WebSearchRequest": {
+        "properties": {
+          "exclude_domains": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 20,
+            "title": "Exclude Domains",
+            "type": "array"
+          },
+          "include_domains": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 5,
+            "title": "Include Domains",
+            "type": "array"
+          },
+          "max_results": {
+            "default": 4,
+            "maximum": 10.0,
+            "minimum": 1.0,
+            "title": "Max Results",
+            "type": "integer"
+          },
+          "query": {
+            "maxLength": 500,
+            "minLength": 1,
+            "title": "Query",
+            "type": "string"
+          },
+          "recency_days": {
+            "anyOf": [
+              {
+                "maximum": 365.0,
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": 7,
+            "title": "Recency Days"
+          }
+        },
+        "required": [
+          "query"
+        ],
+        "title": "WebSearchRequest",
+        "type": "object"
+      },
+      "WebSearchResponse": {
+        "properties": {
+          "provider": {
+            "default": "",
+            "title": "Provider",
+            "type": "string"
+          },
+          "query": {
+            "title": "Query",
+            "type": "string"
+          },
+          "results": {
+            "items": {
+              "$ref": "#/components/schemas/WebSearchResult"
+            },
+            "title": "Results",
+            "type": "array"
+          }
+        },
+        "required": [
+          "query"
+        ],
+        "title": "WebSearchResponse",
+        "type": "object"
+      },
+      "WebSearchResult": {
+        "properties": {
+          "engine": {
+            "default": "",
+            "title": "Engine",
+            "type": "string"
+          },
+          "score": {
+            "default": 0.0,
+            "title": "Score",
+            "type": "number"
+          },
+          "snippet": {
+            "default": "",
+            "title": "Snippet",
+            "type": "string"
+          },
+          "title": {
+            "default": "",
+            "title": "Title",
+            "type": "string"
+          },
+          "url": {
+            "title": "Url",
+            "type": "string"
+          }
+        },
+        "required": [
+          "url"
+        ],
+        "title": "WebSearchResult",
+        "type": "object"
+      },
+      "Webset": {
+        "description": "A webset: criteria + enrichments over asynchronously built items.\n\n``status`` is ``running`` during the first pass, sticky ``idle`` after\ncompletion (a refresh never flips it back \u2014 observe refreshes through the\nnew ``WebsetSearch`` + events, \u00a7 Async lifecycle), and terminal\n``failed``/``cancelled``. ``criteria`` is the initial rule set later\nsearches inherit; ``enrichments`` holds at most 10 active defs. ``backend``\nis the R4 label (there is no caller-facing provider parameter).\n``verification_mode`` is the webset-level default persisted with the row:\nsearches created later (``add_search`` / ``trigger_monitor`` refreshes)\ninherit it, so a ``rules`` webset never silently switches to ``llm``\n(T6 review carry; the runner receives the mode per scheduled pass).",
+        "properties": {
+          "backend": {
+            "default": "oss",
+            "enum": [
+              "oss",
+              "exa"
+            ],
+            "title": "Backend",
+            "type": "string"
+          },
+          "created_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Created At"
+          },
+          "criteria": {
+            "items": {
+              "$ref": "#/components/schemas/VerificationCriterion"
+            },
+            "maxItems": 5,
+            "minItems": 1,
+            "title": "Criteria",
+            "type": "array"
+          },
+          "enrichments": {
+            "items": {
+              "$ref": "#/components/schemas/EnrichmentDef"
+            },
+            "maxItems": 10,
+            "title": "Enrichments",
+            "type": "array"
+          },
+          "id": {
+            "pattern": "^ws_[0-9a-f]{32}$",
+            "title": "Id",
+            "type": "string"
+          },
+          "object": {
+            "const": "webset",
+            "default": "webset",
+            "title": "Object",
+            "type": "string"
+          },
+          "searches": {
+            "items": {
+              "$ref": "#/components/schemas/WebsetSearch"
+            },
+            "title": "Searches",
+            "type": "array"
+          },
+          "status": {
+            "default": "running",
+            "enum": [
+              "running",
+              "idle",
+              "failed",
+              "cancelled"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "updated_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Updated At"
+          },
+          "verification_mode": {
+            "default": "llm",
+            "enum": [
+              "llm",
+              "rules"
+            ],
+            "title": "Verification Mode",
+            "type": "string"
+          },
+          "workspace_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Workspace Id"
+          }
+        },
+        "required": [
+          "criteria"
+        ],
+        "title": "Webset",
+        "type": "object"
+      },
+      "WebsetCounts": {
+        "description": "Item counts by verification state for ``digisearch_websets_get`` (#4066).",
+        "properties": {
+          "pending": {
+            "default": 0,
+            "title": "Pending",
+            "type": "integer"
+          },
+          "rejected": {
+            "default": 0,
+            "title": "Rejected",
+            "type": "integer"
+          },
+          "verified": {
+            "default": 0,
+            "title": "Verified",
+            "type": "integer"
+          }
+        },
+        "title": "WebsetCounts",
+        "type": "object"
+      },
+      "WebsetCreateRequest": {
+        "additionalProperties": false,
+        "description": "Request body for POST /v1/websets (spec \u00a7 Interfaces).",
+        "properties": {
+          "count": {
+            "default": 10,
+            "description": "Target VERIFIED items (not a page size)",
+            "maximum": 100.0,
+            "minimum": 1.0,
+            "title": "Count",
+            "type": "integer"
+          },
+          "criteria": {
+            "description": "1-5 verification rules [{name, rule}]; the service raises invalid_criteria for 0 or >5 so the stable code reaches the envelope",
+            "items": {
+              "additionalProperties": {
+                "type": "string"
+              },
+              "type": "object"
+            },
+            "title": "Criteria",
+            "type": "array"
+          },
+          "enrichments": {
+            "anyOf": [
+              {
+                "items": {
+                  "additionalProperties": true,
+                  "type": "object"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Up to 10 typed enrichment defs (max 10 enforced by the service)",
+            "title": "Enrichments"
+          },
+          "query": {
+            "description": "Natural-language candidate query",
+            "minLength": 1,
+            "title": "Query",
+            "type": "string"
+          },
+          "verification_mode": {
+            "default": "llm",
+            "description": "llm (default) | rules \u2014 validated by the service (invalid_verification_mode)",
+            "title": "Verification Mode",
+            "type": "string"
+          },
+          "workspace_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Tenant id; 'datatap' is rejected (datatap_websets_disabled)",
+            "title": "Workspace Id"
+          }
+        },
+        "required": [
+          "query"
+        ],
+        "title": "WebsetCreateRequest",
+        "type": "object"
+      },
+      "WebsetEnrichmentRequest": {
+        "additionalProperties": false,
+        "description": "Request body for POST /v1/websets/{webset_id}/enrichments.",
+        "properties": {
+          "description": {
+            "default": "",
+            "title": "Description",
+            "type": "string"
+          },
+          "name": {
+            "maxLength": 120,
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          },
+          "options": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Options",
+            "type": "array"
+          },
+          "type": {
+            "enum": [
+              "text",
+              "number",
+              "date",
+              "url",
+              "email",
+              "phone",
+              "options",
+              "company_profile"
+            ],
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "type"
+        ],
+        "title": "WebsetEnrichmentRequest",
+        "type": "object"
+      },
+      "WebsetEvent": {
+        "description": "One append-only event row (oldest-first tailing; delivery state never here).\n\nThe deterministic idempotency key is NOT carried here: the store builds it\nfrom ``(webset_id, type, search_id, item_id or \"\", field or \"\")`` (flag I3)\nand enforces a UNIQUE ``(webset_id, dedup_key)`` index with INSERT OR\nIGNORE, so a resumed runner within one generation cannot duplicate an event\nwhile a new generation (each ``add_search`` / backfill / ``trigger_monitor``\npass) legitimately re-emits terminal events. ``search_id`` is the\n``WebsetSearch`` generation that produced the event; ``item_id`` is empty\nfor webset-level events; ``field`` is reserved for field-scoped kinds\n(none in v1). ``id`` is a bare uuid4-hex (deliberately outside the five\nprefixed id families); ``payload`` is the delivery/consumer body and never\na full page body.",
+        "properties": {
+          "created_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Created At"
+          },
+          "field": {
+            "default": "",
+            "title": "Field",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "item_id": {
+            "default": "",
+            "title": "Item Id",
+            "type": "string"
+          },
+          "payload": {
+            "additionalProperties": true,
+            "title": "Payload",
+            "type": "object"
+          },
+          "search_id": {
+            "minLength": 1,
+            "title": "Search Id",
+            "type": "string"
+          },
+          "type": {
+            "enum": [
+              "item.created",
+              "item.enriched",
+              "webset.idle",
+              "webset.failed"
+            ],
+            "title": "Type",
+            "type": "string"
+          },
+          "webset_id": {
+            "minLength": 1,
+            "title": "Webset Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "webset_id",
+          "type",
+          "search_id"
+        ],
+        "title": "WebsetEvent",
+        "type": "object"
+      },
+      "WebsetEventsData": {
+        "description": "Payload for the ``digisearch_websets_events`` orchestrator tool (#4066).",
+        "properties": {
+          "events": {
+            "items": {
+              "$ref": "#/components/schemas/WebsetEvent"
+            },
+            "title": "Events",
+            "type": "array"
+          },
+          "next_cursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Cursor"
+          }
+        },
+        "required": [
+          "events"
+        ],
+        "title": "WebsetEventsData",
+        "type": "object"
+      },
+      "WebsetExportData": {
+        "description": "Payload for the ``digisearch_websets_export`` orchestrator tool (#4066).",
+        "properties": {
+          "content": {
+            "title": "Content",
+            "type": "string"
+          },
+          "format": {
+            "title": "Format",
+            "type": "string"
+          }
+        },
+        "required": [
+          "format",
+          "content"
+        ],
+        "title": "WebsetExportData",
+        "type": "object"
+      },
+      "WebsetGetData": {
+        "description": "Payload for the ``digisearch_websets_get`` orchestrator tool (#4066).",
+        "properties": {
+          "counts": {
+            "$ref": "#/components/schemas/WebsetCounts"
+          },
+          "webset": {
+            "$ref": "#/components/schemas/Webset"
+          }
+        },
+        "required": [
+          "webset",
+          "counts"
+        ],
+        "title": "WebsetGetData",
+        "type": "object"
+      },
+      "WebsetItem": {
+        "description": "An admitted (or audit-retained rejected) candidate with verdicts + fields.\n\n``verification=\"pending\"`` is the in-flight/queued state only: when a\nsearch's candidate pass finishes, every still-pending item settles\n``rejected`` (fail-closed, never admitted) with synthetic criterion\nresults, so ``pending`` can never block ``idle`` (flag I9). Enrichments map\nfield name -> ``EnrichedField`` (per-field value + citations + terminal\nstatus).",
+        "properties": {
+          "created_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Created At"
+          },
+          "criteria_results": {
+            "items": {
+              "$ref": "#/components/schemas/CriterionResult"
+            },
+            "title": "Criteria Results",
+            "type": "array"
+          },
+          "enrichments": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/EnrichedField"
+            },
+            "title": "Enrichments",
+            "type": "object"
+          },
+          "id": {
+            "pattern": "^wsi_[0-9a-f]{32}$",
+            "title": "Id",
+            "type": "string"
+          },
+          "title": {
+            "default": "",
+            "title": "Title",
+            "type": "string"
+          },
+          "url": {
+            "minLength": 1,
+            "title": "Url",
+            "type": "string"
+          },
+          "verification": {
+            "default": "pending",
+            "enum": [
+              "pending",
+              "verified",
+              "rejected"
+            ],
+            "title": "Verification",
+            "type": "string"
+          },
+          "webset_id": {
+            "minLength": 1,
+            "title": "Webset Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "webset_id",
+          "url"
+        ],
+        "title": "WebsetItem",
+        "type": "object"
+      },
+      "WebsetItemsData": {
+        "description": "Payload for the ``digisearch_websets_list_items`` orchestrator tool (#4066).",
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/WebsetItem"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "next_cursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Cursor"
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "title": "WebsetItemsData",
+        "type": "object"
+      },
+      "WebsetMonitorPauseRequest": {
+        "additionalProperties": false,
+        "description": "Request body for PATCH /v1/websets/{webset_id}/monitors/{monitor_id}.",
+        "properties": {
+          "paused": {
+            "description": "True pauses the tick driver's scheduled refreshes; the manual trigger route still refreshes on demand",
+            "title": "Paused",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "paused"
+        ],
+        "title": "WebsetMonitorPauseRequest",
+        "type": "object"
+      },
+      "WebsetMonitorRequest": {
+        "additionalProperties": false,
+        "description": "Request body for POST /v1/websets/{webset_id}/monitors.",
+        "properties": {
+          "interval_seconds": {
+            "default": 3600,
+            "description": "Refresh cadence in seconds; the shared tick driver executes it",
+            "minimum": 60.0,
+            "title": "Interval Seconds",
+            "type": "integer"
+          },
+          "webhook_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Optional https public URL (Phase C SSRF gate)",
+            "title": "Webhook Url"
+          }
+        },
+        "title": "WebsetMonitorRequest",
+        "type": "object"
+      },
+      "WebsetSearch": {
+        "description": "One settling-pass generation (a webset's initial search or a refresh).\n\n``count`` is the target number of VERIFIED items for this search \u2014 never a\nbackend page size: the landed ``WebSearchRequest.max_results`` page size\nstays at most 10 (``web_search/models.py``) and the runner reaches\n``count`` by query diversification (R3); there is no paging parameter to\nclamp from (audit D25). ``status`` includes ``cancelled``: ``cancel_webset``\nsettles every non-terminal search as ``cancelled`` (flag I6).\n``criteria`` is the 1-5 rule set (``add_search`` inherits the webset's\ninitial criteria when none are given). ``verification_mode`` is the mode\nthis generation runs under (persisted, so a ``rules`` webset never silently\nswitches to ``llm`` on a refresh \u2014 T6 review carry).",
+        "properties": {
+          "backend": {
+            "default": "oss",
+            "enum": [
+              "oss",
+              "exa"
+            ],
+            "title": "Backend",
+            "type": "string"
+          },
+          "count": {
+            "default": 10,
+            "maximum": 100.0,
+            "minimum": 1.0,
+            "title": "Count",
+            "type": "integer"
+          },
+          "criteria": {
+            "items": {
+              "$ref": "#/components/schemas/VerificationCriterion"
+            },
+            "maxItems": 5,
+            "minItems": 1,
+            "title": "Criteria",
+            "type": "array"
+          },
+          "id": {
+            "pattern": "^wss_[0-9a-f]{32}$",
+            "title": "Id",
+            "type": "string"
+          },
+          "query": {
+            "maxLength": 500,
+            "minLength": 1,
+            "title": "Query",
+            "type": "string"
+          },
+          "status": {
+            "default": "running",
+            "enum": [
+              "running",
+              "idle",
+              "failed",
+              "cancelled"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "verification_mode": {
+            "default": "llm",
+            "enum": [
+              "llm",
+              "rules"
+            ],
+            "title": "Verification Mode",
+            "type": "string"
+          },
+          "webset_id": {
+            "minLength": 1,
+            "title": "Webset Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "webset_id",
+          "query",
+          "criteria"
+        ],
+        "title": "WebsetSearch",
+        "type": "object"
+      },
+      "WebsetSearchRequest": {
+        "additionalProperties": false,
+        "description": "Request body for POST /v1/websets/{webset_id}/searches.",
+        "properties": {
+          "count": {
+            "default": 10,
+            "maximum": 100.0,
+            "minimum": 1.0,
+            "title": "Count",
+            "type": "integer"
+          },
+          "criteria": {
+            "anyOf": [
+              {
+                "items": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "type": "object"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Missing criteria inherit the webset's initial rules",
+            "title": "Criteria"
+          },
+          "query": {
+            "minLength": 1,
+            "title": "Query",
+            "type": "string"
+          }
+        },
+        "required": [
+          "query"
+        ],
+        "title": "WebsetSearchRequest",
+        "type": "object"
+      },
+      "WebsetWebhookRequest": {
+        "additionalProperties": false,
+        "description": "Request body for POST /v1/websets/{webset_id}/webhooks (secret returned once).",
+        "properties": {
+          "events": {
+            "description": "Subset of item.created|item.enriched|webset.idle|webset.failed",
+            "items": {
+              "type": "string"
+            },
+            "title": "Events",
+            "type": "array"
+          },
+          "url": {
+            "default": "",
+            "description": "https public URL (Phase C SSRF gate)",
+            "title": "Url",
+            "type": "string"
+          }
+        },
+        "title": "WebsetWebhookRequest",
         "type": "object"
       }
     }
@@ -1130,6 +3166,45 @@
         "summary": "Api Ingest"
       }
     },
+    "/ingest/url": {
+      "post": {
+        "description": "Ingest a URL via :func:`digisearch.pipeline.url_ingest.ingest_url`.",
+        "operationId": "api_ingest_url_ingest_url_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/IngestUrlRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UrlIngestResult"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Api Ingest Url"
+      }
+    },
     "/query": {
       "post": {
         "description": "Search documents. Use format=table to get response.formatted as markdown table.",
@@ -1167,6 +3242,448 @@
           }
         },
         "summary": "Api Query"
+      }
+    },
+    "/v1/digisearch_web_search": {
+      "post": {
+        "description": "Live web search via EXA (dormant without EXA_API_KEY; not the owned corpus).\n\nMounted at ``/v1/digisearch_web_search`` (not ``/v1/web_search``): the first-party\nsearxng\u2192ddgs web search owns ``/v1/web_search`` on develop.\n\n``offset`` pages the recall set (client-side slice of one enlarged window \u2014\nEXA ``POST /search`` has no offset). A window reaching past the\n``web_exa.EXA_MAX_RESULTS`` (100) cap is 400 with the explicit\n:class:`digisearch.web_exa.ExaPageOutOfRangeError` message; a negative\noffset is 422 (``ge=0``). ``offset=0`` (default) is byte-identical to the\nunpaged call (#4234, #4241).",
+        "operationId": "api_web_search_v1_digisearch_web_search_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ExaWebSearchRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WebSearchData"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Api Web Search"
+      }
+    },
+    "/v1/monitors": {
+      "get": {
+        "description": "List watches newest-updated first, optionally scoped by workspace.",
+        "operationId": "api_list_monitors_v1_monitors_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "workspace_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Workspace Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Api List Monitors V1 Monitors Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Api List Monitors"
+      },
+      "post": {
+        "description": "Create a watch. The response carries the one-time delivery secret (R8).\n\n``backend=\"exa\"`` is provisioned REMOTE FIRST through\n:func:`digisearch.monitors.provisioning.create_watch_provisioned`: the\nremote monitor is created (interval period mapped exactly; a webhook\ndelivery target is required), the EXA-returned ``webhookSecret`` is\npersisted as the watch's delivery secret, and only then is the watch\nstored \u2014 a provisioning failure maps through\n:class:`WatchProvisioningError` into the shared monitor error envelope and\npersists nothing. ``backend=\"oss\"`` keeps the local mint path unchanged.",
+        "operationId": "api_create_monitor_v1_monitors_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Watch"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Api Create Monitor"
+      }
+    },
+    "/v1/monitors/exa_webhook": {
+      "post": {
+        "description": "Auth-exempt but per-watch-secret-gated EXA delivery webhook (R1, \u00a74.6).\n\nEXA cannot present a digikey JWT, so the route is exempted in\n:func:`_digisearch_path_scopes` and authenticates each delivery with the\nWATCH's own stored secret (``MonitorStore.get_delivery_secret``) against the\nlive-pinned ``exa-signature: t=<unix>,v1=<hex>`` header\n(``HMAC-SHA256(secret, f\"{t}.{body}\")``, #4123). There is deliberately no\nstatic shared-secret fallback: a missing stored secret, a missing header,\nor a mismatch fails closed with 401 ``exa_bad_signature``; the presented\nvalue is never logged or echoed.\n\nThe target watch is resolved by matching the NESTED event envelope's\n``data.monitorId`` against stored ``Watch.exa_monitor_id`` values \u2014 the\nminimal derivation that needs no new store API; datatap-scoped watches\nnever match (\u00a75). Signature verification happens before any translation or\npersistence, and the resolved watch must be ``backend=\"exa\"`` (a mismatch\nis a misconfiguration: 409 ``watch_backend_mismatch``, nothing persisted).\n\nNon-terminal deliveries are acked 200 ``{\"acknowledged\": true}`` without\npersisting. That set is defined by exclusion in the adapter: ``running``,\n``cancelled``, ``queued``, and any future parseable status that is neither\n``completed`` nor ``failed``/``error`` (EXA retries non-2xx indefinitely, so\nanswering anything but 2xx for an unknown non-terminal status retries\nforever); a malformed envelope or missing/blank run status still fails\nclosed 422. Terminal deliveries translate (Task 8c adapter) into the\ncanonical ``MonitorRun`` and persist it \u2014 201 on first store, and an\nidempotent 200 with the stored run on redelivery (``run_exists`` must never\nanswer 409). Translation and store failures use the shared fail-closed\nenvelope.",
+        "operationId": "api_exa_webhook_v1_monitors_exa_webhook_post",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Api Exa Webhook"
+      }
+    },
+    "/v1/monitors/tick": {
+      "post": {
+        "description": "Run every due + enabled watch once (digiclaw wake-up clock, \u00a74.8).",
+        "operationId": "api_tick_monitors_v1_monitors_tick_post",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Api Tick Monitors V1 Monitors Tick Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Api Tick Monitors"
+      }
+    },
+    "/v1/monitors/{watch_id}": {
+      "delete": {
+        "description": "Delete a watch; its run history is retained.\n\nA ``backend=\"exa\"`` watch carrying an ``exa_monitor_id`` first tears its\nremote monitor down best-effort: an adapter failure is logged\n(``logger.warning``) and swallowed so the local delete still succeeds.\nOSS watches make no remote call, and a missing watch keeps the 404 path.",
+        "operationId": "api_delete_monitor_v1_monitors__watch_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "watch_id",
+            "required": true,
+            "schema": {
+              "title": "Watch Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Api Delete Monitor"
+      },
+      "get": {
+        "description": "Load one watch. The delivery secret is never part of a watch body (R8).",
+        "operationId": "api_get_monitor_v1_monitors__watch_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "watch_id",
+            "required": true,
+            "schema": {
+              "title": "Watch Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Api Get Monitor"
+      },
+      "patch": {
+        "description": "Apply a partial patch; ``{\"rotate_delivery_secret\": true}`` mints a new secret (R8).\n\n``backend`` is fixed at create: a patch naming any other value is refused\n(409 ``watch_backend_immutable``) \u2014 delete and re-create the watch to change\nthe backend (a same-value ``backend`` is a no-op), so neither an\n``oss \u2192 exa`` claim-without-monitor nor an ``exa \u2192 oss`` orphan can be\nproduced. ``exa_monitor_id`` is server-owned too: a patch naming a value\ndifferent from the stored link (including ``null``) is refused (409\n``monitor_exa_monitor_id_immutable``), so DELETE teardown can neither be\nbypassed by clearing the id nor aimed at another watch's remote monitor\n(a same-value ``exa_monitor_id`` is a no-op). Rotation is refused (409\n``exa_secret_rotate_unsupported``) whenever the watch is ``backend=\"exa\"``\nor carries an ``exa_monitor_id``: its delivery secret is EXA's per-monitor\n``webhookSecret``, so a locally minted replacement would silently break\n``exa-signature`` verification.",
+        "operationId": "api_update_monitor_v1_monitors__watch_id__patch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "watch_id",
+            "required": true,
+            "schema": {
+              "title": "Watch Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": true,
+                "title": "Patch",
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Api Update Monitor"
+      }
+    },
+    "/v1/monitors/{watch_id}/runs": {
+      "get": {
+        "description": "Page run history newest-first; *cursor* is the last run id of a page.",
+        "operationId": "api_list_monitor_runs_v1_monitors__watch_id__runs_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "watch_id",
+            "required": true,
+            "schema": {
+              "title": "Watch Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 20,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "cursor",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Cursor"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Api List Monitor Runs"
+      }
+    },
+    "/v1/monitors/{watch_id}/runs/{run_id}": {
+      "get": {
+        "description": "Load one stored run.",
+        "operationId": "api_get_monitor_run_v1_monitors__watch_id__runs__run_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "watch_id",
+            "required": true,
+            "schema": {
+              "title": "Watch Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "run_id",
+            "required": true,
+            "schema": {
+              "title": "Run Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Api Get Monitor Run"
+      }
+    },
+    "/v1/monitors/{watch_id}/trigger": {
+      "post": {
+        "description": "Run one watch turn now (the portable create \u2192 trigger \u2192 runs path).\n\nA failed turn already persisted its ``status=\"failed\"`` run, so the stored\nrecord is returned with 201 rather than masked by a 5xx.",
+        "operationId": "api_trigger_monitor_v1_monitors__watch_id__trigger_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "watch_id",
+            "required": true,
+            "schema": {
+              "title": "Watch Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MonitorTriggerRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Api Trigger Monitor"
       }
     },
     "/v1/orchestrator_invoke": {
@@ -1284,6 +3801,866 @@
           }
         },
         "summary": "Api Research Turn"
+      }
+    },
+    "/v1/web_answer": {
+      "post": {
+        "description": "Grounded answer from the live web via EXA (dormant without EXA_API_KEY).",
+        "operationId": "api_web_answer_v1_web_answer_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/WebAnswerRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Api Web Answer V1 Web Answer Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Api Web Answer"
+      }
+    },
+    "/v1/web_contents": {
+      "post": {
+        "description": "Fetch known URLs via EXA contents (dormant without EXA_API_KEY).",
+        "operationId": "api_web_contents_v1_web_contents_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/WebContentsRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Api Web Contents V1 Web Contents Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Api Web Contents"
+      }
+    },
+    "/v1/web_search": {
+      "post": {
+        "description": "Search the public web (searxng with ddgs fallback, fetch + extract enrichment).\n\nProvider failures (429 / 5xx / connection / timeout) return HTTP 200 with\nthe soft ``{\"ok\": false, ...}`` envelope instead of a 500 (#4192).",
+        "operationId": "v1_web_search_v1_web_search_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/WebSearchRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/WebSearchResponse"
+                    },
+                    {
+                      "$ref": "#/components/schemas/WebSearchErrorResponse"
+                    }
+                  ],
+                  "title": "Response V1 Web Search V1 Web Search Post"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "V1 Web Search"
+      }
+    },
+    "/v1/websets": {
+      "post": {
+        "description": "Create a webset + initial search; the run is scheduled and 202 returns.",
+        "operationId": "api_create_webset_v1_websets_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/WebsetCreateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Api Create Webset"
+      }
+    },
+    "/v1/websets/{webset_id}": {
+      "get": {
+        "description": "Load one webset (status + search generations + enrichment defs).",
+        "operationId": "api_get_webset_v1_websets__webset_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "webset_id",
+            "required": true,
+            "schema": {
+              "title": "Webset Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Api Get Webset"
+      }
+    },
+    "/v1/websets/{webset_id}/cancel": {
+      "post": {
+        "description": "Cancel a webset; the runner settles every non-terminal search ``cancelled``.",
+        "operationId": "api_cancel_webset_v1_websets__webset_id__cancel_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "webset_id",
+            "required": true,
+            "schema": {
+              "title": "Webset Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Api Cancel Webset"
+      }
+    },
+    "/v1/websets/{webset_id}/enrichments": {
+      "post": {
+        "description": "Attach an enrichment def (max 10 active; 11th \u2192 400 enrichment_limit_exceeded).",
+        "operationId": "api_add_webset_enrichment_v1_websets__webset_id__enrichments_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "webset_id",
+            "required": true,
+            "schema": {
+              "title": "Webset Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/WebsetEnrichmentRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Api Add Webset Enrichment"
+      }
+    },
+    "/v1/websets/{webset_id}/enrichments/{enrichment_id}": {
+      "delete": {
+        "description": "Detach an enrichment; already-resolved item values are retained.",
+        "operationId": "api_remove_webset_enrichment_v1_websets__webset_id__enrichments__enrichment_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "webset_id",
+            "required": true,
+            "schema": {
+              "title": "Webset Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "enrichment_id",
+            "required": true,
+            "schema": {
+              "title": "Enrichment Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Api Remove Webset Enrichment"
+      }
+    },
+    "/v1/websets/{webset_id}/events": {
+      "get": {
+        "description": "Page the append-only event log OLDEST-first; ``after`` is the last seen event id.",
+        "operationId": "api_list_webset_events_v1_websets__webset_id__events_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "webset_id",
+            "required": true,
+            "schema": {
+              "title": "Webset Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "after",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "After"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Api List Webset Events"
+      }
+    },
+    "/v1/websets/{webset_id}/export": {
+      "get": {
+        "description": "Export verified items as CSV (polars) or JSON (per-field citations retained).",
+        "operationId": "api_export_webset_v1_websets__webset_id__export_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "webset_id",
+            "required": true,
+            "schema": {
+              "title": "Webset Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "format",
+            "required": false,
+            "schema": {
+              "default": "json",
+              "title": "Format",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Api Export Webset"
+      }
+    },
+    "/v1/websets/{webset_id}/items": {
+      "get": {
+        "description": "Page items NEWEST-first (R11); ``cursor`` is the previous page's last item id.",
+        "operationId": "api_list_webset_items_v1_websets__webset_id__items_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "webset_id",
+            "required": true,
+            "schema": {
+              "title": "Webset Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "verification",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "verified",
+                    "rejected",
+                    "pending"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Verification"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "cursor",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Cursor"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Api List Webset Items"
+      }
+    },
+    "/v1/websets/{webset_id}/monitors": {
+      "get": {
+        "description": "List a webset's monitors newest-created first.",
+        "operationId": "api_list_webset_monitors_v1_websets__webset_id__monitors_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "webset_id",
+            "required": true,
+            "schema": {
+              "title": "Webset Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Api List Webset Monitors"
+      },
+      "post": {
+        "description": "Record a tick-driven refresh cadence on a webset (never a Phase C Watch).",
+        "operationId": "api_create_webset_monitor_v1_websets__webset_id__monitors_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "webset_id",
+            "required": true,
+            "schema": {
+              "title": "Webset Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/WebsetMonitorRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Api Create Webset Monitor"
+      }
+    },
+    "/v1/websets/{webset_id}/monitors/{monitor_id}": {
+      "patch": {
+        "description": "Pause or resume a monitor's scheduled refreshes (the tick driver switch).",
+        "operationId": "api_set_webset_monitor_paused_v1_websets__webset_id__monitors__monitor_id__patch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "webset_id",
+            "required": true,
+            "schema": {
+              "title": "Webset Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "monitor_id",
+            "required": true,
+            "schema": {
+              "title": "Monitor Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/WebsetMonitorPauseRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Api Set Webset Monitor Paused"
+      }
+    },
+    "/v1/websets/{webset_id}/monitors/{monitor_id}/trigger": {
+      "post": {
+        "description": "Manual refresh: open a new search generation (the same path the tick uses).",
+        "operationId": "api_trigger_webset_monitor_v1_websets__webset_id__monitors__monitor_id__trigger_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "webset_id",
+            "required": true,
+            "schema": {
+              "title": "Webset Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "monitor_id",
+            "required": true,
+            "schema": {
+              "title": "Monitor Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Api Trigger Webset Monitor"
+      }
+    },
+    "/v1/websets/{webset_id}/searches": {
+      "post": {
+        "description": "Attach a follow-up search generation (async; 202 returns status=running).",
+        "operationId": "api_add_webset_search_v1_websets__webset_id__searches_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "webset_id",
+            "required": true,
+            "schema": {
+              "title": "Webset Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/WebsetSearchRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Api Add Webset Search"
+      }
+    },
+    "/v1/websets/{webset_id}/webhooks": {
+      "post": {
+        "description": "Register a webhook; the server-generated secret appears in this response only.\n\nAn unknown ``events`` kind is caller input: ``WebsetWebhookRequest.events`` is\n``list[str]`` while ``WebhookConfig.events`` is ``list[EventKind]``, so the\nservice's pydantic ``ValidationError`` maps to 422 here (the sibling routes'\n``validation_error`` envelope) instead of escaping into the generic 500.",
+        "operationId": "api_add_webset_webhook_v1_websets__webset_id__webhooks_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "webset_id",
+            "required": true,
+            "schema": {
+              "title": "Webset Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/WebsetWebhookRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Api Add Webset Webhook"
+      }
+    },
+    "/v1/websets/{webset_id}/webhooks/{webhook_id}/rotate": {
+      "post": {
+        "description": "Rotate the webhook secret with a 24h overlap; returns the NEW secret once.",
+        "operationId": "api_rotate_webset_webhook_v1_websets__webset_id__webhooks__webhook_id__rotate_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "webset_id",
+            "required": true,
+            "schema": {
+              "title": "Webset Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "webhook_id",
+            "required": true,
+            "schema": {
+              "title": "Webhook Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Api Rotate Webset Webhook"
       }
     }
   }

@@ -18,7 +18,7 @@ _HELD = {"SPY", "IJR", "XLP"}
 class TestH4FocusRosterHeldInvariant:
     def test_held_always_in_roster(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """With the staleness gate disabled, every held name must appear in the roster."""
-        monkeypatch.setenv("ATLAS_MAX_ANALYSTS", "4")
+        monkeypatch.setenv("DIGIQUANT_MAX_ANALYSTS", "4")
         monkeypatch.setenv("PORTFOLIO_HELD_GATE", "off")
         roster = compute_focus_roster(
             watchlist=list(_BOOK),
@@ -40,7 +40,7 @@ class TestH4FocusRosterHeldInvariant:
         assert all(e.roster_reason == "held" for e in held_entries)
 
     def test_thesis_mapped_never_dropped(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.setenv("ATLAS_MAX_ANALYSTS", "2")
+        monkeypatch.setenv("DIGIQUANT_MAX_ANALYSTS", "2")
         mappings = [("geo-gold", "GLD", "gold hedge"), ("rates", "TLT", "duration play")]
         roster = compute_focus_roster(
             watchlist=list(_BOOK),
@@ -63,7 +63,7 @@ class TestH4FocusRosterHeldInvariant:
         assert gld.linked_market_thesis_id == "geo-gold"
 
     def test_held_over_cap_keeps_all_held(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.setenv("ATLAS_MAX_ANALYSTS", "2")
+        monkeypatch.setenv("DIGIQUANT_MAX_ANALYSTS", "2")
         monkeypatch.setenv("PORTFOLIO_HELD_GATE", "off")
         roster = compute_focus_roster(
             watchlist=list(_BOOK),
@@ -75,14 +75,14 @@ class TestH4FocusRosterHeldInvariant:
         assert _HELD.issubset(tickers)
         # #1767: and NOTHING else — the book is the only sanctioned overshoot. #950's
         # new-candidate reservation used to expand the cap here, which is precisely how
-        # ATLAS_MAX_ANALYSTS stopped being a ceiling.
+        # DIGIQUANT_MAX_ANALYSTS stopped being a ceiling.
         assert len(roster) <= max(2, len(_HELD))
         assert [e for e in roster if e.roster_reason != "held"] == []
 
     def test_roster_preserves_watchlist_order_among_survivors(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        monkeypatch.setenv("ATLAS_MAX_ANALYSTS", "4")
+        monkeypatch.setenv("DIGIQUANT_MAX_ANALYSTS", "4")
         roster = compute_focus_roster(
             watchlist=list(_BOOK),
             held={"SPY", "CCC"},
@@ -176,7 +176,7 @@ class TestNewCandidateReservation:
 
     def test_new_candidate_survives_tight_cap(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """Cap=4, 3 held — at least 1 non-held technical candidate must survive."""
-        monkeypatch.setenv("ATLAS_MAX_ANALYSTS", "4")
+        monkeypatch.setenv("DIGIQUANT_MAX_ANALYSTS", "4")
         roster = compute_focus_roster(
             watchlist=["SPY", "IJR", "XLP", "AAA", "BBB", "CCC"],
             held={"SPY", "IJR", "XLP"},
@@ -197,9 +197,9 @@ class TestNewCandidateReservation:
         leaves any budget at all, that whole budget goes to non-held candidates (see
         :meth:`test_new_candidate_survives_tight_cap`) — but it is surrendered once the
         book alone fills the ceiling, because a ceiling another rule can lift is not one.
-        The operator's lever is ATLAS_MAX_ANALYSTS.
+        The operator's lever is DIGIQUANT_MAX_ANALYSTS.
         """
-        monkeypatch.setenv("ATLAS_MAX_ANALYSTS", "4")
+        monkeypatch.setenv("DIGIQUANT_MAX_ANALYSTS", "4")
         held = {"H1", "H2", "H3", "H4"}
         roster = compute_focus_roster(
             watchlist=["H1", "H2", "H3", "H4", "NEW1", "NEW2", "NEW3"],
@@ -213,7 +213,7 @@ class TestNewCandidateReservation:
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         """Cap=3, 3 held, 0 non-held watchlist — held-only roster is fine."""
-        monkeypatch.setenv("ATLAS_MAX_ANALYSTS", "3")
+        monkeypatch.setenv("DIGIQUANT_MAX_ANALYSTS", "3")
         monkeypatch.setenv("PORTFOLIO_HELD_GATE", "off")
         roster = compute_focus_roster(
             watchlist=["SPY", "IJR", "XLP"],
@@ -231,7 +231,7 @@ class TestNewCandidateReservation:
         When held alone exceed the cap the roster goes over-budget (#936)
         and no new candidates can be reserved; that is acceptable.
         """
-        monkeypatch.setenv("ATLAS_MAX_ANALYSTS", "2")
+        monkeypatch.setenv("DIGIQUANT_MAX_ANALYSTS", "2")
         monkeypatch.setenv("PORTFOLIO_HELD_GATE", "off")
         roster = compute_focus_roster(
             watchlist=["SPY", "IJR", "XLP", "NEW1"],
@@ -244,7 +244,7 @@ class TestNewCandidateReservation:
 
 @pytest.mark.unit
 def test_held_ticker_also_thesis_mapped_keeps_link(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("ATLAS_MAX_ANALYSTS", "10")
+    monkeypatch.setenv("DIGIQUANT_MAX_ANALYSTS", "10")
     roster = compute_focus_roster(
         watchlist=["XLE", "SPY"],
         held={"XLE"},
@@ -259,7 +259,7 @@ def test_held_ticker_also_thesis_mapped_keeps_link(monkeypatch: pytest.MonkeyPat
 
 @pytest.mark.unit
 def test_technical_entry_carries_rationale(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("ATLAS_MAX_ANALYSTS", "10")
+    monkeypatch.setenv("DIGIQUANT_MAX_ANALYSTS", "10")
     roster = compute_focus_roster(
         watchlist=["QQQ"],
         held=set(),
@@ -307,7 +307,7 @@ def test_extract_thesis_mappings_carries_rationale() -> None:
 
 @pytest.mark.unit
 def test_held_gate_drops_stale_unlinked_held(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("ATLAS_MAX_ANALYSTS", "10")
+    monkeypatch.setenv("DIGIQUANT_MAX_ANALYSTS", "10")
     monkeypatch.setenv("PORTFOLIO_HELD_STALENESS_DELTA", "0.005")
     roster = compute_focus_roster(
         watchlist=["TLT", "XLE"],
@@ -380,7 +380,7 @@ def test_compute_focus_roster_excluded_ledger(monkeypatch: pytest.MonkeyPatch) -
     from tests.dq.research.test_supabase_io import FakeSupabaseClient
 
     monkeypatch.setenv("PORTFOLIO_HELD_STALENESS_DELTA", "0.005")
-    monkeypatch.setenv("ATLAS_MAX_ANALYSTS", "10")
+    monkeypatch.setenv("DIGIQUANT_MAX_ANALYSTS", "10")
 
     # A stub client that selects nothing — QQQ stays below-screen.
     def _stub_select(*, client: object, watchlist: list[str], **kwargs: object) -> list[str]:
@@ -463,7 +463,7 @@ def test_excluded_ledger_records_gated_held_absent_from_watchlist() -> None:
 
 @pytest.mark.unit
 def test_compute_focus_roster_honors_adaptive_budget(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("ATLAS_MAX_ANALYSTS", "100")  # env would allow all
+    monkeypatch.setenv("DIGIQUANT_MAX_ANALYSTS", "100")  # env would allow all
     monkeypatch.setenv("PORTFOLIO_HELD_GATE", "off")
     roster = compute_focus_roster(
         watchlist=["AAA", "BBB", "CCC", "DDD"],

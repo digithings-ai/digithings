@@ -60,6 +60,7 @@ from digiquant.dashboard.accounting.models import (
     PeriodFill,
     PeriodStatus,
 )
+from digiquant.dashboard.tenancy import house_workspace_id
 from digiquant.portfolio.models.portfolio_ledger import (
     DecisionAction,
     HoldingLotStatus,
@@ -78,7 +79,7 @@ from digiquant.portfolio.writers.ledger_io import (
     _rows_for_date,
 )
 from digiquant.portfolio.writers.opening_snapshot import cold_start_requires_seed
-from digiquant.dashboard.tenancy import house_workspace_id
+from digiquant.research.data.queries import r2_close_rows
 
 logger = logging.getLogger(__name__)
 
@@ -150,18 +151,18 @@ def _mark_from_close(
     as_of: date,
     observed_at: datetime,
 ) -> MarkObservation | None:
-    resp = (
-        client.table("price_history")
-        .select("close, date")
-        .eq("ticker", symbol)
-        .eq("date", as_of.isoformat())
-        .limit(1)
-        .execute()
-    )
-    rows = list(getattr(resp, "data", None) or [])
-    if not rows:
+    """Boundary mark from the sealed R2 generation (#4053: R2 is the only path).
+
+    A ticker missing from the manifest is an absent mark (``None``), not an
+    outage — parity with the retired Supabase row-miss. The caller walks back
+    dates / skips the symbol and leaves the date provisional.
+    """
+    try:
+        rows = r2_close_rows(tickers=[symbol], since=as_of, until=as_of)
+    except LookupError:
         return None
-    close = _decimal(rows[0].get("close"))
+    closes = [float(r["close"]) for r in rows if r.get("close") is not None]
+    close = _decimal(closes[0]) if closes else None
     if close is None or close <= 0:
         return None
     return MarkObservation(
@@ -376,7 +377,7 @@ def assemble_period_input(
     period_date: date,
     policy: AccountingPolicy | None = None,
 ) -> PeriodAccountingInput:
-    """Build engine input from ledger fills/lots + price_history marks."""
+    """Build engine input from ledger fills/lots + sealed-R2 marks."""
     policy = policy or AccountingPolicy(policy_version_id=_DEFAULT_POLICY)
     opening_qty = _opening_quantities(client=client, period_date=period_date)
     fills = _fills_for_period(client=client, period_date=period_date)

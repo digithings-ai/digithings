@@ -54,7 +54,11 @@ _TEXT_EXTENSIONS: dict[str, str] = {
 DEFAULT_MAX_FILES = 500
 # ~2MB of text keeps a downstream synthesis prompt bounded without special-casing huge repos.
 DEFAULT_MAX_TOTAL_CHARS = 2_000_000
-DEFAULT_MAX_FILE_CHARS = 200_000
+# Per-file cap stops one runaway file from dominating the corpus. Raised from
+# 200k to 500k when real module docs (digiquant/ARCHITECTURE.md) legitimately grew
+# past the old bound — still well below DEFAULT_MAX_TOTAL_CHARS, so it still
+# guards against unbounded truncation.
+DEFAULT_MAX_FILE_CHARS = 500_000
 
 
 class LocalPathCorpusBuilder:

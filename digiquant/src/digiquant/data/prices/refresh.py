@@ -1,5 +1,9 @@
 """On-demand technicals refresh (Pillar 1F).
 
+Retired with the tables: migration 127 drops ``price_history`` /
+``price_technicals`` (#4053), so calling this module can no longer serve.
+It survives only as the flag-off recompute body.
+
 When ``price_technicals`` is stale at run time (e.g. a Saturday baseline whose Friday
 intraday prices cron didn't run), recompute the indicators from the raw OHLCV **already in
 ``price_history``** and upsert them — *network-free* (no yfinance fetch), so it is safe to
@@ -8,7 +12,7 @@ prices already ingested, rather than silently reading days-old indicators.
 
 This is distinct from the prices cron's ``fetch-quotes`` (which pulls *new* OHLCV from the
 network). The CI pre-baseline step still does a real fetch; this recompute is the in-graph
-fallback (opt-in via ``ATLAS_REFRESH_ON_DEMAND``) and the reusable core both can share.
+fallback (opt-in via ``DIGIQUANT_REFRESH_ON_DEMAND``) and the reusable core both can share.
 
 Read window vs write window (#1752)
 -----------------------------------

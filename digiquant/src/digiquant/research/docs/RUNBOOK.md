@@ -6,7 +6,7 @@ This is the **single authoritative** run instruction for digiquant-research.
 
 | Layer | When | What runs | Supabase impact |
 |--------|------|-----------|-----------------|
-| **GitHub — Daily Price Update** | Weekdays **00:00 UTC** (~**8:00 PM Eastern** during EDT, ~**7:00 PM Eastern** during EST; after NYSE close; GitHub cron is UTC-only) | [`preload-history.py`](scripts/preload-history.py) (stale refresh) → [`compute-technicals.py`](scripts/compute-technicals.py) → macro ingest ([`ingest_fred.py`](scripts/ingest_fred.py), [`ingest_fx_frankfurter.py`](scripts/ingest_fx_frankfurter.py), [`ingest_crypto_fng.py`](scripts/ingest_crypto_fng.py), [`ingest_treasury_curve.py`](scripts/ingest_treasury_curve.py)) | `price_history`, `price_technicals`, **`macro_series_observations`** — **no** digest, no agent research |
+| **GitHub — Daily Price Update** | Weekdays **00:00 UTC** (~**8:00 PM Eastern** during EDT, ~**7:00 PM Eastern** during EST; after NYSE close; GitHub cron is UTC-only) | [`preload-history.py`](scripts/preload-history.py) (stale refresh) → [`compute-technicals.py`](scripts/compute-technicals.py) → macro ingest ([`ingest_fred.py`](scripts/ingest_fred.py), [`ingest_fx_frankfurter.py`](scripts/ingest_fx_frankfurter.py), [`ingest_crypto_fng.py`](scripts/ingest_crypto_fng.py), [`ingest_treasury_curve.py`](scripts/ingest_treasury_curve.py)) | R2 price/technicals generations + **`macro_series_observations`**; the Supabase `price_history`/`price_technicals` tables were dropped in 127 (#4053) — **no** digest, no agent research |
 | **GitHub — research metrics refresh** (`.github/workflows/pipeline-research-metrics.yml`) | **22:00 UTC, DAILY** — after the 21:00 EOD price ingest and the 12:00 dashboard book. Seven days a week since #1833: the book cron is daily, so a MON-SAT metrics cron left every Sunday book permanently unenriched (0 of N rows marked, not merely late). | [`finalize_period_accounting.py`](scripts/finalize_period_accounting.py) (shadow) → [`refresh_performance_metrics.py`](scripts/refresh_performance_metrics.py) `--supabase` (**no** `--fill-calendar-through`; see below) → [`refresh_attribution.py`](scripts/refresh_attribution.py) | **`positions`** performance columns, **`nav_history`**, **`portfolio_metrics`** (script rows), **`position_events`** cumulative-return fields, **`current_book_lookback`** (legacy alias view: `position_attribution`); realized daily contribution only via **`daily_realized_attribution`** / finalized accounting |
 | **Co-work / operator — research & portfolio** | Typically **pre-market** (e.g. 8:00 AM local) or per [`config/schedule.json`](config/schedule.json) | Agent validates + publishes JSON to Supabase (`materialize_snapshot.py`, `publish_document.py`, …) → operator runs [`run_db_first.py`](scripts/run_db_first.py) (optional disk checks → metrics → `execute_at_open.py` → [`validate_db_first.py`](scripts/validate_db_first.py)) | `daily_snapshots`, `documents`, `positions`, `theses`, `position_events`, etc. |
 
@@ -14,7 +14,7 @@ This is the **single authoritative** run instruction for digiquant-research.
 
 The scheduled GitHub job (`pipeline-research-metrics.yml`, 22:00 UTC daily) runs [`refresh_performance_metrics.py --supabase`](scripts/refresh_performance_metrics.py) with **no date flags**. It targets **today (UTC)** only:
 
-1. Refreshes performance columns on **today's** `positions` book (same weights; closes from `price_history`), then updates `nav_history` and **`portfolio_metrics`** with `computed_from='refresh_script'` (or `refresh_script_insufficient_history` while `nav_history` has < 20 rows).
+1. Refreshes performance columns on **today's** `positions` book (same weights; closes from the R2 market cache), then updates `nav_history` and **`portfolio_metrics`** with `computed_from='refresh_script'` (or `refresh_script_insufficient_history` while `nav_history` has < 20 rows).
 2. **Does not overwrite** `portfolio_metrics` rows written by `update_tearsheet.py` (`computed_from='tearsheet'`); those get only their cumulative-return fields backfilled.
 3. **Stale-book guard (#1746).** If `max(positions.date)` is *before* today UTC, the dashboard book never materialized and there is nothing new to compute — the script prints the two dates and **exits 3**, writing nothing. It does **not** fall back to the latest existing date. That fallback was the original defect: `portfolio_metrics` is upserted `on_conflict='date'`, so 22 of 33 green runs (2026-06-22..07-31) silently re-stamped an older row's `generated_at` while its `as_of_date` never moved, and the dashboard served 2026-06-26 numbers for twenty days behind a 10/10-green cron. **A red metrics run with exit 3 is a correct upstream-book alarm, not a flake** — repair the dashboard run, then reprocess with `--date YYYY-MM-DD`.
 
@@ -25,7 +25,7 @@ The scheduled GitHub job (`pipeline-research-metrics.yml`, 22:00 UTC daily) runs
 
 For each **calendar day** after the latest snapshot through the target date: if `positions` has no rows for that date, **clones** the prior day (carry-forward), then updates per-position metrics, `nav_history`, and `portfolio_metrics`.
 
-**Limitation:** `--fill-calendar-through` advances from the **latest** `positions` snapshot date forward only; it does not scan for **holes** on earlier dates, so it cannot repair a historical gap. For a missing day *before* your latest snapshot, run once with `--date YYYY-MM-DD` (after `price_history` has that day). `--date` is unguarded by design — it is the explicit reprocess path.
+**Limitation:** `--fill-calendar-through` advances from the **latest** `positions` snapshot date forward only; it does not scan for **holes** on earlier dates, so it cannot repair a historical gap. For a missing day *before* your latest snapshot, run once with `--date YYYY-MM-DD` (after the R2 cache has that day). `--date` is unguarded by design — it is the explicit reprocess path.
 
 **Lookback runs after metrics and is diagnostic only (#2598).** `pnl_pct` prefers a
 finalized accounting period, then the one-day `nav_history` return. It **never** reads
@@ -35,7 +35,7 @@ realized period contribution (OLY-REV-007). Realized daily contribution is
 `daily_realized_attribution` (finalized `dashboard_accounting_*` tip). Job order between
 metrics and lookback cannot alter daily `pnl_pct` semantics.
 
-**GitHub — manual “Daily Price Update”:** Uses the same steps as the weekday schedule — **`preload-history.py --supabase --supabase-sync`** (per ticker: gap-fill from latest `price_history` date through UTC today; tickers with no rows get a full-history pull, default **`--new-ticker-period max`**). No workflow inputs. For a one-off local run without Actions: `python3 scripts/preload-history.py --supabase --supabase-sync`.
+**GitHub — manual “Daily Price Update”:** **Retired** with the Supabase price tables (127, #4053). The manual path is now the R2 refresh: `python scripts/refresh_market_data_r2.py --dry-run --as-of 2025-08-29` (drop `--dry-run` to write generations); there is no `--supabase` market write left.
 
 **Macro + Treasury (automated):** After technicals, the workflow runs FRED (if **`FRED_API_KEY`**), Frankfurter, crypto Fear & Greed, and **Treasury yields** (`us_treasury` from Treasury XML when the feed returns data — often empty from CI; plus **`treasury_market`** from Yahoo ^IRX/^FVX/^TNX/^TYX for reliable 3M/5Y/10Y/30Y). Migrations: [`015`](supabase/migrations/015_macro_series_observations.sql); [`016`](supabase/migrations/016_sec_recent_filings.sql) / [`017`](supabase/migrations/017_drop_sec_recent_filings.sql) — **`sec_recent_filings`** is **dropped** by 017 (batch SEC ingest retired). Run **`supabase db push`** (or apply `017` in the SQL editor) so the table no longer exists. **One-time deep backfill:** manual workflow **backfill macro** (Treasury: Yahoo **`max`** for `treasury_market`; **`ingest_treasury_curve --backfill`** skips the Treasury.gov XML month crawl for speed — use **`--xml-months N`** locally if you need official XML rows). **Smoke tests:** `ingest_treasury_curve.py --dry-run`. Extra FRED series: [`config/macro_series.yaml`](config/macro_series.yaml); bad IDs log a warning and continue.
 
@@ -44,6 +44,102 @@ metrics and lookback cannot alter daily `pnl_pct` semantics.
 **Claude Cowork:** project briefing and scheduled task recipes live under [`cowork/`](cowork/) — see [`cowork/README.md`](cowork/README.md) and paste [`cowork/PROJECT-PROMPT.md`](cowork/PROJECT-PROMPT.md) into the Cowork project instructions. **First-time setup:** [`cowork/SETUP-RESEARCH-COWORK.md`](cowork/SETUP-RESEARCH-COWORK.md) (agent-driven wizard → `cowork/OPERATOR-COWORK.md` + `config/schedule.json` → `cowork_operator`).
 
 **dashboard daily chain:** `python -m digiquant.portfolio.chain --cadence daily` (`.github/workflows/pipeline-digiquant.yml`). House clocks run every day with `refresh_scope=none` and edit-mode continuity (`skip`/`edit`/`full` per artifact). Operator full refresh is manual (`workflow_dispatch` / `--refresh-scope all`). Beliefs distillation: daily short fold on every house run; `--refresh-scope beliefs` (or unfolded `decision_log` backlog above `OLYMPUS_BELIEFS_BACKLOG`, default 20) selects the full rewrite.
+
+### digikey service key for web grounding (#4028)
+
+Web grounding is default-ON (#3870): the daily chain calls the first-party
+digisearch `web_search` tool, and `research/data/web_grounding.py`
+`_pipeline_bearer()` mints a digikey service JWT via
+`digibase.service_auth.get_service_jwt()` (exchange
+`POST {DIGIKEY_URL}/v1/oauth/token`, `grant_type=api_key`, scope
+`digisearch:query`). Without the credentials the whole book run fails with
+`ServiceAuthError: DIGIQUANT_DIGIKEY_API_KEY is not set`.
+
+`pipeline-digiquant.yml` exports both names at the `run` job level so every
+step inherits them:
+
+| Name | Kind | Value |
+|---|---|---|
+| `DIGIKEY_URL` | Actions **variable** (`vars.DIGIKEY_URL`, YAML default) | `https://key.digithings.ai` |
+| `DIGIQUANT_DIGIKEY_API_KEY` | Actions **secret** | digikey service API key scoped `digisearch:query` |
+
+Minting, provisioning, and rotation: [docs/ops/digiquant-digikey-service-key.md](../../../../../docs/ops/digiquant-digikey-service-key.md).
+Only this workflow runs the grounding code path — the deterministic pipelines
+(backfill, prices, research-metrics) never call it.
+
+### Market-data R2 refresh (cutover #3780)
+
+The versioned R2 cache owns price/macro serving under
+`DIGIQUANT_MARKET_DATA_BACKEND=r2` (set in `.github/digiquant-pipeline.yml`,
+loaded into `$GITHUB_ENV` by `pipeline-digiquant.yml`). Refresh is
+`.github/workflows/pipeline-market-data-refresh.yml`: cron **`0 13 * * *`**
+(morning; distinct from the checkpoint-archiver `30 13 * * *`) plus
+**`30 21 * * *`** (evening: settled US close before the 22:00
+research-metrics run, #4013 D4), running `scripts/refresh_market_data_r2.py`
+(yfinance/FRED/Yahoo-FX → new immutable generations + manifest). Supabase
+market-table writers are paused per the `pipeline-digiquant-prices.yml`
+header (compute-technicals retired (#4013 Task 11); fred/yahoo fetch paused;
+intraday fetch-quotes, calendar sync, at-open, fedprob/bitview kept) — do not
+resume them without a new issue.
+
+Dry-run (exit 0, no writes — the Task 10 live-fire check):
+`python scripts/refresh_market_data_r2.py --dry-run --as-of 2025-08-29`.
+
+Staleness gate runbook entry: the manifest seal may be at most 5 trading
+days behind the run date (`data/prices/refresh_gate.py`, shared by cron and
+readers). On breach the cron writes the manifest with `stale=true`, keeps
+the previous objects serving (fail-soft), and exits non-zero so the failure
+alerts. Operator response: read the `failed` list in the
+`market-data-refresh-manifest` artifact (`/tmp/market-data-refresh.json`,
+90d retention), fix the vendor/secret cause, re-run supervised. Do NOT flip
+the backend flag — readers already fail-soft (history-only rows + loud
+`stale:true` envelope).
+
+Reader-side, `digiquant.research.data.freshness.assert_market_data_fresh`
+(seal ≤ 1 day, ≥ 100 price tickers) is the loud universe-collapse check. It
+ships tested but is not yet called by any production path (deferred
+follow-up); the cron-side gate above is what runs today.
+
+**Supabase market tables dropped (127, #4053).** `pipeline-digiquant-prices.yml`
+stopped writing and the readers moved to R2/live sources, so migration
+**`127_drop_market_data_tables.sql`** drops `price_history` + `price_technicals`
+(after the `price_history_tickers` / `public_price_latest` views). Every market
+read is R2-backed; rollback is **restore-from-generation + replay**, not a flag
+flip. `macro_series_observations` (fedprob/bitview writes) and `trading_calendar`
+(calendar sync) are **not** dropped. The migration file is merged by the agent
+PR; only a **human** applies it via `db-migrate.yml` (never run prod DDL from an
+agent environment).
+
+Promotion runbook (supervised with the operator — write the commands, do
+NOT run them from an agent env; no cloud creds there):
+
+```bash
+# Apply 127_drop_market_data_tables.sql (#4053) through db-migrate.yml on main
+# (push or manual dispatch; one transaction per file, ledgered in
+# olympus_schema_migrations). Never re-edit 124 — it is a ledgered no-op; 127 is
+# the drop. Rollback after apply = restore-from-generation + replay.
+# 0. PRECONDITION (apply gate) — the stack Worker is redeployed with
+#    DIGIQUANT_MARKET_DATA_BACKEND="r2" in [vars] (83640e28c; the value reaches
+#    the digiquant-mcp container via src/index.ts's envVars forwarding, which
+#    otherwise forwards ""). Verify in the container before applying (and
+#    re-check after the stack deploy): printenv DIGIQUANT_MARKET_DATA_BACKEND → r2.
+# 1. Live size gate on the core project, evaluated through the gate script
+#    (PASS <= 320MB per data/cutover_gate.py;
+#    ~172MB of price tables drop toward a ≈292MB target; macro_series_observations
+#    and trading_calendar stay — 127 drops price_history + price_technicals ONLY).
+psql "$CORE_PG_URI" -c "SELECT pg_size_pretty(pg_database_size(current_database()));"
+SIZE_BYTES=$(psql "$CORE_PG_URI" -tAX -c "SELECT pg_database_size(current_database());")
+python -c "import sys; from digiquant.data.cutover_gate import cutover_size_gate_passes; sys.exit(0 if cutover_size_gate_passes(int(sys.argv[1])) else 1)" "$SIZE_BYTES"  # pre-migration: expect exit 1 (>320MB); record the bytes
+# 2. Reclaim, then apply 127 via db-migrate.yml (file + ledger in one transaction).
+psql "$CORE_PG_URI" -c "VACUUM (ANALYZE);"
+# 3. Re-run the gate-script invocation from step 1 post-migration — PASS = exit 0 (<= 320MB).
+```
+
+Owner actions before unsupervised operation: add `CORE_POSTGRES_URI`
+to GitHub secrets (`FRED_API_KEY` provisioned 2026-09-10; refresh/backfill
+need the URI). Prod gate: Worker-edge digikey JWT enforcement (scope
+`digiquant:backtest`) must land before production MCP use (human decision,
+new external network exposure).
 
 ## Two tracks (research vs portfolio)
 
@@ -84,7 +180,7 @@ python3 scripts/backfill_context.py --date YYYY-MM-DD --print-prompt
 python3 scripts/backfill_simulated_runs.py --validate-all
 ```
 
-**As-of date constraints:** all web research must use `before:DATE` query constraints; prices/macro come from Supabase filtered to `<= DATE` (see `backfill_context.py`). The `cowork/tasks/backfill-historical-day.md` recipe is the canonical task definition for each historical day.
+**As-of date constraints:** all web research must use `before:DATE` query constraints; prices come from the R2 seam and macro from Supabase, both filtered to `<= DATE` (see `backfill_context.py`). The `cowork/tasks/backfill-historical-day.md` recipe is the canonical task definition for each historical day.
 
 **Pre-executed:** Apr 5–14, 2026 backfill completed 2026-04-14 (468 documents, all days OK).
 
@@ -237,11 +333,9 @@ Per-document research deltas (`document_delta`, manifest) use the same **week an
 
 Target: **< $1/day** in xAI usage *without reducing capability* — trim
 redundancy and misallocated effort, never research breadth or freshness.
-Agentic searches dominate cost (built-in provider search on the tier's
-`web_search_models` pins — typically `perplexity/sonar` or `:online` variants,
-billed per that model's page; the `openrouter:web_search` Exa server tool is
-**$0.007**/request per [OpenRouter Exa pricing](https://openrouter.ai/docs/features/web-search)
-but unreachable from production pools), tokens are second.
+Agentic searches go through the first-party digisearch `web_search` tool
+(searxng sidecar with ddgs fallback); there are no provider-search pins and
+no synthesis fallback (#3859). Tokens are second.
 
 Capability-preserving reductions in place:
 
@@ -250,7 +344,7 @@ Capability-preserving reductions in place:
 | Per-phase shared-context filtering | `_node_factory._shared_context(context_keys=…)`, `SegmentNodeSpec.extra_context_keys` | Each node receives only the prior documents it consumes (own segment + declared extras) instead of the full latest-per-key dump (every segment + `analyst/*` + `pm-rebalance` + digests) — same information where it's used, large token cut where it isn't |
 | **Per-phase `data_layer` allowlist (#935)** | `_node_factory._shared_context(data_layer_scope=…)`, `SegmentNodeSpec.data_layer_scope` | The whole `data_layer.market_context` (every ETF's 12 technicals + every macro series) was dumped into *every* node. Now scoped: cross-asset phases (macro / asset-class / sector / equity / synthesis) keep `full`; the **PM** gets `portfolio` (macro + regime signals, no per-ticker ETF dump — it reads the book + prices via the data tools); **analyst / debate** nodes get `ticker` (compact regime signals only — they fetch their own ticker's technicals via tools). Freshness probes are scalars and always kept. Same data where it's used; large cut where the node fetches its own |
 | **Delta-aware snapshot history (#935)** | `_node_factory._shared_context(slim_snapshots=…)` (auto-on for `run_type=delta`) | On a **delta** run, the full `last_snapshots` history is collapsed inside shared_context to the latest snapshot's compact **bias row** (regime + per-asset bias) plus the **changed-segment** slugs from triage — a delta node still sees yesterday's stance without re-serializing the fat digest snapshot N times. **Baseline** runs keep the full history (the weekly baseline reviews the whole prior week). The phases that genuinely consume the history (triage / phase9 / monthly) read `state.prior_context.last_snapshots` into their own `phase_inputs`, so dropping the shared_context copy is lossless |
-| portfolio focus list | `portfolio/candidates.py` (`PORTFOLIO_FOCUS_TOP_N`, default 5) | 7C/7CD deliberate current holdings + top-scored opportunity candidates instead of the first `ATLAS_MAX_ANALYSTS` tickers of the watchlist file — same depth, applied where signal is; explicit `--watchlist` overrides |
+| portfolio focus list | `portfolio/candidates.py` (`PORTFOLIO_FOCUS_TOP_N`, default 5) | 7C/7CD deliberate current holdings + top-scored opportunity candidates instead of the first `DIGIQUANT_MAX_ANALYSTS` tickers of the watchlist file — same depth, applied where signal is; explicit `--watchlist` overrides |
 | `snapshot_lookback` 5 → 2 | `research/supabase_io.py` | Prior digests are re-serialized into every node's shared context; baseline + latest delta preserves continuity without 3 redundant copies |
 
 The shared-context block stays the **first (stable)** prompt content part with
@@ -260,7 +354,7 @@ ordering in `digigraph.graph.research_agent._format_scope_block` (#935).
 Deliberately **not** used (they reduce capability): higher triage carry
 thresholds. (`max_search_results` is unused under native dashboard grounding —
 Exa toolkit only.) A **blanket** fan-out cap is still
-rejected, but `ATLAS_MAX_ANALYSTS` is not blanket and since #1767 it is
+rejected, but `DIGIQUANT_MAX_ANALYSTS` is not blanket and since #1767 it is
 genuinely enforced: the prior book is exempt (#936) and thesis vehicles are
 prioritised round-robin *within* the cap, so the reduction falls on the
 lowest-ranked unlinked candidates rather than uniformly. It had never bound at
@@ -320,7 +414,7 @@ is blocked: CI-mapped tier pools only, no frontier pins, no auto-router.
 
 | Env | Values | Effect |
 |---|---|---|
-| `OLYMPUS_MODEL_TIER` | `cheap` (default) / `balanced` / `quality` | Selects pinned models from `config/digiquant_models.yaml` |
+| `DIGIQUANT_MODEL_TIER` | `cheap` (default) / `balanced` / `quality` | Selects pinned models from `config/digiquant_models.yaml` |
 | `CHEAPERINFERENCE_API_KEY` | GitHub secret | House default upstream — all LLM calls route here when set |
 | `OPENROUTER_API_KEY` | GitHub secret | Fallback upstream when house is forced to OpenRouter (`DIGI_HOUSE_UPSTREAM=openrouter`) |
 
@@ -352,12 +446,12 @@ pools in `config/digiquant_models.yaml`, not by request knobs.
 Phases pass **pinned** model slugs (not `openrouter/auto`). Fail-fast:
 provider errors surface instead of substituting another model.
 
-**Web grounding (dashboard)** resolves via `get_grounding_model()` from the tier's
-`web_search_models` pool. House pools are CI synthesis models (`gemini-3.1-flash-lite`,
-`deepseek-v4-flash`) over in-house digisearch retrieval — not sonar / `:online`
-(#3660). Grounding synthesizes via plain completion over the tier pins; dashboard
-call sites do **not** pass Exa `engine` / `max_results`. Fail-fast: there is no
-preflight web-search ping — provider errors surface from the real run.
+**Web grounding (dashboard)** goes through the first-party digisearch
+`web_search` tool with domain scoping from `config/search_domains.yaml`
+passed straight through as tool params (#3859). There is no synthesis
+fallback: a requested search must succeed or raise `DashboardWebSearchError`.
+Fail-fast: there is no preflight web-search ping — provider errors surface
+from the real run.
 **Structured JSON** phases use pinned open-weight models with `strict:true` json_schema.
 
 Per-phase override: `config/model_modes.yaml` → `phase_models` — **frontier models are
@@ -554,7 +648,7 @@ and since #1736 they legitimately disagree.
   honest reporting never triggers a retry storm. A day that lost 4 of 27 segments but
   committed its book is `status=degraded, degraded=false` and CI does **not** retry it.
 
-**`ATLAS_DEGRADED_RUN_PCT` has narrowed in meaning.** It no longer influences `status` (the
+**`DIGIQUANT_DEGRADED_RUN_PCT` has narrowed in meaning.** It no longer influences `status` (the
 STRICT rule above supersedes it); it now controls only *how much segment damage justifies a
 CI retry*. Raise it to make retries rarer, not to make the dashboard greener.
 
@@ -625,4 +719,34 @@ Dry-run prints weights/NAV from `positions`. `--apply` appends one house ledger
 commit and a `commit-run/{run_id}` document. Idempotent when a committed
 manifest already exists. Requires `CORE_SUPABASE_URL` /
 `CORE_SUPABASE_SERVICE_KEY` (same as the pipeline). Does not touch brokers.
+
+<!-- #3766 -->
+## Checkpoint/document archive offload (#3766)
+
+`.github/workflows/pipeline-checkpoint-archive.yml` runs
+`scripts/digiquant_archive_checkpoints.py` daily (R2 creds from the `R2_*`
+repo secrets). Operator contract:
+
+- **Ordering is archive → verify → delete.** The job uploads to R2, reads back
+  and SHA-256-verifies, writes the `archive_objects` pointer row, and only then
+  NULLs the Supabase cell. A pointer-write failure keeps the Supabase row — the
+  daily run is retry-safe and never orphans a payload without its pointer.
+- **The newest run per owner stays in Supabase.** Resume only ever touches the
+  current run id (`thread_base = resume_run_id or run_id`), so archiving
+  predecessors cannot break a retry. `--retain-days` / `--keep` narrow further.
+- **Eviction watermarks are 8.5GB high / 7GB low** on the ledger `size` sum
+  (compressed bytes). Eviction deletes oldest-first and never the latest run's
+  keys. If R2 approaches the 10GB free tier, retention shrinks automatically —
+  more owners → shorter history, no config change.
+- **Reconciliation:** `reconcile_ledger` drops ledger rows whose R2 object is
+  gone and reports orphan R2 keys; it never auto-deletes from R2. Orphans are
+  operator-deleted after confirming no pointer row references them.
+- **Read-back:** `resolve_payload(client, store, source_table, source_key)`
+  in `digiquant.ops.checkpoint_archive` — pointer lookup → R2 GET → sha256
+  verify → zstd decompress. `ArchiveNotFoundError` = no pointer row (payload
+  still live in Supabase or never archived); `ArchiveVerifyError` = checksum
+  mismatch, do not retry silently, escalate.
+- **First live archive of a new phase** (e.g. documents): dry-run first, then
+  archive one old thread/row, verify manifest + registry rows + a
+  `resolve_payload` round-trip, then proceed.
 
