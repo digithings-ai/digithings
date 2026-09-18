@@ -126,6 +126,7 @@ export const JOBS: readonly Job[] = [
   ),
   wd("smoke-stack", "27 7 * * *", DIGITHINGS, "smoke-stack.yml"),
   wd("security-pip-audit", "33 6 * * MON", DIGITHINGS, "security-pip-audit.yml"),
+  wd("security-npm-audit", "37 6 * * MON", DIGITHINGS, "security-npm-audit.yml"),
   wd("smoke-site", "17 6 * * *", DIGITHINGS, "smoke-site.yml"),
 
   // --- twelve-x (FX Hub); schedule removal is a follow-up in that repo ---

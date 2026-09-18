@@ -1,0 +1,120 @@
+# Dependency-audit CI — runs `npm audit` against the monorepo's JS workspaces.
+#
+# Sibling of security-pip-audit.yml (Python CVEs); together they cover both
+# package ecosystems. Scope is the npm workspaces declared in the root
+# package.json (`cloudflare/*` + `cloudflare/digiweb/*`), audited from the
+# single root lockfile (`package-lock.json`) that already records every
+# workspace's dependency closure.
+#
+# Blocks on HIGH/CRITICAL findings; reports (does not block) MODERATE/LOW.
+# Known/accepted advisories can be listed in `npm-audit-ignore.txt` at the repo
+# root (one advisory ID per line — the `GHSA-…`/numeric `id` from `npm audit
+# --json` — with `#`-prefixed comments for justification).
+#
+# Production clock: Cloudflare Worker digithings-cron (cloudflare/digithings-cron)
+# dispatches this weekly; the GHA schedule was removed in #3579.
+name: "Security: npm audit"
+
+on:
+  workflow_dispatch:
+  workflow_call:
+
+permissions:
+  contents: read
+
+jobs:
+  audit:
+    name: npm audit (root workspaces)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: package-lock.json
+
+      # `npm audit` reads the committed lockfile; `--package-lock-only` avoids a
+      # full `node_modules` install (the Python audit exports a closure rather
+      # than installing for the same reason). Run it from the workspace root so
+      # it sees every `cloudflare/*` workspace closure, not a single app's.
+      - name: Run npm audit (JSON, non-blocking capture)
+        id: audit
+        run: |
+          set +e
+          npm audit --audit-level=high --package-lock-only --json > audit.json 2>audit.err
+          rc=$?
+          set -e
+          echo "rc=$rc" >> "$GITHUB_OUTPUT"
+          if [ -s audit.err ]; then
+            echo "── npm audit stderr (first 40 lines):"
+            head -40 audit.err
+          fi
+
+      - name: Classify findings (HIGH/CRITICAL block; MODERATE/LOW warn)
+        run: |
+          python - <<'PY'
+          import json, os, sys
+
+          try:
+              data = json.load(open("audit.json"))
+          except Exception as e:
+              print(f"::error::could not parse npm audit JSON: {e}")
+              sys.exit(1)
+
+          # npm audit JSON: { "vulnerabilities": { name: { severity, isDirect,
+          # via, fixAvailable } }, "metadata": { "vulnerabilities": {...} } }
+          # Advisory id lives in each `via` entry that is a dict (strings are
+          # transitive package names, not advisories).
+          ignore_path = "npm-audit-ignore.txt"
+          ignored: set[str] = set()
+          if os.path.exists(ignore_path):
+              for line in open(ignore_path):
+                  line = line.split("#", 1)[0].strip()
+                  if line:
+                      ignored.add(line)
+
+          def advisory_ids(entry):
+              ids = set()
+              for via in entry.get("via", []) or []:
+                  if isinstance(via, dict):
+                      for key in ("source", "url", "title"):
+                          val = str(via.get(key, ""))
+                          if val:
+                              ids.add(val)
+              return ids
+
+          blockers, warns, ignored_hits = [], [], []
+          for name, entry in (data.get("vulnerabilities") or {}).items():
+              sev = (entry.get("severity") or "unknown").lower()
+              ids = advisory_ids(entry)
+              # An advisory is accepted if the ignore file names its GHSA id,
+              # URL, or title.
+              if ids & ignored:
+                  ignored_hits.append(f"{name} [{sev}] (ignored)")
+                  continue
+              label = f"{name} [{sev}] direct={bool(entry.get('isDirect'))}"
+              if sev in {"high", "critical"}:
+                  blockers.append(label)
+              else:
+                  warns.append(label)
+
+          for w in warns:
+              print(f"::warning::npm audit: {w}")
+          for i in ignored_hits:
+              print(f"::notice::npm audit (ignored): {i}")
+          for b in blockers:
+              print(f"::error::npm audit blocker: {b}")
+
+          meta = (data.get("metadata") or {}).get("vulnerabilities") or {}
+          if blockers:
+              print(f"\nFAIL: {len(blockers)} HIGH/CRITICAL vulnerabilit{'y' if len(blockers)==1 else 'ies'}.")
+              print("Fix by bumping the affected package (or add the advisory id to")
+              print("npm-audit-ignore.txt with a justification comment).")
+              print(f"Totals: {meta}")
+              sys.exit(1)
+          print(f"OK: 0 HIGH/CRITICAL vulnerabilities ({len(warns)} lower-severity, {len(ignored_hits)} ignored).")
+          print(f"Totals: {meta}")
+          PY

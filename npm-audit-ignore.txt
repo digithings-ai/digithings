@@ -1,0 +1,21 @@
+# npm audit accepted-risk list
+# ----------------------------
+# One advisory identifier per line. The `npm audit` classifier matches against
+# the advisory's GHSA id, its URL, or its title, so any of these work:
+#   GHSA-aaaa-bbbb-cccc
+#   https://github.com/advisories/GHSA-aaaa-bbbb-cccc
+#
+# `#`-prefixed lines (and inline trailing `# …` comments) are ignored.
+#
+# Every entry MUST include a justification comment on a neighbouring line:
+#   - why the advisory doesn't apply to our usage (e.g. dev-only, unreachable
+#     path, no fix available yet), and
+#   - when the entry should be re-evaluated (upstream fix version / date).
+#
+# Policy: see SECURITY.md § "Dependency-audit policy" (same policy as the
+# Python `pip-audit-ignore.txt` sibling; #3523).
+#
+# Example:
+#   # GHSA-aaaa-bbbb-cccc — CVE-2099-0000 in foo; only reachable from a dev-only
+#   # script we don't ship. Re-check when foo 2.0 lands.
+#   GHSA-aaaa-bbbb-cccc
