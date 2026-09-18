@@ -32,6 +32,32 @@ Python packages now live at `digiquant.research` / `digiquant.portfolio` / `digi
 
 Wave 5 of the rebrand plan said "prefer keeping `OLYMPUS_*`". Operator secrets, kill switches, and CLI paths now use `DIGIQUANT_*` / `scripts/digiquant_*.py` so merge and env dashboards stay on the product name. Retired names are read-only aliases so live empty kill-switches stay off. Do not set `DIGIQUANT_EXECUTION_ROUTING=1` without an explicit human decision. Do not rewrite SQL, historical ADR bodies, or `.oly-*` CSS. `pipeline-digiquant.yml` keeps its filename until after the scheduled house proof (renaming a scheduled GHA on develop would skip the 12:00 UTC run).
 
+## Amendment (2026-09-18, #3762)
+
+Wave 2a of the de-brand lifts the "stored contracts stay" carve-outs. They were
+correct while the names were only a product concern, but a stored name is still
+a name: leaving them behind keeps the retired vocabulary in the source tree and
+in operator runbooks.
+
+1. **Database rename target is `digiquant_*`.** The live `olympus_*` tables
+   (48 tables at the time of writing, tracked in #3762) move to the
+   `digiquant_*` scheme. This is a forward-migration on the database, never an
+   edit of a frozen migration file: historical `digiquant/supabase/migrations/**`
+   apply as written, and the rename ships as new migrations plus the matching
+   code/`.types` updates.
+2. **The former carve-outs are lifted**, superseding the "stay" language in the
+   2026-09-02 amendment and in Decision point 4:
+   - `OLYMPUS_*` environment aliases — retired; canonical `DIGIQUANT_*` is the
+     only set operators configure. Aliases may be read one release for live
+     deployed secrets, then dropped.
+   - `.oly-*` CSS — retired; the dashboard class family prefix is `.dq-*`.
+   - the digisearch index id `atlas` — retired; the stored index must be
+     reindexed before the id flips (see the indexed-collection note in #3762).
+   - `olympus_*` SQL table names — retired in favor of `digiquant_*` per (1).
+3. **This remains an amendment, not a rewrite.** No historical ADR body and no
+   already-applied migration is edited in place. The de-brand lands as
+   forward changes, wave by wave, each linked to #3762.
+
 ## Links
 
 - Scope: [docs/plans/2026-08-30-product-rebrand-scope.md](../plans/2026-08-30-product-rebrand-scope.md)

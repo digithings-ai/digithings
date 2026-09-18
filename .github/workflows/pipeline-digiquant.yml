@@ -281,9 +281,9 @@ jobs:
           LANGSMITH_API_KEY: ${{ secrets.LANGSMITH_API_KEY }}
           LANGSMITH_PROJECT: digiquant-baseline
           # WP10.1 (#2758): post-H9 immutable shadow allocation JSON under artifacts/
-          # (uploaded below). Export is fail-soft; disable with OLYMPUS_SHADOW_ARTIFACT_MODE=off.
-          OLYMPUS_SHADOW_ARTIFACT_MODE: export
-          OLYMPUS_SHADOW_ARTIFACT_DIR: artifacts
+          # (uploaded below). Export is fail-soft; disable with DIGIQUANT_SHADOW_ARTIFACT_MODE=off.
+          DIGIQUANT_SHADOW_ARTIFACT_MODE: export
+          DIGIQUANT_SHADOW_ARTIFACT_DIR: artifacts
         run: |
           mkdir -p artifacts
           set -o pipefail
