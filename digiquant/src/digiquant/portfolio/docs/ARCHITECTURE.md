@@ -501,6 +501,17 @@ silent orphan in a published performance series, which is the defect this closes
 | H9 `commit_io.book_portfolio` | commit time, ~12:00–14:00 UTC | the **provisional** row: NAV as of the latest close available *before* `run_date`, plus `cash_pct` / `invested_pct`, which H9 alone owns |
 | `digiquant/scripts/research/verify_nav_replay.py --write` | evening cron, ~22:00–23:00 UTC | the **authoritative** NAV: engine replay restated against that date's settled close. `refresh_performance_metrics.py` only *guards* this row — it never computes NAV |
 
+**Bookless mark-to-market (#3439).** The evening cron passes
+`--mark-through <today UTC>`: when the house run committed no book for the
+target date, the replay grid is extended through it holding the last committed
+book's positions (no schedule entry, no fabricated rebalance), so each
+intervening close marks them and the published NAV/PnL series does not go flat.
+This is deliberately **not** `--fill-calendar-through`: that clones the book
+into `positions`, which is the missing-book signal this path must not erase.
+`positions` is never written here, so the metrics step's exit-3 stale-book alarm
+(and the sparse-`positions` evidence the ARCHITECTURE book-gap section relies
+on) remain intact.
+
 **The evening restatement is a correction, not corruption.** Reading a manifest NAV and a
 `nav_history` NAV that differ for the same date is expected: the manifest is a commit-time
 artefact whose only structural job is the `weights_fingerprint` idempotency check, and

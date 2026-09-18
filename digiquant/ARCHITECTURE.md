@@ -2268,6 +2268,13 @@ entry until that cutover. Prompt / structured-output walk for the same pass:
     are refused before any widening (#3994). A read-only
    `verify_nav_replay` (no `--write`) step runs after metrics so drift fails
    loudly.
+   **Bookless mark-to-market (#3439):** the scheduled engine step passes
+   `--mark-through <today UTC>`, which extends the replay grid past the last
+   committed book through today. The last book's positions are held (no schedule
+   entry, no fabricated rebalance) and marked at each intervening close, so a
+   failed house run no longer leaves the NAV/PnL series flat. Only the grid is
+   extended — `positions` is never written — so the missing-book signal and the
+   metrics step's exit-3 stale-book alarm are preserved.
   `refresh_performance_metrics.refresh_nav_point` only guards the engine row;
   `pnl_pct` reads the stored engine series (finalized-accounting precedence
   retired — it caused the Sept 2026 scale break); `update_tearsheet.py` no
