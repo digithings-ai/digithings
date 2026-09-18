@@ -39,7 +39,7 @@ from digiquant.execution.sync_cron import (
 EXIT_NOT_CONFIGURED: int = 2
 EXIT_ROUTING_DISABLED: int = 3
 EXIT_REFUSED: int = 4
-KAIROS_ROUTING_DISABLED: str = "KAIROS_ROUTING_DISABLED"
+DIGIQUANT_ROUTING_DISABLED: str = "DIGIQUANT_ROUTING_DISABLED"
 
 RouteBatchFn = Callable[[Sequence[SyncTarget]], int]
 
@@ -149,7 +149,7 @@ def main(
         return 0
 
     if not routing_on:
-        err(f"{KAIROS_ROUTING_DISABLED}: {EXECUTION_ROUTING} is off (no submit_order)")
+        err(f"{DIGIQUANT_ROUTING_DISABLED}: {EXECUTION_ROUTING} is off (no submit_order)")
         return EXIT_ROUTING_DISABLED
 
     loaded = _load_rows(
@@ -262,7 +262,7 @@ __all__ = [
     "EXIT_NOT_CONFIGURED",
     "EXIT_REFUSED",
     "EXIT_ROUTING_DISABLED",
-    "KAIROS_ROUTING_DISABLED",
+    "DIGIQUANT_ROUTING_DISABLED",
     "RouteBatchFn",
     "main",
 ]

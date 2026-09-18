@@ -53,8 +53,8 @@ def test_main_empty_env_exits_2() -> None:
     assert "execution_route" in blob
     assert "notify" in blob
     assert "OVERLAY_STORE_NOT_CONFIGURED" in blob
-    assert "KAIROS_SYNC_NOT_CONFIGURED" in blob
-    assert "KAIROS_ROUTING_DISABLED" not in blob
+    assert "DIGIQUANT_SYNC_NOT_CONFIGURED" in blob
+    assert "DIGIQUANT_ROUTING_DISABLED" not in blob
     assert "NOTIFY_NOT_CONFIGURED" in blob
     assert missing_overlay_cron_env_names({})
     assert missing_execution_sync_env_names({})

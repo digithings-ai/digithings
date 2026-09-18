@@ -14,7 +14,7 @@ Flags:
   --date YYYY-MM-DD   Period date (default: today UTC)
   --dry-run           Assemble + compute + report; never INSERT
   --shadow            Persist labeled period + reconcile vs legacy nav day return
-                      (default when not --dry-run; also via OLYMPUS_ACCOUNTING_FINALIZER)
+                      (default when not --dry-run; also via DIGIQUANT_ACCOUNTING_FINALIZER)
 
 Writes estimated/incomplete/failed periods as labeled non-final rows. Only
 ``status=final`` with a complete child set is selectable via
@@ -28,7 +28,7 @@ Usage:
   python3 digiquant/scripts/research/finalize_period_accounting.py --supabase --shadow
 
 Exit codes: 0 ok · 1 hard failure · 2 reconcile miss (--strict-reconcile) · 3 declined
-Environment: SUPABASE_URL / CORE_SUPABASE_*, OLYMPUS_ACCOUNTING_FINALIZER
+Environment: SUPABASE_URL / CORE_SUPABASE_*, DIGIQUANT_ACCOUNTING_FINALIZER
 """
 
 from __future__ import annotations
@@ -60,6 +60,7 @@ from digiquant.dashboard.accounting.models import (
     PeriodFill,
     PeriodStatus,
 )
+from digiquant.dashboard.envcompat import ACCOUNTING_FINALIZER, env_lookup
 from digiquant.dashboard.tenancy import house_workspace_id
 from digiquant.portfolio.models.portfolio_ledger import (
     DecisionAction,
@@ -88,7 +89,7 @@ def _eq_house(query: Any) -> Any:
     return query.eq("workspace_id", str(house_workspace_id()))
 
 
-_ENV_MODE = "OLYMPUS_ACCOUNTING_FINALIZER"
+_ENV_MODE = ACCOUNTING_FINALIZER
 _OFF = frozenset({"0", "off", "false", "no", "disabled"})
 _DEFAULT_POLICY = "accounting-v1"
 _BENCHMARK = "SPY"
@@ -136,7 +137,7 @@ def resolve_mode(*, cli_mode: str | None, dry_run: bool, shadow: bool) -> str:
         return "dry-run"
     if shadow:
         return "shadow"
-    raw = (cli_mode or os.environ.get(_ENV_MODE) or "shadow").strip().lower()
+    raw = (cli_mode or env_lookup(ACCOUNTING_FINALIZER) or "shadow").strip().lower()
     if raw in _OFF:
         return "off"
     if raw in {"on", "shadow", "off", "dry-run"}:
@@ -567,7 +568,7 @@ def main() -> int:
         "--mode",
         choices=("shadow", "on", "off", "dry-run"),
         default=None,
-        help="Override OLYMPUS_ACCOUNTING_FINALIZER (default shadow)",
+        help="Override DIGIQUANT_ACCOUNTING_FINALIZER (default shadow)",
     )
     ap.add_argument(
         "--strict-reconcile",
@@ -580,7 +581,7 @@ def main() -> int:
         return 1
     mode = resolve_mode(cli_mode=args.mode, dry_run=args.dry_run, shadow=args.shadow)
     if mode == "off":
-        print("OLYMPUS_ACCOUNTING_FINALIZER=off — skipping")
+        print("DIGIQUANT_ACCOUNTING_FINALIZER=off — skipping")
         return 0
     period_date = date.fromisoformat(args.date) if args.date else datetime.now(tz=UTC).date()
     try:

@@ -2,7 +2,7 @@
 
 Invokes :func:`plan_research_attention` at H4 end over the fixed focus roster and
 branches in H5/H6 provider paths. ``off`` / ``shadow`` / ``enforce`` via
-``OLYMPUS_RESEARCH_ATTENTION_MODE``. Not a graph node; cannot mutate H4 roster.
+``DIGIQUANT_RESEARCH_ATTENTION_MODE``. Not a graph node; cannot mutate H4 roster.
 """
 
 from __future__ import annotations
@@ -33,7 +33,7 @@ from digiquant.dashboard.research_retrieval.planner import (
 from digiquant.portfolio.candidates import holdings_from_prior_book
 from digiquant.portfolio.state import PortfolioState
 from digiquant.research.research_attention import (
-    OLYMPUS_RESEARCH_ATTENTION_MODE_ENV,
+    DIGIQUANT_RESEARCH_ATTENTION_MODE_ENV,
     attention_store_for_run,
     lookup_attention_decision,
     resolve_research_attention_rollout_mode,
@@ -335,7 +335,7 @@ def apply_analyst_metric_patch(
 __all__ = [
     "H5EnforcePath",
     "H6EnforcePath",
-    "OLYMPUS_RESEARCH_ATTENTION_MODE_ENV",
+    "DIGIQUANT_RESEARCH_ATTENTION_MODE_ENV",
     "apply_analyst_metric_patch",
     "build_ticker_attention_features",
     "collect_portfolio_attention_features",

@@ -17,7 +17,7 @@ from digiquant.research.supabase_io import SupabaseClient
 
 logger = logging.getLogger(__name__)
 
-_ACCOUNTING_PERIODS = "olympus_accounting_periods"
+_ACCOUNTING_PERIODS = "accounting_periods"
 
 
 def _parse_uuid(raw: Any) -> UUID | None:

@@ -91,7 +91,7 @@ def test_staging_jwt_alias() -> None:
 
 
 def test_attempt_alias_for_house_workflow_export() -> None:
-    """pipeline-digiquant.yml still exports OLYMPUS_ATTEMPT; do not rename that file today."""
+    """The retired ``OLYMPUS_ATTEMPT`` stays readable for one release (#3762)."""
     env = {"OLYMPUS_ATTEMPT": "3"}
     assert env_lookup(ATTEMPT, environ=env) == "3"
 

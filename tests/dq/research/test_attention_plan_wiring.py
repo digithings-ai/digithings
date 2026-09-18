@@ -6,7 +6,7 @@ from datetime import date
 
 import pytest
 from digiquant.dashboard.attention_plan_graph import (
-    OLYMPUS_PLANNER_MODE_ENV,
+    DIGIQUANT_PLANNER_MODE_ENV,
     maybe_publish_attention_plan_shadow,
     planner_mode_from_env,
 )
@@ -62,11 +62,11 @@ def _state_with_triage() -> ResearchState:
 
 
 def test_planner_mode_from_env_defaults_to_shadow(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.delenv(OLYMPUS_PLANNER_MODE_ENV, raising=False)
+    monkeypatch.delenv(DIGIQUANT_PLANNER_MODE_ENV, raising=False)
     assert planner_mode_from_env() == "shadow"
-    monkeypatch.setenv(OLYMPUS_PLANNER_MODE_ENV, "off")
+    monkeypatch.setenv(DIGIQUANT_PLANNER_MODE_ENV, "off")
     assert planner_mode_from_env() == "off"
-    monkeypatch.setenv(OLYMPUS_PLANNER_MODE_ENV, "enforce")
+    monkeypatch.setenv(DIGIQUANT_PLANNER_MODE_ENV, "enforce")
     assert planner_mode_from_env() == "shadow"
 
 
@@ -82,7 +82,7 @@ def test_maybe_publish_skips_without_triage() -> None:
 
 
 def test_maybe_publish_skips_when_planner_off(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv(OLYMPUS_PLANNER_MODE_ENV, "off")
+    monkeypatch.setenv(DIGIQUANT_PLANNER_MODE_ENV, "off")
     client = FakeSupabaseClient()
     assert maybe_publish_attention_plan_shadow(client=client, state=_state_with_triage()) is None
     assert client.store.get("documents", []) == []

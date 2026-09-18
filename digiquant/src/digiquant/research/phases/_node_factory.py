@@ -62,7 +62,7 @@ from digiquant.research.state import (
 # exists so a new key costs one module plus one line, not an edit to the gate rules.
 from digiquant.research.telemetry import merge_fallback_breakdown  # noqa: F401
 from digiquant.research.triage import triage_decision_to_signal
-from digiquant.tool_rounds import run_olympus_research_agent as run_research_agent
+from digiquant.tool_rounds import run_digiquant_research_agent as run_research_agent
 
 logger = logging.getLogger(__name__)
 
