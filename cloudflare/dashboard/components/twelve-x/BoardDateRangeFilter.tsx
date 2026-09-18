@@ -3,7 +3,11 @@
 /**
  * Compact board-date range filter for the Trades tab.
  * Reuses DigiWeb DatePager calendar chrome (`.nb-cal`) — click start, then end.
- * No shared date-range picker exists in digiweb/dashboard yet.
+ * No shared date-range picker exists in digiweb/dashboard yet. The trigger and
+ * Clear controls wear the kit `Button`; the month-nav and day-cell controls
+ * stay raw native buttons because the `.nb-cal` chrome's canonical home (the
+ * shared DatePager) renders the same native `nb-cal-nav`/`nb-cal-day` elements
+ * (wave-4 BLOCKED, #4306) — migrating only this consumer would fork the chrome.
  */
 import { useMemo, useState } from 'react';
 import { Dialog, DialogContent } from '@digithings/web';

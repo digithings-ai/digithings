@@ -17,6 +17,7 @@ import {
 } from '@/lib/run-health-week';
 import { formatDuration } from '@/components/system/run-economics-row';
 import { IconButton, Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@digithings/web';
+import { Button } from '@digithings/web/ui';
 
 export interface BriefRunHealth {
   status: string | null;
@@ -221,13 +222,18 @@ function WeekBar({
             return (
               <div key={slot.date} className="min-w-0 space-y-1">
                 <Tooltip>
+                  {/* Kit `Button` trigger; the ghost/size defaults are
+                      neutralized so the pill keeps the exact `DAY_PILL_BASE`
+                      chrome it shares with the empty-day slots (#4306). */}
                   <TooltipTrigger
                     render={
-                      <button
+                      <Button
                         type="button"
+                        variant="ghost"
+                        size="xs"
                         data-testid={`week-day-${slot.date}`}
                         aria-label={buildAriaLabel(ep)}
-                        className={`${DAY_PILL_BASE} border-transparent transition-opacity hover:opacity-80 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-accent/60 ${SEGMENT_COLOR[ep.outcome]}`}
+                        className={`${DAY_PILL_BASE} border-transparent p-0 transition-opacity hover:bg-transparent hover:opacity-80 active:translate-y-0 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-accent/60 ${SEGMENT_COLOR[ep.outcome]}`}
                       />
                     }
                   />
