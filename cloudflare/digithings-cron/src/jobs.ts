@@ -126,6 +126,9 @@ export const JOBS: readonly Job[] = [
   ),
   wd("smoke-stack", "27 7 * * *", DIGITHINGS, "smoke-stack.yml"),
   wd("security-pip-audit", "33 6 * * MON", DIGITHINGS, "security-pip-audit.yml"),
+  // Daily, not weekly: an expired credential should surface in <=24h, which is
+  // the point of the canary (#3522).
+  wd("token-canary", "41 6 * * *", DIGITHINGS, "token-canary.yml"),
   wd("smoke-site", "17 6 * * *", DIGITHINGS, "smoke-site.yml"),
 
   // --- twelve-x (FX Hub); schedule removal is a follow-up in that repo ---
