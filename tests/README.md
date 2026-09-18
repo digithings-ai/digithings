@@ -83,7 +83,7 @@ Per-component workflows live under `.github/workflows/` and are orchestrated by 
 | Dashboard | `test-dashboard.yml` | Vitest + static export build (`cloudflare/dashboard/`) |
 | Stack smoke | `smoke-stack.yml` | Nightly/manual Compose `/healthz` (REM-128) |
 | E2E contract | `test-e2e.yml` → `ci.yml` | `test_e2e_contract.py` without full stack |
-| E2E stack | `test-e2e.yml` on `develop` | `pytest -m e2e`; needs `E2E_BEARER_TOKEN` |
+| E2E stack | `test-e2e.yml` on `develop` | `pytest -m e2e`; mints its own bearer (no stored token) |
 | Pandas boundary | `ci.yml` → `ruff-and-scripts` | `scripts/check_pandas_boundary.sh` |
 
 Run locally before push:
