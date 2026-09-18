@@ -30,7 +30,7 @@ interface SectionTitleProps {
  *
  * Wave-2 (#4206): the box is now the kit `Card` (same `--surface` fill, zero
  * radius, hairline ring) and the scroll-reveal hook is the `data-reveal`
- * attribute — MotionLayer no longer needs the retired `.oly-slab` class. */
+ * attribute — MotionLayer no longer needs the retired `.dq-slab` class. */
 export function StatCard({
   label,
   value,

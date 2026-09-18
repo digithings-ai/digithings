@@ -83,7 +83,7 @@ export function SectionCard({
 /**
  * Thin shim over the promoted @digithings/web EmptyState (#1548): dress="glass"
  * is the API name (type/spacing only — it must not look like glass). The
- * promoted part carries its own `.ctl-empty` box, so the retired `.oly-slab`
+ * promoted part carries its own `.ctl-empty` box, so the retired `.dq-slab`
  * layer was redundant; the reveal hook is the `data-reveal` attribute.
  * The local title/message/note API is preserved for consumers
  * (AttributionTab, DecisionScorecardTab, SystemStatus).

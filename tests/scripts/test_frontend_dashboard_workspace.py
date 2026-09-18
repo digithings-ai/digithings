@@ -1,7 +1,7 @@
 """Pin wave 3: the dashboard workspace lives at cloudflare/dashboard.
 
 ADR-0026 wave 3. Public URL is /dashboard/ only; Python digiquant.dashboard
-and CSS .oly-* are unchanged. /olympus/ has no source twin; Pages redirects it.
+and CSS .dq-* are unchanged. /olympus/ has no source twin; Pages redirects it.
 """
 
 from __future__ import annotations

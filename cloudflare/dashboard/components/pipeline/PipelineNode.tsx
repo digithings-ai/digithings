@@ -49,7 +49,7 @@ export default function PipelineNode({
   const status = resolvedStatus(node);
   const statusLabel = pipelineNodeRunStatusLabel(status);
 
-  // Graph nodes use explicit flat-surface tokens instead of `.oly-slab`:
+  // Graph nodes use explicit flat-surface tokens instead of `.dq-slab`:
   // MotionLayer mutates that class for page-level scroll reveals, which races
   // hydration and conflicts with transforms inside this custom camera.
   const cardClass = [

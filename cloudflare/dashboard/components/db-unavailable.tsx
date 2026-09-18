@@ -17,7 +17,7 @@ import { SUBPAGE_MAX } from '@/components/layout-constants';
  * (semantic; the glass dresses carry no glyph disc, so no down tint shows) in
  * the dress="glass-display" cut (API name; the surface is a tonal slab, not
  * glass). Title uses font-display (mono voice). The promoted EmptyState
- * carries its own tonal-slab box, so the retired `.oly-slab` layer was
+ * carries its own tonal-slab box, so the retired `.dq-slab` layer was
  * redundant; the reveal hook is now the `data-reveal` attribute.
  *
  * Copy fix (full-UI-suite critique, P2): this used to say "It'll reconnect
