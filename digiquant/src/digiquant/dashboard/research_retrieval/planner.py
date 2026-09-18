@@ -39,7 +39,7 @@ from typing import (  # score:allow untyped any — scored-lint: heterogeneous d
     Sequence,
     TypeAlias,
 )
-from uuid import NAMESPACE_URL, UUID, uuid5
+from uuid import UUID, uuid5
 
 import yaml
 from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, field_validator, model_validator
@@ -400,10 +400,12 @@ def assert_no_materiality_in_prompt(phase_inputs: Mapping[str, Any]) -> None:
 # ---------------------------------------------------------------------------
 
 RESEARCH_POLICY_ENV = "DIGIQUANT_RESEARCH_POLICY_PATH"
-# Frozen identity strings. Do not rename with the package.
-_ATTENTION_PLAN_NS = uuid5(NAMESPACE_URL, "digithings.olympus.research_attention_plan")
-_ATTENTION_DECISION_NS = uuid5(NAMESPACE_URL, "digithings.olympus.research_attention_decision")
-_ATTENTION_EVALUATION_NS = uuid5(NAMESPACE_URL, "digithings.olympus.research_attention_evaluation")
+# Frozen namespace UUIDs: the literal values the legacy URL seeds already
+# derived. Kept verbatim so attention plan/decision/evaluation ids are
+# unchanged. Do not re-key.
+_ATTENTION_PLAN_NS = UUID("55ee801e-f006-5a47-bcf0-8b2f10293c29")
+_ATTENTION_DECISION_NS = UUID("f40d03e4-0306-56fd-a1f7-9d842267e7d3")
+_ATTENTION_EVALUATION_NS = UUID("b1983998-d185-54bb-a236-8bea9f9c7592")
 _TriageMode: TypeAlias = Literal["quiet", "stale", "active"]
 
 
