@@ -116,14 +116,14 @@ When touching `digiquant/src/digiquant/dashboard/` **or** `cloudflare/dashboard/
    - `skip` → shallow-carry prior row (0 LLM); `edit` → load `*-edit.md` skill, expect
      `DocumentPatch`, merge via `merge_document_patch`; `full` → `*-full.md` skill, full body.
    - Prior = `prior_published(run_date, document_key)` (latest `date < run_date`), not calendar
-     yesterday only. Stale gap > `OLYMPUS_STALE_FULL_DAYS` (default 7) → `full`.
+     yesterday only. Stale gap > `DIGIQUANT_STALE_FULL_DAYS` (default 7) → `full`.
    - Track B WP13-class shadow (#2616): `digiquant.dashboard.attention_plan.plan_attention_shadow`
      records `AttentionPlan` + refresh reasons beside incumbent modes (`off`/`shadow` only;
      never actuates; cannot expand H4 or rewrite H7/H8).
    - Track C glass-box (#1945 / #2622): `attention_plan_io` +
      `attention_plan_graph.maybe_publish_attention_plan_shadow` (research
      `publish_phase`) upsert `attention-plan` on daily runs when triage ran and
-     `OLYMPUS_PLANNER_MODE` is `shadow` (default). Never fabricate UI rows without
+     `DIGIQUANT_PLANNER_MODE` is `shadow` (default). Never fabricate UI rows without
      a published document; never actuate (`enforce` absent).
 6. **portfolio extension pattern** (H1–H9): add phases via `build_portfolio_phases_thesis`; wire
    `build_grounding` + phase blinding; H7 must not emit weights (`PMDirectionMemo` only); H8

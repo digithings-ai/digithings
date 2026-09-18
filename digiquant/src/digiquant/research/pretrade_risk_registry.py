@@ -26,7 +26,7 @@ from digiquant.research.supabase_io import SupabaseClient
 
 logger = logging.getLogger(__name__)
 
-REPORTS = "olympus_pretrade_risk_reports"
+REPORTS = "pretrade_risk_reports"
 
 # Stable namespace for PreTradeRiskReport UUID5 identity. Do not change — existing
 # rows and H9 manifests key on report_id derived from content hash.

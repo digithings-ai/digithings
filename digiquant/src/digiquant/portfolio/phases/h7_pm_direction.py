@@ -47,7 +47,7 @@ from digiquant.research.phases._node_factory import (
 )
 from digiquant.research.state import PhaseError, PhasePortfolioState
 from digiquant.research.supabase_io import SupabaseClient
-from digiquant.tool_rounds import run_olympus_research_agent as run_research_agent
+from digiquant.tool_rounds import run_digiquant_research_agent as run_research_agent
 
 NODE_ID = "portfolio/pm-direction"
 PHASE_NAME = "portfolio_h7_pm_direction"

@@ -2028,7 +2028,7 @@ class TestForecastRegistryInH9:
         assert manifest["status"] == "committed"
         assert manifest["forecast_registry_status"] == "ok"
         assert manifest["forecast_registry_assessments_written"] == 1
-        assert len(client.store.get("olympus_forecast_assessments", [])) == 1
+        assert len(client.store.get("forecast_assessments", [])) == 1
         assert len(client.store.get("positions", [])) >= 1
 
     def test_registry_failure_keeps_book_and_does_not_rebook(self, monkeypatch) -> None:
@@ -2095,7 +2095,7 @@ class TestRiskPolicyRegistryH9:
         assert manifest["schema_version"] == "1.6"
         assert manifest["risk_policy_registry_status"] == "ok"
         assert manifest["risk_policy_registry_run_refs_written"] == 1
-        assert len(client.store.get("olympus_h8_risk_run_refs", [])) == 1
+        assert len(client.store.get("h8_risk_run_refs", [])) == 1
 
     def test_risk_registry_failure_keeps_book(self, monkeypatch) -> None:
         from digiquant.portfolio.phases import h9_commit_run as h9
@@ -2398,7 +2398,7 @@ class TestPreTradeRiskH9:
         assert manifest["pretrade_risk_registry_reports_written"] == 1
         assert manifest["pretrade_risk_report_hash"]
         assert manifest["pretrade_risk_report_id"]
-        rows = client.store.get("olympus_pretrade_risk_reports", [])
+        rows = client.store.get("pretrade_risk_reports", [])
         assert len(rows) == 1
         assert rows[0]["report_content_hash"] == manifest["pretrade_risk_report_hash"]
         assert rows[0]["report_id"] == manifest["pretrade_risk_report_id"]
@@ -2408,13 +2408,13 @@ class TestPreTradeRiskH9:
         client = self._merging_client()
         state = self._state_with_report()
         _run(client, state)
-        assert len(client.store.get("olympus_pretrade_risk_reports", [])) == 1
+        assert len(client.store.get("pretrade_risk_reports", [])) == 1
         out2 = _run(client, state)
         assert out2["phase_portfolio"].commit_manifest["status"] == "noop"
         assert (
             out2["phase_portfolio"].commit_manifest["pretrade_risk_registry_reports_skipped"] == 1
         )
-        assert len(client.store.get("olympus_pretrade_risk_reports", [])) == 1
+        assert len(client.store.get("pretrade_risk_reports", [])) == 1
 
     def test_append_only_no_upsert_or_update(self, monkeypatch) -> None:
         monkeypatch.setenv("OLYMPUS_PRETRADE_RISK_MODE", "enforce")
@@ -2422,9 +2422,9 @@ class TestPreTradeRiskH9:
         state = self._state_with_report()
         _run(client, state)
         # Re-run must not mutate the stored body.
-        first = dict(client.store["olympus_pretrade_risk_reports"][0])
+        first = dict(client.store["pretrade_risk_reports"][0])
         _run(client, state)
-        second = client.store["olympus_pretrade_risk_reports"][0]
+        second = client.store["pretrade_risk_reports"][0]
         assert second == first
 
     def test_h9_never_imports_or_calls_report_builder(self) -> None:

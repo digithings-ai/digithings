@@ -57,13 +57,13 @@ class _MergingQuery(_FakeQuery):
             return _FakeResponse(data=[dict(row) for row in self._insert_rows])
         if self._upsert_row is not None:
             if self.table_name == fo.OUTCOMES:
-                raise AssertionError("upsert is forbidden on olympus_forecast_outcomes")
+                raise AssertionError("upsert is forbidden on forecast_outcomes")
             rows = self._upsert_row if isinstance(self._upsert_row, list) else [self._upsert_row]
             self.store.setdefault(self.table_name, []).extend(rows)
             return _FakeResponse(data=[dict(row) for row in rows])
         if self._update_row is not None:
             if self.table_name == fo.OUTCOMES:
-                raise AssertionError("update is forbidden on olympus_forecast_outcomes")
+                raise AssertionError("update is forbidden on forecast_outcomes")
             updated: list[dict[str, Any]] = []
             for row in self.store.get(self.table_name, []):
                 if self._matches(row):

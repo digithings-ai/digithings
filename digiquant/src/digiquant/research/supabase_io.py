@@ -261,7 +261,7 @@ def publish_document(
     """Upsert one row into ``documents`` on ``(workspace_id, date, document_key)``.
 
     Omitted ``workspace_id`` stamps the house workspace. Overlay private-phase
-    writes require ``OLYMPUS_OVERLAY_PERSIST=1``.
+    writes require ``DIGIQUANT_OVERLAY_PERSIST=1``.
 
     ``doc_type=None`` is the canonical signal for per-segment Phase 1-5
     documents — the schema's ``chk_documents_doc_type`` constraint allows
@@ -398,7 +398,7 @@ def upsert_onchain_cohort_positioning(
     This table has no ``workspace_id`` column (leftover ``UNIQUE(date, market)``). Overlay
     persist-on is not a license to last-writer-win the house research row. Private workspaces
     skip the upsert and return 0; callers that omit *workspace_id* stay on the house write
-    path. Independent of ``OLYMPUS_OVERLAY_PERSIST`` and of staged cutover 113.
+    path. Independent of ``DIGIQUANT_OVERLAY_PERSIST`` and of staged cutover 113.
     """
     if skip_overlay_shared_register(workspace_id):
         logger.info(

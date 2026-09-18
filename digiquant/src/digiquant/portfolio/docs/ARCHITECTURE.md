@@ -26,7 +26,7 @@ portfolio terminal persist is **H9 `commit_run`** (in-graph): `positions`, `nav_
 append. Book/ledger writes stamp house `workspace_id` (migration 097) while keeping
 date-only upsert conflict targets until cutover 113. Phase 9 evolution LLM is **not**
 on the daily path; beliefs distillation is a **daily short fold** after
-publish (`refresh_scope=beliefs` or backlog > `OLYMPUS_BELIEFS_BACKLOG` selects
+publish (`refresh_scope=beliefs` or backlog > `DIGIQUANT_BELIEFS_BACKLOG` selects
 the full rewrite). Empty-lesson days still publish a same-date `beliefs` document.
 
 House CLI close-out (`cli_main`, not `run_research_then_portfolio`): after a non-retry
@@ -44,8 +44,8 @@ cannot send house mail. Missing notify env logs and returns.
 | **H2** | `portfolio/thesis/market-exploration` | `phases/h2_market_thesis_exploration.py` | `edit` exploration doc | market thesis proposals |
 | **H3** | `portfolio/thesis/vehicle-map` | `phases/h3_thesis_vehicle_map.py` | `full`/`edit` | `thesis_vehicles` |
 | **H4** | `portfolio/thesis/opportunity-screener` | `phases/h4_opportunity_screener.py` | deterministic | focus roster (held + mapped + unlinked), capped by a **regime-adaptive budget**; publishes `documents.document_key=opportunity-screener` (`doc_type` `opportunity_screen`) |
-| **H5** | `portfolio/asset-analyst` (×N) | `phases/h5_asset_analyst.py` | `skip`/`edit`/`full` per ticker | unified `AnalystPayload` + WP11.2 `ticker_evidence_bundles` (base build before provider; cite on new forecasts; optional `PortfolioGraphDeps.evidence_bundle_store` append when injected; `OLYMPUS_EVIDENCE_BUNDLE_WRITER=off` kill switch) |
-| **H6** | `portfolio/deliberation` (×N) | `phases/h6_deliberation.py` | cyclic PM↔analyst sub-graph; WP11.3 `H6Selection` (`OLYMPUS_H6_SELECTION_MODE`); WP11.4 bounded missing-fact amendment via shared `evidence_bundle_store` | `deliberation_transcript` + summary (+ amendment/carry provenance) |
+| **H5** | `portfolio/asset-analyst` (×N) | `phases/h5_asset_analyst.py` | `skip`/`edit`/`full` per ticker | unified `AnalystPayload` + WP11.2 `ticker_evidence_bundles` (base build before provider; cite on new forecasts; optional `PortfolioGraphDeps.evidence_bundle_store` append when injected; `DIGIQUANT_EVIDENCE_BUNDLE_WRITER=off` kill switch) |
+| **H6** | `portfolio/deliberation` (×N) | `phases/h6_deliberation.py` | cyclic PM↔analyst sub-graph; WP11.3 `H6Selection` (`DIGIQUANT_H6_SELECTION_MODE`); WP11.4 bounded missing-fact amendment via shared `evidence_bundle_store` | `deliberation_transcript` + summary (+ amendment/carry provenance) |
 | **H7** | `portfolio/pm-direction` | `phases/h7_pm_direction.py` | `edit` prior memo | `PMDirectionMemo` — **no weights**; optional `confidence` ∈ [0, 1] |
 | **H8** | `portfolio/risk-sizing` | `phases/phase7e_risk_sizing.py` | no LLM | `phase_portfolio.sized_book` (sole weight owner; calibrated μ/σ × PM confidence) |
 | **H9** | `portfolio/commit-run` | `phases/h9_commit_run.py` | no LLM | positions, nav, brief, `decision_log` |
@@ -63,7 +63,7 @@ final control shell (carry → cadence → backstop → grid → final caps); re
 identity equals the final book fingerprint (same extractor as H9:
 `commit_io.weights_from_sized_book`). Fail-soft omission does not change
 the sized book. H9 (`commit_run`) validates report identity under
-`OLYMPUS_PRETRADE_RISK_MODE` (`off`|`shadow`|`enforce`; default `shadow`) and
+`DIGIQUANT_PRETRADE_RISK_MODE` (`off`|`shadow`|`enforce`; default `shadow`) and
 append-only persists hash-bound rows to `olympus_pretrade_risk_reports`
 (migration `083`, via `research/pretrade_risk_registry.py` +
 `commit_io.validate_pretrade_risk_report` /
@@ -75,8 +75,8 @@ without blocking (covered by unit tests; #2824). H9 never recomputes the report.
 frozen `ShadowAllocationArtifact` — exact `AllocationInputBundle`, incumbent final
 book weights, `PreTradeRiskReport`, and minimal H9 commit metadata with a SHA-256
 `artifact_content_hash`. Canonical JSON bytes are written via temp + `os.replace`
-under `OLYMPUS_SHADOW_ARTIFACT_DIR` (default `artifacts/`). Mode
-`OLYMPUS_SHADOW_ARTIFACT_MODE` (`off`|`export`; default `export`). Chain calls
+under `DIGIQUANT_SHADOW_ARTIFACT_DIR` (default `artifacts/`). Mode
+`DIGIQUANT_SHADOW_ARTIFACT_MODE` (`off`|`export`; default `export`). Chain calls
 `maybe_export_shadow_allocation_artifact` after portfolio returns (fail-soft; never
 reruns or mutates H8/H9). The module must not import challenger optimizer, replay,
 or broker surfaces. `pipeline-digiquant.yml` uploads `shadow-allocation-*.json` with
@@ -292,7 +292,7 @@ quiet (#925): `skip` — carry prior deliberation summary into H7; fresh
 decision features, provider/round budget) from structured features after H5:
 decision-boundary, conflict, uncertainty, invalidation-risk, material weight, or
 exploration → `select`; otherwise `low_value_carry`. Modes via
-`OLYMPUS_H6_SELECTION_MODE`:
+`DIGIQUANT_H6_SELECTION_MODE`:
 
 | Mode | Behavior |
 |---|---|
@@ -309,7 +309,7 @@ WP11.4+ (durable lineage round trip) still open — WP11 incomplete.
 
 After H4 materializes `focus_roster`, `portfolio/research_attention.py` invokes
 `plan_research_attention` over ticker targets only (helper at H4 end — not a graph
-node). Modes reuse `OLYMPUS_RESEARCH_ATTENTION_MODE=off|shadow|enforce` (default
+node). Modes reuse `DIGIQUANT_RESEARCH_ATTENTION_MODE=off|shadow|enforce` (default
 `shadow`). The planner cannot mutate roster width/order or consume the exploration
 floor; H4 output is byte-identical across modes.
 

@@ -20,7 +20,7 @@ to ``full``… Rely on getting good patches consistently instead", and lists
 
 Nothing here triggers a rewrite, and the distinction matters. What these markers
 do is give the *existing* deterministic staleness cap — §5.3.2's hard cap,
-``OLYMPUS_STALE_FULL_DAYS`` (default 7, see :mod:`digiquant.dashboard.edit_mode.config`)
+``DIGIQUANT_STALE_FULL_DAYS`` (default 7, see :mod:`digiquant.dashboard.edit_mode.config`)
 — an honest input. ``gap_days`` is measured from the last date the content
 materially changed instead of the last date a row happened to be written.
 
