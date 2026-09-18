@@ -10,10 +10,20 @@
 -- recreates old-name compatibility views. Phase C drops the old-name views once
 -- `main` runs the new code. Neither is in this file.
 --
--- Why views and not a rename here: code and migration land on `main` in the same
--- push, but db-migrate pauses on the `production` environment for human approval.
--- A rename-only migration would leave new-name code running against the old
--- schema in that window (PostgREST PGRST205). New-name views close the window.
+-- REQUIRED APPLY ORDER. A rename-only migration would leave new-name code
+-- running against the old schema (PostgREST PGRST205) for as long as the
+-- human-approved `production` db-migrate run has not happened. This additive
+-- view layer removes the schema-rename half of that hazard, but it does NOT
+-- close the window: the new-name views exist only once this migration has been
+-- APPLIED. Until then, every switched call site still raises PGRST205.
+--
+-- Therefore this migration MUST be applied to production BEFORE the new-name
+-- code runs. The promotion is deliberately split so that can be guaranteed:
+-- land this file on `main` alone (harmless while the old code still runs),
+-- approve the `production` db-migrate run, and only then promote the code
+-- switch. Do NOT let the new-name code reach the scheduled digiquant pipeline
+-- before this file is applied. Phase B must also be applied before the Phase B
+-- code switch, for the same reason.
 --
 -- `security_invoker = true` is MANDATORY on every base-table compatibility view.
 -- The PostgreSQL default (false) runs the view as its owner and bypasses the
