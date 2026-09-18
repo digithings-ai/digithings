@@ -4,7 +4,7 @@
 
 > **⚠️ Current routing: house Cheaper Inference, CI-mapped pins per tier.**
 > `config/digiquant_models.yaml` pins a model per capability tier;
-> `OLYMPUS_MODEL_TIER` (`cheap` default / `balanced` / `quality`) selects the
+> `DIGIQUANT_MODEL_TIER` (`cheap` default / `balanced` / `quality`) selects the
 > pinned set, and `apply_digiquant_house_env()` (portfolio chain startup) points
 > the default client at the house upstream. Every LLM call goes through the
 > house key; the web grounding pre-pass is tool-only (first-party digisearch

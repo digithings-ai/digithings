@@ -60,8 +60,8 @@ def test_staging_secret_inventory_lists_vendor_blockers() -> None:
     assert "STRIPE_PRICE_BRIEF_MONTHLY" in required
     assert "STRIPE_PRICE_DESK_MONTHLY" in required
     assert "STRIPE_PRICE_STUDIO_MONTHLY" in required
-    assert "MAILGUN_API_KEY" in required
-    assert "MAILGUN_DOMAIN" in required
+    assert "CLOUDFLARE_EMAIL_API_TOKEN" in required
+    assert "CLOUDFLARE_ACCOUNT_ID" in required
     assert "NOTIFY_FROM" in required
     assert "ALPACA_OAUTH_CLIENT_ID" in required
     assert "ALPACA_OAUTH_CLIENT_SECRET" in required
@@ -77,7 +77,7 @@ def test_missing_secrets_reports_names_only(monkeypatch: pytest.MonkeyPatch) -> 
     assert missing == list(STAGING_REQUIRED_SECRETS)
     msg = format_missing_secrets_failure(missing)
     assert "STRIPE_SECRET_KEY" in msg
-    assert "MAILGUN_API_KEY" in msg
+    assert "CLOUDFLARE_EMAIL_API_TOKEN" in msg
     assert "ALPACA_OAUTH_CLIENT_SECRET" in msg
     # Never embed placeholder values.
     assert "sk_test" not in msg
@@ -98,11 +98,11 @@ def test_empty_and_placeholder_values_count_as_missing(
     for name in STAGING_REQUIRED_SECRETS:
         monkeypatch.setenv(name, "placeholder")
     monkeypatch.setenv("STRIPE_SECRET_KEY", "")
-    monkeypatch.setenv("MAILGUN_API_KEY", "EMPTY")
+    monkeypatch.setenv("CLOUDFLARE_EMAIL_API_TOKEN", "EMPTY")
     monkeypatch.setenv("NOTIFY_FROM", "null")
     missing = missing_execution_staging_secrets()
     assert "STRIPE_SECRET_KEY" in missing
-    assert "MAILGUN_API_KEY" in missing
+    assert "CLOUDFLARE_EMAIL_API_TOKEN" in missing
     assert "NOTIFY_FROM" in missing
 
 

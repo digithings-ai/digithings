@@ -26,7 +26,7 @@ Do **not** buy Workspace for vendor login. Do **not** Sign in with Google as the
 company path.
 
 The company mailbox is **`admin@digithings.ai`**, hosted on the owner’s **Proton**
-account (domain already connected). Use that address on Stripe, Mailgun, X
+account (domain already connected). Use that address on Stripe, X
 (`@digithingsai`), Alpaca, and other vendor signups.
 
 | Piece | Rule |
@@ -48,7 +48,7 @@ require a company Google account.
 
 ## Agentmail — not for vendor accounts
 
-Do **not** create Stripe, Mailgun, Alpaca, X, or Google Cloud logins as
+Do **not** create Stripe, Alpaca, X, or Google Cloud logins as
 `digithings@agentmail.to` or `cursor-cloud-agent6060@agentmail.to`. No vendor
 accounts were completed on those addresses; do not start any.
 

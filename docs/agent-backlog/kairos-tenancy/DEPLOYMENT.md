@@ -52,7 +52,7 @@ Applied via the runbook §2 manual path (`execute_sql` / `apply_migration` +
 ### Remaining (human / production gates)
 
 ```
-§5 secrets + Auth providers + Stripe/Mailgun/Alpaca apps
+§5 secrets + Auth providers + Stripe/Cloudflare/Alpaca apps
   → Edge Function secrets (needs sbp_) + optional full monorepo settings redeploy
   → develop → main Pages promote (flag-off; no cutover 900) — human release gate (~199 commits)
   → §6 cutover (Access on → flag flip → anon-drop 900 → verify → Access off)
@@ -139,7 +139,7 @@ ORDER BY version;
 | `stripe-webhook` | ACTIVE (`verify_jwt=false`) | Awaits `STRIPE_WEBHOOK_SECRET` — unauth POST → `STRIPE_NOT_CONFIGURED` |
 | `create-checkout-session` | ACTIVE | Runtime needs Stripe + `NEXT_PUBLIC_APP_URL` |
 | `customer-portal` | ACTIVE | Runtime needs Stripe + `NEXT_PUBLIC_APP_URL` |
-| `settings` | ACTIVE **v18** | Workspace `plan_tier` entitlement gate (#3196) + GET `/profile` + GET `/notifications` hydrate + PATCH. Smoke: missing/invalid JWT → gateway `401` (`settings-v18-smoke.log`). EF secrets set: `DIGIQUANT_VAULT_*`, `APP_URL`, `NEXT_PUBLIC_APP_URL` (Alpaca/Stripe/Mailgun still absent). Migration `106` stamped on `core`.
+| `settings` | ACTIVE **v18** | Workspace `plan_tier` entitlement gate (#3196) + GET `/profile` + GET `/notifications` hydrate + PATCH. Smoke: missing/invalid JWT → gateway `401` (`settings-v18-smoke.log`). EF secrets set: `DIGIQUANT_VAULT_*`, `APP_URL`, `NEXT_PUBLIC_APP_URL` (Alpaca/Stripe/Cloudflare still absent). Migration `106` stamped on `core`.
 
 ### Schema alignment (agent, 2026-08-30)
 
@@ -266,7 +266,7 @@ NEXT_PUBLIC_DASHBOARD_AUTH=1 npm run build
 | `APP_URL` / `NEXT_PUBLIC_APP_URL` | **SET on `core` to `https://digiquant.io`** (2026-08-31). Observer `GET /settings/app-urls` returns Alpaca `…/olympus/settings/brokers/callback/` + billing `…/olympus/settings/?tab=billing` (no loopback; public client id empty until Alpaca secrets land). settings **v32**, checkout **v8**, portal **v9**. | OAuth redirect pin; checkout return URLs |
 | Vendor identity (`admin@digithings.ai` on Proton) | **Policy** — company mailbox for vendor signups; owner completes CAPTCHA / Proton codes on the desktop. No Workspace / company Google account. Agentmail is not used for vendor signup. See [`DIGITHINGS-IDENTITY.md`](DIGITHINGS-IDENTITY.md). | Vendor consoles |
 | Stripe test products/prices + `STRIPE_SECRET_KEY` + webhook secret | **Blocked** — signup hit hCaptcha; partial signup notes only in `.local/secrets/` (no live keys) | T2 EFs; checkout/portal; claim sync |
-| Mailgun `MAILGUN_API_KEY` / `MAILGUN_DOMAIN` / `NOTIFY_FROM` | **Blocked** — values still **empty** in VM/Cursor env; smoke skipped. Fail-soft notify path OK. `sbp_` available now — paste nonempty Mailgun into EF secrets when obtained. | K5 digest / alerts |
+| Cloudflare Email Sending `CLOUDFLARE_EMAIL_API_TOKEN` / `CLOUDFLARE_ACCOUNT_ID` / `NOTIFY_FROM` | **Blocked** — values still **empty** in VM/Cursor env; smoke skipped. Fail-soft notify path OK. `sbp_` available now — paste nonempty notify values into EF secrets when obtained. | K5 digest / alerts |
 | Supabase Auth providers (Google, GitHub) on `core` | **Partial** — **GitHub Enabled** (OAuth App still named `digiquant olympus` in the vendor console + callback). Site URL `https://digiquant.io` + `/dashboard/auth/callback/` allow-list. **Google Disabled** (skipped captcha console). | T1 login when flag on (GitHub path ready; Google still human) |
 | Alpaca OAuth / paper (`ALPACA_OAUTH_CLIENT_ID` / `_SECRET`) | **Blocked** — half-finished signup notes in `.local/secrets/`; no API secrets to push. | Product broker connect |
 | `SUPABASE_ACCESS_TOKEN` (`sbp_…`) | **Unlocked (agent VM)** — PAT on disk as `.local/secrets/digithings-supabase-pat` (label **digithings**; old “cursor cloud agent” naming retired). Management API `secrets list` OK. EF vault/`APP_URL` intact. **Human:** re-paste `sbp_…` into Cursor env labeled **digithings**. See [`DIGITHINGS-IDENTITY.md`](DIGITHINGS-IDENTITY.md). | EF secrets; CLI deploy |
@@ -395,8 +395,9 @@ curl -sS -X POST "$SUPABASE_FUNCTIONS/create-checkout-session" \
 # 5) Routed order (K4): order_intent → broker_orders status accepted/filled (paper)
 # 6) Mirrored fill: broker_executions row; broker_position_snapshots updated
 # 7) Digest email (K5): enable notification_prefs.daily_digest; run
-#    python -m digiquant.notify.dispatch ; assert Mailgun accept + notification_log
-echo "E2E skeleton complete — attach screenshots / Mailgun event ids to the epic"
+#    python -m digiquant.notify.dispatch ; assert Cloudflare Email Sending accept
+#    + notification_log
+echo "E2E skeleton complete — attach screenshots / notify event ids to the epic"
 ```
 
 House regression (every promotion):
