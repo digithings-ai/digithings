@@ -53,8 +53,13 @@ export function TypedWelcomeCopy({ lines }: { lines: readonly string[] }) {
     }
 
     // The universal boot animation types this copy itself; the hero renders
-    // settled under it. Heroes mounted later (new chat) type as usual.
-    if (document.querySelector("[data-digichat-boot]") !== null) {
+    // settled under it. Heroes mounted later (new chat) type as usual. Skip
+    // markers parked inside hidden containers (Next.js streams a hidden
+    // staging duplicate of the shell that keeps the marker forever).
+    const bootVisible = [
+      ...document.querySelectorAll("[data-digichat-boot]"),
+    ].some((element) => element.closest("[hidden]") === null);
+    if (bootVisible) {
       setReveal(null);
       return;
     }

@@ -393,3 +393,15 @@
 .dboot-overlay[data-instant="true"] {
   transition: none;
 }
+
+/* Tool-chain lab variant: one row per simulated tool call. The row anatomy
+   mirrors the message tool calls (aui-tool-fallback-trigger + DotMatrix
+   states), so whichever skin dresses the chat dresses the boot too. */
+.dboot-lab-tools {
+  display: flex;
+  width: 100%;
+  max-width: 30rem;
+  flex-direction: column;
+  gap: 2px;
+  text-align: left;
+}
