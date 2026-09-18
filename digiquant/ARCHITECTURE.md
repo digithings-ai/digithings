@@ -2805,8 +2805,7 @@ separately so research nodes never pay the per-ticker decision-artifact token ta
   `run_research_agent(...)` call goes through the thin wrapper
   `digiquant.tool_rounds.run_digiquant_research_agent`, which injects
   `DIGIQUANT_MAX_TOOL_ROUNDS` (default **24**, set in
-  `.github/digiquant-pipeline.yml`); the retired `OLYMPUS_MAX_TOOL_ROUNDS` stays
-  readable as an alias via `digiquant.dashboard.envcompat`. The cap is high but finite:
+  `.github/digiquant-pipeline.yml`). The cap is high but finite:
   cheap models need room for data-tool grounding before Pydantic validation.
   digigraph chat keeps its own `max_tool_rounds=4` — never reuse this budget there.
   Transient Supabase faults (disconnects, `PGRST002`, 502s) retry 3× with short
@@ -3935,12 +3934,11 @@ side, quantity, order_type)` call. This work package is **contracts and typing o
 HTTP client, no broker SDK, no database access, and no venue router — a later work package
 (K1 Alpaca, K2 IBKR, K4 router/sync) builds on this surface without changing it.
 
-Operator env names live in `digiquant.dashboard.envcompat`. Canonical names are
-`DIGIQUANT_*` (execution routing, overlay persist, staging JWT, research knobs).
-Retired `DASHBOARD_*` / `EXECUTION_*` / `RESEARCH_*` names remain readable so live empty
-kill-switches stay off. `DIGIQUANT_EXECUTION_ROUTING` defaults **off** — do not
+Operator env names live in `digiquant.dashboard.envcompat` and are all
+`DIGIQUANT_*` (execution routing, overlay persist, staging JWT, research knobs);
+no read-aliases remain. `DIGIQUANT_EXECUTION_ROUTING` defaults **off** — do not
 enable it without an explicit human decision. `pipeline-digiquant.yml` exports
-`DIGIQUANT_ATTEMPT`; the retired `OLYMPUS_ATTEMPT` is accepted as a read-alias.
+`DIGIQUANT_ATTEMPT`.
 
 ### Vocabulary and models
 
@@ -4140,7 +4138,7 @@ Live-venue refusals in `execution/policy.py` are unchanged by the calendar gate.
 performs **no I/O**. House / system — `workspace_id is None` **or** the well-known
 `house_workspace_id()` / `system_workspace_id()` UUIDs → always `PAPER_INTERNAL`
 (hard-coded; those identities can never route externally). Kill switch
-`DIGIQUANT_EXECUTION_ROUTING` (alias `OLYMPUS_KAIROS_ROUTING`) defaults **off** (inverse polarity of `DIGIQUANT_PORTFOLIO_LEDGER` / alias `OLYMPUS_PORTFOLIO_LEDGER`):
+`DIGIQUANT_EXECUTION_ROUTING` defaults **off** (inverse polarity of `DIGIQUANT_PORTFOLIO_LEDGER`):
 off ⇒ only `PAPER_INTERNAL` regardless of connections. With the switch on, a **tenant**
 workspace with exactly one active paper `broker_connections` row maps to `ALPACA_PAPER` /
 `IBKR_PAPER`; zero → `PAPER_INTERNAL`; two or more → `AmbiguousVenueError`. v1 does **not**
@@ -4212,7 +4210,7 @@ Observer until an Alpaca paper OAuth connection exists. The fill remaining-hop
 requires a mirrored row with a symbol **and** an Alpaca paper OAuth connection.
 
 **`execute_at_open` seam.** `resolve_execution_venue_for_run` is the only new call site;
-invalid / empty `DIGIQUANT_EXECUTION_WORKSPACE_ID` (alias `OLYMPUS_KAIROS_WORKSPACE_ID`) warns and falls back to house
+invalid / empty `DIGIQUANT_EXECUTION_WORKSPACE_ID` warns and falls back to house
 (`paper_internal`). Default (no workspace / kill switch off) stays on
 `build_events_from_paper_fills`. Migration 102 + `tests/dq/dashboard/execution/`.
 

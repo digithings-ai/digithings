@@ -125,7 +125,7 @@ class TestH6AmendmentWiring:
     def test_missing_fact_supplement_links_request_to_amendment(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        monkeypatch.setenv("OLYMPUS_H6_SELECTION_MODE", "enforce")
+        monkeypatch.setenv("DIGIQUANT_H6_SELECTION_MODE", "enforce")
         monkeypatch.setenv("DIGIQUANT_DELIBERATION_MIN_ROUNDS", "1")
         store = EvidenceBundleStore()
         bundle_dump, evidence = _bundle_dump()
@@ -180,7 +180,7 @@ class TestH6AmendmentWiring:
     def test_failed_amendment_records_reason_and_keeps_base_hash(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        monkeypatch.setenv("OLYMPUS_H6_SELECTION_MODE", "enforce")
+        monkeypatch.setenv("DIGIQUANT_H6_SELECTION_MODE", "enforce")
         monkeypatch.setenv("DIGIQUANT_DELIBERATION_MIN_ROUNDS", "1")
         bundle_dump, _evidence = _bundle_dump()
         state = _state()

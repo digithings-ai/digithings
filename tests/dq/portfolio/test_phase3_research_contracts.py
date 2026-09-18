@@ -265,9 +265,9 @@ def test_pre_call_manifest_links_wp1_tokens_without_mutation() -> None:
 def test_default_rollout_modes_are_shadow_not_enforce(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.delenv("OLYMPUS_RESEARCH_ATTENTION_MODE", raising=False)
-    monkeypatch.delenv("OLYMPUS_CONTEXT_COMPILER_MODE", raising=False)
-    monkeypatch.delenv("OLYMPUS_H6_SELECTION_MODE", raising=False)
+    monkeypatch.delenv("DIGIQUANT_RESEARCH_ATTENTION_MODE", raising=False)
+    monkeypatch.delenv("DIGIQUANT_CONTEXT_COMPILER_MODE", raising=False)
+    monkeypatch.delenv("DIGIQUANT_H6_SELECTION_MODE", raising=False)
     assert resolve_research_attention_rollout_mode() is AttentionRolloutMode.SHADOW
     assert resolve_context_compiler_mode().value == "shadow"
     assert resolve_h6_selection_mode() is H6SelectionMode.SHADOW

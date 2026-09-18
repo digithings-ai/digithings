@@ -619,7 +619,7 @@ def _seed_loaded_state(
 
 
 def test_wire_h5_off_leaves_incumbent_inputs(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("OLYMPUS_CONTEXT_COMPILER_MODE", "off")
+    monkeypatch.setenv("DIGIQUANT_CONTEXT_COMPILER_MODE", "off")
     ev = _evidence(summary="Filed 8-K")
     loaded = _loaded_state(evidence=(ev,))
     store, pin, version_id = _seed_loaded_state(loaded)
@@ -646,7 +646,7 @@ def test_wire_h5_off_leaves_incumbent_inputs(monkeypatch: pytest.MonkeyPatch) ->
 def test_wire_h5_shadow_records_manifest_beside_incumbent(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setenv("OLYMPUS_CONTEXT_COMPILER_MODE", "shadow")
+    monkeypatch.setenv("DIGIQUANT_CONTEXT_COMPILER_MODE", "shadow")
     ev = _evidence(summary="Filed 8-K")
     loaded = _loaded_state(evidence=(ev,))
     store, pin, version_id = _seed_loaded_state(loaded)
@@ -673,7 +673,7 @@ def test_wire_h5_shadow_records_manifest_beside_incumbent(
 def test_wire_h5_enforce_strips_portfolio_and_injects_capsule(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setenv("OLYMPUS_CONTEXT_COMPILER_MODE", "enforce")
+    monkeypatch.setenv("DIGIQUANT_CONTEXT_COMPILER_MODE", "enforce")
     ev = _evidence(summary="Filed 8-K")
     belief = _belief(evidence=ev, statement="Base intact")
     loaded = _loaded_state(evidence=(ev,), beliefs=(belief,))
@@ -706,7 +706,7 @@ def test_wire_h5_enforce_strips_portfolio_and_injects_capsule(
 def test_wire_h6_enforce_allows_transcript_and_analyst_payload(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setenv("OLYMPUS_CONTEXT_COMPILER_MODE", "enforce")
+    monkeypatch.setenv("DIGIQUANT_CONTEXT_COMPILER_MODE", "enforce")
     ev = _evidence(summary="Bundle evidence")
     loaded = _loaded_state(evidence=(ev,))
     store, pin, version_id = _seed_loaded_state(loaded)
@@ -737,7 +737,7 @@ def test_wire_h6_enforce_allows_transcript_and_analyst_payload(
 def test_wire_h6_rejects_unpinned_bundle_state_version(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setenv("OLYMPUS_CONTEXT_COMPILER_MODE", "enforce")
+    monkeypatch.setenv("DIGIQUANT_CONTEXT_COMPILER_MODE", "enforce")
     ev = _evidence(summary="Bundle evidence")
     loaded = _loaded_state(evidence=(ev,))
     wrong_bundle = _bundle(state_version_id=uuid4())

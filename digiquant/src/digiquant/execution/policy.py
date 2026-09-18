@@ -10,11 +10,10 @@ venue is resolved from:
    ``house_workspace_id()`` / ``system_workspace_id()`` UUIDs → always
    :attr:`~digiquant.brokers.contracts.ExecutionVenue.PAPER_INTERNAL`,
    hard-coded, not configurable. Those identities can never route externally.
-2. **Kill switch** ``DIGIQUANT_EXECUTION_ROUTING`` (alias ``OLYMPUS_KAIROS_ROUTING``;
-   default **off** / absent) → only
-   ``PAPER_INTERNAL`` is reachable regardless of connections. Polarity is the
-   inverse of ``DIGIQUANT_PORTFOLIO_LEDGER`` (alias ``OLYMPUS_PORTFOLIO_LEDGER``;
-   ledger defaults on; routing defaults
+2. **Kill switch** ``DIGIQUANT_EXECUTION_ROUTING`` (default **off** / absent) →
+   only ``PAPER_INTERNAL`` is reachable regardless of connections. Polarity is
+   the inverse of ``DIGIQUANT_PORTFOLIO_LEDGER`` (ledger defaults on; routing
+   defaults
    off) because external submit is a human-gated surface.
 3. **Active paper connection** (kill switch on) → the matching paper venue
    (``alpaca`` → ``ALPACA_PAPER``, ``ibkr`` → ``IBKR_PAPER``). Exactly one active
