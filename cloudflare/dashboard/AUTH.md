@@ -152,7 +152,7 @@ already drops anon SELECT on operator cost telemetry (`atlas_run_diagnostics`);
 - [x] T1 code path: flag-gated PKCE login, `/login` + `/signup` + `/auth/callback`, AuthGate.
 - [ ] **Owner:** enable **Google** (still often Disabled on `core`) and GitHub + Redirect URLs.
 - [x] **Owner:** X OAuth 2.0 enabled on `core` (`external_x_enabled`; authorize `provider=x`). App calls `provider: 'x'`. Legacy `twitter` stays off.
-- [ ] **Owner:** Auth SMTP (Mailgun) or turn Confirm email off until SMTP delivers.
+- [ ] **Owner:** Auth SMTP (Cloudflare Email Sending) or turn Confirm email off until SMTP delivers.
 - [ ] **Owner:** set `FX_HUB_INVITE_HASH` (sha256 hex of the FX Hub invite) on the settings
       Edge Function, apply migration **112**, share the invite URL (or plaintext) out of band.
 - [ ] **Owner:** staging Access overlay retained; production Access removed at
@@ -192,7 +192,8 @@ Operator steps:
 4. Share the invite URL (or the plaintext) out of band. Analysts open the link,
    create an account, and land granted. Paste-code remains on the locked FX Hub
    surface. `product_invite_redemptions` is the admin ledger (who registered).
-   Mailgun digest is a separate secret; until it exists the notification is the
+   The Cloudflare Email Sending digest is a separate secret; until it exists the
+   notification is the
    table row + `notification_log` event `fx_hub_invite_redeemed`.
 
 Cloudflare Access on FX Hub remains a human Zero Trust option if the team should

@@ -724,7 +724,8 @@ Skipped in T0 (K3/K4/K5 own CREATE-time `workspace_id`): `broker_connections`,
 | `notification_log` | `(workspace_id, event_key, sent_date)` | Dedupe ledger — insert-before-send; duplicate PK ⇒ skip. Append-only (INSERT grant only). |
 
 RLS enabled, no client policies; `service_role` SELECT/INSERT/UPDATE on prefs, SELECT/INSERT on log.
-Typed dispatch: `digiquant.notify.dispatch` (fail-soft Mailgun client in `notify/mailgun.py`).
+Typed dispatch: `digiquant.notify.dispatch` (fail-soft client in
+`notify/cloudflare_email.py`).
 
 ### `workspace_id` on the private set (097)
 

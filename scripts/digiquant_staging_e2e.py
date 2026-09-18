@@ -8,7 +8,7 @@ Then Settings product-state reads prove remaining hops. Does not require
 vendor secrets for exit 0.
 
 Phase B: if remaining hops are unproven, fails loudly with **named** missing
-secrets when Stripe / Mailgun / Alpaca OAuth are unset. Never paper-fakes.
+secrets when Stripe / Cloudflare / Alpaca credentials are unset. Never paper-fakes.
 
 Phase C: once secrets are present, checkout must return a session URL and
 the webhook must clear ``STRIPE_NOT_CONFIGURED``. Unproven hops → exit 4.
