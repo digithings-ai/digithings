@@ -47,11 +47,36 @@
 
 :is(.aui-theme-stage, [data-thread-skin="digichat"]) .aui-thread-welcome-copy {
   margin: 0.7rem 0 0;
-  max-width: 46ch;
+  /* Full thread-column width: the copy reads as paragraphs at hero scale
+     instead of a narrow column hugging the left edge. */
+  max-width: none;
   font-family: var(--font-mono);
   font-size: 0.82rem;
   line-height: 1.45;
   color: var(--ink-soft);
+}
+
+/* The not-yet-typed remainder of a line holds its space (the typewriter
+   reveals in place, nothing reflows), painted invisible. */
+:is(.aui-theme-stage, [data-thread-skin="digichat"]) .aui-thread-welcome-ghost {
+  visibility: hidden;
+}
+
+/* Welcome body typewriter caret: same blink grammar as the composer block
+   caret, tinted with the tenant accent. Typing is client-only and degrades
+   to the full copy under prefers-reduced-motion, so no reduced-motion rule
+   is needed here. */
+:is(.aui-theme-stage, [data-thread-skin="digichat"]) .aui-thread-welcome-caret {
+  display: inline-block;
+  width: 0.55em;
+  height: 1.05em;
+  margin-left: 0.08em;
+  /* Net-zero width: the caret overlays the next hidden glyph instead of
+     pushing text, so appearing/retiring never rewraps the line. */
+  margin-right: -0.63em;
+  vertical-align: text-bottom;
+  background: var(--tenant-accent, var(--accent, var(--ink)));
+  animation: aui-caret-blink 1.06s steps(1) infinite;
 }
 
 :is(.aui-theme-stage, [data-thread-skin="digichat"]) .aui-thread-welcome-suggestions {
