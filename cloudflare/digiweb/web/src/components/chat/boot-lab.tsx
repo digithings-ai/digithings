@@ -78,15 +78,18 @@ const TYPED: ReadonlySet<BootLabVariant> = new Set([
 const TYPE_MS = 46;
 const SETTLE_HOLD_MS = 180;
 
-/** Simulated container/agent commands; one row each, in order. */
-const TOOL_CHAIN: readonly string[] = [
-  "pull digichat image",
-  "mount deployment configuration",
-  "warm up chat runtime",
-  "verify foundry connection",
+/**
+ * Simulated container/agent commands; one row each, in order. The durations
+ * vary per row so the chain feels measured, not metronomic. The numbers are
+ * a quiet Easter egg: 1320 + 640 + 880 + 1402 = 4242 ms (pulled as 42 layers)
+ * for the fleet that keeps answering the big question in the logs.
+ */
+const TOOL_CHAIN: readonly { label: string; detail: string; ms: number }[] = [
+  { label: "pull digichat image", detail: "42 layers", ms: 1320 },
+  { label: "mount deployment configuration", detail: "3 mounts", ms: 640 },
+  { label: "warm up chat runtime", detail: "2 workers", ms: 880 },
+  { label: "wire in the backend", detail: "6 tools", ms: 1402 },
 ];
-
-const CHAIN_STEP_MS = 560;
 
 /** The tool-chain family shares the long-load behaviour below. */
 const TOOLCHAIN_VARIANTS: ReadonlySet<BootLabVariant> = new Set([
@@ -370,15 +373,19 @@ function useLiveMs(active: boolean): number {
  */
 function ToolChainRow({
   label,
+  detail,
+  durationMs,
   done,
   failed = false,
 }: {
   label: string;
+  detail: string;
+  durationMs: number;
   done: boolean;
   failed?: boolean;
 }) {
   const liveMs = useLiveMs(!done && !failed);
-  const ms = done ? CHAIN_STEP_MS : liveMs;
+  const ms = done ? durationMs : liveMs;
   return (
     <div
       className="aui-tool-fallback-trigger group/trigger text-muted-foreground flex w-full items-center gap-2 py-1.5 text-sm"
@@ -394,6 +401,7 @@ function ToolChainRow({
         data-slot="tool-fallback-trigger-label"
       >
         {label}
+        <span className="ml-1 opacity-60">· {detail}</span>
       </span>
       <span className="aui-tool-fallback-duration text-muted-foreground text-xs tabular-nums">
         {(ms / 1000).toFixed(1)}s
@@ -587,7 +595,9 @@ function ToolChain({
       return;
     }
     if (step >= TOOL_CHAIN.length) return;
-    const timer = setTimeout(() => setStep((current) => current + 1), CHAIN_STEP_MS);
+    const nextRow = TOOL_CHAIN[step];
+    if (nextRow === undefined) return;
+    const timer = setTimeout(() => setStep((current) => current + 1), nextRow.ms);
     return () => clearTimeout(timer);
   }, [step, instant]);
   useEffect(() => {
@@ -605,13 +615,15 @@ function ToolChain({
       {showReasoning ? (
         <ReasoningRow
           active={!chainDone && !failed}
-          durationMs={chainDone ? CHAIN_STEP_MS * TOOL_CHAIN.length : 0}
+          durationMs={chainDone ? TOOL_CHAIN.reduce((total, row) => total + row.ms, 0) : 0}
         />
       ) : null}
-      {TOOL_CHAIN.slice(0, visible).map((label, index) => (
+      {TOOL_CHAIN.slice(0, visible).map((row, index) => (
         <ToolChainRow
-          key={label}
-          label={label}
+          key={row.label}
+          label={row.label}
+          detail={row.detail}
+          durationMs={row.ms}
           done={index < step}
           failed={failed && index === visible - 1}
         />
