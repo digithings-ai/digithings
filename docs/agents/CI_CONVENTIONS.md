@@ -51,7 +51,7 @@ Workflow `.yml` files only (gh-aw `.md` / `.lock.yml` sources retired with Copil
 | `ci-pr-hygiene.yml` | CI: PR hygiene | PR, schedule (daily 06:00), dispatch | Issue linkage (`Require Fixes`) + path-gated `project_fields.tsv` coverage | Working | TSV job: `project_fields.tsv` + this workflow |
 | `project-status.yml` | Project: status automation | issues, PR closed (merge), push (task/cursor/claude branches) | Move issues through project board pipeline (Todo → In Progress → Done) | Working | PR: merge/close only |
 | `pipeline-provider-review.yml` | Pipeline: provider review | schedule (Sun 00:00), dispatch | `pytest tests/provider_review/ -m unit` then weekly probe + Claude agent; guarded by `CLAUDE_CODE_OAUTH_TOKEN` | Working | none |
-| `docs-reindex-guide.yml` | Docs: reindex guide | push (develop) | Re-index docs into digisearch; dry-run always; apply step requires `DIGISEARCH_URL` | Working | many doc paths |
+| `docs-reindex-guide.yml` | Docs: reindex guide | push (develop) | Re-index docs into digisearch (dry-run; the apply step is local-only — it posts a filesystem path and no auth, #4357) | Working | many doc paths |
 | `sync-architecture-vault.yml` | sync-architecture-vault | push (`main`), dispatch | Mirror digivault-managed `docs/vision/**` → Supabase `public.architecture_notes` for the digithings.ai docs chat; `production` env (human gate); needs migration 048 | Working | `docs/vision/**`, sync script |
 | `project-route-issues.yml` | Project: route issues | issues (opened/reopened/transferred/labeled) | Route issues to module project boards based on `component:*` label; requires `DIGITHINGS_PROJECT_TOKEN` | Working | none |
 | `pipeline-maintenance.yml` | Pipeline: scheduled maintenance | schedule (Mon 08:00), dispatch | Weekly sweep: CVE audit, stale branches, broken doc links, agents-init drift, stale issues/PRs, label coverage, workflow health | Working | none |
@@ -82,7 +82,7 @@ Workflow `.yml` files only (gh-aw `.md` / `.lock.yml` sources retired with Copil
 | `SUPABASE_URL` / `SUPABASE_SERVICE_ROLE_KEY` | research-baseline, research-delta, research-monthly, digiquant-prices | Required for production runs |
 | `GEMINI_API_KEY` | research-baseline, research-delta, research-monthly | Required for research/portfolio LLM calls |
 | `OLLAMA_API_KEY` | research-baseline, research-delta, research-monthly | Required for reasoning tier (phases 7, 7D) |
-| `DIGISEARCH_URL` | reindex-digithings-guide | Optional — apply step skipped when absent |
+| `DIGISEARCH_URL` | pipeline-digiquant | Actions variable; falls back to the hosted `https://search.digithings.ai` |
 | `vars.DIGI_MAINTENANCE_PROJECT_NUMBER` | scheduled-maintenance, ci-failure-triage, enforce-project-assignment | Optional — project-add step skipped when absent |
 
 ---
