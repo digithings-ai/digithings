@@ -87,7 +87,7 @@ class PreflightDeps:
     research_state_store: Any | None = None
     # WP15.6 (#2975): optional outcome-learning maturation stack for lesson pin.
     outcome_maturation_deps: Any | None = None
-    # Outer-retry attempt id (string form of OLYMPUS_ATTEMPT / DiagnosticsDeps.attempt).
+    # Outer-retry attempt id (string form of DIGIQUANT_ATTEMPT / DiagnosticsDeps.attempt).
     research_state_attempt_id: str | None = None
 
 

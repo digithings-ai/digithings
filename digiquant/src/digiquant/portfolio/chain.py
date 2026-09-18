@@ -114,13 +114,13 @@ class DiagnosticsDeps:
     attempt: int = 1
 
 
-OUTER_ATTEMPT_ENV = "OLYMPUS_ATTEMPT"
+OUTER_ATTEMPT_ENV = "DIGIQUANT_ATTEMPT"
 
 
 def _outer_attempt() -> int:
     """The CI outer-retry attempt number, from ``DIGIQUANT_ATTEMPT``.
 
-    ``pipeline-digiquant.yml``'s retry loop still exports ``OLYMPUS_ATTEMPT``
+    ``pipeline-digiquant.yml``'s retry loop exports ``DIGIQUANT_ATTEMPT``
     per attempt (#1762). Readers accept both names. Falls back to 1 —
     a local or single-shot run genuinely is the first attempt, and 1 keeps it distinct from
     the ``0`` sentinel migration 065 stamped on rows written before per-attempt keying.

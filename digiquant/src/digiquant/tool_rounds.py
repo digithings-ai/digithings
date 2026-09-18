@@ -2,7 +2,7 @@
 
 Cheap-model JSON needs room for data-tool grounding before Pydantic
 validation. Default 24; override via ``DIGIQUANT_MAX_TOOL_ROUNDS`` (retired
-``OLYMPUS_MAX_TOOL_ROUNDS`` alias still reads; also set in
+``OLYMPUS_MAX_TOOL_ROUNDS`` read-alias still accepted; also set in
 ``.github/digiquant-pipeline.yml``). digigraph chat keeps its own
 ``max_tool_rounds=4`` — do not reuse this there.
 """
@@ -27,7 +27,7 @@ _DEFAULT_MAX_TOOL_ROUNDS = 24
 T = TypeVar("T", bound=BaseModel)
 
 
-def olympus_max_tool_rounds() -> int:
+def digiquant_max_tool_rounds() -> int:
     """Return the digiquant tool-round cap (default 24, minimum 1)."""
     raw = env_lookup(TOOL_ROUNDS_MAX, default=str(_DEFAULT_MAX_TOOL_ROUNDS)).strip()
     if not raw:
@@ -45,7 +45,7 @@ def olympus_max_tool_rounds() -> int:
     return max(value, 1)
 
 
-def run_olympus_research_agent(
+def run_digiquant_research_agent(
     *,
     skill_text: str,
     phase_inputs: dict[str, Any],
@@ -63,8 +63,8 @@ def run_olympus_research_agent(
     """Thin digiquant wrapper around digigraph's ``run_research_agent``.
 
     Injects ``DIGIQUANT_MAX_TOOL_ROUNDS`` (default 24; the retired
-    ``OLYMPUS_MAX_TOOL_ROUNDS`` alias still reads) unless the caller passes an
-    explicit ``max_tool_rounds``. Digigraph chat stays at ``max_tool_rounds=4``.
+    ``OLYMPUS_MAX_TOOL_ROUNDS`` read-alias still reads) unless the caller passes
+    an explicit ``max_tool_rounds``. Digigraph chat stays at ``max_tool_rounds=4``.
     """
     from digigraph.graph.research_agent import run_research_agent
 
@@ -82,11 +82,11 @@ def run_olympus_research_agent(
         execute_tool=execute_tool,
         max_tool_rounds=max_tool_rounds
         if max_tool_rounds is not None
-        else olympus_max_tool_rounds(),
+        else digiquant_max_tool_rounds(),
     )
 
 
 __all__ = [
-    "olympus_max_tool_rounds",
-    "run_olympus_research_agent",
+    "digiquant_max_tool_rounds",
+    "run_digiquant_research_agent",
 ]

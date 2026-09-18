@@ -4,7 +4,7 @@ Select H6 only for structured decision-value cases (decision boundary, conflict,
 uncertainty, invalidation risk, material portfolio weight, or exploration).
 Low-value names carry with a recorded reason and zero provider budget.
 
-Modes (``OLYMPUS_H6_SELECTION_MODE``):
+Modes (``DIGIQUANT_H6_SELECTION_MODE``):
 
 * ``shadow`` (default) — record :class:`H6Selection`; run full incumbent H6
 * ``enforce`` — actuate carry/select from the typed selection
@@ -55,7 +55,7 @@ from digiquant.dashboard.temporal import require_utc_datetime
 
 logger = logging.getLogger(__name__)
 
-OLYMPUS_H6_SELECTION_MODE_ENV = "OLYMPUS_H6_SELECTION_MODE"
+DIGIQUANT_H6_SELECTION_MODE_ENV = "DIGIQUANT_H6_SELECTION_MODE"
 
 # Portfolio weight at/above this selects ``material`` (percent of book).
 _DEFAULT_MATERIAL_WEIGHT_PCT = 5.0
@@ -160,14 +160,14 @@ class H6Selection(H6PlannerModel):
 
 
 def resolve_h6_selection_mode() -> H6SelectionMode:
-    """Read ``OLYMPUS_H6_SELECTION_MODE``; unknown values → shadow."""
+    """Read ``DIGIQUANT_H6_SELECTION_MODE``; unknown values → shadow."""
     raw = env_lookup(H6_SELECTION_MODE, default="shadow").strip().lower()
     try:
         return H6SelectionMode(raw)
     except ValueError:
         logger.warning(
             "invalid %s=%r; using shadow (allowed: off|shadow|enforce)",
-            OLYMPUS_H6_SELECTION_MODE_ENV,
+            DIGIQUANT_H6_SELECTION_MODE_ENV,
             raw,
         )
         return H6SelectionMode.SHADOW
@@ -399,7 +399,7 @@ def assert_no_materiality_in_prompt(phase_inputs: Mapping[str, Any]) -> None:
 # WP13.1 — versioned research attention policy (#2918)
 # ---------------------------------------------------------------------------
 
-RESEARCH_POLICY_ENV = "OLYMPUS_RESEARCH_POLICY_PATH"
+RESEARCH_POLICY_ENV = "DIGIQUANT_RESEARCH_POLICY_PATH"
 # Frozen identity strings. Do not rename with the package.
 _ATTENTION_PLAN_NS = uuid5(NAMESPACE_URL, "digithings.olympus.research_attention_plan")
 _ATTENTION_DECISION_NS = uuid5(NAMESPACE_URL, "digithings.olympus.research_attention_decision")
@@ -1154,7 +1154,7 @@ __all__ = [
     "PersistedAttentionDecision",
     "PersistedAttentionPlan",
     "H6_SELECTION_PROMPT_FORBIDDEN_KEYS",
-    "OLYMPUS_H6_SELECTION_MODE_ENV",
+    "DIGIQUANT_H6_SELECTION_MODE_ENV",
     "RESEARCH_POLICY_ENV",
     "PolicyExploration",
     "PolicySessionBudget",

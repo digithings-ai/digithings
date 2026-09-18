@@ -301,7 +301,7 @@ jobs:
             # is identical across these attempts and stays the resume handle, so the attempt
             # number is the only thing that can distinguish them. Exported (not an assignment
             # prefix on CMD) because CMD is invoked through a pipe into `tee`.
-            export OLYMPUS_ATTEMPT="${attempt}"
+            export DIGIQUANT_ATTEMPT="${attempt}"
             CMD=(uv run --frozen --no-sync python -m digiquant.portfolio.chain
                  --cadence daily
                  --run-date "${RUN_DATE}"
