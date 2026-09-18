@@ -166,7 +166,7 @@ html.light {
 
 /* ── Scroll reveals (MotionLayer adds html.motion-on only when motion is OK) ──
    Wave-2 (#4206): the reveal hook is the `data-reveal` attribute only — the
-   retired `.oly-slab` class no longer participates (call sites ride the kit
+   retired `.dq-slab` class no longer participates (call sites ride the kit
    `Card`). */
 html.motion-on [data-reveal] {
   opacity: 0;
@@ -188,7 +188,7 @@ html.motion-on [data-reveal].reveal-in {
    1px `--hair` border, radius 0. Depth is reserved for floating overlays;
    content panels stay shadowless. `backdrop-blur` is used ONLY on
    sticky/overlay chrome (nav, mobile app bar, command palette, sidebar) —
-   never on content cards. Wave-2 (#4206): `.oly-slab` is retired — content
+   never on content cards. Wave-2 (#4206): `.dq-slab` is retired — content
    boxes ride the kit `Card` (same `--surface` fill / hairline / radius 0)
    with `data-reveal` as the motion hook. */
 

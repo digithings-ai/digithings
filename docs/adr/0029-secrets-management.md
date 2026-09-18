@@ -18,10 +18,11 @@ The stack has three disjoint secret surfaces and no system of record:
   stack 16, cron 1) plus the `digithings-web` Pages project. Worker secrets are
   write-only: `wrangler secret list` returns names and type, never values
   ([`../ops/SECRETS_INVENTORY.md`](../ops/SECRETS_INVENTORY.md), "Storage
-  surfaces"). One Container per Worker receives only what the `envVars`
-  whitelist forwards
-  (`cloudflare/digichat-cloudflare/src/index.ts:32`); a secret that is `put`
-  but absent from `envVars` is a silent drop (R4).
+  surfaces"). Each Container receives only what its Worker's `envVars` whitelist
+  forwards — the stack Worker runs two: `DigiStackContainer`
+  (`cloudflare/digithings-stack-cloudflare/src/index.ts:60-112`) and
+  `DigiQuantMcpContainer` (`:176-184`) — and a secret that is `put` but absent
+  from `envVars` is a silent drop (R4).
 - **GitHub.** 72 workflows, only 4 declare `environment: production`
   (`SECRETS_INVENTORY.md:158`); ~42 repo secrets + 6 vars, repo-scoped, so any
   workflow on any branch can read production credentials (R13).
@@ -29,7 +30,7 @@ The stack has three disjoint secret surfaces and no system of record:
   `digismith`, `digivault`, `digibase`, `digillm` read plain env vars; dev uses
   gitignored `.env` / `.dev.vars`. `digikey` owns the JWT/API-key model, and
   `DIGIKEY_PRIVATE_KEY_PEM` has **no rollover path** — one static `kid`, one
-  key in JWKS (`digikey/src/digikey/jwt_issue.py:96`, R1).
+  key in JWKS (`digikey/src/digikey/jwt_issue.py:88-99`, R1).
 
 Two facts constrain any solution more than vendor features do.
 
@@ -198,7 +199,7 @@ Cloudflare write-only property, or CI's dependence on vault availability.
    `digikey/src/digikey/jwt_verify.py:45`), then retire the old key (R1).
 2. Implement the vault **re-seal job** for `DIGIQUANT_VAULT_MASTER_KEY` (the
    module docstring says re-seal is out of scope today,
-   `digiquant/src/digiquant/vault/envelope.py:43-44`): seal under a second key
+   `digiquant/src/digiquant/vault/envelope.py:35-36`): seal under a second key
    id, re-seal rows, retire `v1` (R12).
 3. Add a dual-accept window for the static bearers (`DIGIKEY_ADMIN_TOKEN`,
    `DIGIKEY_BFF_TOKEN`, R6) so a one-sided rotation cannot break chat auth.
