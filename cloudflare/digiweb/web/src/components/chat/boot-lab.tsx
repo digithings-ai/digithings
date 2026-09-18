@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState, type CSSProperties } from "react";
+import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { DotMatrix } from "./DotMatrix";
 import {
   DIGI_CHAT_READY_EVENT,
@@ -78,18 +78,59 @@ const TYPED: ReadonlySet<BootLabVariant> = new Set([
 const TYPE_MS = 46;
 const SETTLE_HOLD_MS = 180;
 
+/** Facts the deployment actually reports; rows without facts stay detail-less. */
+export type BootFacts = {
+  starters?: number;
+  models?: number;
+  tools?: number;
+  mcpServers?: number;
+  backend?: string;
+};
+
 /**
  * Simulated container/agent commands; one row each, in order. The durations
- * vary per row so the chain feels measured, not metronomic. The numbers are
- * a quiet Easter egg: 1320 + 640 + 880 + 1402 = 4242 ms (pulled as 42 layers)
- * for the fleet that keeps answering the big question in the logs.
+ * vary per row so the chain feels measured, not metronomic. Rows adapt to the
+ * facts the deployment reports (and only those) - extra rows appear when the
+ * deployment actually carries tools or MCP servers, so different deployments
+ * show different steps and numbers. Never invent counts.
  */
-const TOOL_CHAIN: readonly { label: string; detail: string; ms: number }[] = [
-  { label: "pull digichat image", detail: "42 layers", ms: 1320 },
-  { label: "mount deployment configuration", detail: "3 mounts", ms: 640 },
-  { label: "warm up chat runtime", detail: "2 workers", ms: 880 },
-  { label: "wire in the backend", detail: "6 tools", ms: 1402 },
-];
+export function toolChainRows(
+  facts?: BootFacts,
+): readonly { label: string; detail?: string; ms: number }[] {
+  const rows: { label: string; detail?: string; ms: number }[] = [
+    { label: "pull digichat image", ms: 1320 },
+    {
+      label: "mount deployment configuration",
+      ms: 640,
+      detail: facts?.starters ? `${facts.starters} starters` : undefined,
+    },
+    {
+      label: "warm up chat runtime",
+      ms: 880,
+      detail: facts?.models ? `${facts.models} models` : undefined,
+    },
+  ];
+  if (facts?.tools) {
+    rows.push({
+      label: "wire in the tools",
+      ms: 760,
+      detail: `${facts.tools} tools`,
+    });
+  }
+  if (facts?.mcpServers) {
+    rows.push({
+      label: "attach mcp servers",
+      ms: 720,
+      detail: `${facts.mcpServers} servers`,
+    });
+  }
+  rows.push({
+    label: "wire in the backend",
+    ms: 1402,
+    detail: facts?.backend ? `${facts.backend} backend` : undefined,
+  });
+  return rows;
+}
 
 /** The tool-chain family shares the long-load behaviour below. */
 const TOOLCHAIN_VARIANTS: ReadonlySet<BootLabVariant> = new Set([
@@ -379,7 +420,7 @@ function ToolChainRow({
   failed = false,
 }: {
   label: string;
-  detail: string;
+  detail?: string;
   durationMs: number;
   done: boolean;
   failed?: boolean;
@@ -401,7 +442,7 @@ function ToolChainRow({
         data-slot="tool-fallback-trigger-label"
       >
         {label}
-        <span className="ml-1 opacity-60">· {detail}</span>
+        {detail ? <span className="ml-1 opacity-60">· {detail}</span> : null}
       </span>
       <span className="aui-tool-fallback-duration text-muted-foreground text-xs tabular-nums">
         {(ms / 1000).toFixed(1)}s
@@ -578,6 +619,7 @@ function ToolChain({
   startedAt,
   showTask,
   showReasoning,
+  facts,
   onDone,
 }: {
   instant: boolean;
@@ -586,25 +628,26 @@ function ToolChain({
   startedAt: number;
   showTask: boolean;
   showReasoning: boolean;
+  facts?: BootFacts;
   onDone: () => void;
 }) {
-  const [step, setStep] = useState(instant ? TOOL_CHAIN.length : 0);
+  const rows = useMemo(() => toolChainRows(facts), [facts]);
+  const [step, setStep] = useState(instant ? rows.length : 0);
+  const nextMs = step < rows.length ? rows[step]?.ms : undefined;
   useEffect(() => {
     if (instant) {
-      setStep(TOOL_CHAIN.length);
+      setStep(rows.length);
       return;
     }
-    if (step >= TOOL_CHAIN.length) return;
-    const nextRow = TOOL_CHAIN[step];
-    if (nextRow === undefined) return;
-    const timer = setTimeout(() => setStep((current) => current + 1), nextRow.ms);
+    if (nextMs === undefined) return;
+    const timer = setTimeout(() => setStep((current) => current + 1), nextMs);
     return () => clearTimeout(timer);
-  }, [step, instant]);
+  }, [step, instant, nextMs, rows.length]);
   useEffect(() => {
-    if (step >= TOOL_CHAIN.length) onDone();
-  }, [step, onDone]);
-  const chainDone = step >= TOOL_CHAIN.length;
-  const visible = Math.min(step + 1, TOOL_CHAIN.length);
+    if (step >= rows.length) onDone();
+  }, [step, rows.length, onDone]);
+  const chainDone = step >= rows.length;
+  const visible = Math.min(step + 1, rows.length);
   const hold = chainDone && !ready && !failed;
   const elapsedMs = useElapsedSince(startedAt, hold);
   return (
@@ -615,10 +658,10 @@ function ToolChain({
       {showReasoning ? (
         <ReasoningRow
           active={!chainDone && !failed}
-          durationMs={chainDone ? TOOL_CHAIN.reduce((total, row) => total + row.ms, 0) : 0}
+          durationMs={chainDone ? rows.reduce((total, row) => total + row.ms, 0) : 0}
         />
       ) : null}
-      {TOOL_CHAIN.slice(0, visible).map((row, index) => (
+      {rows.slice(0, visible).map((row, index) => (
         <ToolChainRow
           key={row.label}
           label={row.label}
@@ -641,11 +684,13 @@ export function BootLabOverlay({
   ready,
   onSettled,
   accent,
+  facts,
 }: {
   variant: BootLabVariant;
   ready: boolean;
   onSettled: () => void;
   accent?: string;
+  facts?: BootFacts;
 }) {
   const reduced = useReducedMotion();
   const isToolchain = TOOLCHAIN_VARIANTS.has(variant);
@@ -688,6 +733,7 @@ export function BootLabOverlay({
           startedAt={startedAt.current}
           showTask={variant === "tooltask" || variant === "toolfull"}
           showReasoning={variant === "toolreason" || variant === "toolfull"}
+          facts={facts}
           onDone={() => setChainDone(true)}
         />
       ) : null}

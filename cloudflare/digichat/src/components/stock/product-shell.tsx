@@ -300,6 +300,25 @@ export function ProductStockShell({
   const inputPlaceholder =
     placeholder?.trim() || cfg.chrome.placeholder || "Send a message...";
 
+  // Real deployment facts for the boot chain - the same values the chat runs
+  // on, so the loader never claims counts the deployment does not have.
+  const bootFacts = useMemo(
+    () => ({
+      starters: skinChrome.suggestions.length,
+      models: cfg.models.available.length,
+      tools: cfg.tools.catalog.length,
+      mcpServers: cfg.mcp.servers.length,
+      backend: cfg.backendType,
+    }),
+    [
+      skinChrome.suggestions,
+      cfg.models.available,
+      cfg.tools.catalog,
+      cfg.mcp.servers,
+      cfg.backendType,
+    ],
+  );
+
   const auiConfig = useMemo(
     () =>
       AuiConfig({
@@ -364,6 +383,7 @@ export function ProductStockShell({
                       ready={bootReady}
                       onSettled={() => setBootDone(true)}
                       accent={cfg.chrome.accent?.color}
+                      facts={bootFacts}
                     />
                   ) : (
                     <DigichatBootLoader
