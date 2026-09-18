@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { Files, ListTree } from 'lucide-react';
+import { Button } from '@digithings/web/ui';
 import { buildPipelineDayData, fanoutIdForKey } from '@/lib/pipeline-graph-data';
 import type { PipelineDayData } from '@/lib/pipeline-graph-data';
 import { PIPELINE_TOPOLOGY } from '@/lib/pipeline-topology';
@@ -236,27 +237,29 @@ export default function PipelineClient() {
             No run recorded — showing the expected pipeline.
           </p>
         )}
-        <button
+        <Button
           type="button"
+          variant="outline"
           aria-label="Open all pipeline artifacts"
           title="All artifacts"
           onClick={handleArtifactLedgerOpen}
-          className="mr-1 inline-flex h-9 w-9 items-center justify-center gap-2 border border-hair bg-term-bg font-mono text-xs text-ink transition-colors hover:border-accent/50 hover:text-accent md:mr-2 md:w-auto md:px-3"
+          className="mr-1 h-9 w-9 gap-2 border-hair bg-term-bg font-mono text-xs text-ink hover:border-accent/50 hover:text-accent dark:bg-term-bg dark:hover:bg-term-bg md:mr-2 md:w-auto md:px-3"
         >
           <Files size={15} aria-hidden />
           <span className="hidden md:inline">All artifacts</span>
           <span className="hidden tabular-nums text-ink-mute md:inline">{dayData.artifacts.length}</span>
-        </button>
-        <button
+        </Button>
+        <Button
           type="button"
+          variant="outline"
           aria-label="Open pipeline call trace"
           title="Call trace"
           onClick={handleTraceLedgerOpen}
-          className="mr-1 inline-flex h-9 w-9 items-center justify-center gap-2 border border-hair bg-term-bg font-mono text-xs text-ink transition-colors hover:border-accent/50 hover:text-accent md:mr-2 md:w-auto md:px-3"
+          className="mr-1 h-9 w-9 gap-2 border-hair bg-term-bg font-mono text-xs text-ink hover:border-accent/50 hover:text-accent dark:bg-term-bg dark:hover:bg-term-bg md:mr-2 md:w-auto md:px-3"
         >
           <ListTree size={15} aria-hidden />
           <span className="hidden md:inline">Call trace</span>
-        </button>
+        </Button>
         <PipelineDaySelector
           dates={availableDates}
           value={selectedDate}

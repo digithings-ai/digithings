@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect } from 'react';
+import { Button } from '@digithings/web/ui';
 
 interface ErrorProps {
   error: Error & { digest?: string };
@@ -20,18 +21,12 @@ export default function Error({ error, reset }: ErrorProps) {
           {error?.message || 'An unexpected error occurred loading the dashboard.'}
         </p>
         <div className="flex gap-3 justify-center pt-2">
-          <button
-            onClick={reset}
-            className="px-4 py-2 border border-accent/60 bg-accent/15 hover:bg-accent/25 text-ink rounded text-sm font-medium transition-colors"
-          >
+          <Button type="button" onClick={reset}>
             Try again
-          </button>
-          <button
-            onClick={() => window.location.reload()}
-            className="px-4 py-2 border border-hair hover:bg-ink/[0.06] text-ink-soft rounded text-sm font-medium transition-colors"
-          >
+          </Button>
+          <Button type="button" variant="outline" onClick={() => window.location.reload()}>
             Reload page
-          </button>
+          </Button>
         </div>
       </div>
     </div>

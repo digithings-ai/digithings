@@ -55,6 +55,9 @@ function SelectTrigger({
   )
 }
 
+const SELECT_POPUP_CLASS =
+  "relative isolate z-50 max-h-(--available-height) w-(--anchor-width) min-w-36 origin-(--transform-origin) overflow-x-hidden overflow-y-auto rounded-none bg-popover text-popover-foreground shadow-md ring-1 ring-foreground/10 duration-100 data-[align-trigger=true]:animate-none data-[side=bottom]:slide-in-from-top-2 data-[side=inline-end]:slide-in-from-left-2 data-[side=inline-start]:slide-in-from-right-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2 data-open:animate-in data-open:fade-in-0 data-open:zoom-in-95 data-closed:animate-out data-closed:fade-out-0 data-closed:zoom-out-95"
+
 function SelectContent({
   className,
   children,
@@ -82,7 +85,7 @@ function SelectContent({
         <SelectPrimitive.Popup
           data-slot="select-content"
           data-align-trigger={alignItemWithTrigger}
-          className={cn("relative isolate z-50 max-h-(--available-height) w-(--anchor-width) min-w-36 origin-(--transform-origin) overflow-x-hidden overflow-y-auto rounded-none bg-popover text-popover-foreground shadow-md ring-1 ring-foreground/10 duration-100 data-[align-trigger=true]:animate-none data-[side=bottom]:slide-in-from-top-2 data-[side=inline-end]:slide-in-from-left-2 data-[side=inline-start]:slide-in-from-right-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2 data-open:animate-in data-open:fade-in-0 data-open:zoom-in-95 data-closed:animate-out data-closed:fade-out-0 data-closed:zoom-out-95", className )}
+          className={cn(SELECT_POPUP_CLASS, className)}
           {...props}
         >
           <SelectScrollUpButton />
@@ -91,6 +94,46 @@ function SelectContent({
         </SelectPrimitive.Popup>
       </SelectPrimitive.Positioner>
     </SelectPrimitive.Portal>
+  )
+}
+
+type SelectPopupProps = SelectPrimitive.Popup.Props & {
+  /**
+   * Legacy controls-layer escape hatch: extra props for the positioner
+   * (anchor placement).
+   */
+  positionerProps?: Omit<
+    React.ComponentProps<typeof SelectPrimitive.Positioner>,
+    "children"
+  >
+}
+
+/**
+ * `SelectPopup` is the controls-layer popup composition (positioner + popup,
+ * no portal) kept for the wave-3 call sites (`site-nav`, `settings-panel`,
+ * `ProviderSettings`, `select-reference`) so they move to the kit without a
+ * rewrite. New code should use {@link SelectContent}.
+ */
+function SelectPopup({
+  className,
+  positionerProps,
+  children,
+  ...props
+}: SelectPopupProps) {
+  return (
+    <SelectPrimitive.Positioner
+      data-slot="select-positioner"
+      {...positionerProps}
+      className={cn("isolate z-50", positionerProps?.className)}
+    >
+      <SelectPrimitive.Popup
+        data-slot="select-popup"
+        className={cn(SELECT_POPUP_CLASS, className)}
+        {...props}
+      >
+        <SelectPrimitive.List>{children}</SelectPrimitive.List>
+      </SelectPrimitive.Popup>
+    </SelectPrimitive.Positioner>
   )
 }
 
@@ -104,6 +147,24 @@ function SelectLabel({
       className={cn("px-2 py-2 text-xs text-muted-foreground", className)}
       {...props}
     />
+  )
+}
+
+function SelectItemIndicator({
+  className,
+  ...props
+}: SelectPrimitive.ItemIndicator.Props) {
+  return (
+    <SelectPrimitive.ItemIndicator
+      data-slot="select-item-indicator"
+      render={
+        <span className="pointer-events-none absolute right-2 flex size-4 items-center justify-center" />
+      }
+      className={className}
+      {...props}
+    >
+      <CheckIcon className="pointer-events-none" />
+    </SelectPrimitive.ItemIndicator>
   )
 }
 
@@ -124,13 +185,7 @@ function SelectItem({
       <SelectPrimitive.ItemText className="flex flex-1 shrink-0 gap-2 whitespace-nowrap">
         {children}
       </SelectPrimitive.ItemText>
-      <SelectPrimitive.ItemIndicator
-        render={
-          <span className="pointer-events-none absolute right-2 flex size-4 items-center justify-center" />
-        }
-      >
-        <CheckIcon className="pointer-events-none" />
-      </SelectPrimitive.ItemIndicator>
+      <SelectItemIndicator />
     </SelectPrimitive.Item>
   )
 }
@@ -191,7 +246,9 @@ export {
   SelectContent,
   SelectGroup,
   SelectItem,
+  SelectItemIndicator,
   SelectLabel,
+  SelectPopup,
   SelectScrollDownButton,
   SelectScrollUpButton,
   SelectSeparator,

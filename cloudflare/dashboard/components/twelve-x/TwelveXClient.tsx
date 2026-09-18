@@ -10,6 +10,7 @@ import {
   Workflow,
 } from 'lucide-react';
 import { EmptyState } from '@digithings/web';
+import { Button } from '@digithings/web/ui';
 
 import { SUBPAGE_MAX } from '@/components/layout-constants';
 import { SubpageStickyTabBar, subpageTabButtonClass } from '@/components/subpage-tab-bar';
@@ -118,13 +119,14 @@ export function TwelveXUnavailable({ configured }: { configured: boolean }) {
           }
           action={
             configured ? (
-              <button
+              <Button
                 type="button"
+                variant="outline"
                 onClick={() => window.location.reload()}
-                className="mt-5 inline-flex items-center border border-hair px-4 py-2 text-sm font-medium text-accent transition-colors hover:bg-ink/[0.06]"
+                className="mt-5 h-auto items-center border-hair px-4 py-2 text-sm font-medium text-accent transition-colors hover:bg-ink/[0.06]"
               >
                 Retry
-              </button>
+              </Button>
             ) : undefined
           }
         />
@@ -430,7 +432,7 @@ export default function TwelveXClient() {
         case 'currency':
           setTabState('consensus');
           setConsensusFocusCcy(l.currency);
-          syncUrl('consensus', brief, view);
+          syncUrl('consensus', brief, view, idea);
           break;
         case 'brief':
           openBrief(l.sourceFile, l.runDate);
@@ -438,7 +440,7 @@ export default function TwelveXClient() {
         case 'event':
           setTabState('events');
           setEventFocus({ externalId: l.externalId ?? null, name: l.eventName });
-          syncUrl('events', brief, view);
+          syncUrl('events', brief, view, idea);
           break;
         case 'ideas':
           setTabState('today');
@@ -562,6 +564,8 @@ export default function TwelveXClient() {
           rank={idea?.rank ?? null}
           ideas={data?.tradeIdeaArchive ?? []}
           ideaEval={data?.ideaEval ?? []}
+          loading={loading}
+          error={error}
           onClose={closeIdea}
         />
       </TwelveXProvider>

@@ -434,8 +434,8 @@ fixed daily-reader sequence:
 5. **Book monitor** — session ledger preview → Ledger; holdings tickers → dossiers.
 6. **Drill-ins** — Digest, Pipeline, Performance, Holdings, Ledger, Theses.
 
-The workspace adapts the digiweb `DashboardWorkspaceReference`: one command band,
-compact metrics, flat hairline ledgers, and no nested or decorative cards. The
+The workspace is one command band, compact metrics, flat hairline ledgers, and no
+nested or decorative cards. The
 headline appears once. Loading uses `PageSkeleton`; failures use the shared
 `EmptyState`; missing book, research, or run-health values render explicit local
 empty states. Research and book dates remain independent and use `AsOfBadge`, so

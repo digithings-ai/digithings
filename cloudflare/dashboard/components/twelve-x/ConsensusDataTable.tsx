@@ -1,7 +1,18 @@
 'use client';
 
 import { useMemo, useState } from 'react';
-import { Card } from '@digithings/web/ui';
+import {
+  Button,
+  Card,
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+  TableRowHeader,
+} from '@digithings/web/ui';
+import { SegmentedControl } from '@digithings/web';
 import {
   LEAN_BAND,
   STRONG_BAND,
@@ -119,201 +130,203 @@ export function ConsensusDataTable({
 
   return (
     <div className="space-y-3.5">
-      <div className="flex flex-wrap gap-2" role="group" aria-label="Filter rows">
-        {FILTERS.map((f) => {
-          const on = filter === f.key;
-          return (
-            <button
-              key={f.key}
-              type="button"
-              data-filter={f.key}
-              aria-pressed={on}
-              onClick={() => setFilter(f.key)}
-              className={`text-[11px] font-medium px-2.5 py-1 rounded-none border transition-colors ${
-                on
-                  ? 'border-accent/40 bg-accent/15 text-accent'
-                  : 'border-hair text-ink-mute hover:text-ink'
-              }`}
-            >
-              {f.label}
-            </button>
-          );
-        })}
-      </div>
+      <SegmentedControl
+        options={FILTERS.map((f) => ({ value: f.key, label: f.label }))}
+        value={filter}
+        onChange={setFilter}
+        dress="accent"
+        aria-label="Filter rows"
+      />
 
       <Card data-reveal className="gap-0 overflow-hidden p-0">
-        <div className="overflow-x-auto">
-          <table className="w-full min-w-[880px] border-collapse">
-            <thead>
-              <tr className="border-b border-hair">
-                <th className="px-3.5 py-2.5 text-left text-[10px] font-semibold uppercase tracking-wider text-ink-mute">
-                  <button
-                    type="button"
-                    onClick={() => onHeaderClick('currency')}
-                    className="hover:text-ink transition-colors"
-                  >
-                    Currency
-                  </button>
-                </th>
-                <th className="px-3.5 py-2.5 text-right text-[10px] font-semibold uppercase tracking-wider text-ink-mute">
-                  <button
-                    type="button"
-                    onClick={() => onHeaderClick('actualNow')}
-                    className="hover:text-ink transition-colors"
-                  >
-                    Current
-                  </button>
-                </th>
-                <th className="px-3.5 py-2.5 text-right text-[10px] font-semibold uppercase tracking-wider text-ink-mute">
-                  <button
-                    type="button"
-                    onClick={() => onHeaderClick('avgNow')}
-                    className="hover:text-ink transition-colors"
-                    title="Trailing 5-run average"
-                  >
-                    Average
-                  </button>
-                </th>
-                <th className="px-3.5 py-2.5 text-right text-[10px] font-semibold uppercase tracking-wider text-ink-mute">
-                  <button
-                    type="button"
-                    onClick={() => onHeaderClick('priorChange')}
-                    className="hover:text-ink transition-colors"
-                  >
-                    Prior Δ
-                  </button>
-                </th>
-                <th className="px-3.5 py-2.5 text-right text-[10px] font-semibold uppercase tracking-wider text-ink-mute">
-                  <button
-                    type="button"
-                    onClick={() => onHeaderClick('n_views')}
-                    className="hover:text-ink transition-colors"
-                  >
-                    Opinions
-                  </button>
-                </th>
-                <th className="px-3.5 py-2.5 text-right text-[10px] font-semibold uppercase tracking-wider text-ink-mute">
-                  <button
-                    type="button"
-                    onClick={() => onHeaderClick('agreement')}
-                    className="hover:text-ink transition-colors"
-                  >
-                    Agreement
-                  </button>
-                </th>
-                <th className="px-3.5 py-2.5 text-right text-[10px] font-semibold uppercase tracking-wider text-ink-mute">
-                  <button
-                    type="button"
-                    onClick={() => onHeaderClick('confidence')}
-                    className="hover:text-ink transition-colors"
-                    title="Relevance-weighted conviction share"
-                  >
-                    Conf
-                  </button>
-                </th>
-                <th className="px-3.5 py-2.5 text-right text-[10px] font-semibold uppercase tracking-wider text-ink-mute">
-                  <button
-                    type="button"
-                    onClick={() => onHeaderClick('n_eff')}
-                    className="hover:text-ink transition-colors"
-                    title="Effective sample size"
-                  >
-                    n_eff
-                  </button>
-                </th>
-                <th className="px-3.5 py-2.5 text-[10px] font-semibold uppercase tracking-wider text-ink-mute">
-                  Score
-                </th>
-                <th className="px-3.5 py-2.5 text-center text-[10px] font-semibold uppercase tracking-wider text-ink-mute">
-                  Bias
-                </th>
-                <th className="px-3.5 py-2.5 text-center text-[10px] font-semibold uppercase tracking-wider text-ink-mute">
-                  Details
-                </th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-hair">
-              {rows.map((row) => {
-                const latestRow = latestByRow.get(row.currency);
-                const score = row.actualNow ?? 0;
-                const colorClass = scoreColorClass(score);
-                const n_views = latestRow?.n_views ?? 0;
-                const agreement = latestRow?.agreement ?? 0;
-                const divergence = divergenceByCurrency[row.currency];
-                return (
-                  <tr
-                    key={row.currency}
-                    data-ccy={row.currency}
-                    onClick={() => onRowClick?.(row.currency)}
-                    className="text-sm hover:bg-ink/[0.02] transition-colors cursor-pointer"
-                  >
-                    <td className="px-3.5 py-2.5">
-                      <span
-                        className="font-mono font-semibold text-[13px]"
-                        style={{ color: currencyColor(row.currency) }}
-                      >
-                        {row.currency}
-                      </span>
-                    </td>
-                    <td className={`px-3.5 py-2.5 text-right font-mono tabular-nums text-[13px] ${colorClass}`}>
-                      {fmtSigned(row.actualNow)}
-                    </td>
-                    <td className="px-3.5 py-2.5 text-right font-mono tabular-nums text-[13px] text-ink-soft">
-                      {fmtSigned(row.avgNow)}
-                    </td>
-                    <td className="px-3.5 py-2.5 text-right font-mono tabular-nums text-[13px] text-ink-soft">
-                      {fmtSigned(row.priorChange)}
-                    </td>
-                    <td className="px-3.5 py-2.5 text-right font-mono tabular-nums text-[13px] text-ink-soft">
-                      {n_views}
-                    </td>
-                    <td className="px-3.5 py-2.5 text-right font-mono tabular-nums text-[13px] text-ink-soft">
-                      {agreement !== null && Number.isFinite(agreement) ? `${Math.round(agreement * 100)}%` : '—'}
-                    </td>
-                    <td className="px-3.5 py-2.5 text-right font-mono tabular-nums text-[13px] text-ink-soft">
-                      {(() => {
-                        const confidence = latestRow?.confidence ?? null;
-                        return confidence !== null && Number.isFinite(confidence)
-                          ? `${Math.round(confidence * 100)}%`
-                          : '—';
-                      })()}
-                    </td>
-                    <td className="px-3.5 py-2.5 text-right font-mono tabular-nums text-[13px] text-ink-soft">
-                      {fmtNEff(latestRow?.n_eff)}
-                    </td>
-                    <td className="px-3.5 py-2.5">
-                      <div className="flex min-w-[120px]">
-                        <ConsensusScoreBar value={score} />
-                      </div>
-                    </td>
-                    <td className="px-3.5 py-2.5 text-center">
-                      {divergence?.isDivergent ? (
-                        <DivergenceChip
-                          gap={divergence.gap}
-                          onClick={() => onDivergenceClick?.(row.currency)}
-                        />
-                      ) : (
-                        <span className="font-mono text-[11px] text-ink-mute">—</span>
-                      )}
-                    </td>
-                    <td className="px-3.5 py-2.5 text-center">
-                      <button
-                        type="button"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          onRowClick?.(row.currency);
-                        }}
-                        className="text-[11px] font-medium text-accent hover:underline"
-                      >
-                        Details
-                      </button>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
+        <Table className="min-w-[880px]">
+          <TableHeader>
+            <TableRow>
+              <TableHead className="h-auto px-3.5 py-2.5">
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="xs"
+                  onClick={() => onHeaderClick('currency')}
+                  className="h-auto gap-0 p-0 text-[10px] font-semibold uppercase tracking-wider hover:bg-transparent"
+                >
+                  Currency
+                </Button>
+              </TableHead>
+              <TableHead numeric className="h-auto px-3.5 py-2.5">
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="xs"
+                  onClick={() => onHeaderClick('actualNow')}
+                  className="h-auto gap-0 p-0 text-[10px] font-semibold uppercase tracking-wider hover:bg-transparent"
+                >
+                  Current
+                </Button>
+              </TableHead>
+              <TableHead numeric className="h-auto px-3.5 py-2.5">
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="xs"
+                  onClick={() => onHeaderClick('avgNow')}
+                  title="Trailing 5-run average"
+                  className="h-auto gap-0 p-0 text-[10px] font-semibold uppercase tracking-wider hover:bg-transparent"
+                >
+                  Average
+                </Button>
+              </TableHead>
+              <TableHead numeric className="h-auto px-3.5 py-2.5">
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="xs"
+                  onClick={() => onHeaderClick('priorChange')}
+                  className="h-auto gap-0 p-0 text-[10px] font-semibold uppercase tracking-wider hover:bg-transparent"
+                >
+                  Prior Δ
+                </Button>
+              </TableHead>
+              <TableHead numeric className="h-auto px-3.5 py-2.5">
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="xs"
+                  onClick={() => onHeaderClick('n_views')}
+                  className="h-auto gap-0 p-0 text-[10px] font-semibold uppercase tracking-wider hover:bg-transparent"
+                >
+                  Opinions
+                </Button>
+              </TableHead>
+              <TableHead numeric className="h-auto px-3.5 py-2.5">
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="xs"
+                  onClick={() => onHeaderClick('agreement')}
+                  className="h-auto gap-0 p-0 text-[10px] font-semibold uppercase tracking-wider hover:bg-transparent"
+                >
+                  Agreement
+                </Button>
+              </TableHead>
+              <TableHead numeric className="h-auto px-3.5 py-2.5">
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="xs"
+                  onClick={() => onHeaderClick('confidence')}
+                  title="Relevance-weighted conviction share"
+                  className="h-auto gap-0 p-0 text-[10px] font-semibold uppercase tracking-wider hover:bg-transparent"
+                >
+                  Conf
+                </Button>
+              </TableHead>
+              <TableHead numeric className="h-auto px-3.5 py-2.5">
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="xs"
+                  onClick={() => onHeaderClick('n_eff')}
+                  title="Effective sample size"
+                  className="h-auto gap-0 p-0 text-[10px] font-semibold uppercase tracking-wider hover:bg-transparent"
+                >
+                  n_eff
+                </Button>
+              </TableHead>
+              <TableHead className="h-auto px-3.5 py-2.5 text-[10px] font-semibold uppercase tracking-wider text-ink-mute">
+                Score
+              </TableHead>
+              <TableHead className="h-auto px-3.5 py-2.5 text-center text-[10px] font-semibold uppercase tracking-wider text-ink-mute">
+                Bias
+              </TableHead>
+              <TableHead className="h-auto px-3.5 py-2.5 text-center text-[10px] font-semibold uppercase tracking-wider text-ink-mute">
+                Details
+              </TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {rows.map((row) => {
+              const latestRow = latestByRow.get(row.currency);
+              const score = row.actualNow ?? 0;
+              const colorClass = scoreColorClass(score);
+              const n_views = latestRow?.n_views ?? 0;
+              const agreement = latestRow?.agreement ?? 0;
+              const divergence = divergenceByCurrency[row.currency];
+              return (
+                <TableRow
+                  key={row.currency}
+                  data-ccy={row.currency}
+                  onClick={() => onRowClick?.(row.currency)}
+                  className="cursor-pointer text-sm hover:bg-ink/[0.02]"
+                >
+                  <TableRowHeader className="px-3.5 py-2.5">
+                    <span
+                      className="font-mono font-semibold text-[13px]"
+                      style={{ color: currencyColor(row.currency) }}
+                    >
+                      {row.currency}
+                    </span>
+                  </TableRowHeader>
+                  <TableCell numeric className={`px-3.5 py-2.5 font-mono text-[13px] ${colorClass}`}>
+                    {fmtSigned(row.actualNow)}
+                  </TableCell>
+                  <TableCell numeric className="px-3.5 py-2.5 font-mono text-[13px] text-ink-soft">
+                    {fmtSigned(row.avgNow)}
+                  </TableCell>
+                  <TableCell numeric className="px-3.5 py-2.5 font-mono text-[13px] text-ink-soft">
+                    {fmtSigned(row.priorChange)}
+                  </TableCell>
+                  <TableCell numeric className="px-3.5 py-2.5 font-mono text-[13px] text-ink-soft">
+                    {n_views}
+                  </TableCell>
+                  <TableCell numeric className="px-3.5 py-2.5 font-mono text-[13px] text-ink-soft">
+                    {agreement !== null && Number.isFinite(agreement) ? `${Math.round(agreement * 100)}%` : '—'}
+                  </TableCell>
+                  <TableCell numeric className="px-3.5 py-2.5 font-mono text-[13px] text-ink-soft">
+                    {(() => {
+                      const confidence = latestRow?.confidence ?? null;
+                      return confidence !== null && Number.isFinite(confidence)
+                        ? `${Math.round(confidence * 100)}%`
+                        : '—';
+                    })()}
+                  </TableCell>
+                  <TableCell numeric className="px-3.5 py-2.5 font-mono text-[13px] text-ink-soft">
+                    {fmtNEff(latestRow?.n_eff)}
+                  </TableCell>
+                  <TableCell className="px-3.5 py-2.5">
+                    <div className="flex min-w-[120px]">
+                      <ConsensusScoreBar value={score} />
+                    </div>
+                  </TableCell>
+                  <TableCell className="px-3.5 py-2.5 text-center">
+                    {divergence?.isDivergent ? (
+                      <DivergenceChip
+                        gap={divergence.gap}
+                        onClick={() => onDivergenceClick?.(row.currency)}
+                      />
+                    ) : (
+                      <span className="font-mono text-[11px] text-ink-mute">—</span>
+                    )}
+                  </TableCell>
+                  <TableCell className="px-3.5 py-2.5 text-center">
+                    <Button
+                      type="button"
+                      variant="link"
+                      size="xs"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onRowClick?.(row.currency);
+                      }}
+                      className="h-auto gap-0 p-0 text-[11px] font-medium text-accent"
+                    >
+                      Details
+                    </Button>
+                  </TableCell>
+                </TableRow>
+              );
+            })}
+          </TableBody>
+        </Table>
       </Card>
     </div>
   );

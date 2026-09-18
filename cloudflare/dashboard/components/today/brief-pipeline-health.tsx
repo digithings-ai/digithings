@@ -16,7 +16,8 @@ import {
   shiftWeekStart,
 } from '@/lib/run-health-week';
 import { formatDuration } from '@/components/system/run-economics-row';
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@digithings/web';
+import { IconButton, Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@digithings/web';
+import { Button } from '@digithings/web/ui';
 
 export interface BriefRunHealth {
   status: string | null;
@@ -178,27 +179,25 @@ function WeekBar({
   return (
     <div data-testid="brief-run-health-week" className="mt-3 space-y-2">
       <div className="flex items-center justify-between gap-2">
-        <button
-          type="button"
+        <IconButton
           aria-label="Previous week"
           onClick={onPrev}
-          className="inline-flex h-6 w-6 items-center justify-center text-ink-mute transition-colors hover:text-ink focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-accent/50"
+          className="h-6 w-6 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-accent/50"
         >
           <ChevronLeft size={14} aria-hidden />
-        </button>
+        </IconButton>
         <p className="font-mono text-[10px] uppercase tracking-wide text-ink-mute tabular-nums">
           {rangeLabel}
         </p>
-        <button
-          type="button"
+        <IconButton
           aria-label="Next week"
           aria-disabled={!canGoNext}
           disabled={!canGoNext}
           onClick={onNext}
-          className="inline-flex h-6 w-6 items-center justify-center text-ink-mute transition-colors hover:text-ink focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-accent/50 disabled:pointer-events-none disabled:opacity-30"
+          className="h-6 w-6 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-accent/50 disabled:pointer-events-none disabled:opacity-30"
         >
           <ChevronRight size={14} aria-hidden />
-        </button>
+        </IconButton>
       </div>
 
       <TooltipProvider delay={200}>
@@ -223,13 +222,18 @@ function WeekBar({
             return (
               <div key={slot.date} className="min-w-0 space-y-1">
                 <Tooltip>
+                  {/* Kit `Button` trigger; the ghost/size defaults are
+                      neutralized so the pill keeps the exact `DAY_PILL_BASE`
+                      chrome it shares with the empty-day slots (#4306). */}
                   <TooltipTrigger
                     render={
-                      <button
+                      <Button
                         type="button"
+                        variant="ghost"
+                        size="xs"
                         data-testid={`week-day-${slot.date}`}
                         aria-label={buildAriaLabel(ep)}
-                        className={`${DAY_PILL_BASE} border-transparent transition-opacity hover:opacity-80 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-accent/60 ${SEGMENT_COLOR[ep.outcome]}`}
+                        className={`${DAY_PILL_BASE} border-transparent p-0 transition-opacity hover:bg-transparent hover:opacity-80 active:translate-y-0 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-accent/60 ${SEGMENT_COLOR[ep.outcome]}`}
                       />
                     }
                   />

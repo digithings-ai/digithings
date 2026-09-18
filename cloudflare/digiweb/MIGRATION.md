@@ -77,14 +77,14 @@ review.
 
 ## Shared primitives first
 
-Before writing new UI, check `cloudflare/digiweb/MANIFEST.json` (129 components,
+Before writing new UI, check `cloudflare/digiweb/MANIFEST.json` (128 components,
 16 families) and `@digithings/web` exports: NavShell, Footer/Colophon,
 DocsLayout/CodeTabs/EndpointDoc, Pricing/PricingMatrix, NumberedStages,
 PerfMetrics/StatCounter, TerminalManifest, RepoActivity, the chat family (ChatTranscript/
 ChatMessage/ChatMarkdown/ChatToolCall/…), the vendored shadcn kit
 (`@digithings/web/ui`, below — the **canonical primitive source**), the
-residual controls layer (Table/Select/Sheet/Dialog/DropdownMenu/Tooltip/
-EmptyState/Skeleton/NavButtons/Selection/DatePager/Badge/Field/Label on the
+residual controls layer (Table/Select/Dialog/DropdownMenu/Tooltip/
+EmptyState/Skeleton/NavButtons/Selection/DatePager/Field on the
 `dress` axis — kept only where the kit has no equivalent), Terminal,
 Emblem/StackRow, ModuleCard, Reveal/Stagger/HeroEntrance,
 useScrollyFeatures/ScrollyRail. Motion always via `m` under `MotionProvider`
@@ -117,11 +117,18 @@ where it covers the part, and the controls copies that lost their last consumer
 were deleted (Card/Input React copies at T6; the digichat wrappers that needed
 the chat tone are one-line adapters pinning `dress="chat"`). The kit reproduces
 the controls layer's `dress="reference"|"chat"` axis, so a consumer that needs
-the chat tone passes `dress="chat"` rather than importing a second copy. New
-work starts from the kit wherever the part exists there; the controls layer is
-now a keep-list (Table for `numeric`/`density`, Select for `SelectPopup`
-composition, EmptyState/Skeleton/NavButtons/Selection/DatePager/Badge/Field/
-Label, and the Collapsible that digichat still re-exports). Proof route:
+the chat tone passes `dress="chat"` rather than importing a second copy.
+
+Wave 4 (#4306) closed the last capability gaps (kit Table `numeric`/`density`
+and `TableRowHeader`, kit Select `SelectPopup`/`SelectItemIndicator`, kit Badge
+tones), re-pointed the seven dashboard twelve-x `Sheet` imports onto the kit,
+and deleted the controls files that then had zero consumers — `Avatar`,
+`Badge`, `Sheet`, `Collapsible` — plus digichat's four dead `ui/` wrappers and
+the second gallery-thread component library. `Label` was **not** deleted: it is
+retained private for its `Field` consumer, so its `ctl-label-ref` CSS stays live.
+The controls layer is now a keep-list (Table, Select, Dialog, DropdownMenu,
+Tooltip, EmptyState, Skeleton, NavButtons, Selection/radio, DatePager, Field,
+Label, Slider, Breadcrumbs, Pagination, SearchBar, TagsInput). Proof route:
 `reference/app/(gallery)/ui/page.tsx` (dark, light, and a scoped livery).
 
 ## Promotion playbook (v2 — the #1414 epic shape)
@@ -149,9 +156,12 @@ New UI is born in the reference, promoted, then adopted — never built app-loca
    canonical home for every part it ships — promote into `web/src/ui/` there,
    and prefer adding a `dress`/`skin` axis to the kit part over keeping a second
    app-local or controls copy. The controls layer is now a keep-list for parts
-   the kit cannot express (`Table` `numeric`/`density`, `SelectPopup`
-   composition, and the un-promoted EmptyState/Skeleton/NavButtons/Selection/
-   DatePager/Badge/Field/Label/Collapsible set).
+   the kit cannot express (Table, Select, Dialog, DropdownMenu, Tooltip,
+   EmptyState, Skeleton, NavButtons, Selection/radio, DatePager, Field, Slider,
+   Breadcrumbs, Pagination, SearchBar, TagsInput). Deferred kit items are in
+   #4306 (kit listbox/menu/radiogroup item parts; a kit `hideArrow` prop; the
+   kit Table's `overflow-x-auto` vs sticky headers; SegmentedControl wrapping on
+   very narrow viewports).
 
 ### The cascade-layering contract (bitten twice — read this)
 

@@ -1,4 +1,5 @@
 import { TerminalManifest, type TerminalManifestRow } from "@digithings/web";
+import { Button } from "@digithings/web/ui";
 
 /**
  * Terminal manifest — a `digithings ps` process pane: selectable module rows
@@ -101,13 +102,14 @@ export function TerminalManifestReference() {
           hint="select a module"
           aria-label="digithings module manifest (example data)"
           footer={
-            <button
+            <Button
               type="button"
-              className="mt-auto cursor-pointer self-end rounded-none border border-hair bg-transparent px-[0.6rem] py-[0.3rem] font-mono text-[0.78rem] text-ink-soft transition-colors hover:bg-accent-weak hover:text-ink"
+              variant="ghost"
+              className="mt-auto h-auto cursor-pointer self-end rounded-none border border-hair bg-transparent px-[0.6rem] py-[0.3rem] font-mono text-[0.78rem] font-normal text-ink-soft transition-colors hover:bg-accent-weak hover:text-ink"
             >
               ask <span className="text-ink">digi</span>
               <span className="text-accent">chat</span> →
-            </button>
+            </Button>
           }
         />
       </div>

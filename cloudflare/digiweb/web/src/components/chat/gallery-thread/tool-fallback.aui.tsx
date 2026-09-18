@@ -16,10 +16,10 @@ import {
   Collapsible,
   CollapsibleContent,
   CollapsibleTrigger,
-} from "./ui/collapsible";
+} from "../../../ui/collapsible";
 import { cn } from "./cn";
-import { Button } from "./ui/button";
-import { Textarea } from "./ui/textarea";
+import { Button } from "../../../ui/button";
+import { Textarea } from "../../../ui/textarea";
 import { formatJsonDump, formatToolDurationMs, humanizeToolName } from "./format-json-dump";
 import { readGloomberbAttribution } from "../../../lib/gloomberb";
 
@@ -566,7 +566,7 @@ function ToolFallbackApproval({
         }
       />
       {question && (
-        <Button
+        <Button dress="chat"
           size="sm"
           className={pressable}
           onClick={submitAnswer}
@@ -612,7 +612,7 @@ function ToolFallbackApproval({
           </ul>
         )}
         <div className="flex items-center gap-2">
-          <Button
+          <Button dress="chat"
             size="sm"
             className={pressable}
             onClick={() => respondWithOption(confirming)}
@@ -620,7 +620,7 @@ function ToolFallbackApproval({
           >
             Confirm
           </Button>
-          <Button
+          <Button dress="chat"
             size="sm"
             variant="outline"
             className={pressable}
@@ -653,7 +653,7 @@ function ToolFallbackApproval({
         <div className="flex flex-wrap items-center gap-2">
           {[...allowOptions, ...customOptions, ...rejectOptions].map(
             (option) => (
-              <Button
+              <Button dress="chat"
                 key={option.id}
                 size="sm"
                 variant={option === allowOptions[0] ? "default" : "outline"}
@@ -666,7 +666,7 @@ function ToolFallbackApproval({
             ),
           )}
           {rejectOptions.length === 0 && !question && (
-            <Button
+            <Button dress="chat"
               size="sm"
               variant="outline"
               className={pressable}
@@ -713,7 +713,7 @@ function ToolFallbackApproval({
     >
       {promptText}
       <div className="flex items-center gap-2">
-        <Button
+        <Button dress="chat"
           size="sm"
           className={pressable}
           onClick={() => respond(true)}
@@ -721,7 +721,7 @@ function ToolFallbackApproval({
         >
           Allow
         </Button>
-        <Button
+        <Button dress="chat"
           size="sm"
           variant="outline"
           className={pressable}

@@ -15,7 +15,7 @@ import {
   Collapsible,
   CollapsibleContent,
   CollapsibleTrigger,
-} from "./ui/collapsible";
+} from "../../../ui/collapsible";
 import { cn } from "./cn";
 
 export const ANIMATION_DURATION = 200;

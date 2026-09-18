@@ -1,5 +1,6 @@
 "use client";
 import { useState } from "react";
+import { Button } from "../../ui";
 
 /**
  * Docs code affordances: a hover-revealed copy button, a bare copyable code
@@ -19,9 +20,10 @@ export interface CodeSample {
 function DocsCopyButton({ text, ariaLabel }: { text: string; ariaLabel: string }) {
   const [copied, setCopied] = useState(false);
   return (
-    <button
+    <Button
       type="button"
-      className="docs-code-copy cursor-pointer rounded-none border border-hair bg-surface/80 px-[0.4rem] py-[0.12rem] font-mono text-[0.7rem] text-ink-mute hover:text-ink"
+      variant="ghost"
+      className="docs-code-copy h-auto cursor-pointer rounded-none border border-hair bg-surface/80 px-[0.4rem] py-[0.12rem] font-mono text-[0.7rem] font-normal text-ink-mute hover:bg-transparent hover:text-ink"
       aria-label={ariaLabel}
       onClick={() =>
         navigator.clipboard?.writeText(text).then(
@@ -34,7 +36,7 @@ function DocsCopyButton({ text, ariaLabel }: { text: string; ariaLabel: string }
       }
     >
       {copied ? "copied" : "copy"}
-    </button>
+    </Button>
   );
 }
 
@@ -66,18 +68,19 @@ export function CodeTabs({ samples }: { samples: CodeSample[] }) {
       {samples.length > 1 && (
         <div className="flex gap-[0.2rem]" role="tablist">
           {samples.map((s, i) => (
-            <button
+            <Button
               key={s.label}
               type="button"
               role="tab"
               aria-selected={i === sel}
-              className={`cursor-pointer rounded-none border border-transparent px-[0.6rem] py-[0.2rem] font-mono text-[0.72rem] transition-colors duration-150 ease-brand ${
+              variant="link"
+              className={`h-auto cursor-pointer rounded-none border border-transparent px-[0.6rem] py-[0.2rem] font-mono text-[0.72rem] font-normal transition-colors duration-150 ease-brand hover:no-underline ${
                 i === sel ? "bg-accent-weak text-ink" : "text-ink-mute hover:text-ink-soft"
               }`}
               onClick={() => setSel(i)}
             >
               {s.label}
-            </button>
+            </Button>
           ))}
         </div>
       )}

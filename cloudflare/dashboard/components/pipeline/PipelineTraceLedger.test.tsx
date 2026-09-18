@@ -121,10 +121,11 @@ describe('PipelineTraceLedger', () => {
     expect(html).toContain('3 calls');
     expect(html).toContain('1 retries');
     expect(html).toContain('1 errors');
-    const detailTags = html.match(/<details[^>]*>/g) ?? [];
-    expect(detailTags).toHaveLength(3);
-    expect(detailTags.filter((tag) => tag.includes(' open=""'))).toHaveLength(2);
-    expect(detailTags[0]).not.toContain(' open=""');
+    // TraceEvent is a kit Collapsible: `data-open` marks the expanded events.
+    const eventRoots = html.match(/<div[^>]*data-testid="pipeline-trace-event"[^>]*>/g) ?? [];
+    expect(eventRoots).toHaveLength(3);
+    expect(eventRoots.filter((tag) => tag.includes('data-open=""'))).toHaveLength(2);
+    expect(eventRoots[0]).not.toContain('data-open=""');
   });
 
   it('renders distinct historical and unavailable states', () => {

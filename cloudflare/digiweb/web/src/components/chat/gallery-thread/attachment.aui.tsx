@@ -20,7 +20,7 @@ import {
   DialogTitle,
   DialogContent,
   DialogTrigger,
-} from "./ui/dialog";
+} from "../../../ui/dialog";
 import {
   CloseActionIcon,
   PlusActionIcon,
@@ -60,14 +60,14 @@ const AttachmentPreviewDialog: FC<PropsWithChildren> = ({ children }) => {
     <Dialog>
       <DialogTrigger
         className="aui-attachment-preview-trigger cursor-zoom-in"
-        asChild
-      >
-        {isValidElement(children) ? (
-          children
-        ) : (
-          <button type="button">{children}</button>
-        )}
-      </DialogTrigger>
+        render={
+          isValidElement(children) ? (
+            children
+          ) : (
+            <button type="button">{children}</button>
+          )
+        }
+      />
       <DialogContent className="aui-attachment-preview-dialog-content rounded-none border shadow-none p-2 sm:max-w-3xl">
         <DialogTitle className="aui-sr-only sr-only">
           Image Attachment Preview

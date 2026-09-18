@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { ExternalLink, FileText, Users } from 'lucide-react';
-import { Sheet, SheetContent, SheetTitle } from '@digithings/web';
+import { Sheet, SheetContent, SheetTitle } from '@digithings/web/ui';
 
 import DetailPanelHeaderActions, {
   detailPanelSheetSizeClass,

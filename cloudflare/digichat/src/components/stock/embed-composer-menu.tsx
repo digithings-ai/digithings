@@ -20,6 +20,7 @@ import {
 } from "react";
 import { createPortal } from "react-dom";
 import { CircleIcon } from "lucide-react";
+import { Button, Input, Label } from "@digithings/web/ui";
 import { nextPaletteIndex } from "@digithings/digichat-ui";
 import { useEmbedChatPrefs } from "@/components/stock/embed-chat-prefs";
 import {
@@ -999,13 +1000,15 @@ export function EmbedComposerMenu({
                 ? " new"
                 : ""}
         </span>
-        <button
+        <Button
           type="button"
-          className="hover:text-foreground text-xs tracking-normal normal-case underline-offset-2 hover:underline"
+          variant="link"
+          size="sm"
+          className="h-auto px-0 font-normal text-inherit hover:text-foreground tracking-normal normal-case underline-offset-2"
           onClick={goBack}
         >
           escape
-        </button>
+        </Button>
       </div>
       <div
         className={`flex max-h-[min(50vh,22rem)] flex-col py-1 ${
@@ -1013,9 +1016,9 @@ export function EmbedComposerMenu({
         }`}
       >
         {view === "provider-key" ? (
-          <label className="flex flex-col gap-1 px-3 py-1.5" htmlFor={keyFormId}>
+          <Label className="flex flex-col items-stretch gap-1 px-3 py-1.5" htmlFor={keyFormId}>
             <span className="text-muted-foreground text-xs">Paste API key, then Enter</span>
-            <input
+            <Input
               ref={keyInputRef}
               id={keyFormId}
               type="password"
@@ -1024,7 +1027,7 @@ export function EmbedComposerMenu({
               autoComplete="off"
               spellCheck={false}
               aria-invalid={Boolean(providerError)}
-              className="border-border bg-transparent w-full rounded-none border px-2 py-1.5 font-mono text-sm outline-none"
+              className="border-border bg-transparent w-full rounded-none border px-2 py-1.5 font-mono text-sm outline-none h-auto"
               onChange={(e) => {
                 setKeyDraft(e.target.value);
                 setProviderError(null);
@@ -1036,18 +1039,18 @@ export function EmbedComposerMenu({
                 }
               }}
             />
-          </label>
+          </Label>
         ) : null}
         {view === "provider-model" && customModel ? (
-          <label className="flex flex-col gap-1 px-3 py-1.5">
+          <Label className="flex flex-col items-stretch gap-1 px-3 py-1.5">
             <span className="text-muted-foreground text-xs">Model slug, then Enter</span>
-            <input
+            <Input
               ref={customModelRef}
               type="text"
               value={modelDraft}
               autoComplete="off"
               spellCheck={false}
-              className="border-border bg-transparent w-full rounded-none border px-2 py-1.5 font-mono text-sm outline-none"
+              className="border-border bg-transparent w-full rounded-none border px-2 py-1.5 font-mono text-sm outline-none h-auto"
               onChange={(e) => {
                 setModelDraft(e.target.value);
                 setProviderError(null);
@@ -1059,19 +1062,19 @@ export function EmbedComposerMenu({
                 }
               }}
             />
-          </label>
+          </Label>
         ) : null}
         {view === "mcp-edit" ? (
           <div className="flex flex-col gap-2 px-3 py-1.5">
             <pre className="border-border text-muted-foreground max-h-32 overflow-auto border px-2 py-1.5 font-mono text-[11px] leading-4">
               {mcpConfigJson(mcpDraft)}
             </pre>
-            <div className="flex flex-col gap-1">
+            <div className="flex flex-col items-stretch gap-1">
               <span className="text-muted-foreground text-xs" id="mcp-id-label">
                 id
               </span>
               <div className="relative z-10" data-mcp-id-field>
-                <input
+                <Input
                   type="text"
                   value={mcpDraft.id}
                   disabled={mcpDraft.source === "operator"}
@@ -1088,7 +1091,7 @@ export function EmbedComposerMenu({
                       ? `mcp-suggest-${mcpSuggestions[mcpSuggestIndex]!.id}`
                       : undefined
                   }
-                  className="border-border bg-transparent w-full rounded-none border px-2 py-1 font-mono text-sm outline-none disabled:opacity-60"
+                  className="border-border bg-transparent w-full rounded-none border px-2 py-1 font-mono text-sm outline-none disabled:opacity-60 h-auto"
                   onFocus={() => {
                     if (mcpDraft.source === "session") setMcpIdDropdownOpen(true);
                   }}
@@ -1183,34 +1186,34 @@ export function EmbedComposerMenu({
                 ) : null}
               </div>
             </div>
-            <label className="flex flex-col gap-1">
+            <Label className="flex flex-col items-stretch gap-1">
               <span className="text-muted-foreground text-xs">label</span>
-              <input
+              <Input
                 type="text"
                 value={mcpDraft.label}
                 autoComplete="off"
                 spellCheck={false}
-                className="border-border bg-transparent w-full rounded-none border px-2 py-1 font-mono text-sm outline-none"
+                className="border-border bg-transparent w-full rounded-none border px-2 py-1 font-mono text-sm outline-none h-auto"
                 onChange={(e) => commitMcpDraft({ ...mcpDraft, label: e.target.value })}
               />
-            </label>
+            </Label>
             {mcpDraft.source === "session" ? (
-              <label className="flex flex-col gap-1">
+              <Label className="flex flex-col items-stretch gap-1">
                 <span className="text-muted-foreground text-xs">url</span>
-                <input
+                <Input
                   type="url"
                   value={mcpDraft.url}
                   placeholder="https://…"
                   autoComplete="off"
                   spellCheck={false}
-                  className="border-border bg-transparent w-full rounded-none border px-2 py-1 font-mono text-sm outline-none"
+                  className="border-border bg-transparent w-full rounded-none border px-2 py-1 font-mono text-sm outline-none h-auto"
                   onChange={(e) => commitMcpDraft({ ...mcpDraft, url: e.target.value })}
                 />
-              </label>
+              </Label>
             ) : (
               <p className="text-muted-foreground text-xs">url is operator-managed (BFF)</p>
             )}
-            <div className="flex flex-col gap-1">
+            <div className="flex flex-col items-stretch gap-1">
               <span className="text-muted-foreground text-xs" id="mcp-auth-label">
                 auth
               </span>
@@ -1252,54 +1255,56 @@ export function EmbedComposerMenu({
               </div>
             </div>
             {mcpDraft.auth === "oauth" ? (
-              <div className="flex flex-col gap-1">
+              <div className="flex flex-col items-stretch gap-1">
                 <span className="text-muted-foreground text-xs">token / oauth client secret</span>
                 <div className="flex min-w-0 items-center gap-2">
-                  <button
+                  <Button
                     type="button"
-                    className="border-border shrink-0 whitespace-nowrap rounded-none border px-2 py-1 text-xs"
+                    variant="outline"
+                    size="sm"
+                    className="h-auto shrink-0 whitespace-nowrap border-border px-2 py-1"
                     disabled={mcpOAuthBusy}
                     onClick={() => void authenticateMcp()}
                   >
                     {mcpOAuthBusy ? "Authenticating…" : "Authenticate"}
-                  </button>
+                  </Button>
                   <span className="text-muted-foreground whitespace-nowrap text-xs">or</span>
-                  <input
+                  <Input
                     type="password"
                     value={mcpDraft.token}
                     placeholder="OAuth token"
                     autoComplete="off"
                     spellCheck={false}
-                    className="border-border bg-transparent min-w-0 flex-1 rounded-none border px-2 py-1 font-mono text-sm outline-none"
+                    className="border-border bg-transparent min-w-0 flex-1 rounded-none border px-2 py-1 font-mono text-sm outline-none h-auto"
                     onChange={(e) => commitMcpDraft({ ...mcpDraft, token: e.target.value })}
                   />
                 </div>
               </div>
             ) : mcpDraft.auth !== "none" ? (
-              <label className="flex flex-col gap-1">
+              <Label className="flex flex-col items-stretch gap-1">
                 <span className="text-muted-foreground text-xs">token</span>
-                <input
+                <Input
                   type="password"
                   value={mcpDraft.token}
                   placeholder="Bearer token"
                   autoComplete="off"
                   spellCheck={false}
-                  className="border-border bg-transparent w-full rounded-none border px-2 py-1 font-mono text-sm outline-none"
+                  className="border-border bg-transparent w-full rounded-none border px-2 py-1 font-mono text-sm outline-none h-auto"
                   onChange={(e) => commitMcpDraft({ ...mcpDraft, token: e.target.value })}
                 />
-              </label>
+              </Label>
             ) : null}
-            <div className="flex flex-col gap-1">
+            <div className="flex flex-col items-stretch gap-1">
               <span className="text-muted-foreground text-xs">other</span>
               {Object.entries(mcpDraft.extra).map(([key, value]) => (
-                <label key={key} className="flex flex-col gap-1">
+                <Label key={key} className="flex flex-col items-stretch gap-1">
                   <span className="text-muted-foreground text-xs">{key}</span>
-                  <input
+                  <Input
                     type="text"
                     value={value}
                     autoComplete="off"
                     spellCheck={false}
-                    className="border-border bg-transparent w-full rounded-none border px-2 py-1 font-mono text-sm outline-none"
+                    className="border-border bg-transparent w-full rounded-none border px-2 py-1 font-mono text-sm outline-none h-auto"
                     onChange={(e) =>
                       commitMcpDraft({
                         ...mcpDraft,
@@ -1307,25 +1312,25 @@ export function EmbedComposerMenu({
                       })
                     }
                   />
-                </label>
+                </Label>
               ))}
               <div className="flex gap-2">
-                <input
+                <Input
                   type="text"
                   value={mcpFieldName}
                   placeholder="field"
                   autoComplete="off"
                   spellCheck={false}
-                  className="border-border bg-transparent min-w-0 flex-1 rounded-none border px-2 py-1 font-mono text-sm outline-none"
+                  className="border-border bg-transparent min-w-0 flex-1 rounded-none border px-2 py-1 font-mono text-sm outline-none h-auto"
                   onChange={(e) => setMcpFieldName(e.target.value)}
                 />
-                <input
+                <Input
                   type="text"
                   value={mcpFieldValue}
                   placeholder="value"
                   autoComplete="off"
                   spellCheck={false}
-                  className="border-border bg-transparent min-w-0 flex-1 rounded-none border px-2 py-1 font-mono text-sm outline-none"
+                  className="border-border bg-transparent min-w-0 flex-1 rounded-none border px-2 py-1 font-mono text-sm outline-none h-auto"
                   onChange={(e) => setMcpFieldValue(e.target.value)}
                   onKeyDown={(e) => {
                     if (e.key !== "Enter") return;

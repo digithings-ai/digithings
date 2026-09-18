@@ -1,7 +1,7 @@
 'use client';
 
 import { X } from 'lucide-react';
-import { Sheet, SheetClose, SheetContent, SheetTitle } from '@digithings/web';
+import { Sheet, SheetClose, SheetContent, SheetTitle } from '@digithings/web/ui';
 import type { FxConsensusDivergence } from '@/lib/twelve-x/types';
 import { DEFAULT_DIVERGENCE_THRESHOLD } from '@/lib/twelve-x/divergence';
 import { fmtSigned } from '@/lib/twelve-x/format';

@@ -1,56 +1,34 @@
-"use client"
+"use client";
 
-import * as React from "react"
-import { cn } from "../cn"
-import { Tooltip as TooltipPrimitive } from "radix-ui"
+/**
+ * Product tooltip for the gallery Thread: the canonical kit Tooltip
+ * (`@digithings/web/ui/tooltip`, Base UI) with the chat's long-standing
+ * no-arrow ruling (#3818). The kit `TooltipContent` always renders its
+ * rotated-square `Arrow`; the chat renders none, so the popup is tagged
+ * `data-tooltip-arrow="none"` and that direct Arrow child is hidden here.
+ * Behaviour (hover + focus open, Escape dismiss, aria wiring) is the kit's;
+ * only the arrow is suppressed, which keeps the product's rendered look and
+ * `gallery-thread.source.test.ts` intact. If the kit later grows a
+ * `hideArrow` prop this adapter can collapse to a bare re-export.
+ */
+import type { ComponentProps } from "react";
 
-function TooltipProvider({
-  delayDuration = 0,
-  ...props
-}: React.ComponentProps<typeof TooltipPrimitive.Provider>) {
-  return (
-    <TooltipPrimitive.Provider
-      data-slot="tooltip-provider"
-      delayDuration={delayDuration}
-      {...props}
-    />
-  )
-}
+import { TooltipContent as KitTooltipContent } from "../../../../ui/tooltip";
+import { cn } from "../cn";
 
-function Tooltip({
-  ...props
-}: React.ComponentProps<typeof TooltipPrimitive.Root>) {
-  return <TooltipPrimitive.Root data-slot="tooltip" {...props} />
-}
+export { Tooltip, TooltipTrigger, TooltipProvider } from "../../../../ui/tooltip";
 
-function TooltipTrigger({
-  ...props
-}: React.ComponentProps<typeof TooltipPrimitive.Trigger>) {
-  return <TooltipPrimitive.Trigger data-slot="tooltip-trigger" {...props} />
-}
-
-function TooltipContent({
+export function TooltipContent({
   className,
   sideOffset = 0,
-  children,
   ...props
-}: React.ComponentProps<typeof TooltipPrimitive.Content>) {
+}: ComponentProps<typeof KitTooltipContent>) {
   return (
-    <TooltipPrimitive.Portal>
-      <TooltipPrimitive.Content
-        data-slot="tooltip-content"
-        data-tooltip-arrow="none"
-        sideOffset={sideOffset}
-        className={cn(
-          "z-50 w-fit origin-(--radix-tooltip-content-transform-origin) animate-in rounded-md bg-foreground px-3 py-1.5 text-xs text-balance text-background fade-in-0 zoom-in-95 data-[side=bottom]:slide-in-from-top-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2 data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=closed]:zoom-out-95",
-          className
-        )}
-        {...props}
-      >
-        {children}
-      </TooltipPrimitive.Content>
-    </TooltipPrimitive.Portal>
-  )
+    <KitTooltipContent
+      data-tooltip-arrow="none"
+      sideOffset={sideOffset}
+      className={cn("[&>[aria-hidden]]:hidden", className)}
+      {...props}
+    />
+  );
 }
-
-export { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider }

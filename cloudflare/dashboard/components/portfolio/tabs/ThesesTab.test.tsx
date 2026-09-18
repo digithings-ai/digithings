@@ -58,11 +58,14 @@ describe('ThesesTab (story spine)', () => {
     expect(html).toContain('Prices firm');
   });
 
-  it('keeps confidence and timeframe inside the disclosure body, not its summary', () => {
-    const summary = html.match(/<summary[^>]*>([\s\S]*?)<\/summary>/)?.[1] ?? '';
-    expect(summary).toContain('Advanced Materials Growth');
-    expect(summary).not.toContain('80% confidence');
-    expect(summary).not.toContain('long_term');
+  it('keeps confidence and timeframe inside the disclosure body, not its trigger', () => {
+    // Wave 4: the disclosure is a kit `Collapsible`; its header is the
+    // `collapsible-trigger` button (was <summary>). Same intent — the confidence
+    // meter and timeframe live in the body, not the always-visible header.
+    const trigger = html.match(/data-slot="collapsible-trigger"[^>]*>([\s\S]*?)<\/button>/)?.[1] ?? '';
+    expect(trigger).toContain('Advanced Materials Growth');
+    expect(trigger).not.toContain('80% confidence');
+    expect(trigger).not.toContain('long_term');
     expect(html).toContain('80% confidence');
     expect(html).toContain('Long term');
   });

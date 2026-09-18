@@ -59,10 +59,11 @@ describe('VehicleExpressionRow — no nested glass-card', () => {
       })
     );
 
-    // The vehicle row should render as a native <details> without nested card styling.
-    // Individual rows stay unframed; parent ThesisStoryCard is a disclosure spine.
-    expect(html).toContain('<details');
-    expect(html).not.toMatch(/<details[^>]*class="[^"]*glass-card/);
+    // Wave 4: the row is a kit Collapsible disclosure (was native <details>) and
+    // still carries no nested card styling. Individual rows stay unframed; parent
+    // ThesisStoryCard is the disclosure spine.
+    expect(html).toContain('data-slot="collapsible"');
+    expect(html).not.toMatch(/data-slot="collapsible"[^>]*class="[^"]*glass-card/);
   });
 
   it('uses canonical text-xs for labels instead of ad-hoc text-[10px]', () => {

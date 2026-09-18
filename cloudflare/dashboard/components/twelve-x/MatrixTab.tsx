@@ -1,7 +1,7 @@
 'use client';
 
 import { useMemo, useState } from 'react';
-import { Card } from '@digithings/web/ui';
+import { Button, Card } from '@digithings/web/ui';
 import { Grid3x3 } from 'lucide-react';
 
 import { MATRIX_COLUMNS } from '@/lib/twelve-x/types';
@@ -101,14 +101,15 @@ export default function MatrixTab({
                       role="rowheader"
                       className="sticky left-0 z-10 bg-term-bg"
                     >
-                      <button
+                      <Button
                         type="button"
+                        variant="ghost"
                         onClick={() => setSelectedBroker(broker)}
-                        className="flex w-full items-center gap-1.5 truncate px-4 py-2 text-left font-medium text-ink transition-colors hover:text-accent"
+                        className="flex h-auto w-full items-center justify-start gap-1.5 truncate px-4 py-2 text-left font-medium text-ink hover:bg-transparent hover:text-accent"
                         title={`${broker} — open desk profile`}
                       >
                         <span className="truncate">{broker}</span>
-                      </button>
+                      </Button>
                     </div>
                     {MATRIX_COLUMNS.map((ccy) => {
                       const cell = byCell.get(`${broker}|${ccy}`);
@@ -141,6 +142,10 @@ export default function MatrixTab({
                       }`;
                       return (
                         <div key={ccy} role="cell" className="p-1">
+                          {/* Geometry-pinned matrix cell (wave-4 BLOCKED, #4306):
+                              fills its `role="cell"` grid box (`h-full w-full`) and
+                              carries per-direction tone/hover classes — the kit
+                              `Button` base would only be overridden back off. */}
                           <button
                             type="button"
                             onClick={() =>

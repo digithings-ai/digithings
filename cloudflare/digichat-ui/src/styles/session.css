@@ -680,6 +680,10 @@
   font-size: 0.82rem;
 }
 .dc-doc-pane-close {
+  /* kit IconButton (nb-icon) sizes the glyph at 2rem; the doc-pane header is a
+     compact strip, so the dress keeps its original auto footprint. */
+  width: auto;
+  height: auto;
   border: 1px solid var(--hair);
   background: transparent;
   color: inherit;

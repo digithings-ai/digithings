@@ -1,11 +1,12 @@
 /**
- * Ledger table specimen — the plain Table primitive from @digithings/web,
- * live. This is the unopinionated shell: hairline rows, micro-cap header,
- * mono numerals, caption below. Sorting, virtual rows, and matrix styling
- * stay where they belong — SortableTable, TradeLogTable, PricingMatrix own
- * their grammars and do not compose this one. Numeric columns take
- * `numeric` (right + tabular figures); wide tables wrap in
- * `.ctl-table-scroll`.
+ * Ledger table specimen — the plain kit Table (`@digithings/web/ui`), live.
+ * This is the unopinionated shell: hairline rows, micro-cap header, mono
+ * numerals, caption below. Sorting, virtual rows, and matrix styling stay
+ * where they belong — SortableTable, TradeLogTable, PricingMatrix own their
+ * grammars and do not compose this one. Numeric columns take `numeric`
+ * (right + tabular figures); wide tables wrap in `.ctl-table-scroll`.
+ * Wave 4: re-pointed from the controls-layer Table onto the kit (W4-P1 added
+ * `numeric`/`density` to the kit).
  */
 import {
   Table,
@@ -16,7 +17,7 @@ import {
   TableHead,
   TableHeader,
   TableRow,
-} from "@digithings/web";
+} from "@digithings/web/ui";
 
 const RUNS = [
   { run: "btc_slapper", bars: "3,164", cagr: "+333.10%", maxDd: "−30.50%", pf: "10.25" },
@@ -31,7 +32,7 @@ export function TableReference() {
       <p className="kicker">{"// ledger table"}</p>
       <h2 className="title">Rows before opinions.</h2>
       <p className="section-copy">
-        <code>Table</code> from <code>@digithings/web</code> is the plain ledger: header, rows,
+        <code>Table</code> from <code>@digithings/web/ui</code> is the plain ledger: header, rows,
         footer total, caption — nothing else. Anything with its own grammar (sortable
         leaderboards, trade logs, the returns matrix) keeps it.
       </p>

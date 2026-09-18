@@ -5,6 +5,7 @@ import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { useDashboard } from '@/lib/dashboard-context';
 import { SUBPAGE_MAX } from '@/components/layout-constants';
 import { EmptyState } from '@digithings/web';
+import { Button } from '@digithings/web/ui';
 import PortfolioSectionNav from '@/components/portfolio/PortfolioSectionNav';
 import type { PortfolioSectionId } from '@/components/portfolio/PortfolioSectionNav';
 import { getDocLibraryTier } from '@/lib/library-doc-tier';
@@ -204,13 +205,14 @@ export default function PortfolioShellInner() {
             title="Portfolio is temporarily unavailable"
             body={error || 'Failed to load'}
             action={
-              <button
+              <Button
                 type="button"
+                variant="outline"
                 onClick={() => window.location.reload()}
-                className="mt-5 inline-flex items-center border border-hair px-4 py-2 text-sm font-medium text-accent transition-colors hover:bg-ink/[0.06]"
+                className="mt-5 h-auto border-hair px-4 py-2 text-sm font-medium text-accent hover:bg-ink/[0.06]"
               >
                 Retry
-              </button>
+              </Button>
             }
           />
         </div>

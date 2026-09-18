@@ -41,10 +41,17 @@ vi.mock('@/components/shared/as-of-badge', () => ({
   AsOfBadge: ({ date }: any) => createElement('span', { 'data-testid': 'as-of-badge' }, date),
 }));
 
-vi.mock('@/components/shared/signed-conviction-badge', () => ({
-  SignedConvictionBadge: ({ value }: any) =>
-    createElement('span', { 'data-testid': 'conviction-badge', 'data-value': value }, `+${value}`),
-}));
+// Wave 4: the conviction shim was retired — SignedConvictionBadge now lives in
+// @digithings/web (main barrel). Mock the barrel, preserving the real exports
+// the rest of this view's tree relies on (Button, gloomberbTickerUrl, …).
+vi.mock('@digithings/web', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@digithings/web')>();
+  return {
+    ...actual,
+    SignedConvictionBadge: ({ value }: any) =>
+      createElement('span', { 'data-testid': 'conviction-badge', 'data-value': value }, `+${value}`),
+  };
+});
 
 vi.mock('@/components/ui', () => ({
   Badge: ({ children, variant }: any) =>
