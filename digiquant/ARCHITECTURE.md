@@ -2744,6 +2744,13 @@ separately so research nodes never pay the per-ticker decision-artifact token ta
   (`text`/`detail`/…), never from leftover URLs or envelope keys. An `as_of`-only finding
   with no prose is still rejected.
 - Standalone CLI: `python -m digiquant.research.graph` — research-only consumers.
+- **Watchlist parse is the seal's parse (#4301).** `_parse_watchlist_md` delegates to
+  `digiquant.data.prices.fetchers.parse_watchlist` (an absent file still returns `[]`), so the
+  research fan-out excludes the non-sealable macro/header rows `ETF`/`DXY`/`VIX` and keeps
+  hyphenated pairs (`ETH-USD`) exactly as the R2 seal does. `decision_log.resolve_pending`
+  counts due rows whose ticker has no sealed generation and emits **one aggregated WARNING per
+  pass** (a coverage/config gap, not a transient fault) instead of one WARNING per row per run;
+  the transient-IO WARNING path is unchanged. Tolerant-reader contract: #4136/#4139, #4120.
 - Terminal `publish_phase` is wired only when `deps.publish` is provided;
   the chain orchestrator passes `None` so publish runs once at the end (research artifacts).
 - Web grounding pre-pass for `live_search` segments (#3853 / #3859): `fetch_web_grounding`
