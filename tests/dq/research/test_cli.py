@@ -256,6 +256,23 @@ def test_parse_watchlist_md_dedupes():
     assert len(tickers) == len(set(tickers)), "duplicate tickers in watchlist.md parse output"
 
 
+def test_parse_watchlist_md_matches_seal_exclusions_and_hyphenated_symbols():
+    """Research watchlist parsing must agree with the market-data seal (#4301).
+
+    ``DXY``/``VIX``/``ETF`` are macro/header rows the R2 seal never covers, and
+    hyphenated pairs (``ETH-USD``) are in the sealed universe. The old local
+    regex did the exact opposite — it injected DXY/VIX/ETF as equity tickers and
+    dropped every ``*-USD`` symbol — which fed ``decision_log`` rows that could
+    never resolve.
+    """
+    from digiquant.research.graph import _parse_watchlist_md
+
+    tickers = set(_parse_watchlist_md())
+    assert not (tickers & {"ETF", "DXY", "VIX"}), tickers & {"ETF", "DXY", "VIX"}
+    assert "SPY" in tickers
+    assert "ETH-USD" in tickers
+
+
 def test_parse_macro_series_yaml_nonempty():
     from digiquant.research.graph import _parse_macro_series_yaml
 

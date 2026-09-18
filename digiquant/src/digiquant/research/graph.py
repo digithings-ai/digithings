@@ -256,22 +256,24 @@ def _research_config_root():
 def _parse_watchlist_md() -> list[str]:
     """Extract ticker symbols from config/watchlist.md table rows.
 
-    Matches rows of the form ``| TICKER | description | … |``.
-    Falls back to an empty list when the file is absent.
+    Delegates to :func:`digiquant.data.prices.fetchers.parse_watchlist`, the
+    parser the market-data seal already uses, so the research fan-out and the
+    sealed R2 universe agree (#4301). That parser excludes the non-sealable
+    macro/header rows ``ETF``/``DXY``/``VIX`` and keeps hyphenated symbols
+    (``ETH-USD``); the previous local regex did the opposite — it injected
+    DXY/VIX/ETF as tradeable tickers and dropped every ``*-USD`` pair, which
+    left ``decision_log`` with rows the seal could never price.
+
+    Falls back to an empty list when the file is absent (unlike
+    ``parse_watchlist``'s baked-in ETF fallback, which is for the fetcher's
+    own universe, not for the research graph's fan-out).
     """
-    import re
+    from digiquant.data.prices.fetchers import parse_watchlist
 
     path = _research_config_root() / "watchlist.md"
     if not path.exists():
         return []
-    tickers: list[str] = []
-    for line in path.read_text(encoding="utf-8").splitlines():
-        m = re.match(r"^\s*\|\s*([A-Z0-9]{1,6})\s*\|", line)
-        if m:
-            ticker = m.group(1)
-            if ticker not in tickers:
-                tickers.append(ticker)
-    return tickers
+    return parse_watchlist(path)
 
 
 def _parse_macro_series_yaml() -> list[str]:
