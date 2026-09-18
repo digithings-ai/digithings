@@ -526,3 +526,96 @@ def test_opening_cash_ignores_overlay_nav_and_cash_weight() -> None:
     )
     got = mod._opening_cash(client=client, period_date=PERIOD)
     assert got == Decimal("20.00")
+
+
+# ─── finalizer: negative prior ledger tip declines (#4105) ───────────────────
+
+NEXT_PERIOD = date(2026, 8, 26)
+
+
+def _tip_client(*, closing_cash: str) -> MergingFake:
+    """Client with one prior accounting tip and an open lot (ledger not cold)."""
+    from digiquant.portfolio.models.portfolio_ledger import HoldingLotStatus
+    from digiquant.portfolio.writers.execution_io import HOLDING_LOTS
+
+    return MergingFake(
+        canned_reads={
+            PERIODS: [
+                {
+                    "id": "00000000-0000-0000-0000-0000000000aa",
+                    "period_date": PERIOD.isoformat(),
+                    "status": "final",
+                    "closing_cash": closing_cash,
+                    "closing_equity": "16.77",
+                    "supersedes_id": None,
+                }
+            ],
+            HOLDING_LOTS: [
+                {
+                    "id": "lot-aapl",
+                    "opened_by_execution_id": "exec-aapl",
+                    "opened_at": "2026-08-20T15:00:00+00:00",
+                    "run_date": "2026-08-20",
+                    "quantity": "1",
+                    "status": HoldingLotStatus.OPEN,
+                    "closed_at": None,
+                    "symbol": "AAPL",
+                }
+            ],
+            "positions": [],
+            "nav_history": [
+                {
+                    "date": PERIOD.isoformat(),
+                    "nav": 101.769942,
+                    "cash_pct": 14.8646,
+                },
+            ],
+        }
+    )
+
+
+def test_negative_prior_tip_declines_without_write() -> None:
+    """#4105: a negative prior ``closing_cash`` must decline, not fabricate a stub.
+
+    Before the fix ``_opening_cash`` skipped the ``-84.99856002`` tip and fell
+    through to ``nav * cash_pct / 100`` = 15.13, persisting a degenerate final
+    tip. It must now write nothing and raise.
+    """
+    mod = _load_finalize_mod()
+    client = _tip_client(closing_cash="-84.99856002")
+    with pytest.raises(mod.FinalizerDeclined, match="negative"):
+        mod.finalize_one_day(client=client, period_date=NEXT_PERIOD, mode="shadow")
+    assert client.store.get(PERIODS, []) == []
+
+
+def test_negative_prior_tip_exits_3(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The decline surfaces as exit 3 (the documented DECLINED contract)."""
+    mod = _load_finalize_mod()
+    client = _tip_client(closing_cash="-84.99856002")
+    monkeypatch.setattr(mod, "_sb", lambda: client)
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "finalize_period_accounting.py",
+            "--supabase",
+            "--shadow",
+            "--date",
+            NEXT_PERIOD.isoformat(),
+        ],
+    )
+    assert mod.main() == 3
+    assert client.store.get(PERIODS, []) == []
+
+
+def test_non_negative_prior_tip_still_finalizes() -> None:
+    """Happy path: a recoverable (non-negative) prior tip still finalizes."""
+    mod = _load_finalize_mod()
+    client = _tip_client(closing_cash="1234.56")
+    assert mod._opening_cash(client=client, period_date=NEXT_PERIOD) == Decimal("1234.56")
+    _period, result, _ok = mod.finalize_one_day(
+        client=client, period_date=NEXT_PERIOD, mode="shadow"
+    )
+    assert result is not None
+    assert result.wrote is True
+    assert len(client.store[PERIODS]) == 1

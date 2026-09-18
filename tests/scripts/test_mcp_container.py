@@ -35,6 +35,7 @@ ARCHITECTURE = REPO_ROOT / "digiquant" / "ARCHITECTURE.md"
 MCP_SCOPED_VARS = (
     "DIGIQUANT_MARKET_DATA_BACKEND",
     "FRED_API_KEY",
+    "GLOOMBERB_SESSION_COOKIE",
     "R2_ACCOUNT_ID",
     "R2_BUCKET",
     "R2_ACCESS_KEY_ID",
@@ -160,6 +161,7 @@ def test_wrangler_documents_mcp_secrets() -> None:
     text = WRANGLER.read_text()
     for name in (
         "FRED_API_KEY",
+        "GLOOMBERB_SESSION_COOKIE",
         "R2_ACCOUNT_ID",
         "R2_BUCKET",
         "R2_ACCESS_KEY_ID",

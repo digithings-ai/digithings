@@ -13,10 +13,17 @@ Or local stack (no Docker port conflict):
 from __future__ import annotations
 
 import os
+import re
 import time
+from pathlib import Path
 
 import httpx
 import pytest
+
+# The two symbols test_digiquant_run_backtest_direct asks for. Both must have a
+# `{symbol}.csv` or the multi-symbol backtest returns None -> RuntimeError -> 503.
+_DIRECT_BACKTEST_SYMBOLS = ("AAPL", "MSFT")
+_DATA_README = "digiquant/data/README.md"
 
 
 def _e2e_bearer() -> str:
@@ -26,6 +33,55 @@ def _e2e_bearer() -> str:
             "E2E_BEARER_TOKEN must be set to a digikey JWT for protected routes (see digikey/ARCHITECTURE.md /v1/oauth/token)."
         )
     return tok
+
+
+def _ohlcv_data_dirs(data_dir: str) -> list[Path]:
+    """Directories on the *test host* that may hold `{symbol}.csv` OHLCV files.
+
+    Compose mounts ``./digiquant/data`` read-only at ``/app/data`` inside the
+    digiquant container, but the pytest client runs on the host/runner where
+    ``/app/data`` does not exist. The mount source is also checked so a developer
+    with real CSVs under ``digiquant/data`` gets a real run instead of a false
+    skip; CI (no CSVs — ``.gitignore`` excludes ``**/data/*.csv``) skips.
+    """
+    candidates = [Path(data_dir)]
+    mount_source = Path(__file__).resolve().parents[1] / "digiquant" / "data"
+    if mount_source not in candidates:
+        candidates.append(mount_source)
+    return candidates
+
+
+def _ohlcv_symbols(data_dir: str) -> set[str]:
+    """Stems of every ``*.csv`` visible in a candidate OHLCV directory."""
+    found: set[str] = set()
+    for directory in _ohlcv_data_dirs(data_dir):
+        if directory.is_dir():
+            found.update(path.stem for path in directory.glob("*.csv"))
+    return found
+
+
+def _skip_if_no_ohlcv(data_dir: str, symbols: tuple[str, ...] | None = None) -> None:
+    """Skip when the backtest has no OHLCV CSVs to read.
+
+    Without the CSVs the API fails closed with a 503 (``RuntimeError`` in
+    digiquant/server.py) rather than returning a backtest, so this is a missing
+    fixture, not a product regression. ``symbols=None`` means any CSV is enough
+    (the workflow research node picks its own basket).
+    """
+    present = _ohlcv_symbols(data_dir)
+    if symbols is None:
+        if not present:
+            pytest.skip(
+                f"No OHLCV CSVs in {data_dir} (or the compose mount source digiquant/data): "
+                f"the backtest cannot run in CI. See {_DATA_README} to fetch/author sample data."
+            )
+        return
+    missing = [sym for sym in symbols if sym not in present]
+    if missing:
+        pytest.skip(
+            f"No OHLCV CSV for {', '.join(missing)} in {data_dir} (or the compose mount "
+            f"source digiquant/data): the multi-symbol backtest would 503. See {_DATA_README}."
+        )
 
 
 @pytest.mark.e2e
@@ -92,6 +148,7 @@ def test_digiquant_run_backtest_direct(
     if not e2e_available:
         pytest.skip("E2E stack not available")
     data_dir = os.environ.get("E2E_DATA_DIR", "/app/data")
+    _skip_if_no_ohlcv(data_dir, _DIRECT_BACKTEST_SYMBOLS)
     bearer = _e2e_bearer()
     with httpx.Client(
         timeout=10.0,
@@ -120,10 +177,18 @@ def test_workflow_returns_backtest(
     """Workflow: prompt → research → real Nautilus backtest result."""
     if not e2e_available:
         pytest.skip("E2E stack not available. Start with: docker compose up -d or bash scripts/run_local.sh (then set DIGIGRAPH_URL/DIGIQUANT_URL to 18000/18001)")
+    # The workflow's backtest node needs real OHLCV CSVs (digigraph sets
+    # DIGIQUANT_DATA_DIR=/app/data, backed by the ./digiquant/data mount). With
+    # no CSVs it returns an error rather than a backtest, so skip rather than
+    # fail — same missing-fixture reason as the direct run_backtest test.
+    _skip_if_no_ohlcv(os.environ.get("E2E_DATA_DIR", "/app/data"))
     bearer = _e2e_bearer()
     start = time.monotonic()
+    # Bounded above the workflow's own budgets: 120 s /v1/jobs polling and a
+    # 90 s SSE progress stream (digigraph/graph/nodes.py), so 180 s covers the
+    # slowest path without masking a genuine hang.
     with httpx.Client(
-        timeout=60.0,
+        timeout=180.0,
         headers={"Authorization": f"Bearer {bearer}"},
     ) as client:
         r = client.post(
@@ -143,10 +208,14 @@ def test_workflow_returns_backtest(
     assert "symbols" in bt
     assert isinstance(bt["symbols"], list)
     assert len(bt["symbols"]) > 0
-    # Real Nautilus backtest (no stub)
+    # Real Nautilus backtest (no stub). A single-symbol run is `nautilus-<hex>`;
+    # a multi-symbol aggregate is `multi-<hex>` (nautilus_runner.py:597), which is
+    # what the research node's basket produces — accept both real contracts.
     run_id = bt.get("run_id") or ""
-    assert run_id.startswith("nautilus-"), f"Expected real backtest run_id (nautilus-*), got {run_id!r}"
-    assert elapsed < 60.0, f"Workflow took {elapsed:.1f}s"
+    assert re.fullmatch(r"(?:nautilus|multi)-[0-9a-f]{8}", run_id), (
+        f"Expected real backtest run_id (nautilus-*/multi-*), got {run_id!r}"
+    )
+    assert elapsed < 180.0, f"Workflow took {elapsed:.1f}s"
 
 
 @pytest.mark.e2e

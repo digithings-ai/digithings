@@ -64,6 +64,12 @@ jobs:
           # service env. Setting it on the mint step's `exec` would only reach
           # that one CLI process and the exchange would 403.
           DIGIKEY_ALLOW_DEV_GLOBAL: "1"
+          # The protected-route test `test_test_llm_endpoint` calls digigraph
+          # GET /test_llm, which is opt-in and 404s otherwise
+          # (digigraph/src/digigraph/server.py:276). Compose forwards this to
+          # the digigraph service (docker-compose.yml), so the opt-in must be
+          # here on `docker compose up`, not on the pytest step.
+          DIGI_ENABLE_DEBUG_ENDPOINTS: "1"
         run: |
           cp .env.example .env
           docker compose up -d --wait digigraph digiquant digisearch digikey
