@@ -165,7 +165,7 @@ def test_probe_unsealable_when_aad_mismatched() -> None:
 def test_invoke_chain_credential_none_refuses_never_calls_chain(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setenv("OLYMPUS_OVERLAY_PERSIST", "1")
+    monkeypatch.setenv("DIGIQUANT_OVERLAY_PERSIST", "1")
     called = {"n": 0}
 
     def chain(**_kwargs: object) -> None:

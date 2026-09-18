@@ -220,7 +220,7 @@ Research phases run a **tool loop** so the model fetches real data on demand ins
 
 - **digiquant data tools** (`get_price_technicals` / `get_macro_series`): each tool call is a Supabase read + an extra LLM round-trip carrying the tool result. Bounded by `max_tool_rounds` (default 5). Cost scales with how many symbols/series a phase queries; the prompts name a finite set per phase.
 - **Web grounding (completion synthesis)**: a single read-only **pre-pass** per `live_search` phase — a plain digillm completion over in-house retrieval context (no vendor search tooling), one extra call before the phase's normal completion (not per tool-round). Gated to phases that need soft signals (macro + all alt-/inst- + international).
-- **Kill-switch**: set `ATLAS_DATA_TOOLS=0` to disable all tool grounding (falls back to the tool-less structured call) for cost-controlled or offline runs.
+- **Kill-switch**: set `DIGIQUANT_RESEARCH_DATA_TOOLS=0` to disable all tool grounding (falls back to the tool-less structured call) for cost-controlled or offline runs.
 
 ---
 

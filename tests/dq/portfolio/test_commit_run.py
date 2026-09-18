@@ -144,7 +144,7 @@ class TestCommitRunBooking:
         assert rows[0]["run_id"] == str(_SOURCE_RUN_ID)
 
     def test_decision_holding_days_do_not_shorten_position_risk_horizon(self, monkeypatch) -> None:
-        monkeypatch.setenv("OLYMPUS_POSITION_RISK_FIELDS", "1")
+        monkeypatch.setenv("DIGIQUANT_POSITION_RISK_FIELDS", "1")
         client = FakeSupabaseClient(
             canned_reads={
                 "price_history": [{"date": "2026-06-12", "ticker": "SPY", "close": 600.0}],
@@ -158,7 +158,7 @@ class TestCommitRunBooking:
         assert spy["horizon_days"] == 21
 
     def test_explicit_position_risk_horizon_is_persisted(self, monkeypatch) -> None:
-        monkeypatch.setenv("OLYMPUS_POSITION_RISK_FIELDS", "1")
+        monkeypatch.setenv("DIGIQUANT_POSITION_RISK_FIELDS", "1")
         client = FakeSupabaseClient()
 
         _run(client, _state(preferences={"holding_days": 5, "risk_horizon_days": 30}))
@@ -526,7 +526,7 @@ class TestCommitRunIdempotency:
         assert [m["weights_fingerprint"] for m in found] == ["fp-x"]
 
     def test_house_uuid_keeps_commit_run_prefix(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.setenv("OLYMPUS_OVERLAY_PERSIST", "1")
+        monkeypatch.setenv("DIGIQUANT_OVERLAY_PERSIST", "1")
         overlay = uuid4()
         assert manifest_document_key("run-1", str(overlay)).startswith(OVERLAY_MANIFEST_PREFIX)
         assert manifest_document_key("run-1") == "commit-run/run-1"
@@ -535,7 +535,7 @@ class TestCommitRunIdempotency:
     def test_house_uuid_load_does_not_see_overlay_manifests(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        monkeypatch.setenv("OLYMPUS_OVERLAY_PERSIST", "1")
+        monkeypatch.setenv("DIGIQUANT_OVERLAY_PERSIST", "1")
         overlay = uuid4()
         house = str(house_workspace_id())
         iso = RUN_DATE.isoformat()
@@ -1212,7 +1212,7 @@ class TestCommitChainLedger:
     def test_kill_switch_keeps_legacy_projections_and_writes_no_ledger(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        monkeypatch.setenv("OLYMPUS_PORTFOLIO_LEDGER", "off")
+        monkeypatch.setenv("DIGIQUANT_PORTFOLIO_LEDGER", "off")
         client = _ledger_client(SPY=100.0)
 
         out = _run(client, _state())
@@ -2299,7 +2299,7 @@ class TestPreTradeRiskH9:
         return PretradeRiskFake()
 
     def test_enforce_missing_report_rejects_before_booking(self, monkeypatch) -> None:
-        monkeypatch.setenv("OLYMPUS_PRETRADE_RISK_MODE", "enforce")
+        monkeypatch.setenv("DIGIQUANT_PRETRADE_RISK_MODE", "enforce")
         client = FakeSupabaseClient()
         out = _run(client, _state())
         assert "errors" in out
@@ -2308,7 +2308,7 @@ class TestPreTradeRiskH9:
 
     def test_shadow_default_missing_report_commits_without_blocking(self, monkeypatch) -> None:
         """Default/shadow is fail-soft: missing report must not block the book (#2824)."""
-        monkeypatch.delenv("OLYMPUS_PRETRADE_RISK_MODE", raising=False)
+        monkeypatch.delenv("DIGIQUANT_PRETRADE_RISK_MODE", raising=False)
         client = FakeSupabaseClient()
         out = _run(client, _state())
         assert "errors" not in out
@@ -2319,7 +2319,7 @@ class TestPreTradeRiskH9:
         assert client.store.get("positions")
 
     def test_explicit_shadow_invalid_report_commits(self, monkeypatch) -> None:
-        monkeypatch.setenv("OLYMPUS_PRETRADE_RISK_MODE", "shadow")
+        monkeypatch.setenv("DIGIQUANT_PRETRADE_RISK_MODE", "shadow")
         client = FakeSupabaseClient()
         state = _state()
         state.phase_portfolio = state.phase_portfolio.model_copy(
@@ -2334,7 +2334,7 @@ class TestPreTradeRiskH9:
         assert client.store.get("positions")
 
     def test_enforce_unknown_report_rejects(self, monkeypatch) -> None:
-        monkeypatch.setenv("OLYMPUS_PRETRADE_RISK_MODE", "enforce")
+        monkeypatch.setenv("DIGIQUANT_PRETRADE_RISK_MODE", "enforce")
         client = FakeSupabaseClient()
         state = _state()
         state.phase_portfolio = state.phase_portfolio.model_copy(
@@ -2346,7 +2346,7 @@ class TestPreTradeRiskH9:
         assert not client.store.get("positions")
 
     def test_enforce_book_fingerprint_mismatch_rejects(self, monkeypatch) -> None:
-        monkeypatch.setenv("OLYMPUS_PRETRADE_RISK_MODE", "enforce")
+        monkeypatch.setenv("DIGIQUANT_PRETRADE_RISK_MODE", "enforce")
         client = FakeSupabaseClient()
         report = self._spy_report_payload()
         # Attach a valid SPY report to a different book.
@@ -2387,7 +2387,7 @@ class TestPreTradeRiskH9:
         assert not client.store.get("positions")
 
     def test_enforce_persists_hash_bound_report(self, monkeypatch) -> None:
-        monkeypatch.setenv("OLYMPUS_PRETRADE_RISK_MODE", "enforce")
+        monkeypatch.setenv("DIGIQUANT_PRETRADE_RISK_MODE", "enforce")
         client = self._merging_client()
         state = self._state_with_report()
         out = _run(client, state)
@@ -2404,7 +2404,7 @@ class TestPreTradeRiskH9:
         assert rows[0]["report_id"] == manifest["pretrade_risk_report_id"]
 
     def test_identical_retry_skips_append(self, monkeypatch) -> None:
-        monkeypatch.setenv("OLYMPUS_PRETRADE_RISK_MODE", "enforce")
+        monkeypatch.setenv("DIGIQUANT_PRETRADE_RISK_MODE", "enforce")
         client = self._merging_client()
         state = self._state_with_report()
         _run(client, state)
@@ -2417,7 +2417,7 @@ class TestPreTradeRiskH9:
         assert len(client.store.get("pretrade_risk_reports", [])) == 1
 
     def test_append_only_no_upsert_or_update(self, monkeypatch) -> None:
-        monkeypatch.setenv("OLYMPUS_PRETRADE_RISK_MODE", "enforce")
+        monkeypatch.setenv("DIGIQUANT_PRETRADE_RISK_MODE", "enforce")
         client = self._merging_client()
         state = self._state_with_report()
         _run(client, state)

@@ -286,7 +286,7 @@ class TestUpsertOnchainCohortPositioning:
 
     def test_overlay_workspace_skips_shared_register(self, monkeypatch: pytest.MonkeyPatch) -> None:
         overlay = uuid4()
-        monkeypatch.setenv("OLYMPUS_OVERLAY_PERSIST", "1")
+        monkeypatch.setenv("DIGIQUANT_OVERLAY_PERSIST", "1")
         overlay_client = FakeSupabaseClient()
         overlay_written = upsert_onchain_cohort_positioning(
             client=overlay_client,

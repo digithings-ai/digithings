@@ -364,7 +364,7 @@ class TestThesesWrite:
 
 @pytest.mark.unit
 class TestPositionRiskFields:
-    """Pillar 2E — advisory per-position risk fields, gated by OLYMPUS_POSITION_RISK_FIELDS
+    """Pillar 2E — advisory per-position risk fields, gated by DIGIQUANT_POSITION_RISK_FIELDS
     (off → exact prior book shape; on → entry/stop/target/conviction/sector/horizon)."""
 
     def _state(self, recommended, *, analysts=None, debates=None, preferences=None):
@@ -385,7 +385,7 @@ class TestPositionRiskFields:
         return {r["ticker"]: r for r in client.store["positions"]}
 
     def test_off_by_default_writes_no_new_fields(self, monkeypatch) -> None:
-        monkeypatch.delenv("OLYMPUS_POSITION_RISK_FIELDS", raising=False)
+        monkeypatch.delenv("DIGIQUANT_POSITION_RISK_FIELDS", raising=False)
         client = FakeSupabaseClient()
         build_materialize_node(MaterializeDeps(client=client))(
             self._state([{"ticker": "SPY", "target_pct": 50}])
@@ -395,7 +395,7 @@ class TestPositionRiskFields:
             assert f not in spy
 
     def test_on_enriches_first_open(self, monkeypatch) -> None:
-        monkeypatch.setenv("OLYMPUS_POSITION_RISK_FIELDS", "1")
+        monkeypatch.setenv("DIGIQUANT_POSITION_RISK_FIELDS", "1")
         client = FakeSupabaseClient(
             canned_reads={
                 "price_history": [{"date": "2026-06-11", "ticker": "AAPL", "close": 200.0}],
@@ -420,7 +420,7 @@ class TestPositionRiskFields:
         assert aapl["target_pct_gain"] == 6.0  # 3 × atr_pct
 
     def test_on_carries_entry_forward_on_hold(self, monkeypatch) -> None:
-        monkeypatch.setenv("OLYMPUS_POSITION_RISK_FIELDS", "1")
+        monkeypatch.setenv("DIGIQUANT_POSITION_RISK_FIELDS", "1")
         client = FakeSupabaseClient(
             canned_reads={
                 "positions": [
@@ -447,7 +447,7 @@ class TestPositionRiskFields:
         assert aapl["horizon_days"] == 21  # decision holding_days does not set risk horizon
 
     def test_on_without_atr_skips_stop_target(self, monkeypatch) -> None:
-        monkeypatch.setenv("OLYMPUS_POSITION_RISK_FIELDS", "1")
+        monkeypatch.setenv("DIGIQUANT_POSITION_RISK_FIELDS", "1")
         client = FakeSupabaseClient(
             canned_reads={
                 "price_history": [{"date": "2026-06-11", "ticker": "AAPL", "close": 200.0}],
@@ -464,7 +464,7 @@ class TestPositionRiskFields:
         assert aapl["entry_price"] == 200.0  # entry still seeded
 
     def test_on_without_analyst_skips_conviction(self, monkeypatch) -> None:
-        monkeypatch.setenv("OLYMPUS_POSITION_RISK_FIELDS", "1")
+        monkeypatch.setenv("DIGIQUANT_POSITION_RISK_FIELDS", "1")
         client = FakeSupabaseClient(
             canned_reads={"price_history": [{"date": "2026-06-11", "ticker": "GLD", "close": 50.0}]}
         )
@@ -476,7 +476,7 @@ class TestPositionRiskFields:
         assert gld["sector_bucket"] == "commodity"  # GLD → commodity (asset_classes.yaml)
 
     def test_cash_row_is_never_enriched(self, monkeypatch) -> None:
-        monkeypatch.setenv("OLYMPUS_POSITION_RISK_FIELDS", "1")
+        monkeypatch.setenv("DIGIQUANT_POSITION_RISK_FIELDS", "1")
         client = FakeSupabaseClient(
             canned_reads={
                 "price_history": [{"date": "2026-06-11", "ticker": "SPY", "close": 400.0}]
@@ -493,7 +493,7 @@ class TestPositionRiskFields:
 
     def test_negative_horizon_defaults_to_21(self, monkeypatch) -> None:
         # A nonsensical negative risk horizon must not persist — fall back to the default.
-        monkeypatch.setenv("OLYMPUS_POSITION_RISK_FIELDS", "1")
+        monkeypatch.setenv("DIGIQUANT_POSITION_RISK_FIELDS", "1")
         client = FakeSupabaseClient(
             canned_reads={
                 "price_history": [{"date": "2026-06-11", "ticker": "SPY", "close": 400.0}]
@@ -516,7 +516,7 @@ class TestPositionRiskFields:
         def _boom(*_a, **_k):
             raise RuntimeError("asset_classes.yaml parse error")
 
-        monkeypatch.setenv("OLYMPUS_POSITION_RISK_FIELDS", "1")
+        monkeypatch.setenv("DIGIQUANT_POSITION_RISK_FIELDS", "1")
         monkeypatch.setattr(pm, "sector_bucket", _boom)
         client = FakeSupabaseClient(
             canned_reads={
@@ -540,7 +540,7 @@ class TestPositionRiskFields:
         def _boom(*_a, **_k):
             raise RuntimeError("enrichment error")
 
-        monkeypatch.setenv("OLYMPUS_POSITION_RISK_FIELDS", "1")
+        monkeypatch.setenv("DIGIQUANT_POSITION_RISK_FIELDS", "1")
         monkeypatch.setattr(pm, "sector_bucket", _boom)
         client = FakeSupabaseClient(
             canned_reads={
