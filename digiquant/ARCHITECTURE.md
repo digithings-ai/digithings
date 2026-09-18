@@ -4230,11 +4230,13 @@ settings placeholder). `NOTIFY_FROM` may be a bare address or `Name <addr@domain
 
 **Behavior:** fail-soft for cron/post-run — transport/network errors log a warning and
 return; missing notify env logs `NOTIFY_NOT_CONFIGURED` with named keys and skips
-(never silent as success in agent probes). Dedupe via `notification_log` insert-first
+(never silent as success in agent probes). Dedupe via `notification_claim` insert-first
 PK `(workspace_id, event_key, sent_date)`; suppression is enforced by Cloudflare at
 send time (a suppressed recipient is reported on the send response, the client raises
-`EmailSuppressedError` and dispatch releases the claim, so the send is retried once the
-address is unsuppressed — there is no pre-send query API); tier gates on digest sections and event
+`EmailSuppressedError` and dispatch releases the claim — a DELETE, which is why the
+claim has its own mutable table while `notification_log` records only what was sent —
+so the send is retried once the address is unsuppressed; there is no pre-send query API);
+tier gates on digest sections and event
 types (`house_weights_nav` for holding-change, `private_book` for execution alerts);
 templates carry unsubscribe link, no broker ids/tokens/keys.
 
@@ -4329,7 +4331,7 @@ House GHA (`pipeline-digiquant.yml`) does not yet pass `CLOUDFLARE_EMAIL_API_TOK
 `chore/` or `feat/` branch (`cursor/*` cannot write workflows). Until then the
 close-out is fail-soft skip.
 
-Migration 103 (`notification_prefs`, `notification_log`) + `tests/dq/notify/`.
+Migration 103 (`notification_prefs`, `notification_log`) and 133 (`notification_claim`) + `tests/dq/notify/`.
 
 ## Billing (T2)
 
