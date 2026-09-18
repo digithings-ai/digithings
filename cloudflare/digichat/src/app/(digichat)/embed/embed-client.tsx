@@ -88,6 +88,7 @@ import {
   buildReadyMessage,
   isAllowedSeedParentOrigin,
   parseSeedMessage,
+  READY_EVENT,
   resolveReadyTargetOrigin,
 } from "@/lib/embed-seed-messages";
 import {
@@ -692,6 +693,10 @@ function EmbedChat({
   useEffect(() => {
     if (typeof window === "undefined") return;
     if (window.parent === window.self) return;
+    // Painted and interactive: release same-window waits (the welcome
+    // typewriter) even when the parent origin cannot be resolved below.
+    document.documentElement.dataset.digichatReady = "1";
+    window.dispatchEvent(new Event(READY_EVENT));
     const ancestorOrigins =
       "ancestorOrigins" in window.location ? window.location.ancestorOrigins : null;
     const target = resolveReadyTargetOrigin({
