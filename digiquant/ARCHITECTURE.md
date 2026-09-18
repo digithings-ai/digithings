@@ -3485,8 +3485,12 @@ that metrics/attribution job order cannot alter meaning.
 - **Finalizer**: `digiquant/scripts/research/finalize_period_accounting.py` — assembles ledger
   fills/lots + marks, runs the engine, persists, shadow-reconciles vs provisional H9 nav
   day return. Flags: `--date`, `--dry-run` (no INSERT), `--shadow` (default persist +
-  reconcile). Mode also via `DIGIQUANT_ACCOUNTING_FINALIZER` / `--mode` (`off` no-op). Cold
-  ledger declines with exit 3 (no partial final). Wired ahead of metrics in
+  reconcile). Mode also via `DIGIQUANT_ACCOUNTING_FINALIZER` / `--mode` (`off` no-op).
+  Declines with exit 3 (no write, no partial final) when the ledger is cold, or when the
+  most recent prior accounting tip closes at a negative `closing_cash` (#4105) — the
+  latter previously fell through to a `nav * cash_pct / 100` cash-only stub (2026-08-26
+  NAV 15.13 vs stitched 101.77), so it now declines instead of fabricating a book. Wired
+  ahead of metrics in
   `pipeline-research-metrics.yml` (`continue-on-error` while shadowing). Holding-lot reads
   page via PostgREST `.range` (`_LOT_PAGE_SIZE=1000`) so closed-lot history cannot silently
   truncate the opening book (#2776).
