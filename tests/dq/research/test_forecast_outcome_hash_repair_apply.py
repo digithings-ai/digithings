@@ -234,7 +234,7 @@ class TestApplyTransactionPathIsProven:
         assert update is not None
         rendered = _render(update) or ""
         # Identifiers are quoted by psycopg.sql, never string-formatted.
-        assert '"public"."olympus_forecast_outcomes"' in rendered
+        assert '"public"."forecast_outcomes"' in rendered
         assert "%s" in rendered
         # Values are bound parameters, not interpolated into the SQL text.
         assert stale["outcome_id"] not in rendered
