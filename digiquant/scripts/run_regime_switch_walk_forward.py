@@ -247,9 +247,9 @@ def run(data_path: Path = DEFAULT_DATA_PATH) -> None:
         holdout_metrics,
     )
 
-    print("\n=== sensitivity check: vol-detection window varied ===")
+    print("\n=== sensitivity check: vol-detection window varied (widened grid) ===")
     sensitivity_oos = {}
-    for vw in (45, 90, 180):
+    for vw in (45, 60, 75, 90, 120, 150, 180):
         fs, _ = run_full(vw)
         mean_oos = statistics.mean(f["out_of_sample"]["vs_flat_dca_pct"] for f in fs)
         sensitivity_oos[vw] = mean_oos
