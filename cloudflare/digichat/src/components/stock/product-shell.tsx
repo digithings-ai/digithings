@@ -219,8 +219,9 @@ export function ProductStockShell({
   const [bootReady, setBootReady] = useState(false);
   const [bootDone, setBootDone] = useState(false);
   const [bootHidden, setBootHidden] = useState(false);
+  // The tool-chain boot is the baseline now; `?boot=` still overrides it.
   const [bootVariant, setBootVariant] = useState<BootLabVariant | null>(() =>
-    resolveBootLabVariant(bootLabVariant ?? null),
+    resolveBootLabVariant(bootLabVariant ?? null) ?? "tooltask",
   );
 
   useEffect(() => {
@@ -244,7 +245,7 @@ export function ProductStockShell({
   // that mount without the prop.
   useEffect(() => {
     if (bootLabVariant != null) return;
-    setBootVariant(resolveBootLabVariant());
+    setBootVariant(resolveBootLabVariant() ?? "tooltask");
   }, [bootLabVariant]);
 
   const deployUi = useMemo<DeployUiValue>(
