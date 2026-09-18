@@ -7,6 +7,7 @@ import {
   type DecisionRecord,
   type ScoredDecisionEpisode,
 } from '@/lib/decision-scorecard';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@digithings/web/ui';
 import { StatTile, fmtPct, signColorClass } from '@/components/observability/shared';
 import DecisionEdgeChart, { type DecisionEdgePoint } from './DecisionEdgeChart';
 
@@ -170,30 +171,28 @@ export default function DecisionEffectiveness({
               Edge by stance
             </h2>
           </div>
-          <div className="mt-4 overflow-x-auto">
-            <table className="w-full text-sm tabular-nums">
-              <thead>
-                <tr className="border-b border-hair text-left font-mono text-[11px] uppercase text-ink-mute">
-                  <th className="py-2 pr-3 font-normal">Stance</th>
-                  <th className="py-2 pr-3 text-right font-normal">N</th>
-                  <th className="py-2 pr-3 text-right font-normal">Mean edge</th>
-                  <th className="py-2 text-right font-normal">Hit rate</th>
-                </tr>
-              </thead>
-              <tbody>
-                {stances.map((item) => (
-                  <tr key={item.stance} className="border-b border-hair/50">
-                    <td className="py-2.5 pr-3 capitalize text-ink">{item.stance}</td>
-                    <td className="py-2.5 pr-3 text-right text-ink-soft">{item.n}</td>
-                    <td className={`py-2.5 pr-3 text-right ${signColorClass(item.meanAlphaPct)}`}>
-                      {fmtPct(item.meanAlphaPct)}
-                    </td>
-                    <td className="py-2.5 text-right text-ink-soft">{item.hitRatePct.toFixed(1)}%</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+          <Table className="mt-4 text-sm tabular-nums">
+            <TableHeader>
+              <TableRow className="text-left font-mono text-[11px] uppercase text-ink-mute hover:bg-transparent">
+                <TableHead className="py-2 pr-3 font-normal">Stance</TableHead>
+                <TableHead numeric className="py-2 pr-3 font-normal">N</TableHead>
+                <TableHead numeric className="py-2 pr-3 font-normal">Mean edge</TableHead>
+                <TableHead numeric className="py-2 font-normal">Hit rate</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {stances.map((item) => (
+                <TableRow key={item.stance} className="border-hair/50">
+                  <TableCell className="py-2.5 pr-3 capitalize text-ink">{item.stance}</TableCell>
+                  <TableCell numeric className="py-2.5 pr-3 text-ink-soft">{item.n}</TableCell>
+                  <TableCell numeric className={`py-2.5 pr-3 ${signColorClass(item.meanAlphaPct)}`}>
+                    {fmtPct(item.meanAlphaPct)}
+                  </TableCell>
+                  <TableCell numeric className="py-2.5 text-ink-soft">{item.hitRatePct.toFixed(1)}%</TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
         </section>
 
         <section className="border-y border-hair py-5" aria-labelledby="conviction-diagnostics-heading">

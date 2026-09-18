@@ -12,10 +12,19 @@ import {
   YAxis,
 } from 'recharts';
 import { computeDecisionScorecard } from '@/lib/decision-scorecard';
-import type { TableRow } from '@/lib/database.types';
-import { EmptyState, SectionCard, StatTile, fmtPct, signColorClass } from './shared';
+import type { TableRow as DbTableRow } from '@/lib/database.types';
+import { EmptyState } from '@digithings/web';
+import { SectionCard, StatTile, fmtPct, signColorClass } from './shared';
 import { useChartColors, withAlpha } from '@/lib/chart-colors';
-import { Button } from '@digithings/web/ui';
+import {
+  Button,
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@digithings/web/ui';
 
 // Buckets use |conviction| thresholds (magnitude), matching decision-scorecard.ts and backtest.py:
 //   low    |conv| < 2
@@ -68,7 +77,7 @@ function ReasoningExpander({ thesis, reflection }: { thesis: string | null; refl
 export default function DecisionScorecardTab({
   decisions,
 }: {
-  decisions: TableRow<'decision_log'>[];
+  decisions: DbTableRow<'decision_log'>[];
 }) {
   const chart = useChartColors();
   const scorecard = useMemo(() => computeDecisionScorecard(decisions), [decisions]);
@@ -81,8 +90,10 @@ export default function DecisionScorecardTab({
   if (!scorecard) {
     return (
       <EmptyState
+        dress="glass"
+        data-reveal
         title="No resolved decisions yet"
-        message="The scorecard scores each analyst call once its holding window elapses and the resolver records realized alpha vs SPY. Decisions are still pending — check back after the next resolution run."
+        body="The scorecard scores each analyst call once its holding window elapses and the resolver records realized alpha vs SPY. Decisions are still pending — check back after the next resolution run."
       />
     );
   }
@@ -173,32 +184,30 @@ export default function DecisionScorecardTab({
       </SectionCard>
 
       <SectionCard title="By conviction bucket" subtitle="Per-bucket sample size, hit rate, and mean conviction.">
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm tabular-nums">
-            <thead>
-              <tr className="text-left text-xs text-ink-mute border-b border-hair">
-                <th className="py-2 pr-4 font-medium">Bucket</th>
-                <th className="py-2 pr-4 font-medium text-right">N</th>
-                <th className="py-2 pr-4 font-medium text-right">Mean alpha</th>
-                <th className="py-2 pr-4 font-medium text-right">Hit rate</th>
-                <th className="py-2 font-medium text-right">Mean conviction</th>
-              </tr>
-            </thead>
-            <tbody>
-              {scorecard.buckets.map((b) => (
-                <tr key={b.bucket} className="border-b border-hair/50">
-                  <td className="py-2 pr-4 text-ink">{BUCKET_LABEL[b.bucket] ?? b.bucket}</td>
-                  <td className="py-2 pr-4 text-right text-ink-soft">{b.n}</td>
-                  <td className={`py-2 pr-4 text-right ${signColorClass(b.meanAlphaPct)}`}>
-                    {fmtPct(b.meanAlphaPct)}
-                  </td>
-                  <td className="py-2 pr-4 text-right text-ink-soft">{b.hitRatePct.toFixed(1)}%</td>
-                  <td className="py-2 text-right text-ink-soft">{b.meanConviction.toFixed(2)}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+        <Table className="text-sm tabular-nums">
+          <TableHeader>
+            <TableRow className="text-left text-xs text-ink-mute border-hair hover:bg-transparent">
+              <TableHead className="py-2 pr-4 font-medium">Bucket</TableHead>
+              <TableHead numeric className="py-2 pr-4 font-medium">N</TableHead>
+              <TableHead numeric className="py-2 pr-4 font-medium">Mean alpha</TableHead>
+              <TableHead numeric className="py-2 pr-4 font-medium">Hit rate</TableHead>
+              <TableHead numeric className="py-2 font-medium">Mean conviction</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {scorecard.buckets.map((b) => (
+              <TableRow key={b.bucket} className="border-hair/50">
+                <TableCell className="py-2 pr-4 text-ink">{BUCKET_LABEL[b.bucket] ?? b.bucket}</TableCell>
+                <TableCell numeric className="py-2 pr-4 text-ink-soft">{b.n}</TableCell>
+                <TableCell numeric className={`py-2 pr-4 ${signColorClass(b.meanAlphaPct)}`}>
+                  {fmtPct(b.meanAlphaPct)}
+                </TableCell>
+                <TableCell numeric className="py-2 pr-4 text-ink-soft">{b.hitRatePct.toFixed(1)}%</TableCell>
+                <TableCell numeric className="py-2 text-ink-soft">{b.meanConviction.toFixed(2)}</TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
       </SectionCard>
 
       {/* Per-decision drill-down — the PM's primary tool to evaluate the agent's reasoning.
@@ -209,42 +218,40 @@ export default function DecisionScorecardTab({
         subtitle="Each resolved call with the agent's original thesis and post-mortem reflection. Expand a row to read the full reasoning."
       >
         {resolved.length ? (
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm tabular-nums">
-              <thead>
-                <tr className="text-left text-xs text-ink-mute border-b border-hair">
-                  <th className="py-2 pr-4 font-medium">Date</th>
-                  <th className="py-2 pr-4 font-medium">Ticker</th>
-                  <th className="py-2 pr-4 font-medium">Stance</th>
-                  <th className="py-2 pr-4 font-medium text-right">Conviction</th>
-                  <th className="py-2 pr-4 font-medium text-right">Return</th>
-                  <th className="py-2 pr-4 font-medium text-right">Alpha</th>
-                  <th className="py-2 font-medium">Reasoning</th>
-                </tr>
-              </thead>
-              <tbody>
-                {resolved.map((d) => (
-                  <tr key={d.id} className="border-b border-hair/50 align-top">
-                    <td className="py-2 pr-4 text-ink-mute text-xs">{d.run_date ?? '—'}</td>
-                    <td className="py-2 pr-4 text-ink font-medium">{d.ticker}</td>
-                    <td className="py-2 pr-4 text-ink-soft capitalize">{d.stance ?? '—'}</td>
-                    <td className="py-2 pr-4 text-right text-ink-soft">
-                      {d.conviction != null ? d.conviction.toFixed(1) : '—'}
-                    </td>
-                    <td className={`py-2 pr-4 text-right ${signColorClass(d.actual_return != null ? d.actual_return * 100 : null)}`}>
-                      {fmtPct(d.actual_return != null ? d.actual_return * 100 : null)}
-                    </td>
-                    <td className={`py-2 pr-4 text-right ${signColorClass(d.alpha != null ? d.alpha * 100 : null)}`}>
-                      {fmtPct(d.alpha != null ? d.alpha * 100 : null)}
-                    </td>
-                    <td className="py-2">
-                      <ReasoningExpander thesis={d.thesis} reflection={d.reflection} />
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+          <Table className="text-sm tabular-nums">
+            <TableHeader>
+              <TableRow className="text-left text-xs text-ink-mute border-hair hover:bg-transparent">
+                <TableHead className="py-2 pr-4 font-medium">Date</TableHead>
+                <TableHead className="py-2 pr-4 font-medium">Ticker</TableHead>
+                <TableHead className="py-2 pr-4 font-medium">Stance</TableHead>
+                <TableHead numeric className="py-2 pr-4 font-medium">Conviction</TableHead>
+                <TableHead numeric className="py-2 pr-4 font-medium">Return</TableHead>
+                <TableHead numeric className="py-2 pr-4 font-medium">Alpha</TableHead>
+                <TableHead className="py-2 font-medium">Reasoning</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {resolved.map((d) => (
+                <TableRow key={d.id} className="border-hair/50 align-top">
+                  <TableCell className="py-2 pr-4 text-ink-mute text-xs">{d.run_date ?? '—'}</TableCell>
+                  <TableCell className="py-2 pr-4 text-ink font-medium">{d.ticker}</TableCell>
+                  <TableCell className="py-2 pr-4 text-ink-soft capitalize">{d.stance ?? '—'}</TableCell>
+                  <TableCell numeric className="py-2 pr-4 text-ink-soft">
+                    {d.conviction != null ? d.conviction.toFixed(1) : '—'}
+                  </TableCell>
+                  <TableCell numeric className={`py-2 pr-4 ${signColorClass(d.actual_return != null ? d.actual_return * 100 : null)}`}>
+                    {fmtPct(d.actual_return != null ? d.actual_return * 100 : null)}
+                  </TableCell>
+                  <TableCell numeric className={`py-2 pr-4 ${signColorClass(d.alpha != null ? d.alpha * 100 : null)}`}>
+                    {fmtPct(d.alpha != null ? d.alpha * 100 : null)}
+                  </TableCell>
+                  <TableCell className="py-2 whitespace-normal">
+                    <ReasoningExpander thesis={d.thesis} reflection={d.reflection} />
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
         ) : (
           <p className="text-xs text-ink-mute">No resolved decisions yet.</p>
         )}

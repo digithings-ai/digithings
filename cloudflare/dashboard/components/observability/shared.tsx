@@ -1,7 +1,6 @@
 'use client';
 
 import type { ReactNode } from 'react';
-import { EmptyState as WebEmptyState } from '@digithings/web';
 import { Card } from '@digithings/web/ui';
 
 /** Percent points → "+3.20%" / "-1.50%" / "—" for null. */
@@ -80,34 +79,3 @@ export function SectionCard({
   );
 }
 
-/**
- * Thin shim over the promoted @digithings/web EmptyState (#1548): dress="glass"
- * is the API name (type/spacing only — it must not look like glass). The
- * promoted part carries its own `.ctl-empty` box, so the retired `.oly-slab`
- * layer was redundant; the reveal hook is the `data-reveal` attribute.
- * The local title/message/note API is preserved for consumers
- * (AttributionTab, DecisionScorecardTab, SystemStatus).
- */
-export function EmptyState({
-  title,
-  message,
-  note,
-  flat = false,
-}: {
-  title: string;
-  message: string;
-  /** Short secondary line for PMs — explains why the tab is empty without reading as "broken". */
-  note?: string;
-  flat?: boolean;
-}) {
-  return (
-    <WebEmptyState
-      dress="glass"
-      className={flat ? 'border-y border-hair' : ''}
-      data-reveal
-      title={title}
-      body={message}
-      note={note}
-    />
-  );
-}

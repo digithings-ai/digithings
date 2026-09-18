@@ -2,6 +2,11 @@
 
 import { ChevronRight } from 'lucide-react';
 import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from '@digithings/web/ui';
+import {
   ActionableList,
   RiskList,
   NarrativeSection,
@@ -16,8 +21,8 @@ import type { DigestPayload, SegmentFreshness } from '@/lib/snapshot-types';
 /**
  * "The read" — the full research digest, structured so it is not eleven equal
  * walls of text. Leads with what Today summarizes (regime + actionable + risk
- * radar); the deeper segments are collapsed `<details>` the owner opens on
- * demand. Per-segment freshness badges mark what's from today vs frozen vs
+ * radar); the deeper segments are collapsed kit `Collapsible` disclosures the
+ * owner opens on demand. Per-segment freshness badges mark what's from today vs frozen vs
  * carried from the last baseline.
  */
 
@@ -137,19 +142,21 @@ export function TheReadBody({ digest }: { digest: DigestPayload }) {
               const body = String(digest[key] ?? '').trim();
               if (!body) return null;
               return (
-                <details key={String(key)} className="group py-4">
-                  <summary className="flex cursor-pointer list-none items-center justify-between gap-3 text-sm font-semibold text-ink-soft hover:text-ink">
+                <Collapsible key={String(key)} className="group py-4">
+                  <CollapsibleTrigger className="flex w-full cursor-pointer items-center justify-between gap-3 text-sm font-semibold text-ink-soft hover:text-ink">
                     <span>{title}</span>
                     <ChevronRight
                       size={16}
-                      className="shrink-0 transition-transform group-open:rotate-90"
+                      className="shrink-0 transition-transform group-data-[open]:rotate-90"
                       aria-hidden
                     />
-                  </summary>
-                  <p className="mt-3 text-sm leading-relaxed text-ink-soft whitespace-pre-line">
-                    {body}
-                  </p>
-                </details>
+                  </CollapsibleTrigger>
+                  <CollapsibleContent keepMounted>
+                    <p className="mt-3 text-sm leading-relaxed text-ink-soft whitespace-pre-line">
+                      {body}
+                    </p>
+                  </CollapsibleContent>
+                </Collapsible>
               );
             })}
           </div>

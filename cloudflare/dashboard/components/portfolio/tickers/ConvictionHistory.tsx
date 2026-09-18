@@ -3,11 +3,18 @@
 import { useState } from 'react';
 import Link from 'next/link';
 import { ArrowUpRight } from 'lucide-react';
-import { Button } from '@digithings/web';
+import { Button, SignedConvictionBadge } from '@digithings/web';
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@digithings/web/ui';
 import type { DecisionLogRow } from '@/lib/holdings-decisions';
 import { directionAdjustedAlpha } from '@/lib/decision-scorecard';
 import { buildPipelineHref } from '@/lib/pipeline-links';
-import { SignedConvictionBadge } from '@/components/shared/signed-conviction-badge';
 import { fmtPct, signColorClass } from '@/components/observability/shared';
 
 const DEFAULT_VISIBLE_ROWS = 6;
@@ -56,70 +63,68 @@ export default function ConvictionHistory({ decisions }: { decisions: DecisionLo
         </span>
       </div>
 
-      <div className="overflow-x-auto">
-        <table className="w-full min-w-[760px] text-sm tabular-nums">
-          <thead>
-            <tr className="border-b border-hair text-left font-mono text-[11px] uppercase text-ink-mute">
-              <th className="px-4 py-2.5 font-normal md:px-5">Date</th>
-              <th className="py-2.5 pr-4 font-normal">View</th>
-              <th className="py-2.5 pr-4 text-right font-normal">Conviction</th>
-              <th className="py-2.5 pr-4 font-normal">Outcome</th>
-              <th className="py-2.5 pr-4 text-right font-normal">Return</th>
-              <th className="py-2.5 pr-4 text-right font-normal">Decision edge</th>
-              <th className="py-2.5 pr-4 text-right font-normal">Source</th>
-            </tr>
-          </thead>
-          <tbody>
-            {visibleRows.map((decision) => {
-              const edge = decision.alpha == null
-                ? null
-                : directionAdjustedAlpha(decision.alpha, decision.stance);
-              const pipelineHref = buildPipelineHref({
-                date: decision.run_date,
-                stage: 'selection',
-              });
-              return (
-                <tr key={decision.id} className="border-b border-hair/50">
-                  <td className="px-4 py-3 font-mono text-xs text-ink-mute md:px-5">
-                    {decision.run_date ?? '—'}
-                  </td>
-                  <td className="py-3 pr-4 font-medium capitalize text-ink">
-                    {decision.stance ?? '—'}
-                  </td>
-                  <td className="py-3 pr-4 text-right">
-                    {decision.conviction != null ? (
-                      <SignedConvictionBadge value={decision.conviction} />
-                    ) : (
-                      <span className="text-ink-mute">—</span>
-                    )}
-                  </td>
-                  <td className="py-3 pr-4 text-xs text-ink-soft">
-                    {decision.status === 'resolved'
-                      ? `Scored${decision.holding_days != null ? ` · ${decision.holding_days}d` : ''}`
-                      : 'Awaiting outcome'}
-                  </td>
-                  <td className="py-3 pr-4 text-right">
-                    <OutcomeCell status={decision.status} value={decision.actual_return} />
-                  </td>
-                  <td className={`py-3 pr-4 text-right ${signColorClass(edge)}`}>
-                    {decision.status === 'resolved'
-                      ? fmtPct(edge == null ? null : edge * 100)
-                      : '—'}
-                  </td>
-                  <td className="py-3 pr-4 text-right">
-                    <Link
-                      href={pipelineHref}
-                      className="inline-flex items-center gap-1 text-xs text-accent hover:underline"
-                    >
-                      Open in Pipeline <ArrowUpRight size={13} aria-hidden />
-                    </Link>
-                  </td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
-      </div>
+      <Table className="min-w-[760px] text-sm tabular-nums">
+        <TableHeader>
+          <TableRow className="border-hair text-left font-mono text-[11px] uppercase text-ink-mute hover:bg-transparent">
+            <TableHead className="px-4 py-2.5 font-normal md:px-5">Date</TableHead>
+            <TableHead className="py-2.5 pr-4 font-normal">View</TableHead>
+            <TableHead numeric className="py-2.5 pr-4 font-normal">Conviction</TableHead>
+            <TableHead className="py-2.5 pr-4 font-normal">Outcome</TableHead>
+            <TableHead numeric className="py-2.5 pr-4 font-normal">Return</TableHead>
+            <TableHead numeric className="py-2.5 pr-4 font-normal">Decision edge</TableHead>
+            <TableHead numeric className="py-2.5 pr-4 font-normal">Source</TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {visibleRows.map((decision) => {
+            const edge = decision.alpha == null
+              ? null
+              : directionAdjustedAlpha(decision.alpha, decision.stance);
+            const pipelineHref = buildPipelineHref({
+              date: decision.run_date,
+              stage: 'selection',
+            });
+            return (
+              <TableRow key={decision.id} className="border-hair/50">
+                <TableCell className="px-4 py-3 font-mono text-xs text-ink-mute md:px-5">
+                  {decision.run_date ?? '—'}
+                </TableCell>
+                <TableCell className="py-3 pr-4 font-medium capitalize text-ink">
+                  {decision.stance ?? '—'}
+                </TableCell>
+                <TableCell numeric className="py-3 pr-4">
+                  {decision.conviction != null ? (
+                    <SignedConvictionBadge value={decision.conviction} />
+                  ) : (
+                    <span className="text-ink-mute">—</span>
+                  )}
+                </TableCell>
+                <TableCell className="py-3 pr-4 text-xs text-ink-soft">
+                  {decision.status === 'resolved'
+                    ? `Scored${decision.holding_days != null ? ` · ${decision.holding_days}d` : ''}`
+                    : 'Awaiting outcome'}
+                </TableCell>
+                <TableCell numeric className="py-3 pr-4">
+                  <OutcomeCell status={decision.status} value={decision.actual_return} />
+                </TableCell>
+                <TableCell numeric className={`py-3 pr-4 ${signColorClass(edge)}`}>
+                  {decision.status === 'resolved'
+                    ? fmtPct(edge == null ? null : edge * 100)
+                    : '—'}
+                </TableCell>
+                <TableCell numeric className="py-3 pr-4">
+                  <Link
+                    href={pipelineHref}
+                    className="inline-flex items-center gap-1 text-xs text-accent hover:underline"
+                  >
+                    Open in Pipeline <ArrowUpRight size={13} aria-hidden />
+                  </Link>
+                </TableCell>
+              </TableRow>
+            );
+          })}
+        </TableBody>
+      </Table>
 
       {hiddenCount > 0 ? (
         <div className="flex justify-center border-t border-hair px-4 py-3">

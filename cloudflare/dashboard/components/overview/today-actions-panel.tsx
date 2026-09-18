@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { useMemo, useState } from 'react';
 import { ArrowRight, ArrowDownRight, ArrowUpRight, XCircle, PlusCircle, ListChecks } from 'lucide-react';
-import { Card } from '@digithings/web/ui';
+import { Button, Card } from '@digithings/web/ui';
 import { EVENT_COLORS, withAlpha } from '@/lib/chart-colors';
 import { usablePmRationale } from '@/lib/pm-rationale';
 import { isMaterialRebalanceAction } from '@/lib/rebalance-actions';
@@ -178,13 +178,14 @@ export function TodayActionsPanel({
 
       {holds.length > 0 && (
         <div className="border-t border-hair">
-          <button
+          <Button
             type="button"
+            variant="ghost"
             onClick={() => setShowHolds((v) => !v)}
-            className="w-full px-5 py-2 text-left text-[11px] text-ink-mute hover:text-ink-soft transition-colors"
+            className="h-auto w-full justify-start whitespace-normal px-5 py-2 text-left text-[11px] text-ink-mute hover:text-ink-soft"
           >
             {showHolds ? '▾' : '▸'} {holds.length} position{holds.length !== 1 ? 's' : ''} held
-          </button>
+          </Button>
           {showHolds && (
             <div className="divide-y divide-hair/60">
               {holds.map((a, i) => (
@@ -198,13 +199,14 @@ export function TodayActionsPanel({
       {/* Sizer-removed rows: collapsed by default so they don't bury book-building actions */}
       {sizerRemoved.length > 0 && (
         <div className="border-t border-hair">
-          <button
+          <Button
             type="button"
+            variant="ghost"
             onClick={() => setShowRemoved((v) => !v)}
-            className="w-full px-5 py-2 text-left text-[11px] text-ink-mute hover:text-ink-soft transition-colors"
+            className="h-auto w-full justify-start whitespace-normal px-5 py-2 text-left text-[11px] text-ink-mute hover:text-ink-soft"
           >
             {showRemoved ? '▾' : '▸'} {sizerRemoved.length} removed by risk sizing
-          </button>
+          </Button>
           {showRemoved && (
             <div className="divide-y divide-hair/60">
               {sizerRemoved.map((a, i) => (

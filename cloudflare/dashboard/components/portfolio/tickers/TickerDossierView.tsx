@@ -3,7 +3,15 @@
 import { useMemo, useState } from 'react';
 import Link from 'next/link';
 import { ArrowLeft, ArrowUpRight } from 'lucide-react';
-import { Button, gloomberbTickerUrl } from '@digithings/web';
+import { Button, SignedConvictionBadge, gloomberbTickerUrl } from '@digithings/web';
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@digithings/web/ui';
 import { useDashboard } from '@/lib/dashboard-context';
 import { useAsyncData } from '@/lib/hooks/use-async-data';
 import { fetchTickerDossier } from '@/lib/queries';
@@ -13,7 +21,6 @@ import { buildPipelineHref } from '@/lib/pipeline-links';
 import { SUBPAGE_MAX } from '@/components/layout-constants';
 import PortfolioSectionNav from '@/components/portfolio/PortfolioSectionNav';
 import PageSkeleton from '@/components/page-skeleton';
-import { SignedConvictionBadge } from '@/components/shared/signed-conviction-badge';
 import { EntitledSurface } from '@/components/entitled-surface';
 import { formatPct, pnlColor } from '@/components/ui';
 import ConvictionHistory from './ConvictionHistory';
@@ -429,42 +436,40 @@ export default function TickerDossierView({
               />
               <EntitledSurface artifactClass="house_weights_nav" tier={tier}>
                 {positionEvents.length ? (
-                  <div className="overflow-x-auto">
-                    <table className="w-full min-w-[760px] text-sm tabular-nums">
-                      <thead>
-                        <tr className="border-b border-hair text-left font-mono text-[11px] uppercase text-ink-mute">
-                          <th className="px-4 py-2.5 font-normal md:px-5">Date</th>
-                          <th className="py-2.5 pr-4 font-normal">Action</th>
-                          <th className="py-2.5 pr-4 text-right font-normal">Allocation</th>
-                          <th className="py-2.5 pr-4 text-right font-normal">Change</th>
-                          <th className="py-2.5 pr-4 text-right font-normal">Price</th>
-                          <th className="py-2.5 pr-4 font-normal">Reason</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {visiblePositionEvents.map((event, index) => (
-                          <tr key={`${event.date}-${event.event}-${index}`} className="border-b border-hair/50">
-                            <td className="px-4 py-3 font-mono text-xs text-ink-mute md:px-5">
-                              {event.date}
-                            </td>
-                            <td className="py-3 pr-4 font-medium text-ink">{event.event}</td>
-                            <td className="py-3 pr-4 text-right text-ink-soft">
-                              {formatWeight(event.weight_pct)}
-                            </td>
-                            <td className="py-3 pr-4 text-right text-ink-soft">
-                              {formatWeightChange(event.weight_change_pct)}
-                            </td>
-                            <td className="py-3 pr-4 text-right text-ink-soft">
-                              {formatPrice(event.price)}
-                            </td>
-                            <td className="max-w-xl py-3 pr-4 text-ink-soft">
-                              {eventReason(event.reason)}
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
+                  <Table className="min-w-[760px] text-sm tabular-nums">
+                    <TableHeader>
+                      <TableRow className="border-hair text-left font-mono text-[11px] uppercase text-ink-mute hover:bg-transparent">
+                        <TableHead className="px-4 py-2.5 font-normal md:px-5">Date</TableHead>
+                        <TableHead className="py-2.5 pr-4 font-normal">Action</TableHead>
+                        <TableHead numeric className="py-2.5 pr-4 font-normal">Allocation</TableHead>
+                        <TableHead numeric className="py-2.5 pr-4 font-normal">Change</TableHead>
+                        <TableHead numeric className="py-2.5 pr-4 font-normal">Price</TableHead>
+                        <TableHead className="py-2.5 pr-4 font-normal">Reason</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {visiblePositionEvents.map((event, index) => (
+                        <TableRow key={`${event.date}-${event.event}-${index}`} className="border-hair/50">
+                          <TableCell className="px-4 py-3 font-mono text-xs text-ink-mute md:px-5">
+                            {event.date}
+                          </TableCell>
+                          <TableCell className="py-3 pr-4 font-medium text-ink">{event.event}</TableCell>
+                          <TableCell numeric className="py-3 pr-4 text-ink-soft">
+                            {formatWeight(event.weight_pct)}
+                          </TableCell>
+                          <TableCell numeric className="py-3 pr-4 text-ink-soft">
+                            {formatWeightChange(event.weight_change_pct)}
+                          </TableCell>
+                          <TableCell numeric className="py-3 pr-4 text-ink-soft">
+                            {formatPrice(event.price)}
+                          </TableCell>
+                          <TableCell className="max-w-xl py-3 pr-4 whitespace-normal text-ink-soft">
+                            {eventReason(event.reason)}
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
                 ) : (
                   <p className="px-4 py-6 text-sm text-ink-mute md:px-5">
                     {held

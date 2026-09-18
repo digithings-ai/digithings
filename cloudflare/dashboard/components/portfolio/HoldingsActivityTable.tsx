@@ -2,6 +2,14 @@
 
 import { useMemo, useState, Fragment } from 'react';
 import Link from 'next/link';
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@digithings/web/ui';
 import type { DashboardPositionEvent } from '@/lib/types';
 import { isMaterialBookEvent } from '@/lib/brief-book-event';
 import { thesisDetailHref, tickerDossierHref } from '@/lib/portfolio-url-state';
@@ -25,8 +33,8 @@ function EventDetail({ event }: { event: DashboardPositionEvent }) {
   const reason = usablePmRationale(event.reason);
   const isSell = event.event === 'TRIM' || event.event === 'EXIT';
   return (
-    <tr data-testid="ledger-event-detail" className="bg-ink/[0.02]">
-      <td colSpan={7} className="border-t border-hair/70 px-3 py-3 sm:px-4">
+    <TableRow data-testid="ledger-event-detail" className="border-0 bg-ink/[0.02] hover:bg-ink/[0.02]">
+      <TableCell colSpan={7} className="border-t border-hair/70 px-3 py-3 sm:px-4 whitespace-normal">
         <div className="grid gap-3 text-[0.72rem] text-ink-soft sm:grid-cols-2">
           <dl className="m-0 grid grid-cols-[7.5rem_1fr] gap-x-3 gap-y-1.5 font-mono tabular-nums">
             <dt className="uppercase tracking-wider text-ink-mute">Avg entry</dt>
@@ -88,8 +96,8 @@ function EventDetail({ event }: { event: DashboardPositionEvent }) {
             </div>
           </div>
         </div>
-      </td>
-    </tr>
+      </TableCell>
+    </TableRow>
   );
 }
 
@@ -116,22 +124,22 @@ export default function HoldingsActivityTable({ events }: { events: DashboardPos
         </span>
       </div>
       {activity.length ? (
-        <div data-region="holdings-activity-scroll" className="min-h-0 flex-1 overflow-auto">
-          <table className="w-full table-fixed border-collapse font-mono text-[0.78rem] [font-variant-numeric:tabular-nums]">
-            <thead className="sticky top-0 z-10 bg-surface">
-              <tr className="border-b border-hair text-[0.58rem] uppercase tracking-[0.1em] text-ink-mute">
-                <th className="w-[22%] px-2 py-2.5 text-left font-normal sm:px-4 md:w-auto">Date</th>
-                <th className="w-[14%] px-2 py-2.5 text-left font-normal sm:px-3 md:w-auto">Ticker</th>
-                <th className="w-[14%] px-2 py-2.5 text-left font-normal sm:px-3 md:w-auto">Action</th>
-                <th className="w-[16%] px-2 py-2.5 text-right font-normal sm:px-3 md:w-auto">Change</th>
-                <th className="hidden px-3 py-2.5 text-right font-normal lg:table-cell">Entry</th>
-                <th className="hidden px-3 py-2.5 text-right font-normal md:table-cell">Fill</th>
-                <th className="w-[18%] px-2 py-2.5 text-right font-normal sm:px-3 md:w-auto">
+        <div data-region="holdings-activity-scroll" className="min-h-0 flex-1 overflow-auto [&>div]:overflow-visible">
+          <Table className="table-fixed border-collapse font-mono text-[0.78rem] [font-variant-numeric:tabular-nums]">
+            <TableHeader className="sticky top-0 z-10 bg-surface">
+              <TableRow className="border-hair text-[0.58rem] uppercase tracking-[0.1em] text-ink-mute hover:bg-transparent">
+                <TableHead className="w-[22%] px-2 py-2.5 font-normal sm:px-4 md:w-auto">Date</TableHead>
+                <TableHead className="w-[14%] px-2 py-2.5 font-normal sm:px-3 md:w-auto">Ticker</TableHead>
+                <TableHead className="w-[14%] px-2 py-2.5 font-normal sm:px-3 md:w-auto">Action</TableHead>
+                <TableHead numeric className="w-[16%] px-2 py-2.5 font-normal sm:px-3 md:w-auto">Change</TableHead>
+                <TableHead numeric className="hidden px-3 py-2.5 font-normal lg:table-cell">Entry</TableHead>
+                <TableHead numeric className="hidden px-3 py-2.5 font-normal md:table-cell">Fill</TableHead>
+                <TableHead numeric className="w-[18%] px-2 py-2.5 font-normal sm:px-3 md:w-auto">
                   Realized
-                </th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-hair">
+                </TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody className="divide-y divide-hair">
               {activity.map((event, index) => {
                 const key = eventKey(event, index);
                 const open = expandedKey === key;
@@ -139,9 +147,9 @@ export default function HoldingsActivityTable({ events }: { events: DashboardPos
                 const realized = event.realized_return_pct;
                 return (
                   <Fragment key={key}>
-                    <tr
+                    <TableRow
                       data-testid={`ledger-row-${event.ticker}-${event.date}`}
-                      className={`cursor-pointer hover:bg-ink/[0.03] ${open ? 'bg-ink/[0.02]' : ''}`}
+                      className={`cursor-pointer border-0 hover:bg-ink/[0.03] has-aria-expanded:bg-transparent ${open ? 'bg-ink/[0.02]' : ''}`}
                       onClick={() => setExpandedKey(open ? null : key)}
                       onKeyDown={(e) => {
                         if (e.key === 'Enter' || e.key === ' ') {
@@ -152,8 +160,8 @@ export default function HoldingsActivityTable({ events }: { events: DashboardPos
                       tabIndex={0}
                       aria-expanded={open}
                     >
-                      <td className="px-2 py-2.5 text-ink-mute sm:px-4">{event.date}</td>
-                      <td className="px-2 py-2.5 sm:px-3">
+                      <TableCell className="px-2 py-2.5 text-ink-mute sm:px-4">{event.date}</TableCell>
+                      <TableCell className="px-2 py-2.5 sm:px-3">
                         <Link
                           href={tickerDossierHref(event.ticker)}
                           className="font-semibold text-ink hover:text-accent hover:underline"
@@ -162,21 +170,22 @@ export default function HoldingsActivityTable({ events }: { events: DashboardPos
                         >
                           {event.ticker}
                         </Link>
-                      </td>
-                      <td className="px-2 py-2.5 text-ink-soft sm:px-3">{event.event}</td>
-                      <td className="px-2 py-2.5 text-right text-ink-soft sm:px-3">
+                      </TableCell>
+                      <TableCell className="px-2 py-2.5 text-ink-soft sm:px-3">{event.event}</TableCell>
+                      <TableCell numeric className="px-2 py-2.5 text-ink-soft sm:px-3">
                         {event.weight_change_pct != null
                           ? `${event.weight_change_pct > 0 ? '+' : ''}${event.weight_change_pct.toFixed(1)}pp`
                           : '—'}
-                      </td>
-                      <td className="hidden px-3 py-2.5 text-right text-ink-soft lg:table-cell">
+                      </TableCell>
+                      <TableCell numeric className="hidden px-3 py-2.5 text-ink-soft lg:table-cell">
                         {money(event.avg_entry_price)}
-                      </td>
-                      <td className="hidden px-3 py-2.5 text-right text-ink-soft md:table-cell">
+                      </TableCell>
+                      <TableCell numeric className="hidden px-3 py-2.5 text-ink-soft md:table-cell">
                         {money(event.price)}
-                      </td>
-                      <td
-                        className={`px-2 py-2.5 text-right sm:px-3 ${
+                      </TableCell>
+                      <TableCell
+                        numeric
+                        className={`px-2 py-2.5 sm:px-3 ${
                           !isSell || realized == null
                             ? 'text-ink-mute'
                             : realized >= 0
@@ -185,14 +194,14 @@ export default function HoldingsActivityTable({ events }: { events: DashboardPos
                         }`}
                       >
                         {isSell ? signedPct(realized) : '—'}
-                      </td>
-                    </tr>
+                      </TableCell>
+                    </TableRow>
                     {open ? <EventDetail event={event} /> : null}
                   </Fragment>
                 );
               })}
-            </tbody>
-          </table>
+            </TableBody>
+          </Table>
         </div>
       ) : (
         <p className="px-6 py-10 text-center text-sm text-ink-mute">No position changes recorded.</p>

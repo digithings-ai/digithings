@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import type { Position } from '@/lib/types';
 import type { PlanTier } from '@/lib/entitlements';
-import { ConvictionMeter } from '@/components/shared/conviction-meter';
+import { ConvictionMeter } from '@digithings/web';
 import { EntitledSurface } from '@/components/entitled-surface';
 
 export function ThesisHoldingsExpressing({

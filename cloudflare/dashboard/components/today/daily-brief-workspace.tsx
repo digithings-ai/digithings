@@ -12,6 +12,14 @@ import {
   Shield,
   Wallet,
 } from 'lucide-react';
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@digithings/web/ui';
 import type {
   ActionableItem,
   ResearchRunDiagnostics,
@@ -655,27 +663,27 @@ export function DailyBriefWorkspace({
                 Open book
               </Link>
             </div>
-            <div ref={bookScrollRef} className="overflow-x-auto">
+            <div ref={bookScrollRef} className="overflow-x-auto [&>div]:overflow-visible">
               {held.length === 0 ? (
                 <p className="py-3 text-sm text-ink-mute">No positions held; the book is all cash.</p>
               ) : (
                 <>
-                  <table ref={bookTableRef} className="w-full min-w-[34rem] border-collapse text-left">
-                    <thead>
-                      <tr className="text-[10px] font-bold uppercase tracking-widest text-ink-mute">
-                        <th className="py-2 pr-3 font-bold">Holding</th>
-                        <th className="px-3 py-2 text-right font-bold">Weight</th>
-                        <th className="px-3 py-2 text-right font-bold">Change</th>
-                        <th className="py-2 pl-3 pr-4 text-right font-bold">Day</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-hair/70">
+                  <Table ref={bookTableRef} className="min-w-[34rem] border-collapse text-left">
+                    <TableHeader>
+                      <TableRow className="text-[10px] font-bold uppercase tracking-widest text-ink-mute hover:bg-transparent">
+                        <TableHead className="py-2 pr-3 font-bold">Holding</TableHead>
+                        <TableHead numeric className="px-3 py-2 font-bold">Weight</TableHead>
+                        <TableHead numeric className="px-3 py-2 font-bold">Change</TableHead>
+                        <TableHead numeric className="py-2 pl-3 pr-4 font-bold">Day</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody className="divide-y divide-hair/70">
                       {held.slice(0, 6).map((position) => {
                         const dayTone = metricTone(position.day_change_pct ?? null);
                         const deltaTone = metricTone(position.normalizedDelta ?? null);
                         return (
-                          <tr key={position.ticker} className="text-xs">
-                            <td className="py-2.5 pr-3">
+                          <TableRow key={position.ticker} className="border-0 text-xs hover:bg-transparent">
+                            <TableCell className="py-2.5 pr-3 whitespace-normal">
                               <Link
                                 href={tickerDossierHref(position.ticker)}
                                 className="font-mono font-bold text-ink hover:text-accent hover:underline"
@@ -683,21 +691,21 @@ export function DailyBriefWorkspace({
                                 {position.ticker}
                               </Link>
                               <span className="ml-2 text-ink-mute">{position.name}</span>
-                            </td>
-                            <td className="px-3 py-2.5 text-right font-mono tabular-nums text-ink">
+                            </TableCell>
+                            <TableCell numeric className="px-3 py-2.5 font-mono text-ink">
                               {position.normalizedWeight.toFixed(1)}%
-                            </td>
-                            <td className={`px-3 py-2.5 text-right font-mono tabular-nums ${toneClass(deltaTone)}`}>
+                            </TableCell>
+                            <TableCell numeric className={`px-3 py-2.5 font-mono ${toneClass(deltaTone)}`}>
                               {position.normalizedDelta == null ? '—' : `${position.normalizedDelta > 0 ? '+' : ''}${position.normalizedDelta.toFixed(1)}pp`}
-                            </td>
-                            <td className={`py-2.5 pl-3 pr-4 text-right font-mono tabular-nums ${toneClass(dayTone)}`}>
+                            </TableCell>
+                            <TableCell numeric className={`py-2.5 pl-3 pr-4 font-mono ${toneClass(dayTone)}`}>
                               {signedPct(position.day_change_pct ?? null)}
-                            </td>
-                          </tr>
+                            </TableCell>
+                          </TableRow>
                         );
                       })}
-                    </tbody>
-                  </table>
+                    </TableBody>
+                  </Table>
                   {showBookFade ? (
                     <div
                       aria-hidden="true"

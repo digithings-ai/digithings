@@ -6,7 +6,12 @@ import type { ThesisStory } from '@/lib/thesis-story';
 import { decisionNodeFor } from '@/lib/holdings-decisions';
 import { buildPipelineHref } from '@/lib/pipeline-links';
 import { thesisDetailHref } from '@/lib/portfolio-url-state';
-import { ConvictionMeter } from '@/components/shared/conviction-meter';
+import { ConvictionMeter } from '@digithings/web';
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from '@digithings/web/ui';
 import { AsOfBadge } from '@/components/shared/as-of-badge';
 import { ThesisCriteriaColumns } from '@/components/portfolio/theses/ThesisCriteriaColumns';
 import { VehicleExpressionRow } from '@/components/portfolio/theses/VehicleExpressionRow';
@@ -60,11 +65,11 @@ export function ThesisStoryCard({
       : 'Confidence not set';
 
   return (
-    <details
+    <Collapsible
       className="group border-y border-hair first:border-t-0 last:border-b-0"
-      open={defaultOpen}
+      defaultOpen={defaultOpen}
     >
-      <summary className="cursor-pointer list-none px-4 py-4 transition-colors hover:bg-ink/[0.02] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-accent/50 [&::-webkit-details-marker]:hidden">
+      <CollapsibleTrigger className="w-full cursor-pointer px-4 py-4 transition-colors hover:bg-ink/[0.02] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-accent/50">
         <div className="flex items-start justify-between gap-4">
           <div className="flex min-w-0 items-start gap-3">
             {rank != null && (
@@ -75,7 +80,7 @@ export function ThesisStoryCard({
             <ChevronRight
               size={18}
               aria-hidden
-              className="mt-0.5 shrink-0 text-ink-mute transition-transform group-open:rotate-90"
+              className="mt-0.5 shrink-0 text-ink-mute transition-transform group-data-[open]:rotate-90"
             />
             <h3 className="font-display text-xl leading-snug text-ink">{thesis.name}</h3>
           </div>
@@ -86,9 +91,9 @@ export function ThesisStoryCard({
           ) : null}
         </div>
 
-      </summary>
+      </CollapsibleTrigger>
 
-      <div className="space-y-5 px-4 pb-5 pl-[3.25rem]">
+      <CollapsibleContent keepMounted className="space-y-5 px-4 pb-5 pl-[3.25rem]">
         <div className="flex flex-wrap items-center gap-x-5 gap-y-2 border-b border-hair pb-3">
           <div className="flex items-center gap-2">
             <ConvictionMeter value={pips} max={CONFIDENCE_PIPS} srLabel={confidenceLabel} />
@@ -146,7 +151,7 @@ export function ThesisStoryCard({
         >
           Open thesis detail <ArrowUpRight size={12} aria-hidden />
         </Link>
-      </div>
-    </details>
+      </CollapsibleContent>
+    </Collapsible>
   );
 }

@@ -3,6 +3,15 @@
 import { useState } from 'react';
 import { ArrowUpRight, Calendar, FileText, GitBranch, Scale, TrendingUp } from 'lucide-react';
 import { gloomberbTickerUrl } from '@digithings/web';
+import {
+  Button,
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@digithings/web/ui';
 import DocumentExpandInline from '@/components/library/DocumentExpandInline';
 import { SafeMarkdown } from '@/components/SafeMarkdown';
 import { canonicalPmTitle } from '@/components/portfolio/tabs/palette-and-format';
@@ -102,19 +111,19 @@ export function PmRebalancePanel({ payload }: { payload: Record<string, unknown>
           </div>
         ) : null}
         {actions.length > 0 ? (
-          <div className="overflow-x-auto">
+          <div>
             <p className="mb-2 text-xs font-semibold uppercase text-ink-mute">Actions</p>
-            <table className="w-full text-left text-xs border-collapse">
-              <thead>
-                <tr className="border-b border-hair text-ink-mute">
-                  <th className="py-2 pr-3 font-medium">Ticker</th>
-                  <th className="py-2 pr-3 font-medium">Action</th>
-                  <th className="py-2 pr-3 font-medium text-right">Current</th>
-                  <th className="py-2 pr-3 font-medium text-right">Target</th>
-                  <th className="py-2 font-medium">Rationale</th>
-                </tr>
-              </thead>
-              <tbody>
+            <Table className="text-left text-xs border-collapse">
+              <TableHeader>
+                <TableRow className="border-hair text-ink-mute hover:bg-transparent">
+                  <TableHead className="py-2 pr-3 font-medium">Ticker</TableHead>
+                  <TableHead className="py-2 pr-3 font-medium">Action</TableHead>
+                  <TableHead numeric className="py-2 pr-3 font-medium">Current</TableHead>
+                  <TableHead numeric className="py-2 pr-3 font-medium">Target</TableHead>
+                  <TableHead className="py-2 font-medium">Rationale</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
                 {actions.map((a, i) => {
                   const act = String(a.action ?? '').toLowerCase();
                   const acColor =
@@ -128,19 +137,19 @@ export function PmRebalancePanel({ payload }: { payload: Record<string, unknown>
                   const targetPct =
                     (a as Record<string, unknown>).target_pct ?? (a as Record<string, unknown>).recommended_pct;
                   return (
-                    <tr key={i} className="border-b border-hair/60 align-top">
-                      <td className="py-2 pr-3 font-mono text-accent">{String(a.ticker ?? '—')}</td>
-                      <td className={`py-2 pr-3 font-medium ${acColor}`}>{String(a.action ?? '—')}</td>
-                      <td className="py-2 pr-3 text-right tabular-nums">{fmtPct(a.current_pct)}</td>
-                      <td className="py-2 pr-3 text-right tabular-nums">{fmtPct(targetPct)}</td>
-                      <td className="py-2 text-ink-soft whitespace-pre-wrap">
+                    <TableRow key={i} className="border-hair/60 align-top">
+                      <TableCell className="py-2 pr-3 font-mono text-accent">{String(a.ticker ?? '—')}</TableCell>
+                      <TableCell className={`py-2 pr-3 font-medium ${acColor}`}>{String(a.action ?? '—')}</TableCell>
+                      <TableCell numeric className="py-2 pr-3">{fmtPct(a.current_pct)}</TableCell>
+                      <TableCell numeric className="py-2 pr-3">{fmtPct(targetPct)}</TableCell>
+                      <TableCell className="py-2 text-ink-soft whitespace-pre-wrap">
                         {cleanMemoProse(String(a.rationale ?? '—'))}
-                      </td>
-                    </tr>
+                      </TableCell>
+                    </TableRow>
                   );
                 })}
-              </tbody>
-            </table>
+              </TableBody>
+            </Table>
           </div>
         ) : !notes ? (
           <SafeMarkdown>{md}</SafeMarkdown>
@@ -342,18 +351,19 @@ export function DeliberationsTab() {
                 const active = activeId === d.id;
                 return (
                   <div key={d.id}>
-                    <button
+                    <Button
                       type="button"
+                      variant="ghost"
                       onClick={() => setActiveId(active ? null : d.id)}
                       aria-expanded={active}
-                      className={`w-full text-left px-5 py-3 flex items-center gap-3 hover:bg-ink/[0.03] transition-colors ${
+                      className={`h-auto w-full justify-start gap-3 whitespace-normal px-5 py-3 text-left hover:bg-ink/[0.03] ${
                         active ? 'bg-warn/[0.06]' : ''
                       }`}
                     >
                       <FileText size={14} className="text-warn/70 shrink-0" />
                       <span className="font-mono text-sm">{canonicalPmTitle(d.path)}</span>
                       <span className="ml-auto font-mono text-xs text-ink-mute">{d.date ?? ''}</span>
-                    </button>
+                    </Button>
                     {active ? (
                       <DocumentExpandInline
                         accent="amber"

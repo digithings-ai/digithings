@@ -3,8 +3,8 @@
 import { useEffect, useMemo, useState } from 'react';
 import { ChevronDown } from 'lucide-react';
 import { Skeleton, SkeletonGroup } from '@digithings/web';
+import { EmptyState } from '@digithings/web';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@digithings/web/ui';
-import { EmptyState } from '@/components/observability/shared';
 import { FreshnessBanner, latestSuccessfulRun } from '@/components/system/freshness-banner';
 import { RunEconomicsRow } from '@/components/system/run-economics-row';
 import { EntitledSurface } from '@/components/entitled-surface';
@@ -90,8 +90,10 @@ export default function PipelineRunHealth({
           </SkeletonGroup>
         ) : !dayRuns.length ? (
           <EmptyState
+            dress="glass"
+            data-reveal
             title="No run for this date"
-            message="Pick a date with a recorded pipeline run to see duration, segment counts, and carry/fail stats."
+            body="Pick a date with a recorded pipeline run to see duration, segment counts, and carry/fail stats."
           />
         ) : (
           <>

@@ -11,8 +11,17 @@ import {
   XAxis,
   YAxis,
 } from 'recharts';
-import type { TableRow } from '@/lib/database.types';
-import { EmptyState, SectionCard, StatTile, fmtPct, signColorClass } from './shared';
+import type { TableRow as DbTableRow } from '@/lib/database.types';
+import { EmptyState } from '@digithings/web';
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@digithings/web/ui';
+import { SectionCard, StatTile, fmtPct, signColorClass } from './shared';
 import { useChartColors, withAlpha } from '@/lib/chart-colors';
 
 const TOP_N = 14;
@@ -26,7 +35,7 @@ export default function AttributionTab({
   date,
   embedded = false,
 }: {
-  attribution: TableRow<'position_attribution'>[];
+  attribution: DbTableRow<'position_attribution'>[];
   date: string | null;
   embedded?: boolean;
 }) {
@@ -52,10 +61,12 @@ export default function AttributionTab({
   if (!summary) {
     return (
       <EmptyState
+        dress="glass"
+        className={embedded ? 'border-y border-hair' : ''}
+        data-reveal
         title="No current-book lookback rows yet"
-        message="The 21-day current-book lookback diagnostic is computed daily by refresh_attribution.py after EOD prices land, once the paper book holds positions. It is not realized period P&L."
+        body="The 21-day current-book lookback diagnostic is computed daily by refresh_attribution.py after EOD prices land, once the paper book holds positions. It is not realized period P&L."
         note="Diagnostic only — realized daily contribution comes from accounting periods."
-        flat={embedded}
       />
     );
   }
@@ -154,42 +165,40 @@ export default function AttributionTab({
         subtitle="Single-benchmark lookback diagnostic: contribution (weight × return), selection (weight × excess vs SPY), and total active over the same window. Sums reconcile to active return when every holding is priced. Not realized period attribution."
         flat={embedded}
       >
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm tabular-nums">
-            <thead>
-              <tr className="text-left text-xs text-ink-mute border-b border-hair">
-                <th className="py-2 pr-4 font-medium">Ticker</th>
-                <th className="py-2 pr-4 font-medium">Sector</th>
-                <th className="py-2 pr-4 font-medium text-right">Weight</th>
-                <th className="py-2 pr-4 font-medium text-right">Return</th>
-                <th className="py-2 pr-4 font-medium text-right">Contribution</th>
-                <th className="py-2 pr-4 font-medium text-right">Selection</th>
-                <th className="py-2 font-medium text-right">Total</th>
-              </tr>
-            </thead>
-            <tbody>
-              {attribution.map((r) => (
-                <tr key={r.id} className="border-b border-hair/50">
-                  <td className="py-2 pr-4 text-ink">{r.ticker}</td>
-                  <td className="py-2 pr-4 text-ink-mute truncate max-w-[160px]">{r.sector_bucket ?? '—'}</td>
-                  <td className="py-2 pr-4 text-right text-ink-soft">{fmtPct(r.weight_pct, 1)}</td>
-                  <td className={`py-2 pr-4 text-right ${signColorClass(r.position_return_pct)}`}>
-                    {fmtPct(r.position_return_pct)}
-                  </td>
-                  <td className={`py-2 pr-4 text-right ${signColorClass(r.contribution_pct)}`}>
-                    {fmtPct(r.contribution_pct)}
-                  </td>
-                  <td className={`py-2 pr-4 text-right ${signColorClass(r.selection_effect_pct)}`}>
-                    {fmtPct(r.selection_effect_pct)}
-                  </td>
-                  <td className={`py-2 text-right ${signColorClass(r.total_attribution_pct)}`}>
-                    {fmtPct(r.total_attribution_pct)}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+        <Table className="text-sm tabular-nums">
+          <TableHeader>
+            <TableRow className="text-left text-xs text-ink-mute border-hair hover:bg-transparent">
+              <TableHead className="py-2 pr-4 font-medium">Ticker</TableHead>
+              <TableHead className="py-2 pr-4 font-medium">Sector</TableHead>
+              <TableHead numeric className="py-2 pr-4 font-medium">Weight</TableHead>
+              <TableHead numeric className="py-2 pr-4 font-medium">Return</TableHead>
+              <TableHead numeric className="py-2 pr-4 font-medium">Contribution</TableHead>
+              <TableHead numeric className="py-2 pr-4 font-medium">Selection</TableHead>
+              <TableHead numeric className="py-2 font-medium">Total</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {attribution.map((r) => (
+              <TableRow key={r.id} className="border-hair/50">
+                <TableCell className="py-2 pr-4 text-ink">{r.ticker}</TableCell>
+                <TableCell className="py-2 pr-4 text-ink-mute truncate max-w-[160px]">{r.sector_bucket ?? '—'}</TableCell>
+                <TableCell numeric className="py-2 pr-4 text-ink-soft">{fmtPct(r.weight_pct, 1)}</TableCell>
+                <TableCell numeric className={`py-2 pr-4 ${signColorClass(r.position_return_pct)}`}>
+                  {fmtPct(r.position_return_pct)}
+                </TableCell>
+                <TableCell numeric className={`py-2 pr-4 ${signColorClass(r.contribution_pct)}`}>
+                  {fmtPct(r.contribution_pct)}
+                </TableCell>
+                <TableCell numeric className={`py-2 pr-4 ${signColorClass(r.selection_effect_pct)}`}>
+                  {fmtPct(r.selection_effect_pct)}
+                </TableCell>
+                <TableCell numeric className={`py-2 ${signColorClass(r.total_attribution_pct)}`}>
+                  {fmtPct(r.total_attribution_pct)}
+                </TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
       </SectionCard>
     </div>
   );

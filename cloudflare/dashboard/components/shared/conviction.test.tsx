@@ -1,8 +1,9 @@
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, it, expect } from 'vitest';
-import { ConvictionMeter } from './conviction-meter';
-import { SignedConvictionBadge } from './signed-conviction-badge';
+// Wave 4: the app-local conviction shims were retired; both parts live in
+// @digithings/web (main barrel), which is what the app now imports directly.
+import { ConvictionMeter, SignedConvictionBadge } from '@digithings/web';
 
 describe('ConvictionMeter (F6 unsigned cyan)', () => {
   it('renders `value` filled pips out of `max` with an sr-only label', () => {
