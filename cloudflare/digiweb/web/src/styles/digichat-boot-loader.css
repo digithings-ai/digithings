@@ -326,3 +326,70 @@
     transition: none;
   }
 }
+
+/* Boot-lab alternates (local `?boot=` iteration; see web boot-lab.tsx). */
+.dboot-lab {
+  display: flex;
+  height: 100%;
+  width: 100%;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--font-mono);
+  color: var(--ink);
+}
+
+.dboot-lab-line {
+  display: inline-flex;
+  align-items: center;
+  font-size: 14px;
+  line-height: 1.5;
+  letter-spacing: 0.01em;
+}
+
+.dboot-lab-caret {
+  display: inline-block;
+  width: 0.55em;
+  height: 1.1em;
+  margin-left: 0.35em;
+  vertical-align: -0.2em;
+  background: var(--dboot-caret, var(--accent, var(--ink)));
+  animation: dboot-blink 1.06s steps(1) infinite;
+}
+
+.dboot-lab-muted {
+  color: var(--ink-mute);
+}
+
+.dboot-lab-accent {
+  color: var(--dboot-caret, var(--accent, var(--ink)));
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dboot-lab-caret {
+    animation: none;
+  }
+}
+
+/* Boot-lab extras: stacked log lines, spinner rows, cycling dots. */
+.dboot-lab-lines {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  align-items: flex-start;
+}
+
+.dboot-lab-spin {
+  gap: 0.45rem;
+}
+
+.dboot-lab-dots {
+  display: inline-block;
+  min-width: 1.6ch;
+  text-align: left;
+}
+
+/* Lab variants appear and vanish without a fade (the user asked the reveal to
+   be direct); the classic choreography keeps its transition. */
+.dboot-overlay[data-instant="true"] {
+  transition: none;
+}

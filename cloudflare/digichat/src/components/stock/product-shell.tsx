@@ -30,6 +30,11 @@ import {
 } from "@assistant-ui/react";
 import { ThreadSkinView } from "@/components/assistant-ui/skins";
 import type { ComposerLayout } from "@digithings/web/chat/thread";
+import {
+  BootLabOverlay,
+  resolveBootLabVariant,
+  type BootLabVariant,
+} from "@digithings/web/chat/boot-lab";
 import { DigichatBootLoader } from "@digithings/web/chat/boot-loader";
 import type { DigichatClientConfig, DigichatClientFeatures } from "@/lib/deploy-config";
 import { DEFAULT_CLIENT_CONFIG } from "@/lib/deploy-config";
@@ -91,6 +96,11 @@ export type ProductShellProps = {
   onWebSearchChange?: (enabled: boolean) => void;
   /** Explicit composer layout for the digichat skin (else mode-derived). */
   composerLayout?: ComposerLayout;
+  /**
+   * Boot-lab variant threaded from the embed server (local iteration). When
+   * set, the overlay renders that alternate on first paint — no classic pass.
+   */
+  bootLabVariant?: string | null;
 };
 
 /** Adapters accepted by useAISDKRuntime / RuntimeAdapterProvider (attachments). */
@@ -193,6 +203,7 @@ export function ProductStockShell({
   webSearchScope,
   onWebSearchChange,
   composerLayout,
+  bootLabVariant,
 }: ProductShellProps) {
   const cfg = clientConfig ?? DEFAULT_CLIENT_CONFIG;
   const features = cfg.features;
@@ -208,6 +219,9 @@ export function ProductStockShell({
   const [bootReady, setBootReady] = useState(false);
   const [bootDone, setBootDone] = useState(false);
   const [bootHidden, setBootHidden] = useState(false);
+  const [bootVariant, setBootVariant] = useState<BootLabVariant | null>(() =>
+    resolveBootLabVariant(bootLabVariant ?? null),
+  );
 
   useEffect(() => {
     const timer = setTimeout(() => setBootReady(true), BOOT_MIN_MS);
@@ -216,9 +230,22 @@ export function ProductStockShell({
 
   useEffect(() => {
     if (!bootDone) return;
-    const timer = setTimeout(() => setBootHidden(true), BOOT_FADE_MS);
+    const timer = setTimeout(
+      () => setBootHidden(true),
+      bootVariant ? 0 : BOOT_FADE_MS,
+    );
     return () => clearTimeout(timer);
-  }, [bootDone]);
+  }, [bootDone, bootVariant]);
+
+  // Boot-lab switch: `?boot=<variant>` swaps the classic choreography for a
+  // short alternate (local iteration only; unknown values keep classic).
+  // The embed route threads the value from the server so the classic loader
+  // never paints first (the outline bleed); the URL fallback covers surfaces
+  // that mount without the prop.
+  useEffect(() => {
+    if (bootLabVariant != null) return;
+    setBootVariant(resolveBootLabVariant());
+  }, [bootLabVariant]);
 
   const deployUi = useMemo<DeployUiValue>(
     () => ({
@@ -328,17 +355,27 @@ export function ProductStockShell({
                 <div
                   className="dboot-overlay bg-background"
                   data-done={bootDone ? "true" : "false"}
+                  data-instant={bootVariant ? "true" : "false"}
                 >
-                  <DigichatBootLoader
-                    ready={bootReady}
-                    onSettled={() => setBootDone(true)}
-                    welcome={headline}
-                    welcomeBody={(skinChrome.welcomeBody ?? []).join(" ")}
-                    suggestions={chips}
-                    placeholder={inputPlaceholder}
-                    accent={cfg.chrome.accent?.color}
-                    showAttachment={features.attachments}
-                  />
+                  {bootVariant ? (
+                    <BootLabOverlay
+                      variant={bootVariant}
+                      ready={bootReady}
+                      onSettled={() => setBootDone(true)}
+                      accent={cfg.chrome.accent?.color}
+                    />
+                  ) : (
+                    <DigichatBootLoader
+                      ready={bootReady}
+                      onSettled={() => setBootDone(true)}
+                      welcome={headline}
+                      welcomeBody={(skinChrome.welcomeBody ?? []).join(" ")}
+                      suggestions={chips}
+                      placeholder={inputPlaceholder}
+                      accent={cfg.chrome.accent?.color}
+                      showAttachment={features.attachments}
+                    />
+                  )}
                 </div>
               )}
               {ownsPage ? null : sideSlot}

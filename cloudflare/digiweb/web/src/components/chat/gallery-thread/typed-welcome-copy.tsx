@@ -45,6 +45,13 @@ export function TypedWelcomeCopy({ lines }: { lines: readonly string[] }) {
       return;
     }
 
+    // Lab switch: `?hero=instant` reveals the hero in one shot (paired with
+    // the boot-lab alternates; the classic boot keeps typing the copy itself).
+    if (new URLSearchParams(window.location.search).get("hero") === "instant") {
+      setReveal(null);
+      return;
+    }
+
     // The universal boot animation types this copy itself; the hero renders
     // settled under it. Heroes mounted later (new chat) type as usual.
     if (document.querySelector("[data-digichat-boot]") !== null) {

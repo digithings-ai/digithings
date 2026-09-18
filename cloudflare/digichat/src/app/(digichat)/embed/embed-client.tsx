@@ -137,17 +137,25 @@ function resolveAccent(raw: string | null | undefined): Accent {
  */
 export default function EmbedClient({
   initialTenantCfg,
+  initialBoot,
 }: {
   initialTenantCfg: EmbedTenantClientConfig;
+  initialBoot?: string | null;
 }) {
   return (
     <Suspense fallback={null}>
-      <EmbedPageInner initialTenantCfg={initialTenantCfg} />
+      <EmbedPageInner initialTenantCfg={initialTenantCfg} initialBoot={initialBoot} />
     </Suspense>
   );
 }
 
-function EmbedPageInner({ initialTenantCfg }: { initialTenantCfg: EmbedTenantClientConfig }) {
+function EmbedPageInner({
+  initialTenantCfg,
+  initialBoot,
+}: {
+  initialTenantCfg: EmbedTenantClientConfig;
+  initialBoot?: string | null;
+}) {
   const searchParams = useSearchParams();
   const accent = resolveAccent(searchParams.get("accent"));
   const token = searchParams.get("token") ?? undefined;
@@ -314,6 +322,7 @@ function EmbedPageInner({ initialTenantCfg }: { initialTenantCfg: EmbedTenantCli
           host={host}
           uiParams={urlColors}
           planProof={planProof}
+          bootLab={initialBoot}
         />
       </div>
     </>
@@ -327,6 +336,7 @@ function EmbedChat({
   host,
   uiParams,
   planProof,
+  bootLab,
 }: {
   accent: Accent;
   tenantCfg: EmbedTenantClientConfig;
@@ -334,6 +344,7 @@ function EmbedChat({
   host?: string;
   uiParams: EmbedUiParams;
   planProof?: string | null;
+  bootLab?: string | null;
 }) {
   const {
     key: byokKey,
@@ -1224,7 +1235,8 @@ function EmbedChat({
         runtime={chat.runtime}
         clientConfig={stockClient}
         persistence="none"
-        composerLayout="compact"
+          composerLayout="compact"
+          bootLabVariant={bootLab}
         sendGate={sendGate}
         sessionKey={gate.host}
         webSearchScope={webSearchScope}
