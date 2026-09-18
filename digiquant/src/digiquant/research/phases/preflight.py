@@ -383,10 +383,10 @@ def _business_days_between(earlier: date, later: date) -> int:
 
 
 def _profile_config_store_for_pin(client: SupabaseClient, version_id: str) -> dict[str, Any]:
-    """Load one olympus_profile_config payload by exact id (fail closed if absent)."""
+    """Load one profile_config payload by exact id (fail closed if absent)."""
     try:
         response = (
-            client.table("olympus_profile_config")
+            client.table("profile_config")
             .select("id,payload")
             .eq("id", version_id)
             .limit(1)

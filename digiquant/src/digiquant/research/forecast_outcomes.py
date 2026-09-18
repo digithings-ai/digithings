@@ -2,7 +2,7 @@
 
 Invoked beside legacy ``decision_log`` reflection (preflight_reflect) — never inside
 it and never from conviction scores. Writes only to private append-only
-``olympus_forecast_outcomes``. Missing trading calendar or closes leave the
+``forecast_outcomes``. Missing trading calendar or closes leave the
 forecast logically pending (no invented zero return). Same-run forecasts are
 excluded so outcomes cannot feedback into the run that produced them.
 """
@@ -44,7 +44,7 @@ from digiquant.research.supabase_io import SupabaseClient
 
 logger = logging.getLogger(__name__)
 
-OUTCOMES = "olympus_forecast_outcomes"
+OUTCOMES = "forecast_outcomes"
 DEFAULT_VENUE = "NYSE"
 # US equity cash close proxy when price_history has no observation timestamp.
 _SESSION_CLOSE_HOUR_UTC = 20

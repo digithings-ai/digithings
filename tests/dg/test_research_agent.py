@@ -369,7 +369,7 @@ class TestRunResearchAgent:
         ``finalize()`` delivers it. If the ``finally`` did not span the tool-loop call, an
         exception out of ``execute_tool`` would discard that record while its physical attempt
         row survives — an attempt whose ``call_id`` has no logical row, which migration 067's
-        ``fk_olympus_provider_attempts_call`` will reject once the writer lands.
+        ``fk_provider_attempts_call`` will reject once the writer lands.
 
         The tool must raise something outside digillm's ``run_tools`` recoverable-error tuple
         (``RuntimeError``/``OSError``/``ValueError``/``TypeError``/``KeyError`` — see
