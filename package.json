@@ -11,6 +11,13 @@
     "build": "npm --workspaces --if-present run build"
   },
   "overrides": {
-    "next": "16.2.4"
+    "next": "16.3.5",
+    "js-yaml": "^4.3.2",
+    "hono": "^4.13.8",
+    "fast-uri": "^3.1.8",
+    "browserslist": "^4.29.0",
+    "brace-expansion@<2": "1.1.21",
+    "nanoid@^3": "3.3.19",
+    "express-rate-limit": "^8.7.0"
   }
 }
