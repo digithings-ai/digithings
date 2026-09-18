@@ -127,7 +127,7 @@ Before any phase executes, the agent performs a structured context load:
    (`simulated_pipeline` + `TestDurableH5H6LineageRoundTrip`) proves bases and
    amendments survive store serialize/reload across the H5→H6 boundary.
    Optional `PortfolioGraphDeps.evidence_bundle_store`; default graph leaves it
-   unwired; `OLYMPUS_EVIDENCE_BUNDLE_WRITER=off` gates append when injected.
+   unwired; `DIGIQUANT_EVIDENCE_BUNDLE_WRITER=off` gates append when injected.
 
 7. **Announce**: `"Context loaded. Starting Phase 1 of 9."`
 

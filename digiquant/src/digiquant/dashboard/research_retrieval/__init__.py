@@ -155,8 +155,8 @@ from digiquant.dashboard.research_retrieval.pin import (
     require_research_state_pin,
 )
 from digiquant.dashboard.research_retrieval.planner import (
-    H6_SELECTION_PROMPT_FORBIDDEN_KEYS,
     DIGIQUANT_H6_SELECTION_MODE_ENV,
+    H6_SELECTION_PROMPT_FORBIDDEN_KEYS,
     AttentionBudgetEstimate,
     AttentionContextManifest,
     AttentionDecision,

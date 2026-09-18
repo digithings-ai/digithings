@@ -12,8 +12,8 @@ import pytest
 from digiquant.brokers.connections import AuthKind, Broker, ConnectionEnv, ConnectionStatus
 from digiquant.dashboard.tenancy import house_workspace_id
 from digiquant.execution.route_cron import (
-    EXIT_ROUTING_DISABLED,
     DIGIQUANT_ROUTING_DISABLED,
+    EXIT_ROUTING_DISABLED,
     main,
 )
 from digiquant.execution.sync_cron import SyncTarget
