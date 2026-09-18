@@ -333,7 +333,7 @@ export function ProductStockShell({
                     ready={bootReady}
                     onSettled={() => setBootDone(true)}
                     welcome={headline}
-                    welcomeBody={skinChrome.welcomeBody.join(" ")}
+                    welcomeBody={(skinChrome.welcomeBody ?? []).join(" ")}
                     suggestions={chips}
                     placeholder={inputPlaceholder}
                     accent={cfg.chrome.accent?.color}
