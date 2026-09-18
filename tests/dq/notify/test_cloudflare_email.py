@@ -396,10 +396,12 @@ def test_suppressed_send_releases_claim_so_retry_can_send(
     ).encode()
     monkeypatch.setattr(cf_mod, "urlopen", _Capture(dropped))
     dispatch_workspace(sb, client, cfg, pref, run_date, 12, force_digest=True)
+    assert sb.tables["notification_claim"] == []
     assert sb.tables["notification_log"] == []
 
     monkeypatch.setattr(cf_mod, "urlopen", _Capture())
     dispatch_workspace(sb, client, cfg, pref, run_date, 12, force_digest=True)
+    assert len(sb.tables["notification_claim"]) == 1
     assert len(sb.tables["notification_log"]) == 1
 
 
@@ -498,9 +500,80 @@ def test_migration_133_grants_the_claim_delete_and_keeps_the_log_append_only() -
     canonical = (root / "106_notification_prefs_align_canonical.sql").read_text()
     assert "GRANT SELECT, INSERT ON public.notification_log TO service_role" in canonical
     assert "reject_notification_log_mutation" in canonical
-    log_grants = [
-        line
-        for line in canonical.splitlines()
-        if line.strip().startswith("GRANT") and "notification_log" in line
+    offenders = [
+        f"{path.name}: {line.strip()}"
+        for path in sorted(root.glob("*.sql"))
+        for line in path.read_text().splitlines()
+        if line.strip().startswith("GRANT") and "notification_log" in line and "DELETE" in line
     ]
-    assert not any("DELETE" in line for line in log_grants)
+    assert offenders == [], offenders
+
+
+@pytest.mark.parametrize("site", ["holding", "execution"])
+@pytest.mark.parametrize("suppressed", [False, True])
+def test_alert_sites_claim_record_and_release(
+    monkeypatch: pytest.MonkeyPatch, site: str, suppressed: bool
+) -> None:
+    """Both alert sites share the digest contract: claim, send, record, release (#4384)."""
+    from datetime import date
+
+    from digiquant.notify import dispatch as dispatch_mod
+    from digiquant.notify.dispatch import dispatch_workspace
+    from digiquant.notify.events import ExecutionAlertEvent, HoldingChangeEvent
+
+    from tests.dq.notify.conftest import FakeSupabase
+
+    if site == "holding":
+        event: Any = HoldingChangeEvent(
+            workspace_id="w1",
+            run_date="2026-08-30",
+            ticker="AAPL",
+            change_kind="new",
+            current_weight_pct=5.0,
+            prior_weight_pct=None,
+            delta_pp=5.0,
+            unsubscribe_url="https://example.com/unsub",
+        )
+        pref = {**_pref(), "daily_digest": False, "holding_change_alerts": True}
+        monkeypatch.setattr(dispatch_mod, "detect_holding_changes", lambda *a, **k: [event])
+    else:
+        event = ExecutionAlertEvent(
+            workspace_id="w1",
+            run_date="2026-08-30",
+            symbol="AAPL",
+            side="buy",
+            quantity="1",
+            price="100.00",
+            executed_at="2026-08-30T14:00:00Z",
+            unsubscribe_url="https://example.com/unsub",
+            fill_id="fill-1",
+        )
+        pref = {**_pref(), "daily_digest": False, "execution_alerts": True}
+        monkeypatch.setattr(dispatch_mod, "detect_execution_alerts", lambda *a, **k: [event])
+    monkeypatch.setattr(dispatch_mod, "can", lambda *a, **k: True)
+
+    sb = FakeSupabase(
+        tables={
+            "notification_prefs": [pref],
+            "workspaces": [{"id": "w1", "plan_tier": "free", "name": "House"}],
+            "notification_claim": [],
+            "notification_log": [],
+        }
+    )
+    cfg = _config(unsubscribe_base="https://example.com/settings")
+    dropped = json.dumps(
+        {"success": True, "result": {"suppressed_recipients": ["ops@example.com"]}}
+    ).encode()
+    body = dropped if suppressed else b'{"success": true}'
+    monkeypatch.setattr(cf_mod, "urlopen", _Capture(body))
+
+    dispatch_workspace(sb, CloudflareEmailClient(cfg), cfg, pref, date(2026, 8, 30), 12)
+
+    claim_keys = [row["event_key"] for row in sb.tables["notification_claim"]]
+    log_keys = [row["event_key"] for row in sb.tables["notification_log"]]
+    if suppressed:
+        assert claim_keys == []
+        assert log_keys == []
+    else:
+        assert claim_keys == [event.event_key]
+        assert log_keys == [event.event_key]

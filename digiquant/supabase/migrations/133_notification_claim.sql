@@ -26,7 +26,7 @@
 
 CREATE TABLE IF NOT EXISTS public.notification_claim (
     workspace_id uuid NOT NULL REFERENCES public.workspaces (id),
-    event_key text NOT NULL,
+    event_key text NOT NULL CHECK (char_length(event_key) BETWEEN 1 AND 200),
     sent_date date NOT NULL,
     claimed_at timestamptz NOT NULL DEFAULT now(),
     PRIMARY KEY (workspace_id, event_key, sent_date)

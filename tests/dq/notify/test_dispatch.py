@@ -32,7 +32,7 @@ class _RecordingClient:
 
 
 def test_try_claim_send_slot_dedupes() -> None:
-    sb = FakeSupabase(tables={"notification_log": []})
+    sb = FakeSupabase(tables={"notification_claim": []})
     d = date(2026, 8, 30)
     assert try_claim_send_slot(sb, "w1", "digest:2026-08-30", d) is True
     assert try_claim_send_slot(sb, "w1", "digest:2026-08-30", d) is False

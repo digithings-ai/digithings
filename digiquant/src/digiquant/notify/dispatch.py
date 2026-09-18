@@ -302,17 +302,18 @@ def dispatch_workspace(
         if force_digest or hour_utc == digest_hour:
             if not _is_suppressed(client, email):
                 event_key = f"digest:{run_date.isoformat()}"
+                # Build before claiming: a build failure must not burn the day's slot.
+                content = build_digest_content(
+                    sb,
+                    workspace_id,
+                    tier,
+                    run_date,
+                    notify_config,
+                    workspace_name=workspace_name,
+                )
+                text, html = _render_daily_digest(content)
+                subject = f"dashboard daily digest — {run_date.isoformat()}"
                 if try_claim_send_slot(sb, workspace_id, event_key, run_date):
-                    content = build_digest_content(
-                        sb,
-                        workspace_id,
-                        tier,
-                        run_date,
-                        notify_config,
-                        workspace_name=workspace_name,
-                    )
-                    text, html = _render_daily_digest(content)
-                    subject = f"dashboard daily digest — {run_date.isoformat()}"
                     try:
                         _send_message(client, email, subject, text, html)
                         record_send(sb, workspace_id, event_key, run_date)
@@ -327,10 +328,10 @@ def dispatch_workspace(
             for event in detect_holding_changes(sb, workspace_id, run_date, notify_config):
                 if _is_suppressed(client, email):
                     break
-                if not try_claim_send_slot(sb, workspace_id, event.event_key, run_date):
-                    continue
                 text, html = _render_holding_change(event)
                 subject = f"Holding change — {event.ticker} ({run_date.isoformat()})"
+                if not try_claim_send_slot(sb, workspace_id, event.event_key, run_date):
+                    continue
                 try:
                     _send_message(client, email, subject, text, html)
                     record_send(sb, workspace_id, event.event_key, run_date)
@@ -344,10 +345,10 @@ def dispatch_workspace(
         for event in detect_execution_alerts(sb, workspace_id, run_date, notify_config):
             if _is_suppressed(client, email):
                 break
-            if not try_claim_send_slot(sb, workspace_id, event.event_key, run_date):
-                continue
             text, html = _render_execution_alert(event)
             subject = f"Execution alert — {event.symbol} ({run_date.isoformat()})"
+            if not try_claim_send_slot(sb, workspace_id, event.event_key, run_date):
+                continue
             try:
                 _send_message(client, email, subject, text, html)
                 record_send(sb, workspace_id, event.event_key, run_date)
