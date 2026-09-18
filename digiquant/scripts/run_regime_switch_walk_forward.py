@@ -67,6 +67,7 @@ sys.path.insert(0, str(DIGIQUANT_ROOT / "scripts"))
 
 from digiquant.strategies.sdca.backtest import run_backtest
 from digiquant.strategies.sdca.curve import AccumDistCurve
+from digiquant.strategies.sdca.curve_optimize import search_wide_knee_curve
 from digiquant.strategies.sdca.curve_shape import SdcaCurveShape
 from digiquant.strategies.sdca.indicator_catalog import SdcaCompositeWeights
 from digiquant.strategies.sdca.optimize import load_sdca_extra_z, load_sdca_ohlcv
@@ -121,17 +122,36 @@ def slice_extra_z(extra_z: dict, all_dates: list, window_dates: list) -> dict:
     return {name: [series[i] for i in idxs] for name, series in extra_z.items()}
 
 
-def run_backtest_metrics(dates: list, prices: list[float], risk: list[float | None]) -> dict:
+def run_backtest_metrics(
+    dates: list, prices: list[float], risk: list[float | None], shape: SdcaCurveShape = SHAPE
+) -> dict:
     date_s = pl.Series("date", dates, dtype=pl.Date)
     price_s = pl.Series("price", prices, dtype=pl.Float64)
     risk_s = pl.Series("risk", risk, dtype=pl.Float64)
-    report, _frame = run_backtest(date_s, price_s, risk_s, AccumDistCurve(SHAPE.to_nodes()), INITIAL_CASH)
+    report, _frame = run_backtest(date_s, price_s, risk_s, AccumDistCurve(shape.to_nodes()), INITIAL_CASH)
     return {
         "vs_flat_dca_pct": report.vs_flat_dca_pct,
         "vs_lump_pct": report.vs_lump_pct,
         "capital_deployed_pct": report.capital_deployed_pct,
         "max_drawdown_pct": abs(report.dca_max_drawdown_pct) * 100.0,
     }
+
+
+def refit_curve_on_is(is_dates: list, is_prices: list[float], is_risk: list[float | None]) -> SdcaCurveShape:
+    """Stage 3 per-fold curve refit: search_wide_knee_curve on the IS window only."""
+    date_s = pl.Series("date", is_dates, dtype=pl.Date)
+    price_s = pl.Series("price", is_prices, dtype=pl.Float64)
+    risk_s = pl.Series("risk", is_risk, dtype=pl.Float64)
+    result = search_wide_knee_curve(
+        date_s,
+        price_s,
+        risk_s,
+        initial_cash=INITIAL_CASH,
+        frozen_weights=BASELINE,
+        n_random=600,
+        seed=42,
+    )
+    return result.best.shape
 
 
 def score_fold(
@@ -143,6 +163,8 @@ def score_fold(
     is_end,
     oos_start,
     oos_end,
+    *,
+    refit_curve: bool = False,
 ) -> dict:
     is_dates, is_prices = window_slice(dates, prices, is_start, is_end)
     oos_dates, oos_prices = window_slice(dates, prices, oos_start, oos_end)
@@ -169,10 +191,11 @@ def score_fold(
     is_risk = risk_from_model(is_dates, is_prices, is_extra_z, is_flags)
     oos_risk = risk_from_model(oos_dates, oos_prices, oos_extra_z, oos_flags)
 
-    is_metrics = run_backtest_metrics(is_dates, is_prices, is_risk)
-    oos_metrics = run_backtest_metrics(oos_dates, oos_prices, oos_risk)
+    shape = refit_curve_on_is(is_dates, is_prices, is_risk) if refit_curve else SHAPE
+    is_metrics = run_backtest_metrics(is_dates, is_prices, is_risk, shape)
+    oos_metrics = run_backtest_metrics(oos_dates, oos_prices, oos_risk, shape)
     feasible = oos_metrics["capital_deployed_pct"] > 1.0
-    return {"in_sample": is_metrics, "out_of_sample": oos_metrics, "feasible": feasible}
+    return {"in_sample": is_metrics, "out_of_sample": oos_metrics, "feasible": feasible, "shape": shape}
 
 
 def print_wf_row(label: str, fold_scores: list[dict], holdout_metrics: dict | None) -> None:
@@ -216,11 +239,15 @@ def run(data_path: Path = DEFAULT_DATA_PATH) -> None:
     folds, holdout = make_walk_forward_folds(dates, n_folds=3, holdout_frac=0.2, oos_frac=0.25)
     print(f"{len(folds)} folds, holdout tail {holdout[0]}..{holdout[1]}\n")
 
-    def run_full(vol_window: int) -> tuple[list[dict], dict]:
+    def run_full(vol_window: int, *, refit_curve: bool = False) -> tuple[list[dict], dict]:
         vol = trailing_realized_vol(prices, vol_window)
         is_high_vol_full = causal_expanding_median_split(vol)
         fold_scores = [
-            score_fold(dates, prices, extra_z, is_high_vol_full, f.is_start, f.is_end, f.oos_start, f.oos_end)
+            score_fold(
+                dates, prices, extra_z, is_high_vol_full,
+                f.is_start, f.is_end, f.oos_start, f.oos_end,
+                refit_curve=refit_curve,
+            )
             for f in folds
         ]
         holdout_dates, holdout_prices = window_slice(dates, prices, holdout[0], holdout[1])
@@ -237,7 +264,13 @@ def run(data_path: Path = DEFAULT_DATA_PATH) -> None:
         baseline_risk = risk_from_weighted_z(holdout_dates, pl_z, holdout_extra_z, BASELINE)
         high_vol_risk = risk_from_weighted_z(holdout_dates, pl_z, holdout_extra_z, HIGH_VOL_WEIGHTS)
         holdout_risk = splice(baseline_risk, high_vol_risk, holdout_flags)
-        holdout_metrics = run_backtest_metrics(holdout_dates, holdout_prices, holdout_risk)
+        if refit_curve:
+            search_flags = [is_high_vol_full[idx_by_date[d]] for d in search_dates]
+            search_risk = regime_switched_risk_series(search_dates, search_prices, slice_extra_z(extra_z, dates, search_dates), search_flags)
+            holdout_shape = refit_curve_on_is(search_dates, search_prices, search_risk)
+        else:
+            holdout_shape = SHAPE
+        holdout_metrics = run_backtest_metrics(holdout_dates, holdout_prices, holdout_risk, holdout_shape)
         return fold_scores, holdout_metrics
 
     fold_scores, holdout_metrics = run_full(VOL_WINDOW)
@@ -260,6 +293,37 @@ def run(data_path: Path = DEFAULT_DATA_PATH) -> None:
     print(f"  sensitivity stable={stable}")
 
     print(f"\nOVERALL: beats_flat_dca_oos={beats_flat_dca_oos}  sensitivity_stable={stable}")
+
+    print("\n" + "=" * 70)
+    print("Follow-up (a): per-fold curve refit (search_wide_knee_curve on IS only)")
+    print("=" * 70)
+    fold_scores_r, holdout_metrics_r = run_full(VOL_WINDOW, refit_curve=True)
+    beats_flat_dca_oos_r = print_wf_row(
+        f"regime-switch walk-forward, PER-FOLD CURVE REFIT (vol_window={VOL_WINDOW}d)",
+        fold_scores_r,
+        holdout_metrics_r,
+    )
+    for i, fs in enumerate(fold_scores_r):
+        s = fs["shape"]
+        print(
+            f"  fold {i} refit shape: buy_max_rate={s.buy_max_rate:.1f} buy_knee_risk={s.buy_knee_risk:.1f} "
+            f"sell_knee_risk={s.sell_knee_risk:.1f} sell_max_rate={s.sell_max_rate:.1f} "
+            f"buy_curvature={s.buy_curvature:.2f} sell_curvature={s.sell_curvature:.2f}"
+        )
+
+    print("\n=== sensitivity check (per-fold curve refit): vol-detection window varied ===")
+    sensitivity_oos_r = {}
+    for vw in (45, 90, 180):
+        fs, _ = run_full(vw, refit_curve=True)
+        mean_oos = statistics.mean(f["out_of_sample"]["vs_flat_dca_pct"] for f in fs)
+        sensitivity_oos_r[vw] = mean_oos
+        print(f"  vol_window={vw:>3}d  mean OOS vs_flat_dca={mean_oos:+.2f}%")
+    max_abs_delta_oos_pct_r = max(sensitivity_oos_r.values()) - min(sensitivity_oos_r.values())
+    stable_r = max_abs_delta_oos_pct_r < 5.0 and all(v > 0.0 for v in sensitivity_oos_r.values())
+    print(f"  max_abs_delta_oos_pct={max_abs_delta_oos_pct_r:.2f}  all_positive={all(v > 0.0 for v in sensitivity_oos_r.values())}")
+    print(f"  sensitivity stable={stable_r}")
+
+    print(f"\nOVERALL (per-fold curve refit): beats_flat_dca_oos={beats_flat_dca_oos_r}  sensitivity_stable={stable_r}")
     print(
         "\nDiagnostic only. Not touching RESEARCH_STATE.md/settings.json -- "
         "report back for Chris's explicit accept/reject."
