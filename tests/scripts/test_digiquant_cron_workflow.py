@@ -1,7 +1,7 @@
 """execution cron GHA spec is probe-only and stays off the house pipeline.
 
 Overlay ``usage.start`` is process-global, so overlay / execution sync / route /
-digest / Mailgun must never share ``pipeline-digiquant.yml``'s portfolio chain job. The spec in
+digest / notify must never share ``pipeline-digiquant.yml``'s portfolio chain job. The spec in
 ``docs/agent-backlog/kairos-tenancy/kairos-cron-check.workflow.yml`` is
 fail-closed ``--check`` / ``--dry-run`` only: ``--execute``, ``--all``, and
 ``portfolio.chain`` on that job would be a production apply against Observer.
@@ -26,10 +26,10 @@ SPEC = REPO_ROOT / "docs" / "agent-backlog" / "kairos-tenancy" / "kairos-cron-ch
 INSTALLED = WORKFLOW_DIR / "execution-cron-check.yml"
 HOUSE = WORKFLOW_DIR / "pipeline-digiquant.yml"
 JOBS_SOURCE = REPO_ROOT / "cloudflare" / "digithings-cron" / "src" / "jobs.ts"
-MAILGUN_FRAGMENT = (
-    REPO_ROOT / "docs" / "agent-backlog" / "kairos-tenancy" / "pipeline-olympus-mailgun.env.yml"
+NOTIFY_FRAGMENT = (
+    REPO_ROOT / "docs" / "agent-backlog" / "kairos-tenancy" / "pipeline-olympus-notify.env.yml"
 )
-MAILGUN_KEYS = ("MAILGUN_API_KEY", "MAILGUN_DOMAIN", "NOTIFY_FROM")
+NOTIFY_KEYS = ("CLOUDFLARE_EMAIL_API_TOKEN", "CLOUDFLARE_ACCOUNT_ID", "NOTIFY_FROM")
 
 FORBIDDEN_APPLY = ("--execute", "--all", "portfolio.chain")
 
@@ -216,10 +216,10 @@ def _house_chain_step_env() -> dict[str, object]:
     raise AssertionError("house portfolio.chain step not found")
 
 
-class TestHousePipelineMailgunEnvFragment:
+class TestHousePipelineNotifyEnvFragment:
     def test_fragment_is_secrets_only(self) -> None:
-        frag = yaml.safe_load(MAILGUN_FRAGMENT.read_text(encoding="utf-8"))
-        assert tuple(frag) == MAILGUN_KEYS
+        frag = yaml.safe_load(NOTIFY_FRAGMENT.read_text(encoding="utf-8"))
+        assert tuple(frag) == NOTIFY_KEYS
         for key, value in frag.items():
             assert isinstance(value, str)
             assert f"secrets.{key}" in value
@@ -229,17 +229,17 @@ class TestHousePipelineMailgunEnvFragment:
     def test_house_chain_env_absent_or_matches_fragment(self) -> None:
         """cursor/* cannot splice the fragment; when installed it must be complete."""
         env = _house_chain_step_env()
-        frag = yaml.safe_load(MAILGUN_FRAGMENT.read_text(encoding="utf-8"))
-        present = [key for key in MAILGUN_KEYS if key in env]
+        frag = yaml.safe_load(NOTIFY_FRAGMENT.read_text(encoding="utf-8"))
+        present = [key for key in NOTIFY_KEYS if key in env]
         if not present:
             return
-        for key in MAILGUN_KEYS:
+        for key in NOTIFY_KEYS:
             assert env[key] == frag[key], key
 
     def test_docs_name_the_splice_hop(self) -> None:
         unblock = (
             REPO_ROOT / "docs" / "agent-backlog" / "kairos-tenancy" / "HUMAN-UNBLOCK.md"
         ).read_text(encoding="utf-8")
-        assert "pipeline-olympus-mailgun.env.yml" in unblock
-        for key in MAILGUN_KEYS:
+        assert "pipeline-olympus-notify.env.yml" in unblock
+        for key in NOTIFY_KEYS:
             assert key in unblock

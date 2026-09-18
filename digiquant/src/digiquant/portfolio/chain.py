@@ -884,7 +884,7 @@ def dispatch_house_notifications_after_chain(
     Overlay invokes :func:`run_research_then_portfolio` (not ``cli_main``), so nested
     overlay runs never send house digests. Notify is imported here rather than
     at module import so ``import chain`` on the overlay path does not load
-    Mailgun. ``dispatch_notifications`` is itself fail-soft; this wrapper also
+    the notify client. ``dispatch_notifications`` is itself fail-soft; this wrapper also
     swallows ImportError.
     """
     try:

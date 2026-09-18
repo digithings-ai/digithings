@@ -26,7 +26,7 @@ env:
 
   # Fail-soft feature flags — outages degrade signal, never block the run.
   DIGIQUANT_ONCHAIN_POSITIONING: "1"   # Hyperdash cohort GraphQL (#801)
-  DIGIQUANT_POSITION_RISK_FIELDS: "1"    # Pillar 2E advisory fields (migration 039)
+  DIGIQUANT_POSITION_RISK_FIELDS: "1"  # Pillar 2E advisory fields (migration 039)
 
   # Market-data serving layer (#3780, Task 7b second cutover): "r2" routes
   # the MCP price/macro tools + pipeline reads through the versioned R2 cache

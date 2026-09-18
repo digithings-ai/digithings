@@ -32,7 +32,7 @@ the full rewrite). Empty-lesson days still publish a same-date `beliefs` documen
 House CLI close-out (`cli_main`, not `run_research_then_portfolio`): after a non-retry
 exit, fail-soft K5 `dispatch_house_notifications_after_chain` attempts today's
 digest (`force_digest=True`). Overlay nested chain skips this so overlay jobs
-cannot send house mail. Missing Mailgun env logs and returns.
+cannot send house mail. Missing notify env logs and returns.
 
 ---
 

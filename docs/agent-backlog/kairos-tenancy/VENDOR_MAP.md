@@ -37,21 +37,19 @@ Canonical rules: [`DIGITHINGS-IDENTITY.md`](DIGITHINGS-IDENTITY.md).
 | Human gate | hCaptcha on signup — owner on the desktop |
 | Account email | `admin@digithings.ai`. Do not use Agentmail or company Google SSO. |
 
-## Mailgun — BLOCKED on reCAPTCHA
+## Cloudflare Email Sending — verify domain + token
 
 | Item | Path |
 |------|------|
-| Signup | https://signup.mailgun.com/new/signup (free, no card → 100 msg/day) |
-| Login | https://login.mailgun.com/login/ |
-| API key | Settings → API Security → Private API key → `MAILGUN_API_KEY` |
-| Domain | Sending → Domains (sandbox `sandbox….mailgun.org` OK for staging) → `MAILGUN_DOMAIN` |
-| From | Verified sender on that domain → `NOTIFY_FROM` |
-| Sandbox recipients | Authorize **`admin@digithings.ai`** |
-| Test send | Sending → Send email, or `python -m digiquant.notify.dispatch --require-mailgun` |
-| Local file (when ready) | `.local/secrets/digithings-mailgun.env` |
-| Human gate | reCAPTCHA / SMS — owner on the desktop |
-| Account email | `admin@digithings.ai`. Do not use Agentmail. |
-| MCP status | Mailgun MCP auth fails until API key set |
+| Console | https://dash.cloudflare.com/ → account → Email → Email Sending |
+| API token | My Profile → API Tokens → Create Token → permission **Email Sending: Edit** → `CLOUDFLARE_EMAIL_API_TOKEN` |
+| Account id | Account Home → account id (already `CLOUDFLARE_ACCOUNT_ID` in the repo) |
+| From | Verified sending address → `NOTIFY_FROM` (bare address or `Name <addr@domain>`) |
+| Test send | `python -m digiquant.notify.dispatch --require-notify` |
+| Local file (when ready) | `.local/secrets/digithings-notify.env` |
+| Human gate | Token creation + domain verification — owner on the desktop |
+| Note | Dedicated **Email Sending: Edit** token, not the broad deploy token: rotating one must not break the other. |
+| Suppression | Enforced service-side at send time. A dropped recipient comes back on the response, the client raises `EmailSuppressedError`, dispatch releases the dedupe claim, and the send is retried once the address is unsuppressed. |
 
 ## Alpaca (paper) — BLOCKED on Cloudflare Turnstile
 

@@ -118,7 +118,7 @@ Wave E
 - [ ] Alpaca Connect OAuth app registration submitted (long pole for product connect)
 - [ ] IBKR OAuth 1.0a vendor onboarding email sent (longest pole; scope to include trading)
 - [ ] Stripe test-mode products (Brief / Desk / Studio monthly+annual) + webhook secret provisioned
-- [ ] Mailgun API key fixed + sending domain confirmed
+- [ ] Cloudflare Email Sending token (Email Sending: Edit) + account id + from address confirmed
 - [ ] Supabase Auth providers (Google, GitHub) enabled on `core`
 - [x] `DIGIQUANT_VAULT_MASTER_KEY` generated into deploy secrets
 - [ ] Legal read on investment-adviser status before any live-cutover epic
@@ -256,7 +256,7 @@ free, not house/system, not ops-custom `studio`/`none` without a grant).
   `DIGIQUANT_EXECUTION_ROUTING=1` (default off → exit 3 `KAIROS_ROUTING_DISABLED`).
   `python scripts/digiquant_route_cron.py`. Do not add the kill switch to
   `KAIROS_STAGING_REQUIRED_SECRETS`.
-- House GHA must still splice `pipeline-olympus-mailgun.env.yml` on a `chore/` /
+- House GHA must still splice `pipeline-olympus-notify.env.yml` on a `chore/` /
   `feat/` branch. Scheduled probe is installed as `.github/workflows/kairos-cron-check.yml`
   (#3380); `cursor/*` cannot rename it. Canonical CLI is `scripts/digiquant_cron_check.py`.
 
@@ -281,7 +281,7 @@ Custom-gated). Digest remaining-hop also requires that pref, plus log + inbox
 the UI hop stays unproven). `python -m digiquant.notify.dispatch --dry-run`
 prints digest candidate counts without sending.
 `python scripts/kairos_apply_vendor_secrets.py` → exit **2** until the three
-gitignored `digithings-{stripe,mailgun,alpaca}.env` files exist (then `--apply`
+gitignored `digithings-{stripe,notify,alpaca}.env` files exist (then `--apply`
 pushes names onto core EF secrets). `python scripts/kairos_seal_byok.py` → exit
 **2** until `digithings-byok.env` exists. Other Observer Settings hops (profile /
 notifications / brokers / keys reads, PATCH digest on, TIER_FORBIDDEN on Custom

@@ -4218,31 +4218,36 @@ invalid / empty `DIGIQUANT_EXECUTION_WORKSPACE_ID` (alias `OLYMPUS_KAIROS_WORKSP
 
 ## Notifications (email v0)
 
-K5 Mailgun dispatch for daily digest, holding-change, and execution-alert emails.
-Module: `digiquant/src/digiquant/notify/` (`entitlements.py` mirrors T5
+K5 Cloudflare Email Sending dispatch for daily digest, holding-change, and
+execution-alert emails. Module: `digiquant/src/digiquant/notify/`
+(`cloudflare_email.py` is the thin stdlib client; `entitlements.py` mirrors T5
 `cloudflare/dashboard/lib/entitlements.ts` artifact-class matrix).
 
-**Env:** `MAILGUN_API_KEY`, `MAILGUN_DOMAIN`, `NOTIFY_FROM` (required to send);
-`NOTIFY_UNSUBSCRIBE_BASE` optional (defaults to digiquant.io settings placeholder).
+**Env:** `CLOUDFLARE_EMAIL_API_TOKEN` (dedicated **Email Sending: Edit** token —
+deliberately not the broad deploy token), `CLOUDFLARE_ACCOUNT_ID`, `NOTIFY_FROM`
+(required to send); `NOTIFY_UNSUBSCRIBE_BASE` optional (defaults to digiquant.io
+settings placeholder). `NOTIFY_FROM` may be a bare address or `Name <addr@domain>`.
 
-**Behavior:** fail-soft for cron/post-run — Mailgun/network errors log a warning and
-return; missing Mailgun env logs `MAILGUN_NOT_CONFIGURED` with named keys and skips
+**Behavior:** fail-soft for cron/post-run — transport/network errors log a warning and
+return; missing notify env logs `NOTIFY_NOT_CONFIGURED` with named keys and skips
 (never silent as success in agent probes). Dedupe via `notification_log` insert-first
-PK `(workspace_id, event_key, sent_date)`; suppression checked **before** claim
-(skipped sends do not burn dedupe slots); tier gates on digest sections and event
+PK `(workspace_id, event_key, sent_date)`; suppression is enforced by Cloudflare at
+send time (a suppressed recipient is reported on the send response, the client raises
+`EmailSuppressedError` and dispatch releases the claim, so the send is retried once the
+address is unsuppressed — there is no pre-send query API); tier gates on digest sections and event
 types (`house_weights_nav` for holding-change, `private_book` for execution alerts);
 templates carry unsubscribe link, no broker ids/tokens/keys.
 
-**Loud-fail probe:** `python -m digiquant.notify.dispatch --require-mailgun` (alias
-`--check`) exits **2** with `MAILGUN_NOT_CONFIGURED` listing missing env *names*
+**Loud-fail probe:** `python -m digiquant.notify.dispatch --require-notify` (alias
+`--check`) exits **2** with `NOTIFY_NOT_CONFIGURED` listing missing env *names*
 when vendor keys are empty. `--dry-run` loads `notification_prefs` and prints
 candidate counts (`considered`, `digest_on`, `skipped_prefs_off`,
-`skipped_no_email`, `mailgun_configured`) without sending or claiming
-`notification_log` slots — Mailgun absence is `mailgun_configured=0`, not a
+`skipped_no_email`, `notify_configured`) without sending or claiming
+`notification_log` slots — notify absence is `notify_configured=0`, not a
 skip of the count. `--workspace-id` filters the plan. Missing store env exits
 **2** with `NOTIFY_STORE_NOT_CONFIGURED`. Combined cron probe:
 `python scripts/digiquant_cron_check.py` (overlay `--check` + execution sync `--check` +
-route `--check` + Mailgun names) exits **2** with `EXECUTION_CRON_CHECK` listing
+route `--check` + notify names) exits **2** with `EXECUTION_CRON_CHECK` listing
 which probes failed. Route `--check` logs `routing_enabled=true|false` and
 never calls `submit_order`. The copy-paste GHA spec also runs
 ``python -m digiquant.notify.dispatch --dry-run`` (no send, no
@@ -4276,7 +4281,7 @@ do not prove the hop); a `digest:`
 log key **and** `DIGIQUANT_STAGING_DIGEST_INBOX_CONFIRMED` after an inbox check
 **and** `notification_prefs.daily_digest=true` (dispatch skips prefs that are
 off; Observer PATCH `/settings/notifications` is not Studio-gated).
-Claim-ledger rows are inserted before Mailgun send. Remaining-hop GETs that
+Claim-ledger rows are inserted before notify send. Remaining-hop GETs that
 are not HTTP 200 exit **3**. Unproven hops log a closed-vocabulary
 ``blocker=`` code (never Stripe ids) next to ``proven=False`` so the
 human-owned gate is named. Exit **0** only when all five remaining hops are
@@ -4284,7 +4289,7 @@ proven. Exit **2** when hops are unproven **and** named vendor secrets are
 missing. Checkout URL + unsigned webhook with hops still unproven is **exit 4**.
 Phase C (and the Observer checkout hop) POST `tier=studio` — Brief/Desk would
 leave overlay `TIER_FORBIDDEN` after Stripe lands.
-Recipient for staging digests can be an Agentmail inbox once Mailgun is
+Recipient for staging digests can be an Agentmail inbox once notify is
 configured.
 
 **House pipeline proof:** `python scripts/digiquant_house_pipeline_proof.py` lists
@@ -4312,15 +4317,15 @@ schedule fails. The CLI refuses `--dispatch` / `--apply`.
 |--------|----------|------------------|
 | Cron `python -m digiquant.notify.dispatch` | `dispatch_notifications(hour_utc=now.hour)` | Yes — matches `digest_hour_utc` |
 | House CLI `python -m digiquant.portfolio.chain` (success, not retry) | `dispatch_house_notifications_after_chain` → `force_digest=True` | No — always attempts today's digest; dedupe prevents double-send |
-| Probe `… --require-mailgun` | env presence only (no send) | N/A — exit 2 if incomplete |
-| Preview `… --dry-run` | `plan_digest_dispatch` (prefs counts; no send/claim) | N/A — `mailgun_configured` flag only |
+| Probe `… --require-notify` | env presence only (no send) | N/A — exit 2 if incomplete |
+| Preview `… --dry-run` | `plan_digest_dispatch` (prefs counts; no send/claim) | N/A — `notify_configured` flag only |
 | `run_db_first.py` post-run | `dispatch_notifications(run_date=…, force_digest=True)` | No — always attempts today's digest; dedupe prevents double-send |
 | Overlay `run_research_then_portfolio` | none | N/A — nested overlay must not send house mail |
 | K4 `run_sync_batch` tail | `dispatch_execution_alerts(run_date=…)` | N/A — execution alerts only |
 
-House GHA (`pipeline-digiquant.yml`) does not yet pass `MAILGUN_API_KEY` /
-`MAILGUN_DOMAIN` / `NOTIFY_FROM` into the chain step. Splice
-`docs/agent-backlog/execution-tenancy/pipeline-digiquant-mailgun.env.yml` on a
+House GHA (`pipeline-digiquant.yml`) does not yet pass `CLOUDFLARE_EMAIL_API_TOKEN` /
+`CLOUDFLARE_ACCOUNT_ID` / `NOTIFY_FROM` into the chain step. Splice
+`docs/agent-backlog/kairos-tenancy/pipeline-olympus-notify.env.yml` on a
 `chore/` or `feat/` branch (`cursor/*` cannot write workflows). Until then the
 close-out is fail-soft skip.
 
@@ -4450,7 +4455,7 @@ The fail-closed GHA spec is
 `--dry-run`). `cursor/*` cannot write `.github/workflows/`; the installed
 job still runs `scripts/execution_cron_check.py` (wrapper) until a `chore/` or
 `feat/` hop copies a renamed spec. Missing
-`CORE_SUPABASE_*` / Mailgun GitHub secrets fail closed (exit 2). That job
+`CORE_SUPABASE_*` / notify GitHub secrets fail closed (exit 2). That job
 must never pass `--execute`, `--all`, or invoke `portfolio.chain`.
 
 **Omitted `workspace_id` means the house.** Scannable developer guide:

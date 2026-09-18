@@ -91,7 +91,7 @@ tier matrix, models semantics (provider BYOK v0). Gap artifact:
 | K1 tests (integration marker only) | Alpaca paper API keys | missing — unit tests use mocks, so K1 can merge without |
 | K2 (manual verify only) | IBKR paper username / self-service OAuth creds | missing — mocked unit tests suffice to merge |
 | K3/T2 deploy | `DIGIQUANT_VAULT_MASTER_KEY`, Stripe test keys + price ids, webhook secret | missing |
-| K5 deploy | Working Mailgun API key + domain | MCP key currently failing auth |
+| K5 deploy | Working Cloudflare Email Sending token + account id | token not yet created |
 | T1 deploy | Google + GitHub OAuth apps in Supabase Auth (`core` project) | not configured |
 | Product launch | Alpaca Connect app review; IBKR OAuth 1.0a vendor onboarding | not started — long poles |
 
