@@ -1,7 +1,7 @@
 """Combined loud-fail probe for execution production cron CLIs.
 
 Runs overlay store check, broker-sync store check, route store check, and
-Mailgun check. Route ``--check`` never submits (kill switch still defaults
+notify check. Route ``--check`` never submits (kill switch still defaults
 off). Never prints secret values. Exit 2 if any probe fails.
 """
 
@@ -14,7 +14,7 @@ from pydantic import BaseModel, ConfigDict
 from digiquant.dashboard.overlay.cron import main as overlay_main
 from digiquant.execution.route_cron import main as route_main
 from digiquant.execution.sync_cron import main as sync_main
-from digiquant.notify.mailgun import format_mailgun_not_configured, missing_mailgun_env_names
+from digiquant.notify.cloudflare_email import format_notify_not_configured, missing_notify_env_names
 
 
 class CronCheckResult(BaseModel):
@@ -27,7 +27,7 @@ class CronCheckResult(BaseModel):
 
 
 class CronCheckReport(BaseModel):
-    """Sanitized summary of overlay + sync + route + Mailgun probes."""
+    """Sanitized summary of overlay + sync + route + notify probes."""
 
     model_config = ConfigDict(extra="forbid", frozen=True)
 
@@ -40,14 +40,14 @@ def run_cron_checks(
     overlay_rc: int,
     sync_rc: int,
     route_rc: int,
-    mailgun_rc: int,
+    notify_rc: int,
 ) -> CronCheckReport:
     """Assemble --check outcomes. Does not dispatch jobs or send mail."""
     rows = (
         CronCheckResult(name="overlay", exit_code=overlay_rc),
         CronCheckResult(name="execution_sync", exit_code=sync_rc),
         CronCheckResult(name="execution_route", exit_code=route_rc),
-        CronCheckResult(name="mailgun", exit_code=mailgun_rc),
+        CronCheckResult(name="notify", exit_code=notify_rc),
     )
     failed = tuple(row.name for row in rows if row.exit_code != 0)
     return CronCheckReport(results=rows, failed=failed)
@@ -61,8 +61,8 @@ def format_cron_check_failure(failed: Sequence[str]) -> str:
     return "EXECUTION_CRON_CHECK: " + ", ".join(failed)
 
 
-def mailgun_check_exit_code(environ: Mapping[str, str] | None = None) -> int:
-    missing = missing_mailgun_env_names(environ)
+def notify_check_exit_code(environ: Mapping[str, str] | None = None) -> int:
+    missing = missing_notify_env_names(environ)
     return 2 if missing else 0
 
 
@@ -79,19 +79,19 @@ def main(
     overlay_rc = overlay_main(["--check"], environ=environ, log=log, log_err=err)
     sync_rc = sync_main(["--check"], environ=environ, log=log, log_err=err)
     route_rc = route_main(["--check"], environ=environ, log=log, log_err=err)
-    mailgun_rc = mailgun_check_exit_code(environ)
-    if mailgun_rc != 0:
-        err(format_mailgun_not_configured(missing_mailgun_env_names(environ)))
+    notify_rc = notify_check_exit_code(environ)
+    if notify_rc != 0:
+        err(format_notify_not_configured(missing_notify_env_names(environ)))
     report = run_cron_checks(
         overlay_rc=overlay_rc,
         sync_rc=sync_rc,
         route_rc=route_rc,
-        mailgun_rc=mailgun_rc,
+        notify_rc=notify_rc,
     )
     if report.failed:
         err(format_cron_check_failure(report.failed))
         return cron_check_exit_code(report)
-    log("execution cron check: overlay, sync, route, mailgun env present (names only)")
+    log("execution cron check: overlay, sync, route, notify env present (names only)")
     return 0
 
 
@@ -104,7 +104,7 @@ __all__ = [
     "CronCheckResult",
     "cron_check_exit_code",
     "format_cron_check_failure",
-    "mailgun_check_exit_code",
+    "notify_check_exit_code",
     "main",
     "run_cron_checks",
 ]

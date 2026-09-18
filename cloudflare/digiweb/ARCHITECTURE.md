@@ -16,9 +16,9 @@ cloudflare/digiweb/
 ├── CHARTS.md              finance chart house rules
 ├── CHAT_THEME.md          first-party digichat skin on /chatbot
 ├── ASSISTANT_UI_ELEMENTS.md  full assistant-ui elements catalog (fetch map)
-├── MANIFEST.json          generated machine index of every reference component
+├── MANIFEST.json          generated machine index of every reference + kit component
 ├── scripts/
-│   └── build-manifest.mjs regenerates MANIFEST.json from the reference source
+│   └── build-manifest.mjs regenerates MANIFEST.json from the reference + kit sources
 ├── design/                @digithings/design — tokens.css + CSS primitives
 │   ├── BLEND.md           utilitarian-terminal preference ledger (v0.1 locked)
 │   ├── ROLLOUT.md         phased apply across digiweb → all product frontends
@@ -178,9 +178,11 @@ from `styles/controls-core.css` instead of the kit utilities; `Card` propagates
 Refresh it with `npx shadcn@latest add <name>` inside `cloudflare/digiweb/web`
 (the `components.json` there is authoritative); local deltas stay limited to
 import adaptations (`cn` from `../lib/utils`, sibling `./button`). The kit is
-not in `MANIFEST.json` — that file is generated from the reference app, and
-package-family indexing is tracked in #4225; discovery is the barrel and
-[MIGRATION.md](MIGRATION.md).
+indexed in `MANIFEST.json` under family `ui` (one row per `web/src/ui/<name>.tsx`,
+`path` relative to the digiweb root), because the gallery proves it through the
+package export `@digithings/web/ui` rather than a `@/components/*` path (#4225);
+the barrel remains the export source of truth and
+[MIGRATION.md](MIGRATION.md) the adoption guide.
 
 Page-level dashboard composition is owned by the dashboard app
 (`cloudflare/dashboard`): a command band establishes one primary state, compact
@@ -243,6 +245,15 @@ The generator derives structure (name, path, family) from the filesystem and
 the family a component is imported into, and the `summary` from the leading
 `/** … */` docblock. Components without a docblock appear with `summary: null` —
 the generator prints the coverage so gaps are visible and easy to backfill.
+
+Two indexing rules are worth calling out (#4225): next.js route groups
+(`(gallery)`, `(chatbot)`) are transparent, so family pages at
+`reference/app/(gallery)/<fam>/page.tsx` land under `<fam>` and
+`reference/app/(gallery)/page.tsx` under `foundations`; and the vendored shadcn
+kit at `web/src/ui/*.tsx` — importable only as the package export
+`@digithings/web/ui`, so no reference page ever maps it — is indexed directly
+from source, one row per `<name>.tsx` with `path` relative to the digiweb root,
+under family `ui`.
 
 ## Brand identity — the terminal marks
 

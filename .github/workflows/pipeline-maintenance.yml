@@ -330,6 +330,76 @@ jobs:
             gh project item-add "$PROJ" --owner digithings-ai --url "$URL" >/dev/null 2>&1 || true
           fi
 
+  # ── 4b. ARCHITECTURE.md drift heuristic ─────────────────────────────────────
+  # Proposes, never edits: flags modules whose public-interface paths moved at
+  # least 3 days after their ARCHITECTURE.md did, within the last 30 days. Filed
+  # as ONE tracker issue for human triage. Deliberately NOT labelled `agent-task`
+  # (unlike its doc-hygiene siblings): an agent must not auto-edit architecture
+  # docs — the human decides whether the doc actually drifted (#3525).
+  architecture-drift:
+    name: ARCHITECTURE.md drift heuristic
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # the heuristic compares commit timestamps
+
+      - name: Run drift heuristic
+        id: drift
+        run: |
+          set +e
+          OUTPUT=$(python3 scripts/check_architecture_drift.py --format text --exit-code 2>&1)
+          EXIT=$?
+          {
+            echo "exit_code=$EXIT"
+            echo "output<<EOF"
+            echo "$OUTPUT"
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Create issue if candidates
+        if: steps.drift.outputs.exit_code == '2'
+        env:
+          GH_TOKEN: ${{ secrets.DIGITHINGS_PROJECT_TOKEN }}
+          REPO: ${{ github.repository }}
+          OUTPUT: ${{ steps.drift.outputs.output }}
+          PROJ: ${{ vars.DIGI_MAINTENANCE_PROJECT_NUMBER }}
+        run: |
+          TITLE="[housekeeping] ARCHITECTURE.md drift candidates — $(date +%Y-%m-%d)"
+          EXISTING=$(gh issue list --repo "$REPO" --state open \
+            --search "ARCHITECTURE.md drift candidates in:title" --json number --jq '.[0].number' 2>/dev/null || echo "")
+          [[ -n "$EXISTING" ]] && { echo "Issue #$EXISTING already open — skipping."; exit 0; }
+
+          URL=$(gh issue create --repo "$REPO" \
+            --title "$TITLE" \
+            --label "component:root,priority:medium" \
+            --body "## ARCHITECTURE.md drift candidates
+
+          The weekly heuristic (\`scripts/check_architecture_drift.py\`) found modules whose
+          public-interface paths moved at least 3 days after their \`ARCHITECTURE.md\` did,
+          inside the last 30 days.
+
+          **A proposal, not a verdict — a human judges each row.** AGENTS.md asks for
+          \`{component}/ARCHITECTURE.md\` to be updated on interface changes, but some rows
+          may be docs that genuinely needed no change (e.g. a type-only move). Do **not**
+          auto-edit architecture docs.
+
+          ## Candidates
+          \`\`\`
+          ${OUTPUT}
+          \`\`\`
+
+          ## Acceptance Criteria
+          - [ ] Each candidate judged: doc updated, or recorded as a no-op with why
+          - [ ] Any real drift fixed by hand in a normal reviewed PR")
+          echo "Created: $URL"
+          # Best-effort board placement: never fail the step over it. Written as
+          # if/then rather than `A && B || true`, where the `|| true` covers both
+          # "PROJ unset" and "item-add failed" and reads like an else (SC2015).
+          if [[ -n "${PROJ:-}" ]]; then
+            gh project item-add "$PROJ" --owner digithings-ai --url "$URL" >/dev/null 2>&1 || true
+          fi
+
   # ── 5. Stale issue sweep ─────────────────────────────────────────────────────
   # Issues with no activity in >90 days get a comment + `stale` label.
   # `blocked`-labeled issues get a 7-day threshold (tighter) since they should

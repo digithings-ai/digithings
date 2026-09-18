@@ -188,11 +188,11 @@ jobs:
 
       - name: Ingest Fed rate-decision odds
         env:
-          CORE_SUPABASE_URL: ${{ secrets.CORE_SUPABASE_URL || secrets.SUPABASE_URL }}
-          CORE_SUPABASE_SERVICE_KEY: ${{ secrets.CORE_SUPABASE_SERVICE_KEY || secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          CORE_SUPABASE_URL: ${{ secrets.CORE_SUPABASE_URL }}
+          CORE_SUPABASE_SERVICE_KEY: ${{ secrets.CORE_SUPABASE_SERVICE_KEY }}
           # transition (#1090): legacy names fed from the same secrets until readers migrate
-          SUPABASE_URL: ${{ secrets.CORE_SUPABASE_URL || secrets.SUPABASE_URL }}
-          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.CORE_SUPABASE_SERVICE_KEY || secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          SUPABASE_URL: ${{ secrets.CORE_SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.CORE_SUPABASE_SERVICE_KEY }}
           DRY_RUN: ${{ inputs.dry_run }}
         run: |
           set -o pipefail
@@ -214,11 +214,11 @@ jobs:
         # hung Supabase probe fails this step cleanly (#2531).
         timeout-minutes: 10
         env:
-          CORE_SUPABASE_URL: ${{ secrets.CORE_SUPABASE_URL || secrets.SUPABASE_URL }}
-          CORE_SUPABASE_SERVICE_KEY: ${{ secrets.CORE_SUPABASE_SERVICE_KEY || secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          CORE_SUPABASE_URL: ${{ secrets.CORE_SUPABASE_URL }}
+          CORE_SUPABASE_SERVICE_KEY: ${{ secrets.CORE_SUPABASE_SERVICE_KEY }}
           # transition (#1090): legacy names fed from the same secrets until readers migrate
-          SUPABASE_URL: ${{ secrets.CORE_SUPABASE_URL || secrets.SUPABASE_URL }}
-          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.CORE_SUPABASE_SERVICE_KEY || secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          SUPABASE_URL: ${{ secrets.CORE_SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.CORE_SUPABASE_SERVICE_KEY }}
           OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
           CHEAPERINFERENCE_API_KEY: ${{ secrets.CHEAPERINFERENCE_API_KEY }}
           CHEAPERINFERENCE_API_BASE: ${{ vars.CHEAPERINFERENCE_API_BASE || secrets.CHEAPERINFERENCE_API_BASE || 'https://api.cheaperinference.com/v1' }}
@@ -256,11 +256,11 @@ jobs:
         # 3×70m attempts + 20m backoff. Under the 240m job so the outcome step still runs.
         timeout-minutes: 230
         env:
-          CORE_SUPABASE_URL: ${{ secrets.CORE_SUPABASE_URL || secrets.SUPABASE_URL }}
-          CORE_SUPABASE_SERVICE_KEY: ${{ secrets.CORE_SUPABASE_SERVICE_KEY || secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          CORE_SUPABASE_URL: ${{ secrets.CORE_SUPABASE_URL }}
+          CORE_SUPABASE_SERVICE_KEY: ${{ secrets.CORE_SUPABASE_SERVICE_KEY }}
           # transition (#1090): legacy names fed from the same secrets until readers migrate
-          SUPABASE_URL: ${{ secrets.CORE_SUPABASE_URL || secrets.SUPABASE_URL }}
-          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.CORE_SUPABASE_SERVICE_KEY || secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          SUPABASE_URL: ${{ secrets.CORE_SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.CORE_SUPABASE_SERVICE_KEY }}
           OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
           CHEAPERINFERENCE_API_KEY: ${{ secrets.CHEAPERINFERENCE_API_KEY }}
           CHEAPERINFERENCE_API_BASE: ${{ vars.CHEAPERINFERENCE_API_BASE || secrets.CHEAPERINFERENCE_API_BASE || 'https://api.cheaperinference.com/v1' }}
@@ -276,16 +276,14 @@ jobs:
           # the 1-retry budget across many segments in the same minute.
           DIGILLM_MAX_CONCURRENT_CALLS: 8
           DRY_RUN: ${{ inputs.dry_run }}
-          # transition (#3979): fall back to the pre-#3860 secret names until the
-          # repo secret is renamed; drop the fallback once CORE_POSTGRES_URI exists.
-          CORE_POSTGRES_URI: ${{ secrets.CORE_POSTGRES_URI || secrets.DIGI_CHECKPOINTER_POSTGRES_URI || secrets.MARKET_DATA_POSTGRES_URI }}
+          CORE_POSTGRES_URI: ${{ secrets.CORE_POSTGRES_URI }}
           RESUME_RUN_ID: ${{ inputs.resume_run_id }}
           LANGSMITH_API_KEY: ${{ secrets.LANGSMITH_API_KEY }}
           LANGSMITH_PROJECT: digiquant-baseline
           # WP10.1 (#2758): post-H9 immutable shadow allocation JSON under artifacts/
-          # (uploaded below). Export is fail-soft; disable with OLYMPUS_SHADOW_ARTIFACT_MODE=off.
-          OLYMPUS_SHADOW_ARTIFACT_MODE: export
-          OLYMPUS_SHADOW_ARTIFACT_DIR: artifacts
+          # (uploaded below). Export is fail-soft; disable with DIGIQUANT_SHADOW_ARTIFACT_MODE=off.
+          DIGIQUANT_SHADOW_ARTIFACT_MODE: export
+          DIGIQUANT_SHADOW_ARTIFACT_DIR: artifacts
         run: |
           mkdir -p artifacts
           set -o pipefail
@@ -303,7 +301,7 @@ jobs:
             # is identical across these attempts and stays the resume handle, so the attempt
             # number is the only thing that can distinguish them. Exported (not an assignment
             # prefix on CMD) because CMD is invoked through a pipe into `tee`.
-            export OLYMPUS_ATTEMPT="${attempt}"
+            export DIGIQUANT_ATTEMPT="${attempt}"
             CMD=(uv run --frozen --no-sync python -m digiquant.portfolio.chain
                  --cadence daily
                  --run-date "${RUN_DATE}"

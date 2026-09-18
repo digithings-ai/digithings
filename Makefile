@@ -318,3 +318,12 @@ secrets-scan:
 	  exit 127; \
 	}
 	@gitleaks detect --source . --config .gitleaks.toml --redact --verbose --no-banner
+
+# Match every `secrets.*` read under .github/ against each level (repo secret, repo
+# variable, org secret, environment secret) and report `dead`, `not repo-level`,
+# `unresolved`, `repo-over-org` and `env-over-repo`. `--strict` exits 1 on a dead repo
+# secret; `--strict-unresolved` does the same for a read no level defines.
+# Local check only — deliberately not a CI gate.
+.PHONY: secrets-audit
+secrets-audit:
+	python3 scripts/secrets_audit.py --strict

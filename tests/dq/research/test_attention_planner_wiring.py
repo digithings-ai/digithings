@@ -11,7 +11,7 @@ from digiquant.dashboard.research_retrieval.planner import AttentionMode, Attent
 from digiquant.research.phases._node_factory import SegmentNodeSpec, build_segment_node
 from digiquant.research.phases.triage_phase import TriageDeps, build_triage_node
 from digiquant.research.research_attention import (
-    OLYMPUS_RESEARCH_ATTENTION_MODE_ENV,
+    DIGIQUANT_RESEARCH_ATTENTION_MODE_ENV,
     apply_segment_metric_patch,
     artifact_target_key,
     attention_store_for_run,
@@ -99,7 +99,7 @@ def _clean_attention_stores() -> None:
 
 
 def test_triage_builds_plan_before_segment_nodes(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv(OLYMPUS_RESEARCH_ATTENTION_MODE_ENV, "shadow")
+    monkeypatch.setenv(DIGIQUANT_RESEARCH_ATTENTION_MODE_ENV, "shadow")
     node = build_triage_node(TriageDeps(client=FakeSupabaseClient()))
     update = node(_state_with_triage())
     assert update.get("research_attention_plan") is not None
@@ -110,7 +110,7 @@ def test_triage_builds_plan_before_segment_nodes(monkeypatch: pytest.MonkeyPatch
 
 
 def test_plan_persists_decisions_to_attention_store(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv(OLYMPUS_RESEARCH_ATTENTION_MODE_ENV, "shadow")
+    monkeypatch.setenv(DIGIQUANT_RESEARCH_ATTENTION_MODE_ENV, "shadow")
     state = _state_with_triage(price_deltas={"TLT": 0.01})
     plan = plan_research_attention(state)
     assert plan is not None
@@ -132,7 +132,7 @@ def _apply_attention_plan(state: ResearchState) -> ResearchState:
 
 
 def test_enforce_metric_patch_skips_provider_calls(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv(OLYMPUS_RESEARCH_ATTENTION_MODE_ENV, "enforce")
+    monkeypatch.setenv(DIGIQUANT_RESEARCH_ATTENTION_MODE_ENV, "enforce")
     state = _apply_attention_plan(_state_with_triage(price_deltas={"TLT": 0.012}))
 
     grounding_calls: list[str] = []
@@ -166,7 +166,7 @@ def test_enforce_metric_patch_skips_provider_calls(monkeypatch: pytest.MonkeyPat
 
 
 def test_shadow_preserves_incumbent_provider_path(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv(OLYMPUS_RESEARCH_ATTENTION_MODE_ENV, "shadow")
+    monkeypatch.setenv(DIGIQUANT_RESEARCH_ATTENTION_MODE_ENV, "shadow")
     state = _apply_attention_plan(_state_with_triage())
 
     agent_calls: list[str] = []
@@ -209,7 +209,7 @@ def test_metric_patch_recompiles_structured_view() -> None:
 
 
 def test_enforce_carry_skips_providers(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv(OLYMPUS_RESEARCH_ATTENTION_MODE_ENV, "enforce")
+    monkeypatch.setenv(DIGIQUANT_RESEARCH_ATTENTION_MODE_ENV, "enforce")
     state = _apply_attention_plan(_state_with_triage(price_deltas={}))
 
     agent_calls: list[str] = []
@@ -231,7 +231,7 @@ def test_enforce_carry_skips_providers(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 def test_custom_prompt_skips_plan_requirement(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv(OLYMPUS_RESEARCH_ATTENTION_MODE_ENV, "shadow")
+    monkeypatch.setenv(DIGIQUANT_RESEARCH_ATTENTION_MODE_ENV, "shadow")
     state = _state_with_triage()
     state = state.model_copy(update={"custom_prompt": "What is the outlook for TLT?"})
 
@@ -261,7 +261,7 @@ def test_custom_prompt_skips_plan_requirement(monkeypatch: pytest.MonkeyPatch) -
 def test_off_mode_skips_plan_and_allows_incumbent_without_plan(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setenv(OLYMPUS_RESEARCH_ATTENTION_MODE_ENV, "off")
+    monkeypatch.setenv(DIGIQUANT_RESEARCH_ATTENTION_MODE_ENV, "off")
     state = _state_with_triage()
     assert plan_research_attention(state) is None
     triage_update = build_triage_node(None)(state)

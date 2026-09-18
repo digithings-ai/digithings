@@ -18,6 +18,16 @@ from jinja2 import Environment, FileSystemLoader, select_autoescape
 from pydantic import BaseModel, ConfigDict
 
 from digiquant.data.store.client import build_digiquant_client
+from digiquant.notify.cloudflare_email import (
+    CloudflareEmailConfig,
+    EmailClientProtocol,
+    EmailSuppressedError,
+    EmailTransportError,
+    NotifyNotConfiguredError,
+    build_email_client,
+    format_notify_not_configured,
+    missing_notify_env_names,
+)
 from digiquant.notify.digest import DigestContent, build_digest_content
 from digiquant.notify.entitlements import ArtifactClass, PlanTier, can, is_plan_tier
 from digiquant.notify.events import (
@@ -25,15 +35,6 @@ from digiquant.notify.events import (
     HoldingChangeEvent,
     detect_execution_alerts,
     detect_holding_changes,
-)
-from digiquant.notify.mailgun import (
-    MailgunClientProtocol,
-    MailgunConfig,
-    MailgunNotConfiguredError,
-    MailgunTransportError,
-    build_mailgun_client,
-    format_mailgun_not_configured,
-    missing_mailgun_env_names,
 )
 
 logger = logging.getLogger(__name__)
@@ -55,13 +56,13 @@ class DigestDryRunPlan(BaseModel):
     digest_on: int
     skipped_prefs_off: int
     skipped_no_email: int
-    mailgun_configured: bool
+    notify_configured: bool
 
 
 def plan_digest_dispatch(
     prefs: Sequence[Mapping[str, Any]],
     *,
-    mailgun_configured: bool,
+    notify_configured: bool,
     workspace_id: str | None = None,
 ) -> DigestDryRunPlan:
     """Classify prefs the same way ``dispatch_workspace`` gates digest send."""
@@ -85,7 +86,7 @@ def plan_digest_dispatch(
         digest_on=digest_on,
         skipped_prefs_off=skipped_prefs_off,
         skipped_no_email=skipped_no_email,
-        mailgun_configured=mailgun_configured,
+        notify_configured=notify_configured,
     )
 
 
@@ -93,7 +94,7 @@ def format_digest_dry_run(plan: DigestDryRunPlan) -> str:
     return (
         f"notify dry-run considered={plan.considered} digest_on={plan.digest_on} "
         f"skipped_prefs_off={plan.skipped_prefs_off} skipped_no_email={plan.skipped_no_email} "
-        f"mailgun_configured={int(plan.mailgun_configured)}"
+        f"notify_configured={int(plan.notify_configured)}"
     )
 
 
@@ -180,6 +181,31 @@ def try_claim_send_slot(
         raise
 
 
+def _release_send_slot(
+    sb: SupabaseReader,
+    workspace_id: str,
+    event_key: str,
+    sent_date: date,
+) -> None:
+    """Undo :func:`try_claim_send_slot` after the service refused the send.
+
+    A suppressed recipient is not a send: leaving the claim behind would stop the
+    digest (or the event) from ever being retried once the address is
+    unsuppressed.
+    """
+    try:
+        (
+            sb.table("notification_log")
+            .delete()
+            .eq("workspace_id", workspace_id)
+            .eq("event_key", event_key)
+            .eq("sent_date", sent_date.isoformat())
+            .execute()
+        )
+    except Exception as exc:  # pragma: no cover — defensive; claim release is best-effort
+        logger.warning("notify: could not release claim %s: %s", event_key, exc)
+
+
 def _load_prefs(sb: SupabaseReader) -> list[dict[str, Any]]:
     res = sb.table("notification_prefs").select("*").execute()
     return list(getattr(res, "data", None) or [])
@@ -205,7 +231,7 @@ def _workspace_name(sb: SupabaseReader, workspace_id: str) -> str:
     return str(name or "Workspace")
 
 
-def _is_suppressed(client: MailgunClientProtocol, email: str) -> bool:
+def _is_suppressed(client: EmailClientProtocol, email: str) -> bool:
     if client.is_suppressed(email):
         logger.warning(
             "notify: suppressed address skipped", extra={"email_domain": email.split("@")[-1]}
@@ -215,7 +241,7 @@ def _is_suppressed(client: MailgunClientProtocol, email: str) -> bool:
 
 
 def _send_message(
-    client: MailgunClientProtocol,
+    client: EmailClientProtocol,
     email: str,
     subject: str,
     text_body: str,
@@ -226,8 +252,8 @@ def _send_message(
 
 def dispatch_workspace(
     sb: SupabaseReader,
-    client: MailgunClientProtocol,
-    mailgun_config: MailgunConfig,
+    client: EmailClientProtocol,
+    notify_config: CloudflareEmailConfig,
     pref: dict[str, Any],
     run_date: date,
     hour_utc: int,
@@ -254,19 +280,22 @@ def dispatch_workspace(
                         workspace_id,
                         tier,
                         run_date,
-                        mailgun_config,
+                        notify_config,
                         workspace_name=workspace_name,
                     )
                     text, html = _render_daily_digest(content)
                     subject = f"dashboard daily digest — {run_date.isoformat()}"
                     try:
                         _send_message(client, email, subject, text, html)
-                    except MailgunTransportError as exc:
+                    except EmailSuppressedError as exc:
+                        logger.warning("notify: suppressed recipient, claim released: %s", exc)
+                        _release_send_slot(sb, workspace_id, event_key, run_date)
+                    except EmailTransportError as exc:
                         logger.warning("notify: digest send failed: %s", exc)
 
     if not execution_alerts_only and pref.get("holding_change_alerts"):
         if can(tier, ArtifactClass.HOUSE_WEIGHTS_NAV):
-            for event in detect_holding_changes(sb, workspace_id, run_date, mailgun_config):
+            for event in detect_holding_changes(sb, workspace_id, run_date, notify_config):
                 if _is_suppressed(client, email):
                     break
                 if not try_claim_send_slot(sb, workspace_id, event.event_key, run_date):
@@ -275,11 +304,14 @@ def dispatch_workspace(
                 subject = f"Holding change — {event.ticker} ({run_date.isoformat()})"
                 try:
                     _send_message(client, email, subject, text, html)
-                except MailgunTransportError as exc:
+                except EmailSuppressedError as exc:
+                    logger.warning("notify: suppressed recipient, claim released: %s", exc)
+                    _release_send_slot(sb, workspace_id, event.event_key, run_date)
+                except EmailTransportError as exc:
                     logger.warning("notify: holding-change send failed: %s", exc)
 
     if pref.get("execution_alerts") and can(tier, ArtifactClass.BROKER_STATUS):
-        for event in detect_execution_alerts(sb, workspace_id, run_date, mailgun_config):
+        for event in detect_execution_alerts(sb, workspace_id, run_date, notify_config):
             if _is_suppressed(client, email):
                 break
             if not try_claim_send_slot(sb, workspace_id, event.event_key, run_date):
@@ -288,14 +320,17 @@ def dispatch_workspace(
             subject = f"Execution alert — {event.symbol} ({run_date.isoformat()})"
             try:
                 _send_message(client, email, subject, text, html)
-            except MailgunTransportError as exc:
+            except EmailSuppressedError as exc:
+                logger.warning("notify: suppressed recipient, claim released: %s", exc)
+                _release_send_slot(sb, workspace_id, event.event_key, run_date)
+            except EmailTransportError as exc:
                 logger.warning("notify: execution alert send failed: %s", exc)
 
 
 def _dispatch_with_client(
     sb: SupabaseReader,
-    client: MailgunClientProtocol,
-    mailgun_config: MailgunConfig,
+    client: EmailClientProtocol,
+    notify_config: CloudflareEmailConfig,
     run_date: date,
     hour_utc: int,
     *,
@@ -308,7 +343,7 @@ def _dispatch_with_client(
             dispatch_workspace(
                 sb,
                 client,
-                mailgun_config,
+                notify_config,
                 pref,
                 run_date,
                 hour_utc,
@@ -374,26 +409,26 @@ def _dispatch_notifications_inner(
     if sb is None:
         logger.warning("notify: supabase credentials missing — skip dispatch")
         return
-    missing = missing_mailgun_env_names()
+    missing = missing_notify_env_names()
     if missing:
         # Named code in logs so ops/agents never confuse silent skip with success.
         logger.warning(
             "notify: %s — skip dispatch (fail-soft for cron/post-run)",
-            format_mailgun_not_configured(missing),
+            format_notify_not_configured(missing),
         )
         return
-    mailgun_config = MailgunConfig.from_env()
-    if mailgun_config is None:
+    notify_config = CloudflareEmailConfig.from_env()
+    if notify_config is None:
         logger.warning(
             "notify: %s — skip dispatch",
-            format_mailgun_not_configured(list(missing_mailgun_env_names())),
+            format_notify_not_configured(list(missing_notify_env_names())),
         )
         return
-    client = build_mailgun_client()
+    client = build_email_client()
     if client is None:
         logger.warning(
             "notify: %s — client unavailable, skip dispatch",
-            format_mailgun_not_configured(list(missing_mailgun_env_names())),
+            format_notify_not_configured(list(missing_notify_env_names())),
         )
         return
 
@@ -403,7 +438,7 @@ def _dispatch_notifications_inner(
     _dispatch_with_client(
         sb,
         client,
-        mailgun_config,
+        notify_config,
         effective_date,
         effective_hour,
         force_digest=force_digest,
@@ -415,13 +450,13 @@ def _run_digest_dry_run(
     *,
     workspace_id: str | None,
     prefs: Sequence[Mapping[str, Any]] | None,
-    mailgun_configured: bool | None,
+    notify_configured: bool | None,
     log: Callable[[str], None] | None,
 ) -> int:
     """Print digest candidate counts. Never sends or claims slots."""
     out = log or print
     configured = (
-        not bool(missing_mailgun_env_names()) if mailgun_configured is None else mailgun_configured
+        not bool(missing_notify_env_names()) if notify_configured is None else notify_configured
     )
     loaded: Sequence[Mapping[str, Any]]
     if prefs is None:
@@ -434,7 +469,7 @@ def _run_digest_dry_run(
         loaded = prefs
     plan = plan_digest_dispatch(
         loaded,
-        mailgun_configured=configured,
+        notify_configured=configured,
         workspace_id=workspace_id,
     )
     out(format_digest_dry_run(plan))
@@ -445,31 +480,31 @@ def main(
     argv: list[str] | None = None,
     *,
     prefs: Sequence[Mapping[str, Any]] | None = None,
-    mailgun_configured: bool | None = None,
+    notify_configured: bool | None = None,
     log: Callable[[str], None] | None = None,
 ) -> int:
     """CLI entry: ``python -m digiquant.notify.dispatch``.
 
-    Default (cron): hour-gated dispatch; Mailgun gaps are fail-soft inside
+    Default (cron): hour-gated dispatch; notify gaps are fail-soft inside
     :func:`dispatch_notifications`.
 
-    ``--require-mailgun`` / ``--check``: loud-fail with exit **2** and code
-    ``MAILGUN_NOT_CONFIGURED`` listing missing env *names* (no values). Use for
+    ``--require-notify`` / ``--check``: loud-fail with exit **2** and code
+    ``NOTIFY_NOT_CONFIGURED`` listing missing env *names* (no values). Use for
     staging probes and agent gates — never silent green when vendor keys empty.
 
     ``--dry-run``: load prefs and print candidate counts (no send, no
-    ``notification_log`` claim). Mailgun absence is reported as
-    ``mailgun_configured=0`` rather than skipping the count. ``--workspace-id``
+    ``notification_log`` claim). notify absence is reported as
+    ``notify_configured=0`` rather than skipping the count. ``--workspace-id``
     filters the plan. Missing store env exits **2** with
     ``NOTIFY_STORE_NOT_CONFIGURED``.
     """
     parser = argparse.ArgumentParser(prog="digiquant.notify.dispatch")
     parser.add_argument(
-        "--require-mailgun",
+        "--require-notify",
         "--check",
-        dest="require_mailgun",
+        dest="require_notify",
         action="store_true",
-        help="Exit 2 with MAILGUN_NOT_CONFIGURED when Mailgun env incomplete",
+        help="Exit 2 with NOTIFY_NOT_CONFIGURED when notify env incomplete",
     )
     parser.add_argument(
         "--dry-run",
@@ -484,24 +519,24 @@ def main(
     args = parser.parse_args(argv)
     logging.basicConfig(level=logging.INFO)
 
-    if args.require_mailgun:
-        missing = missing_mailgun_env_names()
+    if args.require_notify:
+        missing = missing_notify_env_names()
         if missing:
-            print(format_mailgun_not_configured(missing), file=sys.stderr)
+            print(format_notify_not_configured(missing), file=sys.stderr)
             return 2
         try:
-            MailgunConfig.require_from_env()
-        except MailgunNotConfiguredError as exc:
+            CloudflareEmailConfig.require_from_env()
+        except NotifyNotConfiguredError as exc:
             print(str(exc), file=sys.stderr)
             return 2
-        print("notify: Mailgun env present (names only check; send not attempted)")
+        print("notify: notify env present (names only check; send not attempted)")
         return 0
 
     if args.dry_run:
         return _run_digest_dry_run(
             workspace_id=args.workspace_id,
             prefs=prefs,
-            mailgun_configured=mailgun_configured,
+            notify_configured=notify_configured,
             log=log,
         )
 

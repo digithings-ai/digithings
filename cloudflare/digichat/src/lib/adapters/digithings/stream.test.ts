@@ -1179,3 +1179,110 @@ it("surfaces a non-JSON upstream body as a stream error without leaking the body
   expect(errorTextFrom(body)).toBe(DIGIGRAPH_UNAVAILABLE_MESSAGE);
   expect(body).not.toContain('"type":"text-delta"');
 });
+
+// #4323: a sleeping stack container answers 503 while it boots. The turn must
+// survive the cold start: report "connecting", retry upstream, then continue.
+it("retries a 503 cold start and reports the connection status", async () => {
+  vi.useFakeTimers();
+  try {
+    const fetchSpy = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(new Response("stack container not ready", { status: 503 }))
+      .mockResolvedValueOnce(
+        new Response('data: {"choices":[{"delta":{"content":"Hello."}}]}\n\ndata: [DONE]\n\n', {
+          status: 200,
+          headers: { "content-type": "text/event-stream" },
+        }),
+      );
+
+    const pendingBody = (async () => {
+      const res = await createDigigraphTraceStreamResponse({
+        messages: [userMessage("hi")],
+        digigraphBaseUrl: "https://digigraph.internal",
+        upstreamHeaders: {},
+        responseHeaders: {},
+        activityDetail: "full",
+      });
+      return new Response(res.body).text();
+    })();
+    await vi.runAllTimersAsync();
+    const body = await pendingBody;
+
+    expect(eventsFrom(body)[0]).toEqual({
+      type: "data-connection",
+      id: "digigraph-connection",
+      data: { state: "connecting" },
+    });
+    expect(eventsFrom(body).filter((event) => event.type === "data-connection")).toEqual([
+      { type: "data-connection", id: "digigraph-connection", data: { state: "connecting" } },
+      { type: "data-connection", id: "digigraph-connection", data: { state: "connected" } },
+    ]);
+    expect(errorTextFrom(body)).toBeUndefined();
+    expect(body).toContain("Hello.");
+    expect(fetchSpy).toHaveBeenCalledTimes(2);
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+it("keeps the unavailable error when the upstream stays cold after retries", async () => {
+  vi.useFakeTimers();
+  try {
+    const fetchSpy = vi
+      .spyOn(globalThis, "fetch")
+      .mockImplementation(async () => new Response("stack container not ready", { status: 503 }));
+    const errorLog = vi.spyOn(console, "error").mockImplementation(() => {});
+
+    const pendingBody = (async () => {
+      const res = await createDigigraphTraceStreamResponse({
+        messages: [userMessage("hi")],
+        digigraphBaseUrl: "https://digigraph.internal",
+        upstreamHeaders: {},
+        responseHeaders: {},
+        activityDetail: "full",
+      });
+      return new Response(res.body).text();
+    })();
+    await vi.runAllTimersAsync();
+    const body = await pendingBody;
+
+    expect(errorTextFrom(body)).toBe(DIGIGRAPH_UNAVAILABLE_MESSAGE);
+    expect(body).not.toContain('"type":"text-delta"');
+    expect(fetchSpy).toHaveBeenCalledTimes(4);
+    expect(errorLog).toHaveBeenCalled();
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+it("stops the retry when the request is aborted during a cold-start wait", async () => {
+  vi.useFakeTimers();
+  try {
+    const controller = new AbortController();
+    const fetchSpy = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValue(new Response("stack container not ready", { status: 503 }));
+    vi.spyOn(console, "error").mockImplementation(() => {});
+
+    const pendingBody = (async () => {
+      const res = await createDigigraphTraceStreamResponse({
+        messages: [userMessage("hi")],
+        digigraphBaseUrl: "https://digigraph.internal",
+        upstreamHeaders: {},
+        responseHeaders: {},
+        activityDetail: "full",
+        signal: controller.signal,
+      });
+      return new Response(res.body).text();
+    })();
+    await vi.advanceTimersByTimeAsync(100);
+    controller.abort();
+    await vi.runAllTimersAsync();
+    const body = await pendingBody;
+
+    expect(fetchSpy).toHaveBeenCalledTimes(1);
+    expect(errorTextFrom(body)).toBeTruthy();
+  } finally {
+    vi.useRealTimers();
+  }
+});

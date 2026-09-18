@@ -119,6 +119,35 @@ class DigigraphStreamContractError extends Error {
   }
 }
 
+const UPSTREAM_MAX_ATTEMPTS = 4;
+// Cold starts: the stack worker answers 503 (`stack container not ready`)
+// while the container boots; retry until the instance is up.
+const UPSTREAM_RETRY_DELAYS_MS = [2000, 5000, 8000];
+
+function retryDelayMs(attempt: number): number {
+  const index = Math.min(attempt - 1, UPSTREAM_RETRY_DELAYS_MS.length - 1);
+  return UPSTREAM_RETRY_DELAYS_MS[index] ?? 0;
+}
+
+/** Abort-aware sleep so Stop stays responsive between cold-start retries. */
+function abortableSleep(ms: number, signal?: AbortSignal): Promise<void> {
+  return new Promise((resolve) => {
+    if (signal?.aborted) {
+      resolve();
+      return;
+    }
+    const onAbort = () => {
+      clearTimeout(timer);
+      resolve();
+    };
+    const timer = setTimeout(() => {
+      signal?.removeEventListener("abort", onAbort);
+      resolve();
+    }, ms);
+    signal?.addEventListener("abort", onAbort, { once: true });
+  });
+}
+
 async function* iterateOpenAiSse(
   body: ReadableStream<Uint8Array>,
   onUsage?: (usage: Record<string, unknown>) => void
@@ -199,6 +228,11 @@ export async function createDigigraphTraceStreamResponse(opts: {
         textOpen = false;
         textSeq += 1;
       };
+      writer.write({
+        type: "data-connection",
+        id: "digigraph-connection",
+        data: { state: "connecting" },
+      });
 
       // Settle on EVERY exit (error, abort, contract failure), not just the
       // success tail: a part left streaming keeps the thinking animation
@@ -212,38 +246,55 @@ export async function createDigigraphTraceStreamResponse(opts: {
       // #2572: never follow cross-origin redirects while carrying BYOK /
       // LiteLLM / digikey credentials (Node forwards X-* across origins).
       let res: Response;
-      try {
-        res = await fetchGuarded(url, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            // Authorization comes from upstreamHeaders and nowhere else, because
-            // route.ts sets it unconditionally (`route.ts:244`, one const literal;
-            // later lines only add X-* keys). NOT because the spread would override
-            // it — a spread overrides only keys it actually contains, so an
-            // `Authorization` set here WOULD survive a caller that omitted one. That
-            // is why route.ts's unconditional set is pinned by a test rather than
-            // left to inspection: if it ever becomes conditional, this adapter must
-            // regain a fallback or digigraph gets an unauthenticated request (#2537).
-            ...opts.upstreamHeaders,
-            // After upstreamHeaders so dogfood never inherits Open WebUI format.
-            // Belt-and-suspenders: digigraph's Open WebUI chrome is opt-in only
-            // (X-Response-Format: openwebui or openwebui_format=true), never implied
-            // by model id, but dogfood forces plain explicitly rather than relying
-            // on that default.
-            "X-Suppress-Tool-Stream": "1",
-            "X-Response-Format": "plain",
-          },
-          body: JSON.stringify(bodyPayload),
-          signal: opts.signal,
-        });
-      } catch (err) {
-        if (err instanceof CredentialRedirectError) {
-          console.error(`[digigraph] credential redirect refused: ${err.message}`);
-          closeText();
-          throw new DigigraphStreamContractError(DIGIGRAPH_UNAVAILABLE_MESSAGE);
+      for (let attempt = 1; ; attempt += 1) {
+        if (opts.signal?.aborted) {
+          throw new DOMException("The operation was aborted.", "AbortError");
         }
-        throw err;
+        try {
+          res = await fetchGuarded(url, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              // Authorization comes from upstreamHeaders and nowhere else, because
+              // route.ts sets it unconditionally (`route.ts:244`, one const literal;
+              // later lines only add X-* keys). NOT because the spread would override
+              // it — a spread overrides only keys it actually contains, so an
+              // `Authorization` set here WOULD survive a caller that omitted one. That
+              // is why route.ts's unconditional set is pinned by a test rather than
+              // left to inspection: if it ever becomes conditional, this adapter must
+              // regain a fallback or digigraph gets an unauthenticated request (#2537).
+              ...opts.upstreamHeaders,
+              // After upstreamHeaders so dogfood never inherits Open WebUI format.
+              // Belt-and-suspenders: digigraph's Open WebUI chrome is opt-in only
+              // (X-Response-Format: openwebui or openwebui_format=true), never implied
+              // by model id, but dogfood forces plain explicitly rather than relying
+              // on that default.
+              "X-Suppress-Tool-Stream": "1",
+              "X-Response-Format": "plain",
+            },
+            body: JSON.stringify(bodyPayload),
+            signal: opts.signal,
+          });
+        } catch (err) {
+          if (err instanceof CredentialRedirectError) {
+            console.error(`[digigraph] credential redirect refused: ${err.message}`);
+            closeText();
+            throw new DigigraphStreamContractError(DIGIGRAPH_UNAVAILABLE_MESSAGE);
+          }
+          if (attempt >= UPSTREAM_MAX_ATTEMPTS || opts.signal?.aborted) {
+            throw err;
+          }
+          await abortableSleep(retryDelayMs(attempt), opts.signal);
+          continue;
+        }
+        if (res.status === 503 && attempt < UPSTREAM_MAX_ATTEMPTS) {
+          if (res.body) {
+            await res.body.cancel().catch(() => {});
+          }
+          await abortableSleep(retryDelayMs(attempt), opts.signal);
+          continue;
+        }
+        break;
       }
       if (!res.ok) {
         // Log the upstream detail server-side; never stream it. A 500 body can
@@ -270,6 +321,11 @@ export async function createDigigraphTraceStreamResponse(opts: {
         closeText();
         throw new DigigraphStreamContractError(DIGIGRAPH_UNAVAILABLE_MESSAGE);
       }
+      writer.write({
+        type: "data-connection",
+        id: "digigraph-connection",
+        data: { state: "connected" },
+      });
       if (!res.body) {
         console.error(
           `[digigraph] upstream ${res.status} returned an empty body (reason=empty_body)`

@@ -114,7 +114,7 @@ def test_missing_env_names_are_canonical() -> None:
     apply_missing = missing_execution_sync_apply_env_names({})
     assert "DIGIQUANT_VAULT_MASTER_KEY" in apply_missing
     msg = format_execution_sync_not_configured(apply_missing)
-    assert msg.startswith("KAIROS_SYNC_NOT_CONFIGURED:")
+    assert msg.startswith("DIGIQUANT_SYNC_NOT_CONFIGURED:")
     assert "sk_test" not in msg
 
 
@@ -122,7 +122,7 @@ def test_check_missing_env_exits_2() -> None:
     err: list[str] = []
     rc = main(["--check"], environ={}, log=lambda _m: None, log_err=err.append)
     assert rc == 2
-    assert "KAIROS_SYNC_NOT_CONFIGURED" in err[0]
+    assert "DIGIQUANT_SYNC_NOT_CONFIGURED" in err[0]
     assert "SUPABASE_URL" in err[0]
 
 

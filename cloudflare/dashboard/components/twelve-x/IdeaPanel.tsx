@@ -9,6 +9,7 @@ import DetailPanelHeaderActions, {
   type DetailPanelSize,
 } from '@/components/DetailPanelHeaderActions';
 import {
+  annotateLevelUpdates,
   assembleTradeHistory,
   biasLabel,
   closeReason,
@@ -18,25 +19,7 @@ import {
   type TradeHistoryRow,
 } from '@/lib/twelve-x/trade-history';
 import type { FxIdeaEvalRow, FxTradeIdeaRow } from '@/lib/twelve-x/types';
-import { useTwelveX } from './context';
 import { IdeaDetail } from './TradeIdeasPanel';
-
-interface Citation {
-  broker?: string;
-  source_file?: string;
-}
-
-function parseCitations(raw: unknown): Citation[] {
-  if (!Array.isArray(raw)) return [];
-  return raw.flatMap((item): Citation[] => {
-    if (typeof item !== 'object' || item === null) return [];
-    const rec = item as Record<string, unknown>;
-    const sourceFile = typeof rec.source_file === 'string' ? rec.source_file : undefined;
-    const broker = typeof rec.broker === 'string' ? rec.broker : undefined;
-    if (!sourceFile && !broker) return [];
-    return [{ source_file: sourceFile, broker }];
-  });
-}
 
 const RESULT_LABELS: Record<string, string> = {
   right: 'Right',
@@ -143,24 +126,42 @@ export function IdeaLifecycleBlock({ row }: { row: TradeHistoryRow }) {
 }
 
 /**
- * The SSR-safe panel content: the lifecycle story, the full trade argument, and
- * the source-brief links. Split from the Sheet chrome (whose portal does not
- * render under static export) so tests can target it directly.
+ * The SSR-safe panel content: the lifecycle story and the full trade argument
+ * (whose `IdeaDetail` already lists the contributing desks). Split from the
+ * Sheet chrome (whose portal does not render under static export) so tests can
+ * target it directly.
  */
 export function IdeaPanelBody({
   idea,
+  ideas,
   ideaEval,
+  loading,
+  error,
 }: {
   idea: FxTradeIdeaRow | null;
+  ideas: FxTradeIdeaRow[];
   ideaEval: FxIdeaEvalRow[];
+  loading: boolean;
+  error: string | null;
 }) {
-  const { openBrief } = useTwelveX();
-  const historyRow = useMemo(
-    () => (idea ? (assembleTradeHistory([idea], ideaEval)[0] ?? null) : null),
-    [idea, ideaEval],
-  );
-  const citations = useMemo(() => parseCitations(idea?.citations), [idea?.citations]);
+  // Annotate against the full archive so `levelsUpdated` (set only by
+  // `annotateLevelUpdates`) is live here, same as the Trades table. #4210.
+  const historyRow = useMemo(() => {
+    if (!idea) return null;
+    const rows = annotateLevelUpdates(assembleTradeHistory(ideas, ideaEval));
+    return rows.find((r) => r.runDate === idea.run_date && r.rank === idea.rank) ?? null;
+  }, [idea, ideas, ideaEval]);
 
+  if (loading) return <p className="text-sm text-ink-mute">Loading trade idea…</p>;
+  if (error) {
+    return (
+      <p className="text-sm text-warn">
+        {error === 'unconfigured'
+          ? 'Trade ideas are not connected in this environment.'
+          : error}
+      </p>
+    );
+  }
   if (!idea) {
     return <p className="text-sm text-ink-mute">Trade idea not found in this feed.</p>;
   }
@@ -169,35 +170,10 @@ export function IdeaPanelBody({
     <>
       {historyRow ? <IdeaLifecycleBlock row={historyRow} /> : null}
 
+      {/* Citations are contributing-desk run artifacts with no loadable brief
+          (#1664), so IdeaDetail already renders them as desks — no separate
+          brief-linking section here. #4210. */}
       <IdeaDetail idea={idea} />
-
-      {citations.length > 0 ? (
-        <section aria-label="Source briefs">
-          <h3 className="mb-2 text-[10px] font-semibold uppercase tracking-wider text-ink-mute">
-            Source briefs
-          </h3>
-          <ul className="flex flex-col gap-1">
-            {citations.map((c, i) => (
-              <li key={`${c.source_file ?? c.broker}-${i}`}>
-                {c.source_file ? (
-                  <Button
-                    type="button"
-                    variant="link"
-                    size="xs"
-                    className="h-auto justify-start p-0 text-left text-xs text-accent"
-                    onClick={() => openBrief(c.source_file as string, null)}
-                    title={c.broker ? `${c.broker} — ${c.source_file}` : c.source_file}
-                  >
-                    {c.broker ?? c.source_file}
-                  </Button>
-                ) : (
-                  <span className="text-xs text-ink-soft">{c.broker}</span>
-                )}
-              </li>
-            ))}
-          </ul>
-        </section>
-      ) : null}
     </>
   );
 }
@@ -214,6 +190,8 @@ export default function IdeaPanel({
   rank,
   ideas,
   ideaEval,
+  loading = false,
+  error = null,
   onClose,
 }: {
   open: boolean;
@@ -221,6 +199,9 @@ export default function IdeaPanel({
   rank: number | null;
   ideas: FxTradeIdeaRow[];
   ideaEval: FxIdeaEvalRow[];
+  /** Feed loading/error state, so a deep link does not flash "not found". */
+  loading?: boolean;
+  error?: string | null;
   onClose: () => void;
 }) {
   const [size, setSize] = useState<DetailPanelSize>('default');
@@ -266,7 +247,13 @@ export default function IdeaPanel({
             size === 'full' ? 'md:mx-auto md:w-full md:max-w-3xl' : '',
           ].join(' ')}
         >
-          <IdeaPanelBody idea={idea} ideaEval={ideaEval} />
+          <IdeaPanelBody
+            idea={idea}
+            ideas={ideas}
+            ideaEval={ideaEval}
+            loading={loading}
+            error={error}
+          />
         </div>
       </SheetContent>
     </Sheet>
