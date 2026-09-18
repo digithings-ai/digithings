@@ -118,7 +118,7 @@ NOT run them from an agent env; no cloud creds there):
 ```bash
 # Apply 127_drop_market_data_tables.sql (#4053) through db-migrate.yml on main
 # (push or manual dispatch; one transaction per file, ledgered in
-# olympus_schema_migrations). Never re-edit 124 — it is a ledgered no-op; 127 is
+# digithings_schema_migrations). Never re-edit 124 — it is a ledgered no-op; 127 is
 # the drop. Rollback after apply = restore-from-generation + replay.
 # 0. PRECONDITION (apply gate) — the stack Worker is redeployed with
 #    DIGIQUANT_MARKET_DATA_BACKEND="r2" in [vars] (83640e28c; the value reaches

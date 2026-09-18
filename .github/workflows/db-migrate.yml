@@ -2,7 +2,7 @@ name: db-migrate
 # Apply pending dashboard Supabase migrations to prod on release to main, so the
 # schema stops drifting behind the repo (#1016 — root cause of the 044/045
 # incidents). Forward-only, race-free, and with exactly ONE gate:
-#   * A dedicated `olympus_schema_migrations` table records applied files, keyed
+#   * A dedicated `digithings_schema_migrations` table records applied files, keyed
 #     on the full filename. A row means prod ran that file; no row means pending.
 #   * Every pending file is EXECUTED. Nothing here records a version it has not
 #     run — that invariant holds on both apply paths below.
@@ -15,6 +15,18 @@ name: db-migrate
 #     transaction. Die between the two and prod is migrated while the ledger
 #     stays silent, so the next run replays the file. That asymmetry is the
 #     reason the grep below exists and the reason not to hand-wrap a migration.
+#
+# The ledger was renamed from `olympus_schema_migrations` (#4295), and the
+# `Bootstrap the migration ledger` step below is what makes that safe. It runs on
+# every apply, BEFORE the skip gate, and in ONE transaction it creates the new
+# `digithings_schema_migrations` table if missing and — while the old table still
+# exists — copies every `(version, applied_at)` row across with
+# `ON CONFLICT (version) DO NOTHING`. So the gate can never see the new name
+# empty while prod's history lives only under the old one. That state would skip
+# nothing and replay 001..N, and 001 is idempotent enough to COMMIT before the
+# chain aborts (see below) — prod PARTIALLY re-migrated with a ledger to match.
+# The old table must NOT be dropped until this bootstrap has run at least once;
+# migration 136 does that drop, guarded by a row-count check.
 #
 # There used to be a second gate: `BASELINE_THROUGH: 45` recorded any file whose
 # numeric prefix was <= 45 WITHOUT executing it, on the theory that those predate
@@ -107,6 +119,40 @@ jobs:
       - uses: actions/checkout@v4
       - name: Ensure psql client
         run: psql --version || { sudo apt-get update && sudo apt-get install -y postgresql-client; }
+      - name: Bootstrap the migration ledger (copy-forward from the old name)
+        env:
+          DB_URI: ${{ secrets.CORE_POSTGRES_URI }}
+        run: |
+          set -euo pipefail
+          test -n "${DB_URI}" || { echo "::error::CORE_POSTGRES_URI secret is empty"; exit 1; }
+          # One transaction, before the gate below: the new ledger either exists complete
+          # with every row the old name recorded, or nothing about the ledger changed. The
+          # old table is read, never written, and a fresh environment (old table absent)
+          # simply creates the new one. Idempotent, so it can run ahead of every apply (#4295).
+          psql "${DB_URI}" -v ON_ERROR_STOP=1 -c "
+            BEGIN;
+            CREATE TABLE IF NOT EXISTS public.digithings_schema_migrations (
+              version text PRIMARY KEY,
+              applied_at timestamptz NOT NULL DEFAULT now()
+            );
+            DO \$\$
+            BEGIN
+              IF to_regclass('public.olympus_schema_migrations') IS NOT NULL THEN
+                INSERT INTO public.digithings_schema_migrations (version, applied_at)
+                SELECT version, applied_at
+                FROM public.olympus_schema_migrations
+                ON CONFLICT (version) DO NOTHING;
+              END IF;
+            END \$\$;
+            ALTER TABLE public.digithings_schema_migrations ENABLE ROW LEVEL SECURITY;
+            REVOKE ALL ON public.digithings_schema_migrations FROM PUBLIC, anon, authenticated;
+            COMMENT ON TABLE public.digithings_schema_migrations IS
+              'Migration ledger for db-migrate.yml (#1016): one row per applied migration file. '
+              'Renamed from olympus_schema_migrations (#4295); rows copied forward by the workflow '
+              'bootstrap. Locked down (issue #1755): RLS enabled with no policies and all grants '
+              'revoked from anon/authenticated. Owner/service_role access only (both bypass RLS).';
+            COMMIT;
+          "
       - name: Apply pending migrations (atomic, ledger-gated)
         env:
           DB_URI: ${{ secrets.CORE_POSTGRES_URI }}
@@ -115,7 +161,7 @@ jobs:
           test -n "${DB_URI}" || { echo "::error::CORE_POSTGRES_URI secret is empty"; exit 1; }
 
           psql "${DB_URI}" -v ON_ERROR_STOP=1 -c \
-            "CREATE TABLE IF NOT EXISTS olympus_schema_migrations (version text PRIMARY KEY, applied_at timestamptz NOT NULL DEFAULT now());"
+            "CREATE TABLE IF NOT EXISTS digithings_schema_migrations (version text PRIMARY KEY, applied_at timestamptz NOT NULL DEFAULT now());"
 
           mapfile -t FILES < <(find digiquant/supabase/migrations -maxdepth 1 -name '*.sql' | sort)
           echo "Found ${#FILES[@]} migration files; the ledger alone decides which are pending."
@@ -138,7 +184,7 @@ jobs:
 
             # The one and only skip gate: a ledger row means prod already ran this file.
             # Nothing below may record a version it has not executed (#1814).
-            exists="$(psql "${DB_URI}" -tA -c "SELECT 1 FROM olympus_schema_migrations WHERE version='${v}';")"
+            exists="$(psql "${DB_URI}" -tA -c "SELECT 1 FROM digithings_schema_migrations WHERE version='${v}';")"
             if [ -n "${exists}" ]; then
               skipped=$((skipped + 1))
               continue
@@ -148,11 +194,11 @@ jobs:
             if grep -qiE '(^|[[:space:]])begin[[:space:]]*;' "$f"; then
               # Self-wrapping migration: already atomic in its own BEGIN/COMMIT.
               psql "${DB_URI}" -v ON_ERROR_STOP=1 -f "$f"
-              psql "${DB_URI}" -v ON_ERROR_STOP=1 -c "INSERT INTO olympus_schema_migrations(version) VALUES ('${v}');"
+              psql "${DB_URI}" -v ON_ERROR_STOP=1 -c "INSERT INTO digithings_schema_migrations(version) VALUES ('${v}');"
             else
               # Unwrapped: run the file and its tracking INSERT in ONE transaction so a
               # partial failure rolls back and the version is recorded iff the DDL committed.
-              { cat "$f"; printf "\nINSERT INTO olympus_schema_migrations(version) VALUES ('%s');\n" "$v"; } \
+              { cat "$f"; printf "\nINSERT INTO digithings_schema_migrations(version) VALUES ('%s');\n" "$v"; } \
                 | psql "${DB_URI}" -v ON_ERROR_STOP=1 --single-transaction -f -
             fi
             applied=$((applied + 1))

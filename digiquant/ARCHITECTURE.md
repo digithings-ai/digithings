@@ -483,7 +483,7 @@ Macro carve-out: migration `124_drop_market_data_tables.sql` is a **no-op**
 because the on-cron Supabase readers were not yet migrated when it was ledgered.
 The real drop ships as **`127_drop_market_data_tables.sql`** (#4053) — a new
 numbered migration, never a re-edit of 124: `db-migrate.yml` records every
-executed file in `olympus_schema_migrations` by name, so a re-edited 124 is
+executed file in `digithings_schema_migrations` by name, so a re-edited 124 is
 silently skipped. 127 drops the two views (`price_history_tickers`,
 `public_price_latest`) before the two tables; every market read is R2/live-only
 (see *Market-data reads: R2* above), and rollback is restore-from-generation +
@@ -3746,7 +3746,7 @@ through RLS on `realtime.messages`, which we can never police.
 
 *Why the textbook fix was withdrawn.* The obvious patch — RLS policies on
 `realtime.messages` plus private channels on both ends — was written as migration `062`, then
-proved **impossible to apply**. It never reached production (no `olympus_schema_migrations`
+proved **impossible to apply**. It never reached production (no migration-ledger
 row; two `db-migrate` runs failed on it), so it was deleted and the number burned. `realtime.messages` is
 owned by `supabase_realtime_admin`, a role with zero members over which zero roles hold
 admin option; our connection is `postgres` (`rolsuper = false`, not a member), and on
@@ -4250,11 +4250,13 @@ settings placeholder). `NOTIFY_FROM` may be a bare address or `Name <addr@domain
 
 **Behavior:** fail-soft for cron/post-run — transport/network errors log a warning and
 return; missing notify env logs `NOTIFY_NOT_CONFIGURED` with named keys and skips
-(never silent as success in agent probes). Dedupe via `notification_log` insert-first
+(never silent as success in agent probes). Dedupe via `notification_claim` insert-first
 PK `(workspace_id, event_key, sent_date)`; suppression is enforced by Cloudflare at
 send time (a suppressed recipient is reported on the send response, the client raises
-`EmailSuppressedError` and dispatch releases the claim, so the send is retried once the
-address is unsuppressed — there is no pre-send query API); tier gates on digest sections and event
+`EmailSuppressedError` and dispatch releases the claim — a DELETE, which is why the
+claim has its own mutable table while `notification_log` records only what was sent —
+so the send is retried once the address is unsuppressed; there is no pre-send query API);
+tier gates on digest sections and event
 types (`house_weights_nav` for holding-change, `private_book` for execution alerts);
 templates carry unsubscribe link, no broker ids/tokens/keys.
 
@@ -4349,7 +4351,7 @@ House GHA (`pipeline-digiquant.yml`) does not yet pass `CLOUDFLARE_EMAIL_API_TOK
 `chore/` or `feat/` branch (`cursor/*` cannot write workflows). Until then the
 close-out is fail-soft skip.
 
-Migration 103 (`notification_prefs`, `notification_log`) + `tests/dq/notify/`.
+Migration 103 (`notification_prefs`, `notification_log`) and 133 (`notification_claim`) + `tests/dq/notify/`.
 
 ## Billing (T2)
 
