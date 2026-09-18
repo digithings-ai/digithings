@@ -133,6 +133,52 @@ export async function resolvePlanTierFromDashboardAccessToken(
 }
 
 /**
+ * Effective plan tier for the dashboard user, read from the my_access RPC.
+ *
+ * Tiered invite codes write entitlement_grants.plan_floor, and the effective
+ * tier is max(plan_tier, plan_floor) — so an invitee granted a desk floor is a
+ * legitimate Desk+ user even when their claims still say "free". Returns null
+ * when the lookup fails or reports an unknown tier (fail soft).
+ */
+export async function resolveEffectivePlanTierFromDashboardAccessToken(
+  accessToken: string,
+  opts?: {
+    supabaseUrl?: string;
+    anonKey?: string;
+    fetchImpl?: typeof fetch;
+  },
+): Promise<PlanTier | null> {
+  const supabaseUrl = (
+    opts?.supabaseUrl ?? process.env.DIGICHAT_DASHBOARD_SUPABASE_URL ?? ""
+  ).trim().replace(/\/$/, "");
+  const anonKey = (
+    opts?.anonKey ?? process.env.DIGICHAT_DASHBOARD_SUPABASE_ANON_KEY ?? ""
+  ).trim();
+  if (!supabaseUrl || !anonKey || !accessToken.trim()) return null;
+
+  const fetchImpl = opts?.fetchImpl ?? fetch;
+  try {
+    const res = await fetchImpl(`${supabaseUrl}/rest/v1/rpc/my_access`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${accessToken.trim()}`,
+        apikey: anonKey,
+        "Content-Type": "application/json",
+      },
+      body: "{}",
+    });
+    if (!res.ok) return null;
+    const payload = (await res.json()) as { effective_plan_tier?: unknown };
+    const raw = payload?.effective_plan_tier;
+    if (typeof raw !== "string") return null;
+    const tier = raw.trim().toLowerCase();
+    return isValidPlanTier(tier) ? tier : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
  * Best-effort tier from query param or header. NEVER used for authorization —
  * only for non-security UI hints. The chat route uses verifyPlanProof() instead.
  */
@@ -142,58 +188,4 @@ export function rawTierFromRequest(req: Request): PlanTier | null {
     new URL(req.url).searchParams.get("plan_tier")?.trim().toLowerCase() ||
     null;
   return raw && isValidPlanTier(raw) ? raw : null;
-}
-
-/** Product key for the 12x FX Hub client grant (migration 108). */
-export const FX_HUB_PRODUCT_KEY = "fx_hub";
-
-/**
- * FX Hub invitees carry a product grant, not a paid plan tier. For the
- * digiquant.io embed they map to desk-equivalent, operator-funded chat
- * access (#3662 follow-up).
- */
-export const FX_HUB_PROOF_TIER: ProofEligibleTier = "desk";
-
-/**
- * True when the dashboard access token resolves to an fx_hub product grant.
- * Reads the caller's own `my_access` row (RLS-safe) — fail-soft false.
- */
-export async function hasFxHubProductFromDashboardAccessToken(
-  accessToken: string,
-  opts?: {
-    supabaseUrl?: string;
-    anonKey?: string;
-    fetchImpl?: typeof fetch;
-  },
-): Promise<boolean> {
-  const supabaseUrl = (
-    opts?.supabaseUrl ?? process.env.DIGICHAT_DASHBOARD_SUPABASE_URL ?? ""
-  ).trim().replace(/\/$/, "");
-  const anonKey = (
-    opts?.anonKey ?? process.env.DIGICHAT_DASHBOARD_SUPABASE_ANON_KEY ?? ""
-  ).trim();
-  const token = accessToken.trim();
-  if (!supabaseUrl || !anonKey || !token) return false;
-
-  const fetchImpl = opts?.fetchImpl ?? fetch;
-  try {
-    const res = await fetchImpl(`${supabaseUrl}/rest/v1/rpc/my_access`, {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${token}`,
-        apikey: anonKey,
-        "Content-Type": "application/json",
-      },
-      body: "{}",
-    });
-    if (!res.ok) return false;
-    const body = (await res.json()) as { products?: unknown } | null;
-    const products = Array.isArray(body?.products) ? body.products : [];
-    return products.some(
-      (p): p is string =>
-        typeof p === "string" && p.trim().toLowerCase() === FX_HUB_PRODUCT_KEY,
-    );
-  } catch {
-    return false;
-  }
 }

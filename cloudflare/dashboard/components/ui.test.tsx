@@ -49,7 +49,7 @@ describe('StatCard', () => {
     const html = renderToStaticMarkup(<StatCard label="NAV" value="$1.2M" subtitle="today" />);
     expect(html).toContain('data-slot="card"');
     expect(html).toContain('data-reveal');
-    expect(html).not.toContain('oly-slab');
+    expect(html).not.toContain('dq-slab');
     expect(html).toContain('NAV');
   });
 });
