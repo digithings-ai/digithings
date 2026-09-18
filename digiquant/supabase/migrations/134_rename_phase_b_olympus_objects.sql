@@ -1,4 +1,4 @@
--- 133_rename_phase_b_olympus_objects.sql
+-- 134_rename_phase_b_olympus_objects.sql
 -- Phase B of the `olympus_*` terminology removal (#4295 gap G5).
 --
 -- Phase A (132) added new-name compatibility views over the still-old-named

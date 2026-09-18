@@ -1,6 +1,6 @@
-"""Unit tests for migration 133 — Phase B olympus_* rename (#4295 gap G5).
+"""Unit tests for migration 134 — Phase B olympus_* rename (#4295 gap G5).
 
-Migration 133 reverses migration 132: it drops the Phase-A new-name views,
+Migration 134 reverses migration 132: it drops the Phase-A new-name views,
 renames every ``olympus_*`` base object to its stripped name, and recreates the
 old names as compatibility views so any pre-approval old-name code keeps
 working. These tests pin the safety properties the design depends on:
@@ -30,7 +30,7 @@ pytestmark = pytest.mark.unit
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 MIGRATIONS_DIR = REPO_ROOT / "digiquant" / "supabase" / "migrations"
-M133 = MIGRATIONS_DIR / "133_rename_phase_b_olympus_objects.sql"
+M134 = MIGRATIONS_DIR / "134_rename_phase_b_olympus_objects.sql"
 
 SELF_WRAP_REGEX = re.compile(r"(^|[\s])(begin|commit)[\s]*;", re.IGNORECASE)
 
@@ -141,8 +141,8 @@ RENAME_TRIGGER_RE = re.compile(
 
 @pytest.fixture(scope="module")
 def sql() -> str:
-    assert M133.is_file(), f"missing {M133.name}"
-    return M133.read_text()
+    assert M134.is_file(), f"missing {M134.name}"
+    return M134.read_text()
 
 
 def test_renames_every_base_table_exactly_once(sql: str) -> None:
