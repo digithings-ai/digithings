@@ -8,10 +8,11 @@
 # What it validates, and the honest limit:
 #   * DIGITHINGS_PROJECT_TOKEN — GitHub PAT, validated read-only with GET /user.
 #   * GH_DISPATCH_TOKEN        — cron dispatch PAT, validated read-only with
-#                                GET /repos/{repo}/actions/permissions (the
-#                                permission it is provisioned for; a fine-grained
-#                                PAT may not authenticate /user, so probing that
-#                                would false-alarm).
+#                                GET /repos/{repo}/actions/runs?per_page=1 (an
+#                                Actions: read-gated endpoint, satisfied by the
+#                                Actions: write grant it is provisioned for; a
+#                                fine-grained PAT may not authenticate /user, so
+#                                probing that would false-alarm).
 #   * CLAUDE_CODE_OAUTH_TOKEN / CURSOR_API_KEY — no quota-free introspection
 #     endpoint exists; proving either valid needs an agent run, which #3522
 #     forbids. These are presence-checked only and reported as

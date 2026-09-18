@@ -85,7 +85,7 @@ def test_probe_error_is_not_a_credential_failure(monkeypatch: pytest.MonkeyPatch
     assert cred.is_failure is False
 
 
-def test_gh_dispatch_token_probes_actions_permissions(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_gh_dispatch_token_probes_actions_runs(monkeypatch: pytest.MonkeyPatch) -> None:
     seen: dict[str, str] = {}
 
     def fake(endpoint: str, token: str, jq: str = ".login"):
@@ -96,12 +96,14 @@ def test_gh_dispatch_token_probes_actions_permissions(monkeypatch: pytest.Monkey
     cwt.check_github_pat(
         "GH_DISPATCH_TOKEN",
         "tok",
-        endpoint="/repos/digithings-ai/digithings/actions/permissions",
-        jq=".enabled",
+        endpoint="/repos/digithings-ai/digithings/actions/runs?per_page=1",
+        jq=".total_count",
     )
     # A fine-grained Actions-only PAT may not authenticate /user, so the probe
-    # must not use it.
-    assert seen["endpoint"].endswith("/actions/permissions")
+    # must not use it. It must also avoid /actions/permissions, which is gated on
+    # Administration: read rather than the Actions: write grant the token has.
+    assert seen["endpoint"].endswith("/actions/runs?per_page=1")
+    assert "/actions/permissions" not in seen["endpoint"]
 
 
 def test_main_exit_codes_are_wired_to_the_verdict(
