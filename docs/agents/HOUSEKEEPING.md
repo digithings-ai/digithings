@@ -34,6 +34,7 @@ the broader delegation framework.
 | Broken internal doc links | `pipeline-maintenance.yml` — `doc-links` job | weekly Mon 08:00 UTC | Runs `python3 scripts/check_doc_links.py`, files `[housekeeping] Broken internal doc links — <date>` if any found |
 | `agents.yml` ↔ `.claude/` drift | `pipeline-maintenance.yml` — `agents-drift` job | weekly Mon 08:00 UTC | Runs `make agents-init --check`, files an issue if regeneration is needed |
 | Per-module `ARCHITECTURE.md` drift | `pipeline-maintenance.yml` — `architecture-drift` job | weekly Mon 08:00 UTC | Runs `scripts/check_architecture_drift.py`: flags modules whose public-interface paths moved ≥3d after their `ARCHITECTURE.md` did (last 30d), one tracker issue for **human** triage. Advisory only — never edits docs |
+| ADR numbering | `pipeline-maintenance.yml` — `adr-numbering` job + `ci-docs.yml` | weekly + on PR | Runs `scripts/check_adr_numbering.py`: `docs/adr/NNNN-*.md` must be zero-padded, unique and gap-free; files `[housekeeping] ADR numbering violation — <date>` on breach |
 | Doc-link check on every PR | `ci-docs.yml` | on PR | Same check as above, gates PRs with broken links |
 
 ## Security
@@ -92,7 +93,6 @@ auth/crypto, brokers/live-trading, new external network exposure, PRs into
 Tracked as issues (see #3533):
 
 - **npm audit for `cloudflare/`** — only Python CVEs are scanned today. → #3523
-- **ADR numbering audit** — no check that `docs/adr/NNNN-*.md` files are sequentially numbered or without duplicates. → #3524
 
 ## Reference
 
