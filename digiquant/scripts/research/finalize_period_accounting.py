@@ -19,7 +19,9 @@ Flags:
 Writes estimated/incomplete/failed periods as labeled non-final rows. Only
 ``status=final`` with a complete child set is selectable via
 ``select_final_period``. Declines (exit 3) when the ledger is cold (open lots
-empty while a positions book exists) so no mislabeled partial final is published.
+empty while a positions book exists) or the most recent prior accounting tip
+closes at a negative ``closing_cash`` (#4105) — so no mislabeled partial final
+and no fabricated cash-stub book is published.
 
 Usage:
   python3 digiquant/scripts/research/finalize_period_accounting.py --supabase
@@ -175,7 +177,14 @@ def _mark_from_close(
 
 
 def _opening_cash(*, client: Any, period_date: date) -> Decimal:
-    """Prior accounting closing cash, else nav_history cash, else zero."""
+    """Prior accounting closing cash, else nav_history cash, else zero.
+
+    A negative prior accounting ``closing_cash`` is a broken ledger tip, not a
+    usable opening balance: skipping it and falling through to
+    ``nav * cash_pct / 100`` fabricates a cash-only stub book (2026-08-26 NAV
+    15.13 vs stitched 101.77, #4105). Decline finalization instead so the
+    caller exits 3 and the date stays on the legacy/stitched NAV fallback.
+    """
     prior = period_date - timedelta(days=1)
     # Walk back a few calendar days for weekends.
     for offset in range(0, 7):
@@ -185,6 +194,12 @@ def _opening_cash(*, client: Any, period_date: date) -> Decimal:
             cash = _decimal(head.get("closing_cash"))
             if cash is not None and cash >= 0:
                 return cash
+            if cash is not None and cash < 0:
+                raise FinalizerDeclined(
+                    f"prior accounting tip {day.isoformat()} has negative "
+                    f"closing_cash={cash} — decline finalization for "
+                    f"{period_date.isoformat()} (no fabricated cash stub, #4105)"
+                )
     resp = (
         _eq_house(client.table("nav_history").select("date, nav, cash_pct"))
         .lt("date", period_date.isoformat())
