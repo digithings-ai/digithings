@@ -11,13 +11,14 @@ from __future__ import annotations
 import re
 from enum import StrEnum
 from typing import Any, Literal, Mapping
-from uuid import NAMESPACE_URL, UUID, uuid5
+from uuid import UUID, uuid5
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 CORPUS_KEY_KINDS = frozenset({"theme", "asset", "segment"})
-# Frozen identity string. Do not rename with the package.
-_CORPUS_VERSION_NS = uuid5(NAMESPACE_URL, "digithings.olympus.research_corpus")
+# Frozen namespace UUID: the literal value the legacy URL seed already derived.
+# Kept verbatim so every derived corpus pin id is unchanged. Do not re-key.
+_CORPUS_VERSION_NS = UUID("a0edd75e-2d5a-5496-8cf4-7c35dd1ef008")
 _SLUG_RE = re.compile(r"^[a-z0-9][a-z0-9._/-]{0,198}$")
 # Reject tenant / profile markers in slug material (anti-fork).
 _TENANT_MARKER_RE = re.compile(
