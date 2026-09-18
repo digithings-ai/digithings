@@ -49,7 +49,7 @@ Canonical rules: [`DIGITHINGS-IDENTITY.md`](DIGITHINGS-IDENTITY.md).
 | Local file (when ready) | `.local/secrets/digithings-notify.env` |
 | Human gate | Token creation + domain verification — owner on the desktop |
 | Note | Dedicated **Email Sending: Edit** token, not the broad deploy token: rotating one must not break the other. |
-| Suppression | Enforced service-side at send time; no pre-send suppression query. |
+| Suppression | Enforced service-side at send time. A dropped recipient comes back on the response, the client raises `EmailSuppressedError`, dispatch releases the dedupe claim, and the send is retried once the address is unsuppressed. |
 
 ## Alpaca (paper) — BLOCKED on Cloudflare Turnstile
 

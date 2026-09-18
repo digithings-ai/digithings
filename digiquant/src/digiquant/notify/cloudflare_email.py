@@ -52,6 +52,20 @@ class EmailTransportError(Exception):
     """Raised when a send fails — dispatch catches and fail-softs."""
 
 
+class EmailSuppressedError(EmailTransportError):
+    """The service refused to deliver to a suppressed recipient.
+
+    Subclasses :class:`EmailTransportError` so existing fail-soft callers keep
+    working, but dispatch catches it first: the claim for a suppressed address
+    has to be released, or the digest would never be retried once the address
+    is unsuppressed.
+    """
+
+    def __init__(self, recipient: str) -> None:
+        self.recipient = recipient
+        super().__init__(f"recipient suppressed by the service: {recipient}")
+
+
 class NotifyNotConfiguredError(RuntimeError):
     """Named misconfig — missing notify env (values never included)."""
 
@@ -166,11 +180,13 @@ class CloudflareEmailClient:
         self._config = config
 
     def is_suppressed(self, email: str) -> bool:
-        """No pre-check: Cloudflare enforces suppression at send time.
+        """No pre-send query exists: suppression is reported by the send itself.
 
-        A suppressed recipient is blocked by the service and is not billed against
-        the monthly quota, so there is nothing to query here. Kept so callers keep
-        one client protocol.
+        Cloudflare enforces its suppression list at send time and does not bill a
+        blocked send, so there is nothing to ask before sending. When it drops a
+        recipient, :meth:`send_message` raises :class:`EmailSuppressedError` and
+        dispatch releases the dedupe claim, which is what keeps a suppressed
+        address retryable. Kept so callers keep one client protocol.
         """
         return False
 
@@ -197,16 +213,21 @@ class CloudflareEmailClient:
             req.add_header("Authorization", f"Bearer {self._config.api_token}")
             req.add_header("Content-Type", "application/json")
             with urlopen(req, timeout=30) as resp:
-                body = resp.read()
                 if resp.status < 200 or resp.status >= 300:
                     raise EmailTransportError(f"unexpected status {resp.status}")
+                body = resp.read()
         except HTTPError as exc:
             raise EmailTransportError(_http_error_detail(exc)) from exc
         except URLError as exc:
             raise EmailTransportError(str(exc)) from exc
+        except (TimeoutError, OSError) as exc:
+            raise EmailTransportError(f"cloudflare email request failed: {exc}") from exc
         detail = _api_error_detail(body)
         if detail is not None:
             raise EmailTransportError(f"cloudflare email rejected the send: {detail}")
+        suppressed = _suppressed_recipient(body)
+        if suppressed is not None:
+            raise EmailSuppressedError(suppressed)
 
 
 def _http_error_detail(exc: HTTPError) -> str:
@@ -237,6 +258,30 @@ def _api_error_detail(body: bytes) -> str | None:
     return f"{code} {message}".strip() if (code or message) else "success=false"
 
 
+def _suppressed_recipient(body: bytes) -> str | None:
+    """``result.suppressed_recipients`` from a 2xx — the service dropped the send.
+
+    Reported on an otherwise-successful response, so :func:`_api_error_detail`
+    cannot see it: without this the send looks delivered and nothing is logged.
+    """
+    if not body:
+        return None
+    try:
+        parsed: Any = json.loads(body)
+    except (ValueError, TypeError):
+        return None
+    if not isinstance(parsed, dict):
+        return None
+    result = parsed.get("result")
+    if not isinstance(result, dict):
+        return None
+    dropped = result.get("suppressed_recipients")
+    if not isinstance(dropped, list) or not dropped:
+        return None
+    first = dropped[0]
+    return str(first) if first else "unknown recipient"
+
+
 def build_email_client() -> EmailClientProtocol | None:
     config = CloudflareEmailConfig.from_env()
     if config is None:
@@ -251,6 +296,7 @@ __all__ = [
     "CloudflareEmailConfig",
     "DEFAULT_UNSUBSCRIBE_BASE",
     "EmailClientProtocol",
+    "EmailSuppressedError",
     "EmailTransportError",
     "NOTIFY_FROM_ENV",
     "NOTIFY_NOT_CONFIGURED",

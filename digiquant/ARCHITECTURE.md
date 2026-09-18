@@ -4232,8 +4232,9 @@ settings placeholder). `NOTIFY_FROM` may be a bare address or `Name <addr@domain
 return; missing notify env logs `NOTIFY_NOT_CONFIGURED` with named keys and skips
 (never silent as success in agent probes). Dedupe via `notification_log` insert-first
 PK `(workspace_id, event_key, sent_date)`; suppression is enforced by Cloudflare at
-send time (a suppressed recipient is blocked and not billed, so there is no pre-send
-query); tier gates on digest sections and event
+send time (a suppressed recipient is reported on the send response, the client raises
+`EmailSuppressedError` and dispatch releases the claim, so the send is retried once the
+address is unsuppressed — there is no pre-send query API); tier gates on digest sections and event
 types (`house_weights_nav` for holding-change, `private_book` for execution alerts);
 templates carry unsubscribe link, no broker ids/tokens/keys.
 

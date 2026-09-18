@@ -21,6 +21,7 @@ from digiquant.data.store.client import build_digiquant_client
 from digiquant.notify.cloudflare_email import (
     CloudflareEmailConfig,
     EmailClientProtocol,
+    EmailSuppressedError,
     EmailTransportError,
     NotifyNotConfiguredError,
     build_email_client,
@@ -180,6 +181,31 @@ def try_claim_send_slot(
         raise
 
 
+def _release_send_slot(
+    sb: SupabaseReader,
+    workspace_id: str,
+    event_key: str,
+    sent_date: date,
+) -> None:
+    """Undo :func:`try_claim_send_slot` after the service refused the send.
+
+    A suppressed recipient is not a send: leaving the claim behind would stop the
+    digest (or the event) from ever being retried once the address is
+    unsuppressed.
+    """
+    try:
+        (
+            sb.table("notification_log")
+            .delete()
+            .eq("workspace_id", workspace_id)
+            .eq("event_key", event_key)
+            .eq("sent_date", sent_date.isoformat())
+            .execute()
+        )
+    except Exception as exc:  # pragma: no cover — defensive; claim release is best-effort
+        logger.warning("notify: could not release claim %s: %s", event_key, exc)
+
+
 def _load_prefs(sb: SupabaseReader) -> list[dict[str, Any]]:
     res = sb.table("notification_prefs").select("*").execute()
     return list(getattr(res, "data", None) or [])
@@ -261,6 +287,9 @@ def dispatch_workspace(
                     subject = f"dashboard daily digest — {run_date.isoformat()}"
                     try:
                         _send_message(client, email, subject, text, html)
+                    except EmailSuppressedError as exc:
+                        logger.warning("notify: suppressed recipient, claim released: %s", exc)
+                        _release_send_slot(sb, workspace_id, event_key, run_date)
                     except EmailTransportError as exc:
                         logger.warning("notify: digest send failed: %s", exc)
 
@@ -275,6 +304,9 @@ def dispatch_workspace(
                 subject = f"Holding change — {event.ticker} ({run_date.isoformat()})"
                 try:
                     _send_message(client, email, subject, text, html)
+                except EmailSuppressedError as exc:
+                    logger.warning("notify: suppressed recipient, claim released: %s", exc)
+                    _release_send_slot(sb, workspace_id, event.event_key, run_date)
                 except EmailTransportError as exc:
                     logger.warning("notify: holding-change send failed: %s", exc)
 
@@ -288,6 +320,9 @@ def dispatch_workspace(
             subject = f"Execution alert — {event.symbol} ({run_date.isoformat()})"
             try:
                 _send_message(client, email, subject, text, html)
+            except EmailSuppressedError as exc:
+                logger.warning("notify: suppressed recipient, claim released: %s", exc)
+                _release_send_slot(sb, workspace_id, event.event_key, run_date)
             except EmailTransportError as exc:
                 logger.warning("notify: execution alert send failed: %s", exc)
 

@@ -11,6 +11,7 @@ from digiquant.notify import cloudflare_email as cf_mod
 from digiquant.notify.cloudflare_email import (
     CloudflareEmailClient,
     CloudflareEmailConfig,
+    EmailSuppressedError,
     EmailTransportError,
     NotifyNotConfiguredError,
     format_notify_not_configured,
@@ -331,3 +332,71 @@ def test_cli_require_notify_ok_when_present(
     code = dispatch_mod.main(["--check"])
     assert code == 0
     assert "notify env present" in capsys.readouterr().out
+
+
+def test_suppressed_recipients_on_success_raises_suppressed_error(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A 2xx that drops the recipient must not look like a delivered send."""
+    body = json.dumps(
+        {"success": True, "result": {"suppressed_recipients": ["user@example.com"]}}
+    ).encode()
+    monkeypatch.setattr(cf_mod, "urlopen", _Capture(body))
+    with pytest.raises(EmailSuppressedError) as ei:
+        CloudflareEmailClient(_config()).send_message("user@example.com", "s", "t", "h")
+    assert ei.value.recipient == "user@example.com"
+    assert isinstance(ei.value, EmailTransportError)
+
+
+def test_read_timeout_becomes_transport_error(monkeypatch: pytest.MonkeyPatch) -> None:
+    def _timeout(req: object, timeout: int | None = None) -> _FakeResponse:
+        del req, timeout
+        raise TimeoutError("read timed out")
+
+    monkeypatch.setattr(cf_mod, "urlopen", _timeout)
+    with pytest.raises(EmailTransportError):
+        CloudflareEmailClient(_config()).send_message("u@example.com", "s", "t", "h")
+
+
+def test_suppressed_send_releases_claim_so_retry_can_send(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A service-suppressed send must not burn the dedupe slot (#4370 review)."""
+    from datetime import date
+
+    from digiquant.notify.dispatch import dispatch_workspace
+
+    from tests.dq.notify.conftest import FakeSupabase
+
+    cfg = _config(unsubscribe_base="https://example.com/settings")
+    pref = {
+        "workspace_id": "w1",
+        "email": "ops@example.com",
+        "daily_digest": True,
+        "holding_change_alerts": False,
+        "execution_alerts": False,
+        "digest_hour_utc": 12,
+    }
+    sb = FakeSupabase(
+        tables={
+            "notification_prefs": [pref],
+            "workspaces": [{"id": "w1", "plan_tier": "free", "name": "House"}],
+            "daily_snapshots": [
+                {"date": "2026-08-30", "snapshot": {"regime": {"bias": "neutral", "summary": "ok"}}}
+            ],
+            "notification_log": [],
+        }
+    )
+    client = CloudflareEmailClient(cfg)
+    run_date = date(2026, 8, 30)
+
+    dropped = json.dumps(
+        {"success": True, "result": {"suppressed_recipients": ["ops@example.com"]}}
+    ).encode()
+    monkeypatch.setattr(cf_mod, "urlopen", _Capture(dropped))
+    dispatch_workspace(sb, client, cfg, pref, run_date, 12, force_digest=True)
+    assert sb.tables["notification_log"] == []
+
+    monkeypatch.setattr(cf_mod, "urlopen", _Capture())
+    dispatch_workspace(sb, client, cfg, pref, run_date, 12, force_digest=True)
+    assert len(sb.tables["notification_log"]) == 1

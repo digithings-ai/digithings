@@ -19,8 +19,8 @@ name: "Pipeline: execution cron check"
 # names fail closed (exit 2). That is the production signal, not a skip.
 #
 # Installed at .github/workflows/execution-cron-check.yml — must match this spec
-# byte-for-byte (tests/scripts/test_execution_cron_workflow.py). Probe-only.
-# tests/scripts/test_execution_cron_workflow.py pins the probe-only invariants
+# byte-for-byte (tests/scripts/test_digiquant_cron_workflow.py). Probe-only.
+# tests/scripts/test_digiquant_cron_workflow.py pins the probe-only invariants
 # against this spec.
 
 on:
