@@ -206,14 +206,21 @@ DO $$ BEGIN
   RAISE NOTICE 'SHIM: stub public.fx_economic_calendar (out-of-repo prod table; 031 ALTERs it)';
 END $$;
 
--- db-migrate.yml creates olympus_schema_migrations before applying files;
--- migration 057 locks it. Stub the ledger table here.
+-- db-migrate.yml creates the migration ledger before applying files; migration
+-- 057 locks the OLD name (`olympus_schema_migrations`) and migration 136 (#4295)
+-- retires it after the workflow's copy-forward bootstrap. Stub BOTH: the old one
+-- so the historical 057 can ALTER/REVOKE it, the new one so 136's guard has the
+-- copied-forward ledger it requires.
 CREATE TABLE IF NOT EXISTS public.olympus_schema_migrations (
   filename text PRIMARY KEY,
   applied_at timestamptz NOT NULL DEFAULT now()
 );
+CREATE TABLE IF NOT EXISTS public.digithings_schema_migrations (
+  version text PRIMARY KEY,
+  applied_at timestamptz NOT NULL DEFAULT now()
+);
 DO $$ BEGIN
-  RAISE NOTICE 'SHIM: stub public.olympus_schema_migrations (normally created by db-migrate.yml)';
+  RAISE NOTICE 'SHIM: stub public.olympus_schema_migrations + public.digithings_schema_migrations (normally created by db-migrate.yml)';
 END $$;
 
 \echo '=== SHIM: bootstrap complete ==='

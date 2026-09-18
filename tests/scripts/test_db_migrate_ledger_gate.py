@@ -1,7 +1,7 @@
 """.github/workflows/db-migrate.yml must never record a migration it did not run (#1814).
 
 The workflow applies pending Supabase migrations to prod on every push to ``main`` that
-touches ``digiquant/supabase/migrations/**``, and ``olympus_schema_migrations`` is the only
+touches ``digiquant/supabase/migrations/**``, and ``digithings_schema_migrations`` is the only
 record of what prod actually has. Until #1814 there was a second gate beside that ledger:
 files whose numeric prefix was ``<= BASELINE_THROUGH`` (45) were INSERTed into the ledger
 *without being executed*, on the theory that they predate the workflow.
@@ -16,7 +16,7 @@ branch was unreachable for every file that existed: it was deleted, not repaired
 These tests therefore assert on the **shape of the loop** rather than on the absence of the
 string ``BASELINE_THROUGH``: the hole reopens just as easily under a different variable name
 or an inlined ``[ "$num" -le 45 ]``. What is pinned is that the ledger lookup is the only
-thing that can skip a file, that every ``INSERT INTO olympus_schema_migrations`` sits in a
+thing that can skip a file, that every ``INSERT INTO digithings_schema_migrations`` sits in a
 branch that also feeds the file to psql, and — on the unwrapped path — that the INSERT
 travels in the *same* psql invocation as the DDL, which is the whole of its atomicity.
 """
@@ -39,7 +39,7 @@ WORKFLOW = REPO_ROOT / ".github" / "workflows" / "db-migrate.yml"
 # published contract, not an implementation detail.
 SELF_WRAP_GREP = "grep -qiE '(^|[[:space:]])begin[[:space:]]*;'"
 
-LEDGER_WRITE = re.compile(r"INSERT\s+INTO\s+olympus_schema_migrations", re.IGNORECASE)
+LEDGER_WRITE = re.compile(r"INSERT\s+INTO\s+digithings_schema_migrations", re.IGNORECASE)
 FEEDS_FILE = re.compile(r"""(?:-f\s+"\$f"|cat\s+"\$f")""")
 
 
@@ -56,7 +56,14 @@ def script(workflow: dict) -> str:
     single line: the unwrapped path spans two physical lines but is one pipeline.
     """
     steps = workflow["jobs"]["migrate"]["steps"]
-    bodies = [str(s["run"]) for s in steps if LEDGER_WRITE.search(str(s.get("run", "")))]
+    # The applying step is the one that runs the per-file loop. The copy-forward
+    # bootstrap step also INSERTs into the ledger, but it copies already-executed
+    # rows and must not be folded into the loop assertions below.
+    bodies = [
+        str(s["run"])
+        for s in steps
+        if LEDGER_WRITE.search(str(s.get("run", ""))) and "for f in" in str(s.get("run", ""))
+    ]
     assert len(bodies) == 1, f"expected one migration-applying step, found {len(bodies)}"
     return re.sub(r"\\\n\s*", " ", bodies[0])
 
@@ -190,7 +197,7 @@ def test_every_migration_file_reaches_the_loop_unfiltered(script: str) -> None:
 
 
 def test_only_the_ledger_lookup_can_skip_a_file(loop: list[str]) -> None:
-    """Every early exit from the loop must be the `olympus_schema_migrations` check.
+    """Every early exit from the loop must be the `digithings_schema_migrations` check.
 
     A second skip path is the bug: it is reached only when the ledger has *no* row, i.e.
     exactly when the file still needs applying.
@@ -222,7 +229,9 @@ def test_the_ledger_lookup_precedes_every_apply(loop: list[str]) -> None:
     The lookup short-circuits ledgered files before any branch below can act on them; put a
     branch first and it starts deciding the fate of files prod has already applied.
     """
-    lookup = next(i for i, ln in enumerate(loop) if "SELECT 1 FROM olympus_schema_migrations" in ln)
+    lookup = next(
+        i for i, ln in enumerate(loop) if "SELECT 1 FROM digithings_schema_migrations" in ln
+    )
     acts = [i for i, ln in enumerate(loop) if LEDGER_WRITE.search(ln) or FEEDS_FILE.search(ln)]
     assert acts, "the loop neither applies nor records anything"
     assert lookup < min(acts), "the loop applies or records a migration before checking the ledger"
