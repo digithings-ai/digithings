@@ -142,6 +142,10 @@ export default function MatrixTab({
                       }`;
                       return (
                         <div key={ccy} role="cell" className="p-1">
+                          {/* Geometry-pinned matrix cell (wave-4 BLOCKED, #4306):
+                              fills its `role="cell"` grid box (`h-full w-full`) and
+                              carries per-direction tone/hover classes — the kit
+                              `Button` base would only be overridden back off. */}
                           <button
                             type="button"
                             onClick={() =>

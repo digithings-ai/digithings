@@ -95,7 +95,7 @@ class _FakeTable:
     def execute(self) -> Any:
         if self._pending_insert is not None:
             row = dict(self._pending_insert)
-            if self._name == "notification_log":
+            if self._name in ("notification_log", "notification_claim"):
                 for existing in self._sb.tables.get(self._name, []):
                     if (
                         existing.get("workspace_id") == row.get("workspace_id")

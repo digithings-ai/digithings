@@ -721,9 +721,10 @@ Skipped in T0 (K3/K4/K5 own CREATE-time `workspace_id`): `broker_connections`,
 | Table | PK | Purpose |
 |-------|----|---------|
 | `notification_prefs` | `(workspace_id)` | Per-workspace email toggles: `daily_digest`, `holding_change_alerts`, `execution_alerts`, `digest_hour_utc` (0–23 UTC). T3 settings UI is the product writer. |
-| `notification_log` | `(workspace_id, event_key, sent_date)` | Dedupe ledger — insert-before-send; duplicate PK ⇒ skip. Append-only (INSERT grant only). |
+| `notification_claim` | `(workspace_id, event_key, sent_date)` | Dedupe window (migration 133) — insert-before-send; duplicate PK ⇒ skip. **Mutable**: the row is deleted when the service refuses the send, so the event can be retried. |
+| `notification_log` | `(workspace_id, event_key, sent_date)` | Record of what was actually sent — written only after a successful send. Append-only (SELECT/INSERT grant plus a mutation trigger, 106). |
 
-RLS enabled, no client policies; `service_role` SELECT/INSERT/UPDATE on prefs, SELECT/INSERT on log.
+RLS enabled, no client policies; `service_role` SELECT/INSERT/UPDATE on prefs, SELECT/INSERT/DELETE on claim, SELECT/INSERT on log.
 Typed dispatch: `digiquant.notify.dispatch` (fail-soft client in
 `notify/cloudflare_email.py`).
 
@@ -1223,7 +1224,7 @@ They dominated the database before 061: 952 MB of a 1263 MB total (75%), growing
 - `'Portfolio Recommendation'` doc_type — removed by migration 021.
 - **Migration `062` (`062_realtime_broadcast_authorization.sql`) — withdrawn and deleted,
   and the number is burned.** It could never be applied (see the `realtime.messages` note
-  under RLS), so it never reached `olympus_schema_migrations` and left no orphan ledger row
+  under RLS), so it never reached the migration ledger and left no orphan ledger row
   to reconcile. Migration `063` supersedes it. Do not reuse `062`: unlike the never-written
   `037`/`038`/`059` it already denotes a specific abandoned approach in the git history and
   in PR #1813. Nothing in the repo enforces this — see [`README.md`](README.md), "`062` is
