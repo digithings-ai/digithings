@@ -68,6 +68,13 @@ def test_dispatch_retry_is_noop() -> None:
                     "sent_date": "2026-08-30",
                 }
             ],
+            "notification_claim": [
+                {
+                    "workspace_id": "w1",
+                    "event_key": "digest:2026-08-30",
+                    "sent_date": "2026-08-30",
+                }
+            ],
         }
     )
     client = _RecordingClient()

@@ -164,9 +164,14 @@ def try_claim_send_slot(
     event_key: str,
     sent_date: date,
 ) -> bool:
-    """Insert-first dedupe — False when already sent today."""
+    """Insert-first dedupe — False when already sent today.
+
+    The claim lives in `notification_claim`, which is mutable: :func:`_release_send_slot`
+    undoes it when the service refuses the send. `notification_log` (written by
+    :func:`record_send` only after a send succeeds) is the append-only record.
+    """
     try:
-        sb.table("notification_log").insert(
+        sb.table("notification_claim").insert(
             {
                 "workspace_id": workspace_id,
                 "event_key": event_key,
@@ -179,6 +184,29 @@ def try_claim_send_slot(
         if "duplicate" in err or "23505" in err or "unique" in err:
             return False
         raise
+
+
+def record_send(
+    sb: SupabaseReader,
+    workspace_id: str,
+    event_key: str,
+    sent_date: date,
+) -> None:
+    """Append the sent record to `notification_log` (the append-only ledger).
+
+    Best-effort: the message is already gone, so a logging failure must not raise into
+    the dispatch loop. The claim in `notification_claim` still covers dedupe.
+    """
+    try:
+        sb.table("notification_log").insert(
+            {
+                "workspace_id": workspace_id,
+                "event_key": event_key,
+                "sent_date": sent_date.isoformat(),
+            }
+        ).execute()
+    except Exception as exc:  # pragma: no cover — defensive; the send already happened
+        logger.warning("notify: could not record send %s: %s", event_key, exc)
 
 
 def _release_send_slot(
@@ -195,7 +223,7 @@ def _release_send_slot(
     """
     try:
         (
-            sb.table("notification_log")
+            sb.table("notification_claim")
             .delete()
             .eq("workspace_id", workspace_id)
             .eq("event_key", event_key)
@@ -287,6 +315,7 @@ def dispatch_workspace(
                     subject = f"dashboard daily digest — {run_date.isoformat()}"
                     try:
                         _send_message(client, email, subject, text, html)
+                        record_send(sb, workspace_id, event_key, run_date)
                     except EmailSuppressedError as exc:
                         logger.warning("notify: suppressed recipient, claim released: %s", exc)
                         _release_send_slot(sb, workspace_id, event_key, run_date)
@@ -304,6 +333,7 @@ def dispatch_workspace(
                 subject = f"Holding change — {event.ticker} ({run_date.isoformat()})"
                 try:
                     _send_message(client, email, subject, text, html)
+                    record_send(sb, workspace_id, event.event_key, run_date)
                 except EmailSuppressedError as exc:
                     logger.warning("notify: suppressed recipient, claim released: %s", exc)
                     _release_send_slot(sb, workspace_id, event.event_key, run_date)
@@ -320,6 +350,7 @@ def dispatch_workspace(
             subject = f"Execution alert — {event.symbol} ({run_date.isoformat()})"
             try:
                 _send_message(client, email, subject, text, html)
+                record_send(sb, workspace_id, event.event_key, run_date)
             except EmailSuppressedError as exc:
                 logger.warning("notify: suppressed recipient, claim released: %s", exc)
                 _release_send_slot(sb, workspace_id, event.event_key, run_date)
