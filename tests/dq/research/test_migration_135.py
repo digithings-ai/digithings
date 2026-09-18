@@ -1,7 +1,7 @@
-"""Unit tests for migration 134 — Phase C olympus_* compat-view drop (#4295 G5).
+"""Unit tests for migration 135 — Phase C olympus_* compat-view drop (#4295 G5).
 
-Migration 134 is the final phase of the ``olympus_*`` terminology removal. It
-drops the old-name compatibility VIEWS that Phase B (migration 133) recreated
+Migration 135 is the final phase of the ``olympus_*`` terminology removal. It
+drops the old-name compatibility VIEWS that Phase B (migration 134) recreated
 after renaming the base objects, so the old vocabulary disappears from the
 database. These tests pin the safety properties the Phase C design depends on:
 
@@ -10,7 +10,7 @@ database. These tests pin the safety properties the Phase C design depends on:
 * ``olympus_schema_migrations`` is never a drop target (it is excluded by name in
   both the guard and the drop loop);
 * the loud safety guard RAISEs when an ``olympus_*`` TABLE still exists, naming
-  the required order 132 -> 133 -> 134;
+  the required order 132 -> 134 -> 135;
 * the drop is dynamic (catalogue iteration + ``format('%I.%I', ...)``) so it does
   not depend on Phase B's exact object list;
 * the file is plain SQL, self-wrap free, and never touches the ledger.
@@ -27,7 +27,7 @@ pytestmark = pytest.mark.unit
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 MIGRATIONS_DIR = REPO_ROOT / "digiquant" / "supabase" / "migrations"
-M134 = MIGRATIONS_DIR / "134_rename_phase_c_drop_compat_views.sql"
+M135 = MIGRATIONS_DIR / "135_rename_phase_c_drop_compat_views.sql"
 
 SELF_WRAP_REGEX = re.compile(r"(^|[\s])begin[\s]*;", re.IGNORECASE)
 DROP_REGEX = re.compile(r"\bdrop\s+([a-z]+)")
@@ -45,8 +45,8 @@ def _strip_comments(sql: str) -> str:
 
 @pytest.fixture(scope="module")
 def sql() -> str:
-    assert M134.is_file(), f"missing {M134.name}"
-    return M134.read_text()
+    assert M135.is_file(), f"missing {M135.name}"
+    return M135.read_text()
 
 
 @pytest.fixture(scope="module")
@@ -120,7 +120,7 @@ def test_safety_guard_raises_when_olympus_tables_remain(lowered: str) -> None:
 
 
 def test_safety_guard_names_the_required_order(sql: str) -> None:
-    assert "132 -> 133 -> 134" in sql
+    assert "132 -> 134 -> 135" in sql
 
 
 def test_drop_loop_orders_results_for_determinism(lowered: str) -> None:

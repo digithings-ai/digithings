@@ -1,18 +1,18 @@
--- 134_rename_phase_c_drop_compat_views.sql
+-- 135_rename_phase_c_drop_compat_views.sql
 -- Phase C (final) of the `olympus_*` terminology removal (#4295 gap G5).
 --
 -- Drops every remaining old-name `olympus_*` compatibility VIEW in schema
 -- `public`, so the old vocabulary disappears from the database entirely. Base
 -- TABLES are never touched, and the ledger is never touched.
 --
--- REQUIRED APPLY ORDER: 132 -> 133 -> 134.
+-- REQUIRED APPLY ORDER: 132 -> 134 -> 135.
 --   * 132 (Phase A) added new-name views over the then-still-`olympus_*` base
 --     objects.
---   * 133 (Phase B) renamed the base objects to their new names and recreated
+--   * 134 (Phase B) renamed the base objects to their new names and recreated
 --     each old name as a `security_invoker = true` compatibility view.
---   * 134 (this file) drops those old-name compatibility views once `main`
+--   * 135 (this file) drops those old-name compatibility views once `main`
 --     runs the new-name code.
--- Applying this file before 133 would target the wrong objects: the old names
+-- Applying this file before 134 would target the wrong objects: the old names
 -- would still be base objects, not compat views. The guard below makes that
 -- failure loud instead of a silent no-op -- if any `olympus_*` TABLE still
 -- exists in `public`, this migration RAISEs and the whole file (together with
@@ -30,7 +30,7 @@
 --
 -- Replay-safe: unwrapped (the db-migrate loop runs this file plus its ledger
 -- INSERT inside one `psql --single-transaction` call). A replay with no
--- `olympus_*` views left is a silent success, so re-running after 133 and 134
+-- `olympus_*` views left is a silent success, so re-running after 134 and 135
 -- have both landed is safe.
 
 DO $$
@@ -52,9 +52,9 @@ BEGIN
 
     IF remaining_tables IS NOT NULL THEN
         RAISE EXCEPTION
-            'migration 134 (Phase C) requires Phase B (migration 133) first: '
+            'migration 135 (Phase C) requires Phase B (migration 134) first: '
             'olympus_* base table(s) still present: %. '
-            'Apply in order 132 -> 133 -> 134.', remaining_tables;
+            'Apply in order 132 -> 134 -> 135.', remaining_tables;
     END IF;
 
     -- Drop every remaining old-name olympus_* compatibility view. Dynamic so it
@@ -70,7 +70,7 @@ BEGIN
          ORDER BY c.relname
     LOOP
         EXECUTE format('DROP VIEW %I.%I', target.schema_name, target.view_name);
-        RAISE NOTICE '134: dropped olympus compat view %.%',
+        RAISE NOTICE '135: dropped olympus compat view %.%',
             target.schema_name, target.view_name;
     END LOOP;
 END
