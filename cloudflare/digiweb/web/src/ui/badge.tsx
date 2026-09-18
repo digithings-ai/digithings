@@ -18,6 +18,13 @@ const badgeVariants = cva(
         ghost:
           "hover:bg-muted hover:text-muted-foreground dark:hover:bg-muted/50",
         link: "text-primary underline-offset-4 hover:underline",
+        // Reference-dress tones (controls-layer Badge parity): hairline chip,
+        // token text/border only — no fill, no hardcoded colour.
+        neutral: "border-hair text-ink-mute",
+        accent: "border-accent-weak text-accent",
+        warn: "border-warn/40 text-warn",
+        up: "border-up/40 text-up",
+        down: "border-down/40 text-down",
       },
     },
     defaultVariants: {

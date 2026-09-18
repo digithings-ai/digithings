@@ -25,19 +25,6 @@ export {
   type DropdownMenuItemProps,
 } from "./DropdownMenu";
 export {
-  Sheet,
-  SheetTrigger,
-  SheetClose,
-  SheetPortal,
-  SheetOverlay,
-  SheetContent,
-  SheetHeader,
-  SheetFooter,
-  SheetTitle,
-  SheetDescription,
-  type SheetContentProps,
-} from "./Sheet";
-export {
   Dialog,
   DialogTrigger,
   DialogClose,
@@ -70,7 +57,6 @@ export {
   TooltipProvider,
   type TooltipContentProps,
 } from "./Tooltip";
-export { Collapsible, CollapsibleTrigger, CollapsibleContent } from "./Collapsible";
 // promoted controls patterns (#1548)
 export {
   Skeleton,

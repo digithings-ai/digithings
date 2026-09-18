@@ -3,16 +3,18 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
+import { ThemeToggle } from "@digithings/web";
 import {
+  Button,
   Select,
   SelectItem,
-  SelectItemIndicator,
   SelectPopup,
   SelectTrigger,
   SelectValue,
-  ThemeToggle,
-} from "@digithings/web";
-import { Sheet, SheetContent, SheetTrigger } from "@digithings/web/ui";
+  Sheet,
+  SheetContent,
+  SheetTrigger,
+} from "@digithings/web/ui";
 import {
   applyLivery,
   getLiverySnapshot,
@@ -57,10 +59,10 @@ const PAGES = [
  *  is never a collapse/clip candidate.
  *
  *  Wave 1 (T6): the hand-built `.site-nav-sheet*`/`.site-nav-scrim*` overlays
- *  and the four native `<select>` pickers are gone. The pickers are the shared
- *  controls-layer `Select` (`@digithings/web`) because the stock `web/ui` kit
- *  has no select; the sheet is the stock `Sheet`, per the mixed-generation
- *  ruling for this sweep. */
+ *  and the four native `<select>` pickers are gone. Wave 4: the pickers moved
+ *  onto the stock kit `Select` (`@digithings/web/ui`) now that it carries the
+ *  non-portal `SelectPopup` the controls layer used; the sheet and the
+ *  hamburger trigger are the stock kit too (`Sheet`, `Button`). */
 export function SiteNav() {
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
@@ -136,7 +138,6 @@ export function SiteNav() {
         {LIVERY_OPTIONS.map((o) => (
           <SelectItem key={o.id} value={o.id}>
             {o.label}
-            <SelectItemIndicator />
           </SelectItem>
         ))}
       </SelectPopup>
@@ -157,7 +158,6 @@ export function SiteNav() {
         {TYPE_SUITES.map((o) => (
           <SelectItem key={o.id} value={o.id}>
             {o.label}
-            <SelectItemIndicator />
           </SelectItem>
         ))}
       </SelectPopup>
@@ -193,9 +193,11 @@ export function SiteNav() {
       <Sheet open={open} onOpenChange={setOpen}>
         <SheetTrigger
           render={
-            <button
+            <Button
               type="button"
-              className="site-nav-burger"
+              variant="ghost"
+              size="icon"
+              className="site-nav-burger size-auto"
               aria-label={open ? "Close navigation" : "Open navigation"}
             />
           }

@@ -4,9 +4,10 @@
  * ledger carries only the information needed to monitor and follow a holding.
  * Static data, token-only dress.
  *
- * Wave 1 (T6): the ledger is the controls-layer kit `Table`
- * (`@digithings/web`); the `.pw-table*` dress is deleted from finance.css.
- * The command band keeps its `.pw-command*` grammar.
+ * Wave 1 (T6): the ledger is the kit `Table`; the `.pw-table*` dress is
+ * deleted from finance.css. The command band keeps its `.pw-command*`
+ * grammar. Wave 4: the last controls-layer Table import was re-pointed onto
+ * `@digithings/web/ui`.
  */
 
 import {
@@ -16,7 +17,7 @@ import {
   TableHead,
   TableHeader,
   TableRow,
-} from "@digithings/web";
+} from "@digithings/web/ui";
 
 const POSITIONS = [
   { ticker: "XLE", category: "energy", weight: "17.2%", targetWeight: "18.0%", stop: "−8%", priceTarget: "+15%" },

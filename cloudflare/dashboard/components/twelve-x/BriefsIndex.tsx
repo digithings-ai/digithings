@@ -1,7 +1,7 @@
 'use client';
 
 import { useMemo, useState } from 'react';
-import { Card } from '@digithings/web/ui';
+import { Button, Card } from '@digithings/web/ui';
 import { ArrowLeft } from 'lucide-react';
 import { DatePager } from '@digithings/web';
 import type { FxBriefRow } from '@/lib/twelve-x/types';
@@ -94,9 +94,15 @@ export default function BriefsIndex({
   return (
     <section className="flex flex-col gap-4">
       <header className="flex min-w-0 flex-wrap items-center gap-3">
-        <button type="button" className="flex items-center gap-1 text-xs text-accent hover:underline" onClick={onBack}>
+        <Button
+          type="button"
+          variant="link"
+          size="xs"
+          className="h-auto justify-start gap-1 p-0 text-xs text-accent"
+          onClick={onBack}
+        >
           <ArrowLeft size={14} /> Today
-        </button>
+        </Button>
         <h2 className="text-base font-semibold text-ink">Broker briefs</h2>
         <span className="font-mono text-[10px] text-ink-mute">
           {dayBriefs.length} {dayBriefs.length === 1 ? 'brief' : 'briefs'}
@@ -135,9 +141,10 @@ export default function BriefsIndex({
               data-reveal
               className="gap-0 p-0 transition-colors hover:ring-accent/50"
             >
-              <button
+              <Button
                 type="button"
-                className="block w-full p-4 text-left"
+                variant="ghost"
+                className="block h-auto w-full justify-start whitespace-normal rounded-none p-4 text-left text-xs font-normal hover:bg-transparent"
                 onClick={() => openBrief(b.source_file, b.run_date)}
               >
               <div className="flex min-w-0 items-center gap-2 text-[11px] text-ink-mute">
@@ -152,7 +159,7 @@ export default function BriefsIndex({
                 {b.document_title ?? b.source_file}
               </p>
               {b.central_thesis ? <p className="mt-1 line-clamp-3 text-xs text-ink-soft">{b.central_thesis}</p> : null}
-              </button>
+              </Button>
             </Card>
           ))}
         </div>

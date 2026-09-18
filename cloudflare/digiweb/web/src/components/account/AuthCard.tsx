@@ -7,6 +7,7 @@
 "use client";
 
 import { type FormEvent, type ReactNode } from "react";
+import { Button, Input, Label } from "../../ui";
 import { DigiquantMark } from "../symbols/marks";
 import { GitHubGlyph, GoogleGlyph, XGlyph } from "../icons";
 
@@ -64,7 +65,7 @@ function OAuthButtons({
   return (
     <>
       {OAUTH.map((item) => (
-        <button
+        <Button
           key={item.provider}
           type="button"
           className="acct-oauth"
@@ -76,7 +77,7 @@ function OAuthButtons({
           onClick={() => onOAuth?.(item.provider)}
         >
           {item.icon}
-        </button>
+        </Button>
       ))}
     </>
   );
@@ -116,11 +117,13 @@ export function AuthCard({
   const fields = (
     <>
       <div className="acct-auth-field">
-        <label className="acct-auth-label" htmlFor={emailId}>
+        <Label className="acct-auth-label leading-[normal]" htmlFor={emailId}>
           Email
-        </label>
-        <input
-          className={error ? "acct-auth-input acct-auth-input-error" : "acct-auth-input"}
+        </Label>
+        <Input
+          className={
+            error ? "acct-auth-input acct-auth-input-error h-auto" : "acct-auth-input h-auto"
+          }
           id={emailId}
           name="email"
           type="email"
@@ -131,11 +134,13 @@ export function AuthCard({
         />
       </div>
       <div className="acct-auth-field">
-        <label className="acct-auth-label" htmlFor={passwordId}>
+        <Label className="acct-auth-label leading-[normal]" htmlFor={passwordId}>
           Password
-        </label>
-        <input
-          className={error ? "acct-auth-input acct-auth-input-error" : "acct-auth-input"}
+        </Label>
+        <Input
+          className={
+            error ? "acct-auth-input acct-auth-input-error h-auto" : "acct-auth-input h-auto"
+          }
           id={passwordId}
           name="password"
           type="password"
@@ -185,14 +190,14 @@ export function AuthCard({
           {fields}
           <div className="acct-auth-actions">
             <OAuthButtons pending={pending} onOAuth={onOAuth} stretch={false} />
-            <button
+            <Button
               type="submit"
-              className="acct-auth-submit"
+              className="acct-auth-submit h-auto font-normal"
               disabled={busy}
               data-testid="login-email-submit"
             >
               {submitLabel}
-            </button>
+            </Button>
           </div>
         </>
       );
@@ -207,14 +212,14 @@ export function AuthCard({
             <span>or email</span>
           </div>
           {fields}
-          <button
+          <Button
             type="submit"
-            className="acct-auth-submit-block"
+            className="acct-auth-submit-block h-auto font-normal"
             disabled={busy}
             data-testid="login-email-submit"
           >
             {submitLabel}
-          </button>
+          </Button>
         </>
       );
       break;
@@ -233,19 +238,23 @@ export function AuthCard({
           {fields}
           <div className="acct-auth-actions">
             <OAuthButtons pending={pending} onOAuth={onOAuth} stretch={false} />
-            <button
+            <Button
               type="submit"
-              className="acct-auth-submit"
+              className="acct-auth-submit h-auto font-normal"
               disabled={busy}
               data-testid="login-email-submit"
             >
               {submitLabel}
-            </button>
+            </Button>
           </div>
           {!signUp ? (
-            <button type="button" className="acct-auth-forgot" onClick={onForgotPassword}>
+            <Button
+              type="button"
+              className="acct-auth-forgot h-auto font-normal"
+              onClick={onForgotPassword}
+            >
               Forgot password?
-            </button>
+            </Button>
           ) : null}
         </>
       );

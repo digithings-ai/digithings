@@ -7,8 +7,10 @@
  *
  * Wave 1: the side pill is the stock kit Badge (outline) with the money tone
  * as a call-site utility, per the wave-1 chip map. T6: the table itself is the
- * controls-layer kit `Table` (`@digithings/web`) — the frame stays the plain
- * call-site shell; numeric columns take the kit's numeric treatment.
+ * kit `Table` — the frame stays the plain call-site shell; numeric columns
+ * take the kit's numeric treatment. Wave 4: the last controls-layer Table
+ * import was re-pointed onto `@digithings/web/ui`, and the row header is now
+ * the kit `TableRowHeader` (W4-P1 closed the no-row-header gap).
  */
 import { Badge } from "@digithings/web/ui";
 import {
@@ -19,7 +21,8 @@ import {
   TableHead,
   TableHeader,
   TableRow,
-} from "@digithings/web";
+  TableRowHeader,
+} from "@digithings/web/ui";
 
 type Position = {
   sym: string;
@@ -56,10 +59,10 @@ export function PortfolioReference() {
         the long/short side read. Tabular numerals keep the columns honest.
       </p>
 
-      {/* Migrated to the stock kit Badge + the controls-layer kit Table. The
-          side pill is `outline` with the money tone as a call-site utility
-          (long → up, short → down); the P&L column keeps its per-row up/down
-          read. The frame stays the plain call-site shell. */}
+      {/* Migrated to the stock kit Badge + the kit Table. The side pill is
+          `outline` with the money tone as a call-site utility (long → up,
+          short → down); the P&L column keeps its per-row up/down read. The
+          frame stays the plain call-site shell. */}
       <div className="mt-[1.2rem] overflow-x-auto rounded-none border border-hair bg-surface">
         <Table className="min-w-[560px]">
           <TableHeader className="border-b border-hair">
@@ -75,11 +78,7 @@ export function PortfolioReference() {
           <TableBody>
             {POSITIONS.map((p) => (
               <TableRow key={p.sym}>
-                {/* The kit Table exposes no row-header part; keep the native
-                    `th scope="row"` and borrow the kit's cell dress class. */}
-                <th scope="row" className="ctl-table-td text-left font-normal text-ink">
-                  {p.sym}
-                </th>
+                <TableRowHeader className="font-normal">{p.sym}</TableRowHeader>
                 <TableCell>
                   <Badge
                     variant="outline"

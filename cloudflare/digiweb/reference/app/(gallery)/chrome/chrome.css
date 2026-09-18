@@ -86,8 +86,7 @@
 
 /* Footer — .ref-footer wrapper, column grid, titles, link lists, and the
    utility row (status/copyright) migrated to utilities in footer-reference.tsx.
-   Kept as CSS: .status-dot (box-shadow tint), the .ref-footer-theme segmented
-   control (JS-toggled .on state on descendant buttons), and the colophon
+   Kept as CSS: .status-dot (box-shadow tint) and the colophon
    mechanics below (scroll-driven animation, masks, gradients). */
 
 .status-dot {
@@ -96,27 +95,6 @@
   border-radius: 999px;
   background: var(--up);
   box-shadow: 0 0 6px color-mix(in srgb, var(--up) 55%, transparent);
-}
-
-.ref-footer-theme {
-  display: inline-flex;
-  border: 1px solid var(--hair);
-  border-radius: 0;
-  overflow: hidden;
-}
-
-.ref-footer-theme button {
-  padding: 0.3rem 0.6rem;
-  color: var(--ink-mute);
-  background: transparent;
-  font-family: var(--font-mono);
-  font-size: 0.66rem;
-  cursor: pointer;
-}
-
-.ref-footer-theme button.on {
-  color: var(--ink);
-  background: var(--surface);
 }
 
 .ref-footer-brand {

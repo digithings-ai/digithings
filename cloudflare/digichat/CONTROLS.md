@@ -1,9 +1,10 @@
 # digichat controls ledger (#1419)
 
-State of `src/components/ui/*` after the E4 adoption and the wave-3 kit
-re-point: which wrappers are thin adapters over the canonical kit
-(`@digithings/web/ui`), which stayed local, and every known rendered-look
-delta for browser QA. Companion to the E3 ledger pattern; the chat dress CSS
+State of `src/components/ui/*` after the E4 adoption, the wave-3 kit
+re-point, and the wave-4 dead-wrapper removal: which wrappers are thin
+adapters over the canonical kit (`@digithings/web/ui`), which stayed local,
+and every known rendered-look delta for browser QA. Companion to the E3
+ledger pattern; the chat dress CSS
 lives in `cloudflare/digiweb/web/src/styles/controls-core.css` (static atoms)
 and `controls-overlay.css` (behavioral controls). The kit parts carry the
 `dress="chat"` axis (wave-3 Important 1) that emits exactly those classes.
@@ -13,32 +14,32 @@ and `controls-overlay.css` (behavioral controls). The kit parts carry the
 | ui/ file | Kit part | Pin | Notes |
 |---|---|---|---|
 | `button.tsx` | `ui/button` | `dress="chat"` | digichat variant/size enums verbatim (`ButtonChatVariant`/`ButtonChatSize`) — identical to the kit's. `buttonVariants` cva export dropped — zero importers (grep-verified). |
-| `badge.tsx` | `ui/badge` | `dress="chat"` | useRender `render` prop + `{ slot, variant }` state preserved. `badgeVariants` export dropped — zero importers. |
 | `card.tsx` | `ui/card` + parts | `dress="chat"` on root | Full 7-part shape, `size` `"default" \| "sm"`, `data-slot`/`data-size` hooks. Parts inherit the dress through the kit's Card context. |
-| `input.tsx` | `ui/input` | `dress="chat"` | Same `@base-ui/react/input` primitive underneath. |
-| `label.tsx` | `ui/label` | `dress="chat"` | `.group data-disabled` / `.peer:disabled` dimming kept (unlayered rules). |
-| `collapsible.tsx` | `Collapsible` family | none (unstyled passthrough) | Re-exports the controls `Collapsible` (the kit copy is not used here); identical to the old wrapper. |
+| `collapsible.tsx` | `ui/collapsible` | none (unstyled passthrough) | Re-exports the kit `Collapsible` (re-pointed to `@digithings/web/ui` in wave 4); byte-identical to the deleted controls copy. |
 | `dropdown-menu.tsx` | `DropdownMenu` family (15 names) | none — default skin IS the chat dress | `skin="reference"` stays available on `DropdownMenuContent`. |
-| `sheet.tsx` | `Sheet` family | none — single skin is the chat dress | Historical export surface kept: `SheetPortal`/`SheetOverlay` exist upstream but were never exported here. |
 | `tooltip.tsx` | `Tooltip` family | none — default skin IS the chat dress | Provider `delay` defaults to 0; `skin="reference"` available on `TooltipContent`. |
 
 Import sites: **zero changes** — every consumer still imports from
 `@/components/ui/<x>`.
 
-## Kept local — no shared counterpart yet
+## Removed in wave 4 — dead wrappers
 
-| ui/ file | Why |
-|---|---|
-| `scroll-area.tsx` | No shared ScrollArea control in `@digithings/web` yet. |
-| `separator.tsx` | No shared Separator. |
-| `sidebar.tsx` | shadcn sidebar system (cva + useRender + local Sheet/Tooltip/Button/Input/Separator/Skeleton composition). Not currently mounted by any digichat page. |
-| `skeleton.tsx` | No shared Skeleton. |
-| `textarea.tsx` | No shared Textarea (the reference `.ff-input` grammar has no multiline specimen promoted yet). Local `rounded-none` — utilitarian v0.1. |
+`badge.tsx`, `input.tsx`, `label.tsx`, and `sheet.tsx` were deleted: every
+call site had already moved to the kit (`@digithings/web/ui`), so the wrappers
+had zero importers (grep-verified). `src/components/ui/` now holds only the
+five thin adapters above — no local-only wrappers remain.
 
-Dependency outcome: `@base-ui/react` **stays** in `package.json` —
-`scroll-area.tsx`, `separator.tsx`, and `sidebar.tsx` still import it
-directly. `class-variance-authority` (sidebar), `tailwind-merge` (`cn`),
-and `lucide-react` (app icons) also remain in use.
+## Vendored trees (do not restyle)
+
+`src/app/(baseline)/stock/ui/*` and `src/components/assistant-ui/skins/*` are
+vendored assistant-ui trees kept verbatim (BLOCKED for restyle); they are not
+part of this ledger.
+
+Dependency outcome: `@base-ui/react` **stays** in `package.json` — the
+vendored `app/(baseline)/stock/ui/*` and `components/assistant-ui/skins/*`
+trees still import it directly. `class-variance-authority` (vendored skins),
+`tailwind-merge` (`cn` in `lib/utils.ts`), and `lucide-react` (app icons) also
+remain in use.
 
 ## Cascade contract (how parity is held without tailwind-merge)
 
@@ -51,9 +52,8 @@ chat-dress defaults sit in `@layer components` (call-site utilities win),
 state/structural rules are unlayered (they keep winning). Verified against
 the compiled `next build` output:
 `.ctl-*` defaults → `@layer components`, `.ctl-*:hover|:focus-visible|
-[aria-*]|[data-size]|[data-theme=dark]` + `.ctl-sheet[data-side=*]`
-geometry → unlayered, call-site `p-8`/`text-[9px]`/`h-6`/`sm:max-w-lg` →
-`@layer utilities`.
+[aria-*]|[data-size]|[data-theme=dark]` state/structural rules → unlayered,
+call-site `p-8`/`text-[9px]`/`h-6`/`sm:max-w-lg` → `@layer utilities`.
 
 Notably preserved (all verified against Tailwind v4.2.2 compiled
 specificity/order of the OLD dress):
@@ -87,6 +87,7 @@ specificity/order of the OLD dress):
 
 ## Dropped exports
 
-- `buttonVariants` (ui/button.tsx), `badgeVariants` (ui/badge.tsx) — cva
-  artifacts with zero importers. Restore by wrapping the shared enums if a
-  future call site needs class-string composition.
+- `buttonVariants` (ui/button.tsx) — a cva artifact with zero importers.
+  Restore by wrapping the shared enums if a future call site needs
+  class-string composition. (`badgeVariants` no longer applies — `ui/badge.tsx`
+  was deleted in wave 4; use the kit's `Badge`.)

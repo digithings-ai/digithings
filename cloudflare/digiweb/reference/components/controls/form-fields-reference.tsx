@@ -2,8 +2,8 @@
 
 import { useState } from "react";
 
-import { Checkbox, Radio, RadioGroup, Switch } from "@digithings/web";
-import { Input, Label, Textarea } from "@digithings/web/ui";
+import { Radio, RadioGroup } from "@digithings/web";
+import { Checkbox, Input, Label, Switch, Textarea } from "@digithings/web/ui";
 
 /**
  * Form fields — labelled inputs in mono micro-caps across every state: focus
@@ -16,8 +16,9 @@ import { Input, Label, Textarea } from "@digithings/web/ui";
  * disabled via `disabled`, labels paired with `id`/`htmlFor`. The mono
  * micro-caps label type is the reference's call-site grammar (the same
  * utilities the native labels carried before); the `.ff-*` dress is gone.
- * Checkbox/Radio/RadioGroup/Switch stay on the `@digithings/web` controls
- * layer — the stock kit has no selection controls yet (ruled W3–4).
+ * Wave 4: Checkbox and Switch are the stock kit too (`@digithings/web/ui`,
+ * Base UI). Radio/RadioGroup stay on the `@digithings/web` controls layer —
+ * the kit has no radio part.
  */
 export function FormFieldsReference() {
   const [checks, setChecks] = useState({ audit: true, paper: false });

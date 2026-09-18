@@ -133,7 +133,10 @@ function panel(open: boolean, runDate: string | null, rank: number | null) {
   );
 }
 
-function body(ideaRow: FxTradeIdeaRow | null) {
+function body(
+  ideaRow: FxTradeIdeaRow | null,
+  state: { loading?: boolean; error?: string | null } = {},
+) {
   return renderToStaticMarkup(
     createElement(TwelveXProvider, {
       value: {
@@ -143,7 +146,13 @@ function body(ideaRow: FxTradeIdeaRow | null) {
         openIdea: vi.fn(),
         watchlist: { tickers: [], has: () => false, toggle: vi.fn() } as never,
       },
-      children: createElement(IdeaPanelBody, { idea: ideaRow, ideaEval: [evalRow] }),
+      children: createElement(IdeaPanelBody, {
+        idea: ideaRow,
+        ideas: ideaRow ? [ideaRow] : [],
+        ideaEval: [evalRow],
+        loading: state.loading ?? false,
+        error: state.error ?? null,
+      }),
     } as never),
   );
 }
@@ -153,12 +162,28 @@ describe('IdeaPanel', () => {
     const html = body(idea);
     expect(html).toContain('BoJ normalization path repricing.');
     expect(html).toContain('Lifecycle');
-    expect(html).toContain('Source briefs');
-    expect(html).toContain('alpha/usdjpy.md');
+    // Citations are contributing desks (run artifacts, no loadable brief #1664)
+    // and render once, via IdeaDetail.
+    expect(html).toContain('Contributing desks');
+    expect(html).toContain('Desk Alpha');
+    expect(html).not.toContain('Source briefs');
+    expect(html).not.toContain('alpha/usdjpy.md');
   });
 
   it('renders an empty state for an unknown row', () => {
     expect(body(null)).toContain('Trade idea not found');
+  });
+
+  it('shows a loading state instead of not-found while the feed loads', () => {
+    const html = body(null, { loading: true });
+    expect(html).toContain('Loading trade idea');
+    expect(html).not.toContain('Trade idea not found');
+  });
+
+  it('shows the feed error instead of not-found when the feed fails', () => {
+    const html = body(null, { error: 'Failed to load FX research data' });
+    expect(html).toContain('Failed to load FX research data');
+    expect(html).not.toContain('Trade idea not found');
   });
 
   it('renders nothing while closed', () => {

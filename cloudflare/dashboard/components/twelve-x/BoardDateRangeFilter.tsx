@@ -3,10 +3,15 @@
 /**
  * Compact board-date range filter for the Trades tab.
  * Reuses DigiWeb DatePager calendar chrome (`.nb-cal`) — click start, then end.
- * No shared date-range picker exists in digiweb/dashboard yet.
+ * No shared date-range picker exists in digiweb/dashboard yet. The trigger and
+ * Clear controls wear the kit `Button`; the month-nav and day-cell controls
+ * stay raw native buttons because the `.nb-cal` chrome's canonical home (the
+ * shared DatePager) renders the same native `nb-cal-nav`/`nb-cal-day` elements
+ * (wave-4 BLOCKED, #4306) — migrating only this consumer would fork the chrome.
  */
 import { useMemo, useState } from 'react';
 import { Dialog, DialogContent } from '@digithings/web';
+import { Button } from '@digithings/web/ui';
 
 const WEEKDAYS = ['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'] as const;
 
@@ -188,30 +193,34 @@ export default function BoardDateRangeFilter({
   return (
     <div className="relative">
       <div className="flex items-center gap-1">
-        <button
+        <Button
           type="button"
+          variant="ghost"
+          size="sm"
           aria-expanded={open}
           aria-haspopup="dialog"
           aria-label="Filter by board date range"
           onClick={openPicker}
           disabled={boards.length === 0}
-          className={`border px-2.5 py-1 text-[11px] font-medium transition-colors ${
+          className={`h-auto border px-2.5 py-1 text-[11px] font-medium transition-colors ${
             hasRange || open
-              ? 'border-accent/40 bg-accent/15 text-accent'
-              : 'border-hair text-ink-mute hover:text-ink'
+              ? 'border-accent/40 bg-accent/15 text-accent hover:bg-accent/15'
+              : 'border-hair text-ink-mute hover:bg-transparent hover:text-ink'
           }`}
         >
           {label}
-        </button>
+        </Button>
         {hasRange ? (
-          <button
+          <Button
             type="button"
+            variant="ghost"
+            size="sm"
             aria-label="Clear board date range"
             onClick={clear}
-            className="border border-hair px-1.5 py-1 text-[11px] text-ink-mute hover:text-ink"
+            className="h-auto border border-hair px-1.5 py-1 text-[11px] text-ink-mute hover:bg-transparent hover:text-ink"
           >
             Clear
-          </button>
+          </Button>
         ) : null}
       </div>
       <Dialog

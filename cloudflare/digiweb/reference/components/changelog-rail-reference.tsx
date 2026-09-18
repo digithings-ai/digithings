@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useReducedMotion } from "motion/react";
+import { IconButton } from "@digithings/web";
 import { Badge, Card, CardContent } from "@digithings/web/ui";
 
 /**
@@ -127,24 +128,22 @@ export function ChangelogRailReference() {
           <h2 className="title">Content that scrolls sideways.</h2>
         </div>
         <div className="flex gap-[0.4rem]">
-          <button
-            type="button"
+          <IconButton
             className="cr-arrow"
             onClick={() => nudge(-1)}
             aria-label="Scroll left"
             disabled={atStart}
           >
             ‹
-          </button>
-          <button
-            type="button"
+          </IconButton>
+          <IconButton
             className="cr-arrow"
             onClick={() => nudge(1)}
             aria-label="Scroll right"
             disabled={atEnd}
           >
             ›
-          </button>
+          </IconButton>
         </div>
       </div>
       <p className="section-copy">
