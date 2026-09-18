@@ -16,10 +16,12 @@ import { hydrateRoot, type Root } from 'react-dom/client';
 import { renderToString } from 'react-dom/server';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-vi.mock('@/lib/twelve-x/supabase', () => ({ isTwelveXConfigured: () => false }));
+const configured = vi.hoisted(() => ({ value: false }));
+vi.mock('@/lib/twelve-x/supabase', () => ({ isTwelveXConfigured: () => configured.value }));
 
-/* The feed is never called (unconfigured short-circuits the effect), but the
- * named imports still have to resolve. */
+/* The feed is stubbed to resolve empty. Most tests stay unconfigured so the
+ * effect short-circuits, but the ?view=ideas restore test configures it so the
+ * tab-content gate opens; the named imports still have to resolve either way. */
 vi.mock('@/lib/twelve-x/fetch', () => {
   const empty = async () => [];
   return {
@@ -53,6 +55,16 @@ const stub = vi.hoisted(
 );
 vi.mock('./TodayTab', () => stub('today'));
 vi.mock('./BriefsIndex', () => stub('briefs'));
+vi.mock('./IdeaCardsIndex', () => stub('ideas-index'));
+vi.mock('./IdeaPanel', () => ({
+  default: (props: { open?: boolean; runDate?: string | null; rank?: number | null }) =>
+    createElement('div', {
+      'data-stub': 'idea-panel',
+      'data-open': String(Boolean(props.open)),
+      'data-run': props.runDate ?? '',
+      'data-rank': props.rank == null ? '' : String(props.rank),
+    }),
+}));
 vi.mock('./ConsensusTab', () => stub('consensus'));
 vi.mock('./EventsTab', () => stub('events'));
 vi.mock('./HowItWorksTab', () => stub('how-it-works'));
@@ -90,6 +102,9 @@ async function hydrateAt(search: string): Promise<{ container: HTMLDivElement; r
   await act(async () => {
     root = hydrateRoot(container, createElement(TwelveXClient));
   });
+  // Flush the post-hydration data effect so the gate (loading/error) settles
+  // before assertions that depend on the resolved view.
+  await act(async () => {});
   return { container, root };
 }
 
@@ -112,6 +127,7 @@ describe('TwelveXClient deep-link hydration', () => {
       });
       container.remove();
     }
+    configured.value = false;
     window.history.replaceState(null, '', PATH);
   });
 
@@ -128,5 +144,20 @@ describe('TwelveXClient deep-link hydration', () => {
   it('stays on Today with no tab param', async () => {
     open = await hydrateAt('');
     expect(activeTabs(open.container)).toEqual(['Today']);
+  });
+
+  it('restores ?view=ideas to the live-ideas index', async () => {
+    configured.value = true;
+    open = await hydrateAt('?view=ideas');
+    expect(open.container.querySelector('[data-stub="ideas-index"]')).not.toBeNull();
+    expect(activeTabs(open.container)).toEqual(['Today']);
+  });
+
+  it('restores ?idea=&ideaRank= into the open idea panel', async () => {
+    open = await hydrateAt('?idea=2026-07-24&ideaRank=2');
+    const panel = open.container.querySelector('[data-stub="idea-panel"]');
+    expect(panel?.getAttribute('data-open')).toBe('true');
+    expect(panel?.getAttribute('data-run')).toBe('2026-07-24');
+    expect(panel?.getAttribute('data-rank')).toBe('2');
   });
 });

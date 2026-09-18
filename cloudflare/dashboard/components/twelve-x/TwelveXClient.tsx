@@ -430,7 +430,7 @@ export default function TwelveXClient() {
         case 'currency':
           setTabState('consensus');
           setConsensusFocusCcy(l.currency);
-          syncUrl('consensus', brief, view);
+          syncUrl('consensus', brief, view, idea);
           break;
         case 'brief':
           openBrief(l.sourceFile, l.runDate);
@@ -438,7 +438,7 @@ export default function TwelveXClient() {
         case 'event':
           setTabState('events');
           setEventFocus({ externalId: l.externalId ?? null, name: l.eventName });
-          syncUrl('events', brief, view);
+          syncUrl('events', brief, view, idea);
           break;
         case 'ideas':
           setTabState('today');
@@ -562,6 +562,8 @@ export default function TwelveXClient() {
           rank={idea?.rank ?? null}
           ideas={data?.tradeIdeaArchive ?? []}
           ideaEval={data?.ideaEval ?? []}
+          loading={loading}
+          error={error}
           onClose={closeIdea}
         />
       </TwelveXProvider>

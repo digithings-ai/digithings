@@ -79,7 +79,7 @@ async function mount() {
 
 describe('TradesTab row interaction', () => {
   function row(): HTMLElement {
-    const el = document.querySelector('tbody tr[role="button"]');
+    const el = document.querySelector('tbody tr[tabindex="0"]');
     expect(el).not.toBeNull();
     return el as HTMLElement;
   }
@@ -96,6 +96,14 @@ describe('TradesTab row interaction', () => {
     const onOpenIdea = await mount();
     await act(async () => {
       row().dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+    });
+    expect(onOpenIdea).toHaveBeenCalledWith('2026-07-24', 1);
+  });
+
+  it('opens the idea sidebar when Space is pressed on a row', async () => {
+    const onOpenIdea = await mount();
+    await act(async () => {
+      row().dispatchEvent(new KeyboardEvent('keydown', { key: ' ', bubbles: true }));
     });
     expect(onOpenIdea).toHaveBeenCalledWith('2026-07-24', 1);
   });

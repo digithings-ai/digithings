@@ -4,7 +4,7 @@ import { useMemo } from 'react';
 import { Card } from '@digithings/web/ui';
 import { ArrowLeft } from 'lucide-react';
 
-import { assembleTradeHistory, biasLabel } from '@/lib/twelve-x/trade-history';
+import { annotateLevelUpdates, assembleTradeHistory, biasLabel } from '@/lib/twelve-x/trade-history';
 import type { FxIdeaEvalRow, FxTradeIdeaRow } from '@/lib/twelve-x/types';
 import { useTwelveX } from './context';
 
@@ -26,7 +26,10 @@ export default function IdeaCardsIndex({
 }) {
   const { openIdea } = useTwelveX();
   const liveRows = useMemo(
-    () => assembleTradeHistory(ideas, ideaEval).filter((r) => r.lifecycle === 'live'),
+    () =>
+      annotateLevelUpdates(assembleTradeHistory(ideas, ideaEval)).filter(
+        (r) => r.lifecycle === 'live',
+      ),
     [ideas, ideaEval],
   );
 

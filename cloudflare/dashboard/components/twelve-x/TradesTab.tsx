@@ -452,9 +452,13 @@ function TradeRow({
   const final = finalResult(row);
   if (result === null) return null;
   const openIdea = () => onOpenIdea?.(row.runDate, row.rank);
+  // Row-level interactivity (click / Enter / Space) with no role override:
+  // `tr` only permits `role="row"`, and overriding it pruned the table
+  // semantics (cells lost their column-header association). The row is a
+  // focusable, clickable row — not a button — so screen readers keep reading
+  // it as a row. #4210.
   return (
     <tr
-      role="button"
       tabIndex={0}
       onClick={openIdea}
       onKeyDown={(event) => {
