@@ -3,7 +3,7 @@
 Kept out of ``test_forecast_outcomes.py`` so the #4296 writer PR (#4309) and this
 #4298 ingress fix can land independently.
 
-The bug: ``olympus_forecast_outcomes`` stores ``forecast_mean_return`` /
+The bug: ``forecast_outcomes`` stores ``forecast_mean_return`` /
 ``realized_return`` / ``signed_residual`` in Postgres ``numeric`` columns. Postgres
 does not preserve trailing zeros, so a value written as ``"0.03250000"`` reads back
 through PostgREST as the JSON number ``0.0325`` (a Python float) and re-``str()``s to

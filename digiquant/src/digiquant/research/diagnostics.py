@@ -741,26 +741,26 @@ def write_row(
         )
     ]
     if events_captured:
+        # PostgreSQL cannot run INSERT ... ON CONFLICT through a view, so the
+        # previous upsert against the run_events compatibility view would have
+        # failed (fail-soft) and silently dropped the run's event telemetry.
+        # Explicit delete-then-insert keeps the same net result: drop the rows
+        # at or beyond the earliest captured sequence, then append the captured
+        # set. Runs as service_role; run_events grants SELECT/INSERT/DELETE.
         try:
             stale_events = (
-                client.table("olympus_run_events")
-                .delete()
-                .eq("run_id", run_id)
-                .eq("attempt", attempt)
+                client.table("run_events").delete().eq("run_id", run_id).eq("attempt", attempt)
             )
             if event_rows:
                 stale_events = stale_events.gte(
-                    "sequence", max(row["sequence"] for row in event_rows) + 1
+                    "sequence", min(row["sequence"] for row in event_rows)
                 )
             stale_events.execute()
         except Exception as exc:  # event telemetry is independently fail-soft
             logger.warning("diagnostics: stale run-event cleanup failed (%s); run continues", exc)
     if event_rows:
         try:
-            client.table("olympus_run_events").upsert(
-                event_rows,
-                on_conflict="run_id,attempt,sequence",
-            ).execute()
+            client.table("run_events").insert(event_rows).execute()
         except Exception as exc:  # event telemetry is independently fail-soft
             logger.warning("diagnostics: run-event write failed (%s); run continues", exc)
     logger.info(

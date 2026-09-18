@@ -40,10 +40,10 @@ from digiquant.research.supabase_io import SupabaseClient
 
 logger = logging.getLogger(__name__)
 
-ASSESSMENTS = "olympus_forecast_assessments"
-AMENDMENTS = "olympus_forecast_amendments"
-CALIBRATIONS = "olympus_forecast_calibrations"
-CALIBRATED_FORECASTS = "olympus_calibrated_forecasts"
+ASSESSMENTS = "forecast_assessments"
+AMENDMENTS = "forecast_amendments"
+CALIBRATIONS = "forecast_calibrations"
+CALIBRATED_FORECASTS = "calibrated_forecasts"
 
 
 class ForecastRegistryConflict(RuntimeError):
@@ -79,7 +79,7 @@ class RegistryWriteResult:
         return self.degraded_reason is None and not self.conflicts
 
 
-# Migration 079 ``olympus_forecast_amendments_reason_check``: length 1..2000.
+# Migration 079 ``forecast_amendments_reason_check``: length 1..2000.
 # H9 persist is fail-soft after booking; a 23514 here degrades the registry
 # without rebooking (house GHA 33426508863 BITO amendment).
 AMENDMENT_REASON_MAX_LEN = 2000

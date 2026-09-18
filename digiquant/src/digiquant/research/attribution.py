@@ -18,7 +18,7 @@ and the identity (when every holding is priced):
 **Contract (#2598 / OLY-REV-007):** this is ``current_book_lookback`` — a diagnostic that
 applies *today's* weights to a trailing return window. It is **not** realized period
 contribution. Realized daily contribution comes only from finalized accounting periods
-(``daily_realized_attribution`` / ``olympus_accounting_contributions``). Do not feed these
+(``daily_realized_attribution`` / ``accounting_contributions``). Do not feed these
 rows into daily ``pnl_pct``, cumulative realized readers, or training labels as realized P&L.
 
 Pure-functional (no I/O, no pandas): the caller assembles per-holding weights + window

@@ -22,9 +22,15 @@ transaction back, which restores the trigger on its own.
 ``outcome_id`` PK churn
 -----------------------
 Repairing the digest changes ``outcome_id`` (its UUID5 input). The
-``olympus_forecast_calibrations.outcome_ids`` array is not a foreign key and is
-left stale by this tool — a documented decision, not an oversight. Default mode
-is a dry run; pass ``--apply`` to write.
+``olympus_forecast_calibrations.outcome_ids`` array cites those UUIDs and is not
+a foreign key, so it would go stale. The array is, however, covered by the
+calibration's immutable ``content_hash``/``calibration_id`` (and transitively by
+``olympus_calibrated_forecasts.calibration_id``): an in-place array rewrite would
+either invalidate the calibration digest or force a PK cascade across two more
+append-only tables. This one-shot tool therefore **refuses** to repair any row
+still cited by a calibration and reports it under ``unrepairable`` with the
+reason — it never rewrites a row and silently leaves stale lineage (#4295 G2).
+Default mode is a dry run; pass ``--apply`` to write.
 
 Usage::
 
@@ -39,6 +45,8 @@ import json
 import logging
 import os
 import sys
+from collections.abc import Callable
+from functools import partial
 from pathlib import Path
 from typing import Any
 
@@ -52,12 +60,14 @@ from _env import load_repo_env  # noqa: E402
 
 from digiquant.research.forecast_outcomes import (  # noqa: E402
     OUTCOMES,
+    ForecastOutcomeHashRepairPlan,
     plan_forecast_outcome_hash_repairs,
 )
 
 logger = logging.getLogger(__name__)
 
 _TRIGGER = "reject_olympus_forecast_outcomes_mutation"
+_CALIBRATIONS = "olympus_forecast_calibrations"
 _URI_ENV_VARS = ("CORE_POSTGRES_URI", "DATABASE_URL")
 
 
@@ -92,6 +102,96 @@ def _status_label(*, apply: bool, repairs: int) -> str:
     return "applied" if repairs else "no_changes"
 
 
+def _payload(
+    *,
+    rows_scanned: int,
+    plan: ForecastOutcomeHashRepairPlan,
+    apply: bool,
+) -> dict[str, Any]:
+    return {
+        "table": OUTCOMES,
+        "rows_scanned": rows_scanned,
+        "repairs": [
+            {
+                "outcome_id": repair.outcome_id,
+                "repaired_outcome_id": repair.repaired_outcome_id,
+                "recorded_content_hash": repair.recorded_content_hash,
+                "repaired_content_hash": repair.repaired_content_hash,
+            }
+            for repair in plan.repairs
+        ],
+        "unrepairable": list(plan.unrepairable),
+        "apply": apply,
+        "status": _status_label(apply=apply, repairs=len(plan.repairs)),
+    }
+
+
+def run_repair(
+    *,
+    connect: Callable[[], Any],
+    sql_module: Any,
+    apply: bool,
+    limit: int | None = None,
+) -> dict[str, Any]:
+    """Drive one repair pass against an injected connection factory.
+
+    ``connect`` returns a psycopg-style connection used as a context manager:
+    clean exit commits, an exception rolls back. Production passes
+    ``functools.partial(psycopg.connect, uri, row_factory=dict_row)``; tests pass
+    a recording fake so the transaction path is provable without a live
+    privileged Postgres (#4295 G1). All statements are built with
+    ``sql_module`` (``psycopg.sql``), so table/trigger identifiers are never
+    string-formatted and values stay bound parameters.
+
+    The citation read, the plan, and the DISABLE/UPDATE/ENABLE writes all run in
+    the one ``connect()`` transaction, so a mid-way failure rolls the whole pass
+    back and the trigger is restored on its own.
+    """
+    table = sql_module.Identifier("public", OUTCOMES)
+    calibrations = sql_module.Identifier("public", _CALIBRATIONS)
+    select_sql = sql_module.SQL("SELECT * FROM {} ORDER BY known_at").format(table)
+    cited_sql = sql_module.SQL("SELECT outcome_ids FROM {}").format(calibrations)
+    update_sql = sql_module.SQL(
+        "UPDATE {} SET outcome_id = %s, content_hash = %s WHERE outcome_id = %s"
+    ).format(table)
+    disable_sql = sql_module.SQL("ALTER TABLE {} DISABLE TRIGGER {}").format(
+        table, sql_module.Identifier(_TRIGGER)
+    )
+    enable_sql = sql_module.SQL("ALTER TABLE {} ENABLE TRIGGER {}").format(
+        table, sql_module.Identifier(_TRIGGER)
+    )
+
+    with connect() as conn:
+        with conn.cursor() as cur:
+            cur.execute(select_sql)
+            rows = [dict(row) for row in cur.fetchall()]
+            cur.execute(cited_sql)
+            cited: set[str] = set()
+            for cited_row in cur.fetchall():
+                for item in dict(cited_row).get("outcome_ids") or ():
+                    cited.add(str(item))
+        if limit is not None:
+            rows = rows[:limit]
+
+        plan = plan_forecast_outcome_hash_repairs(rows=rows, cited_outcome_ids=cited)
+
+        if apply and plan.repairs:
+            with conn.cursor() as cur:
+                cur.execute(disable_sql)
+                for repair in plan.repairs:
+                    cur.execute(
+                        update_sql,
+                        (
+                            repair.repaired_outcome_id,
+                            repair.repaired_content_hash,
+                            repair.outcome_id,
+                        ),
+                    )
+                cur.execute(enable_sql)
+
+    return _payload(rows_scanned=len(rows), plan=plan, apply=apply)
+
+
 def main(argv: list[str] | None = None) -> int:
     load_repo_env()
     parser = argparse.ArgumentParser(
@@ -120,61 +220,11 @@ def main(argv: list[str] | None = None) -> int:
 
     uri = _resolve_uri(args.postgres_uri)
     psycopg, sql, dict_row = _import_psycopg()
-    table = sql.Identifier("public", OUTCOMES)
-    select_sql = sql.SQL("SELECT * FROM {} ORDER BY known_at").format(table)
-    update_sql = sql.SQL(
-        "UPDATE {} SET outcome_id = %s, content_hash = %s WHERE outcome_id = %s"
-    ).format(table)
+    connect = partial(psycopg.connect, uri, row_factory=dict_row)
 
-    with psycopg.connect(uri, row_factory=dict_row) as conn:
-        with conn.cursor() as cur:
-            cur.execute(select_sql)
-            rows = [dict(row) for row in cur.fetchall()]
-        if args.limit is not None:
-            rows = rows[: args.limit]
-
-        plan = plan_forecast_outcome_hash_repairs(rows=rows)
-
-        if args.apply and plan.repairs:
-            with conn.cursor() as cur:
-                cur.execute(
-                    sql.SQL("ALTER TABLE {} DISABLE TRIGGER {}").format(
-                        table, sql.Identifier(_TRIGGER)
-                    )
-                )
-                for repair in plan.repairs:
-                    cur.execute(
-                        update_sql,
-                        (
-                            repair.repaired_outcome_id,
-                            repair.repaired_content_hash,
-                            repair.outcome_id,
-                        ),
-                    )
-                cur.execute(
-                    sql.SQL("ALTER TABLE {} ENABLE TRIGGER {}").format(
-                        table, sql.Identifier(_TRIGGER)
-                    )
-                )
-
-    payload = {
-        "table": OUTCOMES,
-        "rows_scanned": len(rows),
-        "repairs": [
-            {
-                "outcome_id": repair.outcome_id,
-                "repaired_outcome_id": repair.repaired_outcome_id,
-                "recorded_content_hash": repair.recorded_content_hash,
-                "repaired_content_hash": repair.repaired_content_hash,
-            }
-            for repair in plan.repairs
-        ],
-        "unrepairable": list(plan.unrepairable),
-        "apply": args.apply,
-        "status": _status_label(apply=args.apply, repairs=len(plan.repairs)),
-    }
+    payload = run_repair(connect=connect, sql_module=sql, apply=args.apply, limit=args.limit)
     print(json.dumps(payload, indent=2, sort_keys=True))
-    return 0 if plan.ok else 3
+    return 0 if not payload["unrepairable"] else 3
 
 
 if __name__ == "__main__":

@@ -1,12 +1,12 @@
 """Durable append-only writer for dashboard provider telemetry (#1979, Task 1.5).
 
 Drains one run's in-process telemetry buffers from ``digigraph.usage`` and appends them to the
-private ledger migration ``067_olympus_provider_telemetry.sql`` created: ``olympus_node_runs``,
-``olympus_provider_calls``, ``olympus_provider_attempts``.
+private ledger migration ``067_olympus_provider_telemetry.sql`` created: ``node_runs``,
+``provider_calls``, ``provider_attempts``.
 
 Three properties of that ledger shape everything here.
 
-**It is append-only with no correction path.** ``reject_olympus_provider_telemetry_mutation()``
+**It is append-only with no correction path.** ``reject_provider_telemetry_mutation()``
 raises unconditionally on ``BEFORE UPDATE OR DELETE`` per row and ``BEFORE TRUNCATE`` per
 statement, with no role exemption, and ``service_role`` holds only ``SELECT`` and ``INSERT``. A
 malformed row can never be repaired or removed — only superseded by appending another. So every
@@ -14,9 +14,9 @@ record is re-validated through its Pydantic model immediately before insert, and
 fails is counted and dropped rather than written.
 
 **Three foreign keys make an incomplete batch unpersistable, not merely incomplete.**
-``olympus_provider_calls.node_run_id`` references ``olympus_node_runs``,
-``olympus_provider_calls.parent_call_id`` self-references, and
-``olympus_provider_attempts.call_id`` references ``olympus_provider_calls``. A record whose
+``provider_calls.node_run_id`` references ``node_runs``,
+``provider_calls.parent_call_id`` self-references, and
+``provider_attempts.call_id`` references ``provider_calls``. A record whose
 referent is absent from this flush is *quarantined* — counted and reported as incomplete
 coverage — never submitted. Quarantine is decided per record, not per flush, because the real
 production shape is mixed (see below).
@@ -75,9 +75,9 @@ from pydantic import ValidationError
 
 logger = logging.getLogger(__name__)
 
-NODE_RUNS_TABLE = "olympus_node_runs"
-PROVIDER_CALLS_TABLE = "olympus_provider_calls"
-PROVIDER_ATTEMPTS_TABLE = "olympus_provider_attempts"
+NODE_RUNS_TABLE = "node_runs"
+PROVIDER_CALLS_TABLE = "provider_calls"
+PROVIDER_ATTEMPTS_TABLE = "provider_attempts"
 
 #: The keys ``detailed_usage_projection()`` and ``snapshot()`` both report, and the only ones a
 #: reconciliation claim may be made about. Everything else exists on one side only.
@@ -312,7 +312,7 @@ def _order_calls_by_lineage(
 
     A call is insertable only when its ``node_run_id`` names a node run that landed in this
     flush, and its ``parent_call_id`` is either absent or names another insertable call. Parents
-    are emitted before children so the self-referencing ``fk_olympus_provider_calls_parent``
+    are emitted before children so the self-referencing ``fk_provider_calls_parent``
     holds row by row, which keeps the batch valid even if the client splits it into several
     statements.
 
