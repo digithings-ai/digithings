@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { m, useReducedMotion } from "motion/react";
+import { Button } from "../../ui";
 
 /**
  * RotatingPrompts — the rotating hero teaser line promoted from the design
@@ -77,9 +78,10 @@ export function RotatingPrompts({ prompts, intervalMs = 3200, className }: Rotat
       </m.span>
       <span className="prompt-caret" aria-hidden="true" />
       {showPauseControl ? (
-        <button
+        <Button
           type="button"
-          className="prompt-pause ml-auto"
+          variant="ghost"
+          className="prompt-pause h-auto w-auto border-0 bg-transparent p-[0.2rem] hover:bg-transparent ml-auto"
           // Belt-and-suspenders even though the header comment now tells
           // consumers to link the shell as a SIBLING, not by nesting it
           // inside an <a>: stopPropagation alone does NOT stop an ancestor
@@ -107,7 +109,7 @@ export function RotatingPrompts({ prompts, intervalMs = 3200, className }: Rotat
               <rect x="14" y="4" width="5" height="16" />
             </svg>
           )}
-        </button>
+        </Button>
       ) : null}
     </div>
   );

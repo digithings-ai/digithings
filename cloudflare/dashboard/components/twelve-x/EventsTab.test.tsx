@@ -101,14 +101,12 @@ function render(props: Partial<Parameters<typeof EventsTab>[0]> = {}): string {
 describe('EventsTab view switcher (Task 4.2)', () => {
   it('renders a List | Timeline segmented control (no Calendar)', () => {
     const html = render();
-    // The two view buttons are present (data-evtview hooks, demo-faithful).
-    expect(html).toContain('data-evtview="list"');
-    expect(html).toContain('data-evtview="timeline"');
-    // Their labels render.
-    expect(html).toContain('>List<');
-    expect(html).toContain('>Timeline<');
+    // The view toggle is the canonical shared SegmentedControl (#4306).
+    expect(html).toContain('data-slot="segmented"');
+    expect(html).toContain('aria-label="Events view"');
+    expect(html).toContain('>List</button>');
+    expect(html).toContain('>Timeline</button>');
     // The Calendar view is gone entirely.
-    expect(html).not.toContain('data-evtview="calendar"');
     expect(html).not.toContain('>Calendar<');
     expect(html).not.toContain('cal-grid');
   });
@@ -119,8 +117,8 @@ describe('EventsTab view switcher (Task 4.2)', () => {
     expect(html).toContain('Core PCE Price Index');
     expect(html).toContain('ECB President Speech');
     expect(html).toContain('RBA Rate Decision');
-    // The List button is marked active.
-    expect(html).toContain('data-evtview="list" aria-pressed="true"');
+    // The List segment is marked active.
+    expect(html).toMatch(/aria-pressed="true"[^>]*>List<\/button>/);
     // The default view is NOT the timeline Gantt nor the calendar grid.
     expect(html).not.toContain('tl-card');
     expect(html).not.toContain('cal-grid');
@@ -142,8 +140,8 @@ describe('EventsTab view switcher (Task 4.2)', () => {
     expect(html).toContain('tl-card');
     // Multi-day mode exposes the scale control.
     expect(html.toLowerCase()).toContain('scale');
-    // Timeline button is the active one.
-    expect(html).toContain('data-evtview="timeline" aria-pressed="true"');
+    // Timeline segment is the active one.
+    expect(html).toMatch(/aria-pressed="true"[^>]*>Timeline<\/button>/);
   });
 
   it('renders an empty state in List view with no events', () => {

@@ -3,7 +3,8 @@
 import { useEffect, useMemo, useState } from 'react';
 import { ChevronDown } from 'lucide-react';
 import { Skeleton, SkeletonGroup } from '@digithings/web';
-import { EmptyState } from '@/components/observability/shared';
+import { EmptyState } from '@digithings/web';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@digithings/web/ui';
 import { FreshnessBanner, latestSuccessfulRun } from '@/components/system/freshness-banner';
 import { RunEconomicsRow } from '@/components/system/run-economics-row';
 import { EntitledSurface } from '@/components/entitled-surface';
@@ -59,11 +60,11 @@ export default function PipelineRunHealth({
   const summary = loading ? 'Loading…' : summaryLine(dayRuns);
 
   return (
-    <details
+    <Collapsible
       data-testid="pipeline-run-health"
       className="group border-b border-hair bg-surface"
     >
-      <summary className="flex cursor-pointer list-none items-center gap-3 px-3 py-2.5 transition-colors hover:bg-ink/[0.02] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-accent/50 md:px-4 [&::-webkit-details-marker]:hidden">
+      <CollapsibleTrigger className="flex w-full items-center gap-3 px-3 py-2.5 text-left transition-colors hover:bg-ink/[0.02] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-accent/50 md:px-4">
         <span className="font-mono text-[0.62rem] font-semibold uppercase tracking-[0.1em] text-ink-mute">
           Run health
         </span>
@@ -72,12 +73,12 @@ export default function PipelineRunHealth({
         </span>
         <ChevronDown
           size={14}
-          className="shrink-0 text-ink-mute transition-transform group-open:rotate-180"
+          className="shrink-0 text-ink-mute transition-transform group-data-open:rotate-180"
           aria-hidden
         />
-      </summary>
+      </CollapsibleTrigger>
 
-      <div className="space-y-4 border-t border-hair px-3 py-4 md:px-4">
+      <CollapsibleContent className="space-y-4 border-t border-hair px-3 py-4 md:px-4">
         {loading ? (
           <SkeletonGroup aria-label="Loading run diagnostics" className="flex flex-col gap-4">
             <Skeleton variant="block" className="h-12 w-full" />
@@ -89,8 +90,10 @@ export default function PipelineRunHealth({
           </SkeletonGroup>
         ) : !dayRuns.length ? (
           <EmptyState
+            dress="glass"
+            data-reveal
             title="No run for this date"
-            message="Pick a date with a recorded pipeline run to see duration, segment counts, and carry/fail stats."
+            body="Pick a date with a recorded pipeline run to see duration, segment counts, and carry/fail stats."
           />
         ) : (
           <>
@@ -107,7 +110,7 @@ export default function PipelineRunHealth({
             </EntitledSurface>
           </>
         )}
-      </div>
-    </details>
+      </CollapsibleContent>
+    </Collapsible>
   );
 }

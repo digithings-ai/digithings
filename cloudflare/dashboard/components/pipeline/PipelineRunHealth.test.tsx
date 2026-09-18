@@ -14,6 +14,7 @@ describe('PipelineRunHealth', () => {
     expect(html).toContain('data-testid="pipeline-run-health"');
     expect(html).toContain('Run health');
     expect(html).toContain('2026-08-06');
-    expect(html).toContain('<details');
+    expect(html).toContain('data-slot="collapsible"');
+    expect(html).toContain('data-slot="collapsible-trigger"');
   });
 });

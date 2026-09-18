@@ -3,6 +3,14 @@
 import { useMemo } from "react";
 import type { UIMessage } from "ai";
 import { Card } from "@/components/ui/card";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@digithings/web/ui";
 
 export type QuantMetricRow = {
   runId: string;
@@ -71,38 +79,38 @@ export function QuantComparisonStrip(props: {
       <div className="mb-2 font-medium text-muted-foreground">
         Quant runs in this thread ({rows.length})
       </div>
-      <table className="w-full min-w-[480px] border-collapse text-left">
-        <thead>
-          <tr className="border-b border-border/40 text-muted-foreground">
-            <th className="py-1 pr-2 font-medium">Run</th>
-            <th className="py-1 pr-2 font-medium">Strategy</th>
-            <th className="py-1 pr-2 font-medium">Sharpe</th>
-            <th className="py-1 pr-2 font-medium">Ret %</th>
-            <th className="py-1 pr-2 font-medium">Max DD %</th>
-            <th className="py-1 font-medium">Trades</th>
-          </tr>
-        </thead>
-        <tbody>
+      <Table className="min-w-[480px] border-collapse text-left">
+        <TableHeader>
+          <TableRow className="border-border/40 text-muted-foreground hover:bg-transparent">
+            <TableHead className="h-auto py-1 pr-2 pl-0 font-medium">Run</TableHead>
+            <TableHead className="h-auto py-1 pr-2 pl-0 font-medium">Strategy</TableHead>
+            <TableHead className="h-auto py-1 pr-2 pl-0 font-medium">Sharpe</TableHead>
+            <TableHead className="h-auto py-1 pr-2 pl-0 font-medium">Ret %</TableHead>
+            <TableHead className="h-auto py-1 pr-2 pl-0 font-medium">Max DD %</TableHead>
+            <TableHead className="h-auto py-1 pl-0 font-medium">Trades</TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
           {rows.map((r) => (
-            <tr key={r.runId} className="border-b border-border/20">
-              <td className="py-1 pr-2 font-mono text-[10px] text-muted-foreground">
+            <TableRow key={r.runId} className="border-border/20 hover:bg-transparent">
+              <TableCell className="py-1 pr-2 pl-0 font-mono text-[10px] text-muted-foreground">
                 {r.runId.slice(0, 12)}…
-              </td>
-              <td className="py-1 pr-2">{r.strategy ?? "—"}</td>
-              <td className="py-1 pr-2">
+              </TableCell>
+              <TableCell className="py-1 pr-2 pl-0">{r.strategy ?? "—"}</TableCell>
+              <TableCell className="py-1 pr-2 pl-0">
                 {r.sharpe === null ? "—" : r.sharpe.toFixed(3)}
-              </td>
-              <td className="py-1 pr-2">
+              </TableCell>
+              <TableCell className="py-1 pr-2 pl-0">
                 {r.totalReturnPct === null ? "—" : r.totalReturnPct.toFixed(2)}
-              </td>
-              <td className="py-1 pr-2">
+              </TableCell>
+              <TableCell className="py-1 pr-2 pl-0">
                 {r.maxDdPct === null ? "—" : r.maxDdPct.toFixed(2)}
-              </td>
-              <td className="py-1">{r.trades ?? "—"}</td>
-            </tr>
+              </TableCell>
+              <TableCell className="py-1 pl-0">{r.trades ?? "—"}</TableCell>
+            </TableRow>
           ))}
-        </tbody>
-      </table>
+        </TableBody>
+      </Table>
       <p className="mt-2 text-[10px] text-muted-foreground">
         With Postgres enabled, persist runs via{" "}
         <span className="font-mono">POST /api/conversations/&lt;id&gt;/quant-runs</span>.

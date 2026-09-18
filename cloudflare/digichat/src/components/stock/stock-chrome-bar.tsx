@@ -9,6 +9,15 @@
 import { useId, useState, type ReactNode } from "react";
 import { LANGUAGES } from "@/lib/languages";
 import { cn } from "@/lib/utils";
+import {
+  Button,
+  Label,
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@digithings/web/ui";
 
 export type StockChromeBarProps = {
   language?: string;
@@ -65,51 +74,69 @@ export function StockChromeBar({
       data-stock-chrome
     >
       {showLang ? (
-        <label className="flex items-center gap-1.5 text-muted-foreground">
+        <Label className="flex items-center gap-1.5 text-muted-foreground">
           <span className="sr-only">Reply language</span>
-          <select
-            className="bg-background border-border/60 max-w-[10rem] rounded border px-1.5 py-0.5"
+          <Select
             value={language ?? "en"}
-            onChange={(e) => onLanguageChange?.(e.target.value)}
-            aria-label="Reply language"
+            onValueChange={(v) => {
+              if (typeof v === "string") onLanguageChange?.(v);
+            }}
           >
-            {LANGUAGES.map((l) => (
-              <option key={l.code} value={l.code}>
-                {l.label}
-              </option>
-            ))}
-          </select>
-        </label>
+            <SelectTrigger
+              aria-label="Reply language"
+              className="h-auto bg-background border-border/60 max-w-[10rem] px-1.5 py-0.5 text-xs"
+            >
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {LANGUAGES.map((l) => (
+                <SelectItem key={l.code} value={l.code}>
+                  {l.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </Label>
       ) : null}
 
       {showModel ? (
-        <label className="flex items-center gap-1.5 text-muted-foreground">
+        <Label className="flex items-center gap-1.5 text-muted-foreground">
           <span className="sr-only">Model</span>
-          <select
-            className="bg-background border-border/60 max-w-[12rem] rounded border px-1.5 py-0.5"
+          <Select
             value={model ?? models![0]}
-            onChange={(e) => onModelChange?.(e.target.value)}
-            aria-label="Model"
+            onValueChange={(v) => {
+              if (typeof v === "string") onModelChange?.(v);
+            }}
           >
-            {models!.map((id) => (
-              <option key={id} value={id}>
-                {id}
-              </option>
-            ))}
-          </select>
-        </label>
+            <SelectTrigger
+              aria-label="Model"
+              className="h-auto bg-background border-border/60 max-w-[12rem] px-1.5 py-0.5 text-xs"
+            >
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {models!.map((id) => (
+                <SelectItem key={id} value={id}>
+                  {id}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </Label>
       ) : null}
 
       <div className="relative">
-        <button
+        <Button
           type="button"
-          className="text-muted-foreground hover:text-foreground rounded px-1.5 py-0.5 underline-offset-2 hover:underline"
+          variant="link"
+          size="sm"
+          className="h-auto text-muted-foreground hover:text-foreground rounded px-1.5 py-0.5 underline-offset-2"
           aria-expanded={helpOpen}
           aria-controls={helpId}
           onClick={() => setHelpOpen((o) => !o)}
         >
           Help
-        </button>
+        </Button>
         {helpOpen ? (
           <div
             id={helpId}
@@ -122,25 +149,29 @@ export function StockChromeBar({
                 <li key={line}>{line}</li>
               ))}
             </ul>
-            <button
+            <Button
               type="button"
-              className="text-foreground mt-2 underline"
+              variant="link"
+              size="sm"
+              className="mt-2 h-auto text-foreground px-0 underline-offset-2"
               onClick={() => setHelpOpen(false)}
             >
               Close
-            </button>
+            </Button>
           </div>
         ) : null}
       </div>
 
       {showNew ? (
-        <button
+        <Button
           type="button"
-          className="text-muted-foreground hover:text-foreground rounded px-1.5 py-0.5 underline-offset-2 hover:underline"
+          variant="link"
+          size="sm"
+          className="h-auto text-muted-foreground hover:text-foreground rounded px-1.5 py-0.5 underline-offset-2"
           onClick={() => onNewThread?.()}
         >
           New conversation
-        </button>
+        </Button>
       ) : null}
 
       <div className="ml-auto flex items-center gap-2">{trailing}</div>

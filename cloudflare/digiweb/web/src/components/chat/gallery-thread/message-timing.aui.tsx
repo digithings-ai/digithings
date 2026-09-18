@@ -59,23 +59,25 @@ export const MessageTiming: FC<{
   return (
     <TooltipProvider>
       <Tooltip>
-        <TooltipTrigger asChild>
-          <button
-            type="button"
-            data-slot="message-timing-trigger"
-            aria-label="Message timing"
-            className={cn(
-              "text-muted-foreground hover:bg-accent hover:text-accent-foreground flex items-center rounded-md p-1 font-mono text-xs tabular-nums transition-colors",
-              className,
-            )}
-          >
-            {formatToolDurationMs(timing.totalStreamTime)}
-          </button>
+        <TooltipTrigger
+          render={
+            <button
+              type="button"
+              data-slot="message-timing-trigger"
+              aria-label="Message timing"
+              className={cn(
+                "text-muted-foreground hover:bg-accent hover:text-accent-foreground flex items-center rounded-md p-1 font-mono text-xs tabular-nums transition-colors",
+                className,
+              )}
+            />
+          }
+        >
+          {formatToolDurationMs(timing.totalStreamTime)}
         </TooltipTrigger>
         <TooltipContent
           side={side}
           sideOffset={8}
-          className="bg-popover text-popover-foreground border px-3 py-2 [&_[data-slot=tooltip-arrow]]:hidden"
+          className="bg-popover text-popover-foreground border px-3 py-2"
         >
           <div
             data-slot="message-timing-popover"

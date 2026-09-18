@@ -1,7 +1,8 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Card } from '@digithings/web/ui';
+import { Button, Card } from '@digithings/web/ui';
+import { SegmentedControl } from '@digithings/web';
 import { CalendarClock, ChevronRight, Globe, Users } from 'lucide-react';
 import { eventLocalDateKey, hasResolvedTime } from '@/lib/twelve-x/fetch';
 import type {
@@ -167,10 +168,11 @@ function EventRow({
       }`}
     >
       {hasOpinions ? (
-        <button
+        <Button
           type="button"
+          variant="ghost"
           onClick={() => onSelect(event)}
-          className="flex w-full cursor-pointer items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-ink/[0.02]"
+          className="flex h-auto w-full cursor-pointer items-center justify-start gap-3 whitespace-normal px-4 py-3 text-left hover:bg-ink/[0.02]"
         >
           {/* Time column */}
           <div className="w-14 shrink-0 text-right">
@@ -194,7 +196,7 @@ function EventRow({
           <div className="min-w-0 flex-1">
             <div className="flex items-center gap-2">
               <span className="flex items-center gap-1 font-mono text-[11px] uppercase text-ink-mute">
-                <Globe size={11} aria-hidden />
+                <Globe size={11} aria-hidden className="size-[11px]" />
                 {event.country}
               </span>
               <span className={`text-[11px] font-medium ${impactText}`}>
@@ -226,12 +228,12 @@ function EventRow({
           {/* Opinions count + open-detail affordance (only when evidence exists) */}
           <div className="flex w-24 shrink-0 items-center justify-end gap-1.5">
             <span className="flex items-center gap-1 text-[11px] text-ink-mute">
-              <Users size={12} aria-hidden />
+              <Users size={12} aria-hidden className="size-3" />
               <span className="tabular-nums text-ink-soft">{opinions!.mentions}</span>
             </span>
-            <ChevronRight size={14} aria-hidden className="text-ink-mute" />
+            <ChevronRight size={14} aria-hidden className="size-3.5 text-ink-mute" />
           </div>
-        </button>
+        </Button>
       ) : (
         <div className="flex w-full items-center gap-3 px-4 py-3">
           {/* Time column */}
@@ -256,7 +258,7 @@ function EventRow({
           <div className="min-w-0 flex-1">
             <div className="flex items-center gap-2">
               <span className="flex items-center gap-1 font-mono text-[11px] uppercase text-ink-mute">
-                <Globe size={11} aria-hidden />
+                <Globe size={11} aria-hidden className="size-[11px]" />
                 {event.country}
               </span>
               <span className={`text-[11px] font-medium ${impactText}`}>
@@ -463,29 +465,14 @@ export default function EventsTab({
         <CalendarClock size={18} className="shrink-0 text-accent" aria-hidden />
         <h2 className="font-display text-2xl tracking-tight text-ink">Upcoming catalysts</h2>
         {/* List | Timeline segmented control (demo's #evtSubnav). */}
-        <div
-          className="ml-auto inline-flex overflow-hidden rounded-none border border-hair text-[11px]"
-          role="group"
+        <SegmentedControl
+          options={VIEWS.map((v) => ({ value: v.key, label: v.label }))}
+          value={view}
+          onChange={setView}
+          dress="accent"
+          className="ml-auto"
           aria-label="Events view"
-        >
-          {VIEWS.map((v) => {
-            const active = view === v.key;
-            return (
-              <button
-                key={v.key}
-                type="button"
-                data-evtview={v.key}
-                aria-pressed={active}
-                onClick={() => setView(v.key)}
-                className={`px-3 py-1 transition-colors ${
-                  active ? 'bg-accent/20 text-accent' : 'text-ink-mute hover:text-ink-soft'
-                }`}
-              >
-                {v.label}
-              </button>
-            );
-          })}
-        </div>
+        />
         {runDate ? (
           <span className="font-mono text-[10px] text-ink-mute">opinions as of {runDate}</span>
         ) : null}

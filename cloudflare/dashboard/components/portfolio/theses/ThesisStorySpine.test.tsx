@@ -84,9 +84,13 @@ describe('ThesisStorySpine — disclosure default', () => {
       })
     );
 
-    const detailsMatches = html.match(/<details[^>]*>/g) || [];
-    const openMatches = detailsMatches.filter((tag) => tag.includes('open'));
+    // Wave 4: disclosures are kit `Collapsible` roots (was native <details>). The
+    // intent is unchanged: the register renders collapsed, with no root carrying
+    // `data-open` on first paint.
+    const collapsibleMatches = html.match(/data-slot="collapsible"/g) || [];
+    const openMatches = html.match(/data-slot="collapsible"[^>]*data-open/g) || [];
 
+    expect(collapsibleMatches.length).toBeGreaterThan(0);
     expect(openMatches).toHaveLength(0);
     expect(html).toContain('3 theses · as of 2026-07-17');
     expect(html).toContain('High conviction');

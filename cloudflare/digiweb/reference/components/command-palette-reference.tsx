@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { CommandPalette, type CommandPaletteGroup } from "@digithings/web";
+import { Button } from "@digithings/web/ui";
 
 /**
  * Command palette — the dev-tool ⌘K signature: a fuzzy command bar over a
@@ -69,13 +70,18 @@ export function CommandPaletteReference() {
         ⌘K (or Ctrl K), or the button.
       </p>
 
-      <button type="button" className="cp-trigger" onClick={() => setOpen(true)}>
+      <Button
+        type="button"
+        variant="outline"
+        className="cp-trigger h-auto justify-between gap-4 font-normal"
+        onClick={() => setOpen(true)}
+      >
         <span>Search commands…</span>
         <span className="inline-flex gap-[0.2rem]">
           <kbd className="kbd">⌘</kbd>
           <kbd className="kbd">K</kbd>
         </span>
-      </button>
+      </Button>
 
       <CommandPalette
         open={open}

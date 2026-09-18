@@ -29,7 +29,7 @@ from digiquant.portfolio.state import PortfolioState
 from digiquant.research.phases._node_factory import _shared_context
 from digiquant.research.state import ExcludedTicker, FocusRosterEntry, PhaseError
 from digiquant.research.supabase_io import SupabaseClient, publish_document
-from digiquant.tool_rounds import run_olympus_research_agent as run_research_agent
+from digiquant.tool_rounds import run_digiquant_research_agent as run_research_agent
 
 logger = logging.getLogger(__name__)
 

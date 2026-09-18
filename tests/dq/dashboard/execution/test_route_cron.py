@@ -12,8 +12,8 @@ import pytest
 from digiquant.brokers.connections import AuthKind, Broker, ConnectionEnv, ConnectionStatus
 from digiquant.dashboard.tenancy import house_workspace_id
 from digiquant.execution.route_cron import (
+    DIGIQUANT_ROUTING_DISABLED,
     EXIT_ROUTING_DISABLED,
-    KAIROS_ROUTING_DISABLED,
     main,
 )
 from digiquant.execution.sync_cron import SyncTarget
@@ -55,7 +55,7 @@ def test_check_missing_env_exits_2() -> None:
     err: list[str] = []
     rc = main(["--check"], environ={}, log=lambda _m: None, log_err=err.append)
     assert rc == 2
-    assert "KAIROS_SYNC_NOT_CONFIGURED" in err[0]
+    assert "DIGIQUANT_SYNC_NOT_CONFIGURED" in err[0]
 
 
 def test_check_store_present_routing_off_exits_0() -> None:
@@ -124,7 +124,7 @@ def test_all_with_routing_off_does_not_submit() -> None:
         log_err=err.append,
     )
     assert rc == EXIT_ROUTING_DISABLED
-    assert KAIROS_ROUTING_DISABLED in err[0]
+    assert DIGIQUANT_ROUTING_DISABLED in err[0]
     assert called == []
     assert loaded == []
 
@@ -193,7 +193,7 @@ def test_connection_id_routing_off_does_not_load() -> None:
         log_err=err.append,
     )
     assert rc == EXIT_ROUTING_DISABLED
-    assert KAIROS_ROUTING_DISABLED in err[0]
+    assert DIGIQUANT_ROUTING_DISABLED in err[0]
     assert called == []
     assert loaded == []
 
@@ -221,4 +221,4 @@ def test_none_argv_uses_sys_argv(monkeypatch: pytest.MonkeyPatch) -> None:
     err: list[str] = []
     rc = main(None, environ={}, log=lambda _m: None, log_err=err.append)
     assert rc == 2
-    assert "KAIROS_SYNC_NOT_CONFIGURED" in err[0]
+    assert "DIGIQUANT_SYNC_NOT_CONFIGURED" in err[0]

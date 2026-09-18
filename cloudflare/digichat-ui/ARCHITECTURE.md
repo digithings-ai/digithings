@@ -20,7 +20,6 @@ Do not reintroduce a second transcript renderer here.
 | `src/activity-view.ts` | Pure helpers (`citationHits`, …) for markdown export / legacy hydrate. No JSX. |
 | `src/transcript-markdown.ts` | Shared serializer for last-answer + full-thread markdown export. |
 | `src/components/DigiChatMark.tsx` | Brand mark / wordmark (digithings-web nav). |
-| `src/components/CopyButton.tsx` | Markdown copy affordance. |
 | `src/components/DocumentPane.tsx` / `MiniMarkdown.tsx` | Optional helpers — **not** mounted by digichat 2.0 `CliThread`. |
 | `src/styles/session.css` | `.dc-*` session grammar (thread, rows, form). |
 | `src/styles/cursor.css` | `.dt-cur` caret + `dt-bl` keyframes, `.dtc-chip` / `.dtc-error`. |
@@ -28,7 +27,7 @@ Do not reintroduce a second transcript renderer here.
 
 ## Public API contract
 
-- **Exports** (`src/index.ts`): `CopyButton`, `DigiChatMark`/`DigiChatWordmark`,
+- **Exports** (`src/index.ts`): `DigiChatMark`/`DigiChatWordmark`,
   activity-view helpers, transcript markdown helpers, slash-commands helpers,
   optional `DocumentPane`/`MiniMarkdown`, and the types above.
 - **Class names are API.** Consumers style/target `.dc-*` and `.dt-*`/`.dtc-*`

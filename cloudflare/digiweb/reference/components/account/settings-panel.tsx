@@ -3,27 +3,31 @@
 import { useState } from "react";
 
 import {
+  Button,
+  Label,
   Select,
   SelectItem,
-  SelectItemIndicator,
   SelectPopup,
   SelectTrigger,
   SelectValue,
   Switch,
-} from "@digithings/web";
-import { Button, Tabs, TabsList, TabsTrigger } from "@digithings/web/ui";
+  Tabs,
+  TabsList,
+  TabsTrigger,
+} from "@digithings/web/ui";
 
 /**
  * Settings — preference rows in one card, plus the tab-visibility rule: a lower
  * plan never sees Custom+ tabs (they are omitted, not greyed). Danger zone last.
  *
- * Wave 1: the toggle rows are the `@digithings/web` controls-layer Switch, the
- * module picker is its Select (popup renders in place inside the panel, no
- * portal wrapper), and every tab strip is the stock kit Tabs from
- * `@digithings/web/ui` — the theme row and the two plan-visibility strips are
- * panel-less tabs (they select, they do not reveal content). The
- * old toggle/segment/select/tabs dress is gone; the danger action is the
- * stock destructive Button.
+ * Wave 1: every tab strip is the stock kit Tabs — the theme row and the two
+ * plan-visibility strips are panel-less tabs (they select, they do not reveal
+ * content). The old toggle/segment/select/tabs dress is gone; the danger
+ * action is the stock destructive Button.
+ * Wave 4: the Switch, the Select (kit `SelectPopup`, popup renders in place
+ * inside the panel, no portal; the kit item renders its own check), and the
+ * module `<label>` (now kit Label) moved off the controls layer onto
+ * `@digithings/web/ui`.
  */
 
 type Theme = "system" | "light" | "dark";
@@ -104,9 +108,9 @@ export function SettingsPanel() {
 
         <div className="acct-setting-row">
           <div>
-            <label className="block text-[0.88rem] text-ink" htmlFor="setting-module">
+            <Label className="block text-[0.88rem] text-ink" htmlFor="setting-module">
               Default module
-            </label>
+            </Label>
             <p className="acct-setting-desc">Where new sessions open.</p>
           </div>
           <Select defaultValue="digiquant">
@@ -117,7 +121,6 @@ export function SettingsPanel() {
               {MODULES.map((module) => (
                 <SelectItem key={module} value={module}>
                   {module}
-                  <SelectItemIndicator />
                 </SelectItem>
               ))}
             </SelectPopup>

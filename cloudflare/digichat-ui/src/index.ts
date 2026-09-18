@@ -1,4 +1,3 @@
-export { CopyButton } from "./components/CopyButton";
 export { DigiChatMark, DigiChatWordmark } from "./components/DigiChatMark";
 export { MiniMarkdown } from "./components/MiniMarkdown";
 export { DocumentPane } from "./components/DocumentPane";

@@ -1,11 +1,14 @@
 """Canonical DIGIQUANT_* env names with retired aliases.
 
-Python packages stay ``digiquant.dashboard.*``. Operator secrets, kill switches,
-and flags use DIGIQUANT_* first. Retired production aliases in ``ALIASES``
-remain readable so live empty kill-switches stay off until rotated.
+Operator secrets, kill switches, and flags use DIGIQUANT_* first. Retired
+production aliases in ``ALIASES`` remain readable for one release so a live
+deployment that still sets ``OLYMPUS_*`` / ``ATLAS_*`` / ``KAIROS_*`` keeps
+working until it rotates to the canonical name.
 
-``pipeline-digiquant.yml`` still exports ``OLYMPUS_ATTEMPT``; do not rename that
-workflow until after the scheduled house proof. Readers accept both names.
+Python packages stay ``digiquant.dashboard.*``. Workflows
+(``pipeline-digiquant.yml``, ``pipeline-research-metrics.yml``,
+``digiquant-pipeline.yml``) emit the canonical names; the retired aliases are
+accepted on read.
 """
 
 from __future__ import annotations
@@ -49,6 +52,7 @@ MACRO_STALE_DAYS = "DIGIQUANT_MACRO_STALE_DAYS"
 MAX_ANALYSTS = "DIGIQUANT_MAX_ANALYSTS"
 ONCHAIN_POSITIONING = "DIGIQUANT_ONCHAIN_POSITIONING"
 TOOL_ROUNDS_MAX = "DIGIQUANT_MAX_TOOL_ROUNDS"
+ACCOUNTING_FINALIZER = "DIGIQUANT_ACCOUNTING_FINALIZER"
 # First-party web_search tool knobs (digisearch service, #3853). Read via
 # env_lookup like the DIGIQUANT_* entries; no retired aliases.
 DIGISEARCH_URL = "DIGISEARCH_URL"
@@ -93,6 +97,7 @@ ALIASES: dict[str, tuple[str, ...]] = {
     MAX_ANALYSTS: ("ATLAS_MAX_ANALYSTS",),
     ONCHAIN_POSITIONING: ("ATLAS_ONCHAIN_POSITIONING",),
     TOOL_ROUNDS_MAX: ("OLYMPUS_MAX_TOOL_ROUNDS",),
+    ACCOUNTING_FINALIZER: ("OLYMPUS_ACCOUNTING_FINALIZER",),
     DIGISEARCH_URL: (),
     DIGISEARCH_WEB_SEARCH_BACKEND: (),
     DIGISEARCH_SEARXNG_URL: (),
@@ -118,6 +123,7 @@ def env_lookup(
 
 
 __all__ = [
+    "ACCOUNTING_FINALIZER",
     "ALIASES",
     "ATTEMPT",
     "BELIEFS_BACKLOG",

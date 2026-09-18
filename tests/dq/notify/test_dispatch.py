@@ -5,6 +5,7 @@ from __future__ import annotations
 from datetime import date
 
 import pytest
+from digiquant.notify.cloudflare_email import CloudflareEmailConfig
 from digiquant.notify.dispatch import (
     dispatch_workspace,
     format_digest_dry_run,
@@ -12,7 +13,6 @@ from digiquant.notify.dispatch import (
     plan_digest_dispatch,
     try_claim_send_slot,
 )
-from digiquant.notify.mailgun import MailgunConfig
 
 from tests.dq.notify.conftest import FakeSupabase
 
@@ -39,9 +39,9 @@ def test_try_claim_send_slot_dedupes() -> None:
 
 
 def test_dispatch_retry_is_noop() -> None:
-    cfg = MailgunConfig(
-        api_key="k",
-        domain="mg.example.com",
+    cfg = CloudflareEmailConfig(
+        api_token="k",
+        account_id="acct-123",
         from_address="n@example.com",
         unsubscribe_base="https://example.com/settings",
     )
@@ -77,9 +77,9 @@ def test_dispatch_retry_is_noop() -> None:
 
 
 def test_force_digest_bypasses_hour_gate() -> None:
-    cfg = MailgunConfig(
-        api_key="k",
-        domain="mg.example.com",
+    cfg = CloudflareEmailConfig(
+        api_token="k",
+        account_id="acct-123",
         from_address="n@example.com",
         unsubscribe_base="https://example.com/settings",
     )
@@ -112,9 +112,9 @@ def test_force_digest_bypasses_hour_gate() -> None:
 
 
 def test_cron_hour_gate_blocks_wrong_hour() -> None:
-    cfg = MailgunConfig(
-        api_key="k",
-        domain="mg.example.com",
+    cfg = CloudflareEmailConfig(
+        api_token="k",
+        account_id="acct-123",
         from_address="n@example.com",
         unsubscribe_base="https://example.com/settings",
     )
@@ -159,16 +159,16 @@ def test_plan_digest_dispatch_matches_workspace_gate() -> None:
             },
             {"workspace_id": "blank", "email": "", "daily_digest": True},
         ],
-        mailgun_configured=False,
+        notify_configured=False,
     )
     assert plan.considered == 3
     assert plan.digest_on == 1
     assert plan.skipped_prefs_off == 1
     assert plan.skipped_no_email == 1
-    assert plan.mailgun_configured is False
+    assert plan.notify_configured is False
     line = format_digest_dry_run(plan)
     assert "digest_on=1" in line
-    assert "mailgun_configured=0" in line
+    assert "notify_configured=0" in line
     assert "@" not in line
 
     filtered = plan_digest_dispatch(
@@ -184,7 +184,7 @@ def test_plan_digest_dispatch_matches_workspace_gate() -> None:
                 "daily_digest": False,
             },
         ],
-        mailgun_configured=False,
+        notify_configured=False,
         workspace_id="observer",
     )
     assert filtered.considered == 1
@@ -200,12 +200,12 @@ def test_plan_digest_dispatch_matches_workspace_gate() -> None:
                 "daily_digest": True,
             }
         ],
-        mailgun_configured=False,
+        notify_configured=False,
         log=captured.append,
     )
     assert rc == 0
     assert captured == [
-        "notify dry-run considered=1 digest_on=1 skipped_prefs_off=0 skipped_no_email=0 mailgun_configured=0"
+        "notify dry-run considered=1 digest_on=1 skipped_prefs_off=0 skipped_no_email=0 notify_configured=0"
     ]
 
 
@@ -224,7 +224,7 @@ def test_dry_run_never_dispatches_or_claims(monkeypatch: pytest.MonkeyPatch) -> 
                 "daily_digest": True,
             }
         ],
-        mailgun_configured=True,
+        notify_configured=True,
         log=lambda _line: None,
     )
     assert rc == 0

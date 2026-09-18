@@ -98,7 +98,7 @@ jobs:
           CORE_SUPABASE_SERVICE_KEY: ${{ secrets.CORE_SUPABASE_SERVICE_KEY }}
           SUPABASE_URL: ${{ secrets.CORE_SUPABASE_URL }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.CORE_SUPABASE_SERVICE_KEY }}
-          OLYMPUS_ACCOUNTING_FINALIZER: shadow
+          DIGIQUANT_ACCOUNTING_FINALIZER: shadow
           DIGIQUANT_MARKET_DATA_BACKEND: r2
           R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
           R2_BUCKET: ${{ secrets.R2_BUCKET }}

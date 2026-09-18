@@ -5,13 +5,18 @@ import userEvent from "@testing-library/user-event";
 import { StockChromeBar } from "./stock-chrome-bar";
 
 describe("StockChromeBar", () => {
+  // Wave 4 (#4306): the language/model pickers moved from a native <select>
+  // to the kit Select (a Base UI listbox). The interaction therefore opens the
+  // trigger and clicks the option instead of selectOptions() on a <select>;
+  // the assertion (code "de" reaches onLanguageChange) is unchanged.
   it("changes language", async () => {
     const user = userEvent.setup();
     const onLanguageChange = vi.fn();
     render(
       <StockChromeBar language="en" onLanguageChange={onLanguageChange} />,
     );
-    await user.selectOptions(screen.getByLabelText("Reply language"), "de");
+    await user.click(screen.getByRole("combobox", { name: "Reply language" }));
+    await user.click(await screen.findByRole("option", { name: "German" }));
     expect(onLanguageChange).toHaveBeenCalledWith("de");
   });
 

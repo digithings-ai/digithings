@@ -362,7 +362,7 @@ def _default_reflector(prompt_inputs: dict[str, Any]) -> ReflectorOutput:
     ``digigraph`` / ``litellm`` installed.
     """
     from digiquant.research.skills import load_skill
-    from digiquant.tool_rounds import run_olympus_research_agent as run_research_agent
+    from digiquant.tool_rounds import run_digiquant_research_agent as run_research_agent
 
     skill_text = load_skill("decision-reflector")
     return run_research_agent(

@@ -135,14 +135,17 @@ describe('pivotScoreSeries', () => {
 describe('ConsensusTab sub-nav', () => {
   it('renders a Table | Charts sub-nav', () => {
     const html = render();
-    expect(html).toContain('data-conview="table"');
-    expect(html).toContain('data-conview="charts"');
+    // The view toggle is the canonical shared SegmentedControl (#4306).
+    expect(html).toContain('data-slot="segmented"');
+    expect(html).toContain('aria-label="Consensus view"');
+    expect(html).toContain('>Table</button>');
+    expect(html).toContain('>Charts</button>');
   });
 
   it('defaults to the Table view (Table pressed)', () => {
     const html = render();
-    expect(html).toMatch(/data-conview="table"[^>]*aria-pressed="true"/);
-    expect(html).toMatch(/data-conview="charts"[^>]*aria-pressed="false"/);
+    expect(html).toMatch(/aria-pressed="true"[^>]*>Table<\/button>/);
+    expect(html).toMatch(/aria-pressed="false"[^>]*>Charts<\/button>/);
   });
 });
 
@@ -153,9 +156,9 @@ describe('ConsensusTab sub-nav', () => {
 describe('ConsensusTab Table view', () => {
   it('renders the ConsensusDataTable with filter shortcuts', () => {
     const html = render();
-    // Filter shortcuts (no variable window controls).
-    for (const f of ['all', 'bullish', 'bearish', 'strong']) {
-      expect(html).toContain(`data-filter="${f}"`);
+    // Filter shortcuts (no variable window controls) — the shared SegmentedControl.
+    for (const label of ['All', 'Bullish', 'Bearish', 'Strong']) {
+      expect(html).toContain(`>${label}</button>`);
     }
   });
 

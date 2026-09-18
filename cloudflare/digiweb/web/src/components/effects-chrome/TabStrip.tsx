@@ -2,6 +2,7 @@
 
 import { useCallback, useLayoutEffect, useRef, type ReactNode } from "react";
 import { useReducedMotion } from "motion/react";
+import { Button } from "../../ui";
 
 /**
  * TabStrip — the sliding-indicator tab strip promoted from the design
@@ -160,10 +161,11 @@ export function TabStrip({
     >
       <span ref={inkRef} className={`tab-ink ${variant}`} aria-hidden="true" />
       {tabs.map((t, i) => (
-        <button
+        <Button
           key={t.id}
           type="button"
           role="tab"
+          variant="ghost"
           id={tabId(label, t.id)}
           aria-selected={i === active}
           aria-controls={
@@ -172,11 +174,11 @@ export function TabStrip({
               : undefined
           }
           tabIndex={i === active ? 0 : -1}
-          className="tab-btn"
+          className="tab-btn h-auto inline-block border-0 bg-transparent text-[0.76rem] font-normal hover:bg-transparent"
           onClick={() => onChange(i)}
         >
           {t.label}
-        </button>
+        </Button>
       ))}
     </div>
   );

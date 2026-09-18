@@ -7,6 +7,7 @@ import {
   useAuiState,
 } from "@assistant-ui/react";
 import type { FC } from "react";
+import { Button } from "@digithings/web/ui";
 import { parseEmbedChatError, formatEmbedChatError } from "@/lib/embed-chat-error";
 
 function messageStatusErrorText(status: {
@@ -60,12 +61,14 @@ export const MessageError: FC = () => {
         </div>
         {/* #3910: the errored turn must offer retry where the copy shows. */}
         <ActionBarPrimitive.Reload asChild>
-          <button
+          <Button
             type="button"
-            className="aui-message-error-retry mt-2 inline-flex shrink-0 items-center self-start rounded-md border border-hair bg-surface px-2.5 py-1 text-xs font-medium text-ink transition-colors hover:bg-muted"
+            variant="outline"
+            size="sm"
+            className="aui-message-error-retry mt-2 shrink-0 items-center self-start border-hair bg-surface text-ink hover:bg-muted"
           >
             Retry
-          </button>
+          </Button>
         </ActionBarPrimitive.Reload>
       </ErrorPrimitive.Root>
     </MessagePrimitive.Error>

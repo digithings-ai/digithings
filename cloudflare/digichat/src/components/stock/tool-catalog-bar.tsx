@@ -14,6 +14,7 @@ import {
 } from "@/lib/web-search-pref";
 import { useSyncedWebSearchPref } from "@/hooks/use-synced-web-search-pref";
 import { cn } from "@/lib/utils";
+import { Button } from "@digithings/web/ui";
 
 export type ToolCatalogBarProps = {
   clientConfig: DigichatClientConfig;
@@ -94,11 +95,13 @@ export function ToolCatalogBar({
       {entries.map((entry) => {
         if (entry.id === "web_search") {
           return (
-            <button
+            <Button
               key={entry.id}
               type="button"
+              variant={webOn ? "secondary" : "outline"}
+              size="sm"
               className={cn(
-                "rounded-md border px-2 py-1 transition-colors",
+                "border px-2 py-1",
                 webOn
                   ? "border-foreground/40 bg-muted"
                   : "border-border text-muted-foreground",
@@ -107,17 +110,19 @@ export function ToolCatalogBar({
               onClick={toggleWeb}
             >
               {entry.label ?? "Web search"}
-            </button>
+            </Button>
           );
         }
         const force = FORCE_TOOL_BY_CATALOG_ID[entry.id]!;
         const on = armedForce === force;
         return (
-          <button
+          <Button
             key={entry.id}
             type="button"
+            variant={on ? "secondary" : "outline"}
+            size="sm"
             className={cn(
-              "rounded-md border px-2 py-1 transition-colors",
+              "border px-2 py-1",
               on
                 ? "border-foreground/40 bg-muted"
                 : "border-border text-muted-foreground",
@@ -127,7 +132,7 @@ export function ToolCatalogBar({
             title={`Arm ${force} for next send`}
           >
             {entry.label ?? entry.id}
-          </button>
+          </Button>
         );
       })}
     </div>

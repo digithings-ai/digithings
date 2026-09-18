@@ -19,6 +19,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from '@digithings/web';
+import { Button } from '@digithings/web/ui';
 import type { PipelineDayData } from '@/lib/pipeline-graph-data';
 import type { ExpansionState, LaidOutNode, PipelineNodeRunStatus } from '@/lib/pipeline-layout';
 import { layoutPipeline, pipelineNodeRunStatusLabel } from '@/lib/pipeline-layout';
@@ -510,17 +511,18 @@ export default function PipelineCanvas({
               const selected = node.id === activeWalkthroughNode?.id;
 
               return (
-                <button
+                <Button
                   key={node.id}
                   type="button"
+                  variant="outline"
                   data-mobile-node-id={node.id}
                   aria-expanded={expandable ? expanded : undefined}
                   aria-current={selected ? 'step' : undefined}
                   onClick={() => handleNodeClick(node)}
-                  className={`mb-2 flex min-h-14 w-full items-center gap-3 border px-3 py-2.5 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/60 ${
+                  className={`mb-2 flex min-h-14 w-full items-center justify-start gap-3 whitespace-normal px-3 py-2.5 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/60 ${
                     node.kind === 'fanout-branch'
-                      ? 'ml-4 w-[calc(100%-1rem)] border-hair bg-term-bg'
-                      : 'border-hair bg-surface'
+                      ? 'ml-4 w-[calc(100%-1rem)] border-hair bg-term-bg dark:bg-term-bg'
+                      : 'border-hair bg-surface dark:bg-surface'
                   } hover:border-accent/50 hover:bg-accent/[0.04] ${
                     selected ? 'border-accent/60 shadow-[0_0_0_1px_var(--accent)]' : ''
                   }`}
@@ -547,7 +549,7 @@ export default function PipelineCanvas({
                   {expandable ? (
                     expanded ? <ChevronDown size={16} aria-hidden /> : <ChevronRight size={16} aria-hidden />
                   ) : null}
-                </button>
+                </Button>
               );
             })}
           </div>
@@ -555,15 +557,16 @@ export default function PipelineCanvas({
 
         <div className="fixed inset-x-0 bottom-0 z-30 border-y border-hair bg-surface/95 px-4 pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] backdrop-blur-md">
           <div className="flex items-center gap-3">
-            <button
+            <Button
               type="button"
+              variant="outline"
               aria-label="Previous pipeline section"
               disabled={resolvedWalkthroughIndex === 0}
               onClick={() => walkPipeline(-1, 'mobile')}
-              className="flex h-11 w-11 shrink-0 items-center justify-center border border-hair text-ink transition-colors hover:border-accent/50 hover:text-accent disabled:cursor-not-allowed disabled:opacity-30"
+              className="h-11 w-11 shrink-0 border-hair bg-transparent text-ink hover:border-accent/50 hover:bg-transparent hover:text-accent disabled:opacity-30 dark:bg-transparent dark:hover:bg-transparent"
             >
               <ChevronLeft size={20} aria-hidden />
-            </button>
+            </Button>
             <div className="min-w-0 flex-1 text-center">
               <span className="block font-mono text-xs uppercase text-ink-mute">
                 {resolvedWalkthroughIndex + 1} of {walkthroughNodes.length}
@@ -572,15 +575,16 @@ export default function PipelineCanvas({
                 {activeWalkthroughNode?.label ?? activeStage.label}
               </span>
             </div>
-            <button
+            <Button
               type="button"
+              variant="outline"
               aria-label="Next pipeline section"
               disabled={resolvedWalkthroughIndex === walkthroughNodes.length - 1}
               onClick={() => walkPipeline(1, 'mobile')}
-              className="flex h-11 w-11 shrink-0 items-center justify-center border border-hair text-ink transition-colors hover:border-accent/50 hover:text-accent disabled:cursor-not-allowed disabled:opacity-30"
+              className="h-11 w-11 shrink-0 border-hair bg-transparent text-ink hover:border-accent/50 hover:bg-transparent hover:text-accent disabled:opacity-30 dark:bg-transparent dark:hover:bg-transparent"
             >
               <ChevronRight size={20} aria-hidden />
-            </button>
+            </Button>
           </div>
           <div className="mt-3 grid grid-cols-6 gap-1" aria-hidden>
             {PIPELINE_TOPOLOGY.map((stage, index) => (

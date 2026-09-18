@@ -42,7 +42,7 @@ from digiquant.dashboard.research_retrieval.store import (
 
 logger = logging.getLogger(__name__)
 
-OLYMPUS_CONTEXT_COMPILER_MODE_ENV = "OLYMPUS_CONTEXT_COMPILER_MODE"
+DIGIQUANT_CONTEXT_COMPILER_MODE_ENV = "DIGIQUANT_CONTEXT_COMPILER_MODE"
 
 
 class ContextCompilerMode(StrEnum):
@@ -65,14 +65,14 @@ class RoleContextWireResult:
 
 
 def resolve_context_compiler_mode() -> ContextCompilerMode:
-    """Read ``OLYMPUS_CONTEXT_COMPILER_MODE``; unknown values → shadow."""
+    """Read ``DIGIQUANT_CONTEXT_COMPILER_MODE``; unknown values → shadow."""
     raw = env_lookup(CONTEXT_COMPILER_MODE, default="shadow").strip().lower()
     try:
         return ContextCompilerMode(raw)
     except ValueError:
         logger.warning(
             "invalid %s=%r; using shadow (allowed: off|shadow|enforce)",
-            OLYMPUS_CONTEXT_COMPILER_MODE_ENV,
+            DIGIQUANT_CONTEXT_COMPILER_MODE_ENV,
             raw,
         )
         return ContextCompilerMode.SHADOW
@@ -468,7 +468,7 @@ def wire_h7_phase_inputs(
 
 __all__ = [
     "ContextCompilerMode",
-    "OLYMPUS_CONTEXT_COMPILER_MODE_ENV",
+    "DIGIQUANT_CONTEXT_COMPILER_MODE_ENV",
     "RoleContextWireResult",
     "changed_evidence_ids_from_bundle",
     "compile_h5_role_context",

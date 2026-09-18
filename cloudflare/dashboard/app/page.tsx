@@ -11,6 +11,7 @@ import {
 import { fetchResearchRunDiagnostics } from '@/lib/observability-queries';
 import { SUBPAGE_MAX } from '@/components/layout-constants';
 import { EmptyState } from '@digithings/web';
+import { Button } from '@digithings/web/ui';
 import PageSkeleton from '@/components/page-skeleton';
 import {
   DailyBriefWorkspace,
@@ -128,13 +129,14 @@ export default function OverviewPage() {
           title="Couldn’t load your dashboard"
           body={error || 'The latest data did not come through. This is usually temporary.'}
           action={
-            <button
+            <Button
               type="button"
+              variant="outline"
               onClick={() => window.location.reload()}
-              className="mt-5 inline-flex items-center border border-hair px-4 py-2 text-sm font-medium text-ink transition-colors hover:bg-ink/[0.06]"
+              className="mt-5"
             >
               Try again
-            </button>
+            </Button>
           }
         />
       </div>

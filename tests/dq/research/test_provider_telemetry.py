@@ -197,7 +197,7 @@ def test_tiers_are_written_in_foreign_key_order() -> None:
 
 
 def test_parent_calls_are_ordered_ahead_of_their_children() -> None:
-    """fk_olympus_provider_calls_parent self-references, so order inside the batch matters."""
+    """fk_provider_calls_parent self-references, so order inside the batch matters."""
     node = _node()
     parent = _call(node.node_run_id, purpose=CallPurpose.TOOL_SELECTION)
     child = _call(node.node_run_id, parent_call_id=parent.call_id)
@@ -324,7 +324,7 @@ def test_retries_insert_one_row_per_attempt_under_one_call() -> None:
     assert result.provider_attempts.inserted == 3
     rows = client.rows(pt.PROVIDER_ATTEMPTS_TABLE)
     assert sorted(row["attempt_number"] for row in rows) == [1, 2, 3]
-    # uq_olympus_provider_attempts_sequence is (call_id, attempt_number).
+    # uq_provider_attempts_sequence is (call_id, attempt_number).
     assert {row["call_id"] for row in rows} == {str(call.call_id)}
     assert len({(r["call_id"], r["attempt_number"]) for r in rows}) == 3
 

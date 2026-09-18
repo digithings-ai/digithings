@@ -25,8 +25,8 @@ _FAKE = {
     "STRIPE_PRICE_BRIEF_MONTHLY": "price_brief",
     "STRIPE_PRICE_DESK_MONTHLY": "price_desk",
     "STRIPE_PRICE_STUDIO_MONTHLY": "price_studio",
-    "MAILGUN_API_KEY": "key-not-real",
-    "MAILGUN_DOMAIN": "mg.example.test",
+    "CLOUDFLARE_EMAIL_API_TOKEN": "token-not-real",
+    "CLOUDFLARE_ACCOUNT_ID": "acct.example.test",
     "NOTIFY_FROM": "execution <noreply@example.test>",
     "ALPACA_OAUTH_CLIENT_ID": "alpaca-client",
     "ALPACA_OAUTH_CLIENT_SECRET": "alpaca-secret",
@@ -50,9 +50,9 @@ def _write_complete(root: Path) -> None:
         + "\n",
         encoding="utf-8",
     )
-    (secrets / "digithings-mailgun.env").write_text(
-        "MAILGUN_API_KEY={MAILGUN_API_KEY}\n"
-        "MAILGUN_DOMAIN={MAILGUN_DOMAIN}\n"
+    (secrets / "digithings-notify.env").write_text(
+        "CLOUDFLARE_EMAIL_API_TOKEN={CLOUDFLARE_EMAIL_API_TOKEN}\n"
+        "CLOUDFLARE_ACCOUNT_ID={CLOUDFLARE_ACCOUNT_ID}\n"
         "NOTIFY_FROM={NOTIFY_FROM}\n".format(**_FAKE),
         encoding="utf-8",
     )

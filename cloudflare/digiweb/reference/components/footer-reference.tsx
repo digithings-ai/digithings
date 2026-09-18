@@ -2,6 +2,7 @@
 
 import { useRef, useState } from "react";
 import { m, useReducedMotion, useScroll, useTransform } from "motion/react";
+import { SegmentedControl } from "@digithings/web";
 
 const COLUMNS = [
   { title: "Product", links: ["digigraph", "digiquant", "digisearch", "digichat"] },
@@ -70,19 +71,12 @@ export function FooterReference() {
             All systems operational
           </span>
 
-          <span className="ref-footer-theme" role="group" aria-label="Theme">
-            {THEMES.map((option) => (
-              <button
-                key={option}
-                type="button"
-                className={option === theme ? "on" : ""}
-                onClick={() => setTheme(option)}
-                aria-pressed={option === theme}
-              >
-                {option}
-              </button>
-            ))}
-          </span>
+          <SegmentedControl
+            options={THEMES}
+            value={theme}
+            onChange={setTheme}
+            aria-label="Theme"
+          />
 
           <span className="ml-auto text-ink-mute">© 2026 digithings · SOC 2 in progress</span>
         </div>

@@ -76,9 +76,15 @@ describe('TheReadBody', () => {
     expect(html).toContain('Carried from the last baseline');
   });
 
-  it('collapses the deeper segments into details elements', () => {
+  it('collapses the deeper segments into kit Collapsible disclosures', () => {
+    // Wave 4: the deeper segments moved from raw `<details>` to the canonical kit
+    // `Collapsible` (a trigger button with aria-expanded + a mounted panel). The
+    // structural pin is re-pointed at the kit contract; content is still asserted
+    // so a closed-by-default panel that silently dropped its body would fail.
     const html = renderToStaticMarkup(createElement(TheReadBody, { digest: digest() }));
-    expect(html).toContain('<details');
+    expect(html).toContain('data-slot="collapsible"');
+    expect(html).toContain('data-slot="collapsible-trigger"');
+    expect(html).toContain('aria-expanded="false"');
     expect(html).toContain('Institutional flows');
     expect(html).toContain('Thesis tracker');
   });

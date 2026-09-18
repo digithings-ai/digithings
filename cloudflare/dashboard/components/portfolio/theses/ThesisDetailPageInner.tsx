@@ -7,7 +7,7 @@ import { useDashboard } from '@/lib/dashboard-context';
 import { SUBPAGE_MAX } from '@/components/layout-constants';
 import PortfolioSectionNav from '@/components/portfolio/PortfolioSectionNav';
 import PageSkeleton from '@/components/page-skeleton';
-import { ConvictionMeter } from '@/components/shared/conviction-meter';
+import { ConvictionMeter } from '@digithings/web';
 import { AsOfBadge } from '@/components/shared/as-of-badge';
 import { ThesisCriteriaColumns } from '@/components/portfolio/theses/ThesisCriteriaColumns';
 import { ThesisHoldingsExpressing } from '@/components/portfolio/theses/ThesisHoldingsExpressing';

@@ -2,7 +2,8 @@
  * Honest Auth copy for dashboard login + signup.
  *
  * Email confirmation uses Supabase Auth SMTP (or Cloudflare Access PIN on
- * staging). Neither is Mailgun digest. Until custom Auth SMTP is wired, the
+ * staging). Neither is the Cloudflare Email Sending digest. Until custom Auth
+ * SMTP is wired, the
  * confirmation message / 6-digit code often never arrives — OAuth is the
  * working create-account path (first-time Google/GitHub *is* signup).
  */
