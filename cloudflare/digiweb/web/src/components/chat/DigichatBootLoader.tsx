@@ -2,6 +2,8 @@
 
 import { useCallback, useEffect, useRef, useState, type CSSProperties } from "react";
 
+import { signalDigichatReady } from "./boot-signal";
+
 /**
  * DigichatBootLoader — the default DigiChat loading animation.
  *
@@ -533,7 +535,10 @@ export function DigichatBootLoader({
       setChipsTyping(true);
     });
     schedule(SETTLE.BODY, () => setBodyTyping(true));
-    schedule(SETTLE.DONE, () => onSettledRef.current?.());
+    schedule(SETTLE.DONE, () => {
+      signalDigichatReady();
+      onSettledRef.current?.();
+    });
   }, []);
 
   useEffect(() => {
@@ -562,6 +567,7 @@ export function DigichatBootLoader({
   useEffect(() => {
     if (!ready) return;
     if (reduced) {
+      signalDigichatReady();
       onSettledRef.current?.();
       return;
     }
@@ -574,6 +580,7 @@ export function DigichatBootLoader({
     <div
       className={className ? `dboot ${className}` : "dboot"}
       data-attach={showAttachment ? "1" : "0"}
+      data-digichat-boot=""
       style={accent ? ({ "--dboot-caret": accent } as CSSProperties) : undefined}
     >
       <span className="dboot-sr" role="status">

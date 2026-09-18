@@ -4,9 +4,15 @@
  * Product surface: assistant-ui Thread (skin from deploy config) against POST /api/chat.
  * Feature flags / suggestions / chrome copy come from deployment client config.
  * Styling is the selected official assistant-ui template (`chrome.skin`).
+ *
+ * Every surface that rides this shell (embed, standalone, panels) also gets
+ * the universal DigiChat boot animation: the loader mounts as an overlay
+ * above the shell until it settles, then fades out and unmounts. The boot's
+ * settle signal (see @digithings/web chat/boot-signal) also releases copy
+ * choreography that waits for it.
  */
 
-import { useMemo, type ReactNode } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import {
   AuiConfig,
   AssistantRuntimeProvider,
@@ -24,6 +30,7 @@ import {
 } from "@assistant-ui/react";
 import { ThreadSkinView } from "@/components/assistant-ui/skins";
 import type { ComposerLayout } from "@digithings/web/chat/thread";
+import { DigichatBootLoader } from "@digithings/web/chat/boot-loader";
 import type { DigichatClientConfig, DigichatClientFeatures } from "@/lib/deploy-config";
 import { DEFAULT_CLIENT_CONFIG } from "@/lib/deploy-config";
 import {
@@ -48,6 +55,11 @@ import {
 } from "@/components/stock/skin-chrome";
 import { ToolCatalogBar } from "@/components/stock/tool-catalog-bar";
 import { SessionPrefsToolBridge } from "@/components/stock/session-prefs-tool-bridge";
+
+/** Minimum cube sweep before the boot parks (keeps the contour visible). */
+const BOOT_MIN_MS = 1400;
+/** Overlay fade before the settled boot unmounts. */
+const BOOT_FADE_MS = 320;
 
 export type ProductShellProps = {
   runtime: AssistantRuntime;
@@ -192,6 +204,22 @@ export function ProductStockShell({
   const reasoningMode = effectiveReasoningMode(view, thinking);
   const toolCallsMode = effectiveToolCallsMode(view);
 
+  // Boot animation lifecycle: sweep, park after BOOT_MIN_MS, fade, unmount.
+  const [bootReady, setBootReady] = useState(false);
+  const [bootDone, setBootDone] = useState(false);
+  const [bootHidden, setBootHidden] = useState(false);
+
+  useEffect(() => {
+    const timer = setTimeout(() => setBootReady(true), BOOT_MIN_MS);
+    return () => clearTimeout(timer);
+  }, []);
+
+  useEffect(() => {
+    if (!bootDone) return;
+    const timer = setTimeout(() => setBootHidden(true), BOOT_FADE_MS);
+    return () => clearTimeout(timer);
+  }, [bootDone]);
+
   const deployUi = useMemo<DeployUiValue>(
     () => ({
       reasoning: reasoningMode,
@@ -289,13 +317,30 @@ export function ProductStockShell({
               data-user-align={deployUi.userAlign}
               data-theme={cfg.chrome.theme}
               className={cn(
-                "flex h-full min-h-0 flex-1",
+                "relative flex h-full min-h-0 flex-1",
                 sideSlot && !ownsPage ? "flex-row" : "flex-col",
                 cfg.chrome.skin === "digichat" && "accent-digichat",
                 className,
               )}
               style={accentStyle}
             >
+              {bootHidden ? null : (
+                <div
+                  className="dboot-overlay bg-background"
+                  data-done={bootDone ? "true" : "false"}
+                >
+                  <DigichatBootLoader
+                    ready={bootReady}
+                    onSettled={() => setBootDone(true)}
+                    welcome={headline}
+                    welcomeBody={skinChrome.welcomeBody.join(" ")}
+                    suggestions={chips}
+                    placeholder={inputPlaceholder}
+                    accent={cfg.chrome.accent?.color}
+                    showAttachment={features.attachments}
+                  />
+                </div>
+              )}
               {ownsPage ? null : sideSlot}
               <div className="flex min-h-0 min-w-0 flex-1 flex-col">
                 {ownsPage || cfg.chrome.skin === "digichat" ? null : headerSlot}

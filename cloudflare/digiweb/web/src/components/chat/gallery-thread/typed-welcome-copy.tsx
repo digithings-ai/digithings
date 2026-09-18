@@ -2,14 +2,13 @@
 
 import { useEffect, useLayoutEffect, useState } from "react";
 
+import { DIGI_CHAT_READY_EVENT, hasDigichatReady } from "../boot-signal";
+
 /** ms per character for the welcome body typewriter. */
 const TYPE_MS = 18;
 /** Beat between body lines once a line finishes typing. */
 const LINE_PAUSE_MS = 260;
-/** Same-window "embed painted" signal (string twin of the app's
- *  READY_MESSAGE; importing app code from web is off limits). */
-const READY_EVENT = "digichat:ready";
-/** Standalone pages / older builds never signal — start anyway. */
+/** Fallback when no boot loader ever signals (surfaces without a boot). */
 const READY_FALLBACK_MS = 3000;
 
 type Reveal = { line: number; chars: number } | null;
@@ -30,9 +29,10 @@ function prefersReducedMotion(): boolean {
  * The welcomeBody lines under the headline. Every line keeps its full copy
  * in the DOM from the first frame (SSR, no-JS, screen readers, tests); on
  * the client a typewriter reveals the copy in place — the untyped remainder
- * holds its space invisibly, so nothing reflows while it types. Embedded
- * surfaces wait for the embed's painted signal so the type is not spent
- * behind the host's boot overlay.
+ * holds its space invisibly, so nothing reflows while it types. When the app
+ * mounts its boot animation (which types the same copy), the hero stays
+ * static; otherwise the typewriter waits for the boot's painted signal so
+ * the type is not spent behind an overlay.
  */
 export function TypedWelcomeCopy({ lines }: { lines: readonly string[] }) {
   const content = lines.join("\n");
@@ -41,6 +41,13 @@ export function TypedWelcomeCopy({ lines }: { lines: readonly string[] }) {
   useIsoLayoutEffect(() => {
     const copy = content.length === 0 ? [] : content.split("\n");
     if (copy.length === 0 || prefersReducedMotion()) {
+      setReveal(null);
+      return;
+    }
+
+    // The universal boot animation types this copy itself; the hero renders
+    // settled under it. Heroes mounted later (new chat) type as usual.
+    if (document.querySelector("[data-digichat-boot]") !== null) {
       setReveal(null);
       return;
     }
@@ -80,24 +87,23 @@ export function TypedWelcomeCopy({ lines }: { lines: readonly string[] }) {
       schedule(TYPE_MS);
     };
 
-    // Embedded surfaces wait for the embed's painted signal (dispatched
-    // alongside digichat:ready) so the typewriter is not spent behind the
-    // host's boot overlay; standalone pages and older builds start now.
-    const doc = document.documentElement;
+    // The typewriter waits for the boot's painted signal so the type is not
+    // spent behind a host overlay; standalone surfaces (and older builds)
+    // start now, or after the fallback when no signal ever arrives.
     let onReady: (() => void) | undefined;
     let fallback: ReturnType<typeof setTimeout> | undefined;
-    if (window.parent === window || doc.dataset.digichatReady === "1") {
+    if (window.parent === window || hasDigichatReady()) {
       start();
     } else {
       onReady = () => start();
-      window.addEventListener(READY_EVENT, onReady, { once: true });
+      window.addEventListener(DIGI_CHAT_READY_EVENT, onReady, { once: true });
       fallback = setTimeout(start, READY_FALLBACK_MS);
     }
 
     return () => {
       cancelled = true;
       if (timer !== undefined) clearTimeout(timer);
-      if (onReady) window.removeEventListener(READY_EVENT, onReady);
+      if (onReady) window.removeEventListener(DIGI_CHAT_READY_EVENT, onReady);
       if (fallback !== undefined) clearTimeout(fallback);
     };
   }, [content]);
