@@ -3,7 +3,7 @@
 import { useMemo, useState } from 'react';
 import type { Change } from 'diff';
 import { diffLines, diffWords } from 'diff';
-import { Button, Input } from '@digithings/web/ui';
+import { Button, Input, Label } from '@digithings/web/ui';
 import { SafeMarkdown } from '@/components/SafeMarkdown';
 import type { DocumentDiffCompareKind, DocumentDiffPair } from '@/lib/queries';
 import { useGenericDocumentDiff } from '@/lib/hooks/use-generic-document-diff';
@@ -236,7 +236,7 @@ export default function GenericDiffDocumentView({
                 setCustomCompareDate('');
               }}
             />
-            <label className="flex flex-col gap-0.5 min-w-[10.5rem]">
+            <Label className="flex flex-col items-stretch gap-0.5 min-w-[10.5rem]">
               <span className="text-[10px] uppercase tracking-wider text-ink-mute">Or compare to date</span>
               <Input
                 type="date"
@@ -251,7 +251,7 @@ export default function GenericDiffDocumentView({
                 className="h-auto rounded-none border-hair bg-term-bg py-1.5 font-mono text-ink focus-visible:ring-accent/30"
                 aria-label="Compare this document to a custom run date"
               />
-            </label>
+            </Label>
           </div>
         </>
       ) : null}

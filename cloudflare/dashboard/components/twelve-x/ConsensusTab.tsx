@@ -1,7 +1,8 @@
 'use client';
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Card } from '@digithings/web/ui';
+import { Button, Card } from '@digithings/web/ui';
+import { SegmentedControl } from '@digithings/web';
 import { LineChart as LineChartIcon } from 'lucide-react';
 import {
   CartesianGrid,
@@ -171,33 +172,16 @@ export default function ConsensusTab({
         bullish): ±{LEAN_BAND} is a directional lean, ±{STRONG_BAND} strong conviction.
       </p>
 
-      <div
-        className="inline-flex overflow-hidden rounded-none border border-hair"
-        role="group"
+      <SegmentedControl
+        options={[
+          { value: 'table', label: 'Table' },
+          { value: 'charts', label: 'Charts' },
+        ]}
+        value={view}
+        onChange={setView}
+        dress="accent"
         aria-label="Consensus view"
-      >
-        {(['table', 'charts'] as const).map((v, idx) => {
-          const on = view === v;
-          return (
-            <button
-              key={v}
-              type="button"
-              data-conview={v}
-              aria-pressed={on}
-              onClick={() => setView(v)}
-              className={`px-3.5 py-1.5 text-[11.5px] font-medium capitalize transition-colors ${
-                idx === 0 ? 'border-r border-hair' : ''
-              } ${
-                on
-                  ? 'bg-accent/15 text-accent'
-                  : 'text-ink-soft hover:text-ink hover:bg-ink/[0.03]'
-              }`}
-            >
-              {v === 'table' ? 'Table' : 'Charts'}
-            </button>
-          );
-        })}
-      </div>
+      />
 
       {view === 'table' ? (
         <ConsensusDataTable
@@ -234,22 +218,20 @@ export default function ConsensusTab({
               {currencies.map((ccy) => {
                 const isVisible = visibleCurrencies.has(ccy);
                 return (
-                  <button
+                  <Button
                     key={ccy}
                     type="button"
+                    variant="outline"
+                    size="xs"
                     onClick={() => handleLegendClick(ccy)}
                     onDoubleClick={() => handleLegendDoubleClick(ccy)}
                     aria-pressed={isVisible}
-                    className={`px-2.5 py-1 text-xs font-medium rounded-none border transition-colors ${
-                      isVisible
-                        ? 'border-current opacity-100'
-                        : 'border-hair opacity-40'
-                    }`}
+                    className={`bg-transparent ${isVisible ? 'border-current opacity-100' : 'border-hair opacity-40'}`}
                     style={{ color: isVisible ? currencyColor(ccy) : undefined }}
                     title={`Click to toggle, double-click to isolate ${ccy}`}
                   >
                     {ccy}
-                  </button>
+                  </Button>
                 );
               })}
             </div>

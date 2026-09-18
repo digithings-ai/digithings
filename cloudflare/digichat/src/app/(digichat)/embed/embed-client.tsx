@@ -1416,25 +1416,29 @@ function TrialGatePlaceholder({ onOpen }: { onOpen: () => void }) {
     <div className="border-t border-border bg-muted/40 p-4">
       <p className="text-sm font-medium">
         You&rsquo;ve used your {EMBED_FREE_TURN_LIMIT} free questions. Complete{" "}
-        <button
+        <Button
           type="button"
+          variant="link"
+          size="sm"
           onClick={onOpen}
-          className="underline underline-offset-2 hover:opacity-80"
+          className="h-auto px-0 text-inherit underline underline-offset-2 hover:opacity-80"
         >
           the trial form
-        </button>{" "}
+        </Button>{" "}
         to keep chatting.
       </p>
       <p className="mt-2 text-xs text-muted-foreground">
         Closed the form by mistake?{" "}
-        <button
+        <Button
           type="button"
+          variant="link"
+          size="sm"
           onClick={onOpen}
-          className="font-medium underline underline-offset-2 hover:opacity-80"
+          className="h-auto px-0 text-inherit font-medium underline underline-offset-2 hover:opacity-80"
           style={{ color: "var(--accent)" }}
         >
           Retry
-        </button>
+        </Button>
       </p>
     </div>
   );

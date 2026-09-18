@@ -1,7 +1,7 @@
 'use client';
 
 import { useMemo, useState } from 'react';
-import { Badge, Card } from '@digithings/web/ui';
+import { Badge, Button, Card } from '@digithings/web/ui';
 import { ChevronDown, ChevronRight } from 'lucide-react';
 import type { FxTradeIdeaRow, FxConfluenceSnapshotRow } from '@/lib/twelve-x/types';
 import {
@@ -278,23 +278,26 @@ export default function TradeIdeasPanel({
       <header className="flex items-baseline gap-2">
         <TwelveXSectionHeading>Today&rsquo;s trade ideas</TwelveXSectionHeading>
         <span className="font-mono text-[10px] text-ink-mute">· {ideas.length}</span>
-        <button
+        <Button
           type="button"
-          className="ml-auto text-[11px] text-accent hover:underline"
+          variant="link"
+          size="xs"
+          className="ml-auto h-auto p-0 text-[11px] text-accent"
           onClick={() => crossLink({ kind: 'ideas' })}
         >
           see more →
-        </button>
+        </Button>
       </header>
 
       {/* Focal #1 — accent chrome marks it as the top-ranked idea, NOT a P&L
           direction. --up/--down are reserved for P&L sign (F5), so a SHORT #1
           must not read as green. Direction lives in its own colored label. */}
-      <button
+      <Button
         type="button"
+        variant="ghost"
         className={highlightClass(
           top.rank,
-          'rounded-none border border-accent/30 bg-accent/[0.06] p-4 text-left transition-colors hover:border-accent/50',
+          'block h-auto w-full justify-start whitespace-normal rounded-none border border-accent/30 bg-accent/[0.06] p-4 text-left text-xs font-normal transition-colors hover:border-accent/50 hover:bg-accent/[0.06]',
         )}
         onClick={() => toggleIdea(top.rank)}
         aria-expanded={openRank === top.rank}
@@ -318,16 +321,17 @@ export default function TradeIdeasPanel({
             {top.catalyst ? <p className="mt-1 text-[11px] text-ink-mute">Catalyst: {top.catalyst}</p> : null}
           </>
         )}
-      </button>
+      </Button>
 
       {/* #2…N rows — expand in place; ideas are run artifacts with no brief */}
       {rest.map((idea) => (
-        <button
+        <Button
           key={`${idea.run_date}-${idea.rank}`}
           type="button"
+          variant="ghost"
           className={highlightClass(
             idea.rank,
-            'rounded-none border border-hair px-3 py-2 text-left text-xs transition-colors hover:border-accent/50',
+            'block h-auto w-full justify-start whitespace-normal rounded-none border border-hair px-3 py-2 text-left text-xs font-normal transition-colors hover:border-accent/50 hover:bg-transparent',
           )}
           onClick={() => toggleIdea(idea.rank)}
           aria-expanded={openRank === idea.rank}
@@ -344,21 +348,23 @@ export default function TradeIdeasPanel({
             <ContinuityStamp meta={metaFor(idea)} />
           </span>
           {openRank === idea.rank ? <IdeaDetail idea={idea} /> : null}
-        </button>
+        </Button>
       ))}
 
       {/* Expand → confluence reads */}
       {confluence.length > 0 ? (
         <div>
-          <button
+          <Button
             type="button"
-            className="flex items-center gap-1 text-[11px] text-ink-soft hover:text-accent"
+            variant="ghost"
+            size="xs"
+            className="h-auto justify-start gap-1 p-0 text-[11px] font-normal text-ink-soft hover:bg-transparent hover:text-accent"
             onClick={() => setExpanded((v) => !v)}
             aria-expanded={expanded}
           >
             {expanded ? <ChevronDown size={13} /> : <ChevronRight size={13} />}
             {expanded ? 'Hide' : 'Expand'} confluence reads ({confluence.length})
-          </button>
+          </Button>
           {expanded ? (
             <ul className="mt-2 grid gap-1">
               {confluence.map((c) => (
@@ -369,13 +375,15 @@ export default function TradeIdeasPanel({
                   <span className="font-mono text-[10px] text-ink-mute">#{c.rank}</span>
                   <span className="font-semibold text-ink">{c.currency}</span>
                   <span className={`uppercase ${dirClass(c.direction)}`}>{c.direction}</span>
-                  <button
+                  <Button
                     type="button"
-                    className="ml-auto text-accent hover:underline"
+                    variant="link"
+                    size="xs"
+                    className="ml-auto h-auto p-0 text-accent"
                     onClick={() => crossLink({ kind: 'currency', currency: c.currency })}
                   >
                     trend →
-                  </button>
+                  </Button>
                 </li>
               ))}
             </ul>

@@ -2,8 +2,8 @@
 
 import { useState } from "react";
 
-import { Button } from "@digithings/web/ui";
-import { Skeleton, SkeletonGroup, Switch } from "@digithings/web";
+import { Button, Switch } from "@digithings/web/ui";
+import { Skeleton, SkeletonGroup } from "@digithings/web";
 
 /**
  * Skeleton loading states — placeholder shapes with a shimmer sweep that stand
@@ -13,10 +13,11 @@ import { Skeleton, SkeletonGroup, Switch } from "@digithings/web";
  * they mean something. A toggle replays the load. Reduced motion drops the
  * shimmer and shows a static placeholder. Consumes the shared <Skeleton/> and
  * <SkeletonGroup/> primitives from @digithings/web, and the replay toggle is
- * the controls-layer <Switch/> (the stock kit has no switch yet — ruled
- * W3–4); the hand-built `.sk-toggle*` dress is gone.
+ * the stock kit <Switch/> (`@digithings/web/ui`); the hand-built `.sk-toggle*`
+ * dress is gone.
  *
  * Wave 1: the loaded-state action is the stock kit Button (ghost).
+ * Wave 4: the replay toggle moved from the controls layer onto the kit.
  */
 const METRICS = [
   { k: "CAGR", v: "+44.9%", tone: "up" },

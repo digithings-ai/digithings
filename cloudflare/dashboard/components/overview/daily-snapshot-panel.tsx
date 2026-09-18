@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Card } from '@digithings/web/ui';
+import { Button, Card } from '@digithings/web/ui';
 import { Skeleton, SkeletonGroup } from '@digithings/web';
 import { Badge, SectionTitle } from '@/components/ui';
 import { SafeMarkdown } from '@/components/SafeMarkdown';
@@ -192,15 +192,18 @@ export function SnapshotErrorBanner({
           )}
           <p className="text-sm text-ink-soft break-words">{message}</p>
         </div>
-        <button
+        <Button
           type="button"
+          variant="outline"
           onClick={onRetry}
-          className={flat
-            ? 'shrink-0 border border-warn/40 bg-warn/10 px-3 py-1.5 text-xs font-semibold text-warn hover:bg-warn/20'
-            : 'shrink-0 border border-danger/40 bg-danger/10 px-3 py-1.5 text-xs font-semibold text-danger hover:bg-danger/20'}
+          className={`h-auto shrink-0 px-3 py-1.5 text-xs font-semibold ${
+            flat
+              ? 'border-warn/40 bg-warn/10 text-warn hover:bg-warn/20'
+              : 'border-danger/40 bg-danger/10 text-danger hover:bg-danger/20'
+          }`}
         >
           Retry
-        </button>
+        </Button>
       </div>
     </Card>
   );

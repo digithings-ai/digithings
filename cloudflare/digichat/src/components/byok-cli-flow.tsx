@@ -26,6 +26,7 @@ import {
 import { p } from "@/lib/base-path";
 import { cn } from "@/lib/utils";
 import { SegmentedControl } from "@digithings/web";
+import { Button, Input, Label } from "@digithings/web/ui";
 
 type Step = "provider" | "key" | "model" | "validating" | "done";
 
@@ -525,10 +526,10 @@ export function ByokCliFlow({
 
           {step === "key" ? (
             <TermLine marker=">">
-              <label htmlFor={`${formId}-key`} className="dc-byok-prompt">
+              <Label htmlFor={`${formId}-key`} className="dc-byok-prompt">
                 Paste API key, then Enter
-              </label>
-              <input
+              </Label>
+              <Input
                 ref={keyInputRef}
                 id={`${formId}-key`}
                 type="password"
@@ -556,7 +557,7 @@ export function ByokCliFlow({
                 }
                 autoComplete="off"
                 spellCheck={false}
-                className="dc-byok-input"
+                className="dc-byok-input h-auto"
                 aria-invalid={!!error}
               />
             </TermLine>
@@ -578,7 +579,7 @@ export function ByokCliFlow({
                   : "Select model (↑↓ + Enter, or click)"}
               </p>
               {customModel ? (
-                <input
+                <Input
                   ref={customModelRef}
                   type="text"
                   value={model}
@@ -595,7 +596,7 @@ export function ByokCliFlow({
                   placeholder={byokModelPresets(provider)[0]}
                   autoComplete="off"
                   spellCheck={false}
-                  className="dc-byok-input"
+                  className="dc-byok-input h-auto"
                 />
               ) : null}
               {tieredOptions ? (
@@ -661,23 +662,37 @@ export function ByokCliFlow({
         <div className="dc-byok-actions">
           {step === "done" || (active && !configuring) ? (
             <>
-              <button type="button" className="dc-byok-action" onClick={restart}>
+              <Button
+                type="button"
+                variant="link"
+                size="sm"
+                className="dc-byok-action h-auto"
+                onClick={restart}
+              >
                 reconfigure
-              </button>
+              </Button>
               {onClear ? (
-                <button
+                <Button
                   type="button"
-                  className="dc-byok-action dc-byok-action-danger"
+                  variant="link"
+                  size="sm"
+                  className="dc-byok-action dc-byok-action-danger h-auto"
                   onClick={handleClear}
                 >
                   remove
-                </button>
+                </Button>
               ) : null}
             </>
           ) : null}
-          <button type="button" className="dc-byok-action" onClick={onClose}>
+          <Button
+            type="button"
+            variant="link"
+            size="sm"
+            className="dc-byok-action h-auto"
+            onClick={onClose}
+          >
             {step === "done" || active ? "close" : "cancel"} · esc
-          </button>
+          </Button>
         </div>
       </TermLine>
     </div>

@@ -5,6 +5,14 @@ import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { ArrowUpRight } from 'lucide-react';
 import { gloomberbTickerUrl } from '@digithings/web';
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@digithings/web/ui';
 import { pnlColor } from '@/components/ui';
 import type { BookReconciliation } from '@/lib/book-reconciliation';
 import { formatQuoteAge, valuePosition, type Valuation } from '@/lib/live-valuation';
@@ -77,8 +85,8 @@ export default function AllocationsPositionsTable(props: {
           allocation · risk
         </span>
       </div>
-      <div className="min-h-0 flex-1 overflow-auto">
-        <table className="w-full table-fixed border-collapse font-mono text-[0.78rem] [font-variant-numeric:tabular-nums]">
+      <div className="min-h-0 flex-1 overflow-auto [&>div]:overflow-visible">
+        <Table className="table-fixed border-collapse font-mono text-[0.78rem] [font-variant-numeric:tabular-nums]">
           <colgroup>
             <col className="w-[34%] sm:w-[28%]" />
             <col className="hidden w-[18%] sm:table-column" />
@@ -86,18 +94,18 @@ export default function AllocationsPositionsTable(props: {
             <col className="w-[34%] sm:w-[28%]" />
             <col className="w-[10%] sm:w-[8%]" />
           </colgroup>
-          <thead className="sticky top-0 z-10 bg-surface">
-            <tr className="border-b border-hair text-[0.58rem] font-normal uppercase tracking-[0.1em] text-ink-mute">
-              <th className="py-[0.7rem] pl-2 pr-2 text-left font-normal md:pl-4">Holding</th>
-              <th className="hidden px-3 py-[0.7rem] text-left font-normal sm:table-cell">Category</th>
-              <th className="px-2 py-[0.7rem] text-right font-normal md:px-3">Weight / target</th>
-              <th className="px-2 py-[0.7rem] text-right font-normal md:px-3">Stop ↔ target</th>
-              <th className="px-2 py-[0.7rem] text-right font-normal md:px-3">
+          <TableHeader className="sticky top-0 z-10 bg-surface">
+            <TableRow className="border-hair text-[0.58rem] font-normal uppercase tracking-[0.1em] text-ink-mute hover:bg-transparent">
+              <TableHead className="h-auto py-[0.7rem] pl-2 pr-2 font-normal md:pl-4">Holding</TableHead>
+              <TableHead className="h-auto hidden px-3 py-[0.7rem] font-normal sm:table-cell">Category</TableHead>
+              <TableHead numeric className="h-auto px-2 py-[0.7rem] font-normal md:px-3">Weight / target</TableHead>
+              <TableHead numeric className="h-auto px-2 py-[0.7rem] font-normal md:px-3">Stop ↔ target</TableHead>
+              <TableHead numeric className="h-auto px-2 py-[0.7rem] font-normal md:px-3">
                 <span className="sr-only">Dossier</span>
-              </th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-hair">
+              </TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody className="divide-y divide-hair">
             {sorted.map((p) => {
                   const tickerKey = p.ticker.toUpperCase();
                   const isSelected = selectedTicker === tickerKey;
@@ -105,17 +113,17 @@ export default function AllocationsPositionsTable(props: {
                   // only the LABEL (`isFresh`), never which mark is used or what it computes to.
                   const valuation = valuePosition(p, quotes[tickerKey], nowMs);
                   return (
-                      <tr key={p.ticker}
+                      <TableRow key={p.ticker}
                         ref={(el) => {
                           if (el) rowRefs.current.set(tickerKey, el);
                           else rowRefs.current.delete(tickerKey);
                         }}
                         data-selected={isSelected || undefined}
-                        className={`transition-colors hover:bg-ink/[0.03] ${
+                        className={`border-0 transition-colors hover:bg-ink/[0.03] ${
                           isSelected ? 'bg-accent/[0.06] shadow-[inset_2px_0_0_var(--accent)]' : ''
                         }`}
                       >
-                        <td className="max-w-[13rem] py-3 pl-2 pr-2 md:pl-4">
+                        <TableCell className="max-w-[13rem] py-3 pl-2 pr-2 whitespace-normal md:pl-4">
                           <span className="flex items-center gap-1.5">
                             <span className="font-mono font-semibold text-ink">{p.ticker}</span>
                             {/*
@@ -150,18 +158,18 @@ export default function AllocationsPositionsTable(props: {
                           <span className="mt-0.5 block truncate text-[0.64rem] text-ink-mute sm:hidden">
                             {formatAllocationCategory(p.category)}
                           </span>
-                        </td>
-                        <td className="hidden px-3 py-3 text-left text-xs text-ink-soft sm:table-cell">
+                        </TableCell>
+                        <TableCell className="hidden px-3 py-3 text-xs text-ink-soft sm:table-cell">
                           {formatAllocationCategory(p.category)}
-                        </td>
-                        <td className="px-2 py-3 text-right md:px-3">
+                        </TableCell>
+                        <TableCell numeric className="px-2 py-3 md:px-3">
                           <span className="block font-medium">{p.normalizedWeight.toFixed(1)}%</span>
                           <WeightChangeBadge deltaPp={p.weight_delta ?? null} />
                           <span className="mt-0.5 block text-[0.64rem] text-ink-mute">
                             {p.weight_target != null ? `${p.weight_target.toFixed(1)}% target` : 'no target'}
                           </span>
-                        </td>
-                        <td className="px-2 py-3 md:px-3">
+                        </TableCell>
+                        <TableCell className="px-2 py-3 md:px-3">
                           <div className="flex flex-col items-end gap-1">
                             <MarkFigure ticker={p.ticker} valuation={valuation} />
                             <RiskEnvelopeCell
@@ -171,8 +179,8 @@ export default function AllocationsPositionsTable(props: {
                               valuation={valuation}
                             />
                           </div>
-                        </td>
-                        <td className="px-2 py-3 text-right md:px-3">
+                        </TableCell>
+                        <TableCell numeric className="px-2 py-3 md:px-3">
                           <Link
                             href={`/portfolio/tickers?ticker=${encodeURIComponent(p.ticker.toUpperCase())}`}
                             className="inline-flex h-8 w-8 items-center justify-center text-ink-mute hover:text-accent"
@@ -181,19 +189,19 @@ export default function AllocationsPositionsTable(props: {
                           >
                             <ArrowUpRight size={15} aria-hidden />
                           </Link>
-                        </td>
-                      </tr>
+                        </TableCell>
+                      </TableRow>
                   );
                 })}
             {reconciliation.rows.length === 0 && (
-              <tr>
-                <td colSpan={5} className="text-center py-10 text-ink-mute">
+              <TableRow className="border-0">
+                <TableCell colSpan={5} className="text-center py-10 text-ink-mute">
                   No active positions
-                </td>
-              </tr>
+                </TableCell>
+              </TableRow>
             )}
-          </tbody>
-        </table>
+          </TableBody>
+        </Table>
       </div>
     </div>
   );

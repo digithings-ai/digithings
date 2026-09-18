@@ -2,6 +2,7 @@
 
 import { useDeferredValue, useMemo, useState } from 'react';
 import { FileText, Search, X } from 'lucide-react';
+import { Button, Input, Label } from '@digithings/web/ui';
 import type { PipelineArtifact } from '@/lib/pipeline-graph-data';
 
 function artifactFamily(artifact: PipelineArtifact): string {
@@ -61,32 +62,33 @@ export default function PipelineArtifactLedger({
             {artifacts.length} persisted outputs · {date}
           </p>
         </div>
-        <button
+        <Button
           type="button"
+          variant="outline"
           aria-label="Close artifact ledger"
           onClick={onClose}
-          className="flex h-11 w-11 shrink-0 items-center justify-center border border-hair text-ink-mute transition-colors hover:text-ink md:h-8 md:w-8"
+          className="h-11 w-11 shrink-0 border-hair bg-transparent text-ink-mute hover:bg-transparent hover:text-ink dark:bg-transparent dark:hover:bg-transparent md:h-8 md:w-8"
         >
           <X size={18} aria-hidden />
-        </button>
+        </Button>
       </header>
 
       <div className="border-b border-hair p-3 md:px-5">
-        <label className="relative block">
+        <Label className="relative block">
           <span className="sr-only">Search artifacts</span>
           <Search
             size={15}
             aria-hidden
             className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-ink-mute"
           />
-          <input
+          <Input
             type="search"
             value={query}
             onChange={(event) => setQuery(event.target.value)}
             placeholder="Search keys, types, or tickers"
-            className="h-10 w-full border border-hair bg-surface pl-9 pr-3 font-mono text-xs text-ink outline-none transition-colors placeholder:text-ink-mute/70 focus:border-accent"
+            className="h-10 w-full border-hair bg-surface pl-9 pr-3 font-mono text-xs text-ink placeholder:text-ink-mute/70 focus:border-accent focus-visible:border-accent"
           />
-        </label>
+        </Label>
       </div>
 
       <div className="flex-1 overflow-y-auto overscroll-contain px-3 py-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] md:px-5">
@@ -104,12 +106,13 @@ export default function PipelineArtifactLedger({
               {group.items.map((artifact) => {
                 const selected = artifact.documentKey === selectedDocumentKey;
                 return (
-                  <button
+                  <Button
                     key={artifact.documentKey}
                     type="button"
+                    variant="ghost"
                     aria-current={selected ? 'page' : undefined}
                     onClick={() => onSelect(artifact.documentKey)}
-                    className={`flex min-h-14 w-full items-start gap-3 px-2 py-2.5 text-left transition-colors hover:bg-accent/[0.04] ${
+                    className={`flex min-h-14 w-full items-start justify-start gap-3 whitespace-normal px-2 py-2.5 text-left hover:bg-accent/[0.04] ${
                       selected ? 'bg-accent/[0.08]' : ''
                     }`}
                   >
@@ -127,7 +130,7 @@ export default function PipelineArtifactLedger({
                         {artifact.docType}
                       </span>
                     ) : null}
-                  </button>
+                  </Button>
                 );
               })}
             </div>

@@ -120,9 +120,6 @@ export {
 
 // controls layer (#1419)
 export { Button, type ButtonProps, type ButtonDress, type ButtonReferenceVariant, type ButtonChatVariant, type ButtonChatSize } from "./components/controls/Button";
-export { Badge, type BadgeProps, type BadgeDress, type BadgeReferenceVariant, type BadgeChatVariant } from "./components/controls/Badge";
-export { Label, type LabelProps, type LabelDress } from "./components/controls/Label";
-export { Avatar, AvatarImage, AvatarFallback, AvatarBadge, AvatarGroup, AvatarGroupCount, type AvatarProps, type AvatarImageProps, type AvatarFallbackProps, type AvatarSize } from "./components/controls/Avatar";
 export {
   DropdownMenu,
   DropdownMenuPortal,
@@ -139,16 +136,6 @@ export {
   DropdownMenuSub,
   DropdownMenuSubTrigger,
   DropdownMenuSubContent,
-  Sheet,
-  SheetTrigger,
-  SheetClose,
-  SheetPortal,
-  SheetOverlay,
-  SheetContent,
-  SheetHeader,
-  SheetFooter,
-  SheetTitle,
-  SheetDescription,
   Dialog,
   DialogTrigger,
   DialogClose,
@@ -173,13 +160,9 @@ export {
   TooltipTrigger,
   TooltipContent,
   TooltipProvider,
-  Collapsible,
-  CollapsibleTrigger,
-  CollapsibleContent,
   type ControlSkin,
   type DropdownMenuContentProps,
   type DropdownMenuItemProps,
-  type SheetContentProps,
   type DialogContentProps,
   type TableDensity,
   type Crumb,

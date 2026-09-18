@@ -1,22 +1,23 @@
 "use client";
 
 /**
- * Select specimen — the shared form select from @digithings/web, live,
+ * Select specimen — the stock kit form select (`@digithings/web/ui`), live,
  * composed inside the shared Field (label + hint wiring included). The
  * dropdown specimen covers menu panes; this one is the form control:
- * type-ahead, arrow-key travel, flip-aware popup, accent check on the
- * picked row. Dress is `.ctl-select*` in the package core sheet.
+ * type-ahead, arrow-key travel, flip-aware popup, check on the picked row.
+ * Wave 4: the non-portal `SelectPopup` moved from the controls layer onto the
+ * kit, so this specimen dropped the controls import; the kit `SelectItem`
+ * renders its own check, so the explicit `<SelectItemIndicator/>` child is gone.
  */
 import { useState } from "react";
+import { Field } from "@digithings/web";
 import {
-  Field,
   Select,
   SelectItem,
-  SelectItemIndicator,
   SelectPopup,
   SelectTrigger,
   SelectValue,
-} from "@digithings/web";
+} from "@digithings/web/ui";
 
 const VENUES = ["coinbase", "kraken", "binance", "paper"] as const;
 
@@ -27,7 +28,7 @@ export function SelectReference() {
       <p className="kicker">{"// select"}</p>
       <h2 className="title">Pick one, honestly.</h2>
       <p className="section-copy">
-        <code>Select</code> from <code>@digithings/web</code>, sitting in a shared{" "}
+        <code>Select</code> from <code>@digithings/web/ui</code>, sitting in a shared{" "}
         <code>Field</code> — label, hint, and ids meshed by the wrapper. Open it with the
         keyboard and type to jump.
       </p>
@@ -42,7 +43,6 @@ export function SelectReference() {
               {VENUES.map((v) => (
                 <SelectItem key={v} value={v}>
                   {v}
-                  <SelectItemIndicator />
                 </SelectItem>
               ))}
             </SelectPopup>

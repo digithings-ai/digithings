@@ -29,6 +29,7 @@ import {
   type ReactNode,
 } from "react";
 import { createPortal } from "react-dom";
+import { Button } from "../ui";
 import { ThemeToggle } from "./ThemeProvider";
 import { isNavGroup, type NavGroup, type NavItem, type NavLink } from "./chrome";
 import { useBodyScrollLock } from "../lib/useBodyScrollLock";
@@ -261,10 +262,10 @@ function NavShellGroup({
       onMouseEnter={onMouseEnter}
       onMouseLeave={onMouseLeave}
     >
-      <button
+      <Button
         type="button"
         ref={triggerRef}
-        className="nav-shell-group-trigger"
+        className="nav-shell-group-trigger h-auto"
         aria-haspopup="menu"
         aria-expanded={open}
         aria-controls={menuId}
@@ -279,7 +280,7 @@ function NavShellGroup({
       >
         {group.label}
         <span className="nav-shell-group-caret" aria-hidden="true" />
-      </button>
+      </Button>
       {/* Always in the tree (so it can transition, and so SSR ships the index),
           hidden by visibility + aria-hidden while closed — the same contract
           the portal sheet below uses. */}
@@ -542,19 +543,13 @@ export function NavShell({
     mounted &&
     createPortal(
       <>
-        <div
-          role="button"
-          className={`nav-shell-backdrop${menuOpen ? " is-open" : ""}`}
+        <Button
+          type="button"
+          className={`nav-shell-backdrop h-auto${menuOpen ? " is-open" : ""}`}
           aria-label="Close menu"
           aria-hidden={!menuOpen}
           tabIndex={menuOpen ? 0 : -1}
           onClick={closeMenu}
-          onKeyDown={(e) => {
-            if (e.key === "Enter" || e.key === " ") {
-              e.preventDefault();
-              closeMenu();
-            }
-          }}
         />
         <div
           id={sheetId}
@@ -603,9 +598,9 @@ export function NavShell({
           <div className="nav-shell-tail flex items-center gap-[0.9rem] max-[560px]:shrink-0 max-[560px]:gap-[0.5rem]">
             {showThemeToggle && <ThemeToggle />}
             {actions}
-            <button
+            <Button
               type="button"
-              className="nav-shell-toggle"
+              className="nav-shell-toggle h-auto"
               aria-label={menuOpen ? "Close menu" : "Open menu"}
               aria-expanded={menuOpen}
               aria-controls={sheetId}
@@ -618,7 +613,7 @@ export function NavShell({
             >
               <span aria-hidden="true" />
               <span aria-hidden="true" />
-            </button>
+            </Button>
           </div>
         </div>
       </header>

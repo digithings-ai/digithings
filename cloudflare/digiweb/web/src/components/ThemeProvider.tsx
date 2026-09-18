@@ -6,6 +6,7 @@
  * inlined in <head> to avoid a flash.
  */
 import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from "react";
+import { IconButton } from "./controls/NavButtons";
 
 type Theme = "light" | "dark";
 const KEY = "dt-theme";
@@ -77,7 +78,7 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
 export function ThemeToggle({ className }: { className?: string }) {
   const { theme, toggle } = useTheme();
   return (
-    <button
+    <IconButton
       type="button"
       onClick={toggle}
       aria-label="Toggle colour theme"
@@ -94,6 +95,6 @@ export function ThemeToggle({ className }: { className?: string }) {
           <path d="M20 14.5A8 8 0 1 1 9.5 4a6.5 6.5 0 0 0 10.5 10.5z" />
         </svg>
       )}
-    </button>
+    </IconButton>
   );
 }

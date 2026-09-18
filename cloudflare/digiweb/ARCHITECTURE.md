@@ -144,7 +144,21 @@ Waves 0–3 of the shadcn migration (#4206) built the **`ui`** family — the
 first *vendored* package family (stock shadcn/ui on Base UI, `base-lyra`
 preset), with no sheet of its own (all utilities, same bridge). After wave 3 it
 is **the only primitive source** for every part it covers; the controls layer
-survives only where the kit has no equivalent.
+survives only where the kit has no equivalent. Wave 4's W4-P1 closed three of
+those gaps — Table `numeric`/`density` and the new `TableRowHeader`
+(`<th scope="row">`), Select composition (`SelectPopup` + exported
+`SelectItemIndicator`), and the Badge `neutral`/`accent`/`warn`/`up`/`down`
+tones — so the consumers still pinned to `components/controls/*` for those
+parts can move onto the kit. Wave 4's cleanup (W4-J) then re-pointed the seven
+dashboard twelve-x `Sheet` imports onto the kit and deleted the controls files
+with zero consumers (`Avatar`, `Badge`, `Sheet`, `Collapsible`), the second
+`gallery-thread` component library, digichat's four dead `ui/` wrappers, and the
+orphan `dashboard-workspace-reference.tsx`. `Label` was **not** deleted — it is
+retained private for its `Field` consumer, so its `ctl-label-ref` CSS stays live.
+The controls layer is now a keep-list (Table, Select, Dialog, DropdownMenu,
+Tooltip, EmptyState, Skeleton, NavButtons, Selection/radio, DatePager, Field,
+Label, Slider, Breadcrumbs, Pagination, SearchBar, TagsInput); deferred kit items
+live in #4306.
 
 | Family | Components | CSS subpath |
 | ------ | ---------- | ----------- |
@@ -170,13 +184,12 @@ package export `@digithings/web/ui` rather than a `@/components/*` path (#4225);
 the barrel remains the export source of truth and
 [MIGRATION.md](MIGRATION.md) the adoption guide.
 
-Page-level dashboard composition is specified by
-`reference/components/dashboard-workspace-reference.tsx` on the Finance page.
-Its `dw-*` grammar is deliberately reference-only: a command band establishes
-one primary state, compact metrics add context, and a flat hairline ledger owns
-the working detail. Product apps adapt that composition around their own data
-and interactions rather than introducing generic cards or duplicating existing
-controls such as `TabStrip`, `SegmentedControl`, `Sheet`, and `EmptyState`.
+Page-level dashboard composition is owned by the dashboard app
+(`cloudflare/dashboard`): a command band establishes one primary state, compact
+metrics add context, and a flat hairline ledger owns the working detail. Product
+apps adapt that composition around their own data and interactions rather than
+introducing generic cards or duplicating existing controls such as `TabStrip`,
+`SegmentedControl`, `Sheet`, and `EmptyState`.
 
 Since the canon migration (#1399, 2026-07): apps declare **no local `@theme`
 block** — `web-theme.css` is the one bridge (its `inline` semantics keep scoped

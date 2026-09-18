@@ -8,7 +8,17 @@ import {
   DropdownMenuRadioGroup,
   DropdownMenuRadioItem,
   DropdownMenuTrigger,
+  SegmentedControl,
+  Slider,
 } from '@digithings/web';
+import {
+  Button,
+  Table,
+  TableBody,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@digithings/web/ui';
 import type { FxIdeaEvalRow, FxTradeIdeaRow } from '@/lib/twelve-x/types';
 import {
   annotateLevelUpdates,
@@ -100,28 +110,24 @@ function SortHeader({
 }) {
   const active = activeKey === sortKey;
   return (
-    <th
-      className={`px-3 py-2 font-medium ${align === 'right' ? 'text-right' : 'text-left'}`}
+    <TableHead
+      numeric={align === 'right'}
+      className="h-auto px-3 py-2 font-medium"
       title={title}
       aria-sort={active ? (sortDir === 'asc' ? 'ascending' : 'descending') : 'none'}
     >
-      <button
+      <Button
         type="button"
+        variant="ghost"
+        size="xs"
         onClick={() => onSort(sortKey)}
-        className="hover:text-ink transition-colors"
+        className="h-auto p-0 text-[10px] font-medium transition-colors hover:bg-transparent hover:text-ink"
       >
         {label}
         {active ? (sortDir === 'asc' ? ' ↑' : ' ↓') : ''}
-      </button>
-    </th>
+      </Button>
+    </TableHead>
   );
-}
-
-/** DigiWeb-aligned track fill (same recipe as digiweb Slider). */
-function impactSliderFill(pct: number): string {
-  const span = IMPACT_MAX_PCT - IMPACT_MIN_PCT;
-  const filled = span <= 0 ? 0 : ((pct - IMPACT_MIN_PCT) / span) * 100;
-  return `linear-gradient(to right, var(--accent) 0 ${filled}%, color-mix(in srgb, var(--ink) 14%, transparent) ${filled}% 100%)`;
 }
 
 function PairFilterDropdown({
@@ -276,25 +282,13 @@ export default function TradesTab({
       ) : (
         <div className="space-y-3">
           <div className="flex flex-wrap items-center gap-2 px-1" role="group" aria-label="Filter trades">
-            {RESULT_FILTERS.map((f) => {
-              const on = resultFilter === f.key;
-              return (
-                <button
-                  key={f.key}
-                  type="button"
-                  data-filter={f.key}
-                  aria-pressed={on}
-                  onClick={() => setResultFilter(f.key)}
-                  className={`border px-2.5 py-1 text-[11px] font-medium transition-colors ${
-                    on
-                      ? 'border-accent/40 bg-accent/15 text-accent'
-                      : 'border-hair text-ink-mute hover:text-ink'
-                  }`}
-                >
-                  {f.label}
-                </button>
-              );
-            })}
+            <SegmentedControl
+              dress="accent"
+              aria-label="Filter trades by result"
+              options={RESULT_FILTERS.map((f) => ({ value: f.key, label: f.label }))}
+              value={resultFilter}
+              onChange={setResultFilter}
+            />
             <PairFilterDropdown
               value={pairFilter}
               pairs={pairs}
@@ -309,26 +303,18 @@ export default function TradesTab({
                 setBoardTo(to);
               }}
             />
-            <label
-              className="flex min-w-[11rem] flex-1 items-center gap-2 text-[11px] text-ink-mute sm:max-w-[16rem]"
+            <Slider
+              label="Minimum |Impact|"
+              value={impactMinPct}
+              min={IMPACT_MIN_PCT}
+              max={IMPACT_MAX_PCT}
+              step={IMPACT_STEP_PCT}
+              onChange={setImpactMinPct}
+              format={() => formatImpactThresholdLabel(impactMinPct)}
               title="Hide rows whose absolute Impact is below this threshold"
-            >
-              <span className="shrink-0 font-mono tabular-nums text-ink">
-                {formatImpactThresholdLabel(impactMinPct)}
-              </span>
-              <input
-                type="range"
-                min={IMPACT_MIN_PCT}
-                max={IMPACT_MAX_PCT}
-                step={IMPACT_STEP_PCT}
-                value={impactMinPct}
-                onChange={(e) => setImpactMinPct(Number(e.target.value))}
-                aria-label="Minimum absolute Impact percent"
-                data-testid="impact-min-slider"
-                className="ctl-slider-input flex-1"
-                style={{ background: impactSliderFill(impactMinPct) }}
-              />
-            </label>
+              data-testid="impact-min-slider"
+              className="min-w-[11rem] flex-1 sm:max-w-[16rem]"
+            />
           </div>
 
           <div
@@ -362,9 +348,9 @@ export default function TradesTab({
             <p className="px-1 text-sm text-ink-mute">No trades match the current filters.</p>
           ) : (
             <div className="overflow-x-auto border border-hair">
-              <table className="w-full text-xs">
-                <thead>
-                  <tr className="border-b border-hair text-[10px] uppercase tracking-wider text-ink-mute">
+              <Table className="w-full text-xs">
+                <TableHeader>
+                  <TableRow className="border-hair text-[10px] uppercase tracking-wider text-ink-mute hover:bg-transparent">
                     <SortHeader label="Generated" sortKey="generated" activeKey={sortKey} sortDir={sortDir} onSort={onSort} />
                     <SortHeader label="Pair" sortKey="pair" activeKey={sortKey} sortDir={sortDir} onSort={onSort} />
                     <SortHeader label="Bias" sortKey="bias" activeKey={sortKey} sortDir={sortDir} onSort={onSort} />
@@ -390,10 +376,10 @@ export default function TradesTab({
                       align="right"
                     />
                     <SortHeader label="Result" sortKey="result" activeKey={sortKey} sortDir={sortDir} onSort={onSort} />
-                    <th className="px-3 py-2 text-left font-medium">Status</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-hair">
+                    <TableHead className="h-auto px-3 py-2 text-left font-medium">Status</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody className="divide-y divide-hair">
                   {visible.map((row) => (
                     <TradeRow
                       key={`${row.runDate}-${row.rank}`}
@@ -401,8 +387,8 @@ export default function TradesTab({
                       onOpenIdea={onOpenIdea}
                     />
                   ))}
-                </tbody>
-              </table>
+                </TableBody>
+              </Table>
               {hasMore ? (
                 <div
                   ref={sentinelRef}

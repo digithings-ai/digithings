@@ -87,14 +87,18 @@ describe('PerformanceTearsheetView', () => {
   });
 
   it('keeps the benchmark control outside the chart (page-global)', () => {
+    // Wave 4: the benchmark picker is the kit `Select` (portal-rendered list), so the
+    // old native `<option>` markup is gone. The page-global placement contract is
+    // unchanged: the labelled trigger sits in the header, outside the chart section,
+    // and the selected asset renders in the trigger value.
     const out = html();
     expect(out).toContain('data-testid="global-benchmark-control"');
     expect(out).toContain('aria-label="Comparison benchmark"');
-    expect(out).toContain('<option value="SPY" selected="">SPY</option>');
-    expect(out).toContain('<option value="QQQ">QQQ</option>');
+    expect(out).toContain('data-slot="select-trigger"');
+    expect(out).toMatch(/data-slot="select-value"[^>]*>SPY</);
     const chartStart = out.indexOf('data-testid="portfolio-contribution-chart"');
     const chartBlock = out.slice(chartStart);
-    expect(chartBlock).not.toContain('<select');
+    expect(chartBlock).not.toContain('aria-label="Comparison benchmark"');
   });
 
   it('renders insight band for alpha and information ratio', () => {
@@ -193,10 +197,15 @@ describe('headline vs realized presentation (#1664)', () => {
   });
 
   it('offers populated benchmark assets with SPY selected by default', () => {
+    // Wave 4: kit `Select` serves the list through a portal, so the option set is not
+    // in static markup; the observable contract is the labelled trigger plus the
+    // selected value. The control only renders at all when `benchmarkComparisons` is
+    // non-empty, so its presence covers the "populated" half; SPY is the default value.
     const out = html();
     expect(out).toContain('aria-label="Comparison benchmark"');
-    expect(out).toContain('<option value="SPY" selected="">SPY</option>');
-    expect(out).toContain('<option value="QQQ">QQQ</option>');
+    expect(out).toContain('data-slot="select-trigger"');
+    expect(out).toMatch(/data-slot="select-value"[^>]*>SPY</);
+    expect(out).toContain('value="SPY"');
   });
 
   it('does not duplicate realized fills on the tearsheet — Ledger is SSOT', () => {

@@ -12,6 +12,20 @@ import {
   runTearsheetPrint,
   toneClass,
 } from '@digithings/web';
+import {
+  Label,
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@digithings/web/ui';
 import type { PerformanceTearsheet, PerformanceHoldingRow } from './types';
 import {
   PortfolioContributionChart,
@@ -46,40 +60,40 @@ function HoldingsPerformanceTable({
   }
 
   return (
-    <div className="max-h-[22rem] overflow-auto print:max-h-none print:overflow-visible">
-      <table className="w-full min-w-[680px] border-collapse font-mono text-[0.78rem] [font-variant-numeric:tabular-nums]">
-        <thead className="sticky top-0 z-10 bg-surface print:static">
-          <tr className="border-b border-hair text-[0.58rem] uppercase tracking-[0.1em] text-ink-mute">
-            <th className="px-5 py-2.5 text-left font-normal">Holding</th>
-            <th className="px-3 py-2.5 text-left font-normal">Category</th>
-            <th className="px-3 py-2.5 text-right font-normal">Weight</th>
-            <th className="px-3 py-2.5 text-right font-normal">Unrealized</th>
-            <th className="px-5 py-2.5 text-right font-normal">As of</th>
-          </tr>
-        </thead>
-        <tbody className="divide-y divide-hair">
+    <div className="max-h-[22rem] overflow-auto print:max-h-none print:overflow-visible [&>div]:overflow-visible">
+      <Table className="min-w-[680px] border-collapse font-mono text-[0.78rem] [font-variant-numeric:tabular-nums]">
+        <TableHeader className="sticky top-0 z-10 bg-surface print:static">
+          <TableRow className="border-hair text-[0.58rem] uppercase tracking-[0.1em] text-ink-mute hover:bg-transparent">
+            <TableHead className="h-auto px-5 py-2.5 font-normal">Holding</TableHead>
+            <TableHead className="h-auto px-3 py-2.5 font-normal">Category</TableHead>
+            <TableHead numeric className="h-auto px-3 py-2.5 font-normal">Weight</TableHead>
+            <TableHead numeric className="h-auto px-3 py-2.5 font-normal">Unrealized</TableHead>
+            <TableHead numeric className="h-auto px-5 py-2.5 font-normal">As of</TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody className="divide-y divide-hair">
           {rows.map((row) => (
-            <tr
+            <TableRow
               key={row.eventId ?? `${row.ticker}-${row.attributionDate ?? ''}-${row.disposition ?? 'open'}`}
-              className="hover:bg-ink/[0.02]"
+              className="border-0 hover:bg-ink/[0.02]"
             >
-              <td className="px-5 py-2.5 font-semibold text-ink">{row.ticker}</td>
-              <td className="px-3 py-2.5 text-ink-soft">
+              <TableCell className="px-5 py-2.5 font-semibold text-ink">{row.ticker}</TableCell>
+              <TableCell className="px-3 py-2.5 text-ink-soft">
                 {formatAllocationCategory(row.category)}
-              </td>
-              <td className="px-3 py-2.5 text-right text-ink">
+              </TableCell>
+              <TableCell numeric className="px-3 py-2.5 text-ink">
                 {row.weightPct != null ? `${row.weightPct.toFixed(1)}%` : '—'}
-              </td>
-              <td className="px-3 py-2.5 text-right">
+              </TableCell>
+              <TableCell numeric className="px-3 py-2.5">
                 <ReturnValue value={row.unrealizedReturnPct} />
-              </td>
-              <td className="px-5 py-2.5 text-right text-ink-mute">
+              </TableCell>
+              <TableCell numeric className="px-5 py-2.5 text-ink-mute">
                 {row.attributionDate ?? '—'}
-              </td>
-            </tr>
+              </TableCell>
+            </TableRow>
           ))}
-        </tbody>
-      </table>
+        </TableBody>
+      </Table>
     </div>
   );
 }
@@ -219,24 +233,32 @@ export function PerformanceTearsheetView({
             </span>
           ) : null}
           {data.benchmarkComparisons.length ? (
-            <label
+            <Label
               data-testid="global-benchmark-control"
-              className="inline-flex items-center gap-2 font-mono text-[0.68rem] text-ink-mute"
+              className="inline-flex w-auto items-center gap-2 font-mono text-[0.68rem] text-ink-mute"
             >
               <span className="uppercase tracking-wider">Benchmark</span>
-              <select
-                aria-label="Comparison benchmark"
-                value={benchmark?.ticker ?? ''}
-                onChange={(event) => setBenchmarkTicker(event.target.value)}
-                className="h-8 border border-hair bg-surface px-2 font-mono text-[0.72rem] text-ink outline-none focus:border-accent"
+              <Select
+                value={benchmark?.ticker ?? null}
+                onValueChange={(next) => {
+                  if (typeof next === 'string') setBenchmarkTicker(next);
+                }}
               >
-                {data.benchmarkComparisons.map((comparison) => (
-                  <option key={comparison.ticker} value={comparison.ticker}>
-                    {comparison.ticker}
-                  </option>
-                ))}
-              </select>
-            </label>
+                <SelectTrigger
+                  aria-label="Comparison benchmark"
+                  className="h-8 border-hair bg-surface px-2 font-mono text-[0.72rem] text-ink"
+                >
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {data.benchmarkComparisons.map((comparison) => (
+                    <SelectItem key={comparison.ticker} value={comparison.ticker}>
+                      {comparison.ticker}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </Label>
           ) : null}
           <IconButton
             aria-label="Download performance tear sheet as PDF"

@@ -2,13 +2,17 @@
 
 import Link from 'next/link';
 import { ChevronRight, ArrowUpRight } from 'lucide-react';
-import { gloomberbTickerUrl } from '@digithings/web';
+import { SignedConvictionBadge, gloomberbTickerUrl } from '@digithings/web';
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from '@digithings/web/ui';
 import type { Position } from '@/lib/types';
 import type { DecisionLogRow } from '@/lib/holdings-decisions';
 import type { PlanTier } from '@/lib/entitlements';
 import { can } from '@/lib/entitlements';
 import { usePlanTier } from '@/lib/use-entitlement';
-import { SignedConvictionBadge } from '@/components/shared/signed-conviction-badge';
 import { AsOfBadge } from '@/components/shared/as-of-badge';
 import { Badge } from '@/components/ui';
 import { EntitledSurface } from '@/components/entitled-surface';
@@ -78,12 +82,12 @@ export function VehicleExpressionRow({
   const pending = latestDecision?.status === 'pending';
 
   return (
-    <details className="group border-t border-hair first:border-t-0">
-      <summary className="flex cursor-pointer list-none items-center gap-3 px-4 py-3 transition-colors hover:bg-ink/[0.03] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-accent/50 [&::-webkit-details-marker]:hidden">
+    <Collapsible className="group border-t border-hair first:border-t-0">
+      <CollapsibleTrigger className="flex w-full cursor-pointer items-center gap-3 px-4 py-3 transition-colors hover:bg-ink/[0.03] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-accent/50">
         <ChevronRight
           size={14}
           aria-hidden
-          className="shrink-0 text-ink-mute transition-transform group-open:rotate-90"
+          className="shrink-0 text-ink-mute transition-transform group-data-[open]:rotate-90"
         />
         <span className="w-14 shrink-0 font-mono text-sm font-semibold text-ink">{ticker}</span>
         {candidateRank != null ? (
@@ -112,9 +116,9 @@ export function VehicleExpressionRow({
             not held
           </span>
         )}
-      </summary>
+      </CollapsibleTrigger>
 
-      <div className="space-y-4 px-4 pb-4 pl-11">
+      <CollapsibleContent keepMounted className="space-y-4 px-4 pb-4 pl-11">
         {/* Held metrics + entry/exit envelope (TIMING) */}
         {held ? (
           <EntitledSurface artifactClass="house_weights_nav" tier={tier}>
@@ -199,7 +203,7 @@ export function VehicleExpressionRow({
             </a>
           ) : null}
         </div>
-      </div>
-    </details>
+      </CollapsibleContent>
+    </Collapsible>
   );
 }

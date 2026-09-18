@@ -6,7 +6,7 @@ import { diffLines, diffWords } from 'diff';
 import { List } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
-import { Button, Input } from '@digithings/web/ui';
+import { Button, Input, Label } from '@digithings/web/ui';
 import {
   fetchDigestDiffContext,
   loadDigestLibraryDiff,
@@ -307,7 +307,7 @@ export default function DigestDocumentView({
                 setCustomCompareDate('');
               }}
             />
-            <label className="flex flex-col gap-0.5 min-w-[10.5rem]">
+            <Label className="flex flex-col items-stretch gap-0.5 min-w-[10.5rem]">
               <span className="text-[10px] uppercase tracking-wider text-ink-mute">Or compare to date</span>
               <Input
                 type="date"
@@ -322,7 +322,7 @@ export default function DigestDocumentView({
                 className="h-auto rounded-none border-hair bg-term-bg py-1.5 font-mono text-ink focus-visible:ring-accent/30"
                 aria-label="Compare digest to a custom snapshot date"
               />
-            </label>
+            </Label>
           </div>
         </>
       ) : null}

@@ -3,7 +3,12 @@
 import * as React from "react"
 import { cn } from "../lib/utils"
 
-function Table({ className, ...props }: React.ComponentProps<"table">) {
+type TableProps = React.ComponentProps<"table"> & {
+  /** `compact` halves the header/cell padding for dense ledgers. */
+  density?: "default" | "compact"
+}
+
+function Table({ className, density = "default", ...props }: TableProps) {
   return (
     <div
       data-slot="table-container"
@@ -11,7 +16,13 @@ function Table({ className, ...props }: React.ComponentProps<"table">) {
     >
       <table
         data-slot="table"
-        className={cn("w-full caption-bottom text-xs", className)}
+        data-density={density}
+        className={cn(
+          "w-full caption-bottom text-xs",
+          density === "compact" &&
+            "[&_[data-slot=table-head]]:h-8 [&_[data-slot=table-cell]]:py-1 [&_[data-slot=table-row-header]]:py-1",
+          className
+        )}
         {...props}
       />
     </div>
@@ -64,12 +75,18 @@ function TableRow({ className, ...props }: React.ComponentProps<"tr">) {
   )
 }
 
-function TableHead({ className, ...props }: React.ComponentProps<"th">) {
+type TableHeadProps = React.ComponentProps<"th"> & {
+  /** Right-aligns the cell and turns on tabular figures (ledger numerals). */
+  numeric?: boolean
+}
+
+function TableHead({ className, numeric = false, ...props }: TableHeadProps) {
   return (
     <th
       data-slot="table-head"
       className={cn(
         "h-10 px-2 text-left align-middle font-medium whitespace-nowrap text-foreground [&:has([role=checkbox])]:pr-0",
+        numeric && "text-right tabular-nums",
         className
       )}
       {...props}
@@ -77,12 +94,41 @@ function TableHead({ className, ...props }: React.ComponentProps<"th">) {
   )
 }
 
-function TableCell({ className, ...props }: React.ComponentProps<"td">) {
+type TableDataCellProps = React.ComponentProps<"td"> & {
+  /** Right-aligns the cell and turns on tabular figures (ledger numerals). */
+  numeric?: boolean
+}
+
+function TableCell({
+  className,
+  numeric = false,
+  ...props
+}: TableDataCellProps) {
   return (
     <td
       data-slot="table-cell"
       className={cn(
         "p-2 align-middle whitespace-nowrap [&:has([role=checkbox])]:pr-0",
+        numeric && "text-right tabular-nums",
+        className
+      )}
+      {...props}
+    />
+  )
+}
+
+/**
+ * Row-header cell — the `<th scope="row">` that names a body row (a blotter
+ * symbol, a metric label). Cell-shaped (left, body padding) so it sits level
+ * with `TableCell`, unlike the column-oriented `TableHead`.
+ */
+function TableRowHeader({ className, ...props }: React.ComponentProps<"th">) {
+  return (
+    <th
+      data-slot="table-row-header"
+      scope="row"
+      className={cn(
+        "p-2 text-left align-middle font-medium whitespace-nowrap text-foreground [&:has([role=checkbox])]:pr-0",
         className
       )}
       {...props}
@@ -111,5 +157,6 @@ export {
   TableHead,
   TableRow,
   TableCell,
+  TableRowHeader,
   TableCaption,
 }

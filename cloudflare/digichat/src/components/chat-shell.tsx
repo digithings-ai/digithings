@@ -46,6 +46,7 @@ import {
 } from "@/lib/thread-local";
 import { cn } from "@/lib/utils";
 import { p } from "@/lib/base-path";
+import { Button, Input, Label } from "@digithings/web/ui";
 import type { DigichatClientConfig } from "@/lib/deploy-config";
 
 type RemoteSummary = { id: string; title: string; updatedAt: string };
@@ -450,21 +451,26 @@ export function ChatShell({
     >
       <aside className="app-sidebar" aria-label="App sidebar" data-expanded={!collapsed}>
         <div className="app-sidebar-body">
-          <div className="dc-sidebar-brand">
-            <div className="dc-sidebar-brand-mark">DT</div>
+          <div>
+            <div>DT</div>
             <div>
-              <div className="dc-sidebar-brand-name">digichat</div>
-              <div className="dc-sidebar-brand-version">v0.1 · digithings</div>
+              <div>digichat</div>
+              <div>v0.1 · digithings</div>
             </div>
           </div>
 
-          <button type="button" className="dc-sidebar-newchat" onClick={newChat}>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={newChat}
+          >
             + new chat
-          </button>
+          </Button>
 
-          <label className="dc-sidebar-search">
+          <Label>
             <span className="sr-only">Search conversations</span>
-            <input
+            <Input
               type="search"
               value={threadQuery}
               onChange={(e) => setThreadQuery(e.target.value)}
@@ -472,10 +478,10 @@ export function ChatShell({
               autoComplete="off"
               spellCheck={false}
             />
-          </label>
+          </Label>
 
           {grouped.length === 0 ? (
-            <p className="dc-sidebar-empty" role="status">
+            <p role="status">
               {threadQuery.trim() ? "No chats match that search." : "No chats yet."}
             </p>
           ) : (
@@ -486,7 +492,6 @@ export function ChatShell({
                   {g.items.map((t) => (
                     <li key={t.id} style={{ padding: 0 }}>
                       <div
-                        className={cn("dc-sidebar-thread", t.id === activeId && "is-active")}
                         onClick={() => void openThread(t.id)}
                         onKeyDown={(e) => {
                           if (e.key === "Enter" || e.key === " ") {
@@ -498,10 +503,10 @@ export function ChatShell({
                         tabIndex={0}
                         aria-pressed={t.id === activeId}
                       >
-                        <span className="dc-sidebar-thread-title">
+                        <span>
                           {renamingId === t.id ? (
-                            <input
-                              className="dc-sidebar-rename"
+                            <Input
+                              className="h-auto"
                               value={renameDraft}
                               ref={(el) => {
                                 // No autoFocus: it scroll-jumps the sidebar.
@@ -533,7 +538,7 @@ export function ChatShell({
                             t.title
                           )}
                         </span>
-                        <span className="dc-sidebar-thread-time">{formatTimestamp(t.updatedAt)}</span>
+                        <span>{formatTimestamp(t.updatedAt)}</span>
                         <DropdownMenu>
                           <DropdownMenuTrigger
                             aria-label={`Actions for ${t.title}`}
@@ -575,8 +580,8 @@ export function ChatShell({
             <h3>Commands</h3>
             <ul>
               {SLASH_REFERENCE.map((c) => (
-                <li key={c.cmd} className="dc-sidebar-cmd">
-                  <span className="dc-sidebar-cmd-key">{c.cmd}</span>
+                <li key={c.cmd}>
+                  <span>{c.cmd}</span>
                   <span>{c.hint}</span>
                 </li>
               ))}
@@ -588,20 +593,21 @@ export function ChatShell({
               href="https://digithings.ai"
               target="_blank"
               rel="noreferrer"
-              className="dc-sidebar-cmd"
             >
               <span>digithings.ai</span>
               <span aria-hidden>↗</span>
             </Link>
-            <button
+            <Button
               type="button"
-              className="dc-sidebar-cmd"
-              style={{ width: "100%", background: "transparent", border: "none", cursor: "pointer" }}
+              variant="ghost"
+              size="sm"
+              className="h-auto w-full justify-between"
+              style={{ background: "transparent", border: "none", cursor: "pointer" }}
               onClick={() => signOut({ callbackUrl: p("/embed") })}
             >
               <span>sign out</span>
               <span aria-hidden>⏻</span>
-            </button>
+            </Button>
           </section>
         </div>
       </aside>
@@ -610,25 +616,29 @@ export function ChatShell({
         <header className="app-topbar">
           <span className="app-topbar-title">{activeThread.title || "New chat"}</span>
           <span className="app-topbar-meta">
-            <button
+            <Button
               type="button"
+              variant="link"
+              size="sm"
               onClick={() => setByokMode(true)}
-              className="underline-offset-2 hover:underline"
+              className="h-auto px-0 font-normal text-inherit underline-offset-2"
               style={{ background: "transparent", border: "none", color: "inherit", cursor: "pointer", fontFamily: "inherit", fontSize: "inherit" }}
               aria-label="Configure bring your own key"
             >
               bring your own key
-            </button>
+            </Button>
             {" · "}
-            {subtitle} · <button
+            {subtitle} · <Button
               type="button"
+              variant="link"
+              size="sm"
               onClick={() => setCollapsed((v) => !v)}
-              className="underline-offset-2 hover:underline"
+              className="h-auto px-0 font-normal text-inherit underline-offset-2"
               style={{ background: "transparent", border: "none", color: "inherit", cursor: "pointer", fontFamily: "inherit", fontSize: "inherit" }}
               aria-label="Toggle sidebar"
             >
               ⌘/
-            </button>
+            </Button>
           </span>
         </header>
 
@@ -636,9 +646,11 @@ export function ChatShell({
           {activeThread.remote && !activeThread.hydrated ? (
             <div className="flex min-h-[40vh] flex-col items-center justify-center gap-3 text-sm text-muted-foreground">
               <p>Could not load this conversation yet.</p>
-              <button
+              <Button
                 type="button"
-                className="underline-offset-2 hover:underline"
+                variant="link"
+                size="sm"
+                className="h-auto px-0 font-normal text-inherit underline-offset-2"
                 style={{
                   background: "transparent",
                   border: "none",
@@ -650,7 +662,7 @@ export function ChatShell({
                 onClick={() => void openThread(activeThread.id)}
               >
                 Retry
-              </button>
+              </Button>
             </div>
           ) : (
             <ChatPanel

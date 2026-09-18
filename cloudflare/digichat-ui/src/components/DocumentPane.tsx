@@ -1,5 +1,7 @@
 "use client";
 
+import { IconButton } from "@digithings/web";
+
 import { MiniMarkdown } from "./MiniMarkdown";
 import { readableSnippet } from "../activity-view";
 import type { VaultHitSummary } from "../types";
@@ -30,9 +32,9 @@ export function DocumentPane({
     <aside className="dc-doc-pane" aria-label="Document">
       <header className="dc-doc-pane-head">
         <strong className="dc-doc-pane-title">{hit.title}</strong>
-        <button type="button" className="dc-doc-pane-close" onClick={onClose} aria-label="Close document">
+        <IconButton className="dc-doc-pane-close" onClick={onClose} aria-label="Close document">
           ×
-        </button>
+        </IconButton>
       </header>
       {http ? (
         <p className="dc-doc-pane-path">

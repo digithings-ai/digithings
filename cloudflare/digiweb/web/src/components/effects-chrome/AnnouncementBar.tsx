@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, type MouseEventHandler, type ReactNode } from "react";
+import { Button } from "../../ui";
 
 /**
  * AnnouncementBar — Graphite's announcement bar promoted from the design
@@ -69,9 +70,10 @@ export function AnnouncementBar({
         {cta ? <b>{cta}</b> : null}
       </a>
       {dismissible ? (
-        <button
+        <Button
           type="button"
-          className="mr-[0.3rem] h-10 w-10 flex-shrink-0 cursor-pointer border-0 bg-transparent text-[0.8rem] text-ink-mute hover:text-ink"
+          variant="ghost"
+          className="mr-[0.3rem] h-10 w-10 flex-shrink-0 cursor-pointer border-0 bg-transparent text-[0.8rem] font-normal text-ink-mute hover:bg-transparent hover:text-ink"
           aria-label="Dismiss announcement"
           onClick={() => {
             setSelfDismissed(true);
@@ -79,7 +81,7 @@ export function AnnouncementBar({
           }}
         >
           ✕
-        </button>
+        </Button>
       ) : null}
     </div>
   );

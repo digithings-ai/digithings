@@ -7,8 +7,6 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 
-import { Avatar, AvatarFallback, AvatarGroup, AvatarGroupCount } from "./Avatar";
-import { Badge } from "./Badge";
 import { Breadcrumbs } from "./Breadcrumbs";
 import { Button } from "./Button";
 import {
@@ -77,26 +75,6 @@ describe("Button", () => {
   it("defaults the chat dress to default/default like digichat", () => {
     const html = renderToStaticMarkup(<Button dress="chat">Sign in</Button>);
     expect(html).toContain("ctl-btn-chat ctl-btn-chat--default ctl-btn-chat--size-default");
-  });
-});
-
-describe("Badge", () => {
-  it("defaults to the reference tier-badge dress", () => {
-    const html = renderToStaticMarkup(<Badge>core</Badge>);
-    expect(html).toContain("ctl-badge-ref");
-    expect(html).toContain('data-slot="badge"');
-    expect(html).toContain("<span");
-  });
-
-  it("supports digichat's variants and render composition", () => {
-    const html = renderToStaticMarkup(
-      <Badge dress="chat" variant="secondary" className="text-[9px]" render={<a href="#status" />}>
-        ok
-      </Badge>
-    );
-    expect(html).toContain("ctl-badge-chat ctl-badge-chat--secondary text-[9px]");
-    expect(html).toContain("<a");
-    expect(html).toContain('href="#status"');
   });
 });
 
@@ -308,24 +286,6 @@ describe("SearchBar", () => {
     expect(html).toContain("sb-clear");
     expect(html).toContain('aria-label="Clear search"');
     expect(html).not.toContain("sb-hint");
-  });
-});
-
-describe("Avatar", () => {
-  it("renders the digichat family shape", () => {
-    const html = renderToStaticMarkup(
-      <AvatarGroup>
-        <Avatar size="lg">
-          <AvatarFallback>DT</AvatarFallback>
-        </Avatar>
-        <AvatarGroupCount>+3</AvatarGroupCount>
-      </AvatarGroup>
-    );
-    expect(html).toContain("ctl-avatar-group");
-    expect(html).toContain('data-slot="avatar"');
-    expect(html).toContain('data-size="lg"');
-    expect(html).toContain("ctl-avatar-fallback");
-    expect(html).toContain("ctl-avatar-group-count");
   });
 });
 
