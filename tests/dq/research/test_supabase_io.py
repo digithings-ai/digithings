@@ -1094,6 +1094,68 @@ class TestResolvePendingSkipsRowsOnPersistentOutage:
         assert resolved == 1
 
 
+@pytest.mark.unit
+class TestResolvePendingUnknownTickerAggregation:
+    """An unsealed ticker is a coverage gap, not one WARNING per due row (#4301)."""
+
+    def _client(self) -> FakeSupabaseClient:
+        def _row(row_id: str, ticker: str, benchmark: str) -> dict[str, object]:
+            return {
+                "id": row_id,
+                "run_id": f"run-{row_id}",
+                "run_date": "2026-08-20",
+                "ticker": ticker,
+                "stance": "buy",
+                "conviction": 2,
+                "thesis": "t",
+                "benchmark": benchmark,
+                "holding_days": 5,
+                "status": "pending",
+            }
+
+        return FakeSupabaseClient(
+            canned_reads={
+                "decision_log": [
+                    _row("dxy-1", "DXY", "SPY"),
+                    _row("dxy-2", "DXY", "SPY"),
+                    _row("spy-1", "SPY", "QQQ"),
+                ]
+            }
+        )
+
+    def test_counts_coverage_gap_once_and_resolves_siblings(
+        self, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        import digiquant.research.decision_log as dl
+        from digiquant.research.data.queries import UnknownTickerError
+
+        def _window(*, client, ticker, start_date, holding_days):  # type: ignore[no-untyped-def]
+            if ticker == "DXY":
+                raise UnknownTickerError("unknown ticker 'DXY'")
+            return (0.01, start_date, start_date)
+
+        monkeypatch.setattr(dl, "query_returns_window", _window)
+
+        class _Reflection:
+            reflection = "resolved"
+
+        with caplog.at_level(logging.WARNING, logger="digiquant.research.decision_log"):
+            resolved = dl.resolve_pending(
+                client=self._client(),
+                run_date=date(2026, 8, 28),
+                reflector=lambda _payload: _Reflection(),
+            )
+
+        assert resolved == 1
+        warnings = [r for r in caplog.records if r.levelno == logging.WARNING]
+        coverage = [r for r in warnings if "no sealed" in r.getMessage()]
+        # One aggregated line for the DXY coverage gap — never one per due row.
+        assert len(coverage) == 1, [r.getMessage() for r in warnings]
+        assert "DXY=2" in coverage[0].getMessage()
+        # The transient-IO warning path is untouched and did not fire here.
+        assert not any("returns window failed" in r.getMessage() for r in warnings)
+
+
 class _FakeArchiveStore:
     """In-memory StorageBackend double for archive read-through tests (#3792)."""
 

@@ -567,7 +567,9 @@ superseder per prior id. Models/engine/io: `digiquant.dashboard.accounting`.
 - Provisional H9 `nav_history` / `positions` remain continuity data and are **never** selected
   as final accounting. Shadow mode (`--shadow` / default) reconciles period return vs legacy
   nav day return without deleting either path; `--dry-run` reports without INSERT. Cold
-  ledger (open lots empty while a positions book exists) declines with exit 3.
+  ledger (open lots empty while a positions book exists) declines with exit 3, as does a
+  negative `closing_cash` on the most recent prior accounting tip (#4105) — no fabricated
+  cash-stub book.
 - Metrics (`refresh_performance_metrics.py`) prefer a finalized period for `pnl_pct` / indexed
   NAV when present; never feed `current_book_lookback` into daily `pnl_pct` (#2598).
 

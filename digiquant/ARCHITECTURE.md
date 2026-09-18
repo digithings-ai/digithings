@@ -387,24 +387,28 @@ touches the container; once the custom-domain route is enabled it can be pinged
 manually:
 `curl -sS https://mcp.digithings.ai/mcp -H 'Accept: application/json'`.
 
-Per-component secrets (`wrangler secret put`, never committed): `FRED_API_KEY`
-plus the four R2 names `R2_ACCOUNT_ID` / `R2_BUCKET` / `R2_ACCESS_KEY_ID` /
+Per-component secrets (`wrangler secret put`, never committed): `FRED_API_KEY`,
+`GLOOMBERB_SESSION_COOKIE` (session-gated digifetch tools, #4260), and the four
+R2 names `R2_ACCOUNT_ID` / `R2_BUCKET` / `R2_ACCESS_KEY_ID` /
 `R2_SECRET_ACCESS_KEY` (same `digithings-archive` bucket as the checkpoint
 archive). The read path is registry-read-only (registry inserts raise) so the
 cron's `CORE_POSTGRES_URI` is deliberately NOT forwarded here.
 `DIGIQUANT_MARKET_DATA_BACKEND` is passed through with no Worker-side default:
 unset/empty keeps the library default (`supabase`); set it to `"r2"`
-explicitly via env for the hosted path. The Gloomberb session cookie is **not**
-forwarded to this container yet (gated digifetch tools answer the typed
-`auth_required`); the operator path and tracked wiring follow-up are in
+explicitly via env for the hosted path. `GLOOMBERB_SESSION_COOKIE` is forwarded
+as container runtime env (#4260), so once the secret is set the gated digifetch
+tools take the session-authenticated path instead of the zero-HTTP typed
+`auth_required`; an unset/empty value preserves that `auth_required` behavior.
+The operator path is in
 [docs/ops/gloomberb-session-cookie.md](../docs/ops/gloomberb-session-cookie.md).
 
-Owner applies the five secrets from `cloudflare/digithings-stack-cloudflare/`
+Owner applies the six secrets from `cloudflare/digithings-stack-cloudflare/`
 (`$VALUE` filled only in the operator's shell history — never in the repo;
 `env -u` per the `CLOUDFLARE_API_TOKEN` trap noted in `wrangler.toml`):
 
 ```bash
 printf '%s' "$VALUE" | env -u CLOUDFLARE_API_TOKEN npx wrangler secret put FRED_API_KEY
+printf '%s' "$VALUE" | env -u CLOUDFLARE_API_TOKEN npx wrangler secret put GLOOMBERB_SESSION_COOKIE
 printf '%s' "$VALUE" | env -u CLOUDFLARE_API_TOKEN npx wrangler secret put R2_ACCOUNT_ID
 printf '%s' "$VALUE" | env -u CLOUDFLARE_API_TOKEN npx wrangler secret put R2_BUCKET
 printf '%s' "$VALUE" | env -u CLOUDFLARE_API_TOKEN npx wrangler secret put R2_ACCESS_KEY_ID
@@ -2264,6 +2268,13 @@ entry until that cutover. Prompt / structured-output walk for the same pass:
     are refused before any widening (#3994). A read-only
    `verify_nav_replay` (no `--write`) step runs after metrics so drift fails
    loudly.
+   **Bookless mark-to-market (#3439):** the scheduled engine step passes
+   `--mark-through <today UTC>`, which extends the replay grid past the last
+   committed book through today. The last book's positions are held (no schedule
+   entry, no fabricated rebalance) and marked at each intervening close, so a
+   failed house run no longer leaves the NAV/PnL series flat. Only the grid is
+   extended — `positions` is never written — so the missing-book signal and the
+   metrics step's exit-3 stale-book alarm are preserved.
   `refresh_performance_metrics.refresh_nav_point` only guards the engine row;
   `pnl_pct` reads the stored engine series (finalized-accounting precedence
   retired — it caused the Sept 2026 scale break); `update_tearsheet.py` no
@@ -2740,6 +2751,13 @@ separately so research nodes never pay the per-ticker decision-artifact token ta
   (`text`/`detail`/…), never from leftover URLs or envelope keys. An `as_of`-only finding
   with no prose is still rejected.
 - Standalone CLI: `python -m digiquant.research.graph` — research-only consumers.
+- **Watchlist parse is the seal's parse (#4301).** `_parse_watchlist_md` delegates to
+  `digiquant.data.prices.fetchers.parse_watchlist` (an absent file still returns `[]`), so the
+  research fan-out excludes the non-sealable macro/header rows `ETF`/`DXY`/`VIX` and keeps
+  hyphenated pairs (`ETH-USD`) exactly as the R2 seal does. `decision_log.resolve_pending`
+  counts due rows whose ticker has no sealed generation and emits **one aggregated WARNING per
+  pass** (a coverage/config gap, not a transient fault) instead of one WARNING per row per run;
+  the transient-IO WARNING path is unchanged. Tolerant-reader contract: #4136/#4139, #4120.
 - Terminal `publish_phase` is wired only when `deps.publish` is provided;
   the chain orchestrator passes `None` so publish runs once at the end (research artifacts).
 - Web grounding pre-pass for `live_search` segments (#3853 / #3859): `fetch_web_grounding`
@@ -3466,8 +3484,12 @@ that metrics/attribution job order cannot alter meaning.
 - **Finalizer**: `digiquant/scripts/research/finalize_period_accounting.py` — assembles ledger
   fills/lots + marks, runs the engine, persists, shadow-reconciles vs provisional H9 nav
   day return. Flags: `--date`, `--dry-run` (no INSERT), `--shadow` (default persist +
-  reconcile). Mode also via `DIGIQUANT_ACCOUNTING_FINALIZER` / `--mode` (`off` no-op). Cold
-  ledger declines with exit 3 (no partial final). Wired ahead of metrics in
+  reconcile). Mode also via `DIGIQUANT_ACCOUNTING_FINALIZER` / `--mode` (`off` no-op).
+  Declines with exit 3 (no write, no partial final) when the ledger is cold, or when the
+  most recent prior accounting tip closes at a negative `closing_cash` (#4105) — the
+  latter previously fell through to a `nav * cash_pct / 100` cash-only stub (2026-08-26
+  NAV 15.13 vs stitched 101.77), so it now declines instead of fabricating a book. Wired
+  ahead of metrics in
   `pipeline-research-metrics.yml` (`continue-on-error` while shadowing). Holding-lot reads
   page via PostgREST `.range` (`_LOT_PAGE_SIZE=1000`) so closed-lot history cannot silently
   truncate the opening book (#2776).
