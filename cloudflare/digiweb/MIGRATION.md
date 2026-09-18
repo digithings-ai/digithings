@@ -123,11 +123,12 @@ Wave 4 (#4306) closed the last capability gaps (kit Table `numeric`/`density`
 and `TableRowHeader`, kit Select `SelectPopup`/`SelectItemIndicator`, kit Badge
 tones), re-pointed the seven dashboard twelve-x `Sheet` imports onto the kit,
 and deleted the controls files that then had zero consumers — `Avatar`,
-`Badge`, `Label`, `Sheet`, `Collapsible` — plus digichat's four dead `ui/`
-wrappers and the second gallery-thread component library. The controls layer is
-now a keep-list (Table, Select, Dialog, DropdownMenu, Tooltip, EmptyState,
-Skeleton, NavButtons, Selection/radio, DatePager, Field, Slider, Breadcrumbs,
-Pagination, SearchBar, TagsInput). Proof route:
+`Badge`, `Sheet`, `Collapsible` — plus digichat's four dead `ui/` wrappers and
+the second gallery-thread component library. `Label` was **not** deleted: it is
+retained private for its `Field` consumer, so its `ctl-label-ref` CSS stays live.
+The controls layer is now a keep-list (Table, Select, Dialog, DropdownMenu,
+Tooltip, EmptyState, Skeleton, NavButtons, Selection/radio, DatePager, Field,
+Label, Slider, Breadcrumbs, Pagination, SearchBar, TagsInput). Proof route:
 `reference/app/(gallery)/ui/page.tsx` (dark, light, and a scoped livery).
 
 ## Promotion playbook (v2 — the #1414 epic shape)

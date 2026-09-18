@@ -159,10 +159,16 @@ function EmptyTrace({ state, date }: { state: Exclude<PipelineTraceResult['state
 
 function TraceEvent({ event }: { event: PipelineRunEvent }) {
   const needsAttention = event.status === 'error' || event.retry_count > 0;
+  // Controlled disclosure: the open state is seeded from the dynamic
+  // `needsAttention` (error/retry events start open) and the trigger can still
+  // toggle it — preserving the original controlled `<details open>` contract
+  // rather than dropping the value into an uncontrolled `defaultOpen`.
+  const [open, setOpen] = useState(needsAttention);
   return (
     <Collapsible
       data-testid="pipeline-trace-event"
-      defaultOpen={needsAttention || undefined}
+      open={open}
+      onOpenChange={setOpen}
       className={`group border-b border-hair last:border-b-0 ${
         event.status === 'error' ? 'bg-down/[0.04]' : needsAttention ? 'bg-warn/[0.04]' : ''
       }`}

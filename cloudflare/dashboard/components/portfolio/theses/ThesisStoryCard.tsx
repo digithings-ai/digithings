@@ -47,6 +47,10 @@ function deliberationHref(ticker: string): string {
  * the confirm/break criteria, and the vehicles expressing the view. Closed by
  * default — callers control which thesis opens via the `defaultOpen` prop to
  * keep the disclosure spine scannable (#1607).
+ *
+ * Note: `defaultOpen` is the uncontrolled initial state only (the `Collapsible`
+ * kit spelling of the old `<details open={defaultOpen}>`); no caller passes it
+ * today, so every card starts closed and later prop changes do not re-open it.
  */
 export function ThesisStoryCard({
   story,

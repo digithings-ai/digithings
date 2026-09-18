@@ -118,7 +118,7 @@ export default function DecisionAudit({
           >
             <SelectTrigger
               aria-label="Filter by stance"
-              className="h-9 border-hair bg-surface px-3 capitalize text-ink"
+              className="h-9 border-hair bg-surface px-3 text-xs capitalize text-ink"
             >
               <SelectValue />
             </SelectTrigger>
@@ -137,7 +137,7 @@ export default function DecisionAudit({
           >
             <SelectTrigger
               aria-label="Filter by status"
-              className="h-9 border-hair bg-surface px-3 text-ink"
+              className="h-9 border-hair bg-surface px-3 text-xs text-ink"
             >
               <SelectValue />
             </SelectTrigger>
@@ -154,14 +154,14 @@ export default function DecisionAudit({
         <Table className="min-w-[860px] text-sm tabular-nums">
           <TableHeader>
             <TableRow className="text-left font-mono text-[11px] uppercase text-ink-mute hover:bg-transparent">
-              <TableHead className="px-4 py-2.5 font-normal">Date</TableHead>
-              <TableHead className="py-2.5 pr-4 font-normal">Ticker</TableHead>
-              <TableHead className="py-2.5 pr-4 font-normal">Stance</TableHead>
-              <TableHead numeric className="py-2.5 pr-4 font-normal">Conviction</TableHead>
-              <TableHead numeric className="py-2.5 pr-4 font-normal">Return</TableHead>
-              <TableHead numeric className="py-2.5 pr-4 font-normal">Raw alpha</TableHead>
-              <TableHead numeric className="py-2.5 pr-4 font-normal">Decision edge</TableHead>
-              <TableHead className="py-2.5 pr-4 font-normal">Reasoning</TableHead>
+              <TableHead className="h-auto px-4 py-2.5 font-normal">Date</TableHead>
+              <TableHead className="h-auto py-2.5 pr-4 font-normal">Ticker</TableHead>
+              <TableHead className="h-auto py-2.5 pr-4 font-normal">Stance</TableHead>
+              <TableHead numeric className="h-auto py-2.5 pr-4 font-normal">Conviction</TableHead>
+              <TableHead numeric className="h-auto py-2.5 pr-4 font-normal">Return</TableHead>
+              <TableHead numeric className="h-auto py-2.5 pr-4 font-normal">Raw alpha</TableHead>
+              <TableHead numeric className="h-auto py-2.5 pr-4 font-normal">Decision edge</TableHead>
+              <TableHead className="h-auto py-2.5 pr-4 font-normal">Reasoning</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>

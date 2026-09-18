@@ -112,7 +112,7 @@ function SortHeader({
   return (
     <TableHead
       numeric={align === 'right'}
-      className="px-3 py-2 font-medium"
+      className="h-auto px-3 py-2 font-medium"
       title={title}
       aria-sort={active ? (sortDir === 'asc' ? 'ascending' : 'descending') : 'none'}
     >
@@ -376,7 +376,7 @@ export default function TradesTab({
                       align="right"
                     />
                     <SortHeader label="Result" sortKey="result" activeKey={sortKey} sortDir={sortDir} onSort={onSort} />
-                    <TableHead className="px-3 py-2 text-left font-medium">Status</TableHead>
+                    <TableHead className="h-auto px-3 py-2 text-left font-medium">Status</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody className="divide-y divide-hair">

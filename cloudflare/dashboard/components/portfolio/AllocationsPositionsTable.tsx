@@ -96,11 +96,11 @@ export default function AllocationsPositionsTable(props: {
           </colgroup>
           <TableHeader className="sticky top-0 z-10 bg-surface">
             <TableRow className="border-hair text-[0.58rem] font-normal uppercase tracking-[0.1em] text-ink-mute hover:bg-transparent">
-              <TableHead className="py-[0.7rem] pl-2 pr-2 font-normal md:pl-4">Holding</TableHead>
-              <TableHead className="hidden px-3 py-[0.7rem] font-normal sm:table-cell">Category</TableHead>
-              <TableHead numeric className="px-2 py-[0.7rem] font-normal md:px-3">Weight / target</TableHead>
-              <TableHead numeric className="px-2 py-[0.7rem] font-normal md:px-3">Stop ↔ target</TableHead>
-              <TableHead numeric className="px-2 py-[0.7rem] font-normal md:px-3">
+              <TableHead className="h-auto py-[0.7rem] pl-2 pr-2 font-normal md:pl-4">Holding</TableHead>
+              <TableHead className="h-auto hidden px-3 py-[0.7rem] font-normal sm:table-cell">Category</TableHead>
+              <TableHead numeric className="h-auto px-2 py-[0.7rem] font-normal md:px-3">Weight / target</TableHead>
+              <TableHead numeric className="h-auto px-2 py-[0.7rem] font-normal md:px-3">Stop ↔ target</TableHead>
+              <TableHead numeric className="h-auto px-2 py-[0.7rem] font-normal md:px-3">
                 <span className="sr-only">Dossier</span>
               </TableHead>
             </TableRow>

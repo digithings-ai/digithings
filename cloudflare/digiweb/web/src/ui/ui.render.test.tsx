@@ -21,7 +21,6 @@ import {
   Select,
   SelectContent,
   SelectItem,
-  SelectItemIndicator,
   SelectPopup,
   SelectTrigger,
   SelectValue,
@@ -294,17 +293,14 @@ describe("vendored ui kit renders server-side", () => {
     expect(html).not.toContain('data-slot="select-content"');
   });
 
-  it("SelectPopup composes items inline and SelectItemIndicator renders its check", () => {
+  it("SelectPopup composes items inline and SelectItem renders exactly one indicator", () => {
     const html = renderToStaticMarkup(
       <Select defaultValue="aapl" defaultOpen>
         <SelectTrigger>
           <SelectValue placeholder="Ticker" />
         </SelectTrigger>
         <SelectPopup>
-          <SelectItem value="aapl">
-            AAPL
-            <SelectItemIndicator />
-          </SelectItem>
+          <SelectItem value="aapl">AAPL</SelectItem>
           <SelectItem value="msft">MSFT</SelectItem>
         </SelectPopup>
       </Select>,
@@ -315,7 +311,11 @@ describe("vendored ui kit renders server-side", () => {
     expect(html).toContain('data-slot="select-trigger"');
     expect(html).toContain('data-slot="select-popup"');
     expect(html).toContain('data-slot="select-item"');
-    expect(html).toContain('data-slot="select-item-indicator"');
+    // SelectItem renders its own SelectItemIndicator; call sites must NOT pass
+    // a second <SelectItemIndicator/> child (the P1 report's double-render
+    // warning). SSR mounts only the selected item's indicator — assert the
+    // exact count, not mere presence.
+    expect(html.match(/data-slot="select-item-indicator"/g) ?? []).toHaveLength(1);
     expect(html).toContain("AAPL");
     expect(html).toContain("MSFT");
   });

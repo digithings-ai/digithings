@@ -116,11 +116,11 @@ export function PmRebalancePanel({ payload }: { payload: Record<string, unknown>
             <Table className="text-left text-xs border-collapse">
               <TableHeader>
                 <TableRow className="border-hair text-ink-mute hover:bg-transparent">
-                  <TableHead className="py-2 pr-3 font-medium">Ticker</TableHead>
-                  <TableHead className="py-2 pr-3 font-medium">Action</TableHead>
-                  <TableHead numeric className="py-2 pr-3 font-medium">Current</TableHead>
-                  <TableHead numeric className="py-2 pr-3 font-medium">Target</TableHead>
-                  <TableHead className="py-2 font-medium">Rationale</TableHead>
+                  <TableHead className="h-auto py-2 pr-3 font-medium">Ticker</TableHead>
+                  <TableHead className="h-auto py-2 pr-3 font-medium">Action</TableHead>
+                  <TableHead numeric className="h-auto py-2 pr-3 font-medium">Current</TableHead>
+                  <TableHead numeric className="h-auto py-2 pr-3 font-medium">Target</TableHead>
+                  <TableHead className="h-auto py-2 font-medium">Rationale</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>

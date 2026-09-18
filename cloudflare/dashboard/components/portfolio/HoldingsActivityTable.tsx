@@ -128,13 +128,13 @@ export default function HoldingsActivityTable({ events }: { events: DashboardPos
           <Table className="table-fixed border-collapse font-mono text-[0.78rem] [font-variant-numeric:tabular-nums]">
             <TableHeader className="sticky top-0 z-10 bg-surface">
               <TableRow className="border-hair text-[0.58rem] uppercase tracking-[0.1em] text-ink-mute hover:bg-transparent">
-                <TableHead className="w-[22%] px-2 py-2.5 font-normal sm:px-4 md:w-auto">Date</TableHead>
-                <TableHead className="w-[14%] px-2 py-2.5 font-normal sm:px-3 md:w-auto">Ticker</TableHead>
-                <TableHead className="w-[14%] px-2 py-2.5 font-normal sm:px-3 md:w-auto">Action</TableHead>
-                <TableHead numeric className="w-[16%] px-2 py-2.5 font-normal sm:px-3 md:w-auto">Change</TableHead>
-                <TableHead numeric className="hidden px-3 py-2.5 font-normal lg:table-cell">Entry</TableHead>
-                <TableHead numeric className="hidden px-3 py-2.5 font-normal md:table-cell">Fill</TableHead>
-                <TableHead numeric className="w-[18%] px-2 py-2.5 font-normal sm:px-3 md:w-auto">
+                <TableHead className="h-auto w-[22%] px-2 py-2.5 font-normal sm:px-4 md:w-auto">Date</TableHead>
+                <TableHead className="h-auto w-[14%] px-2 py-2.5 font-normal sm:px-3 md:w-auto">Ticker</TableHead>
+                <TableHead className="h-auto w-[14%] px-2 py-2.5 font-normal sm:px-3 md:w-auto">Action</TableHead>
+                <TableHead numeric className="h-auto w-[16%] px-2 py-2.5 font-normal sm:px-3 md:w-auto">Change</TableHead>
+                <TableHead numeric className="h-auto hidden px-3 py-2.5 font-normal lg:table-cell">Entry</TableHead>
+                <TableHead numeric className="h-auto hidden px-3 py-2.5 font-normal md:table-cell">Fill</TableHead>
+                <TableHead numeric className="h-auto w-[18%] px-2 py-2.5 font-normal sm:px-3 md:w-auto">
                   Realized
                 </TableHead>
               </TableRow>

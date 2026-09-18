@@ -163,6 +163,7 @@ export function CurrencyDrilldownPanelBody({
                 key={`${brief.source_file}-${brief.run_date}`}
                 type="button"
                 variant="ghost"
+                data-testid="brief-row"
                 onClick={() => onOpenBrief(brief.source_file, brief.run_date)}
                 className="block h-auto w-full justify-start whitespace-normal rounded-none border border-hair bg-surface p-3 text-left text-sm font-normal transition-colors hover:border-accent hover:bg-surface/80"
               >

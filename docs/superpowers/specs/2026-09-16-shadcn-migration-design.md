@@ -196,8 +196,9 @@ overrides); no new app-local families; every removal proves no consumer.
   surfaces on the kit and removed the second component library
   (`gallery-thread/ui/*` primitives on the kit; digichat-ui `CopyButton` deduped
   to the shared `ChatCopyButton`). The cleanup (W4-J) then deleted the controls
-  files that had zero consumers (`Avatar`, `Badge`, `Label`, `Sheet`,
-  `Collapsible`) and the orphan `dashboard-workspace-reference.tsx`. What remains
+  files that had zero consumers (`Avatar`, `Badge`, `Sheet`, `Collapsible`) and
+  the orphan `dashboard-workspace-reference.tsx`; `Label` survives, retained
+  private for its `Field` consumer with its `ctl-label-ref` CSS live. What remains
   deferred is tracked in **#4306**: kit listbox/menu/radiogroup item parts, a kit
   `hideArrow` prop, the kit Table's `overflow-x-auto` vs sticky headers, and
   `SegmentedControl` wrapping on very narrow viewports.

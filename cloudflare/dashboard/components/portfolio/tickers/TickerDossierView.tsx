@@ -439,12 +439,12 @@ export default function TickerDossierView({
                   <Table className="min-w-[760px] text-sm tabular-nums">
                     <TableHeader>
                       <TableRow className="border-hair text-left font-mono text-[11px] uppercase text-ink-mute hover:bg-transparent">
-                        <TableHead className="px-4 py-2.5 font-normal md:px-5">Date</TableHead>
-                        <TableHead className="py-2.5 pr-4 font-normal">Action</TableHead>
-                        <TableHead numeric className="py-2.5 pr-4 font-normal">Allocation</TableHead>
-                        <TableHead numeric className="py-2.5 pr-4 font-normal">Change</TableHead>
-                        <TableHead numeric className="py-2.5 pr-4 font-normal">Price</TableHead>
-                        <TableHead className="py-2.5 pr-4 font-normal">Reason</TableHead>
+                        <TableHead className="h-auto px-4 py-2.5 font-normal md:px-5">Date</TableHead>
+                        <TableHead className="h-auto py-2.5 pr-4 font-normal">Action</TableHead>
+                        <TableHead numeric className="h-auto py-2.5 pr-4 font-normal">Allocation</TableHead>
+                        <TableHead numeric className="h-auto py-2.5 pr-4 font-normal">Change</TableHead>
+                        <TableHead numeric className="h-auto py-2.5 pr-4 font-normal">Price</TableHead>
+                        <TableHead className="h-auto py-2.5 pr-4 font-normal">Reason</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>

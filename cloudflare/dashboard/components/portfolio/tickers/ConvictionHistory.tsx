@@ -66,13 +66,13 @@ export default function ConvictionHistory({ decisions }: { decisions: DecisionLo
       <Table className="min-w-[760px] text-sm tabular-nums">
         <TableHeader>
           <TableRow className="border-hair text-left font-mono text-[11px] uppercase text-ink-mute hover:bg-transparent">
-            <TableHead className="px-4 py-2.5 font-normal md:px-5">Date</TableHead>
-            <TableHead className="py-2.5 pr-4 font-normal">View</TableHead>
-            <TableHead numeric className="py-2.5 pr-4 font-normal">Conviction</TableHead>
-            <TableHead className="py-2.5 pr-4 font-normal">Outcome</TableHead>
-            <TableHead numeric className="py-2.5 pr-4 font-normal">Return</TableHead>
-            <TableHead numeric className="py-2.5 pr-4 font-normal">Decision edge</TableHead>
-            <TableHead numeric className="py-2.5 pr-4 font-normal">Source</TableHead>
+            <TableHead className="h-auto px-4 py-2.5 font-normal md:px-5">Date</TableHead>
+            <TableHead className="h-auto py-2.5 pr-4 font-normal">View</TableHead>
+            <TableHead numeric className="h-auto py-2.5 pr-4 font-normal">Conviction</TableHead>
+            <TableHead className="h-auto py-2.5 pr-4 font-normal">Outcome</TableHead>
+            <TableHead numeric className="h-auto py-2.5 pr-4 font-normal">Return</TableHead>
+            <TableHead numeric className="h-auto py-2.5 pr-4 font-normal">Decision edge</TableHead>
+            <TableHead numeric className="h-auto py-2.5 pr-4 font-normal">Source</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>

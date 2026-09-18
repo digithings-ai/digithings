@@ -187,11 +187,11 @@ export default function DecisionScorecardTab({
         <Table className="text-sm tabular-nums">
           <TableHeader>
             <TableRow className="text-left text-xs text-ink-mute border-hair hover:bg-transparent">
-              <TableHead className="py-2 pr-4 font-medium">Bucket</TableHead>
-              <TableHead numeric className="py-2 pr-4 font-medium">N</TableHead>
-              <TableHead numeric className="py-2 pr-4 font-medium">Mean alpha</TableHead>
-              <TableHead numeric className="py-2 pr-4 font-medium">Hit rate</TableHead>
-              <TableHead numeric className="py-2 font-medium">Mean conviction</TableHead>
+              <TableHead className="h-auto py-2 pr-4 font-medium">Bucket</TableHead>
+              <TableHead numeric className="h-auto py-2 pr-4 font-medium">N</TableHead>
+              <TableHead numeric className="h-auto py-2 pr-4 font-medium">Mean alpha</TableHead>
+              <TableHead numeric className="h-auto py-2 pr-4 font-medium">Hit rate</TableHead>
+              <TableHead numeric className="h-auto py-2 font-medium">Mean conviction</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -221,13 +221,13 @@ export default function DecisionScorecardTab({
           <Table className="text-sm tabular-nums">
             <TableHeader>
               <TableRow className="text-left text-xs text-ink-mute border-hair hover:bg-transparent">
-                <TableHead className="py-2 pr-4 font-medium">Date</TableHead>
-                <TableHead className="py-2 pr-4 font-medium">Ticker</TableHead>
-                <TableHead className="py-2 pr-4 font-medium">Stance</TableHead>
-                <TableHead numeric className="py-2 pr-4 font-medium">Conviction</TableHead>
-                <TableHead numeric className="py-2 pr-4 font-medium">Return</TableHead>
-                <TableHead numeric className="py-2 pr-4 font-medium">Alpha</TableHead>
-                <TableHead className="py-2 font-medium">Reasoning</TableHead>
+                <TableHead className="h-auto py-2 pr-4 font-medium">Date</TableHead>
+                <TableHead className="h-auto py-2 pr-4 font-medium">Ticker</TableHead>
+                <TableHead className="h-auto py-2 pr-4 font-medium">Stance</TableHead>
+                <TableHead numeric className="h-auto py-2 pr-4 font-medium">Conviction</TableHead>
+                <TableHead numeric className="h-auto py-2 pr-4 font-medium">Return</TableHead>
+                <TableHead numeric className="h-auto py-2 pr-4 font-medium">Alpha</TableHead>
+                <TableHead className="h-auto py-2 font-medium">Reasoning</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>

@@ -174,10 +174,10 @@ export default function DecisionEffectiveness({
           <Table className="mt-4 text-sm tabular-nums">
             <TableHeader>
               <TableRow className="text-left font-mono text-[11px] uppercase text-ink-mute hover:bg-transparent">
-                <TableHead className="py-2 pr-3 font-normal">Stance</TableHead>
-                <TableHead numeric className="py-2 pr-3 font-normal">N</TableHead>
-                <TableHead numeric className="py-2 pr-3 font-normal">Mean edge</TableHead>
-                <TableHead numeric className="py-2 font-normal">Hit rate</TableHead>
+                <TableHead className="h-auto py-2 pr-3 font-normal">Stance</TableHead>
+                <TableHead numeric className="h-auto py-2 pr-3 font-normal">N</TableHead>
+                <TableHead numeric className="h-auto py-2 pr-3 font-normal">Mean edge</TableHead>
+                <TableHead numeric className="h-auto py-2 font-normal">Hit rate</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>

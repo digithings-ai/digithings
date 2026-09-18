@@ -142,7 +142,7 @@ export function ConsensusDataTable({
         <Table className="min-w-[880px]">
           <TableHeader>
             <TableRow>
-              <TableHead className="px-3.5 py-2.5">
+              <TableHead className="h-auto px-3.5 py-2.5">
                 <Button
                   type="button"
                   variant="ghost"
@@ -153,7 +153,7 @@ export function ConsensusDataTable({
                   Currency
                 </Button>
               </TableHead>
-              <TableHead numeric className="px-3.5 py-2.5">
+              <TableHead numeric className="h-auto px-3.5 py-2.5">
                 <Button
                   type="button"
                   variant="ghost"
@@ -164,7 +164,7 @@ export function ConsensusDataTable({
                   Current
                 </Button>
               </TableHead>
-              <TableHead numeric className="px-3.5 py-2.5">
+              <TableHead numeric className="h-auto px-3.5 py-2.5">
                 <Button
                   type="button"
                   variant="ghost"
@@ -176,7 +176,7 @@ export function ConsensusDataTable({
                   Average
                 </Button>
               </TableHead>
-              <TableHead numeric className="px-3.5 py-2.5">
+              <TableHead numeric className="h-auto px-3.5 py-2.5">
                 <Button
                   type="button"
                   variant="ghost"
@@ -187,7 +187,7 @@ export function ConsensusDataTable({
                   Prior Δ
                 </Button>
               </TableHead>
-              <TableHead numeric className="px-3.5 py-2.5">
+              <TableHead numeric className="h-auto px-3.5 py-2.5">
                 <Button
                   type="button"
                   variant="ghost"
@@ -198,7 +198,7 @@ export function ConsensusDataTable({
                   Opinions
                 </Button>
               </TableHead>
-              <TableHead numeric className="px-3.5 py-2.5">
+              <TableHead numeric className="h-auto px-3.5 py-2.5">
                 <Button
                   type="button"
                   variant="ghost"
@@ -209,7 +209,7 @@ export function ConsensusDataTable({
                   Agreement
                 </Button>
               </TableHead>
-              <TableHead numeric className="px-3.5 py-2.5">
+              <TableHead numeric className="h-auto px-3.5 py-2.5">
                 <Button
                   type="button"
                   variant="ghost"
@@ -221,7 +221,7 @@ export function ConsensusDataTable({
                   Conf
                 </Button>
               </TableHead>
-              <TableHead numeric className="px-3.5 py-2.5">
+              <TableHead numeric className="h-auto px-3.5 py-2.5">
                 <Button
                   type="button"
                   variant="ghost"
@@ -233,13 +233,13 @@ export function ConsensusDataTable({
                   n_eff
                 </Button>
               </TableHead>
-              <TableHead className="px-3.5 py-2.5 text-[10px] font-semibold uppercase tracking-wider text-ink-mute">
+              <TableHead className="h-auto px-3.5 py-2.5 text-[10px] font-semibold uppercase tracking-wider text-ink-mute">
                 Score
               </TableHead>
-              <TableHead className="px-3.5 py-2.5 text-center text-[10px] font-semibold uppercase tracking-wider text-ink-mute">
+              <TableHead className="h-auto px-3.5 py-2.5 text-center text-[10px] font-semibold uppercase tracking-wider text-ink-mute">
                 Bias
               </TableHead>
-              <TableHead className="px-3.5 py-2.5 text-center text-[10px] font-semibold uppercase tracking-wider text-ink-mute">
+              <TableHead className="h-auto px-3.5 py-2.5 text-center text-[10px] font-semibold uppercase tracking-wider text-ink-mute">
                 Details
               </TableHead>
             </TableRow>

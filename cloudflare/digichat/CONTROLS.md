@@ -52,9 +52,8 @@ chat-dress defaults sit in `@layer components` (call-site utilities win),
 state/structural rules are unlayered (they keep winning). Verified against
 the compiled `next build` output:
 `.ctl-*` defaults → `@layer components`, `.ctl-*:hover|:focus-visible|
-[aria-*]|[data-size]|[data-theme=dark]` + `.ctl-sheet[data-side=*]`
-geometry → unlayered, call-site `p-8`/`text-[9px]`/`h-6`/`sm:max-w-lg` →
-`@layer utilities`.
+[aria-*]|[data-size]|[data-theme=dark]` state/structural rules → unlayered,
+call-site `p-8`/`text-[9px]`/`h-6`/`sm:max-w-lg` → `@layer utilities`.
 
 Notably preserved (all verified against Tailwind v4.2.2 compiled
 specificity/order of the OLD dress):

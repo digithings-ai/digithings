@@ -168,13 +168,13 @@ export default function AttributionTab({
         <Table className="text-sm tabular-nums">
           <TableHeader>
             <TableRow className="text-left text-xs text-ink-mute border-hair hover:bg-transparent">
-              <TableHead className="py-2 pr-4 font-medium">Ticker</TableHead>
-              <TableHead className="py-2 pr-4 font-medium">Sector</TableHead>
-              <TableHead numeric className="py-2 pr-4 font-medium">Weight</TableHead>
-              <TableHead numeric className="py-2 pr-4 font-medium">Return</TableHead>
-              <TableHead numeric className="py-2 pr-4 font-medium">Contribution</TableHead>
-              <TableHead numeric className="py-2 pr-4 font-medium">Selection</TableHead>
-              <TableHead numeric className="py-2 font-medium">Total</TableHead>
+              <TableHead className="h-auto py-2 pr-4 font-medium">Ticker</TableHead>
+              <TableHead className="h-auto py-2 pr-4 font-medium">Sector</TableHead>
+              <TableHead numeric className="h-auto py-2 pr-4 font-medium">Weight</TableHead>
+              <TableHead numeric className="h-auto py-2 pr-4 font-medium">Return</TableHead>
+              <TableHead numeric className="h-auto py-2 pr-4 font-medium">Contribution</TableHead>
+              <TableHead numeric className="h-auto py-2 pr-4 font-medium">Selection</TableHead>
+              <TableHead numeric className="h-auto py-2 font-medium">Total</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>

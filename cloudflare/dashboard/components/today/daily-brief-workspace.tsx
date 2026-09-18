@@ -671,10 +671,10 @@ export function DailyBriefWorkspace({
                   <Table ref={bookTableRef} className="min-w-[34rem] border-collapse text-left">
                     <TableHeader>
                       <TableRow className="text-[10px] font-bold uppercase tracking-widest text-ink-mute hover:bg-transparent">
-                        <TableHead className="py-2 pr-3 font-bold">Holding</TableHead>
-                        <TableHead numeric className="px-3 py-2 font-bold">Weight</TableHead>
-                        <TableHead numeric className="px-3 py-2 font-bold">Change</TableHead>
-                        <TableHead numeric className="py-2 pl-3 pr-4 font-bold">Day</TableHead>
+                        <TableHead className="h-auto py-2 pr-3 font-bold">Holding</TableHead>
+                        <TableHead numeric className="h-auto px-3 py-2 font-bold">Weight</TableHead>
+                        <TableHead numeric className="h-auto px-3 py-2 font-bold">Change</TableHead>
+                        <TableHead numeric className="h-auto py-2 pl-3 pr-4 font-bold">Day</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody className="divide-y divide-hair/70">

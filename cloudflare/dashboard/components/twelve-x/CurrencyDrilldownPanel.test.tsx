@@ -236,11 +236,15 @@ describe('CurrencyDrilldownPanelBody', () => {
     expect(html).toContain('Broker A');
     // W4-A2: the brief rows are the kit Button now. twMerge drops the
     // duplicate `rounded-none`/`border` the button base cva already carries,
-    // so the one contiguous pin became a per-class pin (same guarantees,
-    // order-independent) rather than weakening.
-    expect(html).toContain('w-full');
-    expect(html).toContain('rounded-none');
-    expect(html).toContain('border-hair');
+    // so assert the surviving classes on the *same* element rather than as
+    // three loose substrings any node could satisfy.
+    const briefRows = html.match(/<button[^>]*data-testid="brief-row"[^>]*>/g) ?? [];
+    expect(briefRows).toHaveLength(2);
+    for (const row of briefRows) {
+      expect(row).toContain('w-full');
+      expect(row).toContain('rounded-none');
+      expect(row).toContain('border-hair');
+    }
   });
 
   it('shows em dash when no confluence data available', () => {

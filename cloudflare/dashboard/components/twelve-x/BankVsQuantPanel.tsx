@@ -90,10 +90,10 @@ export function BankVsQuantPanel({
       <Table className="min-w-[560px]">
         <TableHeader>
           <TableRow className="text-[10px] uppercase tracking-wider text-ink-mute">
-            <TableHead className="px-3 py-2 text-ink-mute">Currency</TableHead>
-            <TableHead className="px-3 py-2 text-ink-mute">Street</TableHead>
-            <TableHead className="px-3 py-2 text-ink-mute">Quant (PMT)</TableHead>
-            <TableHead numeric className="px-3 py-2 text-ink-mute">
+            <TableHead className="h-auto px-3 py-2 text-ink-mute">Currency</TableHead>
+            <TableHead className="h-auto px-3 py-2 text-ink-mute">Street</TableHead>
+            <TableHead className="h-auto px-3 py-2 text-ink-mute">Quant (PMT)</TableHead>
+            <TableHead numeric className="h-auto px-3 py-2 text-ink-mute">
               Gap
             </TableHead>
           </TableRow>

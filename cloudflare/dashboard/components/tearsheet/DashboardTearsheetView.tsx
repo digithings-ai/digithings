@@ -64,11 +64,11 @@ function HoldingsPerformanceTable({
       <Table className="min-w-[680px] border-collapse font-mono text-[0.78rem] [font-variant-numeric:tabular-nums]">
         <TableHeader className="sticky top-0 z-10 bg-surface print:static">
           <TableRow className="border-hair text-[0.58rem] uppercase tracking-[0.1em] text-ink-mute hover:bg-transparent">
-            <TableHead className="px-5 py-2.5 font-normal">Holding</TableHead>
-            <TableHead className="px-3 py-2.5 font-normal">Category</TableHead>
-            <TableHead numeric className="px-3 py-2.5 font-normal">Weight</TableHead>
-            <TableHead numeric className="px-3 py-2.5 font-normal">Unrealized</TableHead>
-            <TableHead numeric className="px-5 py-2.5 font-normal">As of</TableHead>
+            <TableHead className="h-auto px-5 py-2.5 font-normal">Holding</TableHead>
+            <TableHead className="h-auto px-3 py-2.5 font-normal">Category</TableHead>
+            <TableHead numeric className="h-auto px-3 py-2.5 font-normal">Weight</TableHead>
+            <TableHead numeric className="h-auto px-3 py-2.5 font-normal">Unrealized</TableHead>
+            <TableHead numeric className="h-auto px-5 py-2.5 font-normal">As of</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody className="divide-y divide-hair">

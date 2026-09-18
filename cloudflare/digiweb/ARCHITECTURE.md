@@ -151,12 +151,14 @@ those gaps — Table `numeric`/`density` and the new `TableRowHeader`
 tones — so the consumers still pinned to `components/controls/*` for those
 parts can move onto the kit. Wave 4's cleanup (W4-J) then re-pointed the seven
 dashboard twelve-x `Sheet` imports onto the kit and deleted the controls files
-with zero consumers (`Avatar`, `Badge`, `Label`, `Sheet`, `Collapsible`), the
-second `gallery-thread` component library, digichat's four dead `ui/` wrappers,
-and the orphan `dashboard-workspace-reference.tsx`. The controls layer is now a
-keep-list (Table, Select, Dialog, DropdownMenu, Tooltip, EmptyState, Skeleton,
-NavButtons, Selection/radio, DatePager, Field, Slider, Breadcrumbs, Pagination,
-SearchBar, TagsInput); deferred kit items live in #4306.
+with zero consumers (`Avatar`, `Badge`, `Sheet`, `Collapsible`), the second
+`gallery-thread` component library, digichat's four dead `ui/` wrappers, and the
+orphan `dashboard-workspace-reference.tsx`. `Label` was **not** deleted — it is
+retained private for its `Field` consumer, so its `ctl-label-ref` CSS stays live.
+The controls layer is now a keep-list (Table, Select, Dialog, DropdownMenu,
+Tooltip, EmptyState, Skeleton, NavButtons, Selection/radio, DatePager, Field,
+Label, Slider, Breadcrumbs, Pagination, SearchBar, TagsInput); deferred kit items
+live in #4306.
 
 | Family | Components | CSS subpath |
 | ------ | ---------- | ----------- |
