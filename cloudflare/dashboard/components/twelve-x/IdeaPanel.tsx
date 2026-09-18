@@ -2,8 +2,7 @@
 
 import { useMemo, useState } from 'react';
 import { FileText, Target } from 'lucide-react';
-import { Sheet, SheetContent, SheetTitle } from '@digithings/web';
-import { Button } from '@digithings/web/ui';
+import { Button, Sheet, SheetContent, SheetTitle } from '@digithings/web/ui';
 
 import DetailPanelHeaderActions, {
   detailPanelSheetSizeClass,

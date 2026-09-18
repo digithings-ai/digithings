@@ -1,8 +1,7 @@
 'use client';
 
 import { Clock, ExternalLink, X } from 'lucide-react';
-import { Sheet, SheetContent, SheetTitle } from '@digithings/web';
-import { Button } from '@digithings/web/ui';
+import { Button, Sheet, SheetContent, SheetTitle } from '@digithings/web/ui';
 
 import type { MatrixCell } from '@/lib/twelve-x/types';
 import { directionStyle } from '@/lib/twelve-x/matrix-format';

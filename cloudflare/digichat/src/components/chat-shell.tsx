@@ -451,11 +451,11 @@ export function ChatShell({
     >
       <aside className="app-sidebar" aria-label="App sidebar" data-expanded={!collapsed}>
         <div className="app-sidebar-body">
-          <div className="dc-sidebar-brand">
-            <div className="dc-sidebar-brand-mark">DT</div>
+          <div>
+            <div>DT</div>
             <div>
-              <div className="dc-sidebar-brand-name">digichat</div>
-              <div className="dc-sidebar-brand-version">v0.1 · digithings</div>
+              <div>digichat</div>
+              <div>v0.1 · digithings</div>
             </div>
           </div>
 
@@ -463,13 +463,12 @@ export function ChatShell({
             type="button"
             variant="outline"
             size="sm"
-            className="dc-sidebar-newchat"
             onClick={newChat}
           >
             + new chat
           </Button>
 
-          <Label className="dc-sidebar-search">
+          <Label>
             <span className="sr-only">Search conversations</span>
             <Input
               type="search"
@@ -482,7 +481,7 @@ export function ChatShell({
           </Label>
 
           {grouped.length === 0 ? (
-            <p className="dc-sidebar-empty" role="status">
+            <p role="status">
               {threadQuery.trim() ? "No chats match that search." : "No chats yet."}
             </p>
           ) : (
@@ -493,7 +492,6 @@ export function ChatShell({
                   {g.items.map((t) => (
                     <li key={t.id} style={{ padding: 0 }}>
                       <div
-                        className={cn("dc-sidebar-thread", t.id === activeId && "is-active")}
                         onClick={() => void openThread(t.id)}
                         onKeyDown={(e) => {
                           if (e.key === "Enter" || e.key === " ") {
@@ -505,10 +503,10 @@ export function ChatShell({
                         tabIndex={0}
                         aria-pressed={t.id === activeId}
                       >
-                        <span className="dc-sidebar-thread-title">
+                        <span>
                           {renamingId === t.id ? (
                             <Input
-                              className="dc-sidebar-rename h-auto"
+                              className="h-auto"
                               value={renameDraft}
                               ref={(el) => {
                                 // No autoFocus: it scroll-jumps the sidebar.
@@ -540,7 +538,7 @@ export function ChatShell({
                             t.title
                           )}
                         </span>
-                        <span className="dc-sidebar-thread-time">{formatTimestamp(t.updatedAt)}</span>
+                        <span>{formatTimestamp(t.updatedAt)}</span>
                         <DropdownMenu>
                           <DropdownMenuTrigger
                             aria-label={`Actions for ${t.title}`}
@@ -582,8 +580,8 @@ export function ChatShell({
             <h3>Commands</h3>
             <ul>
               {SLASH_REFERENCE.map((c) => (
-                <li key={c.cmd} className="dc-sidebar-cmd">
-                  <span className="dc-sidebar-cmd-key">{c.cmd}</span>
+                <li key={c.cmd}>
+                  <span>{c.cmd}</span>
                   <span>{c.hint}</span>
                 </li>
               ))}
@@ -595,7 +593,6 @@ export function ChatShell({
               href="https://digithings.ai"
               target="_blank"
               rel="noreferrer"
-              className="dc-sidebar-cmd"
             >
               <span>digithings.ai</span>
               <span aria-hidden>↗</span>
@@ -604,7 +601,7 @@ export function ChatShell({
               type="button"
               variant="ghost"
               size="sm"
-              className="dc-sidebar-cmd h-auto w-full justify-between"
+              className="h-auto w-full justify-between"
               style={{ background: "transparent", border: "none", cursor: "pointer" }}
               onClick={() => signOut({ callbackUrl: p("/embed") })}
             >

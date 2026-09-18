@@ -2,8 +2,7 @@
 
 import { useMemo } from 'react';
 import { Building2, ExternalLink, X } from 'lucide-react';
-import { Sheet, SheetContent } from '@digithings/web';
-import { Button } from '@digithings/web/ui';
+import { Button, Sheet, SheetContent } from '@digithings/web/ui';
 
 import { MATRIX_COLUMNS } from '@/lib/twelve-x/types';
 import type { MatrixCell } from '@/lib/twelve-x/types';

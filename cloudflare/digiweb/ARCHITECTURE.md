@@ -149,7 +149,14 @@ those gaps — Table `numeric`/`density` and the new `TableRowHeader`
 (`<th scope="row">`), Select composition (`SelectPopup` + exported
 `SelectItemIndicator`), and the Badge `neutral`/`accent`/`warn`/`up`/`down`
 tones — so the consumers still pinned to `components/controls/*` for those
-parts can move onto the kit.
+parts can move onto the kit. Wave 4's cleanup (W4-J) then re-pointed the seven
+dashboard twelve-x `Sheet` imports onto the kit and deleted the controls files
+with zero consumers (`Avatar`, `Badge`, `Label`, `Sheet`, `Collapsible`), the
+second `gallery-thread` component library, digichat's four dead `ui/` wrappers,
+and the orphan `dashboard-workspace-reference.tsx`. The controls layer is now a
+keep-list (Table, Select, Dialog, DropdownMenu, Tooltip, EmptyState, Skeleton,
+NavButtons, Selection/radio, DatePager, Field, Slider, Breadcrumbs, Pagination,
+SearchBar, TagsInput); deferred kit items live in #4306.
 
 | Family | Components | CSS subpath |
 | ------ | ---------- | ----------- |
@@ -173,13 +180,12 @@ not in `MANIFEST.json` — that file is generated from the reference app, and
 package-family indexing is tracked in #4225; discovery is the barrel and
 [MIGRATION.md](MIGRATION.md).
 
-Page-level dashboard composition is specified by
-`reference/components/dashboard-workspace-reference.tsx` on the Finance page.
-Its `dw-*` grammar is deliberately reference-only: a command band establishes
-one primary state, compact metrics add context, and a flat hairline ledger owns
-the working detail. Product apps adapt that composition around their own data
-and interactions rather than introducing generic cards or duplicating existing
-controls such as `TabStrip`, `SegmentedControl`, `Sheet`, and `EmptyState`.
+Page-level dashboard composition is owned by the dashboard app
+(`cloudflare/dashboard`): a command band establishes one primary state, compact
+metrics add context, and a flat hairline ledger owns the working detail. Product
+apps adapt that composition around their own data and interactions rather than
+introducing generic cards or duplicating existing controls such as `TabStrip`,
+`SegmentedControl`, `Sheet`, and `EmptyState`.
 
 Since the canon migration (#1399, 2026-07): apps declare **no local `@theme`
 block** — `web-theme.css` is the one bridge (its `inline` semantics keep scoped

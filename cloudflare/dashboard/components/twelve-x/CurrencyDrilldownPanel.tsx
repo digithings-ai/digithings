@@ -1,8 +1,7 @@
 'use client';
 
 import { X } from 'lucide-react';
-import { Sheet, SheetClose, SheetContent, SheetTitle } from '@digithings/web';
-import { Button } from '@digithings/web/ui';
+import { Button, Sheet, SheetClose, SheetContent, SheetTitle } from '@digithings/web/ui';
 
 import type { ConsensusCurrencyRow } from '@/lib/twelve-x/consensus-view';
 import { fmtNEff } from '@/lib/twelve-x/format';

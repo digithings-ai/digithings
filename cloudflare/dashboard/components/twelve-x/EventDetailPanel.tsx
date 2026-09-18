@@ -1,8 +1,7 @@
 'use client';
 
 import { CalendarClock, ExternalLink, Globe, Users, X } from 'lucide-react';
-import { Sheet, SheetContent } from '@digithings/web';
-import { Button } from '@digithings/web/ui';
+import { Button, Sheet, SheetContent } from '@digithings/web/ui';
 
 import type { FxEconomicCalendarRow } from '@/lib/twelve-x/types';
 import type { MatchedOpinions } from './EventsTab';

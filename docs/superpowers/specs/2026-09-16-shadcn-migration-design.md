@@ -191,6 +191,16 @@ overrides); no new app-local families; every removal proves no consumer.
   only for parts the kit still does not carry (EmptyState, Skeleton,
   NavButtons, Selection/radio, DatePager, Field, Slider, reference-skin
   Tooltip). Auth (`digikey/`) and live-trading paths untouched.
+  **Wave-4 close-out (2026-09-17).** The sweep slices (W4-A1/A2/B/C/D/E/F/G/H/I)
+  put the remaining dashboard, digichat, digichat-ui, digiweb, and reference
+  surfaces on the kit and removed the second component library
+  (`gallery-thread/ui/*` primitives on the kit; digichat-ui `CopyButton` deduped
+  to the shared `ChatCopyButton`). The cleanup (W4-J) then deleted the controls
+  files that had zero consumers (`Avatar`, `Badge`, `Label`, `Sheet`,
+  `Collapsible`) and the orphan `dashboard-workspace-reference.tsx`. What remains
+  deferred is tracked in **#4306**: kit listbox/menu/radiogroup item parts, a kit
+  `hideArrow` prop, the kit Table's `overflow-x-auto` vs sticky headers, and
+  `SegmentedControl` wrapping on very narrow viewports.
   **Accepted scope reduction (2026-09-17).** The Goal ("no native buttons/
   inputs/selects left in app code") is **not** met and is reduced here rather
   than left unowned: wave 3 migrated the file sets named in Tasks 3–5 only, and
