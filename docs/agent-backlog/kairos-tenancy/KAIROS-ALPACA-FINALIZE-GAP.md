@@ -29,7 +29,7 @@ remain blocked.
 | K2 IBKR read-first | Landed | Vendor onboarding human pole |
 | K3 vault | Landed + EF settings | Needs Alpaca secrets for real connect |
 | K4 router + mirror | Landed | Staging chain needs broker + Stripe |
-| K5 notify | Landed; Mailgun loud-fail | `MAILGUN_*` secrets |
+| K5 notify | Landed; notify loud-fail | `CLOUDFLARE_EMAIL_API_TOKEN` / `CLOUDFLARE_ACCOUNT_ID` secrets |
 | T0 workspaces/RLS | 096–098 + 107 | Cutover **900 not applied** (intentional) |
 | T1 Auth | GitHub proven on prod Pages | Google optional / disabled on core |
 | T2 Stripe | EF + migrations | Captcha / price ids missing |
@@ -46,13 +46,13 @@ remain blocked.
 | Cutover 900 | **Do not apply** without human approval |
 | Draft promote #3183 | Leave draft |
 | Settings EF | ACTIVE; needs redeploy after access.ts change |
-| `STRIPE_*` / `MAILGUN_*` / `ALPACA_OAUTH_*` | **Still empty** — captchas |
+| `STRIPE_*` / `CLOUDFLARE_EMAIL_API_TOKEN` / `ALPACA_OAUTH_*` | **Still empty** — Stripe/Alpaca captchas; notify token not created |
 | Staging E2E `scripts/kairos_staging_e2e.py` | Exit 2 until secrets land |
 
 ## Human asks (blocking)
 
 1. **12x FX Hub access** — creator email is already seeded. Remaining teammates either (a) get an ops INSERT into `client_product_grants` or (b) redeem the hashed invite (`FX_HUB_INVITE_HASH` + migration 112) after signing in. Do not ship a login-optional shared secret.
-2. **Vendor captchas** for digithings@ onboarding: Stripe hCaptcha, Mailgun reCAPTCHA, Alpaca Turnstile.
+2. **Vendor captchas** for digithings@ onboarding: Stripe hCaptcha, Alpaca Turnstile.
 3. After secrets: `supabase secrets set` + redeploy billing/settings EFs; re-run staging E2E.
 4. Confirm whether creator `plan_floor` should stay `custom` (ops / Kairos) or drop to `baseline` once Stripe works for self-serve.
 
@@ -69,4 +69,4 @@ remain blocked.
 - Marking epic complete
 - Applying cutover 900
 - Merging draft #3183
-- Obtaining Stripe / Mailgun / Alpaca API secrets without human captcha
+- Obtaining Stripe / Alpaca API secrets without human captcha
