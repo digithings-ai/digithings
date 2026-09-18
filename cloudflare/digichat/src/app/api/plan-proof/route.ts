@@ -13,10 +13,11 @@
  * Response: { proof: "<base64url-signed-token>", exp: <ms-epoch>, tier: "desk"|... }
  *
  * Flow: verify embed tenant → verify Supabase access token via /auth/v1/user →
- * read app_metadata.plan_tier → mint HMAC for that claims tier only. FX Hub
- * invitees (12x) without a paid tier fall back to a product-grant check
- * (my_access) and mint the desk-equivalent proof.
- * DIGICHAT_PLAN_PROOF_SECRET never reaches the client.
+ * read app_metadata.plan_tier → fall back to the effective tier from the
+ * my_access RPC (max(plan_tier, plan_floor)) → mint an HMAC for a Desk+ tier
+ * only. Free/brief claims and FX Hub-only invitees without a desk floor
+ * receive `403 plan_tier_required` — a product grant never mints a
+ * chat-eligible proof. DIGICHAT_PLAN_PROOF_SECRET never reaches the client.
  */
 
 import { NextResponse } from "next/server";
@@ -24,9 +25,8 @@ import { resolveVerifiedEmbedTenant } from "@/lib/embed-chat-tenant";
 import {
   signPlanProof,
   isProofEligibleTier,
+  resolveEffectivePlanTierFromDashboardAccessToken,
   resolvePlanTierFromDashboardAccessToken,
-  hasFxHubProductFromDashboardAccessToken,
-  FX_HUB_PROOF_TIER,
   type ProofEligibleTier,
 } from "@/lib/plan-proof";
 
@@ -79,21 +79,23 @@ export async function POST(req: Request): Promise<NextResponse> {
     );
   }
 
-  // Claims only — never trust body.tier / X-Embed-Plan-Tier / ?plan_tier=.
+  // Claims first — never trust body.tier / X-Embed-Plan-Tier / ?plan_tier=.
+  // Fall back to the effective tier (max(plan_tier, plan_floor) via my_access)
+  // so desk-floor invitees can chat, while free/brief and FX Hub-only grants
+  // without a desk floor still get 403 (#4305).
   const claimsTier = await resolvePlanTierFromDashboardAccessToken(accessToken, {
     supabaseUrl,
     anonKey,
   });
   let proofTier: ProofEligibleTier | null =
     claimsTier && isProofEligibleTier(claimsTier) ? claimsTier : null;
-  // FX Hub invitees (12x) carry a product grant instead of a paid plan tier;
-  // mint them the desk-equivalent operator-funded embed proof.
   if (!proofTier) {
-    const hasFxHub = await hasFxHubProductFromDashboardAccessToken(
+    const effectiveTier = await resolveEffectivePlanTierFromDashboardAccessToken(
       accessToken,
       { supabaseUrl, anonKey },
     );
-    proofTier = hasFxHub ? FX_HUB_PROOF_TIER : null;
+    proofTier =
+      effectiveTier && isProofEligibleTier(effectiveTier) ? effectiveTier : null;
   }
   if (!proofTier) {
     return NextResponse.json(

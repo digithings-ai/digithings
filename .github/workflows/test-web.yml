@@ -133,3 +133,14 @@ jobs:
 
       - name: Test digithings-stack-cloudflare
         run: npm run test --workspace digithings-stack-cloudflare
+
+      # digichat-cloudflare is in this lane's path filter (ci.yml's `web`) and
+      # declares `test`/`typecheck`, but no lane invoked either, so its vitest
+      # suite (embed flag, env-vars pin, path handling) and tsc program could
+      # regress green (#4322). Same worker shape as digithings-stack-cloudflare
+      # above; the root `npm ci` already links it as a workspace.
+      - name: Typecheck digichat-cloudflare
+        run: npm run typecheck --workspace digithings-digichat-cloudflare
+
+      - name: Test digichat-cloudflare
+        run: npm run test --workspace digithings-digichat-cloudflare
