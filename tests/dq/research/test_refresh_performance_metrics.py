@@ -900,6 +900,30 @@ class TestMetricsWorkflowStepOrder:
             "exists (single source of truth)"
         )
 
+    def test_engine_step_marks_through_today_for_bookless_days(self) -> None:
+        """#3439: the scheduled engine write must not stop at the last book.
+
+        Without ``--mark-through`` a failed house run leaves no NAV bar for the
+        missing day, so the published NAV/PnL series reads flat. The flag only
+        extends the replay grid; ``positions`` is never written, so the
+        missing-book alarm survives.
+        """
+        import yaml
+
+        workflow = (
+            Path(__file__).resolve().parents[3]
+            / ".github"
+            / "workflows"
+            / "pipeline-research-metrics.yml"
+        )
+        spec = yaml.safe_load(workflow.read_text(encoding="utf-8"))
+        step = next(
+            s
+            for s in spec["jobs"]["refresh"]["steps"]
+            if "nautilus engine" in str(s.get("name", "")).lower()
+        )
+        assert '--mark-through "$(date -u +%F)"' in str(step.get("run", ""))
+
 
 class TestRefreshNavPointGuard:
     """``refresh_nav_point`` never computes NAV — it guards the engine row."""

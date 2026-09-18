@@ -178,6 +178,7 @@ export class DigiQuantMcpContainer extends Container {
     DIGIQUANT_MCP_SCOPE: env.DIGIQUANT_MCP_SCOPE ?? "read",
     DIGIQUANT_MARKET_DATA_BACKEND: env.DIGIQUANT_MARKET_DATA_BACKEND ?? "",
     FRED_API_KEY: env.FRED_API_KEY ?? "",
+    GLOOMBERB_SESSION_COOKIE: env.GLOOMBERB_SESSION_COOKIE ?? "",
     R2_ACCOUNT_ID: env.R2_ACCOUNT_ID ?? "",
     R2_BUCKET: env.R2_BUCKET ?? "",
     R2_ACCESS_KEY_ID: env.R2_ACCESS_KEY_ID ?? "",
@@ -257,6 +258,7 @@ export interface Env {
   DIGIQUANT_MCP_SCOPE?: string;
   DIGIQUANT_MARKET_DATA_BACKEND?: string;
   FRED_API_KEY?: string;
+  GLOOMBERB_SESSION_COOKIE?: string;
   R2_ACCOUNT_ID?: string;
   R2_BUCKET?: string;
   R2_ACCESS_KEY_ID?: string;
