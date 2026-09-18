@@ -13,13 +13,13 @@ tables and views.
 a numeric prefix. It runs as the first step of `test-digiquant.yml` (the
 `digiquant/**` path filter covers this directory) and locally via `make
 supabase-migrations-check`. It does **not** check ordering, and it does not compare
-against the live schema — `olympus_schema_migrations` is what records what prod has
+against the live schema — `digithings_schema_migrations` is what records what prod has
 actually applied. A duplicate prefix is now a **hard failure with no exemptions**,
 in both this guard and `db-migrate.yml`.
 
 **The `025` collision is resolved (#3923).** `025_thesis_daily_fields.sql` and
 `025_trading_calendar.sql` were both applied on 2026-06-26 and both recorded in
-`olympus_schema_migrations` under those names. `db-migrate.yml` keys the ledger on
+`digithings_schema_migrations` under those names. `db-migrate.yml` keys the ledger on
 the *full filename*, so renumbering either one mints a new ledger key for a file
 prod already ran. The calendar migration was chosen to move because it is fully
 idempotent (`CREATE TABLE`/`CREATE INDEX IF NOT EXISTS`, `DROP POLICY IF EXISTS`
@@ -42,7 +42,7 @@ or grant it — `CREATE POLICY` raises `42501 must be owner of table messages` a
 and always will (verified read-only against the live project, 2026-08-01; PostgreSQL 17.6
 no longer lets `CREATEROLE` imply admin over pre-existing roles, and the dashboard SQL
 editor runs as the same `postgres`). The file could never be applied, so it never got an
-`olympus_schema_migrations` row and was deleted outright — a clean withdrawal, no orphan
+`digithings_schema_migrations` row and was deleted outright — a clean withdrawal, no orphan
 ledger row, no tombstone. Migration `063` supersedes it. **Nothing in this repo enforces
 that.** The verifier checks filename shape and prefix uniqueness only; nothing hashes
 migration contents and there is no contiguity check, so `062` now looks merely "free" to

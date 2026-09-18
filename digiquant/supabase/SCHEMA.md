@@ -1223,7 +1223,7 @@ They dominated the database before 061: 952 MB of a 1263 MB total (75%), growing
 - `'Portfolio Recommendation'` doc_type — removed by migration 021.
 - **Migration `062` (`062_realtime_broadcast_authorization.sql`) — withdrawn and deleted,
   and the number is burned.** It could never be applied (see the `realtime.messages` note
-  under RLS), so it never reached `olympus_schema_migrations` and left no orphan ledger row
+  under RLS), so it never reached the migration ledger and left no orphan ledger row
   to reconcile. Migration `063` supersedes it. Do not reuse `062`: unlike the never-written
   `037`/`038`/`059` it already denotes a specific abandoned approach in the git history and
   in PR #1813. Nothing in the repo enforces this — see [`README.md`](README.md), "`062` is

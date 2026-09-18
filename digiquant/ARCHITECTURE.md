@@ -479,7 +479,7 @@ Macro carve-out: migration `124_drop_market_data_tables.sql` is a **no-op**
 because the on-cron Supabase readers were not yet migrated when it was ledgered.
 The real drop ships as **`127_drop_market_data_tables.sql`** (#4053) — a new
 numbered migration, never a re-edit of 124: `db-migrate.yml` records every
-executed file in `olympus_schema_migrations` by name, so a re-edited 124 is
+executed file in `digithings_schema_migrations` by name, so a re-edited 124 is
 silently skipped. 127 drops the two views (`price_history_tickers`,
 `public_price_latest`) before the two tables; every market read is R2/live-only
 (see *Market-data reads: R2* above), and rollback is restore-from-generation +
@@ -3725,7 +3725,7 @@ through RLS on `realtime.messages`, which we can never police.
 
 *Why the textbook fix was withdrawn.* The obvious patch — RLS policies on
 `realtime.messages` plus private channels on both ends — was written as migration `062`, then
-proved **impossible to apply**. It never reached production (no `olympus_schema_migrations`
+proved **impossible to apply**. It never reached production (no migration-ledger
 row; two `db-migrate` runs failed on it), so it was deleted and the number burned. `realtime.messages` is
 owned by `supabase_realtime_admin`, a role with zero members over which zero roles hold
 admin option; our connection is `postgres` (`rolsuper = false`, not a member), and on
