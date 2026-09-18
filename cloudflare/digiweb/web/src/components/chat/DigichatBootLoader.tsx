@@ -82,6 +82,8 @@ const SETTLE = {
   CHIPS: 1060,
   BODY: 1300,
   DONE: 2400,
+  /** Breathing room after the last typed character before the host reveals. */
+  PAD: 320,
 } as const;
 
 /** Typewriter speeds (ms per character), matching the approved demo. */
@@ -475,10 +477,16 @@ export function DigichatBootLoader({
   const settleStartedRef = useRef(false);
   const timeoutsRef = useRef<number[]>([]);
   const onSettledRef = useRef(onSettled);
+  const copyRef = useRef({ welcome, welcomeBody, suggestions });
+  const startedAtRef = useRef(0);
 
   useEffect(() => {
     onSettledRef.current = onSettled;
   }, [onSettled]);
+
+  useEffect(() => {
+    copyRef.current = { welcome, welcomeBody, suggestions };
+  }, [welcome, welcomeBody, suggestions]);
 
   useEffect(() => {
     const query = window.matchMedia("(prefers-reduced-motion: reduce)");
@@ -535,7 +543,19 @@ export function DigichatBootLoader({
       setChipsTyping(true);
     });
     schedule(SETTLE.BODY, () => setBodyTyping(true));
-    schedule(SETTLE.DONE, () => {
+    // Hold the overlay until every line has finished typing: fixed 2400ms cut
+    // long copy (e.g. a two-line welcome body) mid-sentence and the host then
+    // unmounted the loader. PAD gives the caret a beat on the last character.
+    const { welcome: welcomeCopy, welcomeBody: bodyCopy, suggestions: chipCopy } = copyRef.current;
+    const typingEnd = Math.max(
+      SETTLE.WELCOME + welcomeCopy.length * TYPE.WELCOME,
+      SETTLE.BODY + bodyCopy.length * TYPE.BODY,
+      ...chipCopy.map((chip) => SETTLE.CHIPS + chip.length * TYPE.CHIP),
+    );
+    // Park can land well after mount (the ready edge); subtract the typing
+    // already served so the reveal still lands at mount + typingEnd + PAD.
+    const elapsed = startedAtRef.current === 0 ? 0 : performance.now() - startedAtRef.current;
+    schedule(Math.max(SETTLE.DONE, Math.max(0, typingEnd - elapsed) + SETTLE.PAD), () => {
       signalDigichatReady();
       onSettledRef.current?.();
     });
@@ -554,6 +574,7 @@ export function DigichatBootLoader({
     // welcome + examples before they played -- datatap types during the load.
     // The park-driven settle (handleParked via onParked) stays on the ready
     // edge so the cube contour keeps sweeping through the load.
+    startedAtRef.current = performance.now();
     startTyping();
     const observer = new ResizeObserver(() => engine.rebuild());
     observer.observe(wrap);
