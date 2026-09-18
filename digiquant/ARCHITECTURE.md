@@ -4140,7 +4140,7 @@ Live-venue refusals in `execution/policy.py` are unchanged by the calendar gate.
 performs **no I/O**. House / system — `workspace_id is None` **or** the well-known
 `house_workspace_id()` / `system_workspace_id()` UUIDs → always `PAPER_INTERNAL`
 (hard-coded; those identities can never route externally). Kill switch
-`DIGIQUANT_EXECUTION_ROUTING` (alias `OLYMPUS_KAIROS_ROUTING`) defaults **off** (inverse polarity of `DIGIQUANT_PORTFOLIO_LEDGER` / alias `DIGIQUANT_PORTFOLIO_LEDGER`):
+`DIGIQUANT_EXECUTION_ROUTING` (alias `OLYMPUS_KAIROS_ROUTING`) defaults **off** (inverse polarity of `DIGIQUANT_PORTFOLIO_LEDGER` / alias `OLYMPUS_PORTFOLIO_LEDGER`):
 off ⇒ only `PAPER_INTERNAL` regardless of connections. With the switch on, a **tenant**
 workspace with exactly one active paper `broker_connections` row maps to `ALPACA_PAPER` /
 `IBKR_PAPER`; zero → `PAPER_INTERNAL`; two or more → `AmbiguousVenueError`. v1 does **not**
