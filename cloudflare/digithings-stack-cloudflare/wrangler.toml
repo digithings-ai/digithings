@@ -91,7 +91,7 @@ instance_type = "standard-2"
 # Single replica by design (max_instances = 1 + one pinned Durable Object id
 # MCP_CONTAINER_ID in src/ports.ts): the MCP read path assumes a single replica
 # (in-memory 900s TTL keyed by as_of + manifest version).
-# Cold-start policy: sleepAfter = "15m" on the class in src/index.ts. A cold
+# Cold-start policy: sleepAfter = "3m" on the class in src/index.ts. A cold
 # start pays only the FastMCP import, never a data load (R2 is the cache); the
 # daily market-data-refresh cron keeps R2 fresh and never touches the container.
 # Once the custom-domain route is enabled it can be pinged manually:
