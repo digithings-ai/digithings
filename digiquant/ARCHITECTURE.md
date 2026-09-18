@@ -387,24 +387,28 @@ touches the container; once the custom-domain route is enabled it can be pinged
 manually:
 `curl -sS https://mcp.digithings.ai/mcp -H 'Accept: application/json'`.
 
-Per-component secrets (`wrangler secret put`, never committed): `FRED_API_KEY`
-plus the four R2 names `R2_ACCOUNT_ID` / `R2_BUCKET` / `R2_ACCESS_KEY_ID` /
+Per-component secrets (`wrangler secret put`, never committed): `FRED_API_KEY`,
+`GLOOMBERB_SESSION_COOKIE` (session-gated digifetch tools, #4260), and the four
+R2 names `R2_ACCOUNT_ID` / `R2_BUCKET` / `R2_ACCESS_KEY_ID` /
 `R2_SECRET_ACCESS_KEY` (same `digithings-archive` bucket as the checkpoint
 archive). The read path is registry-read-only (registry inserts raise) so the
 cron's `CORE_POSTGRES_URI` is deliberately NOT forwarded here.
 `DIGIQUANT_MARKET_DATA_BACKEND` is passed through with no Worker-side default:
 unset/empty keeps the library default (`supabase`); set it to `"r2"`
-explicitly via env for the hosted path. The Gloomberb session cookie is **not**
-forwarded to this container yet (gated digifetch tools answer the typed
-`auth_required`); the operator path and tracked wiring follow-up are in
+explicitly via env for the hosted path. `GLOOMBERB_SESSION_COOKIE` is forwarded
+as container runtime env (#4260), so once the secret is set the gated digifetch
+tools take the session-authenticated path instead of the zero-HTTP typed
+`auth_required`; an unset/empty value preserves that `auth_required` behavior.
+The operator path is in
 [docs/ops/gloomberb-session-cookie.md](../docs/ops/gloomberb-session-cookie.md).
 
-Owner applies the five secrets from `cloudflare/digithings-stack-cloudflare/`
+Owner applies the six secrets from `cloudflare/digithings-stack-cloudflare/`
 (`$VALUE` filled only in the operator's shell history — never in the repo;
 `env -u` per the `CLOUDFLARE_API_TOKEN` trap noted in `wrangler.toml`):
 
 ```bash
 printf '%s' "$VALUE" | env -u CLOUDFLARE_API_TOKEN npx wrangler secret put FRED_API_KEY
+printf '%s' "$VALUE" | env -u CLOUDFLARE_API_TOKEN npx wrangler secret put GLOOMBERB_SESSION_COOKIE
 printf '%s' "$VALUE" | env -u CLOUDFLARE_API_TOKEN npx wrangler secret put R2_ACCOUNT_ID
 printf '%s' "$VALUE" | env -u CLOUDFLARE_API_TOKEN npx wrangler secret put R2_BUCKET
 printf '%s' "$VALUE" | env -u CLOUDFLARE_API_TOKEN npx wrangler secret put R2_ACCESS_KEY_ID
