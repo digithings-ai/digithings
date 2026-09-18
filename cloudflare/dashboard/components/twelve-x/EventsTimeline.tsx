@@ -371,6 +371,11 @@ export default function EventsTimeline({ events, mode, day, onSelect, selectable
                   </>
                 );
                 const key = e.id ?? `${e.date}-${e.time}-${ci}`;
+                // Geometry-pinned timeline card (wave-4 BLOCKED, #4306): the
+                // absolute left/top/width/height come from inline `style` and
+                // the `.tl-card` chrome, and EventsTimeline.test pins the raw
+                // native `tl-card` button host. A kit `Button` would add chrome
+                // every caller would only override, so it stays native.
                 return clickable ? (
                   <button
                     key={key}
