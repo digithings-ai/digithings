@@ -167,7 +167,6 @@ const TOOLCHAIN_VARIANTS: ReadonlySet<BootLabVariant> = new Set([
   "toolfull",
 ]);
 
-const TASK_LABEL = "Loading DigiChat";
 const REASONING_LABEL = "waking up the container";
 /** Readiness cap: embedded surfaces wait for the app handshake; standalone
  *  surfaces never send one, so they settle on their own sooner. Embedded
@@ -456,43 +455,6 @@ function ToolChainRow({
   );
 }
 
-/** The chain's task header (the tool-group trigger anatomy). */
-function TaskHeaderRow({ done, failed }: { done: boolean; failed: boolean }) {
-  return (
-    <div
-      className="text-muted-foreground flex w-full items-center gap-2 py-1.5 text-sm"
-      data-slot="tool-group-trigger"
-    >
-      <span
-        className="inline-flex size-3.5 shrink-0 items-center justify-center"
-        data-slot="tool-group-trigger-loader"
-      >
-        <DotMatrix
-          state={failed ? "error" : done ? "success" : "loading"}
-          label={failed ? "Error" : done ? "Ok" : "Loading"}
-          className="size-3.5"
-        />
-      </span>
-      <span
-        className={
-          "min-w-0 flex-1 truncate text-start text-xs leading-none font-medium" +
-          (done || failed ? "" : " shimmer motion-reduce:animate-none")
-        }
-        data-slot="tool-group-trigger-label"
-      >
-        {TASK_LABEL}
-      </span>
-      <span data-slot="tool-group-trigger-chevron">
-        <DotMatrix
-          state="expand"
-          label="Toggle tools"
-          className="size-3.5 -rotate-90"
-        />
-      </span>
-    </div>
-  );
-}
-
 /** A reasoning row above the calls (the reasoning trigger anatomy). */
 function ReasoningRow({
   active,
@@ -553,7 +515,6 @@ function ToolChain({
   instant,
   ready,
   failed,
-  showTask,
   showReasoning,
   facts,
   onDone,
@@ -561,7 +522,6 @@ function ToolChain({
   instant: boolean;
   ready: boolean;
   failed: boolean;
-  showTask: boolean;
   showReasoning: boolean;
   facts?: BootFacts;
   onDone: () => void;
@@ -619,9 +579,6 @@ function ToolChain({
       : 0;
   return (
     <span className="dboot-lab-tools">
-      {showTask ? (
-        <TaskHeaderRow done={chainDone && ready} failed={failed} />
-      ) : null}
       {showReasoning ? (
         <ReasoningRow active={!chainDone && !failed} durationMs={completedMs} />
       ) : null}
@@ -699,7 +656,6 @@ export function BootLabOverlay({
           instant={reduced}
           ready={appReady}
           failed={failed}
-          showTask={variant === "tooltask" || variant === "toolfull"}
           showReasoning={variant === "toolreason" || variant === "toolfull"}
           facts={facts}
           onDone={() => setChainDone(true)}
