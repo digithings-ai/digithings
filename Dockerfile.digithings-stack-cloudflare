@@ -114,6 +114,13 @@ COPY cloudflare/digithings-stack-cloudflare/container/searxng/limiter.toml \
      /etc/searxng/limiter.toml
 # Rebuild marker: wrangler tags the container image from this Dockerfile, so a
 # context-only change (e.g. entrypoint.sh) must bump this comment to rebuild.
+# Rebuild marker v11 (2026-09-19): enables the `bing` and `mojeek` engines in
+# config/searxng/settings.yml. Both ship `disabled: true` at the pinned
+# SEARXNG_COMMIT and `use_default_settings.engines.keep_only` does NOT flip that
+# flag, so the v10 image's in-stack searxng could only reach duckduckgo (which
+# 403s the container) + wikipedia — no market/news coverage. The explicit
+# `engines: [{name: bing, disabled: false}, {name: mojeek, disabled: false}]`
+# override makes them active. See #4297.
 # Rebuild marker v10 (2026-09-19): installs SearXNG into the image as the
 # in-stack PRIMARY web-search backend (supervisord [program:searxng], loopback
 # :8080, granian/wsgi) and wires digisearch's DIGISEARCH_SEARXNG_URL at it, so
