@@ -114,6 +114,13 @@ COPY apps/digithings-stack-cloudflare/container/searxng/limiter.toml \
      /etc/searxng/limiter.toml
 # Rebuild marker: wrangler tags the container image from this Dockerfile, so a
 # context-only change (e.g. entrypoint.sh) must bump this comment to rebuild.
+# Rebuild marker v13 (2026-09-19): broadens the in-stack searxng engine set in
+# config/searxng/settings.yml — drops the 4-engine `keep_only` allowlist and
+# clears `disabled` (+ `inactive` where upstream sets both, e.g. swisscows/
+# luxxle/tiger) on a wide spread of no-API-key general/news engines, so one
+# blocked engine (duckduckgo 403s the container) can no longer return a
+# successful-but-empty result set that fails the digiquant research run with
+# `web_search_unhealthy`. Requires a rebuild to bake the new settings.yml. #4297.
 # Rebuild marker v12 (2026-09-19): develop relocated the stack container from
 # cloudflare/digithings-stack-cloudflare/ to apps/digithings-stack-cloudflare/;
 # this merge-forward moves the searxng limiter.toml COPY source to the new path

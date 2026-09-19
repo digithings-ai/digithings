@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import os
 import re
 import threading
@@ -21,6 +22,8 @@ from digisearch.web_search.models import (
     WebSearchResult,
 )
 from digisearch.web_search.searxng_provider import SearXNGWebSearchProvider
+
+logger = logging.getLogger(__name__)
 
 
 class WebSearchConfig(BaseModel):
@@ -133,23 +136,51 @@ def _provider_failure_fields(exc: Exception) -> tuple[int | None, bool]:
     return None, False
 
 
+def _format_provider_failure(name: str, exc: Exception) -> str:
+    """Render one backend's failure as ``name: detail`` (secrets scrubbed).
+
+    The upstream HTTP status, when the provider exposed one, is appended so a
+    multi-backend failure message still carries each backend's real result
+    instead of collapsing to the last backend alone.
+    """
+    status, _ = _provider_failure_fields(exc)
+    detail = _scrub_provider_detail(str(exc) or type(exc).__name__)
+    if status is not None and str(status) not in detail:
+        detail = f"{detail} (HTTP {status})"
+    return f"{name}: {detail}"
+
+
 def _search_only(req: WebSearchRequest, config: WebSearchConfig) -> WebSearchResponse:
-    last: Exception | None = None
+    """Run the configured backend, then fail over.
+
+    ``searxng``/``ddgs`` run only the named backend; ``auto`` tries searxng
+    first and ddgs second. Every backend failure is collected so the raised
+    ``WebSearchProviderError`` names each backend and its actual error — a
+    last-error-only message hid the primary's transport failure (#4297).
+    ``retryable`` is true when any backend failed transiently (a transport,
+    timeout, or retryable HTTP status), because the primary can recover on a
+    later attempt; ``status_code`` is the first upstream status any backend
+    exposed, primary-first, rather than the last backend's guess.
+
+    A successful provider call that returns zero rows stays an honest
+    ``ok=true`` response with ``results=[]``: an empty body is never turned
+    into an error here. Only raised provider failures reach this failover.
+    """
     order = [config.backend] if config.backend in ("searxng", "ddgs") else ["searxng", "ddgs"]
+    failures: list[tuple[str, Exception]] = []
     for name in order:
         try:
             if name == "searxng":
                 return SearXNGWebSearchProvider(base_url=config.searxng_url).search(req)
             return DdgsWebSearchProvider().search(req)
         except Exception as exc:
-            last = exc
-            continue
-    if last is None:  # pragma: no cover - ``order`` is never empty
+            failures.append((name, exc))
+    if not failures:  # pragma: no cover - ``order`` is never empty
         raise WebSearchProviderError("all web-search backends failed")
-    status, retryable = _provider_failure_fields(last)
-    detail = _scrub_provider_detail(str(last) or type(last).__name__)
-    if status is not None and str(status) not in detail:
-        detail = f"{detail} (HTTP {status})"
+    fields = [_provider_failure_fields(exc) for _, exc in failures]
+    status = next((s for s, _ in fields if s is not None), None)
+    retryable = any(retry for _, retry in fields)
+    detail = "; ".join(_format_provider_failure(name, exc) for name, exc in failures)
     raise WebSearchProviderError(
         f"all web-search backends failed: {detail}",
         status_code=status,
@@ -189,7 +220,18 @@ def run_web_search(
                 enriched.append(
                     hit.model_copy(update={"snippet": md[:2000] if md else hit.snippet})
                 )
-            except Exception:
+            except Exception as exc:
+                # Documented contract (#3853): one hit's fetch/extract failure
+                # must not fail the whole search, so the original provider
+                # snippet (a real search row, not fabricated content) is kept.
+                # Reviewed under #4297: this is not a hidden provider failure —
+                # the search backend already answered ok — so it is logged to
+                # keep the degraded enrichment visible instead of silent.
+                logger.warning(
+                    "web_search enrichment failed for %s: %s",
+                    _scrub_provider_detail(hit.url),
+                    _scrub_provider_detail(str(exc) or type(exc).__name__),
+                )
                 enriched.append(hit)
     rest = resp.results[config.fetch_max_pages :]
     return WebSearchResponse(query=resp.query, results=enriched + rest, provider=resp.provider)

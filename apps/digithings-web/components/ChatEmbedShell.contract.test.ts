@@ -63,18 +63,22 @@ describe("ChatEmbedShell contracts", () => {
     expect(readParentDocumentTheme({ getAttribute: () => null })).toBe("dark");
   });
 
-  it("keeps the frame canvas pre-painted and the in-app boot as the only loader until digichat:ready settles", async () => {
-    // Source contract: avoid a white flash on the dark digithings theme (#2093).
-    // The shell no longer mounts its own boot overlay -- digichat's in-app boot
-    // chain is the only loader, and the frame slot paints the theme canvas from
-    // the first HTML via .dc-chat-frame (see globals.css).
+  it("covers the cold Container with the shared boot loader until digichat:ready", async () => {
+    // Source contract: avoid a white flash on the dark digithings theme (#2093)
+    // and keep the cold-start window animated. The shell mounts the same
+    // @digithings/ui DigichatBootLoader the embed uses, but only after
+    // WARMUP_DELAY_MS (warm loads stay flash-free) and only until ready; the
+    // iframe is opacity-0 underneath and .dc-chat-frame paints the theme
+    // canvas from the first HTML (see globals.css).
     const { readFileSync } = await import("node:fs");
     const { fileURLToPath } = await import("node:url");
     const path = fileURLToPath(new URL("./ChatEmbedShell.tsx", import.meta.url));
     const src = readFileSync(path, "utf8");
+    expect(src).toContain("DigichatBootLoader");
+    expect(src).toContain("WARMUP_DELAY_MS");
     expect(src).toContain("dc-chat-frame");
     expect(src).toContain("digichat:ready");
-    expect(src).not.toContain("DigichatBootLoader");
+    expect(src).toContain("opacity: embedReady ? 1 : 0");
     // Curated per-host copy rides into the iframe URL.
     expect(src).toContain("Ask about digithings");
     expect(src).toContain("Ask about Online Compliance Center");
@@ -82,17 +86,18 @@ describe("ChatEmbedShell contracts", () => {
     expect(src).toContain('url.searchParams.set("suggestions"');
   });
 
-  it("paints the frame canvas pre-paint instead of mounting a solid boot overlay", async () => {
-    // The old shell overlay is gone -- digichat boots inside the frame now. The
-    // white-flash guard moved to the frame slot: .dc-chat-frame in globals.css
-    // paints --chat-frame-canvas (per [data-theme]) from the first HTML, so the
-    // pre-ready frame is never a browser-default white rectangle.
+  it("keeps the frame canvas pre-painted under the transparent warmup overlay", async () => {
+    // The warmup overlay is transparent (no solid fill) -- the white-flash
+    // guard stays on the frame slot: .dc-chat-frame in globals.css paints
+    // --chat-frame-canvas (per [data-theme]) from the first HTML, and the
+    // iframe's own opacity gate hides the browser-default white underneath.
     const { readFileSync } = await import("node:fs");
     const { fileURLToPath } = await import("node:url");
     const shellPath = fileURLToPath(new URL("./ChatEmbedShell.tsx", import.meta.url));
     const shellSrc = readFileSync(shellPath, "utf8");
     expect(shellSrc).toContain('className="dc-chat-frame"');
-    expect(shellSrc).not.toContain("DigichatBootLoader");
+    expect(shellSrc).toContain("DigichatBootLoader");
+    expect(shellSrc).toContain('background: "transparent"');
 
     const cssPath = fileURLToPath(new URL("../app/globals.css", import.meta.url));
     const css = readFileSync(cssPath, "utf8");
