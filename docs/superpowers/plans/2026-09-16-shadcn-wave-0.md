@@ -2,9 +2,9 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Stand up the shadcn foundation inside `@digithings/web` — the token bridge and the package-level vendored UI set — and prove the chain end-to-end in the reference app: stock `npx shadcn add` components render in the Instrument-Panel skin with zero per-component restyle.
+**Goal:** Stand up the shadcn foundation inside `@digithings/ui` — the token bridge and the package-level vendored UI set — and prove the chain end-to-end in the reference app: stock `npx shadcn add` components render in the Instrument-Panel skin with zero per-component restyle.
 
-**Architecture:** One vendored set lives in `cloudflare/digiweb/web` (`src/ui/`, generated on the Base UI base with the owner's `buFyyjQ` preset folded into `components.json`), exported as `@digithings/web/ui`. A token bridge inside `web-theme.css`'s single `@theme inline` block maps every shadcn CSS variable onto `@digithings/design` tokens, so components inherit radius-0 / mono / ink-primary / hairline with no per-component CSS. The reference app consumes the package set via an `@source` line and a proof route.
+**Architecture:** One vendored set lives in `packages/ui` (`src/ui/`, generated on the Base UI base with the owner's `buFyyjQ` preset folded into `components.json`), exported as `@digithings/ui/ui`. A token bridge inside `web-theme.css`'s single `@theme inline` block maps every shadcn CSS variable onto `@digithings/design` tokens, so components inherit radius-0 / mono / ink-primary / hairline with no per-component CSS. The reference app consumes the package set via an `@source` line and a proof route.
 
 **Tech Stack:** shadcn CLI (latest; Base UI base, `lyra` style), Tailwind v4 (`@theme inline`, `source(none)`), Next 16.2.4 (reference app), vitest 4 (+ `renderToStaticMarkup`, no testing-library), `@digithings/design` tokens.
 
@@ -23,35 +23,35 @@
 - No new app-local CSS class families (`scripts/check_frontend_canon.py` census); no app-local primitives; no new runtime dependencies beyond what the shadcn CLI generates (Base UI, CVA, clsx, tailwind-merge, lucide are already deps).
 - shadcn is **Base UI pinned** (owner decision §9 Q2): re-add the whole set on Base UI, no mixed bases.
 - Font: **JetBrains Mono** (owner decision §9 Q1) — Wave 0 only carries it in `components.json`/preset; the app-level font swap is Wave 1.
-- Tests: vitest. `@digithings/web` asserts with `renderToStaticMarkup` — no testing-library.
+- Tests: vitest. `@digithings/ui` asserts with `renderToStaticMarkup` — no testing-library.
 - The `(chatbot)` family in reference/ is out of scope and its `@source not` exclusion stays; DigiChat/digichat-ui is untouched.
 - Do not push any branch until Task 7.
 
 **Files touched overall:**
-- Modify: `cloudflare/digiweb/web/tsconfig.json`, `cloudflare/digiweb/web/package.json`
-- Create: `cloudflare/digiweb/web/vitest.config.ts`, `cloudflare/digiweb/web/components.json`, `cloudflare/digiweb/web/src/lib/utils.ts` (+test), `cloudflare/digiweb/web/src/ui/*` (+barrel), `cloudflare/digiweb/reference/app/(gallery)/ui/page.tsx`
-- Modify: `cloudflare/digiweb/web/src/styles/web-theme.css` (+contract test), `cloudflare/digiweb/reference/app/globals.css`
-- Delete: `cloudflare/digiweb/reference/components/ui/{avatar,button,collapsible,dialog,skeleton,textarea}.tsx` (6 verified-dead files; `tooltip.tsx` + `dot-matrix.tsx` shim stay — load-bearing for `gallery-thread.source.test.ts`)
-- Docs: `cloudflare/digiweb/MIGRATION.md`, `cloudflare/digiweb/ARCHITECTURE.md` (~~`MANIFEST.json`~~ — generated file, see Task 6 Step 2)
+- Modify: `packages/ui/tsconfig.json`, `packages/ui/package.json`
+- Create: `packages/ui/vitest.config.ts`, `packages/ui/components.json`, `packages/ui/src/lib/utils.ts` (+test), `packages/ui/src/ui/*` (+barrel), `apps/reference/app/(gallery)/ui/page.tsx`
+- Modify: `packages/ui/src/styles/web-theme.css` (+contract test), `apps/reference/app/globals.css`
+- Delete: `apps/reference/components/ui/{avatar,button,collapsible,dialog,skeleton,textarea}.tsx` (6 verified-dead files; `tooltip.tsx` + `dot-matrix.tsx` shim stay — load-bearing for `gallery-thread.source.test.ts`)
+- Docs: `packages/ui/MIGRATION.md`, `packages/ui/ARCHITECTURE.md` (~~`MANIFEST.json`~~ — generated file, see Task 6 Step 2)
 
 ---
 
 ### Task 1: Package plumbing — `@/*` alias, vitest alias, `cn()`
 
 **Files:**
-- Modify: `cloudflare/digiweb/web/tsconfig.json`
-- Create: `cloudflare/digiweb/web/vitest.config.ts`
-- Create: `cloudflare/digiweb/web/src/lib/utils.ts`
-- Test: `cloudflare/digiweb/web/src/lib/utils.test.ts`
-- Modify: `cloudflare/digiweb/web/package.json` (add `typecheck` script)
+- Modify: `packages/ui/tsconfig.json`
+- Create: `packages/ui/vitest.config.ts`
+- Create: `packages/ui/src/lib/utils.ts`
+- Test: `packages/ui/src/lib/utils.test.ts`
+- Modify: `packages/ui/package.json` (add `typecheck` script)
 
 **Interfaces:**
 - Consumes: `clsx`, `tailwind-merge` (already in `web/package.json` deps).
-- Produces: `cn(...inputs: ClassValue[]): string` from `@/lib/utils` (all vendored `src/ui/*` files import exactly this path); `@` alias → `cloudflare/digiweb/web/src` for both `tsc` and vitest.
+- Produces: `cn(...inputs: ClassValue[]): string` from `@/lib/utils` (all vendored `src/ui/*` files import exactly this path); `@` alias → `packages/ui/src` for both `tsc` and vitest.
 
 - [ ] **Step 1: Add the alias to tsconfig**
 
-Edit `cloudflare/digiweb/web/tsconfig.json` compilerOptions to add (keep every existing key as-is):
+Edit `packages/ui/tsconfig.json` compilerOptions to add (keep every existing key as-is):
 
 ```json
 "baseUrl": ".",
@@ -60,7 +60,7 @@ Edit `cloudflare/digiweb/web/tsconfig.json` compilerOptions to add (keep every e
 
 - [ ] **Step 2: Create the vitest alias config**
 
-Create `cloudflare/digiweb/web/vitest.config.ts` (`shadcn add` writes `@/lib/utils` imports; tests resolve them through this alias):
+Create `packages/ui/vitest.config.ts` (`shadcn add` writes `@/lib/utils` imports; tests resolve them through this alias):
 
 ```ts
 import path from "node:path";
@@ -76,7 +76,7 @@ export default defineConfig({
 
 - [ ] **Step 3: Write the failing test**
 
-Create `cloudflare/digiweb/web/src/lib/utils.test.ts`:
+Create `packages/ui/src/lib/utils.test.ts`:
 
 ```ts
 import { describe, expect, it } from "vitest";
@@ -95,12 +95,12 @@ describe("cn", () => {
 
 - [ ] **Step 4: Run test to verify it fails**
 
-Run: `npm --workspace @digithings/web run test -- src/lib/utils.test.ts`
+Run: `npm --workspace @digithings/ui run test -- src/lib/utils.test.ts`
 Expected: FAIL — cannot resolve `./utils`.
 
 - [ ] **Step 5: Create `cn()` (identical to the reference app's copy)**
 
-First read `cloudflare/digiweb/reference/lib/utils.ts` and copy its body verbatim; it must be this shape:
+First read `apps/reference/lib/utils.ts` and copy its body verbatim; it must be this shape:
 
 ```ts
 import { clsx, type ClassValue } from "clsx";
@@ -111,11 +111,11 @@ export function cn(...inputs: ClassValue[]) {
 }
 ```
 
-Write it to `cloudflare/digiweb/web/src/lib/utils.ts`.
+Write it to `packages/ui/src/lib/utils.ts`.
 
 - [ ] **Step 6: Add the `typecheck` script**
 
-In `cloudflare/digiweb/web/package.json` scripts add:
+In `packages/ui/package.json` scripts add:
 
 ```json
 "typecheck": "tsc --noEmit"
@@ -123,13 +123,13 @@ In `cloudflare/digiweb/web/package.json` scripts add:
 
 - [ ] **Step 7: Verify both pass**
 
-Run: `npm --workspace @digithings/web run test -- src/lib/utils.test.ts && npm --workspace @digithings/web run typecheck`
+Run: `npm --workspace @digithings/ui run test -- src/lib/utils.test.ts && npm --workspace @digithings/ui run typecheck`
 Expected: 2 passed; tsc exit 0.
 
 - [ ] **Step 8: Commit**
 
 ```bash
-git add cloudflare/digiweb/web/tsconfig.json cloudflare/digiweb/web/vitest.config.ts cloudflare/digiweb/web/src/lib/utils.ts cloudflare/digiweb/web/src/lib/utils.test.ts cloudflare/digiweb/web/package.json
+git add packages/ui/tsconfig.json packages/ui/vitest.config.ts packages/ui/src/lib/utils.ts packages/ui/src/lib/utils.test.ts packages/ui/package.json
 git commit -m "feat(digiweb): shadcn package plumbing (@/* alias, vitest alias, cn) — wave 0"
 ```
 
@@ -138,11 +138,11 @@ git commit -m "feat(digiweb): shadcn package plumbing (@/* alias, vitest alias, 
 ### Task 2: `components.json` — Base UI base + owner preset
 
 **Files:**
-- Create: `cloudflare/digiweb/web/components.json`
+- Create: `packages/ui/components.json`
 
 **Interfaces:**
 - Consumes: nothing at runtime.
-- Produces: the exact config the `shadcn` CLI reads when run inside `cloudflare/digiweb/web` — `add` writes components to `@/ui` (i.e. `src/ui/`), utils to `@/lib/utils`.
+- Produces: the exact config the `shadcn` CLI reads when run inside `packages/ui` — `add` writes components to `@/ui` (i.e. `src/ui/`), utils to `@/lib/utils`.
 
 - [ ] **Step 1: Probe the current CLI schema in a scratch dir (no guessing)**
 
@@ -156,7 +156,7 @@ Record the generated file. The base selector (`"base": "base"` or equivalent key
 
 - [ ] **Step 2: Write the package config**
 
-Create `cloudflare/digiweb/web/components.json` with the probe's keys, adjusted to the library layout (this is the shape as of 2026-09-16; reconcile against the probe first, probe wins):
+Create `packages/ui/components.json` with the probe's keys, adjusted to the library layout (this is the shape as of 2026-09-16; reconcile against the probe first, probe wins):
 
 ```json
 {
@@ -189,7 +189,7 @@ Create `cloudflare/digiweb/web/components.json` with the probe's keys, adjusted 
 - [ ] **Step 3: Verify the CLI resolves the config**
 
 ```bash
-cd cloudflare/digiweb/web
+cd packages/ui
 npx shadcn@latest add button --dry-run
 ```
 
@@ -198,7 +198,7 @@ Expected: planned output includes `src/ui/button.tsx`; no writes. If the CLI ref
 - [ ] **Step 4: Commit**
 
 ```bash
-git add cloudflare/digiweb/web/components.json
+git add packages/ui/components.json
 git commit -m "feat(digiweb): shadcn components.json (Base UI base, lyra preset) — wave 0"
 ```
 
@@ -207,8 +207,8 @@ git commit -m "feat(digiweb): shadcn components.json (Base UI base, lyra preset)
 ### Task 3: The token bridge in `web-theme.css`
 
 **Files:**
-- Modify: `cloudflare/digiweb/web/src/styles/web-theme.css` (inside the existing `@theme inline` block, lines 16–47)
-- Test: `cloudflare/digiweb/web/src/styles/web-theme.test.ts`
+- Modify: `packages/ui/src/styles/web-theme.css` (inside the existing `@theme inline` block, lines 16–47)
+- Test: `packages/ui/src/styles/web-theme.test.ts`
 
 **Interfaces:**
 - Consumes: semantic tokens from `@digithings/design/tokens.css` (`--bg`, `--ink`, `--surface`, `--surface-2`, `--hair`, `--ink-soft`, `--accent`, `--on-accent`, `--danger`, `--up`, `--down`, `--warn`).
@@ -216,7 +216,7 @@ git commit -m "feat(digiweb): shadcn components.json (Base UI base, lyra preset)
 
 - [ ] **Step 1: Write the failing contract test**
 
-Create `cloudflare/digiweb/web/src/styles/web-theme.test.ts`:
+Create `packages/ui/src/styles/web-theme.test.ts`:
 
 ```ts
 import { readFileSync } from "node:fs";
@@ -284,12 +284,12 @@ describe("web-theme shadcn token contract", () => {
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `npm --workspace @digithings/web run test -- src/styles/web-theme.test.ts`
+Run: `npm --workspace @digithings/ui run test -- src/styles/web-theme.test.ts`
 Expected: FAIL — mappings absent.
 
 - [ ] **Step 3: Add the bridge**
 
-In `cloudflare/digiweb/web/src/styles/web-theme.css`, append these lines INSIDE the existing `@theme inline { … }` block (after `--ease-brand`):
+In `packages/ui/src/styles/web-theme.css`, append these lines INSIDE the existing `@theme inline { … }` block (after `--ease-brand`):
 
 ```css
   /* shadcn/ui token contract — Base UI base, lyra preset.
@@ -329,13 +329,13 @@ Note: `--color-primary` is ink/paper, never an accent fill (differs from the ref
 
 - [ ] **Step 4: Run test to verify it passes**
 
-Run: `npm --workspace @digithings/web run test -- src/styles/web-theme.test.ts`
+Run: `npm --workspace @digithings/ui run test -- src/styles/web-theme.test.ts`
 Expected: 3 passed.
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add cloudflare/digiweb/web/src/styles/web-theme.css cloudflare/digiweb/web/src/styles/web-theme.test.ts
+git add packages/ui/src/styles/web-theme.css packages/ui/src/styles/web-theme.test.ts
 git commit -m "feat(digiweb): shadcn token bridge in web-theme.css (@theme inline) — wave 0"
 ```
 
@@ -344,22 +344,22 @@ git commit -m "feat(digiweb): shadcn token bridge in web-theme.css (@theme inlin
 ### Task 4: Vendored set in the package + reference rewire
 
 **Files:**
-- Create (CLI-generated): `cloudflare/digiweb/web/src/ui/button.tsx`, `card.tsx`, `dialog.tsx`, `input.tsx`
-- Create: `cloudflare/digiweb/web/src/ui/index.ts` (barrel)
-- Modify: `cloudflare/digiweb/web/package.json` (exports)
-- Modify: `cloudflare/digiweb/web/src/styles/web-theme.css` + `web-theme.test.ts` (Step 8b addendum)
-- Modify: `cloudflare/digiweb/reference/app/globals.css` (`@source` line; Step 8b stale-bridge removal)
-- Delete: `cloudflare/digiweb/reference/components/ui/` — only the 6 verified-dead files (`avatar`, `button`, `collapsible`, `dialog`, `skeleton`, `textarea`); `tooltip.tsx` + `dot-matrix.tsx` stay
-- Test: `cloudflare/digiweb/web/src/ui/ui.render.test.tsx`
+- Create (CLI-generated): `packages/ui/src/ui/button.tsx`, `card.tsx`, `dialog.tsx`, `input.tsx`
+- Create: `packages/ui/src/ui/index.ts` (barrel)
+- Modify: `packages/ui/package.json` (exports)
+- Modify: `packages/ui/src/styles/web-theme.css` + `web-theme.test.ts` (Step 8b addendum)
+- Modify: `apps/reference/app/globals.css` (`@source` line; Step 8b stale-bridge removal)
+- Delete: `apps/reference/components/ui/` — only the 6 verified-dead files (`avatar`, `button`, `collapsible`, `dialog`, `skeleton`, `textarea`); `tooltip.tsx` + `dot-matrix.tsx` stay
+- Test: `packages/ui/src/ui/ui.render.test.tsx`
 
 **Interfaces:**
 - Consumes: `cn` from `@/lib/utils` (Task 1) and the token contract (Task 3); consumers render `Button`/`Card`/`Dialog`/`Input` unmodified — zero per-component styling.
-- Produces: `@digithings/web/ui` (barrel export: `Button`, `Card`, `Dialog`, `Input`, plus each component's sub-parts). No `./dot-matrix` export — `DotMatrix` already ships as `./chat/dot-matrix`, and the reference shim re-exports it (load-bearing for `gallery-thread.source.test.ts`).
+- Produces: `@digithings/ui/ui` (barrel export: `Button`, `Card`, `Dialog`, `Input`, plus each component's sub-parts). No `./dot-matrix` export — `DotMatrix` already ships as `./chat/dot-matrix`, and the reference shim re-exports it (load-bearing for `gallery-thread.source.test.ts`).
 
 - [ ] **Step 1: Generate the components on Base UI**
 
 ```bash
-cd cloudflare/digiweb/web
+cd packages/ui
 npx shadcn@latest add button card dialog input -y
 ```
 
@@ -367,7 +367,7 @@ Expected: `src/ui/button.tsx`, `src/ui/card.tsx`, `src/ui/dialog.tsx`, `src/ui/i
 
 - [ ] **Step 2: Write the render test**
 
-Create `cloudflare/digiweb/web/src/ui/ui.render.test.tsx`:
+Create `packages/ui/src/ui/ui.render.test.tsx`:
 
 ```tsx
 import { renderToStaticMarkup } from "react-dom/server";
@@ -400,12 +400,12 @@ describe("vendored ui kit renders server-side", () => {
 
 - [ ] **Step 3: Run test to verify it fails**
 
-Run: `npm --workspace @digithings/web run test -- src/ui/ui.render.test.tsx`
+Run: `npm --workspace @digithings/ui run test -- src/ui/ui.render.test.tsx`
 Expected: FAIL — cannot resolve `./index`.
 
 - [ ] **Step 4: Write the barrel**
 
-Create `cloudflare/digiweb/web/src/ui/index.ts` re-exporting everything the four files export, e.g.:
+Create `packages/ui/src/ui/index.ts` re-exporting everything the four files export, e.g.:
 
 ```ts
 export * from "./button";
@@ -418,7 +418,7 @@ export * from "./input";
 
 - [ ] **Step 5: Run test to verify it passes**
 
-Run: `npm --workspace @digithings/web run test -- src/ui/ui.render.test.tsx`
+Run: `npm --workspace @digithings/ui run test -- src/ui/ui.render.test.tsx`
 Expected: 3 passed.
 
 - [ ] **Step 6: Retire the dead legacy ui files (partial)**
@@ -448,9 +448,9 @@ muted-foreground = ink-soft, destructive = down, ring = 40% accent mix).
 - [ ] **Step 9: Verify the full package + reference gates**
 
 ```bash
-npm --workspace @digithings/web run test
-npm --workspace @digithings/web run typecheck
-cd cloudflare/digiweb/reference && npm run lint && npm run typecheck
+npm --workspace @digithings/ui run test
+npm --workspace @digithings/ui run typecheck
+cd apps/reference && npm run lint && npm run typecheck
 ```
 
 Expected: web suite 49 files/327 tests green; web `typecheck` stays pre-existing red (30 errors, 0 in `src/ui/` — see Task 1/4 rulings); reference lint + typecheck 0 errors. The reference dev/build proof is Task 5.
@@ -458,8 +458,8 @@ Expected: web suite 49 files/327 tests green; web `typecheck` stays pre-existing
 - [ ] **Step 10: Commit**
 
 ```bash
-git add cloudflare/digiweb/web/src/ui cloudflare/digiweb/web/src/styles/web-theme.css cloudflare/digiweb/web/src/styles/web-theme.test.ts cloudflare/digiweb/web/package.json cloudflare/digiweb/reference/app/globals.css
-git commit -m "feat(digiweb): vendored shadcn ui set in @digithings/web + reference rewire — wave 0"
+git add packages/ui/src/ui packages/ui/src/styles/web-theme.css packages/ui/src/styles/web-theme.test.ts packages/ui/package.json apps/reference/app/globals.css
+git commit -m "feat(digiweb): vendored shadcn ui set in @digithings/ui + reference rewire — wave 0"
 ```
 
 ---
@@ -467,15 +467,15 @@ git commit -m "feat(digiweb): vendored shadcn ui set in @digithings/web + refere
 ### Task 5: Proof of chain — reference route + visual verification
 
 **Files:**
-- Create: `cloudflare/digiweb/reference/app/(gallery)/ui/page.tsx`
+- Create: `apps/reference/app/(gallery)/ui/page.tsx`
 
 **Interfaces:**
-- Consumes: `@digithings/web/ui` (Task 4), the token bridge (Task 3), reference `@source` line (Task 4).
+- Consumes: `@digithings/ui/ui` (Task 4), the token bridge (Task 3), reference `@source` line (Task 4).
 - Produces: the acceptance evidence for spec §5 Wave 0 — screenshots of stock components in the skin (dark + light + one livery scope).
 
 - [ ] **Step 1: Write the proof route**
 
-Create `cloudflare/digiweb/reference/app/(gallery)/ui/page.tsx` — a server component rendering, with no custom classes on the components themselves:
+Create `apps/reference/app/(gallery)/ui/page.tsx` — a server component rendering, with no custom classes on the components themselves:
 - `<Button>` in `default`, `secondary`, `outline`, `ghost` variants and `sm`/`lg` sizes, one disabled.
 - `<Input placeholder="Search tickers" />` beside a plain `<label>`.
 - `<Card>` with header/content/footer text.
@@ -485,7 +485,7 @@ Create `cloudflare/digiweb/reference/app/(gallery)/ui/page.tsx` — a server com
 - [ ] **Step 2: Start the reference dev server and screenshot**
 
 ```bash
-cd cloudflare/digiweb/reference
+cd apps/reference
 (nohup npm run dev -- --port 4013 > /tmp/design-reference.dev.log 2>&1 &)
 ```
 
@@ -504,9 +504,9 @@ Verify against the DESIGN.md checklist, then record the verdict in the PR body: 
 
 ```bash
 python scripts/check_frontend_canon.py
-npm --workspace @digithings/web run test
+npm --workspace @digithings/ui run test
 npm --workspace digichat run test          # web-theme.css is shared — regression guard
-cd cloudflare/digiweb/reference && npm run lint && npm run typecheck && npm run build
+cd apps/reference && npm run lint && npm run typecheck && npm run build
 ```
 
 Expected: all green (digichat ≈123 files/1214 tests; canon guard clean — no new app-local css families since all new CSS is in the package sheet).
@@ -514,7 +514,7 @@ Expected: all green (digichat ≈123 files/1214 tests; canon guard clean — no 
 - [ ] **Step 4: Commit**
 
 ```bash
-git add "cloudflare/digiweb/reference/app/(gallery)/ui/page.tsx"
+git add "apps/reference/app/(gallery)/ui/page.tsx"
 git commit -m "feat(digiweb): wave 0 proof route — stock shadcn in the Instrument-Panel skin"
 ```
 
@@ -523,7 +523,7 @@ git commit -m "feat(digiweb): wave 0 proof route — stock shadcn in the Instrum
 ### Task 6: Canon docs
 
 **Files:**
-- Modify: `cloudflare/digiweb/MIGRATION.md`, `cloudflare/digiweb/ARCHITECTURE.md` (~~`cloudflare/digiweb/MANIFEST.json`~~ — struck 2026-09-16: generated file, see Step 2)
+- Modify: `packages/ui/MIGRATION.md`, `packages/ui/ARCHITECTURE.md` (~~`packages/ui/MANIFEST.json`~~ — struck 2026-09-16: generated file, see Step 2)
 
 **Interfaces:**
 - Consumes: Tasks 1–5 as shipped.
@@ -531,7 +531,7 @@ git commit -m "feat(digiweb): wave 0 proof route — stock shadcn in the Instrum
 
 - [ ] **Step 1: MIGRATION.md — add the UI kit section**
 
-Document: the vendored set lives in `@digithings/web` (`src/ui/`, Base UI base); add components by running `npx shadcn@latest add <name>` inside `cloudflare/digiweb/web` (never vendored into an app); consumers add `@source "../../web/src/ui";`; the token bridge lives in `web-theme.css`'s single `@theme inline` block (link spec §3.2); `--color-primary` is ink/paper — never accent.
+Document: the vendored set lives in `@digithings/ui` (`src/ui/`, Base UI base); add components by running `npx shadcn@latest add <name>` inside `packages/ui` (never vendored into an app); consumers add `@source "../../web/src/ui";`; the token bridge lives in `web-theme.css`'s single `@theme inline` block (link spec §3.2); `--color-primary` is ink/paper — never accent.
 
 - [ ] **Step 2: ARCHITECTURE.md family map**
 
@@ -549,7 +549,7 @@ package-family indexing tracked in #4225.
 - [ ] **Step 3: Commit**
 
 ```bash
-git add cloudflare/digiweb/MIGRATION.md cloudflare/digiweb/ARCHITECTURE.md
+git add packages/ui/MIGRATION.md packages/ui/ARCHITECTURE.md
 git commit -m "docs(digiweb): wave 0 canon — vendored ui kit contract in MIGRATION/ARCHITECTURE"
 ```
 

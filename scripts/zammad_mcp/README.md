@@ -33,7 +33,7 @@ ZAMMAD_API_TOKEN=... python -m scripts.zammad_mcp.server --stdio
 
 ## Wiring into digichat (local dogfood)
 
-The occ tenant entry lives in `cloudflare/digichat/config/examples/occ-embed.yaml`
+The occ tenant entry lives in `apps/digichat/config/examples/occ-embed.yaml`
 (`mcp.servers`). The URL stays on the BFF and never reaches the browser;
 Zammad's `Token token=<x>` scheme rides as the raw value under `Authorization`
 (the `authHeader` behavior from #3841). `tokenEnv` is resolved from the digichat
@@ -72,7 +72,7 @@ guard treats it as container-internal DNS; loopback URLs are never dialable
 
 In production the server is **not** a separate container: it runs as the
 `zammad-mcp` program inside the `digithings-stack` Cloudflare Container
-(`cloudflare/digithings-stack-cloudflare/container/supervisor/supervisord.conf`),
+(`apps/digithings-stack-cloudflare/container/supervisor/supervisord.conf`),
 bound to `0.0.0.0:8770`. The image ships the package (`COPY scripts/zammad_mcp`
 in `Dockerfile.digithings-stack-cloudflare`) and the entrypoint aliases the
 dotless name `zammad-mcp` to the container's own address in `/etc/hosts`, so

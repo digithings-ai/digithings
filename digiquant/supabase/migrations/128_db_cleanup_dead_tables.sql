@@ -11,7 +11,7 @@
 --       test_migration_116.py reference them.
 --   fx_economic_calendar (core)
 --       Vestigial: core's economic_calendar is the single source and the
---       twelve-x twin was retired (cloudflare/dashboard/lib/twelve-x/types.ts:130).
+--       twelve-x twin was retired (apps/dashboard/lib/twelve-x/types.ts:130).
 --
 -- Reads on the market-data drop (127) are unaffected; audit_log and the
 -- kairos-tenancy set (job_runs, workspaces, ...) are deliberately NOT here —

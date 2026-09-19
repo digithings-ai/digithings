@@ -29,10 +29,10 @@ test:
 # Unit only (no stack required). digichat Vitest included; dashboard is npm-only (REM-130).
 test-unit:
 	pytest -m unit -v --tb=short
-	cd cloudflare/digichat && npm run test --if-present
+	cd apps/digichat && npm run test --if-present
 
 # Dashboard frontend (not part of test-unit — use CI test-dashboard.yml or run locally):
-#   cd cloudflare/dashboard && npm run lint && npm run test && npm run build
+#   cd apps/dashboard && npm run lint && npm run test && npm run build
 
 # Baseline gate — always-green imports + schemas + CLI help (no Docker, no network).
 test-baseline:
@@ -140,20 +140,20 @@ digichat-profile-a-bundle-down:
 
 # digichat Next.js dev server (http://127.0.0.1:3000, hot reload). Backend: `make up`, `make stack-local`, or ./scripts/run_local.sh
 digichat-dev:
-	cd cloudflare/digichat && npm run dev
+	cd apps/digichat && npm run dev
 
-# digichat GET /api/health (needs dev server + cloudflare/digichat/.env.local + backends).
+# digichat GET /api/health (needs dev server + apps/digichat/.env.local + backends).
 digichat-health:
-	@curl -sf http://127.0.0.1:3000/api/health | python3 -m json.tool && echo || (echo "digichat /api/health failed — run make digichat-dev (see cloudflare/digichat/.env.local)"; exit 1)
+	@curl -sf http://127.0.0.1:3000/api/health | python3 -m json.tool && echo || (echo "digichat /api/health failed — run make digichat-dev (see apps/digichat/.env.local)"; exit 1)
 
-# Python ecosystem on host (digikey 8005, LiteLLM 4000, services 8000–8003) — no Docker. Fast iteration with digichat: stack-local + digichat-dev (see cloudflare/digichat/OPERATIONS.md).
+# Python ecosystem on host (digikey 8005, LiteLLM 4000, services 8000–8003) — no Docker. Fast iteration with digichat: stack-local + digichat-dev (see apps/digichat/OPERATIONS.md).
 stack-local:
 	./scripts/run_stack_local.sh
 
 stack-local-stop:
 	./scripts/stop_stack_local.sh
 
-# Postgres 16 for digichat only (host port 5433). Use with `npm run dev` + DIGICHAT_DATABASE_URL in cloudflare/digichat/.env.local
+# Postgres 16 for digichat only (host port 5433). Use with `npm run dev` + DIGICHAT_DATABASE_URL in apps/digichat/.env.local
 up-digichat-db:
 	docker compose --profile digichat up -d digichat-db
 
@@ -193,7 +193,7 @@ openapi-check:
 openapi-digigraph: openapi-export
 
 # Regenerate the digivault API-reference notes (docs/vision/api/) from the authored
-# /docs content (cloudflare/digithings-web/lib/apiDocs.ts + sharedDocs.ts). Commit the
+# /docs content (apps/digithings-web/lib/apiDocs.ts + sharedDocs.ts). Commit the
 # output; the architecture-vault sync upserts it to Supabase on push to main.
 .PHONY: gen-api-vault
 gen-api-vault:

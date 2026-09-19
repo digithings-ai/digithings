@@ -24,8 +24,8 @@ scripts
 # root context; re-include just that package.
 !scripts/zammad_mcp
 agents
-cloudflare/digithings
-cloudflare/digiquant
+apps/digithings-web
+apps/digiquant-web
 **/*.log
 .env
 .env.*

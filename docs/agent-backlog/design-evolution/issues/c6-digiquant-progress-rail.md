@@ -1,10 +1,10 @@
 ## Goal
 
-Add **Graphite-style progress rail** to the digiquant.io Olympus scroll-pinned section via the shared `ScrollyFeatures` primitive ([`graphite-full.md`](../../../../cloudflare/digiweb/design/references/scans/graphite-full.md)).
+Add **Graphite-style progress rail** to the digiquant.io Olympus scroll-pinned section via the shared `ScrollyFeatures` primitive ([`graphite-full.md`](../../../../packages/design/references/scans/graphite-full.md)).
 
 ## Component
 
-- [x] `cloudflare/digiquant-web/`
+- [x] `apps/digiquant-web/`
 
 ## Acceptance Criteria
 
@@ -24,8 +24,8 @@ Add **Graphite-style progress rail** to the digiquant.io Olympus scroll-pinned s
 
 ## Documentation to Update
 
-- [ ] `cloudflare/digiquant-web` landing docs
-- [ ] `cloudflare/digiweb/design/EVOLUTION.md`
+- [ ] `apps/digiquant-web` landing docs
+- [ ] `packages/design/EVOLUTION.md`
 
 ## Out of Scope
 

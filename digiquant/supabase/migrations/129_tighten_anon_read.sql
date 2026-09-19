@@ -2,7 +2,7 @@
 -- Tighten the anon read surface (#4115, security-review follow-up). The anon
 -- key ships inside the static-export dashboard, so every anon-readable
 -- relation is a public surface. The policies and grants revoked below have no
--- consumer in cloudflare/dashboard or cloudflare/digiquant-web (verified by
+-- consumer in apps/dashboard or apps/digiquant-web (verified by
 -- grep against origin/develop), and nothing else in the repo reads them with
 -- the anon key — every remaining writer/reader runs service_role.
 --

@@ -274,7 +274,7 @@ def _render_clipped_tool_result(result_data: dict[str, Any]) -> Any | None:
 
     The §7 keys are hoisted from the raw result before the clip and attached
     ahead of it: the digichat attribution line (#4130) reads them off the
-    emitted result (``cloudflare/digiweb/web/src/lib/gloomberb.ts``), and the
+    emitted result (``packages/ui/src/lib/gloomberb.ts``), and the
     scalar cap leaves no key structure to read once a string is cut. The
     emitted record is always within ``_MAX_TOOL_RESULT_CHARS`` — including the
     already-≤-cap payload whose hoisted block alone would push it over — so
