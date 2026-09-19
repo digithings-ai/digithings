@@ -92,7 +92,7 @@ export default async function EmbedPage({
   return (
     <>
       <script dangerouslySetInnerHTML={{ __html: themePinScript(paintTheme) }} />
-      <EmbedClient initialTenantCfg={seededCfg} />
+      <EmbedClient initialTenantCfg={seededCfg} initialBoot={first(params.boot) ?? null} />
     </>
   );
 }

@@ -65,6 +65,7 @@ import {
 import { ComposerTriggerPopover } from "./composer-trigger-popover.aui";
 import { MessageError } from "./message-error.aui";
 import { ComposerBlockCaret } from "./block-caret";
+import { TypedWelcomeCopy } from "./typed-welcome-copy";
 
 export type ThreadGroupPart = MessagePrimitive.GroupedParts.GroupPart;
 
@@ -392,11 +393,7 @@ const ThreadWelcome: FC = () => {
       <h1 className="aui-thread-welcome-message-inner fade-in slide-in-from-bottom-1 animate-in fill-mode-both text-2xl font-medium tracking-tight duration-200">
         {welcome}
       </h1>
-      {welcomeBody.map((line) => (
-        <p key={line} className="aui-thread-welcome-copy">
-          {line}
-        </p>
-      ))}
+      <TypedWelcomeCopy lines={welcomeBody} />
     </div>
   );
 };

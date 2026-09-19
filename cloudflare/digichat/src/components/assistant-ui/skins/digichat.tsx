@@ -4,6 +4,7 @@ import "@digithings/web/styles/chat-core.css";
 import "@digithings/web/styles/chat-widgets.css";
 import "@digithings/web/styles/chat-aui.css";
 import "@digithings/web/styles/chatbot.css";
+import "@digithings/web/styles/digichat-boot-loader.css";
 
 import { useCallback, useMemo, type FormEvent } from "react";
 import {

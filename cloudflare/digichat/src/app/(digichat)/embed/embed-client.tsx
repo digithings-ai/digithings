@@ -88,8 +88,10 @@ import {
   buildReadyMessage,
   isAllowedSeedParentOrigin,
   parseSeedMessage,
+  READY_EVENT,
   resolveReadyTargetOrigin,
 } from "@/lib/embed-seed-messages";
+import { signalDigichatBootStep } from "@digithings/web/chat/boot-signal";
 import {
   formatParentErrorLine,
   parseParentErrorMessage,
@@ -136,22 +138,36 @@ function resolveAccent(raw: string | null | undefined): Accent {
  */
 export default function EmbedClient({
   initialTenantCfg,
+  initialBoot,
 }: {
   initialTenantCfg: EmbedTenantClientConfig;
+  initialBoot?: string | null;
 }) {
   return (
     <Suspense fallback={null}>
-      <EmbedPageInner initialTenantCfg={initialTenantCfg} />
+      <EmbedPageInner initialTenantCfg={initialTenantCfg} initialBoot={initialBoot} />
     </Suspense>
   );
 }
 
-function EmbedPageInner({ initialTenantCfg }: { initialTenantCfg: EmbedTenantClientConfig }) {
+function EmbedPageInner({
+  initialTenantCfg,
+  initialBoot,
+}: {
+  initialTenantCfg: EmbedTenantClientConfig;
+  initialBoot?: string | null;
+}) {
   const searchParams = useSearchParams();
   const accent = resolveAccent(searchParams.get("accent"));
   const token = searchParams.get("token") ?? undefined;
   const host = searchParams.get("host") ?? undefined;
   const tenantCfg = useEmbedTenantConfig(token, host, initialTenantCfg);
+
+  // Real boot milestone for the loader: the tenant/deploy config resolved.
+  useEffect(() => {
+    signalDigichatBootStep("config");
+  }, [tenantCfg]);
+
   const urlTheme = parseEmbedThemeParam(searchParams.get("theme"));
   const [parentTheme, setParentTheme] = useState<EmbedTheme | null>(null);
   // Parent postMessage > ?theme= URL pin > tenant registry (default dark).
@@ -313,6 +329,7 @@ function EmbedPageInner({ initialTenantCfg }: { initialTenantCfg: EmbedTenantCli
           host={host}
           uiParams={urlColors}
           planProof={planProof}
+          bootLab={initialBoot}
         />
       </div>
     </>
@@ -326,6 +343,7 @@ function EmbedChat({
   host,
   uiParams,
   planProof,
+  bootLab,
 }: {
   accent: Accent;
   tenantCfg: EmbedTenantClientConfig;
@@ -333,6 +351,7 @@ function EmbedChat({
   host?: string;
   uiParams: EmbedUiParams;
   planProof?: string | null;
+  bootLab?: string | null;
 }) {
   const {
     key: byokKey,
@@ -692,6 +711,10 @@ function EmbedChat({
   useEffect(() => {
     if (typeof window === "undefined") return;
     if (window.parent === window.self) return;
+    // Painted and interactive: release same-window waits (the welcome
+    // typewriter) even when the parent origin cannot be resolved below.
+    document.documentElement.dataset.digichatReady = "1";
+    window.dispatchEvent(new Event(READY_EVENT));
     const ancestorOrigins =
       "ancestorOrigins" in window.location ? window.location.ancestorOrigins : null;
     const target = resolveReadyTargetOrigin({
@@ -1219,7 +1242,8 @@ function EmbedChat({
         runtime={chat.runtime}
         clientConfig={stockClient}
         persistence="none"
-        composerLayout="compact"
+          composerLayout="compact"
+          bootLabVariant={bootLab}
         sendGate={sendGate}
         sessionKey={gate.host}
         webSearchScope={webSearchScope}
