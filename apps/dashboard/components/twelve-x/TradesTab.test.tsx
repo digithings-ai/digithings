@@ -115,14 +115,13 @@ describe('TradesTab', () => {
       createElement(TradesTab, { ideas, ideaEval }),
     );
 
-    // W4-A2: the hand-rolled <input type="range"> now renders the shared
-    // @digithings/ui Slider. The kit part carries data-slot="slider" and its
-    // own .ctl-slider-input mechanic (the same class the old native input
-    // wore), so the existing pins still hold — strengthened, not weakened,
-    // with the shared-part slot assertion.
+    // K1: the Impact threshold is the kit's Base UI Slider
+    // (`@digithings/ui/ui`). The part carries data-slot="slider" and composes
+    // its track/range/thumb slots, so the semantic pins hold under the kit.
     expect(html).toContain('data-testid="impact-min-slider"');
     expect(html).toContain('data-slot="slider"');
-    expect(html).toContain('ctl-slider-input');
+    expect(html).toContain('data-slot="slider-track"');
+    expect(html).toContain('data-slot="slider-thumb"');
     expect(html).toContain('|Impact| ≥ 0%');
     expect(html).toContain('aria-label="Filter by board date range"');
     expect(html).toContain('All boards');

@@ -9,8 +9,7 @@ import {
   LineChart as LineChartIcon,
   Workflow,
 } from 'lucide-react';
-import { EmptyState } from '@digithings/ui';
-import { Button } from '@digithings/ui/ui';
+import { Button, EmptyState } from '@digithings/ui/ui';
 
 import { SUBPAGE_MAX } from '@/components/layout-constants';
 import { SubpageStickyTabBar, subpageTabButtonClass } from '@/components/subpage-tab-bar';

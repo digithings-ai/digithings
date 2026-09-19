@@ -21,7 +21,7 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import { IconButton } from "./controls/NavButtons";
+import { IconButton } from "../ui/icon-button";
 
 /** Text direction. The kit defaults to `"ltr"`; RTL is always opt-in. */
 export type Direction = "ltr" | "rtl";

@@ -16,8 +16,14 @@ import {
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
+  EmptyState,
+  Field,
+  IconButton,
   Input,
   Label,
+  Radio,
+  RadioGroup,
+  SegmentedControl,
   Select,
   SelectContent,
   SelectItem,
@@ -28,6 +34,9 @@ import {
   Sheet,
   SheetContent,
   SheetTrigger,
+  Skeleton,
+  SkeletonGroup,
+  Slider,
   Switch,
   Tabs,
   TabsContent,
@@ -478,5 +487,170 @@ describe("vendored ui kit renders server-side", () => {
     expect(html).toContain('data-slot="dropdown-menu-trigger"');
     expect(html).not.toContain('data-slot="dropdown-menu-content"');
     expect(typeof DropdownMenuContent).toBe("function");
+  });
+});
+
+describe("kit parts promoted from the controls layer (#4306, batch K1)", () => {
+  it("Slider composes the Base UI track/range/thumb with the accent mechanism", () => {
+    const html = renderToStaticMarkup(<Slider value={40} min={0} max={100} aria-label="cap" />);
+    expect(html).toContain('data-slot="slider"');
+    expect(html).toContain('data-slot="slider-track"');
+    expect(html).toContain('data-slot="slider-range"');
+    expect(html).toContain('data-slot="slider-thumb"');
+    // the whole slider is the interactive affordance: pointer cursor on track
+    // and thumb, not-allowed when disabled (kit cursor contract, 0.3).
+    expect(html).toContain("cursor-pointer");
+    expect(html).toContain("data-disabled:cursor-not-allowed");
+  });
+
+  it("Slider renders one thumb for a scalar value and one per range entry", () => {
+    const single = renderToStaticMarkup(<Slider value={40} aria-label="single" />);
+    expect(single.match(/data-slot="slider-thumb"/g) ?? []).toHaveLength(1);
+    const range = renderToStaticMarkup(<Slider defaultValue={[25, 50]} aria-label="range" />);
+    expect(range.match(/data-slot="slider-thumb"/g) ?? []).toHaveLength(2);
+  });
+
+  it("Slider positions thumbs with logical inline coordinates (RTL-safe)", () => {
+    const html = renderToStaticMarkup(<Slider value={40} aria-label="cap" />);
+    expect(html).toContain("inset-inline-start");
+    expect(html).not.toContain("inset-left");
+  });
+
+  it("EmptyState renders the variant glyph, title, body, note and action", () => {
+    const html = renderToStaticMarkup(
+      <EmptyState
+        variant="first-run"
+        title="Nothing here yet"
+        body="Run your first backtest."
+        note="Results appear in the vault."
+        action={<button type="button">New backtest</button>}
+      />,
+    );
+    expect(html).toContain('data-slot="empty-state"');
+    expect(html).toContain("Nothing here yet");
+    expect(html).toContain("Run your first backtest.");
+    expect(html).toContain("Results appear in the vault.");
+    expect(html).toContain("New backtest");
+    expect(html).toMatch(/<svg/);
+  });
+
+  it("EmptyState spends the danger tone only on the error variant and announces it", () => {
+    const error = renderToStaticMarkup(<EmptyState variant="error" title="Boom" />);
+    expect(error).toContain('role="alert"');
+    expect(error).toContain("bg-danger/12");
+    const calm = renderToStaticMarkup(<EmptyState variant="no-results" title="None" />);
+    expect(calm).not.toContain("bg-danger/12");
+    expect(calm).not.toContain('role="alert"');
+  });
+
+  it("EmptyState glass dresses drop the glyph disc unless an icon is passed", () => {
+    const glass = renderToStaticMarkup(<EmptyState variant="error" dress="glass" title="Quiet" />);
+    expect(glass).toContain("justify-center");
+    expect(glass).not.toMatch(/<svg/);
+    const withIcon = renderToStaticMarkup(
+      <EmptyState variant="error" dress="glass" icon={<span>!</span>} title="Quiet" />,
+    );
+    expect(withIcon).toContain("!");
+  });
+
+  it("Skeleton renders the shimmer shape with aria-hidden and no loading semantics", () => {
+    const line = renderToStaticMarkup(<Skeleton className="h-3 w-40" />);
+    expect(line).toContain('data-slot="skeleton"');
+    expect(line).toContain('aria-hidden="true"');
+    expect(line).toContain("motion-reduce:animate-none");
+    const circle = renderToStaticMarkup(<Skeleton variant="circle" />);
+    expect(circle).toContain("rounded-full");
+    expect(renderToStaticMarkup(<Skeleton variant="block" />)).toContain("h-6");
+    expect(renderToStaticMarkup(<Skeleton size="sm" />)).toContain("h-[0.5rem]");
+  });
+
+  it("SkeletonGroup carries the aria-busy loading contract", () => {
+    const busy = renderToStaticMarkup(
+      <SkeletonGroup className="flex flex-col">
+        <Skeleton />
+      </SkeletonGroup>,
+    );
+    expect(busy).toContain('data-slot="skeleton-group"');
+    expect(busy).toContain('aria-busy="true"');
+    expect(renderToStaticMarkup(<SkeletonGroup busy={false} />)).toContain('aria-busy="false"');
+  });
+
+  it("RadioGroup and Radio carry the pointer cursor and disabled contract", () => {
+    const html = renderToStaticMarkup(
+      <RadioGroup defaultValue="paper" aria-label="mode">
+        <Radio value="paper" aria-label="paper" />
+      </RadioGroup>,
+    );
+    expect(html).toContain('data-slot="radio-group"');
+    expect(html).toContain('data-slot="radio"');
+    expect(html).toContain("cursor-pointer");
+    expect(html).toContain("data-disabled:cursor-not-allowed");
+  });
+
+  it("Field wires label, hint and error into the child control", () => {
+    const html = renderToStaticMarkup(
+      <Field label="Ticker" hint="Lowercase.">
+        <input name="ticker" />
+      </Field>,
+    );
+    expect(html).toContain('data-slot="field"');
+    expect(html).toMatch(/<label[^>]*for="/);
+    expect(html).toContain("Lowercase.");
+    expect(html).toMatch(/aria-describedby="/);
+  });
+
+  it("Field swaps the hint for the error and marks the control invalid", () => {
+    const html = renderToStaticMarkup(
+      <Field label="Ticker" hint="Lowercase." error="Required.">
+        <input name="ticker" />
+      </Field>,
+    );
+    expect(html).toContain("Required.");
+    expect(html).not.toContain("Lowercase.");
+    expect(html).toContain('aria-invalid="true"');
+    expect(html).toContain('data-invalid="true"');
+  });
+
+  it("Field marks required with a visible star and a screen-reader line", () => {
+    const html = renderToStaticMarkup(
+      <Field label="Ticker" required>
+        <input name="ticker" />
+      </Field>,
+    );
+    expect(html).toContain("*");
+    expect(html).toContain("(required)");
+    expect(html).toContain("sr-only");
+  });
+
+  it("IconButton is a borderless pointer glyph button with the disabled contract", () => {
+    const html = renderToStaticMarkup(
+      <IconButton aria-label="refresh">
+        <svg />
+      </IconButton>,
+    );
+    expect(html).toContain('data-slot="icon-button"');
+    expect(html).toContain('aria-label="refresh"');
+    expect(html).toContain("cursor-pointer");
+    expect(html).toContain("disabled:cursor-not-allowed");
+  });
+
+  it("SegmentedControl is a pressed-button group (not a tablist) with pointer cells", () => {
+    const html = renderToStaticMarkup(
+      <SegmentedControl options={["1D", "1M", "All"]} value="1M" aria-label="Range" />,
+    );
+    expect(html).toContain('role="group"');
+    expect(html).toContain('data-slot="segmented"');
+    expect(html).toContain('aria-pressed="true"');
+    expect(html).toContain('aria-pressed="false"');
+    expect(html).not.toContain('role="tablist"');
+    expect(html).toContain("cursor-pointer");
+  });
+
+  it("SegmentedControl accent dress reproduces the dashboard wash and type", () => {
+    const html = renderToStaticMarkup(
+      <SegmentedControl dress="accent" options={["a", "b"]} value="a" />,
+    );
+    expect(html).toContain("aria-pressed:bg-accent/20");
+    expect(html).toContain("font-sans");
   });
 });

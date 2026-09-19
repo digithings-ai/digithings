@@ -2,9 +2,14 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { ChevronDown } from 'lucide-react';
-import { Skeleton, SkeletonGroup } from '@digithings/ui';
-import { EmptyState } from '@digithings/ui';
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@digithings/ui/ui';
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+  EmptyState,
+  Skeleton,
+  SkeletonGroup,
+} from '@digithings/ui/ui';
 import { FreshnessBanner, latestSuccessfulRun } from '@/components/system/freshness-banner';
 import { RunEconomicsRow } from '@/components/system/run-economics-row';
 import { EntitledSurface } from '@/components/entitled-surface';

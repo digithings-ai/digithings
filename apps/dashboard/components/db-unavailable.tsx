@@ -1,7 +1,6 @@
 'use client';
 
-import { EmptyState } from '@digithings/ui';
-import { Button } from '@digithings/ui/ui';
+import { Button, EmptyState } from '@digithings/ui/ui';
 import { SUBPAGE_MAX } from '@/components/layout-constants';
 
 /**

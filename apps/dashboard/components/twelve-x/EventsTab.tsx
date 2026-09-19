@@ -1,8 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Button, Card } from '@digithings/ui/ui';
-import { SegmentedControl } from '@digithings/ui';
+import { Button, Card, SegmentedControl } from '@digithings/ui/ui';
 import { CalendarClock, ChevronRight, Globe, Users } from 'lucide-react';
 import { eventLocalDateKey, hasResolvedTime } from '@/lib/twelve-x/fetch';
 import type {

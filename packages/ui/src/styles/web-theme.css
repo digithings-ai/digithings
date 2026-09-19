@@ -21,6 +21,15 @@
 
 @custom-variant data-closed (&:where([data-state="closed"], [data-closed]:not([data-closed="false"])));
 
+/* Skeleton shimmer (#4306, batch K1) — the kit <Skeleton/> rides the stock
+   sk-* sweep; the keyframes live on the bridge so every consumer that imports
+   web-theme gets them, with no controls-core.css dependency. */
+@keyframes sk-shimmer {
+  to {
+    transform: translateX(100%);
+  }
+}
+
 @theme inline {
   --color-bg: var(--bg);
   --color-surface: var(--surface);

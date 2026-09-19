@@ -12,8 +12,8 @@ import {
   YAxis,
 } from 'recharts';
 import type { TableRow as DbTableRow } from '@/lib/database.types';
-import { EmptyState } from '@digithings/ui';
 import {
+  EmptyState,
   Table,
   TableBody,
   TableCell,

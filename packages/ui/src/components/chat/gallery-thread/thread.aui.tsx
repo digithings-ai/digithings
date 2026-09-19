@@ -32,7 +32,7 @@ import {
 import { TooltipIconButton } from "./tooltip-icon-button";
 import { Button } from "../../../ui/button";
 import { DotMatrix } from "../DotMatrix";
-import { Skeleton } from "../../../components/controls/Skeleton";
+import { Skeleton } from "../../../ui/skeleton";
 import { cn } from "./cn";
 import {
   ActionBarMorePrimitive,

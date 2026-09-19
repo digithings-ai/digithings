@@ -2,7 +2,7 @@
 
 import { useRef, useState } from "react";
 import { m, useReducedMotion, useScroll, useTransform } from "motion/react";
-import { SegmentedControl } from "@digithings/ui";
+import { SegmentedControl } from "@digithings/ui/ui";
 
 const COLUMNS = [
   { title: "Product", links: ["digigraph", "digiquant", "digisearch", "digichat"] },

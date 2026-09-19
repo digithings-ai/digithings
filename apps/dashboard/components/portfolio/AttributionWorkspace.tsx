@@ -1,7 +1,8 @@
 'use client';
 
 import { useMemo, useState } from 'react';
-import { SegmentedControl, TabStrip, tabId, tabPanelId } from '@digithings/ui';
+import { TabStrip, tabId, tabPanelId } from '@digithings/ui';
+import { SegmentedControl } from '@digithings/ui/ui';
 import AttributionTab from '@/components/observability/AttributionTab';
 import type { TableRow } from '@/lib/database.types';
 import {

@@ -11,7 +11,6 @@ import {
   Wrench,
   X,
 } from 'lucide-react';
-import { SegmentedControl } from '@digithings/ui';
 import {
   Button,
   Collapsible,
@@ -19,6 +18,7 @@ import {
   CollapsibleTrigger,
   Input,
   Label,
+  SegmentedControl,
 } from '@digithings/ui/ui';
 import { fetchPipelineTrace } from '@/lib/pipeline-trace';
 import type {

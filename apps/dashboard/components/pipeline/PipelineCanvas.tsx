@@ -13,13 +13,12 @@ import {
   Plus,
 } from 'lucide-react';
 import {
-  IconButton,
   Tooltip,
   TooltipContent,
   TooltipProvider,
   TooltipTrigger,
 } from '@digithings/ui';
-import { Button } from '@digithings/ui/ui';
+import { Button, IconButton } from '@digithings/ui/ui';
 import type { PipelineDayData } from '@/lib/pipeline-graph-data';
 import type { ExpansionState, LaidOutNode, PipelineNodeRunStatus } from '@/lib/pipeline-layout';
 import { layoutPipeline, pipelineNodeRunStatusLabel } from '@/lib/pipeline-layout';

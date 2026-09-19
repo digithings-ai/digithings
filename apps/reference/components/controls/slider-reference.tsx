@@ -2,22 +2,18 @@
 
 import { useState } from "react";
 
-/**
- * Range sliders — the parameter control. A native <input type="range"> restyled
- * cross-browser: the track fills to the value with the accent (a computed
- * gradient, so it aligns exactly), a square thumb (sharp-corner grammar,
- * shared with the promoted `.ctl-slider-input` mechanic), a live mono
- * readout, optional tick marks, and a disabled state. Native means keyboard
- * + a11y come free. Accent fill reads under the monochrome default.
- */
-function fill(value: number, min: number, max: number) {
-  const pct = ((value - min) / (max - min)) * 100;
-  return {
-    background: `linear-gradient(to right, var(--accent) 0 ${pct}%, color-mix(in srgb, var(--ink) 14%, transparent) ${pct}% 100%)`,
-  };
-}
+import { Slider } from "@digithings/ui/ui";
 
-function Slider({
+/**
+ * Range sliders — the parameter control. Now the kit's Base UI `Slider`
+ * (`@digithings/ui/ui`, #4306 batch K1): a 4px ink-tinted track, an accent
+ * fill, and a square accent thumb. Single-thumb (`value={n}`) and range
+ * (`value={[a, b]}`) both work. `SliderRow` below is a thin specimen scaffold
+ * that adds the label row, live mono readout and optional ticks around the kit
+ * part — the old hand-rolled native slider and its `.sl-input` mechanic are
+ * gone.
+ */
+function SliderRow({
   label,
   min,
   max,
@@ -39,25 +35,27 @@ function Slider({
   disabled?: boolean;
 }) {
   return (
-    <div className={`sl${disabled ? " sl--disabled" : ""}`}>
+    <div className={disabled ? "opacity-50" : undefined}>
       <div className="mb-[0.6rem] flex items-baseline justify-between">
-        <span className="font-mono text-[0.6rem] uppercase tracking-[0.1em] text-ink-mute">{label}</span>
+        <span className="font-mono text-[0.6rem] uppercase tracking-[0.1em] text-ink-mute">
+          {label}
+        </span>
         <span className="font-mono text-[0.86rem] tabular-nums text-ink">{format(value)}</span>
       </div>
-      <input
-        type="range"
-        className="sl-input"
+      <Slider
+        value={value}
         min={min}
         max={max}
         step={step}
-        value={value}
         disabled={disabled}
-        style={fill(value, min, max)}
         aria-label={label}
-        onChange={(e) => onChange?.(Number(e.target.value))}
+        onValueChange={(v) => onChange?.(v as number)}
       />
       {ticks ? (
-        <div className="mt-[0.55rem] flex justify-between font-mono text-[0.58rem] text-ink-mute" aria-hidden="true">
+        <div
+          className="mt-[0.55rem] flex justify-between font-mono text-[0.58rem] text-ink-mute"
+          aria-hidden="true"
+        >
           {ticks.map((t) => (
             <span key={t}>{format(t)}</span>
           ))}
@@ -76,13 +74,13 @@ export function SliderReference() {
       <p className="kicker">{"// slider"}</p>
       <h2 className="title">Dial the parameters.</h2>
       <p className="section-copy">
-        A native range input restyled to the system: the track fills to the value in the accent,
-        the thumb sits on top, and a mono readout tracks live. Arrow keys nudge, Home/End jump —
-        all for free from the native control. Shown with tick marks and a locked state.
+        A Base UI slider restyled to the system: the track fills to the value in the accent,
+        the thumb sits on top, and a mono readout tracks live. Arrow keys nudge, Home/End jump.
+        Shown with tick marks and a locked state.
       </p>
 
       <div className="mt-[1.2rem] flex max-w-[30rem] flex-col gap-[1.6rem]">
-        <Slider
+        <SliderRow
           label="kelly cap"
           min={0}
           max={1}
@@ -91,7 +89,7 @@ export function SliderReference() {
           onChange={setKelly}
           format={(v) => `${v.toFixed(2)}×`}
         />
-        <Slider
+        <SliderRow
           label="max position"
           min={0}
           max={100}
@@ -101,7 +99,7 @@ export function SliderReference() {
           format={(v) => `${v}%`}
           ticks={[0, 25, 50, 75, 100]}
         />
-        <Slider
+        <SliderRow
           label="leverage (locked)"
           min={1}
           max={10}

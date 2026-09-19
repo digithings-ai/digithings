@@ -2,8 +2,7 @@
 
 import { useState } from "react";
 
-import { Button } from "@digithings/ui/ui";
-import { Skeleton, SkeletonGroup } from "@digithings/ui";
+import { Button, Skeleton, SkeletonGroup } from "@digithings/ui/ui";
 
 /**
  * Skeleton loading states — placeholder shapes with a shimmer sweep that stand

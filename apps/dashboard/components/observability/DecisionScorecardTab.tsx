@@ -13,11 +13,11 @@ import {
 } from 'recharts';
 import { computeDecisionScorecard } from '@/lib/decision-scorecard';
 import type { TableRow as DbTableRow } from '@/lib/database.types';
-import { EmptyState } from '@digithings/ui';
 import { SectionCard, StatTile, fmtPct, signColorClass } from './shared';
 import { useChartColors, withAlpha } from '@/lib/chart-colors';
 import {
   Button,
+  EmptyState,
   Table,
   TableBody,
   TableCell,

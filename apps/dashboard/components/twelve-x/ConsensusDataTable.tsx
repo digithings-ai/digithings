@@ -11,8 +11,8 @@ import {
   TableHeader,
   TableRow,
   TableRowHeader,
+  SegmentedControl,
 } from '@digithings/ui/ui';
-import { SegmentedControl } from '@digithings/ui';
 import {
   LEAN_BAND,
   STRONG_BAND,

@@ -1,8 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Button, Card } from '@digithings/ui/ui';
-import { SegmentedControl } from '@digithings/ui';
+import { Button, Card, SegmentedControl } from '@digithings/ui/ui';
 import { LineChart as LineChartIcon } from 'lucide-react';
 import {
   CartesianGrid,

@@ -84,8 +84,8 @@ PerfMetrics/StatCounter, TerminalManifest, RepoActivity, the chat family (ChatTr
 ChatMessage/ChatMarkdown/ChatToolCall/…), the vendored shadcn kit
 (`@digithings/ui/ui`, below — the **canonical primitive source**), the
 residual controls layer (Table/Select/Dialog/DropdownMenu/Tooltip/
-EmptyState/Skeleton/NavButtons/Selection/DatePager/Field on the
-`dress` axis — kept only where the kit has no equivalent), Terminal,
+NavButtons-remaining/DatePager/Breadcrumbs/Pagination/SearchBar/TagsInput
+on the `dress` axis — kept only where the kit has no equivalent), Terminal,
 Emblem/StackRow, ModuleCard, Reveal/Stagger/HeroEntrance,
 useScrollyFeatures/ScrollyRail. Motion always via `m` under `MotionProvider`
 (LazyMotion `domAnimation` `strict` — a raw `motion.*` element creator throws).
@@ -130,6 +130,52 @@ The controls layer is now a keep-list (Table, Select, Dialog, DropdownMenu,
 Tooltip, EmptyState, Skeleton, NavButtons, Selection/radio, DatePager, Field,
 Label, Slider, Breadcrumbs, Pagination, SearchBar, TagsInput). Proof route:
 `reference/app/(gallery)/ui/page.tsx` (dark, light, and a scoped livery).
+
+Batch K1 (#4306) promoted the seven highest-impact keep-list parts into the kit
+in one pass — **Slider, EmptyState, Skeleton (+ `SkeletonGroup`), RadioGroup/
+Radio, Field, IconButton, SegmentedControl** — and repointed every live
+consumer (canon specimens, dashboard, digichat-ui, `ThemeProvider`). The
+controls copies remain and keep exporting, now at zero consumers (see the
+retirement batch); the reference's local `.sl-input` slider mechanic was
+deleted. The recipe is
+[§ Promote a part out of the controls layer](#promote-a-part-out-of-the-controls-layer-batch-k1).
+The keep-list is down to Breadcrumbs, DatePager, Dialog, DropdownMenu,
+Pagination, SearchBar, Select, Table, TagsInput, Tooltip + the zero-consumer
+K1 parts.
+
+### Promote a part out of the controls layer (batch K1)
+
+The repeatable shape K1 used for each of the seven:
+
+1. **Read the controls source and its CSS.** The controls file's docblock names
+   the adoption targets and every `dress`/variant axis that matters; its rules
+   live in `styles/controls-core.css` (or a family sheet). Translate them
+   value-for-value — this is a *port*, not a redesign.
+2. **Write the kit part in `packages/ui/src/ui/<name>.tsx`.** Token utilities
+   only (no colour literals, no raw palette shades — the canon guard enforces
+   this), logical properties (`ms-/me-/ps-/pe-/start-/end-`, never physical), a
+   `cursor-pointer` on every interactive part with the `disabled:cursor-not-allowed`
+   pair, and `data-slot="<part>"` mirroring the kit's slot contract. Keep the
+   controls `dress`/variant props only where a real consumer passes them.
+   Anything that cannot be a utility (a `::after` shimmer, `@keyframes`) goes to
+   the kit's styling layer — `styles/web-theme.css` for the bridge-level
+   `sk-shimmer` keyframes. Re-export from `ui/index.ts`.
+3. **Repoint consumers, one import at a time.** `@digithings/ui` (main barrel →
+   controls copy) becomes `@digithings/ui/ui` (kit). Move the symbol into an
+   existing `@digithings/ui/ui` import block in the file rather than adding a
+   second import from the same module. Leave every other main-barrel import
+   (Pager, TabStrip, Tooltip, …) where it is.
+4. **Add a specimen entry.** `apps/reference/lib/specimen-inventory.ts` needs a
+   `SPECIMENS` key for the new `ui/index.ts` module pointing at the canonical
+   specimen file + a marker the file contains, or `specimens.test.ts` fails.
+   Repoint the specimen's own import to `@digithings/ui/ui`.
+5. **Pin the part in `ui.render.test.tsx`** (render + variant/pointer/RTL
+   assertions) and, for pointer contracts that only exist in the DOM, in
+   `ui.pointer.client.test.tsx`.
+6. **Keep the controls file.** Do not delete it in the promotion batch — the
+   controls copy stays until its last consumer is gone, then a later retirement
+   batch removes the file, its `controls/index.ts` + main-barrel exports, and
+   its dead CSS together.
 
 ## Promotion playbook (v2 — the #1414 epic shape)
 

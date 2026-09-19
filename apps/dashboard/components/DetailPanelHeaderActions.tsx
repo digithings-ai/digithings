@@ -1,7 +1,7 @@
 'use client';
 
 import { ChevronsLeft, ChevronsRight, Maximize2, Minimize2, X } from 'lucide-react';
-import { IconButton } from '@digithings/ui';
+import { IconButton } from '@digithings/ui/ui';
 
 /** Desktop reader sizes shared by pipeline artifacts and twelve-x briefs (#1679). */
 export type DetailPanelSize = 'default' | 'wide' | 'full';

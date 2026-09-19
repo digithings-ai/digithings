@@ -1,8 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Button, Card } from '@digithings/ui/ui';
-import { Skeleton, SkeletonGroup } from '@digithings/ui';
+import { Button, Card, Skeleton, SkeletonGroup } from '@digithings/ui/ui';
 import { Badge, SectionTitle } from '@/components/ui';
 import { SafeMarkdown } from '@/components/SafeMarkdown';
 import { fetchLatestSnapshot } from '@/lib/snapshot-fetch';

@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { Skeleton, SkeletonGroup } from '@digithings/ui';
+import { Skeleton, SkeletonGroup } from '@digithings/ui/ui';
 import { getLibraryDocumentById, type LibraryDocumentResult } from '@/lib/queries';
 import { pipelineNodeRunStatusLabel } from '@/lib/pipeline-layout';
 import type { LaidOutNode } from '@/lib/pipeline-layout';

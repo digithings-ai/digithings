@@ -2,8 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useReducedMotion } from "motion/react";
-import { IconButton } from "@digithings/ui";
-import { Badge, Card, CardContent } from "@digithings/ui/ui";
+import { Badge, Card, CardContent, IconButton } from "@digithings/ui/ui";
 
 /**
  * Changelog rail — a horizontal scroll strip of release cards. Swipe, wheel, or

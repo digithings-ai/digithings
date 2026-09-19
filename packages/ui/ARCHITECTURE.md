@@ -160,9 +160,21 @@ Tooltip, EmptyState, Skeleton, NavButtons, Selection/radio, DatePager, Field,
 Label, Slider, Breadcrumbs, Pagination, SearchBar, TagsInput); deferred kit items
 live in #4306.
 
+Batch K1 (#4306) then promoted the seven highest-impact remaining gaps in one
+pass: **Slider** (the vendored stock shadcn Base UI slider — single + range
+thumbs, token-bridged to the accent mechanic), **EmptyState**, **Skeleton**
+(+ `SkeletonGroup`), **RadioGroup**/**Radio**, **Field**, **IconButton**, and
+**SegmentedControl**. Every live consumer was repointed — the canon specimens
+(`apps/reference/components/controls/*`), the dashboard's empty-state/skeleton/
+icon-button/segmented-control files, `packages/digichat-ui`, and
+`packages/ui/src/components/ThemeProvider.tsx`. The controls copies stay in
+place and keep exporting (zero-consumer candidates for the retirement batch);
+only the reference's local `.sl-input` mechanic was deleted. The promote-from-
+controls recipe is [MIGRATION.md § Promote a part out of the controls layer](MIGRATION.md#promote-a-part-out-of-the-controls-layer-batch-k1).
+
 | Family | Components | CSS subpath |
 | ------ | ---------- | ----------- |
-| `ui` | Alert, Badge, Button (+ `buttonVariants`), Card (+ parts), Checkbox, Collapsible, Dialog (+ parts), DropdownMenu (+ parts), Input, Label, Select (+ parts), Separator, Sheet (+ parts), Switch, Table (+ parts), Tabs, Textarea, Tooltip (+ parts) — barrel `web/src/ui/index.ts`, export `@digithings/ui/ui` | — (utility-only; consumers add `@source "../../../packages/ui/src/ui"`) |
+| `ui` | Alert, Badge, Button (+ `buttonVariants`), Card (+ parts), Checkbox, Collapsible, Dialog (+ parts), DropdownMenu (+ parts), EmptyState, Field, IconButton, Input, Label, Radio/RadioGroup, SegmentedControl, Select (+ parts), Separator, Sheet (+ parts), Skeleton/SkeletonGroup, Slider, Switch, Table (+ parts), Tabs, Textarea, Tooltip (+ parts) — barrel `web/src/ui/index.ts`, export `@digithings/ui/ui` | — (utility-only; consumers add `@source "../../../packages/ui/src/ui"`; the `sk-shimmer` keyframes ride `styles/web-theme.css`) |
 
 The five parts digichat needed a chat tone for carry the `dress="chat"` axis
 (Button/Card/Badge/Input/Label), which emits the existing `ctl-*-chat` classes

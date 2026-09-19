@@ -2,12 +2,12 @@
 
 import { useDeferredValue, useMemo, useState } from 'react';
 import { ChevronLeft, ChevronRight, Search, X } from 'lucide-react';
-import { IconButton } from '@digithings/ui';
 import {
   Button,
   Collapsible,
   CollapsibleContent,
   CollapsibleTrigger,
+  IconButton,
   Input,
   Label,
   Select,

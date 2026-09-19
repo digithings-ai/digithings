@@ -1,4 +1,4 @@
-import { Skeleton, SkeletonGroup } from '@digithings/ui';
+import { Skeleton, SkeletonGroup } from '@digithings/ui/ui';
 import { SUBPAGE_MAX } from '@/components/layout-constants';
 
 /**

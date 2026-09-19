@@ -1,7 +1,7 @@
 'use client';
 
 import { useLayoutEffect, useRef, useState } from 'react';
-import { SegmentedControl } from '@digithings/ui';
+import { SegmentedControl } from '@digithings/ui/ui';
 import { eventInstant, eventLocalDateKey } from '@/lib/twelve-x/fetch';
 import type { FxEconomicCalendarRow } from '@/lib/twelve-x/types';
 

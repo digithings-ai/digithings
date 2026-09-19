@@ -10,8 +10,7 @@ import {
 } from '@/lib/benchmark-tickers';
 import { fetchResearchRunDiagnostics } from '@/lib/observability-queries';
 import { SUBPAGE_MAX } from '@/components/layout-constants';
-import { EmptyState } from '@digithings/ui';
-import { Button } from '@digithings/ui/ui';
+import { Button, EmptyState } from '@digithings/ui/ui';
 import PageSkeleton from '@/components/page-skeleton';
 import {
   DailyBriefWorkspace,

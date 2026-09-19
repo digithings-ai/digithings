@@ -6,7 +6,7 @@
  * the down colour. Static display templates. Consumes the shared <EmptyState/>
  * primitive from @digithings/ui (each variant carries its default glyph).
  */
-import { EmptyState, type EmptyStateVariant } from "@digithings/ui";
+import { EmptyState, type EmptyStateVariant } from "@digithings/ui/ui";
 import { Button } from "@digithings/ui/ui";
 
 const STATES: {

@@ -8,11 +8,11 @@ import {
   DropdownMenuRadioGroup,
   DropdownMenuRadioItem,
   DropdownMenuTrigger,
-  SegmentedControl,
-  Slider,
 } from '@digithings/ui';
 import {
   Button,
+  SegmentedControl,
+  Slider,
   Table,
   TableBody,
   TableHead,
@@ -303,18 +303,26 @@ export default function TradesTab({
                 setBoardTo(to);
               }}
             />
-            <Slider
-              label="Minimum |Impact|"
-              value={impactMinPct}
-              min={IMPACT_MIN_PCT}
-              max={IMPACT_MAX_PCT}
-              step={IMPACT_STEP_PCT}
-              onChange={setImpactMinPct}
-              format={() => formatImpactThresholdLabel(impactMinPct)}
-              title="Hide rows whose absolute Impact is below this threshold"
-              data-testid="impact-min-slider"
-              className="min-w-[11rem] flex-1 sm:max-w-[16rem]"
-            />
+            <div className="min-w-[11rem] flex-1 sm:max-w-[16rem]">
+              <div className="mb-[0.6rem] flex items-baseline justify-between gap-[0.8rem]">
+                <span className="font-mono text-[0.6rem] uppercase tracking-[0.1em] text-ink-mute">
+                  Minimum |Impact|
+                </span>
+                <span className="font-mono text-[0.86rem] tabular-nums text-ink">
+                  {formatImpactThresholdLabel(impactMinPct)}
+                </span>
+              </div>
+              <Slider
+                value={impactMinPct}
+                min={IMPACT_MIN_PCT}
+                max={IMPACT_MAX_PCT}
+                step={IMPACT_STEP_PCT}
+                onValueChange={(v) => setImpactMinPct(v as number)}
+                aria-label="Minimum |Impact|"
+                title="Hide rows whose absolute Impact is below this threshold"
+                data-testid="impact-min-slider"
+              />
+            </div>
           </div>
 
           <div

@@ -10,8 +10,8 @@
  * renders its own check, so the explicit `<SelectItemIndicator/>` child is gone.
  */
 import { useState } from "react";
-import { Field } from "@digithings/ui";
 import {
+  Field,
   Select,
   SelectItem,
   SelectPopup,

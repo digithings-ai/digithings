@@ -2,7 +2,8 @@
 
 import { useState } from "react";
 
-import { IconButton, Pager, PagerPage, SegmentedControl } from "@digithings/ui";
+import { Pager, PagerPage } from "@digithings/ui";
+import { IconButton, SegmentedControl } from "@digithings/ui/ui";
 
 /**
  * Navigation buttons — the wayfinding controls: a segmented range switch (the

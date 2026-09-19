@@ -1,6 +1,6 @@
 "use client";
 
-import { IconButton } from "@digithings/ui";
+import { IconButton } from "@digithings/ui/ui";
 
 import { MiniMarkdown } from "./MiniMarkdown";
 import { readableSnippet } from "../activity-view";
