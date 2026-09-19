@@ -1,5 +1,53 @@
+import httpx
+
 from digisearch.web_search.models import WebSearchRequest
+from digisearch.web_search.searxng_provider import SearXNGWebSearchProvider
 from digisearch.web_search.service import WebSearchConfig, run_web_search
+
+
+def test_run_web_search_preserves_searxng_unresponsive_diagnostic(monkeypatch):
+    """The empty-with-failing-engines provider diagnostic survives run_web_search.
+
+    The hosted container's only observability channel is the HTTP response, so
+    the compact ``provider`` suffix the searxng provider adds on an empty body
+    must reach the caller through the service reconstruction, not be dropped.
+    """
+    from digisearch.web_search import service as svc
+
+    payload = {
+        "results": [],
+        "unresponsive_engines": [["duckduckgo", "access denied"]],
+    }
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json=payload)
+
+    provider = SearXNGWebSearchProvider(
+        base_url="http://127.0.0.1:8080",
+        client=httpx.Client(transport=httpx.MockTransport(handler)),
+    )
+
+    class _Fetcher:
+        def __init__(self, *a, **k):
+            pass
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            return False
+
+        def fetch(self, url):
+            raise RuntimeError("no network in unit")
+
+    monkeypatch.setattr(svc, "SearXNGWebSearchProvider", lambda **k: provider)
+    monkeypatch.setattr(svc, "HttpFetcher", _Fetcher)
+    resp = run_web_search(
+        WebSearchRequest(query="etf"),
+        config=WebSearchConfig(backend="searxng", fetch_max_pages=1, min_interval_s=0.0),
+    )
+    assert resp.results == []
+    assert resp.provider == "searxng(none; unresponsive=duckduckgo:access denied)"
 
 
 def test_service_prefers_searxng_falls_back_to_ddgs(monkeypatch):
