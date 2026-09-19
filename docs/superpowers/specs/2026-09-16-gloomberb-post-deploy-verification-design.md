@@ -86,11 +86,11 @@ deliberately still cookie-free so no secret wiring is needed.
 - FastMCP streamable-http serves at the `/mcp` path (the documented warm ping
   is `curl -sS https://mcp.digithings.ai/mcp -H 'Accept: application/json'`,
   `wrangler.toml:97`).
-- Hosted wiring: `DigiQuantMcpContainer` (`cloudflare/digithings-stack-cloudflare/src/index.ts:159-205`;
+- Hosted wiring: `DigiQuantMcpContainer` (`apps/digithings-stack-cloudflare/src/index.ts:159-205`;
   `envVars` lines 177–185; `sleepAfter = "24h"` warm policy), the
   `[[containers]]` entry in `wrangler.toml:88-113`, single replica
   (`max_instances = 1`, `MCP_CONTAINER_ID = "mcp-v1"` in
-  `cloudflare/digithings-stack-cloudflare/src/ports.ts:29`).
+  `apps/digithings-stack-cloudflare/src/ports.ts:29`).
 - **The hosted route is not enabled:** the `mcp.digithings.ai` `[[routes]]`
   entry is commented out (`wrangler.toml:63-73`, "HUMAN GATE — infra/network …
   Enable this route ONLY together with Worker-edge digikey JWT enforcement").

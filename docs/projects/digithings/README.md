@@ -68,8 +68,8 @@ Supabase `architecture_notes` (same `production` / `CORE_SUPABASE_*` pattern as
 digithings** (`dry-run` / `apply`, optional website crawl).
 
 digisearch dual-sink is **not** applied from Actions (ingest needs a
-server-visible path). Use the operator path below or the legacy
-`docs-reindex-guide.yml` until remote ingest exists.
+server-visible path). Use the operator path below; `docs-reindex-guide.yml`
+only dry-runs (its apply step was removed in #4357).
 
 ## First onboard (operator / local)
 

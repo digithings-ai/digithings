@@ -196,7 +196,7 @@ class ResearchConfigBundle(BaseModel):
     profile_config_version_id: str | None = Field(
         default=None,
         description=(
-            "Exact olympus_profile_config.id pin for this run. None selects the "
+            "Exact profile_config.id pin for this run. None selects the "
             "digithings house default. Overlay pins fail closed when unresolved."
         ),
     )

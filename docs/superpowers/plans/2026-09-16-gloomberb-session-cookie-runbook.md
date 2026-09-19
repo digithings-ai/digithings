@@ -46,7 +46,7 @@ Expected: a worktree on `task/4099-...` branched from `refs/remotes/origin/modul
 
 - [ ] **Step 2: File the hosted-forwarding follow-up issue**
 
-The hosted MCP container does not forward the cookie today (`cloudflare/digithings-stack-cloudflare/src/index.ts:177-185`; pinned by `tests/scripts/test_mcp_container.py:35-42`); the runbook must not pretend otherwise.
+The hosted MCP container does not forward the cookie today (`apps/digithings-stack-cloudflare/src/index.ts:177-185`; pinned by `tests/scripts/test_mcp_container.py:35-42`); the runbook must not pretend otherwise.
 
 Run:
 ```bash
@@ -58,7 +58,7 @@ Follow-up from #4099 (runbook: docs/ops/gloomberb-session-cookie.md).
 
 The gated digifetch tools (11 names, `data/gloomberb/entitlements.py`)
 answer typed `auth_required` on the hosted MCP surface because
-`DigiQuantMcpContainer.envVars` (cloudflare/digithings-stack-cloudflare/src/index.ts:177-185)
+`DigiQuantMcpContainer.envVars` (apps/digithings-stack-cloudflare/src/index.ts:177-185)
 does not forward `GLOOMBERB_SESSION_COOKIE` and no `wrangler secret` exists for it
 (wrangler.toml secrets comment:135–164).
 
@@ -256,7 +256,7 @@ Create `docs/ops/gloomberb-session-cookie.md`. Required sections and content (fa
 5. `## Extract the session cookie` — browser devtools → Application/Storage → Cookies → `term.gloom.sh`; copy `__Secure-gloomberb.session_token` (fallback `gloomberb.session_token`; `client.py:180-183`). Accepted forms: `name=value` or a bare token (`client.py:437-439, 2143-2154`). Show only `GLOOMBERB_SESSION_COOKIE=__Secure-gloomberb.session_token=<cookie-value>` as the example.
 6. `## Place it per deployment` — three subsections:
    - **Local runs:** add the line to the repo-root `.env` (gitignored); `.env.example` now carries a commented placeholder.
-   - **Hosted MCP container:** NOT forwarded today — `DigiQuantMcpContainer.envVars` (`cloudflare/digithings-stack-cloudflare/src/index.ts:177-185`) carries only scope/backend/FRED/R2, pinned by `tests/scripts/test_mcp_container.py:35-42`; the `mcp.digithings.ai` route is commented out (`wrangler.toml:63-73`, human gate). The tracked wiring (follow-up issue `#<FWD>`) is exactly: add `GLOOMBERB_SESSION_COOKIE: env.GLOOMBERB_SESSION_COOKIE ?? ""` to `envVars`; run `printf '%s' "$VALUE" | env -u CLOUDFLARE_API_TOKEN npx wrangler secret put GLOOMBERB_SESSION_COOKIE`; add the name to `MCP_SCOPED_VARS` in `tests/scripts/test_mcp_container.py` and to `test_wrangler_documents_mcp_secrets`; add it to the `wrangler.toml` secrets comment (lines 135–164).
+   - **Hosted MCP container:** NOT forwarded today — `DigiQuantMcpContainer.envVars` (`apps/digithings-stack-cloudflare/src/index.ts:177-185`) carries only scope/backend/FRED/R2, pinned by `tests/scripts/test_mcp_container.py:35-42`; the `mcp.digithings.ai` route is commented out (`wrangler.toml:63-73`, human gate). The tracked wiring (follow-up issue `#<FWD>`) is exactly: add `GLOOMBERB_SESSION_COOKIE: env.GLOOMBERB_SESSION_COOKIE ?? ""` to `envVars`; run `printf '%s' "$VALUE" | env -u CLOUDFLARE_API_TOKEN npx wrangler secret put GLOOMBERB_SESSION_COOKIE`; add the name to `MCP_SCOPED_VARS` in `tests/scripts/test_mcp_container.py` and to `test_wrangler_documents_mcp_secrets`; add it to the `wrangler.toml` secrets comment (lines 135–164).
    - **GitHub Actions pipeline:** no `GLOOMBERB_*` env is set in any workflow today (verified 2026-09-16); unset means session tools are filtered from the in-process agent surface (`agent_tools.py:261-292`). If the pipeline ever needs a gated tool, a repo secret feeding the pipeline job is the placement — tracked as future work, not documented as live.
 7. `## Verify the cookie works` — the Task 2 Step 4 command verbatim and its expected output (`OK holders rows = <n>`) plus the `FAIL auth_required` troubleshooting note (quoting, `set -a` export). State that the command prints only a code or a row count, never the value.
 8. `## Privacy rules` — never log, never echo, never paste into issues/PRs/chat; the TTL cache discriminator is a truncated SHA-256 fingerprint, not the cookie (`client.py:186-197`); cookies are forwarded only to same-origin redirect hops (`digifetch/src/digifetch/http.py:224`); rotate by replacing the value in every placement (local `.env`, and the hosted secret once wired) — the fingerprint separates sessions, so no cache flush or restart is required for correctness.
@@ -378,4 +378,4 @@ Expected: `CLOSED`. If it is still open, comment the PR link on #4099 and close 
 
 **2. Placeholder scan:** the only bracketed tokens are deliberate runtime fills: `<FWD>` (issue number created in Task 1 Step 2, inserted in Task 3 sections 6 and 9 and the PR body) and `<n>` (dry-run row count). The dry-run steps are captured from a real operator run, not invented — the plan says exactly what to observe and what to do if the flow differs. No TBD/TODO/"add appropriate error handling" phrasing.
 
-**3. Type consistency:** paths, env names, tool names, and line references match the spec and the tree at `118966117`; the test's `ALLOWED_ENV_NAMES` / `REQUIRED_ISSUE_REFS` / `PLACEHOLDER_PREFIXES` are referenced by name in the Global Constraints and Task 3 contract; the runbook path and test path are identical everywhere they appear. `DigiQuantMcpContainer`, `MCP_SCOPED_VARS`, and `test_wrangler_documents_mcp_secrets` are the exact identifiers in `cloudflare/digithings-stack-cloudflare/src/index.ts` and `tests/scripts/test_mcp_container.py`.
+**3. Type consistency:** paths, env names, tool names, and line references match the spec and the tree at `118966117`; the test's `ALLOWED_ENV_NAMES` / `REQUIRED_ISSUE_REFS` / `PLACEHOLDER_PREFIXES` are referenced by name in the Global Constraints and Task 3 contract; the runbook path and test path are identical everywhere they appear. `DigiQuantMcpContainer`, `MCP_SCOPED_VARS`, and `test_wrangler_documents_mcp_secrets` are the exact identifiers in `apps/digithings-stack-cloudflare/src/index.ts` and `tests/scripts/test_mcp_container.py`.

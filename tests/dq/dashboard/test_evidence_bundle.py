@@ -179,7 +179,7 @@ def test_publish_persists_when_writer_on() -> None:
         provenance=_PROV,
     )
     store = EvidenceBundleStore()
-    with patch.dict("os.environ", {"OLYMPUS_EVIDENCE_BUNDLE_WRITER": "on"}, clear=False):
+    with patch.dict("os.environ", {"DIGIQUANT_EVIDENCE_BUNDLE_WRITER": "on"}, clear=False):
         published = publish_h5_evidence_bundle(built=built, store=store)
     assert published.bundle_id == built.bundle.bundle_id
     assert (
@@ -215,7 +215,7 @@ def test_publish_skips_store_when_writer_off_retains_typed() -> None:
         provenance=_PROV,
     )
     store = EvidenceBundleStore()
-    with patch.dict("os.environ", {"OLYMPUS_EVIDENCE_BUNDLE_WRITER": "off"}, clear=False):
+    with patch.dict("os.environ", {"DIGIQUANT_EVIDENCE_BUNDLE_WRITER": "off"}, clear=False):
         published = publish_h5_evidence_bundle(built=built, store=store)
     assert published.bundle_id == built.bundle.bundle_id
     assert (

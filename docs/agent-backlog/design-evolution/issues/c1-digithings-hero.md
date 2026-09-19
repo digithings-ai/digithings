@@ -1,10 +1,10 @@
 ## Goal
 
-Realign **digithings.ai** hero to Cursor pattern: literal primary CTA, trust strip, and `ProductFrame` product visual — per [`EVOLUTION.md` §3 digithings](../../../../cloudflare/digiweb/design/EVOLUTION.md).
+Realign **digithings.ai** hero to Cursor pattern: literal primary CTA, trust strip, and `ProductFrame` product visual — per [`EVOLUTION.md` §3 digithings](../../../../packages/design/EVOLUTION.md).
 
 ## Component
 
-- [x] `cloudflare/digithings-web/`
+- [x] `apps/digithings-web/`
 
 ## Acceptance Criteria
 
@@ -17,7 +17,7 @@ Realign **digithings.ai** hero to Cursor pattern: literal primary CTA, trust str
 - [ ] Mesh/grain atmosphere **hero only** — section below hero uses flat `--bg`
 - [ ] `reveal-up` on hero text block (respects reduced motion)
 - [ ] Mobile (390px): CTAs stack, frame scales via CQ, no horizontal overflow
-- [ ] `npm run build` in `cloudflare/digithings-web` passes
+- [ ] `npm run build` in `apps/digithings-web` passes
 
 ## Test Requirements
 
@@ -28,8 +28,8 @@ Realign **digithings.ai** hero to Cursor pattern: literal primary CTA, trust str
 
 ## Documentation to Update
 
-- [ ] `cloudflare/digithings-web/README.md` or landing component doc if exists
-- [ ] `cloudflare/digiweb/design/EVOLUTION.md` Phase C digithings hero item
+- [ ] `apps/digithings-web/README.md` or landing component doc if exists
+- [ ] `packages/design/EVOLUTION.md` Phase C digithings hero item
 
 ## Out of Scope
 

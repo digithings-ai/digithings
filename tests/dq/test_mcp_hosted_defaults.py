@@ -14,7 +14,7 @@ import pytest
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 DOCKERFILE_MCP = REPO_ROOT / "digiquant" / "Dockerfile.mcp"
-STACK_INDEX_TS = REPO_ROOT / "cloudflare" / "digithings-stack-cloudflare" / "src" / "index.ts"
+STACK_INDEX_TS = REPO_ROOT / "apps" / "digithings-stack-cloudflare" / "src" / "index.ts"
 MCP_SERVER_PY = REPO_ROOT / "digiquant" / "src" / "digiquant" / "mcp_server.py"
 
 HOSTED_SCOPE_LINE = "ENV DIGIQUANT_MCP_SCOPE=read"

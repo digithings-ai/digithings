@@ -6,10 +6,10 @@
 #     imports ghcr.io/digithings-ai/digichat:<version> into ACR) can deploy any
 #     released version. Previously publishing waited for the promotion to main
 #     (#1343), which left released tags without an image (#4346).
-#     The tag's version is checked against cloudflare/digichat/package.json so a
+#     The tag's version is checked against apps/digichat/package.json so a
 #     hand-made or mismatched tag cannot publish a wrong image.
 #
-#  2. On a push to main touching cloudflare/digichat/** (a version can reach main
+#  2. On a push to main touching apps/digichat/** (a version can reach main
 #     without its tag push being rerun).
 #
 # Whichever trigger runs second is a no-op: the manifest check below skips
@@ -23,7 +23,7 @@ on:
     tags:
       - "digichat-v*"
     paths:
-      - "cloudflare/digichat/**"
+      - "apps/digichat/**"
   workflow_dispatch:
 
 concurrency:
@@ -51,11 +51,11 @@ jobs:
         id: version
         run: |
           set -euo pipefail
-          version="$(jq -r .version cloudflare/digichat/package.json)"
+          version="$(jq -r .version apps/digichat/package.json)"
           if [ "${GITHUB_REF_TYPE:-}" = "tag" ]; then
             tag_version="${GITHUB_REF_NAME#digichat-v}"
             if [ "$tag_version" != "$version" ]; then
-              echo "::error::$GITHUB_REF_NAME does not match cloudflare/digichat/package.json ($version) — refusing to publish."
+              echo "::error::$GITHUB_REF_NAME does not match apps/digichat/package.json ($version) — refusing to publish."
               exit 1
             fi
             echo "Publishing release tag $GITHUB_REF_NAME (package.json agrees)."
@@ -80,7 +80,7 @@ jobs:
         uses: docker/build-push-action@v6
         with:
           context: .
-          file: cloudflare/digichat/Dockerfile
+          file: apps/digichat/Dockerfile
           push: true
           tags: |
             ghcr.io/digithings-ai/digichat:v${{ steps.version.outputs.version }}

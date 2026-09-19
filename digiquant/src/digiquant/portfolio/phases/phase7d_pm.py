@@ -126,7 +126,7 @@ def _risk_aggressive_node(state: PortfolioState) -> dict[str, Any]:
     aggressive arm of the debate summary.
     """
     from digiquant.portfolio.skills import load_skill
-    from digiquant.tool_rounds import run_olympus_research_agent as run_research_agent
+    from digiquant.tool_rounds import run_digiquant_research_agent as run_research_agent
 
     skill_text = load_skill("risk-aggressive")
     tools, execute_tool, web_grounding = _risk_tools(state, segment="risk-aggressive")
@@ -189,7 +189,7 @@ def _risk_conservative_node(state: PortfolioState) -> dict[str, Any]:
     ``key_tension`` synthesis.
     """
     from digiquant.portfolio.skills import load_skill
-    from digiquant.tool_rounds import run_olympus_research_agent as run_research_agent
+    from digiquant.tool_rounds import run_digiquant_research_agent as run_research_agent
 
     aggressive = (state.phase7d_risk_debate or {}).get("aggressive_case", "")
     inputs = _build_risk_phase_inputs(state, role="conservative")
@@ -269,7 +269,7 @@ def _pm_node(state: PortfolioState) -> dict[str, Any]:
     to preserve the blinded-analysis semantics at the prompt level.
     """
     from digiquant.portfolio.skills import load_skill
-    from digiquant.tool_rounds import run_olympus_research_agent as run_research_agent
+    from digiquant.tool_rounds import run_digiquant_research_agent as run_research_agent
 
     # Prefer the dedicated pm skill; fall back to portfolio-manager if present.
     skill_text = _load_pm_skill(load_skill)

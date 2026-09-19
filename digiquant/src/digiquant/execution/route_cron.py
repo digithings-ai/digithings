@@ -3,7 +3,7 @@
 Production entry: ``python -m digiquant.execution.route_cron``. Overlay
 books persist order intents; this CLI is the missing submit seam. House and
 system workspaces, live env rows, IBKR paper, and Alpaca ``api_key`` rows are
-never submitted. ``DIGIQUANT_EXECUTION_ROUTING`` (alias ``OLYMPUS_KAIROS_ROUTING``)
+never submitted. ``DIGIQUANT_EXECUTION_ROUTING``
 defaults **off** — ``--all`` then
 exits 3 without calling ``submit_order``. This module does not import Alpaca
 adapters at module level.
@@ -39,7 +39,7 @@ from digiquant.execution.sync_cron import (
 EXIT_NOT_CONFIGURED: int = 2
 EXIT_ROUTING_DISABLED: int = 3
 EXIT_REFUSED: int = 4
-KAIROS_ROUTING_DISABLED: str = "KAIROS_ROUTING_DISABLED"
+DIGIQUANT_ROUTING_DISABLED: str = "DIGIQUANT_ROUTING_DISABLED"
 
 RouteBatchFn = Callable[[Sequence[SyncTarget]], int]
 
@@ -149,7 +149,7 @@ def main(
         return 0
 
     if not routing_on:
-        err(f"{KAIROS_ROUTING_DISABLED}: {EXECUTION_ROUTING} is off (no submit_order)")
+        err(f"{DIGIQUANT_ROUTING_DISABLED}: {EXECUTION_ROUTING} is off (no submit_order)")
         return EXIT_ROUTING_DISABLED
 
     loaded = _load_rows(
@@ -262,7 +262,7 @@ __all__ = [
     "EXIT_NOT_CONFIGURED",
     "EXIT_REFUSED",
     "EXIT_ROUTING_DISABLED",
-    "KAIROS_ROUTING_DISABLED",
+    "DIGIQUANT_ROUTING_DISABLED",
     "RouteBatchFn",
     "main",
 ]

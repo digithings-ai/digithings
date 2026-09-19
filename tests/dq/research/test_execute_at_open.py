@@ -774,10 +774,9 @@ def _ledger_on(monkeypatch: pytest.MonkeyPatch) -> None:
 
     ``ledger_enabled`` reads the process environment and defaults to **on**, so a
     developer with ``DIGIQUANT_PORTFOLIO_LEDGER=0`` (or alias
-    ``OLYMPUS_PORTFOLIO_LEDGER=0``) exported would otherwise see the whole
+    ``DIGIQUANT_PORTFOLIO_LEDGER=0``) exported would otherwise see the whole
     authoritative path silently skipped and the suite still pass.
     """
-    monkeypatch.delenv("OLYMPUS_PORTFOLIO_LEDGER", raising=False)
     monkeypatch.delenv("DIGIQUANT_PORTFOLIO_LEDGER", raising=False)
 
 
@@ -1178,7 +1177,7 @@ class TestBuildEventsFromPaperFillsDeclines:
         assert "portfolio_ledger_commits" in declined and _RUN_D in declined
 
     def test_declines_when_the_kill_switch_is_off(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.setenv("OLYMPUS_PORTFOLIO_LEDGER", "0")
+        monkeypatch.setenv("DIGIQUANT_PORTFOLIO_LEDGER", "0")
         events, declined, _ = _mod.build_events_from_paper_fills(
             _day().client(), _RUN_D, _EXEC_D, now=_NOW
         )

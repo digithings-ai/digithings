@@ -24,7 +24,7 @@ from digiquant.portfolio.research_attention import (
     resolve_h6_attention_decision,
 )
 from digiquant.research.research_attention import (
-    OLYMPUS_RESEARCH_ATTENTION_MODE_ENV,
+    DIGIQUANT_RESEARCH_ATTENTION_MODE_ENV,
     attention_store_for_run,
     reset_attention_stores,
 )
@@ -98,7 +98,7 @@ def _clean_attention_stores() -> None:
 def test_h4_builds_plan_after_roster_without_mutating_roster(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setenv(OLYMPUS_RESEARCH_ATTENTION_MODE_ENV, "shadow")
+    monkeypatch.setenv(DIGIQUANT_RESEARCH_ATTENTION_MODE_ENV, "shadow")
     state = _state_with_roster(price_deltas={"SPY": 0.001})
     roster_before = [e.model_dump(mode="json") for e in state.phase_portfolio.focus_roster]
     update = h4_phase_attention_update(state)
@@ -111,7 +111,7 @@ def test_h4_builds_plan_after_roster_without_mutating_roster(
 
 
 def test_plan_persists_to_attention_store(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv(OLYMPUS_RESEARCH_ATTENTION_MODE_ENV, "shadow")
+    monkeypatch.setenv(DIGIQUANT_RESEARCH_ATTENTION_MODE_ENV, "shadow")
     state = _state_with_roster()
     update = h4_phase_attention_update(state)
     plan = AttentionPlan.model_validate(update["portfolio_research_attention_plan"])
@@ -121,14 +121,14 @@ def test_plan_persists_to_attention_store(monkeypatch: pytest.MonkeyPatch) -> No
 
 
 def test_off_mode_skips_plan(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv(OLYMPUS_RESEARCH_ATTENTION_MODE_ENV, "off")
+    monkeypatch.setenv(DIGIQUANT_RESEARCH_ATTENTION_MODE_ENV, "off")
     state = _state_with_roster()
     assert plan_portfolio_research_attention(state) is None
     assert h4_phase_attention_update(state) == {}
 
 
 def test_h6_resolves_after_h5_features(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv(OLYMPUS_RESEARCH_ATTENTION_MODE_ENV, "enforce")
+    monkeypatch.setenv(DIGIQUANT_RESEARCH_ATTENTION_MODE_ENV, "enforce")
     state = _state_with_roster(price_deltas={"SPY": 0.05})
     update = h4_phase_attention_update(state)
     state = state.model_copy(update=update)
@@ -152,7 +152,7 @@ def test_h6_resolves_after_h5_features(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 def test_enforce_h5_carry_skips_provider(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv(OLYMPUS_RESEARCH_ATTENTION_MODE_ENV, "enforce")
+    monkeypatch.setenv(DIGIQUANT_RESEARCH_ATTENTION_MODE_ENV, "enforce")
     roster = [
         FocusRosterEntry(
             ticker="XYZ",
@@ -208,7 +208,7 @@ def test_graph_node_order_unchanged() -> None:
 
 
 def test_h4_node_plans_without_changing_roster(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv(OLYMPUS_RESEARCH_ATTENTION_MODE_ENV, "shadow")
+    monkeypatch.setenv(DIGIQUANT_RESEARCH_ATTENTION_MODE_ENV, "shadow")
     monkeypatch.setenv("PORTFOLIO_HELD_GATE", "off")
     state = ResearchState(
         run_type="delta",
@@ -218,21 +218,21 @@ def test_h4_node_plans_without_changing_roster(monkeypatch: pytest.MonkeyPatch) 
     )
     node = build_h4_opportunity_screener().nodes[0].run
     off_env = "off"
-    monkeypatch.setenv(OLYMPUS_RESEARCH_ATTENTION_MODE_ENV, off_env)
+    monkeypatch.setenv(DIGIQUANT_RESEARCH_ATTENTION_MODE_ENV, off_env)
     reset_attention_stores()
     off_update = node(state.model_copy())
     off_roster = json.dumps(
         [e.model_dump(mode="json") for e in off_update["phase_portfolio"].focus_roster],
         sort_keys=True,
     )
-    monkeypatch.setenv(OLYMPUS_RESEARCH_ATTENTION_MODE_ENV, "shadow")
+    monkeypatch.setenv(DIGIQUANT_RESEARCH_ATTENTION_MODE_ENV, "shadow")
     reset_attention_stores()
     shadow_update = node(state.model_copy())
     shadow_roster = json.dumps(
         [e.model_dump(mode="json") for e in shadow_update["phase_portfolio"].focus_roster],
         sort_keys=True,
     )
-    monkeypatch.setenv(OLYMPUS_RESEARCH_ATTENTION_MODE_ENV, "enforce")
+    monkeypatch.setenv(DIGIQUANT_RESEARCH_ATTENTION_MODE_ENV, "enforce")
     reset_attention_stores()
     enforce_update = node(state.model_copy())
     enforce_roster = json.dumps(

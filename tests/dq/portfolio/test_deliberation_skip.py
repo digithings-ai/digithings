@@ -156,7 +156,7 @@ class TestH6SelectionEnforceCarry:
     def test_enforce_low_value_carries_without_provider(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        monkeypatch.setenv("OLYMPUS_H6_SELECTION_MODE", "enforce")
+        monkeypatch.setenv("DIGIQUANT_H6_SELECTION_MODE", "enforce")
         compiled = build_pipeline(ResearchState, [build_h6_deliberation(["AAPL"], held={"AAPL"})])
         with patch(
             "digigraph.graph.research_agent.completion_text",
@@ -174,7 +174,7 @@ class TestH6SelectionEnforceCarry:
     def test_shadow_records_selection_but_keeps_incumbent_fingerprint(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        monkeypatch.setenv("OLYMPUS_H6_SELECTION_MODE", "shadow")
+        monkeypatch.setenv("DIGIQUANT_H6_SELECTION_MODE", "shadow")
         compiled = build_pipeline(ResearchState, [build_h6_deliberation(["AAPL"], held={"AAPL"})])
         with patch(
             "digigraph.graph.research_agent.completion_text",

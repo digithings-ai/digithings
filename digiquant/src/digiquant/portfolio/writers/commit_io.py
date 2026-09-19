@@ -1078,7 +1078,7 @@ class PreTradeRiskValidation:
 
 
 def resolve_pretrade_risk_mode() -> PreTradeRiskMode:
-    """Read ``OLYMPUS_PRETRADE_RISK_MODE``; unknown values fall back to shadow."""
+    """Read ``DIGIQUANT_PRETRADE_RISK_MODE``; unknown values fall back to shadow."""
     raw = env_lookup(_PRETRADE_RISK_MODE_ENV, default=PreTradeRiskMode.SHADOW.value).strip().lower()
     try:
         return PreTradeRiskMode(raw)

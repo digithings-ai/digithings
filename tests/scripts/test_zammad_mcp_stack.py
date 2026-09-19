@@ -10,7 +10,7 @@ import pytest
 pytestmark = pytest.mark.unit
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-STACK_DIR = REPO_ROOT / "cloudflare" / "digithings-stack-cloudflare"
+STACK_DIR = REPO_ROOT / "apps" / "digithings-stack-cloudflare"
 SUPERVISORD = STACK_DIR / "container" / "supervisor" / "supervisord.conf"
 ENTRYPOINT = STACK_DIR / "container" / "entrypoint.sh"
 STACK_INDEX = STACK_DIR / "src" / "index.ts"

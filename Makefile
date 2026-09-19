@@ -1,7 +1,7 @@
 # Digi Ecosystem – common targets (Phase 0+)
 # Use: make build, make test, make test-e2e, make up, make down
 
-.PHONY: build up down test test-unit test-e2e test-baseline doc-check vault-check package up-heartbeat up-digichat down-digichat digichat-release-up digichat-release-down digichat-profile-a-up digichat-profile-a-down digichat-profile-a-bundle-up digichat-profile-a-bundle-down digichat-dev digichat-health stack-local stack-local-stop up-digichat-db down-digichat-db seed-digisearch-local export-edgar-digisearch-dev seed-digisearch-edgar-dev seed-digisearch-edgar-dev-host edgar-digisearch-dev agents-init score score-delta clean-imports find-stale commit pr task new-task status batch-candidates parse-error hooks-install up-observability down-observability research-validate supabase-migrations-check
+.PHONY: build up down test test-unit test-e2e test-baseline doc-check adr-check vault-check package up-heartbeat up-digichat down-digichat digichat-release-up digichat-release-down digichat-profile-a-up digichat-profile-a-down digichat-profile-a-bundle-up digichat-profile-a-bundle-down digichat-dev digichat-health stack-local stack-local-stop up-digichat-db down-digichat-db seed-digisearch-local export-edgar-digisearch-dev seed-digisearch-edgar-dev seed-digisearch-edgar-dev-host edgar-digisearch-dev agents-init score score-delta clean-imports find-stale commit pr task new-task status batch-candidates parse-error hooks-install up-observability down-observability research-validate supabase-migrations-check
 
 build:
 	docker compose build
@@ -29,10 +29,10 @@ test:
 # Unit only (no stack required). digichat Vitest included; dashboard is npm-only (REM-130).
 test-unit:
 	pytest -m unit -v --tb=short
-	cd cloudflare/digichat && npm run test --if-present
+	cd apps/digichat && npm run test --if-present
 
 # Dashboard frontend (not part of test-unit — use CI test-dashboard.yml or run locally):
-#   cd cloudflare/dashboard && npm run lint && npm run test && npm run build
+#   cd apps/dashboard && npm run lint && npm run test && npm run build
 
 # Baseline gate — always-green imports + schemas + CLI help (no Docker, no network).
 test-baseline:
@@ -45,6 +45,10 @@ test-e2e:
 # Internal markdown links (agent-facing docs). Same check as CI workflow docs.yml.
 doc-check:
 	python3 scripts/check_doc_links.py
+
+# docs/adr/NNNN-*.md must be zero-padded, unique and gap-free. Same check as CI docs job (#3524).
+adr-check:
+	python3 scripts/check_adr_numbering.py
 
 # Lint the digivault-managed docs/vision vault (wikilinks, frontmatter, taxonomy,
 # orphans) against docs/vision/.digivault.yml. Uses the digivault core (pydantic +
@@ -136,20 +140,20 @@ digichat-profile-a-bundle-down:
 
 # digichat Next.js dev server (http://127.0.0.1:3000, hot reload). Backend: `make up`, `make stack-local`, or ./scripts/run_local.sh
 digichat-dev:
-	cd cloudflare/digichat && npm run dev
+	cd apps/digichat && npm run dev
 
-# digichat GET /api/health (needs dev server + cloudflare/digichat/.env.local + backends).
+# digichat GET /api/health (needs dev server + apps/digichat/.env.local + backends).
 digichat-health:
-	@curl -sf http://127.0.0.1:3000/api/health | python3 -m json.tool && echo || (echo "digichat /api/health failed — run make digichat-dev (see cloudflare/digichat/.env.local)"; exit 1)
+	@curl -sf http://127.0.0.1:3000/api/health | python3 -m json.tool && echo || (echo "digichat /api/health failed — run make digichat-dev (see apps/digichat/.env.local)"; exit 1)
 
-# Python ecosystem on host (digikey 8005, LiteLLM 4000, services 8000–8003) — no Docker. Fast iteration with digichat: stack-local + digichat-dev (see cloudflare/digichat/OPERATIONS.md).
+# Python ecosystem on host (digikey 8005, LiteLLM 4000, services 8000–8003) — no Docker. Fast iteration with digichat: stack-local + digichat-dev (see apps/digichat/OPERATIONS.md).
 stack-local:
 	./scripts/run_stack_local.sh
 
 stack-local-stop:
 	./scripts/stop_stack_local.sh
 
-# Postgres 16 for digichat only (host port 5433). Use with `npm run dev` + DIGICHAT_DATABASE_URL in cloudflare/digichat/.env.local
+# Postgres 16 for digichat only (host port 5433). Use with `npm run dev` + DIGICHAT_DATABASE_URL in apps/digichat/.env.local
 up-digichat-db:
 	docker compose --profile digichat up -d digichat-db
 
@@ -189,7 +193,7 @@ openapi-check:
 openapi-digigraph: openapi-export
 
 # Regenerate the digivault API-reference notes (docs/vision/api/) from the authored
-# /docs content (cloudflare/digithings-web/lib/apiDocs.ts + sharedDocs.ts). Commit the
+# /docs content (apps/digithings-web/lib/apiDocs.ts + sharedDocs.ts). Commit the
 # output; the architecture-vault sync upserts it to Supabase on push to main.
 .PHONY: gen-api-vault
 gen-api-vault:
@@ -319,9 +323,10 @@ secrets-scan:
 	}
 	@gitleaks detect --source . --config .gitleaks.toml --redact --verbose --no-banner
 
-# Compare the repo secret list (`gh secret list`) with every `secrets.*` read
-# under .github/. Reads with no repo-level secret are informational (they usually
-# resolve at org or environment level); a repo secret nothing reads exits 1.
+# Match every `secrets.*` read under .github/ against each level (repo secret, repo
+# variable, org secret, environment secret) and report `dead`, `not repo-level`,
+# `unresolved`, `repo-over-org` and `env-over-repo`. `--strict` exits 1 on a dead repo
+# secret; `--strict-unresolved` does the same for a read no level defines.
 # Local check only — deliberately not a CI gate.
 .PHONY: secrets-audit
 secrets-audit:
