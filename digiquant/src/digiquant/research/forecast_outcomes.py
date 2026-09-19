@@ -32,9 +32,16 @@ from digiquant.portfolio.models.forecast import (
     resolve_effective_forecast,
 )
 from digiquant.portfolio.models.forecast_calibration import (
+    CalibratedForecast,
+    CalibrationArtifactStatus,
+    ForecastCalibration,
     ForecastOutcome,
     OutcomeStatus,
     SessionPriceSnapshot,
+    calibrated_forecast_content_hash,
+    calibrated_forecast_id,
+    forecast_calibration_content_hash,
+    forecast_calibration_id,
     forecast_outcome_content_hash,
     forecast_outcome_hash_payload,
     forecast_outcome_id,
@@ -887,14 +894,294 @@ def plan_forecast_outcome_hash_repairs(
     return ForecastOutcomeHashRepairPlan(repairs=tuple(repairs), unrepairable=tuple(unrepairable))
 
 
+@dataclass(frozen=True)
+class ForecastCalibrationHashRepair:
+    """One stored calibration whose cited outcome ids were rewritten."""
+
+    calibration_id: str
+    repaired_calibration_id: str
+    recorded_content_hash: str
+    repaired_content_hash: str
+
+
+@dataclass(frozen=True)
+class CalibratedForecastHashRepair:
+    """One stored calibrated forecast whose calibration id was rewritten."""
+
+    calibrated_forecast_id: str
+    repaired_calibrated_forecast_id: str
+    recorded_content_hash: str
+    repaired_content_hash: str
+
+
+@dataclass(frozen=True)
+class ForecastOutcomeCascadePlan:
+    """Dry-run result of the full citation cascade (#4295 G2 / #4298).
+
+    ``outcomes`` rewrites the stale ``forecast_outcomes`` rows; ``calibrations``
+    and ``calibrated_forecasts`` carry the transitive id churn those rewrites
+    force through the two append-only citing tables.
+    """
+
+    outcomes: tuple[ForecastOutcomeHashRepair, ...] = field(default_factory=tuple)
+    calibrations: tuple[ForecastCalibrationHashRepair, ...] = field(default_factory=tuple)
+    calibrated_forecasts: tuple[CalibratedForecastHashRepair, ...] = field(default_factory=tuple)
+    unrepairable: tuple[str, ...] = field(default_factory=tuple)
+
+    @property
+    def ok(self) -> bool:
+        return not self.unrepairable
+
+    @property
+    def writes(self) -> int:
+        return len(self.outcomes) + len(self.calibrations) + len(self.calibrated_forecasts)
+
+
+def _calibration_source_fields(row: Mapping[str, Any]) -> dict[str, Any]:
+    """Coerce one persisted calibration row, handling psycopg and PostgREST shapes."""
+    fields: dict[str, Any] = {
+        name: row[name] for name in ForecastCalibration.model_fields if name in row
+    }
+    for decimal_key in (
+        "equivalent_sample_size",
+        "bias",
+        "dispersion",
+        "brier_score",
+        "log_score",
+        "reliability",
+    ):
+        value = fields.get(decimal_key)
+        if value is not None and not isinstance(value, Decimal):
+            fields[decimal_key] = Decimal(str(value))
+    calibration_id = fields.get("calibration_id")
+    if isinstance(calibration_id, str):
+        fields["calibration_id"] = UUID(calibration_id)
+    outcome_ids = fields.get("outcome_ids")
+    if outcome_ids is not None:
+        fields["outcome_ids"] = tuple(UUID(str(item)) for item in outcome_ids)
+    status = fields.get("status")
+    if status is not None and not isinstance(status, CalibrationArtifactStatus):
+        fields["status"] = CalibrationArtifactStatus(str(status))
+    for instant_key in ("effective_at", "known_at"):
+        value = fields.get(instant_key)
+        if isinstance(value, str):
+            fields[instant_key] = _parse_known_at(value)
+    return fields
+
+
+def _calibrated_forecast_source_fields(row: Mapping[str, Any]) -> dict[str, Any]:
+    """Coerce one persisted calibrated-forecast row into constructor-ready values."""
+    fields: dict[str, Any] = {
+        name: row[name] for name in CalibratedForecast.model_fields if name in row
+    }
+    for decimal_key in (
+        "expected_gross_return",
+        "forecast_error_std",
+        "calibrated_positive_probability",
+        "reliability_weight",
+    ):
+        value = fields.get(decimal_key)
+        if value is not None and not isinstance(value, Decimal):
+            fields[decimal_key] = Decimal(str(value))
+    quantiles = fields.get("downside_quantiles")
+    if quantiles is not None:
+        fields["downside_quantiles"] = tuple(
+            item if isinstance(item, Decimal) else Decimal(str(item)) for item in quantiles
+        )
+    for uuid_key in (
+        "calibrated_forecast_id",
+        "base_forecast_id",
+        "effective_forecast_id",
+        "calibration_id",
+    ):
+        value = fields.get(uuid_key)
+        if isinstance(value, str):
+            fields[uuid_key] = UUID(value)
+    status = fields.get("status")
+    if status is not None and not isinstance(status, CalibrationArtifactStatus):
+        fields["status"] = CalibrationArtifactStatus(str(status))
+    for instant_key in ("effective_until", "effective_at", "known_at"):
+        value = fields.get(instant_key)
+        if value is not None and isinstance(value, str):
+            fields[instant_key] = _parse_known_at(value)
+    return fields
+
+
+def plan_forecast_outcome_cascade_repairs(
+    *,
+    outcome_rows: Sequence[Mapping[str, Any]],
+    calibration_rows: Sequence[Mapping[str, Any]],
+    calibrated_forecast_rows: Sequence[Mapping[str, Any]],
+) -> ForecastOutcomeCascadePlan:
+    """Plan the full three-table citation cascade for stale outcome digests.
+
+    ``plan_forecast_outcome_hash_repairs`` refuses a stale row cited by a
+    calibration, because rewriting its PK would leave
+    ``forecast_calibrations.outcome_ids`` stale while the calibration's own
+    immutable ``content_hash``/``calibration_id`` (and, transitively,
+    ``calibrated_forecasts.calibration_id``) still cover the old id. This planner
+    performs the whole bounded cascade instead, in dependency order:
+
+    1. ``forecast_outcomes``: recompute ``content_hash`` -> ``outcome_id``.
+    2. ``forecast_calibrations``: substitute the rewritten ids in ``outcome_ids``,
+       then recompute ``content_hash`` -> ``calibration_id``. Calibrations that
+       cite no rewritten outcome are omitted (nothing changed).
+    3. ``calibrated_forecasts``: substitute the rewritten ``calibration_id``, then
+       recompute ``content_hash`` -> ``calibrated_forecast_id``.
+
+    Pure and read-only. Every rebuilt model is re-validated before being planned,
+    so a row that is genuinely corrupt (not merely stale) is reported under
+    ``unrepairable`` and neither it nor anything downstream of it is planned —
+    the caller must abort the whole transaction rather than write a partial
+    cascade. Already-canonical rows are omitted, so a second pass is a no-op.
+    """
+    outcomes: list[ForecastOutcomeHashRepair] = []
+    calibrations: list[ForecastCalibrationHashRepair] = []
+    calibrated_forecasts: list[CalibratedForecastHashRepair] = []
+    unrepairable: list[str] = []
+
+    outcome_id_map: dict[str, str] = {}
+    for row in outcome_rows:
+        recorded_id = str(row.get("outcome_id") or "")
+        try:
+            fields = _outcome_source_fields(row)
+            recorded_hash = str(fields.get("content_hash") or "")
+            constructed = ForecastOutcome.model_construct(**fields)
+            repaired_hash = forecast_outcome_content_hash(payload=constructed._hash_payload())
+            repaired_id = forecast_outcome_id(
+                effective_forecast_id=constructed.effective_forecast_id,
+                maturity_session=constructed.maturity_session,
+                content_hash=repaired_hash,
+            )
+            ForecastOutcome.model_validate(
+                {**fields, "outcome_id": repaired_id, "content_hash": repaired_hash}
+            )
+        except Exception as exc:
+            unrepairable.append(
+                f"{recorded_id or '<missing outcome_id>'}: {type(exc).__name__}: {exc}"
+            )
+            continue
+        if recorded_id == str(repaired_id) and recorded_hash == repaired_hash:
+            continue
+        outcomes.append(
+            ForecastOutcomeHashRepair(
+                outcome_id=recorded_id,
+                repaired_outcome_id=str(repaired_id),
+                recorded_content_hash=recorded_hash,
+                repaired_content_hash=repaired_hash,
+            )
+        )
+        if recorded_id:
+            outcome_id_map[recorded_id] = str(repaired_id)
+
+    calibration_id_map: dict[str, str] = {}
+    for row in calibration_rows:
+        recorded_id = str(row.get("calibration_id") or "")
+        try:
+            fields = _calibration_source_fields(row)
+            recorded_hash = str(fields.get("content_hash") or "")
+            outcome_ids = tuple(fields.get("outcome_ids") or ())
+            new_outcome_ids = tuple(
+                UUID(outcome_id_map.get(str(item), str(item))) for item in outcome_ids
+            )
+            if new_outcome_ids == outcome_ids:
+                continue
+            constructed = ForecastCalibration.model_construct(
+                **{**fields, "outcome_ids": new_outcome_ids}
+            )
+            repaired_hash = forecast_calibration_content_hash(payload=constructed._hash_payload())
+            repaired_id = forecast_calibration_id(
+                cohort_key=constructed.cohort_key,
+                method_version=constructed.method_version,
+                content_hash=repaired_hash,
+            )
+            ForecastCalibration.model_validate(
+                {
+                    **fields,
+                    "outcome_ids": new_outcome_ids,
+                    "content_hash": repaired_hash,
+                    "calibration_id": repaired_id,
+                }
+            )
+        except Exception as exc:
+            unrepairable.append(
+                f"{recorded_id or '<missing calibration_id>'}: {type(exc).__name__}: {exc}"
+            )
+            continue
+        calibrations.append(
+            ForecastCalibrationHashRepair(
+                calibration_id=recorded_id,
+                repaired_calibration_id=str(repaired_id),
+                recorded_content_hash=recorded_hash,
+                repaired_content_hash=repaired_hash,
+            )
+        )
+        if recorded_id:
+            calibration_id_map[recorded_id] = str(repaired_id)
+
+    for row in calibrated_forecast_rows:
+        recorded_id = str(row.get("calibrated_forecast_id") or "")
+        try:
+            fields = _calibrated_forecast_source_fields(row)
+            recorded_hash = str(fields.get("content_hash") or "")
+            calibration_id = fields.get("calibration_id")
+            if calibration_id is None:
+                continue
+            repaired_calibration_id = calibration_id_map.get(str(calibration_id))
+            if repaired_calibration_id is None:
+                continue
+            new_calibration_uuid = UUID(repaired_calibration_id)
+            constructed = CalibratedForecast.model_construct(
+                **{**fields, "calibration_id": new_calibration_uuid}
+            )
+            repaired_hash = calibrated_forecast_content_hash(payload=constructed._hash_payload())
+            repaired_id = calibrated_forecast_id(
+                effective_forecast_id=constructed.effective_forecast_id,
+                calibration_id=constructed.calibration_id,
+                content_hash=repaired_hash,
+            )
+            CalibratedForecast.model_validate(
+                {
+                    **fields,
+                    "calibration_id": new_calibration_uuid,
+                    "content_hash": repaired_hash,
+                    "calibrated_forecast_id": repaired_id,
+                }
+            )
+        except Exception as exc:
+            unrepairable.append(
+                f"{recorded_id or '<missing calibrated_forecast_id>'}: {type(exc).__name__}: {exc}"
+            )
+            continue
+        calibrated_forecasts.append(
+            CalibratedForecastHashRepair(
+                calibrated_forecast_id=recorded_id,
+                repaired_calibrated_forecast_id=str(repaired_id),
+                recorded_content_hash=recorded_hash,
+                repaired_content_hash=repaired_hash,
+            )
+        )
+
+    return ForecastOutcomeCascadePlan(
+        outcomes=tuple(outcomes),
+        calibrations=tuple(calibrations),
+        calibrated_forecasts=tuple(calibrated_forecasts),
+        unrepairable=tuple(unrepairable),
+    )
+
+
 __all__ = [
     "DEFAULT_VENUE",
     "OUTCOMES",
+    "CalibratedForecastHashRepair",
+    "ForecastCalibrationHashRepair",
+    "ForecastOutcomeCascadePlan",
     "ForecastOutcomeHashRepair",
     "ForecastOutcomeHashRepairPlan",
     "ForecastOutcomeIntegrityError",
     "OutcomeResolveResult",
     "list_resolved_outcomes_as_of",
+    "plan_forecast_outcome_cascade_repairs",
     "plan_forecast_outcome_hash_repairs",
     "resolve_matured_forecast_outcomes",
 ]
