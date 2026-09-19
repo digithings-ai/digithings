@@ -2,7 +2,7 @@
 #
 # Sibling of security-pip-audit.yml (Python CVEs); together they cover both
 # package ecosystems. Scope is the npm workspaces declared in the root
-# package.json (`cloudflare/*` + `cloudflare/digiweb/*`), audited from the
+# package.json (`apps/*` + `packages/*`), audited from the
 # single root lockfile (`package-lock.json`) that already records every
 # workspace's dependency closure.
 #
@@ -11,7 +11,7 @@
 # root (one advisory ID per line — the `GHSA-…`/numeric `id` from `npm audit
 # --json` — with `#`-prefixed comments for justification).
 #
-# Production clock: Cloudflare Worker digithings-cron (cloudflare/digithings-cron)
+# Production clock: Cloudflare Worker digithings-cron (apps/digithings-cron)
 # dispatches this weekly; the GHA schedule was removed in #3579.
 name: "Security: npm audit"
 
@@ -39,7 +39,7 @@ jobs:
       # `npm audit` reads the committed lockfile; `--package-lock-only` avoids a
       # full `node_modules` install (the Python audit exports a closure rather
       # than installing for the same reason). Run it from the workspace root so
-      # it sees every `cloudflare/*` workspace closure, not a single app's.
+      # it sees every `apps/*` + `packages/*` workspace closure, not a single app's.
       - name: Run npm audit (JSON, non-blocking capture)
         id: audit
         run: |
@@ -56,7 +56,7 @@ jobs:
       - name: Classify findings (HIGH/CRITICAL block; MODERATE/LOW warn)
         run: |
           python - <<'PY'
-          import json, os, sys
+          import json, os, re, sys
 
           try:
               data = json.load(open("audit.json"))
@@ -76,6 +76,8 @@ jobs:
                   if line:
                       ignored.add(line)
 
+          GHSA_RE = re.compile(r"GHSA-[0-9a-z-]+", re.IGNORECASE)
+
           def advisory_ids(entry):
               ids = set()
               for via in entry.get("via", []) or []:
@@ -84,6 +86,11 @@ jobs:
                           val = str(via.get(key, ""))
                           if val:
                               ids.add(val)
+                      # npm's `url` is the full advisory URL, but the ignore file
+                      # documents the bare GHSA id, so surface that as its own id.
+                      match = GHSA_RE.search(str(via.get("url", "")))
+                      if match:
+                          ids.add(match.group(0))
               return ids
 
           blockers, warns, ignored_hits = [], [], []

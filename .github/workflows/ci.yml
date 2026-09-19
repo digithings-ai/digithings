@@ -220,8 +220,8 @@ jobs:
             npm_audit:
               - 'package.json'
               - 'package-lock.json'
-              - 'cloudflare/*/package.json'
-              - 'cloudflare/digiweb/*/package.json'
+              - 'apps/*/package.json'
+              - 'packages/*/package.json'
               - 'npm-audit-ignore.txt'
               - '.github/workflows/security-npm-audit.yml'
             # CI_PATH_FILTERS_END

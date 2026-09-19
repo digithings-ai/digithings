@@ -325,14 +325,15 @@ pip_audit:
   - pip-audit-ignore.txt
   - .github/workflows/security-pip-audit.yml
 
-# npm ecosystem audit (#3523): the root lockfile records every `cloudflare/*`
-# workspace closure, so a dependency bump anywhere reddens this lane. Workspace
-# manifests are listed too so a `dependencies` edit that has not yet refreshed
-# the lock is still audited. `npm-audit-ignore.txt` holds accepted advisories.
+# npm ecosystem audit (#3523): the root lockfile records every `apps/*` +
+# `packages/*` workspace closure, so a dependency bump anywhere reddens this
+# lane. Workspace manifests are listed too so a `dependencies` edit that has not
+# yet refreshed the lock is still audited. `npm-audit-ignore.txt` holds accepted
+# advisories.
 npm_audit:
   - package.json
   - package-lock.json
-  - "cloudflare/*/package.json"
-  - "cloudflare/digiweb/*/package.json"
+  - "apps/*/package.json"
+  - "packages/*/package.json"
   - npm-audit-ignore.txt
   - .github/workflows/security-npm-audit.yml

@@ -19,3 +19,56 @@
 #   # GHSA-aaaa-bbbb-cccc — CVE-2099-0000 in foo; only reachable from a dev-only
 #   # script we don't ship. Re-check when foo 2.0 lands.
 #   GHSA-aaaa-bbbb-cccc
+#
+# ── Accepted risk: next@16.2.4 and the postcss/sharp it bundles (#4396) ──────
+#
+# All 30 advisories below share one remediation: `next@16.3.5`. We are
+# deliberately pinned at 16.2.4 because the bump re-reds three Next builds with
+# ~79 pre-existing TypeScript errors (66 dashboard, 8 digichat, 5
+# digiquant-web). That upgrade — its acceptance criteria are "0 HIGH/CRITICAL"
+# and "this lane goes green" — is tracked as #4396.
+#
+# postcss 8.4.31 is the copy nested inside next
+# (`node_modules/next/node_modules/postcss`); sharp 0.34.5 is next's
+# optionalDependency. npm's only offered fix for both is the same `next@16.3.5`,
+# so they clear with that upgrade. Forcing them via a root `overrides` entry was
+# evaluated and rejected: npm will not apply an override without a full
+# lockfile re-resolve (290 unrelated version moves, including downgrades), and
+# it would pin sharp 0.35.4 outside next 16.2.4's declared `^0.34.5`.
+#
+# Re-evaluate when #4396 lands: delete this whole block and let the lane enforce.
+#
+# next@16.2.4 — critical: RCE, DoS, middleware/proxy bypass, cache poisoning,
+# XSS, SSRF.
+GHSA-8h8q-6873-q5fj
+GHSA-26hh-7cqf-hhc6
+GHSA-3g8h-86w9-wvmq
+GHSA-ffhc-5mcf-pf4q
+GHSA-vfv6-92ff-j949
+GHSA-gx5p-jg67-6x7h
+GHSA-mg66-mrh9-m8jx
+GHSA-h64f-5h5j-jqjh
+GHSA-c4j6-fc7j-m34r
+GHSA-492v-c6pp-mqqv
+GHSA-wfc6-r584-vfw7
+GHSA-267c-6grr-h53f
+GHSA-36qx-fr4f-26g5
+GHSA-6gpp-xcg3-4w24
+GHSA-m99w-x7hq-7vfj
+GHSA-89xv-2m56-2m9x
+GHSA-68g3-v927-f742
+GHSA-4633-3j49-mh5q
+GHSA-4c39-4ccg-62r3
+GHSA-p9j2-gv94-2wf4
+GHSA-q8wf-6r8g-63ch
+GHSA-955p-x3mx-jcvp
+GHSA-p293-qw3h-jr36
+GHSA-2xp9-vwfh-vxw4
+# postcss (next-bundled) — high: XSS, arbitrary file read, path traversal.
+GHSA-qx2v-qp2m-jg93
+GHSA-6g55-p6wh-862q
+GHSA-fxqj-rqcc-2cmp
+GHSA-r28c-9q8g-f849
+# sharp (next optionalDependency) — high: inherited libvips / libheif CVEs.
+GHSA-f88m-g3jw-g9cj
+GHSA-rgj7-g3m4-5g8c
