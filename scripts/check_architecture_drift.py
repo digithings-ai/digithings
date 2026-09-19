@@ -85,11 +85,15 @@ MODULE_INTERFACE_PATTERNS: dict[str, tuple[str, ...]] = {
         "src/app/**/layout.tsx",
     ),
     "packages/digichat-ui": ("package.json", "src/index.ts", "src/**/index.ts"),
+    # Pre-move this was `cloudflare/digiweb` and covered both the kit
+    # (`web/src/**`) and the reference app (`reference/app/**/page.tsx`) in one
+    # module root. The #4306 move split them: the kit is `packages/ui`, and the
+    # reference app is `apps/reference` — which has no ARCHITECTURE.md, so the
+    # page globs belong to nothing and only the kit's interface is tracked here.
     "packages/ui": (
         "package.json",
-        "web/src/index.ts",
-        "web/src/**/index.ts",
-        "reference/app/**/page.tsx",
+        "src/index.ts",
+        "src/**/index.ts",
     ),
 }
 

@@ -111,7 +111,7 @@ on:
       # And be equally plain about what has NOT happened: across all 38, some lane
       # running a root install always fired, so nothing has yet reached production
       # through this hole. The one manifest with no lane of its own was
-      # digiweb/reference, named at the end of this list. (An earlier draft counted
+      # apps/reference, named at the end of this list. (An earlier draft counted
       # digichat-ui here too; that was wrong — ci.yml's `digichat` and `web` filters both
       # list packages/digichat-ui/**, and both lanes install at the root.) This closes a
       # structural hole before it bites. It is not the fix for an incident.

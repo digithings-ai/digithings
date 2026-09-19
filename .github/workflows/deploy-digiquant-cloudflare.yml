@@ -82,7 +82,7 @@ on:
       # directory in #1966, which supersedes the manifest line.) Re-derive the closure
       # before adding a glob rather than mirroring that file — `**/package.json` is still
       # rejected, because it would fire this check on every unrelated workspace including
-      # digigraph's vendored echarts manifest. Naming digiweb/reference's manifest one by
+      # digigraph's vendored echarts manifest. Naming the reference app's manifest one by
       # one is the opposite of that sweep, not a step toward it.
       #
       # Residual, deliberate: the root `npm install` above resolves all eight
