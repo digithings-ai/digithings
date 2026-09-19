@@ -295,17 +295,24 @@ def test_real_markdown_file_chunking_matches_recorded_fingerprint() -> None:
     MCP tool-name absorption (`digisearch_web_search` -> `exa_web_search`,
     `digisearch_research_turn` -> `research_turn`) plus conflict-resolution prose in
     ARCHITECTURE.md — fixture prose only; RecursiveChunker unchanged.
+    Re-recorded at count 116 for #4297 (in-house web-search prose edit in
+    ARCHITECTURE.md) — fixture prose only; RecursiveChunker unchanged.
     Hashes only (count still 115) re-recorded for #4306 (the JS workspaces moved to
     apps/ + packages/): three `cloudflare/...` path references in ARCHITECTURE.md became
     `apps/...`, which re-split three chunks without changing their count, so the
     `<= 2000` invariant still holds — fixture prose only; RecursiveChunker unchanged.
+    Hashes only (count still 116) re-recorded for the chore/sync-digisearch-develop-2
+    merge-forward (module/digisearch <- develop): the #4297 in-house web-search prose and
+    the #4306 `apps/` + `packages/` path renames blend into the merged ARCHITECTURE.md,
+    so three chunk hashes differ while the count and the `<= 2000` invariant hold —
+    fixture prose only; RecursiveChunker unchanged.
     """
     arch_path = Path(__file__).resolve().parents[2] / "digisearch" / "ARCHITECTURE.md"
     content = arch_path.read_text(encoding="utf-8")
     doc = Document(id="arch", content=content, source=str(arch_path), doc_type="md")
     chunks = RecursiveChunker().chunk(doc)
 
-    assert len(chunks) == 115
+    assert len(chunks) == 116
     assert all(len(c.content) <= 2000 for c in chunks)
     hashes = [hashlib.sha256(c.content.encode()).hexdigest()[:16] for c in chunks]
     assert hashes == [
@@ -328,7 +335,8 @@ def test_real_markdown_file_chunking_matches_recorded_fingerprint() -> None:
         "58efb49707626f90",
         "cd6a3f2ea2f1a0d0",
         "7e8464fe6a6cc067",
-        "461131751799a611",
+        "849398c2373ea326",
+        "dc9494e06b4e9dfd",
         "f2ac9438877a85b7",
         "4523b0e9d213163a",
         "3850f4956a4c3be9",
@@ -406,7 +414,7 @@ def test_real_markdown_file_chunking_matches_recorded_fingerprint() -> None:
         "473965a9eeeb864d",
         "70c3d41e152ffa11",
         "81d310410772fb3e",
-        "5e6a02ac4bf32f0f",
+        "7b96f76f75a29985",
         "e8874754e8823dbd",
         "472ca1370eb9ef1a",
         "a3987db99f2b72c5",

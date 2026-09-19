@@ -97,7 +97,7 @@ Domains & Routes) for `/embed*`, `/api/chat*`, `/api/embed*`, `/api/byok*`, `/ap
     "activityDetail": "full",
     "title": "OCC help assistant",
     "welcome": "Ask about Online Compliance Center policies, procedures, and help articles.",
-    "attribution": false,
+    "attribution": true,
     "token": "unused-for-first-party",
     "backend": {
       "type": "digigraph",

@@ -1,5 +1,53 @@
+import httpx
+
 from digisearch.web_search.models import WebSearchRequest
+from digisearch.web_search.searxng_provider import SearXNGWebSearchProvider
 from digisearch.web_search.service import WebSearchConfig, run_web_search
+
+
+def test_run_web_search_preserves_searxng_unresponsive_diagnostic(monkeypatch):
+    """The empty-with-failing-engines provider diagnostic survives run_web_search.
+
+    The hosted container's only observability channel is the HTTP response, so
+    the compact ``provider`` suffix the searxng provider adds on an empty body
+    must reach the caller through the service reconstruction, not be dropped.
+    """
+    from digisearch.web_search import service as svc
+
+    payload = {
+        "results": [],
+        "unresponsive_engines": [["duckduckgo", "access denied"]],
+    }
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json=payload)
+
+    provider = SearXNGWebSearchProvider(
+        base_url="http://127.0.0.1:8080",
+        client=httpx.Client(transport=httpx.MockTransport(handler)),
+    )
+
+    class _Fetcher:
+        def __init__(self, *a, **k):
+            pass
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            return False
+
+        def fetch(self, url):
+            raise RuntimeError("no network in unit")
+
+    monkeypatch.setattr(svc, "SearXNGWebSearchProvider", lambda **k: provider)
+    monkeypatch.setattr(svc, "HttpFetcher", _Fetcher)
+    resp = run_web_search(
+        WebSearchRequest(query="etf"),
+        config=WebSearchConfig(backend="searxng", fetch_max_pages=1, min_interval_s=0.0),
+    )
+    assert resp.results == []
+    assert resp.provider == "searxng(none; unresponsive=duckduckgo:access denied)"
 
 
 def test_service_prefers_searxng_falls_back_to_ddgs(monkeypatch):
@@ -347,3 +395,183 @@ def test_search_only_scrubs_scheme_less_provider_credentials(monkeypatch):
     message = str(excinfo.value)
     assert "user:pass" not in message
     assert "***@proxy.internal" in message
+
+
+def _providers_raising(monkeypatch, *, searxng_exc, ddgs_exc):
+    """Point searxng and ddgs at distinct raising fakes (#4297)."""
+    from digisearch.web_search import service as svc
+
+    class _Down:
+        name = "down"
+
+        def __init__(self, factory):
+            self._factory = factory
+
+        def search(self, req):
+            raise self._factory()
+
+    monkeypatch.setattr(svc, "SearXNGWebSearchProvider", lambda **k: _Down(searxng_exc))
+    monkeypatch.setattr(svc, "DdgsWebSearchProvider", lambda *a, **k: _Down(ddgs_exc))
+
+
+def test_all_backends_fail_reports_each_backend_and_error(monkeypatch):
+    """Every backend's real error is named, not just the last one (#4297).
+
+    Pre-fix the searxng transport error was swallowed by ``except: continue``
+    and only ddgs's error survived into the message.
+    """
+    import httpx
+    import pytest
+
+    from digisearch.web_search.models import WebSearchProviderError, WebSearchRequest
+
+    _providers_raising(
+        monkeypatch,
+        searxng_exc=lambda: httpx.ConnectError("searxng refused"),
+        ddgs_exc=lambda: RuntimeError("ddgs boom"),
+    )
+    with pytest.raises(WebSearchProviderError) as excinfo:
+        run_web_search(WebSearchRequest(query="etf"), config=WebSearchConfig(backend="auto"))
+    message = str(excinfo.value)
+    assert "searxng: " in message and "searxng refused" in message
+    assert "ddgs: " in message and "ddgs boom" in message
+    assert message.index("searxng: ") < message.index("ddgs: ")
+
+
+def test_transport_failure_stays_retryable_when_last_backend_hard_fails(monkeypatch):
+    """A transport failure on the primary must not be masked by ddgs (#4297).
+
+    Pre-fix ``retryable`` was taken from the last backend (ddgs's hard
+    failure), so the searxng transport error was reported non-retryable.
+    """
+    import httpx
+    import pytest
+
+    from digisearch.web_search.models import WebSearchProviderError, WebSearchRequest
+
+    _providers_raising(
+        monkeypatch,
+        searxng_exc=lambda: httpx.ConnectError("connection refused"),
+        ddgs_exc=lambda: ValueError("ddgs hard failure"),
+    )
+    with pytest.raises(WebSearchProviderError) as excinfo:
+        run_web_search(WebSearchRequest(query="etf"), config=WebSearchConfig(backend="auto"))
+    assert excinfo.value.status_code is None
+    assert excinfo.value.retryable is True
+    assert "connection refused" in str(excinfo.value)
+
+
+def test_first_upstream_status_wins_primary_first(monkeypatch):
+    """``status_code`` comes from the first backend that exposed one (#4297)."""
+    import httpx
+    import pytest
+
+    from digisearch.web_search.models import WebSearchProviderError, WebSearchRequest
+
+    def searxng_error():
+        request = httpx.Request("GET", "https://searxng.invalid/search")
+        response = httpx.Response(503, request=request, text="unavailable")
+        return httpx.HTTPStatusError("503 Service Unavailable", request=request, response=response)
+
+    _providers_raising(
+        monkeypatch,
+        searxng_exc=searxng_error,
+        ddgs_exc=lambda: ValueError("ddgs hard failure"),
+    )
+    with pytest.raises(WebSearchProviderError) as excinfo:
+        run_web_search(WebSearchRequest(query="etf"), config=WebSearchConfig(backend="auto"))
+    assert excinfo.value.status_code == 503
+    assert excinfo.value.retryable is True
+    assert "503" in str(excinfo.value)
+
+
+def test_explicit_searxng_does_not_fall_through_to_ddgs(monkeypatch):
+    """An explicitly-searxng config fails closed, never silently using ddgs."""
+    import pytest
+
+    from digisearch.web_search import service as svc
+    from digisearch.web_search.models import (
+        WebSearchProviderError,
+        WebSearchRequest,
+        WebSearchResponse,
+    )
+
+    calls: list[str] = []
+
+    class _SearxngDown:
+        name = "searxng"
+
+        def search(self, req):
+            raise RuntimeError("searxng down")
+
+    class _DdgsOk:
+        name = "ddgs"
+
+        def search(self, req):
+            calls.append("ddgs")
+            return WebSearchResponse(query=req.query, provider="ddgs")
+
+    monkeypatch.setattr(svc, "SearXNGWebSearchProvider", lambda **k: _SearxngDown())
+    monkeypatch.setattr(svc, "DdgsWebSearchProvider", lambda *a, **k: _DdgsOk())
+    with pytest.raises(WebSearchProviderError) as excinfo:
+        svc.search_web(WebSearchRequest(query="etf"), config=WebSearchConfig(backend="searxng"))
+    assert calls == []
+    assert "searxng: " in str(excinfo.value)
+    assert "ddgs" not in str(excinfo.value)
+
+
+def test_zero_row_provider_results_are_honest_empty_successes(monkeypatch):
+    """A successful zero-row call is ``results=[]``, never an error (#4297)."""
+    from digisearch.web_search import service as svc
+    from digisearch.web_search.models import WebSearchRequest, WebSearchResponse
+
+    class _Empty:
+        def __init__(self, name):
+            self.name = name
+
+        def search(self, req):
+            return WebSearchResponse(query=req.query, provider=self.name, results=[])
+
+    monkeypatch.setattr(svc, "SearXNGWebSearchProvider", lambda **k: _Empty("searxng"))
+    monkeypatch.setattr(svc, "DdgsWebSearchProvider", lambda *a, **k: _Empty("ddgs"))
+
+    searxng = svc.search_web(
+        WebSearchRequest(query="etf"), config=WebSearchConfig(backend="searxng")
+    )
+    assert searxng.results == [] and searxng.provider == "searxng"
+
+    ddgs = svc.search_web(WebSearchRequest(query="etf"), config=WebSearchConfig(backend="ddgs"))
+    assert ddgs.results == [] and ddgs.provider == "ddgs"
+
+    auto = svc.search_web(WebSearchRequest(query="etf"), config=WebSearchConfig(backend="auto"))
+    assert auto.results == [] and auto.provider == "searxng"
+
+
+def test_ddgsexception_is_non_retryable_by_design(monkeypatch):
+    """ddgs >=9.1 folds every failed search into ``DDGSException``.
+
+    ``DDGSException("No results found.")`` is raised both for a genuinely
+    empty result set and for a throttled/blocked egress IP, so it carries no
+    HTTP status and is deliberately classified ``(None, False)``: no retry is
+    advertised for an outcome that cannot be told apart from a real failure,
+    and no status is guessed. searxng is the reliable primary; a real zero-row
+    searxng call stays an honest ``results=[]`` success (pinned above).
+    """
+    import pytest
+
+    from digisearch.web_search.models import WebSearchProviderError, WebSearchRequest
+    from digisearch.web_search.service import _provider_failure_fields
+
+    ddgs_error = pytest.importorskip("ddgs.exceptions").DDGSException
+    assert _provider_failure_fields(ddgs_error("No results found.")) == (None, False)
+
+    _providers_raising(
+        monkeypatch,
+        searxng_exc=lambda: ValueError("searxng hard failure"),
+        ddgs_exc=lambda: ddgs_error("No results found."),
+    )
+    with pytest.raises(WebSearchProviderError) as excinfo:
+        run_web_search(WebSearchRequest(query="etf"), config=WebSearchConfig(backend="auto"))
+    assert excinfo.value.status_code is None
+    assert excinfo.value.retryable is False
+    assert "No results found." in str(excinfo.value)
