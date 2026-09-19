@@ -2,80 +2,72 @@
 
 /**
  * Contents overview — the home-page index of every design family, each a card
- * linking to its page with a one-line blurb. The map that mirrors the top nav
- * (the section copy says so directly) — so it uses the exact same
- * isActive/aria-current pattern site-nav.tsx already solves current-page
- * wayfinding with, rather than leaving its own "you are here" card
- * indistinguishable from the other 12 links.
+ * linking to its page with a one-line blurb. It reads the same `lib/nav.ts`
+ * data the top bar does, so the map and the bar can never disagree.
  *
- * Wave 1 (T6): the card is the stock `Card` from `@digithings/ui/ui` — the
- * hand-built `.co-card` dress (top accent bar, hover lift) is deleted with it.
- * The current-page signal stays: the link carries `aria-current`, the Card
- * picks it up through the group-aria variant as an accent ring.
+ * The card is the stock `Card` from `@digithings/ui/ui`. The current-page
+ * signal stays: the link carries `aria-current`, the Card picks it up through
+ * the group-aria variant as an accent ring. Reference-only (`lab`) surfaces
+ * render in a separate, de-emphasised row.
  */
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Card, CardContent } from "@digithings/ui/ui";
+import { LAB_NAV, PRIMARY_NAV, type NavItem } from "@/lib/nav";
 
-const FAMILIES = [
-  { href: "/", label: "Foundations", blurb: "Livery system, feature picker, button & CTA states." },
-  {
-    href: "/iterate",
-    label: "Iterate",
-    blurb: "Utilitarian terminal blend — pick corners, type, CTAs, heroes (herdr / agentmail / omarchy).",
-  },
-  { href: "/controls", label: "Controls", blurb: "Custom dropdown pane, search, nav buttons, form fields." },
-  { href: "/layout-patterns", label: "Layout", blurb: "Feature cell, bento grid, scaled product frames." },
-  { href: "/typography", label: "Typography", blurb: "Scroll-linked word reveals and the copy & voice grammar." },
-  { href: "/data", label: "Data", blurb: "Dot matrix, count-up stats, card deck, repository activity, pricing, matrix." },
-  { href: "/finance", label: "Finance", blurb: "Lightweight-Charts dashboards, order book, money metrics." },
-  { href: "/tearsheet", label: "Tearsheet", blurb: "Print-grade SVG tearsheet: synced charts, matrix, trade log, cards." },
-  { href: "/effects", label: "Effects", blurb: "Cursor-follow graph, terminals, pipeline, ambient mesh." },
-  { href: "/chrome", label: "Chrome", blurb: "Announcement bar, scroll-aware nav, tabs, colophon footer." },
-  { href: "/terminal", label: "Terminal", blurb: "Diegetic CLI session and streaming chat transcript." },
-  { href: "/chatbot", label: "Chatbot", blurb: "Thinking chain, composer, markdown, inline chart & graph, widgets." },
-  { href: "/symbols", label: "Symbols", blurb: "Module emblems, wordmarks, QR, vendor logos, glyphs." },
-  { href: "/brand", label: "Brand", blurb: "Avatars, social headers, OG card, mail sign-off — local kit only." },
-  { href: "/account", label: "Account", blurb: "Login, sign-up, payment, settings, profile templates." },
-] as const;
-
-export function ContentsOverview() {
+function FamilyCard({ item, index }: { item: NavItem; index: number }) {
   const pathname = usePathname();
   // Boundary-checked, not a bare startsWith: /data would otherwise also
   // read "current" on a hypothetical /data-v2 route (or any other sibling
   // sharing the prefix) — match only the exact path or a path continuing
   // after a "/".
-  const isActive = (href: string) =>
-    href === "/" ? pathname === "/" : pathname === href || pathname.startsWith(`${href}/`);
+  const isActive =
+    item.href === "/"
+      ? pathname === "/"
+      : pathname === item.href || pathname.startsWith(`${item.href}/`);
 
+  return (
+    <Link
+      href={item.href}
+      aria-current={isActive ? "page" : undefined}
+      className="group block"
+    >
+      <Card className="h-full group-aria-[current=page]:ring-accent">
+        <CardContent className="flex flex-col gap-[0.25rem]">
+          <span className="font-mono text-[0.6rem] tracking-[0.1em] text-accent">
+            {String(index).padStart(2, "0")}
+          </span>
+          <span className="font-mono text-[0.95rem] text-ink">{item.label}</span>
+          <span className="text-[0.8rem] leading-[1.4] text-ink-soft">{item.blurb}</span>
+        </CardContent>
+      </Card>
+    </Link>
+  );
+}
+
+export function ContentsOverview() {
   return (
     <section className="section-block contents-overview">
       <p className="kicker">{"// contents"}</p>
-      <h2 className="title">Fifteen families, one system.</h2>
+      <h2 className="title">{PRIMARY_NAV.length} families, one system.</h2>
       <p className="section-copy">
         Every page is one family of design elements, all sharing the same tokens, livery, and
-        motion laws. Start on Iterate when the blend is in flux — otherwise start anywhere; the
-        top bar carries the same map.
+        motion laws. The top bar carries the same map; <code>/rtl</code> proves the whole canon
+        mirrors, and the reference-only surfaces below stay out of the shipped set.
       </p>
 
       <div className="mt-[1.2rem] grid grid-cols-[repeat(auto-fill,minmax(210px,1fr))] gap-[0.7rem]">
-        {FAMILIES.map((f, i) => (
-          <Link
-            key={f.href + f.label}
-            href={f.href}
-            aria-current={isActive(f.href) ? "page" : undefined}
-            className="group block"
-          >
-            <Card className="h-full group-aria-[current=page]:ring-accent">
-              <CardContent className="flex flex-col gap-[0.25rem]">
-                <span className="font-mono text-[0.6rem] tracking-[0.1em] text-accent">
-                  {String(i).padStart(2, "0")}
-                </span>
-                <span className="font-mono text-[0.95rem] text-ink">{f.label}</span>
-                <span className="text-[0.8rem] leading-[1.4] text-ink-soft">{f.blurb}</span>
-              </CardContent>
-            </Card>
-          </Link>
+        {PRIMARY_NAV.map((item, i) => (
+          <FamilyCard key={item.href} item={item} index={i} />
+        ))}
+      </div>
+
+      <p className="mb-0 mt-[1.6rem] font-mono text-[0.58rem] uppercase tracking-[0.14em] text-ink-mute">
+        reference-only
+      </p>
+      <div className="mt-[0.6rem] grid grid-cols-[repeat(auto-fill,minmax(210px,1fr))] gap-[0.7rem]">
+        {LAB_NAV.map((item, i) => (
+          <FamilyCard key={item.href} item={item} index={i} />
         ))}
       </div>
     </section>

@@ -226,3 +226,27 @@ Two rules for app code:
   `@theme` block (rule 1).
 - Money colors: `--up`/`--down` are fixed per theme in tokens.css (dark wears
   the digiquant phosphor) and must never follow a livery.
+
+## App family CSS layering — what consumers do (#4306, workstream A)
+
+The reference's own family sheets used to be unlayered, so they outranked kit
+Tailwind utilities on a tie — a hazard whenever an app rebuild moved or
+reordered imports. The rule for every app that keeps local family CSS:
+
+- Put the sheet's **dress** in `@layer components` (i.e.
+  `@layer components { … }`). Kit utilities live in `utilities`, which is
+  ordered after `components`, so a call-site `p-4`/`text-[9px]` now wins over
+  the family default without `!important`. This matches the kit's own sheet
+  rule above.
+- A rule that **must** beat a utility (a documented override, an external
+  library's unlayered selector) stays **unlayered on purpose**, and says so
+  inline — see `.sb-hint` in the reference `controls.css`, the one exception,
+  which has to outrank the unlayered `.kbd` in `globals.css`.
+- `@import` statements stay ahead of the layer block (CSS drops a late
+  `@import`).
+- A second Next root that themes vendor CSS (the reference `(chatbot)` shell
+  around assistant-ui) keeps its own unlayered cascade; it is not a canon
+  family sheet.
+
+`apps/reference/lib/layering.test.ts` pins the wrapped set and the `.sb-hint`
+exception, and the reference documents the convention in its README.

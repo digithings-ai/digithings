@@ -1,3 +1,8 @@
+/* Reference family dress, in the `components` layer so kit Tailwind
+   utilities (in `utilities`) win on a tie — the app-rebuild rule in
+   packages/ui/MIGRATION.md. Deliberate utility-beating overrides, if any,
+   stay unlayered and say so inline. */
+@layer components {
 /* ==========================================================================
    rtl.css — layout helpers for the RTL proof route (/rtl).
    Logical properties only: every rule here is a no-op in LTR and mirrors under
@@ -63,4 +68,5 @@
   flex-wrap: wrap;
   gap: 0.6rem;
   align-items: center;
+}
 }

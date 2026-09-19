@@ -61,7 +61,9 @@
 @source "../../../packages/ui/src/ui";
 
 /* Shared base for every design-reference page. Family-specific styles live
-   next to their page (app/<family>/<family>.css) — keep this file small. */
+   next to their page, inside the family route group
+   (app/(gallery)/(<family>)/<route>/<route>.css), wrapped in @layer
+   components — keep this file small. */
 
 :root[data-theme] {
   --font-sans: var(--font-geist-mono), ui-monospace, monospace;

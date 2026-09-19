@@ -29,26 +29,9 @@ import {
   subscribeType,
   TYPE_SUITES,
 } from "@/components/type-store";
-
-const PAGES = [
-  { href: "/", label: "Foundations" },
-  { href: "/rtl", label: "RTL" },
-  { href: "/iterate", label: "Iterate" },
-  { href: "/controls", label: "Controls" },
-  { href: "/ui", label: "UI kit" },
-  { href: "/layout-patterns", label: "Layout" },
-  { href: "/typography", label: "Typography" },
-  { href: "/data", label: "Data" },
-  { href: "/finance", label: "Finance" },
-  { href: "/tearsheet", label: "Tearsheet" },
-  { href: "/effects", label: "Effects" },
-  { href: "/chrome", label: "Chrome" },
-  { href: "/terminal", label: "Terminal" },
-  { href: "/chatbot", label: "Chatbot" },
-  { href: "/symbols", label: "Symbols" },
-  { href: "/brand", label: "Brand" },
-  { href: "/account", label: "Account" },
-] as const;
+// Primary families and the reference-only (lab) group are declared once in
+// `@/lib/nav`; the top bar and the home-page contents map both read them.
+import { LAB_NAV, PRIMARY_NAV } from "@/lib/nav";
 
 /** Shared top bar for the design-reference app. Each page holds one family
  *  of design elements; the bar is the only chrome shared across them.
@@ -176,7 +159,22 @@ export function SiteNav() {
       </Link>
 
       <ul className="site-nav-links">
-        {PAGES.map((page) => (
+        {PRIMARY_NAV.map((page) => (
+          <li key={page.href}>
+            <Link href={page.href} aria-current={isActive(page.href) ? "page" : undefined}>
+              {page.label}
+            </Link>
+          </li>
+        ))}
+      </ul>
+
+      {/* Reference-only surfaces stay off the primary row: a de-emphasised
+          secondary list after the same divider, never peers of the families. */}
+      <ul className="site-nav-links site-nav-links--lab" aria-label="Reference-only surfaces">
+        <li aria-hidden="true" className="site-nav-lab-sep">
+          lab
+        </li>
+        {LAB_NAV.map((page) => (
           <li key={page.href}>
             <Link href={page.href} aria-current={isActive(page.href) ? "page" : undefined}>
               {page.label}
@@ -212,13 +210,31 @@ export function SiteNav() {
               the links stay right-aligned like the rest of the bar's chrome. */}
           <nav aria-label="Design reference sections" className="flex flex-col px-5 pb-6 pt-12">
             <ul className="m-0 list-none p-0">
-              {PAGES.map((page) => (
+              {PRIMARY_NAV.map((page) => (
                 <li key={page.href}>
                   <Link
                     href={page.href}
                     aria-current={isActive(page.href) ? "page" : undefined}
                     onClick={() => setOpen(false)}
                     className="block w-full border-b border-hair py-[0.85rem] text-end font-display text-[1.35rem] text-ink-soft no-underline transition-colors hover:text-ink aria-[current=page]:border-accent/55 aria-[current=page]:text-ink"
+                  >
+                    {page.label}
+                  </Link>
+                </li>
+              ))}
+            </ul>
+
+            <p className="mb-0 mt-[1.2rem] font-mono text-[0.58rem] uppercase tracking-[0.14em] text-ink-mute">
+              reference-only
+            </p>
+            <ul className="m-0 list-none p-0">
+              {LAB_NAV.map((page) => (
+                <li key={page.href}>
+                  <Link
+                    href={page.href}
+                    aria-current={isActive(page.href) ? "page" : undefined}
+                    onClick={() => setOpen(false)}
+                    className="block w-full border-b border-hair py-[0.6rem] text-end font-display text-[1.05rem] text-ink-mute no-underline transition-colors hover:text-ink aria-[current=page]:text-ink"
                   >
                     {page.label}
                   </Link>

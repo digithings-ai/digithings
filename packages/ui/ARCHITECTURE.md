@@ -446,3 +446,14 @@ not fire on a frontend-only PR. Note the distinction: the CI *filter* excludes
 The suite has no auth, crypto, or live-trading surface, so
 the human-gate items in `CLAUDE.md` do not apply to component work here (a
 physical relocation of the shared packages, which touches deploy config, does).
+
+## Family CSS layering (#4306, workstream A)
+
+Kit utilities live in Tailwind's `utilities` layer, so any app rule that must
+lose to them belongs in `components`. The reference's per-family sheets wrap
+their dress in `@layer components { … }` for exactly that reason; a rule that
+has to beat a utility stays unlayered and says so inline (the reference's
+`.sb-hint` vs the unlayered `.kbd`). `@import` lines stay ahead of the layer
+block. The reference `(chatbot)` root, which themes vendor assistant-ui CSS,
+keeps its own unlayered cascade. Full rule and the pinned test:
+[MIGRATION.md § App family CSS layering](MIGRATION.md).

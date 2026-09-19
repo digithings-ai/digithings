@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 
-import { Button, Switch } from "@digithings/ui/ui";
+import { Button } from "@digithings/ui/ui";
 import { Skeleton, SkeletonGroup } from "@digithings/ui";
 
 /**
@@ -10,14 +10,12 @@ import { Skeleton, SkeletonGroup } from "@digithings/ui";
  * in until content arrives, then swap 1:1 to the real layout. The shimmer is a
  * translating gradient over ink-tinted shapes (no accent needed — reads under
  * the monochrome default); money colors only appear in the loaded state where
- * they mean something. A toggle replays the load. Reduced motion drops the
+ * they mean something. A button replays the load. Reduced motion drops the
  * shimmer and shows a static placeholder. Consumes the shared <Skeleton/> and
- * <SkeletonGroup/> primitives from @digithings/ui, and the replay toggle is
- * the stock kit <Switch/> (`@digithings/ui/ui`); the hand-built `.sk-toggle*`
- * dress is gone.
- *
- * Wave 1: the loaded-state action is the stock kit Button (ghost).
- * Wave 4: the replay toggle moved from the controls layer onto the kit.
+ * <SkeletonGroup/> primitives from @digithings/ui; the replay control is the
+ * stock kit <Button/> (`@digithings/ui/ui`) and the hand-built `.sk-toggle*`
+ * dress is gone. `Switch` has its single canonical specimen in
+ * `form-fields-reference`.
  */
 const METRICS = [
   { k: "CAGR", v: "+44.9%", tone: "up" },
@@ -39,12 +37,14 @@ export function SkeletonReference() {
       </p>
 
       <div className="mt-[1.2rem] flex items-center gap-[0.55rem]">
-        <Switch
-          checked={loading}
-          onCheckedChange={setLoading}
-          name="replay-load"
-          aria-label="Replay the load"
-        />
+        <Button
+          variant="outline"
+          size="sm"
+          aria-pressed={loading}
+          onClick={() => setLoading((v) => !v)}
+        >
+          {loading ? "Show loaded" : "Replay load"}
+        </Button>
         <span className="font-mono text-[0.72rem] text-ink-soft">
           {loading ? "loading" : "loaded"}
         </span>

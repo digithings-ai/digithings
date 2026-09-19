@@ -10,9 +10,12 @@ start here: copy a pattern, keep its grammar.
 
 ```bash
 npm run dev --workspace design-reference -- --port 4013
-# Chatbot gallery only: http://127.0.0.1:4013/chatbot/
-# Do not open `/` in the same session — that root still compiles the full gallery.
+# Gallery: http://127.0.0.1:4013/
+# Chatbot (isolated root): http://127.0.0.1:4013/chatbot/
 ```
+
+Retired URLs (`/ui`, `/tearsheet`) redirect in `next dev` (see `next.config.mjs`)
+so an old link does not 404 mid-session; the static export emits no redirects.
 
 It consumes the shared workspaces from source: `@digithings/design` (tokens) and
 `@digithings/ui` (Terminal, emblems, graph, modules data, ThemeProvider). Edits
@@ -23,24 +26,30 @@ to those packages hot-reload here.
 One family of design elements per page; the top bar (`components/site-nav.tsx`)
 is the only shared chrome.
 
+Families live in route groups under `app/(gallery)/` (`(foundations)`, `(controls)`,
+`(data-display)`, `(motion)`, `(layout)`, `(pages)/(templates)`, …) so the folder
+names state the IA without changing the URLs. `/ui` folded into `/controls` and
+`/tearsheet` into `/finance`; `/brand` and `/iterate` are reference-only and stay
+off the primary nav. The route/specimen inventory is machine-readable in
+`lib/specimen-inventory.ts` and pinned by `lib/*.test.ts`.
+
 | Route              | Family      | Holds |
 | ------------------ | ----------- | ----- |
 | `/`                | Foundations | contents map, livery switcher, feature picker, button/CTA states |
-| `/iterate`         | Iterate     | utilitarian terminal blend gallery — pick corners, type, CTAs, nav, heroes, density (herdr / agentmail / omarchy); preference ledger → `design/BLEND.md` |
-| `/controls`        | Controls    | custom dropdown pane, search bar, nav buttons, form fields, tooltip (4 placements), range slider (fill + ticks + disabled), tags/chips input, accordion (single-open disclosure), skeleton loading states (shimmer), empty/error states |
-| `/ui`              | UI kit      | stock shadcn Button/Input/Card/Dialog from `@digithings/ui/ui` on the single token bridge — dark, light, and a scoped-livery proof |
-| `/layout-patterns` | Layout      | feature cell, bento grid, container-scaled product frame, phone mockup (dashboard app) |
-| `/typography`      | Typography  | type specimen + live type-suite switcher (5 coordinated suites: display + body + mono), scroll-linked word reveals (blur / muted / outline), copy & voice grammar |
-| `/data`            | Data        | dot-matrix stat, count-up stat, odometer digit-roll, marquee ticker, sticky card deck, changelog rail, repository activity, sortable data table, pricing, comparison matrix |
-| `/finance`         | Finance     | dashboard workspace command/ledger composition, stock ticker tape, Lightweight-Charts price chart / equity curve / drawdown, synced multi-pane tearsheet (screen-only), performance dashboard, portfolio blotter, charting rules, performance metrics, returns matrix (monthly slice), order book |
-| `/tearsheet`       | Tearsheet   | print-grade SVG tearsheet family (#1463): synced candles with trade markers + hover cards, equity/drawdown/per-trade P&L on one shared zoom window, 3×3 returns matrix, KPI strip, trade log, library cards, live badge, working Download PDF |
-| `/effects`         | Effects     | cursor-follow hero graph, typed terminal, scrolly module graph, research pipeline, ambient mesh, rotating prompts, clip reveal, section transitions (zoom-morph · stacking · cross-fade), arc-flight routing map (revolut-mined), pipeline workflow viz (sequential + parallel, per-step time/token/cost diagnostics; dashboard-ported) |
-| `/chrome`          | Chrome      | announcement bar, command palette, tabs (sliding indicator), toast stack, scroll-aware nav, colophon footer with glow sweep |
-| `/terminal`        | Terminal    | diegetic CLI session + budget, streaming chat transcript |
-| `/chatbot`         | Chatbot     | same first-party Thread as product `/embed` (`@digithings/ui/chat/thread`), fixture runtime, themed with digiweb CSS variables. Isolated Next root (`app/(chatbot)/`) so it does not compile the rest of the gallery. Full elements index (not a live specimen dump): [`../ASSISTANT_UI_ELEMENTS.md`](../ASSISTANT_UI_ELEMENTS.md). |
+| `/rtl`             | RTL         | the whole canon under a `dir=ltr`/`dir=rtl` toggle — the direction proof |
+| `/typography`      | Typography  | type specimen + live type-suite switcher, scroll-linked word reveals, copy & voice grammar |
+| `/controls`        | Controls    | the kit's current surface — Button, Input/Label/Textarea, Checkbox, Switch, Select (+`SelectPopup`), DropdownMenu, Dialog, Sheet, Tooltip, Collapsible, Card, Separator, Alert, Tabs, Badge tones, Table (`density`/`numeric`/`TableRowHeader`/`interactive`) — plus search, nav buttons, slider, tags input, skeleton, empty/error |
+| `/data`            | Data        | dot-matrix stat, count-up stat, odometer, marquee, card deck, changelog rail, repo activity, sortable table, precision/pricing tables, conviction, roadmap Gantt, pricing matrix |
+| `/finance`         | Finance     | canvas dashboards (ticker, price, equity, drawdown, synced tearsheet, performance, blotter, metrics, returns matrix, order book) **and** the print-grade SVG tearsheet branch (folded from the old `/tearsheet`) |
+| `/effects`         | Motion      | cursor-follow hero graph, typed terminal, scrolly graph, research pipeline, ambient mesh, reveals, section transitions, routing map |
+| `/chrome`          | Chrome      | announcement bar, command palette, tabs, toast stack, scroll nav, nav shell/menu, breadcrumbs, pagination, module card, socials, footer |
+| `/terminal`        | Chat        | diegetic CLI session + budget, terminal loaders, streaming chat transcript |
+| `/chatbot`         | Chat        | first-party Thread as product `/embed` (`@digithings/ui/chat/thread`), fixture runtime. Isolated Next root (`app/(chatbot)/`). Elements index: [`../ASSISTANT_UI_ELEMENTS.md`](../ASSISTANT_UI_ELEMENTS.md). |
+| `/layout-patterns` | Layout      | feature cell, bento grid, numbered stages, container-scaled product frame, phone mockup, testimonial wall |
 | `/symbols`         | Symbols     | module emblems, brand marks, favicon tiles, vendor logos, utility glyphs |
-| `/brand`           | Brand       | avatars, social headers, OG card, mail sign-off — local kit, not shipped on digithings.ai |
-| `/account`         | Account     | login, sign-up, payment, settings, profile templates |
+| `/account`         | Templates   | login, sign-up, payment, settings, profile templates |
+| `/brand`           | reference-only | avatars, social headers, OG card, mail sign-off — not shipped on digithings.ai |
+| `/iterate`         | reference-only | blend lab — pick corners, type, CTAs, heroes, density; preference ledger → `design/BLEND.md` |
 
 ## Conventions
 
@@ -80,9 +89,13 @@ is the only shared chrome.
   pane with a definite height, money colours (`--up`/`--down`) for P&L only, and
   multi-series views use **panes with one shared time axis** (see
   `synced-tearsheet-reference.tsx`) rather than stacked separate charts.
-- **CSS.** Shared base + nav live in `app/globals.css`; each page keeps its
-  family styles in `app/<family>/<family>.css`, prefixed per component. Prefix
-  new classes to avoid collisions across the global sheet.
+- **CSS.** Shared base + nav live in `app/globals.css`; each family keeps its
+  styles in `app/(gallery)/(<family>)/<route>/<route>.css`, prefixed per
+  component. Family sheets put their dress in `@layer components` so kit
+  Tailwind utilities win on a tie (the app-rebuild rule in
+  `packages/ui/MIGRATION.md`); a rule that must beat a utility stays unlayered
+  and says so inline (see `.sb-hint`). `(chatbot)` is a second root that themes
+  vendor assistant-ui styles and keeps its own unlayered cascade.
 
 ## Adding a section
 
@@ -91,7 +104,7 @@ is the only shared chrome.
    (`packages/design/references/mine/index.html`) or the canon
    (`packages/design/spec/index.html`).
 2. Put its styles in the owning page's `<family>.css` with a unique class prefix.
-3. Import and place it in `app/<family>/page.tsx` using the section grammar:
+3. Import and place it in the family's `app/(gallery)/(<family>)/<route>/page.tsx` using the section grammar:
    `<section className="section-block"><p className="kicker">// label</p>
    <h2 className="title">Claim.</h2><p className="section-copy">…</p>…</section>`.
 4. Verify from `apps/reference/`: `npm run typecheck` and `npm run lint`

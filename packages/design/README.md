@@ -25,7 +25,7 @@ for the layout rationale.
 - `apps/digithings-web/` — digithings.ai (Next.js; imports `tokens.css` + `site/site.css` directly)
 - `apps/digiquant-web/` — digiquant.io (Next.js; imports `tokens.css` + `site/site.css` directly)
 - `apps/digichat/` — digithings.ai/chat (Next.js; workspace dep, token adoption tracked by #240)
-- `apps/dashboard/` — workspace dep only; token adoption deferred
+- `apps/dashboard/` — token adopter: imports `tokens.css`, the `@digithings/ui` `web-theme.css` bridge and ~15 kit sheets
 
 ---
 

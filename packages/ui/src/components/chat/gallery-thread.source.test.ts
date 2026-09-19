@@ -83,13 +83,17 @@ describe("gallery Thread is the product digichat skin", () => {
     expect(aui).not.toMatch(/\.aui-composer-trigger-popover \{/);
   });
 
-  it("product tooltip matches /chatbot: no rotated-square arrow", () => {
+  it("product tooltip suppresses the canonical kit rotated-square arrow", () => {
     const product = read("gallery-thread/ui/tooltip.tsx");
-    const reference = read("../../../../../apps/reference/components/ui/tooltip.tsx");
+    // The single canonical tooltip is the kit's; the chat adapter opts out of
+    // its arrow via `data-tooltip-arrow="none"` + a descendant hide. The
+    // reference canon uses the kit tooltip directly (the old unreferenced
+    // `apps/reference/components/ui/tooltip.tsx` radix duplicate was deleted in
+    // the #4306 consolidation).
     expect(product).toContain('data-tooltip-arrow="none"');
-    expect(product).not.toMatch(/TooltipPrimitive\.Arrow/);
-    expect(reference).toContain('data-tooltip-arrow="none"');
-    expect(reference).not.toMatch(/TooltipPrimitive\.Arrow/);
+    expect(product).toMatch(/\[&>\[aria-hidden\]\]:hidden/);
+    const kit = read("../../ui/tooltip.tsx");
+    expect(kit).toMatch(/TooltipPrimitive\.Arrow/);
   });
 
   it("markdown lists keep markers inside padding so a scrollport cannot clip them", () => {

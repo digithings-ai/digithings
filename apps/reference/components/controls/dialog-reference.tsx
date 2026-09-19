@@ -5,8 +5,8 @@
  * (stock kit), live. Sibling of Sheet (same @base-ui/react primitive as a
  * side panel): click the trigger, Escape or the scrim dismisses, focus traps
  * inside while open. The delete-confirm danger tint rides a call-site
- * `text-destructive` on the title; the controls-layer `tone` prop has no
- * kit counterpart yet (see the Task-1b gap list).
+ * `text-destructive` on the title; there is no `tone` prop, and the kit does
+ * not need one.
  */
 import { useState } from "react";
 import {

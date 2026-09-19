@@ -6,7 +6,7 @@
  * total. Consumes the shared <ReturnsMatrix/> from the finance-tearsheet
  * family; the former <MonthlyReturns/> heatmap was deprecated into it (#1463)
  * — this is the monthly slice. The full family (synced SVG charts, KPI strip,
- * trade log) lives on the /tearsheet page. Static display template.
+ * trade log) lives in the print branch of the /finance page. Static display template.
  */
 import { ReturnsMatrix, TEARSHEET_DEMO } from "@digithings/ui";
 
@@ -22,7 +22,7 @@ export function MonthlyReturnsReference() {
         magnitude grows (crypto-scale returns fit the cells), and the year column compounds. The
         eye reads the strategy&apos;s seasons at a glance; quarterly/annual granularity and
         drawdown/volatility metrics are one prop away — the full grammar lives on the{" "}
-        <a href="/tearsheet">tearsheet page</a>.
+        <a href="/finance#print-tearsheet">finance print branch</a>.
       </p>
 
       <div className="mt-[1.2rem]">

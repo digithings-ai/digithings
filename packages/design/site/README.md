@@ -68,10 +68,9 @@ those effects belong to the page background around the frame, never on
 the simulated UI itself (EVOLUTION.md §7, "atmospheric outside, surgical
 inside").
 
-Works unscoped in both `[data-theme="light"]` and `[data-theme="dark"]`. A
-React wrapper is deferred until [#1195](https://github.com/digithings-ai/digithings/issues/1195)
-(landing-primitive package location) resolves — the CSS classes are usable
-directly from any JSX/TSX today.
+Works unscoped in both `[data-theme="light"]` and `[data-theme="dark"]`. The React
+wrapper now ships in `@digithings/ui` (exported as `ProductFrame`); the CSS classes
+remain usable directly from any JSX/TSX.
 
 ## `BentoGrid` (CSS-only, EVOLUTION.md Phase B)
 
@@ -101,7 +100,7 @@ Cursor-style linked feature cells. Mobile-first: single column, 2×2 from
 | `.bento__thumb` | Optional image/thumbnail slot — rounds to `--r-md`, clips overflow. |
 | `.bento__cta` | Arrow-suffix link text (`Learn more →`); the `span[aria-hidden]` arrow translates on `.bento__cell:hover`, matching the kit Button hover idiom. |
 
-Works unscoped in both themes. Same deferred-React-wrapper note as ProductFrame (#1195).
+Works unscoped in both themes. The React wrapper ships in `@digithings/ui`.
 
 ## `TrustStrip` (CSS-only, EVOLUTION.md Phase B)
 
@@ -315,7 +314,7 @@ inside a `.bento__cell`.
 | `.capability-card__title` / `.capability-card__body` | Heading + body copy. |
 | `.capability-card__cta` | `Explore →` arrow link; the `span[aria-hidden]` arrow translates on card hover, matching the kit Button/`.bento__cta`. |
 
-Works unscoped in both themes. Same deferred-React-wrapper note as ProductFrame (#1195).
+Works unscoped in both themes. The React wrapper ships in `@digithings/ui`.
 
 ## `HorizontalScrollBand` (CSS-only, EVOLUTION.md Phase E)
 
@@ -343,7 +342,7 @@ without a horizontal gesture.
 | `.h-scroll__track` | Focusable (`tabindex="0"`) flex scroll container — `scroll-snap-type: x mandatory`, hidden scrollbar, `:focus-visible` ring. Under `prefers-reduced-motion: reduce` it becomes a vertical column with no snap. |
 | `.h-scroll__card` | Snap child — fixed `262px` (Cursor changelog card width), flat `--surface` panel. Full-width when stacked under reduced motion. |
 
-CSS-only, both themes. Same deferred-React-wrapper note as ProductFrame (#1195).
+CSS-only, both themes. The React wrapper ships in `@digithings/ui`.
 Content wiring (real changelog/testimonial data) is out of scope here — this
 primitive owns only the scroll/snap/masking contract, same division as
 TrustStrip and ChangelogBand.
@@ -395,7 +394,7 @@ tone follows [`../references/scans/copy-patterns.md`](../references/scans/copy-p
 | `.closing-cta__actions` | Wrapping, centered row of the primary action + optional secondary. |
 | `.closing-cta__secondary` | Mono arrow-suffix link; hover tints `--ink` and nudges the arrow. |
 
-CSS-only, both themes. Same deferred-React-wrapper note as ProductFrame (#1195).
+CSS-only, both themes. The React wrapper ships in `@digithings/ui`.
 
 ## `FaqAccordion` (CSS-only, EVOLUTION.md Phase E)
 
@@ -428,7 +427,7 @@ is native (`Tab` to the summary, `Enter`/`Space` to toggle).
 | `.faq__q` | The `<summary>` — flex row (label + chevron), default marker removed, `:focus-visible` ring. Rotating CSS chevron via `::after`. |
 | `.faq__a` | Answer body, `max-width: 60ch`, muted. |
 
-CSS-only, both themes. Same deferred-React-wrapper note as ProductFrame (#1195).
+CSS-only, both themes. The React wrapper ships in `@digithings/ui`.
 
 ## `PricingMatrix` (CSS-only, EVOLUTION.md Phase E)
 
@@ -472,7 +471,7 @@ tiers: **Self-hosted (MIT)** · **Managed (future)** · **Enterprise (contact)**
 | `.pricing__features` | Check-bulleted list — `✓` in `--up` via `::before`. |
 | `.pricing-table` | Optional comparison grid; `.is-yes` (`--up`) / `.is-no` (`--ink-mute`) cells; first column left-aligned, tier columns centered. |
 
-CSS-only, both themes. Same deferred-React-wrapper note as ProductFrame (#1195).
+CSS-only, both themes. The React wrapper ships in `@digithings/ui`.
 
 ## `HeroFeaturePicker` (CSS + `hero-picker.js`, EVOLUTION.md Phase E)
 
@@ -525,7 +524,7 @@ normalizes the initial state from the `aria-selected` tab without stealing focus
 on load. No network calls, pure DOM. `prefers-reduced-motion` needs no special
 handling — the swap is an instant `hidden` toggle, not an animation.
 
-CSS-only styling, both themes. Same deferred-React-wrapper note as ProductFrame (#1195).
+CSS-only styling, both themes. The React wrapper ships in `@digithings/ui`.
 
 ## `AnnouncementBar` (CSS + `announcement.js`, EVOLUTION.md Phase E)
 
@@ -570,7 +569,7 @@ re-show the bar after users have dismissed a previous one.
 | `.announcement__link` | The link (`--accent`, arrow-suffix); its `::after` stretches over the bar. |
 | `.announcement__dismiss` | Optional close button — sits above the overlay (`z-index`), persists dismissal by `id`. |
 
-CSS + `announcement.js`, both themes. Same deferred-React-wrapper note as ProductFrame (#1195).
+CSS + `announcement.js`, both themes. The React wrapper ships in `@digithings/ui`.
 
 ## `CaseStudyCard` (CSS-only, EVOLUTION.md Phase E · P3)
 
@@ -606,5 +605,5 @@ no card renders until a real quote exists. **Production requires real attributio
 | `.case-study__logo` | Optional 24px grayscale logo (real assets only, with `alt`). |
 | `.case-study--example` | Adds an "EXAMPLE" watermark — demos/docs only, never production. |
 
-CSS-only, both themes. Same deferred-React-wrapper note as ProductFrame (#1195).
+CSS-only, both themes. The React wrapper ships in `@digithings/ui`.
 **P3** — defer content until real quotes or OSS adopter stories exist.
