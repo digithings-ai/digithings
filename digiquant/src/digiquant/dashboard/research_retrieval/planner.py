@@ -4,7 +4,7 @@ Select H6 only for structured decision-value cases (decision boundary, conflict,
 uncertainty, invalidation risk, material portfolio weight, or exploration).
 Low-value names carry with a recorded reason and zero provider budget.
 
-Modes (``OLYMPUS_H6_SELECTION_MODE``):
+Modes (``DIGIQUANT_H6_SELECTION_MODE``):
 
 * ``shadow`` (default) — record :class:`H6Selection`; run full incumbent H6
 * ``enforce`` — actuate carry/select from the typed selection
@@ -39,7 +39,7 @@ from typing import (  # score:allow untyped any — scored-lint: heterogeneous d
     Sequence,
     TypeAlias,
 )
-from uuid import NAMESPACE_URL, UUID, uuid5
+from uuid import UUID, uuid5
 
 import yaml
 from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, field_validator, model_validator
@@ -55,7 +55,7 @@ from digiquant.dashboard.temporal import require_utc_datetime
 
 logger = logging.getLogger(__name__)
 
-OLYMPUS_H6_SELECTION_MODE_ENV = "OLYMPUS_H6_SELECTION_MODE"
+DIGIQUANT_H6_SELECTION_MODE_ENV = "DIGIQUANT_H6_SELECTION_MODE"
 
 # Portfolio weight at/above this selects ``material`` (percent of book).
 _DEFAULT_MATERIAL_WEIGHT_PCT = 5.0
@@ -160,14 +160,14 @@ class H6Selection(H6PlannerModel):
 
 
 def resolve_h6_selection_mode() -> H6SelectionMode:
-    """Read ``OLYMPUS_H6_SELECTION_MODE``; unknown values → shadow."""
+    """Read ``DIGIQUANT_H6_SELECTION_MODE``; unknown values → shadow."""
     raw = env_lookup(H6_SELECTION_MODE, default="shadow").strip().lower()
     try:
         return H6SelectionMode(raw)
     except ValueError:
         logger.warning(
             "invalid %s=%r; using shadow (allowed: off|shadow|enforce)",
-            OLYMPUS_H6_SELECTION_MODE_ENV,
+            DIGIQUANT_H6_SELECTION_MODE_ENV,
             raw,
         )
         return H6SelectionMode.SHADOW
@@ -399,11 +399,13 @@ def assert_no_materiality_in_prompt(phase_inputs: Mapping[str, Any]) -> None:
 # WP13.1 — versioned research attention policy (#2918)
 # ---------------------------------------------------------------------------
 
-RESEARCH_POLICY_ENV = "OLYMPUS_RESEARCH_POLICY_PATH"
-# Frozen identity strings. Do not rename with the package.
-_ATTENTION_PLAN_NS = uuid5(NAMESPACE_URL, "digithings.olympus.research_attention_plan")
-_ATTENTION_DECISION_NS = uuid5(NAMESPACE_URL, "digithings.olympus.research_attention_decision")
-_ATTENTION_EVALUATION_NS = uuid5(NAMESPACE_URL, "digithings.olympus.research_attention_evaluation")
+RESEARCH_POLICY_ENV = "DIGIQUANT_RESEARCH_POLICY_PATH"
+# Frozen namespace UUIDs: the literal values the legacy URL seeds already
+# derived. Kept verbatim so attention plan/decision/evaluation ids are
+# unchanged. Do not re-key.
+_ATTENTION_PLAN_NS = UUID("55ee801e-f006-5a47-bcf0-8b2f10293c29")
+_ATTENTION_DECISION_NS = UUID("f40d03e4-0306-56fd-a1f7-9d842267e7d3")
+_ATTENTION_EVALUATION_NS = UUID("b1983998-d185-54bb-a236-8bea9f9c7592")
 _TriageMode: TypeAlias = Literal["quiet", "stale", "active"]
 
 
@@ -1154,7 +1156,7 @@ __all__ = [
     "PersistedAttentionDecision",
     "PersistedAttentionPlan",
     "H6_SELECTION_PROMPT_FORBIDDEN_KEYS",
-    "OLYMPUS_H6_SELECTION_MODE_ENV",
+    "DIGIQUANT_H6_SELECTION_MODE_ENV",
     "RESEARCH_POLICY_ENV",
     "PolicyExploration",
     "PolicySessionBudget",

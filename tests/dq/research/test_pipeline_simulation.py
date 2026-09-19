@@ -315,8 +315,8 @@ class TestDurableH5H6LineageRoundTrip:
     def test_store_checkpoint_reload_preserves_byte_equivalent_lineage(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        monkeypatch.setenv("OLYMPUS_EVIDENCE_BUNDLE_WRITER", "on")
-        monkeypatch.setenv("OLYMPUS_H6_SELECTION_MODE", "enforce")
+        monkeypatch.setenv("DIGIQUANT_EVIDENCE_BUNDLE_WRITER", "on")
+        monkeypatch.setenv("DIGIQUANT_H6_SELECTION_MODE", "enforce")
         monkeypatch.setenv("DIGIQUANT_DELIBERATION_MIN_ROUNDS", "2")
 
         store = EvidenceBundleStore()

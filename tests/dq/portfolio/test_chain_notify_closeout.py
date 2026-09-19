@@ -26,7 +26,7 @@ def test_helper_passes_force_digest_and_run_date() -> None:
 
 def test_helper_swallows_dispatch_errors() -> None:
     def _boom(**_kwargs: object) -> None:
-        raise RuntimeError("mailgun down")
+        raise RuntimeError("notify down")
 
     chain_mod.dispatch_house_notifications_after_chain(date(2026, 8, 31), dispatch=_boom)
 

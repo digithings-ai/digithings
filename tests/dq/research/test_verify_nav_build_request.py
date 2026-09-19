@@ -160,3 +160,79 @@ class TestNonFiniteAndNegativePrices:
         row = _price_row("2026-09-01", "SPY", 100.0, 103.0, 99.0, -1.0)
         with pytest.raises(ValidationError):
             _bars([row])
+
+
+class TestMarkThroughExtension:
+    """#3439: mark the held book to market through a bookless target date.
+
+    When the house run commits no book, the engine replay grid used to stop at
+    the last committed book, so ``verify_nav_replay.py --write`` produced no NAV
+    bar for the missing day and the published series read flat. ``mark_through``
+    extends the GRID only — the last book's positions are held (no schedule
+    entry, no fabricated rebalance) and each intervening close marks them. The
+    ``positions`` table is untouched, so a missing book stays detectable.
+    """
+
+    @staticmethod
+    def _book(*dates: str) -> list[dict[str, Any]]:
+        return [{"date": d, "ticker": "SPY", "weight_pct": 100.0} for d in dates]
+
+    def test_grid_extends_through_mark_date_without_a_schedule_entry(self) -> None:
+        price_rows = [
+            _price_row("2026-08-24", "SPY", 100.0, 101.0, 99.0, 100.0),
+            _price_row("2026-08-25", "SPY", 100.0, 104.0, 100.0, 104.0),
+            _price_row("2026-08-26", "SPY", 104.0, 106.0, 103.0, 105.0),
+        ]
+        request, _closes, _recorded = _mod.build_request(
+            price_rows,
+            self._book("2026-08-24"),
+            [{"date": "2026-08-24", "nav": 100.0}],
+            mark_through="2026-08-26",
+        )
+        assert [b.ts.date().isoformat() for b in request.series[0].bars] == [
+            "2026-08-24",
+            "2026-08-25",
+            "2026-08-26",
+        ]
+        # The book is held, not re-submitted: the schedule keeps its one real entry.
+        assert [e.effective_date.isoformat() for e in request.weight_schedule] == ["2026-08-24"]
+
+    def test_non_trading_mark_dates_are_forward_filled_flat(self) -> None:
+        price_rows = [
+            _price_row("2026-08-28", "SPY", 100.0, 102.0, 99.0, 101.0),
+            _price_row("2026-08-31", "SPY", 101.0, 103.0, 100.0, 102.0),
+        ]
+        request, _closes, _recorded = _mod.build_request(
+            price_rows,
+            self._book("2026-08-28"),
+            [{"date": "2026-08-28", "nav": 100.0}],
+            mark_through="2026-08-31",
+        )
+        bars = request.series[0].bars
+        assert [b.ts.date().isoformat() for b in bars] == [
+            "2026-08-28",
+            "2026-08-29",
+            "2026-08-30",
+            "2026-08-31",
+        ]
+        # Sat/Sun carry Friday's close flat; Monday marks at its own close.
+        assert bars[1].close == Decimal("101.0")
+        assert bars[2].close == Decimal("101.0")
+        assert bars[3].close == Decimal("102.0")
+
+    @pytest.mark.parametrize("mark_through", ["2026-08-25", "2026-08-20"])
+    def test_mark_through_at_or_before_last_book_is_a_noop(self, mark_through: str) -> None:
+        price_rows = [
+            _price_row("2026-08-24", "SPY", 100.0, 101.0, 99.0, 100.0),
+            _price_row("2026-08-25", "SPY", 100.0, 104.0, 100.0, 104.0),
+        ]
+        request, _closes, _recorded = _mod.build_request(
+            price_rows,
+            self._book("2026-08-24", "2026-08-25"),
+            [{"date": "2026-08-25", "nav": 100.0}],
+            mark_through=mark_through,
+        )
+        assert [b.ts.date().isoformat() for b in request.series[0].bars] == [
+            "2026-08-24",
+            "2026-08-25",
+        ]

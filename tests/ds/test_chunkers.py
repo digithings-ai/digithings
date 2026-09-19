@@ -297,6 +297,15 @@ def test_real_markdown_file_chunking_matches_recorded_fingerprint() -> None:
     ARCHITECTURE.md — fixture prose only; RecursiveChunker unchanged.
     Re-recorded at count 116 for #4297 (in-house web-search prose edit in
     ARCHITECTURE.md) — fixture prose only; RecursiveChunker unchanged.
+    Hashes only (count still 115) re-recorded for #4306 (the JS workspaces moved to
+    apps/ + packages/): three `cloudflare/...` path references in ARCHITECTURE.md became
+    `apps/...`, which re-split three chunks without changing their count, so the
+    `<= 2000` invariant still holds — fixture prose only; RecursiveChunker unchanged.
+    Hashes only (count still 116) re-recorded for the chore/sync-digisearch-develop-2
+    merge-forward (module/digisearch <- develop): the #4297 in-house web-search prose and
+    the #4306 `apps/` + `packages/` path renames blend into the merged ARCHITECTURE.md,
+    so three chunk hashes differ while the count and the `<= 2000` invariant hold —
+    fixture prose only; RecursiveChunker unchanged.
     """
     arch_path = Path(__file__).resolve().parents[2] / "digisearch" / "ARCHITECTURE.md"
     content = arch_path.read_text(encoding="utf-8")
@@ -313,7 +322,7 @@ def test_real_markdown_file_chunking_matches_recorded_fingerprint() -> None:
         "cea76b9e90df056e",
         "6f61da3b9ed54d44",
         "5c87a98eae4b4c24",
-        "c2e2b64819e95c57",
+        "27f0ca91eb93d7e1",
         "5fc146dcd98ed469",
         "6bb725ee96409565",
         "2496b0331a6908ca",
@@ -376,9 +385,9 @@ def test_real_markdown_file_chunking_matches_recorded_fingerprint() -> None:
         "10832c167583db90",
         "3442051d624d3623",
         "06ba55aa13191afa",
-        "0b92159ce012cda6",
+        "533d598598a15fa9",
         "ec4e79e9d9714f36",
-        "06466d8456cb4a74",
+        "16fc77c51656b28e",
         "2ec8256cb4695f07",
         "16bea1bbfea529fc",
         "00bffb9020b848f5",

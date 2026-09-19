@@ -5,9 +5,9 @@ from __future__ import annotations
 from datetime import date
 
 import pytest
+from digiquant.notify.cloudflare_email import CloudflareEmailConfig
 from digiquant.notify.dispatch import dispatch_workspace
 from digiquant.notify.entitlements import PlanTier
-from digiquant.notify.mailgun import MailgunConfig
 
 from tests.dq.notify.conftest import FakeSupabase
 
@@ -25,10 +25,10 @@ class _RecordingClient:
         self.sent.append(subject)
 
 
-def _cfg() -> MailgunConfig:
-    return MailgunConfig(
-        api_key="k",
-        domain="mg.example.com",
+def _cfg() -> CloudflareEmailConfig:
+    return CloudflareEmailConfig(
+        api_token="k",
+        account_id="acct-123",
         from_address="n@example.com",
         unsubscribe_base="https://example.com/settings",
     )

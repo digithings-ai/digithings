@@ -253,7 +253,7 @@ def test_phase1_composition_e2e_simulated_pipeline() -> None:
 
     final, run = _run_phase1_pipeline(
         canned_extras={
-            "olympus_forecast_outcomes": [
+            "forecast_outcomes": [
                 *mature_cohort_outcome_rows(count=3),
                 resolved_outcome_row(salt=99, known_at=LATE_KNOWN_AT),
             ],
@@ -298,9 +298,9 @@ def test_phase1_composition_e2e_simulated_pipeline() -> None:
     assert manifest["risk_policy_registry_run_refs_written"] == 1
     assert manifest["cost_liquidity_registry_estimates_written"] >= 1
 
-    assert len(run.client.store.get("olympus_forecast_assessments", [])) >= 1
-    assert len(run.client.store.get("olympus_h8_risk_run_refs", [])) == 1
-    assert len(run.client.store.get("olympus_action_cost_estimates", [])) >= 1
+    assert len(run.client.store.get("forecast_assessments", [])) >= 1
+    assert len(run.client.store.get("h8_risk_run_refs", [])) == 1
+    assert len(run.client.store.get("action_cost_estimates", [])) >= 1
     assert len(run.client.store.get("positions", [])) >= 1
     assert len(run.client.store.get("portfolio_ledger_commits", [])) == 1
 
@@ -311,7 +311,7 @@ def test_phase1_composition_e2e_simulated_pipeline() -> None:
 
     cutoff = final.knowledge_cutoff_at
     assert cutoff is not None
-    assessment_id = UUID(str(run.client.store["olympus_forecast_assessments"][0]["forecast_id"]))
+    assessment_id = UUID(str(run.client.store["forecast_assessments"][0]["forecast_id"]))
     assert (
         fr.get_forecast_assessment(
             client=run.client,
@@ -320,12 +320,12 @@ def test_phase1_composition_e2e_simulated_pipeline() -> None:
         )
         is not None
     )
-    policy_id = UUID(str(run.client.store["olympus_risk_policies"][0]["policy_id"]))
+    policy_id = UUID(str(run.client.store["risk_policies"][0]["policy_id"]))
     assert (
         rpr.get_risk_policy(client=run.client, policy_id=policy_id, knowledge_cutoff_at=cutoff)
         is not None
     )
-    estimate_id = UUID(str(run.client.store["olympus_action_cost_estimates"][0]["estimate_id"]))
+    estimate_id = UUID(str(run.client.store["action_cost_estimates"][0]["estimate_id"]))
     assert (
         clr.get_action_cost_estimate(
             client=run.client,
@@ -349,9 +349,7 @@ def test_phase1_cutoff_excludes_late_known_outcomes_from_calibration() -> None:
     from tests.dq.portfolio.phase1_e2e_fixtures import LATE_KNOWN_AT, resolved_outcome_row
 
     final, _run = _run_phase1_pipeline(
-        canned_extras={
-            "olympus_forecast_outcomes": [resolved_outcome_row(salt=1, known_at=LATE_KNOWN_AT)]
-        },
+        canned_extras={"forecast_outcomes": [resolved_outcome_row(salt=1, known_at=LATE_KNOWN_AT)]},
     )
     cal = next(iter(final.phase_portfolio.forecast_calibrations.values()))
     assert cal["status"] == CalibrationArtifactStatus.UNAVAILABLE.value

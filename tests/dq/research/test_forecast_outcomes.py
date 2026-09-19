@@ -57,13 +57,13 @@ class _MergingQuery(_FakeQuery):
             return _FakeResponse(data=[dict(row) for row in self._insert_rows])
         if self._upsert_row is not None:
             if self.table_name == fo.OUTCOMES:
-                raise AssertionError("upsert is forbidden on olympus_forecast_outcomes")
+                raise AssertionError("upsert is forbidden on forecast_outcomes")
             rows = self._upsert_row if isinstance(self._upsert_row, list) else [self._upsert_row]
             self.store.setdefault(self.table_name, []).extend(rows)
             return _FakeResponse(data=[dict(row) for row in rows])
         if self._update_row is not None:
             if self.table_name == fo.OUTCOMES:
-                raise AssertionError("update is forbidden on olympus_forecast_outcomes")
+                raise AssertionError("update is forbidden on forecast_outcomes")
             updated: list[dict[str, Any]] = []
             for row in self.store.get(self.table_name, []):
                 if self._matches(row):
@@ -621,3 +621,84 @@ class TestR2UnknownTickerIsAbsentClose:
         monkeypatch.setattr(fo, "r2_backend_enabled", lambda: True)
         with pytest.raises(ValueError, match="unsupported manifest version 2"):
             fo._fetch_session_close(client=OutcomesFake(), ticker="AAPL", session=date(2026, 8, 13))
+
+
+# The exact float64 close from run 35214931391, which aborted preflight.reflect
+# with ``decimal_max_places`` on ``SessionPriceSnapshot.price`` (#4296).
+FLOAT_NOISE_CLOSE = 10.380000114440918
+
+
+class TestR2FloatCloseIngressQuantized:
+    """R2 parquet stores OHLCV as float64 by design; the closure's Decimal ingress
+    must quantize to the price model's money precision (#4296).
+
+    ``Decimal(str(10.380000114440918))`` is a 15-place Decimal, which Pydantic
+    rejects for ``PositivePrice`` (``decimal_places=8``). Rounding it here is a
+    genuine ingress normalization — not a caught ``ValidationError`` and not a
+    skipped matured outcome.
+    """
+
+    @staticmethod
+    def _float_close(monkeypatch: pytest.MonkeyPatch, close: float) -> None:
+        def fake_r2_close_rows(**_kwargs: Any) -> list[dict[str, Any]]:
+            return [{"ticker": "AAPL", "date": "2026-08-13", "close": close}]
+
+        monkeypatch.setattr(
+            "digiquant.research.data.queries.r2_close_rows",
+            fake_r2_close_rows,
+        )
+        monkeypatch.setattr(fo, "r2_backend_enabled", lambda: True)
+
+    def test_raw_float64_would_fail_the_model(self) -> None:
+        """Guard: the unfixed conversion still fails, so the test cannot pass by accident."""
+        from digiquant.portfolio.models.forecast_calibration import SessionPriceSnapshot
+
+        raw = Decimal(str(FLOAT_NOISE_CLOSE))
+        assert raw.as_tuple().exponent < -8
+        with pytest.raises(Exception, match="decimal_max_places"):
+            SessionPriceSnapshot(
+                session_date=date(2026, 8, 13),
+                price=raw,
+                observed_at=TS,
+                known_at=TS,
+            )
+
+    def test_float64_close_validates_session_price_snapshot(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from digiquant.portfolio.models.forecast_calibration import SessionPriceSnapshot
+
+        self._float_close(monkeypatch, FLOAT_NOISE_CLOSE)
+        price = fo._fetch_session_close(
+            client=OutcomesFake(), ticker="AAPL", session=date(2026, 8, 13)
+        )
+        assert price is not None
+        assert price.as_tuple().exponent >= -8
+        digits = "".join(str(d) for d in price.as_tuple().digits)
+        assert len(digits) <= 20  # PositivePrice max_digits=20
+        snap = SessionPriceSnapshot(
+            session_date=date(2026, 8, 13),
+            price=price,
+            observed_at=TS,
+            known_at=TS,
+        )
+        assert snap.price == Decimal("10.38000011")
+
+    def test_outcome_resolves_instead_of_aborting_reflect(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """End-to-end: a float-noise close resolves, it does not crash preflight."""
+        self._float_close(monkeypatch, FLOAT_NOISE_CLOSE)
+        client = OutcomesFake()
+        _seed_assessment(client, _assessment(ticker="AAPL", observed_anchor=False))
+
+        result = fo.resolve_matured_forecast_outcomes(
+            client=client,
+            run_date=RUN_DATE,
+            knowledge_cutoff_at=CUTOFF,
+            trading_sessions=SESSIONS,
+        )
+        assert result.resolved == 1
+        row = client.store[fo.OUTCOMES][0]
+        assert Decimal(str(row["maturity_snapshot"]["price"])) == Decimal("10.38000011")
+        assert row["status"] == OutcomeStatus.RESOLVED.value

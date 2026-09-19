@@ -11,9 +11,9 @@ of scope (regression net). Biggest tables go to kit `Table`; the dashboard chart
 except the kit package itself (Task 1).
 
 **Files touched overall:**
-- `cloudflare/digiweb/web/src/ui/**` (pre-work), `cloudflare/digiweb/web/src/styles/web-theme.css`
-- `cloudflare/digithings-web/**`, `cloudflare/digiquant-web/**`, `cloudflare/dashboard/**`
-- `cloudflare/digiweb/{ARCHITECTURE,MIGRATION}.md` (close-out, only if contracts change)
+- `packages/ui/src/ui/**` (pre-work), `packages/ui/src/styles/web-theme.css`
+- `apps/digithings-web/**`, `apps/digiquant-web/**`, `apps/dashboard/**`
+- `packages/ui/{ARCHITECTURE,MIGRATION}.md` (close-out, only if contracts change)
 - `.github/workflows/test-web.yml` + `scripts/ci_paths.yaml` (CI hardening decision, close-out)
 
 ---
@@ -21,19 +21,19 @@ except the kit package itself (Task 1).
 ### Task 1: Kit pre-work (package PR)
 
 **Files:**
-- Modify: 13 vendored files `cloudflare/digiweb/web/src/ui/{alert,badge,button,card,collapsible,dialog,dropdown-menu,input,label,separator,sheet,tabs,textarea,tooltip}.tsx` — `import { cn } from "@/lib/utils"` → `"../lib/utils"` (package-relative; `web/src/lib/utils.ts` is the sibling target — one level up from `src/ui/`).
-- Modify: `cloudflare/digiweb/web/src/styles/web-theme.css` — inside the existing single `@theme inline`: `--animate-collapsible-down/up` + nested `@keyframes collapsible-down/up`; top-level `@custom-variant data-open` / `data-closed` (same rules the reference carries at `globals.css:396–413`).
-- Modify: `cloudflare/digiweb/web/src/styles/web-theme.test.ts` — contract rows for the new keyframes/variant declarations.
-- Possibly Modify: `cloudflare/digiweb/reference/app/globals.css` — drop the now-promoted duplicate variant/keyframes block (only if byte-identical semantics; otherwise make the reference consume the package's and remove the local one).
+- Modify: 13 vendored files `packages/ui/src/ui/{alert,badge,button,card,collapsible,dialog,dropdown-menu,input,label,separator,sheet,tabs,textarea,tooltip}.tsx` — `import { cn } from "@/lib/utils"` → `"../lib/utils"` (package-relative; `web/src/lib/utils.ts` is the sibling target — one level up from `src/ui/`).
+- Modify: `packages/ui/src/styles/web-theme.css` — inside the existing single `@theme inline`: `--animate-collapsible-down/up` + nested `@keyframes collapsible-down/up`; top-level `@custom-variant data-open` / `data-closed` (same rules the reference carries at `globals.css:396–413`).
+- Modify: `packages/ui/src/styles/web-theme.test.ts` — contract rows for the new keyframes/variant declarations.
+- Possibly Modify: `apps/reference/app/globals.css` — drop the now-promoted duplicate variant/keyframes block (only if byte-identical semantics; otherwise make the reference consume the package's and remove the local one).
 
 **Interfaces:**
 - Consumes: wave-1 kit as shipped.
-- Produces: a consumer-portable kit — no `@/lib/utils` requirement (any app can import `@digithings/web/ui` with only `@source` + `tw-animate-css`), and overlay animations/keyframes available to every consumer; `--hair-strong` defined.
+- Produces: a consumer-portable kit — no `@/lib/utils` requirement (any app can import `@digithings/ui/ui` with only `@source` + `tw-animate-css`), and overlay animations/keyframes available to every consumer; `--hair-strong` defined.
 
 - [ ] **Step 1:** Rewire the 13 `cn` imports to `../lib/utils`; grep-verify zero `from "@/lib` remain in `web/src/ui/`; the reference app must still build (its own `lib/utils.ts` becomes unused by the kit).
 - [ ] **Step 2:** Promote the overlay variant + keyframes from the reference into `web-theme.css`; contract-test rows; reference local block removed only if semantically identical.
 - [ ] **Step 3:** Decide `--hair-strong`: define `--hair-strong: var(--hair-2)` in the bridge if `--hair-2` resolves in all consumers; else map to `var(--hair)`; contract row. (Controls `Table`/`Breadcrumbs`/`Pagination` currently get an invalid border.)
-- [ ] **Step 4:** Gates: `npm --workspace @digithings/web run test` + `typecheck`; canon guard; **`npm --workspace digichat run test`** (web-theme.css is shared — 125 files); reference lint/typecheck/build.
+- [ ] **Step 4:** Gates: `npm --workspace @digithings/ui run test` + `typecheck`; canon guard; **`npm --workspace digichat run test`** (web-theme.css is shared — 125 files); reference lint/typecheck/build.
 - [ ] **Step 5:** Commit.
 
 **Commit:** `fix(digiweb): wave 2 pre-work — portable cn imports, shared overlay variants, --hair-strong`
@@ -43,12 +43,12 @@ except the kit package itself (Task 1).
 ### Task 2: digithings-web adoption
 
 **Files:**
-- Modify: `cloudflare/digithings-web/components/ProviderSettings.tsx` — hand-built slide-over → kit `Sheet`; native input/select → `Input`/`Select`; labels → `Label`; 6 native buttons → `Button`; `role="alert"` → `Alert`.
-- Modify: `cloudflare/digithings-web/components/docs/DigithingsDocs.tsx` — `.docs-copy` → `Button`; `.doc-badge` → `Badge`; the 2 doc tables (`:221`, `:250`) → kit `Table`.
-- Modify: `cloudflare/digithings-web/landing/ModuleManifest.tsx` (button), `.btn*` call sites in `app/{page,about,team,services,quality,not-found}`.
-- Modify: `cloudflare/digithings-web/app/globals.css` — delete `dc-settings-*` dress; add `@source "../../digiweb/web/src/ui";` + `@import "tw-animate-css"`.
-- Modify: `cloudflare/digithings-web/package.json` (+ lockfile) — add `tw-animate-css`.
-- Modify: `cloudflare/digithings-web/components/ProviderSettings.contract.test.tsx` — re-pin markup expectations.
+- Modify: `apps/digithings-web/components/ProviderSettings.tsx` — hand-built slide-over → kit `Sheet`; native input/select → `Input`/`Select`; labels → `Label`; 6 native buttons → `Button`; `role="alert"` → `Alert`.
+- Modify: `apps/digithings-web/components/docs/DigithingsDocs.tsx` — `.docs-copy` → `Button`; `.doc-badge` → `Badge`; the 2 doc tables (`:221`, `:250`) → kit `Table`.
+- Modify: `apps/digithings-web/landing/ModuleManifest.tsx` (button), `.btn*` call sites in `app/{page,about,team,services,quality,not-found}`.
+- Modify: `apps/digithings-web/app/globals.css` — delete `dc-settings-*` dress; add `@source "../../digiweb/web/src/ui";` + `@import "tw-animate-css"`.
+- Modify: `apps/digithings-web/package.json` (+ lockfile) — add `tw-animate-css`.
+- Modify: `apps/digithings-web/components/ProviderSettings.contract.test.tsx` — re-pin markup expectations.
 
 **Interfaces:**
 - Consumes: Tasks 1; wave-1 variant map (primary→default, ghost→ghost, quiet→outline where stock cannot express inline-text quiet, danger→destructive); loading idiom (`disabled` + inline spinner span).
@@ -57,7 +57,7 @@ except the kit package itself (Task 1).
 - [ ] **Step 1:** `ProviderSettings` on `Sheet`/`Input`/`Select`/`Label`/`Button`/`Alert` (preserve focus/escape/backdrop behavior); update the contract test.
 - [ ] **Step 2:** docs + marketing `.btn*`/badges/tables per the map; keep utilities-only, no new families.
 - [ ] **Step 3:** CSS: delete `dc-settings-*` (verify zero consumers), add `@source` + `tw-animate-css`; `package.json` + lockfile.
-- [ ] **Step 4:** Screenshots dark+light (home, `/docs`, provider settings surface) + gates: canon, `test --workspace digithings-web`, `@digithings/web`, `@digithings/digichat-ui`, digichat suite A/B; build (`next build --webpack`).
+- [ ] **Step 4:** Screenshots dark+light (home, `/docs`, provider settings surface) + gates: canon, `test --workspace digithings-web`, `@digithings/ui`, `@digithings/digichat-ui`, digichat suite A/B; build (`next build --webpack`).
 - [ ] **Step 5:** Commit.
 
 **Commit:** `feat(digithings-web): adopt the vendored ui kit`
@@ -82,7 +82,7 @@ except the kit package itself (Task 1).
 - [ ] **Step 1:** buttons + chips + cards.
 - [ ] **Step 2:** the two tables on kit `Table` (numeric columns numeric).
 - [ ] **Step 3:** tabs decision + implementation; CSS deletions + `@source` + `tw-animate-css`; package.json.
-- [ ] **Step 4:** Screenshots dark+light (home, tearsheet, subsystems) + gates: canon, `lint --workspace digiquant-web`, its vitest, `@digithings/web`, digichat A/B; build.
+- [ ] **Step 4:** Screenshots dark+light (home, tearsheet, subsystems) + gates: canon, `lint --workspace digiquant-web`, its vitest, `@digithings/ui`, digichat A/B; build.
 - [ ] **Step 5:** Commit.
 
 **Commit:** `feat(digiquant-web): adopt the vendored ui kit`
@@ -135,7 +135,7 @@ except the kit package itself (Task 1).
 
 **Files:**
 - Modify: `.github/workflows/test-web.yml` + `scripts/ci_paths.yaml` — add the previously-dark `test --workspace digiquant-web` step (decision recorded either way).
-- Modify: `cloudflare/digiweb/{ARCHITECTURE,MIGRATION}.md` — only if adoption changed the written contract (e.g. adoption notes/consumer requirements).
+- Modify: `packages/ui/{ARCHITECTURE,MIGRATION}.md` — only if adoption changed the written contract (e.g. adoption notes/consumer requirements).
 - SDD dir: wave screenshot set + ledger.
 
 **Interfaces:**
@@ -143,7 +143,7 @@ except the kit package itself (Task 1).
 - Produces: the recorded wave-2 state.
 
 - [ ] **Step 1:** Full-wave grep audit: no deleted family prefix used; no `@/lib/utils` left in the kit; `@source` present in all three apps; no new families (`check_frontend_canon.py` clean); digichat/digichat-ui untouched (paths diffed).
-- [ ] **Step 2:** Full gates on each tip: canon; `@digithings/web`; `@digithings/digichat-ui`; each app's lint/test/build; `npm --workspace digichat run test` A/B.
+- [ ] **Step 2:** Full gates on each tip: canon; `@digithings/ui`; `@digithings/digichat-ui`; each app's lint/test/build; `npm --workspace digichat run test` A/B.
 - [ ] **Step 3:** Screenshot set (dark+light) for each app's key surfaces; ledger complete; docs touch-ups.
 - [ ] **Step 4:** Commit (only if files change).
 

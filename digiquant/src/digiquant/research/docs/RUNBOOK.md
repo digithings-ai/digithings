@@ -20,6 +20,8 @@ The scheduled GitHub job (`pipeline-research-metrics.yml`, 22:00 UTC daily) runs
 
 **The daily cron deliberately does *not* pass `--fill-calendar-through`, and must not be changed to.** No workflow has ever passed it (this RUNBOOK previously claimed the price job did — it never did). Carry-forward would clone the prior book into every date where the book never materialized, which is precisely the absent-`positions` signal a missing-book detector reads; densifying it would make the failure undetectable rather than fixing it.
 
+**Bookless mark-to-market (#3439).** The engine NAV step is the exception to that alarm: it runs `verify_nav_replay.py --write --mark-through "$(date -u +%F)"`, which extends the replay grid through today holding the last committed book's positions (no schedule entry, no fabricated rebalance) so NAV/PnL keep moving when the house run commits no book. Only the grid is extended — `positions` is never written — so the absent-`positions` signal and the metrics step's exit-3 alarm above both stay intact. `--mark-through` is a no-op when a book exists for the target date, and it is *not* `--fill-calendar-through` (which clones the book into `positions`).
+
 **Manual densification / backfill** (operator only — also what [`run_db_first.py`](scripts/run_db_first.py) invokes):  
 `python3 scripts/refresh_performance_metrics.py --supabase --fill-calendar-through YYYY-MM-DD`
 
@@ -43,7 +45,7 @@ metrics and lookback cannot alter daily `pnl_pct` semantics.
 
 **Claude Cowork:** project briefing and scheduled task recipes live under [`cowork/`](cowork/) — see [`cowork/README.md`](cowork/README.md) and paste [`cowork/PROJECT-PROMPT.md`](cowork/PROJECT-PROMPT.md) into the Cowork project instructions. **First-time setup:** [`cowork/SETUP-RESEARCH-COWORK.md`](cowork/SETUP-RESEARCH-COWORK.md) (agent-driven wizard → `cowork/OPERATOR-COWORK.md` + `config/schedule.json` → `cowork_operator`).
 
-**dashboard daily chain:** `python -m digiquant.portfolio.chain --cadence daily` (`.github/workflows/pipeline-digiquant.yml`). House clocks run every day with `refresh_scope=none` and edit-mode continuity (`skip`/`edit`/`full` per artifact). Operator full refresh is manual (`workflow_dispatch` / `--refresh-scope all`). Beliefs distillation: daily short fold on every house run; `--refresh-scope beliefs` (or unfolded `decision_log` backlog above `OLYMPUS_BELIEFS_BACKLOG`, default 20) selects the full rewrite.
+**dashboard daily chain:** `python -m digiquant.portfolio.chain --cadence daily` (`.github/workflows/pipeline-digiquant.yml`). House clocks run every day with `refresh_scope=none` and edit-mode continuity (`skip`/`edit`/`full` per artifact). Operator full refresh is manual (`workflow_dispatch` / `--refresh-scope all`). Beliefs distillation: daily short fold on every house run; `--refresh-scope beliefs` (or unfolded `decision_log` backlog above `DIGIQUANT_BELIEFS_BACKLOG`, default 20) selects the full rewrite.
 
 ### digikey service key for web grounding (#4028)
 
@@ -116,7 +118,7 @@ NOT run them from an agent env; no cloud creds there):
 ```bash
 # Apply 127_drop_market_data_tables.sql (#4053) through db-migrate.yml on main
 # (push or manual dispatch; one transaction per file, ledgered in
-# olympus_schema_migrations). Never re-edit 124 — it is a ledgered no-op; 127 is
+# digithings_schema_migrations). Never re-edit 124 — it is a ledgered no-op; 127 is
 # the drop. Rollback after apply = restore-from-generation + replay.
 # 0. PRECONDITION (apply gate) — the stack Worker is redeployed with
 #    DIGIQUANT_MARKET_DATA_BACKEND="r2" in [vars] (83640e28c; the value reaches
@@ -226,7 +228,7 @@ wiring lands.
 
 ### Research attention shadow evaluation (WP13.5 / #2934)
 
-After a shadow-mode dashboard run with `OLYMPUS_RESEARCH_ATTENTION_MODE=shadow`,
+After a shadow-mode dashboard run with `DIGIQUANT_RESEARCH_ATTENTION_MODE=shadow`,
 reconcile planned attention decisions to exact WP1 attempt usage and downstream
 artifacts before considering enforcement:
 

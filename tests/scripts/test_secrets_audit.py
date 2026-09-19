@@ -1,4 +1,4 @@
-"""Unit tests for scripts/secrets_audit.py (#4335)."""
+"""Unit tests for scripts/secrets_audit.py (#4335, #4338)."""
 
 from __future__ import annotations
 
@@ -199,3 +199,172 @@ def test_cli_strict_fails_when_secret_list_unavailable(tmp_path: Path) -> None:
     )
     assert strict.returncode == 1
     assert "repo secret list unavailable" in strict.stdout
+
+
+def _level_fixture(tmp_path: Path, reads: list[str]) -> dict[str, Path]:
+    """A tree whose reads are `reads`, plus one file per level to hand to the CLI."""
+    workflows = tmp_path / ".github" / "workflows"
+    workflows.mkdir(parents=True)
+    body = "".join(f"  {name}: ${{{{ secrets.{name} }}}}\n" for name in reads)
+    (workflows / "a.yml").write_text(f"env:\n{body}", encoding="utf-8")
+
+    files = {
+        "secrets": tmp_path / "secrets.txt",
+        "variables": tmp_path / "variables.txt",
+        "org": tmp_path / "org.txt",
+        "env": tmp_path / "env.txt",
+    }
+    files["secrets"].write_text("REPO_ONLY\nDUPLICATED\n", encoding="utf-8")
+    files["variables"].write_text("VAR_BACKED\n", encoding="utf-8")
+    files["org"].write_text("ORG_BACKED\nDUPLICATED\n", encoding="utf-8")
+    files["env"].write_text("production:ENV_BACKED\n", encoding="utf-8")
+    return files
+
+
+def _run_levels(files: dict[str, Path], tmp_path: Path, *extra: str) -> subprocess.CompletedProcess:
+    return subprocess.run(
+        [
+            sys.executable,
+            str(_SCRIPT),
+            "--root",
+            str(tmp_path),
+            "--secrets-file",
+            str(files["secrets"]),
+            "--variables-file",
+            str(files["variables"]),
+            "--org-secrets-file",
+            str(files["org"]),
+            "--env-secrets-file",
+            str(files["env"]),
+            *extra,
+        ],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+
+@pytest.mark.unit
+def test_classify_levels_splits_explained_unresolved_and_shadowed(audit: object) -> None:
+    surface = audit.Surface(
+        repo_secrets={"REPO_ONLY", "DUPLICATED", "ENV_AND_REPO"},
+        repo_variables={"VAR_BACKED"},
+        org_secrets={"ORG_BACKED", "DUPLICATED"},
+        environment_secrets={"production": {"ENV_BACKED", "ENV_AND_REPO"}},
+    )
+
+    levels = audit.classify_levels(
+        {
+            "REPO_ONLY",
+            "VAR_BACKED",
+            "ORG_BACKED",
+            "ENV_BACKED",
+            "DUPLICATED",
+            "ENV_AND_REPO",
+            "PHANTOM",
+        },
+        surface,
+    )
+
+    assert surface.complete is True
+    assert levels.explained == {"VAR_BACKED", "ORG_BACKED", "ENV_BACKED"}
+    assert levels.unresolved == {"PHANTOM"}
+    assert levels.shadowed == {"DUPLICATED"}
+    assert levels.env_over_repo == {"ENV_AND_REPO"}
+
+
+@pytest.mark.unit
+def test_surface_incomplete_until_every_level_is_known(audit: object) -> None:
+    assert audit.Surface(repo_secrets={"A"}).complete is False
+    assert audit.Surface(repo_secrets={"A"}, repo_variables=set()).complete is False
+    assert (
+        audit.Surface(
+            repo_secrets={"A"}, repo_variables=set(), environment_secrets={}, org_secrets=set()
+        ).complete
+        is True
+    )
+
+
+@pytest.mark.unit
+def test_cli_reports_levels_from_files(tmp_path: Path) -> None:
+    files = _level_fixture(
+        tmp_path, ["REPO_ONLY", "DUPLICATED", "VAR_BACKED", "ORG_BACKED", "ENV_BACKED", "PHANTOM"]
+    )
+
+    result = _run_levels(files, tmp_path)
+
+    assert result.returncode == 0, result.stderr
+    assert "levels: 1 repo variables, 2 org secrets, 1 environments" in result.stdout
+    assert "dead: none" in result.stdout
+    assert "unresolved: PHANTOM" in result.stdout
+    assert "repo-over-org: DUPLICATED" in result.stdout
+    assert "not repo-level: ENV_BACKED, ORG_BACKED, VAR_BACKED" in result.stdout
+
+
+@pytest.mark.unit
+def test_cli_strict_unresolved_needs_every_level_and_fails_on_phantom(tmp_path: Path) -> None:
+    files = _level_fixture(tmp_path, ["REPO_ONLY", "PHANTOM"])
+
+    phantom = _run_levels(files, tmp_path, "--strict-unresolved")
+    assert phantom.returncode == 1
+    assert "PHANTOM" in phantom.stderr
+
+    files["org"].write_text("ORG_BACKED\nDUPLICATED\nPHANTOM\n", encoding="utf-8")
+    explained = _run_levels(files, tmp_path, "--strict-unresolved")
+    assert explained.returncode == 0, explained.stderr
+
+    offline = subprocess.run(
+        [
+            sys.executable,
+            str(_SCRIPT),
+            "--root",
+            str(tmp_path),
+            "--secrets-file",
+            str(files["secrets"]),
+            "--strict-unresolved",
+        ],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert offline.returncode == 1
+    assert "needs every level" in offline.stderr
+
+
+@pytest.mark.unit
+def test_cli_reports_env_over_repo_shadowing(tmp_path: Path) -> None:
+    files = _level_fixture(tmp_path, ["REPO_ONLY", "ENV_AND_REPO"])
+    files["secrets"].write_text("REPO_ONLY\nENV_AND_REPO\n", encoding="utf-8")
+    files["env"].write_text("production:ENV_BACKED\nproduction:ENV_AND_REPO\n", encoding="utf-8")
+
+    result = _run_levels(files, tmp_path)
+
+    assert result.returncode == 0, result.stderr
+    assert "env-over-repo: ENV_AND_REPO" in result.stdout
+
+
+@pytest.mark.unit
+def test_cli_strict_flags_fail_when_repo_list_is_unavailable(tmp_path: Path) -> None:
+    _level_fixture(tmp_path, ["REPO_ONLY"])
+    no_path = {"PATH": ""}
+
+    for flag in ("--strict", "--strict-unresolved"):
+        result = subprocess.run(
+            [sys.executable, str(_SCRIPT), "--root", str(tmp_path), flag],
+            capture_output=True,
+            text=True,
+            check=False,
+            env=no_path,
+        )
+        assert result.returncode == 1, f"{flag} passed without a repo secret list"
+        assert "could not provide it" in result.stderr
+
+    plain = subprocess.run(
+        [sys.executable, str(_SCRIPT), "--root", str(tmp_path)],
+        capture_output=True,
+        text=True,
+        check=False,
+        env=no_path,
+    )
+    assert plain.returncode == 0, plain.stderr
+    assert "repo secret list unavailable" in plain.stdout

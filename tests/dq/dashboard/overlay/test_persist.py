@@ -48,7 +48,6 @@ def test_portfolio_keys_house_unprefixed_overlay_namespaced() -> None:
 def test_require_overlay_persist_refuses_private_when_flag_off(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.delenv("OLYMPUS_OVERLAY_PERSIST", raising=False)
     monkeypatch.delenv("DIGIQUANT_OVERLAY_PERSIST", raising=False)
     with pytest.raises(OverlayPersistDisabled) as exc:
         require_overlay_persist(uuid4())
@@ -72,9 +71,9 @@ def test_skip_overlay_shared_register_independent_of_persist_flag(
 ) -> None:
     """Persist=1 still must not upsert house-owned shared registers."""
     overlay = uuid4()
-    monkeypatch.setenv("OLYMPUS_OVERLAY_PERSIST", "1")
+    monkeypatch.setenv("DIGIQUANT_OVERLAY_PERSIST", "1")
     assert skip_overlay_shared_register(overlay) is True
-    monkeypatch.delenv("OLYMPUS_OVERLAY_PERSIST", raising=False)
+    monkeypatch.delenv("DIGIQUANT_OVERLAY_PERSIST", raising=False)
     assert skip_overlay_shared_register(overlay) is True
     assert skip_overlay_shared_register(None) is False
     assert skip_overlay_shared_register(house_workspace_id()) is False
@@ -84,7 +83,7 @@ def test_overlay_book_portfolio_refuses_private_workspace(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """Persist=1 must not write overlay positions/NAV while UNIQUE(date) remains."""
-    monkeypatch.setenv("OLYMPUS_OVERLAY_PERSIST", "1")
+    monkeypatch.setenv("DIGIQUANT_OVERLAY_PERSIST", "1")
     overlay = uuid4()
     state = ResearchState(
         run_type="delta",
@@ -117,7 +116,7 @@ def test_overlay_book_portfolio_refuses_private_workspace(
 def test_publish_portfolio_documents_namespaces_overlay_keys(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setenv("OLYMPUS_OVERLAY_PERSIST", "1")
+    monkeypatch.setenv("DIGIQUANT_OVERLAY_PERSIST", "1")
     overlay = uuid4()
     state = ResearchState(
         run_type="delta",
@@ -140,7 +139,6 @@ def test_publish_portfolio_documents_namespaces_overlay_keys(
 def test_overlay_persist_disabled_after_corpus(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.delenv("OLYMPUS_OVERLAY_PERSIST", raising=False)
     monkeypatch.delenv("DIGIQUANT_OVERLAY_PERSIST", raising=False)
     called = {"chain": False}
 

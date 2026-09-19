@@ -568,7 +568,7 @@ def resolve_execution_venue_for_run(workspace_id: Optional[str] = None) -> str:
     House cron passes ``workspace_id=None`` → always ``paper_internal``, so the
     existing ``build_events_from_paper_fills`` path and its outputs stay
     byte-identical. External venues are reachable only when
-    ``DIGIQUANT_EXECUTION_ROUTING`` (alias ``OLYMPUS_KAIROS_ROUTING``) is on
+    ``DIGIQUANT_EXECUTION_ROUTING`` is on
     *and* a workspace with an active paper ``broker_connections`` row is
     supplied — that path is wired by the execution router, not by mutating
     the paper-fill writer.

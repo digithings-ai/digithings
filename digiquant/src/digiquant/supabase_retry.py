@@ -1,6 +1,6 @@
 """Bounded retry for Supabase reads hit by transient network faults (#3299).
 
-The Olympus daily run failed on ``httpx.ReadTimeout`` out of
+The digiquant daily run failed on ``httpx.ReadTimeout`` out of
 ``query_returns_window`` (#3078); cheap-model tool rounds also see PostgREST
 ``PGRST002`` and 502s. Retry those (and only those) 3× with short backoff;
 everything else — including 42703 unknown-column — still fails fast so real
