@@ -155,10 +155,10 @@ with zero consumers (`Avatar`, `Badge`, `Sheet`, `Collapsible`), the second
 `gallery-thread` component library, digichat's four dead `ui/` wrappers, and the
 orphan `dashboard-workspace-reference.tsx`. `Label` was **not** deleted — it is
 retained private for its `Field` consumer, so its `ctl-label-ref` CSS stays live.
-The controls layer is now a keep-list (Table, Select, Dialog, DropdownMenu,
-Tooltip, EmptyState, Skeleton, NavButtons, Selection/radio, DatePager, Field,
-Label, Slider, Breadcrumbs, Pagination, SearchBar, TagsInput); deferred kit items
-live in #4306.
+The controls layer's live keep-list after K1 was a shrinking set (Table, Select,
+Dialog, DropdownMenu, Tooltip, NavButtons/Pager, Selection/radio, Label,
+Slider) plus the zero-consumer promoted copies; K2 then cleared the rest of the
+wayfinding/form parts. Deferred kit items live in #4306.
 
 Batch K1 (#4306) then promoted the seven highest-impact remaining gaps in one
 pass: **Slider** (the vendored stock shadcn Base UI slider — single + range
@@ -172,9 +172,23 @@ place and keep exporting (zero-consumer candidates for the retirement batch);
 only the reference's local `.sl-input` mechanic was deleted. The promote-from-
 controls recipe is [MIGRATION.md § Promote a part out of the controls layer](MIGRATION.md#promote-a-part-out-of-the-controls-layer-batch-k1).
 
+Batch K2 (#4306) then promoted the remaining keep-list parts — **Breadcrumbs,
+Pagination, DatePager, TagsInput (+ `TagChip`), SearchBar** — and added the two
+net-new kit parts the canon lacked: **Avatar** (the vendored stock shadcn/Base UI
+avatar, with image/fallback/badge/group parts) and **Form** (a presentational
+`Form`/`FormField`/`FormActions` wrapper over `Field`; no form-library
+dependency). Every live consumer was repointed (the canon specimens, the RTL
+proof, the dashboard `PipelineDaySelector` and `BriefsIndex`), and the
+`DatePager` calendar CSS moved into `styles/web-theme.css` (`.nb-cal*`, plus the
+kit's own `.kit-pop` travel) so the kit no longer depends on the controls sheet.
+The controls copies remain and keep exporting at zero consumers. Part coverage
+finished too: the specimens now render `AlertAction`, `CardAction`,
+`DialogOverlay`/`DialogPortal`, the `DropdownMenu` portal/checkbox/submenu parts,
+the `Select` content/group/label/separator parts, and `SheetClose`/`SheetFooter`.
+
 | Family | Components | CSS subpath |
 | ------ | ---------- | ----------- |
-| `ui` | Alert, Badge, Button (+ `buttonVariants`), Card (+ parts), Checkbox, Collapsible, Dialog (+ parts), DropdownMenu (+ parts), EmptyState, Field, IconButton, Input, Label, Radio/RadioGroup, SegmentedControl, Select (+ parts), Separator, Sheet (+ parts), Skeleton/SkeletonGroup, Slider, Switch, Table (+ parts), Tabs, Textarea, Tooltip (+ parts) — barrel `web/src/ui/index.ts`, export `@digithings/ui/ui` | — (utility-only; consumers add `@source "../../../packages/ui/src/ui"`; the `sk-shimmer` keyframes ride `styles/web-theme.css`) |
+| `ui` | Alert, Avatar (+ parts), Badge, Breadcrumbs, Button (+ `buttonVariants`), Card (+ parts), Checkbox, Collapsible, DatePager, Dialog (+ parts), DropdownMenu (+ parts), EmptyState, Field, Form, IconButton, Input, Label, Pagination, Radio/RadioGroup, SearchBar, SegmentedControl, Select (+ parts), Separator, Sheet (+ parts), Skeleton/SkeletonGroup, Slider, Switch, Table (+ parts), Tabs, TagsInput, Textarea, Tooltip (+ parts) — barrel `web/src/ui/index.ts`, export `@digithings/ui/ui` | `styles/web-theme.css` (the `sk-shimmer` keyframes plus the ported `.nb-cal*` calendar grid and `.kit-pop` travel; otherwise utility-only — consumers add `@source "../../../packages/ui/src/ui"`) |
 
 The five parts digichat needed a chat tone for carry the `dress="chat"` axis
 (Button/Card/Badge/Input/Label), which emits the existing `ctl-*-chat` classes
@@ -384,7 +398,7 @@ logical form, so a few pieces carry explicit direction awareness instead:
   non-mechanical piece in the sweep.
 - Chevrons/arrows that encode a direction are mirrored: the dropdown
   sub-trigger (`rtl:-scale-x-100`), `Pagination` prev/next and `DatePager` month
-  steps (`.ctl-dir-flip`).
+  steps (`rtl:scale-x-[-1]` on the kit parts).
 - Switch / billing-toggle knobs anchor inline-start and negate their checked
   `translateX` under RTL.
 
@@ -409,9 +423,9 @@ Cursor is part of the part, not the page. Tailwind v4 preflight leaves buttons
 at the default arrow, so every activatable kit part sets `cursor-pointer`
 itself: `ui/button.tsx`, the menu/select items and sub-triggers, `TabsTrigger`,
 `Switch`, `Checkbox`, `CollapsibleTrigger`, `TableRow interactive` (opt-in —
-only some rows activate), and the controls-layer pager/date-pager/segmented/
-menu items (via `styles/controls-*.css`). Disabled parts carry
-`cursor: not-allowed` (the `disabled:` / `data-disabled:` variant, or the
+only some rows activate), and the kit `Pagination`, `DatePager`, `TagsInput`,
+`SearchBar` and `Breadcrumbs` controls (via token utilities). Disabled parts
+carry `cursor: not-allowed` (the `disabled:` / `data-disabled:` variant, or the
 kit sheet rule) so the state names the affordance instead of inheriting the
 base pointer.
 

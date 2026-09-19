@@ -5,10 +5,10 @@
  * Controlled (`page` + `pageCount`) with buttons here; pass `hrefForPage`
  * for links. First / last with an ellipsis around the current page, prev /
  * next disabling at the edges, the current page the one loud control (ink
- * fill). Dress is `.ctl-pagination*` in the package core sheet.
+ * fill). Dress is the kit's token utilities (`@digithings/ui/ui`).
  */
 import { useState } from "react";
-import { Pagination } from "@digithings/ui";
+import { Pagination } from "@digithings/ui/ui";
 
 const PAGE_COUNT = 8;
 

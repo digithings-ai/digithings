@@ -17,6 +17,8 @@ import {
   DialogDescription,
   DialogFooter,
   DialogHeader,
+  DialogOverlay,
+  DialogPortal,
   DialogTitle,
   DialogTrigger,
 } from "@digithings/ui/ui";
@@ -58,6 +60,31 @@ export function DialogReference() {
               </DialogClose>
             </DialogFooter>
           </DialogContent>
+        </Dialog>
+      </div>
+
+      <div className="mt-[1.4rem]">
+        <p className="mb-[0.5rem] font-mono text-[0.58rem] uppercase tracking-[0.1em] text-ink-mute">
+          dialog portal + overlay — custom scrim
+        </p>
+        <Dialog>
+          <DialogTrigger render={<Button variant="outline" />}>Open with custom scrim</DialogTrigger>
+          <DialogPortal>
+            <DialogOverlay className="bg-accent/10" />
+            <DialogContent showCloseButton={false}>
+              <DialogHeader>
+                <DialogTitle>Composed from the low-level parts</DialogTitle>
+                <DialogDescription>
+                  <code>DialogContent</code> bundles a portal and overlay; this example composes{" "}
+                  <code>DialogPortal</code> and <code>DialogOverlay</code> explicitly to tint the
+                  scrim at the call site.
+                </DialogDescription>
+              </DialogHeader>
+              <DialogFooter>
+                <DialogClose render={<Button variant="outline" />}>Close</DialogClose>
+              </DialogFooter>
+            </DialogContent>
+          </DialogPortal>
         </Dialog>
       </div>
     </section>

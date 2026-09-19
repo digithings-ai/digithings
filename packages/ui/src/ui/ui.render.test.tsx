@@ -55,6 +55,24 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "./index";
+import {
+  Avatar,
+  AvatarBadge,
+  AvatarFallback,
+  AvatarGroup,
+  AvatarGroupCount,
+  AvatarImage,
+  Breadcrumbs,
+  DatePager,
+  Form,
+  FormActions,
+  FormField,
+  Pagination,
+  SearchBar,
+  TagsInput,
+  formatDatePagerLabel,
+  paginationWindow,
+} from "./index";
 
 describe("vendored ui kit renders server-side", () => {
   it("Button keeps the shadcn data-slot contract", () => {
@@ -652,5 +670,184 @@ describe("kit parts promoted from the controls layer (#4306, batch K1)", () => {
     );
     expect(html).toContain("aria-pressed:bg-accent/20");
     expect(html).toContain("font-sans");
+  });
+});
+
+describe("kit parts promoted from the controls layer (#4306, batch K2)", () => {
+  it("Breadcrumbs renders the trail with a current page and slash separators", () => {
+    const html = renderToStaticMarkup(
+      <Breadcrumbs
+        items={[{ label: "Pipeline", href: "/#pipeline" }, { label: "Research" }]}
+      />,
+    );
+    expect(html).toContain('data-slot="breadcrumbs"');
+    expect(html).toContain('aria-label="Breadcrumb"');
+    expect(html).toContain('aria-current="page"');
+    expect(html).toContain("<nav");
+    expect(html).toContain("<ol");
+    // the trail link is a pointer affordance with the canon focus ring
+    expect(html).toContain("cursor-pointer");
+    expect(html).toContain("focus-visible:ring-accent/30");
+  });
+
+  it("Pagination renders the window with the loud current page and edge steps", () => {
+    const html = renderToStaticMarkup(
+      <Pagination page={5} pageCount={12} onPageChange={() => {}} />,
+    );
+    expect(html).toContain('data-slot="pagination"');
+    expect(html).toContain('aria-label="Pagination"');
+    expect(html).toContain('aria-current="page"');
+    expect(html).toContain('aria-label="Previous page"');
+    expect(html).toContain('aria-label="Next page"');
+    expect(html).toContain("bg-ink");
+    expect(html).toContain("cursor-pointer");
+  });
+
+  it("Pagination disables prev on the first page and renders links with hrefForPage", () => {
+    const html = renderToStaticMarkup(
+      <Pagination page={1} pageCount={4} hrefForPage={(p) => `/log?p=${p}`} />,
+    );
+    expect(html).toContain("disabled");
+    expect(html).toContain('href="/log?p=2"');
+  });
+
+  it("paginationWindow computes the ellipsis window", () => {
+    expect(paginationWindow(5, 12)).toEqual([1, "…", 4, 5, 6, "…", 12]);
+    expect(paginationWindow(1, 3)).toEqual([1, 2, 3]);
+    expect(paginationWindow(2, 2)).toEqual([1, 2]);
+  });
+
+  it("Pagination mirrors its direction glyph under RTL", () => {
+    const html = renderToStaticMarkup(
+      <Pagination page={3} pageCount={9} onPageChange={() => {}} />,
+    );
+    expect(html).toContain("rtl:scale-x-[-1]");
+  });
+
+  it("DatePager renders the capsule label and calendar trigger", () => {
+    const html = renderToStaticMarkup(
+      <DatePager value="2026-09-30" onChange={() => {}} labelAriaLabel="Pick date" />,
+    );
+    expect(html).toContain('data-slot="date-pager"');
+    expect(html).toContain('data-slot="date-pager-trigger"');
+    expect(html).toContain('aria-label="Pick date"');
+    expect(html).toContain(formatDatePagerLabel("2026-09-30"));
+    expect(formatDatePagerLabel("2026-09-30")).toBe("Wed, Sep 30, 2026");
+    expect(html).toContain("tabular-nums");
+    expect(html).toContain("bg-term-bg");
+  });
+
+  it("DatePager mirrors its month/step chevrons under RTL", () => {
+    const html = renderToStaticMarkup(<DatePager value="2026-09-30" onChange={() => {}} />);
+    expect(html).toContain("rtl:scale-x-[-1]");
+  });
+
+  it("TagsInput renders chips with remove controls and filtered suggestions", () => {
+    const html = renderToStaticMarkup(
+      <TagsInput
+        value={["momentum", "ETH-USD"]}
+        placeholder="filter strategies…"
+        suggestions={["momentum", "carry"]}
+      />,
+    );
+    expect(html).toContain('data-slot="tags-input"');
+    expect(html).toContain('data-slot="tag-chip"');
+    expect(html).toContain('aria-label="Remove momentum"');
+    // chips present → placeholder suppressed
+    expect(html).not.toContain("filter strategies…");
+    // already-added suggestion filtered, remaining rendered as +chip
+    expect(html).toContain("+ carry");
+    expect(html.match(/data-slot="tag-suggestions"/g)).toHaveLength(1);
+  });
+
+  it("TagsInput stretches the input while chipless and shows the placeholder", () => {
+    const html = renderToStaticMarkup(<TagsInput value={[]} placeholder="filter strategies…" />);
+    expect(html).toContain('placeholder="filter strategies…"');
+    expect(html).toContain("first:flex-1");
+    expect(html).not.toContain('data-slot="tag-chip"');
+  });
+
+  it("SearchBar shows the hint slot while empty and swaps it for clear on input", () => {
+    const empty = renderToStaticMarkup(
+      <SearchBar value="" onChange={() => {}} hint={<kbd className="kbd">/</kbd>} />,
+    );
+    expect(empty).toContain('data-slot="search-bar"');
+    expect(empty).toContain("/");
+    expect(empty).not.toContain('aria-label="Clear search"');
+
+    const filled = renderToStaticMarkup(
+      <SearchBar value="sharpe" onChange={() => {}} hint={<kbd className="kbd">/</kbd>} />,
+    );
+    expect(filled).toContain('aria-label="Clear search"');
+    expect(filled).not.toContain("<kbd");
+    expect(filled).toContain("webkit-search-cancel-button");
+  });
+
+  it("SearchBar and TagsInput carry pointer cursors on their controls", () => {
+    const search = renderToStaticMarkup(<SearchBar value="x" onChange={() => {}} />);
+    expect(search).toContain("cursor-pointer");
+    const tags = renderToStaticMarkup(
+      <TagsInput value={["a"]} suggestions={["b"]} onRemove={() => {}} />,
+    );
+    expect(tags).toContain("cursor-pointer");
+  });
+
+  it("Form and FormField wire label, hint and error into the control", () => {
+    const html = renderToStaticMarkup(
+      <Form>
+        <FormField label="Ticker" hint="Lowercase.">
+          <input name="ticker" />
+        </FormField>
+        <FormActions>
+          <button type="button">Save</button>
+        </FormActions>
+      </Form>,
+    );
+    expect(html).toContain('data-slot="form"');
+    expect(html).toContain('data-slot="field"');
+    expect(html).toContain('data-slot="form-actions"');
+    expect(html).toMatch(/<label[^>]*for="/);
+    expect(html).toContain("Lowercase.");
+    expect(html).toMatch(/aria-describedby="/);
+  });
+
+  it("Form marks required on the control and shows the required affordance", () => {
+    const html = renderToStaticMarkup(
+      <Form>
+        <FormField label="Ticker" error="Required." required>
+          <input name="ticker" />
+        </FormField>
+      </Form>,
+    );
+    expect(html).toContain("Required.");
+    expect(html).toContain('aria-invalid="true"');
+    expect(html).toContain("(required)");
+  });
+
+  it("Avatar composes root, image and fallback parts", () => {
+    const html = renderToStaticMarkup(
+      <div>
+        <Avatar>
+          <AvatarImage src="/brand/avatar/digithings-avatar-dark.png" alt="digithings" />
+          <AvatarFallback>DG</AvatarFallback>
+        </Avatar>
+        <AvatarGroup>
+          <Avatar size="sm">
+            <AvatarFallback>dg</AvatarFallback>
+            <AvatarBadge />
+          </Avatar>
+          <AvatarGroupCount>+5</AvatarGroupCount>
+        </AvatarGroup>
+      </div>,
+    );
+    expect(html).toContain('data-slot="avatar"');
+    expect(html).toContain('data-slot="avatar-fallback"');
+    expect(html).toContain('data-slot="avatar-group"');
+    expect(html).toContain('data-slot="avatar-group-count"');
+    expect(html).toContain('data-slot="avatar-badge"');
+    expect(html).toContain('data-size="sm"');
+    // the status badge anchors to the inline end, not the physical right
+    expect(html).toContain("end-0");
+    expect(html).not.toContain("right-0");
   });
 });

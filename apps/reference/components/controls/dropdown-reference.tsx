@@ -5,14 +5,19 @@ import { useState } from "react";
 import {
   Button,
   DropdownMenu,
+  DropdownMenuCheckboxItem,
   DropdownMenuContent,
   DropdownMenuGroup,
   DropdownMenuItem,
   DropdownMenuLabel,
+  DropdownMenuPortal,
   DropdownMenuRadioGroup,
   DropdownMenuRadioItem,
   DropdownMenuSeparator,
   DropdownMenuShortcut,
+  DropdownMenuSub,
+  DropdownMenuSubContent,
+  DropdownMenuSubTrigger,
   DropdownMenuTrigger,
   Input,
 } from "@digithings/ui/ui";
@@ -54,6 +59,7 @@ const OPTIONS: Option[] = [
 export function DropdownReference() {
   const [selected, setSelected] = useState(OPTIONS[0].id);
   const [query, setQuery] = useState("");
+  const [liveOnly, setLiveOnly] = useState(false);
 
   const current = OPTIONS.find((o) => o.id === selected) ?? OPTIONS[0];
   const filtered = OPTIONS.filter(
@@ -138,6 +144,19 @@ export function DropdownReference() {
               </DropdownMenuRadioGroup>
             )}
 
+            <DropdownMenuSeparator />
+            <DropdownMenuCheckboxItem checked={liveOnly} onCheckedChange={setLiveOnly}>
+              Live only
+            </DropdownMenuCheckboxItem>
+            <DropdownMenuSub>
+              <DropdownMenuSubTrigger>Export</DropdownMenuSubTrigger>
+              <DropdownMenuPortal>
+                <DropdownMenuSubContent>
+                  <DropdownMenuItem closeOnClick>CSV</DropdownMenuItem>
+                  <DropdownMenuItem closeOnClick>JSON</DropdownMenuItem>
+                </DropdownMenuSubContent>
+              </DropdownMenuPortal>
+            </DropdownMenuSub>
             <DropdownMenuSeparator />
             <DropdownMenuItem closeOnClick className="text-accent">
               <span aria-hidden="true">+</span> New strategy…

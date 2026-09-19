@@ -1,6 +1,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import { DocsCodeBlock } from "@digithings/ui";
+import { AvatarKitReference } from "@/components/brand/avatar-kit-reference";
 import {
   AVATARS,
   BRAND_DOMAIN,
@@ -93,6 +94,7 @@ export default function BrandPage() {
           </figure>
         </div>
         <DownloadList files={AVATARS} />
+        <AvatarKitReference />
       </section>
 
       <section className="section-block" id="social-headers">

@@ -1,6 +1,6 @@
 'use client';
 
-import { DatePager } from '@digithings/ui';
+import { DatePager } from '@digithings/ui/ui';
 
 export interface PipelineDaySelectorProps {
   /** Available run dates, newest first (PipelineClient sorts descending). */

@@ -52,8 +52,8 @@ describe('PipelineDaySelector', () => {
     expect(html).toContain('Fri, Jul 17, 2026');
     expect(html).toContain('Previous day');
     expect(html).toContain('Next day');
-    expect(html).toContain('nb-pager--date');
-    expect(html).toContain('nb-pager-middle');
+    expect(html).toContain('data-slot="date-pager"');
+    expect(html).toContain('data-slot="date-pager-trigger"');
     expect(html).toContain('aria-label="Pick run date"');
   });
 });

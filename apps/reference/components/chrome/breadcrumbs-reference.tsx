@@ -2,9 +2,9 @@
  * Breadcrumbs specimen — the wayfinding trail from @digithings/ui, live.
  * Items are `{ label, href }`; the last item without an `href` renders as
  * the current page (`aria-current="page"`, not a link). Separators are
- * `/`, aria-hidden. Dress is `.ctl-crumbs*` in the package core sheet.
+ * `/`, aria-hidden. Dress is the kit's token utilities (`@digithings/ui/ui`).
  */
-import { Breadcrumbs } from "@digithings/ui";
+import { Breadcrumbs } from "@digithings/ui/ui";
 
 export function BreadcrumbsReference() {
   return (

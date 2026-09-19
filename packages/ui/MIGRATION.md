@@ -139,9 +139,19 @@ controls copies remain and keep exporting, now at zero consumers (see the
 retirement batch); the reference's local `.sl-input` slider mechanic was
 deleted. The recipe is
 [§ Promote a part out of the controls layer](#promote-a-part-out-of-the-controls-layer-batch-k1).
-The keep-list is down to Breadcrumbs, DatePager, Dialog, DropdownMenu,
-Pagination, SearchBar, Select, Table, TagsInput, Tooltip + the zero-consumer
-K1 parts.
+
+Batch K2 (#4306) finished the promotion: **Breadcrumbs, Pagination, DatePager,
+TagsInput (+ `TagChip`), SearchBar**, plus two net-new kit parts — **Avatar**
+(vendored stock shadcn/Base UI; the kit had none) and **Form** (a presentational
+wrapper over `Field` and the kit inputs; the repo carries no form-library
+dependency, so it owns no state). Every live consumer was repointed (canon
+specimens, the RTL proof, the dashboard day selector and briefs index).
+`DatePager`'s `.nb-cal` calendar grid and its `kit-pop` enter/exit travel moved
+to `styles/web-theme.css`, so the kit part no longer reads the controls sheet.
+The controls copies stay and keep exporting, now at zero consumers (the
+retirement batch deletes them). The keep-list is down to Dialog, DropdownMenu,
+Select, Table, Tooltip, NavButtons/Pager, Selection/radio, Label, Slider plus
+the zero-consumer K1/K2 parts.
 
 ### Promote a part out of the controls layer (batch K1)
 

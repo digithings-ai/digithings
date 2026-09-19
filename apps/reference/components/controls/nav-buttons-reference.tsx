@@ -3,7 +3,7 @@
 import { useState } from "react";
 
 import { Pager, PagerPage } from "@digithings/ui";
-import { IconButton, SegmentedControl } from "@digithings/ui/ui";
+import { DatePager, IconButton, SegmentedControl } from "@digithings/ui/ui";
 
 /**
  * Navigation buttons — the wayfinding controls: a segmented range switch (the
@@ -20,6 +20,7 @@ const PAGES = 5;
 export function NavButtonsReference() {
   const [seg, setSeg] = useState("1M");
   const [page, setPage] = useState(1);
+  const [date, setDate] = useState("2026-09-30");
 
   return (
     <section className="section-block">
@@ -54,6 +55,13 @@ export function NavButtonsReference() {
             </PagerPage>
           ))}
         </Pager>
+      </div>
+
+      <div className="mt-[1.4rem]">
+        <p className="mb-[0.5rem] font-mono text-[0.58rem] uppercase tracking-[0.1em] text-ink-mute">
+          date pager
+        </p>
+        <DatePager value={date} onChange={setDate} />
       </div>
 
       <div className="mt-[1.4rem]">

@@ -17,19 +17,13 @@
  * uses `root`, so the reference's own NavShell mirrors too.
  */
 import { useState, type ReactNode } from "react";
-import {
-  Breadcrumbs,
-  DatePager,
-  DirectionProvider,
-  Pagination,
-  TabStrip,
-  type TabItem,
-} from "@digithings/ui";
+import { DirectionProvider, TabStrip, type TabItem } from "@digithings/ui";
 import {
   Alert,
   AlertDescription,
   AlertTitle,
   Badge,
+  Breadcrumbs,
   Button,
   Card,
   CardContent,
@@ -38,6 +32,7 @@ import {
   CardHeader,
   CardTitle,
   Checkbox,
+  DatePager,
   Dialog,
   DialogClose,
   DialogContent,
@@ -56,6 +51,7 @@ import {
   EmptyState,
   Input,
   Label,
+  Pagination,
   Select,
   SelectItem,
   SelectPopup,

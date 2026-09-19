@@ -2,14 +2,14 @@
 
 import { useState } from "react";
 
-import { TagsInput } from "@digithings/ui";
+import { TagsInput } from "@digithings/ui/ui";
 
 /**
  * Tags / chips input — the multi-select filter. Type and Enter (or comma) to
  * add a chip, × or Backspace-on-empty to remove, click a suggestion to add it.
  * Chips wear a hairline rectangle; the field lights the accent on focus. Keyboard-
  * complete and dedup-guarded. Accent reads under the monochrome default.
- * Consumes the shared <TagsInput/> primitive from @digithings/ui (the
+ * Consumes the shared <TagsInput/> primitive from @digithings/ui/ui (the
  * suggestions row included — already-added values are filtered out).
  */
 const SUGGESTIONS = ["momentum", "mean-reversion", "carry", "ETH-USD", "BTC-PERP", "PF>2", "live"];

@@ -5,21 +5,31 @@
  * composed inside the shared Field (label + hint wiring included). The
  * dropdown specimen covers menu panes; this one is the form control:
  * type-ahead, arrow-key travel, flip-aware popup, check on the picked row.
- * Wave 4: the non-portal `SelectPopup` moved from the controls layer onto the
- * kit, so this specimen dropped the controls import; the kit `SelectItem`
- * renders its own check, so the explicit `<SelectItemIndicator/>` child is gone.
+ *
+ * Batch K2: the specimen now composes the portal `SelectContent` (the
+ * recommended part — new code should use it over the controls-parity
+ * `SelectPopup`), with `SelectGroup` / `SelectLabel` / `SelectSeparator`; the
+ * content renders `SelectScrollUpButton` / `SelectScrollDownButton` itself.
+ * The kit `SelectItem` renders its own check, so no explicit
+ * `<SelectItemIndicator/>` child is passed.
  */
 import { useState } from "react";
 import {
   Field,
   Select,
+  SelectContent,
+  SelectGroup,
   SelectItem,
-  SelectPopup,
+  SelectLabel,
+  SelectSeparator,
   SelectTrigger,
   SelectValue,
 } from "@digithings/ui/ui";
 
-const VENUES = ["coinbase", "kraken", "binance", "paper"] as const;
+const GROUPS = [
+  { label: "Exchanges", venues: ["coinbase", "kraken", "binance"] },
+  { label: "Simulation", venues: ["paper"] },
+] as const;
 
 export function SelectReference() {
   const [venue, setVenue] = useState<string>("paper");
@@ -39,13 +49,19 @@ export function SelectReference() {
             <SelectTrigger>
               <SelectValue placeholder="Choose a venue" />
             </SelectTrigger>
-            <SelectPopup>
-              {VENUES.map((v) => (
-                <SelectItem key={v} value={v}>
-                  {v}
-                </SelectItem>
+            <SelectContent>
+              {GROUPS.map((group, i) => (
+                <SelectGroup key={group.label}>
+                  {i > 0 ? <SelectSeparator /> : null}
+                  <SelectLabel>{group.label}</SelectLabel>
+                  {group.venues.map((v) => (
+                    <SelectItem key={v} value={v}>
+                      {v}
+                    </SelectItem>
+                  ))}
+                </SelectGroup>
               ))}
-            </SelectPopup>
+            </SelectContent>
           </Select>
         </Field>
         <p className="mt-[0.7rem] font-mono text-[0.72rem] text-ink-mute">

@@ -1,10 +1,12 @@
 import {
   Alert,
+  AlertAction,
   AlertDescription,
   AlertTitle,
   Badge,
   Button,
   Card,
+  CardAction,
   CardContent,
   CardDescription,
   CardFooter,
@@ -12,8 +14,10 @@ import {
   CardTitle,
   Separator,
   Sheet,
+  SheetClose,
   SheetContent,
   SheetDescription,
+  SheetFooter,
   SheetHeader,
   SheetTitle,
   SheetTrigger,
@@ -118,6 +122,9 @@ export function KitSurfaceReference() {
             <CardHeader>
               <CardTitle>Chain status</CardTitle>
               <CardDescription>Stock Card, flat and hairline-bordered.</CardDescription>
+              <CardAction>
+                <Badge variant="neutral">live</Badge>
+              </CardAction>
             </CardHeader>
             <CardContent>
               Depth comes from the hairline and the tonal step — no shadow on content.
@@ -152,6 +159,11 @@ export function KitSurfaceReference() {
           <Alert variant="destructive">
             <AlertTitle>Key revoked</AlertTitle>
             <AlertDescription>Issue a new key before the next backtest.</AlertDescription>
+            <AlertAction>
+              <Button variant="ghost" size="xs">
+                Dismiss
+              </Button>
+            </AlertAction>
           </Alert>
         </div>
       </section>
@@ -192,6 +204,10 @@ export function KitSurfaceReference() {
                   Slides in from the right on the kit&apos;s own transition.
                 </SheetDescription>
               </SheetHeader>
+              <SheetFooter>
+                <SheetClose render={<Button variant="outline" />}>Cancel</SheetClose>
+                <SheetClose render={<Button />}>Apply</SheetClose>
+              </SheetFooter>
             </SheetContent>
           </Sheet>
         </div>

@@ -2,7 +2,18 @@
 
 import { useState } from "react";
 
-import { Checkbox, Input, Label, Radio, RadioGroup, Switch, Textarea } from "@digithings/ui/ui";
+import {
+  Checkbox,
+  Form,
+  FormActions,
+  FormField,
+  Input,
+  Label,
+  Radio,
+  RadioGroup,
+  Switch,
+  Textarea,
+} from "@digithings/ui/ui";
 
 /**
  * Form fields — labelled inputs in mono micro-caps across every state: focus
@@ -12,12 +23,14 @@ import { Checkbox, Input, Label, Radio, RadioGroup, Switch, Textarea } from "@di
  *
  * Wave 1: the fields are the stock kit — Input/Textarea/Label from
  * `@digithings/ui/ui`, error via the input's own `aria-invalid` treatment,
- * disabled via `disabled`, labels paired with `id`/`htmlFor`. The mono
- * micro-caps label type is the reference's call-site grammar (the same
- * utilities the native labels carried before); the `.ff-*` dress is gone.
+ * disabled via `disabled`. The mono micro-caps label type is the reference's
+ * call-site grammar (the same utilities the native labels carried before).
  * Wave 4: Checkbox and Switch are the stock kit too (`@digithings/ui/ui`,
- * Base UI). Radio/RadioGroup stay on the `@digithings/ui` controls layer —
- * the kit has no radio part.
+ * Base UI).
+ * Batch K2: the hand-rolled label + input + hint grid is now the kit's
+ * `Form` / `FormField` / `FormActions` presentational wrapper (no form
+ * library — the repo has none). Radio/RadioGroup stay on the controls layer
+ * until a later batch.
  */
 export function FormFieldsReference() {
   const [checks, setChecks] = useState({ audit: true, paper: false });
@@ -34,93 +47,50 @@ export function FormFieldsReference() {
           controls — checkbox, radio group, and a toggle — each keyboard-reachable.
         </p>
 
-      <div className="mt-[1.2rem] grid grid-cols-2 gap-[1rem] max-[640px]:grid-cols-1">
-        <div className="flex flex-col gap-[0.35rem]">
-          <Label
-            htmlFor="form-email"
-            className="font-mono text-[0.6rem] uppercase tracking-[0.1em] text-ink-mute"
-          >
-            Email
-          </Label>
+      <Form className="mt-[1.2rem] grid-cols-2 max-[640px]:grid-cols-1">
+        <FormField label="Email" hint="Used for audit notifications only.">
           <Input
-            id="form-email"
             name="email"
             type="email"
             autoComplete="email"
             placeholder="you@desk.tld"
           />
-          <span className="font-mono text-[0.62rem] text-ink-mute">Used for audit notifications only.</span>
-        </div>
+        </FormField>
 
-        <div className="flex flex-col gap-[0.35rem]">
-          <Label
-            htmlFor="form-strategy"
-            className="font-mono text-[0.6rem] uppercase tracking-[0.1em] text-ink-mute"
-          >
-            Strategy name
-          </Label>
+        <FormField label="Strategy name" hint="Lowercase, snake_case.">
           <Input
-            id="form-strategy"
             name="strategy"
             type="text"
             autoComplete="off"
             defaultValue="trend_xsec"
           />
-          <span className="font-mono text-[0.62rem] text-ink-mute">Lowercase, snake_case.</span>
-        </div>
+        </FormField>
 
-        <div className="flex flex-col gap-[0.35rem]">
-          <Label
-            htmlFor="form-api-key"
-            className="font-mono text-[0.6rem] uppercase tracking-[0.1em] text-ink-mute"
-          >
-            API key
-          </Label>
+        <FormField label="API key" error="Key is revoked — issue a new one.">
           <Input
-            id="form-api-key"
             name="api-key"
             type="text"
             autoComplete="off"
             defaultValue="dk_live_9f2…"
-            aria-invalid="true"
           />
-          <span className="font-mono text-[0.62rem] text-danger">Key is revoked — issue a new one.</span>
+        </FormField>
+
+        <FormField label="Region" hint="Locked to your workspace.">
+          <Input name="region" type="text" autoComplete="off" value="us-east-1" disabled readOnly />
+        </FormField>
+
+        <div className="col-span-full">
+          <FormField label="Notes">
+            <Textarea name="notes" rows={3} placeholder="What is this run testing?" />
+          </FormField>
         </div>
 
-        <div className="flex flex-col gap-[0.35rem]">
-          <Label
-            htmlFor="form-region"
-            className="font-mono text-[0.6rem] uppercase tracking-[0.1em] text-ink-mute"
-          >
-            Region
-          </Label>
-          <Input
-            id="form-region"
-            name="region"
-            type="text"
-            autoComplete="off"
-            value="us-east-1"
-            disabled
-            readOnly
-          />
-          <span className="font-mono text-[0.62rem] text-ink-mute">Locked to your workspace.</span>
-        </div>
-
-        <div className="col-span-full flex flex-col gap-[0.35rem]">
-          <Label
-            htmlFor="form-notes"
-            className="font-mono text-[0.6rem] uppercase tracking-[0.1em] text-ink-mute"
-          >
-            Notes
-          </Label>
-          <Textarea
-            id="form-notes"
-            name="notes"
-            rows={3}
-            placeholder="What is this run testing?"
-          />
-        </div>
-      </div>
+        <FormActions className="col-span-full">
+          <span className="font-mono text-[0.62rem] text-ink-mute">
+            No submit — the canon is a static display template.
+          </span>
+        </FormActions>
+      </Form>
 
       <div className="mt-[1.6rem] flex flex-wrap gap-[2rem]">
         <div className="flex flex-col gap-[0.5rem]">

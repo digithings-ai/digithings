@@ -116,8 +116,8 @@ describe('BriefsIndex', () => {
     expect(html).toContain('Broker briefs');
     expect(html).toContain('Board date');
     expect(html).toContain('aria-label="Filter briefs by board date"');
-    expect(html).toContain('nb-pager--date');
-    expect(html).toContain('nb-pager-middle');
+    expect(html).toContain('data-slot="date-pager"');
+    expect(html).toContain('data-slot="date-pager-trigger"');
     expect(html).toContain('Previous board date');
     expect(html).toContain('Next board date');
     expect(html).toContain('Mon, Jun 22, 2026');

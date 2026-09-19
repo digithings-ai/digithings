@@ -1,9 +1,8 @@
 'use client';
 
 import { useMemo, useState } from 'react';
-import { Button, Card } from '@digithings/ui/ui';
+import { Button, Card, DatePager } from '@digithings/ui/ui';
 import { ArrowLeft } from 'lucide-react';
-import { DatePager } from '@digithings/ui';
 import type { FxBriefRow } from '@/lib/twelve-x/types';
 import { sortTodayBriefs } from '@/lib/twelve-x/fetch';
 import { adjacentDates } from '@/components/pipeline/PipelineDaySelector';

@@ -2,14 +2,14 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 
-import { SearchBar } from "@digithings/ui";
+import { SearchBar } from "@digithings/ui/ui";
 
 /**
  * Search bar — a search field with a leading glyph, a clear affordance that
  * appears once there's input, and results that resolve live as you type against
  * a small corpus. Focus lights the accent ring; an empty query shows nothing
  * rather than everything. Static interactive display template. Consumes the
- * shared <SearchBar/> primitive from @digithings/ui — the `/` keycap rides
+ * shared <SearchBar/> primitive from @digithings/ui/ui — the `/` keycap rides
  * its hint slot; the results pane stays specimen-side.
  */
 const CORPUS = [
