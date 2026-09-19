@@ -163,12 +163,14 @@ def test_design_reference_ships_the_kit_page() -> None:
         / "reference"
         / "app"
         / "(gallery)"
+        / "(lab)"
         / "brand"
         / "page.tsx"
     ).read_text(encoding="utf-8")
     assert "{BRAND_TAGLINE}" in page
     assert "design-reference" in page
-    nav_path = (
-        REPO_ROOT / "apps" / "reference" / "components" / "site-nav.tsx"
-    )
-    assert 'href: "/brand"' in nav_path.read_text(encoding="utf-8")
+    # The canon IA consolidation (#4306) moved the nav entries into one source
+    # of truth read by both the top bar and the home-page contents map; the
+    # reference-only /brand entry lives in LAB_NAV there.
+    nav_source = (REPO_ROOT / "apps" / "reference" / "lib" / "nav.ts").read_text(encoding="utf-8")
+    assert 'href: "/brand"' in nav_source
