@@ -40,88 +40,25 @@ jobs:
       # full `node_modules` install (the Python audit exports a closure rather
       # than installing for the same reason). Run it from the workspace root so
       # it sees every `apps/*` + `packages/*` workspace closure, not a single app's.
-      - name: Run npm audit (JSON, non-blocking capture)
-        id: audit
+      #
+      # Exit code is deliberately not asserted here: npm exits non-zero whenever
+      # it reports *any* finding, including the MODERATE/LOW ones this lane only
+      # warns about. The classifier below owns the verdict — including the
+      # registry-failure case, where npm exits non-zero having written a JSON
+      # error body.
+      - name: Run npm audit (JSON capture)
         run: |
           set +e
           npm audit --audit-level=high --package-lock-only --json > audit.json 2>audit.err
-          rc=$?
+          echo "npm audit exit=$?"
           set -e
-          echo "rc=$rc" >> "$GITHUB_OUTPUT"
           if [ -s audit.err ]; then
             echo "── npm audit stderr (first 40 lines):"
             head -40 audit.err
           fi
 
+      # The classifier lives in scripts/ rather than inline so its two
+      # safety-critical behaviours — per-advisory ignore matching, and failing
+      # closed on a registry error — are pinned by tests/scripts/test_classify_npm_audit.py.
       - name: Classify findings (HIGH/CRITICAL block; MODERATE/LOW warn)
-        run: |
-          python - <<'PY'
-          import json, os, re, sys
-
-          try:
-              data = json.load(open("audit.json"))
-          except Exception as e:
-              print(f"::error::could not parse npm audit JSON: {e}")
-              sys.exit(1)
-
-          # npm audit JSON: { "vulnerabilities": { name: { severity, isDirect,
-          # via, fixAvailable } }, "metadata": { "vulnerabilities": {...} } }
-          # Advisory id lives in each `via` entry that is a dict (strings are
-          # transitive package names, not advisories).
-          ignore_path = "npm-audit-ignore.txt"
-          ignored: set[str] = set()
-          if os.path.exists(ignore_path):
-              for line in open(ignore_path):
-                  line = line.split("#", 1)[0].strip()
-                  if line:
-                      ignored.add(line)
-
-          GHSA_RE = re.compile(r"GHSA-[0-9a-z-]+", re.IGNORECASE)
-
-          def advisory_ids(entry):
-              ids = set()
-              for via in entry.get("via", []) or []:
-                  if isinstance(via, dict):
-                      for key in ("source", "url", "title"):
-                          val = str(via.get(key, ""))
-                          if val:
-                              ids.add(val)
-                      # npm's `url` is the full advisory URL, but the ignore file
-                      # documents the bare GHSA id, so surface that as its own id.
-                      match = GHSA_RE.search(str(via.get("url", "")))
-                      if match:
-                          ids.add(match.group(0))
-              return ids
-
-          blockers, warns, ignored_hits = [], [], []
-          for name, entry in (data.get("vulnerabilities") or {}).items():
-              sev = (entry.get("severity") or "unknown").lower()
-              ids = advisory_ids(entry)
-              # An advisory is accepted if the ignore file names its GHSA id,
-              # URL, or title.
-              if ids & ignored:
-                  ignored_hits.append(f"{name} [{sev}] (ignored)")
-                  continue
-              label = f"{name} [{sev}] direct={bool(entry.get('isDirect'))}"
-              if sev in {"high", "critical"}:
-                  blockers.append(label)
-              else:
-                  warns.append(label)
-
-          for w in warns:
-              print(f"::warning::npm audit: {w}")
-          for i in ignored_hits:
-              print(f"::notice::npm audit (ignored): {i}")
-          for b in blockers:
-              print(f"::error::npm audit blocker: {b}")
-
-          meta = (data.get("metadata") or {}).get("vulnerabilities") or {}
-          if blockers:
-              print(f"\nFAIL: {len(blockers)} HIGH/CRITICAL vulnerabilit{'y' if len(blockers)==1 else 'ies'}.")
-              print("Fix by bumping the affected package (or add the advisory id to")
-              print("npm-audit-ignore.txt with a justification comment).")
-              print(f"Totals: {meta}")
-              sys.exit(1)
-          print(f"OK: 0 HIGH/CRITICAL vulnerabilities ({len(warns)} lower-severity, {len(ignored_hits)} ignored).")
-          print(f"Totals: {meta}")
-          PY
+        run: python scripts/classify_npm_audit.py audit.json npm-audit-ignore.txt

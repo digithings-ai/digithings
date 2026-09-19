@@ -223,6 +223,7 @@ jobs:
               - 'apps/*/package.json'
               - 'packages/*/package.json'
               - 'npm-audit-ignore.txt'
+              - 'scripts/classify_npm_audit.py'
               - '.github/workflows/security-npm-audit.yml'
             # CI_PATH_FILTERS_END
 

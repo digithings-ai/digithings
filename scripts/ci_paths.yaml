@@ -336,4 +336,5 @@ npm_audit:
   - "apps/*/package.json"
   - "packages/*/package.json"
   - npm-audit-ignore.txt
+  - scripts/classify_npm_audit.py
   - .github/workflows/security-npm-audit.yml

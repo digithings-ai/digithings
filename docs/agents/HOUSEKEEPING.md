@@ -42,7 +42,7 @@ the broader delegation framework.
 | Coverage | Workflow | Cadence | What it does |
 |---|---|---|---|
 | Python dependency CVEs | `pipeline-maintenance.yml` — `dependency-audit` job + `security-pip-audit.yml` | weekly + on PR | Runs `pip-audit`, files one batched tracker issue (`security:finding`, dispatched at the cursor tier) |
-| npm dependency CVEs | `security-npm-audit.yml` (dispatched weekly by the cron Worker) + `ci.yml` — `npm-audit` lane | weekly Mon 06:37 UTC + on PR | Runs `npm audit` on the root `apps/*` + `packages/*` workspace closure, blocks HIGH/CRITICAL, sites lower severities (accepted advisories in `npm-audit-ignore.txt`) |
+| npm dependency CVEs | `security-npm-audit.yml` (dispatched weekly by the cron Worker) + `ci.yml` — `npm-audit` lane | weekly Mon 06:37 UTC + on PR | Runs `npm audit` on the root `apps/*` + `packages/*` workspace closure, blocks HIGH/CRITICAL, surfaces lower severities (accepted advisories in `npm-audit-ignore.txt`) |
 | Secret leaks | `security-gitleaks.yml` | on push / PR | Scans for hard-coded secrets, fails CI if any found |
 | Protected-path edits | `scripts/claude-hooks/protected-path-guard.sh` | PreToolUse hook | Blocks `.github/workflows/`, `SECURITY.md`, `docs/scoring/`, `config/litellm.yaml`, `projects/` edits outside properly-named branches — in both the current checkout and the primary tree when the session is rooted in a linked worktree |
 | Live-trading path edits | `scripts/hooks/pre-push.sh` | pre-push | Requires `Human-Approved-By:` trailer on commits touching live-trading paths |
