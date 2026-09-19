@@ -149,8 +149,8 @@ The palette is intentionally narrow: three neutrals for text, three surfaces for
 
 ### Tertiary — Money (fenced off from livery, never scoped)
 - **Gain** (`#3DD6C4` dark / `#0C7C71` light): positive P&L and returns only. Light value darkened alongside Phosphor Teal above (2026-08-12, WCAG 1.4.3) — `--up` is a literal, kept in sync with `--accent`'s light hex by convention, not a live reference.
-- **Loss** (`#E5533E` dark / `#C9533B` light): negative P&L and returns only.
-- **Caution** (`#E0B341` dark / `#B5832A` light): warnings and non-P&L "bearish sentiment" reads that must not borrow money color.
+- **Loss** (`#E5533E` dark / `#B2452E` light): negative P&L and returns only. Light value deepened 2026-09 (canon-audit S2): `#C9533B` measured 3.98–4.24:1 as small text on paper (Badge `down`, `.is-neg`, money-down figures) — under AA. Hue preserved; fills/marks keep their margin.
+- **Caution** (`#E0B341` dark / `#8F6220` light): warnings and non-P&L "bearish sentiment" reads that must not borrow money color. Light value deepened 2026-09 (canon-audit S2): `#B5832A` measured 3.25–3.36:1 as small text on paper (Badge `warn`, `.dg-tier.t-roadmap`).
 
 **The Ledger Rule.** Gain/Loss are fixed to their own token (or, on the light theme, a bare literal) — never to `var(--accent)` — specifically so a livery switch, a scoped `.accent-*` class, or a theme flip can never repaint a P&L number. A module's identity color may be positive in tone and still not use Gain; only an actual signed financial read may.
 

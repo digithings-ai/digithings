@@ -49,5 +49,9 @@
   background: color-mix(in srgb, var(--accent) 10%, var(--surface));
   font-family: var(--font-mono);
   font-size: 0.78rem;
-  color: var(--accent);
+  /* Accent-as-text on its own 10% tint: the raw livery measured 2.74–3.66:1
+     in light theme (canon-audit S2) because the light module accents are
+     tuned to 3:1 for graphics. Mix toward the theme ink — worst light livery
+     (digichat pink) now 4.63:1, dark ≥9.5:1. */
+  color: color-mix(in srgb, var(--accent) 70%, var(--ink));
 }

@@ -93,6 +93,16 @@
   max-width: 720px;
 }
 
+/* The pastels above are tuned for the dark terminal panel; on paper they are
+   near-invisible (canon-audit S2 measured the +3/−1 counts at 1.95:1 / 2.38:1
+   and the diff code at 3.24–3.75:1). Light theme deepens the same two hues to
+   the diff domain's paper contrast pair — raw counts 6.49:1 / 6.69:1, code
+   7.5:1+ on the wash — while dark keeps the pastel identity untouched. */
+:root[data-theme="light"] .rv-frame {
+  --rv-add: #256B37;
+  --rv-del: #A63048;
+}
+
 /* .rv-head / .rv-path / .rv-stat migrated to utilities in
    code-review-reference.tsx. Everything below stays: the +/- counts, washes and
    marks read --rv-add / --rv-del (the diff colour domain) defined on .rv-frame. */
@@ -122,7 +132,11 @@
 .rv-ln {
   text-align: right;
   padding-right: 0.5rem;
-  color: var(--ink-mute);
+  /* --ink-mute alone fails AA at 10px on the diff washes in BOTH themes
+     (dark 3.79:1 on the add wash, light 4.32:1 after the S2 light-theme diff
+     deepening). Mixing toward --ink lifts the worst case to 6.89:1 while
+     staying visibly the muted step. */
+  color: color-mix(in srgb, var(--ink-mute) 55%, var(--ink));
   font-size: 0.64rem;
   user-select: none;
 }

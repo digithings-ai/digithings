@@ -180,6 +180,17 @@
   --down: #E5533E;
   --warn: #E0B341;
 
+  /* Returns-matrix cell ink (finance-tearsheet.css). The heatmap wash is
+     --up/--down over --surface, so the cell text has to clear AA against the
+     COMPOSITED fill, not a flat surface. Pure white + pure black are the only
+     pair that keeps every step of the 14–72% wash at ≥4.5:1 on the dark
+     canvas: --ink (#ECEEF0) drops to 4.45:1 at the 52% teal step, and a
+     near-black (#04201C / #08090B / --bg) only clears from ~59–65%, leaving a
+     52–56% band no token pair covers. Light theme reuses --ink (its washes are
+     dark-on-paper). */
+  --heat-ink: #FFFFFF;
+  --heat-ink-strong: #000000;
+
   /* Non-financial danger/error/destructive red — a distinct hue (354°,
      magenta-leaning) from --down's (7.5°, orange-leaning) on purpose, so a
      kill-switch button, a form-field error, and a genuine drawdown figure
@@ -237,10 +248,19 @@
      phosphor, same contrast fix): light runs the deeper phosphor for
      contrast on paper (same convention as --accent, line ~28) — a literal,
      not var(--accent), so P&L stays livery-proof. Down keeps the deeper
-     paper red. */
+     paper red.
+
+     WCAG 1.4.3 fix (2026-09, canon-audit S2): both were still under 4.5:1 as
+     SMALL TEXT on paper — --warn #B5832A measured 3.25–3.36:1 (Badge warn,
+     .dg-tier.t-roadmap) and --down #C9533B 3.98–4.24:1 (Badge down, .is-neg,
+     money-down). Darkened in place, light theme only, hue preserved: --warn →
+     #8F6220 (4.84:1 on --surface-2, the tightest paper ground), --down →
+     #B2452E (5.04:1). Fills/marks only needed 3:1 and still clear it with
+     margin, so this stays a single-token fix; the :root dark values above are
+     untouched. */
   --up:   #0C7C71;
-  --down: #C9533B;
-  --warn: #B5832A;
+  --down: #B2452E;
+  --warn: #8F6220;
 
   /* Non-financial danger/error/destructive red — see the dark-theme comment
      above (named --danger, not --destructive, for the same shadcn-collision
@@ -248,6 +268,12 @@
      --accent/--up/--down already are. Clears AA against --bg/--surface/
      --surface-2 (5.30–5.84:1). */
   --danger: #C32232;
+
+  /* Returns-matrix cell ink — see the dark-theme --heat-ink comment above.
+     Light washes composite to dark-on-paper, so plain --ink already clears;
+     the strong alias mirrors it so a data-strong cell is a no-op on paper. */
+  --heat-ink: var(--ink);
+  --heat-ink-strong: var(--ink);
 
   /* Terminal converts with the theme: light panel, dark ink. */
   --term-bg:   #F1F0EB;

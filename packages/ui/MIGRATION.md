@@ -284,7 +284,21 @@ Two rules for app code:
 - Livery/accent not changing inside a scope → something reintroduced a plain
   `@theme` block (rule 1).
 - Money colors: `--up`/`--down` are fixed per theme in tokens.css (dark wears
-  the digiquant phosphor) and must never follow a livery.
+  the digiquant phosphor) and must never follow a livery. The light `--down`
+  (#B2452E) and `--warn` (#8F6220) were deepened 2026-09 for AA as small text
+  (canon-audit S2) — dark is unchanged.
+- **Accent-as-small-text**: never paint 12–16px text with the raw module
+  livery. The light accents are tuned to 3:1 for graphical objects, so text
+  uses `color-mix(in srgb, var(--accent) 70%, var(--ink))` (the shared recipe
+  in `web-theme.css` `.kicker`, `finance-tearsheet.css` `.ts-kicker`/
+  `.ts-seg-btn.is-active`, `stages.css` `.ns-node`). `.dg-tier.t-core` is the
+  one deliberate raw-accent exception (its `--accent` resolves to `--ink` for
+  the mono liveries).
+- **Returns-matrix cell ink**: `.ts-matrix-cell` reads `--heat-ink`, switching
+  to `--heat-ink-strong` past the up-tone wash boundary (`.is-strong`,
+  `ReturnsMatrix.cellStrong`). Both alias `--ink` in light theme; print pins
+  them to the light ink. Don't replace with `--ink` directly — the 52–56%
+  teal step falls under AA for both `--ink` and any near-black token.
 
 ## App family CSS layering — what consumers do (#4306, workstream A)
 

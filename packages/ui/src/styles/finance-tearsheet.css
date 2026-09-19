@@ -40,7 +40,7 @@
 
   .ts-header { display: flex; justify-content: space-between; align-items: flex-end; gap: 1.5rem; flex-wrap: wrap; margin-bottom: 2rem; padding-bottom: 1.4rem; border-bottom: 1px solid var(--hair); }
   .ts-back { display: inline-block; color: var(--ink-soft); font-family: var(--font-mono); font-size: 0.8rem; letter-spacing: 0.02em; margin-bottom: 0.9rem; }
-  .ts-kicker { display: block; font-family: var(--font-mono); font-size: 0.7rem; letter-spacing: 0.16em; text-transform: uppercase; color: var(--accent); margin-bottom: 0.45rem; }
+  .ts-kicker { display: block; font-family: var(--font-mono); font-size: 0.7rem; letter-spacing: 0.16em; text-transform: uppercase; color: color-mix(in srgb, var(--accent) 70%, var(--ink)); margin-bottom: 0.45rem; }
   .ts-h1 { font-family: var(--font-sans); font-size: clamp(1.7rem, 3.6vw, 2.6rem); font-weight: 600; letter-spacing: -0.03em; line-height: 1.05; color: var(--ink); margin: 0 0 0.85rem; }
   .ts-meta { display: flex; align-items: center; gap: 0.55rem; flex-wrap: wrap; }
   .ts-meta-text { color: var(--ink-mute); font-size: 0.85rem; font-family: var(--font-mono); }
@@ -267,7 +267,7 @@
 .ts-reset-chart svg { display: block; }
 .ts-seg-btn:first-child { border-inline-start: none; }
 .ts-seg-btn:hover { color: var(--ink); }
-.ts-seg-btn.is-active { color: var(--accent); background: var(--accent-weak); }
+.ts-seg-btn.is-active { color: color-mix(in srgb, var(--accent) 70%, var(--ink)); background: var(--accent-weak); }
 /* .ts-seg's own overflow:hidden (it clips square button corners to the
    pill's rounded border-radius) leaves almost no clearance around each
    button — the global :focus-visible rule's positive outline-offset (3px)
@@ -292,7 +292,14 @@
   .ts-matrix-head { color: var(--ink-mute); font-size: 0.66rem; letter-spacing: 0.06em; text-transform: uppercase; text-align: center; padding: 0.3rem 0.2rem; }
   .ts-matrix-year-head { color: var(--ink-soft); }
   .ts-matrix-rowlabel { color: var(--ink-soft); font-size: 0.72rem; display: flex; align-items: center; padding: 0 0.5rem 0 0.1rem; white-space: nowrap; }
-  .ts-matrix-cell { color: var(--ink); text-align: center; padding: 0.4rem 0.25rem; border-radius: var(--r-sm); border: 1px solid var(--hair); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .ts-matrix-cell { color: var(--heat-ink); text-align: center; padding: 0.4rem 0.25rem; border-radius: var(--r-sm); border: 1px solid var(--hair); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  /* The cell background is an --up/--down wash over --surface; at the top of
+     the 14–72% range the dark canvas wash is bright enough that neither
+     --ink nor --heat-ink clears AA on it. `.is-strong` (set by ReturnsMatrix
+     when |value| lands in that band for the up tone) switches to
+     --heat-ink-strong. Worst step 4.60:1 (dark, up 57%); light theme aliases
+     both heat inks to --ink, whose worst step is 5.22:1. */
+  .ts-matrix-cell.is-strong { color: var(--heat-ink-strong); }
   .ts-matrix-fill { width: 100%; align-content: stretch; font-size: clamp(0.72rem, 0.95vw, 0.9rem); gap: 3px; }
   .ts-matrix-year { font-weight: 600; border-color: var(--hair-2); }
 }
@@ -642,8 +649,10 @@
     --accent-weak: rgba(12, 124, 113, 0.1); /* --accent-weak light (.12 → .1 on paper) */
     --on-accent: #ffffff;                   /* --on-accent light */
     --up: #0c7c71;                          /* --up light (paper phosphor) */
-    --down: #c9533b;                        /* --down light */
-    --warn: #b5832a;                        /* --warn light */
+    --down: #b2452e;                        /* --down light (WCAG AA fix 2026-09, canon-audit S2) */
+    --warn: #8f6220;                        /* --warn light (WCAG AA fix 2026-09, canon-audit S2) */
+    --heat-ink: #14181b;                    /* --heat-ink light (== --ink); pinned so dark-theme print never keeps white cell text */
+    --heat-ink-strong: #14181b;             /* --heat-ink-strong light */
   }
 
   html, body {

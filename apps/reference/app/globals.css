@@ -345,9 +345,10 @@ html {
   margin-top: 0.9rem;
 }
 
-/* the hero eyebrow is accent like every other kicker — outrank `.hero p` */
+/* the hero eyebrow is accent like every other kicker — outrank `.hero p`.
+   Same accent-as-text mix as `.kicker` below (canon-audit S2). */
 .hero .kicker {
-  color: var(--accent);
+  color: color-mix(in srgb, var(--accent) 70%, var(--ink));
   margin-top: 0;
 }
 
@@ -355,10 +356,15 @@ html {
   margin-top: clamp(3rem, 7vw, 5rem);
 }
 
+/* Small text must not wear the module livery raw: the per-module light
+   accents are tuned to 3:1 for graphical objects, not 4.5:1 text (canon-audit
+   S2 measured 3.50:1 amber / 2.93:1 pink here). Mixing toward the theme ink
+   keeps the livery identity while clearing AA in both themes — worst light
+   livery (digichat pink) measures 5.12:1 on paper, dark stays ≥8:1. */
 .section-head .kicker,
 .kicker {
   font-family: var(--font-mono);
-  color: var(--accent);
+  color: color-mix(in srgb, var(--accent) 70%, var(--ink));
   font-size: 0.68rem;
   letter-spacing: 0.14em;
   text-transform: uppercase;

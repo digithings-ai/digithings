@@ -190,6 +190,16 @@ function cellBg(value: number | null, maxAbs: number, metric: MatrixMetric): str
   return `color-mix(in srgb, ${tone} ${pct}%, transparent)`;
 }
 
+/** True when the up-tone wash is bright enough that the default cell ink
+ *  cannot clear AA on it: `.ts-matrix-cell.is-strong` then reads
+ *  --heat-ink-strong. Matches the pct>=57 branch in finance-tearsheet.css;
+ *  the down tone never needs it (its wash stays dark through the range). */
+function cellStrong(value: number | null, maxAbs: number, metric: MatrixMetric): boolean {
+  if (value === null || metric !== "return" || value <= 0) return false;
+  const mag = maxAbs > 0 ? Math.abs(value) / maxAbs : 0;
+  return Math.round(14 + Math.min(1, mag) * 58) >= 57;
+}
+
 /** Compact cell % — sheds decimals as magnitude grows so wide crypto returns
  *  (hundreds / thousands of %) fit the narrow grid cells without truncation. */
 function fmtCellPct(v: number): string {
@@ -262,7 +272,11 @@ export function ReturnsMatrix({
             {r.cells.map((c, i) => (
               <div
                 key={i}
-                className={"ts-matrix-cell" + (c.value === null ? " is-empty" : "")}
+                className={
+                  "ts-matrix-cell" +
+                  (c.value === null ? " is-empty" : "") +
+                  (cellStrong(c.value, maxAbs, metric) ? " is-strong" : "")
+                }
                 style={{ background: cellBg(c.value, maxAbs, metric) }}
                 role="cell"
                 title={
@@ -276,7 +290,11 @@ export function ReturnsMatrix({
             ))}
             {showYearCol ? (
               <div
-                className={"ts-matrix-cell ts-matrix-year" + (r.yearValue === null ? " is-empty" : "")}
+                className={
+                  "ts-matrix-cell ts-matrix-year" +
+                  (r.yearValue === null ? " is-empty" : "") +
+                  (cellStrong(r.yearValue, maxAbs, metric) ? " is-strong" : "")
+                }
                 style={{ background: cellBg(r.yearValue, maxAbs, metric) }}
                 role="cell"
                 title={

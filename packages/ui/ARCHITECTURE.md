@@ -368,6 +368,11 @@ and run `make agents-init` (CI enforces idempotence).
   and the contents overview, then update this map and the reference README.
 - **New token** → lives in `@digithings/design/tokens.css` (the shared package);
   reference it, never hardcode the literal.
+- **Contrast contract** → `styles/contrast.contract.test.ts` pins the
+  canon-audit S2 pairs (money tokens as text, the accent-as-text mix, the
+  returns-matrix cell ink, the light diff palette) so a hue change that drops
+  a pair under AA fails the kit suite. Measure with the composited fill, not
+  the flat surface — the matrix and diff washes both composite over a ground.
 
 ## RTL & logical properties (#4306)
 
