@@ -433,7 +433,7 @@
       "box-shadow:0 16px 48px rgba(0,0,0,.28);background:#0b0b0c;display:none;}" +
       "#" +
       PANEL_ID +
-      "[data-open=1]{display:block;}" +
+      "[data-open=\"1\"]{display:block;}" +
       "#" +
       IFRAME_ID +
       "{width:100%;height:100%;border:0;background:transparent;}";
