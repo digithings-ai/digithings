@@ -334,6 +334,9 @@
   width: 100%;
   align-items: center;
   justify-content: center;
+  /* Gutters so the chain never touches the frame edge — the popup panel and
+     narrow embeds crop flush against the panel border without them. */
+  padding: 16px 20px;
   font-family: var(--font-mono);
   color: var(--ink);
 }
