@@ -71,6 +71,16 @@
     text-align: start;
     cursor: pointer;
     transition: border-color 0.18s var(--ease), transform 0.15s var(--ease);
+    /* Containing block for the node's own `.pl-sr` status text. `.pl-sr` is
+       absolutely positioned; without a positioned ancestor its containing
+       block is the initial containing block, so it escaped `.pl-flow`'s
+       `overflow-x: auto` scroller (an abspos box is only clipped by a scroll
+       ancestor that is in its containing-block chain) and folded its static
+       position — far right inside the row's min-content width — into the
+       ROOT scroller. That was the reference audit's /effects @390 critical:
+       documentElement.scrollWidth 785 against a 390 viewport. Anchoring it
+       to the node keeps the sr-only text inside the flow's own scroller. */
+    position: relative;
   }
 
   .pl-node-head {

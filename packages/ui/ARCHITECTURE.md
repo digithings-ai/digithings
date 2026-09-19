@@ -401,7 +401,11 @@ logical form, so a few pieces carry explicit direction awareness instead:
 
 - **`TabStrip`** — the sliding ink anchors on `inset-inline-start` and measures
   the active tab from that same edge via `getBoundingClientRect`, negating x
-  under RTL; arrow-key nav swaps ArrowLeft/ArrowRight. This is the one
+  under RTL; arrow-key nav swaps ArrowLeft/ArrowRight. It re-measures on any
+  geometry change (`ResizeObserver` on the strip and its tabs) **and on a
+  direction change** (`MutationObserver` on `<html>`'s
+  `dir`/`class`/`data-theme`/`style`), so flipping `dir` moves the ink
+  immediately rather than only on the next tab click. This is the one
   non-mechanical piece in the sweep.
 - Chevrons/arrows that encode a direction are mirrored: the dropdown
   sub-trigger (`rtl:-scale-x-100`), `Pagination` prev/next and `DatePager` month

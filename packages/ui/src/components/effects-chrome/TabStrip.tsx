@@ -12,8 +12,12 @@ import { Button } from "../../ui";
  * transform/width (and, for the box dresses, height) are measured from the
  * active tab and written straight to a ref, so the slide is a CSS transition
  * — no `layoutId` (the apps' LazyMotion runs `domAnimation`, which omits
- * layout animations) and no per-frame React state. Survives resize; honours
- * reduced motion (indicator jumps, no slide). The ink anchors on
+ * layout animations) and no per-frame React state. Survives resize and
+ * re-measures on a `dir` flip (ResizeObserver on the strip and its tabs;
+ * MutationObserver on <html>'s `dir`/`class`/`data-theme`/`style`), so the
+ * ink is correct the instant the document mirrors — not only after the next
+ * tab click. Honours reduced motion (indicator jumps, no slide). The ink
+ * anchors on
  * `inset-inline-start` and measures the active tab from that same inline-start
  * edge, so it lands under the active tab in both LTR and RTL; arrow-key nav
  * swaps ArrowLeft/ArrowRight under RTL to match the visual order.
@@ -145,10 +149,34 @@ export function TabStrip({
     mounted.current = true;
   }, [position, reduced]);
 
+  // Re-measure whenever the geometry the ink is derived from can change: the
+  // strip's own box (font/zoom/layout), any tab's box (label reflow, wrap),
+  // and the document's writing direction. A `dir` flip is the case the
+  // reference audit caught (/rtl): the ink kept its LTR offset ~372px from the
+  // active tab until the next click, because nothing re-ran `position()` — a
+  // window `resize` never fires for it. ResizeObserver covers the box changes;
+  // MutationObserver on <html>'s `dir` (plus `class`/`data-theme`/`style`,
+  // which can restyle the strip through a theme/livery swap) covers the
+  // direction flip and any out-of-React dir change, not just the one the kit's
+  // own DirectionProvider makes.
   useLayoutEffect(() => {
-    const onResize = () => position(false);
-    window.addEventListener("resize", onResize);
-    return () => window.removeEventListener("resize", onResize);
+    const list = listRef.current;
+    if (!list) return;
+    const remeasure = () => position(false);
+    const ro = new ResizeObserver(remeasure);
+    ro.observe(list);
+    for (const tab of list.querySelectorAll<HTMLElement>('[role="tab"]')) ro.observe(tab);
+    const mo = new MutationObserver(remeasure);
+    mo.observe(document.documentElement, {
+      attributes: true,
+      attributeFilter: ["dir", "class", "data-theme", "style"],
+    });
+    window.addEventListener("resize", remeasure);
+    return () => {
+      ro.disconnect();
+      mo.disconnect();
+      window.removeEventListener("resize", remeasure);
+    };
   }, [position]);
 
   const onKeyDown = (e: React.KeyboardEvent) => {

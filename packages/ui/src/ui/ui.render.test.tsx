@@ -395,6 +395,24 @@ describe("vendored ui kit renders server-side", () => {
     expect(html).not.toContain("Panel two");
   });
 
+  it("TabsList contains its own overflow so a long list cannot widen the page", () => {
+    // The reference audit's /account @390 critical: a 6-tab list was 459px with
+    // overflow-x:visible, so the whole page scrolled (scrollWidth 494 > 390).
+    // The list must scroll within itself (`max-w-full` caps it to its track,
+    // `overflow-x-auto` makes the excess internal); it still shrink-wraps
+    // (`w-fit`) when there is room, so desktop is untouched.
+    const html = renderToStaticMarkup(
+      <Tabs defaultValue="one">
+        <TabsList>
+          <TabsTrigger value="one">One</TabsTrigger>
+        </TabsList>
+      </Tabs>,
+    );
+    expect(html).toContain("max-w-full");
+    expect(html).toContain("overflow-x-auto");
+    expect(html).toContain("w-fit");
+  });
+
   it("Collapsible renders its panel only while open", () => {
     const open = renderToStaticMarkup(
       <Collapsible defaultOpen>

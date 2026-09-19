@@ -23,7 +23,15 @@ function Tabs({
 }
 
 const tabsListVariants = cva(
-  "group/tabs-list inline-flex w-fit items-center justify-center rounded-none p-[3px] text-muted-foreground group-data-horizontal/tabs:h-8 group-data-vertical/tabs:h-fit group-data-vertical/tabs:flex-col data-[variant=line]:rounded-none",
+  // `max-w-full overflow-x-auto` keeps an over-long list scrolling WITHIN the
+  // list instead of pushing the page wide — the reference audit's /account @390
+  // critical: a 6-tab settings list measured 459px with overflow-x:visible, so
+  // the whole page scrolled (scrollWidth 494 vs viewport 390). The list still
+  // shrink-wraps its content when there is room, so desktop is unchanged; only
+  // the overflow case becomes an internal scroller. The 3px list padding
+  // (p-[3px]) exactly clears the trigger's 3px focus-visible ring, so the
+  // scroller clips nothing the ring needs.
+  "group/tabs-list inline-flex w-fit max-w-full items-center justify-center overflow-x-auto rounded-none p-[3px] text-muted-foreground group-data-horizontal/tabs:h-8 group-data-vertical/tabs:h-fit group-data-vertical/tabs:flex-col data-[variant=line]:rounded-none",
   {
     variants: {
       variant: {
