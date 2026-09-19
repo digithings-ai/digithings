@@ -609,8 +609,8 @@ def test_entitled_overlay_to_paper_fill_to_alert(
     master_key: MasterKey,
 ) -> None:
     """Happy path + woven negatives: house untouched, live raises, sync idempotent."""
-    monkeypatch.setenv("OLYMPUS_KAIROS_ROUTING", "1")
-    monkeypatch.setenv("OLYMPUS_OVERLAY_PERSIST", "1")
+    monkeypatch.setenv("DIGIQUANT_EXECUTION_ROUTING", "1")
+    monkeypatch.setenv("DIGIQUANT_OVERLAY_PERSIST", "1")
 
     house = str(house_workspace_id())
     house_before = sb.snapshot(

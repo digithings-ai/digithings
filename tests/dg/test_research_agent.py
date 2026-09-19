@@ -598,7 +598,7 @@ class TestRunResearchAgent:
         assert mock.call_count == 2
 
     def test_max_tool_rounds_forwarded_to_tool_loop(self) -> None:
-        """Olympus threads OLYMPUS_MAX_TOOL_ROUNDS (24) into run_tools (#3299)."""
+        """Olympus threads DIGIQUANT_MAX_TOOL_ROUNDS (24) into run_tools (#3299)."""
         payload = json.dumps({"regime": "grounded", "confidence": 0.7})
         tools = [
             {

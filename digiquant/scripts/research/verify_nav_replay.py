@@ -14,6 +14,13 @@ and a read-only verify runs after metrics so drift fails loudly).
 exists; tearsheets read the stored series. Default mode is read-only
 verification.
 
+``--write --mark-through YYYY-MM-DD`` extends the replay grid past the last
+committed book using the held positions (no schedule entry, no fabricated
+rebalance) so the engine still marks to market when the house run committed no
+book that day (#3439). The scheduled workflow passes today UTC; it is a no-op
+when a book exists for the target date. ``positions`` is never written by this
+path, so a missing book remains detectable.
+
 Exit codes: 0 = within tolerance (or write succeeded), 1 = usage/config
 error, 2 = NAV breach / engine failure.
 
@@ -32,7 +39,7 @@ from __future__ import annotations
 import argparse
 import os
 import sys
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
 from pathlib import Path
 from typing import TYPE_CHECKING, Any  # score:allow untyped any — duck-typed Supabase client
@@ -249,7 +256,17 @@ def _fetch_price_rows(
     return _rows_from_inception(rows, inception_date)
 
 
-def build_request(price_rows, position_rows, nav_rows):
+def build_request(price_rows, position_rows, nav_rows, mark_through=None):
+    """Build the schema-2.0 replay request from books, bars, and recorded NAV.
+
+    ``mark_through`` (``YYYY-MM-DD`` or ``date``, optional) extends the replay
+    grid through that date when it is later than the last committed book. The
+    last book's positions are held (no schedule entry is added and no fill is
+    fabricated), so the engine marks them to market at each intervening close —
+    the daily MTM that would otherwise be missing when the house run commits no
+    book (#3439). The ``positions`` table is never touched, so a missing book
+    stays detectable.
+    """
     from digiquant.dashboard.replay.models import (
         InstrumentBarSeries,
         OhlcvBar,
@@ -282,10 +299,28 @@ def build_request(price_rows, position_rows, nav_rows):
             )
         )
 
-    grid = sorted(book_by_date)
+    book_dates = sorted(book_by_date)
     schedule_tickers = sorted({t for entry in book_by_date.values() for t in entry})
-    if not grid or not schedule_tickers:
+    if not book_dates or not schedule_tickers:
         raise ValueError("position rows carry no book tickers/dates; refusing an empty replay grid")
+    # Bookless mark-to-market extension (#3439): when the house run commits no
+    # book, the last book's weights still persist in the engine, but the grid
+    # normally stops at that book date — so no NAV bar is produced for the
+    # missing day and the published series reads flat. Extending the GRID (never
+    # the schedule) lets the engine mark the unchanged positions at every close
+    # through ``mark_through``. Bars for non-trading days are forward-filled
+    # flat below, exactly as they already are for book-grid weekends/holidays.
+    grid = list(book_dates)
+    if mark_through is not None:
+        mark_date = (
+            mark_through.isoformat() if isinstance(mark_through, date) else str(mark_through)
+        )
+        if mark_date > book_dates[-1]:
+            cursor = date.fromisoformat(book_dates[-1]) + timedelta(days=1)
+            end = date.fromisoformat(mark_date)
+            while cursor <= end:
+                grid.append(cursor.isoformat())
+                cursor += timedelta(days=1)
 
     closes: dict[tuple[str, str], Decimal] = {}
     volumes: dict[tuple[str, str], Decimal] = {}
@@ -471,6 +506,14 @@ def main() -> int:
         help="With --write, persist only this date (YYYY-MM-DD); default persists all dates from --inception-date.",
     )
     parser.add_argument(
+        "--mark-through",
+        default="",
+        dest="mark_through",
+        help="With --write, extend the replay grid through this date (YYYY-MM-DD) "
+        "using the held last-book positions, so NAV is marked to market on days "
+        "the house run committed no book (#3439). No-op when the book is current.",
+    )
+    parser.add_argument(
         "--inception-date",
         default="2026-07-17",
         help="Earliest date ever written to nav_history. Pre-cutoff dates can never "
@@ -494,6 +537,15 @@ def main() -> int:
         _ymd("--date", args.date)
     if args.date and not args.write:
         parser.error("--date requires --write (verify mode compares the full path)")
+    if args.mark_through:
+        _ymd("--mark-through", args.mark_through)
+        if not args.write:
+            parser.error("--mark-through requires --write")
+        if date.fromisoformat(args.mark_through) > datetime.now(timezone.utc).date():
+            parser.error(
+                f"--mark-through {args.mark_through} is in the future "
+                f"(UTC today {datetime.now(timezone.utc).date().isoformat()})"
+            )
     if args.write and args.date and args.date < args.inception_date:
         parser.error(
             f"--date {args.date} predates --inception-date {args.inception_date} "
@@ -548,7 +600,9 @@ def main() -> int:
         print("SKIP: no sealed R2 rows for the book tickers")
         return 1
 
-    request, _closes, recorded = build_request(price_rows, position_rows, nav_rows)
+    request, _closes, recorded = build_request(
+        price_rows, position_rows, nav_rows, mark_through=args.mark_through or None
+    )
     result = run_shared_cash_portfolio_replay(request)
     if result.status != PortfolioReplayStatus.OK:
         print(f"FAIL: replay {result.status.value}: {result.message}")

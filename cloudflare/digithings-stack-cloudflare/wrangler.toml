@@ -156,6 +156,7 @@ new_sqlite_classes = ["DigiQuantMcpContainer"]
 #   LITELLM_PROXY_API_KEY     # optional shared proxy key
 #   ZAMMAD_API_TOKEN          # read-only Zammad helpdesk MCP (zammad-mcp program, OCC tickets)
 #   FRED_API_KEY              # digiquant-mcp live macro overlap (#3780 Task 8)
+#   GLOOMBERB_SESSION_COOKIE  # digiquant-mcp session-gated digifetch tools (#4260)
 #   R2_ACCOUNT_ID             # digiquant-mcp market-data history reads
 #   R2_BUCKET                 # digiquant-mcp (same digithings-archive bucket)
 #   R2_ACCESS_KEY_ID          # digiquant-mcp

@@ -286,7 +286,7 @@ class TestAuthority:
         chain = _Chain()
         chain.order(symbol="AAPL", action="add", quantity="10")
         client = chain.client()
-        monkeypatch.setenv("OLYMPUS_PORTFOLIO_LEDGER", "0")
+        monkeypatch.setenv("DIGIQUANT_PORTFOLIO_LEDGER", "0")
 
         result = _run(client)
 

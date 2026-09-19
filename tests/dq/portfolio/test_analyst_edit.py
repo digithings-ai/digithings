@@ -682,7 +682,7 @@ def test_h5_persists_before_provider_and_failure_leaves_bundle() -> None:
         raise RuntimeError("provider down")
 
     with (
-        patch.dict("os.environ", {"OLYMPUS_EVIDENCE_BUNDLE_WRITER": "on"}, clear=False),
+        patch.dict("os.environ", {"DIGIQUANT_EVIDENCE_BUNDLE_WRITER": "on"}, clear=False),
         patch(
             "digiquant.portfolio.phases.portfolio_common.build_grounding",
             return_value=(
