@@ -391,6 +391,25 @@ dialog and both sheet sides, both tab systems, tooltip, pager/date-pager, a
 table with end-aligned numerics, badge tones, empty state, cards, and a
 pinned/two-column layout.
 
+## Pointer cursors (#4306, phase 0.3)
+
+Cursor is part of the part, not the page. Tailwind v4 preflight leaves buttons
+at the default arrow, so every activatable kit part sets `cursor-pointer`
+itself: `ui/button.tsx`, the menu/select items and sub-triggers, `TabsTrigger`,
+`Switch`, `Checkbox`, `CollapsibleTrigger`, `TableRow interactive` (opt-in —
+only some rows activate), and the controls-layer pager/date-pager/segmented/
+menu items (via `styles/controls-*.css`). Disabled parts carry
+`cursor: not-allowed` (the `disabled:` / `data-disabled:` variant, or the
+kit sheet rule) so the state names the affordance instead of inheriting the
+base pointer.
+
+The convention is enforced: `scripts/check_frontend_canon.py` flags any
+`cursor-*` utility under `apps/**` (`apps/reference` is the exempt proof
+surface). An app-local cursor is treated as a missing-kit signal — promote the
+part, or leave a reviewed `canon-allow: <reason>` on genuinely app-specific
+chrome (canvas gestures, native `<summary>`, custom timelines). See
+[MIGRATION.md § Pointer cursors](MIGRATION.md).
+
 ## Build / CI posture
 
 The reference app is **linted and type-checked** in CI by the `web` lane

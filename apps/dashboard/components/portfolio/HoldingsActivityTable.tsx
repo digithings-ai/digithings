@@ -149,7 +149,8 @@ export default function HoldingsActivityTable({ events }: { events: DashboardPos
                   <Fragment key={key}>
                     <TableRow
                       data-testid={`ledger-row-${event.ticker}-${event.date}`}
-                      className={`cursor-pointer border-0 hover:bg-ink/[0.03] has-aria-expanded:bg-transparent ${open ? 'bg-ink/[0.02]' : ''}`}
+                      interactive
+                      className={`border-0 hover:bg-ink/[0.03] has-aria-expanded:bg-transparent ${open ? 'bg-ink/[0.02]' : ''}`}
                       onClick={() => setExpandedKey(open ? null : key)}
                       onKeyDown={(e) => {
                         if (e.key === 'Enter' || e.key === ' ') {

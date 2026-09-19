@@ -187,7 +187,7 @@ export default function DecisionAudit({
                   <TableCell className="py-3 pr-4 whitespace-normal">
                     {decision.thesis || decision.reflection ? (
                       <Collapsible className="max-w-md text-xs text-ink-soft">
-                        <CollapsibleTrigger className="cursor-pointer text-ink-soft hover:text-ink">Review</CollapsibleTrigger>
+                        <CollapsibleTrigger className="text-ink-soft hover:text-ink">Review</CollapsibleTrigger>
                         <CollapsibleContent keepMounted>
                           <div className="mt-2 space-y-2 border-l border-hair pl-3 leading-relaxed">
                             {decision.thesis ? <p><strong className="text-ink">Thesis:</strong> {decision.thesis}</p> : null}
@@ -214,7 +214,7 @@ export default function DecisionAudit({
           <IconButton
             onClick={() => setPage((value) => Math.max(0, value - 1))}
             disabled={activePage === 0}
-            className="disabled:cursor-not-allowed disabled:opacity-30"
+            className="disabled:opacity-30"
             aria-label="Previous audit page"
             title="Previous page"
           >
@@ -226,7 +226,7 @@ export default function DecisionAudit({
           <IconButton
             onClick={() => setPage((value) => Math.min(pageCount - 1, value + 1))}
             disabled={activePage >= pageCount - 1}
-            className="disabled:cursor-not-allowed disabled:opacity-30"
+            className="disabled:opacity-30"
             aria-label="Next audit page"
             title="Next page"
           >

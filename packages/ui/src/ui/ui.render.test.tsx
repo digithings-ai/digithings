@@ -225,7 +225,86 @@ describe("vendored ui kit renders server-side", () => {
     );
   });
 
+  // Pointer cursors are a kit-level convention (#4306, phase 0.3): every
+  // interactive part sets `cursor-pointer`, and disabled parts name the
+  // `not-allowed` affordance rather than leaving the base cursor on.
+  it("Button carries the kit pointer cursor and the disabled not-allowed contract", () => {
+    const enabled = renderToStaticMarkup(<Button>Run</Button>);
+    expect(enabled).toContain("cursor-pointer");
+    const disabled = renderToStaticMarkup(<Button disabled>Run</Button>);
+    expect(disabled).toContain("disabled:cursor-not-allowed");
+  });
 
+  it("TabsTrigger carries the pointer cursor and disabled/aria-disabled contract", () => {
+    const html = renderToStaticMarkup(
+      <Tabs defaultValue="one">
+        <TabsList>
+          <TabsTrigger value="one">One</TabsTrigger>
+        </TabsList>
+      </Tabs>,
+    );
+    expect(html).toContain("cursor-pointer");
+    expect(html).toContain("disabled:cursor-not-allowed");
+    expect(html).toContain("aria-disabled:cursor-not-allowed");
+  });
+
+  it("Switch and Checkbox carry the pointer cursor and disabled contract", () => {
+    const sw = renderToStaticMarkup(<Switch aria-label="toggle" />);
+    expect(sw).toContain("cursor-pointer");
+    expect(sw).toContain("data-disabled:cursor-not-allowed");
+    const cb = renderToStaticMarkup(<Checkbox aria-label="check" />);
+    expect(cb).toContain("cursor-pointer");
+    expect(cb).toContain("disabled:cursor-not-allowed");
+  });
+
+  it("CollapsibleTrigger renders the kit pointer cursor by default", () => {
+    const html = renderToStaticMarkup(
+      <Collapsible>
+        <CollapsibleTrigger>More</CollapsibleTrigger>
+      </Collapsible>,
+    );
+    expect(html).toContain("cursor-pointer");
+    expect(html).toContain("disabled:cursor-not-allowed");
+  });
+
+  it("SelectTrigger and SelectItem carry the pointer cursor", () => {
+    const html = renderToStaticMarkup(
+      <Select defaultValue="aapl" defaultOpen>
+        <SelectTrigger>
+          <SelectValue placeholder="Ticker" />
+        </SelectTrigger>
+        <SelectPopup>
+          <SelectItem value="aapl">AAPL</SelectItem>
+        </SelectPopup>
+      </Select>,
+    );
+    expect(html.match(/cursor-pointer/g)?.length ?? 0).toBeGreaterThanOrEqual(2);
+  });
+
+  it("TableRow is interactive only when asked; the pointer cursor is opt-in", () => {
+    const plain = renderToStaticMarkup(
+      <Table>
+        <TableBody>
+          <TableRow>
+            <TableCell>1.20</TableCell>
+          </TableRow>
+        </TableBody>
+      </Table>,
+    );
+    expect(plain).not.toContain("cursor-pointer");
+
+    const clickable = renderToStaticMarkup(
+      <Table>
+        <TableBody>
+          <TableRow interactive>
+            <TableCell>1.20</TableCell>
+          </TableRow>
+        </TableBody>
+      </Table>,
+    );
+    expect(clickable).toContain("cursor-pointer");
+    expect(clickable).toContain('data-interactive="true"');
+  });
 
   it("Table density=compact emits the density hook and compact padding", () => {
     const html = renderToStaticMarkup(

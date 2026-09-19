@@ -143,7 +143,7 @@ export function TheReadBody({ digest }: { digest: DigestPayload }) {
               if (!body) return null;
               return (
                 <Collapsible key={String(key)} className="group py-4">
-                  <CollapsibleTrigger className="flex w-full cursor-pointer items-center justify-between gap-3 text-sm font-semibold text-ink-soft hover:text-ink">
+                  <CollapsibleTrigger className="flex w-full items-center justify-between gap-3 text-sm font-semibold text-ink-soft hover:text-ink">
                     <span>{title}</span>
                     <ChevronRight
                       size={16}

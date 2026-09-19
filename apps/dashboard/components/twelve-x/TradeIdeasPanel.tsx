@@ -150,7 +150,7 @@ export function IdeaDetail({ idea }: { idea: FxTradeIdeaRow }) {
                       <span
                         role="button"
                         tabIndex={0}
-                        className="cursor-pointer font-mono text-[10px] text-ink-mute underline decoration-dotted hover:text-accent"
+                        className="cursor-pointer font-mono text-[10px] text-ink-mute underline decoration-dotted hover:text-accent" // canon-allow: inline evidence toggle inside a sentence; the kit owns no inline-text button
                         onClick={(event) => {
                           event.stopPropagation();
                           toggleEvidenceDetail(index);

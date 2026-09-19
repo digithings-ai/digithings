@@ -195,6 +195,27 @@ LTR rendering is identical. Two rules for app code:
 `rtl: true` is set in `components.json` (kit, reference, digichat); the canon
 proof is the reference `/rtl` route.
 
+## Pointer cursors — kit-level (#4306, phase 0.3)
+
+Cursor is part of the part, not the page. Tailwind v4 preflight no longer puts
+`cursor: pointer` on buttons, so every activatable kit part sets it itself:
+`Button`, menu/select items and sub-triggers, `TabsTrigger`, `Switch`,
+`Checkbox`, `CollapsibleTrigger`, `TableRow interactive` (opt-in — only some
+rows activate), and the controls-layer pager/date-pager/segmented/menu items.
+Disabled parts name `cursor: not-allowed` instead of inheriting the base
+pointer.
+
+Two rules for app code:
+
+- **Do not add `cursor-*` utilities in an app.** `scripts/check_frontend_canon.py`
+  flags `cursor-*` under `apps/**` (the reference gallery is exempt — it proves
+  the canon, disabled and native-control specimens included). A missing cursor
+  means the kit part is missing it: fix `packages/ui`, not the call site.
+- **When a surface is genuinely app-specific** (a canvas pan gesture, a native
+  `<details>/<summary>`, a custom timeline or tab-bar) and the kit owns no
+  equivalent, keep the utility and add a `canon-allow: <reason>` comment on that
+  line, so the exception is reviewed rather than silent.
+
 ## Debugging checklist (QA'ing an app against the canon)
 
 - Utility "not applying" but present in compiled CSS → cascade layering

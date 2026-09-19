@@ -1252,6 +1252,16 @@
     cursor: pointer;
     transition: color 0.2s var(--ease), background-color 0.2s var(--ease);
   }
+
+  /* Disabled is inert but still names the affordance: no click affordance,
+     not-allowed cursor (mirrors the kit Button's disabled convention). */
+  .nb-icon:disabled {
+    cursor: not-allowed;
+  }
+
+  .nb-seg:disabled {
+    cursor: not-allowed;
+  }
 }
 
 .nb-seg:first-child {
@@ -1373,7 +1383,7 @@
 
   .nb-pager-date:disabled {
     opacity: 0.4;
-    cursor: default;
+    cursor: not-allowed;
   }
 
   .nb-pager-date-text {
@@ -1400,9 +1410,10 @@
 }
 
 .nb-pager--capsule .nb-page-edge:disabled {
-  /* shipped: disabled:opacity-30, default cursor (no not-allowed) */
+  /* shipped: disabled:opacity-30; cursor normalized to the kit's not-allowed
+     convention (#4306, phase 0.3) */
   opacity: 0.3;
-  cursor: default;
+  cursor: not-allowed;
 }
 
 .nb-seg-group--accent .nb-seg:hover:not([aria-pressed="true"]) {
@@ -1928,7 +1939,7 @@
     font-family: var(--font-mono);
     font-size: 0.8rem;
     color: var(--ink-soft);
-    cursor: default;
+    cursor: pointer;
     outline: none;
   }
 
@@ -2230,6 +2241,11 @@
     color: var(--accent);
   }
 
+  .ctl-select-item[data-disabled] {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+
   .ctl-table[data-density="compact"] .ctl-table-th,
   .ctl-table[data-density="compact"] .ctl-table-td {
     padding-top: 0.32rem;
@@ -2248,7 +2264,7 @@
 
   .ctl-pagination-step:disabled {
     opacity: 0.4;
-    cursor: default;
+    cursor: not-allowed;
   }
 
 /* F7: universal focus ring on wayfinding controls */

@@ -29,6 +29,8 @@ function messageStatusErrorText(status: {
   return error != null ? String(error) : undefined;
 }
 
+const SUMMARY_CLASS = "cursor-pointer select-none"; // canon-allow: native <details>/<summary>; the kit owns no disclosure-summary part
+
 /** assistant-ui error banner: short copy plus optional API-detail disclosure. */
 export const MessageError: FC = () => {
   const raw = useAuiState((s) => messageStatusErrorText(s.message.status ?? {}));
@@ -49,7 +51,7 @@ export const MessageError: FC = () => {
           </ErrorPrimitive.Message>
           {detail || code ? (
             <details className="mt-2 text-xs opacity-90">
-              <summary className="cursor-pointer select-none">API details</summary>
+              <summary className={SUMMARY_CLASS}>API details</summary>
               {code ? <p className="mt-1 font-mono">code: {code}</p> : null}
               {detail ? (
                 <pre className="mt-1 max-h-40 overflow-auto whitespace-pre-wrap break-all font-mono">

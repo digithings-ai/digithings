@@ -59,7 +59,7 @@ export default function PipelineNode({
     isBranch
       ? 'border border-hair bg-term-bg'
       : 'border border-hair bg-surface',
-    'cursor-pointer hover:-translate-y-px hover:border-hair-2',
+    'cursor-pointer hover:-translate-y-px hover:border-hair-2', // canon-allow: camera-positioned graph node; the kit owns no graph-node part
     selected ? 'border-accent/60 shadow-[0_0_0_1px_var(--accent)]' : '',
   ]
     .filter(Boolean)

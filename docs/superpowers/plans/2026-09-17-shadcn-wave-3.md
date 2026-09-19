@@ -272,6 +272,10 @@ platform test) → fresh-context review → commit.
   changes, re-census affected tasks.
 - Kit `Button` lacks `cursor: pointer` (Tailwind v4 preflight, kit-wide
   policy — wave-2 finding, replicate deliberately, don't "fix" per-app).
+  **Superseded by phase 0.3 (`2b2a1c56c`+, #4306):** pointer cursors are now
+  kit-level — the kit's interactive parts set `cursor-pointer` and the canon
+  guard refuses app-local `cursor-*`. This bullet records wave-3's decision,
+  not the current rule (see `packages/ui/MIGRATION.md`).
 - Print-media residual (layered `[hidden]` vs unlayered package pins —
   package backlog, not this wave).
 - Dev-mode hydration warning (non-reproducible, cold A/B + prod clean).

@@ -257,7 +257,8 @@ export function ConsensusDataTable({
                   key={row.currency}
                   data-ccy={row.currency}
                   onClick={() => onRowClick?.(row.currency)}
-                  className="cursor-pointer text-sm hover:bg-ink/[0.02]"
+                  interactive
+                  className="text-sm hover:bg-ink/[0.02]"
                 >
                   <TableRowHeader className="px-3.5 py-2.5">
                     <span

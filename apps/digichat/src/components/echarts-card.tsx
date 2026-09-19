@@ -115,7 +115,7 @@ function ChartFailedCard({
         {error.message ? `: ${error.message}` : ""}
       </p>
       <Collapsible>
-        <CollapsibleTrigger className="cursor-pointer text-xs text-muted-foreground underline-offset-2 hover:underline">
+        <CollapsibleTrigger className="text-xs text-muted-foreground underline-offset-2 hover:underline">
           View raw JSON
         </CollapsibleTrigger>
         <CollapsibleContent>

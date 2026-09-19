@@ -73,7 +73,7 @@ export function ThesisStoryCard({
       className="group border-y border-hair first:border-t-0 last:border-b-0"
       defaultOpen={defaultOpen}
     >
-      <CollapsibleTrigger className="w-full cursor-pointer px-4 py-4 transition-colors hover:bg-ink/[0.02] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-accent/50">
+      <CollapsibleTrigger className="w-full px-4 py-4 transition-colors hover:bg-ink/[0.02] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-accent/50">
         <div className="flex items-start justify-between gap-4">
           <div className="flex min-w-0 items-start gap-3">
             {rank != null && (

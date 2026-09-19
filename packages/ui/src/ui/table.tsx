@@ -62,12 +62,23 @@ function TableFooter({ className, ...props }: React.ComponentProps<"tfoot">) {
   )
 }
 
-function TableRow({ className, ...props }: React.ComponentProps<"tr">) {
+type TableRowProps = React.ComponentProps<"tr"> & {
+  /**
+   * Marks a row the user can activate (a ledger row that expands, a
+   * drill-down row). Rows are not interactive by default, so the pointer
+   * cursor is opt-in and stays kit-level rather than an app-local utility.
+   */
+  interactive?: boolean
+}
+
+function TableRow({ className, interactive = false, ...props }: TableRowProps) {
   return (
     <tr
       data-slot="table-row"
+      data-interactive={interactive || undefined}
       className={cn(
         "border-b border-border transition-colors hover:bg-muted/50 has-aria-expanded:bg-muted/50 data-[state=selected]:bg-muted",
+        interactive && "cursor-pointer",
         className
       )}
       {...props}

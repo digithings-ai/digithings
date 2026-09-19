@@ -147,7 +147,7 @@ export function DropdownMenuItem({
       data-inset={inset}
       data-variant={variant}
       className={cxBase(
-        "ctl-menu-item relative flex cursor-default items-center gap-1.5 rounded-none px-1.5 py-1 text-sm outline-hidden select-none data-inset:ps-7 data-disabled:pointer-events-none data-disabled:opacity-50",
+        "ctl-menu-item relative flex cursor-pointer items-center gap-1.5 rounded-none px-1.5 py-1 text-sm outline-hidden select-none data-inset:ps-7 data-disabled:pointer-events-none data-disabled:cursor-not-allowed data-disabled:opacity-50",
         className,
       )}
       {...props}
@@ -172,7 +172,7 @@ export function DropdownMenuSubTrigger({
       data-slot="dropdown-menu-sub-trigger"
       data-inset={inset}
       className={cxBase(
-        "ctl-menu-item ctl-menu-subtrigger flex cursor-default items-center gap-1.5 rounded-none px-1.5 py-1 text-sm outline-hidden select-none data-inset:ps-7",
+        "ctl-menu-item ctl-menu-subtrigger flex cursor-pointer items-center gap-1.5 rounded-none px-1.5 py-1 text-sm outline-hidden select-none data-inset:ps-7",
         className,
       )}
       {...props}
@@ -218,7 +218,7 @@ export function DropdownMenuCheckboxItem({
       data-slot="dropdown-menu-checkbox-item"
       data-inset={inset}
       className={cxBase(
-        "ctl-menu-item relative flex cursor-default items-center gap-1.5 rounded-none py-1 pe-8 ps-1.5 text-sm outline-hidden select-none data-inset:ps-7 data-disabled:pointer-events-none data-disabled:opacity-50",
+        "ctl-menu-item relative flex cursor-pointer items-center gap-1.5 rounded-none py-1 pe-8 ps-1.5 text-sm outline-hidden select-none data-inset:ps-7 data-disabled:pointer-events-none data-disabled:cursor-not-allowed data-disabled:opacity-50",
         className,
       )}
       checked={checked}
@@ -254,7 +254,7 @@ export function DropdownMenuRadioItem({
       data-slot="dropdown-menu-radio-item"
       data-inset={inset}
       className={cxBase(
-        "ctl-menu-item relative flex cursor-default items-center gap-1.5 rounded-none py-1 pe-8 ps-1.5 text-sm outline-hidden select-none data-inset:ps-7 data-disabled:pointer-events-none data-disabled:opacity-50",
+        "ctl-menu-item relative flex cursor-pointer items-center gap-1.5 rounded-none py-1 pe-8 ps-1.5 text-sm outline-hidden select-none data-inset:ps-7 data-disabled:pointer-events-none data-disabled:cursor-not-allowed data-disabled:opacity-50",
         className,
       )}
       {...props}

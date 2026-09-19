@@ -601,7 +601,7 @@ export default function PipelineCanvas({
         {/* Canvas viewport — desktop pan/zoom surface. */}
         <div
           ref={viewportRef}
-          className="relative min-h-0 flex-1 select-none overflow-clip cursor-grab active:cursor-grabbing"
+          className="relative min-h-0 flex-1 select-none overflow-clip cursor-grab active:cursor-grabbing" // canon-allow: canvas pan gesture; the kit owns no canvas surface
           style={{ touchAction: 'none', overscrollBehavior: 'contain' }}
           {...bind}
         >

@@ -118,6 +118,12 @@ const THINKING_LABELS: Record<string, string> = {
   open: "Open",
 };
 
+// digichat-local composer menu rows (not the kit DropdownMenu). These carry
+// their own pointer cursor because the kit owns no equivalent row.
+const MCP_SUGGEST_ROW_CLASS = "hover:bg-muted/50 flex w-full cursor-pointer items-baseline justify-between gap-4 rounded-none px-3 py-1.5 text-start text-sm outline-none outline-offset-[-1px]"; // canon-allow: digichat-local composer menu; kit owns no equivalent
+
+const MENU_ROW_CLASS = "flex w-full cursor-pointer items-baseline justify-between gap-4 px-3 py-1.5 text-start text-sm outline-none outline-offset-[-1px]"; // canon-allow: digichat-local composer menu; kit owns no equivalent
+
 function slashName(id: string): string {
   return id.startsWith("/") ? id : `/${id}`;
 }
@@ -1158,7 +1164,7 @@ export function EmbedComposerMenu({
                               aria-label={row.id}
                               aria-selected={highlighted}
                               data-cursor={highlighted ? "true" : undefined}
-                              className={`hover:bg-muted/50 flex w-full cursor-pointer items-baseline justify-between gap-4 rounded-none px-3 py-1.5 text-start text-sm outline-none outline-offset-[-1px] ${
+                              className={`${MCP_SUGGEST_ROW_CLASS} ${
                                 highlighted ? "bg-muted/50" : ""
                               }`}
                               ref={(node) => {
@@ -1377,7 +1383,7 @@ export function EmbedComposerMenu({
                   role={toggle ? "menuitemcheckbox" : exclusive ? "menuitemradio" : "menuitem"}
                   aria-checked={typeof row.checked === "boolean" ? row.checked : undefined}
                   data-cursor={index === cursor ? "true" : undefined}
-                  className="flex w-full cursor-pointer items-baseline justify-between gap-4 px-3 py-1.5 text-start text-sm outline-none outline-offset-[-1px]"
+                  className={MENU_ROW_CLASS}
                   ref={(node) => {
                     if (index === cursor) node?.scrollIntoView({ block: "nearest" });
                   }}

@@ -357,7 +357,7 @@ export default function EventsTimeline({ events, mode, day, onSelect, selectable
                 const isSelectable = selectableIds ? selectableIds.has(e.id ?? '') : true;
                 const clickable = Boolean(onSelect && e.id != null && isSelectable);
                 const className = `tl-card absolute box-border overflow-hidden rounded-none border-l-[3px] px-[7px] py-[6px] text-left ${
-                  clickable ? 'cursor-pointer transition-shadow hover:ring-1 hover:ring-inset hover:ring-ink/20' : ''
+                  clickable ? 'cursor-pointer transition-shadow hover:ring-1 hover:ring-inset hover:ring-ink/20' : '' // canon-allow: absolutely-positioned timeline card; the kit owns no timeline part
                 } ${impactClass(e.impact)} ${impactStyle(e.impact)}`;
                 const style = { left: dayLeft + c.x, top, width: c.width, height: TL_LANE_H };
                 const title = `${e.time} ${e.currency} — ${e.title} (${e.durationMin} min)`;

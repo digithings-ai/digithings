@@ -83,7 +83,7 @@ export function VehicleExpressionRow({
 
   return (
     <Collapsible className="group border-t border-hair first:border-t-0">
-      <CollapsibleTrigger className="flex w-full cursor-pointer items-center gap-3 px-4 py-3 transition-colors hover:bg-ink/[0.03] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-accent/50">
+      <CollapsibleTrigger className="flex w-full items-center gap-3 px-4 py-3 transition-colors hover:bg-ink/[0.03] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-accent/50">
         <ChevronRight
           size={14}
           aria-hidden

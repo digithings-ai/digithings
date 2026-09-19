@@ -18,7 +18,7 @@ Wave 3 put the kit `packages/ui/src/ui/*` in charge and swept the planned file s
 
 - Kit `packages/ui/src/ui/*` is the only primitive source; shared families (`EmptyState`, `SegmentedControl`, `IconButton`, `Pager`, `DatePager`, `Slider`, `Spinner`) come from the main barrel `@digithings/ui`.
 - No new component-class families (the canon guard's family census fails the PR). No hardcoded colours — token-backed utilities only.
-- The `cursor-pointer` policy is unchanged (kit `Button` deliberately has none). The `dress="chat"` and `skin` axes are sanctioned; the chat tone lives in `controls-core.css` `@layer components` on purpose.
+- ~~The `cursor-pointer` policy is unchanged (kit `Button` deliberately has none).~~ **Superseded by phase 0.3 (#4306):** cursors are kit-level now — the kit's interactive parts own `cursor-pointer`, and the canon guard refuses app-local `cursor-*` (see `packages/ui/MIGRATION.md`). The `dress="chat"` and `skin` axes are sanctioned; the chat tone lives in `controls-core.css` `@layer components` on purpose.
 - Never touch live-trading paths, `digikey/`, or anything under `projects/`.
 - Every deletion follows a recorded zero-consumer grep (`rg` output pasted into the task report).
 - Deferred work is never silent: it goes to #4306 or a new dated issue, with a ledger line.

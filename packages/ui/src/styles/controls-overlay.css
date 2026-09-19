@@ -485,7 +485,7 @@
 
   .nb-cal-nav:disabled {
     opacity: 0.3;
-    cursor: default;
+    cursor: not-allowed;
   }
 
   .nb-cal-weekdays,
@@ -549,7 +549,7 @@
   .nb-cal-day:disabled {
     color: var(--ink-mute);
     opacity: 0.35;
-    cursor: default;
+    cursor: not-allowed;
   }
 
   .nb-cal-day--empty {

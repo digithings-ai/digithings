@@ -453,7 +453,7 @@ function TradeRow({
           openIdea();
         }
       }}
-      className="cursor-pointer transition-colors hover:bg-ink/[0.03] focus:outline-none focus-visible:bg-ink/[0.05]"
+      className="cursor-pointer transition-colors hover:bg-ink/[0.03] focus:outline-none focus-visible:bg-ink/[0.05]" // canon-allow: focusable table row with role="row" (no button role); kit TableRow is not this shell
     >
       <td className="whitespace-nowrap px-3 py-2 font-mono text-ink-mute">
         {row.runDate}

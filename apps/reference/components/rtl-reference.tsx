@@ -49,6 +49,7 @@ import {
   DialogTrigger,
   DropdownMenu,
   DropdownMenuContent,
+  DropdownMenuGroup,
   DropdownMenuItem,
   DropdownMenuLabel,
   DropdownMenuSeparator,
@@ -184,12 +185,14 @@ export function RtlReference() {
                   Actions
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="start">
-                  <DropdownMenuLabel>Run</DropdownMenuLabel>
-                  <DropdownMenuItem>
-                    Backtest
-                    <span className="ml-auto text-ink-mute text-[0.7rem]">⌘B</span>
-                  </DropdownMenuItem>
-                  <DropdownMenuItem>Optimize</DropdownMenuItem>
+                  <DropdownMenuGroup>
+                    <DropdownMenuLabel>Run</DropdownMenuLabel>
+                    <DropdownMenuItem>
+                      Backtest
+                      <span className="ms-auto text-ink-mute text-[0.7rem]">⌘B</span>
+                    </DropdownMenuItem>
+                    <DropdownMenuItem>Optimize</DropdownMenuItem>
+                  </DropdownMenuGroup>
                   <DropdownMenuSeparator />
                   <DropdownMenuItem>Delete</DropdownMenuItem>
                 </DropdownMenuContent>
@@ -214,6 +217,18 @@ export function RtlReference() {
                 ))}
               </div>
             ))}
+            <div className="rtl-row" data-specimen="button-disabled">
+              <span className="text-ink-mute w-[5.5rem] font-mono text-[0.7rem]">disabled</span>
+              <Button variant="default" disabled>
+                default
+              </Button>
+              <Button variant="outline" disabled>
+                outline
+              </Button>
+              <Button variant="link" disabled>
+                link
+              </Button>
+            </div>
           </div>
         </Section>
 

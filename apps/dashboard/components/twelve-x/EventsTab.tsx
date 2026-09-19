@@ -172,7 +172,7 @@ function EventRow({
           type="button"
           variant="ghost"
           onClick={() => onSelect(event)}
-          className="flex h-auto w-full cursor-pointer items-center justify-start gap-3 whitespace-normal px-4 py-3 text-left hover:bg-ink/[0.02]"
+          className="flex h-auto w-full items-center justify-start gap-3 whitespace-normal px-4 py-3 text-left hover:bg-ink/[0.02]"
         >
           {/* Time column */}
           <div className="w-14 shrink-0 text-right">

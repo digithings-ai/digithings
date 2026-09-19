@@ -94,7 +94,7 @@ function TwelveXTabBar({
           type="button"
           disabled={disabled}
           onClick={() => onSelect?.(id)}
-          className={`${subpageTabButtonClass(active === id)} disabled:cursor-not-allowed disabled:opacity-50`}
+          className={`${subpageTabButtonClass(active === id)} disabled:cursor-not-allowed disabled:opacity-50`} // canon-allow: sticky tab-bar contract; native button, EXEMPT per wave-4
         >
           <Icon size={16} aria-hidden />
           {label}

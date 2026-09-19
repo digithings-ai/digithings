@@ -17,11 +17,19 @@ Checks (git-tracked files under apps/ and packages/ only):
      committed ``frontend_class_families.json`` baseline) means UI was built
      app-locally instead of promoted through the reference — pages assemble
      from shared primitives.
+  5. App-local cursor utilities (#4306, phase 0.3): ``cursor-*`` in
+     .tsx/.jsx/.ts under ``apps/`` means an app re-implemented an affordance
+     the kit owns. Pointer cursors are kit-level — the kit's interactive parts
+     set them — so an app-local cursor is a missing-kit signal, not a fix. The
+     reference gallery is exempt: it proves the canon, including disabled and
+     native-control specimens.
 
 Escapes:
   * a line containing ``canon-allow`` (with a reason!) is skipped;
   * ALLOWLIST files are sanctioned literal homes (chart palettes, tenant
     embed accents, SSR meta colors);
+  * the reference gallery is exempt from the cursor rule only — it is the
+    canon's demonstration surface;
   * test files are skipped — hygiene tests assert on the banned strings.
 
 Usage: check_frontend_canon.py [--warn]   (--warn reports but exits 0)
@@ -97,6 +105,29 @@ RAW_UTILITY = re.compile(
     rf"|placeholder|decoration|accent|caret|shadow)"
     rf"-(?:(?:{SIDE_OFFSET})-)?(?:{PALETTE_FAMILIES})-\d{{2,3}}(?:/\d{{1,3}})?\b"
 )
+
+# 1b. App-local cursor utilities (#4306, phase 0.3). Same prefix handling as
+#     RAW_UTILITY — a variant chain (`disabled:`, `active:`, …) may precede the
+#     token. The value list is the real Tailwind cursor scale so prose/class
+#     names (``cursor-follow``, ``chat-cursor``) never match.
+CURSOR_UTILITY = re.compile(
+    r"[\"'`\s:\]](?:[a-z-]+:)*cursor-"
+    r"(?:pointer|default|not-allowed|none|auto|grab|grabbing|text|move|help"
+    r"|wait|crosshair|zoom-in|zoom-out|col-resize|row-resize|n-resize|e-resize"
+    r"|s-resize|w-resize|ne-resize|nw-resize|se-resize|sw-resize|ew-resize"
+    r"|ns-resize|nesw-resize|nwse-resize|context-menu|cell|copy|alias"
+    r"|all-scroll|no-drop|progress|vertical-text)\b"
+)
+
+# The reference gallery is the canon's proof surface — it renders specimens
+# (including disabled and raw-native comparisons) and so may set cursor
+# utilities where the kit part is not the thing being demonstrated.
+CURSOR_EXEMPT_PREFIXES = ("apps/reference/",)
+
+
+def is_cursor_exempt(rel: str) -> bool:
+    return any(rel.startswith(p) for p in CURSOR_EXEMPT_PREFIXES)
+
 
 # 2. Pre-canon vocabulary (dashboard pre-#1402 bridge + fin-* semantics).
 LEGACY_VOCAB = re.compile(
@@ -211,6 +242,13 @@ def main() -> int:
                 continue
             if ext in UTILITY_EXTS and RAW_UTILITY.search(line):
                 findings.append((rel, lineno, "raw-palette-utility", line.strip()))
+            if (
+                ext in UTILITY_EXTS
+                and rel.startswith("apps/")
+                and not is_cursor_exempt(rel)
+                and CURSOR_UTILITY.search(line)
+            ):
+                findings.append((rel, lineno, "app-local-cursor", line.strip()))
             if LEGACY_VOCAB.search(line):
                 findings.append((rel, lineno, "legacy-vocabulary", line.strip()))
             if (
@@ -229,7 +267,10 @@ def main() -> int:
         print(
             "\nUse token-backed utilities (text-ink, bg-surface, text-up …) or add"
             "\na `canon-allow: <reason>` comment / ALLOWLIST entry for sanctioned"
-            "\nliterals. Playbook: packages/ui/MIGRATION.md"
+            "\nliterals. Pointer cursors are kit-level: set `cursor-*` on the"
+            "\n`packages/ui` part that owns the affordance (app-local cursor"
+            "\nutilities are refused, `apps/reference` excepted), or `canon-allow`"
+            "\nan app-specific surface. Playbook: packages/ui/MIGRATION.md"
         )
         return 0 if warn_only else 1
 
