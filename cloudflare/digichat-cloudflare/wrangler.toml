@@ -6,6 +6,12 @@ main = "src/index.ts"
 compatibility_date = "2026-08-01"
 compatibility_flags = ["nodejs_compat"]
 
+# Workers Logs (free at this volume — Workers Paid includes 20M events/mo).
+# Enabled so container wake frequency is measurable; full sampling is fine at
+# ~4.6k requests/week.
+[observability]
+enabled = true
+
 # Zone routes — same hostname as Pages: Worker owns digichat paths; Pages owns /chat shells.
 [[routes]]
 pattern = "digithings.ai/embed*"
