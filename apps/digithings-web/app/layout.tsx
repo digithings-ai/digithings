@@ -66,6 +66,13 @@ export const metadata: Metadata = {
 const docsIvoryInit =
   "try{if(/^\\/docs(\\/|$)/.test(location.pathname)&&!localStorage.getItem('dt-theme')){document.documentElement.setAttribute('data-theme','light');var m=document.querySelector('meta[name=\"theme-color\"]');if(m)m.setAttribute('content','#FBFBF9')}}catch(e){}"; // canon-allow: mirrors tokens.css light --bg (pre-paint script)
 
+// Global pre-paint: apply the stored choice on every route. The SSR default is
+// dark; without this a visitor whose stored theme is light paints dark first
+// and flips to light only at hydration (~0.5s in) - the load flash. Mirrors
+// the toggle's storage key (dt-theme).
+const storedThemeInit =
+  "try{var t=localStorage.getItem('dt-theme');if(t==='light'||t==='dark'){document.documentElement.setAttribute('data-theme',t);if(t==='light'){var m=document.querySelector('meta[name=\"theme-color\"]');if(m)m.setAttribute('content','#FBFBF9')}}}catch(e){}"; // canon-allow: mirrors tokens.css light --bg (pre-paint script)
+
 export default function RootLayout({ children }: { children: ReactNode }) {
   // suppressHydrationWarning: themeInitScript (and the /docs ivory default)
   // legitimately flip data-theme + meta pre-hydration; scoped to this
@@ -74,6 +81,8 @@ export default function RootLayout({ children }: { children: ReactNode }) {
     <html lang="en" data-theme="dark" suppressHydrationWarning className={`${GeistMono.variable} no-js`}>
       <head>
         <script dangerouslySetInnerHTML={{ __html: themeInitScript }} />
+        {/* Stored theme choice (all routes) — pre-paint so no dark→light flip at hydration. */}
+        <script dangerouslySetInnerHTML={{ __html: storedThemeInit }} />
         {/* /docs → ivory default (pre-paint), scoped by pathname; see docsIvoryInit above. */}
         <script dangerouslySetInnerHTML={{ __html: docsIvoryInit }} />
         {/* Law 06 (content-first): SSR ships html.no-js so stylesheet rules can

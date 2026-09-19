@@ -63,57 +63,41 @@ describe("ChatEmbedShell contracts", () => {
     expect(readParentDocumentTheme({ getAttribute: () => null })).toBe("dark");
   });
 
-  it("keeps DigichatBootLoader + transparent iframe until digichat:ready settles", async () => {
+  it("keeps the frame canvas pre-painted and the in-app boot as the only loader until digichat:ready settles", async () => {
     // Source contract: avoid a white flash on the dark digithings theme (#2093).
+    // The shell no longer mounts its own boot overlay -- digichat's in-app boot
+    // chain is the only loader, and the frame slot paints the theme canvas from
+    // the first HTML via .dc-chat-frame (see globals.css).
     const { readFileSync } = await import("node:fs");
     const { fileURLToPath } = await import("node:url");
     const path = fileURLToPath(new URL("./ChatEmbedShell.tsx", import.meta.url));
     const src = readFileSync(path, "utf8");
-    expect(src).toContain("DigichatBootLoader");
+    expect(src).toContain("dc-chat-frame");
     expect(src).toContain("digichat:ready");
-    expect(src).toContain("opacity: embedReady ? 1 : 0");
-    expect(src).toContain('backgroundColor: "transparent"');
-    // The overlay drops only after the typed welcome + examples finish: the
-    // loader's settle callback sets sequenceDone, and the fade waits for
-    // ready + sequenceDone so a fast handshake cannot cut the copy mid-type.
-    expect(src).toContain("showBoot = !shellLoadError && !bootSettled");
-    expect(src).toContain("onSettled={() => setSequenceDone(true)}");
-    expect(src).toContain("const overlayFaded = embedReady && sequenceDone");
-    // Curated per-host copy rides into both the iframe URL and the loader.
+    expect(src).not.toContain("DigichatBootLoader");
+    // Curated per-host copy rides into the iframe URL.
     expect(src).toContain("Ask about digithings");
     expect(src).toContain("Ask about Online Compliance Center");
-    // The curated copy also rides the iframe URL (?welcome=/?suggestions=).
     expect(src).toContain('url.searchParams.set("welcome"');
     expect(src).toContain('url.searchParams.set("suggestions"');
-    expect(src).toContain('welcomeBody=""');
   });
 
-  it("keeps the boot overlay transparent so .grain/.glow show through while loading", async () => {
-    // The overlay used to fill solid `var(--bg)` on the assumption it was the
-    // only thing standing between a pre-ready iframe and a white flash -- the
-    // iframe's own opacity:0 (asserted above) already does that job. A solid
-    // fill there painted a flat rectangle over the page's .grain/.glow the
-    // whole time the boot loader was up, then popped to the real background
-    // on ready, reading as "a black box that disappears" once digichat loaded.
+  it("paints the frame canvas pre-paint instead of mounting a solid boot overlay", async () => {
+    // The old shell overlay is gone -- digichat boots inside the frame now. The
+    // white-flash guard moved to the frame slot: .dc-chat-frame in globals.css
+    // paints --chat-frame-canvas (per [data-theme]) from the first HTML, so the
+    // pre-ready frame is never a browser-default white rectangle.
     const { readFileSync } = await import("node:fs");
     const { fileURLToPath } = await import("node:url");
     const shellPath = fileURLToPath(new URL("./ChatEmbedShell.tsx", import.meta.url));
     const shellSrc = readFileSync(shellPath, "utf8");
-
-    // The overlay div wrapping the boot loader: transparent, not var(--bg).
-    const overlayBlock = shellSrc.slice(
-      shellSrc.indexOf("showBoot ? ("),
-      shellSrc.indexOf("<DigichatBootLoader"),
-    );
-    expect(overlayBlock).toContain('background: "transparent"');
-    expect(overlayBlock).not.toContain('background: "var(--bg)"');
-
-    // The loader paints no background of its own (transparent by design); the
-    // scoped className stays so the shell can target it if it ever needs to.
-    expect(shellSrc).toContain('className="dc-embed-boot"');
+    expect(shellSrc).toContain('className="dc-chat-frame"');
+    expect(shellSrc).not.toContain("DigichatBootLoader");
 
     const cssPath = fileURLToPath(new URL("../app/globals.css", import.meta.url));
     const css = readFileSync(cssPath, "utf8");
+    expect(css).toContain(".dc-chat-frame");
+    expect(css).toContain("--chat-frame-canvas");
     expect(css).toContain("@digithings/ui/styles/digichat-boot-loader.css");
   });
 });

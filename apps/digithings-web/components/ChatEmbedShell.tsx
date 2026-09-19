@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { DigichatBootLoader } from "@digithings/ui";
+
 import { readAndClearHandoff } from "@/lib/chatHandoff";
 
 const READY = "digichat:ready";
@@ -127,11 +127,10 @@ export type ChatEmbedShellProps = {
  * pins first paint via `?theme=`, then posts `digichat:theme` on ready and on
  * live toggles so the iframe stays in sync without reload.
  *
- * Boot: shows `@digithings/ui` DigichatBootLoader (the composer-outline cube
- * field) on a transparent surface until `digichat:ready` plus the loader's
- * settle + typewriter sequence finish. The iframe stays transparent /
- * opacity-0 underneath so a white default document never flashes on the dark
- * digithings theme.
+ * Boot: the loader lives inside the iframe (digichat's own boot chain). The
+ * frame slot is painted from the first HTML by `.dc-chat-frame` in globals.css
+ * (`--chat-frame-canvas` per `[data-theme]`), so a white default document
+ * never flashes on the dark digithings theme.
  *
  * Ready failures: posts `digichat:parent-error` into the iframe for in-chat
  * terminal lines (no page banner). If the iframe never loads, shows the same
@@ -148,17 +147,28 @@ export function ChatEmbedShell({
   /** Only when iframe never loads — cannot deliver parent-error postMessage. */
   const [shellLoadError, setShellLoadError] = useState<string | null>(null);
   const [embedReady, setEmbedReady] = useState(false);
-  // The boot overlay crossfades out once digichat:ready lands AND the typed
-  // welcome/examples sequence has played, then unmounts (showBoot), so the
-  // copy always finishes before the real hero replaces it.
-  const [bootSettled, setBootSettled] = useState(false);
-  // Typing finished (the loader's settle callback). Fading at ready alone cut
-  // the typed welcome/examples off mid-word (datatap types during the load).
-  const [sequenceDone, setSequenceDone] = useState(false);
   // Defer iframe src until after mount so we can read the real parent theme
   // (themeInitScript already flipped data-theme) and avoid a wrong-mode flash.
-  const [src, setSrc] = useState("");
-  const [shellTheme, setShellTheme] = useState<EmbedShellTheme>("dark");
+  // Paint the iframe from the first HTML instead of waiting for the mount
+  // effect: a deferred src leaves the page showing its own background (the
+  // white flash) until hydration. The default theme is corrected by the mount
+  // effect right after, if the page runs another one.
+  const [src, setSrc] = useState(() => {
+    // During hydration the SSR iframe already exists - and the inline theme
+    // script may have rewritten its src (light -> dark). Adopt that value so
+    // React's first client render matches the DOM; a mismatch here means
+    // React never patches src again, which froze the embed on the old theme.
+    if (typeof document !== "undefined") {
+      const frames = [
+        ...document.querySelectorAll<HTMLIFrameElement>("#dc-digichat-frame"),
+      ];
+      const liveEl = frames.find((el) => el.closest("[hidden]") === null) ?? frames[0];
+      const live = liveEl?.getAttribute("src");
+      if (live) return live;
+    }
+    return parseOrigin(embedOrigin) ? embedSrc(embedOrigin, embedHost, "light") : "";
+  });
+  const [shellTheme, setShellTheme] = useState<EmbedShellTheme>("light");
   const targetOrigin = useMemo(() => parseOrigin(embedOrigin), [embedOrigin]);
   const configError = targetOrigin
     ? null
@@ -171,7 +181,14 @@ export function ChatEmbedShell({
     // Defer setState out of the synchronous effect body — react-hooks/set-state-in-effect.
     queueMicrotask(() => {
       setShellTheme(theme);
-      setSrc(embedSrc(embedOrigin, embedHost, theme));
+      // The inline script above already rewrote the theme param when the
+      // real theme is dark; only rebuild the src when the live attribute
+      // still disagrees (client-only mounts, embed target changes).
+      // Rebuilding just for the theme reloads the iframe and flashes.
+      const current = iframeRef.current?.getAttribute("src") ?? "";
+      if (!current.includes(`theme=${theme}`)) {
+        setSrc(embedSrc(embedOrigin, embedHost, theme));
+      }
     });
 
     const onThemeAttr = () => {
@@ -179,6 +196,11 @@ export function ChatEmbedShell({
       if (next === themeRef.current) return;
       themeRef.current = next;
       setShellTheme(next);
+      // Rebuild the embed URL for the new theme: the theme message alone left
+      // the app on the old palette (dark composer on a light page). When the
+      // URL is unchanged React skips the attribute write, so this cannot
+      // reload an already-correct iframe.
+      setSrc(embedSrc(embedOrigin, embedHost, next));
       if (!embedReadyRef.current) return;
       const win = iframeRef.current?.contentWindow;
       if (!win) return;
@@ -202,8 +224,6 @@ export function ChatEmbedShell({
     queueMicrotask(() => {
       setShellLoadError(null);
       setEmbedReady(false);
-      setBootSettled(false);
-      setSequenceDone(false);
     });
 
     function onMessage(ev: MessageEvent) {
@@ -251,15 +271,6 @@ export function ChatEmbedShell({
     };
   }, [targetOrigin]);
 
-  // Hold the overlay for the crossfade once ready AND the typed copy has
-  // played, then unmount it. A late ready keeps the overlay docked rather
-  // than revealing an unpainted iframe mid-sequence.
-  useEffect(() => {
-    if (!embedReady || !sequenceDone) return;
-    const t = window.setTimeout(() => setBootSettled(true), 360);
-    return () => window.clearTimeout(t);
-  }, [embedReady, sequenceDone]);
-
   if (configError) {
     return (
       <p className="dc-page" style={{ padding: "2rem" }}>
@@ -267,9 +278,6 @@ export function ChatEmbedShell({
       </p>
     );
   }
-
-  const showBoot = !shellLoadError && !bootSettled;
-  const overlayFaded = embedReady && sequenceDone;
 
   return (
     <div
@@ -295,19 +303,13 @@ export function ChatEmbedShell({
         // to this page's own breakpoints, not a copy of them maintained on
         // the other side of the iframe boundary.
         width: "100%",
-        maxWidth: "min(1280px, 90vw)",
-        marginInline: "auto",
-        // Symmetric with paddingBottom: the parent <main> no longer reserves
-        // --dq-nav-h up top (DtNav is autoHide="hover" now, overlaying rather
-        // than pushing content down), so without this the chat sat flush
-        // against the very top while keeping its bottom gap — lopsided.
-        paddingTop: "clamp(0.75rem, 2.5vw, 1.75rem)",
-        paddingBottom: "clamp(0.75rem, 2.5vw, 1.75rem)",
+        // Full-bleed: the chat fills the page area edge-to-edge (the DataTap
+        // layout), so the themed background reads as one solid surface.
         // Transparent, not var(--bg): the page's fixed .grain/.glow layers (site.css,
         // z-index 0) sit behind this shell, and an opaque fill here paints a visible
-        // rectangle over them. The boot overlay below is transparent for the same
-        // reason (see its own comment) -- the iframe's opacity:0 already hides any
-        // browser-default white pre-ready, so nothing here needs a solid fill.
+        // rectangle over them. The white-flash guard lives on the frame itself
+        // (`.dc-chat-frame` paints --chat-frame-canvas pre-paint) and inside the
+        // iframe's own boot, so nothing here needs a solid fill.
         background: "transparent",
         colorScheme: shellTheme,
       }}
@@ -329,67 +331,24 @@ export function ChatEmbedShell({
         </p>
       ) : null}
 
-      {showBoot ? (
-        <div
-          aria-busy={!overlayFaded}
-          aria-live="polite"
-          aria-hidden={overlayFaded}
-          style={{
-            position: "absolute",
-            inset: 0,
-            zIndex: 1,
-            opacity: overlayFaded ? 0 : 1,
-            // Crossfade only after the typed sequence has played AND the
-            // iframe is ready; fading at ready alone cut the typed copy off
-            // mid-word. Unmount happens via showBoot once the fade ran.
-            transition: "opacity 320ms ease",
-            pointerEvents: overlayFaded ? "none" : "auto",
-            // Transparent, not var(--bg) -- same reasoning as the shell div above.
-            // This used to fill solid on the (mistaken) assumption that it was the
-            // only thing standing between a pre-ready iframe and a flash of
-            // browser-default white, but the iframe's own opacity:0 (below) already
-            // does that job. A solid fill here just painted a flat, textureless
-            // rectangle over the page's .grain/.glow the whole time this was up,
-            // then popped to the real (transparent) background on ready -- visible
-            // as a "black box that disappears" once digichat loaded.
-            background: "transparent",
-          }}
-        >
-          <DigichatBootLoader
-            // Types the curated copy while the container wakes; the overlay
-            // above crossfades once ready + settled and unmounts on the fade.
-            // The same strings ride the iframe URL (embedSrc) so the ready
-            // hero matches what the loader typed.
-            welcome={EMBED_SHELL_COPY[embedHost]?.welcome}
-            // Live tenants carry no welcomeBody, so the ready hero has no body
-            // line; keep the loader silent on it too or the handoff swaps copy.
-            welcomeBody=""
-            suggestions={EMBED_SHELL_COPY[embedHost]?.suggestions}
-            ready={embedReady}
-            onSettled={() => setSequenceDone(true)}
-            // The loader paints straight onto the transparent overlay (no
-            // background of its own), so .grain/.glow keep showing through.
-            className="dc-embed-boot"
-          />
-        </div>
-      ) : null}
-
       {src && !shellLoadError ? (
         <iframe
           ref={iframeRef}
+          id="dc-digichat-frame"
           title="digichat"
           src={src}
+          className="dc-chat-frame"
           style={{
             flex: 1,
             width: "100%",
             border: 0,
             minHeight: 0,
             height: "100%",
-            // Transparent until ready — default iframe white never paints over --bg.
-            backgroundColor: "transparent",
-            colorScheme: shellTheme,
-            opacity: embedReady ? 1 : 0,
-            transition: "opacity 320ms ease",
+            // The in-app boot is the only loader now - the iframe stays
+            // visible from mount so nothing masks it. Its theme canvas and
+            // colour scheme live in globals.css (.dc-chat-frame, keyed on the
+            // root [data-theme]) - component state must never disagree with
+            // the page theme (dark page + light chat rectangle).
             position: "relative",
             zIndex: 0,
           }}
@@ -397,6 +356,19 @@ export function ChatEmbedShell({
           onLoad={() => {
             iframeLoadedRef.current = true;
             setShellLoadError(null);
+          }}
+        />
+      ) : null}
+
+      {src ? (
+        <script
+          // Pre-paint correction: the URL ships theme=light and the real
+          // theme is only knowable from the document (themeInitScript already
+          // ran). Rewrite the iframe's src before its document commits so dark
+          // readers never see the light frame. Inert after hydration.
+          dangerouslySetInnerHTML={{
+            __html:
+              "try{var t=document.documentElement.getAttribute('data-theme')==='light'?'light':'dark';if(t==='dark'){var f=document.getElementById('dc-digichat-frame');var s=f&&f.getAttribute('src');if(s&&s.indexOf('theme=light')>-1){f.setAttribute('src',s.replace('theme=light','theme=dark'));}}}catch(e){}",
           }}
         />
       ) : null}

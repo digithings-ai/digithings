@@ -49,12 +49,14 @@ import {
   type ImageMessagePartComponent,
   type ToolCallMessagePartComponent,
   useAuiState,
+  useThreadViewport,
 } from "@assistant-ui/react";
 import {
   createContext,
   useContext,
   useEffect,
   useRef,
+  useState,
   type ComponentPropsWithoutRef,
   type ComponentType,
   type FC,
@@ -65,6 +67,7 @@ import {
 import { ComposerTriggerPopover } from "./composer-trigger-popover.aui";
 import { MessageError } from "./message-error.aui";
 import { ComposerBlockCaret } from "./block-caret";
+import { TypedWelcomeCopy } from "./typed-welcome-copy";
 
 export type ThreadGroupPart = MessagePrimitive.GroupedParts.GroupPart;
 
@@ -369,6 +372,60 @@ const ThreadMessage: FC = () => {
 };
 
 const ThreadScrollToBottom: FC = () => {
+  const viewportEl = useThreadViewport((s) => s.element.viewport);
+  const [revealSettled, setRevealSettled] = useState(false);
+  const [scrolledAway, setScrolledAway] = useState(false);
+
+  // Arm only after the bottom-up entrance has finished - the button used to
+  // pop in mid-animation.
+  useEffect(() => {
+    const owner = viewportEl?.closest("[data-stock-product]");
+    if (!owner) {
+      setRevealSettled(true);
+      return;
+    }
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const arm = () => {
+      if (owner.getAttribute("data-boot-reveal") !== "true") return;
+      observer.disconnect();
+      timer = setTimeout(() => setRevealSettled(true), 950);
+    };
+    const observer = new MutationObserver(arm);
+    observer.observe(owner, {
+      attributes: true,
+      attributeFilter: ["data-boot-reveal"],
+    });
+    arm();
+    return () => {
+      observer.disconnect();
+      if (timer !== undefined) clearTimeout(timer);
+    };
+  }, [viewportEl]);
+
+  // Show only when history is actually out of view: the viewport must
+  // overflow AND sit more than a line away from the bottom. A scroll of a few
+  // pixels with everything still visible (e.g. after the entrance settle)
+  // must not surface it.
+  useEffect(() => {
+    if (!viewportEl) return;
+    const measure = () => {
+      const overflow = viewportEl.scrollHeight - viewportEl.clientHeight;
+      const distance =
+        viewportEl.scrollHeight - viewportEl.scrollTop - viewportEl.clientHeight;
+      setScrolledAway(overflow > 4 && distance > 24);
+    };
+    measure();
+    viewportEl.addEventListener("scroll", measure, { passive: true });
+    const ro = new ResizeObserver(measure);
+    ro.observe(viewportEl);
+    return () => {
+      viewportEl.removeEventListener("scroll", measure);
+      ro.disconnect();
+    };
+  }, [viewportEl]);
+
+  if (!revealSettled || !scrolledAway) return null;
+
   return (
     <ThreadPrimitive.ScrollToBottom asChild>
       <TooltipIconButton
@@ -392,11 +449,7 @@ const ThreadWelcome: FC = () => {
       <h1 className="aui-thread-welcome-message-inner fade-in slide-in-from-bottom-1 animate-in fill-mode-both text-2xl font-medium tracking-tight duration-200">
         {welcome}
       </h1>
-      {welcomeBody.map((line) => (
-        <p key={line} className="aui-thread-welcome-copy">
-          {line}
-        </p>
-      ))}
+      <TypedWelcomeCopy lines={welcomeBody} />
     </div>
   );
 };

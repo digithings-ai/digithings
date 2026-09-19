@@ -45,20 +45,37 @@
   text-align: center;
   font-size: 0.68rem;
   color: color-mix(in oklch, var(--muted-foreground) 55%, transparent);
+  /* No canvas of its own: the footer shares the app surface everywhere, and
+     sits above the boot overlay so the disclaimer is visible from the very
+     first frame (an anchor at the bottom of the page). */
+  background: transparent;
+  position: relative;
+  z-index: 60;
 }
 
-/* Only the digichat skin mirrors the chat canvas onto the strip: the credit
-   sits below the thread, outside its palette scope, so the shell carries
-   --term-bg (dark + light) and the strip paints it to read as one surface
-   with the transcript (no band edge, no hairline). Other skins keep the
-   transparent strip so a light embed never gets a near-black band. */
-.dc-embed-shell [data-thread-skin="digichat"] .dc-attribution {
-  background: var(--term-bg);
-}
+/* The credit strip is always transparent: canvas, composer and strip share
+   one background on every surface, so the footer can never read as a band -
+   in either theme, and before the wide flag lands. */
 
 .dc-attribution a {
   color: color-mix(in oklch, var(--muted-foreground) 75%, transparent);
   text-decoration: underline;
+}
+
+/* The boot overlay paints the theme surface while the chain runs; wide/page
+   embeds paint no canvas of their own (the host page shows through), so the
+   overlay stays transparent there. Keyed on :root[data-embed-wide="1"], a
+   pre-paint flag the embed route sets, so it holds before hydration. */
+:root[data-embed-wide="1"] .dboot-overlay {
+  background: transparent;
+}
+
+/* The settled thread keeps out of the way while the boot is on screen
+   (otherwise the chain types on top of the hero copy). The flag follows the
+   overlay's actual visibility, so an instant-ready load ships the thread
+   visible and never hides it. */
+[data-stock-product][data-boot-active="true"] > :not(.dboot-overlay) {
+  visibility: hidden;
 }
 
 .dc-inline-link {
