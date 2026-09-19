@@ -1,5 +1,15 @@
 # Changelog
 
+## [2.3.0](https://github.com/digithings-ai/digithings/compare/digichat-v2.2.0...digichat-v2.3.0) (2026-09-19)
+
+
+### Features
+
+* rebuild digithings.ai + digiquant.io from the design reference ([#4306](https://github.com/digithings-ai/digithings/issues/4306)) ([b1f1c72](https://github.com/digithings-ai/digithings/commit/b1f1c72ebcdb2aa895f3ff7b3f12aecd557fe938))
+* **ui:** kit-level pointer cursors, guard enforcement ([#4306](https://github.com/digithings-ai/digithings/issues/4306)) ([b007747](https://github.com/digithings-ai/digithings/commit/b0077474577c4d8be6189891a1e1dc8a680163a8))
+* **ui:** logical properties and RTL support, canon proof route ([#4306](https://github.com/digithings-ai/digithings/issues/4306)) ([2b2a1c5](https://github.com/digithings-ai/digithings/commit/2b2a1c56ce4b9a2c91da5bc5c9e68c060e6cd9e7))
+* **ui:** promote slider, empty-state, skeleton, radio-group, field, icon-button, segmented-control into the kit ([#4306](https://github.com/digithings-ai/digithings/issues/4306)) ([371939b](https://github.com/digithings-ai/digithings/commit/371939bd0734d0f612afbdb64105547242c88d62))
+
 ## [2.2.0](https://github.com/digithings-ai/digithings/compare/digichat-v2.1.0...digichat-v2.2.0) (2026-09-16)
 
 
