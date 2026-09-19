@@ -40,6 +40,39 @@
 
 ---
 
+## 🧩 US Equities — Sector Sub-Industry ETFs
+
+> Counterparts to the SPDR Select primaries above. `config/sectors.yaml` names
+> these alongside each sector's primary ETF, and triage reads every ticker in
+> those lists — so a ticker missing here has no sealed price generation and its
+> price-delta signal is permanently absent (#4167).
+
+| ETF | Description | Category |
+|-----|-------------|----------|
+| SOXX | iShares Semiconductor ETF | equity_sector_sub |
+| IBB | iShares Biotechnology ETF | equity_sector_sub |
+| XBI | SPDR S&P Biotech ETF (equal-weight) | equity_sector_sub |
+| IHI | iShares U.S. Medical Devices ETF | equity_sector_sub |
+| XOP | SPDR S&P Oil & Gas Exploration & Production ETF | equity_sector_sub |
+| OIH | VanEck Oil Services ETF | equity_sector_sub |
+| KBE | SPDR S&P Bank ETF | equity_sector_sub |
+| KRE | SPDR S&P Regional Banking ETF | equity_sector_sub |
+| IAI | iShares U.S. Broker-Dealers & Securities Exchanges ETF | equity_sector_sub |
+| XRT | SPDR S&P Retail ETF | equity_sector_sub |
+| ITB | iShares U.S. Home Construction ETF | equity_sector_sub |
+| KXI | iShares Global Consumer Staples ETF | equity_sector_sub |
+| ITA | iShares U.S. Aerospace & Defense ETF | equity_sector_sub |
+| IYT | iShares U.S. Transportation ETF | equity_sector_sub |
+| PAVE | Global X U.S. Infrastructure Development ETF | equity_sector_sub |
+| COPX | Global X Copper Miners ETF | equity_sector_sub |
+| LIT | Global X Lithium & Battery Tech ETF | equity_sector_sub |
+| VNQ | Vanguard Real Estate ETF | equity_sector_sub |
+| IYR | iShares U.S. Real Estate ETF | equity_sector_sub |
+| REZ | iShares Residential & Multisector Real Estate ETF | equity_sector_sub |
+| GDX | VanEck Gold Miners ETF | commodity_gold_miners |
+
+---
+
 ## 🌐 International — Developed Markets
 
 | ETF | Description | Category |
