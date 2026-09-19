@@ -421,20 +421,23 @@ function ToolChainRow({
   detail,
   durationMs,
   done,
+  shown = true,
   failed = false,
 }: {
   label: string;
   detail?: string;
   durationMs: number;
   done: boolean;
+  shown?: boolean;
   failed?: boolean;
 }) {
-  const liveMs = useLiveMs(!done && !failed);
+  const liveMs = useLiveMs(shown && !done && !failed);
   const ms = done ? durationMs : liveMs;
   return (
     <div
       className="aui-tool-fallback-trigger group/trigger text-muted-foreground flex w-full items-center gap-2 py-1.5 text-sm"
       data-slot="tool-fallback-trigger"
+      data-visible={shown ? "true" : "false"}
     >
       <DotMatrix
         state={failed ? "error" : done ? "success" : "tool"}
@@ -570,7 +573,6 @@ function ToolChain({
   useEffect(() => {
     if (chainDone) onDone();
   }, [chainDone, onDone]);
-  const visible = firstPending === -1 ? rows.length : firstPending + 1;
   // The last row waits on the real ready edge - that is the honest "connect"
   // beat; a failed boot leaves its X up instead of settling.
   const completedMs =
@@ -582,12 +584,17 @@ function ToolChain({
       {showReasoning ? (
         <ReasoningRow active={!chainDone && !failed} durationMs={completedMs} />
       ) : null}
-      {rows.slice(0, visible).map((row, index) => {
+      {rows.map((row, index) => {
         const done = doneAt[index] != null;
         const start =
           index === 0
             ? mountClock.current
             : doneAt[index - 1] ?? mountClock.current;
+        // Every row mounts with the chain; unseen rows only hide their paint
+        // (visibility), so the block keeps its final height from the first
+        // frame and new steps appear below the last one without nudging the
+        // rows above.
+        const shown = firstPending === -1 || index <= firstPending;
         return (
           <ToolChainRow
             key={row.label}
@@ -595,6 +602,7 @@ function ToolChain({
             detail={row.detail}
             durationMs={done ? doneAt[index]! - start : 0}
             done={done}
+            shown={shown}
             failed={
               failed &&
               index === (firstPending === -1 ? rows.length - 1 : firstPending)

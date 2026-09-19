@@ -22,6 +22,28 @@ export function hasDigichatReady(): boolean {
 }
 
 /**
+ * Same-window signal that the boot overlay has left the stage (it starts
+ * fading). Surfaces that hold their choreography until the handoff - e.g. the
+ * welcome typewriter in "takeover" handoff mode - listen for it.
+ */
+export const DIGI_CHAT_REVEALED_EVENT = "digichat:boot-revealed";
+
+/** Mark the boot handoff as started for this document (idempotent). */
+export function signalDigichatRevealed(): void {
+  if (typeof document === "undefined") return;
+  document.documentElement.dataset.digichatRevealed = "1";
+  window.dispatchEvent(new Event(DIGI_CHAT_REVEALED_EVENT));
+}
+
+/** Whether the boot handoff already started in this document. */
+export function hasDigichatRevealed(): boolean {
+  return (
+    typeof document !== "undefined" &&
+    document.documentElement.dataset.digichatRevealed === "1"
+  );
+}
+
+/**
  * Boot-step channel: the app reports real milestones as they happen
  * (deployment configuration applied, chat runtime up) so the boot animation
  * can complete its rows against the actual boot instead of a fixed timeline.
@@ -52,4 +74,46 @@ export function digichatBootSteps(): readonly string[] {
 /** Milliseconds since this document started loading (boot clock). */
 export function digichatBootClockMs(): number {
   return typeof performance === "undefined" ? 0 : performance.now();
+}
+
+/**
+ * Lab switch: `?handoff=` picks how the boot hands off to the chat.
+ * Comma-separated: `reveal` (re-run the hero entrance), `type` (welcome
+ * takeover), `drift` (motion match), `beat` (pause before the fade).
+ */
+export type DigichatHandoff = {
+  reveal: boolean;
+  type: boolean;
+  drift: boolean;
+  beat: boolean;
+};
+
+/**
+ * Parse the `?handoff=` lab switch. The reveal hand-off ships by default;
+ * `?handoff=none` (or `off`) restores the hard cut, and any other comma list
+ * opts into exactly those modes.
+ */
+export function resolveHandoff(): DigichatHandoff {
+  const off: DigichatHandoff = {
+    reveal: false,
+    type: false,
+    drift: false,
+    beat: false,
+  };
+  if (typeof window === "undefined") return off;
+  const raw = new URLSearchParams(window.location.search).get("handoff");
+  if (raw === null) return { ...off, reveal: true };
+  const modes = new Set(
+    raw
+      .split(",")
+      .map((mode) => mode.trim())
+      .filter(Boolean),
+  );
+  if (modes.has("none") || modes.has("off")) return off;
+  return {
+    reveal: modes.has("reveal"),
+    type: modes.has("type"),
+    drift: modes.has("drift"),
+    beat: modes.has("beat"),
+  };
 }

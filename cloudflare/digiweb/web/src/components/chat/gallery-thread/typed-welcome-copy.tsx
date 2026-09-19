@@ -2,7 +2,13 @@
 
 import { useEffect, useLayoutEffect, useState } from "react";
 
-import { DIGI_CHAT_READY_EVENT, hasDigichatReady } from "../boot-signal";
+import {
+  DIGI_CHAT_READY_EVENT,
+  DIGI_CHAT_REVEALED_EVENT,
+  hasDigichatReady,
+  hasDigichatRevealed,
+  resolveHandoff,
+} from "../boot-signal";
 
 /** ms per character for the welcome body typewriter. */
 const TYPE_MS = 18;
@@ -10,6 +16,8 @@ const TYPE_MS = 18;
 const LINE_PAUSE_MS = 260;
 /** Fallback when no boot loader ever signals (surfaces without a boot). */
 const READY_FALLBACK_MS = 3000;
+/** Fallback when the boot overlay never reports its handoff. */
+const REVEALED_FALLBACK_MS = 4000;
 
 type Reveal = { line: number; chars: number } | null;
 
@@ -59,7 +67,10 @@ export function TypedWelcomeCopy({ lines }: { lines: readonly string[] }) {
     const bootVisible = [
       ...document.querySelectorAll("[data-digichat-boot]"),
     ].some((element) => element.closest("[hidden]") === null);
-    if (bootVisible) {
+    // Handoff switch: with `?handoff=type` the hero does not settle under the
+    // boot; the typewriter takes over the moment the overlay leaves.
+    const handoff = resolveHandoff();
+    if (bootVisible && !handoff.type) {
       setReveal(null);
       return;
     }
@@ -101,21 +112,34 @@ export function TypedWelcomeCopy({ lines }: { lines: readonly string[] }) {
 
     // The typewriter waits for the boot's painted signal so the type is not
     // spent behind a host overlay; standalone surfaces (and older builds)
-    // start now, or after the fallback when no signal ever arrives.
+    // start now, or after the fallback when no signal ever arrives. In
+    // takeover mode the boot types nothing, so the type waits for the
+    // handoff (the overlay leaving the stage) instead of the ready signal.
     let onReady: (() => void) | undefined;
+    let onReadyEvent: string | undefined;
     let fallback: ReturnType<typeof setTimeout> | undefined;
-    if (window.parent === window || hasDigichatReady()) {
+    if (bootVisible) {
+      if (hasDigichatRevealed()) {
+        start();
+      } else {
+        onReady = () => start();
+        onReadyEvent = DIGI_CHAT_REVEALED_EVENT;
+        window.addEventListener(onReadyEvent, onReady, { once: true });
+        fallback = setTimeout(start, REVEALED_FALLBACK_MS);
+      }
+    } else if (window.parent === window || hasDigichatReady()) {
       start();
     } else {
       onReady = () => start();
-      window.addEventListener(DIGI_CHAT_READY_EVENT, onReady, { once: true });
+      onReadyEvent = DIGI_CHAT_READY_EVENT;
+      window.addEventListener(onReadyEvent, onReady, { once: true });
       fallback = setTimeout(start, READY_FALLBACK_MS);
     }
 
     return () => {
       cancelled = true;
       if (timer !== undefined) clearTimeout(timer);
-      if (onReady) window.removeEventListener(DIGI_CHAT_READY_EVENT, onReady);
+      if (onReady && onReadyEvent) window.removeEventListener(onReadyEvent, onReady);
       if (fallback !== undefined) clearTimeout(fallback);
     };
   }, [content]);

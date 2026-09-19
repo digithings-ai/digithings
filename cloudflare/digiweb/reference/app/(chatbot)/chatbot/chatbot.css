@@ -1602,3 +1602,78 @@ html:has(.aui-theme-stage) :focus-visible {
   background-color: transparent;
   color: var(--ink);
 }
+
+/* Boot handoff choreography. The stock product flips these attributes when
+   the boot starts handing off (`?handoff=` lab switch) so the chat re-enters
+   on the same beat instead of cutting in statically behind the overlay. */
+@keyframes dboot-handoff-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes dboot-handoff-drift {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+[data-stock-product][data-boot-reveal="true"] .aui-thread-welcome-message-inner {
+  animation: dboot-handoff-in 320ms cubic-bezier(0.2, 0.7, 0.3, 1) both;
+}
+
+[data-stock-product][data-boot-reveal="true"] .aui-thread-welcome-copy {
+  animation: dboot-handoff-in 320ms cubic-bezier(0.2, 0.7, 0.3, 1) both;
+  animation-delay: 70ms;
+}
+
+[data-stock-product][data-boot-reveal="true"] .aui-thread-welcome-suggestion {
+  animation: dboot-handoff-in 320ms cubic-bezier(0.2, 0.7, 0.3, 1) both;
+}
+
+[data-stock-product][data-boot-reveal="true"] .aui-thread-welcome-suggestion:nth-child(2) {
+  animation-delay: 60ms;
+}
+
+[data-stock-product][data-boot-reveal="true"] .aui-thread-welcome-suggestion:nth-child(3) {
+  animation-delay: 120ms;
+}
+
+[data-stock-product][data-boot-reveal="true"] .aui-thread-welcome-suggestion:nth-child(4) {
+  animation-delay: 180ms;
+}
+
+[data-stock-product][data-boot-reveal="true"] .aui-thread-welcome-suggestion:nth-child(5) {
+  animation-delay: 240ms;
+}
+
+[data-stock-product][data-boot-reveal="true"] .aui-composer-root {
+  animation: dboot-handoff-in 320ms cubic-bezier(0.2, 0.7, 0.3, 1) both;
+  animation-delay: 140ms;
+}
+
+[data-stock-product][data-boot-drift="true"] .aui-thread-empty,
+[data-stock-product][data-boot-drift="true"] .aui-composer-root {
+  animation: dboot-handoff-drift 380ms cubic-bezier(0.2, 0.7, 0.3, 1) both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  [data-stock-product][data-boot-reveal="true"] .aui-thread-welcome-message-inner,
+  [data-stock-product][data-boot-reveal="true"] .aui-thread-welcome-copy,
+  [data-stock-product][data-boot-reveal="true"] .aui-thread-welcome-suggestion,
+  [data-stock-product][data-boot-reveal="true"] .aui-composer-root,
+  [data-stock-product][data-boot-drift="true"] .aui-thread-empty,
+  [data-stock-product][data-boot-drift="true"] .aui-composer-root {
+    animation: none;
+  }
+}

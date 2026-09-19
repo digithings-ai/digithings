@@ -405,3 +405,21 @@
   gap: 2px;
   text-align: left;
 }
+
+/* Handoff switch: `drift` lifts the overlay as it fades so the swap reads as
+   one motion with the chat entering underneath. */
+.dboot-overlay[data-drift="true"] {
+  transition:
+    opacity 0.32s ease,
+    transform 0.32s ease;
+}
+
+.dboot-overlay[data-drift="true"][data-done="true"] {
+  transform: translateY(-6px);
+}
+
+/* Unseen chain rows reserve their space from the first frame so the block
+   never re-centers: new steps appear below the last one and nothing moves. */
+.dboot-lab-tools [data-visible="false"] {
+  visibility: hidden;
+}

@@ -36,7 +36,12 @@ import {
   type BootLabVariant,
 } from "@digithings/web/chat/boot-lab";
 import { DigichatBootLoader } from "@digithings/web/chat/boot-loader";
-import { signalDigichatBootStep } from "@digithings/web/chat/boot-signal";
+import {
+  resolveHandoff,
+  signalDigichatBootStep,
+  signalDigichatRevealed,
+  type DigichatHandoff,
+} from "@digithings/web/chat/boot-signal";
 import type { DigichatClientConfig, DigichatClientFeatures } from "@/lib/deploy-config";
 import { DEFAULT_CLIENT_CONFIG } from "@/lib/deploy-config";
 import {
@@ -225,6 +230,17 @@ export function ProductStockShell({
     resolveBootLabVariant(bootLabVariant ?? null) ?? "tooltask",
   );
 
+  // Transition lab switch: `?handoff=` picks how the boot hands off to the
+  // chat (reveal / type / drift / beat). Resolved after mount so the SSR
+  // markup never depends on the URL.
+  const [handoff, setHandoff] = useState<DigichatHandoff | null>(null);
+
+  // Handoff demos must show the real crossfade (the lab boot ordinarily skips
+  // the fade with data-instant + an instant unmount).
+  const handoffLive = Boolean(
+    handoff && (handoff.reveal || handoff.type || handoff.drift || handoff.beat),
+  );
+
   useEffect(() => {
     const timer = setTimeout(() => setBootReady(true), BOOT_MIN_MS);
     return () => clearTimeout(timer);
@@ -234,10 +250,10 @@ export function ProductStockShell({
     if (!bootDone) return;
     const timer = setTimeout(
       () => setBootHidden(true),
-      bootVariant ? 0 : BOOT_FADE_MS,
+      bootVariant && !handoffLive ? 0 : BOOT_FADE_MS,
     );
     return () => clearTimeout(timer);
-  }, [bootDone, bootVariant]);
+  }, [bootDone, bootVariant, handoffLive]);
 
   // Boot-lab switch: `?boot=<variant>` swaps the classic choreography for a
   // short alternate (local iteration only; unknown values keep classic).
@@ -248,6 +264,21 @@ export function ProductStockShell({
     if (bootLabVariant != null) return;
     setBootVariant(resolveBootLabVariant() ?? "tooltask");
   }, [bootLabVariant]);
+
+  // Handoff reveal state: the overlay fade flips it for the hero choreography.
+  const [bootRevealed, setBootRevealed] = useState(false);
+
+  useEffect(() => {
+    setHandoff(resolveHandoff());
+  }, []);
+
+  // The overlay starts fading: release the handoff choreography (hero
+  // re-entry, welcome takeover) and let listeners know.
+  useEffect(() => {
+    if (!bootDone) return;
+    signalDigichatRevealed();
+    setBootRevealed(true);
+  }, [bootDone]);
 
   // Real boot milestone: the product shell mounted with its chat runtime.
   useEffect(() => {
@@ -343,6 +374,16 @@ export function ProductStockShell({
       } as const)
     : undefined;
 
+  // Beat handoff: hold the settled frame (the final check) a beat longer
+  // before the fade starts.
+  const onBootSettled = () => {
+    if (handoff?.beat) {
+      setTimeout(() => setBootDone(true), 220);
+      return;
+    }
+    setBootDone(true);
+  };
+
   return (
     <AssistantRuntimeProvider runtime={runtime} config={auiConfig}>
       <RuntimeAdapterProvider
@@ -371,6 +412,8 @@ export function ProductStockShell({
               data-tool-calls={toolCallsMode}
               data-user-align={deployUi.userAlign}
               data-theme={cfg.chrome.theme}
+              data-boot-reveal={bootRevealed && handoff?.reveal ? "true" : "false"}
+              data-boot-drift={bootRevealed && handoff?.drift ? "true" : "false"}
               className={cn(
                 "relative flex h-full min-h-0 flex-1",
                 sideSlot && !ownsPage ? "flex-row" : "flex-col",
@@ -383,20 +426,21 @@ export function ProductStockShell({
                 <div
                   className="dboot-overlay bg-background"
                   data-done={bootDone ? "true" : "false"}
-                  data-instant={bootVariant ? "true" : "false"}
+                  data-instant={bootVariant && !handoffLive ? "true" : "false"}
+                  data-drift={handoff?.drift ? "true" : "false"}
                 >
                   {bootVariant ? (
                     <BootLabOverlay
                       variant={bootVariant}
                       ready={bootReady}
-                      onSettled={() => setBootDone(true)}
+                      onSettled={onBootSettled}
                       accent={cfg.chrome.accent?.color}
                       facts={bootFacts}
                     />
                   ) : (
                     <DigichatBootLoader
                       ready={bootReady}
-                      onSettled={() => setBootDone(true)}
+                      onSettled={onBootSettled}
                       welcome={headline}
                       welcomeBody={(skinChrome.welcomeBody ?? []).join(" ")}
                       suggestions={chips}
