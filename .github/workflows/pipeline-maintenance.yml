@@ -1,4 +1,4 @@
-# Production clock: Cloudflare Worker digithings-cron (cloudflare/digithings-cron). Schedule removed #3579.
+# Production clock: Cloudflare Worker digithings-cron (apps/digithings-cron). Schedule removed #3579.
 name: "Pipeline: scheduled maintenance"
 
 # Weekly maintenance sweep: security scan, quality check, stale branch cleanup,
@@ -255,6 +255,72 @@ jobs:
           ## Acceptance Criteria
           - [ ] \`make doc-check\` exits 0
           - [ ] No links removed that should be kept (prefer fixing paths over removal)")
+          echo "Created: $URL"
+          # Best-effort board placement: never fail the step over it. Written as
+          # if/then rather than `A && B || true`, where the `|| true` covers both
+          # "PROJ unset" and "item-add failed" and reads like an else (SC2015).
+          if [[ -n "${PROJ:-}" ]]; then
+            gh project item-add "$PROJ" --owner digithings-ai --url "$URL" >/dev/null 2>&1 || true
+          fi
+
+  # ── 3b. ADR numbering audit ────────────────────────────────────────────────────
+  # docs/adr/NNNN-*.md must be zero-padded, unique and gap-free. The PR gate
+  # (ci-docs.yml) catches this at review time; this weekly job files the tracker
+  # when an ADR lands out-of-band (e.g. a direct push) (#3524).
+  adr-numbering:
+    name: ADR numbering audit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Audit ADR numbering
+        id: adr
+        run: |
+          set +e
+          OUTPUT=$(python3 scripts/check_adr_numbering.py 2>&1)
+          EXIT=$?
+          {
+            echo "exit_code=$EXIT"
+            echo "output<<EOF"
+            echo "$OUTPUT"
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Create issue if numbering violation
+        if: steps.adr.outputs.exit_code != '0'
+        env:
+          GH_TOKEN: ${{ secrets.DIGITHINGS_PROJECT_TOKEN }}
+          REPO: ${{ github.repository }}
+          OUTPUT: ${{ steps.adr.outputs.output }}
+          PROJ: ${{ vars.DIGI_MAINTENANCE_PROJECT_NUMBER }}
+        run: |
+          TITLE="[housekeeping] ADR numbering violation — $(date +%Y-%m-%d)"
+          EXISTING=$(gh issue list --repo "$REPO" --state open \
+            --search "ADR numbering violation in:title" --json number --jq '.[0].number' 2>/dev/null || echo "")
+          [[ -n "$EXISTING" ]] && { echo "Issue #$EXISTING already open — skipping."; exit 0; }
+
+          URL=$(gh issue create --repo "$REPO" \
+            --title "$TITLE" \
+            --label "agent-task,component:root,priority:low" \
+            --body "## ADR numbering violation
+
+          \`python3 scripts/check_adr_numbering.py\` found a problem in \`docs/adr/\`.
+
+          ## Task
+          1. Run \`python3 scripts/check_adr_numbering.py\` to see the full list
+          2. Renumber/rename the offending file to the next free number, or record
+             a deliberate gap in \`ALLOWED_GAPS\` in the script with a reason
+          3. Update any inbound links to the renamed file
+          4. Open a PR with the fix
+
+          ## Output
+          \`\`\`
+          ${OUTPUT:0:2000}
+          \`\`\`
+
+          ## Acceptance Criteria
+          - [ ] \`python3 scripts/check_adr_numbering.py\` exits 0
+          - [ ] No ADR content changed — numbering only")
           echo "Created: $URL"
           # Best-effort board placement: never fail the step over it. Written as
           # if/then rather than `A && B || true`, where the `|| true` covers both

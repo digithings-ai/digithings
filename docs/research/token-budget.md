@@ -4,7 +4,7 @@
 
 > **⚠️ Current routing: house Cheaper Inference, CI-mapped pins per tier.**
 > `config/digiquant_models.yaml` pins a model per capability tier;
-> `OLYMPUS_MODEL_TIER` (`cheap` default / `balanced` / `quality`) selects the
+> `DIGIQUANT_MODEL_TIER` (`cheap` default / `balanced` / `quality`) selects the
 > pinned set, and `apply_digiquant_house_env()` (portfolio chain startup) points
 > the default client at the house upstream. Every LLM call goes through the
 > house key; the web grounding pre-pass is tool-only (first-party digisearch
@@ -220,7 +220,7 @@ Research phases run a **tool loop** so the model fetches real data on demand ins
 
 - **digiquant data tools** (`get_price_technicals` / `get_macro_series`): each tool call is a Supabase read + an extra LLM round-trip carrying the tool result. Bounded by `max_tool_rounds` (default 5). Cost scales with how many symbols/series a phase queries; the prompts name a finite set per phase.
 - **Web grounding (completion synthesis)**: a single read-only **pre-pass** per `live_search` phase — a plain digillm completion over in-house retrieval context (no vendor search tooling), one extra call before the phase's normal completion (not per tool-round). Gated to phases that need soft signals (macro + all alt-/inst- + international).
-- **Kill-switch**: set `ATLAS_DATA_TOOLS=0` to disable all tool grounding (falls back to the tool-less structured call) for cost-controlled or offline runs.
+- **Kill-switch**: set `DIGIQUANT_RESEARCH_DATA_TOOLS=0` to disable all tool grounding (falls back to the tool-less structured call) for cost-controlled or offline runs.
 
 ---
 

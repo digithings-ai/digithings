@@ -47,7 +47,7 @@ After filing, edit each issue to add `Parent: #E` (or use the epic checklist to 
 | T4 | Overlay pipeline runs | `component:digiquant` | `module/digiquant` | high | claude | sonnet | no (budget-guarded) |
 | T5 | Tier-gated UI | (dashboard UI) | `develop` | med | cursor | sonnet | no |
 
-Dashboard UI WPs (T1/T3/T5) are one-hop to `develop` (no module tier — `cloudflare/dashboard` routes
+Dashboard UI WPs (T1/T3/T5) are one-hop to `develop` (no module tier — `apps/dashboard` routes
 per `docs/agents/COMPONENT_ROUTING.md`); use a `cursor/<slug>` or `task/<N>-<slug>` branch off
 `origin/develop`. digiquant WPs use `make task ISSUE=N` (module branches were synced 2026-08-29,
 PRs #3083–#3090).
@@ -91,7 +91,7 @@ tier matrix, models semantics (provider BYOK v0). Gap artifact:
 | K1 tests (integration marker only) | Alpaca paper API keys | missing — unit tests use mocks, so K1 can merge without |
 | K2 (manual verify only) | IBKR paper username / self-service OAuth creds | missing — mocked unit tests suffice to merge |
 | K3/T2 deploy | `DIGIQUANT_VAULT_MASTER_KEY`, Stripe test keys + price ids, webhook secret | missing |
-| K5 deploy | Working Mailgun API key + domain | MCP key currently failing auth |
+| K5 deploy | Working Cloudflare Email Sending token + account id | token not yet created |
 | T1 deploy | Google + GitHub OAuth apps in Supabase Auth (`core` project) | not configured |
 | Product launch | Alpaca Connect app review; IBKR OAuth 1.0a vendor onboarding | not started — long poles |
 

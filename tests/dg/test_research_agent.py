@@ -369,7 +369,7 @@ class TestRunResearchAgent:
         ``finalize()`` delivers it. If the ``finally`` did not span the tool-loop call, an
         exception out of ``execute_tool`` would discard that record while its physical attempt
         row survives — an attempt whose ``call_id`` has no logical row, which migration 067's
-        ``fk_olympus_provider_attempts_call`` will reject once the writer lands.
+        ``fk_provider_attempts_call`` will reject once the writer lands.
 
         The tool must raise something outside digillm's ``run_tools`` recoverable-error tuple
         (``RuntimeError``/``OSError``/``ValueError``/``TypeError``/``KeyError`` — see
@@ -598,7 +598,7 @@ class TestRunResearchAgent:
         assert mock.call_count == 2
 
     def test_max_tool_rounds_forwarded_to_tool_loop(self) -> None:
-        """Olympus threads OLYMPUS_MAX_TOOL_ROUNDS (24) into run_tools (#3299)."""
+        """Olympus threads DIGIQUANT_MAX_TOOL_ROUNDS (24) into run_tools (#3299)."""
         payload = json.dumps({"regime": "grounded", "confidence": 0.7})
         tools = [
             {

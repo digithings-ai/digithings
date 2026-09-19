@@ -529,7 +529,7 @@ services:
       # Repo-root context: digichat is an npm workspace member; its lockfile and
       # the private @digithings/design package only exist at the root (#675).
       context: .
-      dockerfile: cloudflare/digichat/Dockerfile
+      dockerfile: apps/digichat/Dockerfile
     image: digi-digichat:latest
     container_name: digi-digichat
     profiles:
@@ -543,7 +543,7 @@ services:
       - NODE_ENV=production
       # Deny-by-default. Set AUTH_TRUST_HOST=true in .env ONLY when digichat is
       # behind a trusted reverse proxy that sets X-Forwarded-Host; always pin
-      # AUTH_URL to the public origin as well (see cloudflare/digichat/ARCHITECTURE.md §6).
+      # AUTH_URL to the public origin as well (see apps/digichat/ARCHITECTURE.md §6).
       - AUTH_TRUST_HOST=${AUTH_TRUST_HOST:-false}
       # Required: no predictable fallback. Local dev gets a placeholder from
       # .env.example; production must generate one: openssl rand -base64 32

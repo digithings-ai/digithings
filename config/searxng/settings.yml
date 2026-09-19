@@ -9,6 +9,21 @@ use_default_settings:
       - bing
       - mojeek
 
+# `bing` and `mojeek` ship `disabled: true` in searxng's own searx/settings.yml
+# at the pinned commit (SEARXNG_COMMIT in Dockerfile.digithings-stack-cloudflare).
+# `use_default_settings.engines.keep_only` only *filters* the engine list; it
+# does not flip that flag (searx/settings_loader.py:update_settings applies a
+# plain `filter`). So without this override the in-stack searxng could only use
+# duckduckgo + wikipedia — and duckduckgo 403s the container. An explicit
+# `engines:` entry merges over the default definition (update_settings ->
+# update_dict) and clears `disabled`, which is what actually enables the engine.
+# duckduckgo/wikipedia stay untouched (enabled by default).
+engines:
+  - name: bing
+    disabled: false
+  - name: mojeek
+    disabled: false
+
 general:
   instance_name: "digi searxng"
 

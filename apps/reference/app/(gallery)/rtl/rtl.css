@@ -1,0 +1,72 @@
+/* Reference family dress, in the `components` layer so kit Tailwind
+   utilities (in `utilities`) win on a tie — the app-rebuild rule in
+   packages/ui/MIGRATION.md. Deliberate utility-beating overrides, if any,
+   stay unlayered and say so inline. */
+@layer components {
+/* ==========================================================================
+   rtl.css — layout helpers for the RTL proof route (/rtl).
+   Logical properties only: every rule here is a no-op in LTR and mirrors under
+   dir="rtl". Kit dress lives in the kit; this is route-local scaffolding.
+   ========================================================================== */
+
+.rtl-proof {
+  display: flex;
+  flex-direction: column;
+  gap: 2.5rem;
+}
+
+/* two-column / pinned layout proof — a sticky row-header column that pins to
+   the inline-start edge (left in LTR, right in RTL) over a scrollable body. */
+.rtl-pinned {
+  overflow-x: auto;
+  border: 1px solid var(--hair);
+}
+
+.rtl-pinned table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.rtl-pinned th,
+.rtl-pinned td {
+  padding: 0.5rem 0.75rem;
+  white-space: nowrap;
+  border-bottom: 1px solid var(--hair);
+}
+
+.rtl-pinned .rtl-pin {
+  position: sticky;
+  inset-inline-start: 0;
+  background: var(--surface);
+}
+
+.rtl-pinned tbody tr:last-child th,
+.rtl-pinned tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.rtl-two-col {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 1rem;
+}
+
+@media (max-width: 48rem) {
+  .rtl-two-col {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+.rtl-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr));
+  gap: 0.75rem;
+}
+
+.rtl-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+  align-items: center;
+}
+}

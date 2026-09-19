@@ -29,7 +29,7 @@ from digiquant.dashboard.research_retrieval.models import (
 from digiquant.dashboard.research_retrieval.store import EvidenceBundleStore
 from digiquant.portfolio.models.forecast import ForecastTerms
 
-OLYMPUS_EVIDENCE_BUNDLE_WRITER_ENV = "OLYMPUS_EVIDENCE_BUNDLE_WRITER"
+DIGIQUANT_EVIDENCE_BUNDLE_WRITER_ENV = "DIGIQUANT_EVIDENCE_BUNDLE_WRITER"
 _H5_BASE_SOURCE = "h5:base"
 # source / authority columns are CHECK (length BETWEEN 1 AND 500) in WP11/WP12 stores.
 _SOURCE_MAX_LEN = 500
@@ -375,7 +375,7 @@ def resolve_h5_state_version_id(
 
 
 __all__ = [
-    "OLYMPUS_EVIDENCE_BUNDLE_WRITER_ENV",
+    "DIGIQUANT_EVIDENCE_BUNDLE_WRITER_ENV",
     "EvidenceConflict",
     "H5EvidenceBundleBuild",
     "H5EvidenceFact",

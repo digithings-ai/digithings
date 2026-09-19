@@ -4,8 +4,12 @@
 # docs/projects/digithings-guide/indexes/docs.yaml.
 #
 # Dry-run always runs (resolves globs, parses + chunks in-process via the
-# digisearch stub backend). The apply step calls the digisearch HTTP API and
-# is skipped when DIGISEARCH_URL is not set (e.g. forks, no secret configured).
+# digisearch stub backend). There is no apply step here: `ingest_live` posts an
+# absolute filesystem path and sends no auth header, so it only works when
+# digisearch shares the host (local stack / Cursor Cloud). Run it by hand there —
+# `DIGISEARCH_URL=http://127.0.0.1:8002 python scripts/reindex_digithings_guide.py
+# --apply` (see the script docstring). Hosted `search.digithings.ai` is JWT-gated
+# and cannot read this runner's filesystem. Removed in #4357.
 name: "Docs: reindex guide"
 
 on:
@@ -79,9 +83,3 @@ jobs:
         env:
           DIGISEARCH_ALLOW_STUB: "1"
         run: uv run --frozen --no-sync python scripts/reindex_digithings_guide.py
-
-      - name: Reindex (apply — posts to digisearch HTTP API)
-        if: env.DIGISEARCH_URL != ''
-        env:
-          DIGISEARCH_URL: ${{ secrets.DIGISEARCH_URL }}
-        run: uv run --frozen --no-sync python scripts/reindex_digithings_guide.py --apply

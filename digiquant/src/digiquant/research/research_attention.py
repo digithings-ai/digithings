@@ -2,7 +2,7 @@
 
 Invokes :func:`plan_research_attention` after triage and branches early in
 provider-owning nodes. ``off`` / ``shadow`` / ``enforce`` via
-``OLYMPUS_RESEARCH_ATTENTION_MODE``. Not a graph node; no provider call to decide.
+``DIGIQUANT_RESEARCH_ATTENTION_MODE``. Not a graph node; no provider call to decide.
 """
 
 from __future__ import annotations
@@ -44,7 +44,7 @@ from digiquant.research.triage_signals import max_abs_move_for_segment, segment_
 
 logger = logging.getLogger(__name__)
 
-OLYMPUS_RESEARCH_ATTENTION_MODE_ENV = "OLYMPUS_RESEARCH_ATTENTION_MODE"
+DIGIQUANT_RESEARCH_ATTENTION_MODE_ENV = "DIGIQUANT_RESEARCH_ATTENTION_MODE"
 
 EnforcePath = Literal["carry", "metric_patch", "full"] | None
 
@@ -64,14 +64,14 @@ def attention_store_for_run(run_id: str) -> AttentionStore:
 
 
 def resolve_research_attention_rollout_mode() -> AttentionRolloutMode:
-    """Read ``OLYMPUS_RESEARCH_ATTENTION_MODE``; unknown values → shadow."""
+    """Read ``DIGIQUANT_RESEARCH_ATTENTION_MODE``; unknown values → shadow."""
     raw = env_lookup(RESEARCH_ATTENTION_MODE, default="shadow").strip().lower()
     try:
         return AttentionRolloutMode(raw)
     except ValueError:
         logger.warning(
             "invalid %s=%r; using shadow (allowed: off|shadow|enforce)",
-            OLYMPUS_RESEARCH_ATTENTION_MODE_ENV,
+            DIGIQUANT_RESEARCH_ATTENTION_MODE_ENV,
             raw,
         )
         return AttentionRolloutMode.SHADOW
@@ -408,7 +408,7 @@ def triage_phase_attention_update(state: ResearchState) -> dict[str, Any]:
 
 
 __all__ = [
-    "OLYMPUS_RESEARCH_ATTENTION_MODE_ENV",
+    "DIGIQUANT_RESEARCH_ATTENTION_MODE_ENV",
     "apply_digest_metric_patch",
     "apply_segment_metric_patch",
     "artifact_target_key",
