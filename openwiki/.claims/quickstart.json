@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "pageVersion": "sha256:0d6bd1a80ce2809c374141155b48ebdc8dc094b7fd5e787fabd676ded9e9741b",
+  "pageVersion": "sha256:74e7f24db4d1d085cddbeae26c37e31bcfefa19cc4b0b4cb28b7a25cdbbe5eab",
   "claims": [
     {
       "id": "claim_c30fda274d3f4487a822bb42cedbce30",
@@ -87,10 +87,88 @@
           "version": "repo-lines-v1:sha256:e3fd0b3dcbc19396ccfc43c1b18c5635c790da2acc2bd9210bfd44d66b124206:eyJzZWxlY3RlZExpbmVDb3VudCI6MTEsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjBkY2VmMTVmOGMyNWE2YjE0YTBiZjI0ZDY0MzMxM2IyNjUwYTFhYzc3MjEyMTYzOTNiYmEzMjZiMzAyZGIzNGUiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImI0MTdmZGQwYWRhNjM1MzE1YWZhZDIzNDJhNGNhYTUwYjc5M2M0NTE0NjU3ZWUxMTA5NmUwNmExYjdjNzdjYWIiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImViYzQyZDQ4NjFlYzZmYjFhZThjYzQ2YzRkYzg1MTEzZTI0ZjllZmZkMmJlNjE1NTJkN2JlYmI4OThhMjQzNTUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6Ijk0YmRiM2YyZjMxNThkMTc4ZjdiMjFiOWYyNmNjZDA1N2QyZDM3NjIzMWE0NzE1YTc3NjFiNGU1NTUyNGY2OWUifQ"
         }
       ]
+    },
+    {
+      "id": "claim_c7a5bc634351473fbfdf2489be01d66e",
+      "statement": "The Cloudflare frontend dev loop section documents local dev commands for the three browser-facing projects under cloudflare/: digichat (make digichat-dev, make up-digichat, make digichat-profile-a-bundle-up), dashboard (npm run dev/build/test/lint from cloudflare/dashboard/), and the design system reference app (npm run dev --workspace design-reference on port 4013).",
+      "evidence": [
+        {
+          "resource": "repo://Makefile#L131-L139",
+          "version": "repo-lines-v1:sha256:8755a12545adb5d20dcc9b26f6117a4c84ac9710b82155a7b5f63bedac515f7d:eyJzZWxlY3RlZExpbmVDb3VudCI6OSwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiODRmNzU1YzhlNzNjYjNkOTg1N2EzYjU0ZTgyMmQ1ZjE0OTlmZmY4NzBiZWI2N2IwZGFlOWM1NTU4NjVmNzgwNCIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiZDY0OTJlYTAzODdlNmQwYTk4NDhjMThhODgwYzg0YzdkMzczZTQ2M2RhZjg4Mzg3ZWU0YjljNWYxNWRmOTZmOCIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiZjM0NzViM2E5ZjJiMDViZmJkYTdmMDA5ZDdmMmRlZTM4M2JiOWUzODAxNDc2Yzc5ZTZjMGIwMWMxYjE0OTgzYyIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiOGM0ZTQ0NTJhOTc3Njk0YzUwNDgwZDI3NDNiMjBhYTk2NTBlZWRiYTJjYjZmYjhmOWI0MDExNGZhOTljOGE4NSJ9"
+        },
+        {
+          "resource": "repo://Makefile#L141-L149",
+          "version": "repo-lines-v1:sha256:53692373d2afead39ae6707f1c833f8f48d7b629f89f1649ef83140c701b54aa:eyJzZWxlY3RlZExpbmVDb3VudCI6OSwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiOGE2MDgyMWI5MTA3MDc1YmFmMmQwODU0ZGNlMzRkODYyMmYyZTU2YWUzNzRjZTM3MjM4YmQwNTZkOGZmNGNjZiIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiOTllOWY2ZjExNTFlZmU0YWVkYjk0ZjEyODEyYTYyOWY4ZjUxODVjZDc1YzBmZDQwYWI0MzU0ZDFiMDgzNGFhOCIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiZmUzNzNhNmJhOGM3YmQ4YTk1YTMwMmNkYzZjZGU5ZjQxMThlZjU2MTVlODhhNmNhODliN2Q1OTllOTFiZTVjNCIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiNTU0MTdiZWViZDIzYjZjNzA0MzBiYzk1YWEzNjU5YjdhNTc3ZjA5OTVhMTU5MDgyMzIwZWZlNzJkOWEwYWYyNCJ9"
+        },
+        {
+          "resource": "repo://Makefile#L96-L101",
+          "version": "repo-lines-v1:sha256:11fa87402eb48f7da57d241095b1c3f64140e0534b35c6cb94751626ad56a7d1:eyJzZWxlY3RlZExpbmVDb3VudCI6NiwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiOTI3NGVkYjFmOTNmMzRlY2Q3NTUzNzI1MjY0ZGI0MjQyMGM3YmZmZWIyM2I1Zjc4MjM5YWZjNjljMTI0NjM0ZCIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiZDhlM2E0ZTc0Y2Y1NmEzNDU4YTk4YzE2YjkzMjE3OTc2MDNmZjczOWU0ZmZhMGFkZWZiYzgwNDQ5MDllYzA5OCIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiYWJhMmY5NzJmZGZjYjRmM2ZkNDcwZTA1ZjNmZGUzN2RkOGQzZDRlMWZiNjNkZTg3YzNkZjkyZDcyZmY4MzJmZSIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiMzY2Y2Y1ZmFiN2JiMGVhNzcwYjJiNDQxNWEwMmZmMTM0YTI3Y2U2Y2Q2M2UxMTkyZGEwZDYxMTJjMGUwODVjMCJ9"
+        },
+        {
+          "resource": "repo://cloudflare/dashboard/README.md#L1-L5",
+          "version": "repo-lines-v1:sha256:24df5da2784ff51129e5186d8b4e58608e03bce527cff5817e0ac5ec1966f69a:eyJzZWxlY3RlZExpbmVDb3VudCI6NSwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiN2JiMGUyODAwMzhmYmZkYmFiMzRlOGUwYzdmYTM3Njc4NThhYzU3M2JjZjNmMzYyMzNjZDVkNzBkMjVlOGFiMSIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiMDFiYTQ3MTljODBiNmZlOTExYjA5MWE3YzA1MTI0YjY0ZWVlY2U5NjRlMDljMDU4ZWY4Zjk4MDVkYWNhNTQ2YiIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjAsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiZTNiMGM0NDI5OGZjMWMxNDlhZmJmNGM4OTk2ZmI5MjQyN2FlNDFlNDY0OWI5MzRjYTQ5NTk5MWI3ODUyYjg1NSIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiYzc3YmJjMTBiMzk2ODcxNjM0YWQyZmU4OGRlOGYxYTQ3YzAxYjYyNWVlNDlmNDI0ODNmNjRhMmE4ZWI5ZjZmOSJ9"
+        },
+        {
+          "resource": "repo://cloudflare/dashboard/package.json#L6-L11",
+          "version": "repo-lines-v1:sha256:1e57603556b69e7bd0a8e4ff1c9c00baeffb4318119b370b48d23b8ac90fb3f9:eyJzZWxlY3RlZExpbmVDb3VudCI6NiwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiNTMxY2Q4NjdiYzE0NDM1MTQ3NDhhOTJmNjQ4MmM2ZDg2NjFmZmE3ZjlkZWExYzFmNmUxODMxYmViMjAxNmY5NiIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiZDA0ZmIyZjVhNDYyNTc3NDIyZGYxYjA5MWFjMTUwODcxNWQ3MjM3ZGRhOGEwNThiZmViZGRiNDVjNjIxYzVlNiIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiYjFiZDRkZWJiYzBkOGVhOWUzODRlNGM5ZjY3MDJhYjllNzFmM2ViMjRhYzEyN2RhNzVhYzAxZWM0ZmVkZjE3MCIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiYzQzN2I5NjEzZDI2YTU1N2M1MGQ5ZTRmNzYwYzlmYThjNmQwZjExYjJmOTZkOTZkOTJlZjEzMDYyNWZhZjM4NCJ9"
+        },
+        {
+          "resource": "repo://cloudflare/digichat/AGENTS.md#L66-L71",
+          "version": "repo-lines-v1:sha256:7f9b31b00ae8c09be90121da12aa87c87ebffc0d808ebf271b4a05c718b882c3:eyJzZWxlY3RlZExpbmVDb3VudCI6NiwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiYjM3ZWZiMDVhODYzZGEyYmYxZDBlOWZhNzBkMGNiZDI3YmIwN2NjY2Y5NjFlZTIxMDExMThjZWJmODllOWRmMSIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiNDdjMDZjNTYxZDVjMzI3MzQzNjg1MjY4YTQ2YjMzOTFmMzk5OGVlZTg5MGQyYmU1MWYwZDIxY2M0YTUzYWU2ZCIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiNGQ0ZWY3MzI0NGNhZDY1M2VhYTE1ZjM0ODgwODVlNDZlNjg5NzkyNDdhMDM5ZDI2ODQzYTQzZmFjN2IyNTE3MSIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiMDAxZjJlYzE3NTkzYzEwNTRlYjQ2MzY3ZDg0NTNlZjI0YTE3M2NlOTZiNzExN2Q5MWY5YTY4ZDQ0ZmVmOGIwMSJ9"
+        },
+        {
+          "resource": "repo://cloudflare/digichat/OPERATIONS.md#L79-L100",
+          "version": "repo-lines-v1:sha256:29abb1b86bb08f1ee19fe33307b1ed0bf4dd126b68f256c51b7eb7951c9e71d4:eyJzZWxlY3RlZExpbmVDb3VudCI6MjIsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjZjNGMzZDQ1Njk1Mzg2YmNjMjY2YWE2ZDRhZjc3MjVmZTdhMDE5NjJlZGJhMWNjNWQ3MTM3OGYxNWRmMWY5MWUiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjU1MzhlMGZlZDc2OTY2ZDVlZjlhYjZmMzA5N2M2NWEzZjQ4YmI3YzAzYmIwNDU4OTAwYzNjNGEwMmFmMGNjM2YiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjdjOWQ1ODAwNDE3NDUyNzIyNDliODExMjE5OWZhYTA5MjJiOTY2OTRiYzEwZjhhY2U3OGIwZGNmYjQ3ZDY4NjMiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImJiYzAyZTI1MGI2ZTU2ZTg5OTNjNmU3YTJlNzI3NTIxMzQ0Y2FlOTgzNGYwN2M5MzVlOGNmZmQwOTZkMjNmZjUifQ"
+        },
+        {
+          "resource": "repo://cloudflare/digiweb/README.md#L45-L52",
+          "version": "repo-lines-v1:sha256:8f889976ab2d290df8f1e8e75fa2b3a4a53ac4753832f2181f26e8e946c8c82f:eyJzZWxlY3RlZExpbmVDb3VudCI6OCwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiMDFiYTQ3MTljODBiNmZlOTExYjA5MWE3YzA1MTI0YjY0ZWVlY2U5NjRlMDljMDU4ZWY4Zjk4MDVkYWNhNTQ2YiIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiNTk2MDFjNGY3ODI3NWEzNTFhZGI2YjRmMWZhNDkyM2RlMDUzOWEwNzRhZDFmZDJmMDM3MjM1YjJkM2MxM2QyMCIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiZGVhZTIzYzc5MmQ5ZTg4MzZkY2U2MWNkMmI2NTc0NWY4OWY5ODUyY2IxMWM2YTFmZTc2NTk2NmMyMDgxMGNiZCIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiMTdmYzQ1Mjg3ZjcwYmI1NWNkNTA0ZjUxYWE1ODIxOGVhNTBjNzkwZGU4NmFjNGEzZmE3MDlhN2QzODg3YmZmZCJ9"
+        }
+      ]
+    },
+    {
+      "id": "claim_597be1e2d24a4eb4ab4ba347fe888d0d",
+      "statement": "The dashboard at cloudflare/dashboard/ is a static-export Next.js 15 app at /dashboard/ that consumes the shared design system via @digithings/design and @digithings/web workspace dependencies, reads Supabase with the anon key, and has its own CI in test-dashboard.yml (not part of make test-unit).",
+      "evidence": [
+        {
+          "resource": "repo://Makefile#L34-L36",
+          "version": "repo-lines-v1:sha256:e4c226042989a112975503d16e15b305be7df37c324e26ced7d5f5087d263905:eyJzZWxlY3RlZExpbmVDb3VudCI6MywiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiMDQ2MmU4ZTYzZGZjYjU0YjRhMDhmNTIwYTA5NTFiOTEzNzgwNWU4NjI5Mzk3ZDliMWUyZjllOTliZmUyNTc3MyIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiMDFiYTQ3MTljODBiNmZlOTExYjA5MWE3YzA1MTI0YjY0ZWVlY2U5NjRlMDljMDU4ZWY4Zjk4MDVkYWNhNTQ2YiIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiMGIzZGI4YTllOTJhNWIxMGVlZDgxOTcwZDY0Y2QzNjY2ZDk2NzVmMjNhMWQxMmVlYzg3M2U5NmY2N2I3ZGIxMiIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiMjY3ZDg5OGI2YzJhZDlmNGU2ZTNmYzVhMWY5NmYxMGM1ODJkYTA1NmY3MWMwZDI1ZTEzZmM2OTFiMTg0YzVkZCJ9"
+        },
+        {
+          "resource": "repo://cloudflare/dashboard/AUTH.md#L1-L8",
+          "version": "repo-lines-v1:sha256:fc671a2f4456d49d33fc32eccf8ea9ec86c241c97eb9c38c120fa7eb5cd21e13:eyJzZWxlY3RlZExpbmVDb3VudCI6OCwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiZjYyMDc0ZWM0NTE2M2RjOGFhZDE3ODkzMWVlMDkzN2MwMGZkMTNiOTE5ZTc3NGJjYjRkNTcxNzI5MzZmMjQyZiIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiMDFiYTQ3MTljODBiNmZlOTExYjA5MWE3YzA1MTI0YjY0ZWVlY2U5NjRlMDljMDU4ZWY4Zjk4MDVkYWNhNTQ2YiIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjAsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiZTNiMGM0NDI5OGZjMWMxNDlhZmJmNGM4OTk2ZmI5MjQyN2FlNDFlNDY0OWI5MzRjYTQ5NTk5MWI3ODUyYjg1NSIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiNTM5NDg5NzZkMmUyYTkwMGNhNGU3ZmUzZTRlNTIwMzQ3MmFmMjEzYjc1NTY2YzU3MDk3NTU1YjZkZDFkNDg4ZCJ9"
+        },
+        {
+          "resource": "repo://cloudflare/dashboard/README.md#L1-L5",
+          "version": "repo-lines-v1:sha256:24df5da2784ff51129e5186d8b4e58608e03bce527cff5817e0ac5ec1966f69a:eyJzZWxlY3RlZExpbmVDb3VudCI6NSwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiN2JiMGUyODAwMzhmYmZkYmFiMzRlOGUwYzdmYTM3Njc4NThhYzU3M2JjZjNmMzYyMzNjZDVkNzBkMjVlOGFiMSIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiMDFiYTQ3MTljODBiNmZlOTExYjA5MWE3YzA1MTI0YjY0ZWVlY2U5NjRlMDljMDU4ZWY4Zjk4MDVkYWNhNTQ2YiIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjAsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiZTNiMGM0NDI5OGZjMWMxNDlhZmJmNGM4OTk2ZmI5MjQyN2FlNDFlNDY0OWI5MzRjYTQ5NTk5MWI3ODUyYjg1NSIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiYzc3YmJjMTBiMzk2ODcxNjM0YWQyZmU4OGRlOGYxYTQ3YzAxYjYyNWVlNDlmNDI0ODNmNjRhMmE4ZWI5ZjZmOSJ9"
+        },
+        {
+          "resource": "repo://cloudflare/dashboard/package.json#L14-L15",
+          "version": "repo-lines-v1:sha256:b3994b7b2dce1fb675768d7a6ebaf0382ac1f26038db92ea57c51443c523a890:eyJzZWxlY3RlZExpbmVDb3VudCI6MiwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiZTFhNTg0YjA2YzgxODIwOGM1ZGJlODY4ZmYyNjkzZGNlYjhmZTAzOTJmMjQyY2U2NGI5ZDZhMGNhZmM0N2Y5OCIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiNmQ0Y2JiNTQ0YzJkNDk1OTMyYjQwODdmY2FiYmMxOGQxODdjZjBjOTc2MzdhZDAyZmY5ZDhmNGIxMTJjMjJkOSIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiZmExNWI2NzgzOWRjYWNmNmM2MTE2NDE1ZTE2MmJhNjRjODZkNzI1OTk0ODRhNWYxZjhjODA5Y2JkMmJkZWZlYiIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiNmYyMzdhYWE0ZjU2Y2JkNGQ5Yzk0NGQ5MDYxN2NiNTU1YTNiM2QyZjk1NWU4NmI5ODEwYzQxZTAyZTM2MTk4NiJ9"
+        }
+      ]
+    },
+    {
+      "id": "claim_15d6c1647473424ab55675a3170e58c8",
+      "statement": "The task-routing table routes chat UI questions to cloudflare/digichat quickstart, dashboard questions to cloudflare/dashboard architecture and operator views, and design-system questions to cloudflare/digiweb/ as the canonical home for all frontend tokens and shared components.",
+      "evidence": [
+        {
+          "resource": "repo://cloudflare/dashboard/README.md#L1-L5",
+          "version": "repo-lines-v1:sha256:24df5da2784ff51129e5186d8b4e58608e03bce527cff5817e0ac5ec1966f69a:eyJzZWxlY3RlZExpbmVDb3VudCI6NSwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiN2JiMGUyODAwMzhmYmZkYmFiMzRlOGUwYzdmYTM3Njc4NThhYzU3M2JjZjNmMzYyMzNjZDVkNzBkMjVlOGFiMSIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiMDFiYTQ3MTljODBiNmZlOTExYjA5MWE3YzA1MTI0YjY0ZWVlY2U5NjRlMDljMDU4ZWY4Zjk4MDVkYWNhNTQ2YiIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjAsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiZTNiMGM0NDI5OGZjMWMxNDlhZmJmNGM4OTk2ZmI5MjQyN2FlNDFlNDY0OWI5MzRjYTQ5NTk5MWI3ODUyYjg1NSIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiYzc3YmJjMTBiMzk2ODcxNjM0YWQyZmU4OGRlOGYxYTQ3YzAxYjYyNWVlNDlmNDI0ODNmNjRhMmE4ZWI5ZjZmOSJ9"
+        },
+        {
+          "resource": "repo://cloudflare/digichat/ARCHITECTURE.md#L15-L17",
+          "version": "repo-lines-v1:sha256:a25a34d167c83aad0ae2da5b18ce341c12841486e1b123cc7ca7abb200581cdf:eyJzZWxlY3RlZExpbmVDb3VudCI6MywiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiNjM1OGNjMTZjOTk1NTU1YTBiODFkZmI4ODhmNDUyOGI2Mzk0NjEyMDEzMzkxMGMzYTIyNTNlNGI1ZjcxMzIxNCIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiNzY3YWI4YzU1NmIwMDU1MTliYTQxZTBlZjA1YzliMjBiYjRmZTExNzY1NzNlOTQ0ZThmNmI5MTYyYjAyOTg2YyIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiMDAxZjJlYzE3NTkzYzEwNTRlYjQ2MzY3ZDg0NTNlZjI0YTE3M2NlOTZiNzExN2Q5MWY5YTY4ZDQ0ZmVmOGIwMSIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiZTU5NDkwNWFhMjQ4YzI0ZDExODgyODY2NjUzZmJhZjRmNDQ5YzgwODZlNGI0MWVhMmZhNWFhYTNiZTkyZDQxNCJ9"
+        },
+        {
+          "resource": "repo://cloudflare/digiweb/README.md#L1-L12",
+          "version": "repo-lines-v1:sha256:63c9a0d52cfa3b44b7654bc20596237bc364dd99c04caefcd53ec88b46d810e1:eyJzZWxlY3RlZExpbmVDb3VudCI6MTIsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjdjNzAzYjBiNzBmYzYyYTVhZGViMzNjMjc1ZDJlMjNjNjlkZWE1ZTM0YTZjZmEzOGQwZjU5OWNkNjUxMDdlNjAiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjczZDc5MWQ4ZDRjNTkzNTRlOWM3ZjJlZjJiODM3Mzg5OGRmYWVlMTg2MDdjNjgwNGZhZmZmYTNiNjhiNThkZTkiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjowLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImQ4NDI5YzQyNmNiMzQ2NTNjZjVmZDkwNjExZmQ2MmIxNTJkM2JiNDdkZmQxZTcxNThmNDYzMGUxYzgwMjJlMmQifQ"
+        }
+      ]
     }
   ],
   "verification": {
     "by": "openwiki/0.5.0",
-    "at": "2026-09-09T14:37:17.158Z"
+    "at": "2026-09-19T12:20:11.463Z"
   }
 }

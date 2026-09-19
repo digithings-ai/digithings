@@ -1,62 +1,178 @@
 {
   "schemaVersion": 1,
-  "pageVersion": "sha256:cdebc633d493e1326a92757f83997f1b4cd04286f384bddb2b3fab1869be8a90",
+  "pageVersion": "sha256:75d1e2d3aaeb289ffd720483cd8880963b91a292677437f25a9692d635ece13a",
   "claims": [
     {
       "id": "claim_9d93f0468d144364aa1d19dd36534c4e",
-      "statement": "The dashboard is a Next.js 16 + React 19 static-export app (output export, unoptimized images, trailingSlash) served under the sole public basePath /dashboard/, with a check:static-export build step.",
+      "statement": "The dashboard is a Next.js 16 + React 19 static-export app (output: export, unoptimized images, trailingSlash, basePath /dashboard/) with @digithings/web compiled via transpilePackages, a check:static-export build step that scans route artifacts for client/server boundary violations and missing headings, and a build-info.json deploy-freshness stamp.",
       "evidence": [
         {
-          "resource": "repo://frontend/dashboard/next.config.mjs#L1-L20",
-          "version": "repo-lines-v1:sha256:ef23e9fd58196a9037e261b88bf3d297561680ea29bdbdb9be9de5b8a5a0a949:eyJzZWxlY3RlZExpbmVDb3VudCI6MjIsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjYzYjAwNDFmM2M1M2YyMWM5Y2NlOWYwYWFjOGI1NjdkODY1NjcyNDA1ZmI5ZTk2MDQ1ZmQ5YzJjMWVkOTIyN2YiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjAxYmE0NzE5YzgwYjZmZTkxMWIwOTFhN2MwNTEyNGI2NGVlZWNlOTY0ZTA5YzA1OGVmOGY5ODA1ZGFjYTU0NmIiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjowLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjoxLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjVjYmMxN2NhOGY3MzU5NDc2NzgzMGEzNmVlZWFjNGNlNWZlYTVkZDM4Nzg1NWVhNzRmNDUxOTE5MTk1ZDVjMTMifQ"
+          "resource": "repo://cloudflare/dashboard/next.config.mjs#L1-L23",
+          "version": "repo-lines-v1:sha256:f6bdbe95d426349698c40ef3111524e9633a623563d60d84b73bcc1b27f24f33:eyJzZWxlY3RlZExpbmVDb3VudCI6MjMsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjYzYjAwNDFmM2M1M2YyMWM5Y2NlOWYwYWFjOGI1NjdkODY1NjcyNDA1ZmI5ZTk2MDQ1ZmQ5YzJjMWVkOTIyN2YiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjVjYmMxN2NhOGY3MzU5NDc2NzgzMGEzNmVlZWFjNGNlNWZlYTVkZDM4Nzg1NWVhNzRmNDUxOTE5MTk1ZDVjMTMiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjowLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjowLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUifQ"
         },
         {
-          "resource": "repo://frontend/dashboard/package.json#L1-L15",
-          "version": "repo-lines-v1:sha256:4271a6140288dfdb52a524e9f9e218219fedefe78da4febca37d55712386949c:eyJzZWxlY3RlZExpbmVDb3VudCI6MTUsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImE2ZmIwOGZkYTFhY2I5NTdiNjExNmJkMzc4MTFhMWZlNDFhMDE2MTFjMDYzMWVkYmY3ODZkNjg4OWEyN2E1NWMiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjZkNGNiYjU0NGMyZDQ5NTkzMmI0MDg3ZmNhYmJjMThkMTg3Y2YwYzk3NjM3YWQwMmZmOWQ4ZjRiMTEyYzIyZDkiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjowLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjZmMjM3YWFhNGY1NmNiZDRkOWM5NDRkOTA2MTdjYjU1NWEzYjNkMmY5NTVlODZiOTgxMGM0MWUwMmUzNjE5ODYifQ"
+          "resource": "repo://cloudflare/dashboard/package.json#L1-L43",
+          "version": "repo-lines-v1:sha256:09adf52eb06983c7d9d44aa8def4dbe5dbd29eb2f5877bc1523486c6cb079e8f:eyJzZWxlY3RlZExpbmVDb3VudCI6NDMsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImE2ZmIwOGZkYTFhY2I5NTdiNjExNmJkMzc4MTFhMWZlNDFhMDE2MTFjMDYzMWVkYmY3ODZkNjg4OWEyN2E1NWMiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjI3ZTU3ODhkNWQ5ZDczZDI0YTgxZGJjMGE1YTc0YmZhODJjOWMzYjNhZjk5ZTUyYWY3OTZlOTBiNDY4YThhM2QiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjowLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjoxLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjQxMmNhMzQ1Y2NmNzViZjljMDgwNmJjZTY5NWJlOGRlODA4Yjc5OTg0MjUxYTdhNTRkMjAyY2Y2MTAxZGQ0NTEifQ"
+        },
+        {
+          "resource": "repo://cloudflare/dashboard/scripts/check-static-export.mjs#L1-L67",
+          "version": "repo-lines-v1:sha256:78b10b9d56afe6164219cd301488ad28dd31c7c7d3bd9b42c566e45686309293:eyJzZWxlY3RlZExpbmVDb3VudCI6NjcsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImFkMzY4MTZlZjljNzYzZTc3MDE4MWJiYWJmZGNmYWUyMGE3OWNkMzEwYzI5YjU2OGE0MTFmZDEyYzYzOGEwYmYiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImQxMGIzNmFhNzRhNTliY2Y0YTg4MTg1ODM3ZjY1OGFmYWYzNjQ2ZWZmMmJiMTZjMzkyOGQwZTkzMzVlOTQ1ZDIiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjowLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjowLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUifQ"
         }
       ]
     },
     {
       "id": "claim_c21cfce1a0ce448687a30e66c100cde8",
-      "statement": "Styling consumes the shared design system via @digithings/design workspace tokens plus the Tailwind v4 bridge from @digithings/web (transpilePackages), layered in app/globals.css.",
+      "statement": "Styling consumes @digithings/design tokens and the Tailwind v4 bridge from @digithings/web (web-theme.css), plus shared control/component sheets (controls-core, account-auth, finance-tearsheet, chat-core, digichat-launcher, command-palette, finance-composites), layered in app/globals.css with @source directives pointing into digiweb/web/src so Tailwind scans package sources it would otherwise skip.",
       "evidence": [
         {
-          "resource": "repo://frontend/dashboard/README.md#L1-L15",
-          "version": "repo-lines-v1:sha256:b1fc1d74cef3adf73a61aa947abd5fe46370b235feeb3b025b220a8baf86be2d:eyJzZWxlY3RlZExpbmVDb3VudCI6MTUsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjdiYjBlMjgwMDM4ZmJmZGJhYjM0ZThlMGM3ZmEzNzY3ODU4YWM1NzNiY2YzZjM2MjMzY2Q1ZDcwZDI1ZThhYjEiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImUxMTgyNmQyNzBjN2U5YjQ0YzcxMWExN2VjNjczMTU1ZDE4MTExNTNlNTQzNjUyMDQxODJmOTQ1NTc2NTM3ZjYiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjowLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImZiNzZjZTRhZDBlMGFjZDJlYzkyY2VlNGVlNTFiZTI0MDJhMTUzZGM1Y2ZkN2U2NTU5ZTY0YzA4MDY0ZTZkMjEifQ"
+          "resource": "repo://cloudflare/dashboard/app/globals.css#L1-L100",
+          "version": "repo-lines-v1:sha256:d7355a0e1fc4e07fb570dbaf38d05730aae0afe26770bd476f87412da6f5148b:eyJzZWxlY3RlZExpbmVDb3VudCI6MTAwLCJmaXJzdFNlbGVjdGVkTGluZUhhc2giOiI0MjA3MGUwYjQ1YmIyMDFiMmI4MzhhNTJhYWFhNmU5NjVmOTY0ZTBiNTQyZDk3ZjFmZTUxN2ZlNTljNGI3NWE4IiwibGFzdFNlbGVjdGVkTGluZUhhc2giOiJmNzljODBhMjVhOTRlMDAzMzMwYzI4ZGM2YTY2NTFkNDI1OTMyMTI2MWU0ZGZlMWZlYzc2N2Y4NTZlMThjOTg5IiwicHJlY2VkaW5nQ29udGV4dExpbmVDb3VudCI6MCwicHJlY2VkaW5nQ29udGV4dEhhc2giOiJlM2IwYzQ0Mjk4ZmMxYzE0OWFmYmY0Yzg5OTZmYjkyNDI3YWU0MWU0NjQ5YjkzNGNhNDk1OTkxYjc4NTJiODU1IiwiZm9sbG93aW5nQ29udGV4dExpbmVDb3VudCI6MywiZm9sbG93aW5nQ29udGV4dEhhc2giOiIyZTU5YzUwN2MwODAxZjgwYTRmNWI2ZDM1NWQzZGFlMGYxMzY2N2QwMGM3ZmFlNDEwMzhjZmU1NDE1OTUwNGViIn0"
         },
         {
-          "resource": "repo://frontend/dashboard/package.json#L15-L20",
-          "version": "repo-lines-v1:sha256:c7405cfd506c2c1a7b015f0872425a9a11c0564124c27060b5eaf61656bd2772:eyJzZWxlY3RlZExpbmVDb3VudCI6NiwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiNmQ0Y2JiNTQ0YzJkNDk1OTMyYjQwODdmY2FiYmMxOGQxODdjZjBjOTc2MzdhZDAyZmY5ZDhmNGIxMTJjMjJkOSIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiZDVjMzk3NzFjZTQ3NTc4NTAyM2Q2NGMwMDJkMzBmNDRjYmRjNzhhNzQyNmNmZjk4YTYwMTYyNzcxMDQ3MGM0MSIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiYzQzN2I5NjEzZDI2YTU1N2M1MGQ5ZTRmNzYwYzlmYThjNmQwZjExYjJmOTZkOTZkOTJlZjEzMDYyNWZhZjM4NCIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiMzFjMTc2NGRjMDg2NWU3NjE5NTdkZTg5Nzg4NDVkYmE4YjE0YTY5MjhmZTA3ZTkzNDkyNzdhNDg5ZTIwMTljNyJ9"
+          "resource": "repo://cloudflare/dashboard/package.json#L13-L27",
+          "version": "repo-lines-v1:sha256:9bda63480ba850b0b39cf08e995b936f89ea0cfc64d347dcc4f4f11e5d4fe4a1:eyJzZWxlY3RlZExpbmVDb3VudCI6MTUsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImJhM2I0NjlkOWUwOTc1NzIyNDY2NjczNGM5ZWY3YjI1NGQ4ODUzNGY1ZDViYjcwOTg5NjA4MDVjNTUzZGMzMDciLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjZhMWI1N2FlY2U4ODM5OTNkMGZmYTZhYzEyMTcxMjc5YWYzMjFlYmMxZTdjZjc3NGY4NTNiMDY0YjJmNjY4YmMiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImM2NjMxMjQ2ZDYxN2NjYWM2ODg2OTliOWVhNDNiOGJiMjJlM2E4MGZlOTM3OTFjNDgyY2I3MGJmNmE0YTg0MzIiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjBiMmZhNTFhMmNkM2M5YTI2NmY1MTE2MGFiYzE5ZjRiMjNmZjUyMjk5ODZiNmRjYzI3M2E5NjQwM2I5ODhkZGYifQ"
         }
       ]
     },
     {
       "id": "claim_fdbeba59985a4e768b2bc9d7cda48e4f",
-      "statement": "The root layout self-hosts fonts via next/font for CSP compliance and scopes pages to the digiquant accent and blueprint background with a version/env label.",
+      "statement": "The root layout self-hosts Geist Mono via next/font for CSP compliance (font-src 'self' data:), wraps children in ThemeProvider, AuthProvider, and AuthGate, and renders body with qn-blueprint-bg; the version/env label (NEXT_PUBLIC_DASHBOARD_VERSION, fallback v0.1 · dev) lives in the sidebar Settings popover (components/sidebar-settings.tsx), not in layout.tsx.",
       "evidence": [
         {
-          "resource": "repo://frontend/dashboard/app/layout.tsx#L1-L30",
-          "version": "repo-lines-v1:sha256:fc462f25121d0d609c2346117377bfa9f8c82fd6b3447a6ef5109132ae90d341:eyJzZWxlY3RlZExpbmVDb3VudCI6MzAsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImZhZjU4NjQxMTA4ZGE0OGM0YmI5MzE5MjQ2NWU5OTM3NTRjMGYxMThhZjhiYjJiMTdlM2E0YWJhZGMxMGFkMTciLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImI2YWQ2YTljOWQ1Yjk3ZWEyZWQ0NjZkZTZhZjE0NWMxY2U1M2Y4NTlmZTRlYThjMzNkMTM3ZjAzN2MzMTdhODgiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjowLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjQ4OTIxMjU5MGQ0MmFmODIwMTc1OWMzMTg4ZGY4ZTRjOTg3OTgwMDY1OTYyMDE0MDg4Nzc1MjhlZDA5OWY0NGQifQ"
+          "resource": "repo://cloudflare/dashboard/app/globals.css#L118-L132",
+          "version": "repo-lines-v1:sha256:03704815aa12668c96cad8710542698f48fce6e5059ab338c0d5936d92830089:eyJzZWxlY3RlZExpbmVDb3VudCI6MTUsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImZiZWI4NmUzYjAwYmEwNWU5ZjY5Y2JkODU2ZGIwYWY0ZGQwZjlkOWVjNDU4NDQ4N2NmYzZlMjE5YTg0YWJlZjkiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQxMmNhMzQ1Y2NmNzViZjljMDgwNmJjZTY5NWJlOGRlODA4Yjc5OTg0MjUxYTdhNTRkMjAyY2Y2MTAxZGQ0NTEiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6Ijc0ZTZlZmM3MDIyYWVkNWU4N2RkNjcxOTg2NDAzNmM3NmNjZTllNTc2ZTk3OGQ3OWI3MDRiZjlkOTIyMWQ0NGQiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjRhNDQyMzZhNzliMTYzM2Q4NDc2ODhhNDAzZTBiMWJiODhhMzVkNjQyM2U2ZTZlZWNjYmI2MDU5OTc1Nzg4Y2YifQ"
+        },
+        {
+          "resource": "repo://cloudflare/dashboard/app/layout.tsx#L1-L69",
+          "version": "repo-lines-v1:sha256:0056f4ecfd4704ff669f39edb562545a8010dd00d2ef8b63986383c58bb3abb5:eyJzZWxlY3RlZExpbmVDb3VudCI6NjksImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImZhZjU4NjQxMTA4ZGE0OGM0YmI5MzE5MjQ2NWU5OTM3NTRjMGYxMThhZjhiYjJiMTdlM2E0YWJhZGMxMGFkMTciLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6Ijk1ZWYwMWJjMDhkYmMzYjYzZTRlNzVlYTNkMjZhNWI5NDE4OTE4NzdlMjdhZDg5MTMyOWM4NDExZDdkOGRjNGQiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjowLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjoxLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjQxMmNhMzQ1Y2NmNzViZjljMDgwNmJjZTY5NWJlOGRlODA4Yjc5OTg0MjUxYTdhNTRkMjAyY2Y2MTAxZGQ0NTEifQ"
+        },
+        {
+          "resource": "repo://cloudflare/dashboard/components/sidebar-settings.tsx#L62-L72",
+          "version": "repo-lines-v1:sha256:e4dd0acab9c795ba272c41ae7092e84a86e28b5e3f8f4744dceca0388cba8e7a:eyJzZWxlY3RlZExpbmVDb3VudCI6MTEsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImYyNGU3MjFiZjU0N2MxMjc3OGZkZjY3OTFiNjEzODY3OTM0NmM4MWJkMzc4NjAzYTQ4ODUyZDA5ZDUxNTEyZDEiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImRkNTQ5NzI0NjIwY2FkMmNlOWI1OTM1YjQ3NThhNTBiZTkxYzJhMDdkODg5MTUwZjQzMDk5NzE1NzcyYjc2MmQiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImNkNDg2MDE5OTZhOGM0MDUyMTdmYjgxNGQwODkyMDJlMTEzNjc5ZGJiNjY0ZDJiZTYwMzZmZjY5OWNkYzcwOWEiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjA0MTAwZTcyZTFhMDkxMDhlYWU5NDU0ZmQwMjdhM2RjMzVlMzcwOGU2YWEzMTRmZGNmM2VhNDdmNjJiZGEzZTcifQ"
         }
       ]
     },
     {
       "id": "claim_cea8d7c3e4194ad2bf4f17014d8c241c",
-      "statement": "Route groups under app/ cover research, portfolio, performance, library, pipeline, and system; lib/ owns book reconciliation and auth gating with fail-closed accounting unit tests.",
+      "statement": "Route groups under app/ cover brief (/), portfolio, pipeline, twelve-x, research, house, library, login, signup, settings, system, observability, strategy, architecture, and why — Pipeline absorbs legacy /why/research/library/system/observability/architecture, Portfolio absorbs /performance; lib/ owns book reconciliation, dashboard-ssot committed-book logic, auth context/gate with PKCE, accounting views with fail-closed contract, and houseBook() workspace scoping.",
       "evidence": [
         {
-          "resource": "repo://frontend/dashboard/app/page.tsx#L1-L30",
-          "version": "repo-lines-v1:sha256:b20ffca293577df99170040185b6512dd2800640d4987cb7ef09a9b9f3479caf:eyJzZWxlY3RlZExpbmVDb3VudCI6NDAsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjNmMzdkYjFiOGRiM2ZiZWEzNmE1ZDJhNmZmZDVmMzM5M2E1M2VmMDUwNDdlMGI1ZTZlMTRhNDM0ZTQwNmZkZmMiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImNhMzBkNDE0NDQ0NDUyYjUwZTU1Y2Y0ZTgyMGQ0ODM2OWY4ODczM2U3NTI5NWJhNzczYTNkMTg5ZDE2OGM3YjciLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjowLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjliYjc1ZDY3MTMyYWZlN2E5NWYxNDI1ZDgyMmNlZTEyM2I0NGZkMTQzNTViMTJmYjVmMmMyM2I4NzAxNjE1ZDkifQ"
+          "resource": "repo://cloudflare/dashboard/app/page.tsx#L1-L30",
+          "version": "repo-lines-v1:sha256:182d00ba7527dcae115e6ecb7ef60dc56d5a6e7b72ce3b84e505becf72324d1e:eyJzZWxlY3RlZExpbmVDb3VudCI6MzAsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjNmMzdkYjFiOGRiM2ZiZWEzNmE1ZDJhNmZmZDVmMzM5M2E1M2VmMDUwNDdlMGI1ZTZlMTRhNDM0ZTQwNmZkZmMiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjU2OWIxOTgwOGYwMTk3OTJkZGE3NzRhYmJiOTBhNGYyYmU2OTJhMWMzNmI0ZmZlYTIyYWYzMmJiNGIzYWExYWQiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjowLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjJhYjI3YmZlODliNjMxNzE2YjZmNjcwOTgxMDM3ZDRlOTE0MWE4OGNhNWRlOWExYzBiN2NjNzYwYWVkNjU2N2MifQ"
         },
         {
-          "resource": "repo://frontend/dashboard/lib/book-reconciliation.ts#L1-L30",
-          "version": "repo-lines-v1:sha256:9d9a7d90b18ff5b7c58a8fa45544f533ef8f7c99288975cf3aac3a573de80178:eyJzZWxlY3RlZExpbmVDb3VudCI6MzAsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImUyMTVjZDUxYjZlYmI3OTI3ZDJkMzJjMjIyYTlkYTUzN2U2MTQxNDMxNTZhYTI1NjhiNWNhOGMzZDliYzdiOWYiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6Ijk3M2M2YTkzMTNhNTQ3ODI0MTRiMzhmNzk4YzY3NDgxMjJkMzg2ZGQ0NmI2M2ExY2M3YmQzMmNlMzliYWI0YmQiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjowLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjViODhiMGRmZmNhZWRhMjJlZWUzOTkwMTdjMTYzNmQ1YWE0ODI2N2NkY2NjN2NhMzVhYzExMzczMDllODhmNzYifQ"
+          "resource": "repo://cloudflare/dashboard/lib/book-reconciliation.ts#L1-L90",
+          "version": "repo-lines-v1:sha256:51f375048496eba5bc03a9656d903a656d4464280156a777341bd84a27d8f455:eyJzZWxlY3RlZExpbmVDb3VudCI6OTAsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImUyMTVjZDUxYjZlYmI3OTI3ZDJkMzJjMjIyYTlkYTUzN2U2MTQxNDMxNTZhYTI1NjhiNWNhOGMzZDliYzdiOWYiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQxMmNhMzQ1Y2NmNzViZjljMDgwNmJjZTY5NWJlOGRlODA4Yjc5OTg0MjUxYTdhNTRkMjAyY2Y2MTAxZGQ0NTEiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjowLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjowLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUifQ"
+        },
+        {
+          "resource": "repo://cloudflare/dashboard/lib/dashboard-ssot.ts#L1-L71",
+          "version": "repo-lines-v1:sha256:db9724b79f1a678a8e5c19fad68afccd6d8f673318bcae10ffa9f771be830f9a:eyJzZWxlY3RlZExpbmVDb3VudCI6NzEsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImVhZjIyY2YwNzMyNTkyYzI0NzE0MWNiZTYxZWZhMTEwMTI2MTJmNWEzMTIyYjlhZjliYmFmNTJmNTcyNGQxOTQiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQxMmNhMzQ1Y2NmNzViZjljMDgwNmJjZTY5NWJlOGRlODA4Yjc5OTg0MjUxYTdhNTRkMjAyY2Y2MTAxZGQ0NTEiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjowLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjowLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUifQ"
+        },
+        {
+          "resource": "repo://cloudflare/dashboard/lib/nav.ts#L1-L40",
+          "version": "repo-lines-v1:sha256:5458384a9f19525a4772991d916183b8c4d63b7a138c145a3dd8e74cc3117c1f:eyJzZWxlY3RlZExpbmVDb3VudCI6NDAsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImU4NjkxYjVjYTljZDlkODY3MGQ0OTI4NGQ0M2ViNWIzN2VmODlmYTgxMWI4YTJlZDAzZGEzMmIyYjdhNzhlN2QiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImQwZTViMzNiM2EyMzQyM2QxMDc4YmExM2FmYTg2NDRjNWIwZWZkOTI3YTA0NDE5NWZiMjNmYTczM2VhNTA0NDkiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjowLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImE0ODFjMThjZmRjN2RiYjQyNGU2ODI2ODg5YjMwNzkyOGUwZmYzNTcyY2Q1MDYyZjNmNTM0OWQwNGFhZjQ4NmMifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_f7a81e26426d4df094e809d2477ed68f",
+      "statement": "AppFrame (components/app-frame.tsx) provides the dashboard shell: a fixed collapsible Sidebar (260px/72px), sticky MobileAppBar with hamburger/brand/search, CommandPalette (⌘K), DigichatPopup launcher, and a DbUnavailable gate that swaps page content when the Supabase backend is unconfigured or unreachable while keeping exempt routes (/pipeline, /settings) reachable for diagnosis.",
+      "evidence": [
+        {
+          "resource": "repo://cloudflare/dashboard/components/app-frame.tsx#L1-L48",
+          "version": "repo-lines-v1:sha256:2cd46478b760ce85840ccfdd2aaafd591d8c68cb6a6f8de35a87a730091b665e:eyJzZWxlY3RlZExpbmVDb3VudCI6NDgsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjNmMzdkYjFiOGRiM2ZiZWEzNmE1ZDJhNmZmZDVmMzM5M2E1M2VmMDUwNDdlMGI1ZTZlMTRhNDM0ZTQwNmZkZmMiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQxMmNhMzQ1Y2NmNzViZjljMDgwNmJjZTY5NWJlOGRlODA4Yjc5OTg0MjUxYTdhNTRkMjAyY2Y2MTAxZGQ0NTEiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjowLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjowLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUifQ"
+        },
+        {
+          "resource": "repo://cloudflare/dashboard/components/mobile-app-bar.tsx#L1-L50",
+          "version": "repo-lines-v1:sha256:64144c2771e24e75c1b94b93ab9c25ac4839aee3c454f764c992aec9138d12d2:eyJzZWxlY3RlZExpbmVDb3VudCI6NTAsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjNmMzdkYjFiOGRiM2ZiZWEzNmE1ZDJhNmZmZDVmMzM5M2E1M2VmMDUwNDdlMGI1ZTZlMTRhNDM0ZTQwNmZkZmMiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQxMmNhMzQ1Y2NmNzViZjljMDgwNmJjZTY5NWJlOGRlODA4Yjc5OTg0MjUxYTdhNTRkMjAyY2Y2MTAxZGQ0NTEiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjowLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjowLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUifQ"
+        },
+        {
+          "resource": "repo://cloudflare/dashboard/components/sidebar.tsx#L177-L300",
+          "version": "repo-lines-v1:sha256:fe626127912b7fd31830b41ab42df01df45c7150157d1bafb9424f2f6eafd3bc:eyJzZWxlY3RlZExpbmVDb3VudCI6MTI0LCJmaXJzdFNlbGVjdGVkTGluZUhhc2giOiJlNzIxNmU4ZTljMGExYTY4ZDA2YzJmYmFhNWZkMjEzOTQ4MmI4ZWZkMGExOTMxNWI5MTVlNmNjZTg0OWQ4OWRjIiwibGFzdFNlbGVjdGVkTGluZUhhc2giOiJhZjIxNWZkMDNjZmMyYmVlYmY4MDRhMTdhYzVlOTQ3OTUxZjdjZDJkYzA1NjA1MjI0OTljNjA2ZmRiY2Q3MTg1IiwicHJlY2VkaW5nQ29udGV4dExpbmVDb3VudCI6MywicHJlY2VkaW5nQ29udGV4dEhhc2giOiIxMGNmMDYwNTAyZTNmNmExYTg0OGQ2MDMwMTg0NmU3ZmRlNDZkN2RkZDFlY2FjMWFhMzkyZjg5NWI1NjZmYjc0IiwiZm9sbG93aW5nQ29udGV4dExpbmVDb3VudCI6MywiZm9sbG93aW5nQ29udGV4dEhhc2giOiIwY2JjOGRjNWM4MDE5YWQwZjUzZWRkMjk2N2Y0OTdjNjYwOTZiZGVmOTUyMTBiODk0YjZjYjhmNDY2OGE0MGE0In0"
+        }
+      ]
+    },
+    {
+      "id": "claim_a84baf1051354c1f9e93353b96b8a385",
+      "statement": "DashboardProvider (lib/dashboard-context.tsx) fetches all dashboard data via getFullDashboardData() and exposes a tri-state dbStatus — 'ok' (configured and reachable), 'unconfigured' (Supabase env absent), or 'unreachable' (fetch rejected) — while keeping status 'ok' during loading so the DbUnavailable gate never flashes on normal startup.",
+      "evidence": [
+        {
+          "resource": "repo://cloudflare/dashboard/lib/dashboard-context.tsx#L1-L64",
+          "version": "repo-lines-v1:sha256:0438ec0a9662be8dbe427780fc0a2af761268dcad0217d3fe8a4ea446fcafc00:eyJzZWxlY3RlZExpbmVDb3VudCI6NjQsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjNmMzdkYjFiOGRiM2ZiZWEzNmE1ZDJhNmZmZDVmMzM5M2E1M2VmMDUwNDdlMGI1ZTZlMTRhNDM0ZTQwNmZkZmMiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQxMmNhMzQ1Y2NmNzViZjljMDgwNmJjZTY5NWJlOGRlODA4Yjc5OTg0MjUxYTdhNTRkMjAyY2Y2MTAxZGQ0NTEiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjowLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjM0MDJjMTk1MGI3ODZmNWY0ZDI1OGZkOGY4MDJhNDlhNTMzMmRhNjU5NDZlYTUxYmMzYWZlNjE2MzkzYTEyZmIifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_5563f0158bb84042bb06d9d97dac99f2",
+      "statement": "Every house-dashboard Group A read (positions, position_events, nav_history, portfolio_metrics) goes through houseBook() in lib/house-workspace.ts, pinning the query to HOUSE_WORKSPACE_ID so overlay workspace rows never seed the public Brief/Holdings/Performance surfaces; shared teasers without workspace_id (daily_snapshots, theses, instruments) stay date-only.",
+      "evidence": [
+        {
+          "resource": "repo://cloudflare/dashboard/README.md#L205-L215",
+          "version": "repo-lines-v1:sha256:545a0478515cc552129155e3bf6452bd84e15eee1894b3a32a18091399e3532e:eyJzZWxlY3RlZExpbmVDb3VudCI6MTEsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImI5ODcwNjFkZTJlNTBhOGIyZmJlN2EzYzZlNjBiYjE2NjQ5MmE0OTk4M2Q1YmYwNWVlZTZiN2Y5NmRiZDRkNWIiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6Ijc2ODc5OTQ5OGM0NzgwMjJlMTI4ZmI5ZDJjODgxNmI3MzlhYjA0ZWFiNmM5MWM2MWFlOGIwNWE5Y2VkZjM4NWUiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjE2ZWFlODI0OTFmZDg3MTkzZDYwZGZiYjA2NjkwMDZiMDE2ZmM2YjFiNGE2ZTZhNTE0M2Q4NWIyYjlhZWUxYjciLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6Ijc1MzI0ZTdlNmRjYjg3YjZjOWQwZmQyYTc1NzNhMjU4MmUyOTNhYjQ3YmI2OTdlMGQyMTlkNjI5OTA3OWVlNTIifQ"
+        },
+        {
+          "resource": "repo://cloudflare/dashboard/lib/house-workspace.ts#L1-L40",
+          "version": "repo-lines-v1:sha256:2cefd5edbe512ff36c2fcc7427526e2d51fe9df79851063ee2601f27998cbeaa:eyJzZWxlY3RlZExpbmVDb3VudCI6NDAsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImVhZjIyY2YwNzMyNTkyYzI0NzE0MWNiZTYxZWZhMTEwMTI2MTJmNWEzMTIyYjlhZjliYmFmNTJmNTcyNGQxOTQiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjhjYmYyMmIzNWRlN2ZiOGRiMWRiNjc4MTIzOGRmNjJkOWNlMjc0NGE5MzI2NTE1NjZkMDQ0NzdjMjRjYTVlY2QiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjowLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImVkZWQwMzk1ODA0ZTljNTMwYjYyMTE2NjI0ZTVlMzU1MWUwN2RkYmI2OTRlYmNmMzYxNDExYjIzMmIxYmM1NjAifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_017b1bf934924d8f8f5feb1764cb8858",
+      "statement": "Auth is opt-in behind the build-time flag NEXT_PUBLIC_DASHBOARD_AUTH=1; AuthProvider resolves the Supabase session (PKCE flow when flag on, plain anon when off) with skipBrowserRedirect so OAuth URLs are assigned directly; AuthGate conditionally renders LoginScreen or full shell; PKCE callbacks on /auth/callback are handled regardless of existing session state; auth errors are mapped to operator-actionable copy without leaking secrets.",
+      "evidence": [
+        {
+          "resource": "repo://cloudflare/dashboard/lib/auth-context.tsx#L1-L100",
+          "version": "repo-lines-v1:sha256:a84780e145ed050712c588c6cfca3303fdc1188b3cb48deb94ef4c81d4f7c393:eyJzZWxlY3RlZExpbmVDb3VudCI6MTAwLCJmaXJzdFNlbGVjdGVkTGluZUhhc2giOiIzZjM3ZGIxYjhkYjNmYmVhMzZhNWQyYTZmZmQ1ZjMzOTNhNTNlZjA1MDQ3ZTBiNWU2ZTE0YTQzNGU0MDZmZGZjIiwibGFzdFNlbGVjdGVkTGluZUhhc2giOiI4YjA0Nzc1M2MwMTBhMTI0OGIwYzFhYmVhNGQ3NWIxNDVkMzlhMGJjMDc3MGMxNjg1NzIyMGI2OTQzYTk1Yzk3IiwicHJlY2VkaW5nQ29udGV4dExpbmVDb3VudCI6MCwicHJlY2VkaW5nQ29udGV4dEhhc2giOiJlM2IwYzQ0Mjk4ZmMxYzE0OWFmYmY0Yzg5OTZmYjkyNDI3YWU0MWU0NjQ5YjkzNGNhNDk1OTkxYjc4NTJiODU1IiwiZm9sbG93aW5nQ29udGV4dExpbmVDb3VudCI6MywiZm9sbG93aW5nQ29udGV4dEhhc2giOiI2NTE1OTE1M2I0MTBmMmExZjMxNzI0ZWI1OWMwNzQxMTYwM2ZmYTg0OGMxOTg3YmRiZjMwNjFiYjhhM2ZlYTJiIn0"
+        },
+        {
+          "resource": "repo://cloudflare/dashboard/lib/auth-errors.ts#L1-L70",
+          "version": "repo-lines-v1:sha256:9db5afe7e98dc8da71648f6fab606961ce428f6a1ac1aede8dd5e5e7a1fbd636:eyJzZWxlY3RlZExpbmVDb3VudCI6NzAsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImVhZjIyY2YwNzMyNTkyYzI0NzE0MWNiZTYxZWZhMTEwMTI2MTJmNWEzMTIyYjlhZjliYmFmNTJmNTcyNGQxOTQiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQxMmNhMzQ1Y2NmNzViZjljMDgwNmJjZTY5NWJlOGRlODA4Yjc5OTg0MjUxYTdhNTRkMjAyY2Y2MTAxZGQ0NTEiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjowLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjowLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUifQ"
+        },
+        {
+          "resource": "repo://cloudflare/dashboard/lib/auth-gate.tsx#L1-L100",
+          "version": "repo-lines-v1:sha256:54d1a5555631e3c5921591b5d3d21860a1cdd1409d844be0c34b59b8478f4009:eyJzZWxlY3RlZExpbmVDb3VudCI6MTAwLCJmaXJzdFNlbGVjdGVkTGluZUhhc2giOiIzZjM3ZGIxYjhkYjNmYmVhMzZhNWQyYTZmZmQ1ZjMzOTNhNTNlZjA1MDQ3ZTBiNWU2ZTE0YTQzNGU0MDZmZGZjIiwibGFzdFNlbGVjdGVkTGluZUhhc2giOiIzOGYzNjNhYWExMGMxNjljNzRkZjAyNWZlMWE0Y2M1MzA4ZjljNWM2ZDQ0YTE1MGI1ZDRmZTY2ZjJiNDdlMWU2IiwicHJlY2VkaW5nQ29udGV4dExpbmVDb3VudCI6MCwicHJlY2VkaW5nQ29udGV4dEhhc2giOiJlM2IwYzQ0Mjk4ZmMxYzE0OWFmYmY0Yzg5OTZmYjkyNDI3YWU0MWU0NjQ5YjkzNGNhNDk1OTkxYjc4NTJiODU1IiwiZm9sbG93aW5nQ29udGV4dExpbmVDb3VudCI6MywiZm9sbG93aW5nQ29udGV4dEhhc2giOiJiNjRmYzYxMzM2MTlkNjdiODZjZWYxZDY2MTY4NTdiMTU5OTY2OTA0MTRmMjg0YWMwMzBkMGUxODU1N2NmYTU5In0"
+        },
+        {
+          "resource": "repo://cloudflare/dashboard/lib/supabase.ts#L1-L106",
+          "version": "repo-lines-v1:sha256:82f8fa9e84707b6e4a447f0a8e956eb8fe3996b6d7514dd37b03da367e1965a1:eyJzZWxlY3RlZExpbmVDb3VudCI6MTA2LCJmaXJzdFNlbGVjdGVkTGluZUhhc2giOiI4NDMyMzQzYjUyMTU0NjI0YWE5ZGYwZTYzMDM5YWE3MjM0OTgwZDc4N2EwZGIzMjZhZmUwNTUyMTMzMjkzZDc3IiwibGFzdFNlbGVjdGVkTGluZUhhc2giOiI0MTJjYTM0NWNjZjc1YmY5YzA4MDZiY2U2OTViZThkZTgwOGI3OTk4NDI1MWE3YTU0ZDIwMmNmNjEwMWRkNDUxIiwicHJlY2VkaW5nQ29udGV4dExpbmVDb3VudCI6MCwicHJlY2VkaW5nQ29udGV4dEhhc2giOiJlM2IwYzQ0Mjk4ZmMxYzE0OWFmYmY0Yzg5OTZmYjkyNDI3YWU0MWU0NjQ5YjkzNGNhNDk1OTkxYjc4NTJiODU1IiwiZm9sbG93aW5nQ29udGV4dExpbmVDb3VudCI6MywiZm9sbG93aW5nQ29udGV4dEhhc2giOiI0OTA3ODgyZmM0NDNkNDBjM2Y3MGFhNzg5YjBhZDExMmFkYTdmZTViZTYwODlhY2RkZjNlNDE0NzA2YWZkZjgzIn0"
+        }
+      ]
+    },
+    {
+      "id": "claim_789dbc5ccb7946fa8ba28e81737ca7f1",
+      "statement": "reconcileBook() dedupes overlapping tickers (keeps max weight_actual), excludes CASH rows from the held set to prevent double-discount, normalizes held weights so held + cash = 100%, and never returns a >100% book; investedPct from nav_history/portfolio_metrics is the authoritative cash split; fail-closed P&L renders '—' for missing basis or mark and AccountingNavContractError on accounting NAV query failure — never silent empty rows or invented numbers.",
+      "evidence": [
+        {
+          "resource": "repo://cloudflare/dashboard/lib/accounting-nav-fail-closed.test.ts#L1-L71",
+          "version": "repo-lines-v1:sha256:45c2038027025d97bef75b10d665a55a38008a495338574c15c0a5cb008284f3:eyJzZWxlY3RlZExpbmVDb3VudCI6NzEsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImVhZjIyY2YwNzMyNTkyYzI0NzE0MWNiZTYxZWZhMTEwMTI2MTJmNWEzMTIyYjlhZjliYmFmNTJmNTcyNGQxOTQiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImY2ZjViNDBiMTU4NDU3ZDE3ODY0ZjIxNzkwNzg2ZGQ1YTJlY2RiNjRiNjZhNjUxZjc4OGQ0ZTI1Y2QzMzAzZDIiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjowLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjowLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUifQ"
+        },
+        {
+          "resource": "repo://cloudflare/dashboard/lib/book-reconciliation.test.ts#L1-L49",
+          "version": "repo-lines-v1:sha256:c589396af0bc851fecf667119a26fe95ae7f84f0a550d06afe52ddfa3907c1e1:eyJzZWxlY3RlZExpbmVDb3VudCI6NDksImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImMwOGU0NjkxYmE2NTMxNDg4YmZlMTMzOTYzZTJjYzI1OTkzMGI0MWYwZjU1YWI1ZTVjZWEyYWQ2MTFkODQxODkiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjNhM2U0NmY5NDI3NmI2ZjZmNGVkMWYwMmFmNzhiZWY2YTJlZTFjNDM5ZGQ1NTg0Yjk3Mzk0ODMxMzIxNGQyYjciLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjowLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjFkNjI1NWRjZDhhMDlmMzYwMzVjODUzMzJhY2NjMjdjODA1Njk0OWFhZjljYzFlN2MyNDhkYzY4NzNhNTE3MmQifQ"
+        },
+        {
+          "resource": "repo://cloudflare/dashboard/lib/book-reconciliation.ts#L1-L90",
+          "version": "repo-lines-v1:sha256:51f375048496eba5bc03a9656d903a656d4464280156a777341bd84a27d8f455:eyJzZWxlY3RlZExpbmVDb3VudCI6OTAsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImUyMTVjZDUxYjZlYmI3OTI3ZDJkMzJjMjIyYTlkYTUzN2U2MTQxNDMxNTZhYTI1NjhiNWNhOGMzZDliYzdiOWYiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQxMmNhMzQ1Y2NmNzViZjljMDgwNmJjZTY5NWJlOGRlODA4Yjc5OTg0MjUxYTdhNTRkMjAyY2Y2MTAxZGQ0NTEiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjowLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjowLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_8cfdda5054ae4bed99f64f660f066af7",
+      "statement": "ACCOUNTING_NAV_VIEW = 'public_accounting_nav_history' is the single source of truth for NAV (finalized tips + labeled legacy estimates with series_seam markers); rollback repoints to LEGACY_PUBLIC_NAV_VIEW = 'public_nav_history'; PUBLIC_REALIZED_ATTRIBUTION_VIEW and PUBLIC_PERIOD_STATUS_VIEW provide realized attribution and tip period status; chainNavContinuity() chains across source runs and charts break the line at seams — never drawing continuous returns across legacy and finalized accounting.",
+      "evidence": [
+        {
+          "resource": "repo://cloudflare/dashboard/lib/accounting-nav-fail-closed.test.ts#L16-L70",
+          "version": "repo-lines-v1:sha256:d27a7c80344eb3111b2c35b3cd849baad4d18fd63643ceda811ca0d8e1f740f7:eyJzZWxlY3RlZExpbmVDb3VudCI6NTUsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjkzNTg4NGM1OTYwMmU4MGFjZTU5MWU5MjYwMjZkMTQyZTZiYzQxZTkxMjM5OGNmODU1ZjE5MjhhZDY2MTAxNjkiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjNhM2U0NmY5NDI3NmI2ZjZmNGVkMWYwMmFmNzhiZWY2YTJlZTFjNDM5ZGQ1NTg0Yjk3Mzk0ODMxMzIxNGQyYjciLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6Ijg4MmIzY2YzNWMwZDIwOGFjZDViZDNjNWFjMDFjZjY1MTU1NTZhZDAxMWY3YTY5NWNkZDRlN2I4NjEwY2JlZDciLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjoxLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImY2ZjViNDBiMTU4NDU3ZDE3ODY0ZjIxNzkwNzg2ZGQ1YTJlY2RiNjRiNjZhNjUxZjc4OGQ0ZTI1Y2QzMzAzZDIifQ"
+        },
+        {
+          "resource": "repo://cloudflare/dashboard/lib/accounting-views.ts#L1-L60",
+          "version": "repo-lines-v1:sha256:f30f186c6ac035dd7d703822c1a49f8e36b4350f9781c39efd2c1d26032a97bd:eyJzZWxlY3RlZExpbmVDb3VudCI6NjAsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImVhZjIyY2YwNzMyNTkyYzI0NzE0MWNiZTYxZWZhMTEwMTI2MTJmNWEzMTIyYjlhZjliYmFmNTJmNTcyNGQxOTQiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6Ijk3MmE0MjkzODJiMmUxNDcxOGUwZTM3YjA1NzBhOGExNzAyOTkxZmNkODQ5OGNkODQwNjBhOGJmNGYwNTAxN2IiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjowLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImIxYzQyZjc5MzU0ODM2M2Q0MWI1YWJkMDRmNGQ5MzgyNmI3OTc2NzdjY2E1NmY2NjE3ZDJmYzI1NzUxNjhiMmUifQ"
         }
       ]
     }
   ],
   "verification": {
     "by": "openwiki/0.5.0",
-    "at": "2026-09-09T14:37:17.158Z"
+    "at": "2026-09-19T12:20:11.463Z"
   }
 }

@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "pageVersion": "sha256:7e9dc98ca139ffca839242b5f3831763176b157ae28cf04f7b0507ec3f36ffc3",
+  "pageVersion": "sha256:0c792ebc69d328549717fb8b5e35a45edd3e1fbdc54ac98b05bb16b2efcc1b6b",
   "claims": [
     {
       "id": "claim_bb78f6fb791340829971aef0844e8ae7",
@@ -13,16 +13,6 @@
       ]
     },
     {
-      "id": "claim_861e8197db3e4787907e71ba2cf1af25",
-      "statement": "Connector writes use the abstract ConnectorPayload (operation + data) in / ConnectorResult (success, external_id, error) out protocol.",
-      "evidence": [
-        {
-          "resource": "repo://digibase/src/digibase/connectors/base.py#L1-L23",
-          "version": "repo-lines-v1:sha256:99716b46c5c35a357b5e720be82a7c9775a57a2c30afbb1f60a5242a3632033b:eyJzZWxlY3RlZExpbmVDb3VudCI6MjMsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImY2ODA2YTEzNjViOTZhNzAzNTJlYzMzNWYyMzUwMTY2OTk3NjM4MzkzZTMzMWRkZjI2OTM4ODlhYjJhMDVkMGYiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImYwYTFiZDFiNjkyY2FhYWM3MGU0NDAxNzNlNmE5YzM2YzM2MWYyMTlkZDdhZGFkZGJiNzg4MzM2OTJiMDEwOWYiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjowLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjowLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUifQ"
-        }
-      ]
-    },
-    {
       "id": "claim_b96faecf8b1244a79aa0a5dac5546c61",
       "statement": "SupabaseConnector (digibase[supabase] extra) wraps an injected client with upsert, filtered select, and guarded delete plus write audit, raising SupabaseNotConfiguredError instead of carrying an implicit None client.",
       "evidence": [
@@ -31,10 +21,86 @@
           "version": "repo-lines-v1:sha256:d1e976d0fec3a27263dcc9dd22da16b27b4ea73e9b4d6a586fa7cac648049969:eyJzZWxlY3RlZExpbmVDb3VudCI6OTIsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjFkODcwN2RiNWMxNGRjNjFmNzVmNTc3YjFiNzFmOGUxZDc1NGY0Y2Y3NTcwYjVjM2IwYzg0NGM3ODAwOTUyZGYiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImU5OTFmMGI0N2Q4NzVkNGMwY2FhZTM3NTljZDhlMjJlNDMwYTZjYTEzYmU0MGI5NDkzZTZjMmNjYWVjMDA0MGEiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjYyMDA5N2U0YWE1MDA2OGJhMTU3ZjlhMjczOWZhZDg2OTk1ZTFlMGNkY2NkYWRjNTg5N2MyMDM0Yzc0ZDNlZmEiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImU0MzJlMTJlMmY5YjBhYmE5YWFlNjM2Yzc1ZjE2ODBkMjY0ZjM2ZTljZDc0NGRmZjk4MWYwZmYyMzBhOTI5MTYifQ"
         }
       ]
+    },
+    {
+      "id": "claim_87025c6e6acb4bad9b90594409513849",
+      "statement": "The digibase.connectors.base module (and its ConnectorPayload / ConnectorResult DTOs) has been removed; connectors use concrete result dataclasses defined in their own submodules.",
+      "evidence": [
+        {
+          "resource": "repo://tests/db/connectors/test_connector_base_removed.py#L12-L25",
+          "version": "repo-lines-v1:sha256:e318fb5461b4abcd586c83677d2be75f7270c48cb601225aed05089c08752a58:eyJzZWxlY3RlZExpbmVDb3VudCI6MTQsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjBlZjM0YTM5ZjkyMmM5MDkwMDhmMTE2NzY1NTlmYmJjODQ2MTY5OTIxZjJlZDlkNDdhOWJkMDA4ZTE2N2MwMzEiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjZhOGQzYWQzOGNhNGQ2ZjExNDAzNDEwYzBlZDE0OTEyMTFhMDFhMzQ5ODkxNDhlYzYzMmZiOWZhN2EyMzc4MGUiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjZmOGY5ZGE0MjYxNTRjODVhNDJkOGNiYjgyNWYyNjc3YmY1MzkyMmY3YzgyMmE4MGNhYjJjOGYwOTE0OTBiODgiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjowLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_f141f652835b4c1a80d6f0a6f0f77584",
+      "statement": "SupabaseConnector.delete() refuses unfiltered deletes: if neither eq nor a non-empty in_ filter is provided, it returns success=False without issuing a request.",
+      "evidence": [
+        {
+          "resource": "repo://digibase/src/digibase/connectors/supabase.py#L237-L251",
+          "version": "repo-lines-v1:sha256:8fd9f31b2dfa5bedcdb4b5892fc3ca03024b3a81ba1c0a5b306b7bc49ecb176c:eyJzZWxlY3RlZExpbmVDb3VudCI6MTUsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6Ijg4NGIxODFiN2Q4Mzk1YTBjYjhjYzc1ZTMxM2ZkMmRjYzBiZTcyNmZjMTIzZTk0MDQzYmY0NzM2NTkzNDBkOTEiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjU1MDMyZTk2NGQwOTMyMzUxZTVkMTg1MjY5MjgxYjE3MWEzYTA5YjA4YjI4NmU2NjFlYTQ3MDMyM2M4MmViNGQiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjVhYzhlOTM5ZTY5ZDkxMjJmMTc2NGJiZTJmMWFjNzJhNTEwN2NmODk1MmI1MTVlYjI5ZDQ5ZjIyYTMyM2U3M2EiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImU0YjA2NzQ2Mjg1MjcwMWZkMTFlMzdlZjE0NjU4N2NjOWVkZGEyNGZmMTdmMTE2YWRhMWQ2ZDFiMTdlZDNlY2YifQ"
+        },
+        {
+          "resource": "repo://tests/db/connectors/test_supabase_connector.py#L337-L342",
+          "version": "repo-lines-v1:sha256:89d44284fefe924a727977e316442b81fbde56a564b40cda1f1ecd13cd6f13b0:eyJzZWxlY3RlZExpbmVDb3VudCI6NiwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiMTY1NzJjOTJiZjFlYWNkOGMyOWI5YTkxODBhMDczZDE2ZmE1MjMxY2ZmZThiZDRjNzcyMzQ2YTUxMzA5ODc4ZSIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiYTJhNGZhNGIwODkyN2E0ZmYzYjI5ZThmMGUxNjFlYjQ2Zjg0NjM0NGE3MGVmM2FiMjI5ZmI4NWIyMDRhN2YwMyIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiMjVhMDgxNTY1OTU0MDJlYTAzMmM0Nzc0MWU0ZjI5OGRjYjkzYmE2ODI2NjVmODQ3MzZmYzA5NTkxZjBhNDE0YyIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiNWZjMjQyOTg3NzI0NjM1NDFkNWQwMjQ2Mzk1ZGI3ZmFkMDc3ODE3NjEyZWYxOWM2ZDBmMzY3YWFiMTExZjQ3ZCJ9"
+        }
+      ]
+    },
+    {
+      "id": "claim_b1d1f8a1c2d64efdbc81dfdff16fb095",
+      "statement": "SupabaseConnector.upsert() chunks large row lists in batches of DEFAULT_CHUNK (500) rows and omits the on_conflict kwarg entirely when None — byte-identical to the bare client.table(t).upsert(rows) form.",
+      "evidence": [
+        {
+          "resource": "repo://digibase/src/digibase/connectors/supabase.py#L127-L168",
+          "version": "repo-lines-v1:sha256:5c4f3a5250975c7b148087fc8e5a01e43da63cab508a03d899e40a8adf3e681a:eyJzZWxlY3RlZExpbmVDb3VudCI6NDIsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImZjYzk0YTUwZWNlYzg1YjI3Yjk2ZTc5MjdlMTEyY2M1MzhiOGU1ZjRmZmQ2YjlhNGZiMjMyMjUzODRlODFhZmEiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjRmOTk2ZTExYzNhNzYyMmVhZGEwODA0ODk3YTYwMmM2MmZhMGFkM2VkMTdjMzA1YWU5NjI4NjhiMjI5NGFlOGMiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjYzYmU3NjI4ZWQxZWJiMTVjMTIxZWNjMmVhMDFkODY0ZmQ3YTFmMWE1ZDNmZDNkYjllMTM2MzVhNjY5OGI0NTIiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjEzZTgyMzg0Y2IzMTYzMzA4MTA5NWE2MDAzN2VjN2NkMjI4ZmU5Y2UzMTI1ZmZkYjg1N2NkYTAzOGRjY2U5MjIifQ"
+        },
+        {
+          "resource": "repo://tests/db/connectors/test_supabase_connector.py#L238-L249",
+          "version": "repo-lines-v1:sha256:0b0ada59bcba555cf94a5cb9ab874921dbc9ea3665ada7beceb697bcdb868ff5:eyJzZWxlY3RlZExpbmVDb3VudCI6MTIsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImM1NzUzZWYxMWNiYjhlNzI3NWRmMmVkNjNkNzYyMDU2MWI4ZDA0MjA5YTI1ZTY0YjFmYWE5ZmYwMDg5MTRjYzMiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjhlMDEzYWI5ZjBmZDdlZWJiY2M2Y2YwNzEyNjdkZDNiZTFkYWM2MTdlODYzMTA4Y2NjNzk3MjNmNmI5NDM5OGEiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjgwZGVhNjU0YjlhYTczNzk3MzE3OWMzNTVkMDdmY2UwYmQyNzczOTE3MmYzMTEyZjk3MzJmNTQxYzc4ZTEyY2YiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjkyYWQwYzk1ZGQxMDQ1YmQ0MmU1YzA0ZWJhNGQ1MTYzMzI4MzkzMmYxODZkYWJiOTYyYjYzMDlhMjFhODQ1ZWMifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_ce57c072b16248d9a617780221ed51a7",
+      "statement": "SupabaseConnector.from_env() defers the supabase package import so importing the module never requires the optional dependency, and raises SupabaseNotConfiguredError (RuntimeError) when SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY are missing.",
+      "evidence": [
+        {
+          "resource": "repo://digibase/src/digibase/connectors/supabase.py#L95-L120",
+          "version": "repo-lines-v1:sha256:7e71f2ba19254a556095be350228984c8acbe7075f62536980dc8d726842281b:eyJzZWxlY3RlZExpbmVDb3VudCI6MjYsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjgyMGI0NTNmNWUwYzkyZDVmNmMyNTFhNWVhMTk2MGQ3MmYzYmQwNzk1NmFlODU3ZGEyMGUzMWE4OGM1NTk2OWYiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImRhN2EwMTc5MGFlZjExYjUyMzFmM2RmZGY4OWMyMTI0ODU0NjU2ODY2MDNkMzMxYjQ5Njc2ODQ3MThjMDg0MGUiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6Ijg5NDhhZmZmZTFkM2NhMjY0NTBlNzA4MDkyMTNmMjNiZTU5YmViYTU3ZThhZTA1MWQ0MjNlNTEyZGFlYzg0NTAiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjFjYmU2ZmM5YzEwZWU1NmUwYzlmNDgyMjFkODMwMzI2MzE5MTIxYzM2NGFhYjhmMWYwOWExNjRmNmU2NjgwMDgifQ"
+        },
+        {
+          "resource": "repo://tests/db/connectors/test_supabase_connector.py#L164-L214",
+          "version": "repo-lines-v1:sha256:187845b67c08a222c89d348d53290c0b74aa7ef42372167bc486f2deee557c85:eyJzZWxlY3RlZExpbmVDb3VudCI6NTEsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQ1MzZiNDFlYzBlYWRkMTNhZDNjYzBkZDQ5MDU0MjA2YTMwM2M4OGQ4YmVkYjdiMmIzNDQxNWJkYzUxOTczMGEiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjdiMjhkMmY0NDQwNWM1MTEwMzMxNTI3YjRiN2JkYzkwYjMwOTI1MGQyZjBjYzZkZmRhYWVhMDI4MDRlMGI4ODIiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6Ijg3YWJjYjlkZGYyYTdiMDM3OTc0MDJjYWM5MjEyYWM4MWNkODg0N2JiOWJmNzc5M2ZkMTI4MjgyY2IwM2YwOTAiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjY4M2E2ZThmNDcyMDExNzJmZTY3YjEyMWI2MmFiNDZkMmYzMDNhYjMzOTQ5MDk5NTlkY2Q3NGYwZDY5OWI4MzgifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_f139a0554f7d43b1b42b3e3a1234fc31",
+      "statement": "digibase.connectors.__init__ exposes SupabaseConnector, SupabaseReadResult, and SupabaseWriteResult via __getattr__ lazy lookup, caching on first access so import digibase.connectors stays usable without the optional supabase dependency.",
+      "evidence": [
+        {
+          "resource": "repo://digibase/src/digibase/connectors/__init__.py#L1-L31",
+          "version": "repo-lines-v1:sha256:bd636171c0d29a4647fcc9b139a99510dc9fb0416ad5696809ca6a49c839a9c5:eyJzZWxlY3RlZExpbmVDb3VudCI6MzEsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjBmMWFlOWI4MzIyNzU0ZjdjNGYxNmJhMTNkODlkYTVmNzJlNTU2YWNhZWMxZGUxY2I4MDQwNzIyZWU1ZGU3ZTgiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjgzOWMzOTU1NmJiN2VjZjE2MmM5ZTExNzY0YWZlN2U4NTM0ODdkOTYwOWQ4ZTZlYmI2NjAxMWE3NTBkMzFmM2EiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjowLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjowLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_d09dd5bec8cd43e1932482d8a6fa1f95",
+      "statement": "SupabaseConnector._audit() logs only non-sensitive metadata (table, operation, rows, on_conflict, filter_columns) via digibase.audit.redact_mapping; row bodies carrying potential PII or licensed data are never included in audit output.",
+      "evidence": [
+        {
+          "resource": "repo://digibase/src/digibase/connectors/supabase.py#L274-L304",
+          "version": "repo-lines-v1:sha256:f26523dcdbdda376206b4aabce37900cf7d738a90b859c97372be95cb029f861:eyJzZWxlY3RlZExpbmVDb3VudCI6MzEsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjVjNmJkZmFjYmM4YzE2YTVkOTI1ZjI1OTgyODIyOTQzYjU1Y2NjYmZkNWZhNDczY2E1NTUwMGIzMThkMmZjNTkiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjU5MDlhNTNhNjE4ZDAyOGUxZDMwMDBjMGE3YWJjZWVjYmU1ZmIzN2Y0ZTUxMWVmZTQ2NjQzZmFkNmU2Njg3MmYiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjBlNWY0NWE2ZDZiMzQ5NTg3MDJiYzkwNjM4NjEyMTIwYzg5NjIxODliNTM4NDdlNGFjNWM4OWRhODNlZTFiZjciLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjowLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUifQ"
+        },
+        {
+          "resource": "repo://tests/db/connectors/test_supabase_connector.py#L288-L309",
+          "version": "repo-lines-v1:sha256:954fc2b1300c6a8004b364cd12693105fabc55100c7c0ac29f01d89174bbed9d:eyJzZWxlY3RlZExpbmVDb3VudCI6MjIsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImNiNTUwNTU5ODRiNzYyMGE3NWMwNmZjM2Y0MGE1ODE2YjI2YjFhYWExNzBmYzMwMGY5YWFhNDI0MTg1YTg3NGYiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6Ijk2NDE1NDk5OTkzNzc1ZmI3ZmY0MDFjYTMwMDE4OWRkYzFmMTdiMWJmOWMzYTliYWJiNTFhZTJhNDE0OTQyMjEiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImYwMTljMzMzNzJiOWU0ZTdhZTE5MzQ1MWI3NzU0YWM3NTc2MDg4ZDUzMGE0ZThjYjE3YTYwYmMxMTM4MzUyNzUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImUxZTQ3Nzg1YjMwMTQ4NGVhYzZlZjU5ZTM1ZDE1Y2JkNTM4YjRhODVhZjgxNTc3YTlhYmQ1YjFhYTlhNGQ5ODYifQ"
+        }
+      ]
     }
   ],
   "verification": {
     "by": "openwiki/0.5.0",
-    "at": "2026-09-09T14:37:17.158Z"
+    "at": "2026-09-19T12:20:11.463Z"
   }
 }

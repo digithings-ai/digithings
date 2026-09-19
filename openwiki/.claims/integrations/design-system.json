@@ -1,0 +1,174 @@
+{
+  "schemaVersion": 1,
+  "pageVersion": "sha256:ceef89fb32dc097206327f42790a66c9b912249f2741b78d67fd9adb8623d0f7",
+  "claims": [
+    {
+      "id": "claim_f2212735a352444d9ad8f26d8077145b",
+      "statement": "The digiweb frontend design suite consists of three workspaces under cloudflare/digiweb/: the reference app (reference/, package design-reference) — a live Next.js 16 showcase; design tokens (design/, package @digithings/design) providing tokens.css as the single palette; and shared React components (web/, package @digithings/web) consumed by all product frontends via package name, not on-disk path.",
+      "evidence": [
+        {
+          "resource": "repo://cloudflare/digiweb/ARCHITECTURE.md#L8-L54",
+          "version": "repo-lines-v1:sha256:20afb98224b41ad974936c5091a527995c6b22e9af1880f7054654561b3d2f3f:eyJzZWxlY3RlZExpbmVDb3VudCI6NDcsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjAxYmE0NzE5YzgwYjZmZTkxMWIwOTFhN2MwNTEyNGI2NGVlZWNlOTY0ZTA5YzA1OGVmOGY5ODA1ZGFjYTU0NmIiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjRiNzQ5NjEzY2NkNWJlMmRjMTE4MTE5NmUzM2I4ODk0ODQxMTc0M2NmOTA0MzhiYTcxY2QyNWIwNjg2ZDNjNTIiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImQ4NWQxYTRiOTVhZWVmYWQ5YjRmYjQzMDY4Njc4YzJkZjhmMjdkZGE4MTJkYWM5Nzg4MWFkNzJiYTgzNjhhODkiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImEyNmYyY2ZmYWViODIzYzUxZTk2YTc2MDgxOWFhNDU1NmZlNjdjZDMzZjBkMWJmMzg0NzJkZjhjZTg4N2IwNDAifQ"
+        },
+        {
+          "resource": "repo://cloudflare/digiweb/PRODUCT.md#L26-L30",
+          "version": "repo-lines-v1:sha256:4ab3dedd601077f73f786ec700ec5a9647e7a753fa79282b1bb16bf6a088e7c9:eyJzZWxlY3RlZExpbmVDb3VudCI6NSwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiYjcyOWY4MmJkZDdiNDZmNWIyZjY5YTBiNTBlODkzMTRiMjMzNDU3ZWIxMWY2ZDcxOGE5N2NjMDg0YWMyZTFhOCIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiM2RlOTFiODczYjhiNTdmMzU1OTBhMWU5MjFmNmYxNDQ0MjdhNTQ3NTBhMDZjYTJkMDIyNDFhNzY0ZTU2MmVhNSIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiODk5ODViYzZjMTlkMDlkYmE3MTU2ZmNmNzY3YTM1OGEyODVjNTQ5NjkzNDI0MTMxYTQ3YjlmYzFjNGUxNDg5NCIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiYmNhNDExOWNhM2M5ZjI1NTExN2U1NTBiOTYzOTg4OWYyMmFmODU4MTEwYTE4MzM4ZGJkZmQ2MzRhNTAzMDYzNiJ9"
+        },
+        {
+          "resource": "repo://cloudflare/digiweb/README.md#L3-L21",
+          "version": "repo-lines-v1:sha256:08e4aed19d206795d035bcfaceacc08c8458375b9e86a880094481318d50b78e:eyJzZWxlY3RlZExpbmVDb3VudCI6MTksImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjgwNGRiNjk5NWI0Zjc2NjdmZjIwNWZhNmYyODMyY2VmMGRkZTVlODhjNmViMmZiMTA3Mzk0MTYxNThiZjA1MDMiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjAxYmE0NzE5YzgwYjZmZTkxMWIwOTFhN2MwNTEyNGI2NGVlZWNlOTY0ZTA5YzA1OGVmOGY5ODA1ZGFjYTU0NmIiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjoyLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjllYTU5MzY0YzQ0ODQyM2E5YjU0ZTI3YWJlZDkzMjFhZDBiMjFhOTA5NzFmMjcyZjk4Y2NiNjQ2NDI0OTc0MTAiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjNjNDgzMWExOThmMTlkOGUwYjI3M2I1OGE2MTkxMDlhNTM3NDgyZmMxMDZmMTdlNzVkZTE2ZDBkMTNlNzk5NTAifQ"
+        },
+        {
+          "resource": "repo://cloudflare/digiweb/web/src/index.ts#L1-L12",
+          "version": "repo-lines-v1:sha256:7534456b1b70e32ef359d763dd5de827815712262c7418de1065ca025cf8d35a:eyJzZWxlY3RlZExpbmVDb3VudCI6MTIsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjllZjM0OWQ2NGUyMTJlNjBkYmZiOTc4NWNlYzU3ZjhhZjE0NDMxYTI3Yzc0MDU3NmQ4ZThjMTJlYWYxMmQyNzEiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImQ2NzFhNDU2MDJiOGJmZmUyMWZhMjQzOTQ0ZGFiNjM3YzdlMDI3NmRkZDJmNWU5NzYzNTcxYTU3MDI0Yzc0NWMiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjowLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImUwODUwYmVjZWY1YjEwYzRkN2VjOWMzMjczODk5OTVkNzgyMGUxOTU3MDEwMDkyMjkxMmYyZTk1OTBiMDk5Y2IifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_3795512cf6224462b345699b9b6fbcdd",
+      "statement": "The pass-through rule mandates that any new frontend pattern must be built in digiweb first and then consumed by product apps; one-off components in product apps are forbidden.",
+      "evidence": [
+        {
+          "resource": "repo://cloudflare/digiweb/ARCHITECTURE.md#L319-L327",
+          "version": "repo-lines-v1:sha256:5e9a20122eabc991ef6c510a27800703af8abb18cedafbb82e091943f8240b65:eyJzZWxlY3RlZExpbmVDb3VudCI6OSwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiNWIxOWI3M2I1ZGI1YjliMzBmYTE5MTE0ZGQzNTg1MjM1ZTk3ZmIwMGZmNWI2N2ZiYjE3NDRhMmY3ODQ2MTZjOCIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiZTdlOGExYzgzODQ1MmJkZmY3MWY2YmUyZDM4MmY0OGZkODI4Yzg0Mzg1N2YwNGU2NDViMjBlNjZhMGQ4ZGQ3MSIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiZjZiMzllMGI1M2YwZmU4ODg3NzJmZDUyY2UwMGFjMzg2Y2ZhNjM4NzBhNWVjYjMxNWU4Y2U2MDgwMWJlNDFmZSIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiMDU1ZWE5YTA1NWM4NWQ2ZGY4OThlMzcwYTQyMDhkNTBjNTgwMGIyNmU0NGM3MzNiMDQ4Y2QwMDA2NjczYjRjYSJ9"
+        },
+        {
+          "resource": "repo://cloudflare/digiweb/PRODUCT.md#L56-L60",
+          "version": "repo-lines-v1:sha256:07b200474ce1073a23efe4b838d47fe0ecb62e7901505b3d22a969c3ecc02c38:eyJzZWxlY3RlZExpbmVDb3VudCI6NSwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiZDQwNzVlZWRkYTVmMDQ2MDQ1MzcwNzk2MzQ0ODFjNmRjYjg0YTcyZmQ1MTNjZDVjNjUyODA0YWQ3MDVlY2YyZSIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiYWNhMzY4YzhiYzkzMzc3ZWI5MmZjYTI2YWMyMTE1NmU3NmViZTY0ZDg1NWMyMGQ5ZWU4ZjQ2YmVjOTZjNWMwNCIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiMTlhMGNmMTc3MDZkNTdmMmY0ZmZjNTNjOTA2NTE2MmFjNmI0ZGY1Yzk1ZGY5NGY4Y2VlNmI4NzU0NTgyY2FlYyIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjEsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiMDUyOTBkZDIxYTc0YTE3OWI1OWJlYzdmOGU4NWM4ZGE5N2UyNDE4ZTc5MDQ0YWM3OWY2ZjQ2MThmMzBmM2Y5NCJ9"
+        },
+        {
+          "resource": "repo://cloudflare/digiweb/README.md#L5-L13",
+          "version": "repo-lines-v1:sha256:9fce7f3e1177f81d7861d040d31dda7e03e33afcb83c407b6c0feaab050c9405:eyJzZWxlY3RlZExpbmVDb3VudCI6OSwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiOTM3OWMxOGNjNmNhMGRkZWYxY2EzZTQyOTNmYmU3YmE0OTVjNGU3ZDU5NGJlZTRhZjdiM2Q5YTQ0MjUwNGU3ZSIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiMDFiYTQ3MTljODBiNmZlOTExYjA5MWE3YzA1MTI0YjY0ZWVlY2U5NjRlMDljMDU4ZWY4Zjk4MDVkYWNhNTQ2YiIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiMTNkOTcwNWEyMTA5MDNhNGRkNTk4NTlhZTJjNDdiODQ5NGMyMGU2YjI5NjNhYzBiM2QwYWI4OGRlODIxYzE4OCIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiODI2NTQ0ZGM0MmJjMzRjOWJiMGJmZTM0YWMyNDVmN2Q2MTUzMWNjYWFkY2ViOGViYjYzZjhjODE5NTg5MjVjMyJ9"
+        }
+      ]
+    },
+    {
+      "id": "claim_4eb8eb2245f04e0fa18d3b0aa1978437",
+      "statement": "digiweb includes an agent-oriented design model: MANIFEST.json (a machine-readable index of every reference component and the shadcn ui kit), ASSISTANT_UI_ELEMENTS.md (the assistant-ui elements catalog), and the digiweb skill (authored at agents/sources/skills/digiweb/SKILL.md, generated to .claude/skills/ by make agents-init) that routes coding agents through the suite.",
+      "evidence": [
+        {
+          "resource": "repo://cloudflare/digiweb/ARCHITECTURE.md#L215-L257",
+          "version": "repo-lines-v1:sha256:6c1d239065c63ad81564b348467877e8b76de6b86ef580cc41c23069d5bed263:eyJzZWxlY3RlZExpbmVDb3VudCI6NDMsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjlhMzVmZDMwYzRiMWQ0YmVmNjBlMmRkOWY1NmExZDYwNjg0ZDEzOGY1Y2M4Y2QzNDgwOTEyNTI0ODc5NTE4NTciLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjAxYmE0NzE5YzgwYjZmZTkxMWIwOTFhN2MwNTEyNGI2NGVlZWNlOTY0ZTA5YzA1OGVmOGY5ODA1ZGFjYTU0NmIiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6Ijk1NTkxNjcwY2ZmNTQyMTc1Y2QwOWM5MTExMGY4NGE4MmExNDk3NDRmNTU1NzY5NTJiZjZkZjNjNzE4Y2YwZTUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImJhNTQ0MzgzNzE3OTBkN2RmMjAxYzE4MWYzMTI3NGUzNDYwNTY5MDA5MGQ2OWQ3NjhhOTkxYWYxZDU4YTYyMjkifQ"
+        },
+        {
+          "resource": "repo://cloudflare/digiweb/ARCHITECTURE.md#L319-L327",
+          "version": "repo-lines-v1:sha256:5e9a20122eabc991ef6c510a27800703af8abb18cedafbb82e091943f8240b65:eyJzZWxlY3RlZExpbmVDb3VudCI6OSwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiNWIxOWI3M2I1ZGI1YjliMzBmYTE5MTE0ZGQzNTg1MjM1ZTk3ZmIwMGZmNWI2N2ZiYjE3NDRhMmY3ODQ2MTZjOCIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiZTdlOGExYzgzODQ1MmJkZmY3MWY2YmUyZDM4MmY0OGZkODI4Yzg0Mzg1N2YwNGU2NDViMjBlNjZhMGQ4ZGQ3MSIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiZjZiMzllMGI1M2YwZmU4ODg3NzJmZDUyY2UwMGFjMzg2Y2ZhNjM4NzBhNWVjYjMxNWU4Y2U2MDgwMWJlNDFmZSIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiMDU1ZWE5YTA1NWM4NWQ2ZGY4OThlMzcwYTQyMDhkNTBjNTgwMGIyNmU0NGM3MzNiMDQ4Y2QwMDA2NjczYjRjYSJ9"
+        },
+        {
+          "resource": "repo://cloudflare/digiweb/MANIFEST.json#L1-L9",
+          "version": "repo-lines-v1:sha256:4fc3bbf51d3eae78287b2b057e92c655ba73f8a2f392920081a4140404735c6f:eyJzZWxlY3RlZExpbmVDb3VudCI6OSwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiYTZmYjA4ZmRhMWFjYjk1N2I2MTE2YmQzNzgxMWExZmU0MWEwMTYxMWMwNjMxZWRiZjc4NmQ2ODg5YTI3YTU1YyIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiNGQ1Y2QyZmI0ZjNkZjg4NDUxNTI1NWIzOTUyM2YyZjhiNTQ3MmJlZWE5ZjU2NmZmY2EyMDRkYjgwMjU2MTA0MSIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjAsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiZTNiMGM0NDI5OGZjMWMxNDlhZmJmNGM4OTk2ZmI5MjQyN2FlNDFlNDY0OWI5MzRjYTQ5NTk5MWI3ODUyYjg1NSIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiM2Q2M2IzMDVjOWQyNzZhMzFmMTAxYzBjOWRjOGQxMjQ1ZjA4MzQyOTlhOWI2NWEwNWI5ZmFmZDI0NmQ3N2Y0ZSJ9"
+        },
+        {
+          "resource": "repo://cloudflare/digiweb/README.md#L27-L42",
+          "version": "repo-lines-v1:sha256:b96f80cd90127cbbcb2c6d8c97bd9a9d3e943da13a239ad4bd388eb74d1df769:eyJzZWxlY3RlZExpbmVDb3VudCI6MTYsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjdmZmNiNDlmZGEzYWRlMDczMTQ2YmNiZDE5Mjg2MzE4MmNkZmJlMTg3ZWM5YjlmNDYxNTU4YjVhYmM5Y2U3YmUiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImNiYWYxMGE3N2Y2ZDRlYjQ3OGFlZTZlYTI3MzVlODU5ODY1MDFhMjE1M2U1MWUzM2RhODE0NzQ3YTU2ZTJjMjUiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImJlZDY2YjI2MzY2ZmE4OWFiM2Y1OWVkY2NkODU1NGIyYWM0NjEwODNlNmRmODExOTM2MDZlMmFlNGU2YzQwOTIiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImU0NGJhNzk0OTI4MmYyOTcwYzhlNmU4ZWI3NzIzN2IzYTgyYzMxMTdlYWZhOTc1YzMwMzRlMzYxYWUxNjNlYTkifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_f3ce45d9761f43ff9778d5ae34ac5b61",
+      "statement": "Every consuming frontend app follows a single CSS wiring order: tailwindcss import, @digithings/design/tokens.css import, and @digithings/web/styles/web-theme.css as the sole @theme inline bridge; no app may declare its own @theme block.",
+      "evidence": [
+        {
+          "resource": "repo://cloudflare/digiweb/ARCHITECTURE.md#L194-L201",
+          "version": "repo-lines-v1:sha256:61b2b958230d8fc04ba974ec757e45935e70b20243f9fcdfe5a197b3a4bdb3de:eyJzZWxlY3RlZExpbmVDb3VudCI6OCwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiYzFhNDljMDcwY2JlZjVmNGMzMDRhMWFiOTgzMTc3MWY3ODRjMjFmMzlmMTlmMGU5YzZhMmZkODU2ZjllNzczNSIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiYzQ3MDhiYWVkMWI0YTViMjFmZGMxYTAwNGNhYjg5ODdlYmZjYWFlMDRkNjQ5NGVjN2Y3NDU1MjA2MjE2MzM2NyIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiZDQ0ZjQwMzFkMjE0MDFiYTkzZTYyODZhYTcxZmM4ODg1MGZiOGY5N2M3MTdhN2QyZjQyMzJiZDRmYjA3ZDcwMyIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiZGEzM2VkODQxNDYyMmNjMWRiZTg1MjVhNDdkMzY5ODI0YWZlZTFlYTM4OWQxOGU1OTg4YTBlYTM2N2ZiNjBjZiJ9"
+        },
+        {
+          "resource": "repo://cloudflare/digiweb/MIGRATION.md#L11-L31",
+          "version": "repo-lines-v1:sha256:b5b3cc0881c0d62fbd585162ab8cfc3cdf927d3aa037cded78ece62ec840b84a:eyJzZWxlY3RlZExpbmVDb3VudCI6MjEsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjVmZTQ0MzA2NGRlMzRmMjIzNWZhZjI3OTNjMjliOGEzNTA4OWEyZmVlMzY1OGEyZmZmOTRjY2YwMWRjODg2MDIiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImY3OTI1ZTJhNTdjMWY3NjA4N2I0ZTQzMjQyNTI5NjI0MWFjMjkyOTRiNjFkN2Q0NmI1NzNhOTBmNzk2NmUzNmUiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImMwMzhjNDA3ZDU4YjBiNzdiYjEzOGY1OTQ4NWJjYzJmODlmNTdhYjlkYjBlOWNkY2Q5MTA1NTJiNmRjY2IwY2YiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjllNjdjZmZhOTZkMmQ5NzI0ZGI3MjYwYjZiNmMyMGEwOTExMjAzODNkZjliOGRhMGUxZTJhMzBiNTJjZDU1M2QifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_01ca25ad55044ae0a6da335f724ede88",
+      "statement": "Design conventions enforced across all surfaces include: tokens never literals (all colour from tokens.css), monochrome as default livery with colour opt-in, money colours (--up/--down) restricted to P&L only, one motion moment per surface honouring prefers-reduced-motion, and token-backed Tailwind utilities preferred over ad-hoc CSS.",
+      "evidence": [
+        {
+          "resource": "repo://cloudflare/digiweb/DESIGN.md",
+          "version": "repo-file-v1:sha256:6d118914904656267998c99a7dc0562d5fe36b0be0ad5c821f3a655f4bad73fa"
+        },
+        {
+          "resource": "repo://cloudflare/digiweb/PRODUCT.md#L37-L42",
+          "version": "repo-lines-v1:sha256:10d4160e89f56f42c11cd8165003604a4989179be8c4708039c0e4e58419ed83:eyJzZWxlY3RlZExpbmVDb3VudCI6NiwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiMzhjOTk0MzYzNWQxOTFlNTJlNzQwOTEwYjI1NWRjZjRkM2I3YzU2NmM2N2NiOWJiZWIyMmY1YTMwMGEyYzQ0OSIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiNGU1YjZkM2VhNzE0MzU5ZWMzNmRmODIzZWJiNDdmZjYxNTY1MGY2NjhiN2I0YzNkNzYxYmZhM2MyYzU5YjA3ZCIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiZTU2ZjQ1YmM5ZTc1YmQ2YWM1NjU0ODRkYmNhM2M2ZDZhYzM4MWVmNmI2N2RlYzllODU3YzRmMDY5NGQ4NjI1MyIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiZjQ5NTM5ZGE5ZDk5MzA1ZmQwOTZlYzZjNWZlOGYxNGY3NjUyNDEwOWJiNmRmNDQ3ZjM5YTEyNzhkMWU0N2JkZSJ9"
+        },
+        {
+          "resource": "repo://cloudflare/digiweb/README.md#L56-L68",
+          "version": "repo-lines-v1:sha256:debfd8b1dd8bcc1371635062de681fb66cb8bc5dc867d0926ee835ece43f0c47:eyJzZWxlY3RlZExpbmVDb3VudCI6MTMsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjdjMTU0Y2JiNDljNDJhOWMyN2Q3NTQ3ZjcwZjQ0ZDg4NTdjZDk3ZjIyMWMxY2QwNGRkZjE2MGNlMGU1NzhmODEiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjAxYmE0NzE5YzgwYjZmZTkxMWIwOTFhN2MwNTEyNGI2NGVlZWNlOTY0ZTA5YzA1OGVmOGY5ODA1ZGFjYTU0NmIiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjE3ZmM0NTI4N2Y3MGJiNTVjZDUwNGY1MWFhNTgyMThlYTUwYzc5MGRlODZhYzRhM2ZhNzA5YTdkMzg4N2JmZmQiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImIwODRiN2ZhNjczMTQ4ZjAyOGNkZTI0YTBjOTNjY2UyZjBlNTIyODc3YzM1YTUwZTJjZWFiZjkwMTlmOGJjYTAifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_a4e90e6bb3844c69b4c8f091dc8327bb",
+      "statement": "digithings-web (cloudflare/digithings-web/, package digithings-web) is the public marketing site for digithings.ai. It is a Next.js 16 + React 19 static export (output: 'export', trailingSlash: true, transpilePackages: ['@digithings/web']) that composes @digithings/web primitives including HeroMesh, OdometerStrip, NumberedStages, RepoActivity, WordReveal, StackRow, SocialRow, and Colophon; its shadcn kit is consumed via @digithings/web/ui for buttonVariants.",
+      "evidence": [
+        {
+          "resource": "repo://cloudflare/digithings-web/app/page.tsx#L1-L19",
+          "version": "repo-lines-v1:sha256:45fa7d4a3ab42288780ed61a697f9060c0401a19291a98e6a085af7971ecef8a:eyJzZWxlY3RlZExpbmVDb3VudCI6MTksImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImU4MjAwOTY0YTk3ODYzNTUyMmIyYWIwOTBjNjUwNjVkOGVmOGU4NWM0NzMwYmIyZWIwNDYwZDM0YzY3N2RkYmIiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImU1YjcyZDFhNzBjNWNkYTA0YTQwN2JlZGU1MWE0ZDg4ZjE0NzljZjI4MjNiZDBlZmRiMWI1ZjUyNzkxMTg2YjIiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjowLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjlmMmZmMWZmZjA5N2M4MjE1ZmQyYTM5ODAxNmFlOTUwZmI3OWU0MmQxOGNiOTJlMWRjNmU3MmQ0ZThkOWQ5NjEifQ"
+        },
+        {
+          "resource": "repo://cloudflare/digithings-web/app/page.tsx#L148-L187",
+          "version": "repo-lines-v1:sha256:e97d9939a88ddcffeddbecd8cd431114ac52864f0c17ff84e31663e595d52e57:eyJzZWxlY3RlZExpbmVDb3VudCI6NDAsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImYyZmFmMGMwNjY5OWEwMWQ1ZGYxZWYxNjUxN2Y1MjNkODUyZjM5Njg4NDQwMGI1MWU4OWM3MzdlNThmNWU2ZWEiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImNiMWI3MGVlNTViYzJhNmMwMmYzZGZjYTNkNDY4YzEwZDNmNjg0MzQ0N2I3YTg4ZGQxN2MwOTE5YzgyNTE2MGYiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjE4YTkxNzU5NzJmZTE1ZTJhOTY0MWFiMTMxZjU3MWU2YzdjYWJjYTA2ODM3NjJlYmE1ZjIzNTNlNDgzYzNkNTYiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjRlNDFhMWVlYjk5NTFkZDcyNDMxZTZmNjM1YjllNTNkY2QyZmRhNmM4YzQyMjZjNTUxNDcwNjk1NWYwYjQzNWYifQ"
+        },
+        {
+          "resource": "repo://cloudflare/digithings-web/app/page.tsx#L54-L69",
+          "version": "repo-lines-v1:sha256:f5ee4554481b319ec64129072bf5f9885a3356e5a314045c4c6576f9ab0cc967:eyJzZWxlY3RlZExpbmVDb3VudCI6MTYsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImIxNzZiMGRiNDMwNGZmYmQyYWY1ZGU1ZWM0NTk4MDRiM2Y1MjQ1YzA5MzBmOGQ4MWQ3NjczMmIxMjBjMjk4YTAiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImIwMmQyYzBkNmRjNWU3NGQ5MmZhMTRiOTFkYmVhMjY0MDkwYmViMzVmZGI5MTg4ZDliMzQxMTgxZGNlOWY0Y2UiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjZmMjQ1ZTE1NWM3MThmNDU3NWI2OGJkMzllYWI4MjY1NDYyNmI4NjFmMWZhNTliYmVhODVmMTdkZWIzNzViMDciLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjQxN2NjNWRmMTNhNjgxNDAyOTBlOTI2N2EwZTdiOTY2MWIwNzNhNWM5YzZiMDZiYWZmOTIwNGJkYmQyYjEyODUifQ"
+        },
+        {
+          "resource": "repo://cloudflare/digithings-web/next.config.mjs",
+          "version": "repo-file-v1:sha256:d025f3f4ecbc56c07648b1b57c1a8e8f60c645564703661d3fe6c6f8b054367d"
+        },
+        {
+          "resource": "repo://cloudflare/digithings-web/package.json",
+          "version": "repo-file-v1:sha256:e274f842890893dbee3931c72ac79b122ef50f4b803f800ba1dd297966ebdb29"
+        }
+      ]
+    },
+    {
+      "id": "claim_b8f9d9a5ccf04ed987050603371457d2",
+      "statement": "digiquant-web (cloudflare/digiquant-web/, package digiquant-web) is the public marketing site for digiquant.io. It is a Next.js 16 + React 19 static export with the same build configuration as digithings-web (output: 'export', trailingSlash: true, transpilePackages: ['@digithings/web']). Its landing page composes @digithings/web primitives including HeroMesh, WordReveal, PricingTierCard, Colophon, Footer, Reveal, and the subsystems registry, plus site-specific components for LiveTickerRow, LivePortfolioPanel, ResearchPipeline, PipelineScene, and StrategySuite.",
+      "evidence": [
+        {
+          "resource": "repo://cloudflare/digiquant-web/app/page.tsx#L1-L21",
+          "version": "repo-lines-v1:sha256:4810b60735e1e4a6f243a30a54dfa0b66bf13b6fe44639834f8290c3583b93c0:eyJzZWxlY3RlZExpbmVDb3VudCI6MjEsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImU4MjAwOTY0YTk3ODYzNTUyMmIyYWIwOTBjNjUwNjVkOGVmOGU4NWM0NzMwYmIyZWIwNDYwZDM0YzY3N2RkYmIiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjAzYjA3ODkyYTE1ODhlM2JhNmU1Y2Y5Y2YzODA5N2YwOWUyMTE5MTY3YTQ4OWNmYjk1NDgxNWM0MDJhMGVjNmEiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjowLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjJhYWJmZjJlN2QwNGM0YzUyYjZhMzE1MTlkNjljODdkOWM4M2QyYjQxOTA5MWY2NjA4NDkzYWY3ZTgxOWM5OTYifQ"
+        },
+        {
+          "resource": "repo://cloudflare/digiquant-web/app/page.tsx#L35-L79",
+          "version": "repo-lines-v1:sha256:771af0c94a6959c4ac0e98004319c92365b5bfcf1fd619edd39cd05abce76ff1:eyJzZWxlY3RlZExpbmVDb3VudCI6NDUsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImYyZmFmMGMwNjY5OWEwMWQ1ZGYxZWYxNjUxN2Y1MjNkODUyZjM5Njg4NDQwMGI1MWU4OWM3MzdlNThmNWU2ZWEiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImI5ZGRiNGZhYWZkMGE5YWY4NjJhMmM3NjhiOWJmY2RjNGE3MTVmNTYxYzAyMzQzNzA0Mjc1NTg5ZGY4M2EwZDIiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjA1ZjgxZDAzYmQzNGE2ZmM3NTg5NTRkNDI5N2E5YzE5NjMzNDNlNWQwZDBjMTg5MzVkYWU0OTJlZDc5NzVhZWQiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjRlNDFhMWVlYjk5NTFkZDcyNDMxZTZmNjM1YjllNTNkY2QyZmRhNmM4YzQyMjZjNTUxNDcwNjk1NWYwYjQzNWYifQ"
+        },
+        {
+          "resource": "repo://cloudflare/digiquant-web/next.config.mjs",
+          "version": "repo-file-v1:sha256:d025f3f4ecbc56c07648b1b57c1a8e8f60c645564703661d3fe6c6f8b054367d"
+        },
+        {
+          "resource": "repo://cloudflare/digiquant-web/package.json",
+          "version": "repo-file-v1:sha256:075d91d53890e202446c2083a129d8ae90951ec75b7e48366861588e438cd122"
+        }
+      ]
+    },
+    {
+      "id": "claim_1f889aa1b4584c27a7b0324fb3c883d0",
+      "statement": "digiweb's own rich documentation is available inside the suite directory and should be consulted directly rather than duplicated: README.md (suite overview), ARCHITECTURE.md (module map, families, brand, CI), DESIGN.md (agent-readable design system), MIGRATION.md (canon adoption playbook), CHARTS.md (chart house rules), CHAT_THEME.md (first-party digichat skin), ASSISTANT_UI_ELEMENTS.md (assistant-ui catalog), MANIFEST.json (component index), and reference/README.md (reference app canon).",
+      "evidence": [
+        {
+          "resource": "repo://cloudflare/digiweb/ARCHITECTURE.md#L8-L33",
+          "version": "repo-lines-v1:sha256:0542640d583c2c9aa7229040d6805d6c2ca13d57f30717607a84a40938b055af:eyJzZWxlY3RlZExpbmVDb3VudCI6MjYsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjAxYmE0NzE5YzgwYjZmZTkxMWIwOTFhN2MwNTEyNGI2NGVlZWNlOTY0ZTA5YzA1OGVmOGY5ODA1ZGFjYTU0NmIiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQ3YzA2YzU2MWQ1YzMyNzM0MzY4NTI2OGE0NmIzMzkxZjM5OThlZWU4OTBkMmJlNTFmMGQyMWNjNGE1M2FlNmQiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImQ4NWQxYTRiOTVhZWVmYWQ5YjRmYjQzMDY4Njc4YzJkZjhmMjdkZGE4MTJkYWM5Nzg4MWFkNzJiYTgzNjhhODkiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImU1ZDdmNjkzNTljZDBhMzYyMzk1NGQ3MTM0ODM3ZWJlODNkZGZiYmU0ZDUyZWE2OGI5ZWU2ODQ4ZTg2N2E0YTUifQ"
+        },
+        {
+          "resource": "repo://cloudflare/digiweb/ASSISTANT_UI_ELEMENTS.md#L1-L10",
+          "version": "repo-lines-v1:sha256:bc785770fa703e68cb37d177cb1c90582e0fbcb5aaf11455c6c575530978716d:eyJzZWxlY3RlZExpbmVDb3VudCI6MTAsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjI2NDI1ZDliY2RiZDZjOTUzYWNkOWVlODMwZjBiM2RlMjRmYTRhMmY3MTIzZjMwMzk2OGQyNjc4YWZkOTdlYWQiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjE5NDM1N2ZkOTc5YTYwZDg0MzQ3MTUyOWUzYWJiNmJhN2RiYWFhZGY4ZmUyOTFiNGYzOTFkNDA4ZWI4ODQ2NTMiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjowLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImZkYzUyZjg5Yjk1OTAwOGNjMmI3N2NmMjc5ZTQxMzUzZDJkZGJhY2ZkMmYyMzQyNDkxOTY2ZWQ0YWIxOTYwNjkifQ"
+        },
+        {
+          "resource": "repo://cloudflare/digiweb/MIGRATION.md#L1-L9",
+          "version": "repo-lines-v1:sha256:4c9b7672c5e7da18b603ffe4bd4421241cf293567c38149c76f28c7172242f58:eyJzZWxlY3RlZExpbmVDb3VudCI6OSwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiODhjMmQ3NGJmZmQ1NTZmYjk4ZDBhZGNiY2NhZjQ2MmFkODYwZTdlMDlkYjAxYjIzNDdmMTNhMDI0NTY4MGEzOSIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiM2MwZGYyOTk1YTIxMjc5MmFlNzdiNmNhM2ZiNDMwMmMzMmE3NGFlM2Y5ZTk3ZDFlZDFlMjBjYWE1YjZlZGVmMiIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjAsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiZTNiMGM0NDI5OGZjMWMxNDlhZmJmNGM4OTk2ZmI5MjQyN2FlNDFlNDY0OWI5MzRjYTQ5NTk5MWI3ODUyYjg1NSIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiMzk0N2E3ZTE3NTM1NmU0NzBmZmIwNjkyNDFkMjliYTg0OTU1M2FkZjI0ZjdlOThmYmNlMGE0MGRmZWUwNzE3MCJ9"
+        },
+        {
+          "resource": "repo://cloudflare/digiweb/README.md#L3-L69",
+          "version": "repo-lines-v1:sha256:caf106b38c0fb3c976854923101d983e37bad29a3e1440d9880c4cf0c6d1e9a2:eyJzZWxlY3RlZExpbmVDb3VudCI6NjcsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjgwNGRiNjk5NWI0Zjc2NjdmZjIwNWZhNmYyODMyY2VmMGRkZTVlODhjNmViMmZiMTA3Mzk0MTYxNThiZjA1MDMiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImM4Y2EyYWMxZjU4NjRiMWY4ODk0YzJhNjExMjc2MWMyNjUxNjlhOTM0ZDNmNGFkYWEyZjAzOTU5MDE2MzdmYmQiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjoyLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjllYTU5MzY0YzQ0ODQyM2E5YjU0ZTI3YWJlZDkzMjFhZDBiMjFhOTA5NzFmMjcyZjk4Y2NiNjQ2NDI0OTc0MTAiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjE3MDVhYjJmODRmYTIwMjlhZDU1NWJmNmRhMjVlYTQyYjc4MzRlZTVhYzA3YzJkZDZlOTBiMjEzYzgzMGU4YWUifQ"
+        }
+      ]
+    }
+  ],
+  "verification": {
+    "by": "openwiki/0.5.0",
+    "at": "2026-09-19T12:20:11.463Z"
+  }
+}

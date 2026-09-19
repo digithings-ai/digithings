@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "pageVersion": "sha256:c1f7022a5d5e743f8670286d23331d265194e93e40669eaba6f49b88681fca6c",
+  "pageVersion": "sha256:fac7c837e867c83d58f8b2748bf7daf62db805a8829ee96d5ae1360c8d9230d7",
   "claims": [
     {
       "id": "claim_19a3f21ad9b844a187919d532516e1dc",
@@ -36,7 +36,7 @@
     },
     {
       "id": "claim_8d403078e99649a9b153328f1d82529a",
-      "statement": "Ingest source is a validated server-side filesystem path with no traversal and no raw URLs, the bulk ingest worker is a Phase-2 stub, and Polars-only holds with no exceptions.",
+      "statement": "Ingest source is a validated server-side filesystem path with no traversal and no raw URLs, URL ingest is a separate SSRF-guarded path in pipeline/url_ingest.py, the bulk ingest worker is a Phase-2 stub, and Polars-only holds with no exceptions.",
       "evidence": [
         {
           "resource": "repo://digisearch/AGENTS.md#L27-L27",
@@ -48,7 +48,7 @@
         },
         {
           "resource": "repo://digisearch/AGENTS.md#L45-L45",
-          "version": "repo-lines-v1:sha256:ada774867113be1049b3f5c98a19a5db753cb84d63c6cd212ee5cc70ea568d12:eyJzZWxlY3RlZExpbmVDb3VudCI6MSwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiYWRhNzc0ODY3MTEzYmUxMDQ5YjNmNWM5OGExOWE1ZGI3NTNjYjg0ZDYzYzZjZDIxMmVlNWNjNzBlYTU2OGQxMiIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiYWRhNzc0ODY3MTEzYmUxMDQ5YjNmNWM5OGExOWE1ZGI3NTNjYjg0ZDYzYzZjZDIxMmVlNWNjNzBlYTU2OGQxMiIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiMzJiYTMxN2IyMTRiMTM3ZmQ1YmEwN2UxZWVmZjgxZmU4MTVjZDExY2EwYmJmZjlhNTA0NDQ0ODliMGYwNDAzYiIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiYjJiMDA5OTQzMjE5NWU2NmEyNzkzYTAyZjc0YTA1MWFjY2Y2NmNjYjBhMTUxODkwZGIxMDFiNWVkMzQ5MTY2YyJ9"
+          "version": "repo-lines-v1:sha256:447b7108a2ffa99eccba60899ab34cdbba94dbca74a60cbb62f96bfda7665cdb:eyJzZWxlY3RlZExpbmVDb3VudCI6MSwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiNDQ3YjcxMDhhMmZmYTk5ZWNjYmE2MDg5OWFiMzRjZGJiYTk0ZGJjYTc0YTYwY2JiNjJmOTZiZmRhNzY2NWNkYiIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiNDQ3YjcxMDhhMmZmYTk5ZWNjYmE2MDg5OWFiMzRjZGJiYTk0ZGJjYTc0YTYwY2JiNjJmOTZiZmRhNzY2NWNkYiIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiMzJiYTMxN2IyMTRiMTM3ZmQ1YmEwN2UxZWVmZjgxZmU4MTVjZDExY2EwYmJmZjlhNTA0NDQ0ODliMGYwNDAzYiIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiYjJiMDA5OTQzMjE5NWU2NmEyNzkzYTAyZjc0YTA1MWFjY2Y2NmNjYjBhMTUxODkwZGIxMDFiNWVkMzQ5MTY2YyJ9"
         },
         {
           "resource": "repo://digisearch/AGENTS.md#L48-L48",
@@ -59,6 +59,6 @@
   ],
   "verification": {
     "by": "openwiki/0.5.0",
-    "at": "2026-09-09T14:37:17.158Z"
+    "at": "2026-09-19T12:20:11.463Z"
   }
 }

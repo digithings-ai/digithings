@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "pageVersion": "sha256:eb0cca1a8c2220aab4477a9733ce15ba0050a24cef8e8145188257729db32b49",
+  "pageVersion": "sha256:1a96c658d2825bedd1fe2d9bcb58f25b1152ae51898a92a2902c608bb584e3ed",
   "claims": [
     {
       "id": "claim_11047ca9946043d3b18fc1c4a1cf7e84",
@@ -14,11 +14,27 @@
     },
     {
       "id": "claim_585a79b88c3e4b44aa543ef792d4cb34",
-      "statement": "All capabilities register via register_tool/register_skill/register_mcp_server with ToolContext.allowed_tool_names enforced at dispatch; verticals publish schemas via orchestrator_tools and execute via orchestrator_invoke.",
+      "statement": "Capabilities register via register_tool/register_skill from builtin.py. ToolContext.allowed_tool_names is enforced at both discovery (get_tools) and dispatch (execute). Verticals publish schemas via POST /v1/orchestrator_tools (cached in-process) and execute via POST /v1/orchestrator_invoke. register_mcp_server returns descriptors only and does not auto-register tools; operator MCP tools from extra_mcp_servers flow through openai_tools_for_servers/call_prefixed_tool, bypassing the _tools registry.",
       "evidence": [
         {
-          "resource": "repo://digigraph/src/digigraph/orchestration/registry.py#L97-L190",
-          "version": "repo-lines-v1:sha256:742abff0f037a9638e29b4ddbcf6f35f0e4db41f476d3dae9cb4a06cf1bfa02f:eyJzZWxlY3RlZExpbmVDb3VudCI6OTQsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjM0ZGFkZGM0MmMzY2Y5OWQ2ZWM1YjNjNjhlMTViNTRmM2ZlMTRkM2MzMjljMDk4Yjc5Nzk3ODk0ZDNiZjlmNDEiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjY1ZTZmMTE4MzJkYmVjNmE5NDMxZTJjZjFiODNmYmUxZTNhYWQ5OGJhN2E3YTI0Mzc0N2E5Y2Q0ODk3MDFkYjciLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjEwOGI1YmU1ZDE5MDQ3NDBhZjQ0MGNlYzAwOGE1MzhlNjY3YWY1ZWE3NjFkNWMyOTM2MDQ3NjNlMjQzYmJlMDEiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImIyN2NmZDc3ZmIyMjNmYzg1NzA5YTg4OGZjNDgzYzlkMzQyNzE4YTJmZDM3YzJmZGM1ZTUzNTAyYjljZDg0M2QifQ"
+          "resource": "repo://digigraph/src/digigraph/orchestration/builtin.py#L101-L160",
+          "version": "repo-lines-v1:sha256:9cd9df90bb9ad57526cf1684728d9d4accfc346c72ac0a77704653b2435562c1:eyJzZWxlY3RlZExpbmVDb3VudCI6NjAsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImVjOGIxZTBiZTFlZGJlM2Y3YTMyOWY3ZWE2ZmQwYWU1Y2I2N2NjNWVhOGI4MGQ0YTFhNmE4ODQ5OWQ0YjdiMjUiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImEwYzgxMWFhMDAyYTRlYmJlZWRjYzNmZTk2MTMzZGVmZTE5NDY2ZDdhOTQ2NDU2ZTUwZGRjZjkwN2Y2MTM5MTkiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImMyNDEwMzg5MzJlNTExNTcyNWNkOGRjZWNkZTMwZmU4N2IxYzc2OTgxMWYwNmI1NWE0ZWViYmRhMDMzZDAxMWQiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjRiYTE1YmNmNzk0ZTgxMTdjYjZiZjkwNGIwZWQ0ZTA5Y2JmZjg3ZmU5YmI5NDA4OTVjMjI4ZDAwNDY4YjlhMTgifQ"
+        },
+        {
+          "resource": "repo://digigraph/src/digigraph/orchestration/registry.py#L123-L197",
+          "version": "repo-lines-v1:sha256:c677253c1572f0efca5f4b06463482fd108addabf38810e642ba00c284073130:eyJzZWxlY3RlZExpbmVDb3VudCI6NzUsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjllMjcwZTcxZjI1OGI4MzlhZmJkMThmMzI3MTM1NTYxNWEwYmE1ZjdhNzJmOTU4ODk2ZDU1MDViZWExZTQwM2QiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjMwMWM5NDk2NDY4NzZjMTE3MDEzM2JkZmQ3MzBjMDIxYzk4ODEwNTg0Mzg4ZTBiZWQ1OWE3N2M2ZDdhODIxNGMiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjM1OGVkMjBlMzE3OWY2YWYwMDZiNDhhZmY4OTUwYTdmMTE4MmUxZmQzNDMwNTY4NGE4MmEwYWI4ZmYzMTQ2NTciLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjZjYTUxNDNmNDE1ZTdjODAxMDEwNTRjYzdkZmI2NzRmNTZkMjU1YzlhYjVhNjQ2OTMzYjcxNTlhMmE0M2UwZjEifQ"
+        },
+        {
+          "resource": "repo://digigraph/src/digigraph/orchestration/registry.py#L200-L252",
+          "version": "repo-lines-v1:sha256:fde4bff3ab41b987540da1b9ff8ec1579d3e14c54aae83e92f84dbdf9116250c:eyJzZWxlY3RlZExpbmVDb3VudCI6NTMsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjNiODc0NTM1ZDc4MjQzY2QyM2U4MjY5YjkwMjgxZTE5YjUzN2VmOTc3MjMwMjMxNzYzZWViY2Q4MDA5MWNlZTciLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImM2NGQ2ZjE0YWIzMGI0MGViMGFlNjRmYWQ3MzdhYzRiNDBhNzY1N2QwYmRlMzk3MjJlZmNmZjUxNDJhNDk1YTEiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjBkNmY1Mjk4MWVmNWM2ZDhmNDlkYjJmY2E5YTAxNjQxNTZhMGRhMjg3YWZlYjIwODNlZDQ3NWMxZDg0OTIyMzAiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjZjMWY2MTNkMGQxOTUxZWUxNWQxZDMxNWM3YTgyNjNlNWVhZTlhMTUwMTZiOWZjNTkwM2M1NjQzZTBlYWJhYmMifQ"
+        },
+        {
+          "resource": "repo://digigraph/src/digigraph/orchestration/registry.py#L302-L365",
+          "version": "repo-lines-v1:sha256:dbab88a3f4af4fe836025bf4922e95b8111d39036613b1234740cea1480b5ad0:eyJzZWxlY3RlZExpbmVDb3VudCI6NjQsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImIzMWQzNDY0NDhlN2VmOTVkODMwNDZiZTA5NjBmMmM3NWI4Njc4NDlhYTQzMDdkZjA2YjAzYzk2YmMyOTYyMGMiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImI5YjBmNDg2YzkwNmYzZjBhN2MzY2ViZjA2NGI1MWExNjU2Mzg2MTdlMzc4ODhiNTc5M2U5ZTUzNTY0ZjBhNTMiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImZiMmNhNmRiNGI3OTc5ZDBlYTJiNzRmNzZmODk2ZThiMTZiZTg1NmYzMjU3N2ZiNTcxOWE3NjdjNmRkOGI3ODAiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjQ2N2Q4NTAxZjlkNjhiM2VlODE5NWJjNTMzMzBhZjk3ODBkODg0NDVmNmIxMmE0YjdjMDM1Mjc5ZTRhMzg0NGEifQ"
+        },
+        {
+          "resource": "repo://digigraph/src/digigraph/orchestration/registry.py#L99-L111",
+          "version": "repo-lines-v1:sha256:c8afecaaa3bb7f4a1948b565fd2e856906796a7518c41e765bc3c1f9bdf6a775:eyJzZWxlY3RlZExpbmVDb3VudCI6MTMsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjM0ZGFkZGM0MmMzY2Y5OWQ2ZWM1YjNjNjhlMTViNTRmM2ZlMTRkM2MzMjljMDk4Yjc5Nzk3ODk0ZDNiZjlmNDEiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6Ijg3MWI1NjI2Nzc1ZDM0ZDZmYWJiOThiODI3YTdhZjcyMjM1YzU0OGI4MmYwNGY1ZWE1YjE2MzVmZDg1YThjMTEiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjEwOGI1YmU1ZDE5MDQ3NDBhZjQ0MGNlYzAwOGE1MzhlNjY3YWY1ZWE3NjFkNWMyOTM2MDQ3NjNlMjQzYmJlMDEiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImEwZDlmYTk4YjQ5YWJhYjZhYWZhMjlkZjA1ODhjMjJjMmU4NGQzOGUwODIyYzAyZGRjNjVjOTA4NzQwOWExY2UifQ"
         }
       ]
     },
@@ -53,6 +69,6 @@
   ],
   "verification": {
     "by": "openwiki/0.5.0",
-    "at": "2026-09-09T14:37:17.158Z"
+    "at": "2026-09-19T12:20:11.463Z"
   }
 }

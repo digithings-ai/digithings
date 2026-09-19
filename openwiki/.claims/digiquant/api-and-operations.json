@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "pageVersion": "sha256:2383fa6453c9d7084eab3abfabf8e829bee7a570f16fb3e2bc90d7d9ca0f5209",
+  "pageVersion": "sha256:fea12f98ec8db14d76a7fe022235a6606bd09734cf2c68659c09d1f0d871f5c6",
   "claims": [
     {
       "id": "claim_45ab64bfaaf249c1979e43120519a1b5",
@@ -32,7 +32,7 @@
       "evidence": [
         {
           "resource": "repo://digiquant/src/digiquant/mcp_server.py#L1-L46",
-          "version": "repo-lines-v1:sha256:a413ed0eb10934dcd28cc1b814059b67dd7b5d6c6eef1c3f150056ec2eb60dd4:eyJzZWxlY3RlZExpbmVDb3VudCI6NDYsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjY3YzI1MzU4YWY4MzE2MmNkNmIzNTQxYzM3MjdhZjUxZjEyODU2MzYyYzAxNGZkY2ZkYWM5YjNjYTE1MzQwMjYiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQ2OTNiOThmNWJlOTZjNTU5N2I4ZjVmMjgwOGViMzFhOGU2YjdkMWRjZDUxZTA5YWQ1NGQxZTgwYmE1MDI5MzYiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjowLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjVhZjQ5YjdlZTNmNWMyNzQxZmVkYzNlODI1ZjczNjM1NDRlYWVkMGI2NWNiYzFmNmRkNWUzNmEyNTZlYzYyNTMifQ"
+          "version": "repo-lines-v1:sha256:af9d232fd4d095a2f45fd289b73ba99689f48a159d974d7e4b0f23079f092a58:eyJzZWxlY3RlZExpbmVDb3VudCI6NTg4LCJmaXJzdFNlbGVjdGVkTGluZUhhc2giOiI2N2MyNTM1OGFmODMxNjJjZDZiMzU0MWMzNzI3YWY1MWYxMjg1NjM2MmMwMTRmZGNmZGFjOWIzY2ExNTM0MDI2IiwibGFzdFNlbGVjdGVkTGluZUhhc2giOiJiZWVhZjJkNGUzMmEyMzQ3MmUxN2M4OTEyN2UxMTdmOGE1MTExYTk3YjgwMTY5YzZmYmJlNzU3OWIxMDQ5YmEyIiwicHJlY2VkaW5nQ29udGV4dExpbmVDb3VudCI6MCwicHJlY2VkaW5nQ29udGV4dEhhc2giOiJlM2IwYzQ0Mjk4ZmMxYzE0OWFmYmY0Yzg5OTZmYjkyNDI3YWU0MWU0NjQ5YjkzNGNhNDk1OTkxYjc4NTJiODU1IiwiZm9sbG93aW5nQ29udGV4dExpbmVDb3VudCI6MywiZm9sbG93aW5nQ29udGV4dEhhc2giOiI1YWY0OWI3ZWUzZjVjMjc0MWZlZGMzZTgyNWY3MzYzNTQ0ZWFlZDBiNjVjYmMxZjZkZDVlMzZhMjU2ZWM2MjUzIn0"
         }
       ]
     },
@@ -49,10 +49,100 @@
           "version": "repo-lines-v1:sha256:7bf5a00f65f782124f322d1408134bdf289ea4ad68da63fc12cbd7c8c24a6ed3:eyJzZWxlY3RlZExpbmVDb3VudCI6MzgsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjZlOTA0MGI2YzE2YjY1ZTM5NDI5ZTEzZmZmMTg5OWZhZmUzYzgwNDJlNzQ2MWNkNDdiYzlmY2RlYmUwZDUzNzAiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImUyMDg0YzliY2Q3NGE4MDY0MGRiZDA1NzFmYjE1MjU2YWVhY2Q1MzAwNzZhOGM3YTZhNzA2MzIzZjEyMWViM2QiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjgxYmY4MzE5NzNhZDM4YzYwZDM5MTA0NzlmYzdkMjRhODE3MThjMjM4MmEyYTg0NjVhZWNhZDE3OGIzYWFkMmMiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImI2ODE0YzZlZjI4MTJhNTNmYjFlMjI0NzFlYWM4NDM2NzZmZWQ4ZmQ4YzgxMGQxNGRkYzU4OTliZDU5ZDZkNzkifQ"
         }
       ]
+    },
+    {
+      "id": "claim_3d5ecccbe70347da84e21337ca727eaf",
+      "statement": "create_mcp_server supports two scopes: scope=full (default) registers every tool while scope=read registers only READ_SCOPE_TOOLS, a dashboard-safe subset of read-only data/digifetch/dashboard-policy tools with no compute or mutate tools; unknown scopes raise ValueError.",
+      "evidence": [
+        {
+          "resource": "repo://digiquant/src/digiquant/mcp_server.py#L483-L579",
+          "version": "repo-lines-v1:sha256:4bf4f3f8a64b14b10c8704259c60c2ff1f53ddd79dc0f7255e952607d972d082:eyJzZWxlY3RlZExpbmVDb3VudCI6OTcsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImIwNzRhYzA2OThmZTgzYjVhMzJmYWIzOTE4ZTZiMTdiYWQ4YTczMzllOTBlYTZkODc3NzliYjI2OWQzZjZkYTYiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImZiM2Y3YzY3NTZmMzI4MTU2ZWNhMWIzYTIyNDI4ODkyZmRhMGE0YzcwOWRjOTY0MzQ3M2Y0ODE4OTNjMTIzOGQiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImE1YjFlOTg1Y2QwNDFmNDdlYzU3MzIyMDNiZTJmMjczMDZjNGY0NzczMmNiOWVmZmNmOWNlOTU1NjUyOWQ0MmEiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjUyMGNlNDE2ZmE3NGVmMDg2ZjZiODllNTk5M2JlNjg2OGQwM2VlNWUzYWE2Zjg3Y2Q1N2RlMjA4NTFkNjgxMzYifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_49e2b705b0564d04ac7b29e8441e4638",
+      "statement": "POST /v1/orchestrator_tools returns the full OpenAI-style tool manifest built by build_orchestrator_tool_manifest (~55 function definitions), and POST /v1/orchestrator_invoke dispatches named tools through the shared service_* functions or the digifetch dispatcher, with every digifetch tool carrying a top-level entitlement (free/session/preview/pro) plus an entitlement note so MCP and orchestrator surfaces cannot drift.",
+      "evidence": [
+        {
+          "resource": "repo://digiquant/src/digiquant/orchestrator_tools.py#L1536-L1600",
+          "version": "repo-lines-v1:sha256:ebeccc4749f7da8a2183a5397ff449545e900e40b216cd84e1858e09aa6a3ee1:eyJzZWxlY3RlZExpbmVDb3VudCI6NjUsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjRlOWY0MDA0MTRlNGE5NzE0MmZjOTVhYzVjZjI0YzY2NDJkN2IxZjJhNDcxYTdhNTE5Njg1YzA2YjNlMDYxN2MiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImJhM2RlZmVjMWE5MDhhYjQwYmEyZTBjYzkyMmE1YjA5N2U0MGRmZDQwMGVjYjVlNzhhMTBlNTVmNWFlMzNkMDAiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjE0NGY4ZmM3MDJiYTBkMWRkMzhlYjhjYTViZGMwNmMwZjdjMmI5MjI5MWY1ZmZiNjk0OTI5YTU1NWEzYTdjNjQiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjowLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUifQ"
+        },
+        {
+          "resource": "repo://digiquant/src/digiquant/server.py#L368-L373",
+          "version": "repo-lines-v1:sha256:c89290ab872d73007bd117b41598acc47af73e31a22d54627f6d760bc66db668:eyJzZWxlY3RlZExpbmVDb3VudCI6NiwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiZGU3NTVkY2Q5OWUwNzYyMmUyZDY4NTM0NGY1MWJlNzA0MjhiOGU1NzQ2OTdmZWRiZTFjYTg3NjFiOGIxNWIwOSIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiYTNhOTU0MTgwZjM3ODYyNmU4MWNlZjBiNjE1YmVjNjI5Y2IyMjEzODEzYTIzZjIwOTg2ZjAyM2MzNWNkNWRhZiIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiNzFhYzEzMDQ1N2Q0ZWQ4NzY5MDczZTU2YzJkM2ZmMTM0MGRiYzRlMGUwZmFmY2VmMDI2M2NjZWE4YzM1MTg4ZCIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiMTM4MjJmMWY4MjkwMjIyZDJhYzI2ZTdjNDhlN2RmZTM3M2ZhNDQ1ZTQxMzlkNWY2ZGNiZGM4ZmY1YmU0ZTdhZiJ9"
+        },
+        {
+          "resource": "repo://digiquant/src/digiquant/server.py#L405-L776",
+          "version": "repo-lines-v1:sha256:7a1a94129fbdfb1e505430319054b51c146dada36d866d2e34a1e5413b46d4e4:eyJzZWxlY3RlZExpbmVDb3VudCI6MzcyLCJmaXJzdFNlbGVjdGVkTGluZUhhc2giOiJlYWMyYTE0ZjNiMGZhMDQ1ZWRiMTkyNDRmOGZlNWEyOThiZGRiZjM0MWRkNjk1NWZlYWMxODg2MjU3NWU2MmIxIiwibGFzdFNlbGVjdGVkTGluZUhhc2giOiJmYjk2ODBiZWQwNjhmNjE0YmU4YmYyM2RlMGIzNjMwMDJkZWIzYmJiYzAzYzJjNmYyMThkNDAyNjNlMWVkODg5IiwicHJlY2VkaW5nQ29udGV4dExpbmVDb3VudCI6MywicHJlY2VkaW5nQ29udGV4dEhhc2giOiJkNzAxNDllMDY5YWQ2N2VjY2Y0NzM2NDZmZjFjNzUwMDUwZDMyOWQxMTAwMThkYzU3NjY4NzhlYWZhMWQ2MDdkIiwiZm9sbG93aW5nQ29udGV4dExpbmVDb3VudCI6MywiZm9sbG93aW5nQ29udGV4dEhhc2giOiIzMjNlN2VmNWFkZTQxNzY0MzdiNTEyNzM4YmYyNTk0ZTBjNWVkZmVhY2Y1MzQ4OGVjZDdhYWJkZGI0YTc0MGRkIn0"
+        }
+      ]
+    },
+    {
+      "id": "claim_aee7e369af874717bfefb2d90c2562aa",
+      "statement": "Async backtests are submitted via POST /backtest/start or the versioned alias POST /v1/jobs/backtest, run in daemon background threads against an in-process job table pruned after 300 seconds, stream SSE progress events (start/done/error) with 30-second heartbeats, and report running/completed/failed through GET /v1/jobs/{job_id}/status with GET /backtest/{job_id}/result returning 202 while running.",
+      "evidence": [
+        {
+          "resource": "repo://digiquant/src/digiquant/backtest_jobs.py#L9-L43",
+          "version": "repo-lines-v1:sha256:b46b62b07303228f6df3131a6ab35c826105b4b18770b2cae2f97e5eaeacacb5:eyJzZWxlY3RlZExpbmVDb3VudCI6MzUsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6Ijc4MjEyN2Q2MWM3NjZmNzZlODNiNzY2YjdkOTg2MmMzY2I2ZDdjZmJjZjA1OTlhNDRlZmEyMGE3ZTRhZDlmZmMiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjdkOWViODZjMDBlNzBlNzljYjA4MmVhZmRjNmI4MGEwZjc0YWM4NzZmNWM4YzFjODdlYzhmZWU1ZDE0Yjg4Y2MiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjI3MTUyODE5ZDNiZTc2MGQ3MjViZDNmOTY2ZDJjM2M2ZmE4Yjk5OGUyODk4ZWQxMDQ1ZjRiN2QwYTU1NWZlNDAiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjowLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUifQ"
+        },
+        {
+          "resource": "repo://digiquant/src/digiquant/server.py#L286-L345",
+          "version": "repo-lines-v1:sha256:4bd0e5c00b24dfc7603d0221d3c79132c484b156660763358e8e2a40ffd56364:eyJzZWxlY3RlZExpbmVDb3VudCI6NjAsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImU4Y2MwYjhiZjcwNDI3MGFiMzZkMjk0ZDUyODkxOTc1ZmJhYTg2YzZlZTlmMzEzOTUwNDlhYzMzZjUwYWZjODkiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImQ2NDExYzlkMmZjNWRmNmI5ZGFkOGFiZGFjMmM2ZDAwNjQxYzJhM2UzMDc5ZDA4MDk5YmM3YWMyNmFkYzhiNDAiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImQ3MjIzMTA2ZmQ4NzQyYjcwZWEyMzNmOWRjMzU5ZjRiMDJiYmIwNjliNzI4M2VlZjc2MjQ5OTUxNmJkN2I5YzgiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImQyMzFkYmJjNjhkZjE3ZjkyMmJkZTFmNWMyYzNiMzFjMDViMTE1Mzk1NWFjNzQ1MDUwM2IzZTkyZjg0NzgxOGYifQ"
+        },
+        {
+          "resource": "repo://digiquant/src/digiquant/server.py#L899-L946",
+          "version": "repo-lines-v1:sha256:ee85fb184e453dfda2472b9cb155ada3bd4dc49325c9f4a029295f36e5da0bd6:eyJzZWxlY3RlZExpbmVDb3VudCI6NDgsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjFiODdjZmE4ZTAzZGY3NTRjYTk2MTFhOGJkNWE1YjAyMmJjYzRiMzg2Njc0M2I3Mjg4MjE4YzNjNjgzZDAxNjkiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQ4OTNmNDBlMzc4MWViODk2YzgyZDA0NmEwODA2N2ExMWUzNWNkZjJmMWRmYWYyNmZlYTkwYjhkYjY2NzY0MTMiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImRjNzM5ZTFjNjVhMDA5ZTM3MWVjZjhlZDgyN2MzZDFhMDFmYTNhM2Q0NTEzNTEyNWI3OTBmMjUwYWY4ZDE4ZTEiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjA3OTIzZTFmNTkwODUyZjc0ZTM3ZDA1ZTQ5OWJjMTEyODg0NjlkYmQ2MzZmN2I2ZTEyMDJhNGVhZmIyMTYxNTQifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_684c340a16db44a6b3f8a4cc7488cf1e",
+      "statement": "Per-IP sliding-window rate limiting caps /run_backtest, /run_optimize, /run_pipeline, /v1/workflow, /v1/jobs/backtest, and /v1/orchestrator_invoke at 10 req/60s, /v1/orchestrator_tools at 30 req/60s, with a 30 req/60s default, exempting /health, /healthz, and testclient IPs, and is disabled when DIGI_DISABLE_RATE_LIMIT is 1/true/yes.",
+      "evidence": [
+        {
+          "resource": "repo://digiquant/src/digiquant/server.py#L62-L116",
+          "version": "repo-lines-v1:sha256:793e4b63a00b755e0bb940edb3b48cd990ac7d0541689ae56db4409f489e5fd9:eyJzZWxlY3RlZExpbmVDb3VudCI6NTUsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImIyMTc3ZDJjYTk0Y2MyM2Y1YzVkMTY1M2IzYmEzZjkzZmZiZDBlODgzYjdiYmQxYWI5MzY0MjkwMGM3YWZhNTYiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImFhNzk2NWE0ZDljMzVkNjczNGIzNmQyYTFkMjkzNzk5MWY3MmQ1MWYwZjhmMWI0ZGM1ZWI3NDU5Y2M2MTBkOTkiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjU4ZmIwMzZhODlkZjMzYzRhMDY1MTkxZDA5NmI1N2I0YzJhNTBhM2I2M2U5OWYwYmEzZDViODY3MWJkZjgyNjciLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjkzYzM0NmFjMzBiNzVkY2M4MzQyYWNhNmRhZWU3OTk3OGViZTllNmY2ZDhiZDM2NjY5OWI0MjYwOGVkYWU3N2UifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_db0a31561062465a8e37cf87216924d1",
+      "statement": "The MCP market-data read tools are backend-switched by DIGIQUANT_MARKET_DATA_BACKEND (supabase default, or r2 via R2HistoryStore); digiquant_get_price_technicals is R2-only after migration 127, and both R2 technicals and macro return as_of/stale envelopes where a stale flag (seal >5 trading days behind or a live-fetch error entry) is served but never cached in the 900s TTL.",
+      "evidence": [
+        {
+          "resource": "repo://digiquant/src/digiquant/mcp_server.py#L326-L424",
+          "version": "repo-lines-v1:sha256:378e4f1fd783bcf388767cff4cb3e1797fe8e801aae9ce2ec336ae6b075eba21:eyJzZWxlY3RlZExpbmVDb3VudCI6OTksImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjMzNmRkNDRmY2ZiYzEwNDAyYzc2ZTdhYmIyNjBhMGQ5NmJmYWM4MjRkYzBjNmMyNDcyZDRiMzU2ZTU4NWYwZTYiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjJkODAyOTQxOTcyNGJmODhiZWZiNmZmYTUxODJmOWVmZWRlNDIzNWU2OGYwNjIyMGVlMjM3NDQ4NGQ5MjczMDAiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjBiNDY4YWQwYWJkNWRmODYyMGJiOTRiZGZmZTg1ZjQyMTEwZWNkYThhZjc2NGE0ZDVjM2JhMDZiYWE1Zjc3M2YiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjVlMWQ0ZWMwNGU2YmY3YjRlZDgwZGI0ODdkNjcyYzNkZjk1MzA5YzVkMmY3ZWZjNTg5N2E1NGNhZWMwYTE5YWUifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_aed16e980e9d462fa0b8268eb17554da",
+      "statement": "The digifetch x Gloomberb family adds 33 read-scope enrichment tools (quotes, batch quotes, price history, ticker financials, options chains, SEC filings, holders, analyst research, corporate actions, earnings, FX, search, news, econ, CDS, transcripts, tweets, venues, screener, 13F, Shiller, proxy statements, filing events, risk reports, short interest, equity diagnostic, saved searches) that return a §7 attribution envelope, default ON behind GLOOMBERB_ENABLED, and answer typed auth_required/pro_required for session-gated tools when GLOOMBERB_SESSION_COOKIE is missing or a Pro plan is required.",
+      "evidence": [
+        {
+          "resource": "repo://digiquant/src/digiquant/mcp_server.py#L483-L536",
+          "version": "repo-lines-v1:sha256:ab3d436410b0cc9b0915eb22ba9903d61378599fe239eb96b386681f5b404e39:eyJzZWxlY3RlZExpbmVDb3VudCI6NTQsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImIwNzRhYzA2OThmZTgzYjVhMzJmYWIzOTE4ZTZiMTdiYWQ4YTczMzllOTBlYTZkODc3NzliYjI2OWQzZjZkYTYiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImZhZmJhMDUyN2MzOTUzYzRiNmUwZTViNTczOWJhODM2MTJmODA1M2JjZGM5NDY2NzMwMTkzY2QxZDU5MGI0MDgiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImE1YjFlOTg1Y2QwNDFmNDdlYzU3MzIyMDNiZTJmMjczMDZjNGY0NzczMmNiOWVmZmNmOWNlOTU1NjUyOWQ0MmEiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjgwZDA5ODE2NTZlYmE1NzE5OWUzNGMwMjRmNmY2MWJkZDIwZTM2N2NkNWE5NmE5ZTA0NmNiMWVlMTc3OWUwMzkifQ"
+        },
+        {
+          "resource": "repo://digiquant/src/digiquant/mcp_server.py#L884-L895",
+          "version": "repo-lines-v1:sha256:e99571ea102de038b8aeb48afaed255cfefbeb5e6d9181e4be89c179f66a3b1b:eyJzZWxlY3RlZExpbmVDb3VudCI6MTIsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjcxMDY0NmQ3ODM3YmMwYzAwNzEyZjg2MTc0ZTVmMTk2NmNjNWNmNGU0MDA0MWQzNTlhYmMxMTFhYjY2ZmQyYzIiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjYxMjg5NmYyYWJmMzAwYjBiYTIwZjM3MGY4YmQ0OGUwZDlhZGFhNjJiZGI3NDI2NjVlN2ExNDE1ZmVkNDhkYWIiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImQwOGQ1ZmIyMmQwNzQxMmY4N2JhOWU0YzU4Y2MzOTQ5MThkNWJkOTFhMTEyMDdkZTdkYzAwNGM1YzRkMjc4NDMiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImRkNGRmMjI5YTA2YTk3ZjllNDg2OTgyZGI3NDVjYjg5ZmEzMTZkOWQ0YzM4MDBjMjIyZmJkYTA3ZTJhYzY3YTcifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_82941fa2c2da47cbbb5a22b808c795be",
+      "statement": "run_digiquant_research_agent wraps digigraph's run_research_agent and injects DIGIQUANT_MAX_TOOL_ROUNDS (default 24, minimum 1) as the max_tool_rounds unless the caller passes an explicit value, keeping digigraph chat's own max_tool_rounds=4 independent.",
+      "evidence": [
+        {
+          "resource": "repo://digiquant/src/digiquant/tool_rounds.py#L24-L84",
+          "version": "repo-lines-v1:sha256:95837a6abdbe5b2f8cf2b0de2d1b721ce6d381958379a62a71b2be28dde989f2:eyJzZWxlY3RlZExpbmVDb3VudCI6NjEsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImQ2MzNkZDdhYjVkMzRiMGE5OTEzZjYxNzg2ZjkxZmIzMGM0NmQzYjliYjJkNjg0ZDY2ZmZjMThmZGZlOGU3NjciLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjMwYzFmMTg4ZjE0MmVkN2E4MjQ2ODBiMjA3MTcyYzU1MTliYzYxNGE0OGZkYTdjZjE2N2VkYjhkZGY3OTk1NmMiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImU1YzFjNDYyZTJhMzlkNzQ3NTlmNWUxYjEyNmY3NjgzYTJiNzMwMTE4ZTE4ZjUxMjJiMDhjZWRlZWI2NTBlMjMiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjNiMjM2N2JkMGRmMGE2MmRmYzNkMTIxOTkxYjI5OGZlNGU5YzNkMzI2NzUyZTY5ODU1OTQzYjZjZjRiMjQ4M2QifQ"
+        }
+      ]
     }
   ],
   "verification": {
     "by": "openwiki/0.5.0",
-    "at": "2026-09-09T14:37:17.158Z"
+    "at": "2026-09-19T12:20:11.463Z"
   }
 }
