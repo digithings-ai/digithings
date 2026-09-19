@@ -77,15 +77,15 @@ DEFAULT_INTERFACE_PATTERNS: tuple[str, ...] = (
 )
 
 MODULE_INTERFACE_PATTERNS: dict[str, tuple[str, ...]] = {
-    "cloudflare/digichat": (
+    "apps/digichat": (
         "package.json",
         "src/**/index.ts",
         "src/app/**/page.tsx",
         "src/app/**/route.ts",
         "src/app/**/layout.tsx",
     ),
-    "cloudflare/digichat-ui": ("package.json", "src/index.ts", "src/**/index.ts"),
-    "cloudflare/digiweb": (
+    "packages/digichat-ui": ("package.json", "src/index.ts", "src/**/index.ts"),
+    "packages/ui": (
         "package.json",
         "web/src/index.ts",
         "web/src/**/index.ts",
