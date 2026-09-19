@@ -1,66 +1,112 @@
 {
   "schemaVersion": 1,
-  "pageVersion": "sha256:0ab665346edfa0640c03e743b33a9551ab242cccb25d6e573527a62a01f9df88",
+  "pageVersion": "sha256:150a680aca46122ac77a1687ed1c960b994523099bef032dd0721df0e008f281",
   "claims": [
     {
       "id": "claim_dab35baa40af4350b8e3d7969e80ac49",
-      "statement": "Local dev runs host backends via make stack-local plus make digichat-dev on port 3000, requiring matching AUTH_URL origin and an identical DIGIKEY_BFF_TOKEN, without which chat returns upstream_auth.",
+      "statement": "Local dev runs host backends via make stack-local plus make digichat-dev (cd cloudflare/digichat && npm run dev) on port 3000, requiring matching AUTH_URL origin and an identical DIGIKEY_BFF_TOKEN, without which chat returns upstream_auth.",
       "evidence": [
         {
-          "resource": "repo://frontend/digichat/OPERATIONS.md#L140-L175",
-          "version": "repo-lines-v1:sha256:22a26fab45f870169919bb79311edbdc364fca21a3c99d12dbfd59950cd0b031:eyJzZWxlY3RlZExpbmVDb3VudCI6MzYsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6Ijk5ZTkxYjYwZGUyOGZkYjJmYTY0MWVlNWYxNmU1YWE3OTA1NGUzN2E1NzI4YmZjNWE4YTVmODFkYTEwMTgxYzQiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjAxYmE0NzE5YzgwYjZmZTkxMWIwOTFhN2MwNTEyNGI2NGVlZWNlOTY0ZTA5YzA1OGVmOGY5ODA1ZGFjYTU0NmIiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjRmMzk1NmNhZDExNGNmOTEzZWE3NTAyZDU4NTY3YjhlMzU4ZjFjZDliZTQyMjAzMjcxZWFhMDAyOTA0YmRlODkiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjY2ODc1OTI2YTkzNzlhNWZjODBhZDU3ODFkN2M2Nzc4MzZmNDk4NWY1NWQ1OTcxYmQ3ZWJjOTg4ZGI1NTM3N2MifQ"
+          "resource": "repo://cloudflare/digichat/.env.example#L1-L30",
+          "version": "repo-lines-v1:sha256:3546b58223f2688a3fbf6c48b63030c65af0a8ac81ca7487c053c6812280fca8:eyJzZWxlY3RlZExpbmVDb3VudCI6MzAsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImYwNmFmZDk2YzZiNmRlM2JjOTg4ODQ4ZTRkYzM0NDYxZWMxMGRiYTEyNmUxODc2NmZiNmZkNzg3ZWJlMjQyODIiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjAxYmE0NzE5YzgwYjZmZTkxMWIwOTFhN2MwNTEyNGI2NGVlZWNlOTY0ZTA5YzA1OGVmOGY5ODA1ZGFjYTU0NmIiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjowLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImJlZDNjMjhjNGMwOWViYzk1ODJkNDY0MGQ0NmU1ZmMyYjI4YjAwMmFiMDRiNjA0NmEzODdhNDlhNTU1NWNkNGEifQ"
         },
         {
-          "resource": "repo://frontend/digichat/OPERATIONS.md#L76-L110",
-          "version": "repo-lines-v1:sha256:20afec39099fa0d0081f8766c4f8271d973dca2cf4cfe633efb4c980c170aee5:eyJzZWxlY3RlZExpbmVDb3VudCI6MzUsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjAxYmE0NzE5YzgwYjZmZTkxMWIwOTFhN2MwNTEyNGI2NGVlZWNlOTY0ZTA5YzA1OGVmOGY5ODA1ZGFjYTU0NmIiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjNkMDg0NzMyMzcxMGJjMmI2NmYzNGMwYTY1YjQxYWU2YzU2OTZkNzE0ZjM4NGYxMzFmZDk3ZDI0YzE4NzhlYWIiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjEwZTc4NDRmNDQ4MzNjMTMwZTlkZDhiNTAwNzQ1MDk1ZGE1ZmMxYjdmNjEwMWY5MjhlNzJjZDM0YmZhMzcyYjAiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjllODlhZWUyNmM5OTUzODIyZTk1MWM0MDcyODNjMWExMmI1ODhhMzQyNDI4MTFhMDZhMDE4ZjNjYjQ0NDBlYjAifQ"
+          "resource": "repo://cloudflare/digichat/OPERATIONS.md#L77-L98",
+          "version": "repo-lines-v1:sha256:41972502d27bef435b12312740879621321ac382fea0eda7a3db0fe90c5f5aac:eyJzZWxlY3RlZExpbmVDb3VudCI6MjIsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjBkNWYxMjM0MDdmOGJlYThiOWNhYmM2MGYzNTNjZDA2ZmMyYjgyOTM2ODIyNWFlMzk4MGQzMTZjZDEzNzAxNzYiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImE0MjJlMmQ2YWFjMWI4YTNlYTMwYTQ4ZTVkNjAyZTkwZTU2NDIyN2QwOThjNTllNjJiZjFiNjFkMjkzODBlNjciLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjVkZTI0OWU0Zjg3MzY1ZDY4NTcyODhkYTFmNjU0NjM2YzMwNWMyZTYzNGIzMzA2ODMyMTE4ZDY0YTExYTliN2IiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjU4YTJiOTFiNTQ5Mjc1YWM3NGRkMjQ0NDJhN2YzM2EzMjdmODFjZmMwMzE5OTYwODZjZmZiZmMxNTJmMDAzMTAifQ"
         }
       ]
     },
     {
       "id": "claim_1a780ef323454bda85127db427163044",
-      "statement": "Postgres is optional (health reports database: skipped without it); migrations in drizzle/ are additive and auto-applied at boot when DIGICHAT_AUTO_MIGRATE=1, which is why the image ships the drizzle folder.",
+      "statement": "Postgres is optional (health reports database: skipped without it); migrations in cloudflare/digichat/drizzle/ are additive and auto-applied at boot via instrumentation.ts when DIGICHAT_AUTO_MIGRATE=1, which is why the container image ships the drizzle folder.",
       "evidence": [
         {
-          "resource": "repo://frontend/digichat/Dockerfile#L48-L51",
-          "version": "repo-lines-v1:sha256:73036f885f25aa3d60dd9c186e88e739a2cfde4d2f66cbd4b4030501210942e2:eyJzZWxlY3RlZExpbmVDb3VudCI6NCwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiYzU4MWJkZjFkNjg1MDU5ODM5YzEzYjFhOGE0ZDExMTM2OGRkNGRmZTU1MGQ4NDNhOWI3MTlkNWJkOTg4NDJkZSIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiMGI4OGFjZDgzODFjOWJhNmNkZDNkZmJiNDQ4YjE3ZDk2ZjliNTdhMzlhZjVkOTIxOTE0ODkzNmFmNDc4ZmY4MyIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiYTA4NTRkMWUwMjY5Yzk0ODhhNDc1OGFiZDFkMmNlYTg4OTIzZjMyZDZkMTU2YWEwMjBlNWI5ZjgxNTRjNDI4ZCIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiN2Q2NTNlMzMzZGU2ZDU4NTI2ZGRmZTU2MjY3Nzc1NmZjZjVjZGY3ZDZjZmU0ZjU5ZmE3YWI0NjBhNzljZGE0OSJ9"
+          "resource": "repo://cloudflare/digichat/Dockerfile#L48-L51",
+          "version": "repo-lines-v1:sha256:539776d7ccc7f6afa068b05bb39ef4e95d1ede0425dc79044a0f7aa3a357f30f:eyJzZWxlY3RlZExpbmVDb3VudCI6NCwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiYzU4MWJkZjFkNjg1MDU5ODM5YzEzYjFhOGE0ZDExMTM2OGRkNGRmZTU1MGQ4NDNhOWI3MTlkNWJkOTg4NDJkZSIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiY2Y4MDNmOGI0ZGJhZDE4NDE2MzJiOTg5ZGQxYjhmYTlhOTEyM2RhMWU5NmI3M2NhYmI3ODY2ZDgzYmU0OTMwZSIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiYjQ4ZTcwYmY5ODY3YzBhZGRlNjA2OWNjMjY1YmQ0MmEwOTBhN2Q5MjFjNzc4NjYyOTU5MTBkNTc5NGI2YWRhZCIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiZDQwYzIxN2Q2ZjZkOTBkYmY5OWRiNzZiZGUyMzg5ZmNjOGI0OTQxMDBlMzA2YTM0M2UwMDBlYjg3NDhmNjk2OCJ9"
         },
         {
-          "resource": "repo://frontend/digichat/OPERATIONS.md#L110-L110",
-          "version": "repo-lines-v1:sha256:3d0847323710bc2b66f34c0a65b41ae6c5696d714f384f131fd97d24c1878eab:eyJzZWxlY3RlZExpbmVDb3VudCI6MSwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiM2QwODQ3MzIzNzEwYmMyYjY2ZjM0YzBhNjViNDFhZTZjNTY5NmQ3MTRmMzg0ZjEzMWZkOTdkMjRjMTg3OGVhYiIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiM2QwODQ3MzIzNzEwYmMyYjY2ZjM0YzBhNjViNDFhZTZjNTY5NmQ3MTRmMzg0ZjEzMWZkOTdkMjRjMTg3OGVhYiIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiODg5MWJjZjI4OGMzM2RlMjliZmNlMGU2MGZkNGZkNGE2YjE5MmFiMDBlZjhkYTUyNjE5OGIxZDk1ZDQ0ZTMyNyIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiOWU4OWFlZTI2Yzk5NTM4MjJlOTUxYzQwNzI4M2MxYTEyYjU4OGEzNDI0MjgxMWEwNmEwMThmM2NiNDQ0MGViMCJ9"
+          "resource": "repo://cloudflare/digichat/src/instrumentation.ts#L1-L11",
+          "version": "repo-lines-v1:sha256:ae2b90feef7cdd0aaf97c56e26853c3f48082aaf62d508f875c668da80ebaf0d:eyJzZWxlY3RlZExpbmVDb3VudCI6MTEsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjcyOTNhNjFmNmFmMWZlNzkxMWU1MmNmNmI3ZDY0YzdmN2I0NTIyZTcxYTcxZjg2MGViZTY3YjI1YzM5NDMwZDkiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQxMmNhMzQ1Y2NmNzViZjljMDgwNmJjZTY5NWJlOGRlODA4Yjc5OTg0MjUxYTdhNTRkMjAyY2Y2MTAxZGQ0NTEiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjowLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjowLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUifQ"
         },
         {
-          "resource": "repo://frontend/digichat/OPERATIONS.md#L210-L210",
-          "version": "repo-lines-v1:sha256:a2f0532884f0da0ea368536da09b4d21283f741b59cceb54833877486350185c:eyJzZWxlY3RlZExpbmVDb3VudCI6MSwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiYTJmMDUzMjg4NGYwZGEwZWEzNjg1MzZkYTA5YjRkMjEyODNmNzQxYjU5Y2NlYjU0ODMzODc3NDg2MzUwMTg1YyIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiYTJmMDUzMjg4NGYwZGEwZWEzNjg1MzZkYTA5YjRkMjEyODNmNzQxYjU5Y2NlYjU0ODMzODc3NDg2MzUwMTg1YyIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiNzdiMjhjZWIzZDMzMmRmMDlhNzFkMWIzZTI4ZjgzZmU2YjQzOTQ2ZmMzNmQ3MjI2MzdjMDYzYzU2MzZlNmYyMSIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiOWFhNTk5ZGE3N2FlZWViNGE5OTdkZDgzNTA4MzM4N2IyMzRhMmRhYzZmMTQ5MWM0NjJiNzJjMmVkMmM0MDczZSJ9"
+          "resource": "repo://cloudflare/digichat/src/lib/migrate.ts#L1-L21",
+          "version": "repo-lines-v1:sha256:97655ef6e3de0e70135271c96243d8963cecc4aef16446a42e1cf05b6c40be0e:eyJzZWxlY3RlZExpbmVDb3VudCI6MjEsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImQ0Zjc2NzhkZjU4NzhmNjJlNTRiYWEyNDU0ZWIzZTgwNjg4MTk3YmUxN2E3NDQwOWE4ZjllODNmNjcxNmZiNDMiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQxMmNhMzQ1Y2NmNzViZjljMDgwNmJjZTY5NWJlOGRlODA4Yjc5OTg0MjUxYTdhNTRkMjAyY2Y2MTAxZGQ0NTEiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjowLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjowLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUifQ"
         }
       ]
     },
     {
       "id": "claim_31e92a8089024a1a8c4800da83c2e3c3",
-      "statement": "The container is a multi-stage Node 22 standalone build from the repo root run as non-root nextjs on port 3000, with /embed frame-ancestors resolved at request time rather than as build args.",
+      "statement": "The container is a multi-stage Node 22 standalone build from the repo root, runs as non-root nextjs via trusted-proxy-server.mjs on port 3000 (Next.js on internal 3001), with /embed frame-ancestors resolved at request time rather than as build args.",
       "evidence": [
         {
-          "resource": "repo://frontend/digichat/Dockerfile#L1-L25",
-          "version": "repo-lines-v1:sha256:9b5899662db7db8c76cc3b1a0b791b9acb03ebee4f369272fba636332457f2a7:eyJzZWxlY3RlZExpbmVDb3VudCI6MjUsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjIzOWIzMGZiMzZhY2U4MmUyY2ZjNTRkYTM4ZTY4N2Y3ZTRmZGY5MmM4MDZjZWNkNzI4ZjFiODExZTgzOTAyZjIiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjdmM2M3ZjJmNGYzMDE2YzdhY2YzOWY0OTA4ZTcxMTA3NDFiZjRhNTgyZTExN2Q4MDdmNzRkNjgzZWY3YzhmYjkiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjowLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImIxODIyMDM0YTZkN2Y2YmZjYTczMzdkMGRmNjk3YjllNTI3MGJlYzRhZWY4NjJkYmZjYmMwNWI4YjNjNDIwYWYifQ"
+          "resource": "repo://cloudflare/digichat/Dockerfile#L1-L61",
+          "version": "repo-lines-v1:sha256:94d1b1310284c404b4bb87e79fa75c18f3e3f758e6f0f6afc9427e2faf1d3262:eyJzZWxlY3RlZExpbmVDb3VudCI6NjEsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjIzOWIzMGZiMzZhY2U4MmUyY2ZjNTRkYTM4ZTY4N2Y3ZTRmZGY5MmM4MDZjZWNkNzI4ZjFiODExZTgzOTAyZjIiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjlkMjZjNGM2NDlkNjZhZGEwMzc4ZTI0YzAzODI1NTYxZDdmN2U4NzgxODMwNDZiZThhNTc1N2FmM2E0N2FlMjQiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjowLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjowLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUifQ"
         },
         {
-          "resource": "repo://frontend/digichat/OPERATIONS.md#L18-L30",
-          "version": "repo-lines-v1:sha256:ccb4ea0fa6d1f5029d5f517d611bfe83fc979edc621eb79769f9026a1d22d456:eyJzZWxlY3RlZExpbmVDb3VudCI6MTMsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjAxYmE0NzE5YzgwYjZmZTkxMWIwOTFhN2MwNTEyNGI2NGVlZWNlOTY0ZTA5YzA1OGVmOGY5ODA1ZGFjYTU0NmIiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImFmOGYzMzU4OTNhZTg1OTRhNmZkMDkxYzVkNGNmMDQ2OTRhMmI2YjkyOWE3OWJjNjc3MWYxMmQ3NzgzMmUyYWUiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImNhYThkMmNhYzJjYjZjODhmOTE0MmFlMGM1M2Q0YjNlMGYzOTFiNTIzMmFjZGM5ZDNhMjIxMzExNzdiMTU0NTAiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImIyODVmOGEwNmVjMjYwMzBmOWI5MmQwNjUyOWUwM2RjYTE0ZDIwODFkYTdmNmQ4MjFjOGViZDYyMzc0NzA2ZTEifQ"
+          "resource": "repo://cloudflare/digichat/scripts/trusted-proxy-server.mjs#L1-L150",
+          "version": "repo-lines-v1:sha256:fe3dbfdc4becf4caac1a128f72ddbea18b9e2cca1746b39d58c68d7595ea0e76:eyJzZWxlY3RlZExpbmVDb3VudCI6MTUwLCJmaXJzdFNlbGVjdGVkTGluZUhhc2giOiJhYjI4OGYzZGI2YjM3M2ZhZTQ0NDVkZGE4Njg5ZjNlNGQ3ODMxNWI5MjA2Mzc3NDVlYjM1MmU0MTExZjA0NzZiIiwibGFzdFNlbGVjdGVkTGluZUhhc2giOiJlYjM4ZGQ3Yzg3ZDVjYmJlMjg1ODAzM2UzMjUwN2Q2NTk5NTMzYzk0ZGE5YzM5MGM3NGRmYzU5Y2QxMzMxZGU5IiwicHJlY2VkaW5nQ29udGV4dExpbmVDb3VudCI6MCwicHJlY2VkaW5nQ29udGV4dEhhc2giOiJlM2IwYzQ0Mjk4ZmMxYzE0OWFmYmY0Yzg5OTZmYjkyNDI3YWU0MWU0NjQ5YjkzNGNhNDk1OTkxYjc4NTJiODU1IiwiZm9sbG93aW5nQ29udGV4dExpbmVDb3VudCI6MCwiZm9sbG93aW5nQ29udGV4dEhhc2giOiJlM2IwYzQ0Mjk4ZmMxYzE0OWFmYmY0Yzg5OTZmYjkyNDI3YWU0MWU0NjQ5YjkzNGNhNDk1OTkxYjc4NTJiODU1In0"
         }
       ]
     },
     {
       "id": "claim_ad1f3ac11d6746d6b1c55f3228672f8b",
-      "statement": "Machine digi_live keys are bcrypt-hashed in Postgres under machine:<tenantSlug>, distinct from digikey dgk_live keys used for upstream JWT exchange; releases install from GHCR, not npm.",
+      "statement": "Machine digi_live keys are bcrypt-hashed (cost 12) in Postgres under owner key machine:<tenantSlug>, distinct from digikey dgk_live keys used for upstream JWT exchange; releases install from GHCR (ghcr.io/digithings-ai/digichat:vX.Y.Z), not npm.",
       "evidence": [
         {
-          "resource": "repo://frontend/digichat/OPERATIONS.md#L31-L60",
-          "version": "repo-lines-v1:sha256:965394781d3082d9c2e0d09bf1d65cad3609f7c36005304293e3cd4be8c7db7d:eyJzZWxlY3RlZExpbmVDb3VudCI6MzAsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjM0MGY1MzRjZTA2OTM1MGIxZDg2Y2I1NjFhOWEwYzk3Nzk3MWZjMThhMjllZTU4YWNkZDBmZmM3ZjA3NTE1YjEiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImY0NDRmNjkwYjMyNzEzYTIzODE0M2NiOTcyYzA0OGVlNWVlMzNjNTM5MzljNDFmYjljOGI0MjZjZjNiZWI4OTAiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImZmNjQyOGNlNGU1ZGU1Y2ZjNWZkOWNhNGI3ZjIyY2FjMDIzM2EwNjdlYTBiYTU4YjE4ODY0YmVmNTU2Mzc5ZTIiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImYyMmQ2MDhkZDQ1MzE5ZWEyMTE1YWEyYzkwMmFhZDg2NThmYzE3YTQ3YTRjODVlNzZmZmNlOTYwYWVlMTRjOTkifQ"
+          "resource": "repo://.github/workflows/publish-digichat-image.yml#L1-L60",
+          "version": "repo-lines-v1:sha256:85f771cf23d76dcd7d0e3094d4339a231e2ebbdfc486236cd6f4a1e59f96eb46:eyJzZWxlY3RlZExpbmVDb3VudCI6NjAsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImIxMTY2NTk2MjE0MDE1ZWJmMDI2NWE3MmM3NzFjMTdlZjI5ZDI2OTQzNThhMTE1Nzk4ZDhkZWRjZjliYTVhMjMiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjZhNmMyZDc1ZGQ4OGU4MGNjMWMxNGM1YTdkOGQ5YjZhYWI2YTc4OTgzMTBjYTMzNTBmMTJkMDkxZDcxZDBlYWUiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjowLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjowLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUifQ"
+        },
+        {
+          "resource": "repo://cloudflare/digichat/scripts/create-api-key.ts#L1-L53",
+          "version": "repo-lines-v1:sha256:cddca1d0622945f46f776a609c0efaaec25f48f85e96b8ec6f20ea86c8f9f082:eyJzZWxlY3RlZExpbmVDb3VudCI6NTMsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImVhZjIyY2YwNzMyNTkyYzI0NzE0MWNiZTYxZWZhMTEwMTI2MTJmNWEzMTIyYjlhZjliYmFmNTJmNTcyNGQxOTQiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjIyMmFiYzkyMWU2N2E5ODJkZWExZDVjZTg0OWE4Zjk2YWMyYzYxZjc0ODM5NTc4N2Y4MzEyYTMxZGY4NGU1ZjgiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjowLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjowLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUifQ"
+        },
+        {
+          "resource": "repo://cloudflare/digichat/src/lib/api-key.ts#L1-L52",
+          "version": "repo-lines-v1:sha256:17ed5999dd3b46f3894d95b31ed96d947b6ac33d416ab39529be7e7884f71d38:eyJzZWxlY3RlZExpbmVDb3VudCI6NTIsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjFkZTI0ZTNhNzEyZDgxNmI2OTc0Mjc2ZjY4YWU2YTBhZTRhMmEzYWMzNzVmNzgxNjBmZDg2OTYxNGM1ZGQ1YWEiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQxMmNhMzQ1Y2NmNzViZjljMDgwNmJjZTY5NWJlOGRlODA4Yjc5OTg0MjUxYTdhNTRkMjAyY2Y2MTAxZGQ0NTEiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjowLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjowLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_71175e756a424d1fa28bf76a61239269",
+      "statement": "Two Dockerfiles exist: cloudflare/digichat/Dockerfile for GHCR self-host releases and Dockerfile.digichat-cloudflare for Cloudflare Containers (adds DIGICHAT_ASSET_PREFIX /_dtchat); both share the same multi-stage build, entrypoint, and drizzle/ shipping logic.",
+      "evidence": [
+        {
+          "resource": "repo://Dockerfile.digichat-cloudflare#L1-L69",
+          "version": "repo-lines-v1:sha256:2ccfcd75b6288b417e62fd03c488f1751e257c6d6cc34b788b919f19dc339e26:eyJzZWxlY3RlZExpbmVDb3VudCI6NjksImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjhiZmE0MjVkMjc0ZDM1MGQ1YmE5ZTI2ZTQ2Njc2ODlmZGYyZWZiYmRjYmRhOTcyNmEzM2I5OGUyODA4YWMyZGMiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjlkMjZjNGM2NDlkNjZhZGEwMzc4ZTI0YzAzODI1NTYxZDdmN2U4NzgxODMwNDZiZThhNTc1N2FmM2E0N2FlMjQiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjowLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjowLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUifQ"
+        },
+        {
+          "resource": "repo://cloudflare/digichat/Dockerfile#L1-L61",
+          "version": "repo-lines-v1:sha256:94d1b1310284c404b4bb87e79fa75c18f3e3f758e6f0f6afc9427e2faf1d3262:eyJzZWxlY3RlZExpbmVDb3VudCI6NjEsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjIzOWIzMGZiMzZhY2U4MmUyY2ZjNTRkYTM4ZTY4N2Y3ZTRmZGY5MmM4MDZjZWNkNzI4ZjFiODExZTgzOTAyZjIiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjlkMjZjNGM2NDlkNjZhZGEwMzc4ZTI0YzAzODI1NTYxZDdmN2U4NzgxODMwNDZiZThhNTc1N2FmM2E0N2FlMjQiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjowLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjowLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_70844d127164477189d10456d786f92b",
+      "statement": "The Cloudflare Container deploy workflow triggers on main when cloudflare/digichat/package.json version changes or the Container wrapper changes; secrets are set via wrangler secret put, and the container is a separate deploy target from the GHCR image used for self-hosted/client compose deployments.",
+      "evidence": [
+        {
+          "resource": "repo://.github/workflows/deploy-digichat-cloudflare-container.yml#L1-L40",
+          "version": "repo-lines-v1:sha256:8eea9db9ddf972acc6c73909013f95db08060226c1b958f003b9676c2df3c96c:eyJzZWxlY3RlZExpbmVDb3VudCI6NDAsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjhmZWNjNzY3NGJlM2U5YTA4ZTU2OTBmOThmYzY4ZDQ3YzMyN2Q1ZjFiMmZhNWY0NDgyYmQyMzljZDBmNzE3YzUiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjNmMmZhNzNmMDcwNDg5ZDk3MjRhMDI5ZGZiNTAyYWEwODg1MDdkMDg1NzliYmJjYzk0ZWQ5MzVjMWEwNTMzMTYiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjowLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImNjYTFlZGFkMzk0YmZmYmEzZWI4YjFhYjgyNzUxMzViMTczNTU5MTgzNTcyY2Q4NTE2MzJjZTI1ZGQ1N2Q4ODkifQ"
+        },
+        {
+          "resource": "repo://infra/digichat-digithings/README.md#L54-L69",
+          "version": "repo-lines-v1:sha256:f5af76d8be2a1fecb8fdc104198fced8459ab3226b0d872e6bd3a2a7e2b01669:eyJzZWxlY3RlZExpbmVDb3VudCI6MTYsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjA2MzBjNDIxYWQ0ODNkYjQ0NDQxYmIxOThhOGE1OWI5M2UxYzUzYWE1MDNkZDBhMTJkNmQ3OWE2NzA4YTE4ZjkiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImM5ZGQ5OGQ4MzQyMzA2NDNkMjE1YTVlZWZkMGI1ZWNhYmE0OWI1ZDEyZjFhZGJlNmQxMGQ3OWViMTQ3NjY0ZmEiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjIxZDA5NGIyZjEyOGM5YTkzMzZlZWM1NTA1ZDA2YzlhMGY5ZjllZTcxM2Y4OTllOGRmMWMwOWE5MTNmZTlmZjMiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjE3ODAxMTZjZDcyMDE4YWNkMTFiZWM2ZjE2NWNlODUxYjNlYmMyMzUwMzkyYWNjNGYzODAyN2YxZWIzNWU4YTEifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_e9be0f6ce2f24b19843fe4f56462a6a0",
+      "statement": "GET /api/health is unauthenticated, probes each enabled ecosystem service (4 s timeout) and runs SELECT 1 against Postgres (or reports skipped), returning { ok, checks, version }; version resolves from DIGICHAT_VERSION env, /etc/digichat-version, or package.json.",
+      "evidence": [
+        {
+          "resource": "repo://cloudflare/digichat/src/app/api/health/route.ts#L1-L78",
+          "version": "repo-lines-v1:sha256:218ccd3b2f49721db117b4aee02facf03f65e3f795b771de26df65f9b12639a1:eyJzZWxlY3RlZExpbmVDb3VudCI6NzgsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImM3OWZkN2I0Njc0N2UzNmNkNjAwMTEzMWJhNWE3YWFiNTMyNzE0MTlkOGE4NDliYjllMmQ1NmQ1ZWYwMDAxMjEiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQxMmNhMzQ1Y2NmNzViZjljMDgwNmJjZTY5NWJlOGRlODA4Yjc5OTg0MjUxYTdhNTRkMjAyY2Y2MTAxZGQ0NTEiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjowLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjowLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUifQ"
         }
       ]
     }
   ],
   "verification": {
     "by": "openwiki/0.5.0",
-    "at": "2026-09-09T14:37:17.158Z"
+    "at": "2026-09-19T12:20:11.463Z"
   }
 }

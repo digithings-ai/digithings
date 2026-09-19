@@ -1,22 +1,26 @@
 {
   "schemaVersion": 1,
-  "pageVersion": "sha256:8f20028e7039d1add13647e508f57858932587f84530bcb61f742fe764cf8f0e",
+  "pageVersion": "sha256:9b12cd096642ce7d8f8ac6b76b8202011fea1c4495581818a225d2ff9c91825c",
   "claims": [
     {
       "id": "claim_833ed63831fe44b6b1de03b1788c1bf4",
-      "statement": "Six Nautilus strategies plus the SDCA engine register with aliases, resolved through the single canonical STRATEGY_ALIASES map with PARAM_SPEC_NAMES for differing optimize keys.",
+      "statement": "Twelve Nautilus strategies register at import time via strategies/registry.py:register(), gated on find_spec('nautilus_trader'); the lazy _KNOWN_STRATEGIES set in backtest.py unites STRATEGY_PARAM_SPECS keys, STRATEGY_ALIASES keys/values, and runtime registry keys for strategy-name validation. Alias resolution goes through the single STRATEGY_ALIASES map with PARAM_SPEC_NAMES bridging btc_sdca → sdca for optimize specs.",
       "evidence": [
         {
-          "resource": "repo://digiquant/ARCHITECTURE.md#L64-L80",
-          "version": "repo-lines-v1:sha256:d83835afff77baa630a0ac554c042667153e422b4e2be15219cb50218e1ab3e3:eyJzZWxlY3RlZExpbmVDb3VudCI6MTcsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjdjYTY0ZTJmMzI1OTc0MDFiZTQxMmNlNmE3NDliYzY1MjAxNTgyODQzNDM1MGRjNThkOTg0YTllNzM2NzI5NTgiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImUzZTc2ZmMzODI4ZmY3M2ZmNWEyNDQxYmU0ZmEzOTc4YmU2OThhOTJiMzIwYjE3OTRlNzQzNDFhZmNmMGI0ZTEiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImEyMTMwYWZkZmNmNWIzZTk5OGJlZGI3NDNmZjU5ZmIyMDYzMzg1MGM3MDZlMzAyYWEzOGRiNzQ3ODY0NDZjZDMiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjI1ZWUyZGMzOTAwYjVhMTQ0Nzk2YzFmMDQzZjAzY2FiYzlmM2U5NThiMjJmMDViOTg1ZDA2ZDVmNjc5MGFkMTQifQ"
+          "resource": "repo://digiquant/src/digiquant/backtest.py#L19-L39",
+          "version": "repo-lines-v1:sha256:c5dd60277ab258e9e7bd2671fa923f36e74e774099e433438d2c967e46d8131f:eyJzZWxlY3RlZExpbmVDb3VudCI6MjEsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjIzN2E1MmYwNjJhNWVkMjc0OWRiMTQzYWFhOWJhMTU4NzQ3MTkxNzEwM2Q0YTIzMjZhNWRjYWUxOGJkMDY5MWQiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6Ijg3NjYyMmQ5MzE0ZmI3YmNkZWJjZWI1MWRjOTAwNDdlZWE5YjFkY2I0N2JlMmVmZmNmYjE5ZDUzYzE5YmIyMjciLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjBjMjVjNjkzZjJkZjIyMDNhMTNhZDNiODIwNzA5MmU4YTE2OGQ2MDE0N2I0ZDk5ZWEzYmEyOGMzZTA2YjA5OTIiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjBiOTk5MTFkZjYwMGFlNjBmMmZkNmYzNjIzN2QyNDEwNjI5Y2IxZjA1ODk4ZGNhYzE3NjU2OWQ3N2YzZjk1ZWQifQ"
         },
         {
-          "resource": "repo://digiquant/src/digiquant/strategy_aliases.py#L15-L28",
-          "version": "repo-lines-v1:sha256:bc326afd4f9eb414da94638edbbc054bdd0745656c84561fc817124faed34954:eyJzZWxlY3RlZExpbmVDb3VudCI6MTQsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImRiYTA4ZGM1NDkxNGI1N2NlMzNiMmRlNzI1NGI5ZTViODdmN2Q5MTI2ZTY5ZjliYWQxNjIzZDBhMjVhYTEzNmMiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQxMmNhMzQ1Y2NmNzViZjljMDgwNmJjZTY5NWJlOGRlODA4Yjc5OTg0MjUxYTdhNTRkMjAyY2Y2MTAxZGQ0NTEiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjE5NGE1ZDA4MWE2ZDRlMzYxNmE3NGM5OGMzZmEwNzIxMzQ0NmUzNWZmMzExNzQwNGI1M2E4ZmI1YjlmOGVhZjQiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImNkZjE0ZDhjYTZlOWM1NmE0NzMyNDc3Y2U0YmY4YjZmYzQ0ZTYzYWNjZDZlZjI4ZjA4YWI2ZThhNTg5MjQxMGMifQ"
+          "resource": "repo://digiquant/src/digiquant/strategies/__init__.py#L5-L23",
+          "version": "repo-lines-v1:sha256:a18de6517718cefb79cc5946dde08e30a3b615314d1d241e5049f4239ae5b4b0:eyJzZWxlY3RlZExpbmVDb3VudCI6MTksImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjUxYmQxZTlmMTdiMTg1ZmY3ZGNjNWY0NjUxNmFjNWM5MGFhMTYwMTk0MTA5M2JjNThjNTZlNzM2YWM2OWFiOWMiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjJmMGYzZWY2NTkzZmM2YTdhZGFlZDBlNjQxMzY3MTZlNDU1ZjFlZTY5N2NiM2Q5MjQwNmY0Y2Y5Mjc3ZGY4NDUiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjYzOWZmY2M1YTQ0YTIzM2Y0ZmU3YjNkY2ExM2M2ZGFkZjgwOWM3MjcyYWVmMDhlNjRkZDI0MzI5ZmFjNjYxZWUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjY2ZDc0YzBkZDg1YjBkNTQ4NjQ1MWFhN2RlOTZjN2YzZTg3NzkxMzNlNWViMWFiMzU3YWMyMTE3NjVmZTNhMWIifQ"
         },
         {
-          "resource": "repo://digiquant/src/digiquant/strategy_aliases.py#L30-L33",
-          "version": "repo-lines-v1:sha256:8c3bd79251d188d4aea27bb8a6f23105b4bff717bbb44a3a0185604f94b14296:eyJzZWxlY3RlZExpbmVDb3VudCI6NCwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiYmMzYjJlNTJlNDc0YjIyM2RmN2IxYjY2ZDVhODQxZDEwNmFmOTQzYjAxYWJhM2U3NWM1MjE2ZjEyZjY0NTYxYSIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiNDEyY2EzNDVjY2Y3NWJmOWMwODA2YmNlNjk1YmU4ZGU4MDhiNzk5ODQyNTFhN2E1NGQyMDJjZjYxMDFkZDQ1MSIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiM2ExNzc3NTVlZGMwZjYyMzlmZGFjM2VkOGE5MzhkNzk3MTk2ZjFiZGZmMDFiMjY3OGJhYWNjMzc5NDVlNmVjNCIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiYjdmMTZhMDg1ZmEwYWI4MWM0NGQ1OGE0NzE5ZDRjYTc5YWI4YzhhNmEwMjc0ZDhmZTA2OTU5Y2VkNTNiMzY0ZiJ9"
+          "resource": "repo://digiquant/src/digiquant/strategies/registry.py#L28-L66",
+          "version": "repo-lines-v1:sha256:e53451325a6e62121f5225fe869da02eb8f2cdeef6b8bb247108068be6109711:eyJzZWxlY3RlZExpbmVDb3VudCI6MzksImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjUyOWI1ZWJiNDM0MWY2Y2ZiZTdmNWFhYjJlYjM2ZWE1ZDFkZjQ1YmQ0ODNhMzY5YjcwNzQwMTRkMWNkODc0ZWUiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImY5NGFlYTczZjhkNDUyZjc1ZjlmMWUzNDVkZmE0YzE2MzA4NDM0ZTYyZTY4M2UyOWE2ODUyNWNiMWZlMzRjMTkiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjViM2QxNzFiZDdkNWI0MzI1OTk4MDEyN2NhYTJmNDQ2YTgxNmQ1OGI3NzEwMjYzZjZhNjNhZWRmZjYzMGU4NDMiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjA5MzE5M2FkZjI4NjUxMGQ4ZTJmZGM5OTlhNGFhYTJlOTRiMTcyYjkyOGMzNmU2ZmQ1YmViZDM3NGRiNWQ2ZmMifQ"
+        },
+        {
+          "resource": "repo://digiquant/src/digiquant/strategy_aliases.py#L15-L44",
+          "version": "repo-lines-v1:sha256:24d960cc64bb2d9da2b6611261411ac0220263a65b8938d7d642c2977cc59509:eyJzZWxlY3RlZExpbmVDb3VudCI6MzAsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImRiYTA4ZGM1NDkxNGI1N2NlMzNiMmRlNzI1NGI5ZTViODdmN2Q5MTI2ZTY5ZjliYWQxNjIzZDBhMjVhYTEzNmMiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQ1N2QyMzdhZGE3YmRjNWFkM2FkMDgwN2Y5YmZjZTUwMWM5MDUzMGVjOTAzM2MzYWM2NGQ2ZmIzM2FmYTFmZTEiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjE5NGE1ZDA4MWE2ZDRlMzYxNmE3NGM5OGMzZmEwNzIxMzQ0NmUzNWZmMzExNzQwNGI1M2E4ZmI1YjlmOGVhZjQiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImJlOGE1NWM3NmZkNWRlMGY3MzFhMjA0M2MyNzk2MzMyZTQ4ZGE5NzgyMmJiNGZkY2NhZjY2OGQwYWNmMzQ5ZmYifQ"
         }
       ]
     },
@@ -32,21 +36,71 @@
     },
     {
       "id": "claim_903268d5d1f84649927f74ff308c3d1c",
-      "statement": "BacktestResult carries run identity, window, PnL, return, Sharpe, drawdown, and trade counts with ok/partial/error status; OptimizeResult adds best_params with the best trial's backtest under OptimizationConstraints.",
+      "statement": "BacktestResult carries run identity, window, PnL, return, Sharpe, drawdown, trade counts, and per-symbol PnL breakdown with ok/partial/error status; OptimizeResult adds best_params with the best trial's backtest under OptimizationConstraints.",
       "evidence": [
         {
-          "resource": "repo://digiquant/src/digiquant/models.py#L46-L67",
-          "version": "repo-lines-v1:sha256:60a51a7e9516864bc2835a7e73ff37a5accdd836e48596c896068d4e93de9046:eyJzZWxlY3RlZExpbmVDb3VudCI6MjIsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjgzZTVhOGRmMjZmYWJhZWI5ZGNlZGYxYzZiNzg5ZDRhZmVhZjI1ZmNjNWY4ODhlZDlkNGU1MGU1OWRmMjE0NWQiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjZhNjdmMTJkODYxMzBhZjQ0NTRhYTM0NGQyYThjYjc4YWI5Y2E2NGJjNzExMDAxODU1MzJiOTlkN2E2MTI2YjQiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImFiNDY2Njk1OWJmYzNiMDBmNzFhMmVlZDkxODk3YzljYmUzMzVjMjQ1Zjc5MzJkMjgzN2ZlOGQ0YTAwNWY5NDciLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjowLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUifQ"
+          "resource": "repo://digiquant/src/digiquant/models.py#L38-L49",
+          "version": "repo-lines-v1:sha256:bceb463ba4807ac40f2d8822ed2782a9159b524abead5c239e3b49b11c41a803:eyJzZWxlY3RlZExpbmVDb3VudCI6MTIsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjgzZDg2NTg4YTdiZTJlNTg2YzM2YWVkZTQ2YTdlNTMyMDhhMmJmMWM0ZWIxMWI4MTQ4M2VhMjNiMTlhNzdmZmUiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6Ijk4ZmFmNjBkOTdmYjczNzQ1MWU1ZDA4NjIwMWNhNWVmZDcxMzc2YzYyMmVkZGI2NmI0Njc4Yzc3YjZlZTYwZGUiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjliYTQwNThhYjA0Y2E2ZGJiZTA0ZmYyZmJiYmM2MzA2YTk5OWRkYTI0YmMwNGRhOWM1ZWIzY2VjZTUxMjllODciLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjFiNTYwODAzYjEyMjEyZTc5YjVmZGUwYzkwZDMxYzkzNDU0OTBkYzI1MWMyNDJiNGQ5ZDUwNTBhNDA1MmM1MjUifQ"
         },
         {
-          "resource": "repo://digiquant/src/digiquant/models.py#L8-L40",
-          "version": "repo-lines-v1:sha256:0cda94949d7d88add341bbe0350ec2abf5c1a53b1de8fa208418290471bb64e8:eyJzZWxlY3RlZExpbmVDb3VudCI6MzMsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQ2ODkzYTczODQ1YTk2ZjI2MmIyNDM5YjIzMWU5NzE4ZDQ3OGEzYjNmM2U4OWIwNDdjNGUxYWUxNDU0MDZhNmMiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6Ijg4YTAxOGVhYTcyY2MxOTVlNmRlYjUxNjM1NGNiZTg4NjdjNmZjOTg3OGQzZDAzYTQxNmQ5ZTdmMzRhMDQwMjgiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImVlYWJlZjFkNTE5ZGM0YzlmNDMwNjFiMGJjNDkzNDE2MWNkMzNhOWJmNmYyZWJiODg5YzgxYThhNjc4ZWU0NjYiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImZiMDYwNjYzOGMyZTNmNGEwZTIyZWUyMjg4NjUyNDJhN2UyMmI0ZTIyOTkzMTUwOTNiOTJiOGM4MTg1ZWIyZWIifQ"
+          "resource": "repo://digiquant/src/digiquant/models.py#L52-L66",
+          "version": "repo-lines-v1:sha256:c7fcc02abbc023809024798528d597365b8ce7d4732f1410a509e1c3786ce77a:eyJzZWxlY3RlZExpbmVDb3VudCI6MTUsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjgzZTVhOGRmMjZmYWJhZWI5ZGNlZGYxYzZiNzg5ZDRhZmVhZjI1ZmNjNWY4ODhlZDlkNGU1MGU1OWRmMjE0NWQiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjZhNjdmMTJkODYxMzBhZjQ0NTRhYTM0NGQyYThjYjc4YWI5Y2E2NGJjNzExMDAxODU1MzJiOTlkN2E2MTI2YjQiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImFiNDY2Njk1OWJmYzNiMDBmNzFhMmVlZDkxODk3YzljYmUzMzVjMjQ1Zjc5MzJkMjgzN2ZlOGQ0YTAwNWY5NDciLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjY1Nzg3ZDM0NWIxMjBmMGVjOTBlMGU2NGI1MGFlNmI4ZGVjNDc5ZDdmYzU3MDRjNjVmYzg0OTU2NmI4ODY2YTYifQ"
+        },
+        {
+          "resource": "repo://digiquant/src/digiquant/models.py#L8-L36",
+          "version": "repo-lines-v1:sha256:493978c12fb3638610c32b1dc459aac5d3619fb7a944efc2dffb06827e8e8ce1:eyJzZWxlY3RlZExpbmVDb3VudCI6MjksImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQ2ODkzYTczODQ1YTk2ZjI2MmIyNDM5YjIzMWU5NzE4ZDQ3OGEzYjNmM2U4OWIwNDdjNGUxYWUxNDU0MDZhNmMiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjAxYmE0NzE5YzgwYjZmZTkxMWIwOTFhN2MwNTEyNGI2NGVlZWNlOTY0ZTA5YzA1OGVmOGY5ODA1ZGFjYTU0NmIiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImUyYTllMzU1NmE0ZmNmZjI4ODAxODFiZGJiN2E2MjZkYmMzOGU2ODYzOTlkY2M4ODdiMDQwMjY4MWM0NzIzZGMiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImM1ODVjOTYyYWIwMzlkZmJkOTczNTlkOGIwMGMxN2I0OTJkODM3NTdmNmY0OTBmN2RlOTk4NWM0NGRmMWExNTEifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_404d9c6c9a65472784015a6d92094f0a",
+      "statement": "run_backtest caches results in-memory by SHA-256 of (strategy_name, sorted(symbols), sorted(params), data_path, data_dir), with LRU eviction capped by DIGIQUANT_BACKTEST_CACHE_MAX (default 128). The cache is disabled when DIGIQUANT_BACKTEST_CACHE=false or when a tearsheet_path is set.",
+      "evidence": [
+        {
+          "resource": "repo://digiquant/src/digiquant/backtest.py#L132-L140",
+          "version": "repo-lines-v1:sha256:005c5ad8797cb827647031262ada72b2ea299ebf50a0e6ea35f17d5c736df822:eyJzZWxlY3RlZExpbmVDb3VudCI6OSwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiMWFhMzlmNmFjMTljMDhmMGNiYzk0NGFhYTA4MjZiMTE0NzYxNzQ5M2E4NDI4OTEwM2ZlMDNmYjA5ZjQ3Yjk1MCIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiYjBkNmQzMGE3YTFiMjYzN2I4MDI0ODZhMThjMjM1OTIwOTQ4NjJkNjlkYWI0ZjNjNTIwMzc0NDBlNWU5MTEwMSIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiMTM1MGZhNGMzZjliNzliNzc3MmVmN2FiZTM0MjgxNjVkYjNhZDJlZmIxZDJkNGZiODYxOWI5MzQ2Y2NiZjc1YiIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiNWI1OWEzM2E2N2FhNzcwMmE4MTY2NDMyYTY2MDgzNGI0Yzk5MmMzNGUzMjBlZTM4NTk5M2NkNmEyZTZkZDQwYSJ9"
+        },
+        {
+          "resource": "repo://digiquant/src/digiquant/backtest.py#L54-L104",
+          "version": "repo-lines-v1:sha256:a347dac77843689e18e0830f1e5b455a9a4909ba384f5f1d2848d9a6b86aa7a3:eyJzZWxlY3RlZExpbmVDb3VudCI6NTEsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImVmNWQ0N2UxZWFjMmEzZTkyNjkwZDFhZTg2ZTI3YjJiY2Q5YTE1Y2M5M2E3NzgyNzc0Y2RmNDJjYmE3Nzg1NmMiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjExZGMyNDc3OWEzNTkxZmQ3ZWQ1MzUyYjNmOWIyZTZhOGZiMzg3NzExNmNkYzE0NTgzNTNmMDg4OTNjNzNmNDAiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImMwNzdjNmQ2YmQ5MDBlNzE1YTkwYTMxNjE1MDUyYWFhNTk4YjQwYThmMzFmMmQxNTY0MzQ5MzM5MmMyNzRmNmEiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjU5OWU1ZTZjNTdkMGEyNTAxOGQ0NDVjYzNiZmM0MzBkOGY1OGY3NTU3Nzc5NmNkZmQ1ZTM5ZWViNDgzM2Y4ZTYifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_1e213d07b39147e1858943a22fd59fa0",
+      "statement": "The research module (digiquant.research.backtest) provides a separate pure-functional decision-level backtest system (Pillar 3C) with its own dataclass BacktestResult that evaluates calibration via conviction buckets (high ≥ 4, medium ≥ 2, low, unknown). It is a decision-sequence tear sheet, not a daily NAV simulation, and shares no code with the Nautilus Pydantic BacktestResult.",
+      "evidence": [
+        {
+          "resource": "repo://digiquant/src/digiquant/research/backtest.py#L147-L203",
+          "version": "repo-lines-v1:sha256:52fab48d60edabf8d4975dad647cd090ebc427717f66a9109ed33e38c1852c26:eyJzZWxlY3RlZExpbmVDb3VudCI6NTcsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjM1ODc2ZDFiMzY5YWZjYzgwMWZlNDE2YWM5OTBkNDg1MzE3OWMzYzg3NWEyNmE3MzI0MjYwMzE0NDdiZmQ3NjQiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjMwYzFmMTg4ZjE0MmVkN2E4MjQ2ODBiMjA3MTcyYzU1MTliYzYxNGE0OGZkYTdjZjE2N2VkYjhkZGY3OTk1NmMiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjBiNDY4YWQwYWJkNWRmODYyMGJiOTRiZGZmZTg1ZjQyMTEwZWNkYThhZjc2NGE0ZDVjM2JhMDZiYWE1Zjc3M2YiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjY4OTljODM1MjAzM2QzM2RkMWEwZjJhZGZlODUwMzE1MWJjODUzNzE0ODA4MDNiMGUxMTcxNDFmNzAxZTRjMjkifQ"
+        },
+        {
+          "resource": "repo://digiquant/src/digiquant/research/backtest.py#L27-L67",
+          "version": "repo-lines-v1:sha256:f7cae67174e2f9add2f34b11540b0f3511978accb44da4f9a3efcb1b4880a348:eyJzZWxlY3RlZExpbmVDb3VudCI6NDEsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjhiYTEwZDg4YjkyM2ViYjU5YjVkYjkwMWI2MmJhYWMyNGE1MTA0YjM5NDA2OTAwZjY0N2M5NTU4YWI5MGM4ZTIiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImNmZTQzZjVmNmQyODllNTZkOGMzNjYxZTc4YWE4NGNiN2JmYzg2OTAzMjc0ZDFjYTFkOTgyOGNkYTNjNjNkNmEiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImIxNmE3ZDBkMTY0ODcxOWE4NTA2NzdjM2Q5MzJmZGVjZDc1NWJiODc1NmE1NzdjZDAwY2Y3YWNiYTU4Y2M5MTUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImYxYWZjOTA5N2QyYmRmMWZkYjg0Y2I4NjIxMzk1MjRlMjAzYjIyYWM0MmQ0NmZkYmVjZGE5YWY5Njc5MWIwNTAifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_079dc0f38b4f4e5ea52147d9c2142656",
+      "statement": "Portfolio model contracts (forecast_calibration, cost_liquidity, risk_policy) share a strict style: frozen, extra='forbid', UTC-only aware datetimes, Decimal economics, UUID5 idempotent identity, and content hashes with canonical 8-decimal-place spelling. Phase 1 is observational only — estimates do not veto or resize actions.",
+      "evidence": [
+        {
+          "resource": "repo://digiquant/src/digiquant/portfolio/models/cost_liquidity.py#L49-L100",
+          "version": "repo-lines-v1:sha256:20ae728659a8423a9bbd00440b2780c3bf3c37de44b79e79a83ef65149279fe3:eyJzZWxlY3RlZExpbmVDb3VudCI6NTIsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImFmNzc1YzgyM2VmMzFkMzM5MGZjYjQ0ODBkOGE0YzQ4ZDVhOWI3ZTFhNGJiNzQ4YmZlNTBmZjg3N2M5NmQ3ZDkiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjZlYWQ5ZWY5NjM1YmU5MjNhMGQ1MTk2ZjgwNzk1NTU3NGY1ZmIzMDQyZTM0ZDM4NTk3NGM5MTYzMDM1OWIyZmIiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImRhMjdmOTRkNWI4MjllOGE1MDYzYjEzMTJmMDVkY2EzZjNkZTliNThkNDJhYTM2MjFjYWQ5M2JiNTE1N2E4YWMiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjAyOTAzNzE3YzliY2IxM2QyM2U2MzI1YTk1ZjY5ZWQwMmM4MWFiNWY3YzFmNDIwMzliYTM2ZjYzMzQ0ZWUxYTgifQ"
+        },
+        {
+          "resource": "repo://digiquant/src/digiquant/portfolio/models/forecast_calibration.py#L70-L160",
+          "version": "repo-lines-v1:sha256:964dd2c94deb264355d45c765f2e3021e837bcead9d732f0f1dea848f47bab89:eyJzZWxlY3RlZExpbmVDb3VudCI6OTEsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImVjMjc5ODRlNjkwYTljZDRmNTVjOTNhNzE5MjBmNjJhNDllNzIwMmRjZWZhNjIxNzAyMjVmMzA0ZDk4MDYxNTQiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImU3ZjIzNDI0N2I3OThhOTE3ZjI4MmM5YWU4NjU2MWYxMTAwYmJhYWNhYWQ5MzdjOWYyY2VmOGUwNzdlYzA3NzEiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImZlMDU3YmZmOWNlNmQxMzQyNGM4NDQ2MzU3OTAyNTBjOGJiZmQxMGU5YTE5YzhiMDZlZmQwZjQ5YWY2OTdlNGIiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjYwZmRlMjNkY2Y0MDJkMjliMjJhZWMzMzljYjNmYTIyZTUyMWRjZTk2ZWUwMmVlODA2NTcxNzRjNzZkODk5YmEifQ"
+        },
+        {
+          "resource": "repo://digiquant/src/digiquant/portfolio/models/risk_policy.py#L38-L58",
+          "version": "repo-lines-v1:sha256:00efd82edc2ddaf748cbb60cf0f6c6104fca9dd4b0dd94ee988043ff4976bdc8:eyJzZWxlY3RlZExpbmVDb3VudCI6MjEsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQ5M2U2YWY4NmVmN2JjYjY0NDgxMjQ4MjY2M2RkYjM0Y2M1NmYzZDNhMzExOWI0M2E2MjJlYjIzODI0YmFjNTIiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjE4ZjE5NjVjNmQ3OTYyZTU5YjJjY2RlM2I3ZjdlNzdmNDYwNzYyOGUxMzg2N2Q4ODZmNWM1MmQ0NGQ5ODZjMmEiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImNmNjBkMjEzZWY3ZDhkMGM2M2I0MzQ5Y2Y0Y2M3MThlNzA1ZmUwZDg0NGUwMWU0OTQ1ZWUxMWQ1NzIwOGIzNTgiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjQzNWE4MzBhYjM3YjA2OGRhM2Y4ZmFhOTViMzZiNjkyOGVkZjFhMDg2MDlkOWY2MzNlNzg0NjkzNDcyMzMwM2YifQ"
         }
       ]
     }
   ],
   "verification": {
     "by": "openwiki/0.5.0",
-    "at": "2026-09-09T14:37:17.158Z"
+    "at": "2026-09-19T12:20:11.463Z"
   }
 }

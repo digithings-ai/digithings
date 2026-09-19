@@ -1,76 +1,96 @@
 {
   "schemaVersion": 1,
-  "pageVersion": "sha256:542d7c3bd0d677004032ac8b369031c7f69aabe26bca5d640f01fe335c353a51",
+  "pageVersion": "sha256:6d81e32838e30871304d2e1091e17acd6464969daa746aeecf35f26cac206469",
   "claims": [
     {
       "id": "claim_0b7fef078ce14f44b7408295c5c8addd",
       "statement": "Group A book reads go through houseBook(), which pins the house workspace_id so overlay rows never seed the public book; shared teasers without workspace_id stay date-only.",
       "evidence": [
         {
-          "resource": "repo://frontend/dashboard/lib/house-workspace.test.ts#L28-L48",
-          "version": "repo-lines-v1:sha256:0e039ee0519738c8735e177b970b7b7ca2552c241dff01f8dc419dd3c217dc0a:eyJzZWxlY3RlZExpbmVDb3VudCI6MjEsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImQxOTNhOTVkMGE2MjZjZjQyMTMyZWNkM2UyOWMxYzQ2M2NmYWM5Y2ZiYTYzZWM0MmRmZmY2ODBkOTE2ODBhMjciLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImRiMDFhNzMwMDQzMjVlYzhkZGUwMjBiZGM5ZjBhMzUwMmI1NDc1OThkNjJkYjRlZDI0NDY3OWI4OGI3OGUzZjEiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImY2NTIxNmJhZjI5OTVlOWQ4ZDQ3ZjA0NWE4N2VhMjNiZWMyOTY2MWU1NDM4OGQzN2U2NGZiZDNhZTZkNDlhZWIiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImI2MzE1ZmYyNDVlY2NjMWRmYjNiMjhlMTQyMjI5MmRmZjg2MDU4N2Q3ZmVkZjM5Yzc1YmM5MzRjY2M3ZWNmNjcifQ"
+          "resource": "repo://cloudflare/dashboard/lib/house-workspace.test.ts#L54-L73",
+          "version": "repo-lines-v1:sha256:01bc807a4ef095fc7fa23a7342243ccceeaecd9d43bf6a821d6f66440d04ec62:eyJzZWxlY3RlZExpbmVDb3VudCI6MjAsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImJhZjk3M2MyOTgyMTEyOWNlMjg0YmUzZmUyYWVlOGI2MTQyNzNkN2Y4ZWViMzg2ZTAzOGYzZTY0MDI0NWY4ZDgiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjNhM2U0NmY5NDI3NmI2ZjZmNGVkMWYwMmFmNzhiZWY2YTJlZTFjNDM5ZGQ1NTg0Yjk3Mzk0ODMxMzIxNGQyYjciLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImI3NzlkMTE4ZDZlM2NiZjQ1MDUzOTc0OGRlZTdhNDMwN2FjYmU2NDQ2Y2JhMjk3ZjI3NjBmYTVkMGJiYTFiYzIiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjoxLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImY2ZjViNDBiMTU4NDU3ZDE3ODY0ZjIxNzkwNzg2ZGQ1YTJlY2RiNjRiNjZhNjUxZjc4OGQ0ZTI1Y2QzMzAzZDIifQ"
         },
         {
-          "resource": "repo://frontend/dashboard/lib/house-workspace.ts#L1-L30",
-          "version": "repo-lines-v1:sha256:3b87f42d1779b197e833cbcdebe0bacfb733355e99daa982df567cfe83689264:eyJzZWxlY3RlZExpbmVDb3VudCI6MzAsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImVhZjIyY2YwNzMyNTkyYzI0NzE0MWNiZTYxZWZhMTEwMTI2MTJmNWEzMTIyYjlhZjliYmFmNTJmNTcyNGQxOTQiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjA1MzU2ZjlkYzczMmIzMTYzZDQxMDIyMjM2NmUwNDQ3MzkzYmFjMWM4YjA5NjJhM2IyNjFmYmM2OTA2ZGJiNWYiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjowLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6Ijc2MjQxNjU4MDFiNDZmNDY4ZjFhMzNkNGJiNDlhODg4ZDUzOTJhMzAxYTM5ZWE1NzQzYjdjZjE4OGE4NGRkNjAifQ"
+          "resource": "repo://cloudflare/dashboard/lib/house-workspace.ts#L26-L45",
+          "version": "repo-lines-v1:sha256:8351e82b6352a4bd2e1699d5017d3d1e3c7e618169519878c020c5e26caebe94:eyJzZWxlY3RlZExpbmVDb3VudCI6MjAsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImZiN2IwZDA5ODdhMGZmNjQxZTE5NGZmZDdlOTliNDgzN2I1MGFjODdiODdhNWQ0ZDllNmFiNWU0NThhNWM0OTEiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQxMmNhMzQ1Y2NmNzViZjljMDgwNmJjZTY5NWJlOGRlODA4Yjc5OTg0MjUxYTdhNTRkMjAyY2Y2MTAxZGQ0NTEiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjcwYTI2Njg0ODVjNjE0ZGRjMGFlNTU3NjAwNGIyNGVjNDY4MGMzMzgxZWY2MTFmODAxOTZjNjkyN2MzY2JlOWEiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjowLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUifQ"
         }
       ]
     },
     {
       "id": "claim_154eff4286b74ea6a21812bb87a8f891",
-      "statement": "The performance tearsheet reads the public_accounting_nav_history view (finalized tips plus labeled legacy estimates) with rollback to legacy views by repointing constants.",
+      "statement": "The performance tearsheet reads the public_accounting_nav_history view (finalized tips plus labeled legacy estimates) with rollback to legacy views by repointing the LEGACY_PUBLIC_NAV_VIEW constant without code deletion.",
       "evidence": [
         {
-          "resource": "repo://frontend/dashboard/README.md#L21-L24",
+          "resource": "repo://cloudflare/dashboard/README.md#L21-L24",
           "version": "repo-lines-v1:sha256:c71a867c6137a655e6f6b22780245970ffc7561b20b9cbe8b076cbaf4b93bfbc:eyJzZWxlY3RlZExpbmVDb3VudCI6NCwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiNTExZjE3ZDJkMjNkYWZhMjU0YWZmNzI1NGIyYTA3ZGJjYzBmMjBlOTE0NmFjOWJkY2E5ZTc3ZDhmZTA2MDEyNCIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiMTEzZTgyMGFhZmVlMGQ5NWY1NzQyMmE2ODc5OThjOGM0MTgwOTFkNzE2ZmVjZTgwNmFiNDVhNmM2NjliODE2OSIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiN2JjNGJjY2M2MzNmYmM4ZjRlNjUwZDBmMDNhMTY4YmMzYTA0NTY2MTM5OTNkZjkxZTM4OGI3YWFkMjc0ZGIzZSIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiMzBiYWI0NTJiY2Q4MGE1NzcwMGQ1YWEyYzVjYTllZWRmZGUyYjM0MjEyOTkzNmU2OGM2NGJiYTVhN2FmMjc0NyJ9"
         },
         {
-          "resource": "repo://frontend/dashboard/README.md#L54-L61",
-          "version": "repo-lines-v1:sha256:2f91ccf29246be67fbba0fea9bb4626f92259ac300374d8e9b89eb4664c405c4:eyJzZWxlY3RlZExpbmVDb3VudCI6OCwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiYWM4N2ViY2M0MTMyZDUwYmE4ODYwODMzOTIxZTVmMzE5ODVmZTcyOTE1YzU5NjIxNDFiN2Q4YTE1MDI0NjI1OCIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiNDIxMTk0YTYwNDczNzE2NDAwYjQ3YWM5ZDY3MWMyYzZkMjRlZTQ0NmRjMjllYmE3NjZkMjBiODcyN2U4OTVlOSIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiODE4MGVlYjk0MzAwZWI1NmMzYmMwNGE3ODNiY2NiMmM2YjRkY2JjNDBmYzRhODBhZDg0ZDVlZTgxMGEwNmIxZCIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiNTVlNmE1YjdlNDZkZmNkY2FhMWY3NWI3MzM2ZGIxZTZkZDA4ODI3OWQwMTkyZjhhZWQ4NzhjNGQ0MThlMTVhMSJ9"
+          "resource": "repo://cloudflare/dashboard/README.md#L57-L66",
+          "version": "repo-lines-v1:sha256:d834e41e3e287146612da1e877e9a40e834fdcdef769971ddd15abf7d638e41d:eyJzZWxlY3RlZExpbmVDb3VudCI6MTAsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImFjODdlYmNjNDEzMmQ1MGJhODg2MDgzMzkyMWU1ZjMxOTg1ZmU3MjkxNWM1OTYyMTQxYjdkOGExNTAyNDYyNTgiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQyMTE5NGE2MDQ3MzcxNjQwMGI0N2FjOWQ2NzFjMmM2ZDI0ZWU0NDZkYzI5ZWJhNzY2ZDIwYjg3MjdlODk1ZTkiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjgxODBlZWI5NDMwMGViNTZjM2JjMDRhNzgzYmNjYjJjNmI0ZGNiYzQwZmM0YTgwYWQ4NGQ1ZWU4MTBhMDZiMWQiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjU1ZTZhNWI3ZTQ2ZGZjZGNhYTFmNzViNzMzNmRiMWU2ZGQwODgyNzlkMDE5MmY4YWVkODc4YzRkNDE4ZTE1YTEifQ"
         },
         {
-          "resource": "repo://frontend/dashboard/lib/accounting-views.ts#L8-L12",
+          "resource": "repo://cloudflare/dashboard/lib/accounting-views.ts#L8-L12",
           "version": "repo-lines-v1:sha256:3d6ee84228a309e77f20a6cbdec2dffd426097f772028bcf4b9bc8c83034ea30:eyJzZWxlY3RlZExpbmVDb3VudCI6NSwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiZTgyZmU1OTg5NmFiNjkwY2U4MTg3NTE3NjNiYjAyZWNlODQ0ZTJjZGE2ODUxOWZkMzdhMDI5N2JiMWIxMDMxNiIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiM2E2OTkwMDQ5MjhjYWI3NGIyNDI0Y2E1ZDE2ZjE0OWU0NDE0YzlmNjk5NjI3ZWM3MWU4ZjA5NWMwYjllNjRjYSIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiNDczYmMzNzA2YzJjZTQxYWVmMzRlZjJkZGI2NWVmY2Y3YWZhMjk2Yjc0MjBlNzIxNTY5ZGQyZTliMjNmMmMyNyIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiODY1YWY2YzZmMDdhM2M5MDY5MzJkOTQxNjBhYzU4OGNjMDM5NTM3MmRkMTA5MmU1ZmZjYTEwMGE3NzMyNzIxNiJ9"
         }
       ]
     },
     {
       "id": "claim_dc7f3e2ee1de498db5a2f4c9ce474c5f",
-      "statement": "Open-book Unrealized prefers stored unrealized_pnl_pct/since_entry_return_pct, derives from entry vs current price otherwise, fills missing marks from price_history stamped with that close date, and fails closed to em-dash without basis or mark.",
+      "statement": "Open-book Unrealized prefers stored unrealized_pnl_pct from ValuablePosition, derives from entry_price vs current_price otherwise, fills missing nightly marks from the R2 market API GET /v1/market/closes (price_history was dropped in migration 127, #4053), and fails closed to em-dash without basis or mark.",
       "evidence": [
         {
-          "resource": "repo://frontend/dashboard/README.md#L29-L33",
-          "version": "repo-lines-v1:sha256:7f489d6eb20261694a7fe6026621004b10d3b43d1ee88afe8455ae9d746629cd:eyJzZWxlY3RlZExpbmVDb3VudCI6NSwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiOTJhNTM4YWEwY2QxZTgwOWMwYzdiZmRiYmU2NDk1OWQ3YmNhOGFhNWU3Yzk2MmQxZGE0Yjg4NDNkNGNiZGRlYSIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiZmIxMzFhMGM3OTQ3NTgwMzFmMmZlZjM0MmNiNzJjY2RkZjIwYjEwYmMyM2ZhMjg3YWFjNDkwMjg3YWMxZWI0OSIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiNGNhYjVkZmU1ZDgyZDg0YzZmOWVhY2Q4NDQ2MmM5ZjY0YjJmMWI5ZjBiNjI1NmMwMjRlYTgyZWE1MjQwMGUzMCIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiZmU4ZDZlNzllMTA0Yjg2MjQzNmRhMTVlNzE4ZDhmYWZmZTM5MTJhN2UxZWI5NTY2OTNhODIxNGFiODJmZjY4MyJ9"
+          "resource": "repo://cloudflare/dashboard/README.md#L189-L190",
+          "version": "repo-lines-v1:sha256:7d61635c27478b084d39ab78bd742668fd314ffd2c089e16345ecf037fb947fa:eyJzZWxlY3RlZExpbmVDb3VudCI6MiwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiNzNmNzljZGU2NTZiOTdjN2QyMjExODE2ZGZlZjgwYjk5MWE5NjJiNGI4MjQyZjIyZTE0MThjNTRiY2U3YWE2YyIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiNTkxOWY1ZmJmN2VmMzU0MmQ0ZWU0NmFmZTcyOGE1NTI4ZDUxNTJhZWRiY2I4MzU2YjdlYTFjY2FkMjdhYjNlNCIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiYjlkZTNhNDkyMjY2YjIwM2ZiMTFiZDliYTRjOWVjZWMxNWI4ZTI3ZjllZjc0NDU5MjIzYTBlYWFhZDQ2ZGNjYSIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiMmEwOTk3MTk5ZjQwNWUwMDI0NTRhOTM3OTUxYjZlZWYxZGQ4MjA3NzIyZGIxMjA5ZDViZTFjYzFhNGUwYzVhYiJ9"
+        },
+        {
+          "resource": "repo://cloudflare/dashboard/README.md#L29-L34",
+          "version": "repo-lines-v1:sha256:7a72a2670bbfa0d2f6a2ebc3924599df5b913185a12c88051b985cd1b7d9c989:eyJzZWxlY3RlZExpbmVDb3VudCI6NiwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiOTJhNTM4YWEwY2QxZTgwOWMwYzdiZmRiYmU2NDk1OWQ3YmNhOGFhNWU3Yzk2MmQxZGE0Yjg4NDNkNGNiZGRlYSIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiZmIxMzFhMGM3OTQ3NTgwMzFmMmZlZjM0MmNiNzJjY2RkZjIwYjEwYmMyM2ZhMjg3YWFjNDkwMjg3YWMxZWI0OSIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiNGNhYjVkZmU1ZDgyZDg0YzZmOWVhY2Q4NDQ2MmM5ZjY0YjJmMWI5ZjBiNjI1NmMwMjRlYTgyZWE1MjQwMGUzMCIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiZmU4ZDZlNzllMTA0Yjg2MjQzNmRhMTVlNzE4ZDhmYWZmZTM5MTJhN2UxZWI5NTY2OTNhODIxNGFiODJmZjY4MyJ9"
+        },
+        {
+          "resource": "repo://cloudflare/dashboard/lib/live-valuation.ts#L126-L135",
+          "version": "repo-lines-v1:sha256:6130faf24d5bd0ffe9eff3eea65830dc93d157a71ededf5cd9230eedeebd7ed6:eyJzZWxlY3RlZExpbmVDb3VudCI6MTAsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjYzYzJiODI1MjQ3Njg4NGEwNzM0OGZlNjVlN2QyYjAwNjM5OWYwYTBhNTBhZDliYmM0ODI1ZGY5OGJlYzc4OGMiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQxMmNhMzQ1Y2NmNzViZjljMDgwNmJjZTY5NWJlOGRlODA4Yjc5OTg0MjUxYTdhNTRkMjAyY2Y2MTAxZGQ0NTEiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6Ijk4M2M5NjlmZTIzN2QwMjMwNDgwYzNlNTQ2YmUyMGZiY2RiODllNjRjNGNjMjM0M2EwZGE5YTU0MDBjYWVjMjkiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjBiZmY2M2ZiNzM4OWFhNzU3YjYzNzM1NTgzMjQyNGI3ZDUxNWY2NzZkYjE4MTIwMGYyZGNiY2ZiODNhZTBhMzAifQ"
+        },
+        {
+          "resource": "repo://cloudflare/dashboard/lib/market-data.ts#L51-L77",
+          "version": "repo-lines-v1:sha256:14d4cde6675d954909072c533fa97889e55cd0ab9b2f4e7257261fd6be3842ac:eyJzZWxlY3RlZExpbmVDb3VudCI6MjcsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjBhM2MwMjRkNzIzNTUzMTU0OTc0Njc1MzIxZmE1NTg0NDU3ZTdhY2JlOWQ1NjA2OTMwZGFiMzJiMjk1MTRhYjIiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQxMmNhMzQ1Y2NmNzViZjljMDgwNmJjZTY5NWJlOGRlODA4Yjc5OTg0MjUxYTdhNTRkMjAyY2Y2MTAxZGQ0NTEiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImZkMTBiMDBhOTJkMDA0NGRhNzIyNDZhZjRiMzdjNTg4ZmEyMTlhZGJlYjFiYzA0ZTBlNWEwYTFlMGQzZjRiYjIiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjowLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUifQ"
         }
       ]
     },
     {
       "id": "claim_08e3eb90e14f46f994be80aaa7b9d3d1",
-      "statement": "Ledger is the single source of truth for OPEN/ADD/EXIT/TRIM fills with avg entry, fill price, and realized pct vs average entry; the tearsheet links there instead of duplicating closed positions.",
+      "statement": "Ledger is the single source of truth for OPEN/ADD/EXIT/TRIM fills with avg entry, fill price, and realized pct vs average entry for sells (sold weight from prev_weight_pct minus weight_pct); the tearsheet links there instead of duplicating closed positions.",
       "evidence": [
         {
-          "resource": "repo://frontend/dashboard/README.md#L24-L27",
+          "resource": "repo://cloudflare/dashboard/README.md#L24-L27",
           "version": "repo-lines-v1:sha256:9b8dff6de38fd0067606efde85cc3e1bfd39ff9eb2351177ed925f4cdfc942c8:eyJzZWxlY3RlZExpbmVDb3VudCI6NCwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiMTEzZTgyMGFhZmVlMGQ5NWY1NzQyMmE2ODc5OThjOGM0MTgwOTFkNzE2ZmVjZTgwNmFiNDVhNmM2NjliODE2OSIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiZWE4ODAwNGEzNDAwYWZhZTIwNWUyMTk5YmY5NTEzZjVkNTlmMjk2ODRhMDRhOGExYzJjYjY5ZmI3ODQwZmVlNSIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiZWJmZDQwN2RjZmFkNDRjNTMzMWRmMjc5NzBkZTQ4YmIxYmZlNGMyY2I1NDBkYzI3MzNjOTdhZDE0M2U1MWIyYiIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiNTBlMzI0NWZjNWM2NTc0MDcwNTRkYzlmY2U5YTA0OGVmZTk2MTFhNWQyMWJjYzE3YjhkZTc1YTA0MjMxMmFjNiJ9"
         },
         {
-          "resource": "repo://frontend/dashboard/README.md#L33-L37",
-          "version": "repo-lines-v1:sha256:a6e805fc277184193f7ea73954ef75df1190b5d44de37205c49e82d775da2d17:eyJzZWxlY3RlZExpbmVDb3VudCI6NSwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiZmIxMzFhMGM3OTQ3NTgwMzFmMmZlZjM0MmNiNzJjY2RkZjIwYjEwYmMyM2ZhMjg3YWFjNDkwMjg3YWMxZWI0OSIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiMDc0MzUwY2UxMTFmZTczZmNjYmIxOGM0MWI4NTQ4ZmI5YTA5NTJlZjZiMWRjZTc2Mjc4YjlhNTI4OWExMTQ0NyIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiYjdiN2ZjNTUxN2M2MzY1YWFhMDdiYjkwNjJiNTI3OThhODBmNDEyYTJiOTFmNWVlYmRlYjhkM2E3NjBiYTYyMiIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiZDYzYjg1MmRkNDhjZjhkYWJjYThmYTUzNTliMjhlZmJhMTczZTc2OTkxZjBkNjA0ODBkOTBkZWE2OTJmMjNkNCJ9"
+          "resource": "repo://cloudflare/dashboard/README.md#L34-L38",
+          "version": "repo-lines-v1:sha256:a6e805fc277184193f7ea73954ef75df1190b5d44de37205c49e82d775da2d17:eyJzZWxlY3RlZExpbmVDb3VudCI6NSwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiZmIxMzFhMGM3OTQ3NTgwMzFmMmZlZjM0MmNiNzJjY2RkZjIwYjEwYmMyM2ZhMjg3YWFjNDkwMjg3YWMxZWI0OSIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiMDc0MzUwY2UxMTFmZTczZmNjYmIxOGM0MWI4NTQ4ZmI5YTA5NTJlZjZiMWRjZTc2Mjc4YjlhNTI4OWExMTQ0NyIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiYWM3ZTA2MTllZDAyNTQ3YzJmYjc1YTI4NjFhZDY5ZTFhOGE4YmI5YjJhNDgzNjc0NmFiODQ5ZTMyNThlZGE3OSIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiZDYzYjg1MmRkNDhjZjhkYWJjYThmYTUzNTliMjhlZmJhMTczZTc2OTkxZjBkNjA0ODBkOTBkZWE2OTJmMjNkNCJ9"
         }
       ]
     },
     {
       "id": "claim_dd603fcd79884867962fc117988830c0",
-      "statement": "Attribution defaults to a direction-adjusted decision-effectiveness monitor with book attribution and audit siblings, calibration gated on two buckets of 10 independent decisions, and audit paged at 25 rows.",
+      "statement": "Attribution defaults to a direction-adjusted decision-effectiveness monitor with book attribution and audit siblings, calibration gated on two conviction buckets each holding 10 independent decisions, and audit paged at PAGE_SIZE equals 25 rows.",
       "evidence": [
         {
-          "resource": "repo://frontend/dashboard/README.md#L38-L45",
-          "version": "repo-lines-v1:sha256:cb80224388681d3657eb5de9360a7c6121b221ad4243ffdb94f2de5b1d9e0c15:eyJzZWxlY3RlZExpbmVDb3VudCI6OCwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiMjdmMjE0ZWY4Njk0MWVjN2M2YTc0ODBlMDZiNGQ5MGRhOTlmMTAxZjRkMGMxMDY1MDAyODQzYTY1ZDZkNDJjNSIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiYjRiNDQxN2YxODhlODVhMGNlMWEwMGZkZDhhY2ZkODcyMTU4ZjdiMDk3OGVmN2NjNTIwMDFhMTIwYmUxYzQ2OCIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiZDUwMDdlMTAyM2E0ZjBjOGEzNjBlZTE4OWJiYWQ5MjcwMDBmNmQwMjgyMGUwYjljMWFhODkyYzMwYWU2YjRkNCIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiMGViZTk5MDZjNjhlNDJkMDYyYjkwMzIwMTY5NjEwNWEyYjM1YjM2MDA3NTgxZTU5OGQ5Mzc0ZTllMWNhZDgxNyJ9"
+          "resource": "repo://cloudflare/dashboard/components/portfolio/AttributionWorkspace.tsx#L15-L21",
+          "version": "repo-lines-v1:sha256:1e698d324cb34665ab66f30c608171249ac8dd4b8956692305884aa852383439:eyJzZWxlY3RlZExpbmVDb3VudCI6NywiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiYTJhNDNmMDFmYWUzMTYyNTJkYzExMzcxNDY5OTYwYmFiNDVmNjNhOGZkN2IyMmJmNjI4MWUwMWRjNzkyYjg4MyIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiY2U0NzM3YjI1MWI0MWI2NDk3MGNmMmIzMWFiOGE0YTJlOTYzYzQ1ZTVjMTM1Nzc2OGE3MzNhNTQ0N2NiYjEzNCIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiZDE4N2RiMzhhZjA1NTM2N2FhODRhYzQzZjdlMDVlMzJmMTkyMjJjN2VkN2QwYTdjZmE5NjdiMjMyODFlYTg0OCIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiNjI2MDdhNjA1MDRlNGFjNzUyNDkzZmRjYzI0NGE3ZDlmZWQ4NzNlMmIyNTExMzlhY2Y5ODBjODg5NmYxZjMwYyJ9"
+        },
+        {
+          "resource": "repo://cloudflare/dashboard/components/portfolio/DecisionAudit.tsx#L29-L29",
+          "version": "repo-lines-v1:sha256:35032f4f9a791b784d97e81812eb5ccb6e28743562020b6334d4f1cd4e0f562b:eyJzZWxlY3RlZExpbmVDb3VudCI6MSwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiMzUwMzJmNGY5YTc5MWI3ODRkOTdlODE4MTJlYjVjY2I2ZTI4NzQzNTYyMDIwYjYzMzRkNGYxY2Q0ZTBmNTYyYiIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiMzUwMzJmNGY5YTc5MWI3ODRkOTdlODE4MTJlYjVjY2I2ZTI4NzQzNTYyMDIwYjYzMzRkNGYxY2Q0ZTBmNTYyYiIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiMTM1ZjY5ZTNlMzc5ZTE5NTkxY2IzY2I2MDRiN2JkOTRlNmMzZGIyYmYxOGVhN2U3MzcwNGMyZjU4ZWEzZGU0MCIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiYTBlMWUxYzQzZmE4MzkyMTFjNGZlODA0NzMwMzE5YjRhZjc3YmVkM2FkMDk3MTI0MDhkOWI1NWE3NWM3YTI3YiJ9"
+        },
+        {
+          "resource": "repo://cloudflare/dashboard/lib/decision-scorecard.ts#L269-L276",
+          "version": "repo-lines-v1:sha256:150a2620aaef3987809808d80b663eaa46eb19db3b5167c816405ad70b6dd9c8:eyJzZWxlY3RlZExpbmVDb3VudCI6OCwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiZmVhMzk5NDRiMjdlMmFmNzkyYzhhN2FjMDgzNDQxZjhlOTM5Y2MxMzRkNjNiODNhZDNmYjlkZWFhMTU2NzZhZSIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiYjJkZDZhMmIxMDAyYmYzNGQ3NzI4OTQzZWNiMTg0YWVjZjFiMjBlNzhjYzhjMWFiNDE4MGQ4MjgzZDk3YTZmZSIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiYTBhMWVhMzY0ZDBmMzFlMWJkN2U4ZWZlNDRiMjE0N2NmZDdiNDAxYzUxNjRhNjk2YWFkNTg4MjU1YmRiZmFlYiIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiMjhkOGZlY2M5OGZmMDgxNWQ5MDhmMWMzOWYxYTMxYTYwMmIwODhkOTI4OWRhNmM5Mzc2NjRkYTkxMDY4MDJkNSJ9"
         }
       ]
     }
   ],
   "verification": {
     "by": "openwiki/0.5.0",
-    "at": "2026-09-09T14:37:17.158Z"
+    "at": "2026-09-19T12:20:11.463Z"
   }
 }

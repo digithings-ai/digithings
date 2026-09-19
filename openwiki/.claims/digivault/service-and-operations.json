@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "pageVersion": "sha256:5e01d1081c8ca3cb6758281cecba8a14ecf1d52417f2adb936c6944864ff4ad0",
+  "pageVersion": "sha256:331f86c3866b5f3d71a7586ee04b013852d55aeaf83d0c6f464def635eeeb721",
   "claims": [
     {
       "id": "claim_6e962be50cd047299eb8706fff8fea28",
@@ -14,11 +14,15 @@
     },
     {
       "id": "claim_bf5eb6c5c1f3496b8b82774c04cbfbbd",
-      "statement": "Tenant path prefixes bind server-side to the JWT tenant via DIGI_TENANT_CORPUS_MAP, no-op when unset and fail-closed once set, complementing digigraph's model-side prefix overwrite.",
+      "statement": "Tenant path prefixes bind server-side to the JWT tenant via DIGI_TENANT_CORPUS_MAP, no-op when unset and fail-closed once set (403 for mismatch, 503 for set-but-unusable), complementing digigraph's model-side prefix overwrite as an independent layer for callers that talk to digivault directly.",
       "evidence": [
         {
-          "resource": "repo://digivault/ARCHITECTURE.md#L39-L40",
-          "version": "repo-lines-v1:sha256:a92aef42de712219d5849ebad8b01c437b0cde87ccaecf016266100fc2895ba1:eyJzZWxlY3RlZExpbmVDb3VudCI6MiwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiOWE3YWRmZDU5MDU3Y2RjZWVlYzQ2OTg3NDUyYjRkZTMxNDVkNGFiMmZjMWQ2MWE2ZDE4ZDc0YzgxMTA5MTIzMCIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiZWM3OGJjOTk5MDYyMGY4NDY1OTI1NTFjOGZiMzYyYTI4Y2YwMzAyMTNjOGVjYzg5YjNkZmRlNGQ2ODc2OWI2MCIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiZmNiNDdiMjUwMDAzZDQ4YTRjZWUxODJjYzlhNzg4ODMwNDgyNTFmYTZhMTgzMTEzMWJlNmMxY2ZiM2NhYWFkYiIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiZGVlZWUyODIxNDIyYTRjMDg0YzIwZTY0ZThiZjQyNGZkM2UwN2U2OTk5NDVmMGY5NTc5Y2MxMGNjMmMwNWUyYiJ9"
+          "resource": "repo://digivault/ARCHITECTURE.md#L41-L41",
+          "version": "repo-lines-v1:sha256:38d9816db93c077811e4114399bf3dfe980163e68f2fa6c798e70eadd78b15a2:eyJzZWxlY3RlZExpbmVDb3VudCI6MSwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiMzhkOTgxNmRiOTNjMDc3ODExZTQxMTQzOTliZjNkZmU5ODAxNjNlNjhmMmZhNmM3OThlNzBlYWRkNzhiMTVhMiIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiMzhkOTgxNmRiOTNjMDc3ODExZTQxMTQzOTliZjNkZmU5ODAxNjNlNjhmMmZhNmM3OThlNzBlYWRkNzhiMTVhMiIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiZmNiNDdiMjUwMDAzZDQ4YTRjZWUxODJjYzlhNzg4ODMwNDgyNTFmYTZhMTgzMTEzMWJlNmMxY2ZiM2NhYWFkYiIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiMThkYTUyNzlhMTU1M2YxZjQ0ZDg0YmUyMjhmMGE3ZWMzNDk5NTQ4MjJhM2MyMjNiMWZmMzBkODMxZGQ4YjI1NiJ9"
+        },
+        {
+          "resource": "repo://digivault/src/digivault/tenant_scope.py#L1-L70",
+          "version": "repo-lines-v1:sha256:9119a0f8e2a500f3656f560d534b55dd604cd87fe7c793b1416b7f7dfc6055b5:eyJzZWxlY3RlZExpbmVDb3VudCI6NzAsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImM5ZGYzZGQ5ZGU1NDczNWNkZDdmMTljOTBkMTY2NzQ2ZTNjZWNjMzc4NjlmYjRiOWQ1ZjlkNDkyYmIyOWNkMjMiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjM1OGM3ZDU2M2EzYzI2YTJjNzcwMDA2OTY5MDYyYWI4MmViNzMzMDljNWQ3YzQ5YWQ3ZjJhNTkzZjEyMWNhYTciLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjowLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjFhYWY3NjM3Y2I2ZTdlNWRiODVkNjM0Mjc0NjAxNGRmMDQxY2NkNTU4YTkyMGIyOWViNmFjNzE5ZDdiYWY1YzIifQ"
         }
       ]
     },
@@ -41,10 +45,52 @@
           "version": "repo-lines-v1:sha256:f031424e7012b708ddefe2eba6d9eccf51db44bf73c9ce5e98aca38ffae0b382:eyJzZWxlY3RlZExpbmVDb3VudCI6MjcsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQzMGVkYWFiZThlZTI2NDExMGVjYzE3MjQ1ZjVmMDgyZTkxZWNlMjFmNDY5N2U4ZTFlM2I1ZjM5YTQwZDk1NjYiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjFmMmJiMzc1OWZkOGVmZmJhZjBjNjkyMDdjNWEzNGZhNTg2YjJkNjQ5NDVlYzAxZmYwYzJlMmEwZGViYjI2NGYiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImE3OTkzYjc2NjA0MzVlNTVjNWEzNjNkNWY1NDE3NzliYmQyNjE1NGJkYzE4YWVkNzc0NGFhZTU3ZjEzNTQ4MzMiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImFjZDU3OTYxNTI4MDI1YTNjNGE5OGEyYTM3YTdiZjM4M2NjM2JjZmYxNzExMjQxYjA2MTRkMjI2YWRkNDZjMzkifQ"
         }
       ]
+    },
+    {
+      "id": "claim_f11bc170e8214820b6edf657cca14465",
+      "statement": "digivault_search_notes follows a strict three-tier search precedence: D1Store.search (FTS5, Cloudflare D1 REST API) when configured — D1 wins even when DIGIVAULT_ROOT is also set; else local filesystem keyword search via local_search when DIGIVAULT_ROOT is set; else SupabaseStore.search via the search_architecture_notes RPC. A partial D1 config (some but not all three vars) raises D1StoreError → 503.",
+      "evidence": [
+        {
+          "resource": "repo://digivault/ARCHITECTURE.md#L159-L200",
+          "version": "repo-lines-v1:sha256:e3c73baf544f7d1fd8207ae05766677ba908b35cb6971555a20f331126a949ac:eyJzZWxlY3RlZExpbmVDb3VudCI6NDIsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjNkY2RlNDY3MzE3MjFmMjgyMmUyYTUxZDcyMjdkZmI3NmQzOTJiYzM5MDBlMmI3ZTQyYjkzZWY2ZWRhYjY2ZGQiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQ2MTM2NzRjNjM2ZTFkMmY4YmRjOWVmNzg5YmIwMGJkZDAxYWVlZDM0YWY5MDQ3ODY1NzQyOGFmNmYyYjBjMDkiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjUxYzk3ZWFkOTBhZmUxZjk2YzI2MzlkY2RjNjY3YTMwZDRjY2NhNjZkMDk2MmE0Zjk2NzRiMzQ0ZThjMzAxNzUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjFlZTZmOGRiNGI3MmMwYzBkN2Y2NTBjOWE1NWJmNWNiNmE1OTU1NzNlNmEwZWMyY2FiOGVjMzExNjYyM2Y1ZGIifQ"
+        },
+        {
+          "resource": "repo://digivault/src/digivault/server.py#L729-L858",
+          "version": "repo-lines-v1:sha256:c8b365a001522518c880ea7245d937ace834e3f2d2d1b90fbd098750559e210f:eyJzZWxlY3RlZExpbmVDb3VudCI6MTMwLCJmaXJzdFNlbGVjdGVkTGluZUhhc2giOiJlOTYxNGJjMzM1Mjg4ZDRiYmVjMTc0NTc0NzY0NzFlZmJjZTQxYmQ3MmJkODJlODdmOTRkNWQ2Yzg0MjQ2YmQwIiwibGFzdFNlbGVjdGVkTGluZUhhc2giOiIyNmI1OGI1ZDM1YmMyOThmYjRkNGY4MDIyZTNhNzFmNzk1OWE3OTVkOTFkYzU1MjU1MzIyMTJlOTJkOWZiMGNmIiwicHJlY2VkaW5nQ29udGV4dExpbmVDb3VudCI6MywicHJlY2VkaW5nQ29udGV4dEhhc2giOiI1Njg1ZjA2MGYxYjNiMmE1ZjRmY2E4ZDhlZDQ1YjViODQxNDBjN2Q3YmM5NTRjODk4OTliMWVjNTUyZjE1NGU2IiwiZm9sbG93aW5nQ29udGV4dExpbmVDb3VudCI6MywiZm9sbG93aW5nQ29udGV4dEhhc2giOiJkODhiMzI1MjM0ZTI5Y2M5NDdmODM2YmNlMjdmMTUyNDNmNWI1NWY3YzI2MDY1MjNjMWViMGY4YmFlOTVkZmRmIn0"
+        }
+      ]
+    },
+    {
+      "id": "claim_9cbb65e6c091457f9d58ecece5b88304",
+      "statement": "digivault applies per-IP sliding-window rate limiting (in-process deque + lock): /v1/orchestrator_invoke at 10/min, /v1/orchestrator_tools at 30/min, /healthz exempt, everything else default 30/min. IP is read from X-Forwarded-For or request.client.host; DIGI_DISABLE_RATE_LIMIT=1 disables it and TestClient traffic is exempt.",
+      "evidence": [
+        {
+          "resource": "repo://digivault/ARCHITECTURE.md#L152-L158",
+          "version": "repo-lines-v1:sha256:9b8b0ac780da4921c7be9ec933ef137fdbd8c5c8c49a66aa677c6c25a7aa16af:eyJzZWxlY3RlZExpbmVDb3VudCI6NywiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiODExMmMxNGEwMmNiZmViMGI4MzYyMjVlZTg3NmFhNjAxZDgwNTUxOWEzNDMwMDUwYzI3YWUzZDhiMjhlMmE2MSIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiMThhZmYwNmM4ZWVjNmJiZGE3MTVmNGY4YjQ2MTk4OWQxOTg3NThiMThjNWMzNDk4NTcyMjM1YmY1YTI1N2FkZSIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiZDI2NjUxOWY3NGQ0MThjZGJiMDQzMDY0NjU1NzFlNDZiM2UxODg1ZDNlYzgyNGI0NDc2OTc1NDk4NjY5ZTdkOCIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiOWQ5ZGI1NzU5N2Y0MThiNmQzNGQ3ZWJkM2JhNjljNTQxNDM4YTQwMWNmN2NlNTEwMzViN2NkYWYzYWJjYmU4NyJ9"
+        },
+        {
+          "resource": "repo://digivault/src/digivault/server.py#L80-L130",
+          "version": "repo-lines-v1:sha256:aaa38659a46e12c6e2045dbc98ac84d9aa79726ca52f52372ed0b91a0b49ef35:eyJzZWxlY3RlZExpbmVDb3VudCI6NTEsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImVhZGQ5NjIzYzk4N2E1NjgxNzRkYTJhYTdiNTVjNjk3NDZkYWMxMzk5MmEyNWE5Mjk5ODA4Nzk4NjBjOWJhMmMiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImFhNzk2NWE0ZDljMzVkNjczNGIzNmQyYTFkMjkzNzk5MWY3MmQ1MWYwZjhmMWI0ZGM1ZWI3NDU5Y2M2MTBkOTkiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjY4OTM5OTdhNzAxYjFkNzU0NmQ2NmMwYTFjOTBhZWI5MjIzNjEzZTExYzU5ZWRhYWMwMGVmMjgyMjIxZjNkNGYiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjkzYzM0NmFjMzBiNzVkY2M4MzQyYWNhNmRhZWU3OTk3OGViZTllNmY2ZDhiZDM2NjY5OWI0MjYwOGVkYWU3N2UifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_ecb90efdd5374e86ad2e30a55bfb23de",
+      "statement": "digivault's MCP server runs as a thin FastMCP transport wrapper on default 127.0.0.1:8769 (streamable HTTP) with optional --stdio mode, registering tools exclusively through tool_dispatch.register_mcp_tools and exposing search_notes, search_tag, backlinks, lint, and create_note (the last gated behind DIGIVAULT_MCP_WRITE=1) — get_note stays orchestrator-only.",
+      "evidence": [
+        {
+          "resource": "repo://digivault/Dockerfile.mcp#L1-L32",
+          "version": "repo-lines-v1:sha256:9781d4ecba6ca267d139588457c350cf7a53e296557b815882b4d828ba7cf90b:eyJzZWxlY3RlZExpbmVDb3VudCI6MzIsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjFiM2M1MTI1N2JlMjQ1Njc3MjUzZTVlOGI4YzI3NTJiMjQ3ZDM1YmE1ZmI2N2RiOGNiNjc0OGM4NjA4ZjYyMzUiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImFiMDFiOGRkZDg1ZGI1M2M3OTE5NDJiMmU4NGMyYjU0YzVmMDhkNTM0Y2UzMWQ4OTQyMDhmOGUxMGUyYTJmMDAiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjowLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjowLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUifQ"
+        },
+        {
+          "resource": "repo://digivault/src/digivault/mcp_server.py#L1-L65",
+          "version": "repo-lines-v1:sha256:59f11ef4a390ff2d59baa6d44555269a31bd8caa8c2245ebd6b57cc68648175f:eyJzZWxlY3RlZExpbmVDb3VudCI6NjUsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImE3MDhkYWY2OWI0N2E1NGY3MjI2ODBkOTA4MjE3NDg2MjcxZmYyN2E4YTdjOGQ3YjJmNGYzMWMyYjhiMjBkOWUiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjE4ZTk5MjMyY2QzYTMwOWY1MGNiZDZmNjYyMTI3ZWVhYWZjZTFmNzM2MjkyZGVmYjExM2Q5ODFhMjBjN2Q4NTIiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjowLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjowLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUifQ"
+        }
+      ]
     }
   ],
   "verification": {
     "by": "openwiki/0.5.0",
-    "at": "2026-09-09T14:37:17.158Z"
+    "at": "2026-09-19T12:20:11.463Z"
   }
 }

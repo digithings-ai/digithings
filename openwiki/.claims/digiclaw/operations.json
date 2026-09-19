@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "pageVersion": "sha256:be33eb9a1a022a51cb9d9cb21b6a799f1438ae05f3e3c7c7705810a73ace4153",
+  "pageVersion": "sha256:7064c292038fbf6d73cf99a51899fde690dd7f23f6a7358c00adbcca1e920902",
   "claims": [
     {
       "id": "claim_8da502feb6a340b1913abe805c363752",
@@ -53,10 +53,38 @@
           "version": "repo-lines-v1:sha256:d9ba63de1c9bf84a6215924c382bba1ff7d03b82ca95d3fd53005f8190662aed:eyJzZWxlY3RlZExpbmVDb3VudCI6MzEsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImVlZjVmOTVhMDMyMzliZDgyODQyZmIwODJkNjAwZjEzYjc5MzY2Yjk0MTkyNjUwMWU5NjQ4ZTI1YTNmYmRjMDYiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjAxYmE0NzE5YzgwYjZmZTkxMWIwOTFhN2MwNTEyNGI2NGVlZWNlOTY0ZTA5YzA1OGVmOGY5ODA1ZGFjYTU0NmIiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImMzY2RhMjA4ZWY1MDFlZTQ1MGE2NzIyN2ZlNjYzOTEwMDRiYWMyNTc1NGI4ODc2Y2ViNzNmMmM4YzMwMDBkN2QiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6Ijk0YTZmN2ZkNDJhYjQzM2Q2M2VjMGY2Yjg2ZTY3YmM4MDBlODMxNmE0YmIyODg4NTljMTRlY2Q4Yjg2ZTI3MWEifQ"
         }
       ]
+    },
+    {
+      "id": "claim_8100df84b1ba4285890e71594d079cf1",
+      "statement": "The Docker Compose heartbeat container runs three concurrent shell processes: a one-time bootstrap that starts the web-watch-tick agent, a background 1800s heartbeat loop, and a foreground 60s scheduler tick loop.",
+      "evidence": [
+        {
+          "resource": "repo://digiclaw/ARCHITECTURE.md#L290-L294",
+          "version": "repo-lines-v1:sha256:870701ea6c7a48a4b5da2d71862e801fe9b066a3919a67fa0a4d18f7de0f483b:eyJzZWxlY3RlZExpbmVDb3VudCI6NSwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiNDllM2IxZmQwMjdhM2Y1MDYxYTM3Y2IxNzc3YmE2Y2ZmOThlZDM4ZDhjMGJjNDFkYTU4MjgxY2Q0OTc1YmM3NCIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiZWIwZGI3YjU3MjU5MTk5NTQzMTVmNDRkNThiNjJiOTVkODY4OWJlMDQyNGE1MmIzMzU0Y2I5NzZmZDY4MGFkMSIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiODE3NzM1NWYyMWE3MWE2YTZlN2Y5YjU2NzFiMzgwY2RmMGY4ODJkODk0M2I3NmU1MGFkODEwN2YwMjhjZjg5NCIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiNTBjYmNkMTRlODcxNTcyNGY2OWRmNGIyNWJjYjdkNTAzYjhiODYwMzg1YTc3NjBiMzhhOTJhOGYxNzUxYThiMSJ9"
+        },
+        {
+          "resource": "repo://docker-compose.yml#L492-L499",
+          "version": "repo-lines-v1:sha256:ea626917c6ddae16dbcb0b68d324f29f584404ef87a57516fea3ccc4a1cd4a4a:eyJzZWxlY3RlZExpbmVDb3VudCI6OCwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiY2M4MWFjODM4YTMwMjE1ZDg3OWE3OTBlNWRlYTY0ZTExMzc4ZDM1ZmI3ZWEwZDQyMDUyMmI3ZDcyYTA2OGM2YiIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiZGZmOGExZjE5NDI1ZjFiMzBmYjZkMjg2MmVhNjZjNTJjYWZkZDNjOTYyNDJhYjU3YmFiODk1YzZhMDI4N2M2NSIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiNGEzODg2Yzc2YjgzNjM3OTU1ZTA1OTgyZmE2ZGIxNTY3YTBhNDIwNWYxNmFkN2M5MmQzNTJhMGQ4NDQ0NDQzMCIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiNTNkNzJiZGIyMWMyMjBiOTg4MTNjZGY4ZGRjODA0NmYwMWIxYTE2MGE3MmQ0NjBiMTNlZjFmNmI5MTdmYzA1NCJ9"
+        }
+      ]
+    },
+    {
+      "id": "claim_889a225366ee4278a31926898dbfc617",
+      "statement": "The web-watch-tick agent POSTs to digisearch /v1/monitors/tick with a digikey service JWT scoped to digisearch:query, minted from DIGICLAW_DIGIKEY_API_KEY; transport and auth failures raise and persist as the agent's last_error.",
+      "evidence": [
+        {
+          "resource": "repo://digiclaw/agents/web-watch-tick.yaml",
+          "version": "repo-file-v1:sha256:a31e29416fa2455e526c3100f0c78841a27122ffe69b360f918f9f2a49e50ac5"
+        },
+        {
+          "resource": "repo://digiclaw/src/digiclaw/monitors_tick.py#L46-L73",
+          "version": "repo-lines-v1:sha256:b3be796dac36cc760d9ced101b4bbd898cd09c25396a768720559dca7434e0c4:eyJzZWxlY3RlZExpbmVDb3VudCI6MjgsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImZjNDg5OTU4MDg5NTZhZmVkMTZkMjlmNWMyYzM4MzFkOTlmMGE3ZGE1YzVkNTMwMDc2NDYzMmJjYjUwNzg2NDIiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjBiYjNhODJjMjVkZjYwZTQzY2IxOWY3YWZiZGI0ZThlOWVlMWFhMzg3OWMwOTEyNDIzODIyMWQ2OWEyNTk5YzIiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjFkZWNjZDgyNDIxN2FhNGMxNDk2ZDk3NDI3ZmY0OTFlODFiN2Q4ODRlMmZjMDNhZDUyZTE1ODUxYTEwZWFiNGYiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjowLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUifQ"
+        }
+      ]
     }
   ],
   "verification": {
     "by": "openwiki/0.5.0",
-    "at": "2026-09-09T14:37:17.158Z"
+    "at": "2026-09-19T12:20:11.463Z"
   }
 }

@@ -1,22 +1,22 @@
 {
   "schemaVersion": 1,
-  "pageVersion": "sha256:a8d07859e374e85060ee1aac9301ac935d67f0450a11e0fcb71d793e33bb352b",
+  "pageVersion": "sha256:b9b0aae5d69bba3324855467af6cd35b3b82c923a7a5c00841efd79cb56f1a49",
   "claims": [
     {
       "id": "claim_b4be3a1d084146038945f107689976b9",
       "statement": "POST /query is the retrieval entry point while POST /v1/orchestrator_tools and /v1/orchestrator_invoke expose digigraph's federated surface with schemas and dispatch owned by digisearch.",
       "evidence": [
         {
-          "resource": "repo://digisearch/src/digisearch/server.py#L370-L370",
-          "version": "repo-lines-v1:sha256:cc0ab10106bb2db9d37c646cc3f6c293e438603f6ff25fdacd55723d6312fb6c:eyJzZWxlY3RlZExpbmVDb3VudCI6MSwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiY2MwYWIxMDEwNmJiMmRiOWQzN2M2NDZjYzNmNmMyOTNlNDM4NjAzZjZmZjI1ZmRhY2Q1NTcyM2Q2MzEyZmI2YyIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiY2MwYWIxMDEwNmJiMmRiOWQzN2M2NDZjYzNmNmMyOTNlNDM4NjAzZjZmZjI1ZmRhY2Q1NTcyM2Q2MzEyZmI2YyIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiZmQ1ZDMyM2ZkMGZjYTU1OGI5OGVjYmNmZDA4MmY5ZjgzOWJmYTFiN2Q3YzM0MDYwNjhkNmQzYTg1MTNlNzllZiIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiNmU4ZWJkMzY1ZmNhNzYyZmQ4MTU3N2RiYjQ5MGJkNTVjZWM4NDk3NzliMzFiMDU4YzdlYjljZjAyZGM1Yzk3YyJ9"
+          "resource": "repo://digisearch/src/digisearch/server.py#L1054-L1056",
+          "version": "repo-lines-v1:sha256:80c8e2521af4120afb85b26bb6776ffc3e042c9f06f6c2ce446d23b1a473e840:eyJzZWxlY3RlZExpbmVDb3VudCI6MywiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiYzJiMWQ1YmM5MTQzZDMzYmM2ZGI1ZGY3NzA1ZDZhYzRiMDgxNTRjNDFiYjk2YmUxMTY5OTgzZDdlOWJiNzZiNSIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiNmIyM2ZjYTg2OWEyYjRhMGU0MmI5Mzc4NjI2YjQ3YTVhMDI2MWE0ZGNhN2NiN2Y5ZjY1NmE1MTA4NzViOGQxMSIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiZTQyMmNmNmZjYWMzNDQ4YzIzZWY2YjFjZDBmNDc1YmRlNGUyYmRlOGY4MmNiNWUyMDdjNjg3ZThkOWIwMjE1YyIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiN2VlNmM0MGEwOTU1YjUzZDg3NTQ1MTcyYTk0NDUyMWMxNDk4YWRmNjI1MzE5MTA4NzcyOTQ2MjIxNDhlZDYxZCJ9"
         },
         {
-          "resource": "repo://digisearch/src/digisearch/server.py#L441-L441",
-          "version": "repo-lines-v1:sha256:e1742134504a9994e68818a10e3f2a7618baf6618342dced96ade38eb8fc90c2:eyJzZWxlY3RlZExpbmVDb3VudCI6MSwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiZTE3NDIxMzQ1MDRhOTk5NGU2ODgxOGExMGUzZjJhNzYxOGJhZjY2MTgzNDJkY2VkOTZhZGUzOGViOGZjOTBjMiIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiZTE3NDIxMzQ1MDRhOTk5NGU2ODgxOGExMGUzZjJhNzYxOGJhZjY2MTgzNDJkY2VkOTZhZGUzOGViOGZjOTBjMiIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiOGNjNGE3ZDFjYzc5NmFiYTNlNDY3MjMzMjdmNTE3ZTlmODExOTgyZDI1MGYwNzAyOTg2ZTRiNTc2NGFkOTU4OSIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiZDE2YTQ3NDhjZDU3NDljNzUwNjk4OTY1NDYzNmU4N2QxN2I2MTIzMDQ0NzQzNDU1MmYxMWYzYjYyZjA5YzQ3MCJ9"
+          "resource": "repo://digisearch/src/digisearch/server.py#L688-L691",
+          "version": "repo-lines-v1:sha256:717568a66ca3c92a7181c78a36445c94a7aecb6378de03cc38c815521f7df62b:eyJzZWxlY3RlZExpbmVDb3VudCI6NCwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiZTE3NDIxMzQ1MDRhOTk5NGU2ODgxOGExMGUzZjJhNzYxOGJhZjY2MTgzNDJkY2VkOTZhZGUzOGViOGZjOTBjMiIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiN2I3ZTgxODUyOTgwMjJiZTIyMzkwNDNiNTc0NjQyOTg0M2U3MmIxMjU4MDBkYWViZTExZGJlMTI5MjEyMTc5MyIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiOGNjNGE3ZDFjYzc5NmFiYTNlNDY3MjMzMjdmNTE3ZTlmODExOTgyZDI1MGYwNzAyOTg2ZTRiNTc2NGFkOTU4OSIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiOTkzODEzNGVhZGEzZTFmZmU0MjhlYTBjYzU1NDgzMjdlZjFlOWMzMzI1YmNhOWM0YzViYWYwMjQ4ZTVmMmI0ZSJ9"
         },
         {
-          "resource": "repo://digisearch/src/digisearch/server.py#L513-L566",
-          "version": "repo-lines-v1:sha256:03bba4f2eb41a182762005accb7100870a66b32834f64565c85215581ebcffc8:eyJzZWxlY3RlZExpbmVDb3VudCI6NTQsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImZlYTM1YjZjZTExMjgwYTVlMzRjZTE1NTFjZTA4OTcxNDNlNjJjYWU3MmY3ZTE5NmY3ZWIzYzI5NTE4YmM5OTQiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImMyYjFkNWJjOTE0M2QzM2JjNmRiNWRmNzcwNWQ2YWM0YjA4MTU0YzQxYmI5NmJlMTE2OTk4M2Q3ZTliYjc2YjUiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImY5OWVmZWRmZDJkOTcwNmQ4OTFjN2JhOTgzZTdmODRlMDVhZDBlMDE5MWMxMzI3OThiZTVlM2MxY2M1MzA0MjYiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjJkODQ2NjlmZDUyZGU2YWEyNDlhOGM1MjNlZDVmNGU4MTdjYjQwMTQ5YmU4NjZkNjVlNzFiZTMzYzJjMWNlMTcifQ"
+          "resource": "repo://digisearch/src/digisearch/server.py#L824-L835",
+          "version": "repo-lines-v1:sha256:9b74bee4d55435ada972162b6b99599e9f345092ff88a2c68f4152e5a2a61636:eyJzZWxlY3RlZExpbmVDb3VudCI6MTIsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImZlYTM1YjZjZTExMjgwYTVlMzRjZTE1NTFjZTA4OTcxNDNlNjJjYWU3MmY3ZTE5NmY3ZWIzYzI5NTE4YmM5OTQiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImM5NWEzNGRlNTg5OWUxNjgwODcwMWU5NGU3ZWZjNjE0MTI0OWQ1YzBhMjJhMmRhODgyY2ZmNDhjZjZlYzY1ZTQiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImY5OWVmZWRmZDJkOTcwNmQ4OTFjN2JhOTgzZTdmODRlMDVhZDBlMDE5MWMxMzI3OThiZTVlM2MxY2M1MzA0MjYiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjFiNTE3OTc5NmIwZjBiMWYwMzM2NDM4ZDAzMDc1ZGQyYWQ0OWMzY2Q1ZTUyYWE2ZWE1NTk0NDM5MTc5YjRlNzYifQ"
         }
       ]
     },
@@ -32,15 +32,15 @@
     },
     {
       "id": "claim_c18cd2be1d4b4a64aa73437d515fc707",
-      "statement": "HybridSearcher fuses keyword and vector rankings with RRF and the Reranker reorders top results via Cohere, BGE, or CrossEncoder providers.",
+      "statement": "HybridSearcher fuses keyword and vector rankings with RRF (k=60, alpha=0.6) and the Reranker reorders results via the Cohere (rerank-multilingual-v3.0) or BGE (BAAI/bge-reranker-v2-m3 loaded through sentence-transformers CrossEncoder) providers, falling back to the original order on failure unless strict mode is set.",
       "evidence": [
         {
-          "resource": "repo://digisearch/src/digisearch/search/hybrid.py#L13-L31",
-          "version": "repo-lines-v1:sha256:31d895b1e604437ecc779dd19f8305bb8b16d3660a7b130b1bb9d8b528432200:eyJzZWxlY3RlZExpbmVDb3VudCI6MTksImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImM2M2I1Mjk3MjA0NTllMGZhMDE4YWNlNGU1MjgzNTZhYjM3OTY4ZDdlZmIxM2JiODM4YmQ0NGRlNmYzYTc3MmUiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjFiZmIyOTE1NDI4NTJkN2FjODFlYzY0NzU0Yzg4YTJiMWJiOTc5ZDMzZDlhNjU0MzAwNDU5ODNhN2I3Njk5OGMiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjYyMDA5N2U0YWE1MDA2OGJhMTU3ZjlhMjczOWZhZDg2OTk1ZTFlMGNkY2NkYWRjNTg5N2MyMDM0Yzc0ZDNlZmEiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjFkYjE5YWUyMDg5ZTEzZmU1ZDU2YTM0Yzk5YWY1NDM5Y2NmNzFiMGJhYzYwODdkNWIyYTQzZGI0ZTkxYWE5ZWEifQ"
+          "resource": "repo://digisearch/src/digisearch/search/hybrid.py#L13-L70",
+          "version": "repo-lines-v1:sha256:4153787ba0b25613a1c0370fe72ff5a0afa141df33b5f0b520f269deae52d145:eyJzZWxlY3RlZExpbmVDb3VudCI6NTgsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImM2M2I1Mjk3MjA0NTllMGZhMDE4YWNlNGU1MjgzNTZhYjM3OTY4ZDdlZmIxM2JiODM4YmQ0NGRlNmYzYTc3MmUiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjJiYjU0MmE5MDcwY2FhNGM5OTg5ZmQxN2U0NGE5NmIwMmViNTBmY2JjZWQ2N2VhMGU0N2FjODgzZTg5NjgwZGUiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjYyMDA5N2U0YWE1MDA2OGJhMTU3ZjlhMjczOWZhZDg2OTk1ZTFlMGNkY2NkYWRjNTg5N2MyMDM0Yzc0ZDNlZmEiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjowLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUifQ"
         },
         {
-          "resource": "repo://digisearch/src/digisearch/search/reranker.py#L11-L37",
-          "version": "repo-lines-v1:sha256:bb17ee8cfb6d95b6f9acd029f2a716da8e3b37c1bbd73b3f17a4c16f8414c6f4:eyJzZWxlY3RlZExpbmVDb3VudCI6MjcsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImZhNDE5MjhiNjNlYTE2MGUxYjZlNmI2YWZjODk2ZjUyN2MzYjFiNWE5ZGU3NWY5ODlkMDNhNzg2NDc2NTlkYzciLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6Ijc3NmRiNWVjMTRjZmMxMjY3OTRlNmE0OGU1ZTJmNTk1MTY3ZTY4OTIyZjAxZmUxZDI1ODMwZmQ1ZDJmMmY1ZmUiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImU1YzFjNDYyZTJhMzlkNzQ3NTlmNWUxYjEyNmY3NjgzYTJiNzMwMTE4ZTE4ZjUxMjJiMDhjZWRlZWI2NTBlMjMiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImZhMWUzNmQ5OWJiNDcxMzVlMmFjYTU4NjY0NTU5MmRlNzk1MWMzNTNmMWRkYTdhMmYzMjE5ZjJkZDUwMTkyZWMifQ"
+          "resource": "repo://digisearch/src/digisearch/search/reranker.py#L29-L81",
+          "version": "repo-lines-v1:sha256:a6dde1ed3c606663f81f45c8e0afb76504473dbabd377051c769ca2cac685ebb:eyJzZWxlY3RlZExpbmVDb3VudCI6NTMsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6Ijk5ZWYzYjE5NzEyZGVkODBmYmE0OTUzMWFiZWY3OGZhYTM4NGRiNzdlYzIwYTI4YjI2MGIxZTU1NDU3ZTY5YzQiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImI1NDNlZGI3ZWFhNzRhNDUzY2MyNWE1ZmMyYTk2M2YxNDNjNzAyODhiZGZjZjM3MGUwMGY4ZWQyOGMyYTlhMzEiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImIzYTZmZjRjNjI1YmRlOWJiZmVmNjIxMGExMGQxM2ZkZDhmZjYyNzQ3NjZhMWZhODU5NDAzNzg3YzUwNTYxY2YiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjowLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUifQ"
         }
       ]
     },
@@ -53,10 +53,88 @@
           "version": "repo-lines-v1:sha256:0d98ba41498971042b8bb14a3dcc6989ba6e14db68ef82cdcad18cc52d6f0408:eyJzZWxlY3RlZExpbmVDb3VudCI6MjEsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjNlZmI5NzE0MDI3YWM0YjBmODY0ZTU0NzQ2YTk3ZTQxYWYxOWJkYTBiMDk4YjBjODYwZTQ5YjgyODEyYzBhYWYiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjAxYmE0NzE5YzgwYjZmZTkxMWIwOTFhN2MwNTEyNGI2NGVlZWNlOTY0ZTA5YzA1OGVmOGY5ODA1ZGFjYTU0NmIiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjAwMWYyZWMxNzU5M2MxMDU0ZWI0NjM2N2Q4NDUzZWYyNGExNzNjZTk2YjcxMTdkOTFmOWE2OGQ0NGZlZjhiMDEiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjlkZGMxODNlMWVmZjkyN2MzYzk5MWRiZjdiNTdjMzczYzkwNmY3YTA4Nzc1OGNiNWI4OGQyYjkxYmFjOTBhYmYifQ"
         }
       ]
+    },
+    {
+      "id": "claim_12bd460e062449a6b79a9a4bf9935ed5",
+      "statement": "query_index routes queries through registered backends in order Azure AI Search → Cloudflare Vectorize → ChromaDB; a configured backend that fails raises SearchBackendError or VectorizeBackendError so a failing remote index is never silently answered from a different corpus.",
+      "evidence": [
+        {
+          "resource": "repo://digisearch/src/digisearch/search/_stub.py#L1-L13",
+          "version": "repo-lines-v1:sha256:f55c224b3ca8cd474de6bd7d5ca98a71559907404b3709cce2243d30eb64b628:eyJzZWxlY3RlZExpbmVDb3VudCI6MTMsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6Ijg1M2U3NjkyYThiODM5M2U2MWJhMzdjZGE5YzExY2Y2MDFjMmJmNjExYTg0ZTBjNDdhNjFjMTFmZWJmOTNmZGUiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImEzMDNlY2RkNGE0ZDEwZjE5YzczZmQ0MmZkMTI0MzdmZDMzNTRhODI2ODE2MDVkYTUyNTVhOTdhMzkwNjhkYmIiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjowLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjU1YjZlODcwNmI0MzA0N2YyYTZkYjY3ZjEzMjYzODU5NTYwNGU2N2YzNjk2Njg3NmNlMDE1OGYwMDUzZTZiZDEifQ"
+        },
+        {
+          "resource": "repo://digisearch/src/digisearch/search/_stub.py#L216-L249",
+          "version": "repo-lines-v1:sha256:4c40d93726f17be65b30ddfe31a2bc5bb47579e069315186d0cc3bd1df3e49f8:eyJzZWxlY3RlZExpbmVDb3VudCI6MzQsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjNjY2MwMWFkZjUwMGRlOTI5Y2QwODQwMTA3NzE4NWQ5MmM3MWRkMjRkYmU4ODY3YjcyZTcxNmI3OWFiZjA2MGMiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6Ijc1MmZlY2RlYTIzMTRhZDRhYTIyZWVjMGFiMjU1MmFjZTQ3ZTI3MjBlZTgwZGIwYTEzMjk4ZTU3ZGZkZTEyMzAiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjlhMTU1ZmNkNGE1YjgwMDdlOTAxYzEyOWUxNzA2NTliYzVkZGI1ODdiZjkwMThjMWE3NTQ3YWEwZTZjZTQwMDMiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImU2NTdjMmM1Y2U5OTc5YTJiMTI0N2UxNDg2MzY2YWM2MmZjNGE2ZDc5MzU1MjlkNDMyMzQyZmM1ZGFkOGExM2YifQ"
+        },
+        {
+          "resource": "repo://digisearch/src/digisearch/search/_stub.py#L82-L141",
+          "version": "repo-lines-v1:sha256:8df5846bf04087c0967dea1ed77716b31c58b5c9e59b484df16d0d9eae259e7a:eyJzZWxlY3RlZExpbmVDb3VudCI6NjAsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImQyMTE3MmJkZWRlNjA0YjJkNjRiMTk4NDY5YTM1YTI5YmI0Y2I4MTNmMmQ2MzFjYjBlYmUxYTI1NDQ3NDhiZDEiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjViZDBlYmUyNjg2ZWI4NTk2ZmU1NzNjN2Y2N2ZlNmVkMGZlYzViYTc3NDUxODUzZTJmZmE0ZmZiNDA0Y2UzMzEiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjJhZTQzMzlmNGYzY2I3Nzk3ZjQyNWJlMWRmYzM3OTUyY2I4OWE0ODIzNTU1N2I0MjU3ZDg3MjkxNDRiZTMzYzIiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjRlYmU3Y2EyODk3MmMwM2MwNmM3NTNmYmYzNmQxZjEwZmIyMzc4MDYxMDJjY2Y1YjA5ODNhMTFlMDA0OWIyMmMifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_df78aa4924eb40ee9130cb16fcf1bf52",
+      "statement": "Cross-encoder reranking is off by default and enabled via DIGISEARCH_RERANK_ENABLED=1; Query.skip_rerank suppresses it, which digisearch_fetch_all sets so exhaustively paginated pages are not reordered.",
+      "evidence": [
+        {
+          "resource": "repo://digisearch/src/digisearch/search/_stub.py#L199-L213",
+          "version": "repo-lines-v1:sha256:5223cb46a4c1df3b9d5962ceb0ab5e88b75249e45d769acbc189ccb6e4d3488a:eyJzZWxlY3RlZExpbmVDb3VudCI6MTUsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImRiNzFjYTU3ZGRhNmQyZDhhMzc2ZDk0NWQ5MGZmMGE2NmQ0NTE4M2IzZjA0NjdhMzg1YjNiMGJiNGRmZmIwMGUiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImNhOGFlOTEzYjA5Njc1ZDc4ODAwYWM1NmU2N2VhYTQ1Y2JiOTM2OTE3YWZmZDE2ZTQzMmY5NDI5OTlhMzgyZmYiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjViMmNhMWM2MzRmODAyNjAxYTJmY2FjNTNkMGE1MGU5YTc1ODAxMzRiMjhhMzdmMzdkZjUwYzRmODU1YmExODQiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6Ijc1MDA2ZjNlMzNjMGQ1MjMzNTRhMjIyMzdiYTY3ZDIxNDI4NzNhYjFiZjg0YTcwMGE0OTE4MDY3MzY2ZmIxZDYifQ"
+        },
+        {
+          "resource": "repo://digisearch/src/digisearch/server.py#L1104-L1122",
+          "version": "repo-lines-v1:sha256:8803637c1768db2797fc352332159225ee9ceeb91dd8519f194fef9a983b513b:eyJzZWxlY3RlZExpbmVDb3VudCI6MTksImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjgzZTBkYjNiODc2Y2Y5ODA0M2EyNDdlNTFlMGI5YWY3ZDJlZTMzZThmYTRiYWEwY2M3NjNmZWNhMWZkYzFjZTIiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjU1MDMyZTk2NGQwOTMyMzUxZTVkMTg1MjY5MjgxYjE3MWEzYTA5YjA4YjI4NmU2NjFlYTQ3MDMyM2M4MmViNGQiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImIzZThkYzdiNmJkYjgwM2YyZWZmYzY5OTYyNWU0ZDMwNzFkZTgzYWJmMDg1ZDZhZWRjYWY1YjUwMzZjYjk0YzkiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImEzOTE1MGE2NmUyNTU5NzQxZmZmZjlhNGQ4N2RmYmEwNGJjMDlmYTkyZTI3ZGU1NjU5MmE4N2JjYjRlYzJlMDcifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_427363e689e34f7aa26002e254e8eb6b",
+      "statement": "POST /v1/web_search runs searxng → ddgs search with optional digifetch page enrichment, and provider failures (429/5xx/timeouts) return an HTTP 200 soft {ok:false} envelope with retryable and status_code hints instead of a 500.",
+      "evidence": [
+        {
+          "resource": "repo://digisearch/src/digisearch/server.py#L1392-L1421",
+          "version": "repo-lines-v1:sha256:22e9172ddddd96dc2ccd251b18f8e0efbe842baa36fb8c58c6431f14a420f5d7:eyJzZWxlY3RlZExpbmVDb3VudCI6MzAsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImE2NzFlNWI3MzgyZDM4NThlYWY4ZmU3ZjZmODU1MDc0YjExYjc1ZjEzZThiYjkyMjRkMTdkNDkyODM4MDRjNDkiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjU5MDlhNTNhNjE4ZDAyOGUxZDMwMDBjMGE3YWJjZWVjYmU1ZmIzN2Y0ZTUxMWVmZTQ2NjQzZmFkNmU2Njg3MmYiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjFlZTY0MjYyNTYwYmQ0ZDU4OTA4NzMzMzAwNWZjNmZmZWY3YTFkNWQ3ZTk1MmE2ZWUxNzNhYWVkNDM3YmI3ZjgiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImQ5NDY2MTc2YjI0NWI3YTFmNWE5MGEyNTA0ZWMzMWVjZmI4Yjg1OTI3ODVmOTc0MWM1ZTUyZGZhZTA2MjA1ZDMifQ"
+        },
+        {
+          "resource": "repo://digisearch/src/digisearch/web_search/service.py#L136-L195",
+          "version": "repo-lines-v1:sha256:512689fdb25eec3175c0ea73a1d36b11d66d9951d78893d2b3b7ef2d00e04471:eyJzZWxlY3RlZExpbmVDb3VudCI6NjAsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjkwZmMxYmQ0MDRmZjMwNmRlMTc5M2E4OGQ3NzdiNWQyODQxZjRlMDMwZWUwNmM1YjVlOGE0ZGZkYmQ0MjRiYTQiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImQ0MzgyZTNjYmQ1NTFlZTFlMWQ0ZmRjYzJhNDBhZjA2YTY2NzhiNDJkMjllODcwOGU5OGJkYzA3MmU5OTZkNDQiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImZiMWFhYTA3Nzg0OWQxZTFhMjcwNTViZTk1M2IxNjZjYmFjZDFmZWFiZTU0NDlkM2VmYjI4NTE3MTYzODYwMjgiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjowLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_291d5c4c868b487981994067cdd0c949",
+      "statement": "An identity-aware per-path rate limiter runs outermost: /query and /v1/orchestrator_invoke allow 10 req/60s while /ingest and most other paths allow 30 req/60s, and bearer-token callers get a 6x budget keyed on the token hash with a per-IP ceiling.",
+      "evidence": [
+        {
+          "resource": "repo://digisearch/src/digisearch/server.py#L171-L198",
+          "version": "repo-lines-v1:sha256:73314123e9e428a388162dccc119a0555c10049281b3b3207637edefa04dfe24:eyJzZWxlY3RlZExpbmVDb3VudCI6MjgsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImM0MmUzNTI3MzAwOGU1OTUxMmQzZmVlZTYzY2M4MzkxZDk0MmQ5YzFlMDEyYTVkYWNiODEyN2I5NGEzNjMwZDgiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImVkZTYyZjRhNGIxZjBjNGVhZmU0OTY2MTg5ODBiMGNlN2Q2N2EyZWZmNDVmMmZkZTM1YzRkZWFlZmIyYjcyNWUiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImM5OTUxM2QyMGIxNGJhYzJlZWI5YTgyYmEyMDZlZDY5OWEyMmRkMmM1NGEwOWM5OGU1MmVhMTg4ZWNlNjg0NWQiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjlmYzUyNGE3N2Y1NWMzOGNmM2YxNTViODczMTRmYzA4MGQ4Y2YwYjVjMWQ2ZGJmNWViZDA0YjZmZGE2N2VlMWEifQ"
+        },
+        {
+          "resource": "repo://digisearch/src/digisearch/server.py#L311-L349",
+          "version": "repo-lines-v1:sha256:5334a0347461a87624f4500182b0c8bdd2eb68916c397968d4868e637ba84823:eyJzZWxlY3RlZExpbmVDb3VudCI6MzksImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjE3YzBhNzhiYjZlMzQzNDljN2Y1NjlhNDRiYzk5NmFlNWIzZTQxOGNmNTIyNDNmNTllYTg3NTFhZDNmMjhiYTAiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImFhNzk2NWE0ZDljMzVkNjczNGIzNmQyYTFkMjkzNzk5MWY3MmQ1MWYwZjhmMWI0ZGM1ZWI3NDU5Y2M2MTBkOTkiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjhjYzRhN2QxY2M3OTZhYmEzZTQ2NzIzMzI3ZjUxN2U5ZjgxMTk4MmQyNTBmMDcwMjk4NmU0YjU3NjRhZDk1ODkiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjkzYzM0NmFjMzBiNzVkY2M4MzQyYWNhNmRhZWU3OTk3OGViZTllNmY2ZDhiZDM2NjY5OWI0MjYwOGVkYWU3N2UifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_d0fdcdec03854704b4d9413e3f679e98",
+      "statement": "POST /v1/research_turn runs a LangGraph plan → retrieve/aggregate graph, routing source=web/auto through a single search/fetch/BGE-rerank/digillm-synthesis web branch that never indexes fetched pages and fails hard (WebResearchError) rather than returning an uncited answer.",
+      "evidence": [
+        {
+          "resource": "repo://digisearch/src/digisearch/agent/pipeline.py#L112-L149",
+          "version": "repo-lines-v1:sha256:284488616f1b8c2947416c95732cdcc1fe028e56b7577e1766bdcb4da9df2865:eyJzZWxlY3RlZExpbmVDb3VudCI6MzgsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjVhYjM3MjEzYWIzYzdjMDZmM2UxYTVmOWI2MGQ1NmFmOTFlN2I5MzUwOThlYzgyMGI3YjZjMTYxOTAyZjQ4YWYiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQ1NmYzYTYzZjNlZTcxMTJlZDRmZDBlNGU3YjYxYjhiODYyNzE1MmM2MmU5YzcwYmI0YjJjYTk3NTU1MWUwMzkiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjRmYmQwMDkzMTRiYzI3MDg0MTY3MzRhMDJhZTVmZjM5YTFlNDhhMDUwYmU5MWY0M2IyZmFhOTIwMDJjNjJiZmMiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImU1NDUxZGVkZGQzYjc0M2JmNmM1NTZjZTA3MjE4ZWI4OWJjOGFjNzEwY2Q3ZTEwMjhjODA4ZjViY2E3OTkxZWIifQ"
+        },
+        {
+          "resource": "repo://digisearch/src/digisearch/agent/web_branch.py#L1-L11",
+          "version": "repo-lines-v1:sha256:237d03b136f955c5df6c7e2c2a9525eea07d0722f69f67f337cbdd17bcd49a86:eyJzZWxlY3RlZExpbmVDb3VudCI6MTEsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImE5M2FlY2MwMGRiZjczYTJmOGJlNmE0ZDg4N2NiZTIwZWYwZDM5Yjg1NjhlYzczMmM0YWQ5MTZjOTc2YWI5OTIiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImY4ODdjNWE3M2E1N2RkMjc2MGJjNTYwZjVkZTZmZmU4MmEzNjM3MmYxYjBhZDYxMWMyZGUwM2M2YWU3NWE1NzgiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjowLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjE2YjJkN2U5ZjMyMDdmMjk2YmM4NjIzN2QwM2RjZDdhM2RmYTQ4ZDliZWYzY2VlZTliY2RlN2FlMzNkMmIwMDcifQ"
+        },
+        {
+          "resource": "repo://digisearch/src/digisearch/agent/web_branch.py#L135-L158",
+          "version": "repo-lines-v1:sha256:2f9a3b00e4e50d9e081be6b3b03a5ef3e019ee25daeba56352f201000d1b4e39:eyJzZWxlY3RlZExpbmVDb3VudCI6MjQsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImNkZjA2MWMxYzY5NjhhNDZmZDFhYTBlYzYwNWI4OTk3MWZhOTMyMDA3OGJhZTllMzY2NGNkOTg2ZTczZDk3MmIiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjA5M2Y2NGU5Y2JlOThlNmE0YzBjZDRmN2FmNjU1NmIwYWRhMjA1ZWZjNDg0MmU4MWRiZjJkYjc5NDdhYmRiMTYiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6Ijk5OTlkYTE2YjEyYTgzNzk4YmRmMTI2ZmIzMGYyMGViMzEyOTEwN2RhNzgxZTkyOTljMTk4NWYyYzRjMjBmODkiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjIzN2ZjMWI1OWQ5MWQyZGUxOTg5ODNiMTM0NGZjOTBmYTU0OTEyMzNkNDUxZjRjN2E1ZTRlN2Q0OTZkNDIwMzQifQ"
+        }
+      ]
     }
   ],
   "verification": {
     "by": "openwiki/0.5.0",
-    "at": "2026-09-09T14:37:17.158Z"
+    "at": "2026-09-19T12:20:11.463Z"
   }
 }

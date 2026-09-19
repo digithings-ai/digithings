@@ -1,0 +1,202 @@
+{
+  "schemaVersion": 1,
+  "pageVersion": "sha256:290a145adda344e4a2f604404db7c7001b2f20981320ae68810a2f6774190cae",
+  "claims": [
+    {
+      "id": "claim_1e5ab7e3c22045828010402038b87419",
+      "statement": "The digichat Cloudflare Container (Dockerfile.digichat-cloudflare, Node.js 22) hosts the digichat Next.js BFF behind a Worker on digithings.ai. One shared Container instance (id shared-v7) serves all marketing tenants (digithings, OCC, digiquant dashboard) differentiated at request time via ?host= / X-Embed-Host and the DIGICHAT_EMBED_TENANTS registry secret. The Worker owns paths /embed*, /api/chat*, /api/embed*, /api/byok*, /api/plan-proof*, /api/health, and /_dtchat*; Pages owns /chat and /chat/occ shells.",
+      "evidence": [
+        {
+          "resource": "repo://cloudflare/digichat-cloudflare/README.md#L1-L17",
+          "version": "repo-lines-v1:sha256:441e21e9b7daebc5411c910bfe75512bf68b86889bc98e545c7f35a634735815:eyJzZWxlY3RlZExpbmVDb3VudCI6MTcsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjMxZTJjYzc4N2QzYWY0MmVkMDU0N2Q2YzQyNWYyM2NhYmM1Y2RiZWRiYjkxOGJiYTQzOGNlODM5NzQxZjM0NzIiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImM5NzhmN2U4NDc2Zjk4ZDk1YWY2YjgwOTEyYjg4ZDYwMzliMTlkZTA2MWQzNjkwMzM2ZDAyNDk0NGFhYzA4MjIiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjowLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjI5Y2E1MGE1OTJmZjc5NDhlZTQ3NGRkYzYwOWI4ZTRlZDdjMGNlMzNlMDM4MTg5NDhkZmZmYmVmZTNmYTc1M2YifQ"
+        },
+        {
+          "resource": "repo://cloudflare/digichat-cloudflare/src/index.ts#L1-L96",
+          "version": "repo-lines-v1:sha256:1cf9b3d7ec5c4cbf7f14503050e5f312c2771cac47bc8ca1ace237acb32f85f7:eyJzZWxlY3RlZExpbmVDb3VudCI6OTYsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImVhZjIyY2YwNzMyNTkyYzI0NzE0MWNiZTYxZWZhMTEwMTI2MTJmNWEzMTIyYjlhZjliYmFmNTJmNTcyNGQxOTQiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImFhMWQxYTYzMzkwMjI5Yzc5ODM0N2U4M2EwNDA1NDQxYzk0MDAwMzUyODRhZDE2OGMxYmY2Y2RmMWQ3MGEzNzAiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjowLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjowLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUifQ"
+        },
+        {
+          "resource": "repo://cloudflare/digichat-cloudflare/src/paths.ts#L1-L22",
+          "version": "repo-lines-v1:sha256:0a7106e78fc913a6c4b01a76628b830679ba40caae3be8241f1bf8d26517c746:eyJzZWxlY3RlZExpbmVDb3VudCI6MjIsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImVhZjIyY2YwNzMyNTkyYzI0NzE0MWNiZTYxZWZhMTEwMTI2MTJmNWEzMTIyYjlhZjliYmFmNTJmNTcyNGQxOTQiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImY2MWVmZWNmODc5ZWY5ZGZkYzU4ZThiYWQ3MWQzZTcxMGM0ODRjZWZiNmViNzA1M2MyYWY2NjM4ZDY5ZTVmNWEiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjowLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjowLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUifQ"
+        },
+        {
+          "resource": "repo://cloudflare/digichat-cloudflare/wrangler.toml#L2-L71",
+          "version": "repo-lines-v1:sha256:9c592e324d52ccb6c00c3ed655afa136d2d95c41d2d7fa8fe04853ccd4d7029f:eyJzZWxlY3RlZExpbmVDb3VudCI6NzAsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjU1MzAxNzJiODkxNzFlZGYxYjE4OWEzM2Q4NTIzNDA2OWE1NmM1ODc3NDkwM2E1YTFlZGEzMzAxMTdhNmQ5NmIiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjMyYzQ4NThlMjJjYzJjOTY3YjQyMTUwZmE1NTA1NjJhMmM4MzljMmNlYmNhYWI5MWNhYmRmNmY0ZGEwMjAwMjIiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjoxLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjI2YmYxM2YwZjdiZDNhNWFkZWVhZmVmMGJjMjMxYWQwNjQ5NWE4ZWIzMTc0ODU4ZjQ3OThjMDFmNmI1NzM1YjMiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImE0MDBiODRjNzk2ZGYwNzBlNjVmZGIxZDcxNTY3Yjc1MzI2NDRkOGQ4YTc0YmRhMDJjNTU4MjNlNDYwMzMxMmYifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_dde6fbb9860d42bc9deafe793f5696ad",
+      "statement": "The Profile A stack Cloudflare Container (Dockerfile.digithings-stack-cloudflare, Python 3.12-slim) runs multiple processes under supervisord inside one Firecracker microVM: Redis (:6379 loopback), digikey (:8005 edge), digigraph (:8000 edge), seed_chroma (oneshot), digivault (:8004 loopback), digisearch (:8002 edge), digisearch-mcp (:8765), digivault-mcp (:8769), digigraph-mcp (:8766 loopback), zammad-mcp (:8770), and LiteLLM (:4000 loopback). The shared container ID is shared-v15, max_instances 5, instance_type standard-2.",
+      "evidence": [
+        {
+          "resource": "repo://Dockerfile.digithings-stack-cloudflare#L1-L107",
+          "version": "repo-lines-v1:sha256:b2486157371482617c777361723fc54e0484b890de1dc299fa8b250d0990112a:eyJzZWxlY3RlZExpbmVDb3VudCI6MTA3LCJmaXJzdFNlbGVjdGVkTGluZUhhc2giOiI2YzhiMmMyZjgyZmM0NjI1MDRhOTEzOGYwMjI1MTUwOGQ5Y2RjMmM2YTU2ZTk0YmRlZjQxNGE3ZWNhMmQ2OGNlIiwibGFzdFNlbGVjdGVkTGluZUhhc2giOiIyYWM1NmE2NDg2MzAyN2JiYjFlZTIyYTZmZjllMWFiYTZlOWQwZGJkNmY4NDA3ZGJmYTM3MDgyMTY3ZjdiYmY4IiwicHJlY2VkaW5nQ29udGV4dExpbmVDb3VudCI6MCwicHJlY2VkaW5nQ29udGV4dEhhc2giOiJlM2IwYzQ0Mjk4ZmMxYzE0OWFmYmY0Yzg5OTZmYjkyNDI3YWU0MWU0NjQ5YjkzNGNhNDk1OTkxYjc4NTJiODU1IiwiZm9sbG93aW5nQ29udGV4dExpbmVDb3VudCI6MCwiZm9sbG93aW5nQ29udGV4dEhhc2giOiJlM2IwYzQ0Mjk4ZmMxYzE0OWFmYmY0Yzg5OTZmYjkyNDI3YWU0MWU0NjQ5YjkzNGNhNDk1OTkxYjc4NTJiODU1In0"
+        },
+        {
+          "resource": "repo://cloudflare/digithings-stack-cloudflare/container/supervisor/supervisord.conf#L1-L166",
+          "version": "repo-lines-v1:sha256:b95c5894f1813ce790a900f8385eb5a20b4c4f2a1d1f9939291edb508b60a67b:eyJzZWxlY3RlZExpbmVDb3VudCI6MTY2LCJmaXJzdFNlbGVjdGVkTGluZUhhc2giOiJkYjU1ZWQ5NzNlYTc5Njc4OWMwYjQ5ZDMzY2MxYzNhMDI4ODJmMmE0YTQ1Mzg0MzZmMDNjNzNjZjQ3NDY0ZDQyIiwibGFzdFNlbGVjdGVkTGluZUhhc2giOiJlMDQ2YjY4NmM4Nzg0NmM1YTI2OGIzODY1NjViNWQyMWExZDlkMDYyZWEyNzFjZWMwMzEzOWY2OWNkYTU2ZDhkIiwicHJlY2VkaW5nQ29udGV4dExpbmVDb3VudCI6MCwicHJlY2VkaW5nQ29udGV4dEhhc2giOiJlM2IwYzQ0Mjk4ZmMxYzE0OWFmYmY0Yzg5OTZmYjkyNDI3YWU0MWU0NjQ5YjkzNGNhNDk1OTkxYjc4NTJiODU1IiwiZm9sbG93aW5nQ29udGV4dExpbmVDb3VudCI6MCwiZm9sbG93aW5nQ29udGV4dEhhc2giOiJlM2IwYzQ0Mjk4ZmMxYzE0OWFmYmY0Yzg5OTZmYjkyNDI3YWU0MWU0NjQ5YjkzNGNhNDk1OTkxYjc4NTJiODU1In0"
+        },
+        {
+          "resource": "repo://cloudflare/digithings-stack-cloudflare/src/index.ts#L45-L146",
+          "version": "repo-lines-v1:sha256:1c6a5f9843065f3f7cffc423829131208a6715fad8fa65165ffda9646578258c:eyJzZWxlY3RlZExpbmVDb3VudCI6MTAyLCJmaXJzdFNlbGVjdGVkTGluZUhhc2giOiJkOGNkMWEyNzRlYTE4NDM4ZTJkYzk4NWEyZmYzODNjZDFjOGZmZTJjMDc3NTExNDIzMzJlYjcxYTZjM2IxYWE3IiwibGFzdFNlbGVjdGVkTGluZUhhc2giOiIyN2U1Nzg4ZDVkOWQ3M2QyNGE4MWRiYzBhNWE3NGJmYTgyYzljM2IzYWY5OWU1MmFmNzk2ZTkwYjQ2OGE4YTNkIiwicHJlY2VkaW5nQ29udGV4dExpbmVDb3VudCI6MywicHJlY2VkaW5nQ29udGV4dEhhc2giOiJkNzQ4MWNjMmExODViMTg2OTRhMmNiMzA3Mjk3NWZhMDg3MDhlOTU5MWU1MzVjOGQ1ZmIwY2Y2YzcwNDgzZWI0IiwiZm9sbG93aW5nQ29udGV4dExpbmVDb3VudCI6MywiZm9sbG93aW5nQ29udGV4dEhhc2giOiIzNzkyOWU5MWUwZjk5YzNlODI1ZGU2OWI0MzVmYjY0ODRkMWIwYTFkZjJmNDY1NjFhYmYxYTI5ZjA0MTg4Yjg4In0"
+        },
+        {
+          "resource": "repo://cloudflare/digithings-stack-cloudflare/src/ports.ts#L1-L60",
+          "version": "repo-lines-v1:sha256:cfb6f45bef229ba75f7a455228eabf677f98981fc15f076acecb2802de8ae702:eyJzZWxlY3RlZExpbmVDb3VudCI6NjAsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjllZTQxZTQ4NGE0OWJmYmY3ZTY2ZTUwMmUzMGQzNmIyZjRlMTI2ZGU4Y2E1NWQyOTA2NmIyOWVkZjIyMjAzZGEiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQxMmNhMzQ1Y2NmNzViZjljMDgwNmJjZTY5NWJlOGRlODA4Yjc5OTg0MjUxYTdhNTRkMjAyY2Y2MTAxZGQ0NTEiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjowLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjowLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUifQ"
+        },
+        {
+          "resource": "repo://cloudflare/digithings-stack-cloudflare/wrangler.toml#L81-L92",
+          "version": "repo-lines-v1:sha256:326cb687911b3b7948160887544cf24eac9498982eb5e0baae8ef96adb05c81f:eyJzZWxlY3RlZExpbmVDb3VudCI6MTIsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjM1NDljYTY1YmVhMjQ4NThlZTU5MWY5YzFkNTcyMjNlN2U5OWM3MzAxZDE5ZDAwZjVhNmNkOTVhYWQ3Y2RhNTkiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjJkOTIxZDg3YjY1YjBkOWFhM2ExZjEzOTRkZTU2NTM3ZWRlZjdjNWYyODRhYWViOWQ4MTk2YTI0YWY1OTgxOGQiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImM3Y2QwYzNlYjQwNWU0OWNlYmQyMWI5ZTc3YmRhZjNmMDgyZWE2MWE0MmE3M2NiNWUxMjg1MGMxNDk3NTRiYTciLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjE0NWRkOGQyODg0ZTUyOTY4NDM3NjM3Y2E1YTZhZjM2MzRjOTZmMmU3YzM5ZmVhZWYzYjNmZDBmNDg3OWYwZTcifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_782ba8f0504b4cf7b0f45d798aeadfb5",
+      "statement": "The stack Worker publishes three custom domains on digithings.ai zone: graph.digithings.ai → digigraph :8000, key.digithings.ai → digikey :8005, and search.digithings.ai → digisearch :8002 (JWT scoped digisearch:query, owner-approved #4063). The workers.dev endpoint is disabled. Auth-exempt paths across all hosts are limited to /health, /healthz, /metrics, /docs, /redoc, /openapi.json, OPTIONS preflights, plus Worker-served /_stack/meta and /v1/market/* paths.",
+      "evidence": [
+        {
+          "resource": "repo://cloudflare/digithings-stack-cloudflare/src/index.ts#L314-L392",
+          "version": "repo-lines-v1:sha256:770ee75eff354fdeb1f90f42484a1e241c979860c066fc8b0de5959bfe83f413:eyJzZWxlY3RlZExpbmVDb3VudCI6NzksImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImMzMjdiNmMyNmNjYTI4MDRiMjY2YTc3YTJhNGYxMTU1NTBkOTNiNmUyYzI3MjI4MmJiMGJjZjY0OWQ1Y2MzMDMiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImFhMWQxYTYzMzkwMjI5Yzc5ODM0N2U4M2EwNDA1NDQxYzk0MDAwMzUyODRhZDE2OGMxYmY2Y2RmMWQ3MGEzNzAiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImUzYTQ2ZDEyOWUxOWYxMzUzNTUwNTgxNmMyYjVjZTQ5NTk0NzY1MDI0MGQyY2U5OGY3N2MwMWZlNDYyNzE3YjMiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjowLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUifQ"
+        },
+        {
+          "resource": "repo://cloudflare/digithings-stack-cloudflare/src/ports.ts#L1-L60",
+          "version": "repo-lines-v1:sha256:cfb6f45bef229ba75f7a455228eabf677f98981fc15f076acecb2802de8ae702:eyJzZWxlY3RlZExpbmVDb3VudCI6NjAsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjllZTQxZTQ4NGE0OWJmYmY3ZTY2ZTUwMmUzMGQzNmIyZjRlMTI2ZGU4Y2E1NWQyOTA2NmIyOWVkZjIyMjAzZGEiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQxMmNhMzQ1Y2NmNzViZjljMDgwNmJjZTY5NWJlOGRlODA4Yjc5OTg0MjUxYTdhNTRkMjAyY2Y2MTAxZGQ0NTEiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjowLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjowLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUifQ"
+        },
+        {
+          "resource": "repo://cloudflare/digithings-stack-cloudflare/wrangler.toml#L8-L68",
+          "version": "repo-lines-v1:sha256:7d27d7ba801a4ec30ca0ec1508afdbbeee54ab3c0b6caacfc808babc9d99158e:eyJzZWxlY3RlZExpbmVDb3VudCI6NjEsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjMyYzQ4NThlMjJjYzJjOTY3YjQyMTUwZmE1NTA1NjJhMmM4MzljMmNlYmNhYWI5MWNhYmRmNmY0ZGEwMjAwMjIiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjAxYmE0NzE5YzgwYjZmZTkxMWIwOTFhN2MwNTEyNGI2NGVlZWNlOTY0ZTA5YzA1OGVmOGY5ODA1ZGFjYTU0NmIiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjUxMGQ1NmJhYmFiMmY5YTY2ZjA1ZWIxY2Q2NDY2YzcwNzRmNDMyM2E4OWRkNjQ2Y2I5NThmMmJkZTEzN2ViZDMiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImVlMjkxMzg0YThjODZhOWNmM2JhZmEzMjU3MjFlZWFjNzg5NTc2YmFkNThiZDA0YzVlMzhhMTViYzNkZDBmZjQifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_19a583bb6c724ce1b86e4bc7743a884a",
+      "statement": "MCP edge paths on graph.digithings.ai at /_stack/mcp/{zammad,digisearch,digivault}/* are secret-gated: the Worker checks the x-digi-mcp-key header against MCP_EDGE_KEY (or per-server MCP_EDGE_KEYS entries) and returns fail-closed 401 when the key is missing or mismatched, without reaching the container. The zammad MCP (:8770) serves the OCC embed's read-only ticket search.",
+      "evidence": [
+        {
+          "resource": "repo://cloudflare/digithings-stack-cloudflare/README.md#L9-L25",
+          "version": "repo-lines-v1:sha256:d235a073e265d74ae05b75bfe33352fa48674355168826e4c9f06d52dff39dac:eyJzZWxlY3RlZExpbmVDb3VudCI6MTcsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImRiNGFmODBkOGQzNzE1MTcwOWM1OWExOTc3ODZiYTAwYWY0MmRiYTI2MTFiYjFhNWNmNGNjOTYxNjQ0MmMwNGUiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImMwMzkwZDllMGFhZmU1N2Y1ZmQzNDY1MDg0M2Q4OWFlYzhjYzkwYTI2NjUzZGViYWNhNTZmMjk1MWFjY2FlMTciLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjhmZmI5NzUzOTAxYTVjNzg3YjhiZjMwYjU5Y2M5ZTU1ZDc4Yzg2N2ZmMzlhYTRhNGMxMWEyOGUzZWVhOWI5YTYiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImFjY2RlZGI0MTZkMDY1N2M3MjE1YjkzMjk2MWE5YTA5MmI4MDIyOTlmOTBiOThkZGJmZmRmMGUyZGYzYjRmMjcifQ"
+        },
+        {
+          "resource": "repo://cloudflare/digithings-stack-cloudflare/src/index.ts#L274-L301",
+          "version": "repo-lines-v1:sha256:7c6680dcfac7238b5755d20480613041ce429cdfad90793b3efcbef74617598d:eyJzZWxlY3RlZExpbmVDb3VudCI6MjgsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6Ijg3NDA1MWY5MGU2OTU4YzIzY2U1MjhjOWMwOWU2YmM4NzRmYmU2Y2I0YzcwM2E3NTA4M2VkY2I1ZjVjYzAyODYiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQxMmNhMzQ1Y2NmNzViZjljMDgwNmJjZTY5NWJlOGRlODA4Yjc5OTg0MjUxYTdhNTRkMjAyY2Y2MTAxZGQ0NTEiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImZmZTZkZGFkNzMyMjJlYTU1NzFmMTM1ZTg2MjhhMDUyNjc4NWE1YjQ1YTA2YzA3ZWU0N2Q4NmFlODJmODYxMmYiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjAxZjQ4M2RkZDRkZTU0OTllY2Q5YWE0N2JlMjFkMzhmZTI0MGNlZmI1YTYxOTkxYjFiNzBmNDI1ZjY0YmMyOTAifQ"
+        },
+        {
+          "resource": "repo://cloudflare/digithings-stack-cloudflare/src/index.ts#L338-L358",
+          "version": "repo-lines-v1:sha256:16f10e8d0a343999e62f24448325c399ac0a14d4c5bd091559cecf4094d49a27:eyJzZWxlY3RlZExpbmVDb3VudCI6MjEsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImE0Njc4YjAxNTA3ZjNjYTIxMDkzNjE0MzNmZjhkYmY2ZDUyODc1OTc1OGFjMzNmNjdlOGRiZDQ1MDkxZmIwYWIiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjliNjJmNjBkODU5MGE1NzljZjQ2ZjhkNjczNzhjNGM1NzJiOTYyY2VjY2RiOTBjN2E1ZjdiNDJiOTYwNzgyYTQiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjFjNTQ1NzM4NDY5ZmQ0NDA3YmNjYTFkNTg3MTkyNThiZmUyNzhjMDlhOTExZjViNDJhMGFjNTU1ZTA2MGJjNzEiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjY4NDBhZWYyMWZhNzI4Mjg4ZjAxNWZmZWI1MTAwZDA3N2MwZjNmY2Y1ZDBjNDA3MzExODMyZGQzNDM0ODk4ZWYifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_2549115003ae4459a24bd2e0fee1d0be",
+      "statement": "The digithings-cron Worker (cloudflare/digithings-cron) is a thin Worker with no Containers or Durable Objects, using Cloudflare Cron Triggers to dispatch workflow_dispatch and repository_dispatch events to digithings-ai/digithings and digithings-ai/twelve-x on the develop branch. It replaces unreliable GitHub Actions schedule triggers. 34 unique cron expressions in wrangler.toml map to 34 typed jobs defined in src/jobs.ts.",
+      "evidence": [
+        {
+          "resource": "repo://cloudflare/digithings-cron/README.md#L1-L63",
+          "version": "repo-lines-v1:sha256:eb804c3a0fd2cd7374e4078179df768f26dd38b852dd7fddb84f47e84a6162cd:eyJzZWxlY3RlZExpbmVDb3VudCI6NjMsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjI2MGY1MWE3ODk3MDk3NTM5NGJhODE0OWU1YzQxZWI1YjM1YWIyNTA5M2Q1ZTJmYjNjYTEyYTUzMTlkZDJlZTkiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjZiN2JjODllOWQ2ZjYzZWJjNWQ4MWQyZjI2N2QwMzIyZGMwNTM2YjhhOTY4NGIzYmM2MjgyYzgzN2RkMTc5N2YiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjowLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjowLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUifQ"
+        },
+        {
+          "resource": "repo://cloudflare/digithings-cron/src/index.ts#L1-L110",
+          "version": "repo-lines-v1:sha256:949c8ba8ec51bd735d6c00d74b21da8f71f0f44a437061a771688ac59aad8287:eyJzZWxlY3RlZExpbmVDb3VudCI6MTEwLCJmaXJzdFNlbGVjdGVkTGluZUhhc2giOiJlYWYyMmNmMDczMjU5MmMyNDcxNDFjYmU2MWVmYTExMDEyNjEyZjVhMzEyMmI5YWY5YmJhZjUyZjU3MjRkMTk0IiwibGFzdFNlbGVjdGVkTGluZUhhc2giOiJhYTFkMWE2MzM5MDIyOWM3OTgzNDdlODNhMDQwNTQ0MWM5NDAwMDM1Mjg0YWQxNjhjMWJmNmNkZjFkNzBhMzcwIiwicHJlY2VkaW5nQ29udGV4dExpbmVDb3VudCI6MCwicHJlY2VkaW5nQ29udGV4dEhhc2giOiJlM2IwYzQ0Mjk4ZmMxYzE0OWFmYmY0Yzg5OTZmYjkyNDI3YWU0MWU0NjQ5YjkzNGNhNDk1OTkxYjc4NTJiODU1IiwiZm9sbG93aW5nQ29udGV4dExpbmVDb3VudCI6MiwiZm9sbG93aW5nQ29udGV4dEhhc2giOiIzOWFhZDkwOWRjMzM5NzRlNTU5NTcyMTdjNzRiY2MzNTExMzQ5NzdiOGM1ZTRjMmM1NGU5OGRjYWI4NmFhZjNmIn0"
+        },
+        {
+          "resource": "repo://cloudflare/digithings-cron/src/jobs.ts#L1-L180",
+          "version": "repo-lines-v1:sha256:c1e709a5cf6a192148e2dd18ecce16ddb7bc98ab82ad5875c50fb639c4c2cd36:eyJzZWxlY3RlZExpbmVDb3VudCI6MTgwLCJmaXJzdFNlbGVjdGVkTGluZUhhc2giOiJlYWYyMmNmMDczMjU5MmMyNDcxNDFjYmU2MWVmYTExMDEyNjEyZjVhMzEyMmI5YWY5YmJhZjUyZjU3MjRkMTk0IiwibGFzdFNlbGVjdGVkTGluZUhhc2giOiI0MTJjYTM0NWNjZjc1YmY5YzA4MDZiY2U2OTViZThkZTgwOGI3OTk4NDI1MWE3YTU0ZDIwMmNmNjEwMWRkNDUxIiwicHJlY2VkaW5nQ29udGV4dExpbmVDb3VudCI6MCwicHJlY2VkaW5nQ29udGV4dEhhc2giOiJlM2IwYzQ0Mjk4ZmMxYzE0OWFmYmY0Yzg5OTZmYjkyNDI3YWU0MWU0NjQ5YjkzNGNhNDk1OTkxYjc4NTJiODU1IiwiZm9sbG93aW5nQ29udGV4dExpbmVDb3VudCI6MCwiZm9sbG93aW5nQ29udGV4dEhhc2giOiJlM2IwYzQ0Mjk4ZmMxYzE0OWFmYmY0Yzg5OTZmYjkyNDI3YWU0MWU0NjQ5YjkzNGNhNDk1OTkxYjc4NTJiODU1In0"
+        },
+        {
+          "resource": "repo://cloudflare/digithings-cron/wrangler.toml#L1-L59",
+          "version": "repo-lines-v1:sha256:78cc3e9bb34c81f1c02c4384f8990c222061270c88552be52a61e8060b6edb5e:eyJzZWxlY3RlZExpbmVDb3VudCI6NTksImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjkxNjNjYmNhNmZmNjk4ZjdmZTQ3YmM1YWZhODM4NDg5ZmE2ZDA4Zjk2NDU3MTlkNzA4YmRmYzBhMjFhMjJhMmIiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImY5NDE2ZTA5Zjc4YmEzMTZjMDMyNTY4MjEzYjg1NWVlNzU2ZTQxNTY1ZDkxOGYwOTUxOWM4MWZkNjIwZjQwNjAiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjowLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjowLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_068255326d3e4102a102139a00758ec6",
+      "statement": "The digithings-cron dispatch function sends POST requests to the GitHub Actions API, treating 200/204 as success and 422 with 'already queued'/'already running' as benign. Rate limits (429, 403/422 with rate-limit text) trigger up to 3 retries with Retry-After-aware backoff. DRY_RUN=1 logs the intended POST without calling GitHub. GH_DISPATCH_TOKEN is required for real dispatch.",
+      "evidence": [
+        {
+          "resource": "repo://cloudflare/digithings-cron/src/dispatch.ts#L1-L162",
+          "version": "repo-lines-v1:sha256:16f84f7349712eea65f9c1101a52686d171923f3f43c5a3ebc2071a7176ac3cb:eyJzZWxlY3RlZExpbmVDb3VudCI6MTYyLCJmaXJzdFNlbGVjdGVkTGluZUhhc2giOiJlYWYyMmNmMDczMjU5MmMyNDcxNDFjYmU2MWVmYTExMDEyNjEyZjVhMzEyMmI5YWY5YmJhZjUyZjU3MjRkMTk0IiwibGFzdFNlbGVjdGVkTGluZUhhc2giOiI0MTJjYTM0NWNjZjc1YmY5YzA4MDZiY2U2OTViZThkZTgwOGI3OTk4NDI1MWE3YTU0ZDIwMmNmNjEwMWRkNDUxIiwicHJlY2VkaW5nQ29udGV4dExpbmVDb3VudCI6MCwicHJlY2VkaW5nQ29udGV4dEhhc2giOiJlM2IwYzQ0Mjk4ZmMxYzE0OWFmYmY0Yzg5OTZmYjkyNDI3YWU0MWU0NjQ5YjkzNGNhNDk1OTkxYjc4NTJiODU1IiwiZm9sbG93aW5nQ29udGV4dExpbmVDb3VudCI6MCwiZm9sbG93aW5nQ29udGV4dEhhc2giOiJlM2IwYzQ0Mjk4ZmMxYzE0OWFmYmY0Yzg5OTZmYjkyNDI3YWU0MWU0NjQ5YjkzNGNhNDk1OTkxYjc4NTJiODU1In0"
+        },
+        {
+          "resource": "repo://cloudflare/digithings-cron/src/env.ts#L1-L17",
+          "version": "repo-lines-v1:sha256:e3fb5d6bf2ddda1e67fbd1f2de0be66bc652bbb2a7febde8f5dbc7f6316bf371:eyJzZWxlY3RlZExpbmVDb3VudCI6MTcsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjU0MjRiYjIzNDQzYWM0NTUxY2E5MjNlMzBlNmQyY2QwMDFmNDA3OGQ0NmYxMjdiY2E2MTM1MzNlYzYyNGYwNmQiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQxMmNhMzQ1Y2NmNzViZjljMDgwNmJjZTY5NWJlOGRlODA4Yjc5OTg0MjUxYTdhNTRkMjAyY2Y2MTAxZGQ0NTEiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjowLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjowLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_f9b428be37b646b6ae9c8eb8fb323972",
+      "statement": "The ET open gate (src/et-open.ts) is season-aware: jobs with etOpenGate=true dispatch only on the EDT cron (40 13 * * MON-FRI) during Eastern Daylight Time and the EST cron (40 14 * * MON-FRI) during Eastern Standard Time, and only when America/New_York wall-clock time is at or after 09:30. The other season's cron is skipped.",
+      "evidence": [
+        {
+          "resource": "repo://cloudflare/digithings-cron/src/et-open.ts#L1-L44",
+          "version": "repo-lines-v1:sha256:e3d9273d367e6e5ac218edf4d96cec661976a7f08bdfba5d594a7dd588426e2e:eyJzZWxlY3RlZExpbmVDb3VudCI6NDQsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImVhZjIyY2YwNzMyNTkyYzI0NzE0MWNiZTYxZWZhMTEwMTI2MTJmNWEzMTIyYjlhZjliYmFmNTJmNTcyNGQxOTQiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQxMmNhMzQ1Y2NmNzViZjljMDgwNmJjZTY5NWJlOGRlODA4Yjc5OTg0MjUxYTdhNTRkMjAyY2Y2MTAxZGQ0NTEiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjowLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjowLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUifQ"
+        },
+        {
+          "resource": "repo://cloudflare/digithings-cron/src/index.ts#L24-L38",
+          "version": "repo-lines-v1:sha256:09b4ec7441c8d1f62400cc71a645f7c1f3d13f4d1e44bc65429689f07e4cdae4:eyJzZWxlY3RlZExpbmVDb3VudCI6MTUsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjhlNzUwNzY1OTc2YmRmNTNhOWVmNTI0OGFkNWZhODIyNDFhMjg3NDkwYjFhNmI0ZTBkMzc4MjgwOGNmMGI3NDIiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQ4OTNmNDBlMzc4MWViODk2YzgyZDA0NmEwODA2N2ExMWUzNWNkZjJmMWRmYWYyNmZlYTkwYjhkYjY2NzY0MTMiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjgzOTQ3OGNiYzgzYTJjYjkwNzMwMDU5ZDQ0MGUzNTk3MWRjZDMyMDg4YzQzZGNhZTJlMDFiMmI1ODRjZTY2YmEiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjA0ZTkyNDM1NTA4MzZkNmE5Y2E1NGZhMjNlYjYxZTJhZDYyMjIwNDFjOGUxMTgwODI0MzNiM2IxMDJjNTMwZGQifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_2f2b604297b846d794423c2ab46ff251",
+      "statement": "The read-only market data endpoint /v1/market/tickers and /v1/market/closes is served by the stack Worker directly from the MARKET_DATA R2 binding (digithings-archive bucket), never proxied to the container. It reads a manifest, resolves per-ticker Parquet pointers with SHA-256 integrity checks, and returns sorted {date, ticker, close} rows. Max 25 tickers per request (400 error on exceed). CORS is limited to MARKET_DATA_ALLOWED_ORIGINS.",
+      "evidence": [
+        {
+          "resource": "repo://cloudflare/digithings-stack-cloudflare/src/market-data.ts#L1-L114",
+          "version": "repo-lines-v1:sha256:2a7f27d65a8ab46f9e998d7ca9b4c1f820a33607b628362bcb9c20f7fcfd183d:eyJzZWxlY3RlZExpbmVDb3VudCI6MTE0LCJmaXJzdFNlbGVjdGVkTGluZUhhc2giOiJhMGY1Zjg0NDMwZTEwM2MxZGE3M2Q2MzM5ZGY2MDIzZDlhODNkNzBhN2VhZjJiODg1MjU5ODAzN2U4OWU5MGU3IiwibGFzdFNlbGVjdGVkTGluZUhhc2giOiI0MTJjYTM0NWNjZjc1YmY5YzA4MDZiY2U2OTViZThkZTgwOGI3OTk4NDI1MWE3YTU0ZDIwMmNmNjEwMWRkNDUxIiwicHJlY2VkaW5nQ29udGV4dExpbmVDb3VudCI6MCwicHJlY2VkaW5nQ29udGV4dEhhc2giOiJlM2IwYzQ0Mjk4ZmMxYzE0OWFmYmY0Yzg5OTZmYjkyNDI3YWU0MWU0NjQ5YjkzNGNhNDk1OTkxYjc4NTJiODU1IiwiZm9sbG93aW5nQ29udGV4dExpbmVDb3VudCI6MCwiZm9sbG93aW5nQ29udGV4dEhhc2giOiJlM2IwYzQ0Mjk4ZmMxYzE0OWFmYmY0Yzg5OTZmYjkyNDI3YWU0MWU0NjQ5YjkzNGNhNDk1OTkxYjc4NTJiODU1In0"
+        },
+        {
+          "resource": "repo://cloudflare/digithings-stack-cloudflare/wrangler.toml#L28-L33",
+          "version": "repo-lines-v1:sha256:7394471772191a18786b732b0108ed5dcd0895365ab959e383b8eeb660b3d94f:eyJzZWxlY3RlZExpbmVDb3VudCI6NiwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiMzBmMjhhMDdjYWQyODIyNGIzMTFkMWRmODRmNTNiNjUyZWU3Njc5ZDI5YjRlYzg1MGVjMjVhYjU5ZDE3ODBmNiIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiOWYzYjM3OGQyOWY5YTA3YjRjNjljZmRmMDRkZGZkMGE1YTQyMmQ5ODQ4MGY3ZDQ4NDQ1OWVhNjAxOTVjOTdlZSIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiNGI4N2YwZmY5ZmRlZmE5Njc0N2I5MGIzODUxNTExMzU0ZDdhNjNhY2UyZDc1MzM4NjhjZWY1YTY5NDQwMWJmMiIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiZTA5ODY1NzJhMGMxYzQxYjc5NjA4OTQyZTY0YTEyNzRhMzM3YTU1YTI2YmMyMjI0MTAyYjM5YjMzM2E5NDFjZSJ9"
+        }
+      ]
+    },
+    {
+      "id": "claim_3c188f191f4b4c2cad35baaa860949b1",
+      "statement": "Both the digichat Container (DigiChatContainer) and stack Container (DigiStackContainer) use sleepAfter='3m' — after 3 minutes of idle the Firecracker microVM suspends, with each wake billing for the full window. The stack Worker's fetch() performs per-request port waiting with a 180-second portReadyTimeout and returns 503 when the container fails to become ready. Bumping the shared container ID (shared-v7 → shared-v8 for digichat, shared-v15 → shared-v16 for stack) forces a new Firecracker instance on next deploy.",
+      "evidence": [
+        {
+          "resource": "repo://cloudflare/digichat-cloudflare/src/index.ts#L23-L27",
+          "version": "repo-lines-v1:sha256:e8c1cc11bddcacc7c3590776780ccf3ffae7eed35320cdd8ec2377af2e0cb84a:eyJzZWxlY3RlZExpbmVDb3VudCI6NSwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiNTFiMzkxOTcyN2VhMjljZjI2NDM0YjI2ZDYyN2Q1NjU1ZTIxNzIxOTg2ZjUwYmYxNTI3YzgxMDRiNDhmNWE2OSIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiNGYyYTJmOTk2ZjA4ZTY4MGJkMjkyMTM1YTZmYTQ5NzhiZGEyNmU2MDJkODRmMzNjYjFkNTk0Nzc1ZDQzMDRiNSIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiOTFmYjNkYjU0YTgxN2VhNTQ3MzU5YTZjYTI2ODUzYjE0ZDk5ZWNmZjRlNzNhMjExMWUwYWY4MWJlNGNmMjNmNyIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiNGJmM2RlYjFjN2E4NTAyNmYxOGYxYTlmZDJjYmMwNDMwNjc1YmQ4MWFhYTM4Yzk0ZDQzMzQ0YWM1ZjllNWY3YyJ9"
+        },
+        {
+          "resource": "repo://cloudflare/digichat-cloudflare/src/paths.ts#L22-L22",
+          "version": "repo-lines-v1:sha256:f61efecf879ef9dfdc58e8bad71d3e710c484cefb6eb7053c2af6638d69e5f5a:eyJzZWxlY3RlZExpbmVDb3VudCI6MSwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiZjYxZWZlY2Y4NzllZjlkZmRjNThlOGJhZDcxZDNlNzEwYzQ4NGNlZmI2ZWI3MDUzYzJhZjY2MzhkNjllNWY1YSIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiZjYxZWZlY2Y4NzllZjlkZmRjNThlOGJhZDcxZDNlNzEwYzQ4NGNlZmI2ZWI3MDUzYzJhZjY2MzhkNjllNWY1YSIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiNzQ3MzgzZTZkNzBjNWJjMWIwNzc2NTAwM2EwNTAwZDk2NjBhNTVmN2M0NjI1MmQwZWE3NGQwMTk0YWM5YWQyYiIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjAsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiZTNiMGM0NDI5OGZjMWMxNDlhZmJmNGM4OTk2ZmI5MjQyN2FlNDFlNDY0OWI5MzRjYTQ5NTk5MWI3ODUyYjg1NSJ9"
+        },
+        {
+          "resource": "repo://cloudflare/digithings-stack-cloudflare/src/index.ts#L118-L146",
+          "version": "repo-lines-v1:sha256:191f12b7c0d0208857f1e3fb759e2034208a441c8d38cb3a1ffcef2b1d4969d5:eyJzZWxlY3RlZExpbmVDb3VudCI6MjksImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImIwMmE1NGMzZjIzNmY1YTc2NDgxYjRlMjRkMDIxNWEzNGViMTYxZGIwZGQ4ZTg4ZGQ4MmI0NmMxYzlkZDIzNjEiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjI3ZTU3ODhkNWQ5ZDczZDI0YTgxZGJjMGE1YTc0YmZhODJjOWMzYjNhZjk5ZTUyYWY3OTZlOTBiNDY4YThhM2QiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjdmMmEzZGViMjQ4ZDU1NmMyN2UzYWYyYThhMTFhMDNjOTFjMTVkOTVkZjA4ZjNlZjYwYWQ2NjAwYWYyOGY2NjUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjM3OTI5ZTkxZTBmOTljM2U4MjVkZTY5YjQzNWZiNjQ4NGQxYjBhMWRmMmY0NjU2MWFiZjFhMjlmMDQxODhiODgifQ"
+        },
+        {
+          "resource": "repo://cloudflare/digithings-stack-cloudflare/src/index.ts#L46-L54",
+          "version": "repo-lines-v1:sha256:e950c69f465b1f58ac6da810a5507ec1481bad32d29e5a5d218ee72e35702f31:eyJzZWxlY3RlZExpbmVDb3VudCI6OSwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiOTZiNjZkMjczMTIxNjhiY2Q4NDZiNjgxYzVmMWU0OTZkMTlkZWY3NTg1YWY0YTM2YmY5YzlmNzI0NWNlYzA5YyIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiNmVjNDQ0ODNhY2Y2NmFkN2ZiYWUzYzMzODJkYTM4MzdjYjVlYmIxNDkxYWE0N2IyMDNhYjIzYWU3YTQ0OWEzMCIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiYjJlOTM4YWVjNmY2MDlkNDc3YzAyOGRjODM0MTQyYjQ5MWFkZDE0NzdiYjFhNGZkYjczZGNmMWRmYTRkZDk1MiIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiOGVmYjhmYzM2OTk3NWE4NGUxYmRlZjExZjE4NWE0YWQ0OTVjNDdiOWU3N2Q5MTRkMjcwODE2Zjc5MmI3NmI1ZCJ9"
+        },
+        {
+          "resource": "repo://cloudflare/digithings-stack-cloudflare/src/ports.ts#L31-L37",
+          "version": "repo-lines-v1:sha256:f61683bbff96fd23f24c80de27aae3e5d503d1ea24b2ccffbabd34f39287da50:eyJzZWxlY3RlZExpbmVDb3VudCI6NywiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiY2NhZGQ4YjVmY2NkZTM0ZWRhMzBkMjg5ZWE5MmQ5OWMwMDk0MTVhZmIxYzZlMzVhYzRhYTNhY2NlODFmOTVjYSIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiMTg1MmE4YWMzMDUwYThkMmRjYjRiYTMyN2NlNmQ3MjlhOGViN2JjNzY4ZTQyZWU5NWJhNzU2NzQ5MGM5ZDIzOSIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiOGY5MGI3ZTRlMTM1OGE0OGM1YjNlMjAxMTJmZmNhZmM4MDc2MTg5Zjc0NjFlYjkyNzZhZTJkNTcxYWM0ZWRjNCIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiNjMxOTQ3NDUwYjY5ZTIyNTEzNThlNmNiOGQxODc1YjgzYzExZDFkYjlmZmFiYmFjZWY3NjlhMDVlZmQ0NmE4MiJ9"
+        }
+      ]
+    },
+    {
+      "id": "claim_213c23618a0d41c390caa980f657d7d9",
+      "statement": "The digiquant-mcp Container is a dedicated single-replica Container (DigiQuantMcpContainer, max_instances=1, id mcp-v1, Dockerfile: digiquant/Dockerfile.mcp) serving FastMCP streamable-http on :8767 with default read-only scope. The mcp.digithings.ai custom-domain route is commented out in wrangler.toml behind a HUMAN GATE pending Worker-edge digikey JWT enforcement (scope digiquant:backtest). A cold start pays only the FastMCP import — R2 is the market-data cache, refreshed by a separate daily cron.",
+      "evidence": [
+        {
+          "resource": "repo://cloudflare/digithings-stack-cloudflare/src/index.ts#L149-L205",
+          "version": "repo-lines-v1:sha256:8d06b13cefcc7ab24d4d2dca18da80d304d67f335cf0e9bcf401c127725f0d7a:eyJzZWxlY3RlZExpbmVDb3VudCI6NTcsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImVhZjIyY2YwNzMyNTkyYzI0NzE0MWNiZTYxZWZhMTEwMTI2MTJmNWEzMTIyYjlhZjliYmFmNTJmNTcyNGQxOTQiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQxMmNhMzQ1Y2NmNzViZjljMDgwNmJjZTY5NWJlOGRlODA4Yjc5OTg0MjUxYTdhNTRkMjAyY2Y2MTAxZGQ0NTEiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImZiNTgwZTk2NGY4M2E0NzNmNDNkNDQzODQ2Mjk0OWQ2OGI1NjAwZmRhNzg3ZjE2Mzc0NWQwMGRlODljYmYzNmEiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjgwZTA1MWJiOTc4NGNiNDI2M2JkYTUzYjJjMDAyZDU1ZGI5ZGVlNzE3OGQyZGUwNGI4OTZjNjEyNThjZDA3NWMifQ"
+        },
+        {
+          "resource": "repo://cloudflare/digithings-stack-cloudflare/src/ports.ts#L14-L29",
+          "version": "repo-lines-v1:sha256:d741b468ad40504103b1ce4c945d0ee7117d01ec55db8eeca4f986657ba0a049:eyJzZWxlY3RlZExpbmVDb3VudCI6MTYsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImVhZjIyY2YwNzMyNTkyYzI0NzE0MWNiZTYxZWZhMTEwMTI2MTJmNWEzMTIyYjlhZjliYmFmNTJmNTcyNGQxOTQiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjJjODgxOGUzYTU5Y2IyNTQzZWEwMDZlYWYyYTBjMzM1NWEzNmVkZjA3ODBkODE4MDlhNmMxNjM5YTVkNDUzYzUiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjE3OGM2NzE2ZDk2NTIwZTA5MDc4NWUwMTBhNzNkMjhhMTk3NWUyNmI5Njk2YzdkMzliNzQzMGE5YzZmZDFhMDQiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImNiOTVlZjNiNTM3Mzg5OWEzMzlhMDBiMmUyZjg3Y2QxODdjMGI1MzlmZjM2ODlhY2UzNDhmMTI5ODFkOWM4ZjYifQ"
+        },
+        {
+          "resource": "repo://cloudflare/digithings-stack-cloudflare/wrangler.toml#L69-L119",
+          "version": "repo-lines-v1:sha256:62d2c44f561ddafeded397d9be5ab1d927b46107a41faffede97226ee4ee9bb1:eyJzZWxlY3RlZExpbmVDb3VudCI6NTEsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjFmNzEzMDgzODVmZjc1Mjc5OTAwN2E4MDVhOGVmZDNlMTI4MjMzMGVjMjk4Y2U3MTNkNWZlZmRmZTA3NjY1NWIiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjJkOTIxZDg3YjY1YjBkOWFhM2ExZjEzOTRkZTU2NTM3ZWRlZjdjNWYyODRhYWViOWQ4MTk2YTI0YWY1OTgxOGQiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6Ijg0MjEyZGQxODczZTk2MDI0YTA3NDY0MThjOWQyOGU4ZmMxZjM1MTEyNDExYjdkYTViMGY0NDY1MWRmMjgxOWYiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjNiY2VkZTdiZTNkY2Q4OTEwYWQ5OWU5MDI2YjU5ODhlMjk5NGUwNjM1Mjg5ZTE1ODYxODVlMjQ3MTZlNzUyOWMifQ"
+        }
+      ]
+    }
+  ],
+  "verification": {
+    "by": "openwiki/0.5.0",
+    "at": "2026-09-19T12:20:11.463Z"
+  }
+}

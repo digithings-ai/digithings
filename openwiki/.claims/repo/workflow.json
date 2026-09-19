@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "pageVersion": "sha256:e9511567c6cfd0b1a1dc2c9c21df7d5d7b097d667705f6c9ff515e7b017e95a4",
+  "pageVersion": "sha256:66ddd2908e6d8428ac6ff56d34bfcd2a99f344bf8774af9f739d7053586e5a9c",
   "claims": [
     {
       "id": "claim_e99d14d599e14d27a9dde5e69d6e752f",
@@ -36,7 +36,7 @@
         },
         {
           "resource": "repo://Makefile#L26-L42",
-          "version": "repo-lines-v1:sha256:0b1583b53e3102a3139b24b232b7573879216bb46c7356d9879b30075fdc9cec:eyJzZWxlY3RlZExpbmVDb3VudCI6MTcsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImQwMDdiNTExODg0NTFkYjM3OTNhZTI0ZWExNzk0ODU4MzY3MmVjNTUxNDJhZmFiOTVmMzE0MTNkZjExZDViOWYiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjBmOTVhMjRiMmE5YTg4NGU2NWIyM2FkYjVkYjkxZTc0NzAzYmNiMTJhYTY1MzZlZGJhZTIwODc3NWVkYzczNGEiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjM3MjU0OGQ1YTM2ZmE2ZDJlYzA1NmYwY2JiZmVlMjc1MmZkNGQ1ODEyNjRkMWVmZTgyY2I1NTI5YmY0NDM0NWUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjY0MjRjNWY3YWJmN2VhYWU0YjRjMDYxOWY1YzNlNGE1NmQ3YTAxMGM1YzlkNGFlYTdmMmJjMGI3ZDY2MjI1YmEifQ"
+          "version": "repo-lines-v1:sha256:eb2a9e9a13f3f789c105e99f4fc2215de0ef7c23869d73d2cfb19f6e0b5153a2:eyJzZWxlY3RlZExpbmVDb3VudCI6MTcsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImQwMDdiNTExODg0NTFkYjM3OTNhZTI0ZWExNzk0ODU4MzY3MmVjNTUxNDJhZmFiOTVmMzE0MTNkZjExZDViOWYiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjBmOTVhMjRiMmE5YTg4NGU2NWIyM2FkYjVkYjkxZTc0NzAzYmNiMTJhYTY1MzZlZGJhZTIwODc3NWVkYzczNGEiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjM3MjU0OGQ1YTM2ZmE2ZDJlYzA1NmYwY2JiZmVlMjc1MmZkNGQ1ODEyNjRkMWVmZTgyY2I1NTI5YmY0NDM0NWUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjY0MjRjNWY3YWJmN2VhYWU0YjRjMDYxOWY1YzNlNGE1NmQ3YTAxMGM1YzlkNGFlYTdmMmJjMGI3ZDY2MjI1YmEifQ"
         }
       ]
     },
@@ -53,10 +53,82 @@
           "version": "repo-lines-v1:sha256:e3fd0b3dcbc19396ccfc43c1b18c5635c790da2acc2bd9210bfd44d66b124206:eyJzZWxlY3RlZExpbmVDb3VudCI6MTEsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjBkY2VmMTVmOGMyNWE2YjE0YTBiZjI0ZDY0MzMxM2IyNjUwYTFhYzc3MjEyMTYzOTNiYmEzMjZiMzAyZGIzNGUiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImI0MTdmZGQwYWRhNjM1MzE1YWZhZDIzNDJhNGNhYTUwYjc5M2M0NTE0NjU3ZWUxMTA5NmUwNmExYjdjNzdjYWIiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImViYzQyZDQ4NjFlYzZmYjFhZThjYzQ2YzRkYzg1MTEzZTI0ZjllZmZkMmJlNjE1NTJkN2JlYmI4OThhMjQzNTUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6Ijk0YmRiM2YyZjMxNThkMTc4ZjdiMjFiOWYyNmNjZDA1N2QyZDM3NjIzMWE0NzE1YTc3NjFiNGU1NTUyNGY2OWUifQ"
         }
       ]
+    },
+    {
+      "id": "claim_46f30e4b14514fee87a7b164dd4140c3",
+      "statement": "The client-side pre-push hook (installed by make hooks-install) enforces four guards: origin-remote restriction to github.com/digithings-ai/digithings, branch-name taxonomy validation (deletions exempt), main push blocked without ALLOW_MAIN_PUSH=1, and live-trading paths requiring a Human-Approved-By: git trailer in at least one commit.",
+      "evidence": [
+        {
+          "resource": "repo://scripts/hooks/pre-push.sh#L1-L29",
+          "version": "repo-lines-v1:sha256:19fc2527d9dce47cee0ddf3d5f1f6b122620b73cbe577aeb3ebc695d1ab4ea00:eyJzZWxlY3RlZExpbmVDb3VudCI6MjksImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjFkOTVmYzA0YTgwYzk1MmY0OWNlNDE4ODYyN2M1M2IwZmJlOGM0NDA0MWI5NTJkNTkyYWNkMWRlOTk4NjE0NjYiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjBiZTExZTdkYzhlYTdlMTYzZjQ4MDc5NDYwODIzZTdiYTgxMzIwMGQ2NTM0YTE0MTljOWE2YTJkMTBlNjNlOTAiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjowLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImU1YzRjNTIzZDNiNWE2MTA0OTY2OTJiNTNlZGE2MzYzNmQwMmM4ZDFjNzFhMGZhYWRjZmM1YjgwMjU1OGQ2YTYifQ"
+        },
+        {
+          "resource": "repo://scripts/hooks/pre-push.sh#L129-L159",
+          "version": "repo-lines-v1:sha256:1cfe0e6bba2447f73b5e78ad32a6fc93fae74ed2784549996f201952a3820a52:eyJzZWxlY3RlZExpbmVDb3VudCI6MzEsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImIxNGRhZmY5M2E1Yjc1MzYzNDBmNmJlOGMxMWQ0ZTJhZTNlMGQ1YzIxNzdiM2UzYzhkNGViZWUxYzU0YjM0NzkiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjdhYzE0ZjhhNzI2NDg3YzRhMTdmM2IyMGE1NGU0ZGM0NTZhNjgyNDZjY2ZkN2JiNmU5NjA1YzliNzhkNDNiOGIiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjcwNGMzNTc0NjI5NWU4MjRlMTFhZWMxNjAzM2IwZjI0ZTc5NDIwODgyNDdmNjZkYzNhZWU1YTQ1YWNmZjQxZDQiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImU5MWJmZThiMTlmMTk4MDUzYWM2MWZiODcxNWNmODIyZDVkZmJmOGE5N2E3NGQ5ZTM5ZmU5MjZkZmE3YTc3YTYifQ"
+        },
+        {
+          "resource": "repo://scripts/hooks/pre-push.sh#L71-L89",
+          "version": "repo-lines-v1:sha256:cee950707ed008ce35c85ec3004c5899dd5428eee7df7e95b541fe783fd22ede:eyJzZWxlY3RlZExpbmVDb3VudCI6MTksImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImI1MTM5MjFhZTBmZDhlZDM4ZTFiMWJmMWI3NTU5ZTk2YTZlMDMwYjI1NGE4MWFjNjUzMzQ5MjYxZTA1ZWNlYTQiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6Ijg0ZTc2MDQyNmE4ZTNhODYwZGQxNTBlNmMxMTc4YmFhNmJmMTgyNGM1N2ZlODI3M2IwMmI0YTVjZTQ1M2FhNzEiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImM0YzBmYjUxM2ZhYTUxMDNkMjE3MzUwNjg4ZjViNWI0NDM1ZmMxMGRhMTdjNzI3MzM4ZmUyZWI3Mjk4YzMzN2YiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImRjYjBhNzJiYjNkMmI0ODhjOWYyYzQzMTZmYmNjNzBlMDA5ZjBkMGQxMTQyMjQ2ZjdjODNjYzM4ZGE2NWQyNzkifQ"
+        },
+        {
+          "resource": "repo://scripts/hooks/pre-push.sh#L92-L97",
+          "version": "repo-lines-v1:sha256:cd2d15fc3f39e1278fb00ab8fd983c3311f5b3b15a5b490d6d67109b8889f24b:eyJzZWxlY3RlZExpbmVDb3VudCI6NiwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiODljOWNlNTQzODQzZWZiYzJiNTNiZjY4M2YzZGQyNGQzYjRkYzAxZWI4ZjlmOGYwOGZkZWM0MzliYmY4MTE4MyIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiMzVmYzkwZmY4YTQ0MTRjNTQ0MWQwZjY3N2M1Y2JmZGEzOGI0NzRlNTFiZmQ1NTlhNTU1OWRlMGY4NzcwNTUyNCIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiMGMxOTU0NmNiZDFhN2E4MzY0OTQ4MjlhOGY5YzhkOGQ0YmRiZjBkZjdmMWI1MWExZWI2NGYxZWE4MmEwMjlkYyIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiMGJjMjMxMDUzOTJiMmI4M2ZjODhlY2MyNDJiMjQ4MmU5MGY0MzYwZDY3Mzc2ZjhlOWI1ODhiZTFjNzk1MjZmMiJ9"
+        }
+      ]
+    },
+    {
+      "id": "claim_be8212a51afa418d9d99412c078b25a1",
+      "statement": "npm workspaces cover cloudflare/* and cloudflare/digiweb/*; the local digichat dev loop is make stack-local (or make up) for backends, optional make up-digichat-db for Postgres, and make digichat-dev for the Next.js dev server on :3000; the dashboard runs via npm --workspace cloudflare/dashboard run dev on :3001.",
+      "evidence": [
+        {
+          "resource": "repo://Makefile#L141-L161",
+          "version": "repo-lines-v1:sha256:abcf5cab32ec0b6a6130e3aa9412fba969864209a92f88d85832e749356d2188:eyJzZWxlY3RlZExpbmVDb3VudCI6MjEsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjhhNjA4MjFiOTEwNzA3NWJhZjJkMDg1NGRjZTM0ZDg2MjJmMmU1NmFlMzc0Y2UzNzIzOGJkMDU2ZDhmZjRjY2YiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjE5YmQ0MDcxM2ZjNmEzZDMzMTk2MDRhM2IzMzFhODliMTgzOTdjOTlkM2Q0NjExNWE0YmIwMDAzZDYxMGQwNTEiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImZlMzczYTZiYThjN2JkOGE5NWEzMDJjZGM2Y2RlOWY0MTE4ZWY1NjE1ZTg4YTZjYTg5YjdkNTk5ZTkxYmU1YzQiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjFhNzViOTBhNjc3ZTQ4YTI2ZGFmZDkyNWQwN2JiZTE2MzQxNmY3MzkzODcxYzkxZmM0YmIzM2RhYjM5OThmOTIifQ"
+        },
+        {
+          "resource": "repo://Makefile#L149-L151",
+          "version": "repo-lines-v1:sha256:7430ea968d16e28382b04b2675c33d6f329af86665aa81c5d49ba0ae69efbcc0:eyJzZWxlY3RlZExpbmVDb3VudCI6MywiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiOTllOWY2ZjExNTFlZmU0YWVkYjk0ZjEyODEyYTYyOWY4ZjUxODVjZDc1YzBmZDQwYWI0MzU0ZDFiMDgzNGFhOCIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiNzI2OWNjMDZhNDNhYTc1ODI4YjEyMmFiMDgyOGI0M2EwMzRkZTVjYTY5MjZhMGE5MzFhNjUzNWJkYzM5YmRjZSIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiM2U4YzZjNWRkZDYyNzU4NmY0ZmNhYzBjMTcyOTEzYWQ5OTZhZDBiNmFiOWZjNzEyOTIxNzQzZmFkYmRhNDg2ZiIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiZTRmMDMxOGVjMmJlOTAzZGRlMTRmMmZmYzE4YzQwNDdiYWMwNjE5OWRlYzBhZDVkZmRmNWJiOGYyN2Q5NDI3NiJ9"
+        },
+        {
+          "resource": "repo://docs/plans/2026-09-18-dev-cloudflare-containers.md#L155-L180",
+          "version": "repo-lines-v1:sha256:f2c97d4c3796dd411918dfcd01d974fe36c6e6ab8b2579c3bd8a93535c009dc0:eyJzZWxlY3RlZExpbmVDb3VudCI6MjYsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjZiMGEzMWY0MDk3NDM5MzYxMTRhYzE1NjRhOWEyNGMwOTA3Y2Y2ZmNmMjM2MjE3Njk0NmNkODRiYjI5ODBjMzUiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjMzZmI5MjlkZmM4NzBiNjdjMTc0Zjg1ZDFjZjc3YjNiMmRjMGI2NmJkMGVhMTQ2ZmM5OWMzZGNhMjlhZDNhNzgiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImE2YjViMDkzMjYxMzIxZTMwY2ZkMWE3OGM3N2U2NWE1ZmM5NDA4M2Q0NzNmNTkzZWVhMjg2MmFiYjE5NzYyNjciLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6Ijg0OTZjY2Q4ZTk3OWQ2OGQwNjg4NDcyOWQ4ODNhNDA4MzdhMDk3OTQzZjE4NDgwYWY2MTQxZTE5NWVmNWY0MGUifQ"
+        },
+        {
+          "resource": "repo://package.json#L4-L7",
+          "version": "repo-lines-v1:sha256:3704b77380e3c716b9467ea94a63a129bd00661f45f8ad7678a95d2903972ce5:eyJzZWxlY3RlZExpbmVDb3VudCI6NCwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiNWRhZWViY2I3ZGEwOWIzYTdjOTU4YzE0OWMxNmJiYmY5MTYxMmVjNjFkNDQyN2IzZWUxZTYzMjJhOGYyYmEwMCIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiOTY0ZDhjMDczNDI5ODkzMTAxNTc2ZDg4ZDk5MTI3ZTg5ZDY4OTFkM2IxN2U4OWRmMDJlYzlhZTcwNzA1ZDhiZSIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiMzcwOWRiZWFkMTQzNzllM2NiMWI0NGIwYmE3Mjk0MTk3OGU5ZDMwMWQ3ZGNlY2ZlYzEzM2NlYzhmMDc0NDMwMCIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiNDBlZmM1Yjk5MGEyNmM2Yjk2ZjU0ZjYwNzU0Y2Y1MTg5NDg4YzE0MzE3YzAwOTZmNDY4NmY0Y2U2N2JmOGI3NCJ9"
+        }
+      ]
+    },
+    {
+      "id": "claim_b6a10019f53e4269bfbe9a13b6dedaed",
+      "statement": "No server-side branch-naming ruleset exists; scripts/github-rulesets/01-branch-naming.json declares the same taxonomy but was never applied to origin — the only active ruleset is module-branch-protection on refs/heads/module/**.",
+      "evidence": [
+        {
+          "resource": "repo://BRANCHING.md#L164-L183",
+          "version": "repo-lines-v1:sha256:12ca9b14a38ea8828b580861adddf679bf45a628782bd7a7b4295564103db953:eyJzZWxlY3RlZExpbmVDb3VudCI6MjAsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImEzOGI5Nzc2ODczYzgzYjEzZTRjMTY2NGQ1OTBhNzkzNmFmMTUxNWMwNTAzOTE5OWQ1ZmY5ZGJlMjY0MDFkMDgiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6Ijc1YTYxNDY2NjVkMTQyMThlZmJjNDE2Y2UzYWJiNDNhYjI4YTlhMjY1NmYwMWU2ZDZjZDY2ZTJlMjhmYTc0ZjUiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjkyODViNDdlYjA5M2U1OTc3MzJkMWVmODFjNWQ3MTM4Zjc3OTkyZDRhMjAwN2Y3ZmJiZWQ4ZGI2MjE3YmNmOTciLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjMwMTJmMjA2MWU0M2ExNTM4ZGM3ZjI0MjBjYjFjOTFjZTllZjJjMmU2NjNhZGJlNzZiNmFmZjFjYjBjM2NjZjMifQ"
+        },
+        {
+          "resource": "repo://BRANCHING.md#L185-L200",
+          "version": "repo-lines-v1:sha256:f1a0d700efa1f3d7247620bc5ae9bc6960251e9f6c4bcc2a1686b9460ae35210:eyJzZWxlY3RlZExpbmVDb3VudCI6MTYsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6Ijc3NTE4OTRiZjBmNjgxNzk5ZWI0NjRkYWY3YzM1ODcwNzRkNzYxOTA4YTNiMGM2NzVhZDdiYTkyMmZlYTE3OTkiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImJhN2E3ZmM0ODA3MjE3NzAxODkwNjQyNjUwNjcwYjIxNWFmZDhmNjk0MDgyZDNiMThmYmVhZGZjNTJiNzRjMDYiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjczMDY0Y2I2MDIwMDJlMmU4YTY4ZDkyNzM3ODYwODE2ZGFhYTAyYmE4ZDE0Y2YyZjUzZjcwMWYyMjQzOWJmMGIiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjAzMDQyZDgwNDk3NThhNmU5ZGE5YzY0ZDlkMDUyZjNkZjBkNDUzODA4YmZkOWY5ZDA1MTNiZWI2YjgwMmI1MDIifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_c43d61c7a3934bce8b8c14bcd1f1ee7c",
+      "statement": "The review-coverage gate scripts/check_review_coverage.py runs on every PR into main and asserts each commit was reviewed at its own task PR via five PR hatches (Cursor Bugbot success, APPROVED review, completed agent-tool review, reviewed:agent + in-session-review comment, reviewed:owner) plus one direct-push fallback requiring both the in-session-review marker and the commit sha on a reviewed:agent-labelled issue or PR.",
+      "evidence": [
+        {
+          "resource": "repo://AGENTS.md#L152-L164",
+          "version": "repo-lines-v1:sha256:517fa3517e439d7a07b048d6b085f02321a02071bc3ceaff5f34601c7c1a422f:eyJzZWxlY3RlZExpbmVDb3VudCI6MTMsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjE4ZmIzOTg1Mzk5Y2E3MTlmYTkyNjkwZGIwYzdkY2ZlZDgyZjZiMjAxODYzNDgzZTJlMDdlMGQzZjcwZTQ3NTkiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjAxYmE0NzE5YzgwYjZmZTkxMWIwOTFhN2MwNTEyNGI2NGVlZWNlOTY0ZTA5YzA1OGVmOGY5ODA1ZGFjYTU0NmIiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjAwMWYyZWMxNzU5M2MxMDU0ZWI0NjM2N2Q4NDUzZWYyNGExNzNjZTk2YjcxMTdkOTFmOWE2OGQ0NGZlZjhiMDEiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjhiZTA0OGQxYzRjNWZhN2RhYzYyMTNiYjI3Nzc5ZmIxZmJhMjhmOGFjYjBkNmIyMDMwMjJjODMwMzFhNWQ5ZmEifQ"
+        },
+        {
+          "resource": "repo://AGENTS.md#L180-L228",
+          "version": "repo-lines-v1:sha256:ecc438ceea2a051c8c700be1e0bc3dd67cc9e8e35898ca05a379b415aa7ce1d1:eyJzZWxlY3RlZExpbmVDb3VudCI6NDksImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImMyN2FhYjBhMzA4NzkyNWIwNjNiMDYyNjVjOTMwMTVjMDA0Mjc0YmFhN2Y5M2ZhMmVmNTdjYWIyYWU5YjE0ZTYiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjE1YjE5NWJkNDI3Nzg5ZTVhMWQ1Zjg1MjkzNDJlMjcyMDJlOTg3NzA2YTliYTA1ZTNhMWE0YjA0MmQzNzNhNDUiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjA0YTJlZDY4OTg3MmZlOTZmOGI2NjM2Y2I0NTZlMjFjYzE4ZDU4MzFhMjAyMWI5Mzg1MDNjMmU1YjMyY2E5YWQiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImQ2N2YxZjIwMzRiYTYwNGQyYWE0NTExMDQxODY5OWY5YTdkZTIxODk4MjRiMWU2OTlmODY5OGFiZWEyMTM2NmYifQ"
+        }
+      ]
     }
   ],
   "verification": {
     "by": "openwiki/0.5.0",
-    "at": "2026-09-09T14:37:17.158Z"
+    "at": "2026-09-19T12:20:11.463Z"
   }
 }

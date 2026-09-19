@@ -1,18 +1,18 @@
 {
   "schemaVersion": 1,
-  "pageVersion": "sha256:5cb5a00a328b14674f89f2fcafcfb035f4b6b997cd661045c506383ecd331b82",
+  "pageVersion": "sha256:744de5212f5b67559bee54a2fc2a848f24079fae64cdd552f309f8461e8f5cfc",
   "claims": [
     {
       "id": "claim_e03ee801e3ae4ade8e7e554bcfbacb33",
-      "statement": "Provider prefixes register base URLs and key env vars while get_client_for_model resolves per request across default base, LiteLLM proxy, OpenRouter, and BYOK pass-throughs with request-scoped credential overrides.",
+      "statement": "Provider prefixes register base URLs and key env vars while get_client_for_model resolves per request across Cheaper Inference, default base, LiteLLM proxy, OpenRouter rewrite, and BYOK pass-throughs with request-scoped credential overrides.",
       "evidence": [
         {
-          "resource": "repo://digillm/src/digillm/client.py#L236-L246",
-          "version": "repo-lines-v1:sha256:82afda5d355dca995407db836ce17fb40309078a9c71d66dfd8e0c364d293e26:eyJzZWxlY3RlZExpbmVDb3VudCI6MTEsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjJlNmMyZDVlMGViYWJlZGU3YjRhZjdkNDgwOWExMzRlYjM3MzA1ODM1NGM1MjcyYjUyM2M4N2QxOWFiNjc1OWYiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjAxYmE0NzE5YzgwYjZmZTkxMWIwOTFhN2MwNTEyNGI2NGVlZWNlOTY0ZTA5YzA1OGVmOGY5ODA1ZGFjYTU0NmIiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjA5ZjkzMDgzYzE5NzEyMWI5ODI3MDBiYThhZmFiZDE3MjJjZjFkM2U3NDA0NTA5ZTgwZWZhMjcyNDdmNjJmMDciLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjI3NTg1OGQyM2Q4ZGIzZTAzZDgxMTI0ZGYzYjkzMTkzNzhmZGYxODRkNDkxODRkNDhkN2JkMTNjZDIxZTM4MjMifQ"
+          "resource": "repo://digillm/src/digillm/client.py#L231-L259",
+          "version": "repo-lines-v1:sha256:5c7a4b6931b5d87ca17a4eb499f653749b603a00f40b8f97b8badd4c462265c2:eyJzZWxlY3RlZExpbmVDb3VudCI6MjksImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjVjMjJkZDVlY2I3NDI1Zjk2NDdkOTMwZGY4NDgzODUxMWUzN2I3Zjk5MmRjMjI5NTdkMjAyZDRjNzljMjZkOTIiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImE2YjJiZGYzMTQ5M2YxZjljZmMwMDUzYzA4OThmNDM3ZTlmYTRjNDI3ODk4NjQxMGJlMTRmMDgyZWFmODgwNDAiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjRlNDgwYWM3YTVhZjlkNjQzZDBiZWFkMTU0ZTMzODg1OGI5NDdlNDZhYWY5YTQzMTllODgxNDQ3NGZlOWI2NTgiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImE1ZjEzYzE3MDk5NGVkZTNhM2VjYWU2YzQyMjc0NzYwYjY4ODgzNWM0ZDAxNzNjMTFjMjNkYjZlZDdlMWQ1NTEifQ"
         },
         {
-          "resource": "repo://digillm/src/digillm/client.py#L638-L680",
-          "version": "repo-lines-v1:sha256:bf0476bda983688a0f07d02106d069e780ed01087c38bd15d86af3cc86d73f2c:eyJzZWxlY3RlZExpbmVDb3VudCI6NDMsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQ3ZTVhM2QzMzIwMzJiYmYyODUzZTg1NzU4MzA5NWQ0YTQzMzg0MDRlMmY4OGQxMGU3NzNhY2MxOTViMDQzYTgiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjVkMWFjYzBkN2Y4YTc2MGMwMTY0OTZkNjE3ZTQzMDI0NjJjOWEwZDE2YjRiZDA5NjhiNWU3MjQwNDFlNWVlNWQiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjdkZDU4OWM5ZWE0NjFkODM1Y2E0Y2Y1MGYyMWU3ZWEyY2MzNjM2NjRjZTlkY2NhMmVkZDhiY2VmNmUwMDJhMDAiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImI0MWVlYzQyNmRlYmRjYmVjZDhiOWJhNGFjNjQ4NjhiMzBkYzczODFmMjQzODJkNWVjNjU4NGIzOGUzMWI1N2IifQ"
+          "resource": "repo://digillm/src/digillm/client.py#L713-L772",
+          "version": "repo-lines-v1:sha256:43c4b2d5cacd3c5c6c7e19cde18e3228dd5776bb16edd9d3d2959829f753a825:eyJzZWxlY3RlZExpbmVDb3VudCI6NjAsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQ3ZTVhM2QzMzIwMzJiYmYyODUzZTg1NzU4MzA5NWQ0YTQzMzg0MDRlMmY4OGQxMGU3NzNhY2MxOTViMDQzYTgiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjJkMGU5MWM3MjM3YjdhMmNiZmZhY2FkNTRiN2MyZDA2ZDI0YWY4ZmFlMzkwMDc4ZDY5YjQ4ZmE5ZDc4Yzg1NTIiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjdkZDU4OWM5ZWE0NjFkODM1Y2E0Y2Y1MGYyMWU3ZWEyY2MzNjM2NjRjZTlkY2NhMmVkZDhiY2VmNmUwMDJhMDAiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjZkMGU3YjUzYTQ5ZjQ3NTNiN2M0ZDM0ZTJmOTM0N2VjMTc3ZGIxNzJmMTE5N2UwODk5ZWE5NmFmMDdlY2ZhZjYifQ"
         }
       ]
     },
@@ -39,6 +39,6 @@
   ],
   "verification": {
     "by": "openwiki/0.5.0",
-    "at": "2026-09-09T14:37:17.158Z"
+    "at": "2026-09-19T12:20:11.463Z"
   }
 }

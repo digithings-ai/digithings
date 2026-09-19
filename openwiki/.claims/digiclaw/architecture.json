@@ -1,14 +1,14 @@
 {
   "schemaVersion": 1,
-  "pageVersion": "sha256:4fa187e2201b9ccc9d1be519db70e7f4c2746e18232d851d54135a3444a6bf21",
+  "pageVersion": "sha256:1669efd5e2a6a0a0c1f2f42a648c9c2ae6bba899ca0031ed7dd63394c758cfce",
   "claims": [
     {
       "id": "claim_c0361c1934ea42079e1d0d28ac2d0b2e",
-      "statement": "digiclaw ships heartbeat runner, JSONL audit, and agent scheduler as a CLI with no HTTP server; channel adapters, session/queue managers, WebSocket plane, and skill execution are deferred.",
+      "statement": "digiclaw ships heartbeat runner, JSONL audit, agent scheduler, and digisearch monitor-tick integration as a CLI with no HTTP server; channel adapters, session/queue managers, WebSocket plane, full agent registry, and skill execution are deferred.",
       "evidence": [
         {
-          "resource": "repo://digiclaw/ARCHITECTURE.md#L9-L30",
-          "version": "repo-lines-v1:sha256:e09a99f41e2f84162802624d7441567182202fabf118b85421a09fe20947e4b0:eyJzZWxlY3RlZExpbmVDb3VudCI6MjIsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjYzNThjYzE2Yzk5NTU1NWEwYjgxZGZiODg4ZjQ1MjhiNjM5NDYxMjAxMzM5MTBjM2EyMjUzZTRiNWY3MTMyMTQiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImY1MmQ3MTExMDNkNTBhNDM3ODMwYzZmYmNkMDRmYjRiYWI0OWEwZjgyZjZkMjZkMWM3OTFjNmU4NDg4ZGQwOTAiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjAwMWYyZWMxNzU5M2MxMDU0ZWI0NjM2N2Q4NDUzZWYyNGExNzNjZTk2YjcxMTdkOTFmOWE2OGQ0NGZlZjhiMDEiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjkzNzY5OTQyMjE4YjgzNzY1ZTU5MTQ5NjFkYzU5MTM4ZDE2YjA0YTliYWE0OTI4MjkzMDI1ZmVhMDg3NDQwZjAifQ"
+          "resource": "repo://digiclaw/ARCHITECTURE.md#L9-L21",
+          "version": "repo-lines-v1:sha256:20942984dad3627d80d95a11ac932274011735c4a61236aa340775422a1d37e6:eyJzZWxlY3RlZExpbmVDb3VudCI6MTMsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjYzNThjYzE2Yzk5NTU1NWEwYjgxZGZiODg4ZjQ1MjhiNjM5NDYxMjAxMzM5MTBjM2EyMjUzZTRiNWY3MTMyMTQiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImFjNTllODZhOWM0NTRhZTYyMjkwMzg0MWIyNDE1NDQzMWM0MzJlNjQwYjNlNGNiOWY1NTkyMTM0NjYzZGY4YmEiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjAwMWYyZWMxNzU5M2MxMDU0ZWI0NjM2N2Q4NDUzZWYyNGExNzNjZTk2YjcxMTdkOTFmOWE2OGQ0NGZlZjhiMDEiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6Ijg4MzEwMzZmYTUyOGE2ZmE0ZTdlMTI4MDliYmU4N2FmMDBjOThiMjQ5MTUzNDU4MjRlNjIyMmI3N2JhZDBjOTgifQ"
         }
       ]
     },
@@ -27,28 +27,46 @@
       "statement": "audit_log() delegates to digibase.audit.emit_event as append-only JSONL with mandatory redaction of password, api_key, token, and secret keys, and best-effort AUDIT_SINK_URL delivery.",
       "evidence": [
         {
-          "resource": "repo://digiclaw/ARCHITECTURE.md#L32-L48",
-          "version": "repo-lines-v1:sha256:e591593ab42053f7b42cc56248278eeda560704699b7ff0daddd3a045d23ed41:eyJzZWxlY3RlZExpbmVDb3VudCI6MTcsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjA2YmVlNzY5MGEyNzE4ZTVmZWM2OTliMGEzYmU2ZmUxZjhmYTZlYTU0MjUwNTRjZGE1MWJlNTIyNThjY2M3MmIiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImI3MTJjNzNkOWMyNjA2MjI2ODY3YTJmMmEzZWViODVlMjczZDA2YzU1ZDA3NmJmYTI1NmYyOTcyNTkwYzFiYmEiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjAwMWYyZWMxNzU5M2MxMDU0ZWI0NjM2N2Q4NDUzZWYyNGExNzNjZTk2YjcxMTdkOTFmOWE2OGQ0NGZlZjhiMDEiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjdkNjRkNjVmYjUwNzJhMDQ4YzI2N2EzMTVjOGMzZWVlMDhkYWYyMGU5OWY0YzhiZTQ2MzA1NjIwMjVhMGRmOGIifQ"
+          "resource": "repo://digiclaw/ARCHITECTURE.md#L71-L80",
+          "version": "repo-lines-v1:sha256:72c218057a190c67ae49ce8882b0971b1e678bb587187919626aaf82728a44f8:eyJzZWxlY3RlZExpbmVDb3VudCI6MTAsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjY4NTJkNjAzMGJkMjBlMzFmZjM0Y2Y3ZTNjNDkwMGIyOGY5Zjk1YjhjMWY2MTM4ZmNkM2NkYmU5YWJjODA4OTQiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjNkMzY1M2Y1ODIxNjU3NDllNWJmYzQwYThiMzI2NDYwM2VhOTAxZjMxOGQwYTA2ZjIxODQ2MTJmNmRkYzJhZjgiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImQ4OGNlMjZiMmNjMjg5ZDhiMmUxZmQ3ZTMwN2Y3MTIyODNhOGVjZDFlYTc2ZDRlNjNiZDVlZjhkOWY0N2FmNjAiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjAwMWYyZWMxNzU5M2MxMDU0ZWI0NjM2N2Q4NDUzZWYyNGExNzNjZTk2YjcxMTdkOTFmOWE2OGQ0NGZlZjhiMDEifQ"
+        },
+        {
+          "resource": "repo://digiclaw/src/digiclaw/audit.py#L15-L41",
+          "version": "repo-lines-v1:sha256:f59e008253cf8b461bf130e9f634d720738f813df75bf203107f23d64c6f5486:eyJzZWxlY3RlZExpbmVDb3VudCI6MjcsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjI2MmY1YTI5OTM1ZGRlMDU3YmYyYzZmMWUzYTg0NjUwNjkwMTRiNjI5MDcwZThmNmMxNzgxOWQ5MTgwMDhiZDciLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjMwYzFmMTg4ZjE0MmVkN2E4MjQ2ODBiMjA3MTcyYzU1MTliYzYxNGE0OGZkYTdjZjE2N2VkYjhkZGY3OTk1NmMiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjU5OTM4YTQ3YWZkY2I5MDM4OWU3ZWY1MGFlYzc1YTFmMDdiMTljZThkOTBiYzk0N2Y1ODY0OGVlN2M5ZWQ2YTQiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjowLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUifQ"
         }
       ]
     },
     {
       "id": "claim_8f072ee74a8f418d8dbf02776fde4a3c",
-      "statement": "The scheduler owns start/stop/pause/resume lifecycle over digiclaw/agents YAML with cron plus continuous interval ticks; event-triggered runs are schema-only and drift logs drift_check_skipped without a bearer.",
+      "statement": "The scheduler owns start/stop/pause/resume lifecycle over digiclaw/agents YAML with cron and continuous schedule modes, durable state via atomic JsonStateStore, restart re-queue, and agent-runner dispatch; event-triggered runs are schema-only; the web-watch-tick agent dispatches to digiclaw.monitors_tick.run_due_monitors.",
       "evidence": [
         {
-          "resource": "repo://digiclaw/AGENTS.md#L30-L45",
-          "version": "repo-lines-v1:sha256:0ed41d9821b34f8d7b4e0bda344c81976cf146efb51bbb1a548b7c52f99aa211:eyJzZWxlY3RlZExpbmVDb3VudCI6MTYsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImVlZjVmOTVhMDMyMzliZDgyODQyZmIwODJkNjAwZjEzYjc5MzY2Yjk0MTkyNjUwMWU5NjQ4ZTI1YTNmYmRjMDYiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImM5MWRhNTNhNTZmOTg5NGQzZmFjZmU3NTZjYzk0MjAyZDIwZjM4MTM5NTUwZmJkMjFkOGE4MGRiNTdhM2Y5M2YiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImMzY2RhMjA4ZWY1MDFlZTQ1MGE2NzIyN2ZlNjYzOTEwMDRiYWMyNTc1NGI4ODc2Y2ViNzNmMmM4YzMwMDBkN2QiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjM4Mjc5M2MyNTVmZGJlYTllZjc5MzVlNTlkMzRlMzY3MjU0YTk5MjBlMjZhZjA0ZWQ0YTliNDZlNTM4YjgyNTkifQ"
+          "resource": "repo://digiclaw/src/digiclaw/cli.py#L109-L114",
+          "version": "repo-lines-v1:sha256:b051225d0da593b45341ff53db32b7b363da7966267488b8945bc7f2e6505152:eyJzZWxlY3RlZExpbmVDb3VudCI6NiwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiZDJkZDdmZjU3ODgzMjkwNDM3MDY0MWE3ZjJmZGFlZWViYzA1ZjA3NTY3NGU0YThjODk2YjU1OWY0ZjE5NzE5NSIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiMmYxZTA1ODBmMzQ1ZmJkZWYyM2RiYjVmNmU0NDI0Y2ExZjNkZTJjODY3MTg1ZjZlMDFjNGVhODIxYWU2Mzc2NSIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiOGNjNGE3ZDFjYzc5NmFiYTNlNDY3MjMzMjdmNTE3ZTlmODExOTgyZDI1MGYwNzAyOTg2ZTRiNTc2NGFkOTU4OSIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiYjRhNjk3NTU5MDc3NDlmMjM3MTg5Yzk1Zjg3MWI0ZjVkOWM3YWUxMzBjYzA0MWRiNWFkMzFmOGRlZjJhYmYyNyJ9"
         },
         {
-          "resource": "repo://digiclaw/ARCHITECTURE.md#L9-L17",
-          "version": "repo-lines-v1:sha256:0407b76e302b70ff4cb1879ba6a67ce8ecde45a1daca90f487f6de8b8ead9ace:eyJzZWxlY3RlZExpbmVDb3VudCI6OSwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiNjM1OGNjMTZjOTk1NTU1YTBiODFkZmI4ODhmNDUyOGI2Mzk0NjEyMDEzMzkxMGMzYTIyNTNlNGI1ZjcxMzIxNCIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiYWM1OWU4NmE5YzQ1NGFlNjIyOTAzODQxYjI0MTU0NDMxYzQzMmU2NDBiM2U0Y2I5ZjU1OTIxMzQ2NjNkZjhiYSIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiMDAxZjJlYzE3NTkzYzEwNTRlYjQ2MzY3ZDg0NTNlZjI0YTE3M2NlOTZiNzExN2Q5MWY5YTY4ZDQ0ZmVmOGIwMSIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiODgzMTAzNmZhNTI4YTZmYTRlN2UxMjgwOWJiZTg3YWYwMGM5OGIyNDkxNTM0NTgyNGU2MjIyYjc3YmFkMGM5OCJ9"
+          "resource": "repo://digiclaw/src/digiclaw/scheduler.py#L145-L200",
+          "version": "repo-lines-v1:sha256:eb2953c4e1ac71929360f65805a457043d2df8c877c37136940b091f9f88802a:eyJzZWxlY3RlZExpbmVDb3VudCI6NTYsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImQ2ODVlNjdhYWVmMDJjZjgzMzI1MGMxYjZjYjI3MWQ4OTQ3YWZlZmIwZmNiYTFiZjRkYWExY2VlZGNjNzlkYzAiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImMyMDZlMjU3YzBmOGFiODU4Yjc1OWIwYjkxMjI2ZDUzMWQxMWViMDBkMWIxMmM2NjE5Y2Q3ZWNjMmFhYzBkZjYiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjA1ZTRkZmIxYjYyMGU5NDcyYjQ2Njk5YTIyYjM4YTM2ZGE0ZWY5NjBmYzYyZmViZmUyZTFlNjhmNWExMzA2ZjgiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjJlNWE0YmYwY2MxZWVjY2Y2NzQyMzg3M2YxNzBhN2IzY2ZjYTcxYzA0MDYzYWZhOTE4YjU5OGI5ZmExZTM5ZTcifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_1ff184fbd95741d3a2956ccb0745b3ca",
+      "statement": "The web-watch-tick continuous agent POSTs digisearch /v1/monitors/tick with a digikey service JWT minted via digibase.service_auth.get_service_jwt using DIGICLAW_DIGIKEY_API_KEY and scopes=('digisearch:query',); auth and transport failures raise and are persisted as the agent's last_error.",
+      "evidence": [
+        {
+          "resource": "repo://digiclaw/src/digiclaw/monitors_tick.py#L46-L73",
+          "version": "repo-lines-v1:sha256:b3be796dac36cc760d9ced101b4bbd898cd09c25396a768720559dca7434e0c4:eyJzZWxlY3RlZExpbmVDb3VudCI6MjgsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImZjNDg5OTU4MDg5NTZhZmVkMTZkMjlmNWMyYzM4MzFkOTlmMGE3ZGE1YzVkNTMwMDc2NDYzMmJjYjUwNzg2NDIiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjBiYjNhODJjMjVkZjYwZTQzY2IxOWY3YWZiZGI0ZThlOWVlMWFhMzg3OWMwOTEyNDIzODIyMWQ2OWEyNTk5YzIiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjFkZWNjZDgyNDIxN2FhNGMxNDk2ZDk3NDI3ZmY0OTFlODFiN2Q4ODRlMmZjMDNhZDUyZTE1ODUxYTEwZWFiNGYiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjowLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUifQ"
+        },
+        {
+          "resource": "repo://digiclaw/src/digiclaw/scheduler.py#L318-L339",
+          "version": "repo-lines-v1:sha256:27e28f971654d7fd00ae2af98bf9bf459c313904bdf0c2a16f52e0b252d1c7cd:eyJzZWxlY3RlZExpbmVDb3VudCI6MjIsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6Ijg2NmJhYjEwYWViZWFhMmRlYTUxNTc1MzVlZWNhNWFlYzVjODI0NjA1ZjcwZGZmZTZiZWI5NDYyNDhmZTM4YjQiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjA4YTgyOWE1M2IyZjA5ZDEwMjY4N2I5MGMxZWNlOGM3NTRlNWFhNGEwN2ExMzI5Y2FiZjFkNTQ1Y2M0ZGM2ZTUiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjhlYjI2ZTk4NDU1ZTY3OTBlYWU2YjIxMTcxZDdjYzUxNTA0ZjgzYzgzMzg2NzgyZDQxMDljMDQ2ODg3OGYzNDIiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjhlMzUzMjg1NjNiM2Q2YjQ5ZGM5Y2I4NGRhOGI1OTA4MWQ1NzgyYmY5NjIwMTk1YTUyNzhkMWU2Zjc3MzAxMmIifQ"
         }
       ]
     }
   ],
   "verification": {
     "by": "openwiki/0.5.0",
-    "at": "2026-09-09T14:37:17.158Z"
+    "at": "2026-09-19T12:20:11.463Z"
   }
 }

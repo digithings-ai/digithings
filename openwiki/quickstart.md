@@ -6,6 +6,20 @@ tags: [digithings, quickstart, routing]
 sources:
   - id: openwiki-source-4b2266e051b2270b6ec5aa4f
     resource: repo://BRANCHING.md
+  - id: openwiki-source-952b82c07129084446f85bcd
+    resource: repo://cloudflare/dashboard/AUTH.md
+  - id: openwiki-source-f684e8065f2d8e28d31a5a78
+    resource: repo://cloudflare/dashboard/package.json
+  - id: openwiki-source-6104f7e1a8f92dc96c545c2e
+    resource: repo://cloudflare/dashboard/README.md
+  - id: openwiki-source-d13908d6689be82e081bf722
+    resource: repo://cloudflare/digichat/AGENTS.md
+  - id: openwiki-source-39f126856e4c852a2e1892f8
+    resource: repo://cloudflare/digichat/ARCHITECTURE.md
+  - id: openwiki-source-5b3953cf3c102a6e5817ea8d
+    resource: repo://cloudflare/digichat/OPERATIONS.md
+  - id: openwiki-source-37ccf33443f2bb654db300e4
+    resource: repo://cloudflare/digiweb/README.md
   - id: openwiki-source-72050835d3541ab62444987d
     resource: repo://digiclaw/AGENTS.md
   - id: openwiki-source-deb1497ccdcada935084b098
@@ -30,10 +44,12 @@ sources:
     resource: repo://digivault/AGENTS.md
   - id: openwiki-source-a49bd70bd0f6d776441b838b
     resource: repo://docs/agents/CODE_REVIEW_POLICY.md
-generated: { by: "opencode", at: "2026-09-07T22:38:58.074Z" }
+  - id: openwiki-source-012f2c78e3b1446dfc35803f
+    resource: repo://Makefile
+generated: { by: "openwiki/0.5.0", at: "2026-09-19T12:20:11.463Z" }
 verified:
   - by: openwiki/0.5.0
-    at: 2026-09-09T14:37:17.158Z
+    at: 2026-09-19T12:20:11.463Z
 ---
 
 # digithings Quickstart
@@ -53,11 +69,12 @@ service, verify with health/status curls, run the unit gates — per its
 | Add LangSmith tracing, check trace status | [digismith quickstart](#digismith-tracing) (below) |
 | Work with the markdown vault | [digivault Quickstart](/openwiki/digivault/quickstart.md) |
 | Issue keys, exchange JWTs | [digikey Quickstart](/openwiki/digikey/quickstart.md) |
-| Run the chat UI | [digichat Quickstart](/openwiki/digichat/quickstart.md) |
+| Run the chat UI (`cloudflare/digichat`) | [digichat Quickstart](/openwiki/digichat/quickstart.md) |
+| Run the operator dashboard (`cloudflare/dashboard`) | [Dashboard Architecture](/openwiki/dashboard/architecture.md) → [Operator Views](/openwiki/dashboard/operator-views.md) |
 | Heartbeat, audit log, schedules | [digiclaw Quickstart](/openwiki/digiclaw/quickstart.md) |
 | Shared helpers (errors, metrics, OTel, audit) | [digibase Library Guide](/openwiki/digibase/library-guide.md) |
 | LLM client, fetch engine, skill compiler | [digillm](/openwiki/libraries/digillm.md), [digifetch](/openwiki/libraries/digifetch.md), [digiskills](/openwiki/libraries/digiskills.md) |
-| Operator views (research, portfolio, tearsheet) | [Dashboard Architecture](/openwiki/dashboard/architecture.md) |
+| Design system, tokens, shared components | [Design System and Marketing Sites](/openwiki/integrations/design-system.md) — `cloudflare/digiweb/` is the canonical home |
 | Branches, make targets, review/merge rules | [Repo Workflow](/openwiki/repo/workflow.md) |
 
 ## Stack-wide verify
@@ -71,6 +88,73 @@ curl -s http://localhost:8003/healthz   # digismith
 curl -s http://localhost:8005/healthz   # digikey
 pytest tests/ -m unit -k "digigraph or digiquant or digisearch or digismith or digikey" -v
 ```
+
+## Cloudflare frontend dev loop
+
+The three browser-facing projects live under `cloudflare/` and share the design
+system at `cloudflare/digiweb/`. Each runs a Next.js dev server bound to its own
+port; they expect the backends from the stack-wide verify above to be reachable.
+
+### digichat (`cloudflare/digichat/`)
+
+The chat product BFF on port 3000 (host dev server) or 3005 (Docker Compose):
+
+```bash
+# Host dev server (hot reload) — backends must already be running
+make digichat-dev        # → http://127.0.0.1:3000
+make digichat-health     # smoke GET /api/health
+
+# Docker Compose (self-contained, port 3005)
+make up-digichat         # --profile digichat up -d --build
+make down-digichat
+
+# Cloudflare parity Profile A bundle (one supervisord image + digichat + Postgres)
+make digichat-profile-a-bundle-up
+make digichat-profile-a-bundle-down
+
+# Gates (from cloudflare/digichat/)
+npm run test             # Vitest
+npm run lint             # ESLint
+npm run build            # type-check + production build
+npm run db:migrate       # optional Postgres persistence
+```
+
+See [digichat Quickstart](/openwiki/digichat/quickstart.md) and
+[digichat Operations](/openwiki/digichat/operations.md) for the full env matrix
+and the auth bootstrap flow.
+
+### Dashboard (`cloudflare/dashboard/`)
+
+The digiquant operator surface is a **static export** Next.js app at
+`/dashboard/` (public path on `digiquant.io`). It reads Supabase with the anon
+key and imports the shared design system (`@digithings/design`,
+`@digithings/web`):
+
+```bash
+# From cloudflare/dashboard/
+npm run dev               # http://localhost:3000/dashboard/
+npm run lint              # ESLint
+npm run test              # Vitest
+npm run build             # production static export + static-export check
+```
+
+The dashboard is not part of `make test-unit`; its CI lives in
+`test-dashboard.yml`. See [Dashboard Architecture](/openwiki/dashboard/architecture.md)
+and [Dashboard Operator Views](/openwiki/dashboard/operator-views.md) for the
+full data/auth layers and view contracts.
+
+### Design system (`cloudflare/digiweb/`)
+
+Every product surface imports tokens and shared components from
+`cloudflare/digiweb/`. Start the reference app to browse the live showcase
+before building anything:
+
+```bash
+npm run dev --workspace design-reference   # http://127.0.0.1:4013
+```
+
+Full conventions, the manifest, and the pass-through rule live in
+[Design System and Marketing Sites](/openwiki/integrations/design-system.md).
 
 ## digismith tracing
 
