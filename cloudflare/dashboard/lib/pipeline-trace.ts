@@ -1,7 +1,9 @@
 import { isSupabaseConfigured, supabase } from './supabase';
 import type { ViewRow } from './database.types';
 
-export type PipelineRunEvent = ViewRow<'olympus_run_event_trace'>;
+// Canonical view name after the Phase B/C olympus rename (#4295). Migration 135 drops
+// the legacy `olympus_run_event_trace` compat view, so the dashboard must read `run_event_trace`.
+export type PipelineRunEvent = ViewRow<'run_event_trace'>;
 
 export type PipelineTraceResult =
   | { state: 'available'; events: PipelineRunEvent[] }
@@ -30,7 +32,7 @@ export async function fetchPipelineTrace(runDate: string): Promise<PipelineTrace
   try {
     for (let offset = 0; offset < TRACE_MAX_ROWS; offset += TRACE_PAGE_SIZE) {
       const { data, error } = await supabase
-        .from('olympus_run_event_trace')
+        .from('run_event_trace')
         .select('*')
         .eq('run_date', runDate)
         .order('run_id', { ascending: true })
