@@ -16,8 +16,7 @@ import {
   shiftWeekStart,
 } from '@/lib/run-health-week';
 import { formatDuration } from '@/components/system/run-economics-row';
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@digithings/ui';
-import { Button, IconButton } from '@digithings/ui/ui';
+import { Button, IconButton, Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@digithings/ui/ui';
 
 export interface BriefRunHealth {
   status: string | null;

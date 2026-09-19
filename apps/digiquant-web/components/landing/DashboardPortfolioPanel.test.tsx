@@ -60,7 +60,7 @@ describe("live positions blotter on the kit Table (wave 2 T3)", () => {
 
   it("renders the kit Table shell", () => {
     expect(html).toContain('data-slot="table"');
-    expect(html).toContain("ctl-table");
+    expect(html).toContain('data-slot="table-container"');
     expect(html).toContain("min-w-[560px]");
     expect(html).not.toContain("border-collapse font-mono");
   });

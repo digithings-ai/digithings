@@ -4,14 +4,16 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { ChevronLeft, ChevronRight, LogOut, Search } from 'lucide-react';
+import { GLOOMBERB_TERMINAL_URL } from '@digithings/ui';
 import {
-  GLOOMBERB_TERMINAL_URL,
+  Alert,
+  AlertDescription,
+  Button,
   Tooltip,
   TooltipContent,
   TooltipProvider,
   TooltipTrigger,
-} from '@digithings/ui';
-import { Alert, AlertDescription, Button } from '@digithings/ui/ui';
+} from '@digithings/ui/ui';
 import { DashboardMark } from '@/components/dashboard-mark';
 import { GloomberbMark } from '@/components/gloomberb-mark';
 import { useAppShell } from '@/components/app-shell-context';

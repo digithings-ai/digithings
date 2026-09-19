@@ -3,8 +3,9 @@
 import { useState } from 'react';
 import Link from 'next/link';
 import { ArrowUpRight } from 'lucide-react';
-import { Button, SignedConvictionBadge } from '@digithings/ui';
+import { SignedConvictionBadge } from '@digithings/ui';
 import {
+  Button,
   Table,
   TableBody,
   TableCell,
@@ -129,8 +130,7 @@ export default function ConvictionHistory({ decisions }: { decisions: DecisionLo
       {hiddenCount > 0 ? (
         <div className="flex justify-center border-t border-hair px-4 py-3">
           <Button
-            dress="reference"
-            variant="quiet"
+            variant="ghost"
             onClick={() => setShowAll(!showAll)}
             aria-label={showAll ? 'Show fewer analyses' : `Show ${hiddenCount} older analyses`}
           >

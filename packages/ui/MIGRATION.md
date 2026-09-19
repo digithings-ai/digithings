@@ -77,15 +77,13 @@ review.
 
 ## Shared primitives first
 
-Before writing new UI, check `packages/ui/MANIFEST.json` (128 components,
-16 families) and `@digithings/ui` exports: NavShell, Footer/Colophon,
+Before writing new UI, check `packages/ui/MANIFEST.json` (144 components,
+17 families) and `@digithings/ui` exports: NavShell, Footer/Colophon,
 DocsLayout/CodeTabs/EndpointDoc, Pricing/PricingMatrix, NumberedStages,
 PerfMetrics/StatCounter, TerminalManifest, RepoActivity, the chat family (ChatTranscript/
 ChatMessage/ChatMarkdown/ChatToolCall/…), the vendored shadcn kit
-(`@digithings/ui/ui`, below — the **canonical primitive source**), the
-residual controls layer (Table/Select/Dialog/DropdownMenu/Tooltip/
-NavButtons-remaining/DatePager/Breadcrumbs/Pagination/SearchBar/TagsInput
-on the `dress` axis — kept only where the kit has no equivalent), Terminal,
+(`@digithings/ui/ui`, below — the **only primitive source**; the legacy
+controls layer was retired in batch K3), Terminal,
 Emblem/StackRow, ModuleCard, Reveal/Stagger/HeroEntrance,
 useScrollyFeatures/ScrollyRail. Motion always via `m` under `MotionProvider`
 (LazyMotion `domAnimation` `strict` — a raw `motion.*` element creator throws).
@@ -124,20 +122,18 @@ and `TableRowHeader`, kit Select `SelectPopup`/`SelectItemIndicator`, kit Badge
 tones), re-pointed the seven dashboard twelve-x `Sheet` imports onto the kit,
 and deleted the controls files that then had zero consumers — `Avatar`,
 `Badge`, `Sheet`, `Collapsible` — plus digichat's four dead `ui/` wrappers and
-the second gallery-thread component library. `Label` was **not** deleted: it is
-retained private for its `Field` consumer, so its `ctl-label-ref` CSS stays live.
-The controls layer is now a keep-list (Table, Select, Dialog, DropdownMenu,
-Tooltip, EmptyState, Skeleton, NavButtons, Selection/radio, DatePager, Field,
-Label, Slider, Breadcrumbs, Pagination, SearchBar, TagsInput). Proof route:
-`reference/app/(gallery)/ui/page.tsx` (dark, light, and a scoped livery).
+the second gallery-thread component library. Batch K1 (#4306) then promoted the
+seven highest-impact remaining parts, K2 finished the wayfinding/form parts, and
+K3 retired the layer outright. Proof route:
+`reference/app/(gallery)/(controls)/controls/page.tsx` (dark, light, and a
+scoped livery).
 
 Batch K1 (#4306) promoted the seven highest-impact keep-list parts into the kit
 in one pass — **Slider, EmptyState, Skeleton (+ `SkeletonGroup`), RadioGroup/
 Radio, Field, IconButton, SegmentedControl** — and repointed every live
 consumer (canon specimens, dashboard, digichat-ui, `ThemeProvider`). The
-controls copies remain and keep exporting, now at zero consumers (see the
-retirement batch); the reference's local `.sl-input` slider mechanic was
-deleted. The recipe is
+controls copies remained at zero consumers until K3; the reference's local
+`.sl-input` slider mechanic was deleted. The recipe is
 [§ Promote a part out of the controls layer](#promote-a-part-out-of-the-controls-layer-batch-k1).
 
 Batch K2 (#4306) finished the promotion: **Breadcrumbs, Pagination, DatePager,
@@ -148,10 +144,18 @@ dependency, so it owns no state). Every live consumer was repointed (canon
 specimens, the RTL proof, the dashboard day selector and briefs index).
 `DatePager`'s `.nb-cal` calendar grid and its `kit-pop` enter/exit travel moved
 to `styles/web-theme.css`, so the kit part no longer reads the controls sheet.
-The controls copies stay and keep exporting, now at zero consumers (the
-retirement batch deletes them). The keep-list is down to Dialog, DropdownMenu,
-Select, Table, Tooltip, NavButtons/Pager, Selection/radio, Label, Slider plus
-the zero-consumer K1/K2 parts.
+The controls copies remained at zero consumers until K3.
+
+Batch K3 (#4306) **retired the legacy controls layer**. The last main-barrel
+consumers (dashboard `Button`/`Dialog`/`DropdownMenu`/`Tooltip`,
+digiquant-web/digithings-web `Table`/`Select`, digichat's adapter re-exports)
+were re-pointed to `@digithings/ui/ui`, `Pager`/`PagerPage` were promoted into
+`ui/pager.tsx` for the canon nav-buttons specimen, and `cx` moved to
+`lib/cx.ts` for `ContactMailto`. `packages/ui/src/components/controls/*` and
+its `src/index.ts` exports were deleted, and the dead `.ctl-*` CSS
+(`ctl-avatar*`, `ctl-badge-ref*`, `ctl-search-row`, `ctl-sheet*`) went with it.
+The promote playbook below is **closed**: there is no controls layer left to
+promote out of — new parts are authored directly in `packages/ui/src/ui/`.
 
 ### Promote a part out of the controls layer (batch K1)
 
@@ -182,10 +186,11 @@ The repeatable shape K1 used for each of the seven:
 5. **Pin the part in `ui.render.test.tsx`** (render + variant/pointer/RTL
    assertions) and, for pointer contracts that only exist in the DOM, in
    `ui.pointer.client.test.tsx`.
-6. **Keep the controls file.** Do not delete it in the promotion batch — the
-   controls copy stays until its last consumer is gone, then a later retirement
-   batch removes the file, its `controls/index.ts` + main-barrel exports, and
-   its dead CSS together.
+6. **Retired: the controls file.** This step existed because a promotion batch
+   left its controls copy in place until a later retirement pass. Batch K3
+   (#4306) deleted the layer, so there is no controls copy to keep and no
+   promotion source left: author new parts directly in
+   `packages/ui/src/ui/`.
 
 ## Promotion playbook (v2 — the #1414 epic shape)
 
@@ -211,10 +216,8 @@ New UI is born in the reference, promoted, then adopted — never built app-loca
    **The kit wins wherever it covers the part.** `@digithings/ui/ui` is the
    canonical home for every part it ships — promote into `web/src/ui/` there,
    and prefer adding a `dress`/`skin` axis to the kit part over keeping a second
-   app-local or controls copy. The controls layer is now a keep-list for parts
-   the kit cannot express (Table, Select, Dialog, DropdownMenu, Tooltip,
-   EmptyState, Skeleton, NavButtons, Selection/radio, DatePager, Field, Slider,
-   Breadcrumbs, Pagination, SearchBar, TagsInput). Deferred kit items are in
+   app-local copy. The legacy controls layer was retired in batch K3 (#4306),
+   so the kit is now the **only** primitive source. Deferred kit items are in
    #4306 (kit listbox/menu/radiogroup item parts; a kit `hideArrow` prop; the
    kit Table's `overflow-x-auto` vs sticky headers; SegmentedControl wrapping on
    very narrow viewports).

@@ -82,7 +82,7 @@ describe("PivotStatsTable on the kit Table (wave 2 T3)", () => {
     expect(html).toContain('data-slot="table"');
     expect(html).toContain('data-slot="table-header"');
     expect(html).toContain('data-slot="table-body"');
-    expect(html).toContain("ctl-table");
+    expect(html).toContain('data-slot="table-container"');
     expect(html).toContain("ts-pivot-table");
     expect(html).not.toContain("ts-table ");
   });
@@ -116,12 +116,12 @@ describe("PivotStatsTable on the kit Table (wave 2 T3)", () => {
     expect(html).toContain(">all<");
     expect(html).toContain(">long<");
     expect(html).toContain(">short<");
-    expect(html).toContain("ctl-table-num");
+    expect(html).toContain("tabular-nums");
     expect(html).toContain("ts-pivot-col");
   });
 
   it("keeps the numeric treatment on data cells", () => {
-    expect(html).toMatch(/<td[^>]*ctl-table-num[^>]*>/);
+    expect(html).toMatch(/<td[^>]*tabular-nums[^>]*>/);
   });
 
   it("compact mode drops to the six preview metrics and the all column", () => {

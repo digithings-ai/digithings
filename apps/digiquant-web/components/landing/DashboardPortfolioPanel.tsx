@@ -40,15 +40,17 @@ import {
   LiveBadge,
   PerformanceDashboard,
   Reveal,
+  fmtNum,
+  fmtPct,
+} from "@digithings/ui";
+import {
   Table,
   TableBody,
   TableCell,
   TableHead,
   TableHeader,
   TableRow,
-  fmtNum,
-  fmtPct,
-} from "@digithings/ui";
+} from "@digithings/ui/ui";
 import type { DashboardHeadline, DashboardRatio } from "@digithings/ui";
 import { useLivePortfolio, type LivePosition } from "@/lib/live";
 

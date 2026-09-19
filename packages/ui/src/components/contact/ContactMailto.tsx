@@ -26,7 +26,7 @@
 import { useCallback, useSyncExternalStore } from "react";
 import type { CSSProperties, MouseEvent, ReactNode } from "react";
 
-import { cx } from "../controls/cx";
+import { cx } from "../../lib/cx";
 
 /** Pure so the query-string assembly is unit-testable without rendering. */
 export function buildMailtoHref(email: string, subject?: string): string {

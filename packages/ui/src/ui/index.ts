@@ -16,6 +16,7 @@ export * from "./icon-button";
 export * from "./input";
 export * from "./label";
 export * from "./pagination";
+export * from "./pager";
 export * from "./radio-group";
 export * from "./search-bar";
 export * from "./segmented-control";

@@ -12,4 +12,4 @@ export {
   TooltipTrigger,
   TooltipContent,
   TooltipProvider,
-} from "@digithings/ui"
+} from "@digithings/ui/ui"

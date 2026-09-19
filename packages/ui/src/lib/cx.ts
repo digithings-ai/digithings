@@ -1,8 +1,10 @@
 /**
- * Class joiners for the controls family. Deliberately NOT tailwind-merge:
- * base-vs-call-site utility conflicts are resolved by layering instead —
- * every default a call site may override lives in `@layer components` in
- * styles/controls-overlay.css, where the app's utilities layer wins.
+ * Class joiners. Deliberately NOT tailwind-merge: base-vs-call-site utility
+ * conflicts are resolved by layering instead — every default a call site may
+ * override lives in `@layer components`, where the app's utilities layer wins.
+ *
+ * Relocated from the retired controls layer (#4306) — ContactMailto is the
+ * surviving consumer.
  */
 export const cx = (...parts: Array<string | false | null | undefined>): string =>
   parts.filter(Boolean).join(" ");

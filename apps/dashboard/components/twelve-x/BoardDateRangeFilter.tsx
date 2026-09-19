@@ -10,8 +10,7 @@
  * (wave-4 BLOCKED, #4306) — migrating only this consumer would fork the chrome.
  */
 import { useMemo, useState } from 'react';
-import { Dialog, DialogContent } from '@digithings/ui';
-import { Button } from '@digithings/ui/ui';
+import { Dialog, DialogContent, Button } from '@digithings/ui/ui';
 
 const WEEKDAYS = ['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'] as const;
 
@@ -233,7 +232,7 @@ export default function BoardDateRangeFilter({
         <DialogContent
           aria-label="Board date range"
           data-testid="board-date-range-calendar"
-          className="w-auto [&_.ctl-dialog-card]:w-auto"
+          className="w-auto"
         >
           <div className="nb-cal">
             <div className="nb-cal-head">

@@ -68,6 +68,8 @@ import {
   FormActions,
   FormField,
   Pagination,
+  Pager,
+  PagerPage,
   SearchBar,
   TagsInput,
   formatDatePagerLabel,
@@ -722,6 +724,28 @@ describe("kit parts promoted from the controls layer (#4306, batch K2)", () => {
       <Pagination page={3} pageCount={9} onPageChange={() => {}} />,
     );
     expect(html).toContain("rtl:scale-x-[-1]");
+  });
+
+  it("Pager renders disabled edges around the middle slot", () => {
+    const html = renderToStaticMarkup(
+      <Pager prevDisabled nextAriaLabel="Next day">
+        <PagerPage current>1</PagerPage>
+        <PagerPage>2</PagerPage>
+      </Pager>,
+    );
+    expect(html).toContain('data-slot="pager"');
+    expect(html).toContain('data-slot="pager-page"');
+    expect(html).toContain('aria-current="page"');
+    expect(html).toContain('aria-label="Next day"');
+    expect(html).toContain("disabled");
+    expect(html).toContain("cursor-pointer");
+  });
+
+  it("Pager capsule dress reproduces the dashboard one-capsule look", () => {
+    const html = renderToStaticMarkup(<Pager dress="capsule" nextAriaLabel="Next" />);
+    expect(html).toContain("bg-term-bg");
+    expect(html).toContain("grid-cols-[auto_1fr_auto]");
+    expect(html).toContain("disabled:cursor-not-allowed");
   });
 
   it("DatePager renders the capsule label and calendar trigger", () => {

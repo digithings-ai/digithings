@@ -3,8 +3,9 @@
 import { useMemo, useState } from 'react';
 import Link from 'next/link';
 import { ArrowLeft, ArrowUpRight } from 'lucide-react';
-import { Button, SignedConvictionBadge, gloomberbTickerUrl } from '@digithings/ui';
+import { SignedConvictionBadge, gloomberbTickerUrl } from '@digithings/ui';
 import {
+  Button,
   Table,
   TableBody,
   TableCell,
@@ -480,8 +481,7 @@ export default function TickerDossierView({
                 {hiddenActionCount > 0 ? (
                   <div className="flex justify-center border-t border-hair px-4 py-3">
                     <Button
-                      dress="reference"
-                      variant="quiet"
+                      variant="ghost"
                       onClick={() => setShowAllActions(!showAllActions)}
                       aria-label={showAllActions
                         ? 'Show fewer position actions'

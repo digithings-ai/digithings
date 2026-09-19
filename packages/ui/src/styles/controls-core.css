@@ -1,13 +1,13 @@
 /* ==========================================================================
-   @digithings/ui — shared controls layer CSS (components/controls/*, #1419).
-   The static control atoms: Button, Badge, Card, Input, Label, Avatar —
-   plus the promoted controls patterns (#1548): Skeleton (sk-*), EmptyState
-   (ctl-empty*), SegmentedControl/Pager/IconButton (nb-*), TagsInput (tg-*),
-   SearchBar (ctl-search / sb-*). The #1548 families carry the reference
+   @digithings/ui — chat-dress control CSS (styles/controls-core.css).
+
+   The legacy controls layer (`components/controls/*`, #1419) was retired in
+   batch K3 (#4306). What the kit still emits lives here: the chat dress
+   (`.ctl-btn-chat*`, `.ctl-badge-chat*`, `.ctl-input-chat`, `.ctl-label-chat`)
+   and the kit Card's `.ctl-card-*` part rules. The rest of the sheet is
+   historical. The #1548 families carry the reference
    dress, plus dashboard's shipped dresses where the two differ (nb-pager
-   "capsule", nb-seg "accent" — see the NavButtons dresses section;
-   tg-chip-quant accent chip and ctl-search-row dropdown filter row — see
-   the TagsInput / SearchBar sections); they
+   "capsule", nb-seg "accent" — see the NavButtons dresses section); they
    follow the same layering split as the chat dress — single-class defaults
    in @layer components, state/structural rules unlayered.
 
@@ -436,39 +436,6 @@
   border-radius: 0;
 }
 
-/* ── Badge — reference dress (web-theme.css .dg-tier badge grammar) ──────── */
-
-.ctl-badge-ref {
-  font-family: var(--font-mono);
-  font-size: 0.6rem;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-  color: var(--ink-mute);
-  border: 1px solid var(--hair);
-  border-radius: 0;
-  padding: 0.16rem 0.5rem;
-}
-
-.ctl-badge-ref--accent {
-  color: var(--accent);
-  border-color: var(--accent-weak);
-}
-
-.ctl-badge-ref--warn {
-  color: var(--warn);
-  border-color: color-mix(in srgb, var(--warn) 40%, transparent);
-}
-
-.ctl-badge-ref--up {
-  color: var(--up);
-  border-color: color-mix(in srgb, var(--up) 40%, transparent);
-}
-
-.ctl-badge-ref--down {
-  color: var(--down);
-  border-color: color-mix(in srgb, var(--down) 40%, transparent);
-}
-
 /* ── Badge — chat dress (digichat ui/badge.tsx) — defaults in
       @layer components, states/structural rules unlayered (see header) ──── */
 
@@ -828,171 +795,6 @@
 .peer:disabled ~ .ctl-label-chat {
   cursor: not-allowed;
   opacity: 0.5;
-}
-
-/* ── Avatar — chat dress only (digichat ui/avatar.tsx; the reference family
-      has no avatar specimen — reference dress deferred to a product ruling).
-      Defaults in @layer components, data-size/structural rules unlayered ── */
-
-@layer components {
-  .ctl-avatar {
-    position: relative;
-    display: flex;
-    width: 2rem;
-    height: 2rem;
-    flex-shrink: 0;
-    border-radius: 9999px;
-    user-select: none;
-  }
-
-  .ctl-avatar::after {
-    content: "";
-    position: absolute;
-    inset: 0;
-    border-radius: 9999px;
-    border: 1px solid var(--border, var(--hair));
-    mix-blend-mode: darken;
-  }
-
-  .ctl-avatar-image {
-    aspect-ratio: 1 / 1;
-    width: 100%;
-    height: 100%;
-    border-radius: 9999px;
-    object-fit: cover;
-  }
-
-  .ctl-avatar-fallback {
-    display: flex;
-    width: 100%;
-    height: 100%;
-    align-items: center;
-    justify-content: center;
-    border-radius: 9999px;
-    background: var(--muted, var(--surface-2));
-    font-size: 0.875rem;
-    line-height: calc(1.25 / 0.875);
-    color: var(--muted-foreground, var(--ink-soft));
-  }
-
-  .ctl-avatar-badge {
-    position: absolute;
-    inset-inline-end: 0;
-    bottom: 0;
-    z-index: 10;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    border-radius: 9999px;
-    background: var(--primary, var(--accent));
-    color: var(--primary-foreground, var(--on-accent));
-    background-blend-mode: color;
-    box-shadow: 0 0 0 2px var(--background, var(--bg));
-    user-select: none;
-  }
-}
-
-[data-theme="dark"] .ctl-avatar::after {
-  mix-blend-mode: lighten;
-}
-
-.ctl-avatar[data-size="lg"] {
-  width: 2.5rem;
-  height: 2.5rem;
-}
-
-.ctl-avatar[data-size="sm"] {
-  width: 1.5rem;
-  height: 1.5rem;
-}
-
-.ctl-avatar[data-size="sm"] .ctl-avatar-fallback {
-  font-size: 0.75rem;
-  line-height: calc(1 / 0.75);
-}
-
-.ctl-avatar[data-size="sm"] .ctl-avatar-badge {
-  width: 0.5rem;
-  height: 0.5rem;
-}
-
-.ctl-avatar[data-size="sm"] .ctl-avatar-badge > svg {
-  display: none;
-}
-
-.ctl-avatar[data-size="default"] .ctl-avatar-badge {
-  width: 0.625rem;
-  height: 0.625rem;
-}
-
-.ctl-avatar[data-size="default"] .ctl-avatar-badge > svg {
-  width: 0.5rem;
-  height: 0.5rem;
-}
-
-.ctl-avatar[data-size="lg"] .ctl-avatar-badge {
-  width: 0.75rem;
-  height: 0.75rem;
-}
-
-.ctl-avatar[data-size="lg"] .ctl-avatar-badge > svg {
-  width: 0.5rem;
-  height: 0.5rem;
-}
-
-@layer components {
-  .ctl-avatar-group {
-    display: flex;
-  }
-
-  .ctl-avatar-group-count {
-    position: relative;
-    display: flex;
-    width: 2rem;
-    height: 2rem;
-    flex-shrink: 0;
-    align-items: center;
-    justify-content: center;
-    border-radius: 0;
-    background: var(--muted, var(--surface-2));
-    font-size: 0.875rem;
-    line-height: calc(1.25 / 0.875);
-    color: var(--muted-foreground, var(--ink-soft));
-    box-shadow: 0 0 0 2px var(--background, var(--bg));
-  }
-}
-
-.ctl-avatar-group > :not(:last-child) {
-  margin-inline-end: -0.5rem;
-}
-
-.ctl-avatar-group > [data-slot="avatar"] {
-  box-shadow: 0 0 0 2px var(--background, var(--bg));
-}
-
-.ctl-avatar-group:has([data-size="lg"]) .ctl-avatar-group-count {
-  width: 2.5rem;
-  height: 2.5rem;
-}
-
-.ctl-avatar-group:has([data-size="sm"]) .ctl-avatar-group-count {
-  width: 1.5rem;
-  height: 1.5rem;
-}
-
-.ctl-avatar-group-count > svg {
-  width: 1rem;
-  height: 1rem;
-}
-
-.ctl-avatar-group:has([data-size="lg"]) .ctl-avatar-group-count > svg {
-  width: 1.25rem;
-  height: 1.25rem;
-}
-
-.ctl-avatar-group:has([data-size="sm"]) .ctl-avatar-group-count > svg {
-  width: 0.75rem;
-  height: 0.75rem;
 }
 
 /* ── Skeleton — the sk-* shimmer grammar (#1548, from
@@ -1637,42 +1439,6 @@
 
 .sb-clear:hover {
   color: var(--ink);
-}
-
-/* row dress (#1548 dashboard adoption — the ticker filter row inside the
-   NAV-comparables dropdown pane, performance-chart-workspace.tsx): a
-   full-width radius-less hairline-bottom row with an inset accent focus
-   ring and no leading glyph. Translated utility-for-utility from the
-   shipped input (w-full px-2.5 py-2 text-sm border-b border-hair
-   focus:ring-1 focus:ring-inset focus:ring-accent/30). Same layering
-   split: single-class default in @layer components, structural/state
-   rules unlayered. */
-@layer components {
-  .ctl-search.ctl-search-row {
-    width: 100%;
-    gap: 0;
-    padding: 0 0.625rem 0 0;
-    border: none;
-    border-bottom: 1px solid var(--hair);
-    border-radius: 0;
-    background: transparent;
-  }
-}
-
-.ctl-search-row .sb-glyph {
-  display: none;
-}
-
-.ctl-search-row .sb-input {
-  padding: 0.5rem 0.625rem;
-  font-family: var(--font-sans);
-  font-size: 0.875rem;
-  line-height: 1.25rem;
-}
-
-.ctl-search.ctl-search-row:focus-within {
-  border-color: var(--hair);
-  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 30%, transparent);
 }
 
 /* ── Slider input — DigiWeb range mechanic (#3577)

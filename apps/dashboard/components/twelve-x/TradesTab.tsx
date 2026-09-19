@@ -3,14 +3,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ClipboardList } from 'lucide-react';
 import {
+  Button,
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuRadioGroup,
   DropdownMenuRadioItem,
   DropdownMenuTrigger,
-} from '@digithings/ui';
-import {
-  Button,
   SegmentedControl,
   Slider,
   Table,
@@ -155,7 +153,7 @@ function PairFilterDropdown({
       >
         {label}
       </DropdownMenuTrigger>
-      <DropdownMenuContent skin="reference" align="start" sideOffset={4} className="max-h-64 min-w-[8rem]">
+      <DropdownMenuContent align="start" sideOffset={4} className="max-h-64 min-w-[8rem]">
         <DropdownMenuRadioGroup value={value} onValueChange={onChange}>
           <DropdownMenuRadioItem value="all">All pairs</DropdownMenuRadioItem>
           {pairs.map((p) => (

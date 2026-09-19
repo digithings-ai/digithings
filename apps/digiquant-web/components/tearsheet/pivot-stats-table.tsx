@@ -3,16 +3,19 @@
 import { useMemo } from "react";
 import {
   SegToggle,
+  fmtNum,
+  fmtPct,
+  toneClass,
+} from "@digithings/ui";
+import {
   Table,
   TableBody,
   TableCell,
   TableHead,
   TableHeader,
   TableRow,
-  fmtNum,
-  fmtPct,
-  toneClass,
-} from "@digithings/ui";
+  TableRowHeader,
+} from "@digithings/ui/ui";
 import { fmtRatio } from "./stats";
 import {
   PIVOT_LABELS,
@@ -200,12 +203,12 @@ function PivotStatsGrid({
         <TableBody>
           {metricRows.map((row) => (
             <TableRow key={row.key}>
-              <TableHead
+              <TableRowHeader
                 scope="row"
                 className="ts-pivot-metric-col border-b-hair text-left text-[0.88rem] font-normal normal-case tracking-normal text-ink-soft"
               >
                 {row.label}
-              </TableHead>
+              </TableRowHeader>
               {columns.map(({ slice, metrics }) => (
                 <TableCell key={slice.id} numeric className="ts-pivot-col">
                   {row.cell(metrics)}

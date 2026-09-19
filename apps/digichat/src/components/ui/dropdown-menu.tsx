@@ -22,4 +22,4 @@ export {
   DropdownMenuSub,
   DropdownMenuSubTrigger,
   DropdownMenuSubContent,
-} from "@digithings/ui"
+} from "@digithings/ui/ui"

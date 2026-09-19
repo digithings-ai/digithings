@@ -49,7 +49,7 @@ is irrelevant to resolution — every other frontend imports them the same way:
 | Package | Directory | Provides |
 | ------- | --------- | -------- |
 | `@digithings/design` | `design/` | `tokens.css` — the palette/type/motion tokens every surface uses |
-| `@digithings/ui` | `web/` | shared React layer (NavShell, `SocialRow` / `DIGITHINGS_SOCIALS`, DocsLayout/CodeTabs/EndpointDoc, Pricing/PricingMatrix, NumberedStages, PerfMetrics/StatCounter, TerminalManifest, RepoActivity, the chat family including `DigichatLauncher`, the vendored shadcn kit `ui/` (**canonical**, `dress` axis) plus the residual controls layer, the conviction primitives, Terminal, emblems, graph, ThemeProvider, MotionProvider, `AuthCard`, module data) + `styles/web-theme.css`, **the single `@theme inline` Tailwind bridge** |
+| `@digithings/ui` | `web/` | shared React layer (NavShell, `SocialRow` / `DIGITHINGS_SOCIALS`, DocsLayout/CodeTabs/EndpointDoc, Pricing/PricingMatrix, NumberedStages, PerfMetrics/StatCounter, TerminalManifest, RepoActivity, the chat family including `DigichatLauncher`, the vendored shadcn kit `ui/` (**the only primitive source**, `dress` axis), the conviction primitives, Terminal, emblems, graph, ThemeProvider, MotionProvider, `AuthCard`, module data) + `styles/web-theme.css`, **the single `@theme inline` Tailwind bridge** |
 
 `SocialRow` (`web/src/components/SocialRow.tsx`, dress in `./styles/nav-shell.css`)
 is the quiet company-profile utility row: the same borderless `.btn-icon`
@@ -142,23 +142,18 @@ like the dashboard's subpage tab bar).
 
 Waves 0–3 of the shadcn migration (#4206) built the **`ui`** family — the
 first *vendored* package family (stock shadcn/ui on Base UI, `base-lyra`
-preset), with no sheet of its own (all utilities, same bridge). After wave 3 it
-is **the only primitive source** for every part it covers; the controls layer
-survives only where the kit has no equivalent. Wave 4's W4-P1 closed three of
-those gaps — Table `numeric`/`density` and the new `TableRowHeader`
-(`<th scope="row">`), Select composition (`SelectPopup` + exported
-`SelectItemIndicator`), and the Badge `neutral`/`accent`/`warn`/`up`/`down`
-tones — so the consumers still pinned to `components/controls/*` for those
-parts can move onto the kit. Wave 4's cleanup (W4-J) then re-pointed the seven
-dashboard twelve-x `Sheet` imports onto the kit and deleted the controls files
-with zero consumers (`Avatar`, `Badge`, `Sheet`, `Collapsible`), the second
-`gallery-thread` component library, digichat's four dead `ui/` wrappers, and the
-orphan `dashboard-workspace-reference.tsx`. `Label` was **not** deleted — it is
-retained private for its `Field` consumer, so its `ctl-label-ref` CSS stays live.
-The controls layer's live keep-list after K1 was a shrinking set (Table, Select,
-Dialog, DropdownMenu, Tooltip, NavButtons/Pager, Selection/radio, Label,
-Slider) plus the zero-consumer promoted copies; K2 then cleared the rest of the
-wayfinding/form parts. Deferred kit items live in #4306.
+preset), with no sheet of its own (all utilities, same bridge). Wave 4's W4-P1
+closed the Table/Select/Badge gaps — Table `numeric`/`density` and the new
+`TableRowHeader` (`<th scope="row">`), Select composition (`SelectPopup` +
+exported `SelectItemIndicator`), and the Badge
+`neutral`/`accent`/`warn`/`up`/`down` tones — so the consumers still pinned to
+`components/controls/*` could move onto the kit. Wave 4's cleanup (W4-J) then
+re-pointed the seven dashboard twelve-x `Sheet` imports onto the kit and deleted
+the controls files with zero consumers (`Avatar`, `Badge`, `Sheet`,
+`Collapsible`), the second `gallery-thread` component library, digichat's four
+dead `ui/` wrappers, and the orphan `dashboard-workspace-reference.tsx`.
+Batches K1–K2 promoted the last missing capabilities, and batch K3 retired the
+layer outright (below). Deferred kit items live in #4306.
 
 Batch K1 (#4306) then promoted the seven highest-impact remaining gaps in one
 pass: **Slider** (the vendored stock shadcn Base UI slider — single + range
@@ -167,10 +162,10 @@ thumbs, token-bridged to the accent mechanic), **EmptyState**, **Skeleton**
 **SegmentedControl**. Every live consumer was repointed — the canon specimens
 (`apps/reference/components/controls/*`), the dashboard's empty-state/skeleton/
 icon-button/segmented-control files, `packages/digichat-ui`, and
-`packages/ui/src/components/ThemeProvider.tsx`. The controls copies stay in
-place and keep exporting (zero-consumer candidates for the retirement batch);
-only the reference's local `.sl-input` mechanic was deleted. The promote-from-
-controls recipe is [MIGRATION.md § Promote a part out of the controls layer](MIGRATION.md#promote-a-part-out-of-the-controls-layer-batch-k1).
+`packages/ui/src/components/ThemeProvider.tsx`. The controls copies stayed in
+place and kept exporting until the retirement batch; only the reference's local
+`.sl-input` mechanic was deleted. The promote-from-controls recipe is
+[MIGRATION.md § Promote a part out of the controls layer](MIGRATION.md#promote-a-part-out-of-the-controls-layer-batch-k1).
 
 Batch K2 (#4306) then promoted the remaining keep-list parts — **Breadcrumbs,
 Pagination, DatePager, TagsInput (+ `TagChip`), SearchBar** — and added the two
@@ -181,14 +176,26 @@ dependency). Every live consumer was repointed (the canon specimens, the RTL
 proof, the dashboard `PipelineDaySelector` and `BriefsIndex`), and the
 `DatePager` calendar CSS moved into `styles/web-theme.css` (`.nb-cal*`, plus the
 kit's own `.kit-pop` travel) so the kit no longer depends on the controls sheet.
-The controls copies remain and keep exporting at zero consumers. Part coverage
-finished too: the specimens now render `AlertAction`, `CardAction`,
+The controls copies remained at zero consumers until batch K3 deleted them. Part
+coverage finished too: the specimens now render `AlertAction`, `CardAction`,
 `DialogOverlay`/`DialogPortal`, the `DropdownMenu` portal/checkbox/submenu parts,
 the `Select` content/group/label/separator parts, and `SheetClose`/`SheetFooter`.
 
+Batch K3 (#4306) **retired the controls layer**: the last main-barrel consumers
+were repointed to the kit, `Pager`/`PagerPage` were promoted into
+`ui/pager.tsx` (their only remaining consumer was the canon nav-buttons
+specimen), the one live helper (`cx`) moved to `lib/cx.ts` for `ContactMailto`,
+and every `packages/ui/src/components/controls/*` file plus its exports in
+`src/index.ts` was deleted. The dead `.ctl-*` CSS went with it — `ctl-avatar*`,
+`ctl-badge-ref*`, `ctl-search-row`, and `ctl-sheet*` in
+`styles/controls-core.css` / `controls-overlay.css` — while the chat-dress
+families the kit still emits (`ctl-btn-chat*`, `ctl-badge-chat*`,
+`ctl-card-chat*`, `ctl-input-chat`, `ctl-label-chat`) stay live. `@digithings/ui`
+is no longer a primitive source; the kit (`@digithings/ui/ui`) is the only one.
+
 | Family | Components | CSS subpath |
 | ------ | ---------- | ----------- |
-| `ui` | Alert, Avatar (+ parts), Badge, Breadcrumbs, Button (+ `buttonVariants`), Card (+ parts), Checkbox, Collapsible, DatePager, Dialog (+ parts), DropdownMenu (+ parts), EmptyState, Field, Form, IconButton, Input, Label, Pagination, Radio/RadioGroup, SearchBar, SegmentedControl, Select (+ parts), Separator, Sheet (+ parts), Skeleton/SkeletonGroup, Slider, Switch, Table (+ parts), Tabs, TagsInput, Textarea, Tooltip (+ parts) — barrel `web/src/ui/index.ts`, export `@digithings/ui/ui` | `styles/web-theme.css` (the `sk-shimmer` keyframes plus the ported `.nb-cal*` calendar grid and `.kit-pop` travel; otherwise utility-only — consumers add `@source "../../../packages/ui/src/ui"`) |
+| `ui` | Alert, Avatar (+ parts), Badge, Breadcrumbs, Button (+ `buttonVariants`), Card (+ parts), Checkbox, Collapsible, DatePager, Dialog (+ parts), DropdownMenu (+ parts), EmptyState, Field, Form, IconButton, Input, Label, Pager, Pagination, Radio/RadioGroup, SearchBar, SegmentedControl, Select (+ parts), Separator, Sheet (+ parts), Skeleton/SkeletonGroup, Slider, Switch, Table (+ parts), Tabs, TagsInput, Textarea, Tooltip (+ parts) — barrel `web/src/ui/index.ts`, export `@digithings/ui/ui` | `styles/web-theme.css` (the `sk-shimmer` keyframes plus the ported `.nb-cal*` calendar grid and `.kit-pop` travel; otherwise utility-only — consumers add `@source "../../../packages/ui/src/ui"`) |
 
 The five parts digichat needed a chat tone for carry the `dress="chat"` axis
 (Button/Card/Badge/Input/Label), which emits the existing `ctl-*-chat` classes

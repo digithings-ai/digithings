@@ -83,10 +83,6 @@
 @source "../../../packages/ui/src/components/stages";
 @source "../../../packages/ui/src/components/effects-chrome";
 
-/* Tailwind never scans package sources — generate the token utilities the
-   shared controls carry (MIGRATION.md rule 3). */
-@source "../../../packages/ui/src/components/controls";
-
 /* Tailwind never scans package sources — the vendored kit primitives
    (Button/Input/Label/Alert/Card/Badge/Sheet/Dialog) render here after the
    wave-2 adoption (MIGRATION.md rule 3). */

@@ -3,10 +3,6 @@ import Link from "next/link";
 import { Fragment, useState, type ReactNode } from "react";
 import {
   modules,
-  Table,
-  TableBody,
-  TableCell,
-  TableRow,
   type ModuleNode,
   StackRow,
   Emblem,
@@ -17,7 +13,15 @@ import {
   DocsCodeBlock,
   Reveal,
 } from "@digithings/ui";
-import { Badge, Button, buttonVariants } from "@digithings/ui/ui";
+import {
+  Badge,
+  Button,
+  buttonVariants,
+  Table,
+  TableBody,
+  TableCell,
+  TableRow,
+} from "@digithings/ui/ui";
 import { apiDocs, type ModuleApiDoc, type Endpoint } from "@/lib/apiDocs";
 import { guides, type Block } from "@/lib/sharedDocs";
 import { guideToMarkdown, moduleToMarkdown } from "@/lib/docsSerializers";

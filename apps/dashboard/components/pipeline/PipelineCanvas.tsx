@@ -13,12 +13,13 @@ import {
   Plus,
 } from 'lucide-react';
 import {
+  Button,
+  IconButton,
   Tooltip,
   TooltipContent,
   TooltipProvider,
   TooltipTrigger,
-} from '@digithings/ui';
-import { Button, IconButton } from '@digithings/ui/ui';
+} from '@digithings/ui/ui';
 import type { PipelineDayData } from '@/lib/pipeline-graph-data';
 import type { ExpansionState, LaidOutNode, PipelineNodeRunStatus } from '@/lib/pipeline-layout';
 import { layoutPipeline, pipelineNodeRunStatusLabel } from '@/lib/pipeline-layout';
@@ -620,7 +621,7 @@ export default function PipelineCanvas({
                       </IconButton>
                     )}
                   />
-                  <TooltipContent skin="reference" side="bottom">Zoom out</TooltipContent>
+                  <TooltipContent side="bottom">Zoom out</TooltipContent>
                 </Tooltip>
                 <Tooltip>
                   <TooltipTrigger
@@ -634,7 +635,7 @@ export default function PipelineCanvas({
                       </IconButton>
                     )}
                   />
-                  <TooltipContent skin="reference" side="bottom">
+                  <TooltipContent side="bottom">
                     Fit pipeline to view
                   </TooltipContent>
                 </Tooltip>
@@ -646,7 +647,7 @@ export default function PipelineCanvas({
                       </IconButton>
                     )}
                   />
-                  <TooltipContent skin="reference" side="bottom">Zoom in</TooltipContent>
+                  <TooltipContent side="bottom">Zoom in</TooltipContent>
                 </Tooltip>
                 <span className="mx-1 h-5 w-px bg-hair" aria-hidden />
                 <Tooltip>
@@ -657,7 +658,7 @@ export default function PipelineCanvas({
                       </IconButton>
                     )}
                   />
-                  <TooltipContent skin="reference" side="bottom">Expand all</TooltipContent>
+                  <TooltipContent side="bottom">Expand all</TooltipContent>
                 </Tooltip>
                 <Tooltip>
                   <TooltipTrigger
@@ -667,7 +668,7 @@ export default function PipelineCanvas({
                       </IconButton>
                     )}
                   />
-                  <TooltipContent skin="reference" side="bottom">Collapse all</TooltipContent>
+                  <TooltipContent side="bottom">Collapse all</TooltipContent>
                 </Tooltip>
                 <span className="mx-1 h-5 w-px bg-hair" aria-hidden />
                 <Tooltip>
@@ -684,7 +685,7 @@ export default function PipelineCanvas({
                       </IconButton>
                     )}
                   />
-                  <TooltipContent skin="reference" side="bottom">Previous section</TooltipContent>
+                  <TooltipContent side="bottom">Previous section</TooltipContent>
                 </Tooltip>
                 <Tooltip>
                   <TooltipTrigger
@@ -699,7 +700,7 @@ export default function PipelineCanvas({
                       </IconButton>
                     )}
                   />
-                  <TooltipContent skin="reference" side="bottom">
+                  <TooltipContent side="bottom">
                     {resolvedWalkthroughIndex + 1} of {walkthroughNodes.length}
                     {' · '}
                     {activeWalkthroughNode?.label ?? activeStage.label}
@@ -719,7 +720,7 @@ export default function PipelineCanvas({
                       </IconButton>
                     )}
                   />
-                  <TooltipContent skin="reference" side="bottom">Next section</TooltipContent>
+                  <TooltipContent side="bottom">Next section</TooltipContent>
                 </Tooltip>
               </div>
             </TooltipProvider>

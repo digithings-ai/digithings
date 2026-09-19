@@ -7,19 +7,17 @@ import {
   Button,
   Input,
   Label,
-  Sheet,
-  SheetContent,
-  SheetHeader,
-  SheetTitle,
-} from "@digithings/ui/ui";
-import {
   Select,
   SelectItem,
   SelectItemIndicator,
   SelectPopup,
   SelectTrigger,
   SelectValue,
-} from "@digithings/ui";
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+} from "@digithings/ui/ui";
 import {
   PROVIDER_LABELS,
   PROVIDER_MODELS,
