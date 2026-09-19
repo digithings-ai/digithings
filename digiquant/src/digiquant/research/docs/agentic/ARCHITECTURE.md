@@ -389,7 +389,7 @@ The Next.js frontend reads from Supabase where wired, with `cloudflare/public/da
 
 ## Snapshot read path (frontend-consumable)
 
-**Goal:** the research frontend (Next.js dashboard at `cloudflare/dashboard/`) and any other consumer can fetch a daily run's full state with one query and zero pipeline-runtime imports. Issue [#302](https://github.com/digithings-ai/digithings/issues/302).
+**Goal:** the research frontend (Next.js dashboard at `apps/dashboard/`) and any other consumer can fetch a daily run's full state with one query and zero pipeline-runtime imports. Issue [#302](https://github.com/digithings-ai/digithings/issues/302).
 
 ### Source of truth
 

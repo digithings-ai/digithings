@@ -112,7 +112,7 @@ authoritative. Do not publish or quote the arithmetic-chain value as a settled N
 ## Related
 
 - Contracts: `digiquant/src/digiquant/dashboard/tenancy.py`
-- Dashboard helper: `cloudflare/dashboard/lib/house-workspace.ts`
+- Dashboard helper: `apps/dashboard/lib/house-workspace.ts`
 - Schema / RLS notes: `digiquant/supabase/SCHEMA.md` (migrations 096–113)
 - Settings / APP_URL paths: `digiquant/supabase/functions/_shared/app-url.ts`
   (`APP_URL` = site origin only; paths append `/dashboard/...`)
