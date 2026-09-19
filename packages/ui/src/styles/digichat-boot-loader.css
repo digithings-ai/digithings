@@ -306,3 +306,123 @@
 .dboot[data-attach="0"] .dboot-placeholder {
   padding-inline-start: 6px;
 }
+
+/* Consumer overlay hook: position a boot loader above a surface until it
+   settles (see ProductStockShell). Fades out on data-done before unmount. */
+.dboot-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 40;
+  transition: opacity 0.32s ease;
+}
+
+.dboot-overlay[data-done="true"] {
+  opacity: 0;
+  pointer-events: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dboot-overlay {
+    transition: none;
+  }
+}
+
+/* Boot-lab alternates (local `?boot=` iteration; see web boot-lab.tsx). */
+.dboot-lab {
+  display: flex;
+  height: 100%;
+  width: 100%;
+  align-items: center;
+  justify-content: center;
+  /* Gutters so the chain never touches the frame edge — the popup panel and
+     narrow embeds crop flush against the panel border without them. */
+  padding: 16px 20px;
+  font-family: var(--font-mono);
+  color: var(--ink);
+}
+
+.dboot-lab-line {
+  display: inline-flex;
+  align-items: center;
+  font-size: 14px;
+  line-height: 1.5;
+  letter-spacing: 0.01em;
+}
+
+.dboot-lab-caret {
+  display: inline-block;
+  width: 0.55em;
+  height: 1.1em;
+  margin-left: 0.35em;
+  vertical-align: -0.2em;
+  background: var(--dboot-caret, var(--accent, var(--ink)));
+  animation: dboot-blink 1.06s steps(1) infinite;
+}
+
+.dboot-lab-muted {
+  color: var(--ink-mute);
+}
+
+.dboot-lab-accent {
+  color: var(--dboot-caret, var(--accent, var(--ink)));
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dboot-lab-caret {
+    animation: none;
+  }
+}
+
+/* Boot-lab extras: stacked log lines, spinner rows, cycling dots. */
+.dboot-lab-lines {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  align-items: flex-start;
+}
+
+.dboot-lab-spin {
+  gap: 0.45rem;
+}
+
+.dboot-lab-dots {
+  display: inline-block;
+  min-width: 1.6ch;
+  text-align: left;
+}
+
+/* Lab variants appear and vanish without a fade (the user asked the reveal to
+   be direct); the classic choreography keeps its transition. */
+.dboot-overlay[data-instant="true"] {
+  transition: none;
+}
+
+/* Tool-chain lab variant: one row per simulated tool call. The row anatomy
+   mirrors the message tool calls (aui-tool-fallback-trigger + DotMatrix
+   states), so whichever skin dresses the chat dresses the boot too. */
+.dboot-lab-tools {
+  display: flex;
+  width: 100%;
+  max-width: 30rem;
+  flex-direction: column;
+  gap: 2px;
+  text-align: left;
+}
+
+/* Handoff switch: `drift` lifts the overlay as it fades so the swap reads as
+   one motion with the chat entering underneath. */
+.dboot-overlay[data-drift="true"] {
+  transition:
+    opacity 0.32s ease,
+    transform 0.32s ease;
+}
+
+.dboot-overlay[data-drift="true"][data-done="true"] {
+  transform: translateY(-6px);
+}
+
+/* Unseen chain rows reserve their space from the first frame so the block
+   never re-centers: new steps appear below the last one and nothing moves. */
+.dboot-lab-tools [data-visible="false"] {
+  visibility: hidden;
+}

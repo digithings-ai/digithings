@@ -97,7 +97,10 @@
     url.searchParams.set("host", host);
     url.searchParams.set("layout", "embed");
     if (token) url.searchParams.set("token", token);
-    if (theme) url.searchParams.set("theme", theme);
+    // The popup chrome is dark; without an explicit host theme the embed must
+    // match it (a light embed on the dark panel showed a white canvas flash
+    // and a mismatched footer).
+    url.searchParams.set("theme", theme || "dark");
     if (accent) url.searchParams.set("accent", accent);
     return url.toString();
   }
@@ -433,7 +436,7 @@
       "box-shadow:0 16px 48px rgba(0,0,0,.28);background:#0b0b0c;display:none;}" +
       "#" +
       PANEL_ID +
-      "[data-open=1]{display:block;}" +
+      "[data-open=\"1\"]{display:block;}" +
       "#" +
       IFRAME_ID +
       "{width:100%;height:100%;border:0;background:transparent;}";

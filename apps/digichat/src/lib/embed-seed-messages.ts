@@ -3,6 +3,15 @@ import { isFirstPartyEmbedHost } from "@/lib/embed-first-party";
 
 export const READY_MESSAGE = { type: "digichat:ready" } as const;
 
+/**
+ * Same-window twin of {@link READY_MESSAGE}: dispatched right before the
+ * parent `postMessage` so in-page surfaces can hold animations until the
+ * embed is painted (the welcome typewriter waits for it). A string literal
+ * on purpose — the consumer lives in `@digithings/ui`, which must not
+ * import app code.
+ */
+export const READY_EVENT: string = READY_MESSAGE.type;
+
 export type ReadyMessage = {
   type: "digichat:ready";
   /**
