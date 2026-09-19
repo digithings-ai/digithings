@@ -458,7 +458,7 @@ reasoning workflow without replacing their domain interactions:
   page-level card primitives.
 - Pipeline has three separate inspection surfaces: the topology explains process and
   run status, All artifacts lists every persisted `document_key`, and Call trace lists
-  ordered model/search/tool operations from `olympus_run_event_trace`. Soft-stamped
+  ordered model/search/tool operations from `run_event_trace`. Soft-stamped
   `call_id` / `attempt_id` / `node_run_id` (#2763) join each row to WP1
   `dashboard_provider_*` (067 is economics authority; the public view still omits
   tokens/cost). Every known
