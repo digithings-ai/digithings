@@ -110,10 +110,14 @@ COPY config/searxng/settings.yml /etc/searxng/settings.yml
 # /etc/searxng/limiter.toml. Whitelist loopback (the in-container digisearch
 # caller) so the JSON API's 4/hour API_WINDOW cap and the curl/Python-UA bot
 # rule do not throttle the primary backend. See #4297.
-COPY cloudflare/digithings-stack-cloudflare/container/searxng/limiter.toml \
+COPY apps/digithings-stack-cloudflare/container/searxng/limiter.toml \
      /etc/searxng/limiter.toml
 # Rebuild marker: wrangler tags the container image from this Dockerfile, so a
 # context-only change (e.g. entrypoint.sh) must bump this comment to rebuild.
+# Rebuild marker v12 (2026-09-19): develop relocated the stack container from
+# cloudflare/digithings-stack-cloudflare/ to apps/digithings-stack-cloudflare/;
+# this merge-forward moves the searxng limiter.toml COPY source to the new path
+# (same file, same runtime destination /etc/searxng/limiter.toml).
 # Rebuild marker v11 (2026-09-19): enables the `bing` and `mojeek` engines in
 # config/searxng/settings.yml. Both ship `disabled: true` at the pinned
 # SEARXNG_COMMIT and `use_default_settings.engines.keep_only` does NOT flip that
