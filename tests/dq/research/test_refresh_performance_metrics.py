@@ -748,7 +748,7 @@ class TestMetricsCronRunsEveryDay:
 
         jobs_src = (
             Path(__file__).resolve().parents[3]
-            / "cloudflare"
+            / "apps"
             / "digithings-cron"
             / "src"
             / "jobs.ts"

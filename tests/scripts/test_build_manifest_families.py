@@ -6,8 +6,8 @@ the `(gallery)` family — 5 families / 111 components instead of 15 / 106. A
 next.js route group is organisational, not a family, so `(...)` segments must be
 skipped (and the bare `app/(gallery)/page.tsx` falls back to `foundations`).
 
-The vendored shadcn kit (`web/src/ui/*.tsx`) is importable only as the package
-export `@digithings/web/ui`, never as `@/components/*`, so no reference page maps
+The vendored shadcn kit (`packages/ui/src/ui/*.tsx`) is importable only as the package
+export `@digithings/ui/ui`, never as `@/components/*`, so no reference page maps
 it and it must be indexed directly from source, one row per file.
 
 The script takes an output path as argv[2], so this test writes to a temp file
@@ -26,7 +26,7 @@ import pytest
 pytestmark = pytest.mark.unit
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-SCRIPT = REPO_ROOT / "cloudflare" / "digiweb" / "scripts" / "build-manifest.mjs"
+SCRIPT = REPO_ROOT / "scripts" / "build-manifest.mjs"
 
 
 @pytest.fixture(scope="module")
@@ -55,7 +55,7 @@ def test_counts_match_the_index(manifest: dict) -> None:
 def test_ui_kit_is_indexed_from_package_source(manifest: dict) -> None:
     ui = {e["id"]: e for e in manifest["families"]["ui"]}
     assert {"button", "card", "dialog", "input"} <= set(ui)
-    assert ui["button"]["path"] == "web/src/ui/button.tsx"
+    assert ui["button"]["path"] == "packages/ui/src/ui/button.tsx"
     assert ui["button"]["name"] == "Button"
     # Test files under the source dir are not components.
     assert not [i for i in ui if i.endswith(".test")]

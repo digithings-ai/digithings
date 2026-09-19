@@ -1,0 +1,308 @@
+/**
+ * digichat-boot-loader — the default DigiChat loading animation.
+ *
+ * The composer outline as a field of 3px cubes (4px pitch): two heads sweep
+ * out-and-back between opposite corners while the embed warms, then park and
+ * refill, the cube layer swaps out for the composer's 1px border, and the
+ * welcome copy, suggestion rows and glyphs type/build in.
+ *
+ * Import once in the consumer shell, after chat-core.css (tokens used:
+ * --font-mono, --bg, --ink, --ink-soft, --ink-mute, --accent):
+ *   @import "@digithings/ui/styles/digichat-boot-loader.css";
+ */
+
+.dboot {
+  --dboot-head: var(--accent);
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  width: 100%;
+  height: 100%;
+  font-family: var(--font-mono);
+  color: var(--ink);
+}
+
+.dboot-sr {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  border: 0;
+  clip-path: inset(50%);
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+.dboot-dock {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  width: 100%;
+  max-width: 42rem;
+  margin-inline: auto;
+  padding: 0 16px 14px;
+}
+
+.dboot-welcome {
+  min-height: 32px;
+  font-size: 24px;
+  line-height: 32px;
+  font-weight: 400;
+  letter-spacing: -0.6px;
+  color: var(--ink);
+}
+
+.dboot-body {
+  min-height: 1.5em;
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--ink-mute);
+}
+
+.dboot-chips {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 2px;
+  opacity: 0;
+  transition: opacity 0.25s ease;
+}
+
+.dboot-chips[data-visible="true"] {
+  opacity: 1;
+}
+
+.dboot-chip {
+  display: grid;
+  grid-template-columns: 1.25rem minmax(0, 1fr);
+  column-gap: 0.55rem;
+  align-items: start;
+  text-align: left;
+}
+
+.dboot-chip-mark {
+  width: 14px;
+  height: 14px;
+  margin-top: 2.5px;
+  color: var(--ink);
+}
+
+.dboot-chip-mark .dboot-glyph {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.dboot-chip-text {
+  min-height: 19px;
+  font-size: 13.12px;
+  line-height: 19px;
+  color: var(--ink-soft);
+}
+
+.dboot-composer-wrap {
+  position: relative;
+  height: 44px;
+}
+
+.dboot-composer {
+  position: absolute;
+  inset: 0 auto 0 0;
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  padding: 4px 6px;
+  border: 1px solid transparent;
+  border-radius: 0;
+  background: transparent;
+  transition:
+    background-color 0.2s ease,
+    border-color 0.2s ease;
+}
+
+.dboot-composer[data-solid="true"] {
+  background: var(--bg);
+  border-color: color-mix(in srgb, var(--ink) 12%, transparent);
+}
+
+.dboot-placeholder {
+  flex: 1;
+  min-width: 0;
+  padding-left: 22px;
+  font-size: 14px;
+  line-height: 22px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: color-mix(in srgb, var(--ink-mute) 60%, transparent);
+}
+
+.dboot-send {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  color: color-mix(in srgb, var(--ink-mute) 70%, transparent);
+}
+
+.dboot-send .dboot-glyph {
+  display: block;
+  width: 16px;
+  height: 16px;
+}
+
+.dboot-grid {
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  display: block;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+  pointer-events: none;
+}
+
+.dboot-grid[data-hidden="true"] {
+  display: none;
+}
+
+.dboot-grid rect {
+  fill: var(--ink);
+}
+
+.dboot-grid rect.fhead {
+  fill: var(--dboot-head);
+}
+
+.dboot-line {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  border: 1px solid var(--ink);
+  opacity: 0;
+  pointer-events: none;
+}
+
+.dboot-line[data-visible="true"] {
+  opacity: 1;
+  transition: opacity 0.25s ease;
+}
+
+.dboot-line[data-solid="true"] {
+  opacity: 0;
+  transition: opacity 0.3s ease;
+}
+
+.dboot-plus {
+  position: absolute;
+  left: 8px;
+  top: 50%;
+  z-index: 2;
+  width: 14px;
+  height: 14px;
+  transform: translateY(-50%);
+  color: var(--ink-mute);
+  opacity: 0;
+}
+
+.dboot-plus[data-pop="true"] {
+  opacity: 1;
+  animation: dboot-pop 0.25s ease;
+}
+
+.dboot-plus .dboot-glyph {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.dboot-caret {
+  display: inline-block;
+  width: 0.5em;
+  height: 1.3em;
+  margin-left: 0.2em;
+  vertical-align: -0.25em;
+  background: var(--dboot-caret, var(--accent, var(--ink)));
+  animation: dboot-blink 1.06s steps(1) infinite;
+}
+
+@keyframes dboot-blink {
+  0%,
+  49% {
+    opacity: 1;
+  }
+  50%,
+  100% {
+    opacity: 0;
+  }
+}
+
+@keyframes dboot-pop {
+  from {
+    opacity: 0;
+    transform: translateY(-50%) scale(0.3);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(-50%) scale(1);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dboot-caret,
+  .dboot-plus {
+    animation: none;
+  }
+  .dboot-chips,
+  .dboot-composer,
+  .dboot-line {
+    transition: none;
+  }
+}
+
+/* Shared-loader metrics matched to the settled embed (parity with the DataTap
+   port): suggestion rows carry the embed's py-0.5 padding, 0.5 row gap and
+   19.024px line box; the mock composer sits flush above the footer rows; and
+   when a tenant has attachments off, the attach glyph and its placeholder
+   gutter disappear so the handoff does not shift. */
+.dboot-dock {
+  gap: 0;
+  padding: 0;
+}
+
+.dboot-welcome {
+  margin-bottom: 12px;
+}
+
+.dboot-chips {
+  gap: 1.6px;
+  margin-bottom: 16px;
+}
+
+.dboot-chip {
+  padding: 3.2px 0;
+}
+
+.dboot-chip-text {
+  line-height: 19.024px;
+}
+
+.dboot-composer-wrap {
+  height: 38px;
+}
+
+.dboot-placeholder {
+  padding-left: var(--composer-gutter, 22px);
+}
+
+.dboot[data-attach="0"] .dboot-plus {
+  display: none;
+}
+
+.dboot[data-attach="0"] .dboot-placeholder {
+  padding-left: 6px;
+}

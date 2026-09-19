@@ -1,0 +1,126 @@
+/* Controls page — dropdown, search, navigation buttons, form fields. */
+
+/* ── Dropdown ─────────────────────────────────────────────────────────── */
+/* .dd-* deleted (wave 1) — the specimen is the stock DropdownMenu from
+   @digithings/ui/ui with an inline filter Input; dress and keyboard
+   behavior come from the kit. No CSS here. */
+
+/* ── Search ───────────────────────────────────────────────────────────── */
+/* .ctl-search / .sb-input promoted to @digithings/ui's <SearchBar/>
+   (#1548) — dress now lives in styles/controls-core.css. Only the `/`
+   keycap hint stays: it is consumer markup passed through the bar's hint
+   slot, and its unlayered .kbd override depends on THIS sheet loading
+   after globals.css. */
+
+/* the `/` keycap hint: kept as CSS, not a utility. `.kbd` (globals.css) is
+   unlayered and sets color: ink-soft; unlayered rules beat Tailwind's layered
+   utilities regardless of specificity, so only this later unlayered rule can
+   push the hint back to ink-mute. */
+.sb-hint {
+  color: var(--ink-mute);
+}
+
+/* ── Navigation buttons ───────────────────────────────────────────────── */
+/* nb-* promoted to @digithings/ui's <SegmentedControl/> / <Pager/> /
+   <IconButton/> (#1548) — dress now lives in styles/controls-core.css,
+   selection keyed off aria-pressed / aria-current instead of .on. */
+
+/* ── Form fields ──────────────────────────────────────────────────────── */
+/* .ff-* deleted (wave 1) — inputs, textarea and labels are the stock
+   Input/Textarea/Label from @digithings/ui/ui; checkbox/radio/switch are the
+   controls-layer selection primitives. Focus, error and disabled states are
+   the primitives' own (aria-invalid / disabled); the label micro-caps is
+   call-site type. No CSS here. */
+
+/* ── tooltip ──────────────────────────────────────────────────────────── */
+/* .tt-* deleted (wave 1) — the specimen is the stock Tooltip family from
+   @digithings/ui/ui: placement via `side`, the kit arrow, and the stock
+   data-open/data-closed animation. No CSS here. */
+
+/* ── accordion ────────────────────────────────────────────────────────── */
+/* .acc-* deleted (wave 1) — the specimen composes the stock Collapsible from
+   @digithings/ui/ui; the panel animates from the primitive's measured
+   --collapsible-panel-height and the chevron turns off the root data-open
+   state. No CSS here. */
+
+/* ── skeleton loading states ──────────────────────────────────────────── */
+/* .sk-toggle* deleted (wave 1) — the replay toggle is the controls-layer
+   <Switch/>. The shimmer primitives were already promoted to
+   @digithings/ui's <Skeleton/> (#1548) — dress lives in
+   styles/controls-core.css. No CSS here. */
+
+/* ── range slider ───────────────────────────────────────────────────────── */
+/* Grid, head, label, value, and ticks migrated to utilities in
+   slider-reference.tsx. The input restyling below is a mechanic (native range
+   appearance reset + computed gradient fill from the tsx) and stays as CSS. */
+
+.sl-input {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 100%;
+  height: 4px;
+  border-radius: 0;
+  cursor: pointer;
+  background: color-mix(in srgb, var(--ink) 14%, transparent);
+}
+
+.sl-input:focus-visible {
+  outline: none;
+}
+
+/* webkit thumb */
+.sl-input::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 14px;
+  height: 14px;
+  margin-top: -5px;
+  border-radius: 0;
+  background: var(--accent);
+  border: 2px solid var(--surface);
+  box-shadow: 0 0 0 1px var(--hair);
+  cursor: pointer;
+  transition: box-shadow 0.15s var(--ease);
+}
+
+.sl-input:focus-visible::-webkit-slider-thumb {
+  box-shadow: 0 0 0 1px var(--hair), 0 0 0 3px color-mix(in srgb, var(--accent) 28%, transparent);
+}
+
+/* firefox thumb + track */
+.sl-input::-moz-range-thumb {
+  width: 14px;
+  height: 14px;
+  border-radius: 0;
+  background: var(--accent);
+  border: 2px solid var(--surface);
+  box-shadow: 0 0 0 1px var(--hair);
+  cursor: pointer;
+}
+
+.sl-input:focus-visible::-moz-range-thumb {
+  box-shadow: 0 0 0 1px var(--hair), 0 0 0 3px color-mix(in srgb, var(--accent) 28%, transparent);
+}
+
+.sl--disabled {
+  opacity: 0.5;
+}
+
+.sl--disabled .sl-input {
+  cursor: not-allowed;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sl-input::-webkit-slider-thumb {
+    transition: none;
+  }
+}
+
+/* ── tags / chips input ─────────────────────────────────────────────────── */
+/* tg-* promoted to @digithings/ui's <TagsInput/> (#1548) — dress now lives
+   in styles/controls-core.css (the specimen's baked-in margin-top moved to
+   the thin consumer's mt-[1.2rem]). No CSS here. */
+
+/* empty / error states — promoted to @digithings/ui's <EmptyState/> (#1548);
+   the specimen's token utilities were translated value-for-value into
+   styles/controls-core.css (ctl-empty*). No CSS here. */

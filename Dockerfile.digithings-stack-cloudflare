@@ -72,7 +72,7 @@ COPY scripts/merge_litellm_cheaperinference.py /app/scripts/merge_litellm_cheape
 # Read-only Zammad MCP for the OCC help chat (supervisord [program:zammad-mcp];
 # deps `mcp` + `httpx` already present via digigraph[mcp]).
 COPY scripts/zammad_mcp ./scripts/zammad_mcp
-COPY cloudflare/digithings-stack-cloudflare/container/supervisor/supervisord.conf \
+COPY apps/digithings-stack-cloudflare/container/supervisor/supervisord.conf \
      /etc/supervisor/conf.d/digithings.conf
 # Rebuild marker: wrangler tags the container image from this Dockerfile, so a
 # context-only change (e.g. entrypoint.sh) must bump this comment to rebuild.
@@ -95,11 +95,11 @@ COPY cloudflare/digithings-stack-cloudflare/container/supervisor/supervisord.con
 # Rebuild marker v3 (2026-09-15): ships the FastMCP 1.9.3-compatible zammad server
 # (no `from __future__ import annotations`); container instances keep their start-time env,
 # so force a fresh image (and with it a fresh instance) when secrets/env must land.
-COPY cloudflare/digithings-stack-cloudflare/container/entrypoint.sh /entrypoint.sh
-COPY cloudflare/digithings-stack-cloudflare/container/seed_chroma.sh /seed_chroma.sh
-COPY cloudflare/digithings-stack-cloudflare/container/start_digikey.sh /start_digikey.sh
-COPY cloudflare/digithings-stack-cloudflare/container/start_digisearch.sh /start_digisearch.sh
-COPY cloudflare/digithings-stack-cloudflare/container/seed /seed
+COPY apps/digithings-stack-cloudflare/container/entrypoint.sh /entrypoint.sh
+COPY apps/digithings-stack-cloudflare/container/seed_chroma.sh /seed_chroma.sh
+COPY apps/digithings-stack-cloudflare/container/start_digikey.sh /start_digikey.sh
+COPY apps/digithings-stack-cloudflare/container/start_digisearch.sh /start_digisearch.sh
+COPY apps/digithings-stack-cloudflare/container/seed /seed
 RUN chmod +x /entrypoint.sh /seed_chroma.sh /start_digikey.sh /start_digisearch.sh \
     && mkdir -p /data/chroma /data/vault /data/digikey /var/log/supervisor
 
