@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useEffect, useRef, useState, useSyncExternalStore } from "react";
+import { useState, useSyncExternalStore } from "react";
 import { ThemeToggle } from "@digithings/ui";
 import {
   Button,
@@ -35,12 +35,17 @@ import { LAB_NAV, PRIMARY_NAV } from "@/lib/nav";
 
 /** Shared top bar for the design-reference app. Each page holds one family
  *  of design elements; the bar is the only chrome shared across them.
- *  Below the fit threshold the links — and the livery/type-suite pickers —
- *  collapse behind a hamburger that opens the kit Sheet (`@digithings/ui/ui`,
+ *
+ *  The row's composition is breakpoint-driven (see `.site-nav` in globals.css:
+ *  1080px and 1600px), not JS fit-measured — the old ResizeObserver collapsed
+ *  the moment the row stopped fitting, which hid the family map on ordinary
+ *  desktop widths (1440/1280) until ~1600px. At ≥1080px the primary family
+ *  map rides inline; the reference-only lab group and both choosers stay in
+ *  the kit Sheet behind the hamburger. At ≥1600px the lab group and pickers
+ *  join the row and the hamburger retires. Below 1080px the hamburger is the
+ *  only way in, opening the full menu in the kit Sheet (`@digithings/ui/ui`,
  *  Base UI dialog: focus trap, document scroll lock, Escape/backdrop close,
- *  focus returned to the trigger). The always-visible row never has more than
- *  the brand mark, theme toggle, and hamburger to fit, so the hamburger itself
- *  is never a collapse/clip candidate.
+ *  focus returned to the trigger).
  *
  *  Wave 1 (T6): the hand-built `.site-nav-sheet*`/`.site-nav-scrim*` overlays
  *  and the four native `<select>` pickers are gone. Wave 4: the pickers moved
@@ -61,46 +66,6 @@ export function SiteNav() {
 
   const livery = useSyncExternalStore(subscribeLivery, getLiverySnapshot, getLiveryServerSnapshot);
   const typeTheme = useSyncExternalStore(subscribeType, getTypeSnapshot, getTypeServerSnapshot);
-
-  // Collapse to the hamburger whenever the inline links (plus the livery/type
-  // pickers — both collapse together, see .site-nav.is-collapsed in
-  // globals.css) stop fitting — at any width, not a hardcoded breakpoint (the
-  // item count grows as pages are added). We compare the bar's content width
-  // (scrollWidth, which exceeds clientWidth once the nowrap row overflows)
-  // against the space available, and freeze the "required" width while
-  // collapsed so re-expanding uses the real requirement (+8px hysteresis)
-  // instead of the shrunken collapsed row.
-  const navRef = useRef<HTMLElement | null>(null);
-  const [collapsed, setCollapsed] = useState(false);
-  const collapsedRef = useRef(false);
-  const requiredRef = useRef(0);
-
-  useEffect(() => {
-    const nav = navRef.current;
-    if (!nav) return;
-    const ro = new ResizeObserver(() => {
-      if (!collapsedRef.current) requiredRef.current = nav.scrollWidth;
-      const threshold = collapsedRef.current ? requiredRef.current + 8 : requiredRef.current;
-      const next = nav.clientWidth < threshold;
-      if (next !== collapsedRef.current) {
-        collapsedRef.current = next;
-        setCollapsed(next);
-      }
-    });
-    ro.observe(nav);
-    return () => ro.disconnect();
-  }, []);
-
-  // Close the sheet the moment the row stops being collapsed (e.g. a device
-  // rotation or window resize widens the bar past the fit threshold while
-  // the sheet is open) — same adjust-state-during-render pattern as the
-  // pathname handling above. Without this, the sheet's own livery/type-suite
-  // pickers stay mounted and one live setting would have two controls.
-  const [lastCollapsed, setLastCollapsed] = useState(collapsed);
-  if (lastCollapsed !== collapsed) {
-    setLastCollapsed(collapsed);
-    if (!collapsed && open) setOpen(false);
-  }
 
   // Boundary-checked, not a bare startsWith: /data would otherwise also read
   // "current" on a hypothetical /data-v2 route (or any other sibling sharing
@@ -149,11 +114,7 @@ export function SiteNav() {
   );
 
   return (
-    <nav
-      ref={navRef}
-      className={`site-nav${collapsed ? " is-collapsed" : ""}`}
-      aria-label="Design reference sections"
-    >
+    <nav className="site-nav" aria-label="Design reference sections">
       <Link href="/" className="site-nav-mark">
         design<em>ref</em>
       </Link>
@@ -242,11 +203,10 @@ export function SiteNav() {
               ))}
             </ul>
 
-            {/* Livery + type suite pickers collapse in here alongside the
-                links (see .site-nav.is-collapsed in globals.css) — they
-                are hidden from the always-visible row below the same
-                breakpoint, so the row only ever needs to fit the brand
-                mark, theme toggle, and the hamburger. */}
+            {/* Livery + type suite pickers live in here alongside the links
+                everywhere below 1600px (see `.site-nav-livery`/`-suite` in
+                globals.css) — below the 1600px row they would crowd the
+                family map, so the hamburger is their only door. */}
             <div className="mt-[1.4rem] flex items-center gap-[0.75rem] border-t border-hair pt-[1.1rem]">
               {liveryPicker("Page livery")}
               {typePicker("Type suite")}

@@ -47,7 +47,7 @@ function FamilyCard({ item, index }: { item: NavItem; index: number }) {
 
 export function ContentsOverview() {
   return (
-    <section className="section-block contents-overview">
+    <section className="section-block contents-overview" id="contents">
       <p className="kicker">{"// contents"}</p>
       <h2 className="title">{PRIMARY_NAV.length} families, one system.</h2>
       <p className="section-copy">

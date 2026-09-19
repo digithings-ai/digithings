@@ -1,6 +1,7 @@
 import "./chatbot-shell.css";
 import type { ReactNode } from "react";
 import type { Metadata } from "next";
+import Link from "next/link";
 import { GeistSans } from "geist/font/sans";
 import { GeistMono } from "geist/font/mono";
 import {
@@ -28,6 +29,12 @@ export default function ChatbotRootLayout({ children }: { children: ReactNode })
       <body>
         <header className="chatbot-bar">
           <span className="chatbot-bar-mark">digichat</span>
+          {/* /chatbot is an isolated root (its own shell + @source graph), so
+              it renders no SiteNav — this header link is its way back to the
+              gallery index and the rest of the canon. */}
+          <Link href="/" className="chatbot-bar-home">
+            ← design reference
+          </Link>
           <ChatbotThemeToggle />
         </header>
         {children}

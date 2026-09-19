@@ -117,9 +117,8 @@ html {
   border-bottom: 1px solid var(--hair);
   background: color-mix(in srgb, var(--bg) 86%, transparent);
   backdrop-filter: blur(10px);
-  /* stay a single row — JS collapses to the hamburger the moment the inline
-     links would overflow (see SiteNav). overflow-x:clip contains any transient
-     pre-hydration overflow so the bar never grows to a second line; overflow-y
+  /* stay a single row across every breakpoint. overflow-x:clip contains any
+     transient overflow so the bar never grows to a second line; overflow-y
      stays visible so the in-place controls-layer Select popups (livery / type
      suite) can extend below the bar instead of being clipped by it. */
   flex-wrap: nowrap;
@@ -142,9 +141,9 @@ html {
 
 .site-nav-links {
   list-style: none;
-  display: flex;
+  display: none;
   flex-wrap: nowrap;
-  gap: 1rem;
+  gap: 0.85rem;
   margin: 0;
   padding: 0;
 }
@@ -201,16 +200,18 @@ html {
 }
 
 /* Livery (color) + type (font) selectors — persistent, app-wide choosers in
-   the bar. The livery starts the right-aligned control group. */
+   the bar. Hidden until the >=1600px row (they crowd the family map below
+   that); the sheet carries them while hidden. At >=1600px the livery starts
+   the right-aligned control group. */
 
 .site-nav-livery {
   margin-left: auto;
-  display: inline-flex;
+  display: none;
   align-items: center;
 }
 
 .site-nav-suite {
-  display: inline-flex;
+  display: none;
   align-items: center;
 }
 
@@ -224,6 +225,9 @@ html {
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  /* the theme toggle starts the trailing group while the pickers are hidden
+     (<1600px); at >=1600px `.site-nav-livery` takes the auto-margin back. */
+  margin-left: auto;
   padding: 0.5rem;
   border: none;
   background: transparent;
@@ -243,7 +247,7 @@ html {
 }
 
 .site-nav-burger {
-  display: none;
+  display: inline-flex;
   flex-direction: column;
   justify-content: center;
   align-items: center;
@@ -276,40 +280,75 @@ html {
   border-radius: 0;
 }
 
+/* Row composition is breakpoint-driven (SiteNav):
+     <1080px          hamburger only — the full menu is the kit Sheet.
+     1080–1599px      primary family map inline; the reference-only lab group
+                      and both choosers stay in the sheet behind the hamburger.
+     >=1600px         lab group + livery/type choosers join the row; the
+                      hamburger retires (nothing is hidden any more).
+   These blocks sit after every base rule so they win on source order. The
+   1080px row needs the brand mark, the 13 primary links, the theme toggle and
+   the hamburger: measured ~1047px, so it clears with ~33px of air. (At 1024px
+   the same row overflowed by ~23px — hence 1080, not 1024, as the low end of
+   the "~1024–1280" range: readable, not crowded.) */
+@media (min-width: 1080px) {
+  .site-nav {
+    gap: 1.2rem;
+  }
+
+  .site-nav-links {
+    display: flex;
+    gap: 0.85rem;
+  }
+
+  /* the lab group shares `.site-nav-links`; keep it out of the mid row so it
+     does not crowd the primary map — it rejoins at >=1600px below. */
+  .site-nav-links--lab {
+    display: none;
+  }
+}
+
+@media (min-width: 1600px) {
+  .site-nav {
+    gap: 1.6rem;
+  }
+
+  .site-nav-links {
+    gap: 1rem;
+  }
+
+  .site-nav-links--lab {
+    display: flex;
+  }
+
+  .site-nav-livery,
+  .site-nav-suite {
+    display: inline-flex;
+  }
+
+  .site-nav-livery {
+    margin-left: auto;
+  }
+
+  .site-nav-theme {
+    margin-left: 0;
+  }
+
+  .site-nav-burger {
+    display: none;
+  }
+}
+
 /* Full-viewport scrim + sheet dress removed in wave 1 (T6): the mobile menu
    is the stock kit `Sheet` (`@digithings/ui/ui`) — Base UI dialog provides
    the backdrop, focus trap, and document scroll lock. */
 
-/* Collapsed state — driven by JS fit-detection (SiteNav), not a fixed
-   breakpoint: the inline links give way to the hamburger the instant they
-   would no longer fit on one row, whatever the viewport width. The livery
-   and type-suite pickers collapse in lockstep (they move into the sheet)
-   so the always-visible row only ever has to fit the brand mark, theme
-   toggle, and hamburger: that trio must never overflow, since the
-   hamburger is the only way back into the sheet. */
-.site-nav.is-collapsed .site-nav-links {
-  display: none;
-}
-
-.site-nav.is-collapsed .site-nav-livery,
-.site-nav.is-collapsed .site-nav-suite {
-  display: none;
-}
-
-.site-nav.is-collapsed .site-nav-burger {
-  display: inline-flex;
-}
-
-/* .site-nav-livery normally starts the right-aligned trailing group via its
-   own margin-left:auto (see above) — but that rule hides livery outright
-   when collapsed, so nothing is left to absorb the row's leading space and
-   the theme toggle + hamburger fall back to sitting left-aligned right next
-   to the brand mark. Re-anchor the auto-margin on the theme toggle, the
-   first element still visible in the trailing group once collapsed, so the
-   pair stays pinned to the right edge exactly as it does at full width. */
-.site-nav.is-collapsed .site-nav-theme {
-  margin-left: auto;
-}
+/* The old `is-collapsed` JS state is gone (SiteNav): the row's composition is
+   now the 1024px/1600px breakpoint pair defined next to `.site-nav` above.
+   Below 1024px `.site-nav-links` stays `display:none` (its base rule) and the
+   hamburger — the only way back into the sheet — is always visible, so the
+   bar can never clip its own escape hatch. At >=1600px the hamburger retires
+   because every surface is already on the row. */
 
 /* Page scaffold */
 

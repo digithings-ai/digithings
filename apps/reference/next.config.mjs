@@ -21,6 +21,11 @@ async function redirects() {
 const nextConfig = {
   output: "export",
   images: { unoptimized: true },
+  // Two root layouts ((gallery) + the isolated (chatbot) shell) mean the
+  // unmatched-URL 404 must be a `global-not-found` tree — `app/not-found.tsx`
+  // would need a single top-level layout to wrap it. Next emits 404.html from
+  // this for the static export.
+  // experimental-bisect-disabled
   trailingSlash: true,
   transpilePackages: ["@digithings/ui", "@digithings/design"],
   allowedDevOrigins: ["127.0.0.1", "localhost"],
