@@ -97,7 +97,10 @@
     url.searchParams.set("host", host);
     url.searchParams.set("layout", "embed");
     if (token) url.searchParams.set("token", token);
-    if (theme) url.searchParams.set("theme", theme);
+    // The popup chrome is dark; without an explicit host theme the embed must
+    // match it (a light embed on the dark panel showed a white canvas flash
+    // and a mismatched footer).
+    url.searchParams.set("theme", theme || "dark");
     if (accent) url.searchParams.set("accent", accent);
     return url.toString();
   }

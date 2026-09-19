@@ -26,6 +26,7 @@
  */
 
 import { resolveEmbedHostParamOrReferer } from "@/lib/embed-client-config";
+import { isEmbedHexColor } from "@/lib/embed-accent-style";
 import {
   embedOriginHostOf,
   resolveEmbedClientConfigForPaint,
@@ -84,14 +85,77 @@ export default async function EmbedPage({
   );
   const urlTheme = parseEmbedThemeParam(first(params.theme));
   const paintTheme = urlTheme ?? initialTenantCfg.theme;
-  const seededCfg =
+  // The host's URL overrides (welcome / placeholder / suggestions / accent)
+  // seed the first paint too: the client hook applies them post-mount, which
+  // let the generic default copy ("Ask a question") and other unconfigured
+  // chrome flash before the configured values landed. Never show a
+  // placeholder that is not configured.
+  const uiWelcome = first(params.welcome);
+  const uiPlaceholder = first(params.placeholder);
+  const rawSuggestions = first(params.suggestions);
+  const uiSuggestions = rawSuggestions
+    ? (() => {
+        try {
+          const parsed = JSON.parse(rawSuggestions) as unknown;
+          if (Array.isArray(parsed)) {
+            return parsed.filter(
+              (s): s is string => typeof s === "string" && s.trim().length > 0,
+            );
+          }
+        } catch {
+          /* fall through to the pipe-separated form */
+        }
+        return rawSuggestions
+          .split("|")
+          .map((s) => s.trim())
+          .filter(Boolean);
+      })()
+    : undefined;
+  const uiAccent = isEmbedHexColor(first(params.accent))
+    ? first(params.accent)
+    : undefined;
+  const uiAccentForeground = isEmbedHexColor(first(params.accentForeground))
+    ? first(params.accentForeground)
+    : undefined;
+  const themedCfg =
     urlTheme && urlTheme !== initialTenantCfg.theme
       ? { ...initialTenantCfg, theme: urlTheme }
       : initialTenantCfg;
+  const seededCfg = {
+    ...themedCfg,
+    ...(uiWelcome ? { welcome: uiWelcome } : {}),
+    ...(uiPlaceholder ? { placeholder: uiPlaceholder } : {}),
+    ...(uiSuggestions && uiSuggestions.length
+      ? { suggestions: uiSuggestions }
+      : {}),
+    ...(uiAccent && uiAccentForeground
+      ? { accent: { color: uiAccent, foreground: uiAccentForeground } }
+      : {}),
+  };
 
   return (
     <>
+      {/* The app owns its canvas: a configured embed paints the theme
+          background from --background; the bare baseline view (no host/token)
+          stays fully transparent so it is a clean baseline for future work.
+          The host iframe is always transparent; the scheme keeps widgets
+          themed. */}
+      <style
+        dangerouslySetInnerHTML={{
+          __html: `html{background:transparent}${
+            first(params.host) || first(params.token)
+              ? "body{background:var(--background)}"
+              : "body{background:transparent!important}body *{background:transparent!important}"
+          }:root[data-theme="dark"] body{color-scheme:dark}:root[data-theme="light"] body{color-scheme:light}`,
+        }}
+      />
       <script dangerouslySetInnerHTML={{ __html: themePinScript(paintTheme) }} />
+      <script
+        dangerouslySetInnerHTML={{
+          __html:
+            "try{document.documentElement.dataset.embedWide=/[?&]wide=1(?:&|$)/.test(window.location.search)?'1':'0';}catch(e){}",
+        }}
+      />
       <EmbedClient initialTenantCfg={seededCfg} initialBoot={first(params.boot) ?? null} />
     </>
   );

@@ -12,7 +12,7 @@
  * choreography that waits for it.
  */
 
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
   AuiConfig,
   AssistantRuntimeProvider,
@@ -37,6 +37,8 @@ import {
 } from "@digithings/web/chat/boot-lab";
 import { DigichatBootLoader } from "@digithings/web/chat/boot-loader";
 import {
+  DIGI_CHAT_READY_EVENT,
+  hasDigichatReady,
   resolveHandoff,
   signalDigichatBootStep,
   signalDigichatRevealed,
@@ -222,9 +224,20 @@ export function ProductStockShell({
   const toolCallsMode = effectiveToolCallsMode(view);
 
   // Boot animation lifecycle: sweep, park after BOOT_MIN_MS, fade, unmount.
-  const [bootReady, setBootReady] = useState(false);
-  const [bootDone, setBootDone] = useState(false);
-  const [bootHidden, setBootHidden] = useState(false);
+  // A document that already settled (soft navigation, warm container) starts
+  // skipped: replaying the boot would flash the loader over a live chat.
+  const bootAlreadyReady =
+    typeof document !== "undefined" && hasDigichatReady();
+  const [bootReady, setBootReady] = useState(bootAlreadyReady);
+  const [bootDone, setBootDone] = useState(bootAlreadyReady);
+  const [bootHidden, setBootHidden] = useState(bootAlreadyReady);
+  // Set when the boot is skipped (already-settled document or an instant
+  // ready) so the handoff choreography stays off too - nothing should replay.
+  const bootSkippedRef = useRef(bootAlreadyReady);
+  // The boot UI renders client-side only, after the skip window: an instant
+  // ready means there is nothing to load, and a warm refresh must not flash
+  // the chain before the skip lands. Lab knobs show it immediately.
+  const [bootVisible, setBootVisible] = useState(false);
   // The tool-chain boot is the baseline now; `?boot=` still overrides it.
   const [bootVariant, setBootVariant] = useState<BootLabVariant | null>(() =>
     resolveBootLabVariant(bootLabVariant ?? null) ?? "tooltask",
@@ -245,6 +258,43 @@ export function ProductStockShell({
     const timer = setTimeout(() => setBootReady(true), BOOT_MIN_MS);
     return () => clearTimeout(timer);
   }, []);
+
+  // Ready that lands almost immediately (warm container) means the chat was
+  // not really loading: skip the choreography instead of replaying it.
+  // Lab knobs (?boot=/?bootdelay=/?bootfail=/?handoff=/?hero=) keep the boot
+  // visible for demos even on warm loads.
+  useEffect(() => {
+    if (bootDone) return;
+    if (/[?&](boot|bootdelay|bootfail|handoff|hero)=/.test(window.location.search)) {
+      return;
+    }
+    if (hasDigichatReady()) {
+      bootSkippedRef.current = true;
+      setBootDone(true);
+      setBootHidden(true);
+      return;
+    }
+    const startedAt = performance.now();
+    const onReady = () => {
+      if (performance.now() - startedAt <= 600) {
+        bootSkippedRef.current = true;
+        setBootDone(true);
+        setBootHidden(true);
+      }
+    };
+    window.addEventListener(DIGI_CHAT_READY_EVENT, onReady, { once: true });
+    return () => window.removeEventListener(DIGI_CHAT_READY_EVENT, onReady);
+  }, [bootDone]);
+
+  useEffect(() => {
+    if (bootHidden) return;
+    if (/[?&](boot|bootdelay|bootfail|handoff|hero)=/.test(window.location.search)) {
+      setBootVisible(true);
+      return;
+    }
+    const timer = setTimeout(() => setBootVisible(true), 600);
+    return () => clearTimeout(timer);
+  }, [bootHidden]);
 
   useEffect(() => {
     if (!bootDone) return;
@@ -277,6 +327,8 @@ export function ProductStockShell({
   useEffect(() => {
     if (!bootDone) return;
     signalDigichatRevealed();
+    // The bottom-up entrance plays on every load - skipped boots included:
+    // the hero should always build up from the composer, never cut in.
     setBootRevealed(true);
   }, [bootDone]);
 
@@ -414,6 +466,7 @@ export function ProductStockShell({
               data-theme={cfg.chrome.theme}
               data-boot-reveal={bootRevealed && handoff?.reveal ? "true" : "false"}
               data-boot-drift={bootRevealed && handoff?.drift ? "true" : "false"}
+              data-boot-active={bootVisible && !bootHidden ? "true" : "false"}
               className={cn(
                 "relative flex h-full min-h-0 flex-1",
                 sideSlot && !ownsPage ? "flex-row" : "flex-col",
@@ -422,7 +475,7 @@ export function ProductStockShell({
               )}
               style={accentStyle}
             >
-              {bootHidden ? null : (
+              {!bootVisible || bootHidden ? null : (
                 <div
                   className="dboot-overlay bg-background"
                   data-done={bootDone ? "true" : "false"}
