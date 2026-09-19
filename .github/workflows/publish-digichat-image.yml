@@ -9,6 +9,12 @@
 #     The tag's version is checked against apps/digichat/package.json so a
 #     hand-made or mismatched tag cannot publish a wrong image.
 #
+#     NOTE the tag push itself cannot start this workflow: release-please runs
+#     as the built-in GITHUB_TOKEN, and events raised by that token do not create
+#     runs (#4348). release-please-digichat.yml therefore *dispatches* this
+#     workflow after it cuts the tag, and the `tags:` trigger below only serves a
+#     tag pushed by a human with a non-GITHUB_TOKEN credential.
+#
 #  2. On a push to main touching apps/digichat/** (a version can reach main
 #     without its tag push being rerun).
 #
