@@ -74,7 +74,7 @@ function FieldTable({ title, fields }: { title: string; fields: DocsField[] }) {
               <td className="whitespace-nowrap">
                 <InlineCode>{f.name}</InlineCode>
                 {f.required && (
-                  <span className="ml-[0.15rem] text-down" title="required">
+                  <span className="ms-[0.15rem] text-down" title="required">
                     *
                   </span>
                 )}

@@ -17,7 +17,7 @@ const WEEKDAYS = ["Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"] as const;
 
 function ChevronLeftIcon() {
   return (
-    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden>
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden className="ctl-dir-flip">
       <path
         d="M15 18l-6-6 6-6"
         stroke="currentColor"
@@ -31,7 +31,7 @@ function ChevronLeftIcon() {
 
 function ChevronRightIcon() {
   return (
-    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden>
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden className="ctl-dir-flip">
       <path
         d="M9 18l6-6-6-6"
         stroke="currentColor"

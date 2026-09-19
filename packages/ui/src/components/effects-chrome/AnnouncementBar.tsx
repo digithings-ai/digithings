@@ -73,7 +73,7 @@ export function AnnouncementBar({
         <Button
           type="button"
           variant="ghost"
-          className="mr-[0.3rem] h-10 w-10 flex-shrink-0 cursor-pointer border-0 bg-transparent text-[0.8rem] font-normal text-ink-mute hover:bg-transparent hover:text-ink"
+          className="me-[0.3rem] h-10 w-10 flex-shrink-0 cursor-pointer border-0 bg-transparent text-[0.8rem] font-normal text-ink-mute hover:bg-transparent hover:text-ink"
           aria-label="Dismiss announcement"
           onClick={() => {
             setSelfDismissed(true);

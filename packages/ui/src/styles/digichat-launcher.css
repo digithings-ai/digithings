@@ -14,7 +14,7 @@
   --digichat-launcher-right: 1.25rem;
   --digichat-launcher-bottom: 1.25rem;
   position: fixed;
-  right: var(--digichat-launcher-right);
+  inset-inline-end: var(--digichat-launcher-right);
   bottom: var(--digichat-launcher-bottom);
   z-index: 70;
   display: flex;
@@ -167,7 +167,7 @@
   justify-content: space-between;
   gap: 0.5rem;
   flex: none;
-  padding-left: 0.75rem;
+  padding-inline-start: 0.75rem;
   border-bottom: 1px solid var(--hair);
   color: var(--ink-mute);
   font: 400 0.68rem/1 var(--font-mono);
@@ -190,7 +190,7 @@
   flex: none;
   padding: 0;
   border: 0;
-  border-left: 1px solid var(--hair);
+  border-inline-start: 1px solid var(--hair);
   border-radius: 0;
   background: transparent;
   color: var(--ink-mute);
@@ -214,6 +214,7 @@
   content: attr(data-tooltip);
   position: absolute;
   top: calc(100% + 6px);
+  /* physical on purpose: centering pairs left:50% with translateX(-50%) */
   left: 50%;
   z-index: 120;
   padding: 0.2rem 0.45rem;

@@ -336,6 +336,61 @@ and run `make agents-init` (CI enforces idempotence).
 - **New token** → lives in `@digithings/design/tokens.css` (the shared package);
   reference it, never hardcode the literal.
 
+## RTL & logical properties (#4306)
+
+The kit is **direction-agnostic by construction**: every part is authored with
+logical CSS so LTR rendering is byte-identical and `dir="rtl"` mirrors the whole
+tree — no per-page work. The preset declares this honestly: `rtl: true` in
+`components.json` (kit, reference, digichat).
+
+**Setting direction.** `ThemeProvider` takes `dir?: "ltr" | "rtl"` (default
+`"ltr"`) and applies it to `<html>`; that is the app-level switch —
+`<ThemeProvider dir="rtl">` mirrors the entire document, chrome included. For a
+region, `DirectionProvider` renders a `<div dir=…>` (and `useDirection()` reads
+the nearest one); `DirectionProvider root` applies to `<html>` instead and
+resets to `ltr` on unmount. Both are exported from the package barrel. RTL is
+never the default and there is no language switcher.
+
+**Policy for new parts.** Never write a physical directional property. Convert
+at authoring time:
+
+| Physical | Logical |
+| --- | --- |
+| `margin-left/right` | `margin-inline-start/end` (`ml-/mr-` → `ms-/me-`) |
+| `padding-left/right` | `padding-inline-start/end` (`pl-/pr-` → `ps-/pe-`) |
+| `left` / `right` (positioning) | `inset-inline-start/end` (`left-/right-` → `start-/end-`) |
+| `text-align: left/right` | `text-align: start/end` (`text-left/right` → `text-start/end`) |
+| `border-left/right` | `border-inline-start/end` (`border-l-/r-` → `border-s-/e-`) |
+| `border-top/bottom-left/right-radius` | `border-start-start`, `border-start-end`, `border-end-start`, `border-end-end` (`rounded-tl/tr/bl/br-` → `rounded-ss/se/es/ee-`) |
+
+**Directional art.** `translate`/`transform` and `transform-origin` have no
+logical form, so a few pieces carry explicit direction awareness instead:
+
+- **`TabStrip`** — the sliding ink anchors on `inset-inline-start` and measures
+  the active tab from that same edge via `getBoundingClientRect`, negating x
+  under RTL; arrow-key nav swaps ArrowLeft/ArrowRight. This is the one
+  non-mechanical piece in the sweep.
+- Chevrons/arrows that encode a direction are mirrored: the dropdown
+  sub-trigger (`rtl:-scale-x-100`), `Pagination` prev/next and `DatePager` month
+  steps (`.ctl-dir-flip`).
+- Switch / billing-toggle knobs anchor inline-start and negate their checked
+  `translateX` under RTL.
+
+**Deliberately physical** (mirroring would be wrong; each carries an inline
+comment): `ui/sheet.tsx` and `.ctl-sheet[data-side=…]` geometry — `side` names a
+physical edge in the API; `.nav-shell-group-caret` and the
+`accordion-reference` caret (rotated corners that build a vertical caret);
+`.ctl-tip-arrow[data-side=left|right]` (physical placements, split from the
+logical `inline-start/end` rules); markdown-table `[[align=right]]:text-right`
+(HTML `align` is physical); toast-stack `inset` shorthand.
+
+**Proof route.** `apps/reference/app/(gallery)/rtl/page.tsx` renders the canon
+behind an LTR/RTL toggle (`DirectionProvider root`), covering chrome, every
+button variant × size, fields, Select + `SelectPopup`, checkbox/switch, dropdown,
+dialog and both sheet sides, both tab systems, tooltip, pager/date-pager, a
+table with end-aligned numerics, badge tones, empty state, cards, and a
+pinned/two-column layout.
+
 ## Build / CI posture
 
 The reference app is **linted and type-checked** in CI by the `web` lane

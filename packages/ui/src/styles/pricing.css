@@ -43,7 +43,7 @@
 .pm-toggle .pm-knob {
   position: absolute;
   top: 2px;
-  left: 2px;
+  inset-inline-start: 2px;
   width: 15px;
   height: 15px;
   border-radius: 0;
@@ -59,4 +59,9 @@
 .pm-toggle.on .pm-knob {
   transform: translateX(17px);
   background: var(--accent);
+}
+
+/* knob anchors at inline-start; checked travel is physical → mirror in RTL */
+[dir="rtl"] .pm-toggle.on .pm-knob {
+  transform: translateX(-17px);
 }

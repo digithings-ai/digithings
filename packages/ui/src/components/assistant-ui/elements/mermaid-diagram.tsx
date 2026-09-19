@@ -171,7 +171,7 @@ function MermaidZoom({ svg, children }: MermaidZoomProps) {
         data-slot="mermaid-zoom-trigger"
         aria-label="Expand diagram"
         onClick={() => setIsOpen(true)}
-        className="aui-mermaid-zoom-trigger text-muted-foreground hover:text-foreground hover:border-muted-foreground/70 border-border bg-background absolute top-2 right-2 cursor-pointer rounded-md border p-1.5 opacity-0 transition group-hover/mermaid:opacity-100 focus-visible:opacity-100"
+        className="aui-mermaid-zoom-trigger text-muted-foreground hover:text-foreground hover:border-muted-foreground/70 border-border bg-background absolute top-2 end-2 cursor-pointer rounded-md border p-1.5 opacity-0 transition group-hover/mermaid:opacity-100 focus-visible:opacity-100"
       >
         <Maximize2 className="size-3.5" />
       </button>
@@ -206,7 +206,7 @@ function MermaidZoom({ svg, children }: MermaidZoomProps) {
             </div>
             <div
               data-slot="mermaid-zoom-toolbar"
-              className="aui-mermaid-zoom-toolbar border-border bg-background absolute top-4 right-4 flex items-center gap-1 rounded-lg border p-1"
+              className="aui-mermaid-zoom-toolbar border-border bg-background absolute top-4 end-4 flex items-center gap-1 rounded-lg border p-1"
             >
               <button
                 type="button"

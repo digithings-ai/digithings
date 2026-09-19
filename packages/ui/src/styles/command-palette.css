@@ -127,7 +127,7 @@
     font-family: var(--font-mono);
     font-size: 0.8rem;
     cursor: pointer;
-    text-align: left;
+    text-align: start;
   }
 
   .cp-icon {
@@ -209,8 +209,8 @@
   .cp-overlay--glass {
     /* shipped: pt-[12vh] px-3 sm:px-4 */
     padding-top: 12vh;
-    padding-left: 0.75rem;
-    padding-right: 0.75rem;
+    padding-inline-start: 0.75rem;
+    padding-inline-end: 0.75rem;
   }
 
   .cp-overlay--glass .cp-scrim {
@@ -286,8 +286,8 @@
 
   @media (min-width: 640px) {
     .cp-overlay--glass {
-      padding-left: 1rem;
-      padding-right: 1rem;
+      padding-inline-start: 1rem;
+      padding-inline-end: 1rem;
     }
   }
 }

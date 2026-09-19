@@ -103,8 +103,8 @@
   background: transparent;
   color: var(--ink-mute);
   border-color: transparent;
-  padding-left: 0.2rem;
-  padding-right: 0.2rem;
+  padding-inline-start: 0.2rem;
+  padding-inline-end: 0.2rem;
 }
 
 .ctl-btn-ref--quiet:hover {
@@ -382,19 +382,19 @@
 }
 
 .ctl-btn-chat--size-default:has([data-icon="inline-end"]) {
-  padding-right: 0.5rem;
+  padding-inline-end: 0.5rem;
 }
 
 .ctl-btn-chat--size-default:has([data-icon="inline-start"]) {
-  padding-left: 0.5rem;
+  padding-inline-start: 0.5rem;
 }
 
 .ctl-btn-chat--size-xs:has([data-icon="inline-end"]) {
-  padding-right: 0.375rem;
+  padding-inline-end: 0.375rem;
 }
 
 .ctl-btn-chat--size-xs:has([data-icon="inline-start"]) {
-  padding-left: 0.375rem;
+  padding-inline-start: 0.375rem;
 }
 
 .ctl-btn-chat--size-xs svg:not([class*="size-"]) {
@@ -403,11 +403,11 @@
 }
 
 .ctl-btn-chat--size-sm:has([data-icon="inline-end"]) {
-  padding-right: 0.375rem;
+  padding-inline-end: 0.375rem;
 }
 
 .ctl-btn-chat--size-sm:has([data-icon="inline-start"]) {
-  padding-left: 0.375rem;
+  padding-inline-start: 0.375rem;
 }
 
 .ctl-btn-chat--size-sm svg:not([class*="size-"]) {
@@ -416,11 +416,11 @@
 }
 
 .ctl-btn-chat--size-lg:has([data-icon="inline-end"]) {
-  padding-right: 0.75rem;
+  padding-inline-end: 0.75rem;
 }
 
 .ctl-btn-chat--size-lg:has([data-icon="inline-start"]) {
-  padding-left: 0.75rem;
+  padding-inline-start: 0.75rem;
 }
 
 .ctl-btn-chat--size-icon-xs svg:not([class*="size-"]) {
@@ -524,11 +524,11 @@
 }
 
 .ctl-badge-chat:has([data-icon="inline-end"]) {
-  padding-right: 0.375rem;
+  padding-inline-end: 0.375rem;
 }
 
 .ctl-badge-chat:has([data-icon="inline-start"]) {
-  padding-left: 0.375rem;
+  padding-inline-start: 0.375rem;
 }
 
 .ctl-badge-chat[aria-invalid="true"] {
@@ -618,8 +618,8 @@
     grid-auto-rows: min-content;
     align-items: start;
     gap: 0.25rem;
-    border-top-left-radius: 0;
-    border-top-right-radius: 0;
+    border-start-start-radius: 0;
+    border-start-end-radius: 0;
     padding-inline: 1rem;
   }
 
@@ -646,8 +646,8 @@
     border-top: 1px solid var(--border, var(--hair));
     background: color-mix(in oklab, var(--muted, var(--surface-2)) 50%, transparent);
     padding: 1rem;
-    border-bottom-left-radius: 0;
-    border-bottom-right-radius: 0;
+    border-end-start-radius: 0;
+    border-end-end-radius: 0;
   }
 
   /* the action slot places itself the same way under both dresses */
@@ -677,13 +677,13 @@
 }
 
 .ctl-card-chat > img:first-child {
-  border-top-left-radius: 0;
-  border-top-right-radius: 0;
+  border-start-start-radius: 0;
+  border-start-end-radius: 0;
 }
 
 .ctl-card-chat > img:last-child {
-  border-bottom-left-radius: 0;
-  border-bottom-right-radius: 0;
+  border-end-start-radius: 0;
+  border-end-end-radius: 0;
 }
 
 .ctl-card-chat .ctl-card-header:has([data-slot="card-action"]) {
@@ -877,7 +877,7 @@
 
   .ctl-avatar-badge {
     position: absolute;
-    right: 0;
+    inset-inline-end: 0;
     bottom: 0;
     z-index: 10;
     display: inline-flex;
@@ -1201,7 +1201,7 @@
   .nb-seg {
     padding: 0.4rem 0.85rem;
     border: none;
-    border-left: 1px solid var(--hair);
+    border-inline-start: 1px solid var(--hair);
     background: var(--surface);
     color: var(--ink-mute);
     font-family: var(--font-mono);
@@ -1255,7 +1255,7 @@
 }
 
 .nb-seg:first-child {
-  border-left: none;
+  border-inline-start: none;
 }
 
 .nb-seg:hover {
@@ -1489,7 +1489,7 @@
   }
 
   .tg-suggest-label {
-    margin-right: 0.2rem;
+    margin-inline-end: 0.2rem;
     font-family: var(--font-mono);
     font-size: 0.56rem;
     text-transform: uppercase;
@@ -1853,7 +1853,7 @@
   .ctl-switch-knob {
     position: absolute;
     top: 2px;
-    left: 2px;
+    inset-inline-start: 2px;
     display: block;
     width: 14px;
     height: 14px;
@@ -1895,7 +1895,7 @@
   .ctl-select-value {
     flex: 1;
     min-width: 0;
-    text-align: left;
+    text-align: start;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
@@ -2022,14 +2022,14 @@
 
   .ctl-table-caption {
     caption-side: bottom;
-    text-align: left;
+    text-align: start;
     color: var(--ink-mute);
     font-size: 0.72rem;
     padding-top: 0.7rem;
   }
 
   .ctl-table-th {
-    text-align: left;
+    text-align: start;
     font-weight: 500;
     font-size: 0.68rem;
     text-transform: uppercase;
@@ -2059,7 +2059,7 @@
   }
 
   .ctl-table-num {
-    text-align: right;
+    text-align: end;
     font-variant-numeric: tabular-nums;
     white-space: nowrap;
   }
@@ -2190,6 +2190,12 @@
     background: var(--accent);
   }
 
+  /* the knob anchors at inline-start, so its checked travel is physical and
+     must mirror under dir=rtl (translate has no logical form). */
+  [dir="rtl"] .ctl-switch[data-checked] .ctl-switch-knob {
+    transform: translateX(-14px);
+  }
+
   .ctl-switch:focus-visible {
     outline: none;
     box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 30%, transparent);
@@ -2256,6 +2262,16 @@
   outline: none;
   border-color: var(--hair-strong);
   box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 30%, transparent);
+}
+
+/* ── direction-flipped glyph ──────────────────────────────────────────────
+   For an arrow/chevron whose meaning is "toward the inline end" (pagination
+   prev/next, DatePager month steps): the glyph is authored pointing right and
+   mirrored wholesale under dir=rtl. display:inline-block makes a plain inline
+   span transformable; SVGs are replaced elements and scale without it. */
+[dir="rtl"] .ctl-dir-flip {
+  display: inline-block;
+  transform: scaleX(-1);
 }
 /* ── reduced motion ─────────────────────────────────────────────────────── */
 

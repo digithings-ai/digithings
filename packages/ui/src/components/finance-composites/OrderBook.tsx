@@ -60,7 +60,7 @@ function Row({
     >
       {/* depth bar fills from the right, tinted by side (money colors) */}
       <span
-        className={`absolute inset-y-0 right-0 z-0 ${ask ? "bg-down/[0.14]" : "bg-up/[0.14]"}`}
+        className={`absolute inset-y-0 end-0 z-0 ${ask ? "bg-down/[0.14]" : "bg-up/[0.14]"}`}
         style={{ width: depth }}
         aria-hidden="true"
       />

@@ -177,6 +177,24 @@ Unlayered author CSS beats every `@layer`, including `utilities`. Therefore:
   always `layer(components)` (`site.css` shipped `* { margin: 0 }` unlayered
   and silently killed every margin utility — twice).
 
+## RTL — what consumers do (#4306)
+
+The kit now ships logical properties, so an app opts into RTL with one prop,
+not a restyle: wrap the tree in `<ThemeProvider dir="rtl">` (or a subtree in
+`<DirectionProvider dir="rtl">`) from `@digithings/ui`. Nothing else changes —
+LTR rendering is identical. Two rules for app code:
+
+- Author **logical** directional utilities/properties only (`ms-/me-`, `ps-/pe-`,
+  `start-/end-`, `text-start/end`, `border-s-/e-`, `rounded-ss/se/es/ee-`); a
+  physical `ml-/left-/text-right/…` reintroduces the old bug and will re-break
+  under `dir="rtl"`.
+- If you truly need a physical edge (a device mock, an explicitly-physical
+  `side`/placement prop), keep it physical **and** leave a comment saying why —
+  see the exceptions documented in [ARCHITECTURE.md § RTL](ARCHITECTURE.md).
+
+`rtl: true` is set in `components.json` (kit, reference, digichat); the canon
+proof is the reference `/rtl` route.
+
 ## Debugging checklist (QA'ing an app against the canon)
 
 - Utility "not applying" but present in compiled CSS → cascade layering

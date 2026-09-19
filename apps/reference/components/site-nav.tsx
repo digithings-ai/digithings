@@ -32,6 +32,7 @@ import {
 
 const PAGES = [
   { href: "/", label: "Foundations" },
+  { href: "/rtl", label: "RTL" },
   { href: "/iterate", label: "Iterate" },
   { href: "/controls", label: "Controls" },
   { href: "/ui", label: "UI kit" },
@@ -207,7 +208,7 @@ export function SiteNav() {
         </SheetTrigger>
 
         <SheetContent side="right" aria-label="Navigation" className="overflow-y-auto">
-          {/* pt-12 clears the stock close button (absolute top-3 right-3);
+          {/* pt-12 clears the stock close button (absolute top-3 end-3);
               the links stay right-aligned like the rest of the bar's chrome. */}
           <nav aria-label="Design reference sections" className="flex flex-col px-5 pb-6 pt-12">
             <ul className="m-0 list-none p-0">
@@ -217,7 +218,7 @@ export function SiteNav() {
                     href={page.href}
                     aria-current={isActive(page.href) ? "page" : undefined}
                     onClick={() => setOpen(false)}
-                    className="block w-full border-b border-hair py-[0.85rem] text-right font-display text-[1.35rem] text-ink-soft no-underline transition-colors hover:text-ink aria-[current=page]:border-accent/55 aria-[current=page]:text-ink"
+                    className="block w-full border-b border-hair py-[0.85rem] text-end font-display text-[1.35rem] text-ink-soft no-underline transition-colors hover:text-ink aria-[current=page]:border-accent/55 aria-[current=page]:text-ink"
                   >
                     {page.label}
                   </Link>

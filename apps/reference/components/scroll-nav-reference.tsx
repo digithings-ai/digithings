@@ -62,7 +62,7 @@ export function ScrollNavReference() {
               <li key={link}>{link}</li>
             ))}
           </ul>
-          <Button variant="outline" type="button" className="ml-auto">
+          <Button variant="outline" type="button" className="ms-auto">
             Sign in
           </Button>
         </m.div>

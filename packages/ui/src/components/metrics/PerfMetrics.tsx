@@ -59,7 +59,7 @@ export function PerfMetrics({
             }`}
           >
             {m.value}
-            {m.unit ? <span className="ml-[0.15em] text-[0.85rem] text-ink-mute">{m.unit}</span> : null}
+            {m.unit ? <span className="ms-[0.15em] text-[0.85rem] text-ink-mute">{m.unit}</span> : null}
           </span>
         </div>
       ))}

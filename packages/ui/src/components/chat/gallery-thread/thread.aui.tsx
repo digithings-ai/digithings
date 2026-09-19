@@ -227,13 +227,13 @@ const ThreadHistorySkeleton: FC = () => (
     className="animate-in fade-in fill-mode-both flex flex-col gap-y-6 [animation-delay:150ms] [animation-duration:200ms]"
   >
     <span className="sr-only">Loading conversation</span>
-    <Skeleton variant="block" className="ml-auto h-9 w-2/5 rounded-xl motion-reduce:animate-none" />
+    <Skeleton variant="block" className="ms-auto h-9 w-2/5 rounded-xl motion-reduce:animate-none" />
     <div className="flex flex-col gap-y-2">
       <Skeleton variant="line" className="h-4 w-11/12 motion-reduce:animate-none" />
       <Skeleton variant="line" className="h-4 w-4/5 motion-reduce:animate-none" />
       <Skeleton variant="line" className="h-4 w-3/5 motion-reduce:animate-none" />
     </div>
-    <Skeleton variant="block" className="ml-auto h-9 w-1/3 rounded-xl motion-reduce:animate-none" />
+    <Skeleton variant="block" className="ms-auto h-9 w-1/3 rounded-xl motion-reduce:animate-none" />
     <div className="flex flex-col gap-y-2">
       <Skeleton variant="line" className="h-4 w-10/12 motion-reduce:animate-none" />
       <Skeleton variant="line" className="h-4 w-2/3 motion-reduce:animate-none" />
@@ -387,7 +387,7 @@ const ThreadWelcome: FC = () => {
   return (
     <div
       data-slot="aui_thread-welcome"
-      className="aui-thread-welcome-root flex flex-col items-start text-left"
+      className="aui-thread-welcome-root flex flex-col items-start text-start"
     >
       <h1 className="aui-thread-welcome-message-inner fade-in slide-in-from-bottom-1 animate-in fill-mode-both text-2xl font-medium tracking-tight duration-200">
         {welcome}
@@ -416,7 +416,7 @@ const ThreadSuggestionItem: FC = () => {
     <SuggestionPrimitive.Trigger send asChild>
       <button
         type="button"
-        className="aui-thread-welcome-suggestion fade-in slide-in-from-bottom-1 animate-in fill-mode-both grid w-full cursor-pointer grid-cols-[1.25rem_minmax(0,1fr)] items-start gap-x-[0.55rem] rounded-none border-0 bg-transparent px-0 py-0.5 text-left text-sm font-normal duration-200"
+        className="aui-thread-welcome-suggestion fade-in slide-in-from-bottom-1 animate-in fill-mode-both grid w-full cursor-pointer grid-cols-[1.25rem_minmax(0,1fr)] items-start gap-x-[0.55rem] rounded-none border-0 bg-transparent px-0 py-0.5 text-start text-sm font-normal duration-200"
       >
         <span className="aui-msg-marker" aria-hidden="true">
           <DotMatrix

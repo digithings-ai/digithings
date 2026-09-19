@@ -82,7 +82,7 @@ export function ChatThinking({
         <span className={`think-dot${live && safe ? " is-live" : ""}`} aria-hidden="true" />
         {label}
         {shownCount != null ? (
-          <span className="ml-[0.1rem] border-l border-hair pl-[0.5rem] text-ink-mute">
+          <span className="ms-[0.1rem] border-s border-hair ps-[0.5rem] text-ink-mute">
             {shownCount}
           </span>
         ) : null}
@@ -91,7 +91,7 @@ export function ChatThinking({
       {isOpen && steps?.length ? (
         <ol
           ref={listRef}
-          className={`think-steps m-0 ml-[0.35rem] flex list-none flex-col gap-[0.5rem] p-0 pl-[1.4rem]${
+          className={`think-steps m-0 ms-[0.35rem] flex list-none flex-col gap-[0.5rem] p-0 ps-[1.4rem]${
             revealed ? " in" : ""
           }`}
         >

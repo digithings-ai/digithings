@@ -1,4 +1,12 @@
-export { ThemeProvider, ThemeToggle, useTheme, themeInitScript } from "./components/ThemeProvider";
+export {
+  ThemeProvider,
+  ThemeToggle,
+  useTheme,
+  themeInitScript,
+  DirectionProvider,
+  useDirection,
+  type Direction,
+} from "./components/ThemeProvider";
 export { MotionProvider, Reveal, Stagger, HeroEntrance, useMotionSafe, m, EASE } from "./motion/primitives";
 export {
   useScrollyFeatures,

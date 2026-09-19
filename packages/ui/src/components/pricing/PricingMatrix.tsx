@@ -105,14 +105,14 @@ export function PricingMatrix({
               <th
                 scope="col"
                 aria-label={featureColumnLabel}
-                className="border-b border-hair pt-[0.8rem] pr-[0.9rem] pb-[1rem] pl-0 text-left align-top"
+                className="border-b border-hair pt-[0.8rem] pe-[0.9rem] pb-[1rem] ps-0 text-start align-top"
               />
               {tiers.map((tier, i) => (
                 <th
                   scope="col"
                   key={i}
                   className={cx(
-                    "border-b border-hair px-[0.9rem] pt-[0.8rem] pb-[1rem] text-left align-top",
+                    "border-b border-hair px-[0.9rem] pt-[0.8rem] pb-[1rem] text-start align-top",
                     tier.popular && "rounded-none border-t-2 border-t-accent bg-accent/6",
                   )}
                 >
@@ -136,7 +136,7 @@ export function PricingMatrix({
                 <th
                   scope="rowgroup"
                   colSpan={tiers.length + 1}
-                  className="px-0 pt-[1rem] pb-[0.4rem] text-left font-mono text-[0.62rem] font-normal uppercase tracking-[0.1em] text-ink-mute"
+                  className="px-0 pt-[1rem] pb-[0.4rem] text-start font-mono text-[0.62rem] font-normal uppercase tracking-[0.1em] text-ink-mute"
                 >
                   {group.label}
                 </th>
@@ -145,7 +145,7 @@ export function PricingMatrix({
                 <tr key={ri}>
                   <th
                     scope="row"
-                    className="border-b border-hair/60 py-[0.55rem] pr-[0.9rem] pl-0 text-left font-normal text-ink-soft"
+                    className="border-b border-hair/60 py-[0.55rem] pe-[0.9rem] ps-0 text-start font-normal text-ink-soft"
                   >
                     {row.label}
                   </th>

@@ -56,7 +56,7 @@ export function StreamTranscriptReference() {
         <ChatMessage role="user">backtest trend_xsec on ETH, last eight years</ChatMessage>
         <ChatMessage role="assistant">running it through digiquant · nautilus engine</ChatMessage>
         <div className="st-tool">
-          <span className="mr-[0.55rem] text-accent">⌄</span>
+          <span className="me-[0.55rem] text-accent">⌄</span>
           digiquant.backtest — trend_xsec · ETH-USD · 3,102 bars
           <span className="text-up">ok</span>
           <span className="text-ink-mute">412ms</span>

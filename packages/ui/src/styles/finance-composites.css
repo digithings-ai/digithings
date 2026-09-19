@@ -73,10 +73,10 @@
   }
 
   .srt-l {
-    text-align: left;
+    text-align: start;
   }
   .srt-r {
-    text-align: right;
+    text-align: end;
   }
 
   .srt-head {
@@ -158,16 +158,16 @@
 /* headline cells: left hairlines between cells; stacked with top hairlines
    when the row collapses to one column ≤ 720px */
 .pdash-head {
-  border-left: 1px solid var(--hair);
+  border-inline-start: 1px solid var(--hair);
 }
 
 .pdash-head:first-child {
-  border-left: none;
+  border-inline-start: none;
 }
 
 @media (max-width: 720px) {
   .pdash-head {
-    border-left: none;
+    border-inline-start: none;
     border-top: 1px solid var(--hair);
   }
 
@@ -179,14 +179,14 @@
 /* ratio strip: left hairlines between cells, re-derived per row keyed off
    the strip's data-cols (n-up desktop, 3-up ≤ 720px) */
 .pdash-ratio {
-  border-left: 1px solid var(--hair);
+  border-inline-start: 1px solid var(--hair);
 }
 
 .pdash-ratios[data-cols="6"] .pdash-ratio:nth-child(6n + 1),
 .pdash-ratios[data-cols="5"] .pdash-ratio:nth-child(5n + 1),
 .pdash-ratios[data-cols="4"] .pdash-ratio:nth-child(4n + 1),
 .pdash-ratios[data-cols="3"] .pdash-ratio:nth-child(3n + 1) {
-  border-left: none;
+  border-inline-start: none;
 }
 
 @media (max-width: 720px) {
@@ -196,10 +196,10 @@
   .pdash-ratios[data-cols="6"] .pdash-ratio:nth-child(6n + 1),
   .pdash-ratios[data-cols="5"] .pdash-ratio:nth-child(5n + 1),
   .pdash-ratios[data-cols="4"] .pdash-ratio:nth-child(4n + 1) {
-    border-left: 1px solid var(--hair);
+    border-inline-start: 1px solid var(--hair);
   }
 
   .pdash-ratios[data-cols] .pdash-ratio:nth-child(3n + 1) {
-    border-left: none;
+    border-inline-start: none;
   }
 }

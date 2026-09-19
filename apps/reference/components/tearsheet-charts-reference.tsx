@@ -175,7 +175,7 @@ export function TearsheetChartsReference() {
           type="button"
           variant="outline"
           size="sm"
-          className="ts-header-actions ml-auto h-auto font-normal"
+          className="ts-header-actions ms-auto h-auto font-normal"
           onClick={() =>
             runTearsheetPrint({
               documentTitle: "finance-tearsheet specimen — digiweb",

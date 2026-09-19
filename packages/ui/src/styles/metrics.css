@@ -21,7 +21,7 @@
 /* ── PerfMetrics: n-up hairline cell grid ────────────────────────────────── */
 
 .perf-metric {
-  border-left: 1px solid var(--hair);
+  border-inline-start: 1px solid var(--hair);
   border-top: 1px solid var(--hair);
 }
 
@@ -35,7 +35,7 @@
 .perf-metrics[data-cols="4"] .perf-metric:nth-child(4n + 1),
 .perf-metrics[data-cols="3"] .perf-metric:nth-child(3n + 1),
 .perf-metrics[data-cols="2"] .perf-metric:nth-child(2n + 1) {
-  border-left: none;
+  border-inline-start: none;
 }
 
 /* ≤ 720px the grid is two-up whatever data-cols says — re-derive the
@@ -53,27 +53,27 @@
 
   .perf-metrics[data-cols="4"] .perf-metric:nth-child(4n + 1),
   .perf-metrics[data-cols="3"] .perf-metric:nth-child(3n + 1) {
-    border-left: 1px solid var(--hair);
+    border-inline-start: 1px solid var(--hair);
   }
 
   .perf-metrics[data-cols] .perf-metric:nth-child(2n + 1) {
-    border-left: none;
+    border-inline-start: none;
   }
 }
 
 /* ── StatCounter: single-row strip, left hairlines between stats ─────────── */
 
 .sc-stat {
-  border-left: 1px solid var(--hair);
+  border-inline-start: 1px solid var(--hair);
 }
 
 .sc-stat:first-child {
-  border-left: none;
+  border-inline-start: none;
 }
 
 @media (max-width: 720px) {
   .sc-stat:nth-child(2n + 1) {
-    border-left: none;
+    border-inline-start: none;
   }
 
   .sc-stat:nth-child(n + 3) {

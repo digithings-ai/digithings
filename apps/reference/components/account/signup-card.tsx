@@ -175,7 +175,7 @@ export function SignupCard() {
                   ))}
                 </div>
                 <span
-                  className="min-w-[3.6rem] text-right font-mono text-[0.62rem] uppercase tracking-[0.08em] text-ink-mute"
+                  className="min-w-[3.6rem] text-end font-mono text-[0.62rem] uppercase tracking-[0.08em] text-ink-mute"
                   id="signup-strength"
                   role="status"
                 >

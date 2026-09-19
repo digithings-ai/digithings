@@ -173,7 +173,7 @@ export function PerformanceDashboard({
                   style={{ width: `${a.pct}%` }}
                 />
               </span>
-              <span className="text-right text-ink-soft [font-variant-numeric:tabular-nums]">
+              <span className="text-end text-ink-soft [font-variant-numeric:tabular-nums]">
                 {a.pct}%
               </span>
             </div>

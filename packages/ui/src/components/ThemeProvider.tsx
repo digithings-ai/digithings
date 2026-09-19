@@ -1,12 +1,75 @@
 "use client";
 /**
- * Theme controller for the React marketing apps. Sets [data-theme] on <html>
- * and persists the shared `dt-theme` key (also read by dashboard → cross-surface
- * sync on the same origin). Pair with the pre-paint snippet (themeInitScript)
- * inlined in <head> to avoid a flash.
+ * Theme + direction controller for the React marketing apps. Sets
+ * [data-theme] on <html> and persists the shared `dt-theme` key (also read by
+ * dashboard → cross-surface sync on the same origin). Pair with the pre-paint
+ * snippet (themeInitScript) inlined in <head> to avoid a flash.
+ *
+ * Direction is opt-in: `ThemeProvider dir="rtl"` (default `"ltr"`) applies
+ * `dir` to <html>, which is all the kit needs — every part is authored with
+ * logical properties and `[[dir=rtl]]`-scoped art, so the whole tree mirrors
+ * without touching a single page. `DirectionProvider` is the nested form: it
+ * wraps a region in its own `dir` (and `root` applies to <html> instead), for
+ * side-by-side or per-subtree direction.
  */
-import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from "react";
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useState,
+  type ReactNode,
+} from "react";
 import { IconButton } from "./controls/NavButtons";
+
+/** Text direction. The kit defaults to `"ltr"`; RTL is always opt-in. */
+export type Direction = "ltr" | "rtl";
+
+const DirectionCtx = createContext<Direction>("ltr");
+
+/** Current text direction of the surrounding `DirectionProvider` (default ltr). */
+export function useDirection(): Direction {
+  return useContext(DirectionCtx);
+}
+
+/**
+ * Apply `dir` to a region. By default it renders a wrapper <div dir=…> and
+ * provides `useDirection()`; with `root` it applies `dir` to <html> instead
+ * (matching `ThemeProvider dir`) and renders children without a wrapper, so a
+ * full app or page can flip direction. Either form resets the document to
+ * `ltr` on unmount when `root` is used.
+ */
+export function DirectionProvider({
+  dir = "ltr",
+  root = false,
+  className,
+  children,
+}: {
+  dir?: Direction;
+  /** Apply to <html> (whole document) rather than a wrapper element. */
+  root?: boolean;
+  className?: string;
+  children: ReactNode;
+}) {
+  useEffect(() => {
+    if (!root) return;
+    document.documentElement.setAttribute("dir", dir);
+    return () => {
+      document.documentElement.setAttribute("dir", "ltr");
+    };
+  }, [dir, root]);
+
+  const value = useMemo(() => dir, [dir]);
+  if (root) return <DirectionCtx.Provider value={value}>{children}</DirectionCtx.Provider>;
+  return (
+    <DirectionCtx.Provider value={value}>
+      <div dir={dir} className={className}>
+        {children}
+      </div>
+    </DirectionCtx.Provider>
+  );
+}
 
 type Theme = "light" | "dark";
 const KEY = "dt-theme";
@@ -44,7 +107,14 @@ export function useTheme() {
   return ctx;
 }
 
-export function ThemeProvider({ children }: { children: ReactNode }) {
+export function ThemeProvider({
+  children,
+  dir = "ltr",
+}: {
+  children: ReactNode;
+  /** Text direction applied to <html>. Defaults to `"ltr"`; RTL is opt-in. */
+  dir?: Direction;
+}) {
   const [theme, setTheme] = useState<Theme>("dark");
 
   useEffect(() => {
@@ -72,7 +142,13 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
     });
   }, []);
 
-  return <ThemeCtx.Provider value={{ theme, toggle }}>{children}</ThemeCtx.Provider>;
+  return (
+    <ThemeCtx.Provider value={{ theme, toggle }}>
+      <DirectionProvider root dir={dir}>
+        {children}
+      </DirectionProvider>
+    </ThemeCtx.Provider>
+  );
 }
 
 export function ThemeToggle({ className }: { className?: string }) {

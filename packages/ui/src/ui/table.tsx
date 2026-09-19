@@ -85,8 +85,8 @@ function TableHead({ className, numeric = false, ...props }: TableHeadProps) {
     <th
       data-slot="table-head"
       className={cn(
-        "h-10 px-2 text-left align-middle font-medium whitespace-nowrap text-foreground [&:has([role=checkbox])]:pr-0",
-        numeric && "text-right tabular-nums",
+        "h-10 px-2 text-start align-middle font-medium whitespace-nowrap text-foreground [&:has([role=checkbox])]:pe-0",
+        numeric && "text-end tabular-nums",
         className
       )}
       {...props}
@@ -108,8 +108,8 @@ function TableCell({
     <td
       data-slot="table-cell"
       className={cn(
-        "p-2 align-middle whitespace-nowrap [&:has([role=checkbox])]:pr-0",
-        numeric && "text-right tabular-nums",
+        "p-2 align-middle whitespace-nowrap [&:has([role=checkbox])]:pe-0",
+        numeric && "text-end tabular-nums",
         className
       )}
       {...props}
@@ -128,7 +128,7 @@ function TableRowHeader({ className, ...props }: React.ComponentProps<"th">) {
       data-slot="table-row-header"
       scope="row"
       className={cn(
-        "p-2 text-left align-middle font-medium whitespace-nowrap text-foreground [&:has([role=checkbox])]:pr-0",
+        "p-2 text-start align-middle font-medium whitespace-nowrap text-foreground [&:has([role=checkbox])]:pe-0",
         className
       )}
       {...props}

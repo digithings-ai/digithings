@@ -49,7 +49,7 @@ const MARKS: Record<ChatToolCallStatus, { glyph: string; cls: string }> = {
 };
 
 const HEAD_CLS =
-  "tc-head flex w-full items-center gap-[0.5rem] border-0 bg-transparent px-0 py-[0.2rem] text-left font-mono text-[0.78rem] text-term-ink";
+  "tc-head flex w-full items-center gap-[0.5rem] border-0 bg-transparent px-0 py-[0.2rem] text-start font-mono text-[0.78rem] text-term-ink";
 
 function HeadContent({
   name,
@@ -84,9 +84,9 @@ function HeadContent({
       {args ? (
         <span className="min-w-0 flex-1 truncate text-term-mute">({args})</span>
       ) : null}
-      <span className={`ml-auto shrink-0 ${mark.cls}`}>{mark.glyph}</span>
+      <span className={`ms-auto shrink-0 ${mark.cls}`}>{mark.glyph}</span>
       {duration ? (
-        <span className="min-w-[3rem] shrink-0 text-right text-[0.7rem] text-term-mute">
+        <span className="min-w-[3rem] shrink-0 text-end text-[0.7rem] text-term-mute">
           {duration}
         </span>
       ) : null}
@@ -164,7 +164,7 @@ export function ChatToolCall({
         </div>
       )}
       {hasBody && isOpen ? (
-        <div className="pb-[0.4rem] pl-[0.75rem] pt-[0.15rem]">
+        <div className="pb-[0.4rem] ps-[0.75rem] pt-[0.15rem]">
           {lines?.map((l) => {
             const line = typeof l === "string" ? { text: l, tone: undefined } : l;
             const tone =

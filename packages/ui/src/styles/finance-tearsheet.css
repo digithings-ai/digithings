@@ -78,8 +78,8 @@
   .ts-chart-legend-line { width: 18px; height: 0; border-top: 2px solid var(--accent); }
   .ts-chart-legend-bar-up { width: 12px; height: 9px; background: var(--up); opacity: 0.82; border-radius: 0; }
   .ts-chart-legend-bar-down { width: 12px; height: 9px; background: var(--down); opacity: 0.82; border-radius: 0; }
-  .ts-chart-legend-marker-buy { width: 0; height: 0; border-left: 6px solid transparent; border-right: 6px solid transparent; border-bottom: 10px solid var(--accent); filter: drop-shadow(0 1px 2px color-mix(in srgb, var(--bg) 60%, transparent)); }
-  .ts-chart-legend-marker-sell { width: 0; height: 0; border-left: 6px solid transparent; border-right: 6px solid transparent; border-top: 10px solid var(--down); filter: drop-shadow(0 1px 2px color-mix(in srgb, var(--bg) 60%, transparent)); }
+  .ts-chart-legend-marker-buy { width: 0; height: 0; border-inline-start: 6px solid transparent; border-inline-end: 6px solid transparent; border-bottom: 10px solid var(--accent); filter: drop-shadow(0 1px 2px color-mix(in srgb, var(--bg) 60%, transparent)); }
+  .ts-chart-legend-marker-sell { width: 0; height: 0; border-inline-start: 6px solid transparent; border-inline-end: 6px solid transparent; border-top: 10px solid var(--down); filter: drop-shadow(0 1px 2px color-mix(in srgb, var(--bg) 60%, transparent)); }
   .ts-chart-legend-bar-open {
     width: 12px;
     height: 9px;
@@ -146,7 +146,7 @@
     letter-spacing: 0.02em;
     line-height: 1.35;
     white-space: normal;
-    text-align: left;
+    text-align: start;
     box-shadow: 0 10px 28px -18px rgba(0, 0, 0, 0.45); /* neutral shade, theme-agnostic */
     pointer-events: none;
     transform: translate(12px, calc(-100% - 8px));
@@ -183,7 +183,7 @@
 .ts-chart-tip.is-flip-x.is-flip-y { transform: translate(calc(-100% - 12px), 12px); }
 .ts-chart-tip-dl > div { display: flex; gap: 0.65rem; justify-content: space-between; align-items: baseline; }
 .ts-chart-tip-dl dt { color: var(--ink-mute); font-size: 0.6rem; text-transform: uppercase; letter-spacing: 0.06em; flex-shrink: 0; }
-.ts-chart-tip-dl dd { margin: 0; color: var(--ink); text-align: right; white-space: nowrap; }
+.ts-chart-tip-dl dd { margin: 0; color: var(--ink); text-align: end; white-space: nowrap; }
 .ts-tone-accent.ts-line { stroke: var(--accent); }
 .ts-tone-accent.ts-area { fill: var(--accent); }
 .ts-tone-up.ts-line { stroke: var(--up); }
@@ -223,7 +223,7 @@
   }
   .ts-marker-buy { fill: var(--accent); }
   .ts-marker-sell { fill: var(--down); }
-  .ts-panel-hint { margin-left: auto; }
+  .ts-panel-hint { margin-inline-start: auto; }
 }
 
 .ts-candle-up .ts-candle-wick { stroke: var(--accent); }
@@ -242,7 +242,7 @@
   .ts-reset-chart {
     position: absolute;
     top: 0.5rem;
-    right: 0.5rem;
+    inset-inline-end: 0.5rem;
     z-index: 6;
     text-transform: none;
     letter-spacing: 0;
@@ -259,13 +259,13 @@
 
   /* Segmented toggle (Linear/Log, Log $/%, Monthly/Quarterly/Annual). */
   .ts-seg { display: inline-flex; border: 1px solid var(--hair); border-radius: var(--r-sm); overflow: hidden; background: var(--surface-2); }
-  .ts-seg-btn { font-family: var(--font-mono); font-size: 0.74rem; color: var(--ink-mute); background: transparent; border: none; border-left: 1px solid var(--hair); padding: 0.22rem 0.62rem; cursor: pointer; transition: color 0.18s var(--ease), background 0.18s var(--ease); }
+  .ts-seg-btn { font-family: var(--font-mono); font-size: 0.74rem; color: var(--ink-mute); background: transparent; border: none; border-inline-start: 1px solid var(--hair); padding: 0.22rem 0.62rem; cursor: pointer; transition: color 0.18s var(--ease), background 0.18s var(--ease); }
   .ts-chart-controls { display: inline-flex; align-items: center; gap: 0.55rem; flex-wrap: wrap; }
 }
 
 .ts-reset:hover { background: color-mix(in srgb, var(--accent) 24%, transparent); }
 .ts-reset-chart svg { display: block; }
-.ts-seg-btn:first-child { border-left: none; }
+.ts-seg-btn:first-child { border-inline-start: none; }
 .ts-seg-btn:hover { color: var(--ink); }
 .ts-seg-btn.is-active { color: var(--accent); background: var(--accent-weak); }
 /* .ts-seg's own overflow:hidden (it clips square button corners to the
@@ -307,7 +307,7 @@
   .ts-table-wrap { width: 100%; overflow-x: auto; }
   .ts-table-scroll { max-height: 520px; overflow-y: auto; }
   .ts-table { width: 100%; border-collapse: collapse; font-size: 0.88rem; }
-  .ts-num { text-align: right; }
+  .ts-num { text-align: end; }
   .ts-breakdown-wrap { max-height: 520px; }
 
   /* Pivot statistics table */
@@ -331,20 +331,20 @@
   .ts-dir-short { color: var(--down); }
 }
 
-.ts-table th, .ts-table td { text-align: left; padding: 0.55rem 0.8rem; border-bottom: 1px solid var(--hair); white-space: nowrap; }
+.ts-table th, .ts-table td { text-align: start; padding: 0.55rem 0.8rem; border-bottom: 1px solid var(--hair); white-space: nowrap; }
 .ts-table thead th { position: sticky; top: 0; background: var(--surface); color: var(--ink-mute); font-family: var(--font-mono); font-size: 0.7rem; letter-spacing: 0.08em; text-transform: uppercase; z-index: 1; }
 .ts-table tbody th[scope="row"] { color: var(--ink-soft); font-weight: 400; }
 .ts-table td { color: var(--ink); font-family: var(--font-mono); }
-.ts-breakdown td { text-align: right; }
-.ts-breakdown th:first-child, .ts-breakdown td:first-child { text-align: left; }
+.ts-breakdown td { text-align: end; }
+.ts-breakdown th:first-child, .ts-breakdown td:first-child { text-align: start; }
 .ts-breakdown tbody th[scope="row"] { color: var(--ink-soft); font-weight: 500; white-space: nowrap; }
 .ts-pivot-seg .ts-seg-btn { font-size: 0.68rem; padding: 0.18rem 0.52rem; }
-.ts-pivot-table td { text-align: right; }
+.ts-pivot-table td { text-align: end; }
 .ts-pivot-metric-col {
   position: sticky;
-  left: 0;
+  inset-inline-start: 0;
   z-index: 1;
-  text-align: left !important;
+  text-align: start !important;
   font-weight: 500;
   color: var(--ink-soft);
   white-space: nowrap;
@@ -418,7 +418,7 @@
     display: flex;
     gap: 1.25rem;
     flex-wrap: wrap;
-    margin-left: auto;
+    margin-inline-start: auto;
   }
   .ts-position-flat-msg {
     margin: 0;
@@ -484,7 +484,7 @@
     flex-shrink: 0;
     width: 0.4rem;
     height: 0.4rem;
-    border-right: 1.5px solid var(--ink-mute);
+    border-inline-end: 1.5px solid var(--ink-mute);
     border-bottom: 1.5px solid var(--ink-mute);
     transform: rotate(45deg);
     margin-top: -0.12rem;
@@ -522,7 +522,7 @@
 }
 .ts-strategy-notes-meta li {
   position: relative;
-  padding-left: 1em;
+  padding-inline-start: 1em;
   font-family: var(--font-mono);
   font-size: 0.72rem;
   line-height: 1.45;
@@ -531,7 +531,7 @@
 .ts-strategy-notes-meta li::before {
   content: "·";
   position: absolute;
-  left: 0;
+  inset-inline-start: 0;
   color: var(--accent);
 }
 
@@ -585,7 +585,7 @@
     box-shadow: 0 0 0 0 color-mix(in srgb, var(--accent) 55%, transparent);
     animation: ts-live-pulse 2.4s ease-out infinite;
   }
-  .ts-card-live { margin-left: auto; }
+  .ts-card-live { margin-inline-start: auto; }
 }
 
 @keyframes ts-live-pulse {
@@ -593,7 +593,7 @@
   70% { box-shadow: 0 0 0 7px color-mix(in srgb, var(--accent) 0%, transparent); }
   100% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--accent) 0%, transparent); }
 }
-.ts-meta .ts-live-badge { margin-right: 0.15rem; }
+.ts-meta .ts-live-badge { margin-inline-end: 0.15rem; }
 
 @media (max-width: 820px) {
   .ts-grid-2 { grid-template-columns: 1fr; }
@@ -721,7 +721,7 @@
     text-transform: lowercase;
   }
   .ts-print-brand-link {
-    margin-left: auto;
+    margin-inline-start: auto;
     font-family: var(--font-mono);
     font-size: 0.78rem;
     color: var(--accent);
@@ -749,7 +749,7 @@
     color: var(--accent);
     text-decoration: none;
   }
-  .ts-print-footer-note { margin-left: auto; }
+  .ts-print-footer-note { margin-inline-start: auto; }
 
   .ts-print-heading {
     display: block !important;

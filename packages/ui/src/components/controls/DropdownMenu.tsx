@@ -124,7 +124,7 @@ export function DropdownMenuLabel({
     <MenuPrimitive.GroupLabel
       data-slot="dropdown-menu-label"
       data-inset={inset}
-      className={cxBase("px-1.5 py-1 text-xs font-medium text-ink-soft data-inset:pl-7", className)}
+      className={cxBase("px-1.5 py-1 text-xs font-medium text-ink-soft data-inset:ps-7", className)}
       {...props}
     />
   );
@@ -147,7 +147,7 @@ export function DropdownMenuItem({
       data-inset={inset}
       data-variant={variant}
       className={cxBase(
-        "ctl-menu-item relative flex cursor-default items-center gap-1.5 rounded-none px-1.5 py-1 text-sm outline-hidden select-none data-inset:pl-7 data-disabled:pointer-events-none data-disabled:opacity-50",
+        "ctl-menu-item relative flex cursor-default items-center gap-1.5 rounded-none px-1.5 py-1 text-sm outline-hidden select-none data-inset:ps-7 data-disabled:pointer-events-none data-disabled:opacity-50",
         className,
       )}
       {...props}
@@ -172,13 +172,13 @@ export function DropdownMenuSubTrigger({
       data-slot="dropdown-menu-sub-trigger"
       data-inset={inset}
       className={cxBase(
-        "ctl-menu-item ctl-menu-subtrigger flex cursor-default items-center gap-1.5 rounded-none px-1.5 py-1 text-sm outline-hidden select-none data-inset:pl-7",
+        "ctl-menu-item ctl-menu-subtrigger flex cursor-default items-center gap-1.5 rounded-none px-1.5 py-1 text-sm outline-hidden select-none data-inset:ps-7",
         className,
       )}
       {...props}
     >
       {children}
-      <ChevronRightIcon className="ml-auto" />
+      <ChevronRightIcon className="ms-auto rtl:-scale-x-100" />
     </MenuPrimitive.SubmenuTrigger>
   );
 }
@@ -218,14 +218,14 @@ export function DropdownMenuCheckboxItem({
       data-slot="dropdown-menu-checkbox-item"
       data-inset={inset}
       className={cxBase(
-        "ctl-menu-item relative flex cursor-default items-center gap-1.5 rounded-none py-1 pr-8 pl-1.5 text-sm outline-hidden select-none data-inset:pl-7 data-disabled:pointer-events-none data-disabled:opacity-50",
+        "ctl-menu-item relative flex cursor-default items-center gap-1.5 rounded-none py-1 pe-8 ps-1.5 text-sm outline-hidden select-none data-inset:ps-7 data-disabled:pointer-events-none data-disabled:opacity-50",
         className,
       )}
       checked={checked}
       {...props}
     >
       <span
-        className="pointer-events-none absolute right-2 flex items-center justify-center"
+        className="pointer-events-none absolute end-2 flex items-center justify-center"
         data-slot="dropdown-menu-checkbox-item-indicator"
       >
         <MenuPrimitive.CheckboxItemIndicator>
@@ -254,13 +254,13 @@ export function DropdownMenuRadioItem({
       data-slot="dropdown-menu-radio-item"
       data-inset={inset}
       className={cxBase(
-        "ctl-menu-item relative flex cursor-default items-center gap-1.5 rounded-none py-1 pr-8 pl-1.5 text-sm outline-hidden select-none data-inset:pl-7 data-disabled:pointer-events-none data-disabled:opacity-50",
+        "ctl-menu-item relative flex cursor-default items-center gap-1.5 rounded-none py-1 pe-8 ps-1.5 text-sm outline-hidden select-none data-inset:ps-7 data-disabled:pointer-events-none data-disabled:opacity-50",
         className,
       )}
       {...props}
     >
       <span
-        className="pointer-events-none absolute right-2 flex items-center justify-center"
+        className="pointer-events-none absolute end-2 flex items-center justify-center"
         data-slot="dropdown-menu-radio-item-indicator"
       >
         <MenuPrimitive.RadioItemIndicator>
@@ -286,7 +286,7 @@ export function DropdownMenuShortcut({ className, ...props }: React.ComponentPro
   return (
     <span
       data-slot="dropdown-menu-shortcut"
-      className={cx("ctl-menu-shortcut ml-auto text-xs tracking-widest text-ink-soft", className)}
+      className={cx("ctl-menu-shortcut ms-auto text-xs tracking-widest text-ink-soft", className)}
       {...props}
     />
   );

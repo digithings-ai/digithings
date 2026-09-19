@@ -86,7 +86,7 @@ const Items: FC<ItemsProps> = ({ emptyLabel, loadingLabel }) => {
             >
               <span className="shrink-0 text-sm font-medium">{item.label}</span>
               {item.description ? (
-                <span className="text-muted-foreground min-w-0 truncate text-right text-xs leading-tight">
+                <span className="text-muted-foreground min-w-0 truncate text-end text-xs leading-tight">
                   {item.description}
                 </span>
               ) : null}

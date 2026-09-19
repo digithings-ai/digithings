@@ -70,7 +70,7 @@
 
 .tm-row-link {
   width: 100%;
-  text-align: left;
+  text-align: start;
   background: transparent;
   border: 0;
   cursor: pointer;
@@ -181,7 +181,7 @@
   .tm-out {
     margin-top: 0;
     border-top: 0;
-    border-left: 1px dashed var(--hair);
+    border-inline-start: 1px dashed var(--hair);
     padding: 0.1rem 0 0.4rem 1.6rem;
     min-height: 0;
   }

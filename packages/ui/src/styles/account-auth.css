@@ -267,7 +267,7 @@
 
 .acct-auth-strength-word {
   min-width: 3.6rem;
-  text-align: right;
+  text-align: end;
   font-family: var(--font-mono);
   font-size: 0.62rem;
   text-transform: uppercase;

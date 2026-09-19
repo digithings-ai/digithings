@@ -77,7 +77,7 @@ export function Pagination({
     if (hrefForPage && !disabled) {
       return (
         <a key={dir} href={hrefForPage(target)} aria-label={label} className={cls}>
-          <span aria-hidden="true">{glyph}</span>
+          <span aria-hidden="true" className="ctl-dir-flip">{glyph}</span>
         </a>
       );
     }

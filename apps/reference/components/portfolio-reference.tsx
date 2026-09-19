@@ -110,7 +110,7 @@ export function PortfolioReference() {
             <TableRow>
               <TableCell
                 colSpan={5}
-                className="text-left text-[0.6rem] uppercase tracking-[0.1em] text-ink-mute"
+                className="text-start text-[0.6rem] uppercase tracking-[0.1em] text-ink-mute"
               >
                 net unrealized
               </TableCell>

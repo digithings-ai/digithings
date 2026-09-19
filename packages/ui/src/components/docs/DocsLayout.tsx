@@ -79,10 +79,10 @@ export function DocsLayout({
               key={it.id}
               href={`#${it.id}`}
               aria-current={active === it.id ? "true" : undefined}
-              className={`rounded-none border-l-2 px-[0.6rem] py-[0.28rem] font-mono text-[0.82rem] no-underline transition-colors duration-150 ease-brand ${
+              className={`rounded-none border-s-2 px-[0.6rem] py-[0.28rem] font-mono text-[0.82rem] no-underline transition-colors duration-150 ease-brand ${
                 active === it.id
-                  ? "border-l-accent bg-accent-weak text-ink"
-                  : "border-l-transparent text-ink-soft hover:bg-accent-weak hover:text-ink"
+                  ? "border-s-accent bg-accent-weak text-ink"
+                  : "border-s-transparent text-ink-soft hover:bg-accent-weak hover:text-ink"
               }`}
             >
               {it.label}

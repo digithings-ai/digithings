@@ -134,7 +134,7 @@ export function TabsReference() {
                     <span className="flex-1 text-ink">{p.sym}</span>
                     <span className="tabular-nums text-ink-soft">{p.qty}</span>
                     <span
-                      className={`min-w-[5rem] text-right tabular-nums ${p.up ? "text-up" : "text-down"}`}
+                      className={`min-w-[5rem] text-end tabular-nums ${p.up ? "text-up" : "text-down"}`}
                     >
                       {p.up ? "+" : "−"}${Math.abs(p.pnl).toLocaleString()}
                     </span>

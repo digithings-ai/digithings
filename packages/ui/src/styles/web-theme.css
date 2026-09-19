@@ -130,6 +130,8 @@ body {
 /* ── module cards ────────────────────────────────────────────────────── */
 .mod-card { display: flex; flex-direction: column; gap: 0.3rem; background: var(--surface); border: 1px solid var(--hair); border-radius: var(--r-md); padding: 1.4rem 1.3rem; transition: transform .3s var(--ease), border-color .3s var(--ease); position: relative; overflow: hidden; }
 .mod-card::before { content: ""; position: absolute; inset: 0 0 auto 0; height: 2px; background: var(--accent); transform: scaleX(0); transform-origin: left; transition: transform .32s var(--ease); }
+/* transform-origin has no logical keyword — fill from the inline-start edge */
+[dir="rtl"] .mod-card::before { transform-origin: right; }
 .mod-card:hover { transform: translateY(-4px); border-color: var(--hair-2); }
 .mod-card:hover::before { transform: scaleX(1); }
 .mod-card-top { display: flex; align-items: center; justify-content: space-between; margin-bottom: 0.3rem; }
@@ -158,7 +160,7 @@ body {
 .dg-node.hub .label { fill: var(--ink); font-size: 14px; }
 .dg-node.on .halo { opacity: 0.22; } .dg-node.on .node { stroke-width: 2.6; } .dg-node.on .label { fill: var(--ink); }
 .dg-node.dim { opacity: 0.32; }
-.dg-rail { position: absolute; right: clamp(1rem, 3vw, 2rem); top: 50%; transform: translateY(-50%); display: flex; flex-direction: column; gap: 8px; }
+.dg-rail { position: absolute; inset-inline-end: clamp(1rem, 3vw, 2rem); top: 50%; transform: translateY(-50%); display: flex; flex-direction: column; gap: 8px; }
 .dg-tick { width: 6px; height: 6px; border-radius: 50%; background: var(--hair-2); transition: background .2s var(--ease), transform .2s var(--ease); }
 .dg-tick.on { background: var(--accent); transform: scale(1.5); }
 
@@ -190,7 +192,7 @@ body {
    slides in flow — the hook signals this via `stepper`). ────────────────── */
 .scrolly-track { position: relative; }
 .scrolly-pin { position: sticky; top: 0; min-height: 100svh; display: flex; flex-direction: column; justify-content: center; }
-.scrolly-rail { position: absolute; right: clamp(1rem, 3vw, 2rem); top: 50%; transform: translateY(-50%); display: flex; flex-direction: column; gap: 8px; }
+.scrolly-rail { position: absolute; inset-inline-end: clamp(1rem, 3vw, 2rem); top: 50%; transform: translateY(-50%); display: flex; flex-direction: column; gap: 8px; }
 .scrolly-tick { width: 6px; height: 6px; border-radius: 50%; background: var(--hair-2); transition: background .2s var(--ease), transform .2s var(--ease); }
 .scrolly-tick.on { background: var(--accent); transform: scale(1.5); }
 .scrolly-stepper { display: flex; flex-direction: column; gap: 2rem; max-width: var(--wrap); margin-inline: auto; padding-inline: var(--gutter); }

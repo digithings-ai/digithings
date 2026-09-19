@@ -81,7 +81,7 @@ export function RotatingPrompts({ prompts, intervalMs = 3200, className }: Rotat
         <Button
           type="button"
           variant="ghost"
-          className="prompt-pause h-auto w-auto border-0 bg-transparent p-[0.2rem] hover:bg-transparent ml-auto"
+          className="prompt-pause h-auto w-auto border-0 bg-transparent p-[0.2rem] hover:bg-transparent ms-auto"
           // Belt-and-suspenders even though the header comment now tells
           // consumers to link the shell as a SIBLING, not by nesting it
           // inside an <a>: stopPropagation alone does NOT stop an ancestor

@@ -78,7 +78,7 @@ export function FooterReference() {
             aria-label="Theme"
           />
 
-          <span className="ml-auto text-ink-mute">© 2026 digithings · SOC 2 in progress</span>
+          <span className="ms-auto text-ink-mute">© 2026 digithings · SOC 2 in progress</span>
         </div>
 
         {/* Colophon — the page's last word (canon §08): the brand at giant

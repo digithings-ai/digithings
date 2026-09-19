@@ -46,7 +46,7 @@
    no top border, first column no left border (Tailwind can't express
    nth-child) — same grammar as metrics.css's .perf-metric grid */
 .odo-cell {
-  border-left: 1px solid var(--hair);
+  border-inline-start: 1px solid var(--hair);
   border-top: 1px solid var(--hair);
 }
 
@@ -59,7 +59,7 @@
 .odo-grid[data-cols="4"] .odo-cell:nth-child(4n + 1),
 .odo-grid[data-cols="3"] .odo-cell:nth-child(3n + 1),
 .odo-grid[data-cols="2"] .odo-cell:nth-child(2n + 1) {
-  border-left: none;
+  border-inline-start: none;
 }
 
 /* ≤ 720px the strip is two-up whatever data-cols says (matching the
@@ -78,11 +78,11 @@
 
   .odo-grid[data-cols="4"] .odo-cell:nth-child(4n + 1),
   .odo-grid[data-cols="3"] .odo-cell:nth-child(3n + 1) {
-    border-left: 1px solid var(--hair);
+    border-inline-start: 1px solid var(--hair);
   }
 
   .odo-grid[data-cols] .odo-cell:nth-child(2n + 1) {
-    border-left: none;
+    border-inline-start: none;
   }
 }
 
@@ -141,6 +141,12 @@
   transform: scaleX(0);
   transform-origin: left;
   transition: transform 0.3s var(--ease);
+}
+
+/* transform-origin has no logical keyword — the hairline fills from the
+   cell's inline-start, which is the right edge under dir=rtl. */
+[dir="rtl"] .bento-cell::before {
+  transform-origin: right;
 }
 
 .bento-cell:hover {
@@ -216,7 +222,7 @@
 .pf-artboard {
   position: absolute;
   top: 0;
-  left: 0;
+  inset-inline-start: 0;
   width: 800px;
   height: 300px;
   transform-origin: top left;
@@ -227,7 +233,7 @@
 @layer components {
   .pf-tag {
     position: absolute;
-    right: 0.6rem;
+    inset-inline-end: 0.6rem;
     top: 0.6rem;
     z-index: 2;
     font-family: var(--font-mono);

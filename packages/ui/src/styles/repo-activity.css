@@ -288,7 +288,7 @@
   position: relative;
   height: 1rem;
   margin-bottom: 0.3rem;
-  margin-left: 2.1rem;
+  margin-inline-start: 2.1rem;
   font-family: var(--font-mono);
   font-size: 0.65rem;
   color: var(--ink-mute);
@@ -334,7 +334,7 @@
   justify-content: space-between;
   gap: 0.4rem 1rem;
   margin-top: 0.5rem;
-  margin-left: 2.1rem;
+  margin-inline-start: 2.1rem;
   font-family: var(--font-mono);
   font-size: 0.68rem;
   color: var(--ink-mute);
@@ -351,7 +351,7 @@
 }
 
 .ra-heat-legend > span:first-child {
-  margin-left: 0;
+  margin-inline-start: 0;
 }
 
 .ra-heat-legend .ra-heat-cell {

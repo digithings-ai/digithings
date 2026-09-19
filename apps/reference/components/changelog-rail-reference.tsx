@@ -188,7 +188,7 @@ export function ChangelogRailReference() {
                   {rel.entries.map((entry) => (
                     <li
                       key={entry}
-                      className="relative pl-4 text-[0.82rem] text-ink-soft before:absolute before:left-0 before:font-mono before:text-ink-mute before:content-['+']"
+                      className="relative ps-4 text-[0.82rem] text-ink-soft before:absolute before:start-0 before:font-mono before:text-ink-mute before:content-['+']"
                     >
                       {entry}
                     </li>

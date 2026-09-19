@@ -43,7 +43,7 @@ export function StockTicker({ items, className }: StockTickerProps) {
       <div className="tk-track">
         {[...items, ...items].map((t, i) => (
           <span
-            className="inline-flex items-baseline gap-2 whitespace-nowrap border-r border-hair px-[1.3rem] py-[0.7rem] font-mono text-[0.82rem] [font-variant-numeric:tabular-nums]"
+            className="inline-flex items-baseline gap-2 whitespace-nowrap border-e border-hair px-[1.3rem] py-[0.7rem] font-mono text-[0.82rem] [font-variant-numeric:tabular-nums]"
             key={`${t.symbol}-${i}`}
             aria-hidden={i >= items.length || undefined}
           >

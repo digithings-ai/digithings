@@ -171,7 +171,7 @@ describe("vendored ui kit renders server-side", () => {
     expect(html).toContain("AAPL");
   });
 
-  it("Table numeric cells right-align with tabular figures", () => {
+  it("Table numeric cells end-align with tabular figures", () => {
     const html = renderToStaticMarkup(
       <Table>
         <TableHeader>
@@ -186,8 +186,46 @@ describe("vendored ui kit renders server-side", () => {
         </TableBody>
       </Table>,
     );
-    expect(html).toContain("text-right tabular-nums");
+    expect(html).toContain("text-end tabular-nums");
   });
+
+  it("Table head and cells carry logical start alignment, never physical text-left", () => {
+    const html = renderToStaticMarkup(
+      <Table>
+        <TableHeader>
+          <TableRow>
+            <TableHead>ticker</TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          <TableRow>
+            <TableRowHeader>BTC-PERP</TableRowHeader>
+            <TableCell>1.20</TableCell>
+          </TableRow>
+        </TableBody>
+      </Table>,
+    );
+    expect(html).toContain("text-start");
+    expect(html).not.toContain("text-left");
+  });
+
+  it("Button size paddings use logical inline padding (ps/pe)", () => {
+    const html = renderToStaticMarkup(<Button size="sm">Go</Button>);
+    expect(html).toContain("ps-1.5");
+    expect(html).not.toContain("pl-1.5");
+  });
+
+  it("Switch thumb mirrors its checked travel under dir=rtl", () => {
+    const html = renderToStaticMarkup(<Switch aria-label="toggle" />);
+    expect(html).toContain(
+      "rtl:group-data-[size=default]/switch:data-checked:-translate-x-[calc(100%-2px)]",
+    );
+    expect(html).toContain(
+      "rtl:group-data-[size=sm]/switch:data-checked:-translate-x-[calc(100%-2px)]",
+    );
+  });
+
+
 
   it("Table density=compact emits the density hook and compact padding", () => {
     const html = renderToStaticMarkup(

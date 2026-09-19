@@ -23,14 +23,14 @@
 /* ── collapsible tool-call block (ChatToolCall) ─────────────────────── */
 
 .tc {
-  border-left: 2px solid color-mix(in srgb, var(--accent) 40%, var(--term-hair));
+  border-inline-start: 2px solid color-mix(in srgb, var(--accent) 40%, var(--term-hair));
   /* Space between the chain rail and the tool name — lives here (not a
-     Tailwind pl-*) so it still applies when the utility isn't regenerated. */
-  padding-left: 0.75rem;
+     Tailwind ps-*) so it still applies when the utility isn't regenerated. */
+  padding-inline-start: 0.75rem;
 }
 
 .tc--err {
-  border-left-color: color-mix(in srgb, var(--danger) 55%, var(--term-hair));
+  border-inline-start-color: color-mix(in srgb, var(--danger) 55%, var(--term-hair));
 }
 
 .tc-dump {
@@ -85,7 +85,7 @@ button.tc-head[aria-expanded="true"] .tc-caret {
   justify-content: center;
   width: 0.55rem;
   height: 0.55rem;
-  margin-left: auto;
+  margin-inline-start: auto;
   transform: none;
   transform-origin: 50% 50%;
 }
@@ -106,7 +106,7 @@ button.tc-head[aria-expanded="true"] .tc-caret {
 }
 
 .think-steps {
-  border-left: 2px solid color-mix(in srgb, var(--accent) 30%, var(--hair));
+  border-inline-start: 2px solid color-mix(in srgb, var(--accent) 30%, var(--hair));
 }
 
 .think-steps li {
@@ -118,7 +118,7 @@ button.tc-head[aria-expanded="true"] .tc-caret {
 .think-steps li::before {
   content: "";
   position: absolute;
-  left: -1.62rem;
+  inset-inline-start: -1.62rem;
   top: 0.5rem;
   width: 6px;
   height: 6px;

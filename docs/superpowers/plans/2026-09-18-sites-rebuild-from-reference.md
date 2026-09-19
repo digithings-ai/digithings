@@ -84,6 +84,7 @@ not by file):
 
 ```
 /                     foundations — tokens, theme, livery, type suites, motion laws, contents
+/rtl                  RTL proof — the whole canon under a dir=ltr/dir=rtl toggle (phase 0.2, #4306)
 /typography           type specimen, type suites, word reveals, copy grammar
 /controls             ALL inputs and controls (fold the current /ui route in here):
                       button · input/label/textarea/separator · checkbox/switch/radio ·

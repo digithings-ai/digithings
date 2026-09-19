@@ -64,7 +64,7 @@ export function CodeSampleReference() {
 
       <div className="cs-block cs-install mt-[1.2rem] max-w-[640px] overflow-hidden rounded-none border border-hair bg-term-bg">
         <div
-          className="flex items-center gap-[0.2rem] border-b border-hair py-[0.4rem] pl-[0.9rem] pr-[0.5rem]"
+          className="flex items-center gap-[0.2rem] border-b border-hair py-[0.4rem] ps-[0.9rem] pe-[0.5rem]"
           role="tablist"
           aria-label="Install method"
         >
@@ -105,7 +105,7 @@ export function CodeSampleReference() {
       </div>
 
       <div className="cs-block mt-[1.2rem] max-w-[640px] overflow-hidden rounded-none border border-hair bg-term-bg">
-        <div className="flex items-center gap-[0.2rem] border-b border-hair py-[0.4rem] pl-[0.9rem] pr-[0.5rem]">
+        <div className="flex items-center gap-[0.2rem] border-b border-hair py-[0.4rem] ps-[0.9rem] pe-[0.5rem]">
           <span className="font-mono text-[0.62rem] uppercase tracking-[0.1em] text-ink-mute">
             python
           </span>

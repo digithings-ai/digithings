@@ -28,7 +28,7 @@
 
 .tl-mark {
   color: var(--accent);
-  margin-right: 0.5rem;
+  margin-inline-end: 0.5rem;
 }
 
 /* `pre` keeps a mid-word trailing space, so the caret never jumps back a cell

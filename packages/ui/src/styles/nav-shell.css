@@ -28,8 +28,8 @@
 .nav-shell {
   position: fixed;
   top: 0;
-  left: 0;
-  right: 0;
+  inset-inline-start: 0;
+  inset-inline-end: 0;
   height: var(--nav-shell-h, 62px);
   z-index: 210;
   display: flex;
@@ -111,7 +111,9 @@
   color: var(--ink);
 }
 /* borders, not a glyph: the caret follows ink through [data-theme] and needs
-   no font metrics to sit straight */
+   no font metrics to sit straight. Physical borders on purpose — the caret is
+   a vertical (down/up) affordance built from a rotated corner, so mirroring it
+   under dir=rtl would tilt it the wrong way. */
 .nav-shell-group-caret {
   width: 0.3rem;
   height: 0.3rem;
@@ -129,6 +131,8 @@
 .nav-shell-menu {
   position: absolute;
   top: 100%;
+  /* physical on purpose: centering pairs left:50% with a physical
+     translateX(-50%), so it must not mirror (it is direction-neutral). */
   left: 50%;
   z-index: 1; /* the tail cluster follows the strip in the DOM */
   display: flex;
@@ -314,7 +318,7 @@
   display: flex;
   flex-direction: column;
   align-items: flex-end;
-  text-align: right;
+  text-align: end;
   padding: calc(var(--nav-shell-h, 62px) + 1.5rem) clamp(1.25rem, 5vw, 2rem)
     max(1.25rem, env(safe-area-inset-bottom));
   background: transparent;
@@ -336,7 +340,7 @@
   gap: 0.35rem;
   flex: 1;
   width: min(100%, 20rem);
-  margin-left: auto;
+  margin-inline-start: auto;
   font-size: 1.35rem;
   font-family: var(--font-mono);
   color: var(--ink);
@@ -348,7 +352,7 @@
   padding: 0.85rem 0;
   border-bottom: 1px solid var(--hair);
   color: var(--ink-soft);
-  text-align: right;
+  text-align: end;
   text-shadow: 0 1px 12px color-mix(in srgb, var(--bg) 70%, transparent);
   transition: color 0.2s var(--ease);
 }
@@ -375,7 +379,7 @@
   display: flex;
   justify-content: flex-end;
   width: min(100%, 20rem);
-  margin-left: auto;
+  margin-inline-start: auto;
   padding-top: 1.5rem;
   padding-bottom: max(1rem, env(safe-area-inset-bottom));
   pointer-events: auto;
@@ -395,12 +399,12 @@
 @media (max-width: 880px) {
   .nav-shell-toggle {
     display: inline-flex;
-    margin-left: 0.5rem;
+    margin-inline-start: 0.5rem;
   }
 }
 @media (max-width: 560px) {
   .nav-shell-toggle {
-    margin-left: 0.65rem;
+    margin-inline-start: 0.65rem;
   }
 }
 /* Never hide the bar on small screens: thumb-scroll jitters direction, and

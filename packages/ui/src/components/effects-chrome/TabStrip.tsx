@@ -13,7 +13,10 @@ import { Button } from "../../ui";
  * active tab and written straight to a ref, so the slide is a CSS transition
  * — no `layoutId` (the apps' LazyMotion runs `domAnimation`, which omits
  * layout animations) and no per-frame React state. Survives resize; honours
- * reduced motion (indicator jumps, no slide).
+ * reduced motion (indicator jumps, no slide). The ink anchors on
+ * `inset-inline-start` and measures the active tab from that same inline-start
+ * edge, so it lands under the active tab in both LTR and RTL; arrow-key nav
+ * swaps ArrowLeft/ArrowRight under RTL to match the visual order.
  *
  * Three dresses: `underline` for content regions, `pill` for a compact
  * filled-rect mode switch (API name kept; shape is radius 0), `chip` for a
@@ -110,15 +113,24 @@ export function TabStrip({
       if (!list || !ink) return;
       const el = list.querySelectorAll<HTMLButtonElement>('[role="tab"]')[active];
       if (!el) return;
+      const listRect = list.getBoundingClientRect();
+      const elRect = el.getBoundingClientRect();
+      // The ink is anchored with inset-inline-start: 0, so its origin mirrors
+      // with the strip. Measure the active tab from that same inline-start
+      // edge (physical left in LTR, physical right in RTL) and translate by
+      // the physical delta — `transform` has no logical form, so RTL negates.
+      const rtl = getComputedStyle(list).direction === "rtl";
+      const x = rtl ? listRect.right - elRect.right : elRect.left - listRect.left;
+      const y = elRect.top - listRect.top;
       ink.style.transition = animate ? "" : "none";
-      // translate(x, y): offsetTop/offsetLeft are measured against the strip's
-      // padding box — the same origin as the ink's absolute top:0/left:0 — so
-      // the box dresses (pill/chip) track the tab even across wrapped rows.
-      ink.style.transform = `translate(${el.offsetLeft}px, ${el.offsetTop}px)`;
-      ink.style.width = `${el.offsetWidth}px`;
+      // translate(x, y): measured against the strip's padding box — the same
+      // origin as the ink's absolute inset-inline-start/top — so the box
+      // dresses (pill/chip) track the tab even across wrapped rows.
+      ink.style.transform = `translate(${rtl ? -x : x}px, ${y}px)`;
+      ink.style.width = `${elRect.width}px`;
       // The underline ink keeps its CSS height (2px, strip-bottom anchored);
       // the box dresses take the tab's own height.
-      if (variant !== "underline") ink.style.height = `${el.offsetHeight}px`;
+      if (variant !== "underline") ink.style.height = `${elRect.height}px`;
       if (!animate) {
         // flush the jump before restoring the transition so it never animates
         void ink.offsetWidth;
@@ -140,9 +152,16 @@ export function TabStrip({
   }, [position]);
 
   const onKeyDown = (e: React.KeyboardEvent) => {
+    // In an RTL strip the tabs run right-to-left, so "next" is visually to the
+    // left: ArrowLeft/ArrowRight swap their DOM-order meaning.
+    const rtl = listRef.current
+      ? getComputedStyle(listRef.current).direction === "rtl"
+      : false;
+    const nextInDom = (active + 1) % tabs.length;
+    const prevInDom = (active - 1 + tabs.length) % tabs.length;
     let next = active;
-    if (e.key === "ArrowRight") next = (active + 1) % tabs.length;
-    else if (e.key === "ArrowLeft") next = (active - 1 + tabs.length) % tabs.length;
+    if (e.key === "ArrowRight") next = rtl ? prevInDom : nextInDom;
+    else if (e.key === "ArrowLeft") next = rtl ? nextInDom : prevInDom;
     else if (e.key === "Home") next = 0;
     else if (e.key === "End") next = tabs.length - 1;
     else return;

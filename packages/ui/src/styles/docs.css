@@ -83,7 +83,7 @@
 .doc-code .docs-code-copy {
   position: absolute;
   top: 0.4rem;
-  right: 0.4rem;
+  inset-inline-end: 0.4rem;
   opacity: 0;
   transition: opacity 0.15s var(--ease, ease);
 }

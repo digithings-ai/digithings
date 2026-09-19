@@ -143,7 +143,7 @@ export function PrecisionTable({ columns, rows, className }: PrecisionTableProps
               scope="col"
               className={cx(
                 "border-b border-hair pb-[0.5rem] text-[0.6rem] uppercase tracking-[0.08em] text-ink-mute",
-                i === last ? "text-right" : "text-left",
+                i === last ? "text-end" : "text-start",
               )}
             >
               {column}
@@ -160,7 +160,7 @@ export function PrecisionTable({ columns, rows, className }: PrecisionTableProps
                 className={cx(
                   "border-b border-hair py-[0.55rem]",
                   ci === 0 ? "text-ink" : "text-ink-soft",
-                  ci === last && "text-right",
+                  ci === last && "text-end",
                 )}
               >
                 {cell}
