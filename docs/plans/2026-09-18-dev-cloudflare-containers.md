@@ -29,10 +29,10 @@ container boot-env trap*):
 | `digithings-stack` | `DigiStackContainer` | 5 | `standard-2` | 15m | `graph.` / `key.` / `search.digithings.ai` custom domains |
 | `digithings-stack` | `DigiQuantMcpContainer` | 1 | `standard-2` | 15m | `mcp.digithings.ai` route (commented out, not enabled) |
 
-Sources: `cloudflare/digichat-cloudflare/wrangler.toml`,
-`cloudflare/digithings-stack-cloudflare/wrangler.toml`,
-`cloudflare/digichat-cloudflare/src/index.ts:26`,
-`cloudflare/digithings-stack-cloudflare/src/index.ts:54,166`.
+Sources: `apps/digichat-cloudflare/wrangler.toml`,
+`apps/digithings-stack-cloudflare/wrangler.toml`,
+`apps/digichat-cloudflare/src/index.ts:26`,
+`apps/digithings-stack-cloudflare/src/index.ts:54,166`.
 
 Deploy paths differ and matter for isolation:
 
@@ -86,9 +86,9 @@ container behaviour under `env` proves awkward. This is a question for the owner
 Container ids are pinned constants today — dev must not share a Durable Object
 with prod:
 
-- `SHARED_DIGICHAT_CONTAINER_ID = "shared-v7"` — `cloudflare/digichat-cloudflare/src/paths.ts:22`
-- `SHARED_STACK_CONTAINER_ID = "shared-v15"` — `cloudflare/digithings-stack-cloudflare/src/ports.ts:37`
-- `MCP_CONTAINER_ID = "mcp-v1"` — `cloudflare/digithings-stack-cloudflare/src/ports.ts:29`
+- `SHARED_DIGICHAT_CONTAINER_ID = "shared-v7"` — `apps/digichat-cloudflare/src/paths.ts:22`
+- `SHARED_STACK_CONTAINER_ID = "shared-v15"` — `apps/digithings-stack-cloudflare/src/ports.ts:37`
+- `MCP_CONTAINER_ID = "mcp-v1"` — `apps/digithings-stack-cloudflare/src/ports.ts:29`
 
 A dev env needs distinct ids (e.g. `shared-v7-dev`) derived from the Worker
 name/env, so a dev boot can never attach to a prod instance. The ids are also the
@@ -160,21 +160,21 @@ longer exist on `develop`. The frontends live under `cloudflare/`:
 npm install
 
 # local dashboard (static-export Next app), http://127.0.0.1:3001/dashboard/
-npm --workspace cloudflare/dashboard run dev
+npm --workspace apps/dashboard run dev
 
 # local digichat (Next), default port 3000; 3002 avoids a clash
-npm --workspace cloudflare/digichat run dev -- -p 3002
+npm --workspace apps/digichat run dev -- -p 3002
 # or explicitly:
-#   cd cloudflare/digichat && npx next dev --hostname 127.0.0.1 -p 3002
+#   cd apps/digichat && npx next dev --hostname 127.0.0.1 -p 3002
 ```
 
 Local `.env.local` points at the **dev** containers, not prod:
 
-- `cloudflare/digichat/.env.local` — `DIGIGRAPH_INTERNAL_URL`, `DIGIKEY_URL`,
+- `apps/digichat/.env.local` — `DIGIGRAPH_INTERNAL_URL`, `DIGIKEY_URL`,
   `DIGIKEY_BFF_TOKEN` at the dev stack; `AUTH_URL` at the local digichat origin.
-- `cloudflare/dashboard/.env.local` — `NEXT_PUBLIC_DIGICHAT_EMBED_ORIGIN` at the
+- `apps/dashboard/.env.local` — `NEXT_PUBLIC_DIGICHAT_EMBED_ORIGIN` at the
   local digichat origin and `NEXT_PUBLIC_DIGICHAT_EMBED_HOST` for the dev parent.
-  `cloudflare/dashboard/README.md` documents the loopback dogfood pattern
+  `apps/dashboard/README.md` documents the loopback dogfood pattern
   (digichat `:3005`, dashboard `:4014`); the current `dev` script serves `:3001`.
   `NEXT_PUBLIC_MARKET_DATA_URL` should point at the dev stack's
   `/v1/market/*`, not `graph.digithings.ai`.
@@ -241,7 +241,7 @@ new `docs/ops/` checklist) a line requiring, before any `develop → main` promo
 
 ## See also
 
-- `cloudflare/digichat-cloudflare/README.md`, `cloudflare/digithings-stack-cloudflare/README.md`
-- `cloudflare/dashboard/README.md`, `cloudflare/digichat/README.md`
+- `apps/digichat-cloudflare/README.md`, `apps/digithings-stack-cloudflare/README.md`
+- `apps/dashboard/README.md`, `apps/digichat/README.md`
 - `docs/ops/SECRETS_ROTATION.md` (container boot-env trap, wrangler auth trap)
 - `docs/DEPLOYMENT.md`

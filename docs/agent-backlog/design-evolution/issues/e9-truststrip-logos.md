@@ -4,7 +4,7 @@ Extend **`TrustStrip`** (#1204) with **integration logo variant** — x.ai-style
 
 ## Component
 
-- [x] cross-cutting (`cloudflare/digiweb/design/`)
+- [x] cross-cutting (`packages/design/`)
 
 ## Acceptance Criteria
 
@@ -22,8 +22,8 @@ Extend **`TrustStrip`** (#1204) with **integration logo variant** — x.ai-style
 
 ## Documentation to Update
 
-- [ ] `cloudflare/digiweb/design/site/README.md`
-- [ ] `cloudflare/digiweb/design/COPY_GUIDE.md`
+- [ ] `packages/design/site/README.md`
+- [ ] `packages/design/COPY_GUIDE.md`
 
 ## Out of Scope
 

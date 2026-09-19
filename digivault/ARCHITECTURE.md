@@ -142,7 +142,7 @@ report = vault.lint()           # -> LintReport(ok, note_count, issues)
   volume-mounted at `/data/vault`), supervisord `[program:digivault-mcp]`
   (`python -m digivault.mcp_server --port 8769 --host 0.0.0.0`, reachable only
   through the key-gated `/_stack/mcp/digivault/*` edge route — `MCP_EDGE_KEY`,
-  `cloudflare/digithings-stack-cloudflare/src/index.ts`). MCP exposes
+  `apps/digithings-stack-cloudflare/src/index.ts`). MCP exposes
   `search_notes` (required `path_prefix`; D1 -> local -> Supabase), tag search,
   backlinks, and lint over the vault; `create_note` registers but refuses calls
   unless `DIGIVAULT_MCP_WRITE=1`, and `digivault_get_note` stays
