@@ -33,12 +33,12 @@ digiquant:
   - tests/dq/**
   - .github/workflows/test-digiquant.yml
   # The browser half of the live price feed is guarded from Python, because
-  # cloudflare/digiquant-web has no test runner at all (#1807). Without this entry a
+  # apps/digiquant-web has no test runner at all (#1807). Without this entry a
   # frontend-only edit to useLivePrices.ts fires the `web` lane (eslint + build) and
   # never runs tests/dq/test_prices_live_subscriber.py — the exact change class that
   # guard exists to catch. eslint does not flag re-adding `private: true`, collapsing
   # the per-instance Realtime topic, or reinstating a broadcast subscription.
-  - cloudflare/digiquant-web/lib/live/**
+  - apps/digiquant-web/lib/live/**
 
 digisearch:
   - digisearch/**
@@ -74,48 +74,48 @@ digifetch:
   - .github/workflows/test-digifetch.yml
 
 digichat:
-  - cloudflare/digichat/**
+  - apps/digichat/**
   # #1941 moved digichat's whole render path into these two packages —
-  # MiniMarkdown delegates to @digithings/web's ChatMarkdown, and the activity
+  # MiniMarkdown delegates to @digithings/ui's ChatMarkdown, and the activity
   # feed renders on its chat primitives. Without them an edit to
   # ChatMarkdownSource or ChatMermaidBlock changed the embed transcript and
   # fired no digichat lint, test or build.
-  - cloudflare/digichat-ui/**
-  - cloudflare/digiweb/web/**
-  - cloudflare/digiweb/design/**
+  - packages/digichat-ui/**
+  - packages/ui/**
+  - packages/design/**
   - package.json
   - package-lock.json
   - .github/workflows/test-digichat.yml
 
 dashboard:
-  - cloudflare/dashboard/**
-  # Dashboard is the third consumer of @digithings/web: it declares the dep, imports
+  - apps/dashboard/**
+  # Dashboard is the third consumer of @digithings/ui: it declares the dep, imports
   # chat-core.css, and renders <ChatMarkdown> via SafeMarkdown. Without this, a PR
-  # editing only cloudflare/digiweb/web/** runs no dashboard lint, tests or static-export
+  # editing only packages/ui/** runs no dashboard lint, tests or static-export
   # check while measurably changing what the dashboard ships — the `.chat-md h5` selector
   # added in #1948 lands in the dashboard's built stylesheet. Not digichat-ui: the
   # dashboard does not consume it.
-  - cloudflare/digiweb/web/**
-  - cloudflare/digiweb/design/**
+  - packages/ui/**
+  - packages/design/**
   - package.json
   - package-lock.json
   - .github/workflows/test-dashboard.yml
 
 web:
-  - cloudflare/digithings-web/**
-  - cloudflare/digiquant-web/**
+  - apps/digithings-web/**
+  - apps/digiquant-web/**
   # Org-wide Cloudflare cron Worker. This lane owns its Vitest + typecheck
   # because it already installs the root npm workspaces.
-  - cloudflare/digithings-cron/**
+  - apps/digithings-cron/**
   # digithings-web /chat renders digichat-ui's DigiChatSession and imports its
   # session.css + cursor.css, so a change there is a change to this app.
-  - cloudflare/digichat-ui/**
-  - cloudflare/digiweb/web/**
-  - cloudflare/digiweb/design/**
+  - packages/digichat-ui/**
+  - packages/ui/**
+  - packages/design/**
   # Derived brand kit (avatars, OG cards, social headers). --check runs in
   # test-web.yml after npm ci (Geist + sharp). A header-only edit must redden
   # this lane, not merge as an untested PNG.
-  - cloudflare/digiweb/brand/**
+  - packages/brand/**
   # The design reference is the canonical surface every other frontend copies patterns
   # from (.claude/skills/digiweb/SKILL.md routes all web work through it), and until this
   # entry nothing built, linted or type-checked it: the only `run build` calls in
@@ -127,30 +127,30 @@ web:
   # check_frontend_canon.py scans this workspace for raw palette utilities, legacy
   # vocabulary and colour literals. Only its CSS class-family census skips digiweb, and
   # that is deliberate — the reference is where new families are born (CENSUS_APPS in
-  # that script). score.py reaches this directory too; what excludes cloudflare/** is the
+  # that script). score.py reaches this directory too; what excludes apps/** + packages/** is the
   # `score` filter below, not the tool. None of those is a lint or a typecheck.
   #
   # It rides the `web` lane rather than a lane of its own because test-web.yml already
-  # pays the root `npm ci` that wires the @digithings/design and @digithings/web symlinks
+  # pays the root `npm ci` that wires the @digithings/design and @digithings/ui symlinks
   # this workspace declares; a separate workflow would duplicate that install to run two
   # commands.
   #
   # Note what this is NOT: neither Cloudflare deploy check watches this *directory*, and
   # this entry does not change that — neither site builds this app, so firing two
   # production builds per edit here would be cost with no consumer. This lane runs lint
-  # + tsc, never `next build`. Both checks do watch `cloudflare/digiweb/reference/package.json`
+  # + tsc, never `next build`. Both checks do watch `apps/reference/package.json`
   # (#1977, merged 2026-08-07) as an *install* input, since the root `npm install`
   # resolves all eight manifests before either site compiles. Different claim, and the
   # two compose: that PR's union guard reads every glob in this file, so this directory
   # entry independently satisfies it.
-  - cloudflare/digiweb/reference/**
+  - apps/reference/**
   # digichat Containers Worker + Dockerfile (workspace digithings-digichat-cloudflare).
   # Pages does not build it; vitest/wrangler live in that package. Keep on the web lane
   # so package.json is never an orphan install-input (#2073 / #2074).
-  - cloudflare/digichat-cloudflare/**
+  - apps/digichat-cloudflare/**
   # Profile A stack Containers Worker (workspace digithings-stack-cloudflare).
   # Same install-input / web-lane cover as digichat-cloudflare above.
-  - cloudflare/digithings-stack-cloudflare/**
+  - apps/digithings-stack-cloudflare/**
   - package.json
   - package-lock.json
   - .github/workflows/test-web.yml
@@ -164,7 +164,7 @@ score:
   - digismith/**
   - digikey/**
   - digivault/**
-  # cloudflare/** intentionally excluded from scoring (#1310): score.py is a
+  # apps/** + packages/** intentionally excluded from scoring (#1310): score.py is a
   # Python-oriented anti-pattern heuristic that misfires on CSS/JS; gitleaks
   # still runs on frontend PRs for secrets, and app builds still gate breakage.
   - scripts/**
@@ -246,7 +246,7 @@ ruff_and_scripts:
   - scripts/ci_paths.yaml
   # Python schedule invariants parse the Worker's typed job map and wrangler
   # triggers after #3579 moved production clocks out of workflow `schedule:`.
-  - cloudflare/digithings-cron/**
+  - apps/digithings-cron/**
   # This job's "Validate model routing (config only)" step runs
   # scripts/validate_model_routing.py --routing against the REAL
   # config/model_modes.yaml -- the only CI check that does; tests/dg/test_model_config.py
@@ -262,7 +262,7 @@ ruff_and_scripts:
   # release-please at a dead branch fires actionlint but not this lane.
   - .release-please-manifest.json
   - release-please-config.json
-  - cloudflare/digichat/package.json
+  - apps/digichat/package.json
   - package-lock.json
   - .github/workflows/release-please-digichat.yml
   # tests/scripts/test_prices_cron_dst.py asserts DST invariants and cron<->`if:`
@@ -276,8 +276,8 @@ ruff_and_scripts:
   # PR editing only db-migrate.yml fires actionlint but NOT that guard — silent on exactly the
   # edit it exists to catch. Same shape as the prices-cron entry above.
   - .github/workflows/db-migrate.yml
-  # tests/scripts/test_pipeline_dashboard_attempt.py asserts the outer-retry loop exports
-  # OLYMPUS_ATTEMPT, which is the only channel carrying the attempt number into the diagnostics
+  # tests/scripts/test_pipeline_digiquant_attempt.py asserts the outer-retry loop exports
+  # DIGIQUANT_ATTEMPT, which is the only channel carrying the attempt number into the diagnostics
   # key (#1762). This file IS listed under research_graph, but that lane's selector is
   # `tests/dq/research tests/dq/portfolio tests/dq/learning` — it never runs tests/scripts/. Drop the
   # export and every attempt collides on (run_id, 1) again with no error anywhere; the only

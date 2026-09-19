@@ -98,7 +98,7 @@ class TestResolveEditMode:
         assert mode == "full"
 
     def test_stale_gap_exceeds_env_returns_full(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.setenv("OLYMPUS_STALE_FULL_DAYS", "7")
+        monkeypatch.setenv("DIGIQUANT_STALE_FULL_DAYS", "7")
         prior = _macro_prior(prior_date=date(2026, 6, 1))
         mode = resolve_edit_mode(
             artifact_key=("segment", "macro"),
@@ -109,7 +109,7 @@ class TestResolveEditMode:
         assert mode == "full"
 
     def test_stale_gap_within_env_returns_edit(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.setenv("OLYMPUS_STALE_FULL_DAYS", "7")
+        monkeypatch.setenv("DIGIQUANT_STALE_FULL_DAYS", "7")
         prior = _macro_prior(prior_date=date(2026, 6, 14))
         mode = resolve_edit_mode(
             artifact_key=("segment", "macro"),
@@ -120,7 +120,7 @@ class TestResolveEditMode:
         assert mode == "edit"
 
     def test_stale_full_days_default_is_seven(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.delenv("OLYMPUS_STALE_FULL_DAYS", raising=False)
+        monkeypatch.delenv("DIGIQUANT_STALE_FULL_DAYS", raising=False)
         assert stale_full_days() == 7
 
 

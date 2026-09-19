@@ -34,8 +34,8 @@ jobs:
       # generations back into core macro_series_observations — twelve-x reads
       # that table for pair fixes. Without core creds the mirror is inert
       # (fail-soft by design), so pass them here.
-      CORE_SUPABASE_URL: ${{ secrets.CORE_SUPABASE_URL || secrets.SUPABASE_URL }}
-      CORE_SUPABASE_SERVICE_KEY: ${{ secrets.CORE_SUPABASE_SERVICE_KEY || secrets.SUPABASE_SERVICE_ROLE_KEY }}
+      CORE_SUPABASE_URL: ${{ secrets.CORE_SUPABASE_URL }}
+      CORE_SUPABASE_SERVICE_KEY: ${{ secrets.CORE_SUPABASE_SERVICE_KEY }}
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v5

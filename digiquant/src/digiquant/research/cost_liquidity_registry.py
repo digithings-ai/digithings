@@ -34,9 +34,9 @@ from digiquant.research.supabase_io import SupabaseClient
 
 logger = logging.getLogger(__name__)
 
-LIQUIDITY_SNAPSHOTS = "olympus_liquidity_snapshots"
-ACTION_COST_ESTIMATES = "olympus_action_cost_estimates"
-ACTION_COST_OUTCOMES = "olympus_action_cost_outcomes"
+LIQUIDITY_SNAPSHOTS = "liquidity_snapshots"
+ACTION_COST_ESTIMATES = "action_cost_estimates"
+ACTION_COST_OUTCOMES = "action_cost_outcomes"
 PAPER_EXECUTIONS = "portfolio_ledger_paper_executions"
 DECISION_INTENTS = "portfolio_ledger_decision_intents"
 REQUESTED_TARGETS = "portfolio_ledger_requested_targets"

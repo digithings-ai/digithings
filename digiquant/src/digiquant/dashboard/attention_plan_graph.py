@@ -25,7 +25,7 @@ from digiquant.research.triage import triage_decision_to_signal
 
 logger = logging.getLogger(__name__)
 
-OLYMPUS_PLANNER_MODE_ENV = "OLYMPUS_PLANNER_MODE"
+DIGIQUANT_PLANNER_MODE_ENV = "DIGIQUANT_PLANNER_MODE"
 
 
 class _StatePriorLoader:
@@ -61,7 +61,7 @@ def planner_mode_from_env() -> PlannerMode:
         return raw  # type: ignore[return-value]
     logger.warning(
         "invalid %s=%r; using shadow (enforce is not available)",
-        OLYMPUS_PLANNER_MODE_ENV,
+        DIGIQUANT_PLANNER_MODE_ENV,
         raw,
     )
     return "shadow"
@@ -139,7 +139,7 @@ def maybe_publish_attention_plan_shadow(
 
 
 __all__ = [
-    "OLYMPUS_PLANNER_MODE_ENV",
+    "DIGIQUANT_PLANNER_MODE_ENV",
     "maybe_publish_attention_plan_shadow",
     "planner_mode_from_env",
 ]

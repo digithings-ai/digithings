@@ -134,7 +134,7 @@ TASKS = [
             "On submit, profile is persisted and user returns to the main chat.",
             "Vitest/Playwright smoke test on the review screen.",
         ],
-        "docs": "cloudflare/digichat/README.md.",
+        "docs": "apps/digichat/README.md.",
     },
     {
         "parent": 296, "slug": "296-revision",
@@ -147,7 +147,7 @@ TASKS = [
             "Edits bump `profile_version` and trigger JWT refresh on next request.",
             "Unit test: edit → persist → JWT claim version increments.",
         ],
-        "docs": "cloudflare/digichat/README.md.",
+        "docs": "apps/digichat/README.md.",
     },
     {
         "parent": 296, "slug": "296-atlas-reads-profile",

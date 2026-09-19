@@ -16,7 +16,7 @@ Exit 0 is allowed only when every hop here is proven from product state:
   ``auth_kind=oauth`` connection. An ``api_key`` row with fills must not prove
   the hop.
 - Digest: a ``digest:`` notification_log key **and** an inbox confirmation
-  (claim-ledger rows are inserted before Mailgun send) **and** the workspace
+  (claim-ledger rows are inserted before the notify send) **and** the workspace
   ``daily_digest`` pref enabled. Dispatch skips prefs that are off.
 
 Unproven hops carry a closed-vocabulary blocker code (never Stripe ids,

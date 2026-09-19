@@ -41,7 +41,7 @@ from digiquant.research.supabase_io import SupabaseClient
 
 logger = logging.getLogger(__name__)
 
-OLYMPUS_RETRIEVAL_MANIFEST_MODE_ENV = "OLYMPUS_RETRIEVAL_MANIFEST_MODE"
+DIGIQUANT_RETRIEVAL_MANIFEST_MODE_ENV = "DIGIQUANT_RETRIEVAL_MANIFEST_MODE"
 
 RESEARCH_TOOLS: list[dict[str, Any]] = [
     {
@@ -105,14 +105,14 @@ RESEARCH_TOOLS: list[dict[str, Any]] = [
 
 
 def resolve_retrieval_manifest_mode() -> RetrievalManifestMode:
-    """Read ``OLYMPUS_RETRIEVAL_MANIFEST_MODE``; unknown values → shadow."""
+    """Read ``DIGIQUANT_RETRIEVAL_MANIFEST_MODE``; unknown values → shadow."""
     raw = env_lookup(RETRIEVAL_MANIFEST_MODE, default="shadow").strip().lower()
     try:
         return RetrievalManifestMode(raw)
     except ValueError:
         logger.warning(
             "invalid %s=%r; using shadow (allowed: off|shadow|enforce)",
-            OLYMPUS_RETRIEVAL_MANIFEST_MODE_ENV,
+            DIGIQUANT_RETRIEVAL_MANIFEST_MODE_ENV,
             raw,
         )
         return RetrievalManifestMode.SHADOW
