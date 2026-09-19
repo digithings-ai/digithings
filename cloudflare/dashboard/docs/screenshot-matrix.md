@@ -48,7 +48,7 @@ Capture guidance:
 | `pm-rebalance` | `pm-rebalance` | `artifacts/pm-rebalance-desktop.png` |
 | `commit` | `commit-run/…` | `artifacts/commit-desktop.png` |
 | `beliefs` | `beliefs` | `artifacts/beliefs-desktop.png` |
-| `call-trace` | Call trace panel (`olympus_run_event_trace`) | `artifacts/call-trace-desktop.png` |
+| `call-trace` | Call trace panel (`run_event_trace`) | `artifacts/call-trace-desktop.png` |
 | `artifact-ledger` | ledger-only e.g. `risk-debate` | `artifacts/artifact-ledger-desktop.png` |
 
 Families align with `REPRESENTATIVE_RUN_DOCUMENT_KEYS` in
