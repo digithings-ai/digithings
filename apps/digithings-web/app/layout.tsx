@@ -71,7 +71,7 @@ const docsIvoryInit =
 // and flips to light only at hydration (~0.5s in) - the load flash. Mirrors
 // the toggle's storage key (dt-theme).
 const storedThemeInit =
-  "try{var t=localStorage.getItem('dt-theme');if(t==='light'||t==='dark'){document.documentElement.setAttribute('data-theme',t);if(t==='light'){var m=document.querySelector('meta[name=\"theme-color\"]');if(m)m.setAttribute('content','#FBFBF9')}}}catch(e){}";
+  "try{var t=localStorage.getItem('dt-theme');if(t==='light'||t==='dark'){document.documentElement.setAttribute('data-theme',t);if(t==='light'){var m=document.querySelector('meta[name=\"theme-color\"]');if(m)m.setAttribute('content','#FBFBF9')}}}catch(e){}"; // canon-allow: mirrors tokens.css light --bg (pre-paint script)
 
 export default function RootLayout({ children }: { children: ReactNode }) {
   // suppressHydrationWarning: themeInitScript (and the /docs ivory default)
