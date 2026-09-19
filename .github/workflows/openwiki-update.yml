@@ -68,9 +68,10 @@ jobs:
           OPENAI_COMPATIBLE_BASE_URL: ${{ vars.CHEAPERINFERENCE_API_BASE || secrets.CHEAPERINFERENCE_API_BASE || 'https://api.cheaperinference.com/v1' }}
           OPENWIKI_MODEL_ID: "deepseek-v4-pro"
           # Required for the LangSmith connector's code-mode pull to authenticate.
+          # Reuses the org-level LANGSMITH_API_KEY — no separate repo secret (#4357).
           # For extra workspaces, add OPENWIKI_LANGSMITH_API_KEY_2, _3, ... as repo
           # secrets and env entries here.
-          OPENWIKI_LANGSMITH_API_KEY: ${{ secrets.OPENWIKI_LANGSMITH_API_KEY }}
+          OPENWIKI_LANGSMITH_API_KEY: ${{ secrets.LANGSMITH_API_KEY }}
           # Optional: also trace this workflow's own OpenWiki run to LangSmith.
           LANGSMITH_API_KEY: ${{ secrets.LANGSMITH_API_KEY }}
           LANGCHAIN_PROJECT: openwiki

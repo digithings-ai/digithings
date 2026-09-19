@@ -4,7 +4,7 @@ The hosted market-data MCP server is a dedicated container built from
 ``digiquant/Dockerfile.mcp`` (FastMCP ``streamable-http`` on :8767 with the
 ``[research]``/``[mcp]`` extras — never the backtest engine), fronted by a
 second Cloudflare Container (``DigiQuantMcpContainer``) beside the Profile A
-stack in ``cloudflare/digithings-stack-cloudflare/``.
+stack in ``apps/digithings-stack-cloudflare/``.
 
 RED premise (review finding 3): at creation these tests failed with
 ``FileNotFoundError`` (brief Step 2) because ``Dockerfile.mcp`` did not exist
@@ -25,9 +25,9 @@ pytestmark = pytest.mark.unit
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 DOCKERFILE = REPO_ROOT / "digiquant" / "Dockerfile.mcp"
-WRANGLER = REPO_ROOT / "cloudflare" / "digithings-stack-cloudflare" / "wrangler.toml"
-WORKER_INDEX = REPO_ROOT / "cloudflare" / "digithings-stack-cloudflare" / "src" / "index.ts"
-WORKER_PORTS = REPO_ROOT / "cloudflare" / "digithings-stack-cloudflare" / "src" / "ports.ts"
+WRANGLER = REPO_ROOT / "apps" / "digithings-stack-cloudflare" / "wrangler.toml"
+WORKER_INDEX = REPO_ROOT / "apps" / "digithings-stack-cloudflare" / "src" / "index.ts"
+WORKER_PORTS = REPO_ROOT / "apps" / "digithings-stack-cloudflare" / "src" / "ports.ts"
 ARCHITECTURE = REPO_ROOT / "digiquant" / "ARCHITECTURE.md"
 
 #: Vars forwarded by DigiQuantMcpContainer.envVars only — never duplicated into
@@ -35,6 +35,7 @@ ARCHITECTURE = REPO_ROOT / "digiquant" / "ARCHITECTURE.md"
 MCP_SCOPED_VARS = (
     "DIGIQUANT_MARKET_DATA_BACKEND",
     "FRED_API_KEY",
+    "GLOOMBERB_SESSION_COOKIE",
     "R2_ACCOUNT_ID",
     "R2_BUCKET",
     "R2_ACCESS_KEY_ID",
@@ -119,12 +120,14 @@ def test_worker_routes_mcp_service() -> None:
     index = WORKER_INDEX.read_text()
     assert "DigiQuantMcpContainer" in index
     assert "DIGIQUANT_MCP_PORT" in index
-    # Finding 1: no live unauthenticated forwarding route ships. The workers.dev
-    # `/_stack/mcp` path forwarder is removed (Worker-edge digikey enforcement
-    # is a separate prod-gate follow-up); the commented mcp.digithings.ai route
-    # stays reserved, not live. Comments may name the removed path only to
-    # record its removal, so this pins the quoted route literals, not the words.
-    assert '"/_stack/mcp"' not in index
+    # Finding 1: no *unauthenticated* forwarding route ships. The removed
+    # workers.dev `/_stack/mcp` path forwarder never comes back; the only live
+    # MCP edge routes are the secret-gated per-server map in index.ts
+    # (MCP_EDGE_PREFIX + MCP_EDGE_KEY, fail-closed 401 without a matching
+    # x-digi-mcp-key header — the same pattern as the #4174 zammad route).
+    assert 'const MCP_EDGE_PREFIX = "/_stack/mcp";' in index
+    assert "x-digi-mcp-key" in index
+    assert "workerEnv.MCP_EDGE_KEY?.trim()" in index
     assert '"/_stack/mcp/"' not in index
     # Finding 4: hostname routing is the exact reserved hostname, never a
     # `startsWith("mcp.")` prefix matching any mcp.* host.
@@ -158,6 +161,7 @@ def test_wrangler_documents_mcp_secrets() -> None:
     text = WRANGLER.read_text()
     for name in (
         "FRED_API_KEY",
+        "GLOOMBERB_SESSION_COOKIE",
         "R2_ACCOUNT_ID",
         "R2_BUCKET",
         "R2_ACCESS_KEY_ID",

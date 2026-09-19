@@ -51,7 +51,7 @@ via `docker-compose.override.yml`.
 ```bash
 DIGICHAT_REQUIRE_ROOT_AUTH=0
 DIGICHAT_EMBED_HOSTS=digithings.ai,www.digithings.ai
-DIGICHAT_EMBED_TENANTS='{"digithings.ai":{"slug":"digithings","aliases":["www.digithings.ai"],"gateMode":"ungated","showByok":true,"showStatusBar":true,"layout":"page","activityDetail":"full","attribution":false,"token":"<schema-required>","backend":{"type":"digigraph"}}}'
+DIGICHAT_EMBED_TENANTS='{"digithings.ai":{"slug":"digithings","aliases":["www.digithings.ai"],"gateMode":"ungated","showByok":true,"showStatusBar":true,"layout":"page","activityDetail":"full","attribution":true,"token":"<schema-required>","backend":{"type":"digigraph"}}}'
 ```
 
 digiquant.io is **crawl-only** unless a human later requests iframing digithings
@@ -68,8 +68,8 @@ Supabase `architecture_notes` (same `production` / `CORE_SUPABASE_*` pattern as
 digithings** (`dry-run` / `apply`, optional website crawl).
 
 digisearch dual-sink is **not** applied from Actions (ingest needs a
-server-visible path). Use the operator path below or the legacy
-`docs-reindex-guide.yml` until remote ingest exists.
+server-visible path). Use the operator path below; `docs-reindex-guide.yml`
+only dry-runs (its apply step was removed in #4357).
 
 ## First onboard (operator / local)
 

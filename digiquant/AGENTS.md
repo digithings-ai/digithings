@@ -97,9 +97,9 @@ ruff check digiquant/ && ruff format --check digiquant/
 
 ## Dashboard (research + portfolio)
 
-Public path is **`/dashboard/`** only (`cloudflare/dashboard`; ADR-0026). `/dashboard/` is retired — no redirect alias.
+Public path is **`/dashboard/`** only (`apps/dashboard`; ADR-0026). `/dashboard/` is retired — no redirect alias.
 
-When touching `digiquant/src/digiquant/dashboard/` **or** `cloudflare/dashboard/` Group A queries:
+When touching `digiquant/src/digiquant/dashboard/` **or** `apps/dashboard/` Group A queries:
 
 1. Read [`ARCHITECTURE.md`](ARCHITECTURE.md) § research + portfolio and
    [`docs/superpowers/specs/2026-06-20-olympus-daily-thesis-design.md`](../docs/superpowers/specs/2026-06-20-olympus-daily-thesis-design.md).
@@ -109,21 +109,21 @@ When touching `digiquant/src/digiquant/dashboard/` **or** `cloudflare/dashboard/
 3. Read component guides: [`src/digiquant/research/docs/AGENTS.md`](src/digiquant/research/docs/AGENTS.md),
    [`src/digiquant/portfolio/docs/AGENTS.md`](src/digiquant/portfolio/docs/AGENTS.md).
 4. **One graph, one daily cadence** — do not add a portfolio-lite env fork, `run_type` graph forks,
-   or `monthly` synthesis paths. Cost control = `DIGIQUANT_MODEL_TIER` (canonical since #3784; `OLYMPUS_MODEL_TIER` remains a listed retired alias in `digiquant.dashboard.envcompat`) + per-artifact `skip`/`edit`/`full`.
+   or `monthly` synthesis paths. Cost control = `DIGIQUANT_MODEL_TIER` + per-artifact `skip`/`edit`/`full`.
 5. **Edit-mode extension pattern** (`digiquant.dashboard.edit_mode`):
    - Call `resolve_edit_mode(artifact_key, run_date, prior_loader, triage, force_full_rewrite)`
      at node entry.
    - `skip` → shallow-carry prior row (0 LLM); `edit` → load `*-edit.md` skill, expect
      `DocumentPatch`, merge via `merge_document_patch`; `full` → `*-full.md` skill, full body.
    - Prior = `prior_published(run_date, document_key)` (latest `date < run_date`), not calendar
-     yesterday only. Stale gap > `OLYMPUS_STALE_FULL_DAYS` (default 7) → `full`.
+     yesterday only. Stale gap > `DIGIQUANT_STALE_FULL_DAYS` (default 7) → `full`.
    - Track B WP13-class shadow (#2616): `digiquant.dashboard.attention_plan.plan_attention_shadow`
      records `AttentionPlan` + refresh reasons beside incumbent modes (`off`/`shadow` only;
      never actuates; cannot expand H4 or rewrite H7/H8).
    - Track C glass-box (#1945 / #2622): `attention_plan_io` +
      `attention_plan_graph.maybe_publish_attention_plan_shadow` (research
      `publish_phase`) upsert `attention-plan` on daily runs when triage ran and
-     `OLYMPUS_PLANNER_MODE` is `shadow` (default). Never fabricate UI rows without
+     `DIGIQUANT_PLANNER_MODE` is `shadow` (default). Never fabricate UI rows without
      a published document; never actuate (`enforce` absent).
 6. **portfolio extension pattern** (H1–H9): add phases via `build_portfolio_phases_thesis`; wire
    `build_grounding` + phase blinding; H7 must not emit weights (`PMDirectionMemo` only); H8
@@ -478,7 +478,7 @@ and [`docs/adr/0021-digiquant-supabase-project-topology.md`](../docs/adr/0021-di
 It is the **only** place the `api.gloom.sh` URL/site logic lives — `digifetch`
 stays a generic transport engine (no URLs, no env reads).
 
-- **33 tools, read scope, default ON.** `digifetch_quote`, `digifetch_quotes_batch`,
+- **34 tools, read scope, default ON.** `digifetch_quote`, `digifetch_quotes_batch`,
   `digifetch_price_history`, `digifetch_ticker_financials`, `digifetch_options_chain`,
   `digifetch_sec_filings`, `digifetch_holders`, `digifetch_analyst_research`,
   `digifetch_corporate_actions`, `digifetch_earnings_calendar`,
@@ -491,7 +491,9 @@ stays a generic transport engine (no URLs, no env reads).
   `digifetch_13f_funds`, `digifetch_13f_holdings`, and the #4110 phase-3
   cohort `digifetch_shiller`, `digifetch_proxy_statements`,
   `digifetch_filing_events`, `digifetch_risk_reports`,
-  `digifetch_short_interest`, `digifetch_equity_diagnostic` are registered in
+  `digifetch_short_interest`, `digifetch_equity_diagnostic`, and the #4110
+  phase-4a `digifetch_saved_searches` (`digifetch_transcripts` also gained a
+  `transcript_id` detail mode) are registered in
   `mcp_server.py` (`_maybe_tool`, `READ_SCOPE_TOOLS`) and listed in
   `orchestrator_tools.py`. Keep them read-scope; the family is default-ON behind
   `GLOOMBERB_ENABLED` — only `1`/`true`/`yes`/`on` enable it, and any other value
@@ -615,7 +617,8 @@ stays a generic transport engine (no URLs, no env reads).
   credit conditions (FRED composition over `digifetch_econ_series`), treasury
   auctions (fiscaldata), prediction markets (local model), scanner (websocket).
   See ARCHITECTURE §5 for the full list; the per-transcript detail route
-  (`/cloud/transcripts/{id}`) remains a candidate extension.
+  (`/cloud/transcripts/{id}`) is `digifetch_transcripts`' `transcript_id` mode,
+  and `digifetch_saved_searches` covers `/cloud/search/saved`.
 - **Entitlements (#4110 phase 5).** Every digifetch tool declares exactly one
   entitlement in `data/gloomberb/entitlements.py` (`TOOL_ENTITLEMENTS`):
   `free` (anonymous), `session` (`GLOOMBERB_SESSION_COOKIE` required; without

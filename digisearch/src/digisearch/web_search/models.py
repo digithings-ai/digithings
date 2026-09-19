@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from typing import Literal
 from urllib.parse import urlparse
 
 from pydantic import BaseModel, Field
@@ -19,6 +20,44 @@ class WebSearchResponse(BaseModel):
     query: str
     results: list[WebSearchResult] = Field(default_factory=list)
     provider: str = ""
+
+
+class WebSearchErrorResponse(BaseModel):
+    """Soft error envelope for provider failures on POST /v1/web_search (#4192).
+
+    Provider 429/5xx/connection/timeout failures come back as HTTP 200 with
+    this shape (never a 500). ``retryable``/``status_code`` let callers such as
+    digiquant back off on throttling instead of failing the run hard.
+    """
+
+    ok: Literal[False] = False
+    error: str
+    retryable: bool = False
+    status_code: int | None = None
+
+
+class WebSearchProviderError(RuntimeError):
+    """All configured web-search backends failed at the provider level (#4192).
+
+    Raised by ``service._search_only`` once the searxng→ddgs failover is
+    exhausted. Carries the upstream HTTP status when a provider exposed one and
+    a ``retryable`` hint (429 / 5xx / connection / timeout) so HTTP callers can
+    answer with the soft in-envelope error instead of leaking a 500.
+
+    Subclasses RuntimeError so existing ``except RuntimeError`` callers keep
+    their behavior.
+    """
+
+    def __init__(
+        self,
+        message: str,
+        *,
+        status_code: int | None = None,
+        retryable: bool = False,
+    ) -> None:
+        super().__init__(message)
+        self.status_code = status_code
+        self.retryable = retryable
 
 
 class WebSearchRequest(BaseModel):

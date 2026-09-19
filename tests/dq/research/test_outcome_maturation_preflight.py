@@ -375,7 +375,7 @@ def test_h7_manifest_uses_structured_lesson_not_decision_log() -> None:
 
 
 def test_h5_and_h7_wire_expose_lesson_id(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("OLYMPUS_CONTEXT_COMPILER_MODE", "shadow")
+    monkeypatch.setenv("DIGIQUANT_CONTEXT_COMPILER_MODE", "shadow")
     ev = _evidence(summary="pin")
     loaded = _loaded_state(evidence=(ev,))
     store, pin = _store_with_state(loaded)

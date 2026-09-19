@@ -26,7 +26,7 @@ what the portfolio *is*, and it neither writes nor rewrites the book.
 
 Since #2418 these models are **no longer dark**: ``portfolio/writers/ledger_io.py`` appends
 the first five links of the chain (including ``TargetAdjustment`` since #2768) from
-every H9 run that actually commits, unless the ``OLYMPUS_PORTFOLIO_LEDGER`` kill switch
+every H9 run that actually commits, unless the ``DIGIQUANT_PORTFOLIO_LEDGER`` kill switch
 is off (see ``digiquant/ARCHITECTURE.md``), and ``execution_io.py`` appends the last two.
 A run that short-circuits as ``status="noop"`` returns before the append — "no rows" on
 that path is intentional, not a missing producer.

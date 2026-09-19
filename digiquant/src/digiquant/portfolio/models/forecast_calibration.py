@@ -15,7 +15,7 @@ from __future__ import annotations
 
 import hashlib
 import json
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 from decimal import Decimal
 from enum import StrEnum
 from typing import Annotated, TypeAlias
@@ -96,6 +96,71 @@ def _canonical_json(payload: object) -> str:
     return json.dumps(payload, sort_keys=True, separators=(",", ":"), default=str)
 
 
+# ``ReturnFraction`` is ``decimal_places=8`` — the canonical spelling of a return
+# is its fixed 8-decimal-place form. Postgres ``numeric`` does not preserve
+# trailing zeros, so a value persisted as ``0.03250000`` reads back through
+# PostgREST as the JSON number ``0.0325`` (Python float) and re-``str()``s to
+# ``0.0325``. Hashing the quantized spelling makes write-time and read-time
+# digests agree regardless of that loss (#4298). Calibration metrics share the
+# convention because their contracts are likewise 8-decimal-place Decimals.
+_RETURN_FRACTION_QUANTUM = Decimal("0.00000001")
+
+
+def canonical_return_fraction(value: Decimal) -> str:
+    """Canonical 8dp string spelling of a Decimal field for artifact hashes."""
+    return str(value.quantize(_RETURN_FRACTION_QUANTUM))
+
+
+# Decimal-valued payload keys for the calibration artifacts. Keeping the list by
+# key (rather than rebuilding every payload at one call site) lets the writer,
+# the model validator, and tests all funnel through the same hash helpers and
+# still hash the same canonical spelling.
+_FORECAST_CALIBRATION_DECIMAL_SCALARS = (
+    "equivalent_sample_size",
+    "bias",
+    "dispersion",
+    "brier_score",
+    "log_score",
+    "reliability",
+)
+_CALIBRATED_FORECAST_DECIMAL_SCALARS = (
+    "expected_gross_return",
+    "forecast_error_std",
+    "calibrated_positive_probability",
+    "reliability_weight",
+)
+_CALIBRATED_FORECAST_DECIMAL_SEQUENCES = ("downside_quantiles",)
+
+
+def _canonicalize_payload_decimals(
+    payload: dict[str, object],
+    *,
+    scalar_keys: tuple[str, ...],
+    sequence_keys: tuple[str, ...] = (),
+) -> dict[str, object]:
+    """Return a copy of ``payload`` with Decimal-valued fields canonicalized.
+
+    Payloads are assembled by several call sites (the model validators, the
+    calibrator, tests) which spell Decimals with ``str()``. Hashing the fixed
+    8dp spelling here, in the one place every call site shares, keeps a
+    write-time digest and a PostgREST float read-back recompute identical
+    without duplicating a canonical builder at each site.
+    """
+    canonical = dict(payload)
+    for key in scalar_keys:
+        value = canonical.get(key)
+        if value is not None:
+            canonical[key] = canonical_return_fraction(Decimal(value))  # type: ignore[arg-type]
+    for key in sequence_keys:
+        value = canonical.get(key)
+        if value is not None:
+            canonical[key] = [
+                canonical_return_fraction(Decimal(item))
+                for item in value  # type: ignore[union-attr]
+            ]
+    return canonical
+
+
 def forecast_outcome_content_hash(*, payload: dict[str, object]) -> str:
     """SHA-256 over canonical JSON of outcome economic identity fields."""
     return hashlib.sha256(_canonical_json(payload).encode("utf-8")).hexdigest()
@@ -118,7 +183,11 @@ def forecast_outcome_id(
 
 def forecast_calibration_content_hash(*, payload: dict[str, object]) -> str:
     """SHA-256 over canonical JSON of calibration cohort/metrics identity."""
-    return hashlib.sha256(_canonical_json(payload).encode("utf-8")).hexdigest()
+    canonical = _canonicalize_payload_decimals(
+        payload,
+        scalar_keys=_FORECAST_CALIBRATION_DECIMAL_SCALARS,
+    )
+    return hashlib.sha256(_canonical_json(canonical).encode("utf-8")).hexdigest()
 
 
 def forecast_calibration_id(
@@ -138,7 +207,12 @@ def forecast_calibration_id(
 
 def calibrated_forecast_content_hash(*, payload: dict[str, object]) -> str:
     """SHA-256 over canonical JSON of calibrated-forecast shadow fields."""
-    return hashlib.sha256(_canonical_json(payload).encode("utf-8")).hexdigest()
+    canonical = _canonicalize_payload_decimals(
+        payload,
+        scalar_keys=_CALIBRATED_FORECAST_DECIMAL_SCALARS,
+        sequence_keys=_CALIBRATED_FORECAST_DECIMAL_SEQUENCES,
+    )
+    return hashlib.sha256(_canonical_json(canonical).encode("utf-8")).hexdigest()
 
 
 def calibrated_forecast_id(
@@ -155,6 +229,65 @@ def calibrated_forecast_id(
         _CALIBRATED_FORECAST_ID_NAMESPACE,
         f"{effective_forecast_id}:{cal_key}:{content_hash.strip()}",
     )
+
+
+def forecast_outcome_hash_payload(
+    *,
+    base_forecast_id: UUID,
+    effective_forecast_id: UUID,
+    ticker: str,
+    horizon_sessions: int,
+    reference_session: date,
+    maturity_session: date,
+    reference_snapshot: SessionPriceSnapshot | None,
+    maturity_snapshot: SessionPriceSnapshot | None,
+    forecast_mean_return: Decimal | None,
+    realized_return: Decimal | None,
+    signed_residual: Decimal | None,
+    positive_label: bool | None,
+    status: OutcomeStatus,
+    unavailable_reason: str | None,
+    event_time: datetime,
+    known_at: datetime,
+) -> dict[str, object]:
+    """Canonical digest payload shared by the writer and the validator.
+
+    The writer (:func:`digiquant.research.forecast_outcomes._build_resolved_outcome`)
+    and :meth:`ForecastOutcome._hash_payload` must build byte-identical payloads:
+    two duplicated builders is exactly how a write-time digest and a read-time
+    recompute drift apart (#4298). Return fields are canonicalized to fixed 8dp so
+    the persisted ``numeric`` read-back cannot change the digest.
+    """
+    return {
+        "base_forecast_id": str(base_forecast_id),
+        "effective_forecast_id": str(effective_forecast_id),
+        "ticker": ticker,
+        "horizon_sessions": horizon_sessions,
+        "reference_session": reference_session.isoformat(),
+        "maturity_session": maturity_session.isoformat(),
+        "reference_snapshot": (
+            None if reference_snapshot is None else reference_snapshot.model_dump(mode="json")
+        ),
+        "maturity_snapshot": (
+            None if maturity_snapshot is None else maturity_snapshot.model_dump(mode="json")
+        ),
+        "forecast_mean_return": (
+            None
+            if forecast_mean_return is None
+            else canonical_return_fraction(forecast_mean_return)
+        ),
+        "realized_return": (
+            None if realized_return is None else canonical_return_fraction(realized_return)
+        ),
+        "signed_residual": (
+            None if signed_residual is None else canonical_return_fraction(signed_residual)
+        ),
+        "positive_label": positive_label,
+        "status": status.value,
+        "unavailable_reason": unavailable_reason,
+        "event_time": event_time.isoformat(),
+        "known_at": known_at.isoformat(),
+    }
 
 
 class ForecastOutcome(ForecastCalibrationModel):
@@ -275,38 +408,24 @@ class ForecastOutcome(ForecastCalibrationModel):
         return self
 
     def _hash_payload(self) -> dict[str, object]:
-        return {
-            "base_forecast_id": str(self.base_forecast_id),
-            "effective_forecast_id": str(self.effective_forecast_id),
-            "ticker": self.ticker,
-            "horizon_sessions": self.horizon_sessions,
-            "reference_session": self.reference_session.isoformat(),
-            "maturity_session": self.maturity_session.isoformat(),
-            "reference_snapshot": (
-                None
-                if self.reference_snapshot is None
-                else self.reference_snapshot.model_dump(mode="json")
-            ),
-            "maturity_snapshot": (
-                None
-                if self.maturity_snapshot is None
-                else self.maturity_snapshot.model_dump(mode="json")
-            ),
-            "forecast_mean_return": (
-                None if self.forecast_mean_return is None else str(self.forecast_mean_return)
-            ),
-            "realized_return": (
-                None if self.realized_return is None else str(self.realized_return)
-            ),
-            "signed_residual": (
-                None if self.signed_residual is None else str(self.signed_residual)
-            ),
-            "positive_label": self.positive_label,
-            "status": self.status.value,
-            "unavailable_reason": self.unavailable_reason,
-            "event_time": self.event_time.isoformat(),
-            "known_at": self.known_at.isoformat(),
-        }
+        return forecast_outcome_hash_payload(
+            base_forecast_id=self.base_forecast_id,
+            effective_forecast_id=self.effective_forecast_id,
+            ticker=self.ticker,
+            horizon_sessions=self.horizon_sessions,
+            reference_session=self.reference_session,
+            maturity_session=self.maturity_session,
+            reference_snapshot=self.reference_snapshot,
+            maturity_snapshot=self.maturity_snapshot,
+            forecast_mean_return=self.forecast_mean_return,
+            realized_return=self.realized_return,
+            signed_residual=self.signed_residual,
+            positive_label=self.positive_label,
+            status=self.status,
+            unavailable_reason=self.unavailable_reason,
+            event_time=self.event_time,
+            known_at=self.known_at,
+        )
 
 
 class ForecastCalibration(ForecastCalibrationModel):
@@ -551,8 +670,10 @@ __all__ = [
     "SessionPriceSnapshot",
     "calibrated_forecast_content_hash",
     "calibrated_forecast_id",
+    "canonical_return_fraction",
     "forecast_calibration_content_hash",
     "forecast_calibration_id",
     "forecast_outcome_content_hash",
+    "forecast_outcome_hash_payload",
     "forecast_outcome_id",
 ]

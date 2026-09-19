@@ -112,8 +112,8 @@ MCP (Model Context Protocol) is the standard for tool discovery and invocation a
 |-----------|-------------------|-----------|--------------------------|-----------------|
 | **digigraph** | `python -m digigraph.mcp_server` (install: `pip install -e "digigraph[mcp]"`); in the cloudflare stack, loopback `:8766` inside `DigiStackContainer` via the `digigraph-mcp` supervisord program (no public route yet) | 8766 (streamable-http) or stdio | `workflow`, `chat`, `thread_state`, `list_orchestrator_tools`, `list_orchestrator_tools_detailed` | digiclaw (Phase 2), IDE plugins, Claude Desktop |
 | **digiquant** | `python -m digiquant.mcp_server` | 8767 (streamable-http) or stdio | `digiquant_run_pipeline`, `digiquant_list_strategies`, `run_backtest`, `run_optimize`, `run_validation` | digigraph (invokes via HTTP orchestrator), power-user IDE |
-| **digisearch** | `docker compose --profile digisearch-mcp up` → container port 8765; in the cloudflare stack, loopback `:8765` inside `DigiStackContainer` via the `digisearch-mcp` supervisord program (no public route yet) | 8765 (streamable-http) | `digisearch_query`, `digisearch_fetch_all`, `digisearch_research_turn` (with `digisearch[agent]`), `digisearch_research_delegate` | digigraph (invokes via HTTP orchestrator), Langflow, IDE |
-| **digivault** | `docker compose --profile digivault-mcp up` → container port 8769; in the cloudflare stack, loopback `:8769` inside `DigiStackContainer` via the `digivault-mcp` supervisord program (no public route yet) | 8769 (streamable-http) | `digivault_search_tag`, `digivault_backlinks`, `digivault_lint`, `digivault_create_note` (`digivault_search_notes` / `digivault_get_note` stay orchestrator-only) | digigraph (invokes via HTTP orchestrator), IDE |
+| **digisearch** | `docker compose --profile digisearch-mcp up` → container port 8765; in the cloudflare stack, `:8765` inside `DigiStackContainer` via the `digisearch-mcp` supervisord program, reachable only through the key-gated `/_stack/mcp/digisearch/*` edge route | 8765 (streamable-http) | `semantic`, `digisearch_fetch_all`, `research_turn` (with `digisearch[agent]`), `digisearch_research_delegate` | digigraph (invokes via HTTP orchestrator), Langflow, IDE |
+| **digivault** | `docker compose --profile digivault-mcp up` → container port 8769; in the cloudflare stack, `:8769` inside `DigiStackContainer` via the `digivault-mcp` supervisord program, reachable only through the key-gated `/_stack/mcp/digivault/*` edge route | 8769 (streamable-http) | `digivault_search_notes`, `digivault_search_tag`, `digivault_backlinks`, `digivault_lint` (`digivault_create_note` only when `DIGIVAULT_MCP_WRITE=1`) | digigraph (invokes via HTTP orchestrator), IDE |
 
 **Design notes:**
 
@@ -467,7 +467,7 @@ make up-heartbeat
 make stack-local          # runs scripts/run_stack_local.sh
 
 # Start digichat UI with hot reload (separate terminal)
-make digichat-dev         # cd cloudflare/digichat && npm run dev → http://127.0.0.1:3000
+make digichat-dev         # cd apps/digichat && npm run dev → http://127.0.0.1:3000
 ```
 
 Requires Python 3.12+ virtual environment with all packages installed editable:
@@ -609,7 +609,7 @@ Each service maintains its own detailed architecture document. The root `ARCHITE
 | digibase | [digibase/ARCHITECTURE.md](digibase/ARCHITECTURE.md) |
 | digiclaw | [digiclaw/ARCHITECTURE.md](digiclaw/ARCHITECTURE.md) |
 | digikey | [digikey/ARCHITECTURE.md](digikey/ARCHITECTURE.md) |
-| digichat | [cloudflare/digichat/ARCHITECTURE.md](cloudflare/digichat/ARCHITECTURE.md) |
+| digichat | [apps/digichat/ARCHITECTURE.md](apps/digichat/ARCHITECTURE.md) |
 | Frontend umbrella (ADR-0009) | [docs/adr/0009-frontend-umbrella.md](docs/adr/0009-frontend-umbrella.md) |
 | Local full stack setup | [docs/LOCAL_STACK.md](docs/LOCAL_STACK.md) |
 | LLM model configuration | [config/MODELS.md](config/MODELS.md) |

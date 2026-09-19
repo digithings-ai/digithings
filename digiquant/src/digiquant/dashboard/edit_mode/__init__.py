@@ -6,7 +6,7 @@ Public API for research/portfolio nodes (spec §4–§5). Wraps the proven
 
 from __future__ import annotations
 
-from digiquant.dashboard.edit_mode.config import OLYMPUS_STALE_FULL_DAYS_ENV, stale_full_days
+from digiquant.dashboard.edit_mode.config import DIGIQUANT_STALE_FULL_DAYS_ENV, stale_full_days
 from digiquant.dashboard.edit_mode.merge import MergeError, merge_document_patch
 from digiquant.dashboard.edit_mode.models import (
     ArtifactEditOutput,
@@ -37,7 +37,7 @@ from digiquant.dashboard.research_retrieval import (
 )
 
 __all__ = [
-    "OLYMPUS_STALE_FULL_DAYS_ENV",
+    "DIGIQUANT_STALE_FULL_DAYS_ENV",
     "ArtifactEditOutput",
     "ArtifactKey",
     "DocumentPatch",

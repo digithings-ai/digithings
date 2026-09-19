@@ -355,7 +355,7 @@ class HyperdashScraper:
 
 def _onchain_enabled() -> bool:
     """Opt-in kill-switch for the LIVE Hyperdash scrape (env
-    ``DIGIQUANT_ONCHAIN_POSITIONING``; retired ``ATLAS_ONCHAIN_POSITIONING`` still reads).
+    ``DIGIQUANT_ONCHAIN_POSITIONING``).
 
     Defaults OFF so unit tests never hit the network just by invoking preflight (the scrape is an
     external HTTP call, unlike the DB-backed fed_odds path). The research workflows set it to "1" to

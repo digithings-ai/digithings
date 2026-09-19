@@ -169,7 +169,6 @@ def _connection(*, broker: Broker = Broker.ALPACA) -> BrokerConnection:
 
 @pytest.fixture(autouse=True)
 def _clear_routing_env(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.delenv("OLYMPUS_KAIROS_ROUTING", raising=False)
     monkeypatch.delenv("DIGIQUANT_EXECUTION_ROUTING", raising=False)
 
 
@@ -178,18 +177,18 @@ def test_routing_enabled_defaults_off() -> None:
 
 
 def test_routing_enabled_opt_in(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("OLYMPUS_KAIROS_ROUTING", "1")
+    monkeypatch.setenv("DIGIQUANT_EXECUTION_ROUTING", "1")
     assert routing_enabled() is True
 
 
 def test_routing_enabled_in_reads_mapping_not_process_env() -> None:
     assert routing_enabled_in({}) is False
-    assert routing_enabled_in({"OLYMPUS_KAIROS_ROUTING": "1"}) is True
+    assert routing_enabled_in({"DIGIQUANT_EXECUTION_ROUTING": "1"}) is True
     assert routing_enabled() is False
 
 
 def test_house_workspace_always_paper_internal(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("OLYMPUS_KAIROS_ROUTING", "1")
+    monkeypatch.setenv("DIGIQUANT_EXECUTION_ROUTING", "1")
     assert (
         resolve_venue(None, active_paper_brokers=[Broker.ALPACA]) is ExecutionVenue.PAPER_INTERNAL
     )
@@ -200,17 +199,17 @@ def test_kill_switch_off_forces_paper_internal() -> None:
 
 
 def test_active_alpaca_paper_when_routing_on(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("OLYMPUS_KAIROS_ROUTING", "on")
+    monkeypatch.setenv("DIGIQUANT_EXECUTION_ROUTING", "on")
     assert resolve_venue(_WS, active_paper_brokers=[Broker.ALPACA]) is ExecutionVenue.ALPACA_PAPER
 
 
 def test_active_ibkr_paper_when_routing_on(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("OLYMPUS_KAIROS_ROUTING", "true")
+    monkeypatch.setenv("DIGIQUANT_EXECUTION_ROUTING", "true")
     assert resolve_venue(_WS, active_paper_brokers=["ibkr"]) is ExecutionVenue.IBKR_PAPER
 
 
 def test_ambiguous_brokers_raise(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("OLYMPUS_KAIROS_ROUTING", "1")
+    monkeypatch.setenv("DIGIQUANT_EXECUTION_ROUTING", "1")
     with pytest.raises(AmbiguousVenueError):
         resolve_venue(_WS, active_paper_brokers=[Broker.ALPACA, Broker.IBKR])
 
@@ -339,7 +338,7 @@ def test_route_skips_when_paper_internal() -> None:
 
 
 def test_route_submits_and_mirrors(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("OLYMPUS_KAIROS_ROUTING", "1")
+    monkeypatch.setenv("DIGIQUANT_EXECUTION_ROUTING", "1")
     store, oid = _chain_store(action=DecisionAction.ADD)
     adapter = _FakeAdapter()
     result = route_pending_orders(
@@ -364,7 +363,7 @@ def test_route_submits_and_mirrors(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 def test_route_refuses_inconsistent_noop_chain(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("OLYMPUS_KAIROS_ROUTING", "1")
+    monkeypatch.setenv("DIGIQUANT_EXECUTION_ROUTING", "1")
     store, oid = _chain_store(action=DecisionAction.NO_OP)
     adapter = _FakeAdapter()
     result = route_pending_orders(
@@ -383,7 +382,7 @@ def test_route_refuses_inconsistent_noop_chain(monkeypatch: pytest.MonkeyPatch) 
 
 
 def test_route_deterministic_id_collision_on_retry(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("OLYMPUS_KAIROS_ROUTING", "1")
+    monkeypatch.setenv("DIGIQUANT_EXECUTION_ROUTING", "1")
     store, _oid = _chain_store(action=DecisionAction.TRIM)
     adapter = _FakeAdapter()
     client = _FakeClient(store)
@@ -432,7 +431,7 @@ def test_router_module_has_no_upsert() -> None:
 
 def test_foreign_workspace_intents_never_submitted(monkeypatch: pytest.MonkeyPatch) -> None:
     """Tenant-A connection must not submit tenant-B's same-date pending intents."""
-    monkeypatch.setenv("OLYMPUS_KAIROS_ROUTING", "1")
+    monkeypatch.setenv("DIGIQUANT_EXECUTION_ROUTING", "1")
     ws_a = _WS
     ws_b = UUID("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb")
     store_a, oid_a = _chain_store(action=DecisionAction.ADD, workspace_id=ws_a)
@@ -465,7 +464,7 @@ def test_workspace_none_never_substituted_with_connection(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """workspace_id=None must stay house ⇒ PAPER_INTERNAL (no connection.workspace remap)."""
-    monkeypatch.setenv("OLYMPUS_KAIROS_ROUTING", "1")
+    monkeypatch.setenv("DIGIQUANT_EXECUTION_ROUTING", "1")
     store, _ = _chain_store(action=DecisionAction.ADD)
     adapter = _FakeAdapter()
     result = route_pending_orders(
@@ -488,7 +487,7 @@ def test_house_and_system_uuids_never_route_externally(
 ) -> None:
     from digiquant.dashboard.tenancy import house_workspace_id, system_workspace_id
 
-    monkeypatch.setenv("OLYMPUS_KAIROS_ROUTING", "1")
+    monkeypatch.setenv("DIGIQUANT_EXECUTION_ROUTING", "1")
     assert (
         resolve_venue(house_workspace_id(), active_paper_brokers=[Broker.ALPACA])
         is ExecutionVenue.PAPER_INTERNAL
@@ -502,7 +501,7 @@ def test_house_and_system_uuids_never_route_externally(
 def test_live_env_connection_with_explicit_brokers_raises(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setenv("OLYMPUS_KAIROS_ROUTING", "1")
+    monkeypatch.setenv("DIGIQUANT_EXECUTION_ROUTING", "1")
     store, _ = _chain_store(action=DecisionAction.ADD)
     adapter = _FakeAdapter()
     live_conn = BrokerConnection(
@@ -543,7 +542,7 @@ def test_public_resolve_venue_raises_live_venue_not_authorized() -> None:
 
 
 def test_pending_missing_workspace_id_raises(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("OLYMPUS_KAIROS_ROUTING", "1")
+    monkeypatch.setenv("DIGIQUANT_EXECUTION_ROUTING", "1")
     store, _ = _chain_store(action=DecisionAction.ADD)
     store["portfolio_ledger_order_intents"][0].pop("workspace_id")
     adapter = _FakeAdapter()
@@ -566,7 +565,7 @@ def test_missing_workspace_id_raises_under_threaded_scoped_read(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """Scoped ``eq(workspace_id)`` would silently drop a null-id row; router must raise."""
-    monkeypatch.setenv("OLYMPUS_KAIROS_ROUTING", "1")
+    monkeypatch.setenv("DIGIQUANT_EXECUTION_ROUTING", "1")
     store, oid = _chain_store(action=DecisionAction.ADD)
     store["portfolio_ledger_order_intents"][0].pop("workspace_id")
     client = _FakeClient(store)
@@ -590,7 +589,7 @@ def test_missing_workspace_id_raises_under_threaded_scoped_read(
 
 def test_overlay_pending_routed_via_own_connection(monkeypatch: pytest.MonkeyPatch) -> None:
     """Overlay workspace pending routes on its connection; house sibling is unseen."""
-    monkeypatch.setenv("OLYMPUS_KAIROS_ROUTING", "1")
+    monkeypatch.setenv("DIGIQUANT_EXECUTION_ROUTING", "1")
     overlay = _WS
     house = house_workspace_id()
     store_o, oid_o = _chain_store(action=DecisionAction.ADD, workspace_id=overlay)

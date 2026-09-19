@@ -68,7 +68,7 @@ GitHub Actions `automerge-agent` / `automerge-docs` remain a backstop. They do n
 
 ## What this is
 
-digithings — open-core agentic stack (quant finance, RAG, chat). Services: **digigraph** (8000, LangGraph orchestration), **digiquant** (8001, NautilusTrader quant + research + portfolio sub-graphs), **digisearch** (8002, RAG), **digikey** (8005, JWT + API keys), **digismith** (8003, tracing), **digivault** (8004, Obsidian-style markdown vault management — profile `digivault`), **digiclaw** (heartbeat + audit), **digibase** (shared library). Frontends: **digichat** (3005, chat UI), **dashboard** (`cloudflare/dashboard`, digiquant operator surface at `/dashboard/`). Sub-graphs in digiquant: research at `digiquant/src/digiquant/research/`, portfolio at `digiquant/src/digiquant/portfolio/`. Old `digiquant/src/digiquant/research/` is gone.
+digithings — open-core agentic stack (quant finance, RAG, chat). Services: **digigraph** (8000, LangGraph orchestration), **digiquant** (8001, NautilusTrader quant + research + portfolio sub-graphs), **digisearch** (8002, RAG), **digikey** (8005, JWT + API keys), **digismith** (8003, tracing), **digivault** (8004, Obsidian-style markdown vault management — profile `digivault`), **digiclaw** (heartbeat + audit), **digibase** (shared library). Frontends: **digichat** (3005, chat UI), **dashboard** (`apps/dashboard`, digiquant operator surface at `/dashboard/`). Sub-graphs in digiquant: research at `digiquant/src/digiquant/research/`, portfolio at `digiquant/src/digiquant/portfolio/`. Old `digiquant/src/digiquant/research/` is gone.
 
 ---
 
@@ -82,6 +82,7 @@ digithings — open-core agentic stack (quant finance, RAG, chat). Services: **d
 - Every change traces to a GitHub Issue: `task/<N>-slug` branch or `Fixes #N` in the PR body
 - Never touch live-trading paths without explicit human approval
 - `projects/` is confidential — never push to public remotes
+- **Pointer cursors are kit-level** — `@digithings/ui` interactive parts set `cursor-pointer` (and `cursor-not-allowed` when disabled); app-local `cursor-*` utilities are refused by the canon guard (`apps/reference` excepted). Missing cursor = missing kit part.
 - **Digi names are always lowercase** — see [Naming](#naming--digi-modules) below
 
 ---
@@ -127,9 +128,11 @@ Wrong vocabulary causes routing mistakes (wrong component folder, wrong AGENTS.m
 
 The quality bar is **review**, not a self-score. Use `/review` / in-session review / `review-and-ship` and the hatches in [CODE_REVIEW_POLICY.md](docs/agents/CODE_REVIEW_POLICY.md). Those cover security, quality, optimization, and accuracy. Do not use the CodeRabbit Cursor plugin `code-review` skill.
 
+**Every review run produces a review file.** Whatever the venue — `/review`, an in-session or fresh-context review, `review-and-ship`, or a subagent reviewer — write the findings to a durable file so they can be worked through and re-checked: `review-<subject>.md` beside the plan or ledger the review belongs to (for SDD work, `.superpowers/sdd/<plan>/review-*.md`). The file carries the reviewer, the subject (commit/PR), the verdict, severity counts, and file:line evidence. A review that exists only in chat is not review coverage, and findings that cannot be re-read cannot be driven to closure.
+
 `make score` and [`docs/scoring/`](docs/scoring/) remain an optional human/CI tool. Do not treat them as an agent pre-flight or a substitute for review.
 
-**Presentation-only frontend** (`cloudflare/digiweb/design/**`, `**.css`, static marketing pages): iterate on **one branch off `develop`** with a live preview (`.claude/launch.json` dev servers) and open a single PR when the look is approved. `cloudflare/**` is excluded from the optional `score` CI filter. Gates that still apply: gitleaks (secrets), app builds, the digithings deploy build-check. (See #1310.)
+**Presentation-only frontend** (`packages/design/**`, `**.css`, static marketing pages): iterate on **one branch off `develop`** with a live preview (`.claude/launch.json` dev servers) and open a single PR when the look is approved. `apps/**` and `packages/**` are excluded from the optional `score` CI filter. Gates that still apply: gitleaks (secrets), app builds, the digithings deploy build-check. (See #1310.)
 
 ---
 
@@ -384,7 +387,7 @@ PATH="$PWD/.venv/bin:$PATH" make stack-local   # digikey :8005, digigraph :8000,
 PATH="$PWD/.venv/bin:$PATH" ./scripts/stop_stack_local.sh
 ```
 
-digichat dev UI (needs `cloudflare/digichat/.env.local` + optional `make up-digichat-db` for Postgres): `make digichat-dev` → http://127.0.0.1:3000.
+digichat dev UI (needs `apps/digichat/.env.local` + optional `make up-digichat-db` for Postgres): `make digichat-dev` → http://127.0.0.1:3000.
 
 ### Lint / test commands (no stack required)
 

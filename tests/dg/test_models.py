@@ -81,7 +81,7 @@ class TestChatCompletionRequest:
         The effective prompt is derived server-side (project config / tenant corpus
         map); see tests/dg/test_corpus_routing.py and tests/dg/test_api.py for the
         ignore behaviour. Pin acceptance so the field is not dropped without a
-        migration for cloudflare/digichat and other callers.
+        migration for apps/digichat and other callers.
         """
         req = ChatCompletionRequest(messages=[], research_system_prompt="baseline default")
         assert req.research_system_prompt == "baseline default"

@@ -5,20 +5,20 @@ from __future__ import annotations
 from datetime import date
 
 import pytest
+from digiquant.notify.cloudflare_email import CloudflareEmailConfig
 from digiquant.notify.events import (
     detect_execution_alerts,
     detect_holding_changes,
     holding_weight_change,
 )
-from digiquant.notify.mailgun import MailgunConfig
 
 from tests.dq.notify.conftest import FakeSupabase
 
 pytestmark = pytest.mark.unit
 
-_CONFIG = MailgunConfig(
-    api_key="k",
-    domain="mg.example.com",
+_CONFIG = CloudflareEmailConfig(
+    api_token="k",
+    account_id="acct-123",
     from_address="n@example.com",
     unsubscribe_base="https://example.com/settings",
 )

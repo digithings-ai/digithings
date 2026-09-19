@@ -177,6 +177,10 @@ from .models import (
     RiskReportsResult,
     RiskReworded,
     RiskSummary,
+    SavedSearch,
+    SavedSearchesEnvelope,
+    SavedSearchesInput,
+    SavedSearchesResult,
     ScreenerEnvelope,
     ScreenerInput,
     ScreenerResult,
@@ -361,6 +365,8 @@ __all__ = [
     "TickerTweetsInput",
     "TweetSearchInput",
     "VenuesInput",
+    # coverage expansion (#4110 phase 4a)
+    "SavedSearchesInput",
     "ScreenerInput",
     "ThirteenFFundsInput",
     "ThirteenFHoldingsInput",
@@ -423,6 +429,9 @@ __all__ = [
     "TweetsResult",
     "Venue",
     "VenuesResult",
+    # coverage expansion (#4110 phase 4a)
+    "SavedSearch",
+    "SavedSearchesResult",
     "ScreenerRow",
     "ScreenerResult",
     "Fund13F",
@@ -484,6 +493,8 @@ __all__ = [
     "StatementsEnvelope",
     "TweetsEnvelope",
     "VenuesEnvelope",
+    # coverage expansion (#4110 phase 4a)
+    "SavedSearchesEnvelope",
     "ScreenerEnvelope",
     "Funds13FEnvelope",
     "Holdings13FEnvelope",

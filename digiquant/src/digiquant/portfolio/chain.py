@@ -114,13 +114,13 @@ class DiagnosticsDeps:
     attempt: int = 1
 
 
-OUTER_ATTEMPT_ENV = "OLYMPUS_ATTEMPT"
+OUTER_ATTEMPT_ENV = "DIGIQUANT_ATTEMPT"
 
 
 def _outer_attempt() -> int:
     """The CI outer-retry attempt number, from ``DIGIQUANT_ATTEMPT``.
 
-    ``pipeline-digiquant.yml``'s retry loop still exports ``OLYMPUS_ATTEMPT``
+    ``pipeline-digiquant.yml``'s retry loop exports ``DIGIQUANT_ATTEMPT``
     per attempt (#1762). Readers accept both names. Falls back to 1 —
     a local or single-shot run genuinely is the first attempt, and 1 keeps it distinct from
     the ``0`` sentinel migration 065 stamped on rows written before per-attempt keying.
@@ -333,6 +333,19 @@ def _run_preflight_only(state: ResearchState, deps: ChainDeps) -> ResearchState:
         return state
 
 
+def _guard_web_search_health() -> None:
+    """Fail-fast pre-flight web_search gate (#4198).
+
+    Raises ``WebSearchHealthError`` unless the web_search tool answers a
+    minimal live probe with a non-empty result set. Deliberately fail-hard:
+    every research phase grounds on web_search, so continuing would waste
+    hours producing an invalid run (no fallbacks — #3859 policy unchanged).
+    """
+    from digiquant.research.data.web_search_health import check_web_search_health
+
+    check_web_search_health()
+
+
 def _persist_stage_report(state: ResearchState, report: PipelineStageReport) -> ResearchState:
     """Stamp ``pipeline_stage_outcomes`` on state (JSON dump for diagnostics)."""
     return state.model_copy(update={"pipeline_stage_outcomes": report.model_dump(mode="json")})
@@ -543,6 +556,16 @@ def run_research_then_portfolio(
 
         research_started = _stage_start(2, 5, "research")
         if research_enabled:
+            # Fail-fast web_search gate (#4198 owner directive): every research
+            # phase grounds on the first-party web_search tool, so a run with a
+            # dead search provider is invalid output — no fallbacks (#3859).
+            # This is the deliberate fail-hard exception to the pipeline's
+            # fail-soft probe convention (see research/phases/preflight.py):
+            # stop before any research phase executes. The workflow's
+            # ``python -m digiquant web-search healthcheck`` step is the primary
+            # gate; this in-process guard is the second line of defence for
+            # invocations outside the workflow (house CLI, overlay).
+            _guard_web_search_health()
             # research: research only, no publish.
             research_deps = ResearchGraphDeps(
                 preflight=deps.research.preflight,
@@ -861,7 +884,7 @@ def dispatch_house_notifications_after_chain(
     Overlay invokes :func:`run_research_then_portfolio` (not ``cli_main``), so nested
     overlay runs never send house digests. Notify is imported here rather than
     at module import so ``import chain`` on the overlay path does not load
-    Mailgun. ``dispatch_notifications`` is itself fail-soft; this wrapper also
+    the notify client. ``dispatch_notifications`` is itself fail-soft; this wrapper also
     swallows ImportError.
     """
     try:
@@ -971,16 +994,27 @@ def cli_main(argv: list[str] | None = None) -> int:
         _prior_book = load_prior_book(client, research_input.run_date)
         _holdings = holdings_from_prior_book(_prior_book)
 
-    final_state = run_research_then_portfolio(
-        research_input=research_input,
-        deps=chain_deps,
-        checkpointer=_checkpointer,
-        thread_base=_thread_base,
-        portfolio_watchlist=None,
-        # Prior-book holdings always survive the 7C/7CD cap (#936). Empty when the
-        # operator overrides --watchlist or for monthly runs (no portfolio).
-        portfolio_held=set(_holdings or ()),
-    )
+    from digiquant.research.data.web_search_health import WebSearchHealthError
+
+    try:
+        final_state = run_research_then_portfolio(
+            research_input=research_input,
+            deps=chain_deps,
+            checkpointer=_checkpointer,
+            thread_base=_thread_base,
+            portfolio_watchlist=None,
+            # Prior-book holdings always survive the 7C/7CD cap (#936). Empty when the
+            # operator overrides --watchlist or for monthly runs (no portfolio).
+            portfolio_held=set(_holdings or ()),
+        )
+    except WebSearchHealthError as exc:
+        # Fail fast (#4198): a dead web_search tool invalidates all downstream
+        # research; emit the machine-readable summary and stop.
+        summary["status"] = "web_search_unhealthy"
+        summary["error"] = str(exc)
+        json.dump({"ok": False, "summary": summary}, sys.stdout, default=str)
+        sys.stdout.write("\n")
+        return 1
 
     # Degraded-run gate (#726, 1B) + good-book guard (#809): a run that produced little/no
     # fresh research is worth retrying — exit non-zero so the CI outer-retry fires (one bad

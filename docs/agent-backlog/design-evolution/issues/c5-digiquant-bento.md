@@ -1,10 +1,10 @@
 ## Goal
 
-Demote extra digiquant.io scroll sections into a **Cursor bento grid** for Pipeline · Strategies · Pricing — with `ProductFrame` tearsheet/UI crops ([`EVOLUTION.md` §3](../../../../cloudflare/digiweb/design/EVOLUTION.md)).
+Demote extra digiquant.io scroll sections into a **Cursor bento grid** for Pipeline · Strategies · Pricing — with `ProductFrame` tearsheet/UI crops ([`EVOLUTION.md` §3](../../../../packages/design/EVOLUTION.md)).
 
 ## Component
 
-- [x] `cloudflare/digiquant-web/`
+- [x] `apps/digiquant-web/`
 
 ## Acceptance Criteria
 
@@ -21,12 +21,12 @@ Demote extra digiquant.io scroll sections into a **Cursor bento grid** for Pipel
 ## Test Requirements
 
 - Manual scroll: Olympus pin + strategy stack + contact section z-order correct at 100%/125% zoom
-- `cd cloudflare/digiquant-web && npm run build`
+- `cd apps/digiquant-web && npm run build`
 
 ## Documentation to Update
 
-- [ ] `cloudflare/digiweb/design/demos/digiquant-landing/DESIGN_DECISIONS.md` — note bento demotion
-- [ ] `cloudflare/digiweb/design/EVOLUTION.md`
+- [ ] `packages/design/demos/digiquant-landing/DESIGN_DECISIONS.md` — note bento demotion
+- [ ] `packages/design/EVOLUTION.md`
 
 ## Out of Scope
 

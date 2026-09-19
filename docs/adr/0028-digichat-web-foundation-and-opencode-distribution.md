@@ -10,7 +10,7 @@ day: the assistant-ui + AI SDK v7 + standard data-parts implementation is
 Supersedes [ADR-0027](0027-opencode-digichat-cli-foundation.md).
 
 **Release line (owner, 2026-09-05):** the published package is
-`cloudflare/digichat` **1.4.0**. Non-UI BFF/auth/embed-policy work may still
+`apps/digichat` **1.4.0**. Non-UI BFF/auth/embed-policy work may still
 ship as **1.5** on `develop`. Do not merge the 2.0 UI/stream migration into
 `develop` until a 2.0 release is intended — release-please on `develop` would
 otherwise fold it into 1.5 or force a major too early. Do not add 1.x UI
@@ -50,13 +50,13 @@ the repository moved from `sst/opencode` to `anomalyco/opencode`. Carrying a
 branded fork across that velocity is not defensible.
 
 The existing delivery and code split also argues against replacing the web
-foundation. `cloudflare/digichat` plus `cloudflare/digichat-ui` contain 18,622
+foundation. `apps/digichat` plus `packages/digichat-ui` contain 18,622
 production/config lines; in the Next.js app approximately 47% is browser
 presentation and 53% is API routes, adapters, auth, persistence, and embed
 policy. The genuinely visual part of `digichat-ui` is approximately 2,300–2,600
 lines. Its roughly 3,100-line source already contains `DigiChatSession`,
 slash-command handling, streaming intro, activities, transcript markdown, and
-the terminal stylesheet; markdown is already delegated to `@digithings/web`.
+the terminal stylesheet; markdown is already delegated to `@digithings/ui`.
 Replacing the chat chrome would not retire most of digichat. A convincing CLI
 skin on the current React UI is estimated at 1–2 weeks, or 3–5 weeks with a
 theme system, keyboard-navigation polish, and accessibility. An alternative

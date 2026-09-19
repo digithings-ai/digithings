@@ -1,0 +1,36 @@
+/* Account surfaces consumed from the digiweb account family (login, signup,
+   session, settings). Token-only; class prefix `.acct-`.
+
+   Wave-2 (#4206) pruning: the reference `.btn-*` button dress this sheet used
+   to carry for the login card / session rail is gone — auth buttons ride the
+   package's own `.acct-auth-submit` dress (AuthCard) and the kit Button
+   (sidebar sign-out), and the callback's CTA uses the kit's `buttonVariants`.
+   `.acct-field`, `.acct-divider`, `.acct-strength-seg`, `.acct-btn-block`,
+   `.acct-login-shell`, `.acct-login-card`, `.acct-login-mark`, `.acct-input`,
+   `.acct-input-error` and `.acct-error` were zero-consumer after the T5a/T5b
+   swaps and were deleted in the wave-3 close-out (T6). `.acct-session-*`
+   still serves the sidebar session rail. */
+
+.acct-session-rail {
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+  margin-bottom: 0.75rem;
+}
+
+.acct-session-email {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  color: var(--ink);
+}
+
+.acct-session-meta {
+  font-family: var(--font-mono);
+  font-size: 0.62rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--ink-mute);
+}

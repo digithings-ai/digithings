@@ -37,14 +37,17 @@ from digiquant.portfolio.payloads import analyst_payloads, deliberation_summarie
 from digiquant.portfolio.phases.portfolio_common import _portfolio_grounding
 from digiquant.portfolio.skills import load_skill_full
 from digiquant.portfolio.state import PortfolioState
-from digiquant.research.forecast_outcomes import list_resolved_outcomes_as_of
+from digiquant.research.forecast_outcomes import (
+    ForecastOutcomeIntegrityError,
+    list_resolved_outcomes_as_of,
+)
 from digiquant.research.phases._node_factory import (
     _shared_context,
     apply_web_grounding_to_inputs,
 )
 from digiquant.research.state import PhaseError, PhasePortfolioState
 from digiquant.research.supabase_io import SupabaseClient
-from digiquant.tool_rounds import run_olympus_research_agent as run_research_agent
+from digiquant.tool_rounds import run_digiquant_research_agent as run_research_agent
 
 NODE_ID = "portfolio/pm-direction"
 PHASE_NAME = "portfolio_h7_pm_direction"
@@ -116,6 +119,13 @@ def _load_cutoff_outcomes(
         return []
     try:
         return list_resolved_outcomes_as_of(client=client, knowledge_cutoff_at=cutoff)
+    except ForecastOutcomeIntegrityError:
+        # #4298: a persisted digest that no longer matches its canonical payload is a
+        # deterministic data-integrity failure, not a transient load error. It must
+        # fail the run loud with the named error (which carries the outcome_id and the
+        # one-shot repair tool) rather than quietly shrink the calibration cohort to
+        # zero — that would silently drop matured labels on the daily house path.
+        raise
     except Exception as exc:
         logger.warning(
             "H7 shadow calibration: outcome load failed (%s: %s); empty cohort",
@@ -130,10 +140,18 @@ def _attach_shadow_calibration(
     *,
     client: SupabaseClient | None,
 ) -> ShadowCalibrationAttachment:
-    """Observational attach at H6→H7 boundary — never raises into H7 direction."""
+    """Observational attach at H6→H7 boundary.
+
+    Transient load/attach failures degrade to an empty attachment (#2684). A
+    persisted-digest integrity failure (:class:`ForecastOutcomeIntegrityError`,
+    #4298) is deliberately NOT caught here: the run fails with the named error
+    instead of silently calibrating against an emptied cohort.
+    """
     try:
         outcomes = _load_cutoff_outcomes(client=client, state=state)
         return attach_shadow_calibrations_from_state(state, outcomes=outcomes)
+    except ForecastOutcomeIntegrityError:
+        raise
     except Exception as exc:
         logger.warning(
             "H7 shadow calibration attach failed (%s: %s); empty attachment",

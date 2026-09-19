@@ -33,11 +33,15 @@ logger = logging.getLogger(__name__)
 _CONFIG = Path(__file__).resolve().parent.parent / "config" / "search_domains.yaml"
 
 # Enforced caps on the first-party web_search tool call. digisearch's
-# ``WebSearchRequest`` rejects the whole request over either (``include_domains``
-# <= 5, ``exclude_domains`` <= 20), which fails the segment and so the book —
-# the same class as the query cap (#4163).
+# ``WebSearchRequest`` rejects the whole request over any of these (``query``
+# <= 500, ``include_domains`` <= 5, ``exclude_domains`` <= 20,
+# 1 <= ``recency_days`` <= 365), which fails the segment and so the book — the
+# same class as the query cap (#4163). ``tests/dq/research/data/test_web_grounding.py``
+# pins these mirrors against the model itself so they cannot drift silently (#4165).
 _MAX_ALLOWED_DOMAINS = 5
 _MAX_EXCLUDED_DOMAINS = 20
+_MIN_RECENCY_DAYS = 1
+_MAX_RECENCY_DAYS = 365
 
 
 class DashboardWebSearchError(RuntimeError):
@@ -51,16 +55,21 @@ def _config() -> dict[str, Any]:
 
 
 def _build_query(segment: str, run_date: date | str, scope: str = "") -> str:
+    """A *search query*, not an instruction prompt (#4165).
+
+    digisearch's ``web_search`` is a pure search: it returns result rows and
+    :func:`call_web_search_tool` formats them into the cited summary, so
+    "summarize the key findings with inline citations" scaffolding would only
+    dilute retrieval (same shape as ``ai_portfolios._build_query``, #4163).
+    """
     run_label = run_date.isoformat() if isinstance(run_date, date) else str(run_date)
     q = (
-        f"For the '{segment}' segment of a daily market-research brief dated "
-        f"{run_label}, search the web for the latest material developments — "
-        "news, sentiment, positioning, fund/ETF flows, options/derivatives signals, and "
-        "official (Fed/Treasury/regulatory) statements as relevant to this segment. "
+        f"latest {segment} market developments {run_label} - news, sentiment, "
+        "positioning, fund/ETF flows, options/derivatives signals, "
+        "Fed/Treasury/regulatory statements"
     )
     if scope:
-        q += f"Focus on: {scope}. "
-    q += "Summarize the key findings as concise bullet points with inline source citations."
+        q += f" - {scope}"
     return q
 
 
@@ -98,8 +107,13 @@ def call_web_search_tool(
     max_results: int,
     bearer_token: str | None = None,
     exclude_domains: list[str] | None = None,
+    recency_days: int | None = None,
+    timeout_s: float = 120.0,
 ) -> dict[str, Any]:
     """First-party web_search tool via digigraph's orchestrator hub (#3853).
+
+    ``timeout_s`` bounds the single hub HTTP call (#4198 pre-flight passes a
+    short value, so a hung provider cannot stall the pipeline gate).
 
     Carries the Task 1 service JWT (#3859): an explicit ``bearer_token`` wins,
     else :func:`_pipeline_bearer` mints one via digikey. The token threads
@@ -108,8 +122,11 @@ def call_web_search_tool(
 
     Domain scoping (``include_domains`` / ``exclude_domains``) and
     ``max_results`` pass straight through to the tool — never folded into the
-    query text. Returns ``{"summary", "sources"}`` in the digigraph-compatible
-    shape, plus ``relaxed_domains: True`` when the allowlist had to be relaxed.
+    query text. ``recency_days`` (from the yaml config, #4165) is clamped to
+    digisearch's 1-365 window and forwarded; ``None`` leaves digisearch's own
+    default in place. Returns ``{"summary", "sources"}`` in the
+    digigraph-compatible shape, plus ``relaxed_domains: True`` when the
+    allowlist had to be relaxed.
     Raises ``RuntimeError`` when the service errors or when both the
     scoped search and its unscoped retry yield no rows (#4086).
     Never imports digisearch directly — the call goes over HTTP
@@ -126,6 +143,18 @@ def call_web_search_tool(
         )
         query = query[:_MAX_QUERY_CHARS].rsplit(" ", 1)[0] or query[:_MAX_QUERY_CHARS]
 
+    if recency_days is not None:
+        clamped = min(max(recency_days, _MIN_RECENCY_DAYS), _MAX_RECENCY_DAYS)
+        if clamped != recency_days:
+            logger.warning(
+                "web_search recency_days=%s; digisearch accepts %d-%d - using %d",
+                recency_days,
+                _MIN_RECENCY_DAYS,
+                _MAX_RECENCY_DAYS,
+                clamped,
+            )
+        recency_days = clamped
+
     token = bearer_token if bearer_token is not None else _pipeline_bearer()
     context = ToolContext(
         session_id=None,
@@ -141,7 +170,9 @@ def call_web_search_tool(
             include_domains=include,
             exclude_domains=excluded,
             max_results=max_results,
+            recency_days=recency_days,
             context=context,
+            timeout=timeout_s,
         )
         return (tool_out or {}).get("results") or []
 
@@ -200,10 +231,11 @@ def fetch_web_grounding(
     """Return ``{"summary", "sources", "as_of"}`` web grounding for a segment.
 
     Tool-only: a requested search must succeed or raise
-    :exc:`DashboardWebSearchError` — never ``None``. Domain scoping and the
-    result count default to ``search_domains.yaml`` and pass straight through
-    to the ``web_search`` tool. Propagates ``relaxed_domains: True`` when a
-    scoped search had to be relaxed to keep real grounding flowing (#4086).
+    :exc:`DashboardWebSearchError` — never ``None``. Domain scoping, the
+    result count, and the recency window (#4165) default to
+    ``search_domains.yaml`` and pass straight through to the ``web_search``
+    tool. Propagates ``relaxed_domains: True`` when a scoped search had to be
+    relaxed to keep real grounding flowing (#4086).
     ``model`` is accepted for caller compatibility and ignored: grounding
     comes from the tool, not a synthesis model.
     """
@@ -231,6 +263,16 @@ def fetch_web_grounding(
         except (TypeError, ValueError):
             max_results = 4
     max_results = max(1, min(max_results, 10))
+    recency_days: int | None = None
+    raw_recency = cfg.get("recency_days")
+    if raw_recency is not None:
+        try:
+            recency_days = int(raw_recency)
+        except (TypeError, ValueError):
+            logger.warning(
+                "recency_days=%r is not an integer; digisearch's default applies",
+                raw_recency,
+            )
     as_of = run_date.isoformat() if isinstance(run_date, date) else str(run_date)
     try:
         tool_out = call_web_search_tool(
@@ -238,6 +280,7 @@ def fetch_web_grounding(
             include_domains=domains,
             exclude_domains=excluded,
             max_results=max_results,
+            recency_days=recency_days,
         )
     except DashboardWebSearchError:
         raise
