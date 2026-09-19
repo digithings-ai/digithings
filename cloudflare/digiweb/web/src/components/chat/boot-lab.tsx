@@ -3,7 +3,10 @@
 import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { DotMatrix } from "./DotMatrix";
 import {
+  DIGI_CHAT_BOOT_STEP_EVENT,
   DIGI_CHAT_READY_EVENT,
+  digichatBootClockMs,
+  digichatBootSteps,
   hasDigichatReady,
   signalDigichatReady,
 } from "./boot-signal";
@@ -81,51 +84,75 @@ const SETTLE_HOLD_MS = 180;
 /** Facts the deployment actually reports; rows without facts stay detail-less. */
 export type BootFacts = {
   starters?: number;
+  model?: string;
   models?: number;
-  tools?: number;
+  toolLabels?: readonly string[];
   mcpServers?: number;
   backend?: string;
 };
 
+/** Real milestones the app reports while the container comes up. */
+type BootMilestone = "image" | "config" | "runtime" | "loop" | "backend";
+
 /**
- * Simulated container/agent commands; one row each, in order. The durations
- * vary per row so the chain feels measured, not metronomic. Rows adapt to the
- * facts the deployment reports (and only those) - extra rows appear when the
- * deployment actually carries tools or MCP servers, so different deployments
- * show different steps and numbers. Never invent counts.
+ * Container/agent commands; one row each, in order. Rows adapt to the facts
+ * the deployment actually reports (and only those) - extra rows appear when
+ * the deployment carries tools or MCP servers, so different deployments show
+ * different steps and numbers. Never invent counts. Each row carries the real
+ * milestone that completes it (`ms` is the beat it keeps before that milestone
+ * lands, and the cap when no signal ever does).
  */
 export function toolChainRows(
   facts?: BootFacts,
-): readonly { label: string; detail?: string; ms: number }[] {
-  const rows: { label: string; detail?: string; ms: number }[] = [
-    { label: "pull digichat image", ms: 1320 },
+): readonly {
+  label: string;
+  detail?: string;
+  milestone: BootMilestone;
+  ms: number;
+}[] {
+  const rows: {
+    label: string;
+    detail?: string;
+    milestone: BootMilestone;
+    ms: number;
+  }[] = [
+    { label: "pull digichat image", milestone: "image", ms: 1320 },
     {
       label: "mount deployment configuration",
+      milestone: "config",
       ms: 640,
       detail: facts?.starters ? `${facts.starters} starters` : undefined,
     },
     {
       label: "warm up chat runtime",
+      milestone: "runtime",
       ms: 880,
-      detail: facts?.models ? `${facts.models} models` : undefined,
+      detail: facts?.model
+        ? facts.model
+        : facts?.models
+          ? `${facts.models} models`
+          : undefined,
     },
   ];
-  if (facts?.tools) {
+  if (facts?.toolLabels?.length) {
     rows.push({
       label: "wire in the tools",
+      milestone: "loop",
       ms: 760,
-      detail: `${facts.tools} tools`,
+      detail: facts.toolLabels.join(", "),
     });
   }
   if (facts?.mcpServers) {
     rows.push({
       label: "attach mcp servers",
+      milestone: "loop",
       ms: 720,
       detail: `${facts.mcpServers} servers`,
     });
   }
   rows.push({
     label: "wire in the backend",
+    milestone: "backend",
     ms: 1402,
     detail: facts?.backend ? `${facts.backend} backend` : undefined,
   });
@@ -141,7 +168,6 @@ const TOOLCHAIN_VARIANTS: ReadonlySet<BootLabVariant> = new Set([
 ]);
 
 const TASK_LABEL = "Loading DigiChat";
-const HOLD_LABEL = "connect to digichat";
 const REASONING_LABEL = "waking up the container";
 const HOLD_HINT = "cold start — this can take up to a minute";
 /** Waiting this long surfaces the cold-start hint. */
@@ -288,18 +314,6 @@ function useDelayedTrue(value: boolean, delayMs: number): boolean {
     return () => clearTimeout(timer);
   }, [value, delayMs]);
   return delayed;
-}
-
-/** Live ms since `startedAt` while `active` (the real load clock). */
-function useElapsedSince(startedAt: number, active: boolean): number {
-  const [ms, setMs] = useState(0);
-  useEffect(() => {
-    if (!active) return;
-    setMs(Date.now() - startedAt);
-    const interval = setInterval(() => setMs(Date.now() - startedAt), 240);
-    return () => clearInterval(interval);
-  }, [startedAt, active]);
-  return ms;
 }
 
 function TypedLabel({ text, instant }: { text: string; instant: boolean }) {
@@ -532,39 +546,6 @@ function ReasoningRow({
   );
 }
 
-/** The real row: runs until the app's ready signal lands (live seconds). */
-function HoldRow({
-  done,
-  failed,
-  elapsedMs,
-}: {
-  done: boolean;
-  failed: boolean;
-  elapsedMs: number;
-}) {
-  return (
-    <div
-      className="aui-tool-fallback-trigger group/trigger text-muted-foreground flex w-full items-center gap-2 py-1.5 text-sm"
-      data-slot="tool-fallback-trigger"
-    >
-      <DotMatrix
-        state={failed ? "error" : done ? "success" : "tool"}
-        label={failed ? "Error" : done ? "Ok" : "Running"}
-        className="aui-tool-fallback-trigger-icon size-3.5 shrink-0"
-      />
-      <span
-        className="aui-tool-fallback-trigger-label-wrapper min-w-0 flex-1 truncate text-start leading-none"
-        data-slot="tool-fallback-trigger-label"
-      >
-        {HOLD_LABEL}
-      </span>
-      <span className="aui-tool-fallback-duration text-muted-foreground text-xs tabular-nums">
-        {(elapsedMs / 1000).toFixed(1)}s
-      </span>
-    </div>
-  );
-}
-
 /** Reload is the retry: it re-runs the boot handshake from scratch. */
 function RetryButton() {
   return (
@@ -612,11 +593,22 @@ function HoldStatus({ failed }: { failed: boolean }) {
   return null;
 }
 
+function useBootSteps(): ReadonlySet<string> {
+  const [steps, setSteps] = useState<ReadonlySet<string>>(
+    () => new Set(digichatBootSteps()),
+  );
+  useEffect(() => {
+    const onStep = () => setSteps(new Set(digichatBootSteps()));
+    window.addEventListener(DIGI_CHAT_BOOT_STEP_EVENT, onStep);
+    return () => window.removeEventListener(DIGI_CHAT_BOOT_STEP_EVENT, onStep);
+  }, []);
+  return steps;
+}
+
 function ToolChain({
   instant,
   ready,
   failed,
-  startedAt,
   showTask,
   showReasoning,
   facts,
@@ -625,56 +617,92 @@ function ToolChain({
   instant: boolean;
   ready: boolean;
   failed: boolean;
-  startedAt: number;
   showTask: boolean;
   showReasoning: boolean;
   facts?: BootFacts;
   onDone: () => void;
 }) {
   const rows = useMemo(() => toolChainRows(facts), [facts]);
-  const [step, setStep] = useState(instant ? rows.length : 0);
-  const nextMs = step < rows.length ? rows[step]?.ms : undefined;
+  const steps = useBootSteps();
+  const mountClock = useRef(digichatBootClockMs());
+  const [doneAt, setDoneAt] = useState<(number | null)[]>(() =>
+    rows.map(() => (instant ? mountClock.current : null)),
+  );
+  const [tick, setTick] = useState(0);
+  const pending = doneAt.some((value) => value === null);
+  const firstPending = doneAt.findIndex((value) => value === null);
+  const chainDone = !pending;
+  // Poll while rows are open: each row flips when its real milestone lands.
+  // Image rows and tool/MCP rows keep a short beat so the chain stays
+  // readable, config/runtime fall back to a cap so a missed signal cannot
+  // wedge the boot, and the backend row waits for the app's real ready edge.
   useEffect(() => {
-    if (instant) {
-      setStep(rows.length);
-      return;
-    }
-    if (nextMs === undefined) return;
-    const timer = setTimeout(() => setStep((current) => current + 1), nextMs);
-    return () => clearTimeout(timer);
-  }, [step, instant, nextMs, rows.length]);
+    if (instant || !pending) return;
+    const interval = setInterval(() => setTick((value) => value + 1), 250);
+    return () => clearInterval(interval);
+  }, [instant, pending]);
   useEffect(() => {
-    if (step >= rows.length) onDone();
-  }, [step, rows.length, onDone]);
-  const chainDone = step >= rows.length;
-  const visible = Math.min(step + 1, rows.length);
-  const hold = chainDone && !ready && !failed;
-  const elapsedMs = useElapsedSince(startedAt, hold);
+    if (instant || !pending) return;
+    setDoneAt((current) => {
+      const index = current.findIndex((value) => value === null);
+      if (index === -1) return current;
+      const row = rows[index];
+      if (row === undefined) return current;
+      const previousDone = index === 0 ? mountClock.current : current[index - 1];
+      if (previousDone === null || previousDone === undefined) return current;
+      const now = digichatBootClockMs();
+      const reached =
+        row.milestone === "backend"
+          ? ready
+          : row.milestone === "config" || row.milestone === "runtime"
+            ? steps.has(row.milestone) || now - previousDone >= row.ms * 2
+            : now - previousDone >= row.ms;
+      if (!reached) return current;
+      const next = [...current];
+      next[index] = now;
+      return next;
+    });
+  }, [tick, instant, pending, ready, rows, steps]);
+  useEffect(() => {
+    if (chainDone) onDone();
+  }, [chainDone, onDone]);
+  const visible = firstPending === -1 ? rows.length : firstPending + 1;
+  // The last row waits on the real ready edge - that is the honest "connect"
+  // beat, and the hold/retry ladder attaches to it.
+  const waiting = !failed && !ready && firstPending === rows.length - 1;
+  const completedMs =
+    chainDone && doneAt[rows.length - 1] != null
+      ? doneAt[rows.length - 1]! - mountClock.current
+      : 0;
   return (
     <span className="dboot-lab-tools">
       {showTask ? (
         <TaskHeaderRow done={chainDone && ready} failed={failed} />
       ) : null}
       {showReasoning ? (
-        <ReasoningRow
-          active={!chainDone && !failed}
-          durationMs={chainDone ? rows.reduce((total, row) => total + row.ms, 0) : 0}
-        />
+        <ReasoningRow active={!chainDone && !failed} durationMs={completedMs} />
       ) : null}
-      {rows.slice(0, visible).map((row, index) => (
-        <ToolChainRow
-          key={row.label}
-          label={row.label}
-          detail={row.detail}
-          durationMs={row.ms}
-          done={index < step}
-          failed={failed && index === visible - 1}
-        />
-      ))}
-      {chainDone ? (
-        <HoldRow done={ready} failed={failed} elapsedMs={elapsedMs} />
-      ) : null}
-      {hold || failed ? <HoldStatus failed={failed} /> : null}
+      {rows.slice(0, visible).map((row, index) => {
+        const done = doneAt[index] != null;
+        const start =
+          index === 0
+            ? mountClock.current
+            : doneAt[index - 1] ?? mountClock.current;
+        return (
+          <ToolChainRow
+            key={row.label}
+            label={row.label}
+            detail={row.detail}
+            durationMs={done ? doneAt[index]! - start : 0}
+            done={done}
+            failed={
+              failed &&
+              index === (firstPending === -1 ? rows.length - 1 : firstPending)
+            }
+          />
+        );
+      })}
+      {waiting || failed ? <HoldStatus failed={failed} /> : null}
     </span>
   );
 }
@@ -697,7 +725,6 @@ export function BootLabOverlay({
   const [chainDone, setChainDone] = useState(!isToolchain);
   const [bootDelayMs] = useState(resolveBootDelayMs);
   const [failAfterMs] = useState(resolveBootFailMs);
-  const startedAt = useRef(Date.now());
   // `?bootfail` forces the failure demo: ignore the real ready signal so the
   // boot cannot settle before the forced failure lands.
   const app = useAppReady(isToolchain && failAfterMs === 0);
@@ -730,7 +757,6 @@ export function BootLabOverlay({
           instant={reduced}
           ready={appReady}
           failed={failed}
-          startedAt={startedAt.current}
           showTask={variant === "tooltask" || variant === "toolfull"}
           showReasoning={variant === "toolreason" || variant === "toolfull"}
           facts={facts}

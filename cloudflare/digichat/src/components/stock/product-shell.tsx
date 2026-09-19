@@ -36,6 +36,7 @@ import {
   type BootLabVariant,
 } from "@digithings/web/chat/boot-lab";
 import { DigichatBootLoader } from "@digithings/web/chat/boot-loader";
+import { signalDigichatBootStep } from "@digithings/web/chat/boot-signal";
 import type { DigichatClientConfig, DigichatClientFeatures } from "@/lib/deploy-config";
 import { DEFAULT_CLIENT_CONFIG } from "@/lib/deploy-config";
 import {
@@ -248,6 +249,11 @@ export function ProductStockShell({
     setBootVariant(resolveBootLabVariant() ?? "tooltask");
   }, [bootLabVariant]);
 
+  // Real boot milestone: the product shell mounted with its chat runtime.
+  useEffect(() => {
+    signalDigichatBootStep("runtime");
+  }, []);
+
   const deployUi = useMemo<DeployUiValue>(
     () => ({
       reasoning: reasoningMode,
@@ -305,13 +311,15 @@ export function ProductStockShell({
   const bootFacts = useMemo(
     () => ({
       starters: skinChrome.suggestions.length,
+      model: cfg.models.default,
       models: cfg.models.available.length,
-      tools: cfg.tools.catalog.length,
+      toolLabels: cfg.tools.catalog.map((tool) => tool.label ?? tool.id),
       mcpServers: cfg.mcp.servers.length,
       backend: cfg.backendType,
     }),
     [
       skinChrome.suggestions,
+      cfg.models.default,
       cfg.models.available,
       cfg.tools.catalog,
       cfg.mcp.servers,

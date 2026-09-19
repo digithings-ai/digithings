@@ -91,6 +91,7 @@ import {
   READY_EVENT,
   resolveReadyTargetOrigin,
 } from "@/lib/embed-seed-messages";
+import { signalDigichatBootStep } from "@digithings/web/chat/boot-signal";
 import {
   formatParentErrorLine,
   parseParentErrorMessage,
@@ -161,6 +162,12 @@ function EmbedPageInner({
   const token = searchParams.get("token") ?? undefined;
   const host = searchParams.get("host") ?? undefined;
   const tenantCfg = useEmbedTenantConfig(token, host, initialTenantCfg);
+
+  // Real boot milestone for the loader: the tenant/deploy config resolved.
+  useEffect(() => {
+    signalDigichatBootStep("config");
+  }, [tenantCfg]);
+
   const urlTheme = parseEmbedThemeParam(searchParams.get("theme"));
   const [parentTheme, setParentTheme] = useState<EmbedTheme | null>(null);
   // Parent postMessage > ?theme= URL pin > tenant registry (default dark).
