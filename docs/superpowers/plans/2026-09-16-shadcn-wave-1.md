@@ -14,7 +14,7 @@
 ## Goal
 
 Every primitive the **reference app** renders comes from
-`@digithings/web/ui` (stock shadcn, `base-lyra`, Base UI). Hand-built dress
+`@digithings/ui/ui` (stock shadcn, `base-lyra`, Base UI). Hand-built dress
 families in the reference are deleted where superseded. The reference stops
 carrying its own control dress.
 
@@ -23,7 +23,7 @@ carrying its own control dress.
 1. **Controls-layer specimens stay.** `controls-layer-reference`,
    `dialog-reference`, `empty-states-reference`, `nav-buttons-reference`,
    `select/tags-input/search-bar/skeleton-reference` document the
-   `@digithings/web` **dress-axis controls layer**, which digichat-facing
+   `@digithings/ui` **dress-axis controls layer**, which digichat-facing
    package families still consume. Retiring that layer is wave 3–4 work; wave
    1 does not touch it. New stock-kit specimens go on the `/ui` route instead.
 2. **Definition-of-done (§10) is the migration target, not the wave target.**
@@ -51,7 +51,7 @@ carrying its own control dress.
 - Screenshots into the SDD dir for the routes a task touches (dark + light;
   livery switch where a scoped section exists).
 - Gates per task: `python3 scripts/check_frontend_canon.py`;
-  `npm --workspace @digithings/web run test`; reference
+  `npm --workspace @digithings/ui run test`; reference
   `npm run lint && npm run typecheck`; `npx next build --webpack`
   (supplementary; Turbopack is environmental).
 - Knip-style audit after each sweep: no class token used in TSX whose only
@@ -67,10 +67,10 @@ The new worktree has no `node_modules`:
 WT=…/opencode/wt-shadcn-w1
 SHARED=…/opencode/digichat-build-2.0
 ln -s "$SHARED/node_modules" "$WT/node_modules"
-ln -s "$SHARED/cloudflare/digiweb/web/node_modules" \
-      "$WT/cloudflare/digiweb/web/node_modules"
-ln -s "$SHARED/cloudflare/digiweb/reference/node_modules" \
-      "$WT/cloudflare/digiweb/reference/node_modules"
+ln -s "$SHARED/packages/ui/node_modules" \
+      "$WT/packages/ui/node_modules"
+ln -s "$SHARED/apps/reference/node_modules" \
+      "$WT/apps/reference/node_modules"
 ```
 
 (Proves the wave-0 env quirk: web/reference installs live in the shared
@@ -81,17 +81,17 @@ worktree; reference `npm run dev` must use webpack.)
 ### Task 1: Kit — form + layout primitives
 
 **Files:**
-- Create (CLI): `cloudflare/digiweb/web/src/ui/{textarea,label,separator,badge,alert}.tsx`
-- Modify: `cloudflare/digiweb/web/src/ui/index.ts`,
-  `cloudflare/digiweb/web/src/ui/ui.render.test.tsx`
+- Create (CLI): `packages/ui/src/ui/{textarea,label,separator,badge,alert}.tsx`
+- Modify: `packages/ui/src/ui/index.ts`,
+  `packages/ui/src/ui/ui.render.test.tsx`
 
 **Interfaces:**
 - Consumes: wave 0 kit + `web/components.json` (base-lyra).
 - Produces: `Textarea`, `Label`, `Separator`, `Badge`, `Alert`
-  (+ parts) from `@digithings/web/ui`.
+  (+ parts) from `@digithings/ui/ui`.
 
 - [ ] **Step 1:** Run `npx shadcn@latest add textarea label separator badge alert`
-  inside `cloudflare/digiweb/web` (record the CLI version in the report).
+  inside `packages/ui` (record the CLI version in the report).
   Expect zero restyles; only import adaptation allowed (`cn` from
   `@/lib/utils`).
 - [ ] **Step 2:** Barrel exports in `src/ui/index.ts`; per-component render
@@ -108,13 +108,13 @@ worktree; reference `npm run dev` must use webpack.)
 ### Task 2: Kit — overlays (tabs, collapsible, tooltip, sheet, dropdown-menu)
 
 **Files:**
-- Create (CLI): `cloudflare/digiweb/web/src/ui/{tabs,collapsible,tooltip,sheet,dropdown-menu}.tsx`
-- Modify: `cloudflare/digiweb/web/src/ui/index.ts`,
+- Create (CLI): `packages/ui/src/ui/{tabs,collapsible,tooltip,sheet,dropdown-menu}.tsx`
+- Modify: `packages/ui/src/ui/index.ts`,
   `ui.render.test.tsx`
 
 **Interfaces:**
 - Produces: `Tabs` family, `Collapsible` family, `Tooltip` family,
-  `Sheet` family, `DropdownMenu` family from `@digithings/web/ui`.
+  `Sheet` family, `DropdownMenu` family from `@digithings/ui/ui`.
   `sheet`/`dropdown-menu` are `"use client"`.
 
 - [ ] **Step 1:** CLI add; verify Base UI base in each file; the repo's

@@ -20,7 +20,7 @@ The stack has three disjoint secret surfaces and no system of record:
   ([`../ops/SECRETS_INVENTORY.md`](../ops/SECRETS_INVENTORY.md), "Storage
   surfaces"). Each Container receives only what its Worker's `envVars` whitelist
   forwards — the stack Worker runs two: `DigiStackContainer`
-  (`cloudflare/digithings-stack-cloudflare/src/index.ts:60-112`) and
+  (`apps/digithings-stack-cloudflare/src/index.ts:60-112`) and
   `DigiQuantMcpContainer` (`:176-184`) — and a secret that is `put` but absent
   from `envVars` is a silent drop (R4).
 - **GitHub.** 72 workflows, only 4 declare `environment: production`
@@ -41,18 +41,18 @@ start; the Cloudflare docs say so directly — "we can't set the secret store
 binding … as defaults here, as getting their values is asynchronous"
 ([containers env-vars example](https://developers.cloudflare.com/containers/examples/env-vars-and-secrets/)).
 digichat autostarts via `container.fetch(request)`
-(`cloudflare/digichat-cloudflare/src/index.ts:90`) and the stack's
+(`apps/digichat-cloudflare/src/index.ts:90`) and the stack's
 `startAndWaitForPorts` calls pass no `startOptions.envVars`
-(`cloudflare/digithings-stack-cloudflare/src/index.ts:124`), so both rely on the
+(`apps/digithings-stack-cloudflare/src/index.ts:124`), so both rely on the
 static field. Secrets Store *can* reach a container only through the async
 per-instance path; adopting it means changing the start call, not just the
 wrangler config.
 
 **2. A running Container keeps its boot-time env until recycled.** `wrangler
 deploy` does not roll it; the only working lever is bumping
-`SHARED_DIGICHAT_CONTAINER_ID` (`cloudflare/digichat-cloudflare/src/paths.ts:22`)
+`SHARED_DIGICHAT_CONTAINER_ID` (`apps/digichat-cloudflare/src/paths.ts:22`)
 or `SHARED_STACK_CONTAINER_ID`
-(`cloudflare/digithings-stack-cloudflare/src/ports.ts:37`) — R5. A rotated
+(`apps/digithings-stack-cloudflare/src/ports.ts:37`) — R5. A rotated
 secret can look rotated in `secret list` while the old value stays live.
 
 Secrets Store is also **still open beta** (["Available in open
@@ -133,7 +133,7 @@ new tooling.
 1. Delete the dead and misdirected secrets the audit found: digichat
    `CHEAPERINFERENCE_API_KEY` / `OPENROUTER_API_KEY` (put but not in `envVars`,
    R4), the dead Pages `OPENROUTER_API_KEY`
-   (`cloudflare/digithings-web/wrangler.toml:24`; confirm live Pages env first —
+   (`apps/digithings-web/wrangler.toml:24`; confirm live Pages env first —
    it is not enumerable, `SECRETS_INVENTORY.md:162`), and the mcp example keys
    after an owner confirm-dead or rotate (R3).
 2. Reconcile the stack secret checklist against the live set (R9): documented
@@ -222,7 +222,7 @@ rotation APIs; human approval for the `digikey/` crypto path.
    env-consuming secret changed, then deploys. `wrangler deploy` alone does not
    roll (`../ops/SECRETS_ROTATION.md`, "The container boot-env trap").
 2. Prove the roll behaviourally: the stack exposes its instance id at
-   `_stack/meta` (`cloudflare/digithings-stack-cloudflare/src/index.ts:319`);
+   `_stack/meta` (`apps/digithings-stack-cloudflare/src/index.ts:319`);
    digichat has no probe, so prove via an auth reset after the 15 m
    `sleepAfter`.
 3. **Defer** the async alternative — `startAndWaitForPorts({ startOptions:

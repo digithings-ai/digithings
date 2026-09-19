@@ -8,7 +8,7 @@ Status: draft for approval · 2026-09-18 · branch `feat/rebuild-sites-from-refe
 
 Wave 3 and wave 4 migrated the UIs onto the canonical kit, but the result introduced
 regressions on the public sites (see §7) and left the pages reading as "kit parts dropped
-into an old layout". The **design reference app** (`cloudflare/digiweb/reference`) is judged
+into an old layout". The **design reference app** (`apps/reference`) is judged
 correct and is the visual canon. Rather than patch the old pages, rebuild both public sites
 **from scratch** against the reference, and use the rebuild to certify every public-facing
 page and its content for release.
@@ -33,16 +33,16 @@ reference app.
 
 In scope:
 
-1. **digithings.ai** — rebuild the public site (`cloudflare/digithings-web`) from scratch on the kit.
-2. **digiquant.io** — rebuild the public site (`cloudflare/digiquant-web`) from scratch on the kit.
-3. **The digiquant dashboard** (`cloudflare/dashboard`, served at `/dashboard/`) — in scope.
-4. **The design reference** (`cloudflare/digiweb/reference`) — a refinement, consolidation and
+1. **digithings.ai** — rebuild the public site (`apps/digithings-web`) from scratch on the kit.
+2. **digiquant.io** — rebuild the public site (`apps/digiquant-web`) from scratch on the kit.
+3. **The digiquant dashboard** (`apps/dashboard`, served at `/dashboard/`) — in scope.
+4. **The design reference** (`apps/reference`) — a refinement, consolidation and
    organisation pass (§5), because it is the component source of truth for the rebuild.
 5. **A public-page content audit** — every public page and every claim on it, certified for release.
 
 Out of scope (do not modify):
 
-- **digichat** (`cloudflare/digichat`, `cloudflare/digichat-ui`) — explicitly out of scope.
+- **digichat** (`apps/digichat`, `packages/digichat-ui`) — explicitly out of scope.
   The two iframe shell pages `/chat` and `/chat/occ` inside digithings-web stay part of that
   site, but nothing about the digichat product changes.
 - Backend services, `digikey/`, live-trading paths, `projects/`.
@@ -71,8 +71,8 @@ Retained deliberately (they are working plumbing, not presentation):
 
 | Input | Path |
 |---|---|
-| Design canon (components, tokens, specimens) | `cloudflare/digiweb/reference` + `cloudflare/digiweb/design` |
-| Kit | `cloudflare/digiweb/web/src` (`@digithings/web`, `@digithings/web/ui`) |
+| Design canon (components, tokens, specimens) | `apps/reference` + `packages/design` |
+| Kit | `packages/ui/src` (`@digithings/ui`, `@digithings/ui/ui`) |
 | Site inventory | `/var/folders/36/1mwn8lfs7qx58560qsmy12xw0000gn/T/opencode/rebuild/inventory-*.md` |
 | Reference-site study + screenshots | `/var/folders/36/1mwn8lfs7qx58560qsmy12xw0000gn/T/opencode/ingest/` |
 | Regression must-not-repeat list | `/var/folders/36/1mwn8lfs7qx58560qsmy12xw0000gn/T/opencode/regressions/regressions-wave34.md` |
@@ -130,7 +130,7 @@ docs are corrected; lint + typecheck + `next build --webpack` (18+ routes) green
 
 ## 6. Workstream B — the rebuild, page by page
 
-### digithings.ai (`cloudflare/digithings-web`) — opencode-informed language
+### digithings.ai (`apps/digithings-web`) — opencode-informed language
 
 | Page | What it must become (mapping to canonical parts) |
 |---|---|
@@ -149,7 +149,7 @@ docs are corrected; lint + typecheck + `next build --webpack` (18+ routes) green
 
 Nav/footer rebuilt once as a shared chrome module (no duplicated nav data between sites).
 
-### digiquant.io (`cloudflare/digiquant-web`) — gloom-informed language
+### digiquant.io (`apps/digiquant-web`) — gloom-informed language
 
 | Page | What it must become |
 |---|---|

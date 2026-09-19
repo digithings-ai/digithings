@@ -24,7 +24,7 @@ Add optional **Olympus footer status dot** wired to digismith `GET /v1/status` â
 ## Documentation to Update
 
 - [ ] `cloudflare/olympus/ARCHITECTURE.md`
-- [ ] `cloudflare/digiweb/design/EVOLUTION.md`
+- [ ] `packages/design/EVOLUTION.md`
 
 ## Out of Scope
 

@@ -92,7 +92,7 @@ auth/crypto, brokers/live-trading, new external network exposure, PRs into
 
 Tracked as issues (see #3533):
 
-- **npm audit for `cloudflare/`** — only Python CVEs are scanned today. → #3523
+- **npm audit for `apps/` + `packages/`** — only Python CVEs are scanned today. → #3523
 
 ## Reference
 

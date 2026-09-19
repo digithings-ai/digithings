@@ -14,7 +14,7 @@ Epic: #4206. Predecessors: wave 0 (#4230), wave 1 (#4254), wave 2
 ## Goal
 
 100% component coverage: every component rendered by the three product apps
-(`digithings-web`, `digiquant-web`, `dashboard`) comes from `@digithings/web`
+(`digithings-web`, `digiquant-web`, `dashboard`) comes from `@digithings/ui`
 and speaks the kit (`web/src/ui`) language. No app-local shadows of shared
 families, no legacy dress-axis families with live consumers, no native
 buttons/inputs/selects left in app code.
@@ -32,13 +32,13 @@ buttons/inputs/selects left in app code.
 
 ## Census evidence (verified 2026-09-17 on `d052a09a7`)
 
-| App | tsx files | import `@digithings/web` | use kit `ui` | legacy still rendered |
+| App | tsx files | import `@digithings/ui` | use kit `ui` | legacy still rendered |
 |---|---|---|---|---|
 | digithings-web | ~18+ (components+app) | 26 files | 10 (Button, Sheet, Badge, Alert, Input, Label) | `DtNav.tsx` (every-page nav): `btn btn-primary` + `btn-icon`; `.btn` defined in `@digithings/design` `site.css:76`, not the kit |
 | digiquant-web | ~33+ | 39 files | 14 (Button, Badge, Card only) | `dqss-*` (53 uses), `dq-*`, `dqpipe-*`, `ts-tab*` — containers kept intentionally in wave 2, never re-audited |
 | dashboard | **281** | 77 files | 35 (Button, Card, Alert, Input, Label, Badge only — no Dialog/Sheet/Select/Table/Tabs from kit) | `acct-*` (login/gate), `oly-slab` (7), `ctl-dialog-card` (5); login, product-gate, observability, pipeline, callback, db-unavailable untouched; ledger residuals: 10 inputs / 10 labels / 3 selects / **117 buttons** outside scope |
 
-Shared package (`cloudflare/digiweb/web/src`, 260 files): **200 legacy
+Shared package (`packages/ui/src`, 260 files): **200 legacy
 dress-axis components** (chat 62, controls 27, finance-tearsheet 18,
 repo-activity 12, …) vs **15 kit parts** in `ui/`. Only
 `chat/gallery-thread/*` consumes the kit; every other family the sites
@@ -59,8 +59,8 @@ ordered accordingly.
 - Terminal family look is canon; reproduce, don't replace.
 - Third-party CSS (e.g. `.docs-swagger .swagger-ui .btn`) is out of scope.
 - No new app-local CSS class families (canon guard) and no new app-local
-  primitives — every replacement imports from `@digithings/web` or
-  `@digithings/web/ui`.
+  primitives — every replacement imports from `@digithings/ui` or
+  `@digithings/ui/ui`.
 
 ## Evidence protocol (every task)
 
@@ -73,7 +73,7 @@ ordered accordingly.
   light): `…/digichat-build-2.0/.superpowers/sdd/2026-09-17-shadcn-wave-3/`
   (briefs, reports, diffs, screenshots). Ledger `progress.md` there.
 - Gates per task: `python3 scripts/check_frontend_canon.py`;
-  `npm --workspace @digithings/web run test`; app `lint` + `typecheck` +
+  `npm --workspace @digithings/ui run test`; app `lint` + `typecheck` +
   workspace tests; `next build` (webpack or real-install copy);
   `npm --workspace digichat run test` (web-theme.css is shared);
   zero-consumer grep audit for every deleted class/family.
@@ -140,11 +140,11 @@ over. Nothing else can standardize until the canonical layer is decided.
 legacy `.btn` dress; the shared `NavShell`/`nav-shell.css` backs it.
 
 **Files:**
-- Modify: `cloudflare/digiweb/web/src/components/NavShell.tsx`,
+- Modify: `packages/ui/src/components/NavShell.tsx`,
   `web/src/styles/nav-shell.css` (`.nav-shell-sheet-cta .btn`),
-  `cloudflare/digiweb/design/site/site.css` (`.btn` family → thin alias
+  `packages/design/site/site.css` (`.btn` family → thin alias
   over `buttonVariants`, or deleted after zero-consumer audit).
-- Modify: `cloudflare/digithings-web/components/DtNav.tsx`
+- Modify: `apps/digithings-web/components/DtNav.tsx`
   (`btn btn-primary` → `buttonVariants`, `btn-icon` → kit `Button`).
 - Modify: `dq-nav-h` consumers in digithings-web (21 uses — audit: shared
   header family or app-local; migrate or promote).
@@ -195,7 +195,7 @@ legacy `.btn` dress; the shared `NavShell`/`nav-shell.css` backs it.
 ### Task 4: digithings-web residuals
 
 **Files:**
-- Modify: `cloudflare/digithings-web/components/ProviderSettings.contract.test.tsx`
+- Modify: `apps/digithings-web/components/ProviderSettings.contract.test.tsx`
   only if Task 1 changed Sheet/Select/Alert semantics it pins.
 - Verify: zero `.dc-settings-*`, `.docs-copy`, `.doc-badge` in render paths
   (wave-2 leftovers are comments + `DtNav` — DtNav covered by Task 2).
@@ -253,8 +253,8 @@ platform test) → fresh-context review → commit.
   members, `.oly-*`, `.acct-*` migrated members, `.ts-chip`
   (already zero-consumer repo-wide — delete), app-local shadows deleted in
   Tasks 2–5 (verify).
-- Update `cloudflare/digiweb/{ARCHITECTURE,MIGRATION}.md` (promotion
-  playbook: reference → `@digithings/web` → adopted — now with the kit as
+- Update `packages/ui/{ARCHITECTURE,MIGRATION}.md` (promotion
+  playbook: reference → `@digithings/ui` → adopted — now with the kit as
   the only primitive source) and the migration spec's wave-3 section.
 - CI: `.github/workflows/test-web.yml` + `scripts/ci_paths.yaml` hardening
   if the wave adds packages/paths (wave-2 plan left this as close-out).

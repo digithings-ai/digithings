@@ -16,15 +16,15 @@ paths and aliases from here.
 
 | New path | From | Notes |
 |---|---|---|
-| `packages/ui` | `cloudflare/digiweb/web` | **the whole `@digithings/web` library** (≈30 subpath exports: `./ui`, `./styles/*`, chat, finance, data-layout …) — not just `src/ui` |
-| `packages/design` | `cloudflare/digiweb/design` | `tokens.css`, `site/`, `releases.json`, `MANIFEST.json`? |
-| `packages/digichat-ui` | `cloudflare/digichat-ui` | |
-| `packages/brand`? | `cloudflare/digiweb/brand` | unmapped in the first draft — decision needed |
-| `apps/digithings-web` | `cloudflare/digithings-web` | |
-| `apps/digiquant-web` | `cloudflare/digiquant-web` | |
-| `apps/dashboard` | `cloudflare/dashboard` | separate export into `dist/dashboard/`, `basePath: /dashboard` |
-| `apps/reference` | `cloudflare/digiweb/reference` | the design canon |
-| `apps/digichat` | `cloudflare/digichat` | out of scope for the rebuild, moved for consistency; nested `cli/` + `reference/` ride along (not workspaces) |
+| `packages/ui` | `packages/ui` | **the whole `@digithings/ui` library** (≈30 subpath exports: `./ui`, `./styles/*`, chat, finance, data-layout …) — not just `src/ui` |
+| `packages/design` | `packages/design` | `tokens.css`, `site/`, `releases.json`, `MANIFEST.json`? |
+| `packages/digichat-ui` | `packages/digichat-ui` | |
+| `packages/brand`? | `packages/brand` | unmapped in the first draft — decision needed |
+| `apps/digithings-web` | `apps/digithings-web` | |
+| `apps/digiquant-web` | `apps/digiquant-web` | |
+| `apps/dashboard` | `apps/dashboard` | separate export into `dist/dashboard/`, `basePath: /dashboard` |
+| `apps/reference` | `apps/reference` | the design canon |
+| `apps/digichat` | `apps/digichat` | out of scope for the rebuild, moved for consistency; nested `cli/` + `reference/` ride along (not workspaces) |
 | `apps/digichat-cloudflare` / `apps/digithings-cron` / `apps/digithings-stack-cloudflare` | same names under `cloudflare/` | Workers — `apps/` vs a `workers/` tier is a decision |
 | *(unchanged)* | `digigraph/ digiquant/ digikey/ digisearch/ digismith/ digiclaw/ digibase/ digivault/ digiskills/ …` | Python services are not part of this move |
 | *(unchanged)* | `scripts/`, `.github/`, `docs/`, `Makefile` | scripts stay at root; their *contents* change |
@@ -41,7 +41,7 @@ paths and aliases from here.
 5. `.github/workflows/ci.yml:76-121` + `scripts/ci_paths.yaml` — app lanes silently skip; merges land untested.
 6. `deploy-digithings-cloudflare.yml:9,39-41`, `deploy-digiquant-cloudflare.yml:9-12` — deploy build checks stop firing.
 7. `release-please-config.json:6,16` + `.release-please-manifest.json:2` — releases stop or versions drift.
-8. `Dockerfile.digichat-cloudflare:12-44`, `cloudflare/digichat/Dockerfile:9-34`, `docker-compose.yml:532` — image builds abort.
+8. `Dockerfile.digichat-cloudflare:12-44`, `apps/digichat/Dockerfile:9-34`, `docker-compose.yml:532` — image builds abort.
 9. `apps/reference/next.config.mjs:7,17` `turbopack.root = join(here, "..")` — after the move it roots a different tree (OOM/behaviour change).
 10. `dashboard/vitest.config.ts:39-40`, `digiquant-web/vitest.config.ts:15-16` — `../digiweb/web` alias becomes unresolvable.
 
@@ -54,7 +54,7 @@ paths and aliases from here.
 
 ## Decisions this plan needs
 
-1. **Package name**: keep `@digithings/web` (zero import churn) or rename to
+1. **Package name**: keep `@digithings/ui` (zero import churn) or rename to
    `@digithings/ui` (matches the template's `@workspace/ui`, ~4 apps + docs + tests
    touched, one mechanical commit)?
 2. **Workers home**: `apps/` alongside the sites, a separate `workers/` tier, or stay

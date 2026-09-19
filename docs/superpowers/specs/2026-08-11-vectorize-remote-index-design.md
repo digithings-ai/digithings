@@ -3,7 +3,7 @@
 **Date:** 2026-08-11
 **Status:** Approved (design), not yet implemented
 **Supersedes for production:** the container-local Chroma seeding path in
-`cloudflare/digithings-stack-cloudflare/container/seed_chroma.sh`
+`apps/digithings-stack-cloudflare/container/seed_chroma.sh`
 
 ## Problem
 
@@ -17,7 +17,7 @@ from markdown baked into the image.
 it is started, it will have a fresh disk as defined by its container image."*
 Persistent volumes do not exist (snapshots are "coming soon"; FUSE-to-R2 is
 documented as not SSD-like performance). `sleepAfter = "2h"`
-(`cloudflare/digithings-stack-cloudflare/src/index.ts`), so cold boots are routine.
+(`apps/digithings-stack-cloudflare/src/index.ts`), so cold boots are routine.
 
 Consequences of the current design:
 
@@ -150,7 +150,7 @@ only queries.
 
 ### Production container changes
 
-`cloudflare/digithings-stack-cloudflare/`:
+`apps/digithings-stack-cloudflare/`:
 
 - `src/index.ts`: add `VECTORIZE_ACCOUNT_ID` / `VECTORIZE_API_TOKEN` to the
   container `envVars` whitelist and the `Env` interface. **This is required** —
