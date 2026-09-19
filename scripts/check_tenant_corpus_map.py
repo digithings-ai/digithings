@@ -4,8 +4,8 @@ Compares key sets AND per-key ``digisearchIndex``/``vaultPathPrefix`` values acr
 (a) ``infra/digichat-release/compose.profile-a-bundle.override.yml``
 ``DIGICHAT_EMBED_TENANTS`` JSON (only entries carrying a ``backend`` with
 ``digisearchIndex`` — the ``digithings.ai`` + ``occ.digithings.ai`` hosts),
-(b) ``cloudflare/digithings-stack-cloudflare/wrangler.toml`` ``DIGI_TENANT_CORPUS_MAP``,
-(c) ``cloudflare/digithings-stack-cloudflare/src/index.ts`` fallback literal
+(b) ``apps/digithings-stack-cloudflare/wrangler.toml`` ``DIGI_TENANT_CORPUS_MAP``,
+(c) ``apps/digithings-stack-cloudflare/src/index.ts`` fallback literal
 (``DIGI_TENANT_CORPUS_MAP: env... ?? '<json>'``).
 
 Exit 0 when all three agree, 1 with a unified diff on drift. This deliberately
@@ -27,8 +27,8 @@ import yaml
 REPO_ROOT = Path(__file__).resolve().parents[1]
 
 _COMPOSE_REL = Path("infra/digichat-release/compose.profile-a-bundle.override.yml")
-_WRANGLER_REL = Path("cloudflare/digithings-stack-cloudflare/wrangler.toml")
-_INDEX_TS_REL = Path("cloudflare/digithings-stack-cloudflare/src/index.ts")
+_WRANGLER_REL = Path("apps/digithings-stack-cloudflare/wrangler.toml")
+_INDEX_TS_REL = Path("apps/digithings-stack-cloudflare/src/index.ts")
 
 _ENV_VAR = "DIGI_TENANT_CORPUS_MAP"
 _FALLBACK_RE = re.compile(

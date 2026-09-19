@@ -169,10 +169,18 @@ def resolve_pending(
     if not pending:
         return 0
 
+    from digiquant.research.data.queries import UnknownTickerError
+
     reflector_fn = reflector or _default_reflector
 
     resolved_count = 0
     skipped_no_data = 0
+    # Per-ticker count of due rows whose ticker has no sealed R2 generation
+    # (DXY/VIX macro rows, bare crypto aliases, legacy rows). That is a
+    # coverage/config gap, not a transient fault, so it is reported once per
+    # pass instead of an identical WARNING on every row, every run, forever
+    # (#4301; the tolerant readers landed in #4136/#4139).
+    unknown_ticker_counts: dict[str, int] = {}
     for row in pending:
         try:
             decision_run_date = _parse_iso_date(row.get("run_date"))
@@ -197,6 +205,14 @@ def resolve_pending(
                 start_date=decision_run_date,
                 holding_days=holding_days,
             )
+        except UnknownTickerError:
+            # No sealed generation for the ticker: absent coverage, not a
+            # fault (#4120). Count it (attributed to the row's ticker — the
+            # macro/alias row is the usual miss) and resolve sibling rows; the
+            # single aggregated line below replaces per-row WARNING spam.
+            unknown_ticker_counts[ticker] = unknown_ticker_counts.get(ticker, 0) + 1
+            skipped_no_data += 1
+            continue
         except Exception as exc:
             # A persistent outage (retries exhausted) must not block sibling
             # rows — the row stays pending for the next due-window check (#3078).
@@ -253,6 +269,15 @@ def resolve_pending(
         )
         resolved_count += 1
 
+    if unknown_ticker_counts:
+        logger.warning(
+            "decision_log Phase B skipped %d rows with no sealed market-data "
+            "generation (coverage/config gap, not a transient fault): %s "
+            "(run_date=%s)",
+            sum(unknown_ticker_counts.values()),
+            ", ".join(f"{t}={n}" for t, n in sorted(unknown_ticker_counts.items())),
+            run_date.isoformat(),
+        )
     if resolved_count or skipped_no_data:
         logger.info(
             "decision_log Phase B resolved=%d skipped_no_data=%d (run_date=%s)",

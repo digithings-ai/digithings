@@ -20,14 +20,24 @@ from __future__ import annotations
 
 import importlib.util
 from collections.abc import Callable
-from datetime import UTC, date, datetime
+from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal
 from pathlib import Path
 from typing import Any
+from uuid import UUID
 
 import psycopg
 import psycopg.sql
 import pytest
+from digiquant.portfolio.models.forecast_calibration import (
+    CalibratedForecast,
+    CalibrationArtifactStatus,
+    ForecastCalibration,
+    calibrated_forecast_content_hash,
+    calibrated_forecast_id,
+    forecast_calibration_content_hash,
+    forecast_calibration_id,
+)
 from digiquant.research import forecast_outcomes as fo
 
 from tests.dq.research.test_forecast_outcome_hash_ingress import (
@@ -327,3 +337,239 @@ class TestPriceIngressHardening:
             observed_at=TS,
             known_at=TS,
         )
+
+
+# ─── G2 cascade: rewrite the rows that cite a repaired outcome ──────────────
+
+
+_CASCADE_TS = datetime(2026, 8, 25, 21, 0, tzinfo=UTC)
+_BASE_ID = UUID("11111111-1111-4111-8111-111111111111")
+_EFF_ID = UUID("22222222-2222-4222-8222-222222222222")
+_COHORT_KEY = "horizon:21|regime:default"
+_METHOD_VERSION = "shadow-calibrator@1"
+
+
+def _citing_calibration(outcome_id: UUID | str) -> ForecastCalibration:
+    """A canonically hashed AVAILABLE calibration citing ``outcome_id``."""
+    fields: dict[str, Any] = {
+        "cohort_key": _COHORT_KEY,
+        "prior_definition": "zero_mean_shrinkage@v1",
+        "method_version": _METHOD_VERSION,
+        "sample_count": 1,
+        "equivalent_sample_size": Decimal("0.50000000"),
+        "bias": Decimal("0.02000000"),
+        "dispersion": Decimal("0.08000000"),
+        "brier_score": Decimal("0.18000000"),
+        "log_score": Decimal("-0.45000000"),
+        "reliability": Decimal("0.25000000"),
+        "status": CalibrationArtifactStatus.AVAILABLE,
+        "unavailable_reason": None,
+        "outcome_ids": (UUID(str(outcome_id)),),
+        "effective_at": _CASCADE_TS,
+        "known_at": _CASCADE_TS,
+    }
+    content_hash = forecast_calibration_content_hash(
+        payload=ForecastCalibration.model_construct(**fields)._hash_payload()
+    )
+    return ForecastCalibration(
+        **fields,
+        content_hash=content_hash,
+        calibration_id=forecast_calibration_id(
+            cohort_key=_COHORT_KEY,
+            method_version=_METHOD_VERSION,
+            content_hash=content_hash,
+        ),
+    )
+
+
+def _anchored_calibrated(calibration: ForecastCalibration) -> CalibratedForecast:
+    """A canonically hashed AVAILABLE calibrated forecast anchored to ``calibration``."""
+    fields: dict[str, Any] = {
+        "base_forecast_id": _BASE_ID,
+        "effective_forecast_id": _EFF_ID,
+        "calibration_id": calibration.calibration_id,
+        "ticker": "AAPL",
+        "expected_gross_return": Decimal("0.03000000"),
+        "forecast_error_std": Decimal("0.09000000"),
+        "downside_quantiles": (Decimal("-0.20000000"), Decimal("-0.10000000")),
+        "calibrated_positive_probability": Decimal("0.55000000"),
+        "reliability_weight": Decimal("0.25000000"),
+        "effective_until": _CASCADE_TS + timedelta(days=21),
+        "status": CalibrationArtifactStatus.AVAILABLE,
+        "unavailable_reason": None,
+        "effective_at": _CASCADE_TS,
+        "known_at": _CASCADE_TS,
+    }
+    content_hash = calibrated_forecast_content_hash(
+        payload=CalibratedForecast.model_construct(**fields)._hash_payload()
+    )
+    return CalibratedForecast(
+        **fields,
+        content_hash=content_hash,
+        calibrated_forecast_id=calibrated_forecast_id(
+            effective_forecast_id=_EFF_ID,
+            calibration_id=calibration.calibration_id,
+            content_hash=content_hash,
+        ),
+    )
+
+
+def _calibration_row(calibration: ForecastCalibration) -> dict[str, Any]:
+    return calibration.model_dump(mode="json")
+
+
+def _calibrated_row(subject: CalibratedForecast) -> dict[str, Any]:
+    return subject.model_dump(mode="json")
+
+
+def _cascade_fixtures() -> tuple[dict[str, Any], ForecastCalibration, CalibratedForecast]:
+    stale = _stale_row()
+    calibration = _citing_calibration(stale["outcome_id"])
+    return stale, calibration, _anchored_calibrated(calibration)
+
+
+def _run_cascade(conn: _RecordingConnection, *, apply: bool) -> dict[str, Any]:
+    return script.run_cascade_repair(
+        connect=_connect(conn),
+        sql_module=psycopg.sql,
+        apply=apply,
+    )
+
+
+def _rendered_statements(conn: _RecordingConnection) -> list[str]:
+    return [_render(statement) or "" for statement, _params in conn.statements]
+
+
+class TestCascadeTransactionPath:
+    def test_dry_run_plans_the_whole_chain_and_writes_nothing(self) -> None:
+        stale, calibration, subject = _cascade_fixtures()
+        conn = _RecordingConnection(
+            fetch_batches=[[stale], [_calibration_row(calibration)], [_calibrated_row(subject)]]
+        )
+        payload = _run_cascade(conn, apply=False)
+
+        assert payload["status"] == "dry_run"
+        assert payload["mode"] == "cascade"
+        assert len(payload["outcomes"]) == 1
+        assert len(payload["calibrations"]) == 1
+        assert len(payload["calibrated_forecasts"]) == 1
+        assert payload["unrepairable"] == []
+        # One README select per table, nothing else.
+        assert conn.kinds() == ["select", "select", "select"]
+        assert conn.commits == 1
+        assert conn.rollbacks == 0
+
+    def test_apply_disables_three_triggers_then_writes_then_reenables(self) -> None:
+        stale, calibration, subject = _cascade_fixtures()
+        conn = _RecordingConnection(
+            fetch_batches=[[stale], [_calibration_row(calibration)], [_calibrated_row(subject)]]
+        )
+        payload = _run_cascade(conn, apply=True)
+
+        assert payload["status"] == "applied"
+        # 3 selects, 3 DISABLEs, then detach + outcome + calibration + calibrated
+        # UPDATEs, then 3 ENABLEs — all in one transaction.
+        assert conn.kinds() == ["select"] * 3 + ["disable"] * 3 + ["update"] * 4 + ["enable"] * 3
+        assert conn.commits == 1
+        assert conn.rollbacks == 0
+        assert conn.committed_trigger == "enabled"
+
+    def test_citation_is_detached_before_it_is_rewritten(self) -> None:
+        stale, calibration, subject = _cascade_fixtures()
+        conn = _RecordingConnection(
+            fetch_batches=[[stale], [_calibration_row(calibration)], [_calibrated_row(subject)]]
+        )
+        _run_cascade(conn, apply=True)
+
+        rendered = _rendered_statements(conn)
+        detach = next(i for i, sql in enumerate(rendered) if "SET calibration_id = NULL" in sql)
+        outcome_update = next(
+            i
+            for i, sql in enumerate(rendered)
+            if sql.lstrip().upper().startswith("UPDATE") and "forecast_outcomes" in sql
+        )
+        calibration_update = next(i for i, sql in enumerate(rendered) if "outcome_ids = %s" in sql)
+        # FK-safe order: clear the referencing FK, rewrite the outcome id, and
+        # only then rewrite the cited calibration id.
+        assert detach < calibration_update
+        assert outcome_update < calibration_update
+
+    def test_refused_plan_writes_nothing(self) -> None:
+        stale, calibration, _subject = _cascade_fixtures()
+        broken = {**_calibration_row(calibration), "status": "not-a-status"}
+        conn = _RecordingConnection(fetch_batches=[[stale], [broken], []])
+        payload = _run_cascade(conn, apply=True)
+
+        assert payload["unrepairable"]
+        assert conn.kinds() == ["select", "select", "select"]
+        assert conn.rollbacks == 0
+        # Nothing was written, so the reported status is a dry run.
+        assert payload["status"] == "dry_run"
+
+    def test_second_cascade_apply_is_no_changes(self) -> None:
+        stale = _stale_row()
+        planned = fo.plan_forecast_outcome_cascade_repairs(
+            outcome_rows=[stale], calibration_rows=[], calibrated_forecast_rows=[]
+        )
+        repair = planned.outcomes[0]
+        canonical = {
+            **stale,
+            "outcome_id": repair.repaired_outcome_id,
+            "content_hash": repair.repaired_content_hash,
+        }
+        calibration = _citing_calibration(repair.repaired_outcome_id)
+        subject = _anchored_calibrated(calibration)
+        conn = _RecordingConnection(
+            fetch_batches=[[canonical], [_calibration_row(calibration)], [_calibrated_row(subject)]]
+        )
+        payload = _run_cascade(conn, apply=True)
+
+        assert payload["status"] == "no_changes"
+        assert payload["outcomes"] == []
+        assert payload["calibrations"] == []
+        assert payload["calibrated_forecasts"] == []
+        assert conn.kinds() == ["select", "select", "select"]
+        assert conn.commits == 1
+
+    def test_citation_array_is_bound_as_a_list_not_a_tuple(self) -> None:
+        stale, calibration, subject = _cascade_fixtures()
+        conn = _RecordingConnection(
+            fetch_batches=[[stale], [_calibration_row(calibration)], [_calibrated_row(subject)]]
+        )
+        _run_cascade(conn, apply=True)
+
+        bound: Any = None
+        for statement, params in conn.statements:
+            if params and len(params) == 4 and "outcome_ids" in (_render(statement) or ""):
+                bound = params[2]
+        # A tuple adapts as a composite record ('(a,b)'), which Postgres rejects
+        # as a malformed array literal — the citation must bind as a list.
+        assert isinstance(bound, list)
+        assert all(isinstance(item, UUID) for item in bound)
+        assert len(bound) == 1
+
+    def test_mid_way_failure_rolls_back_and_leaves_all_triggers_enabled(self) -> None:
+        stale, calibration, subject = _cascade_fixtures()
+        # Statement 9 is the citation UPDATE: after all three DISABLEs, before any ENABLE.
+        conn = _RecordingConnection(
+            fetch_batches=[[stale], [_calibration_row(calibration)], [_calibrated_row(subject)]],
+            fail_on=9,
+        )
+        with pytest.raises(RuntimeError, match="injected mid-transaction failure"):
+            _run_cascade(conn, apply=True)
+
+        assert conn.commits == 0
+        assert conn.rollbacks == 1
+        assert conn.committed_trigger == "enabled"
+        assert "enable" not in conn.kinds()
+
+    def test_uncited_stale_outcome_plans_no_cascade_rows(self) -> None:
+        stale = _stale_row()
+        conn = _RecordingConnection(fetch_batches=[[stale], [], []])
+        payload = _run_cascade(conn, apply=True)
+
+        assert len(payload["outcomes"]) == 1
+        assert payload["calibrations"] == []
+        assert payload["calibrated_forecasts"] == []
+        # Only the outcome table needs its trigger touched here.
+        assert conn.kinds().count("disable") == 3

@@ -133,7 +133,7 @@ All three adapters (`IBAdapterStub`, `AlpacaAdapterStub`, `QuantConnectAdapterSt
 | `tearsheet_extract.py` | Equity/fill/drawdown extraction from Nautilus reports (#1185) |
 | `tearsheet_stats.py` | Categorized / full / risk HTML stats tables (#1185) |
 | `tearsheet_page.py` | Tearsheet HTML page layout + CSS/JS (#1185) |
-| `tearsheet_data.py` | Unified `TearsheetData` schema + `from_pine`/`from_nautilus` adapters; emits the JSON consumed by the React strategy-tearsheet library (`cloudflare/digiquant-web` `/strategies` routes on digiquant.io) |
+| `tearsheet_data.py` | Unified `TearsheetData` schema + `from_pine`/`from_nautilus` adapters; emits the JSON consumed by the React strategy-tearsheet library (`apps/digiquant-web` `/strategies` routes on digiquant.io) |
 | `strategy_aliases.py` | Canonical alias → registry-name map + `resolve_param_spec_name` (SDCA `btc_sdca` → `sdca` for optimize specs) (#1185) |
 | `cli/` | `digiquant backtest | optimize | export | strategy | prices | web-search | policy-replay` CLI |
 
@@ -357,7 +357,7 @@ carries the `[research]`/`[mcp]` extras — never the backtest engine. The hoste
 bind is non-loopback via `DIGIQUANT_MCP_HOST=0.0.0.0` /
 `DIGIQUANT_MCP_PORT=8767` (code defaults stay `127.0.0.1:8767` for local runs).
 
-Cloudflare wiring (`cloudflare/digithings-stack-cloudflare/`): `DigiQuantMcpContainer`
+Cloudflare wiring (`apps/digithings-stack-cloudflare/`): `DigiQuantMcpContainer`
 beside `DigiStackContainer` (own `[[containers]]` image entry, `MCP_STACK`
 binding, `v2` migration), routed by exact hostname (`mcp.digithings.ai`,
 reserved) only — no workers.dev forwarding route ships. Single replica by design (`max_instances = 1`, one pinned
@@ -387,24 +387,28 @@ touches the container; once the custom-domain route is enabled it can be pinged
 manually:
 `curl -sS https://mcp.digithings.ai/mcp -H 'Accept: application/json'`.
 
-Per-component secrets (`wrangler secret put`, never committed): `FRED_API_KEY`
-plus the four R2 names `R2_ACCOUNT_ID` / `R2_BUCKET` / `R2_ACCESS_KEY_ID` /
+Per-component secrets (`wrangler secret put`, never committed): `FRED_API_KEY`,
+`GLOOMBERB_SESSION_COOKIE` (session-gated digifetch tools, #4260), and the four
+R2 names `R2_ACCOUNT_ID` / `R2_BUCKET` / `R2_ACCESS_KEY_ID` /
 `R2_SECRET_ACCESS_KEY` (same `digithings-archive` bucket as the checkpoint
 archive). The read path is registry-read-only (registry inserts raise) so the
 cron's `CORE_POSTGRES_URI` is deliberately NOT forwarded here.
 `DIGIQUANT_MARKET_DATA_BACKEND` is passed through with no Worker-side default:
 unset/empty keeps the library default (`supabase`); set it to `"r2"`
-explicitly via env for the hosted path. The Gloomberb session cookie is **not**
-forwarded to this container yet (gated digifetch tools answer the typed
-`auth_required`); the operator path and tracked wiring follow-up are in
+explicitly via env for the hosted path. `GLOOMBERB_SESSION_COOKIE` is forwarded
+as container runtime env (#4260), so once the secret is set the gated digifetch
+tools take the session-authenticated path instead of the zero-HTTP typed
+`auth_required`; an unset/empty value preserves that `auth_required` behavior.
+The operator path is in
 [docs/ops/gloomberb-session-cookie.md](../docs/ops/gloomberb-session-cookie.md).
 
-Owner applies the five secrets from `cloudflare/digithings-stack-cloudflare/`
+Owner applies the six secrets from `apps/digithings-stack-cloudflare/`
 (`$VALUE` filled only in the operator's shell history — never in the repo;
 `env -u` per the `CLOUDFLARE_API_TOKEN` trap noted in `wrangler.toml`):
 
 ```bash
 printf '%s' "$VALUE" | env -u CLOUDFLARE_API_TOKEN npx wrangler secret put FRED_API_KEY
+printf '%s' "$VALUE" | env -u CLOUDFLARE_API_TOKEN npx wrangler secret put GLOOMBERB_SESSION_COOKIE
 printf '%s' "$VALUE" | env -u CLOUDFLARE_API_TOKEN npx wrangler secret put R2_ACCOUNT_ID
 printf '%s' "$VALUE" | env -u CLOUDFLARE_API_TOKEN npx wrangler secret put R2_BUCKET
 printf '%s' "$VALUE" | env -u CLOUDFLARE_API_TOKEN npx wrangler secret put R2_ACCESS_KEY_ID
@@ -537,7 +541,7 @@ Still open from #160 AC: dedicated `indicator list` / `indicator compute` (close
 The BTC/ETH/SOL Slapper tearsheets published on digiquant.io are produced end-to-end by digiquant's own pipeline:
 
 1. **Price** — `scripts/fetch_coinbase.py` pulls daily Coinbase OHLCV (CCXT) into `digiquant/data/price-history/<TICKER>.csv` (matches TradingView's Coinbase series). `generate_tearsheets.py` and `export_sdca_macro.py` default to the same directory (`DIGIQUANT_ROOT / "data" / "price-history"`). Do not point generate at repo-root `data/price-history` — that is a different tree (#3472).
-2. **Backtest** — `scripts/generate_tearsheets.py` runs each strategy through the NautilusTrader engine, extracts round-trip trades from the positions report, and builds a TradingView-style percent-of-equity compounding equity curve + All/Long/Short stats, emitting `TearsheetData` JSON (`tearsheet_data.from_nautilus_run`) into `cloudflare/digiquant-web/public/strategies/`. Each strategy's backtest runs in its **own spawned process** (#1389): NautilusTrader's Rust logging can only initialize once per process (`log::set_boxed_logger`), so a second in-process `BacktestEngine` aborts the interpreter with a logger re-init panic (SIGABRT). Isolation also contains any engine crash to its strategy — the script collects per-strategy success/failure, prints an OK/FAILED summary line per strategy, and exits non-zero if **any** strategy failed. On a partial failure, `index.json` keeps the prior entry for each failed strategy (so digiquant.io does not lose a live strategy card); a fully successful full run rewrites `index.json` as before.
+2. **Backtest** — `scripts/generate_tearsheets.py` runs each strategy through the NautilusTrader engine, extracts round-trip trades from the positions report, and builds a TradingView-style percent-of-equity compounding equity curve + All/Long/Short stats, emitting `TearsheetData` JSON (`tearsheet_data.from_nautilus_run`) into `apps/digiquant-web/public/strategies/`. Each strategy's backtest runs in its **own spawned process** (#1389): NautilusTrader's Rust logging can only initialize once per process (`log::set_boxed_logger`), so a second in-process `BacktestEngine` aborts the interpreter with a logger re-init panic (SIGABRT). Isolation also contains any engine crash to its strategy — the script collects per-strategy success/failure, prints an OK/FAILED summary line per strategy, and exits non-zero if **any** strategy failed. On a partial failure, `index.json` keeps the prior entry for each failed strategy (so digiquant.io does not lose a live strategy card); a fully successful full run rewrites `index.json` as before.
 3. **Validation** — `scripts/validation/pine_backtest.py` is a Pine-faithful replica of TradingView's fill model used as a parity oracle; `scripts/validation/compare_tv.py` matches our entries to a TradingView export (entry date + direction, broken down by signal family).
 
 Structural settings (symbol, capital, sizing, 2018 trade window, precision) live in the **public** `strategies/settings.json`; proprietary indicator calibrations live in the **gitignored** `strategies/calibrations.json` (shape shown in `calibrations.example.json`). The `SlapperConfig.trade_start` gate mirrors Pine's `in_date_range` so warmup uses earlier bars while reported trades match the TradingView window.
@@ -598,7 +602,7 @@ Existing published fixtures stay at older schema versions (no `ohlc_bars`, blank
 
 **Public signal delay (#1462).** The public tearsheets lag reality by **3 calendar days** ("backtested strategies running live — signals delayed 3 days") to protect strategy IP: on a single-asset long/flat strategy a current equity curve trivially leaks the live position. The mechanism is an **end-date shift, not redaction** — `generate_tearsheets.py --signal-delay-days N` truncates the OHLCV frame (`apply_signal_delay`, cutoff = newest cached bar minus N calendar days) *before* the backtest, so the entire tearsheet is generated as if run N days ago. Every artifact (equity curve, drawdown, trade log, open-position state, headline metrics, `period_end`) is self-consistent by construction; there is no per-field redaction logic to get wrong. The lag is declared honestly: the static JSON, the `index.json` entry, and the `strategy_tearsheets` metrics all carry `signal_delay_days`, and a payload note states the as-of date. `generated_at` stays the true generation timestamp (the delay is marketed openly, not hidden). Default is `0` (exact no-op) for internal/undelayed runs; the scheduled pipeline (`pipeline-digiquant-tearsheets.yml`) passes `--signal-delay-days 3`. Side effect: the `_PUBLISHED_BASELINE` drift warning compares exact trade counts, so a trade opened within the delay window can transiently warn — informational only. Tests: `tests/dq/test_tearsheet_signal_delay.py`.
 
-**digiquant.io consumption** — the landing page, strategy library (`/strategies`), and tearsheet views read **live from Supabase `strategy_tearsheets`** at runtime (#1069): the client fetches the row via the shared anon browser client (`cloudflare/digiquant-web/lib/live/`), so a fresh nightly upsert updates the site with **no rebuild or redeploy**. The static-JSON artifacts under `public/strategies/` were removed. Build-time still needs the *route list* (`generateStaticParams` in `app/strategies/[id]/page.tsx` hardcodes the three Slapper slugs **plus `btc_sdca`**); `dynamicParams: false` 404s any other id. Homepage `StrategySuite` lists the same four. Public names are **asset then type**: `btc_sdca` is **BTC-SDCA**; the Slapper books are **BTC L/S**, **ETH L/S**, **SOL L/S** (Slapper `enable_short` + net-short + BTC reversal flip — a long/short book, not RS). The library filters by public type (All / SDCA / L/S; RS is reserved on the enum). The Charts **Indicators** tab is SDCA-only (`showsIndicatorsTab` / public type `sdca`) — L/S P/L books never get that tab, even if a payload carried unused series. Public KPIs: total return, max drawdown, vs buy-and-hold (lump), MTM allocated. **vs-flat DCA is not a public comparable** (`flat_dca_mark_to_market` spends remaining cash equally each day and is fully deployed by the last bar; keep the number on the payload). Honesty (`beats_flat_dca_oos` false, backtest only, 3-day delay) lives in notes, not title chips. The primary chart is allocation + sized buy/sell fills, plus today's remaining-book signal. Operator go-live is `generate_tearsheets.py --strategy btc_sdca --signal-delay-days 3 --push-supabase` from a tree whose `settings.json` includes `btc_sdca` (real Nautilus backtest; no hand-inserted metrics). Nightly `pipeline-digiquant-tearsheets.yml` now stages `M2SL.csv` / `DTWEXBGS.csv` beside the Coinbase cache (#3453) so those composite weights are not silently dropped. The job still checks out `main` (#1626) — a family is unpublished until its settings entry is on main. Agents do not push.
+**digiquant.io consumption** — the landing page, strategy library (`/strategies`), and tearsheet views read **live from Supabase `strategy_tearsheets`** at runtime (#1069): the client fetches the row via the shared anon browser client (`apps/digiquant-web/lib/live/`), so a fresh nightly upsert updates the site with **no rebuild or redeploy**. The static-JSON artifacts under `public/strategies/` were removed. Build-time still needs the *route list* (`generateStaticParams` in `app/strategies/[id]/page.tsx` hardcodes the three Slapper slugs **plus `btc_sdca`**); `dynamicParams: false` 404s any other id. Homepage `StrategySuite` lists the same four. Public names are **asset then type**: `btc_sdca` is **BTC-SDCA**; the Slapper books are **BTC L/S**, **ETH L/S**, **SOL L/S** (Slapper `enable_short` + net-short + BTC reversal flip — a long/short book, not RS). The library filters by public type (All / SDCA / L/S; RS is reserved on the enum). The Charts **Indicators** tab is SDCA-only (`showsIndicatorsTab` / public type `sdca`) — L/S P/L books never get that tab, even if a payload carried unused series. Public KPIs: total return, max drawdown, vs buy-and-hold (lump), MTM allocated. **vs-flat DCA is not a public comparable** (`flat_dca_mark_to_market` spends remaining cash equally each day and is fully deployed by the last bar; keep the number on the payload). Honesty (`beats_flat_dca_oos` false, backtest only, 3-day delay) lives in notes, not title chips. The primary chart is allocation + sized buy/sell fills, plus today's remaining-book signal. Operator go-live is `generate_tearsheets.py --strategy btc_sdca --signal-delay-days 3 --push-supabase` from a tree whose `settings.json` includes `btc_sdca` (real Nautilus backtest; no hand-inserted metrics). Nightly `pipeline-digiquant-tearsheets.yml` now stages `M2SL.csv` / `DTWEXBGS.csv` beside the Coinbase cache (#3453) so those composite weights are not silently dropped. The job still checks out `main` (#1626) — a family is unpublished until its settings entry is on main. Agents do not push.
 
 Regenerate only when calibrations are available from **one** of:
 
@@ -1542,7 +1546,7 @@ OpenTelemetry instrumentation is set up via `setup_otel_fastapi(app, service_nam
 
 ### Dashboard digichat popup (#3422)
 
-The operator UI at `/dashboard/` (`cloudflare/dashboard`) mounts a Desk+ digichat
+The operator UI at `/dashboard/` (`apps/dashboard`) mounts a Desk+ digichat
 popup that iframes digichat `/embed` (digigraph backend → digillm). Grounding,
 web search, and model tiers are digichat tenant config (`DIGICHAT_EMBED_TENANTS`
 for `digiquant.io`), not digiquant HTTP. Plan gate: `glassbox_economics` (Desk+).
@@ -2264,6 +2268,13 @@ entry until that cutover. Prompt / structured-output walk for the same pass:
     are refused before any widening (#3994). A read-only
    `verify_nav_replay` (no `--write`) step runs after metrics so drift fails
    loudly.
+   **Bookless mark-to-market (#3439):** the scheduled engine step passes
+   `--mark-through <today UTC>`, which extends the replay grid past the last
+   committed book through today. The last book's positions are held (no schedule
+   entry, no fabricated rebalance) and marked at each intervening close, so a
+   failed house run no longer leaves the NAV/PnL series flat. Only the grid is
+   extended — `positions` is never written — so the missing-book signal and the
+   metrics step's exit-3 stale-book alarm are preserved.
   `refresh_performance_metrics.refresh_nav_point` only guards the engine row;
   `pnl_pct` reads the stored engine series (finalized-accounting precedence
   retired — it caused the Sept 2026 scale break); `update_tearsheet.py` no
@@ -2643,7 +2654,7 @@ or mixed fallback.
 
 **Dashboard UI SSOT (#3580).** Brief and Tearsheet share one accounting NAV view
 (`public_accounting_nav_history`) and shared pure helpers
-(`cloudflare/dashboard/lib/performance-ssot.ts`). Tearsheet loads via
+(`apps/dashboard/lib/performance-ssot.ts`). Tearsheet loads via
 `getPerformanceBundle`; Brief rebuilds persisted headlines from the same view
 already in `getFullDashboardData` snapshots. Invested % prefers the accounting tip;
 book as-of is `committedBookDate`. Live marks on Brief are explicitly badged and must
@@ -2675,7 +2686,7 @@ the two percent writers could not satisfy: both are gated on `nav_history` reach
 `_MIN_NAV_HISTORY_ROWS = 20`, and the first running drawdown they compute (~-1.31%) raises
 PostgREST `APIError 23514` — permanently, since running max drawdown is monotonically
 non-increasing. New writers of these columns must emit percent; readers may take the stored
-value directly (`cloudflare/dashboard/lib/portfolio-risk-metrics.ts` maps them onto
+value directly (`apps/dashboard/lib/portfolio-risk-metrics.ts` maps them onto
 `annVolPct` / `maxDrawdownPct` unchanged).
 
 Known wart, deliberately not changed here: `computed_from` carries
@@ -2740,6 +2751,13 @@ separately so research nodes never pay the per-ticker decision-artifact token ta
   (`text`/`detail`/…), never from leftover URLs or envelope keys. An `as_of`-only finding
   with no prose is still rejected.
 - Standalone CLI: `python -m digiquant.research.graph` — research-only consumers.
+- **Watchlist parse is the seal's parse (#4301).** `_parse_watchlist_md` delegates to
+  `digiquant.data.prices.fetchers.parse_watchlist` (an absent file still returns `[]`), so the
+  research fan-out excludes the non-sealable macro/header rows `ETF`/`DXY`/`VIX` and keeps
+  hyphenated pairs (`ETH-USD`) exactly as the R2 seal does. `decision_log.resolve_pending`
+  counts due rows whose ticker has no sealed generation and emits **one aggregated WARNING per
+  pass** (a coverage/config gap, not a transient fault) instead of one WARNING per row per run;
+  the transient-IO WARNING path is unchanged. Tolerant-reader contract: #4136/#4139, #4120.
 - Terminal `publish_phase` is wired only when `deps.publish` is provided;
   the chain orchestrator passes `None` so publish runs once at the end (research artifacts).
 - Web grounding pre-pass for `live_search` segments (#3853 / #3859): `fetch_web_grounding`
@@ -2805,8 +2823,7 @@ separately so research nodes never pay the per-ticker decision-artifact token ta
   `run_research_agent(...)` call goes through the thin wrapper
   `digiquant.tool_rounds.run_digiquant_research_agent`, which injects
   `DIGIQUANT_MAX_TOOL_ROUNDS` (default **24**, set in
-  `.github/digiquant-pipeline.yml`); the retired `OLYMPUS_MAX_TOOL_ROUNDS` stays
-  readable as an alias via `digiquant.dashboard.envcompat`. The cap is high but finite:
+  `.github/digiquant-pipeline.yml`). The cap is high but finite:
   cheap models need room for data-tool grounding before Pydantic validation.
   digigraph chat keeps its own `max_tool_rounds=4` — never reuse this budget there.
   Transient Supabase faults (disconnects, `PGRST002`, 502s) retry 3× with short
@@ -3467,8 +3484,12 @@ that metrics/attribution job order cannot alter meaning.
 - **Finalizer**: `digiquant/scripts/research/finalize_period_accounting.py` — assembles ledger
   fills/lots + marks, runs the engine, persists, shadow-reconciles vs provisional H9 nav
   day return. Flags: `--date`, `--dry-run` (no INSERT), `--shadow` (default persist +
-  reconcile). Mode also via `DIGIQUANT_ACCOUNTING_FINALIZER` / `--mode` (`off` no-op). Cold
-  ledger declines with exit 3 (no partial final). Wired ahead of metrics in
+  reconcile). Mode also via `DIGIQUANT_ACCOUNTING_FINALIZER` / `--mode` (`off` no-op).
+  Declines with exit 3 (no write, no partial final) when the ledger is cold, or when the
+  most recent prior accounting tip closes at a negative `closing_cash` (#4105) — the
+  latter previously fell through to a `nav * cash_pct / 100` cash-only stub (2026-08-26
+  NAV 15.13 vs stitched 101.77), so it now declines instead of fabricating a book. Wired
+  ahead of metrics in
   `pipeline-research-metrics.yml` (`continue-on-error` while shadowing). Holding-lot reads
   page via PostgREST `.range` (`_LOT_PAGE_SIZE=1000`) so closed-lot history cannot silently
   truncate the opening book (#2776).
@@ -3560,7 +3581,7 @@ SELECT the same public calendar as anon — do not number this `113`, which is
 the staged cutover under `migrations/cutover/`): the twelve-x
 ingest (`fx_calendar/calendar_db.py`) is repointed to write it, and the dashboard
 twelve-x **events tab reads it via the main dashboard client** (`getUpcomingEvents` in
-`cloudflare/dashboard/lib/twelve-x/fetch.ts`) rather than the twelve-x project — the
+`apps/dashboard/lib/twelve-x/fetch.ts`) rather than the twelve-x project — the
 other FX research tables stay on `twelveXSupabase`. Cutover is gated: the frontend
 read goes live only once the repointed ingest has populated `core`.
 
@@ -3719,7 +3740,7 @@ bypassing the edge function, and whatever gate it carried, entirely.
 [`supabase/migrations/063_prices_live_table.sql`](supabase/migrations/063_prices_live_table.sql)
 moves the transport onto `public.prices_live`: the publisher upserts one row per ticker
 (`functions/prices-live/index.ts`) and the browser subscribes to `postgres_changes` on that
-table (`cloudflare/digiquant-web/lib/live/useLivePrices.ts`). **Neither end passes
+table (`apps/digiquant-web/lib/live/useLivePrices.ts`). **Neither end passes
 `config: { private: true }` any more, deliberately** — that flag routes authorization back
 through RLS on `realtime.messages`, which we can never police.
 
@@ -3838,7 +3859,7 @@ individual calls, ordering, retries, or timing without fabrication.
 
 | Field | Question | Consumers |
 |---|---|---|
-| `RunSummary.status` | Was the run healthy? | `atlas_run_diagnostics.status`, `cloudflare/dashboard` (`run-episodes.ts` `classify()`, `freshness-banner.tsx` `isOk()`) |
+| `RunSummary.status` | Was the run healthy? | `atlas_run_diagnostics.status`, `apps/dashboard` (`run-episodes.ts` `classify()`, `freshness-banner.tsx` `isOk()`) |
 | `RunSummary.retry_signal` | Is re-running worth the money? | `chain._retry_worthy` → the process exit code → CI's outer-retry loop |
 
 `status` stays inside `ok | degraded | failed | cancelled` — there is no CHECK constraint on
@@ -3871,7 +3892,7 @@ detectable and is the only way a future collision would be visible.
   `atlas_run_health` view — appended **last**, since `CREATE OR REPLACE VIEW` can only add
   columns. Pre-existing rows carry the sentinel `0`, never `1`: backfilling 1 would assert 28
   provably-collapsed rows are first attempts, which is the fabrication the change exists to end.
-- `cloudflare/dashboard/lib/run-episodes.ts` gets fixed for free — `attempts = rows.length` and the
+- `apps/dashboard/lib/run-episodes.ts` gets fixed for free — `attempts = rows.length` and the
   `recovered` outcome were built on the assumption that attempts are distinct rows. It orders by
   `attempt` where usable and falls back to `created_at` for `0`-sentinel rows.
   `RUN_DIAGNOSTICS_LIMIT` rose 30 → 90 because a retried date now consumes several slots.
@@ -3935,12 +3956,11 @@ side, quantity, order_type)` call. This work package is **contracts and typing o
 HTTP client, no broker SDK, no database access, and no venue router — a later work package
 (K1 Alpaca, K2 IBKR, K4 router/sync) builds on this surface without changing it.
 
-Operator env names live in `digiquant.dashboard.envcompat`. Canonical names are
-`DIGIQUANT_*` (execution routing, overlay persist, staging JWT, research knobs).
-Retired `DASHBOARD_*` / `EXECUTION_*` / `RESEARCH_*` names remain readable so live empty
-kill-switches stay off. `DIGIQUANT_EXECUTION_ROUTING` defaults **off** — do not
+Operator env names live in `digiquant.dashboard.envcompat` and are all
+`DIGIQUANT_*` (execution routing, overlay persist, staging JWT, research knobs);
+no read-aliases remain. `DIGIQUANT_EXECUTION_ROUTING` defaults **off** — do not
 enable it without an explicit human decision. `pipeline-digiquant.yml` exports
-`DIGIQUANT_ATTEMPT`; the retired `OLYMPUS_ATTEMPT` is accepted as a read-alias.
+`DIGIQUANT_ATTEMPT`.
 
 ### Vocabulary and models
 
@@ -4140,7 +4160,7 @@ Live-venue refusals in `execution/policy.py` are unchanged by the calendar gate.
 performs **no I/O**. House / system — `workspace_id is None` **or** the well-known
 `house_workspace_id()` / `system_workspace_id()` UUIDs → always `PAPER_INTERNAL`
 (hard-coded; those identities can never route externally). Kill switch
-`DIGIQUANT_EXECUTION_ROUTING` (alias `OLYMPUS_KAIROS_ROUTING`) defaults **off** (inverse polarity of `DIGIQUANT_PORTFOLIO_LEDGER` / alias `OLYMPUS_PORTFOLIO_LEDGER`):
+`DIGIQUANT_EXECUTION_ROUTING` defaults **off** (inverse polarity of `DIGIQUANT_PORTFOLIO_LEDGER`):
 off ⇒ only `PAPER_INTERNAL` regardless of connections. With the switch on, a **tenant**
 workspace with exactly one active paper `broker_connections` row maps to `ALPACA_PAPER` /
 `IBKR_PAPER`; zero → `PAPER_INTERNAL`; two or more → `AmbiguousVenueError`. v1 does **not**
@@ -4212,7 +4232,7 @@ Observer until an Alpaca paper OAuth connection exists. The fill remaining-hop
 requires a mirrored row with a symbol **and** an Alpaca paper OAuth connection.
 
 **`execute_at_open` seam.** `resolve_execution_venue_for_run` is the only new call site;
-invalid / empty `DIGIQUANT_EXECUTION_WORKSPACE_ID` (alias `OLYMPUS_KAIROS_WORKSPACE_ID`) warns and falls back to house
+invalid / empty `DIGIQUANT_EXECUTION_WORKSPACE_ID` warns and falls back to house
 (`paper_internal`). Default (no workspace / kill switch off) stays on
 `build_events_from_paper_fills`. Migration 102 + `tests/dq/dashboard/execution/`.
 
@@ -4221,7 +4241,7 @@ invalid / empty `DIGIQUANT_EXECUTION_WORKSPACE_ID` (alias `OLYMPUS_KAIROS_WORKSP
 K5 Cloudflare Email Sending dispatch for daily digest, holding-change, and
 execution-alert emails. Module: `digiquant/src/digiquant/notify/`
 (`cloudflare_email.py` is the thin stdlib client; `entitlements.py` mirrors T5
-`cloudflare/dashboard/lib/entitlements.ts` artifact-class matrix).
+`apps/dashboard/lib/entitlements.ts` artifact-class matrix).
 
 **Env:** `CLOUDFLARE_EMAIL_API_TOKEN` (dedicated **Email Sending: Edit** token —
 deliberately not the broad deploy token), `CLOUDFLARE_ACCOUNT_ID`, `NOTIFY_FROM`
@@ -4496,7 +4516,7 @@ stamps house `workspace_id` on those same Group A tables when `eq` omits it
 (`HOUSE_BOOK_READ_TABLES` in `research/data/queries.py`). House preflight
 `load_prior_context` / analyst and deliberation continuity / beliefs /
 institutional-absence documents also pin house so overlay private docs cannot
-seed the house graph. The dashboard Group A readers (`cloudflare/dashboard/lib/queries.ts`, `observability-queries.ts`)
+seed the house graph. The dashboard Group A readers (`apps/dashboard/lib/queries.ts`, `observability-queries.ts`)
 go through `houseBook()` (`lib/house-workspace.ts`) so a signed-in Custom
 member's overlay rows cannot mix into Brief / Holdings / Performance. Accounting NAV still uses
 `public_accounting_nav_history` (security definer; house-only until a later

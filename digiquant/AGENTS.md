@@ -97,9 +97,9 @@ ruff check digiquant/ && ruff format --check digiquant/
 
 ## Dashboard (research + portfolio)
 
-Public path is **`/dashboard/`** only (`cloudflare/dashboard`; ADR-0026). `/dashboard/` is retired — no redirect alias.
+Public path is **`/dashboard/`** only (`apps/dashboard`; ADR-0026). `/dashboard/` is retired — no redirect alias.
 
-When touching `digiquant/src/digiquant/dashboard/` **or** `cloudflare/dashboard/` Group A queries:
+When touching `digiquant/src/digiquant/dashboard/` **or** `apps/dashboard/` Group A queries:
 
 1. Read [`ARCHITECTURE.md`](ARCHITECTURE.md) § research + portfolio and
    [`docs/superpowers/specs/2026-06-20-olympus-daily-thesis-design.md`](../docs/superpowers/specs/2026-06-20-olympus-daily-thesis-design.md).
@@ -109,7 +109,7 @@ When touching `digiquant/src/digiquant/dashboard/` **or** `cloudflare/dashboard/
 3. Read component guides: [`src/digiquant/research/docs/AGENTS.md`](src/digiquant/research/docs/AGENTS.md),
    [`src/digiquant/portfolio/docs/AGENTS.md`](src/digiquant/portfolio/docs/AGENTS.md).
 4. **One graph, one daily cadence** — do not add a portfolio-lite env fork, `run_type` graph forks,
-   or `monthly` synthesis paths. Cost control = `DIGIQUANT_MODEL_TIER` (canonical since #3784; `OLYMPUS_MODEL_TIER` remains a listed retired alias in `digiquant.dashboard.envcompat`) + per-artifact `skip`/`edit`/`full`.
+   or `monthly` synthesis paths. Cost control = `DIGIQUANT_MODEL_TIER` + per-artifact `skip`/`edit`/`full`.
 5. **Edit-mode extension pattern** (`digiquant.dashboard.edit_mode`):
    - Call `resolve_edit_mode(artifact_key, run_date, prior_loader, triage, force_full_rewrite)`
      at node entry.

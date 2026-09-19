@@ -23,7 +23,6 @@ class _Out(BaseModel):
 
 def test_default_is_24(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.delenv(TOOL_ROUNDS_MAX, raising=False)
-    monkeypatch.delenv("OLYMPUS_MAX_TOOL_ROUNDS", raising=False)
     assert digiquant_max_tool_rounds() == 24
 
 
@@ -37,18 +36,6 @@ def test_env_override_and_floor(monkeypatch: pytest.MonkeyPatch) -> None:
 def test_invalid_env_falls_back_to_default(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv(TOOL_ROUNDS_MAX, "lots")
     assert digiquant_max_tool_rounds() == 24
-
-
-def test_canonical_wins_over_retired_alias(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv(TOOL_ROUNDS_MAX, "8")
-    monkeypatch.setenv("OLYMPUS_MAX_TOOL_ROUNDS", "24")
-    assert digiquant_max_tool_rounds() == 8
-
-
-def test_retired_alias_still_read(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.delenv(TOOL_ROUNDS_MAX, raising=False)
-    monkeypatch.setenv("OLYMPUS_MAX_TOOL_ROUNDS", "8")
-    assert digiquant_max_tool_rounds() == 8
 
 
 def _install_stub_agent(monkeypatch: pytest.MonkeyPatch) -> dict[str, Any]:

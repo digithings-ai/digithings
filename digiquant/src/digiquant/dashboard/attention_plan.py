@@ -13,7 +13,7 @@ import hashlib
 from datetime import date
 from enum import StrEnum
 from typing import Literal, Mapping, Sequence
-from uuid import NAMESPACE_URL, UUID, uuid5
+from uuid import UUID, uuid5
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
@@ -29,8 +29,9 @@ from digiquant.dashboard.profile_config import (
     profile_config_version_id,
 )
 
-# Frozen identity string. Do not rename with the package.
-_PLAN_NS = uuid5(NAMESPACE_URL, "digithings.olympus.attention_plan")
+# Frozen namespace UUID: the literal value the legacy URL seed already derived.
+# Kept verbatim so every derived plan id is unchanged. Do not re-key.
+_PLAN_NS = UUID("b3161865-af82-5871-b1ad-729f26f0bd4d")
 
 PlannerMode = Literal["off", "shadow"]
 AttentionAction = Literal["carry", "section_refresh", "deep_refresh"]

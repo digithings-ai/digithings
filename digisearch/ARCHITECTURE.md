@@ -167,7 +167,7 @@ As of the March 2026 codebase snapshot, the following modules are implemented an
 
 All paths under the FastAPI app in `server.py`. Base URL: `http://digisearch:8002`.
 Hosted: the same server is reachable publicly as `https://search.digithings.ai`
-via the `cloudflare/digithings-stack-cloudflare` Worker (#4063 — new external
+via the `apps/digithings-stack-cloudflare` Worker (#4063 — new external
 route, owner-approved for CI web grounding). Auth is unchanged: every route
 outside the shared `_PUBLIC_PATHS` allowlist — `/health`, `/healthz`, `/metrics`,
 `/docs`, `/redoc`, `/openapi.json` — requires a digikey JWT via `DigiAuthMiddleware`
@@ -1358,7 +1358,7 @@ both set (non-empty after `.strip()`) — canonical names shared with D1
 each falls back to the legacy `VECTORIZE_ACCOUNT_ID`/`VECTORIZE_API_TOKEN`,
 then `D1_ACCOUNT_ID`/`D1_API_TOKEN`, names when unset (`_first_env`), so the
 rename is zero-downtime. This is what the production Cloudflare Container uses
-(`cloudflare/digithings-stack-cloudflare/container/` unsets `CHROMA_PATH` and
+(`apps/digithings-stack-cloudflare/container/` unsets `CHROMA_PATH` and
 skips the Chroma seed once Vectorize is configured).
 
 It exists because Cloudflare Container disk is ephemeral: a container-local
@@ -1404,7 +1404,7 @@ passes digisearch's `index_name` straight into the Vectorize URL with no
 translation, so the Vectorize index **must be named exactly** what the
 digisearch server for that tenant is configured with — `DIGISEARCH_INDEX` /
 the `DIGI_TENANT_CORPUS_MAP` entry, both set in
-`cloudflare/digithings-stack-cloudflare/wrangler.toml`. Today that value is
+`apps/digithings-stack-cloudflare/wrangler.toml`. Today that value is
 underscore-form (`digithings_docs`, `occ_help`) to match the hardcoded Chroma
 collection names in `container/seed_chroma.sh` — renaming either side without
 renaming the other breaks that pairing outright.

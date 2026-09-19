@@ -423,7 +423,7 @@ class TestH6SelectionWiring:
     def test_enforce_selected_success_meets_two_round_floor(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        monkeypatch.setenv("OLYMPUS_H6_SELECTION_MODE", "enforce")
+        monkeypatch.setenv("DIGIQUANT_H6_SELECTION_MODE", "enforce")
         monkeypatch.setenv("DIGIQUANT_DELIBERATION_MIN_ROUNDS", "2")
         compiled = build_pipeline(ResearchState, [build_h6_deliberation(["AAPL"], held={"AAPL"})])
         calls: list[str] = []
@@ -475,7 +475,7 @@ class TestH6SelectionWiring:
     def test_provider_failure_keeps_typed_selection_provenance(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        monkeypatch.setenv("OLYMPUS_H6_SELECTION_MODE", "enforce")
+        monkeypatch.setenv("DIGIQUANT_H6_SELECTION_MODE", "enforce")
         with patch.object(
             h6_deliberation,
             "run_deliberation_loop",

@@ -283,7 +283,7 @@ def test_h7_no_target_weights_in_structured_body() -> None:
 
 
 def test_wire_h7_off_leaves_incumbent_inputs(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("OLYMPUS_CONTEXT_COMPILER_MODE", "off")
+    monkeypatch.setenv("DIGIQUANT_CONTEXT_COMPILER_MODE", "off")
     ev = _evidence(summary="Macro read")
     loaded = _loaded_state(evidence=(ev,))
     store, pin = _store_with_state(loaded)
@@ -304,7 +304,7 @@ def test_wire_h7_off_leaves_incumbent_inputs(monkeypatch: pytest.MonkeyPatch) ->
 def test_wire_h7_shadow_records_manifest_and_degraded_flag(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setenv("OLYMPUS_CONTEXT_COMPILER_MODE", "shadow")
+    monkeypatch.setenv("DIGIQUANT_CONTEXT_COMPILER_MODE", "shadow")
     ev = _evidence(summary="Macro read")
     loaded = _loaded_state(evidence=(ev,))
     store, pin = _store_with_state(loaded)
@@ -330,7 +330,7 @@ def test_wire_h7_shadow_records_manifest_and_degraded_flag(
 def test_wire_h7_enforce_injects_structured_context_without_weights(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setenv("OLYMPUS_CONTEXT_COMPILER_MODE", "enforce")
+    monkeypatch.setenv("DIGIQUANT_CONTEXT_COMPILER_MODE", "enforce")
     ev = _evidence(summary="Macro read")
     loaded = _loaded_state(evidence=(ev,))
     store, pin = _store_with_state(loaded)

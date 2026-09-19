@@ -23,6 +23,32 @@ ENV PYTHONUNBUFFERED=1 \
 
 RUN pip install --upgrade pip && pip install uv
 
+# ─── SearXNG: in-stack PRIMARY web-search backend for digisearch (#4297) ───
+# The upstream `searxng/searxng` image is Void/musl, so its binaries cannot be
+# copied into this Debian image. Install the pinned source into its own venv
+# (isolated from the digi stack env) and run granian exactly as the upstream
+# dist image does (GRANIAN_INTERFACE=wsgi). Pinned by commit SHA (no git: the
+# codeload tarball + a frozen version module avoid shelling out to git at
+# import time, see searx/version.py).
+ARG SEARXNG_COMMIT=a1144dda3e97668c9d445022b7019c224cd4bb1e
+RUN mkdir -p /usr/local/searxng \
+    && curl -fsSL -o /tmp/searxng.tar.gz \
+         "https://codeload.github.com/searxng/searxng/tar.gz/${SEARXNG_COMMIT}" \
+    && tar -xzf /tmp/searxng.tar.gz --strip-components=1 -C /usr/local/searxng \
+    && rm -f /tmp/searxng.tar.gz \
+    && test -f /usr/local/searxng/searx/settings.yml \
+    && uv venv /usr/local/searxng/.venv \
+    && uv pip install --python /usr/local/searxng/.venv/bin/python \
+         -r /usr/local/searxng/requirements.txt \
+         -r /usr/local/searxng/requirements-server.txt \
+    && printf '%s\n' \
+         'VERSION_STRING = "2026.9.3"' \
+         'VERSION_TAG = "2026.9.3"' \
+         'DOCKER_TAG = "2026.9.3-a1144dda3"' \
+         'GIT_URL = "https://github.com/searxng/searxng"' \
+         'GIT_BRANCH = "master"' \
+         > /usr/local/searxng/searx/version_frozen.py
+
 # Shared libs
 COPY digibase/pyproject.toml digibase/README.md ./digibase/
 COPY digibase/src ./digibase/src
@@ -72,10 +98,38 @@ COPY scripts/merge_litellm_cheaperinference.py /app/scripts/merge_litellm_cheape
 # Read-only Zammad MCP for the OCC help chat (supervisord [program:zammad-mcp];
 # deps `mcp` + `httpx` already present via digigraph[mcp]).
 COPY scripts/zammad_mcp ./scripts/zammad_mcp
-COPY cloudflare/digithings-stack-cloudflare/container/supervisor/supervisord.conf \
+COPY apps/digithings-stack-cloudflare/container/supervisor/supervisord.conf \
      /etc/supervisor/conf.d/digithings.conf
+# SearXNG config — the SAME file docker-compose.yml mounts into the dev
+# searxng sidecar (no fork). Its `redis.url` names the `valkey` host, which
+# entrypoint.sh aliases to 127.0.0.1 so the in-container [program:redis]
+# serves it. See #4297.
+COPY config/searxng/settings.yml /etc/searxng/settings.yml
+# Container-only botdetection config: searxng ships its default limiter.toml
+# inside the image, but once a custom settings folder exists it only reads
+# /etc/searxng/limiter.toml. Whitelist loopback (the in-container digisearch
+# caller) so the JSON API's 4/hour API_WINDOW cap and the curl/Python-UA bot
+# rule do not throttle the primary backend. See #4297.
+COPY apps/digithings-stack-cloudflare/container/searxng/limiter.toml \
+     /etc/searxng/limiter.toml
 # Rebuild marker: wrangler tags the container image from this Dockerfile, so a
 # context-only change (e.g. entrypoint.sh) must bump this comment to rebuild.
+# Rebuild marker v12 (2026-09-19): develop relocated the stack container from
+# cloudflare/digithings-stack-cloudflare/ to apps/digithings-stack-cloudflare/;
+# this merge-forward moves the searxng limiter.toml COPY source to the new path
+# (same file, same runtime destination /etc/searxng/limiter.toml).
+# Rebuild marker v11 (2026-09-19): enables the `bing` and `mojeek` engines in
+# config/searxng/settings.yml. Both ship `disabled: true` at the pinned
+# SEARXNG_COMMIT and `use_default_settings.engines.keep_only` does NOT flip that
+# flag, so the v10 image's in-stack searxng could only reach duckduckgo (which
+# 403s the container) + wikipedia — no market/news coverage. The explicit
+# `engines: [{name: bing, disabled: false}, {name: mojeek, disabled: false}]`
+# override makes them active. See #4297.
+# Rebuild marker v10 (2026-09-19): installs SearXNG into the image as the
+# in-stack PRIMARY web-search backend (supervisord [program:searxng], loopback
+# :8080, granian/wsgi) and wires digisearch's DIGISEARCH_SEARXNG_URL at it, so
+# the hosted container no longer depends on a single throttled ddgs scrape
+# (#4297). Ships config/searxng/settings.yml + the entrypoint `valkey` alias.
 # Rebuild marker v9 (2026-09-17): drops zammad__* from the digiproject allowlist
 # and the entrypoint DIGI_ALLOWED_TOOLS fallback so the website digichat no
 # longer offers Zammad; OCC keeps it via its per-request live MCP union.
@@ -95,13 +149,13 @@ COPY cloudflare/digithings-stack-cloudflare/container/supervisor/supervisord.con
 # Rebuild marker v3 (2026-09-15): ships the FastMCP 1.9.3-compatible zammad server
 # (no `from __future__ import annotations`); container instances keep their start-time env,
 # so force a fresh image (and with it a fresh instance) when secrets/env must land.
-COPY cloudflare/digithings-stack-cloudflare/container/entrypoint.sh /entrypoint.sh
-COPY cloudflare/digithings-stack-cloudflare/container/seed_chroma.sh /seed_chroma.sh
-COPY cloudflare/digithings-stack-cloudflare/container/start_digikey.sh /start_digikey.sh
-COPY cloudflare/digithings-stack-cloudflare/container/start_digisearch.sh /start_digisearch.sh
-COPY cloudflare/digithings-stack-cloudflare/container/seed /seed
+COPY apps/digithings-stack-cloudflare/container/entrypoint.sh /entrypoint.sh
+COPY apps/digithings-stack-cloudflare/container/seed_chroma.sh /seed_chroma.sh
+COPY apps/digithings-stack-cloudflare/container/start_digikey.sh /start_digikey.sh
+COPY apps/digithings-stack-cloudflare/container/start_digisearch.sh /start_digisearch.sh
+COPY apps/digithings-stack-cloudflare/container/seed /seed
 RUN chmod +x /entrypoint.sh /seed_chroma.sh /start_digikey.sh /start_digisearch.sh \
-    && mkdir -p /data/chroma /data/vault /data/digikey /var/log/supervisor
+    && mkdir -p /data/chroma /data/vault /data/digikey /var/log/supervisor /var/cache/searxng
 
 EXPOSE 8000 8002 8005
 ENTRYPOINT ["/entrypoint.sh"]

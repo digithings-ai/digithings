@@ -67,7 +67,7 @@ def test_check_store_present_routing_off_exits_0() -> None:
 
 def test_check_store_present_routing_on_exits_0() -> None:
     logs: list[str] = []
-    env = {**_STORE, "OLYMPUS_KAIROS_ROUTING": "1"}
+    env = {**_STORE, "DIGIQUANT_EXECUTION_ROUTING": "1"}
     rc = main(["--check"], environ=env, log=logs.append, log_err=lambda _m: None)
     assert rc == 0
     assert any("routing_enabled=true" in line for line in logs)
@@ -78,7 +78,7 @@ def test_refuses_implicit_submits() -> None:
     called: list[UUID] = []
     rc = main(
         [],
-        environ={**_STORE, "OLYMPUS_KAIROS_ROUTING": "1"},
+        environ={**_STORE, "DIGIQUANT_EXECUTION_ROUTING": "1"},
         targets=[_target()],
         route_batch=lambda rows: called.extend(t.connection_id for t in rows) or 0,
         log=lambda _m: None,
@@ -133,7 +133,7 @@ def test_all_with_routing_on_routes_alpaca_oauth_only() -> None:
     called: list[UUID] = []
     rc = main(
         ["--all"],
-        environ={**_STORE, "OLYMPUS_KAIROS_ROUTING": "1"},
+        environ={**_STORE, "DIGIQUANT_EXECUTION_ROUTING": "1"},
         targets=[
             _target(workspace_id=house_workspace_id()),
             _target(),
@@ -153,7 +153,7 @@ def test_dispatch_is_refused() -> None:
     called: list[UUID] = []
     rc = main(
         ["--dispatch"],
-        environ={**_STORE, "OLYMPUS_KAIROS_ROUTING": "1"},
+        environ={**_STORE, "DIGIQUANT_EXECUTION_ROUTING": "1"},
         targets=[_target()],
         route_batch=lambda rows: called.extend(t.connection_id for t in rows) or 0,
         log=lambda _m: None,
@@ -169,7 +169,7 @@ def test_apply_is_refused() -> None:
     called: list[UUID] = []
     rc = main(
         ["--apply"],
-        environ={**_STORE, "OLYMPUS_KAIROS_ROUTING": "1"},
+        environ={**_STORE, "DIGIQUANT_EXECUTION_ROUTING": "1"},
         targets=[_target()],
         route_batch=lambda rows: called.extend(t.connection_id for t in rows) or 0,
         log=lambda _m: None,
@@ -204,7 +204,7 @@ def test_connection_id_missing_says_route_not_sync() -> None:
     missing = UUID("00000000-0000-0000-0000-000000000000")
     rc = main(
         ["--connection-id", str(missing)],
-        environ={**_STORE, "OLYMPUS_KAIROS_ROUTING": "1"},
+        environ={**_STORE, "DIGIQUANT_EXECUTION_ROUTING": "1"},
         targets=[_target()],
         route_batch=lambda rows: called.extend(t.connection_id for t in rows) or 0,
         log=lambda _m: None,

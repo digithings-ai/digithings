@@ -1,8 +1,7 @@
 """Tool-round budget for digiquant research-agent calls (#3299).
 
 Cheap-model JSON needs room for data-tool grounding before Pydantic
-validation. Default 24; override via ``DIGIQUANT_MAX_TOOL_ROUNDS`` (retired
-``OLYMPUS_MAX_TOOL_ROUNDS`` read-alias still accepted; also set in
+validation. Default 24; override via ``DIGIQUANT_MAX_TOOL_ROUNDS`` (also set in
 ``.github/digiquant-pipeline.yml``). digigraph chat keeps its own
 ``max_tool_rounds=4`` — do not reuse this there.
 """
@@ -62,8 +61,7 @@ def run_digiquant_research_agent(
 ) -> T:
     """Thin digiquant wrapper around digigraph's ``run_research_agent``.
 
-    Injects ``DIGIQUANT_MAX_TOOL_ROUNDS`` (default 24; the retired
-    ``OLYMPUS_MAX_TOOL_ROUNDS`` read-alias still reads) unless the caller passes
+    Injects ``DIGIQUANT_MAX_TOOL_ROUNDS`` (default 24) unless the caller passes
     an explicit ``max_tool_rounds``. Digigraph chat stays at ``max_tool_rounds=4``.
     """
     from digigraph.graph.research_agent import run_research_agent
