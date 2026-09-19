@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 
+import { DigichatBootLoader } from "@digithings/ui";
 import { readAndClearHandoff } from "@/lib/chatHandoff";
 
 const READY = "digichat:ready";
@@ -13,6 +14,18 @@ export const PARENT_ERROR = "digichat:parent-error";
 
 /** Match digichat READY_TIMEOUT_MS — CF Container cold start can exceed 15s. */
 export const EMBED_READY_TIMEOUT_MS = 30_000;
+
+/**
+ * Warmup cover: the digichat Container scales to zero, so the first visit
+ * after an idle period waits 15-25s with no document inside the frame (the
+ * Worker blocks the request while the container wakes). Delay the loader past
+ * the warm path (~0.6s) so ordinary navigation never flashes an animation,
+ * then hold it until `digichat:ready` and crossfade to the real frame.
+ */
+export const WARMUP_DELAY_MS = 700;
+
+/** Must cover the overlay's opacity transition below. */
+export const WARMUP_FADE_MS = 360;
 
 /** Default embed host for digithings.ai/chat (client #0). */
 export const DEFAULT_CHAT_EMBED_HOST = "digithings.ai";
@@ -127,10 +140,14 @@ export type ChatEmbedShellProps = {
  * pins first paint via `?theme=`, then posts `digichat:theme` on ready and on
  * live toggles so the iframe stays in sync without reload.
  *
- * Boot: the loader lives inside the iframe (digichat's own boot chain). The
- * frame slot is painted from the first HTML by `.dc-chat-frame` in globals.css
- * (`--chat-frame-canvas` per `[data-theme]`), so a white default document
- * never flashes on the dark digithings theme.
+ * Boot: digichat's in-app boot chain owns the warm path (it yields on warm
+ * nav), but a cold Container has no document to run it in. Until the frame
+ * paints, this shell covers the wait with the same `@digithings/ui`
+ * DigichatBootLoader the embed uses — shown only after WARMUP_DELAY_MS so
+ * warm loads never flash it, and crossfaded out on `digichat:ready`. The
+ * iframe stays opacity-0 underneath and the frame slot is painted from the
+ * first HTML by `.dc-chat-frame` in globals.css (`--chat-frame-canvas` per
+ * `[data-theme]`), so a white default document never flashes.
  *
  * Ready failures: posts `digichat:parent-error` into the iframe for in-chat
  * terminal lines (no page banner). If the iframe never loads, shows the same
@@ -147,6 +164,9 @@ export function ChatEmbedShell({
   /** Only when iframe never loads — cannot deliver parent-error postMessage. */
   const [shellLoadError, setShellLoadError] = useState<string | null>(null);
   const [embedReady, setEmbedReady] = useState(false);
+  // Warmup overlay lifecycle: mounts only when ready is late (cold Container),
+  // unmounts after the crossfade once ready lands.
+  const [warmupMounted, setWarmupMounted] = useState(false);
   // Defer iframe src until after mount so we can read the real parent theme
   // (themeInitScript already flipped data-theme) and avoid a wrong-mode flash.
   // Paint the iframe from the first HTML instead of waiting for the mount
@@ -271,6 +291,22 @@ export function ChatEmbedShell({
     };
   }, [targetOrigin]);
 
+  // Cold-start cover: only after a warm load has had its chance
+  // (WARMUP_DELAY_MS), so ordinary navigation never flashes a loader. setState
+  // lives in the timer callback (react-hooks/set-state-in-effect).
+  useEffect(() => {
+    if (embedReady || shellLoadError) return;
+    const t = window.setTimeout(() => setWarmupMounted(true), WARMUP_DELAY_MS);
+    return () => window.clearTimeout(t);
+  }, [embedReady, shellLoadError]);
+
+  // Unmount after the crossfade has run (the overlay is opacity-0 by then).
+  useEffect(() => {
+    if (!warmupMounted || !embedReady) return;
+    const t = window.setTimeout(() => setWarmupMounted(false), WARMUP_FADE_MS);
+    return () => window.clearTimeout(t);
+  }, [warmupMounted, embedReady]);
+
   if (configError) {
     return (
       <p className="dc-page" style={{ padding: "2rem" }}>
@@ -331,6 +367,38 @@ export function ChatEmbedShell({
         </p>
       ) : null}
 
+      {warmupMounted && !shellLoadError ? (
+        <div
+          aria-busy={!embedReady}
+          aria-live="polite"
+          aria-hidden={embedReady}
+          style={{
+            position: "absolute",
+            inset: 0,
+            zIndex: 1,
+            // Crossfade to the real frame on ready; transparent so the page's
+            // .grain/.glow layers keep showing through (same reasoning as the
+            // shell div above).
+            opacity: embedReady ? 0 : 1,
+            transition: "opacity 320ms ease",
+            pointerEvents: embedReady ? "none" : "auto",
+            background: "transparent",
+          }}
+        >
+          <DigichatBootLoader
+            // Types the curated copy while the Container wakes; the same
+            // strings ride the iframe URL (embedSrc) so the ready hero matches
+            // what the loader typed. Live tenants carry no welcomeBody, so keep
+            // the loader silent on it too or the handoff swaps copy.
+            welcome={EMBED_SHELL_COPY[embedHost]?.welcome}
+            welcomeBody=""
+            suggestions={EMBED_SHELL_COPY[embedHost]?.suggestions}
+            ready={embedReady}
+            className="dc-embed-boot"
+          />
+        </div>
+      ) : null}
+
       {src && !shellLoadError ? (
         <iframe
           ref={iframeRef}
@@ -344,11 +412,14 @@ export function ChatEmbedShell({
             border: 0,
             minHeight: 0,
             height: "100%",
-            // The in-app boot is the only loader now - the iframe stays
-            // visible from mount so nothing masks it. Its theme canvas and
-            // colour scheme live in globals.css (.dc-chat-frame, keyed on the
-            // root [data-theme]) - component state must never disagree with
-            // the page theme (dark page + light chat rectangle).
+            // Hidden until ready so the browser-default white document never
+            // paints through the warmup overlay (or, with no overlay on a warm
+            // load, before the app's own theme canvas is up). Its theme canvas
+            // and colour scheme live in globals.css (.dc-chat-frame, keyed on
+            // the root [data-theme]) - component state must never disagree
+            // with the page theme (dark page + light chat rectangle).
+            opacity: embedReady ? 1 : 0,
+            transition: "opacity 320ms ease",
             position: "relative",
             zIndex: 0,
           }}
