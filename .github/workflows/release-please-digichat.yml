@@ -41,13 +41,39 @@ concurrency:
 permissions:
   contents: write
   pull-requests: write
+  # `gh workflow run` below dispatches publish-digichat-image.yml, which needs
+  # actions:write on the token.
+  actions: write
 
 jobs:
   release-please:
     runs-on: ubuntu-latest
     steps:
       - uses: googleapis/release-please-action@v4
+        id: release
         with:
           target-branch: develop
           config-file: release-please-config.json
           manifest-file: .release-please-manifest.json
+
+      # The `digichat-v*` tag this step creates cannot start a workflow by
+      # itself: release-please authenticates as the built-in GITHUB_TOKEN, and
+      # events raised by that token do not create new runs (#4348 — the tag
+      # path in publish-digichat-image.yml was inert, and the 2.2.0 image only
+      # got built because someone dispatched it by hand). `workflow_dispatch`
+      # is the documented exception to that rule, so the release explicitly
+      # dispatches the publish workflow instead of relying on the tag event.
+      #
+      # Manifest mode prefixes outputs with the package path, `/` → `--`
+      # (`apps/digichat--release_created`); the unprefixed names are the
+      # single-package form. Both are checked because a silent no-op here is
+      # exactly the failure this step exists to fix, and a wrong output name
+      # would reproduce it invisibly.
+      - name: Dispatch the image publish for this release
+        if: ${{ steps.release.outputs['apps/digichat--release_created'] || steps.release.outputs.release_created }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.release.outputs['apps/digichat--tag_name'] || steps.release.outputs.tag_name }}
+        run: |
+          echo "release created; dispatching publish-digichat-image.yml at ${TAG}"
+          gh workflow run publish-digichat-image.yml --ref "$TAG"
