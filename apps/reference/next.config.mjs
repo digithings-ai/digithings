@@ -21,11 +21,15 @@ async function redirects() {
 const nextConfig = {
   output: "export",
   images: { unoptimized: true },
-  // Two root layouts ((gallery) + the isolated (chatbot) shell) mean the
-  // unmatched-URL 404 must be a `global-not-found` tree — `app/not-found.tsx`
-  // would need a single top-level layout to wrap it. Next emits 404.html from
-  // this for the static export.
-  // experimental-bisect-disabled
+  // Two root layouts ((gallery) + the isolated (chatbot) shell) means an
+  // unmatched URL has no layout to inherit, so `app/not-found.tsx` carries its
+  // own <html>/<body> (globals.css + ThemeProvider). With `output: "export"`
+  // Next emits out/404.html from it — verified: the export contains the themed
+  // 404 and hydrates without a #418 mismatch.
+  //
+  // `experimental.globalNotFound` was tried for this and retired: it is a
+  // root-level tree, so it broke the App Router hydration of `/` (React #418)
+  // while producing the same 404.html. Do not re-enable it.
   trailingSlash: true,
   transpilePackages: ["@digithings/ui", "@digithings/design"],
   allowedDevOrigins: ["127.0.0.1", "localhost"],
