@@ -1,10 +1,10 @@
 ## Goal
 
-Build shared **`HorizontalScrollBand`** primitive — Cursor-style horizontal snap scroll for changelog cards, testimonial rows, and mobile overflow bands ([`EVOLUTION.md` §6](../../../../cloudflare/digiweb/design/EVOLUTION.md), [design spec §Layer C](../../../superpowers/specs/2026-06-30-frontend-design-evolution-layers-design.md)).
+Build shared **`HorizontalScrollBand`** primitive — Cursor-style horizontal snap scroll for changelog cards, testimonial rows, and mobile overflow bands ([`EVOLUTION.md` §6](../../../../packages/design/EVOLUTION.md), [design spec §Layer C](../../../superpowers/specs/2026-06-30-frontend-design-evolution-layers-design.md)).
 
 ## Component
 
-- [x] cross-cutting (`cloudflare/digiweb/design/`)
+- [x] cross-cutting (`packages/design/`)
 
 ## Acceptance Criteria
 
@@ -13,21 +13,21 @@ Build shared **`HorizontalScrollBand`** primitive — Cursor-style horizontal sn
 - [ ] `prefers-reduced-motion: reduce` → stack cards vertically (no horizontal scroll)
 - [ ] Optional `horizontal-scroll.js` for keyboard nav / focus management (document if skipped)
 - [ ] Demo in smoke page with 3+ cards
-- [ ] Document in `cloudflare/digiweb/design/site/README.md`
+- [ ] Document in `packages/design/site/README.md`
 
 ## Test Requirements
 
 ```bash
-cd cloudflare/digithings-web && npm run build
-cd cloudflare/digiquant-web && npm run build
+cd apps/digithings-web && npm run build
+cd apps/digiquant-web && npm run build
 ```
 
 Manual: mobile viewport — cards snap; reduced motion — vertical stack.
 
 ## Documentation to Update
 
-- [ ] `cloudflare/digiweb/design/site/README.md`
-- [ ] `cloudflare/digiweb/design/EVOLUTION.md`
+- [ ] `packages/design/site/README.md`
+- [ ] `packages/design/EVOLUTION.md`
 
 ## Out of Scope
 

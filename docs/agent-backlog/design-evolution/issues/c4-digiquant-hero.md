@@ -1,10 +1,10 @@
 ## Goal
 
-Upgrade **digiquant.io** hero with Cursor literal CTAs, Graphite friction trust strip, and x.ai-style stat counters ([`EVOLUTION.md` §3 digiquant](../../../../cloudflare/digiweb/design/EVOLUTION.md)).
+Upgrade **digiquant.io** hero with Cursor literal CTAs, Graphite friction trust strip, and x.ai-style stat counters ([`EVOLUTION.md` §3 digiquant](../../../../packages/design/EVOLUTION.md)).
 
 ## Component
 
-- [x] `cloudflare/digiquant-web/`
+- [x] `apps/digiquant-web/`
 
 ## Acceptance Criteria
 
@@ -21,15 +21,15 @@ Upgrade **digiquant.io** hero with Cursor literal CTAs, Graphite friction trust 
 ## Test Requirements
 
 ```bash
-cd cloudflare/digiquant-web && npm run build
+cd apps/digiquant-web && npm run build
 ```
 
 Manual: verify `/#strategies` hash scroll still works after #1198 fixes
 
 ## Documentation to Update
 
-- [ ] `cloudflare/digiquant-web/README.md`
-- [ ] `cloudflare/digiweb/design/EVOLUTION.md`
+- [ ] `apps/digiquant-web/README.md`
+- [ ] `packages/design/EVOLUTION.md`
 
 ## Out of Scope
 

@@ -2,8 +2,8 @@
   "name": "digithings-monorepo",
   "private": true,
   "workspaces": [
-    "cloudflare/*",
-    "cloudflare/digiweb/*"
+    "apps/*",
+    "packages/*"
   ],
   "scripts": {
     "lint": "npm --workspaces --if-present run lint",
