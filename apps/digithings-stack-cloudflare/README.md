@@ -151,7 +151,8 @@ Boot order (critical for Cloudflare Containers port probes):
 1. Entrypoint copies vault notes (`seed-*.md` always refreshed from the image;
    other filenames only if missing), then **starts supervisord immediately** so
    digigraph `:8000` / digikey `:8005` bind (do **not** block on Chroma seed).
-2. Supervisord starts redis → digikey (waits for Redis PONG) → digigraph.
+2. Supervisord starts redis → searxng (loopback `:8080`) → digikey (waits for
+   Redis PONG) → digigraph.
 3. Oneshot `seed_chroma` waits for digigraph `/healthz`, then runs
    `digisearch ingest` for **`digithings_docs`** (`/seed/digithings_docs`) and
    **`occ_help`** (`/seed/occ_help`) into Chroma.
@@ -238,12 +239,23 @@ Ollama in this path unless you need them.
 | digivault `:8004` | loopback | Notes |
 | LiteLLM `:4000` | loopback | LLM router |
 | Redis `:6379` | loopback | digikey blocklist |
+| SearXNG `:8080` | loopback | Primary `web_search` backend for digisearch ([#4297](https://github.com/digithings-ai/digithings/issues/4297)) |
 | digisearch-mcp `:8765` | key-gated edge | RAG MCP (fail-loud backend gate); `/_stack/mcp/digisearch/*` |
 | digivault-mcp `:8769` | key-gated edge | vault MCP (search_notes/search_tag/backlinks/lint; `create_note` with `DIGIVAULT_MCP_WRITE=1`) |
 | digigraph-mcp `:8766` | loopback | orchestrator MCP (`DIGI_MCP_REQUIRE_AUTH=1`, stack JWKS) |
 
-hosted `:8765` `web_search` uses the embedded ddgs fallback (no searxng sidecar in-stack);
-compose-local searxng via `DIGISEARCH_SEARXNG_URL` remains for dev.
+Hosted `:8765`/`:8002` `web_search` runs against an **in-stack SearXNG**
+(digisearch `DIGISEARCH_SEARXNG_URL=http://127.0.0.1:8080`, wired explicitly on
+the `[program:digisearch]` / `[program:digisearch-mcp]` supervisor entries).
+SearXNG is the reliable primary; the embedded `ddgs` scrape is only the
+secondary. This mirrors dev compose, where the same
+`config/searxng/settings.yml` is mounted into the `searxng` + `valkey` sidecars
+and digisearch reaches it as `http://searxng:8080`. In the container there is no
+sidecar: SearXNG (`granian`/wsgi) runs under supervisord as `[program:searxng]`
+on loopback `:8080`, and the copied settings file's `redis://valkey:6379/0`
+limiter URL is satisfied by aliasing the name `valkey` to the in-container
+`[program:redis]` (both `127.0.0.1:6379`). No new external dependency or
+secret — everything ships in this image.
 
 **Omitted on purpose:** digiquant, digismith HTTP, Ollama, heartbeat.
 

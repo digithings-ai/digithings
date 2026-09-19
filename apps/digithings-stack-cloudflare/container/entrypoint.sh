@@ -226,4 +226,18 @@ finally:
   fi
 fi
 
+# The copied config/searxng/settings.yml names its limiter DB as
+# `redis://valkey:6379/0` — the dedicated sidecar host in dev compose. This
+# container runs the single [program:redis] on 127.0.0.1:6379 instead, so alias
+# the dotless name `valkey` to loopback and the file works unchanged (#4297).
+# Best-effort and non-fatal, same shape as the zammad-mcp alias above: searxng
+# starts either way, and a missing alias only degrades its limiter DB.
+if ! getent hosts valkey >/dev/null 2>&1; then
+  if printf '127.0.0.1 valkey\n' >> /etc/hosts 2>/dev/null; then
+    echo "digithings-stack: aliased valkey -> 127.0.0.1 (searxng limiter redis)"
+  else
+    echo "digithings-stack: WARN could not alias valkey; searxng limiter redis unreachable" >&2
+  fi
+fi
+
 exec /usr/bin/supervisord -n -c /etc/supervisor/conf.d/digithings.conf
