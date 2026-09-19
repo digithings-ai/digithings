@@ -415,6 +415,33 @@ export interface Database {
           node_run_id: string | null;
         };
       };
+      // Canonical name for the body-free Pipeline call trace after the Phase B/C olympus
+      // rename (#4295). Identical columns to the legacy `olympus_run_event_trace` view
+      // above, which migration 135 drops; the dashboard now reads this view.
+      run_event_trace: {
+        Row: {
+          run_id: string;
+          attempt: number;
+          run_date: string;
+          run_type: string | null;
+          sequence: number;
+          event_kind: 'model_call' | 'search_call' | 'tool_call';
+          phase: string | null;
+          operation: string | null;
+          document_key: string | null;
+          name: string;
+          status: 'ok' | 'error';
+          duration_ms: number | null;
+          retry_count: number;
+          sources: number;
+          input_summary: string;
+          output_summary: string;
+          created_at: string;
+          call_id: string | null;
+          attempt_id: string | null;
+          node_run_id: string | null;
+        };
+      };
       // Curated accounting public surface (migration 074 / #2599). Prefer these over
       // raw nav_history for public/performance readers; rollback = LEGACY public_nav_history.
       public_accounting_nav_history: {
