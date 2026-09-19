@@ -405,29 +405,3 @@
   gap: 2px;
   text-align: left;
 }
-
-/* Cold-start reassurance line under the held tool row. */
-.dboot-lab-hint {
-  margin-top: 4px;
-  font-size: 12px;
-  line-height: 1.45;
-  opacity: 0.75;
-}
-
-/* Retry affordance in the long-load / failure hint (skin-agnostic). */
-.dboot-lab-retry {
-  margin-left: 0.35rem;
-  padding: 0;
-  border: 0;
-  background: none;
-  font: inherit;
-  color: inherit;
-  cursor: pointer;
-  text-decoration: underline;
-  text-decoration-style: dotted;
-  text-underline-offset: 2px;
-}
-
-.dboot-lab-retry:hover {
-  color: var(--dboot-caret, var(--accent, inherit));
-}

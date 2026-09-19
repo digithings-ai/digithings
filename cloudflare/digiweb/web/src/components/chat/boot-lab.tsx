@@ -169,15 +169,6 @@ const TOOLCHAIN_VARIANTS: ReadonlySet<BootLabVariant> = new Set([
 
 const TASK_LABEL = "Loading DigiChat";
 const REASONING_LABEL = "waking up the container";
-const HOLD_HINT = "cold start — this can take up to a minute";
-/** Waiting this long surfaces the cold-start hint. */
-const HOLD_HINT_MS = 10_000;
-/** Still running this long: suggest a retry without declaring failure. */
-const RETRY_HINT_MS = 45_000;
-const RETRY_HINT = "taking longer than usual — ";
-/** The hold row failed: the app never signalled ready (or said it failed). */
-const FAIL_TEXT = "couldn't reach the chat — ";
-const RETRY_LABEL = "retry";
 /** Readiness cap: embedded surfaces wait for the app handshake; standalone
  *  surfaces never send one, so they settle on their own sooner. Embedded
  *  surfaces that pass the cap surface a failure + retry instead of settling. */
@@ -546,53 +537,6 @@ function ReasoningRow({
   );
 }
 
-/** Reload is the retry: it re-runs the boot handshake from scratch. */
-function RetryButton() {
-  return (
-    <button
-      type="button"
-      className="dboot-lab-retry"
-      onClick={() => window.location.reload()}
-    >
-      {RETRY_LABEL}
-    </button>
-  );
-}
-
-/** The reassurance ladder: cold-start hint -> retry suggestion -> failed. */
-function HoldStatus({ failed }: { failed: boolean }) {
-  const [stage, setStage] = useState(0);
-  useEffect(() => {
-    if (failed) return;
-    const cold = setTimeout(() => setStage(1), HOLD_HINT_MS);
-    const retry = setTimeout(() => setStage(2), RETRY_HINT_MS);
-    return () => {
-      clearTimeout(cold);
-      clearTimeout(retry);
-    };
-  }, [failed]);
-  if (failed) {
-    return (
-      <span className="dboot-lab-line dboot-lab-hint">
-        {FAIL_TEXT}
-        <RetryButton />
-      </span>
-    );
-  }
-  if (stage >= 2) {
-    return (
-      <span className="dboot-lab-line dboot-lab-hint">
-        {RETRY_HINT}
-        <RetryButton />
-      </span>
-    );
-  }
-  if (stage === 1) {
-    return <span className="dboot-lab-line dboot-lab-hint">{HOLD_HINT}</span>;
-  }
-  return null;
-}
-
 function useBootSteps(): ReadonlySet<string> {
   const [steps, setSteps] = useState<ReadonlySet<string>>(
     () => new Set(digichatBootSteps()),
@@ -668,8 +612,7 @@ function ToolChain({
   }, [chainDone, onDone]);
   const visible = firstPending === -1 ? rows.length : firstPending + 1;
   // The last row waits on the real ready edge - that is the honest "connect"
-  // beat, and the hold/retry ladder attaches to it.
-  const waiting = !failed && !ready && firstPending === rows.length - 1;
+  // beat; a failed boot leaves its X up instead of settling.
   const completedMs =
     chainDone && doneAt[rows.length - 1] != null
       ? doneAt[rows.length - 1]! - mountClock.current
@@ -702,7 +645,6 @@ function ToolChain({
           />
         );
       })}
-      {waiting || failed ? <HoldStatus failed={failed} /> : null}
     </span>
   );
 }
