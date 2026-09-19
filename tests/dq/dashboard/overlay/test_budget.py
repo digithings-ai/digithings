@@ -128,7 +128,7 @@ def test_budget_snapshot_is_run_scoped_not_process_global() -> None:
 
 def test_budget_checked_after_chain(monkeypatch: pytest.MonkeyPatch) -> None:
     """B5: post-chain overrun → budget_exhausted; corpus already published stays."""
-    monkeypatch.setenv("OLYMPUS_OVERLAY_PERSIST", "1")
+    monkeypatch.setenv("DIGIQUANT_OVERLAY_PERSIST", "1")
     spent = Decimal("0")
 
     def reader() -> Decimal:

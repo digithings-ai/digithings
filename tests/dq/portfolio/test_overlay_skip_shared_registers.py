@@ -64,7 +64,7 @@ def test_overlay_persist_on_does_not_write_theses(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     overlay = uuid4()
-    monkeypatch.setenv("OLYMPUS_OVERLAY_PERSIST", "1")
+    monkeypatch.setenv("DIGIQUANT_OVERLAY_PERSIST", "1")
     overlay_client = FakeSupabaseClient()
     upsert_thesis_row(
         overlay_client,
@@ -101,7 +101,7 @@ def test_overlay_persist_on_does_not_write_analyst_coverage(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     overlay = uuid4()
-    monkeypatch.setenv("OLYMPUS_OVERLAY_PERSIST", "1")
+    monkeypatch.setenv("DIGIQUANT_OVERLAY_PERSIST", "1")
     overlay_client = FakeSupabaseClient()
     upsert_analyst_coverage(
         overlay_client,
@@ -127,7 +127,7 @@ def test_overlay_persist_on_does_not_write_thesis_vehicles(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     overlay = uuid4()
-    monkeypatch.setenv("OLYMPUS_OVERLAY_PERSIST", "1")
+    monkeypatch.setenv("DIGIQUANT_OVERLAY_PERSIST", "1")
     overlay_client = FakeSupabaseClient()
     written = upsert_thesis_vehicles(
         overlay_client,
@@ -156,7 +156,7 @@ def test_overlay_persist_thesis_review_returns_zero(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     overlay = uuid4()
-    monkeypatch.setenv("OLYMPUS_OVERLAY_PERSIST", "1")
+    monkeypatch.setenv("DIGIQUANT_OVERLAY_PERSIST", "1")
     review = ThesisReviewOutput(
         reviewed_theses=[
             ThesisStatusUpdate(thesis_id="ai-capex", new_status="MONITORING"),
@@ -189,7 +189,7 @@ def test_overlay_persist_vehicle_map_returns_zero(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     overlay = uuid4()
-    monkeypatch.setenv("OLYMPUS_OVERLAY_PERSIST", "1")
+    monkeypatch.setenv("DIGIQUANT_OVERLAY_PERSIST", "1")
     vehicle_map = ThesisVehicleMapOutput(
         mappings=[
             ThesisVehicleMapping(thesis_id="ai-capex", candidate_tickers=["NVDA"]),
@@ -220,7 +220,7 @@ def test_overlay_materialize_skips_theses_register(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     overlay = uuid4()
-    monkeypatch.setenv("OLYMPUS_OVERLAY_PERSIST", "1")
+    monkeypatch.setenv("DIGIQUANT_OVERLAY_PERSIST", "1")
     overlay_client = FakeSupabaseClient()
     overlay_state = ResearchState(
         run_type="delta",
@@ -276,7 +276,7 @@ def test_overlay_persist_on_does_not_write_decision_log(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     overlay = uuid4()
-    monkeypatch.setenv("OLYMPUS_OVERLAY_PERSIST", "1")
+    monkeypatch.setenv("DIGIQUANT_OVERLAY_PERSIST", "1")
     overlay_client = FakeSupabaseClient()
     overlay_count = persist_pending(
         client=overlay_client,
@@ -302,7 +302,7 @@ def test_overlay_resolve_pending_does_not_stamp_house_rows(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     overlay = uuid4()
-    monkeypatch.setenv("OLYMPUS_OVERLAY_PERSIST", "1")
+    monkeypatch.setenv("DIGIQUANT_OVERLAY_PERSIST", "1")
     pending = {
         "id": "row-house",
         "run_id": "house-run",
@@ -338,7 +338,7 @@ def test_overlay_preflight_reflect_skips_decision_log(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     overlay = uuid4()
-    monkeypatch.setenv("OLYMPUS_OVERLAY_PERSIST", "1")
+    monkeypatch.setenv("DIGIQUANT_OVERLAY_PERSIST", "1")
     calls: list[str] = []
 
     def fake_resolve_pending(**_kwargs: object) -> int:
@@ -371,7 +371,7 @@ def test_overlay_persist_on_does_not_write_onchain_cohort_positioning(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     overlay = uuid4()
-    monkeypatch.setenv("OLYMPUS_OVERLAY_PERSIST", "1")
+    monkeypatch.setenv("DIGIQUANT_OVERLAY_PERSIST", "1")
     row = {"date": "2026-08-30", "market": "ETH", "divergence": -0.8}
     overlay_client = FakeSupabaseClient()
     overlay_written = upsert_onchain_cohort_positioning(
@@ -404,7 +404,7 @@ def test_overlay_preflight_injects_onchain_without_persisting(
     from digiquant.data.onchain.hyperdash import cohort_summary_to_positioning
 
     overlay = uuid4()
-    monkeypatch.setenv("OLYMPUS_OVERLAY_PERSIST", "1")
+    monkeypatch.setenv("DIGIQUANT_OVERLAY_PERSIST", "1")
     summary = {
         "timestamp": "2026-08-30T00:00:00Z",
         "totalTraders": 999,
@@ -483,7 +483,7 @@ def test_overlay_beliefs_fold_does_not_run(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     overlay = uuid4()
-    monkeypatch.setenv("OLYMPUS_OVERLAY_PERSIST", "1")
+    monkeypatch.setenv("DIGIQUANT_OVERLAY_PERSIST", "1")
     overlay_state = ResearchState(
         run_type="delta",
         run_date=_RUN,
@@ -539,7 +539,7 @@ def test_overlay_distill_beliefs_does_not_stamp_house_rows(
     from digiquant.dashboard.learning import beliefs_distillation as mod
 
     overlay = uuid4()
-    monkeypatch.setenv("OLYMPUS_OVERLAY_PERSIST", "1")
+    monkeypatch.setenv("DIGIQUANT_OVERLAY_PERSIST", "1")
     rows = [_resolved_lesson(row_id="house-1")]
     overlay_client = FakeSupabaseClient(canned_reads={"decision_log": rows})
     overlay_client.store["decision_log"] = [dict(r) for r in rows]
@@ -607,7 +607,7 @@ def test_overlay_beliefs_fold_skips_when_research_crashes_before_preflight(
     from digiquant.portfolio.chain import run_research_then_portfolio
 
     overlay = uuid4()
-    monkeypatch.setenv("OLYMPUS_OVERLAY_PERSIST", "1")
+    monkeypatch.setenv("DIGIQUANT_OVERLAY_PERSIST", "1")
     rows = [_resolved_lesson(row_id=f"house-{i}") for i in range(21)]
     overlay_client = FakeSupabaseClient(canned_reads={"decision_log": rows})
     overlay_client.store["decision_log"] = [dict(r) for r in rows]
@@ -654,7 +654,7 @@ def test_overlay_config_loader_failure_records_terminal_and_does_not_fold(
     from digiquant.dashboard.learning import beliefs_distillation as mod
     from digiquant.portfolio.chain import DiagnosticsDeps, run_research_then_portfolio
 
-    monkeypatch.setenv("OLYMPUS_OVERLAY_PERSIST", "1")
+    monkeypatch.setenv("DIGIQUANT_OVERLAY_PERSIST", "1")
     rows = [_resolved_lesson(row_id=f"house-{i}") for i in range(21)]
     overlay_client = FakeSupabaseClient(canned_reads={"decision_log": rows})
     overlay_client.store["decision_log"] = [dict(r) for r in rows]

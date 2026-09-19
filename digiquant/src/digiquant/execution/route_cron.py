@@ -3,7 +3,7 @@
 Production entry: ``python -m digiquant.execution.route_cron``. Overlay
 books persist order intents; this CLI is the missing submit seam. House and
 system workspaces, live env rows, IBKR paper, and Alpaca ``api_key`` rows are
-never submitted. ``DIGIQUANT_EXECUTION_ROUTING`` (alias ``OLYMPUS_KAIROS_ROUTING``)
+never submitted. ``DIGIQUANT_EXECUTION_ROUTING``
 defaults **off** — ``--all`` then
 exits 3 without calling ``submit_order``. This module does not import Alpaca
 adapters at module level.

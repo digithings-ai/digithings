@@ -20,6 +20,8 @@ The scheduled GitHub job (`pipeline-research-metrics.yml`, 22:00 UTC daily) runs
 
 **The daily cron deliberately does *not* pass `--fill-calendar-through`, and must not be changed to.** No workflow has ever passed it (this RUNBOOK previously claimed the price job did — it never did). Carry-forward would clone the prior book into every date where the book never materialized, which is precisely the absent-`positions` signal a missing-book detector reads; densifying it would make the failure undetectable rather than fixing it.
 
+**Bookless mark-to-market (#3439).** The engine NAV step is the exception to that alarm: it runs `verify_nav_replay.py --write --mark-through "$(date -u +%F)"`, which extends the replay grid through today holding the last committed book's positions (no schedule entry, no fabricated rebalance) so NAV/PnL keep moving when the house run commits no book. Only the grid is extended — `positions` is never written — so the absent-`positions` signal and the metrics step's exit-3 alarm above both stay intact. `--mark-through` is a no-op when a book exists for the target date, and it is *not* `--fill-calendar-through` (which clones the book into `positions`).
+
 **Manual densification / backfill** (operator only — also what [`run_db_first.py`](scripts/run_db_first.py) invokes):  
 `python3 scripts/refresh_performance_metrics.py --supabase --fill-calendar-through YYYY-MM-DD`
 

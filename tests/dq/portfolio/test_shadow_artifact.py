@@ -415,8 +415,8 @@ def test_export_from_state_and_maybe_export(
     assert built is not None
     assert built.artifact_content_hash == artifact.artifact_content_hash
 
-    monkeypatch.setenv("OLYMPUS_SHADOW_ARTIFACT_MODE", "export")
-    monkeypatch.setenv("OLYMPUS_SHADOW_ARTIFACT_DIR", str(tmp_path))
+    monkeypatch.setenv("DIGIQUANT_SHADOW_ARTIFACT_MODE", "export")
+    monkeypatch.setenv("DIGIQUANT_SHADOW_ARTIFACT_DIR", str(tmp_path))
     digest = maybe_export_shadow_allocation_artifact(state)
     assert digest == artifact.artifact_content_hash
     files = list(tmp_path.glob("shadow-allocation-*.json"))
@@ -438,16 +438,16 @@ def test_export_failure_does_not_raise(
         },
     )
     state = SimpleNamespace(run_id="run-2758", run_date=_SESSION, phase_portfolio=phase)
-    monkeypatch.setenv("OLYMPUS_SHADOW_ARTIFACT_MODE", "export")
+    monkeypatch.setenv("DIGIQUANT_SHADOW_ARTIFACT_MODE", "export")
     # Point at a file path so mkdir/write fails closed without raising to caller.
     blocker = tmp_path / "not-a-dir"
     blocker.write_text("x", encoding="utf-8")
-    monkeypatch.setenv("OLYMPUS_SHADOW_ARTIFACT_DIR", str(blocker))
+    monkeypatch.setenv("DIGIQUANT_SHADOW_ARTIFACT_DIR", str(blocker))
     assert maybe_export_shadow_allocation_artifact(state) is None
 
 
 def test_mode_off_skips_export(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("OLYMPUS_SHADOW_ARTIFACT_MODE", "off")
+    monkeypatch.setenv("DIGIQUANT_SHADOW_ARTIFACT_MODE", "off")
     assert sa.resolve_shadow_artifact_mode() is ShadowArtifactMode.OFF
     assert maybe_export_shadow_allocation_artifact(SimpleNamespace()) is None
 

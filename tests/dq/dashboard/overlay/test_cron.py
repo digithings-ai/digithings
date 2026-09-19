@@ -464,7 +464,7 @@ def test_dry_run_prints_persist_enabled_when_flag_set() -> None:
     logs: list[str] = []
     rc = main(
         ["--dry-run", "--run-date", _RUN.isoformat()],
-        environ={"OLYMPUS_OVERLAY_PERSIST": "1"},
+        environ={"DIGIQUANT_OVERLAY_PERSIST": "1"},
         workspaces=[_ws(_USER)],
         log=logs.append,
         log_err=lambda _m: None,
@@ -746,7 +746,7 @@ def test_execute_production_missing_vault_exits_2_before_dispatch() -> None:
         environ={
             "SUPABASE_URL": "https://example.supabase.co",
             "SUPABASE_SERVICE_ROLE_KEY": "k",
-            "OLYMPUS_OVERLAY_PERSIST": "1",
+            "DIGIQUANT_OVERLAY_PERSIST": "1",
         },
         workspaces=[_ws(_USER)],
         log=lambda _m: None,
