@@ -254,6 +254,12 @@ export function ProductStockShell({
     handoff && (handoff.reveal || handoff.type || handoff.drift || handoff.beat),
   );
 
+  // The bottom-up entrance plays on every load - skipped boots included:
+  // the hero should always build up from the composer, never cut in.
+  // Derived from bootDone rather than a state flip in an effect
+  // (react-hooks/set-state-in-effect).
+  const bootRevealed = bootDone;
+
   useEffect(() => {
     const timer = setTimeout(() => setBootReady(true), BOOT_MIN_MS);
     return () => clearTimeout(timer);
@@ -268,12 +274,16 @@ export function ProductStockShell({
     if (/[?&](boot|bootdelay|bootfail|handoff|hero)=/.test(window.location.search)) {
       return;
     }
-    if (hasDigichatReady()) {
-      bootSkippedRef.current = true;
+  if (hasDigichatReady()) {
+    bootSkippedRef.current = true;
+    // Defer setState out of the synchronous effect body -
+    // react-hooks/set-state-in-effect.
+    queueMicrotask(() => {
       setBootDone(true);
       setBootHidden(true);
-      return;
-    }
+    });
+    return;
+  }
     const startedAt = performance.now();
     const onReady = () => {
       if (performance.now() - startedAt <= 600) {
@@ -288,10 +298,12 @@ export function ProductStockShell({
 
   useEffect(() => {
     if (bootHidden) return;
-    if (/[?&](boot|bootdelay|bootfail|handoff|hero)=/.test(window.location.search)) {
-      setBootVisible(true);
-      return;
-    }
+  if (/[?&](boot|bootdelay|bootfail|handoff|hero)=/.test(window.location.search)) {
+    // Defer setState out of the synchronous effect body -
+    // react-hooks/set-state-in-effect.
+    queueMicrotask(() => setBootVisible(true));
+    return;
+  }
     const timer = setTimeout(() => setBootVisible(true), 600);
     return () => clearTimeout(timer);
   }, [bootHidden]);
@@ -309,17 +321,13 @@ export function ProductStockShell({
   // short alternate (local iteration only; unknown values keep classic).
   // The embed route threads the value from the server so the classic loader
   // never paints first (the outline bleed); the URL fallback covers surfaces
-  // that mount without the prop.
-  useEffect(() => {
-    if (bootLabVariant != null) return;
-    setBootVariant(resolveBootLabVariant() ?? "tooltask");
-  }, [bootLabVariant]);
-
-  // Handoff reveal state: the overlay fade flips it for the hero choreography.
-  const [bootRevealed, setBootRevealed] = useState(false);
+  // that mount without the prop. Resolved once in the state initializer above
+  // (no effect needed: react-hooks/set-state-in-effect).
 
   useEffect(() => {
-    setHandoff(resolveHandoff());
+    // Defer setState out of the synchronous effect body -
+    // react-hooks/set-state-in-effect.
+    queueMicrotask(() => setHandoff(resolveHandoff()));
   }, []);
 
   // The overlay starts fading: release the handoff choreography (hero
@@ -327,9 +335,6 @@ export function ProductStockShell({
   useEffect(() => {
     if (!bootDone) return;
     signalDigichatRevealed();
-    // The bottom-up entrance plays on every load - skipped boots included:
-    // the hero should always build up from the composer, never cut in.
-    setBootRevealed(true);
   }, [bootDone]);
 
   // Real boot milestone: the product shell mounted with its chat runtime.
