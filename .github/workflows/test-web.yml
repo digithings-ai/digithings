@@ -123,6 +123,20 @@ jobs:
       - name: Typecheck design-reference
         run: npm run typecheck --workspace design-reference
 
+      # The reference is the component source of truth for the whole rebuild, and its
+      # test suite is the guard on that canon — the route smoke test, the specimen
+      # contract, the layering check, the nav and chrome contracts. It ran in NO lane
+      # (#4444), which is how a kit primitive (`kbd`, promoted by the Q1 slice) shipped
+      # with a rendered specimen but no registry entry: `specimens.test.ts` caught it the
+      # moment anyone ran the suite, and nobody was.
+      #
+      # Needs no `next build`: every assertion reads source files from disk (`existsSync`
+      # against tracked paths), not build output — verified by running the suite with
+      # `out/` and `.next/` removed. So this step stays cheap, and sits here rather than
+      # behind a build that this workspace deliberately does not run in CI.
+      - name: Test design-reference
+        run: npm run test --workspace design-reference
+
       # digithings-stack-cloudflare is in this lane's path filter (ci.yml's `web`)
       # but had no step here, so a var added to the hand-kept `Env` interface and
       # never wired into `envVars` (index.ts) merged green — the exact silent

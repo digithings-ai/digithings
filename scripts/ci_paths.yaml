@@ -137,8 +137,9 @@ web:
   #
   # Note what this is NOT: neither Cloudflare deploy check watches this *directory*, and
   # this entry does not change that — neither site builds this app, so firing two
-  # production builds per edit here would be cost with no consumer. This lane runs lint
-  # + tsc, never `next build`. Both checks do watch `apps/reference/package.json`
+  # production builds per edit here would be cost with no consumer. This lane runs lint,
+  # tsc and the reference's own vitest suite, never `next build`. Both checks do watch
+  # `apps/reference/package.json`
   # (#1977, merged 2026-08-07) as an *install* input, since the root `npm install`
   # resolves all eight manifests before either site compiles. Different claim, and the
   # two compose: that PR's union guard reads every glob in this file, so this directory
