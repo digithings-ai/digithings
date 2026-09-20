@@ -132,21 +132,40 @@ export default async function EmbedPage({
       ? { accent: { color: uiAccent, foreground: uiAccentForeground } }
       : {}),
   };
+  // The canvas walk: the attribution strip is transparent and sits on the
+  // shell, while the thread paints its own canvas — two surfaces that must be
+  // the same colour from the first byte, not (as they were) white until a
+  // post-mount `data-skin-canvas` effect landed. Resolve the one token here,
+  // server-side, from what the paint already knows.
+  const embedCanvas =
+    seededCfg.skin === "digichat"
+      ? paintTheme === "dark"
+        ? "#121417"
+        : "#f1f0eb"
+      : "var(--background)";
 
   return (
     <>
-      {/* The app owns its canvas: a configured embed paints the theme
-          background from --background; the bare baseline view (no host/token)
-          stays fully transparent so it is a clean baseline for future work.
-          The host iframe is always transparent; the scheme keeps widgets
-          themed. */}
+      {/* The app owns its canvas, and it owns exactly ONE of them. The colour
+          is resolved server-side (skin + paint theme) into `--embed-canvas`,
+          so body, shell, thread and the attribution strip all paint the same
+          surface from the first parsed byte — the footer can never flash a
+          lighter or darker colour between hydration steps, and a late-landing
+          tenant/skin can no longer repaint the shell after the reader is
+          looking. The bare baseline view (no host/token) stays fully
+          transparent so it is a clean baseline for future work. The host
+          iframe is always transparent; the scheme keeps widgets themed. */}
       <style
         dangerouslySetInnerHTML={{
-          __html: `html{background:transparent}${
+          __html: `html{background:transparent}:root{--embed-canvas:${embedCanvas}}${
+            seededCfg.skin === "digichat"
+              ? ':root[data-theme="dark"]{--embed-canvas:#121417}:root[data-theme="light"]{--embed-canvas:#f1f0eb}'
+              : ""
+          }${
             first(params.host) || first(params.token)
-              ? "body{background:var(--background)}"
-              : "body{background:transparent!important}body *{background:transparent!important}"
-          }:root[data-theme="dark"] body{color-scheme:dark}:root[data-theme="light"] body{color-scheme:light}`,
+              ? "body.bg-background{background:var(--embed-canvas)}.dc-embed-shell{background:var(--embed-canvas)}"
+              : "body.bg-background{background:transparent!important}body *{background:transparent!important}"
+          }:root[data-embed-wide="1"] body.bg-background{background:transparent}:root[data-embed-wide="1"] .dc-embed-shell{background:transparent}:root[data-theme="dark"] body{color-scheme:dark}:root[data-theme="light"] body{color-scheme:light}`,
         }}
       />
       <script dangerouslySetInnerHTML={{ __html: themePinScript(paintTheme) }} />
