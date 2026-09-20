@@ -404,3 +404,19 @@ export {
   MODULE_SUFFIXES,
   type AnimatedLockupProps,
 } from "./components/symbols/terminal-lockup";
+
+// prose family (D1, #4429) — the shared long-form company/legal grammar
+// (PageHead / RuledList / RuledRow / Mono), promoted from digithings-web's
+// app-local `_company/prose.tsx`. Utilities only; no site/app CSS class.
+export {
+  Mono,
+  PageHead,
+  RuledList,
+  RuledRow,
+  type MonoProps,
+  type PageHeadProps,
+  type RuledListProps,
+  type RuledRowProps,
+} from "./components/prose";
+// figure family (D1, #4429) — the numbered `Fig N` figure caption.
+export { Figure, type FigureProps } from "./components/figure";

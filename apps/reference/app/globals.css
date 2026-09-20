@@ -37,6 +37,8 @@
 @source not "../components/chatbot";
 @source "../../../packages/ui/src/components/docs";
 @source "../../../packages/ui/src/components/NavShell.tsx";
+/* SkipLink/CtaLink/IconLink carry token utilities (the skip link's off-screen
+   hide, the CTA dress) — the /chrome CTA specimen needs them generated. */
 @source "../../../packages/ui/src/components/chrome.tsx";
 @source "../../../packages/ui/src/components/pricing";
 @source "../../../packages/ui/src/components/stages";
@@ -58,6 +60,9 @@
 @source "../../../packages/ui/src/components/icons.tsx";
 /* The terminal loaders' specimen markup now lives in the package too. */
 @source "../../../packages/ui/src/components/terminal";
+/* Promoted prose atoms + the `Fig N` figure (D1, #4429). */
+@source "../../../packages/ui/src/components/prose";
+@source "../../../packages/ui/src/components/figure";
 @source "../../../packages/ui/src/ui";
 
 /* Shared base for every design-reference page. Family-specific styles live

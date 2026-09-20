@@ -58,8 +58,8 @@ ALLOWLIST = {
     "apps/digiquant-web/components/landing/AmbientMesh.tsx",
     "apps/digiquant-web/components/landing/HeroMesh.tsx",
     "apps/digiquant-web/components/landing/HeroGraph.tsx",
-    "apps/digithings-web/components/landing/HeroMesh.tsx",
-    "apps/digithings-web/components/landing/HeroGraph.tsx",
+    # digithings-web's HeroMesh/HeroGraph were deleted in the D1 rebuild
+    # (#4429) — the reused mesh art gave way to a fresh canon composition.
     # Reference-app livery chooser: a deliberate concrete swatch table
     # mirroring tokens.css module accents.
     "apps/reference/components/livery-store.ts",

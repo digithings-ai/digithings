@@ -1,7 +1,6 @@
 import type { Metadata } from "next";
-import { Reveal } from "@digithings/ui";
+import { CtaLink, PageHead, RuledList, RuledRow } from "@digithings/ui";
 import { DtFooter } from "@/components/DtFooter";
-import { PageHead } from "../_company/prose";
 import { DtNav } from "@/components/DtNav";
 import releases from "@digithings/design/releases.json";
 
@@ -35,32 +34,33 @@ export default function ChangelogPage() {
 
         <section className="section pt-0">
           <div className="wrap">
-            <Reveal>
-              <div className="changelog-band">
-                {ENTRIES.map((e) => (
-                  <div className="changelog-row" key={`${e.product}-${e.version}`}>
-                    <div className="changelog-row__date">
-                      {e.date} · {e.version}
-                    </div>
-                    <div className="changelog-row__title">
-                      <a href={e.href} target="_blank" rel="noopener noreferrer">
-                        {e.title}
-                      </a>
-                      <span className="changelog-row__tag">{e.tag}</span>
-                    </div>
-                  </div>
-                ))}
-              </div>
-              <p className="changelog-band__footer">
-                <a
-                  href="https://github.com/digithings-ai/digithings/releases"
-                  target="_blank"
-                  rel="noopener noreferrer"
+            <RuledList className="mt-[1.2rem]">
+              {ENTRIES.map((e) => (
+                <RuledRow
+                  key={`${e.product}-${e.version}`}
+                  term={`[${e.date}] ${e.version}`}
                 >
-                  All GitHub releases →
-                </a>
-              </p>
-            </Reveal>
+                  <a
+                    className="text-ink [text-underline-offset:2px] hover:text-accent"
+                    href={e.href}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                  >
+                    {e.title}
+                  </a>{" "}
+                  <span className="font-mono text-[0.78rem] text-ink-mute">[{e.tag}]</span>
+                </RuledRow>
+              ))}
+            </RuledList>
+            <div className="mt-[1.6rem]">
+              <CtaLink
+                href="https://github.com/digithings-ai/digithings/releases"
+                external
+                variant="ghost"
+              >
+                All GitHub releases
+              </CtaLink>
+            </div>
           </div>
         </section>
       </main>
