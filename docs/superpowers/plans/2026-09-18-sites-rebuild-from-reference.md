@@ -1,8 +1,40 @@
 # Rebuild digithings.ai and digiquant.io (and the digiquant dashboard) from the design reference
 
-Status: draft for approval · 2026-09-18 · branch `feat/rebuild-sites-from-reference`
-(worktree `/var/folders/36/1mwn8lfs7qx58560qsmy12xw0000gn/T/opencode/wt-rebuild`, cut from
-`origin/develop` @ `44ff6d109`).
+Status: **approved, in execution** · re-baselined 2026-09-20 against `origin/develop` @ `cf5627b10`.
+
+Original draft: 2026-09-18, branch `feat/rebuild-sites-from-reference`, cut from `origin/develop` @ `44ff6d109`.
+
+## 0. Re-baseline (2026-09-20)
+
+That branch landed as **#4410** and was promoted to `main` (#4407). Measuring the plan
+against what actually shipped:
+
+| Task | State | Evidence |
+|---|---|---|
+| R0 reference consolidation | **DONE** | Target IA is live (all 15 routes); the route/specimen/layering/nav/chrome test suite shipped (`apps/reference/lib/{routes,specimens,layering,nav,chrome}.test.ts`, 38 tests) |
+| R1 shared chrome | **NOT STARTED** | Nav + footer are still per-site (`apps/digithings-web/components/DtNav.tsx`, `DtFooter.tsx` vs digiquant-web's own) |
+| D1 digithings-web page tree | **NOT STARTED** | `apps/digithings-web/app/page.tsx` last changed by the move commit `0fc56fbb0`, not a rebuild |
+| Q1 digiquant-web page tree | **NOT STARTED** | same — `0fc56fbb0` is the last commit on `apps/digiquant-web/app/page.tsx` |
+| Q2 dashboard chrome + gate | **NOT STARTED** | — |
+| Q3 dashboard surfaces | **NOT STARTED** | — |
+| C1 content audit | **NOT STARTED** | — |
+| C2 release certification | **NOT STARTED** | — |
+
+What #4410 *did* deliver, beyond R0: the `apps/*` + `packages/*` move, the kit capability
+promotions, the legacy controls-layer retirement, and the canon-audit fixes (390px overflow,
+AA contrast, reference nav/404/chatbot/slider). So the canonical layer is complete and the
+sites sit on the kit — they were simply never rebuilt, which is precisely the gap §1 describes.
+
+Execution order, by dependency: **R1 → (D1 ∥ Q1) → C1 → C2**, with **Q2/Q3** runnable in
+parallel with R1 since the dashboard has its own chrome.
+
+**The canonical-layer rule is enforced, not aspirational.** `scripts/check_frontend_canon.py`
+scans `apps/` + `packages/` and fails on raw palette utilities, pre-canon vocabulary, colour
+literals in component code, and — the family census — any *new* app-local component-class
+family, which is the mechanical form of "if you want something new, add it to the design
+reference first". Every slice below must keep it green; adding a needed part to the kit (with
+tests) is the sanctioned path, never an app-local re-implementation.
+
 
 ## 1. Why
 
