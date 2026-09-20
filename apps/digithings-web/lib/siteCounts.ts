@@ -43,8 +43,8 @@ export const PYTHON_TEST_FILES = 809;
 // find apps packages -path '*/node_modules' -prune -o \
 //   \( -name '*.test.ts' -o -name '*.test.tsx' -o -name '*.spec.ts' \
 //      -o -name '*.spec.tsx' -o -name '*.test.js' -o -name '*.test.mjs' \) \
-//   -print | wc -l                                                          → 451
-export const FRONTEND_TEST_FILES = 451;
+//   -print | wc -l                                                          → 455
+export const FRONTEND_TEST_FILES = 455;
 // ls .github/workflows/ | grep -c '\.yml$'                                  → 74
 export const CI_WORKFLOWS = 74;
 // ls .github/workflows/ | grep -c '^test-'                                  → 17
