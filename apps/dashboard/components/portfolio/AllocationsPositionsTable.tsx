@@ -79,8 +79,8 @@ export default function AllocationsPositionsTable(props: {
       data-region="positions-table"
       className="flex h-full min-h-0 flex-col border border-hair bg-surface"
     >
-      <div className="flex items-center justify-between gap-3 border-b border-hair bg-term-bg px-4 py-3 md:px-6">
-        <h3 className="font-display text-xl font-normal tracking-tight text-ink">Positions</h3>
+      <div className="flex items-center justify-between gap-3 border-b border-hair px-4 py-3 md:px-6">
+        <h3 className="text-sm font-semibold text-ink">Positions</h3>
         <span className="font-mono text-[0.62rem] uppercase tracking-wider text-ink-mute">
           allocation · risk
         </span>

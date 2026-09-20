@@ -248,14 +248,14 @@ export default function TickerDossierView({
         <header
           data-testid="dossier-command-band"
           aria-label="Ticker dossier summary"
-          className="dossier-command grid grid-cols-1 border-y border-hair bg-surface/[0.82] lg:grid-cols-[minmax(14rem,1.15fr)_minmax(0,2fr)_auto]"
+          className="dossier-command grid grid-cols-1 border-y border-hair lg:grid-cols-[minmax(14rem,1.15fr)_minmax(0,2fr)_auto]"
         >
           <div
             data-region="identity"
             className="flex flex-col justify-center gap-2 border-b border-hair p-5 lg:border-b-0 lg:border-r"
           >
             <div className="flex flex-wrap items-baseline gap-2">
-              <h1 className="font-mono text-4xl font-medium leading-none text-ink md:text-5xl">
+              <h1 className="font-mono text-xl font-medium tracking-tight text-ink md:text-2xl">
                 {ticker}
               </h1>
               <span className="font-mono text-[0.62rem] uppercase tracking-wider text-ink-mute">
@@ -343,7 +343,7 @@ export default function TickerDossierView({
               <div className="grid lg:grid-cols-[minmax(0,1.6fr)_minmax(16rem,0.6fr)]">
                 <div className="px-4 py-5 md:px-5">
                   <div className="flex flex-wrap items-center gap-3">
-                    <strong className="font-display text-2xl capitalize text-ink">
+                    <strong className="text-lg font-semibold capitalize text-ink">
                       {currentStance || 'No current stance'}
                     </strong>
                     {currentConviction != null ? (

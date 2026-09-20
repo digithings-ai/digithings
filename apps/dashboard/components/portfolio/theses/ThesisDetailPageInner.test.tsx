@@ -47,6 +47,8 @@ describe('ThesisDetailPageInner (#1615 — bordered command + two-column dossier
     expect(html).toContain('long_term');
     expect(html).toContain('as of');
     expect(html).toContain('data-testid="thesis-command-band"');
+    // Q3b slice 3: the thesis name sits in the ledger/attribution register, not a display hero.
+    expect(html).not.toContain('text-3xl');
   });
 
   it('uses a two-column dossier layout: narrative/criteria as main, vehicles/provenance as context', () => {
