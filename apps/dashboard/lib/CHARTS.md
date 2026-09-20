@@ -1,8 +1,11 @@
 # Dashboard chart inventory & engine ruling (#1420, epic #1414)
 
-> **Ruling: lightweight-charts is the canon for time-series; recharts is
-> sanctioned for categorical/composition surfaces (lightweight-charts has no
-> categorical grammar).**
+> **Ruling: lightweight-charts is the canon for time-series; the kit
+> finance-tearsheet SVG primitives are the canon for annotated series
+> (reference bands/lines/dots, overlays, categorical bars). recharts is
+> retired — as of Q3b slice 5a (#4443) no dashboard surface imports it and
+> the dependency is dropped from `package.json`. A new `from 'recharts'`
+> fails `lib/lw-chart-canon.test.ts` loudly.**
 
 The reference grammar for lightweight-charts lives in the digiweb design
 reference (`apps/reference/components/equity-curve-reference.tsx`,
@@ -55,20 +58,20 @@ lightweight-charts crosshair (axis labels) instead of the app's
 `ChartTipShell` HTML tooltip, and its drawdown pane has no `%`-suffixed
 priceFormat.
 
-### Stays on recharts (sanctioned)
+### Retired from recharts (Q3b slice 5a removes the sanction entirely)
 
-| File | Chart(s) | Why it stays |
+No surface stays on recharts. The former sanctioned list is retired:
+
+| File | Chart(s) | Where it went |
 |---|---|---|
-| `components/twelve-x/ConsensusTab.tsx` | Consensus score lines (x = run_date) + position-split stacked area | The stacked split is composition (no lw grammar) and both panes share one currency-selection/smoothing state; splitting one view across two engines costs more than canon buys. Honest note: the score-lines pane *is* time-indexed — if it is ever decoupled from the split pane it becomes a migrate candidate. |
+| `components/twelve-x/ConsensusTab.tsx` | Consensus score lines (x = run_date) + stale dashed overlays, conviction bands, 5 threshold lines | Kit `MultiTimeSeries` (`@digithings/ui` finance-tearsheet) with the new `references` (bands + lines), explicit `domain`, and per-series `color` from the `chart-colors.ts` allowlist. The toggle/isolate legend stays caller-side kit `Button`s — no kit primitive was needed for it. Deliberate improvement: the old `connectNulls` gap-bridging is gone — gaps stay gaps, because an interpolated segment is a claim about data that does not exist. |
+| `components/twelve-x/LevelFixChart.tsx` | Fix line + entry band + stop/target lines + entry/exit dots | Kit `TimeSeries` with `references` (band + lines + date-snapped markers). Retires that surface's `getComputedStyle` theme reader — the kit SVG is token-driven CSS. |
 
 Q3b slice 4 (#4443) migrated `components/observability/AttributionTab.tsx`
 (contribution-by-position bars, x = ticker) off recharts onto the kit
 `SignedBars` primitive (`@digithings/ui` finance-tearsheet), extended there
 with optional per-bar `labels` plus a native `<title>` carrying each bar's
 exact value — the labelled-categorical-bars gap that had kept the sanction.
-The sanction above now covers only twelve-x surfaces, which slice 5 owns
-together with their reference-band/line/dot and toggleable-legend
-requirements (see the slice-4 report on #4443).
 
 `components/tearsheet/DashboardTearsheetView.tsx` (`PerformanceTearsheetView`) renders the shared
 finance-tearsheet family's print-oriented SVG charts (`TimeSeries`,
@@ -141,10 +144,13 @@ stayed local and the gap is recorded here as the promotion spec (MIGRATION.md
   (token theming, autoSize, theme-reactive re-skin, reduced-motion handling
   come for free — the lifecycle itself is the shared `@digithings/ui`
   finance-charts scaffold). Colors only from `lib/chart-colors.ts`.
+- New **annotated series** (published levels, conviction bands, event
+  anchors, multi-series overlays) → kit `TimeSeries` / `MultiTimeSeries`
+  (`@digithings/ui` finance-tearsheet: `references` for bands/lines/markers,
+  explicit `domain`, per-series `color`, `dashed` overlays). Toggle/isolate
+  legends stay caller-side.
 - New **categorical bar** chart → kit `SignedBars` (`@digithings/ui`
   finance-tearsheet: sign-toned bars, optional angled per-bar labels, exact
-  values as native `<title>`s). Richer composition (reference bands/lines,
-  toggleable multi-series legends) stays on recharts until slice 5 promotes
-  those grammars — colors only from `lib/chart-colors.ts` either way.
+  values as native `<title>`s).
 
 Guarded by `lib/lw-chart-canon.test.ts` and `scripts/check_frontend_canon.py`.

@@ -471,6 +471,38 @@ export type ChartTone = "accent" | "up" | "down";
 /** Overlay lines may also use the muted ink (rails, lump/flat benchmarks). */
 export type OverlayTone = ChartTone | "mute";
 
+/**
+ * Reference overlays for TimeSeries / MultiTimeSeries (Q3b slice 5, #4443).
+ * Published levels, conviction bands and event anchors that are data, not
+ * decoration — every consumer pairs them with a text caption carrying the
+ * same facts so the chart stays legible without pixels.
+ */
+export type ReferenceTone = "accent" | "up" | "down" | "warn" | "mute";
+export interface ReferenceLineSpec {
+  value: number;
+  tone?: ReferenceTone;
+  /** Dashed by default (all current consumers dash); pass false for solid. */
+  dashed?: boolean;
+  label?: string;
+}
+export interface ReferenceBandSpec {
+  from: number;
+  to: number;
+  tone?: ReferenceTone;
+}
+export interface ReferenceMarkerSpec {
+  /** ISO date — snaps to the nearest plotted date. */
+  t: string;
+  v: number;
+  tone?: ReferenceTone;
+  label?: string;
+}
+export interface ChartReferences {
+  lines?: ReferenceLineSpec[];
+  bands?: ReferenceBandSpec[];
+  markers?: ReferenceMarkerSpec[];
+}
+
 /** A normalized x-domain window (fractions 0..1 over a chart's full date span). */
 export interface ViewWindow {
   lo: number;
@@ -878,10 +910,103 @@ export interface TimeSeriesProps {
   resetView?: ViewWindow;
   /** When false, omit hover tooltips (static print-first panes). */
   interactive?: boolean;
+  /**
+   * Reference overlays: horizontal levels, shaded bands, date-anchored dots.
+   * Rendered beneath the series paths; out-of-domain values clamp to the plot.
+   */
+  references?: ChartReferences;
+  /** Explicit y-domain [lo, hi] (data units). Omit ⇒ derived from the data. */
+  domain?: [number, number];
   /** Accessible name for the chart (role="img" has none without it) — should
    *  summarize the series, e.g. "Equity curve, percent return, linear scale,
    *  Jan 2023 to Feb 2025". */
   ariaLabel: string;
+}
+
+/** Nearest plotted date index for a reference marker's ISO date. */
+function nearestDateIndex(dates: string[], t: string): number {
+  const target = Date.parse(t);
+  if (!Number.isFinite(target) || dates.length === 0) return -1;
+  let best = 0;
+  let bestDist = Infinity;
+  for (let i = 0; i < dates.length; i++) {
+    const d = Date.parse(dates[i]);
+    if (!Number.isFinite(d)) continue;
+    const dist = Math.abs(d - target);
+    if (dist < bestDist) {
+      bestDist = dist;
+      best = i;
+    }
+  }
+  return bestDist === Infinity ? -1 : best;
+}
+
+/**
+ * Reference bands (behind), lines and date-anchored dots for the two series
+ * panes. Render the result before the series paths so bands sit beneath them.
+ */
+function referenceEls(args: {
+  dates: string[];
+  xAt: (i: number) => number;
+  yAt: (v: number) => number;
+  plotLeft: number;
+  plotWidth: number;
+  plotTop: number;
+  plotBottom: number;
+  references: ChartReferences | undefined;
+}): ReactNode[] {
+  const { references } = args;
+  if (!references) return [];
+  const els: ReactNode[] = [];
+  const clampY = (y: number) => Math.max(args.plotTop, Math.min(args.plotBottom, y));
+  (references.bands ?? []).forEach((b, i) => {
+    const y1 = clampY(args.yAt(b.from));
+    const y2 = clampY(args.yAt(b.to));
+    els.push(
+      <rect
+        key={`ref-band-${i}`}
+        x={args.plotLeft}
+        y={Math.min(y1, y2)}
+        width={args.plotWidth}
+        height={Math.max(1, Math.abs(y2 - y1))}
+        className={`ts-ref-band ts-ref-band-${b.tone ?? "accent"}`}
+        data-chart-layer="reference-band"
+      />,
+    );
+  });
+  (references.lines ?? []).forEach((l, i) => {
+    const y = clampY(args.yAt(l.value));
+    els.push(
+      <line
+        key={`ref-line-${i}`}
+        x1={args.plotLeft}
+        y1={y}
+        x2={args.plotLeft + args.plotWidth}
+        y2={y}
+        className={`ts-ref-line ts-ref-tone-${l.tone ?? "mute"}${l.dashed === false ? "" : " ts-ref-dashed"}`}
+        data-chart-layer="reference-line"
+      >
+        {l.label ? <title>{l.label}</title> : null}
+      </line>,
+    );
+  });
+  (references.markers ?? []).forEach((m, i) => {
+    const idx = nearestDateIndex(args.dates, m.t);
+    if (idx < 0) return;
+    els.push(
+      <circle
+        key={`ref-marker-${i}`}
+        cx={args.xAt(idx)}
+        cy={clampY(args.yAt(m.v))}
+        r={3.5}
+        className={`ts-ref-dot ts-ref-dot-${m.tone ?? "accent"}`}
+        data-chart-layer="reference-marker"
+      >
+        {m.label ? <title>{m.label}</title> : null}
+      </circle>,
+    );
+  });
+  return els;
 }
 
 /**
@@ -1224,6 +1349,8 @@ function TimeSeriesBody({
   fullSpan,
   resetView,
   interactive = true,
+  references,
+  domain,
   ariaLabel,
 }: TimeSeriesProps & { points: TearsheetSeriesPoint[]; height: number }) {
   const wrapRef = useRef<HTMLDivElement>(null);
@@ -1238,10 +1365,12 @@ function TimeSeriesBody({
   const plotBottom = pad.top + plotH;
 
   const values = points.map((p) => p.v);
-  const { lo, hi } = dataDomain(values, scale, {
+  const auto = dataDomain(values, scale, {
     padRatio: 0.05,
     anchorZero: zeroBaseline ? "max" : undefined,
   });
+  const lo = domain ? scale.f(domain[0]) : auto.lo;
+  const hi = domain ? scale.f(domain[1]) : auto.hi;
 
   const n = points.length;
   const xAt = (i: number) => pad.left + (n === 1 ? plotW / 2 : (i / (n - 1)) * plotW);
@@ -1323,6 +1452,16 @@ function TimeSeriesBody({
       </defs>
       {gridEls}
       <g clipPath="url(#ts-series-clip)">
+        {referenceEls({
+          dates: points.map((p) => p.t),
+          xAt,
+          yAt,
+          plotLeft: pad.left,
+          plotWidth: plotW,
+          plotTop,
+          plotBottom,
+          references,
+        })}
         <path d={area} className={"ts-area ts-tone-" + tone} />
         <path d={line} className={"ts-line ts-tone-" + tone} fill="none" />
       </g>
@@ -1813,6 +1952,13 @@ export interface OverlaySeries {
   label: string;
   points: TearsheetSeriesPoint[];
   tone?: OverlayTone;
+  /**
+   * Explicit stroke color (CSS color string) — for categorical series whose
+   * identity must stay stable across themes (e.g. per-currency hues from an
+   * allowlisted palette). Wins over `tone`. No literals at call sites: pass
+   * values, not hex.
+   */
+  color?: string;
   dashed?: boolean;
   /** Area fill under the line (default false — overlays stay as strokes). */
   fill?: boolean;
@@ -1829,6 +1975,13 @@ export interface MultiTimeSeriesProps {
   fullSpan?: [string, string];
   resetView?: ViewWindow;
   interactive?: boolean;
+  /**
+   * Reference overlays: horizontal levels, shaded bands, date-anchored dots.
+   * Rendered beneath the series paths; out-of-domain values clamp to the plot.
+   */
+  references?: ChartReferences;
+  /** Explicit y-domain [lo, hi] (data units). Omit ⇒ derived from the data. */
+  domain?: [number, number];
   ariaLabel: string;
 }
 
@@ -1902,6 +2055,8 @@ function MultiTimeSeriesBody({
   fullSpan,
   resetView,
   interactive = true,
+  references,
+  domain,
   ariaLabel,
 }: MultiTimeSeriesProps & { height: number }) {
   const wrapRef = useRef<HTMLDivElement>(null);
@@ -1925,11 +2080,14 @@ function MultiTimeSeriesBody({
   for (const m of maps) {
     for (const v of m.values()) values.push(v);
   }
-  const { lo, hi } = dataDomain(values, scale, {
-    padRatio: 0.05,
-    anchorZero: zeroBaseline ? "max" : undefined,
-  });
-
+  const { lo, hi } = (() => {
+    const auto = dataDomain(values, scale, {
+      padRatio: 0.05,
+      anchorZero: zeroBaseline ? "max" : undefined,
+    });
+    if (!domain) return auto;
+    return { lo: scale.f(domain[0]), hi: scale.f(domain[1]) };
+  })();
   const n = dates.length;
   const xAt = (i: number) => pad.left + (n <= 1 ? plotW / 2 : (i / (n - 1)) * plotW);
   const yAt = (val: number) => pad.top + plotH - ((scale.f(val) - lo) / (hi - lo)) * plotH;
@@ -1980,6 +2138,7 @@ function MultiTimeSeriesBody({
         d={line}
         fill="none"
         className={"ts-line ts-tone-" + tone + dash}
+        style={s.color ? { stroke: s.color } : undefined}
         data-series={s.id}
         data-chart-layer="overlay-line"
       />,
@@ -2037,7 +2196,19 @@ function MultiTimeSeriesBody({
           </clipPath>
         </defs>
         {gridEls}
-        <g clipPath={`url(#${clipId})`}>{lineEls}</g>
+        <g clipPath={`url(#${clipId})`}>
+          {referenceEls({
+            dates,
+            xAt,
+            yAt,
+            plotLeft: pad.left,
+            plotWidth: plotW,
+            plotTop,
+            plotBottom,
+            references,
+          })}
+          {lineEls}
+        </g>
         {idxs.map((i, k) => {
           const anchor = i === 0 ? "start" : i === n - 1 ? "end" : "middle";
           return (

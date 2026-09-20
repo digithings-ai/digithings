@@ -21,6 +21,7 @@ import {
   Kpi,
   KpiStrip,
   LOOKBACK_OPTIONS,
+  MultiTimeSeries,
   PRINT_FULL_VIEW,
   ReturnsMatrix,
   SegToggle,
@@ -56,6 +57,14 @@ const CONTRIBUTION_POINTS = D.equity.slice(-18).map((point, index, points) => ({
     Hedges: index > 7 ? -(index - 7) * 0.06 : 0,
   },
 }));
+
+// Reference-overlay specimen inputs, derived from the demo walk so the
+// levels sit inside the plotted frame whatever the seed produces.
+const REF_PTS = D.equity.slice(-24);
+const REF_LO = Math.min(...REF_PTS.map((p) => p.v));
+const REF_HI = Math.max(...REF_PTS.map((p) => p.v));
+const REF_SPAN = REF_HI - REF_LO || 1;
+const REF_ALT = REF_PTS.map((p, i) => ({ t: p.t, v: p.v - REF_SPAN * (0.3 + i * 0.005) }));
 
 function Toned({ v, children }: { v: number; children: React.ReactNode }) {
   const c = toneClass(v);
@@ -229,6 +238,61 @@ export function TearsheetChartsReference() {
           />
         </div>
         <p className="ts-subhead">Labels ride the bottom gutter angled; each bar carries its exact value as a native title</p>
+      </section>
+
+      <section className="ts-panel">
+        <div className="ts-panel-head">
+          <span className="ts-panel-label">Reference overlays: levels, bands, anchors</span>
+          <ChartLegend
+            items={[
+              { kind: "line", label: "Fix" },
+              { kind: "line-dashed", label: "Stop / target" },
+            ]}
+          />
+        </div>
+        <div className="ts-chart" style={{ height: 300 }}>
+          <TimeSeries
+            points={REF_PTS}
+            height={300}
+            fmt={fmtCompact}
+            references={{
+              bands: [{ from: REF_LO + REF_SPAN * 0.35, to: REF_LO + REF_SPAN * 0.55 }],
+              lines: [
+                { value: REF_LO - REF_SPAN * 0.1, tone: "warn", label: "Stop" },
+                { value: REF_HI + REF_SPAN * 0.1, tone: "accent", label: "Target" },
+              ],
+              markers: [{ t: REF_PTS[6].t, v: REF_PTS[6].v, label: "Entry" }],
+            }}
+            ariaLabel="Reference overlays: single series with an entry band, stop and target lines, and an entry anchor dot"
+          />
+        </div>
+        <p className="ts-subhead">Bands sit beneath the series; dashed levels and date-snapped dots duplicate the caption facts, never replace them</p>
+      </section>
+
+      <section className="ts-panel">
+        <div className="ts-panel-head">
+          <span className="ts-panel-label">Multi-series with explicit domain and per-series color</span>
+        </div>
+        <div className="ts-chart" style={{ height: 300 }}>
+          <MultiTimeSeries
+            series={[
+              { id: "AAA", label: "AAA", points: REF_PTS, color: "var(--accent)" },
+              { id: "BBB", label: "BBB", points: REF_ALT, dashed: true, tone: "mute" },
+            ]}
+            height={300}
+            fmt={fmtCompact}
+            domain={[REF_LO - REF_SPAN * 0.5, REF_HI + REF_SPAN * 0.2]}
+            references={{
+              bands: [
+                { from: REF_HI, to: REF_HI + REF_SPAN * 0.2, tone: "up" },
+                { from: REF_LO - REF_SPAN * 0.5, to: REF_LO - REF_SPAN * 0.2, tone: "down" },
+              ],
+              lines: [{ value: REF_LO - REF_SPAN * 0.05 }],
+            }}
+            ariaLabel="Multi-series with an explicit domain, per-series color, conviction bands, and a zero line"
+          />
+        </div>
+        <p className="ts-subhead">Explicit domain pins the frame; color overrides tone per series; out-of-domain references clamp to the plot</p>
       </section>
 
       <section className="ts-panel ts-tab-stack">
