@@ -1,41 +1,44 @@
 "use client";
 /**
  * digiquant.io top bar — the shared NavShell primitive (@digithings/ui)
- * dressed with this app's brand, links, GitHub tail action, and the dashboard
- * CTA — in the sheet on narrow viewports, and as a compact tail button right
- * of the GitHub glyph on wide ones (#1450 round 3). Supersedes the app-local
- * DqNav copy (#1401): the scroll grammar
- * (settle after 8px, yield past 180px), hamburger, portal sheet, Escape/scrim
- * dismissal, and body-scroll lock all live in the primitive; only the dress
- * arrives from here.
+ * dressed with this app's brand, links, current path, GitHub tail action, and
+ * the dashboard CTA — in the sheet on narrow viewports, and as a compact
+ * mark-only link right of the GitHub glyph on wide ones (#1450 round 3).
+ * Supersedes the app-local DqNav copy (#1401): the scroll grammar (settle after
+ * 8px, yield past 180px), hamburger, portal sheet, Escape/scrim dismissal,
+ * body-scroll lock and focus return all live in the primitive; only the dress
+ * arrives from here. The GitHub and sheet CTAs are the kit's IconLink/CtaLink,
+ * so the button dress lives once in buttonVariants; the desktop dashboard mark
+ * keeps its bespoke ol-pulse/ol-draw animation (the `.dq-mark`/`.dq-stroke`
+ * hook), triggered through the mark's own wrapper.
  *
  * Dashboard CTA is a plain <a href="/dashboard/"> (separate export).
- * Desktop: teal mark only. Sheet: Open dashboard.
  */
-import { NavShell, GitHubGlyph, DigiquantMark } from "@digithings/ui";
-import { buttonVariants } from "@digithings/ui/ui";
+import { usePathname } from "next/navigation";
+import { NavShell, GitHubGlyph, DigiquantMark, IconLink, CtaLink } from "@digithings/ui";
 import { Brand, DQ_NAV_PRIMARY } from "@/app/_nav";
 
 export function SiteNav() {
+  const pathname = usePathname();
   return (
     <NavShell
       brand={<Brand />}
       links={DQ_NAV_PRIMARY}
+      currentPath={pathname ?? undefined}
       homeLabel="digiquant home"
       actions={
         <>
-          <a
-            className={buttonVariants({ variant: "ghost", size: "icon-sm" })}
+          <IconLink
             href="https://github.com/digithings-ai"
-            target="_blank"
-            rel="noopener noreferrer"
-            aria-label="digiquant on GitHub"
+            label="digiquant on GitHub"
+            external
           >
             <GitHubGlyph />
-          </a>
-          {/* Icon-only desktop twin. hidden! beats unlayered .dq-cta display. */}
+          </IconLink>
+          {/* Icon-only desktop twin of the sheet CTA, with the dashboard mark
+              animation. hidden! beats the unlayered .dq-nav-mark-cta display. */}
           <a
-            className="dq-nav-mark-cta dq-cta max-[880px]:hidden!"
+            className="dq-nav-mark-cta max-[880px]:hidden!"
             href="/dashboard/"
             aria-label="Open the dashboard"
           >
@@ -44,14 +47,13 @@ export function SiteNav() {
         </>
       }
       cta={
-        <a
-          className={buttonVariants({ variant: "default" }) + " dq-cta"}
+        <CtaLink
           href="/dashboard/"
           aria-label="Open the dashboard"
+          icon={<DigiquantMark size={18} />}
         >
-          <DigiquantMark size={18} />
           <span>Open dashboard</span>
-        </a>
+        </CtaLink>
       }
     />
   );

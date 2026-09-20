@@ -4,6 +4,43 @@ Status: **approved, in execution** · re-baselined 2026-09-20 against `origin/de
 
 Original draft: 2026-09-18, branch `feat/rebuild-sites-from-reference`, cut from `origin/develop` @ `44ff6d109`.
 
+## 0. Owner direction (2026-09-20) — READ THIS BEFORE §6
+
+Delivered after the first wave of workstream B, because the wave was drifting toward
+*refining* the existing pages rather than rebuilding them. It governs everything below.
+
+> "I wouldn't use the existing live pages as the design to use and go forward with. I would
+> take their content and the general structure and what I want to show, but in terms of
+> design, the design reference and the example websites take precedence. I want something
+> new. I don't want the same old. Don't use the existing website as something to lean on and
+> just do small modifications to. You're rewriting this from the ground up using our new
+> design language as we defined in design reference, using the SHADCN design reference and
+> examples, and using the example websites I like — OpenCode for digithings. As an example of
+> how to keep it simple and direct, I think we went over the top with our older versions and
+> I just want to bring it back to a utilitarian simplicity. **DigiChat is explicitly out of
+> scope — do not change the container, the embedded chat, or anything about it.**"
+
+Consequences, stated plainly because they overrule earlier readings of §6:
+
+1. **The existing pages are a CONTENT source, not a design source.** Take the words, the
+   facts, the general structure and what must be shown. The design comes from
+   `apps/reference` + `packages/ui` (the shadcn canon) and the reference sites.
+2. **Rewrite, do not restyle.** "Chrome-only" deltas are withdrawn. Every page is
+   re-composed on the new language.
+3. **Utilitarian simplicity is the single most important steer.** Fewer sections, less
+   decoration, flat surfaces, smaller type, no flourishes. If a section does not earn its
+   place, cut it. The hero canvas meshes, the 480vh scrolly pipeline and the ambient meshes
+   are precisely the "over the top" being removed — deleting them is the point.
+4. **No reused legacy art.** Repurposing `HeroMesh`/`HeroGraph` as a "media block" is
+   withdrawn. Build any such block fresh from canonical parts, or omit it.
+5. **digichat is untouched** — container, embedded chat, `/embed` postMessage protocol.
+   The `/chat` and `/chat/occ` shell pages may carry the site's new nav/footer like any
+   other page; nothing about the chat product changes.
+6. **Honesty and correctness constraints do not relax**: print layouts survive; every
+   figure single-sourced and traceable; in-sample/backtest wording wherever a performance
+   figure appears; no unmarked projections; no promise of live trading.
+
+
 ## 0. Re-baseline (2026-09-20)
 
 That branch landed as **#4410** and was promoted to `main` (#4407). Measuring the plan

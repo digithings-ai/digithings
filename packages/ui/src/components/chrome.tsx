@@ -1,12 +1,15 @@
 "use client";
 /** Shared nav, footer, and module card. Brand + links are passed in so both
  *  marketing apps reuse the same chrome. */
-import { useRef, type ReactNode } from "react";
+import { useRef, type AnchorHTMLAttributes, type ReactNode } from "react";
 import { m, useScroll, useTransform } from "motion/react";
+import type { VariantProps } from "class-variance-authority";
 import { Emblem } from "./emblems";
 import { StackRow } from "./StackLogo";
 import { type ModuleNode } from "../data/modules";
 import { useMotionSafe } from "../motion/primitives";
+import { buttonVariants } from "../ui/button";
+import { cn } from "../lib/utils";
 
 export interface NavLink { label: string; href: string; external?: boolean; cta?: boolean; }
 
@@ -27,6 +30,118 @@ export type NavItem = NavLink | NavGroup;
 /** Discriminates the NavItem union on the one field only a group carries. */
 export function isNavGroup(item: NavItem): item is NavGroup {
   return "items" in item;
+}
+
+/** The kit's vocabulary for a CTA's dress, taken straight from buttonVariants
+ *  so there is exactly one button treatment in the canon — a CTA link is the
+ *  same dress as the Button it pairs with, never a parallel class family. */
+type ButtonVariant = NonNullable<VariantProps<typeof buttonVariants>["variant"]>;
+type ButtonSize = NonNullable<VariantProps<typeof buttonVariants>["size"]>;
+
+/** Absolute or protocol-relative href — never a same-page route. */
+const isExternalHref = (href: string) => /^[a-z][a-z0-9+.-]*:/i.test(href) || href.startsWith("//");
+
+/** Whether `href` names the page the visitor is currently on. Owned here so
+ *  every site marks `aria-current` by the same rule: an exact pathname match
+ *  only — never an external link, and never a same-page anchor (`/#pipeline`,
+ *  `#section`) since several of those share one pathname and would all light
+ *  up. Trailing slashes are equivalent (`/docs` ≡ `/docs/`, the static-export
+ *  shape). */
+export function hrefIsCurrent(href: string, currentPath?: string): boolean {
+  if (!currentPath || isExternalHref(href) || href.includes("#")) return false;
+  const path = href.split("?")[0] ?? href;
+  const norm = (p: string) => (p.length > 1 ? p.replace(/\/+$/, "") : p);
+  return norm(path) === norm(currentPath);
+}
+
+/** Skip-to-content — visually hidden until keyboard focus, then pinned to the
+ *  top-left. Token utilities (the pre-canon app copy is what this replaces);
+ *  the consumer owns the target's `id` and focusability. */
+export function SkipLink({
+  href = "#main",
+  children = "Skip to content",
+  className,
+}: {
+  href?: string;
+  children?: ReactNode;
+  className?: string;
+}) {
+  return (
+    <a
+      href={href}
+      className={cn(
+        "fixed top-2 left-2 z-[300] -translate-y-[200%] rounded-none bg-[var(--accent)] px-[0.9rem] py-2 font-mono text-[0.72rem] text-[var(--on-accent)] no-underline focus-visible:translate-y-0",
+        className,
+      )}
+    >
+      {children}
+    </a>
+  );
+}
+
+export interface CtaLinkProps extends Omit<AnchorHTMLAttributes<HTMLAnchorElement>, "href"> {
+  href: string;
+  /** buttonVariants variant — the single CTA dress vocabulary. */
+  variant?: ButtonVariant;
+  size?: ButtonSize;
+  /** External destination: opens a new tab with the matching rel. */
+  external?: boolean;
+  /** Optional leading glyph, rendered before the label. */
+  icon?: ReactNode;
+}
+
+/** A CTA link dressed with the kit's button treatment. The kit shipped a
+ *  `<Button>` (a real button) but no link equivalent, so every site hand-rolled
+ *  `buttonVariants(...)` at the call site (or invented a `.dc-nav-cta` /
+ *  `.dq-cta` class). This is that one treatment, named. */
+export function CtaLink({
+  href,
+  children,
+  variant = "default",
+  size = "sm",
+  external,
+  icon,
+  className,
+  ...rest
+}: CtaLinkProps) {
+  return (
+    <a
+      href={href}
+      className={cn(buttonVariants({ variant, size }), className)}
+      target={external ? "_blank" : undefined}
+      rel={external ? "noopener noreferrer" : undefined}
+      {...rest}
+    >
+      {icon}
+      {children}
+    </a>
+  );
+}
+
+export interface IconLinkProps
+  extends Omit<AnchorHTMLAttributes<HTMLAnchorElement>, "href" | "aria-label"> {
+  href: string;
+  /** The accessible name — required, because the child is a bare glyph. */
+  label: string;
+  external?: boolean;
+}
+
+/** Icon-only link (the nav tail's GitHub glyph, a mark-only CTA). The kit's
+ *  ghost icon-button dress, with the `aria-label` the bare svg needs made
+ *  mandatory rather than left to each call site. */
+export function IconLink({ href, label, external, className, children, ...rest }: IconLinkProps) {
+  return (
+    <a
+      href={href}
+      aria-label={label}
+      className={cn(buttonVariants({ variant: "ghost", size: "icon-sm" }), className)}
+      target={external ? "_blank" : undefined}
+      rel={external ? "noopener noreferrer" : undefined}
+      {...rest}
+    >
+      {children}
+    </a>
+  );
 }
 
 export function Footer({
