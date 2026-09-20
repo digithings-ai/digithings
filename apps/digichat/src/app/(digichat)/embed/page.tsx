@@ -140,8 +140,8 @@ export default async function EmbedPage({
   const embedCanvas =
     seededCfg.skin === "digichat"
       ? paintTheme === "dark"
-        ? "#121417"
-        : "#f1f0eb"
+        ? "#121417" // canon-allow: the first parsed byte has no CSS var to read yet
+        : "#f1f0eb" // canon-allow: same literal pair as the product-chrome.css term-bg fallback
       : "var(--background)";
 
   return (
@@ -159,7 +159,7 @@ export default async function EmbedPage({
         dangerouslySetInnerHTML={{
           __html: `html{background:transparent}:root{--embed-canvas:${embedCanvas}}${
             seededCfg.skin === "digichat"
-              ? ':root[data-theme="dark"]{--embed-canvas:#121417}:root[data-theme="light"]{--embed-canvas:#f1f0eb}'
+              ? ':root[data-theme="dark"]{--embed-canvas:#121417}:root[data-theme="light"]{--embed-canvas:#f1f0eb}' // canon-allow: keeps the canvas token correct when the theme flips before hydration
               : ""
           }${
             first(params.host) || first(params.token)
