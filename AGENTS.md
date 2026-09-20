@@ -364,6 +364,21 @@ ruff check . && ruff format .
 
 ---
 
+## Artifact + worktree placement
+
+- Task worktrees live at `.worktrees/task/N-slug/` — create them with
+  `make task ISSUE=N`, remove with `scripts/worktree_task.sh remove N`
+  after the PR merges. Never leave detached temp worktrees under
+  `/tmp/opencode/wt-*` behind; remove them once their branch is merged
+  or abandoned.
+- Screenshots are throwaway verification artifacts: save ad-hoc captures
+  to `/tmp/` or the session temp dir, never to the repo root, and delete
+  them when done. The only committed PNGs are the tracked fixtures under
+  `frontend/dashboard/fixtures/screenshots/` — do not add new ones without
+  a test that reads them.
+
+---
+
 ## Cursor Cloud specific instructions
 
 ### Runtime prerequisites (one-time on a fresh VM)
