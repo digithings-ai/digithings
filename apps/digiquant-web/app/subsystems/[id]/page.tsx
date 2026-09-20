@@ -46,7 +46,7 @@ export default async function SubsystemPage({ params }: { params: Promise<{ id: 
   return (
     <>
       <SiteNav />
-      <main className="section dq-subpage">
+      <main className="section dq-subpage" id="main" tabIndex={-1}>
         <div className="wrap" style={{ maxWidth: 820 }}>
           <p style={{ fontFamily: "var(--font-mono)", fontSize: ".8rem", color: "var(--ink-mute)", marginBottom: "1.4rem" }}>
             <Link href="/#pipeline" style={{ color: "var(--ink-soft)" }}>pipeline</Link> / {s.name.toLowerCase()}

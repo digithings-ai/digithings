@@ -1,9 +1,13 @@
 "use client";
-/** Homepage odometer strip (#1069). The "backtested trades" figure is summed
- *  live from the Supabase strategy index — every number here is mined from
- *  shipped data, never invented. The other three are structural constants. */
+/** Homepage odometer strip (#1069). Every number here is mined from a shipped
+ *  source, never hand-written: the subsystem count from the shared registry
+ *  (passed in), the phase count from the single pipeline data file
+ *  (`app/_pipeline.ts`, the same file the chip gallery reads), the zero as the
+ *  named `LIVE_ORDERS` constant, and the trade count summed live from the
+ *  Supabase strategy index. */
 import { useEffect, useState } from "react";
 import { OdometerStrip, type OdometerStat } from "@digithings/ui";
+import { LIVE_ORDERS, PIPELINE_PHASES } from "@/app/_pipeline";
 import { fetchStrategyIndex } from "@/lib/live/strategies";
 
 export function MetricsOdometer({
@@ -27,9 +31,9 @@ export function MetricsOdometer({
 
   const stats: OdometerStat[] = [
     { value: String(subsystemCount), label: "subsystems" },
-    { value: "7", label: "pipeline stages" },
+    { value: String(PIPELINE_PHASES.length), label: "pipeline phases" },
     { value: String(trades), label: "backtested trades" },
-    { value: "0", label: "live orders" },
+    { value: String(LIVE_ORDERS), label: "live orders" },
   ];
 
   return <OdometerStrip stats={stats} className={className} />;

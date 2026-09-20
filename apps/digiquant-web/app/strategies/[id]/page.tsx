@@ -42,7 +42,7 @@ export default async function TearsheetPage({ params }: { params: Promise<{ id: 
   return (
     <>
       <SiteNav />
-      <main className="ts-page dq-subpage">
+      <main className="ts-page dq-subpage" id="main" tabIndex={-1}>
         <div className="wrap">
           <TearsheetView key={id} slug={id} />
         </div>

@@ -54,10 +54,9 @@ ALLOWLIST = {
     "apps/digichat/src/app/(digichat)/embed/embed-client.tsx",
     "packages/ui/src/components/ThemeProvider.tsx",  # SSR theme-color meta
     # Canvas scenes compose runtime colors from token-derived channels
-    # (migrate-vs-leave: canvas art stays concrete).
-    "apps/digiquant-web/components/landing/AmbientMesh.tsx",
-    "apps/digiquant-web/components/landing/HeroMesh.tsx",
-    "apps/digiquant-web/components/landing/HeroGraph.tsx",
+    # (migrate-vs-leave: canvas art stays concrete). digiquant's three canvas
+    # files were deleted in #4430 (the hero is the kit ProductFrame artefact
+    # now), so their sanctions went with them.
     "apps/digithings-web/components/landing/HeroMesh.tsx",
     "apps/digithings-web/components/landing/HeroGraph.tsx",
     # Reference-app livery chooser: a deliberate concrete swatch table

@@ -2,7 +2,6 @@ import type { Metadata } from "next";
 import { Reveal } from "@digithings/ui";
 import { SiteNav } from "@/components/landing/SiteNav";
 import { SiteFooter } from "@/components/landing/SiteFooter";
-import { AmbientMesh } from "@/components/landing/AmbientMesh";
 import releases from "@digithings/design/releases.json";
 
 export const metadata: Metadata = {
@@ -27,7 +26,6 @@ export default function ChangelogPage() {
     <>
       <SiteNav />
       <main className="dq-subpage" id="main" tabIndex={-1}>
-        <AmbientMesh />
         <section className="section">
           <div className="wrap">
             <Reveal>

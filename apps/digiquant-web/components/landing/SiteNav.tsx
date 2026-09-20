@@ -25,6 +25,7 @@ export function SiteNav() {
       brand={<Brand />}
       links={DQ_NAV_PRIMARY}
       currentPath={pathname ?? undefined}
+      skipTo="#main"
       homeLabel="digiquant home"
       actions={
         <>

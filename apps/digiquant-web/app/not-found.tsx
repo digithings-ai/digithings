@@ -13,7 +13,7 @@ export default function NotFound() {
   return (
     <>
       <SiteNav />
-      <main className="dq-subpage">
+      <main className="dq-subpage" id="main" tabIndex={-1}>
         <div className="wrap pb-[clamp(4.5rem,10vw,7rem)]">
           <header className="dq-sechead">
             <div className="kicker">{"// missing"}</div>
