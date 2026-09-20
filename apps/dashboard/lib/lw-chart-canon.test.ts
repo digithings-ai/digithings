@@ -37,9 +37,11 @@ function componentSources(): string[] {
 const ALL_COMPONENTS = componentSources();
 const MIGRATED = ALL_COMPONENTS.filter((rel) => read(rel).includes("from 'lightweight-charts'"));
 
-/** Categorical/composition surfaces — sanctioned to stay on recharts. */
+/** Categorical/composition surfaces — sanctioned to stay on recharts.
+ * AttributionTab left this list in Q3b slice 4 (#4443): its ticker bars now
+ * ride the kit SignedBars primitive, so the sanction covers only the
+ * twelve-x surfaces that slice 5 owns. */
 const RECHARTS_SANCTIONED = [
-  'components/observability/AttributionTab.tsx',
   'components/twelve-x/ConsensusTab.tsx',
 ];
 
@@ -78,6 +80,12 @@ describe('chart engine ruling (lib/CHARTS.md, #1420)', () => {
         `${rel} must not import lightweight-charts — it has no categorical grammar`
       ).toBe(false);
     }
+  });
+
+  it('attribution bars ride the kit primitive, not recharts (Q3b slice 4)', () => {
+    const src = read('components/observability/AttributionTab.tsx');
+    expect(src).toContain('SignedBars');
+    expect(src.includes("from 'recharts'")).toBe(false);
   });
 
   it('components never call createChart directly — the scaffold owns the lifecycle', () => {

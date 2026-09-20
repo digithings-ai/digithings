@@ -59,8 +59,16 @@ priceFormat.
 
 | File | Chart(s) | Why it stays |
 |---|---|---|
-| `components/observability/AttributionTab.tsx` | Contribution by position bars | Categorical (x = ticker). |
 | `components/twelve-x/ConsensusTab.tsx` | Consensus score lines (x = run_date) + position-split stacked area | The stacked split is composition (no lw grammar) and both panes share one currency-selection/smoothing state; splitting one view across two engines costs more than canon buys. Honest note: the score-lines pane *is* time-indexed — if it is ever decoupled from the split pane it becomes a migrate candidate. |
+
+Q3b slice 4 (#4443) migrated `components/observability/AttributionTab.tsx`
+(contribution-by-position bars, x = ticker) off recharts onto the kit
+`SignedBars` primitive (`@digithings/ui` finance-tearsheet), extended there
+with optional per-bar `labels` plus a native `<title>` carrying each bar's
+exact value — the labelled-categorical-bars gap that had kept the sanction.
+The sanction above now covers only twelve-x surfaces, which slice 5 owns
+together with their reference-band/line/dot and toggleable-legend
+requirements (see the slice-4 report on #4443).
 
 `components/tearsheet/DashboardTearsheetView.tsx` (`PerformanceTearsheetView`) renders the shared
 finance-tearsheet family's print-oriented SVG charts (`TimeSeries`,
@@ -133,8 +141,10 @@ stayed local and the gap is recorded here as the promotion spec (MIGRATION.md
   (token theming, autoSize, theme-reactive re-skin, reduced-motion handling
   come for free — the lifecycle itself is the shared `@digithings/ui`
   finance-charts scaffold). Colors only from `lib/chart-colors.ts`.
-- New **categorical/composition** chart → recharts, colors only from
-  `lib/chart-colors.ts` (`useChartColors()` for semantic hues, the fixed
-  allowlist for series identity).
+- New **categorical bar** chart → kit `SignedBars` (`@digithings/ui`
+  finance-tearsheet: sign-toned bars, optional angled per-bar labels, exact
+  values as native `<title>`s). Richer composition (reference bands/lines,
+  toggleable multi-series legends) stays on recharts until slice 5 promotes
+  those grammars — colors only from `lib/chart-colors.ts` either way.
 
 Guarded by `lib/lw-chart-canon.test.ts` and `scripts/check_frontend_canon.py`.
