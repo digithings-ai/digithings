@@ -72,6 +72,15 @@ describe('LevelFixChart', () => {
     expect(html).toContain('In 1.0820');
     expect(html).toContain('Out 1.0950');
     expect(html).not.toContain('anchors only');
+    // Kit reference overlays (Q3b slice 5a): entry band, stop + target
+    // lines, and entry/exit anchor dots ride the shared primitive.
+    expect(html).toContain('data-chart-layer="reference-band"');
+    expect(html).toContain('ts-ref-band-accent');
+    expect(html).toContain('data-chart-layer="reference-line"');
+    expect(html).toContain('ts-ref-tone-warn');
+    expect(html).toContain('data-chart-layer="reference-marker"');
+    expect(html).toContain('<title>In 1.0820</title>');
+    expect(html).toContain('<title>Out 1.0950</title>');
   });
 
   it('badges the anchors-only fallback', () => {
@@ -86,5 +95,17 @@ describe('LevelFixChart', () => {
     const series = buildLevelFixSeries({ ...idea(), trade_levels: null }, null, []);
     const html = renderToStaticMarkup(createElement(LevelFixChart, { series }));
     expect(html).toContain('No fix data for EUR/USD yet.');
+  });
+
+  it('renders the series with no reference layers when no levels are published', () => {
+    const series = buildLevelFixSeries({ ...idea(), trade_levels: null }, null, [
+      { date: '2026-06-13', fix: 1.082 },
+      { date: '2026-06-14', fix: 1.086 },
+    ]);
+    const html = renderToStaticMarkup(createElement(LevelFixChart, { series }));
+    expect(html).toContain('<svg');
+    expect(html).not.toContain('reference-band');
+    expect(html).not.toContain('reference-line');
+    expect(html).not.toContain('reference-marker');
   });
 });
