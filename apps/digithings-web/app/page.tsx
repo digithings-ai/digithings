@@ -9,20 +9,18 @@ import {
   RepoActivity,
   SocialRow,
   StackRow,
-  TerminalManifest,
   WordReveal,
-  modules,
   type CodeSample,
   type NumberedStage,
   type OdometerStat,
   type StackItem,
-  type TerminalManifestRow,
 } from "@digithings/ui";
 import { buttonVariants } from "@digithings/ui/ui";
 import { DT_CONTACT_EMAIL } from "@/app/_nav";
 import { DtFooter } from "@/components/DtFooter";
 import { DtNav } from "@/components/DtNav";
-import { moduleActivity, CONTRIBUTING_URL, REPO_CLONE, REPO_LIVE, REPO_URL, repoActivity } from "@/lib/repoActivity";
+import { ModuleManifest } from "@/components/landing/ModuleManifest";
+import { CONTRIBUTING_URL, REPO_CLONE, REPO_LIVE, REPO_URL, repoActivity } from "@/lib/repoActivity";
 import {
   BYOK_KEYS_STORED,
   COMPOSE_DEFAULT,
@@ -140,21 +138,6 @@ const PRINCIPLES: NumberedStage[] = [
 ];
 
 export default function Home() {
-  // Module manifest rows straight from the shared registry — the manifest names
-  // which modules ship and which are roadmap, so no page needs a second list.
-  const manifestRows: TerminalManifestRow[] = [...modules]
-    .sort((a, b) => a.graphOrder - b.graphOrder)
-    .map((m) => {
-      const activity = moduleActivity(m.id);
-      return {
-        id: m.id,
-        name: m.id,
-        status: m.tier === "roadmap" ? "roadmap" : "online",
-        blurb: m.role,
-        detail: [m.tagline, "", ...m.summary, "", "stack   " + m.stack.map((s) => s.name).join("  ·  "), ...(activity ? ["repo    " + activity] : [])].join("\n"),
-      };
-    });
-
   return (
     <>
       <DtNav />
@@ -212,15 +195,7 @@ export default function Home() {
               {ROADMAP_MODULES} more are on the roadmap; the manifest marks which.
             </p>
             <Figure n={2} caption="The shared module registry, rendered as a terminal manifest." className="mt-[1.6rem]">
-              <TerminalManifest
-                className="mx-auto max-w-[980px]"
-                prompt="//"
-                command="modules"
-                meta={`· ${SHIPPING_MODULES} online · ${ROADMAP_MODULES} on the roadmap`}
-                rows={manifestRows}
-                namePrefix="digi"
-                aria-label="digithings module manifest"
-              />
+              <ModuleManifest />
             </Figure>
           </div>
         </section>
@@ -292,6 +267,9 @@ export default function Home() {
         <section className="section" id="contact">
           <div className="wrap">
             <span className="kicker">{"// contact"}</span>
+            <h2 className="mt-[0.7rem] text-[1.15rem] font-normal text-ink">
+              Questions, enterprise, or partnership.
+            </h2>
             <p className="mt-[0.7rem] max-w-[64ch] text-[1rem] leading-[1.7] text-ink-soft">
               The whole monorepo is MIT-licensed and public — take it and run it yourself. What we
               sell is the integration work: fitting these modules to the stack you already have.

@@ -83,7 +83,9 @@ export default function AboutPage() {
           shipping modules — orchestration, quant research, retrieval, chat, auth, tracing,
           heartbeat and audit, a markdown vault, and the shared library the rest sit on — plus{" "}
           {ROADMAP_MODULES} more marked roadmap in the registry rather than quietly counted as
-          built. It is a set of parts you assemble, not a platform you move into.
+          built. You run them on your own hardware, against your own provider keys, with every step
+          of every run readable afterwards. It is a set of parts you assemble, not a platform you
+          move into.
         </PageHead>
 
         <section className="section">

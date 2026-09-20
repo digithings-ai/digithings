@@ -73,8 +73,9 @@ const DIMENSIONS: NumberedStage[] = [
     title: "Quality",
     mech:
       "Pydantic v2 and Polars only — no pandas. Ruff clean at line length 100. A test for every " +
-      "new public function or route. No orphaned exports, structured errors rather than bare " +
-      "raises, and the component's ARCHITECTURE.md updated in the same change.",
+      "new public function or route. No file over 400 lines, no orphaned exports, structured " +
+      "errors rather than bare raises, and the component's ARCHITECTURE.md updated in the same " +
+      "change.",
   },
   {
     num: "03",

@@ -117,7 +117,8 @@ const PIPELINE: { term: string; body: string }[] = [
       "Seven Python components — digibase, digigraph, digiquant, digisearch, digismith, digikey " +
       "and digiclaw — have their locked dependency closure exported and audited against the OSV " +
       "database weekly, and whenever a dependency manifest changes. HIGH and CRITICAL block the " +
-      "merge; MEDIUM and LOW are warn-only. Three boundaries: the workspace has eleven members, so " +
+      "merge; MEDIUM and LOW are warn-only. Accepting a CVE requires an entry with a rationale and " +
+      "a re-evaluation trigger. Three boundaries: the workspace has eleven members, so " +
       "digifetch, digillm, digiskills and digivault are outside the matrix; a pull request that " +
       "adds Python without touching a manifest does not trigger it; and the scope is Python only, " +
       "so the frontend and digichat dependency trees are unaudited.",
@@ -150,7 +151,8 @@ const LIMITS: { term: string; body: string }[] = [
     body:
       "The audit redactor walks a payload and replaces any key whose name contains password, " +
       "api_key, token or secret. It does not inspect values, so it is not a PII scrubber and will " +
-      "not catch a secret stored under an unexpected key name.",
+      "not catch a secret stored under an unexpected key name. Keeping prompts and document bodies " +
+      "out of audit payloads is a discipline enforced by review, not by the function.",
   },
   {
     term: "The live-trading gate is not a runtime interlock",
@@ -159,7 +161,8 @@ const LIMITS: { term: string; body: string }[] = [
       "connect and submit_order methods raise NotImplementedError. What guards them is a " +
       "source-tree fact plus process: a local pre-push hook demands a human co-sign trailer on " +
       "commits touching live-trading paths, and the security rubric scores it. There is no circuit " +
-      "breaker in the running system, and a hook on a developer's machine can be bypassed.",
+      "breaker in the running system, and a hook on a developer's machine can be bypassed — after " +
+      "which the change still has to clear review and branch protection.",
   },
   {
     term: "Key-scope isolation, not storage isolation",
@@ -208,21 +211,26 @@ const LIMITS: { term: string; body: string }[] = [
     body:
       "The secret scanner is pinned and SHA-256 verified. The GitHub Actions around it are weaker: " +
       "some are pinned to a commit SHA, most only to a major-version tag, which a compromised " +
-      "upstream release can move under us. Pinning is audited when a workflow file changes.",
+      "upstream release can move under us. Pinning is audited when a workflow file changes rather " +
+      "than enforced by a check.",
   },
   {
     term: "The insider controls are process, not enforcement",
     body:
       "The hooks that block protected-path edits and unsigned live-trading pushes run in the " +
       "developer's own environment, so a determined insider with write access can bypass them. " +
-      "What is left is pull-request review and GitHub branch protection.",
+      "What is left is pull-request review and GitHub branch protection — configuration audited " +
+      "out of band, not a property of the repository you can read. The same applies to the " +
+      "secret-scanner allowlist: a wrongly scoped entry would mask a real leak, and only review " +
+      "catches that.",
   },
   {
     term: "The public endpoints still fingerprint",
     body:
       "Liveness and JWKS are deliberately minimal and secret-free, but their response shape still " +
-      "leaks stack and version information. That is accepted rather than mitigated, and there is no " +
-      "WAF or bot-management layer in front of any of it.",
+      "leaks stack and version information. That is accepted rather than mitigated, on the basis " +
+      "that the contract is public by design — and there is no WAF or bot-management layer in " +
+      "front of any of it.",
   },
 ];
 
@@ -304,7 +312,8 @@ export default function SecurityPage() {
             <p className="mt-[0.7rem] max-w-[64ch] text-[1rem] leading-[1.7] text-ink-soft">
               A selection from the residual-risk column of the threat model — the entries a reader
               deciding whether to deploy this would want first, not the whole table. SECURITY.md
-              carries every row, each next to the mitigation it sits behind.
+              carries every row, each next to the mitigation it sits behind. If any of this is
+              disqualifying for your deployment, better to learn it here than after an integration.
             </p>
             <RuledList>
               {LIMITS.map((r) => (
