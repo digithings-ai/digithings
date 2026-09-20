@@ -13,10 +13,6 @@ import { Card } from "@digithings/ui/ui";
 import { Kbd } from "@digithings/ui/ui";
 import { PIPELINE_ENGINES, PIPELINE_PHASES } from "@/app/_pipeline";
 
-/** Why an id gap (h7 → h7e → h9, missing h8) is not a typo or a dropped step. */
-const PHASE_ID_TITLE =
-  "The real internal phase-folder name, not a sequential count — a gap (like the missing h8) means that number was never assigned, not a typo.";
-
 export function PipelineGallery() {
   return (
     <section className="section" id="pipeline">
@@ -57,9 +53,7 @@ export function PipelineGallery() {
                   {engine.phases.map((phase) => (
                     <li key={`${engine.id}-${phase.id}`}>
                       <Card className="h-full gap-[0.35rem] px-[0.9rem] py-[0.8rem]">
-                        <Kbd className="self-start text-accent" title={PHASE_ID_TITLE}>
-                          {phase.id}
-                        </Kbd>
+                        <Kbd className="self-start text-accent">{phase.id}</Kbd>
                         <span className="text-[0.9rem] font-medium tracking-[-0.01em] text-ink">
                           {phase.name}
                         </span>

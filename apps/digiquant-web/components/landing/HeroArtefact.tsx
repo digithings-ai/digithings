@@ -15,7 +15,7 @@
  */
 import { ProductFrame } from "@digithings/ui";
 import { Kbd } from "@digithings/ui/ui";
-import { PIPELINE_ENGINES } from "@/app/_pipeline";
+import { LIVE_ORDERS, PIPELINE_ENGINES } from "@/app/_pipeline";
 
 export function HeroArtefact() {
   return (
@@ -70,9 +70,9 @@ export function HeroArtefact() {
           <span className="font-mono text-[9px] uppercase tracking-[0.14em] text-ink-mute">
             illustrative surface · not live results
           </span>
-          <span className="ml-auto font-mono text-[9px] uppercase tracking-[0.14em] text-ink-mute">
-            0 live orders
-          </span>
+            <span className="ml-auto font-mono text-[9px] uppercase tracking-[0.14em] text-ink-mute">
+              {LIVE_ORDERS} live orders
+            </span>
         </div>
       </div>
     </ProductFrame>

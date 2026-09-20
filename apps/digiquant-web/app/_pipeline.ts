@@ -1,15 +1,18 @@
 /**
  * Single source of truth for digiquant's research → portfolio pipeline
  * (#4430). One data file feeds BOTH the homepage chip gallery and the metrics
- * band, so the two can never disagree about how many phases ship — the plan's
- * old "16 phases" / "7 pipeline stages" pair was self-contradicting, and this
- * file replaces both numbers with the real phase folders.
+ * band, so the two can never disagree about how many phases ship.
  *
- * The ids are the REAL internal phase-folder names, not a sequential count
- * (#4430 ground truth): `digiquant/src/digiquant/research/phases/` holds ten
- * phase entry points, `digiquant/src/digiquant/portfolio/phases/` holds nine.
- * The portfolio sequence runs h7 → h7e → h9 with no h8 because that number was
- * never assigned a phase — a gap in the internal naming, not a missing step.
+ * Canonical source for the portfolio sequence (order, membership and H-labels):
+ * `digiquant/src/digiquant/portfolio/graph.py`
+ * `build_portfolio_phases_thesis()` — ten appends, H1–H9 plus the coverage
+ * director between H4 and H5. Risk sizing is H8 there
+ * (`_build_h8_risk_sizing` → `portfolio_h8_risk_sizing`, implemented in
+ * `phases/phase7e_risk_sizing.py`; `PORTFOLIO_SUBGRAPH.md` maps
+ * "H8 = phase7e_risk_sizing"). The chip ids below are those H-designators,
+ * in graph order. Nothing is asserted here about phase numbering beyond what
+ * the graph states — see `_pipeline.test.ts`, which pins this list to the
+ * graph's append sequence so drift fails loudly.
  *
  * Execution has no phase folders yet: it is marked "in development" and its
  * `phases` array is deliberately empty, so `PIPELINE_PHASES.length` counts only
@@ -49,16 +52,17 @@ export const RESEARCH_PHASES: readonly PipelinePhase[] = [
   { id: "09", name: "Publish", detail: "to the thesis store" },
 ];
 
-/** Portfolio / deliberation phases, in run order (`portfolio/phases/*`). */
+/** Portfolio / deliberation phases, in graph order (`graph.py`, H1–H9 + coverage director). */
 export const PORTFOLIO_PHASES: readonly PipelinePhase[] = [
   { id: "h1", name: "Thesis review", detail: "inherit & re-score" },
   { id: "h2", name: "Market thesis", detail: "exploration" },
   { id: "h3", name: "Vehicle map", detail: "thesis → instruments" },
   { id: "h4", name: "Screener", detail: "opportunity filter" },
+  { id: "h45", name: "Coverage director", detail: "refresh, explore, or skip" },
   { id: "h5", name: "Asset analyst", detail: "per-name workup" },
   { id: "h6", name: "Deliberation", detail: "multi-agent debate" },
   { id: "h7", name: "PM direction", detail: "allocate & gate" },
-  { id: "h7e", name: "Risk sizing", detail: "½-Kelly, ceilings" },
+  { id: "h8", name: "Risk sizing", detail: "½-Kelly, ceilings" },
   { id: "h9", name: "Commit run", detail: "persist & evolve" },
 ];
 
