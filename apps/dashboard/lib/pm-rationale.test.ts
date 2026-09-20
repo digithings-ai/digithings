@@ -1,9 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
-  buildDisplayRationaleByTicker,
   isDerivedBookReason,
   isMechanicalSizingRationale,
-  narrativesFromPmDirectionMemo,
   resolvePmRationale,
   usablePmRationale,
 } from './pm-rationale';
@@ -48,64 +46,25 @@ describe('isDerivedBookReason', () => {
   });
 });
 
-describe('resolvePmRationale / buildDisplayRationaleByTicker', () => {
-  it('skips mechanical rebalance text and prefers H7 roster narrative', () => {
-    const map = buildDisplayRationaleByTicker({
-      pmRebalanceActions: [
-        {
-          ticker: 'XLF',
-          action: 'trim',
-          rationale: 'Position weight set by deterministic risk sizing.',
-        },
-      ],
-      pmDirectionMemo: {
-        roster: [
-          {
-            ticker: 'XLF',
-            direction: 'long',
-            conviction_rank: 2,
-            narrative: 'Financials still track the breadth recovery after the selloff.',
-          },
-        ],
-      },
-    });
-    expect(map.XLF).toBe('Financials still track the breadth recovery after the selloff.');
+describe('resolvePmRationale', () => {
+  it('prefers the first usable candidate and skips mechanical boilerplate', () => {
+    expect(
+      resolvePmRationale(
+        'Position weight set by deterministic risk sizing.',
+        'Financials still track the breadth recovery after the selloff.'
+      )
+    ).toBe('Financials still track the breadth recovery after the selloff.');
   });
 
-  it('omits tickers that only have the sizing boilerplate', () => {
-    const map = buildDisplayRationaleByTicker({
-      pmRebalanceActions: [
-        {
-          ticker: 'XLF',
-          rationale: 'Position weight set by deterministic risk sizing.',
-        },
-      ],
-    });
-    expect(map).toEqual({});
+  it('returns null when every candidate is boilerplate or blank', () => {
     expect(
       resolvePmRationale('Position weight set by deterministic risk sizing.', null)
     ).toBeNull();
   });
 
-  it('keeps a real pm-rebalance rationale over H7 when both exist', () => {
-    const map = buildDisplayRationaleByTicker({
-      pmRebalanceActions: [{ ticker: 'NVDA', rationale: 'Valuation stretched into earnings.' }],
-      pmDirectionMemo: {
-        roster: [{ ticker: 'NVDA', narrative: 'Older H7 narrative for NVDA.' }],
-      },
-    });
-    expect(map.NVDA).toBe('Valuation stretched into earnings.');
-  });
-
-  it('extracts H7 narratives and ignores blank rows', () => {
-    expect(
-      narrativesFromPmDirectionMemo({
-        roster: [
-          { ticker: 'SPY', narrative: 'Core beta while breadth confirms.' },
-          { ticker: 'cash', narrative: '' },
-          { ticker: 'QQQ', narrative: 'Position weight set by deterministic risk sizing.' },
-        ],
-      })
-    ).toEqual({ SPY: 'Core beta while breadth confirms.' });
+  it('keeps a real first rationale over a later one', () => {
+    expect(resolvePmRationale('Valuation stretched into earnings.', 'Older narrative.')).toBe(
+      'Valuation stretched into earnings.'
+    );
   });
 });
