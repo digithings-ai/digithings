@@ -137,6 +137,7 @@ export default function AttributionTab({
         subtitle="Single-benchmark lookback diagnostic: contribution (weight × return), selection (weight × excess vs SPY), and total active over the same window. Sums reconcile to active return when every holding is priced. Not realized period attribution."
         flat={embedded}
       >
+        <div className="min-w-0 overflow-x-auto">
         <Table className="text-sm tabular-nums">
           <TableHeader>
             <TableRow className="text-left text-xs text-ink-mute border-hair hover:bg-transparent">
@@ -171,6 +172,7 @@ export default function AttributionTab({
             ))}
           </TableBody>
         </Table>
+        </div>
       </SectionCard>
     </div>
   );

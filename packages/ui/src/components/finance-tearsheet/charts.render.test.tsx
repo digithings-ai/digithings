@@ -40,6 +40,10 @@ describe('SignedBars labels (Q3b slice 4, #4443)', () => {
     expect(html).toContain('>BBB</text>');
     expect(html).toContain('>CCC</text>');
     expect(html).toContain('rotate(-30');
+    // Label gutter: anchors sit 28px above the viewBox bottom so the -30°
+    // labels land inside the plot gutter instead of clipping (default
+    // height 220 → y=192; the first cut anchored at height-10).
+    expect(html).toContain('y="192"');
     expect(html).toContain('<title>AAA: 2.50%</title>');
     expect(html).toContain('<title>BBB: -1.25%</title>');
     expect(html).toContain('ts-tone-up');

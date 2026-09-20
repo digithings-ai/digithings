@@ -478,10 +478,14 @@ html.light .qn-blueprint-bg {
    family: @digithings/ui/styles/finance-tearsheet.css, imported at the
    top of this file (#1463). Dashboard's former §13 screen variants
    (tighter panels/KPIs, .ts-btn/.ts-notes additions, SVG axis rules)
-   are deleted in Q3b slice 4 (#4443): no dashboard markup consumes them
-   and no kit component this app renders emits them — the family sheet
+   are deleted in Q3b slice 4 (#4443): no dashboard markup consumes them — the family sheet
    is the single source, and it must survive for digiquant-web's print
-   tearsheet. What remains below is ONLY dashboard's print geometry
+   tearsheet. Note that .ts-svg/.ts-axis/.ts-svg-empty were NOT dead:
+   the kit charts this app renders emit those class names, so the local
+   rules were live unlayered overrides. Retiring them is the intended
+   flat-register restyle (chart axis 17px → the kit's 11px, empty text
+   22px → 13px, svg overflow visible → hidden), not a no-op. What remains
+   below is ONLY dashboard's print geometry
    (shell-chrome hides, @page, .ts-page padding); everything else in
    print comes from the family sheet. */
 

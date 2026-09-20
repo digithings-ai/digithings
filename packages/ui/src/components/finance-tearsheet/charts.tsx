@@ -1410,7 +1410,11 @@ export function SignedBars({ values, height = 220, fmt = fmtCompact, ariaLabel, 
         const label = raw?.trim() ? raw.trim() : null;
         if (!label || i >= n) return null;
         const cx = PAD.left + i * slot + slot / 2;
-        const ly = height - 10;
+        // Gutter below the plot: a -30° label drops ~half its length under
+        // its anchor, so the anchor sits 28px above the viewBox bottom —
+        // anchoring at the old height-10 clipped tickers against the
+        // section edge (caught by screenshot in Q3b slice 4).
+        const ly = height - 28;
         return (
           <text key={`xl${i}`} x={cx.toFixed(1)} y={ly} textAnchor="end" transform={`rotate(-30 ${cx.toFixed(1)} ${ly})`} className="ts-axis">{label}</text>
         );

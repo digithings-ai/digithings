@@ -189,4 +189,11 @@ describe('AttributionTab — contribution bars on the kit primitive (Q3b slice 4
     expect(html).toContain('No priced contributions to chart.');
     expect(html).not.toContain('<title>AAPL:');
   });
+
+  it('scrolls the decomposition table instead of overflowing narrow widths', () => {
+    const html = render(rows);
+    // min-w-0 is load-bearing: the card is a column flex parent, so
+    // overflow-x alone cannot beat the table's min-content width.
+    expect(html).toContain('min-w-0 overflow-x-auto');
+  });
 });
