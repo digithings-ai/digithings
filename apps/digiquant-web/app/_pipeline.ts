@@ -11,7 +11,7 @@
  * `phases/phase7e_risk_sizing.py`; `PORTFOLIO_SUBGRAPH.md` maps
  * "H8 = phase7e_risk_sizing"). The chip ids below are those H-designators,
  * in graph order. Nothing is asserted here about phase numbering beyond what
- * the graph states — see `_pipeline.test.ts`, which pins this list to the
+ * the graph states — see `pipeline-data.test.ts`, which pins this list to the
  * graph's append sequence so drift fails loudly.
  *
  * Execution has no phase folders yet: it is marked "in development" and its
