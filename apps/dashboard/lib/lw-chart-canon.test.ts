@@ -37,13 +37,12 @@ function componentSources(): string[] {
 const ALL_COMPONENTS = componentSources();
 const MIGRATED = ALL_COMPONENTS.filter((rel) => read(rel).includes("from 'lightweight-charts'"));
 
-/** Categorical/composition surfaces — sanctioned to stay on recharts.
- * AttributionTab left this list in Q3b slice 4 (#4443): its ticker bars now
- * ride the kit SignedBars primitive, so the sanction covers only the
- * twelve-x surfaces that slice 5 owns. */
-const RECHARTS_SANCTIONED = [
-  'components/twelve-x/ConsensusTab.tsx',
-];
+/** recharts is retired (Q3b slice 5a, #4443). The last two categorical
+ * surfaces — ConsensusTab (score lines + stale overlays + conviction bands)
+ * and LevelFixChart (fix line + entry band + level lines + anchor dots) —
+ * ride kit TimeSeries/MultiTimeSeries reference overlays now. There is no
+ * sanction list anymore: any new `from 'recharts'` fails loudly here. */
+const RECHARTS_SANCTIONED: string[] = [];
 
 describe('chart engine ruling (lib/CHARTS.md, #1420)', () => {
   // MIGRATED is derived and currently empty, so the two loops below have no
@@ -71,7 +70,16 @@ describe('chart engine ruling (lib/CHARTS.md, #1420)', () => {
     }
   });
 
-  it('categorical/composition charts stay on recharts (no lightweight-charts creep)', () => {
+  it('no categorical/composition surface is left on recharts — the sanction is empty', () => {
+    // The loop below ranges over the sanction list, so an empty list would
+    // pass vacuously (the #1747 false-green lesson). This pins the
+    // retirement: the list must stay empty AND no component may import
+    // recharts at all.
+    expect(RECHARTS_SANCTIONED).toEqual([]);
+    const offenders = ALL_COMPONENTS.filter((rel) =>
+      read(rel).includes("from 'recharts'"),
+    );
+    expect(offenders).toEqual([]);
     for (const rel of RECHARTS_SANCTIONED) {
       const src = read(rel);
       expect(src, `${rel} is a sanctioned recharts surface`).toContain("from 'recharts'");
@@ -102,7 +110,7 @@ describe('chart engine ruling (lib/CHARTS.md, #1420)', () => {
     // Unwrap the markdown (blockquote prefixes + hard wraps) before matching.
     const doc = read('lib/CHARTS.md').replace(/\n>? ?/g, ' ');
     expect(doc).toContain('lightweight-charts is the canon for time-series');
-    expect(doc).toContain('recharts is sanctioned for categorical/composition surfaces');
-    expect(doc).toContain('lightweight-charts has no categorical grammar');
+    expect(doc).toContain('recharts is retired');
+    expect(doc).toContain('fails `lib/lw-chart-canon.test.ts` loudly');
   });
 });
