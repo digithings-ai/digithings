@@ -19,9 +19,12 @@ export function ThesisStorySpine({
   const thesisLabel = `${stories.length} ${stories.length === 1 ? 'thesis' : 'theses'}`;
 
   return (
-    <section data-region="thesis-ledger" className="min-w-0 border-y border-hair bg-surface">
+    <section data-region="thesis-ledger" className="min-w-0 border-y border-hair">
       <div className="flex items-baseline justify-between gap-3 border-x border-b border-hair px-5 py-4">
-        <h2 className="font-display text-2xl text-ink">Market theses</h2>
+        <div>
+          <p className="font-mono text-[11px] uppercase text-ink-mute">Portfolio · theses</p>
+          <h2 className="mt-1 font-display text-xl font-normal tracking-tight text-ink">Market theses</h2>
+        </div>
         <p className="font-mono text-xs text-ink-mute">
           {thesisLabel}{asOf ? ` · as of ${asOf}` : ''}
         </p>
