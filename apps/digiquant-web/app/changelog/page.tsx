@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
-import { Footer, Reveal } from "@digithings/ui";
-import { DQ_FOOTER, DQ_FOOTER_META } from "../_nav";
+import { Reveal } from "@digithings/ui";
 import { SiteNav } from "@/components/landing/SiteNav";
+import { SiteFooter } from "@/components/landing/SiteFooter";
 import { AmbientMesh } from "@/components/landing/AmbientMesh";
 import releases from "@digithings/design/releases.json";
 
@@ -71,7 +71,7 @@ export default function ChangelogPage() {
           </div>
         </section>
       </main>
-      <Footer links={DQ_FOOTER} meta={DQ_FOOTER_META} />
+      <SiteFooter />
     </>
   );
 }

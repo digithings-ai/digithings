@@ -37,6 +37,7 @@
 @source not "../components/chatbot";
 @source "../../../packages/ui/src/components/docs";
 @source "../../../packages/ui/src/components/NavShell.tsx";
+@source "../../../packages/ui/src/components/chrome.tsx";
 @source "../../../packages/ui/src/components/pricing";
 @source "../../../packages/ui/src/components/stages";
 @source "../../../packages/ui/src/components/metrics";

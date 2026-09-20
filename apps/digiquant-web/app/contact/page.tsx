@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
-import { Footer, PricingTierCard, Reveal } from "@digithings/ui";
-import { DQ_FOOTER, DQ_FOOTER_META } from "../_nav";
+import { PricingTierCard, Reveal } from "@digithings/ui";
+import { SiteFooter } from "@/components/landing/SiteFooter";
 import {
   CONTACT_MANAGED_FEATURES,
   CONTACT_SELF_FEATURES,
@@ -100,7 +100,7 @@ export default function ContactPage() {
           </div>
         </section>
       </main>
-      <Footer links={DQ_FOOTER} meta={DQ_FOOTER_META} />
+      <SiteFooter />
     </>
   );
 }
