@@ -7,28 +7,22 @@ import {
   NumberedStages,
   OdometerStrip,
   RepoActivity,
-  Reveal,
   SocialRow,
   StackRow,
+  TerminalManifest,
   WordReveal,
+  modules,
   type CodeSample,
   type NumberedStage,
   type OdometerStat,
   type StackItem,
+  type TerminalManifestRow,
 } from "@digithings/ui";
 import { buttonVariants } from "@digithings/ui/ui";
 import { DT_CONTACT_EMAIL } from "@/app/_nav";
 import { DtFooter } from "@/components/DtFooter";
 import { DtNav } from "@/components/DtNav";
-import { HeroMesh } from "@/components/landing/HeroMesh";
-import { ModuleManifest } from "@/components/landing/ModuleManifest";
-import {
-  CONTRIBUTING_URL,
-  REPO_CLONE,
-  REPO_LIVE,
-  REPO_URL,
-  repoActivity,
-} from "@/lib/repoActivity";
+import { moduleActivity, CONTRIBUTING_URL, REPO_CLONE, REPO_LIVE, REPO_URL, repoActivity } from "@/lib/repoActivity";
 import {
   BYOK_KEYS_STORED,
   COMPOSE_DEFAULT,
@@ -39,26 +33,18 @@ import {
   SHIPPING_MODULES,
 } from "@/lib/siteCounts";
 
-// v9 landing for the digithings platform — rebuilt on the opencode.ai language
-// (D1, #4429). A small-type mono hero states the one-line claim, the install
-// command is a segmented tab group with a copy affordance, and every visual
-// block below is a promoted @digithings/ui primitive rendered inside a numbered
-// `Fig N` figure: the ambient mesh/graph field (repurposed from the retired
-// full-bleed hero), the OdometerStrip metrics band, the shared TerminalManifest,
-// the NumberedStages principles spine, RepoActivity, and the one big WordReveal
-// claim. The page stays a server component and exports statically; the mesh /
-// graph / counters / reveal are client islands and honor prefers-reduced-motion
-// and no-JS.
+// v9 landing — a fresh composition on the opencode.ai language (D1, #4429):
+// monospace-first, deliberately small type, flat surfaces, no decoration and no
+// reused legacy art. The whole page is canonical kit parts + the shared prose
+// grammar; the module manifest, metrics, dependency list, repo activity and
+// principles are the same facts the old page carried, re-presented simply.
 //
-// Every count is single-sourced in lib/siteCounts.ts (D1): the module split is
-// derived from the shared registry, the rest are dated repository snapshots —
-// no page restates a number. Nothing here is a projection and nothing promises
-// live trading.
+// Every count is single-sourced in lib/siteCounts.ts. Nothing here is a
+// projection and nothing promises live trading.
 
-// The install channels that actually exist in the repository README — there is
-// no `curl | sh` installer, so no such tab is offered. Each tab is the complete
-// path from clone to a running stack: Docker (`make up`), the no-Docker local
-// stack (`make stack-local`), and the prebuilt GHCR images (`make up-ghcr`).
+// The install channels that exist in the repository README — there is no
+// `curl | sh` installer, so no tab invents one. Each is the complete path from
+// clone to a running stack.
 const INSTALL: CodeSample[] = [
   {
     label: "docker",
@@ -74,16 +60,6 @@ const INSTALL: CodeSample[] = [
   },
 ];
 
-// Every figure is countable in the repo (#1846) and single-sourced above:
-//   9  — non-roadmap modules in the shared registry (2 are roadmap: digistore,
-//        digilink). The manifest below self-discloses the same split.
-//   23 — services under `services:` in the single docker-compose.yml.
-//   3  — live vector backends behind one client, fail-closed at startup:
-//        Cloudflare Vectorize → Azure AI Search → Chroma.
-//   0  — BYOK keys stored: the key arrives per-request in `x-byok-key` and is
-//        forwarded upstream, never persisted or logged.
-// Rendered by the OdometerStrip: each digit is a 0–9 reel that rolls to its
-// value on arrival; reduced motion and no-JS ship the settled final figures.
 const METRICS: OdometerStat[] = [
   { value: String(SHIPPING_MODULES), label: "modules shipping" },
   { value: String(COMPOSE_SERVICES), label: "compose services" },
@@ -91,13 +67,10 @@ const METRICS: OdometerStat[] = [
   { value: String(BYOK_KEYS_STORED), label: "keys stored" },
 ];
 
-// The packages the stack is actually assembled from, named deliberately and in
-// full (#1846) — compatibility is the differentiator, so the dependency list IS
-// the pitch. Rendered by the shared StackRow/StackLogo primitives: a slug in the
-// logos registry gets its real vendor mark, anything else degrades to a monogram
-// chip. NautilusTrader, LiteLLM, Cheaper Inference, Chroma, Azure AI Search and
-// Assistant UI publish no single-path monochrome SVG, so they read as monograms —
-// expected, not a bug. Every slug below is verified against components/logos.ts.
+// The packages the stack is assembled from — compatibility is the differentiator,
+// so the dependency list is the pitch. Rendered by StackRow/StackLogo: a slug in
+// the logos registry gets its real vendor mark, anything else a monogram chip.
+// Slugs verified against components/logos.ts.
 const INTEGRATIONS: { label: string; items: StackItem[] }[] = [
   {
     label: "orchestration & models",
@@ -137,16 +110,13 @@ const INTEGRATIONS: { label: string; items: StackItem[] }[] = [
   },
 ];
 
-// The four properties of every module — a numbered spine. Counts are the
-// single-sourced constants so the copy cannot drift from the figures above.
 const PRINCIPLES: NumberedStage[] = [
   {
     num: "01",
     title: "Self-hosted by default",
     mech:
       `One docker-compose file, ${COMPOSE_SERVICES} services, on a laptop or any host you own — ` +
-      `${COMPOSE_DEFAULT} up by default and the rest behind named profiles you turn on: digichat, ` +
-      "digivault, the search MCP, the heartbeat, observability, and the LiteLLM cache.",
+      `${COMPOSE_DEFAULT} up by default and the rest behind named profiles you turn on.`,
   },
   {
     num: "02",
@@ -156,7 +126,9 @@ const PRINCIPLES: NumberedStage[] = [
   {
     num: "03",
     title: "Audit-on by default",
-    mech: "Append-only JSONL audit and a correlation ID on every service hop. Events record a prompt's length, never its text — tail events.jsonl and check.",
+    mech:
+      "Append-only JSONL audit and a correlation ID on every service hop. Events record a " +
+      "prompt's length, never its text — tail events.jsonl and check.",
   },
   {
     num: "04",
@@ -168,14 +140,29 @@ const PRINCIPLES: NumberedStage[] = [
 ];
 
 export default function Home() {
+  // Module manifest rows straight from the shared registry — the manifest names
+  // which modules ship and which are roadmap, so no page needs a second list.
+  const manifestRows: TerminalManifestRow[] = [...modules]
+    .sort((a, b) => a.graphOrder - b.graphOrder)
+    .map((m) => {
+      const activity = moduleActivity(m.id);
+      return {
+        id: m.id,
+        name: m.id,
+        status: m.tier === "roadmap" ? "roadmap" : "online",
+        blurb: m.role,
+        detail: [m.tagline, "", ...m.summary, "", "stack   " + m.stack.map((s) => s.name).join("  ·  "), ...(activity ? ["repo    " + activity] : [])].join("\n"),
+      };
+    });
+
   return (
     <>
       <DtNav />
 
       <main id="main" tabIndex={-1}>
-        {/* Small-type mono hero (opencode language): the one-line claim, the
-            lede, and the install command as a segmented tab group. No mesh here
-            any more — the art moved into the Fig 1 media block below. */}
+        {/* Hero: the one-line claim at 22px mono, the lede, and the install
+            command as a segmented tab group with a copy affordance. No mesh, no
+            animation — the opencode.ai language. */}
         <section className="section pb-0" aria-labelledby="hero-claim">
           <div className="wrap">
             <span className="kicker">{"// digithings"}</span>
@@ -187,159 +174,114 @@ export default function Home() {
             </h1>
             <p className="mt-[1rem] max-w-[62ch] text-[1.02rem] leading-[1.7] text-ink-soft">
               Build and ship AI applications on infrastructure you own — your hosts, your keys, your
-              choice of model.
+              choice of model. Self-hosted, MIT-licensed, every step traceable.
             </p>
             <div className="mt-[1.6rem] max-w-[46rem]">
               <CodeTabs samples={INSTALL} />
             </div>
             <div className="mt-[1.4rem] flex flex-wrap items-center gap-[0.8rem]">
               <CtaLink href="/chat">Ask digichat</CtaLink>
-              <CtaLink href="#metrics" variant="ghost">
-                See the numbers
+              <CtaLink href="/docs" variant="ghost">
+                Read the docs
               </CtaLink>
             </div>
           </div>
         </section>
 
-        {/* Fig 1 — the ambient mesh/graph field, repurposed from the retired
-            full-bleed hero into a bounded, looping media block. The canvas and
-            graph are the same client art; the caption is honest about what it
-            is (a live field, not a screencast). */}
-        <section className="section pb-0" aria-label="Ambient field">
+        {/* Fig 1 — the numbers, counted. No prose restates them. */}
+        <section className="section" id="metrics">
           <div className="wrap">
+            <span className="kicker">{"// by the numbers"}</span>
             <Figure
               n={1}
-              caption="The ambient mesh and graph field, drawn live in the browser — no image, no video."
+              caption={`Counted ${COUNTED_AT}; the module split is derived from the shared registry.`}
+              className="mt-[1.2rem]"
             >
-              <div className="relative aspect-[16/9] w-full overflow-hidden border border-hair">
-                <HeroMesh variant="media" />
-              </div>
+              <OdometerStrip stats={METRICS} />
             </Figure>
           </div>
         </section>
 
-        <section className="section" id="metrics">
+        {/* Fig 2 — the module manifest. Dense mono checklist; selecting a row
+            types its detail at the cursor (primitive behaviour). */}
+        <section className="section section-alt" id="architecture">
           <div className="wrap">
-            <Reveal className="section-head center">
-              <span className="kicker">{"// by the numbers"}</span>
-              <h2>The platform, in four numbers.</h2>
-              <p>
-                No asterisks — every figure is countable in the repo, and every one is single-sourced
-                in this site&apos;s <code className="font-mono text-ink">lib/siteCounts.ts</code>. The
-                manifest below names which modules ship and which are still roadmap.
-              </p>
-            </Reveal>
-            <Reveal>
-              <Figure
-                n={2}
-                caption={`Counted ${COUNTED_AT}; the module split is derived from the shared registry.`}
-              >
-                <OdometerStrip stats={METRICS} className="mx-auto max-w-[880px]" />
-              </Figure>
-            </Reveal>
+            <span className="kicker">{"// the modules"}</span>
+            <p className="mt-[0.7rem] max-w-[64ch] text-[1rem] leading-[1.7] text-ink-soft">
+              {SHIPPING_MODULES} ship today and run standalone or compose with the rest.{" "}
+              {ROADMAP_MODULES} more are on the roadmap; the manifest marks which.
+            </p>
+            <Figure n={2} caption="The shared module registry, rendered as a terminal manifest." className="mt-[1.6rem]">
+              <TerminalManifest
+                className="mx-auto max-w-[980px]"
+                prompt="//"
+                command="modules"
+                meta={`· ${SHIPPING_MODULES} online · ${ROADMAP_MODULES} on the roadmap`}
+                rows={manifestRows}
+                namePrefix="digi"
+                aria-label="digithings module manifest"
+              />
+            </Figure>
           </div>
         </section>
 
-        <section className="section section-architecture" id="architecture">
-          <div className="wrap">
-            <Reveal className="section-head center">
-              <span className="kicker">{"// the architecture"}</span>
-              {/* "9", not "11": the #metrics band one screen above renders the
-                  same shipped-module count, so a scanning reader never meets two
-                  different headline-level numbers for the same thing. The split
-                  is derived from the registry. */}
-              <h2 className="text-balance">{SHIPPING_MODULES} modules. One toolkit.</h2>
-              <p>
-                The {SHIPPING_MODULES} that ship run standalone or compose with the rest — retrieval,
-                quant research and chat, plus the auth, tracing and audit any deployment needs.{" "}
-                {ROADMAP_MODULES} more are on the roadmap; the manifest below marks which.
-              </p>
-            </Reveal>
-            <ModuleManifest />
-          </div>
-        </section>
-
-        {/* Integrations: the dependency list as the pitch. Uses the shared
-            StackRow primitive — no app-local component, no new class family. */}
+        {/* Integrations — the dependency list as the pitch. */}
         <section className="section" id="integrations">
           <div className="wrap">
-            <Reveal className="section-head center">
-              <span className="kicker">{"// integrations"}</span>
-              <h2>Built on what you already run.</h2>
-              <p>
-                Every module is assembled from open-source libraries you can name, version, and
-                swap — no forks, no reimplementations. That is why this drops into an existing
-                deployment instead of asking you to replace one.
-              </p>
-            </Reveal>
-            {INTEGRATIONS.map((group) => (
-              <Reveal key={group.label} className="mx-auto mt-[1.7rem] max-w-[880px]">
-                <div className="font-mono text-[0.7rem] uppercase tracking-[0.16em] text-ink-mute">
-                  {group.label}
+            <span className="kicker">{"// integrations"}</span>
+            <p className="mt-[0.7rem] max-w-[64ch] text-[1rem] leading-[1.7] text-ink-soft">
+              Every module is assembled from open-source libraries you can name, version, and swap —
+              no forks, no reimplementations.
+            </p>
+            <div className="mt-[1.8rem] grid gap-[1.6rem]">
+              {INTEGRATIONS.map((group) => (
+                <div key={group.label}>
+                  <div className="font-mono text-[0.7rem] uppercase tracking-[0.16em] text-ink-mute">
+                    {group.label}
+                  </div>
+                  <StackRow items={group.items} />
                 </div>
-                <StackRow items={group.items} />
-              </Reveal>
-            ))}
+              ))}
+            </div>
           </div>
         </section>
 
-        {/* "built on what you already run" (open dependencies) → "maintained in
-            the open" (the repo itself). Placed here rather than under the hero so
-            its figures never sit adjacent to the #metrics odometer, where two
-            number-bearing blocks would read as one restated twice. Plain
-            .section: section-alt stays the single accent before the claim. */}
-        <section className="section" id="repository">
-          <div className="wrap">
-            <Reveal className="section-head center">
-              <span className="kicker">{"// the repository"}</span>
-              <h2>Maintained in the open.</h2>
-              <p>
-                One MIT-licensed monorepo, public and moving. Below are the most recent pull
-                requests to land on{" "}
-                <code className="font-mono text-ink">{repoActivity.branch}</code> — each one you
-                can open and read, not a changelog entry we wrote about ourselves.
-              </p>
-            </Reveal>
-            <Reveal>
-              <RepoActivity
-                variant="detailed"
-                snapshot={repoActivity}
-                repoUrl={REPO_URL}
-                live={REPO_LIVE}
-                cloneCommand={REPO_CLONE}
-                contributingUrl={CONTRIBUTING_URL}
-                className="mx-auto mt-[2rem] max-w-[980px]"
-              />
-            </Reveal>
-          </div>
-        </section>
-
+        {/* Why — the four properties as a numbered spine. */}
         <section className="section section-alt" id="principles">
           <div className="wrap">
-            <Reveal className="section-head">
-              <span className="kicker">{"// why digithings"}</span>
-              <h2>Nobody knows which vendor wins.</h2>
-              <p>
-                The field moves faster than any bet you could place on it, so this architecture
-                declines to place one. Nothing here is married to a provider: the stack is
-                self-hosted, keys arrive per request, and models and vector backends are
-                configuration rather than code. When the leader changes, you change one setting —
-                not the application on top.
-              </p>
-            </Reveal>
-            <NumberedStages stages={PRINCIPLES} className="max-w-[760px]" />
+            <span className="kicker">{"// why digithings"}</span>
+            <p className="mt-[0.7rem] max-w-[64ch] text-[1rem] leading-[1.7] text-ink-soft">
+              The field moves faster than any bet you could place on it, so this architecture
+              declines to place one. Providers and backends are configuration, not code.
+            </p>
+            <NumberedStages stages={PRINCIPLES} className="mt-[2rem] max-w-[760px]" />
           </div>
         </section>
 
-        {/* No .section padding here: the WordReveal track is its own breathing
-            room (the line rides in, pins at mid-viewport for a beat, and the
-            page flows on) — section padding on top of it read as a dead gap. */}
+        {/* The repository — velocity, read from the snapshot. */}
+        <section className="section" id="repository">
+          <div className="wrap">
+            <span className="kicker">{"// the repository"}</span>
+            <p className="mt-[0.7rem] max-w-[64ch] text-[1rem] leading-[1.7] text-ink-soft">
+              One MIT-licensed monorepo, public and moving. Recent pull requests to land on{" "}
+              <code className="font-mono text-ink">{repoActivity.branch}</code> — each one you can
+              open and read.
+            </p>
+            <RepoActivity
+              variant="detailed"
+              snapshot={repoActivity}
+              repoUrl={REPO_URL}
+              live={REPO_LIVE}
+              cloneCommand={REPO_CLONE}
+              contributingUrl={CONTRIBUTING_URL}
+              className="mt-[1.8rem] max-w-[980px]"
+            />
+          </div>
+        </section>
+
+        {/* The claim. No arrows, no decoration — the line carries itself. */}
         <section id="claim" aria-label="You own the stack, the keys, and the infrastructure">
           <div className="wrap">
-            {/* The owner's own line, and the one claim the whole page exists to
-                support. Three sentences on purpose: WordReveal fills word by
-                word, so the repetition lands as three separate beats rather
-                than one clause. */}
             <WordReveal
               id="claim-reveal"
               text="You own the stack. You own the keys. You own the infra."
@@ -347,24 +289,20 @@ export default function Home() {
           </div>
         </section>
 
-        <section className="section text-center" id="contact">
-          <Reveal className="wrap">
-            <div className="section-head center">
-              <div className="kicker">Contact</div>
-              <h2>Questions, enterprise, or partnership.</h2>
-              <p>
-                The whole monorepo is MIT-licensed and public — take it and run it yourself. What
-                we sell is the integration work: fitting these modules to the stack you already
-                have, on your own infrastructure.
-              </p>
-            </div>
-            <div className="mt-[2rem] flex flex-wrap justify-center gap-[0.8rem]">
+        <section className="section" id="contact">
+          <div className="wrap">
+            <span className="kicker">{"// contact"}</span>
+            <p className="mt-[0.7rem] max-w-[64ch] text-[1rem] leading-[1.7] text-ink-soft">
+              The whole monorepo is MIT-licensed and public — take it and run it yourself. What we
+              sell is the integration work: fitting these modules to the stack you already have.
+            </p>
+            <div className="mt-[1.6rem] flex flex-wrap items-center gap-[0.8rem]">
               <ContactMailto
                 email={DT_CONTACT_EMAIL}
                 className={buttonVariants({ variant: "default" })}
                 subject="digithings%20inquiry"
               >
-                Email us <span aria-hidden="true">→</span>
+                Email us
               </ContactMailto>
               <ContactMailto
                 email={DT_CONTACT_EMAIL}
@@ -373,19 +311,16 @@ export default function Home() {
               >
                 Enterprise
               </ContactMailto>
+              <span className="font-mono text-[0.82rem] text-ink-mute">
+                <ContactMailto email={DT_CONTACT_EMAIL} showAddress>
+                  {DT_CONTACT_EMAIL}
+                </ContactMailto>
+              </span>
             </div>
-            <p className="mt-[1.4rem] font-mono text-[0.88rem] text-ink-mute">
-              <ContactMailto email={DT_CONTACT_EMAIL}
-                className="text-accent [text-underline-offset:2px] hover:text-ink"
-                showAddress
-              >
-                Or email us directly
-              </ContactMailto>
-            </p>
-            <div className="mt-[1.6rem] flex justify-center">
+            <div className="mt-[1.6rem]">
               <SocialRow />
             </div>
-          </Reveal>
+          </div>
         </section>
       </main>
 

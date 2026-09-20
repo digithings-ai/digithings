@@ -1,7 +1,5 @@
 import type { Metadata } from "next";
-import Link from "next/link";
-import { PageHead } from "@digithings/ui";
-import { buttonVariants } from "@digithings/ui/ui";
+import { CtaLink, PageHead } from "@digithings/ui";
 import { DtNav } from "@/components/DtNav";
 import { DtFooter } from "@/components/DtFooter";
 
@@ -21,13 +19,11 @@ export default function NotFound() {
         </PageHead>
         <section className="section">
           <div className="wrap">
-            <div className="flex flex-wrap gap-[0.8rem]">
-              <Link className={buttonVariants({ variant: "default" })} href="/">
-                Back to top
-              </Link>
-              <Link className={buttonVariants({ variant: "ghost" })} href="/docs">
+            <div className="flex flex-wrap items-center gap-[0.8rem]">
+              <CtaLink href="/">Back to top</CtaLink>
+              <CtaLink href="/docs" variant="ghost">
                 Browse the docs
-              </Link>
+              </CtaLink>
             </div>
           </div>
         </section>

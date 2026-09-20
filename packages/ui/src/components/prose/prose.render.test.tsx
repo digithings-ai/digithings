@@ -53,6 +53,16 @@ describe("prose atoms — server render", () => {
     expect(html).toContain("supervisor + sub-graph orchestration");
   });
 
+  it("RuledList appends a caller className", () => {
+    const html = renderToStaticMarkup(
+      <RuledList className="mt-[1.2rem]">
+        <RuledRow term="x">y</RuledRow>
+      </RuledList>,
+    );
+    expect(html).toContain("mt-[1.2rem]");
+    expect(html).toContain("list-none");
+  });
+
   it("Mono is inline code on the mono face", () => {
     const html = renderToStaticMarkup(<Mono>X-Request-ID</Mono>);
     expect(html).toContain("<code");

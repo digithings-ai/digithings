@@ -77,10 +77,10 @@ export function RuledRow({ term, children }: RuledRowProps) {
   );
 }
 
-export type RuledListProps = { children: ReactNode };
+export type RuledListProps = { children: ReactNode; className?: string };
 
 /** The list wrapper for `RuledRow` — resets the marker and collapses the gap
  *  so the hairlines butt against each other. */
-export function RuledList({ children }: RuledListProps) {
-  return <ul className="m-0 grid list-none gap-0 p-0">{children}</ul>;
+export function RuledList({ children, className }: RuledListProps) {
+  return <ul className={[className, "m-0 grid list-none gap-0 p-0"].filter(Boolean).join(" ")}>{children}</ul>;
 }

@@ -1,9 +1,7 @@
 import type { Metadata } from "next";
-import Link from "next/link";
-import { PageHead, Reveal, RuledList, RuledRow } from "@digithings/ui";
+import { ContactMailto, CtaLink, PageHead, RuledList, RuledRow } from "@digithings/ui";
 import { buttonVariants } from "@digithings/ui/ui";
 import { DtFooter } from "@/components/DtFooter";
-import { ContactMailto } from "@digithings/ui";
 import { DT_CONTACT_EMAIL } from "@/app/_nav";
 import { DtNav } from "@/components/DtNav";
 
@@ -61,14 +59,11 @@ export default function ServicesPage() {
 
         <section className="section">
           <div className="wrap">
-            <Reveal className="section-head">
-              <span className="kicker">{"// what we do"}</span>
-              <h2>From repository to working system.</h2>
-              <p>
-                Start with the modules you need, connect them to the systems you already run, and
-                leave with code and documentation your team owns.
-              </p>
-            </Reveal>
+            <span className="kicker">{"// what we do"}</span>
+            <p className="mt-[0.7rem] max-w-[64ch] text-[1rem] leading-[1.7] text-ink-soft">
+              Start with the modules you need, connect them to the systems you already run, and
+              leave with code and documentation your team owns.
+            </p>
             <RuledList>
               {WORK.map((item) => (
                 <RuledRow key={item.term} term={item.term}>
@@ -80,71 +75,55 @@ export default function ServicesPage() {
         </section>
 
         <section className="section section-alt">
-          <div className="wrap grid gap-[3rem] lg:grid-cols-[minmax(0,1fr)_minmax(18rem,0.5fr)]">
-            <div>
-              <Reveal className="section-head">
-                <span className="kicker">{"// how an engagement starts"}</span>
-                <h2>Scope the outcome before the work.</h2>
-                <p>
-                  Tell us what you run today, what you want to build, and which constraints matter.
-                  We will determine whether digithings fits and define the deliverables,
-                  dependencies, responsibilities, timing, and price in writing before work begins.
-                </p>
-              </Reveal>
-              <p className="mt-[1rem] max-w-[64ch] text-[1rem] leading-[1.75] text-ink-soft">
-                There are no public package prices or service-level commitments because the work is
-                scoped for each environment. The repository remains available whether or not you
-                engage us.
-              </p>
-            </div>
-
-            <div className="border-t border-hair pt-[1.4rem] lg:border-l lg:border-t-0 lg:pl-[1.8rem] lg:pt-0">
-              <span className="block font-mono text-[0.7rem] uppercase tracking-[0.14em] text-ink-mute">
-                Useful context to include
-              </span>
-              <ul className="mt-[1rem] grid list-none gap-[0.75rem] p-0 text-[0.9rem] leading-[1.65] text-ink-soft">
-                <li>Your current infrastructure and deployment target</li>
-                <li>The data, providers, and services that must connect</li>
-                <li>The workflow or application your users need</li>
-                <li>Your security, compliance, and operating constraints</li>
-              </ul>
-            </div>
+          <div className="wrap">
+            <span className="kicker">{"// how an engagement starts"}</span>
+            <p className="mt-[0.7rem] max-w-[64ch] text-[1rem] leading-[1.7] text-ink-soft">
+              Tell us what you run today, what you want to build, and which constraints matter. We
+              will determine whether digithings fits and define the deliverables, dependencies,
+              responsibilities, timing, and price in writing before work begins.
+            </p>
+            <p className="mt-[1rem] max-w-[64ch] text-[1rem] leading-[1.75] text-ink-soft">
+              There are no public package prices or service-level commitments because the work is
+              scoped for each environment. The repository remains available whether or not you
+              engage us.
+            </p>
+            <RuledList>
+              <RuledRow term="Useful context">
+                Your current infrastructure and deployment target; the data, providers, and services
+                that must connect; the workflow or application your users need; and your security,
+                compliance, and operating constraints.
+              </RuledRow>
+            </RuledList>
           </div>
         </section>
 
         <section className="section">
           <div className="wrap">
-            <Reveal className="section-head">
-              <span className="kicker">{"// contact"}</span>
-              <h2>Describe the system you want to build.</h2>
-              <p>
-                A short note about your environment and intended outcome is enough to start the
-                conversation.
-              </p>
-            </Reveal>
-            <div className="flex flex-wrap gap-[0.8rem]">
+            <span className="kicker">{"// contact"}</span>
+            <p className="mt-[0.7rem] max-w-[64ch] text-[1rem] leading-[1.7] text-ink-soft">
+              A short note about your environment and intended outcome is enough to start the
+              conversation.
+            </p>
+            <div className="mt-[1.6rem] flex flex-wrap items-center gap-[0.8rem]">
               <ContactMailto
                 email={DT_CONTACT_EMAIL}
                 className={buttonVariants({ variant: "default" })}
                 subject="digithings%20services%20inquiry"
               >
-                Email about a project <span aria-hidden="true">→</span>
+                Email about a project
               </ContactMailto>
-              <Link className={buttonVariants({ variant: "ghost" })} href="/docs">
+              <CtaLink href="/docs" variant="ghost">
                 Read the docs
-              </Link>
-              <Link className={buttonVariants({ variant: "ghost" })} href="/security">
+              </CtaLink>
+              <CtaLink href="/security" variant="ghost">
                 Review security
-              </Link>
+              </CtaLink>
+              <span className="font-mono text-[0.82rem] text-ink-mute">
+                <ContactMailto email={DT_CONTACT_EMAIL} showAddress>
+                  {DT_CONTACT_EMAIL}
+                </ContactMailto>
+              </span>
             </div>
-            <p className="mt-[1.4rem] font-mono text-[0.88rem] text-ink-mute">
-              <ContactMailto email={DT_CONTACT_EMAIL}
-                className="text-accent [text-underline-offset:2px] hover:text-ink"
-                showAddress
-              >
-                Or email us directly
-              </ContactMailto>
-            </p>
           </div>
         </section>
       </main>
