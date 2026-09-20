@@ -24,6 +24,7 @@ import {
   PRINT_FULL_VIEW,
   ReturnsMatrix,
   SegToggle,
+  SignedBars,
   TEARSHEET_DEMO,
   TimeSeries,
   TradeReturnChart,
@@ -212,6 +213,22 @@ export function TearsheetChartsReference() {
             ariaLabel="Portfolio return contribution by factor: Quality, Momentum, and Hedges, over the trailing 18 periods, with the exact portfolio return overlaid"
           />
         </div>
+      </section>
+
+      <section className="ts-panel">
+        <div className="ts-panel-head">
+          <span className="ts-panel-label">Labelled signed bars</span>
+        </div>
+        <div className="ts-chart" style={{ height: 300 }}>
+          <SignedBars
+            values={[2.5, 1.1, -0.4, 0.9, -1.8, 0.3]}
+            labels={["AAA", "BBB", "CCC", "DDD", "EEE", "FFF"]}
+            height={300}
+            fmt={fmtPct}
+            ariaLabel="Labelled signed bars: per-holding contribution in percent, gains and losses"
+          />
+        </div>
+        <p className="ts-subhead">Labels ride the bottom gutter angled; each bar carries its exact value as a native title</p>
       </section>
 
       <section className="ts-panel ts-tab-stack">
