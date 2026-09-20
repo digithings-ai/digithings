@@ -24,14 +24,14 @@ jobs:
           cache: npm
           cache-dependency-path: ./package-lock.json
 
-      # Install at the monorepo root so npm wires the @digithings/web and
+      # Install at the monorepo root so npm wires the @digithings/ui and
       # @digithings/design workspace symlinks, then run each app in-workspace.
       - name: Install (root workspaces)
         run: npm ci --no-audit --no-fund
 
       # Canon ratchet (#1404): frontends stay on token-backed utilities —
       # no raw palette classes, legacy vocabulary, or color literals outside
-      # the sanctioned allowlist. Playbook: cloudflare/digiweb/MIGRATION.md
+      # the sanctioned allowlist. Playbook: packages/ui/MIGRATION.md
       - name: Frontend canon guard
         run: python3 scripts/check_frontend_canon.py
 
@@ -58,11 +58,11 @@ jobs:
       # activity-view, ChatActivities, MiniMarkdown, chat-markdown.render and
       # chat-mermaid.client. They are separate vitest roots, so digithings-web's
       # run above does not glob them in — 3 files there, 5 in digichat-ui, 10 in
-      # @digithings/web, all disjoint (49 was digichat's count, a different lane). This lane
-      # owns them because both packages live under cloudflare/digiweb and are
+      # @digithings/ui, all disjoint (49 was digichat's count, a different lane). This lane
+      # owns them because both packages live under packages/ui and are
       # consumed by more than one app.
-      - name: Test @digithings/web
-        run: npm run test --workspace @digithings/web
+      - name: Test @digithings/ui
+        run: npm run test --workspace @digithings/ui
 
       - name: Test @digithings/digichat-ui
         run: npm run test --workspace @digithings/digichat-ui
@@ -91,7 +91,7 @@ jobs:
       # literals — only its CSS class-family census skips digiweb, deliberately, since
       # the reference is where new families are born. What was missing is a lint and a
       # typecheck. It belongs in this lane rather than one of its own because the root
-      # `npm ci` above already wires the @digithings/design and @digithings/web symlinks
+      # `npm ci` above already wires the @digithings/design and @digithings/ui symlinks
       # it declares.
       - name: Lint design-reference
         run: npm run lint --workspace design-reference
@@ -99,14 +99,14 @@ jobs:
       # Type-checked as well as linted, because eslint-config-next does not type-check:
       # a bad prop type or a broken import in the reference passes `eslint .` clean.
       #
-      # Scope is wider than the step name: @digithings/web exports raw `src/index.ts`, so
+      # Scope is wider than the step name: @digithings/ui exports raw `src/index.ts`, so
       # tsc pulls ~103 of its sources into the program. A type error in that package —
       # which digichat and dashboard work also edits — reddens this step. Extra coverage,
       # but read the error path before assuming the reference is at fault.
       #
       # Run through the workspace's own `typecheck` script rather than a bare root `tsc`
       # so cwd and tsconfig selection are unambiguous. Today both resolve the same binary
-      # (root typescript 6.0.3; only cloudflare/digichat nests its own, 5.9.3, for its ^5
+      # (root typescript 6.0.3; only apps/digichat nests its own, 5.9.3, for its ^5
       # pin) — the script is what keeps that true if the reference ever nests one.
       #
       # No `next build` here on purpose: neither Cloudflare site builds this workspace,
@@ -119,7 +119,7 @@ jobs:
       # is not a one-fix change). Do not "tighten" it without regenerating or excluding
       # next-env.d.ts, and note Next rewrites that line itself on upgrade
       # (`next dev` writes .next/dev/types, `next build` writes .next/types).
-      # Same pair cloudflare/digiweb/reference/README.md documents as the local gate.
+      # Same pair apps/reference/README.md documents as the local gate.
       - name: Typecheck design-reference
         run: npm run typecheck --workspace design-reference
 

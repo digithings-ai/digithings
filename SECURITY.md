@@ -196,7 +196,15 @@ Every Python component is scanned on every PR, every push to `main`/`develop`, a
 
 - **Blocks merge:** any finding with OSV severity **HIGH** or **CRITICAL** (CVSS ≥ 7.0).
 - **Warn-only:** findings at **MEDIUM** or **LOW** severity, and findings with unknown severity — surfaced via `::warning::` annotations on the PR, not gated.
-- **Scope:** `digibase`, `digigraph`, `digiquant`, `digisearch`, `digismith`, `digikey`, `digiclaw`. Each component is installed with its `[dev]` extras and audited against the resolved transitive closure. `digiquant[nautilus]` is excluded (tracked in #42). `digichat/` (Node) is audited by a sibling `npm audit --omit=dev` job (follow-up).
+- **Scope:** `digibase`, `digigraph`, `digiquant`, `digisearch`, `digismith`, `digikey`, `digiclaw`. Each component is installed with its `[dev]` extras and audited against the resolved transitive closure. `digiquant[nautilus]` is excluded (tracked in #42).
+
+The JS workspaces are covered by the sibling [`npm audit` workflow](.github/workflows/security-npm-audit.yml) on the same cadence, auditing the whole `apps/*` + `packages/*` closure from the single root `package-lock.json`.
+
+- **Blocks merge:** any advisory npm reports as **HIGH** or **CRITICAL**.
+- **Warn-only:** **MODERATE**, **LOW** and unknown severities.
+- **Per-advisory acceptance:** the classifier matches the ignore list against each advisory individually, not against the package — a *new* advisory on a package that already has accepted ones still blocks.
+- **Fails closed:** an npm audit that could not reach the registry (error body, or no `vulnerabilities` key) fails the lane rather than reporting clean.
+- **Scope note:** accepted npm advisories live in [`npm-audit-ignore.txt`](npm-audit-ignore.txt) and follow the same justification requirement as the Python list below.
 
 ### Accepting a CVE
 

@@ -20,7 +20,7 @@
 #
 # It spends no quota and writes nothing but the tracker issue on failure.
 #
-# Production clock: Cloudflare Worker digithings-cron (cloudflare/digithings-cron)
+# Production clock: Cloudflare Worker digithings-cron (apps/digithings-cron)
 # dispatches this daily; the GHA schedule was removed in #3579.
 name: "Ops: token-validity canary"
 

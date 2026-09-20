@@ -44,6 +44,7 @@ jobs:
       workflows: ${{ steps.filter.outputs.workflows }}
       compose: ${{ steps.filter.outputs.compose }}
       pip_audit: ${{ steps.filter.outputs.pip_audit }}
+      npm_audit: ${{ steps.filter.outputs.npm_audit }}
     steps:
       - uses: actions/checkout@v4
       - uses: dorny/paths-filter@v3
@@ -75,7 +76,7 @@ jobs:
               - 'digiquant/**'
               - 'tests/dq/**'
               - '.github/workflows/test-digiquant.yml'
-              - 'cloudflare/digiquant-web/lib/live/**'
+              - 'apps/digiquant-web/lib/live/**'
             digisearch:
               - 'digisearch/**'
               - 'tests/ds/**'
@@ -94,31 +95,31 @@ jobs:
               - 'digifetch/**'
               - '.github/workflows/test-digifetch.yml'
             digichat:
-              - 'cloudflare/digichat/**'
-              - 'cloudflare/digichat-ui/**'
-              - 'cloudflare/digiweb/web/**'
-              - 'cloudflare/digiweb/design/**'
+              - 'apps/digichat/**'
+              - 'packages/digichat-ui/**'
+              - 'packages/ui/**'
+              - 'packages/design/**'
               - 'package.json'
               - 'package-lock.json'
               - '.github/workflows/test-digichat.yml'
             dashboard:
-              - 'cloudflare/dashboard/**'
-              - 'cloudflare/digiweb/web/**'
-              - 'cloudflare/digiweb/design/**'
+              - 'apps/dashboard/**'
+              - 'packages/ui/**'
+              - 'packages/design/**'
               - 'package.json'
               - 'package-lock.json'
               - '.github/workflows/test-dashboard.yml'
             web:
-              - 'cloudflare/digithings-web/**'
-              - 'cloudflare/digiquant-web/**'
-              - 'cloudflare/digithings-cron/**'
-              - 'cloudflare/digichat-ui/**'
-              - 'cloudflare/digiweb/web/**'
-              - 'cloudflare/digiweb/design/**'
-              - 'cloudflare/digiweb/brand/**'
-              - 'cloudflare/digiweb/reference/**'
-              - 'cloudflare/digichat-cloudflare/**'
-              - 'cloudflare/digithings-stack-cloudflare/**'
+              - 'apps/digithings-web/**'
+              - 'apps/digiquant-web/**'
+              - 'apps/digithings-cron/**'
+              - 'packages/digichat-ui/**'
+              - 'packages/ui/**'
+              - 'packages/design/**'
+              - 'packages/brand/**'
+              - 'apps/reference/**'
+              - 'apps/digichat-cloudflare/**'
+              - 'apps/digithings-stack-cloudflare/**'
               - 'package.json'
               - 'package-lock.json'
               - '.github/workflows/test-web.yml'
@@ -191,11 +192,11 @@ jobs:
               - 'agents/**'
               - '.github/workflows/ci.yml'
               - 'scripts/ci_paths.yaml'
-              - 'cloudflare/digithings-cron/**'
+              - 'apps/digithings-cron/**'
               - 'config/**'
               - '.release-please-manifest.json'
               - 'release-please-config.json'
-              - 'cloudflare/digichat/package.json'
+              - 'apps/digichat/package.json'
               - 'package-lock.json'
               - '.github/workflows/release-please-digichat.yml'
               - '.github/workflows/pipeline-digiquant-prices.yml'
@@ -216,16 +217,24 @@ jobs:
               - '**/pyproject.toml'
               - 'pip-audit-ignore.txt'
               - '.github/workflows/security-pip-audit.yml'
+            npm_audit:
+              - 'package.json'
+              - 'package-lock.json'
+              - 'apps/*/package.json'
+              - 'packages/*/package.json'
+              - 'npm-audit-ignore.txt'
+              - 'scripts/classify_npm_audit.py'
+              - '.github/workflows/security-npm-audit.yml'
             # CI_PATH_FILTERS_END
 
   # ── Frontend canon guard (#1404, #1434) — UNCONDITIONAL ─────────────────────
   # No `needs`/`if` gate on purpose: check_frontend_canon.py does
-  # `git ls-files cloudflare` and scans ALL frontend files regardless of the
+  # `git ls-files apps packages` and scans ALL frontend files regardless of the
   # diff, so its verdict is a property of the whole tree while a path filter is a
   # property of the diff. Gate it on any filter (as the per-app test jobs still are)
   # and a PR whose diff falls outside that filter skips a check whose scope was never
   # the diff in the first place. The mismatch is structural, so closing glob gaps does
-  # not fix it: cloudflare/digichat-ui/** and cloudflare/digiweb/reference/** were both in
+  # not fix it: packages/digichat-ui/** and apps/reference/** were both in
   # no lane when this job was written and both are covered now (digichat + web, and
   # web since #1981) — the argument is unchanged. Keep the census case in view when
   # judging that: digichat-ui IS a census app (CENSUS_APPS in check_frontend_canon.py),
@@ -341,6 +350,12 @@ jobs:
     needs: changes
     if: needs.changes.outputs.pip_audit == 'true'
     uses: ./.github/workflows/security-pip-audit.yml
+
+  # ── Dependency CVE audit (npm / GHSA) — root JS workspaces (#3523) ──────────
+  npm-audit:
+    needs: changes
+    if: needs.changes.outputs.npm_audit == 'true'
+    uses: ./.github/workflows/security-npm-audit.yml
 
   # ── Root-level ruff + scripts unit tests ────────────────────────────────────
   ruff-and-scripts:
@@ -632,6 +647,7 @@ jobs:
       - nautilus-smoke
       - research-graph
       - pip-audit
+      - npm-audit
       - ruff-and-scripts
       - actionlint
       - compose-validate

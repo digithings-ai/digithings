@@ -22,13 +22,13 @@
 ## 1. Goal and scope
 
 Make **shadcn/ui** the component, element, and animation substrate for every
-digiweb surface, vendored once in `@digithings/web` and consumed by all sites,
+digiweb surface, vendored once in `@digithings/ui` and consumed by all sites,
 so bespoke component construction ends.
 
 **In scope**
 
-- Vendored shadcn component set living in the `@digithings/web` package,
-  exported as `@digithings/web/ui`, with a package-level `components.json`.
+- Vendored shadcn component set living in the `@digithings/ui` package,
+  exported as `@digithings/ui/ui`, with a package-level `components.json`.
 - A token bridge that maps shadcn CSS variables onto `@digithings/design`
   tokens so stock shadcn components render in the Instrument-Panel language
   (radius 0, mono, ink/paper primary, hairline borders) with no per-component
@@ -53,18 +53,18 @@ so bespoke component construction ends.
 - The Terminal family look (always-dark palette, prompt glyphs) is canon; the
   migration must reproduce it, not replace it.
 - No new app-local CSS class families (canon guard) and no app-local primitives
-  (promotion playbook: reference → `@digithings/web` → adopted).
+  (promotion playbook: reference → `@digithings/ui` → adopted).
 
 ## 2. Current state (verified 2026-09-16)
 
 | Fact | Value |
 |------|-------|
-| shadcn config today | `cloudflare/digiweb/reference/components.json` exists (style `new-york`, baseColor `neutral`, cssVariables, Lucide, css `app/globals.css`, registries: `@assistant-ui`) |
+| shadcn config today | `apps/reference/components.json` exists (style `new-york`, baseColor `neutral`, cssVariables, Lucide, css `app/globals.css`, registries: `@assistant-ui`) |
 | Vendored ui/ today | 8 stock files in `reference/components/ui/` (avatar, button, collapsible, dialog, dot-matrix, skeleton, textarea, tooltip) |
 | Live shadcn usage today | only `reference/components/chatbot/chatbot-thread-list.tsx` + `cube-matrix-legend.tsx` |
 | Token bridge today | **absent** — `web-theme.css` defines no shadcn variable names (`--background`, `--primary`, `--ring`, `--radius`, `--border`, …), so vendored components fall back to shadcn defaults |
 | Tailwind setup | v4.1.7, `@import "tailwindcss" source(none)` with explicit `@source` list; `@source not "../components/ui"` |
-| Primitive layer | `@digithings/web` (`cloudflare/digiweb/web/`) — controls/chat/finance/docs/… families, 73 exports, ~28 stylesheets; **no `ui/` dir** |
+| Primitive layer | `@digithings/ui` (`packages/ui/`) — controls/chat/finance/docs/… families, 73 exports, ~28 stylesheets; **no `ui/` dir** |
 | Consumers | reference (4013), digithings-web, digiquant-web, dashboard, digichat embeds |
 | Canon | `MIGRATION.md` (import order, `@theme inline`, `@source`, layering), `DESIGN.md` (Instrument Panel), `scripts/check_frontend_canon.py` |
 | Research verdict (2026-09) | stay on shadcn/ui; adopt Lyra preset; Blocks + Motion + View Transitions; HeroUI v3 = npm fallback only if ever needed; avoid Tremor |
@@ -74,7 +74,7 @@ so bespoke component construction ends.
 ### 3.1 One vendored set, in the package
 
 ```
-cloudflare/digiweb/web/
+packages/ui/
   components.json              # NEW — package-level shadcn config (style: lyra)
   src/ui/                      # NEW — vendored shadcn components (copy-paste)
     button.tsx  card.tsx  dialog.tsx  …        # npx shadcn add <name>
@@ -82,7 +82,7 @@ cloudflare/digiweb/web/
     web-theme.css              # EXTENDED — the one bridge (see §3.2)
 ```
 
-- Consumers import `@digithings/web/ui` (new subpath export `./ui`, plus
+- Consumers import `@digithings/ui/ui` (new subpath export `./ui`, plus
   `./ui/*` if needed). **No app vendors its own copy**; the reference app's
   `components/ui/` is deleted once superseded.
 - `npx shadcn@latest add <component|block>` runs **inside `web/`**; the
@@ -161,7 +161,7 @@ overrides); no new app-local families; every removal proves no consumer.
 
 - **Wave 0 — proof of chain (WS1+WS2):** bridge + package bootstrap + the
   reference app renders a stock `Button`, `Card`, `Dialog`, `Input` from
-  `@digithings/web/ui` in the Instrument-Panel skin. Exit: preview screenshots
+  `@digithings/ui/ui` in the Instrument-Panel skin. Exit: preview screenshots
   + vitest + canon guard green.
 - **Wave 1 — reference sweep (WS3):** all primitives swapped in
   `reference/`; bespoke reference css deleted where superseded.
@@ -172,7 +172,7 @@ overrides); no new app-local families; every removal proves no consumer.
   motion & view-transition pass.
   **Implemented on `feat/shadcn-wave-3` (#4206), unmerged as of 2026-09-17:**
   the kit
-  (`@digithings/web/ui`) became the single primitive source — Table + Select
+  (`@digithings/ui/ui`) became the single primitive source — Table + Select
   vendored (T1b), the kit declared canonical for every overlapping controls
   part, and the sweep re-pointed the reference, digichat, digithings-web,
   digiquant-web, and dashboard onto it (T2–T5). `dress="reference"|"chat"`
@@ -205,9 +205,9 @@ overrides); no new app-local families; every removal proves no consumer.
   **Accepted scope reduction (2026-09-17).** The Goal ("no native buttons/
   inputs/selects left in app code") is **not** met and is reduced here rather
   than left unowned: wave 3 migrated the file sets named in Tasks 3–5 only, and
-  the remaining raw controls in `cloudflare/dashboard` are tracked in **#4306**.
+  the remaining raw controls in `apps/dashboard` are tracked in **#4306**.
   Measured on this tip with
-  `grep -rn '<button\b' cloudflare/dashboard --include='*.tsx'`: 94 `<button`
+  `grep -rn '<button\b' apps/dashboard --include='*.tsx'`: 94 `<button`
   (87 outside tests), 9 `<label`, 5 `<select` (3 real render sites —
   `components/portfolio/DecisionAudit.tsx:92,108`,
   `components/tearsheet/DashboardTearsheetView.tsx:227`; the other 2 are test
@@ -217,13 +217,13 @@ overrides); no new app-local families; every removal proves no consumer.
   Deliberate exemptions: `SubpageStickyTabBar`'s contract requires a raw
   `<button>` child, the sidebar-settings trigger keeps its shipped dress,
   `PipelineNode`'s root is a token-only `<div role="button">`, and
-  `cloudflare/digithings-web`'s SwaggerExplorer renders third-party swagger
+  `apps/digithings-web`'s SwaggerExplorer renders third-party swagger
   chrome.
 - **Wave 4 — marketing + cleanup (WS7, WS8):** block-by-block, owner-approved;
   dead css, families json, docs final.
 
 Every wave is PR-shaped, reversible, and ends with the full gate: vitest
-(`@digithings/web` + touched apps), `check_frontend_canon.py`, lint/typecheck,
+(`@digithings/ui` + touched apps), `check_frontend_canon.py`, lint/typecheck,
 reference preview screenshots, and a live digichat regression check (embed
 unaffected).
 
@@ -245,7 +245,7 @@ unaffected).
 
 ## 7. Verification
 
-- Unit: `npm --workspace @digithings/web run test` (46 files/318 tests today),
+- Unit: `npm --workspace @digithings/ui run test` (46 files/318 tests today),
   per-app Vitest, reference lint/typecheck.
 - Tokens/canon: `python scripts/check_frontend_canon.py` clean in every PR.
 - Visual: reference app on :4013 + oc-cdp screenshot protocol
@@ -308,7 +308,7 @@ unaffected).
 
 ## 10. Definition of done
 
-A site is "migrated" when: it imports only `@digithings/web/ui` (no app-local
+A site is "migrated" when: it imports only `@digithings/ui/ui` (no app-local
 `components/ui`), no hand-built equivalent of a shadcn primitive remains, its
 css family census has not grown, its dark/light/livery states match DESIGN.md,
 and its tests, the canon guard, and the digichat regression suite are green.
