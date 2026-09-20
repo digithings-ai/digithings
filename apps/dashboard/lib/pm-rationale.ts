@@ -38,18 +38,3 @@ export function usablePmRationale(raw: string | null | undefined): string | null
   if (!t || isMechanicalSizingRationale(t) || isDerivedBookReason(t)) return null;
   return t;
 }
-
-/**
- * First usable PM reason among candidates (action row → map → H7 → H6 → H5).
- * Matches the backend priority in H8 `_selection_rationale_by_ticker`, minus the
- * mechanical fallback — callers must not invent a reason when this returns null.
- */
-export function resolvePmRationale(
-  ...candidates: Array<string | null | undefined>
-): string | null {
-  for (const c of candidates) {
-    const usable = usablePmRationale(c);
-    if (usable) return usable;
-  }
-  return null;
-}

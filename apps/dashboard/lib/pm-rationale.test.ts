@@ -2,7 +2,6 @@ import { describe, expect, it } from 'vitest';
 import {
   isDerivedBookReason,
   isMechanicalSizingRationale,
-  resolvePmRationale,
   usablePmRationale,
 } from './pm-rationale';
 
@@ -43,28 +42,5 @@ describe('isDerivedBookReason', () => {
 
   it('keeps real PM thesis text', () => {
     expect(isDerivedBookReason('Maintain financial exposure while breadth confirms.')).toBe(false);
-  });
-});
-
-describe('resolvePmRationale', () => {
-  it('prefers the first usable candidate and skips mechanical boilerplate', () => {
-    expect(
-      resolvePmRationale(
-        'Position weight set by deterministic risk sizing.',
-        'Financials still track the breadth recovery after the selloff.'
-      )
-    ).toBe('Financials still track the breadth recovery after the selloff.');
-  });
-
-  it('returns null when every candidate is boilerplate or blank', () => {
-    expect(
-      resolvePmRationale('Position weight set by deterministic risk sizing.', null)
-    ).toBeNull();
-  });
-
-  it('keeps a real first rationale over a later one', () => {
-    expect(resolvePmRationale('Valuation stretched into earnings.', 'Older narrative.')).toBe(
-      'Valuation stretched into earnings.'
-    );
   });
 });

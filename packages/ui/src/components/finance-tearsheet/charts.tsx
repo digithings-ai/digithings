@@ -1345,10 +1345,23 @@ export interface SignedBarsProps {
   fmt?: (v: number) => string;
   /** Accessible name for the chart (role="img" has none without it). */
   ariaLabel: string;
+  /**
+   * Optional per-bar x-axis labels, parallel to `values` by index. Entries
+   * beyond `values` are ignored; a missing or empty entry leaves that bar
+   * unlabeled. Labels render angled (-30°) in the bottom gutter, matching
+   * the categorical-bar convention, and join the bar's hover title.
+   */
+  labels?: string[];
 }
 
-/** Per-item signed bar chart (gains var(--up), losses var(--down)). */
-export function SignedBars({ values, height = 220, fmt = fmtCompact, ariaLabel }: SignedBarsProps) {
+/**
+ * Per-item signed bar chart (gains var(--up), losses var(--down)).
+ *
+ * Each bar carries a native SVG `<title>` with its exact formatted value
+ * (plus label when given) so the precise reading survives without a JS
+ * tooltip layer — and without pixels, so it stays testable in markup.
+ */
+export function SignedBars({ values, height = 220, fmt = fmtCompact, ariaLabel, labels }: SignedBarsProps) {
   if (!values || values.length === 0) return <Empty height={height} msg="no trades" />;
 
   const plotW = W - PAD.left - PAD.right;
@@ -1386,8 +1399,24 @@ export function SignedBars({ values, height = 220, fmt = fmtCompact, ariaLabel }
         const x = PAD.left + i * slot + (slot - bw) / 2;
         const y = v >= 0 ? yAt(v) : zeroY;
         const h = Math.max(0.5, Math.abs(yAt(v) - zeroY));
+        const label = labels?.[i]?.trim() ? labels[i].trim() : null;
         return (
-          <rect key={i} x={x.toFixed(1)} y={y.toFixed(1)} width={bw.toFixed(1)} height={h.toFixed(1)} className={"ts-bar ts-tone-" + (v >= 0 ? "up" : "down")} />
+          <rect key={i} x={x.toFixed(1)} y={y.toFixed(1)} width={bw.toFixed(1)} height={h.toFixed(1)} className={"ts-bar ts-tone-" + (v >= 0 ? "up" : "down")}>
+            <title>{label ? `${label}: ${fmt(v)}` : fmt(v)}</title>
+          </rect>
+        );
+      })}
+      {(labels ?? []).map((raw, i) => {
+        const label = raw?.trim() ? raw.trim() : null;
+        if (!label || i >= n) return null;
+        const cx = PAD.left + i * slot + slot / 2;
+        // Gutter below the plot: a -30° label drops ~half its length under
+        // its anchor, so the anchor sits 28px above the viewBox bottom —
+        // anchoring at the old height-10 clipped tickers against the
+        // section edge (caught by screenshot in Q3b slice 4).
+        const ly = height - 28;
+        return (
+          <text key={`xl${i}`} x={cx.toFixed(1)} y={ly} textAnchor="end" transform={`rotate(-30 ${cx.toFixed(1)} ${ly})`} className="ts-axis">{label}</text>
         );
       })}
     </Svg>
