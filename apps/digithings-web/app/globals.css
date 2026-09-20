@@ -52,6 +52,7 @@
    through node_modules/@digithings/ui: Tailwind's scanner does not traverse
    the workspace symlink and silently generates nothing. */
 @source "../../../packages/ui/src/components/NavShell.tsx";
+@source "../../../packages/ui/src/components/chrome.tsx";
 @source "../../../packages/ui/src/components/TerminalManifest.tsx";
 @source "../../../packages/ui/src/components/docs";
 @source "../../../packages/ui/src/components/chat";

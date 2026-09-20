@@ -42,6 +42,7 @@
    Paths stay file-relative on purpose: Tailwind's scanner does not traverse
    the node_modules workspace symlink and silently generates nothing. */
 @source "../../../packages/ui/src/components/NavShell.tsx";
+@source "../../../packages/ui/src/components/chrome.tsx";
 @source "../../../packages/ui/src/components/pricing";
 @source "../../../packages/ui/src/components/marquee";
 @source "../../../packages/ui/src/components/data-layout";
