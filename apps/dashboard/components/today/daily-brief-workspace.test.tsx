@@ -176,9 +176,9 @@ describe('DailyBriefWorkspace', () => {
     expect(html).not.toContain('Your update');
     expect(html).not.toContain('data-testid="brief-attention"');
     expect(html).not.toContain('data-testid="brief-beats"');
-    expect(html).not.toContain('Breadth improves while duration risk');
-    // The upsell teaser has no place on the operator surface.
-    expect(html).not.toContain('portfolio-teaser');
+    // The upsell teaser has no place on the operator surface. This fixture is
+    // enterprise-tier, where the teaser returns null by design — the assertion
+    // that actually guards its removal is the free-tier one below.
     // The drill-in nav duplicated the sidebar.
     expect(html).not.toContain('Brief drill-ins');
     // Scoreboard leads: figures before the decision row.
@@ -384,6 +384,9 @@ describe('DailyBriefWorkspace', () => {
 
     // Live house_weights_nav panels replaced by LockedSurface
     expect(html).toContain('locked-surface');
+    // The upsell teaser has no place on the operator surface. Free tier is
+    // where it would actually render, so this is the assertion that guards it.
+    expect(html).not.toContain('portfolio-teaser');
     expect(html).toContain('data-artifact-class="house_weights_nav"');
     expect(html).not.toContain('data-brief-section="scoreboard"');
     expect(html).not.toContain('data-brief-section="book"');

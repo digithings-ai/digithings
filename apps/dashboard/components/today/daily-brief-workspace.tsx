@@ -203,7 +203,8 @@ function decisionSummary(actions: RebalanceAction[]): {
   }
   return {
     label: `${active.length} allocation change${active.length === 1 ? '' : 's'}`,
-    // Compact action chips only — thesis prose lives in the hero attention.
+    // Compact action chips only — thesis prose lives in the ticker dossier
+    // and the digest, not on the Brief.
     detail: active.map((action) => portfolioActionChip(action)).join(' · '),
     active,
   };

@@ -140,6 +140,9 @@ describe('Today (Overview) page', () => {
     expect(html).toContain('Trim NVDA');
     expect(html).toContain('Latest decision');
     expect(html).toContain('1 allocation change');
+    // The actionable still renders in "Signals to resolve" — this assertion was
+    // valid before the recomposition and stays valid after it.
+    expect(html).toContain('Monitor DXY above 120.4');
     expect(html).toContain('Pipeline health');
     expect(html).toContain('Checking pipeline status');
     expect(html).toContain('Since inception');
