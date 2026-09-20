@@ -1,7 +1,6 @@
 import type { Metadata } from "next";
 import { SiteNav } from "@/components/landing/SiteNav";
 import { SiteFooter } from "@/components/landing/SiteFooter";
-import { AmbientMesh } from "@/components/landing/AmbientMesh";
 import { StrategyLibraryLive } from "@/components/tearsheet/strategy-library-live";
 
 export const metadata: Metadata = {
@@ -13,8 +12,7 @@ export default function StrategiesPage() {
   return (
     <>
       <SiteNav />
-      <main className="dq-subpage pb-[clamp(4.5rem,10vw,7rem)]">
-        <AmbientMesh />
+      <main className="dq-subpage pb-[clamp(4.5rem,10vw,7rem)]" id="main" tabIndex={-1}>
         <div className="wrap pb-[1.5rem]">
           <header className="dq-sechead">
             <div className="kicker">{"// strategies"}</div>

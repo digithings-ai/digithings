@@ -14,7 +14,12 @@ export default function PipelineRedirect() {
   return (
     <>
       <SiteNav />
-      <main className="section dq-subpage" style={{ minHeight: "50vh", display: "grid", placeItems: "center" }}>
+      <main
+        className="section dq-subpage"
+        id="main"
+        tabIndex={-1}
+        style={{ minHeight: "50vh", display: "grid", placeItems: "center" }}
+      >
         <p style={{ color: "var(--ink-soft)" }}>
           Redirecting… <Link href="/#pipeline">Continue to pipeline</Link>
         </p>

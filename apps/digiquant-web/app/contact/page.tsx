@@ -10,7 +10,6 @@ import {
 import { ContactMailto } from "@digithings/ui";
 import { buttonVariants } from "@digithings/ui/ui";
 import { SiteNav } from "@/components/landing/SiteNav";
-import { AmbientMesh } from "@/components/landing/AmbientMesh";
 import { CloneRepoButton } from "@/components/landing/CloneRepoButton";
 
 export const metadata: Metadata = {
@@ -23,8 +22,7 @@ export default function ContactPage() {
   return (
     <>
       <SiteNav />
-      <main className="dq-subpage">
-        <AmbientMesh />
+      <main className="dq-subpage" id="main" tabIndex={-1}>
         <section className="section">
           <div className="wrap">
             <Reveal>
