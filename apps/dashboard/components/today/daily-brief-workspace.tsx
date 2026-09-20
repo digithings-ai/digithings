@@ -3,15 +3,7 @@
 import type { ReactNode } from 'react';
 import Link from 'next/link';
 import { useEffect, useRef, useState } from 'react';
-import {
-  AlertTriangle,
-  BookOpen,
-  ChartNoAxesCombined,
-  GitBranch,
-  ListOrdered,
-  Shield,
-  Wallet,
-} from 'lucide-react';
+import { AlertTriangle } from 'lucide-react';
 import {
   Table,
   TableBody,
@@ -39,7 +31,6 @@ import {
   tickerDossierHref,
 } from '@/lib/portfolio-url-state';
 import { EntitledSurface } from '@/components/entitled-surface';
-import { PortfolioTeaserSurface } from '@/components/tier/portfolio-teaser-surface';
 import {
   metricsDivergenceBadgeLabel,
   navContractBadgeLabel,
@@ -49,7 +40,7 @@ import {
   BriefPipelineHealth,
   type BriefRunHealth,
 } from './brief-pipeline-health';
-import { activeRebalanceActions, buildBriefHighlight, portfolioActionChip } from './brief-highlight';
+import { activeRebalanceActions, portfolioActionChip } from './brief-highlight';
 import type { TodayThesis } from './today-summaries';
 
 export type { BriefRunHealth };
@@ -108,13 +99,11 @@ function ClaimLink({
 export interface DailyBriefWorkspaceProps {
   regime: string;
   regimeLabel: string;
-  headline: string | null;
   confidence: number | null;
   digestDate: string | null;
   bookDate: string | null;
   runType: string | null;
   actions: RebalanceAction[];
-  rationaleByTicker: Record<string, string>;
   returns: {
     sincePct: number | null;
     sinceDate: string | null;
@@ -228,23 +217,12 @@ function statusDot(status: string): string {
   return 'bg-ink-mute/50';
 }
 
-const DESTINATIONS = [
-  { label: 'Digest', href: null as string | null, icon: BookOpen },
-  { label: 'Pipeline', href: '/pipeline', icon: GitBranch },
-  { label: 'Performance', href: '/portfolio/performance', icon: ChartNoAxesCombined },
-  { label: 'Holdings', href: '/portfolio', icon: Wallet },
-  { label: 'Ledger', href: '/portfolio/ledger', icon: ListOrdered },
-  { label: 'Theses', href: '/portfolio?tab=theses', icon: Shield },
-] as const;
-
 const LEDGER_DAY_PREVIEW = 4;
 
 export function DailyBriefWorkspace({
-  headline,
   digestDate,
   bookDate,
   actions,
-  rationaleByTicker,
   returns,
   investedPct,
   performanceSsot = null,
@@ -269,17 +247,6 @@ export function DailyBriefWorkspace({
     .sort((a, b) => Math.abs(b.day_change_pct ?? 0) - Math.abs(a.day_change_pct ?? 0));
   const decision = decisionSummary(actions);
   const ledgerPreview = ledgerDayEvents.slice(0, LEDGER_DAY_PREVIEW);
-  const highlightEvent = ledgerDayEvents[0] ?? null;
-  const highlight = buildBriefHighlight({
-    headline,
-    actions,
-    rationaleByTicker,
-    actionables,
-    risks,
-    contextBullets,
-    latestEvent: highlightEvent,
-    digestDate,
-  });
   const latestThesis = theses[0] ?? null;
   const latestRisk = risks[0] ?? null;
   const latestContext = contextBullets[0] ?? null;
@@ -359,12 +326,10 @@ export function DailyBriefWorkspace({
       className="overflow-hidden border border-hair bg-surface"
     >
       <header data-brief-section="command" className="border-b border-hair">
-        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-hair px-5 py-3 sm:px-7">
-          <div className="flex min-w-0 items-center gap-3">
-            <span className="text-[10px] font-bold uppercase tracking-widest text-accent">
-              Morning brief
-            </span>
-          </div>
+        <div className="flex flex-wrap items-center justify-between gap-3 px-5 py-3 sm:px-7">
+          <h1 className="text-[10px] font-bold uppercase tracking-widest text-accent">
+            Morning brief
+          </h1>
           <div className="flex flex-wrap items-center gap-2">
             {liveMarks ? (
               <span
@@ -393,73 +358,7 @@ export function DailyBriefWorkspace({
             <AsOfBadge date={digestDate} />
           </div>
         </div>
-
-        <div className="grid lg:grid-cols-[minmax(0,1fr)_20rem]">
-          <div className="px-5 py-6 sm:px-7 sm:py-7 lg:border-r lg:border-hair">
-            {/* Personal pipeline update (variant B) — one attention sentence +
-                Research / Portfolio / Watch beats. Regime / run-type chrome
-                stays out of this hero (#3036). */}
-            <p className="text-[10px] font-bold uppercase tracking-widest text-ink-mute">
-              Your update · {digestDate ? formatAsOf(digestDate) : 'awaiting next run'}
-            </p>
-            <h1 className="mt-2 max-w-4xl font-display text-2xl leading-tight text-ink sm:text-3xl xl:text-4xl">
-              <ClaimLink
-                href={highlight.attentionHref}
-                testId="brief-attention"
-                className="line-clamp-6 sm:line-clamp-none"
-              >
-                {highlight.attention}
-              </ClaimLink>
-            </h1>
-            <ul
-              data-testid="brief-beats"
-              className="mt-5 max-w-3xl space-y-2.5"
-              aria-label="Research, portfolio, and watch beats"
-            >
-              {highlight.beats.map((beat) => (
-                <li key={beat.kind} className="grid grid-cols-[5.5rem_1fr] gap-3 text-sm leading-snug">
-                  <span className="text-[10px] font-bold uppercase tracking-widest text-ink-mute">
-                    {beat.label}
-                  </span>
-                  <ClaimLink
-                    href={beat.href}
-                    className={beat.available ? 'text-ink-soft' : 'text-ink-mute'}
-                  >
-                    {beat.text}
-                  </ClaimLink>
-                </li>
-              ))}
-            </ul>
-          </div>
-
-          <div className="grid grid-cols-1 divide-y divide-hair sm:grid-cols-2 sm:divide-x sm:divide-y-0 lg:grid-cols-1 lg:divide-x-0 lg:divide-y">
-            <ClaimLink
-              href={decisionHref}
-              testId="brief-decision-link"
-              className="block px-5 py-4 sm:px-6"
-            >
-              <p className="text-[10px] font-bold uppercase tracking-widest text-ink-mute">
-                Latest decision
-              </p>
-              <p className="mt-1 text-lg font-semibold text-ink">{decision.label}</p>
-              <p className="mt-0.5 text-xs text-ink-soft">{decision.detail}</p>
-            </ClaimLink>
-            <BriefPipelineHealth
-              runHealth={runHealth}
-              diagnostics={runDiagnostics}
-              snapshotDate={digestDate}
-              positionDates={positionDates}
-            />
-          </div>
-        </div>
       </header>
-
-      <div className="px-5 py-3 sm:px-6">
-        <PortfolioTeaserSurface
-          tier={tier}
-          tickers={held.map((p) => p.ticker)}
-        />
-      </div>
 
       <EntitledSurface artifactClass="house_weights_nav" tier={tier}>
         <BriefCardLink
@@ -485,6 +384,26 @@ export function DailyBriefWorkspace({
           </dl>
         </BriefCardLink>
       </EntitledSurface>
+
+      <div className="grid grid-cols-1 divide-y divide-hair border-b border-hair sm:grid-cols-2 sm:divide-x sm:divide-y-0">
+        <ClaimLink
+          href={decisionHref}
+          testId="brief-decision-link"
+          className="block px-5 py-4 sm:px-6"
+        >
+          <p className="text-[10px] font-bold uppercase tracking-widest text-ink-mute">
+            Latest decision
+          </p>
+          <p className="mt-1 text-lg font-semibold text-ink">{decision.label}</p>
+          <p className="mt-0.5 text-xs text-ink-soft">{decision.detail}</p>
+        </ClaimLink>
+        <BriefPipelineHealth
+          runHealth={runHealth}
+          diagnostics={runDiagnostics}
+          snapshotDate={digestDate}
+          positionDates={positionDates}
+        />
+      </div>
 
       <section data-brief-section="monitor" className="grid border-b border-hair lg:grid-cols-2 lg:divide-x lg:divide-hair">
         <BriefCardLink
@@ -719,19 +638,6 @@ export function DailyBriefWorkspace({
         </div>
       </section>
       </EntitledSurface>
-
-      <nav aria-label="Brief drill-ins" className="grid grid-cols-2 divide-x divide-y divide-hair sm:grid-cols-3 lg:grid-cols-6 lg:divide-y-0">
-        {DESTINATIONS.map(({ label, href, icon: Icon }) => (
-          <Link
-            key={label}
-            href={href ?? digestHref}
-            className="flex min-h-16 items-center justify-between gap-3 px-4 py-3 text-xs font-medium text-ink-soft transition-colors hover:bg-ink/[0.03] hover:text-ink sm:px-5"
-          >
-            <span>{label}</span>
-            <Icon size={14} className="text-ink-mute" />
-          </Link>
-        ))}
-      </nav>
     </section>
     </div>
   );

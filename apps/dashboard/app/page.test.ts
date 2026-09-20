@@ -121,18 +121,23 @@ describe('Today (Overview) page', () => {
     expect(html).not.toContain('glass-card');
   });
 
-  it('orders the daily story from personal update through decisions, risk, and drill-ins', () => {
+  it('orders the daily story from figures through decisions, risk, and book', () => {
     useDashboardMock.mockReturnValue({
       data: makeData([{ ticker: 'NVDA', current_pct: 8, recommended_pct: 6, action: 'TRIM' }]),
       loading: false,
       error: null,
     });
     const html = renderToStaticMarkup(createElement(OverviewPage));
-    expect(html).toContain('Your update');
-    expect(html).toContain('data-testid="brief-attention"');
-    // Attention prefers the book move when present; research beat keeps digest signal.
+    // No digest-duplicating hero, no drill-in nav duplicating the sidebar.
+    expect(html).not.toContain('Your update');
+    expect(html).not.toContain('data-testid="brief-attention"');
+    expect(html).not.toContain('data-testid="brief-beats"');
+    expect(html).not.toContain('aria-label="Brief drill-ins"');
+    // Figures lead; the decision row follows the scoreboard.
+    const scoreboardAt = html.indexOf('data-brief-section="scoreboard"');
+    expect(scoreboardAt).toBeGreaterThan(-1);
+    expect(html.indexOf('Latest decision')).toBeGreaterThan(scoreboardAt);
     expect(html).toContain('Trim NVDA');
-    expect(html).toContain('Monitor DXY above 120.4');
     expect(html).toContain('Latest decision');
     expect(html).toContain('1 allocation change');
     expect(html).toContain('Pipeline health');
@@ -149,9 +154,6 @@ describe('Today (Overview) page', () => {
     expect(html).toContain('Allocation and movers');
     expect(html).toContain('EWT');
     expect(html).toContain('-5.6');
-    for (const label of ['Digest', 'Pipeline', 'Performance', 'Holdings', 'Theses']) {
-      expect(html).toContain(label);
-    }
     expect(html).not.toContain('Market state');
   });
 
