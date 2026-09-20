@@ -1,16 +1,15 @@
 import {
   Colophon,
-  Footer,
   PricingTierCard,
   Reveal,
   WordReveal,
   subsystems,
 } from "@digithings/ui";
-import { DQ_FOOTER, DQ_FOOTER_META } from "./_nav";
 import { PRICING_TIERS, PRICING_FAQ } from "./_pricing";
 import { ContactMailto } from "@digithings/ui";
 import { buttonVariants } from "@digithings/ui/ui";
 import { SiteNav } from "@/components/landing/SiteNav";
+import { SiteFooter } from "@/components/landing/SiteFooter";
 import { HeroMesh } from "@/components/landing/HeroMesh";
 import { LiveTickerRow } from "@/components/landing/LiveTickerRow";
 import { LivePortfolioPanel } from "@/components/landing/DashboardPortfolioPanel";
@@ -195,7 +194,7 @@ export default function Home() {
           (flagship grammar, #1450) — subpage consumers keep the
           outline-only default. */}
       <Colophon name="digi" suffix="quant" sweep />
-      <Footer links={DQ_FOOTER} meta={DQ_FOOTER_META} />
+      <SiteFooter />
     </>
   );
 }

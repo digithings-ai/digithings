@@ -164,16 +164,22 @@ html {
    dress covers them; the package's nav-shell.css .btn-icon stays for its
    other consumers.) */
 
-/* Dashboard mark CTA (NavShell sheet slot + desktop tail). */
-.dq-cta { display: inline-flex; align-items: center; gap: 0.45rem; }
+/* Dashboard mark CTA — desktop tail (icon-only) and the sheet CTA's leading
+   glyph. The old `.dq-cta` layout helper is gone (#R1): the sheet CTA is the
+   kit <CtaLink> now, and this class folds the flex dress into the one element
+   that still needs it. The mark animation is a hook on `.dq-mark`/`.dq-stroke`,
+   triggered by whichever wrapper holds it — the desktop tail link below, or the
+   kit's `.nav-shell-sheet-cta` around the sheet CTA. */
 /* Desktop tail — teal mark only. No label: the wordmark is already
    digiquant, and the accessible name is on the <a>. */
 .dq-nav-mark-cta {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   color: var(--accent);
   width: 2.35rem;
   height: 2.35rem;
   padding: 0;
-  justify-content: center;
   text-decoration: none;
   border: none;
   border-radius: 0;
@@ -184,7 +190,8 @@ html {
 .dq-nav-mark-cta:hover { opacity: 1; background: color-mix(in srgb, var(--accent) 12%, transparent); }
 .dq-mark { transform-origin: 50% 50%; }
 /* Strokes are fully drawn at rest. Idle: replay the dashboard loader once
-   every 10s (1.55s of motion, then hold). Hover: the same 1.55s loop. */
+   every 10s (1.55s of motion, then hold). Hover (desktop tail or the sheet
+   CTA): the same 1.55s loop. */
 .dq-stroke { stroke-dasharray: var(--ol-len, 200); stroke-dashoffset: 0; }
 .dq-stroke-1 { --ol-len: 120; }
 .dq-stroke-2 { --ol-len: 190; }
@@ -192,14 +199,14 @@ html {
 .dq-stroke-4 { --ol-len: 165; }
 .dq-nav-mark-cta .dq-mark { animation: ol-pulse-idle 10s cubic-bezier(0.22, 1, 0.36, 1) infinite; }
 .dq-nav-mark-cta .dq-stroke { animation: ol-draw-idle 10s ease-in-out infinite; }
-.dq-cta:hover .dq-mark { animation: ol-pulse 1.55s cubic-bezier(0.22, 1, 0.36, 1) infinite; }
-.dq-cta:hover .dq-stroke { animation: ol-draw 1.55s ease-in-out infinite; }
-.dq-cta .dq-stroke-2,
-.dq-cta:hover .dq-stroke-2 { animation-delay: 0.03s; }
-.dq-cta .dq-stroke-3,
-.dq-cta:hover .dq-stroke-3 { animation-delay: 0.06s; }
-.dq-cta .dq-stroke-4,
-.dq-cta:hover .dq-stroke-4 { animation-delay: 0.09s; }
+:is(.dq-nav-mark-cta, .nav-shell-sheet-cta):hover .dq-mark { animation: ol-pulse 1.55s cubic-bezier(0.22, 1, 0.36, 1) infinite; }
+:is(.dq-nav-mark-cta, .nav-shell-sheet-cta):hover .dq-stroke { animation: ol-draw 1.55s ease-in-out infinite; }
+:is(.dq-nav-mark-cta, .nav-shell-sheet-cta) .dq-stroke-2,
+:is(.dq-nav-mark-cta, .nav-shell-sheet-cta):hover .dq-stroke-2 { animation-delay: 0.03s; }
+:is(.dq-nav-mark-cta, .nav-shell-sheet-cta) .dq-stroke-3,
+:is(.dq-nav-mark-cta, .nav-shell-sheet-cta):hover .dq-stroke-3 { animation-delay: 0.06s; }
+:is(.dq-nav-mark-cta, .nav-shell-sheet-cta) .dq-stroke-4,
+:is(.dq-nav-mark-cta, .nav-shell-sheet-cta):hover .dq-stroke-4 { animation-delay: 0.09s; }
 @keyframes ol-pulse { 0% { transform: scale(0.82); } 35% { transform: scale(1); } 55% { transform: scale(0.72); } 72% { transform: scale(1.03); } 100% { transform: scale(1); } }
 @keyframes ol-draw { 0% { stroke-dashoffset: var(--ol-len); opacity: 0.4; } 10% { opacity: 1; } 40%, 55% { stroke-dashoffset: 0; opacity: 1; } 100% { stroke-dashoffset: 0; opacity: 1; } }
 /* 1.55s of ol-pulse / ol-draw packed into the first 15.5% of a 10s cycle. */
@@ -218,8 +225,8 @@ html {
 @media (prefers-reduced-motion: reduce) {
   .dq-nav-mark-cta .dq-mark,
   .dq-nav-mark-cta .dq-stroke,
-  .dq-cta:hover .dq-mark,
-  .dq-cta:hover .dq-stroke { animation: none; }
+  :is(.dq-nav-mark-cta, .nav-shell-sheet-cta):hover .dq-mark,
+  :is(.dq-nav-mark-cta, .nav-shell-sheet-cta):hover .dq-stroke { animation: none; }
 }
 
 /* push subpage content (no full-bleed hero) clear of the fixed nav; relative so

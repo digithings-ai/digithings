@@ -40,10 +40,16 @@ export {
   Footer,
   Colophon,
   ModuleCard,
+  SkipLink,
+  CtaLink,
+  IconLink,
+  hrefIsCurrent,
   isNavGroup,
   type NavLink,
   type NavGroup,
   type NavItem,
+  type CtaLinkProps,
+  type IconLinkProps,
 } from "./components/chrome";
 export { NavShell, type NavShellProps } from "./components/NavShell";
 export { DocsLayout, type DocsNavGroup, type DocsNavItem, type DocsHero } from "./components/docs/DocsLayout";

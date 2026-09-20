@@ -1,7 +1,6 @@
 import type { Metadata } from "next";
-import { Footer } from "@digithings/ui";
-import { DQ_FOOTER, DQ_FOOTER_META } from "../_nav";
 import { SiteNav } from "@/components/landing/SiteNav";
+import { SiteFooter } from "@/components/landing/SiteFooter";
 import { AmbientMesh } from "@/components/landing/AmbientMesh";
 import { StrategyLibraryLive } from "@/components/tearsheet/strategy-library-live";
 
@@ -29,7 +28,7 @@ export default function StrategiesPage() {
           <StrategyLibraryLive />
         </div>
       </main>
-      <Footer links={DQ_FOOTER} meta={DQ_FOOTER_META} />
+      <SiteFooter />
     </>
   );
 }

@@ -3,8 +3,7 @@
 import { useEffect } from "react";
 import Link from "next/link";
 import { SiteNav } from "@/components/landing/SiteNav";
-import { Footer } from "@digithings/ui";
-import { DQ_FOOTER, DQ_FOOTER_META } from "../_nav";
+import { SiteFooter } from "@/components/landing/SiteFooter";
 
 // Retired standalone page — pipeline content lives at /#pipeline on the homepage.
 export default function PipelineRedirect() {
@@ -20,7 +19,7 @@ export default function PipelineRedirect() {
           Redirecting… <Link href="/#pipeline">Continue to pipeline</Link>
         </p>
       </main>
-      <Footer links={DQ_FOOTER} meta={DQ_FOOTER_META} />
+      <SiteFooter />
     </>
   );
 }
