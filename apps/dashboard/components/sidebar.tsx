@@ -19,51 +19,17 @@ import { GloomberbMark } from '@/components/gloomberb-mark';
 import { useAppShell } from '@/components/app-shell-context';
 import SidebarSettings from '@/components/sidebar-settings';
 import { useAuth } from '@/lib/auth-context';
-import { NAV, type NavItem } from '@/lib/nav';
+import { NAV, navItemForPath, type NavItem } from '@/lib/nav';
 import { dashboardBasePath } from '@/lib/supabase';
 import { useFxHubOnlyInvitee } from '@/lib/fx-hub-only';
-
-function routeActive(pathname: string, base: string, href: string): boolean {
-  const norm = pathname.replace(/\/+$/, '') || '/';
-  if (href === '/') {
-    // Only the real home route — not every top-level path (those have one segment too).
-    const baseNorm = base.replace(/\/+$/, '');
-    if (baseNorm) {
-      if (norm === baseNorm) return true;
-      if (norm.startsWith(`${baseNorm}/`)) {
-        const afterBase = norm.slice(baseNorm.length + 1);
-        return afterBase.split('/').filter(Boolean).length === 0;
-      }
-      return false;
-    }
-    return norm.split('/').filter(Boolean).length === 0;
-  }
-  if (href === '/portfolio') {
-    // Portfolio absorbs the legacy /performance route (now a tab).
-    return /\/portfolio(\/|$)/.test(pathname) || /\/performance(\/|$)/.test(pathname);
-  }
-  if (href === '/pipeline') {
-    // Pipeline replaces Why + System; absorbs legacy /why, /research, /library,
-    // /system, /observability, /architecture routes.
-    return (
-      /\/pipeline(\/|$)/.test(pathname) ||
-      /\/why(\/|$)/.test(pathname) ||
-      /\/research(\/|$)/.test(pathname) ||
-      /\/library(\/|$)/.test(pathname) ||
-      /\/system(\/|$)/.test(pathname) ||
-      /\/observability(\/|$)/.test(pathname) ||
-      /\/architecture(\/|$)/.test(pathname)
-    );
-  }
-  const candidates = [href, `${base}${href}`, `${href}/`, `${base}${href}/`].filter(
-    (p, i, a) => p && a.indexOf(p) === i
-  );
-  return candidates.some((p) => norm === p || norm.endsWith(p));
-}
 
 export default function Sidebar() {
   const pathname = usePathname();
   const base = dashboardBasePath();
+  // The nav→route map is the canonical `navItemForPath` (lib/nav.ts): a live
+  // route that is not a NAV destination (e.g. /why) resolves to null instead of
+  // being silently collapsed onto Pipeline.
+  const activeHref = navItemForPath(pathname, base);
   const { sidebarCollapsed, toggleSidebar, mobileNavOpen, setMobileNavOpen, openCommandPalette } =
     useAppShell();
   const { authEnabled, user, signOut } = useAuth();
@@ -96,7 +62,7 @@ export default function Sidebar() {
 
   const renderLink = (item: NavItem) => {
     const { href, label, icon: Icon, demoted } = item;
-    const isActive = routeActive(pathname, base, href);
+    const isActive = activeHref === href;
     const link = (
       <Link
         key={href}
@@ -195,7 +161,7 @@ export default function Sidebar() {
           fixed top-0 left-0 h-screen z-[1000] transition-all duration-300 ease-out
           w-[260px]
           ${mobileNavOpen ? 'translate-x-0' : '-translate-x-full'}
-          md:translate-x-0 md:relative md:z-auto
+          md:translate-x-0
           ${sidebarCollapsed ? 'md:w-[72px]' : 'md:w-[260px]'}
         `}
       >
