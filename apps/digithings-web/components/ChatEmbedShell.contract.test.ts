@@ -63,10 +63,10 @@ describe("ChatEmbedShell contracts", () => {
     expect(readParentDocumentTheme({ getAttribute: () => null })).toBe("dark");
   });
 
-  it("covers the cold Container with the shared boot loader until digichat:ready", async () => {
+  it("covers the cold Container with the shared tool-chain boot until digichat:ready", async () => {
     // Source contract: avoid a white flash on the dark digithings theme (#2093)
-    // and keep the cold-start window animated. The shell mounts the same
-    // @digithings/ui DigichatBootLoader the embed uses, but only after
+    // and keep the cold-start window animated. The shell mounts the shared
+    // @digithings/ui tool-chain boot (the loader the embed itself runs), but only after
     // WARMUP_DELAY_MS (warm loads stay flash-free) and only until ready; the
     // iframe is opacity-0 underneath and .dc-chat-frame paints the theme
     // canvas from the first HTML (see globals.css).
@@ -74,7 +74,9 @@ describe("ChatEmbedShell contracts", () => {
     const { fileURLToPath } = await import("node:url");
     const path = fileURLToPath(new URL("./ChatEmbedShell.tsx", import.meta.url));
     const src = readFileSync(path, "utf8");
-    expect(src).toContain("DigichatBootLoader");
+    expect(src).toContain("BootLabOverlay");
+    expect(src).toContain('variant="tooltask"');
+    expect(src).toContain("readyEdge={embedReady}");
     expect(src).toContain("WARMUP_DELAY_MS");
     expect(src).toContain("dc-chat-frame");
     expect(src).toContain("digichat:ready");
@@ -96,7 +98,7 @@ describe("ChatEmbedShell contracts", () => {
     const shellPath = fileURLToPath(new URL("./ChatEmbedShell.tsx", import.meta.url));
     const shellSrc = readFileSync(shellPath, "utf8");
     expect(shellSrc).toContain('className="dc-chat-frame"');
-    expect(shellSrc).toContain("DigichatBootLoader");
+    expect(shellSrc).toContain("BootLabOverlay");
     expect(shellSrc).toContain('background: "transparent"');
 
     const cssPath = fileURLToPath(new URL("../app/globals.css", import.meta.url));
