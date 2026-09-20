@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.3.1](https://github.com/digithings-ai/digithings/compare/digichat-v2.3.0...digichat-v2.3.1) (2026-09-20)
+
+
+### Bug Fixes
+
+* **digichat:** the embed paints one canvas token from the first byte ([#4433](https://github.com/digithings-ai/digithings/issues/4433)) ([dea7717](https://github.com/digithings-ai/digithings/commit/dea7717dd3dd6f4ef3ae443098799bddbc468d2f))
+
 ## [2.3.0](https://github.com/digithings-ai/digithings/compare/digichat-v2.2.0...digichat-v2.3.0) (2026-09-19)
 
 
