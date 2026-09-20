@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 
-import { DigichatBootLoader } from "@digithings/ui";
+import { BootLabOverlay } from "@digithings/ui/chat/boot-lab";
 import { readAndClearHandoff } from "@/lib/chatHandoff";
 
 const READY = "digichat:ready";
@@ -143,7 +143,7 @@ export type ChatEmbedShellProps = {
  * Boot: digichat's in-app boot chain owns the warm path (it yields on warm
  * nav), but a cold Container has no document to run it in. Until the frame
  * paints, this shell covers the wait with the same `@digithings/ui`
- * DigichatBootLoader the embed uses — shown only after WARMUP_DELAY_MS so
+ * BootLabOverlay tool-chain the embed uses — shown only after WARMUP_DELAY_MS so
  * warm loads never flash it, and crossfaded out on `digichat:ready`. The
  * iframe stays opacity-0 underneath and the frame slot is painted from the
  * first HTML by `.dc-chat-frame` in globals.css (`--chat-frame-canvas` per
@@ -385,16 +385,21 @@ export function ChatEmbedShell({
             background: "transparent",
           }}
         >
-          <DigichatBootLoader
-            // Types the curated copy while the Container wakes; the same
-            // strings ride the iframe URL (embedSrc) so the ready hero matches
-            // what the loader typed. Live tenants carry no welcomeBody, so keep
-            // the loader silent on it too or the handoff swaps copy.
-            welcome={EMBED_SHELL_COPY[embedHost]?.welcome}
-            welcomeBody=""
-            suggestions={EMBED_SHELL_COPY[embedHost]?.suggestions}
+          <BootLabOverlay
+            // The canonical tool-chain boot: rows pull the image, mount the
+            // configuration, warm the runtime, then the last row waits for the
+            // app's real ready edge — the digichat:ready postMessage, passed
+            // through as readyEdge because the app runs in another document.
+            // Facts are the deployment's real values (never invented counts):
+            // both live tenants run the digigraph backend.
+            variant="tooltask"
             ready={embedReady}
-            className="dc-embed-boot"
+            readyEdge={embedReady}
+            onSettled={() => {}}
+            facts={{
+              starters: EMBED_SHELL_COPY[embedHost]?.suggestions.length,
+              backend: "digigraph",
+            }}
           />
         </div>
       ) : null}
