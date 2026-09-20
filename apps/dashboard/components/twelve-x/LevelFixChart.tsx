@@ -33,6 +33,24 @@ export function LevelFixChart({ series }: { series: LevelFixSeries }) {
 
   const hasLevels = entryLow !== null || entryHigh !== null || stop !== null || targets.length > 0;
 
+  // The chart's whole purpose is where the fix sits relative to the published
+  // levels, so the domain must cover both. Without it the frame auto-derives
+  // from the fixes alone and an out-of-range stop/target clamps to the plot
+  // edge, which reads as "at the boundary" regardless of the real level.
+  const levelValues = [entryLow, entryHigh, stop, ...targets].filter(
+    (v): v is number => v !== null,
+  );
+  const spanValues = [...points.map((p) => p.fix), ...levelValues];
+  const domain: [number, number] | undefined = (() => {
+    if (spanValues.length === 0) return undefined;
+    const lo = Math.min(...spanValues);
+    const hi = Math.max(...spanValues);
+    // A flat series would give a zero-width domain (NaN in the path), so the
+    // pad is always positive: 8% of the spread, or 1% of the value when flat.
+    const pad = hi > lo ? (hi - lo) * 0.08 : Math.abs(hi) * 0.01 || 0.01;
+    return [lo - pad, hi + pad];
+  })();
+
   if (points.length === 0 && !hasLevels) {
     return (
       <div className="border border-hair bg-surface/40 p-4 text-xs text-ink-mute" data-testid="level-fix-chart">
@@ -52,7 +70,9 @@ export function LevelFixChart({ series }: { series: LevelFixSeries }) {
           <TimeSeries
             points={points.map((p) => ({ t: p.date, v: p.fix }))}
             height={220}
-            fmt={fmtFix}
+                fmt={fmtFix}
+                domain={domain}
+
             references={{
               bands:
                 entryLow !== null && entryHigh !== null
