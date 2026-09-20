@@ -170,11 +170,11 @@ const LIMITS: { term: string; body: string }[] = [
   {
     term: "Frontend is scored differently",
     body:
-      "The score job only reads Python diffs, so the rubrics never see JS or CSS — rightly, " +
+      "The score job scores a diff that excludes apps/** and packages/** by pathspec, so the rubrics never see JS or CSS — rightly, " +
       "since the heuristics are Python-oriented and misfire on them. Presentation work is gated instead by secret scanning, the canon " +
       "guard, lint, typecheck, and a production build that fails on a type error. Most frontend suites run in CI — digithings-web, the dashboard, digichat, the shared ui packages, cron, and the Cloudflare workers all have a lane that runs them. " +
-      "The two exceptions are digiquant-web and the design reference: both ship test scripts no lane invokes (test-web.yml lints them only), " +
-      "so the pipeline-data pin and the reference route smoke test are a local discipline — a narrower net, honestly narrower.",
+      "The exception is digiquant-web, which ships a test script no lane invokes (test-web.yml lints it only), " +
+      "so its pipeline-data pin is a local discipline — a narrower net, honestly narrower.",
   },
   {
     term: "Test count is not coverage",
