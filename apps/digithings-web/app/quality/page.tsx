@@ -1,16 +1,27 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import {
+  Figure,
+  Mono,
   NumberedStages,
   OdometerStrip,
+  PageHead,
   Reveal,
+  RuledList,
+  RuledRow,
   type NumberedStage,
   type OdometerStat,
 } from "@digithings/ui";
 import { buttonVariants } from "@digithings/ui/ui";
 import { DtFooter } from "@/components/DtFooter";
-import { Mono, PageHead, RuledList, RuledRow } from "../_company/prose";
 import { DtNav } from "@/components/DtNav";
+import {
+  CI_WORKFLOWS,
+  COUNTED_AT,
+  FRONTEND_TEST_FILES,
+  PYTHON_TEST_FILES,
+  TEST_LANES,
+} from "@/lib/siteCounts";
 
 export const metadata: Metadata = {
   title: "quality — the gates a change has to clear",
@@ -53,26 +64,16 @@ export const metadata: Metadata = {
 // the stricter 8 / 8 / 7 / 9 that score.py, the README and CLAUDE.md agree on.
 // The doc fix belongs in a docs change; do not silently paper over it here.
 
-const COUNTED_AT = "5 August 2026";
-
-// Every figure below is the output of the command above it, run on a clean
-// checkout of develop. Re-run them when you touch this block: the page invites
-// the reader to, so a number that does not reproduce is worse than no number.
-// (The python count read 319 here until 2026-08-05 while the command returned
-// 321 — it never reproduced, including at the commit it was written on.)
-//
-// find tests -name 'test_*.py' | wc -l                                  → 321
-// find frontend -path '*/node_modules' -prune -o \( -name '*.test.ts*'
-//   -o -name '*.spec.ts*' -o -name '*.test.js' -o -name '*.test.mjs' \) -print  → 180
-//   ^ the -print is load-bearing: without it find's implicit print also emits the
-//     pruned node_modules directories, and the command returns 186 instead.
-// ls .github/workflows/ | grep -c '\.yml$'                              → 63
-// ls .github/workflows/ | grep -c '^test-'                              → 17
+// Every figure comes from lib/siteCounts.ts (D1, #4429), where each snapshot
+// carries the exact command that produced it and the date it was run — the page
+// invites the reader to reproduce them, so a number that does not reproduce is
+// worse than no number, and the count must not be restated differently on two
+// pages. Re-run the commands there when you touch it.
 const METRICS: OdometerStat[] = [
-  { value: "321", label: "python test files" },
-  { value: "180", label: "frontend test files" },
-  { value: "63", label: "ci workflows" },
-  { value: "17", label: "test lanes" },
+  { value: String(PYTHON_TEST_FILES), label: "python test files" },
+  { value: String(FRONTEND_TEST_FILES), label: "frontend test files" },
+  { value: String(CI_WORKFLOWS), label: "ci workflows" },
+  { value: String(TEST_LANES), label: "test lanes" },
 ];
 
 // The four dimensions, with the threshold as the tag. Each `mech` names what
@@ -244,11 +245,14 @@ export default function QualityPage() {
               </p>
             </Reveal>
             <Reveal>
-              <OdometerStrip stats={METRICS} className="mx-auto max-w-[880px]" />
+              <Figure
+                n={1}
+                caption={`counted ${COUNTED_AT} · they grow · file counts, not coverage`}
+                className="mx-auto max-w-[880px]"
+              >
+                <OdometerStrip stats={METRICS} />
+              </Figure>
             </Reveal>
-            <p className="mx-auto mt-[1.1rem] max-w-[880px] text-center font-mono text-[0.72rem] text-ink-mute">
-              counted {COUNTED_AT} · they grow · file counts, not coverage
-            </p>
           </div>
         </section>
 
@@ -328,8 +332,8 @@ export default function QualityPage() {
               <span className="kicker">{"// the lanes"}</span>
               <h2>What runs before a merge.</h2>
               <p>
-                Sixty-three workflow files, most of them fired by path filters so a change pays only
-                for the surface it touched.
+                {CI_WORKFLOWS} workflow files, most of them fired by path filters so a change pays
+                only for the surface it touched.
               </p>
             </Reveal>
             <RuledList>

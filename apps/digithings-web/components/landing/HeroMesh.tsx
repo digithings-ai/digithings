@@ -11,7 +11,7 @@
  * light mode. Under prefers-reduced-motion it renders one calm static frame and
  * the entrance classes resolve to their final state via CSS.
  */
-import { useEffect, useRef, type ReactNode } from "react";
+import { useCallback, useEffect, useRef, type ReactNode } from "react";
 import { HeroGraph } from "./HeroGraph";
 
 const rnd = (a: number, b: number) => a + Math.random() * (b - a);
@@ -28,10 +28,27 @@ const hexToRgb = (hex: string): string => {
   return Number.isNaN(n) ? "236,238,240" : `${(n >> 16) & 255},${(n >> 8) & 255},${n & 255}`;
 };
 
-export function HeroMesh({ children }: { children: ReactNode }) {
-  const heroRef = useRef<HTMLElement>(null);
+/**
+ * `variant="hero"` (default) is the full-bleed `<header>` hero. `variant="media"`
+ * renders the same canvas + graph art as a decorative, absolutely-filling block
+ * inside a caller-owned frame — the D1 `Fig N` media figure — with no landmark
+ * and no inner content.
+ */
+export function HeroMesh({
+  children,
+  variant = "hero",
+}: {
+  children?: ReactNode;
+  variant?: "hero" | "media";
+}) {
+  const heroRef = useRef<HTMLElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const innerRef = useRef<HTMLDivElement>(null);
+  // Callback ref: the hero is a <header> and the media variant a <div>, so one
+  // HTMLElement ref serves both without a per-branch cast.
+  const setHero = useCallback((el: HTMLElement | null) => {
+    heroRef.current = el;
+  }, []);
 
   useEffect(() => {
     const hero = heroRef.current;
@@ -171,14 +188,29 @@ export function HeroMesh({ children }: { children: ReactNode }) {
     };
   }, []);
 
-  return (
-    <header className="dqhero" id="hero" ref={heroRef}>
+  const art = (
+    <>
       <canvas className="dqhero-canvas" ref={canvasRef} aria-hidden="true" />
       <div className="dqhero-veil" aria-hidden="true" />
       <HeroGraph />
       <div className="dqhero-inner" ref={innerRef}>
         {children}
       </div>
+    </>
+  );
+
+  if (variant === "media") {
+    // Decorative: the frame and its Fig caption carry the meaning.
+    return (
+      <div className="dqhero dqhero--media" ref={setHero} aria-hidden="true">
+        {art}
+      </div>
+    );
+  }
+
+  return (
+    <header className="dqhero" id="hero" ref={setHero}>
+      {art}
     </header>
   );
 }

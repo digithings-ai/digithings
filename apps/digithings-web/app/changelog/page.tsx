@@ -1,7 +1,6 @@
 import type { Metadata } from "next";
-import { Reveal } from "@digithings/ui";
+import { PageHead, Reveal } from "@digithings/ui";
 import { DtFooter } from "@/components/DtFooter";
-import { PageHead } from "../_company/prose";
 import { DtNav } from "@/components/DtNav";
 import releases from "@digithings/design/releases.json";
 
@@ -39,14 +38,16 @@ export default function ChangelogPage() {
               <div className="changelog-band">
                 {ENTRIES.map((e) => (
                   <div className="changelog-row" key={`${e.product}-${e.version}`}>
+                    {/* Bracketed mono meta (opencode language): [date] + the
+                        tagged version, with the release type as a bracketed chip. */}
                     <div className="changelog-row__date">
-                      {e.date} · {e.version}
+                      [{e.date}] {e.version}
                     </div>
                     <div className="changelog-row__title">
                       <a href={e.href} target="_blank" rel="noopener noreferrer">
                         {e.title}
                       </a>
-                      <span className="changelog-row__tag">{e.tag}</span>
+                      <span className="changelog-row__tag">[{e.tag}]</span>
                     </div>
                   </div>
                 ))}

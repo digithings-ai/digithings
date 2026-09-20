@@ -1,8 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { DtFooter } from "@/components/DtFooter";
-import { Mono, PageHead, RuledList, RuledRow } from "../../_company/prose";
-import { ContactMailto, Reveal } from "@digithings/ui";
+import { ContactMailto, Mono, PageHead, Reveal, RuledList, RuledRow } from "@digithings/ui";
 import { DT_CONTACT_EMAIL } from "@/app/_nav";
 import { DtNav } from "@/components/DtNav";
 

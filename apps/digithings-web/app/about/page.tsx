@@ -1,10 +1,10 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { Reveal } from "@digithings/ui";
+import { Mono, PageHead, Reveal } from "@digithings/ui";
 import { buttonVariants } from "@digithings/ui/ui";
 import { DtFooter } from "@/components/DtFooter";
-import { Mono, PageHead } from "../_company/prose";
 import { DtNav } from "@/components/DtNav";
+import { ROADMAP_MODULES, SHIPPING_MODULES } from "@/lib/siteCounts";
 
 export const metadata: Metadata = {
   title: "about — open AI infrastructure you can host",
@@ -99,10 +99,11 @@ export default function AboutPage() {
             </>
           }
         >
-          digithings is an open-source, modular AI infrastructure repository. Nine shipping modules
+          digithings is an open-source, modular AI infrastructure repository. {SHIPPING_MODULES}{" "}
+          shipping modules
           — orchestration, quant research, retrieval, chat, auth, tracing, heartbeat and audit,
-          a markdown vault, and the shared library the rest sit on — plus two more marked roadmap in the registry rather
-          than quietly counted as built. You run them on your own
+          a markdown vault, and the shared library the rest sit on — plus {ROADMAP_MODULES} more
+          marked roadmap in the registry rather than quietly counted as built. You run them on your own
           hardware, against your own provider keys, with every step of every run readable
           afterwards. It is a set of parts you assemble, not a platform you move into.
         </PageHead>

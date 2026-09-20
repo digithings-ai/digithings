@@ -1,8 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { Reveal } from "@digithings/ui";
+import { Mono, PageHead, Reveal, RuledList, RuledRow } from "@digithings/ui";
 import { DtFooter } from "@/components/DtFooter";
-import { Mono, PageHead, RuledList, RuledRow } from "../_company/prose";
 import { DtNav } from "@/components/DtNav";
 
 export const metadata: Metadata = {

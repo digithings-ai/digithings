@@ -1,5 +1,9 @@
 import {
+  CodeTabs,
   Colophon,
+  ContactMailto,
+  CtaLink,
+  Figure,
   NumberedStages,
   OdometerStrip,
   RepoActivity,
@@ -7,11 +11,11 @@ import {
   SocialRow,
   StackRow,
   WordReveal,
+  type CodeSample,
   type NumberedStage,
   type OdometerStat,
   type StackItem,
 } from "@digithings/ui";
-import { ContactMailto } from "@digithings/ui";
 import { buttonVariants } from "@digithings/ui/ui";
 import { DT_CONTACT_EMAIL } from "@/app/_nav";
 import { DtFooter } from "@/components/DtFooter";
@@ -25,59 +29,75 @@ import {
   REPO_URL,
   repoActivity,
 } from "@/lib/repoActivity";
+import {
+  BYOK_KEYS_STORED,
+  COMPOSE_DEFAULT,
+  COMPOSE_SERVICES,
+  COUNTED_AT,
+  ROADMAP_MODULES,
+  SEARCH_BACKENDS,
+  SHIPPING_MODULES,
+} from "@/lib/siteCounts";
 
-// v8 landing for the digithings platform — 100% reference-sourced + expressive
-// (#1450). A mouse-following mesh-gradient hero (HeroMesh + reveal-field
-// HeroGraph) opens, then every visual block is a promoted @digithings/ui
-// primitive or token-backed utility: a digit-roll OdometerStrip metrics band,
-// the shared TerminalManifest, the NumberedStages principles spine, the
-// RepoActivity section, and the one big WordReveal claim. The mesh / graph /
-// counters / reveal are client islands; the page stays a server component and
-// exports statically. Every motion moment honors prefers-reduced-motion and
-// reads with no JS (html.no-js fallbacks).
+// v9 landing for the digithings platform — rebuilt on the opencode.ai language
+// (D1, #4429). A small-type mono hero states the one-line claim, the install
+// command is a segmented tab group with a copy affordance, and every visual
+// block below is a promoted @digithings/ui primitive rendered inside a numbered
+// `Fig N` figure: the ambient mesh/graph field (repurposed from the retired
+// full-bleed hero), the OdometerStrip metrics band, the shared TerminalManifest,
+// the NumberedStages principles spine, RepoActivity, and the one big WordReveal
+// claim. The page stays a server component and exports statically; the mesh /
+// graph / counters / reveal are client islands and honor prefers-reduced-motion
+// and no-JS.
 //
-// The slot under the hero used to hold a drifting <Marquee> of the seven core
-// dependencies, then a RepoStrip of snapshot figures. Both are gone: the
-// marquee named libraries the #integrations section already names, and the
-// strip restated counts that now live once in <RepoActivity> further down.
+// Every count is single-sourced in lib/siteCounts.ts (D1): the module split is
+// derived from the shared registry, the rest are dated repository snapshots —
+// no page restates a number. Nothing here is a projection and nothing promises
+// live trading.
 
-// Every figure here is countable in the repo — no projections, no asterisks
-// (#1846). Each one is checked against the code, and the band must not
-// contradict the manifest right below it, which self-discloses "9 online · 2 on
-// the roadmap" (computed from the registry, so it tracks automatically):
-//   9  — non-roadmap modules in the shared `modules` registry (2 are roadmap:
-//        digistore, digilink). digivault was missing from the registry until it was
-//        added here — it ships
-//        a FastAPI service on 8004 behind its own compose profile and had been
-//        missing. This deliberately does NOT say "11", which is what used to sit
-//        14 lines under "no asterisks".
-//   16 — services under `services:` in the single 460-line docker-compose.yml.
-//   2  — live vector backends behind one client: Chroma and Azure AI Search
-//        (digisearch/src/digisearch/server.py fails startup unless one is
-//        configured).
+// The install channels that actually exist in the repository README — there is
+// no `curl | sh` installer, so no such tab is offered. Each tab is the complete
+// path from clone to a running stack: Docker (`make up`), the no-Docker local
+// stack (`make stack-local`), and the prebuilt GHCR images (`make up-ghcr`).
+const INSTALL: CodeSample[] = [
+  {
+    label: "docker",
+    code: `${REPO_CLONE}.git\ncd digithings\nmake up`,
+  },
+  {
+    label: "local",
+    code: `${REPO_CLONE}.git\ncd digithings\nmake stack-local`,
+  },
+  {
+    label: "ghcr",
+    code: `${REPO_CLONE}.git\ncd digithings\nmake pull-ghcr && make up-ghcr`,
+  },
+];
+
+// Every figure is countable in the repo (#1846) and single-sourced above:
+//   9  — non-roadmap modules in the shared registry (2 are roadmap: digistore,
+//        digilink). The manifest below self-discloses the same split.
+//   23 — services under `services:` in the single docker-compose.yml.
+//   3  — live vector backends behind one client, fail-closed at startup:
+//        Cloudflare Vectorize → Azure AI Search → Chroma.
 //   0  — BYOK keys stored: the key arrives per-request in `x-byok-key` and is
-//        forwarded upstream, never persisted or logged
-//        (apps/digichat/src/app/api/chat/route.ts).
-// Rendered by the OdometerStrip (#1452 promotion): each digit is a 0–9 reel
-// that rolls to its value on arrival; reduced motion and no-JS ship the
-// settled final figures.
+//        forwarded upstream, never persisted or logged.
+// Rendered by the OdometerStrip: each digit is a 0–9 reel that rolls to its
+// value on arrival; reduced motion and no-JS ship the settled final figures.
 const METRICS: OdometerStat[] = [
-  { value: "9", label: "modules shipping" },
-  { value: "16", label: "compose services" },
-  { value: "2", label: "vector backends" },
-  { value: "0", label: "keys stored" },
+  { value: String(SHIPPING_MODULES), label: "modules shipping" },
+  { value: String(COMPOSE_SERVICES), label: "compose services" },
+  { value: String(SEARCH_BACKENDS), label: "vector backends" },
+  { value: String(BYOK_KEYS_STORED), label: "keys stored" },
 ];
 
 // The packages the stack is actually assembled from, named deliberately and in
 // full (#1846) — compatibility is the differentiator, so the dependency list IS
-// the pitch. This section is also why the marquee above it was removable: it named
-// a subset of these on a loop and added nothing. Rendered by the shared
-// StackRow/StackLogo primitives (@digithings/ui): a slug present in the logos
-// registry gets its real vendor mark, anything else degrades to a monogram
-// chip. NautilusTrader, LiteLLM, Cheaper Inference, Chroma, Azure AI Search
-// and Assistant UI publish no single-path monochrome SVG, so they read as
-// monograms — expected, not a bug. Every slug below is verified against
-// components/logos.ts.
+// the pitch. Rendered by the shared StackRow/StackLogo primitives: a slug in the
+// logos registry gets its real vendor mark, anything else degrades to a monogram
+// chip. NautilusTrader, LiteLLM, Cheaper Inference, Chroma, Azure AI Search and
+// Assistant UI publish no single-path monochrome SVG, so they read as monograms —
+// expected, not a bug. Every slug below is verified against components/logos.ts.
 const INTEGRATIONS: { label: string; items: StackItem[] }[] = [
   {
     label: "orchestration & models",
@@ -117,16 +137,16 @@ const INTEGRATIONS: { label: string; items: StackItem[] }[] = [
   },
 ];
 
-// The four properties of every module — verbatim from the prior principles grid,
-// now a numbered spine.
+// The four properties of every module — a numbered spine. Counts are the
+// single-sourced constants so the copy cannot drift from the figures above.
 const PRINCIPLES: NumberedStage[] = [
   {
     num: "01",
     title: "Self-hosted by default",
     mech:
-      "One docker-compose file, sixteen services, on a laptop or any host you own — eight up by " +
-      "default and the rest behind named profiles you turn on: digichat, digivault, the search MCP, " +
-      "the heartbeat, observability, and the LiteLLM cache.",
+      `One docker-compose file, ${COMPOSE_SERVICES} services, on a laptop or any host you own — ` +
+      `${COMPOSE_DEFAULT} up by default and the rest behind named profiles you turn on: digichat, ` +
+      "digivault, the search MCP, the heartbeat, observability, and the LiteLLM cache.",
   },
   {
     num: "02",
@@ -141,7 +161,9 @@ const PRINCIPLES: NumberedStage[] = [
   {
     num: "04",
     title: "Backend-swappable",
-    mech: "Two live vector backends — Chroma and Azure AI Search — behind one client, swappable without touching business code.",
+    mech:
+      `${SEARCH_BACKENDS} live vector backends — Cloudflare Vectorize, Azure AI Search and Chroma — ` +
+      "behind one client, swappable without touching business code.",
   },
 ];
 
@@ -151,40 +173,50 @@ export default function Home() {
       <DtNav />
 
       <main id="main" tabIndex={-1}>
-        <HeroMesh>
-          <h1 className="dqhero-h1">
-            <span className="ln">
-              <span>AI infrastructure</span>
-            </span>
-            <span className="ln">
-              <span>in a glass box</span>
-            </span>
-            <span className="ln">
-              <span>
-                <em>you own</em>
-              </span>
-            </span>
-          </h1>
-          <p className="dqhero-lede">
-            Build and ship AI applications on infrastructure you own — your hosts, your keys, your
-            choice of model.
-          </p>
-          <div className="dqhero-cta">
-            {/* Claim + install: shared .cmdline (site.css) is the diegetic
-                proof; the loud control is ink/paper, never an accent pill. */}
-            <p className="cmdline">
-              <span className="prompt">$</span>
-              git clone https://github.com/digithings-ai/digithings.git
+        {/* Small-type mono hero (opencode language): the one-line claim, the
+            lede, and the install command as a segmented tab group. No mesh here
+            any more — the art moved into the Fig 1 media block below. */}
+        <section className="section pb-0" aria-labelledby="hero-claim">
+          <div className="wrap">
+            <span className="kicker">{"// digithings"}</span>
+            <h1
+              id="hero-claim"
+              className="mt-[0.9rem] font-mono text-[22px] font-normal leading-[1.45] tracking-[-0.01em] text-ink"
+            >
+              AI infrastructure, in a glass box you own.
+            </h1>
+            <p className="mt-[1rem] max-w-[62ch] text-[1.02rem] leading-[1.7] text-ink-soft">
+              Build and ship AI applications on infrastructure you own — your hosts, your keys, your
+              choice of model.
             </p>
-            <a className={buttonVariants({ variant: "default" })} href="/chat">
-              Ask digichat
-            </a>
-            <a className="dqhero-scroll-label" href="#metrics">
-              Scroll to explore
-            </a>
-            <div className="dqhero-scroll" aria-hidden="true" />
+            <div className="mt-[1.6rem] max-w-[46rem]">
+              <CodeTabs samples={INSTALL} />
+            </div>
+            <div className="mt-[1.4rem] flex flex-wrap items-center gap-[0.8rem]">
+              <CtaLink href="/chat">Ask digichat</CtaLink>
+              <CtaLink href="#metrics" variant="ghost">
+                See the numbers
+              </CtaLink>
+            </div>
           </div>
-        </HeroMesh>
+        </section>
+
+        {/* Fig 1 — the ambient mesh/graph field, repurposed from the retired
+            full-bleed hero into a bounded, looping media block. The canvas and
+            graph are the same client art; the caption is honest about what it
+            is (a live field, not a screencast). */}
+        <section className="section pb-0" aria-label="Ambient field">
+          <div className="wrap">
+            <Figure
+              n={1}
+              caption="The ambient mesh and graph field, drawn live in the browser — no image, no video."
+            >
+              <div className="relative aspect-[16/9] w-full overflow-hidden border border-hair">
+                <HeroMesh variant="media" />
+              </div>
+            </Figure>
+          </div>
+        </section>
 
         <section className="section" id="metrics">
           <div className="wrap">
@@ -192,12 +224,18 @@ export default function Home() {
               <span className="kicker">{"// by the numbers"}</span>
               <h2>The platform, in four numbers.</h2>
               <p>
-                No asterisks — every figure is countable in the repo. Nine modules ship today and
-                two are still on the roadmap; the manifest below names which.
+                No asterisks — every figure is countable in the repo, and every one is single-sourced
+                in this site&apos;s <code className="font-mono text-ink">lib/siteCounts.ts</code>. The
+                manifest below names which modules ship and which are still roadmap.
               </p>
             </Reveal>
             <Reveal>
-              <OdometerStrip stats={METRICS} className="mx-auto max-w-[880px]" />
+              <Figure
+                n={2}
+                caption={`Counted ${COUNTED_AT}; the module split is derived from the shared registry.`}
+              >
+                <OdometerStrip stats={METRICS} className="mx-auto max-w-[880px]" />
+              </Figure>
             </Reveal>
           </div>
         </section>
@@ -206,25 +244,15 @@ export default function Home() {
           <div className="wrap">
             <Reveal className="section-head center">
               <span className="kicker">{"// the architecture"}</span>
-              {/* No nowrap here: the head is 56ch wide and the headline at full
-                  clamp size is wider, so forcing one line overflows the box to
-                  the right and reads off-center (text-align:center anchors
-                  overflowing nowrap text at the left edge). It wraps to two
-                  centered lines instead.
-                  "Nine", not "Eleven" (full-UI-suite critique, P2): the
-                  #metrics section one screen above states, and the odometer
-                  literally renders, "9" shipped modules — a scanning reader
-                  hitting two different headline-level numbers back to back
-                  reads as a contradiction, even though both are correct under
-                  their own count (nine shipped vs. eleven total registered).
-                  The 9-shipped/2-roadmap split already lives in the body copy
-                  below; the headline now matches the number it is standing
-                  next to. */}
-              <h2 className="text-balance">Nine modules. One toolkit.</h2>
+              {/* "9", not "11": the #metrics band one screen above renders the
+                  same shipped-module count, so a scanning reader never meets two
+                  different headline-level numbers for the same thing. The split
+                  is derived from the registry. */}
+              <h2 className="text-balance">{SHIPPING_MODULES} modules. One toolkit.</h2>
               <p>
-                The nine that ship run standalone or compose with the rest — retrieval, quant
-                research and chat, plus the auth, tracing and audit any deployment needs. Two more
-                are on the roadmap; the manifest below marks which.
+                The {SHIPPING_MODULES} that ship run standalone or compose with the rest — retrieval,
+                quant research and chat, plus the auth, tracing and audit any deployment needs.{" "}
+                {ROADMAP_MODULES} more are on the roadmap; the manifest below marks which.
               </p>
             </Reveal>
             <ModuleManifest />

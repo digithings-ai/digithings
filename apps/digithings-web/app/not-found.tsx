@@ -1,9 +1,9 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { PageHead } from "@digithings/ui";
 import { buttonVariants } from "@digithings/ui/ui";
 import { DtNav } from "@/components/DtNav";
 import { DtFooter } from "@/components/DtFooter";
-import { PageHead } from "./_company/prose";
 
 export const metadata: Metadata = {
   title: "No such page — digithings",
@@ -14,7 +14,7 @@ export default function NotFound() {
   return (
     <>
       <DtNav />
-      <main className="pt-[var(--dq-nav-h)]">
+      <main id="main" tabIndex={-1} className="pt-[var(--dq-nav-h)]">
         <PageHead kicker="// 404" title="No such page.">
           The address does not match anything on this site. The docs index is the
           fastest way back.
