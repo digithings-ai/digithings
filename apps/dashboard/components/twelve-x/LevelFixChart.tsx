@@ -53,7 +53,7 @@ export function LevelFixChart({ series }: { series: LevelFixSeries }) {
 
   if (points.length === 0 && !hasLevels) {
     return (
-      <div className="border border-hair bg-surface/40 p-4 text-xs text-ink-mute" data-testid="level-fix-chart">
+      <div className="border border-hair p-4 text-xs text-ink-mute" data-testid="level-fix-chart">
         No fix data for {pair} yet.
       </div>
     );

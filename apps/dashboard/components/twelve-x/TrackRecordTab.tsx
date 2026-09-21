@@ -76,7 +76,7 @@ export default function TrackRecordTab({
     <div className="space-y-4">
       <div className="flex flex-wrap items-center gap-3 px-1">
         <History size={18} className="shrink-0 text-accent" aria-hidden />
-        <h2 className="font-display text-2xl tracking-tight text-ink">Track record</h2>
+        <h2 className="font-display text-xl tracking-tight text-ink">Track record</h2>
       </div>
       <p className="max-w-2xl px-1 text-xs text-ink-mute">
         Whether past calls worked, with uncertainty shown instead of hidden. Idea
