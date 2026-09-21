@@ -591,6 +591,32 @@ describe("kit parts promoted from the controls layer (#4306, batch K1)", () => {
     expect(withIcon).toContain("!");
   });
 
+  it("EmptyState glass-display is fluid and wrap-safe so the gate card cannot clip its title (#4452)", () => {
+    const html = renderToStaticMarkup(
+      <EmptyState
+        variant="error"
+        dress="glass-display"
+        className="mx-auto max-w-md"
+        title="Live data is not connected in this build"
+        body="This deployment has no live data backend configured."
+      />,
+    );
+    // Fluid: the card fills its container up to the consumer's cap. Without
+    // this it can size to content and push past a phone-width viewport.
+    expect(html).toContain("w-full");
+    // Wrap-safe: a long unbreakable token must break, not overflow the box.
+    expect(html).toContain("break-words");
+    // A text-first gate card may never ellipsise the message it exists to state.
+    // Scope to the message elements — an action Button may carry its own
+    // `whitespace-nowrap` for its label without truncating the gate's copy.
+    const title = html.match(/<h3[^>]*class="([^"]*)"/)?.[1] ?? "";
+    const body = html.match(/<p[^>]*class="([^"]*)"/)?.[1] ?? "";
+    for (const cls of [title, body]) {
+      expect(cls).not.toContain("truncate");
+      expect(cls).not.toMatch(/whitespace-nowrap|text-ellipsis|line-clamp/);
+    }
+  });
+
   it("Skeleton renders the shimmer shape with aria-hidden and no loading semantics", () => {
     const line = renderToStaticMarkup(<Skeleton className="h-3 w-40" />);
     expect(line).toContain('data-slot="skeleton"');
