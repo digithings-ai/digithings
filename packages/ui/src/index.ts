@@ -445,3 +445,11 @@ export {
   type GlyphListProps,
   type GlyphRowProps,
 } from "./components/document";
+
+// changelog family (D1, #4429) — the release rail: one row per release with a
+// sticky version/date aside and the shipped title in the wide column.
+export {
+  ReleaseRail,
+  type ReleaseRailItem,
+  type ReleaseRailProps,
+} from "./components/changelog";

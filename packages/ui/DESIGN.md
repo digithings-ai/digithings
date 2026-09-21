@@ -219,6 +219,13 @@ The public sites are documents, not posters: every page is one framed column, a 
 
 **The Type Ladder.** `--type-hero` (`clamp(2rem, 4.5vw, 2.75rem)`) is reserved for a landing hero; every other surface uses `--type-page-title` (`clamp(1.5rem, 3vw, 2rem)`), `--type-section` (1.375rem), `--type-sub-label`/`--type-body` (1rem) and `--type-meta` (0.75rem with `--tracking-meta` 0.08em, uppercase for Fig captions and table headers only). The instrument-panel display clamp stays for the reference and dashboard surfaces, not for a public page.
 
+### Changelog rows (ReleaseRail)
+
+A release is one hairline row in a `180px 1fr` grid: the version, date and product pinned in a
+sticky aside (`sm:sticky sm:top-[5rem]`), the shipped title in the wide column, and its
+highlights as `[*]` rows in caller order. No cards, no scroll strip, and no tag chrome beyond
+the release tag itself; static, so a changelog reads without JavaScript.
+
 ## Elevation & Depth
 
 **Flat by default; shadow means overlay; glow means alive.** The system does not use ambient elevation shadows on ordinary content. A card, a panel, a form field, a finance dashboard composite — all of them read depth from a single 1px hairline border and a flat surface fill, escalating only to the stronger `hairline-strong` border on hover. The dashboard states this as an explicit house rule: "FLAT — no glass morphism on content."
