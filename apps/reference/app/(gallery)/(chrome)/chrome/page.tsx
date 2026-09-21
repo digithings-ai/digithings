@@ -9,6 +9,7 @@ import { ModuleCardReference } from "@/components/chrome/module-card-reference";
 import { NavMenuReference } from "@/components/chrome/nav-menu-reference";
 import { NavShellReference } from "@/components/chrome/nav-shell-reference";
 import { PaginationReference } from "@/components/chrome/pagination-reference";
+import { FooterCellsReference } from "@/components/footer-cells-reference";
 import { ReleaseRailReference } from "@/components/release-rail-reference";
 import { ScrollNavReference } from "@/components/scroll-nav-reference";
 import { SocialsReference } from "@/components/socials-reference";
@@ -41,6 +42,7 @@ export default function ChromePage() {
       <BreadcrumbsReference />
       <PaginationReference />
       <ReleaseRailReference />
+      <FooterCellsReference />
       <ModuleCardReference />
       <SocialsReference />
       <FooterReference />

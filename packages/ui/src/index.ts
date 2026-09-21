@@ -453,3 +453,11 @@ export {
   type ReleaseRailItem,
   type ReleaseRailProps,
 } from "./components/changelog";
+
+// footer family (D1, #4429) — the footer as a hairline table: one cell per
+// destination, the legal strip underneath.
+export {
+  FooterCells,
+  type FooterCell,
+  type FooterCellsProps,
+} from "./components/footer";

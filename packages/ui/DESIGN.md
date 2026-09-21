@@ -226,6 +226,13 @@ sticky aside (`sm:sticky sm:top-[5rem]`), the shipped title in the wide column, 
 highlights as `[*]` rows in caller order. No cards, no scroll strip, and no tag chrome beyond
 the release tag itself; static, so a changelog reads without JavaScript.
 
+### Footer cells (FooterCells)
+
+The footer is a hairline table, not a link cloud: one cell per top-level destination at equal
+weight (`sm:grid-cols-2 lg:grid-cols-5`), each separated by the same 1px hairline the sections
+use, and a mono legal strip underneath carrying the copyright, the privacy notice and the
+sibling site. No column headings, no nested groups, no background change.
+
 ## Elevation & Depth
 
 **Flat by default; shadow means overlay; glow means alive.** The system does not use ambient elevation shadows on ordinary content. A card, a panel, a form field, a finance dashboard composite — all of them read depth from a single 1px hairline border and a flat surface fill, escalating only to the stronger `hairline-strong` border on hover. The dashboard states this as an explicit house rule: "FLAT — no glass morphism on content."
