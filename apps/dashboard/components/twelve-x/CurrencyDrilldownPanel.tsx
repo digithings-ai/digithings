@@ -43,7 +43,7 @@ export function CurrencyDrilldownPanelBody({
     <div className="space-y-6">
       {/* Header */}
       <div className="space-y-2">
-        <h3 className="font-display text-2xl tracking-tight text-ink">{currency}</h3>
+        <h3 className="font-display text-xl tracking-tight text-ink">{currency}</h3>
         <p className="text-sm text-ink-soft">{label}</p>
       </div>
 

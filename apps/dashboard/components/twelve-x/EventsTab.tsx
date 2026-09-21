@@ -462,7 +462,7 @@ export default function EventsTab({
     <div className="space-y-4">
       <div className="flex flex-wrap items-center gap-3 px-1">
         <CalendarClock size={18} className="shrink-0 text-accent" aria-hidden />
-        <h2 className="font-display text-2xl tracking-tight text-ink">Upcoming catalysts</h2>
+        <h2 className="font-display text-xl tracking-tight text-ink">Upcoming catalysts</h2>
         {/* List | Timeline segmented control (demo's #evtSubnav). */}
         <SegmentedControl
           options={VIEWS.map((v) => ({ value: v.key, label: v.label }))}

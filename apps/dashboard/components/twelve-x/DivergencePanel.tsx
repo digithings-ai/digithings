@@ -19,7 +19,7 @@ export function DivergencePanelBody({ divergence }: { divergence: FxConsensusDiv
   return (
     <div className="space-y-5">
       <div className="space-y-1">
-        <h3 className="font-display text-2xl tracking-tight text-ink">{divergence.currency}</h3>
+        <h3 className="font-display text-xl tracking-tight text-ink">{divergence.currency}</h3>
         <p className="text-sm text-ink-soft">
           Street vs PMT Smart Bias — gap {divergence.gap.toFixed(2)} (threshold{' '}
           {DEFAULT_DIVERGENCE_THRESHOLD})

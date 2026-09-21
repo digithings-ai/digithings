@@ -46,21 +46,17 @@ export default function WhyClient() {
             <p className="font-mono text-xs font-semibold uppercase text-ink-mute">
               Reasoning workspace
             </p>
-            <h1 className="mt-1 font-display text-3xl text-ink">
+            <h1 className="mt-1 font-display text-2xl text-ink">
               Why the book looks this way
             </h1>
             <p className="mt-1 text-sm text-ink-mute">
               synthesized read → challenged decisions → PM record
             </p>
           </div>
-          <dl className="grid grid-cols-2 gap-px border border-hair bg-hair text-sm lg:min-w-64">
+          <dl className="grid grid-cols-1 gap-px border border-hair bg-hair text-sm lg:min-w-64">
             <div className="bg-surface px-3 py-2">
               <dt className="font-mono text-xs uppercase text-ink-mute">View</dt>
               <dd className="mt-1 font-medium text-ink">{activeLabel}</dd>
-            </div>
-            <div className="bg-surface px-3 py-2">
-              <dt className="font-mono text-xs uppercase text-ink-mute">Record</dt>
-              <dd className="mt-1 font-medium text-ink">Latest run</dd>
             </div>
           </dl>
         </header>

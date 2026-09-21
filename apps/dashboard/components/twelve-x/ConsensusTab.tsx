@@ -173,7 +173,7 @@ export default function ConsensusTab({
     <div className="space-y-5">
       <div className="flex flex-wrap items-center gap-3 px-1">
         <LineChartIcon size={18} className="shrink-0 text-accent" aria-hidden />
-        <h2 className="font-display text-2xl tracking-tight text-ink">G10 consensus</h2>
+        <h2 className="font-display text-xl tracking-tight text-ink">G10 consensus</h2>
       </div>
 
       <p className="text-xs text-ink-mute max-w-2xl">
