@@ -233,6 +233,17 @@ weight (`sm:grid-cols-2 lg:grid-cols-5`), each separated by the same 1px hairlin
 use, and a mono legal strip underneath carrying the copyright, the privacy notice and the
 sibling site. No column headings, no nested groups, no background change.
 
+### Docs frame (DocsLayout + DocsSearch)
+
+The docs shell is the framed column with a spine: the scroll-spied sidebar (a native `<details>`
+disclosure below 860px, so the nav never just vanishes), the content column, and — once the
+viewport clears 1200px — a narrower *on this page* rail, sticky at `--docs-nav-h` and built from
+the same `itemLink` renderer as the sidebar (2px inline-start border, `bg-accent-weak` when
+active). `DocsLayout` takes `nav`, `rail`, `railLabel` (default "on this page") and a `search`
+slot; the search is `DocsSearch` — the stock `SearchBar` wearing a `<Kbd>⌘K</Kbd>` hint — which
+filters the page's own headings on the client (no index, no dependency) and binds `⌘K`/`Ctrl-K`
+to focus. Print hides the sidebar and the rail and collapses back to a single column.
+
 ## Elevation & Depth
 
 **Flat by default; shadow means overlay; glow means alive.** The system does not use ambient elevation shadows on ordinary content. A card, a panel, a form field, a finance dashboard composite — all of them read depth from a single 1px hairline border and a flat surface fill, escalating only to the stronger `hairline-strong` border on hover. The dashboard states this as an explicit house rule: "FLAT — no glass morphism on content."

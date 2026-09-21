@@ -107,10 +107,35 @@
 }
 .doc-fields tr:last-child td { border-bottom: 0; }
 
+/* ── on-this-page rail: a third column on wide viewports ───────────────────
+   Opt-in: a page supplies `rail` entries and the shell grows a column. Below
+   1200px the entries stay out of the layout — the sidebar already carries the
+   page's sections and the mobile disclosure keeps them reachable. */
+.docs-rail { display: none; }
+
+/* The search affordance sits above the hero, right-aligned with the field. */
+.docs-search { display: flex; justify-content: flex-end; }
+
+@media (min-width: 1200px) {
+  .docs-shell:has(> .docs-side):has(> .docs-rail) {
+    grid-template-columns: 200px minmax(0, 1fr) 200px;
+  }
+  .docs-shell:has(> .docs-rail):not(:has(> .docs-side)) {
+    grid-template-columns: minmax(0, 1fr) 200px;
+  }
+  .docs-rail {
+    display: block;
+    align-self: start;
+    position: sticky;
+    top: var(--docs-nav-h, 6rem);
+  }
+}
+
 /* ── print: navigation chrome drops out; content flows full-width ───────── */
 @media print {
   .docs-side,
   .docs-side-mobile,
+  .docs-rail,
   .docs-code-copy { display: none; }
   .docs-shell { grid-template-columns: 1fr; }
 }

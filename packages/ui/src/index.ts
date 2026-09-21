@@ -53,6 +53,7 @@ export {
 } from "./components/chrome";
 export { NavShell, type NavShellProps } from "./components/NavShell";
 export { DocsLayout, type DocsNavGroup, type DocsNavItem, type DocsHero } from "./components/docs/DocsLayout";
+export { DocsSearch, filterDocsItems, type DocsSearchProps } from "./components/docs/DocsSearch";
 export { CodeTabs, DocsCodeBlock, type CodeSample } from "./components/docs/CodeTabs";
 export { CopyCommand, type CopyCommandProps, type CopyCommandSample } from "./components/docs/CopyCommand";
 export { EndpointDoc, MethodBadge, type DocsEndpoint, type DocsField, type DocsMethod } from "./components/docs/Endpoint";
