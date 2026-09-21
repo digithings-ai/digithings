@@ -104,7 +104,7 @@ When touching `digiquant/src/digiquant/dashboard/` **or** `apps/dashboard/` Grou
 1. Read [`ARCHITECTURE.md`](ARCHITECTURE.md) § research + portfolio and
    [`docs/superpowers/specs/2026-06-20-olympus-daily-thesis-design.md`](../docs/superpowers/specs/2026-06-20-olympus-daily-thesis-design.md).
 2. Read **house book scope**: [`docs/ops/HOUSE_BOOK_SCOPE.md`](../docs/ops/HOUSE_BOOK_SCOPE.md) —
-   omitted `workspace_id` = house; dashboard uses `houseBook()`; MCP `query_data`
+   omitted `workspace_id` = house; dashboard uses `houseBook()`; MCP `query_research`
    stamps `HOUSE_BOOK_READ_TABLES`.
 3. Read component guides: [`src/digiquant/research/docs/AGENTS.md`](src/digiquant/research/docs/AGENTS.md),
    [`src/digiquant/portfolio/docs/AGENTS.md`](src/digiquant/portfolio/docs/AGENTS.md).

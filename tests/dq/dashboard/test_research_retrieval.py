@@ -19,6 +19,7 @@ from digiquant.dashboard.research_retrieval import (
     query_portfolio,
     query_research,
     research_document_allowed,
+    search_research,
     strip_blinded_forbidden_keys,
 )
 from digiquant.dashboard.research_retrieval.context import (
@@ -909,3 +910,269 @@ class TestQueryResearchArchiveReadthrough:
             store=_FakeArchiveStore(),
         )
         assert out == {"error": "no research row found for 'macro' as of 2026-06-19"}
+
+
+@pytest.mark.unit
+class TestSearchResearch:
+    """#4436: the filterable, paginated, R2-read-through research search tool."""
+
+    def _client(self) -> FakeSupabaseClient:
+        return FakeSupabaseClient(
+            canned_reads={
+                "documents": [
+                    {
+                        "date": "2026-06-19",
+                        "document_key": "deep-dives/AAPL",
+                        "title": "Apple deep dive",
+                        "doc_type": "deep-dive",
+                        "category": "equity",
+                        "segment": "equity",
+                        "sector": "Technology",
+                        "run_type": "baseline",
+                        "content": "x" * 600,
+                        "payload": {"thesis": "services margin"},
+                        "workspace_id": str(house_workspace_id()),
+                    },
+                    {
+                        "date": "2026-06-19",
+                        "document_key": "macro",
+                        "title": "Macro board",
+                        "doc_type": "macro",
+                        "category": "macro",
+                        "segment": "macro",
+                        "sector": None,
+                        "run_type": "baseline",
+                        "content": "short",
+                        "payload": {"regime": "tight"},
+                        "workspace_id": str(house_workspace_id()),
+                    },
+                    {
+                        "date": "2026-05-01",
+                        "document_key": "deep-dives/AAPL",
+                        "title": "Apple prior",
+                        "doc_type": "deep-dive",
+                        "category": "equity",
+                        "segment": "equity",
+                        "sector": "Technology",
+                        "run_type": "baseline",
+                        "content": "prior body",
+                        "payload": {"thesis": "old"},
+                        "workspace_id": str(house_workspace_id()),
+                    },
+                ]
+            }
+        )
+
+    def test_default_single_day_baseline_documents(self) -> None:
+        out = search_research(self._client(), run_date=date(2026, 6, 19))
+        assert out["dataset"] == "documents"
+        assert out["run_type"] == "baseline"
+        assert out["date_from"] == "2026-06-19"
+        assert out["date_to"] == "2026-06-19"
+        keys = {row["document_key"] for row in out["rows"]}
+        assert keys == {"deep-dives/AAPL", "macro"}
+
+    def test_include_prior_spans_history(self) -> None:
+        out = search_research(
+            self._client(),
+            run_date=date(2026, 6, 19),
+            document_key="deep-dives/AAPL",
+            include_prior=True,
+        )
+        assert out["include_prior"] is True
+        assert out["date_from"] is None
+        assert {row["date"] for row in out["rows"]} == {"2026-06-19", "2026-05-01"}
+
+    def test_date_range_filter(self) -> None:
+        out = search_research(
+            self._client(),
+            run_date=date(2026, 6, 19),
+            date_from=date(2026, 5, 1),
+            date_to=date(2026, 6, 19),
+        )
+        assert out["row_count"] == 3
+
+    def test_no_lookahead_past_anchor(self) -> None:
+        out = search_research(
+            self._client(),
+            run_date=date(2026, 5, 15),
+            date_to=date(2026, 6, 30),
+            include_prior=True,
+        )
+        # Upper bound clamps to the anchor; the 2026-06-19 rows are excluded.
+        assert out["date_to"] == "2026-05-15"
+        assert {row["date"] for row in out["rows"]} == {"2026-05-01"}
+
+    def test_sector_filter(self) -> None:
+        out = search_research(self._client(), run_date=date(2026, 6, 19), sector="Technology")
+        assert out["row_count"] == 1
+        assert out["rows"][0]["document_key"] == "deep-dives/AAPL"
+
+    def test_subject_filter_matches_title(self) -> None:
+        out = search_research(self._client(), run_date=date(2026, 6, 19), subject="Apple")
+        assert out["row_count"] == 1
+        assert out["rows"][0]["document_key"] == "deep-dives/AAPL"
+
+    def test_doc_type_filter(self) -> None:
+        out = search_research(self._client(), run_date=date(2026, 6, 19), doc_type="macro")
+        assert out["row_count"] == 1
+        assert out["rows"][0]["document_key"] == "macro"
+
+    def test_segment_alias_resolves_to_document_key(self) -> None:
+        out = search_research(self._client(), run_date=date(2026, 6, 19), segment="macro")
+        assert out["row_count"] == 1
+        assert out["rows"][0]["document_key"] == "macro"
+
+    def test_full_content_returns_untruncated_body(self) -> None:
+        out = search_research(
+            self._client(),
+            run_date=date(2026, 6, 19),
+            document_key="deep-dives/AAPL",
+            full_content=True,
+        )
+        assert len(out["rows"][0]["content"]) == 600
+        assert "content_truncated" not in out["rows"][0]
+
+    def test_preview_truncates_large_content(self) -> None:
+        out = search_research(
+            self._client(), run_date=date(2026, 6, 19), document_key="deep-dives/AAPL"
+        )
+        row = out["rows"][0]
+        assert len(row["content"]) == 500
+        assert row["content_truncated"] is True
+
+    def test_pagination_limit_and_offset(self) -> None:
+        page1 = search_research(self._client(), run_date=date(2026, 6, 19), limit=1, offset=0)
+        assert page1["limit"] == 1
+        assert page1["row_count"] == 1
+        assert len(page1["rows"]) == 1
+        page2 = search_research(self._client(), run_date=date(2026, 6, 19), limit=1, offset=1)
+        assert page2["row_count"] == 1
+        assert page2["rows"][0]["document_key"] != page1["rows"][0]["document_key"]
+
+    def test_limit_is_capped_at_500(self) -> None:
+        out = search_research(self._client(), run_date=date(2026, 6, 19), limit=9999)
+        assert out["limit"] == 500
+
+    def test_unknown_dataset_returns_error(self) -> None:
+        out = search_research(self._client(), run_date=date(2026, 6, 19), dataset="price_history")
+        assert "error" in out and "unknown dataset" in out["error"]
+
+    def test_portfolio_dataset_blocked_for_blinded_phase(self) -> None:
+        out = search_research(
+            self._client(),
+            run_date=date(2026, 6, 19),
+            dataset="positions",
+            retrieval_phase="h5_analyst",
+        )
+        assert "error" in out and "portfolio" in out["error"]
+
+    def test_portfolio_dataset_allowed_for_pm(self) -> None:
+        client = FakeSupabaseClient(
+            canned_reads={
+                "positions": [
+                    {
+                        "date": "2026-06-19",
+                        "ticker": "AAPL",
+                        "weight_pct": 4.0,
+                        "workspace_id": str(house_workspace_id()),
+                    }
+                ]
+            }
+        )
+        out = search_research(
+            client, run_date=date(2026, 6, 19), dataset="positions", retrieval_phase="h7_pm"
+        )
+        assert out["row_count"] == 1
+        assert out["rows"][0]["ticker"] == "AAPL"
+
+    def test_decision_log_uses_run_date_column_and_run_id(self) -> None:
+        client = FakeSupabaseClient(
+            canned_reads={
+                "decision_log": [
+                    {
+                        "run_date": "2026-06-19",
+                        "run_id": "r1",
+                        "ticker": "AAPL",
+                        "stance": "long",
+                        "status": "open",
+                        "alpha": 0.01,
+                        "reflection": "ok",
+                    },
+                    {
+                        "run_date": "2026-06-19",
+                        "run_id": "r2",
+                        "ticker": "MSFT",
+                        "stance": "flat",
+                        "status": "closed",
+                        "alpha": -0.02,
+                        "reflection": "no",
+                    },
+                ]
+            }
+        )
+        out = search_research(
+            client,
+            run_date=date(2026, 6, 19),
+            dataset="decision_log",
+            run_id="r1",
+            retrieval_phase="h7_pm",
+        )
+        assert out["row_count"] == 1
+        assert out["rows"][0]["ticker"] == "AAPL"
+
+    def test_documents_archived_payload_hydrated_from_r2(self) -> None:
+        payload = {"thesis": "hydrated from r2"}
+        store = _FakeArchiveStore()
+        client = FakeSupabaseClient(
+            canned_reads={
+                "documents": [
+                    {
+                        "date": "2026-06-19",
+                        "document_key": "macro",
+                        "doc_type": "macro",
+                        "run_type": "baseline",
+                        "content": "body",
+                        "payload": None,
+                        "workspace_id": str(house_workspace_id()),
+                    }
+                ]
+            },
+            store={},
+        )
+        # Patch the archive store resolver into the fake client's store path.
+        import digiquant.dashboard.research_retrieval.queries as q
+
+        orig = q.read_archived_document
+
+        def _fake_read(_client, _store, *, workspace_id, document_key, date_str):
+            return payload
+
+        q.read_archived_document = _fake_read  # type: ignore[assignment]
+        try:
+            out = search_research(
+                client,
+                run_date=date(2026, 6, 19),
+                document_key="macro",
+                store=store,
+            )
+        finally:
+            q.read_archived_document = orig  # type: ignore[assignment]
+        assert out["rows"][0]["payload"] == payload
+
+    def test_blinded_phase_drops_blocked_document(self) -> None:
+        client = FakeSupabaseClient(
+            canned_reads={
+                "documents": [
+                    {
+                        "date": "2026-06-19",
+                        "document_key": "digest",
+                        "content": "secret",
+                        "payload": {},
+                        "workspace_id": str(house_workspace_id()),
+                    }
+                ]
+            }
+        )
+        out = search_research(client, run_date=date(2026, 6, 19), retrieval_phase="h5_analyst")
+        assert out["row_count"] == 0

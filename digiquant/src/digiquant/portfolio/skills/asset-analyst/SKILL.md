@@ -13,7 +13,7 @@ is absent (an exploratory/technical pick), say so explicitly and assess whether 
 thesis is warranted — do not invent one.
 
 Emit a unified ``AnalystPayload`` for the focus ticker. Use ``query_research`` and
-``query_data`` only — stay blinded to portfolio weights.
+``query_research`` only — stay blinded to portfolio weights.
 
 Populate every field substantively — the PM, deliberation, and risk sizer all depend on
 them:
