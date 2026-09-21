@@ -358,6 +358,27 @@
   --ease-glide: cubic-bezier(0.22, 1, 0.36, 1);
   --duration-reveal: 0.6s;
   --duration-hover: 0.18s;
+  --duration-copied: 1.5s;
+
+  /* Marketing type ladder (the document scale). The instrument-panel display
+     clamp stays reserved for a landing hero; every other surface uses this
+     smaller, denser ladder so a page reads as a document, not a poster. */
+  --type-hero: clamp(2rem, 4.5vw, 2.75rem);
+  --type-page-title: clamp(1.5rem, 3vw, 2rem);
+  --type-section: 1.375rem;
+  --type-sub-label: 1rem;
+  --type-body: 1rem;
+  --type-meta: 0.75rem;
+  --tracking-meta: 0.08em;
+
+  --leading-prose: 1.8;
+  --leading-prose-narrow: 1.75;
+  --measure-prose: 72ch;
+
+  /* One framed column, one inline inset, one block step per page. */
+  --frame-w: var(--wrap);
+  --page-pad: var(--gutter);
+  --page-step: var(--section-y);
 }
 
 /* High-fidelity twin of the house curve (canon §09): a spring-shaped
