@@ -43,7 +43,7 @@ Parameters:
 | `sector` | str | null | `documents.sector` |
 | `subject` | str | null | Maps to `documents` `category`/`topic_key`/title match |
 | `doc_type` | str | null | `documents.doc_type` |
-| `phase` | str | null | `documents.phase` |
+| `phase` | enum | `research_edit` | Retrieval/blinding phase (`RetrievalPhase`); gates what the caller may see, not a `documents` column (#4467) |
 | `include_prior` | bool | `false` | Opt-in self-read of prior-day documents for continuity |
 | `as_of_date` | ISO date | null | Anchor; defaults to the dispatcher's `run_date` |
 | `limit` | int | 50 | Rows per page (clamped `[1,500]`) |
@@ -63,7 +63,7 @@ Keep `fetch_prior_document` (exact single-document fetch) as-is. Fold `query_por
 
 Extend `digiquant/src/digiquant/dashboard/research_retrieval/`:
 
-- `queries.py` — add `search_research(client, *, run_type, run_id, date_from, date_to, document_key, segment, ticker, sector, subject, doc_type, phase, include_prior, as_of_date, limit, offset, full_content, …) -> dict` alongside the existing narrow `query_research`, reusing `_query_documents_row`, `_hydrate_archived_row`, and the join helpers. Add pagination.
+- `queries.py` — add `search_research(client, *, run_type, run_id, date_from, date_to, document_key, segment, ticker, sector, subject, doc_type, retrieval_phase, include_prior, as_of_date, limit, offset, full_content, …) -> dict` alongside the existing narrow `query_research`, reusing `_query_documents_row`, `_hydrate_archived_row`, and the join helpers. Add pagination.
 - `tools.py` — extend `RESEARCH_TOOLS` schema for `query_research`; route the new params in `build_research_tool_dispatcher`.
 - `blinding.py` — keep the phase-scoped category gate; add the `include_prior` path through the same gate so a phase cannot read what it is not allowed to see.
 

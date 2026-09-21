@@ -1214,3 +1214,73 @@ class TestSearchResearch:
         )
         out = search_research(client, run_date=date(2026, 6, 19), retrieval_phase="h5_analyst")
         assert out["row_count"] == 0
+
+    def test_digest_delta_blocked_for_h5_analyst(self) -> None:
+        client = FakeSupabaseClient(
+            canned_reads={
+                "documents": [
+                    {
+                        "date": "2026-06-19",
+                        "document_key": "digest-delta",
+                        "title": "Daily Delta",
+                        "doc_type": "Daily Delta",
+                        "run_type": "baseline",
+                        "content": "secret delta",
+                        "payload": {},
+                        "workspace_id": str(house_workspace_id()),
+                    }
+                ]
+            }
+        )
+        blinded = search_research(client, run_date=date(2026, 6, 19), retrieval_phase="h5_analyst")
+        assert blinded["row_count"] == 0
+        visible = search_research(client, run_date=date(2026, 6, 19), retrieval_phase="h1_thesis")
+        assert visible["row_count"] == 1
+        assert visible["rows"][0]["document_key"] == "digest-delta"
+
+    def test_unknown_retrieval_phase_returns_error(self) -> None:
+        out = search_research(self._client(), run_date=date(2026, 6, 19), retrieval_phase="bogus")
+        assert "error" in out
+        assert "unknown retrieval phase" in out["error"]
+
+    def test_document_phase_int_column_is_not_filtered(self) -> None:
+        client = FakeSupabaseClient(
+            canned_reads={
+                "documents": [
+                    {
+                        "date": "2026-06-19",
+                        "document_key": "macro",
+                        "title": "Macro board",
+                        "doc_type": "macro",
+                        "run_type": "baseline",
+                        "phase": 7,
+                        "content": "short",
+                        "payload": {},
+                        "workspace_id": str(house_workspace_id()),
+                    }
+                ]
+            }
+        )
+        out = search_research(client, run_date=date(2026, 6, 19))
+        assert out["row_count"] == 1
+        assert out["rows"][0]["document_key"] == "macro"
+
+    def test_ticker_and_document_key_intersect(self) -> None:
+        matched = search_research(
+            self._client(),
+            run_date=date(2026, 6, 19),
+            ticker="AAPL",
+            document_key="deep-dives/AAPL",
+        )
+        assert matched["row_count"] == 1
+        assert matched["rows"][0]["document_key"] == "deep-dives/AAPL"
+
+        empty = search_research(
+            self._client(),
+            run_date=date(2026, 6, 19),
+            ticker="AAPL",
+            document_key="macro",
+        )
+        assert "error" not in empty
+        assert empty["row_count"] == 0
+        assert empty["rows"] == []

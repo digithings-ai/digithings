@@ -776,9 +776,15 @@ def create_mcp_server(
         ``positions``, ``nav_history``, ``portfolio_metrics``,
         ``position_events``, ``decision_log``. Filter by ``run_type``
         (default ``baseline``), a ``date_from``/``date_to`` range, an exact
-        ``document_key`` or ``segment`` slug, ``ticker``, ``sector``,
-        free-text ``subject`` (title/category/key), ``doc_type`` or
-        ``phase``. ``include_prior=true`` spans prior days for continuity;
+        ``document_key``, ``ticker``, ``sector``, free-text ``subject``
+        (title/category/key) or ``doc_type``. ``segment`` is an alias of
+        ``document_key``, not a filter on the ``segment`` column.
+
+        ``phase`` is the retrieval/blinding phase (one of ``research_edit``,
+        ``h1_thesis``, ``h2_thesis``, ``h5_analyst``, ``h6_deliberation``,
+        ``h7_pm``, ``h8_sizing``); it defaults to ``research_edit``, the
+        unblinded operator read, and must be supplied explicitly to apply a
+        blinded view. ``include_prior=true`` spans prior days for continuity;
         otherwise the range defaults to a single day (``as_of_date`` or
         today). ``limit`` is capped server-side and ``offset`` pages it.
         Market history stays on ``digiquant_get_price_technicals`` /
@@ -811,7 +817,7 @@ def create_mcp_server(
                 sector=sector,
                 subject=subject,
                 doc_type=doc_type,
-                phase=phase,
+                retrieval_phase=phase or "research_edit",
                 include_prior=include_prior,
                 as_of_date=_parse(as_of_date),
                 limit=limit,

@@ -12,6 +12,7 @@ from datetime import UTC, date, datetime
 from typing import (  # scored-lint suppression: heterogeneous graph / dict shapes
     Any,
     Callable,
+    get_args,
 )
 
 from digiquant.dashboard.envcompat import RETRIEVAL_MANIFEST_MODE, env_lookup
@@ -101,7 +102,14 @@ RESEARCH_TOOLS: list[dict[str, Any]] = [
                         "description": "Free-text match on title/category/key",
                     },
                     "doc_type": {"type": "string"},
-                    "phase": {"type": "string"},
+                    "phase": {
+                        "type": "string",
+                        "enum": list(get_args(RetrievalPhase)),
+                        "description": (
+                            "Retrieval/blinding phase. In-process, the node's own phase "
+                            "governs and cannot be raised by the caller."
+                        ),
+                    },
                     "include_prior": {
                         "type": "boolean",
                         "description": "Span prior days (default false = single run_date)",
@@ -308,7 +316,6 @@ def build_research_tool_dispatcher(
                     "sector",
                     "subject",
                     "doc_type",
-                    "phase",
                     "include_prior",
                     "limit",
                     "offset",
@@ -329,7 +336,6 @@ def build_research_tool_dispatcher(
                         sector=args.get("sector"),
                         subject=args.get("subject"),
                         doc_type=args.get("doc_type"),
-                        phase=args.get("phase"),
                         include_prior=bool(args.get("include_prior", False)),
                         as_of_date=_parse_optional_date(args.get("as_of_date")),
                         limit=int(args.get("limit", 50)),

@@ -329,7 +329,10 @@ and MCP: `search_research(...)` in `research_retrieval/queries.py` takes a typed
 `positions`, `nav_history`, `theses`, `thesis_vehicles`, `position_events`,
 `portfolio_metrics`, `decision_log`) with `run_type`/`run_id`/`date_from`/
 `date_to`/`document_key`/`segment`/`ticker`/`sector`/`subject`/`doc_type`/
-`phase`/`include_prior`/`as_of_date`/`limit`/`offset`/`full_content` filters. No
+`retrieval_phase`/`include_prior`/`as_of_date`/`limit`/`offset`/`full_content`
+filters. `retrieval_phase` is the retrieval/blinding phase (one of
+`RetrievalPhase`, validated — an unknown name errors instead of falling through
+unblinded); it is not a `documents` column. No
 raw-table or arbitrary-column surface exists. Look-ahead is impossible (the upper
 window date is clamped to the effective `as_of`); the default is a single day
 unless `include_prior` widens it to `date_from`. Every `documents` read is gated
