@@ -3,7 +3,7 @@
 import PortfolioSectionNav from '@/components/portfolio/PortfolioSectionNav';
 import HoldingsActivityTable from '@/components/portfolio/HoldingsActivityTable';
 import PageSkeleton from '@/components/page-skeleton';
-import { SUBPAGE_MAX } from '@/components/layout-constants';
+import { EYEBROW, H1, LEDE, PAGE, PAGE_HEADER } from '@/components/layout-constants';
 import { Button, EmptyState } from '@digithings/ui/ui';
 import { LockedSurface } from '@/components/locked-surface';
 import { useDashboard } from '@/lib/dashboard-context';
@@ -26,14 +26,14 @@ export default function PortfolioLedgerPage() {
     return (
       <div className="flex min-h-full flex-col" data-testid="ledger-locked">
         <PortfolioSectionNav active="ledger" />
-        <div className={`${SUBPAGE_MAX} flex-1 space-y-4 py-4 md:py-5`}>
-          <div>
-            <p className="font-mono text-[11px] uppercase text-ink-mute">Portfolio · ledger</p>
-            <h1 className="mt-1 font-display text-xl font-normal tracking-tight text-ink">Ledger</h1>
-            <p className="mt-1 max-w-2xl text-sm text-ink-soft">
+        <div className={`${PAGE} flex-1 space-y-4 py-4 md:py-5`}>
+          <header className={PAGE_HEADER}>
+            <p className={EYEBROW}>Portfolio · ledger</p>
+            <h1 className={H1}>Ledger</h1>
+            <p className={LEDE}>
               Position-event activity for the house book.
             </p>
-          </div>
+          </header>
           <LockedSurface tier={tier} artifactClass="house_weights_nav" />
         </div>
       </div>
@@ -51,7 +51,7 @@ function LedgerBody() {
     return (
       <div className="flex min-h-full flex-col">
         <PortfolioSectionNav active="ledger" />
-        <div className={`${SUBPAGE_MAX} flex-1 py-12`}>
+        <div className={`${PAGE} flex-1 py-12`}>
           <EmptyState
             variant="error"
             className="mx-auto max-w-md"
@@ -78,15 +78,15 @@ function LedgerBody() {
   return (
     <div className="flex min-h-full flex-col">
       <PortfolioSectionNav active="ledger" />
-      <div className={`${SUBPAGE_MAX} flex-1 space-y-4 py-4 md:py-5`}>
-        <div>
-          <p className="font-mono text-[11px] uppercase text-ink-mute">Portfolio · ledger</p>
-          <h1 className="mt-1 font-display text-xl font-normal tracking-tight text-ink">Ledger</h1>
-          <p className="mt-1 max-w-2xl text-sm text-ink-soft">
+      <div className={`${PAGE} flex-1 space-y-4 py-4 md:py-5`}>
+        <header className={PAGE_HEADER}>
+          <p className={EYEBROW}>Portfolio · ledger</p>
+          <h1 className={H1}>Ledger</h1>
+          <p className={LEDE}>
             Position-event activity for the house book. Private append-only ledger tables remain
             service_role-only — this surface shows the public event stream only.
           </p>
-        </div>
+        </header>
         {events.length === 0 ? (
           <p className="text-sm text-ink-mute">No position events recorded yet.</p>
         ) : (

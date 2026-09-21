@@ -9,6 +9,7 @@ import {
   Alert,
   AlertDescription,
   Button,
+  Separator,
   Tooltip,
   TooltipContent,
   TooltipProvider,
@@ -23,6 +24,19 @@ import { NAV, navItemForPath, type NavItem } from '@/lib/nav';
 import { dashboardBasePath } from '@/lib/supabase';
 import { useFxHubOnlyInvitee } from '@/lib/fx-hub-only';
 
+/**
+ * The dashboard's primary chrome: a fixed, out-of-flow rail on desktop and a
+ * drawer under `md`. The owner spine is `NAV` (lib/nav.ts) — single-sourced with
+ * the mobile app bar so the two can never drift.
+ *
+ * Layout contract: the rail is `fixed`, so `main` owns the explicit desktop
+ * offset (`mainOffsetClass`); it must never `md:relative` into flow. That is
+ * asserted in `components/app-frame.test.tsx` and is the critical #4426
+ * regression guard.
+ *
+ * Rebuilt from zero on the shared grammar: flat surface, small mono type, kit
+ * primitives at default dress. No atmosphere, no glow, no bespoke mark motion.
+ */
 export default function Sidebar() {
   const pathname = usePathname();
   const base = dashboardBasePath();
@@ -35,10 +49,7 @@ export default function Sidebar() {
   const { authEnabled, user, signOut } = useAuth();
   const [signOutError, setSignOutError] = useState<string | null>(null);
   // An FX-Hub-invited account with no paid plan (the 12x trader invite path)
-  // sees ONLY FX Hub — no Brief/Portfolio/Pipeline nav, not even teaser
-  // content, to avoid the confusion of a research dashboard they weren't
-  // given access to. A real paying tier (or the studio-floor creator/admin)
-  // is unaffected — this only fires for fx_hub-granted + free tier.
+  // sees ONLY FX Hub — no Brief/Portfolio/Pipeline nav, not even teaser content.
   const { canFxHub, fxHubOnlyInvitee } = useFxHubOnlyInvitee();
 
   useEffect(() => {
@@ -60,6 +71,17 @@ export default function Sidebar() {
     (typeof user?.user_metadata?.name === 'string' ? user.user_metadata.name : null) ||
     'Signed in';
 
+  const linkClass = (isActive: boolean, muted: boolean) =>
+    [
+      'flex items-center gap-3 py-2.5 text-[13px] transition-colors',
+      sidebarCollapsed ? 'md:justify-center md:px-3' : 'px-5',
+      isActive
+        ? 'bg-ink/[0.05] font-medium text-ink'
+        : muted
+          ? 'text-ink-mute hover:bg-ink/[0.03] hover:text-ink-soft'
+          : 'text-ink-soft hover:bg-ink/[0.03] hover:text-ink',
+    ].join(' ');
+
   const renderLink = (item: NavItem) => {
     const { href, label, icon: Icon, demoted } = item;
     const isActive = activeHref === href;
@@ -70,20 +92,10 @@ export default function Sidebar() {
         onClick={() => setMobileNavOpen(false)}
         aria-current={isActive ? 'page' : undefined}
         data-demoted={demoted ? 'true' : undefined}
-        className={`
-          flex items-center gap-3 py-3 text-sm font-medium transition-all
-          ${sidebarCollapsed ? 'md:justify-center md:px-3' : 'px-6'}
-          ${
-            isActive
-              ? 'text-ink bg-ink/[0.04] qn-sidebar-link-active'
-              : demoted
-                ? 'text-ink-mute hover:text-ink-soft hover:bg-ink/[0.02]'
-                : 'text-ink-soft hover:text-ink hover:bg-ink/[0.03]'
-          }
-        `}
+        className={linkClass(isActive, Boolean(demoted))}
       >
-        <Icon size={demoted ? 18 : 20} className="shrink-0" />
-        <span className={`qn-sidebar-label ${sidebarCollapsed ? 'md:sr-only' : ''}`}>{label}</span>
+        <Icon size={16} className="shrink-0" />
+        <span className={sidebarCollapsed ? 'md:sr-only' : ''}>{label}</span>
       </Link>
     );
     if (!sidebarCollapsed) return link;
@@ -98,10 +110,7 @@ export default function Sidebar() {
   };
 
   // Dedicated terminal entry (#4204) — the external terminal research tool,
-  // deliberately a flat external anchor rather than a nav route, pinned to
-  // the bottom tools area; per-ticker deep links stay on the surfaces that
-  // carry a symbol. Hidden for an fx_hub-only invitee, like every other
-  // destination the single-view contract omits.
+  // deliberately a flat external anchor rather than a nav route.
   const showGloomberb = !fxHubOnlyInvitee;
   const gloomberbLink = (
     <a
@@ -110,16 +119,10 @@ export default function Sidebar() {
       rel="noopener noreferrer"
       aria-label="Gloomberb Terminal (opens in a new tab)"
       data-testid="sidebar-gloomberb-link"
-      className={`
-        flex items-center gap-3 py-3 text-sm font-medium transition-all
-        ${sidebarCollapsed ? 'md:justify-center md:px-3' : 'px-6'}
-        text-ink-mute hover:text-ink-soft hover:bg-ink/[0.02]
-      `}
+      className={linkClass(false, true)}
     >
-      <GloomberbMark size={18} className="shrink-0" />
-      <span className={`qn-sidebar-label ${sidebarCollapsed ? 'md:sr-only' : ''}`}>
-        Gloomberb Terminal
-      </span>
+      <GloomberbMark size={16} className="shrink-0" />
+      <span className={sidebarCollapsed ? 'md:sr-only' : ''}>Gloomberb Terminal</span>
     </a>
   );
 
@@ -146,7 +149,7 @@ export default function Sidebar() {
     <>
       {mobileNavOpen ? (
         <div
-          className="fixed inset-0 z-[999] bg-black/60 md:hidden"
+          className="fixed inset-0 z-[999] bg-ink/40 md:hidden"
           onClick={() => setMobileNavOpen(false)}
           aria-hidden
         />
@@ -155,56 +158,57 @@ export default function Sidebar() {
       <aside
         id="app-sidebar-nav"
         aria-label="Sidebar"
-        className={`
-          bg-surface/95 backdrop-blur-md border-r border-hair
-          flex flex-col shrink-0
-          fixed top-0 left-0 h-screen z-[1000] transition-all duration-300 ease-out
-          w-[260px]
-          ${mobileNavOpen ? 'translate-x-0' : '-translate-x-full'}
-          md:translate-x-0
-          ${sidebarCollapsed ? 'md:w-[72px]' : 'md:w-[260px]'}
-        `}
+        className={[
+          'fixed top-0 left-0 z-[1000] flex h-screen shrink-0 flex-col border-r border-hair bg-surface transition-[width] duration-300 ease-out',
+          'w-[260px]',
+          mobileNavOpen ? 'translate-x-0' : '-translate-x-full',
+          'md:translate-x-0',
+          sidebarCollapsed ? 'md:w-[72px]' : 'md:w-[260px]',
+        ].join(' ')}
       >
-        <div className="border-b border-hair shrink-0 px-6 py-5 min-h-[72px] flex flex-col justify-center">
+        <div className="flex min-h-[72px] shrink-0 items-center border-b border-hair px-5">
           <div
-            className={`flex items-center justify-between gap-2 w-full ${sidebarCollapsed ? 'md:hidden' : ''}`}
+            className={`flex w-full items-center justify-between gap-2 ${
+              sidebarCollapsed ? 'md:hidden' : ''
+            }`}
           >
-            <div className="flex items-center gap-2.5 min-w-0" aria-label="digiquant">
+            <div className="flex min-w-0 items-center gap-2.5" aria-label="digiquant">
               <DashboardMark className="shrink-0" />
             </div>
             <Button
               type="button"
               variant="ghost"
+              size="icon"
               onClick={toggleSidebar}
-              className="hidden h-auto shrink-0 rounded-none border border-hair p-2 text-ink-mute hover:bg-ink/[0.06] hover:text-ink md:inline-flex"
+              className="hidden md:inline-flex"
               aria-label="Collapse sidebar"
             >
-              <ChevronLeft size={18} />
+              <ChevronLeft size={16} />
             </Button>
           </div>
           <div
-            className={`${sidebarCollapsed ? 'hidden md:flex' : 'hidden'} flex-col items-center gap-3 w-full py-1`}
+            className={`${sidebarCollapsed ? 'hidden md:flex' : 'hidden'} w-full flex-col items-center gap-2`}
           >
             <DashboardMark className="shrink-0" />
             <Button
               type="button"
               variant="ghost"
+              size="icon"
               onClick={toggleSidebar}
-              className="h-auto rounded-none border border-hair p-2 text-ink-mute hover:bg-ink/[0.06] hover:text-ink"
               aria-label="Expand sidebar"
             >
-              <ChevronRight size={18} />
+              <ChevronRight size={16} />
             </Button>
           </div>
         </div>
 
-        <nav aria-label="Primary" className="flex-1 py-4 flex flex-col">
+        <nav aria-label="Primary" className="flex flex-1 flex-col py-3">
           {sidebarCollapsed ? null : (
             <Button
               type="button"
               variant="ghost"
               onClick={openCommandPalette}
-              className="mx-6 mb-1 hidden h-auto items-center justify-start gap-2 rounded-none border border-hair px-3 py-1.5 text-xs text-ink-mute hover:bg-ink/[0.03] hover:text-ink-soft md:inline-flex"
+              className="mx-5 mb-2 hidden justify-start gap-2 px-3 text-xs text-ink-mute md:inline-flex"
               aria-label="Search"
             >
               <Search size={14} className="shrink-0" />
@@ -215,10 +219,8 @@ export default function Sidebar() {
           <TooltipProvider delay={200}>
             {primary.map(renderLink)}
             {showGloomberb || demoted.length > 0 ? (
-              <div
-                data-testid="sidebar-bottom-tools"
-                className="mt-auto pt-4 border-t border-hair/60"
-              >
+              <div data-testid="sidebar-bottom-tools" className="mt-auto pt-3">
+                <Separator className="mb-3" />
                 {demoted.map(renderLink)}
                 {renderGloomberbLink()}
               </div>
@@ -227,28 +229,29 @@ export default function Sidebar() {
         </nav>
 
         <div
-          className={`border-t border-hair mt-auto overflow-visible relative z-10 ${
-            sidebarCollapsed ? 'md:px-2 px-6 py-4' : 'px-6 py-4'
+          className={`relative z-10 mt-auto border-t border-hair ${
+            sidebarCollapsed ? 'px-3 py-4 md:px-2' : 'px-5 py-4'
           }`}
         >
           {authEnabled && user ? (
             <div
-              className={`acct-session-rail ${sidebarCollapsed ? 'md:items-center' : ''}`}
+              className={`flex flex-col gap-2 ${sidebarCollapsed ? 'md:items-center' : ''}`}
               data-testid="sidebar-auth-identity"
             >
               <p
-                className={`acct-session-email ${sidebarCollapsed ? 'md:sr-only' : ''}`}
+                className={`truncate font-mono text-[11px] text-ink-soft ${
+                  sidebarCollapsed ? 'md:sr-only' : ''
+                }`}
                 title={identityLabel}
               >
                 {identityLabel}
               </p>
-              <p className={`acct-session-meta ${sidebarCollapsed ? 'md:sr-only' : ''}`}>signed in</p>
               <Button
                 type="button"
                 variant="ghost"
                 onClick={() => void handleSignOut()}
-                className={`h-auto gap-2 rounded-none border border-hair px-3 py-1.5 text-xs text-ink hover:border-accent/50 ${
-                  sidebarCollapsed ? 'md:justify-center md:px-2' : ''
+                className={`justify-start gap-2 px-2 text-xs text-ink ${
+                  sidebarCollapsed ? 'md:justify-center' : ''
                 }`}
                 aria-label="Sign out"
               >

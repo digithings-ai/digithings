@@ -2,7 +2,7 @@
 
 import type { ReactNode } from 'react';
 import { Button, EmptyState } from '@digithings/ui/ui';
-import { SUBPAGE_MAX } from '@/components/layout-constants';
+import { PAGE } from '@/components/layout-constants';
 import type { DbStatus } from '@/lib/dashboard-context';
 
 /**
@@ -55,7 +55,7 @@ const COPY: Record<Exclude<DbStatus, 'ok'>, { title: string; body: ReactNode }> 
 export default function DbUnavailable({ status }: { status: DbStatus }) {
   const { title, body } = COPY[status === 'ok' ? 'unreachable' : status];
   return (
-    <div className={`${SUBPAGE_MAX} py-12`} data-testid="db-unavailable" data-db-status={status}>
+    <div className={`${PAGE} py-12`} data-testid="db-unavailable" data-db-status={status}>
       <EmptyState
         variant="error"
         dress="glass-display"

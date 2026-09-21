@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import { SUBPAGE_MAX } from '@/components/layout-constants';
+import { EYEBROW, H1, LEDE, PAGE, PAGE_HEADER } from '@/components/layout-constants';
 import { SettingsContent } from '@/components/settings-content';
 import { ProfileTab } from '@/components/settings/profile-tab';
 import { PipelineTab } from '@/components/settings/pipeline-tab';
@@ -78,13 +78,13 @@ export default function SettingsPage() {
 
   if (fxHubOnlyInvitee) {
     return (
-      <div className={`${SUBPAGE_MAX} py-6 md:py-8 space-y-6`}>
-        <header className="space-y-2">
-          <p className="font-mono text-[0.72rem] tracking-[0.02em] text-ink">
+      <div className={`${PAGE} space-y-6 py-6 md:py-8`}>
+        <header className={PAGE_HEADER}>
+          <p className={EYEBROW}>
             fx hub <span className="text-ink-mute">· account</span>
           </p>
-          <h1 className="font-display text-2xl tracking-tight text-ink">Your account.</h1>
-          <p className="max-w-[46ch] text-[0.88rem] leading-[1.45] text-ink-soft">
+          <h1 className={H1}>Your account.</h1>
+          <p className={LEDE}>
             Your FX Hub profile: invite status and sign-out only. Desk settings do not apply to
             this product.
           </p>
@@ -100,13 +100,13 @@ export default function SettingsPage() {
   }
 
   return (
-    <div className={`${SUBPAGE_MAX} py-6 md:py-8 space-y-6`}>
-      <header className="space-y-2">
-        <p className="font-mono text-[0.72rem] tracking-[0.02em] text-ink">
+    <div className={`${PAGE} space-y-6 py-6 md:py-8`}>
+      <header className={PAGE_HEADER}>
+        <p className={EYEBROW}>
           dashboard <span className="text-ink-mute">· settings</span>
         </p>
-        <h1 className="font-display text-2xl tracking-tight text-ink">The desk, not the product.</h1>
-        <p className="max-w-[46ch] text-[0.88rem] leading-[1.45] text-ink-soft">
+        <h1 className={H1}>The desk, not the product.</h1>
+        <p className={LEDE}>
           Notifications and billing on every plan. Pipeline, keys, and brokers only appear when this
           workspace can use them.
         </p>

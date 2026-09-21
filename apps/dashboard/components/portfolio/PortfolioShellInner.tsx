@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { useDashboard } from '@/lib/dashboard-context';
-import { SUBPAGE_MAX } from '@/components/layout-constants';
+import { H1, LEDE, PAGE_HEADER, SUBPAGE_MAX } from '@/components/layout-constants';
 import { Button, EmptyState } from '@digithings/ui/ui';
 import PortfolioSectionNav from '@/components/portfolio/PortfolioSectionNav';
 import type { PortfolioSectionId } from '@/components/portfolio/PortfolioSectionNav';
@@ -234,6 +234,13 @@ export default function PortfolioShellInner() {
       <PortfolioSectionNav active={sectionActive} />
 
       <div className={`${SUBPAGE_MAX} flex min-h-0 flex-1 flex-col space-y-6 py-4 md:py-5`}>
+        <header className={PAGE_HEADER}>
+          <h1 className={H1}>Portfolio</h1>
+          <p className={LEDE}>
+            The house book: holdings and theses, with the tearsheet, ledger and attribution as
+            inspectable sub-surfaces.
+          </p>
+        </header>
         {tab === 'holdings' && (
           <AllocationsTab
             lastUpdated={lastUpdated}

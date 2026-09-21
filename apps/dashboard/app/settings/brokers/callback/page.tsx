@@ -12,7 +12,7 @@ import {
   type SettingsApiOptions,
 } from '@/lib/settings-api';
 import { useAuth } from '@/lib/auth-context';
-import { SUBPAGE_MAX } from '@/components/layout-constants';
+import { H1, PAGE, PAGE_HEADER } from '@/components/layout-constants';
 
 /**
  * Alpaca OAuth callback — posts the authorization code to the settings Edge
@@ -92,10 +92,12 @@ export default function AlpacaOAuthCallbackPage() {
   }, [loading, session]);
 
   return (
-    <div className={`${SUBPAGE_MAX} py-10`} data-testid="alpaca-oauth-callback">
-      <h1 className="font-display text-2xl text-ink tracking-tight">Broker connect</h1>
+    <div className={`${PAGE} py-10`} data-testid="alpaca-oauth-callback">
+      <header className={PAGE_HEADER}>
+        <h1 className={H1}>Broker connect</h1>
+      </header>
       <p
-        className={`mt-3 text-sm ${status === 'error' ? 'text-down' : 'text-ink-soft'}`}
+        className={`text-sm ${status === 'error' ? 'text-down' : 'text-ink-soft'}`}
         role="status"
       >
         {detail}

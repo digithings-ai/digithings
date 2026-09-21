@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import PageSkeleton from '@/components/page-skeleton';
 import AttributionWorkspace from '@/components/portfolio/AttributionWorkspace';
 import PortfolioSectionNav from '@/components/portfolio/PortfolioSectionNav';
-import { SUBPAGE_MAX } from '@/components/layout-constants';
+import { H1, LEDE, PAGE, PAGE_HEADER } from '@/components/layout-constants';
 import { EntitledSurface } from '@/components/entitled-surface';
 import {
   fetchPortfolioAttribution,
@@ -41,8 +41,13 @@ export default function AttributionPage() {
   return (
     <div className="flex min-h-full flex-col">
       <PortfolioSectionNav active="attribution" />
-      <div className={`${SUBPAGE_MAX} flex-1 py-4 md:py-5`}>
-        <h1 className="sr-only">Attribution</h1>
+      <div className={`${PAGE} flex-1 space-y-4 py-4 md:py-5`}>
+        <header className={PAGE_HEADER}>
+          <h1 className={H1}>Attribution</h1>
+          <p className={LEDE}>
+            Decision effectiveness, book attribution and the underlying audit record.
+          </p>
+        </header>
         <EntitledSurface artifactClass="house_weights_nav">
           {error ? (
             <p className="text-sm text-down">{error}</p>
