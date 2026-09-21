@@ -309,7 +309,9 @@ def test_report_failure_omits_report_without_changing_book(
     from tests.dq.research.test_supabase_io import FakeSupabaseClient
 
     bundle = _bundle(returns={"AAPL": ("0.06", "0.02", "1.0")})
-    artifacts = SizingRiskArtifacts(policy=_risk_policy(), covariance_snapshot=_covariance(("AAPL",)))
+    artifacts = SizingRiskArtifacts(
+        policy=_risk_policy(), covariance_snapshot=_covariance(("AAPL",))
+    )
     monkeypatch.setattr(
         "digiquant.portfolio.sizing_risk_snapshots.resolve_sizing_risk_artifacts",
         lambda **_kwargs: artifacts,

@@ -561,7 +561,9 @@ class OutcomeEpisodeAssembler:
         )
 
         sizing_lineage = _sizing_lineage(lineage)
-        commit_links = _commit_links(lineage) if disposition is EpisodeDisposition.AUTHORIZED else None
+        commit_links = (
+            _commit_links(lineage) if disposition is EpisodeDisposition.AUTHORIZED else None
+        )
 
         prior = self._store.select_episode_as_of(
             episode_key=episode_key,

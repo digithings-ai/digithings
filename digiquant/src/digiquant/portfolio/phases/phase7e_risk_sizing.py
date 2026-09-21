@@ -85,9 +85,7 @@ SIZING_INPUT_MODE_CALIBRATED = "calibrated"
 SIZING_INPUT_MODE_INCUMBENT = "incumbent"
 # Fail-soft when H7 omits ``confidence``: conservative half-size, never treat as 1.0.
 SIZING_MISSING_CONFIDENCE_DEFAULT = 0.5
-_SIZING_INPUT_MODES = frozenset(
-    {SIZING_INPUT_MODE_CALIBRATED, SIZING_INPUT_MODE_INCUMBENT}
-)
+_SIZING_INPUT_MODES = frozenset({SIZING_INPUT_MODE_CALIBRATED, SIZING_INPUT_MODE_INCUMBENT})
 _SIZING_RATIONALE_FALLBACK = "Position weight set by deterministic risk sizing."
 _MAX_ACTION_RATIONALE_LEN = 2000
 

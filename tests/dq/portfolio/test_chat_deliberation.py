@@ -28,8 +28,7 @@ from digiquant.research.state import (
 pytestmark = pytest.mark.unit
 
 _DELIBERATION_PATH = (
-    Path(__file__).resolve().parents[3]
-    / "digiquant/src/digiquant/portfolio/phases/deliberation.py"
+    Path(__file__).resolve().parents[3] / "digiquant/src/digiquant/portfolio/phases/deliberation.py"
 )
 
 

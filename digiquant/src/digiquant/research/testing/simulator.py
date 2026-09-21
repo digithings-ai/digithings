@@ -1035,9 +1035,7 @@ class SimulationRun:
             deps=chain_deps.portfolio,
         )
         # Slice by phase name, not fixed index — phases insert between H4/H5 (#3739).
-        analyst_end = next(
-            i for i, phase in enumerate(phases) if phase.name == "portfolio_analyst"
-        )
+        analyst_end = next(i for i, phase in enumerate(phases) if phase.name == "portfolio_analyst")
         state = _invoke_research_then_portfolio_phases(
             research_input,
             chain_deps,

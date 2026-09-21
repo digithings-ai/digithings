@@ -227,7 +227,9 @@ def test_direction_sections_all_typed_or_unavailable() -> None:
     assert f"effective_forecast:{_EFFECTIVE_ID}" in mandate.entity_ids
     matured = next(s for s in ctx.sections if s.kind is DirectionSectionKind.MATURED_FORECASTS)
     assert f"forecast_outcome:{_OUTCOME_ID}" in matured.entity_ids
-    unresolved = next(s for s in ctx.sections if s.kind is DirectionSectionKind.UNRESOLVED_FORECASTS)
+    unresolved = next(
+        s for s in ctx.sections if s.kind is DirectionSectionKind.UNRESOLVED_FORECASTS
+    )
     assert f"effective_forecast:{_EFFECTIVE_ID}" in unresolved.entity_ids
     contrib = next(s for s in ctx.sections if s.kind is DirectionSectionKind.CONTRIBUTION_COST)
     assert f"accounting_period:{_ACCOUNTING_ID}" in contrib.entity_ids
@@ -324,7 +326,9 @@ def test_wire_direction_shadow_records_manifest_and_degraded_flag(
     assert result.phase_inputs["portfolio_performance"] == incumbent["portfolio_performance"]
     assert "context_capsule_shadow" in result.phase_inputs
     assert "direction_decision_context_shadow" in result.phase_inputs
-    assert result.phase_inputs.get("direction_context_degraded") == "missing_versioned_prerequisites"
+    assert (
+        result.phase_inputs.get("direction_context_degraded") == "missing_versioned_prerequisites"
+    )
 
 
 def test_wire_direction_enforce_injects_structured_context_without_weights(
@@ -362,5 +366,7 @@ def test_wire_direction_enforce_injects_structured_context_without_weights(
     assert "structured_context" in result.phase_inputs
     assert result.direction_decision_context is not None
     assert f"effective_forecast:{_EFFECTIVE_ID}" in next(
-        s.entity_ids for s in result.direction_decision_context.sections if s.kind is DirectionSectionKind.MANDATE
+        s.entity_ids
+        for s in result.direction_decision_context.sections
+        if s.kind is DirectionSectionKind.MANDATE
     )

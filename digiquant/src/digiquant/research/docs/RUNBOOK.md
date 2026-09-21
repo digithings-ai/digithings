@@ -713,8 +713,8 @@ checked out `main`), do **not** re-run the cheap-tier LLM pipeline. Recover the
 already-decided book:
 
 ```bash
-python digiquant/scripts/research/recover_commit_ledger_commit.py --date YYYY-MM-DD
-python digiquant/scripts/research/recover_commit_ledger_commit.py --date YYYY-MM-DD --apply
+python digiquant/scripts/research/recover_commit_ledger.py --date YYYY-MM-DD
+python digiquant/scripts/research/recover_commit_ledger.py --date YYYY-MM-DD --apply
 ```
 
 Dry-run prints weights/NAV from `positions`. `--apply` appends one house ledger

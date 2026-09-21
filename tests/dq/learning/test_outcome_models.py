@@ -251,7 +251,9 @@ def test_no_op_episode_rejects_fabricated_commit_links() -> None:
         _episode(
             disposition=EpisodeDisposition.NO_OP,
             sizing_lineage=None,
-            commit_links=CommitExecutionLinks(action_id=UUID("66666666-6666-4666-8666-666666666666")),
+            commit_links=CommitExecutionLinks(
+                action_id=UUID("66666666-6666-4666-8666-666666666666")
+            ),
             realized=None,
         )
 

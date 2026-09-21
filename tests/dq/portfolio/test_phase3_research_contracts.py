@@ -141,7 +141,9 @@ def test_planner_helpers_are_not_graph_nodes() -> None:
 # --------------------------------------------------------------------------- H4 width / order / exploration
 
 
-def test_screener_roster_unchanged_across_shadow_attention_plan(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_screener_roster_unchanged_across_shadow_attention_plan(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     monkeypatch.setenv("DIGIQUANT_MAX_ANALYSTS", "4")
     monkeypatch.setenv("PORTFOLIO_HELD_GATE", "off")
     roster_a = compute_focus_roster(

@@ -416,7 +416,9 @@ def phase3_role_contexts(
     )
     h7 = compile_direction_role_context(
         loaded=loaded,
-        prerequisites=DirectionPrerequisiteSnapshot(state_version_id=loaded.version.state_version_id),
+        prerequisites=DirectionPrerequisiteSnapshot(
+            state_version_id=loaded.version.state_version_id
+        ),
         focus_roster=(bundle.ticker,),
     )
     return {

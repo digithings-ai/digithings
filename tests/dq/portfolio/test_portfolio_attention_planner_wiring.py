@@ -200,9 +200,7 @@ def test_graph_node_order_unchanged() -> None:
 
     phases = build_portfolio_phases_thesis(watchlist=["SPY"], held={"SPY"})
     names = [p.name for p in phases]
-    assert names.index("portfolio_screener") < names.index(
-        "portfolio_analyst"
-    )
+    assert names.index("portfolio_screener") < names.index("portfolio_analyst")
     assert names.index("portfolio_analyst") < names.index("portfolio_deliberation")
     assert len(names) == len(set(names))
 

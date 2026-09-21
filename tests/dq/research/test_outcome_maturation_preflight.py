@@ -44,14 +44,14 @@ from digiquant.research.phases.outcome_maturation import (
 )
 from digiquant.research.phases.preflight import PreflightDeps, build_preflight_node
 from digiquant.research.state import ResearchConfigBundle, ResearchState
+
+from tests.dq.dashboard.test_context_compiler import _bundle
+from tests.dq.learning.test_lesson_registry import _report
 from tests.dq.portfolio.test_direction_context_compiler import (
     _evidence,
     _loaded_state,
     _store_with_state,
 )
-
-from tests.dq.dashboard.test_context_compiler import _bundle
-from tests.dq.learning.test_lesson_registry import _report
 from tests.dq.research.test_supabase_io import FakeSupabaseClient
 
 pytestmark = pytest.mark.unit

@@ -220,7 +220,10 @@ class TestH6AmendmentWiring:
                     with_fanout_ticker(state, "AAPL")
                 )
         summary = out["phase_portfolio"].deliberation_summaries["AAPL"]
-        assert summary["evidence_amendment_outcome"] == DeliberationAmendmentOutcome.INVALID_REQUEST.value
+        assert (
+            summary["evidence_amendment_outcome"]
+            == DeliberationAmendmentOutcome.INVALID_REQUEST.value
+        )
         assert summary["evidence_amendment_failure_reason"] == "claim_id_not_in_base_bundle"
         assert summary["base_bundle_id"] == bundle_dump["bundle_id"]
         assert summary.get("evidence_amendment_id") is None

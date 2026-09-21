@@ -197,6 +197,8 @@ def test_persist_from_state_empty_is_ok() -> None:
 
 def test_persist_from_state_round_trip() -> None:
     client = RiskRegistryFake()
-    result = rpr.persist_sizing_risk_snapshots_from_state(client=client, state=_state_with_artifacts())
+    result = rpr.persist_sizing_risk_snapshots_from_state(
+        client=client, state=_state_with_artifacts()
+    )
     assert result.ok
     assert result.run_refs_written == 1

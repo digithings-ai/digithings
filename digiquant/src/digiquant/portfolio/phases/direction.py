@@ -209,7 +209,9 @@ def _direction_node(
     }
     pin = state.research_state_pin if isinstance(state.research_state_pin, dict) else None
     prereq = (
-        state.direction_prerequisite_snapshot if isinstance(state.direction_prerequisite_snapshot, dict) else None
+        state.direction_prerequisite_snapshot
+        if isinstance(state.direction_prerequisite_snapshot, dict)
+        else None
     )
     phase_inputs = wire_direction_phase_inputs(
         phase_inputs,
@@ -225,7 +227,9 @@ def _direction_node(
         decision_lessons=tuple(legacy_lessons),
         focus_roster=tuple(_focus_roster_tickers(state)),
     ).phase_inputs
-    tools, execute_tool, web_grounding = _portfolio_grounding(state, phase="direction", segment=NODE_ID)
+    tools, execute_tool, web_grounding = _portfolio_grounding(
+        state, phase="direction", segment=NODE_ID
+    )
     phase_inputs = apply_web_grounding_to_inputs(
         phase_inputs,
         web_grounding=web_grounding,

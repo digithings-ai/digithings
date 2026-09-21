@@ -455,7 +455,9 @@ def _resolve_deliberation_selection(
         return incumbent_fallback_selection(feats, mode=mode)
 
 
-def _attach_selection(summary: DeliberationSummary, selection: DeliberationSelection) -> DeliberationSummary:
+def _attach_selection(
+    summary: DeliberationSummary, selection: DeliberationSelection
+) -> DeliberationSummary:
     return summary.model_copy(
         update={
             "selection_reason": selection.reason.value,
@@ -501,7 +503,9 @@ def run_deliberation_loop(
     """
     pm_skill = load_skill_full("deliberation")
     analyst_skill = load_skill_full("deliberation-analyst-response")
-    tools, execute_tool, _web_grounding = _deliberation_grounding(state, segment=f"{NODE_ID}-{ticker}")
+    tools, execute_tool, _web_grounding = _deliberation_grounding(
+        state, segment=f"{NODE_ID}-{ticker}"
+    )
     transcript: list[DeliberationTurn] = []
     round_number = 0
     prior_summary = _prior_deliberation_summary(state, ticker)
@@ -821,7 +825,8 @@ def _deliberation_node_factory(
 
         # Enforce + select: skip fingerprint short-circuit so selected success meets round floor.
         allow_fingerprint_skip = deliberation_enforce != "challenge" and not (
-            selection.mode is DeliberationSelectionMode.ENFORCE and selection.action is DeliberationAction.SELECT
+            selection.mode is DeliberationSelectionMode.ENFORCE
+            and selection.action is DeliberationAction.SELECT
         )
         if allow_fingerprint_skip and deliberation_skip_signal(
             state, ticker, analyst_stance=stance
@@ -1009,7 +1014,9 @@ def build_deliberation_from_state(
         ticker = state.portfolio_fanout_ticker
         if not ticker:
             return {}
-        return _deliberation_node_factory(ticker, evidence_bundle_store, research_state_store)(state)
+        return _deliberation_node_factory(ticker, evidence_bundle_store, research_state_store)(
+            state
+        )
 
     return FanOutPhase(
         name=PHASE_NAME,

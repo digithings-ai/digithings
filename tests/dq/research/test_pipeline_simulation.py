@@ -469,7 +469,10 @@ class TestDurableH5H6LineageRoundTrip:
         assert aapl.get("evidence_amendment_outcome") == DeliberationAmendmentOutcome.ACCEPTED.value
         assert aapl.get("evidence_amendment_id")
         assert aapl.get("missing_fact_request_id")
-        assert msft.get("evidence_amendment_outcome") == DeliberationAmendmentOutcome.INVALID_REQUEST.value
+        assert (
+            msft.get("evidence_amendment_outcome")
+            == DeliberationAmendmentOutcome.INVALID_REQUEST.value
+        )
         assert msft.get("evidence_amendment_failure_reason") == "claim_id_not_in_base_bundle"
 
         aapl_bundle_id = UUID(str(aapl["base_bundle_id"]))

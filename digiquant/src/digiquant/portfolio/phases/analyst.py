@@ -147,7 +147,9 @@ def build_analyst(
         nodes=[
             NodeSpec(
                 name=f"{NODE_ID}-{ticker}",
-                run=_analyst_node_factory(ticker, client, evidence_bundle_store, research_state_store),
+                run=_analyst_node_factory(
+                    ticker, client, evidence_bundle_store, research_state_store
+                ),
             )
             for ticker in capped
         ],
@@ -172,7 +174,9 @@ def build_analyst_from_state(
         ticker = state.portfolio_fanout_ticker
         if not ticker:
             return {}
-        return _analyst_node_factory(ticker, client, evidence_bundle_store, research_state_store)(state)
+        return _analyst_node_factory(ticker, client, evidence_bundle_store, research_state_store)(
+            state
+        )
 
     return FanOutPhase(
         name=PHASE_NAME,
