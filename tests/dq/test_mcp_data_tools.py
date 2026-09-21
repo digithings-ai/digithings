@@ -93,6 +93,17 @@ def test_query_research_forwards_phase_as_retrieval_phase(monkeypatch):
     assert "error" not in out, out
     assert captured["retrieval_phase"] == "h5_analyst"
 
+    # D2 (owner directive): the external read-scope surface is blinded by
+    # default for the document/digest datasets ...
     captured.clear()
     fn(dataset="documents")
+    assert captured["retrieval_phase"] == "h5_analyst"
+
+    captured.clear()
+    fn(dataset="daily_snapshots")
+    assert captured["retrieval_phase"] == "h5_analyst"
+
+    # ... while the book datasets keep the operator default.
+    captured.clear()
+    fn(dataset="positions")
     assert captured["retrieval_phase"] == "research_edit"

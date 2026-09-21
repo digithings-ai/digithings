@@ -782,11 +782,14 @@ def create_mcp_server(
 
         ``phase`` is the retrieval/blinding phase (one of ``research_edit``,
         ``h1_thesis``, ``h2_thesis``, ``h5_analyst``, ``h6_deliberation``,
-        ``h7_pm``, ``h8_sizing``); it defaults to ``research_edit``, the
-        unblinded operator read, and must be supplied explicitly to apply a
-        blinded view. ``include_prior=true`` spans prior days for continuity;
-        otherwise the range defaults to a single day (``as_of_date`` or
-        today). ``limit`` is capped server-side and ``offset`` pages it.
+        ``h7_pm``, ``h8_sizing``). ``documents`` and ``daily_snapshots`` reads
+        default to the blinded ``h5_analyst`` view, so the digest,
+        ``digest-delta`` and ``beliefs`` artifacts are withheld unless the
+        caller widens the phase explicitly (``phase="research_edit"``); book
+        datasets keep the operator default. ``include_prior=true`` spans prior
+        days for continuity; otherwise the range defaults to a single day
+        (``as_of_date`` or today). ``limit`` is capped server-side and
+        ``offset`` pages it.
         Market history stays on ``digiquant_get_price_technicals`` /
         ``digiquant_get_macro_series``. Returns ``{"error": ...}`` on failure.
         """
@@ -800,6 +803,13 @@ def create_mcp_server(
             if not raw:
                 return None
             return _date.fromisoformat(str(raw)[:10])
+
+        # Blinded default on the external read-scope surface (#4467 D2): the
+        # document and digest reads are blinded unless the caller names a phase
+        # explicitly; book datasets keep the operator default.
+        default_phase = (
+            "h5_analyst" if dataset in {"documents", "daily_snapshots"} else "research_edit"
+        )
 
         try:
             client = build_client(SupabaseConfig.from_env())
@@ -817,7 +827,7 @@ def create_mcp_server(
                 sector=sector,
                 subject=subject,
                 doc_type=doc_type,
-                retrieval_phase=phase or "research_edit",
+                retrieval_phase=phase or default_phase,
                 include_prior=include_prior,
                 as_of_date=_parse(as_of_date),
                 limit=limit,
