@@ -604,9 +604,14 @@ def _postprocess_search_rows(
     for row in rows:
         if dataset == "documents":
             key = str(row.get("document_key") or "")
-            if key and not research_document_allowed(retrieval_phase, key):
+            if not research_document_allowed(retrieval_phase, key):
                 continue
             row = _hydrate_archived_row(client, row, store=store)
+        elif dataset == "daily_snapshots":
+            # The snapshot IS the digest payload, so the same phase gate that
+            # blinds ``documents/digest`` must apply here too.
+            if not research_document_allowed(retrieval_phase, DIGEST_DOCUMENT_KEY):
+                continue
         if dataset in {"documents", "daily_snapshots"} and not full_content:
             row = _preview_row(row)
         out.append(row)
@@ -655,10 +660,15 @@ def search_research(
     if dataset in _PORTFOLIO_DATASETS and not portfolio_tool_allowed(retrieval_phase):
         return {"error": "search_research portfolio datasets are not available in this phase"}
 
-    effective_as_of = as_of_date or run_date
-    upper = date_to or effective_as_of
-    if upper > effective_as_of:  # never read ahead of the anchor date
-        upper = effective_as_of
+    # ``run_date`` is the hard ceiling. A caller-supplied ``as_of_date`` can only
+    # narrow the window (replay an earlier point in time); it can never push the
+    # upper bound past the run's logical date and read future research.
+    anchor = run_date
+    if as_of_date is not None and as_of_date < anchor:
+        anchor = as_of_date
+    upper = date_to or anchor
+    if upper > anchor:  # never read ahead of the run's logical date
+        upper = anchor
     if date_from is not None:
         lower: date | None = date_from
     elif include_prior:

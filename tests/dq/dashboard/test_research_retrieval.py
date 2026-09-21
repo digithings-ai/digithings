@@ -1003,6 +1003,44 @@ class TestSearchResearch:
         assert out["date_to"] == "2026-05-15"
         assert {row["date"] for row in out["rows"]} == {"2026-05-01"}
 
+    def test_future_as_of_date_cannot_read_past_run_date(self) -> None:
+        # A caller-supplied future ``as_of_date`` must not widen the window past
+        # ``run_date`` — run_date is the hard ceiling.
+        out = search_research(
+            self._client(),
+            run_date=date(2026, 5, 15),
+            as_of_date=date(2026, 6, 19),
+            include_prior=True,
+        )
+        assert out["date_to"] == "2026-05-15"
+        assert {row["date"] for row in out["rows"]} == {"2026-05-01"}
+
+    def test_daily_snapshots_digest_blocked_for_blinded_phase(self) -> None:
+        # ``daily_snapshots`` carries the digest payload, so the phase gate that
+        # blinds ``documents/digest`` must apply to this dataset too.
+        client = FakeSupabaseClient(
+            canned_reads={
+                "daily_snapshots": [
+                    {"date": "2026-06-19", "snapshot": {"one_line_summary": "H5-BLINDED"}}
+                ]
+            }
+        )
+        blocked = search_research(
+            client,
+            run_date=date(2026, 6, 19),
+            dataset="daily_snapshots",
+            retrieval_phase="h5_analyst",
+        )
+        assert blocked["row_count"] == 0
+
+        visible = search_research(
+            client,
+            run_date=date(2026, 6, 19),
+            dataset="daily_snapshots",
+            retrieval_phase="h1_thesis",
+        )
+        assert visible["row_count"] == 1
+
     def test_sector_filter(self) -> None:
         out = search_research(self._client(), run_date=date(2026, 6, 19), sector="Technology")
         assert out["row_count"] == 1

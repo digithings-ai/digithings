@@ -56,12 +56,10 @@ an explicit workspace UUID and must not fall through to house.
 
 ### Research / MCP `query_research`
 
-`HOUSE_BOOK_READ_TABLES` in `digiquant.research.data.queries` stamps house
-when `eq` omits `workspace_id`. To read another book:
-
-```python
-search_research(client, run_date=day, dataset="positions", workspace_id=str(overlay_id))
-```
+`search_research` in `digiquant.dashboard.research_retrieval.queries` reads **house
+only** — it stamps `_eq_house` and has no `workspace_id` override. There is no
+overlay-book read path through this tool; read another book with a direct
+Supabase query that pins its `workspace_id`.
 
 ### Dashboard (TypeScript)
 
