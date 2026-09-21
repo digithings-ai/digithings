@@ -54,6 +54,7 @@ export {
 export { NavShell, type NavShellProps } from "./components/NavShell";
 export { DocsLayout, type DocsNavGroup, type DocsNavItem, type DocsHero } from "./components/docs/DocsLayout";
 export { CodeTabs, DocsCodeBlock, type CodeSample } from "./components/docs/CodeTabs";
+export { CopyCommand, type CopyCommandProps, type CopyCommandSample } from "./components/docs/CopyCommand";
 export { EndpointDoc, MethodBadge, type DocsEndpoint, type DocsField, type DocsMethod } from "./components/docs/Endpoint";
 export { HashScrollManager } from "./navigation/HashScrollManager";
 export {
@@ -425,3 +426,22 @@ export {
 } from "./components/prose";
 // figure family (D1, #4429) — the numbered `Fig N` figure caption.
 export { Figure, type FigureProps } from "./components/figure";
+// document family (D1, #4429) — the framed-column marketing grammar
+// (DocumentFrame / Section / PageTitle / Prose / GlyphList / GlyphRow): one
+// bordered column, hairline section separators, a small document-scale type
+// ladder, and the `[*]` + `<strong>Label</strong>` row. Utilities only; no
+// site/app CSS class, so no census entry and nothing to add to styles/.
+export {
+  DocumentFrame,
+  Section,
+  PageTitle,
+  Prose,
+  GlyphList,
+  GlyphRow,
+  type DocumentFrameProps,
+  type SectionProps,
+  type PageTitleProps,
+  type ProseProps,
+  type GlyphListProps,
+  type GlyphRowProps,
+} from "./components/document";
