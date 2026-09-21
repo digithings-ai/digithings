@@ -104,6 +104,12 @@ dashboard:
 web:
   - apps/digithings-web/**
   - apps/digiquant-web/**
+  # digiquant-web's pipeline-data pin re-reads this file at test time and asserts the
+  # site's portfolio chips match its `phases.append(...)` sequence in order (#4441).
+  # Without this entry the pin only runs when the APP changes — a backend-only phase
+  # rename or reorder would never fire the lane, which is precisely the drift the pin
+  # was written to catch. One file, not digiquant/**: the pin reads nothing else.
+  - digiquant/src/digiquant/portfolio/graph.py
   # Org-wide Cloudflare cron Worker. This lane owns its Vitest + typecheck
   # because it already installs the root npm workspaces.
   - apps/digithings-cron/**

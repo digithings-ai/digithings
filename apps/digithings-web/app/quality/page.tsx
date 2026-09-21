@@ -172,9 +172,9 @@ const LIMITS: { term: string; body: string }[] = [
     body:
       "The score job scores a diff that excludes apps/** and packages/** by pathspec, so the rubrics never see JS or CSS — rightly, " +
       "since the heuristics are Python-oriented and misfire on them. Presentation work is gated instead by secret scanning, the canon " +
-      "guard, lint, typecheck, and a production build that fails on a type error. Every frontend suite runs in a CI lane — digithings-web, digiquant-web, the dashboard, digichat, the shared ui packages, cron, and the Cloudflare workers each have one. " +
-      "digiquant-web's pipeline-data pin, which holds the site's twenty pipeline chips in order against the backend graph, " +
-      "is enforced on every change that touches the app.",
+      "guard, lint, typecheck, and a production build that fails on a type error. Every frontend workspace's suite runs in a CI lane — digithings-web, digiquant-web, the dashboard, digichat, the shared ui packages, cron, and the Cloudflare workers each have one. " +
+      "digiquant-web's pipeline-data pin, which holds the site's ten portfolio chips in order against the backend graph and pins the twenty-chip total, " +
+      "is enforced on every change that touches the app or that graph.",
   },
   {
     term: "Test count is not coverage",

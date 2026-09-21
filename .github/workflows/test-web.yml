@@ -85,10 +85,16 @@ jobs:
       # components/landing/pipeline-data.test.ts: it re-reads
       # digiquant/src/digiquant/portfolio/graph.py at test time, extracts the
       # `phases.append(...)` sequence and asserts chip-for-chip, in-order equality
-      # with the site's 20 pipeline chips. That pin exists because the site once
-      # asserted a false claim about our own pipeline in a user-facing tooltip
-      # (#4441 — 19 vs 20 phases, and an `h7e` label for what is
-      # H8 = phase7e_risk_sizing). Ungated, the honesty fix can drift back.
+      # with the site's TEN portfolio chips (the research ten are count-only — the
+      # test says so itself; the 20 is the combined total, not an order pin). That
+      # pin exists because the site once asserted a false claim about our own
+      # pipeline in a user-facing tooltip (#4441 — 19 vs 20 phases, and an `h7e`
+      # label for what is H8 = phase7e_risk_sizing). Ungated, the fix can drift back.
+      #
+      # Scope: this lane fires on apps/digiquant-web/** and, via ci_paths.yaml, on
+      # digiquant/src/digiquant/portfolio/graph.py — the file the pin reads. Without
+      # that second path a backend-only phase change would never run the pin, which
+      # is the drift this step exists to stop.
       #
       # Placement constraint, deliberate: vitest.config.ts includes only
       # `components/**` + `lib/**`, so an app/-placed test would be silently
