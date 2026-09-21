@@ -164,7 +164,7 @@ class TestForbiddenImports:
                     "import httpx",
                     "import nautilus_trader",
                     "from digiquant.portfolio.writers import commit_io",
-                    "from digiquant.portfolio.phases.h9_commit_run import commit_run",
+                    "from digiquant.portfolio.phases.commit import commit_run",
                 ]
             )
             + "\n",
@@ -175,7 +175,7 @@ class TestForbiddenImports:
         joined = " ".join(f.message for f in findings)
         assert "httpx" in joined
         assert "nautilus_trader" in joined
-        assert "commit_io" in joined or "h9_commit_run" in joined
+        assert "commit_io" in joined or "commit" in joined
 
 
 class TestArtifactTrustGates:

@@ -63,7 +63,7 @@ class OutcomeLearningModel(BaseModel):
 
 
 class EpisodeDisposition(StrEnum):
-    """H7-aligned disposition explaining downstream action/fill presence."""
+    """direction-aligned disposition explaining downstream action/fill presence."""
 
     AUTHORIZED = "authorized"
     EXCLUDED = "excluded"
@@ -190,7 +190,7 @@ class OutcomeTemporalContract(OutcomeLearningModel):
         return self
 
 
-class H8TargetLineage(OutcomeLearningModel):
+class SizingTargetLineage(OutcomeLearningModel):
     """Requested vs approved H8 targets with reason-coded adjustments."""
 
     requested_weight: UnitInterval | None = None
@@ -198,7 +198,7 @@ class H8TargetLineage(OutcomeLearningModel):
     adjustment_codes: tuple[NonEmptyStr, ...] = ()
 
 
-class H9ExecutionLinks(OutcomeLearningModel):
+class CommitExecutionLinks(OutcomeLearningModel):
     """Lineage into the action/fill ledger when execution occurred."""
 
     action_id: UUID
@@ -264,8 +264,8 @@ class OutcomeEpisode(OutcomeLearningModel):
     disposition: EpisodeDisposition
     temporal: OutcomeTemporalContract
 
-    h8_lineage: H8TargetLineage | None = None
-    h9_links: H9ExecutionLinks | None = None
+    sizing_lineage: SizingTargetLineage | None = None
+    commit_links: CommitExecutionLinks | None = None
     realized: RealizedReturnObservation | None = None
 
     expected_cost_id: UUID | None = None
@@ -295,8 +295,8 @@ class OutcomeEpisode(OutcomeLearningModel):
             disposition=self.disposition,
             temporal=self.temporal,
             realized=self.realized,
-            h8_lineage=self.h8_lineage,
-            h9_links=self.h9_links,
+            sizing_lineage=self.sizing_lineage,
+            commit_links=self.commit_links,
             evidence_bundle_id=self.evidence_bundle_id,
             research_state_version_id=self.research_state_version_id,
             context_manifest_id=self.context_manifest_id,
@@ -322,20 +322,20 @@ class OutcomeEpisode(OutcomeLearningModel):
             label="episode_version_id",
         )
         if self.disposition == EpisodeDisposition.AUTHORIZED:
-            if self.h9_links is None:
-                raise ValueError("authorized disposition requires h9_links")
+            if self.commit_links is None:
+                raise ValueError("authorized disposition requires commit_links")
             if self.realized is None:
                 raise ValueError("authorized disposition requires realized returns")
         if self.disposition in (EpisodeDisposition.EXCLUDED, EpisodeDisposition.NO_OP):
-            if self.h9_links is not None:
-                raise ValueError(f"{self.disposition.value} disposition forbids h9_links")
+            if self.commit_links is not None:
+                raise ValueError(f"{self.disposition.value} disposition forbids commit_links")
             if self.realized is not None:
                 raise ValueError(
                     f"{self.disposition.value} disposition forbids fabricated realized"
                 )
         if self.disposition == EpisodeDisposition.REJECTED:
-            if self.h9_links is not None:
-                raise ValueError("rejected disposition forbids h9_links")
+            if self.commit_links is not None:
+                raise ValueError("rejected disposition forbids commit_links")
             if self.realized is not None:
                 raise ValueError("rejected disposition forbids fabricated realized")
         return self
@@ -515,8 +515,8 @@ def episode_content_hash(
     disposition: EpisodeDisposition,
     temporal: OutcomeTemporalContract,
     realized: RealizedReturnObservation | None,
-    h8_lineage: H8TargetLineage | None,
-    h9_links: H9ExecutionLinks | None,
+    sizing_lineage: SizingTargetLineage | None,
+    commit_links: CommitExecutionLinks | None,
     evidence_bundle_id: UUID | None = None,
     research_state_version_id: UUID | None = None,
     context_manifest_id: UUID | None = None,
@@ -539,8 +539,8 @@ def episode_content_hash(
         "disposition": disposition.value,
         "temporal": temporal.model_dump(mode="json"),
         "realized": realized.model_dump(mode="json") if realized else None,
-        "h8_lineage": h8_lineage.model_dump(mode="json") if h8_lineage else None,
-        "h9_links": h9_links.model_dump(mode="json") if h9_links else None,
+        "sizing_lineage": sizing_lineage.model_dump(mode="json") if sizing_lineage else None,
+        "commit_links": commit_links.model_dump(mode="json") if commit_links else None,
         "evidence_bundle_id": str(evidence_bundle_id) if evidence_bundle_id else None,
         "research_state_version_id": (
             str(research_state_version_id) if research_state_version_id else None
@@ -629,8 +629,8 @@ __all__ = [
     "ComponentObservation",
     "EpisodeDisposition",
     "EvidenceQuality",
-    "H8TargetLineage",
-    "H9ExecutionLinks",
+    "SizingTargetLineage",
+    "CommitExecutionLinks",
     "LessonQualityState",
     "OutcomeEpisode",
     "OutcomeLessonVersion",

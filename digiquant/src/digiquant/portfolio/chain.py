@@ -963,7 +963,7 @@ def cli_main(argv: list[str] | None = None) -> int:
         triage=TriageDeps(client=client),
         preflight_reflect=PreflightReflectDeps(client=client),
     )
-    from digiquant.portfolio.phases.h9_commit_run import CommitRunDeps
+    from digiquant.portfolio.phases.commit import CommitRunDeps
     from digiquant.portfolio.phases.phase7e_risk_sizing import RiskSizingDeps
 
     portfolio_deps = PortfolioGraphDeps(

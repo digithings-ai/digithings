@@ -54,7 +54,7 @@ class _WriteKind(StrEnum):
 
 @dataclass(frozen=True)
 class RiskRegistryWriteResult:
-    """Outcome of one :func:`persist_h8_risk_snapshots` call."""
+    """Outcome of one :func:`persist_sizing_risk_snapshots` call."""
 
     policies_written: int = 0
     policies_skipped: int = 0
@@ -318,7 +318,7 @@ def get_covariance_snapshot(
     return CovarianceSnapshot.model_validate(payload)
 
 
-def collect_h8_risk_snapshots_from_state(
+def collect_sizing_risk_snapshots_from_state(
     state: Any,
 ) -> tuple[RiskPolicy | None, CovarianceSnapshot | None]:
     """Extract typed H8 risk artifacts from portfolio phase state for H9 persistence."""
@@ -352,7 +352,7 @@ def collect_h8_risk_snapshots_from_state(
     return policy, snapshot
 
 
-def persist_h8_risk_snapshots(
+def persist_sizing_risk_snapshots(
     *,
     client: SupabaseClient,
     source_run_id: str,
@@ -435,13 +435,13 @@ def persist_h8_risk_snapshots(
     )
 
 
-def persist_h8_risk_snapshots_from_state(
+def persist_sizing_risk_snapshots_from_state(
     *,
     client: SupabaseClient,
     state: Any,
 ) -> RiskRegistryWriteResult:
     """Collect H8 artifacts from portfolio state; empty is success."""
-    policy, snapshot = collect_h8_risk_snapshots_from_state(state)
+    policy, snapshot = collect_sizing_risk_snapshots_from_state(state)
     if policy is None or snapshot is None:
         return RiskRegistryWriteResult()
     source_run_id = str(getattr(state, "run_id", "") or "").strip()
@@ -450,7 +450,7 @@ def persist_h8_risk_snapshots_from_state(
     run_date = getattr(state, "run_date", None)
     if run_date is None:
         return RiskRegistryWriteResult(degraded_reason="missing_run_date")
-    return persist_h8_risk_snapshots(
+    return persist_sizing_risk_snapshots(
         client=client,
         source_run_id=source_run_id,
         run_date=run_date,
@@ -466,9 +466,9 @@ __all__ = [
     "RiskPolicyRegistryConflict",
     "RiskPolicyRegistryError",
     "RiskRegistryWriteResult",
-    "collect_h8_risk_snapshots_from_state",
+    "collect_sizing_risk_snapshots_from_state",
     "get_covariance_snapshot",
     "get_risk_policy",
-    "persist_h8_risk_snapshots",
-    "persist_h8_risk_snapshots_from_state",
+    "persist_sizing_risk_snapshots",
+    "persist_sizing_risk_snapshots_from_state",
 ]

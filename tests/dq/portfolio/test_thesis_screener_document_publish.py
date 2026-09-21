@@ -9,12 +9,12 @@ import pytest
 from digigraph.graph.pipeline_builder import build_pipeline
 from digiquant.dashboard.edit_mode.prior import artifact_document_key
 from digiquant.portfolio.models.thesis import ThesisReviewOutput, ThesisStatusUpdate
-from digiquant.portfolio.phases import h1_thesis_review as h1
-from digiquant.portfolio.phases.h1_thesis_review import ARTIFACT_KEY, build_h1_thesis_review
-from digiquant.portfolio.phases.h4_opportunity_screener import (
+from digiquant.portfolio.phases import thesis as h1
+from digiquant.portfolio.phases.screener import (
     OPPORTUNITY_SCREENER_DOCUMENT_KEY,
-    build_h4_opportunity_screener,
+    build_screener,
 )
+from digiquant.portfolio.phases.thesis import ARTIFACT_KEY, build_thesis
 from digiquant.research.state import PriorContext, ResearchConfigBundle, ResearchState
 
 from tests.dq.research.test_supabase_io import FakeSupabaseClient
@@ -24,7 +24,7 @@ THESIS_REVIEW_DOCUMENT_KEY = artifact_document_key(ARTIFACT_KEY)
 
 @pytest.mark.unit
 class TestH1PublishesThesisReviewDocument:
-    def test_h1_upserts_thesis_review_document_key(self) -> None:
+    def test_thesis_upserts_thesis_review_document_key(self) -> None:
         state = ResearchState(
             run_type="delta",
             run_date=date(2026, 8, 31),
@@ -40,7 +40,7 @@ class TestH1PublishesThesisReviewDocument:
             ),
         )
         client = FakeSupabaseClient()
-        compiled = build_pipeline(ResearchState, [build_h1_thesis_review(client=client)])
+        compiled = build_pipeline(ResearchState, [build_thesis(client=client)])
         llm_review = ThesisReviewOutput(
             reviewed_theses=[
                 ThesisStatusUpdate(
@@ -53,7 +53,7 @@ class TestH1PublishesThesisReviewDocument:
             notes="Gold remains the hedge.",
         )
         with patch(
-            "digiquant.portfolio.phases.h1_thesis_review._run_h1_llm",
+            "digiquant.portfolio.phases.thesis._run_thesis_llm",
             return_value=llm_review,
         ):
             compiled.invoke(state)
@@ -66,7 +66,7 @@ class TestH1PublishesThesisReviewDocument:
         reviewed = body.get("reviewed_theses") or []
         assert reviewed[0]["thesis_id"] == "geo-gold"
 
-    def test_h1_receives_stitched_markdown_briefing(self) -> None:
+    def test_thesis_receives_stitched_markdown_briefing(self) -> None:
         """WP-E: H1 consumes date/body/regime_label, not JSON findings."""
         state = ResearchState(
             run_type="delta",
@@ -90,7 +90,7 @@ class TestH1PublishesThesisReviewDocument:
             return ThesisReviewOutput(), None, []
 
         client = FakeSupabaseClient()
-        compiled = build_pipeline(ResearchState, [build_h1_thesis_review(client=client)])
+        compiled = build_pipeline(ResearchState, [build_thesis(client=client)])
         with patch.object(h1, "run_thesis_phase_llm", side_effect=_capture):
             compiled.invoke(state)
 
@@ -103,7 +103,7 @@ class TestH1PublishesThesisReviewDocument:
         assert "headline" not in digest
         assert "material_findings" not in digest
 
-    def test_h1_composes_legacy_digest_json_into_markdown(self) -> None:
+    def test_thesis_composes_legacy_digest_json_into_markdown(self) -> None:
         state = ResearchState(
             run_type="delta",
             run_date=date(2026, 8, 31),
@@ -126,7 +126,7 @@ class TestH1PublishesThesisReviewDocument:
             return ThesisReviewOutput(), None, []
 
         client = FakeSupabaseClient()
-        compiled = build_pipeline(ResearchState, [build_h1_thesis_review(client=client)])
+        compiled = build_pipeline(ResearchState, [build_thesis(client=client)])
         with patch.object(h1, "run_thesis_phase_llm", side_effect=_capture):
             compiled.invoke(state)
 
@@ -138,15 +138,15 @@ class TestH1PublishesThesisReviewDocument:
 
 @pytest.mark.unit
 class TestH4PublishesOpportunityScreener:
-    def test_h4_upserts_flat_opportunity_screener_key(
+    def test_screener_upserts_flat_opportunity_screener_key(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        from digiquant.portfolio.phases import h4_opportunity_screener as h4
+        from digiquant.portfolio.phases import screener as h4
 
         monkeypatch.setenv("PORTFOLIO_HELD_GATE", "off")
         monkeypatch.setattr(h4, "assess_budget", lambda *a, **k: (2, 0, None))
         client = FakeSupabaseClient()
-        node = build_h4_opportunity_screener(client=client).nodes[0].run
+        node = build_screener(client=client).nodes[0].run
         state = ResearchState(
             run_type="delta",
             run_date=date(2026, 8, 31),

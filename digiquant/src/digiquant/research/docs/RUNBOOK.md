@@ -677,7 +677,7 @@ book 06-26; first post-gap book 07-17. Any performance series that spans those d
 
 **Cause and fix.** H9 was failing its coherence check closed while runs still reported `ok`
 (#1555). 18 of the 22 `atlas_run_diagnostics` rows in the window say `status='ok'` and every one
-of them carries `portfolio_h9_commit_run/portfolio/commit-run: held ticker <T> missing from
+of them carries `portfolio_commit/portfolio/commit-run: held ticker <T> missing from
 book and not flat in H7`. Fixed **2026-07-17** (`40312d82`, PR #1565); `positions` resumes the
 same date. Full evidence and the post-fix `book_committed` reconciliation are in
 [`portfolio/docs/ARCHITECTURE.md`](../../portfolio/docs/ARCHITECTURE.md) under "The 2026-06-27 →
@@ -713,8 +713,8 @@ checked out `main`), do **not** re-run the cheap-tier LLM pipeline. Recover the
 already-decided book:
 
 ```bash
-python digiquant/scripts/research/recover_h9_ledger_commit.py --date YYYY-MM-DD
-python digiquant/scripts/research/recover_h9_ledger_commit.py --date YYYY-MM-DD --apply
+python digiquant/scripts/research/recover_commit_ledger_commit.py --date YYYY-MM-DD
+python digiquant/scripts/research/recover_commit_ledger_commit.py --date YYYY-MM-DD --apply
 ```
 
 Dry-run prints weights/NAV from `positions`. `--apply` appends one house ledger

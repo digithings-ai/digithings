@@ -16,7 +16,7 @@ from digiquant.portfolio.models.deliberation import (
     DeliberationAnalystTurn,
     DeliberationPmTurn,
 )
-from digiquant.portfolio.phases.h6_deliberation import build_h6_deliberation
+from digiquant.portfolio.phases.deliberation import build_deliberation
 from digiquant.portfolio.skills import load_skill_full
 from digiquant.research.state import (
     FocusRosterEntry,
@@ -27,9 +27,9 @@ from digiquant.research.state import (
 
 pytestmark = pytest.mark.unit
 
-_H6_PATH = (
+_DELIBERATION_PATH = (
     Path(__file__).resolve().parents[3]
-    / "digiquant/src/digiquant/portfolio/phases/h6_deliberation.py"
+    / "digiquant/src/digiquant/portfolio/phases/deliberation.py"
 )
 
 
@@ -65,12 +65,12 @@ def _schema_from_msgs(msgs: list[dict[str, Any]]) -> str:
 
 
 class TestH6AnalystSkillLoad:
-    def test_h6_source_loads_deliberation_analyst_response_not_h5(self) -> None:
-        source = _H6_PATH.read_text(encoding="utf-8")
+    def test_deliberation_source_loads_deliberation_analyst_response_not_h5(self) -> None:
+        source = _DELIBERATION_PATH.read_text(encoding="utf-8")
         assert 'load_skill_full("asset-analyst")' not in source
         assert 'load_skill_full("deliberation-analyst-response")' in source
 
-    def test_analyst_turn_does_not_load_h5_asset_analyst_skill(
+    def test_analyst_turn_does_not_load_analyst_asset_analyst_skill(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         monkeypatch.setenv("DIGIQUANT_DELIBERATION_MIN_ROUNDS", "2")
@@ -80,7 +80,7 @@ class TestH6AnalystSkillLoad:
             loaded.append(slug)
             return f"# stub skill {slug}"
 
-        compiled = build_pipeline(ResearchState, [build_h6_deliberation(["AAPL"], held={"AAPL"})])
+        compiled = build_pipeline(ResearchState, [build_deliberation(["AAPL"], held={"AAPL"})])
         pm_calls = {"n": 0}
 
         def fake(_m: str, msgs: list[dict[str, Any]], **_: Any) -> str:
@@ -112,7 +112,7 @@ class TestH6AnalystSkillLoad:
 
         with (
             patch(
-                "digiquant.portfolio.phases.h6_deliberation.load_skill_full",
+                "digiquant.portfolio.phases.deliberation.load_skill_full",
                 side_effect=fake_load,
             ),
             patch("digigraph.graph.research_agent.completion_text", side_effect=fake),

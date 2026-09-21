@@ -108,7 +108,7 @@ def validate_sizing_lineage(
     ``requested`` even means — ``sizing.SizingResult.requested_pct`` (used by the
     ``test_sizing.py`` lineage battery) is the sizer's own pre-adjustment raw
     weight, so it does line up with ``chain[0].original_pct`` by construction; but
-    ``phase7e_risk_sizing._validate_h8_lineage`` passes the **PM's own
+    ``phase7e_risk_sizing._validate_sizing_lineage`` passes the **PM's own
     ``target_pct`` ask** as ``requested``, and ``size_portfolio`` derives its raw
     weight from conviction/stance, entirely independent of what the PM asked for
     (see ``_effective_inputs``/``_memo_effective_inputs``). Requiring

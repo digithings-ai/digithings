@@ -10,7 +10,7 @@ from uuid import UUID, uuid4
 import pytest
 from digiquant.dashboard.tenancy import house_workspace_id
 from digiquant.portfolio.models.pm_direction import PMDirectionMemo, TickerDirection
-from digiquant.portfolio.phases.h9_commit_run import CommitRunDeps, build_commit_run_node
+from digiquant.portfolio.phases.commit import CommitRunDeps, build_commit_run_node
 from digiquant.portfolio.writers.commit_io import (
     _NAV_INTERVAL_TICKER_BATCH,
     _NAV_INTERVAL_WINDOW_DAYS,
@@ -255,7 +255,7 @@ class TestProvisionalNavSuppression:
 
 
 class TestCommitRunCoherence:
-    def test_held_ticker_flat_in_h7_is_allowed(self) -> None:
+    def test_held_ticker_flat_in_direction_is_allowed(self) -> None:
         client = FakeSupabaseClient()
         memo = PMDirectionMemo(
             date=RUN_DATE,
@@ -572,14 +572,14 @@ class TestCommitRunIdempotency:
         assert [m["weights_fingerprint"] for m in house_omitted] == ["house"]
         assert [m["weights_fingerprint"] for m in house_pinned] == ["house"]
 
-    def test_missing_sized_book_with_h7_memo_fails_closed(self) -> None:
+    def test_missing_sized_book_with_direction_memo_fails_closed(self) -> None:
         client = FakeSupabaseClient()
         state = _state(with_sized_book=False)
         node = build_commit_run_node(CommitRunDeps(client=client))
         result = node(state)
         assert result.get("errors")
         err = result["errors"][0]
-        assert err.phase == "portfolio_h9_commit_run"
+        assert err.phase == "portfolio_commit"
         assert "sized_book" in err.message.lower()
         assert "positions" not in client.store
 
@@ -1021,7 +1021,7 @@ def _assert_linear_chain(rows: list[dict], label: str) -> None:
 class TestCommitChainLedger:
     """Task 2.3 — H9 appends the authoritative commit chain (#2418)."""
 
-    def test_h9_appends_the_chain_for_every_final_ticker_and_cash(self) -> None:
+    def test_commit_appends_the_chain_for_every_final_ticker_and_cash(self) -> None:
         client = _ledger_client(SPY=100.0)
         out = _run(client, _state())
         assert not out.get("errors"), out.get("errors")
@@ -1053,7 +1053,7 @@ class TestCommitChainLedger:
             for row in rows:
                 assert "_on_conflict" not in row, f"{table} was written with upsert()"
 
-    def test_h9_is_the_only_ledger_writer(self) -> None:
+    def test_commit_is_the_only_ledger_writer(self) -> None:
         import pathlib
         import subprocess
 
@@ -1074,7 +1074,7 @@ class TestCommitChainLedger:
         # reads existing positions and must not call H8 / ``book_portfolio``. A fourth
         # ``append_commit_chain(`` site is a second commit *authority* and fails this.
         assert sorted(hits) == [
-            "digiquant/src/digiquant/portfolio/phases/h9_commit_run.py",
+            "digiquant/src/digiquant/portfolio/phases/commit.py",
             "digiquant/src/digiquant/portfolio/writers/ledger_io.py",
             "digiquant/src/digiquant/portfolio/writers/recover_ledger.py",
         ], f"a second commit authority appeared: {hits}"
@@ -2032,7 +2032,7 @@ class TestForecastRegistryInH9:
         assert len(client.store.get("positions", [])) >= 1
 
     def test_registry_failure_keeps_book_and_does_not_rebook(self, monkeypatch) -> None:
-        from digiquant.portfolio.phases import h9_commit_run as h9
+        from digiquant.portfolio.phases import commit as h9
 
         client = FakeSupabaseClient()
         state = _state(
@@ -2067,17 +2067,17 @@ class TestForecastRegistryInH9:
 
 
 class TestRiskPolicyRegistryH9:
-    def test_books_once_and_persists_h8_risk_snapshots(self) -> None:
+    def test_books_once_and_persists_sizing_risk_snapshots(self) -> None:
         from datetime import UTC, datetime
 
         import polars as pl
-        from digiquant.portfolio.h8_risk_snapshots import resolve_h8_risk_artifacts
+        from digiquant.portfolio.sizing_risk_snapshots import resolve_sizing_risk_artifacts
 
         from tests.dq.research.test_risk_policy_registry import RiskRegistryFake
 
         client = RiskRegistryFake()
         state = _state()
-        bundle = resolve_h8_risk_artifacts(
+        bundle = resolve_sizing_risk_artifacts(
             state=state,
             pm_tickers=["SPY"],
             corr=pl.DataFrame({"a": ["SPY"], "b": ["SPY"], "corr": [1.0]}),
@@ -2098,7 +2098,7 @@ class TestRiskPolicyRegistryH9:
         assert len(client.store.get("h8_risk_run_refs", [])) == 1
 
     def test_risk_registry_failure_keeps_book(self, monkeypatch) -> None:
-        from digiquant.portfolio.phases import h9_commit_run as h9
+        from digiquant.portfolio.phases import commit as h9
 
         client = FakeSupabaseClient()
         state = _state()
@@ -2106,7 +2106,7 @@ class TestRiskPolicyRegistryH9:
         def boom(**_k):
             raise RuntimeError("risk registry down")
 
-        monkeypatch.setattr(h9, "persist_h8_risk_snapshots_from_state", boom)
+        monkeypatch.setattr(h9, "persist_sizing_risk_snapshots_from_state", boom)
         out = _run(client, state)
         manifest = out["phase_portfolio"].commit_manifest
         assert manifest["status"] == "committed"
@@ -2120,7 +2120,7 @@ class TestCostLiquidityRegistryH9Noop:
     def test_fingerprint_noop_retries_cost_with_prior_ledger_commit_id(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        from digiquant.portfolio.phases import h9_commit_run as h9
+        from digiquant.portfolio.phases import commit as h9
         from digiquant.portfolio.writers.ledger_io import LedgerAppend
 
         client = _ledger_client(SPY=100.0)
@@ -2153,7 +2153,7 @@ class TestCostLiquidityRegistryH9Noop:
     def test_noop_without_prior_ledger_commit_id_stays_skipped(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        from digiquant.portfolio.phases import h9_commit_run as h9
+        from digiquant.portfolio.phases import commit as h9
         from digiquant.portfolio.writers.commit_io import (
             weights_fingerprint,
             weights_from_sized_book,
@@ -2427,10 +2427,10 @@ class TestPreTradeRiskH9:
         second = client.store["pretrade_risk_reports"][0]
         assert second == first
 
-    def test_h9_never_imports_or_calls_report_builder(self) -> None:
+    def test_commit_never_imports_or_calls_report_builder(self) -> None:
         import ast
 
-        import digiquant.portfolio.phases.h9_commit_run as h9
+        import digiquant.portfolio.phases.commit as h9
         import digiquant.portfolio.writers.commit_io as commit_io
 
         for module in (h9, commit_io):

@@ -61,7 +61,7 @@ FORBIDDEN_IMPORT_PREFIXES: frozenset[str] = frozenset(
         "digiquant.portfolio.writers.commit_io",
         "digiquant.portfolio.writers.execution_io",
         "digiquant.portfolio.writers.opening_snapshot",
-        "digiquant.portfolio.phases.h9_commit_run",
+        "digiquant.portfolio.phases.commit",
     }
 )
 

@@ -647,7 +647,7 @@ def book_portfolio(
     # written the date. A re-dispatch after the engine step must not clobber
     # that value with a provisional recompute, so an existing row for this
     # (workspace, date) keeps its stored NAV — fail-closed toward the engine.
-    # H9-owned ``cash_pct`` / ``invested_pct`` are still refreshed (they track
+    # commit-owned ``cash_pct`` / ``invested_pct`` are still refreshed (they track
     # the just-booked weights, which the engine write preserves untouched), so
     # a conflicting same-day re-book cannot leave them stale behind new
     # ``positions``. ``positions`` below book normally in either case.
@@ -1011,7 +1011,7 @@ def carried_held_tickers(state: ResearchState) -> set[str]:
     coherence exemption can never diverge into a silent mismatch (the #1030
     principle):
 
-    - **H4-gated** (:func:`gated_out_tickers`): quiet held names never dispatched
+    - **screener-gated** (:func:`gated_out_tickers`): quiet held names never dispatched
       to H5 — "we own it and nothing material changed".
     - **Memo-unaddressed** (#1649): held names the H7 PM memo's roster addresses
       with neither ``long`` nor ``flat``. Memo coverage is LLM discipline — run

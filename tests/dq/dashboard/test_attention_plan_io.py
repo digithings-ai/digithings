@@ -79,7 +79,7 @@ def test_payload_includes_refresh_reasons_and_profile_pin() -> None:
         run_date=RUN,
         artifacts=[("segment", "macro")],
         prior_loader=loader,
-        h4_roster=["SPY"],
+        screener_roster=["SPY"],
         planner_mode="shadow",
     )
     payload = attention_plan_document_payload(result)

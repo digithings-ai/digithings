@@ -22,7 +22,7 @@ from digiquant.portfolio.models.pm_direction import (
     TickerDirection,
     bind_forecast_references,
 )
-from digiquant.portfolio.phases.h7_pm_direction import _bind_forecast_references, _h7_node
+from digiquant.portfolio.phases.direction import _bind_forecast_references, _direction_node
 from digiquant.research.state import PhasePortfolioState, PriorContext, ResearchState
 
 pytestmark = pytest.mark.unit
@@ -205,10 +205,10 @@ class TestH7SuccessPathBinding:
             memo="ok",
         )
         with patch(
-            "digiquant.portfolio.phases.h7_pm_direction.run_research_agent",
+            "digiquant.portfolio.phases.direction.run_research_agent",
             return_value=llm_memo,
         ):
-            out = _h7_node(state)
+            out = _direction_node(state)
 
         memo = out["phase_portfolio"].pm_direction_memo
         assert memo is not None

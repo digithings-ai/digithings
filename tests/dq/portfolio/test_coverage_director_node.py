@@ -109,7 +109,7 @@ class TestCoverageDirectorNode:
         assert "TLT" in excluded  # H4-rostered but director-omitted
         assert result.get("errors", []) == []
 
-    def test_director_llm_failure_falls_back_to_h4_roster(self) -> None:
+    def test_director_llm_failure_falls_back_to_screener_roster(self) -> None:
         """An LLM failure keeps H4's roster and records a non-retryable PhaseError."""
         state = _state()
         before = [(e.ticker, e.roster_reason) for e in state.phase_portfolio.focus_roster]
@@ -121,7 +121,7 @@ class TestCoverageDirectorNode:
         assert err.phase == coverage_director.PHASE_NAME
         assert err.retryable is False
 
-    def test_empty_h4_roster_skips_llm(self) -> None:
+    def test_empty_screener_roster_skips_llm(self) -> None:
         """Nothing to direct — no LLM call, state untouched."""
         state = _state()
         state.phase_portfolio = state.phase_portfolio.model_copy(update={"focus_roster": []})

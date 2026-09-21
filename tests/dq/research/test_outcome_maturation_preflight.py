@@ -14,25 +14,25 @@ from digiquant.dashboard.learning.outcome_assembly import (
 )
 from digiquant.dashboard.learning.outcome_models import (
     AttributionComponent,
+    CommitExecutionLinks,
     EpisodeDisposition,
-    H8TargetLineage,
-    H9ExecutionLinks,
     OutcomeEpisode,
     OutcomeTemporalContract,
     RealizedReturnObservation,
+    SizingTargetLineage,
     episode_content_hash,
     episode_version_id,
 )
 from digiquant.dashboard.learning.outcome_store import OutcomeLearningStore
 from digiquant.dashboard.research_retrieval.context_wiring import (
-    wire_h5_phase_inputs,
-    wire_h7_phase_inputs,
+    wire_analyst_phase_inputs,
+    wire_direction_phase_inputs,
 )
-from digiquant.dashboard.research_retrieval.h7_decision_context import (
-    H7DecisionContextCompileInput,
-    H7PrerequisiteSnapshot,
-    H7SectionKind,
-    compile_h7_decision_context,
+from digiquant.dashboard.research_retrieval.direction_decision_context import (
+    DirectionDecisionContextCompileInput,
+    DirectionPrerequisiteSnapshot,
+    DirectionSectionKind,
+    compile_direction_decision_context,
 )
 from digiquant.research.graph import ResearchGraphDeps, build_research_graph
 from digiquant.research.phases.outcome_maturation import (
@@ -44,10 +44,14 @@ from digiquant.research.phases.outcome_maturation import (
 )
 from digiquant.research.phases.preflight import PreflightDeps, build_preflight_node
 from digiquant.research.state import ResearchConfigBundle, ResearchState
+from tests.dq.portfolio.test_direction_context_compiler import (
+    _evidence,
+    _loaded_state,
+    _store_with_state,
+)
 
 from tests.dq.dashboard.test_context_compiler import _bundle
 from tests.dq.learning.test_lesson_registry import _report
-from tests.dq.portfolio.test_h7_context_compiler import _evidence, _loaded_state, _store_with_state
 from tests.dq.research.test_supabase_io import FakeSupabaseClient
 
 pytestmark = pytest.mark.unit
@@ -93,12 +97,12 @@ def _portfolio_episode(
         source_run_id=source_run_id,
         disposition=EpisodeDisposition.AUTHORIZED,
         temporal=temporal,
-        h8_lineage=H8TargetLineage(
+        sizing_lineage=SizingTargetLineage(
             requested_weight=Decimal("0.05"),
             approved_weight=Decimal("0.04"),
             adjustment_codes=("risk_cap",),
         ),
-        h9_links=H9ExecutionLinks(
+        commit_links=CommitExecutionLinks(
             action_id=UUID("66666666-6666-4666-8666-666666666666"),
             order_id=UUID("77777777-7777-4777-8777-777777777777"),
             fill_ids=(UUID("88888888-8888-4888-8888-888888888888"),),
@@ -124,8 +128,8 @@ def _portfolio_episode(
         disposition=fields["disposition"],  # type: ignore[arg-type]
         temporal=fields["temporal"],  # type: ignore[arg-type]
         realized=fields["realized"],  # type: ignore[arg-type]
-        h8_lineage=fields["h8_lineage"],  # type: ignore[arg-type]
-        h9_links=fields["h9_links"],  # type: ignore[arg-type]
+        sizing_lineage=fields["sizing_lineage"],  # type: ignore[arg-type]
+        commit_links=fields["commit_links"],  # type: ignore[arg-type]
         evidence_bundle_id=None,
         research_state_version_id=None,
         context_manifest_id=None,
@@ -329,7 +333,7 @@ def test_exact_replay_selects_same_lesson() -> None:
     assert first.pin.lesson_version_id == second.pin.lesson_version_id
 
 
-def test_preflight_pins_lesson_before_h7_prerequisites() -> None:
+def test_preflight_pins_lesson_before_direction_prerequisites() -> None:
     store = OutcomeLearningStore()
     episode = _portfolio_episode(source_run_id=_PRIOR_RUN)
     deps = PreflightDeps(
@@ -348,33 +352,33 @@ def test_preflight_pins_lesson_before_h7_prerequisites() -> None:
     )
     assert out["outcome_lesson_status"] == "pinned"
     assert out["outcome_lesson_pin"]["lesson_version_id"]
-    snapshot = out["h7_prerequisite_snapshot"]
+    snapshot = out["direction_prerequisite_snapshot"]
     assert snapshot["outcome_lesson_version_id"] == out["outcome_lesson_pin"]["lesson_version_id"]
 
 
-def test_h7_manifest_uses_structured_lesson_not_decision_log() -> None:
+def test_direction_manifest_uses_structured_lesson_not_decision_log() -> None:
     ev = _evidence(summary="pin")
     loaded = _loaded_state(evidence=(ev,))
     lesson_id = UUID("aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa")
-    prereq = H7PrerequisiteSnapshot(
+    prereq = DirectionPrerequisiteSnapshot(
         state_version_id=loaded.version.state_version_id,
         outcome_lesson_version_id=lesson_id,
         outcome_lesson_content_hash="abc123",
     )
-    ctx = compile_h7_decision_context(
-        H7DecisionContextCompileInput(
+    ctx = compile_direction_decision_context(
+        DirectionDecisionContextCompileInput(
             loaded=loaded,
             prerequisites=prereq,
             decision_lessons=({"decision_id": "legacy-1", "lesson": "prose"},),
             outcome_lesson_version_id=lesson_id,
         )
     )
-    prior_auth = next(s for s in ctx.sections if s.kind is H7SectionKind.PRIOR_AUTHORIZATION)
+    prior_auth = next(s for s in ctx.sections if s.kind is DirectionSectionKind.PRIOR_AUTHORIZATION)
     assert prior_auth.entity_ids == (f"outcome_lesson:{lesson_id}",)
     assert not any(eid.startswith("decision_lesson:") for eid in prior_auth.entity_ids)
 
 
-def test_h5_and_h7_wire_expose_lesson_id(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_analyst_and_direction_wire_expose_lesson_id(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("DIGIQUANT_CONTEXT_COMPILER_MODE", "shadow")
     ev = _evidence(summary="pin")
     loaded = _loaded_state(evidence=(ev,))
@@ -384,7 +388,7 @@ def test_h5_and_h7_wire_expose_lesson_id(monkeypatch: pytest.MonkeyPatch) -> Non
         "content_hash": "lesson-hash-1",
     }
     bundle = _bundle(state_version_id=loaded.version.state_version_id)
-    h5 = wire_h5_phase_inputs(
+    h5 = wire_analyst_phase_inputs(
         {"ticker": "AAPL"},
         ticker="AAPL",
         bundle=bundle,
@@ -394,11 +398,11 @@ def test_h5_and_h7_wire_expose_lesson_id(monkeypatch: pytest.MonkeyPatch) -> Non
     )
     assert h5.phase_inputs["outcome_lesson_version_id"] == lesson_pin["lesson_version_id"]
 
-    h7 = wire_h7_phase_inputs(
+    h7 = wire_direction_phase_inputs(
         {"segment": "pm-direction"},
         research_state_pin=pin,
         research_state_store=store,
-        h7_prerequisite_snapshot=H7PrerequisiteSnapshot(
+        direction_prerequisite_snapshot=DirectionPrerequisiteSnapshot(
             state_version_id=loaded.version.state_version_id,
             outcome_lesson_version_id=UUID(lesson_pin["lesson_version_id"]),
         ).model_dump(mode="json"),

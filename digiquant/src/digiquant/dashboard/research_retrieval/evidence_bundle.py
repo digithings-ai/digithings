@@ -30,7 +30,7 @@ from digiquant.dashboard.research_retrieval.store import EvidenceBundleStore
 from digiquant.portfolio.models.forecast import ForecastTerms
 
 DIGIQUANT_EVIDENCE_BUNDLE_WRITER_ENV = "DIGIQUANT_EVIDENCE_BUNDLE_WRITER"
-_H5_BASE_SOURCE = "h5:base"
+_ANALYST_BASE_SOURCE = "h5:base"
 # source / authority columns are CHECK (length BETWEEN 1 AND 500) in WP11/WP12 stores.
 _SOURCE_MAX_LEN = 500
 
@@ -49,7 +49,7 @@ _PORTFOLIO_LEAK_AUTHORITIES = frozenset(
 NonEmptyField: TypeAlias = Annotated[str, Field(min_length=1, max_length=500)]
 
 
-class H5EvidenceFact(BaseModel):
+class AnalystEvidenceFact(BaseModel):
     """One pre-provider observation eligible for the H5 base bundle."""
 
     model_config = ConfigDict(extra="forbid", frozen=True)
@@ -86,10 +86,10 @@ class MissingEvidenceField(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
     field: NonEmptyField
-    reason: NonEmptyField = "absent_from_h5_inputs"
+    reason: NonEmptyField = "absent_from_analyst_inputs"
 
 
-class H5EvidenceBundleBuild(BaseModel):
+class AnalystEvidenceBundleBuild(BaseModel):
     """Canonical build result: immutable base + leaf records + diagnostics."""
 
     model_config = ConfigDict(extra="forbid", frozen=True)
@@ -111,11 +111,11 @@ def facts_from_phase_inputs(
     ticker: str,
     phase_inputs: dict[str, object],
     knowledge_cutoff_at: datetime,
-) -> tuple[tuple[H5EvidenceFact, ...], tuple[MissingEvidenceField, ...]]:
+) -> tuple[tuple[AnalystEvidenceFact, ...], tuple[MissingEvidenceField, ...]]:
     """Extract ticker-scoped facts; refuse portfolio-context authorities."""
     sym = ticker.strip().upper()
     cutoff = knowledge_cutoff_at
-    facts: list[H5EvidenceFact] = []
+    facts: list[AnalystEvidenceFact] = []
     missing: list[MissingEvidenceField] = []
 
     web = phase_inputs.get("web_grounding")
@@ -130,7 +130,7 @@ def facts_from_phase_inputs(
             missing.append(
                 MissingEvidenceField(
                     field="web_grounding.sources",
-                    reason="absent_from_h5_inputs",
+                    reason="absent_from_analyst_inputs",
                 )
             )
         as_of_raw = web.get("as_of")
@@ -148,7 +148,7 @@ def facts_from_phase_inputs(
                 event_time = cutoff
         for src in source_list:
             facts.append(
-                H5EvidenceFact(
+                AnalystEvidenceFact(
                     source=src[:_SOURCE_MAX_LEN],
                     authority="web_grounding",
                     summary=summary,
@@ -158,7 +158,7 @@ def facts_from_phase_inputs(
                 )
             )
     else:
-        missing.append(MissingEvidenceField(field="web_grounding", reason="absent_from_h5_inputs"))
+        missing.append(MissingEvidenceField(field="web_grounding", reason="absent_from_analyst_inputs"))
 
     deltas = phase_inputs.get("price_deltas")
     if isinstance(deltas, dict):
@@ -167,7 +167,7 @@ def facts_from_phase_inputs(
             raw_delta = deltas.get(ticker)
         if raw_delta is not None:
             facts.append(
-                H5EvidenceFact(
+                AnalystEvidenceFact(
                     source=f"price_delta:{sym}",
                     authority="price_delta",
                     summary=f"{sym} price_delta={raw_delta}",
@@ -180,11 +180,11 @@ def facts_from_phase_inputs(
             missing.append(
                 MissingEvidenceField(
                     field=f"price_deltas.{sym}",
-                    reason="absent_from_h5_inputs",
+                    reason="absent_from_analyst_inputs",
                 )
             )
     else:
-        missing.append(MissingEvidenceField(field="price_deltas", reason="absent_from_h5_inputs"))
+        missing.append(MissingEvidenceField(field="price_deltas", reason="absent_from_analyst_inputs"))
 
     bias = phase_inputs.get("bias_row")
     if isinstance(bias, dict) and bias:
@@ -196,7 +196,7 @@ def facts_from_phase_inputs(
         }
         if safe:
             facts.append(
-                H5EvidenceFact(
+                AnalystEvidenceFact(
                     source="phase6_bias_row",
                     authority="bias_row",
                     summary=str(safe),
@@ -211,17 +211,17 @@ def facts_from_phase_inputs(
     return tuple(facts), tuple(missing)
 
 
-def build_h5_evidence_bundle(
+def build_analyst_evidence_bundle(
     *,
     ticker: str,
     source_run_id: str,
     attempt_id: str,
     state_version_id: UUID,
-    facts: tuple[H5EvidenceFact, ...],
+    facts: tuple[AnalystEvidenceFact, ...],
     recorded_at: datetime,
     provenance: TypedProvenance,
     missing_fields: tuple[str, ...] | tuple[MissingEvidenceField, ...] = (),
-) -> H5EvidenceBundleBuild:
+) -> AnalystEvidenceBundleBuild:
     """Dedupe facts, link conflicts, and materialize one immutable base bundle."""
     sym = ticker.strip().upper()
     by_id: dict[UUID, EvidenceRecord] = {}
@@ -286,7 +286,7 @@ def build_h5_evidence_bundle(
         ticker=sym,
         state_version_id=state_version_id,
         evidence_ids=evidence_ids,
-        source=_H5_BASE_SOURCE,
+        source=_ANALYST_BASE_SOURCE,
     )
     bundle = TickerEvidenceBundle(
         bundle_id=ticker_evidence_bundle_id(
@@ -299,7 +299,7 @@ def build_h5_evidence_bundle(
         attempt_id=attempt_id,
         state_version_id=state_version_id,
         evidence_ids=evidence_ids,
-        source=_H5_BASE_SOURCE,
+        source=_ANALYST_BASE_SOURCE,
         event_time=event_time,
         effective_as_of=effective_as_of,
         known_at=known_at,
@@ -314,10 +314,10 @@ def build_h5_evidence_bundle(
             normalized_missing.append(item)
         else:
             normalized_missing.append(
-                MissingEvidenceField(field=str(item), reason="absent_from_h5_inputs")
+                MissingEvidenceField(field=str(item), reason="absent_from_analyst_inputs")
             )
 
-    return H5EvidenceBundleBuild(
+    return AnalystEvidenceBundleBuild(
         bundle=bundle,
         evidence=evidence,
         conflicts=tuple(conflicts),
@@ -325,9 +325,9 @@ def build_h5_evidence_bundle(
     )
 
 
-def publish_h5_evidence_bundle(
+def publish_analyst_evidence_bundle(
     *,
-    built: H5EvidenceBundleBuild,
+    built: AnalystEvidenceBundleBuild,
     store: EvidenceBundleStore | None,
 ) -> TickerEvidenceBundle:
     """Persist base when writer+store are active; always return the typed bundle."""
@@ -361,7 +361,7 @@ def cite_evidence_bundle_on_forecast(
 _UNPINNED_STATE_VERSION_NS = UUID("c1a0e507-4b8d-5f2a-9c17-3d6e8f0a1b22")
 
 
-def resolve_h5_state_version_id(
+def resolve_analyst_state_version_id(
     research_state_pin: dict[str, object] | None,
     *,
     source_run_id: str,
@@ -377,13 +377,13 @@ def resolve_h5_state_version_id(
 __all__ = [
     "DIGIQUANT_EVIDENCE_BUNDLE_WRITER_ENV",
     "EvidenceConflict",
-    "H5EvidenceBundleBuild",
-    "H5EvidenceFact",
+    "AnalystEvidenceBundleBuild",
+    "AnalystEvidenceFact",
     "MissingEvidenceField",
-    "build_h5_evidence_bundle",
+    "build_analyst_evidence_bundle",
     "cite_evidence_bundle_on_forecast",
     "evidence_bundle_writer_enabled",
     "facts_from_phase_inputs",
-    "publish_h5_evidence_bundle",
-    "resolve_h5_state_version_id",
+    "publish_analyst_evidence_bundle",
+    "resolve_analyst_state_version_id",
 ]

@@ -6,7 +6,7 @@ from datetime import UTC, date, datetime
 from uuid import UUID, uuid4
 
 import pytest
-from digiquant.portfolio.h9_cost_evidence import (
+from digiquant.portfolio.commit_cost_evidence import (
     build_cost_bundles_for_commit,
     investor_currency_from_state,
 )
@@ -126,7 +126,7 @@ class TestCostEvidenceReadsVolFromTechnicals:
         )
 
     def test_price_row_merges_technicals_vol(self) -> None:
-        from digiquant.portfolio.h9_cost_evidence import _fetch_price_row
+        from digiquant.portfolio.commit_cost_evidence import _fetch_price_row
 
         row = _fetch_price_row(
             client=self._client(),
@@ -139,7 +139,7 @@ class TestCostEvidenceReadsVolFromTechnicals:
         assert row["atr_pct"] == 1.2
 
     def test_missing_technicals_leaves_vol_unset_not_fatal(self) -> None:
-        from digiquant.portfolio.h9_cost_evidence import _fetch_price_row
+        from digiquant.portfolio.commit_cost_evidence import _fetch_price_row
 
         client = FakeSupabaseClient(
             canned_reads={

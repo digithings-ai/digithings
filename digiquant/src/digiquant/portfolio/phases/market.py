@@ -26,7 +26,7 @@ from digiquant.research.supabase_io import SupabaseClient
 logger = logging.getLogger(__name__)
 
 NODE_ID = "portfolio/thesis/market-exploration"
-PHASE_NAME = "portfolio_h2_market_exploration"
+PHASE_NAME = "portfolio_market"
 ARTIFACT_KEY = ("thesis", "market-exploration")
 DOC_TYPE = "market_thesis_exploration"
 
@@ -53,12 +53,12 @@ def _reviewed_status_by_id(state: PortfolioState) -> dict[str, str]:
     return statuses
 
 
-def _run_h2_llm(state: PortfolioState) -> MarketThesisExplorationOutput:
+def _run_market_llm(state: PortfolioState) -> MarketThesisExplorationOutput:
     exploration, _doc, errors = run_thesis_phase_llm(
         state=state,
         skill_slug="market-thesis-exploration",
         artifact_key=ARTIFACT_KEY,
-        retrieval_phase="h2_thesis",
+        retrieval_phase="market",
         phase_slug=NODE_ID,
         output_model=MarketThesisExplorationOutput,
         phase_inputs={
@@ -81,9 +81,9 @@ def _run_h2_llm(state: PortfolioState) -> MarketThesisExplorationOutput:
     return exploration
 
 
-def _h2_node_factory(client: SupabaseClient | None):
+def _market_node_factory(client: SupabaseClient | None):
     def _node(state: PortfolioState) -> dict[str, Any]:
-        exploration = _run_h2_llm(state)
+        exploration = _run_market_llm(state)
         proposals, validation_errors = validate_market_thesis_proposals(
             list(exploration.theses),
             list(state.prior_context.active_theses),
@@ -122,8 +122,8 @@ def _h2_node_factory(client: SupabaseClient | None):
     return _node
 
 
-def build_h2_market_thesis_exploration(*, client: SupabaseClient | None = None) -> PipelinePhase:
+def build_market(*, client: SupabaseClient | None = None) -> PipelinePhase:
     return PipelinePhase(
         name=PHASE_NAME,
-        nodes=[NodeSpec(name=NODE_ID, run=_h2_node_factory(client))],
+        nodes=[NodeSpec(name=NODE_ID, run=_market_node_factory(client))],
     )

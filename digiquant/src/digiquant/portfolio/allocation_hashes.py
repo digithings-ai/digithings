@@ -56,7 +56,7 @@ def allocation_bundle_content_hash(*, payload: dict[str, Any]) -> str:
     return sha256_hex(payload)
 
 
-def h7_memo_hash_payload(
+def direction_memo_hash_payload(
     *,
     session_date: str,
     roster: list[dict[str, object]],
@@ -264,7 +264,7 @@ __all__ = [
     "allocation_bundle_hash_payload",
     "calibrated_slice_hash_payload",
     "canonical_json",
-    "h7_memo_hash_payload",
+    "direction_memo_hash_payload",
     "pretrade_risk_report_content_hash",
     "pretrade_risk_report_hash_payload",
     "prior_weights_from_entries",

@@ -10,7 +10,7 @@ from digiquant.portfolio.allocation_contracts import (
     AssetInputStatus,
 )
 from digiquant.portfolio.allocation_hashes import (
-    h7_memo_hash_payload,
+    direction_memo_hash_payload,
     sha256_hex,
     weights_fingerprint,
 )
@@ -283,7 +283,7 @@ def _assemble(
     )
 
 
-def test_h7_authorization_only_ignores_extra_calibrated_tickers() -> None:
+def test_direction_authorization_only_ignores_extra_calibrated_tickers() -> None:
     """Only H7 roster tickers enter the bundle — extras in calibration map are ignored."""
     memo = _memo("AAPL")
     calibrated = {
@@ -333,7 +333,7 @@ def test_exact_forecast_policy_covariance_cost_versions() -> None:
     assert bundle.source_hashes.cost_hashes == (("AAPL", cost_a),)
 
     expected_h7 = sha256_hex(
-        h7_memo_hash_payload(
+        direction_memo_hash_payload(
             session_date=_SESSION.isoformat(),
             roster=[
                 {
@@ -360,7 +360,7 @@ def test_exact_forecast_policy_covariance_cost_versions() -> None:
             ],
         )
     )
-    assert bundle.source_hashes.h7_memo_hash == expected_h7
+    assert bundle.source_hashes.direction_memo_hash == expected_h7
 
 
 def test_prior_weights_fingerprint_matches_book() -> None:
@@ -389,7 +389,7 @@ def test_rejects_future_known_at_past_cutoff() -> None:
         )
 
 
-def test_h5_stance_mutation_does_not_change_authorization() -> None:
+def test_analyst_stance_mutation_does_not_change_authorization() -> None:
     """Analyst sell/buy cannot add, drop, or reverse H7-authorized instruments."""
     memo = _memo("AAPL", "MSFT", directions={"AAPL": "long", "MSFT": "flat"})
     base = _assemble(

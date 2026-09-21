@@ -56,11 +56,11 @@ def _terms(**overrides: object) -> ForecastTerms:
 
 def test_build_dedupes_identical_facts() -> None:
     from digiquant.dashboard.research_retrieval.evidence_bundle import (
-        H5EvidenceFact,
-        build_h5_evidence_bundle,
+        AnalystEvidenceFact,
+        build_analyst_evidence_bundle,
     )
 
-    fact = H5EvidenceFact(
+    fact = AnalystEvidenceFact(
         source="https://example.com/a",
         authority="web_grounding",
         summary="AAPL beat estimates",
@@ -68,7 +68,7 @@ def test_build_dedupes_identical_facts() -> None:
         effective_as_of=_TS - timedelta(hours=2),
         known_at=_TS - timedelta(hours=1),
     )
-    built = build_h5_evidence_bundle(
+    built = build_analyst_evidence_bundle(
         ticker="aapl",
         source_run_id="run-wp112",
         attempt_id="1",
@@ -84,11 +84,11 @@ def test_build_dedupes_identical_facts() -> None:
 
 def test_build_records_conflicts_and_missing_fields() -> None:
     from digiquant.dashboard.research_retrieval.evidence_bundle import (
-        H5EvidenceFact,
-        build_h5_evidence_bundle,
+        AnalystEvidenceFact,
+        build_analyst_evidence_bundle,
     )
 
-    left = H5EvidenceFact(
+    left = AnalystEvidenceFact(
         source="reuters",
         authority="web_grounding",
         summary="guidance raised",
@@ -96,7 +96,7 @@ def test_build_records_conflicts_and_missing_fields() -> None:
         effective_as_of=_TS - timedelta(hours=3),
         known_at=_TS - timedelta(hours=2),
     )
-    right = H5EvidenceFact(
+    right = AnalystEvidenceFact(
         source="reuters",
         authority="web_grounding",
         summary="guidance cut",
@@ -104,7 +104,7 @@ def test_build_records_conflicts_and_missing_fields() -> None:
         effective_as_of=_TS - timedelta(hours=2),
         known_at=_TS - timedelta(hours=1),
     )
-    built = build_h5_evidence_bundle(
+    built = build_analyst_evidence_bundle(
         ticker="AAPL",
         source_run_id="run-wp112",
         attempt_id="1",
@@ -156,12 +156,12 @@ def test_facts_from_phase_inputs_skip_portfolio_leakage() -> None:
 
 def test_publish_persists_when_writer_on() -> None:
     from digiquant.dashboard.research_retrieval.evidence_bundle import (
-        H5EvidenceFact,
-        build_h5_evidence_bundle,
-        publish_h5_evidence_bundle,
+        AnalystEvidenceFact,
+        build_analyst_evidence_bundle,
+        publish_analyst_evidence_bundle,
     )
 
-    fact = H5EvidenceFact(
+    fact = AnalystEvidenceFact(
         source="https://example.com/a",
         authority="web_grounding",
         summary="one",
@@ -169,7 +169,7 @@ def test_publish_persists_when_writer_on() -> None:
         effective_as_of=_TS - timedelta(hours=1),
         known_at=_TS - timedelta(minutes=30),
     )
-    built = build_h5_evidence_bundle(
+    built = build_analyst_evidence_bundle(
         ticker="AAPL",
         source_run_id="run-wp112",
         attempt_id="1",
@@ -180,7 +180,7 @@ def test_publish_persists_when_writer_on() -> None:
     )
     store = EvidenceBundleStore()
     with patch.dict("os.environ", {"DIGIQUANT_EVIDENCE_BUNDLE_WRITER": "on"}, clear=False):
-        published = publish_h5_evidence_bundle(built=built, store=store)
+        published = publish_analyst_evidence_bundle(built=built, store=store)
     assert published.bundle_id == built.bundle.bundle_id
     assert (
         store.base_bundle_count_for(
@@ -192,12 +192,12 @@ def test_publish_persists_when_writer_on() -> None:
 
 def test_publish_skips_store_when_writer_off_retains_typed() -> None:
     from digiquant.dashboard.research_retrieval.evidence_bundle import (
-        H5EvidenceFact,
-        build_h5_evidence_bundle,
-        publish_h5_evidence_bundle,
+        AnalystEvidenceFact,
+        build_analyst_evidence_bundle,
+        publish_analyst_evidence_bundle,
     )
 
-    fact = H5EvidenceFact(
+    fact = AnalystEvidenceFact(
         source="https://example.com/a",
         authority="web_grounding",
         summary="one",
@@ -205,7 +205,7 @@ def test_publish_skips_store_when_writer_off_retains_typed() -> None:
         effective_as_of=_TS - timedelta(hours=1),
         known_at=_TS - timedelta(minutes=30),
     )
-    built = build_h5_evidence_bundle(
+    built = build_analyst_evidence_bundle(
         ticker="AAPL",
         source_run_id="run-wp112",
         attempt_id="1",
@@ -216,7 +216,7 @@ def test_publish_skips_store_when_writer_off_retains_typed() -> None:
     )
     store = EvidenceBundleStore()
     with patch.dict("os.environ", {"DIGIQUANT_EVIDENCE_BUNDLE_WRITER": "off"}, clear=False):
-        published = publish_h5_evidence_bundle(built=built, store=store)
+        published = publish_analyst_evidence_bundle(built=built, store=store)
     assert published.bundle_id == built.bundle.bundle_id
     assert (
         store.base_bundle_count_for(
@@ -228,12 +228,12 @@ def test_publish_skips_store_when_writer_off_retains_typed() -> None:
 
 def test_cite_forecast_includes_bundle_and_evidence_ids() -> None:
     from digiquant.dashboard.research_retrieval.evidence_bundle import (
-        H5EvidenceFact,
-        build_h5_evidence_bundle,
+        AnalystEvidenceFact,
+        build_analyst_evidence_bundle,
         cite_evidence_bundle_on_forecast,
     )
 
-    fact = H5EvidenceFact(
+    fact = AnalystEvidenceFact(
         source="https://example.com/a",
         authority="web_grounding",
         summary="one",
@@ -241,7 +241,7 @@ def test_cite_forecast_includes_bundle_and_evidence_ids() -> None:
         effective_as_of=_TS - timedelta(hours=1),
         known_at=_TS - timedelta(minutes=30),
     )
-    built = build_h5_evidence_bundle(
+    built = build_analyst_evidence_bundle(
         ticker="AAPL",
         source_run_id="run-wp112",
         attempt_id="1",
@@ -259,11 +259,11 @@ def test_cite_forecast_includes_bundle_and_evidence_ids() -> None:
 def test_evidence_record_ids_reuse_wp12_helpers() -> None:
     """Bundle evidence leaves use WP12 EvidenceRecord identity — no parallel scheme."""
     from digiquant.dashboard.research_retrieval.evidence_bundle import (
-        H5EvidenceFact,
-        build_h5_evidence_bundle,
+        AnalystEvidenceFact,
+        build_analyst_evidence_bundle,
     )
 
-    fact = H5EvidenceFact(
+    fact = AnalystEvidenceFact(
         source="https://example.com/a",
         authority="web_grounding",
         summary="one",
@@ -271,7 +271,7 @@ def test_evidence_record_ids_reuse_wp12_helpers() -> None:
         effective_as_of=_TS - timedelta(hours=1),
         known_at=_TS - timedelta(minutes=30),
     )
-    built = build_h5_evidence_bundle(
+    built = build_analyst_evidence_bundle(
         ticker="AAPL",
         source_run_id="run-wp112",
         attempt_id="1",
@@ -293,11 +293,11 @@ def test_evidence_record_ids_reuse_wp12_helpers() -> None:
     )
 
 
-def test_h5_evidence_fact_rejects_blank_summary() -> None:
-    from digiquant.dashboard.research_retrieval.evidence_bundle import H5EvidenceFact
+def test_analyst_evidence_fact_rejects_blank_summary() -> None:
+    from digiquant.dashboard.research_retrieval.evidence_bundle import AnalystEvidenceFact
 
     with pytest.raises(ValidationError):
-        H5EvidenceFact(
+        AnalystEvidenceFact(
             source="x",
             authority="web_grounding",
             summary="  ",
@@ -310,7 +310,7 @@ def test_h5_evidence_fact_rejects_blank_summary() -> None:
 def test_facts_from_phase_inputs_preserves_long_web_grounding_summary() -> None:
     """Long web_grounding prose must pass without max_length/truncate (#3063)."""
     from digiquant.dashboard.research_retrieval.evidence_bundle import (
-        H5EvidenceFact,
+        AnalystEvidenceFact,
         facts_from_phase_inputs,
     )
 
@@ -338,7 +338,7 @@ def test_facts_from_phase_inputs_preserves_long_web_grounding_summary() -> None:
     assert len(web_facts[0].summary) == len(long_summary.strip())
     assert missing == ()
 
-    direct = H5EvidenceFact(
+    direct = AnalystEvidenceFact(
         source="https://example.com",
         authority="web_grounding",
         summary=long_summary,

@@ -23,8 +23,8 @@ from digiquant.portfolio.models.forecast import (
     materialize_forecast_amendment,
     resolve_effective_forecast,
 )
-from digiquant.portfolio.phases import h6_deliberation
-from digiquant.portfolio.phases.h6_deliberation import build_h6_from_state
+from digiquant.portfolio.phases import deliberation
+from digiquant.portfolio.phases.deliberation import build_deliberation_from_state
 from digiquant.research.state import FocusRosterEntry, PriorContext, ResearchConfigBundle
 
 pytestmark = pytest.mark.unit
@@ -137,8 +137,8 @@ class TestH6ForecastLineageCarry:
                 }
             }
         )
-        with patch.object(h6_deliberation, "deliberation_skip_signal", return_value=True):
-            out = build_h6_from_state().worker.run(with_fanout_ticker(state, "AAPL"))
+        with patch.object(deliberation, "deliberation_skip_signal", return_value=True):
+            out = build_deliberation_from_state().worker.run(with_fanout_ticker(state, "AAPL"))
         summary = out["phase_portfolio"].deliberation_summaries["AAPL"]
         assert summary["carry_reason"] == "fingerprint_skip"
         assert summary["effective_forecast_id"] == str(prior_eff.effective_id)
@@ -171,11 +171,11 @@ class TestH6ForecastLineageCarry:
         base = _assessment()
         state = _state(assessment=base)
         with patch.object(
-            h6_deliberation,
+            deliberation,
             "run_deliberation_loop",
             side_effect=ValueError("boom"),
         ):
-            out = build_h6_from_state().worker.run(with_fanout_ticker(state, "AAPL"))
+            out = build_deliberation_from_state().worker.run(with_fanout_ticker(state, "AAPL"))
         summary = out["phase_portfolio"].deliberation_summaries["AAPL"]
         assert summary["carry_reason"] == "llm_failure"
         assert summary["base_forecast_id"] == str(base.forecast_id)

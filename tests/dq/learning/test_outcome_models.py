@@ -16,13 +16,12 @@ import pytest
 from digiquant.dashboard.learning.outcome_models import (
     AttributionComponent,
     AttributionMethod,
+    CommitExecutionLinks,
     ComponentAttributionReport,
     ComponentEligibility,
     ComponentObservation,
     EpisodeDisposition,
     EvidenceQuality,
-    H8TargetLineage,
-    H9ExecutionLinks,
     LessonQualityState,
     OutcomeEpisode,
     OutcomeLessonVersion,
@@ -30,6 +29,7 @@ from digiquant.dashboard.learning.outcome_models import (
     OutcomeQualityIssue,
     OutcomeTemporalContract,
     RealizedReturnObservation,
+    SizingTargetLineage,
     UnavailableReason,
     episode_content_hash,
     episode_version_id,
@@ -87,12 +87,12 @@ def _episode(**overrides: object) -> OutcomeEpisode:
         policy_version_id="policy-v1",
         disposition=EpisodeDisposition.AUTHORIZED,
         temporal=_temporal(),
-        h8_lineage=H8TargetLineage(
+        sizing_lineage=SizingTargetLineage(
             requested_weight=Decimal("0.05"),
             approved_weight=Decimal("0.04"),
             adjustment_codes=("risk_cap",),
         ),
-        h9_links=H9ExecutionLinks(
+        commit_links=CommitExecutionLinks(
             action_id=UUID("66666666-6666-4666-8666-666666666666"),
             order_id=UUID("77777777-7777-4777-8777-777777777777"),
             fill_ids=(UUID("88888888-8888-4888-8888-888888888888"),),
@@ -126,8 +126,8 @@ def _episode(**overrides: object) -> OutcomeEpisode:
         disposition=fields["disposition"],  # type: ignore[arg-type]
         temporal=fields["temporal"],  # type: ignore[arg-type]
         realized=fields.get("realized"),  # type: ignore[arg-type]
-        h8_lineage=fields.get("h8_lineage"),  # type: ignore[arg-type]
-        h9_links=fields.get("h9_links"),  # type: ignore[arg-type]
+        sizing_lineage=fields.get("sizing_lineage"),  # type: ignore[arg-type]
+        commit_links=fields.get("commit_links"),  # type: ignore[arg-type]
         evidence_bundle_id=fields.get("evidence_bundle_id"),  # type: ignore[arg-type]
         research_state_version_id=fields.get("research_state_version_id"),  # type: ignore[arg-type]
         context_manifest_id=fields.get("context_manifest_id"),  # type: ignore[arg-type]
@@ -225,40 +225,40 @@ def test_episode_rejects_missing_core_refs() -> None:
 def test_all_canonical_dispositions_validate(disposition: EpisodeDisposition) -> None:
     overrides: dict[str, object] = {"disposition": disposition}
     if disposition in (EpisodeDisposition.EXCLUDED, EpisodeDisposition.NO_OP):
-        overrides["h8_lineage"] = None
-        overrides["h9_links"] = None
+        overrides["sizing_lineage"] = None
+        overrides["commit_links"] = None
         overrides["realized"] = None
     elif disposition == EpisodeDisposition.REJECTED:
-        overrides["h9_links"] = None
+        overrides["commit_links"] = None
         overrides["realized"] = None
     ep = _episode(**overrides)
     assert ep.disposition is disposition
 
 
-def test_excluded_episode_allows_missing_h9_without_fabricated_fill() -> None:
+def test_excluded_episode_allows_missing_commit_without_fabricated_fill() -> None:
     ep = _episode(
         disposition=EpisodeDisposition.EXCLUDED,
-        h8_lineage=None,
-        h9_links=None,
+        sizing_lineage=None,
+        commit_links=None,
         realized=None,
     )
-    assert ep.h9_links is None
+    assert ep.commit_links is None
     assert ep.realized is None
 
 
-def test_no_op_episode_rejects_fabricated_h9_links() -> None:
-    with pytest.raises(ValidationError, match="h9_links"):
+def test_no_op_episode_rejects_fabricated_commit_links() -> None:
+    with pytest.raises(ValidationError, match="commit_links"):
         _episode(
             disposition=EpisodeDisposition.NO_OP,
-            h8_lineage=None,
-            h9_links=H9ExecutionLinks(action_id=UUID("66666666-6666-4666-8666-666666666666")),
+            sizing_lineage=None,
+            commit_links=CommitExecutionLinks(action_id=UUID("66666666-6666-4666-8666-666666666666")),
             realized=None,
         )
 
 
-def test_authorized_episode_requires_h9_links() -> None:
-    with pytest.raises(ValidationError, match="h9_links"):
-        _episode(disposition=EpisodeDisposition.AUTHORIZED, h9_links=None)
+def test_authorized_episode_requires_commit_links() -> None:
+    with pytest.raises(ValidationError, match="commit_links"):
+        _episode(disposition=EpisodeDisposition.AUTHORIZED, commit_links=None)
 
 
 # ── Attribution methods ───────────────────────────────────────────────────────
@@ -415,8 +415,8 @@ def test_episode_content_hash_stable() -> None:
         disposition=ep.disposition,
         temporal=ep.temporal,
         realized=ep.realized,
-        h8_lineage=ep.h8_lineage,
-        h9_links=ep.h9_links,
+        sizing_lineage=ep.sizing_lineage,
+        commit_links=ep.commit_links,
         evidence_bundle_id=ep.evidence_bundle_id,
         research_state_version_id=ep.research_state_version_id,
         context_manifest_id=ep.context_manifest_id,

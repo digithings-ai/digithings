@@ -129,7 +129,7 @@ def _assessment(
     else:
         anchor = PriceAnchor(
             status=PriceAnchorStatus.UNAVAILABLE,
-            unavailable_reason="mark_price_not_available_in_h5_state",
+            unavailable_reason="mark_price_not_available_in_analyst_state",
         )
     return ForecastAssessment(
         forecast_id=forecast_assessment_id(

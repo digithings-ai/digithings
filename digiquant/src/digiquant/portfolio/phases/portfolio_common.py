@@ -25,13 +25,13 @@ from digiquant.dashboard.edit_mode import (
 from digiquant.dashboard.edit_mode.merge import MergeError, coerce_document_patch
 from digiquant.dashboard.envcompat import ATTEMPT, env_lookup
 from digiquant.dashboard.research_retrieval.blinding import RetrievalPhase
-from digiquant.dashboard.research_retrieval.context_wiring import wire_h5_phase_inputs
+from digiquant.dashboard.research_retrieval.context_wiring import wire_analyst_phase_inputs
 from digiquant.dashboard.research_retrieval.evidence_bundle import (
-    build_h5_evidence_bundle,
+    build_analyst_evidence_bundle,
     cite_evidence_bundle_on_forecast,
     facts_from_phase_inputs,
-    publish_h5_evidence_bundle,
-    resolve_h5_state_version_id,
+    publish_analyst_evidence_bundle,
+    resolve_analyst_state_version_id,
 )
 from digiquant.dashboard.research_retrieval.models import TickerEvidenceBundle, TypedProvenance
 from digiquant.dashboard.research_retrieval.store import EvidenceBundleStore, ResearchStateStore
@@ -49,7 +49,7 @@ from digiquant.portfolio.models.forecast import (
 )
 from digiquant.portfolio.research_attention import (
     apply_analyst_metric_patch,
-    research_attention_h5_enforce_path,
+    research_attention_analyst_enforce_path,
 )
 from digiquant.portfolio.skills import load_skill_edit, load_skill_full
 from digiquant.portfolio.state import PortfolioState
@@ -294,11 +294,11 @@ def materialize_forecast_assessment(
     )
 
 
-def _h5_price_anchor(_state: PortfolioState, _ticker: str) -> PriceAnchor:
+def _analyst_price_anchor(_state: PortfolioState, _ticker: str) -> PriceAnchor:
     """H5 state carries pct deltas, not absolute marks — typed unavailability."""
     return PriceAnchor(
         status=PriceAnchorStatus.UNAVAILABLE,
-        unavailable_reason="mark_price_not_available_in_h5_state",
+        unavailable_reason="mark_price_not_available_in_analyst_state",
     )
 
 
@@ -425,14 +425,14 @@ def _attach_forecast_lineage(
         ),
         prompt_version=prompt_version,
         artifact_version=artifact_version,
-        price_anchor=_h5_price_anchor(state, ticker),
+        price_anchor=_analyst_price_anchor(state, ticker),
         effective_at=cutoff,
         known_at=cutoff,
     )
     return payload.model_copy(update={"forecast": terms, "forecast_assessment": assessment})
 
 
-def _h5_attempt_id() -> str:
+def _analyst_attempt_id() -> str:
     raw = env_lookup(ATTEMPT).strip()
     return raw or "1"
 
@@ -449,8 +449,8 @@ def _publish_base_bundle_before_provider(
     cutoff = _cutoff_or_run_date(state)
     recorded_at = cutoff
     run_id = str(state.run_id)
-    attempt_id = _h5_attempt_id()
-    state_version_id = resolve_h5_state_version_id(
+    attempt_id = _analyst_attempt_id()
+    state_version_id = resolve_analyst_state_version_id(
         state.research_state_pin if isinstance(state.research_state_pin, dict) else None,
         source_run_id=run_id,
     )
@@ -464,7 +464,7 @@ def _publish_base_bundle_before_provider(
         attempt_id=attempt_id,
         artifact_id=f"artifact-h5-{ticker.strip().upper()}",
     )
-    built = build_h5_evidence_bundle(
+    built = build_analyst_evidence_bundle(
         ticker=ticker,
         source_run_id=run_id,
         attempt_id=attempt_id,
@@ -474,7 +474,7 @@ def _publish_base_bundle_before_provider(
         provenance=provenance,
         missing_fields=missing,
     )
-    bundle = publish_h5_evidence_bundle(built=built, store=store)
+    bundle = publish_analyst_evidence_bundle(built=built, store=store)
     logger.info(
         "H5 evidence bundle published for %s bundle_id=%s durable=%s phase=%s",
         ticker,
@@ -527,7 +527,7 @@ def run_asset_analyst_llm(
     errors: list[PhaseError] = []
     artifact_key = analyst_artifact_key(ticker)
     mode = resolve_analyst_edit_mode(state, ticker)
-    enforce_path = research_attention_h5_enforce_path(state, ticker=ticker)
+    enforce_path = research_attention_analyst_enforce_path(state, ticker=ticker)
     if enforce_path == "full":
         mode = "full"
     elif enforce_path == "carry" and mode != "full":
@@ -617,7 +617,7 @@ def run_asset_analyst_llm(
         load_skill_edit("asset-analyst") if mode == "edit" else load_skill_full("asset-analyst")
     )
     tools, execute_tool, web_grounding = _portfolio_grounding(
-        state, phase="h5_analyst", segment=phase_slug
+        state, phase="analyst", segment=phase_slug
     )
     _active = list(state.prior_context.active_theses)
     phase_inputs: dict[str, Any] = {
@@ -644,7 +644,7 @@ def run_asset_analyst_llm(
     if prior is not None:
         phase_inputs["prior_analyst"] = dict(prior.payload)
 
-    # WP11.2: one base bundle per H5-attempted ticker — before provider call.
+    # WP11.2: one base bundle per analyst-attempted ticker — before provider call.
     evidence_bundle = _publish_base_bundle_before_provider(
         state=state,
         ticker=ticker,
@@ -666,7 +666,7 @@ def run_asset_analyst_llm(
                 "prior_document": prior.payload,
             }
         )
-        phase_inputs = wire_h5_phase_inputs(
+        phase_inputs = wire_analyst_phase_inputs(
             phase_inputs,
             ticker=ticker,
             bundle=evidence_bundle,
@@ -753,7 +753,7 @@ def run_asset_analyst_llm(
         )
         return enriched, doc, errors, evidence_bundle
 
-    phase_inputs = wire_h5_phase_inputs(
+    phase_inputs = wire_analyst_phase_inputs(
         phase_inputs,
         ticker=ticker,
         bundle=evidence_bundle,

@@ -14,19 +14,21 @@ from datetime import date
 
 import pytest
 from digiquant.dashboard.research_retrieval import (
-    assert_blinded_h5_prompt,
-    assert_blinded_h6_prompt,
+    assert_blinded_analyst_prompt,
+    assert_blinded_deliberation_prompt,
     strip_blinded_forbidden_keys,
 )
 from digiquant.dashboard.research_retrieval.context import ContextRole
 from digiquant.dashboard.research_retrieval.context_wiring import resolve_context_compiler_mode
-from digiquant.dashboard.research_retrieval.h7_decision_context import assert_h7_no_target_weights
+from digiquant.dashboard.research_retrieval.direction_decision_context import (
+    assert_direction_no_target_weights,
+)
 from digiquant.dashboard.research_retrieval.planner import (
     AttentionRolloutMode,
-    H6Action,
-    H6SelectionMode,
+    DeliberationAction,
+    DeliberationSelectionMode,
     incumbent_fallback_selection,
-    resolve_h6_selection_mode,
+    resolve_deliberation_selection_mode,
 )
 from digiquant.dashboard.research_retrieval.store import EvidenceBundleStore
 from digiquant.portfolio.graph import (
@@ -35,9 +37,9 @@ from digiquant.portfolio.graph import (
     build_portfolio_graph,
     build_portfolio_phases_thesis,
 )
-from digiquant.portfolio.phases.h4_opportunity_screener import compute_focus_roster
-from digiquant.portfolio.phases.h9_commit_run import CommitRunDeps
+from digiquant.portfolio.phases.commit import CommitRunDeps
 from digiquant.portfolio.phases.phase7e_risk_sizing import RiskSizingDeps
+from digiquant.portfolio.phases.screener import compute_focus_roster
 from digiquant.research.graph import ResearchGraphDeps, build_research_graph
 from digiquant.research.phases.preflight import PreflightDeps
 from digiquant.research.phases.publish_phase import PublishDeps
@@ -51,9 +53,9 @@ from tests.dq.portfolio.phase3_e2e_fixtures import (
     PORTFOLIO_COMPILED_NODES,
     PRODUCTION_GUARD_PATHS,
     RESEARCH_COMPILED_NODES,
-    assert_research_plan_preserves_h4_roster,
+    assert_research_plan_preserves_screener_roster,
     phase3_attention_plan,
-    phase3_h6_selection,
+    phase3_deliberation_selection,
     phase3_pinned_research_state,
     production_imports_enforce_promotion,
     run_phase3_composition,
@@ -101,21 +103,21 @@ def test_portfolio_graph_topology_unchanged_by_phase3() -> None:
     assert PORTFOLIO_COMPILED_NODES.issubset(nodes)
     phase_names = {p.name for p in build_portfolio_phases_thesis(watchlist=["AAPL"], held=set())}
     for expected in (
-        "portfolio_h1_thesis_review",
-        "portfolio_h4_opportunity_screener",
-        "portfolio_h5_asset_analyst",
-        "portfolio_h6_deliberation",
-        "portfolio_h7_pm_direction",
-        "portfolio_h8_risk_sizing",
-        "portfolio_h9_commit_run",
+        "portfolio_thesis",
+        "portfolio_screener",
+        "portfolio_analyst",
+        "portfolio_deliberation",
+        "portfolio_direction",
+        "portfolio_sizing_risk_sizing",
+        "portfolio_commit",
     ):
         assert expected in phase_names
 
 
-def test_h6_deliberation_module_disables_broad_live_search() -> None:
+def test_deliberation_module_disables_broad_live_search() -> None:
     path = (
         pathlib.Path(__file__).resolve().parents[3]
-        / "digiquant/src/digiquant/portfolio/phases/h6_deliberation.py"
+        / "digiquant/src/digiquant/portfolio/phases/deliberation.py"
     )
     source = path.read_text(encoding="utf-8")
     assert "live_search=True" not in source
@@ -139,7 +141,7 @@ def test_planner_helpers_are_not_graph_nodes() -> None:
 # --------------------------------------------------------------------------- H4 width / order / exploration
 
 
-def test_h4_roster_unchanged_across_shadow_attention_plan(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_screener_roster_unchanged_across_shadow_attention_plan(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("DIGIQUANT_MAX_ANALYSTS", "4")
     monkeypatch.setenv("PORTFOLIO_HELD_GATE", "off")
     roster_a = compute_focus_roster(
@@ -158,7 +160,7 @@ def test_h4_roster_unchanged_across_shadow_attention_plan(monkeypatch: pytest.Mo
 
     _, _, loaded = phase3_pinned_research_state()
     plan = phase3_attention_plan(state_version_id=loaded.version.state_version_id, roster=tickers_a)
-    assert_research_plan_preserves_h4_roster(plan, tickers_a)
+    assert_research_plan_preserves_screener_roster(plan, tickers_a)
 
 
 # --------------------------------------------------------------------------- bundles / amendments / replay
@@ -170,8 +172,8 @@ def test_phase3_full_fixture_byte_stable_over_serialize_reload() -> None:
     assert composed["plan"] == again["plan"]
     assert composed["original_state_bytes"] == again["original_state_bytes"]
     assert composed["bundle_snapshot"] == again["bundle_snapshot"]
-    assert composed["contexts"]["h5_capsule"].content_hash == (
-        again["contexts"]["h5_capsule"].content_hash
+    assert composed["contexts"]["analyst_capsule"].content_hash == (
+        again["contexts"]["analyst_capsule"].content_hash
     )
     assert composed["reloaded_bundles"].lineage_bytes() == composed["bundle_snapshot"]
     assert composed["reloaded_bundles"].unlinked_amendment_count() == 0
@@ -197,24 +199,24 @@ def test_exact_state_version_bytes_survive_newer_rows() -> None:
 # --------------------------------------------------------------------------- H6 selection / round floor / provenance
 
 
-def test_selected_h6_meets_two_round_floor_in_shadow() -> None:
-    selected = phase3_h6_selection(conflict=True)
-    assert selected.action is H6Action.SELECT
+def test_selected_deliberation_meets_two_round_floor_in_shadow() -> None:
+    selected = phase3_deliberation_selection(conflict=True)
+    assert selected.action is DeliberationAction.SELECT
     assert selected.budget.min_rounds >= 2
-    assert selected.mode is H6SelectionMode.SHADOW
+    assert selected.mode is DeliberationSelectionMode.SHADOW
     assert selected.actuated is False
 
 
 def test_low_value_carry_records_provenance_without_actuation() -> None:
-    carry = phase3_h6_selection(conflict=False, low_value=True)
-    assert carry.action is H6Action.CARRY
+    carry = phase3_deliberation_selection(conflict=False, low_value=True)
+    assert carry.action is DeliberationAction.CARRY
     assert carry.budget.max_provider_calls == 0
-    assert carry.mode is H6SelectionMode.SHADOW
+    assert carry.mode is DeliberationSelectionMode.SHADOW
     assert carry.actuated is False
 
 
 def test_incumbent_fallback_selection_is_typed_and_actuated_false() -> None:
-    features = phase3_h6_selection(conflict=True).features
+    features = phase3_deliberation_selection(conflict=True).features
     fallback = incumbent_fallback_selection(features)
     assert fallback.reason.value == "incumbent_fallback"
     assert fallback.actuated is False
@@ -224,26 +226,26 @@ def test_incumbent_fallback_selection_is_typed_and_actuated_false() -> None:
 # --------------------------------------------------------------------------- blinded deterministic contexts
 
 
-def test_role_contexts_are_blinded_and_h7_has_no_weights() -> None:
+def test_role_contexts_are_blinded_and_direction_has_no_weights() -> None:
     composed = run_phase3_composition()
-    wire = composed["contexts"]["h5_wire"]
-    h5_inputs = strip_blinded_forbidden_keys(dict(wire.phase_inputs), role=ContextRole.H5_ANALYST)
-    assert_blinded_h5_prompt(h5_inputs)
-    h6_inputs = {
+    wire = composed["contexts"]["analyst_wire"]
+    analyst_inputs = strip_blinded_forbidden_keys(dict(wire.phase_inputs), role=ContextRole.ANALYST)
+    assert_blinded_analyst_prompt(analyst_inputs)
+    deliberation_inputs = {
         "ticker": composed["bundle"].ticker,
-        "structured_context": composed["contexts"]["h6_capsule"].body,
+        "structured_context": composed["contexts"]["deliberation_capsule"].body,
     }
-    assert_blinded_h6_prompt(h6_inputs)
+    assert_blinded_deliberation_prompt(deliberation_inputs)
     h7 = composed["contexts"]["h7"]
-    assert_h7_no_target_weights(h7.structured_body)
+    assert_direction_no_target_weights(h7.structured_body)
     assert h7.base_manifest.state_version_id == composed["loaded"].version.state_version_id
 
 
-def test_h5_h6_manifests_share_pinned_state_version() -> None:
+def test_analyst_deliberation_manifests_share_pinned_state_version() -> None:
     composed = run_phase3_composition()
     state_id = composed["loaded"].version.state_version_id
-    assert composed["contexts"]["h5_manifest"].state_version_id == state_id
-    assert composed["contexts"]["h6_manifest"].state_version_id == state_id
+    assert composed["contexts"]["analyst_manifest"].state_version_id == state_id
+    assert composed["contexts"]["deliberation_manifest"].state_version_id == state_id
     assert composed["contexts"]["h7"].base_manifest.state_version_id == state_id
 
 
@@ -253,7 +255,7 @@ def test_h5_h6_manifests_share_pinned_state_version() -> None:
 def test_pre_call_manifest_links_wp1_tokens_without_mutation() -> None:
     composed = run_phase3_composition()
     link = composed["telemetry"]
-    manifest = composed["contexts"]["h5_manifest"]
+    manifest = composed["contexts"]["analyst_manifest"]
     assert link.manifest_id == manifest.manifest_id
     assert link.actual_prompt_tokens == 900
     assert manifest.estimated_tokens is not None
@@ -270,7 +272,7 @@ def test_default_rollout_modes_are_shadow_not_enforce(
     monkeypatch.delenv("DIGIQUANT_H6_SELECTION_MODE", raising=False)
     assert resolve_research_attention_rollout_mode() is AttentionRolloutMode.SHADOW
     assert resolve_context_compiler_mode().value == "shadow"
-    assert resolve_h6_selection_mode() is H6SelectionMode.SHADOW
+    assert resolve_deliberation_selection_mode() is DeliberationSelectionMode.SHADOW
 
 
 def test_production_surfaces_do_not_import_policy_promotion() -> None:

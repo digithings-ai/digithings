@@ -24,10 +24,10 @@ from digiquant.portfolio.models.forecast import (
     PriceAnchorStatus,
 )
 from digiquant.portfolio.payloads import deliberation_summaries
-from digiquant.portfolio.phases import h6_deliberation
-from digiquant.portfolio.phases.h6_deliberation import (
-    build_h6_deliberation,
-    build_h6_from_state,
+from digiquant.portfolio.phases import deliberation
+from digiquant.portfolio.phases.deliberation import (
+    build_deliberation,
+    build_deliberation_from_state,
 )
 from digiquant.portfolio.phases.portfolio_common import materialize_forecast_assessment
 from digiquant.research.state import (
@@ -68,7 +68,7 @@ def _state() -> ResearchState:
 @pytest.mark.unit
 class TestDeliberationConvergence:
     def test_pm_challenge_then_analyst_converges(self) -> None:
-        compiled = build_pipeline(ResearchState, [build_h6_deliberation(["AAPL"], held={"AAPL"})])
+        compiled = build_pipeline(ResearchState, [build_deliberation(["AAPL"], held={"AAPL"})])
         calls: list[str] = []
 
         def fake(_m: str, msgs: list[dict[str, Any]], **_: Any) -> str:
@@ -107,7 +107,7 @@ class TestDeliberationConvergence:
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         monkeypatch.setenv("DIGIQUANT_DELIBERATION_MAX_ROUNDS", "1")
-        compiled = build_pipeline(ResearchState, [build_h6_deliberation(["AAPL"], held={"AAPL"})])
+        compiled = build_pipeline(ResearchState, [build_deliberation(["AAPL"], held={"AAPL"})])
 
         def fake(_m: str, msgs: list[dict[str, Any]], **_: Any) -> str:
             schema = next(
@@ -153,7 +153,7 @@ class TestDeliberationConvergence:
         # — a PM that converges on its first turn returns WITHOUT an analyst turn. (The
         # default floor is 2, exercised by the test below.)
         monkeypatch.setenv("DIGIQUANT_DELIBERATION_MIN_ROUNDS", "1")
-        compiled = build_pipeline(ResearchState, [build_h6_deliberation(["AAPL"], held={"AAPL"})])
+        compiled = build_pipeline(ResearchState, [build_deliberation(["AAPL"], held={"AAPL"})])
         calls: list[str] = []
 
         def fake(_m: str, msgs: list[dict[str, Any]], **_: Any) -> str:
@@ -186,7 +186,7 @@ class TestDeliberationConvergence:
         # record its challenge and the analyst must respond before convergence is honored —
         # no more round-1 rubber-stamp (#945).
         monkeypatch.setenv("DIGIQUANT_DELIBERATION_MIN_ROUNDS", "2")
-        compiled = build_pipeline(ResearchState, [build_h6_deliberation(["AAPL"], held={"AAPL"})])
+        compiled = build_pipeline(ResearchState, [build_deliberation(["AAPL"], held={"AAPL"})])
         calls: list[str] = []
 
         def fake(_m: str, msgs: list[dict[str, Any]], **_: Any) -> str:
@@ -260,11 +260,11 @@ class TestDeliberationFailureCarry:
     def _run_h6(state: ResearchState) -> dict[str, Any]:
         # Drives the production fan-out worker directly: this exercises the carry
         # construction without standing up the LLM plumbing the loop tests need.
-        return build_h6_from_state().worker.run(with_fanout_ticker(state, "AAPL"))
+        return build_deliberation_from_state().worker.run(with_fanout_ticker(state, "AAPL"))
 
     def test_crash_carry_is_flagged_and_is_not_converged(self) -> None:
         with patch.object(
-            h6_deliberation,
+            deliberation,
             "run_deliberation_loop",
             side_effect=ValueError("Expecting value: line 1 column 1 (char 0)"),
         ):
@@ -277,7 +277,7 @@ class TestDeliberationFailureCarry:
         assert summary["transcript"] == []
         assert summary["selection_reason"]  # WP11.3 provenance on failure path
         # The PhaseError shape the research portfolio-density gate counts stays untouched.
-        assert out["errors"][0].phase == "portfolio_h6_deliberation"
+        assert out["errors"][0].phase == "portfolio_deliberation"
         assert out["errors"][0].message.startswith("deliberation LLM failed")
 
     def test_invalid_amendment_degrades_ticker_not_chain(self) -> None:
@@ -316,7 +316,7 @@ class TestDeliberationFailureCarry:
         bad_terms["base_probability"] = "0.30"
         bad_terms["bull_probability"] = "0.20"
         with patch.object(
-            h6_deliberation,
+            deliberation,
             "run_deliberation_loop",
             return_value=(summary, bad_terms, None),
         ):
@@ -325,7 +325,7 @@ class TestDeliberationFailureCarry:
         assert degraded["carried"] is True
         assert degraded["carry_reason"] == "llm_failure"
         assert degraded["converged"] is False
-        assert out["errors"][0].phase == "portfolio_h6_deliberation"
+        assert out["errors"][0].phase == "portfolio_deliberation"
 
     def test_fingerprint_skip_carry_is_labelled_benign(self) -> None:
         state = _state()
@@ -338,7 +338,7 @@ class TestDeliberationFailureCarry:
                 }
             }
         )
-        with patch.object(h6_deliberation, "deliberation_skip_signal", return_value=True):
+        with patch.object(deliberation, "deliberation_skip_signal", return_value=True):
             out = self._run_h6(state)
         summary = out["phase_portfolio"].deliberation_summaries["AAPL"]
         assert summary["carried"] is True
@@ -425,7 +425,7 @@ class TestH6SelectionWiring:
     ) -> None:
         monkeypatch.setenv("DIGIQUANT_H6_SELECTION_MODE", "enforce")
         monkeypatch.setenv("DIGIQUANT_DELIBERATION_MIN_ROUNDS", "2")
-        compiled = build_pipeline(ResearchState, [build_h6_deliberation(["AAPL"], held={"AAPL"})])
+        compiled = build_pipeline(ResearchState, [build_deliberation(["AAPL"], held={"AAPL"})])
         calls: list[str] = []
 
         def fake(_m: str, msgs: list[dict[str, Any]], **_: Any) -> str:
@@ -438,7 +438,7 @@ class TestH6SelectionWiring:
             # Materiality / selection features must never appear in provider prompts.
             blob = json.dumps(msgs)
             assert "weight_pct" not in blob
-            assert "h6_selection" not in blob
+            assert "deliberation_selection" not in blob
             assert "materiality" not in blob
             calls.append(schema)
             if schema == "DeliberationPmTurn":
@@ -468,7 +468,7 @@ class TestH6SelectionWiring:
         summary = final.phase_portfolio.deliberation_summaries["AAPL"]
         assert summary["converged"] is True
         assert summary["selection_reason"] == "decision_boundary"
-        assert summary["h6_selection"]["budget"]["min_rounds"] >= 2
+        assert summary["deliberation_selection"]["budget"]["min_rounds"] >= 2
         assert "DeliberationAnalystTurn" in calls
         assert len(summary["transcript"]) >= 2
 
@@ -477,14 +477,14 @@ class TestH6SelectionWiring:
     ) -> None:
         monkeypatch.setenv("DIGIQUANT_H6_SELECTION_MODE", "enforce")
         with patch.object(
-            h6_deliberation,
+            deliberation,
             "run_deliberation_loop",
             side_effect=RuntimeError("provider unavailable"),
         ):
-            out = build_h6_from_state().worker.run(with_fanout_ticker(_state(), "AAPL"))
+            out = build_deliberation_from_state().worker.run(with_fanout_ticker(_state(), "AAPL"))
         summary = out["phase_portfolio"].deliberation_summaries["AAPL"]
         assert summary["carry_reason"] == "llm_failure"
         assert summary["converged"] is False
         assert summary["selection_reason"] == "decision_boundary"
-        assert summary["h6_selection"]["action"] == "select"
+        assert summary["deliberation_selection"]["action"] == "select"
         assert out["errors"][0].message.startswith("deliberation LLM failed")

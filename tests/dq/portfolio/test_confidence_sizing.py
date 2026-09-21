@@ -9,7 +9,6 @@ from __future__ import annotations
 from datetime import date
 
 import pytest
-from digiquant.portfolio.h8_risk_snapshots import H8RiskArtifacts
 from digiquant.portfolio.models.pm_direction import PMDirectionMemo, TickerDirection
 from digiquant.portfolio.phases import phase7e_risk_sizing
 from digiquant.portfolio.phases.phase7e_risk_sizing import (
@@ -17,6 +16,7 @@ from digiquant.portfolio.phases.phase7e_risk_sizing import (
     build_risk_sizing_node,
 )
 from digiquant.portfolio.sizing import SizingCaps, TickerRisk, size_portfolio
+from digiquant.portfolio.sizing_risk_snapshots import SizingRiskArtifacts
 from digiquant.portfolio.skills import load_skill_full
 from digiquant.research.state import (
     PhasePortfolioState,
@@ -69,7 +69,7 @@ def test_all_missing_confidence_skips_haircut() -> None:
 
 
 def test_missing_confidence_uses_conservative_default_not_one() -> None:
-    assert phase7e_risk_sizing.H8_MISSING_CONFIDENCE_DEFAULT == pytest.approx(0.5)
+    assert phase7e_risk_sizing.SIZING_MISSING_CONFIDENCE_DEFAULT == pytest.approx(0.5)
     assert phase7e_risk_sizing.pm_confidence_scale(None) == pytest.approx(0.5)
     assert phase7e_risk_sizing.pm_confidence_scale(None) != pytest.approx(1.0)
     assert phase7e_risk_sizing.pm_confidence_scale(0.9) == pytest.approx(0.9)
@@ -212,7 +212,7 @@ def test_missing_confidence_scale_matches_half_not_full() -> None:
         memo="m",
     )
     scales = phase7e_risk_sizing.confidence_scales_from_memo(memo)
-    assert scales["IAU"] == pytest.approx(phase7e_risk_sizing.H8_MISSING_CONFIDENCE_DEFAULT)
+    assert scales["IAU"] == pytest.approx(phase7e_risk_sizing.SIZING_MISSING_CONFIDENCE_DEFAULT)
     assert scales["GLD"] == pytest.approx(1.0)
     scores = {"IAU": 2.0, "GLD": 2.0}
     result = size_portfolio(
@@ -227,7 +227,7 @@ def test_missing_confidence_scale_matches_half_not_full() -> None:
     assert weights["GLD"] == pytest.approx(weights["IAU"] * 2.0)
 
 
-def _run_h8_with_memo(
+def _run_sizing_with_memo(
     monkeypatch: pytest.MonkeyPatch,
     *,
     roster: list[TickerDirection],
@@ -235,9 +235,9 @@ def _run_h8_with_memo(
 ) -> dict[str, float]:
     bundle = _bundle(returns=returns, ranks={row.ticker: row.conviction_rank for row in roster})
     tickers = tuple(row.ticker for row in roster if row.direction == "long")
-    artifacts = H8RiskArtifacts(policy=_risk_policy(), covariance_snapshot=_covariance(tickers))
+    artifacts = SizingRiskArtifacts(policy=_risk_policy(), covariance_snapshot=_covariance(tickers))
     monkeypatch.setattr(
-        "digiquant.portfolio.h8_risk_snapshots.resolve_h8_risk_artifacts",
+        "digiquant.portfolio.sizing_risk_snapshots.resolve_sizing_risk_artifacts",
         lambda **_kwargs: artifacts,
     )
     monkeypatch.setattr(
@@ -254,7 +254,7 @@ def _run_h8_with_memo(
                 "max_sector_pct": 100,
                 "target_portfolio_vol": 1.0e6,
                 "weight_increment_pct": 0,
-                "h8_sizing_input_mode": "calibrated",
+                "sizing_input_mode": "calibrated",
             }
         ),
         phase_portfolio=PhasePortfolioState(
@@ -279,7 +279,7 @@ def test_phase7e_applies_memo_confidence_cash_first(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     returns = {"IAU": ("0.06", "0.02", "1.0"), "GLD": ("0.06", "0.02", "1.0")}
-    high = _run_h8_with_memo(
+    high = _run_sizing_with_memo(
         monkeypatch,
         roster=[
             TickerDirection(ticker="IAU", direction="long", conviction_rank=1, confidence=0.9),
@@ -291,7 +291,7 @@ def test_phase7e_applies_memo_confidence_cash_first(
     invested = sum(high.values())
     assert invested < 100.0
     # Same forecasts: haircuts must not lift IAU above its full-confidence size.
-    full = _run_h8_with_memo(
+    full = _run_sizing_with_memo(
         monkeypatch,
         roster=[
             TickerDirection(ticker="IAU", direction="long", conviction_rank=1, confidence=1.0),
@@ -304,7 +304,7 @@ def test_phase7e_applies_memo_confidence_cash_first(
     assert high["IAU"] <= full["IAU"] + 1e-9
 
 
-def test_pm_skill_says_h8_sizes_by_confidence_not_rank() -> None:
+def test_pm_skill_says_sizing_sizes_by_confidence_not_rank() -> None:
     body = load_skill_full("pm-direction")
     lowered = body.lower()
     assert "converts your ranks" not in lowered

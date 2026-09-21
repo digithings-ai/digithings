@@ -58,7 +58,7 @@ def _artifact_key_str(key: ArtifactKey) -> str:
     return f"{key[0]}:{key[1]}"
 
 
-def h4_roster_fingerprint(roster: Sequence[str]) -> str:
+def screener_roster_fingerprint(roster: Sequence[str]) -> str:
     """Deterministic fingerprint of an H4 focus roster (order-sensitive)."""
     normalized = [ticker.strip().upper() for ticker in roster if ticker and ticker.strip()]
     blob = "\n".join(normalized).encode("utf-8")
@@ -151,25 +151,25 @@ class AttentionPlan(BaseModel):
     profile_key: str = Field(..., min_length=1, max_length=100)
     is_house_default: bool
     run_date: date
-    h4_roster: list[str] = Field(default_factory=list)
-    h4_roster_fingerprint: str = Field(..., min_length=64, max_length=64)
+    screener_roster: list[str] = Field(default_factory=list)
+    screener_roster_fingerprint: str = Field(..., min_length=64, max_length=64)
     decisions: list[AttentionDecision] = Field(default_factory=list)
     # Explicitly absent: mandate weights, H7 memo, H8 sizing — planner has no authority.
 
-    @field_validator("h4_roster")
+    @field_validator("screener_roster")
     @classmethod
     def _upper_roster(cls, value: list[str]) -> list[str]:
         return [ticker.strip().upper() for ticker in value if ticker and ticker.strip()]
 
     @model_validator(mode="after")
     def _fingerprint_matches_roster(self) -> AttentionPlan:
-        expected = h4_roster_fingerprint(self.h4_roster)
-        if self.h4_roster_fingerprint != expected:
-            raise ValueError("h4_roster_fingerprint must match h4_roster")
+        expected = screener_roster_fingerprint(self.screener_roster)
+        if self.screener_roster_fingerprint != expected:
+            raise ValueError("screener_roster_fingerprint must match screener_roster")
         expected_id = attention_plan_id(
             run_date=self.run_date,
             profile_config_version_id=self.profile_config_version_id,
-            roster_fingerprint=self.h4_roster_fingerprint,
+            roster_fingerprint=self.screener_roster_fingerprint,
             schema_version=self.schema_version,
         )
         if self.plan_id != expected_id:
@@ -224,14 +224,14 @@ def plan_attention_shadow(
     prior_loader: PriorLoader,
     triages: Mapping[ArtifactKey, TriageSignal | None] | None = None,
     force_full_rewrite: bool = False,
-    h4_roster: Sequence[str] | None = None,
+    screener_roster: Sequence[str] | None = None,
     planner_mode: PlannerMode = "shadow",
     profile_config_version_id: UUID | None = None,
     profile_store: Mapping[str, ProfileConfig | Mapping[str, object]] | None = None,
 ) -> AttentionPlanShadowResult:
     """Build a shadow AttentionPlan beside incumbent ``resolve_edit_mode``.
 
-    Never actuates alternate routing. Does not mutate ``h4_roster``. Does not
+    Never actuates alternate routing. Does not mutate ``screener_roster``. Does not
     emit H7/H8 fields.
     """
     if planner_mode not in ("off", "shadow"):
@@ -243,8 +243,8 @@ def plan_attention_shadow(
         requested_version_id=profile_config_version_id,
         store=profile_store,
     )
-    roster = list(h4_roster or [])
-    roster_fp = h4_roster_fingerprint(roster)
+    roster = list(screener_roster or [])
+    roster_fp = screener_roster_fingerprint(roster)
     triage_map = triages or {}
 
     incumbent: dict[str, EditMode] = {}
@@ -294,8 +294,8 @@ def plan_attention_shadow(
         profile_key=profile.profile_key,
         is_house_default=profile.is_house_default,
         run_date=run_date,
-        h4_roster=roster,
-        h4_roster_fingerprint=roster_fp,
+        screener_roster=roster,
+        screener_roster_fingerprint=roster_fp,
         decisions=decisions,
     )
     return AttentionPlanShadowResult(
@@ -306,24 +306,24 @@ def plan_attention_shadow(
     )
 
 
-def assert_plan_preserves_h4_roster(plan: AttentionPlan, roster: Sequence[str]) -> None:
+def assert_plan_preserves_screener_roster(plan: AttentionPlan, roster: Sequence[str]) -> None:
     """Test/helper: planner output roster must be byte-identical to input."""
     expected = [t.strip().upper() for t in roster if t and t.strip()]
-    if plan.h4_roster != expected:
+    if plan.screener_roster != expected:
         raise AttentionPlanError("AttentionPlan must not expand, shrink, or reorder H4 roster")
-    if plan.h4_roster_fingerprint != h4_roster_fingerprint(expected):
+    if plan.screener_roster_fingerprint != screener_roster_fingerprint(expected):
         raise AttentionPlanError("AttentionPlan H4 fingerprint mismatch")
 
 
-def assert_plan_has_no_h7_h8_authority(plan: AttentionPlan) -> None:
+def assert_plan_has_no_direction_sizing_authority(plan: AttentionPlan) -> None:
     """Test/helper: plan payload must not carry H7/H8 authority fields."""
     dumped = plan.model_dump()
     forbidden = {
         "mandate",
         "weights",
         "target_weights",
-        "h7",
-        "h8",
+        "direction",
+        "sizing",
         "pm_direction_memo",
         "allocation",
         "book_change",
@@ -343,10 +343,10 @@ __all__ = [
     "PlannerMode",
     "RefreshReasonCode",
     "action_for_edit_mode",
-    "assert_plan_has_no_h7_h8_authority",
-    "assert_plan_preserves_h4_roster",
+    "assert_plan_has_no_direction_sizing_authority",
+    "assert_plan_preserves_screener_roster",
     "attention_plan_id",
-    "h4_roster_fingerprint",
+    "screener_roster_fingerprint",
     "house_profile_config",
     "plan_attention_shadow",
     "profile_config_version_id",

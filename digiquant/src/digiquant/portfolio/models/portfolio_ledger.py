@@ -356,7 +356,7 @@ class RequestedTarget(TimedPortfolioLedgerRecord):
 # correlation-dedup record is exactly as invalid as an increasing cap one.
 # ``GRID_ROUNDING`` always rounds down to the sizing grid (never to nearest —
 # see ``sizing._round_to_grid``'s own reduce-only invariant), and ``FLAT_EXIT``
-# always drives a held position to exactly 0 (an H7-flat exit or a PM-exit —
+# always drives a held position to exactly 0 (an direction-flat exit or a PM-exit —
 # see ARCHITECTURE.md's H8 adjustment-event taxonomy table), so both belong
 # here alongside the caps/dedup/breaker set. ``VOLATILITY_SCALE`` and
 # ``FINAL_GROSS_SCALE`` are deliberately absent: both can scale a book UP as

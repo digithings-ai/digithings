@@ -21,7 +21,7 @@ from digigraph.graph.pipeline_builder import NodeSpec, PipelinePhase
 from digiquant.dashboard.overlay.persist import portfolio_document_key
 from digiquant.portfolio.budget_controller import assess_budget
 from digiquant.portfolio.candidates import holdings_from_prior_book, select_focus_tickers
-from digiquant.portfolio.research_attention import h4_phase_attention_update
+from digiquant.portfolio.research_attention import screener_phase_attention_update
 from digiquant.portfolio.roster_cap import capped_tickers, configured_max_analysts
 from digiquant.portfolio.state import PortfolioState
 from digiquant.research.state import ExcludedTicker, FocusRosterEntry
@@ -30,7 +30,7 @@ from digiquant.research.supabase_io import SupabaseClient, publish_document
 logger = logging.getLogger(__name__)
 
 NODE_ID = "portfolio/thesis/opportunity-screener"
-PHASE_NAME = "portfolio_h4_opportunity_screener"
+PHASE_NAME = "portfolio_screener"
 OPPORTUNITY_SCREENER_DOCUMENT_KEY = "opportunity-screener"
 OPPORTUNITY_SCREENER_PAYLOAD_DOC_TYPE = "opportunity_screen"
 
@@ -300,8 +300,8 @@ def preview_focus_roster_tickers(
     ]
 
 
-def _h4_node_factory(client: SupabaseClient | None):
-    def _h4_node(state: PortfolioState) -> dict[str, Any]:
+def _screener_node_factory(client: SupabaseClient | None):
+    def _screener_node(state: PortfolioState) -> dict[str, Any]:
         watchlist = list(state.config.watchlist)
         held = holdings_from_state(state)
         mappings = extract_thesis_mappings(state.phase_portfolio.thesis_vehicle_map)
@@ -359,9 +359,9 @@ def _h4_node_factory(client: SupabaseClient | None):
                     state.run_date,
                 )
         planned = state.model_copy(update=phase_update)
-        return {**phase_update, **h4_phase_attention_update(planned)}
+        return {**phase_update, **screener_phase_attention_update(planned)}
 
-    return _h4_node
+    return _screener_node
 
 
 def build_screener_document(
@@ -438,8 +438,8 @@ def holdings_from_state(state: PortfolioState) -> set[str]:
     return set(holdings_from_prior_book(state.prior_context.prior_book))
 
 
-def build_h4_opportunity_screener(*, client: SupabaseClient | None = None) -> PipelinePhase:
+def build_screener(*, client: SupabaseClient | None = None) -> PipelinePhase:
     return PipelinePhase(
         name=PHASE_NAME,
-        nodes=[NodeSpec(name=NODE_ID, run=_h4_node_factory(client))],
+        nodes=[NodeSpec(name=NODE_ID, run=_screener_node_factory(client))],
     )

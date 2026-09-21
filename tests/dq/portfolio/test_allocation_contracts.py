@@ -41,7 +41,7 @@ _POLICY_HASH = "a" * 64
 _CAL_HASH_A = "b" * 64
 _CAL_HASH_B = "c" * 64
 _COST_HASH_A = "d" * 64
-_H7_HASH = "e" * 64
+_DIRECTION_HASH = "e" * 64
 _COV_HASH = "f" * 64
 
 
@@ -95,7 +95,7 @@ def _sample_bundle(**overrides: object) -> AllocationInputBundle:
     )
     cost = CostLiquidityBinding(entries=(("AAPL", _COST_HASH_A),))
     source = build_source_hashes(
-        h7_memo_hash=_H7_HASH,
+        direction_memo_hash=_DIRECTION_HASH,
         risk_policy_hash=_POLICY_HASH,
         prior_entries=tuple((entry.ticker, entry.weight_pct) for entry in prior.entries),
         calibrated_hashes=(("AAPL", _CAL_HASH_A), ("MSFT", _CAL_HASH_B)),
@@ -219,7 +219,7 @@ def test_bundle_hash_stable_and_order_independent_in_payload() -> None:
         },
         cost_liquidity={"entries": [["AAPL", _COST_HASH_A]]},
         source_hashes={
-            "h7_memo_hash": _H7_HASH,
+            "direction_memo_hash": _DIRECTION_HASH,
             "risk_policy_hash": _POLICY_HASH,
             "prior_weights_fingerprint": weights_fingerprint({"AAPL": 30.0, "MSFT": 20.0}),
             "covariance_hash": _COV_HASH,

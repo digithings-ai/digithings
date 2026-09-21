@@ -44,7 +44,7 @@ _SESSION = date(2026, 8, 26)
 _POLICY_ID = UUID("22222222-2222-4222-8222-222222222222")
 _POLICY_HASH = "d" * 64
 _CAL_HASH = "e" * 64
-_H7_HASH = "f" * 64
+_DIRECTION_HASH = "f" * 64
 
 # Explicit post-cutover control sequence — must match RiskPolicy.control_order.
 _POST_CUTOVER_CONTROL_SEQUENCE: tuple[str, ...] = (
@@ -140,7 +140,7 @@ def _bundle(
         risk_policy_id=_POLICY_ID,
     )
     source = build_source_hashes(
-        h7_memo_hash=_H7_HASH,
+        direction_memo_hash=_DIRECTION_HASH,
         risk_policy_hash=_POLICY_HASH,
         prior_entries=(),
         calibrated_hashes=tuple(cal_hashes),
@@ -395,12 +395,12 @@ def test_identical_calibrated_raw_mix_yields_identical_post_control_book() -> No
 def test_calibrated_mode_stamps_and_fallback_when_coverage_empty(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    from digiquant.portfolio.h8_risk_snapshots import H8RiskArtifacts
     from digiquant.portfolio.models.pm_direction import PMDirectionMemo, TickerDirection
     from digiquant.portfolio.phases.phase7e_risk_sizing import (
         RiskSizingDeps,
         build_risk_sizing_node,
     )
+    from digiquant.portfolio.sizing_risk_snapshots import SizingRiskArtifacts
     from digiquant.research.state import (
         PhasePortfolioState,
         ResearchConfigBundle,
@@ -413,9 +413,9 @@ def test_calibrated_mode_stamps_and_fallback_when_coverage_empty(
     bundle = _bundle(returns={"AAPL": ("0.06", "0.02", "1.0")})
     policy = _risk_policy()
     cov = _covariance(("AAPL",))
-    artifacts = H8RiskArtifacts(policy=policy, covariance_snapshot=cov)
+    artifacts = SizingRiskArtifacts(policy=policy, covariance_snapshot=cov)
     monkeypatch.setattr(
-        "digiquant.portfolio.h8_risk_snapshots.resolve_h8_risk_artifacts",
+        "digiquant.portfolio.sizing_risk_snapshots.resolve_sizing_risk_artifacts",
         lambda **_kwargs: artifacts,
     )
     monkeypatch.setattr(
@@ -433,7 +433,7 @@ def test_calibrated_mode_stamps_and_fallback_when_coverage_empty(
         "max_sector_pct": 100,
         "target_portfolio_vol": 1.0e6,
         "weight_increment_pct": 0,
-        "h8_sizing_input_mode": "calibrated",
+        "sizing_input_mode": "calibrated",
     }
     state = ResearchState(
         run_type="delta",
@@ -452,7 +452,7 @@ def test_calibrated_mode_stamps_and_fallback_when_coverage_empty(
     out = build_risk_sizing_node(RiskSizingDeps(client=client))(state)
     book = out["phase_portfolio"].sized_book
     assert book is not None
-    assert book["h8_sizing_input_mode"] == "calibrated"
+    assert book["sizing_input_mode"] == "calibrated"
     assert book["allocation_input_bundle_hash"] == bundle.bundle_content_hash
 
     monkeypatch.setattr(
@@ -463,7 +463,7 @@ def test_calibrated_mode_stamps_and_fallback_when_coverage_empty(
     out_fb = build_risk_sizing_node(RiskSizingDeps(client=client))(state)
     book_fb = out_fb["phase_portfolio"].sized_book
     assert book_fb is not None
-    assert book_fb["h8_sizing_input_mode"] == "incumbent_fallback"
+    assert book_fb["sizing_input_mode"] == "incumbent_fallback"
     assert book_fb["allocation_input_bundle_hash"] == bundle.bundle_content_hash
 
 

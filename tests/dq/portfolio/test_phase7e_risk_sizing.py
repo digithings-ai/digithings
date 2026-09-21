@@ -342,7 +342,7 @@ def test_memo_conviction_rank_orders_weights() -> None:
     assert w["AAA"] > w["BBB"]
 
 
-def test_memo_path_publishes_h7_narrative_as_action_rationale() -> None:
+def test_memo_path_publishes_direction_narrative_as_action_rationale() -> None:
     roster = [
         TickerDirection(
             ticker="AAA",
@@ -390,7 +390,7 @@ def _memo_state(
     return state
 
 
-def test_gapful_h7_ranks_match_dense_fallback() -> None:
+def test_gapful_direction_ranks_match_dense_fallback() -> None:
     """Gapful ranks [2,7,11] must size like dense [1,2,3] (WP8.1)."""
     tickers = ["AAA", "BBB", "CCC"]
     vols = _tech_rows({t: 20 for t in tickers})
@@ -416,7 +416,7 @@ def test_gapful_h7_ranks_match_dense_fallback() -> None:
         assert dense[ticker] == pytest.approx(gapful[ticker])
 
 
-def test_duplicate_h7_ranks_tie_by_symbol() -> None:
+def test_duplicate_direction_ranks_tie_by_symbol() -> None:
     """Duplicate ranks resolve deterministically by ticker symbol (WP8.1)."""
     roster = [
         TickerDirection(ticker="BBB", direction="long", conviction_rank=1),
@@ -429,7 +429,7 @@ def test_duplicate_h7_ranks_tie_by_symbol() -> None:
     assert w["AAA"] > w["BBB"]
 
 
-def test_h5_sell_cannot_drop_h7_long() -> None:
+def test_analyst_sell_cannot_drop_direction_long() -> None:
     """H5 sell/watch must not remove an H7-authorized long (WP8.1)."""
     roster = [TickerDirection(ticker="AAA", direction="long", conviction_rank=1)]
     analysts = {"AAA": {"conviction_score": 5, "stance": "sell"}}
@@ -443,7 +443,7 @@ def test_h5_sell_cannot_drop_h7_long() -> None:
     assert w["AAA"] > 0
 
 
-def test_h7_flat_not_admitted_via_h5_buy() -> None:
+def test_direction_flat_not_admitted_via_analyst_buy() -> None:
     """H7 flat roster entry cannot enter sizing through H5 buy alone (WP8.1)."""
     roster = [
         TickerDirection(ticker="SPY", direction="long", conviction_rank=1),
@@ -1015,7 +1015,7 @@ class TestCarryLoopEventEmission:
         assert not any(a["ticker"] == "DBO" for a in carries)
 
 
-def test_h7_flat_and_omitted_held_never_conflate_on_the_same_ticker() -> None:
+def test_direction_flat_and_omitted_held_never_conflate_on_the_same_ticker() -> None:
     """#2417 — flat (FLAT_EXIT) and omitted/unaddressed (CONTINUITY_CARRY) are structurally
     exclusive: ``memo_addressed_tickers`` already includes flat-tagged tickers, so a held
     ticker can reach exactly one of the two backstop branches, never both.
@@ -1090,7 +1090,7 @@ def test_apply_turnover_minimum_hold_override_emits_event_band_clamp_does_not() 
 class TestValidateSizingLineage:
     """#2417 §6/§7 — the standalone validator, exercised directly.
 
-    The wired production call site (``_validate_h8_lineage``, invoked from
+    The wired production call site (``_validate_sizing_lineage``, invoked from
     ``risk_sizing()`` after ``_build_sized_book`` returns) has its own coverage
     below in ``TestValidateH8LineageCallSite`` — both the golden path (a real,
     materially-capped book that logs nothing) and the regression path (a
@@ -1179,7 +1179,7 @@ class TestValidateH8LineageCallSite:
             "adjustments": [adjustment.model_dump()],
         }
         # must not raise and must not log — nothing here is a failure.
-        phase7e_risk_sizing._validate_h8_lineage({"SPY": 50.0}, sized_book, {})
+        phase7e_risk_sizing._validate_sizing_lineage({"SPY": 50.0}, sized_book, {})
 
     def test_direct_call_logs_but_does_not_raise_on_unexplained_delta(
         self, caplog: pytest.LogCaptureFixture
@@ -1189,7 +1189,7 @@ class TestValidateH8LineageCallSite:
             "adjustments": [],
         }
         with caplog.at_level(logging.ERROR, logger=phase7e_risk_sizing.__name__):
-            phase7e_risk_sizing._validate_h8_lineage({"SPY": 50.0}, sized_book, {})
+            phase7e_risk_sizing._validate_sizing_lineage({"SPY": 50.0}, sized_book, {})
         assert "H8 lineage validation failed" in caplog.text
 
     def test_wired_end_to_end_golden_path_logs_nothing(
@@ -1359,7 +1359,7 @@ def test_incumbent_default_caps_final_book_matches_golden_fixture() -> None:
     assert_book_matches_golden(sizing_result_snapshot(result), golden)
 
 
-def test_h8_attaches_risk_snapshots_without_changing_book() -> None:
+def test_sizing_attaches_risk_snapshots_without_changing_book() -> None:
     """WP6.3 (#2698): resolver runs before sizing; incumbent weights unchanged."""
     from digiquant.portfolio.models.risk_policy import PolicyArtifactStatus
 

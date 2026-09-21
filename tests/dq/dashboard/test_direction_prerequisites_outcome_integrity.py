@@ -11,9 +11,11 @@ from __future__ import annotations
 from datetime import UTC, date, datetime
 
 import pytest
-from digiquant.dashboard.research_retrieval.h7_decision_context import H7PrerequisiteSnapshot
-from digiquant.dashboard.research_retrieval.h7_prerequisites import (
-    build_h7_prerequisite_snapshot,
+from digiquant.dashboard.research_retrieval.direction_decision_context import (
+    DirectionPrerequisiteSnapshot,
+)
+from digiquant.dashboard.research_retrieval.direction_prerequisites import (
+    build_direction_prerequisite_snapshot,
 )
 from digiquant.research import forecast_outcomes as fo
 
@@ -30,8 +32,8 @@ CUTOFF = datetime(2026, 8, 25, 21, 0, tzinfo=UTC)
 RUN_DATE = date(2026, 8, 25)
 
 
-def _snapshot(client: FakeSupabaseClient) -> H7PrerequisiteSnapshot | None:
-    return build_h7_prerequisite_snapshot(
+def _snapshot(client: FakeSupabaseClient) -> DirectionPrerequisiteSnapshot | None:
+    return build_direction_prerequisite_snapshot(
         client=client,
         run_date=RUN_DATE,
         knowledge_cutoff_at=CUTOFF,

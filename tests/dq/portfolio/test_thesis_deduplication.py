@@ -8,7 +8,7 @@ from pathlib import Path
 
 import pytest
 from digiquant.portfolio.models.thesis import MarketThesisExplorationOutput, ThesisProposal
-from digiquant.portfolio.phases.h2_market_thesis_exploration import _reviewed_status_by_id
+from digiquant.portfolio.phases.market import _reviewed_status_by_id
 from digiquant.portfolio.writers.thesis_io import (
     persist_market_thesis_exploration,
     upsert_thesis_row,
@@ -178,7 +178,7 @@ def test_rejects_ambiguous_legacy_active_topic() -> None:
     ]
 
 
-def test_h2_update_preserves_h1_same_run_status() -> None:
+def test_market_update_preserves_thesis_same_run_status() -> None:
     state = ResearchState(
         run_type="baseline",
         run_date=date(2026, 7, 20),

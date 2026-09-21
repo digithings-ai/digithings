@@ -341,7 +341,7 @@ def test_noop_commit_manifest_satisfies_the_no_book_gate() -> None:
 # ------------------------------------------------- #1742: portfolio deliberation density
 
 
-def _portfolio_deliberations(n: int, *, failed: int, phase: str = "portfolio_h6_deliberation"):
+def _portfolio_deliberations(n: int, *, failed: int, phase: str = "portfolio_deliberation"):
     """A portfolio phase with ``n`` deliberations of which ``failed`` recorded a PhaseError."""
     portfolio = _committed_book(
         deliberation_summaries={f"T{i}": {"ticker": f"T{i}"} for i in range(n)}
@@ -375,13 +375,13 @@ def test_portfolio_deliberation_gate_tolerates_routine_cap_noise() -> None:
     assert s.status == "ok"
 
 
-def test_h9_commit_error_is_excluded_from_the_deliberation_numerator() -> None:
-    # portfolio_h9_commit_run is already gated by #1555; counting it here would double-count it
+def test_commit_error_is_excluded_from_the_deliberation_numerator() -> None:
+    # portfolio_commit is already gated by #1555; counting it here would double-count it
     # and pollute a metric that is supposed to measure *reasoning* failures.
     portfolio, _ = _portfolio_deliberations(4, failed=0)
     state = _prod_shaped_state(failed=0, phase_portfolio=portfolio)
     state.errors = [
-        PhaseError(phase="portfolio_h9_commit_run", node="portfolio/commit-run", message="conflict")
+        PhaseError(phase="portfolio_commit", node="portfolio/commit-run", message="conflict")
     ]
     s = diagnostics.summarize_run(state)
     assert s.breakdown["portfolio_deliberation"] == {"total": 4, "failed": 0}
@@ -402,8 +402,8 @@ def test_portfolio_deliberation_gate_silent_when_nothing_was_deliberated() -> No
     "phase",
     [
         "phase_portfolio",
-        "portfolio_h6_deliberation",
-        "portfolio_h7_pm_direction",
+        "portfolio_deliberation",
+        "portfolio_direction",
         "phase7d_pm",
         "phase9_evolution",
     ],

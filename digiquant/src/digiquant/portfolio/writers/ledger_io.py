@@ -285,7 +285,7 @@ def _frozen_symbols(*, client: SupabaseClient, order_rows: list[dict[str, Any]])
 def _prior_weights(state: ResearchState) -> dict[str, float]:
     """Mark-to-market prior book weights, in percent.
 
-    The same source ``h7_pm_direction`` and ``phase7d_pm`` read. research preflight
+    The same source ``direction`` and ``phase7d_pm`` read. research preflight
     derives it from ``load_prior_book(client, run_date)`` and drifts it by price moves
     since the prior book date (#955), which is the baseline H8 sized its targets
     against — so measuring the ledger's share deltas against it, rather than re-reading
@@ -460,9 +460,9 @@ def append_commit_chain(
     date_str = run_date.isoformat()
     effective_at = datetime.combine(run_date, time(0, 0), tzinfo=UTC)
     recorded_at = datetime.now(UTC)
-    h8_adjustments = list(adjustments or ())
-    h8_requested = {_symbol(k): float(v) for k, v in (requested_pct or {}).items()}
-    adjustments_by_symbol = _pct_adjustments_by_symbol(h8_adjustments)
+    sizing_adjustments = list(adjustments or ())
+    sizing_requested = {_symbol(k): float(v) for k, v in (requested_pct or {}).items()}
+    adjustments_by_symbol = _pct_adjustments_by_symbol(sizing_adjustments)
 
     overlay_ws = getattr(state.config, "workspace_id", None)
     require_overlay_persist(overlay_ws)
@@ -500,7 +500,7 @@ def append_commit_chain(
     symbols = set(targets)
     symbols |= {s for s, pct in prior.items() if abs(pct) > _WEIGHT_EPSILON}
     symbols |= set(approved_heads)
-    symbols |= set(h8_requested)
+    symbols |= set(sizing_requested)
     symbols |= set(adjustments_by_symbol)
     symbols -= frozen
 
@@ -536,7 +536,7 @@ def append_commit_chain(
         request_pct = _request_pct_for_symbol(
             symbol=symbol,
             target_pct=target_pct,
-            requested_pct=h8_requested,
+            requested_pct=sizing_requested,
             pct_adjustments=symbol_adjustments,
         )
         action, reason = _decision(

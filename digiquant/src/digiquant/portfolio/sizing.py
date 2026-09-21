@@ -143,7 +143,7 @@ class SizingResult:
     # not just the survivors.
     requested_pct: dict[str, float] = field(default_factory=dict)
     # Set only on a fully-flat (100% cash) result, distinguishing WHY the book is
-    # empty — never conflate an H7-driven flat decision with a sizing-side dropout.
+    # empty — never conflate an direction-driven flat decision with a sizing-side dropout.
     flat_reason: Literal["no_conviction_cleared_bar", "all_candidates_dropped"] | None = None
 
 

@@ -50,7 +50,7 @@ def _pm_tools(state: PortfolioState, *, segment: str = "pm-rebalance"):
         run_date=state.run_date,
         segment=segment,
         use_research_tools=True,
-        research_phase="h7_pm",
+        research_phase="direction",
     )
 
 

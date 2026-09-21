@@ -9,7 +9,7 @@ from uuid import UUID
 
 import polars as pl
 import pytest
-from digiquant.portfolio.h8_risk_snapshots import resolve_h8_risk_artifacts
+from digiquant.portfolio.sizing_risk_snapshots import resolve_sizing_risk_artifacts
 from digiquant.research import risk_policy_registry as rpr
 from digiquant.research.state import (
     PhasePortfolioState,
@@ -93,7 +93,7 @@ def _artifacts():
         prior_context=PriorContext(),
         config=ResearchConfigBundle(preferences={}),
     )
-    return resolve_h8_risk_artifacts(state=state, pm_tickers=["SPY", "TLT"], corr=corr)
+    return resolve_sizing_risk_artifacts(state=state, pm_tickers=["SPY", "TLT"], corr=corr)
 
 
 def _state_with_artifacts() -> ResearchState:
@@ -115,7 +115,7 @@ def _state_with_artifacts() -> ResearchState:
 def test_persist_writes_policy_snapshot_and_run_ref() -> None:
     client = RiskRegistryFake()
     bundle = _artifacts()
-    result = rpr.persist_h8_risk_snapshots(
+    result = rpr.persist_sizing_risk_snapshots(
         client=client,
         source_run_id=str(RUN_ID),
         run_date=RUN_DATE,
@@ -134,14 +134,14 @@ def test_persist_writes_policy_snapshot_and_run_ref() -> None:
 def test_exact_retry_skips() -> None:
     client = RiskRegistryFake()
     bundle = _artifacts()
-    first = rpr.persist_h8_risk_snapshots(
+    first = rpr.persist_sizing_risk_snapshots(
         client=client,
         source_run_id=str(RUN_ID),
         run_date=RUN_DATE,
         policy=bundle.policy,
         snapshot=bundle.covariance_snapshot,
     )
-    second = rpr.persist_h8_risk_snapshots(
+    second = rpr.persist_sizing_risk_snapshots(
         client=client,
         source_run_id=str(RUN_ID),
         run_date=RUN_DATE,
@@ -157,7 +157,7 @@ def test_exact_retry_skips() -> None:
 def test_get_risk_policy_respects_cutoff() -> None:
     client = RiskRegistryFake()
     bundle = _artifacts()
-    rpr.persist_h8_risk_snapshots(
+    rpr.persist_sizing_risk_snapshots(
         client=client,
         source_run_id=str(RUN_ID),
         run_date=RUN_DATE,
@@ -190,13 +190,13 @@ def test_persist_from_state_empty_is_ok() -> None:
         run_date=RUN_DATE,
         baseline_date=date(2026, 8, 24),
     )
-    result = rpr.persist_h8_risk_snapshots_from_state(client=client, state=state)
+    result = rpr.persist_sizing_risk_snapshots_from_state(client=client, state=state)
     assert result.ok
     assert result.policies_written == 0
 
 
 def test_persist_from_state_round_trip() -> None:
     client = RiskRegistryFake()
-    result = rpr.persist_h8_risk_snapshots_from_state(client=client, state=_state_with_artifacts())
+    result = rpr.persist_sizing_risk_snapshots_from_state(client=client, state=_state_with_artifacts())
     assert result.ok
     assert result.run_refs_written == 1

@@ -225,7 +225,7 @@ def test_incomplete_marks_remain_non_final() -> None:
     assert select_final_period(client=client, period_date=PERIOD) is None
 
 
-def test_provisional_h9_nav_cannot_be_selected_as_final() -> None:
+def test_provisional_commit_nav_cannot_be_selected_as_final() -> None:
     """nav_history continuity rows are not accounting periods."""
     client = MergingFake(
         canned_reads={

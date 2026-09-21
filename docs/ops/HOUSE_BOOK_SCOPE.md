@@ -88,7 +88,7 @@ script is house-owned).
 | Overlay `--execute` with persist off | Refuses / finishes `persist_disabled` — not a remaining-hop proof |
 | Staged cutover **113** (drop legacy `UNIQUE(date)`) | Not auto-applied; do not copy to top-level or apply on `core` while `main` writers still upsert `on_conflict=date`. [#3331](https://github.com/digithings-ai/digithings/pull/3331) stamps house `workspace_id` on those writers but **does not** widen the conflict target. `pipeline-dashboard.yml` checks out `ref: main` even when the schedule event is on default `develop`. |
 | Main house GHA vs develop tenancy writers | Live cron executes **main**. Develop already stamps via `house_workspace_id()` and upserts `on_conflict=workspace_id,date` — that is not what the scheduled job runs. Do not assume a green develop unit run proves the house publish. |
-| Booked positions, missing H9 ledger | Operator recovery: `python digiquant/scripts/research/recover_h9_ledger_commit.py --date YYYY-MM-DD` (then `--apply`). Reads house `positions` / `nav_history`; calls `append_commit_chain`. Do not re-run the LLM pipeline. Do not `workflow_dispatch`. |
+| Booked positions, missing H9 ledger | Operator recovery: `python digiquant/scripts/research/recover_commit_ledger_commit.py --date YYYY-MM-DD` (then `--apply`). Reads house `positions` / `nav_history`; calls `append_commit_chain`. Do not re-run the LLM pipeline. Do not `workflow_dispatch`. |
 | `DIGIQUANT_OVERLAY_PERSIST=1` (a retired alias is also read) before 113 on target | Persist-on still cannot prove a private overlay book while legacy uniques collide |
 
 ## nav_history write order (provisional window)

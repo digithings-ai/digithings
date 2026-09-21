@@ -18,7 +18,7 @@ from uuid import UUID
 from pydantic import BaseModel, ConfigDict
 
 from digiquant.dashboard.research_retrieval.blinding import research_document_allowed
-from digiquant.dashboard.research_retrieval.evidence_bundle import H5EvidenceFact
+from digiquant.dashboard.research_retrieval.evidence_bundle import AnalystEvidenceFact
 from digiquant.dashboard.research_retrieval.models import (
     EvidenceBundleAmendment,
     EvidenceRecord,
@@ -38,13 +38,13 @@ from digiquant.portfolio.models.deliberation import MissingFactProposal
 
 logger = logging.getLogger(__name__)
 
-H6_AMENDMENT_POLICY_MAX_PER_BASE = 1
-_H6_AMENDMENT_SOURCE = "h6:missing_fact"
+DELIBERATION_AMENDMENT_POLICY_MAX_PER_BASE = 1
+_DELIBERATION_AMENDMENT_SOURCE = "h6:missing_fact"
 
 ExecuteTool = Callable[[str, dict[str, Any]], str]
 
 
-class H6AmendmentOutcome(StrEnum):
+class DeliberationAmendmentOutcome(StrEnum):
     """Result of one bounded missing-fact supplement attempt."""
 
     NONE = "none"
@@ -55,12 +55,12 @@ class H6AmendmentOutcome(StrEnum):
     BLINDED_SOURCE = "blinded_source"
 
 
-class H6AmendmentResult(BaseModel):
+class DeliberationAmendmentResult(BaseModel):
     """Audit record linking proposal → request → amendment (or failure)."""
 
     model_config = ConfigDict(extra="forbid", frozen=True)
 
-    outcome: H6AmendmentOutcome
+    outcome: DeliberationAmendmentOutcome
     base_bundle_id: UUID
     base_content_hash: NonEmptyStr
     missing_fact_request: MissingFactRequest | None = None
@@ -105,7 +105,7 @@ def validate_missing_fact_proposal(
     if claim not in allowed:
         return "claim_id_not_in_base_bundle"
     document_key = document_key_for_source_kind(proposal.source_kind, base_bundle.ticker)
-    if not research_document_allowed("h6_deliberation", document_key):
+    if not research_document_allowed("deliberation", document_key):
         return "source_kind_blinded"
     return None
 
@@ -115,7 +115,7 @@ def _facts_from_research_payload(
     payload: dict[str, Any],
     document_key: str,
     knowledge_cutoff_at: datetime,
-) -> tuple[H5EvidenceFact, ...]:
+) -> tuple[AnalystEvidenceFact, ...]:
     """Extract at most one supplemental fact leaf from a targeted research row."""
     body = payload.get("body")
     if body is None:
@@ -124,9 +124,9 @@ def _facts_from_research_payload(
         return ()
     summary = body.strip()
     return (
-        H5EvidenceFact(
+        AnalystEvidenceFact(
             source=document_key[:500],
-            authority="h6_missing_fact",
+            authority="deliberation_missing_fact",
             summary=summary,
             event_time=knowledge_cutoff_at,
             effective_as_of=knowledge_cutoff_at,
@@ -137,7 +137,7 @@ def _facts_from_research_payload(
 
 def _materialize_supplemental_evidence(
     *,
-    facts: tuple[H5EvidenceFact, ...],
+    facts: tuple[AnalystEvidenceFact, ...],
     recorded_at: datetime,
     provenance: TypedProvenance,
 ) -> tuple[EvidenceRecord, ...]:
@@ -183,7 +183,7 @@ def retrieve_missing_fact_evidence(
     if execute_tool is None:
         return (), "retrieval_tools_unavailable"
     document_key = document_key_for_source_kind(proposal.source_kind, ticker)
-    if not research_document_allowed("h6_deliberation", document_key):
+    if not research_document_allowed("deliberation", document_key):
         return (), "source_kind_blinded"
     try:
         raw = execute_tool("query_research", {"document_key": document_key})
@@ -260,7 +260,7 @@ def _materialize_amendment(
         base_bundle_id=base_bundle.bundle_id,
         missing_fact_request_id=request.request_id,
         evidence_ids=evidence_ids,
-        source=_H6_AMENDMENT_SOURCE,
+        source=_DELIBERATION_AMENDMENT_SOURCE,
     )
     if evidence:
         event_time = min(item.event_time for item in evidence)
@@ -280,7 +280,7 @@ def _materialize_amendment(
         missing_fact_request_id=request.request_id,
         ticker=base_bundle.ticker,
         evidence_ids=evidence_ids,
-        source=_H6_AMENDMENT_SOURCE,
+        source=_DELIBERATION_AMENDMENT_SOURCE,
         event_time=event_time,
         effective_as_of=effective_as_of,
         known_at=known_at,
@@ -290,7 +290,7 @@ def _materialize_amendment(
     )
 
 
-def attempt_h6_evidence_amendment(
+def attempt_deliberation_evidence_amendment(
     *,
     proposal: MissingFactProposal,
     base_bundle: TickerEvidenceBundle,
@@ -299,14 +299,14 @@ def attempt_h6_evidence_amendment(
     store: EvidenceBundleStore | None,
     recorded_at: datetime,
     provenance: TypedProvenance,
-) -> H6AmendmentResult:
+) -> DeliberationAmendmentResult:
     """Validate, retrieve, and optionally persist one H6 evidence amendment."""
     base_hash = base_bundle.content_hash
     if store is not None and (
-        store.amendment_count_for_base(base_bundle.bundle_id) >= H6_AMENDMENT_POLICY_MAX_PER_BASE
+        store.amendment_count_for_base(base_bundle.bundle_id) >= DELIBERATION_AMENDMENT_POLICY_MAX_PER_BASE
     ):
-        return H6AmendmentResult(
-            outcome=H6AmendmentOutcome.POLICY_EXHAUSTED,
+        return DeliberationAmendmentResult(
+            outcome=DeliberationAmendmentOutcome.POLICY_EXHAUSTED,
             base_bundle_id=base_bundle.bundle_id,
             base_content_hash=base_hash,
             failure_reason="amendment_policy_exhausted",
@@ -314,8 +314,8 @@ def attempt_h6_evidence_amendment(
 
     invalid = validate_missing_fact_proposal(proposal, base_bundle)
     if invalid is not None:
-        return H6AmendmentResult(
-            outcome=H6AmendmentOutcome.INVALID_REQUEST,
+        return DeliberationAmendmentResult(
+            outcome=DeliberationAmendmentOutcome.INVALID_REQUEST,
             base_bundle_id=base_bundle.bundle_id,
             base_content_hash=base_hash,
             failure_reason=invalid,
@@ -331,11 +331,11 @@ def attempt_h6_evidence_amendment(
     )
     if retrieval_error is not None:
         outcome = (
-            H6AmendmentOutcome.BLINDED_SOURCE
+            DeliberationAmendmentOutcome.BLINDED_SOURCE
             if retrieval_error == "source_kind_blinded"
-            else H6AmendmentOutcome.RETRIEVAL_FAILED
+            else DeliberationAmendmentOutcome.RETRIEVAL_FAILED
         )
-        return H6AmendmentResult(
+        return DeliberationAmendmentResult(
             outcome=outcome,
             base_bundle_id=base_bundle.bundle_id,
             base_content_hash=base_hash,
@@ -367,8 +367,8 @@ def attempt_h6_evidence_amendment(
                 type(exc).__name__,
                 exc,
             )
-            return H6AmendmentResult(
-                outcome=H6AmendmentOutcome.RETRIEVAL_FAILED,
+            return DeliberationAmendmentResult(
+                outcome=DeliberationAmendmentOutcome.RETRIEVAL_FAILED,
                 base_bundle_id=base_bundle.bundle_id,
                 base_content_hash=base_hash,
                 missing_fact_request=request,
@@ -376,8 +376,8 @@ def attempt_h6_evidence_amendment(
                 supplemental_evidence=evidence,
             )
 
-    return H6AmendmentResult(
-        outcome=H6AmendmentOutcome.ACCEPTED,
+    return DeliberationAmendmentResult(
+        outcome=DeliberationAmendmentOutcome.ACCEPTED,
         base_bundle_id=base_bundle.bundle_id,
         base_content_hash=base_hash,
         missing_fact_request=request,
@@ -387,10 +387,10 @@ def attempt_h6_evidence_amendment(
 
 
 __all__ = [
-    "H6_AMENDMENT_POLICY_MAX_PER_BASE",
-    "H6AmendmentOutcome",
-    "H6AmendmentResult",
-    "attempt_h6_evidence_amendment",
+    "DELIBERATION_AMENDMENT_POLICY_MAX_PER_BASE",
+    "DeliberationAmendmentOutcome",
+    "DeliberationAmendmentResult",
+    "attempt_deliberation_evidence_amendment",
     "document_key_for_source_kind",
     "retrieve_missing_fact_evidence",
     "validate_missing_fact_proposal",

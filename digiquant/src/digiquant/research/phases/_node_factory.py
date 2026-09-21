@@ -407,11 +407,11 @@ class SegmentNodeSpec:
     """Equip this segment with the dashboard research tools (#930 / #4436).
 
     Research segments read their own prior published documents for continuity.
-    ``research_phase="h6_deliberation"`` drops ``query_portfolio`` (book access)
+    ``research_phase="deliberation"`` drops ``query_portfolio`` (book access)
     while allowing every research document key.
     """
 
-    research_phase: str = "h6_deliberation"
+    research_phase: str = "deliberation"
     """Retrieval phase used for the research-tool blinding gate."""
 
 

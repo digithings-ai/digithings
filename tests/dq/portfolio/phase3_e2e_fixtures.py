@@ -14,12 +14,14 @@ from typing import Any  # score:allow untyped any — scored-lint: heterogeneous
 from uuid import UUID, uuid4
 
 from digiquant.dashboard.research_retrieval.context_wiring import (
-    compile_h5_role_context,
-    compile_h6_role_context,
-    compile_h7_role_context,
-    wire_h5_phase_inputs,
+    compile_analyst_role_context,
+    compile_deliberation_role_context,
+    compile_direction_role_context,
+    wire_analyst_phase_inputs,
 )
-from digiquant.dashboard.research_retrieval.h7_decision_context import H7PrerequisiteSnapshot
+from digiquant.dashboard.research_retrieval.direction_decision_context import (
+    DirectionPrerequisiteSnapshot,
+)
 from digiquant.dashboard.research_retrieval.models import (
     EvidenceBundleAmendment,
     MissingFactRequest,
@@ -37,8 +39,8 @@ from digiquant.dashboard.research_retrieval.planner import (
     AttentionFeatures,
     AttentionRolloutMode,
     AttentionTargetKind,
-    H6SelectionMode,
-    build_h6_decision_features,
+    DeliberationSelectionMode,
+    build_deliberation_decision_features,
     load_research_attention_policy,
     plan_research_attention,
     select_h6,
@@ -117,8 +119,8 @@ RESEARCH_COMPILED_NODES = frozenset(
 PRODUCTION_GUARD_PATHS = (
     _REPO / "digiquant/src/digiquant/portfolio/chain.py",
     _REPO / "digiquant/src/digiquant/portfolio/graph.py",
-    _REPO / "digiquant/src/digiquant/portfolio/phases/h5_asset_analyst.py",
-    _REPO / "digiquant/src/digiquant/portfolio/phases/h6_deliberation.py",
+    _REPO / "digiquant/src/digiquant/portfolio/phases/analyst.py",
+    _REPO / "digiquant/src/digiquant/portfolio/phases/deliberation.py",
 )
 
 ENFORCE_PROMOTION_FRAGMENTS = frozenset(
@@ -316,11 +318,11 @@ def phase3_evidence_bundle_lineage(*, state_version_id: UUID) -> tuple[EvidenceB
     return store, snapshot
 
 
-def phase3_h4_roster() -> list[str]:
+def phase3_screener_roster() -> list[str]:
     return ["AAPL", "MSFT"]
 
 
-def assert_research_plan_preserves_h4_roster(plan: Any, roster: list[str]) -> None:
+def assert_research_plan_preserves_screener_roster(plan: Any, roster: list[str]) -> None:
     """WP13 planner must not expand, shrink, or reorder the H4 ticker roster."""
     expected = [t.strip().upper() for t in roster if t and t.strip()]
     ticker_keys = [
@@ -334,7 +336,7 @@ def assert_research_plan_preserves_h4_roster(plan: Any, roster: list[str]) -> No
 
 def phase3_attention_plan(*, roster: list[str] | None = None, state_version_id: UUID) -> Any:
     """Shadow attention plan over ticker + artifact targets; H4 fingerprint preserved."""
-    roster = roster if roster is not None else phase3_h4_roster()
+    roster = roster if roster is not None else phase3_screener_roster()
     policy = load_research_attention_policy()
     features = [
         AttentionFeatures(
@@ -342,7 +344,7 @@ def phase3_attention_plan(*, roster: list[str] | None = None, state_version_id: 
             target_key=ticker,
             state_version_id=str(state_version_id),
             has_prior=True,
-            h6=build_h6_decision_features(
+            deliberation=build_deliberation_decision_features(
                 ticker=ticker,
                 roster_reason="held" if ticker == "AAPL" else "technical",
                 held=ticker == "AAPL",
@@ -367,15 +369,15 @@ def phase3_attention_plan(*, roster: list[str] | None = None, state_version_id: 
         policy=policy,
         rollout_mode=AttentionRolloutMode.SHADOW,
     )
-    assert_research_plan_preserves_h4_roster(plan, roster)
+    assert_research_plan_preserves_screener_roster(plan, roster)
     assert plan.actuated is False
     return plan
 
 
-def phase3_h6_selection(*, conflict: bool = False, low_value: bool = False) -> Any:
+def phase3_deliberation_selection(*, conflict: bool = False, low_value: bool = False) -> Any:
     analyst = {"stance": "buy" if conflict else "hold", "conviction_score": 3}
     prior = {"stance": "hold", "conviction_score": 2}
-    features = build_h6_decision_features(
+    features = build_deliberation_decision_features(
         ticker="AAPL",
         roster_reason="held",
         held=not low_value,
@@ -385,7 +387,7 @@ def phase3_h6_selection(*, conflict: bool = False, low_value: bool = False) -> A
         price_delta=0.02 if conflict else 0.001,
         has_evidence_conflict=conflict,
     )
-    return select_h6(features, mode=H6SelectionMode.SHADOW)
+    return select_h6(features, mode=DeliberationSelectionMode.SHADOW)
 
 
 def phase3_role_contexts(
@@ -394,35 +396,35 @@ def phase3_role_contexts(
 ) -> dict[str, Any]:
     """Compile H5/H6/H7 blinded contexts from one pinned state version."""
     ev_id = loaded.evidence[0].evidence_id
-    h5_capsule, h5_manifest = compile_h5_role_context(
+    analyst_capsule, analyst_manifest = compile_analyst_role_context(
         loaded=loaded,
         ticker=bundle.ticker,
         bundle=bundle,
         changed_evidence_ids=frozenset({ev_id}),
     )
-    h5_wire = wire_h5_phase_inputs(
+    analyst_wire = wire_analyst_phase_inputs(
         {"ticker": bundle.ticker, "stance": "hold"},
         ticker=bundle.ticker,
         bundle=bundle,
         research_state_pin={"state_version_id": str(loaded.version.state_version_id)},
         changed_evidence_ids=frozenset({ev_id}),
     )
-    h6_capsule, h6_manifest = compile_h6_role_context(
+    deliberation_capsule, deliberation_manifest = compile_deliberation_role_context(
         loaded=loaded,
         ticker=bundle.ticker,
         bundle=bundle,
     )
-    h7 = compile_h7_role_context(
+    h7 = compile_direction_role_context(
         loaded=loaded,
-        prerequisites=H7PrerequisiteSnapshot(state_version_id=loaded.version.state_version_id),
+        prerequisites=DirectionPrerequisiteSnapshot(state_version_id=loaded.version.state_version_id),
         focus_roster=(bundle.ticker,),
     )
     return {
-        "h5_capsule": h5_capsule,
-        "h5_manifest": h5_manifest,
-        "h5_wire": h5_wire,
-        "h6_capsule": h6_capsule,
-        "h6_manifest": h6_manifest,
+        "analyst_capsule": analyst_capsule,
+        "analyst_manifest": analyst_manifest,
+        "analyst_wire": analyst_wire,
+        "deliberation_capsule": deliberation_capsule,
+        "deliberation_manifest": deliberation_manifest,
         "h7": h7,
     }
 
@@ -485,10 +487,10 @@ def run_phase3_composition() -> dict[str, Any]:
     plan_again = phase3_attention_plan(state_version_id=state_id)
     assert plan == plan_again
 
-    selected = phase3_h6_selection(conflict=True)
-    carry = phase3_h6_selection(conflict=False, low_value=True)
+    selected = phase3_deliberation_selection(conflict=True)
+    carry = phase3_deliberation_selection(conflict=False, low_value=True)
     contexts = phase3_role_contexts(loaded, bundle)
-    telemetry = phase3_telemetry_reconciliation(contexts["h5_manifest"])
+    telemetry = phase3_telemetry_reconciliation(contexts["analyst_manifest"])
 
     # Newer rows must not mutate pinned exact-version bytes.
     later_ev = _evidence(summary="Post-pin filing")
@@ -524,11 +526,11 @@ __all__ = [
     "PHASE3_SESSION",
     "PHASE3_STATE_VERSION",
     "PRODUCTION_GUARD_PATHS",
-    "assert_research_plan_preserves_h4_roster",
+    "assert_research_plan_preserves_screener_roster",
     "phase3_attention_plan",
     "phase3_evidence_bundle_lineage",
-    "phase3_h4_roster",
-    "phase3_h6_selection",
+    "phase3_screener_roster",
+    "phase3_deliberation_selection",
     "phase3_pinned_research_state",
     "phase3_role_contexts",
     "phase3_telemetry_reconciliation",

@@ -1252,7 +1252,7 @@ class TestSoleAuthority:
     holds only while nothing else writes `paper_executions` or `holding_lots` — a second
     writer would give the same position two irreconcilable records, and the append-only
     trigger cannot tell a rogue insert from a legitimate one. So this is a *structural*
-    guard, the sibling of ``test_h9_is_the_only_ledger_writer``: it fails when a new module
+    guard, the sibling of ``test_commit_is_the_only_ledger_writer``: it fails when a new module
     starts naming those tables, and the fix is to route through the executor, not to widen
     the allow-list.
 
@@ -1279,7 +1279,7 @@ class TestSoleAuthority:
         writers = "digiquant/src/digiquant/portfolio/writers"
         # ``ledger_io`` declares the paper_executions name because H9 reads it to decide
         # whether a symbol is already filled and therefore frozen. Reading is fine; it
-        # never inserts there, which ``test_h9_is_the_only_ledger_writer`` pins from the
+        # never inserts there, which ``test_commit_is_the_only_ledger_writer`` pins from the
         # other side.
         assert self._files_naming("portfolio_ledger_paper_executions") == [
             f"{writers}/execution_io.py",

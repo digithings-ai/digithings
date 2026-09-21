@@ -11,7 +11,7 @@ from uuid import UUID
 
 from digigraph.graph.pipeline_builder import NodeSpec, PipelinePhase
 
-from digiquant.portfolio.h9_cost_evidence import (
+from digiquant.portfolio.commit_cost_evidence import (
     build_cost_bundles_for_commit,
     investor_currency_from_state,
 )
@@ -41,14 +41,14 @@ from digiquant.research.cost_liquidity_registry import (
     persist_cost_liquidity_bundles,
 )
 from digiquant.research.forecast_registry import persist_forecast_lineage_from_state
-from digiquant.research.risk_policy_registry import persist_h8_risk_snapshots_from_state
+from digiquant.research.risk_policy_registry import persist_sizing_risk_snapshots_from_state
 from digiquant.research.state import PhaseError, PhasePortfolioState
 from digiquant.research.supabase_io import SupabaseClient
 
 logger = logging.getLogger(__name__)
 
 NODE_ID = "portfolio/commit-run"
-PHASE_NAME = "portfolio_h9_commit_run"
+PHASE_NAME = "portfolio_commit"
 
 
 @dataclass(frozen=True)
@@ -76,7 +76,7 @@ def _persist_risk_policy_registry(
 ) -> dict[str, Any]:
     """Fail-soft H8 risk snapshot registry (#2698). Never raises into booking."""
     try:
-        result = persist_h8_risk_snapshots_from_state(client=client, state=state)
+        result = persist_sizing_risk_snapshots_from_state(client=client, state=state)
     except Exception as exc:
         logger.warning(
             "h9 risk policy registry degraded (%s: %s); book retained",
@@ -403,10 +403,10 @@ def build_commit_run_node(deps: CommitRunDeps):
         # attempt reads to decide "already committed", so a partial chain must leave no
         # manifest behind — otherwise a failed append reports as a clean no-op and the
         # lineage is silently short a commit. Raising here is the honest outcome.
-        h8_adjustments = [
+        sizing_adjustments = [
             SizingAdjustment.model_validate(event) for event in (book.get("adjustments") or [])
         ]
-        h8_requested = {
+        sizing_requested = {
             str(ticker): float(pct) for ticker, pct in (book.get("requested_pct") or {}).items()
         }
         ledger = append_commit_chain(
@@ -415,8 +415,8 @@ def build_commit_run_node(deps: CommitRunDeps):
             weights=booked.weights,
             cash_pct=booked.cash_pct,
             nav=booked.nav,
-            adjustments=h8_adjustments,
-            requested_pct=h8_requested,
+            adjustments=sizing_adjustments,
+            requested_pct=sizing_requested,
         )
         cost_registry, cost_snapshots, cost_estimates = _persist_cost_liquidity_registry(
             client=deps.client,
@@ -477,7 +477,7 @@ def build_commit_run_node(deps: CommitRunDeps):
     return commit_run
 
 
-def build_h9_commit_run(deps: CommitRunDeps | None = None) -> PipelinePhase:
+def build_commit(deps: CommitRunDeps | None = None) -> PipelinePhase:
     """Wrap H9 into a single-node ``PipelinePhase``."""
 
     def _noop(_state: PortfolioState) -> dict[str, Any]:
@@ -495,5 +495,5 @@ __all__ = [
     "NODE_ID",
     "PHASE_NAME",
     "build_commit_run_node",
-    "build_h9_commit_run",
+    "build_commit",
 ]

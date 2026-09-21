@@ -32,24 +32,24 @@ mode_budgets:
     provider_calls: 0
     searches: 0
     uncached_tokens: 0
-    min_h6_rounds: 0
+    min_deliberation_rounds: 0
   metric_patch:
     provider_calls: 0
     searches: 0
     uncached_tokens: 0
-    min_h6_rounds: 0
+    min_deliberation_rounds: 0
   section_patch:
     provider_calls: 2
     searches: 1
     uncached_tokens: 8000
-    min_h6_rounds: 0
+    min_deliberation_rounds: 0
   challenge:
     provider_calls: 4
     searches: 2
     uncached_tokens: 16000
-    min_h6_rounds: 2
+    min_deliberation_rounds: 2
   deep_refresh:
     provider_calls: 8
     searches: 4
     uncached_tokens: 32000
-    min_h6_rounds: 0
+    min_deliberation_rounds: 0

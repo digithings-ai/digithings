@@ -747,7 +747,7 @@ def _usage_to_budget(usages: Sequence[ActualProviderAttemptUsage]) -> AttentionB
         provider_calls=len(usages),
         searches=sum(item.searches for item in usages),
         uncached_tokens=uncached,
-        min_h6_rounds=0,
+        min_deliberation_rounds=0,
     )
 
 
@@ -755,7 +755,7 @@ def _decision_needs_telemetry(planned: AttentionBudgetEstimate) -> bool:
     return (
         planned.provider_calls > 0
         or planned.searches > 0
-        or planned.min_h6_rounds > 0
+        or planned.min_deliberation_rounds > 0
         or planned.uncached_tokens > 0
     )
 

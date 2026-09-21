@@ -21,7 +21,7 @@ from typing import (
 from digigraph.graph.pipeline_builder import NodeSpec, PipelinePhase
 from pydantic import ValidationError
 
-from digiquant.dashboard.research_retrieval.context_wiring import wire_h7_phase_inputs
+from digiquant.dashboard.research_retrieval.context_wiring import wire_direction_phase_inputs
 from digiquant.dashboard.research_retrieval.store import ResearchStateStore
 from digiquant.portfolio.candidates import holdings_from_prior_book
 from digiquant.portfolio.forecast_calibration import (
@@ -50,7 +50,7 @@ from digiquant.research.supabase_io import SupabaseClient
 from digiquant.tool_rounds import run_digiquant_research_agent as run_research_agent
 
 NODE_ID = "portfolio/pm-direction"
-PHASE_NAME = "portfolio_h7_pm_direction"
+PHASE_NAME = "portfolio_direction"
 ARTIFACT_KEY = ("pm", "direction-memo")
 
 logger = logging.getLogger(__name__)
@@ -173,7 +173,7 @@ def _phase_portfolio_with_shadow(
     )
 
 
-def _h7_node(
+def _direction_node(
     state: PortfolioState,
     *,
     client: SupabaseClient | None = None,
@@ -209,13 +209,13 @@ def _h7_node(
     }
     pin = state.research_state_pin if isinstance(state.research_state_pin, dict) else None
     prereq = (
-        state.h7_prerequisite_snapshot if isinstance(state.h7_prerequisite_snapshot, dict) else None
+        state.direction_prerequisite_snapshot if isinstance(state.direction_prerequisite_snapshot, dict) else None
     )
-    phase_inputs = wire_h7_phase_inputs(
+    phase_inputs = wire_direction_phase_inputs(
         phase_inputs,
         research_state_pin=pin,
         research_state_store=research_state_store,
-        h7_prerequisite_snapshot=prereq,
+        direction_prerequisite_snapshot=prereq,
         outcome_lesson_pin=lesson_pin,
         analyst_payloads=analyst_payloads(state),
         deliberation_summaries=deliberation_summaries(state),
@@ -225,7 +225,7 @@ def _h7_node(
         decision_lessons=tuple(legacy_lessons),
         focus_roster=tuple(_focus_roster_tickers(state)),
     ).phase_inputs
-    tools, execute_tool, web_grounding = _portfolio_grounding(state, phase="h7_pm", segment=NODE_ID)
+    tools, execute_tool, web_grounding = _portfolio_grounding(state, phase="direction", segment=NODE_ID)
     phase_inputs = apply_web_grounding_to_inputs(
         phase_inputs,
         web_grounding=web_grounding,
@@ -278,7 +278,7 @@ def _h7_node(
     return {"phase_portfolio": _phase_portfolio_with_shadow(memo=memo, shadow=shadow)}
 
 
-def build_h7_pm_direction(
+def build_direction(
     *,
     client: SupabaseClient | None = None,
     research_state_store: ResearchStateStore | None = None,
@@ -286,7 +286,7 @@ def build_h7_pm_direction(
     """Build H7; optional ``client`` loads cutoff-safe outcomes for shadow calibration."""
 
     def _bound(state: PortfolioState) -> dict[str, Any]:
-        return _h7_node(state, client=client, research_state_store=research_state_store)
+        return _direction_node(state, client=client, research_state_store=research_state_store)
 
     return PipelinePhase(
         name=PHASE_NAME,
@@ -297,7 +297,7 @@ def build_h7_pm_direction(
 __all__ = [
     "NODE_ID",
     "PHASE_NAME",
-    "build_h7_pm_direction",
+    "build_direction",
     "_bind_forecast_references",
-    "_h7_node",
+    "_direction_node",
 ]

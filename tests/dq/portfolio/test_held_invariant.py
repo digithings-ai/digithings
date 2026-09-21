@@ -5,8 +5,8 @@ from __future__ import annotations
 import inspect
 
 import pytest
-from digiquant.portfolio.phases.h5_asset_analyst import build_h5_asset_analyst
-from digiquant.portfolio.phases.h6_deliberation import build_h6_deliberation
+from digiquant.portfolio.phases.analyst import build_analyst
+from digiquant.portfolio.phases.deliberation import build_deliberation
 from digiquant.portfolio.roster_cap import capped_tickers
 
 _BOOK = ("AAA", "BBB", "SPY", "CCC", "IJR", "XLP")
@@ -27,16 +27,16 @@ class TestHeldInvariantCap:
         assert len(kept) <= max(3, len(_HELD))
         assert [t for t in kept if t not in _HELD] == []
 
-    def test_h5_nodes_cover_held(self, monkeypatch: pytest.MonkeyPatch) -> None:
+    def test_analyst_nodes_cover_held(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setenv("DIGIQUANT_MAX_ANALYSTS", "3")
-        phase = build_h5_asset_analyst(list(_BOOK), held=_HELD)
+        phase = build_analyst(list(_BOOK), held=_HELD)
         names = {n.name for n in phase.nodes}
         for ticker in _HELD:
             assert f"portfolio/asset-analyst-{ticker}" in names
 
-    def test_h6_nodes_cover_held(self, monkeypatch: pytest.MonkeyPatch) -> None:
+    def test_deliberation_nodes_cover_held(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setenv("DIGIQUANT_MAX_ANALYSTS", "3")
-        phase = build_h6_deliberation(list(_BOOK), held=_HELD)
+        phase = build_deliberation(list(_BOOK), held=_HELD)
         names = {n.name for n in phase.nodes}
         for ticker in _HELD:
             assert f"portfolio/deliberation-{ticker}" in names

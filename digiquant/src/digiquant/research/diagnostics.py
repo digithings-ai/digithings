@@ -49,10 +49,10 @@ _CHAIN_ERROR_PHASE = "chain"
 _CORE_ENGINES = ("research", "portfolio")
 
 # ``phase`` stamped on a PhaseError raised by H9 commit-run (see
-# ``portfolio.phases.h9_commit_run.PHASE_NAME``). It carries a node-level phase (not "chain"),
+# ``portfolio.phases.commit.PHASE_NAME``). It carries a node-level phase (not "chain"),
 # so the chain-error gate never sees it — yet every one of its exits (coherence fail-closed,
 # idempotency conflict, memo-present-but-no-book) is a non-commit that must gate the run (#1555).
-_PORTFOLIO_COMMIT_PHASE = "portfolio_h9_commit_run"
+_PORTFOLIO_COMMIT_PHASE = "portfolio_commit"
 
 # Master-digest synthesis is a first-class run artifact (#1559): when it fails and
 # the run falls back to carrying the prior digest forward, the run must surface as
@@ -65,16 +65,16 @@ _MASTER_DIGEST_NODE = "master-digest"
 
 # portfolio/thesis phases whose PhaseErrors mean "a piece of the book's reasoning
 # died" (#1742). Deliberately an explicit allow-list of the five literals actually emitted
-# (``h6_deliberation.PHASE_NAME``, ``h7_pm_direction.PHASE_NAME``, the ``phase_portfolio``
+# (``deliberation.PHASE_NAME``, ``direction.PHASE_NAME``, the ``phase_portfolio``
 # marker shared by ``portfolio_common`` / ``thesis_common``, ``phase7d_pm``,
 # ``phase9_evolution``) rather than a ``portfolio_*`` prefix match: a prefix would also swallow
-# H1-H5 bookkeeping errors and ``portfolio_h9_commit_run``, which is already gated separately
+# thesis-H5 bookkeeping errors and ``portfolio_commit``, which is already gated separately
 # (#1555) and must NOT be double-counted here.
 _PORTFOLIO_FAILURE_PHASES = frozenset(
     {
         "phase_portfolio",
-        "portfolio_h6_deliberation",
-        "portfolio_h7_pm_direction",
+        "portfolio_deliberation",
+        "portfolio_direction",
         "phase7d_pm",
         "phase9_evolution",
     }
@@ -345,7 +345,7 @@ def summarize_run(
     research_produced = total > 0 and not _research_chain_crashed(errors)
     # Every H9 non-commit outcome, unified: (1) a book that materialized but never persisted
     # (coherence fail-closed / idempotency conflict / no-manifest skip), OR (2) any
-    # ``portfolio_h9_commit_run`` PhaseError — which also covers the memo-present-but-no-book
+    # ``portfolio_commit`` PhaseError — which also covers the memo-present-but-no-book
     # fail-closed where nothing materialized (``book_materialized`` is False). H9 never both
     # commits and errors, so this can't fire on a healthy committed run (#1555).
     portfolio_commit_error = any(
@@ -361,7 +361,7 @@ def summarize_run(
     # noise fills the tail (#1555). The structural ``breakdown["book_committed"]`` flag (see
     # ``_row``) is the truncation-proof source.
     if commit_failed:
-        error_parts.insert(0, "portfolio_h9_commit_run/uncommitted: H9 produced no committed book")
+        error_parts.insert(0, "portfolio_commit/uncommitted: H9 produced no committed book")
     error_summary = "; ".join(error_parts)[:_ERROR_SUMMARY_MAX]
     if errors:
         breakdown["errors"] = [
@@ -427,7 +427,7 @@ def summarize_run(
     # H9 commit gate (#1555): an H9 non-commit is a silent terminal failure — the coherence
     # fail-closed, idempotency conflict, no-manifest skip, and memo-present-but-no-book exit
     # all present as ``ok`` today because an H9 PhaseError carries phase
-    # ``portfolio_h9_commit_run`` (not ``chain``) and so never reaches the degraded gate above.
+    # ``portfolio_commit`` (not ``chain``) and so never reaches the degraded gate above.
     # Force it degraded regardless of the research-segment verdict, and never let it be
     # reported "ok"/"cancelled". ``failed`` (a worse verdict) is left intact.
     if commit_failed and status in ("ok", "cancelled"):

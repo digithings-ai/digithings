@@ -9,8 +9,8 @@ import pytest
 from digiquant.dashboard.research_retrieval import (
     ResearchCache,
     ResearchRetriever,
-    assert_blinded_h5_prompt,
-    assert_blinded_h6_prompt,
+    assert_blinded_analyst_prompt,
+    assert_blinded_deliberation_prompt,
     build_research_tool_dispatcher,
     build_retrieval_query_pin,
     link_manifest_provider_tokens,
@@ -288,7 +288,7 @@ class TestQueryPortfolio:
         out = query_portfolio(
             client,
             run_date=date(2026, 6, 20),
-            phase="h7_pm",
+            phase="direction",
             as_of_date=date(2026, 6, 19),
             watchlist=("SPY",),
         )
@@ -313,7 +313,7 @@ class TestQueryPortfolio:
         out = query_portfolio(
             client,
             run_date=date(2026, 6, 20),
-            phase="h7_pm",
+            phase="direction",
             as_of_date=date(2026, 6, 19),
             ticker="SPY",
         )
@@ -334,7 +334,7 @@ class TestQueryPortfolio:
         out = query_portfolio(
             client,
             run_date=date(2026, 6, 20),
-            phase="h7_pm",
+            phase="direction",
             as_of_date=date(2026, 6, 19),
         )
         assert out["as_of_date"] == "2026-06-17"
@@ -381,7 +381,7 @@ class TestQueryPortfolio:
         out = query_portfolio(
             client,
             run_date=date(2026, 6, 20),
-            phase="h7_pm",
+            phase="direction",
             as_of_date=date(2026, 6, 19),
         )
         assert [row["ticker"] for row in out["positions"]] == ["SPY"]
@@ -417,7 +417,7 @@ class TestQueryPortfolio:
         out = query_portfolio(
             client,
             run_date=date(2026, 6, 20),
-            phase="h7_pm",
+            phase="direction",
             as_of_date=date(2026, 6, 19),
         )
         assert out["as_of_date"] == "2026-06-17"
@@ -427,27 +427,27 @@ class TestQueryPortfolio:
 
 @pytest.mark.unit
 class TestBlinding:
-    def test_h5_analyst_blocks_portfolio(self) -> None:
-        assert portfolio_tool_allowed("h5_analyst") is False
+    def test_analyst_blocks_portfolio(self) -> None:
+        assert portfolio_tool_allowed("analyst") is False
         out = query_portfolio(
             FakeSupabaseClient(),
             run_date=date(2026, 6, 20),
-            phase="h5_analyst",
+            phase="analyst",
         )
         assert "error" in out
 
-    def test_h5_analyst_blocks_analyst_documents(self) -> None:
-        assert research_document_allowed("h5_analyst", "analyst/SPY") is False
+    def test_analyst_blocks_analyst_documents(self) -> None:
+        assert research_document_allowed("analyst", "analyst/SPY") is False
         out = query_research(
             FakeSupabaseClient(),
             run_date=date(2026, 6, 20),
             document_key="analyst/SPY",
-            phase="h5_analyst",
+            phase="analyst",
         )
         assert "error" in out
 
-    def test_h5_analyst_allows_macro_segment(self) -> None:
-        assert research_document_allowed("h5_analyst", "macro") is True
+    def test_analyst_allows_macro_segment(self) -> None:
+        assert research_document_allowed("analyst", "macro") is True
         client = FakeSupabaseClient(
             canned_reads={
                 "documents": [
@@ -463,38 +463,38 @@ class TestBlinding:
             client,
             run_date=date(2026, 6, 20),
             document_key="macro",
-            phase="h5_analyst",
+            phase="analyst",
         )
         assert "error" not in out
 
-    def test_h6_blocks_portfolio(self) -> None:
-        assert portfolio_tool_allowed("h6_deliberation") is False
+    def test_deliberation_blocks_portfolio(self) -> None:
+        assert portfolio_tool_allowed("deliberation") is False
 
-    def test_h7_allows_portfolio(self) -> None:
-        assert portfolio_tool_allowed("h7_pm") is True
+    def test_direction_allows_portfolio(self) -> None:
+        assert portfolio_tool_allowed("direction") is True
 
-    def test_h1_allows_digest_and_portfolio(self) -> None:
-        assert research_document_allowed("h1_thesis", "digest") is True
-        assert portfolio_tool_allowed("h1_thesis") is True
+    def test_thesis_allows_digest_and_portfolio(self) -> None:
+        assert research_document_allowed("thesis", "digest") is True
+        assert portfolio_tool_allowed("thesis") is True
 
-    def test_h6_blocks_portfolio_query(self) -> None:
+    def test_deliberation_blocks_portfolio_query(self) -> None:
         out = query_portfolio(
             FakeSupabaseClient(),
             run_date=date(2026, 6, 20),
-            phase="h6_deliberation",
+            phase="deliberation",
         )
         assert "error" in out
 
 
 @pytest.mark.unit
 class TestBlindedPromptGuards:
-    def test_h5_rejects_prior_book_in_prompt(self) -> None:
+    def test_analyst_rejects_prior_book_in_prompt(self) -> None:
         with pytest.raises(ValueError, match="blinded keys"):
-            assert_blinded_h5_prompt({"ticker": "AAPL", "prior_book": []})
+            assert_blinded_analyst_prompt({"ticker": "AAPL", "prior_book": []})
 
-    def test_h6_rejects_materiality_features(self) -> None:
+    def test_deliberation_rejects_materiality_features(self) -> None:
         with pytest.raises(ValueError, match="blinded keys"):
-            assert_blinded_h6_prompt({"ticker": "AAPL", "weight_pct": 12.0})
+            assert_blinded_deliberation_prompt({"ticker": "AAPL", "weight_pct": 12.0})
 
     def test_strip_removes_portfolio_keys_for_h6(self) -> None:
         stripped = strip_blinded_forbidden_keys(
@@ -504,7 +504,7 @@ class TestBlindedPromptGuards:
                 "prior_book": [{"ticker": "MSFT"}],
                 "transcript": [],
             },
-            role="h6_deliberation",
+            role="deliberation",
         )
         assert "prior_book" not in stripped
         assert stripped["analyst_payload"]["stance"] == "hold"
@@ -531,7 +531,7 @@ def _manifest_with_legacy(*, legacy: LegacyDocumentRef) -> tuple[LoadedResearchS
     loaded = _loaded_state(evidence=(evidence,), legacy_refs=(legacy,))
     capsule, manifest = compile_context_capsule(
         ContextCompileInput(
-            role=ContextRole.H5_ANALYST,
+            role=ContextRole.ANALYST,
             state=loaded,
             ticker="AAPL",
         )
@@ -545,7 +545,7 @@ class TestRetrievalManifestPinning:
         execute = build_research_tool_dispatcher(
             FakeSupabaseClient(),
             run_date=date(2026, 6, 20),
-            phase="h5_analyst",
+            phase="analyst",
             pin_mode=RetrievalManifestMode.ENFORCE,
         )
         out = execute("query_research", {"document_key": "macro", "as_of_date": "2026-06-19"})
@@ -1029,7 +1029,7 @@ class TestSearchResearch:
             client,
             run_date=date(2026, 6, 19),
             dataset="daily_snapshots",
-            retrieval_phase="h5_analyst",
+            retrieval_phase="analyst",
         )
         assert blocked["row_count"] == 0
 
@@ -1037,7 +1037,7 @@ class TestSearchResearch:
             client,
             run_date=date(2026, 6, 19),
             dataset="daily_snapshots",
-            retrieval_phase="h1_thesis",
+            retrieval_phase="thesis",
         )
         assert visible["row_count"] == 1
 
@@ -1101,7 +1101,7 @@ class TestSearchResearch:
             self._client(),
             run_date=date(2026, 6, 19),
             dataset="positions",
-            retrieval_phase="h5_analyst",
+            retrieval_phase="analyst",
         )
         assert "error" in out and "portfolio" in out["error"]
 
@@ -1119,7 +1119,7 @@ class TestSearchResearch:
             }
         )
         out = search_research(
-            client, run_date=date(2026, 6, 19), dataset="positions", retrieval_phase="h7_pm"
+            client, run_date=date(2026, 6, 19), dataset="positions", retrieval_phase="direction"
         )
         assert out["row_count"] == 1
         assert out["rows"][0]["ticker"] == "AAPL"
@@ -1154,7 +1154,7 @@ class TestSearchResearch:
             run_date=date(2026, 6, 19),
             dataset="decision_log",
             run_id="r1",
-            retrieval_phase="h7_pm",
+            retrieval_phase="direction",
         )
         assert out["row_count"] == 1
         assert out["rows"][0]["ticker"] == "AAPL"
@@ -1212,10 +1212,10 @@ class TestSearchResearch:
                 ]
             }
         )
-        out = search_research(client, run_date=date(2026, 6, 19), retrieval_phase="h5_analyst")
+        out = search_research(client, run_date=date(2026, 6, 19), retrieval_phase="analyst")
         assert out["row_count"] == 0
 
-    def test_digest_delta_blocked_for_h5_analyst(self) -> None:
+    def test_digest_delta_blocked_for_analyst(self) -> None:
         client = FakeSupabaseClient(
             canned_reads={
                 "documents": [
@@ -1232,9 +1232,9 @@ class TestSearchResearch:
                 ]
             }
         )
-        blinded = search_research(client, run_date=date(2026, 6, 19), retrieval_phase="h5_analyst")
+        blinded = search_research(client, run_date=date(2026, 6, 19), retrieval_phase="analyst")
         assert blinded["row_count"] == 0
-        visible = search_research(client, run_date=date(2026, 6, 19), retrieval_phase="h1_thesis")
+        visible = search_research(client, run_date=date(2026, 6, 19), retrieval_phase="thesis")
         assert visible["row_count"] == 1
         assert visible["rows"][0]["document_key"] == "digest-delta"
 
