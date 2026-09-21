@@ -155,7 +155,7 @@ export default function TodayTab({
                         <Button
                           type="button"
                           variant="ghost"
-                          className="block h-auto w-full justify-start whitespace-normal rounded-none border border-hair bg-term-bg p-3 text-left text-xs font-normal transition-colors hover:border-accent/50 hover:bg-term-bg"
+                          className="block h-auto w-full justify-start whitespace-normal rounded-none border border-hair p-3 text-left text-xs font-normal transition-colors hover:border-accent/50"
                           onClick={() => openBrief(b.source_file, b.run_date)}
                         >
                           <div className="flex min-w-0 items-center gap-2 text-[11px] text-ink-mute">

@@ -489,7 +489,7 @@ export default function EventsTab({
           <div className="space-y-4">
             {grouped.map(([dateStr, rows]) => (
               <Card key={dateStr} data-reveal className="gap-0 overflow-hidden p-0">
-                <div className="flex items-center gap-3 border-b border-hair bg-term-bg px-4 py-2.5">
+                <div className="flex items-center gap-3 border-b border-hair px-4 py-2.5">
                   <h3 className="text-xs font-semibold uppercase tracking-wider text-ink-soft">
                     {formatDateLabel(dateStr)}
                   </h3>
