@@ -27,7 +27,7 @@ PromptRole = Literal["h5_analyst", "h6_deliberation"]
 
 DIGEST_DOCUMENT_KEY = "digest"
 
-_H5_BLOCKED_DOC_PREFIXES = ("analyst/", "deliberation/", "pm-")
+_H5_BLOCKED_DOC_PREFIXES = ("analyst/", "deliberation/", "pm-", "digest")
 _H5_BLOCKED_DOC_KEYS = frozenset({DIGEST_DOCUMENT_KEY, "beliefs"})
 
 _PORTFOLIO_ALLOWED_PHASES = frozenset(

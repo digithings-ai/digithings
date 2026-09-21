@@ -18,6 +18,7 @@ from datetime import date
 from enum import StrEnum
 from typing import (
     Any,  # score:allow untyped any — scored-lint suppression: heterogeneous graph / dict shapes
+    get_args,
 )
 from uuid import UUID
 
@@ -37,6 +38,10 @@ from digiquant.research.supabase_io import SupabaseClient
 from digiquant.supabase_retry import run_with_supabase_retry
 
 logger = logging.getLogger(__name__)
+
+# The valid retrieval/blinding phases. Validating against the ``RetrievalPhase``
+# literal keeps an unknown phase from silently falling through unblinded.
+_RETRIEVAL_PHASES = frozenset(get_args(RetrievalPhase))
 
 
 class RetrievalManifestMode(StrEnum):
@@ -633,7 +638,6 @@ def search_research(
     sector: str | None = None,
     subject: str | None = None,
     doc_type: str | None = None,
-    phase: str | None = None,
     include_prior: bool = False,
     as_of_date: date | None = None,
     limit: int = 50,
@@ -653,6 +657,9 @@ def search_research(
     """
     if dataset not in _SEARCHABLE_DATASETS:
         return {"error": f"search_research unknown dataset {dataset!r}"}
+
+    if retrieval_phase not in _RETRIEVAL_PHASES:
+        return {"error": f"search_research unknown retrieval phase {retrieval_phase!r}"}
 
     capped_limit = max(1, min(int(limit), 500))
     safe_offset = max(0, int(offset))
@@ -681,20 +688,29 @@ def search_research(
     eq_filters: dict[str, str] = {}
     in_filters: dict[str, list[str]] = {}
     or_filter: str | None = None
+    empty_intersection = False
 
     if dataset == "documents":
-        if key:
-            eq_filters["document_key"] = key
         if run_type:
             eq_filters["run_type"] = run_type
         if sector:
             eq_filters["sector"] = sector
         if doc_type:
             eq_filters["doc_type"] = doc_type
-        if phase:
-            eq_filters["phase"] = phase
         if ticker:
-            in_filters["document_key"] = _document_keys_for_ticker(client, ticker=ticker)
+            ticker_keys = _document_keys_for_ticker(client, ticker=ticker)
+            if key:
+                # ``document_key`` and ``ticker`` both name the ``document_key``
+                # column, so an explicit key intersects the ticker-derived set
+                # instead of ANDing a contradictory eq() with in_().
+                ticker_keys = [candidate for candidate in ticker_keys if candidate == key]
+                in_filters["document_key"] = ticker_keys
+                if not ticker_keys:
+                    empty_intersection = True
+            else:
+                in_filters["document_key"] = ticker_keys
+        elif key:
+            eq_filters["document_key"] = key
         if subject:
             token = subject.replace("%", "").replace(",", " ").strip()
             or_filter = f"title.like.%{token}%,category.like.%{token}%,document_key.like.%{token}%"
@@ -721,6 +737,25 @@ def search_research(
     ):
         return apply_retrieval_pin_to_result(
             {"error": pin_error}, pin=retrieval_pin, pin_error=pin_error
+        )
+
+    if empty_intersection:
+        # ``document_key`` and ``ticker`` filtered to no common row: return a
+        # clean zero-row result instead of a contradictory eq()+in_() query.
+        return apply_retrieval_pin_to_result(
+            {
+                "dataset": dataset,
+                "run_type": run_type if dataset == "documents" else None,
+                "date_from": lower.isoformat() if lower is not None else None,
+                "date_to": upper.isoformat(),
+                "include_prior": include_prior,
+                "row_count": 0,
+                "limit": capped_limit,
+                "offset": safe_offset,
+                "rows": [],
+            },
+            pin=retrieval_pin,
+            pin_error=pin_error,
         )
 
     date_column = _SEARCH_DATE_COLUMN.get(dataset, "date")
