@@ -26,6 +26,7 @@ from digiquant.dashboard.research_retrieval.queries import (
     extract_section,
     query_portfolio,
     query_research,
+    search_research,
 )
 from digiquant.dashboard.research_retrieval.store import (
     ActualProviderAttemptUsage,
@@ -49,16 +50,69 @@ RESEARCH_TOOLS: list[dict[str, Any]] = [
         "function": {
             "name": "query_research",
             "description": (
-                "Fetch a research vertical document or daily digest snapshot from Supabase. "
-                "Use document_key (e.g. macro, equity, digest) or segment slug. "
-                "When a context manifest pin is active, as_of_date must match an allowed ref."
+                "Search the research pipeline and book for prior work. Reads live rows from "
+                "Supabase and transparently hydrates archived document payloads from R2. "
+                "Use document_key (e.g. macro, equity, digest) or segment slug for an exact "
+                "fetch; use dataset/date_from/date_to/ticker/sector/subject/doc_type for a "
+                "filtered search. Defaults to the baseline run for the current run_date. "
+                "Set include_prior=true to span prior days for continuity. When a context "
+                "manifest pin is active, as_of_date must match an allowed ref."
             ),
             "parameters": {
                 "type": "object",
                 "properties": {
+                    "dataset": {
+                        "type": "string",
+                        "enum": [
+                            "documents",
+                            "daily_snapshots",
+                            "theses",
+                            "thesis_vehicles",
+                            "positions",
+                            "nav_history",
+                            "portfolio_metrics",
+                            "position_events",
+                            "decision_log",
+                        ],
+                        "description": "Which research/book dataset to search (default documents)",
+                    },
+                    "run_type": {
+                        "type": "string",
+                        "description": "Pipeline run type (default baseline)",
+                    },
+                    "run_id": {
+                        "type": "string",
+                        "description": "Optional run identifier (decision_log)",
+                    },
+                    "date_from": {
+                        "type": "string",
+                        "description": "Inclusive lower bound YYYY-MM-DD",
+                    },
+                    "date_to": {
+                        "type": "string",
+                        "description": "Inclusive upper bound YYYY-MM-DD",
+                    },
                     "document_key": {"type": "string"},
                     "segment": {"type": "string"},
+                    "ticker": {"type": "string"},
+                    "sector": {"type": "string"},
+                    "subject": {
+                        "type": "string",
+                        "description": "Free-text match on title/category/key",
+                    },
+                    "doc_type": {"type": "string"},
+                    "phase": {"type": "string"},
+                    "include_prior": {
+                        "type": "boolean",
+                        "description": "Span prior days (default false = single run_date)",
+                    },
                     "as_of_date": {"type": "string", "description": "YYYY-MM-DD"},
+                    "limit": {"type": "integer", "description": "Max rows 1-500 (default 50)"},
+                    "offset": {"type": "integer", "description": "Pagination offset (default 0)"},
+                    "full_content": {
+                        "type": "boolean",
+                        "description": "Return full document content instead of a bounded preview",
+                    },
                 },
             },
         },
@@ -244,16 +298,57 @@ def build_research_tool_dispatcher(
                 return pin_err
 
             if name == "query_research":
-                result = query_research(
-                    client,
-                    run_date=run_date,
-                    document_key=args.get("document_key"),
-                    segment=args.get("segment"),
-                    as_of_date=_parse_optional_date(args.get("as_of_date")),
-                    phase=phase,
-                    cache=cache,
-                    retrieval_pin=effective_pin,
-                )
+                search_keys = {
+                    "dataset",
+                    "run_type",
+                    "run_id",
+                    "date_from",
+                    "date_to",
+                    "ticker",
+                    "sector",
+                    "subject",
+                    "doc_type",
+                    "phase",
+                    "include_prior",
+                    "limit",
+                    "offset",
+                    "full_content",
+                }
+                if search_keys & set(args):
+                    result = search_research(
+                        client,
+                        run_date=run_date,
+                        dataset=str(args.get("dataset") or "documents"),
+                        run_type=str(args.get("run_type") or "baseline"),
+                        run_id=args.get("run_id"),
+                        date_from=_parse_optional_date(args.get("date_from")),
+                        date_to=_parse_optional_date(args.get("date_to")),
+                        document_key=args.get("document_key"),
+                        segment=args.get("segment"),
+                        ticker=args.get("ticker"),
+                        sector=args.get("sector"),
+                        subject=args.get("subject"),
+                        doc_type=args.get("doc_type"),
+                        phase=args.get("phase"),
+                        include_prior=bool(args.get("include_prior", False)),
+                        as_of_date=_parse_optional_date(args.get("as_of_date")),
+                        limit=int(args.get("limit", 50)),
+                        offset=int(args.get("offset", 0)),
+                        full_content=bool(args.get("full_content", False)),
+                        retrieval_phase=phase,
+                        retrieval_pin=effective_pin,
+                    )
+                else:
+                    result = query_research(
+                        client,
+                        run_date=run_date,
+                        document_key=args.get("document_key"),
+                        segment=args.get("segment"),
+                        as_of_date=_parse_optional_date(args.get("as_of_date")),
+                        phase=phase,
+                        cache=cache,
+                        retrieval_pin=effective_pin,
+                    )
             elif name == "fetch_prior_document":
                 document_key = args.get("document_key")
                 if not document_key:

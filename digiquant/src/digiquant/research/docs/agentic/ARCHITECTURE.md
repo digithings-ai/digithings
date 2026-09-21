@@ -65,7 +65,7 @@ Quiet-day savings: triage `skip` (0 LLM) + `edit` (`DocumentPatch`) — not a se
 research terminates at `phase7_synthesis` (`DigestPayload`). portfolio reads only `DigestPayload`
 from research runtime ([ADR-0015](../../../../../../docs/adr/0015-research-vs-portfolio.md)).
 
-Retrieval tools (portfolio grounding): `query_research`, `query_data`, `query_portfolio` with
+Retrieval tools (portfolio grounding): `query_research`, `query_portfolio` with
 phase-scoped blinding (spec §6.1).
 
 ---

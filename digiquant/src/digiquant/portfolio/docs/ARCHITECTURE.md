@@ -638,7 +638,7 @@ flowchart TB
 ## Grounding and blinding
 
 portfolio H1–H7 use `build_grounding` / `build_thesis_grounding` with phase-scoped tool
-blinding (`query_research`, `query_data`, `query_portfolio` per spec §6.1). Prior analyst
+blinding (`query_research`, `query_portfolio` per spec §6.1). Prior analyst
 and thesis context loads via preflight + on-demand `fetch_prior_document`.
 
 ---

@@ -155,14 +155,14 @@ class TestPmNodeContract:
         assert book == {"SPY": 40.0}  # residual left as implicit cash, no BIL injected
 
     def test_pm_uses_full_scope_data_tools(self, monkeypatch) -> None:
-        # The PM is the decision-maker — full query_data scope (may read the book),
+        # The PM is the decision-maker — full query_research scope (may read the book),
         # NOT blinded like the analysts/debaters; and the tools are actually wired.
         captured: dict = {}
 
         def fake_build_grounding(**kwargs):
             captured.update(kwargs)
             return (
-                [{"type": "function", "function": {"name": "query_data"}}],
+                [{"type": "function", "function": {"name": "query_research"}}],
                 (lambda _n, _a: "{}"),
                 # Requested live search must succeed or raise (#3859): hand the
                 # node canned grounding so this tools-wiring test stays

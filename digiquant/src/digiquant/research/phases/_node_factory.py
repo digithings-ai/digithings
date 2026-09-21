@@ -403,6 +403,17 @@ class SegmentNodeSpec:
     advertise a tool that would only return ``auth_required``. Enrichment only.
     """
 
+    use_research_tools: bool = True
+    """Equip this segment with the dashboard research tools (#930 / #4436).
+
+    Research segments read their own prior published documents for continuity.
+    ``research_phase="h6_deliberation"`` drops ``query_portfolio`` (book access)
+    while allowing every research document key.
+    """
+
+    research_phase: str = "h6_deliberation"
+    """Retrieval phase used for the research-tool blinding gate."""
+
 
 # Type aliases for the two factory seams.
 InputsBuilder = Callable[[ResearchState, SegmentNodeSpec], dict[str, Any]]
@@ -960,6 +971,8 @@ def build_segment_node(
             ai_portfolios=spec.ai_portfolios,
             live_search_is_fallback=spec.live_search_is_fallback,
             digifetch_tools=spec.digifetch_tools,
+            use_research_tools=spec.use_research_tools,
+            research_phase=spec.research_phase,
         )
         if web_grounding:
             inputs = {**inputs, "web_grounding": web_grounding}

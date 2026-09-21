@@ -492,7 +492,7 @@ READ_SCOPE_TOOLS: frozenset[str] = frozenset(
         "digiquant_get_price_technicals",
         "digiquant_get_macro_series",
         "digiquant_get_trade_levels",
-        "digiquant_query_data",
+        "digiquant_query_research",
         "dashboard_get_policy_replay",
         "dashboard_get_policy_comparison",
         "dashboard_evaluate_policy_gate",
@@ -748,49 +748,75 @@ def create_mcp_server(
             cache_dir=cache_dir,
         )
 
-    @_maybe_tool("digiquant_query_data")
-    def digiquant_query_data(
-        table: str,
-        columns: str = "*",
-        eq: dict[str, Any] | None = None,
-        gte: dict[str, Any] | None = None,
-        lte: dict[str, Any] | None = None,
-        order: str | None = None,
-        desc: bool = True,
+    @_maybe_tool("digiquant_query_research")
+    def digiquant_query_research(
+        dataset: str = "documents",
+        run_type: str = "baseline",
+        run_id: str | None = None,
+        date_from: str | None = None,
+        date_to: str | None = None,
+        document_key: str | None = None,
+        segment: str | None = None,
+        ticker: str | None = None,
+        sector: str | None = None,
+        subject: str | None = None,
+        doc_type: str | None = None,
+        phase: str | None = None,
+        include_prior: bool = False,
+        as_of_date: str | None = None,
         limit: int = 50,
+        offset: int = 0,
+        full_content: bool = False,
     ) -> str:
-        """Read rows from a whitelisted dashboard table (JSON).
+        """Search the research pipeline and book for prior work (JSON).
 
-        Exposes the same read-only, table-scoped reader the in-process portfolio
-        agents use, so external agents (digichat / execution) can fetch the paper
-        book and market data by key (#925). Allowed tables: ``positions``,
-        ``nav_history``, ``theses``, ``thesis_vehicles``, ``position_events``,
-        ``portfolio_metrics``, ``trading_calendar``. Market history
-        (``price_history``, ``price_technicals``, ``macro_series_observations``)
-        moved to the versioned R2 cache (#3780) and is no longer readable here —
-        use ``digiquant_get_price_technicals`` / ``digiquant_get_macro_series``.
-        Operator-internal telemetry (decision_log, diagnostics) is deliberately
-        NOT readable.
-        Group A books (``positions``, ``nav_history``, ``position_events``,
-        ``portfolio_metrics``) default to the house ``workspace_id`` when
-        ``eq`` omits it; pass ``eq.workspace_id`` to read another book.
-        ``limit`` is capped server-side. Returns ``{"error": ...}`` on failure.
+        Reads live rows from Supabase and transparently hydrates archived
+        document payloads from R2 (#4436). ``dataset`` is one of
+        ``documents``, ``daily_snapshots``, ``theses``, ``thesis_vehicles``,
+        ``positions``, ``nav_history``, ``portfolio_metrics``,
+        ``position_events``, ``decision_log``. Filter by ``run_type``
+        (default ``baseline``), a ``date_from``/``date_to`` range, an exact
+        ``document_key`` or ``segment`` slug, ``ticker``, ``sector``,
+        free-text ``subject`` (title/category/key), ``doc_type`` or
+        ``phase``. ``include_prior=true`` spans prior days for continuity;
+        otherwise the range defaults to a single day (``as_of_date`` or
+        today). ``limit`` is capped server-side and ``offset`` pages it.
+        Market history stays on ``digiquant_get_price_technicals`` /
+        ``digiquant_get_macro_series``. Returns ``{"error": ...}`` on failure.
         """
-        from digiquant.research.data.queries import query_data
+        from datetime import UTC, datetime
+        from datetime import date as _date
+
+        from digiquant.dashboard.research_retrieval.queries import search_research
         from digiquant.research.supabase_io import SupabaseConfig, build_client
+
+        def _parse(raw: str | None) -> _date | None:
+            if not raw:
+                return None
+            return _date.fromisoformat(str(raw)[:10])
 
         try:
             client = build_client(SupabaseConfig.from_env())
-            result = query_data(
+            result = search_research(
                 client=client,
-                table=table,
-                columns=columns,
-                eq=eq,
-                gte=gte,
-                lte=lte,
-                order=order,
-                desc=desc,
+                run_date=datetime.now(tz=UTC).date(),
+                dataset=dataset,
+                run_type=run_type,
+                run_id=run_id,
+                date_from=_parse(date_from),
+                date_to=_parse(date_to),
+                document_key=document_key,
+                segment=segment,
+                ticker=ticker,
+                sector=sector,
+                subject=subject,
+                doc_type=doc_type,
+                phase=phase,
+                include_prior=include_prior,
+                as_of_date=_parse(as_of_date),
                 limit=limit,
+                offset=offset,
+                full_content=full_content,
             )
         except Exception as exc:  # surface as JSON to the caller, never crash
             return json.dumps({"error": f"{type(exc).__name__}: {exc}"})

@@ -275,7 +275,7 @@ The MCP server (`mcp_server.py`) listens on `127.0.0.1:8767` by default with `st
 
 `create_mcp_server(scope=...)` gates registration: `scope="full"` (default)
 registers all 58 tools; `scope="read"` registers only the 44 dashboard-chat
-reads (strategy list, price/macro reads, causal trade levels, `query_data`,
+reads (strategy list, price/macro reads, causal trade levels, `query_research`,
 policy replay/comparison reads, gate reads + evaluations, the coinmetrics
 catalog, and the 34 `digifetch_*` Gloomberb enrichment reads).
 `--scope` / `DIGIQUANT_MCP_SCOPE` select the scope; `host`/`port` live on the
@@ -320,6 +320,29 @@ rate-limited), the subset attaches **only when a primary grounding executor
 actually built** — a segment with no data/research tools degrades to tool-less
 rather than arming a tool loop on delayed enrichment data alone. The client
 cache/breaker mutations are lock-guarded (`threading.Lock`) for parallel nodes.
+
+Research retrieval (`query_research`, #4436) is the unified search surface over
+research documents + the book, replacing the retired generic `query_data` reader.
+One toolkit at `dashboard/research_retrieval/` backs both the in-pipeline agents
+and MCP: `search_research(...)` in `research_retrieval/queries.py` takes a typed
+`dataset` enum (9 searchable datasets — `documents`, `daily_snapshots`,
+`positions`, `nav_history`, `theses`, `thesis_vehicles`, `position_events`,
+`portfolio_metrics`, `decision_log`) with `run_type`/`run_id`/`date_from`/
+`date_to`/`document_key`/`segment`/`ticker`/`sector`/`subject`/`doc_type`/
+`phase`/`include_prior`/`as_of_date`/`limit`/`offset`/`full_content` filters. No
+raw-table or arbitrary-column surface exists. Look-ahead is impossible (the upper
+window date is clamped to the effective `as_of`); the default is a single day
+unless `include_prior` widens it to `date_from`. Every `documents` read is gated
+by `research_document_allowed(retrieval_phase, key)` (phase-scoped blinding), and
+portfolio datasets are gated by `portfolio_tool_allowed`. Archived
+`documents.payload` bodies hydrate read-through from R2 (`_hydrate_archived_row`);
+`documents.content` is never archived. `content` is preview-truncated to 500
+chars unless `full_content`. In-pipeline wiring:
+`research/phases/_node_factory.SegmentNodeSpec.use_research_tools` /
+`research_phase` (`build_segment_node`, H6 gets the full toolkit;
+`portfolio/phases/phase7d_pm._pm_tools` passes `h7_pm`). MCP:
+`digiquant_query_research` (read scope) — the `digiquant_query_data` registration
+is removed.
 
 #### MCP vs HTTP-only (#1185)
 
@@ -2574,11 +2597,11 @@ that carries the prior body.
 #### Day-over-day continuity contract (#859)
 
 Supabase is the system of record. Preflight loads **pointers and slim summaries**;
-phases **fetch** full history on demand via `query_data` / MCP — nothing stuffs
+phases **fetch** full history on demand via `query_research` / MCP — nothing stuffs
 multi-day document dumps into every prompt. Group A books (`positions`,
 `nav_history`, `position_events`, `portfolio_metrics`) default to the house
 `workspace_id` when `eq` omits it, so overlay same-date rows cannot seed house
-research agents or `digiquant_query_data`. Pass `eq.workspace_id` to read
+research agents or `digiquant_query_research`. Pass `eq.workspace_id` to read
 another book. Market-data tables and `theses` are not injected.
 
 ```mermaid
@@ -2631,7 +2654,7 @@ flowchart LR
 
 | Field | Source table | Loaded in | In prompt | Fetch on demand |
 | --- | --- | --- | --- | --- |
-| `last_snapshots` | `daily_snapshots` | `load_prior_context` | last 2 bias rows (filtered per node) | older snapshots via `query_data` |
+| `last_snapshots` | `daily_snapshots` | `load_prior_context` | last 2 bias rows (filtered per node) | older snapshots via `query_research` |
 | `latest_segments` | `documents` | `load_prior_context` | own segment + declared extras only (#696) | full segment body by `document_key` |
 | `prior_book` / `current_weights` | `positions` | `load_prior_book` | PM + risk: weights + held names | entry prices via `positions` tool |
 | `prior_analyst_by_ticker` | `documents` (`analyst/*`) | `load_prior_analyst_summaries` | slim excerpt for **held** tickers | full analyst payload by key |
@@ -2835,12 +2858,11 @@ separately so research nodes never pay the per-ticker decision-artifact token ta
    CHECK). Invalid amendment economics **raise at unit level** instead of falling back to a
    REJECTED/base-preserved outcome (#3078) — a structurally invalid amendment is
    a model-output error that must surface, not be absorbed; the H6 node catches it
-   and degrades that ticker to carried + PhaseError, never killing the chain (#3738). `query_data`
-   no longer serves market history at all (#3780): its table allowlist refuses
+   and degrades that ticker to carried + PhaseError, never killing the chain (#3738). The retired
+   `query_data` reader (#4436) no longer serves market history at all (#3780): its table allowlist refused
    `price_history` / `price_technicals` / `macro_series_observations`, so those
    tables are simply not readable here; dedicated R2-backed tools
-   (`digiquant_get_price_technicals`, `get_macro_series`) own those reads, and MCP
-   `digiquant_query_data` shares the same refusal. The #3771 per-table column
+   (`digiquant_get_price_technicals`, `get_macro_series`) own those reads. The #3771 per-table column
    allowlist that once guarded the two price tables was deleted with the cutover
    (it could never run once the tables left the reader, #3959). For the tables
    still readable here, explicit columns/order/filter keys are shape-checked to
@@ -4511,7 +4533,7 @@ the house library), `backfill_research_state` house inventory pages (overlay
 rows must not seed the in-memory research-state store),
 `audit_activity_coverage_api` Group A max-dates) pin via
 `eq_house_workspace()`
-(omitted id = house). House research/MCP `query_data` / `digiquant_query_data`
+(omitted id = house). House MCP `query_research` / `digiquant_query_research`
 stamps house `workspace_id` on those same Group A tables when `eq` omits it
 (`HOUSE_BOOK_READ_TABLES` in `research/data/queries.py`). House preflight
 `load_prior_context` / analyst and deliberation continuity / beliefs /

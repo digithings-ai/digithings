@@ -41,7 +41,7 @@ logger = logging.getLogger(__name__)
 
 
 def _pm_tools(state: PortfolioState, *, segment: str = "pm-rebalance"):
-    """Full-scope query_data + computed tools for the PM. As the decision-maker it MAY
+    """Full-scope query_research + computed tools for the PM. As the decision-maker it MAY
     read the book (positions/nav_history/theses) for rebalance + sizing context — it is
     not blinded like the analysts/debaters."""
     return build_grounding(
@@ -49,6 +49,8 @@ def _pm_tools(state: PortfolioState, *, segment: str = "pm-rebalance"):
         live_search=True,
         run_date=state.run_date,
         segment=segment,
+        use_research_tools=True,
+        research_phase="h7_pm",
     )
 
 

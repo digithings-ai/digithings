@@ -140,7 +140,9 @@ def test_build_grounding_composes_data_and_digifetch_executors(
     )
     assert tools is not None and execute_tool is not None
     names = {t["function"]["name"] for t in tools}
-    assert {"query_data", "digifetch_quote"}.issubset(names)
+    # query_data was retired in #4436; the typed macro reader is the data-family
+    # marker that proves the data executor composed alongside digifetch.
+    assert {"get_macro_series", "digifetch_quote"}.issubset(names)
     # The combined dispatcher routes by family and rejects unknown names.
     payload = json.loads(execute_tool("digifetch_quote", {"symbol": "AAPL"}))
     assert payload["data"]["quote"]["price"] == 200.0

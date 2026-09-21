@@ -192,6 +192,7 @@ from digiquant.dashboard.research_retrieval.queries import (
     extract_section,
     query_portfolio,
     query_research,
+    search_research,
 )
 from digiquant.dashboard.research_retrieval.retriever import ResearchRetriever
 from digiquant.dashboard.research_retrieval.shadow_evaluation import (
@@ -417,6 +418,7 @@ __all__ = [
     "resolve_h6_selection_mode",
     "retrieval_pin_from_wire_result",
     "retrieve_missing_fact_evidence",
+    "search_research",
     "select_h6",
     "strip_blinded_forbidden_keys",
     "strip_h7_weight_keys",

@@ -466,6 +466,306 @@ def query_research(
     return apply_retrieval_pin_to_result(result, pin=retrieval_pin, pin_error=pin_error)
 
 
+_SEARCHABLE_DATASETS = frozenset(
+    {
+        "documents",
+        "daily_snapshots",
+        "theses",
+        "thesis_vehicles",
+        "positions",
+        "nav_history",
+        "portfolio_metrics",
+        "position_events",
+        "decision_log",
+    }
+)
+
+_PORTFOLIO_DATASETS = frozenset(
+    {
+        "theses",
+        "thesis_vehicles",
+        "positions",
+        "nav_history",
+        "portfolio_metrics",
+        "position_events",
+        "decision_log",
+    }
+)
+
+_HOUSE_SCOPED_DATASETS = frozenset(
+    {"documents", "positions", "nav_history", "portfolio_metrics", "position_events"}
+)
+
+_SEARCH_COLUMNS: dict[str, str] = {
+    "documents": (
+        "date, document_key, title, doc_type, category, segment, sector, run_type, content, payload"
+    ),
+    "daily_snapshots": "date, snapshot",
+    "theses": "date, thesis_id, name, vehicle, invalidation, status, notes",
+    "thesis_vehicles": "date, thesis_id, ticker, source_exploration_key",
+    "positions": "date, ticker, weight_pct, entry_date",
+    "nav_history": "date, nav, cash_pct, invested_pct",
+    "portfolio_metrics": "date, pnl_pct, sharpe, volatility, max_drawdown, alpha",
+    "position_events": "date, ticker, event, book_source",
+    "decision_log": "run_date, run_id, ticker, stance, status, alpha, reflection",
+}
+
+_SEARCH_DATE_COLUMN: dict[str, str] = {"decision_log": "run_date"}
+
+_PREVIEW_CHARS = 500
+
+
+def _document_keys_for_ticker(client: SupabaseClient, *, ticker: str) -> list[str]:
+    """Resolve a ticker to candidate ``documents.document_key`` values.
+
+    ``documents`` has no ticker column, so the ticker join runs through
+    ``thesis_vehicles.source_exploration_key`` plus the conventional
+    ``deep-dives/<TICKER>`` / ``custom-research/<TICKER>`` keys.
+    """
+    keys: set[str] = {ticker, f"deep-dives/{ticker}", f"custom-research/{ticker}"}
+    try:
+        resp = (
+            client.table("thesis_vehicles")
+            .select("source_exploration_key")
+            .eq("ticker", ticker)
+            .limit(200)
+            .execute()
+        )
+    except Exception as exc:  # ticker join is best-effort, never fatal
+        logger.warning("search_research ticker join failed for %s: %s", ticker, exc)
+        return sorted(keys)
+    for row in getattr(resp, "data", None) or []:
+        source = row.get("source_exploration_key")
+        if source:
+            keys.add(str(source))
+    return sorted(keys)
+
+
+def _search_table(
+    client: SupabaseClient,
+    *,
+    table: str,
+    columns: str,
+    date_column: str,
+    date_from: date | None,
+    date_to: date | None,
+    eq_filters: dict[str, str],
+    in_filters: dict[str, list[str]],
+    or_filter: str | None,
+    limit: int,
+    offset: int,
+    house_scoped: bool,
+) -> list[dict[str, Any]]:
+    """One bounded, ordered, paginated read against a typed dataset table."""
+
+    def _run() -> list[dict[str, Any]]:
+        query = client.table(table).select(columns)
+        if house_scoped:
+            query = _eq_house(query)
+        if date_from is not None:
+            query = query.gte(date_column, date_from.isoformat())
+        if date_to is not None:
+            query = query.lte(date_column, date_to.isoformat())
+        for column, value in eq_filters.items():
+            query = query.eq(column, value)
+        for column, values in in_filters.items():
+            query = query.in_(column, values)
+        if or_filter:
+            query = query.or_(or_filter)
+        query = query.order(date_column, desc=True)
+        query = query.range(offset, offset + limit - 1)
+        resp = query.execute()
+        return list(getattr(resp, "data", None) or [])
+
+    return run_with_supabase_retry(_run, operation=f"search_research {table}")
+
+
+def _preview_row(row: dict[str, Any]) -> dict[str, Any]:
+    """Bound large text bodies unless the caller asked for full content."""
+    out = dict(row)
+    content = out.get("content")
+    if isinstance(content, str) and len(content) > _PREVIEW_CHARS:
+        out["content"] = content[:_PREVIEW_CHARS]
+        out["content_truncated"] = True
+    return out
+
+
+def _postprocess_search_rows(
+    client: SupabaseClient,
+    rows: list[dict[str, Any]],
+    *,
+    dataset: str,
+    retrieval_phase: RetrievalPhase,
+    full_content: bool,
+    store: Any | None,
+) -> list[dict[str, Any]]:
+    """Apply phase blinding, R2 payload read-through, and preview truncation."""
+    out: list[dict[str, Any]] = []
+    for row in rows:
+        if dataset == "documents":
+            key = str(row.get("document_key") or "")
+            if not research_document_allowed(retrieval_phase, key):
+                continue
+            row = _hydrate_archived_row(client, row, store=store)
+        elif dataset == "daily_snapshots":
+            # The snapshot IS the digest payload, so the same phase gate that
+            # blinds ``documents/digest`` must apply here too.
+            if not research_document_allowed(retrieval_phase, DIGEST_DOCUMENT_KEY):
+                continue
+        if dataset in {"documents", "daily_snapshots"} and not full_content:
+            row = _preview_row(row)
+        out.append(row)
+    return out
+
+
+def search_research(
+    client: SupabaseClient,
+    *,
+    run_date: date,
+    dataset: str = "documents",
+    run_type: str | None = "baseline",
+    run_id: str | None = None,
+    date_from: date | None = None,
+    date_to: date | None = None,
+    document_key: str | None = None,
+    segment: str | None = None,
+    ticker: str | None = None,
+    sector: str | None = None,
+    subject: str | None = None,
+    doc_type: str | None = None,
+    phase: str | None = None,
+    include_prior: bool = False,
+    as_of_date: date | None = None,
+    limit: int = 50,
+    offset: int = 0,
+    full_content: bool = False,
+    retrieval_phase: RetrievalPhase = "research_edit",
+    retrieval_pin: RetrievalQueryPin | None = None,
+    store: Any | None = None,
+) -> dict[str, Any]:
+    """Filterable research/portfolio reader over the typed dataset surfaces.
+
+    Storage routing is transparent: live rows come from Supabase, and archived
+    older ``documents.payload`` cells are hydrated through the R2 pointer
+    (``_hydrate_archived_row``). Market history is served by the dedicated
+    price/macro tools, never here. No raw table or column name is accepted, so
+    the generic PostgREST surface that ``query_data`` exposed is gone.
+    """
+    if dataset not in _SEARCHABLE_DATASETS:
+        return {"error": f"search_research unknown dataset {dataset!r}"}
+
+    capped_limit = max(1, min(int(limit), 500))
+    safe_offset = max(0, int(offset))
+
+    if dataset in _PORTFOLIO_DATASETS and not portfolio_tool_allowed(retrieval_phase):
+        return {"error": "search_research portfolio datasets are not available in this phase"}
+
+    # ``run_date`` is the hard ceiling. A caller-supplied ``as_of_date`` can only
+    # narrow the window (replay an earlier point in time); it can never push the
+    # upper bound past the run's logical date and read future research.
+    anchor = run_date
+    if as_of_date is not None and as_of_date < anchor:
+        anchor = as_of_date
+    upper = date_to or anchor
+    if upper > anchor:  # never read ahead of the run's logical date
+        upper = anchor
+    if date_from is not None:
+        lower: date | None = date_from
+    elif include_prior:
+        lower = None
+    else:
+        lower = upper
+
+    key = _resolve_document_key(document_key=document_key, segment=segment)
+
+    eq_filters: dict[str, str] = {}
+    in_filters: dict[str, list[str]] = {}
+    or_filter: str | None = None
+
+    if dataset == "documents":
+        if key:
+            eq_filters["document_key"] = key
+        if run_type:
+            eq_filters["run_type"] = run_type
+        if sector:
+            eq_filters["sector"] = sector
+        if doc_type:
+            eq_filters["doc_type"] = doc_type
+        if phase:
+            eq_filters["phase"] = phase
+        if ticker:
+            in_filters["document_key"] = _document_keys_for_ticker(client, ticker=ticker)
+        if subject:
+            token = subject.replace("%", "").replace(",", " ").strip()
+            or_filter = f"title.like.%{token}%,category.like.%{token}%,document_key.like.%{token}%"
+    elif dataset == "thesis_vehicles":
+        if ticker:
+            eq_filters["ticker"] = ticker
+    elif dataset in {"positions", "position_events", "decision_log"}:
+        if ticker:
+            eq_filters["ticker"] = ticker
+        if dataset == "decision_log" and run_id:
+            eq_filters["run_id"] = run_id
+
+    pin_error: str | None = None
+    if dataset == "documents" and key:
+        pin_error = _pin_rejects_document_access(
+            retrieval_pin, document_key=key, as_of_date=as_of_date
+        )
+    else:
+        pin_error = _pin_rejects_latest_fallback(retrieval_pin, as_of_date)
+    if (
+        pin_error is not None
+        and retrieval_pin is not None
+        and retrieval_pin.mode is RetrievalManifestMode.ENFORCE
+    ):
+        return apply_retrieval_pin_to_result(
+            {"error": pin_error}, pin=retrieval_pin, pin_error=pin_error
+        )
+
+    date_column = _SEARCH_DATE_COLUMN.get(dataset, "date")
+    try:
+        rows = _search_table(
+            client,
+            table=dataset,
+            columns=_SEARCH_COLUMNS[dataset],
+            date_column=date_column,
+            date_from=lower,
+            date_to=upper,
+            eq_filters=eq_filters,
+            in_filters=in_filters,
+            or_filter=or_filter,
+            limit=capped_limit,
+            offset=safe_offset,
+            house_scoped=dataset in _HOUSE_SCOPED_DATASETS,
+        )
+    except Exception as exc:  # return structured error to tool caller
+        logger.warning("search_research failed for %s: %s", dataset, exc)
+        return {"error": f"search_research failed: {exc}"}
+
+    rows = _postprocess_search_rows(
+        client,
+        rows,
+        dataset=dataset,
+        retrieval_phase=retrieval_phase,
+        full_content=full_content,
+        store=store,
+    )
+
+    result = {
+        "dataset": dataset,
+        "run_type": run_type if dataset == "documents" else None,
+        "date_from": lower.isoformat() if lower is not None else None,
+        "date_to": upper.isoformat(),
+        "include_prior": include_prior,
+        "row_count": len(rows),
+        "limit": capped_limit,
+        "offset": safe_offset,
+        "rows": rows,
+    }
+    return apply_retrieval_pin_to_result(result, pin=retrieval_pin, pin_error=pin_error)
+
+
 def query_portfolio(
     client: SupabaseClient,
     *,

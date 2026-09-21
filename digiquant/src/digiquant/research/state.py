@@ -256,7 +256,7 @@ class PriorContext(BaseModel):
         description=(
             "Slim prior ``analyst/{ticker}`` summaries for held names — date, document_key, "
             "stance, conviction_score, thesis_excerpt. Full payloads stay in Supabase; phases "
-            "fetch via ``query_data`` when the excerpt is insufficient (#859)."
+            "fetch via ``query_research`` when the excerpt is insufficient (#859)."
         ),
     )
     prior_deliberation_by_ticker: dict[str, dict[str, Any]] = Field(
