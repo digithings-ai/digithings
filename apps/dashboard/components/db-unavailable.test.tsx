@@ -21,23 +21,39 @@ import DbUnavailable from './db-unavailable';
  */
 describe('DbUnavailable narrow-width contract', () => {
   const html = renderToStaticMarkup(<DbUnavailable status="unconfigured" />);
+  // Scope every width/typography assertion to the card element itself. A bare
+  // `expect(html).toContain('w-full')` would be vacuous here: the wrapper uses
+  // SUBPAGE_MAX, which already contains `w-full`, so it would pass even if the
+  // kit dress lost its own. Read the card's own class attribute instead.
+  const cardTag = html.match(/<article[^>]*data-slot="empty-state"[^>]*>/)?.[0] ?? '';
+  const cardClass = cardTag.match(/class="([^"]*)"/)?.[1] ?? '';
+
+  it('renders the kit EmptyState card', () => {
+    // Fails loudly if the structure changes, rather than letting the scoped
+    // assertions below pass against an empty string.
+    expect(cardTag).not.toBe('');
+  });
 
   it('states the full title in the unconfigured case', () => {
     expect(html).toContain('Live data is not connected in this build');
   });
 
-  it('is fluid: fills its container up to a max-width cap, never content-sized', () => {
-    expect(html).toContain('w-full');
-    expect(html).toContain('max-w-md');
+  it('is fluid: the card fills its container up to a max-width cap, never content-sized', () => {
+    // `w-full` must be on the CARD — that is the kit dress's own class, so this
+    // fails if `empty-state.tsx` drops it. `max-w-md` is the consumer's cap.
+    expect(cardClass).toContain('w-full');
+    expect(cardClass).toContain('max-w-md');
   });
 
   it('is wrap-safe and never ellipsises its own message', () => {
-    expect(html).toContain('break-words');
     // Scope to the message elements: the kit Button legitimately carries
     // `whitespace-nowrap` for its own label, which is not the gate's message.
     const title = html.match(/<h3[^>]*class="([^"]*)"/)?.[1] ?? '';
     const body = html.match(/<p[^>]*class="([^"]*)"/)?.[1] ?? '';
+    expect(title).not.toBe('');
+    expect(body).not.toBe('');
     for (const cls of [title, body]) {
+      expect(cls).toContain('break-words');
       expect(cls).not.toContain('truncate');
       expect(cls).not.toMatch(/whitespace-nowrap|text-ellipsis|line-clamp/);
     }
