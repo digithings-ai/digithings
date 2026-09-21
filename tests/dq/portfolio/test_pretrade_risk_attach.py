@@ -34,8 +34,8 @@ def _run_h8(
     prior_book: list[dict[str, Any]] | None = None,
     current_weights: dict[str, float] | None = None,
 ) -> dict[str, Any]:
-    from digiquant.portfolio.h8_risk_snapshots import H8RiskArtifacts
     from digiquant.portfolio.models.pm_direction import PMDirectionMemo, TickerDirection
+    from digiquant.portfolio.sizing_risk_snapshots import SizingRiskArtifacts
     from digiquant.research.state import (
         PhasePortfolioState,
         PriorContext,
@@ -51,9 +51,9 @@ def _run_h8(
     bundle = _bundle(returns=returns)
     policy = _risk_policy()
     cov = _covariance(tickers)
-    artifacts = H8RiskArtifacts(policy=policy, covariance_snapshot=cov)
+    artifacts = SizingRiskArtifacts(policy=policy, covariance_snapshot=cov)
     monkeypatch.setattr(
-        "digiquant.portfolio.h8_risk_snapshots.resolve_h8_risk_artifacts",
+        "digiquant.portfolio.sizing_risk_snapshots.resolve_sizing_risk_artifacts",
         lambda **_kwargs: artifacts,
     )
     monkeypatch.setattr(
@@ -75,7 +75,7 @@ def _run_h8(
         "max_sector_pct": 100,
         "target_portfolio_vol": 1.0e6,
         "weight_increment_pct": 0,
-        "h8_sizing_input_mode": "calibrated",
+        "sizing_input_mode": "calibrated",
         **(preferences or {}),
     }
     if current_weights is not None:
@@ -119,7 +119,7 @@ def test_report_fingerprint_matches_final_book_after_controls(
     assert report.allocation_input_bundle_hash == result["bundle"].bundle_content_hash
 
 
-def test_final_book_weights_matches_h9_extractor_on_divergent_shapes() -> None:
+def test_final_book_weights_matches_commit_extractor_on_divergent_shapes() -> None:
     """H8 report binding and H9 validation must share one weight extractor (#2824)."""
     from digiquant.portfolio.phases.phase7e_risk_sizing import _final_book_weights
     from digiquant.portfolio.writers.commit_io import weights_from_sized_book
@@ -138,10 +138,10 @@ def test_final_book_weights_matches_h9_extractor_on_divergent_shapes() -> None:
         ]
     }
     for book in (gross_gt_100, dup_rows):
-        h8_risky, _cash = _final_book_weights(book)
-        h9_risky = weights_from_sized_book(book)
-        assert h8_risky == h9_risky
-        assert weights_fingerprint(h8_risky) == weights_fingerprint(h9_risky)
+        sizing_risky, _cash = _final_book_weights(book)
+        commit_risky = weights_from_sized_book(book)
+        assert sizing_risky == commit_risky
+        assert weights_fingerprint(sizing_risky) == weights_fingerprint(commit_risky)
 
 
 def test_continuity_carry_case_report_matches_final_book(
@@ -233,8 +233,8 @@ def test_builder_path_does_not_mutate_final_book_weights(
     book = result["book"]
     before = [dict(row) for row in book["recommended_portfolio"]]
     # Re-run attach helper against a mutable copy of the book payload.
-    from digiquant.portfolio.h8_risk_snapshots import H8RiskArtifacts
     from digiquant.portfolio.models.pm_direction import PMDirectionMemo, TickerDirection
+    from digiquant.portfolio.sizing_risk_snapshots import SizingRiskArtifacts
     from digiquant.research.state import (
         PhasePortfolioState,
         ResearchConfigBundle,
@@ -264,7 +264,7 @@ def test_builder_path_does_not_mutate_final_book_weights(
         **book,
         "recommended_portfolio": [dict(row) for row in book["recommended_portfolio"]],
     }
-    artifacts = H8RiskArtifacts(
+    artifacts = SizingRiskArtifacts(
         policy=_risk_policy(),
         covariance_snapshot=_covariance(("AAPL", "MSFT")),
     )
@@ -296,8 +296,8 @@ def test_report_failure_omits_report_without_changing_book(
         "build_pretrade_risk_report_for_final_book",
         lambda **_k: None,
     )
-    from digiquant.portfolio.h8_risk_snapshots import H8RiskArtifacts
     from digiquant.portfolio.models.pm_direction import PMDirectionMemo, TickerDirection
+    from digiquant.portfolio.sizing_risk_snapshots import SizingRiskArtifacts
     from digiquant.research.state import (
         PhasePortfolioState,
         ResearchConfigBundle,
@@ -309,9 +309,11 @@ def test_report_failure_omits_report_without_changing_book(
     from tests.dq.research.test_supabase_io import FakeSupabaseClient
 
     bundle = _bundle(returns={"AAPL": ("0.06", "0.02", "1.0")})
-    artifacts = H8RiskArtifacts(policy=_risk_policy(), covariance_snapshot=_covariance(("AAPL",)))
+    artifacts = SizingRiskArtifacts(
+        policy=_risk_policy(), covariance_snapshot=_covariance(("AAPL",))
+    )
     monkeypatch.setattr(
-        "digiquant.portfolio.h8_risk_snapshots.resolve_h8_risk_artifacts",
+        "digiquant.portfolio.sizing_risk_snapshots.resolve_sizing_risk_artifacts",
         lambda **_kwargs: artifacts,
     )
     monkeypatch.setattr(
@@ -329,7 +331,7 @@ def test_report_failure_omits_report_without_changing_book(
                 "max_sector_pct": 100,
                 "target_portfolio_vol": 1.0e6,
                 "weight_increment_pct": 0,
-                "h8_sizing_input_mode": "calibrated",
+                "sizing_input_mode": "calibrated",
             }
         ),
         phase_portfolio=PhasePortfolioState(

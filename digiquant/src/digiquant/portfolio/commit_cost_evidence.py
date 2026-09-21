@@ -106,7 +106,7 @@ def _load_symbol_history(
 
     rows = run_with_supabase_retry(
         _fetch_history,
-        operation=f"h9 cost history {symbol}",
+        operation=f"commit cost history {symbol}",
     )
     if not rows:
         return pl.DataFrame()

@@ -16,7 +16,7 @@ from digiquant.portfolio.models.pm_direction import (
     PMDirectionMemo,
     TickerDirection,
 )
-from digiquant.portfolio.phases.h7_pm_direction import NODE_ID, _h7_node
+from digiquant.portfolio.phases.direction import NODE_ID, _direction_node
 from digiquant.research.state import PhasePortfolioState, PriorContext, ResearchState
 
 pytestmark = pytest.mark.unit
@@ -99,10 +99,10 @@ class TestH7FailSoft:
     def test_llm_failure_carries_prior_memo_without_raising(self) -> None:
         state = _state(with_prior_memo=True)
         with patch(
-            "digiquant.portfolio.phases.h7_pm_direction.run_research_agent",
+            "digiquant.portfolio.phases.direction.run_research_agent",
             side_effect=ValueError("Expecting value: line 201 column 1 (char 1100)"),
         ):
-            out = _h7_node(state)
+            out = _direction_node(state)
 
         memo = out["phase_portfolio"].pm_direction_memo
         assert memo is not None, "prior memo must be carried"
@@ -121,10 +121,10 @@ class TestH7FailSoft:
     def test_llm_failure_without_prior_memo_degrades_to_none(self) -> None:
         state = _state(with_prior_memo=False)
         with patch(
-            "digiquant.portfolio.phases.h7_pm_direction.run_research_agent",
+            "digiquant.portfolio.phases.direction.run_research_agent",
             side_effect=ValueError("Expecting value: line 1 column 1 (char 0)"),
         ):
-            out = _h7_node(state)
+            out = _direction_node(state)
 
         assert out["phase_portfolio"].pm_direction_memo is None
         errors = out.get("errors") or []
@@ -133,10 +133,10 @@ class TestH7FailSoft:
     def test_llm_failure_rebinds_current_forecast_ids_not_prior(self) -> None:
         state = _state(with_prior_memo=True, with_current_forecast=True)
         with patch(
-            "digiquant.portfolio.phases.h7_pm_direction.run_research_agent",
+            "digiquant.portfolio.phases.direction.run_research_agent",
             side_effect=ValueError("Expecting value: line 1 column 1 (char 0)"),
         ):
-            out = _h7_node(state)
+            out = _direction_node(state)
 
         memo = out["phase_portfolio"].pm_direction_memo
         assert memo is not None
@@ -174,10 +174,10 @@ class TestH7BindOnSuccess:
             memo="fresh",
         )
         with patch(
-            "digiquant.portfolio.phases.h7_pm_direction.run_research_agent",
+            "digiquant.portfolio.phases.direction.run_research_agent",
             return_value=llm_memo,
         ):
-            out = _h7_node(state)
+            out = _direction_node(state)
 
         memo = out["phase_portfolio"].pm_direction_memo
         assert memo is not None

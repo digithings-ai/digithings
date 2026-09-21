@@ -28,7 +28,7 @@ from digiquant.research.supabase_io import SupabaseClient, publish_document
 logger = logging.getLogger(__name__)
 
 NODE_ID = "portfolio/thesis/market-review"
-PHASE_NAME = "portfolio_h1_thesis_review"
+PHASE_NAME = "portfolio_thesis"
 ARTIFACT_KEY = ("thesis", "thesis-review")
 DOCUMENT_KEY = artifact_document_key(ARTIFACT_KEY)
 DOC_TYPE = "Thesis Review"
@@ -96,12 +96,12 @@ def _publish_thesis_review_document(
     )
 
 
-def _run_h1_llm(state: PortfolioState) -> ThesisReviewOutput:
+def _run_thesis_llm(state: PortfolioState) -> ThesisReviewOutput:
     review, _doc, errors = run_thesis_phase_llm(
         state=state,
         skill_slug="thesis",
         artifact_key=ARTIFACT_KEY,
-        retrieval_phase="h1_thesis",
+        retrieval_phase="thesis",
         phase_slug=NODE_ID,
         output_model=ThesisReviewOutput,
         phase_inputs={
@@ -120,9 +120,9 @@ def _run_h1_llm(state: PortfolioState) -> ThesisReviewOutput:
     return review
 
 
-def _h1_node_factory(client: SupabaseClient | None):
+def _thesis_node_factory(client: SupabaseClient | None):
     def _node(state: PortfolioState) -> dict[str, Any]:
-        review = _run_h1_llm(state)
+        review = _run_thesis_llm(state)
         hits = _invalidation_hits_for_state(state)
         review = merge_review_with_invalidation_hits(
             review,
@@ -157,8 +157,8 @@ def _h1_node_factory(client: SupabaseClient | None):
     return _node
 
 
-def build_h1_thesis_review(*, client: SupabaseClient | None = None) -> PipelinePhase:
+def build_thesis(*, client: SupabaseClient | None = None) -> PipelinePhase:
     return PipelinePhase(
         name=PHASE_NAME,
-        nodes=[NodeSpec(name=NODE_ID, run=_h1_node_factory(client))],
+        nodes=[NodeSpec(name=NODE_ID, run=_thesis_node_factory(client))],
     )

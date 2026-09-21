@@ -12,14 +12,14 @@ from decimal import Decimal
 from uuid import UUID
 
 import pytest
-from digiquant.dashboard.research_retrieval.context_wiring import wire_h7_phase_inputs
-from digiquant.dashboard.research_retrieval.h7_decision_context import (
-    H7DecisionContextCompileInput,
-    H7PrerequisiteSnapshot,
-    H7SectionAvailability,
-    H7SectionKind,
-    assert_h7_no_target_weights,
-    compile_h7_decision_context,
+from digiquant.dashboard.research_retrieval.context_wiring import wire_direction_phase_inputs
+from digiquant.dashboard.research_retrieval.direction_decision_context import (
+    DirectionDecisionContextCompileInput,
+    DirectionPrerequisiteSnapshot,
+    DirectionSectionAvailability,
+    DirectionSectionKind,
+    assert_direction_no_target_weights,
+    compile_direction_decision_context,
 )
 from digiquant.dashboard.research_retrieval.models import (
     BeliefStatus,
@@ -186,10 +186,10 @@ def _store_with_state(loaded: LoadedResearchState) -> tuple[ResearchStateStore, 
     return store, {"state_version_id": str(version_id)}
 
 
-def _prerequisites(*, state_version_id: UUID | None = None) -> H7PrerequisiteSnapshot:
+def _prerequisites(*, state_version_id: UUID | None = None) -> DirectionPrerequisiteSnapshot:
     loaded = _loaded_state(evidence=(_evidence(summary="pin"),))
     pin_id = state_version_id or loaded.version.state_version_id
-    return H7PrerequisiteSnapshot(
+    return DirectionPrerequisiteSnapshot(
         state_version_id=pin_id,
         accounting_period_id=_ACCOUNTING_ID,
         accounting_period_content_hash=content_digest({"period": "2026-08-25"}),
@@ -198,12 +198,12 @@ def _prerequisites(*, state_version_id: UUID | None = None) -> H7PrerequisiteSna
     )
 
 
-def test_h7_sections_all_typed_or_unavailable() -> None:
+def test_direction_sections_all_typed_or_unavailable() -> None:
     ev = _evidence(summary="Macro read")
     belief = _belief(evidence=ev, statement="Risk-on")
     loaded = _loaded_state(evidence=(ev,), beliefs=(belief,))
-    ctx = compile_h7_decision_context(
-        H7DecisionContextCompileInput(
+    ctx = compile_direction_decision_context(
+        DirectionDecisionContextCompileInput(
             loaded=loaded,
             prerequisites=_prerequisites(),
             analyst_payloads={_TICKER: {"stance": "buy", "ticker": _TICKER}},
@@ -221,28 +221,30 @@ def test_h7_sections_all_typed_or_unavailable() -> None:
         )
     )
     kinds = {section.kind for section in ctx.sections}
-    assert kinds == set(H7SectionKind)
-    mandate = next(s for s in ctx.sections if s.kind is H7SectionKind.MANDATE)
+    assert kinds == set(DirectionSectionKind)
+    mandate = next(s for s in ctx.sections if s.kind is DirectionSectionKind.MANDATE)
     assert f"analyst:{_TICKER}" in mandate.entity_ids
     assert f"effective_forecast:{_EFFECTIVE_ID}" in mandate.entity_ids
-    matured = next(s for s in ctx.sections if s.kind is H7SectionKind.MATURED_FORECASTS)
+    matured = next(s for s in ctx.sections if s.kind is DirectionSectionKind.MATURED_FORECASTS)
     assert f"forecast_outcome:{_OUTCOME_ID}" in matured.entity_ids
-    unresolved = next(s for s in ctx.sections if s.kind is H7SectionKind.UNRESOLVED_FORECASTS)
+    unresolved = next(
+        s for s in ctx.sections if s.kind is DirectionSectionKind.UNRESOLVED_FORECASTS
+    )
     assert f"effective_forecast:{_EFFECTIVE_ID}" in unresolved.entity_ids
-    contrib = next(s for s in ctx.sections if s.kind is H7SectionKind.CONTRIBUTION_COST)
+    contrib = next(s for s in ctx.sections if s.kind is DirectionSectionKind.CONTRIBUTION_COST)
     assert f"accounting_period:{_ACCOUNTING_ID}" in contrib.entity_ids
-    risk = next(s for s in ctx.sections if s.kind is H7SectionKind.PRE_TRADE_RISK)
-    assert risk.availability is H7SectionAvailability.UNAVAILABLE
+    risk = next(s for s in ctx.sections if s.kind is DirectionSectionKind.PRE_TRADE_RISK)
+    assert risk.availability is DirectionSectionAvailability.UNAVAILABLE
     assert risk.unavailable_reason == "pre_trade_risk_report_not_yet_built_at_h7"
 
 
-def test_h7_enforce_refuses_unversioned_prerequisite_state() -> None:
+def test_direction_enforce_refuses_unversioned_prerequisite_state() -> None:
     ev = _evidence(summary="Macro read")
     loaded = _loaded_state(evidence=(ev,))
     bad = _prerequisites(state_version_id=_OTHER_STATE_ID)
     with pytest.raises(ValueError, match="state_version_id"):
-        compile_h7_decision_context(
-            H7DecisionContextCompileInput(
+        compile_direction_decision_context(
+            DirectionDecisionContextCompileInput(
                 loaded=loaded,
                 prerequisites=bad,
                 enforce_version_pin=True,
@@ -250,12 +252,12 @@ def test_h7_enforce_refuses_unversioned_prerequisite_state() -> None:
         )
 
 
-def test_h7_enforce_refuses_missing_prerequisites() -> None:
+def test_direction_enforce_refuses_missing_prerequisites() -> None:
     ev = _evidence(summary="Macro read")
     loaded = _loaded_state(evidence=(ev,))
-    with pytest.raises(ValueError, match="h7_prerequisite_snapshot"):
-        compile_h7_decision_context(
-            H7DecisionContextCompileInput(
+    with pytest.raises(ValueError, match="direction_prerequisite_snapshot"):
+        compile_direction_decision_context(
+            DirectionDecisionContextCompileInput(
                 loaded=loaded,
                 prerequisites=None,
                 enforce_version_pin=True,
@@ -263,11 +265,11 @@ def test_h7_enforce_refuses_missing_prerequisites() -> None:
         )
 
 
-def test_h7_no_target_weights_in_structured_body() -> None:
+def test_direction_no_target_weights_in_structured_body() -> None:
     ev = _evidence(summary="Macro read")
     loaded = _loaded_state(evidence=(ev,))
-    ctx = compile_h7_decision_context(
-        H7DecisionContextCompileInput(
+    ctx = compile_direction_decision_context(
+        DirectionDecisionContextCompileInput(
             loaded=loaded,
             prerequisites=_prerequisites(),
             analyst_payloads={
@@ -279,10 +281,10 @@ def test_h7_no_target_weights_in_structured_body() -> None:
             focus_roster=(_TICKER,),
         )
     )
-    assert_h7_no_target_weights(ctx.structured_body)
+    assert_direction_no_target_weights(ctx.structured_body)
 
 
-def test_wire_h7_off_leaves_incumbent_inputs(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_wire_direction_off_leaves_incumbent_inputs(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("DIGIQUANT_CONTEXT_COMPILER_MODE", "off")
     ev = _evidence(summary="Macro read")
     loaded = _loaded_state(evidence=(ev,))
@@ -291,17 +293,17 @@ def test_wire_h7_off_leaves_incumbent_inputs(monkeypatch: pytest.MonkeyPatch) ->
         "analyst_payloads": {"AAPL": {"stance": "buy"}},
         "portfolio_performance": {"nav": 100.0},
     }
-    result = wire_h7_phase_inputs(
+    result = wire_direction_phase_inputs(
         incumbent,
         research_state_pin=pin,
         research_state_store=store,
-        h7_prerequisite_snapshot=_prerequisites().model_dump(mode="json"),
+        direction_prerequisite_snapshot=_prerequisites().model_dump(mode="json"),
     )
     assert result.capsule is None
     assert result.phase_inputs == incumbent
 
 
-def test_wire_h7_shadow_records_manifest_and_degraded_flag(
+def test_wire_direction_shadow_records_manifest_and_degraded_flag(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setenv("DIGIQUANT_CONTEXT_COMPILER_MODE", "shadow")
@@ -312,22 +314,24 @@ def test_wire_h7_shadow_records_manifest_and_degraded_flag(
         "analyst_payloads": {"AAPL": {"stance": "buy"}},
         "portfolio_performance": {"nav": 100.0},
     }
-    result = wire_h7_phase_inputs(
+    result = wire_direction_phase_inputs(
         incumbent,
         research_state_pin=pin,
         research_state_store=store,
-        h7_prerequisite_snapshot=None,
+        direction_prerequisite_snapshot=None,
         analyst_payloads={"AAPL": {"stance": "buy"}},
         focus_roster=("AAPL",),
     )
-    assert result.h7_decision_context is not None
+    assert result.direction_decision_context is not None
     assert result.phase_inputs["portfolio_performance"] == incumbent["portfolio_performance"]
     assert "context_capsule_shadow" in result.phase_inputs
-    assert "h7_decision_context_shadow" in result.phase_inputs
-    assert result.phase_inputs.get("h7_context_degraded") == "missing_versioned_prerequisites"
+    assert "direction_decision_context_shadow" in result.phase_inputs
+    assert (
+        result.phase_inputs.get("direction_context_degraded") == "missing_versioned_prerequisites"
+    )
 
 
-def test_wire_h7_enforce_injects_structured_context_without_weights(
+def test_wire_direction_enforce_injects_structured_context_without_weights(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setenv("DIGIQUANT_CONTEXT_COMPILER_MODE", "enforce")
@@ -339,18 +343,18 @@ def test_wire_h7_enforce_injects_structured_context_without_weights(
         "portfolio_performance": {"nav": 100.0},
         "target_pct": 0.12,
     }
-    prereq = H7PrerequisiteSnapshot(
+    prereq = DirectionPrerequisiteSnapshot(
         state_version_id=loaded.version.state_version_id,
         accounting_period_id=_ACCOUNTING_ID,
         accounting_period_content_hash=content_digest({"period": "2026-08-25"}),
         matured_forecast_outcome_ids=(str(_OUTCOME_ID),),
         unresolved_forecast_effective_ids=(_EFFECTIVE_ID,),
     )
-    result = wire_h7_phase_inputs(
+    result = wire_direction_phase_inputs(
         incumbent,
         research_state_pin=pin,
         research_state_store=store,
-        h7_prerequisite_snapshot=prereq.model_dump(mode="json"),
+        direction_prerequisite_snapshot=prereq.model_dump(mode="json"),
         analyst_payloads={"AAPL": {"stance": "buy"}},
         deliberation_summaries={
             "AAPL": {"effective_forecast_id": _EFFECTIVE_ID},
@@ -360,7 +364,9 @@ def test_wire_h7_enforce_injects_structured_context_without_weights(
     assert "portfolio_performance" not in result.phase_inputs
     assert "target_pct" not in result.phase_inputs
     assert "structured_context" in result.phase_inputs
-    assert result.h7_decision_context is not None
+    assert result.direction_decision_context is not None
     assert f"effective_forecast:{_EFFECTIVE_ID}" in next(
-        s.entity_ids for s in result.h7_decision_context.sections if s.kind is H7SectionKind.MANDATE
+        s.entity_ids
+        for s in result.direction_decision_context.sections
+        if s.kind is DirectionSectionKind.MANDATE
     )

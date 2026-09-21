@@ -799,11 +799,11 @@ def simulate_chat_completion(
         if schema == "DebateSummary":
             return _debate_summary_body(ticker=str(inputs.get("ticker", "AAPL")))
         if schema == "CoverageDirective":
-            h4_roster = inputs.get("h4_roster") or []
+            screener_roster = inputs.get("screener_roster") or []
             return {
                 "refresh": [
                     {"ticker": str(row.get("ticker", "")).upper(), "reason": "simulated refresh"}
-                    for row in h4_roster
+                    for row in screener_roster
                     if isinstance(row, dict) and str(row.get("ticker") or "").strip()
                 ],
                 "explore": [],
@@ -1035,14 +1035,12 @@ class SimulationRun:
             deps=chain_deps.portfolio,
         )
         # Slice by phase name, not fixed index — phases insert between H4/H5 (#3739).
-        h5_end = next(
-            i for i, phase in enumerate(phases) if phase.name == "portfolio_h5_asset_analyst"
-        )
+        analyst_end = next(i for i, phase in enumerate(phases) if phase.name == "portfolio_analyst")
         state = _invoke_research_then_portfolio_phases(
             research_input,
             chain_deps,
             self.config_bundle,
-            portfolio_phases=phases[: h5_end + 1],
+            portfolio_phases=phases[: analyst_end + 1],
         )
         return ResearchState.model_validate(state) if isinstance(state, dict) else state
 
@@ -1060,13 +1058,13 @@ class SimulationRun:
             watchlist=list(state.config.watchlist),
             deps=chain_deps.portfolio,
         )
-        h6_start = next(
-            i for i, phase in enumerate(phases) if phase.name == "portfolio_h6_deliberation"
+        deliberation_start = next(
+            i for i, phase in enumerate(phases) if phase.name == "portfolio_deliberation"
         )
         resume = _invoke_portfolio_phases_from(
             state,
             chain_deps,
-            phases[h6_start:],  # H6–H9
+            phases[deliberation_start:],  # H6–H9
         )
         return ResearchState.model_validate(resume) if isinstance(resume, dict) else resume
 
@@ -1220,7 +1218,7 @@ def simulated_pipeline(
         preflight_reflect=(PreflightReflectDeps(client=client) if preflight_reflect else None),
     )
     from digiquant.portfolio.graph import PortfolioGraphDeps, ThesisGraphDeps
-    from digiquant.portfolio.phases.h9_commit_run import CommitRunDeps
+    from digiquant.portfolio.phases.commit import CommitRunDeps
     from digiquant.portfolio.phases.phase7e_risk_sizing import RiskSizingDeps
 
     portfolio_deps = PortfolioGraphDeps(

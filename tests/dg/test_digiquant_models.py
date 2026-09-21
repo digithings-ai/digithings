@@ -586,8 +586,8 @@ def test_no_online_slug_in_any_phase_pool() -> None:
     "slug",
     [
         "portfolio/deliberation-AAPL",  # the regression: was unmapped
-        "h6_pm_challenge-AAPL",
-        "h6_analyst_response-AAPL",
+        "deliberation_pm_challenge-AAPL",
+        "deliberation_analyst_response-AAPL",
         "portfolio/asset-analyst-AAPL",
         "portfolio/pm-direction",
         "sector-technology",
@@ -678,7 +678,7 @@ def test_unresolved_capability_returns_none_under_a_bound_byok_key(
     ``server._LLM_PROBE_ERRORS``, so ``/test_llm`` would 500 instead of degrading. The
     five production callers
     (``research_agent.py``, ``portfolio_common.py``, ``thesis_common.py``,
-    ``h6_deliberation.py``, ``_node_factory.py``) all chain ``or get_model_for_mode()``
+    ``deliberation.py``, ``_node_factory.py``) all chain ``or get_model_for_mode()``
     and expect a value, not a raise.
     """
     from digigraph.llm_auth import pop_byok, push_byok_header

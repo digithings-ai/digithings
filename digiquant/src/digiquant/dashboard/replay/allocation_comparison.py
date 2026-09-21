@@ -41,7 +41,7 @@ FORBIDDEN_IMPORT_PREFIXES: frozenset[str] = frozenset(
     {
         "digiquant.brokers",
         "digiquant.portfolio.writers",
-        "digiquant.portfolio.phases.h9_commit_run",
+        "digiquant.portfolio.phases.commit",
         "digiquant.portfolio.phases.phase7e_risk_sizing",
         "digiquant.research.supabase_io",
         "digiquant.nautilus_runner",
@@ -61,8 +61,8 @@ _FORBIDDEN_CRITERIA_KEYS: frozenset[str] = frozenset(
         "production_config_write",
         "set_live",
         "promote_to_production",
-        "h8_booking",
-        "h9_commit",
+        "sizing_booking",
+        "commit",
     }
 )
 

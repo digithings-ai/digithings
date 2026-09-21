@@ -6,14 +6,14 @@ context into deterministic, risk-managed weights via
 :func:`~digiquant.portfolio.sizing.size_portfolio` — the sole weight owner on the
 thesis-first path (ADR-0020).
 
-**WP8.4 (#2734):** on the memo path, when ``h8_sizing_input_mode=calibrated`` (default)
+**WP8.4 (#2734):** on the memo path, when ``sizing_input_mode=calibrated`` (default)
 and a validated ``AllocationInputBundle`` is present, raw weights come from calibrated
 forecasts (reliability × max(0, μ) / σ_ε). Rank→conviction and fixed-premium Kelly are
 not used on that path. Missing bundle falls back to the characterized incumbent path
 (versioned; never an unversioned hybrid). Downstream controls are unchanged.
 
 **WP-H:** each long's sized weight is then scaled by H7 ``confidence`` (cash-first).
-Missing confidence uses :data:`H8_MISSING_CONFIDENCE_DEFAULT` (0.5), never 1.0.
+Missing confidence uses :data:`SIZING_MISSING_CONFIDENCE_DEFAULT` (0.5), never 1.0.
 
 **H8 inside portfolio graph (PR 4c):** output lands in ``phase_portfolio.sized_book``.
 Legacy chain-terminal invocation may still write ``phase7d_rebalance`` when no memo
@@ -81,13 +81,11 @@ logger = logging.getLogger(__name__)
 _VOL_LOOKBACK_DAYS = 40
 _CONVICTION_FLOOR, _CONVICTION_CAP = -5.0, 5.0
 
-H8_SIZING_INPUT_MODE_CALIBRATED = "calibrated"
-H8_SIZING_INPUT_MODE_INCUMBENT = "incumbent"
+SIZING_INPUT_MODE_CALIBRATED = "calibrated"
+SIZING_INPUT_MODE_INCUMBENT = "incumbent"
 # Fail-soft when H7 omits ``confidence``: conservative half-size, never treat as 1.0.
-H8_MISSING_CONFIDENCE_DEFAULT = 0.5
-_H8_SIZING_INPUT_MODES = frozenset(
-    {H8_SIZING_INPUT_MODE_CALIBRATED, H8_SIZING_INPUT_MODE_INCUMBENT}
-)
+SIZING_MISSING_CONFIDENCE_DEFAULT = 0.5
+_SIZING_INPUT_MODES = frozenset({SIZING_INPUT_MODE_CALIBRATED, SIZING_INPUT_MODE_INCUMBENT})
 _SIZING_RATIONALE_FALLBACK = "Position weight set by deterministic risk sizing."
 _MAX_ACTION_RATIONALE_LEN = 2000
 
@@ -114,23 +112,23 @@ def _clamp_conviction(value: float) -> float:
     return max(_CONVICTION_FLOOR, min(_CONVICTION_CAP, value))
 
 
-def resolve_h8_sizing_input_mode(preferences: Mapping[str, Any]) -> str:
+def resolve_sizing_input_mode(preferences: Mapping[str, Any]) -> str:
     """Versioned H8 raw-input mode. Unknown values fall back to calibrated (Gate 2)."""
-    raw = preferences.get("h8_sizing_input_mode", H8_SIZING_INPUT_MODE_CALIBRATED)
-    mode = str(raw).strip().lower() if raw is not None else H8_SIZING_INPUT_MODE_CALIBRATED
-    if mode not in _H8_SIZING_INPUT_MODES:
-        return H8_SIZING_INPUT_MODE_CALIBRATED
+    raw = preferences.get("sizing_input_mode", SIZING_INPUT_MODE_CALIBRATED)
+    mode = str(raw).strip().lower() if raw is not None else SIZING_INPUT_MODE_CALIBRATED
+    if mode not in _SIZING_INPUT_MODES:
+        return SIZING_INPUT_MODE_CALIBRATED
     return mode
 
 
 def pm_confidence_scale(confidence: float | None) -> float:
     """Map H7 confidence to an H8 size multiplier in [0, 1].
 
-    Missing confidence uses :data:`H8_MISSING_CONFIDENCE_DEFAULT` (0.5). Never treat
+    Missing confidence uses :data:`SIZING_MISSING_CONFIDENCE_DEFAULT` (0.5). Never treat
     an omitted field as full size (1.0).
     """
     if confidence is None:
-        return H8_MISSING_CONFIDENCE_DEFAULT
+        return SIZING_MISSING_CONFIDENCE_DEFAULT
     return max(0.0, min(1.0, float(confidence)))
 
 
@@ -139,7 +137,7 @@ def confidence_scales_from_memo(memo: PMDirectionMemo) -> dict[str, float] | Non
 
     When **every** long omits ``confidence`` (pre-WP-G memos), return ``None`` so H8
     does not silently haircut the book. When any long has a value, omitted rows use
-    :data:`H8_MISSING_CONFIDENCE_DEFAULT` (0.5), never 1.0.
+    :data:`SIZING_MISSING_CONFIDENCE_DEFAULT` (0.5), never 1.0.
     """
     longs = [
         entry for entry in memo.roster if entry.direction == "long" and not _is_cash(entry.ticker)
@@ -156,7 +154,7 @@ def calibrated_scores_from_bundle(
     *,
     long_tickers: list[str],
 ) -> dict[str, float]:
-    """Map H7-authorized longs to WP8.4 raw scores; degraded/negative → omitted.
+    """Map direction-authorized longs to WP8.4 raw scores; degraded/negative → omitted.
 
     Missing or non-available calibrated slices receive no new risk (cash/safety).
     """
@@ -223,7 +221,7 @@ def _memo_effective_inputs(
     _analysts: dict[str, dict[str, Any]],
     default_conviction: float,
 ) -> tuple[dict[str, float], dict[str, str]]:
-    """Per H7-authorized long: conviction from dense rank; stance is not H5-gated."""
+    """Per direction-authorized long: conviction from dense rank; stance is not analyst-gated."""
     long_entries = [entry for entry in memo.roster if entry.direction == "long"]
     n_long = len(long_entries)
     floor = max(default_conviction, 2.0)
@@ -549,7 +547,7 @@ def _held_carry_weights(state: ResearchState) -> dict[str, float]:
     that silently froze **every** delta-day commit from 2026-06-26 (#1555) and again
     on 2026-07-21/22 (#1649):
 
-    - H4-gated: the staleness gate moved a quiet held name into
+    - screener-gated: the staleness gate moved a quiet held name into
       ``focus_roster_excluded`` (no fresh analyst, absent from the H7 PM memo).
     - Memo-unaddressed (#1649): the H7 PM memo's roster omitted a held name
       entirely (neither ``long`` nor ``flat``) — memo coverage is LLM discipline,
@@ -637,7 +635,7 @@ def _apply_held_continuity_backstop(
                         adjustment_type=SizingAdjustmentType.FLAT_EXIT,
                         original_pct=_drifted_weight(state, ticker) or 0.0,
                         adjusted_pct=0.0,
-                        reason="H7-flat: held position honored as exit, never resurrected",
+                        reason="direction-flat: held position honored as exit, never resurrected",
                     )
                 )
             continue
@@ -723,7 +721,7 @@ def _lineage_materiality_pct(preferences: Mapping[str, Any]) -> float:
     return no_trade_band_pp(widest_current, dict(preferences)) if widest_current > 0 else threshold
 
 
-def _validate_h8_lineage(
+def _validate_sizing_lineage(
     pm_targets: dict[str, float],
     sized_book: RebalancePayload,
     preferences: Mapping[str, Any],
@@ -782,7 +780,7 @@ def _build_sized_book(
 
     Third element is the WP8.3 shadow ``AllocationInputBundle`` (or ``None``).
     """
-    from digiquant.portfolio.h8_risk_snapshots import resolve_h8_risk_artifacts
+    from digiquant.portfolio.sizing_risk_snapshots import resolve_sizing_risk_artifacts
 
     caps = SizingCaps.from_preferences(state.config.preferences)
     memo = state.phase_portfolio.pm_direction_memo
@@ -819,7 +817,7 @@ def _build_sized_book(
     # WP6.3 (#2698): resolve incumbent policy + covariance snapshot before sizing.
     # Audit-only in Phase 1 — incumbent ``size_portfolio`` inputs stay unchanged.
     # #2803: resolver always returns typed artifacts (unavailable on failure).
-    risk_artifacts = resolve_h8_risk_artifacts(
+    risk_artifacts = resolve_sizing_risk_artifacts(
         state=state,
         pm_tickers=pm_tickers,
         corr=corr_frame,
@@ -849,7 +847,7 @@ def _build_sized_book(
             if bundle_tickers == sorted(pm_tickers):
                 bundle_covariance = risk_artifacts.covariance_snapshot
             else:
-                bundle_covariance = resolve_h8_risk_artifacts(
+                bundle_covariance = resolve_sizing_risk_artifacts(
                     state=state,
                     pm_tickers=bundle_tickers,
                     corr=corr_frame,
@@ -867,18 +865,18 @@ def _build_sized_book(
             logger.warning("phase7e: allocation input bundle failed (%s); continuing", exc)
             allocation_bundle = None
 
-    input_mode = resolve_h8_sizing_input_mode(state.config.preferences)
+    input_mode = resolve_sizing_input_mode(state.config.preferences)
     calibrated_scores: dict[str, float] | None = None
-    sizing_mode_label = H8_SIZING_INPUT_MODE_INCUMBENT
+    sizing_mode_label = SIZING_INPUT_MODE_INCUMBENT
     if (
         memo is not None
-        and input_mode == H8_SIZING_INPUT_MODE_CALIBRATED
+        and input_mode == SIZING_INPUT_MODE_CALIBRATED
         and allocation_bundle is not None
     ):
         candidate_scores = calibrated_scores_from_bundle(allocation_bundle, long_tickers=pm_tickers)
         if candidate_scores:
             calibrated_scores = candidate_scores
-            sizing_mode_label = H8_SIZING_INPUT_MODE_CALIBRATED
+            sizing_mode_label = SIZING_INPUT_MODE_CALIBRATED
         else:
             # Owner-approved degraded fallback: no AVAILABLE positive-alpha slice →
             # characterized incumbent path (never an unversioned hybrid / silent all-cash).
@@ -887,7 +885,7 @@ def _build_sized_book(
                 "phase7e: calibrated sizing requested but no usable calibrated scores; "
                 "falling back to characterized incumbent rank→conviction path"
             )
-    elif memo is not None and input_mode == H8_SIZING_INPUT_MODE_CALIBRATED:
+    elif memo is not None and input_mode == SIZING_INPUT_MODE_CALIBRATED:
         sizing_mode_label = "incumbent_fallback"
         logger.warning(
             "phase7e: calibrated sizing requested but AllocationInputBundle unavailable; "
@@ -1017,7 +1015,7 @@ def _build_sized_book(
         # pre-cap map so ledger requested_weight can differ from approved.
         "adjustments": [event.model_dump() for event in events],
         "requested_pct": dict(result.requested_pct),
-        "h8_sizing_input_mode": sizing_mode_label,
+        "sizing_input_mode": sizing_mode_label,
     }
     if bundle_hash is not None:
         updated["allocation_input_bundle_hash"] = bundle_hash
@@ -1354,9 +1352,9 @@ def build_risk_sizing_node(deps: RiskSizingDeps):
         # #2417 §6: unexplained-delta lineage check, layered on top of (not inside)
         # _build_sized_book's own fail-soft try/except — logs and continues, never
         # affects the already-computed sized_book. The memo path's pm_targets are
-        # membership flags, not weights (see _validate_h8_lineage docstring), so the
+        # membership flags, not weights (see _validate_sizing_lineage docstring), so the
         # comparison only runs for the legacy phase7d_rebalance path.
-        _validate_h8_lineage(
+        _validate_sizing_lineage(
             pm_targets,
             sized_book,
             state.config.preferences,
@@ -1404,15 +1402,15 @@ def build_risk_sizing_phase(deps: RiskSizingDeps) -> PipelinePhase:
     from digigraph.graph.pipeline_builder import NodeSpec, PipelinePhase
 
     return PipelinePhase(
-        name="portfolio_h8_risk_sizing",
+        name="portfolio_sizing_risk_sizing",
         nodes=[NodeSpec(name="portfolio/risk-sizing", run=build_risk_sizing_node(deps))],
     )
 
 
 __all__ = [
-    "H8_MISSING_CONFIDENCE_DEFAULT",
-    "H8_SIZING_INPUT_MODE_CALIBRATED",
-    "H8_SIZING_INPUT_MODE_INCUMBENT",
+    "SIZING_MISSING_CONFIDENCE_DEFAULT",
+    "SIZING_INPUT_MODE_CALIBRATED",
+    "SIZING_INPUT_MODE_INCUMBENT",
     "RiskSizingDeps",
     "build_pretrade_risk_report_for_final_book",
     "build_risk_sizing_node",
@@ -1420,5 +1418,5 @@ __all__ = [
     "calibrated_scores_from_bundle",
     "confidence_scales_from_memo",
     "pm_confidence_scale",
-    "resolve_h8_sizing_input_mode",
+    "resolve_sizing_input_mode",
 ]

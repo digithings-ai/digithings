@@ -20,7 +20,9 @@ from unittest.mock import patch
 from uuid import UUID
 
 import pytest
-from digiquant.dashboard.research_retrieval.h6_amendment import H6AmendmentOutcome
+from digiquant.dashboard.research_retrieval.deliberation_amendment import (
+    DeliberationAmendmentOutcome,
+)
 from digiquant.dashboard.research_retrieval.store import EvidenceBundleStore
 from digiquant.portfolio.graph import PortfolioGraphDeps, ThesisGraphDeps
 from digiquant.portfolio.models.deliberation import (
@@ -116,7 +118,7 @@ class TestSimulatorContract:
         from digiquant.research.testing.simulator import simulate_chat_completion
 
         inputs = {
-            "h4_roster": [
+            "screener_roster": [
                 {"ticker": "AAPL", "roster_reason": "held"},
                 {"ticker": "MSFT", "roster_reason": "thesis_mapped"},
             ]
@@ -407,19 +409,19 @@ class TestDurableH5H6LineageRoundTrip:
         ) as run:
             with (
                 patch(
-                    "digiquant.portfolio.phases.h6_deliberation.run_research_agent",
+                    "digiquant.portfolio.phases.deliberation.run_research_agent",
                     side_effect=fake_research_agent,
                 ),
                 patch(
-                    "digiquant.portfolio.phases.h6_deliberation.build_grounding",
+                    "digiquant.portfolio.phases.deliberation.build_grounding",
                     side_effect=_grounding_with_search_flag,
                 ),
             ):
                 after_h5 = run.invoke_through_h5(research_input)
 
-            h5_snapshot = store.dump_snapshot()
+            analyst_snapshot = store.dump_snapshot()
             checkpoint_json = after_h5.model_dump_json()
-            reloaded_store = EvidenceBundleStore.from_snapshot(h5_snapshot)
+            reloaded_store = EvidenceBundleStore.from_snapshot(analyst_snapshot)
             checkpoint_state = ResearchState.model_validate_json(checkpoint_json)
 
             assert len(reloaded_store._bases) >= 1
@@ -449,11 +451,11 @@ class TestDurableH5H6LineageRoundTrip:
 
             with (
                 patch(
-                    "digiquant.portfolio.phases.h6_deliberation.run_research_agent",
+                    "digiquant.portfolio.phases.deliberation.run_research_agent",
                     side_effect=fake_research_agent,
                 ),
                 patch(
-                    "digiquant.portfolio.phases.h6_deliberation.build_grounding",
+                    "digiquant.portfolio.phases.deliberation.build_grounding",
                     side_effect=_grounding_with_search_flag,
                 ),
             ):
@@ -464,10 +466,13 @@ class TestDurableH5H6LineageRoundTrip:
 
         aapl = final.phase_portfolio.deliberation_summaries["AAPL"]
         msft = final.phase_portfolio.deliberation_summaries["MSFT"]
-        assert aapl.get("evidence_amendment_outcome") == H6AmendmentOutcome.ACCEPTED.value
+        assert aapl.get("evidence_amendment_outcome") == DeliberationAmendmentOutcome.ACCEPTED.value
         assert aapl.get("evidence_amendment_id")
         assert aapl.get("missing_fact_request_id")
-        assert msft.get("evidence_amendment_outcome") == H6AmendmentOutcome.INVALID_REQUEST.value
+        assert (
+            msft.get("evidence_amendment_outcome")
+            == DeliberationAmendmentOutcome.INVALID_REQUEST.value
+        )
         assert msft.get("evidence_amendment_failure_reason") == "claim_id_not_in_base_bundle"
 
         aapl_bundle_id = UUID(str(aapl["base_bundle_id"]))
@@ -475,9 +480,9 @@ class TestDurableH5H6LineageRoundTrip:
         assert base_hash == final.phase_portfolio.ticker_evidence_bundles["AAPL"]["content_hash"]
         assert reloaded_store.amendment_count_for_base(aapl_bundle_id) == 1
 
-        post_h6_snapshot = reloaded_store.dump_snapshot()
-        roundtrip_store = EvidenceBundleStore.from_snapshot(post_h6_snapshot)
-        assert roundtrip_store.lineage_bytes() == post_h6_snapshot
+        post_deliberation_snapshot = reloaded_store.dump_snapshot()
+        roundtrip_store = EvidenceBundleStore.from_snapshot(post_deliberation_snapshot)
+        assert roundtrip_store.lineage_bytes() == post_deliberation_snapshot
         assert roundtrip_store.lineage_bytes() != prior_lineage
         assert len(roundtrip_store._amendments) >= 1
         assert roundtrip_store.unlinked_amendment_count() == 0
@@ -489,7 +494,7 @@ class TestPhase3ResearchComposition:
 
     def test_simulator_graphs_exclude_planner_nodes(self) -> None:
         from digiquant.portfolio.graph import build_portfolio_graph
-        from digiquant.portfolio.phases.h9_commit_run import CommitRunDeps
+        from digiquant.portfolio.phases.commit import CommitRunDeps
         from digiquant.portfolio.phases.phase7e_risk_sizing import RiskSizingDeps
         from digiquant.research.graph import ResearchGraphDeps, build_research_graph
         from digiquant.research.phases.preflight import PreflightDeps

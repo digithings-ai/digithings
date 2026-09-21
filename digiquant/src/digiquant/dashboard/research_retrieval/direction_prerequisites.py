@@ -7,7 +7,9 @@ from datetime import date, datetime
 from typing import Any  # score:allow untyped any — scored-lint: heterogeneous dict / client shapes
 from uuid import UUID
 
-from digiquant.dashboard.research_retrieval.h7_decision_context import H7PrerequisiteSnapshot
+from digiquant.dashboard.research_retrieval.direction_decision_context import (
+    DirectionPrerequisiteSnapshot,
+)
 from digiquant.dashboard.temporal import require_utc_datetime
 from digiquant.research.forecast_outcomes import (
     ForecastOutcomeIntegrityError,
@@ -58,7 +60,7 @@ def _load_latest_accounting_period(
     return period_id, str(content_hash)
 
 
-def build_h7_prerequisite_snapshot(
+def build_direction_prerequisite_snapshot(
     *,
     client: SupabaseClient | None,
     run_date: date,
@@ -66,7 +68,7 @@ def build_h7_prerequisite_snapshot(
     research_state_pin: dict[str, object] | None,
     prior_effective_forecast_ids: tuple[str, ...] = (),
     outcome_lesson_pin: dict[str, object] | None = None,
-) -> H7PrerequisiteSnapshot | None:
+) -> DirectionPrerequisiteSnapshot | None:
     """Pin versioned WP3/WP5/WP15 inputs for H7 context compile at preflight."""
     state_version_id: UUID | None = None
     if isinstance(research_state_pin, dict):
@@ -120,7 +122,7 @@ def build_h7_prerequisite_snapshot(
     ):
         return None
 
-    return H7PrerequisiteSnapshot(
+    return DirectionPrerequisiteSnapshot(
         state_version_id=state_version_id,
         accounting_period_id=accounting_period_id,
         accounting_period_content_hash=accounting_period_content_hash,
@@ -133,4 +135,4 @@ def build_h7_prerequisite_snapshot(
     )
 
 
-__all__ = ["build_h7_prerequisite_snapshot"]
+__all__ = ["build_direction_prerequisite_snapshot"]

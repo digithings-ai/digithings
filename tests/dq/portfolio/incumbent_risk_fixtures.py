@@ -14,7 +14,7 @@ from typing import Any  # score:allow untyped any — scored-lint: heterogeneous
 
 from digiquant.portfolio.sizing import SizingResult
 
-FIXTURE_PATH = Path(__file__).resolve().parent / "fixtures" / "incumbent_h8_risk_policy.json"
+FIXTURE_PATH = Path(__file__).resolve().parent / "fixtures" / "incumbent_sizing_risk_policy.json"
 
 
 def load_incumbent_risk_fixture() -> dict[str, Any]:

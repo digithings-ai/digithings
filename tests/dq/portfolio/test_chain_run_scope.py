@@ -111,12 +111,12 @@ def test_fanout_ticker_reads_back_the_send_cursor() -> None:
     assert fanout_ticker(with_fanout_ticker(state, "GLD")) == "GLD"
 
 
-def test_h5_and_h6_fanouts_declare_the_telemetry_discriminator() -> None:
+def test_analyst_and_deliberation_fanouts_declare_the_telemetry_discriminator() -> None:
     """Without `item_key` the H5/H6 workers would record `fanout_key=None` for every ticker."""
     from digiquant.portfolio.focus_roster import fanout_ticker
-    from digiquant.portfolio.phases import h5_asset_analyst, h6_deliberation
+    from digiquant.portfolio.phases import analyst, deliberation
 
-    h5 = h5_asset_analyst.build_h5_from_state(client=None)
-    h6 = h6_deliberation.build_h6_from_state()
+    h5 = analyst.build_analyst_from_state(client=None)
+    h6 = deliberation.build_deliberation_from_state()
     assert h5.item_key is fanout_ticker
     assert h6.item_key is fanout_ticker

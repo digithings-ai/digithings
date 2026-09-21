@@ -662,7 +662,7 @@ def build_materialize_node(deps: MaterializeDeps):
         # written the date. A re-dispatch after the engine step must not
         # clobber that value with a provisional recompute, so an existing
         # house row for this date keeps its stored NAV — fail-closed toward
-        # the engine. H9-owned ``cash_pct`` / ``invested_pct`` are still
+        # the engine. commit-owned ``cash_pct`` / ``invested_pct`` are still
         # refreshed so they track the just-booked weights. ``positions`` below
         # still book normally.
         existing_nav = load_nav_history_row(client, run_date)

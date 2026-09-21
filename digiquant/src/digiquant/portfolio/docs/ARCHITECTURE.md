@@ -40,15 +40,15 @@ cannot send house mail. Missing notify env logs and returns.
 
 | Step | Node | Module | Edit behavior | Output |
 |------|------|--------|---------------|--------|
-| **H1** | `portfolio/thesis/market-review` | `phases/h1_thesis_review.py` | `edit` active market theses | `theses` rows + `documents.document_key=thesis/thesis-review`. Consumes `digest_briefing_for_portfolio` (`date` / `body` / `regime_label`), not DigestSnapshot JSON findings. |
-| **H2** | `portfolio/thesis/market-exploration` | `phases/h2_market_thesis_exploration.py` | `edit` exploration doc | market thesis proposals |
-| **H3** | `portfolio/thesis/vehicle-map` | `phases/h3_thesis_vehicle_map.py` | `full`/`edit` | `thesis_vehicles` |
-| **H4** | `portfolio/thesis/opportunity-screener` | `phases/h4_opportunity_screener.py` | deterministic | focus roster (held + mapped + unlinked), capped by a **regime-adaptive budget**; publishes `documents.document_key=opportunity-screener` (`doc_type` `opportunity_screen`) |
-| **H5** | `portfolio/asset-analyst` (×N) | `phases/h5_asset_analyst.py` | `skip`/`edit`/`full` per ticker | unified `AnalystPayload` + WP11.2 `ticker_evidence_bundles` (base build before provider; cite on new forecasts; optional `PortfolioGraphDeps.evidence_bundle_store` append when injected; `DIGIQUANT_EVIDENCE_BUNDLE_WRITER=off` kill switch) |
-| **H6** | `portfolio/deliberation` (×N) | `phases/h6_deliberation.py` | cyclic PM↔analyst sub-graph; WP11.3 `H6Selection` (`DIGIQUANT_H6_SELECTION_MODE`); WP11.4 bounded missing-fact amendment via shared `evidence_bundle_store` | `deliberation_transcript` + summary (+ amendment/carry provenance) |
-| **H7** | `portfolio/pm-direction` | `phases/h7_pm_direction.py` | `edit` prior memo | `PMDirectionMemo` — **no weights**; optional `confidence` ∈ [0, 1] |
+| **H1** | `portfolio/thesis/market-review` | `phases/thesis.py` | `edit` active market theses | `theses` rows + `documents.document_key=thesis/thesis-review`. Consumes `digest_briefing_for_portfolio` (`date` / `body` / `regime_label`), not DigestSnapshot JSON findings. |
+| **H2** | `portfolio/thesis/market-exploration` | `phases/market.py` | `edit` exploration doc | market thesis proposals |
+| **H3** | `portfolio/thesis/vehicle-map` | `phases/vehicle_map.py` | `full`/`edit` | `thesis_vehicles` |
+| **H4** | `portfolio/thesis/opportunity-screener` | `phases/screener.py` | deterministic | focus roster (held + mapped + unlinked), capped by a **regime-adaptive budget**; publishes `documents.document_key=opportunity-screener` (`doc_type` `opportunity_screen`) |
+| **H5** | `portfolio/asset-analyst` (×N) | `phases/analyst.py` | `skip`/`edit`/`full` per ticker | unified `AnalystPayload` + WP11.2 `ticker_evidence_bundles` (base build before provider; cite on new forecasts; optional `PortfolioGraphDeps.evidence_bundle_store` append when injected; `DIGIQUANT_EVIDENCE_BUNDLE_WRITER=off` kill switch) |
+| **H6** | `portfolio/deliberation` (×N) | `phases/deliberation.py` | cyclic PM↔analyst sub-graph; WP11.3 `DeliberationSelection` (`DIGIQUANT_H6_SELECTION_MODE`); WP11.4 bounded missing-fact amendment via shared `evidence_bundle_store` | `deliberation_transcript` + summary (+ amendment/carry provenance) |
+| **H7** | `portfolio/pm-direction` | `phases/direction.py` | `edit` prior memo | `PMDirectionMemo` — **no weights**; optional `confidence` ∈ [0, 1] |
 | **H8** | `portfolio/risk-sizing` | `phases/phase7e_risk_sizing.py` | no LLM | `phase_portfolio.sized_book` (sole weight owner; calibrated μ/σ × PM confidence) |
-| **H9** | `portfolio/commit-run` | `phases/h9_commit_run.py` | no LLM | positions, nav, brief, `decision_log` |
+| **H9** | `portfolio/commit-run` | `phases/commit.py` | no LLM | positions, nav, brief, `decision_log` |
 
 **Pre-trade risk report (#2742 / WP9.1, #2746 / WP9.2, #2750 / WP9.3):** `portfolio/allocation_contracts.py`
 defines frozen `PreTradeRiskReport` (metric leaves with provenance or typed
@@ -183,7 +183,7 @@ Legacy `build_portfolio_phases` aliases the thesis path. **Removed from graph:**
 
 ## H4 dispatch budget (regime-adaptive, Stage 2 — #1043 / #1017)
 
-`_h4_node` calls `budget_controller.assess_budget(state, client, static_cap)` to size the
+`_screener_node` calls `budget_controller.assess_budget(state, client, static_cap)` to size the
 analyst roster instead of relying solely on the static `DIGIQUANT_MAX_ANALYSTS`. A deterministic
 classifier (`budget_controller.py`) maps three signals research already produces — VIX
 term-structure state, market breadth (`pct_above_50dma`), and cross-sectional return
@@ -223,7 +223,7 @@ Two consequences, both deliberate:
 
 - **Thesis vehicles are prioritised, not exempt.** `held=` is the prior book only;
   thesis-mapped tickers go in as `candidate_priority`, a **round-robin across theses by
-  within-thesis rank** (`h4_opportunity_screener.thesis_priority_order`). Output order
+  within-thesis rank** (`screener.thesis_priority_order`). Output order
   still follows the watchlist — priority decides *which* candidates survive, not the
   dispatch order. A vehicle the cap drops gets a `focus_roster_excluded` row naming the
   cap, so the drop is recorded rather than silent.
@@ -270,8 +270,8 @@ must never imply #1 = largest weight.
 
 Per-ticker cyclic sub-graph (not a single LLM call):
 
-- `h6_pm_challenge` — PM challenges analyst doc; may emit `converged=true`
-- `h6_analyst_response` — analyst answers in meeting prose (not a second H5 report)
+- `deliberation_pm_challenge` — PM challenges analyst doc; may emit `converged=true`
+- `deliberation_analyst_response` — analyst answers in meeting prose (not a second H5 report)
 
 Skills: PM loads `deliberation` (`skills/deliberation/deliberation-full.md`). The
 analyst reply loads `deliberation-analyst-response`
@@ -288,7 +288,7 @@ quiet (#925): `skip` — carry prior deliberation summary into H7; fresh
 
 ### Deterministic selection — WP11.3 (#2902)
 
-`research_retrieval/planner.py` emits typed `H6Selection` (one primary reason,
+`research_retrieval/planner.py` emits typed `DeliberationSelection` (one primary reason,
 decision features, provider/round budget) from structured features after H5:
 decision-boundary, conflict, uncertainty, invalidation-risk, material weight, or
 exploration → `select`; otherwise `low_value_carry`. Modes via
@@ -319,7 +319,7 @@ floor; H4 output is byte-identical across modes.
 | H6 | Re-route after H5 features: `challenge` runs deliberation; other modes carry with `attention_carry` |
 
 Plan persists to `portfolio_research_attention_plan` + shared `AttentionStore`.
-Coexists with WP11.3 `H6Selection` — attention enforce takes precedence when both
+Coexists with WP11.3 `DeliberationSelection` — attention enforce takes precedence when both
 apply. Rollback: `off`/`shadow`.
 
 ### Role context compiler — WP14.1 (#2938)
@@ -338,7 +338,7 @@ H6 no longer runs generic ``live_search`` web grounding. When the PM names exact
 one missing fact via ``MissingFactProposal`` on ``DeliberationPmTurn``, portfolio may
 attempt a single targeted ``query_research`` fetch (blinded by ``source_kind``) and
 append ``MissingFactRequest`` + ``EvidenceBundleAmendment`` through
-``research_retrieval/h6_amendment.py``. Policy cap: one amendment per base bundle;
+``research_retrieval/deliberation_amendment.py``. Policy cap: one amendment per base bundle;
 invalid/exhausted/failed attempts record ``evidence_amendment_outcome`` /
 ``evidence_amendment_failure_reason`` on ``DeliberationSummary`` and continue with
 the immutable H5 base — never broad re-grounding.
@@ -373,7 +373,7 @@ Consequences of `llm_failure`, all downstream of the flag:
   it *larger*. Correlation de-dup can still drop a capped leg in favour of a challenged one
   — intended. The book note names every capped position.
 
-The `PhaseError` shape (`phase="portfolio_h6_deliberation"`, message prefix `deliberation LLM
+The `PhaseError` shape (`phase="portfolio_deliberation"`, message prefix `deliberation LLM
 failed`) is unchanged — research's portfolio-density degraded gate counts phases, not messages.
 Not yet propagated: `supabase_io._slim_deliberation_summary` drops `carry_reason`, so a
 crash carry looks benign to the *next* day's fingerprint-skip carry.
@@ -415,7 +415,7 @@ shared with the legacy `portfolio_materialize` path so both writers persist iden
 H8's carry injection (`phase7e_risk_sizing._held_carry_weights`) and H9's exemption, so
 the two can never diverge — covers:
 
-- **H4-gated** (#1030/#1555): the staleness gate moves a quiet held name into
+- **screener-gated** (#1030/#1555): the staleness gate moves a quiet held name into
   `focus_roster_excluded` and dispatches no analyst, so it never reaches the H7 memo.
 - **Memo-unaddressed** (#1649): the H7 memo's roster omits a held name entirely (neither
   `long` nor `flat`). Memo coverage is LLM discipline — the pm-direction skill demands
@@ -538,7 +538,7 @@ legacy `portfolio_materialize`) read the existing `nav_history` row for
 `(workspace, run_date)` first (`research.supabase_io.load_nav_history_row`,
 workspace-pinned per house book scope). When a row with a non-null NAV already
 exists — i.e. the engine step already wrote this date — the stored NAV is kept
-and only the H9-owned `cash_pct` / `invested_pct` are refreshed (with a
+and only the commit-owned `cash_pct` / `invested_pct` are refreshed (with a
 warning), so a conflicting same-day re-book cannot leave them stale behind
 new `positions`. `positions` pruning/booking still runs; only the NAV value
 is guarded. A same-date re-commit *before* the engine step still writes the
@@ -559,7 +559,7 @@ proposing a backfill. Verified against the live `core` project on 2026-08-01:
   post-gap book: 07-17.
 - 22 `atlas_run_diagnostics` rows cover that window and **18 of them report `status='ok'`**.
   All 18 carry the H9 coherence check (1) failure in `error_summary`:
-  `portfolio_h9_commit_run/portfolio/commit-run: held ticker <T> missing from book and not
+  `portfolio_commit/portfolio/commit-run: held ticker <T> missing from book and not
   flat in H7` (EWT on most dates; EWT, IJR, UUP and TLT by 07-16). Grep production for **that
   message**, not for the word "coherence" — the literal string `coherence` appears in zero rows,
   and no `error_summary` in the window comes close to the 2000-char cap, so nothing was
@@ -676,9 +676,9 @@ Three holes are closed:
 3. **portfolio reasoning failures are counted, not just logged.** H6 degrades one ticker per
    failure and carries the analyst stance forward, so 31 of 39 dead deliberations left every
    segment "fresh" and the run "ok". `diagnostics._portfolio_deliberation_health` counts errors
-   in the five portfolio phases (`phase_portfolio`, `portfolio_h6_deliberation`,
-   `portfolio_h7_pm_direction`, `phase7d_pm`, `phase9_evolution`) over
-   `phase_portfolio.deliberation_summaries`. `portfolio_h9_commit_run` is **excluded** — it is
+   in the five portfolio phases (`phase_portfolio`, `portfolio_deliberation`,
+   `portfolio_direction`, `phase7d_pm`, `phase9_evolution`) over
+   `phase_portfolio.deliberation_summaries`. `portfolio_commit` is **excluded** — it is
    already gated by #1555 and must not be double-counted.
 
 **Adding a `breakdown` key?** Do not edit `diagnostics._segment_counts`. Write a contributor

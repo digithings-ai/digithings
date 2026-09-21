@@ -28,7 +28,7 @@ digiquant/src/digiquant/portfolio/
 ├── graph.py                 ← build_portfolio_phases_thesis / build_portfolio_graph
 ├── chain.py                 ← run_research_then_portfolio (cron entry)
 ├── phases/
-│   ├── h1_thesis_review.py … h9_commit_run.py
+│   ├── thesis.py … commit.py
 │   └── phase7e_risk_sizing.py   ← H8
 ├── skills/                  ← thesis, asset-analyst, deliberation, pm-direction, …
 └── docs/                    ← this directory

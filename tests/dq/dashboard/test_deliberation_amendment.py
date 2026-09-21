@@ -11,14 +11,14 @@ from datetime import UTC, datetime, timedelta
 from uuid import UUID
 
 import pytest
-from digiquant.dashboard.research_retrieval.evidence_bundle import build_h5_evidence_bundle
-from digiquant.dashboard.research_retrieval.h6_amendment import (
-    H6_AMENDMENT_POLICY_MAX_PER_BASE,
-    H6AmendmentOutcome,
-    attempt_h6_evidence_amendment,
+from digiquant.dashboard.research_retrieval.deliberation_amendment import (
+    DELIBERATION_AMENDMENT_POLICY_MAX_PER_BASE,
+    DeliberationAmendmentOutcome,
+    attempt_deliberation_evidence_amendment,
     document_key_for_source_kind,
     validate_missing_fact_proposal,
 )
+from digiquant.dashboard.research_retrieval.evidence_bundle import build_analyst_evidence_bundle
 from digiquant.dashboard.research_retrieval.models import (
     TypedProvenance,
     missing_fact_request_content_hash,
@@ -39,10 +39,10 @@ _PROV = TypedProvenance(
 
 
 def _base_bundle(*, evidence_count: int = 1):
-    from digiquant.dashboard.research_retrieval.evidence_bundle import H5EvidenceFact
+    from digiquant.dashboard.research_retrieval.evidence_bundle import AnalystEvidenceFact
 
     facts = tuple(
-        H5EvidenceFact(
+        AnalystEvidenceFact(
             source=f"src-{index}",
             authority="analyst_doc",
             summary=f"fact {index}",
@@ -52,7 +52,7 @@ def _base_bundle(*, evidence_count: int = 1):
         )
         for index in range(evidence_count)
     )
-    built = build_h5_evidence_bundle(
+    built = build_analyst_evidence_bundle(
         ticker="AAPL",
         source_run_id="run-h6-amend",
         attempt_id="attempt-1",
@@ -124,7 +124,7 @@ def test_successful_amendment_links_request_evidence_and_amendment() -> None:
             }
         )
 
-    result = attempt_h6_evidence_amendment(
+    result = attempt_deliberation_evidence_amendment(
         proposal=proposal,
         base_bundle=bundle,
         ticker="AAPL",
@@ -133,7 +133,7 @@ def test_successful_amendment_links_request_evidence_and_amendment() -> None:
         recorded_at=_TS,
         provenance=_PROV,
     )
-    assert result.outcome is H6AmendmentOutcome.ACCEPTED
+    assert result.outcome is DeliberationAmendmentOutcome.ACCEPTED
     assert result.base_content_hash == bundle.content_hash
     assert result.missing_fact_request is not None
     assert result.amendment is not None
@@ -152,7 +152,7 @@ def test_policy_cap_refuses_second_amendment() -> None:
     def execute_tool(_name: str, _args: dict[str, object]) -> str:
         return json.dumps({"payload": {"body": "supplement"}})
 
-    first = attempt_h6_evidence_amendment(
+    first = attempt_deliberation_evidence_amendment(
         proposal=proposal,
         base_bundle=bundle,
         ticker="AAPL",
@@ -161,8 +161,8 @@ def test_policy_cap_refuses_second_amendment() -> None:
         recorded_at=_TS,
         provenance=_PROV,
     )
-    assert first.outcome is H6AmendmentOutcome.ACCEPTED
-    second = attempt_h6_evidence_amendment(
+    assert first.outcome is DeliberationAmendmentOutcome.ACCEPTED
+    second = attempt_deliberation_evidence_amendment(
         proposal=proposal,
         base_bundle=bundle,
         ticker="AAPL",
@@ -171,15 +171,15 @@ def test_policy_cap_refuses_second_amendment() -> None:
         recorded_at=_TS,
         provenance=_PROV,
     )
-    assert second.outcome is H6AmendmentOutcome.POLICY_EXHAUSTED
-    assert store.amendment_count_for_base(bundle.bundle_id) == H6_AMENDMENT_POLICY_MAX_PER_BASE
+    assert second.outcome is DeliberationAmendmentOutcome.POLICY_EXHAUSTED
+    assert store.amendment_count_for_base(bundle.bundle_id) == DELIBERATION_AMENDMENT_POLICY_MAX_PER_BASE
 
 
 def test_retrieval_failure_records_outcome_without_broad_search() -> None:
     store = EvidenceBundleStore()
     bundle, evidence = _base_bundle()
     store.append_base_bundle(bundle)
-    result = attempt_h6_evidence_amendment(
+    result = attempt_deliberation_evidence_amendment(
         proposal=_proposal(claim_id=str(evidence[0].evidence_id)),
         base_bundle=bundle,
         ticker="AAPL",
@@ -188,7 +188,7 @@ def test_retrieval_failure_records_outcome_without_broad_search() -> None:
         recorded_at=_TS,
         provenance=_PROV,
     )
-    assert result.outcome is H6AmendmentOutcome.RETRIEVAL_FAILED
+    assert result.outcome is DeliberationAmendmentOutcome.RETRIEVAL_FAILED
     assert result.amendment is None
     assert result.failure_reason == "retrieval_tools_unavailable"
     assert store.amendment_count_for_base(bundle.bundle_id) == 0
@@ -198,7 +198,7 @@ def test_invalid_proposal_never_persists_request() -> None:
     store = EvidenceBundleStore()
     bundle, _evidence = _base_bundle()
     store.append_base_bundle(bundle)
-    result = attempt_h6_evidence_amendment(
+    result = attempt_deliberation_evidence_amendment(
         proposal=_proposal(claim_id="missing-claim"),
         base_bundle=bundle,
         ticker="AAPL",
@@ -207,7 +207,7 @@ def test_invalid_proposal_never_persists_request() -> None:
         recorded_at=_TS,
         provenance=_PROV,
     )
-    assert result.outcome is H6AmendmentOutcome.INVALID_REQUEST
+    assert result.outcome is DeliberationAmendmentOutcome.INVALID_REQUEST
     assert store.amendment_count_for_base(bundle.bundle_id) == 0
     assert len(store._requests) == 0  # type: ignore[attr-defined]
 
@@ -235,7 +235,7 @@ def test_missing_fact_request_id_is_deterministic() -> None:
     def execute_tool(_name: str, _args: dict[str, object]) -> str:
         return json.dumps({"payload": {"body": "dated catalyst"}})
 
-    result = attempt_h6_evidence_amendment(
+    result = attempt_deliberation_evidence_amendment(
         proposal=proposal,
         base_bundle=bundle,
         ticker="AAPL",

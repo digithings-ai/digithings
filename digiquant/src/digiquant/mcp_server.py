@@ -781,9 +781,9 @@ def create_mcp_server(
         ``document_key``, not a filter on the ``segment`` column.
 
         ``phase`` is the retrieval/blinding phase (one of ``research_edit``,
-        ``h1_thesis``, ``h2_thesis``, ``h5_analyst``, ``h6_deliberation``,
-        ``h7_pm``, ``h8_sizing``). ``documents`` and ``daily_snapshots`` reads
-        default to the blinded ``h5_analyst`` view, so the digest,
+        ``thesis``, ``market``, ``analyst``, ``deliberation``,
+        ``direction``, ``sizing``). ``documents`` and ``daily_snapshots`` reads
+        default to the blinded ``analyst`` view, so the digest,
         ``digest-delta`` and ``beliefs`` artifacts are withheld unless the
         caller widens the phase explicitly (``phase="research_edit"``); book
         datasets keep the operator default. ``include_prior=true`` spans prior
@@ -808,7 +808,7 @@ def create_mcp_server(
         # document and digest reads are blinded unless the caller names a phase
         # explicitly; book datasets keep the operator default.
         default_phase = (
-            "h5_analyst" if dataset in {"documents", "daily_snapshots"} else "research_edit"
+            "analyst" if dataset in {"documents", "daily_snapshots"} else "research_edit"
         )
 
         try:

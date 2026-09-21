@@ -343,7 +343,7 @@ portfolio datasets are gated by `portfolio_tool_allowed`. Archived
 chars unless `full_content`. In-pipeline wiring:
 `research/phases/_node_factory.SegmentNodeSpec.use_research_tools` /
 `research_phase` (`build_segment_node`, H6 gets the full toolkit;
-`portfolio/phases/phase7d_pm._pm_tools` passes `h7_pm`). MCP:
+`portfolio/phases/phase7d_pm._pm_tools` passes `direction`). MCP:
 `digiquant_query_research` (read scope) — the `digiquant_query_data` registration
 is removed.
 
@@ -519,7 +519,7 @@ post-cutover size gate (`data/cutover_gate.py`, `POST_CUTOVER_SIZE_GATE_MB=320`)
 reads the `pg_database_size` total only: the ~172MB price-table saving lands
 with 127 toward the ≈292MB target.
 
-H9 seal coverage: H9 (`h9_cost_evidence.py`) reads the run-date session
+H9 seal coverage: H9 (`commit_cost_evidence.py`) reads the run-date session
 bar but R2 seals through the manifest `as_of`; seal < run_date fail-softs
 to the sealed tail. Live-fire checklist asserts seal coverage at H9 time
 (manifest `as_of` vs run_date) before sign-off.
@@ -1924,7 +1924,7 @@ entry until that cutover. Prompt / structured-output walk for the same pass:
   conventions — does not invent a parallel hash scheme. WP11.2
   (`research_retrieval/evidence_bundle.py`) builds one canonical H5 base per
   ticker (dedupe, temporal span, conflicts/missing fields) **before** the
-  provider call (`portfolio_common` / `h5_asset_analyst`), retains
+  provider call (`portfolio_common` / `analyst`), retains
   `PhasePortfolioState.ticker_evidence_bundles` even when H5 fails, and cites
   bundle/evidence IDs on newly materialized `ForecastTerms`. Default portfolio
   graph leaves `EvidenceBundleStore` unwired (same shadow pattern as
@@ -1932,14 +1932,14 @@ entry until that cutover. Prompt / structured-output walk for the same pass:
   append runs only when a caller injects the store. `DIGIQUANT_EVIDENCE_BUNDLE_WRITER=off`
   then skips that append while retaining the typed bundle. Not
   operator-durable yet — SQL IO adapter still later. WP11.3
-  (`research_retrieval/planner.py`) adds deterministic `H6Selection`
-  (reasons/features/budget) wired into `h6_deliberation`:
+  (`research_retrieval/planner.py`) adds deterministic `DeliberationSelection`
+  (reasons/features/budget) wired into `deliberation`:
   `DIGIQUANT_H6_SELECTION_MODE=off|shadow|enforce` (default `shadow` records
   selection beside full incumbent H6; `enforce` actuates low-value carry with
   zero provider calls; planner failure falls back to full incumbent H6, never
   an unrecorded skip). Materiality (`weight_pct`) is a selection feature only
   — never injected into H6 prompts. Selected success still meets the two-round
-  floor. WP11.4 (`research_retrieval/h6_amendment.py`) constrains H6 to at most one
+  floor. WP11.4 (`research_retrieval/deliberation_amendment.py`) constrains H6 to at most one
   validated missing-fact supplement per base bundle: PM ``MissingFactProposal``
   (claim_id/question/source_kind/reason) → blinded ``query_research`` only (no
   generic ``live_search``) → append-only ``MissingFactRequest`` +
@@ -1969,8 +1969,8 @@ entry until that cutover. Prompt / structured-output walk for the same pass:
   (`carry` \| `metric_patch` \| `section_patch` \| `challenge` \| `deep_refresh`)
   and rollout `off` \| `shadow` \| `enforce`. Identical state/policy/target set
   yields byte-identical plan + resource totals; exploration reservations survive
-  session budget trimming.   `h6_selection_to_attention_decision` bridges WP11.3
-  `H6Selection` without forking ID schemes. API-only in 13.1 — portfolio
+  session budget trimming.   `deliberation_selection_to_attention_decision` bridges WP11.3
+  `DeliberationSelection` without forking ID schemes. API-only in 13.1 — portfolio
   runtime wiring is WP13.4 (landed #2930); persistence is WP13.2; research pre-provider routing is
   WP13.3.
   **Attention persistence (#2922 / WP13.2).** Migration
@@ -2009,7 +2009,7 @@ entry until that cutover. Prompt / structured-output walk for the same pass:
   no `enforce` activation.
   **Role context compiler (#2938 / WP14.1).** `research_retrieval/context.py`
   defines frozen `ContextCapsule`, `ContextItem`, `ContextManifest`, and per-role
-  allowlists (`h5_analyst`, `h6_deliberation`, `h7_pm`). `compile_context_capsule`
+  allowlists (`analyst`, `deliberation`, `direction`). `compile_context_capsule`
   / `compile_context_manifest` compile bounded structured JSONL bodies from one
   exact pinned `ResearchStateVersion` plus optional bundle/amendment/attention
   artifacts. Deterministic sort/hash, byte/token budgets, typed omission reasons,
@@ -2020,12 +2020,12 @@ entry until that cutover. Prompt / structured-output walk for the same pass:
   `off|shadow|enforce`): shadow records compiled capsule/manifest beside incumbent
   `phase_inputs`; enforce strips portfolio/PM keys and injects `structured_context`
   with manifest linkage fields for WP1 telemetry. Prompt guards live in
-  `research_retrieval/blinding.py` (`assert_blinded_h5_prompt` /
-  `assert_blinded_h6_prompt`). **WP14.3 (#2946)** wires H7 via the same mode knob:
-  `h7_decision_context.py` compiles typed sections (mandate, calibration,
+  `research_retrieval/blinding.py` (`assert_blinded_analyst_prompt` /
+  `assert_blinded_deliberation_prompt`). **WP14.3 (#2946)** wires H7 via the same mode knob:
+  `direction_decision_context.py` compiles typed sections (mandate, calibration,
   contribution/cost, pre-trade risk, prior authorization, unresolved/matured
-  forecasts) from pinned research state plus `h7_prerequisite_snapshot` (preflight);
-  `wire_h7_phase_inputs` records shadow beside incumbent PM inputs or enforces
+  forecasts) from pinned research state plus `direction_prerequisite_snapshot` (preflight);
+  `wire_direction_phase_inputs` records shadow beside incumbent PM inputs or enforces
   `structured_context` without target weights; H7 output schema unchanged.
   **WP14.4 (#2950)** pins drill-down retrieval to compiled manifests via
   `DIGIQUANT_RETRIEVAL_MANIFEST_MODE` (`off|shadow|enforce`, default `shadow`):
@@ -2072,7 +2072,7 @@ entry until that cutover. Prompt / structured-output walk for the same pass:
   order: pinned `knowledge_cutoff_at` → `OutcomeEpisodeAssembler.assemble_pass` +
   `ComponentAttributor.attribute_and_persist` for prior-run matured forecasts →
   `LessonCompiler.compile_and_persist` / `OutcomeLearningStore.select_lesson_as_of` →
-  `outcome_lesson_pin` on `ResearchState` and `H7PrerequisiteSnapshot.outcome_lesson_*`
+  `outcome_lesson_pin` on `ResearchState` and `DirectionPrerequisiteSnapshot.outcome_lesson_*`
   for WP14 H5/H7 context. Structured `outcome_lesson:{id}` replaces `decision_log` prose in
   prior-authorization sections when pinned; consuming-run episodes are excluded. Unwired
   `outcome_maturation_deps` → typed `store_unavailable` (legacy paths continue).
@@ -2160,11 +2160,11 @@ entry until that cutover. Prompt / structured-output walk for the same pass:
   hashed so distinct failures cannot share ``snapshot_id``). Bridge helpers derive
   `SizingCaps` / `BreakerConfig` for parity tests only — production H8 still calls
   `size_portfolio` directly in Phase 1.
-  **Risk snapshot persistence (#2698 / WP6.3, #2803):** `portfolio/h8_risk_snapshots.resolve_h8_risk_artifacts`
+  **Risk snapshot persistence (#2698 / WP6.3, #2803):** `portfolio/sizing_risk_snapshots.resolve_sizing_risk_artifacts`
   runs at the existing H8 entry before incumbent sizing and always returns typed
   artifacts (resolver exceptions become visible ``unavailable`` dumps); typed state
   slots `phase_portfolio.risk_policy` / `covariance_snapshot`; H9 fail-soft appends via
-  `risk_policy_registry.persist_h8_risk_snapshots_from_state` after booking (manifest
+  `risk_policy_registry.persist_sizing_risk_snapshots_from_state` after booking (manifest
   `schema_version` 1.4). Never feeds resolved objects into `size_portfolio` in Phase 1.
   **Action cost input binding (#2700 / WP7.1):** adapters in
   `portfolio/action_cost_inputs.py` translate authoritative Phase 0 ledger rows
@@ -2184,7 +2184,7 @@ entry until that cutover. Prompt / structured-output walk for the same pass:
   missing economics map to `unpriceable`/`degraded` with explicit reasons — never
   zero-by-omission. Phase 1 observational only — estimates do not feed turnover.
   **Cost/liquidity persistence (#2709 / WP7.3):** after H9 mints `order_intent_id`,
-  `portfolio/h9_cost_evidence.py` builds bundles and
+  `portfolio/commit_cost_evidence.py` builds bundles and
   `research/cost_liquidity_registry.py` append-writes to migration `082` tables
   (fail-soft after booking). `preflight_reflect` resolves `ActionCostOutcome` when
   paper executions arrive; typed state slots `liquidity_snapshots` and
@@ -2196,13 +2196,13 @@ entry until that cutover. Prompt / structured-output walk for the same pass:
   one validated bundle at H8 entry from H7 mandate + exact Phase 1 forecast /
   policy / covariance / cost versions + prior weights; typed state slot
   `phase_portfolio.allocation_input_bundle`. WP8.4 cutover: when
-  `h8_sizing_input_mode=calibrated` (default) and the bundle yields at least one
+  `sizing_input_mode=calibrated` (default) and the bundle yields at least one
   AVAILABLE positive-alpha score, incumbent `size_portfolio` raw weights use
   `reliability × max(0, μ) / σ_ε` — rank→conviction and fixed-premium Kelly are
   absent from that path. Missing/empty coverage falls back to characterized
-  incumbent (`incumbent_fallback`); set `h8_sizing_input_mode=incumbent` to force
+  incumbent (`incumbent_fallback`); set `sizing_input_mode=incumbent` to force
   the legacy path. Every sized book stamps `allocation_input_bundle_hash` +
-  `h8_sizing_input_mode`. H8 then scales each long by H7 `confidence` (cash-first;
+  `sizing_input_mode`. H8 then scales each long by H7 `confidence` (cash-first;
   missing → 0.5). Downstream caps/corr/vol/breaker/grid/continuity stay in the
   same order; confidence is a reduce-only haircut after vol-target so leftover
   cash is not redistributed. WP8.5 locks that shell in
@@ -2531,9 +2531,9 @@ entry until that cutover. Prompt / structured-output walk for the same pass:
   **H4 is the sole fan-out cap chokepoint** — `roster_cap.capped_tickers` bounds the
   H5/H6 roster width to `max(DIGIQUANT_MAX_ANALYSTS, len(prior_book))`; the prior book is
   the only sanctioned overshoot (#936) and thesis vehicles are prioritised within the
-  cap rather than exempt from it (#1767). The `build_h5_asset_analyst` /
-  `build_h6_deliberation` compile-time builders also call it, but are test-only —
-  `graph.py` wires the runtime `build_h5_from_state` / `build_h6_from_state` fan-outs.
+  cap rather than exempt from it (#1767). The `build_analyst` /
+  `build_deliberation` compile-time builders also call it, but are test-only —
+  `graph.py` wires the runtime `build_analyst_from_state` / `build_deliberation_from_state` fan-outs.
   Roster width lands in `atlas_run_diagnostics.breakdown` via
   `portfolio/roster_diagnostics.roster_breakdown`. H4.5 coverage director (#3739) narrows
   the H4 roster behaviorally (refresh / explore / skip with reasons, reasoning-tier
@@ -2836,11 +2836,11 @@ separately so research nodes never pay the per-ticker decision-artifact token ta
   forecast H7 saw (`portfolio/models/pm_direction.py`); economics and identifiers are
   never LLM-authored. The dashboard `PmDirectionDocumentView` hides those audit
   fields. **H8** (`phase7e_risk_sizing`) is the sole weight owner. On the
-  calibrated path (`h8_sizing_input_mode=calibrated`) raw size is
+  calibrated path (`sizing_input_mode=calibrated`) raw size is
   `reliability × max(0, μ) / σ_ε`; rank is unused for magnitude. H8 then scales
   each long by H7 `confidence` (cash-first: leftover stays cash, never renormalized
   into peers). Missing confidence on a mixed roster fail-softs to
-  `H8_MISSING_CONFIDENCE_DEFAULT` (0.5), never 1.0. Pre-WP-G memos that omit
+  `SIZING_MISSING_CONFIDENCE_DEFAULT` (0.5), never 1.0. Pre-WP-G memos that omit
   confidence on every long skip the haircut so replay does not silently shrink.
   **H9** (`commit_run`) is the portfolio terminal: positions, nav, theses sync, brief
   publish, `decision_log` append, the portfolio lineage ledger commit chain (see
@@ -2857,7 +2857,7 @@ separately so research nodes never pay the per-ticker decision-artifact token ta
   `query_returns_window`; anything else (notably 42703) still fails fast.
    H6 amendment envelopes unwrap one `{terms|amendment|forecast_amendment}` level,
    tenor fills from the H5 base, and the registry reason is always the short
-   `h6_challenge_revision` (never `summary.conclusion`, which tripped the 2000-char
+   `deliberation_challenge_revision` (never `summary.conclusion`, which tripped the 2000-char
    CHECK). Invalid amendment economics **raise at unit level** instead of falling back to a
    REJECTED/base-preserved outcome (#3078) — a structurally invalid amendment is
    a model-output error that must surface, not be absorbed; the H6 node catches it
@@ -2911,10 +2911,10 @@ order only — it is not a size input on the calibrated path.
 - `digiquant.portfolio.phases.phase7e_risk_sizing` — H8 enforcement node. Reads
   `PMDirectionMemo` (direction + ranks + confidence), assembles `AllocationInputBundle`,
   and on the calibrated path feeds bundle scores into `size_portfolio` (rank→conviction
-  unused). H8 then scales each long by H7 `confidence` (`H8_MISSING_CONFIDENCE_DEFAULT=0.5`
+  unused). H8 then scales each long by H7 `confidence` (`SIZING_MISSING_CONFIDENCE_DEFAULT=0.5`
   when omitted). Falls back to dense rank→conviction when mode is `incumbent` or
   calibrated coverage is empty. Writes `phase_portfolio.sized_book` with
-  `allocation_input_bundle_hash` + `h8_sizing_input_mode`. After the final control shell
+  `allocation_input_bundle_hash` + `sizing_input_mode`. After the final control shell
   (carry / cadence / backstop / grid / final caps), builds and attaches
   `phase_portfolio.pre_trade_risk_report` via
   `build_pretrade_risk_report_for_final_book` (WP9.3 / #2750) and stamps
@@ -2997,7 +2997,7 @@ consumers, all downstream of H8, which remains the sole weight owner — but no 
 codebase reads the field yet. It is populated today only on payloads `phases.phase7e_risk_sizing
 ._build_sized_book` produces; the legacy `phase7d_rebalance` payload (`phases.phase7d_pm`) has no
 `adjustments` key at all, so any future consumer must treat the field as absent-safe
-(`.get("adjustments") or []`, the same pattern `_validate_h8_lineage` already uses) rather than
+(`.get("adjustments") or []`, the same pattern `_validate_sizing_lineage` already uses) rather than
 assuming it is always present.
 
 #### Run robustness + telemetry (Pillar 1B)
@@ -3246,7 +3246,7 @@ not a row the approval chains through.
 #### H9 appends the commit chain (#2418)
 
 `digiquant/src/digiquant/portfolio/writers/ledger_io.py` is the only writer into these
-tables. The pipeline caller is `phases/h9_commit_run.py`, after `persist_decision_log`
+tables. The pipeline caller is `phases/commit.py`, after `persist_decision_log`
 and **before `save_commit_manifest`**. That ordering is load-bearing — the manifest is what the
 next attempt reads to decide "already committed", so a partial chain must leave no manifest
 behind. Raising is the honest outcome (invariant 12); a manifest written first would report a

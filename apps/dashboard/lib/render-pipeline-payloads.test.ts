@@ -538,8 +538,8 @@ describe('AttentionPlan glass-box renderer (#1945)', () => {
       plan_id: '00000000-0000-0000-0000-000000000002',
       schema_version: 1,
       run_date: '2026-08-25',
-      h4_roster: ['SPY', 'QQQ'],
-      h4_roster_fingerprint: 'a'.repeat(64),
+      screener_roster: ['SPY', 'QQQ'],
+      screener_roster_fingerprint: 'a'.repeat(64),
       decisions: [
         {
           artifact_key: 'segment:macro',

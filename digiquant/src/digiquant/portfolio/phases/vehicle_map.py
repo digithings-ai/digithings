@@ -22,17 +22,17 @@ from digiquant.research.supabase_io import SupabaseClient
 logger = logging.getLogger(__name__)
 
 NODE_ID = "portfolio/thesis/vehicle-map"
-PHASE_NAME = "portfolio_h3_vehicle_map"
+PHASE_NAME = "portfolio_vehicle_map"
 ARTIFACT_KEY = ("thesis", "vehicle-map")
 DOC_TYPE = "thesis_vehicle_map"
 
 
-def _run_h3_llm(state: PortfolioState) -> ThesisVehicleMapOutput:
+def _run_vehicle_map_llm(state: PortfolioState) -> ThesisVehicleMapOutput:
     vehicle_map, _doc, errors = run_thesis_phase_llm(
         state=state,
         skill_slug="thesis-vehicle-map",
         artifact_key=ARTIFACT_KEY,
-        retrieval_phase="h2_thesis",
+        retrieval_phase="market",
         phase_slug=NODE_ID,
         output_model=ThesisVehicleMapOutput,
         phase_inputs={
@@ -55,9 +55,9 @@ def _run_h3_llm(state: PortfolioState) -> ThesisVehicleMapOutput:
     return vehicle_map
 
 
-def _h3_node_factory(client: SupabaseClient | None):
+def _vehicle_map_node_factory(client: SupabaseClient | None):
     def _node(state: PortfolioState) -> dict[str, Any]:
-        vehicle_map = _run_h3_llm(state)
+        vehicle_map = _run_vehicle_map_llm(state)
         document = build_thesis_document(
             doc_type=DOC_TYPE,
             run_date=state.run_date,
@@ -84,8 +84,8 @@ def _h3_node_factory(client: SupabaseClient | None):
     return _node
 
 
-def build_h3_thesis_vehicle_map(*, client: SupabaseClient | None = None) -> PipelinePhase:
+def build_vehicle_map(*, client: SupabaseClient | None = None) -> PipelinePhase:
     return PipelinePhase(
         name=PHASE_NAME,
-        nodes=[NodeSpec(name=NODE_ID, run=_h3_node_factory(client))],
+        nodes=[NodeSpec(name=NODE_ID, run=_vehicle_map_node_factory(client))],
     )

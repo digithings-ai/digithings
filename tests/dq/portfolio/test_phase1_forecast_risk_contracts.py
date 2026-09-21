@@ -25,8 +25,8 @@ from digiquant.portfolio.models.forecast import (
 )
 from digiquant.portfolio.models.forecast_calibration import CalibrationArtifactStatus
 from digiquant.portfolio.models.risk_policy import PolicyArtifactStatus
-from digiquant.portfolio.phases.h6_deliberation import _resolve_from_debate
-from digiquant.portfolio.phases.h9_commit_run import CommitRunDeps, _manifest_payload
+from digiquant.portfolio.phases.commit import CommitRunDeps, _manifest_payload
+from digiquant.portfolio.phases.deliberation import _resolve_from_debate
 from digiquant.portfolio.phases.phase7e_risk_sizing import RiskSizingDeps
 from digiquant.portfolio.phases.portfolio_common import materialize_forecast_assessment
 from digiquant.portfolio.sizing import TickerRisk, size_portfolio
@@ -110,10 +110,10 @@ def test_portfolio_graph_topology_unchanged_by_phase1() -> None:
     assert _PORTFOLIO_COMPILED_NODES.issubset(nodes)
     phase_names = {p.name for p in build_portfolio_phases_thesis(watchlist=["AAPL"], held=set())}
     for expected in (
-        "portfolio_h1_thesis_review",
-        "portfolio_h7_pm_direction",
-        "portfolio_h8_risk_sizing",
-        "portfolio_h9_commit_run",
+        "portfolio_thesis",
+        "portfolio_direction",
+        "portfolio_sizing_risk_sizing",
+        "portfolio_commit",
     ):
         assert expected in phase_names
 
@@ -143,7 +143,7 @@ def test_research_graph_topology_unchanged_by_phase1() -> None:
         assert forbidden not in nodes
 
 
-def test_h9_manifest_carries_phase1_registry_fields() -> None:
+def test_commit_manifest_carries_phase1_registry_fields() -> None:
     manifest = _manifest_payload(
         source_run_id="run-test",
         status="committed",
@@ -423,7 +423,7 @@ def test_phase1_unpriceable_action_is_typed_not_zero() -> None:
 
 def test_phase1_degraded_risk_registry_keeps_book(monkeypatch: pytest.MonkeyPatch) -> None:
 
-    from digiquant.portfolio.phases import h9_commit_run as h9
+    from digiquant.portfolio.phases import commit as h9
 
     from tests.dq.portfolio.test_commit_run import _run, _state
 
@@ -433,7 +433,7 @@ def test_phase1_degraded_risk_registry_keeps_book(monkeypatch: pytest.MonkeyPatc
     def boom(**_kwargs: object) -> None:
         raise RuntimeError("risk registry down")
 
-    monkeypatch.setattr(h9, "persist_h8_risk_snapshots_from_state", boom)
+    monkeypatch.setattr(h9, "persist_sizing_risk_snapshots_from_state", boom)
     out = _run(client, state)
     manifest = out["phase_portfolio"].commit_manifest or {}
     assert manifest["status"] == "committed"
@@ -441,7 +441,7 @@ def test_phase1_degraded_risk_registry_keeps_book(monkeypatch: pytest.MonkeyPatc
     assert client.store.get("positions", [])
 
 
-def test_phase1_h9_second_commit_with_same_book_is_noop() -> None:
+def test_phase1_commit_second_commit_with_same_book_is_noop() -> None:
     from tests.dq.portfolio.test_commit_run import _ledger_client, _mirror_ledger, _run, _state
 
     client = _ledger_client(SPY=100.0)

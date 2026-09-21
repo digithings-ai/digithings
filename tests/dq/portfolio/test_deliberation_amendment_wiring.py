@@ -9,11 +9,13 @@ from unittest.mock import patch
 from uuid import UUID
 
 import pytest
-from digiquant.dashboard.research_retrieval.evidence_bundle import (
-    H5EvidenceFact,
-    build_h5_evidence_bundle,
+from digiquant.dashboard.research_retrieval.deliberation_amendment import (
+    DeliberationAmendmentOutcome,
 )
-from digiquant.dashboard.research_retrieval.h6_amendment import H6AmendmentOutcome
+from digiquant.dashboard.research_retrieval.evidence_bundle import (
+    AnalystEvidenceFact,
+    build_analyst_evidence_bundle,
+)
 from digiquant.dashboard.research_retrieval.models import TickerEvidenceBundle, TypedProvenance
 from digiquant.dashboard.research_retrieval.store import EvidenceBundleStore
 from digiquant.portfolio.focus_roster import with_fanout_ticker
@@ -22,7 +24,7 @@ from digiquant.portfolio.models.deliberation import (
     DeliberationPmTurn,
     MissingFactProposal,
 )
-from digiquant.portfolio.phases import h6_deliberation
+from digiquant.portfolio.phases import deliberation
 from digiquant.research.state import (
     FocusRosterEntry,
     PhasePortfolioState,
@@ -44,7 +46,7 @@ _PROV = TypedProvenance(
 
 def _bundle_dump(*, evidence_count: int = 1) -> tuple[dict[str, Any], tuple[Any, ...]]:
     facts = tuple(
-        H5EvidenceFact(
+        AnalystEvidenceFact(
             source=f"src-{index}",
             authority="analyst_doc",
             summary=f"fact {index}",
@@ -54,7 +56,7 @@ def _bundle_dump(*, evidence_count: int = 1) -> tuple[dict[str, Any], tuple[Any,
         )
         for index in range(evidence_count)
     )
-    built = build_h5_evidence_bundle(
+    built = build_analyst_evidence_bundle(
         ticker="AAPL",
         source_run_id="run-h6-wire",
         attempt_id="attempt-1",
@@ -115,10 +117,10 @@ def _state() -> ResearchState:
 
 @pytest.mark.unit
 class TestH6AmendmentWiring:
-    def test_h6_grounding_disables_generic_live_search(self) -> None:
-        with patch("digiquant.portfolio.phases.h6_deliberation.build_grounding") as mocked:
+    def test_deliberation_grounding_disables_generic_live_search(self) -> None:
+        with patch("digiquant.portfolio.phases.deliberation.build_grounding") as mocked:
             mocked.return_value = (None, None, None)
-            h6_deliberation._h6_grounding(_state(), segment="test")
+            deliberation._deliberation_grounding(_state(), segment="test")
         mocked.assert_called_once()
         assert mocked.call_args.kwargs["live_search"] is False
 
@@ -160,18 +162,18 @@ class TestH6AmendmentWiring:
             return json.dumps({"payload": {"body": "Next earnings on 2026-10-28."}})
 
         with patch(
-            "digiquant.portfolio.phases.h6_deliberation.run_research_agent",
+            "digiquant.portfolio.phases.deliberation.run_research_agent",
             side_effect=fake_research_agent,
         ):
             with patch(
-                "digiquant.portfolio.phases.h6_deliberation.build_grounding",
+                "digiquant.portfolio.phases.deliberation.build_grounding",
                 return_value=([{"type": "function"}], execute_tool, None),
             ):
-                out = h6_deliberation.build_h6_from_state(store).worker.run(
+                out = deliberation.build_deliberation_from_state(store).worker.run(
                     with_fanout_ticker(_state(), "AAPL")
                 )
         summary = out["phase_portfolio"].deliberation_summaries["AAPL"]
-        assert summary["evidence_amendment_outcome"] == H6AmendmentOutcome.ACCEPTED.value
+        assert summary["evidence_amendment_outcome"] == DeliberationAmendmentOutcome.ACCEPTED.value
         assert summary["missing_fact_request_id"]
         assert summary["evidence_amendment_id"]
         assert summary["base_bundle_id"] == bundle_dump["bundle_id"]
@@ -207,18 +209,21 @@ class TestH6AmendmentWiring:
             )
 
         with patch(
-            "digiquant.portfolio.phases.h6_deliberation.run_research_agent",
+            "digiquant.portfolio.phases.deliberation.run_research_agent",
             side_effect=fake_research_agent,
         ):
             with patch(
-                "digiquant.portfolio.phases.h6_deliberation.build_grounding",
+                "digiquant.portfolio.phases.deliberation.build_grounding",
                 return_value=([{"type": "function"}], None, None),
             ):
-                out = h6_deliberation.build_h6_from_state().worker.run(
+                out = deliberation.build_deliberation_from_state().worker.run(
                     with_fanout_ticker(state, "AAPL")
                 )
         summary = out["phase_portfolio"].deliberation_summaries["AAPL"]
-        assert summary["evidence_amendment_outcome"] == H6AmendmentOutcome.INVALID_REQUEST.value
+        assert (
+            summary["evidence_amendment_outcome"]
+            == DeliberationAmendmentOutcome.INVALID_REQUEST.value
+        )
         assert summary["evidence_amendment_failure_reason"] == "claim_id_not_in_base_bundle"
         assert summary["base_bundle_id"] == bundle_dump["bundle_id"]
         assert summary.get("evidence_amendment_id") is None

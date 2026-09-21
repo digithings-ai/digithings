@@ -45,7 +45,7 @@ def _should_backfill_vehicle_thesis(entry: dict[str, Any]) -> bool:
     return entry.get("roster_reason") in _EXPLORATORY_REASONS
 
 
-PHASE_NAME = "portfolio_h5_asset_analyst"
+PHASE_NAME = "portfolio_analyst"
 
 
 def _roster_entry_map(state: PortfolioState) -> dict[str, dict[str, Any]]:
@@ -55,7 +55,7 @@ def _roster_entry_map(state: PortfolioState) -> dict[str, dict[str, Any]]:
     }
 
 
-def _h5_node_factory(
+def _analyst_node_factory(
     ticker: str,
     client: SupabaseClient | None,
     evidence_bundle_store: EvidenceBundleStore | None = None,
@@ -124,7 +124,7 @@ def _h5_node_factory(
     return _node
 
 
-def build_h5_asset_analyst(
+def build_analyst(
     tickers: list[str],
     *,
     held: Collection[str] = (),
@@ -147,14 +147,16 @@ def build_h5_asset_analyst(
         nodes=[
             NodeSpec(
                 name=f"{NODE_ID}-{ticker}",
-                run=_h5_node_factory(ticker, client, evidence_bundle_store, research_state_store),
+                run=_analyst_node_factory(
+                    ticker, client, evidence_bundle_store, research_state_store
+                ),
             )
             for ticker in capped
         ],
     )
 
 
-def build_h5_from_state(
+def build_analyst_from_state(
     client: SupabaseClient | None = None,
     *,
     evidence_bundle_store: EvidenceBundleStore | None = None,
@@ -172,7 +174,9 @@ def build_h5_from_state(
         ticker = state.portfolio_fanout_ticker
         if not ticker:
             return {}
-        return _h5_node_factory(ticker, client, evidence_bundle_store, research_state_store)(state)
+        return _analyst_node_factory(ticker, client, evidence_bundle_store, research_state_store)(
+            state
+        )
 
     return FanOutPhase(
         name=PHASE_NAME,

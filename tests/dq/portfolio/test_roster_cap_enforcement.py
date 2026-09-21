@@ -12,7 +12,7 @@ from __future__ import annotations
 from datetime import date
 
 import pytest
-from digiquant.portfolio.phases.h4_opportunity_screener import (
+from digiquant.portfolio.phases.screener import (
     compute_focus_roster,
     compute_focus_roster_excluded,
     thesis_priority_order,

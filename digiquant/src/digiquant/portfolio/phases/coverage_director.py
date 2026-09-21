@@ -34,7 +34,7 @@ from digiquant.tool_rounds import run_digiquant_research_agent as run_research_a
 logger = logging.getLogger(__name__)
 
 NODE_ID = "portfolio/coverage/director"
-PHASE_NAME = "portfolio_h45_coverage_director"
+PHASE_NAME = "portfolio_coverage_director"
 
 DIRECTOR_REFRESH_REASON: Literal["director_refresh"] = "director_refresh"
 DIRECTOR_EXPLORE_REASON: Literal["director_explore"] = "director_explore"
@@ -124,7 +124,7 @@ def _director_phase_inputs(state: PortfolioState) -> dict[str, Any]:
     """Inputs the director judges on: H4 roster + book + market movement + prefs."""
     roster = state.phase_portfolio.focus_roster or []
     return {
-        "h4_roster": [entry.model_dump(mode="json") for entry in roster],
+        "screener_roster": [entry.model_dump(mode="json") for entry in roster],
         "held": sorted(holdings_from_prior_book(state.prior_context.prior_book)),
         "price_deltas": dict(getattr(state, "price_deltas", {}) or {}),
         "preferences": dict(state.config.preferences),

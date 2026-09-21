@@ -380,7 +380,7 @@ class RebalancePayload(TypedDict, total=False):
     # when they differ from the approved book.
     requested_pct: dict[str, float]
     # WP8.4 (#2734): versioned raw-input mode and source bundle identity on every book.
-    h8_sizing_input_mode: str
+    sizing_input_mode: str
     allocation_input_bundle_hash: str
     # WP9.3 (#2750): content hash of the attached PreTradeRiskReport (observational).
     pre_trade_risk_report_hash: str
@@ -679,10 +679,10 @@ class ResearchState(BaseModel):
         description="Detail when research_state_status is state_unavailable.",
     )
     # WP14.3 (#2946): versioned WP3/WP5/WP9 refs for H7 decision context compile.
-    h7_prerequisite_snapshot: dict[str, Any] | None = Field(
+    direction_prerequisite_snapshot: dict[str, Any] | None = Field(
         default=None,
         description=(
-            "H7PrerequisiteSnapshot dump from preflight — accounting, forecast "
+            "DirectionPrerequisiteSnapshot dump from preflight — accounting, forecast "
             "outcomes, and pin linkage for H7 context compiler."
         ),
     )

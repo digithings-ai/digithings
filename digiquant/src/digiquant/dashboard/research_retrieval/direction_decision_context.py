@@ -30,9 +30,9 @@ from digiquant.dashboard.research_retrieval.models import (
 from digiquant.dashboard.research_retrieval.planner import AttentionPlan
 from digiquant.dashboard.research_retrieval.store import LoadedResearchState
 
-H7_SECTION_SCHEMA_VERSION: int = 1
+DIRECTION_SECTION_SCHEMA_VERSION: int = 1
 
-_H7_WEIGHT_FORBIDDEN_KEYS = frozenset(
+_DIRECTION_WEIGHT_FORBIDDEN_KEYS = frozenset(
     {
         "target_pct",
         "target_weight",
@@ -45,7 +45,7 @@ _H7_WEIGHT_FORBIDDEN_KEYS = frozenset(
 )
 
 
-class H7SectionKind(StrEnum):
+class DirectionSectionKind(StrEnum):
     """Typed H7 decision context sections."""
 
     MANDATE = "mandate"
@@ -57,7 +57,7 @@ class H7SectionKind(StrEnum):
     MATURED_FORECASTS = "matured_forecasts"
 
 
-class H7SectionAvailability(StrEnum):
+class DirectionSectionAvailability(StrEnum):
     """Whether a section carries versioned entity IDs."""
 
     AVAILABLE = "available"
@@ -65,7 +65,7 @@ class H7SectionAvailability(StrEnum):
     DEGRADED = "degraded"
 
 
-class H7PrerequisiteSnapshot(ResearchStateModel):
+class DirectionPrerequisiteSnapshot(ResearchStateModel):
     """Versioned WP3/WP5/WP9 inputs pinned at preflight for H7 compile."""
 
     state_version_id: UUID | None = None
@@ -77,46 +77,46 @@ class H7PrerequisiteSnapshot(ResearchStateModel):
     action_cost_estimate_ids: tuple[NonEmptyStr, ...] = Field(default_factory=tuple)
     outcome_lesson_version_id: UUID | None = None
     outcome_lesson_content_hash: NonEmptyStr | None = None
-    schema_version: int = H7_SECTION_SCHEMA_VERSION
+    schema_version: int = DIRECTION_SECTION_SCHEMA_VERSION
 
 
-class H7ContextSection(ResearchStateModel):
+class DirectionContextSection(ResearchStateModel):
     """One typed H7 context section — versioned IDs or explicit unavailability."""
 
-    kind: H7SectionKind
-    availability: H7SectionAvailability
+    kind: DirectionSectionKind
+    availability: DirectionSectionAvailability
     entity_ids: tuple[NonEmptyStr, ...] = Field(default_factory=tuple)
     content_hash: NonEmptyStr | None = None
     unavailable_reason: NonEmptyStr | None = None
     degraded_reason: NonEmptyStr | None = None
-    schema_version: int = H7_SECTION_SCHEMA_VERSION
+    schema_version: int = DIRECTION_SECTION_SCHEMA_VERSION
 
     @model_validator(mode="after")
-    def _validate_availability(self) -> H7ContextSection:
-        if self.availability is H7SectionAvailability.AVAILABLE:
+    def _validate_availability(self) -> DirectionContextSection:
+        if self.availability is DirectionSectionAvailability.AVAILABLE:
             if not self.entity_ids and self.content_hash is None:
                 raise ValueError("available section requires entity_ids or content_hash")
-        if self.availability is H7SectionAvailability.UNAVAILABLE and not self.unavailable_reason:
+        if self.availability is DirectionSectionAvailability.UNAVAILABLE and not self.unavailable_reason:
             raise ValueError("unavailable section requires unavailable_reason")
-        if self.availability is H7SectionAvailability.DEGRADED and not self.degraded_reason:
+        if self.availability is DirectionSectionAvailability.DEGRADED and not self.degraded_reason:
             raise ValueError("degraded section requires degraded_reason")
         return self
 
 
-class H7DecisionContext(ResearchStateModel):
+class DirectionDecisionContext(ResearchStateModel):
     """Compiled H7 decision capsule: role context + typed sections."""
 
-    sections: tuple[H7ContextSection, ...]
+    sections: tuple[DirectionContextSection, ...]
     base_capsule: ContextCapsule
     base_manifest: ContextManifest
     content_hash: NonEmptyStr
-    schema_version: int = H7_SECTION_SCHEMA_VERSION
+    schema_version: int = DIRECTION_SECTION_SCHEMA_VERSION
 
     @property
     def structured_body(self) -> str:
         """JSONL body for provider ``structured_context`` injection."""
         lines: list[str] = []
-        lines.append(json.dumps({"role": ContextRole.H7_PM.value, "sections": len(self.sections)}))
+        lines.append(json.dumps({"role": ContextRole.DIRECTION.value, "sections": len(self.sections)}))
         lines.append(self.base_capsule.body)
         for section in self.sections:
             lines.append(section.model_dump_json())
@@ -124,11 +124,11 @@ class H7DecisionContext(ResearchStateModel):
 
 
 @dataclass(frozen=True)
-class H7DecisionContextCompileInput:
+class DirectionDecisionContextCompileInput:
     """Inputs for one H7 decision context compile."""
 
     loaded: LoadedResearchState
-    prerequisites: H7PrerequisiteSnapshot | None
+    prerequisites: DirectionPrerequisiteSnapshot | None
     attention_plan: AttentionPlan | None = None
     analyst_payloads: dict[str, dict[str, Any]] | None = None
     deliberation_summaries: dict[str, dict[str, Any]] | None = None
@@ -141,7 +141,7 @@ class H7DecisionContextCompileInput:
     enforce_version_pin: bool = False
 
 
-def _section_content_hash(kind: H7SectionKind, entity_ids: tuple[str, ...]) -> str:
+def _section_content_hash(kind: DirectionSectionKind, entity_ids: tuple[str, ...]) -> str:
     return content_digest({"kind": kind.value, "entity_ids": list(entity_ids)})
 
 
@@ -212,29 +212,29 @@ def _prior_authorization_entity_ids(
 
 
 def _build_section(
-    kind: H7SectionKind,
+    kind: DirectionSectionKind,
     *,
     entity_ids: tuple[str, ...],
     degraded_reason: str | None = None,
     unavailable_reason: str | None = None,
-) -> H7ContextSection:
+) -> DirectionContextSection:
     if unavailable_reason:
-        return H7ContextSection(
+        return DirectionContextSection(
             kind=kind,
-            availability=H7SectionAvailability.UNAVAILABLE,
+            availability=DirectionSectionAvailability.UNAVAILABLE,
             unavailable_reason=unavailable_reason,
         )
     if not entity_ids:
-        return H7ContextSection(
+        return DirectionContextSection(
             kind=kind,
-            availability=H7SectionAvailability.UNAVAILABLE,
+            availability=DirectionSectionAvailability.UNAVAILABLE,
             unavailable_reason=f"{kind.value}_inputs_missing",
         )
     availability = (
-        H7SectionAvailability.DEGRADED if degraded_reason else H7SectionAvailability.AVAILABLE
+        DirectionSectionAvailability.DEGRADED if degraded_reason else DirectionSectionAvailability.AVAILABLE
     )
     digest = _section_content_hash(kind, entity_ids)
-    return H7ContextSection(
+    return DirectionContextSection(
         kind=kind,
         availability=availability,
         entity_ids=entity_ids,
@@ -246,10 +246,10 @@ def _build_section(
 def _require_pinned_prerequisites(
     *,
     loaded: LoadedResearchState,
-    prerequisites: H7PrerequisiteSnapshot | None,
-) -> H7PrerequisiteSnapshot:
+    prerequisites: DirectionPrerequisiteSnapshot | None,
+) -> DirectionPrerequisiteSnapshot:
     if prerequisites is None:
-        raise ValueError("H7 enforce requires versioned h7_prerequisite_snapshot")
+        raise ValueError("H7 enforce requires versioned direction_prerequisite_snapshot")
     pin_id = prerequisites.state_version_id
     if pin_id is None:
         raise ValueError("H7 enforce requires prerequisites.state_version_id")
@@ -258,7 +258,7 @@ def _require_pinned_prerequisites(
     return prerequisites
 
 
-def compile_h7_decision_context(inp: H7DecisionContextCompileInput) -> H7DecisionContext:
+def compile_direction_decision_context(inp: DirectionDecisionContextCompileInput) -> DirectionDecisionContext:
     """Compile H7 decision context from pinned state + prerequisite snapshot."""
     prerequisites = inp.prerequisites
     if inp.enforce_version_pin:
@@ -268,7 +268,7 @@ def compile_h7_decision_context(inp: H7DecisionContextCompileInput) -> H7Decisio
 
     base_capsule, base_manifest = compile_context_capsule(
         ContextCompileInput(
-            role=ContextRole.H7_PM,
+            role=ContextRole.DIRECTION,
             state=inp.loaded,
             attention_plan=inp.attention_plan,
         )
@@ -285,14 +285,14 @@ def compile_h7_decision_context(inp: H7DecisionContextCompileInput) -> H7Decisio
         deliberation_summaries=deliberation,
         focus_roster=inp.focus_roster,
     )
-    mandate = _build_section(H7SectionKind.MANDATE, entity_ids=mandate_ids)
+    mandate = _build_section(DirectionSectionKind.MANDATE, entity_ids=mandate_ids)
 
     cal_ids = _calibration_entity_ids(
         shadow_calibrations=calibrations,
         calibrated_forecasts=calibrated,
     )
     calibration = _build_section(
-        H7SectionKind.CALIBRATION,
+        DirectionSectionKind.CALIBRATION,
         entity_ids=cal_ids,
         degraded_reason="shadow_calibration_observational" if cal_ids else None,
         unavailable_reason=None if cal_ids else None,
@@ -308,20 +308,20 @@ def compile_h7_decision_context(inp: H7DecisionContextCompileInput) -> H7Decisio
         )
     contribution_cost_ids = tuple(sorted(set(contrib_ids) | set(cost_ids)))
     contribution_cost = _build_section(
-        H7SectionKind.CONTRIBUTION_COST,
+        DirectionSectionKind.CONTRIBUTION_COST,
         entity_ids=contribution_cost_ids,
     )
 
     risk_hash = prerequisites.ex_ante_risk_snapshot_hash if prerequisites else None
     if risk_hash:
         pre_trade_risk = _build_section(
-            H7SectionKind.PRE_TRADE_RISK,
+            DirectionSectionKind.PRE_TRADE_RISK,
             entity_ids=(f"ex_ante_risk_snapshot:{risk_hash}",),
         )
     else:
-        pre_trade_risk = H7ContextSection(
-            kind=H7SectionKind.PRE_TRADE_RISK,
-            availability=H7SectionAvailability.UNAVAILABLE,
+        pre_trade_risk = DirectionContextSection(
+            kind=DirectionSectionKind.PRE_TRADE_RISK,
+            availability=DirectionSectionAvailability.UNAVAILABLE,
             unavailable_reason="pre_trade_risk_report_not_yet_built_at_h7",
         )
 
@@ -334,19 +334,19 @@ def compile_h7_decision_context(inp: H7DecisionContextCompileInput) -> H7Decisio
             else (prerequisites.outcome_lesson_version_id if prerequisites is not None else None)
         ),
     )
-    prior_auth = _build_section(H7SectionKind.PRIOR_AUTHORIZATION, entity_ids=auth_ids)
+    prior_auth = _build_section(DirectionSectionKind.PRIOR_AUTHORIZATION, entity_ids=auth_ids)
 
     matured_ids = tuple(
         f"forecast_outcome:{oid}"
         for oid in (prerequisites.matured_forecast_outcome_ids if prerequisites else ())
     )
-    matured = _build_section(H7SectionKind.MATURED_FORECASTS, entity_ids=matured_ids)
+    matured = _build_section(DirectionSectionKind.MATURED_FORECASTS, entity_ids=matured_ids)
 
     unresolved_ids = tuple(
         f"effective_forecast:{eid}"
         for eid in (prerequisites.unresolved_forecast_effective_ids if prerequisites else ())
     )
-    unresolved = _build_section(H7SectionKind.UNRESOLVED_FORECASTS, entity_ids=unresolved_ids)
+    unresolved = _build_section(DirectionSectionKind.UNRESOLVED_FORECASTS, entity_ids=unresolved_ids)
 
     sections = (
         mandate,
@@ -363,38 +363,38 @@ def compile_h7_decision_context(inp: H7DecisionContextCompileInput) -> H7Decisio
             "sections": [section.model_dump(mode="json") for section in sections],
         }
     )
-    ctx = H7DecisionContext(
+    ctx = DirectionDecisionContext(
         sections=sections,
         base_capsule=base_capsule,
         base_manifest=base_manifest,
         content_hash=digest,
     )
-    assert_h7_no_target_weights(ctx.structured_body)
+    assert_direction_no_target_weights(ctx.structured_body)
     return ctx
 
 
-def strip_h7_weight_keys(payload: dict[str, Any]) -> dict[str, Any]:
+def strip_direction_weight_keys(payload: dict[str, Any]) -> dict[str, Any]:
     """Remove target-weight fields from H7 provider inputs."""
-    return {key: value for key, value in payload.items() if key not in _H7_WEIGHT_FORBIDDEN_KEYS}
+    return {key: value for key, value in payload.items() if key not in _DIRECTION_WEIGHT_FORBIDDEN_KEYS}
 
 
-def assert_h7_no_target_weights(text: str) -> None:
+def assert_direction_no_target_weights(text: str) -> None:
     """Hard guard: H7 structured context must not carry target allocation weights."""
     lowered = text.lower()
-    for key in _H7_WEIGHT_FORBIDDEN_KEYS:
+    for key in _DIRECTION_WEIGHT_FORBIDDEN_KEYS:
         if key in lowered:
             raise ValueError(f"H7 context must not include target weight key {key!r}")
 
 
 __all__ = [
-    "H7DecisionContext",
-    "H7DecisionContextCompileInput",
-    "H7ContextSection",
-    "H7PrerequisiteSnapshot",
-    "H7SectionAvailability",
-    "H7SectionKind",
-    "H7_SECTION_SCHEMA_VERSION",
-    "assert_h7_no_target_weights",
-    "compile_h7_decision_context",
-    "strip_h7_weight_keys",
+    "DirectionDecisionContext",
+    "DirectionDecisionContextCompileInput",
+    "DirectionContextSection",
+    "DirectionPrerequisiteSnapshot",
+    "DirectionSectionAvailability",
+    "DirectionSectionKind",
+    "DIRECTION_SECTION_SCHEMA_VERSION",
+    "assert_direction_no_target_weights",
+    "compile_direction_decision_context",
+    "strip_direction_weight_keys",
 ]

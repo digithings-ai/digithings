@@ -33,14 +33,14 @@ logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
-class H8RiskArtifacts:
+class SizingRiskArtifacts:
     """Resolved incumbent H8 inputs for audit — never wired into ``size_portfolio`` in Phase 1."""
 
     policy: RiskPolicy
     covariance_snapshot: CovarianceSnapshot
 
 
-def _h8_effective_at(state: ResearchState) -> datetime:
+def _sizing_effective_at(state: ResearchState) -> datetime:
     cutoff = state.knowledge_cutoff_at
     if cutoff is not None:
         return require_utc_datetime(cutoff, field_name="knowledge_cutoff_at")
@@ -98,9 +98,9 @@ def _fail_closed_artifacts(
     state: ResearchState,
     pm_tickers: list[str],
     reason: str,
-) -> H8RiskArtifacts:
+) -> SizingRiskArtifacts:
     """Typed unavailable artifacts when resolution fails (#2803)."""
-    effective_at = _h8_effective_at(state)
+    effective_at = _sizing_effective_at(state)
     clipped = reason.strip()[:200] or "resolver_error"
     tagged = f"resolver_error:{clipped}"
     baseline_policy = resolve_risk_policy(
@@ -114,26 +114,26 @@ def _fail_closed_artifacts(
         as_of_session=state.run_date,
         resolved_at=effective_at,
     )
-    return H8RiskArtifacts(
+    return SizingRiskArtifacts(
         policy=_restamp_policy_unavailable(baseline_policy, reason=tagged),
         covariance_snapshot=_restamp_snapshot_unavailable(baseline_snapshot, reason=tagged),
     )
 
 
-def resolve_h8_risk_artifacts(
+def resolve_sizing_risk_artifacts(
     *,
     state: ResearchState,
     pm_tickers: list[str],
     corr: pl.DataFrame | None,
     observation_count: int | None = None,
-) -> H8RiskArtifacts:
+) -> SizingRiskArtifacts:
     """Resolve policy + covariance snapshot at the H8 entry boundary (#2698 / WP6.3).
 
     Always returns typed artifacts. Resolver exceptions become visible
     ``unavailable`` dumps rather than silent omission (#2803).
     """
     try:
-        effective_at = _h8_effective_at(state)
+        effective_at = _sizing_effective_at(state)
         resolution = resolve_risk_policy(
             state.config.preferences,
             effective_at=effective_at,
@@ -146,10 +146,10 @@ def resolve_h8_risk_artifacts(
             resolved_at=effective_at,
             observation_count=observation_count,
         )
-        return H8RiskArtifacts(policy=resolution.policy, covariance_snapshot=snapshot)
+        return SizingRiskArtifacts(policy=resolution.policy, covariance_snapshot=snapshot)
     except Exception as exc:
         logger.warning(
-            "h8 risk snapshot resolution failed (%s: %s); attaching unavailable artifacts",
+            "sizing risk snapshot resolution failed (%s: %s); attaching unavailable artifacts",
             type(exc).__name__,
             exc,
         )
@@ -160,4 +160,4 @@ def resolve_h8_risk_artifacts(
         )
 
 
-__all__ = ["H8RiskArtifacts", "resolve_h8_risk_artifacts"]
+__all__ = ["SizingRiskArtifacts", "resolve_sizing_risk_artifacts"]

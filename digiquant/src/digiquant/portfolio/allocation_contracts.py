@@ -218,7 +218,7 @@ class CostLiquidityBinding(AllocationContractModel):
 class AllocationSourceHashes(AllocationContractModel):
     """Pinned upstream artifact digests for replay and H9 validation."""
 
-    h7_memo_hash: NonEmptyId
+    direction_memo_hash: NonEmptyId
     risk_policy_hash: NonEmptyId
     prior_weights_fingerprint: NonEmptyId
     covariance_hash: NonEmptyId | None = None
@@ -399,7 +399,7 @@ class AllocationInputBundle(AllocationContractModel):
             else {"entries": sorted([list(pair) for pair in self.cost_liquidity.entries])}
         )
         source_payload = {
-            "h7_memo_hash": self.source_hashes.h7_memo_hash,
+            "direction_memo_hash": self.source_hashes.direction_memo_hash,
             "risk_policy_hash": self.source_hashes.risk_policy_hash,
             "prior_weights_fingerprint": self.source_hashes.prior_weights_fingerprint,
             "covariance_hash": self.source_hashes.covariance_hash,
@@ -424,7 +424,7 @@ class AllocationInputBundle(AllocationContractModel):
 
 def build_source_hashes(
     *,
-    h7_memo_hash: str,
+    direction_memo_hash: str,
     risk_policy_hash: str,
     prior_entries: tuple[tuple[str, float], ...],
     calibrated_hashes: tuple[tuple[str, str], ...],
@@ -433,7 +433,7 @@ def build_source_hashes(
 ) -> AllocationSourceHashes:
     """Construct validated source hashes with prior weights fingerprint."""
     return AllocationSourceHashes(
-        h7_memo_hash=h7_memo_hash,
+        direction_memo_hash=direction_memo_hash,
         risk_policy_hash=risk_policy_hash,
         prior_weights_fingerprint=weights_fingerprint(prior_weights_from_entries(prior_entries)),
         covariance_hash=covariance_hash,

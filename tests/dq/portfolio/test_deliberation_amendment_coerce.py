@@ -14,7 +14,7 @@ from digiquant.portfolio.models.forecast import (
     fill_forecast_tenor_from_base,
     unwrap_forecast_terms_payload,
 )
-from digiquant.portfolio.phases.h6_deliberation import _resolve_from_debate
+from digiquant.portfolio.phases.deliberation import _resolve_from_debate
 from digiquant.portfolio.phases.portfolio_common import materialize_forecast_assessment
 from digiquant.research.state import PhasePortfolioState, ResearchState
 from pydantic import ValidationError
@@ -70,7 +70,7 @@ def test_gld_missing_tenor_fills_from_base_and_accepts_string_probabilities() ->
         ticker="GLD",
         analyst=analyst,
         amendment_terms_raw=raw,
-        amendment_reason="h6_challenge_revision",
+        amendment_reason="deliberation_challenge_revision",
     )
     assert amendment is not None
     assert effective is not None
@@ -87,7 +87,7 @@ def test_iau_nested_terms_wrapper_materializes() -> None:
         ticker="IAU",
         analyst=analyst,
         amendment_terms_raw={"terms": sample_forecast_terms_dict()},
-        amendment_reason="h6_challenge_revision",
+        amendment_reason="deliberation_challenge_revision",
     )
     assert amendment is not None
     assert effective is not None
@@ -104,7 +104,7 @@ def test_amendment_spelling_wrappers_materialize(wrapper_key: str) -> None:
         ticker="IAU",
         analyst=analyst,
         amendment_terms_raw={wrapper_key: sample_forecast_terms_dict()},
-        amendment_reason="h6_challenge_revision",
+        amendment_reason="deliberation_challenge_revision",
     )
     assert amendment is not None
     assert effective is not None
@@ -116,17 +116,17 @@ def test_amendment_spelling_wrappers_materialize(wrapper_key: str) -> None:
 
 
 def test_registry_reason_is_short_not_conclusion() -> None:
-    """Registry reason stays h6_challenge_revision even for a long conclusion (#3299)."""
+    """Registry reason stays deliberation_challenge_revision even for a long conclusion (#3299)."""
     analyst, state = _analyst()
     _, amendment = _resolve_from_debate(
         state=state,
         ticker="GLD",
         analyst=analyst,
         amendment_terms_raw=sample_forecast_terms_dict(),
-        amendment_reason="h6_challenge_revision",
+        amendment_reason="deliberation_challenge_revision",
     )
     assert amendment is not None
-    assert amendment.reason == "h6_challenge_revision"
+    assert amendment.reason == "deliberation_challenge_revision"
     assert len(amendment.reason) < 100  # well under the 2000-char registry CHECK
 
 
@@ -143,7 +143,7 @@ def test_slv_wrapper_with_top_level_and_nested_terms_materializes() -> None:
         ticker="SLV",
         analyst=analyst,
         amendment_terms_raw=raw,
-        amendment_reason="h6_challenge_revision",
+        amendment_reason="deliberation_challenge_revision",
     )
     assert amendment is not None
     assert amendment.terms.thesis_valid_probability == Decimal("0.40")

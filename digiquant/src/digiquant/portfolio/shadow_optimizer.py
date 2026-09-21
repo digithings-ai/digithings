@@ -40,7 +40,7 @@ FORBIDDEN_IMPORT_PREFIXES: frozenset[str] = frozenset(
         "cvxopt",
         "digiquant.brokers",
         "digiquant.portfolio.writers",
-        "digiquant.portfolio.phases.h9_commit_run",
+        "digiquant.portfolio.phases.commit",
         "digiquant.portfolio.phases.phase7e_risk_sizing",
         "digiquant.research.supabase_io",
         "nautilus_trader",

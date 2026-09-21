@@ -41,9 +41,9 @@ CapsuleBody = Annotated[str, Field(min_length=0)]
 class ContextRole(StrEnum):
     """portfolio/research roles that receive compiled context capsules."""
 
-    H5_ANALYST = "h5_analyst"
-    H6_DELIBERATION = "h6_deliberation"
-    H7_PM = "h7_pm"
+    ANALYST = "analyst"
+    DELIBERATION = "deliberation"
+    DIRECTION = "direction"
 
 
 class ContextItemKind(StrEnum):
@@ -73,7 +73,7 @@ class ContextOmissionReason(StrEnum):
 
 
 _DEFAULT_POLICIES: dict[ContextRole, dict[str, object]] = {
-    ContextRole.H5_ANALYST: {
+    ContextRole.ANALYST: {
         "allowed_kinds": (
             ContextItemKind.EVIDENCE,
             ContextItemKind.BELIEF,
@@ -86,7 +86,7 @@ _DEFAULT_POLICIES: dict[ContextRole, dict[str, object]] = {
         "requires_ticker": True,
         "delta_evidence_only": True,
     },
-    ContextRole.H6_DELIBERATION: {
+    ContextRole.DELIBERATION: {
         "allowed_kinds": (
             ContextItemKind.TICKER_BUNDLE,
             ContextItemKind.BUNDLE_AMENDMENT,
@@ -97,7 +97,7 @@ _DEFAULT_POLICIES: dict[ContextRole, dict[str, object]] = {
         "requires_ticker": True,
         "delta_evidence_only": False,
     },
-    ContextRole.H7_PM: {
+    ContextRole.DIRECTION: {
         "allowed_kinds": (
             ContextItemKind.BELIEF,
             ContextItemKind.EXPECTED_EVENT,
@@ -281,7 +281,7 @@ class _Candidate:
     content_hash: str
     ticker: str | None
     payload: str
-    h6_bundle_evidence: bool = False
+    deliberation_bundle_evidence: bool = False
 
 
 def role_context_policy_content_hash(
@@ -447,7 +447,7 @@ def _collect_candidates(inp: ContextCompileInput) -> tuple[list[_Candidate], lis
         content_hash: str,
         ticker: str | None,
         payload: str,
-        h6_bundle_evidence: bool = False,
+        deliberation_bundle_evidence: bool = False,
     ) -> None:
         ref = f"{kind.value}:{entity_id}"
         if kind is ContextItemKind.LEGACY_REF:
@@ -468,14 +468,14 @@ def _collect_candidates(inp: ContextCompileInput) -> tuple[list[_Candidate], lis
                 )
             )
             return
-        if inp.role is ContextRole.H6_DELIBERATION and kind is ContextItemKind.EVIDENCE:
-            if not h6_bundle_evidence:
+        if inp.role is ContextRole.DELIBERATION and kind is ContextItemKind.EVIDENCE:
+            if not deliberation_bundle_evidence:
                 omissions.append(
                     ContextOmission(
                         kind=kind,
                         entity_id=ref,
                         reason=ContextOmissionReason.ROLE_NOT_ALLOWED,
-                        detail="h6_evidence_must_come_from_bundle_or_amendment",
+                        detail="deliberation_evidence_must_come_from_bundle_or_amendment",
                     )
                 )
                 return
@@ -511,7 +511,7 @@ def _collect_candidates(inp: ContextCompileInput) -> tuple[list[_Candidate], lis
                 content_hash=content_hash,
                 ticker=ticker,
                 payload=payload,
-                h6_bundle_evidence=h6_bundle_evidence,
+                deliberation_bundle_evidence=deliberation_bundle_evidence,
             )
         )
 
@@ -569,7 +569,7 @@ def _collect_candidates(inp: ContextCompileInput) -> tuple[list[_Candidate], lis
             ticker=inp.bundle.ticker,
             payload=inp.bundle.source,
         )
-        if inp.role is ContextRole.H6_DELIBERATION:
+        if inp.role is ContextRole.DELIBERATION:
             for evidence_id in inp.bundle.evidence_ids:
                 record = next(
                     (item for item in state.evidence if item.evidence_id == evidence_id), None
@@ -582,7 +582,7 @@ def _collect_candidates(inp: ContextCompileInput) -> tuple[list[_Candidate], lis
                     content_hash=record.content_hash,
                     ticker=inp.bundle.ticker,
                     payload=record.summary,
-                    h6_bundle_evidence=True,
+                    deliberation_bundle_evidence=True,
                 )
 
     if inp.amendment is not None:
@@ -595,7 +595,7 @@ def _collect_candidates(inp: ContextCompileInput) -> tuple[list[_Candidate], lis
             ticker=inp.amendment.ticker,
             payload=inp.amendment.source,
         )
-        if inp.role is ContextRole.H6_DELIBERATION:
+        if inp.role is ContextRole.DELIBERATION:
             for evidence_id in inp.amendment.evidence_ids:
                 record = next(
                     (item for item in state.evidence if item.evidence_id == evidence_id), None
@@ -608,7 +608,7 @@ def _collect_candidates(inp: ContextCompileInput) -> tuple[list[_Candidate], lis
                     content_hash=record.content_hash,
                     ticker=inp.amendment.ticker,
                     payload=record.summary,
-                    h6_bundle_evidence=True,
+                    deliberation_bundle_evidence=True,
                 )
 
     if inp.attention_plan is not None:

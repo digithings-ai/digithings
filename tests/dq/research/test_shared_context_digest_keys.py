@@ -71,17 +71,31 @@ def test_shared_context_drops_digest_when_key_missing_from_whitelist():
 @pytest.mark.unit
 def test_live_h_phases_never_reference_dead_digest_baseline_key():
     """`digest-baseline` is never published by anything. Guard against the typo
-    reappearing in the live H1-H9 phase modules. `phase7d_pm.py` is deliberately
-    excluded — confirmed unreachable from any production graph builder
-    (`portfolio/graph.py::build_portfolio_phases` aliases to the thesis-first graph,
-    never `phase7d_pm.build_phase7d_pm`), so it isn't fixed as part of #1270.
+    reappearing in the live step phase modules (#4471 renamed them off the h-marker
+    scheme). `phase7d_pm.py` is deliberately excluded — confirmed unreachable from
+    any production graph builder (`portfolio/graph.py::build_portfolio_phases`
+    aliases to the thesis-first graph, never `phase7d_pm.build_phase7d_pm`), so it
+    isn't fixed as part of #1270.
     """
     phases_dir = pathlib.Path(portfolio_phases_pkg.__file__).parent
-    live_h_files = sorted(phases_dir.glob("h*.py"))
-    assert live_h_files, "expected to find the h1..h9 phase modules"
+    live_files = [
+        phases_dir / name
+        for name in (
+            "thesis.py",
+            "market.py",
+            "vehicle_map.py",
+            "screener.py",
+            "analyst.py",
+            "deliberation.py",
+            "direction.py",
+            "commit.py",
+        )
+    ]
+    live_files = [f for f in live_files if f.exists()]
+    assert live_files, "expected to find the live step phase modules"
 
     # Match the quoted string literal, not the bare phrase — code comments are
-    # free to *discuss* the dead key (as h7_pm_direction.py's now does) without
+    # free to *discuss* the dead key (as direction.py's now does) without
     # tripping this guard; only an actual `"digest-baseline"` tuple element should.
-    offenders = [f.name for f in live_h_files if '"digest-baseline"' in f.read_text()]
+    offenders = [f.name for f in live_files if '"digest-baseline"' in f.read_text()]
     assert offenders == []

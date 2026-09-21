@@ -92,7 +92,7 @@ _CAL_HASH_A = "b" * 64
 _CAL_HASH_B = "c" * 64
 _COST_HASH_A = "d" * 64
 _COST_HASH_B = "e" * 64
-_H7_HASH = "f" * 64
+_DIRECTION_HASH = "f" * 64
 _COV_HASH = "1" * 64
 
 _REPO = Path(__file__).resolve().parents[3]
@@ -126,7 +126,7 @@ PORTFOLIO_COMPILED_NODES = frozenset(
 PRODUCTION_GUARD_PATHS = (
     _REPO / "digiquant/src/digiquant/portfolio/chain.py",
     _REPO / "digiquant/src/digiquant/portfolio/phases/phase7e_risk_sizing.py",
-    _REPO / "digiquant/src/digiquant/portfolio/phases/h9_commit_run.py",
+    _REPO / "digiquant/src/digiquant/portfolio/phases/commit.py",
     _REPO / "digiquant/src/digiquant/portfolio/shadow_artifact.py",
 )
 
@@ -214,7 +214,7 @@ def phase2_allocation_bundle(
     )
     cost = CostLiquidityBinding(entries=(("AAPL", _COST_HASH_A), ("MSFT", _COST_HASH_B)))
     source = build_source_hashes(
-        h7_memo_hash=_H7_HASH,
+        direction_memo_hash=_DIRECTION_HASH,
         risk_policy_hash=_POLICY_HASH,
         prior_entries=tuple((entry.ticker, entry.weight_pct) for entry in prior.entries),
         calibrated_hashes=(("AAPL", _CAL_HASH_A), ("MSFT", _CAL_HASH_B)),

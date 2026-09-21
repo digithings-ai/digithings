@@ -663,8 +663,8 @@ export function renderAttentionPlanMarkdown(payload: unknown): string {
   );
 
   const plan = asObj(p.plan) || {};
-  const roster = Array.isArray(plan.h4_roster)
-    ? plan.h4_roster.map((x) => s(x).trim()).filter(Boolean)
+  const roster = Array.isArray(plan.screener_roster)
+    ? plan.screener_roster.map((x) => s(x).trim()).filter(Boolean)
     : [];
   if (roster.length) {
     out.push('## H4 roster (read-only)', '', roster.map((t) => `- ${t}`).join('\n'), '');

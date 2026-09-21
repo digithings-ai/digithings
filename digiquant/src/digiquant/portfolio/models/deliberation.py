@@ -150,11 +150,11 @@ class DeliberationSummary(BaseModel):
     # WP11.3 — every H6 run/carry records one selection reason (+ optional full dump).
     selection_reason: str | None = Field(
         default=None,
-        description="Primary H6SelectionReason code for this run/carry (#2902).",
+        description="Primary DeliberationSelectionReason code for this run/carry (#2902).",
     )
-    h6_selection: dict[str, Any] | None = Field(
+    deliberation_selection: dict[str, Any] | None = Field(
         default=None,
-        description="Optional H6Selection dump (shadow/enforce audit; never prompt input).",
+        description="Optional DeliberationSelection dump (shadow/enforce audit; never prompt input).",
     )
     # WP4.4 forecast lineage — IDs + optional full amendment dump for H9 registry (#2663).
     base_forecast_id: str | None = None

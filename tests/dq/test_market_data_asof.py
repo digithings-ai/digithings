@@ -109,11 +109,11 @@ def test_asof_before_first_bar_returns_empty_rows(_r2_seal: None) -> None:
     assert out["rows"] == []
 
 
-def test_h9_session_past_seal_serves_sealed_tail(_r2_seal: None) -> None:
+def test_commit_session_past_seal_serves_sealed_tail(_r2_seal: None) -> None:
     """H9 seal coverage (#3780 Task 10 live-fire item): H9 reads the run_date
     session bar but R2 seals through the manifest ``as_of``. A session past
     the seal fail-softs to the sealed tail — never an empty frame or error."""
-    from digiquant.portfolio.h9_cost_evidence import _load_symbol_history
+    from digiquant.portfolio.commit_cost_evidence import _load_symbol_history
 
     session = (_date.fromisoformat(_SEAL) + _td(days=7)).isoformat()
     frame = _load_symbol_history(client=None, symbol="SPY", as_of_session=session, lookback_days=20)

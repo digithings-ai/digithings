@@ -15,7 +15,7 @@ MIGRATION_PATH = MIGRATIONS_DIR / "095_olympus_target_adjustment_types.sql"
 
 SELF_WRAP_REGEX = re.compile(r"(^|[\s])begin[\s]*;", re.IGNORECASE)
 
-H8_TYPES = (
+TARGET_ADJUSTMENT_TYPES = (
     "conviction_floor",
     "single_name_cap",
     "sector_cap",
@@ -75,15 +75,15 @@ def test_no_historical_backfill(sql: str) -> None:
 
 def test_widens_adjustment_type_check(sql: str) -> None:
     assert "portfolio_ledger_target_adjustments_adjustment_type_check" in sql
-    for value in (*LEGACY_TYPES, *H8_TYPES):
+    for value in (*LEGACY_TYPES, *TARGET_ADJUSTMENT_TYPES):
         assert f"'{value}'" in sql, f"missing vocabulary member {value}"
 
 
-def test_reducing_types_check_covers_h8_reduce_only(sql: str) -> None:
+def test_reducing_types_check_covers_sizing_reduce_only(sql: str) -> None:
     assert "chk_portfolio_ledger_target_adjustments_reducing_types" in sql
     for value in REDUCING_TYPES:
         assert f"'{value}'" in sql, f"reducing CHECK missing {value}"
 
 
-def test_names_h9_as_producer(sql: str) -> None:
+def test_names_commit_as_producer(sql: str) -> None:
     assert "append_commit_chain" in sql or "H9" in sql

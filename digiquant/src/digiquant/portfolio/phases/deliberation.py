@@ -17,26 +17,26 @@ from digiquant.dashboard.envcompat import (
     DELIBERATION_MIN_ROUNDS,
     env_lookup,
 )
-from digiquant.dashboard.research_retrieval.context_wiring import wire_h6_phase_inputs
-from digiquant.dashboard.research_retrieval.evidence_bundle import evidence_bundle_writer_enabled
-from digiquant.dashboard.research_retrieval.h6_amendment import (
-    H6AmendmentOutcome,
-    H6AmendmentResult,
-    attempt_h6_evidence_amendment,
+from digiquant.dashboard.research_retrieval.context_wiring import wire_deliberation_phase_inputs
+from digiquant.dashboard.research_retrieval.deliberation_amendment import (
+    DeliberationAmendmentOutcome,
+    DeliberationAmendmentResult,
+    attempt_deliberation_evidence_amendment,
 )
+from digiquant.dashboard.research_retrieval.evidence_bundle import evidence_bundle_writer_enabled
 from digiquant.dashboard.research_retrieval.models import (
     TickerEvidenceBundle,
     TypedProvenance,
 )
 from digiquant.dashboard.research_retrieval.planner import (
-    H6Action,
-    H6Selection,
-    H6SelectionMode,
-    H6SelectionReason,
+    DeliberationAction,
+    DeliberationSelection,
+    DeliberationSelectionMode,
+    DeliberationSelectionReason,
     assert_no_materiality_in_prompt,
-    build_h6_decision_features,
+    build_deliberation_decision_features,
     incumbent_fallback_selection,
-    resolve_h6_selection_mode,
+    resolve_deliberation_selection_mode,
     select_h6,
 )
 from digiquant.dashboard.research_retrieval.store import EvidenceBundleStore, ResearchStateStore
@@ -69,7 +69,7 @@ from digiquant.portfolio.models.forecast import (
     resolve_effective_forecast,
     unwrap_forecast_terms_payload,
 )
-from digiquant.portfolio.research_attention import research_attention_h6_enforce_path
+from digiquant.portfolio.research_attention import research_attention_deliberation_enforce_path
 from digiquant.portfolio.roster_cap import capped_tickers
 from digiquant.portfolio.skills import load_skill_full
 from digiquant.portfolio.state import PortfolioState
@@ -85,12 +85,12 @@ from digiquant.tool_rounds import run_digiquant_research_agent as run_research_a
 logger = logging.getLogger(__name__)
 
 NODE_ID = "portfolio/deliberation"
-PHASE_NAME = "portfolio_h6_deliberation"
+PHASE_NAME = "portfolio_deliberation"
 DEFAULT_DELIBERATION_MAX_ROUNDS = 10
 DEFAULT_DELIBERATION_MIN_ROUNDS = 2
 
 
-def _h6_attempt_id() -> str:
+def _deliberation_attempt_id() -> str:
     raw = env_lookup(ATTEMPT).strip()
     return raw or "1"
 
@@ -108,15 +108,15 @@ def _base_bundle_for_ticker(state: PortfolioState, ticker: str) -> TickerEvidenc
         return None
 
 
-def _h6_grounding(state: PortfolioState, *, segment: str = ""):
+def _deliberation_grounding(state: PortfolioState, *, segment: str = ""):
     """H6 grounding — research tools only; generic web search forbidden (#2908)."""
     return build_grounding(
         use_data_tools=False,
         live_search=False,
         run_date=state.run_date,
-        segment=segment or "portfolio/h6_deliberation",
+        segment=segment or "portfolio/deliberation",
         use_research_tools=True,
-        research_phase="h6_deliberation",
+        research_phase="deliberation",
         watchlist=tuple(state.config.watchlist),
     )
 
@@ -125,13 +125,13 @@ def _attach_evidence_amendment(
     summary: DeliberationSummary,
     *,
     base_bundle: TickerEvidenceBundle | None,
-    amendment_result: H6AmendmentResult | None,
+    amendment_result: DeliberationAmendmentResult | None,
 ) -> DeliberationSummary:
     update: dict[str, Any] = {}
     if base_bundle is not None:
         update["base_bundle_id"] = str(base_bundle.bundle_id)
     if amendment_result is None:
-        update["evidence_amendment_outcome"] = H6AmendmentOutcome.NONE.value
+        update["evidence_amendment_outcome"] = DeliberationAmendmentOutcome.NONE.value
         return summary.model_copy(update=update)
     update["evidence_amendment_outcome"] = amendment_result.outcome.value
     if amendment_result.failure_reason:
@@ -151,8 +151,8 @@ def _maybe_attempt_missing_fact_amendment(
     base_bundle: TickerEvidenceBundle | None,
     execute_tool: Any,
     store: EvidenceBundleStore | None,
-    prior_result: H6AmendmentResult | None,
-) -> H6AmendmentResult | None:
+    prior_result: DeliberationAmendmentResult | None,
+) -> DeliberationAmendmentResult | None:
     if prior_result is not None:
         return prior_result
     if proposal is None or base_bundle is None:
@@ -160,10 +160,10 @@ def _maybe_attempt_missing_fact_amendment(
     cutoff = state.knowledge_cutoff_at or base_bundle.recorded_at
     provenance = TypedProvenance(
         source_run_id=str(state.run_id),
-        attempt_id=_h6_attempt_id(),
+        attempt_id=_deliberation_attempt_id(),
         artifact_id=f"artifact-h6-{ticker.strip().upper()}",
     )
-    return attempt_h6_evidence_amendment(
+    return attempt_deliberation_evidence_amendment(
         proposal=proposal,
         base_bundle=base_bundle,
         ticker=ticker,
@@ -316,7 +316,7 @@ def _resolve_from_debate(
     amendment = materialize_forecast_amendment(
         base=base,
         terms=terms,
-        reason=amendment_reason or "h6_challenge_revision",
+        reason=amendment_reason or "deliberation_challenge_revision",
         source_run_id=str(state.run_id),
         provider_invocation_id=f"h6:{ticker}:{state.run_id}",
         effective_at=cutoff,
@@ -390,15 +390,15 @@ def _invalidation_risk_for(state: PortfolioState, ticker: str, analyst: Mapping[
     return False
 
 
-def _resolve_h6_selection(
+def _resolve_deliberation_selection(
     state: PortfolioState, ticker: str, analyst: dict[str, Any]
-) -> H6Selection:
+) -> DeliberationSelection:
     """Build features + selection; planner errors → incumbent fallback (full H6)."""
-    mode = resolve_h6_selection_mode()
-    if mode is H6SelectionMode.OFF:
+    mode = resolve_deliberation_selection_mode()
+    if mode is DeliberationSelectionMode.OFF:
         # Off: no selection record required for actuation; still emit typed incumbent reason.
         held = ticker in set(holdings_from_prior_book(state.prior_context.prior_book))
-        feats = build_h6_decision_features(
+        feats = build_deliberation_decision_features(
             ticker=ticker,
             roster_reason=_roster_reason_for(state, ticker),
             held=held,
@@ -424,7 +424,7 @@ def _resolve_h6_selection(
         price_delta = state.price_deltas.get(ticker.strip().upper())
         if price_delta is None:
             price_delta = state.price_deltas.get(ticker)
-        feats = build_h6_decision_features(
+        feats = build_deliberation_decision_features(
             ticker=ticker,
             roster_reason=_roster_reason_for(state, ticker),
             held=held,
@@ -445,7 +445,7 @@ def _resolve_h6_selection(
             exc,
         )
         held = ticker in set(holdings_from_prior_book(state.prior_context.prior_book))
-        feats = build_h6_decision_features(
+        feats = build_deliberation_decision_features(
             ticker=ticker,
             roster_reason=_roster_reason_for(state, ticker),
             held=held,
@@ -455,11 +455,13 @@ def _resolve_h6_selection(
         return incumbent_fallback_selection(feats, mode=mode)
 
 
-def _attach_selection(summary: DeliberationSummary, selection: H6Selection) -> DeliberationSummary:
+def _attach_selection(
+    summary: DeliberationSummary, selection: DeliberationSelection
+) -> DeliberationSummary:
     return summary.model_copy(
         update={
             "selection_reason": selection.reason.value,
-            "h6_selection": selection.model_dump(mode="json"),
+            "deliberation_selection": selection.model_dump(mode="json"),
         }
     )
 
@@ -493,7 +495,7 @@ def run_deliberation_loop(
     base_bundle: TickerEvidenceBundle | None = None,
     evidence_bundle_store: EvidenceBundleStore | None = None,
     research_state_store: ResearchStateStore | None = None,
-) -> tuple[DeliberationSummary, dict[str, Any] | None, H6AmendmentResult | None]:
+) -> tuple[DeliberationSummary, dict[str, Any] | None, DeliberationAmendmentResult | None]:
     """PM↔analyst loop until ``converged=true`` or ``DIGIQUANT_DELIBERATION_MAX_ROUNDS`` cap.
 
     Returns the summary, the last analyst-proposed complete ``forecast_amendment``
@@ -501,7 +503,9 @@ def run_deliberation_loop(
     """
     pm_skill = load_skill_full("deliberation")
     analyst_skill = load_skill_full("deliberation-analyst-response")
-    tools, execute_tool, _web_grounding = _h6_grounding(state, segment=f"{NODE_ID}-{ticker}")
+    tools, execute_tool, _web_grounding = _deliberation_grounding(
+        state, segment=f"{NODE_ID}-{ticker}"
+    )
     transcript: list[DeliberationTurn] = []
     round_number = 0
     prior_summary = _prior_deliberation_summary(state, ticker)
@@ -509,14 +513,14 @@ def run_deliberation_loop(
     max_rounds = deliberation_max_rounds()
     min_rounds = min(deliberation_min_rounds(), max_rounds)
     last_amendment_terms: dict[str, Any] | None = None
-    amendment_result: H6AmendmentResult | None = None
+    amendment_result: DeliberationAmendmentResult | None = None
     pin = state.research_state_pin if isinstance(state.research_state_pin, dict) else None
 
     while True:
         round_number += 1
         pm_inputs = {
             **_portfolio_phase_inputs(state, ticker),
-            "segment": f"h6_pm_challenge-{ticker}",
+            "segment": f"deliberation_pm_challenge-{ticker}",
             "role": "pm",
             "round_number": round_number,
             "transcript": [t.model_dump(mode="json") for t in transcript],
@@ -528,7 +532,7 @@ def run_deliberation_loop(
             pm_inputs["evidence_amendment"] = [
                 item.model_dump(mode="json") for item in amendment_result.supplemental_evidence
             ]
-        pm_inputs = wire_h6_phase_inputs(
+        pm_inputs = wire_deliberation_phase_inputs(
             pm_inputs,
             ticker=ticker,
             bundle=base_bundle,
@@ -546,7 +550,7 @@ def run_deliberation_loop(
                 data_layer_scope="portfolio",
             ),
             output_model=DeliberationPmTurn,
-            phase_slug=f"h6_pm_challenge-{ticker}",
+            phase_slug=f"deliberation_pm_challenge-{ticker}",
             tools=tools,
             execute_tool=execute_tool,
             model=eff_model,
@@ -609,7 +613,7 @@ def run_deliberation_loop(
 
         analyst_inputs: dict[str, Any] = {
             **_portfolio_phase_inputs(state, ticker),
-            "segment": f"h6_analyst_response-{ticker}",
+            "segment": f"deliberation_analyst_response-{ticker}",
             "role": "analyst",
             "round_number": round_number,
             "pm_challenge": pm_turn.challenge,
@@ -623,7 +627,7 @@ def run_deliberation_loop(
             ]
         if amendment_result is not None and amendment_result.failure_reason:
             analyst_inputs["evidence_amendment_failure"] = amendment_result.failure_reason
-        analyst_inputs = wire_h6_phase_inputs(
+        analyst_inputs = wire_deliberation_phase_inputs(
             analyst_inputs,
             ticker=ticker,
             bundle=base_bundle,
@@ -640,7 +644,7 @@ def run_deliberation_loop(
                 data_layer_scope="ticker",
             ),
             output_model=DeliberationAnalystTurn,
-            phase_slug=f"h6_analyst_response-{ticker}",
+            phase_slug=f"deliberation_analyst_response-{ticker}",
             tools=tools,
             execute_tool=execute_tool,
             model=eff_model,
@@ -685,7 +689,7 @@ def run_deliberation_loop(
             )
 
 
-def _h6_node_factory(
+def _deliberation_node_factory(
     ticker: str,
     evidence_bundle_store: EvidenceBundleStore | None = None,
     research_state_store: ResearchStateStore | None = None,
@@ -698,10 +702,10 @@ def _h6_node_factory(
             return {}
         stance = str(analyst.get("stance") or "hold")
         base = _base_forecast_from_analyst(analyst)
-        selection = _resolve_h6_selection(state, ticker, analyst)
-        h6_enforce = research_attention_h6_enforce_path(state, ticker, analyst)
+        selection = _resolve_deliberation_selection(state, ticker, analyst)
+        deliberation_enforce = research_attention_deliberation_enforce_path(state, ticker, analyst)
 
-        if h6_enforce == "carry":
+        if deliberation_enforce == "carry":
             prior = _prior_deliberation_summary(state, ticker)
             stance_map = {"buy": "bullish", "sell": "bearish"}
             if prior:
@@ -759,10 +763,10 @@ def _h6_node_factory(
 
         # Enforce + low-value: carry with zero provider calls (typed reason).
         if (
-            h6_enforce is None
-            and selection.mode is H6SelectionMode.ENFORCE
-            and selection.action is H6Action.CARRY
-            and selection.reason is H6SelectionReason.LOW_VALUE_CARRY
+            deliberation_enforce is None
+            and selection.mode is DeliberationSelectionMode.ENFORCE
+            and selection.action is DeliberationAction.CARRY
+            and selection.reason is DeliberationSelectionReason.LOW_VALUE_CARRY
         ):
             prior = _prior_deliberation_summary(state, ticker)
             stance_map = {"buy": "bullish", "sell": "bearish"}
@@ -820,8 +824,9 @@ def _h6_node_factory(
             }
 
         # Enforce + select: skip fingerprint short-circuit so selected success meets round floor.
-        allow_fingerprint_skip = h6_enforce != "challenge" and not (
-            selection.mode is H6SelectionMode.ENFORCE and selection.action is H6Action.SELECT
+        allow_fingerprint_skip = deliberation_enforce != "challenge" and not (
+            selection.mode is DeliberationSelectionMode.ENFORCE
+            and selection.action is DeliberationAction.SELECT
         )
         if allow_fingerprint_skip and deliberation_skip_signal(
             state, ticker, analyst_stance=stance
@@ -883,7 +888,7 @@ def _h6_node_factory(
                 amendment_terms_raw=amendment_terms,
                 # Registry reason stays short: conclusion lives on the deliberation
                 # document itself; using it here tripped the 2000-char CHECK (#3299).
-                amendment_reason="h6_challenge_revision",
+                amendment_reason="deliberation_challenge_revision",
             )
             summary = _attach_evidence_amendment(
                 summary,
@@ -964,7 +969,7 @@ def _h6_node_factory(
     return _node
 
 
-def build_h6_deliberation(
+def build_deliberation(
     tickers: list[str],
     *,
     held: Collection[str] = (),
@@ -986,14 +991,14 @@ def build_h6_deliberation(
         nodes=[
             NodeSpec(
                 name=f"{NODE_ID}-{ticker}",
-                run=_h6_node_factory(ticker, evidence_bundle_store, research_state_store),
+                run=_deliberation_node_factory(ticker, evidence_bundle_store, research_state_store),
             )
             for ticker in capped
         ],
     )
 
 
-def build_h6_from_state(
+def build_deliberation_from_state(
     evidence_bundle_store: EvidenceBundleStore | None = None,
     research_state_store: ResearchStateStore | None = None,
 ) -> FanOutPhase:
@@ -1009,7 +1014,9 @@ def build_h6_from_state(
         ticker = state.portfolio_fanout_ticker
         if not ticker:
             return {}
-        return _h6_node_factory(ticker, evidence_bundle_store, research_state_store)(state)
+        return _deliberation_node_factory(ticker, evidence_bundle_store, research_state_store)(
+            state
+        )
 
     return FanOutPhase(
         name=PHASE_NAME,
