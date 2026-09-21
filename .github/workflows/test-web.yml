@@ -48,8 +48,8 @@ jobs:
       # digithings-web gained vitest in #1868 (2026-08-05) — chatHandoff and the CSP
       # contract — but no lane ever ran it, so those two files could not fail. That is
       # the same silent-pass defect as a green build with no reviewer attached, caught
-      # a day later while adding a third test file. digiquant-web has no `test`
-      # script; add the step when it gets one.
+      # a day later while adding a third test file. (digiquant-web had the same gap,
+      # left dark until #4448 — see its Test step beside its lint below.)
       - name: Test digithings-web
         run: npm run test --workspace digithings-web
 
@@ -78,6 +78,23 @@ jobs:
 
       - name: Lint digiquant-web
         run: npm run lint --workspace digiquant-web
+
+      # digiquant-web declared `"test": "vitest run"` but no lane invoked it, so its
+      # suite could not fail (#4448) — the last app in this lane still dark after
+      # #4445 lit the design reference. The load-bearing file is
+      # components/landing/pipeline-data.test.ts: it re-reads
+      # digiquant/src/digiquant/portfolio/graph.py at test time, extracts the
+      # `phases.append(...)` sequence and asserts chip-for-chip, in-order equality
+      # with the site's 20 pipeline chips. That pin exists because the site once
+      # asserted a false claim about our own pipeline in a user-facing tooltip
+      # (#4441 — 19 vs 20 phases, and an `h7e` label for what is
+      # H8 = phase7e_risk_sizing). Ungated, the honesty fix can drift back.
+      #
+      # Placement constraint, deliberate: vitest.config.ts includes only
+      # `components/**` + `lib/**`, so an app/-placed test would be silently
+      # uncollected — green because it never runs, not because it passes.
+      - name: Test digiquant-web
+        run: npm run test --workspace digiquant-web
 
       # Nothing in .github/workflows built, linted or type-checked the design reference
       # until these two steps — the only `run build` calls are test-digichat.yml and
