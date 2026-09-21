@@ -48,6 +48,7 @@ import {
   type FileMessagePartComponent,
   type ImageMessagePartComponent,
   type ToolCallMessagePartComponent,
+  useAui,
   useAuiState,
   useThreadViewport,
 } from "@assistant-ui/react";
@@ -615,6 +616,32 @@ const Composer: FC<{
 };
 
 const ComposerSendControls: FC = () => {
+  const aui = useAui();
+  // Mirrors `composerSendDisabled` from `@assistant-ui/core`'s primitive
+  // predicates. Inlined rather than imported: the predicate is not re-exported
+  // from `@assistant-ui/react` (the only assistant-ui package this one depends
+  // on), so a deep import would resolve only thanks to npm hoisting.
+  const sendDisabled = useAuiState(
+    (s) => !s.composer.canSend || (s.thread.isRunning && !s.thread.capabilities.queue),
+  );
+  const sendRef = useRef<HTMLButtonElement | null>(null);
+
+  // A `type="submit"` button already submits its form on activation, so the
+  // click must not also do it: `preventDefault()` suppresses that implicit
+  // submission, and the explicit `requestSubmit()` below replaces it with one
+  // we control. Without this the form's `submit` fires twice per click, and the
+  // free-turn gate mounted on `onSubmit` runs twice — holding or charging the
+  // turn more than once.
+  const submitComposer = (event: ReactMouseEvent<HTMLButtonElement>) => {
+    event.preventDefault();
+    const form = sendRef.current?.closest("form");
+    if (form) {
+      form.requestSubmit();
+      return;
+    }
+    aui.composer.send();
+  };
+
   return (
     <div className="aui-composer-send-controls flex shrink-0 items-center gap-1.5">
       <AuiIf condition={(s) => s.thread.capabilities.dictation}>
@@ -658,23 +685,24 @@ const ComposerSendControls: FC = () => {
         </AuiIf>
       </AuiIf>
       <AuiIf condition={(s) => !s.thread.isRunning}>
-        <ComposerPrimitive.Send asChild>
-          <TooltipIconButton
-            tooltip="Send (Enter)"
-            side="bottom"
-            type="button"
-            variant="ghost"
-            size="icon"
-            className="aui-composer-send size-7 rounded-full"
-            aria-label="Send message"
-          >
-            <DotMatrix
-              state="send"
-              label="Send"
-              className="aui-composer-send-icon size-3.5"
-            />
-          </TooltipIconButton>
-        </ComposerPrimitive.Send>
+        <TooltipIconButton
+          ref={sendRef}
+          tooltip="Send (Enter)"
+          side="bottom"
+          type="submit"
+          variant="ghost"
+          size="icon"
+          className="aui-composer-send size-7 rounded-full"
+          aria-label="Send message"
+          disabled={sendDisabled}
+          onClick={submitComposer}
+        >
+          <DotMatrix
+            state="send"
+            label="Send"
+            className="aui-composer-send-icon size-3.5"
+          />
+        </TooltipIconButton>
       </AuiIf>
       <AuiIf condition={(s) => s.thread.isRunning}>
         <ComposerPrimitive.Cancel asChild>
