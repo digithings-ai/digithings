@@ -165,17 +165,30 @@ export async function POST(req: Request) {
   // Fall back to the embed tenant, and never let a config read throw 500 a
   // request that used to work.
   let dep: DigichatDeployment | null = null;
+  // A config read error must keep failing closed for an explicit model, so
+  // track it separately from "no deployment matched this host".
+  let configFailed = false;
   try {
     const { resolveDeploymentForHost, getDigichatConfig, embedTenantToDeployment } =
       await import("@/lib/deploy-config/loader");
     try {
-      dep = resolveDeploymentForHost(req.headers.get("x-embed-host"), getDigichatConfig());
+      const config = getDigichatConfig();
+      // Host selection is never authorization. On the embed surface the host
+      // has already been verified (token / first-party origin) before we get
+      // here, so X-Embed-Host is safe to consult. On the authenticated session
+      // path it is just a client-supplied header — use the config's own
+      // deployment block instead of letting a caller name another host.
+      dep = embedConfig
+        ? resolveDeploymentForHost(req.headers.get("x-embed-host"), config)
+        : (config.deployment ?? null);
     } catch {
+      configFailed = true;
       dep = null;
     }
     if (!dep && embedConfig) dep = embedTenantToDeployment(embedConfig);
   } catch {
     // Unreadable loader must never 500 a request that used to work.
+    configFailed = true;
     dep = null;
   }
   // Embed wins wherever both exist so the embed surface stays byte-identical;
@@ -319,6 +332,17 @@ export async function POST(req: Request) {
         );
       }
       if (allowed) modelId = allowed;
+    } else if (configFailed && requestedModel) {
+      // The deployment config could not be read, so we cannot prove the model
+      // is allowed → fail closed rather than forward an unverified id.
+      runLock.release();
+      return new Response(
+        JSON.stringify({
+          error: "model_not_allowed",
+          message: "Deployment model allowlist could not be loaded.",
+        }),
+        { status: 400, headers: { "content-type": "application/json" } },
+      );
     } else if (requestedModel) {
       modelId = requestedModel;
     }

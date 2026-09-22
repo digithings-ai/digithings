@@ -1548,7 +1548,7 @@ vi.mocked(createFoundryStreamResponse).mockClear();
         }
       });
 
-      it("enforces models.available on the foundry path", async () => {
+      it("runs the models.available allowlist ahead of the foundry branch", async () => {
         setDigichatConfigForTests(
           parseDigichatConfig({
             version: 1,
@@ -1570,6 +1570,13 @@ vi.mocked(createFoundryStreamResponse).mockClear();
           const body = (await res.json()) as { error: string };
           expect(body.error).toBe("model_not_allowed");
           expect(createFoundryStreamResponse).not.toHaveBeenCalled();
+
+          // An allowlisted model must pass the allowlist and reach the foundry
+          // branch — which only happens because the allowlist now runs first.
+          vi.mocked(createFoundryStreamResponse).mockClear();
+          const ok = await POST(chatReq({ "x-digi-model": "only-this-model" }));
+          expect(ok.status).toBe(200);
+          expect(createFoundryStreamResponse).toHaveBeenCalledTimes(1);
         } finally {
           resetDigichatConfigForTests();
         }
