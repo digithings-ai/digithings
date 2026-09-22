@@ -91,8 +91,8 @@ jobs:
       # H8 = phase7e_risk_sizing). The Q1 website revert (#4489) removed that pin with
       # the component it guarded. The restored component asserts no portfolio phase total
       # (it does say "Ten phases" for research, which matches research/phases/), and its
-      # `h7e` chip is the numbered fragment of the real `phase7e_risk_sizing` folder with
-      # no `phase8_*` folder to contradict it, so it does not restate the #4441 falsehood —
+      # `h7e` chip is the portfolio phase id for the real `phase7e_risk_sizing` module,
+      # with no `phase8_*` module to contradict it, so it does not restate the #4441 falsehood —
       # but its portfolio chip list is unguarded, so drift between it and graph.py now goes
       # unnoticed. Re-adding a pin for the restored component is open work.
       #

@@ -196,10 +196,10 @@ const LIMITS: { term: string; body: string }[] = [
   {
     term: "Frontend is scored differently",
     body:
-      "The score job's diff excludes apps/** and packages/** by pathspec, so it never sees JS or CSS — " +
-      "rightly, since the heuristics are Python-oriented and misfire on them. Presentation work is " +
-      "gated instead by secret scanning, the canon guard, lint, typecheck, and a production build that fails on " +
-      "a type error. The frontend suites run in CI: the web lane runs digithings-web, digiquant-web, the design " +
+      "The score job's diff excludes apps/** and packages/** by pathspec — the app frontend's JS and CSS are " +
+      "never scored — rightly, since the heuristics are Python-oriented and misfire on them. Presentation work " +
+      "is gated instead by secret scanning, the canon guard, lint, and a production build that type-checks each " +
+      "app and fails on a type error. The frontend suites run in CI: the web lane runs digithings-web, digiquant-web, the design " +
       "reference, the shared ui packages, cron and the Cloudflare workers, and digichat and the dashboard have " +
       "their own lanes. A narrower net than a coverage gate, honestly narrower.",
   },
