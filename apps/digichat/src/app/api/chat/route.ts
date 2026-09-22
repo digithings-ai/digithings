@@ -10,6 +10,7 @@ import {
   normalizeOpenRouterModel,
 } from "@/lib/byok-openrouter";
 import { byokRequiresModel } from "@/lib/byok-providers";
+import { backendAdapterFor, isDigigraphConfig, isFoundryConfig } from "@/lib/backend-adapters";
 import { createDigiGraphClient, digigraphModelName } from "@/lib/digigraph";
 import {
   DigigraphUpstreamAuthError,
@@ -194,6 +195,9 @@ export async function POST(req: Request) {
   // Embed wins wherever both exist so the embed surface stays byte-identical;
   // the change is the session surface gaining the deployment config.
   const backend = embedConfig?.backend ?? dep?.backend;
+  // The registry describes the backend once (#4522): the streaming path is
+  // chosen from `adapter.protocol`, never from a `backend.type` comparison.
+  const adapter = backendAdapterFor(backend?.type);
   const activityDetail = embedConfig?.activityDetail ?? dep?.gate.activityDetail ?? "labels";
   const requiredPlanTier = embedConfig?.requiredPlanTier ?? dep?.gate.requiredPlanTier;
 
@@ -360,7 +364,7 @@ export async function POST(req: Request) {
     }
   }
 
-  if (backend?.type === "foundry") {
+  if (adapter.protocol === "foundry-responses" && isFoundryConfig(backend)) {
     const foundryBackend = backend;
     let foundryRes: Response;
     try {
@@ -448,7 +452,7 @@ export async function POST(req: Request) {
     "X-Digi-Caller": "digichat",
     Authorization: `Bearer ${upstreamBearer}`,
   };
-  if (backend?.type === "digigraph") {
+  if (adapter.capabilities.corpus && isDigigraphConfig(backend)) {
     const digigraphBackend = backend;
     if (digigraphBackend.digisearchIndex) {
       upstreamHeaders["X-Digi-Corpus-Index"] = digigraphBackend.digisearchIndex;

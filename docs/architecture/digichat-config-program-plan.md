@@ -332,6 +332,18 @@ criterion for "every backend has the same end result".
 - **5a — registry refactor, no new backends.** Extract the two hard-coded
   branches into the registry; digigraph and foundry behave identically to
   today. Ships behind the existing config. No new dependency. **Low risk.**
+  **Done (issue #4522):** `apps/digichat/src/lib/backend-adapters.ts` is the
+  registry — one entry per `backend.type` carrying `protocol` (`digigraph-trace`
+  | `foundry-responses` | …), `auth` (`upstream-bearer` | `managed-identity` |
+  `env` | `byok`), and a `capabilities` object (reasoning, reasoningSummary?,
+  toolCalls, webSearch, sources, turnMutation, conversationContinuity,
+  attachments, mcp, corpus). The handler resolves the adapter once
+  (`backendAdapterFor(backend?.type)`) and chooses its streaming path from
+  `adapter.protocol` and `adapter.capabilities.corpus` — there is no
+  `backend.type === "…"` comparison left in `route.ts`. `backend-adapters.test.ts`
+  pins exhaustiveness, both adapters' protocol/auth/capabilities, the
+  reasoning+toolCalls parity invariant, the digigraph default, the type guards,
+  and (as a source guard) that the handler never compares `backend.type`.
 - **5b — AI-SDK backends.** `openai-completions`, `openai-responses`,
   `anthropic`, `google-vertex`. Reuses the installed `ai` v7 +
   `@ai-sdk/*` providers; each new provider package is a **new dependency**.
