@@ -4,21 +4,18 @@
   "_dq": "dashboard .dq-slab is the BLEND v0.1 tonal slab (surface + hairline, radius 0) that replaced the retired .glass-card family. MotionLayer reveals .dq-slab.",
   "_acct": "dashboard .acct-* is the digiweb account family (login, signup, session, settings) born in apps/reference/app/account/account.css. dashboard consumes the same prefix rather than forking a local one (PR #3264).",
   "_dboot": "digithings-web .dboot-* is the @digithings/ui digichat boot-loader family (packages/ui/src/styles/digichat-boot-loader.css); the site shell overrides one dock rule for the wide composer (ChatEmbedShell); same precedent as .tl-*.",
+  "_d1": "digithings-web's 'dqhero' entry was removed with the D1 rebuild (#4429): the .dqhero-* family was digiquant-origin art reused in this app, and the reused HeroMesh/HeroGraph media block was dropped in favour of a fresh composition on the canon. digiquant-web keeps its own 'dqhero' (it is that app's hero).",
   "digithings-web": [
     "brand",
     "dboot",
     "dc",
     "doc",
     "docs",
-    "dqhero",
     "glow",
     "tl"
   ],
   "digiquant-web": [
     "dq",
-    "dqhero",
-    "dqp",
-    "dqpipe",
     "dqss",
     "footer",
     "glow",

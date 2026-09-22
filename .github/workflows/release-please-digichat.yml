@@ -31,8 +31,19 @@ on:
       - develop
     paths:
       - "apps/digichat/**"
+      # digichat's UI primitives live in packages/ui and its product skin in
+      # packages/digichat-ui, but both ship inside the digichat image. #4456's
+      # Send-button gate fix was scoped `fix(digichat)` and touched only
+      # packages/ui, so the path filter above missed it, release-please never
+      # ran for the merge, and no 2.3.2 proposal was ever opened (#4460).
+      - "packages/ui/**"
+      - "packages/digichat-ui/**"
       - "release-please-config.json"
       - ".release-please-manifest.json"
+  # The push filter above cannot be satisfied by the run that merges a fix to
+  # this file, and a release sometimes needs proposing without inventing a
+  # commit under apps/digichat/** just to trip the filter.
+  workflow_dispatch:
 
 concurrency:
   group: release-please-digichat
@@ -76,4 +87,9 @@ jobs:
           TAG: ${{ steps.release.outputs['apps/digichat--tag_name'] || steps.release.outputs.tag_name }}
         run: |
           echo "release created; dispatching publish-digichat-image.yml at ${TAG}"
-          gh workflow run publish-digichat-image.yml --ref "$TAG"
+          # This job never checks the repo out, so `gh` has no working
+          # directory to resolve the repo from and dies with
+          # `failed to run git: fatal: not a git repository`. Name it
+          # explicitly, or the dispatch never happens and the release is
+          # tagged without an image — which is what happened to 2.3.1.
+          gh workflow run publish-digichat-image.yml --ref "$TAG" --repo "$GITHUB_REPOSITORY"

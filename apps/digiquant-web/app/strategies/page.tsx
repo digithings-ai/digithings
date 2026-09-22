@@ -1,8 +1,6 @@
 import type { Metadata } from "next";
-import { Footer } from "@digithings/ui";
-import { DQ_FOOTER, DQ_FOOTER_META } from "../_nav";
 import { SiteNav } from "@/components/landing/SiteNav";
-import { AmbientMesh } from "@/components/landing/AmbientMesh";
+import { SiteFooter } from "@/components/landing/SiteFooter";
 import { StrategyLibraryLive } from "@/components/tearsheet/strategy-library-live";
 
 export const metadata: Metadata = {
@@ -14,8 +12,7 @@ export default function StrategiesPage() {
   return (
     <>
       <SiteNav />
-      <main className="dq-subpage pb-[clamp(4.5rem,10vw,7rem)]">
-        <AmbientMesh />
+      <main className="dq-subpage pb-[clamp(4.5rem,10vw,7rem)]" id="main" tabIndex={-1}>
         <div className="wrap pb-[1.5rem]">
           <header className="dq-sechead">
             <div className="kicker">{"// strategies"}</div>
@@ -29,7 +26,7 @@ export default function StrategiesPage() {
           <StrategyLibraryLive />
         </div>
       </main>
-      <Footer links={DQ_FOOTER} meta={DQ_FOOTER_META} />
+      <SiteFooter />
     </>
   );
 }

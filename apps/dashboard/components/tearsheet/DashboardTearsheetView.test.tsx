@@ -86,6 +86,19 @@ describe('PerformanceTearsheetView', () => {
     expect(out).not.toContain('paper NAV index 112.50');
   });
 
+  // Q3b slice 4: flat mono register — ledger eyebrow, no display-hero type,
+  // no surface fills, no dead print hook. Full fixture renders every band,
+  // so each absence would fail if the old markup came back.
+  it('keeps the tearsheet chrome in the flat mono register', () => {
+    const out = html();
+    expect(out).toContain('Portfolio · performance');
+    expect(out).not.toContain('text-2xl');
+    expect(out).not.toContain('bg-surface/80');
+    expect(out).not.toContain('ts-print-root');
+    expect(out).not.toContain('font-display text-xl font-normal text-ink">Open positions');
+    expect(out).not.toContain('font-display text-xl text-ink">Return contribution');
+  });
+
   it('keeps the benchmark control outside the chart (page-global)', () => {
     // Wave 4: the benchmark picker is the kit `Select` (portal-rendered list), so the
     // old native `<option>` markup is gone. The page-global placement contract is

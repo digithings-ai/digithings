@@ -112,7 +112,7 @@ function Metric({
   return (
     <div className="flex min-w-0 flex-col justify-center gap-1 border-r border-hair px-4 py-4 last:border-r-0">
       <dt className="font-mono text-[0.62rem] uppercase tracking-wider text-ink-mute">{label}</dt>
-      <dd className="m-0 font-mono text-2xl font-medium tabular-nums text-ink">
+      <dd className="m-0 font-mono text-xl font-medium tabular-nums text-ink">
         {format === 'number' ? (
           value != null ? value.toFixed(2) : '—'
         ) : format === 'ratio' ? (
@@ -128,9 +128,9 @@ function Metric({
 
 function OpenHoldingsPanel({ rows }: { rows: PerformanceHoldingRow[] }) {
   return (
-    <section className="border-x border-b border-hair bg-surface" data-testid="open-positions-panel">
+    <section className="border-x border-b border-hair" data-testid="open-positions-panel">
       <div className="flex items-center justify-between gap-3 border-b border-hair px-5 py-3">
-        <h2 className="font-display text-xl font-normal text-ink">Open positions</h2>
+        <h2 className="text-sm font-semibold text-ink">Open positions</h2>
         <span className="font-mono text-[0.62rem] uppercase tracking-wider text-ink-mute">
           open book · unrealized
         </span>
@@ -153,7 +153,7 @@ function LedgerDoorway({ sellCount }: { sellCount: number }) {
   return (
     <div
       data-testid="ledger-doorway"
-      className="flex flex-wrap items-center justify-between gap-3 border-x border-b border-hair bg-surface px-5 py-2.5 font-mono text-[0.62rem] uppercase tracking-wider text-ink-mute"
+      className="flex flex-wrap items-center justify-between gap-3 border-x border-b border-hair px-5 py-2.5 font-mono text-[0.62rem] uppercase tracking-wider text-ink-mute"
     >
       <span>
         {sellCount > 0 ? noun : 'No recorded exits or trims'}
@@ -211,9 +211,12 @@ export function PerformanceTearsheetView({
       : null;
 
   return (
-    <div className="ts-print-root space-y-0">
+    <div className="space-y-0">
       <header className="flex flex-wrap items-center justify-between gap-4 border-b border-hair pb-3">
-        <h1 className="font-display text-2xl font-normal text-ink">Performance</h1>
+        <div>
+          <p className="font-mono text-[11px] uppercase text-ink-mute">Portfolio · performance</p>
+          <h1 className="mt-1 font-display text-xl font-normal tracking-tight text-ink">Performance</h1>
+        </div>
         <div className="flex flex-wrap items-center gap-3">
           {navContract && navContract !== 'empty' ? (
             <span
@@ -275,7 +278,7 @@ export function PerformanceTearsheetView({
       <section
         data-testid="performance-command-band"
         aria-label="Portfolio returns"
-        className="grid grid-cols-1 border-x border-b border-hair bg-surface/80 md:grid-cols-[minmax(0,1fr)_auto]"
+        className="grid grid-cols-1 border-x border-b border-hair md:grid-cols-[minmax(0,1fr)_auto]"
       >
         <dl className="m-0 grid grid-cols-1 sm:grid-cols-3">
           <Metric label="Portfolio return" value={portfolioReturnPct} note="since inception" />
@@ -303,7 +306,7 @@ export function PerformanceTearsheetView({
       <section
         data-testid="performance-insight-band"
         aria-label="Risk-adjusted insight metrics"
-        className="border-x border-b border-hair bg-surface"
+        className="border-x border-b border-hair"
       >
         <dl className="m-0 grid grid-cols-1 sm:grid-cols-2">
           <Metric

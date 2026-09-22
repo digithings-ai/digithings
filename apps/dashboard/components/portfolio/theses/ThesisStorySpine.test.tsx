@@ -40,8 +40,13 @@ describe('ThesisStorySpine — research library', () => {
     );
 
     expect(html).toContain('Market theses');
+    expect(html).toContain('Portfolio · theses');
     expect(html).toContain('1 thesis · as of 2026-07-17');
     expect(html).toContain('High conviction');
+    // Q3b slice 3: flat mono register — no display-hero type, no surface fill.
+    expect(html).not.toContain('text-2xl');
+    expect(html).not.toContain('bg-surface');
+    expect(html).not.toContain('font-display text-xl leading-snug');
   });
 
   it('does not render coverage metrics, an index, or unassigned shelves', () => {

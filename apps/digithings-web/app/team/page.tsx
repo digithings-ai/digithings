@@ -1,11 +1,7 @@
 import type { Metadata } from "next";
 import Image from "next/image";
-import Link from "next/link";
-import { Reveal } from "@digithings/ui";
-import { buttonVariants } from "@digithings/ui/ui";
+import { ContactMailto, CtaLink, PageHead } from "@digithings/ui";
 import { DtFooter } from "@/components/DtFooter";
-import { PageHead } from "../_company/prose";
-import { ContactMailto } from "@digithings/ui";
 import { DT_CONTACT_EMAIL } from "@/app/_nav";
 import { DtNav } from "@/components/DtNav";
 
@@ -82,74 +78,58 @@ export default function TeamPage() {
 
         <section className="section">
           <div className="wrap">
-            {/* The roster needs its own .section-head: without an h2 here the
-                member card's h3 would follow the page h1 directly and skip a
-                level. It also gives the single card something to sit under
-                while the roster is one entry long. */}
-            <Reveal className="section-head">
-              <span className="kicker">{"// roster"}</span>
-              <h2>Current maintainer.</h2>
-            </Reveal>
-            <div className="grid gap-[1.1rem] md:grid-cols-2">
-              {MEMBERS.map((m) => (
-                <Reveal key={m.name} className="mod-card">
-                  <div className="flex flex-wrap items-center gap-[1.1rem]">
-                    <Image
-                      src={m.avatar}
-                      alt={`${m.name}, ${m.role.toLowerCase()} of digithings`}
-                      width={m.avatarSize}
-                      height={m.avatarSize}
-                      className="h-[112px] w-[112px] rounded-none border border-hair"
-                    />
-                    <div className="grid gap-[0.2rem]">
-                      <h3>{m.name}</h3>
-                      <span className="role">{m.role}</span>
-                      <a
-                        className="font-mono text-[0.82rem] text-accent [text-underline-offset:2px] hover:text-ink hover:underline"
-                        href={m.github}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                      >
-                        @{m.githubHandle}
-                      </a>
-                    </div>
-                  </div>
-                  <p className="mt-[1rem] text-[0.92rem] leading-[1.7] text-ink-soft">{m.blurb}</p>
-                </Reveal>
-              ))}
-            </div>
+            <span className="kicker">{"// roster"}</span>
+            {MEMBERS.map((m) => (
+              <div key={m.name} className="mt-[1.2rem] flex flex-wrap items-center gap-[1.2rem]">
+                <Image
+                  src={m.avatar}
+                  alt={`${m.name}, ${m.role.toLowerCase()} of digithings`}
+                  width={m.avatarSize}
+                  height={m.avatarSize}
+                  className="h-[96px] w-[96px] rounded-none border border-hair"
+                />
+                <div className="grid gap-[0.25rem]">
+                  <h2 className="text-[1.1rem] font-normal text-ink">{m.name}</h2>
+                  <span className="font-mono text-[0.78rem] text-ink-mute">{m.role}</span>
+                  <a
+                    className="font-mono text-[0.82rem] text-accent [text-underline-offset:2px] hover:text-ink hover:underline"
+                    href={m.github}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                  >
+                    @{m.githubHandle}
+                  </a>
+                </div>
+                <p className="mt-[0.6rem] max-w-[62ch] text-[0.95rem] leading-[1.7] text-ink-soft">
+                  {m.blurb}
+                </p>
+              </div>
+            ))}
           </div>
         </section>
 
         <section className="section section-alt">
           <div className="wrap">
-            <Reveal className="section-head">
-              <span className="kicker">{"// working together"}</span>
-              <h2>Contributions and conversations.</h2>
-              <p>
-                The stack is MIT-licensed and developed in public: issues, pull requests and design
-                notes all live in the repository. You can contribute there or contact us for help
-                integrating the stack and building on it.
-              </p>
-            </Reveal>
-            <div className="flex flex-wrap gap-[0.8rem]">
-              <a
-                className={buttonVariants({ variant: "default" })}
-                href="https://github.com/digithings-ai/digithings"
-                target="_blank"
-                rel="noopener noreferrer"
-              >
-                Contribute on GitHub <span aria-hidden="true">→</span>
-              </a>
-              <Link className={buttonVariants({ variant: "ghost" })} href="/services">
+            <span className="kicker">{"// working together"}</span>
+            <p className="mt-[0.7rem] max-w-[64ch] text-[1rem] leading-[1.7] text-ink-soft">
+              The stack is MIT-licensed and developed in public: issues, pull requests and design
+              notes all live in the repository. You can contribute there or contact us for help
+              integrating the stack and building on it.
+            </p>
+            <div className="mt-[1.6rem] flex flex-wrap items-center gap-[0.8rem]">
+              <CtaLink href="https://github.com/digithings-ai/digithings" external>
+                Contribute on GitHub
+              </CtaLink>
+              <CtaLink href="/services" variant="ghost">
                 View services
-              </Link>
+              </CtaLink>
               <ContactMailto
                 email={DT_CONTACT_EMAIL}
-                className={buttonVariants({ variant: "ghost" })}
+                className="font-mono text-[0.86rem] text-accent [text-underline-offset:2px] hover:text-ink"
                 subject="digithings%20inquiry"
+                showAddress
               >
-                Contact digithings
+                {DT_CONTACT_EMAIL}
               </ContactMailto>
             </div>
           </div>

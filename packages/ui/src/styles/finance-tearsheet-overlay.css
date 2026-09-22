@@ -30,6 +30,31 @@
 }
 .ts-price-faint { stroke: var(--ink-soft); stroke-width: 1; opacity: 0.35; }
 .ts-axis-mute { fill: var(--ink-soft); }
+
+/**
+ * Generic reference overlays for TimeSeries / MultiTimeSeries (Q3b slice 5a,
+ * #4443). Token-driven like the rest of the family: nothing here reads the
+ * theme in JS, so consumers drop their getComputedStyle color readers.
+ */
+.ts-ref-line { stroke-width: 1.2; }
+.ts-ref-dashed { stroke-dasharray: 4 4; }
+.ts-ref-tone-accent { stroke: var(--accent); }
+.ts-ref-tone-up { stroke: var(--up); }
+.ts-ref-tone-down { stroke: var(--down); }
+.ts-ref-tone-warn { stroke: var(--warn); }
+.ts-ref-tone-mute { stroke: var(--ink-soft); }
+.ts-ref-band { stroke: none; }
+.ts-ref-band-accent { fill: color-mix(in srgb, var(--accent) 8%, transparent); }
+.ts-ref-band-up { fill: color-mix(in srgb, var(--up) 10%, transparent); }
+.ts-ref-band-down { fill: color-mix(in srgb, var(--down) 10%, transparent); }
+.ts-ref-band-warn { fill: color-mix(in srgb, var(--warn) 10%, transparent); }
+.ts-ref-band-mute { fill: color-mix(in srgb, var(--ink-mute) 8%, transparent); }
+.ts-ref-dot { stroke: var(--bg); stroke-width: 1; }
+.ts-ref-dot-accent { fill: var(--accent); }
+.ts-ref-dot-up { fill: var(--up); }
+.ts-ref-dot-down { fill: var(--down); }
+.ts-ref-dot-warn { fill: var(--warn); }
+.ts-ref-dot-mute { fill: var(--ink-soft); }
 .ts-fill-dot-buy { fill: var(--up); opacity: 0.7; }
 .ts-fill-dot-sell { fill: var(--down); opacity: 0.7; }
 .ts-indicator-grid {

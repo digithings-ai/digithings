@@ -110,6 +110,18 @@ describe('AllocationsPositionsTable', () => {
     expect(html).not.toContain('>Unrealized<');
   });
 
+  // Q3b slice 3: flat register — the Positions header is a small section label,
+  // not a display hero, and the header band carries no tinted fill. (The risk
+  // track keeps its own bg-term-bg; only the band fill is asserted absent.)
+  it('keeps the positions header in the flat mono register', () => {
+    const html = renderToStaticMarkup(createElement(AllocationsPositionsTable, {
+      reconciliation: recon([pos({})]),
+    }));
+    expect(html).toContain('Positions');
+    expect(html).not.toContain('font-display');
+    expect(html).not.toContain('bg-term-bg px-4');
+  });
+
   it('uses the ticker dossier as the only row follow-through', () => {
     const html = renderToStaticMarkup(createElement(AllocationsPositionsTable, {
       reconciliation: recon([pos({ ticker: 'NVDA' })]),

@@ -66,6 +66,7 @@ export const SPECIMENS: Readonly<Record<string, SpecimenEntry>> = {
   form: { specimen: "components/controls/form-fields-reference.tsx", route: "/controls", marker: "FormField" },
   "icon-button": { specimen: "components/controls/nav-buttons-reference.tsx", route: "/controls", marker: "IconButton" },
   input: { specimen: "components/controls/form-fields-reference.tsx", route: "/controls", marker: "Input" },
+  kbd: { specimen: "components/chrome/kbd-reference.tsx", route: "/chrome", marker: "Kbd" },
   label: { specimen: "components/controls/form-fields-reference.tsx", route: "/controls", marker: "Label" },
   pagination: { specimen: "components/chrome/pagination-reference.tsx", route: "/chrome", marker: "Pagination" },
   pager: { specimen: "components/controls/nav-buttons-reference.tsx", route: "/controls", marker: "Pager" },

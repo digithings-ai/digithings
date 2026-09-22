@@ -299,3 +299,15 @@ describe('EventsTab — no Gloomberb shortcut (#4204)', () => {
     expect(html).not.toContain('term.gloom.sh');
   });
 });
+
+// Q3b slice 5b: flat register — same rule slice 3 pinned on the portfolio
+// table. The day-group band is a structural separator, not a tinted surface,
+// so it carries the hairline rule and no fill. (A risk track or a sheet panel
+// keeps its own bg-term-bg; only the band fill is asserted absent.)
+describe('EventsTab — day-group band carries no tinted fill (Q3b slice 5b)', () => {
+  it('renders the grouped band with a hairline, not a bg-term-bg slab', () => {
+    const html = render({});
+    expect(html).toContain('2026-06-22');
+    expect(html).not.toContain('bg-term-bg px-4');
+  });
+});
