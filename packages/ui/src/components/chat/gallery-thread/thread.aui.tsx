@@ -320,6 +320,12 @@ const ThreadRoot: FC<{
     >
       <ThreadPrimitive.Viewport
         turnAnchor="top"
+        // The top-anchored message carries `padding-top: 1.5rem` (chat-aui.css)
+        // so it does not sit flush against the viewport top. `tallerThan` scores
+        // the anchor's offsetHeight, which includes that padding, so it is
+        // raised by the same 1.5rem to keep the set of fully-pinned messages
+        // unchanged from before the padding was added.
+        topAnchorMessageClamp={{ tallerThan: "11.5em", visibleHeight: "6em" }}
         data-slot="aui_thread-viewport"
         className="relative flex flex-1 flex-col overflow-x-hidden overflow-y-scroll scroll-smooth digichat-thread__viewport"
       >
@@ -409,28 +415,40 @@ const ThreadScrollToBottom: FC = () => {
   // settle) must not surface it.
   useEffect(() => {
     if (!viewportEl) return;
-    const group = viewportEl.querySelector<HTMLElement>(
-      '[data-slot="aui_message-group"]',
-    );
-    const composer = viewportEl.querySelector<HTMLElement>(
-      '[data-slot="aui_composer-shell"]',
-    );
-    if (!group || !composer) {
-      setScrolledAway(false);
-      return;
-    }
+    let observedGroup: HTMLElement | null = null;
+    let observedComposer: HTMLElement | null = null;
     const measure = () => {
+      // Re-query each run: neither node is guaranteed to be mounted yet (and
+      // either may remount), so a captured reference could go stale.
+      const group = viewportEl.querySelector<HTMLElement>(
+        '[data-slot="aui_message-group"]',
+      );
+      const composer = viewportEl.querySelector<HTMLElement>(
+        '[data-slot="aui_composer-shell"]',
+      );
+      if (!group || !composer) {
+        setScrolledAway(false);
+        return;
+      }
+      if (group !== observedGroup) {
+        if (observedGroup) ro.unobserve(observedGroup);
+        ro.observe(group);
+        observedGroup = group;
+      }
+      if (composer !== observedComposer) {
+        if (observedComposer) ro.unobserve(observedComposer);
+        ro.observe(composer);
+        observedComposer = composer;
+      }
       setScrolledAway(
         group.getBoundingClientRect().bottom >
           composer.getBoundingClientRect().top + 1,
       );
     };
+    const ro = new ResizeObserver(measure);
     measure();
     viewportEl.addEventListener("scroll", measure, { passive: true });
-    const ro = new ResizeObserver(measure);
     ro.observe(viewportEl);
-    ro.observe(group);
-    ro.observe(composer);
     return () => {
       viewportEl.removeEventListener("scroll", measure);
       ro.disconnect();

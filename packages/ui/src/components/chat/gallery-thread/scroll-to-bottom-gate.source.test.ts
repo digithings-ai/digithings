@@ -28,4 +28,13 @@ describe("gallery-thread scroll-to-bottom gate", () => {
       /\.digichat-thread__viewport\s+\[data-aui-top-anchor-user\]\s*\{[^}]*padding-top:\s*1\.5rem/,
     );
   });
+
+  it("raises the top-anchor clamp by the padding so pinned messages do not clip", () => {
+    const source = read("thread.aui.tsx");
+    // The clamp scores the anchor's offsetHeight, which includes the 1.5rem
+    // padding-top, so tallerThan must be raised by the same amount (10em + 1.5rem).
+    expect(source).toMatch(
+      /topAnchorMessageClamp=\{\{\s*tallerThan:\s*"11\.5em",\s*visibleHeight:\s*"6em"\s*\}\}/,
+    );
+  });
 });
