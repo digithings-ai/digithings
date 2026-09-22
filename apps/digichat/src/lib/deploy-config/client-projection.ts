@@ -94,7 +94,6 @@ export type DigichatClientConfig = {
   };
   gate: {
     mode: "turn_limited" | "ungated" | "trial_form";
-    activityDetail: "off" | "labels" | "full";
     llmAccess?: DigichatDeployment["gate"]["llmAccess"];
     lockedContact?: string;
     showByok?: boolean;
@@ -150,7 +149,6 @@ export const DEFAULT_CLIENT_CONFIG: DigichatClientConfig = {
   mcp: { servers: [], allowUserServers: false, allowAddForm: false },
   gate: {
     mode: "turn_limited",
-    activityDetail: "labels",
     showByok: false,
     showLanguageSelector: false,
     webSearch: false,
@@ -232,7 +230,6 @@ export function toDigichatClientConfig(dep: DigichatDeployment): DigichatClientC
     },
     gate: {
       mode: dep.gate.mode,
-      activityDetail: dep.gate.activityDetail,
       llmAccess: dep.gate.llmAccess,
       lockedContact: dep.gate.lockedContact,
       showByok: dep.gate.showByok,
