@@ -86,7 +86,7 @@ export function ThesisStoryCard({
               aria-hidden
               className="mt-0.5 shrink-0 text-ink-mute transition-transform group-data-[open]:rotate-90"
             />
-            <h3 className="text-lg font-semibold leading-snug text-ink">{thesis.name}</h3>
+            <h3 className="font-display text-xl leading-snug text-ink">{thesis.name}</h3>
           </div>
           {isNonActive(thesis.status) ? (
             <span className="shrink-0 border border-warn/40 px-2 py-0.5 text-xs font-semibold uppercase tracking-wider text-warn">

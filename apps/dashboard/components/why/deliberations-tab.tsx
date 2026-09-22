@@ -69,7 +69,7 @@ export function PmRebalancePanel({ payload }: { payload: Record<string, unknown>
 
   return (
     <section data-testid="rebalance-ledger" className="border-y border-hair">
-      <div className="px-5 py-3 border-b border-hair flex items-center gap-2">
+      <div className="px-5 py-3 border-b border-hair bg-term-bg flex items-center gap-2">
         <GitBranch size={14} className="text-accent shrink-0" aria-hidden />
         <h3 className="text-xs font-semibold uppercase text-ink-mute">Rebalance memo</h3>
         <span className="ml-auto font-mono text-xs text-ink-mute">automated</span>
@@ -166,7 +166,7 @@ export function RiskDebatePanel({ payload }: { payload: Record<string, unknown> 
 
   return (
     <section data-testid="risk-debate-ledger" className="border-y border-hair">
-      <div className="px-5 py-3 border-b border-hair flex items-center gap-2">
+      <div className="px-5 py-3 border-b border-hair bg-term-bg flex items-center gap-2">
         <Scale size={14} className="text-warn shrink-0" aria-hidden />
         <h3 className="text-xs font-semibold uppercase text-ink-mute">Risk debate</h3>
         <span className="ml-auto font-mono text-xs text-ink-mute">automated</span>
@@ -202,7 +202,7 @@ export function DeliberationsPanel({ docs }: { docs: PipelineTickerDoc[] }) {
 
   return (
     <section data-testid="ticker-debate-ledger" className="border-y border-hair">
-      <div className="px-5 py-3 border-b border-hair flex items-center gap-2">
+      <div className="px-5 py-3 border-b border-hair bg-term-bg flex items-center gap-2">
         <TrendingUp size={14} className="text-accent shrink-0" aria-hidden />
         <h3 className="text-xs font-semibold uppercase text-ink-mute">Ticker debates</h3>
         <span className="ml-auto font-mono text-xs text-ink-mute">
