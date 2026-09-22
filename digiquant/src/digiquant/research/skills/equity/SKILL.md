@@ -22,8 +22,8 @@ description: Run US equity market overview analysis. In the orchestrator pipelin
   flag it as a soft proxy.
 
 ## Inputs
-- `config/watchlist.md` (equity section)
-- `config/preferences.md`
+- `config/watchlist.md` — repository provenance for a maintainer (equity section); NOT retrievable by a tool.
+- `config/preferences.md` — repository provenance for a maintainer; NOT retrievable by a tool.
 - Macro regime output (anchors all analysis)
 - CTA positioning output (systematic equity direction)
 - Institutional flows output (ETF in/outflows)
@@ -54,9 +54,7 @@ description: Run US equity market overview analysis. In the orchestrator pipelin
    - McClellan Oscillator, breadth divergences
    - Sector ETF flows (not price — ETF.com for flow data)
 
-> DB-first: do not require `data/agent-cache/daily`. If you need refreshed numbers, run `./scripts/fetch-market-data.sh` (writes legacy archive summaries) or use MCP sources.
 > If that fails (sandbox), use the data tools directly (`get_price_technicals`, `get_macro_series`, etc.).
-> **Web fetch**: use `defuddle parse <url> --md` instead of WebFetch for any news article, breadth site, earnings page, or analyst note URL. Not for API endpoints, `.json`, or `.md` files.
 
 ## Research Steps
 

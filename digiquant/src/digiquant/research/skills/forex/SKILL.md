@@ -18,8 +18,8 @@ description: Run forex and currency analysis as part of the daily digest. Covers
 - Also **`get_macro_series`** for `DTWEXBGS` (broad USD index) to anchor the dollar view.
 
 ## Inputs
-- `config/watchlist.md` (forex section)
-- `config/preferences.md`
+- `config/watchlist.md` — repository provenance for a maintainer (forex section); NOT retrievable by a tool.
+- `config/preferences.md` — repository provenance for a maintainer; NOT retrievable by a tool.
 - Macro regime output
 - Bonds output (rate differentials drive FX)
 
@@ -30,8 +30,6 @@ description: Run forex and currency analysis as part of the daily digest. Covers
 For live or intraday rates that have not yet been snapshotted, query the same Yahoo Finance symbols directly (`EURUSD=X`, `GBPUSD=X`, `JPY=X`, `CAD=X`) — the underlying provider for the daily feed.
 
 For richer FX context (cross-rates, historical comparisons over arbitrary windows, or pairs not in the daily watchlist), pull the relevant central bank statement or FT/Reuters article via web fetch and read the published rate alongside.
-
-> **Web fetch**: use `defuddle parse <url> --md` instead of WebFetch for any central bank statement, geopolitical news article, or FX analysis page URL. Not for API endpoints, `.json`, or `.md` files.
 
 ---
 

@@ -19,8 +19,8 @@ description: Run global macro analysis as part of the daily digest. Covers econo
   *is* present, cite its source URLs in `sources`.
 
 ## Inputs
-- `config/watchlist.md` (macro section)
-- `config/preferences.md`
+- `config/watchlist.md` — repository provenance for a maintainer (macro section); NOT retrievable by a tool.
+- `config/preferences.md` — repository provenance for a maintainer; NOT retrievable by a tool.
 - Sentiment output (Phase 1A) — does sentiment confirm or contradict macro?
 - CTA positioning output (Phase 1B) — are systematics aligned?
 - Politician/Fed signals output (Phase 1D) — any policy pivot signal?
@@ -38,11 +38,8 @@ description: Run global macro analysis as part of the daily digest. Covers econo
    - Fed/ECB/BOJ speeches, statements, minutes
    - PMI, CPI, NFP, GDP prints and market reactions
    - Geopolitical events and escalation risk
-   - Inflation breakevens (TIPS) and real yields — use `mcp_fred_fred_series_observations` with series `T10YIE` (10Y breakeven), `T5YIE` (5Y breakeven), `DFII10` (10Y TIPS real yield)
-   - Additional FRED series via `mcp_fred_*`: `CPIAUCSL` (CPI), `PCEPI` (PCE), `UNRATE`, `GDP`, `T10Y2Y` (2s10s spread), `T10Y3M` (3m10y spread), `VIXCLS`
-
-> DB-first: do not require `data/agent-cache/daily`. If you need fresh numbers, run `./scripts/fetch-market-data.sh` (writes to legacy archive paths only) or use MCP sources.
-> **Web fetch**: use `defuddle parse <url> --md` instead of WebFetch for any news article, Fed speech transcript, central bank statement, or economic release page. Not for API endpoints, `.json`, or `.md` files.
+   - Inflation breakevens (TIPS) and real yields — use `get_macro_series` with series `T10YIE` (10Y breakeven), `T5YIE` (5Y breakeven), `DFII10` (10Y TIPS real yield)
+   - Additional FRED series via `get_macro_series`: `CPIAUCSL` (CPI), `PCEPI` (PCE), `UNRATE`, `GDP`, `T10Y2Y` (2s10s spread), `T10Y3M` (3m10y spread), `VIXCLS`
 
 ## Research Steps
 
