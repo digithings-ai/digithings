@@ -1,7 +1,7 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
   "title": "PM Direction Memo",
-  "description": "direction portfolio direction artifact \u2014 direction, conviction rank, and confidence in [0, 1]; weights are set by sizing. ForecastReference is attached post-LLM (WP4.5); do not invent forecast IDs. Rank is order, not size.",
+  "description": "PM direction artifact \u2014 direction, conviction rank, and confidence in [0, 1]; weights are set by sizing. ForecastReference is attached post-LLM (WP4.5); do not invent forecast IDs. Rank is order, not size.",
   "type": "object",
   "additionalProperties": false,
   "required": [

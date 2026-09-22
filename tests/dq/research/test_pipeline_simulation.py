@@ -274,7 +274,7 @@ class TestOverrides:
                 )
             )
 
-        # analyst unified analyst: one call per ticker.
+        # unified analyst: one call per ticker.
         assert len(seen_tickers) == 2
         for ticker in ("AAPL", "MSFT"):
             payload = final.phase_portfolio.asset_analysts[ticker]

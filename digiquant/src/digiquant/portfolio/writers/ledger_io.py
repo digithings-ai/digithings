@@ -1,4 +1,4 @@
-"""commit authoritative commit chain — append-only portfolio lineage (#2418, #2768).
+"""Authoritative commit chain — append-only portfolio lineage (#2418, #2768).
 
 commit is the *only* writer of the migration-069 lineage tables. One call to
 :func:`append_commit_chain` appends a whole commit: one ``portfolio_ledger_commits``

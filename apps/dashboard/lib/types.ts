@@ -492,7 +492,7 @@ export interface PerformanceMetrics {
 // ---------------------------------------------------------------------------
 
 /**
- * The analyst unified analyst output (`documents.payload` where
+ * The unified analyst output (`documents.payload` where
  * `document_key = 'analyst/{TICKER}'`), mirrored from the backend Pydantic model
  * `digiquant/.../portfolio/models/analyst.py:AnalystPayload`. `conviction_score` is
  * SIGNED (ge=-5 le=5) — render with `SignedConvictionBadge`, never clamp or feed

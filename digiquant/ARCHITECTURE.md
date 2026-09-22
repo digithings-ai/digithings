@@ -2573,13 +2573,13 @@ flowchart TB
     thesis["thesis review"]
     market["market thesis exploration"]
     vehicle_map["vehicle_map thesis vehicle map"]
-    screener["screener opportunity screener"]
+    screener["opportunity screener"]
     H45["screener.5 coverage director"]
-    analyst["analyst asset analyst ×N"]
+    analyst["asset analyst ×N"]
     deliberation["deliberation ×N"]
     direction["PM direction memo"]
-    sizing["sizing risk sizing (7E)"]
-    commit["commit commit_run"]
+    sizing["risk sizing (7E)"]
+    commit["commit_run"]
     thesis --> market --> vehicle_map --> screener --> H45 --> analyst --> deliberation --> direction --> sizing --> commit
   end
 
@@ -2631,10 +2631,10 @@ flowchart LR
   end
 
   subgraph portfolio["portfolio thesis–commit"]
-    analyst["analyst analysts"]
+    analyst["analysts"]
     direction["PM direction"]
-    sizing["sizing risk sizing"]
-    commit["commit commit_run"]
+    sizing["risk sizing"]
+    commit["commit_run"]
   end
 
   DS --> PC

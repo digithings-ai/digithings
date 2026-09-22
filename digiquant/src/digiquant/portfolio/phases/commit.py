@@ -53,7 +53,7 @@ PHASE_NAME = "portfolio_commit"
 
 @dataclass(frozen=True)
 class CommitRunDeps:
-    """Wiring for the commit terminal commit node."""
+    """Wiring for the terminal commit node."""
 
     client: SupabaseClient
 

@@ -141,7 +141,7 @@ def inventory_slugs() -> list[tuple[str, str]]:
     """Hand list plus any digiquant_models.yaml capabilities missing from it.
 
     Prefers deriving coverage from ``config/digiquant_models.yaml`` so new
-    portfolio/H6 phases cannot silently drop out of --routing (#3787).
+    portfolio/deliberation phases cannot silently drop out of --routing (#3787).
     """
     import yaml
 

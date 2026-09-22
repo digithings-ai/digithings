@@ -55,9 +55,9 @@ erDiagram
 |-------|----|---------|
 | `daily_snapshots` | `(date)` | One consolidated JSON snapshot per calendar day. Root of the daily pipeline. |
 | `positions` | `(date, ticker)` unique kept; T0 also adds `(workspace_id, date, ticker)` | Daily position book; one row per held ticker. Legacy unique retained until P6. |
-| `theses` | `(date, thesis_id)` | Active investment theses per day; H1–H3 writers + H9 sync. Migration 025 adds daily thesis fields. Migration 056 adds stable `topic_key` and a partial unique `(date, topic_key)` index so only one nonterminal market opinion exists per topic/date. **No** `workspace_id` in T0 — shared research stays tenant-agnostic (system workspace conceptually; column deferred). |
+| `theses` | `(date, thesis_id)` | Active investment theses per day; thesis–vehicle_map writers + commit sync. Migration 025 adds daily thesis fields. Migration 056 adds stable `topic_key` and a partial unique `(date, topic_key)` index so only one nonterminal market opinion exists per topic/date. **No** `workspace_id` in T0 — shared research stays tenant-agnostic (system workspace conceptually; column deferred). |
 | `position_events` | `(date, ticker)` unique kept; T0 also adds `(workspace_id, date, ticker)` | Every open / close / rebalance against a position with reason tag. |
-| `documents` | `(workspace_id, date, document_key)` | JSONB payload store for every narrative / structured artifact. Doc-type CHECK set by migration 023. T4 migration 105 adds `workspace_id` (NOT NULL, house-backfilled) and **replaces** the legacy `UNIQUE(date, document_key)` so overlay+house same-key rows do not collide. Overlay H7/H8 keys are also prefixed `overlay/{workspace_id}/…`. Private-phase writes require `DIGIQUANT_OVERLAY_PERSIST=1` after the T1-train anon-policy drop; `anon_read` is untouched. |
+| `documents` | `(workspace_id, date, document_key)` | JSONB payload store for every narrative / structured artifact. Doc-type CHECK set by migration 023. T4 migration 105 adds `workspace_id` (NOT NULL, house-backfilled) and **replaces** the legacy `UNIQUE(date, document_key)` so overlay+house same-key rows do not collide. Overlay direction/sizing keys are also prefixed `overlay/{workspace_id}/…`. Private-phase writes require `DIGIQUANT_OVERLAY_PERSIST=1` after the T1-train anon-policy drop; `anon_read` is untouched. |
 | `nav_history` | PK `(date)` kept; T0 also adds UNIQUE `(workspace_id, date)` | Daily portfolio NAV. |
 | `portfolio_metrics` | `(date)` unique kept; T0 also adds `(workspace_id, date)` | Pre-computed Sharpe, vol, drawdown, exposure metrics. |
 
@@ -77,7 +77,7 @@ erDiagram
 | Table | PK | Purpose |
 |-------|----|---------|
 | `thesis_vehicles` | `(date, thesis_id, ticker)` | Per-thesis vehicle map; FK → `theses (date, thesis_id)`. |
-| `deliberation_sessions` | `(session_id UUID)` | **Dropped in migration 128 (#4053).** One row per H6 deliberation session; `kind` is legacy (`baseline`, `delta_scoped`, `monthly`) — daily graph uses thesis-first H6 without separate session kinds. |
+| `deliberation_sessions` | `(session_id UUID)` | **Dropped in migration 128 (#4053).** One row per deliberation session; `kind` is legacy (`baseline`, `delta_scoped`, `monthly`) — daily graph uses thesis-first deliberation without separate session kinds. |
 | `deliberation_rounds` | `(id BIGSERIAL)` | **Dropped in migration 128 (#4053).** Round-loop persistence; unique on `(session_id, ticker, round_number)`. |
 | `analyst_coverage` | `(date, ticker)` | Daily denormalized analyst ↔ ticker index. |
 | `deep_dive_triggers` | `(id BIGSERIAL)` | **Dropped in migration 128 (#4053).** Audit trail of every recess- or delta-watch- or manually- forced deep-dive. |
@@ -232,15 +232,15 @@ callers inject the store.
 
 ### Ticker evidence bundles — migration 090 (#2844 / WP11.1 + #2892 / WP11.2)
 
-Private append-only H5 base evidence bundles and H6 missing-fact amendments.
+Private append-only analyst base evidence bundles and deliberation missing-fact amendments.
 Contracts: `TickerEvidenceBundle`, `MissingFactRequest`,
 `EvidenceBundleAmendment` in `digiquant.dashboard.research_retrieval.models`.
 Application boundary: `EvidenceBundleStore` (in-memory for unit tests; SQL IO
-adapter later). WP11.2 builds typed H5 bases into
+adapter later). WP11.2 builds typed analyst bases into
 `phase_portfolio.ticker_evidence_bundles` before the provider call; default portfolio
 graph leaves the store unwired (append + `DIGIQUANT_EVIDENCE_BUNDLE_WRITER` only
 when a caller injects a store). Dark launch: no public base view, no historical
-backfill, no H6 selection cutover (WP11.3+), not operator-durable until SQL IO
+backfill, no deliberation selection cutover (WP11.3+), not operator-durable until SQL IO
 + wiring. Bundles cite `state_version_id` + `evidence_ids` for WP12 lineage;
 amendments must reference one base and one missing-fact request (zero unlinked
 amendments). Unique `(source_run_id, ticker)` enforces one base per run/ticker;
@@ -251,9 +251,9 @@ trigger so amendment `base_bundle_id` must equal the linked request's
 
 | Table | PK | Purpose |
 |-------|----|---------|
-| `olympus_ticker_evidence_bundles` | `(bundle_id UUID)` | Immutable H5 base bundle + payload jsonb; unique run/ticker and run/ticker/content. |
+| `olympus_ticker_evidence_bundles` | `(bundle_id UUID)` | Immutable analyst base bundle + payload jsonb; unique run/ticker and run/ticker/content. |
 | `olympus_missing_fact_requests` | `(request_id UUID)` | Named missing-fact request FK → base bundle. |
-| `olympus_evidence_bundle_amendments` | `(amendment_id UUID)` | Append-only H6 supplement FK → base + request; `091` requires request.base = amendment.base. |
+| `olympus_evidence_bundle_amendments` | `(amendment_id UUID)` | Append-only deliberation supplement FK → base + request; `091` requires request.base = amendment.base. |
 
 RLS enabled with **zero** policies; `PUBLIC`/`anon`/`authenticated` fully revoked;
 `service_role` reset then `SELECT, INSERT` only; `reject_olympus_evidence_bundle_mutation()`
@@ -329,14 +329,14 @@ blocks `UPDATE`/`DELETE`/`TRUNCATE`.
 
 ### Forecast registry — migration 079 (#2663 / WP4.6)
 
-Private append-only prospective H5/H6 forecast lineage. Written after H9 portfolio
+Private append-only prospective analyst/deliberation forecast lineage. Written after commit portfolio
 booking only; registry failure is fail-soft and cannot rebook. No historical
 backfill, no prompt/reasoning bodies, no public base view.
 
 | Table | PK | Purpose |
 |-------|----|---------|
-| `olympus_forecast_assessments` | `(forecast_id UUID)` | Immutable H5 `ForecastAssessment` base: ticker, run/provider/prompt/artifact versions, terms jsonb, price_anchor jsonb, content_hash, effective_at, known_at, recorded_at. |
-| `olympus_forecast_amendments` | `(amendment_id UUID)` | Immutable H6 `ForecastAmendment`: FK to base, optional supersedes_amendment_id, reason, terms, evidence/contradiction id arrays, content_hash, times. |
+| `olympus_forecast_assessments` | `(forecast_id UUID)` | Immutable analyst `ForecastAssessment` base: ticker, run/provider/prompt/artifact versions, terms jsonb, price_anchor jsonb, content_hash, effective_at, known_at, recorded_at. |
+| `olympus_forecast_amendments` | `(amendment_id UUID)` | Immutable deliberation `ForecastAmendment`: FK to base, optional supersedes_amendment_id, reason, terms, evidence/contradiction id arrays, content_hash, times. |
 
 RLS enabled with **zero** policies; `PUBLIC`/`anon`/`authenticated` fully revoked;
 `service_role` reset then `SELECT, INSERT` only; `reject_olympus_forecast_registry_mutation()`
@@ -351,9 +351,9 @@ WP5.1 shipped schema + Pydantic contracts; WP5.2 adds the trading-session outcom
 resolver (`digiquant.research.forecast_outcomes`) writing
 `olympus_forecast_outcomes` only. WP5.3 adds the pure deterministic shrinkage
 calibrator (`digiquant.portfolio.forecast_calibration`). WP5.4 attaches at the
-H6→H7 boundary and persists via `forecast_registry.persist_shadow_calibrations`
-into `olympus_forecast_calibrations` + `olympus_calibrated_forecasts` (H9 fail-soft).
-H8 cutover remains later.
+deliberation→direction boundary and persists via `forecast_registry.persist_shadow_calibrations`
+into `olympus_forecast_calibrations` + `olympus_calibrated_forecasts` (commit fail-soft).
+sizing cutover remains later.
 
 | Table | PK | Purpose |
 |-------|----|---------|
@@ -367,13 +367,13 @@ blocks `UPDATE`/`DELETE`/`TRUNCATE`. Models:
 `digiquant.portfolio.models.forecast_calibration`. Outcome writer:
 `digiquant.research.forecast_outcomes` (WP5.2). Shadow calibrator + attach:
 `digiquant.portfolio.forecast_calibration` (WP5.3/5.4). Calibration table writers:
-`digiquant.research.forecast_registry.persist_shadow_calibrations` (WP5.4 / H9).
+`digiquant.research.forecast_registry.persist_shadow_calibrations` (WP5.4 / commit).
 
 ### Risk policy snapshot registry — migration 081 (#2698 / WP6.3)
 
-Private append-only resolved H8 risk inputs: one `RiskPolicy` + one `CovarianceSnapshot`
-per run, plus a run ref binding `source_run_id`. Resolver runs at the H8 entry boundary;
-H9 fail-soft persistence via `digiquant.research.risk_policy_registry` after booking.
+Private append-only resolved sizing risk inputs: one `RiskPolicy` + one `CovarianceSnapshot`
+per run, plus a run ref binding `source_run_id`. Resolver runs at the sizing entry boundary;
+commit fail-soft persistence via `digiquant.research.risk_policy_registry` after booking.
 Phase 1 audit artifact for policy/covariance; WP8.4 may consume the paired
 `AllocationInputBundle` for calibrated raw weights while leaving these registry
 tables observational.
@@ -390,8 +390,8 @@ Registry: `digiquant.research.risk_policy_registry` (exact-ID reads only).
 
 ### Pre-trade risk report registry — migration 083 (#2754 / WP9.4)
 
-Private append-only `PreTradeRiskReport` rows bound to the final H8 book H9 commits.
-H8 attaches the observational report after final controls; H9 validates identity
+Private append-only `PreTradeRiskReport` rows bound to the final sizing book commit commits.
+sizing attaches the observational report after final controls; commit validates identity
 (content hash, final-book fingerprint, allocation-bundle hash) then INSERT-only
 persists. Exact retry (same `report_id` + hash) skips; content conflict never UPDATE.
 Rollout: `DIGIQUANT_PRETRADE_RISK_MODE=off|shadow|enforce` (default `shadow`).
@@ -403,7 +403,7 @@ Rollout: `DIGIQUANT_PRETRADE_RISK_MODE=off|shadow|enforce` (default `shadow`).
 RLS enabled with **zero** policies; append-only via `reject_olympus_pretrade_risk_report_mutation()`.
 Contract: `digiquant.portfolio.allocation_contracts.PreTradeRiskReport`.
 Registry: `digiquant.research.pretrade_risk_registry`.
-H9 surface: `portfolio.writers.commit_io.validate_pretrade_risk_report` /
+commit surface: `portfolio.writers.commit_io.validate_pretrade_risk_report` /
 `persist_validated_pretrade_risk_report`.
 
 ### Live quote transport — new in migration 063 (#1807)
@@ -510,14 +510,14 @@ blocked; they are made pointless (`200 {"skipped": "not claimed"}`, nothing fetc
 Prospective, append-only contracts closing finding OLY-REV-009: decision intent, target
 approval, order intent, fill, and holding state were previously conflated across
 `positions`/`decision_log`/snapshots. Eight tables form one replayable chain and add no
-writer — H9 `commit_run` stays the sole authoritative booking path.
+writer — commit `commit_run` stays the sole authoritative booking path.
 
 | Table | PK | Purpose |
 |-------|----|---------|
 | `portfolio_ledger_commits` | `(id UUID)` | Root of one lineage run: `run_date`, `policy_version_id`, no `status` column — self-FK `supersedes_id` (backward-only, never a forward pointer), scoped by a composite `FOREIGN KEY (supersedes_id, run_date) REFERENCES ... (id, run_date)` so a row can only supersede one from its own run_date, plus a partial unique index (`run_date` WHERE `supersedes_id IS NULL`) enforce currency structurally instead. |
 | `portfolio_ledger_decision_intents` | `(id UUID)` | `action` (add/trim/exit/no_op/reject) plus a mandatory closed-vocabulary `reason`, cross-checked so only a valid action/reason pair persists; FK to `portfolio_ledger_commits`. |
 | `portfolio_ledger_requested_targets` | `(id UUID)` | Pre-adjustment target weight/quantity, nullable with no DEFAULT (missing stays `NULL`, never fabricated to `0`) and mutually exclusive — exactly one of weight/quantity must be set (XOR), never both; an explicit `0` remains a legal value once set; FK to `portfolio_ledger_decision_intents`. |
-| `portfolio_ledger_target_adjustments` | `(id UUID)` | One adjustment step (`TargetAdjustmentType`: legacy `cap`/`rounding`/`carry` plus the 12 H8 reason codes; CHECK widened in migration 095) with `original_value`/`adjusted_value` (`>= 0`, may legitimately be zero); reduce-only types may only reduce the value; no supersession concept — it's a point-in-time audit step; FK to `portfolio_ledger_requested_targets`. Producer: H9 `ledger_io.append_commit_chain` (#2768). |
+| `portfolio_ledger_target_adjustments` | `(id UUID)` | One adjustment step (`TargetAdjustmentType`: legacy `cap`/`rounding`/`carry` plus the 12 sizing reason codes; CHECK widened in migration 095) with `original_value`/`adjusted_value` (`>= 0`, may legitimately be zero); reduce-only types may only reduce the value; no supersession concept — it's a point-in-time audit step; FK to `portfolio_ledger_requested_targets`. Producer: commit `ledger_io.append_commit_chain` (#2768). |
 | `portfolio_ledger_approved_targets` | `(id UUID)` | Post-adjustment approved weight/quantity, nullable with no DEFAULT (missing stays `NULL`, never fabricated to `0`) but *not* mutually exclusive — at least one of weight/quantity must be set (OR), both allowed, and an explicit `0` remains legal — with self-FK `supersedes_id` (backward-only), scoped by a composite `FOREIGN KEY (supersedes_id, run_date, symbol) REFERENCES ... (id, run_date, symbol)` so a row can only supersede one from its own run_date and symbol — a changed same-date target is a new row, never a rewrite; FK to `portfolio_ledger_requested_targets`. |
 | `portfolio_ledger_order_intents` | `(id UUID)` | `quantity NOT NULL CHECK (> 0)`, terminal `status` (pending/executed/rejected — no `superseded` value; supersession is orthogonal to status), self-FK `supersedes_id` (backward-only), likewise scoped by a composite `FOREIGN KEY (supersedes_id, run_date, symbol) REFERENCES ... (id, run_date, symbol)`, `rejection_reason` required exactly when rejected; FK to `portfolio_ledger_approved_targets`. |
 | `portfolio_ledger_paper_executions` | `(id UUID)` | Immutable fill: `quantity`/`price` both `NOT NULL CHECK (> 0)`, `id` a deterministic `uuid5(order_intent_id, executed_date)` backed by `UNIQUE (order_intent_id, executed_date)` so an exact-same-date retry reproduces the identical row instead of duplicating; FK to `portfolio_ledger_order_intents`. |
@@ -564,7 +564,7 @@ superseder per prior id. Models/engine/io: `digiquant.dashboard.accounting`.
 - Restatement appends a new period that `supersedes_id`-points at the prior tip — never mutates.
 - `select_final_period` returns only a **complete** head with `status=final`. Incomplete marks,
   estimated/failed status, or a period row missing its children are **not** authoritative.
-- Provisional H9 `nav_history` / `positions` remain continuity data and are **never** selected
+- Provisional commit `nav_history` / `positions` remain continuity data and are **never** selected
   as final accounting. Shadow mode (`--shadow` / default) reconciles period return vs legacy
   nav day return without deleting either path; `--dry-run` reports without INSERT. Cold
   ledger (open lots empty while a positions book exists) declines with exit 3, as does a
@@ -633,9 +633,9 @@ convention. The FK relies on Postgres's default `MATCH SIMPLE`, under which a `N
 `supersedes_id` short-circuits the whole constraint — a root row (no predecessor)
 is never required to also carry `run_date`/`symbol` in the referenced row.
 
-This is schema and contracts only (#2415). No H7/H8/H9 ownership changed, no broker or
+This is schema and contracts only (#2415). No direction/sizing/commit ownership changed, no broker or
 live-trading path is touched, and nothing writes these tables yet — a future task wires a
-producer (dual-writing from H7/H8/H9) before any consumer (a paper executor, then
+producer (dual-writing from direction/sizing/commit) before any consumer (a paper executor, then
 accounting/learning) can read them. See `digiquant/ARCHITECTURE.md` → "Portfolio lineage
 ledger (private, #2415)" for the full chain and failure-mode writeup.
 
@@ -1215,7 +1215,7 @@ They dominated the database before 061: 952 MB of a 1263 MB total (75%), growing
   no policy) and skips the VACUUM, silently — so 061 asserts ownership at apply time.
 
 > **Still open:** 94% of the bytes are the `__pregel_tasks` channel — one full
-> `ResearchState` copy per H5/H6 fan-out target (`portfolio/focus_roster.py:29`),
+> `ResearchState` copy per analyst/deliberation fan-out target (`portfolio/focus_roster.py:29`),
 > which violates `digigraph/AGENTS.md` "State stays lean". Retention caps the
 > footprint but does not reduce the ~48 MB/day of write volume. Deferred from #1758
 > as a human-gated architecture change.

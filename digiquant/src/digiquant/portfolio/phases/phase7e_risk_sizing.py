@@ -122,7 +122,7 @@ def resolve_sizing_input_mode(preferences: Mapping[str, Any]) -> str:
 
 
 def pm_confidence_scale(confidence: float | None) -> float:
-    """Map direction confidence to an sizing size multiplier in [0, 1].
+    """Map direction confidence to a sizing multiplier in [0, 1].
 
     Missing confidence uses :data:`SIZING_MISSING_CONFIDENCE_DEFAULT` (0.5). Never treat
     an omitted field as full size (1.0).

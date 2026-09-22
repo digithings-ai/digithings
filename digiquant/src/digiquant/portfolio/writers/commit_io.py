@@ -1097,7 +1097,7 @@ def validate_pretrade_risk_report(
     *,
     mode: PreTradeRiskMode | None = None,
 ) -> PreTradeRiskValidation:
-    """Validate attached PreTradeRiskReport identity against the book commit will commit.
+    """Validate attached PreTradeRiskReport identity against the book the commit will write.
 
     Checks presence, Pydantic parse (unknown/corrupt), recomputed content hash via
     the contract validator, final-book fingerprint vs ``weights``, optional sized-book

@@ -242,7 +242,7 @@ def run_research_agent(
     Tool-path retry (#1739):
         A tool-grounded turn gets **no** provider-side schema enforcement, so a
         chatty model can answer with a prose preamble and fail ``json.loads`` at
-        char 0 (observed 31/39 deliberation deliberations on 2026-07-31). The retry is
+        char 0 (observed 31/39 deliberations on 2026-07-31). The retry is
         therefore *tool-free and enforced* rather than a second tool loop:
 
         - ``digillm.run_tools`` builds its tool-result conversation in a local

@@ -1,4 +1,4 @@
-"""screener opportunity screener — focus roster held invariant (#936)."""
+"""opportunity screener — focus roster held invariant (#936)."""
 
 from __future__ import annotations
 

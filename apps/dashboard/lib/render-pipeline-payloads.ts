@@ -535,7 +535,7 @@ export function isDebateSummaryPayload(payload: unknown): boolean {
   return typeof p.bull_thesis === 'string' && typeof p.bear_thesis === 'string';
 }
 
-/** Markdown for a bull/bear debate summary or deliberation PM↔analyst deliberation. */
+/** Markdown for a bull/bear debate summary or deliberation PM↔analyst. */
 export function renderDebateSummaryMarkdown(payload: unknown): string {
   const p = asObj(payload) ?? {};
   const ticker = s(p.ticker).trim();

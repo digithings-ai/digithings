@@ -365,7 +365,7 @@ DEFAULT_RESPONSES: dict[str, FixtureResponse] = {
         "sources": [],
     },
     "MonthlyDigest": _digest_body(),
-    # analyst unified analyst
+    # unified analyst
     "AnalystPayload": {
         "ticker": "AAPL",
         "conviction_score": 2,

@@ -248,7 +248,7 @@ the pipeline's whole observed lifetime.
 
 ## PMDirectionMemo (direction)
 
-direction emits direction + ordinal conviction rank + narrative + optional `confidence`
+direction emits a direction + ordinal conviction rank + narrative + optional `confidence`
 in `[0, 1]` — never `target_pct`, `weight`, or `recommended_portfolio`. Schema:
 `PMDirectionMemo` / `TickerDirection` (see spec §11.2). Rank is **order, not size**.
 WP4.5 (#2660) adds `ForecastReference` per roster row, bound after the LLM (and
@@ -566,7 +566,7 @@ proposing a backfill. Verified against the live `core` project on 2026-08-01:
   truncated. This is check (1) at the top of this section reporting a frozen commit under an
   `ok` verdict, which is exactly the lie the degraded gate above now prevents.
 
-**Fixed 2026-07-17** by `40312d82` "restore portfolio screener–commit commits" (PR #1565, branch
+**Fixed 2026-07-17** by `40312d82` "restore portfolio H4–H9 commits" (PR #1565, branch
 `task/1555-portfolio-restoration`), then hardened 07-22 by the memo-unaddressed held carry
 (`b84a4d73`) and the final-book continuity backstop (`1dc93db3`). `positions` resumes on
 2026-07-17, the same date. Of the 18 diagnostics rows from 07-17 onward that carry a **non-null**
@@ -622,11 +622,11 @@ flowchart TB
     market["market exploration"]
     vehicle_map["vehicle_map vehicle map"]
     screener["screener"]
-    analyst["analyst asset analyst ×N"]
+    analyst["asset analyst ×N"]
     deliberation["deliberation ×N"]
     direction["PM direction"]
-    sizing["sizing risk sizing"]
-    commit["commit commit_run"]
+    sizing["risk sizing"]
+    commit["commit_run"]
     thesis --> market --> vehicle_map --> screener --> analyst --> deliberation --> direction --> sizing --> commit
   end
 
