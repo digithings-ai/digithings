@@ -36,6 +36,7 @@ TOOL_GROUNDED_SKILLS = (
     "deliberation",
     "deliberation-analyst-response",
     "market-thesis-exploration",
+    "pm-allocation-memo",
     "pm-direction",
     "pm-rebalance-decision",
     "portfolio-manager",
@@ -91,6 +92,18 @@ class TestContractReachesToolGroundedSkills:
         assert PORTFOLIO_TOOL_USE_CONTRACT in body
 
 
+class TestGateIsPinned:
+    def test_gate_is_exactly_the_documented_set(self) -> None:
+        """A new tool-grounded portfolio skill must be a deliberate gate addition.
+
+        The gate is an allowlist, so a missed skill would silently keep looping; pinning it
+        here means the omission fails a test instead of a production run.
+        """
+        from digiquant.portfolio.skills import _TOOL_CONTRACT_SKILLS
+
+        assert _TOOL_CONTRACT_SKILLS == frozenset(TOOL_GROUNDED_SKILLS)
+
+
 class TestContractScope:
     @pytest.mark.parametrize("slug", TOOL_LESS_SKILLS)
     def test_tool_less_skills_do_not_carry_it(self, slug: str) -> None:
@@ -99,9 +112,12 @@ class TestContractScope:
 
 
 class TestContractSaysWhatMakesItConverge:
-    def test_states_repeat_calls_return_the_same_bytes(self) -> None:
+    def test_states_repeat_calls_return_the_same_rows(self) -> None:
         lowered = PORTFOLIO_TOOL_USE_CONTRACT.lower()
-        assert "returns the same bytes" in lowered
+        assert "the same rows" in lowered
+        assert "cannot surface a row" in lowered
+        # Live enrichment tools are cached, so re-calling them is not a way to get more.
+        assert "are cached" in lowered
         assert "empty result is an answer" in lowered
 
     def test_states_the_toolset_is_the_request_schemas(self) -> None:

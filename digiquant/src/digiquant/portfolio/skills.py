@@ -110,9 +110,11 @@ There is no shell, no URL fetcher, no browser, and no MCP client in this loop. I
 instructions above name one, that instruction describes a different environment: you cannot
 run it, so do not try, and do not report its absence as a gap in the data.
 
-- Every retrieval tool is a read of stored rows. Repeating a call with the same arguments
-  returns the same bytes, and re-phrasing the question cannot surface a row that was not
-  already there. An empty result is an answer, not a failure to retry.
+- The retrieval tools read stored rows: repeating a call with the same arguments returns
+  the same rows, and re-phrasing the question cannot surface a row that was not already
+  there. An empty result is an answer, not a failure to retry. Enrichment tools that read a
+  live upstream are cached, so re-calling one inside this turn does not surface new
+  evidence either.
 - Do not fetch back out of the store what this request already carries in its inputs — read
   it from the inputs.
 - Data tools are ground truth where the request carries them. Use as many calls as the work
@@ -176,9 +178,10 @@ def _skill_full_candidates(slug: str) -> tuple[Path, ...]:
 def load_skill_full(slug: str) -> str:
     """Return the Markdown body of a portfolio full skill (see ``_skill_full_candidates``).
 
-    Both contracts are appended here at the single load chokepoint rather than copied
-    into each file, for the same reason ``EDIT_SCHEMA_CONSTRAINTS`` is appended in
-    ``load_skill_edit``: it cannot drift between them. ``PORTFOLIO_TOOL_USE_CONTRACT``
+    Both contracts are appended at the load chokepoints (``load_skill``,
+    ``load_skill_edit``, ``load_skill_full``) rather than copied into each file, for the
+    same reason ``EDIT_SCHEMA_CONSTRAINTS`` is appended in ``load_skill_edit``: they
+    cannot drift between them. ``PORTFOLIO_TOOL_USE_CONTRACT``
     (#4524) reaches every portfolio skill whose turn is tool-grounded;
     ``DELIBERATION_AMENDMENT_CONTRACT`` reaches the analyst-reply skill only —
     ``DeliberationAnalystTurn`` is the only turn model carrying ``forecast_amendment``
