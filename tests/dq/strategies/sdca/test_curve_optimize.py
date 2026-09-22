@@ -13,23 +13,36 @@ from digiquant.cli import main as digiquant_main
 from digiquant.strategies.sdca.backtest import run_backtest
 from digiquant.strategies.sdca.curve import AccumDistCurve
 from digiquant.strategies.sdca.curve_optimize import (
+    CONTINUOUS_CROSSING_EPS,
     CURVE_SEARCH_BOUNDS,
+    DEAD_ZONE_WIDTH_GRID,
     DEEP_CHEAP_RISK,
     DEEP_RICH_RISK,
     PUBLISHED_BUY_KNEE,
     PUBLISHED_SELL_KNEE,
+    WIDE_KNEE_SEARCH_BOUNDS,
     CurveOptimizeGates,
     FillConcentration,
     beats_baseline_concentration,
+    continuous_shape_ok,
+    continuous_shape_params,
+    dead_zone_shape_params,
     fill_concentration,
     persist_curve_winner,
     published_indicator_weights,
     round_shape_for_preset,
+    sample_continuous_curve_trials,
     sample_curve_trials,
+    sample_wide_knee_curve_trials,
+    score_dead_zone_width,
     score_shape_on_index,
+    search_continuous_curve,
     search_curve,
+    search_wide_knee_curve,
     shape_from_bounds_ok,
+    sweep_dead_zone_width,
 )
+from digiquant.strategies.sdca.curve import RISK_NODES
 from digiquant.strategies.sdca.curve_shape import SdcaCurveShape
 from digiquant.strategies.sdca.presets import load_preset
 from digiquant.strategy_specs import get_param_specs
@@ -168,12 +181,16 @@ class TestFillConcentration:
 
 
 class TestSearchSpace:
-    def test_bounds_are_wider_than_published_3_pct_25_70(self) -> None:
+    def test_bounds_reach_past_the_published_25_70_knees(self) -> None:
+        """Knee bounds now extend past the published dead zone (not just up to it),
+        so the search can reach the wider active zones that fix vs-Buy&Hold
+        underperformance — see curve_trial.py manual trials."""
         assert CURVE_SEARCH_BOUNDS["buy_max_rate"][1] >= 30.0
         assert CURVE_SEARCH_BOUNDS["sell_max_rate"][1] >= 30.0
         assert CURVE_SEARCH_BOUNDS["buy_knee_risk"][0] <= 10.0
-        assert CURVE_SEARCH_BOUNDS["buy_knee_risk"][1] <= PUBLISHED_BUY_KNEE
-        assert CURVE_SEARCH_BOUNDS["sell_knee_risk"][0] >= PUBLISHED_SELL_KNEE
+        assert CURVE_SEARCH_BOUNDS["buy_knee_risk"][1] > PUBLISHED_BUY_KNEE
+        assert CURVE_SEARCH_BOUNDS["sell_knee_risk"][0] < PUBLISHED_SELL_KNEE
+        assert CURVE_SEARCH_BOUNDS["buy_knee_risk"][1] < CURVE_SEARCH_BOUNDS["sell_knee_risk"][0]
         assert CURVE_SEARCH_BOUNDS["buy_curvature"][1] >= 4.0
         assert CURVE_SEARCH_BOUNDS["sell_curvature"][1] >= 4.0
 
@@ -185,9 +202,9 @@ class TestSearchSpace:
         assert hi_sell >= 30.0
         lo_bk, hi_bk, _, _, _ = specs["buy_knee_risk"]
         lo_sk, hi_sk, _, _, _ = specs["sell_knee_risk"]
-        assert hi_bk < lo_sk
-        assert hi_bk <= PUBLISHED_BUY_KNEE
-        assert lo_sk >= PUBLISHED_SELL_KNEE
+        assert (lo_bk, hi_bk) == CURVE_SEARCH_BOUNDS["buy_knee_risk"]
+        assert (lo_sk, hi_sk) == CURVE_SEARCH_BOUNDS["sell_knee_risk"]
+        assert hi_bk < lo_sk  # dead zone stays non-empty even at the widest knees
 
     def test_sample_trials_stay_in_bounds_and_keep_dead_zone(self) -> None:
         trials = sample_curve_trials(
@@ -208,8 +225,282 @@ class TestSearchSpace:
             assert shape.sell_max_rate > 0.0
 
 
+class TestContinuousCurveParams:
+    def test_crossing_risk_splits_into_a_tiny_symmetric_knee_gap(self) -> None:
+        params = continuous_shape_params(50.0, 20.0, 20.0, 2.0, 2.0)
+        assert params["buy_knee_risk"] == pytest.approx(50.0 - CONTINUOUS_CROSSING_EPS / 2)
+        assert params["sell_knee_risk"] == pytest.approx(50.0 + CONTINUOUS_CROSSING_EPS / 2)
+        gap = params["sell_knee_risk"] - params["buy_knee_risk"]
+        assert gap == pytest.approx(CONTINUOUS_CROSSING_EPS)
+        assert gap < 5.0  # far below the RISK_NODES spacing
+
+    def test_rates_are_near_zero_but_nonzero_on_either_side_of_the_crossing(self) -> None:
+        params = continuous_shape_params(50.0, 20.0, 20.0, 2.0, 2.0)
+        shape = SdcaCurveShape(**params)
+        just_below = shape.rate_at(50.0 - CONTINUOUS_CROSSING_EPS)
+        just_above = shape.rate_at(50.0 + CONTINUOUS_CROSSING_EPS)
+        assert 0.0 < just_below < 0.01
+        assert -0.01 < just_above < 0.0
+
+    def test_continuous_shape_ok_ignores_old_disjoint_knee_bounds(self) -> None:
+        """A crossing near 15 puts sell_knee_risk far outside the old
+        CURVE_SEARCH_BOUNDS sell range [50, 92] -- that's fine here, since a
+        continuous fit's crossing point legitimately covers that whole middle
+        territory (there's no artificial dead zone constraining it)."""
+        params = continuous_shape_params(15.0, 20.0, 20.0, 2.0, 2.0)
+        assert not shape_from_bounds_ok(params)
+        assert continuous_shape_ok(params)
+
+    def test_continuous_shape_ok_still_rejects_out_of_bounds_rate(self) -> None:
+        params = continuous_shape_params(50.0, 999.0, 20.0, 2.0, 2.0)
+        assert not continuous_shape_ok(params)
+
+    def test_continuous_shape_ok_rejects_zero_sell_max_rate(self) -> None:
+        params = continuous_shape_params(50.0, 20.0, 0.0, 2.0, 2.0)
+        assert not continuous_shape_ok(params)
+
+
+class TestSampleContinuousCurveTrials:
+    def test_random_only_trials_deduped_and_within_bounds(self) -> None:
+        """Occasionally a high-curvature crossing lands so close to a RISK_NODES
+        point that the adjacent node's interpolated rate underflows below
+        SdcaCurveShape's own epsilon and gets rejected -- inherent to the
+        unchanged shape validator, not a defect in the generator, so a small
+        undercount vs n_random is expected rather than an exact match."""
+        trials = sample_continuous_curve_trials(n_random=40, seed=7, include_grid=False)
+        assert 35 <= len(trials) <= 40
+        for params in trials:
+            assert continuous_shape_ok(params)
+
+    def test_at_most_one_risk_node_ever_falls_in_the_dead_zone(self) -> None:
+        trials = sample_continuous_curve_trials(n_random=200, seed=3, include_grid=True)
+        assert len(trials) > 0
+        for params in trials:
+            shape = SdcaCurveShape(**params)
+            dead_nodes = [
+                r for r in RISK_NODES if shape.buy_knee_risk <= r <= shape.sell_knee_risk
+            ]
+            assert len(dead_nodes) <= 1
+
+    def test_grid_and_random_are_independent_knobs(self) -> None:
+        grid_only = sample_continuous_curve_trials(n_random=0, include_grid=True)
+        random_only = sample_continuous_curve_trials(n_random=10, seed=1, include_grid=False)
+        assert len(grid_only) > 0
+        assert 8 <= len(random_only) <= 10
+
+    def test_same_seed_is_deterministic(self) -> None:
+        a = sample_continuous_curve_trials(n_random=25, seed=11, include_grid=False)
+        b = sample_continuous_curve_trials(n_random=25, seed=11, include_grid=False)
+        assert a == b
+
+
+class TestSearchContinuousCurve:
+    def test_search_continuous_curve_picks_a_feasible_continuous_shape(self) -> None:
+        dates, prices, risk = _v_cycle()
+        result = search_continuous_curve(
+            dates,
+            prices,
+            risk,
+            initial_cash=1000.0,
+            frozen_weights=published_indicator_weights(),
+            n_random=60,
+            seed=5,
+            include_grid=False,
+        )
+        assert 50 <= result.num_evaluations <= 60
+        gap = result.best.shape.sell_knee_risk - result.best.shape.buy_knee_risk
+        assert gap == pytest.approx(CONTINUOUS_CROSSING_EPS)
+        assert result.beats_flat_dca_oos is False
+
+    def test_baseline_is_todays_published_curve(self) -> None:
+        dates, prices, risk = _v_cycle()
+        result = search_continuous_curve(
+            dates,
+            prices,
+            risk,
+            initial_cash=1000.0,
+            frozen_weights=published_indicator_weights(),
+            n_random=20,
+            seed=9,
+            include_grid=False,
+        )
+        assert result.baseline.shape == _published_shape()
+
+
+class TestSampleWideKneeCurveTrials:
+    def test_random_only_trials_deduped_and_within_bounds(self) -> None:
+        trials = sample_wide_knee_curve_trials(n_random=200, seed=7, include_grid=False)
+        assert 150 <= len(trials) <= 200
+        for params in trials:
+            assert shape_from_bounds_ok(params, bounds=WIDE_KNEE_SEARCH_BOUNDS)
+
+    def test_knees_are_independent_not_a_single_crossing(self) -> None:
+        """Unlike the continuous-curve sampler, gaps here should vary widely --
+        this search must be able to explore genuinely separated buy/sell
+        knees, not just a near-zero crossing epsilon."""
+        trials = sample_wide_knee_curve_trials(n_random=300, seed=3, include_grid=False)
+        gaps = [t["sell_knee_risk"] - t["buy_knee_risk"] for t in trials]
+        assert max(gaps) > 20.0
+        assert min(gaps) < 20.0
+
+    def test_grid_and_random_are_independent_knobs(self) -> None:
+        grid_only = sample_wide_knee_curve_trials(n_random=0, include_grid=True)
+        random_only = sample_wide_knee_curve_trials(n_random=10, seed=1, include_grid=False)
+        assert len(grid_only) > 0
+        assert 8 <= len(random_only) <= 10
+
+    def test_same_seed_is_deterministic(self) -> None:
+        a = sample_wide_knee_curve_trials(n_random=25, seed=11, include_grid=False)
+        b = sample_wide_knee_curve_trials(n_random=25, seed=11, include_grid=False)
+        assert a == b
+
+
+class TestSearchWideKneeCurve:
+    def test_search_wide_knee_curve_picks_a_feasible_shape(self) -> None:
+        dates, prices, risk = _v_cycle()
+        result = search_wide_knee_curve(
+            dates,
+            prices,
+            risk,
+            initial_cash=1000.0,
+            frozen_weights=published_indicator_weights(),
+            n_random=60,
+            seed=5,
+            include_grid=False,
+        )
+        assert 50 <= result.num_evaluations <= 60
+        assert result.best.shape.buy_knee_risk < result.best.shape.sell_knee_risk
+        assert result.beats_flat_dca_oos is False
+
+    def test_baseline_is_todays_published_curve(self) -> None:
+        dates, prices, risk = _v_cycle()
+        result = search_wide_knee_curve(
+            dates,
+            prices,
+            risk,
+            initial_cash=1000.0,
+            frozen_weights=published_indicator_weights(),
+            n_random=20,
+            seed=9,
+            include_grid=False,
+        )
+        assert result.baseline.shape == _published_shape()
+
+
+class TestDeadZoneShapeParams:
+    def test_zero_width_collapses_to_a_tiny_symmetric_gap(self) -> None:
+        params = dead_zone_shape_params(50.0, 0.0, 15.0, 15.0, 1.5, 1.5)
+        assert params["sell_knee_risk"] - params["buy_knee_risk"] == pytest.approx(2e-6)
+        assert params["buy_knee_risk"] == pytest.approx(50.0, abs=1e-5)
+
+    def test_width_widens_a_symmetric_gap_around_crossing(self) -> None:
+        params = dead_zone_shape_params(50.0, 20.0, 15.0, 15.0, 1.5, 1.5)
+        assert params["buy_knee_risk"] == pytest.approx(40.0)
+        assert params["sell_knee_risk"] == pytest.approx(60.0)
+
+    def test_large_width_near_an_edge_clips_to_valid_knee_bounds(self) -> None:
+        params = dead_zone_shape_params(5.0, 50.0, 15.0, 15.0, 1.5, 1.5, knee_floor=0.5, knee_ceiling=99.5)
+        assert params["buy_knee_risk"] == pytest.approx(0.5)
+        assert params["buy_knee_risk"] < params["sell_knee_risk"]
+        # every width, including this clipped edge case, must yield a valid shape
+        SdcaCurveShape(**params)
+
+    def test_every_grid_width_yields_a_valid_shape_from_a_mid_crossing(self) -> None:
+        for width in DEAD_ZONE_WIDTH_GRID:
+            params = dead_zone_shape_params(50.0, width, 15.0, 15.0, 1.5, 1.5)
+            SdcaCurveShape(**params)
+
+
+class TestScoreDeadZoneWidth:
+    def test_trade_days_match_the_raw_backtest_report(self) -> None:
+        dates, prices, risk = _v_cycle()
+        shape = _shape(buy_knee_risk=45.0, sell_knee_risk=55.0)
+        report, _ = run_backtest(dates, prices, risk, AccumDistCurve(shape.to_nodes()), 1000.0)
+        scored = score_dead_zone_width(dates, prices, risk, shape, 10.0, 1000.0)
+        assert scored.trade_days == report.buy_days + report.sell_days
+        assert scored.buy_days == report.buy_days
+        assert scored.sell_days == report.sell_days
+        assert scored.width == 10.0
+
+    def test_long_only_shape_is_flagged_infeasible(self) -> None:
+        dates, prices, risk = _v_cycle()
+        shape = _shape(sell_max_rate=0.0)
+        scored = score_dead_zone_width(dates, prices, risk, shape, 45.0, 1000.0)
+        assert not scored.feasible
+        assert "long_only" in scored.reject_reasons
+
+
+class TestSweepDeadZoneWidth:
+    def _winner(self) -> SdcaCurveShape:
+        return SdcaCurveShape(
+            buy_max_rate=15.0,
+            buy_knee_risk=49.75,
+            sell_knee_risk=50.25,
+            sell_max_rate=15.0,
+            buy_curvature=1.5,
+            sell_curvature=1.5,
+        )
+
+    def test_recovers_the_winners_crossing_as_the_midpoint(self) -> None:
+        dates, prices, risk = _v_cycle()
+        result = sweep_dead_zone_width(
+            dates,
+            prices,
+            risk,
+            self._winner(),
+            initial_cash=1000.0,
+            frozen_weights=published_indicator_weights(),
+            widths=(0.5, 10.0, 50.0),
+        )
+        assert result.crossing_risk == pytest.approx(50.0)
+        assert [t.width for t in result.trials] == [0.5, 10.0, 50.0]
+
+    def test_continuous_baseline_is_the_winner_shape_unmodified(self) -> None:
+        dates, prices, risk = _v_cycle()
+        winner = self._winner()
+        result = sweep_dead_zone_width(
+            dates,
+            prices,
+            risk,
+            winner,
+            initial_cash=1000.0,
+            frozen_weights=published_indicator_weights(),
+            widths=(5.0,),
+        )
+        assert result.continuous_baseline.shape == winner
+        assert result.continuous_baseline.width == 0.0
+
+    def test_wider_dead_zone_trades_less_on_this_v_cycle(self) -> None:
+        dates, prices, risk = _v_cycle()
+        result = sweep_dead_zone_width(
+            dates,
+            prices,
+            risk,
+            self._winner(),
+            initial_cash=1000.0,
+            frozen_weights=published_indicator_weights(),
+            widths=(0.5, 50.0),
+        )
+        narrow, wide = result.trials
+        assert wide.trade_days <= narrow.trade_days
+
+    def test_frozen_weights_round_trip_into_the_result(self) -> None:
+        dates, prices, risk = _v_cycle()
+        weights = published_indicator_weights()
+        result = sweep_dead_zone_width(
+            dates,
+            prices,
+            risk,
+            self._winner(),
+            initial_cash=1000.0,
+            frozen_weights=weights,
+            widths=(1.0,),
+        )
+        assert result.frozen_weights == weights.model_dump()
+
+
 class TestSearchAndPersist:
-    def test_search_picks_higher_return_among_concentrated(self) -> None:
+    def test_search_picks_higher_risk_adjusted_return(self) -> None:
         dates, prices, risk = _v_cycle()
         baseline = _published_shape()
         clustered = _shape(
@@ -246,17 +537,22 @@ class TestSearchAndPersist:
             baseline=baseline,
             frozen_weights=published_indicator_weights(),
         )
+        clustered_score = score_shape_on_index(dates, prices, risk, clustered, 1000.0)
         assert result.num_evaluations == 2
         assert result.beats_flat_dca_oos is False
-        assert result.best.total_return_pct >= result.baseline.total_return_pct
-        assert result.best.concentration.buy_mean_risk is not None
-        assert result.baseline.concentration.buy_mean_risk is not None
-        assert (
-            result.best.concentration.buy_mean_risk <= result.baseline.concentration.buy_mean_risk
+        # best is whichever trial has the higher risk_adjusted_return, not
+        # necessarily the higher raw total_return_pct or the more concentrated one.
+        assert result.best.risk_adjusted_return == pytest.approx(
+            max(result.baseline.risk_adjusted_return, clustered_score.risk_adjusted_return)
         )
 
-    def test_higher_return_drip_does_not_win_over_concentrated(self) -> None:
-        """A long risk≈20 plateau lets a 25-knee linear dump cash before the bottom."""
+    def test_best_is_picked_by_risk_adjusted_return_not_raw_return(self) -> None:
+        """A long risk≈20 plateau lets a 25-knee linear dump cash before the bottom.
+
+        Objective is risk_adjusted_return (total_return_pct / max_drawdown_pct), so
+        `best` can differ from whichever trial has the higher raw total_return_pct —
+        unlike the old concentration-gated selection, this is checked directly
+        against both trials' own scores rather than assumed via a fixed knee."""
         n_plateau, n_bottom, n_mid, n_rich = 50, 20, 15, 30
         prices: list[float] = []
         risks: list[float] = []
@@ -330,8 +626,12 @@ class TestSearchAndPersist:
         assert clustered_score.concentration.buy_mean_risk is not None
         assert drip_score.concentration.buy_mean_risk is not None
         assert clustered_score.concentration.buy_mean_risk < drip_score.concentration.buy_mean_risk
-        assert result.best.shape.buy_knee_risk == pytest.approx(12.0)
-        assert result.unconstrained_return_pct >= result.best.total_return_pct - 1e-9
+        # best is whichever of the two has the higher risk_adjusted_return.
+        assert result.best.risk_adjusted_return == pytest.approx(
+            max(drip_score.risk_adjusted_return, clustered_score.risk_adjusted_return)
+        )
+        # unconstrained is the same max over the feasible pool used for `best`.
+        assert result.unconstrained_return_pct == pytest.approx(result.best.total_return_pct)
 
     def test_persist_requires_return_and_concentration(self, tmp_path: Path) -> None:
         dates, prices, risk = _v_cycle()
@@ -369,7 +669,7 @@ class TestSearchAndPersist:
 
     def test_published_weights_are_frozen_from_settings(self) -> None:
         weights = published_indicator_weights()
-        assert weights.valuation == pytest.approx(1.0)
+        assert weights.power_law == pytest.approx(1.0)
         assert weights.m2 == pytest.approx(0.5)
         assert weights.dxy == pytest.approx(0.5)
         assert weights.rs_eth == pytest.approx(0.0)

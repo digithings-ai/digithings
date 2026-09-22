@@ -39,7 +39,7 @@ class SdcaTwoStageProvenance(BaseModel):
     variant: Literal["aggressive", "regularized"]
     evaluator: str
     stage_a_weights: dict[str, float]
-    stage_b_params: dict[str, float | int | str]
+    stage_b_params: dict[str, bool | float | int | str]
     windows: list[CycleWindow]
     mean_is_vs_flat_dca_pct: float
     mean_oos_vs_flat_dca_pct: float

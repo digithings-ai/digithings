@@ -2,7 +2,7 @@
 
 Follows the same precompute-then-drive pattern as ``m2_liquidity.py``: the
 composite-risk index (produced upstream via ``compute_composite_risk()`` and
-``valuation_z_score()``) is written to a parquet of ``date``/``risk`` columns
+``power_law_z_score()``) is written to a parquet of ``date``/``risk`` columns
 and passed in by path, since neither a Polars DataFrame nor a ``RiskModel``
 can live in a frozen Nautilus ``StrategyConfig`` (msgspec struct). On each
 bar, the strategy looks up that day's risk, converts it to a trade rate via

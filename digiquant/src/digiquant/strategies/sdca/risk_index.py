@@ -1,10 +1,10 @@
 """Risk-index builder — glue from a ``RiskModel`` to the Nautilus ``risk_path`` parquet.
 
-Closes the #3168 integration gap: every piece (rails, valuation-z, composite
+Closes the #3168 integration gap: every piece (rails, power-law-z, composite
 risk, ``SdcaStrategy`` loading a ``date``/``risk`` parquet) already existed,
 but nothing joined them. This module is pure wiring — no new maths.
 
-``build_risk_index()`` runs the already-written pipeline (rails → valuation-z
+``build_risk_index()`` runs the already-written pipeline (rails → power-law-z
 → composite risk) and returns the two columns ``SdcaStrategy`` needs plus
 diagnostic columns for an auditable tearsheet (#3172). ``write_risk_index()``
 persists the two-column parquet under every validation
@@ -21,8 +21,9 @@ import polars as pl
 from pydantic import BaseModel, ConfigDict, Field
 
 from digiquant.strategies.sdca.composite_risk import IndicatorWeight, compute_composite_risk
+from digiquant.strategies.sdca.price_oscillators import SdcaOscillatorSpec
 from digiquant.strategies.sdca.risk_model import RiskModel
-from digiquant.strategies.sdca.valuation import valuation_z_score
+from digiquant.strategies.sdca.power_law_zscore import power_law_confluence_z
 
 _REQUIRED_RAIL_COLUMNS = ("low", "median", "high")
 _DIAGNOSTIC_COLUMNS = (
@@ -32,7 +33,7 @@ _DIAGNOSTIC_COLUMNS = (
     "low",
     "median",
     "high",
-    "valuation_z",
+    "power_law_z",
     "composite_z",
 )
 
@@ -54,15 +55,30 @@ def build_risk_index(
     price: pl.Series,
     risk_model: RiskModel,
     extra_indicators: list[IndicatorWeight] | None = None,
-    valuation_weight: float = 1.0,
+    power_law_weight: float = 1.0,
+    oscillators: SdcaOscillatorSpec | None = None,
+    *,
+    composite_rolling_window: int | None = None,
+    composite_rolling_min_samples: int | None = None,
+    composite_smoothing_window: int | None = None,
+    composite_smoothing_min_samples: int | None = None,
 ) -> pl.DataFrame:
     """Join a ``RiskModel`` + price series into the SDCA risk index.
 
     Returns a frame with ``date``, ``risk``, and diagnostic columns
-    (``price``, ``low``, ``median``, ``high``, ``valuation_z``, ``composite_z``).
-    Null semantics are inherited from ``valuation_z_score`` /
+    (``price``, ``low``, ``median``, ``high``, ``power_law_z``, ``composite_z``).
+    Null semantics are inherited from ``power_law_confluence_z`` /
     ``compute_composite_risk``: a null in any enabled indicator makes that
     day's ``risk`` null (an explicit no-trade day for ``SdcaStrategy``).
+    ``power_law_z`` here is ``power_law_confluence_z``'s output (whole-history
+    power-law leg blended with a rolling trend leg) — ``oscillators`` (default
+    ``SdcaOscillatorSpec()``) configures the trend leg's window.
+    ``composite_rolling_window`` (default ``None``, off) forwards to
+    ``compute_composite_risk``'s rolling re-normalization of the blended
+    composite — see that function's docstring. ``composite_smoothing_window``
+    (default ``None``, off) forwards to that same function's separate causal
+    rolling-mean smoothing of the final composite, applied after any rolling
+    re-normalization — use this one to damp day-to-day noise in the index.
     """
     dates = _require_date_series(dates, name="dates")
     if price.len() != dates.len():
@@ -80,12 +96,26 @@ def build_risk_index(
             f"got {rails.height} rows for {dates.len()} dates"
         )
 
-    valuation_z = valuation_z_score(price, rails["low"], rails["median"], rails["high"])
+    spec = oscillators or SdcaOscillatorSpec()
+    power_law_z = power_law_confluence_z(
+        dates,
+        price,
+        rails["low"],
+        rails["median"],
+        rails["high"],
+        trend_window=spec.power_law_trend_window,
+    )
     indicators = [
-        IndicatorWeight(name="valuation", z=valuation_z, weight=valuation_weight),
+        IndicatorWeight(name="power_law", z=power_law_z, weight=power_law_weight),
         *(extra_indicators or []),
     ]
-    composite = compute_composite_risk(indicators)
+    composite = compute_composite_risk(
+        indicators,
+        rolling_window=composite_rolling_window,
+        rolling_min_samples=composite_rolling_min_samples,
+        smoothing_window=composite_smoothing_window,
+        smoothing_min_samples=composite_smoothing_min_samples,
+    )
     payload: dict[str, pl.Series] = {
         "date": dates,
         "risk": composite["risk"],
@@ -93,7 +123,7 @@ def build_risk_index(
         "low": rails["low"],
         "median": rails["median"],
         "high": rails["high"],
-        "valuation_z": valuation_z,
+        "power_law_z": power_law_z,
         "composite_z": composite["composite_z"],
     }
     extra_z_cols: list[str] = []

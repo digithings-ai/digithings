@@ -2,13 +2,14 @@
 
 Index members stay at published ``settings.json`` weights (power law 1.0 +
 M2 0.5 + DXY 0.5). Search is over ``SdcaCurveShape`` only. Objective is
-``total_return_pct`` (highest backtest return). vs-flat-DCA is logged, never
-the headline, and never used to set ``beats_flat_dca_oos``.
+``risk_adjusted_return`` (``total_return_pct / max_drawdown_pct``), so the
+search rewards a smoother equity curve, not just raw return. vs-flat-DCA and
+vs-lump-sum are logged, never used to set ``beats_flat_dca_oos``.
 
-Concentration uses fixed published cheap/rich bands (risk < 25 / risk > 70)
-plus deeper bands (risk < 15 / risk > 85) and dollar-weighted mean risk:
-remaining-book already only buys below the trial's own buy knee, so that
-fraction is tautological unless the band is independent of the trial.
+Concentration (fixed published cheap/rich bands, risk < 25 / risk > 70, plus
+deeper bands risk < 15 / risk > 85) is reported for transparency but is not a
+hard feasibility gate: it is anchored to the *published* curve's knees, so it
+would reject a wider-knee candidate outright regardless of performance.
 """
 
 from __future__ import annotations
@@ -32,6 +33,7 @@ from digiquant.strategies.sdca.curve_shape import SdcaCurveShape
 from digiquant.strategies.sdca.indicator_catalog import SdcaCompositeWeights, build_extra_indicators
 from digiquant.strategies.sdca.optimize import drop_extras_missing_sources, load_sdca_extra_sources
 from digiquant.strategies.sdca.presets import load_preset
+from digiquant.strategies.sdca.price_oscillators import SdcaOscillatorSpec
 from digiquant.strategies.sdca.risk_index import build_risk_index
 
 logger = logging.getLogger(__name__)
@@ -44,24 +46,26 @@ PUBLISHED_BUY_KNEE = 25.0
 PUBLISHED_SELL_KNEE = 70.0
 DEEP_CHEAP_RISK = 15.0
 DEEP_RICH_RISK = 85.0
+_DRAWDOWN_EPSILON = 0.5  # floor (pct points) so a ~0 drawdown doesn't blow up the ratio
 
 CURVE_SEARCH_BOUNDS: dict[str, tuple[float, float]] = {
     "buy_max_rate": (3.0, 40.0),
-    "buy_knee_risk": (8.0, 25.0),
-    "sell_knee_risk": (70.0, 92.0),
+    "buy_knee_risk": (8.0, 45.0),
+    "sell_knee_risk": (50.0, 92.0),
     "sell_max_rate": (3.0, 40.0),
     "buy_curvature": (1.0, 5.0),
     "sell_curvature": (1.0, 5.0),
 }
 
-# Coarse grid: widened vs the published 3% / 25 / 70 / curv 1+2 clip.
+# Coarse grid: widened vs the published 3% / 25 / 70 / curv 1+2 clip, and past
+# the old 25/70 knee caps so trial-and-error's wide-zone shapes are sampled.
 DEFAULT_COARSE_GRID: dict[str, tuple[float, ...]] = {
     "buy_max_rate": (8.0, 15.0, 25.0, 35.0),
-    "buy_knee_risk": (10.0, 15.0, 20.0, 25.0),
-    "sell_knee_risk": (70.0, 80.0, 88.0),
+    "buy_knee_risk": (10.0, 15.0, 20.0, 25.0, 35.0, 45.0),
+    "sell_knee_risk": (50.0, 55.0, 60.0, 70.0, 80.0, 88.0),
     "sell_max_rate": (8.0, 15.0, 25.0, 35.0),
-    "buy_curvature": (1.0, 2.0, 3.5),
-    "sell_curvature": (2.0, 3.5),
+    "buy_curvature": (1.0, 1.5, 2.0, 3.5),
+    "sell_curvature": (1.0, 1.5, 2.0, 3.5),
 }
 
 _SHAPE_KEYS = (
@@ -75,12 +79,19 @@ _SHAPE_KEYS = (
 
 
 class CurveOptimizeGates(BaseModel):
-    """Hard gates. Return is maximized only among trials that pass."""
+    """Hard gates. Risk-adjusted return is maximized only among trials that pass.
+
+    ``min_buy_frac_cheap``/``min_sell_frac_rich`` default to 0 (off): they are
+    measured against the fixed *published* knees (``PUBLISHED_BUY_KNEE``/
+    ``PUBLISHED_SELL_KNEE``), not a candidate's own knee, so a nonzero floor
+    here would reject a wide-knee candidate outright regardless of
+    performance. Set them explicitly to re-enable as a sanity check.
+    """
 
     model_config = ConfigDict(frozen=True, strict=True)
 
-    min_buy_frac_cheap: float = Field(0.99, ge=0.0, le=1.0)
-    min_sell_frac_rich: float = Field(0.99, ge=0.0, le=1.0)
+    min_buy_frac_cheap: float = Field(0.0, ge=0.0, le=1.0)
+    min_sell_frac_rich: float = Field(0.0, ge=0.0, le=1.0)
     require_2025_sells: bool = True
     require_sells: bool = True
     min_sell_max_rate: float = Field(1.0, gt=0.0)
@@ -106,12 +117,16 @@ class FillConcentration(BaseModel):
 
 
 class CurveTrialScore(BaseModel):
-    """One curve on the frozen index. vs-flat is logged, not the objective."""
+    """One curve on the frozen index. Objective is ``risk_adjusted_return``."""
 
     model_config = ConfigDict(frozen=True, strict=True)
 
     shape: SdcaCurveShape
     total_return_pct: float
+    max_drawdown_pct: float = Field(ge=0.0, description="abs(dca_max_drawdown_pct) * 100")
+    risk_adjusted_return: float = Field(
+        description="total_return_pct / max(max_drawdown_pct, epsilon)"
+    )
     vs_lump_pct: float
     vs_flat_dca_pct: float
     concentration: FillConcentration
@@ -146,7 +161,7 @@ def published_indicator_weights(
     raw = json.loads(path.read_text())
     block = raw["strategies"]["btc_sdca"]["sdca"]["indicator_weights"]
     return SdcaCompositeWeights(
-        valuation=float(block.get("valuation", 1.0)),
+        power_law=float(block.get("power_law", 1.0)),
         m2=float(block.get("m2", 0.0)),
         rs_eth=float(block.get("rs_eth", 0.0)),
         dxy=float(block.get("dxy", 0.0)),
@@ -164,8 +179,13 @@ def published_curve_shape() -> SdcaCurveShape:
     return preset.shape
 
 
-def shape_from_bounds_ok(params: dict[str, float | int | str]) -> bool:
-    """True when params form a valid shape inside ``CURVE_SEARCH_BOUNDS``."""
+def shape_from_bounds_ok(
+    params: dict[str, float | int | str],
+    *,
+    bounds: dict[str, tuple[float, float]] | None = None,
+) -> bool:
+    """True when params form a valid shape inside ``bounds`` (default ``CURVE_SEARCH_BOUNDS``)."""
+    b = bounds if bounds is not None else CURVE_SEARCH_BOUNDS
     try:
         shape = SdcaCurveShape(
             buy_max_rate=float(params["buy_max_rate"]),
@@ -177,7 +197,7 @@ def shape_from_bounds_ok(params: dict[str, float | int | str]) -> bool:
         )
     except (KeyError, TypeError, ValueError):
         return False
-    for key, (lo, hi) in CURVE_SEARCH_BOUNDS.items():
+    for key, (lo, hi) in b.items():
         value = float(getattr(shape, key))
         if value < lo - 1e-9 or value > hi + 1e-9:
             return False
@@ -233,6 +253,270 @@ def sample_curve_trials(
             drawn[name] = round(rng.uniform(lo, hi), 4)
         _add(drawn)
     return out
+
+
+# Stage A: continuous (no meaningful dead zone) curve fit. `SdcaCurveShape`'s
+# invariant is a *strict* buy_knee_risk < sell_knee_risk with no minimum gap
+# enforced, so a single free `crossing_risk` plus a fixed epsilon produces an
+# effectively continuous curve without a new shape class. `CONTINUOUS_CROSSING_EPS`
+# is far below the 5-point RISK_NODES spacing, so at most one runtime node ever
+# lands inside the (buy_knee, sell_knee) interval.
+CONTINUOUS_CROSSING_EPS = 0.5
+CONTINUOUS_CROSSING_BOUNDS: tuple[float, float] = (2.0, 98.0)
+
+CONTINUOUS_COARSE_GRID: dict[str, tuple[float, ...]] = {
+    "crossing_risk": tuple(float(r) for r in range(10, 91, 5)),
+    "buy_max_rate": (8.0, 15.0, 25.0, 35.0),
+    "sell_max_rate": (8.0, 15.0, 25.0, 35.0),
+    "buy_curvature": (1.0, 1.5, 2.0, 3.5),
+    "sell_curvature": (1.0, 1.5, 2.0, 3.5),
+}
+
+
+def continuous_shape_params(
+    crossing_risk: float,
+    buy_max_rate: float,
+    sell_max_rate: float,
+    buy_curvature: float,
+    sell_curvature: float,
+    *,
+    eps: float = CONTINUOUS_CROSSING_EPS,
+) -> dict[str, float]:
+    """The six ``SdcaCurveShape`` params for one crossing point + a tiny epsilon gap.
+
+    ``eps`` is far smaller than the 5-point ``RISK_NODES`` spacing, so the
+    resulting 21-node curve is effectively continuous at ``crossing_risk``:
+    no grid node sees a meaningful dead zone.
+    """
+    half = eps / 2.0
+    return {
+        "buy_max_rate": buy_max_rate,
+        "buy_knee_risk": crossing_risk - half,
+        "sell_knee_risk": crossing_risk + half,
+        "sell_max_rate": sell_max_rate,
+        "buy_curvature": buy_curvature,
+        "sell_curvature": sell_curvature,
+    }
+
+
+def continuous_shape_ok(params: dict[str, float | int | str]) -> bool:
+    """True when ``params`` form a valid ``SdcaCurveShape`` with rate/curvature
+    inside ``CURVE_SEARCH_BOUNDS``.
+
+    Knee values are NOT checked against ``CURVE_SEARCH_BOUNDS`` -- those
+    bounds assume the old disjoint dead zone (``buy_knee_risk`` in [8, 45],
+    ``sell_knee_risk`` in [50, 92]); a continuous crossing point legitimately
+    ranges across that whole middle territory and beyond.
+    """
+    try:
+        shape = SdcaCurveShape(
+            buy_max_rate=float(params["buy_max_rate"]),
+            buy_knee_risk=float(params["buy_knee_risk"]),
+            sell_knee_risk=float(params["sell_knee_risk"]),
+            sell_max_rate=float(params["sell_max_rate"]),
+            buy_curvature=float(params["buy_curvature"]),
+            sell_curvature=float(params["sell_curvature"]),
+        )
+    except (KeyError, TypeError, ValueError):
+        return False
+    for key in ("buy_max_rate", "sell_max_rate", "buy_curvature", "sell_curvature"):
+        lo, hi = CURVE_SEARCH_BOUNDS[key]
+        value = float(getattr(shape, key))
+        if value < lo - 1e-9 or value > hi + 1e-9:
+            return False
+    return shape.sell_max_rate > 0.0
+
+
+def sample_continuous_curve_trials(
+    *,
+    n_random: int = 0,
+    seed: int = 42,
+    include_grid: bool = True,
+    eps: float = CONTINUOUS_CROSSING_EPS,
+    crossing_bounds: tuple[float, float] = CONTINUOUS_CROSSING_BOUNDS,
+) -> list[dict[str, float]]:
+    """Rerunnable trial list for the continuous (no-dead-zone) curve fit.
+
+    Parameterized by a single free ``crossing_risk`` instead of independent
+    buy/sell knee ranges, so the search finds the best fair-value crossing
+    point rather than an artificial dead zone. Output is still the standard
+    six ``SdcaCurveShape`` keys, so it plugs directly into the existing
+    ``search_curve()``/``score_shape_on_index()`` unchanged.
+    """
+    seen: set[tuple[float, ...]] = set()
+    out: list[dict[str, float]] = []
+
+    def _add(crossing: float, buy_rate: float, sell_rate: float, buy_curv: float, sell_curv: float) -> None:
+        params = continuous_shape_params(crossing, buy_rate, sell_rate, buy_curv, sell_curv, eps=eps)
+        if not continuous_shape_ok(params):
+            return
+        key = tuple(round(params[k], 6) for k in _SHAPE_KEYS)
+        if key in seen:
+            return
+        seen.add(key)
+        out.append(params)
+
+    if include_grid:
+        names = list(CONTINUOUS_COARSE_GRID)
+        for combo in itertools.product(*(CONTINUOUS_COARSE_GRID[n] for n in names)):
+            values = dict(zip(names, combo, strict=True))
+            _add(
+                values["crossing_risk"],
+                values["buy_max_rate"],
+                values["sell_max_rate"],
+                values["buy_curvature"],
+                values["sell_curvature"],
+            )
+    rng = random.Random(seed)
+    lo, hi = crossing_bounds
+    for _ in range(max(0, n_random)):
+        crossing = round(rng.uniform(lo, hi), 4)
+        buy_rate = round(rng.uniform(*CURVE_SEARCH_BOUNDS["buy_max_rate"]), 4)
+        sell_rate = round(rng.uniform(*CURVE_SEARCH_BOUNDS["sell_max_rate"]), 4)
+        buy_curv = round(rng.uniform(*CURVE_SEARCH_BOUNDS["buy_curvature"]), 4)
+        sell_curv = round(rng.uniform(*CURVE_SEARCH_BOUNDS["sell_curvature"]), 4)
+        _add(crossing, buy_rate, sell_rate, buy_curv, sell_curv)
+    return out
+
+
+def search_continuous_curve(
+    dates: pl.Series,
+    prices: pl.Series,
+    risk: pl.Series,
+    *,
+    initial_cash: float,
+    frozen_weights: SdcaCompositeWeights,
+    n_random: int = 400,
+    seed: int = 42,
+    include_grid: bool = True,
+    eps: float = CONTINUOUS_CROSSING_EPS,
+    crossing_bounds: tuple[float, float] = CONTINUOUS_CROSSING_BOUNDS,
+    gates: CurveOptimizeGates | None = None,
+) -> CurveOptimizeResult:
+    """Stage A entry: fit the best continuous crossing curve on a frozen index.
+
+    Baseline for comparison is today's published ``btc_optimized`` shape --
+    useful context, not a claim that the two are apples-to-apples (the
+    published curve has a real dead zone; this one doesn't by construction).
+    """
+    trials = sample_continuous_curve_trials(
+        n_random=n_random,
+        seed=seed,
+        include_grid=include_grid,
+        eps=eps,
+        crossing_bounds=crossing_bounds,
+    )
+    return search_curve(
+        dates,
+        prices,
+        risk,
+        trials,
+        initial_cash=initial_cash,
+        baseline=published_curve_shape(),
+        frozen_weights=frozen_weights,
+        gates=gates,
+        evaluator="curve_simulator",
+    )
+
+
+# Wide-knee search: Chris's direct visual-inspection hypothesis (2026-09-05,
+# same session as Stage A/B) -- looking at the aggregate risk chart, buying
+# should start around risk 40 and get aggressive by ~25; selling should start
+# around risk 60 and get aggressive by ~75, and since the composite is
+# z-scored that split is naturally symmetric as a *starting point*, not a
+# constraint: buy_knee_risk and sell_knee_risk stay fully independent here
+# (unlike Stage A's single crossing point), so the search is free to land on
+# an asymmetric result. Curvature >= 1 already gives the "slow near the knee,
+# exponential near the edge" ramp Chris described; CURVE_SEARCH_BOUNDS caps
+# sell_max_rate at 40, but Stage A/B fills showed sells never came close to
+# depleting the position even with a wide dead zone -- so this search widens
+# the sell-rate ceiling well past that, to let the optimizer actually explore
+# selling the position down toward empty at extreme risk if that's what
+# improves risk_adjusted_return.
+WIDE_KNEE_SEARCH_BOUNDS: dict[str, tuple[float, float]] = {
+    "buy_max_rate": (5.0, 40.0),
+    "buy_knee_risk": (20.0, 48.0),
+    "sell_knee_risk": (52.0, 80.0),
+    "sell_max_rate": (5.0, 95.0),
+    "buy_curvature": (1.0, 6.0),
+    "sell_curvature": (1.0, 6.0),
+}
+
+WIDE_KNEE_COARSE_GRID: dict[str, tuple[float, ...]] = {
+    "buy_max_rate": (15.0, 25.0, 35.0),
+    "buy_knee_risk": (30.0, 35.0, 40.0, 45.0),
+    "sell_knee_risk": (55.0, 60.0, 65.0, 70.0),
+    "sell_max_rate": (15.0, 30.0, 50.0, 70.0, 90.0),
+    "buy_curvature": (1.5, 2.5, 4.0),
+    "sell_curvature": (1.5, 2.5, 4.0),
+}
+
+
+def sample_wide_knee_curve_trials(
+    *,
+    n_random: int = 3000,
+    seed: int = 42,
+    include_grid: bool = True,
+    bounds: dict[str, tuple[float, float]] = WIDE_KNEE_SEARCH_BOUNDS,
+    grid: dict[str, tuple[float, ...]] = WIDE_KNEE_COARSE_GRID,
+) -> list[dict[str, float]]:
+    """Rerunnable trial list for the wide-knee curve fit (buy/sell knees free)."""
+    seen: set[tuple[float, ...]] = set()
+    out: list[dict[str, float]] = []
+
+    def _add(params: dict[str, float]) -> None:
+        if not shape_from_bounds_ok(params, bounds=bounds):
+            return
+        key = tuple(round(params[k], 6) for k in _SHAPE_KEYS)
+        if key in seen:
+            return
+        seen.add(key)
+        out.append(params)
+
+    if include_grid:
+        names = list(grid)
+        for combo in itertools.product(*(grid[n] for n in names)):
+            _add(dict(zip(names, combo, strict=True)))
+    rng = random.Random(seed)
+    for _ in range(max(0, n_random)):
+        drawn = {name: round(rng.uniform(lo, hi), 4) for name, (lo, hi) in bounds.items()}
+        _add(drawn)
+    return out
+
+
+def search_wide_knee_curve(
+    dates: pl.Series,
+    prices: pl.Series,
+    risk: pl.Series,
+    *,
+    initial_cash: float,
+    frozen_weights: SdcaCompositeWeights,
+    n_random: int = 3000,
+    seed: int = 42,
+    include_grid: bool = True,
+    bounds: dict[str, tuple[float, float]] = WIDE_KNEE_SEARCH_BOUNDS,
+    grid: dict[str, tuple[float, ...]] = WIDE_KNEE_COARSE_GRID,
+    gates: CurveOptimizeGates | None = None,
+) -> CurveOptimizeResult:
+    """Wide-knee entry: fit independent buy/sell curves on a frozen index.
+
+    Baseline for comparison is today's published ``btc_optimized`` shape, same
+    caveat as Stage A: not apples-to-apples, just useful context.
+    """
+    trials = sample_wide_knee_curve_trials(
+        n_random=n_random, seed=seed, include_grid=include_grid, bounds=bounds, grid=grid
+    )
+    return search_curve(
+        dates,
+        prices,
+        risk,
+        trials,
+        initial_cash=initial_cash,
+        baseline=published_curve_shape(),
+        frozen_weights=frozen_weights,
+        gates=gates,
+        evaluator="curve_simulator",
+    )
 
 
 def fill_concentration(frame: pl.DataFrame) -> FillConcentration:
@@ -333,9 +617,13 @@ def score_shape_on_index(
     )
     conc = fill_concentration(frame)
     reasons = _reject_reasons(shape, conc, g)
+    max_drawdown_pct = abs(report.dca_max_drawdown_pct) * 100.0
+    risk_adjusted_return = report.total_return_pct / max(max_drawdown_pct, _DRAWDOWN_EPSILON)
     return CurveTrialScore(
         shape=shape,
         total_return_pct=report.total_return_pct,
+        max_drawdown_pct=max_drawdown_pct,
+        risk_adjusted_return=risk_adjusted_return,
         vs_lump_pct=report.vs_lump_pct,
         vs_flat_dca_pct=report.vs_flat_dca_pct,
         concentration=conc,
@@ -394,25 +682,27 @@ def search_curve(
         raise ValueError("no valid curve trials to evaluate")
     feasible = [s for s in ranked if s.feasible]
     pool = feasible or ranked
-    unconstrained = max(pool, key=lambda s: s.total_return_pct)
-    concentrated = [
-        s
-        for s in feasible
-        if beats_baseline_concentration(s.concentration, baseline_score.concentration)
-    ]
-    # Persist candidate is max return among concentration-beating trials, not the
-    # unconstrained drip (higher remaining-book rates at the same knees can raise
-    # return while spreading fills through the cheap/rich bands).
-    best = max(concentrated, key=lambda s: s.total_return_pct) if concentrated else unconstrained
+    # "Unconstrained" here means before any concentration preference (feasibility
+    # gates like no_sells/negative_cash still apply via `pool`). Objective is
+    # risk_adjusted_return, not raw total_return_pct, so the winner also reflects
+    # the smoother equity curve wider zones tend to produce.
+    unconstrained = max(pool, key=lambda s: s.risk_adjusted_return)
+    # Concentration is reported, not a hard filter for `best`: it's measured
+    # against the fixed published knees, so it would reject a wide-knee winner
+    # outright regardless of risk-adjusted performance.
+    best = unconstrained
     beat_ret = best.total_return_pct > baseline_score.total_return_pct + 1e-9
+    beat_risk_adj = best.risk_adjusted_return > baseline_score.risk_adjusted_return + 1e-9
     beat_conc = beats_baseline_concentration(best.concentration, baseline_score.concentration)
-    persist_ok = bool(best.feasible and beat_ret and beat_conc)
+    persist_ok = bool(best.feasible and beat_risk_adj)
     notes = (
         f"Frozen index weights {frozen_weights.model_dump()}. "
-        f"Objective=total_return_pct among concentration-beating trials "
-        f"evaluator={evaluator}. "
-        f"Unconstrained max return={unconstrained.total_return_pct:.4f} "
-        f"shape={params_from_shape(unconstrained.shape)}. "
+        f"Objective=risk_adjusted_return (total_return_pct / max_drawdown_pct) "
+        f"among feasible trials, evaluator={evaluator}. "
+        f"best risk_adjusted_return={best.risk_adjusted_return:.4f} "
+        f"(return={best.total_return_pct:.2f}%, drawdown={best.max_drawdown_pct:.2f}%) "
+        f"shape={params_from_shape(best.shape)}. "
+        f"beats_baseline_concentration={beat_conc} (reported, not gated). "
         f"vs-flat-DCA logged only (best={best.vs_flat_dca_pct:.4f}). "
         "beats_flat_dca_oos is not set from this in-sample search. "
         "Do not --push-supabase from this command."
@@ -429,6 +719,183 @@ def search_curve(
         evaluator=evaluator,
         beats_flat_dca_oos=False,
         unconstrained_return_pct=unconstrained.total_return_pct,
+        notes=notes,
+    )
+
+
+# Stage B: fix Stage A's winning crossing/rates/curvatures, sweep only the
+# knee gap (`width`) around that crossing. Trade count (`buy_days +
+# sell_days`) isn't on `CurveTrialScore`, so Stage B scores directly off
+# `run_backtest`'s `SdcaBacktestReport` instead of `score_shape_on_index`.
+DEAD_ZONE_WIDTH_GRID: tuple[float, ...] = (
+    CONTINUOUS_CROSSING_EPS,
+    1.0,
+    2.0,
+    3.0,
+    5.0,
+    7.5,
+    10.0,
+    15.0,
+    20.0,
+    25.0,
+    30.0,
+    40.0,
+    50.0,
+)
+
+
+class DeadZoneWidthTrialScore(BaseModel):
+    """One dead-zone width on Stage A's fixed crossing/rates/curvatures."""
+
+    model_config = ConfigDict(frozen=True, strict=True)
+
+    width: float = Field(ge=0.0)
+    shape: SdcaCurveShape
+    total_return_pct: float
+    max_drawdown_pct: float = Field(ge=0.0)
+    risk_adjusted_return: float
+    trade_days: int = Field(ge=0, description="buy_days + sell_days")
+    buy_days: int = Field(ge=0)
+    sell_days: int = Field(ge=0)
+    no_trade_days: int = Field(ge=0)
+    feasible: bool
+    reject_reasons: tuple[str, ...] = ()
+
+
+class DeadZoneWidthSweepResult(BaseModel):
+    """The risk_adjusted_return-vs-trade-count frontier across dead-zone widths."""
+
+    model_config = ConfigDict(frozen=True, strict=True)
+
+    crossing_risk: float
+    frozen_weights: dict[str, float]
+    trials: tuple[DeadZoneWidthTrialScore, ...]
+    continuous_baseline: DeadZoneWidthTrialScore
+    notes: str = ""
+
+
+def dead_zone_shape_params(
+    crossing_risk: float,
+    width: float,
+    buy_max_rate: float,
+    sell_max_rate: float,
+    buy_curvature: float,
+    sell_curvature: float,
+    *,
+    knee_floor: float = 0.5,
+    knee_ceiling: float = 99.5,
+) -> dict[str, float]:
+    """Widen Stage A's crossing into a dead zone, clipped to valid knee bounds.
+
+    ``SdcaCurveShape`` requires ``0 < buy_knee_risk < sell_knee_risk <= 100``;
+    clipping to ``[knee_floor, knee_ceiling]`` keeps a very large ``width``
+    (or a crossing near an edge) from producing an invalid shape instead of
+    raising, at the cost of an asymmetric zone in that edge case.
+    """
+    half = max(width, 0.0) / 2.0
+    buy_knee = max(crossing_risk - half, knee_floor)
+    sell_knee = min(crossing_risk + half, knee_ceiling)
+    if buy_knee >= sell_knee:
+        mid = (buy_knee + sell_knee) / 2.0
+        buy_knee, sell_knee = mid - 1e-6, mid + 1e-6
+    return {
+        "buy_max_rate": buy_max_rate,
+        "buy_knee_risk": buy_knee,
+        "sell_knee_risk": sell_knee,
+        "sell_max_rate": sell_max_rate,
+        "buy_curvature": buy_curvature,
+        "sell_curvature": sell_curvature,
+    }
+
+
+def score_dead_zone_width(
+    dates: pl.Series,
+    prices: pl.Series,
+    risk: pl.Series,
+    shape: SdcaCurveShape,
+    width: float,
+    initial_cash: float,
+    *,
+    gates: CurveOptimizeGates | None = None,
+) -> DeadZoneWidthTrialScore:
+    """Score one dead-zone width, reading trade counts off the raw backtest report."""
+    g = gates or CurveOptimizeGates()
+    report, frame = run_backtest(
+        dates, prices, risk, AccumDistCurve(shape.to_nodes()), initial_cash
+    )
+    conc = fill_concentration(frame)
+    reasons = _reject_reasons(shape, conc, g)
+    max_drawdown_pct = abs(report.dca_max_drawdown_pct) * 100.0
+    risk_adjusted_return = report.total_return_pct / max(max_drawdown_pct, _DRAWDOWN_EPSILON)
+    return DeadZoneWidthTrialScore(
+        width=width,
+        shape=shape,
+        total_return_pct=report.total_return_pct,
+        max_drawdown_pct=max_drawdown_pct,
+        risk_adjusted_return=risk_adjusted_return,
+        trade_days=report.buy_days + report.sell_days,
+        buy_days=report.buy_days,
+        sell_days=report.sell_days,
+        no_trade_days=report.no_trade_days,
+        feasible=not reasons,
+        reject_reasons=tuple(reasons),
+    )
+
+
+def sweep_dead_zone_width(
+    dates: pl.Series,
+    prices: pl.Series,
+    risk: pl.Series,
+    winner: SdcaCurveShape,
+    *,
+    initial_cash: float,
+    frozen_weights: SdcaCompositeWeights,
+    widths: Sequence[float] = DEAD_ZONE_WIDTH_GRID,
+    gates: CurveOptimizeGates | None = None,
+) -> DeadZoneWidthSweepResult:
+    """Stage B entry: fix Stage A's crossing/rates/curvatures, sweep dead-zone width.
+
+    Builds the risk_adjusted_return-vs-trade-count frontier for picking a
+    realistic trade cadence: "clean up the middle area... keep the edges
+    where the most buying and selling happens." ``winner`` should be Stage
+    A's best shape (``search_continuous_curve(...).best.shape``); its own
+    ``(buy_knee_risk, sell_knee_risk)`` midpoint is treated as the fixed fair-
+    value crossing point.
+    """
+    crossing_risk = (winner.buy_knee_risk + winner.sell_knee_risk) / 2.0
+    g = gates or CurveOptimizeGates()
+    trials: list[DeadZoneWidthTrialScore] = []
+    for width in widths:
+        params = dead_zone_shape_params(
+            crossing_risk,
+            width,
+            winner.buy_max_rate,
+            winner.sell_max_rate,
+            winner.buy_curvature,
+            winner.sell_curvature,
+        )
+        shape = SdcaCurveShape(**params)
+        trials.append(
+            score_dead_zone_width(dates, prices, risk, shape, width, initial_cash, gates=g)
+        )
+    continuous_baseline = score_dead_zone_width(
+        dates, prices, risk, winner, 0.0, initial_cash, gates=g
+    )
+    notes = (
+        f"Stage B dead-zone-width sweep fixing crossing_risk={crossing_risk:.4f}, "
+        f"buy_max_rate={winner.buy_max_rate:.4f}, sell_max_rate={winner.sell_max_rate:.4f}, "
+        f"buy_curvature={winner.buy_curvature:.4f}, sell_curvature={winner.sell_curvature:.4f} "
+        "(Stage A's winner, held fixed). "
+        f"Frozen index weights {frozen_weights.model_dump()}. "
+        "Frontier is risk_adjusted_return vs. trade_days (buy_days + sell_days); "
+        "pick the narrowest width whose risk_adjusted_return loss vs the "
+        "continuous baseline is an acceptable price for a realistic trade cadence."
+    )
+    return DeadZoneWidthSweepResult(
+        crossing_risk=crossing_risk,
+        frozen_weights=frozen_weights.model_dump(),
+        trials=tuple(trials),
+        continuous_baseline=continuous_baseline,
         notes=notes,
     )
 
@@ -471,7 +938,7 @@ def persist_curve_winner(
         prov = json.loads(provenance_path.read_text())
         weight_params: dict[str, float] = {}
         for name, val in result.frozen_weights.items():
-            key = "valuation_weight" if name == "valuation" else f"{name}_weight"
+            key = "power_law_weight" if name == "power_law" else f"{name}_weight"
             weight_params[key] = float(val)
         prov["best_params"] = {**params_from_shape(shape), **weight_params}
         prov["beats_flat_dca_oos"] = False
@@ -506,8 +973,20 @@ def load_frozen_index(
     signal_delay_days: int = 3,
     trade_start: str = "2018-01-01",
     ticker: str = "BTC-USD",
+    weights: SdcaCompositeWeights | None = None,
+    oscillators: SdcaOscillatorSpec | None = None,
 ) -> tuple[pl.Series, pl.Series, pl.Series, SdcaCompositeWeights]:
-    """Published composite risk on the delayed cache, sliced from ``trade_start``."""
+    """Composite risk on the delayed cache, sliced from ``trade_start``.
+
+    ``weights`` defaults to today's published ``settings.json`` mix; pass an
+    explicit ``SdcaCompositeWeights`` to freeze a different composite instead
+    (e.g. a diagnostic search's winning mix not yet promoted into
+    ``settings.json``). ``oscillators`` likewise defaults to
+    ``SdcaOscillatorSpec()``'s production periods; pass an explicit spec to
+    freeze indicator construction periods a Stage-2-style period search has
+    already picked, instead of silently falling back to defaults tuned for a
+    different indicator formula.
+    """
     ohlcv = load_cached(ticker, cache_dir)
     if ohlcv is None or ohlcv.is_empty():
         raise FileNotFoundError(f"no cached {ticker} under {cache_dir}")
@@ -516,22 +995,22 @@ def load_frozen_index(
     dates = ohlcv[ts_col]
     if dates.dtype != pl.Date:
         dates = dates.cast(pl.Date)
-    published = published_indicator_weights()
+    requested = weights if weights is not None else published_indicator_weights()
     sources = load_sdca_extra_sources(cache_dir)
-    weights = drop_extras_missing_sources(published, sources)
-    extras = build_extra_indicators(dates, ohlcv["close"], weights, sources)
+    resolved = drop_extras_missing_sources(requested, sources)
+    extras = build_extra_indicators(dates, ohlcv["close"], resolved, sources, oscillators=oscillators)
     index = build_risk_index(
         dates,
         ohlcv["close"],
         BtcPowerLawRiskModel(load_coefficients()),
         extra_indicators=extras or None,
-        valuation_weight=weights.valuation,
+        power_law_weight=resolved.power_law,
     )
     cutoff = date.fromisoformat(trade_start)
     window = index.filter(pl.col("date") >= cutoff)
     if window.is_empty():
         raise ValueError(f"frozen index empty after trade_start={trade_start}")
-    return window["date"], window["price"], window["risk"], weights
+    return window["date"], window["price"], window["risk"], resolved
 
 
 def run_published_curve_search(
@@ -568,18 +1047,29 @@ def run_published_curve_search(
 
 
 __all__ = [
+    "CONTINUOUS_COARSE_GRID",
+    "CONTINUOUS_CROSSING_BOUNDS",
+    "CONTINUOUS_CROSSING_EPS",
     "CURVE_SEARCH_BOUNDS",
+    "DEAD_ZONE_WIDTH_GRID",
     "DEEP_CHEAP_RISK",
     "DEEP_RICH_RISK",
     "DEFAULT_COARSE_GRID",
     "PUBLISHED_BUY_KNEE",
     "PUBLISHED_SELL_KNEE",
+    "WIDE_KNEE_COARSE_GRID",
+    "WIDE_KNEE_SEARCH_BOUNDS",
     "CurveOptimizeGates",
     "CurveOptimizeResult",
     "CurveTrialScore",
+    "DeadZoneWidthSweepResult",
+    "DeadZoneWidthTrialScore",
     "FillConcentration",
     "apply_calendar_delay",
     "beats_baseline_concentration",
+    "continuous_shape_ok",
+    "continuous_shape_params",
+    "dead_zone_shape_params",
     "fill_concentration",
     "load_frozen_index",
     "params_from_shape",
@@ -588,8 +1078,14 @@ __all__ = [
     "published_indicator_weights",
     "round_shape_for_preset",
     "run_published_curve_search",
+    "sample_continuous_curve_trials",
     "sample_curve_trials",
+    "score_dead_zone_width",
     "score_shape_on_index",
+    "search_continuous_curve",
     "search_curve",
+    "search_wide_knee_curve",
+    "sample_wide_knee_curve_trials",
     "shape_from_bounds_ok",
+    "sweep_dead_zone_width",
 ]

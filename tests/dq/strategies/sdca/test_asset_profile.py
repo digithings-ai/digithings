@@ -133,7 +133,7 @@ class TestSdcaAssetProfileEthResearch:
     def test_rejects_btc_plugin_not_on_allowlist(self) -> None:
         profile = SdcaAssetProfile.eth_research_v1()
         with pytest.raises(ValueError, match="allowlist"):
-            profile.ensure_extras_allowed(SdcaCompositeWeights(valuation=1.0, m2=0.5))
+            profile.ensure_extras_allowed(SdcaCompositeWeights(power_law=1.0, m2=0.5))
 
 
 class TestDailyClosesFromOhlcv:
@@ -165,10 +165,14 @@ class TestGenericTechnicalsFromAnyOhlcv:
         spec = SdcaOscillatorSpec()
         btc_z = technicals_from_ohlcv(btc_dates, btc_close, spec)
         eth_z = technicals_from_ohlcv(eth_dates, eth_close, spec)
-        assert set(btc_z) == set(eth_z) == set(GENERIC_TECHNICAL_NAMES)
-        assert len(btc_z["weekly_rsi"]) == n
-        assert len(eth_z["sma_band"]) == n
-        assert btc_z["weekly_rsi"] != eth_z["weekly_rsi"]
+        # technicals_from_ohlcv materializes every price-oscillator name
+        # (allowlist=None path), a superset of the trimmed default
+        # GENERIC_TECHNICAL_NAMES search scope.
+        assert set(btc_z) == set(eth_z)
+        assert set(GENERIC_TECHNICAL_NAMES).issubset(set(btc_z))
+        assert len(btc_z["weekly_monthly_rsi"]) == n
+        assert len(eth_z["weekly_monthly_macd"]) == n
+        assert btc_z["weekly_monthly_rsi"] != eth_z["weekly_monthly_rsi"]
 
     def test_calibrated_rsi_length_changes_z(self) -> None:
         n = 400
@@ -195,12 +199,21 @@ class TestGenericTechnicalsFromAnyOhlcv:
         extras = build_extra_indicators(
             dates,
             close,
-            SdcaCompositeWeights(valuation=1.0, weekly_rsi=0.4, sma_band=0.2),
+            SdcaCompositeWeights(power_law=1.0, weekly_monthly_rsi=0.4, weekly_monthly_macd=0.2),
             ExtraIndicatorSources(),
             oscillators=profile.oscillators,
             allowlist=profile.extra_indicators,
         )
-        assert [e.name for e in extras] == ["weekly_rsi", "sma_band"]
+        # eth_research_v1's default allowlist is GENERIC_TECHNICAL_NAMES
+        # (post-trim: only the weekly+monthly confluence variant of each
+        # oscillator style), so only those two names are materialized here.
+        by_name = {e.name: e for e in extras}
+        assert set(by_name) == {
+            "weekly_monthly_rsi",
+            "weekly_monthly_macd",
+        }
+        assert by_name["weekly_monthly_rsi"].enabled
+        assert by_name["weekly_monthly_macd"].enabled
 
 
 class TestSecondAssetSmoke:
@@ -227,7 +240,7 @@ class TestSecondAssetSmoke:
             extras = build_extra_indicators(
                 series_dates,
                 series_close,
-                SdcaCompositeWeights(valuation=1.0, weekly_rsi=0.3, sma_band=0.2),
+                SdcaCompositeWeights(power_law=1.0, weekly_monthly_rsi=0.3, weekly_monthly_macd=0.2),
                 ExtraIndicatorSources(),
                 oscillators=profile.oscillators,
                 allowlist=profile.extra_indicators,
@@ -237,7 +250,7 @@ class TestSecondAssetSmoke:
                 series_close,
                 model,
                 extra_indicators=extras,
-                valuation_weight=1.0,
+                power_law_weight=1.0,
             )
             overlap = cycle_overlap_score(
                 series_dates.to_list(),

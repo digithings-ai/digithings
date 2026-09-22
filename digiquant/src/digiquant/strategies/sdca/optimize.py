@@ -28,7 +28,10 @@ from digiquant.strategies.sdca.indicator_catalog import (
     load_date_value_frame,
     missing_extra_names,
 )
-from digiquant.strategies.sdca.price_oscillators import price_oscillator_z_vectors
+from digiquant.strategies.sdca.price_oscillators import (
+    SdcaOscillatorSpec,
+    price_oscillator_z_vectors,
+)
 from digiquant.strategies.sdca.risk_model import RiskModel
 from digiquant.strategies.sdca.walk_forward import (
     SENSITIVITY_SPIKE_PCT,
@@ -64,13 +67,22 @@ SDCA_SHAPE_DEFAULTS: dict[str, float] = {
     "sell_max_rate": 10.0,
     "buy_curvature": 1.0,
     "sell_curvature": 2.0,
-    "valuation_weight": 1.0,
+    "power_law_weight": 1.0,
     "m2_weight": 0.0,
     "rs_eth_weight": 0.0,
     "dxy_weight": 0.0,
     "weekly_rsi_weight": 0.0,
     "weekly_macd_weight": 0.0,
     "sma_band_weight": 0.0,
+    # Independent fast-crash circuit-breaker (crash_override.py) -- NOT a
+    # composite weight. Disabled by default so every existing trial dict and
+    # test is byte-for-byte unaffected unless a trial opts in explicitly.
+    "crash_override_enabled": False,
+    "crash_override_window": 14,
+    "crash_override_min_samples": 7,
+    "crash_override_trigger_z": -2.0,
+    "crash_override_ramp_z": 1.0,
+    "crash_override_risk": 95.0,
 }
 
 
@@ -91,7 +103,7 @@ class SdcaWalkForwardResult(BaseModel):
 
     model_config = ConfigDict(frozen=True, strict=True)
 
-    best_params: dict[str, float | int | str]
+    best_params: dict[str, bool | float | int | str]
     folds: list[WalkForwardFold]
     holdout: tuple[date, date]
     fold_scores: list[FoldScore]
@@ -118,7 +130,7 @@ class SdcaOptimizeProvenance(BaseModel):
     fit_window: tuple[date, date]
     folds: list[WalkForwardFold]
     holdout: tuple[date, date]
-    best_params: dict[str, float | int | str]
+    best_params: dict[str, bool | float | int | str]
     mean_is_vs_flat_dca_pct: float
     mean_oos_vs_flat_dca_pct: float
     is_oos_gap_pct: float
@@ -181,9 +193,61 @@ def load_sdca_extra_sources(root: Path | str | None) -> ExtraIndicatorSources:
     m2_path = _first_existing(base, ("M2SL.csv", "M2.csv", "M2SL.parquet"))
     eth_path = _first_existing(base, ("ETH-USD.csv", "ETH-USD.parquet"))
     dxy_path = _first_existing(base, ("DTWEXBGS.csv", "DXY.csv", "DTWEXBGS.parquet"))
+    # Bitview's own client caches under data/onchain/bitview/ (sibling of
+    # data/price-history/, not inside it) -- check there before an explicit
+    # sibling file, so a fresh fetch_bitview_series() run is picked up
+    # without a manual export step.
+    def _bitview_path(csv_names: tuple[str, ...], cache_stem: str) -> Path | None:
+        path = _first_existing(base, csv_names)
+        if path is not None:
+            return path
+        cache = base.parent / "onchain" / "bitview" / f"{cache_stem}.parquet"
+        return cache if cache.exists() else None
+
+    onchain_mvrv_path = _bitview_path(("ONCHAIN_MVRV.csv", "BITVIEW_MVRV.csv"), "mvrv")
+    onchain_asopr_path = _bitview_path(("ONCHAIN_ASOPR.csv", "BITVIEW_ASOPR.csv"), "asopr_24h")
+    onchain_puell_path = _bitview_path(("ONCHAIN_PUELL.csv", "BITVIEW_PUELL.csv"), "puell_multiple")
+    onchain_rhodl_path = _bitview_path(("ONCHAIN_RHODL.csv", "BITVIEW_RHODL.csv"), "rhodl_ratio")
+    # CoinMetrics' client caches under data/onchain/coinmetrics/ (sibling of
+    # data/price-history/, not inside it), same layout as Bitview above --
+    # check there before an explicit sibling file.
+    def _coinmetrics_path(csv_names: tuple[str, ...], cache_stem: str) -> Path | None:
+        path = _first_existing(base, csv_names)
+        if path is not None:
+            return path
+        cache = base.parent / "onchain" / "coinmetrics" / f"{cache_stem}.parquet"
+        return cache if cache.exists() else None
+
+    onchain_addr_ratio_path = _coinmetrics_path(
+        ("ONCHAIN_ADDR_RATIO.csv", "COINMETRICS_ADRACTCNT.csv"), "btc_AdrActCnt"
+    )
+    # alternative.me's own client caches under data/onchain/fear_greed/
+    # (sibling of data/price-history/), same layout as Bitview/CoinMetrics.
+    fear_greed_path = _first_existing(base, ("FEAR_GREED.csv", "FNG.csv"))
+    if fear_greed_path is None:
+        cache = base.parent / "onchain" / "fear_greed" / "fear_greed.parquet"
+        fear_greed_path = cache if cache.exists() else None
     m2_dates, m2_values = load_date_value_frame(m2_path) if m2_path else (None, None)
     eth_dates, eth_close = load_date_value_frame(eth_path) if eth_path else (None, None)
     dxy_dates, dxy_values = load_date_value_frame(dxy_path) if dxy_path else (None, None)
+    onchain_mvrv_dates, onchain_mvrv_values = (
+        load_date_value_frame(onchain_mvrv_path) if onchain_mvrv_path else (None, None)
+    )
+    onchain_asopr_dates, onchain_asopr_values = (
+        load_date_value_frame(onchain_asopr_path) if onchain_asopr_path else (None, None)
+    )
+    onchain_puell_dates, onchain_puell_values = (
+        load_date_value_frame(onchain_puell_path) if onchain_puell_path else (None, None)
+    )
+    onchain_rhodl_dates, onchain_rhodl_values = (
+        load_date_value_frame(onchain_rhodl_path) if onchain_rhodl_path else (None, None)
+    )
+    onchain_addr_ratio_dates, onchain_addr_ratio_values = (
+        load_date_value_frame(onchain_addr_ratio_path) if onchain_addr_ratio_path else (None, None)
+    )
+    fear_greed_dates, fear_greed_values = (
+        load_date_value_frame(fear_greed_path) if fear_greed_path else (None, None)
+    )
     return ExtraIndicatorSources(
         m2_dates=m2_dates,
         m2_values=m2_values,
@@ -191,6 +255,18 @@ def load_sdca_extra_sources(root: Path | str | None) -> ExtraIndicatorSources:
         eth_close=eth_close,
         dxy_dates=dxy_dates,
         dxy_values=dxy_values,
+        onchain_mvrv_dates=onchain_mvrv_dates,
+        onchain_mvrv_values=onchain_mvrv_values,
+        onchain_asopr_dates=onchain_asopr_dates,
+        onchain_asopr_values=onchain_asopr_values,
+        onchain_puell_dates=onchain_puell_dates,
+        onchain_puell_values=onchain_puell_values,
+        onchain_rhodl_dates=onchain_rhodl_dates,
+        onchain_rhodl_values=onchain_rhodl_values,
+        onchain_addr_ratio_dates=onchain_addr_ratio_dates,
+        onchain_addr_ratio_values=onchain_addr_ratio_values,
+        fear_greed_dates=fear_greed_dates,
+        fear_greed_values=fear_greed_values,
     )
 
 
@@ -206,6 +282,18 @@ def drop_extras_missing_sources(
         payload["rs_eth"] = 0.0
     if payload["dxy"] > 0.0 and sources.dxy_dates is None:
         payload["dxy"] = 0.0
+    if payload["onchain_mvrv"] > 0.0 and sources.onchain_mvrv_dates is None:
+        payload["onchain_mvrv"] = 0.0
+    if payload["onchain_asopr"] > 0.0 and sources.onchain_asopr_dates is None:
+        payload["onchain_asopr"] = 0.0
+    if payload["onchain_puell"] > 0.0 and sources.onchain_puell_dates is None:
+        payload["onchain_puell"] = 0.0
+    if payload["onchain_rhodl"] > 0.0 and sources.onchain_rhodl_dates is None:
+        payload["onchain_rhodl"] = 0.0
+    if payload["onchain_addr_ratio"] > 0.0 and sources.onchain_addr_ratio_dates is None:
+        payload["onchain_addr_ratio"] = 0.0
+    if payload["fear_greed"] > 0.0 and sources.fear_greed_dates is None:
+        payload["fear_greed"] = 0.0
     return SdcaCompositeWeights(**payload)
 
 
@@ -215,26 +303,44 @@ def load_sdca_extra_z(
     *,
     data_path: str | Path | None,
     data_dir: str | Path | None,
+    oscillators: SdcaOscillatorSpec | None = None,
 ) -> dict[str, list[float | None]]:
     """Load independent extras from sibling files next to the BTC OHLCV CSV.
 
-    Looks for ``M2SL.csv``/``M2.csv``, ``ETH-USD.csv``, ``DTWEXBGS.csv``/``DXY.csv``.
+    Looks for ``M2SL.csv``/``M2.csv``, ``ETH-USD.csv``, ``DTWEXBGS.csv``/``DXY.csv``,
+    four Bitview/BRK on-chain series -- MVRV, aSOPR, Puell Multiple, RHODL
+    Ratio (``ONCHAIN_<NAME>.csv``/``BITVIEW_<NAME>.csv``, or the Bitview
+    client's own ``data/onchain/bitview/*.parquet`` caches) -- and one
+    CoinMetrics series, the active-address ratio (``ONCHAIN_ADDR_RATIO.csv``/
+    ``COINMETRICS_ADRACTCNT.csv``, or ``data/onchain/coinmetrics/btc_AdrActCnt.parquet``).
     Missing files omit that extra (trials that need it are skipped).
+
+    ``oscillators`` defaults to ``SdcaOscillatorSpec()``'s production periods;
+    pass an explicit spec to freeze the price-oscillator extras (weekly_rsi,
+    weekly_macd, sma_band, monthly_rsi, monthly_macd, weekly_monthly_rsi,
+    weekly_monthly_macd) at periods a period search has already picked,
+    instead of silently reverting to defaults tuned for a different formula.
     """
     root = Path(data_path).parent if data_path is not None else None
     if root is None and data_dir is not None:
         root = Path(data_dir)
     date_s = pl.Series("date", list(dates), dtype=pl.Date)
     price_s = pl.Series("price", list(prices), dtype=pl.Float64)
-    extra: dict[str, list[float | None]] = price_oscillator_z_vectors(date_s, price_s)
+    extra: dict[str, list[float | None]] = price_oscillator_z_vectors(date_s, price_s, oscillators)
     sources = load_sdca_extra_sources(root)
     weights = SdcaCompositeWeights(
-        valuation=1.0,
+        power_law=1.0,
         m2=1.0 if sources.m2_dates is not None else 0.0,
         rs_eth=1.0 if sources.eth_dates is not None else 0.0,
         dxy=1.0 if sources.dxy_dates is not None else 0.0,
+        onchain_mvrv=1.0 if sources.onchain_mvrv_dates is not None else 0.0,
+        onchain_asopr=1.0 if sources.onchain_asopr_dates is not None else 0.0,
+        onchain_puell=1.0 if sources.onchain_puell_dates is not None else 0.0,
+        onchain_rhodl=1.0 if sources.onchain_rhodl_dates is not None else 0.0,
+        onchain_addr_ratio=1.0 if sources.onchain_addr_ratio_dates is not None else 0.0,
+        fear_greed=1.0 if sources.fear_greed_dates is not None else 0.0,
     )
-    extra.update(extra_z_vectors(date_s, price_s, weights, sources))
+    extra.update(extra_z_vectors(date_s, price_s, weights, sources, oscillators=oscillators))
     return extra
 
 
@@ -387,7 +493,7 @@ def _holdout_metrics(
     shape = shape_from_params(params)
     weights = composite_weights_from_params(params)
     extras = extra_indicators_for_window(hold_dates, dates, extra_z or {}, weights)
-    return evaluator(hold_dates, hold_prices, model, shape, weights.valuation, extras)
+    return evaluator(hold_dates, hold_prices, model, shape, weights.power_law, extras)
 
 
 def persist_btc_optimized(

@@ -1,7 +1,7 @@
 """Walk-forward schedule and DCA-native objective for SDCA (#3174).
 
 The owner's curve *shape* is frozen (#3169). This module searches the six
-bounded parameters plus composite indicator weights (``valuation_weight`` and
+bounded parameters plus composite indicator weights (``power_law_weight`` and
 optional ``m2_weight`` / ``rs_eth_weight`` / ``dxy_weight`` plus price
 oscillators ``weekly_rsi_weight`` / ``weekly_macd_weight`` / ``sma_band_weight``).
 The primary score is ``vs_flat_dca_pct`` (did the signal beat blind averaging?)
@@ -41,7 +41,7 @@ class SdcaOptimizeObjective(BaseModel):
     """Maximize ``vs_flat_dca_pct`` subject to activity and drawdown rails.
 
     Justification: flat DCA already captures the averaging effect, so anything
-    above it is attributable to the valuation signal. Total return / vs-lump
+    above it is attributable to the power-law signal. Total return / vs-lump
     reward buying everything on day 1 in a bull market and are rejected.
     """
 
@@ -86,7 +86,7 @@ class SdcaTrialEvaluator(Protocol):
         prices: Sequence[float],
         risk_model: RiskModel,
         shape: SdcaCurveShape,
-        valuation_weight: float,
+        power_law_weight: float,
         extra_indicators: Sequence[IndicatorWeight] | None = None,
     ) -> SdcaTrialMetrics: ...
 
@@ -174,9 +174,9 @@ def params_are_valid(params: dict[str, float | int | str]) -> bool:
     return True
 
 
-def valuation_weight_from_params(params: dict[str, float | int | str]) -> float:
-    """Valuation rail weight; defaults to 1.0 (valuation-only) when omitted."""
-    return composite_weights_from_params(params).valuation
+def power_law_weight_from_params(params: dict[str, float | int | str]) -> float:
+    """Power-law rail weight; defaults to 1.0 (power-law-only) when omitted."""
+    return composite_weights_from_params(params).power_law
 
 
 def window_slice(
@@ -244,7 +244,7 @@ def score_trial_on_folds(
             is_prices,
             model,
             shape,
-            weights.valuation,
+            weights.power_law,
             extra_indicators_for_window(is_dates, dates, zmap, weights),
         )
         out_of_sample = evaluator(
@@ -252,7 +252,7 @@ def score_trial_on_folds(
             oos_prices,
             model,
             shape,
-            weights.valuation,
+            weights.power_law,
             extra_indicators_for_window(oos_dates, dates, zmap, weights),
         )
         scores.append(
@@ -313,9 +313,9 @@ __all__ = [
     "max_drawdown_magnitude_pct",
     "objective_score",
     "params_are_valid",
+    "power_law_weight_from_params",
     "score_trial_on_folds",
     "sensitivity_neighbors",
     "shape_from_params",
-    "valuation_weight_from_params",
     "window_slice",
 ]

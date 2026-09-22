@@ -1,0 +1,65 @@
+{
+  "asset": "BTC-USD",
+  "strategy_id": "btc_sdca",
+  "purpose": "index-then-curve mismatch fix: settings.json enabled weekly_rsi=0.25/weekly_macd=0.5 (commit 82cd1ddcc) but the currently-published curve (btc_curve_optimize_provenance.json / btc_optimized_provenance.json) was fit against a stale 3-member index (valuation+m2+dxy only, from a divergent branch, commit 4dece6542). This file re-fits the curve on the actually-live 5-member index and walk-forward-validates it.",
+  "beats_flat_dca_oos": false,
+  "frozen_weights": {
+    "valuation": 1.0,
+    "m2": 0.5,
+    "rs_eth": 0.0,
+    "dxy": 0.5,
+    "weekly_rsi": 0.25,
+    "weekly_macd": 0.5,
+    "sma_band": 0.0
+  },
+  "curve_search": {
+    "evaluator": "curve_simulator",
+    "command": "digiquant sdca-optimize-curve --cache-dir data/price-history --signal-delay-days 3 --n-random 400 --seed 42",
+    "num_evaluations": 1553,
+    "num_feasible": 830,
+    "best_shape": {
+      "buy_max_rate": 25.0,
+      "buy_knee_risk": 25.0,
+      "sell_knee_risk": 80.0,
+      "sell_max_rate": 8.0,
+      "buy_curvature": 1.0,
+      "sell_curvature": 3.5
+    },
+    "total_return_pct": 1476.43,
+    "vs_lump_pct": 254.16,
+    "vs_flat_dca_pct_in_sample": 314.54,
+    "beats_baseline_return": true,
+    "beats_baseline_concentration": true,
+    "sell_days_2025": 4
+  },
+  "walk_forward": {
+    "evaluator": "nautilus",
+    "data_source_note": "BTC-USD.csv refreshed via `digiquant prices preload-history --tickers BTC-USD --years 12` (yfinance) to cover 2014-09-17→2026-09-02; the previously cached CSV only went back to 2017-01-01 and could not satisfy fit_btc_power_law's 730-day-per-fold minimum. Values differ slightly from the Coinbase-sourced cache used in older provenance files (different vendor), directionally consistent.",
+    "fit_window": ["2014-09-17", "2024-04-12"],
+    "holdout": ["2024-04-13", "2026-09-02"],
+    "mean_is_vs_flat_dca_pct": -13.78,
+    "mean_oos_vs_flat_dca_pct": -16.21,
+    "is_oos_gap_pct": 2.43,
+    "holdout_vs_flat_dca_pct": 3.25,
+    "beats_flat_dca_oos": false,
+    "sensitivity": {
+      "frac": 0.05,
+      "spike_threshold_pct": 2.0,
+      "max_abs_delta_oos_pct": 36.79,
+      "stable": false,
+      "neighbor_count": 25
+    },
+    "fold_scores": [
+      {"fold": 0, "is": "2014-09-17→2017-02-06", "oos": "2017-02-07→2019-06-30", "is_vs_flat_dca_pct": -65.01, "oos_vs_flat_dca_pct": -1.85},
+      {"fold": 1, "is": "2014-09-17→2019-06-30", "oos": "2019-07-01→2021-11-20", "is_vs_flat_dca_pct": -28.42, "oos_vs_flat_dca_pct": -8.21},
+      {"fold": 2, "is": "2014-09-17→2021-11-20", "oos": "2021-11-21→2024-04-12", "is_vs_flat_dca_pct": 52.10, "oos_vs_flat_dca_pct": -38.57, "note": "fold 2 in-sample capital_deployed_pct came back at -2558% -- degenerate/anomalous, not a trustworthy percentage; needs investigation before this fold's numbers are relied on (possibly related to long_only=false short-side accounting)."}
+    ]
+  },
+  "notes": [
+    "Mismatch confirmed via commit ancestry (not raw timestamps -- 82cd1ddcc and 4dece6542 are on divergent branches, so timestamp order is meaningless; content + ancestor check is what settles it).",
+    "curve_simulator and Nautilus sharply disagree for this candidate: curve_simulator says +314.5% vs-flat in-sample, Nautilus says -13.8% vs-flat in-sample for the identical params. Do not average or reconcile these -- AGENTS.md's 'one evaluator per question' rule is exactly why this file reports both separately instead of picking one.",
+    "Sensitivity is unstable (max_abs_delta_oos_pct=36.79 vs a 2.0 threshold): a 5% perturbation of the winning shape swings OOS by up to ~37 points. The curve_simulator winner is fragile under Nautilus even setting aside the failing OOS sign.",
+    "settings.json / presets.json / btc_optimized_provenance.json / btc_curve_optimize_provenance.json are intentionally left untouched -- this trial is not a chosen candidate, so nothing is persisted or published. The live preset still runs the old (index-mismatched) curve pending a decision on how to proceed.",
+    "Do not --push-supabase from this record."
+  ]
+}

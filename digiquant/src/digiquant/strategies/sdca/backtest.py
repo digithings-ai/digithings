@@ -15,14 +15,18 @@ import polars as pl
 from pydantic import BaseModel, ConfigDict, Field
 
 from digiquant.strategies.sdca.curve import AccumDistCurve
-from digiquant.strategies.sdca.dca_metrics import flat_dca_mark_to_market
+from digiquant.strategies.sdca.dca_metrics import (
+    first_trade_index,
+    flat_dca_mark_to_market,
+    lump_mark_to_market,
+)
 
 
 class SdcaBacktestReport(BaseModel):
     """Summary stats for one SDCA backtest run vs. its lump-sum benchmark.
 
     This report is a CI-only parity harness for the allocation math in this
-    module (curve/composite-risk/valuation) — it is never the authoritative
+    module (curve/composite-risk/power-law) — it is never the authoritative
     backtest result. NautilusTrader remains the sole backtest/live engine
     (digiquant/AGENTS.md); the Nautilus strategy wrapper (#1081) calls
     ``size_trade()`` below rather than reimplementing it, so there is exactly
@@ -137,7 +141,6 @@ def run_backtest(
 
     cash = initial_cash
     asset_units = 0.0
-    asset_units_bought_at_start = initial_cash / prices[0]
 
     rates: list[float | None] = []
     daily_trade_usd: list[float] = []
@@ -145,7 +148,6 @@ def run_backtest(
     asset_units_col: list[float] = []
     net_deployed_col: list[float] = []
     portfolio_value_col: list[float] = []
-    buy_hold_value_col: list[float] = []
 
     buy_days = sell_days = no_trade_days = 0
     risk_sum = rate_sum = 0.0
@@ -182,8 +184,10 @@ def run_backtest(
         asset_units_col.append(asset_units)
         net_deployed_col.append(initial_cash - cash)
         portfolio_value_col.append(cash + asset_units * day_price)
-        buy_hold_value_col.append(asset_units_bought_at_start * day_price)
 
+    buy_hold_value_col = lump_mark_to_market(
+        prices, initial_cash, start_index=first_trade_index(daily_trade_usd)
+    )
     flat_dca_value_col = flat_dca_mark_to_market(prices, initial_cash)
 
     frame = pl.DataFrame(

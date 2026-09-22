@@ -47,7 +47,7 @@ def _evaluator(
     prices: list[float],
     model: RiskModel,
     shape: SdcaCurveShape,
-    valuation_weight: float,
+    power_law_weight: float,
     extra_indicators: object = None,
 ) -> SdcaTrialMetrics:
     assert isinstance(model, _ConstRails)
@@ -73,15 +73,15 @@ def _evaluator(
 
 class TestFreezeAndStageBTrials:
     def test_freeze_emits_all_weight_keys(self) -> None:
-        w = SdcaCompositeWeights(valuation=0.6, weekly_rsi=0.4)
+        w = SdcaCompositeWeights(power_law=0.6, weekly_rsi=0.4)
         frozen = freeze_weight_params(w)
-        assert frozen["valuation_weight"] == pytest.approx(0.6)
+        assert frozen["power_law_weight"] == pytest.approx(0.6)
         assert frozen["weekly_rsi_weight"] == pytest.approx(0.4)
         assert frozen["weekly_macd_weight"] == pytest.approx(0.0)
         assert frozen["sma_band_weight"] == pytest.approx(0.0)
 
     def test_stage_b_trials_hold_weights_fixed(self) -> None:
-        w = SdcaCompositeWeights(valuation=0.7, weekly_rsi=0.3)
+        w = SdcaCompositeWeights(power_law=0.7, weekly_rsi=0.3)
         trials = stage_b_trials(
             w,
             [
@@ -92,14 +92,14 @@ class TestFreezeAndStageBTrials:
         assert len(trials) == 2
         assert {t["buy_max_rate"] for t in trials} == {5.0, 12.0}
         assert all(t["weekly_rsi_weight"] == pytest.approx(0.3) for t in trials)
-        assert all(t["valuation_weight"] == pytest.approx(0.7) for t in trials)
+        assert all(t["power_law_weight"] == pytest.approx(0.7) for t in trials)
 
 
 class TestStageBFrozenSearch:
     def test_picks_closer_curve_with_frozen_weights(self) -> None:
         dates = _dates()
         prices = [100.0 + i for i in range(len(dates))]
-        weights = SdcaCompositeWeights(valuation=0.6, weekly_rsi=0.4)
+        weights = SdcaCompositeWeights(power_law=0.6, weekly_rsi=0.4)
         extra_z = {"weekly_rsi": [0.0] * len(dates)}
         hidden = {
             **SDCA_SHAPE_DEFAULTS,
@@ -124,7 +124,7 @@ class TestStageBFrozenSearch:
         )
         assert result.best_params["buy_max_rate"] == pytest.approx(8.0)
         assert result.best_params["weekly_rsi_weight"] == pytest.approx(0.4)
-        assert result.best_params["valuation_weight"] == pytest.approx(0.6)
+        assert result.best_params["power_law_weight"] == pytest.approx(0.6)
 
 
 class TestCurveSimEvaluator:
@@ -151,7 +151,7 @@ class TestPersistTwoStage:
     def test_writes_aggressive_and_regularized_sidecars(self, tmp_path: Path) -> None:
         dates = _dates()
         prices = [100.0] * len(dates)
-        weights = SdcaCompositeWeights(valuation=0.63, weekly_rsi=0.37)
+        weights = SdcaCompositeWeights(power_law=0.63, weekly_rsi=0.37)
         extra_z = {"weekly_rsi": [0.0] * len(dates)}
         stage_b = run_stage_b_frozen(
             dates,
@@ -186,9 +186,9 @@ class TestPersistTwoStage:
         assert aggressive["variant"] == "aggressive"
         assert regularized["variant"] == "regularized"
         assert aggressive["evaluator"] == "synthetic_fixture"
-        assert aggressive["stage_a_weights"]["valuation"] == pytest.approx(0.63)
+        assert aggressive["stage_a_weights"]["power_law"] == pytest.approx(0.63)
         assert aggressive["stage_a_weights"]["weekly_rsi"] == pytest.approx(0.37)
-        assert regularized["stage_a_weights"]["valuation"] == pytest.approx(0.6)
+        assert regularized["stage_a_weights"]["power_law"] == pytest.approx(0.6)
         assert regularized["stage_a_weights"]["weekly_rsi"] == pytest.approx(0.4)
         assert regularized["stage_b_params"]["buy_max_rate"] < aggressive["stage_b_params"][
             "buy_max_rate"

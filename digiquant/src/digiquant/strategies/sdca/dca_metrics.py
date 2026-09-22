@@ -71,12 +71,30 @@ def flat_dca_mark_to_market(prices: Sequence[float], initial_cash: float) -> lis
     return out
 
 
-def lump_mark_to_market(prices: Sequence[float], initial_cash: float) -> list[float]:
-    """All capital deployed at day-0 price, marked to each later close."""
+def first_trade_index(daily_trade_usd: Sequence[float]) -> int:
+    """Index of the first non-zero fill, or ``0`` if the book never traded."""
+    for i, usd in enumerate(daily_trade_usd):
+        if usd != 0:
+            return i
+    return 0
+
+
+def lump_mark_to_market(
+    prices: Sequence[float], initial_cash: float, *, start_index: int = 0
+) -> list[float]:
+    """All capital deployed at ``start_index``'s price, marked to each later close.
+
+    Days before ``start_index`` hold ``initial_cash`` flat (undeployed) so the
+    benchmark only starts moving once the DCA book itself has made a trade —
+    pass ``first_trade_index(daily_trade_usd)`` to compare like for like.
+    """
     if not prices:
         raise ValueError("lump_mark_to_market requires at least one price")
-    units = float(initial_cash) / float(prices[0])
-    return [units * float(p) for p in prices]
+    units = float(initial_cash) / float(prices[start_index])
+    return [
+        float(initial_cash) if i < start_index else units * float(p)
+        for i, p in enumerate(prices)
+    ]
 
 
 def breakdown_from_daily(
@@ -106,7 +124,9 @@ def breakdown_from_daily(
         raise ValueError("breakdown_from_daily requires at least one day")
 
     flat = flat_dca_mark_to_market(prices, initial_cash)
-    lump = lump_mark_to_market(prices, initial_cash)
+    lump = lump_mark_to_market(
+        prices, initial_cash, start_index=first_trade_index(daily_trade_usd)
+    )
     final_pv = float(portfolio_values[-1])
     final_flat = flat[-1]
     final_lump = lump[-1]
@@ -339,7 +359,9 @@ def tearsheet_overlays(
         }
         return empty
 
-    lump = lump_mark_to_market(prices, initial_cash)
+    lump = lump_mark_to_market(
+        prices, initial_cash, start_index=first_trade_index(daily_trade_usd)
+    )
     flat = flat_dca_mark_to_market(prices, initial_cash)
     cost = running_cost_basis(prices, daily_trade_usd)
 
@@ -439,6 +461,7 @@ def dca_current_signal(
 
 __all__ = [
     "SdcaFill",
+    "first_trade_index",
     "flat_dca_mark_to_market",
     "lump_mark_to_market",
     "breakdown_from_daily",

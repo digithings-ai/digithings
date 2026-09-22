@@ -9,10 +9,6 @@ import random
 from pathlib import Path
 from typing import Any
 
-from digiquant.strategy_aliases import (
-    resolve_param_spec_name,
-)
-
 logger = logging.getLogger(__name__)
 
 # Mtime cache for YAML spec file: (path_str, mtime, result).
@@ -65,6 +61,17 @@ def _load_yaml_specs() -> dict[str, dict[str, tuple]]:
 # Hard cap on grid size to prevent accidental combinatorial explosion.
 MAX_GRID_SIZE = 10_000
 
+# Alias -> canonical strategy name (must match registry)
+_ALIAS_TO_CANONICAL: dict[str, str] = {
+    "ema": "ema_cross",
+    "s": "ema_cross",  # test shorthand
+    "mean_reversion_tech": "ema_cross",
+    "momentum_tech": "ema_cross",
+    "mean_reversion_stat_arb": "bollinger_mr",
+    "momentum_energy": "rsi_momentum",
+    "btc_sdca": "sdca",
+}
+
 # Param spec: (min, max, default, step_hint, type_str)
 # step_hint: suggested step for grid; None = use 1 or 0.5 based on type
 STRATEGY_PARAM_SPECS: dict[str, dict[str, tuple[float, float, Any, float | None, str]]] = {
@@ -103,20 +110,21 @@ STRATEGY_PARAM_SPECS: dict[str, dict[str, tuple[float, float, Any, float | None,
         "trade_size": (1.0, 10000.0, 1000, None, "int"),
     },
     # SDCA (#3174 + remaining-book curve search): six SdcaCurveShape params
-    # plus valuation/macro/oscillator weights in [0, 1] (composite normalizes).
-    # Curve bounds are widened so remaining-book rates can concentrate at
-    # extremes (max 40%/day, knees at/inside the published 25/70 dead zone,
-    # curvature up to 5). Zero extra weight = disabled.
-    # Default valuation=1 / extras=0 matches today's BTC charts unless settings
+    # plus power-law/macro/oscillator weights in [0, 1] (composite normalizes).
+    # Curve bounds match curve_optimize.CURVE_SEARCH_BOUNDS: max 40%/day, knees
+    # widened past the published 25/70 dead zone (buy up to 45, sell down to
+    # 50) so the search can reach wider active zones, curvature up to 5.
+    # Zero extra weight = disabled.
+    # Default power_law=1 / extras=0 matches today's BTC charts unless settings
     # freeze a composite (published BTC is power law 1.0 + M2 0.5 + DXY 0.5).
     "sdca": {
         "buy_max_rate": (3.0, 40.0, 15.0, 1.0, "float"),
-        "buy_knee_risk": (8.0, 25.0, 15.0, 1.0, "float"),
-        "sell_knee_risk": (70.0, 92.0, 80.0, 1.0, "float"),
+        "buy_knee_risk": (8.0, 45.0, 15.0, 1.0, "float"),
+        "sell_knee_risk": (50.0, 92.0, 80.0, 1.0, "float"),
         "sell_max_rate": (3.0, 40.0, 15.0, 1.0, "float"),
         "buy_curvature": (1.0, 5.0, 2.0, 0.5, "float"),
         "sell_curvature": (1.0, 5.0, 3.0, 0.5, "float"),
-        "valuation_weight": (0.0, 1.0, 1.0, 0.1, "float"),
+        "power_law_weight": (0.0, 1.0, 1.0, 0.1, "float"),
         "m2_weight": (0.0, 1.0, 0.0, 0.1, "float"),
         "rs_eth_weight": (0.0, 1.0, 0.0, 0.1, "float"),
         "dxy_weight": (0.0, 1.0, 0.0, 0.1, "float"),
@@ -128,8 +136,8 @@ STRATEGY_PARAM_SPECS: dict[str, dict[str, tuple[float, float, Any, float | None,
 
 
 def _resolve_strategy_name(strategy_name: str) -> str:
-    """Resolve alias to ``STRATEGY_PARAM_SPECS`` key (SDCA: ``btc_sdca`` → ``sdca``)."""
-    return resolve_param_spec_name(strategy_name)
+    """Resolve alias to canonical strategy name."""
+    return _ALIAS_TO_CANONICAL.get(strategy_name, strategy_name)
 
 
 def get_param_specs(strategy_name: str) -> dict[str, tuple[float, float, Any, float | None, str]]:

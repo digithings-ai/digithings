@@ -1,4 +1,4 @@
-"""Parity fixture (acceptance criterion #1): the full SDCA pipeline — valuation
+"""Parity fixture (acceptance criterion #1): the full SDCA pipeline — power_law
 z-score -> composite risk -> AccumDistCurve -> backtest — reproduces expected
 numbers within tolerance on a synthetic, self-consistent rails + price series.
 
@@ -14,7 +14,7 @@ import pytest
 from digiquant.strategies.sdca.backtest import run_backtest
 from digiquant.strategies.sdca.composite_risk import IndicatorWeight, compute_composite_risk
 from digiquant.strategies.sdca.curve import AccumDistCurve
-from digiquant.strategies.sdca.valuation import valuation_z_score
+from digiquant.strategies.sdca.power_law_zscore import power_law_z_score
 
 pytestmark = pytest.mark.unit
 
@@ -28,13 +28,13 @@ class TestSdcaPipelineParityFixture:
         high = pl.Series([200.0] * 5)
         price = pl.Series([50.0, 75.0, 100.0, 150.0, 200.0])
 
-        z = valuation_z_score(price, low, median, high)
+        z = power_law_z_score(price, low, median, high)
         # price==low -> z=+3 (max buy); price==high -> z=-3 (max sell); price==median -> z=0
         assert z[0] == pytest.approx(3.0)
         assert z[2] == pytest.approx(0.0)
         assert z[4] == pytest.approx(-3.0)
 
-        composite = compute_composite_risk([IndicatorWeight(name="valuation", z=z, weight=1.0)])
+        composite = compute_composite_risk([IndicatorWeight(name="power_law", z=z, weight=1.0)])
         # composite_z mirrors z exactly (single indicator, weight 1) -> risk is the direct mapping
         assert composite["risk"][0] == pytest.approx(0.0)  # cheap -> max-buy risk
         assert composite["risk"][2] == pytest.approx(50.0)  # median -> neutral

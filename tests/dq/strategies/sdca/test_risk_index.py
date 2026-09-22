@@ -13,7 +13,7 @@ from digiquant.strategies.sdca.risk_index import (
     build_risk_index,
     write_risk_index,
 )
-from digiquant.strategies.sdca.valuation import valuation_z_score
+from digiquant.strategies.sdca.power_law_zscore import power_law_z_score
 
 pytestmark = pytest.mark.unit
 
@@ -24,7 +24,7 @@ _DIAGNOSTIC_COLUMNS = {
     "low",
     "median",
     "high",
-    "valuation_z",
+    "power_law_z",
     "composite_z",
 }
 
@@ -76,23 +76,23 @@ class TestBuildRiskIndex:
     def test_price_at_median_is_risk_50(self) -> None:
         dates, price = _dates_and_price(n=1, price=100.0)
         frame = build_risk_index(dates, price, StaticRiskModel())
-        assert frame["valuation_z"][0] == pytest.approx(0.0)
+        assert frame["power_law_z"][0] == pytest.approx(0.0)
         assert frame["risk"][0] == pytest.approx(50.0)
         assert frame["composite_z"][0] == pytest.approx(0.0)
 
     def test_price_at_low_rail_is_risk_0(self) -> None:
         dates, price = _dates_and_price(n=1, price=50.0)
         frame = build_risk_index(dates, price, StaticRiskModel())
-        assert frame["valuation_z"][0] == pytest.approx(3.0)
+        assert frame["power_law_z"][0] == pytest.approx(3.0)
         assert frame["risk"][0] == pytest.approx(0.0)
 
-    def test_matches_valuation_z_then_composite_pipeline(self) -> None:
+    def test_matches_power_law_z_then_composite_pipeline(self) -> None:
         dates, price = _dates_and_price(n=3, price=80.0)
         model = StaticRiskModel()
         frame = build_risk_index(dates, price, model)
         rails = model.rails(dates)
-        expected_z = valuation_z_score(price, rails["low"], rails["median"], rails["high"])
-        assert frame["valuation_z"].to_list() == pytest.approx(expected_z.to_list())
+        expected_z = power_law_z_score(price, rails["low"], rails["median"], rails["high"])
+        assert frame["power_law_z"].to_list() == pytest.approx(expected_z.to_list())
 
     def test_null_rail_day_survives_as_null_risk_not_zero(self) -> None:
         dates, price = _dates_and_price(n=3)
@@ -101,7 +101,7 @@ class TestBuildRiskIndex:
         assert frame["risk"][1] is None
         assert frame["risk"][2] is not None
         assert frame["composite_z"][1] is None
-        assert frame["valuation_z"][1] is None
+        assert frame["power_law_z"][1] is None
 
     def test_extra_indicators_blend_into_composite(self) -> None:
         dates, price = _dates_and_price(n=1, price=100.0)
@@ -109,7 +109,7 @@ class TestBuildRiskIndex:
             IndicatorWeight(name="macro", z=pl.Series([3.0]), weight=1.0),
         ]
         frame = build_risk_index(dates, price, StaticRiskModel(), extra_indicators=extra)
-        # valuation z=0 (price at median) + macro z=3, equal weights → composite 1.5
+        # power_law z=0 (price at median) + macro z=3, equal weights → composite 1.5
         assert frame["composite_z"][0] == pytest.approx(1.5)
 
     def test_rejects_length_mismatch(self) -> None:
@@ -130,6 +130,44 @@ class TestBuildRiskIndex:
         assert frame["date"][0] == dates[0]
         assert frame["date"][-1] == dates[-1]
         assert frame["risk"].null_count() == 0
+
+
+class TestBuildRiskIndexRollingComposite:
+    def test_default_off_matches_undecorated_call(self) -> None:
+        dates, price = _dates_and_price(n=50, price=100.0)
+        model = StaticRiskModel()
+        plain = build_risk_index(dates, price, model)
+        explicit_off = build_risk_index(dates, price, model, composite_rolling_window=None)
+        assert plain["risk"].to_list() == explicit_off["risk"].to_list()
+        assert plain["composite_z"].to_list() == explicit_off["composite_z"].to_list()
+
+    def test_rolling_window_changes_output_once_warmed_up(self) -> None:
+        # Prices ramp so power_law_z (and thus composite_z) drifts over the
+        # window instead of sitting flat — a flat input can't tell a rolling
+        # renormalization apart from the plain clip.
+        n = 60
+        start = date(2020, 1, 1)
+        dates = pl.Series("date", [start + _dt.timedelta(days=i) for i in range(n)], dtype=pl.Date)
+        price = pl.Series("price", [100.0 + i for i in range(n)], dtype=pl.Float64)
+        model = StaticRiskModel()
+        plain = build_risk_index(dates, price, model)
+        rolling = build_risk_index(
+            dates, price, model, composite_rolling_window=20, composite_rolling_min_samples=10
+        )
+        assert rolling["composite_z"][:9].to_list() == [None] * 9
+        assert rolling["composite_z"][-1] != pytest.approx(plain["composite_z"][-1])
+
+    def test_rolling_window_still_nulls_on_missing_rail_day(self) -> None:
+        dates, price = _dates_and_price(n=15)
+        frame = build_risk_index(
+            dates,
+            price,
+            StaticRiskModel(null_row=10),
+            composite_rolling_window=10,
+            composite_rolling_min_samples=3,
+        )
+        assert frame["composite_z"][10] is None
+        assert frame["risk"][10] is None
 
 
 class TestWriteRiskIndex:

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import datetime as _dt
+import math
 from datetime import date
 from pathlib import Path
 
@@ -19,13 +20,26 @@ from digiquant.strategies.sdca.indicator_catalog import (
     composite_weights_from_params,
     dxy_z,
     extra_indicators_for_window,
+    fear_greed_z,
     load_date_value_frame,
     m2_liquidity_z,
+    onchain_addr_ratio_z,
+    onchain_asopr_z,
+    onchain_mvrv_z,
+    onchain_puell_z,
+    onchain_rhodl_z,
     parse_indicator_weights_json,
+    rs_eth_confluence_z,
     rs_eth_z,
 )
+from digiquant.strategies.sdca.power_law_zscore import power_law_z_score
+from digiquant.strategies.sdca.price_oscillators import (
+    SdcaOscillatorSpec,
+    macd_confluence_z,
+    rsi_confluence_z,
+    sma_band_confluence_z,
+)
 from digiquant.strategies.sdca.risk_index import build_risk_index
-from digiquant.strategies.sdca.valuation import valuation_z_score
 
 pytestmark = pytest.mark.unit
 
@@ -41,33 +55,33 @@ def _dates(n: int, start: date = date(2020, 1, 1)) -> pl.Series:
 
 
 class TestSdcaCompositeWeights:
-    def test_default_is_valuation_only(self) -> None:
+    def test_default_is_power_law_only(self) -> None:
         w = SdcaCompositeWeights()
-        assert w.valuation == pytest.approx(1.0)
+        assert w.power_law == pytest.approx(1.0)
         assert w.enabled_extras() == {}
-        assert w.normalized().valuation == pytest.approx(1.0)
+        assert w.normalized().power_law == pytest.approx(1.0)
 
     def test_zero_weight_is_disabled_not_in_blend(self) -> None:
-        w = SdcaCompositeWeights(valuation=1.0, m2=0.0, rs_eth=0.0, dxy=0.0)
+        w = SdcaCompositeWeights(power_law=1.0, m2=0.0, rs_eth=0.0, dxy=0.0)
         assert "m2" not in w.enabled_extras()
 
     def test_normalize_is_simplex(self) -> None:
-        w = SdcaCompositeWeights(valuation=2.0, m2=2.0, rs_eth=0.0, dxy=0.0).normalized()
-        assert w.valuation == pytest.approx(0.5)
+        w = SdcaCompositeWeights(power_law=2.0, m2=2.0, rs_eth=0.0, dxy=0.0).normalized()
+        assert w.power_law == pytest.approx(0.5)
         assert w.m2 == pytest.approx(0.5)
-        assert w.valuation + w.m2 + w.rs_eth + w.dxy == pytest.approx(1.0)
+        assert w.power_law + w.m2 + w.rs_eth + w.dxy == pytest.approx(1.0)
 
     def test_all_zero_rejected(self) -> None:
         with pytest.raises(ValueError, match="at least one"):
-            SdcaCompositeWeights(valuation=0.0, m2=0.0, rs_eth=0.0, dxy=0.0)
+            SdcaCompositeWeights(power_law=0.0, m2=0.0, rs_eth=0.0, dxy=0.0)
 
     def test_from_params_defaults_match_current_btc_charts(self) -> None:
         w = composite_weights_from_params({"buy_max_rate": 10.0})
-        assert w.valuation == pytest.approx(1.0)
+        assert w.power_law == pytest.approx(1.0)
         assert w.enabled_extras() == {}
 
     def test_parse_json_object(self) -> None:
-        w = parse_indicator_weights_json('{"valuation": 0.5, "m2": 0.5}')
+        w = parse_indicator_weights_json('{"power_law": 0.5, "m2": 0.5}')
         assert w.m2 == pytest.approx(0.5)
         assert w.rs_eth == pytest.approx(0.0)
 
@@ -75,6 +89,23 @@ class TestSdcaCompositeWeights:
         assert EXTRA_INDICATOR_NAMES[:3] == ("m2", "rs_eth", "dxy")
         assert "rolling_z" not in EXTRA_INDICATOR_NAMES
         assert "mayer" not in EXTRA_INDICATOR_NAMES
+
+    def test_monthly_rsi_and_macd_default_to_zero_but_are_wired(self) -> None:
+        """Zero-weight by default (opt-in). Trimmed from the default
+        EXTRA_INDICATOR_NAMES search scope (one variant per oscillator style
+        kept: weekly_monthly_rsi/weekly_monthly_macd), but the field and its
+        build_extra_indicators wiring (allowlist=None path) still work.
+        """
+        w = SdcaCompositeWeights()
+        assert w.monthly_rsi == pytest.approx(0.0)
+        assert w.monthly_macd == pytest.approx(0.0)
+        assert w.enabled_extras() == {}
+        assert "monthly_rsi" not in EXTRA_INDICATOR_NAMES
+        assert "monthly_macd" not in EXTRA_INDICATOR_NAMES
+
+    def test_monthly_rsi_and_macd_participate_in_extra_items_when_set(self) -> None:
+        w = SdcaCompositeWeights(power_law=0.0, monthly_rsi=1.0)
+        assert w.enabled_extras() == {"monthly_rsi": 1.0}
 
 
 class TestCausalRollingZ:
@@ -121,6 +152,117 @@ class TestNamedExtras:
         assert tail
         assert sum(tail) / len(tail) < 0
 
+    def test_fear_greed_rising_greed_is_negative_z(self) -> None:
+        n = 50
+        dates = _dates(n)
+        fng = pl.Series([20.0 + i for i in range(n)])
+        z = fear_greed_z(dates, dates, fng, window=10, min_samples=8)
+        tail = [v for v in z.to_list() if v is not None]
+        assert tail
+        assert sum(tail) / len(tail) < 0
+
+    def test_fear_greed_falling_fear_is_positive_z(self) -> None:
+        n = 50
+        dates = _dates(n)
+        fng = pl.Series([80.0 - i for i in range(n)])
+        z = fear_greed_z(dates, dates, fng, window=10, min_samples=8)
+        tail = [v for v in z.to_list() if v is not None]
+        assert tail
+        assert sum(tail) / len(tail) > 0
+
+    def test_onchain_mvrv_rising_is_negative_z(self) -> None:
+        n = 50
+        dates = _dates(n)
+        mvrv = pl.Series([1.0 * (1.05**i) for i in range(n)])
+        z = onchain_mvrv_z(dates, dates, mvrv, window=10, min_samples=8)
+        tail = [v for v in z.to_list() if v is not None]
+        assert tail
+        assert sum(tail) / len(tail) < 0
+
+    def test_onchain_mvrv_falling_is_positive_z(self) -> None:
+        n = 50
+        dates = _dates(n)
+        mvrv = pl.Series([5.0 * (0.95**i) for i in range(n)])
+        z = onchain_mvrv_z(dates, dates, mvrv, window=10, min_samples=8)
+        tail = [v for v in z.to_list() if v is not None]
+        assert tail
+        assert sum(tail) / len(tail) > 0
+
+    @pytest.mark.parametrize(
+        "z_fn", [onchain_asopr_z, onchain_puell_z, onchain_rhodl_z], ids=lambda fn: fn.__name__
+    )
+    def test_onchain_ratio_rising_is_negative_z(self, z_fn) -> None:
+        n = 50
+        dates = _dates(n)
+        rising = pl.Series([1.0 * (1.05**i) for i in range(n)])
+        z = z_fn(dates, dates, rising, window=10, min_samples=8)
+        tail = [v for v in z.to_list() if v is not None]
+        assert tail
+        assert sum(tail) / len(tail) < 0
+
+    @pytest.mark.parametrize(
+        "z_fn", [onchain_asopr_z, onchain_puell_z, onchain_rhodl_z], ids=lambda fn: fn.__name__
+    )
+    def test_onchain_ratio_falling_is_positive_z(self, z_fn) -> None:
+        n = 50
+        dates = _dates(n)
+        falling = pl.Series([5.0 * (0.95**i) for i in range(n)])
+        z = z_fn(dates, dates, falling, window=10, min_samples=8)
+        tail = [v for v in z.to_list() if v is not None]
+        assert tail
+        assert sum(tail) / len(tail) > 0
+
+    @pytest.mark.parametrize(
+        "z_fn", [onchain_mvrv_z, onchain_asopr_z, onchain_puell_z, onchain_rhodl_z],
+        ids=lambda fn: fn.__name__,
+    )
+    def test_onchain_ratio_zero_warmup_does_not_produce_inf(self, z_fn) -> None:
+        """Pre-history days report 0.0 (not enough chain history yet) --
+        must be treated as missing, not logged into -inf."""
+        n = 30
+        dates = _dates(n)
+        values = pl.Series([0.0] * 10 + [2.0 * (1.02**i) for i in range(n - 10)])
+        z = z_fn(dates, dates, values, window=10, min_samples=5)
+        finite = [v for v in z.to_list() if v is not None]
+        assert finite
+        assert all(math.isfinite(v) for v in finite)
+
+    def test_onchain_addr_ratio_price_rising_addr_flat_is_negative_z(self) -> None:
+        """Price rising with flat active-address count -- ratio rises (more
+        expensive per network user) -- elevated ratio is overvalued/sell-favorable."""
+        n = 50
+        dates = _dates(n)
+        price = pl.Series([100.0 * (1.05**i) for i in range(n)])
+        addr = pl.Series([1000.0] * n)
+        z = onchain_addr_ratio_z(dates, price, dates, addr, window=10, min_samples=8)
+        tail = [v for v in z.to_list() if v is not None]
+        assert tail
+        assert sum(tail) / len(tail) < 0
+
+    def test_onchain_addr_ratio_addr_rising_price_flat_is_positive_z(self) -> None:
+        """Flat price with rising active-address count -- ratio falls (cheaper
+        per network user) -- depressed ratio is undervalued/buy-favorable."""
+        n = 50
+        dates = _dates(n)
+        price = pl.Series([100.0] * n)
+        addr = pl.Series([1000.0 * (1.05**i) for i in range(n)])
+        z = onchain_addr_ratio_z(dates, price, dates, addr, window=10, min_samples=8)
+        tail = [v for v in z.to_list() if v is not None]
+        assert tail
+        assert sum(tail) / len(tail) > 0
+
+    def test_onchain_addr_ratio_zero_addr_warmup_does_not_produce_inf(self) -> None:
+        """Pre-adoption days report 0 active addresses -- must be nulled before
+        the divide, not just the resulting ratio, so it can't produce inf."""
+        n = 30
+        dates = _dates(n)
+        price = pl.Series([100.0] * n)
+        addr = pl.Series([0.0] * 10 + [1000.0 * (1.02**i) for i in range(n - 10)])
+        z = onchain_addr_ratio_z(dates, price, dates, addr, window=10, min_samples=5)
+        finite = [v for v in z.to_list() if v is not None]
+        assert finite
+        assert all(math.isfinite(v) for v in finite)
+
     def test_rs_eth_cheap_btc_is_positive_z(self) -> None:
         n = 50
         dates = _dates(n)
@@ -132,8 +274,94 @@ class TestNamedExtras:
         assert sum(tail) / len(tail) > 0
 
 
+class TestRsEthConfluenceZ:
+    def _btc_eth(self, n: int = 500) -> tuple[pl.Series, pl.Series, pl.Series]:
+        dates = _dates(n)
+        btc = pl.Series(
+            [
+                1000.0
+                + 300.0 * math.sin(2 * math.pi * i / 140.0)
+                + 60.0 * math.sin(2 * math.pi * i / 33.0)
+                for i in range(n)
+            ]
+        )
+        eth = pl.Series([50.0] * n)
+        return dates, btc, eth
+
+    def test_clipped_to_unit_interval(self) -> None:
+        dates, btc, eth = self._btc_eth()
+        z = rs_eth_confluence_z(dates, btc, dates, eth)
+        finite = [v for v in z.to_list() if v is not None]
+        assert finite
+        assert max(finite) <= 3.0 + 1e-9
+        assert min(finite) >= -3.0 - 1e-9
+
+    def test_matches_agreement_scaled_formula_across_history(self) -> None:
+        dates, btc, eth = self._btc_eth()
+        slow = rs_eth_z(dates, btc, dates, eth, window=90, min_samples=20)
+        fast = rs_eth_z(dates, btc, dates, eth, window=30, min_samples=15)
+        confluence = rs_eth_confluence_z(dates, btc, dates, eth)
+
+        saw_agreement = saw_disagreement = False
+        for s, f, c in zip(slow.to_list(), fast.to_list(), confluence.to_list(), strict=True):
+            if s is None and f is None:
+                assert c is None
+                continue
+            if s is None:
+                assert c == pytest.approx(f, abs=1e-9)
+                continue
+            if f is None:
+                assert c == pytest.approx(s, abs=1e-9)
+                continue
+            base = 0.5 * s + 0.5 * f
+            if s == 0.0 or f == 0.0:
+                expected = base
+            elif (s > 0) == (f > 0):
+                frac = min(abs(s), abs(f)) / max(abs(s), abs(f))
+                expected = max(-3.0, min(3.0, base * (1.0 + 0.5 * frac)))
+                saw_agreement = True
+            else:
+                expected = max(-3.0, min(3.0, base * 0.5))
+                saw_disagreement = True
+            assert c == pytest.approx(expected, abs=1e-9)
+
+        assert saw_agreement, "fixture never hit the agreement branch"
+        assert saw_disagreement, "fixture never hit the disagreement branch"
+
+    def test_fast_leg_params_change_output(self) -> None:
+        n = 300
+        dates = _dates(n)
+        btc = pl.Series([1000.0 - 0.3 * i + 20.0 * math.sin(i / 6.0) for i in range(n)])
+        eth = pl.Series([50.0 + 0.05 * i for i in range(n)])
+        z_short = rs_eth_confluence_z(
+            dates, btc, dates, eth, fast_window=10, fast_min_samples=5
+        ).to_list()
+        z_long = rs_eth_confluence_z(
+            dates, btc, dates, eth, fast_window=40, fast_min_samples=20
+        ).to_list()
+        assert z_short != z_long
+
+
+class TestOscillatorSpecRsEthFast:
+    def test_default_matches_shorter_window(self) -> None:
+        spec = SdcaOscillatorSpec()
+        assert spec.rs_eth_fast_window == 30
+        assert spec.rs_eth_fast_min_samples == 15
+
+    def test_fast_independent_of_slow(self) -> None:
+        spec = SdcaOscillatorSpec(rs_eth_window=120, rs_eth_fast_window=20)
+        assert spec.rs_eth_window == 120
+        assert spec.rs_eth_fast_window == 20
+
+    def test_fast_min_samples_must_not_exceed_window(self) -> None:
+        with pytest.raises(ValueError, match="rs_eth_fast_min_samples"):
+            SdcaOscillatorSpec(rs_eth_fast_window=10, rs_eth_fast_min_samples=20)
+
+
 class TestBuildExtraIndicators:
-    def test_zero_weights_emit_no_extras_even_when_sources_exist(self) -> None:
+    def test_zero_weights_emit_no_enabled_extras_even_when_sources_exist(self) -> None:
+        """M2 stays weight-gated (source present, weight 0 → omitted); the always-on
+        price oscillators still materialize for display, but disabled."""
         dates = _dates(30)
         m2 = pl.Series([100.0] * 30)
         sources = ExtraIndicatorSources(m2_dates=dates, m2_values=m2)
@@ -146,7 +374,50 @@ class TestBuildExtraIndicators:
             min_samples=5,
             roc_days=5,
         )
-        assert extras == []
+        assert {e.name for e in extras} == {
+            "weekly_rsi",
+            "weekly_macd",
+            "sma_band",
+            "monthly_rsi",
+            "monthly_macd",
+            "weekly_monthly_rsi",
+            "weekly_monthly_macd",
+            "fast_crash_vol",
+        }
+        assert all(not e.enabled for e in extras)
+
+    def test_zero_rs_eth_weight_still_materializes_when_eth_source_exists(self) -> None:
+        """rs_eth is a display-only diagnostic at weight 0, like the price
+        oscillators, as long as its ETH source series was loaded."""
+        dates = _dates(30)
+        eth = pl.Series([50.0 + 0.1 * i for i in range(30)])
+        sources = ExtraIndicatorSources(eth_dates=dates, eth_close=eth)
+        extras = build_extra_indicators(
+            dates,
+            pl.Series([100.0] * 30),
+            SdcaCompositeWeights(),
+            sources,
+            window=10,
+            min_samples=5,
+        )
+        by_name = {e.name: e for e in extras}
+        assert "rs_eth" in by_name
+        assert by_name["rs_eth"].weight == 0.0
+        assert not by_name["rs_eth"].enabled
+
+    def test_zero_rs_eth_weight_omitted_when_no_eth_source(self) -> None:
+        """Without an ETH source, rs_eth can't be charted, so it's simply absent
+        (same as before) rather than raising like the weight>0 case does."""
+        dates = _dates(30)
+        extras = build_extra_indicators(
+            dates,
+            pl.Series([100.0] * 30),
+            SdcaCompositeWeights(),
+            ExtraIndicatorSources(),
+            window=10,
+            min_samples=5,
+        )
+        assert "rs_eth" not in {e.name for e in extras}
 
     def test_positive_m2_weight_without_source_raises(self) -> None:
         dates = _dates(30)
@@ -154,14 +425,43 @@ class TestBuildExtraIndicators:
             build_extra_indicators(
                 dates,
                 pl.Series([100.0] * 30),
-                SdcaCompositeWeights(valuation=1.0, m2=0.5),
+                SdcaCompositeWeights(power_law=1.0, m2=0.5),
                 ExtraIndicatorSources(),
             )
+
+    def test_positive_onchain_addr_ratio_weight_without_source_raises(self) -> None:
+        dates = _dates(30)
+        with pytest.raises(ValueError, match="onchain_addr_ratio"):
+            build_extra_indicators(
+                dates,
+                pl.Series([100.0] * 30),
+                SdcaCompositeWeights(power_law=1.0, onchain_addr_ratio=0.5),
+                ExtraIndicatorSources(),
+            )
+
+    def test_onchain_addr_ratio_wires_into_build_extra_indicators(self) -> None:
+        dates = _dates(30)
+        price = pl.Series([100.0] * 30)
+        addr = pl.Series([1000.0 + i for i in range(30)])
+        sources = ExtraIndicatorSources(onchain_addr_ratio_dates=dates, onchain_addr_ratio_values=addr)
+        extras = build_extra_indicators(
+            dates,
+            price,
+            SdcaCompositeWeights(power_law=1.0, onchain_addr_ratio=1.0),
+            sources,
+            window=10,
+            min_samples=5,
+        )
+        by_name = {e.name: e for e in extras}
+        assert "onchain_addr_ratio" in by_name
+        assert by_name["onchain_addr_ratio"].enabled
+        expected = onchain_addr_ratio_z(dates, price, dates, addr, window=10, min_samples=5)
+        assert by_name["onchain_addr_ratio"].z.to_list() == expected.to_list()
 
     def test_window_slice_keeps_alignment(self) -> None:
         dates = [date(2020, 1, 1) + _dt.timedelta(days=i) for i in range(10)]
         extra_z = {"m2": [float(i) for i in range(10)]}
-        w = SdcaCompositeWeights(valuation=1.0, m2=1.0)
+        w = SdcaCompositeWeights(power_law=1.0, m2=1.0)
         sliced = extra_indicators_for_window(dates[3:6], dates, extra_z, w)
         assert len(sliced) == 1
         assert sliced[0].name == "m2"
@@ -186,8 +486,92 @@ class TestBuildExtraIndicators:
         assert dates[0] == date(2017, 11, 9)
         assert values[0] == pytest.approx(320.5)
 
+    def test_weekly_rsi_slot_is_the_confluence_sub_aggregate(self) -> None:
+        """weekly_rsi now wires to rsi_confluence_z (weekly+daily), not mtf_rsi_z."""
+        n = 300
+        dates = _dates(n)
+        close = pl.Series([1000.0 + 3.0 * ((i % 40) - 20) - 0.5 * i for i in range(n)])
+        spec = SdcaOscillatorSpec(rsi_length=10, daily_rsi_length=6)
+        extras = build_extra_indicators(
+            dates,
+            close,
+            SdcaCompositeWeights(power_law=1.0, weekly_rsi=1.0),
+            ExtraIndicatorSources(),
+            oscillators=spec,
+        )
+        by_name = {e.name: e for e in extras}
+        expected = rsi_confluence_z(dates, close, weekly_length=10, daily_length=6)
+        assert by_name["weekly_rsi"].z.to_list() == expected.to_list()
+        assert by_name["weekly_rsi"].enabled
 
-class TestDefaultMatchesValuationOnly:
+    def test_weekly_macd_slot_is_the_confluence_sub_aggregate(self) -> None:
+        """weekly_macd now wires to macd_confluence_z (weekly+daily), not weekly-only."""
+        n = 300
+        dates = _dates(n)
+        close = pl.Series([1000.0 + 3.0 * ((i % 40) - 20) - 0.5 * i for i in range(n)])
+        spec = SdcaOscillatorSpec(macd_fast=8, macd_slow=21, macd_daily_fast=5, macd_daily_slow=10)
+        extras = build_extra_indicators(
+            dates,
+            close,
+            SdcaCompositeWeights(power_law=1.0, weekly_macd=1.0),
+            ExtraIndicatorSources(),
+            oscillators=spec,
+        )
+        by_name = {e.name: e for e in extras}
+        expected = macd_confluence_z(
+            dates, close, weekly_fast=8, weekly_slow=21, daily_fast=5, daily_slow=10
+        )
+        assert by_name["weekly_macd"].z.to_list() == expected.to_list()
+        assert by_name["weekly_macd"].enabled
+
+    def test_sma_band_slot_is_the_confluence_sub_aggregate(self) -> None:
+        """sma_band now wires to sma_band_confluence_z (slow+fast), not the raw single-window z."""
+        n = 300
+        dates = _dates(n)
+        close = pl.Series([1000.0 + 3.0 * ((i % 40) - 20) - 0.5 * i for i in range(n)])
+        spec = SdcaOscillatorSpec(
+            sma_band_window=80, sma_band_fast_window=15, sma_band_fast_min_samples=8
+        )
+        extras = build_extra_indicators(
+            dates,
+            close,
+            SdcaCompositeWeights(power_law=1.0, sma_band=1.0),
+            ExtraIndicatorSources(),
+            oscillators=spec,
+        )
+        by_name = {e.name: e for e in extras}
+        expected = sma_band_confluence_z(
+            dates, close, slow_window=80, fast_window=15, fast_min_samples=8
+        )
+        assert by_name["sma_band"].z.to_list() == expected.to_list()
+        assert by_name["sma_band"].enabled
+
+    def test_rs_eth_slot_is_the_confluence_sub_aggregate(self) -> None:
+        """rs_eth now wires to rs_eth_confluence_z (slow+fast), not the raw single-window z."""
+        n = 300
+        dates = _dates(n)
+        btc = pl.Series([1000.0 + 3.0 * ((i % 40) - 20) - 0.5 * i for i in range(n)])
+        eth = pl.Series([50.0 + 0.2 * ((i % 25) - 12) + 0.1 * i for i in range(n)])
+        sources = ExtraIndicatorSources(eth_dates=dates, eth_close=eth)
+        spec = SdcaOscillatorSpec(
+            rs_eth_window=60, rs_eth_fast_window=12, rs_eth_fast_min_samples=6
+        )
+        extras = build_extra_indicators(
+            dates,
+            btc,
+            SdcaCompositeWeights(power_law=1.0, rs_eth=1.0),
+            sources,
+            oscillators=spec,
+        )
+        by_name = {e.name: e for e in extras}
+        expected = rs_eth_confluence_z(
+            dates, btc, dates, eth, slow_window=60, fast_window=12, fast_min_samples=6
+        )
+        assert by_name["rs_eth"].z.to_list() == expected.to_list()
+        assert by_name["rs_eth"].enabled
+
+
+class TestDefaultMatchesPowerLawOnly:
     def test_disabled_extras_match_single_indicator_risk(self) -> None:
         dates = _dates(5)
         price = pl.Series([80.0] * 5)
@@ -202,16 +586,16 @@ class TestDefaultMatchesValuationOnly:
 
     def test_nonzero_m2_weight_changes_composite(self) -> None:
         dates = _dates(1)
-        price = pl.Series([100.0])  # at median → valuation_z = 0
+        price = pl.Series([100.0])  # at median → power_law_z = 0
         model = StaticRiskModel()
         rails = model.rails(dates)
-        val_z = valuation_z_score(price, rails["low"], rails["median"], rails["high"])
+        val_z = power_law_z_score(price, rails["low"], rails["median"], rails["high"])
         assert val_z[0] == pytest.approx(0.0)
         extras = [IndicatorWeight(name="m2", z=pl.Series([3.0]), weight=1.0)]
         frame = build_risk_index(dates, price, model, extra_indicators=extras)
         expected = compute_composite_risk(
             [
-                IndicatorWeight(name="valuation", z=val_z, weight=1.0),
+                IndicatorWeight(name="power_law", z=val_z, weight=1.0),
                 extras[0],
             ]
         )

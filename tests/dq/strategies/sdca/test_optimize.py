@@ -17,11 +17,13 @@ from digiquant.strategies.sdca.optimize import (
     SdcaOptimizeProvenance,
     SdcaWalkForwardResult,
     load_btc_optimized_provenance,
+    load_sdca_extra_z,
     persist_btc_optimized,
     run_sdca_walk_forward,
     walk_forward_to_optimize_result,
 )
 from digiquant.strategies.sdca.presets import load_preset
+from digiquant.strategies.sdca.price_oscillators import SdcaOscillatorSpec
 from digiquant.strategies.sdca.risk_model import RiskModel
 from digiquant.strategies.sdca.walk_forward import SdcaTrialMetrics
 from digiquant.strategy_specs import (
@@ -45,7 +47,7 @@ _HIDDEN = {
     "sell_max_rate": 6.0,
     "buy_curvature": 1.0,
     "sell_curvature": 2.0,
-    "valuation_weight": 1.0,
+    "power_law_weight": 1.0,
     "m2_weight": 0.0,
 }
 
@@ -84,7 +86,7 @@ def _distance(shape: SdcaCurveShape, weight: float, m2_weight: float = 0.0) -> f
         + ((shape.buy_knee_risk - _HIDDEN["buy_knee_risk"]) / 10.0) ** 2
         + ((shape.sell_knee_risk - _HIDDEN["sell_knee_risk"]) / 10.0) ** 2
         + (shape.sell_max_rate - _HIDDEN["sell_max_rate"]) ** 2
-        + (weight - _HIDDEN["valuation_weight"]) ** 2
+        + (weight - _HIDDEN["power_law_weight"]) ** 2
         + (m2_weight - _HIDDEN.get("m2_weight", 0.0)) ** 2
     )
 
@@ -94,7 +96,7 @@ def _evaluator(
     prices: list[float],
     model: RiskModel,
     shape: SdcaCurveShape,
-    valuation_weight: float,
+    power_law_weight: float,
     extra_indicators: object = None,
 ) -> SdcaTrialMetrics:
     assert isinstance(model, _ConstRails)
@@ -103,7 +105,7 @@ def _evaluator(
     for ind in extras:
         if getattr(ind, "name", "") == "m2":
             m2_w = float(ind.weight)
-    vs_flat = 5.0 - _distance(shape, valuation_weight, m2_w) - 0.02 * len(dates)
+    vs_flat = 5.0 - _distance(shape, power_law_weight, m2_w) - 0.02 * len(dates)
     return SdcaTrialMetrics(
         vs_flat_dca_pct=vs_flat,
         vs_lump_pct=-1.0,
@@ -126,7 +128,7 @@ class TestStrategySpecsSdca:
             "sell_max_rate",
             "buy_curvature",
             "sell_curvature",
-            "valuation_weight",
+            "power_law_weight",
             "m2_weight",
             "rs_eth_weight",
             "dxy_weight",
@@ -138,7 +140,7 @@ class TestStrategySpecsSdca:
         lo_buy, hi_buy, _, _, _ = specs["buy_knee_risk"]
         lo_sell, hi_sell, _, _, _ = specs["sell_knee_risk"]
         assert hi_buy < lo_sell
-        assert specs["valuation_weight"][0] == 0.0
+        assert specs["power_law_weight"][0] == 0.0
         assert specs["m2_weight"][2] == 0.0
 
     def test_alias_get_param_specs(self) -> None:
@@ -317,12 +319,12 @@ class TestPersistAndDispatch:
             symbols=["BTC-USD"],
             data_path=csv,
             param_grid=[dict(SDCA_SHAPE_DEFAULTS), dict(_HIDDEN)],
-            base_params={"weekly_rsi_weight": 0.4, "valuation_weight": 0.6},
+            base_params={"weekly_rsi_weight": 0.4, "power_law_weight": 0.6},
         )
         trials = captured["trials"]
         assert isinstance(trials, list)
         assert all(t.get("weekly_rsi_weight") == 0.4 for t in trials)
-        assert all(t.get("valuation_weight") == 0.6 for t in trials)
+        assert all(t.get("power_law_weight") == 0.6 for t in trials)
 
     def test_sdca_auto_grid_excludes_curvatures(self) -> None:
         trials = _sdca_trials(None, "grid", 10, None)
@@ -368,8 +370,8 @@ class TestPersistAndDispatch:
     def test_walk_forward_searches_extra_weights(self) -> None:
         dates = _dates()
         prices = [100.0 + i for i in range(len(dates))]
-        hidden = {**_HIDDEN, "valuation_weight": 0.4, "m2_weight": 0.6}
-        worse = {**SDCA_SHAPE_DEFAULTS, "m2_weight": 0.0, "valuation_weight": 1.0}
+        hidden = {**_HIDDEN, "power_law_weight": 0.4, "m2_weight": 0.6}
+        worse = {**SDCA_SHAPE_DEFAULTS, "m2_weight": 0.0, "power_law_weight": 1.0}
         extra_z = {"m2": [0.0] * len(dates)}
         result = run_sdca_walk_forward(
             dates,
@@ -381,4 +383,50 @@ class TestPersistAndDispatch:
             extra_z=extra_z,
         )
         assert result.best_params["m2_weight"] == pytest.approx(0.6)
-        assert result.best_params["valuation_weight"] == pytest.approx(0.4)
+        assert result.best_params["power_law_weight"] == pytest.approx(0.4)
+
+
+class TestLoadSdcaExtraZOscillators:
+    """A frozen ``oscillators`` spec must actually change the price-oscillator
+    extras -- #3174's walk-forward silently reverted weekly_monthly_rsi/macd,
+    sma_band, weekly_rsi, and weekly_macd to ``SdcaOscillatorSpec()`` defaults
+    because ``load_sdca_extra_z``'s second ``extra_z_vectors(...)`` call (used
+    to also pick up m2/dxy/rs_eth) omitted ``oscillators=oscillators`` and
+    then clobbered the correctly-computed keys from the first call via
+    ``dict.update``.
+    """
+
+    def test_frozen_oscillators_change_price_oscillator_extras(self, tmp_path: Path) -> None:
+        dates = [date(2018, 1, 1) + timedelta(days=i) for i in range(900)]
+        import math
+
+        prices = [30_000.0 * (1.0 + 0.4 * math.sin(i / 45.0)) for i in range(len(dates))]
+
+        frozen = SdcaOscillatorSpec(
+            rsi_length=5,
+            monthly_rsi_length=2,
+            macd_fast=16,
+            macd_slow=35,
+            monthly_macd_fast=4,
+            monthly_macd_slow=9,
+            sma_band_window=120,
+            sma_band_fast_window=30,
+        )
+        extra_frozen = load_sdca_extra_z(
+            dates, prices, data_path=None, data_dir=str(tmp_path), oscillators=frozen
+        )
+        extra_default = load_sdca_extra_z(
+            dates, prices, data_path=None, data_dir=str(tmp_path), oscillators=None
+        )
+
+        for name in (
+            "weekly_monthly_rsi",
+            "weekly_monthly_macd",
+            "sma_band",
+            "weekly_rsi",
+            "weekly_macd",
+        ):
+            assert extra_frozen[name] != extra_default[name], (
+                f"{name} did not change with a different oscillators spec -- "
+                "load_sdca_extra_z is silently ignoring `oscillators` again"
+            )
