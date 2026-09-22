@@ -497,6 +497,21 @@ forces the next commit into a brand-new release — three digichat releases (1.1
 1.2.0, and a same-day 1.2.1 proposal) landed within ~48 hours this way, none of
 them tied to a deliberate release decision (2026-08-13).
 
+release-please keeps targeting `develop`, so the version bump rides the
+promotion into `main` — do not re-target it at `main`, or the squashed promotion
+commit reads as a no-op and the changelog empties out.
+
+**Every release also gets its own branch, cut from `main`.** Once the promotion
+lands, cut `release/vX.Y.Z` from `main` at the release commit and tag it there —
+one branch per released version. That branch is the version's **maintenance
+line**, not a staging gate: features accumulate on `develop`, and by the time
+the branch exists the version is already deployed. Patch releases continue the
+chain (`release/vX.Y.(Z+1)` branched from `release/vX.Y.Z`); a fix on an older
+line is cherry-picked onto `develop` so the next promotion carries it, and the
+older line's version bump is never merged into `main`. Recipes:
+[BRANCHING.md](BRANCHING.md#cutting-a-release) § Cutting a release / Patching a
+release, and [RELEASES.md](RELEASES.md#patching-a-released-version).
+
 ---
 
 ## Agent surface
