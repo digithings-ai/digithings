@@ -91,10 +91,17 @@ export function ArgumentSeams() {
             <span className="text-[0.82rem] leading-[1.5] text-ink-mute">{l.theirs}</span>
           </div>
 
-          {/* The seam itself — the one glyph carrying the argument. */}
+          {/* The seam itself — the one glyph carrying the argument.
+              It was the faintest thing in the diagram (a 7.7px glyph at
+              --ink-soft over a 9% dashed rule), which is backwards: the seam is
+              the claim. The rule steps up to --ink-mute and the glyph to full
+              ink at 1.15rem, so the perforation and the swap both read at a
+              glance. The rule stays a 1px hairline so it cannot compete with
+              the right column's 3px solid ink edge — the diagram still has one
+              loudest line, and it is the owned side's. */}
           <div className="relative flex items-center justify-center" aria-hidden="true">
-            <span className="absolute inset-y-0 start-1/2 w-px border-s border-dashed border-hair" />
-            <span className="relative font-mono text-[0.82rem] text-ink-soft">&#8644;</span>
+            <span className="absolute inset-y-0 start-1/2 w-px border-s border-dashed border-ink-mute" />
+            <span className="relative font-mono text-[1.15rem] leading-none text-ink">&#8644;</span>
           </div>
 
           {/* Yours — the same cell, owned. The page's accent is deliberately
