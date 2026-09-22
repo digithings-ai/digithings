@@ -1,7 +1,7 @@
 # Digi Ecosystem – common targets (Phase 0+)
 # Use: make build, make test, make test-e2e, make up, make down
 
-.PHONY: build up down test test-unit test-e2e test-baseline doc-check adr-check vault-check package up-heartbeat up-digichat down-digichat digichat-release-up digichat-release-down digichat-profile-a-up digichat-profile-a-down digichat-profile-a-bundle-up digichat-profile-a-bundle-down digichat-dev digichat-health stack-local stack-local-stop up-digichat-db down-digichat-db seed-digisearch-local export-edgar-digisearch-dev seed-digisearch-edgar-dev seed-digisearch-edgar-dev-host edgar-digisearch-dev agents-init score score-delta clean-imports find-stale commit pr task new-task status batch-candidates parse-error hooks-install up-observability down-observability research-validate supabase-migrations-check
+.PHONY: build up down test test-unit test-e2e test-baseline doc-check adr-check vault-check package up-heartbeat up-digichat down-digichat digichat-release-up digichat-release-down digichat-profile-a-up digichat-profile-a-down digichat-profile-a-bundle-up digichat-profile-a-bundle-down digichat-dev digichat-health digichat-config-check stack-local stack-local-stop up-digichat-db down-digichat-db seed-digisearch-local export-edgar-digisearch-dev seed-digisearch-edgar-dev seed-digisearch-edgar-dev-host edgar-digisearch-dev agents-init score score-delta clean-imports find-stale commit pr task new-task status batch-candidates parse-error hooks-install up-observability down-observability research-validate supabase-migrations-check
 
 build:
 	docker compose build
@@ -141,6 +141,14 @@ digichat-profile-a-bundle-down:
 # digichat Next.js dev server (http://127.0.0.1:3000, hot reload). Backend: `make up`, `make stack-local`, or ./scripts/run_local.sh
 digichat-dev:
 	cd apps/digichat && npm run dev
+
+# Validate a digichat deployment config and print what it resolves to.
+# Fails loudly on a missing/invalid file (the container would silently fall back
+# to the built-in dev default otherwise). CONFIG defaults to DIGICHAT_CONFIG_PATH
+# or /app/config/digichat.yaml.
+#   make digichat-config-check CONFIG=infra/digichat-release/config/digichat.yaml
+digichat-config-check:
+	cd apps/digichat && npm run --silent config:check -- $(if $(CONFIG),$(abspath $(CONFIG)),)
 
 # digichat GET /api/health (needs dev server + apps/digichat/.env.local + backends).
 digichat-health:

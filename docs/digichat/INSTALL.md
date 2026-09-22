@@ -52,6 +52,37 @@ Compose overlays and env templates live under
 
 Adapters only: `digigraph` \| `foundry`. digigraph owns digillm→LiteLLM and digivault.
 
+### The deployment config — one file
+
+Every profile mounts [`infra/digichat-release/config/`](../../infra/digichat-release/config/)
+at `/app/config` and reads `/app/config/digichat.yaml`. That one YAML file defines
+the install — skin, chrome, gate, tools, MCP servers, backend:
+
+```bash
+cp infra/digichat-release/config/digichat.yaml.example \
+   infra/digichat-release/config/digichat.yaml
+# edit it: slug, chrome.skin, title/welcome, gate, backend
+
+make digichat-config-check CONFIG=infra/digichat-release/config/digichat.yaml
+```
+
+`make digichat-config-check` prints the resolved deployment(s) and fails on an
+invalid file — run it before `up -d`. A missing file falls back to the built-in
+dev default silently; an invalid file fails the container at boot.
+
+Two traps:
+
+- **The mount replaces `/app/config`.** The image's baked
+  `/app/config/examples/*` is *not* reachable in the release profiles. Copy any
+  reference config you want into `config/`. For a different catalog skin alone,
+  set `DIGICHAT_CHROME_SKIN=<id>` (`chatgpt`, `claude`, `grok`, …) instead.
+- **Do not mix shapes.** `DIGICHAT_EMBED_TENANTS` (hosts mode) merges *with* a
+  `deployment:` block, registering a stray anonymous install. Use `hosts:` in the
+  file **or** the env registry — not both.
+
+Reference configs: [`apps/digichat/config/examples/`](../../apps/digichat/config/examples/)
+(`local-app.yaml`, `occ-embed.yaml`, `datatap-mcp.yaml`, `skins/*.yaml`, …).
+
 ### Profile A — digigraph stack
 
 ```text
@@ -92,7 +123,7 @@ Containers) instead of N GHCR services — `make digichat-profile-a-bundle-up`
 ([`compose.profile-a-bundle.yml`](../../infra/digichat-release/compose.profile-a-bundle.yml)).
 Clients who want per-service pins keep multi-image Profile A above.
 
-Config for LiteLLM / digigraph is vendored under
+Config for LiteLLM / digigraph / digichat is vendored under
 [`infra/digichat-release/config/`](../../infra/digichat-release/config/) (no monorepo
 `config/` clone required). Stack GHCR packages appear after
 `publish-service-images.yml` runs on `main` (promote #2023, then first publish).

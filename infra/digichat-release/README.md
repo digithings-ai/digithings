@@ -11,7 +11,8 @@ Install unit: `ghcr.io/digithings-ai/digichat:vX.Y.Z` (not npm, not `:latest`).
 | `.env.profile-a.example` | Env template for Profile A (multi-image) |
 | `.env.profile-a-bundle.example` | Env template for Profile A bundle |
 | `.env.profile-b.example` | Env template for Profile B |
-| `config/` | Vendored LiteLLM + digigraph config mount for Profile A |
+| `config/` | Config mount for every profile: LiteLLM + digigraph + **digichat** |
+| `config/digichat.yaml.example` | Starter deployment config — `cp` to `config/digichat.yaml` and edit |
 
 ## Image inventory (Profile A)
 
@@ -51,6 +52,38 @@ Tear down: `make digichat-release-down VERSION=1.0.0`.
 
 Existing clients (including DataTap) may keep `DIGICHAT_VERSION=0.9.3` —
 `ghcr.io/digithings-ai/digichat:v0.9.3` stays on GHCR.
+
+## The deployment config — one file per install
+
+Every profile bind-mounts this directory at `/app/config` (read-only) and points
+digichat at `/app/config/digichat.yaml`. That one YAML file is the install:
+skin, chrome, gate, tools, MCP servers, and backend.
+
+```bash
+cp infra/digichat-release/config/digichat.yaml.example \
+   infra/digichat-release/config/digichat.yaml
+# edit it — the client's skin, title, welcome copy, gate, backend
+
+make digichat-config-check CONFIG=infra/digichat-release/config/digichat.yaml
+# prints the resolved deployment(s); fails loudly on an invalid file
+```
+
+Validate **before** `up -d`. A missing file falls back to the built-in dev
+default silently; an invalid file fails the container at boot. `make
+digichat-config-check` catches both.
+
+Two traps:
+
+- **The mount replaces `/app/config`.** The image's baked
+  `/app/config/examples/*` is *not* reachable in these profiles — copy any
+  reference config you want into `config/`. For a catalog skin alone, set
+  `DIGICHAT_CHROME_SKIN=<id>` instead of editing YAML.
+- **Do not mix shapes.** `DIGICHAT_EMBED_TENANTS` (hosts mode) merges *with* a
+  `deployment:` block, registering a stray anonymous install. Use `hosts:` in the
+  file **or** the env registry — not both.
+
+Full reference configs: [`apps/digichat/config/examples/`](../../apps/digichat/config/examples/).
+Client-facing guide: [`docs/digichat/INSTALL.md`](../../docs/digichat/INSTALL.md).
 
 ## Profile A — digigraph stack
 
@@ -169,6 +202,7 @@ Host must supply Azure identity for Foundry; do not put a Foundry API key in dig
 | Full stack GHCR (monorepo overlay) | `make up-ghcr` (+ `--profile digichat --profile digivault`) |
 | Profile B (Foundry) | `docker compose -f infra/digichat-release/compose.profile-b.yml --env-file infra/digichat-release/.env.profile-b up -d` |
 | Local monorepo build | `make up-digichat` |
+| Validate the deployment config | `make digichat-config-check CONFIG=infra/digichat-release/config/digichat.yaml` |
 | Client install guide | [`docs/digichat/INSTALL.md`](../../docs/digichat/INSTALL.md) |
 | Populate client docs (offline) | [`docs/digichat/CLIENT-DOCS-ONBOARD.md`](../../docs/digichat/CLIENT-DOCS-ONBOARD.md) |
 | Post-publish smoke | [`docs/digichat/RELEASE-SMOKE.md`](../../docs/digichat/RELEASE-SMOKE.md) |

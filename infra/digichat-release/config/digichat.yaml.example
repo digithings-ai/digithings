@@ -1,0 +1,115 @@
+version: 1
+# ─────────────────────────────────────────────────────────────────────────────
+# digichat deployment config — the one file that defines a chat container.
+#
+#   cp config/digichat.yaml.example config/digichat.yaml
+#   $EDITOR config/digichat.yaml
+#   make digichat-config-check CONFIG=infra/digichat-release/config/digichat.yaml
+#
+# The release compose mounts this directory at /app/config read-only and reads
+# DIGICHAT_CONFIG_PATH (default /app/config/digichat.yaml). Validate before
+# restarting: an INVALID file fails the container at boot, but a MISSING file
+# silently falls back to the built-in dev default — so keep the file present.
+#
+# Only `version` and one of `deployment:` (this single-client shape) or
+# `hosts:` (many hostnames in one container) are required. Everything else has
+# a documented default. Reference files: apps/digichat/config/examples/
+# ─────────────────────────────────────────────────────────────────────────────
+
+# Single client: the whole container is this deployment.
+deployment:
+  slug: client
+
+  chrome:
+    # app = full page | embed = iframe/widget surface (default)
+    mode: embed
+    theme: dark
+    # Any of the 12 skins: base, chatgpt, claude, grok, gemini, perplexity,
+    # react-ink, expo-react-native, base-assistant-ui, webpage-assistant,
+    # product-page-assistant, digichat
+    skin: digichat
+    title: Client Chat
+    welcome:
+      title: Ask a question
+      body: Ask about anything you need help with.
+    placeholder: Ask a question
+    suggestions:
+      - What can you help me with?
+      - Search my workspace
+      - Connect a tool
+      - Change the appearance
+    defaultLanguage: en
+    transcript:
+      userAlign: left
+    # attribution: true
+    # accent:
+    #   color: "#e2708a"
+    #   foreground: "#06110f"
+
+  # none = no history | memory = in-browser | server = Postgres (needs auth)
+  persistence: none
+  # anonymous = token/host gated embed | session = Auth.js sign-in (app mode)
+  auth: anonymous
+
+  features:
+    attachments: true
+    dictation: false
+    speech: false
+    # reasoning / toolCalls disclosure:
+    #   off | collapsed | balanced | expanded | locked_open
+    reasoning: collapsed
+    toolCalls: collapsed
+    sources: true
+    branchPicker: true
+    modelPicker: false
+    pageContext: visible
+
+  # models:
+  #   default: deepseek/deepseek-v4-flash
+  #   available:
+  #     - deepseek/deepseek-v4-flash
+  #     - openai/gpt-oss-120b
+  #   allowPicker: true
+
+  # digigraph = digithings chat brain (needs DIGIKEY_BFF_TOKEN + digigraph URL)
+  # foundry   = Azure AI Foundry agent (the host supplies the Azure identity)
+  backend:
+    type: digigraph
+  # backend:
+  #   type: foundry
+  #   projectEndpoint: https://YOUR_PROJECT.services.ai.azure.com/api/projects/YOUR_PROJECT
+  #   agentName: YOUR_AGENT
+
+  # Operator tools this client may call. Empty catalog = no tools.
+  tools:
+    allowUserToggle: true
+    catalog: []
+  #   catalog:
+  #     - id: digisearch
+  #       default: true
+  #       label: Search
+  #     - id: digivault
+  #       default: true
+  #       label: Vault
+  #     - id: web_search
+  #       default: true
+  #       label: Web search
+
+  # Operator MCP servers stay server-side — URLs never reach the browser.
+  mcp:
+    servers: []
+    allowUserServers: false
+    allowAddForm: false
+
+  gate:
+    # ungated = no cap | turn_limited = N free then in-chat BYOK
+    # trial_form = server-side per-IP free turns, then unlock
+    mode: ungated
+    activityDetail: labels   # off | labels | full
+    llmAccess: operator
+    showByok: false
+    webSearch: false
+
+# Authorises this container's own /embed surface. Prefer the
+# DIGICHAT_EMBED_TOKEN env overlay over committing a token here.
+# token: replace-embed-token
