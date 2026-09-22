@@ -1378,8 +1378,11 @@ vi.mocked(createFoundryStreamResponse).mockClear();
       });
       expect(call?.responseHeaders["X-Digichat-Session"]).toBe("sess-trace");
       expect(call?.responseHeaders["X-Request-Id"]).toBe("rid-trace");
-      // No embed config on an authenticated request, so the adapter gets the default.
-      expect(call?.activityDetail).toBe("full");
+      // The session path now resolves the same deployment the embed path does
+      // (Phase 2b), so the adapter gets that deployment's `gate.activityDetail`
+      // instead of a hard-coded "full". The synthetic dev config in tests leaves
+      // it at the schema default.
+      expect(call?.activityDetail).toBe("labels");
       expect(call?.signal).toBeDefined();
     });
 
@@ -1457,6 +1460,123 @@ vi.mocked(createFoundryStreamResponse).mockClear();
           const res = await POST(chatReq({ "x-embed-host": "https://matched.example" }));
           expect(res.status).toBe(200);
           expect(lastTraceOpts()).not.toHaveProperty("researchSystemPrompt");
+        } finally {
+          resetDigichatConfigForTests();
+        }
+      });
+    });
+
+    describe("the session path honours the deployment config (Phase 2b)", () => {
+      // `resolveChatTenantContext` is mocked to `mockAuthCtx`, which carries no
+      // `embedConfig` — so these requests are the authenticated-session surface,
+      // exactly where the deployment config used to be ignored.
+      it("routes a session request to the deployment's foundry backend", async () => {
+        setDigichatConfigForTests(
+          parseDigichatConfig({
+            version: 1,
+            deployment: {
+              slug: "client",
+              backend: {
+                type: "foundry",
+                projectEndpoint: "https://example.openai.azure.com",
+                agentName: "agent-1",
+              },
+            },
+          })
+        );
+        try {
+          vi.mocked(createFoundryStreamResponse).mockClear();
+          const res = await POST(chatReq());
+          expect(res.status).toBe(200);
+          expect(createFoundryStreamResponse).toHaveBeenCalledTimes(1);
+          const opts = vi.mocked(createFoundryStreamResponse).mock.calls.at(-1)?.[0] as {
+            projectEndpoint: string;
+            agentName: string;
+          };
+          expect(opts.projectEndpoint).toBe("https://example.openai.azure.com");
+          expect(opts.agentName).toBe("agent-1");
+        } finally {
+          resetDigichatConfigForTests();
+        }
+      });
+
+      it("forwards the digigraph corpus index and vault prefix on a session request", async () => {
+        setDigichatConfigForTests(
+          parseDigichatConfig({
+            version: 1,
+            deployment: {
+              slug: "client",
+              backend: {
+                type: "digigraph",
+                digisearchIndex: "idx-1",
+                vaultPathPrefix: "notes/",
+              },
+            },
+          })
+        );
+        try {
+          const res = await POST(chatReq());
+          expect(res.status).toBe(200);
+          const opts = vi.mocked(createDigigraphTraceStreamResponse).mock.calls.at(-1)?.[0] as {
+            upstreamHeaders: Record<string, string>;
+          };
+          expect(opts.upstreamHeaders["X-Digi-Corpus-Index"]).toBe("idx-1");
+          expect(opts.upstreamHeaders["X-Digi-Vault-Prefix"]).toBe("notes/");
+        } finally {
+          resetDigichatConfigForTests();
+        }
+      });
+
+      it("enforces the deployment's requiredPlanTier on a session request", async () => {
+        setDigichatConfigForTests(
+          parseDigichatConfig({
+            version: 1,
+            deployment: {
+              slug: "client",
+              backend: { type: "digigraph" },
+              gate: { mode: "ungated", activityDetail: "labels", requiredPlanTier: "studio" },
+            },
+          })
+        );
+        try {
+          const res = await POST(chatReq());
+          expect(res.status).toBe(403);
+          const body = (await res.json()) as { error: string };
+          expect(body.error).toBe("plan_tier_required");
+        } finally {
+          resetDigichatConfigForTests();
+        }
+      });
+
+      it("runs the models.available allowlist ahead of the foundry branch", async () => {
+        setDigichatConfigForTests(
+          parseDigichatConfig({
+            version: 1,
+            deployment: {
+              slug: "client",
+              backend: {
+                type: "foundry",
+                projectEndpoint: "https://example.openai.azure.com",
+                agentName: "agent-1",
+              },
+              models: { available: ["only-this-model"] },
+            },
+          })
+        );
+        try {
+          vi.mocked(createFoundryStreamResponse).mockClear();
+          const res = await POST(chatReq({ "x-digi-model": "some-other-model" }));
+          expect(res.status).toBe(400);
+          const body = (await res.json()) as { error: string };
+          expect(body.error).toBe("model_not_allowed");
+          expect(createFoundryStreamResponse).not.toHaveBeenCalled();
+
+          // An allowlisted model must pass the allowlist and reach the foundry
+          // branch — which only happens because the allowlist now runs first.
+          vi.mocked(createFoundryStreamResponse).mockClear();
+          const ok = await POST(chatReq({ "x-digi-model": "only-this-model" }));
+          expect(ok.status).toBe(200);
+          expect(createFoundryStreamResponse).toHaveBeenCalledTimes(1);
         } finally {
           resetDigichatConfigForTests();
         }
