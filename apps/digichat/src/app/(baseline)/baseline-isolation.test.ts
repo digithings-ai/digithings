@@ -16,7 +16,11 @@ describe("baseline preview isolation", () => {
     expect(layout).not.toMatch(/import ["'].*globals\.css["']/);
     expect(layout).not.toMatch(/themeInitScript/);
     expect(layout).not.toMatch(/accent-digichat/);
-    expect(layout).not.toMatch(/Geist_Mono/);
+    // The catalog renders the first-party `digichat` skin, whose theme reads
+    // `--font-geist-mono`; only that font variable is borrowed from the app
+    // shell — never its `data-theme` wiring.
+    expect(layout).toMatch(/variable:\s*"--font-geist-mono"/);
+    expect(layout).not.toMatch(/data-theme/);
     expect(css).not.toMatch(/@digithings\//);
     expect(css).not.toMatch(/assistant-ui-cli/);
     expect(css).not.toMatch(/chat-core/);

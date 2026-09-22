@@ -47,7 +47,7 @@ export default function MatrixTab({
     <div className="space-y-4">
       <div className="flex flex-wrap items-center gap-3 px-1">
         <Grid3x3 size={18} className="shrink-0 text-accent" aria-hidden />
-        <h2 className="font-display text-xl tracking-tight text-ink">Desk view matrix</h2>
+        <h2 className="font-display text-2xl tracking-tight text-ink">Desk view matrix</h2>
         <span className="rounded-none bg-term-bg px-1.5 py-0.5 text-[10px] font-medium text-ink-mute">
           8 of 10 G10 · NOK/SEK omitted
         </span>
@@ -68,7 +68,7 @@ export default function MatrixTab({
               {/* Header row */}
               <div
                 role="row"
-                className="grid items-stretch border-b border-hair"
+                className="grid items-stretch border-b border-hair bg-term-bg"
                 style={{ gridTemplateColumns: gridTemplate }}
               >
                 <div
@@ -184,7 +184,7 @@ export default function MatrixTab({
           </div>
 
           {/* Legend */}
-          <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 border-t border-hair px-4 py-2.5 text-[11px] text-ink-mute">
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 border-t border-hair bg-term-bg px-4 py-2.5 text-[11px] text-ink-mute">
             <span className="flex items-center gap-1.5">
               <span className="text-accent" aria-hidden>▲</span> Bullish
             </span>

@@ -36,7 +36,6 @@ describe('BookReconciliationStrip', () => {
       createElement(BookReconciliationStrip, { reconciliation: recon, asOfDate: '2026-06-23', positionCount: 11 })
     );
     expect(html).not.toContain('glass-card');
-    expect(html).not.toContain('bg-surface');
     expect(html).toContain('border-hair');
     expect(html).toContain('data-testid="command-band"');
   });

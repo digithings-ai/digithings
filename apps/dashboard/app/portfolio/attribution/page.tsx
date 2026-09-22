@@ -41,7 +41,7 @@ export default function AttributionPage() {
   return (
     <div className="flex min-h-full flex-col">
       <PortfolioSectionNav active="attribution" />
-      <div className={`${SUBPAGE_MAX} flex-1 py-4 md:py-5`}>
+      <main className={`${SUBPAGE_MAX} flex-1 py-4 md:py-5`}>
         <h1 className="sr-only">Attribution</h1>
         <EntitledSurface artifactClass="house_weights_nav">
           {error ? (
@@ -56,7 +56,7 @@ export default function AttributionPage() {
             />
           )}
         </EntitledSurface>
-      </div>
+      </main>
     </div>
   );
 }

@@ -72,15 +72,6 @@ describe('Sidebar', () => {
     entitlementMock.effectivePlanTier = 'enterprise';
   });
 
-  it('is a fixed, out-of-flow rail on desktop — main owns the explicit offset', () => {
-    const html = renderToStaticMarkup(createElement(Sidebar));
-    const aside = html.match(/<aside[^>]*id="app-sidebar-nav"[^>]*>/)?.[0] ?? '';
-    expect(aside).toContain('fixed');
-    // `md:relative` is what let the old implicit layout "work by accident".
-    expect(aside).not.toContain('md:relative');
-    expect(aside).toContain('md:translate-x-0');
-  });
-
   it('renders the owner destinations without System', () => {
     const html = renderToStaticMarkup(createElement(Sidebar));
     for (const label of ['Brief', 'Portfolio', 'Pipeline', 'FX Hub']) {

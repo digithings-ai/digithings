@@ -22,6 +22,7 @@ import {
 import { DigichatThread, type ComposerLayout, type ThreadSlashTrigger } from "@digithings/ui/chat/thread";
 import {
   BASELINE_EMBED_PLACEHOLDER,
+  BASELINE_EMBED_SUGGESTIONS,
   BASELINE_EMBED_WELCOME,
 } from "@/lib/baseline-embed";
 import { useComposerCopy, useSkinChrome } from "@/components/stock/skin-chrome";
@@ -54,7 +55,7 @@ export function DigichatSkin({
   /** Explicit override — embed forces compact regardless of chrome mode. */
   composerLayout?: ComposerLayout;
 }) {
-  const { welcome, welcomeBody, placeholder } = useComposerCopy(
+  const { welcome, welcomeBody, placeholder, suggestions } = useComposerCopy(
     BASELINE_EMBED_WELCOME,
     BASELINE_EMBED_PLACEHOLDER,
   );
@@ -291,6 +292,7 @@ export function DigichatSkin({
     <DigichatThread
       welcome={welcome}
       welcomeBody={welcomeBody}
+      suggestions={suggestions.length > 0 ? suggestions : BASELINE_EMBED_SUGGESTIONS}
       placeholder={placeholder}
       onComposerSubmit={onComposerSubmit}
       composerLayout={composerLayout ?? (mode === "app" ? "expanded" : "compact")}

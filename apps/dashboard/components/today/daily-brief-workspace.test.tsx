@@ -89,6 +89,7 @@ const sessionLedgerEvent: DashboardPositionEvent = {
 const populatedProps: DailyBriefWorkspaceProps = {
   regime: 'Slowing / Cooling / Neutral / Risk-Off',
   regimeLabel: 'bearish',
+  headline: 'Breadth improves while duration risk remains elevated.',
   confidence: 0.6,
   digestDate: '2026-08-06',
   bookDate: '2026-08-05',
@@ -102,6 +103,9 @@ const populatedProps: DailyBriefWorkspaceProps = {
       rationale: 'Valuation stretched into earnings.',
     },
   ],
+  rationaleByTicker: {
+    XLF: 'Maintain financial exposure while breadth confirms.',
+  },
   returns: {
     sincePct: -0.9,
     sinceDate: '2026-06-23',
@@ -137,11 +141,13 @@ const populatedProps: DailyBriefWorkspaceProps = {
 const emptyProps: DailyBriefWorkspaceProps = {
   regime: 'Unknown',
   regimeLabel: 'neutral',
+  headline: null,
   confidence: null,
   digestDate: null,
   bookDate: null,
   runType: null,
   actions: [],
+  rationaleByTicker: {},
   returns: {
     sincePct: null,
     sinceDate: null,
@@ -166,31 +172,24 @@ const emptyProps: DailyBriefWorkspaceProps = {
 };
 
 describe('DailyBriefWorkspace', () => {
-  it('leads with figures, then decision and health — no hero, beats, teaser, or drill-in nav', () => {
+  it('tells the daily monitoring story once, with an honest system state and drill-ins', () => {
     const html = renderToStaticMarkup(
       <DailyBriefWorkspace {...populatedProps} />
     );
 
     expect(html).toContain('Morning brief');
-    // The digest-duplicating hero is cut: no attention sentence, no beats.
-    expect(html).not.toContain('Your update');
-    expect(html).not.toContain('data-testid="brief-attention"');
-    expect(html).not.toContain('data-testid="brief-beats"');
-    // The upsell teaser has no place on the operator surface. This fixture is
-    // enterprise-tier, where the teaser returns null by design — the assertion
-    // that actually guards its removal is the free-tier one below.
-    // The drill-in nav duplicated the sidebar.
-    expect(html).not.toContain('Brief drill-ins');
-    // Scoreboard leads: figures before the decision row.
-    const scoreboardAt = html.indexOf('data-brief-section="scoreboard"');
-    const decisionAt = html.indexOf('Latest decision');
-    expect(scoreboardAt).toBeGreaterThan(-1);
-    expect(decisionAt).toBeGreaterThan(scoreboardAt);
-    // Decision chips carry the action; rationale prose lives in the dossier.
-    expect(html).toContain('1 allocation change');
-    expect(html).toContain('Trim NVDA (8.0% → 6.0%)');
+    expect(html).toContain('Your update');
+    expect(html).toContain('data-testid="brief-attention"');
+    expect(html).toContain('Trim NVDA — Valuation stretched into earnings.');
+    expect(html).toContain('Research');
     expect(html).toContain('Hold breadth above 65%');
+    expect(html).toContain('Portfolio');
+    // Portfolio beat + latest decision are compact action chips — thesis once in hero.
+    expect(html).toContain('Trim NVDA (8.0% → 6.0%)');
+    expect(html.match(/Valuation stretched into earnings/g)?.length).toBe(1);
+    expect(html).toContain('Watch');
     expect(html).toContain('Duration selloff');
+    expect(html).toContain('1 allocation change');
     expect(html).toContain('Pipeline complete');
     expect(html).toContain('8 / 8 segments');
     expect(html).toContain('data-testid="brief-pipeline-health"');
@@ -219,7 +218,13 @@ describe('DailyBriefWorkspace', () => {
     expect(html).toContain('Maintain financial exposure');
     expect(html).toContain('XLF');
     expect(html).toContain('VGK');
+    expect(html).toContain('Pipeline');
+    expect(html).toContain('Performance');
+    expect(html).toContain('Holdings');
+    expect(html).toContain('Ledger');
+    expect(html).toContain('Theses');
     expect(html).toContain('data-testid="daily-brief-workspace"');
+    expect(html).toContain('line-clamp-6');
     expect(html).toContain('overflow-x-auto');
     expect(html).not.toContain('glass-card');
     expect(html).not.toContain('Market state');
@@ -229,9 +234,10 @@ describe('DailyBriefWorkspace', () => {
     expect(html).not.toContain('Open digest');
     expect(html).not.toContain('Last recorded book event');
     expect(html).toContain('data-testid="brief-ledger-day"');
+    expect(html).toContain('Ledger');
   });
 
-  it('wires brief sections and claims to sourced destinations, without a drill-in nav', () => {
+  it('wires brief sections and claims to sourced destinations', () => {
     const html = renderToStaticMarkup(
       <DailyBriefWorkspace {...populatedProps} />
     );
@@ -245,11 +251,10 @@ describe('DailyBriefWorkspace', () => {
     expect(html).toContain('data-testid="brief-holdings-link"');
     expect(html).toContain('data-testid="brief-decision-link"');
     expect(html).toContain('href="/portfolio/tickers?ticker=NVDA"');
-    // The drill-in nav duplicated the sidebar — whole cards are the affordance.
-    expect(html).not.toContain('aria-label="Brief drill-ins"');
+    expect(html).toContain('data-testid="brief-attention"');
   });
 
-  it('keeps thesis prose out of the decision card — chips there, narrative in the dossier', () => {
+  it('shows the portfolio thesis once in the hero — not again in beats or latest decision', () => {
     const thesis = 'Held at ~20%. ADX 26.1 confirms trend strength; trim into stretched financials.';
     const html = renderToStaticMarkup(
       <DailyBriefWorkspace
@@ -263,6 +268,7 @@ describe('DailyBriefWorkspace', () => {
             rationale: thesis,
           },
         ]}
+        rationaleByTicker={{ XLF: thesis }}
         ledgerDayEvents={[
           {
             ...sessionLedgerEvent,
@@ -272,15 +278,22 @@ describe('DailyBriefWorkspace', () => {
       />
     );
 
+    expect(html).toContain(`Trim XLF — ${thesis}`);
     expect(html).toContain('Trim XLF (22.0% → 18.0%)');
     expect(html).toContain('1 allocation change');
+    const attentionMatch = html.match(
+      /data-testid="brief-attention"[^>]*>([^<]*)</
+    );
+    expect(attentionMatch?.[1]).toContain(thesis);
+    const beatsMatch = html.match(/data-testid="brief-beats"[\s\S]*?<\/ul>/);
+    expect(beatsMatch?.[0]).toContain('Trim XLF (22.0% → 18.0%)');
+    expect(beatsMatch?.[0]).not.toContain('ADX 26.1');
     // Sidebar: label + compact chip only (stop before Pipeline health).
     const decisionBlock = html.match(
       /Latest decision<\/p><p[^>]*>[^<]*<\/p><p[^>]*>([^<]*)<\/p>/
     );
     expect(decisionBlock?.[1]).toBe('Trim XLF (22.0% → 18.0%)');
     expect(decisionBlock?.[1]).not.toContain('ADX');
-    expect(html).not.toContain('ADX 26.1');
   });
 
   it('does not imply a healthy pipeline when run telemetry is unavailable', () => {
@@ -292,7 +305,8 @@ describe('DailyBriefWorkspace', () => {
     expect(html).not.toContain('Pipeline complete');
     expect(html).toContain('No ledger activity this session');
     expect(html).toContain('No additional digest context was recorded.');
-    expect(html).toContain('No actionable monitor was published.');
+    expect(html).toContain('Nothing material was published for this run yet.');
+    expect(html).toContain('No research highlight was published for this run.');
     expect(html).toContain('No decision published');
     expect(html).not.toContain('Holding the book');
   });
@@ -348,7 +362,7 @@ describe('DailyBriefWorkspace', () => {
     expect(html).not.toContain('Last recorded book event');
   });
 
-  it('never shows mechanical sizing text in the decision card', () => {
+  it('never shows mechanical sizing text in hero, portfolio beat, or latest decision', () => {
     const html = renderToStaticMarkup(
       <DailyBriefWorkspace
         {...populatedProps}
@@ -361,6 +375,9 @@ describe('DailyBriefWorkspace', () => {
             rationale: 'Position weight set by deterministic risk sizing.',
           },
         ]}
+        rationaleByTicker={{
+          XLF: 'Position weight set by deterministic risk sizing.',
+        }}
       />
     );
 
@@ -384,9 +401,6 @@ describe('DailyBriefWorkspace', () => {
 
     // Live house_weights_nav panels replaced by LockedSurface
     expect(html).toContain('locked-surface');
-    // The upsell teaser has no place on the operator surface. Free tier is
-    // where it would actually render, so this is the assertion that guards it.
-    expect(html).not.toContain('portfolio-teaser');
     expect(html).toContain('data-artifact-class="house_weights_nav"');
     expect(html).not.toContain('data-brief-section="scoreboard"');
     expect(html).not.toContain('data-brief-section="book"');
