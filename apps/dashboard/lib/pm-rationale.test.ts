@@ -6,7 +6,7 @@ import {
 } from './pm-rationale';
 
 describe('isMechanicalSizingRationale', () => {
-  it('treats the canonical H8 fallback as empty', () => {
+  it('treats the canonical sizing fallback as empty', () => {
     expect(isMechanicalSizingRationale('Position weight set by deterministic risk sizing.')).toBe(
       true
     );

@@ -12,8 +12,8 @@ shadow rows into migration ``080`` tables.
 :class:`ForecastRegistryConflict` — never UPDATE.
 **Cutoff reads:** exact-ID selects only; rows with ``known_at`` after the pinned
 knowledge cutoff are invisible.
-**H9 boundary:** writers are fail-soft after portfolio booking; a registry failure
-must not rebook. Shadow calibration never feeds incumbent H8.
+**commit boundary:** writers are fail-soft after portfolio booking; a registry failure
+must not rebook. Shadow calibration never feeds incumbent sizing.
 """
 
 from __future__ import annotations
@@ -80,7 +80,7 @@ class RegistryWriteResult:
 
 
 # Migration 079 ``forecast_amendments_reason_check``: length 1..2000.
-# H9 persist is fail-soft after booking; a 23514 here degrades the registry
+# commit persist is fail-soft after booking; a 23514 here degrades the registry
 # without rebooking (house GHA 33426508863 BITO amendment).
 AMENDMENT_REASON_MAX_LEN = 2000
 
@@ -332,7 +332,7 @@ def persist_forecast_lineage(
 
     Bases must land before amendments that reference them. Exact retries skip;
     content conflicts and hard write errors surface on the result (callers that
-    want fail-soft H9 behavior should catch and mark degraded).
+    want fail-soft commit behavior should catch and mark degraded).
     """
     a_written = a_skipped = 0
     m_written = m_skipped = 0
@@ -388,7 +388,7 @@ def persist_shadow_calibrations(
     """Append calibration versions then shadow subjects. Never mutates existing rows.
 
     Calibrations must land before subjects that FK them. Exact retries skip;
-    content conflicts surface on the result. Callers that want fail-soft H9
+    content conflicts surface on the result. Callers that want fail-soft commit
     behavior should catch and mark degraded.
     """
     c_written = c_skipped = 0
@@ -532,11 +532,11 @@ def get_forecast_amendment(
 def collect_lineage_from_state(
     state: Any,
 ) -> tuple[list[ForecastAssessment], list[ForecastAmendment]]:
-    """Extract typed lineage artifacts from portfolio phase state for H9 persistence.
+    """Extract typed lineage artifacts from portfolio phase state for commit persistence.
 
     Bases come from ``phase_portfolio.asset_analysts[*].forecast_assessment``.
     Amendments come from ``phase_portfolio.deliberation_summaries[*].forecast_amendment``
-    when H6 attached a complete accepted amendment dump.
+    when deliberation attached a complete accepted amendment dump.
     """
     portfolio = getattr(state, "phase_portfolio", None)
     assessments: list[ForecastAssessment] = []

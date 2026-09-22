@@ -12,7 +12,7 @@ Central reference for running the digiquant-research pipeline on any AI platform
 
 ## What is digiquant-research?
 
-A **9-phase** AI research pipeline (alternative data → institutional → macro → asset classes → equities/sectors → earnings → digest → portfolio H1–H9) with **one daily cadence** and edit-mode continuity (`skip`/`edit`/`full` per artifact). Phases emit structured JSON materialized into `daily_snapshots` and `documents` in Supabase.
+A **9-phase** AI research pipeline (alternative data → institutional → macro → asset classes → equities/sectors → earnings → digest → portfolio thesis–commit) with **one daily cadence** and edit-mode continuity (`skip`/`edit`/`full` per artifact). Phases emit structured JSON materialized into `daily_snapshots` and `documents` in Supabase.
 
 ## Quick start (DB-first)
 

@@ -1,4 +1,4 @@
-"""Per-run diagnostics → atlas_run_diagnostics (Pillar 1B).
+"""Per-run diagnostics → run_diagnostics (Pillar 1B).
 
 summarize_run counts fresh/carried/failed segments and derives a status; write_row upserts
 the row (fail-soft); is_degraded gates the CLI exit. A node-failure carry (reason
@@ -304,7 +304,7 @@ def test_retry_signal_still_fires_on_the_legacy_share_rule() -> None:
 
 
 def test_no_book_gate_degrades_research_with_nothing_committed() -> None:
-    # H9 committing nothing at all leaves ``sized_book`` None and raises no PhaseError, so
+    # commit committing nothing at all leaves ``sized_book`` None and raises no PhaseError, so
     # the #1555 commit gate (materialized-but-uncommitted) misses it entirely and the run
     # reported "ok" — the shape behind #1766's 20-day blackout.
     state = _prod_shaped_state(failed=0)
@@ -341,7 +341,7 @@ def test_noop_commit_manifest_satisfies_the_no_book_gate() -> None:
 # ------------------------------------------------- #1742: portfolio deliberation density
 
 
-def _portfolio_deliberations(n: int, *, failed: int, phase: str = "portfolio_h6_deliberation"):
+def _portfolio_deliberations(n: int, *, failed: int, phase: str = "portfolio_deliberation"):
     """A portfolio phase with ``n`` deliberations of which ``failed`` recorded a PhaseError."""
     portfolio = _committed_book(
         deliberation_summaries={f"T{i}": {"ticker": f"T{i}"} for i in range(n)}
@@ -365,7 +365,7 @@ def test_portfolio_deliberation_gate_degrades_a_mostly_dead_portfolio() -> None:
 
 
 def test_portfolio_deliberation_gate_tolerates_routine_cap_noise() -> None:
-    # The 2026-07-26 baseline: 1 of 50 — H6 emits the same (phase, node) for a benign
+    # The 2026-07-26 baseline: 1 of 50 — deliberation emits the same (phase, node) for a benign
     # max_rounds cap as for an LLM crash, so a gate on *any* error would flip every run.
     portfolio, errors = _portfolio_deliberations(50, failed=1)
     state = _prod_shaped_state(failed=0, phase_portfolio=portfolio)
@@ -375,13 +375,13 @@ def test_portfolio_deliberation_gate_tolerates_routine_cap_noise() -> None:
     assert s.status == "ok"
 
 
-def test_h9_commit_error_is_excluded_from_the_deliberation_numerator() -> None:
-    # portfolio_h9_commit_run is already gated by #1555; counting it here would double-count it
+def test_commit_error_is_excluded_from_the_deliberation_numerator() -> None:
+    # portfolio_commit is already gated by #1555; counting it here would double-count it
     # and pollute a metric that is supposed to measure *reasoning* failures.
     portfolio, _ = _portfolio_deliberations(4, failed=0)
     state = _prod_shaped_state(failed=0, phase_portfolio=portfolio)
     state.errors = [
-        PhaseError(phase="portfolio_h9_commit_run", node="portfolio/commit-run", message="conflict")
+        PhaseError(phase="portfolio_commit", node="portfolio/commit-run", message="conflict")
     ]
     s = diagnostics.summarize_run(state)
     assert s.breakdown["portfolio_deliberation"] == {"total": 4, "failed": 0}
@@ -402,8 +402,8 @@ def test_portfolio_deliberation_gate_silent_when_nothing_was_deliberated() -> No
     "phase",
     [
         "phase_portfolio",
-        "portfolio_h6_deliberation",
-        "portfolio_h7_pm_direction",
+        "portfolio_deliberation",
+        "portfolio_direction",
         "phase7d_pm",
         "phase9_evolution",
     ],
@@ -502,7 +502,7 @@ def test_write_row_writes_events_with_usage_and_counts() -> None:
         },
     )
     assert summary is not None
-    rows = client.store["atlas_run_diagnostics"]
+    rows = client.store["run_diagnostics"]
     assert len(rows) == 1
     row = rows[0]
     assert row["run_id"] == "baseline-2026-06-12-local"
@@ -544,7 +544,7 @@ def test_write_row_surfaces_empty_retries_from_usage_snapshot() -> None:
             "empty_retries": {"total": 3, "by_model": {"openrouter/auto": 2, "x-ai/grok-4": 1}},
         },
     )
-    row = client.store["atlas_run_diagnostics"][0]
+    row = client.store["run_diagnostics"][0]
     assert row["breakdown"]["empty_retries"] == {
         "total": 3,
         "by_model": {"openrouter/auto": 2, "x-ai/grok-4": 1},
@@ -758,5 +758,5 @@ def test_write_row_records_cancelled_status() -> None:
     )
     assert summary is not None
     assert summary.status == "cancelled"
-    rows = client.store["atlas_run_diagnostics"]
+    rows = client.store["run_diagnostics"]
     assert rows[0]["status"] == "cancelled"

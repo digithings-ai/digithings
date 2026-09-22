@@ -1,6 +1,6 @@
 """CoverageDirective model + roster application (#3739).
 
-The coverage director (PM role, between H4 and H5) decides which H4-rostered
+The coverage director (PM role, between screener and analyst) decides which screener-rostered
 tickers get fresh analysis today. Strict schema: every selected ticker needs a
 reason, and no ticker may appear in more than one bucket.
 """
@@ -51,7 +51,7 @@ def test_apply_coverage_keeps_selected_with_director_reasons() -> None:
 
 
 def test_apply_coverage_never_widens_roster() -> None:
-    """A directive ticker that was never on the H4 roster is dropped, not added."""
+    """A directive ticker that was never on the screener roster is dropped, not added."""
     roster = [_entry("BTC-USD")]
     directive = CoverageDirective(
         refresh=[{"ticker": "DOGE-USD", "reason": "meme frenzy"}],

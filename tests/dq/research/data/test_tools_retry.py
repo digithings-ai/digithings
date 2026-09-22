@@ -44,11 +44,11 @@ class _FlakyClient(_FakeClient):
         return inner
 
 
-def _theses_client(**over):  # type: ignore[no-untyped-def]
+def _macro_client(**over):  # type: ignore[no-untyped-def]
     return _FlakyClient(
         {
-            "theses": [
-                {"ticker": "SPY", "date": "2026-06-08", "thesis_id": "t1"},
+            "macro_series_observations": [
+                {"series_id": "DFF", "obs_date": "2026-06-07", "value": 4.5},
             ]
         },
         **over,
@@ -59,10 +59,10 @@ def test_transient_disconnect_retries_then_returns_data(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr(time, "sleep", lambda _s: None)
-    client = _theses_client(failures=2)
+    client = _macro_client(failures=2)
     dispatch = build_data_tool_dispatcher(client)
-    out = json.loads(dispatch("query_data", {"table": "theses"}))
-    assert out["rows"][0]["thesis_id"] == "t1"
+    out = json.loads(dispatch("get_macro_series", {"series_ids": ["DFF"], "lookback": 3}))
+    assert out["DFF"]["latest"]["value"] == 4.5
     assert client.attempts == 3
 
 
@@ -70,11 +70,12 @@ def test_persistent_outage_returns_error_string_after_three_attempts(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr(time, "sleep", lambda _s: None)
-    client = _theses_client(failures=10)
+    client = _macro_client(failures=10)
     dispatch = build_data_tool_dispatcher(client)
-    out = json.loads(dispatch("query_data", {"table": "theses"}))
-    # Retries exhausted: the pre-existing error shape, not a raise.
-    assert "timed out" in out["error"]
+    out = dispatch("get_macro_series", {"series_ids": ["DFF"], "lookback": 3})
+    # Retries exhausted: the pre-existing Error: string shape, not a raise.
+    assert out.startswith("Error:")
+    assert "timed out" in out
     assert client.attempts == 3
 
 
@@ -97,10 +98,11 @@ def test_schema_error_fails_fast_without_retry(
             inner.execute = _execute  # type: ignore[method-assign]
             return inner
 
-    # Use a table without a per-column allowlist so the 42703 still reaches
-    # Supabase (price_technicals/price_history now fail-fast in query_data #3771).
+    # query_data (the raw-table reader) was retired in #4436; the surviving
+    # Supabase-backed macro reader still routes through the retry wrapper, so
+    # a schema bug keeps its fail-fast contract.
     dispatch = build_data_tool_dispatcher(_BadColumnClient({}))
-    err = dispatch("query_data", {"table": "positions", "columns": "nope"})
+    err = dispatch("get_macro_series", {"series_ids": ["DFF"], "lookback": 3})
     # A real bug (42703) is not transient: one attempt, Error string, no sleep.
     assert "42703" in err
     assert _BadColumnClient.attempts == 1

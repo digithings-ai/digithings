@@ -89,7 +89,7 @@ class TestPortfolioLedgerModel:
         """Writers stamp workspace_id before insert; extra=forbid must not reject it.
 
         Without the field on PortfolioLedgerModel, model_validate of PostgREST
-        rows degraded H9 cost-liquidity evidence (#c326219d).
+        rows degraded commit cost-liquidity evidence (#c326219d).
         """
         overlay = uuid4()
         commit = make_commit(workspace_id=overlay)

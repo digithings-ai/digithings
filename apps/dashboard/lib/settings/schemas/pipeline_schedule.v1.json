@@ -6,7 +6,7 @@
       "properties": {
         "deliberation": {
           "default": true,
-          "description": "Run portfolio deliberation (H1\u2013H9 intent) on this weekday.",
+          "description": "Run portfolio deliberation (thesis\u2013H9 intent) on this weekday.",
           "title": "Deliberation",
           "type": "boolean"
         },

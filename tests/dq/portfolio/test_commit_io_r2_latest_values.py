@@ -1,4 +1,4 @@
-"""H9 ``_latest_values`` R2 branch — no Supabase market read (#4053 T5).
+"""commit ``_latest_values`` R2 branch — no Supabase market read (#4053 T5).
 
 ``commit_io._enrich_positions`` seeds ``entry_price`` from the latest close and
 ``atr_pct`` from the latest technicals row. Both tables are dropped in

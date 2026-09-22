@@ -44,7 +44,7 @@ from digiquant.data.prices.fetchers import FetchResult
 from digiquant.data.prices.r2_history import macro_latest_pointer_key
 from digiquant.data.prices.technicals import compute_indicators
 from digiquant.portfolio.candidates import select_focus_tickers
-from digiquant.portfolio.h9_cost_evidence import _fetch_price_row, _load_symbol_history
+from digiquant.portfolio.commit_cost_evidence import _fetch_price_row, _load_symbol_history
 from digiquant.portfolio.phases.phase7e_risk_sizing import _load_ticker_risk
 from digiquant.portfolio.portfolio_materialize import _upsert_portfolio_metrics
 from digiquant.portfolio.writers.commit_io import _interval_price_returns
@@ -854,7 +854,7 @@ def test_portfolio_materialize_benchmark_r2_matches_supabase(monkeypatch):
     assert r2_row["benchmark_return_pct"] != pytest.approx(sup_row["benchmark_return_pct"])
 
 
-def test_h9_symbol_history_r2_matches_supabase(monkeypatch):
+def test_commit_symbol_history_r2_matches_supabase(monkeypatch):
     _, _, sup = _t7b_both(monkeypatch)
     kwargs: dict = {"symbol": "SPY", "as_of_session": _T7B_AS_OF, "lookback_days": 20}
     _use_supabase(monkeypatch)
@@ -865,7 +865,7 @@ def test_h9_symbol_history_r2_matches_supabase(monkeypatch):
     assert got.sort("date").to_dicts() == pytest.approx(want.sort("date").to_dicts(), nan_ok=True)
 
 
-def test_h9_price_row_r2_matches_supabase(monkeypatch):
+def test_commit_price_row_r2_matches_supabase(monkeypatch):
     _, _, sup = _t7b_both(monkeypatch)
     kwargs: dict = {"symbol": "SPY", "session_date": _T7B_AS_OF}
     _use_supabase(monkeypatch)

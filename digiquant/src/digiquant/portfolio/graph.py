@@ -1,4 +1,4 @@
-"""Compiled portfolio sub-graph — thesis-first H1–H9 (PR 4a–4d).
+"""Compiled portfolio sub-graph — thesis-first thesis–commit (PR 4a–4d).
 
 Per [ADR-0015](../../../../docs/adr/0015-research-vs-portfolio.md), portfolio consumes
 an research digest and produces analyst, deliberation, PM, and reflection outputs
@@ -16,22 +16,22 @@ from typing import (
 from digigraph.graph.pipeline_builder import NodeSpec
 
 from digiquant.dashboard.research_retrieval.store import EvidenceBundleStore, ResearchStateStore
+from digiquant.portfolio.phases.analyst import build_analyst_from_state
+from digiquant.portfolio.phases.commit import CommitRunDeps, build_commit
 from digiquant.portfolio.phases.coverage_director import build_coverage_director
-from digiquant.portfolio.phases.h1_thesis_review import build_h1_thesis_review
-from digiquant.portfolio.phases.h2_market_thesis_exploration import (
-    build_h2_market_thesis_exploration,
+from digiquant.portfolio.phases.deliberation import build_deliberation_from_state
+from digiquant.portfolio.phases.direction import build_direction
+from digiquant.portfolio.phases.market import (
+    build_market,
 )
-from digiquant.portfolio.phases.h3_thesis_vehicle_map import build_h3_thesis_vehicle_map
-from digiquant.portfolio.phases.h4_opportunity_screener import build_h4_opportunity_screener
-from digiquant.portfolio.phases.h5_asset_analyst import build_h5_from_state
-from digiquant.portfolio.phases.h6_deliberation import build_h6_from_state
-from digiquant.portfolio.phases.h7_pm_direction import build_h7_pm_direction
-from digiquant.portfolio.phases.h9_commit_run import CommitRunDeps, build_h9_commit_run
 from digiquant.portfolio.phases.phase7e_risk_sizing import (
     RiskSizingDeps,
     build_risk_sizing_phase,
 )
 from digiquant.portfolio.phases.phase9_evolution import Phase9Deps
+from digiquant.portfolio.phases.screener import build_screener
+from digiquant.portfolio.phases.thesis import build_thesis
+from digiquant.portfolio.phases.vehicle_map import build_vehicle_map
 from digiquant.portfolio.pipeline_builder import PipelinePhase, build_pipeline
 from digiquant.portfolio.state import PortfolioState
 from digiquant.research.state import ResearchState
@@ -50,7 +50,7 @@ __all__ = [
 
 @dataclass(frozen=True)
 class ThesisGraphDeps:
-    """Optional Supabase client for H1–H5 thesis/analyst row writers."""
+    """Optional Supabase client for thesis–analyst thesis/analyst row writers."""
 
     client: SupabaseClient | None = None
 
@@ -78,7 +78,7 @@ def _resolve_risk_sizing_client(deps: PortfolioGraphDeps) -> SupabaseClient | No
 
 
 def _resolve_shared_client(deps: PortfolioGraphDeps) -> SupabaseClient | None:
-    """Prefer thesis, then risk sizing, then H9 commit client."""
+    """Prefer thesis, then risk sizing, then commit client."""
     if deps.thesis is not None and deps.thesis.client is not None:
         return deps.thesis.client
     client = _resolve_risk_sizing_client(deps)
@@ -89,7 +89,7 @@ def _resolve_shared_client(deps: PortfolioGraphDeps) -> SupabaseClient | None:
     return None
 
 
-def _build_h8_risk_sizing(deps: PortfolioGraphDeps) -> PipelinePhase:
+def _build_sizing_risk_sizing(deps: PortfolioGraphDeps) -> PipelinePhase:
     client = _resolve_risk_sizing_client(deps)
     if client is None:
 
@@ -97,7 +97,7 @@ def _build_h8_risk_sizing(deps: PortfolioGraphDeps) -> PipelinePhase:
             return {}
 
         return PipelinePhase(
-            name="portfolio_h8_risk_sizing",
+            name="portfolio_sizing_risk_sizing",
             nodes=[NodeSpec(name="portfolio/risk-sizing-noop", run=_noop)],
         )
     return build_risk_sizing_phase(RiskSizingDeps(client=client))
@@ -110,34 +110,34 @@ def build_portfolio_phases_thesis(
     debate_rounds: int = 1,  # removed with 7CD; kept for CLI compat
     held: Collection[str] = (),
 ) -> list[PipelinePhase]:
-    """Thesis-first portfolio phases H1–H9 (PR 4d)."""
+    """Thesis-first portfolio phases thesis–commit (PR 4d)."""
     deps = deps or PortfolioGraphDeps()
     thesis_client = deps.thesis.client if deps.thesis else None
     shared_client = _resolve_shared_client(deps)
     bundle_store = deps.evidence_bundle_store
     state_store = deps.research_state_store
     phases: list[PipelinePhase] = []
-    phases.append(build_h1_thesis_review(client=thesis_client))
-    phases.append(build_h2_market_thesis_exploration(client=thesis_client))
-    phases.append(build_h3_thesis_vehicle_map(client=thesis_client))
-    phases.append(build_h4_opportunity_screener(client=thesis_client))
+    phases.append(build_thesis(client=thesis_client))
+    phases.append(build_market(client=thesis_client))
+    phases.append(build_vehicle_map(client=thesis_client))
+    phases.append(build_screener(client=thesis_client))
     phases.append(build_coverage_director(client=shared_client))
     phases.append(
-        build_h5_from_state(
+        build_analyst_from_state(
             client=thesis_client,
             evidence_bundle_store=bundle_store,
             research_state_store=state_store,
         )
     )
     phases.append(
-        build_h6_from_state(
+        build_deliberation_from_state(
             evidence_bundle_store=bundle_store,
             research_state_store=state_store,
         )
     )
-    phases.append(build_h7_pm_direction(client=shared_client, research_state_store=state_store))
-    phases.append(_build_h8_risk_sizing(deps))
-    phases.append(build_h9_commit_run(deps.commit_run))
+    phases.append(build_direction(client=shared_client, research_state_store=state_store))
+    phases.append(_build_sizing_risk_sizing(deps))
+    phases.append(build_commit(deps.commit_run))
     return phases
 
 

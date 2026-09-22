@@ -279,7 +279,7 @@ def start(*, run_id: str | None = None) -> None:
     """Activate capture and clear any prior calls.
 
     ``run_id`` is the durable identifier every record in this run is keyed by — the
-    ``GITHUB_RUN_ID`` that ``atlas_run_diagnostics`` already uses, so detailed telemetry and
+    ``GITHUB_RUN_ID`` that ``run_diagnostics`` already uses, so detailed telemetry and
     the diagnostics row join on one value. It is stored verbatim and never truncated, because
     it is a join key. A blank or absent value leaves the run without node identity rather than
     inventing one: nodes then keep the existing no-identity behaviour of emitting physical

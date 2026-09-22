@@ -23,7 +23,7 @@ production shape is mixed (see below).
 
 **Telemetry is never a dependency of portfolio completion.** Every insert is independently
 fail-soft. A failed flush is a logged, counted condition; it cannot change the run's return
-value, its exit code, the portfolio commit, or the ``atlas_run_diagnostics`` aggregate row.
+value, its exit code, the portfolio commit, or the ``run_diagnostics`` aggregate row.
 
 Production shape as of #1982 (Task 1.4)
 ---------------------------------------
@@ -93,7 +93,7 @@ ReconciliationStatus = Literal["reconciled", "mismatched", "unavailable"]
 
 # Double-flush guard, keyed by (run_id, attempt). `pipeline-digiquant.yml` retries the chain up to
 # three times inside ONE job, so run_id alone is not unique within a process — the attempt number
-# is what distinguishes them, exactly as it does for the `atlas_run_diagnostics` conflict key.
+# is what distinguishes them, exactly as it does for the `run_diagnostics` conflict key.
 # Bounded because nothing else prunes it; a chain process handles a handful of attempts and exits,
 # and the cap only matters to a long-lived host that imports this module.
 _GUARD_LOCK = threading.Lock()

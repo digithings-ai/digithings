@@ -1,11 +1,11 @@
 # portfolio — Portfolio Deliberation Sub-graph
 
-> **Status (2026-06-20):** Topology **implemented** as H1–H9 in `graph.build_portfolio_phases_thesis()`.
+> **Status (2026-06-20):** Topology **implemented** as thesis–commit in `graph.build_portfolio_phases_thesis()`.
 > **Canonical reference:** [`ARCHITECTURE.md`](ARCHITECTURE.md) and
 > [`docs/superpowers/specs/2026-06-20-olympus-daily-thesis-design.md`](../../../../../docs/superpowers/specs/2026-06-20-olympus-daily-thesis-design.md) §13.2.
 > The Wave 2 unit plan below is **historical** — node names map to shipped modules
-> (`phase_h1` → `h1_thesis_review`, …, `phase_h7` → `h7_pm_direction`, H8 = `phase7e_risk_sizing`,
-> H9 = `h9_commit_run`). Deep-dive recess batch and `PMAllocationMemo` weights are **not** in v1.
+> (`phase_h1` → `thesis`, …, `phase_h7` → `direction`, sizing = `phase7e_risk_sizing`,
+> commit = `commit`). Deep-dive recess batch and `PMAllocationMemo` weights are **not** in v1.
 
 > **Historical note (pre-#930):** This document described the planned Wave 2 portfolio expansion before
 > thesis-first cutover. Skills listed here are now wired; bull/bear 7CD and post-PM thesis derivation are removed.
@@ -22,29 +22,29 @@ portfolio turns research into an allocation memo and rebalance decision. It repl
   phase6_consolidate (research; existing)
             │
             ▼
-  phase_h1_thesis_review ─────────► theses CRUD
+  phase_thesis ─────────► theses CRUD
             │
             ▼
-  phase_h2_market_thesis_exploration
+  phase_market
             │
             ▼
-  phase_h3_thesis_vehicle_map ─────► thesis_vehicles (×N)
+  phase_vehicle_map ─────► thesis_vehicles (×N)
             │
             ▼
-  phase_h4_opportunity_screener
+  phase_screener
             │
             ▼
      fan-out per ticker
    ┌────────┴────────┐
    ▼        …        ▼
-  phase_h5_asset_analyst (×N)       ← batchable (W3-C)
+  phase_analyst (×N)       ← batchable (W3-C)
    │                 │
    └────── fan-in ───┘
             │
      fan-out per ticker
    ┌────────┴────────┐
    ▼        …        ▼
-  phase_h6_deliberation (×N)        ← internal round-loop per ticker
+  phase_deliberation (×N)        ← internal round-loop per ticker
    │                 │
    │  ┌──── round loop (cyclic) ─────┐
    │  │  PM challenge                │
@@ -60,7 +60,7 @@ portfolio turns research into an allocation memo and rebalance decision. It repl
             │                              │
             │ no                           │
             ▼◄─────────────────────────────┘
-  phase_h7_pm_allocation_memo
+  phase_direction_pm_allocation_memo
             │
             ▼
   phase7d_rebalance (existing; input swapped in W2-G)
@@ -70,29 +70,29 @@ portfolio turns research into an allocation memo and rebalance decision. It repl
 
 ```mermaid
 flowchart TD
-    P6[phase6_consolidate] --> H1[phase_h1_thesis_review]
-    H1 --> H2[phase_h2_market_thesis_exploration]
-    H2 --> H3[phase_h3_thesis_vehicle_map]
-    H3 --> H4[phase_h4_opportunity_screener]
-    H4 --> FAN1{fan-out per ticker}
-    FAN1 --> H5A[phase_h5_asset_analyst · AAPL]
-    FAN1 --> H5B[phase_h5_asset_analyst · TSLA]
-    FAN1 --> H5N[phase_h5_asset_analyst · …]
-    H5A --> JOIN1((join))
-    H5B --> JOIN1
-    H5N --> JOIN1
+    P6[phase6_consolidate] --> thesis[phase_thesis]
+    thesis --> market[phase_market]
+    market --> vehicle_map[phase_vehicle_map]
+    vehicle_map --> screener[phase_screener]
+    screener --> FAN1{fan-out per ticker}
+    FAN1 --> AnalystA[phase_analyst · AAPL]
+    FAN1 --> AnalystB[phase_analyst · TSLA]
+    FAN1 --> AnalystN[phase_analyst · …]
+    AnalystA --> JOIN1((join))
+    AnalystB --> JOIN1
+    AnalystN --> JOIN1
     JOIN1 --> FAN2{fan-out per ticker}
-    FAN2 --> H6A[phase_h6_deliberation · AAPL]
-    FAN2 --> H6B[phase_h6_deliberation · TSLA]
-    FAN2 --> H6N[phase_h6_deliberation · …]
-    H6A --> JOIN2((join))
-    H6B --> JOIN2
-    H6N --> JOIN2
+    FAN2 --> DeliberationA[phase_deliberation · AAPL]
+    FAN2 --> DeliberationB[phase_deliberation · TSLA]
+    FAN2 --> DeliberationN[phase_deliberation · …]
+    DeliberationA --> JOIN2((join))
+    DeliberationB --> JOIN2
+    DeliberationN --> JOIN2
     JOIN2 --> DD{any recess<br/>requests?}
     DD -- yes --> DDB[deep_dive_batch]
-    DD -- no --> H7
-    DDB --> H7[phase_h7_pm_allocation_memo]
-    H7 --> P7D[phase7d_rebalance]
+    DD -- no --> direction
+    DDB --> direction[phase_direction_pm_allocation_memo]
+    direction --> P7D[phase7d_rebalance]
 
     subgraph round_loop["phase_h6 round loop (per ticker)"]
         R1[analyst present] --> R2[PM challenge]
@@ -109,14 +109,14 @@ flowchart TD
 
 | Phase | Role | Skill(s) | Fan-out | Primary output |
 |-------|------|----------|---------|----------------|
-| `phase_h1_thesis_review` | Re-score active theses; update status (`ACTIVE` / `CHALLENGED` / `CLOSED` / `INVALIDATED` / `PAUSED`) per `chk_theses_status` | `thesis`, `thesis-tracker` | 1 | `ThesisReviewOutput` |
-| `phase_h2_market_thesis_exploration` | Discover new theses from macro + sector research | `market-thesis-exploration` | 1 | `MarketThesisExploration` |
-| `phase_h3_thesis_vehicle_map` | Map each thesis to candidate tickers | `thesis-vehicle-map` | 1 | `ThesisVehicleMap` |
-| `phase_h4_opportunity_screener` | Rank universe; pick analyst roster | `opportunity-screener` | 1 | `OpportunityScreen` |
-| `phase_h5_asset_analyst` | Per-ticker blinded analyst recommendation | `asset-analyst` | N tickers | `AssetRecommendation` per ticker |
-| `phase_h6_deliberation` | PM↔analyst cyclic deliberation per ticker | `deliberation`, [`portfolio-manager`](../../portfolio/skills/portfolio-manager/SKILL.md), `asset-analyst` | N tickers (× rounds) | `DeliberationSession` per ticker |
+| `phase_thesis` | Re-score active theses; update status (`ACTIVE` / `CHALLENGED` / `CLOSED` / `INVALIDATED` / `PAUSED`) per `chk_theses_status` | `thesis`, `thesis-tracker` | 1 | `ThesisReviewOutput` |
+| `phase_market` | Discover new theses from macro + sector research | `market-thesis-exploration` | 1 | `MarketThesisExploration` |
+| `phase_vehicle_map` | Map each thesis to candidate tickers | `thesis-vehicle-map` | 1 | `ThesisVehicleMap` |
+| `phase_screener` | Rank universe; pick analyst roster | `opportunity-screener` | 1 | `OpportunityScreen` |
+| `phase_analyst` | Per-ticker blinded analyst recommendation | `asset-analyst` | N tickers | `AssetRecommendation` per ticker |
+| `phase_deliberation` | PM↔analyst cyclic deliberation per ticker | `deliberation`, [`portfolio-manager`](../../portfolio/skills/portfolio-manager/SKILL.md), `asset-analyst` | N tickers (× rounds) | `DeliberationSession` per ticker |
 | `deep_dive_batch` | Resolve recess requests | `deep-dive` | M recesses | `DeepDiveNote` rows |
-| `phase_h7_pm_allocation_memo` | PM-authored allocation memo | [`pm-allocation-memo`](../../portfolio/skills/pm-allocation-memo/SKILL.md) | 1 | `PMAllocationMemo` |
+| `phase_direction_pm_allocation_memo` | PM-authored allocation memo | [`pm-allocation-memo`](../../portfolio/skills/pm-allocation-memo/SKILL.md) | 1 | `PMAllocationMemo` |
 
 ---
 
@@ -186,7 +186,7 @@ class ResearchState(BaseModel):
 
 Two reducer changes (same file):
 
-- `_merge_analyst_dict` is **renamed** to `_merge_ticker_dict` in W2-E (see [WAVE2_UNIT_SPECS.md §W2-E](WAVE2_UNIT_SPECS.md#w2-e--phase_h5_asset_analyst-replaces-phase7c)) — one ticker-keyed, right-wins-on-collision reducer shared by `asset_recommendations` (h5) and `deliberation_sessions` (h6). No separate `_merge_session_dict`.
+- `_merge_analyst_dict` is **renamed** to `_merge_ticker_dict` in W2-E (see [WAVE2_UNIT_SPECS.md §W2-E](WAVE2_UNIT_SPECS.md#w2-e--phase_analyst-replaces-phase7c)) — one ticker-keyed, right-wins-on-collision reducer shared by `asset_recommendations` (h5) and `deliberation_sessions` (h6). No separate `_merge_session_dict`.
 - `_append_list` (new) — concatenates parallel list writes; order is commit-order from LangGraph (not semantically significant — consumers sort by `ticker`).
 
 `RecessRequest`, the portfolio sub-models, and `_merge_ticker_dict` / `_append_list` live alongside `SegmentSlot` in `state.py` so they share the same import boundary.
@@ -264,18 +264,18 @@ Each H-phase's Supabase adapter (to be added in W2-A) writes to both `documents`
 
 > **doc_type vocabulary:** strings below are the **exact Title-Case tokens** enforced by `chk_documents_doc_type` (migration 023, live in prod). Do not change case or spacing — the CHECK constraint will reject the insert.
 >
-> **`'Thesis Review'` is NOT yet in the allowlist.** A stub migration **025** (see §5.1 below) must be written and applied in Wave 2 as part of W2-A before W2-B can persist `phase_h1_thesis_review` output. Until 025 ships, W2-B tests run against a FakeSupabase fixture that mirrors the proposed extended allowlist.
+> **`'Thesis Review'` is NOT yet in the allowlist.** A stub migration **025** (see §5.1 below) must be written and applied in Wave 2 as part of W2-A before W2-B can persist `phase_thesis` output. Until 025 ships, W2-B tests run against a FakeSupabase fixture that mirrors the proposed extended allowlist.
 
 | Phase | `documents` row (`doc_type`) | First-class table(s) |
 |-------|-----------------|----------------------|
-| `phase_h1_thesis_review` | `'Thesis Review'` (payload = full output; requires migration 025 — see §5.1) | `theses` — upsert one row per `ThesisStatusUpdate` (`(date, thesis_id)` key); update **only canonical columns** present in migration 001: `status`, `invalidation`, `notes`, `vehicle`. Per-day evidence trail lives in the `'Thesis Review'` **document payload** (`body.reviewed_theses[].evidence[]`) — it is NOT duplicated into a relational column. There is no `evidence_log` column on `theses`, and we do not add one: the document is the right home for the narrative evidence list. |
-| `phase_h2_market_thesis_exploration` | `'Market Thesis Exploration'` | `theses` — create one `ACTIVE` row or update one canonical row per `topic_key`; updates preserve H1's same-run lifecycle status (or the prior nonterminal status when H1 emitted no update). Migration 056 enforces one nonterminal market topic per date. |
-| `phase_h3_thesis_vehicle_map` | `'Thesis Vehicle Map'` | `thesis_vehicles` — one row per `(thesis_id, ticker)` with `rationale`, `exclusion_reasons`, `candidate_rank` (derived from position in `candidate_tickers`), `user_mandate_notes`, `source_exploration_key` = the `documents.key` of the h2 output. |
-| `phase_h4_opportunity_screener` | `'Opportunity Screen'` (requires migration 025 — see §5.1) | `analyst_coverage` — upsert `(date, ticker)` for each `RosterPick`; set `thesis_ids`, `analyst_role='roster'`. |
-| `phase_h5_asset_analyst` | `'Asset Recommendation'` (one per ticker) | `analyst_coverage` — update `current_recommendation_key` + `last_updated`. |
-| `phase_h6_deliberation` | `'Deliberation Transcript'` (one per ticker) **+** one `'Deliberation Session Index'` (run-level) | `deliberation_sessions` (one row per run) + `deliberation_rounds` (one per round per ticker) + `deep_dive_triggers` (one per `RecessRequest`). |
+| `phase_thesis` | `'Thesis Review'` (payload = full output; requires migration 025 — see §5.1) | `theses` — upsert one row per `ThesisStatusUpdate` (`(date, thesis_id)` key); update **only canonical columns** present in migration 001: `status`, `invalidation`, `notes`, `vehicle`. Per-day evidence trail lives in the `'Thesis Review'` **document payload** (`body.reviewed_theses[].evidence[]`) — it is NOT duplicated into a relational column. There is no `evidence_log` column on `theses`, and we do not add one: the document is the right home for the narrative evidence list. |
+| `phase_market` | `'Market Thesis Exploration'` | `theses` — create one `ACTIVE` row or update one canonical row per `topic_key`; updates preserve thesis's same-run lifecycle status (or the prior nonterminal status when thesis emitted no update). Migration 056 enforces one nonterminal market topic per date. |
+| `phase_vehicle_map` | `'Thesis Vehicle Map'` | `thesis_vehicles` — one row per `(thesis_id, ticker)` with `rationale`, `exclusion_reasons`, `candidate_rank` (derived from position in `candidate_tickers`), `user_mandate_notes`, `source_exploration_key` = the `documents.key` of the h2 output. |
+| `phase_screener` | `'Opportunity Screen'` (requires migration 025 — see §5.1) | `analyst_coverage` — upsert `(date, ticker)` for each `RosterPick`; set `thesis_ids`, `analyst_role='roster'`. |
+| `phase_analyst` | `'Asset Recommendation'` (one per ticker) | `analyst_coverage` — update `current_recommendation_key` + `last_updated`. |
+| `phase_deliberation` | `'Deliberation Transcript'` (one per ticker) **+** one `'Deliberation Session Index'` (run-level) | `deliberation_sessions` (one row per run) + `deliberation_rounds` (one per round per ticker) + `deep_dive_triggers` (one per `RecessRequest`). |
 | `deep_dive_batch` | `'Deep Dive'` (one per recess — **reuses** the existing allowlist entry; we do NOT mint a separate `'Deep Dive Batch'` doc_type, because each individual recess writes its own document) | `deep_dive_triggers` — update `deep_dive_document_key` + `resolved_at`. |
-| `phase_h7_pm_allocation_memo` | `'PM Allocation Memo'` | *(none — narrative-heavy; no first-class table. Table-queryable fields live in the phase7d `rebalance_decision` row.)* |
+| `phase_direction_pm_allocation_memo` | `'PM Allocation Memo'` | *(none — narrative-heavy; no first-class table. Table-queryable fields live in the phase7d `rebalance_decision` row.)* |
 
 Each row is also appended to `state.published: list[PublishedArtifact]` so Phase 9 evolution can audit write volume.
 
@@ -289,8 +289,8 @@ Each row is also appended to `state.published: list[PublishedArtifact]` so Phase
 
 Migration 023 is the current live state of `chk_documents_doc_type`. Two portfolio outputs are not yet covered:
 
-- `'Thesis Review'` — output of `phase_h1_thesis_review`.
-- `'Opportunity Screen'` — output of `phase_h4_opportunity_screener`.
+- `'Thesis Review'` — output of `phase_thesis`.
+- `'Opportunity Screen'` — output of `phase_screener`.
 
 All other portfolio doc_types (`'Market Thesis Exploration'`, `'Thesis Vehicle Map'`, `'Asset Recommendation'`, `'Deliberation Transcript'`, `'Deliberation Session Index'`, `'PM Allocation Memo'`, `'Deep Dive'`) are already in the migration-023 allowlist — **no action required for them**.
 
@@ -318,13 +318,13 @@ Triage ([`triage.py`](../../../src/digiquant/research/triage.py)) is extended wi
 
 | Phase | Baseline (Sun) | Delta (Mon–Fri) | Monthly |
 |-------|----------------|-----------------|---------|
-| `phase_h1_thesis_review` | run | **run daily** — thesis drift is material | run |
-| `phase_h2_market_thesis_exploration` | run | skip unless `prior_context.latest_segments["macro"]` shows regime shift | run |
-| `phase_h3_thesis_vehicle_map` | run | skip unless h1 produced a `CHALLENGED` or `CLOSED` transition *or* h2 ran | run |
-| `phase_h4_opportunity_screener` | run | skip if h3 skipped and no ticker had bias flip | run |
-| `phase_h5_asset_analyst` (per-ticker) | all roster | only tickers on `analyst_coverage` whose segment bias flipped OR whose linked thesis is `CHALLENGED` | all roster |
-| `phase_h6_deliberation` (per-ticker) | all roster | only tickers whose `AssetRecommendation` changed versus the prior run *or* whose thesis is `CHALLENGED` | all roster |
-| `phase_h7_pm_allocation_memo` | run | run **only if** any `phase_h6` node actually ran (otherwise carry the prior memo) | run |
+| `phase_thesis` | run | **run daily** — thesis drift is material | run |
+| `phase_market` | run | skip unless `prior_context.latest_segments["macro"]` shows regime shift | run |
+| `phase_vehicle_map` | run | skip unless h1 produced a `CHALLENGED` or `CLOSED` transition *or* h2 ran | run |
+| `phase_screener` | run | skip if h3 skipped and no ticker had bias flip | run |
+| `phase_analyst` (per-ticker) | all roster | only tickers on `analyst_coverage` whose segment bias flipped OR whose linked thesis is `CHALLENGED` | all roster |
+| `phase_deliberation` (per-ticker) | all roster | only tickers whose `AssetRecommendation` changed versus the prior run *or* whose thesis is `CHALLENGED` | all roster |
+| `phase_direction_pm_allocation_memo` | run | run **only if** any `phase_h6` node actually ran (otherwise carry the prior memo) | run |
 
 **New triage rule kinds (added to `_rule_for_segment`):**
 
@@ -338,7 +338,7 @@ Carried entries still surface in the Phase 9 post-mortem so operators can see wh
 
 ## 7. Integration with existing phases
 
-### 7.1 `phase7c_analyst` (current) → `phase_h5_asset_analyst` (new)
+### 7.1 `phase7c_analyst` (current) → `phase_analyst` (new)
 
 **Decision: replace.** The existing [`phase7c_analyst.py`](../../../src/digiquant/research/phases/phase7c_analyst.py) emits a minimal `AnalystPayload` (`conviction_score`, `stance`, `thesis`, `risks`). `phase_h5` emits the richer `AssetRecommendation` governed by the existing [`asset-recommendation.schema.json`](../../portfolio/templates/schemas/asset-recommendation.schema.json) — bull/bear cases, context block, verdict with `recommended_weight_pct`, thesis linkage.
 
@@ -347,7 +347,7 @@ Carried entries still surface in the Phase 9 post-mortem so operators can see wh
 - The `AnalystPayload` Pydantic class is removed; no backward-compat shim — callers are in-repo and migrate in the same PR.
 - A thin-wrapper option (keeping `phase7c_analyst` as a call through to `phase_h5`) was rejected: adds indirection with no consumer, and the state-field rename is a one-line change at the call sites.
 
-### 7.2 `phase7d_rebalance` (current) consumes `phase_h7_pm_allocation_memo`
+### 7.2 `phase7d_rebalance` (current) consumes `phase_direction_pm_allocation_memo`
 
 [`phase7d_pm.py`](../../../src/digiquant/research/phases/phase7d_pm.py) currently reads `state.phase7c_analysts` directly and re-derives allocations. Under portfolio, phase_h7 writes the allocation memo and phase7d becomes a **pure transform**:
 

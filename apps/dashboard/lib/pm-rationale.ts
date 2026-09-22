@@ -1,8 +1,8 @@
 /**
  * PM position rationale for Brief / actions UI.
  *
- * Historical `pm-rebalance` rows often carry the H8 mechanical fallback
- * ("Position weight set by deterministic risk sizing.") even when H7 already
+ * Historical `pm-rebalance` rows often carry the mechanical sizing fallback
+ * ("Position weight set by deterministic risk sizing.") even when direction already
  * published a real roster narrative. Never surface that boilerplate as a
  * "reason" — prefer usable PM thesis text, else show action + ticker only.
  *
@@ -18,7 +18,7 @@ const MECHANICAL_SIZING_RE =
 const DERIVED_BOOK_REASON_RE =
   /derived from positions book|proposed_positions|rebalance_decision\.json|digest (proposed_positions )?unavailable/i;
 
-/** True when the string is empty or the known H8 sizing fallback (and close variants). */
+/** True when the string is empty or the known sizing fallback (and close variants). */
 export function isMechanicalSizingRationale(raw: string | null | undefined): boolean {
   const t = (raw ?? '').replace(/\s+/g, ' ').trim();
   if (!t) return true;

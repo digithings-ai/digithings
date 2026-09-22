@@ -30,16 +30,16 @@ publish must skip it (see ``publish_phase``) even with persist on.
 ``theses`` / ``analyst_coverage`` / ``thesis_vehicles`` / ``decision_log`` /
 ``onchain_cohort_positioning`` are the same class of shared register: no
 ``workspace_id`` column, leftover ``UNIQUE(date, …)`` / ``UNIQUE(run_date, ticker)``
-/ ``UNIQUE(date, market)``. Overlay persist-on still compiles H1–H5,
+/ ``UNIQUE(date, market)``. Overlay persist-on still compiles thesis–analyst,
 preflight_reflect, and research preflight with the overlay client; a same-date
 upsert last-writer-wins the house corpus, and ``resolve_pending`` would stamp
 house reflections by id. Overlay ``run_research_then_portfolio`` also always
-reaches ``_run_beliefs_fold`` after a fail-soft H9 book refuse; distillation
+reaches ``_run_beliefs_fold`` after a fail-soft commit book refuse; distillation
 reads every unfolded house ``decision_log`` row and stamps
 ``beliefs_folded_at`` by id. ``skip_overlay_shared_register`` no-ops those
 writes for a private workspace. Independent of persist-on and of staged
 cutover 113 (113 does not add theses/decision_log/onchain tenancy). Private
-overlay is H7–H9 book only (T4). Overlay still injects
+overlay is direction–commit book only (T4). Overlay still injects
 ``market_context["onchain_positioning"]`` in-memory; only the DB upsert is
 skipped.
 """
@@ -137,7 +137,7 @@ def skip_overlay_shared_register(workspace_id: UUID | str | None) -> bool:
 
 
 def portfolio_document_key(base: str, workspace_id: UUID | str | None) -> str:
-    """House keys stay unprefixed. Overlay H7/H8 keys are ``overlay/{ws}/{base}``."""
+    """House keys stay unprefixed. Overlay direction/sizing keys are ``overlay/{ws}/{base}``."""
     if not is_private_workspace(workspace_id):
         return base
     return f"{OVERLAY_DOC_PREFIX}{resolved_workspace_id(workspace_id)}/{base}"

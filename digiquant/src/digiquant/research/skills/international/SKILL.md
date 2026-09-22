@@ -14,7 +14,7 @@ description: Deep-dive analysis of international and emerging markets. Covers De
   computed indicators (sma/rsi/macd/adx/atr/zscore), newest first — use those
   values; **never invent a number** — every quantitative claim must cite a value you fetched.
   If a call returns no rows for a symbol, say so and lower conviction. Market history is not
-  readable through `query_data` (#3780) — never use it to fetch prices or technicals.
+  readable through `query_research` (#3780) — never use it to fetch prices or technicals.
 - Cover the regional ETFs in scope (e.g. EFA/EEM/FXI/EWJ/VGK).
 - A pre-fetched **`web_grounding`** block (when present) covers non-US markets and stale non-US M2 / policy data; cite its URLs.
 

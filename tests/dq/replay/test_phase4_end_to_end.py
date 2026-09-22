@@ -42,7 +42,7 @@ pytestmark = pytest.mark.unit
 _REPO = Path(__file__).resolve().parents[3]
 _PRODUCTION_GUARD_PATHS = (
     _REPO / "digiquant/src/digiquant/portfolio/chain.py",
-    _REPO / "digiquant/src/digiquant/portfolio/phases/h9_commit_run.py",
+    _REPO / "digiquant/src/digiquant/portfolio/phases/commit.py",
 )
 
 

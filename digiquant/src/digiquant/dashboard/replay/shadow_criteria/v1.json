@@ -2,7 +2,7 @@
   "schema_version": "1.0",
   "criteria_version": "shadow-allocation-v1",
   "author": "dashboard-phase2-wp10",
-  "rationale": "Human-authored shadow evidence thresholds for incumbent vs challenger paired replay. Eligibility for Phase 4 review only — never production activation, config write, or H8/H9 booking.",
+  "rationale": "Human-authored shadow evidence thresholds for incumbent vs challenger paired replay. Eligibility for Phase 4 review only — never production activation, config write, or sizing/commit booking.",
   "effective_date": "2026-08-25",
   "evidence_mode": "observed_paired_replay",
   "require_identical_manifest": true,

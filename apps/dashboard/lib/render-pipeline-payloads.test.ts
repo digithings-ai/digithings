@@ -395,7 +395,7 @@ describe('renderDocumentMarkdownFromPayload routing', () => {
     expect(md).toContain('Datacenter capex');
   });
 
-  it('renders H6 PM↔analyst chat turns published under rounds (DBO shape)', () => {
+  it('renders deliberation PM↔analyst chat turns published under rounds (DBO shape)', () => {
     const h6 = {
       ticker: 'DBO',
       net_stance: 'neutral',
@@ -538,8 +538,8 @@ describe('AttentionPlan glass-box renderer (#1945)', () => {
       plan_id: '00000000-0000-0000-0000-000000000002',
       schema_version: 1,
       run_date: '2026-08-25',
-      h4_roster: ['SPY', 'QQQ'],
-      h4_roster_fingerprint: 'a'.repeat(64),
+      screener_roster: ['SPY', 'QQQ'],
+      screener_roster_fingerprint: 'a'.repeat(64),
       decisions: [
         {
           artifact_key: 'segment:macro',

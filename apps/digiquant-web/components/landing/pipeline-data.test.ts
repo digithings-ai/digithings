@@ -25,16 +25,16 @@ const GRAPH_PATH = path.resolve(
 );
 /** Builder call in graph.py → chip id in PORTFOLIO_PHASES. */
 const BUILDER_TO_CHIP: Record<string, string> = {
-  build_h1_thesis_review: "h1",
-  build_h2_market_thesis_exploration: "h2",
-  build_h3_thesis_vehicle_map: "h3",
-  build_h4_opportunity_screener: "h4",
+  build_thesis: "h1",
+  build_market: "h2",
+  build_vehicle_map: "h3",
+  build_screener: "h4",
   build_coverage_director: "h45",
-  build_h5_from_state: "h5",
-  build_h6_from_state: "h6",
-  build_h7_pm_direction: "h7",
-  _build_h8_risk_sizing: "h8",
-  build_h9_commit_run: "h9",
+  build_analyst_from_state: "h5",
+  build_deliberation_from_state: "h6",
+  build_direction: "h7",
+  _build_sizing_risk_sizing: "h8",
+  build_commit: "h9",
 };
 
 function graphPhaseBuilders(): string[] {
