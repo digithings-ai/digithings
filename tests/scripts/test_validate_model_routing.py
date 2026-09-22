@@ -2,7 +2,7 @@
 
 ``ci.yml`` runs ``validate_model_routing.py --routing`` against real config. The
 load-bearing logic is the offline resolver: exact ``phase_models`` pins, trailing-``-``
-prefix matches (per-ticker H6 deliberation slugs), and ``DIGI_LLM_MODE`` / default
+prefix matches (per-ticker deliberation slugs), and ``DIGI_LLM_MODE`` / default
 fallbacks when a slug is unpinned. Network ``--ping`` stays out of unit tests; the
 skip/strict bookkeeping is exercised with a fake ``digigraph.llm_client`` so no call
 leaves the process (#3939).

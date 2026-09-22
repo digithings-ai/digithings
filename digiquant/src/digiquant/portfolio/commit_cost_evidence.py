@@ -1,6 +1,6 @@
 """Build prospective cost/liquidity bundles after authoritative order intents exist (#2709).
 
-Runs at the H9 boundary once ``append_commit_chain`` has minted ``order_intent_id``
+Runs at the commit boundary once ``append_commit_chain`` has minted ``order_intent_id``
 rows. Observational only — never feeds turnover or sizing.
 """
 

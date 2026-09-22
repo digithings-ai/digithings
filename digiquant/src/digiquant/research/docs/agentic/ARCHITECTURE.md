@@ -1,7 +1,7 @@
 # digiquant-research — System Architecture
 
 > **Last updated**: 2026-06-20  
-> **Pipeline version**: v4 — daily dashboard graph (research A0–A4 → portfolio H1–H9) with edit-mode continuity  
+> **Pipeline version**: v4 — daily dashboard graph (research A0–A4 → portfolio thesis–commit) with edit-mode continuity  
 > **Canonical spec:** [`docs/superpowers/specs/2026-06-20-olympus-daily-thesis-design.md`](../../../../../../../docs/superpowers/specs/2026-06-20-olympus-daily-thesis-design.md) §13–§14
 
 ---
@@ -15,7 +15,7 @@
 | Daily cadence + refresh_scope | [`WORKFLOWS.md`](WORKFLOWS.md) |
 | Skill index (filesystem source of truth) | [`SKILLS-CATALOG.md`](SKILLS-CATALOG.md) |
 | IDE / Copilot / Cursor setup | [`PLATFORMS.md`](PLATFORMS.md) |
-| portfolio H1–H9 topology | [`portfolio/docs/ARCHITECTURE.md`](../../../portfolio/docs/ARCHITECTURE.md) |
+| portfolio thesis–commit topology | [`portfolio/docs/ARCHITECTURE.md`](../../../portfolio/docs/ARCHITECTURE.md) |
 | Dated health / score snapshot | [`../SYSTEM-SCORECARD.md`](../SYSTEM-SCORECARD.md) |
 
 ---
@@ -27,7 +27,7 @@
 | Track | What | Task entry points |
 |-------|------|-------------------|
 | **Research (Track A)** | Daily research with edit-mode — publish **`digest`** and segment research to Supabase | [`recurring-scheduled-run.md`](../cowork/tasks/recurring-scheduled-run.md), `python -m digiquant.portfolio.chain --cadence daily` |
-| **Portfolio (Track B)** | Thesis-first portfolio H1–H9 → `commit_run` | Same chain entry point (unified daily graph) |
+| **Portfolio (Track B)** | Thesis-first portfolio thesis–commit → `commit_run` | Same chain entry point (unified daily graph) |
 | **Review & improvement** | `preflight_reflect` on due `decision_log` rows + matured typed forecast outcomes (`forecast_outcomes`, WP5.2); daily beliefs short fold | `--refresh-scope beliefs` (full rewrite) |
 
 **Superseded cadence (historical only):** separate weekly baseline / weekday delta / month-end
@@ -35,7 +35,7 @@ synthesis workflows — replaced by one daily graph + `resolve_edit_mode` per ar
 
 The **9-phase tables** below are a **reference map** of segment skills. **Authoritative runtime
 order** is the LangGraph pipeline: A0 preflight → A1 triage → A2 segments → A3 consolidate →
-A4 digest → portfolio H1–H9.
+A4 digest → portfolio thesis–commit.
 
 ---
 
@@ -116,16 +116,16 @@ Before any phase executes, the agent performs a structured context load:
    + `pin_state_for_run`) onto `ResearchState.research_state_pin`. Resume
    reuses the run/attempt pin; typed `state_unavailable` keeps compatibility
    documents shadow-only. Never re-select / `load_latest` after the pin.
-6b. **Ticker evidence bundles (#2844 / WP11.1–WP11.5)** — typed H5
-   `TickerEvidenceBundle` + append-only H6 `MissingFactRequest` /
+6b. **Ticker evidence bundles (#2844 / WP11.1–WP11.5)** — typed analyst
+   `TickerEvidenceBundle` + append-only deliberation `MissingFactRequest` /
    `EvidenceBundleAmendment` contracts (`research_retrieval` models +
    in-memory `EvidenceBundleStore` with `dump_snapshot`/`from_snapshot` for
    checkpoint reload; private migrations `090`/`091`; SQL IO adapter later).
    One immutable base per run/ticker; amendments must link one base and one
-   request. WP11.2 builds the H5 base before the provider call; WP11.3–11.4
-   wire deterministic H6 selection + bounded missing-fact supplements; WP11.5
+   request. WP11.2 builds the analyst base before the provider call; WP11.3–11.4
+   wire deterministic deliberation selection + bounded missing-fact supplements; WP11.5
    (`simulated_pipeline` + `TestDurableH5H6LineageRoundTrip`) proves bases and
-   amendments survive store serialize/reload across the H5→H6 boundary.
+   amendments survive store serialize/reload across the analyst→deliberation boundary.
    Optional `PortfolioGraphDeps.evidence_bundle_store`; default graph leaves it
    unwired; `DIGIQUANT_EVIDENCE_BUNDLE_WRITER=off` gates append when injected.
 
@@ -302,7 +302,7 @@ reads only its upstream memos plus the last **two full** digest briefing bodies
 5. **US equities** — overview plus the 11 sector memos (operators pick leadership from those memos; no rolled-up scorecard)
 6. **Watchlist / risk radar** — evidence-based items to monitor; no trade verbs
 
-H1/H2 consume `digest_briefing_for_portfolio` (`date` / `body` / `regime_label` only).
+thesis/market consume `digest_briefing_for_portfolio` (`date` / `body` / `regime_label` only).
 
 **Context budget ([#1559](https://github.com/digithings-ai/digithings/issues/1559)).** Subsection agents slim their upstream memo bodies under `_DIGEST_SEGMENT_INPUTS_BUDGET_CHARS`. The stitcher sees subsections + two full prior briefing bodies (capped at `_DIGEST_PRIOR_BODY_MAX`, not 300 chars). `latest_segments` is filtered to the digest keys (`digest`, `digest-delta`).
 
@@ -654,7 +654,7 @@ Every phase node passes a `phase_slug` (e.g. `alt-sentiment-news`, `master-diges
 
 ```yaml
 phase_models:
-  # H6 deliberation emits strict JSON; llama-4-maverick returned empty completions under
+  # deliberation emits strict JSON; llama-4-maverick returned empty completions under
   # STRICT json_schema, so the per-ticker slugs are pinned to the json/tool-reliable model.
   portfolio/deliberation-: deepseek/deepseek-v4-flash   # trailing '-' = prefix match
   # Pinned (not pool-hashed) so digest routing stays deterministic; v4-flash's 1M context
@@ -673,7 +673,7 @@ Phase 7C spawns one LLM node per ticker in the watchlist (up to 98). The `DIGIQU
 | `0` (default) | No cap — full watchlist |
 | `30` (CI default) | Capped at 30 tickers; logged at INFO level |
 
-On the live thesis-first path the cap is applied once, in H4 (`roster_cap.capped_tickers`),
+On the live thesis-first path the cap is applied once, in screener (`roster_cap.capped_tickers`),
 and since #1767 it is actually enforced — the prior book is the only sanctioned overshoot
 and thesis vehicles are prioritised within it. See
 `portfolio/docs/ARCHITECTURE.md` § "Roster cap enforcement (#1767)".
@@ -712,7 +712,7 @@ Tier-wide changes belong in `config/digiquant_models.yaml` (capability pools per
 |----------|---------|-----------|
 | `OPENROUTER_API_KEY` | All phase LLM calls + web grounding | GitHub secret + local `.env` |
 | `DIGIQUANT_MODEL_TIER` | Tier select (`cheap` default / `balanced` / `quality`) | Optional; workflow env or shell |
-| `DIGIQUANT_MAX_ANALYSTS` | H4/H5/H6 roster fan-out cap (#1767) | CI workflow env: `"30"` |
+| `DIGIQUANT_MAX_ANALYSTS` | screener/analyst/deliberation roster fan-out cap (#1767) | CI workflow env: `"30"` |
 | `SUPABASE_URL` / `SUPABASE_SERVICE_ROLE_KEY` | Publishing + diagnostics | GitHub secret + local `.env` |
 
 House routing (default client base) is applied by `apply_digiquant_house_env()` at chain startup. Run `python3 scripts/validate-provider-keys.py` after adding keys to `.env` to smoke-test the configured providers.

@@ -1,4 +1,4 @@
-"""H1 — daily thesis review (confidence + criteria refresh)."""
+"""thesis — daily thesis review (confidence + criteria refresh)."""
 
 from __future__ import annotations
 
@@ -116,7 +116,7 @@ def _run_thesis_llm(state: PortfolioState) -> ThesisReviewOutput:
     if review is None:
         return ThesisReviewOutput()
     if errors:
-        logger.warning("H1 thesis review completed with %d recoverable errors", len(errors))
+        logger.warning("thesis review completed with %d recoverable errors", len(errors))
     return review
 
 
@@ -147,7 +147,7 @@ def _thesis_node_factory(client: SupabaseClient | None):
                 _publish_thesis_review_document(client, state, document)
             except Exception:
                 logger.exception(
-                    "H1: thesis-review document publish failed for %s; continuing",
+                    "thesis: thesis-review document publish failed for %s; continuing",
                     state.run_date,
                 )
         return {

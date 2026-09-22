@@ -1,7 +1,7 @@
 """Integration Task 1.1 — lock Phase 1 forecast/risk/cost contracts (#2713, #2719).
 
 End-to-end composition gate: Phase 1 registries attach observational artifacts
-without forking graph topology. H8 still books once; size follows canned H7
+without forking graph topology. sizing still books once; size follows canned direction
 confidence (simulator default 0.7 → 70% AAPL, leftover stays cash).
 """
 
@@ -243,7 +243,7 @@ def _run_phase1_pipeline(*, canned_extras: dict | None = None, overrides: dict |
 
 
 def test_phase1_composition_e2e_simulated_pipeline() -> None:
-    """Full graph: registries populated, H7 lineage, H8/H9 observational artifacts, book once."""
+    """Full graph: registries populated, direction lineage, sizing/commit observational artifacts, book once."""
     from tests.dq.portfolio.phase1_e2e_fixtures import (
         LATE_KNOWN_AT,
         mature_cohort_outcome_rows,
@@ -304,7 +304,7 @@ def test_phase1_composition_e2e_simulated_pipeline() -> None:
     assert len(run.client.store.get("positions", [])) >= 1
     assert len(run.client.store.get("portfolio_ledger_commits", [])) == 1
 
-    # Simulator canned H7 memo sets AAPL confidence=0.7; H8 haircuts cash-first.
+    # Simulator canned direction memo sets AAPL confidence=0.7; sizing haircuts cash-first.
     aapl_row = next(row for row in portfolio.pm_direction_memo.roster if row.ticker == "AAPL")
     assert aapl_row.confidence == pytest.approx(0.7)
     assert sized_book_weights(portfolio.sized_book) == {"AAPL": 70.0}

@@ -1,4 +1,4 @@
-"""WP8.3 — assemble canonical H8 AllocationInputBundle (#2730)."""
+"""WP8.3 — assemble canonical sizing AllocationInputBundle (#2730)."""
 
 from __future__ import annotations
 
@@ -284,7 +284,7 @@ def _assemble(
 
 
 def test_direction_authorization_only_ignores_extra_calibrated_tickers() -> None:
-    """Only H7 roster tickers enter the bundle — extras in calibration map are ignored."""
+    """Only direction roster tickers enter the bundle — extras in calibration map are ignored."""
     memo = _memo("AAPL")
     calibrated = {
         "AAPL": _calibrated("AAPL"),
@@ -390,7 +390,7 @@ def test_rejects_future_known_at_past_cutoff() -> None:
 
 
 def test_analyst_stance_mutation_does_not_change_authorization() -> None:
-    """Analyst sell/buy cannot add, drop, or reverse H7-authorized instruments."""
+    """Analyst sell/buy cannot add, drop, or reverse direction-authorized instruments."""
     memo = _memo("AAPL", "MSFT", directions={"AAPL": "long", "MSFT": "flat"})
     base = _assemble(
         memo=memo,
@@ -416,7 +416,7 @@ def test_deterministic_asset_order_independent_of_roster_input_order() -> None:
     reverse = _assemble(memo=_memo("AAPL", "MSFT"), covariance=_covariance(("AAPL", "MSFT")))
     assert forward.canonical_asset_order == ("AAPL", "MSFT")
     assert reverse.canonical_asset_order == ("AAPL", "MSFT")
-    # Mandate ranks still follow H7 values; order of rows is canonical
+    # Mandate ranks still follow direction values; order of rows is canonical
     assert [m.ticker for m in forward.mandates] == ["AAPL", "MSFT"]
     assert [m.ticker for m in reverse.mandates] == ["AAPL", "MSFT"]
 
@@ -435,7 +435,7 @@ def test_missing_calibration_yields_typed_degraded_slice() -> None:
 
 
 def test_long_plus_flat_roster_pins_matching_covariance() -> None:
-    """Full H7 roster (including flat) must keep covariance when tickers match order."""
+    """Full direction roster (including flat) must keep covariance when tickers match order."""
     memo = _memo("AAPL", "MSFT", directions={"AAPL": "long", "MSFT": "flat"})
     cov = _covariance(("AAPL", "MSFT"))
     bundle = _assemble(memo=memo, covariance=cov, prior={"AAPL": 40.0}, cash=60.0)
@@ -467,7 +467,7 @@ def test_from_state_fills_missing_horizons_with_default() -> None:
         phase_portfolio=PhasePortfolioState(
             pm_direction_memo=memo,
             calibrated_forecasts={"AAPL": _calibrated("AAPL").model_dump(mode="json")},
-            # No deliberation_summaries → no H6 horizons
+            # No deliberation_summaries → no deliberation horizons
         ),
     )
     # from_state derives DEFAULT when horizons are absent (phase7e no longer forces 21).
@@ -482,7 +482,7 @@ def test_from_state_fills_missing_horizons_with_default() -> None:
 
 
 def test_from_state_derives_coherent_non_default_horizon() -> None:
-    """#2814: coherent H6 horizon ≠ 21 must assemble — not reject via expected=21."""
+    """#2814: coherent deliberation horizon ≠ 21 must assemble — not reject via expected=21."""
     from digiquant.portfolio.allocation_inputs import (
         DEFAULT_FORECAST_HORIZON_SESSIONS,
         assemble_allocation_input_bundle_from_state,

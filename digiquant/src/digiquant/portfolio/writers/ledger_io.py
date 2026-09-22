@@ -1,9 +1,9 @@
-"""H9 authoritative commit chain — append-only portfolio lineage (#2418, #2768).
+"""commit authoritative commit chain — append-only portfolio lineage (#2418, #2768).
 
-H9 is the *only* writer of the migration-069 lineage tables. One call to
+commit is the *only* writer of the migration-069 lineage tables. One call to
 :func:`append_commit_chain` appends a whole commit: one ``portfolio_ledger_commits``
 row, one decision intent / requested target / approved target per symbol, zero or
-more ``target_adjustments`` for H8 pct-unit deltas (#2768), and one order intent
+more ``target_adjustments`` for sizing pct-unit deltas (#2768), and one order intent
 per symbol whose weight actually moved.
 
 Three properties shape every line below.
@@ -95,7 +95,7 @@ _POLICY_PREFIX = "portfolio-h8-sizing"
 
 
 def ledger_enabled() -> bool:
-    """Whether H9 appends the authoritative chain. Defaults to **on**.
+    """Whether commit appends the authoritative chain. Defaults to **on**.
 
     Note the polarity is the deliberate *inverse* of
     ``commit_io._position_risk_fields_enabled``: that flag opts *in* to an advisory
@@ -109,7 +109,7 @@ def ledger_enabled() -> bool:
 
 @dataclass(frozen=True)
 class LedgerAppend:
-    """What one commit appended, for the H9 manifest."""
+    """What one commit appended, for the commit manifest."""
 
     commit_id: str
     frozen_symbols: list[str]
@@ -287,7 +287,7 @@ def _prior_weights(state: ResearchState) -> dict[str, float]:
 
     The same source ``direction`` and ``phase7d_pm`` read. research preflight
     derives it from ``load_prior_book(client, run_date)`` and drifts it by price moves
-    since the prior book date (#955), which is the baseline H8 sized its targets
+    since the prior book date (#955), which is the baseline sizing sized its targets
     against — so measuring the ledger's share deltas against it, rather than re-reading
     ``positions`` here, keeps NAV and prior weight on one snapshot. Legitimately empty
     on a seed run with no prior book, which correctly sizes every position as a fresh
@@ -318,7 +318,7 @@ def _decision(
     ``ADD``/``NEW_CONVICTION`` is the *only* pairing the schema offers for a weight
     increase (there is no "increase" action), and a move to zero is recorded as
     ``EXIT``/``THESIS_INVALIDATED`` even when a risk cap rather than a thesis change
-    forced it — H9 sees the weight, not the reason. H8's ``TargetAdjustment`` rows are
+    forced it — commit sees the weight, not the reason. sizing's ``TargetAdjustment`` rows are
     where the cap-driven variants belong.
     """
     if symbol == _CASH:
@@ -403,7 +403,7 @@ def _request_pct_for_symbol(
 ) -> float:
     """Pre-cap weight percent for ``symbol``, falling back to the approved target.
 
-    Preference order: explicit H8 ``requested_pct`` map; else the first pct-unit
+    Preference order: explicit sizing ``requested_pct`` map; else the first pct-unit
     adjustment's ``original_pct`` (chain start); else the approved target (no delta).
     """
     if symbol in requested_pct:
@@ -439,7 +439,7 @@ def append_commit_chain(
 ) -> LedgerAppend | None:
     """Append one authoritative commit and its lineage. Returns ``None`` when disabled.
 
-    ``weights`` and ``cash_pct`` are H8's final book in percent; ``nav`` is the NAV
+    ``weights`` and ``cash_pct`` are sizing's final book in percent; ``nav`` is the NAV
     ``commit_io.book_portfolio`` computed from the same prior-book snapshot.
     ``adjustments`` / ``requested_pct`` come from the sized book (#2768): when a
     pre-cap request differs from the approved weight, ``requested_weight`` stores
@@ -483,7 +483,7 @@ def append_commit_chain(
     if len(commit_heads) > 1:
         raise RuntimeError(
             f"{COMMITS} has {len(commit_heads)} heads for {date_str}; the chain forked "
-            "and H9 will not extend an ambiguous lineage"
+            "and commit will not extend an ambiguous lineage"
         )
     approved_heads = _head_by_symbol(_heads(prior_approved))
     order_heads = _head_by_symbol(_heads(prior_orders))
@@ -494,7 +494,7 @@ def append_commit_chain(
     prior = _prior_weights(state)
 
     # A symbol earns a row if the new book names it, if the prior book still holds it
-    # (so an exit is recorded rather than implied by absence), if H8 requested it
+    # (so an exit is recorded rather than implied by absence), if sizing requested it
     # (even when caps drove it to zero), or if it has an open approved target to
     # supersede. Frozen symbols are excluded outright.
     symbols = set(targets)

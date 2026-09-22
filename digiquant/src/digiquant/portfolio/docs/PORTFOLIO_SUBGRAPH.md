@@ -1,11 +1,11 @@
 # portfolio — Portfolio Deliberation Sub-graph
 
-> **Status (2026-06-20):** Topology **implemented** as H1–H9 in `graph.build_portfolio_phases_thesis()`.
+> **Status (2026-06-20):** Topology **implemented** as thesis–commit in `graph.build_portfolio_phases_thesis()`.
 > **Canonical reference:** [`ARCHITECTURE.md`](ARCHITECTURE.md) and
 > [`docs/superpowers/specs/2026-06-20-olympus-daily-thesis-design.md`](../../../../../docs/superpowers/specs/2026-06-20-olympus-daily-thesis-design.md) §13.2.
 > The Wave 2 unit plan below is **historical** — node names map to shipped modules
-> (`phase_h1` → `thesis`, …, `phase_h7` → `direction`, H8 = `phase7e_risk_sizing`,
-> H9 = `commit`). Deep-dive recess batch and `PMAllocationMemo` weights are **not** in v1.
+> (`phase_h1` → `thesis`, …, `phase_h7` → `direction`, sizing = `phase7e_risk_sizing`,
+> commit = `commit`). Deep-dive recess batch and `PMAllocationMemo` weights are **not** in v1.
 
 > **Historical note (pre-#930):** This document described the planned Wave 2 portfolio expansion before
 > thesis-first cutover. Skills listed here are now wired; bull/bear 7CD and post-PM thesis derivation are removed.
@@ -70,11 +70,11 @@ portfolio turns research into an allocation memo and rebalance decision. It repl
 
 ```mermaid
 flowchart TD
-    P6[phase6_consolidate] --> H1[phase_thesis]
-    H1 --> H2[phase_market]
-    H2 --> H3[phase_vehicle_map]
-    H3 --> H4[phase_screener]
-    H4 --> FAN1{fan-out per ticker}
+    P6[phase6_consolidate] --> thesis[phase_thesis]
+    thesis --> market[phase_market]
+    market --> vehicle_map[phase_vehicle_map]
+    vehicle_map --> screener[phase_screener]
+    screener --> FAN1{fan-out per ticker}
     FAN1 --> AnalystA[phase_analyst · AAPL]
     FAN1 --> AnalystB[phase_analyst · TSLA]
     FAN1 --> AnalystN[phase_analyst · …]
@@ -90,9 +90,9 @@ flowchart TD
     DeliberationN --> JOIN2
     JOIN2 --> DD{any recess<br/>requests?}
     DD -- yes --> DDB[deep_dive_batch]
-    DD -- no --> H7
-    DDB --> H7[phase_direction_pm_allocation_memo]
-    H7 --> P7D[phase7d_rebalance]
+    DD -- no --> direction
+    DDB --> direction[phase_direction_pm_allocation_memo]
+    direction --> P7D[phase7d_rebalance]
 
     subgraph round_loop["phase_h6 round loop (per ticker)"]
         R1[analyst present] --> R2[PM challenge]
@@ -269,7 +269,7 @@ Each H-phase's Supabase adapter (to be added in W2-A) writes to both `documents`
 | Phase | `documents` row (`doc_type`) | First-class table(s) |
 |-------|-----------------|----------------------|
 | `phase_thesis` | `'Thesis Review'` (payload = full output; requires migration 025 — see §5.1) | `theses` — upsert one row per `ThesisStatusUpdate` (`(date, thesis_id)` key); update **only canonical columns** present in migration 001: `status`, `invalidation`, `notes`, `vehicle`. Per-day evidence trail lives in the `'Thesis Review'` **document payload** (`body.reviewed_theses[].evidence[]`) — it is NOT duplicated into a relational column. There is no `evidence_log` column on `theses`, and we do not add one: the document is the right home for the narrative evidence list. |
-| `phase_market` | `'Market Thesis Exploration'` | `theses` — create one `ACTIVE` row or update one canonical row per `topic_key`; updates preserve H1's same-run lifecycle status (or the prior nonterminal status when H1 emitted no update). Migration 056 enforces one nonterminal market topic per date. |
+| `phase_market` | `'Market Thesis Exploration'` | `theses` — create one `ACTIVE` row or update one canonical row per `topic_key`; updates preserve thesis's same-run lifecycle status (or the prior nonterminal status when thesis emitted no update). Migration 056 enforces one nonterminal market topic per date. |
 | `phase_vehicle_map` | `'Thesis Vehicle Map'` | `thesis_vehicles` — one row per `(thesis_id, ticker)` with `rationale`, `exclusion_reasons`, `candidate_rank` (derived from position in `candidate_tickers`), `user_mandate_notes`, `source_exploration_key` = the `documents.key` of the h2 output. |
 | `phase_screener` | `'Opportunity Screen'` (requires migration 025 — see §5.1) | `analyst_coverage` — upsert `(date, ticker)` for each `RosterPick`; set `thesis_ids`, `analyst_role='roster'`. |
 | `phase_analyst` | `'Asset Recommendation'` (one per ticker) | `analyst_coverage` — update `current_recommendation_key` + `last_updated`. |

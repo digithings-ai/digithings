@@ -1,7 +1,7 @@
 """WP10.5 — paired incumbent/challenger shadow comparison evidence (#2799).
 
 Compares two isolated WP10.4 shared-cash replay arms under an identical observed
-manifest. Evidence only — never production H8/H9 booking, auto-promotion, or
+manifest. Evidence only — never production sizing/commit booking, auto-promotion, or
 config write. Challenger remains unreachable from the production graph.
 """
 

@@ -1,4 +1,4 @@
-"""WP14.2 — wire blinded H5/H6 context capsules into provider phase_inputs."""
+"""WP14.2 — wire blinded analyst/deliberation context capsules into provider phase_inputs."""
 
 from __future__ import annotations
 
@@ -100,7 +100,7 @@ def try_load_pinned_research_state(
 
 
 def changed_evidence_ids_from_bundle(bundle: TickerEvidenceBundle) -> frozenset[UUID]:
-    """Default H5 delta set: evidence IDs referenced by the pinned bundle."""
+    """Default analyst delta set: evidence IDs referenced by the pinned bundle."""
     return frozenset(bundle.evidence_ids)
 
 
@@ -111,7 +111,7 @@ def compile_analyst_role_context(
     bundle: TickerEvidenceBundle,
     changed_evidence_ids: frozenset[UUID] | None = None,
 ) -> tuple[ContextCapsule, ContextManifest]:
-    """Compile bounded H5 capsule from pinned state + bundle."""
+    """Compile bounded analyst capsule from pinned state + bundle."""
     delta = changed_evidence_ids or changed_evidence_ids_from_bundle(bundle)
     return compile_context_capsule(
         ContextCompileInput(
@@ -139,7 +139,7 @@ def compile_direction_role_context(
     focus_roster: tuple[str, ...] = (),
     enforce_version_pin: bool = False,
 ) -> DirectionDecisionContext:
-    """Compile bounded H7 decision capsule from pinned state + prerequisites."""
+    """Compile bounded direction decision capsule from pinned state + prerequisites."""
     structured_lesson = outcome_lesson_version_id
     if structured_lesson is None and prerequisites is not None:
         structured_lesson = prerequisites.outcome_lesson_version_id
@@ -169,7 +169,7 @@ def compile_deliberation_role_context(
     bundle: TickerEvidenceBundle,
     amendment: EvidenceBundleAmendment | None = None,
 ) -> tuple[ContextCapsule, ContextManifest]:
-    """Compile bounded H6 capsule (bundle/amendment evidence only)."""
+    """Compile bounded deliberation capsule (bundle/amendment evidence only)."""
     return compile_context_capsule(
         ContextCompileInput(
             role=ContextRole.DELIBERATION,
@@ -226,7 +226,7 @@ def wire_analyst_phase_inputs(
     outcome_lesson_pin: dict[str, object] | None = None,
     changed_evidence_ids: frozenset[UUID] | None = None,
 ) -> RoleContextWireResult:
-    """Apply H5 context compiler wiring (shadow records; enforce replaces structured slice)."""
+    """Apply analyst context compiler wiring (shadow records; enforce replaces structured slice)."""
     mode = resolve_context_compiler_mode()
     if mode is ContextCompilerMode.OFF:
         return RoleContextWireResult(
@@ -238,7 +238,7 @@ def wire_analyst_phase_inputs(
 
     loaded = try_load_pinned_research_state(research_state_store, research_state_pin)
     if loaded is None:
-        logger.debug("H5 context compile skipped — no pinned research state in store")
+        logger.debug("analyst context compile skipped — no pinned research state in store")
         return RoleContextWireResult(
             phase_inputs=dict(phase_inputs),
             capsule=None,
@@ -288,7 +288,7 @@ def wire_deliberation_phase_inputs(
     research_state_store: ResearchStateStore | None = None,
     amendment: EvidenceBundleAmendment | None = None,
 ) -> RoleContextWireResult:
-    """Apply H6 context compiler wiring beside incumbent deliberation inputs."""
+    """Apply deliberation context compiler wiring beside incumbent deliberation inputs."""
     mode = resolve_context_compiler_mode()
     if mode is ContextCompilerMode.OFF:
         return RoleContextWireResult(
@@ -299,7 +299,7 @@ def wire_deliberation_phase_inputs(
         )
 
     if bundle is None:
-        logger.debug("H6 context compile skipped — no base evidence bundle")
+        logger.debug("deliberation context compile skipped — no base evidence bundle")
         return RoleContextWireResult(
             phase_inputs=dict(phase_inputs),
             capsule=None,
@@ -354,7 +354,7 @@ def _parse_direction_prerequisites(raw: dict[str, object] | None) -> DirectionPr
     try:
         return DirectionPrerequisiteSnapshot.model_validate(raw)
     except Exception:
-        logger.warning("invalid direction_prerequisite_snapshot; skipping H7 context compile")
+        logger.warning("invalid direction_prerequisite_snapshot; skipping direction context compile")
         return None
 
 
@@ -374,7 +374,7 @@ def wire_direction_phase_inputs(
     decision_lessons: tuple[dict[str, Any], ...] = (),
     focus_roster: tuple[str, ...] = (),
 ) -> RoleContextWireResult:
-    """Apply H7 decision context compiler beside incumbent PM direction inputs."""
+    """Apply direction decision context compiler beside incumbent PM direction inputs."""
     mode = resolve_context_compiler_mode()
     if mode is ContextCompilerMode.OFF:
         return RoleContextWireResult(
@@ -386,7 +386,7 @@ def wire_direction_phase_inputs(
 
     loaded = try_load_pinned_research_state(research_state_store, research_state_pin)
     if loaded is None:
-        logger.debug("H7 context compile skipped — no pinned research state in store")
+        logger.debug("direction context compile skipped — no pinned research state in store")
         return RoleContextWireResult(
             phase_inputs=dict(phase_inputs),
             capsule=None,
@@ -422,7 +422,7 @@ def wire_direction_phase_inputs(
     except ValueError:
         if enforce_pin:
             raise
-        logger.debug("H7 context compile skipped — prerequisite validation failed")
+        logger.debug("direction context compile skipped — prerequisite validation failed")
         return RoleContextWireResult(
             phase_inputs=dict(phase_inputs),
             capsule=None,

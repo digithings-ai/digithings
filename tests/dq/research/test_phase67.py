@@ -650,7 +650,7 @@ class TestPhase7StripTradeVerbs:
         assert "Monitor AI capex commentary into earnings." in stripped.body
 
 
-# ─── H5 unified analyst tests ───────────────────────────────────────────────
+# ─── analyst unified analyst tests ───────────────────────────────────────────────
 
 
 def _analyst_payload(ticker: str) -> str:

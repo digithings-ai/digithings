@@ -1,8 +1,8 @@
 # Wave 2 Unit Specs — portfolio implementation
 
-> **Superseded for implementation:** [#930](https://github.com/digithings-ai/digithings/issues/930) shipped H1–H9.
+> **Superseded for implementation:** [#930](https://github.com/digithings-ai/digithings/issues/930) shipped thesis–commit.
 > **Canonical spec:** [`docs/superpowers/specs/2026-06-20-olympus-daily-thesis-design.md`](../../../../../../docs/superpowers/specs/2026-06-20-olympus-daily-thesis-design.md) §13.2.
-> **Live topology:** [`ARCHITECTURE.md`](ARCHITECTURE.md). H-path name mapping: W2-C/D/E/F/G → H1/H2/H3/H5/H6/H7; H8 = `phase7e_risk_sizing`; H9 = `commit`.
+> **Live topology:** [`ARCHITECTURE.md`](ARCHITECTURE.md). H-path name mapping: W2-C/D/E/F/G → thesis/market/vehicle_map/analyst/deliberation/direction; sizing = `phase7e_risk_sizing`; commit = `commit`.
 
 > **Historical note:** This document described the planned Wave 2 portfolio expansion before thesis-first
 > cutover. Retained for forensics and unit-ID cross-reference only.

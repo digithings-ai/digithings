@@ -1,14 +1,14 @@
-"""H7 — PM direction memo (direction + rank + confidence; no weights).
+"""direction — PM direction memo (direction + rank + confidence; no weights).
 
 WP4.5 (#2660): after LLM success or prior-memo fail-soft, deterministically bind
 each roster row to the current run's effective forecast (never model-supplied IDs).
 
 WP-G: roster rows may carry ``confidence`` in ``[0, 1]``. Rank remains order, not
-size. H8 scales each long by that confidence (cash-first).
+size. sizing scales each long by that confidence (cash-first).
 
-WP5.4 (#2684): at this existing H6→H7 boundary, attach cutoff-safe shadow
-calibration artifacts into typed state for H9 persistence. Observational only —
-never feeds incumbent H8 and does not add a graph node.
+WP5.4 (#2684): at this existing deliberation→direction boundary, attach cutoff-safe shadow
+calibration artifacts into typed state for commit persistence. Observational only —
+never feeds incumbent sizing and does not add a graph node.
 """
 
 from __future__ import annotations
@@ -90,7 +90,7 @@ def _focus_roster_tickers(state: PortfolioState) -> list[str]:
 
 
 def _prior_memo_fallback(state: PortfolioState) -> PMDirectionMemo | None:
-    """Parse the prior pm-direction memo for the H7 LLM-failure carry (#1665)."""
+    """Parse the prior pm-direction memo for the direction LLM-failure carry (#1665)."""
     payload = _prior_direction_payload(state)
     if not payload:
         return None
@@ -128,7 +128,7 @@ def _load_cutoff_outcomes(
         raise
     except Exception as exc:
         logger.warning(
-            "H7 shadow calibration: outcome load failed (%s: %s); empty cohort",
+            "direction shadow calibration: outcome load failed (%s: %s); empty cohort",
             type(exc).__name__,
             exc,
         )
@@ -140,7 +140,7 @@ def _attach_shadow_calibration(
     *,
     client: SupabaseClient | None,
 ) -> ShadowCalibrationAttachment:
-    """Observational attach at H6→H7 boundary.
+    """Observational attach at deliberation→direction boundary.
 
     Transient load/attach failures degrade to an empty attachment (#2684). A
     persisted-digest integrity failure (:class:`ForecastOutcomeIntegrityError`,
@@ -154,7 +154,7 @@ def _attach_shadow_calibration(
         raise
     except Exception as exc:
         logger.warning(
-            "H7 shadow calibration attach failed (%s: %s); empty attachment",
+            "direction shadow calibration attach failed (%s: %s); empty attachment",
             type(exc).__name__,
             exc,
         )
@@ -179,7 +179,7 @@ def _direction_node(
     client: SupabaseClient | None = None,
     research_state_store: ResearchStateStore | None = None,
 ) -> dict[str, Any]:
-    """H7 node body; ``client`` optional for cutoff-safe outcome load (WP5.4)."""
+    """direction node body; ``client`` optional for cutoff-safe outcome load (WP5.4)."""
     # WP5.4: attach before LLM so fail-soft memo path still carries shadows.
     shadow = _attach_shadow_calibration(state, client=client)
 
@@ -254,19 +254,21 @@ def _direction_node(
             tools=tools,
             execute_tool=execute_tool,
         )
-    except Exception as exc:  # LLM-output failure degrades H7, never the chain (#1665)
+    except Exception as exc:  # LLM-output failure degrades direction, never the chain (#1665)
         # Fallback: carry the PRIOR direction memo re-dated to today. Held names it
         # addressed keep their directions; anything it misses is covered by the
         # #1649 memo-unaddressed held-carry, so the book still coheres and COMMITS —
         # which keeps retry_worthy False and the run single-attempt. No parseable
-        # prior → memo None (H8's legacy sizing path).
+        # prior → memo None (sizing's legacy sizing path).
         # WP4.5: re-bind forecast references from *this* run's effective map —
         # prior memo IDs must not masquerade as today's authoritative forecasts.
         memo = _prior_memo_fallback(state)
         if memo is not None:
             memo = _bind_forecast_references(memo, state)
         mode = "prior memo carried" if memo is not None else "no prior memo; legacy sizing"
-        logger.warning("H7 pm-direction LLM failed (%s: %s); %s", type(exc).__name__, exc, mode)
+        logger.warning(
+            "direction pm-direction LLM failed (%s: %s); %s", type(exc).__name__, exc, mode
+        )
         err = PhaseError(
             phase=PHASE_NAME,
             node=NODE_ID,
@@ -287,7 +289,7 @@ def build_direction(
     client: SupabaseClient | None = None,
     research_state_store: ResearchStateStore | None = None,
 ) -> PipelinePhase:
-    """Build H7; optional ``client`` loads cutoff-safe outcomes for shadow calibration."""
+    """Build direction; optional ``client`` loads cutoff-safe outcomes for shadow calibration."""
 
     def _bound(state: PortfolioState) -> dict[str, Any]:
         return _direction_node(state, client=client, research_state_store=research_state_store)

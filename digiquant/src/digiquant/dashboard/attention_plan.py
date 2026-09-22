@@ -4,7 +4,7 @@ Produces typed pre-provider attention decisions with stable refresh reasons whil
 the **incumbent** ``edit_mode`` path still executes. Planner mode is ``off`` or
 ``shadow`` only — ``enforce`` is intentionally absent. The digithings house
 profile pin is required for plan identity; overlay pins fail closed when missing.
-The planner cannot expand an H4 roster or rewrite H7/H8 authority.
+The planner cannot expand an screener roster or rewrite direction/sizing authority.
 """
 
 from __future__ import annotations
@@ -59,7 +59,7 @@ def _artifact_key_str(key: ArtifactKey) -> str:
 
 
 def screener_roster_fingerprint(roster: Sequence[str]) -> str:
-    """Deterministic fingerprint of an H4 focus roster (order-sensitive)."""
+    """Deterministic fingerprint of an screener focus roster (order-sensitive)."""
     normalized = [ticker.strip().upper() for ticker in roster if ticker and ticker.strip()]
     blob = "\n".join(normalized).encode("utf-8")
     return hashlib.sha256(blob).hexdigest()
@@ -154,7 +154,7 @@ class AttentionPlan(BaseModel):
     screener_roster: list[str] = Field(default_factory=list)
     screener_roster_fingerprint: str = Field(..., min_length=64, max_length=64)
     decisions: list[AttentionDecision] = Field(default_factory=list)
-    # Explicitly absent: mandate weights, H7 memo, H8 sizing — planner has no authority.
+    # Explicitly absent: mandate weights, direction memo, sizing — planner has no authority.
 
     @field_validator("screener_roster")
     @classmethod
@@ -232,7 +232,7 @@ def plan_attention_shadow(
     """Build a shadow AttentionPlan beside incumbent ``resolve_edit_mode``.
 
     Never actuates alternate routing. Does not mutate ``screener_roster``. Does not
-    emit H7/H8 fields.
+    emit direction/sizing fields.
     """
     if planner_mode not in ("off", "shadow"):
         raise AttentionPlanError(
@@ -310,13 +310,13 @@ def assert_plan_preserves_screener_roster(plan: AttentionPlan, roster: Sequence[
     """Test/helper: planner output roster must be byte-identical to input."""
     expected = [t.strip().upper() for t in roster if t and t.strip()]
     if plan.screener_roster != expected:
-        raise AttentionPlanError("AttentionPlan must not expand, shrink, or reorder H4 roster")
+        raise AttentionPlanError("AttentionPlan must not expand, shrink, or reorder screener roster")
     if plan.screener_roster_fingerprint != screener_roster_fingerprint(expected):
-        raise AttentionPlanError("AttentionPlan H4 fingerprint mismatch")
+        raise AttentionPlanError("AttentionPlan screener fingerprint mismatch")
 
 
 def assert_plan_has_no_direction_sizing_authority(plan: AttentionPlan) -> None:
-    """Test/helper: plan payload must not carry H7/H8 authority fields."""
+    """Test/helper: plan payload must not carry direction/sizing authority fields."""
     dumped = plan.model_dump()
     forbidden = {
         "mandate",
@@ -330,7 +330,7 @@ def assert_plan_has_no_direction_sizing_authority(plan: AttentionPlan) -> None:
     }
     overlap = forbidden.intersection(dumped)
     if overlap:
-        raise AttentionPlanError(f"AttentionPlan must not carry H7/H8 fields: {sorted(overlap)}")
+        raise AttentionPlanError(f"AttentionPlan must not carry direction/sizing fields: {sorted(overlap)}")
 
 
 # Re-export house pin helper id for tests / callers

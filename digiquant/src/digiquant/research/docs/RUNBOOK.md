@@ -146,7 +146,7 @@ new external network exposure).
 ## Two tracks (research vs portfolio)
 
 - **Track A — Generic research** (positioning-blind): macro, sectors, crypto, sentiment, etc. **Do not** load `config/preferences.md` or `config/investment-profile.md`. Each research run **ends** with the **`digest`** — `documents.digest` + materialized `daily_snapshots` for the date — as the **single overview** of all sub-segments (`python -m digiquant.portfolio.chain --cadence daily` through research A0–A4). Run [`run_db_first.py --skip-execute --validate-mode research`](scripts/run_db_first.py) after publish.
-- **Track B — Portfolio manager & analyst** (user-specific): **reads** the research **`digest`** from Supabase (does **not** compile it) + [`config/preferences.md`](config/preferences.md) + [`config/investment-profile.md`](config/investment-profile.md); portfolio H1–H9 produces thesis artifacts, deliberation, PM direction, sized book, and `commit_run` booking. Timing is controlled by [`config/schedule.json`](config/schedule.json) (`portfolio_manager_cadence`, `execution_assumption`, `rebalance_source_for_opens`). Run full validation: `--validate-mode full` or `pm`.
+- **Track B — Portfolio manager & analyst** (user-specific): **reads** the research **`digest`** from Supabase (does **not** compile it) + [`config/preferences.md`](config/preferences.md) + [`config/investment-profile.md`](config/investment-profile.md); portfolio thesis–commit produces thesis artifacts, deliberation, PM direction, sized book, and `commit_run` booking. Timing is controlled by [`config/schedule.json`](config/schedule.json) (`portfolio_manager_cadence`, `execution_assumption`, `rebalance_source_for_opens`). Run full validation: `--validate-mode full` or `pm`.
 
 ### Track B — fresh vs delta artifacts (thesis-first)
 
@@ -643,7 +643,7 @@ and since #1736 they legitimately disagree.
 
 - **`status`** — was the run healthy? Written by `diagnostics.summarize_run`. It flips to
   `degraded` on **any** failed research segment, on a majority of dead portfolio deliberations,
-  on an H9 non-commit, and on "research produced research but nothing committed". Read
+  on an commit non-commit, and on "research produced research but nothing committed". Read
   `breakdown.degraded_reasons` for which rule tripped.
 - **`retry_signal`** (surfaced as `degraded` in `run.log`'s final JSON, and the process exit
   code) — is re-running worth the money? Deliberately frozen at the pre-#1736 rules, so
@@ -675,10 +675,10 @@ outcome** line carries the last JSON summary found in `artifacts/run.log`, or
 book 06-26; first post-gap book 07-17. Any performance series that spans those dates is
 **discontinuous by design** — that is expected, not a bug to be repaired.
 
-**Cause and fix.** H9 was failing its coherence check closed while runs still reported `ok`
+**Cause and fix.** commit was failing its coherence check closed while runs still reported `ok`
 (#1555). 18 of the 22 `run_diagnostics` rows in the window say `status='ok'` and every one
 of them carries `portfolio_commit/portfolio/commit-run: held ticker <T> missing from
-book and not flat in H7`. Fixed **2026-07-17** (`40312d82`, PR #1565); `positions` resumes the
+book and not flat in direction`. Fixed **2026-07-17** (`40312d82`, PR #1565); `positions` resumes the
 same date. Full evidence and the post-fix `book_committed` reconciliation are in
 [`portfolio/docs/ARCHITECTURE.md`](../../portfolio/docs/ARCHITECTURE.md) under "The 2026-06-27 →
 2026-07-16 book gap is permanent and accepted".
@@ -707,7 +707,7 @@ this case — for 06-27 → 07-16 there is no committed book to compute from.
 ### Booked positions, missing ledger commit (#3330)
 
 If `positions` / `nav_history` / `pm-rebalance` exist for the date but
-`portfolio_ledger_commits` does not (H9 `append_commit_chain` died after
+`portfolio_ledger_commits` does not (commit `append_commit_chain` died after
 `book_portfolio` — historically `23502` `workspace_id` NOT NULL while cron
 checked out `main`), do **not** re-run the cheap-tier LLM pipeline. Recover the
 already-decided book:

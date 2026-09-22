@@ -1,8 +1,8 @@
-"""Build and publish one H5 base ticker evidence bundle (#2892 / WP11.2).
+"""Build and publish one analyst base ticker evidence bundle (#2892 / WP11.2).
 
-Canonicalizes H5 inputs into a :class:`TickerEvidenceBundle` before the
+Canonicalizes analyst inputs into a :class:`TickerEvidenceBundle` before the
 provider call, optionally persists via :class:`EvidenceBundleStore`, and cites
-bundle/evidence IDs on new forecast materializations. Does **not** cut over H6
+bundle/evidence IDs on new forecast materializations. Does **not** cut over deliberation
 selection (WP11.3+). Reuses WP11.1 / WP12 identity helpers only.
 """
 
@@ -34,7 +34,7 @@ _ANALYST_BASE_SOURCE = "h5:base"
 # source / authority columns are CHECK (length BETWEEN 1 AND 500) in WP11/WP12 stores.
 _SOURCE_MAX_LEN = 500
 
-# Keys that must never become evidence authorities (H5 blinding / anti-leak).
+# Keys that must never become evidence authorities (analyst blinding / anti-leak).
 _PORTFOLIO_LEAK_AUTHORITIES = frozenset(
     {
         "held_in_prior_book",
@@ -50,7 +50,7 @@ NonEmptyField: TypeAlias = Annotated[str, Field(min_length=1, max_length=500)]
 
 
 class AnalystEvidenceFact(BaseModel):
-    """One pre-provider observation eligible for the H5 base bundle."""
+    """One pre-provider observation eligible for the analyst base bundle."""
 
     model_config = ConfigDict(extra="forbid", frozen=True)
 
@@ -81,7 +81,7 @@ class EvidenceConflict(BaseModel):
 
 
 class MissingEvidenceField(BaseModel):
-    """Named input field absent from the H5 acquisition pass."""
+    """Named input field absent from the analyst acquisition pass."""
 
     model_config = ConfigDict(extra="forbid", frozen=True)
 

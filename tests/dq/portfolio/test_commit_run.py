@@ -1,4 +1,4 @@
-"""H9 ``commit_run`` coherence + idempotency tests (#932, #1046)."""
+"""commit ``commit_run`` coherence + idempotency tests (#932, #1046)."""
 
 from __future__ import annotations
 
@@ -51,7 +51,7 @@ def _sized_book(spy_pct: float = 100.0) -> dict:
     return {
         "recommended_portfolio": [{"ticker": "SPY", "target_pct": spy_pct}],
         "actions": [],
-        "notes": "H8 sized book",
+        "notes": "sizing sized book",
     }
 
 
@@ -69,7 +69,7 @@ def _state(
     run_id: UUID = _SOURCE_RUN_ID,
 ) -> ResearchState:
     # Prior-book holdings make a name "held" without putting it in the roster — the
-    # real shape of a gated-out held position (held in the book, excluded from H5).
+    # real shape of a gated-out held position (held in the book, excluded from analyst).
     # PriorContext is frozen, so it must be built at construction time.
     prior_context = (
         PriorContext(prior_book=[{"ticker": t, "weight_pct": 0.0} for t in prior_book_held])
@@ -209,7 +209,7 @@ class TestProvisionalNavSuppression:
     """
 
     def test_existing_engine_nav_row_is_preserved(self) -> None:
-        """Engine NAV wins; H9-owned cash/invested still track the new book."""
+        """Engine NAV wins; commit-owned cash/invested still track the new book."""
         existing = {
             "date": RUN_DATE.isoformat(),
             "nav": 99.5,
@@ -331,14 +331,14 @@ class TestCommitRunCoherence:
         assert "positions" not in client.store
 
     def test_gated_out_held_position_in_excluded_ledger_is_allowed(self) -> None:
-        """A held position deliberately gated out of H5 (Stage 1b staleness gate) is
+        """A held position deliberately gated out of analyst (Stage 1b staleness gate) is
         carried, not orphaned (#1030).
 
-        AAPL is a prior-book holding (held) below the staleness threshold, so H4
+        AAPL is a prior-book holding (held) below the staleness threshold, so screener
         records it in ``focus_roster_excluded`` and dispatches no analyst. The
         position is still carried in the book (weight > 0) and is not flat — without
         the held-carry exemption, ``coherence_errors`` would fail-close with "lacks
-        H5 analyst doc", the live regression that broke the quiet-day path.
+        analyst doc", the live regression that broke the quiet-day path.
         """
         client = FakeSupabaseClient()
         state = _state(
@@ -361,7 +361,7 @@ class TestCommitRunCoherence:
                 }
             },
             prior_book_held=("AAPL",),  # AAPL is genuinely held (prior book), not just excluded
-            excluded=("AAPL",),  # gated out of H5 as a quiet held name — carried, not flat
+            excluded=("AAPL",),  # gated out of analyst as a quiet held name — carried, not flat
             pm_memo=PMDirectionMemo(
                 date=RUN_DATE,
                 roster=[TickerDirection(ticker="SPY", direction="long", conviction_rank=1)],
@@ -815,7 +815,7 @@ class TestCanonicalThesisIds:
                         "rationale": "PM: maintain core US equity beta while energy sleeve scales.",
                     }
                 ],
-                "notes": "H8 sized book",
+                "notes": "sizing sized book",
             }
         )
         node = build_commit_run_node(CommitRunDeps(client=client))
@@ -830,11 +830,11 @@ class TestCanonicalThesisIds:
 
 
 class TestMemoUnaddressedHeldCarry:
-    """#1649 — held names the H7 memo omits are carried, never dropped or blocked.
+    """#1649 — held names the direction memo omits are carried, never dropped or blocked.
 
     Run 29936849103 (2026-07-22): the PM memo's roster omitted SEVEN held tickers
-    (neither ``long`` nor ``flat``); H8 dropped them and H9 froze the commit with
-    "held ticker X missing from book and not flat in H7". Memo coverage is LLM
+    (neither ``long`` nor ``flat``); sizing dropped them and commit froze the commit with
+    "held ticker X missing from book and not flat in direction". Memo coverage is LLM
     discipline — an owned position with no explicit instruction defaults to hold.
     """
 
@@ -876,7 +876,7 @@ class TestMemoUnaddressedHeldCarry:
         assert manifest.get("status") == "committed"
 
     def test_memo_omitted_held_name_without_analyst_doc_still_commits(self) -> None:
-        """Loop-2 exemption: a carried held name whose H5 failed today is not a stray."""
+        """Loop-2 exemption: a carried held name whose analyst failed today is not a stray."""
         client = FakeSupabaseClient()
         state = _state(
             sized_book={
@@ -924,7 +924,7 @@ class TestMemoUnaddressedHeldCarry:
         assert manifest.get("status") == "committed"
 
     def test_carried_set_is_held_only_and_sizing_carries_drifted_weight(self) -> None:
-        """The carry set never widens beyond held names; H8 injects the drifted weight."""
+        """The carry set never widens beyond held names; sizing injects the drifted weight."""
         from digiquant.portfolio.phases.phase7e_risk_sizing import _held_carry_weights
         from digiquant.portfolio.writers.commit_io import carried_held_tickers
 
@@ -949,7 +949,7 @@ _APPROVED = "portfolio_ledger_approved_targets"
 _ORDERS = "portfolio_ledger_order_intents"
 _EXECUTIONS = "portfolio_ledger_paper_executions"
 
-# Adjustments may be empty on a commit with no H8 deltas — keep them out of the
+# Adjustments may be empty on a commit with no sizing deltas — keep them out of the
 # "every table must have rows" loops; they are mirrored for supersession reads.
 _LEDGER_TABLES = (_COMMITS, _INTENTS, _REQUESTED, _APPROVED, _ORDERS)
 
@@ -957,7 +957,7 @@ _LEDGER_TABLES = (_COMMITS, _INTENTS, _REQUESTED, _APPROVED, _ORDERS)
 def _ledger_client(**closes: float) -> FakeSupabaseClient:
     """Fake client with a priceable close for each ticker the day before ``RUN_DATE``.
 
-    H9 converts a weight delta to a share count at the last close strictly before
+    commit converts a weight delta to a share count at the last close strictly before
     ``run_date`` (the same window ``_interval_price_returns`` uses), so a ticker
     with no row here is deliberately unpriceable.
     """
@@ -1019,7 +1019,7 @@ def _assert_linear_chain(rows: list[dict], label: str) -> None:
 
 
 class TestCommitChainLedger:
-    """Task 2.3 — H9 appends the authoritative commit chain (#2418)."""
+    """Task 2.3 — commit appends the authoritative commit chain (#2418)."""
 
     def test_commit_appends_the_chain_for_every_final_ticker_and_cash(self) -> None:
         client = _ledger_client(SPY=100.0)
@@ -1069,9 +1069,9 @@ class TestCommitChainLedger:
             capture_output=True,
             text=True,
         ).stdout.split()
-        # ``ledger_io`` is the only writer. Pipeline caller is H9. ``recover_ledger``
+        # ``ledger_io`` is the only writer. Pipeline caller is commit. ``recover_ledger``
         # is the operator recovery caller for a booked-but-uncommitted day (#3330): it
-        # reads existing positions and must not call H8 / ``book_portfolio``. A fourth
+        # reads existing positions and must not call sizing / ``book_portfolio``. A fourth
         # ``append_commit_chain(`` site is a second commit *authority* and fails this.
         assert sorted(hits) == [
             "digiquant/src/digiquant/portfolio/phases/commit.py",
@@ -1232,7 +1232,7 @@ class TestTargetAdjustmentPersistence:
         return {
             "recommended_portfolio": [{"ticker": "SPY", "target_pct": 40.0}],
             "actions": [],
-            "notes": "H8 sized with single-name cap",
+            "notes": "sizing sized with single-name cap",
             "requested_pct": {"SPY": 80.0},
             "adjustments": [
                 {
@@ -1407,7 +1407,7 @@ class TestLedgerIoMutationPins:
         assert float(orders[0]["quantity"]) == pytest.approx(0.4)
 
     def test_no_trade_band_does_not_mint_order_intent(self) -> None:
-        """H8 HOLD / ``_decision`` NO_OP must not still emit an order because shares > 0."""
+        """sizing HOLD / ``_decision`` NO_OP must not still emit an order because shares > 0."""
         client = _ledger_client(SPY=50.0)
         out = _run(
             client,
@@ -1645,13 +1645,13 @@ def _multi_book(**target_pcts: float) -> dict:
             {"ticker": t, "target_pct": pct} for t, pct in target_pcts.items()
         ],
         "actions": [],
-        "notes": "H8 sized book",
+        "notes": "sizing sized book",
     }
 
 
 def _multi_analysts(*tickers: str) -> dict:
-    # coherence_errors fails closed on an open position with no H5 doc, so a
-    # multi-ticker book needs one per name or H9 writes nothing at all.
+    # coherence_errors fails closed on an open position with no analyst doc, so a
+    # multi-ticker book needs one per name or commit writes nothing at all.
     return {
         t: {
             "ticker": t,
@@ -1749,7 +1749,7 @@ class TestLedgerRowsSatisfyMigration069:
         assert emitted <= allowed, f"illegal action/reason pair(s): {emitted - allowed}"
 
     def test_weight_columns_stay_inside_the_zero_to_one_domain(self) -> None:
-        # H8's book is in percent; the DDL stores a [0, 1] fraction. A missed
+        # sizing's book is in percent; the DDL stores a [0, 1] fraction. A missed
         # conversion passes every fake-client test and 23514s on the first real run.
         client = _ledger_client(SPY=100.0, AAPL=50.0)
         _run(
@@ -1956,7 +1956,7 @@ class TestIntervalPriceReturnsRowCap:
 
 
 class TestForecastRegistryInH9:
-    """WP4.6 (#2663): H9 persists forecast lineage after booking; failure cannot rebook."""
+    """WP4.6 (#2663): commit persists forecast lineage after booking; failure cannot rebook."""
 
     def _assessment_payload(self) -> dict:
         from datetime import UTC, datetime
@@ -2203,7 +2203,7 @@ class TestCostLiquidityRegistryH9Noop:
 
 
 class TestPreTradeRiskH9:
-    """WP9.4 — H9 hash validation + append-only PreTradeRiskReport persistence (#2754)."""
+    """WP9.4 — commit hash validation + append-only PreTradeRiskReport persistence (#2754)."""
 
     def _spy_report_payload(self, *, run_id: str = str(_SOURCE_RUN_ID)) -> dict:
         from digiquant.portfolio.pretrade_risk import (

@@ -5,7 +5,7 @@ Covers:
      best-effort theses.update(linked_market_thesis_id=...) for each ticker.
   2. upsert_vehicle_thesis_from_analyst() resolves the market link from the
      reliable thesis_vehicles map at CREATION time (#1563) — the caller rarely
-     supplies one and the same-date H3 back-fill can never populate it, which
+     supplies one and the same-date vehicle_map back-fill can never populate it, which
      left every vehicle thesis null-linked in prod. Primary = lowest
      candidate_rank; falls back to the most recent prior mapping.
   3. upsert_thesis_row() never persists a self-referential link (the shape of

@@ -1,4 +1,4 @@
-"""WP11.4 — H6 deliberation uses bounded missing-fact amendments only (#2908)."""
+"""WP11.4 — deliberation uses bounded missing-fact amendments only (#2908)."""
 
 from __future__ import annotations
 

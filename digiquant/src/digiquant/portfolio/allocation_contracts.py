@@ -1,4 +1,4 @@
-"""H8 allocation input and WP9 pre-trade risk report contracts.
+"""sizing allocation input and WP9 pre-trade risk report contracts.
 
 Defines :class:`AllocationInputBundle` (#2727 / WP8.2) and
 :class:`PreTradeRiskReport` (#2742 / WP9.1) as frozen models with SHA-256
@@ -60,7 +60,7 @@ class AllocationCadence(StrEnum):
 
 
 class AssetInputStatus(StrEnum):
-    """Whether one asset's calibrated slice is usable at H8 entry."""
+    """Whether one asset's calibrated slice is usable at sizing entry."""
 
     AVAILABLE = "available"
     DEGRADED = "degraded"
@@ -68,7 +68,7 @@ class AssetInputStatus(StrEnum):
 
 
 class AllocationRunContext(AllocationContractModel):
-    """Run/cutoff/cadence identity for one H8 sizing pass."""
+    """Run/cutoff/cadence identity for one sizing pass."""
 
     run_id: NonEmptyId
     session_date: date
@@ -84,7 +84,7 @@ class AllocationRunContext(AllocationContractModel):
 
 
 class MandateReference(AllocationContractModel):
-    """H7 mandate slice for one ticker — direction and rank, no weights."""
+    """direction mandate slice for one ticker — direction and rank, no weights."""
 
     ticker: NonEmptyId
     direction: Literal["long", "flat"]
@@ -136,14 +136,14 @@ class CalibratedReturnSlice(AllocationContractModel):
 
 
 class PriorWeightEntry(AllocationContractModel):
-    """One prior risky weight before H8 sizing."""
+    """One prior risky weight before sizing."""
 
     ticker: NonEmptyId
     weight_pct: WeightPct
 
 
 class PriorBookSnapshot(AllocationContractModel):
-    """Prior marked book weights consumed by H8."""
+    """Prior marked book weights consumed by sizing."""
 
     entries: tuple[PriorWeightEntry, ...]
     cash_weight_pct: WeightPct
@@ -216,7 +216,7 @@ class CostLiquidityBinding(AllocationContractModel):
 
 
 class AllocationSourceHashes(AllocationContractModel):
-    """Pinned upstream artifact digests for replay and H9 validation."""
+    """Pinned upstream artifact digests for replay and commit validation."""
 
     direction_memo_hash: NonEmptyId
     risk_policy_hash: NonEmptyId
@@ -247,7 +247,7 @@ class AllocationSourceHashes(AllocationContractModel):
 
 
 class AllocationInputBundle(AllocationContractModel):
-    """Canonical validated identity for one H8 sizing pass."""
+    """Canonical validated identity for one sizing pass."""
 
     schema_version: str = "1.0"
     run: AllocationRunContext
@@ -556,7 +556,7 @@ class BindingConstraint(AllocationContractModel):
 
 
 class AlteredTarget(AllocationContractModel):
-    """Requested target changed by a deterministic H8 control."""
+    """Requested target changed by a deterministic sizing control."""
 
     ticker: NonEmptyId
     requested_weight_pct: FiniteFloat
@@ -687,11 +687,11 @@ class ControlOutcomesBlock(AllocationContractModel):
 
 
 class PreTradeRiskReport(AllocationContractModel):
-    """Final-book risk/cost/liquidity explanation for H9 and operators.
+    """Final-book risk/cost/liquidity explanation for commit and operators.
 
     Observational only — constructing or hashing a report never mutates weights.
     Metric computation lives in :mod:`digiquant.portfolio.pretrade_risk`
-    (WP9.2); attachment is WP9.3; H9 persistence is WP9.4. The contract may remain
+    (WP9.2); attachment is WP9.3; commit persistence is WP9.4. The contract may remain
     shadow until those land.
     """
 

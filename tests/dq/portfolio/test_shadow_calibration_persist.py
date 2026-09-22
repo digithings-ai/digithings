@@ -1,4 +1,4 @@
-"""WP5.4 (#2684): attach + persist shadow forecast calibration at H6/H7 boundary."""
+"""WP5.4 (#2684): attach + persist shadow forecast calibration at deliberation/direction boundary."""
 
 from __future__ import annotations
 
@@ -394,7 +394,7 @@ class TestH7BoundaryAttach:
         assert portfolio.pm_direction_memo is not None
         assert portfolio.forecast_calibrations
         assert portfolio.calibrated_forecasts
-        # H7 memo still direction-only — no calibrated economics on the memo.
+        # direction memo still direction-only — no calibrated economics on the memo.
         assert not hasattr(portfolio.pm_direction_memo.roster[0], "expected_gross_return")
         assert "AAPL" in portfolio.calibrated_forecasts
         assert (
@@ -404,9 +404,9 @@ class TestH7BoundaryAttach:
 
 
 class TestH7OutcomeIntegrityFailsLoud:
-    """#4298: a stale persisted digest must fail H7, not empty the cohort.
+    """#4298: a stale persisted digest must fail direction, not empty the cohort.
 
-    The reader raises ``ForecastOutcomeIntegrityError``; the H7 caller used to
+    The reader raises ``ForecastOutcomeIntegrityError``; the direction caller used to
     catch ``Exception`` twice (inner load + outer attach) and return an empty
     cohort, neutralizing the fail-loud contract. These exercise the *caller*,
     not the reader in isolation.

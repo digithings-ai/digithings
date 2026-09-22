@@ -150,8 +150,8 @@ export default function OverviewPage() {
   const pipe = data.pipeline_observability;
   const rebalanceActions = data.portfolio_management?.rebalance_actions ?? [];
 
-  // Per-ticker PM thesis for Brief / actions (#704). Prefer real H7/H8 narrative;
-  // never pass through H8's mechanical sizing fallback (historical docs still
+  // Per-ticker PM thesis for Brief / actions (#704). Prefer real direction/sizing narrative;
+  // never pass through sizing's mechanical fallback (historical docs still
   // carry it until the next pipeline run after #3043).
   const pmActions = (pipe?.pm_rebalance as { actions?: unknown } | null)?.actions;
   const extrasByTicker: Record<string, string> = {};

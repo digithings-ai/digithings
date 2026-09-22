@@ -1,7 +1,7 @@
-"""Phase 7E / H8 — deterministic risk-sizing enforcement (#726, Pillar 2).
+"""Phase 7E / sizing — deterministic risk-sizing enforcement (#726, Pillar 2).
 
-H7 ``PMDirectionMemo`` supplies direction (long|flat), conviction ranks (order only),
-and optional ``confidence`` ∈ [0, 1]. This phase maps those inputs plus H5/H6 analyst
+direction ``PMDirectionMemo`` supplies direction (long|flat), conviction ranks (order only),
+and optional ``confidence`` ∈ [0, 1]. This phase maps those inputs plus analyst/deliberation analyst
 context into deterministic, risk-managed weights via
 :func:`~digiquant.portfolio.sizing.size_portfolio` — the sole weight owner on the
 thesis-first path (ADR-0020).
@@ -12,10 +12,10 @@ forecasts (reliability × max(0, μ) / σ_ε). Rank→conviction and fixed-premi
 not used on that path. Missing bundle falls back to the characterized incumbent path
 (versioned; never an unversioned hybrid). Downstream controls are unchanged.
 
-**WP-H:** each long's sized weight is then scaled by H7 ``confidence`` (cash-first).
+**WP-H:** each long's sized weight is then scaled by direction ``confidence`` (cash-first).
 Missing confidence uses :data:`SIZING_MISSING_CONFIDENCE_DEFAULT` (0.5), never 1.0.
 
-**H8 inside portfolio graph (PR 4c):** output lands in ``phase_portfolio.sized_book``.
+**sizing inside portfolio graph (PR 4c):** output lands in ``phase_portfolio.sized_book``.
 Legacy chain-terminal invocation may still write ``phase7d_rebalance`` when no memo
 is present.
 """
@@ -83,7 +83,7 @@ _CONVICTION_FLOOR, _CONVICTION_CAP = -5.0, 5.0
 
 SIZING_INPUT_MODE_CALIBRATED = "calibrated"
 SIZING_INPUT_MODE_INCUMBENT = "incumbent"
-# Fail-soft when H7 omits ``confidence``: conservative half-size, never treat as 1.0.
+# Fail-soft when direction omits ``confidence``: conservative half-size, never treat as 1.0.
 SIZING_MISSING_CONFIDENCE_DEFAULT = 0.5
 _SIZING_INPUT_MODES = frozenset({SIZING_INPUT_MODE_CALIBRATED, SIZING_INPUT_MODE_INCUMBENT})
 _SIZING_RATIONALE_FALLBACK = "Position weight set by deterministic risk sizing."
@@ -113,7 +113,7 @@ def _clamp_conviction(value: float) -> float:
 
 
 def resolve_sizing_input_mode(preferences: Mapping[str, Any]) -> str:
-    """Versioned H8 raw-input mode. Unknown values fall back to calibrated (Gate 2)."""
+    """Versioned sizing raw-input mode. Unknown values fall back to calibrated (Gate 2)."""
     raw = preferences.get("sizing_input_mode", SIZING_INPUT_MODE_CALIBRATED)
     mode = str(raw).strip().lower() if raw is not None else SIZING_INPUT_MODE_CALIBRATED
     if mode not in _SIZING_INPUT_MODES:
@@ -122,7 +122,7 @@ def resolve_sizing_input_mode(preferences: Mapping[str, Any]) -> str:
 
 
 def pm_confidence_scale(confidence: float | None) -> float:
-    """Map H7 confidence to an H8 size multiplier in [0, 1].
+    """Map direction confidence to an sizing size multiplier in [0, 1].
 
     Missing confidence uses :data:`SIZING_MISSING_CONFIDENCE_DEFAULT` (0.5). Never treat
     an omitted field as full size (1.0).
@@ -133,9 +133,9 @@ def pm_confidence_scale(confidence: float | None) -> float:
 
 
 def confidence_scales_from_memo(memo: PMDirectionMemo) -> dict[str, float] | None:
-    """Per-long H7 confidence multipliers. Flats are omitted (H8 does not size them).
+    """Per-long direction confidence multipliers. Flats are omitted (sizing does not size them).
 
-    When **every** long omits ``confidence`` (pre-WP-G memos), return ``None`` so H8
+    When **every** long omits ``confidence`` (pre-WP-G memos), return ``None`` so sizing
     does not silently haircut the book. When any long has a value, omitted rows use
     :data:`SIZING_MISSING_CONFIDENCE_DEFAULT` (0.5), never 1.0.
     """
@@ -197,7 +197,7 @@ def _memo_long_tickers(memo: PMDirectionMemo) -> list[str]:
 
 
 def _rank_to_conviction(rank: int, n_long: int, *, floor: float) -> float:
-    """Map H7 ordinal rank (1 = best) to a sizing conviction in [-5, 5]."""
+    """Map direction ordinal rank (1 = best) to a sizing conviction in [-5, 5]."""
     if n_long <= 0:
         return floor
     if n_long == 1:
@@ -207,7 +207,7 @@ def _rank_to_conviction(rank: int, n_long: int, *, floor: float) -> float:
 
 
 def _densify_memo_ranks(long_entries: list[TickerDirection]) -> dict[str, int]:
-    """Map H7 long roster to dense ranks 1..N (best first).
+    """Map direction long roster to dense ranks 1..N (best first).
 
     Gapful raw ranks (e.g. ``[2, 7, 11]``) and duplicate ranks tie-break by ticker
     so conviction mapping depends on ordering only, not rank gaps.
@@ -232,7 +232,7 @@ def _memo_effective_inputs(
         convictions[entry.ticker] = _clamp_conviction(
             _rank_to_conviction(dense_ranks[entry.ticker], n_long, floor=floor)
         )
-        # H7 owns eligibility on the memo path; H5 stance must not drop a long.
+        # direction owns eligibility on the memo path; analyst stance must not drop a long.
         stances[entry.ticker] = "buy"
     return convictions, stances
 
@@ -270,7 +270,7 @@ def _cap_unchallenged_convictions(
 ) -> tuple[dict[str, float], list[str]]:
     """Hold every crash-carried name at the entry ``bar``; return the book and those names.
 
-    H6 fails soft: when the deliberation LLM crashes it carries the analyst's own stance
+    deliberation fails soft: when the deliberation LLM crashes it carries the analyst's own stance
     forward, so a position that received **no** PM challenge could still be sized at top
     conviction — 40% of the 2026-07-31 book, including all three new opens. Capping at
     ``SizingCaps.min_conviction`` means an unchallenged name stays in the book but can never
@@ -322,7 +322,7 @@ def _unchallenged_note(unchallenged: list[str]) -> str:
     if not unchallenged:
         return ""
     return (
-        " Held at the conviction bar (H6 deliberation failed, no PM challenge): "
+        " Held at the conviction bar (deliberation failed, no PM challenge): "
         f"{', '.join(unchallenged)}."
     )
 
@@ -419,7 +419,7 @@ def _selection_rationale_by_ticker(
 ) -> dict[str, str]:
     """Per-ticker PM selection thesis for published rebalance actions (#2597).
 
-    Priority: H7 roster narrative → H4 focus-roster rationale → H6 conclusion → H5 thesis.
+    Priority: direction roster narrative → screener focus-roster rationale → deliberation conclusion → analyst thesis.
     """
     out: dict[str, str] = {}
 
@@ -516,7 +516,7 @@ def _rebuild_actions(
                 f"{base} [removed by risk sizing — cap / correlation de-dup / conviction floor]"
             ).strip()
         out.append(row)
-    # Sized tickers the PM had no explicit action row for — the NORM on the H7 memo
+    # Sized tickers the PM had no explicit action row for — the NORM on the direction memo
     # path (original_actions is empty there), so every booked day misreported held
     # rebalances as "new" (#1676). Classify against the live drifted weight instead:
     # add / trim / hold for existing positions, "new" only for genuinely new names.
@@ -542,19 +542,19 @@ def _rebuild_actions(
 def _held_carry_weights(state: ResearchState) -> dict[str, float]:
     """Prior (drifted) weights for deliberately carried held names (#1030, #1555, #1649).
 
-    Two classes of held name must be carried at their current drifted weight or H9
+    Two classes of held name must be carried at their current drifted weight or commit
     fails closed with "held ticker missing from book and not flat" — the fail-closed
     that silently froze **every** delta-day commit from 2026-06-26 (#1555) and again
     on 2026-07-21/22 (#1649):
 
     - screener-gated: the staleness gate moved a quiet held name into
-      ``focus_roster_excluded`` (no fresh analyst, absent from the H7 PM memo).
-    - Memo-unaddressed (#1649): the H7 PM memo's roster omitted a held name
+      ``focus_roster_excluded`` (no fresh analyst, absent from the direction PM memo).
+    - Memo-unaddressed (#1649): the direction PM memo's roster omitted a held name
       entirely (neither ``long`` nor ``flat``) — memo coverage is LLM discipline,
       and an owned position with no explicit instruction defaults to "hold".
 
     Scoped to :func:`~digiquant.portfolio.writers.commit_io.carried_held_tickers`
-    — reusing the exact set H9's coherence check exempts so the carry set and the
+    — reusing the exact set commit's coherence check exempts so the carry set and the
     exemption set can never diverge into a new silent mismatch. A PM-exited name
     (addressed in the roster, marked ``flat``) is memo-addressed, so it is never
     resurrected here.
@@ -601,13 +601,13 @@ def _apply_held_continuity_backstop(
 
     The per-cause carries (#1030 gated, #1649 memo-unaddressed) cover known cracks,
     but the 2026-07-22 22:54 run proved unknown ones exist: NINE held names reached
-    H9 with weight<=0 despite the memo-unaddressed carry being live (suspected:
+    commit with weight<=0 despite the memo-unaddressed carry being live (suspected:
     PM-longed names dropped by sizing caps — memo-addressed, so exempt from the
     carry). This backstop enforces the invariant on the FINAL sized dict regardless
     of cause: any held, non-flat ticker at weight<=0 is re-added at its drifted
     weight, with a WARNING naming the cause bucket (memo-addressed ⇒ sized-out;
     else carry-miss) so diagnostics show exactly which crack fired. A held name
-    with NO recoverable weight stays out and H9 still fails closed — that case
+    with NO recoverable weight stays out and commit still fails closed — that case
     genuinely needs eyes.
     """
     from digiquant.portfolio.writers.commit_io import (
@@ -623,7 +623,7 @@ def _apply_held_continuity_backstop(
         if out.get(ticker, 0.0) > 0:
             continue
         if ticker in flats:
-            # H7 explicitly said "flat" for this held name — never resurrect it. Distinct
+            # direction explicitly said "flat" for this held name — never resurrect it. Distinct
             # from the carry-miss/pm-addressed-sized-out branch below (#2417 FLAT_EXIT vs
             # CONTINUITY_CARRY): the two are structurally mutually exclusive because
             # ``memo_addressed_tickers`` already includes flat-tagged tickers, so a flat
@@ -644,7 +644,7 @@ def _apply_held_continuity_backstop(
         if weight is None:
             logger.warning(
                 "held-continuity backstop: %s has weight<=0 (%s) and NO recoverable "
-                "drifted weight — H9 will fail closed",
+                "drifted weight — commit will fail closed",
                 ticker,
                 cause,
             )
@@ -735,14 +735,14 @@ def _validate_sizing_lineage(
     ``size_portfolio``. Never raises past this point and never mutates ``sized_book``:
     a lineage failure is logged, not converted into a dropped rebalance.
 
-    ``targets_are_weights`` must be ``False`` for the memo path (H7 direction-only —
-    no PM weights, per the H7/H8 split), where ``pm_targets`` is a membership flag
+    ``targets_are_weights`` must be ``False`` for the memo path (direction-only —
+    no PM weights, per the direction/sizing split), where ``pm_targets`` is a membership flag
     (every long-roster ticker = 1.0), not a real requested weight. Comparing that
     flag against a real approved percentage is meaningless — it flagged nearly every
     sized position as an "unexplained delta" and logged an ERROR with a stack trace
     on most production runs (#2417 CodeRabbit review on #2434), since the live
     production path *is* the memo path. This layer no-ops there until a follow-up
-    gives the memo path a real pre-H8 target representation (see #2417 design spec
+    gives the memo path a real pre-sizing target representation (see #2417 design spec
     §6 "Open items to confirm"). It is exact for the legacy ``phase7d_rebalance``
     path (default ``True``), where ``pm_targets`` already holds real target_pct
     weights (``_pm_direction_legacy``).
@@ -764,7 +764,7 @@ def _validate_sizing_lineage(
             materiality_pct=_lineage_materiality_pct(preferences),
         )
     except LineageValidationError:
-        logger.error("H8 lineage validation failed", exc_info=True)
+        logger.error("sizing lineage validation failed", exc_info=True)
 
 
 def _build_sized_book(
@@ -822,8 +822,8 @@ def _build_sized_book(
         pm_tickers=pm_tickers,
         corr=corr_frame,
     )
-    # WP8.3 (#2730) / WP8.4 (#2734): assemble canonical AllocationInputBundle at H8 entry.
-    # Covariance for the bundle must match the full H7 roster (long+flat), which may
+    # WP8.3 (#2730) / WP8.4 (#2734): assemble canonical AllocationInputBundle at sizing entry.
+    # Covariance for the bundle must match the full direction roster (long+flat), which may
     # differ from the longs-only ``pm_tickers`` snapshot used for incumbent sizing audit.
     allocation_bundle = None
     if memo is not None and risk_artifacts is not None:
@@ -853,7 +853,7 @@ def _build_sized_book(
                     corr=corr_frame,
                 ).covariance_snapshot
 
-            # Derive the common horizon from H6 deliberation (DEFAULT fills gaps only).
+            # Derive the common horizon from deliberation (DEFAULT fills gaps only).
             # Hardcoding expected=21 rejected coherent non-21 books into silent
             # incumbent_fallback (#2814 / WP8 review finding).
             allocation_bundle = assemble_allocation_input_bundle_from_state(
@@ -898,7 +898,7 @@ def _build_sized_book(
         analysts = analyst_payloads(state)
         debates = deliberation_summaries(state)
         if calibrated_scores is not None:
-            # H7 owns eligibility; H5 stance must not drop a long. Magnitude from bundle.
+            # direction owns eligibility; analyst stance must not drop a long. Magnitude from bundle.
             stances = {ticker: "buy" for ticker in pm_tickers}
             # Corr-dedup priority uses calibrated scores; unused tickers stay at 0.
             convictions = {
@@ -922,7 +922,7 @@ def _build_sized_book(
             )
         if unchallenged:
             logger.warning(
-                "phase7e: %d position(s) held at the conviction bar — H6 deliberation "
+                "phase7e: %d position(s) held at the conviction bar — deliberation "
                 "crashed, so no PM challenge ran (%s)",
                 len(unchallenged),
                 ", ".join(unchallenged),
@@ -1008,9 +1008,9 @@ def _build_sized_book(
             preferences=dict(state.config.preferences),
         ),
         "notes": (f"{prior_notes}\n\n" if prior_notes else "")
-        + f"Risk-sizing (H8): {result.explanation}{breaker_note}"
+        + f"Risk-sizing (sizing): {result.explanation}{breaker_note}"
         f"{_unchallenged_note(unchallenged)}{mode_note}{bundle_note}",
-        # #2417 / #2768: reason-coded H8 adjustments — persisted by H9 as
+        # #2417 / #2768: reason-coded sizing adjustments — persisted by commit as
         # TargetAdjustment rows when unit is ``pct``. ``requested_pct`` is the
         # pre-cap map so ledger requested_weight can differ from approved.
         "adjustments": [event.model_dump() for event in events],
@@ -1047,8 +1047,8 @@ _BINDING_CONSTRAINT_TYPES = frozenset(
 def _final_book_weights(sized_book: RebalancePayload) -> tuple[dict[str, float], float]:
     """Extract final risky weights + cash from the post-control sized book.
 
-    Uses the same extractor as H9 (`weights_from_sized_book`) so the report
-    fingerprint equals the book H9 will validate and commit (#2824 / WP9 review).
+    Uses the same extractor as commit (`weights_from_sized_book`) so the report
+    fingerprint equals the book commit will validate and commit (#2824 / WP9 review).
     """
     # Lazy import: commit_io pulls research/portfolio writers; avoid module-cycle at import.
     from digiquant.portfolio.writers.commit_io import weights_from_sized_book
@@ -1088,7 +1088,7 @@ def _prior_book_weights_for_report(
 def _controls_from_adjustments(
     sized_book: RebalancePayload,
 ) -> tuple[tuple[BindingConstraint, ...], tuple[AlteredTarget, ...], tuple[RejectedTarget, ...]]:
-    """Map H8 explanation events onto WP9.1 control blocks (observational only).
+    """Map sizing explanation events onto WP9.1 control blocks (observational only).
 
     Multiple adjustments can land on one ticker (carry then final-cap, etc.). The
     contract requires unique tickers in altered/rejected lists, so we collapse to
@@ -1168,7 +1168,7 @@ def _forecast_quality_from_bundle(
 
 
 def _cost_scalars_from_state(state: ResearchState) -> CostLiquidityScalars | None:
-    """Observational WP7 estimates already on state (typically empty until H9)."""
+    """Observational WP7 estimates already on state (typically empty until commit)."""
     estimates = state.phase_portfolio.action_cost_estimates or {}
     if not estimates:
         return None
@@ -1231,7 +1231,7 @@ def build_pretrade_risk_report_for_final_book(
 
     Read-only observation — never mutates ``sized_book`` weights. Returns ``None``
     when required identity inputs are missing or the builder fails (typed report
-    failure blocks only report promotion before H9 enforcement).
+    failure blocks only report promotion before commit enforcement).
     """
     if allocation_bundle is None and not sized_book.get("allocation_input_bundle_hash"):
         return None
@@ -1297,7 +1297,7 @@ def build_pretrade_risk_report_for_final_book(
 
 
 def build_risk_sizing_node(deps: RiskSizingDeps):
-    """Return the Phase 7E / H8 enforcement node bound to ``deps``."""
+    """Return the Phase 7E / sizing enforcement node bound to ``deps``."""
 
     def risk_sizing(state: ResearchState) -> dict[str, Any]:
         memo_raw = state.phase_portfolio.pm_direction_memo
@@ -1397,7 +1397,7 @@ def build_risk_sizing_node(deps: RiskSizingDeps):
 
 
 def build_risk_sizing_phase(deps: RiskSizingDeps) -> PipelinePhase:
-    """Wrap the enforcement node into a single-node ``PipelinePhase`` (H8)."""
+    """Wrap the enforcement node into a single-node ``PipelinePhase`` (sizing)."""
     # Lazy: digigraph.graph pulls the LLM stack (openai); lean envs lack it.
     from digigraph.graph.pipeline_builder import NodeSpec, PipelinePhase
 

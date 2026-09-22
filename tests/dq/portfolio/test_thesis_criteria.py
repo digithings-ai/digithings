@@ -1,4 +1,4 @@
-"""Thesis invalidation criteria — H1 must mark CHALLENGED on hit (spec §16)."""
+"""Thesis invalidation criteria — thesis must mark CHALLENGED on hit (spec §16)."""
 
 from __future__ import annotations
 

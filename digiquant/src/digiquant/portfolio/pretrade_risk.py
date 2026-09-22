@@ -2,7 +2,7 @@
 
 Pure functions only — consume exact WP6 covariance, WP7 cost/liquidity scalars,
 and a final book. Never re-estimate covariance/cost, never mutate weights, never
-fabricate unsupported factor/scenario values. H8 attachment is WP9.3; H9
+fabricate unsupported factor/scenario values. sizing attachment is WP9.3; commit
 persistence is WP9.4.
 """
 

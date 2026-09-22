@@ -1,4 +1,4 @@
-"""H7 fail-soft (#1665): an LLM-output failure carries the prior memo, never raises.
+"""direction fail-soft (#1665): an LLM-output failure carries the prior memo, never raises.
 
 WP4.5 (#2660): fail-soft must re-bind ForecastReference from *current* deliberation
 IDs — a carried prior memo cannot retain stale forecast authority.

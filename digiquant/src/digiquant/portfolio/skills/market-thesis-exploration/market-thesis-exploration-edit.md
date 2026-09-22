@@ -15,7 +15,7 @@ Compare every retained or proposed market opinion with `active_theses` before pa
 	omit `existing_thesis_id`, and use a new lowercase kebab-case `topic_key`.
 - Different wording, evidence, confidence, catalyst details, or sector examples are updates,
 	not new opinions.
-- A `PAUSED` topic remains the same opinion. Never create a replacement; omit it unless H1
+- A `PAUSED` topic remains the same opinion. Never create a replacement; omit it unless thesis
 	explicitly reactivated it based on new evidence.
 - Consolidate legacy same-topic entries into one canonical thesis. Emit at most one proposal
 	per `topic_key`.

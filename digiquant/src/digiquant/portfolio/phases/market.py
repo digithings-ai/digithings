@@ -1,4 +1,4 @@
-"""H2 — market thesis exploration (propose/revise market theses)."""
+"""market — market thesis exploration (propose/revise market theses)."""
 
 from __future__ import annotations
 
@@ -32,7 +32,7 @@ DOC_TYPE = "market_thesis_exploration"
 
 
 def _reviewed_status_by_id(state: PortfolioState) -> dict[str, str]:
-    """H1's same-run status wins when H2 refreshes an existing thesis body."""
+    """thesis's same-run status wins when market refreshes an existing thesis body."""
     statuses = {
         str(row.get("thesis_id")): str(row.get("status") or "ACTIVE")
         for row in state.prior_context.active_theses
@@ -77,7 +77,7 @@ def _run_market_llm(state: PortfolioState) -> MarketThesisExplorationOutput:
     if exploration is None:
         return MarketThesisExplorationOutput()
     if errors:
-        logger.warning("H2 market exploration completed with %d recoverable errors", len(errors))
+        logger.warning("market exploration completed with %d recoverable errors", len(errors))
     return exploration
 
 
@@ -90,7 +90,7 @@ def _market_node_factory(client: SupabaseClient | None):
         )
         if validation_errors:
             logger.warning(
-                "H2 rejected %d market-thesis proposal(s): %s",
+                "market rejected %d market-thesis proposal(s): %s",
                 len(validation_errors),
                 "; ".join(validation_errors),
             )

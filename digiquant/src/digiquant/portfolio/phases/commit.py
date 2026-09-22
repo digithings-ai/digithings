@@ -1,4 +1,4 @@
-"""H9 — terminal ``commit_run`` (positions, brief, decision_log; #932)."""
+"""commit — terminal ``commit_run`` (positions, brief, decision_log; #932)."""
 
 from __future__ import annotations
 
@@ -53,7 +53,7 @@ PHASE_NAME = "portfolio_commit"
 
 @dataclass(frozen=True)
 class CommitRunDeps:
-    """Wiring for the H9 terminal commit node."""
+    """Wiring for the commit terminal commit node."""
 
     client: SupabaseClient
 
@@ -74,7 +74,7 @@ def _phase_error(message: str) -> dict[str, Any]:
 def _persist_risk_policy_registry(
     *, client: SupabaseClient, state: PortfolioState
 ) -> dict[str, Any]:
-    """Fail-soft H8 risk snapshot registry (#2698). Never raises into booking."""
+    """Fail-soft sizing risk snapshot registry (#2698). Never raises into booking."""
     try:
         result = persist_sizing_risk_snapshots_from_state(client=client, state=state)
     except Exception as exc:
@@ -258,7 +258,7 @@ def _manifest_payload(
     status/counts only — never forecast math or prompt bodies. WP5.4 extends the
     same block with shadow calibration write counts (#2684).
 
-    ``schema_version`` 1.4 adds optional H8 risk-policy snapshot registry fields
+    ``schema_version`` 1.4 adds optional sizing risk-policy snapshot registry fields
     (#2698 / WP6.3): status/counts only — never matrix math or sizing inputs.
 
     ``schema_version`` 1.5 adds optional cost/liquidity registry fields (#2709 / WP7.3):
@@ -294,14 +294,14 @@ def _manifest_payload(
 
 
 def build_commit_run_node(deps: CommitRunDeps):
-    """Return the H9 commit node bound to ``deps``."""
+    """Return the commit node bound to ``deps``."""
 
     def commit_run(state: PortfolioState) -> dict[str, Any]:
         book = sized_book(state)
         if book is None:
             if state.phase_portfolio.pm_direction_memo is not None:
                 return _phase_error(
-                    "sized_book missing but H7 pm_direction_memo present — H8 risk sizing required"
+                    "sized_book missing but direction pm_direction_memo present — sizing risk sizing required"
                 )
             return {}
 
@@ -318,7 +318,7 @@ def build_commit_run_node(deps: CommitRunDeps):
         latest, commit_seq = resolve_prior_commit(priors)
 
         # WP9.4: validate report identity before booking. Enforce rejects incomplete
-        # commits; shadow records status without blocking. H9 never builds the report.
+        # commits; shadow records status without blocking. commit never builds the report.
         pretrade_validation = validate_pretrade_risk_report(state, weights)
         if not pretrade_validation.ok and pretrade_validation.mode is PreTradeRiskMode.ENFORCE:
             return _phase_error(
@@ -478,7 +478,7 @@ def build_commit_run_node(deps: CommitRunDeps):
 
 
 def build_commit(deps: CommitRunDeps | None = None) -> PipelinePhase:
-    """Wrap H9 into a single-node ``PipelinePhase``."""
+    """Wrap commit into a single-node ``PipelinePhase``."""
 
     def _noop(_state: PortfolioState) -> dict[str, Any]:
         return {}

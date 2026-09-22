@@ -423,7 +423,7 @@ export interface PipelineObservabilityBundle {
   risk_debate: Record<string, unknown> | null;
   /** portfolio `pm-rebalance` decision doc (actions carry per-ticker rationale), or null. */
   pm_rebalance: Record<string, unknown> | null;
-  /** portfolio H7 `pm-direction-memo` (roster[].narrative = PM thesis), or null. */
+  /** portfolio direction `pm-direction-memo` (roster[].narrative = PM thesis), or null. */
   pm_direction_memo: Record<string, unknown> | null;
 }
 
@@ -492,7 +492,7 @@ export interface PerformanceMetrics {
 // ---------------------------------------------------------------------------
 
 /**
- * The H5 unified analyst output (`documents.payload` where
+ * The analyst unified analyst output (`documents.payload` where
  * `document_key = 'analyst/{TICKER}'`), mirrored from the backend Pydantic model
  * `digiquant/.../portfolio/models/analyst.py:AnalystPayload`. `conviction_score` is
  * SIGNED (ge=-5 le=5) — render with `SignedConvictionBadge`, never clamp or feed

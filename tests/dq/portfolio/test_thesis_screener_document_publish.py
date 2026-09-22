@@ -1,4 +1,4 @@
-"""WP-B: H1 thesis-review and H4 screener publish inspectable documents."""
+"""WP-B: thesis-review and screener publish inspectable documents."""
 
 from __future__ import annotations
 
@@ -67,7 +67,7 @@ class TestH1PublishesThesisReviewDocument:
         assert reviewed[0]["thesis_id"] == "geo-gold"
 
     def test_thesis_receives_stitched_markdown_briefing(self) -> None:
-        """WP-E: H1 consumes date/body/regime_label, not JSON findings."""
+        """WP-E: thesis consumes date/body/regime_label, not JSON findings."""
         state = ResearchState(
             run_type="delta",
             run_date=date(2026, 8, 31),
@@ -79,7 +79,7 @@ class TestH1PublishesThesisReviewDocument:
             "body": "# Daily Digest — 2026-08-31\n\n## Market regime\n\nSlowing / cooling.\n",
             "regime_label": "Slowing / Cooling",
             "bias": "bearish",
-            "headline": "should not reach H1",
+            "headline": "should not reach thesis",
             "material_findings": [{"label": "Curve", "summary": "2s10s re-steepened."}],
         }
         captured: dict[str, object] = {}

@@ -1,4 +1,4 @@
-"""H2 market-thesis identity and duplicate-prevention contract."""
+"""market-thesis identity and duplicate-prevention contract."""
 
 from __future__ import annotations
 

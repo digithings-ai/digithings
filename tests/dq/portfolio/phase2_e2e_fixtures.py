@@ -1,7 +1,7 @@
 """Deterministic helpers for Integration Task 2.1 Phase 2 lock tests (#2820).
 
 Composes WP8 allocation bundle → WP9 PreTradeRiskReport → WP10 shadow artifact /
-challenger / paired comparison without wiring challenger into production H8/H9.
+challenger / paired comparison without wiring challenger into production sizing/commit.
 """
 
 from __future__ import annotations

@@ -1,4 +1,4 @@
-"""Held-ticker cap invariant tests (#936) — H4/H5/H6 roster cap."""
+"""Held-ticker cap invariant tests (#936) — screener/analyst/deliberation roster cap."""
 
 from __future__ import annotations
 

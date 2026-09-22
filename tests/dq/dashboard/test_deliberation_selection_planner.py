@@ -1,4 +1,4 @@
-"""WP11.3 — deterministic H6 selection from decision-value features (#2902)."""
+"""WP11.3 — deterministic deliberation selection from decision-value features (#2902)."""
 
 from __future__ import annotations
 

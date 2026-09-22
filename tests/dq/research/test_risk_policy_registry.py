@@ -1,4 +1,4 @@
-"""Writer/reader tests for the H8 risk policy snapshot registry (#2698 / WP6.3)."""
+"""Writer/reader tests for the sizing risk policy snapshot registry (#2698 / WP6.3)."""
 
 from __future__ import annotations
 

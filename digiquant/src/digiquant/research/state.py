@@ -264,7 +264,7 @@ class PriorContext(BaseModel):
         description=(
             "Slim prior ``deliberation/{ticker}`` summaries for held names — date, "
             "document_key, net_stance, conviction_delta, converged, conclusion_excerpt. "
-            "The full transcript stays in Supabase (excluded from ``latest_segments``); H6 "
+            "The full transcript stays in Supabase (excluded from ``latest_segments``); deliberation "
             "injects this slim carry into the PM↔analyst loop's ``prior_deliberation`` "
             "phase_input (#925)."
         ),
@@ -370,13 +370,13 @@ class RebalancePayload(TypedDict, total=False):
     recommended_portfolio: list[TargetWeightRow]
     actions: list[RebalanceActionRow]
     notes: str
-    # Reason-coded H8 sizing adjustments (#2417) — mirrored into durable
-    # ``TargetAdjustment`` rows by H9 (#2768) when ``unit`` is ``pct``. Each row
+    # Reason-coded sizing adjustments (#2417) — mirrored into durable
+    # ``TargetAdjustment`` rows by commit (#2768) when ``unit`` is ``pct``. Each row
     # mirrors ``SizingAdjustment.model_dump()``. Absent/empty is valid (fully flat
     # book, or sizing failed soft before any adjustment ran).
     adjustments: list[dict[str, Any]]
-    # Pre-cap request weights in percent (#2768) — H8's ``SizingResult.requested_pct``.
-    # H9 writes these onto ``portfolio_ledger_requested_targets.requested_weight``
+    # Pre-cap request weights in percent (#2768) — sizing's ``SizingResult.requested_pct``.
+    # commit writes these onto ``portfolio_ledger_requested_targets.requested_weight``
     # when they differ from the approved book.
     requested_pct: dict[str, float]
     # WP8.4 (#2734): versioned raw-input mode and source bundle identity on every book.
@@ -467,7 +467,7 @@ class PhaseError(BaseModel):
 
 
 class FocusRosterEntry(BaseModel):
-    """One ticker on the portfolio H4 focus roster."""
+    """One ticker on the portfolio screener focus roster."""
 
     ticker: str
     roster_reason: Literal[
@@ -491,7 +491,7 @@ class ExcludedTicker(BaseModel):
 
 
 class PhasePortfolioState(BaseModel):
-    """Thesis-first portfolio slots (H1–H9)."""
+    """Thesis-first portfolio slots (thesis–commit)."""
 
     thesis_review: dict[str, Any] | None = None
     market_thesis_exploration: dict[str, Any] | None = None
@@ -501,50 +501,50 @@ class PhasePortfolioState(BaseModel):
     asset_analysts: Annotated[dict[str, dict[str, Any]], _merge_right_wins_dict] = Field(
         default_factory=dict
     )
-    # WP11.2: ticker → TickerEvidenceBundle dump (H5 base; published before provider).
+    # WP11.2: ticker → TickerEvidenceBundle dump (analyst base; published before provider).
     ticker_evidence_bundles: Annotated[dict[str, dict[str, Any]], _merge_right_wins_dict] = Field(
         default_factory=dict,
-        description="ticker → TickerEvidenceBundle dump (H5 base; WP11.2)",
+        description="ticker → TickerEvidenceBundle dump (analyst base; WP11.2)",
     )
     deliberation_summaries: Annotated[dict[str, dict[str, Any]], _merge_right_wins_dict] = Field(
         default_factory=dict
     )
-    # WP5.4 shadow calibration (observational; never feeds H8).
+    # WP5.4 shadow calibration (observational; never feeds sizing).
     forecast_calibrations: Annotated[dict[str, dict[str, Any]], _merge_right_wins_dict] = Field(
         default_factory=dict,
-        description="calibration_id → ForecastCalibration dump (H6→H7 attach)",
+        description="calibration_id → ForecastCalibration dump (deliberation→direction attach)",
     )
     calibrated_forecasts: Annotated[dict[str, dict[str, Any]], _merge_right_wins_dict] = Field(
         default_factory=dict,
-        description="ticker → CalibratedForecast dump (H6→H7 attach)",
+        description="ticker → CalibratedForecast dump (deliberation→direction attach)",
     )
-    # WP6.3 H8 risk audit snapshots (observational; never feeds size_portfolio in Phase 1).
+    # WP6.3 sizing risk audit snapshots (observational; never feeds size_portfolio in Phase 1).
     risk_policy: dict[str, Any] | None = Field(
         default=None,
-        description="Resolved RiskPolicy dump (H8 attach)",
+        description="Resolved RiskPolicy dump (sizing attach)",
     )
     covariance_snapshot: dict[str, Any] | None = Field(
         default=None,
-        description="Resolved CovarianceSnapshot dump (H8 attach)",
+        description="Resolved CovarianceSnapshot dump (sizing attach)",
     )
-    # WP8.3/8.4 canonical H8 allocation input bundle (feeds calibrated raw weights when usable).
+    # WP8.3/8.4 canonical sizing allocation input bundle (feeds calibrated raw weights when usable).
     allocation_input_bundle: dict[str, Any] | None = Field(
         default=None,
-        description="Validated AllocationInputBundle dump at H8 entry (WP8.3/8.4)",
+        description="Validated AllocationInputBundle dump at sizing entry (WP8.3/8.4)",
     )
-    # WP9.3 observational PreTradeRiskReport (built after final H8 controls; H9 persist in WP9.4).
+    # WP9.3 observational PreTradeRiskReport (built after final sizing controls; commit persist in WP9.4).
     pre_trade_risk_report: dict[str, Any] | None = Field(
         default=None,
-        description="Validated PreTradeRiskReport dump after final H8 book (WP9.3)",
+        description="Validated PreTradeRiskReport dump after final sizing book (WP9.3)",
     )
     # WP7.3 observational cost/liquidity evidence (never feeds turnover in Phase 1).
     liquidity_snapshots: Annotated[dict[str, dict[str, Any]], _merge_right_wins_dict] = Field(
         default_factory=dict,
-        description="snapshot_id → LiquiditySnapshot dump (H9 attach)",
+        description="snapshot_id → LiquiditySnapshot dump (commit attach)",
     )
     action_cost_estimates: Annotated[dict[str, dict[str, Any]], _merge_right_wins_dict] = Field(
         default_factory=dict,
-        description="order_intent_id → ActionCostEstimate dump (H9 attach)",
+        description="order_intent_id → ActionCostEstimate dump (commit attach)",
     )
     pm_direction_memo: Any | None = (
         None  # PMDirectionMemo JSON; typed in portfolio.models.pm_direction
@@ -557,7 +557,7 @@ def _merge_phase_portfolio(
     left: PhasePortfolioState | None,
     right: PhasePortfolioState | None,
 ) -> PhasePortfolioState:
-    """Reducer for parallel H5/H6 writes into nested ``phase_portfolio`` slots."""
+    """Reducer for parallel analyst/deliberation writes into nested ``phase_portfolio`` slots."""
     if not left:
         return right or PhasePortfolioState()
     if not right:
@@ -678,12 +678,12 @@ class ResearchState(BaseModel):
         default=None,
         description="Detail when research_state_status is state_unavailable.",
     )
-    # WP14.3 (#2946): versioned WP3/WP5/WP9 refs for H7 decision context compile.
+    # WP14.3 (#2946): versioned WP3/WP5/WP9 refs for direction decision context compile.
     direction_prerequisite_snapshot: dict[str, Any] | None = Field(
         default=None,
         description=(
             "DirectionPrerequisiteSnapshot dump from preflight — accounting, forecast "
-            "outcomes, and pin linkage for H7 context compiler."
+            "outcomes, and pin linkage for direction context compiler."
         ),
     )
     # WP15.6 (#2975): exact structured lesson pin selected at preflight.
@@ -691,7 +691,7 @@ class ResearchState(BaseModel):
         default=None,
         description=(
             "OutcomeLessonPin dump after preflight maturation/compile. Authoritative "
-            "structured lesson for WP14 H5/H7 context — not decision_log prose."
+            "structured lesson for WP14 analyst/direction context — not decision_log prose."
         ),
     )
     outcome_lesson_status: str | None = Field(
@@ -749,7 +749,7 @@ class ResearchState(BaseModel):
         default_factory=PhasePortfolioState
     )
 
-    # Transient per-Send fan-out cursor: a ``FanOutPhase`` dispatch (the H5/H6 per-ticker map)
+    # Transient per-Send fan-out cursor: a ``FanOutPhase`` dispatch (the analyst/deliberation per-ticker map)
     # sets this on the state copy it hands each parallel worker, so the worker knows which
     # ticker it owns. Workers never write it back, so the merged graph state keeps it None.
     portfolio_fanout_ticker: str | None = None
@@ -766,7 +766,7 @@ class ResearchState(BaseModel):
     # WP13.3 (#2926): deterministic research attention plan built at triage end.
     # Stored as JSON-compatible dump; validate via research_attention helpers.
     research_attention_plan: dict[str, Any] | None = None
-    # WP13.4 (#2930): post-H4 portfolio ticker attention plan — roster is already fixed.
+    # WP13.4 (#2930): post-screener portfolio ticker attention plan — roster is already fixed.
     portfolio_research_attention_plan: dict[str, Any] | None = None
     # Per-ticker fractional pct_change between the two most-recent trading
     # days strictly before run_date. Populated by the triage phase on delta

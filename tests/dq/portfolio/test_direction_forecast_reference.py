@@ -1,4 +1,4 @@
-"""WP4.5 (#2660): H7 binds ForecastReference from the current effective forecast map."""
+"""WP4.5 (#2660): direction binds ForecastReference from the current effective forecast map."""
 
 from __future__ import annotations
 

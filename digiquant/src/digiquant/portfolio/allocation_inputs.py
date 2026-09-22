@@ -1,7 +1,7 @@
-"""Assemble the canonical H8 ``AllocationInputBundle`` (#2730 / WP8.3).
+"""Assemble the canonical sizing ``AllocationInputBundle`` (#2730 / WP8.3).
 
-Validate and join H7 mandate plus exact Phase 1 forecast / policy / covariance /
-cost artifacts and prior weights at H8 entry. WP8.4 feeds the validated bundle into
+Validate and join direction mandate plus exact Phase 1 forecast / policy / covariance /
+cost artifacts and prior weights at sizing entry. WP8.4 feeds the validated bundle into
 incumbent ``size_portfolio`` raw weights when ``sizing_input_mode=calibrated``.
 """
 
@@ -41,13 +41,13 @@ from digiquant.portfolio.models.pm_direction import PMDirectionMemo, TickerDirec
 from digiquant.portfolio.models.risk_policy import CovarianceSnapshot, RiskPolicy
 
 _CASH = "CASH"
-# Common portfolio forecast horizon (trading sessions). Used as shadow fill when H6
-# did not attach an effective forecast for every H7 roster ticker.
+# Common portfolio forecast horizon (trading sessions). Used as shadow fill when deliberation
+# did not attach an effective forecast for every direction roster ticker.
 DEFAULT_FORECAST_HORIZON_SESSIONS = 21
 
 
 class AllocationInputAssemblyError(ValueError):
-    """Raised when H8 cannot form one coherent allocation input identity."""
+    """Raised when sizing cannot form one coherent allocation input identity."""
 
 
 def _is_cash(ticker: str) -> bool:
@@ -57,7 +57,7 @@ def _is_cash(ticker: str) -> bool:
 def _canonical_asset_order(memo: PMDirectionMemo) -> tuple[str, ...]:
     tickers = [entry.ticker for entry in memo.roster if not _is_cash(entry.ticker)]
     if len(tickers) != len(set(tickers)):
-        raise AllocationInputAssemblyError("H7 roster tickers must be unique")
+        raise AllocationInputAssemblyError("direction roster tickers must be unique")
     return tuple(sorted(tickers))
 
 
@@ -243,16 +243,16 @@ def assemble_allocation_input_bundle(
     profile_config_version_id: UUID | None = None,
     analyst_stances: Mapping[str, Any] | None = None,
 ) -> AllocationInputBundle:
-    """Join H7 + Phase 1 artifacts into one validated ``AllocationInputBundle``.
+    """Join direction + Phase 1 artifacts into one validated ``AllocationInputBundle``.
 
-    ``analyst_stances`` is accepted so callers can pass H5 context without effect —
+    ``analyst_stances`` is accepted so callers can pass analyst context without effect —
     authorization and direction come only from ``memo``.
     """
-    del analyst_stances  # H5 must not authorize; kept for explicit no-op API.
+    del analyst_stances  # analyst must not authorize; kept for explicit no-op API.
     cutoff = require_utc_datetime(cutoff_at, field_name="cutoff_at")
     order = _canonical_asset_order(memo)
     if not order:
-        raise AllocationInputAssemblyError("H7 roster has no non-CASH tickers")
+        raise AllocationInputAssemblyError("direction roster has no non-CASH tickers")
 
     horizon = _resolve_horizon(
         order=order,
@@ -401,7 +401,7 @@ def assemble_allocation_input_bundle_from_state(
     covariance: CovarianceSnapshot | None = None,
     expected_horizon_sessions: int | None = None,
 ) -> AllocationInputBundle | None:
-    """Shadow assembler for H8 entry — returns ``None`` when inputs are incomplete.
+    """Shadow assembler for sizing entry — returns ``None`` when inputs are incomplete.
 
     Never raises into the sizing path: incomplete memo / missing policy → ``None``.
     """

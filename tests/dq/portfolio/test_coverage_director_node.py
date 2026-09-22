@@ -1,4 +1,4 @@
-"""H4.5 coverage director — PM-directed analyst coverage (#3739)."""
+"""screener.5 coverage director — PM-directed analyst coverage (#3739)."""
 
 from __future__ import annotations
 
@@ -77,7 +77,7 @@ def _run_node(state: ResearchState, directive_or_exc: Any) -> dict[str, Any]:
 
 class TestCoverageDirectorNode:
     def test_director_rewrites_roster_with_director_reasons(self) -> None:
-        """Director refresh/explore become the H5 roster; skipped names leave with reasons."""
+        """Director refresh/explore become the analyst roster; skipped names leave with reasons."""
         state = _state()
         state.phase_portfolio = state.phase_portfolio.model_copy(
             update={
@@ -106,11 +106,11 @@ class TestCoverageDirectorNode:
 
         excluded = {e.ticker: e.reason for e in result["phase_portfolio"].focus_roster_excluded}
         assert excluded["SPY"] == "quiet; last analysis stands"
-        assert "TLT" in excluded  # H4-rostered but director-omitted
+        assert "TLT" in excluded  # screener-rostered but director-omitted
         assert result.get("errors", []) == []
 
     def test_director_llm_failure_falls_back_to_screener_roster(self) -> None:
-        """An LLM failure keeps H4's roster and records a non-retryable PhaseError."""
+        """An LLM failure keeps screener's roster and records a non-retryable PhaseError."""
         state = _state()
         before = [(e.ticker, e.roster_reason) for e in state.phase_portfolio.focus_roster]
         result, _mocked = _run_node(state, RuntimeError("provider down"))

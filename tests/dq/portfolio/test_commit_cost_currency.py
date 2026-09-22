@@ -98,7 +98,7 @@ class TestCostEvidenceReadsVolFromTechnicals:
     """hist_vol_21/atr_pct live in price_technicals, not price_history (#3299).
 
     Selecting them from price_history raised Postgres 42703 and blanked cost
-    evidence; H9 now reads OHLCV from history and joins the latest technicals row.
+    evidence; commit now reads OHLCV from history and joins the latest technicals row.
     """
 
     def _client(self) -> FakeSupabaseClient:

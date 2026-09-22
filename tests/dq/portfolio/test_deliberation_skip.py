@@ -1,4 +1,4 @@
-"""H6 deliberation skip tests (dashboard #930 PR 4b + WP11.3 #2902)."""
+"""deliberation skip tests (dashboard #930 PR 4b + WP11.3 #2902)."""
 
 from __future__ import annotations
 

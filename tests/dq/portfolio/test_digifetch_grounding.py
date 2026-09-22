@@ -1,4 +1,4 @@
-"""Portfolio grounding wires the PM digifetch subset — H5 + H7, not H6 (#4146)."""
+"""Portfolio grounding wires the PM digifetch subset — analyst + direction, not deliberation (#4146)."""
 
 from __future__ import annotations
 
@@ -118,7 +118,7 @@ def test_portfolio_grounding_equips_the_free_pm_subset(
 
 @pytest.mark.unit
 def test_analyst_call_site_grounds_with_the_pm_subset(monkeypatch: pytest.MonkeyPatch) -> None:
-    # Drive the real H5 entry point (not the helper directly) so dropping the
+    # Drive the real analyst entry point (not the helper directly) so dropping the
     # grounding call from the node path fails here (#4146 review F6).
     recorded: list[dict[str, Any]] = []
     _record_grounding_calls(monkeypatch, recorded)
@@ -132,7 +132,7 @@ def test_analyst_call_site_grounds_with_the_pm_subset(monkeypatch: pytest.Monkey
         phase_slug="portfolio/asset-analyst-AAPL",
     )
     assert payload is None and document is None and errors
-    assert recorded, "H5 must ground through portfolio_common.build_grounding"
+    assert recorded, "analyst must ground through portfolio_common.build_grounding"
     assert recorded[-1]["research_phase"] == "analyst"
     assert recorded[-1]["digifetch_tools"] == PM_TOOLS
 
@@ -146,14 +146,14 @@ def test_direction_call_site_grounds_with_the_pm_subset(monkeypatch: pytest.Monk
 
     out = direction._direction_node(_state())
     assert out.get("errors"), "the stubbed LLM failure must fail soft"
-    assert recorded, "H7 must ground through portfolio_common.build_grounding"
+    assert recorded, "direction must ground through portfolio_common.build_grounding"
     assert recorded[-1]["research_phase"] == "direction"
     assert recorded[-1]["digifetch_tools"] == PM_TOOLS
 
 
 @pytest.mark.unit
 def test_deliberation_grounding_stays_digifetch_free() -> None:
-    # Decision recorded in #4146: H6 is research-tools-only by policy (#2908);
+    # Decision recorded in #4146: deliberation is research-tools-only by policy (#2908);
     # its evidence path is the bundle + amendment flow, not a new data family.
     tools, _execute_tool, _ = _deliberation_grounding(_state())
     assert tools is not None

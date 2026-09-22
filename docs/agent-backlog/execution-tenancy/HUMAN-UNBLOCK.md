@@ -63,7 +63,7 @@ GitHub secrets include `CORE_SUPABASE_*` plus notify names. House daily stays
 on `pipeline-olympus.yml`. Do not `workflow_dispatch` the house pipeline.
 
 House digest send (after notify GitHub secrets exist): splice
-`docs/agent-backlog/kairos-tenancy/pipeline-olympus-notify.env.yml` into the
+`docs/agent-backlog/execution-tenancy/pipeline-olympus-notify.env.yml` into the
 "Run Olympus research pipeline" `env:` on the same `chore/`/`feat/` branch.
 Without those names, `hermes.chain` close-out logs `NOTIFY_NOT_CONFIGURED` and
 skips (fail-soft; the book still commits).

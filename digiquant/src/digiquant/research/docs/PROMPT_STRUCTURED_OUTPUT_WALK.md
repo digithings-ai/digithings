@@ -9,8 +9,8 @@ reconsider vs prose. Machine catalog:
 
 - Product name is **digiquant** only (no Olympus / Atlas / Hermes / Kairos).
 - Keep structured outputs where they are the contract (ids, weights, orders,
-  H7 direction/rank/confidence).
-- Prefer prose where structured JSON destroys signal (notably H6 deliberation —
+  direction/rank/confidence).
+- Prefer prose where structured JSON destroys signal (notably deliberation —
   see `docs/reviews/2026-08-06-olympus-pipeline-review.md` OLY-REV-004).
 - Do this in the same pass as digigraph hosting; do not wait for a second epic.
 
@@ -24,7 +24,7 @@ reconsider vs prose. Machine catalog:
 | research/phase7-digest | reconsider | report prose + structured bias/ids |
 | portfolio/asset-analyst | reconsider | forecast must survive |
 | portfolio/deliberation | prose_preferred | preserve disagreement |
-| portfolio/pm-direction | keep | H8 contract |
+| portfolio/pm-direction | keep | sizing contract |
 | portfolio/risk-sizing | keep | weights |
 | portfolio/commit-run | keep | booker |
 

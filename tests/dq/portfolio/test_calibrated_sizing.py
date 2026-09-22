@@ -1,4 +1,4 @@
-"""WP8.4 — feed calibrated forecasts into incumbent H8 raw sizing (#2734).
+"""WP8.4 — feed calibrated forecasts into incumbent sizing raw sizing (#2734).
 
 Control shell (caps / corr / vol / breaker / grid) stays unchanged; only the raw-weight
 stage switches from rank→conviction / fixed-premium Kelly to calibrated μ/σ/reliability.
@@ -232,7 +232,7 @@ def test_rank_gap_change_with_fixed_forecasts_does_not_change_raw_weights() -> N
 
 
 def test_analyst_stance_does_not_affect_calibrated_eligibility() -> None:
-    """H7 memo path stamps buy even when H5 says sell; calibrated sizing uses that map."""
+    """direction memo path stamps buy even when analyst says sell; calibrated sizing uses that map."""
     from digiquant.portfolio.models.pm_direction import PMDirectionMemo, TickerDirection
 
     memo = PMDirectionMemo(

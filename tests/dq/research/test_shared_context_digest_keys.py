@@ -55,7 +55,7 @@ def test_shared_context_drops_digest_when_key_missing_from_whitelist():
             "digest-delta": {"headline": "stale digest-delta from last week"},
         }
     )
-    # The old H7 tuple: ("pm-rebalance", "digest-delta", "digest-baseline") —
+    # The old direction tuple: ("pm-rebalance", "digest-delta", "digest-baseline") —
     # "digest-baseline" is never written by anything, so the day after a
     # baseline run this kept the stale digest-delta row instead of the fresh
     # baseline one.

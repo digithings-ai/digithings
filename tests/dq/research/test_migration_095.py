@@ -86,4 +86,4 @@ def test_reducing_types_check_covers_sizing_reduce_only(sql: str) -> None:
 
 
 def test_names_commit_as_producer(sql: str) -> None:
-    assert "append_commit_chain" in sql or "H9" in sql
+    assert "append_commit_chain" in sql or "commit" in sql

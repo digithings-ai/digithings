@@ -1,4 +1,4 @@
-"""H1 must not mint vehicle-shaped theses into the market register.
+"""thesis must not mint vehicle-shaped theses into the market register.
 
 House rows on 2026-08-31 / 2026-09-01 used thesis_id ``veicle-{EWG,GLD,XLB}``
 (missing the 'h' in vehicle), ``thesis_kind`` null, and price-technicals notes.

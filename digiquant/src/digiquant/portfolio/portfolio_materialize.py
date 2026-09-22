@@ -459,7 +459,7 @@ def _latest_values(
     """``{ticker: value_col}`` from the latest row ≤ run_date per ticker (look-ahead-guarded).
 
     Legacy twin of ``commit_io._latest_values`` — this path is off the daily
-    pipeline (the H9 terminal books via ``commit_io``), so its Supabase body was
+    pipeline (the commit terminal books via ``commit_io``), so its Supabase body was
     not migrated to R2: migration 127 drops both tables (#4053), and a caller
     must not run this branch after the drop.
 

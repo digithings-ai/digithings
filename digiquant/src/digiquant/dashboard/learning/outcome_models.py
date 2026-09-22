@@ -191,7 +191,7 @@ class OutcomeTemporalContract(OutcomeLearningModel):
 
 
 class SizingTargetLineage(OutcomeLearningModel):
-    """Requested vs approved H8 targets with reason-coded adjustments."""
+    """Requested vs approved sizing targets with reason-coded adjustments."""
 
     requested_weight: UnitInterval | None = None
     approved_weight: UnitInterval | None = None

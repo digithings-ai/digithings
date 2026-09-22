@@ -5,7 +5,7 @@ Compiles bounded, inspectable role inputs from one exact pinned
 plus optional bundle/amendment/attention artifacts. Prose and raw transcripts
 are never authoritative — structured entity IDs and content hashes are.
 
-WP14.2–14.4 wire these capsules into H5/H6/H7 provider calls; this module is
+WP14.2–14.4 wire these capsules into analyst/deliberation/direction provider calls; this module is
 models + compiler entrypoints only.
 """
 

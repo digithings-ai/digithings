@@ -1,7 +1,7 @@
-"""Bounded H6 missing-fact evidence supplement (#2908 / WP11.4).
+"""Bounded deliberation missing-fact evidence supplement (#2908 / WP11.4).
 
 Validated :class:`~digiquant.portfolio.models.deliberation.MissingFactProposal`
-→ targeted retrieval → append-only :class:`EvidenceBundleAmendment`. Generic H6 web
+→ targeted retrieval → append-only :class:`EvidenceBundleAmendment`. Generic deliberation web
 search is forbidden; invalid/exhausted/failed paths never fall back to broad search.
 """
 
@@ -190,7 +190,7 @@ def retrieve_missing_fact_evidence(
         parsed = json.loads(raw)
     except Exception as exc:
         logger.warning(
-            "H6 missing-fact retrieval failed for %s (%s: %s)",
+            "deliberation missing-fact retrieval failed for %s (%s: %s)",
             document_key,
             type(exc).__name__,
             exc,
@@ -300,7 +300,7 @@ def attempt_deliberation_evidence_amendment(
     recorded_at: datetime,
     provenance: TypedProvenance,
 ) -> DeliberationAmendmentResult:
-    """Validate, retrieve, and optionally persist one H6 evidence amendment."""
+    """Validate, retrieve, and optionally persist one deliberation evidence amendment."""
     base_hash = base_bundle.content_hash
     if store is not None and (
         store.amendment_count_for_base(base_bundle.bundle_id) >= DELIBERATION_AMENDMENT_POLICY_MAX_PER_BASE
@@ -362,7 +362,7 @@ def attempt_deliberation_evidence_amendment(
             store.append_amendment(amendment)
         except Exception as exc:
             logger.warning(
-                "H6 amendment store append failed for %s (%s: %s); continuing with base bundle",
+                "deliberation amendment store append failed for %s (%s: %s); continuing with base bundle",
                 ticker,
                 type(exc).__name__,
                 exc,

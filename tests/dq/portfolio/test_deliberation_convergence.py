@@ -1,4 +1,4 @@
-"""H6 deliberation convergence tests (dashboard #930 PR 4b)."""
+"""deliberation convergence tests (dashboard #930 PR 4b)."""
 
 from __future__ import annotations
 
@@ -383,7 +383,7 @@ class TestDeliberationFailureCarry:
         assert shaped["bear_thesis"] == "prior agreement"
 
     def test_chat_transcript_publishes_without_mirrored_theses(self) -> None:
-        # H6 has no bull/bear fields — remapping both to conclusion made the document
+        # deliberation has no bull/bear fields — remapping both to conclusion made the document
         # look two-sided while the real debate lived only under rounds/transcript.
         state = _state()
         state.phase_portfolio.deliberation_summaries = {

@@ -1,4 +1,4 @@
-"""H6 — cyclic PM↔analyst deliberation per ticker (spec §10)."""
+"""deliberation — cyclic PM↔analyst deliberation per ticker (spec §10)."""
 
 from __future__ import annotations
 
@@ -109,7 +109,7 @@ def _base_bundle_for_ticker(state: PortfolioState, ticker: str) -> TickerEvidenc
 
 
 def _deliberation_grounding(state: PortfolioState, *, segment: str = ""):
-    """H6 grounding — research tools only; generic web search forbidden (#2908)."""
+    """deliberation grounding — research tools only; generic web search forbidden (#2908)."""
     return build_grounding(
         use_data_tools=False,
         live_search=False,
@@ -357,7 +357,7 @@ def _roster_reason_for(state: PortfolioState, ticker: str) -> str:
 
 
 def _bundle_conflict_signal(bundle_dump: Mapping[str, Any] | None) -> bool:
-    """True when the H5 bundle dump carries conflict diagnostics (if present)."""
+    """True when the analyst bundle dump carries conflict diagnostics (if present)."""
     if not isinstance(bundle_dump, Mapping):
         return False
     conflicts = bundle_dump.get("conflicts")
@@ -368,7 +368,7 @@ def _bundle_conflict_signal(bundle_dump: Mapping[str, Any] | None) -> bool:
 
 
 def _invalidation_risk_for(state: PortfolioState, ticker: str, analyst: Mapping[str, Any]) -> bool:
-    """Thesis challenged / invalidation hit for this ticker → select H6."""
+    """Thesis challenged / invalidation hit for this ticker → select deliberation."""
     sym = ticker.strip().upper()
     for thesis in state.prior_context.active_theses:
         if not isinstance(thesis, Mapping):
@@ -393,7 +393,7 @@ def _invalidation_risk_for(state: PortfolioState, ticker: str, analyst: Mapping[
 def _resolve_deliberation_selection(
     state: PortfolioState, ticker: str, analyst: dict[str, Any]
 ) -> DeliberationSelection:
-    """Build features + selection; planner errors → incumbent fallback (full H6)."""
+    """Build features + selection; planner errors → incumbent fallback (full deliberation)."""
     mode = resolve_deliberation_selection_mode()
     if mode is DeliberationSelectionMode.OFF:
         # Off: no selection record required for actuation; still emit typed incumbent reason.
@@ -439,7 +439,7 @@ def _resolve_deliberation_selection(
         return select_h6(feats, mode=mode)
     except Exception as exc:
         logger.warning(
-            "H6 selection failed for %s (%s: %s); falling back to full incumbent H6",
+            "deliberation selection failed for %s (%s: %s); falling back to full incumbent deliberation",
             ticker,
             type(exc).__name__,
             exc,
@@ -912,7 +912,7 @@ def _deliberation_node_factory(
                         phase=PHASE_NAME,
                         node=f"{NODE_ID}-{ticker}",
                         message=(
-                            f"H6 deliberation for {ticker} hit max_rounds cap "
+                            f"deliberation for {ticker} hit max_rounds cap "
                             f"({summary.cap_reason or 'max_rounds'})"
                         ),
                         retryable=False,
@@ -922,7 +922,7 @@ def _deliberation_node_factory(
         except Exception as exc:  # LLM-output failure degrades this ticker, never the chain (#1665)
             stance_map = {"buy": "bullish", "sell": "bearish"}
             logger.warning(
-                "H6 deliberation LLM failed for %s (%s: %s); carrying analyst stance",
+                "deliberation LLM failed for %s (%s: %s); carrying analyst stance",
                 ticker,
                 type(exc).__name__,
                 exc,
@@ -931,7 +931,7 @@ def _deliberation_node_factory(
                 ticker=ticker,
                 # NOT converged: no PM challenge ran, so there is no debate to converge.
                 # Reporting ``converged=True`` here is what let a crashed deliberation reach
-                # H7/H8 and the published document as a settled two-sided debate (#1742).
+                # direction/sizing and the published document as a settled two-sided debate (#1742).
                 converged=False,
                 conclusion=str(analyst.get("thesis") or f"carried analyst stance: {stance}"),
                 net_stance=stance_map.get(stance, "neutral"),  # type: ignore[arg-type]
@@ -1004,7 +1004,7 @@ def build_deliberation_from_state(
 ) -> FanOutPhase:
     """Runtime roster fan-out — one parallel ``Send`` worker per focus-roster ticker.
 
-    Like H5, the roster is only known at run time, so ``FanOutPhase`` maps each ticker to a
+    Like analyst, the roster is only known at run time, so ``FanOutPhase`` maps each ticker to a
     concurrent worker; the ``phase_portfolio`` (deliberation) and ``errors`` reducers merge the
     parallel writes. Replaces the prior serial loop so each ticker's PM↔analyst debate runs
     concurrently instead of one after another.

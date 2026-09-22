@@ -110,10 +110,10 @@ class TestSimulatorContract:
             assert out["sources"] == list(CANNED_TOOL_SEARCH["sources"])
 
     def test_coverage_directive_default_refreshes_rostered_tickers(self) -> None:
-        """The simulator keeps the full H4 roster flowing to H5 (#3739).
+        """The simulator keeps the full screener roster flowing to analyst (#3739).
 
         The director's per-call default refreshes every rostered ticker, so
-        simulated runs preserve pre-H4.5 behavior (full H4 roster → H5).
+        simulated runs preserve pre-screener.5 behavior (full screener roster → analyst).
         """
         from digiquant.research.testing.simulator import simulate_chat_completion
 
@@ -170,7 +170,7 @@ class TestBaselineEndToEnd:
             debate = final.phase_portfolio.deliberation_summaries[ticker]
             assert "net_stance" in debate
 
-        # H7 direction + H8 sized book.
+        # direction + sizing sized book.
         assert final.phase_portfolio.pm_direction_memo is not None
         assert final.phase_portfolio.sized_book is not None
 
@@ -274,7 +274,7 @@ class TestOverrides:
                 )
             )
 
-        # H5 unified analyst: one call per ticker.
+        # analyst unified analyst: one call per ticker.
         assert len(seen_tickers) == 2
         for ticker in ("AAPL", "MSFT"):
             payload = final.phase_portfolio.asset_analysts[ticker]
@@ -312,7 +312,7 @@ class TestNoNetworkOrTokens:
 
 @pytest.mark.unit
 class TestDurableH5H6LineageRoundTrip:
-    """WP11.5 — H5 base + H6 amendment lineage survives store/checkpoint reload."""
+    """WP11.5 — analyst base + deliberation amendment lineage survives store/checkpoint reload."""
 
     def test_store_checkpoint_reload_preserves_byte_equivalent_lineage(
         self, monkeypatch: pytest.MonkeyPatch
@@ -427,7 +427,7 @@ class TestDurableH5H6LineageRoundTrip:
             assert len(reloaded_store._bases) >= 1
             for ticker in ("AAPL", "MSFT"):
                 bundle_dump = checkpoint_state.phase_portfolio.ticker_evidence_bundles.get(ticker)
-                assert bundle_dump is not None, f"missing H5 bundle for {ticker}"
+                assert bundle_dump is not None, f"missing analyst bundle for {ticker}"
                 bundle_id = UUID(str(bundle_dump["bundle_id"]))
                 loaded = reloaded_store.load_base_bundle(bundle_id)
                 assert loaded.content_hash == bundle_dump["content_hash"]
@@ -542,7 +542,7 @@ class TestPhase3ResearchComposition:
                 )
             )
         assert final.phase_portfolio.asset_analysts.get("AAPL")
-        assert store._bases, "H5 must persist at least one base bundle when writer enabled"
+        assert store._bases, "analyst must persist at least one base bundle when writer enabled"
         snapshot = store.dump_snapshot()
         reloaded = EvidenceBundleStore.from_snapshot(snapshot)
         assert reloaded.lineage_bytes() == snapshot

@@ -1,4 +1,4 @@
-"""H6 amendment envelope coerce (house GHA 33426508863 GLD/SLV/IAU)."""
+"""deliberation amendment envelope coerce (house GHA 33426508863 GLD/SLV/IAU)."""
 
 from __future__ import annotations
 

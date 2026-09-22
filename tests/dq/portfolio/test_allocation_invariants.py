@@ -1,4 +1,4 @@
-"""WP8.5 — lock H8 allocation invariants after calibrated cutover (#2738).
+"""WP8.5 — lock sizing allocation invariants after calibrated cutover (#2738).
 
 Permanent property/golden suite for the post-WP8.4 control shell. Changing forecasts
 may change raw weights; reordering ``INCUMBENT_CONTROL_ORDER``, redistributing cap

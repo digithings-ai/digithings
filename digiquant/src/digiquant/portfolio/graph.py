@@ -1,4 +1,4 @@
-"""Compiled portfolio sub-graph — thesis-first H1–H9 (PR 4a–4d).
+"""Compiled portfolio sub-graph — thesis-first thesis–commit (PR 4a–4d).
 
 Per [ADR-0015](../../../../docs/adr/0015-research-vs-portfolio.md), portfolio consumes
 an research digest and produces analyst, deliberation, PM, and reflection outputs
@@ -50,7 +50,7 @@ __all__ = [
 
 @dataclass(frozen=True)
 class ThesisGraphDeps:
-    """Optional Supabase client for H1–H5 thesis/analyst row writers."""
+    """Optional Supabase client for thesis–analyst thesis/analyst row writers."""
 
     client: SupabaseClient | None = None
 
@@ -78,7 +78,7 @@ def _resolve_risk_sizing_client(deps: PortfolioGraphDeps) -> SupabaseClient | No
 
 
 def _resolve_shared_client(deps: PortfolioGraphDeps) -> SupabaseClient | None:
-    """Prefer thesis, then risk sizing, then H9 commit client."""
+    """Prefer thesis, then risk sizing, then commit client."""
     if deps.thesis is not None and deps.thesis.client is not None:
         return deps.thesis.client
     client = _resolve_risk_sizing_client(deps)
@@ -110,7 +110,7 @@ def build_portfolio_phases_thesis(
     debate_rounds: int = 1,  # removed with 7CD; kept for CLI compat
     held: Collection[str] = (),
 ) -> list[PipelinePhase]:
-    """Thesis-first portfolio phases H1–H9 (PR 4d)."""
+    """Thesis-first portfolio phases thesis–commit (PR 4d)."""
     deps = deps or PortfolioGraphDeps()
     thesis_client = deps.thesis.client if deps.thesis else None
     shared_client = _resolve_shared_client(deps)

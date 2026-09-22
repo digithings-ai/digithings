@@ -426,7 +426,7 @@ def _hydrate_config(
     current_weights = prior_book_current_weights(prior_book)
     if current_weights:
         # Mark-to-market (#955): drift prior weights by price moves since the last run so
-        # the H8 no-trade band compares against the actual current book, not stale targets.
+        # the sizing no-trade band compares against the actual current book, not stale targets.
         held = tuple(t for t in current_weights if not _is_cash_ticker(t))
         try:
             deltas = (
