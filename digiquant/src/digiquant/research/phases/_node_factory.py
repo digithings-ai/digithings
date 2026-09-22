@@ -778,7 +778,7 @@ class EditSegmentResult(NamedTuple):
 
 
 # Cap on the stored merge-failure reason. A Pydantic ValidationError message carries the
-# full offending body; ``atlas_run_diagnostics.breakdown`` is an operator-facing jsonb
+# full offending body; ``run_diagnostics.breakdown`` is an operator-facing jsonb
 # column, not a log sink, and the same cap is applied to ``master_digest_failed``.
 _MERGE_FALLBACK_REASON_MAX = 300
 

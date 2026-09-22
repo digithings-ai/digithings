@@ -200,7 +200,7 @@ class TestQueryDataRetired:
 
     def test_whitelist_excludes_operator_tables(self) -> None:
         assert "decision_log" not in ALLOWED_READ_TABLES
-        assert "atlas_run_diagnostics" not in ALLOWED_READ_TABLES
+        assert "run_diagnostics" not in ALLOWED_READ_TABLES
         assert {"positions", "theses", "trading_calendar"} <= ALLOWED_READ_TABLES
 
     def test_whitelist_excludes_r2_cutover_market_tables(self) -> None:

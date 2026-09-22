@@ -1,4 +1,4 @@
-"""Per-run diagnostics → atlas_run_diagnostics (Pillar 1B).
+"""Per-run diagnostics → run_diagnostics (Pillar 1B).
 
 summarize_run counts fresh/carried/failed segments and derives a status; write_row upserts
 the row (fail-soft); is_degraded gates the CLI exit. A node-failure carry (reason
@@ -502,7 +502,7 @@ def test_write_row_writes_events_with_usage_and_counts() -> None:
         },
     )
     assert summary is not None
-    rows = client.store["atlas_run_diagnostics"]
+    rows = client.store["run_diagnostics"]
     assert len(rows) == 1
     row = rows[0]
     assert row["run_id"] == "baseline-2026-06-12-local"
@@ -544,7 +544,7 @@ def test_write_row_surfaces_empty_retries_from_usage_snapshot() -> None:
             "empty_retries": {"total": 3, "by_model": {"openrouter/auto": 2, "x-ai/grok-4": 1}},
         },
     )
-    row = client.store["atlas_run_diagnostics"][0]
+    row = client.store["run_diagnostics"][0]
     assert row["breakdown"]["empty_retries"] == {
         "total": 3,
         "by_model": {"openrouter/auto": 2, "x-ai/grok-4": 1},
@@ -758,5 +758,5 @@ def test_write_row_records_cancelled_status() -> None:
     )
     assert summary is not None
     assert summary.status == "cancelled"
-    rows = client.store["atlas_run_diagnostics"]
+    rows = client.store["run_diagnostics"]
     assert rows[0]["status"] == "cancelled"

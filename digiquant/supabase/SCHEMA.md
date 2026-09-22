@@ -380,11 +380,11 @@ tables observational.
 
 | Table | PK | Purpose |
 |-------|----|---------|
-| `olympus_risk_policies` | `(policy_id UUID)` | Immutable resolved `RiskPolicy`: method_version, status, unavailable_reason, effective_at, content_hash, full `policy_body` jsonb. |
-| `olympus_covariance_snapshots` | `(snapshot_id UUID)` | Immutable `CovarianceSnapshot`: as_of_session, lookback_days, status, resolved_at, content_hash, full `snapshot_body` jsonb. |
-| `olympus_h8_risk_run_refs` | `(source_run_id text)` | One ref per run: run_date, policy_id FK, snapshot_id FK, effective_at. |
+| `risk_policies` | `(policy_id UUID)` | Immutable resolved `RiskPolicy`: method_version, status, unavailable_reason, effective_at, content_hash, full `policy_body` jsonb. |
+| `covariance_snapshots` | `(snapshot_id UUID)` | Immutable `CovarianceSnapshot`: as_of_session, lookback_days, status, resolved_at, content_hash, full `snapshot_body` jsonb. |
+| `sizing_risk_run_refs` | `(source_run_id text)` | One ref per run: run_date, policy_id FK, snapshot_id FK, effective_at. |
 
-RLS enabled with **zero** policies; append-only via `reject_olympus_risk_policy_snapshot_mutation()`.
+RLS enabled with **zero** policies; append-only via `reject_risk_policy_snapshot_mutation()`.
 Models: `digiquant.portfolio.models.risk_policy`. Resolver: `digiquant.portfolio.risk_policy`.
 Registry: `digiquant.research.risk_policy_registry` (exact-ID reads only).
 
@@ -833,7 +833,7 @@ policy (all `USING (true)` today) as `authenticated_read_public_reference`:
 parity rows are kept as the historical record of what 116 mirrored.
 
 Not a widening: the anon key already reads every one of these. Tables that are
-deliberately anon-denied (`atlas_run_diagnostics`, `checkpoint*`,
+deliberately anon-denied (`run_diagnostics`, `checkpoint*`,
 `strategy_calibrations`, all `portfolio_ledger_*` / `olympus_accounting_*`) are
 untouched and stay own-workspace-only.
 
@@ -991,7 +991,7 @@ in the same change.
 - **Exception — `strategy_calibrations` (migration 046):** RLS enabled with **no**
   anon policy, so anon reads return an empty set (not an error) while the service
   role keeps full access. The fitted calibration is private; mirrors the
-  `atlas_run_diagnostics` idiom (migration 033).
+  `run_diagnostics` idiom (migration 033).
 - **Exception — `olympus_run_events` (migration 066, #1945; WP1 join 086 / #2763):** ordered
   call telemetry is service-role-only. RLS is enabled with zero policies and
   `anon`/`authenticated` grants are revoked. The definer-rights `olympus_run_event_trace` view
@@ -1145,10 +1145,10 @@ stood between the *published* anon JWT and a write.
   migration chain runs as), so the implicit form is the effective one. `FOR ROLE
   supabase_admin` raises *must be a member of role* and, under `psql
   --single-transaction`, rolls the whole migration back.
-- **Why it mattered:** `atlas_run_health` is a single-table projection, so Postgres made it
+- **Why it mattered:** `run_health` is a single-table projection, so Postgres made it
   auto-updatable, and `security_invoker = false` means writes through it run as `postgres`
-  and bypass `atlas_run_diagnostics`' RLS. With the standing anon DELETE grant, an
-  unauthenticated `DELETE /rest/v1/atlas_run_health` erased the whole run-telemetry
+  and bypass `run_diagnostics`' RLS. With the standing anon DELETE grant, an
+  unauthenticated `DELETE /rest/v1/run_health` erased the whole run-telemetry
   history. `price_history_tickers` carries `DISTINCT`, so it is not auto-updatable —
   defense-in-depth only.
 - **Residuals:** the `supabase_admin` default-ACL entry (unreachable from `postgres`; only

@@ -2095,7 +2095,7 @@ class TestRiskPolicyRegistryH9:
         assert manifest["schema_version"] == "1.6"
         assert manifest["risk_policy_registry_status"] == "ok"
         assert manifest["risk_policy_registry_run_refs_written"] == 1
-        assert len(client.store.get("h8_risk_run_refs", [])) == 1
+        assert len(client.store.get("sizing_risk_run_refs", [])) == 1
 
     def test_risk_registry_failure_keeps_book(self, monkeypatch) -> None:
         from digiquant.portfolio.phases import commit as h9

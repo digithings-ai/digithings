@@ -787,7 +787,7 @@ class ResearchState(BaseModel):
     # failed patch merge fall back to full regeneration with *no* PhaseError, which is the
     # right call for run health but left the event completely unobservable — a segment that
     # paid for a patch call AND a full regeneration is byte-identical in
-    # ``atlas_run_diagnostics`` to one that merged cleanly. Non-gating telemetry: written
+    # ``run_diagnostics`` to one that merged cleanly. Non-gating telemetry: written
     # here, surfaced via ``research.telemetry.merge_fallback_breakdown``, never read by a gate.
     # Right-wins reducer (like ``document_deltas``, not ``_merge_segment_dict``): parallel
     # fan-out nodes each write their own slug, and a duplicate slug is not a wiring bug

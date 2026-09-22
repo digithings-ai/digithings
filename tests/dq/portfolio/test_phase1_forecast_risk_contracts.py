@@ -299,7 +299,7 @@ def test_phase1_composition_e2e_simulated_pipeline() -> None:
     assert manifest["cost_liquidity_registry_estimates_written"] >= 1
 
     assert len(run.client.store.get("forecast_assessments", [])) >= 1
-    assert len(run.client.store.get("h8_risk_run_refs", [])) == 1
+    assert len(run.client.store.get("sizing_risk_run_refs", [])) == 1
     assert len(run.client.store.get("action_cost_estimates", [])) >= 1
     assert len(run.client.store.get("positions", [])) >= 1
     assert len(run.client.store.get("portfolio_ledger_commits", [])) == 1

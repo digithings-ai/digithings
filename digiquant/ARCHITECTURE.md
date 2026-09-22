@@ -2503,7 +2503,7 @@ entry until that cutover. Prompt / structured-output walk for the same pass:
   * `research.telemetry.content_freeze_breakdown` projects `state.content_freezes` into
     `breakdown` as a non-gating `content_freeze` key. `segments_ok` is deliberately
     **unchanged** — it counts segments that produced a row today, which stays true of a frozen
-    one, and it is read by `atlas_run_health` (041), `run-episodes.ts` and three frontend
+    one, and it is read by `run_health` (041), `run-episodes.ts` and three frontend
     components.
 
   Scoped to segments. The digest's equivalent freeze was fixed by #1559's
@@ -2534,7 +2534,7 @@ entry until that cutover. Prompt / structured-output walk for the same pass:
   cap rather than exempt from it (#1767). The `build_analyst` /
   `build_deliberation` compile-time builders also call it, but are test-only —
   `graph.py` wires the runtime `build_analyst_from_state` / `build_deliberation_from_state` fan-outs.
-  Roster width lands in `atlas_run_diagnostics.breakdown` via
+  Roster width lands in `run_diagnostics.breakdown` via
   `portfolio/roster_diagnostics.roster_breakdown`. H4.5 coverage director (#3739) narrows
   the H4 roster behaviorally (refresh / explore / skip with reasons, reasoning-tier
   judgment, `portfolio/coverage/director: reasoning` pin) and can never widen it —
@@ -3042,9 +3042,9 @@ assuming it is always present.
     wrong), and `unavailable` (unknown). Missing provider usage or cost yields `unavailable` and
     a quantified shortfall — never a fabricated zero, and never an exact-billing claim.
   - **Failure is fail-soft throughout.** A flush failure cannot change the run's return value,
-    its exit code, the portfolio commit, or the `atlas_run_diagnostics` row. No reader is cut
+    its exit code, the portfolio commit, or the `run_diagnostics` row. No reader is cut
     over to these tables; the aggregate remains the active read path (plan Invariant 14).
-- `digiquant.research.diagnostics` — writes one `atlas_run_diagnostics` row per run
+- `digiquant.research.diagnostics` — writes one `run_diagnostics` row per run
   **attempt** (`write_row`, keyed on `(run_id, attempt)`, fail-soft): fresh/carried/failed
   segment counts from
   state + the `digigraph.usage` LLM snapshot (calls/tokens/sources). `summarize_run` derives
@@ -3663,7 +3663,7 @@ Only the `payload` cell is archived — `content` is untouched.
 **RLS.** Every strategy-store table RLS-enabled. Public reference + tearsheet tables grant
 `anon SELECT USING (true)`; writers use the service role (RLS bypass). `strategy_calibrations`
 has no anon policy — anon reads return an empty set (not a permission error) while the service
-role keeps full access (mirrors the `atlas_run_diagnostics` idiom, migration 033). Run
+role keeps full access (mirrors the `run_diagnostics` idiom, migration 033). Run
 `get_advisors(type="security")` after applying; expect zero `rls_disabled_in_public` findings.
 
 **Grants — RLS is no longer the only write gate (#1757).** Migration
@@ -3673,9 +3673,9 @@ revokes `INSERT, UPDATE, DELETE, TRUNCATE, REFERENCES, TRIGGER` from `PUBLIC`, `
 with the same list, so new relations inherit read-only instead of Supabase's bootstrap
 `GRANT ALL`. Before it, the *published* anon JWT held full DML on all 35 base tables plus
 two views, and RLS-with-no-write-policy was the single layer denying writes — one already
-exploitable: `atlas_run_health` (migration 041) is auto-updatable and deliberately
+exploitable: `run_health` (migration 041) is auto-updatable and deliberately
 `security_invoker = false`, so an unauthenticated `DELETE` through it ran as `postgres` and
-erased every `atlas_run_diagnostics` row. `service_role` is untouched — it is the only
+erased every `run_diagnostics` row. `service_role` is untouched — it is the only
 writer. When adding a public view, pair `GRANT SELECT` with an explicit `REVOKE` (050/052
 do; 041/018 did not) and never use `REVOKE ALL` in the default-privileges statement: it
 would strip `SELECT` and `safeSelect` renders a PostgREST 42501 as an empty panel, not an
@@ -3688,7 +3688,7 @@ adds `olympus_node_runs`, `olympus_provider_calls`, and `olympus_provider_attemp
 service-role-only, RLS-enabled with no policies, and append-only: `service_role` receives only
 `SELECT`/`INSERT`, while database triggers reject `UPDATE` and `DELETE`. The schema stores generic
 artifact references but no provider payload. It is prospective only; no historical attempts or
-costs are inferred from `atlas_run_diagnostics` aggregates. Task #1963 does not write these tables:
+costs are inferred from `run_diagnostics` aggregates. Task #1963 does not write these tables:
 it establishes in-process logical purpose, parentage, cache status, exact observable attempt count,
 and artifact disposition; Task 1.5 owns durable persistence and reconciliation.
 
@@ -3872,7 +3872,7 @@ either (a) call `ingest_research_document` directly at the end of
 ---
 
 <!-- #1736 -->
-## Run health telemetry — `atlas_run_diagnostics` (#1736)
+## Run health telemetry — `run_diagnostics` (#1736)
 
 `digiquant/src/digiquant/research/diagnostics.py` derives **two** verdicts from a
 finished run's state, and they are deliberately not the same signal:
@@ -3884,7 +3884,7 @@ individual calls, ordering, retries, or timing without fabrication.
 
 | Field | Question | Consumers |
 |---|---|---|
-| `RunSummary.status` | Was the run healthy? | `atlas_run_diagnostics.status`, `apps/dashboard` (`run-episodes.ts` `classify()`, `freshness-banner.tsx` `isOk()`) |
+| `RunSummary.status` | Was the run healthy? | `run_diagnostics.status`, `apps/dashboard` (`run-episodes.ts` `classify()`, `freshness-banner.tsx` `isOk()`) |
 | `RunSummary.retry_signal` | Is re-running worth the money? | `chain._retry_worthy` → the process exit code → CI's outer-retry loop |
 
 `status` stays inside `ok | degraded | failed | cancelled` — there is no CHECK constraint on
@@ -3914,7 +3914,7 @@ detectable and is the only way a future collision would be visible.
   `GITHUB_RUN_ID`. The attempt is a separate column precisely so the telemetry key and the
   resume key cannot drift apart.
 - Migration `065` swaps the primary key to `(run_id, attempt)` and appends `attempt` to the
-  `atlas_run_health` view — appended **last**, since `CREATE OR REPLACE VIEW` can only add
+  `run_health` view — appended **last**, since `CREATE OR REPLACE VIEW` can only add
   columns. Pre-existing rows carry the sentinel `0`, never `1`: backfilling 1 would assert 28
   provably-collapsed rows are first attempts, which is the fabrication the change exists to end.
 - `apps/dashboard/lib/run-episodes.ts` gets fixed for free — `attempts = rows.length` and the

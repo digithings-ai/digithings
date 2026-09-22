@@ -325,7 +325,7 @@ def _screener_node_factory(client: SupabaseClient | None):
         )
         # Roster width is the dominant cost driver of the whole run (#1767: width 8 → 39
         # tracked $0.86 → $4.00) and until the width breakdown reaches
-        # ``atlas_run_diagnostics`` this log line is the only record of it.
+        # ``run_diagnostics`` this log line is the only record of it.
         logger.info(
             "H4 focus roster (%d, cap=%d, budget=%d, theses=%d, regime=%s): %s",
             len(roster),

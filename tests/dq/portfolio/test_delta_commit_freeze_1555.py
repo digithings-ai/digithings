@@ -202,7 +202,7 @@ class TestUncommittedBookIsLoud:
             client, state=state, run_id="freeze-1", run_type="delta", run_date=RUN_DATE
         )
         assert summary is not None
-        row = client.store["atlas_run_diagnostics"][0]
+        row = client.store["run_diagnostics"][0]
         assert row["status"] == "degraded"
         # Truncation-proof structured signal (not buried in error_summary text).
         assert row["breakdown"]["book_committed"] is False

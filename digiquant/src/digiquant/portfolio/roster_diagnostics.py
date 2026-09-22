@@ -1,4 +1,4 @@
-"""Roster-width contributor for the ``atlas_run_diagnostics.breakdown`` jsonb (#1767).
+"""Roster-width contributor for the ``run_diagnostics.breakdown`` jsonb (#1767).
 
 ``DIGIQUANT_MAX_ANALYSTS`` was bypassed for the entire observed lifetime of the pipeline and
 **no column recorded roster width**, so a 1.6× cap breach (39 dispatched analysts against

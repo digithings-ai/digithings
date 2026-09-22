@@ -239,7 +239,7 @@ theses as the budget allows before deepening any one. At `DIGIQUANT_MAX_ANALYSTS
 7 of 27 theses get no vehicle analysed on a wide day (25 would leave 12). The cap and the
 thesis map are sized for different worlds; this makes the cap real without resolving that.
 
-Width is recorded in the `atlas_run_diagnostics.breakdown` jsonb (no migration) by
+Width is recorded in the `run_diagnostics.breakdown` jsonb (no migration) by
 `portfolio/roster_diagnostics.roster_breakdown` — `width`, `by_reason`, `theses_covered`,
 `excluded`, `max_analysts`, `over_cap`. Its absence is why the breach went unnoticed for
 the pipeline's whole observed lifetime.
@@ -442,7 +442,7 @@ fail-closed, idempotency conflict, or a no-manifest skip) is now a **degraded** 
 `phase_portfolio.sized_book` / `commit_manifest` (a manifest with status `committed`/`noop`
 counts as committed) and forces `degraded` when materialized-but-not-committed — a state an
 H9 `PhaseError` can't trigger on its own. Both flags are emitted structurally in the
-`atlas_run_diagnostics.breakdown` (truncation-proof) and in the chain CLI summary alongside
+`run_diagnostics.breakdown` (truncation-proof) and in the chain CLI summary alongside
 `book_materialized`; a commit-failure marker is prepended to `error_summary` so it survives
 the 2000-char cap. `chain._retry_worthy` keys the #809 good-book guard on `book_committed`
 (not mere materialization), so an uncommitted book retries while a committed one does not.
@@ -557,7 +557,7 @@ proposing a backfill. Verified against the live `core` project on 2026-08-01:
 - `positions`, `nav_history` and `portfolio_metrics` each hold **zero rows** for every date in
   `2026-06-27 … 2026-07-16` — 20 consecutive calendar days. Last pre-gap book: 06-26. First
   post-gap book: 07-17.
-- 22 `atlas_run_diagnostics` rows cover that window and **18 of them report `status='ok'`**.
+- 22 `run_diagnostics` rows cover that window and **18 of them report `status='ok'`**.
   All 18 carry the H9 coherence check (1) failure in `error_summary`:
   `portfolio_commit/portfolio/commit-run: held ticker <T> missing from book and not
   flat in H7` (EWT on most dates; EWT, IJR, UUP and TLT by 07-16). Grep production for **that
@@ -654,7 +654,7 @@ and thesis context loads via preflight + on-demand `fetch_prior_document`.
 <!-- #1736 -->
 ## Chain-level failure containment (#1736 / #1737 / #1733)
 
-`chain.run_research_then_portfolio` writes the `atlas_run_diagnostics` row from a `finally` block,
+`chain.run_research_then_portfolio` writes the `run_diagnostics` row from a `finally` block,
 so anything that can reach that block with an error-free state becomes an invisible failure.
 Three holes are closed:
 
