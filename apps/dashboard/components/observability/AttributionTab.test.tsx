@@ -154,3 +154,46 @@ describe('AttributionTab — stat tile labels', () => {
     expect(render(rows)).not.toContain('glass-card');
   });
 });
+
+describe('AttributionTab — contribution bars on the kit primitive (Q3b slice 4)', () => {
+  const rows: AttributionRow[] = [
+    makeRow('AAPL', { contribution_pct: 0.2 }),
+    makeRow('MSFT', { contribution_pct: -0.15 }),
+    makeRow('CASH', { contribution_pct: 0, sector_bucket: null }),
+  ];
+
+  it('renders one labelled, sign-toned bar per priced holding', () => {
+    const html = render(rows);
+    expect(html).toContain('>AAPL</text>');
+    expect(html).toContain('>MSFT</text>');
+    expect(html).toContain('<title>AAPL: +0.20%</title>');
+    expect(html).toContain('<title>MSFT: -0.15%</title>');
+    expect(html).toContain('ts-tone-up');
+    expect(html).toContain('ts-tone-down');
+  });
+
+  it('keeps the synthetic CASH row out of the by-position chart', () => {
+    const html = render(rows);
+    expect(html).not.toContain('>CASH</text>');
+  });
+
+  it('renders no recharts remnants', () => {
+    const html = render(rows);
+    expect(html).not.toContain('recharts-wrapper');
+  });
+
+  it('keeps the honest empty when nothing is priced', () => {
+    const html = render([
+      makeRow('AAPL', { contribution_pct: null }),
+    ]);
+    expect(html).toContain('No priced contributions to chart.');
+    expect(html).not.toContain('<title>AAPL:');
+  });
+
+  it('scrolls the decomposition table instead of overflowing narrow widths', () => {
+    const html = render(rows);
+    // min-w-0 is load-bearing: the card is a column flex parent, so
+    // overflow-x alone cannot beat the table's min-content width.
+    expect(html).toContain('min-w-0 overflow-x-auto');
+  });
+});

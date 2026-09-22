@@ -171,3 +171,26 @@ export function ArchitectureToSystemRedirectPage() {
     </Suspense>
   );
 }
+
+/** Old `/system` URL → Pipeline (run health moved there). Now rides the shared
+ *  redirect grammar so every always-redirecting route is detectable from one
+ *  import (`lib/route-map.test.ts` asserts the registry matches the code). */
+function SystemToPipelineInner() {
+  const router = useRouter();
+  const searchParams = useSearchParams();
+
+  useEffect(() => {
+    const qs = searchParams.toString();
+    router.replace(qs ? `/pipeline?${qs}` : '/pipeline');
+  }, [router, searchParams]);
+
+  return <RedirectFallback />;
+}
+
+export function SystemToPipelineRedirectPage() {
+  return (
+    <Suspense fallback={<RedirectFallback />}>
+      <SystemToPipelineInner />
+    </Suspense>
+  );
+}

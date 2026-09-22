@@ -31,7 +31,14 @@ import {
 import { createPortal } from "react-dom";
 import { Button } from "../ui";
 import { ThemeToggle } from "./ThemeProvider";
-import { isNavGroup, type NavGroup, type NavItem, type NavLink } from "./chrome";
+import {
+  hrefIsCurrent,
+  isNavGroup,
+  SkipLink,
+  type NavGroup,
+  type NavItem,
+  type NavLink,
+} from "./chrome";
 import { useBodyScrollLock } from "../lib/useBodyScrollLock";
 
 // Mount gate: server + first (hydration) client render read `false`; the client
@@ -59,6 +66,15 @@ export interface NavShellProps {
   homeHref?: string;
   /** Accessible label for the brand home link (e.g. "digiquant home"). */
   homeLabel?: string;
+  /** The visitor's current pathname (Next `usePathname()`, passed by the site's
+   *  client wrapper). NavShell owns the `aria-current="page"` rule once —
+   *  `hrefIsCurrent` matches an exact route only, never an external link or a
+   *  same-page anchor. Omit and no link is marked. */
+  currentPath?: string;
+  /** Render the shared <SkipLink/> before the bar, targeting this id
+   *  (e.g. "#main"). Omitted: no skip link — the consumer may not have a
+   *  focusable target yet. */
+  skipTo?: string;
   /**
    * Show/hide grammar for the bar. Default "scroll" — settle after 8px,
    * yield past 180px on scroll-down, return on scroll-up (the canon
@@ -78,10 +94,21 @@ const itemKey = (item: NavItem, i: number) =>
 
 /** A plain wayfinding link, in the strip or in the sheet. Menu items are their
  *  own markup inside NavShellGroup — they carry roles, refs and a tabIndex. */
-function NavShellLink({ link, onNavigate }: { link: NavLink; onNavigate?: () => void }) {
+function NavShellLink({
+  link,
+  current,
+  onNavigate,
+}: {
+  link: NavLink;
+  /** This link names the page the visitor is on (computed by the caller from
+   *  `hrefIsCurrent(link.href, currentPath)`). */
+  current?: boolean;
+  onNavigate?: () => void;
+}) {
   return (
     <a
       href={link.href}
+      aria-current={current ? "page" : undefined}
       target={link.external ? "_blank" : undefined}
       rel={link.external ? "noopener noreferrer" : undefined}
       onClick={onNavigate}
@@ -103,6 +130,7 @@ function NavShellGroup({
   groupKey,
   open,
   setOpenKey,
+  currentPath,
 }: {
   group: NavGroup;
   /** This group's identity in the parent's single "which one is open" slot. */
@@ -111,6 +139,8 @@ function NavShellGroup({
   /** The parent's useState setter — stable, so the dismissal listeners below
    *  subscribe once per open instead of once per parent render. */
   setOpenKey: (key: string | null) => void;
+  /** The visitor's current pathname, for `aria-current` on menu items. */
+  currentPath?: string;
 }) {
   const onOpen = useCallback(() => setOpenKey(groupKey), [setOpenKey, groupKey]);
   const onClose = useCallback(() => setOpenKey(null), [setOpenKey]);
@@ -299,6 +329,7 @@ function NavShellGroup({
               itemRefs.current[i] = el;
             }}
             href={item.href}
+            aria-current={hrefIsCurrent(item.href, currentPath) ? "page" : undefined}
             className="nav-shell-menu-item"
             role="menuitem"
             // Roving focus: the trigger is the menu's single tab stop and items
@@ -324,11 +355,13 @@ function NavShellStrip({
   className,
   openKey,
   setOpenKey,
+  currentPath,
 }: {
   items: NavItem[];
   className?: string;
   openKey: string | null;
   setOpenKey: (key: string | null) => void;
+  currentPath?: string;
 }) {
   return (
     <nav className={className} aria-label="Primary">
@@ -341,9 +374,14 @@ function NavShellStrip({
             groupKey={key}
             open={openKey === key}
             setOpenKey={setOpenKey}
+            currentPath={currentPath}
           />
         ) : (
-          <NavShellLink key={key} link={item} />
+          <NavShellLink
+            key={key}
+            link={item}
+            current={hrefIsCurrent(item.href, currentPath)}
+          />
         );
       })}
     </nav>
@@ -355,9 +393,11 @@ function NavShellStrip({
  *  needless tap. Own component for the useId behind aria-labelledby. */
 function NavShellSheetSection({
   group,
+  currentPath,
   onNavigate,
 }: {
   group: NavGroup;
+  currentPath?: string;
   onNavigate?: () => void;
 }) {
   const labelId = useId();
@@ -367,7 +407,12 @@ function NavShellSheetSection({
         {group.label}
       </p>
       {group.items.map((item) => (
-        <NavShellLink key={item.href + item.label} link={item} onNavigate={onNavigate} />
+        <NavShellLink
+          key={item.href + item.label}
+          link={item}
+          current={hrefIsCurrent(item.href, currentPath)}
+          onNavigate={onNavigate}
+        />
       ))}
     </div>
   );
@@ -377,19 +422,31 @@ function NavShellSheetSection({
 function NavShellSheetNav({
   items,
   className,
+  currentPath,
   onNavigate,
 }: {
   items: NavItem[];
   className?: string;
+  currentPath?: string;
   onNavigate?: () => void;
 }) {
   return (
     <nav className={className} aria-label="Primary">
       {items.map((item, i) =>
         isNavGroup(item) ? (
-          <NavShellSheetSection key={itemKey(item, i)} group={item} onNavigate={onNavigate} />
+          <NavShellSheetSection
+            key={itemKey(item, i)}
+            group={item}
+            currentPath={currentPath}
+            onNavigate={onNavigate}
+          />
         ) : (
-          <NavShellLink key={itemKey(item, i)} link={item} onNavigate={onNavigate} />
+          <NavShellLink
+            key={itemKey(item, i)}
+            link={item}
+            current={hrefIsCurrent(item.href, currentPath)}
+            onNavigate={onNavigate}
+          />
         ),
       )}
     </nav>
@@ -404,9 +461,12 @@ export function NavShell({
   showThemeToggle = true,
   homeHref = "/",
   homeLabel = "home",
+  currentPath,
+  skipTo,
   autoHide = "scroll",
 }: NavShellProps) {
   const navRef = useRef<HTMLElement>(null);
+  const toggleRef = useRef<HTMLButtonElement>(null);
   const [menuOpen, setMenuOpen] = useState(false);
   // Which dropdown is open, by itemKey — one slot, so opening a second group
   // closes the first without any cross-group bookkeeping.
@@ -418,7 +478,14 @@ export function NavShell({
     () => false,
   );
 
+  // Navigation and the hamburger's own toggle leave focus where it is; the
+  // two dismissal paths that would otherwise strand focus on a hidden sheet
+  // (Escape, scrim) return it to the control that opened the sheet.
   const closeMenu = useCallback(() => setMenuOpen(false), []);
+  const closeMenuAndReturn = useCallback(() => {
+    setMenuOpen(false);
+    toggleRef.current?.focus();
+  }, []);
 
   // Scroll grammar (canon: settle, then yield). Class flips outside React
   // state: scroll fires per frame and the bar's dress is pure presentation.
@@ -533,11 +600,11 @@ export function NavShell({
   useEffect(() => {
     if (!menuOpen) return;
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") closeMenu();
+      if (e.key === "Escape") closeMenuAndReturn();
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [menuOpen, closeMenu]);
+  }, [menuOpen, closeMenuAndReturn]);
 
   const menuOverlay =
     mounted &&
@@ -549,7 +616,7 @@ export function NavShell({
           aria-label="Close menu"
           aria-hidden={!menuOpen}
           tabIndex={menuOpen ? 0 : -1}
-          onClick={closeMenu}
+          onClick={closeMenuAndReturn}
         />
         <div
           id={sheetId}
@@ -559,6 +626,7 @@ export function NavShell({
           <NavShellSheetNav
             items={links}
             className="nav-shell-sheet-links"
+            currentPath={currentPath}
             onNavigate={closeMenu}
           />
           {cta && <div className="nav-shell-sheet-cta">{cta}</div>}
@@ -569,6 +637,7 @@ export function NavShell({
 
   return (
     <>
+      {skipTo ? <SkipLink href={skipTo} /> : null}
       {/* data-* rather than a class: the scroll listener owns .is-scrolled /
           .is-hidden on this same element via classList, and a React className
           rewrite would wipe them. An attribute React alone controls can't
@@ -594,12 +663,14 @@ export function NavShell({
             className="nav-shell-links flex gap-[1.8rem] text-[0.9rem] text-ink-soft max-[880px]:hidden"
             openKey={openGroup}
             setOpenKey={setOpenGroup}
+            currentPath={currentPath}
           />
           <div className="nav-shell-tail flex items-center gap-[0.9rem] max-[560px]:shrink-0 max-[560px]:gap-[0.5rem]">
             {showThemeToggle && <ThemeToggle />}
             {actions}
             <Button
               type="button"
+              ref={toggleRef}
               className="nav-shell-toggle h-auto"
               aria-label={menuOpen ? "Close menu" : "Open menu"}
               aria-expanded={menuOpen}

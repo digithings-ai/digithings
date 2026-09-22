@@ -257,7 +257,7 @@ export default function TradesTab({
     <div className="space-y-4">
       <div className="flex flex-wrap items-center gap-3 px-1">
         <ClipboardList size={18} className="shrink-0 text-accent" aria-hidden />
-        <h2 className="font-display text-2xl tracking-tight text-ink">Trades</h2>
+        <h2 className="font-display text-xl tracking-tight text-ink">Trades</h2>
       </div>
       <p className="max-w-2xl px-1 text-xs text-ink-mute">
         Every trade recommendation and whether it worked. A trade stays live until its stop
@@ -324,7 +324,7 @@ export default function TradesTab({
           </div>
 
           <div
-            className="flex flex-wrap gap-x-6 gap-y-2 border border-hair bg-surface/40 px-3 py-2.5"
+            className="flex flex-wrap gap-x-6 gap-y-2 border border-hair px-3 py-2.5"
             data-testid="trades-summary"
             aria-label="Filtered trade summary"
           >

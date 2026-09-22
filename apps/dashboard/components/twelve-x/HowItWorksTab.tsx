@@ -160,7 +160,7 @@ function SectionHeader({
   tone?: 'accent' | 'warn';
 }) {
   return (
-    <div className="flex items-center gap-2 border-b border-hair bg-term-bg px-5 py-3">
+    <div className="flex items-center gap-2 border-b border-hair px-5 py-3">
       <Icon size={14} className={tone === 'warn' ? 'text-warn' : 'text-accent'} aria-hidden />
       <h3 className="text-xs font-semibold uppercase text-ink-mute">{title}</h3>
       {meta ? <span className="ml-auto font-mono text-xs text-ink-mute">{meta}</span> : null}
