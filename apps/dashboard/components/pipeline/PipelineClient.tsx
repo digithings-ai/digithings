@@ -243,7 +243,7 @@ export default function PipelineClient() {
           aria-label="Open all pipeline artifacts"
           title="All artifacts"
           onClick={handleArtifactLedgerOpen}
-          className="mr-1 h-9 w-9 gap-2 border-hair font-mono text-xs text-ink hover:border-accent/50 hover:text-accent md:mr-2 md:w-auto md:px-3"
+          className="mr-1 h-9 w-9 gap-2 border-hair bg-term-bg font-mono text-xs text-ink hover:border-accent/50 hover:text-accent dark:bg-term-bg dark:hover:bg-term-bg md:mr-2 md:w-auto md:px-3"
         >
           <Files size={15} aria-hidden />
           <span className="hidden md:inline">All artifacts</span>
@@ -255,7 +255,7 @@ export default function PipelineClient() {
           aria-label="Open pipeline call trace"
           title="Call trace"
           onClick={handleTraceLedgerOpen}
-          className="mr-1 h-9 w-9 gap-2 border-hair font-mono text-xs text-ink hover:border-accent/50 hover:text-accent md:mr-2 md:w-auto md:px-3"
+          className="mr-1 h-9 w-9 gap-2 border-hair bg-term-bg font-mono text-xs text-ink hover:border-accent/50 hover:text-accent dark:bg-term-bg dark:hover:bg-term-bg md:mr-2 md:w-auto md:px-3"
         >
           <ListTree size={15} aria-hidden />
           <span className="hidden md:inline">Call trace</span>

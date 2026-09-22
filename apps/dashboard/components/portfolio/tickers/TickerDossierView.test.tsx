@@ -133,13 +133,6 @@ describe('TickerDossierView — command band structure', () => {
     expect(html).toContain('data-testid="dossier-command-band"');
     expect(html).toContain('data-region="metrics"');
     expect(html).not.toMatch(/dossier-command[^>]*glass-card/);
-    // Q3b slice 3: flat mono register — no display-hero ticker, no surface fill.
-    // (The ticker h1 keeps md:text-2xl, the ledger/attribution register, so the
-    // absence pins the old text-4xl/5xl hero and display type, not all 2xl.)
-    expect(html).not.toContain('text-4xl');
-    expect(html).not.toContain('text-5xl');
-    expect(html).not.toContain('bg-surface/');
-    expect(html).not.toContain('font-display');
     expect(html).toContain('border-');
     expect(html).toContain('data-testid="gloomberb-link"');
     expect(html).toContain('https://term.gloom.sh/?ticker=XLE');

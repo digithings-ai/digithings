@@ -348,7 +348,7 @@ print(r.json()["sharpe_ratio"])`,
       mcp: "digisearch mcp   (FastMCP streamable-http: semantic, research_turn)",
     },
     env: [
-      { name: "CLOUDFLARE_ACCOUNT_ID", description: "Cloudflare account (activates the Vectorize backend, first in precedence)." },
+      { name: "CLOUDFLARE_ACCOUNT_ID", description: "Cloudflare account (activates the Vectorize backend)." },
       { name: "CLOUDFLARE_API_TOKEN", description: "Cloudflare API token for Vectorize." },
       { name: "CHROMA_PATH", description: "Persistent Chroma directory (activates the Chroma backend)." },
       { name: "AZURE_SEARCH_ENDPOINT", description: "Azure AI Search endpoint (alternative backend)." },

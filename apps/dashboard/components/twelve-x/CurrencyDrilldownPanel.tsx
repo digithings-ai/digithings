@@ -43,12 +43,12 @@ export function CurrencyDrilldownPanelBody({
     <div className="space-y-6">
       {/* Header */}
       <div className="space-y-2">
-        <h3 className="font-display text-xl tracking-tight text-ink">{currency}</h3>
+        <h3 className="font-display text-2xl tracking-tight text-ink">{currency}</h3>
         <p className="text-sm text-ink-soft">{label}</p>
       </div>
 
       {/* Score metrics */}
-      <div className="space-y-3 rounded-none border border-hair p-4">
+      <div className="space-y-3 rounded-none border border-hair bg-term-bg p-4">
         <h4 className="text-xs font-semibold uppercase tracking-wider text-ink-mute">
           Consensus Metrics
         </h4>
@@ -74,7 +74,7 @@ export function CurrencyDrilldownPanelBody({
 
       {/* Opinion counts and split */}
       {consensus && (
-        <div className="space-y-3 rounded-none border border-hair p-4">
+        <div className="space-y-3 rounded-none border border-hair bg-term-bg p-4">
           <h4 className="text-xs font-semibold uppercase tracking-wider text-ink-mute">
             Desk Opinions
           </h4>
@@ -116,7 +116,7 @@ export function CurrencyDrilldownPanelBody({
       )}
 
       {/* Confluence score and components */}
-      <div className="space-y-3 rounded-none border border-hair p-4">
+      <div className="space-y-3 rounded-none border border-hair bg-term-bg p-4">
         <h4 className="text-xs font-semibold uppercase tracking-wider text-ink-mute">
           Confluence
         </h4>
