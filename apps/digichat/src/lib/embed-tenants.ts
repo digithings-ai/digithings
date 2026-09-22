@@ -678,7 +678,7 @@ const PLAN_TIER_ORDER = ["free", "brief", "desk", "studio", "enterprise"] as con
  * undefined/spoofed values are denied.
  */
 export function isPlanTierSatisfied(
-  cfg: EmbedTenantConfig | null | undefined,
+  cfg: Pick<EmbedTenantConfig, "requiredPlanTier"> | null | undefined,
   callerTier: string | null | undefined,
 ): boolean {
   const required = cfg?.requiredPlanTier;

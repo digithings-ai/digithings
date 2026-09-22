@@ -18,7 +18,7 @@ This document reorganizes the remaining work around three decisions taken on
 | # | Decision | Source | Status |
 |---|----------|--------|--------|
 | **D0** | Route digichat work through the **module tier** (`module/digichat` as the hop into `develop`) | user, 2026-09-22 | **done** (sync PR #4503) |
-| **D1** | Build `modal` and `sidebar` as **real config-driven presentation surfaces**, not a fold into `/embed` | user, 2026-09-22 | to implement (Phase 2d) |
+| **D1** | Build `modal` and `sidebar` as **real config-driven presentation surfaces**, not a fold into `/embed` | user, 2026-09-22 | done — Phase 2d (#4515) |
 | **D2** | Maintain a **supported-backend matrix** where every backend yields the *same* chat end result (reasoning, tool calls, web search, all activity surfaced) | user, 2026-09-22 | to implement (Phase 5) |
 
 Already shipped and merged into `develop`:
@@ -107,18 +107,47 @@ Nothing here changes behaviour; it removes config that lies.
 
 ## Phase 2b — authenticated-session gaps
 
-The `auth: session` path silently ignores config that the embed path honours.
+The `auth: session` path silently ignored config that the embed path honours.
+Root cause: the chat route resolved the deployment **twice from two sources** —
+`embedConfigOf(tenantCtx)` (non-null only for embeds) drove every gate, while the
+real host deployment was resolved later, inside the model-allowlist `try`, and
+never consulted by the branches above it.
 
-- **Foundry is unreachable for `auth: session`** — the server branches on
-  `embedConfig`, which is `null` there, so it silently runs digigraph.
-- `backend.digigraph.digisearchIndex` / `vaultPathPrefix` are not forwarded on
-  the session path.
-- `gate.requiredPlanTier`, `gate.llmAccess`, `gate.activityDetail` are not
-  enforced on the session path.
-- `models.available` enforcement: not applied on the Foundry path (early
-  return) and bypassed for BYOK.
-- `hosts[].auth: session` is not enforced for embeds.
-- One regression test per gap.
+**Done (issue #4510):** one deployment is now resolved once, right after
+`embedConfig`, and every gate reads from it with the embed config preferred so
+the embed path stays byte-identical.
+
+- Foundry now serves the session path (`backend?.type === "foundry"`).
+- `backend.digigraph.digisearchIndex` / `vaultPathPrefix` reach digigraph on the
+  session path.
+- `gate.requiredPlanTier` is enforced on the session path (passed to
+  `isPlanTierSatisfied` as `{ requiredPlanTier }`; its param narrowed to
+  `Pick<EmbedTenantConfig, "requiredPlanTier">`).
+- `gate.activityDetail` is honoured on the session path (previously hard-coded
+  `"full"` for the trace adapter).
+- `models.available` now applies to the Foundry path too (the allowlist moved
+  ahead of the backend branch).
+- The redundant second `dep` resolution in the MCP/forced-tool header block was
+  removed.
+- 4 regression tests added, all on a session request (`embedConfig === null`).
+
+**Deliberately out of scope (with reasons):**
+
+- **`gate.llmAccess`** — the plan listed it as a server gap; it is not one. No
+  server code reads `llmAccess` anywhere: it is a client-side presentation /
+  error-copy policy consumed only by `embed-client.tsx`, `embed-chat-error.ts`
+  and `embed-send-gate.ts`, and it is already projected to the browser via
+  `DigichatClientConfig.gate.llmAccess`. There is nothing to hoist.
+- **`gate.trial_form`** — a per-IP anonymous-visitor counter. Wiring it to
+  authenticated sessions would impose a 3-turn limit on existing signed-in
+  users; the trial gate stays embed-only by design.
+- **`gate.webSearch` for sessions** — the `DIGICHAT_WEB_SEARCH=1` env fallback
+  remains the documented session toggle.
+- **`hosts[].auth: session` for embeds** — still open; deferred.
+
+**KEEP:** the BYOK model bypass (`if (byokKey) { … }`, cites #3829) — a bound
+BYOK key spends the visitor's provider models, so the CI picker must not reject
+those ids.
 
 ## Phase 2c — app/embed parity, per field
 
@@ -146,8 +175,8 @@ host-side script (`apps/digichat/public/widget.js` + the dashboard popup), and
 |------|---------|-----------|
 | `app` | `/` → `ChatShell` (server persistence) or `HomeStockClient` | unchanged |
 | `embed` | `/embed` | unchanged (iframe-only, no shell) |
-| `modal` | `/` renders the app chrome **plus** a launcher-mounted overlay panel built on `DigichatLauncher` + `embed-popup-config` | overlay, scrim, focus trap, Escape to close |
-| `sidebar` | `/` renders the app chrome with the chat docked to one side | docked panel, resizable/collapsible, host content beside it |
+| `modal` | `/` mounts a corner launcher (30px trigger) that opens the chat in a launcher-mounted overlay panel built on `DigichatLauncher` + `embed-popup-config` | overlay, scrim, focus trap, Escape to close |
+| `sidebar` | `/` mounts the chat docked to one side (canvas reserved beside it) | docked panel, resizable/collapsible, host content beside it |
 
 Work items:
 
@@ -168,10 +197,49 @@ Work items:
 6. **Config surface.** Keep `chrome.mode` as the selector; add `chrome.launcher`
    fields only if needed. Document each mode in `docs/digichat/`.
 
-**Open question for the user:** should `modal`/`sidebar` be **in-app surfaces**
-(this plan) or remain **host-side** concerns (the host page decides and iframes
-`/embed`)? D1 says implement, so this plan implements; the question is only
-whether the host-side path should also stay supported as an alias.
+**Done (issue #4515, PR into `module/digichat`):**
+
+- **Mode router** — `(digichat)/page.tsx` redirects only `embed`; `modal` and
+  `sidebar` now flow through the app paths (`const framed =
+  isFramedPresentation(mode) && !layoutSkin` keeps `ChatShell` for the
+  full-page surface only).
+- **Frame** — new `apps/digichat/src/components/stock/presentation-frame.tsx`
+  (`PresentationFrame`, `isFramedPresentation`): `modal` mounts the existing
+  `DigichatLauncher` (title/aria-label from `chrome.title`/`chrome.launcher`),
+  `sidebar` mounts a docked `aside.dc-presentation__panel` beside a
+  reserved canvas. Both wrap the same `ProductStockShell`, so skin, chrome and
+  theme are identical across modes. **`LAYOUT_SKINS` are skipped** — a
+  page-owning skin (docs / dashboard / expo) keeps the page even when
+  `chrome.mode` asks for a frame, because a launcher panel or a 380px dock would
+  strip the template it renders.
+- **Mode reaches the shell** — `home-stock-client.tsx` now passes
+  `data-chrome-mode={mode}` (was hard-coded `"app"`). The page wrapper stays
+  `h-dvh` for every mode: `modal` portals its panel to `document.body`
+  (`DigichatLauncher`), so the wrapper only sizes the non-framed and `sidebar`
+  cases.
+- **Hotkey bound** — `DigichatLauncher` gained a `hotkey?: string` prop plus an
+  exported `matchesHotkey(event, hotkey)` helper (`mod` = exactly one of
+  ctrl/meta; unnamed modifiers must be absent; a malformed string such as `k+`
+  matches nothing; `matchesHotkey` unit-tested). The listener only
+  opens — Escape and the backdrop keep owning dismissal.
+- **Per-mode formatting** — `apps/digichat/src/styles/product-chrome.css` has
+  `.dc-presentation--sidebar`, `__canvas`, `__panel` (the modal mode needs
+  no rules: `digichat-launcher.css` already sizes the panel body).
+
+**Persistence in the framed modes:** a `modal`/`sidebar` deployment mounts the
+stock shell, so `persistence: server` is **not** available there — only the
+full-page `app` mode reaches `ChatShell`. `modal`/`sidebar` behave like
+`persistence: none` for the session surface (this is unchanged from before
+Phase 2d, when both modes redirected to `/embed`, which is also persistence-free).
+A deployment that needs server-side history must use `chrome.mode: app`.
+
+The host-side path (`public/widget.js` + the dashboard popup, both built on
+`buildPopupEmbedSrc`) stays supported and unchanged — an in-app `modal` surface
+and a host-side iframe popup are complementary, not alternatives.
+
+**Deferred within 2d:** the launcher panel is fixed-size (no resize/collapse
+affordance) and the sidebar width is a constant `min(380px, 100vw)` rather than
+`chrome.launcher`-driven. Revisit only if a deployment needs it.
 
 ---
 
