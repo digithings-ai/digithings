@@ -57,7 +57,15 @@ RESEARCH_TOOLS: list[dict[str, Any]] = [
                 "fetch; use dataset/date_from/date_to/ticker/sector/subject/doc_type for a "
                 "filtered search. Defaults to the baseline run for the current run_date. "
                 "Set include_prior=true to span prior days for continuity. When a context "
-                "manifest pin is active, as_of_date must match an allowed ref."
+                "manifest pin is active, as_of_date must match an allowed ref. "
+                "This is a read of stored rows: repeating a call with the same arguments "
+                "returns the same rows, and re-phrasing the same question with a different "
+                "subject/dataset/ticker cannot surface a row that was not already there. "
+                "The document your own segment is writing today does not exist yet, so an "
+                "exact fetch for it on the run date returns nothing by design — that is an "
+                "answer, not a failure. "
+                "Use it for continuity (one prior fetch per key) and stop; an empty result "
+                "means the evidence genuinely is not in the store."
             ),
             "parameters": {
                 "type": "object",
@@ -130,7 +138,11 @@ RESEARCH_TOOLS: list[dict[str, Any]] = [
         "function": {
             "name": "fetch_prior_document",
             "description": (
-                "Fetch prior materialized document body (or one section) for edit-mode patching."
+                "Fetch prior materialized document body (or one section) for edit-mode "
+                "patching. Pass the segment slug or document_key exactly as published — one "
+                "call is enough to read your prior document, and calling again returns the "
+                "same bytes. The document for the current run date does not exist yet (you "
+                "are writing it), so fetch the prior day's body for continuity and move on."
             ),
             "parameters": {
                 "type": "object",
