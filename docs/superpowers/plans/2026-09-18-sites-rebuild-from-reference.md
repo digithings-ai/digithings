@@ -59,7 +59,7 @@ against what actually shipped:
 |---|---|---|
 | R0 reference consolidation | **DONE** | Target IA is live (all 15 routes); the route/specimen/layering/nav/chrome test suite shipped (`apps/reference/lib/{routes,specimens,layering,nav,chrome}.test.ts`, 38 tests) |
 | R1 shared chrome | **NOT STARTED** | Nav + footer are still per-site (`apps/digithings-web/components/DtNav.tsx`, `DtFooter.tsx` vs digiquant-web's own) |
-| D1 digithings-web page tree | **NOT STARTED** | `apps/digithings-web/app/page.tsx` last changed by the move commit `0fc56fbb0`, not a rebuild |
+| D1 digithings-web page tree | **IN PROGRESS** (updated 2026-09-22) | `/` rebuilt from the reference under v12→v15 (#4429, PR #4470); the remaining routes still carry the move-commit chrome |
 | Q1 digiquant-web page tree | **NOT STARTED** | same — `0fc56fbb0` is the last commit on `apps/digiquant-web/app/page.tsx` |
 | Q2 dashboard chrome + gate | **NOT STARTED** | — |
 | Q3 dashboard surfaces | **NOT STARTED** | — |
@@ -223,7 +223,7 @@ docs are corrected; lint + typecheck + `next build --webpack` (18+ routes) green
 
 | Page | What it must become (mapping to canonical parts) |
 |---|---|
-| `/` | Small-type mono hero with the one-line claim, install command as a **segmented tab group** (`curl`/`docker`/`git`) with a copy affordance; `OdometerStrip`/`StatCounter` figures as `Fig N` with captions; `TerminalManifest` module list (dense mono checklist with bold lead-ins); `StackRow` vendor groups; `RepoActivity`; `NumberedStages` principles; `WordReveal` claim; `ContactMailto` + `SocialRow`; `Colophon` + footer. Product demo as a looping media block. |
+| `/` | **Built** (v15, #4429). Badge + one-line mono hero; boot band pairing the clone command with a live deployment terminal (`BootTerminal`); the module mosaic (`ModuleGrid` — scroll-focus cells on desktop, `TerminalManifest` stepper fallback below 860px); the seven-layer seam diagram for the argument (`ArgumentSeams`/`ArgumentClaims`); the open-source band (`RepoHeatmap` 26-week grid + clone box + `ReleaseRail`); a badged synthetic digiquant band (`StockTicker`, `PriceChart`, `PerfMetrics`, `Pipeline`); the integration types as a `SortableTable`; one `TestimonialWall`; FAQ beside a digichat simulation that hands off to `/chat`; contact form + `ContactMailto`/`SocialRow`; `Colophon` with `sweep` + footer. **Superseded here:** the segmented `curl`/`docker`/`git` tab group (one clone command now), `OdometerStrip`/`StatCounter` figure rows, `NumberedStages` principles (the seam diagram replaced the sequential readout), the `WordReveal` claim (the animated `Colophon` replaced it) and the looping media block. |
 | `/about` | Prose page: property cards, compatibility list (`RuledList` grammar), glass-box traceability, limits, source CTA. |
 | `/docs` | `DocsLayout` (unchanged shell): hero, shared guides, per-module articles. Chrome rebuilt on the new nav. |
 | `/docs/api`, `/docs/api/[service]` | Index + per-service Swagger explorer, full width, no sidebar-less column bug. |

@@ -23,6 +23,13 @@ export interface CopyCommandProps {
   /** Accessible name for the tab strip. */
   ariaLabel?: string;
   className?: string;
+  /**
+   * Single-command form: no tab strip, no copy affordance — the whole code box
+   * *is* the button ("click the box and it copies"). For a hero where the
+   * command is a one-liner and the tabs would be noise. `samples[0]` is shown;
+   * the rest are ignored.
+   */
+  inline?: boolean;
 }
 
 /** Mirrors `--duration-copied`; a timeout needs millis, not a custom property. */
@@ -34,7 +41,7 @@ function splitCommand(sample: CopyCommandSample): [string, string] {
   return [protocol, code.slice(protocol.length)];
 }
 
-export function CopyCommand({ samples, ariaLabel = "Install command", className }: CopyCommandProps) {
+export function CopyCommand({ samples, ariaLabel = "Install command", className, inline = false }: CopyCommandProps) {
   const [selected, setSelected] = useState(0);
   const [copied, setCopied] = useState(false);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -61,11 +68,12 @@ export function CopyCommand({ samples, ariaLabel = "Install command", className 
 
   return (
     <div className={cn("w-full max-w-[var(--measure-prose)]", className)}>
-      <div
-        role="tablist"
-        aria-label={ariaLabel}
-        className="flex flex-wrap items-end gap-[1.4rem] border-b border-hair"
-      >
+      {inline ? null : (
+        <div
+          role="tablist"
+          aria-label={ariaLabel}
+          className="flex flex-wrap items-end gap-[1.4rem] border-b border-hair"
+        >
         {samples.map((sample, index) => (
           <button
             key={sample.label}
@@ -81,21 +89,32 @@ export function CopyCommand({ samples, ariaLabel = "Install command", className 
             {sample.label}
           </button>
         ))}
-      </div>
+        </div>
+      )}
       <button
         type="button"
         data-copied={copied ? "true" : "false"}
         onClick={copy}
-        aria-label={`Copy ${current.label} command`}
-        className="group flex w-full cursor-pointer items-center gap-[1rem] border-x border-b border-t-0 border-hair bg-surface px-[1rem] py-[0.85rem] text-left font-mono text-[0.85rem] leading-[1.5] transition-colors duration-150 ease-brand hover:bg-surface-2"
+        aria-label={`Copy ${inline ? "command" : `${current.label} command`}`}
+        className={cn(
+          "group flex w-full cursor-pointer items-center gap-[1rem] px-[1rem] py-[0.85rem] text-left font-mono text-[0.85rem] leading-[1.5] transition-opacity duration-150 ease-brand",
+          inline
+            ? "border border-hair bg-transparent hover:opacity-80"
+            : "border-x border-b border-t-0 border-hair bg-surface hover:bg-surface-2",
+        )}
       >
-        <span className="min-w-0 flex-1 truncate text-ink">
+        <span className="min-w-0 flex-1 truncate whitespace-nowrap text-ink">
           {protocol ? <span className="text-ink-mute">{protocol}</span> : null}
           <span className="font-medium">{payload}</span>
         </span>
-        <span className="shrink-0 text-[0.7rem] text-ink-mute">
-          <span className="group-data-[copied=true]:hidden">copy</span>
-          <span className="hidden text-accent group-data-[copied=true]:inline">copied</span>
+        <span
+          aria-hidden="true"
+          className={cn(
+            "shrink-0 text-[0.7rem] text-accent",
+            copied ? "inline" : "hidden",
+          )}
+        >
+          copied
         </span>
       </button>
     </div>

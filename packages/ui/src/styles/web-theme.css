@@ -110,6 +110,24 @@
     from { height: var(--radix-collapsible-content-height, var(--collapsible-panel-height, auto)); }
     to { height: 0; }
   }
+
+  /* Entrance choreography (D1, #4429) — the staged hero reveal. Declared in
+     THIS block rather than a second one: web-theme.test.ts pins exactly one
+     `@theme inline`, because a second is how a token bridge drifts. */
+  --animate-appear: kit-appear 0.6s forwards ease-out;
+  --animate-appear-zoom: kit-appear-zoom 0.6s forwards ease-out;
+  --line-width: 1px;
+
+  @keyframes kit-appear {
+    0% { opacity: 0; transform: translateY(1rem); filter: blur(0.5rem); }
+    50% { filter: blur(0); }
+    100% { opacity: 1; transform: translateY(0); filter: blur(0); }
+  }
+
+  @keyframes kit-appear-zoom {
+    0% { opacity: 0; transform: scale(0.5); }
+    100% { opacity: 1; transform: scale(1); }
+  }
 }
 
 /* Base element defaults shared by the React apps.
@@ -191,6 +209,52 @@ body {
 
 /* code block (module init snippet) */
 .codeblock { background: var(--term-bg); border: 1px solid var(--term-hair); border-radius: 0; padding: 1.1rem 1.3rem; font-family: var(--font-mono); font-size: 0.82rem; line-height: 1.9; color: var(--term-ink); overflow-x: auto; white-space: pre-wrap; }
+
+/* ── the flat module grid (ModuleGrid, v13 stage 4) ────────────────────────
+   The angular sibling of the SVG graph: every module is a square-ish cell in
+   one grid for the whole run, the focused cell is the one the scroll selects,
+   and the detail sits in a flat panel beside it. No radius anywhere — this is
+   the canon's flat-corner grammar, where the graph above is the rounded one.
+   The grid is sized so all modules fit one viewport without an internal
+   scrollbar (12 cells at 4 columns = 3 rows). */
+/* Mosaic (v15, #4429): no rail, no side panel, no per-cell logo or tier colour.
+   One flex-wrap field of flat cells whose resting size follows `tier`; the
+   focused cell grows in place and reveals its detail, so the whole story stays
+   in a single view. Widths animate because flex-grow/min-height are animatable. */
+.dg-mosaic { display: flex; flex-wrap: wrap; align-content: stretch; gap: 1px; width: 100%; max-width: var(--frame-w); margin-inline: auto; background: var(--hair); border: 1px solid var(--hair); }
+.dg-mosaic-cell { display: flex; flex-direction: column; gap: 0.5rem; flex-grow: 1; min-height: clamp(6rem, 12vh, 8rem); padding: 0.8rem 0.9rem; margin: 0; background: var(--surface); border: 0; border-radius: 0; text-align: left; cursor: pointer; opacity: 0.5; overflow: hidden; transition: flex-basis .45s var(--ease), min-height .45s var(--ease), opacity .25s var(--ease), background .25s var(--ease); }
+.dg-mosaic-cell:hover { opacity: 0.82; }
+.dg-mosaic-cell.on { min-height: clamp(11rem, 22vh, 14rem); opacity: 1; background: var(--surface-2, var(--surface)); box-shadow: inset 0 0 0 1px var(--accent); cursor: default; }
+.dg-mosaic-name { font-family: var(--font-mono); font-size: 0.82rem; font-weight: 500; color: var(--ink); }
+.dg-mosaic-role { font-family: var(--font-mono); font-size: 0.66rem; line-height: 1.5; color: var(--ink-mute); }
+.dg-mosaic-cell.on .dg-mosaic-role { color: var(--ink-soft); }
+.dg-mosaic-detail { display: flex; flex-direction: column; gap: 0.7rem; margin-top: 0.4rem; min-width: 0; }
+.dg-mosaic-tag { color: var(--ink-soft); font-family: var(--font-mono); font-size: 0.76rem; line-height: 1.6; }
+.dg-mosaic-ask { align-self: flex-start; margin-top: auto; font-family: var(--font-mono); font-size: 0.76rem; color: var(--ink-mute); }
+
+/* Terminal registers (v15, #4429): the boot playback is a fixed box on the
+   landing page, so it must not grow as lines type in. `fill` stretches .term
+   to the wrapper's height; `compact` drops the body type a step. Both are
+   additive modifiers over the shared .term base in site.css. */
+.term--fill { display: flex; flex-direction: column; height: 100%; }
+.term--fill .term-body { flex: 1 1 auto; min-height: 0; overflow: hidden; }
+.term--compact .term-bar { padding: 0.55rem 0.9rem; }
+.term--compact .term-body { font-size: 0.72rem; line-height: 1.72; padding: 0.9rem 1rem 1rem; min-height: 0; }
+.term--compact { box-shadow: 0 28px 64px -40px rgba(0, 0, 0, 0.5); }
+
+/* digiquant band (v15, #4429): a deliberately foreign surface. The section is
+   tinted with digiquant's own accent over the page background and bounded by a
+   hairline above and below, so it reads as a different product's page sitting
+   inside the digithings page rather than another digithings band. Pair it with
+   `.accent-digiquant` on the same element so `--accent` resolves to the cyan. */
+.quant-band {
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--accent) 7%, transparent),
+    transparent 72%
+  );
+  border-block: 1px solid var(--hair);
+}
 
 /* mobile / reduced-motion stepper */
 .dg-stepper { display: flex; flex-direction: column; gap: 2rem; max-width: var(--wrap); margin-inline: auto; padding-inline: var(--gutter); }
@@ -375,5 +439,145 @@ body {
   .kit-pop[data-open],
   .kit-pop[data-closed] {
     animation: none;
+  }
+}
+
+/* ==========================================================================
+   PAGE GEOMETRY + ENTRANCE CHOREOGRAPHY (D1, #4429 — ported techniques)
+   --------------------------------------------------------------------------
+   Two things this kit was missing, both read out of launch-ui's source (MIT)
+   rather than invented:
+
+   1. `line-*` / `fade-*` / `glass-*` — a named utility vocabulary so sections
+      COMPOSE instead of hand-rolling a border or a mask each time. That
+      hand-rolling is exactly why the first pass of pages read as ad hoc.
+
+   2. `animate-appear` — the staged entrance. Every hero element carries it
+      with a `delay-*` class, starting from `opacity-0`; `forwards` means the
+      resting state after the run is the visible one, so nothing flashes.
+
+   Both are token-backed. NOTE for the canon guard: `line-*` deliberately
+   duplicates @digithings/design/site/site.css's legacy `.line-*` names — that
+   sheet is imported by apps that do NOT import this bridge, so neither can
+   own it exclusively. Declared here as `@utility` so Tailwind generates them
+   alongside its own.
+   ========================================================================== */
+
+/* ---- Layout rules: the persistent page geometry -------------------------
+   A section that runs the full container height between two vertical hairlines
+   reads as one built object rather than boxes in a column. `line-y` draws only
+   the inline edges (0 top/bottom), `line-x` only the block edges. */
+/* Plain CSS, not @apply and not a var()-based shorthand: Tailwind's utility
+   generator resolves these at build time and a `var(--line-width, 1px)` inside
+   a shorthand did not survive (the border rendered 0px). A literal `1px` is
+   correct here — the hairline width is a canon constant, not a themed value. */
+@utility line-y {
+  border-left-width: 1px;
+  border-right-width: 1px;
+  border-style: solid;
+  border-color: var(--hair);
+}
+
+@utility line-x {
+  border-top-width: 1px;
+  border-bottom-width: 1px;
+  border-style: solid;
+  border-color: var(--hair);
+}
+
+@utility line-t {
+  border-top-width: 1px;
+  border-style: solid;
+  border-color: var(--hair);
+}
+
+@utility line-b {
+  border-bottom-width: 1px;
+  border-style: solid;
+  border-color: var(--hair);
+}
+
+/* Must come AFTER the line-* rules in source order for equal specificity to
+   win, which is why it is declared here rather than with the others. */
+@utility line-dashed {
+  border-style: dashed;
+}
+
+/* ---- Fade masks: bleed an artefact into the page instead of cutting it ---
+   (`fade-bottom` on a hero section is what stops a product shot ending on a
+   hard edge.) */
+@utility fade-x {
+  mask-image: linear-gradient(to right, transparent 0%, black 25%, black 75%, transparent 100%);
+}
+
+@utility fade-y {
+  mask-image: linear-gradient(to top, transparent 0%, black 25%, black 75%, transparent 100%);
+}
+
+@utility fade-top {
+  mask-image: linear-gradient(to bottom, transparent 0%, black 35%);
+}
+
+@utility fade-bottom {
+  mask-image: linear-gradient(to top, transparent 0%, black 35%);
+}
+
+@utility fade-top-lg {
+  mask-image: linear-gradient(to bottom, transparent 15%, black 100%);
+}
+
+@utility fade-bottom-lg {
+  mask-image: linear-gradient(to top, transparent 15%, black 100%);
+}
+
+@utility fade-left {
+  mask-image: linear-gradient(to right, transparent 0%, black 35%);
+}
+
+@utility fade-right {
+  mask-image: linear-gradient(to left, transparent 0%, black 35%);
+}
+
+/* ---- Glass: layered gradient surfaces over the flat ground -------------
+   Five depths. `hair` is this system's border token, so the edges stay in the
+   canon rather than reaching for a Tailwind palette. */
+@utility glass-1 {
+  border: 1px solid var(--hair);
+  background-image: linear-gradient(to bottom, color-mix(in srgb, var(--surface) 80%, transparent), color-mix(in srgb, var(--surface) 40%, transparent));
+}
+
+@utility glass-2 {
+  border: 1px solid var(--hair);
+  background-image: linear-gradient(to bottom, var(--surface), color-mix(in srgb, var(--surface) 80%, transparent));
+}
+
+@utility glass-3 {
+  border: 1px solid var(--hair);
+  background-image: linear-gradient(to bottom, color-mix(in srgb, var(--surface) 30%, transparent), color-mix(in srgb, var(--surface) 20%, transparent));
+}
+
+@utility glass-4 {
+  border: 1px solid var(--hair);
+  background-image: linear-gradient(to bottom, color-mix(in srgb, var(--surface) 60%, transparent), color-mix(in srgb, var(--surface) 20%, transparent));
+}
+
+@utility glass-5 {
+  border: 1px solid var(--hair);
+  background-image: linear-gradient(to bottom, var(--surface), color-mix(in srgb, var(--surface) 20%, transparent));
+}
+
+/* ---- The entrance choreography: keyframes + tokens live in the one
+   @theme inline block above, per web-theme.test.ts. ---- */
+
+/* Reduced motion: the choreography parks elements at their END state rather
+   than their start state, so a reduced-motion visitor sees the finished page
+   immediately instead of a page of invisible elements. */
+@media (prefers-reduced-motion: reduce) {
+  .animate-appear,
+  .animate-appear-zoom {
+    animation: none;
+    opacity: 1;
+    transform: none;
+    filter: none;
   }
 }

@@ -86,6 +86,16 @@ export interface NavShellProps {
    * `:focus-within` reveals it (nav-shell.css).
    */
   autoHide?: "scroll" | "hover";
+  /**
+   * Clip the bar's own band (its scrolled backdrop + bottom hairline) to the
+   * page column instead of the viewport edges. The row was always capped to
+   * `--wrap`; this is for a document whose sections are drawn between the
+   * persistent `LayoutLines`, so a full-bleed bar would paint across the very
+   * rules that define the page. Unset (the default) keeps the bar full-bleed —
+   * right for an app shell, wrong for this kind of page. Pass the same register
+   * as `LayoutLines` (`--frame-w`) so the band's edges land on the rules.
+   */
+  clipToFrame?: boolean;
 }
 
 /** Key for a NavItem: groups have no href, so the label carries the identity. */
@@ -464,6 +474,7 @@ export function NavShell({
   currentPath,
   skipTo,
   autoHide = "scroll",
+  clipToFrame = false,
 }: NavShellProps) {
   const navRef = useRef<HTMLElement>(null);
   const toggleRef = useRef<HTMLButtonElement>(null);
@@ -644,7 +655,7 @@ export function NavShell({
           collide — and it lets CSS pin the bar in place while a menu is open. */}
       <header
         ref={navRef}
-        className={`nav-shell${menuOpen ? " is-menu-open" : ""}`}
+        className={`nav-shell${menuOpen ? " is-menu-open" : ""}${clipToFrame ? " is-clipped" : ""}`}
         data-group-open={openGroup !== null}
       >
         <div className="nav-shell-row relative z-[56] mx-auto flex w-full max-w-[var(--wrap,1180px)] items-center justify-between gap-[1.5rem] px-[var(--gutter,1.5rem)] max-[880px]:gap-[1rem]">
