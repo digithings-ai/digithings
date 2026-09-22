@@ -183,6 +183,19 @@ describe("DigichatLauncher interactions", () => {
       expect(matchesHotkey(new KeyboardEvent("keydown", { key: "j", metaKey: true }), "mod+k")).toBe(
         false,
       );
+      // `mod` is exactly one of ctrl/meta; both held is not the shortcut.
+      expect(
+        matchesHotkey(
+          new KeyboardEvent("keydown", { key: "k", metaKey: true, ctrlKey: true }),
+          "mod+k",
+        ),
+      ).toBe(false);
+      // A malformed string (empty token) matches nothing rather than degrading
+      // to the bare key.
+      expect(matchesHotkey(new KeyboardEvent("keydown", { key: "k" }), "k+")).toBe(false);
+      expect(matchesHotkey(new KeyboardEvent("keydown", { key: "k", metaKey: true }), "mod++k")).toBe(
+        false,
+      );
     });
 
     it("opens the panel from the configured hotkey", () => {

@@ -14,6 +14,7 @@
 import type { ReactNode } from "react";
 import { DigichatLauncher } from "@digithings/ui/chat/launcher";
 import type { DigichatClientConfig } from "@/lib/deploy-config";
+import { skinOwnsPageChrome } from "@/lib/thread-skins";
 
 type ChromeMode = DigichatClientConfig["chrome"]["mode"];
 
@@ -32,6 +33,14 @@ export function PresentationFrame({
   children: ReactNode;
 }) {
   const chrome = clientConfig.chrome;
+
+  // Layout skins (docs / dashboard / expo) own the whole page — a launcher
+  // panel or a 380px dock would strip the template they render. They keep the
+  // page even when `chrome.mode` asks for a frame.
+  if (skinOwnsPageChrome(chrome.skin)) {
+    return <>{children}</>;
+  }
+
   const label = chrome.launcher?.label ?? chrome.title ?? "digichat";
 
   if (mode === "modal") {
@@ -40,7 +49,7 @@ export function PresentationFrame({
         title={chrome.title ?? "digichat"}
         ariaLabel={label}
         hotkey={chrome.launcher?.hotkey}
-        className="digichat-presentation digichat-presentation--modal"
+        className="dc-presentation dc-presentation--modal"
       >
         {children}
       </DigichatLauncher>
@@ -50,11 +59,11 @@ export function PresentationFrame({
   if (mode === "sidebar") {
     return (
       <div
-        className="digichat-presentation digichat-presentation--sidebar"
+        className="dc-presentation dc-presentation--sidebar"
         data-chrome-mode="sidebar"
       >
-        <div className="digichat-presentation__canvas" aria-hidden="true" />
-        <aside className="digichat-presentation__panel" aria-label={label}>
+        <div className="dc-presentation__canvas" aria-hidden="true" />
+        <aside className="dc-presentation__panel" aria-label={label}>
           {children}
         </aside>
       </div>

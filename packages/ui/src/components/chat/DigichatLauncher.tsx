@@ -44,13 +44,14 @@ const getServerSnapshot = () => false;
  *
  * `mod` means "ctrl or meta" so one deployment string works on both macOS and
  * Windows/Linux; naming `ctrl` or `meta` explicitly pins that one. Every
- * modifier not named must be absent, so `k` alone never fires on `mod+k`.
+ * modifier not named must be absent, so `k` alone never fires on `mod+k`. A
+ * malformed string (empty token, e.g. `k+` or `mod++k`) matches nothing rather
+ * than silently degrading to the bare key.
  */
 export function matchesHotkey(event: KeyboardEvent, hotkey: string): boolean {
-  const tokens = hotkey
-    .split("+")
-    .map((token) => token.trim().toLowerCase())
-    .filter(Boolean);
+  const parts = hotkey.split("+");
+  if (parts.some((part) => part.trim() === "")) return false;
+  const tokens = parts.map((token) => token.trim().toLowerCase());
   if (tokens.length === 0) return false;
   const key = tokens[tokens.length - 1];
   const mods = new Set(tokens.slice(0, -1));
@@ -62,7 +63,8 @@ export function matchesHotkey(event: KeyboardEvent, hotkey: string): boolean {
 
   if (needsCtrl && !event.ctrlKey) return false;
   if (needsMeta && !event.metaKey) return false;
-  if (needsMod && !(event.ctrlKey || event.metaKey)) return false;
+  // `mod` is exactly one of ctrl/meta — both held is not the shortcut.
+  if (needsMod && event.ctrlKey === event.metaKey) return false;
   if (!needsCtrl && !needsMod && event.ctrlKey) return false;
   if (!needsMeta && !needsMod && event.metaKey) return false;
   if (needsAlt !== event.altKey) return false;

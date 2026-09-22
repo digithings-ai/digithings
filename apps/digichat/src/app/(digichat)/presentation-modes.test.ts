@@ -23,9 +23,9 @@ describe("chrome.mode presentation surfaces", () => {
     const page = read("page.tsx");
 
     expect(page).toMatch(/if \(!layoutSkin && mode === "embed"\)/);
-    expect(page).not.toMatch(/mode === "modal" \|\| mode === "sidebar"\)\s*\{\s*redirect/);
+    expect(page).not.toMatch(/\(mode === "embed" \|\| mode === "modal" \|\| mode === "sidebar"\)/);
     // modal/sidebar mount the stock shell, so ChatShell must not claim them.
-    expect(page).toMatch(/const framed = mode === "modal" \|\| mode === "sidebar"/);
+    expect(page).toMatch(/const framed = isFramedPresentation\(mode\) && !layoutSkin/);
     expect(page).toMatch(/client\.persistence === "server" && !framed/);
   });
 
@@ -36,8 +36,6 @@ describe("chrome.mode presentation surfaces", () => {
     expect(client).toMatch(/const mode = clientConfig\.chrome\.mode/);
     expect(client).toMatch(/data-chrome-mode=\{mode\}/);
     expect(client).not.toMatch(/data-chrome-mode="app"/);
-    // The launcher body is already viewport height; `h-dvh` there overflows it.
-    expect(client).toMatch(/mode === "modal" \? "flex h-full flex-col"/);
     expect(client).toMatch(/<PresentationFrame mode=\{mode\} clientConfig=\{clientConfig\}>/);
   });
 
@@ -51,14 +49,16 @@ describe("chrome.mode presentation surfaces", () => {
     expect(frame).toMatch(/hotkey=\{chrome\.launcher\?\.hotkey\}/);
     expect(frame).toMatch(/mode === "modal"/);
     expect(frame).toMatch(/mode === "sidebar"/);
-    expect(frame).toMatch(/digichat-presentation__panel/);
+    expect(frame).toMatch(/dc-presentation__panel/);
+    // Page-owning skins must never be wrapped in the frame.
+    expect(frame).toMatch(/skinOwnsPageChrome\(chrome\.skin\)/);
   });
 
   it("styles the docked sidebar panel", () => {
     const css = readFileSync(join(srcDir, "styles", "product-chrome.css"), "utf8");
 
-    expect(css).toMatch(/\.digichat-presentation--sidebar \{/);
-    expect(css).toMatch(/\.digichat-presentation__canvas \{/);
-    expect(css).toMatch(/\.digichat-presentation__panel \{/);
+    expect(css).toMatch(/\.dc-presentation--sidebar \{/);
+    expect(css).toMatch(/\.dc-presentation__canvas \{/);
+    expect(css).toMatch(/\.dc-presentation__panel \{/);
   });
 });

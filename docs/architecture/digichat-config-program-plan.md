@@ -175,8 +175,8 @@ host-side script (`apps/digichat/public/widget.js` + the dashboard popup), and
 |------|---------|-----------|
 | `app` | `/` → `ChatShell` (server persistence) or `HomeStockClient` | unchanged |
 | `embed` | `/embed` | unchanged (iframe-only, no shell) |
-| `modal` | `/` renders the app chrome **plus** a launcher-mounted overlay panel built on `DigichatLauncher` + `embed-popup-config` | overlay, scrim, focus trap, Escape to close |
-| `sidebar` | `/` renders the app chrome with the chat docked to one side | docked panel, resizable/collapsible, host content beside it |
+| `modal` | `/` mounts a corner launcher (30px trigger) that opens the chat in a launcher-mounted overlay panel built on `DigichatLauncher` + `embed-popup-config` | overlay, scrim, focus trap, Escape to close |
+| `sidebar` | `/` mounts the chat docked to one side (canvas reserved beside it) | docked panel, resizable/collapsible, host content beside it |
 
 Work items:
 
@@ -200,24 +200,38 @@ Work items:
 **Done (issue #4515, PR into `module/digichat`):**
 
 - **Mode router** — `(digichat)/page.tsx` redirects only `embed`; `modal` and
-  `sidebar` now flow through the app paths (`const framed = mode === "modal" ||
-  mode === "sidebar"` keeps `ChatShell` for the full-page surface only).
+  `sidebar` now flow through the app paths (`const framed =
+  isFramedPresentation(mode) && !layoutSkin` keeps `ChatShell` for the
+  full-page surface only).
 - **Frame** — new `apps/digichat/src/components/stock/presentation-frame.tsx`
   (`PresentationFrame`, `isFramedPresentation`): `modal` mounts the existing
   `DigichatLauncher` (title/aria-label from `chrome.title`/`chrome.launcher`),
-  `sidebar` mounts a docked `aside.digichat-presentation__panel` beside a
+  `sidebar` mounts a docked `aside.dc-presentation__panel` beside a
   reserved canvas. Both wrap the same `ProductStockShell`, so skin, chrome and
-  theme are identical across modes.
+  theme are identical across modes. **`LAYOUT_SKINS` are skipped** — a
+  page-owning skin (docs / dashboard / expo) keeps the page even when
+  `chrome.mode` asks for a frame, because a launcher panel or a 380px dock would
+  strip the template it renders.
 - **Mode reaches the shell** — `home-stock-client.tsx` now passes
-  `data-chrome-mode={mode}` (was hard-coded `"app"`) and uses `h-full` instead of
-  `h-dvh` for `modal` so the panel body does not overflow the launcher.
+  `data-chrome-mode={mode}` (was hard-coded `"app"`). The page wrapper stays
+  `h-dvh` for every mode: `modal` portals its panel to `document.body`
+  (`DigichatLauncher`), so the wrapper only sizes the non-framed and `sidebar`
+  cases.
 - **Hotkey bound** — `DigichatLauncher` gained a `hotkey?: string` prop plus an
-  exported `matchesHotkey(event, hotkey)` helper (`mod` = ctrl-or-meta; unnamed
-  modifiers must be absent; `matchesHotkey` unit-tested). The listener only
+  exported `matchesHotkey(event, hotkey)` helper (`mod` = exactly one of
+  ctrl/meta; unnamed modifiers must be absent; a malformed string such as `k+`
+  matches nothing; `matchesHotkey` unit-tested). The listener only
   opens — Escape and the backdrop keep owning dismissal.
 - **Per-mode formatting** — `apps/digichat/src/styles/product-chrome.css` has
-  `.digichat-presentation--sidebar`, `__canvas`, `__panel` (the modal mode needs
+  `.dc-presentation--sidebar`, `__canvas`, `__panel` (the modal mode needs
   no rules: `digichat-launcher.css` already sizes the panel body).
+
+**Persistence in the framed modes:** a `modal`/`sidebar` deployment mounts the
+stock shell, so `persistence: server` is **not** available there — only the
+full-page `app` mode reaches `ChatShell`. `modal`/`sidebar` behave like
+`persistence: none` for the session surface (this is unchanged from before
+Phase 2d, when both modes redirected to `/embed`, which is also persistence-free).
+A deployment that needs server-side history must use `chrome.mode: app`.
 
 The host-side path (`public/widget.js` + the dashboard popup, both built on
 `buildPopupEmbedSrc`) stays supported and unchanged — an in-app `modal` surface

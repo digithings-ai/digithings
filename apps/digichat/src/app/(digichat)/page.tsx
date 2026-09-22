@@ -7,6 +7,7 @@ import {
   getDigichatConfig,
 } from "@/lib/deploy-config/loader";
 import { skinOwnsPageChrome } from "@/lib/thread-skins";
+import { isFramedPresentation } from "@/components/stock/presentation-frame";
 import { HomeStockClient } from "./home-stock-client";
 
 /**
@@ -27,7 +28,8 @@ export default async function Home() {
   const mode = client.chrome.mode;
   const layoutSkin = skinOwnsPageChrome(client.chrome.skin);
   // modal and sidebar are real in-app surfaces now; only `embed` bounces out.
-  const framed = mode === "modal" || mode === "sidebar";
+  // A layout skin owns `/` regardless of mode, so it is never "framed".
+  const framed = isFramedPresentation(mode) && !layoutSkin;
 
   if (!layoutSkin && mode === "embed") {
     redirect("/embed");

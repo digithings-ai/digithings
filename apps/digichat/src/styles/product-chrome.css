@@ -313,7 +313,7 @@ body:has(.dc-embed-shell[data-wide="1"]) {
 /* chrome.mode: sidebar (#4515). A docked panel beside the host content rather
    than the bare iframe. The modal mode needs no rules here — the launcher
    panel already sizes its own body (see digichat-launcher.css). */
-.digichat-presentation--sidebar {
+.dc-presentation--sidebar {
   display: flex;
   height: 100%;
   width: 100%;
@@ -322,13 +322,13 @@ body:has(.dc-embed-shell[data-wide="1"]) {
 
 /* The host page keeps its own layout; this canvas only reserves the space the
    panel occupies so the docked chat never covers the content. */
-.digichat-presentation__canvas {
+.dc-presentation__canvas {
   flex: 1 1 auto;
   min-width: 0;
   background: var(--background);
 }
 
-.digichat-presentation__panel {
+.dc-presentation__panel {
   display: flex;
   flex-direction: column;
   flex: none;
@@ -336,7 +336,7 @@ body:has(.dc-embed-shell[data-wide="1"]) {
   height: 100%;
   min-height: 0;
   overflow: hidden;
-  border-inline-start: 1px solid var(--hair);
+  border-inline-start: 1px solid var(--border);
   background: var(--background);
   color: var(--foreground);
 }

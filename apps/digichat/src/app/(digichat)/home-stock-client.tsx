@@ -135,9 +135,10 @@ function HomeStockClientSingle({
   return (
     <StockChatPrefsHost value={prefs.prefsApi} panes={prefs.panes}>
       <div
-        // `modal` fills the launcher panel body, which is already the viewport
-        // height; `h-dvh` there would overflow it.
-        className={mode === "modal" ? "flex h-full flex-col" : "flex h-dvh flex-col"}
+        // `modal` portals its panel to `document.body` (see DigichatLauncher),
+        // so this wrapper only sizes the page for the non-framed and sidebar
+        // cases — `h-dvh` is right for both.
+        className="flex h-dvh flex-col"
         data-chrome-mode={mode}
         data-persistence="none"
       >
@@ -225,7 +226,7 @@ function HomeStockClientMemory({
   return (
     <StockChatPrefsHost value={prefs.prefsApi} panes={prefs.panes}>
       <div
-        className={mode === "modal" ? "flex h-full flex-col" : "flex h-dvh flex-col"}
+        className="flex h-dvh flex-col"
         data-chrome-mode={mode}
         data-persistence="memory"
       >
