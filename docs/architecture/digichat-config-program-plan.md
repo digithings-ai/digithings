@@ -107,18 +107,47 @@ Nothing here changes behaviour; it removes config that lies.
 
 ## Phase 2b — authenticated-session gaps
 
-The `auth: session` path silently ignores config that the embed path honours.
+The `auth: session` path silently ignored config that the embed path honours.
+Root cause: the chat route resolved the deployment **twice from two sources** —
+`embedConfigOf(tenantCtx)` (non-null only for embeds) drove every gate, while the
+real host deployment was resolved later, inside the model-allowlist `try`, and
+never consulted by the branches above it.
 
-- **Foundry is unreachable for `auth: session`** — the server branches on
-  `embedConfig`, which is `null` there, so it silently runs digigraph.
-- `backend.digigraph.digisearchIndex` / `vaultPathPrefix` are not forwarded on
-  the session path.
-- `gate.requiredPlanTier`, `gate.llmAccess`, `gate.activityDetail` are not
-  enforced on the session path.
-- `models.available` enforcement: not applied on the Foundry path (early
-  return) and bypassed for BYOK.
-- `hosts[].auth: session` is not enforced for embeds.
-- One regression test per gap.
+**Done (issue #4510):** one deployment is now resolved once, right after
+`embedConfig`, and every gate reads from it with the embed config preferred so
+the embed path stays byte-identical.
+
+- Foundry now serves the session path (`backend?.type === "foundry"`).
+- `backend.digigraph.digisearchIndex` / `vaultPathPrefix` reach digigraph on the
+  session path.
+- `gate.requiredPlanTier` is enforced on the session path (passed to
+  `isPlanTierSatisfied` as `{ requiredPlanTier }`; its param narrowed to
+  `Pick<EmbedTenantConfig, "requiredPlanTier">`).
+- `gate.activityDetail` is honoured on the session path (previously hard-coded
+  `"full"` for the trace adapter).
+- `models.available` now applies to the Foundry path too (the allowlist moved
+  ahead of the backend branch).
+- The redundant second `dep` resolution in the MCP/forced-tool header block was
+  removed.
+- 4 regression tests added, all on a session request (`embedConfig === null`).
+
+**Deliberately out of scope (with reasons):**
+
+- **`gate.llmAccess`** — the plan listed it as a server gap; it is not one. No
+  server code reads `llmAccess` anywhere: it is a client-side presentation /
+  error-copy policy consumed only by `embed-client.tsx`, `embed-chat-error.ts`
+  and `embed-send-gate.ts`, and it is already projected to the browser via
+  `DigichatClientConfig.gate.llmAccess`. There is nothing to hoist.
+- **`gate.trial_form`** — a per-IP anonymous-visitor counter. Wiring it to
+  authenticated sessions would impose a 3-turn limit on existing signed-in
+  users; the trial gate stays embed-only by design.
+- **`gate.webSearch` for sessions** — the `DIGICHAT_WEB_SEARCH=1` env fallback
+  remains the documented session toggle.
+- **`hosts[].auth: session` for embeds** — still open; deferred.
+
+**KEEP:** the BYOK model bypass (`if (byokKey) { … }`, cites #3829) — a bound
+BYOK key spends the visitor's provider models, so the CI picker must not reject
+those ids.
 
 ## Phase 2c — app/embed parity, per field
 
