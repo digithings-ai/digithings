@@ -89,7 +89,7 @@ describe('PmDirectionDocumentView', () => {
     expect(tlt).toBeGreaterThan(qqq);
   });
 
-  it('derives buy/hold/sell from prior weights vs H8 targets', () => {
+  it('derives buy/hold/sell from prior weights vs sizing targets', () => {
     const html = render({
       rebalance: {
         actions: [

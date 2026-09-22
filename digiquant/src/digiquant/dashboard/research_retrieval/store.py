@@ -528,10 +528,10 @@ class EvidenceBundleMissingError(LookupError):
 
 
 class EvidenceBundleStore:
-    """Append-only H5 base + H6 amendment boundary (no upsert / update / delete).
+    """Append-only analyst base + deliberation amendment boundary (no upsert / update / delete).
 
     Dark-launch companion to :class:`ResearchStateStore`. SQL schema:
-    ``090_olympus_evidence_bundles.sql``. Does not cut over H6 selection (WP11.3+).
+    ``090_olympus_evidence_bundles.sql``. Does not cut over deliberation selection (WP11.3+).
     """
 
     def __init__(self) -> None:
@@ -558,7 +558,7 @@ class EvidenceBundleStore:
         return value
 
     def append_base_bundle(self, bundle: TickerEvidenceBundle) -> TickerEvidenceBundle:
-        """Insert immutable H5 base; exact retry is a no-op; one base per run/ticker."""
+        """Insert immutable analyst base; exact retry is a no-op; one base per run/ticker."""
         run_key = (bundle.source_run_id, bundle.ticker)
         existing_id = self._run_ticker.get(run_key)
         if existing_id is not None and existing_id != bundle.bundle_id:
@@ -599,7 +599,7 @@ class EvidenceBundleStore:
         )
 
     def append_amendment(self, amendment: EvidenceBundleAmendment) -> EvidenceBundleAmendment:
-        """Append H6 amendment; requires existing base + matching missing-fact request."""
+        """Append deliberation amendment; requires existing base + matching missing-fact request."""
         base = self._bases.get(amendment.base_bundle_id)
         if base is None:
             raise EvidenceBundleError(
@@ -654,7 +654,7 @@ class EvidenceBundleStore:
         )
 
     def amendment_count_for_base(self, base_bundle_id: UUID) -> int:
-        """Policy helper: count append-only H6 supplements on one base bundle."""
+        """Policy helper: count append-only deliberation supplements on one base bundle."""
         return sum(
             1
             for amendment in self._amendments.values()

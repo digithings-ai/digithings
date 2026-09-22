@@ -1,4 +1,4 @@
-"""H3 — thesis vehicle map (market thesis → tickers)."""
+"""vehicle_map — thesis vehicle map (market thesis → tickers)."""
 
 from __future__ import annotations
 
@@ -51,7 +51,7 @@ def _run_vehicle_map_llm(state: PortfolioState) -> ThesisVehicleMapOutput:
     if vehicle_map is None:
         return ThesisVehicleMapOutput()
     if errors:
-        logger.warning("H3 vehicle map completed with %d recoverable errors", len(errors))
+        logger.warning("vehicle_map vehicle map completed with %d recoverable errors", len(errors))
     return vehicle_map
 
 

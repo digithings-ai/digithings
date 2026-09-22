@@ -325,7 +325,7 @@ def apply_web_grounding_to_inputs(
     flag; the run aborts rather than reasoning ungrounded (#3859).
 
     Skipped-by-design segments return ``inputs`` unchanged with no call and no
-    raise: ``live_search=False`` segments (H6, options, onchain, short folds)
+    raise: ``live_search=False`` segments (deliberation, options, onchain, short folds)
     and grounded-by-ingest segments (``live_search_is_fallback`` with a fresh
     ingested FRED layer, e.g. macro, #711), which ground on their in-process
     data tools instead of the paid web_search tool call.

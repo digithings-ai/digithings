@@ -795,7 +795,7 @@ class TestRejections:
         assert rejected["run_date"] == RUN_DATE.isoformat()
 
     def test_order_from_a_superseded_approval_is_stale_not_filled(self) -> None:
-        """H8 re-approved a different target for the day; this order is an artefact."""
+        """sizing re-approved a different target for the day; this order is an artefact."""
         chain = _Chain()
         chain.order(
             symbol="AAPL",
@@ -1277,7 +1277,7 @@ class TestSoleAuthority:
 
     def test_only_execution_io_names_the_fill_tables(self) -> None:
         writers = "digiquant/src/digiquant/portfolio/writers"
-        # ``ledger_io`` declares the paper_executions name because H9 reads it to decide
+        # ``ledger_io`` declares the paper_executions name because commit reads it to decide
         # whether a symbol is already filled and therefore frozen. Reading is fine; it
         # never inserts there, which ``test_commit_is_the_only_ledger_writer`` pins from the
         # other side.

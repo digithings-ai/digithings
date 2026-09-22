@@ -1,8 +1,8 @@
-"""H4 — deterministic opportunity screener (focus roster).
+"""screener — deterministic opportunity screener (focus roster).
 
 Builds ``state.phase_portfolio.focus_roster``: prior-book holdings (#936) plus
-thesis-mapped vehicles from H3 and technical opportunity candidates. Replaces
-``candidates.select_focus_tickers`` for the portfolio fan-out once H4 runs in-graph.
+thesis-mapped vehicles from vehicle_map and technical opportunity candidates. Replaces
+``candidates.select_focus_tickers`` for the portfolio fan-out once screener runs in-graph.
 """
 
 from __future__ import annotations
@@ -60,7 +60,7 @@ def _held_passes_gate(
 
 
 def extract_thesis_mappings(vehicle_map: dict[str, Any] | None) -> list[tuple[str, str, str]]:
-    """Return ``(thesis_id, ticker, rationale)`` triples from an H3 ``thesis_vehicle_map``."""
+    """Return ``(thesis_id, ticker, rationale)`` triples from an vehicle_map ``thesis_vehicle_map``."""
     if not vehicle_map:
         return []
     body = vehicle_map.get("body") if isinstance(vehicle_map.get("body"), dict) else vehicle_map
@@ -85,7 +85,7 @@ def extract_thesis_mappings(vehicle_map: dict[str, Any] | None) -> list[tuple[st
 def thesis_priority_order(thesis_mappings: Iterable[tuple[str, str, str]]) -> list[str]:
     """Breadth-first round-robin over theses: every thesis's rank-1 vehicle, then rank-2, …
 
-    H3 emits each thesis's ``candidate_tickers`` in within-thesis rank order, and
+    vehicle_map emits each thesis's ``candidate_tickers`` in within-thesis rank order, and
     nothing in the vehicle map carries a *conviction* signal — ``candidate_rank`` is a
     position inside the mapping, not a score — so "prioritise the thesis map" (#1767)
     can only mean **breadth**: cover as many theses as the budget allows before
@@ -219,7 +219,7 @@ def compute_focus_roster(
             ordered_tickers.append(ticker)
 
     # #1767: ``held`` is the prior book ONLY. It used to be unioned with every ticker in
-    # the H3 thesis-vehicle map, which pushed the protected set past the cap on every day
+    # the vehicle_map thesis-vehicle map, which pushed the protected set past the cap on every day
     # the map was populated (40 tickers on 2026-07-31 against a cap of 25), drove
     # ``capped_tickers`` into its over-budget #936 branch, and so bypassed the cap by
     # construction. Thesis vehicles are now *prioritised inside* the budget instead of
@@ -256,7 +256,7 @@ def compute_focus_roster_excluded(
     - If the ticker is in *held*: reason = "held, no material change (below staleness threshold)".
     - Else if the ticker is in *thesis_mapped*: reason names the analyst cap, because
       "not thesis-mapped and below technical screen" would be a false statement about a
-      ticker H3 explicitly nominated — the roster width is what excluded it.
+      ticker vehicle_map explicitly nominated — the roster width is what excluded it.
     - Otherwise: reason = "not thesis-mapped and below technical screen".
 
     Note the ledger is *not* a carry authorisation for these rows: ``commit_io``
@@ -327,7 +327,7 @@ def _screener_node_factory(client: SupabaseClient | None):
         # tracked $0.86 → $4.00) and until the width breakdown reaches
         # ``run_diagnostics`` this log line is the only record of it.
         logger.info(
-            "H4 focus roster (%d, cap=%d, budget=%d, theses=%d, regime=%s): %s",
+            "screener focus roster (%d, cap=%d, budget=%d, theses=%d, regime=%s): %s",
             len(roster),
             static_cap,
             budget,
@@ -336,7 +336,7 @@ def _screener_node_factory(client: SupabaseClient | None):
             ", ".join(f"{e.ticker}:{e.roster_reason}" for e in roster),
         )
         logger.info(
-            "H4 excluded ledger (%d): %s",
+            "screener excluded ledger (%d): %s",
             len(excluded),
             ", ".join(e.ticker for e in excluded),
         )
@@ -355,7 +355,7 @@ def _screener_node_factory(client: SupabaseClient | None):
                 )
             except Exception:
                 logger.exception(
-                    "H4: opportunity-screener document publish failed for %s; continuing",
+                    "screener: opportunity-screener document publish failed for %s; continuing",
                     state.run_date,
                 )
         planned = state.model_copy(update=phase_update)
@@ -370,7 +370,7 @@ def build_screener_document(
     roster: list[FocusRosterEntry],
     excluded: list[ExcludedTicker],
 ) -> dict[str, Any]:
-    """Envelope the H4 roster for ``OpportunityScreenerDocumentView``."""
+    """Envelope the screener roster for ``OpportunityScreenerDocumentView``."""
     shortlist = [entry.model_dump(mode="json") for entry in roster]
     excluded_rows = [row.model_dump(mode="json") for row in excluded]
     tickers = ", ".join(e.ticker for e in roster) or "none"

@@ -102,7 +102,7 @@ def test_run_scope_is_unavailable_without_diagnostics_deps(monkeypatch: pytest.M
 
 
 def test_fanout_ticker_reads_back_the_send_cursor() -> None:
-    """The H5/H6 discriminator is the cursor `with_fanout_ticker` injected — nothing parsed."""
+    """The analyst/deliberation discriminator is the cursor `with_fanout_ticker` injected — nothing parsed."""
     from digiquant.portfolio.focus_roster import fanout_ticker, with_fanout_ticker
     from digiquant.portfolio.state import PortfolioState
 
@@ -112,7 +112,7 @@ def test_fanout_ticker_reads_back_the_send_cursor() -> None:
 
 
 def test_analyst_and_deliberation_fanouts_declare_the_telemetry_discriminator() -> None:
-    """Without `item_key` the H5/H6 workers would record `fanout_key=None` for every ticker."""
+    """Without `item_key` the analyst/deliberation workers would record `fanout_key=None` for every ticker."""
     from digiquant.portfolio.focus_roster import fanout_ticker
     from digiquant.portfolio.phases import analyst, deliberation
 

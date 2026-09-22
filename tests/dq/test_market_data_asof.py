@@ -110,7 +110,7 @@ def test_asof_before_first_bar_returns_empty_rows(_r2_seal: None) -> None:
 
 
 def test_commit_session_past_seal_serves_sealed_tail(_r2_seal: None) -> None:
-    """H9 seal coverage (#3780 Task 10 live-fire item): H9 reads the run_date
+    """commit seal coverage (#3780 Task 10 live-fire item): commit reads the run_date
     session bar but R2 seals through the manifest ``as_of``. A session past
     the seal fail-softs to the sealed tail — never an empty frame or error."""
     from digiquant.portfolio.commit_cost_evidence import _load_symbol_history

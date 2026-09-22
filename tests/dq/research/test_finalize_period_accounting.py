@@ -1,6 +1,6 @@
 """Unit tests for dashboard EOD accounting persistence (#2597, Task 3.2).
 
-Covers: idempotent exact retry; provisional H9 never selected as final;
+Covers: idempotent exact retry; provisional commit never selected as final;
 incomplete marks remain non-final; restatement supersedes; metrics ignore
 finalized periods (engine NAV is the sole pnl source, #3695); mid-chain
 failure publishes no partial final.

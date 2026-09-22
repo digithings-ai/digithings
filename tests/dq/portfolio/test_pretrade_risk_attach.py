@@ -1,4 +1,4 @@
-"""WP9.3 — attach PreTradeRiskReport after the final H8 control shell (#2750)."""
+"""WP9.3 — attach PreTradeRiskReport after the final sizing control shell (#2750)."""
 
 from __future__ import annotations
 
@@ -20,7 +20,7 @@ pytestmark = pytest.mark.unit
 
 
 def _final_weights(book: dict[str, Any]) -> dict[str, float]:
-    """Match H9 commit extraction — report fingerprint must equal this map."""
+    """Match commit extraction — report fingerprint must equal this map."""
     from digiquant.portfolio.writers.commit_io import weights_from_sized_book
 
     return weights_from_sized_book(book)
@@ -101,7 +101,7 @@ def _run_h8(
     book = portfolio.sized_book
     assert book is not None
     report_raw = portfolio.pre_trade_risk_report
-    assert report_raw is not None, "WP9.3 must attach pre_trade_risk_report after final H8"
+    assert report_raw is not None, "WP9.3 must attach pre_trade_risk_report after final sizing"
     report = PreTradeRiskReport.model_validate(report_raw)
     return {"book": book, "report": report, "portfolio": portfolio, "bundle": bundle}
 
@@ -120,7 +120,7 @@ def test_report_fingerprint_matches_final_book_after_controls(
 
 
 def test_final_book_weights_matches_commit_extractor_on_divergent_shapes() -> None:
-    """H8 report binding and H9 validation must share one weight extractor (#2824)."""
+    """sizing report binding and commit validation must share one weight extractor (#2824)."""
     from digiquant.portfolio.phases.phase7e_risk_sizing import _final_book_weights
     from digiquant.portfolio.writers.commit_io import weights_from_sized_book
 
@@ -290,7 +290,7 @@ def test_builder_path_does_not_mutate_final_book_weights(
 def test_report_failure_omits_report_without_changing_book(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Typed report failure blocks only report promotion (pre-H9 enforcement)."""
+    """Typed report failure blocks only report promotion (pre-commit enforcement)."""
     monkeypatch.setattr(
         phase7e_risk_sizing,
         "build_pretrade_risk_report_for_final_book",

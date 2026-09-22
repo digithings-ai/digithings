@@ -1,12 +1,12 @@
-"""Coverage director (PM role, between H4 and H5) — #3739.
+"""Coverage director (PM role, between screener and analyst) — #3739.
 
-H4 builds the deterministic focus roster (held + thesis-mapped + technicals).
+screener builds the deterministic focus roster (held + thesis-mapped + technicals).
 The director decides which rostered tickers actually get fresh analysis today:
 refresh (reassessment needed), explore (new candidate worth analyzing), or skip
-(rely on analysis history — downstream H5/H6 carry prior with 0 LLM).
+(rely on analysis history — downstream analyst/deliberation carry prior with 0 LLM).
 
 The director proposes; ``apply_coverage`` disposes deterministically: it can
-only narrow the H4 roster, never widen it. Unknown directive tickers are
+only narrow the screener roster, never widen it. Unknown directive tickers are
 dropped, and rostered tickers the directive omits are excluded.
 """
 
@@ -79,7 +79,7 @@ def apply_coverage(
     roster: list[FocusRosterEntry],
     directive: CoverageDirective,
 ) -> tuple[list[FocusRosterEntry], list[ExcludedTicker]]:
-    """Narrow the H4 *roster* per *directive*; never widen it.
+    """Narrow the screener *roster* per *directive*; never widen it.
 
     Returns ``(kept, excluded)`` in roster order. Directive tickers absent from
     the roster are dropped with a warning. Rostered tickers the directive omits
@@ -97,7 +97,7 @@ def apply_coverage(
         for selection in bucket:
             if selection.ticker not in rostered:
                 logger.warning(
-                    "coverage director: directive ticker %s not on H4 roster; dropping",
+                    "coverage director: directive ticker %s not on screener roster; dropping",
                     selection.ticker,
                 )
 
@@ -121,7 +121,7 @@ COVERAGE_DIRECTIVE_PAYLOAD_DOC_TYPE = "coverage_directive"
 
 
 def _director_phase_inputs(state: PortfolioState) -> dict[str, Any]:
-    """Inputs the director judges on: H4 roster + book + market movement + prefs."""
+    """Inputs the director judges on: screener roster + book + market movement + prefs."""
     roster = state.phase_portfolio.focus_roster or []
     return {
         "screener_roster": [entry.model_dump(mode="json") for entry in roster],
@@ -192,19 +192,21 @@ def _coverage_director_node(
             phase_slug=NODE_ID,
             tools=None,
         )
-    except Exception as exc:  # LLM failure keeps H4's roster, never the chain (#3739)
+    except Exception as exc:  # LLM failure keeps screener's roster, never the chain (#3739)
         logger.warning(
-            "H4.5 coverage-director LLM failed (%s: %s); keeping H4 roster", type(exc).__name__, exc
+            "screener.5 coverage-director LLM failed (%s: %s); keeping screener roster",
+            type(exc).__name__,
+            exc,
         )
         err = PhaseError(
             phase=PHASE_NAME,
             node=NODE_ID,
-            message=f"coverage-director LLM failed, H4 roster kept: {exc}"[:500],
+            message=f"coverage-director LLM failed, screener roster kept: {exc}"[:500],
             retryable=False,
         )
         return {"errors": [err]}
     kept, excluded = apply_coverage(roster, directive)
-    # Merge H4's exclusion ledger rows that still apply (tickers nobody selected).
+    # Merge screener's exclusion ledger rows that still apply (tickers nobody selected).
     kept_tickers = {e.ticker for e in kept}
     excluded_tickers = {e.ticker for e in excluded}
     merged_excluded = list(excluded) + [
@@ -213,7 +215,7 @@ def _coverage_director_node(
         if row.ticker not in kept_tickers and row.ticker not in excluded_tickers
     ]
     logger.info(
-        "H4.5 coverage directive (%d refresh/explore, %d skip): %s",
+        "screener.5 coverage directive (%d refresh/explore, %d skip): %s",
         len(kept),
         len(merged_excluded),
         ", ".join(f"{e.ticker}:{e.roster_reason}" for e in kept),
@@ -245,14 +247,14 @@ def _coverage_director_node(
             )
         except Exception:
             logger.exception(
-                "H4.5: coverage-directive document publish failed for %s; continuing",
+                "screener.5: coverage-directive document publish failed for %s; continuing",
                 state.run_date,
             )
     return phase_update
 
 
 def build_coverage_director(*, client: SupabaseClient | None = None) -> PipelinePhase:
-    """Build H4.5; optional ``client`` publishes the coverage-directive document."""
+    """Build screener.5; optional ``client`` publishes the coverage-directive document."""
 
     def _bound(state: PortfolioState) -> dict[str, Any]:
         return _coverage_director_node(state, client=client)

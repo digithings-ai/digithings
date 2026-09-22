@@ -141,7 +141,7 @@ def test_weights_fingerprint_matches_commit_io_delegate() -> None:
 
 
 def test_weights_fingerprint_golden_bytes() -> None:
-    """Byte-stable incumbent idempotency digest (WP8.2 must not drift H9)."""
+    """Byte-stable incumbent idempotency digest (WP8.2 must not drift commit)."""
     fp = weights_fingerprint({"ZZZ": 12.5, "AAA": 3.3333})
     assert fp == "39e67aed0e43743b8b8f3c58b52f8c07187ec69333c9549764c36d327a43c99b"
 

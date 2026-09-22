@@ -1,4 +1,4 @@
-"""Private append-only H8 risk policy / covariance snapshot registry (#2698 / WP6.3).
+"""Private append-only sizing risk policy / covariance snapshot registry (#2698 / WP6.3).
 
 Persists immutable :class:`~digiquant.portfolio.models.risk_policy.RiskPolicy`
 and :class:`~digiquant.portfolio.models.risk_policy.CovarianceSnapshot` rows
@@ -10,7 +10,7 @@ from migration ``081_olympus_risk_policy_snapshots.sql``, plus one run ref per
 :class:`RiskPolicyRegistryConflict` — never UPDATE.
 **Cutoff reads:** exact-ID selects only; rows with ``effective_at`` / ``resolved_at``
 after the pinned knowledge cutoff are invisible.
-**H9 boundary:** writers are fail-soft after portfolio booking; a registry failure
+**commit boundary:** writers are fail-soft after portfolio booking; a registry failure
 must not rebook. Resolved artifacts never feed incumbent ``size_portfolio`` in Phase 1.
 """
 
@@ -321,7 +321,7 @@ def get_covariance_snapshot(
 def collect_sizing_risk_snapshots_from_state(
     state: Any,
 ) -> tuple[RiskPolicy | None, CovarianceSnapshot | None]:
-    """Extract typed H8 risk artifacts from portfolio phase state for H9 persistence."""
+    """Extract typed sizing risk artifacts from portfolio phase state for commit persistence."""
     portfolio = getattr(state, "phase_portfolio", None)
     if portfolio is None:
         return None, None
@@ -440,7 +440,7 @@ def persist_sizing_risk_snapshots_from_state(
     client: SupabaseClient,
     state: Any,
 ) -> RiskRegistryWriteResult:
-    """Collect H8 artifacts from portfolio state; empty is success."""
+    """Collect sizing artifacts from portfolio state; empty is success."""
     policy, snapshot = collect_sizing_risk_snapshots_from_state(state)
     if policy is None or snapshot is None:
         return RiskRegistryWriteResult()

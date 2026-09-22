@@ -40,7 +40,7 @@ _PORTFOLIO_ALLOWED_PHASES = frozenset(
     }
 )
 
-# Portfolio / PM context must not enter H5/H6 provider prompts (WP14.2 blinding).
+# Portfolio / PM context must not enter analyst/deliberation provider prompts (WP14.2 blinding).
 _ANALYST_DELIBERATION_PROMPT_FORBIDDEN_KEYS = frozenset(
     {
         "prior_book",
@@ -98,18 +98,18 @@ def strip_blinded_forbidden_keys(
 
 
 def assert_blinded_analyst_prompt(phase_inputs: Mapping[str, Any]) -> None:
-    """Hard guard: H5 prompts must not include portfolio/PM/materiality leakage."""
+    """Hard guard: analyst prompts must not include portfolio/PM/materiality leakage."""
     leaked = forbidden_prompt_keys("analyst").intersection(phase_inputs)
     if leaked:
-        raise ValueError(f"H5 prompt must not include blinded keys: {sorted(leaked)}")
+        raise ValueError(f"analyst prompt must not include blinded keys: {sorted(leaked)}")
     assert_no_materiality_in_prompt(phase_inputs)
 
 
 def assert_blinded_deliberation_prompt(phase_inputs: Mapping[str, Any]) -> None:
-    """Hard guard: H6 prompts must not include portfolio/PM/materiality leakage."""
+    """Hard guard: deliberation prompts must not include portfolio/PM/materiality leakage."""
     leaked = forbidden_prompt_keys("deliberation").intersection(phase_inputs)
     if leaked:
-        raise ValueError(f"H6 prompt must not include blinded keys: {sorted(leaked)}")
+        raise ValueError(f"deliberation prompt must not include blinded keys: {sorted(leaked)}")
     assert_no_materiality_in_prompt(phase_inputs)
 
 

@@ -4,7 +4,7 @@ Deterministic coordinate-search allocator for write-denied shadow evaluation
 only. Consumes a WP10.1 :class:`ShadowAllocationArtifact` plus numeric
 covariance/cost schedules supplied by the isolated caller.
 
-Must never be imported by the production H8/H9 graph, commit writers, brokers,
+Must never be imported by the production sizing/commit graph, commit writers, brokers,
 or live-trading surfaces. No SciPy/CVXPY — pure Python grid search only.
 """
 

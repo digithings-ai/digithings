@@ -1,4 +1,4 @@
-"""Unified H5 analyst payload (spec §9)."""
+"""Unified analyst payload (spec §9)."""
 
 from __future__ import annotations
 
@@ -151,7 +151,7 @@ class AnalystPayload(BaseModel):
     forecast_assessment: Annotated[ForecastAssessment | None, SkipJsonSchema()] = Field(
         default=None,
         description=(
-            "Immutable ForecastAssessment produced by H5 materialization. "
+            "Immutable ForecastAssessment produced by analyst materialization. "
             "Never LLM-authored; SkipJsonSchema keeps it out of the provider schema."
         ),
     )

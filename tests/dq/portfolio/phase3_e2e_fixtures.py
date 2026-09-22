@@ -180,7 +180,7 @@ def _missing_fact_request(bundle: TickerEvidenceBundle) -> MissingFactRequest:
     content_hash = missing_fact_request_content_hash(
         base_bundle_id=bundle.bundle_id,
         fact_key="next_earnings_date",
-        rationale="H6 challenge needs dated catalyst",
+        rationale="deliberation challenge needs dated catalyst",
     )
     return MissingFactRequest(
         request_id=missing_fact_request_id(
@@ -191,7 +191,7 @@ def _missing_fact_request(bundle: TickerEvidenceBundle) -> MissingFactRequest:
         base_bundle_id=bundle.bundle_id,
         ticker=bundle.ticker,
         fact_key="next_earnings_date",
-        rationale="H6 challenge needs dated catalyst",
+        rationale="deliberation challenge needs dated catalyst",
         event_time=bundle.event_time,
         effective_as_of=bundle.effective_as_of,
         known_at=bundle.known_at,
@@ -323,7 +323,7 @@ def phase3_screener_roster() -> list[str]:
 
 
 def assert_research_plan_preserves_screener_roster(plan: Any, roster: list[str]) -> None:
-    """WP13 planner must not expand, shrink, or reorder the H4 ticker roster."""
+    """WP13 planner must not expand, shrink, or reorder the screener ticker roster."""
     expected = [t.strip().upper() for t in roster if t and t.strip()]
     ticker_keys = [
         d.target_key.upper()
@@ -331,11 +331,13 @@ def assert_research_plan_preserves_screener_roster(plan: Any, roster: list[str])
         if d.features.target_kind is AttentionTargetKind.TICKER
     ]
     if ticker_keys != expected:
-        raise AssertionError(f"H4 roster mismatch: planner={ticker_keys!r} expected={expected!r}")
+        raise AssertionError(
+            f"screener roster mismatch: planner={ticker_keys!r} expected={expected!r}"
+        )
 
 
 def phase3_attention_plan(*, roster: list[str] | None = None, state_version_id: UUID) -> Any:
-    """Shadow attention plan over ticker + artifact targets; H4 fingerprint preserved."""
+    """Shadow attention plan over ticker + artifact targets; screener fingerprint preserved."""
     roster = roster if roster is not None else phase3_screener_roster()
     policy = load_research_attention_policy()
     features = [
@@ -394,7 +396,7 @@ def phase3_role_contexts(
     loaded: LoadedResearchState,
     bundle: TickerEvidenceBundle,
 ) -> dict[str, Any]:
-    """Compile H5/H6/H7 blinded contexts from one pinned state version."""
+    """Compile analyst/deliberation/direction blinded contexts from one pinned state version."""
     ev_id = loaded.evidence[0].evidence_id
     analyst_capsule, analyst_manifest = compile_analyst_role_context(
         loaded=loaded,

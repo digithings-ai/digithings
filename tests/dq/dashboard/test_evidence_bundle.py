@@ -1,8 +1,8 @@
-"""H5 evidence-bundle build + publish (#2892 / WP11.2).
+"""analyst evidence-bundle build + publish (#2892 / WP11.2).
 
 Red coverage: canonical dedupe; event/known/source times; conflicts/missing
 fields; forecast cites bundle/evidence IDs; durable writer disable retains
-typed in-run bundle. H5 provider-path wiring lives in ``tests/dq/portfolio/``
+typed in-run bundle. analyst provider-path wiring lives in ``tests/dq/portfolio/``
 (research-graph CI has digigraph deps).
 """
 

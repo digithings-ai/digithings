@@ -37,7 +37,7 @@ PROMPT_WALK_NODES: tuple[PromptWalkNode, ...] = (
     PromptWalkNode(
         node_id="research/preflight",
         job="research",
-        phase="A0",
+        phase="preflight",
         output_model=None,
         structured_output="n_a",
         walk_note="Deterministic loads; no LLM.",
@@ -45,7 +45,7 @@ PROMPT_WALK_NODES: tuple[PromptWalkNode, ...] = (
     PromptWalkNode(
         node_id="research/triage",
         job="research",
-        phase="A0",
+        phase="triage",
         output_model="TriagePlan",
         structured_output="keep",
         walk_note="skip/edit/full is the cost contract.",
@@ -53,7 +53,7 @@ PROMPT_WALK_NODES: tuple[PromptWalkNode, ...] = (
     PromptWalkNode(
         node_id="research/phase1-sentiment",
         job="research",
-        phase="A1",
+        phase="sentiment",
         output_model="SentimentNewsReport",
         skill_slug="alt-data-sentiment",
         structured_output="reconsider",
@@ -62,7 +62,7 @@ PROMPT_WALK_NODES: tuple[PromptWalkNode, ...] = (
     PromptWalkNode(
         node_id="research/phase7-digest",
         job="research",
-        phase="A4",
+        phase="digest",
         output_model="DigestSnapshot",
         skill_slug="digest",
         structured_output="reconsider",

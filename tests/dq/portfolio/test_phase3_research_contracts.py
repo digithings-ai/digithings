@@ -1,7 +1,7 @@
 """Integration Task 3.1 — lock Phase 3 research contracts (#3019).
 
 End-to-end composition gate across WP11–WP14: immutable bundles/amendments,
-pinned research state, shadow attention routing, blinded role contexts, H6
+pinned research state, shadow attention routing, blinded role contexts, deliberation
 selection round floor, and telemetry reconciliation — without planner graph
 nodes or runtime policy promotion.
 """
@@ -138,7 +138,7 @@ def test_planner_helpers_are_not_graph_nodes() -> None:
         )
 
 
-# --------------------------------------------------------------------------- H4 width / order / exploration
+# --------------------------------------------------------------------------- screener width / order / exploration
 
 
 def test_screener_roster_unchanged_across_shadow_attention_plan(
@@ -198,7 +198,7 @@ def test_exact_state_version_bytes_survive_newer_rows() -> None:
     )
 
 
-# --------------------------------------------------------------------------- H6 selection / round floor / provenance
+# --------------------------------------------------------------------------- deliberation selection / round floor / provenance
 
 
 def test_selected_deliberation_meets_two_round_floor_in_shadow() -> None:

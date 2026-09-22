@@ -1,4 +1,4 @@
-"""H5 edit-mode tests (dashboard #930 PR 4b)."""
+"""analyst edit-mode tests (dashboard #930 PR 4b)."""
 
 from __future__ import annotations
 
@@ -301,7 +301,7 @@ def _sample_terms() -> dict[str, object]:
 
 @pytest.mark.unit
 class TestH5ForecastMaterialization:
-    """WP4.3 — every new full H5 produces an immutable ForecastAssessment."""
+    """WP4.3 — every new full analyst produces an immutable ForecastAssessment."""
 
     def test_serializer_includes_assessment_and_anchor_reason(self) -> None:
         from datetime import UTC, datetime
@@ -651,7 +651,7 @@ class TestH5ForecastMaterialization:
 
 @pytest.mark.unit
 def test_analyst_persists_before_provider_and_failure_leaves_bundle() -> None:
-    """WP11.2: publish base before provider; H5 failure retains typed bundle."""
+    """WP11.2: publish base before provider; analyst failure retains typed bundle."""
     from datetime import UTC, datetime
     from unittest.mock import MagicMock
     from uuid import UUID, uuid4

@@ -1,4 +1,4 @@
-"""H8 risk snapshot attachment at the sizing entry boundary (#2698 / WP6.3).
+"""sizing risk snapshot attachment at the sizing entry boundary (#2698 / WP6.3).
 
 Keeps :mod:`digiquant.portfolio.risk_policy` free of
 :mod:`digiquant.portfolio.phases.phase7e_risk_sizing` import cycles.
@@ -34,7 +34,7 @@ logger = logging.getLogger(__name__)
 
 @dataclass(frozen=True)
 class SizingRiskArtifacts:
-    """Resolved incumbent H8 inputs for audit — never wired into ``size_portfolio`` in Phase 1."""
+    """Resolved incumbent sizing inputs for audit — never wired into ``size_portfolio`` in Phase 1."""
 
     policy: RiskPolicy
     covariance_snapshot: CovarianceSnapshot
@@ -127,7 +127,7 @@ def resolve_sizing_risk_artifacts(
     corr: pl.DataFrame | None,
     observation_count: int | None = None,
 ) -> SizingRiskArtifacts:
-    """Resolve policy + covariance snapshot at the H8 entry boundary (#2698 / WP6.3).
+    """Resolve policy + covariance snapshot at the sizing entry boundary (#2698 / WP6.3).
 
     Always returns typed artifacts. Resolver exceptions become visible
     ``unavailable`` dumps rather than silent omission (#2803).

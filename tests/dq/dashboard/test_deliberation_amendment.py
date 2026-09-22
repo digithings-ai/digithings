@@ -1,7 +1,7 @@
-"""WP11.4 — bounded H6 missing-fact amendment (#2908).
+"""WP11.4 — bounded deliberation missing-fact amendment (#2908).
 
 One validated proposal → targeted retrieval → append-only amendment. No generic
-H6 web search; invalid/exhausted/failed requests never fall back to broad search.
+deliberation web search; invalid/exhausted/failed requests never fall back to broad search.
 """
 
 from __future__ import annotations

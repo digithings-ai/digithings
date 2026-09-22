@@ -1,7 +1,7 @@
 """DIGIQUANT_MAX_ANALYSTS is actually enforced, and thesis vehicles are prioritised (#1767).
 
 Before this fix ``compute_focus_roster`` passed ``active_held ∪ every thesis-map ticker``
-as ``held``, so on any day the H3 vehicle map was populated the protected set exceeded the
+as ``held``, so on any day the vehicle_map vehicle map was populated the protected set exceeded the
 cap, ``capped_tickers`` took its over-budget #936 branch, and the cap was bypassed by
 construction. The decisive production shape is reproduced in
 :func:`test_populated_thesis_map_no_longer_bypasses_the_cap`.
@@ -25,7 +25,7 @@ _RUN_DATE = date(2026, 7, 31)
 def _prod_shape() -> tuple[list[str], set[str], list[tuple[str, str, str]]]:
     """The 2026-07-31 run: an 8-position book, 27 live theses, 40 mapped vehicles.
 
-    Thesis ids are emitted in order and each carries 1-2 vehicles, matching the H3
+    Thesis ids are emitted in order and each carries 1-2 vehicles, matching the vehicle_map
     output shape (``candidate_tickers`` in within-thesis rank order).
     """
     held = {f"H{i:02d}" for i in range(8)}

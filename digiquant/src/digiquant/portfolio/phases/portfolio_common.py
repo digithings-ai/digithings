@@ -1,4 +1,4 @@
-"""Shared helpers for H5/H6 portfolio-track portfolio nodes."""
+"""Shared helpers for analyst/deliberation portfolio-track portfolio nodes."""
 
 from __future__ import annotations
 
@@ -295,7 +295,7 @@ def materialize_forecast_assessment(
 
 
 def _analyst_price_anchor(_state: PortfolioState, _ticker: str) -> PriceAnchor:
-    """H5 state carries pct deltas, not absolute marks — typed unavailability."""
+    """analyst state carries pct deltas, not absolute marks — typed unavailability."""
     return PriceAnchor(
         status=PriceAnchorStatus.UNAVAILABLE,
         unavailable_reason="mark_price_not_available_in_analyst_state",
@@ -367,7 +367,7 @@ def _attach_forecast_lineage(
     Full mode without ``ForecastTerms`` retains analyst prose (shadow rollout) and
     records ``forecast_unavailable`` rather than dropping the ticker.
 
-    When materializing a **new** assessment, cite the H5 base bundle / evidence
+    When materializing a **new** assessment, cite the analyst base bundle / evidence
     IDs on ``ForecastTerms.evidence_ids`` (WP11.2). Skip / identical-content
     carries preserve prior identity without re-citing.
     """
@@ -389,7 +389,7 @@ def _attach_forecast_lineage(
         else:
             if mode == "full":
                 logger.warning(
-                    "H5 full analysis for %s missing ForecastTerms; "
+                    "analyst full analysis for %s missing ForecastTerms; "
                     "forecast_unavailable (analyst payload retained)",
                     ticker,
                 )
@@ -397,7 +397,7 @@ def _attach_forecast_lineage(
                     PhaseError(
                         phase="phase_portfolio",
                         node=phase_slug,
-                        message="forecast_unavailable: full H5 missing ForecastTerms",
+                        message="forecast_unavailable: full analyst missing ForecastTerms",
                     )
                 )
             return payload
@@ -476,7 +476,7 @@ def _publish_base_bundle_before_provider(
     )
     bundle = publish_analyst_evidence_bundle(built=built, store=store)
     logger.info(
-        "H5 evidence bundle published for %s bundle_id=%s durable=%s phase=%s",
+        "analyst evidence bundle published for %s bundle_id=%s durable=%s phase=%s",
         ticker,
         bundle.bundle_id,
         store is not None,
@@ -486,15 +486,15 @@ def _publish_base_bundle_before_provider(
 
 
 def _portfolio_grounding(state: PortfolioState, *, phase: RetrievalPhase, segment: str = ""):
-    """Grounding for H5 (asset analyst) + H7 (PM direction).
+    """Grounding for analyst (asset analyst) + direction (PM direction).
 
     #4146: both equip ``PM_TOOLS`` — a PM-fit digifetch subset (quotes/news,
     analyst views, earnings/corporate actions, macro/credit/valuation context);
-    it also fits the ticker-scoped H5 analyst, which is why the two phases
+    it also fits the ticker-scoped analyst, which is why the two phases
     share it rather than taking two near-identical subsets. Session-gated names
     drop out when no ``GLOOMBERB_SESSION_COOKIE`` is configured.
 
-    H6 deliberation deliberately stays digifetch-free: it is research-tools-only
+    deliberation deliberately stays digifetch-free: it is research-tools-only
     by policy (#2908), and its evidence path is the bundle + amendment flow.
     """
     return build_grounding(
@@ -689,7 +689,7 @@ def run_asset_analyst_llm(
             )
         except Exception as exc:
             logger.warning(
-                "H5 analyst edit LLM failed for %s (%s: %s); bundle retained",
+                "analyst edit LLM failed for %s (%s: %s); bundle retained",
                 ticker,
                 type(exc).__name__,
                 exc,
@@ -713,7 +713,7 @@ def run_asset_analyst_llm(
                 ),
             )
         except (MergeError, ValidationError) as exc:
-            logger.warning("H5 analyst edit merge failed for %s (%s)", ticker, exc)
+            logger.warning("analyst edit merge failed for %s (%s)", ticker, exc)
             errors.append(
                 PhaseError(phase="phase_portfolio", node=phase_slug, message=str(exc)[:500])
             )
@@ -776,7 +776,7 @@ def run_asset_analyst_llm(
         )
     except Exception as exc:  # LLM-output failure degrades this ticker, never the chain (#1665)
         logger.warning(
-            "H5 analyst LLM failed for %s (%s: %s); skipping ticker (bundle retained)",
+            "analyst LLM failed for %s (%s: %s); skipping ticker (bundle retained)",
             ticker,
             type(exc).__name__,
             exc,

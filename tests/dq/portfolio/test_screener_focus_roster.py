@@ -1,4 +1,4 @@
-"""H4 opportunity screener — focus roster held invariant (#936)."""
+"""opportunity screener — focus roster held invariant (#936)."""
 
 from __future__ import annotations
 
@@ -26,7 +26,7 @@ class TestH4FocusRosterHeldInvariant:
             run_date=date(2026, 6, 20),
         )
         tickers = {e.ticker for e in roster}
-        assert _HELD.issubset(tickers), f"held dropped from H4 roster: {_HELD - tickers}"
+        assert _HELD.issubset(tickers), f"held dropped from screener roster: {_HELD - tickers}"
 
     def test_held_entries_tagged_held(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setenv("PORTFOLIO_HELD_GATE", "off")
@@ -102,7 +102,7 @@ def test_focus_roster_entry_model() -> None:
 def test_compute_focus_roster_passes_client_to_technical_screen(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """H4 technical picks forward the Supabase client to select_focus_tickers."""
+    """screener technical picks forward the Supabase client to select_focus_tickers."""
     client = FakeSupabaseClient()
     seen: dict[str, object] = {}
 
@@ -200,9 +200,9 @@ class TestNewCandidateReservation:
         The operator's lever is DIGIQUANT_MAX_ANALYSTS.
         """
         monkeypatch.setenv("DIGIQUANT_MAX_ANALYSTS", "4")
-        held = {"H1", "H2", "H3", "H4"}
+        held = {"THESIS", "MARKET", "VEHICLE_MAP", "SCREENER"}
         roster = compute_focus_roster(
-            watchlist=["H1", "H2", "H3", "H4", "NEW1", "NEW2", "NEW3"],
+            watchlist=["THESIS", "MARKET", "VEHICLE_MAP", "SCREENER", "NEW1", "NEW2", "NEW3"],
             held=held,
             run_date=date(2026, 6, 20),
         )
@@ -360,7 +360,7 @@ def test_held_gate_no_signal_keeps_held(monkeypatch: pytest.MonkeyPatch) -> None
 
 
 # ---------------------------------------------------------------------------
-# Stage 1b Task 3: populate + emit the excluded ledger in the H4 node
+# Stage 1b Task 3: populate + emit the excluded ledger in the screener node
 # ---------------------------------------------------------------------------
 
 
@@ -436,7 +436,7 @@ def test_excluded_ledger_records_gated_held_absent_from_watchlist() -> None:
 
     Prior-book holdings are not necessarily on the watchlist (the watchlist is the
     research universe; the book is what we own). A quiet held name absent from the
-    watchlist is still gated out of H5 — and commit-run relies on the excluded
+    watchlist is still gated out of analyst — and commit-run relies on the excluded
     ledger to carry it instead of failing closed on a missing analyst doc. Iterating
     only the watchlist silently dropped it.
     """
@@ -476,7 +476,7 @@ def test_compute_focus_roster_honors_adaptive_budget(monkeypatch: pytest.MonkeyP
 
 
 # ---------------------------------------------------------------------------
-# Stage 2 Task 6: H4 node wires the regime-adaptive dispatch budget
+# Stage 2 Task 6: screener node wires the regime-adaptive dispatch budget
 # ---------------------------------------------------------------------------
 
 
@@ -516,7 +516,7 @@ def test_screener_node_applies_adaptive_budget(monkeypatch: pytest.MonkeyPatch) 
 
 @pytest.mark.unit
 def test_screener_roster_identical_across_attention_modes(monkeypatch: pytest.MonkeyPatch) -> None:
-    """WP13.4 (#2930): planner off/shadow/enforce must not mutate H4 roster."""
+    """WP13.4 (#2930): planner off/shadow/enforce must not mutate screener roster."""
     import json
 
     from digiquant.portfolio.phases import screener as h4

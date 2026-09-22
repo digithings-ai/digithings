@@ -124,7 +124,7 @@ class TestProvisionalNavSuppression:
     """Booking must not clobber an engine NAV row with a provisional recompute (#3804)."""
 
     def test_existing_engine_nav_row_is_preserved(self) -> None:
-        """Engine NAV wins; H9-owned cash/invested still track the new book."""
+        """Engine NAV wins; commit-owned cash/invested still track the new book."""
         existing = {
             "date": RUN_DATE.isoformat(),
             "nav": 99.5,

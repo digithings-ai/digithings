@@ -124,7 +124,7 @@ def _is_forbidden_import(module: str) -> bool:
 
 
 def check_forbidden_imports(*, path: Path, source: str | None = None) -> list[IsolationFinding]:
-    """Reject Supabase / H9 commit I/O / network / live Nautilus / broker imports."""
+    """Reject Supabase / commit I/O / network / live Nautilus / broker imports."""
     text = path.read_text(encoding="utf-8") if source is None else source
     findings: list[IsolationFinding] = []
     try:

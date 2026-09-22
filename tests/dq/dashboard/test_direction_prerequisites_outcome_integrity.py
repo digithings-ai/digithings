@@ -1,4 +1,4 @@
-"""#4298 caller guard: H7 prerequisites must fail loud on a stale persisted digest.
+"""#4298 caller guard: direction prerequisites must fail loud on a stale persisted digest.
 
 The reader (``list_resolved_outcomes_as_of``) raises
 ``ForecastOutcomeIntegrityError``; this caller used to catch ``Exception``,

@@ -1,6 +1,6 @@
 """Integration Task 2.1 — lock Phase 2 allocation contracts (#2820).
 
-End-to-end composition gate across WP8–WP10: calibrated H8 path, PreTradeRiskReport
+End-to-end composition gate across WP8–WP10: calibrated sizing path, PreTradeRiskReport
 bind/persist identity, shadow isolation + challenger comparison. Challenger stays
 disabled in production; graph topology unchanged.
 """
@@ -72,7 +72,7 @@ def _final_weights(book: dict[str, Any]) -> dict[str, float]:
 
 
 def _run_calibrated_h8(monkeypatch: pytest.MonkeyPatch) -> dict[str, Any]:
-    """H8 calibrated cutover with PreTradeRiskReport attach (WP8.4 + WP9.3)."""
+    """sizing calibrated cutover with PreTradeRiskReport attach (WP8.4 + WP9.3)."""
     from digiquant.portfolio.phases.phase7e_risk_sizing import build_risk_sizing_node
     from digiquant.portfolio.sizing_risk_snapshots import SizingRiskArtifacts
 
@@ -158,7 +158,7 @@ def test_portfolio_graph_topology_unchanged_by_phase2() -> None:
 
 
 def test_direction_owns_eligibility_analyst_stance_cannot_reverse() -> None:
-    """H7 long roster → buy stances; H5 sell cannot reverse authorization."""
+    """direction long roster → buy stances; analyst sell cannot reverse authorization."""
     roster = [
         TickerDirection(ticker="AAA", direction="long", conviction_rank=1),
         TickerDirection(ticker="BBB", direction="long", conviction_rank=2),
@@ -217,7 +217,7 @@ def test_incumbent_control_order_preserved() -> None:
     assert positions == sorted(positions)
 
 
-# --------------------------------------------------------------------------- H8 → report → H9 identity
+# --------------------------------------------------------------------------- sizing → report → commit identity
 
 
 def test_calibrated_sizing_report_binds_final_book(monkeypatch: pytest.MonkeyPatch) -> None:

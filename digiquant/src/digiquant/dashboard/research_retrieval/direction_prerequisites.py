@@ -1,4 +1,4 @@
-"""Build versioned H7 prerequisite snapshot at research preflight (#2946 / WP14.3)."""
+"""Build versioned direction prerequisite snapshot at research preflight (#2946 / WP14.3)."""
 
 from __future__ import annotations
 
@@ -47,7 +47,7 @@ def _load_latest_accounting_period(
             .execute()
         )
     except Exception as exc:
-        logger.debug("H7 prerequisites: accounting load failed (%s)", exc)
+        logger.debug("direction prerequisites: accounting load failed (%s)", exc)
         return None, None
     rows = list(getattr(resp, "data", None) or [])
     if not rows:
@@ -69,7 +69,7 @@ def build_direction_prerequisite_snapshot(
     prior_effective_forecast_ids: tuple[str, ...] = (),
     outcome_lesson_pin: dict[str, object] | None = None,
 ) -> DirectionPrerequisiteSnapshot | None:
-    """Pin versioned WP3/WP5/WP15 inputs for H7 context compile at preflight."""
+    """Pin versioned WP3/WP5/WP15 inputs for direction context compile at preflight."""
     state_version_id: UUID | None = None
     if isinstance(research_state_pin, dict):
         state_version_id = _parse_uuid(research_state_pin.get("state_version_id"))
@@ -111,7 +111,7 @@ def build_direction_prerequisite_snapshot(
                 # snapshot that silently omits the matured cohort.
                 raise
             except Exception as exc:
-                logger.debug("H7 prerequisites: forecast outcomes load failed (%s)", exc)
+                logger.debug("direction prerequisites: forecast outcomes load failed (%s)", exc)
 
     if (
         state_version_id is None

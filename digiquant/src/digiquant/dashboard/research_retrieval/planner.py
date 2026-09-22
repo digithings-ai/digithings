@@ -1,16 +1,16 @@
-"""WP11.3 — deterministic H6 deliberation selection (#2902).
+"""WP11.3 — deterministic deliberation selection (#2902).
 
-Select H6 only for structured decision-value cases (decision boundary, conflict,
+Select deliberation only for structured decision-value cases (decision boundary, conflict,
 uncertainty, invalidation risk, material portfolio weight, or exploration).
 Low-value names carry with a recorded reason and zero provider budget.
 
 Modes (``DIGIQUANT_H6_SELECTION_MODE``):
 
-* ``shadow`` (default) — record :class:`DeliberationSelection`; run full incumbent H6
+* ``shadow`` (default) — record :class:`DeliberationSelection`; run full incumbent deliberation
 * ``enforce`` — actuate carry/select from the typed selection
-* ``off`` — skip selection; full incumbent H6
+* ``off`` — skip selection; full incumbent deliberation
 
-Planner failure falls back to **full incumbent H6**, never an unrecorded skip.
+Planner failure falls back to **full incumbent deliberation**, never an unrecorded skip.
 Materiality (``weight_pct``) is a selection feature only — callers must not
 inject it into provider prompts.
 
@@ -72,7 +72,7 @@ RawUncertaintyLabel: TypeAlias = Literal["low", "medium", "high"]
 
 
 class DeliberationSelectionMode(StrEnum):
-    """Rollout knob for deterministic H6 selection."""
+    """Rollout knob for deterministic deliberation selection."""
 
     OFF = "off"
     SHADOW = "shadow"
@@ -80,7 +80,7 @@ class DeliberationSelectionMode(StrEnum):
 
 
 class DeliberationAction(StrEnum):
-    """Whether H6 deliberation should run or carry."""
+    """Whether deliberation should run or carry."""
 
     SELECT = "select"
     CARRY = "carry"
@@ -100,7 +100,7 @@ class DeliberationSelectionReason(StrEnum):
 
 
 class DeliberationPlannerModel(BaseModel):
-    """Strict immutable base for H6 selection contracts."""
+    """Strict immutable base for deliberation selection contracts."""
 
     model_config = ConfigDict(extra="forbid", frozen=True)
 
@@ -143,7 +143,7 @@ class DeliberationBudget(DeliberationPlannerModel):
 
 
 class DeliberationSelection(DeliberationPlannerModel):
-    """Typed H6 selection outcome — reasons / features / budget."""
+    """Typed deliberation selection outcome — reasons / features / budget."""
 
     ticker: NonEmptyStr
     action: DeliberationAction
@@ -251,7 +251,7 @@ def select_h6(
     mode: DeliberationSelectionMode | None = None,
     actuated: bool | None = None,
 ) -> DeliberationSelection:
-    """Deterministic H6 selection — no LLM, no H4 roster mutation."""
+    """Deterministic deliberation selection — no LLM, no screener roster mutation."""
     resolved_mode = mode if mode is not None else resolve_deliberation_selection_mode()
     reason = _primary_reason(features)
     action = DeliberationAction.CARRY if reason is DeliberationSelectionReason.LOW_VALUE_CARRY else DeliberationAction.SELECT
@@ -274,7 +274,7 @@ def incumbent_fallback_selection(
     *,
     mode: DeliberationSelectionMode | None = None,
 ) -> DeliberationSelection:
-    """Typed provenance when selection fails — still run full incumbent H6."""
+    """Typed provenance when selection fails — still run full incumbent deliberation."""
     resolved_mode = mode if mode is not None else resolve_deliberation_selection_mode()
     return DeliberationSelection(
         ticker=features.ticker,
@@ -313,7 +313,7 @@ def build_deliberation_decision_features(
     has_evidence_conflict: bool = False,
     invalidation_risk: bool = False,
 ) -> DeliberationDecisionFeatures:
-    """Assemble features from H5/H4/book state (selection path only)."""
+    """Assemble features from analyst/screener/book state (selection path only)."""
     stance = str(analyst.get("stance") or "hold").strip().lower() or "hold"
     prior_stance: str | None = None
     if isinstance(prior_analyst, Mapping) and prior_analyst:
@@ -374,7 +374,7 @@ def build_deliberation_decision_features(
     )
 
 
-# Keys that must never appear in H6 provider phase_inputs (blinding / anti-leak).
+# Keys that must never appear in deliberation provider phase_inputs (blinding / anti-leak).
 DELIBERATION_SELECTION_PROMPT_FORBIDDEN_KEYS = frozenset(
     {
         "weight_pct",
@@ -392,7 +392,7 @@ def assert_no_materiality_in_prompt(phase_inputs: Mapping[str, Any]) -> None:
     """Hard guard: selection materiality features never enter provider prompts."""
     leaked = DELIBERATION_SELECTION_PROMPT_FORBIDDEN_KEYS.intersection(phase_inputs)
     if leaked:
-        raise ValueError(f"H6 prompt must not include selection materiality keys: {sorted(leaked)}")
+        raise ValueError(f"deliberation prompt must not include selection materiality keys: {sorted(leaked)}")
 
 
 # ---------------------------------------------------------------------------

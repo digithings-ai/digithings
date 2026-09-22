@@ -1,4 +1,4 @@
-"""WP-F — H6 analyst replies use a meeting skill, not the H5 report skill."""
+"""WP-F — deliberation analyst replies use a meeting skill, not the analyst report skill."""
 
 from __future__ import annotations
 

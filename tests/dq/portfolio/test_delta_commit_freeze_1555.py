@@ -1,15 +1,15 @@
-"""Regression: the silent H4→H9 delta-day commit freeze (#1555).
+"""Regression: the silent screener→commit delta-day commit freeze (#1555).
 
 Since 2026-06-26 every daily run reported ``ok:true, degraded:false,
 book_materialized:true`` while nothing committed to ``positions`` / ``nav_history`` /
 ``decision_log`` / ``documents`` for weeks. Root cause:
 
-- The H4 held-staleness gate (#1017/#1026) moves a quiet held name into
-  ``focus_roster_excluded`` (no fresh analyst, absent from the H7 PM memo).
-- H8 sizing then DROPS that held name from the sized book (it is neither a PM long
+- The screener held-staleness gate (#1017/#1026) moves a quiet held name into
+  ``focus_roster_excluded`` (no fresh analyst, absent from the direction PM memo).
+- sizing then DROPS that held name from the sized book (it is neither a PM long
   nor inside the min-hold window).
-- H9 ``coherence_errors`` fails closed ("held ticker X missing from book and not flat
-  in H7") and returns a ``PhaseError`` whose ``phase="portfolio_commit"`` never
+- commit ``coherence_errors`` fails closed ("held ticker X missing from book and not flat
+  in direction") and returns a ``PhaseError`` whose ``phase="portfolio_commit"`` never
   reaches the degraded gate (which only escalates ``phase="chain"`` errors / research
   failures) — so the run stays "ok" and the freeze is invisible.
 
@@ -45,7 +45,7 @@ WATCHLIST = ("AAPL", "MSFT")
 def _run_quiet_delta(*, commit_run: bool = True) -> tuple[ResearchState, dict]:
     """Run the research→portfolio chain for a quiet delta day with two held positions.
 
-    Both watchlist names are prior-book holdings with sub-threshold price moves, so H4
+    Both watchlist names are prior-book holdings with sub-threshold price moves, so screener
     gates them out of the roster (Stage 1b staleness gate) and dispatches no analyst —
     the exact production shape that froze the commit path.
     """
@@ -69,7 +69,7 @@ class TestDeltaDayCommits:
         final, store = _run_quiet_delta()
 
         # Precondition: this IS the frozen scenario — both held names were gated out of
-        # H5 (no fresh analyst) and quietly recorded in the excluded ledger.
+        # analyst (no fresh analyst) and quietly recorded in the excluded ledger.
         assert final.phase_portfolio.asset_analysts == {}, "quiet day: no analyst should dispatch"
         excluded = {e.ticker for e in final.phase_portfolio.focus_roster_excluded}
         assert {"AAPL", "MSFT"} <= excluded, "held names must be in the gated-out ledger"
@@ -114,7 +114,7 @@ class TestUncommittedBookIsLoud:
     """A materialized-but-uncommitted book must be loud: degraded + structured signal."""
 
     def test_chain_uncommitted_book_flips_degraded(self) -> None:
-        # commit_run wiring off → H8 materializes a book, H9 is a no-op (no manifest).
+        # commit_run wiring off → sizing materializes a book, commit is a no-op (no manifest).
         # Pre-#1555 this reported status "ok"; now it must be degraded.
         final, store = _run_quiet_delta(commit_run=False)
         assert final.phase_portfolio.sized_book is not None
@@ -146,8 +146,8 @@ class TestUncommittedBookIsLoud:
         assert summary.error_summary.startswith("portfolio_commit/uncommitted")
 
     def test_commit_error_flips_degraded_even_without_materialized_book(self) -> None:
-        # H9 exit: sized_book is None but H7 emitted a memo → PhaseError
-        # ("sized_book missing but H7 pm_direction_memo present"). Here ``book_materialized``
+        # commit exit: sized_book is None but direction emitted a memo → PhaseError
+        # ("sized_book missing but direction pm_direction_memo present"). Here ``book_materialized``
         # is False, so the materialized-but-uncommitted trigger alone would miss it — the
         # escalation must also fire on any ``portfolio_commit`` PhaseError (#1555 3a).
         from digiquant.research.state import PhaseError, SegmentPayload, SegmentSlot
@@ -160,13 +160,13 @@ class TestUncommittedBookIsLoud:
             PhaseError(
                 phase="portfolio_commit",
                 node="portfolio/commit-run",
-                message="sized_book missing but H7 pm_direction_memo present",
+                message="sized_book missing but direction pm_direction_memo present",
                 retryable=False,
             )
         ]
         summary = diagnostics.summarize_run(state)
         assert summary.book_materialized is False  # nothing materialized …
-        assert summary.status == "degraded"  # … yet the H9 error still gates the run
+        assert summary.status == "degraded"  # … yet the commit error still gates the run
         assert summary.error_summary.startswith("portfolio_commit/uncommitted")
 
     def test_idempotency_noop_counts_as_committed(self) -> None:

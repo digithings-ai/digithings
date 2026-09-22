@@ -395,7 +395,7 @@ describe('renderDocumentMarkdownFromPayload routing', () => {
     expect(md).toContain('Datacenter capex');
   });
 
-  it('renders H6 PM↔analyst chat turns published under rounds (DBO shape)', () => {
+  it('renders deliberation PM↔analyst chat turns published under rounds (DBO shape)', () => {
     const h6 = {
       ticker: 'DBO',
       net_stance: 'neutral',

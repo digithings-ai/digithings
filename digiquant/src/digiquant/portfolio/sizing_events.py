@@ -1,12 +1,12 @@
-"""In-memory reason-coded adjustment events for the H8 sizing pipeline
-(#2417, dashboard WP2 Task 2.2, OLY-REV-009), handed to H9 for durable persistence
+"""In-memory reason-coded adjustment events for the sizing pipeline
+(#2417, dashboard WP2 Task 2.2, OLY-REV-009), handed to commit for durable persistence
 (#2768).
 
 These events remain a deliberately separate type from the persisted portfolio-lineage
 ledger models in :mod:`digiquant.portfolio.models.portfolio_ledger`
 (``TargetAdjustmentType`` / ``TargetAdjustment``, #2415): that ledger is append-only
-and H9 is its sole writer. H8 applies caps upstream of H9 and returns these events
-plus ``SizingResult.requested_pct`` on the sized book; H9 maps ``unit="pct"`` events
+and commit is its sole writer. sizing applies caps upstream of commit and returns these events
+plus ``SizingResult.requested_pct`` on the sized book; commit maps ``unit="pct"`` events
 onto ``portfolio_ledger_target_adjustments`` keyed to the matching
 ``RequestedTarget``. ``unit="conviction"`` events stay explanation-only (different
 dimension from weight columns).
@@ -15,7 +15,7 @@ defined here as an additive superset of its original 3 (``cap``/``rounding``/
 ``carry``), and migration 095 widened the DB CHECK so persisted rows can use the
 fine-grained codes. The two *types* stay separate — one governs an in-memory event,
 the other a persisted row — so the live sizing pipeline is not coupled to the
-ledger model package. H8 remains the sole owner of the final weight — nothing here
+ledger model package. sizing remains the sole owner of the final weight — nothing here
 changes, reorders, or re-derives a weight; every event field is populated from a
 value already computed on the real weight-calculation path.
 """
@@ -30,7 +30,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 
 class SizingAdjustmentType(StrEnum):
-    """The 12 named H8 adjustment reasons (#2417)."""
+    """The 12 named sizing adjustment reasons (#2417)."""
 
     CONVICTION_FLOOR = "conviction_floor"
     SINGLE_NAME_CAP = "single_name_cap"
@@ -65,7 +65,7 @@ class SizingAdjustment(BaseModel):
 
 
 class LineageValidationError(Exception):
-    """Base class for H8 lineage-validation failures (#2417).
+    """Base class for sizing lineage-validation failures (#2417).
 
     Deliberately separate from the fail-soft try/except already guarding
     ``size_portfolio()`` inside ``_build_sized_book`` — that guard exists to keep a

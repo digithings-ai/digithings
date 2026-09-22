@@ -1021,7 +1021,7 @@ class TestSearchResearch:
         client = FakeSupabaseClient(
             canned_reads={
                 "daily_snapshots": [
-                    {"date": "2026-06-19", "snapshot": {"one_line_summary": "H5-BLINDED"}}
+                    {"date": "2026-06-19", "snapshot": {"one_line_summary": "analyst-BLINDED"}}
                 ]
             }
         )

@@ -257,7 +257,7 @@ export interface Database {
       };
       thesis_vehicles: {
         // Analyst vehicle-selection map: ticker → MARKET thesis_id, with rationale +
-        // candidate_rank (many-to-many). Written reliably by portfolio H3
+        // candidate_rank (many-to-many). Written reliably by portfolio vehicle_map
         // (persist_thesis_vehicle_map). This is the RELIABLE ticker→market-thesis join
         // used by the Theses story spine (#1562) — `theses.linked_market_thesis_id` is
         // self-referential/dead. NB: `thesis_id` is co-generated per `date` with the

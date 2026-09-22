@@ -440,7 +440,7 @@ def test_analyst_omits_non_delta_evidence_with_reason() -> None:
 
 def test_deliberation_role_allowlist_rejects_beliefs_and_patches() -> None:
     ev = _evidence(summary="Bundle evidence")
-    belief = _belief(evidence=ev, statement="Should not appear in H6")
+    belief = _belief(evidence=ev, statement="Should not appear in deliberation")
     patch = _patch(summary="Metric refresh")
     state = _loaded_state(evidence=(ev,), beliefs=(belief,), patches=(patch,))
     bundle = _bundle(state_version_id=state.version.state_version_id)
@@ -581,7 +581,7 @@ def test_compile_manifest_standalone_matches_capsule_manifest() -> None:
 
 
 # ---------------------------------------------------------------------------
-# WP14.2 — blinded H5/H6 provider wiring
+# WP14.2 — blinded analyst/deliberation provider wiring
 # ---------------------------------------------------------------------------
 
 

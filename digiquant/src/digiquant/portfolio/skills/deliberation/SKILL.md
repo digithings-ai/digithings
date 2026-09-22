@@ -1,6 +1,6 @@
 ---
 name: deliberation
-description: PM devil's advocate ↔ analyst deliberation (H6).
+description: PM devil's advocate ↔ analyst deliberation (deliberation).
 ---
 
 # Deliberation (default)
@@ -9,7 +9,7 @@ Meeting: PM challenges the analyst outlook; analyst replies in conversational pr
 until the PM closes.
 
 Full prompts: `deliberation-full.md` (PM) and `analyst-response-full.md`
-(analyst reply). Do not load H5 `asset-analyst` for the H6 reply turn.
+(analyst reply). Do not load analyst `asset-analyst` for the deliberation reply turn.
 
 Before you set ``converged=true`` you MUST have raised at least one specific, substantive
 challenge — probe position sizing, correlation with the existing book, catalyst timing, or

@@ -1,4 +1,4 @@
-"""WP4.4 H6 quiet-carry + amendment lineage attachment."""
+"""WP4.4 deliberation quiet-carry + amendment lineage attachment."""
 
 from __future__ import annotations
 
@@ -132,7 +132,7 @@ class TestH6ForecastLineageCarry:
                     "amendment_id": str(prior_eff.amendment_id),
                     "effective_forecast_id": str(prior_eff.effective_id),
                     "amendment_outcome": AmendmentOutcome.ACCEPTED.value,
-                    # Round-trip dump so H9 can re-persist after fail-soft (#2790).
+                    # Round-trip dump so commit can re-persist after fail-soft (#2790).
                     "forecast_amendment": amendment.model_dump(mode="json"),
                 }
             }
@@ -158,7 +158,7 @@ class TestH6ForecastLineageCarry:
             knowledge_cutoff_at=_TS,
             phase_portfolio=out["phase_portfolio"],
         )
-        # H5 assessment still on the input state path for registry; attach for collect.
+        # analyst assessment still on the input state path for registry; attach for collect.
         collected_state.phase_portfolio = PhasePortfolioState(
             asset_analysts=state.phase_portfolio.asset_analysts,
             deliberation_summaries=out["phase_portfolio"].deliberation_summaries,

@@ -1,4 +1,4 @@
-"""WP-H — H8 scales calibrated size by PM confidence; rank is order, not size.
+"""WP-H — sizing scales calibrated size by PM confidence; rank is order, not size.
 
 Cash-first: a confidence haircut must not be renormalized into other names.
 Missing confidence uses the documented conservative default (not 1.0).

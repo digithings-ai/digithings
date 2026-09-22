@@ -1,7 +1,7 @@
-"""WP14.3 — typed H7 decision context sections after prerequisite gates (#2946).
+"""WP14.3 — typed direction decision context sections after prerequisite gates (#2946).
 
 Compiles mandate, calibration, contribution/cost, pre-trade risk, prior
-authorization, and forecast feedback sections from versioned inputs. H7 authority
+authorization, and forecast feedback sections from versioned inputs. direction authority
 limits are preserved — no target weights and no numerical forecast mutation.
 """
 
@@ -46,7 +46,7 @@ _DIRECTION_WEIGHT_FORBIDDEN_KEYS = frozenset(
 
 
 class DirectionSectionKind(StrEnum):
-    """Typed H7 decision context sections."""
+    """Typed direction decision context sections."""
 
     MANDATE = "mandate"
     CALIBRATION = "calibration"
@@ -66,7 +66,7 @@ class DirectionSectionAvailability(StrEnum):
 
 
 class DirectionPrerequisiteSnapshot(ResearchStateModel):
-    """Versioned WP3/WP5/WP9 inputs pinned at preflight for H7 compile."""
+    """Versioned WP3/WP5/WP9 inputs pinned at preflight for direction compile."""
 
     state_version_id: UUID | None = None
     accounting_period_id: UUID | None = None
@@ -81,7 +81,7 @@ class DirectionPrerequisiteSnapshot(ResearchStateModel):
 
 
 class DirectionContextSection(ResearchStateModel):
-    """One typed H7 context section — versioned IDs or explicit unavailability."""
+    """One typed direction context section — versioned IDs or explicit unavailability."""
 
     kind: DirectionSectionKind
     availability: DirectionSectionAvailability
@@ -104,7 +104,7 @@ class DirectionContextSection(ResearchStateModel):
 
 
 class DirectionDecisionContext(ResearchStateModel):
-    """Compiled H7 decision capsule: role context + typed sections."""
+    """Compiled direction decision capsule: role context + typed sections."""
 
     sections: tuple[DirectionContextSection, ...]
     base_capsule: ContextCapsule
@@ -125,7 +125,7 @@ class DirectionDecisionContext(ResearchStateModel):
 
 @dataclass(frozen=True)
 class DirectionDecisionContextCompileInput:
-    """Inputs for one H7 decision context compile."""
+    """Inputs for one direction decision context compile."""
 
     loaded: LoadedResearchState
     prerequisites: DirectionPrerequisiteSnapshot | None
@@ -249,17 +249,17 @@ def _require_pinned_prerequisites(
     prerequisites: DirectionPrerequisiteSnapshot | None,
 ) -> DirectionPrerequisiteSnapshot:
     if prerequisites is None:
-        raise ValueError("H7 enforce requires versioned direction_prerequisite_snapshot")
+        raise ValueError("direction enforce requires versioned direction_prerequisite_snapshot")
     pin_id = prerequisites.state_version_id
     if pin_id is None:
-        raise ValueError("H7 enforce requires prerequisites.state_version_id")
+        raise ValueError("direction enforce requires prerequisites.state_version_id")
     if pin_id != loaded.version.state_version_id:
         raise ValueError("prerequisites.state_version_id must match pinned research state")
     return prerequisites
 
 
 def compile_direction_decision_context(inp: DirectionDecisionContextCompileInput) -> DirectionDecisionContext:
-    """Compile H7 decision context from pinned state + prerequisite snapshot."""
+    """Compile direction decision context from pinned state + prerequisite snapshot."""
     prerequisites = inp.prerequisites
     if inp.enforce_version_pin:
         prerequisites = _require_pinned_prerequisites(
@@ -374,16 +374,16 @@ def compile_direction_decision_context(inp: DirectionDecisionContextCompileInput
 
 
 def strip_direction_weight_keys(payload: dict[str, Any]) -> dict[str, Any]:
-    """Remove target-weight fields from H7 provider inputs."""
+    """Remove target-weight fields from direction provider inputs."""
     return {key: value for key, value in payload.items() if key not in _DIRECTION_WEIGHT_FORBIDDEN_KEYS}
 
 
 def assert_direction_no_target_weights(text: str) -> None:
-    """Hard guard: H7 structured context must not carry target allocation weights."""
+    """Hard guard: direction structured context must not carry target allocation weights."""
     lowered = text.lower()
     for key in _DIRECTION_WEIGHT_FORBIDDEN_KEYS:
         if key in lowered:
-            raise ValueError(f"H7 context must not include target weight key {key!r}")
+            raise ValueError(f"direction context must not include target weight key {key!r}")
 
 
 __all__ = [

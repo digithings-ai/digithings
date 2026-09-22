@@ -84,7 +84,7 @@ from digiquant.research.state import (
 
 # Gate thresholds (spec §12.2 / §16 test_quiet_day) — re-baseline when graph changes.
 # 2026-06-20 re-baseline: mandatory δ DocumentPatches (3) + phase5 sector bypass
-# (11× SectorReport until #929 triage wiring) + digest + portfolio thesis track + held H5.
+# (11× SectorReport until #929 triage wiring) + digest + portfolio thesis track + held analyst.
 QUIET_DAY_LLM_BUDGET = 22
 QUIET_DAY_MIN_PATCH_RATIO = 0.10
 PATCH_OUTPUT_SCHEMAS = frozenset({"DocumentPatch"})
@@ -365,7 +365,7 @@ DEFAULT_RESPONSES: dict[str, FixtureResponse] = {
         "sources": [],
     },
     "MonthlyDigest": _digest_body(),
-    # H5 unified analyst
+    # unified analyst
     "AnalystPayload": {
         "ticker": "AAPL",
         "conviction_score": 2,
@@ -383,7 +383,7 @@ DEFAULT_RESPONSES: dict[str, FixtureResponse] = {
         "expectations": "",
         "fingerprint_news_hash": "",
     },
-    # H6 deliberation
+    # deliberation
     "DeliberationPmTurn": {
         "converged": True,
         "challenge": "",
@@ -412,12 +412,12 @@ DEFAULT_RESPONSES: dict[str, FixtureResponse] = {
         "conservative_case": "synthetic conservative",
         "key_tension": "synthetic tension",
     },
-    # H4.5 coverage director (#3739) — the per-call default below refreshes
-    # every rostered ticker so simulated runs preserve pre-H4.5 behavior
-    # (full H4 roster flows to H5). Static entry must exist or the
+    # screener.5 coverage director (#3739) — the per-call default below refreshes
+    # every rostered ticker so simulated runs preserve pre-screener.5 behavior
+    # (full screener roster flows to analyst). Static entry must exist or the
     # dispatcher raises KeyError before reaching the per-call default.
     "CoverageDirective": {"refresh": [], "explore": [], "skip": []},
-    # H7 PM direction (no weights)
+    # PM direction (no weights)
     "PMDirectionMemo": {
         "schema_version": "1.0",
         "date": "2026-04-26",
@@ -452,7 +452,7 @@ DEFAULT_RESPONSES: dict[str, FixtureResponse] = {
         "skip_reason": "simulator_default",
         "ops": [],
     },
-    # portfolio thesis track (H1–H3)
+    # portfolio thesis track (thesis–vehicle_map)
     "ThesisReviewOutput": {
         "reviewed_theses": [],
         "new_candidate_theses": [],
@@ -626,7 +626,7 @@ def build_quiet_day_canned_extras(
         # Held names are quiet: prior_date close == two_days_ago close (0% delta).
         # query_price_deltas reads strictly before run_date (``.lt(date, run_date)``),
         # so the run_date 102.0 close is invisible to the staleness gate — it only
-        # affects the NAV calc. Delta 0.0 < 0.5% threshold → gated out of H5 and
+        # affects the NAV calc. Delta 0.0 < 0.5% threshold → gated out of analyst and
         # carried, not re-analyzed (Stage 1b held gate, #1030).
         price_history.extend(
             [
@@ -1021,7 +1021,7 @@ class SimulationRun:
         return ResearchState.model_validate(result) if isinstance(result, dict) else result
 
     def invoke_through_h5(self, research_input: ResearchInput) -> ResearchState:
-        """Run research + portfolio H1–H5 only (checkpoint boundary before H6)."""
+        """Run research + portfolio thesis–analyst only (checkpoint boundary before deliberation)."""
         from digiquant.portfolio.chain import ChainDeps
         from digiquant.portfolio.graph import PortfolioGraphDeps, build_portfolio_phases_thesis
 
@@ -1034,7 +1034,7 @@ class SimulationRun:
             watchlist=list(research_input.watchlist),
             deps=chain_deps.portfolio,
         )
-        # Slice by phase name, not fixed index — phases insert between H4/H5 (#3739).
+        # Slice by phase name, not fixed index — phases insert between screener/analyst (#3739).
         analyst_end = next(i for i, phase in enumerate(phases) if phase.name == "portfolio_analyst")
         state = _invoke_research_then_portfolio_phases(
             research_input,
@@ -1045,7 +1045,7 @@ class SimulationRun:
         return ResearchState.model_validate(state) if isinstance(state, dict) else state
 
     def invoke_portfolio_from_h6(self, state: ResearchState) -> ResearchState:
-        """Resume portfolio from H6 onward using the wired deps (post-checkpoint)."""
+        """Resume portfolio from deliberation onward using the wired deps (post-checkpoint)."""
         from digiquant.portfolio.chain import ChainDeps
         from digiquant.portfolio.graph import PortfolioGraphDeps, build_portfolio_phases_thesis
 
@@ -1064,7 +1064,7 @@ class SimulationRun:
         resume = _invoke_portfolio_phases_from(
             state,
             chain_deps,
-            phases[deliberation_start:],  # H6–H9
+            phases[deliberation_start:],  # deliberation–commit
         )
         return ResearchState.model_validate(resume) if isinstance(resume, dict) else resume
 
@@ -1192,12 +1192,12 @@ def simulated_pipeline(
         Whether to wire the optional dep slots. Default behavior: publish +
         triage + commit_run on (matches production non-monthly runs, #932);
         phase9 + reflect off (those require migrations 026/027). ``commit_run``
-        wires H9 terminal portfolio booking (positions + NAV + brief).
+        wires commit terminal portfolio booking (positions + NAV + brief).
     preferences
         Merged into ``ResearchConfigBundle.preferences`` so tests can flip
         ``debate_rounds``, ``holding_days``, etc.
     evidence_bundle_store
-        Optional append-only H5/H6 bundle store. When set, portfolio H5/H6 wire
+        Optional append-only analyst/deliberation bundle store. When set, portfolio analyst/deliberation wire
         the store for publish/amendment persistence (WP11.5 durable tests).
     """
     client = seed_supabase_client(canned_extras, replace_defaults=replace_canned_defaults)

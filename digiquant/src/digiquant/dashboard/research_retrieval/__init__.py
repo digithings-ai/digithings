@@ -10,17 +10,17 @@ WP12.5 compiled prose views:
 :mod:`digiquant.dashboard.research_retrieval.views`.
 WP11.1 ticker evidence bundles + amendments:
 :class:`~digiquant.dashboard.research_retrieval.store.EvidenceBundleStore`
-(models in the same ``models`` module; H6 selection cutover is WP11.3+;
+(models in the same ``models`` module; deliberation selection cutover is WP11.3+;
 WP13.1 research attention policy extends ``research_retrieval/planner.py``).
-WP11.2 H5 publish:
+WP11.2 analyst publish:
 :mod:`digiquant.dashboard.research_retrieval.evidence_bundle`
 (one base bundle per analyst-attempted ticker before the provider call).
-WP11.3 deterministic H6 selection:
+WP11.3 deterministic deliberation selection:
 :mod:`digiquant.dashboard.research_retrieval.planner`
 (``DeliberationSelection`` reasons/features/budget; ``DIGIQUANT_H6_SELECTION_MODE``).
-WP11.4 bounded H6 missing-fact amendment:
+WP11.4 bounded deliberation missing-fact amendment:
 :mod:`digiquant.dashboard.research_retrieval.deliberation_amendment`
-(one validated proposal → targeted retrieval → append-only amendment; no generic H6 search).
+(one validated proposal → targeted retrieval → append-only amendment; no generic deliberation search).
 WP13.2 attention persistence:
 :class:`~digiquant.dashboard.research_retrieval.store.AttentionStore`
 (plans/decisions/context manifests/policy evaluations; migration
@@ -31,10 +31,10 @@ WP13.5 shadow evaluation:
 WP14.1 role context compiler:
 :mod:`digiquant.dashboard.research_retrieval.context`
 (``ContextCapsule`` / ``ContextManifest`` / role allowlists; models + compiler only — WP14.2+ wiring).
-WP14.2 blinded H5/H6 context wiring:
+WP14.2 blinded analyst/deliberation context wiring:
 :mod:`digiquant.dashboard.research_retrieval.context_wiring`
 (``DIGIQUANT_CONTEXT_COMPILER_MODE`` off|shadow|enforce beside incumbent provider inputs).
-WP14.3 H7 decision context wiring:
+WP14.3 direction decision context wiring:
 :mod:`digiquant.dashboard.research_retrieval.direction_decision_context`
 (typed mandate/calibration/contribution/risk/authorization/forecast sections;
 :mod:`digiquant.dashboard.research_retrieval.direction_prerequisites` preflight snapshot).

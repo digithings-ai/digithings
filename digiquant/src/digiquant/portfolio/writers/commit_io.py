@@ -1,4 +1,4 @@
-"""H9 terminal I/O — portfolio booking, brief publish, commit manifest (#932)."""
+"""commit terminal I/O — portfolio booking, brief publish, commit manifest (#932)."""
 
 from __future__ import annotations
 
@@ -427,7 +427,7 @@ def _enrich_positions(
 
 
 def _action_rationale_by_ticker(book: RebalancePayload | dict[str, Any]) -> dict[str, str]:
-    """Per-ticker rationale from H8 ``actions`` for ``positions`` booking (#2597)."""
+    """Per-ticker rationale from sizing ``actions`` for ``positions`` booking (#2597)."""
     out: dict[str, str] = {}
     for action in book.get("actions") or []:
         if not isinstance(action, dict):
@@ -442,7 +442,7 @@ def _action_rationale_by_ticker(book: RebalancePayload | dict[str, Any]) -> dict
 
 
 def weights_from_sized_book(book: RebalancePayload | dict[str, Any]) -> dict[str, float]:
-    """Normalize H8 ``recommended_portfolio`` into non-CASH positive weights."""
+    """Normalize sizing ``recommended_portfolio`` into non-CASH positive weights."""
     recommended = book.get("recommended_portfolio") or []
     weights: dict[str, float] = {}
     for row in recommended:
@@ -558,7 +558,7 @@ def _prune_orphan_positions(
 
 @dataclass(frozen=True)
 class BookedPortfolio:
-    """Result of booking H8 weights into ``positions`` + ``nav_history``."""
+    """Result of booking sizing weights into ``positions`` + ``nav_history``."""
 
     weights: dict[str, float]
     cash_pct: float
@@ -574,7 +574,7 @@ def book_portfolio(
     state: ResearchState,
     book: RebalancePayload | dict[str, Any],
 ) -> BookedPortfolio:
-    """Upsert ``positions`` + ``nav_history`` from H8 weights only."""
+    """Upsert ``positions`` + ``nav_history`` from sizing weights only."""
     run_date = state.run_date
     date_str = run_date.isoformat()
     weights = weights_from_sized_book(book)
@@ -857,10 +857,10 @@ def publish_portfolio_brief(
     state: ResearchState,
     book: RebalancePayload | dict[str, Any],
 ) -> PublishedArtifact:
-    """Publish operator brief — weights from H8 ``sized_book`` only.
+    """Publish operator brief — weights from sizing ``sized_book`` only.
 
     ``adjustments`` and ``requested_pct`` are excluded from the document payload:
-    H9 persists them on the portfolio ledger (#2768); carrying them into the
+    commit persists them on the portfolio ledger (#2768); carrying them into the
     ``pm-rebalance`` document would duplicate lineage without a reader contract.
     """
     date_str = state.run_date.isoformat()
@@ -884,7 +884,7 @@ def publish_portfolio_documents(
     client: SupabaseClient,
     state: ResearchState,
 ) -> list[PublishedArtifact]:
-    """Publish H5/H6/H7 artifacts not covered by research publish."""
+    """Publish analyst/deliberation/direction artifacts not covered by research publish."""
     date_str = state.run_date.isoformat()
     run_type = state.run_type
     workspace_id = getattr(state.config, "workspace_id", None)
@@ -947,7 +947,7 @@ def publish_portfolio_documents(
 
 
 def held_tickers(state: ResearchState) -> set[str]:
-    """Prior-book holdings + H4 roster entries marked ``held`` (#936)."""
+    """Prior-book holdings + screener roster entries marked ``held`` (#936)."""
     held = set(holdings_from_prior_book(state.prior_context.prior_book))
     for entry in state.phase_portfolio.focus_roster:
         if entry.roster_reason == "held" and entry.ticker:
@@ -970,9 +970,9 @@ def flat_tickers_from_memo(state: ResearchState) -> set[str]:
 
 
 def gated_out_tickers(state: ResearchState) -> set[str]:
-    """HELD names deliberately not dispatched to H5 (Stage 1b staleness gate, #1030).
+    """HELD names deliberately not dispatched to analyst (Stage 1b staleness gate, #1030).
 
-    The H4 staleness/delta gate records a quiet, unlinked held name in
+    The screener staleness/delta gate records a quiet, unlinked held name in
     ``focus_roster_excluded`` instead of dispatching an analyst. The position is
     still carried in the book at its prior weight — "we own it and nothing
     material changed" is its decision — so commit-run treats it as an intentional
@@ -991,7 +991,7 @@ def gated_out_tickers(state: ResearchState) -> set[str]:
 
 
 def memo_addressed_tickers(state: ResearchState) -> set[str]:
-    """Tickers the H7 PM memo's roster explicitly addressed (``long`` or ``flat``)."""
+    """Tickers the direction PM memo's roster explicitly addressed (``long`` or ``flat``)."""
     memo = state.phase_portfolio.pm_direction_memo
     if memo is None:
         return set()
@@ -1007,13 +1007,13 @@ def memo_addressed_tickers(state: ResearchState) -> set[str]:
 def carried_held_tickers(state: ResearchState) -> set[str]:
     """HELD names carried at drifted weight instead of resized or dropped (#1030, #1649).
 
-    Two deliberate-carry classes share ONE set so H8's carry injection and H9's
+    Two deliberate-carry classes share ONE set so sizing's carry injection and commit's
     coherence exemption can never diverge into a silent mismatch (the #1030
     principle):
 
     - **screener-gated** (:func:`gated_out_tickers`): quiet held names never dispatched
-      to H5 — "we own it and nothing material changed".
-    - **Memo-unaddressed** (#1649): held names the H7 PM memo's roster addresses
+      to analyst — "we own it and nothing material changed".
+    - **Memo-unaddressed** (#1649): held names the direction PM memo's roster addresses
       with neither ``long`` nor ``flat``. Memo coverage is LLM discipline — run
       29936849103 (2026-07-22) omitted SEVEN held tickers and froze the commit.
       Owning a position with no explicit PM instruction defaults to "hold at
@@ -1039,7 +1039,7 @@ def coherence_errors(state: ResearchState, weights: dict[str, float]) -> list[st
 
     for ticker in held_tickers(state):
         if weights.get(ticker, 0.0) <= 0 and ticker not in flats:
-            errors.append(f"held ticker {ticker} missing from book and not flat in H7")
+            errors.append(f"held ticker {ticker} missing from book and not flat in direction")
 
     for ticker, weight in weights.items():
         if weight <= 0:
@@ -1048,13 +1048,13 @@ def coherence_errors(state: ResearchState, weights: dict[str, float]) -> list[st
         # no fresh analyst doc. The exemption only covers held carries; a genuine
         # missing-doc gap (a non-held stray with a positive weight) still fails closed.
         if ticker not in analysts and ticker not in flats and ticker not in carried:
-            errors.append(f"open position {ticker} lacks H5 analyst doc and is not flat in H7")
+            errors.append(f"open position {ticker} lacks analyst doc and is not flat in direction")
 
     return errors
 
 
 class PreTradeRiskMode(StrEnum):
-    """Rollout knob for H9 PreTradeRiskReport hash validation (#2754 / WP9.4).
+    """Rollout knob for commit PreTradeRiskReport hash validation (#2754 / WP9.4).
 
     ``off`` — skip validation and persistence.
     ``shadow`` — validate + persist when present; never block the book (default).
@@ -1068,7 +1068,7 @@ class PreTradeRiskMode(StrEnum):
 
 @dataclass(frozen=True)
 class PreTradeRiskValidation:
-    """Outcome of H9 report identity checks — never recomputes metrics."""
+    """Outcome of commit report identity checks — never recomputes metrics."""
 
     ok: bool
     mode: PreTradeRiskMode
@@ -1097,7 +1097,7 @@ def validate_pretrade_risk_report(
     *,
     mode: PreTradeRiskMode | None = None,
 ) -> PreTradeRiskValidation:
-    """Validate attached PreTradeRiskReport identity against the book H9 will commit.
+    """Validate attached PreTradeRiskReport identity against the book the commit will write.
 
     Checks presence, Pydantic parse (unknown/corrupt), recomputed content hash via
     the contract validator, final-book fingerprint vs ``weights``, optional sized-book

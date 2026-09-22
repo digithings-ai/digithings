@@ -1,4 +1,4 @@
-"""WP14.3 — H7 decision context compiler wiring (#2946).
+"""WP14.3 — direction decision context compiler wiring (#2946).
 
 Red coverage: mandate, calibration, contribution/cost, pre-trade risk, prior
 authorization, unresolved/matured forecast sections; exact IDs; shadow degraded

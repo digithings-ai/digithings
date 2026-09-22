@@ -1,4 +1,4 @@
-"""H5 — unified asset analyst per focus-roster ticker (spec §9)."""
+"""analyst — unified asset analyst per focus-roster ticker (spec §9)."""
 
 from __future__ import annotations
 
@@ -87,13 +87,13 @@ def _analyst_node_factory(
                 return {}
             if errors:
                 logger.warning(
-                    "H5 %s failed after evidence publish (%d errors); bundle retained",
+                    "analyst %s failed after evidence publish (%d errors); bundle retained",
                     ticker,
                     len(errors),
                 )
             return {"phase_portfolio": portfolio_update}
         if errors:
-            logger.warning("H5 %s completed with %d recoverable errors", ticker, len(errors))
+            logger.warning("analyst %s completed with %d recoverable errors", ticker, len(errors))
         doc_key = artifact_document_key(analyst_artifact_key(ticker))
         if client is not None and not skip_overlay_shared_register(state.config.workspace_id):
             upsert_analyst_coverage(
@@ -162,9 +162,9 @@ def build_analyst_from_state(
     evidence_bundle_store: EvidenceBundleStore | None = None,
     research_state_store: ResearchStateStore | None = None,
 ) -> FanOutPhase:
-    """Runtime roster fan-out — one parallel ``Send`` worker per H4 ``focus_roster`` ticker.
+    """Runtime roster fan-out — one parallel ``Send`` worker per screener ``focus_roster`` ticker.
 
-    The roster is computed at run time by H4 (so it can't be a compile-time per-ticker phase);
+    The roster is computed at run time by screener (so it can't be a compile-time per-ticker phase);
     ``FanOutPhase`` maps each ticker to a concurrent worker invocation and the ``phase_portfolio``
     reducer merges their analyst payloads. This replaces the prior single node that looped the
     tickers serially — N analyst LLM calls now run in parallel instead of back-to-back.

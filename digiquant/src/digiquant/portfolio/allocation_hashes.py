@@ -1,13 +1,13 @@
-"""Stable SHA-256 identities for H8 allocation inputs and WP9 risk reports.
+"""Stable SHA-256 identities for sizing allocation inputs and WP9 risk reports.
 
 Canonical JSON uses sorted keys, compact separators, UTF-8, normalized UTC
 timestamps in payloads, ``allow_nan=False``, and SHA-256 digests. Never use
 Python ``hash()`` for cross-run identity.
 
 ``weights_fingerprint`` is the sole authoritative implementation —
-:mod:`digiquant.portfolio.writers.commit_io` delegates here so H9
+:mod:`digiquant.portfolio.writers.commit_io` delegates here so commit
 idempotency bytes stay stable. Pre-trade report digests live beside the
-allocation bundle helpers so H9 can bind book + report without a second hash
+allocation bundle helpers so commit can bind book + report without a second hash
 dialect (#2742 / WP9.1).
 """
 

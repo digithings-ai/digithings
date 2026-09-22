@@ -1,6 +1,6 @@
 ---
 name: asset-analyst
-description: Unified per-ticker asset analyst (H5).
+description: Unified per-ticker asset analyst (analyst).
 ---
 
 # Asset analyst (default)

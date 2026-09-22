@@ -1,7 +1,7 @@
 """Versioned risk policy and covariance snapshot contracts (#2692 / WP6.2).
 
-Strict Pydantic v2 models resolve every incumbent H8 leaf with provenance before
-H9/replay consumption. Phase 1 versions incumbent behavior only — no optimizer
+Strict Pydantic v2 models resolve every incumbent sizing leaf with provenance before
+commit/replay consumption. Phase 1 versions incumbent behavior only — no optimizer
 or live ``size_portfolio`` input swap.
 
 Style mirrors :mod:`digiquant.portfolio.models.forecast_calibration`:
@@ -114,7 +114,7 @@ class RankToConvictionEntry(RiskPolicyModel):
 
 
 class RiskPolicy(RiskPolicyModel):
-    """Fully resolved incumbent H8 policy — every leaf carries provenance."""
+    """Fully resolved incumbent sizing policy — every leaf carries provenance."""
 
     policy_id: UUID
     method_version: NonEmptyId

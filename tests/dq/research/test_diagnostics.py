@@ -304,7 +304,7 @@ def test_retry_signal_still_fires_on_the_legacy_share_rule() -> None:
 
 
 def test_no_book_gate_degrades_research_with_nothing_committed() -> None:
-    # H9 committing nothing at all leaves ``sized_book`` None and raises no PhaseError, so
+    # commit committing nothing at all leaves ``sized_book`` None and raises no PhaseError, so
     # the #1555 commit gate (materialized-but-uncommitted) misses it entirely and the run
     # reported "ok" — the shape behind #1766's 20-day blackout.
     state = _prod_shaped_state(failed=0)
@@ -365,7 +365,7 @@ def test_portfolio_deliberation_gate_degrades_a_mostly_dead_portfolio() -> None:
 
 
 def test_portfolio_deliberation_gate_tolerates_routine_cap_noise() -> None:
-    # The 2026-07-26 baseline: 1 of 50 — H6 emits the same (phase, node) for a benign
+    # The 2026-07-26 baseline: 1 of 50 — deliberation emits the same (phase, node) for a benign
     # max_rounds cap as for an LLM crash, so a gate on *any* error would flip every run.
     portfolio, errors = _portfolio_deliberations(50, failed=1)
     state = _prod_shaped_state(failed=0, phase_portfolio=portfolio)

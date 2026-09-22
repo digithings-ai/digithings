@@ -19,7 +19,7 @@ Consumer Stripe SKUs: [`PRICING.md`](PRICING.md) (Brief / Desk / Studio — prop
 ## Filing (human or authorized session)
 
 ```bash
-cd docs/agent-backlog/kairos-tenancy
+cd docs/agent-backlog/execution-tenancy
 gh issue create --title "[epic] Olympus client-ready: Kairos execution + user tenancy" \
   --body-file EPIC.md --label agent-task --label "component:digiquant" --label epic
 # Note the epic number E, then for each WP (replace labels per the table below):

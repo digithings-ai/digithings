@@ -1,4 +1,4 @@
-"""Golden fixture loader for incumbent H8 risk policy characterization (WP6.1 / #2687).
+"""Golden fixture loader for incumbent sizing risk policy characterization (WP6.1 / #2687).
 
 Freezes current production defaults and representative sizing outcomes before
 ``RiskPolicy`` / ``CovarianceSnapshot`` modeling in WP6.2. Tests import this
