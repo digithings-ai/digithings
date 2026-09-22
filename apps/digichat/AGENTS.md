@@ -12,10 +12,11 @@ In this order, before writing any code:
 
 1. [`ARCHITECTURE.md`](ARCHITECTURE.md) — full capability matrix, module map, API surface (all route handlers), auth flow, DB schema, streaming behavior
 2. [`../../docs/architecture/digichat-modular-frontend.md`](../../docs/architecture/digichat-modular-frontend.md) — modular frontend; digigraph digithings path; Foundry client adapter
-3. `node_modules/next/dist/docs/` — **required** before writing any Next.js code; this version has breaking changes from prior releases (path inside installed dependencies, not a committed file)
-4. [`../../AGENTS.md`](../../AGENTS.md) — non-negotiable stack-wide rules
-5. `../../ROADMAP.md` — OpenClaw integration and RAG ingestion UI are Phase 2; do not build them now (see `docs/VISION.md` for the current plan)
-6. `../../docs/agent-backlog/` — current task queue lives on GitHub Project #1; see `docs/agents/AGENT_WORKFLOW.md`
+3. **[`../../docs/digichat/SKIN-GALLERY.md`](../../docs/digichat/SKIN-GALLERY.md) — for any UI work.** The single centralized surface: every skin on one backend, with the skin registry, the selector chrome, the feature/prefs wiring, how to add a skin, and the gotchas that make a skin render wrong. Start here before touching a skin.
+4. `node_modules/next/dist/docs/` — **required** before writing any Next.js code; this version has breaking changes from prior releases (path inside installed dependencies, not a committed file)
+5. [`../../AGENTS.md`](../../AGENTS.md) — non-negotiable stack-wide rules
+6. `../../ROADMAP.md` — OpenClaw integration and RAG ingestion UI are Phase 2; do not build them now (see `docs/VISION.md` for the current plan)
+7. `../../docs/agent-backlog/` — current task queue lives on GitHub Project #1; see `docs/agents/AGENT_WORKFLOW.md`
 
 ---
 
