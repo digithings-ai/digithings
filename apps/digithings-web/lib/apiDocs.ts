@@ -348,6 +348,8 @@ print(r.json()["sharpe_ratio"])`,
       mcp: "digisearch mcp   (FastMCP streamable-http: semantic, research_turn)",
     },
     env: [
+      { name: "CLOUDFLARE_ACCOUNT_ID", description: "Cloudflare account (activates the Vectorize backend, first in precedence)." },
+      { name: "CLOUDFLARE_API_TOKEN", description: "Cloudflare API token for Vectorize." },
       { name: "CHROMA_PATH", description: "Persistent Chroma directory (activates the Chroma backend)." },
       { name: "AZURE_SEARCH_ENDPOINT", description: "Azure AI Search endpoint (alternative backend)." },
       { name: "AZURE_SEARCH_API_KEY", description: "Azure AI Search key." },
@@ -371,7 +373,7 @@ print(r.json()["sharpe_ratio"])`,
         responseFields: [
           { name: "results", type: "object[]", description: "Normalized hits (chunk_id, doc_id, score, content, metadata)." },
           { name: "total", type: "integer", description: "Total matches." },
-          { name: "backend", type: "string", description: '"chroma" | "azure_ai_search" | "stub".' },
+          { name: "backend", type: "string", description: '"vectorize" | "chroma" | "azure_ai_search" | "stub".' },
         ],
         examples: [
           {
