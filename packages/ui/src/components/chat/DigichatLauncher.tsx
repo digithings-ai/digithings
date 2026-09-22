@@ -39,6 +39,39 @@ const subscribeToClient = () => () => {};
 const getClientSnapshot = () => true;
 const getServerSnapshot = () => false;
 
+/**
+ * Test a keydown against a `mod+k` / `ctrl+shift+d` style hotkey.
+ *
+ * `mod` means "ctrl or meta" so one deployment string works on both macOS and
+ * Windows/Linux; naming `ctrl` or `meta` explicitly pins that one. Every
+ * modifier not named must be absent, so `k` alone never fires on `mod+k`. A
+ * malformed string (empty token, e.g. `k+` or `mod++k`) matches nothing rather
+ * than silently degrading to the bare key.
+ */
+export function matchesHotkey(event: KeyboardEvent, hotkey: string): boolean {
+  const parts = hotkey.split("+");
+  if (parts.some((part) => part.trim() === "")) return false;
+  const tokens = parts.map((token) => token.trim().toLowerCase());
+  if (tokens.length === 0) return false;
+  const key = tokens[tokens.length - 1];
+  const mods = new Set(tokens.slice(0, -1));
+  const needsCtrl = mods.has("ctrl");
+  const needsMeta = mods.has("meta") || mods.has("cmd");
+  const needsMod = mods.has("mod");
+  const needsAlt = mods.has("alt") || mods.has("option");
+  const needsShift = mods.has("shift");
+
+  if (needsCtrl && !event.ctrlKey) return false;
+  if (needsMeta && !event.metaKey) return false;
+  // `mod` is exactly one of ctrl/meta — both held is not the shortcut.
+  if (needsMod && event.ctrlKey === event.metaKey) return false;
+  if (!needsCtrl && !needsMod && event.ctrlKey) return false;
+  if (!needsMeta && !needsMod && event.metaKey) return false;
+  if (needsAlt !== event.altKey) return false;
+  if (needsShift !== event.shiftKey) return false;
+  return event.key.toLowerCase() === key;
+}
+
 export type DigichatLauncherProps = {
   /** Embedded chat surface, usually the digichat iframe. */
   children: ReactNode;
@@ -48,6 +81,11 @@ export type DigichatLauncherProps = {
   ariaLabel?: string;
   /** Render into document.body (default) or inside the current container. */
   portal?: boolean;
+  /**
+   * Keyboard shortcut that opens the panel while it is closed, e.g. `mod+k`.
+   * See `matchesHotkey` for the accepted syntax.
+   */
+  hotkey?: string;
   /** Start open for demos or controlled previews. */
   defaultOpen?: boolean;
   /** Called after opening or after the close animation completes. */
@@ -64,6 +102,7 @@ export function DigichatLauncher({
   title = "digichat",
   ariaLabel = "digichat",
   portal = true,
+  hotkey,
   defaultOpen = false,
   onOpenChange,
   className,
@@ -195,6 +234,24 @@ export function DigichatLauncher({
       window.removeEventListener("keydown", onKeyDown);
     };
   }, [closePanel, open]);
+
+  /* The hotkey only opens: once the panel is up, Escape and the backdrop own
+     dismissal, so a shortcut cannot toggle the surface out from under a user
+     mid-message. `openPanelRef` keeps the listener stable across renders. */
+  const openPanelRef = useRef(openPanel);
+  // eslint-disable-next-line react-hooks/refs -- useLatest for the hotkey listener
+  openPanelRef.current = openPanel;
+
+  useEffect(() => {
+    if (!hotkey || open || closing) return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (!matchesHotkey(event, hotkey)) return;
+      event.preventDefault();
+      openPanelRef.current();
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [closing, hotkey, open]);
 
   useEffect(
     () => () => {
