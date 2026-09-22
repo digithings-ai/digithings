@@ -1,8 +1,17 @@
 'use client';
 
 import { useMemo } from 'react';
+import {
+  Bar,
+  BarChart,
+  CartesianGrid,
+  Cell,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
+} from 'recharts';
 import type { TableRow as DbTableRow } from '@/lib/database.types';
-import { SignedBars } from '@digithings/ui';
 import {
   EmptyState,
   Table,
@@ -13,6 +22,7 @@ import {
   TableRow,
 } from '@digithings/ui/ui';
 import { SectionCard, StatTile, fmtPct, signColorClass } from './shared';
+import { useChartColors, withAlpha } from '@/lib/chart-colors';
 
 const TOP_N = 14;
 
@@ -29,6 +39,7 @@ export default function AttributionTab({
   date: string | null;
   embedded?: boolean;
 }) {
+  const chart = useChartColors();
   const summary = useMemo(() => {
     if (!attribution.length) return null;
     const holdings = attribution.filter((r) => r.ticker !== 'CASH');
@@ -120,13 +131,30 @@ export default function AttributionTab({
         flat={embedded}
       >
         {chartData.length ? (
-          <SignedBars
-            values={chartData.map((d) => d.contribution)}
-            labels={chartData.map((d) => d.ticker)}
-            height={300}
-            fmt={(v) => fmtPct(v)}
-            ariaLabel="Lookback contribution by holding, in percent"
-          />
+          <div className="h-[300px] w-full">
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={chartData} margin={{ top: 8, right: 16, left: 0, bottom: 0 }}>
+                <CartesianGrid stroke={chart.hair} vertical={false} />
+                <XAxis dataKey="ticker" tick={{ fill: chart.axis, fontSize: 10 }} interval={0} angle={-30} textAnchor="end" height={50} />
+                <YAxis tick={{ fill: chart.axis, fontSize: 11 }} tickFormatter={(v: number) => `${v}%`} />
+                <Tooltip
+                  cursor={{ fill: withAlpha(chart.ink, 0.04) }}
+                  contentStyle={{
+                    background: 'var(--term-bg)',
+                    border: '1px solid var(--hair)',
+                    borderRadius: 8,
+                    fontSize: 12,
+                  }}
+                  formatter={(value: number) => [`${value}%`, 'Contribution']}
+                />
+                <Bar dataKey="contribution" radius={[3, 3, 0, 0]} isAnimationActive={false}>
+                  {chartData.map((d) => (
+                    <Cell key={d.ticker} fill={d.contribution >= 0 ? chart.up : chart.down} />
+                  ))}
+                </Bar>
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
         ) : (
           <p className="text-xs text-ink-mute">No priced contributions to chart.</p>
         )}
@@ -137,7 +165,6 @@ export default function AttributionTab({
         subtitle="Single-benchmark lookback diagnostic: contribution (weight × return), selection (weight × excess vs SPY), and total active over the same window. Sums reconcile to active return when every holding is priced. Not realized period attribution."
         flat={embedded}
       >
-        <div className="min-w-0 overflow-x-auto">
         <Table className="text-sm tabular-nums">
           <TableHeader>
             <TableRow className="text-left text-xs text-ink-mute border-hair hover:bg-transparent">
@@ -172,7 +199,6 @@ export default function AttributionTab({
             ))}
           </TableBody>
         </Table>
-        </div>
       </SectionCard>
     </div>
   );

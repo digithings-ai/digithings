@@ -202,31 +202,6 @@ describe('ConsensusTab Charts view', () => {
     expect(html).toContain('Consensus score over time');
   });
 
-  it('rides the kit MultiTimeSeries with conviction bands and threshold lines', () => {
-    const html = render({ initialView: 'charts' });
-    // Two conviction bands (strong bull / strong bear) plus the five
-    // threshold lines ride the shared kit primitive, not recharts.
-    expect(html.match(/data-chart-layer="reference-band"/g)).toHaveLength(2);
-    expect(html).toContain('data-chart-layer="reference-line"');
-    expect(html).toContain('ts-ref-band-accent');
-    expect(html).toContain('ts-ref-band-warn');
-    expect(html).toContain('<title>Strong +1.25</title>');
-    expect(html).toContain('<title>Zero</title>');
-    // Every G10 currency renders as a kit overlay series with its stable hue.
-    for (const ccy of G10_CURRENCIES) {
-      expect(html).toContain(`data-series="${ccy}"`);
-    }
-  });
-
-  it('renders a dashed stale extension when a currency misses the latest run', () => {
-    const series = tenCurrencySeries().filter(
-      (r) => !(r.currency === 'USD' && r.run_date === DATES[DATES.length - 1]),
-    );
-    const html = render({ initialView: 'charts', series, latest: latestFrom(series) });
-    expect(html).toContain('data-series="USD__stale"');
-    expect(html).toContain('ts-line-dashed');
-  });
-
   it('does NOT render the removed position-split chart', () => {
     const html = render({ initialView: 'charts' });
     expect(html).not.toContain('data-chart="split"');

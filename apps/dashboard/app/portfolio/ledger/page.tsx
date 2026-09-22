@@ -28,8 +28,7 @@ export default function PortfolioLedgerPage() {
         <PortfolioSectionNav active="ledger" />
         <div className={`${SUBPAGE_MAX} flex-1 space-y-4 py-4 md:py-5`}>
           <div>
-            <p className="font-mono text-[11px] uppercase text-ink-mute">Portfolio · ledger</p>
-            <h1 className="mt-1 font-display text-xl font-normal tracking-tight text-ink">Ledger</h1>
+            <h1 className="font-display text-xl font-normal tracking-tight text-ink">Ledger</h1>
             <p className="mt-1 max-w-2xl text-sm text-ink-soft">
               Position-event activity for the house book.
             </p>
@@ -80,8 +79,7 @@ function LedgerBody() {
       <PortfolioSectionNav active="ledger" />
       <div className={`${SUBPAGE_MAX} flex-1 space-y-4 py-4 md:py-5`}>
         <div>
-          <p className="font-mono text-[11px] uppercase text-ink-mute">Portfolio · ledger</p>
-          <h1 className="mt-1 font-display text-xl font-normal tracking-tight text-ink">Ledger</h1>
+          <h1 className="font-display text-xl font-normal tracking-tight text-ink">Ledger</h1>
           <p className="mt-1 max-w-2xl text-sm text-ink-soft">
             Position-event activity for the house book. Private append-only ledger tables remain
             service_role-only — this surface shows the public event stream only.

@@ -83,7 +83,7 @@ export default function SettingsPage() {
           <p className="font-mono text-[0.72rem] tracking-[0.02em] text-ink">
             fx hub <span className="text-ink-mute">· account</span>
           </p>
-          <h1 className="font-display text-2xl tracking-tight text-ink">Your account.</h1>
+          <h1 className="font-display text-3xl tracking-tight text-ink">Your account.</h1>
           <p className="max-w-[46ch] text-[0.88rem] leading-[1.45] text-ink-soft">
             Your FX Hub profile: invite status and sign-out only. Desk settings do not apply to
             this product.
@@ -105,7 +105,7 @@ export default function SettingsPage() {
         <p className="font-mono text-[0.72rem] tracking-[0.02em] text-ink">
           dashboard <span className="text-ink-mute">· settings</span>
         </p>
-        <h1 className="font-display text-2xl tracking-tight text-ink">The desk, not the product.</h1>
+        <h1 className="font-display text-3xl tracking-tight text-ink">The desk, not the product.</h1>
         <p className="max-w-[46ch] text-[0.88rem] leading-[1.45] text-ink-soft">
           Notifications and billing on every plan. Pipeline, keys, and brokers only appear when this
           workspace can use them.
