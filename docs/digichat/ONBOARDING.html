@@ -1,0 +1,809 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>digichat — onboarding</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20'%3E%3Crect width='20' height='20' fill='%2308090b'/%3E%3Cg fill='%23e2708a'%3E%3Crect x='2' y='6' width='2.3' height='2.3'/%3E%3Crect x='6' y='4' width='2.3' height='2.3'/%3E%3Crect x='6' y='8' width='2.3' height='2.3'/%3E%3Crect x='10' y='6' width='2.3' height='2.3'/%3E%3Crect x='14' y='4' width='2.3' height='2.3'/%3E%3Crect x='14' y='8' width='2.3' height='2.3'/%3E%3C/g%3E%3C/svg%3E">
+<style>
+  :root{
+    --bg:#08090b; --panel:#121417; --panel-2:#171a1e; --hair:rgba(255,255,255,.09);
+    --hair-2:rgba(255,255,255,.16);
+    --ink:#eceef0; --soft:#9aa0a6; --mute:#6b7177;
+    --accent:#3dd6c4; --pink:#e2708a; --warn:#e0b341; --danger:#e5533e;
+    --mono:"Geist Mono","JetBrains Mono",ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+  }
+  *{box-sizing:border-box}
+  html{scroll-behavior:smooth}
+  body{
+    margin:0;background:var(--bg);color:var(--ink);
+    font-family:var(--mono);font-size:14px;line-height:1.62;
+    -webkit-font-smoothing:antialiased;
+  }
+  .wrap{max-width:1080px;margin:0 auto;padding:0 20px 96px}
+
+  /* ---------- nav ---------- */
+  nav.toc{
+    position:sticky;top:0;z-index:10;background:rgba(8,9,11,.92);
+    border-bottom:1px solid var(--hair);backdrop-filter:blur(8px);
+  }
+  nav.toc .inner{max-width:1080px;margin:0 auto;padding:9px 20px;display:flex;flex-wrap:wrap;gap:2px 14px;align-items:center}
+  nav.toc a{color:var(--soft);text-decoration:none;font-size:11.5px;letter-spacing:.02em;white-space:nowrap}
+  nav.toc a:hover{color:var(--accent)}
+  nav.toc .brand{color:var(--pink);font-size:11.5px;letter-spacing:.08em;text-transform:uppercase;margin-right:8px}
+
+  /* ---------- header ---------- */
+  header.hero{padding:52px 0 30px;border-bottom:1px solid var(--hair)}
+  .kicker{color:var(--mute);font-size:11px;letter-spacing:.14em;text-transform:uppercase}
+  h1{font-size:34px;line-height:1.15;margin:12px 0 10px;letter-spacing:-.02em;font-weight:500}
+  h1 .dim{color:var(--mute)}
+  .lede{color:var(--soft);max-width:74ch;margin:0}
+  .meta{display:flex;flex-wrap:wrap;gap:6px;margin-top:20px}
+
+  /* ---------- sections ---------- */
+  section{padding:44px 0 4px;border-bottom:1px solid var(--hair)}
+  section:last-of-type{border-bottom:0}
+  h2{font-size:19px;font-weight:500;margin:0 0 6px;letter-spacing:-.01em}
+  h2 .n{color:var(--mute);margin-right:10px;font-size:13px}
+  h3{font-size:13px;font-weight:500;letter-spacing:.06em;text-transform:uppercase;color:var(--accent);margin:26px 0 8px}
+  h4{font-size:13.5px;font-weight:500;margin:18px 0 6px}
+  p{margin:9px 0}
+  p.soft{color:var(--soft)}
+  ul,ol{margin:9px 0;padding-left:20px}
+  li{margin:4px 0}
+  a{color:var(--accent)}
+  code{font-family:var(--mono);font-size:12.4px;background:var(--panel-2);border:1px solid var(--hair);padding:.5px 4px;color:#dfe3e6}
+  strong{font-weight:500;color:#fff}
+  .read{color:var(--mute);font-size:11.5px}
+
+  /* ---------- atoms ---------- */
+  .chip{
+    display:inline-block;border:1px solid var(--hair-2);background:var(--panel);
+    padding:2px 7px;font-size:11px;color:var(--soft);letter-spacing:.02em;white-space:nowrap;
+  }
+  .chip b{color:var(--ink);font-weight:500}
+  .chip.pink{border-color:rgba(226,112,138,.45);color:var(--pink)}
+  .chip.teal{border-color:rgba(61,214,196,.4);color:var(--accent)}
+  .card{border:1px solid var(--hair);background:var(--panel);padding:14px 16px;margin:12px 0}
+  .card.tight{padding:11px 13px}
+  .grid{display:grid;gap:10px}
+  .g2{grid-template-columns:repeat(auto-fit,minmax(280px,1fr))}
+  .g3{grid-template-columns:repeat(auto-fit,minmax(210px,1fr))}
+  .g4{grid-template-columns:repeat(auto-fit,minmax(160px,1fr))}
+  .note{border-left:2px solid var(--warn);background:rgba(224,179,65,.06);padding:10px 14px;margin:14px 0;color:var(--soft)}
+  .note b{color:var(--warn);font-weight:500}
+  .note.pink{border-left-color:var(--pink);background:rgba(226,112,138,.06)}
+  .note.pink b{color:var(--pink)}
+  .note.teal{border-left-color:var(--accent);background:rgba(61,214,196,.05)}
+  .note.teal b{color:var(--accent)}
+
+  /* ---------- tables ---------- */
+  table{width:100%;border-collapse:collapse;margin:12px 0;font-size:12.6px}
+  th{
+    text-align:left;font-weight:500;font-size:10.5px;letter-spacing:.1em;text-transform:uppercase;
+    color:var(--mute);border-bottom:1px solid var(--hair-2);padding:6px 10px 6px 0;vertical-align:bottom;
+  }
+  td{padding:7px 10px 7px 0;border-bottom:1px solid var(--hair);vertical-align:top;color:var(--soft)}
+  td:first-child{color:var(--ink)}
+  td code{font-size:11.6px}
+  tr:last-child td{border-bottom:0}
+  .scroll{overflow-x:auto}
+
+  /* ---------- flow diagram ---------- */
+  .flow{display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin:14px 0}
+  .node{
+    border:1px solid var(--hair-2);background:var(--panel);padding:8px 11px;min-width:0;
+  }
+  .node .t{font-size:12.4px;color:var(--ink)}
+  .node .s{font-size:10.5px;color:var(--mute);letter-spacing:.03em}
+  .node.hi{border-color:rgba(226,112,138,.5)}
+  .node.srv{border-color:rgba(224,179,65,.45)}
+  .arrow{color:var(--mute);font-size:14px;padding:0 1px}
+  .stack{display:flex;flex-direction:column;gap:6px;margin:12px 0}
+  .stack .row{display:flex;gap:8px;align-items:baseline}
+
+  /* ---------- layers ---------- */
+  .layer{border:1px solid var(--hair);padding:9px 12px;background:var(--panel);margin:0}
+  .layer + .layer{border-top:0}
+  .layer .lbl{font-size:12.4px;color:var(--ink)}
+  .layer .sub{font-size:11px;color:var(--mute)}
+  .layer.l1{background:#0d1013}
+  .layer.l2{background:var(--panel)}
+  .layer.l3{background:var(--panel-2)}
+  .layer.l4{background:#1c2025}
+
+  /* ---------- skin cards ---------- */
+  .skin{border:1px solid var(--hair);background:var(--panel);padding:10px 12px}
+  .skin .id{font-size:12.6px;color:var(--ink)}
+  .skin .what{font-size:11.4px;color:var(--soft);margin-top:3px}
+  .skin .src{font-size:10.4px;color:var(--mute);margin-top:6px;word-break:break-all}
+  .skin.first{border-color:rgba(226,112,138,.5);background:rgba(226,112,138,.05)}
+
+  /* ---------- code ---------- */
+  pre{
+    background:#0b0d10;border:1px solid var(--hair);padding:12px 14px;overflow-x:auto;
+    font-size:12.2px;line-height:1.55;margin:12px 0;color:#cfd4d8;
+  }
+  pre .c{color:var(--mute)}
+  pre .k{color:var(--accent)}
+  pre .s{color:var(--pink)}
+  pre .v{color:#d9c98a}
+
+  /* ---------- misc ---------- */
+  .kpi{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin:14px 0}
+  .kpi div{border:1px solid var(--hair);background:var(--panel);padding:11px 12px}
+  .kpi .v{font-size:19px;color:var(--ink);letter-spacing:-.01em}
+  .kpi .k{font-size:10.5px;color:var(--mute);letter-spacing:.08em;text-transform:uppercase;margin-top:2px}
+  footer{padding:40px 0 0;color:var(--mute);font-size:11.5px}
+  hr{border:0;border-top:1px solid var(--hair);margin:22px 0}
+</style>
+</head>
+<body>
+
+<nav class="toc">
+  <div class="inner">
+    <span class="brand">digichat</span>
+    <a href="#tldr">60 seconds</a>
+    <a href="#where">Where it lives</a>
+    <a href="#flow">Message flow</a>
+    <a href="#skins">Skins</a>
+    <a href="#ui">UI layer</a>
+    <a href="#config">Configuration</a>
+    <a href="#keys">Keys &amp; auth</a>
+    <a href="#deploy">Deployment</a>
+    <a href="#release">Release</a>
+    <a href="#status">Where it stands</a>
+    <a href="#work">Working in it</a>
+    <a href="#index">Index</a>
+  </div>
+</nav>
+
+<div class="wrap">
+
+<header class="hero">
+  <div class="kicker">onboarding · architecture · everything you need</div>
+  <h1>digichat <span class="dim">— a chat product, its skins,<br>its backend, and how it ships</span></h1>
+  <p class="lede">
+    digichat is a <strong>Next.js 16 chat UI plus its own backend-for-frontend</strong>. One deployment
+    serves a chat widget you can embed anywhere, and the look is a parameter — a <em>skin</em> — so the
+    same product can render as any of twelve different chat interfaces. Everything below is the map:
+    where the code is, how a message travels, how settings and secrets are handled, and how a release
+    reaches production.
+  </p>
+  <div class="meta">
+    <span class="chip pink"><b>digichat</b> v2.3.2</span>
+    <span class="chip"><b>apps/digichat</b> · Next.js 16 · AI SDK v7 · assistant-ui</span>
+    <span class="chip">12 skins · 1 backend</span>
+    <span class="chip">BFF — no upstream key in the browser</span>
+    <span class="chip">ghcr.io/digithings-ai/digichat</span>
+  </div>
+  <p class="read" style="margin-top:16px">≈ 8 minute read · every path is relative to the repo root · last verified against <code>develop</code></p>
+</header>
+
+<!-- ============================================================ -->
+<section id="tldr">
+  <h2><span class="n">01</span>In 60 seconds</h2>
+  <p class="soft">If you read nothing else, read this box.</p>
+
+  <div class="card">
+    <p style="margin-top:0">
+      A user opens a page with digichat on it — the marketing site's <code>/chat</code> iframes it, or a
+      customer embeds it directly. The browser loads a <strong>React chat UI</strong> from
+      <code>apps/digichat</code>. When the user sends a message, the browser POSTs it to digichat's own
+      route handler, <code>POST /api/chat</code>. That route is the <strong>BFF</strong>: it authenticates
+      the caller, resolves which tenant/config applies, and then calls the real model backend
+      (<code>digigraph</code>, or Azure Foundry) using a credential that <em>never</em> leaves the server.
+      The answer streams back.
+    </p>
+    <p style="margin-bottom:0">
+      Which chat interface you see is <code>chrome.skin</code> — a value in the deployment's config, not a
+      code fork. Twelve skins ship in the image, including the first-party <code>digichat</code> look
+      that the marketing site uses. A local surface (<code>/baseline</code>) mounts all twelve against one
+      backend so you can iterate on any of them in one place.
+    </p>
+  </div>
+
+  <div class="kpi">
+    <div><div class="v">2.3.2</div><div class="k">current version</div></div>
+    <div><div class="v">12</div><div class="k">skins in the image</div></div>
+    <div><div class="v">1</div><div class="k">BFF chat route</div></div>
+    <div><div class="v">1250</div><div class="k">app tests passing</div></div>
+    <div><div class="v">2</div><div class="k">backends: digigraph · Foundry</div></div>
+  </div>
+
+  <div class="grid g3">
+    <div class="card tight"><h4 style="margin-top:0">Product code</h4><p class="soft" style="margin:0"><code>apps/digichat/</code> — the Next.js app: routes, the BFF, persistence, deploy config.</p></div>
+    <div class="card tight"><h4 style="margin-top:0">Shared UI</h4><p class="soft" style="margin:0"><code>packages/ui/</code> — the chat Thread, the skin kit, and every stylesheet.</p></div>
+    <div class="card tight"><h4 style="margin-top:0">Design system</h4><p class="soft" style="margin:0"><code>packages/design/</code> tokens + <code>packages/digichat-ui/</code> chat CSS &amp; helpers.</p></div>
+  </div>
+</section>
+
+<!-- ============================================================ -->
+<section id="where">
+  <h2><span class="n">02</span>Where it lives</h2>
+  <p class="soft">The repo is an npm-workspaces monorepo: <code>apps/*</code> and <code>packages/*</code>. digichat spans four of them.</p>
+
+  <div class="scroll">
+  <table>
+    <thead><tr><th style="width:210px">Path</th><th style="width:150px">Package</th><th>What it is</th></tr></thead>
+    <tbody>
+      <tr>
+        <td><code>apps/digichat</code></td><td><code>digichat</code></td>
+        <td><strong>The product.</strong> Next.js 16 App Router app: the chat surfaces, the BFF route handlers, auth, Postgres persistence (Drizzle), the deployment-config loader, and the dev skin gallery. This is what gets containerised and published.</td>
+      </tr>
+      <tr>
+        <td><code>packages/ui</code></td><td><code>@digithings/ui</code></td>
+        <td><strong>The shared UI layer.</strong> The first-party chat <em>Thread</em> (<code>chat/gallery-thread/</code>), the boot loader, the launcher, <code>DotMatrix</code>, and <em>every</em> stylesheet digichat uses (<code>src/styles/</code>). Also the generic component kit (<code>ui/</code>) and the finance/docs/deck components other products share.</td>
+      </tr>
+      <tr>
+        <td><code>packages/digichat-ui</code></td><td><code>@digithings/digichat-ui</code></td>
+        <td>Chat-specific shared bits: the wordmark, <code>MiniMarkdown</code>, the canonical activity rows, transcript-to-markdown serialisation, the slash-command definitions, and the <code>cursor.css</code> / <code>session.css</code> sheets. Deliberately <em>not</em> a session shell.</td>
+      </tr>
+      <tr>
+        <td><code>packages/design</code></td><td><code>@digithings/design</code></td>
+        <td>The design tokens — the <code>--bg / --surface / --ink / --hair / --term-*</code> palette, dark and light, plus per-module accents. Everything visual resolves back to this file.</td>
+      </tr>
+      <tr>
+        <td><code>apps/reference</code></td><td><code>design-reference</code></td>
+        <td>The design reference app. <strong>Important:</strong> the canonical first-party digichat stylesheet lives here at <code>app/(chatbot)/chatbot/chatbot.css</code> and is re-exported by <code>packages/ui</code> as <code>styles/chatbot.css</code>. This is the source of truth for the digichat look.</td>
+      </tr>
+      <tr>
+        <td><code>apps/digithings-web</code></td><td><code>digithings-web</code></td>
+        <td>The marketing site. Its <code>/chat</code> page iframes digichat's <code>/embed</code> surface — that is the live production instance today.</td>
+      </tr>
+      <tr>
+        <td><code>apps/digichat/cli</code></td><td><code>@digithings/digichat-cli</code></td>
+        <td>A separate Ink/terminal client (v1.4.0) sharing the same chat vocabulary. Not part of the web product.</td>
+      </tr>
+    </tbody>
+  </table>
+  </div>
+
+  <h3>Inside apps/digichat</h3>
+  <div class="grid g2">
+    <div class="card tight">
+      <h4 style="margin-top:0">Routes — <code>src/app/</code></h4>
+      <ul style="margin-bottom:0">
+        <li><code>(digichat)/</code> — the production surface and its root layout. <code>/</code> routes by config mode; <code>/embed</code> is the iframe surface.</li>
+        <li><code>(baseline)/</code> — the <strong>dev-only skin gallery</strong> at <code>/baseline</code>. Isolated root layout, no product globals. Returns 404 in a production build.</li>
+        <li><code>api/</code> — every backend call. <code>chat/</code>, <code>conversations/</code>, <code>byok/</code>, <code>deploy/chrome</code>, <code>embed/tenant-config</code>, <code>health</code>, <code>plan-proof</code>, <code>mcp/oauth/*</code>, plus the dev-only <code>baseline-chat</code> proxy.</li>
+      </ul>
+    </div>
+    <div class="card tight">
+      <h4 style="margin-top:0">Libs — <code>src/lib/</code></h4>
+      <ul style="margin-bottom:0">
+        <li><code>deploy-config/</code> — the Zod schema, the YAML loader, the client projection. The settings engine.</li>
+        <li><code>request-auth.ts</code> — <code>requireDigiChatAuth()</code>, the BFF gate.</li>
+        <li><code>digigraph-upstream.ts</code> · <code>digikey-exchange.ts</code> — how the server obtains its upstream credential.</li>
+        <li><code>ecosystem.ts</code> — endpoint defaults + the <code>isAllowedServiceUrl()</code> SSRF guard.</li>
+        <li><code>thread-skins.ts</code> — the skin registry.</li>
+        <li><code>adapters/</code> — <code>digithings/</code> (digigraph SSE) and <code>foundry/</code> (Azure) stream adapters.</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<!-- ============================================================ -->
+<section id="flow">
+  <h2><span class="n">03</span>How a message flows</h2>
+  <p class="soft">Every surface — embed, app, gallery — converges on one route: <code>POST /api/chat</code>.</p>
+
+  <div class="flow">
+    <div class="node hi"><div class="t">Browser</div><div class="s">React + assistant-ui Thread</div></div>
+    <span class="arrow">→</span>
+    <div class="node"><div class="t">AssistantChatTransport</div><div class="s">posts to <code>/api/chat</code></div></div>
+    <span class="arrow">→</span>
+    <div class="node srv"><div class="t">BFF route handler</div><div class="s">apps/digichat/src/app/api/chat/route.ts</div></div>
+    <span class="arrow">→</span>
+    <div class="node srv"><div class="t">digigraph</div><div class="s">SSE chat completions</div></div>
+  </div>
+
+  <p>The BFF route is where all the product logic lives, in order:</p>
+  <ol>
+    <li><strong>Authenticate</strong> — <code>requireDigiChatAuth()</code> accepts a machine key (<code>digi_live_…</code>) or an Auth.js session, and returns the tenant + user identity.</li>
+    <li><strong>Resolve the tenant</strong> — which deployment config applies to this host (see <a href="#config">Configuration</a>).</li>
+    <li><strong>Rate-limit</strong> — per-IP for anonymous embeds, plus a shared BFF limit.</li>
+    <li><strong>Gate</strong> — the free-turn / trial policy for that tenant (<code>ungated</code>, <code>turn_limited</code>, <code>trial_form</code>).</li>
+    <li><strong>Lock the run</strong> — a per-session mutex so two sends can't interleave.</li>
+    <li><strong>Pick the backend adapter</strong> — <code>digithings/stream.ts</code> (digigraph) or <code>foundry/stream.ts</code> (Azure), and stream the answer back as AI-SDK UI chunks.</li>
+  </ol>
+
+  <h3>Getting the upstream credential</h3>
+  <p class="soft">This is the part worth understanding, because it is the whole reason a BFF exists here.</p>
+  <div class="flow">
+    <div class="node"><div class="t"><code>DIGIKEY_BFF_TOKEN</code></div><div class="s">server env</div></div>
+    <span class="arrow">→</span>
+    <div class="node srv"><div class="t">digikey token exchange</div><div class="s"><code>lib/digikey-exchange.ts</code></div></div>
+    <span class="arrow">→</span>
+    <div class="node srv"><div class="t">short-lived JWT</div><div class="s">cached in memory</div></div>
+    <span class="arrow">→</span>
+    <div class="node"><div class="t"><code>Authorization: Bearer …</code></div><div class="s">added to the upstream request only</div></div>
+  </div>
+
+  <div class="note teal">
+    <b>The secret boundary.</b> The browser never receives a digigraph URL, a digikey token, a provider
+    key, or a machine key. It gets a session cookie and an opaque thread id. Everything sensitive is
+    added to the outbound request inside the route handler — and <code>client-projection.ts</code> exists
+    purely to strip secrets out of any config that <em>is</em> sent to the browser.
+  </div>
+
+  <h3>The four rules that hold this together</h3>
+  <div class="scroll">
+  <table>
+    <thead><tr><th style="width:230px">Rule</th><th>Where it is enforced</th></tr></thead>
+    <tbody>
+      <tr><td>BFF pattern is non-negotiable</td><td>All upstream calls go through route handlers. Projection at <code>lib/deploy-config/client-projection.ts</code>.</td></tr>
+      <tr><td>Auth on every route except health</td><td><code>requireDigiChatAuth()</code> in <code>lib/request-auth.ts</code>, called from every route that touches tenant data.</td></tr>
+      <tr><td>SSRF guard on user-supplied URLs</td><td><code>isAllowedServiceUrl()</code> in <code>lib/ecosystem.ts</code>; MCP has its own inverse guard.</td></tr>
+      <tr><td>Machine keys are bcrypt-hashed</td><td>Table <code>api_keys</code> (<code>key_hash</code>, <code>key_prefix</code>) via Drizzle; raw key shown once at creation.</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <p class="read">Source: <code>apps/digichat/AGENTS.md</code> (non-negotiable rules), <code>apps/digichat/ARCHITECTURE.md</code> (full API + security analysis).</p>
+</section>
+
+<!-- ============================================================ -->
+<section id="skins">
+  <h2><span class="n">04</span>The skins</h2>
+  <p>
+    A <strong>skin</strong> is which chat interface renders. It is a config value — <code>chrome.skin</code> —
+    not a branch or a fork. Twelve ship in the image: eleven vendored assistant-ui catalog templates plus
+    the first-party <code>digichat</code> look. The registry is
+    <code>apps/digichat/src/lib/thread-skins.ts</code>; the dispatch is
+    <code>components/assistant-ui/skins/index.tsx</code>.
+  </p>
+
+  <div class="grid g3">
+    <div class="skin"><div class="id">base</div><div class="what">The default. A fixed assistant-ui demo Thread.</div><div class="src">skins/base/thread.tsx</div></div>
+    <div class="skin"><div class="id">base-assistant-ui</div><div class="what">The same Thread inside the official brand/labels config shell.</div><div class="src">skins/base-assistant-ui/</div></div>
+    <div class="skin"><div class="id">chatgpt</div><div class="what">Vendored clone.</div><div class="src">skins/chatgpt.tsx</div></div>
+    <div class="skin"><div class="id">claude</div><div class="what">Vendored clone.</div><div class="src">skins/claude.tsx</div></div>
+    <div class="skin"><div class="id">grok</div><div class="what">Vendored clone.</div><div class="src">skins/grok.tsx</div></div>
+    <div class="skin"><div class="id">gemini</div><div class="what">Vendored clone.</div><div class="src">skins/gemini.tsx</div></div>
+    <div class="skin"><div class="id">perplexity</div><div class="what">Vendored clone.</div><div class="src">skins/perplexity.tsx</div></div>
+    <div class="skin"><div class="id">react-ink</div><div class="what">Web facsimile of the terminal client.</div><div class="src">skins/react-ink.tsx</div></div>
+    <div class="skin"><div class="id">expo-react-native</div><div class="what">Web facsimile of the phone frame.</div><div class="src">skins/expo-react-native.tsx</div></div>
+    <div class="skin"><div class="id">webpage-assistant</div><div class="what">Docs layout + assistant. Owns the page chrome.</div><div class="src">skins/webpage-assistant/</div></div>
+    <div class="skin"><div class="id">product-page-assistant</div><div class="what">Product dashboard + floating assistant. Owns the page chrome.</div><div class="src">skins/product-page-assistant/</div></div>
+    <div class="skin first"><div class="id">digichat <span class="chip pink" style="font-size:9.5px;padding:0 4px">first-party</span></div><div class="what">Our own look: the gallery Thread from <code>@digithings/ui</code>, with slash commands, mentions, copy/export, page context.</div><div class="src">skins/digichat.tsx → packages/ui/src/components/chat/gallery-thread/thread.aui.tsx</div></div>
+  </div>
+
+  <h3>How a skin is chosen</h3>
+  <ul>
+    <li><strong>Explicitly</strong> — <code>chrome.skin</code> in the deployment config, or the <code>DIGICHAT_CHROME_SKIN</code> env override.</li>
+    <li><strong>By tenant</strong> — first-party hosts and slugs (<code>digithings.ai</code>, <code>occ</code>, <code>digithings-ai</code>) default to <code>digichat</code> via <code>defaultThreadSkinForTenant()</code>; everyone else defaults to <code>base</code>.</li>
+    <li><strong>In the gallery</strong> — <code>?skin=</code> on <code>/baseline</code>.</li>
+  </ul>
+
+  <div class="note pink">
+    <b>Where to do UI work.</b> <code>docs/digichat/SKIN-GALLERY.md</code> is the canonical guide: it explains
+    the registry, the selector chrome, how to add a skin, and the five gotchas that make a skin render
+    wrong (the <code>data-thread-skin</code> marker, Tailwind <code>@source</code>, the font variable, the
+    prefs host, the theme attribute). Start there before touching a skin.
+  </div>
+</section>
+
+<!-- ============================================================ -->
+<section id="ui">
+  <h2><span class="n">05</span>The UI layer</h2>
+  <p>
+    The chat UI is <strong>assistant-ui primitives</strong> (Thread, Viewport, Composer, Message) wrapped in
+    our own composition. The first-party Thread is one large file —
+    <code>packages/ui/src/components/chat/gallery-thread/thread.aui.tsx</code> — that assembles the whole
+    thing: viewport, welcome, suggestions, scroll-to-bottom, composer, action bars, branch picker,
+    attachments, reasoning and tool-call disclosure.
+  </p>
+
+  <h3>Stylesheets — who owns what</h3>
+  <p class="soft">This is the part that confuses people. There are several sheets; they are layered, not alternatives.</p>
+
+  <div class="stack">
+    <div class="layer l1"><div class="lbl">① <code>packages/design/tokens.css</code></div><div class="sub">The palette itself: <code>--bg --surface --ink --hair --term-* --accent</code>, dark and light, keyed on <code>[data-theme]</code>. Nothing renders without this.</div></div>
+    <div class="layer l2"><div class="lbl">② <code>packages/ui/styles/web-theme.css</code></div><div class="sub">The Tailwind v4 <code>@theme inline</code> bridge: maps those tokens onto utility names (<code>--color-background: var(--bg)</code>, <code>--color-card: var(--surface)</code>…). <em>inline</em> is load-bearing — it keeps utilities resolving at the use site so a scoped theme flip works.</div></div>
+    <div class="layer l3"><div class="lbl">③ <code>packages/ui/styles/chat-aui.css</code></div><div class="sub">The digichat skin palette. Declares the dark values on <code>.digichat-thread</code> and the light values behind <code>:root[data-theme="light"] .digichat-thread</code>, plus the assistant-ui variable bridge and the thread-list/attachment/tool rhythm.</div></div>
+    <div class="layer l4"><div class="lbl">④ <code>packages/ui/styles/chatbot.css</code> → <code>apps/reference/app/(chatbot)/chatbot/chatbot.css</code></div><div class="sub">A 4-line re-export. The <strong>real</strong> first-party grammar — welcome copy, composer, block caret, markdown, reasoning, tool UI, portal mirrors — scoped to <code>:is(.aui-theme-stage, [data-thread-skin="digichat"])</code>. Source of truth lives in the reference app.</div></div>
+    <div class="layer l1"><div class="lbl">⑤ Component sheets</div><div class="sub"><code>chat-core.css</code> (transcript, markdown, mermaid) · <code>chat-widgets.css</code> (tool-call + reasoning disclosure) · <code>digichat-boot-loader.css</code> (boot animation) · <code>digichat-launcher.css</code> (corner launcher) · <code>terminal-*.css</code> (CLI) · <code>product-chrome.css</code> (attribution, embed shell, embed caret) · <code>digichat-ui/styles/cursor.css</code>.</div></div>
+  </div>
+
+  <h3>The scope marker — the one thing to remember</h3>
+  <p>
+    The entire first-party theme is scoped to the attribute <code>[data-thread-skin="digichat"]</code>. The
+    Thread declares it on its own root, so <em>every</em> mount path — the gallery, the embed shell, the
+    product shell — gets the same theme without each surface remembering to wrap it. If a skin looks
+    unstyled, check that attribute first.
+  </p>
+  <pre><span class="c">// packages/ui/src/components/chat/gallery-thread/thread.aui.tsx</span>
+&lt;ThreadPrimitive.Root
+  className=<span class="s">"aui-root aui-thread-root digichat-thread …"</span>
+  data-user-align=<span class="s">"left"</span>
+  data-thread-skin=<span class="s">"digichat"</span>   <span class="c">// ← the whole theme hangs off this</span>
+&gt;</pre>
+
+  <h3>The visual language</h3>
+  <div class="grid g2">
+    <div class="card tight">
+      <ul style="margin:0">
+        <li><strong>Mono everything.</strong> Geist Mono for text and UI (<code>--font-geist-mono</code>, loaded per layout).</li>
+        <li><strong>Zero radius.</strong> <code>--radius: 0</code> — the terminal look. The theme flattens any rounded utility inside the skin scope.</li>
+        <li><strong>Block caret.</strong> Native <code>caret-shape: block</code> where supported; a painted overlay where it isn't.</li>
+      </ul>
+    </div>
+    <div class="card tight">
+      <ul style="margin:0">
+        <li><strong>DotMatrix.</strong> The 5×5 cube glyph system (<code>components/chat/DotMatrix.tsx</code>) — every icon in the UI is a dot-matrix state: <code>scroll</code>, <code>send</code>, <code>copy</code>, <code>thinking</code>, <code>example</code>…</li>
+        <li><strong>Boot loader.</strong> A cube field sweeps the composer outline, then types the welcome copy.</li>
+        <li><strong>Hairlines.</strong> <code>--hair</code> borders, no shadows.</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<!-- ============================================================ -->
+<section id="config">
+  <h2><span class="n">06</span>Configuration — how settings are containerised</h2>
+  <p>
+    One codebase serves many customers. The difference between them is a <strong>deployment declaration</strong>:
+    a YAML file, Zod-validated, that describes a tenant's chrome, gate, features, models, tools and backend.
+    Nothing is compiled in per customer and nothing lives in a database — it is a file on disk plus an env
+    overlay, read once at process start.
+  </p>
+
+  <div class="flow">
+    <div class="node"><div class="t">digichat.yaml</div><div class="s">or <code>DIGICHAT_EMBED_TENANTS</code> JSON</div></div>
+    <span class="arrow">→</span>
+    <div class="node srv"><div class="t">loader (server-only)</div><div class="s">Zod validate · fail closed</div></div>
+    <span class="arrow">→</span>
+    <div class="node srv"><div class="t">host → deployment</div><div class="s">matched per request</div></div>
+    <span class="arrow">→</span>
+    <div class="node"><div class="t">client projection</div><div class="s">strips tokens, URLs, keys</div></div>
+    <span class="arrow">→</span>
+    <div class="node"><div class="t">browser</div><div class="s">chrome + features only</div></div>
+  </div>
+
+  <h3>Two shapes, one process</h3>
+  <div class="grid g2">
+    <div class="card tight">
+      <h4 style="margin-top:0"><code>deployment:</code> — single install</h4>
+      <p class="soft" style="margin:0">One customer, one container. The whole process <em>is</em> the tenant. This is what a self-hoster writes.</p>
+    </div>
+    <div class="card tight">
+      <h4 style="margin-top:0"><code>hosts:</code> — multi-tenant registry</h4>
+      <p class="soft" style="margin:0">Many hostnames, one process. A request is matched to a deployment by hostname. This is how digithings serves several sites from one container.</p>
+    </div>
+  </div>
+
+  <h3>What a deployment declares</h3>
+  <pre><span class="c"># illustrative — the real schema is apps/digichat/src/lib/deploy-config/schema.ts</span>
+<span class="k">version</span>: <span class="v">1</span>
+<span class="k">deployment</span>:
+  <span class="k">slug</span>: <span class="s">acme</span>
+  <span class="k">chrome</span>:
+    <span class="k">mode</span>: <span class="s">embed</span>            <span class="c"># app | embed | modal | sidebar</span>
+    <span class="k">skin</span>: <span class="s">digichat</span>          <span class="c"># one of the 12 registry ids</span>
+    <span class="k">theme</span>: <span class="s">dark</span>
+    <span class="k">accent</span>: { <span class="k">color</span>: <span class="s">"#e2708a"</span>, <span class="k">foreground</span>: <span class="s">"#08090b"</span> }
+    <span class="k">welcome</span>: { <span class="k">title</span>: <span class="s">"Ask about your portfolio"</span> }
+    <span class="k">suggestions</span>: [<span class="s">"Summarise today"</span>, <span class="s">"Explain this chart"</span>]
+  <span class="k">gate</span>: { <span class="k">mode</span>: <span class="s">turn_limited</span> }   <span class="c"># ungated | turn_limited | trial_form</span>
+  <span class="k">features</span>: { <span class="k">attachments</span>: <span class="v">true</span>, <span class="k">modelPicker</span>: <span class="v">false</span>, <span class="k">view</span>: <span class="s">balanced</span> }
+  <span class="k">models</span>: { <span class="k">default</span>: <span class="s">"deepseek/deepseek-v4-flash"</span>, <span class="k">available</span>: [<span class="s">"…"</span>] }
+  <span class="k">tools</span>: { <span class="k">catalog</span>: [{ <span class="k">id</span>: <span class="s">digisearch</span>, <span class="k">default</span>: <span class="v">true</span> }] }
+  <span class="k">backend</span>: { <span class="k">type</span>: <span class="s">digigraph</span> }   <span class="c"># or foundry</span></pre>
+
+  <h3>The three gate modes</h3>
+  <div class="scroll">
+  <table>
+    <thead><tr><th style="width:150px">Mode</th><th>Behaviour</th></tr></thead>
+    <tbody>
+      <tr><td><code>ungated</code></td><td>No cap. The visitor talks freely; billing/limits are the operator's problem. Used by the digithings.ai marketing embed.</td></tr>
+      <tr><td><code>turn_limited</code></td><td>A few free turns, then the visitor brings their own key (BYOK) in-chat. The default for an unconfigured container.</td></tr>
+      <tr><td><code>trial_form</code></td><td>A per-IP server-side counter: 3 free turns, then a form unlocks a longer allowance. The DataTap-style trial.</td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <div class="note">
+    <b>Tenant identity is the hostname, and it is only for selection.</b> The <code>X-Embed-Host</code>
+    header (or the referer) picks which config applies. <em>Authorization</em> is separate — a tenant token,
+    or a first-party host with an attested first-party origin. Never treat the host header as proof of
+    identity.
+  </div>
+
+  <div class="note pink">
+    <b>Never bake config into the image.</b> Tokens must not be Docker build args — the tenant registry is
+    read from the environment or a mounted file at runtime, so secrets never land in a layer.
+  </div>
+</section>
+
+<!-- ============================================================ -->
+<section id="keys">
+  <h2><span class="n">07</span>Keys &amp; auth</h2>
+  <p>Two credential classes, plus the upstream exchange. That is the whole model.</p>
+
+  <div class="grid g3">
+    <div class="card tight">
+      <h4 style="margin-top:0">Session</h4>
+      <p class="soft" style="margin:0">An Auth.js encrypted-JWT cookie signed with <code>AUTH_SECRET</code>. Providers: OIDC, a dev password provider, and a production-guarded local bootstrap. This is a <em>person</em>.</p>
+    </div>
+    <div class="card tight">
+      <h4 style="margin-top:0">Machine key</h4>
+      <p class="soft" style="margin:0">A <code>digi_live_…</code> key issued by digichat for server-to-server callers. Stored bcrypt-hashed in Postgres (<code>api_keys.key_hash</code>), shown once at creation. This is a <em>service</em>.</p>
+    </div>
+    <div class="card tight">
+      <h4 style="margin-top:0">Upstream exchange</h4>
+      <p class="soft" style="margin:0"><code>DIGIKEY_BFF_TOKEN</code> is exchanged server-side for a short-lived JWT, cached in memory, and attached only to the outbound digigraph call. This is <em>our</em> access to the model backend.</p>
+    </div>
+  </div>
+
+  <h3>Environment variables that matter</h3>
+  <p class="soft">Server-only unless marked <span class="chip teal" style="font-size:10px;padding:0 5px">browser</span>.</p>
+  <div class="scroll">
+  <table>
+    <thead><tr><th style="width:280px">Variable</th><th style="width:120px">Scope</th><th>What it does</th></tr></thead>
+    <tbody>
+      <tr><td><code>AUTH_SECRET</code></td><td>server</td><td>Signs/encrypts session cookies. <strong>Required in production.</strong></td></tr>
+      <tr><td><code>AUTH_URL</code></td><td>server</td><td>Public origin; OAuth callback base.</td></tr>
+      <tr><td><code>DIGIKEY_BFF_TOKEN</code></td><td>server</td><td>Exchanged for the upstream JWT. Required for real chat.</td></tr>
+      <tr><td><code>DIGIKEY_URL</code></td><td>server</td><td>The digikey base URL used for that exchange.</td></tr>
+      <tr><td><code>DIGIGRAPH_INTERNAL_URL</code></td><td>server</td><td>digigraph base URL — the default backend.</td></tr>
+      <tr><td><code>DIGIGRAPH_UPSTREAM_API_KEY</code></td><td>server</td><td>Static bearer alternative when not using the digikey exchange.</td></tr>
+      <tr><td><code>DIGICHAT_CONFIG_PATH</code></td><td>server</td><td>Path to the deployment YAML. Defaults to <code>/app/config/digichat.yaml</code>.</td></tr>
+      <tr><td><code>DIGICHAT_EMBED_TENANTS</code></td><td>server</td><td>JSON host→tenant registry for the multi-tenant container.</td></tr>
+      <tr><td><code>DIGICHAT_DATABASE_URL</code></td><td>server</td><td>Postgres, when thread persistence is <code>server</code>.</td></tr>
+      <tr><td><code>DIGICHAT_AUTO_MIGRATE</code></td><td>server</td><td>Run Drizzle migrations on boot. Recommended in Docker.</td></tr>
+      <tr><td><code>DIGICHAT_BOOTSTRAP_API_KEY</code></td><td>server</td><td>A static machine key for bootstrapping clients, compared timing-safely.</td></tr>
+      <tr><td><code>DIGICHAT_DEV_AUTH</code> · <code>DIGICHAT_DEV_PASSWORD</code></td><td>server, dev only</td><td>Registers the dev password provider. Guarded so it cannot activate in production.</td></tr>
+      <tr><td><code>DIGICHAT_ALLOW_DEV_GLOBAL</code></td><td>server, dev only</td><td>Must never be <code>1</code> in production.</td></tr>
+      <tr><td><code>NEXT_PUBLIC_DIGICHAT_BASE_PATH</code></td><td><span class="chip teal" style="font-size:10px;padding:0 5px">browser</span></td><td>Client mirror of the sub-path, for serving under <code>/chat</code>.</td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <div class="note teal">
+    <b>What the browser can see:</b> only <code>NEXT_PUBLIC_*</code> variables and the client projection of
+    the config — chrome, features, model ids, tool <em>ids</em>. Never a URL with credentials in it, never a
+    token, never a key. <code>X-Digichat-Session</code> is an opaque thread UUID, not the session token.
+  </div>
+</section>
+
+<!-- ============================================================ -->
+<section id="deploy">
+  <h2><span class="n">08</span>Deployment</h2>
+  <p>digichat ships as a container image. Two profiles cover the two backend stories.</p>
+
+  <div class="grid g2">
+    <div class="card tight">
+      <h4 style="margin-top:0">The image</h4>
+      <ul style="margin:0">
+        <li><code>apps/digichat/Dockerfile</code> — <code>node:22-alpine</code>, multi-stage, Next.js standalone output, non-root user, listens on <code>3000</code>.</li>
+        <li>Ships the Drizzle migrations and example configs so a container can migrate and be configured at boot.</li>
+        <li>Published as <code>ghcr.io/digithings-ai/digichat:vX.Y.Z</code> and <code>:latest</code>.</li>
+        <li>Pin the version in production — never <code>:latest</code>.</li>
+      </ul>
+    </div>
+    <div class="card tight">
+      <h4 style="margin-top:0">The two profiles</h4>
+      <ul style="margin:0">
+        <li><strong>Profile A</strong> — digichat + Postgres + digikey + digigraph + digivault + LiteLLM. The full stack, one compose file.</li>
+        <li><strong>Profile B</strong> — digichat + Postgres only, talking to Azure Foundry with the host's Azure identity. No provider key in digichat at all.</li>
+      </ul>
+    </div>
+  </div>
+
+  <h3>What a self-hoster does</h3>
+  <ol>
+    <li>Pull a pinned image: <code>docker pull ghcr.io/digithings-ai/digichat:v2.3.2</code></li>
+    <li>Pick a profile (A or B) and copy its env example.</li>
+    <li>Fill in <code>AUTH_SECRET</code>, <code>AUTH_URL</code>, the backend credentials (<code>DIGIKEY_BFF_TOKEN</code> for A; Azure identity for B), and the tenant registry with per-tenant tokens.</li>
+    <li>Bring it up with the provided compose file.</li>
+    <li>Smoke test <code>/api/health</code>, then open <code>/embed?host=…&amp;token=…</code>.</li>
+  </ol>
+  <p class="read">
+    Guides: <code>docs/digichat/INSTALL.md</code> (the client install guide), <code>infra/digichat-release/</code>
+    (profiles + compose), <code>infra/self-host/compose.ghcr.yml</code> (pull-only full stack),
+    <code>apps/digichat/OPERATIONS.md</code> (operator runbook).
+  </p>
+
+  <h3>How CI publishes it</h3>
+  <div class="flow">
+    <div class="node"><div class="t">release-please cuts a tag on <code>develop</code></div><div class="s">digichat-vX.Y.Z</div></div>
+    <span class="arrow">→</span>
+    <div class="node"><div class="t">dispatches the publish workflow</div><div class="s">a GITHUB_TOKEN tag can't trigger a run</div></div>
+    <span class="arrow">→</span>
+    <div class="node srv"><div class="t">build + push to GHCR</div><div class="s">refuses a tag that disagrees with package.json</div></div>
+  </div>
+  <p class="soft">
+    The workflow also fires on a push to <code>main</code> touching <code>apps/digichat/**</code>, and it
+    skips if the version tag already exists — so whichever trigger runs second is a no-op.
+  </p>
+</section>
+
+<!-- ============================================================ -->
+<section id="release">
+  <h2><span class="n">09</span>How it is released</h2>
+
+  <div class="flow">
+    <div class="node"><div class="t">task branch</div><div class="s">task/N-slug</div></div>
+    <span class="arrow">→</span>
+    <div class="node"><div class="t">module/digichat</div><div class="s">component integration</div></div>
+    <span class="arrow">→</span>
+    <div class="node"><div class="t">develop</div><div class="s">release-please bumps the version here</div></div>
+    <span class="arrow">→</span>
+    <div class="node srv"><div class="t">main</div><div class="s">promotion PR — a human owns this</div></div>
+    <span class="arrow">→</span>
+    <div class="node hi"><div class="t">release/vX.Y.Z</div><div class="s">cut from main, one per version, never deleted</div></div>
+  </div>
+
+  <h3>Release automation</h3>
+  <ul>
+    <li><strong>release-please</strong> watches <code>develop</code> (not <code>main</code>) and keeps a single release PR open, accumulating changes. Merging it is a <em>deliberate</em> release decision — not routine hygiene.</li>
+    <li>It targets <code>develop</code> on purpose: a squashed <code>develop → main</code> promotion commit reads as a no-op to a conventional-commits parser and would swallow the changelog signal.</li>
+    <li>Tags are <code>digichat-vX.Y.Z</code>, and the changelog lands in <code>apps/digichat/CHANGELOG.md</code>.</li>
+    <li>Version bump rides the promotion into <code>main</code>; then a release branch is cut <em>from main</em>.</li>
+  </ul>
+
+  <h3>Patching an older release</h3>
+  <ul>
+    <li>Branch off the previous one so the name equals the version: <code>release/v2.3.3</code> from <code>release/v2.3.2</code>.</li>
+    <li>Apply the fix, bump, tag, push — a human-pushed tag publishes the image.</li>
+    <li>The <em>fix</em> (never the version bump) is cherry-picked onto <code>develop</code>, or the next promotion clobbers it.</li>
+    <li>Never merge a release branch into <code>main</code> — its version bump would take production backwards.</li>
+  </ul>
+
+  <div class="note">
+    <b>Two enforcement gaps worth knowing.</b> <code>release/v*</code> has no branch-protection rule yet
+    (the payload exists at <code>scripts/github-rulesets/04-protect-releases.json</code>; applying it is a
+    repo-settings change needing a human). And <code>main</code> requires no approvals — its only required
+    check is <code>Every commit reaching main was reviewed</code>.
+  </div>
+
+  <h3>Recent releases</h3>
+  <div class="scroll">
+  <table>
+    <thead><tr><th style="width:90px">Version</th><th style="width:120px">Date</th><th>Headline</th></tr></thead>
+    <tbody>
+      <tr><td><code>2.3.2</code></td><td>2026-09-21</td><td>embed Send button submits the composer form so the free-turn gate sees it</td></tr>
+      <tr><td><code>2.3.1</code></td><td>2026-09-20</td><td>embed paints one canvas token from the first byte</td></tr>
+      <tr><td><code>2.3.0</code></td><td>2026-09-19</td><td>config-driven welcome copy, pre-painted theme canvas, boot chain; UI kit promotions, pointer cursors, RTL</td></tr>
+      <tr><td><code>2.2.0</code></td><td>2026-09-16</td><td>configurable view modes + thinking override, Gloomberb attribution, hosted MCP, retryable error card</td></tr>
+      <tr><td><code>2.0.0</code></td><td>2026-09-08</td><td><strong>Breaking:</strong> assistant-ui Thread + AI SDK v7 becomes the product UI; parents iframe into <code>/embed</code></td></tr>
+      <tr><td><code>1.0.0</code></td><td>2026-08-10</td><td>public cut — digigraph adapters, digithings.ai cutover, self-hosted profiles and install docs</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <p class="read">
+    <strong>Do not delete <code>ghcr.io/digithings-ai/digichat:v0.9.3</code></strong> — external clients are
+    pinned to it.
+  </p>
+</section>
+
+<!-- ============================================================ -->
+<section id="status">
+  <h2><span class="n">10</span>Where everything stands</h2>
+
+  <div class="grid g3">
+    <div class="card tight">
+      <h4 style="margin-top:0;color:var(--accent)">Shipped</h4>
+      <ul style="margin:0">
+        <li>assistant-ui Thread + AI SDK v7 as the product UI (2.0)</li>
+        <li>12 skins, config-selectable</li>
+        <li>Deployment config: Zod YAML + env + multi-tenant registry</li>
+        <li>digigraph <em>and</em> Azure Foundry backends</li>
+        <li>Conversation persistence (localStorage, optional Postgres)</li>
+        <li>Embed gating, BYOK, trial forms, plan proofs</li>
+        <li>MCP (hosted + user servers), OAuth</li>
+        <li>GHCR image + Profile A/B self-host</li>
+        <li>Ink CLI (separate package)</li>
+      </ul>
+    </div>
+    <div class="card tight">
+      <h4 style="margin-top:0;color:var(--warn)">Deferred — Phase 2, do not scaffold</h4>
+      <ul style="margin:0">
+        <li>OpenClaw gateway integration</li>
+        <li>RAG document-ingestion UI (digisearch upload/manage)</li>
+        <li>Fine-grained permission admin UI (tenant mapping is manual SQL today)</li>
+        <li>digibase credential brokering (raw Postgres URL until then)</li>
+      </ul>
+    </div>
+    <div class="card tight">
+      <h4 style="margin-top:0;color:var(--pink)">Open / in flight</h4>
+      <ul style="margin:0">
+        <li><strong>Epic #1248</strong> — cut <code>digithings.ai/chat</code> over from the bespoke widget to the real digichat gateway</li>
+        <li><strong>Epic #2016</strong> — self-host GHCR + OpenAPI</li>
+        <li><code>module/digichat</code> is a stale integration branch — the repo advises branching from <code>develop</code> rather than reviving it</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="note">
+    <b>Known doc drift — trust the code.</b> Several guides still say the current version is <code>1.0.0</code>
+    or that publishing stopped at <code>v0.9.3</code>; the marketing copy says <code>v2.3.1</code>. The truth is
+    <code>apps/digichat/package.json</code> → <strong>2.3.2</strong>. Also, <code>apps/digichat/AGENTS.md</code>
+    says <code>GET /api/health</code> is the only public route, but <code>/api/deploy/chrome</code>,
+    <code>/api/embed/tenant-config</code>, <code>/api/mcp/oauth/callback</code> and <code>/api/plan-proof</code>
+    are intentionally unauthenticated too (they serve client-safe projections or have their own token check).
+  </div>
+</section>
+
+<!-- ============================================================ -->
+<section id="work">
+  <h2><span class="n">11</span>Working in it</h2>
+
+  <div class="grid g2">
+    <div class="card tight">
+      <h4 style="margin-top:0">Run it locally</h4>
+      <pre style="margin:8px 0 0">make digichat-dev
+<span class="c"># → http://127.0.0.1:3000</span>
+<span class="c"># /baseline          the skin gallery (dev only)</span>
+<span class="c"># /baseline?skin=digichat&amp;theme=dark</span></pre>
+      <p class="soft" style="margin:8px 0 0">The gallery's runtime proxies the live production endpoint, so you get real streaming with no local Python stack and no keys.</p>
+    </div>
+    <div class="card tight">
+      <h4 style="margin-top:0">Pre-flight before you push</h4>
+      <pre style="margin:8px 0 0">npm run test --workspace digichat
+npm run lint --workspace digichat
+npm run build --workspace digichat</pre>
+      <p class="soft" style="margin:8px 0 0">126 files / 1250 tests pass today. Lint must be <strong>zero errors</strong>. <code>build</code> also creates <code>.next/standalone</code>, which breaks <code>make doc-check</code> until removed.</p>
+    </div>
+  </div>
+
+  <h3>The rules you cannot break</h3>
+  <div class="scroll">
+  <table>
+    <thead><tr><th style="width:230px">Rule</th><th>Why</th></tr></thead>
+    <tbody>
+      <tr><td>No upstream credential in the browser</td><td>The whole BFF exists for this. Route handlers only.</td></tr>
+      <tr><td>Auth on every API route except health</td><td>Multi-tenant data must never be reachable anonymously.</td></tr>
+      <tr><td>SSRF-guard any user-supplied URL</td><td>Endpoint overrides and MCP servers are visitor-influenced.</td></tr>
+      <tr><td>Machine keys stay hashed</td><td>Never log or store raw key material.</td></tr>
+      <tr><td>Migrations are additive</td><td>New columns nullable or defaulted; never edit a shipped migration.</td></tr>
+      <tr><td>Read <code>node_modules/next/dist/docs/</code> before writing Next.js code</td><td>This Next major has breaking changes.</td></tr>
+      <tr><td>Product names are always lowercase</td><td><code>digichat</code>, never DigiChat — even at the start of a sentence.</td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <h3>How work gets merged</h3>
+  <p class="soft">
+    Start with <code>make task ISSUE=N</code> — it reads the issue's component label, routes to the right base
+    branch, and gives you an isolated worktree. Task PRs merge when ready (required CI green, not conflicted,
+    review coverage on the record). Still a human decision: anything into <code>main</code>, release-please
+    PRs, <code>digikey/</code> auth-crypto, live trading, and new external network exposure.
+  </p>
+</section>
+
+<!-- ============================================================ -->
+<section id="index">
+  <h2><span class="n">12</span>Where to look</h2>
+  <div class="scroll">
+  <table>
+    <thead><tr><th style="width:300px">Question</th><th>File</th></tr></thead>
+    <tbody>
+      <tr><td>Full capability matrix, API surface, data model, security</td><td><code>apps/digichat/ARCHITECTURE.md</code></td></tr>
+      <tr><td>Agent rules for this app</td><td><code>apps/digichat/AGENTS.md</code></td></tr>
+      <tr><td>Any UI work — skins, stylesheets, gotchas</td><td><code>docs/digichat/SKIN-GALLERY.md</code></td></tr>
+      <tr><td>Deploy config schema</td><td><code>apps/digichat/src/lib/deploy-config/schema.ts</code></td></tr>
+      <tr><td>The chat BFF</td><td><code>apps/digichat/src/app/api/chat/route.ts</code></td></tr>
+      <tr><td>Auth gate</td><td><code>apps/digichat/src/lib/request-auth.ts</code></td></tr>
+      <tr><td>Upstream credential exchange</td><td><code>apps/digichat/src/lib/digigraph-upstream.ts</code>, <code>lib/digikey-exchange.ts</code></td></tr>
+      <tr><td>The first-party Thread</td><td><code>packages/ui/src/components/chat/gallery-thread/thread.aui.tsx</code></td></tr>
+      <tr><td>The digichat theme (source of truth)</td><td><code>apps/reference/app/(chatbot)/chatbot/chatbot.css</code></td></tr>
+      <tr><td>Skin registry</td><td><code>apps/digichat/src/lib/thread-skins.ts</code></td></tr>
+      <tr><td>Self-host install guide</td><td><code>docs/digichat/INSTALL.md</code></td></tr>
+      <tr><td>Operator runbook</td><td><code>apps/digichat/OPERATIONS.md</code></td></tr>
+      <tr><td>Branch model &amp; release process</td><td><code>BRANCHING.md</code>, <code>RELEASES.md</code></td></tr>
+      <tr><td>Product vision &amp; roadmap</td><td><code>docs/vision/digichat.md</code>, <code>ROADMAP.md</code></td></tr>
+      <tr><td>Design tokens</td><td><code>packages/design/tokens.css</code></td></tr>
+    </tbody>
+  </table>
+  </div>
+</section>
+
+<footer>
+  digichat onboarding · generated from the working tree at v2.3.2 · every path relative to the repo root ·
+  companion docs: <code>docs/digichat/SKIN-GALLERY.md</code>, <code>apps/digichat/ARCHITECTURE.md</code>
+</footer>
+
+</div>
+</body>
+</html>

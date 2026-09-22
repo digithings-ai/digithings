@@ -31,7 +31,10 @@ export const TooltipIconButton = forwardRef<
               size="icon"
               {...rest}
               className={cn(
-                "aui-button-icon size-6 p-1 active:scale-90",
+                // `inline-flex` + centring keeps the glyph in the middle of the
+                // box; without it the button falls back to `display: block` and
+                // the icon drifts below the baseline of the composer row.
+                "aui-button-icon inline-flex size-6 items-center justify-center p-1 active:scale-90",
                 className,
               )}
               ref={ref}

@@ -33,6 +33,12 @@
 @source "./stock";
 @source "./baseline";
 @source "../../components/assistant-ui/skins";
+/* The first-party `digichat` skin mounts the gallery Thread from the shared UI
+   package, whose source lives in packages/ui. Tailwind only emits utilities it
+   can see, so without this the catalog silently dropped kit-only classes — e.g.
+   the tooltip arrow suppression, which rendered as a diamond under every hover
+   label. Mirrors the package source the digichat app shell scans. */
+@source "../../../../../packages/ui/src/components/chat";
 
 @custom-variant dark (&:is(.dark *));
 

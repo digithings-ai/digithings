@@ -86,9 +86,12 @@
   font-family: var(--font-geist-mono, var(--font-mono), ui-monospace, monospace);
   background: var(--term-bg);
   color: var(--term-ink);
-  max-width: var(--thread-max-width);
+  /* Full-bleed canvas like the other skins: the root fills its container so
+     the background reaches the edges, and the inner column in
+     `thread.aui.tsx` (`mx-auto max-w-(--thread-max-width)`) keeps the actual
+     messages and composer at 44rem. Constraining the root instead left the
+     page background showing through in the gutters. */
   width: 100%;
-  margin-inline: auto;
 }
 
 :root[data-theme="light"] .digichat-thread,
