@@ -245,7 +245,7 @@ export interface ServerPortfolioMetrics {
 
 /**
  * A single research run's health + optional economics. The public dashboard reads
- * from the anon-safe `atlas_run_health` view (status, segment counts, timing);
+ * from the anon-safe `run_health` view (status, segment counts, timing);
  * spend telemetry fields are null unless a BFF with service-role access is wired.
  */
 export interface ResearchRunDiagnostics {

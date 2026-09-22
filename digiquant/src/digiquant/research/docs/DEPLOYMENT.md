@@ -201,7 +201,7 @@ The pipeline opens (or comments on) a single rolling issue titled
 
 ## Cost monitoring
 
-Per-run token counts land in `atlas_run_diagnostics` via `digiquant.research.diagnostics`
+Per-run token counts land in `run_diagnostics` via `digiquant.research.diagnostics`
 (LLM usage snapshot from `digigraph.usage`). Target **≤20 LLM calls** on a quiet day
 (re-baselined after thesis-first H1–H9 wiring).
 

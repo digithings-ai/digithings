@@ -100,7 +100,7 @@ class ChainDeps:
 
 @dataclass(frozen=True)
 class DiagnosticsDeps:
-    """Wiring for the ``atlas_run_diagnostics`` telemetry write (Pillar 1B)."""
+    """Wiring for the ``run_diagnostics`` telemetry write (Pillar 1B)."""
 
     client: Any
     run_id: str
@@ -1026,7 +1026,7 @@ def cli_main(argv: list[str] | None = None) -> int:
     retry_worthy = _retry_worthy_summary(run_summary)
     # ``degraded`` keeps its pre-#1736 meaning (= the retry signal) so nothing parsing run.log
     # changes shape; ``status`` is the honest health verdict that lands in
-    # ``atlas_run_diagnostics``. Both are printed because they legitimately disagree — a day
+    # ``run_diagnostics``. Both are printed because they legitimately disagree — a day
     # that lost segments but committed its book is ``status=degraded, degraded=false`` (#1736).
     summary["degraded"] = run_summary.retry_signal
     summary["status"] = run_summary.status

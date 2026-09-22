@@ -1,6 +1,6 @@
-"""Per-run telemetry → ``atlas_run_diagnostics`` (Pillar 1B).
+"""Per-run telemetry → ``run_diagnostics`` (Pillar 1B).
 
-Migration 032 created the ``atlas_run_diagnostics`` table and named this module as its
+Migration 032 created the ``run_diagnostics`` table and named this module as its
 writer, but the module never existed — so the table stayed empty and a run's health was
 invisible. This closes that gap: at the end of every chain run :func:`write_row` counts
 fresh / carried / failed segments from state, folds in the LLM usage snapshot
@@ -315,7 +315,7 @@ def summarize_run(
     went wrong *after* the research segments used to be invisible: eight separate issues
     (#1736 #1732 #1735 #1738 #1737 #1733 #1763 #1742) are one defect wearing eight hats.
 
-    ``status`` — the health verdict the dashboard and ``atlas_run_diagnostics`` read:
+    ``status`` — the health verdict the dashboard and ``run_diagnostics`` read:
 
     - ``"failed"`` — nothing fresh was produced AND no snapshot was published; or a
       core research engine (research/portfolio) crashed at the chain level.
@@ -673,7 +673,7 @@ def write_row(
     finished_at: datetime | None = None,
     attempt: int = 1,
 ) -> RunSummary | None:
-    """Upsert one ``atlas_run_diagnostics`` row (on ``run_id, attempt``). Fail-soft → ``None``
+    """Upsert one ``run_diagnostics`` row (on ``run_id, attempt``). Fail-soft → ``None``
     on any error (telemetry never breaks a run). Returns the :class:`RunSummary` on success.
 
     The conflict key is per-ATTEMPT since #1762. ``pipeline-digiquant.yml`` retries the chain up
@@ -696,7 +696,7 @@ def write_row(
             finished_at=finished_at,
             attempt=attempt,
         )
-        client.table("atlas_run_diagnostics").upsert(row, on_conflict="run_id,attempt").execute()
+        client.table("run_diagnostics").upsert(row, on_conflict="run_id,attempt").execute()
     except Exception as exc:  # telemetry write must never crash the run
         logger.warning("diagnostics: write_row failed (%s); run continues", exc)
         return None

@@ -223,7 +223,7 @@ class TestCapDropsAreVisible:
 
 @pytest.mark.unit
 class TestRosterBreakdownContributor:
-    """The width contributor for ``atlas_run_diagnostics.breakdown`` (#1767).
+    """The width contributor for ``run_diagnostics.breakdown`` (#1767).
 
     Tested by direct call: the ``_BREAKDOWN_CONTRIBUTORS`` seam it plugs into is owned
     by PR #1774 and is not on ``develop``, so nothing registers it yet.

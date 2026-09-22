@@ -418,7 +418,7 @@ on the dashboard 404. Every in-app link, the command palette, and the legacy
 
 `app/page.tsx` is the daily decision workspace. It owns benchmark alignment,
 percentage-return calculations, book freshness, rebalance rationale joins, and a
-brief-only read of the anon-safe `atlas_run_health` view. It passes those truth
+brief-only read of the anon-safe `run_health` view. It passes those truth
 contracts into `components/today/daily-brief-workspace.tsx`, which follows one
 fixed daily-reader sequence:
 
@@ -501,7 +501,7 @@ values.
 > `USING (true)` still applies; gate shared hosts with **Cloudflare Access**
 > (staging overlay after T1; production Access comes off at cutover — D7).
 > Migration `033` drops anon SELECT on operator cost telemetry
-> (`atlas_run_diagnostics`); `pm_notes` is intentionally kept.
+> (`run_diagnostics`); `pm_notes` is intentionally kept.
 
 ## Daily snapshot envelope
 

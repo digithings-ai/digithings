@@ -36,7 +36,7 @@ logger = logging.getLogger(__name__)
 
 POLICIES = "risk_policies"
 SNAPSHOTS = "covariance_snapshots"
-RUN_REFS = "h8_risk_run_refs"
+RUN_REFS = "sizing_risk_run_refs"
 
 
 class RiskPolicyRegistryConflict(RuntimeError):

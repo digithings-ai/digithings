@@ -369,7 +369,7 @@ retained paid fallbacks. PR-1 converts `alt-options-derivatives` to read the
 FRED vol complex (VIX/VIX3M/VXN/GVZ/OVX, in `config/macro_series.yaml`) via
 `get_macro_series` instead of a paid `web_search` (#708).
 
-`atlas_run_diagnostics.est_cost_usd` tracks each run **attempt** (per-attempt keying since
+`run_diagnostics.est_cost_usd` tracks each run **attempt** (per-attempt keying since
 #1762 — before that the last outer-retry attempt overwrote the expensive one's cost on 28 of
 54 rows, so a day's total needs `sum(est_cost_usd) … GROUP BY run_date`, not one row); verify
 after changes.
@@ -484,7 +484,7 @@ When the scheduled research pipeline fails (`research baseline`, `research delta
 
 ### OpenRouter empty completions (degraded book, "empty completion from …" in logs)
 
-**First check:** `atlas_run_diagnostics.breakdown.empty_retries` on the run row — `total` and
+**First check:** `run_diagnostics.breakdown.empty_retries` on the run row — `total` and
 `by_model` count every digillm empty-retry self-heal (the `empty-retry n/4` log lines). A green
 `status` with a rising `empty_retries.total` means the provider is flaking but recovering; treat
 it as a warning before it escalates to a hard failure (see 2026-07-20 → 07-21 in #1639).
@@ -638,7 +638,7 @@ Re-run with `--force` to overwrite. Uses [`scripts/legacy_delta_to_ops.py`](scri
 <!-- #1736 -->
 ## Run status vs. retry-worthiness (#1736)
 
-`atlas_run_diagnostics.status` and the pipeline's exit code answer **different questions**,
+`run_diagnostics.status` and the pipeline's exit code answer **different questions**,
 and since #1736 they legitimately disagree.
 
 - **`status`** — was the run healthy? Written by `diagnostics.summarize_run`. It flips to
@@ -676,7 +676,7 @@ book 06-26; first post-gap book 07-17. Any performance series that spans those d
 **discontinuous by design** — that is expected, not a bug to be repaired.
 
 **Cause and fix.** H9 was failing its coherence check closed while runs still reported `ok`
-(#1555). 18 of the 22 `atlas_run_diagnostics` rows in the window say `status='ok'` and every one
+(#1555). 18 of the 22 `run_diagnostics` rows in the window say `status='ok'` and every one
 of them carries `portfolio_commit/portfolio/commit-run: held ticker <T> missing from
 book and not flat in H7`. Fixed **2026-07-17** (`40312d82`, PR #1565); `positions` resumes the
 same date. Full evidence and the post-fix `book_committed` reconciliation are in
