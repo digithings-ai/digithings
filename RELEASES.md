@@ -4,27 +4,26 @@ Monorepo components ship as **independent Python packages** (`digibase`, `digigr
 
 ## Release process
 
-1. Confirm CI is green on `develop`, and land the version bump there first — the release-please PR, or a hand bump committed together with its tag (see [Tagging convention](#tagging-convention)).
+1. Confirm CI is green on `develop`, and land the version bump there first — merge the release-please PR (or, for a hand bump, commit it on `develop` together with its tag — see [Tagging convention](#tagging-convention)). Merging the release-please PR is what cuts the `digichat-vX.Y.Z` tag, on `develop`.
 2. **Promote `develop` → `main`.** Open the promotion PR (`gh pr create --base main --head develop`) and merge it. A PR into `main` is the production cutover, so a human owns that step.
-3. **Cut the release branch and the tag on `main`** — one branch per released version, from `main` at the release commit:
+3. **Cut the release branch on `main`** — one branch per released version, from `main` at the promotion commit (the tag's commit is in `main`'s history by then):
 
    ```bash
    git checkout main && git pull
-   git tag digichat-v2.3.2
-   git push origin digichat-v2.3.2
    git checkout -b release/v2.3.2
    git push -u origin release/v2.3.2
    ```
 
    This is a required step, not bookkeeping: the branch is how that version is patched once `main` has moved on. See [Patching a released version](#patching-a-released-version) and BRANCHING.md § [Cutting a release](BRANCHING.md#cutting-a-release).
-4. **Docker images (automated on `main`):**
-   - Python HTTP services → [`.github/workflows/publish-service-images.yml`](.github/workflows/publish-service-images.yml)  
+4. **Docker images:**
+   - digichat → [`.github/workflows/publish-digichat-image.yml`](.github/workflows/publish-digichat-image.yml)  
+     Published when release-please cuts the `digichat-vX.Y.Z` tag on `develop` (the release workflow dispatches it at the tag), and re-checked on a push to `main` touching `apps/digichat/**`.  
+     Tags: `:v<package.json version>` and `:latest` (skips if that version tag already exists).
+   - Python HTTP services → [`.github/workflows/publish-service-images.yml`](.github/workflows/publish-service-images.yml) — a push to `main` only, **not** a tag.  
      Images: `ghcr.io/digithings-ai/{digikey,digigraph,digiquant,digisearch,digismith,digivault,digiclaw}`  
      Tags: `:sha-<12-char-sha>`, `:latest`, and `:v<pyproject-version>`.  
      Manual: Actions → “Publish: service images” → `workflow_dispatch` (all or one service).
-   - digichat → [`.github/workflows/publish-digichat-image.yml`](.github/workflows/publish-digichat-image.yml)  
-     Tags: `:v<package.json version>` and `:latest` (skips if that version tag already exists).
-5. Git tags are cut in step 3 — `git tag <component>-vX.Y.Z` (per-component, e.g. `digichat-v2.3.2`) or repo-wide `vX.Y.Z`, pick one and stay consistent. The tag is what the release branch is anchored to and what pinned clients cite.
+5. **Tagging:** the `digichat-vX.Y.Z` tag is cut in step 1 by release-please (if you bump by hand, cut it yourself on `develop` in the same change). Per-component `digichat-vX.Y.Z` or repo-wide `vX.Y.Z` — pick one and stay consistent. The tag is the release identity pinned clients cite, and it is what publishes the digichat image.
 6. Append a changelog entry under "Unreleased" below, then move it under a new dated heading.
 
 Self-host pull path: [`infra/self-host/compose.ghcr.yml`](infra/self-host/compose.ghcr.yml) + [`docs/templates/self-host/README.md`](docs/templates/self-host/README.md). Epic: [#2016](https://github.com/digithings-ai/digithings/issues/2016).
@@ -44,23 +43,28 @@ git tag digichat-v2.3.3
 git push origin release/v2.3.3 digichat-v2.3.3
 ```
 
-The tag is what publishes the image (`publish-digichat-image.yml` keys off
-`package.json`'s version; the Python services key off `pyproject`), so a patch
-release needs the bump, the tag, and the branch together.
+A human-pushed `digichat-vX.Y.Z` tag publishes the digichat image
+(`publish-digichat-image.yml` keys off `package.json`'s version), so for digichat
+a patch release needs the bump, the tag and the branch together. The Python
+service images publish only on a push to `main`, so a patch that is never
+promoted ships no service image.
 
-Then get the fix onto the mainline:
+The fix then has to reach `develop`, in every case — release-please reads
+`develop`, so a fix that only lives on the release branch is clobbered by the
+next promotion:
 
-- **Current line** — if `main` is still on `2.3.x`, also open the patch as a PR
-  into `main`. Production should carry the fix.
-- **Older line** — if `main` has moved on (say to `2.4.0`), do **not** merge the
-  release branch into `main`: its version bump would take production backwards.
-  Cherry-pick the *fix* (never the version bump) onto `develop` instead, so the
-  next promotion carries it forward:
+```bash
+git checkout develop
+git cherry-pick <fix-sha>                        # the fix, never the version bump
+```
 
-  ```bash
-  git checkout develop
-  git cherry-pick <fix-sha>
-  ```
+Never merge the release branch into `main`: its version bump would take
+production backwards (or fork the version line). Production picks the fix up
+through the next `develop` → `main` promotion, which now carries the
+cherry-pick. If production has to be patched sooner — only meaningful while
+`main` is still on the same line, `2.3.x` — cherry-pick the *fix* into a
+`fix/<slug>` branch off `main`, PR it into `main` (human on the cutover), and
+cherry-pick the same fix onto `develop`. Still never the version bump.
 
 Release branches are never deleted — one per released version, and an old one is
 the only way to patch a client still pinned to it. See BRANCHING.md §

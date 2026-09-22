@@ -128,23 +128,27 @@ has no branch-naming ruleset to edit.
 ```bash
 git checkout develop
 git pull
-# the version bump lands on develop first (the release-please PR, or a hand
-# bump committed together with its tag — see RELEASES.md)
+# the version bump lands on develop first: merge the release-please PR (or, for
+# a hand bump, commit it on develop together with the tag — see RELEASES.md).
+# Merging it is what makes release-please cut `digichat-v2.3.2` on develop.
 gh pr create --base main --head develop --title "chore: promote develop to main"
 gh pr merge --merge                              # PR into main: human on the cutover
 git checkout main
 git pull
-git tag digichat-v2.3.2                          # per-component or repo-wide — see RELEASES.md
-git push origin digichat-v2.3.2
 git checkout -b release/v2.3.2                   # this version's maintenance line
 git push -u origin release/v2.3.2
 ```
 
-The release branch starts life identical to the tag. It is **not** where the
-release is stabilised: by the time it exists, that version is already on `main`
-and deployed. Its job is to keep carrying fixes for *that* version after `main`
-has moved on — pinned clients (self-host stacks, DataTap on
-`ghcr.io/digithings-ai/digichat:v0.9.3`) keep consuming it.
+The tag already exists by this point — release-please cuts `digichat-vX.Y.Z` on
+`develop` when the bump lands there, and that is the release moment (it is also
+what dispatches the digichat image publish). Promoting `develop` brings the
+tagged commit into `main`'s history, so the release branch is cut from `main`
+while being tree-identical to the tag.
+
+The branch is **not** where the release is stabilised: by the time it exists,
+that version is already on `main` and deployed. Its job is to keep carrying
+fixes for *that* version after `main` has moved on — pinned clients (self-host
+stacks, DataTap on `ghcr.io/digithings-ai/digichat:v0.9.3`) keep consuming it.
 
 Do not delete the branch when the next release ships. There is one branch per
 released version, and the older ones are the reason you can still patch them.
@@ -158,26 +162,32 @@ previous one, so the branch name always equals the version it carries:
 git checkout -b release/v2.3.3 release/v2.3.2
 # apply the fix, bump the version to 2.3.3, commit
 git tag digichat-v2.3.3
-git push origin release/v2.3.3 digichat-v2.3.3   # the image publishes from the tag
+git push origin release/v2.3.3 digichat-v2.3.3   # a human-pushed digichat tag publishes the image
 ```
 
-Whether the patch also belongs on `main` depends on which line it is:
+The fix then has to reach `develop`, in every case — release-please reads
+`develop`, so a fix that only lives on the release branch is clobbered by the
+next promotion:
 
-- **Current line** (`main` is still on `2.3.x`) — open the patch as a normal PR
-  into `main` as well as tagging it on the release branch. Production should
-  have the fix.
-- **Older line** (`main` has moved on, e.g. to `2.4.0`) — do **not** merge the
-  release branch into `main`: its version bump would drag production backwards.
-  Instead cherry-pick the *fix* (never the version bump) onto `develop`, so the
-  next promotion carries it forward:
+```bash
+git checkout develop
+git cherry-pick <fix-sha>                        # the fix, never the version bump
+```
 
-  ```bash
-  git checkout develop
-  git cherry-pick <fix-sha>
-  ```
+Never merge the release branch into `main`: its version bump would take
+production backwards (or fork the version line). Production picks the fix up the
+normal way, through the next `develop` → `main` promotion, which now carries the
+cherry-pick.
 
-Either way the fix, not just the release branch, has to reach `develop` — that
-is what stops the next promotion from clobbering it.
+If production has to be patched before that promotion — only meaningful while
+`main` is still on the same line, `2.3.x` — cherry-pick the *fix* into a
+`fix/<slug>` branch off `main`, PR it into `main` (human on the cutover), and
+cherry-pick the same fix onto `develop`. Still never the version bump.
+
+A caveat on images: a human-pushed `digichat-vX.Y.Z` tag publishes the digichat
+image, but the Python service images publish only on a push to `main`
+(`publish-service-images.yml`), so a patch that is never promoted ships no
+service image.
 
 ## Deleting a stale branch
 
@@ -188,8 +198,10 @@ git push origin --delete <branch>
 git branch -d <branch>                          # local
 ```
 
-`main` and `develop` are protected server-side against deletion. `release/v*` is
-**not** — see the gap note below.
+`main` and `develop` are protected server-side against deletion. Release
+branches are policy-protected — one per released version, and an old one is the
+only way to patch a client still pinned to it — but that is not yet enforced
+server-side; see the gap note below.
 
 **Deletions are exempt from the name check.** The hook validates the branch name
 on the way in, not on the way out: a ref that predates a tightening of the
@@ -237,8 +249,9 @@ change, not a docs change:
   with write access — and that now matters more than it used to: since a
   release branch is a shipped version's only maintenance line, losing one means
   a pinned client can no longer be patched at all. Protecting `release/**`
-  (no force-push, no deletion) is intended; it is a repo-settings change, so it
-  needs a human, not this document.
+  (no force-push, no deletion) is intended, and the payload already exists in
+  `scripts/github-rulesets/04-protect-releases.json`; applying it is a
+  repo-settings change, so it needs a human, not this document.
 - **`main` requires no *approval*.** `required_approving_review_count` is `0`, so
   a PR into `main` can be merged by whoever opened it. Its one required status
   check is `Every commit reaching main was reviewed` — the review-coverage gate in
