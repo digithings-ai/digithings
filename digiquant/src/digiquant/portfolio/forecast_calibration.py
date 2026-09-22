@@ -2,7 +2,7 @@
 
 Core calibrator is pure (no Supabase). WP5.4 adds cutoff-safe attach helpers
 invoked at the existing deliberation→direction boundary; commit persists artifacts. WP8.4 feeds
-AVAILABLE ``CalibratedForecast`` slices into sizing via ``AllocationInputBundle``.
+AVAILABLE ``CalibratedForecast`` slices into allocation via ``AllocationInputBundle``.
 
 Shrinks cohort residual bias toward a declared zero-mean prior, reports
 Brier/log scores, and emits ``CalibratedForecast`` subjects with non-zero
@@ -99,7 +99,7 @@ _Z_NORMAL: dict[str, Decimal] = {
 
 @dataclass(frozen=True)
 class CalibrationBundle:
-    """Cohort metrics plus one calibrated subject for sizing bundle consumption."""
+    """Cohort metrics plus one calibrated subject for allocation bundle consumption."""
 
     calibration: ForecastCalibration
     calibrated_forecast: CalibratedForecast
@@ -494,7 +494,7 @@ def calibrate_subject(
 ) -> CalibratedForecast:
     """Build a shadow calibrated subject from cohort metrics + effective terms.
 
-    Does not feed incumbent sizing. Unavailable calibration → typed unavailable subject.
+    Does not feed incumbent allocation. Unavailable calibration → typed unavailable subject.
     """
     try:
         known_at = require_utc_datetime(as_of, field_name="as_of")
@@ -680,7 +680,7 @@ def attach_shadow_calibrations(
     One ``ForecastCalibration`` per distinct cohort key; one ``CalibratedForecast``
     per subject. Empty subjects → empty attachment. Outcomes must already be
     cutoff-bounded by the caller (``known_at > as_of`` are ignored again inside
-    the calibrator). Does not write to Supabase here; WP8.4 sizing consumes the
+    the calibrator). Does not write to Supabase here; WP8.4 allocation consumes the
     attached dumps via ``AllocationInputBundle``.
     """
     known_at = require_utc_datetime(as_of, field_name="as_of")

@@ -200,9 +200,9 @@ class TestNewCandidateReservation:
         The operator's lever is DIGIQUANT_MAX_ANALYSTS.
         """
         monkeypatch.setenv("DIGIQUANT_MAX_ANALYSTS", "4")
-        held = {"thesis", "market", "vehicle_map", "screener"}
+        held = {"THESIS", "MARKET", "VEHICLE_MAP", "SCREENER"}
         roster = compute_focus_roster(
-            watchlist=["thesis", "market", "vehicle_map", "screener", "NEW1", "NEW2", "NEW3"],
+            watchlist=["THESIS", "MARKET", "VEHICLE_MAP", "SCREENER", "NEW1", "NEW2", "NEW3"],
             held=held,
             run_date=date(2026, 6, 20),
         )
