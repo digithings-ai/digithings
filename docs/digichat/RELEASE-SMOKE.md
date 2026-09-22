@@ -1,7 +1,7 @@
 # digichat release smoke checklist
 
-After `digichat-vX.Y.Z` is tagged (release-please on develop) and
-`ghcr.io/digithings-ai/digichat:vX.Y.Z` is published (publish workflow on main):
+After `digichat-vX.Y.Z` is tagged (release-please on `develop`, which dispatches the
+image publish) and the promotion to `main` has landed:
 
 ## Identity
 

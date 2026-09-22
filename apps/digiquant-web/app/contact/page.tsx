@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
-import { PricingTierCard, Reveal } from "@digithings/ui";
-import { SiteFooter } from "@/components/landing/SiteFooter";
+import { Footer, PricingTierCard, Reveal } from "@digithings/ui";
+import { DQ_FOOTER, DQ_FOOTER_META } from "../_nav";
 import {
   CONTACT_MANAGED_FEATURES,
   CONTACT_SELF_FEATURES,
@@ -10,6 +10,7 @@ import {
 import { ContactMailto } from "@digithings/ui";
 import { buttonVariants } from "@digithings/ui/ui";
 import { SiteNav } from "@/components/landing/SiteNav";
+import { AmbientMesh } from "@/components/landing/AmbientMesh";
 import { CloneRepoButton } from "@/components/landing/CloneRepoButton";
 
 export const metadata: Metadata = {
@@ -22,7 +23,8 @@ export default function ContactPage() {
   return (
     <>
       <SiteNav />
-      <main className="dq-subpage" id="main" tabIndex={-1}>
+      <main className="dq-subpage">
+        <AmbientMesh />
         <section className="section">
           <div className="wrap">
             <Reveal>
@@ -98,7 +100,7 @@ export default function ContactPage() {
           </div>
         </section>
       </main>
-      <SiteFooter />
+      <Footer links={DQ_FOOTER} meta={DQ_FOOTER_META} />
     </>
   );
 }
