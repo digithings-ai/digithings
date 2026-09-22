@@ -25,6 +25,22 @@
 @import "@digithings/ui/styles/data-layout.css";
 @import "@digithings/ui/styles/repo-activity.css";
 @import "@digithings/ui/styles/word-reveal.css";
+/* effects-chrome.css owns the effects/primitive chrome that is not token-backed
+   Tailwind utilities: the Pipeline grammar (.pl-node, .pl-detail, .pl-io,
+   .pl-diag-*), the Glow/Emblem dress and the marquee. The digiquant band on the
+   landing page renders <Pipeline>, so without this sheet its labels and values
+   concatenate with no separation — the section is unreadable (#4429). */
+@import "@digithings/ui/styles/effects-chrome.css";
+/* Finance + metrics families (#4429): the digiquant band renders <StockTicker>,
+   <PriceChart>, <PerfMetrics> and <LiveBadge>. Their structural CSS is not
+   token-backed Tailwind — finance-composites.css declares the .tk seamless-tape
+   track (.tk { overflow: hidden } + .tk-track { width: max-content;
+   animation: tk-scroll }), and without it the market tape wraps onto three
+   rows instead of scrolling on one. metrics.css carries the .perf-metric
+   grid, finance-tearsheet.css the .ts-* card dress and LiveBadge. */
+@import "@digithings/ui/styles/finance-composites.css";
+@import "@digithings/ui/styles/metrics.css";
+@import "@digithings/ui/styles/finance-tearsheet.css";
 /* Chat family primitives (#1418) — imported BEFORE the digichat-ui sheets so
    the .dc- and .dt- rules keep winning same-specificity ties (e.g. the
    caret's animation shorthand when an element carries both .chat-cursor
@@ -36,6 +52,16 @@
    deliberately do not import this. Must come AFTER chat-core.css. */
 @import "@digithings/ui/styles/chat-math.css";
 @import "@digithings/ui/styles/chat-widgets.css";
+/* The first-party digichat Thread (#4429 Stage 8). The FAQ band mounts the real
+   product Thread module (`@digithings/ui/chat/thread`) against a local fixture
+   runtime, so the app needs the two sheets that dress it:
+   - chat-aui.css maps the assistant-ui/shadcn vars onto digiweb tokens and owns
+     the `.aui-theme-stage` frame the Thread is mounted inside;
+   - chatbot.css is the product import of the gallery grammar sheet and owns the
+     welcome slot, example rows, composer and tool rows.
+   chat-aui.css must come first: the gallery sheet wins same-specificity ties. */
+@import "@digithings/ui/styles/chat-aui.css";
+@import "@digithings/ui/styles/chatbot.css";
 /* Terminal loaders sheet (legacy DigiChatSession Searching… chrome). Kept for
    any residual .tl-* usage on the marketing shell; the live chat UI lives in
    the iframe. AFTER chat-core.css. */
@@ -73,6 +99,21 @@
    `Fig N` Figure, which carry the long-form page grammar as utilities. */
 @source "../../../packages/ui/src/components/prose";
 @source "../../../packages/ui/src/components/figure";
+/* … and the finance primitives the digiquant band composes: <PriceChart>
+   (finance-charts), <StockTicker>/.srt leaderboard (finance-composites),
+   <PerfMetrics> (metrics) and the <LiveBadge>/<TearsheetCard> family
+   (finance-tearsheet). Each carries token utilities. */
+@source "../../../packages/ui/src/components/finance-charts";
+@source "../../../packages/ui/src/components/finance-composites";
+@source "../../../packages/ui/src/components/finance-tearsheet";
+@source "../../../packages/ui/src/components/metrics";
+/* … and the page-geometry parts (LayoutLines/Mockup/MockupFrame/Glow). Those
+   components carry the ported `line-*` and `fade-*` utility classes, and
+   Tailwind only emits a utility it has SEEN in scanned content — so without
+   this line `line-y`/`line-dashed` on LayoutLines generate nothing and the
+   page's framing rules render at 0px while the ones written inline in
+   app/page.tsx still work. Silent, and only visible in the rendered page. */
+@source "../../../packages/ui/src/components/page-geometry.tsx";
 /* … and the vendored shadcn kit primitives (@digithings/ui/ui) — the Sheet,
    Input/Label/Button/Alert/Badge family carries token-backed utilities. The
    controls-layer Select/Table carry none (plain .ctl-* classes in
@@ -118,6 +159,14 @@
    page shading always reaches the top border. (The shared file also feeds
    digiquant.io, so we don't touch it.) */
 .glow { animation: none; transform: none; }
+
+/* The landing page (main.landing) drops both fixed washes — the noise `.grain`
+   and the radial `.glow` — so the page reads as a clean ground under the layout
+   lines rather than a tinted, textured one. Scoped by `:has(main.landing)` so
+   every other route keeps them (the /chat boot loader deliberately lets both
+   show through — see the note further down). */
+body:has(main.landing) .grain,
+body:has(main.landing) .glow { display: none; }
 
 /* ==========================================================================
    v7 LANDING CHROME — originally ported from digiquant-web/app/globals.css

@@ -1,8 +1,17 @@
 import type { Metadata } from "next";
-import { ContactMailto, CtaLink, PageHead, RuledList, RuledRow } from "@digithings/ui";
+import {
+  ContactMailto,
+  CtaLink,
+  DocumentFrame,
+  GlyphList,
+  GlyphRow,
+  PageTitle,
+  Prose,
+  Section,
+} from "@digithings/ui";
 import { buttonVariants } from "@digithings/ui/ui";
-import { DtFooter } from "@/components/DtFooter";
 import { DT_CONTACT_EMAIL } from "@/app/_nav";
+import { DtFooter } from "@/components/DtFooter";
 import { DtNav } from "@/components/DtNav";
 
 export const metadata: Metadata = {
@@ -12,30 +21,45 @@ export const metadata: Metadata = {
     "top of the open-source stack.",
 };
 
-const WORK = [
+// /services — rebuilt on the document grammar (D1, #4429): one framed column,
+// hairline-separated sections, the `[*]` row grammar. Three sections — what we
+// do, how an engagement starts, and the contact. The honesty framing leads: the
+// code is MIT and free to self-host, and what is sold is the integration work.
+
+const WORK: { label: string; body: string }[] = [
   {
-    term: "Deploy the stack",
+    label: "Deploy the stack",
     body:
-      "Set up the modules you need in your environment and document how they run, connect, and " +
-      "recover.",
+      "Set up the modules you need in your environment and document how they run, connect and " +
+      "recover",
   },
   {
-    term: "Connect your systems",
+    label: "Connect your systems",
     body:
-      "Integrate your model providers, identity layer, data sources, retrieval backends, and " +
-      "existing services.",
+      "Integrate your model providers, identity layer, data sources, retrieval backends and " +
+      "existing services",
   },
   {
-    term: "Build on digithings",
+    label: "Build on digithings",
     body:
-      "Develop agent workflows, MCP tools, retrieval pipelines, or a customer-facing application " +
-      "using the same modules and engineering standards as the core stack.",
+      "Develop agent workflows, MCP tools, retrieval pipelines or a customer-facing application " +
+      "on the same modules and engineering standards as the core stack",
   },
   {
-    term: "Hand over the work",
+    label: "Hand over the work",
     body:
-      "Deliver source code, tests, operating documentation, and CI checks in infrastructure your " +
-      "team controls.",
+      "Deliver source code, tests, operating documentation and CI checks in infrastructure your " +
+      "team controls",
+  },
+];
+
+const CONTEXT: { label: string; body: string }[] = [
+  {
+    label: "Useful context",
+    body:
+      "Your current infrastructure and deployment target, the data, providers and services that " +
+      "must connect, the workflow or application your users need, and your security, compliance " +
+      "and operating constraints",
   },
 ];
 
@@ -45,66 +69,57 @@ export default function ServicesPage() {
       <DtNav />
 
       <main id="main" tabIndex={-1} className="pt-[var(--dq-nav-h)]">
-        <PageHead
-          kicker={"// services"}
-          title={
-            <>
-              Build on digithings <em>in your environment.</em>
-            </>
-          }
-        >
-          The software is MIT-licensed and free to self-host. We provide implementation services
-          for teams that want help integrating the stack or building an application on top of it.
-        </PageHead>
+        <DocumentFrame>
+          <div className="px-[var(--page-pad)] py-[var(--page-step)]">
+            <PageTitle title="Build on digithings, in your environment.">
+              The software is MIT-licensed and free to self-host. What we sell is the integration
+              work — fitting these modules to the systems you already run.
+            </PageTitle>
+          </div>
 
-        <section className="section">
-          <div className="wrap">
-            <span className="kicker">{"// what we do"}</span>
-            <p className="mt-[0.7rem] max-w-[64ch] text-[1rem] leading-[1.7] text-ink-soft">
-              Start with the modules you need, connect them to the systems you already run, and
-              leave with code and documentation your team owns.
-            </p>
-            <RuledList>
-              {WORK.map((item) => (
-                <RuledRow key={item.term} term={item.term}>
-                  {item.body}
-                </RuledRow>
+          <Section
+            id="what-we-do"
+            title="What we do"
+            lede="Start with the modules you need, connect them to the systems you already run, and leave with code and documentation your team owns."
+          >
+            <GlyphList>
+              {WORK.map((r) => (
+                <GlyphRow key={r.label} label={r.label}>
+                  {r.body}
+                </GlyphRow>
               ))}
-            </RuledList>
-          </div>
-        </section>
+            </GlyphList>
+          </Section>
 
-        <section className="section section-alt">
-          <div className="wrap">
-            <span className="kicker">{"// how an engagement starts"}</span>
-            <p className="mt-[0.7rem] max-w-[64ch] text-[1rem] leading-[1.7] text-ink-soft">
-              Tell us what you run today, what you want to build, and which constraints matter. We
-              will determine whether digithings fits and define the deliverables, dependencies,
-              responsibilities, timing, and price in writing before work begins.
-            </p>
-            <p className="mt-[1rem] max-w-[64ch] text-[1rem] leading-[1.75] text-ink-soft">
-              There are no public package prices or service-level commitments because the work is
-              scoped for each environment. The repository remains available whether or not you
-              engage us.
-            </p>
-            <RuledList>
-              <RuledRow term="Useful context">
-                Your current infrastructure and deployment target; the data, providers, and services
-                that must connect; the workflow or application your users need; and your security,
-                compliance, and operating constraints.
-              </RuledRow>
-            </RuledList>
-          </div>
-        </section>
+          <Section
+            id="engagement"
+            title="How an engagement starts"
+            lede="Tell us what you run today, what you want to build and which constraints matter. We will determine whether digithings fits and define the deliverables, dependencies, responsibilities, timing and price in writing before work begins."
+          >
+            <Prose>
+              <p>
+                There are no public package prices or service-level commitments because the work is
+                scoped for each environment. The repository remains available whether or not you
+                engage us.
+              </p>
+            </Prose>
+            <div className="mt-[1.6rem]">
+              <GlyphList>
+                {CONTEXT.map((r) => (
+                  <GlyphRow key={r.label} label={r.label}>
+                    {r.body}
+                  </GlyphRow>
+                ))}
+              </GlyphList>
+            </div>
+          </Section>
 
-        <section className="section">
-          <div className="wrap">
-            <span className="kicker">{"// contact"}</span>
-            <p className="mt-[0.7rem] max-w-[64ch] text-[1rem] leading-[1.7] text-ink-soft">
-              A short note about your environment and intended outcome is enough to start the
-              conversation.
-            </p>
-            <div className="mt-[1.6rem] flex flex-wrap items-center gap-[0.8rem]">
+          <Section
+            id="contact"
+            title="Contact"
+            lede="A short note about your environment and intended outcome is enough to start the conversation."
+          >
+            <div className="flex flex-wrap items-center gap-[0.8rem]">
               <ContactMailto
                 email={DT_CONTACT_EMAIL}
                 className={buttonVariants({ variant: "default" })}
@@ -118,14 +133,14 @@ export default function ServicesPage() {
               <CtaLink href="/security" variant="ghost">
                 Review security
               </CtaLink>
-              <span className="font-mono text-[0.82rem] text-ink-mute">
+              <span className="font-mono text-[length:var(--type-body)] text-ink-mute">
                 <ContactMailto email={DT_CONTACT_EMAIL} showAddress>
                   {DT_CONTACT_EMAIL}
                 </ContactMailto>
               </span>
             </div>
-          </div>
-        </section>
+          </Section>
+        </DocumentFrame>
       </main>
 
       <DtFooter />

@@ -362,9 +362,24 @@
 
   /* Marketing type ladder (the document scale). The instrument-panel display
      clamp stays reserved for a landing hero; every other surface uses this
-     smaller, denser ladder so a page reads as a document, not a poster. */
+     smaller, denser ladder so a page reads as a document, not a poster.
+     --type-display is the LANDING-ONLY register: the one headline a landing
+     page hangs on. Read against launch-ui (MIT), whose hero is md:text-8xl.
+     Two corrections after seeing it rendered: the ceiling came down from 6rem
+     to 5rem (mono is wider than their sans, so 96px broke a 33-character claim
+     across four lines and pushed the artefact off-screen), and the floor went
+     up so a narrow viewport still reads as a headline. Nothing but a landing
+     hero uses it.
+     --type-section-stand first: the section headings had no size between the
+     22px document register and the 32px page title, so every section heading
+     after a 80px hero read as fine print. This is the connecting step, and it
+     tops out ABOVE --type-page-title's clamp on purpose — when both resolved
+     to 32px the two beats were indistinguishable and the section rhythm
+     collapsed back into one flat cadence. */
+  --type-display: clamp(2.75rem, 6vw, 5rem);
   --type-hero: clamp(2rem, 4.5vw, 2.75rem);
   --type-page-title: clamp(1.5rem, 3vw, 2rem);
+  --type-section-stand: clamp(1.6rem, 3.2vw, 2.5rem);
   --type-section: 1.375rem;
   --type-sub-label: 1rem;
   --type-body: 1rem;

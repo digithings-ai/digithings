@@ -1,8 +1,17 @@
 import type { Metadata } from "next";
 import Image from "next/image";
-import { ContactMailto, CtaLink, PageHead } from "@digithings/ui";
-import { DtFooter } from "@/components/DtFooter";
+import {
+  ContactMailto,
+  CtaLink,
+  DocumentFrame,
+  GlyphList,
+  GlyphRow,
+  PageTitle,
+  Prose,
+  Section,
+} from "@digithings/ui";
 import { DT_CONTACT_EMAIL } from "@/app/_nav";
+import { DtFooter } from "@/components/DtFooter";
 import { DtNav } from "@/components/DtNav";
 
 export const metadata: Metadata = {
@@ -12,26 +21,12 @@ export const metadata: Metadata = {
     "GitHub repository.",
 };
 
-// /team — a roster template with one entry. Adding a member is one object in
-// MEMBERS plus one vendored avatar file; the layout takes the second card
-// without edits (single-column below 720px, two up from there).
-//
-// AVATARS ARE VENDORED, NOT HOTLINKED. public/team/chris.png was downloaded
-// once from avatars.githubusercontent.com/u/34689321 and committed. Pointing
-// <Image> at githubusercontent would make this page depend on GitHub's
-// availability AND send every visitor's IP and user-agent to GitHub, which is a
-// third-party request nobody asked for on an "own your infrastructure" site. The
-// file is a PNG despite what the avatar URL implies — the extension follows the
-// bytes (verified with `file`), so Cloudflare Pages serves the right MIME type.
-// next.config.mjs sets images.unoptimized (static export), so <Image> emits a
-// plain <img> and the explicit width/height are the intrinsic dimensions; the
-// h-/w- utilities set the rendered box, giving a 2x-density 112px avatar.
-//
-// The GitHub API confirms user
-// 34689321 is login `chrizefan`, display name "Chris", company "digithings.ai" —
-// so the handle, link and avatar belong to the same account. The page limits
-// itself to the maintainer role and work visible in the repository; it makes no
-// claims about employment history, credentials, or private biography.
+// /team — rebuilt on the document grammar (D1, #4429): one framed column, two
+// sections, no roster card grid. One maintainer, kept generic — the page makes
+// no claim about employment history, credentials or private biography. The
+// avatar is vendored under public/team/, never hotlinked from GitHub, so the
+// page sends no third-party request and depends on no external host.
+
 type Member = {
   name: string;
   role: string;
@@ -58,64 +53,83 @@ const MEMBERS: Member[] = [
   },
 ];
 
+const TOGETHER: { label: string; body: string }[] = [
+  {
+    label: "In the open",
+    body:
+      "Issues, pull requests and design notes all live in the repository, so the work is readable " +
+      "as it happens",
+  },
+  {
+    label: "Get help",
+    body:
+      "You can contribute there, or contact us for help integrating the stack and building on it",
+  },
+];
+
 export default function TeamPage() {
   return (
     <>
       <DtNav />
 
       <main id="main" tabIndex={-1} className="pt-[var(--dq-nav-h)]">
-        <PageHead
-          kicker={"// team"}
-          title={
-            <>
-              Meet the <em>maintainer.</em>
-            </>
-          }
-        >
-          digithings is currently maintained by Chris. The project is developed in public, so its
-          code, decisions, and progress can be reviewed directly.
-        </PageHead>
+        <DocumentFrame>
+          <div className="px-[var(--page-pad)] py-[var(--page-step)]">
+            <PageTitle title="Meet the maintainer.">
+              digithings is currently maintained by Chris. The project is developed in public, so
+              its code, decisions and progress can be reviewed directly.
+            </PageTitle>
+          </div>
 
-        <section className="section">
-          <div className="wrap">
-            <span className="kicker">{"// roster"}</span>
+          <Section id="maintainer" title="The maintainer">
             {MEMBERS.map((m) => (
-              <div key={m.name} className="mt-[1.2rem] flex flex-wrap items-center gap-[1.2rem]">
-                <Image
-                  src={m.avatar}
-                  alt={`${m.name}, ${m.role.toLowerCase()} of digithings`}
-                  width={m.avatarSize}
-                  height={m.avatarSize}
-                  className="h-[96px] w-[96px] rounded-none border border-hair"
-                />
-                <div className="grid gap-[0.25rem]">
-                  <h2 className="text-[1.1rem] font-normal text-ink">{m.name}</h2>
-                  <span className="font-mono text-[0.78rem] text-ink-mute">{m.role}</span>
-                  <a
-                    className="font-mono text-[0.82rem] text-accent [text-underline-offset:2px] hover:text-ink hover:underline"
-                    href={m.github}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                  >
-                    @{m.githubHandle}
-                  </a>
+              <div key={m.name}>
+                <div className="flex flex-wrap items-center gap-[1.2rem]">
+                  <Image
+                    src={m.avatar}
+                    alt={`${m.name}, ${m.role.toLowerCase()} of digithings`}
+                    width={m.avatarSize}
+                    height={m.avatarSize}
+                    className="h-[96px] w-[96px] border border-hair"
+                  />
+                  <div className="grid gap-[0.25rem]">
+                    <span className="text-[length:var(--type-section)] font-medium text-ink">
+                      {m.name}
+                    </span>
+                    <span className="font-mono text-[length:var(--type-meta)] tracking-[var(--tracking-meta)] uppercase text-ink-mute">
+                      {m.role}
+                    </span>
+                    <a
+                      className="font-mono text-[length:var(--type-meta)] text-accent underline-offset-[3px] hover:text-ink hover:underline"
+                      href={m.github}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                    >
+                      @{m.githubHandle}
+                    </a>
+                  </div>
                 </div>
-                <p className="mt-[0.6rem] max-w-[62ch] text-[0.95rem] leading-[1.7] text-ink-soft">
-                  {m.blurb}
-                </p>
+                <div className="mt-[1.2rem]">
+                  <Prose>
+                    <p>{m.blurb}</p>
+                  </Prose>
+                </div>
               </div>
             ))}
-          </div>
-        </section>
+          </Section>
 
-        <section className="section section-alt">
-          <div className="wrap">
-            <span className="kicker">{"// working together"}</span>
-            <p className="mt-[0.7rem] max-w-[64ch] text-[1rem] leading-[1.7] text-ink-soft">
-              The stack is MIT-licensed and developed in public: issues, pull requests and design
-              notes all live in the repository. You can contribute there or contact us for help
-              integrating the stack and building on it.
-            </p>
+          <Section
+            id="working-together"
+            title="Working together"
+            lede="The stack is MIT-licensed and developed in public, so there are two ways in."
+          >
+            <GlyphList>
+              {TOGETHER.map((r) => (
+                <GlyphRow key={r.label} label={r.label}>
+                  {r.body}
+                </GlyphRow>
+              ))}
+            </GlyphList>
             <div className="mt-[1.6rem] flex flex-wrap items-center gap-[0.8rem]">
               <CtaLink href="https://github.com/digithings-ai/digithings" external>
                 Contribute on GitHub
@@ -123,17 +137,14 @@ export default function TeamPage() {
               <CtaLink href="/services" variant="ghost">
                 View services
               </CtaLink>
-              <ContactMailto
-                email={DT_CONTACT_EMAIL}
-                className="font-mono text-[0.86rem] text-accent [text-underline-offset:2px] hover:text-ink"
-                subject="digithings%20inquiry"
-                showAddress
-              >
-                {DT_CONTACT_EMAIL}
-              </ContactMailto>
+              <span className="font-mono text-[length:var(--type-body)] text-ink-mute">
+                <ContactMailto email={DT_CONTACT_EMAIL} subject="digithings%20inquiry" showAddress>
+                  {DT_CONTACT_EMAIL}
+                </ContactMailto>
+              </span>
             </div>
-          </div>
-        </section>
+          </Section>
+        </DocumentFrame>
       </main>
 
       <DtFooter />

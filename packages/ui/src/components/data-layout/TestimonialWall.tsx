@@ -4,7 +4,9 @@
  * lockup. Quote data comes in via props; the voice doctrine is the caller's
  * contract — real numbers and real orgs only, phrased as `{Org} × {product}`,
  * never invented. Attribution avatars are mono initials derived from the
- * name; the optional org strip closes the band under a hairline. Entirely
+ * name; the optional org strip closes the band under a hairline. A quote may
+ * carry an `href` so a named customer's org links to its own public site, and
+ * `columns` drops the wall to two for a band holding two voices. Entirely
  * token-backed utilities — no family CSS rules. Server component — no state.
  *
  * Wiring (in the consuming app):
@@ -19,10 +21,22 @@ export type TestimonialQuote = {
   role: string;
   /** Organization — pairs with `lockup` as `{org} × {lockup}`. */
   org: string;
+  /**
+   * Optional public site for the org. When present the org name renders as a
+   * link — for a named customer whose site is public, never for a quote whose
+   * attribution is only a role.
+   */
+  href?: string;
 };
 
 export type TestimonialWallProps = {
   quotes: TestimonialQuote[];
+  /**
+   * Columns at the widest breakpoint (collapses to one below 820px). Default
+   * 3; use 2 for a wall holding two voices, so the row fills instead of
+   * leaving an empty third cell.
+   */
+  columns?: 2 | 3;
   /** Product half of the `{org} × {product}` lockup; omit to drop it. */
   lockup?: string;
   /** Org names for the quiet strip under the wall; omit to drop the strip. */
@@ -43,6 +57,7 @@ const initials = (name: string) =>
 
 export function TestimonialWall({
   quotes,
+  columns = 3,
   lockup,
   orgs,
   orgsLabel = "trusted by",
@@ -51,7 +66,11 @@ export function TestimonialWall({
 }: TestimonialWallProps) {
   return (
     <div className={className}>
-      <div className="grid grid-cols-3 gap-[0.9rem] max-[820px]:grid-cols-1">
+      <div
+        className={`grid gap-[0.9rem] max-[820px]:grid-cols-1 ${
+          columns === 2 ? "grid-cols-2" : "grid-cols-3"
+        }`}
+      >
         {quotes.map((q) => (
           <figure
             key={q.name}
@@ -70,7 +89,19 @@ export function TestimonialWall({
               <span className="flex min-w-0 flex-col">
                 <span className="font-mono text-[0.76rem] text-ink">{q.name}</span>
                 <span className="font-mono text-[0.62rem] text-ink-mute">
-                  {q.role} · {q.org}
+                  {q.role} ·{" "}
+                  {q.href ? (
+                    <a
+                      className="underline-offset-[3px] hover:text-ink hover:underline"
+                      href={q.href}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                    >
+                      {q.org}
+                    </a>
+                  ) : (
+                    q.org
+                  )}
                   {lockup ? <span className="text-accent"> × {lockup}</span> : null}
                 </span>
               </span>

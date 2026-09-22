@@ -1,5 +1,12 @@
 import type { Metadata } from "next";
-import { CtaLink, PageHead, RuledList, RuledRow } from "@digithings/ui";
+import {
+  CtaLink,
+  DocumentFrame,
+  PageTitle,
+  ReleaseRail,
+  Section,
+  type ReleaseRailItem,
+} from "@digithings/ui";
 import { DtFooter } from "@/components/DtFooter";
 import { DtNav } from "@/components/DtNav";
 import releases from "@digithings/design/releases.json";
@@ -10,48 +17,50 @@ export const metadata: Metadata = {
     "Tagged digichat and digiskills releases from the digithings repository. Dates and titles come from the shipped CHANGELOG files, not a marketing rewrite.",
 };
 
+// /changelog — the release rows on the document grammar (D1, #4429): one framed
+// column, a PageTitle and a single section holding the ReleaseRail. No bands,
+// no bracketed ruled list. The rows are the data file verbatim (newest first);
+// the only mapping is that `releases.json` stores the published label as
+// "digichat v2.3.1" while the rail already prints the product on its own line,
+// so the redundant product prefix is stripped and the version stays the link.
+
 type Release = {
   date: string;
   version: string;
   title: string;
   href: string;
-  tag: string;
+  tag?: string;
   product: string;
 };
 
-const ENTRIES = releases as Release[];
+const ENTRIES: ReleaseRailItem[] = (releases as Release[]).map((release) => ({
+  product: release.product,
+  version: release.version.replace(`${release.product} `, ""),
+  date: release.date,
+  title: release.title,
+  href: release.href,
+  tag: release.tag,
+}));
 
 export default function ChangelogPage() {
   return (
     <>
       <DtNav />
-      <main id="main" tabIndex={-1}>
-        <PageHead kicker="// changelog" title="Tagged releases.">
-          Versioned frontend packages only — digichat and digiskills, as published on GitHub.
-          The rest of the stack ships on <code className="font-mono text-[0.92em] text-ink">develop</code>
-          {" "}without a product tag.
-        </PageHead>
 
-        <section className="section pt-0">
-          <div className="wrap">
-            <RuledList className="mt-[1.2rem]">
-              {ENTRIES.map((e) => (
-                <RuledRow
-                  key={`${e.product}-${e.version}`}
-                  term={`[${e.date}] ${e.version}`}
-                >
-                  <a
-                    className="text-ink [text-underline-offset:2px] hover:text-accent"
-                    href={e.href}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                  >
-                    {e.title}
-                  </a>{" "}
-                  <span className="font-mono text-[0.78rem] text-ink-mute">[{e.tag}]</span>
-                </RuledRow>
-              ))}
-            </RuledList>
+      <main id="main" tabIndex={-1} className="pt-[var(--dq-nav-h)]">
+        <DocumentFrame>
+          <div className="px-[var(--page-pad)] py-[var(--page-step)]">
+            <PageTitle title="Tagged releases.">
+              Versioned frontend packages only — digichat and digiskills, as published on GitHub.
+            </PageTitle>
+          </div>
+
+          <Section
+            id="releases"
+            title="Releases"
+            lede="Newest first, straight from each package's shipped CHANGELOG — the rest of the stack ships on develop without a product tag."
+          >
+            <ReleaseRail items={ENTRIES} />
             <div className="mt-[1.6rem]">
               <CtaLink
                 href="https://github.com/digithings-ai/digithings/releases"
@@ -61,9 +70,10 @@ export default function ChangelogPage() {
                 All GitHub releases
               </CtaLink>
             </div>
-          </div>
-        </section>
+          </Section>
+        </DocumentFrame>
       </main>
+
       <DtFooter />
     </>
   );

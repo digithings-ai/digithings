@@ -462,3 +462,15 @@ export {
   type FooterCell,
   type FooterCellsProps,
 } from "./components/footer";
+
+// page-geometry family (D1, #4429) — the persistent page structure and the
+// product-artefact depth treatment. `LayoutLines` is one fixed pair of dashed
+// vertical rules the whole page sits between; `MockupFrame` + `Mockup` + `Glow`
+// give a product shot layered depth instead of a flat border. Techniques read
+// out of launch-ui's source (MIT) and re-expressed in this kit's tokens.
+export {
+  LayoutLines,
+  Mockup,
+  MockupFrame,
+  Glow,
+} from "./components/page-geometry";

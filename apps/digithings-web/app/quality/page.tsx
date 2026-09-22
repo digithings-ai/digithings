@@ -1,16 +1,17 @@
 import type { Metadata } from "next";
 import {
+  CtaLink,
+  DocumentFrame,
   Figure,
+  GlyphList,
+  GlyphRow,
   Mono,
-  NumberedStages,
   OdometerStrip,
-  PageHead,
-  RuledList,
-  RuledRow,
-  type NumberedStage,
+  PageTitle,
+  Prose,
+  Section,
   type OdometerStat,
 } from "@digithings/ui";
-import { CtaLink } from "@digithings/ui";
 import { DtFooter } from "@/components/DtFooter";
 import { DtNav } from "@/components/DtNav";
 import {
@@ -29,15 +30,15 @@ export const metadata: Metadata = {
     "account of what the gate is and is not.",
 };
 
-// /quality — the engineering-process page, re-composed flat (D1, #4429).
+// /quality — the engineering-evidence page, rebuilt flat on the document
+// grammar (D1, #4429). Four blocks and nothing else: the counted figures, the
+// scoring gate (its four dimensions and how the scanner blocks on them), the
+// test lanes, and the limits. No bands, no numbered spine, no second list
+// grammar — the old "scoring gate" and "how the gate runs" sections merged
+// because they describe one mechanism.
 //
-// Every figure is single-sourced in lib/siteCounts.ts, where each snapshot
-// carries the exact command that produced it and the date it was run — the page
-// invites the reader to reproduce them, so a number that does not reproduce is
-// worse than no number.
-//
-// The honest framing this page keeps: the four-dimension gate is TWO things, and
-// conflating them would be a lie of omission.
+// The honest framing this page keeps: the four-dimension gate is TWO things,
+// and conflating them would be a lie of omission.
 //   1. scripts/score.py — a stdlib-only regex heuristic. It runs in CI as the
 //      `score` job against the PR diff and exits non-zero below threshold, so it
 //      really does block. Its own docstring says it is "NOT a full static
@@ -48,6 +49,11 @@ export const metadata: Metadata = {
 // The individual rubric files' headers disagree with the thresholds score.py,
 // docs/scoring/README.md and CLAUDE.md agree on; the page names that rather
 // than papering over it, and cites the stricter reading.
+//
+// Every figure is single-sourced in lib/siteCounts.ts, where each snapshot
+// carries the exact command that produced it and the date it was run — the page
+// invites the reader to reproduce them, so a number that does not reproduce is
+// worse than no number.
 
 const METRICS: OdometerStat[] = [
   { value: String(PYTHON_TEST_FILES), label: "python test files" },
@@ -56,41 +62,37 @@ const METRICS: OdometerStat[] = [
   { value: String(TEST_LANES), label: "test lanes" },
 ];
 
-// The four dimensions, with the threshold as the tag.
-const DIMENSIONS: NumberedStage[] = [
+// The four dimensions, with the threshold the scanner's own table carries.
+const DIMENSIONS: { name: string; threshold: string; body: string }[] = [
   {
-    num: "01",
-    tag: "≥ 8 / 10",
-    title: "Security",
-    mech:
+    name: "Security",
+    threshold: "≥ 8 / 10",
+    body:
       "No secrets in source. Pydantic validation at every HTTP, MCP and CLI boundary. Protected " +
       "routes scope-checked and fail-closed when auth is unconfigured. No new loopback exception, " +
       "no debug back door, and no live-trading path touched without a human gate.",
   },
   {
-    num: "02",
-    tag: "≥ 8 / 10",
-    title: "Quality",
-    mech:
+    name: "Quality",
+    threshold: "≥ 8 / 10",
+    body:
       "Pydantic v2 and Polars only — no pandas. Ruff clean at line length 100. A test for every " +
       "new public function or route. No file over 400 lines, no orphaned exports, structured " +
       "errors rather than bare raises, and the component's ARCHITECTURE.md updated in the same " +
       "change.",
   },
   {
-    num: "03",
-    tag: "≥ 7 / 10",
-    title: "Optimization",
-    mech:
+    name: "Optimization",
+    threshold: "≥ 7 / 10",
+    body:
       "LLM calls routed through the cached LiteLLM path with no hardcoded model strings. Polars " +
       "lazy frames with a single collect. No N+1 request or embedding loops, no blocking call in " +
       "an async route, and the ten-million-row backtest budget held.",
   },
   {
-    num: "04",
-    tag: "≥ 9 / 10",
-    title: "Accuracy",
-    mech:
+    name: "Accuracy",
+    threshold: "≥ 9 / 10",
+    body:
       "The strictest threshold, because this is the dimension about being wrong rather than being " +
       "untidy: correct LangGraph state transitions, an audit event for every persistent state " +
       "change, no silenced error paths, unchanged public API contracts, preserved Nautilus event " +
@@ -144,9 +146,10 @@ const LANES: { term: string; body: string }[] = [
   {
     term: "Pull-request hygiene",
     body:
-      "Every change traces to a GitHub issue — a task branch carrying the issue number, or a " +
-      "closing keyword in the pull request. Documentation and chore branches are deliberately " +
-      "exempt, so the rule stays enforceable instead of routinely waived.",
+      "A convention rather than a gate: a change is meant to trace to a GitHub issue — a task " +
+      "branch carrying the issue number, or a closing keyword in the pull request. CI used to " +
+      "check this and no longer does; the job was dropped in 2026-08 because it was never a " +
+      "required check, so the trail is kept by habit and review rather than enforced.",
   },
 ];
 
@@ -191,128 +194,124 @@ export default function QualityPage() {
       <DtNav />
 
       <main id="main" tabIndex={-1} className="pt-[var(--dq-nav-h)]">
-        <PageHead
-          kicker={"// quality"}
-          title={
-            <>
-              Gates, <em>and what they miss.</em>
-            </>
-          }
-        >
-          Every change to this repository clears the same path: a per-component test lane, a
-          four-dimension score against published rubrics, and a set of named triggers that force a
-          human to look. Here is what that path checks — and, at the bottom, where it is weaker than
-          it sounds.
-        </PageHead>
+        <DocumentFrame>
+          <div className="px-[var(--page-pad)] py-[var(--page-step)]">
+            <PageTitle title="Gates, and what they miss.">
+              Every change to this repository clears the same path: a per-component test lane, a
+              four-dimension score against published rubrics, and a set of named triggers that force
+              a human to look. Here is what that path checks — and where it is weaker than it
+              sounds.
+            </PageTitle>
+          </div>
 
-        <section className="section">
-          <div className="wrap">
-            <span className="kicker">{"// counted, not estimated"}</span>
+          <Section
+            id="counted"
+            title="Counted, not estimated"
+            lede={`Every figure is a repository snapshot taken ${COUNTED_AT} on a clean checkout — file counts, not coverage.`}
+          >
             <Figure
               n={1}
-              caption={`counted ${COUNTED_AT} · they grow · file counts, not coverage`}
-              className="mt-[1.2rem]"
+              caption={
+                <>
+                  Single-sourced in <Mono>lib/siteCounts.ts</Mono> — file counts, not coverage.
+                </>
+              }
             >
               <OdometerStrip stats={METRICS} />
             </Figure>
-          </div>
-        </section>
+          </Section>
 
-        <section className="section section-alt">
-          <div className="wrap">
-            <span className="kicker">{"// the scoring gate"}</span>
-            <p className="mt-[0.7rem] max-w-[64ch] text-[1rem] leading-[1.7] text-ink-soft">
-              Four rubrics live in <Mono>docs/scoring/</Mono>, ten criteria each, one point per
-              criterion, no partial credit. A change is scored on all four and every one has to
-              clear its own bar.
-            </p>
-            <NumberedStages stages={DIMENSIONS} className="mt-[2rem] max-w-[760px]" />
-          </div>
-        </section>
+          <Section
+            id="gate"
+            title="The scoring gate"
+            lede="Four rubrics live in docs/scoring/, ten criteria each, one point per criterion, no partial credit. A change is scored on all four and every one has to clear its own bar."
+          >
+            <GlyphList>
+              {DIMENSIONS.map((dimension) => (
+                <GlyphRow key={dimension.name} label={dimension.name}>
+                  <Mono>{dimension.threshold}</Mono> — {dimension.body}
+                </GlyphRow>
+              ))}
+            </GlyphList>
 
-        <section className="section">
-          <div className="wrap">
-            <span className="kicker">{"// how the gate runs"}</span>
-            <p className="mt-[0.7rem] max-w-[64ch] text-[1rem] leading-[1.7] text-ink-soft">
-              <Mono>scripts/score.py</Mono> runs as a CI job against the pull request&rsquo;s diff and
-              exits non-zero when any dimension is under threshold, so the check goes red and the
-              merge waits. Its own header is blunter than that:{" "}
-              <em>
-                &ldquo;a heuristic scanner — it flags known anti-patterns by regex&hellip; It is NOT a
-                full static analyzer. Treat results as a checklist aide, not a gate.&rdquo;
-              </em>{" "}
-              Both halves are true together: the script disclaims being a gate because a regex cannot
-              judge a novel anti-pattern, and the workflow uses it as one anyway because a known
-              anti-pattern should not need a reviewer to catch it.
-            </p>
-            <RuledList>
-              <RuledRow term="The scanner">
+            <Prose className="mt-[1.6rem]">
+              <p>
+                <Mono>scripts/score.py</Mono> runs as a CI job against the pull request&rsquo;s diff
+                and exits non-zero when any dimension is under threshold, so the check goes red and
+                the merge waits. Its own header is blunter than that:{" "}
+                <em>
+                  &ldquo;a heuristic scanner — it flags known anti-patterns by regex&hellip; It is
+                  NOT a full static analyzer. Treat results as a checklist aide, not a gate.&rdquo;
+                </em>{" "}
+                Both halves are true together: the script disclaims being a gate because a regex
+                cannot judge a novel anti-pattern, and the workflow uses it as one anyway because a
+                known anti-pattern should not need a reviewer to catch it.
+              </p>
+            </Prose>
+
+            <GlyphList className="mt-[1.6rem]">
+              <GlyphRow label="The scanner">
                 A blocking CI job. Regex over the diff, stdlib only. Catches known anti-patterns; it
                 will miss a novel one.
-              </RuledRow>
-              <RuledRow term="The rubrics">
+              </GlyphRow>
+              <GlyphRow label="The rubrics">
                 Self-scored by the author in the pull-request template — forty criteria, recorded
                 judgement, visible in the pull request and reviewable by whoever comes next.
-              </RuledRow>
-              <RuledRow term="Thresholds">
-                Security 8, Quality 8, Optimization 7, Accuracy 9 — the figures the scanner&rsquo;s
-                own table, the rubric index and the repository&rsquo;s contributor rules carry. The
-                individual rubric files disagree, each header adding a second, lower number; the
-                stricter reading is the one quoted here.
-              </RuledRow>
-            </RuledList>
-          </div>
-        </section>
+              </GlyphRow>
+              <GlyphRow label="Thresholds">
+                Security 8, Quality 8, Optimization 7, Accuracy 9 — the figures the
+                scanner&rsquo;s own table, the rubric index and the repository&rsquo;s contributor
+                rules carry. The individual rubric files disagree, each header adding a second,
+                lower number; the stricter reading is the one quoted here.
+              </GlyphRow>
+            </GlyphList>
+          </Section>
 
-        <section className="section section-alt">
-          <div className="wrap">
-            <span className="kicker">{"// the lanes"}</span>
-            <p className="mt-[0.7rem] max-w-[64ch] text-[1rem] leading-[1.7] text-ink-soft">
-              {CI_WORKFLOWS} workflow files, most of them fired by path filters so a change pays only
-              for the surface it touched.
-            </p>
-            <RuledList>
-              {LANES.map((r) => (
-                <RuledRow key={r.term} term={r.term}>
-                  {r.body}
-                </RuledRow>
+          <Section
+            id="lanes"
+            title="How a change is tested"
+            lede={`${CI_WORKFLOWS} workflow files, most of them fired by path filters so a change pays only for the surface it touched.`}
+          >
+            <GlyphList>
+              {LANES.map((lane) => (
+                <GlyphRow key={lane.term} label={lane.term}>
+                  {lane.body}
+                </GlyphRow>
               ))}
-            </RuledList>
-          </div>
-        </section>
+            </GlyphList>
+          </Section>
 
-        <section className="section">
-          <div className="wrap">
-            <span className="kicker">{"// limits"}</span>
-            <p className="mt-[0.7rem] max-w-[64ch] text-[1rem] leading-[1.7] text-ink-soft">
-              A quality page that only lists gates is a marketing page. These are the four things
-              worth knowing before you take the numbers above as a guarantee.
-            </p>
-            <RuledList>
-              {LIMITS.map((r) => (
-                <RuledRow key={r.term} term={r.term}>
-                  {r.body}
-                </RuledRow>
+          <Section
+            id="limits"
+            title="What this does not prove"
+            lede="A quality page that only lists gates is a marketing page. These are the four things worth knowing before you take the numbers above as a guarantee."
+          >
+            <GlyphList>
+              {LIMITS.map((limit) => (
+                <GlyphRow key={limit.term} label={limit.term}>
+                  {limit.body}
+                </GlyphRow>
               ))}
-            </RuledList>
-            <p className="mt-[1.6rem] max-w-[64ch] text-[0.95rem] leading-[1.7] text-ink-soft">
-              The rubrics themselves are in the repository, so you can judge the bar rather than
-              take our word for where it sits.{" "}
-              <a className="text-accent [text-underline-offset:2px] hover:text-ink" href="/security">
-                The security page
-              </a>{" "}
-              does the same for the runtime posture.
-            </p>
+            </GlyphList>
+
+            <Prose className="mt-[1.6rem]">
+              <p>
+                The rubrics themselves are in the repository, so you can judge the bar rather than
+                take our word for where it sits. <a href="/security">The security page</a> does the
+                same for the runtime posture.
+              </p>
+            </Prose>
+
             <div className="mt-[1.6rem] flex flex-wrap items-center gap-[0.8rem]">
-              <CtaLink href="https://github.com/digithings-ai/digithings/tree/main/docs/scoring" external>
+              <CtaLink
+                href="https://github.com/digithings-ai/digithings/tree/main/docs/scoring"
+                external
+              >
                 Read the rubrics
               </CtaLink>
-              <CtaLink href="/docs" variant="ghost">
-                API reference
-              </CtaLink>
             </div>
-          </div>
-        </section>
+          </Section>
+        </DocumentFrame>
       </main>
 
       <DtFooter />

@@ -1,5 +1,13 @@
 import type { Metadata } from "next";
-import { Mono, PageHead, RuledList, RuledRow } from "@digithings/ui";
+import {
+  DocumentFrame,
+  GlyphList,
+  GlyphRow,
+  Mono,
+  PageTitle,
+  Prose,
+  Section,
+} from "@digithings/ui";
 import { DtFooter } from "@/components/DtFooter";
 import { DtNav } from "@/components/DtNav";
 
@@ -11,8 +19,11 @@ export const metadata: Metadata = {
     "pip-audit in CI — plus the boundaries we have not closed yet.",
 };
 
-// /security — re-composed flat (D1, #4429): four ruled lists, no card grid, no
-// decoration. Written against the code, not the brochure.
+// /security, rebuilt on the document grammar (D1, #4429): one framed column,
+// hairline section separators, the `[*]` row grammar — no card grid, no
+// alternating bands. Five sections: the four surfaces a reader deciding whether
+// to deploy this wants (identity, traceability, pipeline, limits) and the
+// disclosure policy. Content is read out of the code, not the brochure.
 //
 // Source of record is the root SECURITY.md (threat model + STRIDE table +
 // non-negotiable defaults). Two statements here deliberately differ from prose
@@ -29,6 +40,12 @@ export const metadata: Metadata = {
 // The limits section is a SELECTION from the STRIDE residual-risk column, not a
 // reproduction of it — asserting completeness while dropping rows is the same
 // defect as overclaiming a control.
+//
+// One correction from the pre-rebuild page: its pip-audit row and a limits row
+// both said the JS dependency trees were unaudited. A sibling npm audit lane
+// (#3523) covers the root `apps/*` + `packages/*` closure on the same cadence,
+// so the pip-audit row now names its two real boundaries and the false limits
+// row is dropped.
 
 const IDENTITY: { term: string; body: string }[] = [
   {
@@ -118,10 +135,10 @@ const PIPELINE: { term: string; body: string }[] = [
       "and digiclaw — have their locked dependency closure exported and audited against the OSV " +
       "database weekly, and whenever a dependency manifest changes. HIGH and CRITICAL block the " +
       "merge; MEDIUM and LOW are warn-only. Accepting a CVE requires an entry with a rationale and " +
-      "a re-evaluation trigger. Three boundaries: the workspace has eleven members, so " +
-      "digifetch, digillm, digiskills and digivault are outside the matrix; a pull request that " +
-      "adds Python without touching a manifest does not trigger it; and the scope is Python only, " +
-      "so the frontend and digichat dependency trees are unaudited.",
+      "a re-evaluation trigger. Two boundaries remain: the workspace has eleven members, so " +
+      "digifetch, digillm, digiskills and digivault are outside this matrix; and a pull request " +
+      "that adds Python without touching a manifest does not trigger it. The JS workspaces are " +
+      "covered by a sibling npm audit lane on the same cadence.",
   },
   {
     term: "Loopback by default",
@@ -200,13 +217,6 @@ const LIMITS: { term: string; body: string }[] = [
       "that long to propagate to every verifier.",
   },
   {
-    term: "Dependency auditing stops at Python",
-    body:
-      "There is no Node or JavaScript dependency audit anywhere in CI, so the frontend and digichat " +
-      "dependency trees are not scanned for CVEs at all — it is written down as a follow-up, not " +
-      "shipped.",
-  },
-  {
     term: "Not every Action is pinned to a SHA",
     body:
       "The secret scanner is pinned and SHA-256 verified. The GitHub Actions around it are weaker: " +
@@ -240,124 +250,98 @@ export default function SecurityPage() {
       <DtNav />
 
       <main id="main" tabIndex={-1} className="pt-[var(--dq-nav-h)]">
-        <PageHead
-          kicker={"// security"}
-          title={
-            <>
-              Controls, <em>and their edges.</em>
-            </>
-          }
-        >
-          Every claim below was read out of the source before it was written down, and the last
-          section is the part most pages leave out: what is not covered. The full threat model,
-          including a STRIDE table with a residual-risk column for each row, lives in{" "}
-          <Mono>SECURITY.md</Mono> at the root of the repository — public, like the rest of it.
-        </PageHead>
+        <DocumentFrame>
+          <div className="px-[var(--page-pad)] py-[var(--page-step)]">
+            <PageTitle title="Controls, and their edges.">
+              Every claim below was read out of the source before it was written down, and the last
+              section is the part most pages leave out: what is not covered.
+            </PageTitle>
+          </div>
 
-        <section className="section">
-          <div className="wrap">
-            <span className="kicker">{"// identity"}</span>
-            <p className="mt-[0.7rem] max-w-[64ch] text-[1rem] leading-[1.7] text-ink-soft">
-              digikey issues and verifies everything. It is eighteen Python modules, not a framework
-              plugin, and there is no static shared-secret fallback left in the stack.
-            </p>
-            <RuledList>
+          <Section
+            id="identity"
+            title="Identity"
+            lede="digikey issues and verifies everything — a standalone service, not a framework plugin, and there is no static shared-secret fallback left in the stack."
+          >
+            <GlyphList>
               {IDENTITY.map((r) => (
-                <RuledRow key={r.term} term={r.term}>
+                <GlyphRow key={r.term} label={r.term}>
                   {r.body}
-                </RuledRow>
+                </GlyphRow>
               ))}
-            </RuledList>
-          </div>
-        </section>
+            </GlyphList>
+          </Section>
 
-        <section className="section section-alt">
-          <div className="wrap">
-            <span className="kicker">{"// traceability"}</span>
-            <p className="mt-[0.7rem] max-w-[64ch] text-[1rem] leading-[1.7] text-ink-soft">
-              The reason to run your own infrastructure is to be able to answer what happened. These
-              four are the mechanics of that answer.
-            </p>
-            <RuledList>
+          <Section
+            id="traceability"
+            title="Traceability"
+            lede="The reason to run your own infrastructure is to be able to answer what happened. These four are the mechanics of that answer."
+          >
+            <GlyphList>
               {TRACEABILITY.map((r) => (
-                <RuledRow key={r.term} term={r.term}>
+                <GlyphRow key={r.term} label={r.term}>
                   {r.body}
-                </RuledRow>
+                </GlyphRow>
               ))}
-            </RuledList>
-          </div>
-        </section>
+            </GlyphList>
+          </Section>
 
-        <section className="section">
-          <div className="wrap">
-            <span className="kicker">{"// pipeline"}</span>
-            <p className="mt-[0.7rem] max-w-[64ch] text-[1rem] leading-[1.7] text-ink-soft">
-              Secrets scanning and dependency auditing are gates rather than dashboards — when they
-              run they fail the job instead of filing a note for later. Each row says what triggers
-              it, because a gate that does not fire is not a gate.
-            </p>
-            <RuledList>
+          <Section
+            id="pipeline"
+            title="The pipeline"
+            lede="Secrets scanning and dependency auditing are gates rather than dashboards — when they run they fail the job instead of filing a note for later. Each row says what triggers it, because a gate that does not fire is not a gate."
+          >
+            <GlyphList>
               {PIPELINE.map((r) => (
-                <RuledRow key={r.term} term={r.term}>
+                <GlyphRow key={r.term} label={r.term}>
                   {r.body}
-                </RuledRow>
+                </GlyphRow>
               ))}
-            </RuledList>
-          </div>
-        </section>
+            </GlyphList>
+          </Section>
 
-        <section className="section section-alt">
-          <div className="wrap">
-            <span className="kicker">{"// limits"}</span>
-            <p className="mt-[0.7rem] max-w-[64ch] text-[1rem] leading-[1.7] text-ink-soft">
-              A selection from the residual-risk column of the threat model — the entries a reader
-              deciding whether to deploy this would want first, not the whole table. SECURITY.md
-              carries every row, each next to the mitigation it sits behind. If any of this is
-              disqualifying for your deployment, better to learn it here than after an integration.
-            </p>
-            <RuledList>
+          <Section
+            id="limits"
+            title="Limits"
+            lede="A selection from the residual-risk column of the threat model — the entries a reader deciding whether to deploy this would want first, not the whole table; SECURITY.md carries every row next to the mitigation it sits behind."
+          >
+            <GlyphList>
               {LIMITS.map((r) => (
-                <RuledRow key={r.term} term={r.term}>
+                <GlyphRow key={r.term} label={r.term}>
                   {r.body}
-                </RuledRow>
+                </GlyphRow>
               ))}
-            </RuledList>
-          </div>
-        </section>
+            </GlyphList>
+          </Section>
 
-        <section className="section">
-          <div className="wrap">
-            <span className="kicker">{"// disclosure"}</span>
-            <p className="mt-[0.7rem] max-w-[64ch] text-[1rem] leading-[1.7] text-ink-soft">
-              Please do not open a public issue. Email the address published in <Mono>SECURITY.md</Mono>{" "}
-              with <Mono>[digithings Security]</Mono> in the subject, and include reproduction steps,
-              the affected components, and any impact you know of.
-            </p>
-            <p className="mt-[1rem] max-w-[64ch] text-[0.95rem] leading-[1.7] text-ink-soft">
-              The commitment is an acknowledgement within 72 hours and a coordinated-disclosure
-              timeline within seven days. We will agree an embargo where it makes sense, and credit
-              you in the release notes if you want it.
-            </p>
-            <p className="mt-[1.2rem] font-mono text-[0.86rem] text-ink-mute">
-              <a
-                className="text-accent [text-underline-offset:2px] hover:text-ink"
-                href="https://github.com/digithings-ai/digithings/blob/main/SECURITY.md"
-                target="_blank"
-                rel="noopener noreferrer"
-              >
-                SECURITY.md — threat model, defaults, disclosure contact
-              </a>
-            </p>
-            <p className="mt-[1.4rem] max-w-[64ch] text-[0.95rem] leading-[1.7] text-ink-soft">
-              For how the same posture is enforced on the way in — the review gates, the test suite,
-              the rubrics —{" "}
-              <a className="text-accent [text-underline-offset:2px] hover:text-ink" href="/quality">
-                see the quality page
-              </a>
-              .
-            </p>
-          </div>
-        </section>
+          <Section id="disclosure" title="Disclosure" lede="Please do not open a public issue.">
+            <Prose>
+              <p>
+                Email the address published in <Mono>SECURITY.md</Mono> with{" "}
+                <Mono>[digithings Security]</Mono> in the subject, and include reproduction steps,
+                the affected components, and any impact you know of.
+              </p>
+              <p>
+                The commitment is an acknowledgement within 72 hours and a coordinated-disclosure
+                timeline within seven days. We will agree an embargo where it makes sense, and
+                credit you in the release notes if you want it.
+              </p>
+              <p>
+                <a
+                  href="https://github.com/digithings-ai/digithings/blob/main/SECURITY.md"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  SECURITY.md — threat model, defaults, disclosure contact
+                </a>
+              </p>
+              <p>
+                For how the same posture is enforced on the way in — the review gates, the test
+                suite, the rubrics — <a href="/quality">see the quality page</a>.
+              </p>
+            </Prose>
+          </Section>
+        </DocumentFrame>
       </main>
 
       <DtFooter />

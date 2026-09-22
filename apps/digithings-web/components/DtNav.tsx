@@ -25,6 +25,7 @@ export function DtNav({ autoHide }: { autoHide?: "scroll" | "hover" }) {
       skipTo="#main"
       homeLabel="digithings home"
       autoHide={autoHide}
+      clipToFrame
       actions={
         <>
           <IconLink
