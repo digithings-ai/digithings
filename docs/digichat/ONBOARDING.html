@@ -753,7 +753,7 @@ npm run build --workspace digichat</pre>
     <thead><tr><th style="width:230px">Rule</th><th>Why</th></tr></thead>
     <tbody>
       <tr><td>No upstream credential in the browser</td><td>The whole BFF exists for this. Route handlers only.</td></tr>
-      <tr><td>Auth on every API route except health</td><td>Multi-tenant data must never be reachable anonymously.</td></tr>
+      <tr><td>Auth on every API route except health</td><td>Multi-tenant data must never be reachable anonymously. The enumerated exceptions are the client-safe projections (<span class="mono">deploy/chrome</span>, <span class="mono">embed/tenant-config</span>), the OAuth redirect (<span class="mono">mcp/oauth/callback</span>), <span class="mono">plan-proof</span>, and the dev-only <span class="mono">baseline-chat</span>.</td></tr>
       <tr><td>SSRF-guard any user-supplied URL</td><td>Endpoint overrides and MCP servers are visitor-influenced.</td></tr>
       <tr><td>Machine keys stay hashed</td><td>Never log or store raw key material.</td></tr>
       <tr><td>Migrations are additive</td><td>New columns nullable or defaulted; never edit a shipped migration.</td></tr>

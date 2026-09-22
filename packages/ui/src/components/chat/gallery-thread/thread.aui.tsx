@@ -129,8 +129,9 @@ export type ThreadProps = {
   /** `chrome.welcome.body`. */
   welcomeBody?: readonly string[] | undefined;
   /**
-   * `chrome.suggestions` in deploy YAML. Static fallback prompts shown in the
-   * new-chat welcome state. Runtime-provided suggestions still win.
+   * `chrome.suggestions` in deploy YAML. Static prompts for the new-chat
+   * welcome state; when non-empty they take precedence over the runtime's own
+   * suggestion adapter, which is the fallback.
    */
   suggestions?: readonly string[] | undefined;
   className?: string | undefined;
@@ -519,8 +520,8 @@ const ThreadSuggestions: FC = () => {
   return (
     <div className="aui-thread-welcome-suggestions flex w-full flex-col items-stretch gap-0.5">
       {suggestions.length > 0 ? (
-        suggestions.map((prompt) => (
-          <StaticSuggestionItem key={prompt} prompt={prompt} />
+        suggestions.map((prompt, index) => (
+          <StaticSuggestionItem key={`${index}:${prompt}`} prompt={prompt} />
         ))
       ) : (
         <ThreadPrimitive.Suggestions>

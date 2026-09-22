@@ -90,8 +90,10 @@ browser (any skin)
   user-controlled SSRF).
 - The route is gated by `isLocalBaselinePreview()`: it returns 404 unless the
   build is non-production **and** the request host is `127.0.0.1` / `localhost`.
-  That loopback+dev gate is why it is the one `src/app/api/` route that does not
-  call `requireDigiChatAuth()` — it is not a public API.
+  That loopback+dev gate is why it is one of the few `src/app/api/` routes that
+  does not call `requireDigiChatAuth()` (with `health`, `deploy/chrome`,
+  `embed/tenant-config`, `mcp/oauth/callback` and `plan-proof`) — it is not a
+  public API.
 
 To point the gallery at a **different** backend (a local Python stack, a staging
 host), change the upstream resolution in `baseline-preview.ts` or the proxy in

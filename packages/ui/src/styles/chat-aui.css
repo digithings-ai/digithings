@@ -496,8 +496,10 @@
    no twin for: the unwrapped-mount code-header hover, catalog-skin popover
    items, tooltip/dialog accent tokens, and the hidden tooltip arrows (#3818). */
 
-/* No twin: /baseline mounts the gallery Thread without .aui-theme-stage or
-   [data-thread-skin], so chatbot.css's gated fence-copy hover never applies. */
+/* Belt and braces: the scope marker now matches on every mount (the Thread
+   declares `data-thread-skin="digichat"`), so chatbot.css's fence-copy hover
+   applies too — this keeps the flattened header identical for any mount that
+   somehow renders `.digichat-thread` without the marker. */
 .digichat-thread .aui-code-header-root button:hover,
 .digichat-thread .aui-code-header-root button:focus-visible {
   background: transparent;
