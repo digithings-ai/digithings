@@ -1,6 +1,6 @@
 # ADR 0030: MCP tool names identify the direct data source, not the hosting module
 
-**Status:** proposed
+**Status:** accepted
 **Date:** 2026-09-22
 
 ## Context
