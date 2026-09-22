@@ -88,6 +88,8 @@ export type ModuleRow = {
   name: string;
   tier: string;
   role: string;
+  /** The role's tail after the first ` · ` — the grid cell's short line. */
+  roleShort: string;
   tagline: string;
   emblem: string;
   dockerCmd: string | null;
@@ -102,6 +104,9 @@ export const MODULE_ROWS: ModuleRow[] = modules.map((m) => ({
   name: m.name,
   tier: m.tier,
   role: m.role,
+  // The registry role is "Category · detail"; a 2-column cell has room for the
+  // detail half only, which is the half that says what the module is.
+  roleShort: m.role.includes("·") ? m.role.split("·").slice(1).join("·").trim() : m.role,
   tagline: m.tagline,
   emblem: m.emblem,
   dockerCmd: m.dockerCmd,

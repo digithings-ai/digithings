@@ -27,6 +27,16 @@ type Variant = {
 
 const VARIANTS: Variant[] = [
   {
+    slug: "mixed",
+    name: "V8 · Mixed",
+    width: "narrow, card-first",
+    bar: "standard nav",
+    hero: "claim + lede",
+    stack: "bento + travelling focus",
+    motion: "focus follows scroll",
+    note: "The pick: Registry's narrow card page with Specimen's frame rhythm. The stack leads; as you scroll, focus moves module to module and a detail card beside the grid changes with it — role, real dependency chips, the compose command that starts it.",
+  },
+  {
     slug: "command-bar",
     name: "V1 · Command bar",
     width: "full-bleed",
@@ -165,7 +175,10 @@ export default function VariantsIndex() {
           </div>
 
           <div className="mt-[1.6rem] flex flex-wrap items-center gap-[0.8rem]">
-            <CtaLink href="/variants/command-bar">Start with V1</CtaLink>
+            <CtaLink href="/variants/mixed">Open V8 · Mixed</CtaLink>
+            <CtaLink href="/variants/command-bar" variant="ghost">
+              V1
+            </CtaLink>
             <CtaLink href="/" variant="ghost">
               Back to the current home page
             </CtaLink>

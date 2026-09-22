@@ -24,7 +24,7 @@ export const metadata: Metadata = {
   robots: { index: false, follow: false },
 };
 
-const SUMMARY = "flex cursor-pointer list-none items-baseline gap-[0.9rem] py-[0.8rem] [&::-webkit-details-marker]:hidden";
+const SUMMARY = "flex list-none items-baseline gap-[0.9rem] py-[0.8rem] [&::-webkit-details-marker]:hidden";
 
 export default function VariantRegistry() {
   return (
