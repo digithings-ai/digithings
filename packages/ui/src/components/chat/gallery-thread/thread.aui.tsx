@@ -403,22 +403,34 @@ const ThreadScrollToBottom: FC = () => {
     };
   }, [viewportEl]);
 
-  // Show only when history is actually out of view: the viewport must
-  // overflow AND sit more than a line away from the bottom. A scroll of a few
-  // pixels with everything still visible (e.g. after the entrance settle)
-  // must not surface it.
+  // Show only when content is actually hidden under the composer: the message
+  // list's bottom must sit below the top edge of the composer shell. A scroll
+  // of a few pixels with everything still visible (e.g. after the entrance
+  // settle) must not surface it.
   useEffect(() => {
     if (!viewportEl) return;
+    const group = viewportEl.querySelector<HTMLElement>(
+      '[data-slot="aui_message-group"]',
+    );
+    const composer = viewportEl.querySelector<HTMLElement>(
+      '[data-slot="aui_composer-shell"]',
+    );
+    if (!group || !composer) {
+      setScrolledAway(false);
+      return;
+    }
     const measure = () => {
-      const overflow = viewportEl.scrollHeight - viewportEl.clientHeight;
-      const distance =
-        viewportEl.scrollHeight - viewportEl.scrollTop - viewportEl.clientHeight;
-      setScrolledAway(overflow > 4 && distance > 24);
+      setScrolledAway(
+        group.getBoundingClientRect().bottom >
+          composer.getBoundingClientRect().top + 1,
+      );
     };
     measure();
     viewportEl.addEventListener("scroll", measure, { passive: true });
     const ro = new ResizeObserver(measure);
     ro.observe(viewportEl);
+    ro.observe(group);
+    ro.observe(composer);
     return () => {
       viewportEl.removeEventListener("scroll", measure);
       ro.disconnect();

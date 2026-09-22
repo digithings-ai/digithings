@@ -297,6 +297,13 @@
   scrollbar-width: thin;
 }
 
+/* Keep the top-anchored (trailing) user message off the top edge. The library
+   pins the anchor's border-box top to the viewport top, so padding shows as a
+   gap while the previous message stays hidden one message-gap above. */
+.digichat-thread__viewport [data-aui-top-anchor-user] {
+  padding-top: 1.5rem;
+}
+
 .digichat-thread-list {
   --accent: var(--accent-digichat, #e2708a);
   --term-bg: #08090b;
