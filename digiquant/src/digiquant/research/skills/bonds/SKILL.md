@@ -18,22 +18,20 @@ description: Run bond market and interest rates analysis as part of the daily di
 - Also **`get_macro_series`** for `DGS10`, `DGS2`, `T10Y2Y`, `T10Y3M`, `DFF` to anchor the curve.
 
 ## Inputs
-- `config/watchlist.md` (bonds section)
-- `config/preferences.md`
+- `config/watchlist.md` — repository provenance for a maintainer (bonds section); NOT retrievable by a tool.
+- `config/preferences.md` — repository provenance for a maintainer; NOT retrievable by a tool.
 - Macro regime output (rate path context)
 
 ## Data Layer
 
 > DB-first: read the latest relevant snapshot data from Supabase (`daily_snapshots.snapshot` / `documents.payload`).
 
-Supplement with `mcp_fred_*` tools for data not in the fetch files:
-- **TIPS breakevens**: `mcp_fred_fred_series_observations` with `T10YIE` (10Y), `T5YIE` (5Y)
+Supplement with `get_macro_series` tools for data not in the fetch files:
+- **TIPS breakevens**: `get_macro_series` with `T10YIE` (10Y), `T5YIE` (5Y)
 - **Real yields**: series `DFII10` (10Y TIPS real yield)
 - **Credit spreads**: `BAMLH0A0HYM2` (HY OAS), `BAMLC0A0CM` (IG OAS)
 - **Fed Funds**: `DFF` for current effective rate
 - **5Y5Y forward**: `T5YIFR`
-
-> **Web fetch**: use `defuddle parse <url> --md` instead of WebFetch for any Fed speech, credit market article, or sovereign debt news page URL. Not for API endpoints, `.json`, or `.md` files.
 
 ---
 

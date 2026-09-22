@@ -23,10 +23,6 @@ top tickers, structural drivers) through the research agent's
 `phase_inputs.sector_config` block. Every prompt below references fields
 from that block.
 
-Web fetch: use `defuddle parse <url> --md` instead of WebFetch for
-earnings pages, analyst notes, product announcements, or news article
-URLs. Not for API endpoints, `.json`, or `.md` files.
-
 ---
 
 ## Inputs you will see
