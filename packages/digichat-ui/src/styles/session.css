@@ -1,0 +1,762 @@
+.dc-page {
+  min-height: 100vh;
+  padding: calc(var(--dq-nav-h, 62px) + 0.6rem) clamp(0.7rem, 3vw, 1.4rem) clamp(0.7rem, 3vw, 1.2rem);
+  display: flex;
+}
+
+.dc-session {
+  width: 100%;
+  max-width: min(1080px, 96vw);
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  height: calc(100vh - var(--dq-nav-h, 62px) - 1.4rem);
+  min-height: 440px;
+  font-family: var(--font-mono);
+  background: transparent;
+}
+
+/* Opt-in from a full-page embedder (?wide=1 — digithings.ai /chat, /chat/occ):
+   drop the 1080px reading-column cap so the session fills its iframe/page. Kept
+   separate from .dc-session-embed (a widget-layout concern) — this is purely a
+   width override on the same page layout. */
+.dc-session--wide {
+  max-width: none;
+}
+
+.dc-session-embed {
+  flex: 1;
+  min-height: 0;
+  max-width: none;
+  height: auto;
+}
+
+.dc-brand {
+  display: flex;
+  align-items: baseline;
+  gap: 0.35rem;
+  border-bottom: 1px solid var(--hair);
+  padding: 0.55rem 0.75rem;
+  font-size: 0.82rem;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+.dc-brand-by {
+  font-weight: 400;
+  color: var(--ink-mute);
+}
+.dc-brand-link {
+  font-weight: 500;
+  color: var(--accent);
+  text-decoration: none;
+}
+.dc-brand-link:hover {
+  text-decoration: underline;
+}
+
+.dc-wordmark-header {
+  flex-shrink: 0;
+  border-bottom: 1px solid var(--hair);
+  padding: 0.55rem 0.75rem;
+  font-size: 0.82rem;
+}
+
+.dc-thread {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+  padding: 0.85rem 0.75rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.dc-msg {
+  position: relative;
+  display: grid;
+  grid-template-columns: 0.85rem minmax(0, 1fr);
+  gap: 0.5rem;
+  align-items: start;
+  font-size: 0.8rem;
+  line-height: 1.55;
+}
+.dc-who {
+  color: var(--accent);
+  font-weight: 600;
+  user-select: none;
+}
+.dc-user .dc-who {
+  color: var(--accent);
+  font-weight: 700;
+}
+.dc-body {
+  min-width: 0;
+  color: var(--ink-soft);
+  word-break: break-word;
+}
+.dc-user .dc-body,
+.dc-intro .dc-body {
+  color: var(--ink);
+  white-space: pre-wrap;
+}
+.dc-intro-body {
+  font-size: 0.78rem;
+  line-height: 1.5;
+}
+.dc-intro .dc-body {
+  color: var(--ink-soft);
+}
+.dc-out-dim {
+  color: var(--ink-mute);
+}
+
+/* Busy turn: one bare <ChatStreamCursor> under the chain / answer. Tool rows
+   carry running/ok themselves — no typed TerminalStepCaret status line. */
+.dc-body > .tl-line {
+  color: var(--ink-mute);
+}
+
+.dc-body a {
+  color: var(--accent);
+  text-underline-offset: 2px;
+}
+.dc-code-inline {
+  font-family: var(--font-mono);
+  font-size: 0.82em;
+  background: color-mix(in srgb, var(--ink) 9%, transparent);
+  border-radius: 0;
+  padding: 0.05rem 0.3rem;
+}
+.dc-code-block {
+  position: relative;
+  margin: 0.6rem 0;
+}
+.dc-code-block pre {
+  margin: 0;
+  background: color-mix(in srgb, var(--ink) 7%, transparent);
+  border: 1px solid var(--hair);
+  border-radius: 0;
+  padding: 0.7rem 0.8rem;
+  overflow-x: auto;
+}
+.dc-code-block code {
+  font-family: var(--font-mono);
+  font-size: 0.74rem;
+  color: var(--ink);
+  white-space: pre;
+}
+
+.dc-code-copy,
+.dc-msg-copy {
+  font: inherit;
+  font-size: 0.7rem;
+  color: var(--ink-mute);
+  background: color-mix(in srgb, var(--surface) 80%, transparent);
+  border: 1px solid var(--hair);
+  border-radius: 0;
+  padding: 0.12rem 0.4rem;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.15s var(--ease, ease);
+}
+.dc-code-copy {
+  position: absolute;
+  top: 0.4rem;
+  right: 0.4rem;
+}
+.dc-msg-actions {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  margin-top: 0.4rem;
+}
+.dc-msg-actions-visible .dc-msg-copy {
+  opacity: 1;
+}
+.dc-msg-copy {
+  position: static;
+  display: inline-block;
+  margin-top: 0;
+}
+.dc-edit-last {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  width: 100%;
+}
+.dc-edit-textarea {
+  width: 100%;
+  min-height: 4.5rem;
+  resize: vertical;
+  font: inherit;
+  font-size: 0.9rem;
+  color: var(--ink);
+  background: var(--surface);
+  border: 1px solid var(--hair);
+  border-radius: 0;
+  padding: 0.45rem 0.55rem;
+  box-sizing: border-box;
+}
+.dc-code-block:hover .dc-code-copy,
+.dc-body:hover .dc-msg-copy,
+.dc-code-copy:focus-visible,
+.dc-msg-copy:focus-visible {
+  opacity: 1;
+}
+
+.dc-suggest {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+  padding-left: 1.6rem;
+}
+
+.dc-form {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: end;
+  gap: 0.5rem;
+  padding: 0.5rem 0.75rem 0.75rem;
+  border-top: 1px solid var(--hair);
+  background: transparent;
+  position: relative;
+}
+.dc-slash {
+  grid-column: 1 / -1;
+  list-style: none;
+  margin: 0;
+  padding: 0.15rem 0 0.35rem;
+  border-bottom: 1px solid var(--hair);
+}
+.dc-slash-item {
+  display: flex;
+  gap: 0.75rem;
+  width: 100%;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-size: 0.78rem;
+  text-align: left;
+  padding: 0.28rem 0;
+  cursor: pointer;
+}
+.dc-slash-item:hover,
+.dc-slash-item:focus-visible,
+.dc-slash-item-active {
+  color: var(--accent);
+}
+.dc-slash-cmd {
+  font-family: var(--font-mono);
+  min-width: 5.5rem;
+}
+.dc-slash-hint {
+  color: var(--ink-mute);
+}
+.dc-slash-note pre {
+  margin: 0;
+  font: inherit;
+  font-size: 0.78rem;
+  white-space: pre-wrap;
+  color: var(--ink-mute);
+}
+.dc-textarea {
+  font: inherit;
+  font-size: 0.8rem;
+  line-height: 1.45;
+  background: transparent;
+  border: 0;
+  color: var(--ink);
+  width: 100%;
+  resize: none;
+  max-height: 140px;
+  padding: 0.35rem 0;
+}
+/* iOS Safari auto-zooms the page on focusing any input/textarea under 16px —
+ * there is no CSS opt-out for that behavior, only staying above the
+ * threshold. Width alone is the wrong test: the popup launcher embeds this
+ * session in a ~400px iframe on a desktop, where the 16px input towered over
+ * the 0.8rem transcript beside it. `pointer: coarse` is what separates a phone
+ * from a narrow frame, and a phone is the only place the zoom happens. */
+@media (max-width: 640px) and (pointer: coarse) {
+  .dc-textarea {
+    font-size: 1rem;
+  }
+}
+.dc-textarea::placeholder {
+  color: var(--ink-soft);
+}
+.dc-textarea:focus {
+  outline: none;
+}
+.dc-send,
+.dc-stop {
+  font: inherit;
+  align-self: stretch;
+  border: 1px solid var(--hair);
+  border-radius: 0;
+  cursor: pointer;
+  padding: 0.3rem 0.65rem;
+  transition: background 0.18s var(--ease, ease), color 0.18s var(--ease, ease);
+}
+.dc-send {
+  font-size: 1rem;
+  border-radius: 0;
+  background: var(--ink);
+  color: var(--bg);
+  border-color: var(--ink);
+}
+.dc-stop {
+  font-size: 0.8rem;
+  color: var(--ink-soft);
+  background: transparent;
+}
+.dc-send:hover:not(:disabled) {
+  background: var(--ink);
+  color: var(--bg);
+}
+.dc-stop:hover {
+  background: color-mix(in srgb, var(--ink) 8%, transparent);
+}
+.dc-send:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+@media (prefers-reduced-motion: reduce) {
+  .dc-code-copy,
+  .dc-msg-copy,
+  .dc-send,
+  .dc-stop {
+    transition: none;
+  }
+}
+
+/* ---------------------------------------------------------------------------
+ * Agent chain (#1418 gap 6).
+ *
+ * The rows themselves are the shared chat primitives (ChatToolCall /
+ * ChatThinking / ChatWidgetFrame / ChatMessage from @digithings/ui), which
+ * carry their own token utilities — generated by each consumer's
+ * `@source ".../packages/ui/src/components/chat"`. What lives here is only the
+ * chain container and the content ChatActivities nests INSIDE a primitive
+ * (the source list, the reasoning blob, the brief body): no consumer @sources
+ * this package, so utilities written in its .tsx would never generate.
+ *
+ * The pre-canon bordered `.dc-activities` box is gone — the canon reads as a
+ * flowing chain of fold-away rows (the Claude Code / opencode pattern), not a
+ * panel. The selector stays (consumed API); only its dress changed.
+ * ------------------------------------------------------------------------- */
+.dc-activities {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  margin-bottom: 0.55rem;
+  font-size: 0.72rem;
+  line-height: 1.45;
+}
+/* System aside (`·` ChatMessage) — sits at the chain's text size rather than
+   the transcript's, so it reads as chain chrome and not as an answer. */
+.dc-act-status {
+  font-size: 0.72rem;
+}
+.dc-act-hits {
+  margin: 0.1rem 0 0;
+  padding-left: 0.9rem;
+  list-style: disc;
+  font-size: 0.74rem;
+  line-height: 1.5;
+  /* Cap so a 5-note search with 4-line snippets can't own the transcript —
+     same scroll grammar as `.dc-act-reasoning-text`. */
+  max-height: 14rem;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+.dc-act-hits li {
+  margin: 0.12rem 0;
+  color: var(--ink-mute);
+}
+.dc-act-hits li::marker {
+  color: var(--accent);
+}
+.dc-act-hit-title {
+  color: var(--ink-soft);
+}
+.dc-act-hit-path {
+  margin-left: 0.35rem;
+  color: var(--ink-mute);
+  font-size: 0.92em;
+}
+.dc-act-hit-tier,
+.dc-act-hit-year {
+  margin-left: 0.35rem;
+  color: var(--ink-mute);
+  font-size: 0.88em;
+}
+/* Snippet disclosure — closed by default so a 5-note search shows titles
+   only; click a title to read the chunk. Native <details>, no JS. */
+.dc-act-hit {
+  display: block;
+}
+.dc-act-hit-summary {
+  cursor: pointer;
+  list-style: none;
+}
+.dc-act-hit-summary::-webkit-details-marker {
+  display: none;
+}
+.dc-act-hit-snippet {
+  margin: 0.2rem 0 0;
+  color: var(--ink-mute);
+  display: -webkit-box;
+  -webkit-line-clamp: 4;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+/* Reasoning blob inside the ChatThinking disclosure. Wraps rather than
+   scrolls sideways — the embed runs down to 375px. */
+.dc-act-reasoning-text {
+  margin: 0;
+  max-height: 14rem;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  white-space: pre-wrap;
+  word-break: break-word;
+  color: var(--ink-mute);
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  line-height: 1.55;
+}
+/* Research brief — a ChatWidgetFrame card; the frame is unpadded by contract,
+   so the body owns its padding. */
+.dc-act-brief {
+  margin: 0.25rem 0;
+}
+.dc-act-brief-body {
+  padding: 0.6rem 0.8rem;
+  font-size: 0.74rem;
+  line-height: 1.5;
+  color: var(--ink-mute);
+}
+.dc-act-brief-themes {
+  margin: 0;
+  padding-left: 1rem;
+}
+.dc-act-brief-label {
+  color: var(--ink-soft);
+  font-weight: 600;
+}
+.dc-act-brief-questions {
+  margin-top: 0.4rem;
+}
+.dc-act-brief-q-heading {
+  margin: 0 0 0.2rem;
+  font-size: 0.85em;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--ink-mute);
+}
+.dc-act-brief-questions ol {
+  margin: 0;
+  padding-left: 1.1rem;
+}
+
+.dc-inline-link {
+  font: inherit;
+  font-size: inherit;
+  color: var(--accent-digichat, var(--accent));
+  background: none;
+  border: 0;
+  padding: 0;
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  font-weight: 500;
+}
+.dc-inline-link:hover {
+  color: var(--ink);
+}
+.dc-intro-byok {
+  display: inline;
+  margin: 0;
+  color: var(--ink-soft);
+}
+.dc-quota-banner {
+  margin: 0.2rem 0 0 1.6rem;
+  padding: 0.45rem 0.65rem;
+  border: 1px solid color-mix(in srgb, var(--down) 35%, var(--hair));
+  border-radius: 0;
+  background: color-mix(in srgb, var(--down) 8%, transparent);
+  font-size: 0.74rem;
+  color: var(--ink-soft);
+}
+.dc-quota-banner p {
+  margin: 0;
+}
+
+
+/* Inline BYOK terminal flow (session-only keys) */
+.dc-byok-flow {
+  margin-top: var(--space-3);
+}
+.dc-byok-prompt {
+  margin: 0 0 0.4rem;
+  font-family: var(--font-family-mono);
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+.dc-byok-option-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  max-width: 28rem;
+  outline: none;
+}
+.dc-byok-option-list:focus-visible {
+  outline: 1px solid color-mix(in srgb, var(--accent) 50%, transparent);
+  outline-offset: 2px;
+}
+.dc-byok-option {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  width: 100%;
+  margin: 0;
+  padding: 0.2rem 0.35rem;
+  border: 0;
+  background: transparent;
+  color: var(--text-primary);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  border-radius: 0;
+}
+.dc-byok-option:hover,
+.dc-byok-option-active {
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+}
+.dc-byok-option-cursor {
+  display: inline-block;
+  width: 1ch;
+  color: var(--accent);
+  font-family: var(--font-family-mono);
+}
+.dc-byok-input {
+  display: block;
+  width: 100%;
+  max-width: 28rem;
+  margin-top: 0.25rem;
+  padding: 0.4rem 0.55rem;
+  border: 1px solid var(--border-color);
+  border-radius: 0;
+  background: var(--bg-term, transparent);
+  color: var(--text-primary);
+  font-family: var(--font-family-mono);
+  font-size: 13px;
+  outline: none;
+}
+.dc-byok-input:focus {
+  border-color: var(--accent);
+}
+.dc-byok-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+}
+.dc-byok-action {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--text-secondary);
+  font-family: var(--font-family-mono);
+  font-size: 11px;
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.dc-byok-action:hover {
+  color: var(--text-primary);
+}
+.dc-byok-action-danger {
+  color: var(--down, #e0654b);
+}
+
+.dc-attribution {
+  border-top: 1px solid var(--hair);
+  padding: 0.5rem 0.75rem;
+  text-align: center;
+  font-size: 0.68rem;
+  color: var(--ink-soft);
+}
+.dc-attribution a {
+  color: var(--accent);
+  text-decoration: underline;
+}
+
+.dc-session-main {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+}
+.dc-session-with-pane .dc-session-main {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(220px, 38%);
+}
+.dc-session-main .dc-thread {
+  flex: 1;
+  min-width: 0;
+}
+
+.dc-source-cards {
+  list-style: none;
+  margin: 0.55rem 0 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+.dc-source-card {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.1rem;
+  max-width: 16rem;
+  border: 1px solid var(--hair);
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-size: 0.74rem;
+  text-align: left;
+  padding: 0.35rem 0.5rem;
+  cursor: pointer;
+}
+.dc-source-card:hover,
+.dc-source-card:focus-visible {
+  border-color: var(--accent);
+}
+.dc-source-card-title {
+  color: var(--accent);
+}
+.dc-source-card-path {
+  color: var(--ink-mute);
+  font-size: 0.68rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+}
+
+.dc-act-hit-open {
+  border: 0;
+  background: none;
+  padding: 0;
+  font: inherit;
+  color: var(--accent);
+  cursor: pointer;
+  text-align: left;
+}
+.dc-act-hit-open:hover,
+.dc-act-hit-open:focus-visible {
+  text-decoration: underline;
+}
+
+.dc-doc-pane {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  border-left: 1px solid var(--hair);
+  background: var(--bg);
+}
+.dc-doc-pane-head {
+  display: flex;
+  align-items: start;
+  gap: 0.5rem;
+  padding: 0.55rem 0.7rem;
+  border-bottom: 1px solid var(--hair);
+}
+.dc-doc-pane-title {
+  flex: 1;
+  font-size: 0.82rem;
+}
+.dc-doc-pane-close {
+  /* kit IconButton (nb-icon) sizes the glyph at 2rem; the doc-pane header is a
+     compact strip, so the dress keeps its original auto footprint. */
+  width: auto;
+  height: auto;
+  border: 1px solid var(--hair);
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  font: inherit;
+  line-height: 1;
+  padding: 0.1rem 0.4rem;
+}
+.dc-doc-pane-path,
+.dc-doc-pane-snippet,
+.dc-doc-pane-empty {
+  margin: 0;
+  padding: 0.5rem 0.7rem;
+  font-size: 0.74rem;
+  color: var(--ink-mute);
+}
+.dc-doc-pane-body,
+.dc-doc-pane-frame {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: 0.6rem 0.7rem;
+}
+.dc-doc-pane-frame {
+  width: 100%;
+  border: 0;
+}
+
+/* ---------------------------------------------------------------------------
+ * Print transcript (#3510). Hide interactive chrome — composer, slash rows,
+ * stop/copy/regen toolbars, BYOK banners, searching chain — and keep turn
+ * text + optional Sources cards. Browser Save as PDF is the PDF path.
+ * ------------------------------------------------------------------------- */
+@media print {
+  .dc-form,
+  .dc-slash,
+  .dc-slash-note,
+  .dc-msg-actions,
+  .dc-msg-copy,
+  .dc-code-copy,
+  .dc-stop,
+  .dc-send,
+  .dc-suggest,
+  .dc-quota-banner,
+  .dc-byok-flow,
+  .dc-intro-byok,
+  .dc-activities,
+  .dc-doc-pane,
+  .dc-msg[aria-busy="true"],
+  .dt-cur {
+    display: none !important;
+  }
+  .dc-page,
+  .dc-session {
+    display: block;
+    height: auto;
+    min-height: 0;
+    max-width: none;
+  }
+  .dc-session-main {
+    display: block;
+  }
+  .dc-thread {
+    overflow: visible;
+    display: block;
+  }
+  .dc-msg {
+    break-inside: avoid;
+  }
+  .dc-session,
+  .dc-body,
+  .dc-user .dc-body,
+  .dc-intro .dc-body {
+    color: #000;
+  }
+}

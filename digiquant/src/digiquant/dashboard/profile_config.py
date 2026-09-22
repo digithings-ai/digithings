@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from decimal import Decimal
 from typing import Any, Mapping
-from uuid import NAMESPACE_URL, UUID, uuid5
+from uuid import UUID, uuid5
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
@@ -20,8 +20,10 @@ from digiquant.profiles.investment_profile import InvestmentProfile
 from digiquant.profiles.pipeline_schedule import PipelineSchedule
 
 HOUSE_PROFILE_KEY = "house"
-# Frozen identity string (migration 075). Do not rename with the package.
-_PROFILE_VERSION_NS = uuid5(NAMESPACE_URL, "digithings.olympus.profile_config")
+# Frozen namespace UUID (migration 075): the literal value the legacy URL seed
+# already derived. Kept verbatim so every derived profile-config version id is
+# unchanged. Do not re-key without a matching id migration.
+_PROFILE_VERSION_NS = UUID("6b517df3-6212-5610-a117-61ab09e196a2")
 
 
 class ProfileConfigMissingError(LookupError):

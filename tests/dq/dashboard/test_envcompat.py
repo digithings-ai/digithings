@@ -1,4 +1,4 @@
-"""Canonical DIGIQUANT_* env names; retired aliases remain readable."""
+"""Canonical DIGIQUANT_* env names; no retired read-aliases remain (#4295)."""
 
 from __future__ import annotations
 
@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 from digiquant.dashboard.envcompat import (
-    ATTEMPT,
+    ALIASES,
     EXECUTION_ROUTING,
     OVERLAY_PERSIST,
     RESEARCH_DATA_TOOLS,
@@ -22,14 +22,23 @@ pytestmark = pytest.mark.unit
 REPO_ROOT = Path(__file__).resolve().parents[3]
 
 
-def test_env_lookup_canonical_wins_over_alias() -> None:
+def test_aliases_map_has_no_retired_module_names() -> None:
+    """#4295: the OLYMPUS_/ATLAS_/KAIROS_ read-aliases are gone for good."""
+    forbidden = ("OLYMPUS_", "ATLAS_", "KAIROS_")
+    for canonical, aliases in ALIASES.items():
+        assert not canonical.startswith(forbidden), canonical
+        for alias in aliases:
+            assert not alias.startswith(forbidden), alias
+
+
+def test_env_lookup_reads_canonical() -> None:
+    assert env_lookup(EXECUTION_ROUTING, environ={EXECUTION_ROUTING: "0"}) == "0"
+
+
+def test_env_lookup_ignores_retired_name() -> None:
     env = {EXECUTION_ROUTING: "0", "OLYMPUS_KAIROS_ROUTING": "1"}
     assert env_lookup(EXECUTION_ROUTING, environ=env) == "0"
-
-
-def test_env_lookup_alias_when_canonical_absent() -> None:
-    env = {"OLYMPUS_KAIROS_ROUTING": "1"}
-    assert env_lookup(EXECUTION_ROUTING, environ=env) == "1"
+    assert env_lookup(EXECUTION_ROUTING, environ={"OLYMPUS_KAIROS_ROUTING": "1"}) == ""
 
 
 def test_env_lookup_canonical_empty_does_not_fall_through() -> None:
@@ -38,62 +47,37 @@ def test_env_lookup_canonical_empty_does_not_fall_through() -> None:
     assert env_lookup(EXECUTION_ROUTING, environ=env) == ""
 
 
-def test_env_lookup_default_when_neither_present() -> None:
+def test_env_lookup_default_when_absent() -> None:
     assert env_lookup(RESEARCH_DATA_TOOLS, environ={}, default="1") == "1"
 
 
-def test_env_lookup_tool_rounds_canonical_wins_over_olympus() -> None:
-    env = {TOOL_ROUNDS_MAX: "4", "OLYMPUS_MAX_TOOL_ROUNDS": "24"}
-    assert env_lookup(TOOL_ROUNDS_MAX, environ=env) == "4"
-
-
-def test_env_lookup_tool_rounds_alias_when_canonical_absent() -> None:
-    env = {"OLYMPUS_MAX_TOOL_ROUNDS": "8"}
-    assert env_lookup(TOOL_ROUNDS_MAX, environ=env) == "8"
-
-
-def test_env_lookup_tool_rounds_default_when_neither_present() -> None:
+def test_env_lookup_tool_rounds_default_when_absent() -> None:
     assert env_lookup(TOOL_ROUNDS_MAX, environ={}, default="24") == "24"
 
 
 def test_routing_enabled_reads_canonical(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.delenv("OLYMPUS_KAIROS_ROUTING", raising=False)
+    monkeypatch.delenv(EXECUTION_ROUTING, raising=False)
     monkeypatch.setenv(EXECUTION_ROUTING, "1")
     assert routing_enabled() is True
     monkeypatch.delenv(EXECUTION_ROUTING, raising=False)
     assert routing_enabled() is False
 
 
-def test_routing_enabled_in_still_accepts_retired_alias() -> None:
-    assert routing_enabled_in({"OLYMPUS_KAIROS_ROUTING": "1"}) is True
+def test_routing_enabled_in_reads_mapping() -> None:
     assert routing_enabled_in({EXECUTION_ROUTING: "1"}) is True
     assert routing_enabled_in({}) is False
 
 
-def test_overlay_persist_reads_canonical_and_alias(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    monkeypatch.delenv("OLYMPUS_OVERLAY_PERSIST", raising=False)
+def test_overlay_persist_reads_canonical(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.delenv(OVERLAY_PERSIST, raising=False)
     assert overlay_persist_enabled() is False
-    monkeypatch.setenv("OLYMPUS_OVERLAY_PERSIST", "1")
-    assert overlay_persist_enabled() is True
-    monkeypatch.delenv("OLYMPUS_OVERLAY_PERSIST", raising=False)
     monkeypatch.setenv(OVERLAY_PERSIST, "1")
     assert overlay_persist_enabled() is True
 
 
-def test_staging_jwt_alias() -> None:
-    env = {"KAIROS_STAGING_USER_JWT": "jwt-from-alias"}
-    assert env_lookup(STAGING_USER_JWT, environ=env) == "jwt-from-alias"
-    env = {STAGING_USER_JWT: "jwt-canonical", "KAIROS_STAGING_USER_JWT": "jwt-from-alias"}
+def test_staging_jwt_canonical() -> None:
+    env = {STAGING_USER_JWT: "jwt-canonical"}
     assert env_lookup(STAGING_USER_JWT, environ=env) == "jwt-canonical"
-
-
-def test_attempt_alias_for_house_workflow_export() -> None:
-    """pipeline-digiquant.yml still exports OLYMPUS_ATTEMPT; do not rename that file today."""
-    env = {"OLYMPUS_ATTEMPT": "3"}
-    assert env_lookup(ATTEMPT, environ=env) == "3"
 
 
 def test_operator_scripts_use_digiquant_prefix() -> None:

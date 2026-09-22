@@ -57,7 +57,7 @@ erDiagram
 | `positions` | `(date, ticker)` unique kept; T0 also adds `(workspace_id, date, ticker)` | Daily position book; one row per held ticker. Legacy unique retained until P6. |
 | `theses` | `(date, thesis_id)` | Active investment theses per day; H1–H3 writers + H9 sync. Migration 025 adds daily thesis fields. Migration 056 adds stable `topic_key` and a partial unique `(date, topic_key)` index so only one nonterminal market opinion exists per topic/date. **No** `workspace_id` in T0 — shared research stays tenant-agnostic (system workspace conceptually; column deferred). |
 | `position_events` | `(date, ticker)` unique kept; T0 also adds `(workspace_id, date, ticker)` | Every open / close / rebalance against a position with reason tag. |
-| `documents` | `(workspace_id, date, document_key)` | JSONB payload store for every narrative / structured artifact. Doc-type CHECK set by migration 023. T4 migration 105 adds `workspace_id` (NOT NULL, house-backfilled) and **replaces** the legacy `UNIQUE(date, document_key)` so overlay+house same-key rows do not collide. Overlay H7/H8 keys are also prefixed `overlay/{workspace_id}/…`. Private-phase writes require `OLYMPUS_OVERLAY_PERSIST=1` after the T1-train anon-policy drop; `anon_read` is untouched. |
+| `documents` | `(workspace_id, date, document_key)` | JSONB payload store for every narrative / structured artifact. Doc-type CHECK set by migration 023. T4 migration 105 adds `workspace_id` (NOT NULL, house-backfilled) and **replaces** the legacy `UNIQUE(date, document_key)` so overlay+house same-key rows do not collide. Overlay H7/H8 keys are also prefixed `overlay/{workspace_id}/…`. Private-phase writes require `DIGIQUANT_OVERLAY_PERSIST=1` after the T1-train anon-policy drop; `anon_read` is untouched. |
 | `nav_history` | PK `(date)` kept; T0 also adds UNIQUE `(workspace_id, date)` | Daily portfolio NAV. |
 | `portfolio_metrics` | `(date)` unique kept; T0 also adds `(workspace_id, date)` | Pre-computed Sharpe, vol, drawdown, exposure metrics. |
 
@@ -156,7 +156,7 @@ is display/view-only.
 
 **Cutover gate:** point public readers only after an approved shadow interval (including one
 rebalance session) has zero unexplained reconciliation failures. Do **not** enable
-`OLYMPUS_ACCOUNTING_FINALIZER=on` until ops/shadow evidence is approved.
+`DIGIQUANT_ACCOUNTING_FINALIZER=on` until ops/shadow evidence is approved.
 
 **Prod deploy invariant (#3029):** dashboard / digiquant.io readers already query
 `public_accounting_nav_history`. If that view is missing (`PGRST205`), Performance and
@@ -238,7 +238,7 @@ Contracts: `TickerEvidenceBundle`, `MissingFactRequest`,
 Application boundary: `EvidenceBundleStore` (in-memory for unit tests; SQL IO
 adapter later). WP11.2 builds typed H5 bases into
 `phase_portfolio.ticker_evidence_bundles` before the provider call; default portfolio
-graph leaves the store unwired (append + `OLYMPUS_EVIDENCE_BUNDLE_WRITER` only
+graph leaves the store unwired (append + `DIGIQUANT_EVIDENCE_BUNDLE_WRITER` only
 when a caller injects a store). Dark launch: no public base view, no historical
 backfill, no H6 selection cutover (WP11.3+), not operator-durable until SQL IO
 + wiring. Bundles cite `state_version_id` + `evidence_ids` for WP12 lineage;
@@ -394,7 +394,7 @@ Private append-only `PreTradeRiskReport` rows bound to the final H8 book H9 comm
 H8 attaches the observational report after final controls; H9 validates identity
 (content hash, final-book fingerprint, allocation-bundle hash) then INSERT-only
 persists. Exact retry (same `report_id` + hash) skips; content conflict never UPDATE.
-Rollout: `OLYMPUS_PRETRADE_RISK_MODE=off|shadow|enforce` (default `shadow`).
+Rollout: `DIGIQUANT_PRETRADE_RISK_MODE=off|shadow|enforce` (default `shadow`).
 
 | Table | PK | Purpose |
 |-------|----|---------|
@@ -567,7 +567,9 @@ superseder per prior id. Models/engine/io: `digiquant.dashboard.accounting`.
 - Provisional H9 `nav_history` / `positions` remain continuity data and are **never** selected
   as final accounting. Shadow mode (`--shadow` / default) reconciles period return vs legacy
   nav day return without deleting either path; `--dry-run` reports without INSERT. Cold
-  ledger (open lots empty while a positions book exists) declines with exit 3.
+  ledger (open lots empty while a positions book exists) declines with exit 3, as does a
+  negative `closing_cash` on the most recent prior accounting tip (#4105) — no fabricated
+  cash-stub book.
 - Metrics (`refresh_performance_metrics.py`) prefer a finalized period for `pnl_pct` / indexed
   NAV when present; never feed `current_book_lookback` into daily `pnl_pct` (#2598).
 
@@ -721,10 +723,12 @@ Skipped in T0 (K3/K4/K5 own CREATE-time `workspace_id`): `broker_connections`,
 | Table | PK | Purpose |
 |-------|----|---------|
 | `notification_prefs` | `(workspace_id)` | Per-workspace email toggles: `daily_digest`, `holding_change_alerts`, `execution_alerts`, `digest_hour_utc` (0–23 UTC). T3 settings UI is the product writer. |
-| `notification_log` | `(workspace_id, event_key, sent_date)` | Dedupe ledger — insert-before-send; duplicate PK ⇒ skip. Append-only (INSERT grant only). |
+| `notification_claim` | `(workspace_id, event_key, sent_date)` | Dedupe window (migration 133) — insert-before-send; duplicate PK ⇒ skip. **Mutable**: the row is deleted when the service refuses the send, so the event can be retried. |
+| `notification_log` | `(workspace_id, event_key, sent_date)` | Record of what was actually sent — written only after a successful send. Append-only (SELECT/INSERT grant plus a mutation trigger, 106). |
 
-RLS enabled, no client policies; `service_role` SELECT/INSERT/UPDATE on prefs, SELECT/INSERT on log.
-Typed dispatch: `digiquant.notify.dispatch` (fail-soft Mailgun client in `notify/mailgun.py`).
+RLS enabled, no client policies; `service_role` SELECT/INSERT/UPDATE on prefs, SELECT/INSERT/DELETE on claim, SELECT/INSERT on log.
+Typed dispatch: `digiquant.notify.dispatch` (fail-soft client in
+`notify/cloudflare_email.py`).
 
 ### `workspace_id` on the private set (097)
 
@@ -794,7 +798,7 @@ persist would have leaked private books. Migration **110** recreates
 
 Shared teasers without `workspace_id` (`daily_snapshots`, `theses`,
 `instruments`) are untouched. Overlay must not upsert `daily_snapshots`.
-**Documents** may persist under `OLYMPUS_OVERLAY_PERSIST=1` after 110.
+**Documents** may persist under `DIGIQUANT_OVERLAY_PERSIST=1` after 110.
 **positions / nav_history / ledger** stay refused (`legacy_book_unique`) while
 097's leftover `UNIQUE(date)` / `UNIQUE(date,ticker)` / `PRIMARY KEY (date)` and
 069's `uq_portfolio_ledger_commits_one_root (run_date)` remain. House writers on
@@ -947,7 +951,7 @@ collide overlay+house rows that share a key. Authenticated policy
 own-member only. **`anon_read` is not dropped or rewritten** (T1-train).
 
 `job_runs.status` CHECK is extended with `persist_disabled` (overlay
-private-phase refuse when `OLYMPUS_OVERLAY_PERSIST` is off). Production may set
+private-phase refuse when `DIGIQUANT_OVERLAY_PERSIST` is off). Production may set
 that flag only after the T1-train anon-policy drop. Structural tests:
 `tests/dq/dashboard/overlay/test_migration_105.py`.
 
@@ -1222,7 +1226,7 @@ They dominated the database before 061: 952 MB of a 1263 MB total (75%), growing
 - `'Portfolio Recommendation'` doc_type — removed by migration 021.
 - **Migration `062` (`062_realtime_broadcast_authorization.sql`) — withdrawn and deleted,
   and the number is burned.** It could never be applied (see the `realtime.messages` note
-  under RLS), so it never reached `olympus_schema_migrations` and left no orphan ledger row
+  under RLS), so it never reached the migration ledger and left no orphan ledger row
   to reconcile. Migration `063` supersedes it. Do not reuse `062`: unlike the never-written
   `037`/`038`/`059` it already denotes a specific abandoned approach in the git history and
   in PR #1813. Nothing in the repo enforces this — see [`README.md`](README.md), "`062` is

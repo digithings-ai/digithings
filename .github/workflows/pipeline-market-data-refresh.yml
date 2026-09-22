@@ -29,15 +29,13 @@ jobs:
       R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
       R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
       FRED_API_KEY: ${{ secrets.FRED_API_KEY }}
-      # transition (#3979): fall back to the pre-#3860 secret names until the
-      # repo secret is renamed; drop the fallback once CORE_POSTGRES_URI exists.
-      CORE_POSTGRES_URI: ${{ secrets.CORE_POSTGRES_URI || secrets.DIGI_CHECKPOINTER_POSTGRES_URI || secrets.MARKET_DATA_POSTGRES_URI }}
+      CORE_POSTGRES_URI: ${{ secrets.CORE_POSTGRES_URI }}
       # FX mirror (#4150): refresh_market_data_r2.py mirrors sealed Yahoo-FX
       # generations back into core macro_series_observations — twelve-x reads
       # that table for pair fixes. Without core creds the mirror is inert
       # (fail-soft by design), so pass them here.
-      CORE_SUPABASE_URL: ${{ secrets.CORE_SUPABASE_URL || secrets.SUPABASE_URL }}
-      CORE_SUPABASE_SERVICE_KEY: ${{ secrets.CORE_SUPABASE_SERVICE_KEY || secrets.SUPABASE_SERVICE_ROLE_KEY }}
+      CORE_SUPABASE_URL: ${{ secrets.CORE_SUPABASE_URL }}
+      CORE_SUPABASE_SERVICE_KEY: ${{ secrets.CORE_SUPABASE_SERVICE_KEY }}
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v5

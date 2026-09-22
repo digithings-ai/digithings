@@ -6,8 +6,8 @@ from dataclasses import dataclass
 from datetime import date
 from typing import Any, Protocol  # score:allow untyped any — Supabase reader Protocol surface
 
+from digiquant.notify.cloudflare_email import CloudflareEmailConfig, unsubscribe_url
 from digiquant.notify.entitlements import ArtifactClass, PlanTier, can
-from digiquant.notify.mailgun import MailgunConfig, unsubscribe_url
 
 
 class SupabaseReader(Protocol):
@@ -183,7 +183,7 @@ def build_digest_content(
     workspace_id: str,
     tier: PlanTier,
     run_date: date,
-    mailgun_config: MailgunConfig,
+    notify_config: CloudflareEmailConfig,
     workspace_name: str = "Workspace",
 ) -> DigestContent:
     """Load dashboard-equivalent rows and filter sections by tier entitlements."""
@@ -249,7 +249,7 @@ def build_digest_content(
         workspace_id=workspace_id,
         workspace_name=workspace_name,
         tier=tier,
-        unsubscribe_url=unsubscribe_url(workspace_id, mailgun_config),
+        unsubscribe_url=unsubscribe_url(workspace_id, notify_config),
         sections=filtered,
     )
 

@@ -83,10 +83,23 @@ Every pull request and every push to `develop`/`main` runs
 - **Local reproduction.** `make secrets-scan` runs the same config against
   the working tree. Install gitleaks via `brew install gitleaks` or
   `go install github.com/gitleaks/gitleaks/v8@latest`.
-- **Allowlist policy.** `tests/`, `.env.example`, top-level and `docs/**/*.md`
-  markdown, and `scripts/claude-hooks/fixtures/` are allowlisted because they
-  only contain placeholder values, fake/ephemeral fixtures, or
-  vendor-published example tokens (e.g. `AKIAIOSFODNN7EXAMPLE`). Adding a new
+- **Secret-list drift.** `make secrets-audit` matches every `secrets.*` read under
+  `.github/` against each level a name can live at — repo secret, repo variable, org
+  secret, environment secret — and reports `dead` (a repo secret nothing reads),
+  `not repo-level` (defined at another level), `unresolved` (defined nowhere, so Actions
+  substitutes an empty string), `repo-over-org` (defined at both, where the repo copy
+  silently wins) and `env-over-repo` (defined at both, where a job that declares that
+  environment reads the environment copy). `--strict` exits non-zero on `dead`;
+  `--strict-unresolved` does the same for `unresolved`. Both refuse to pass when a level
+  could not be read. Passing `--secrets-file` keeps the whole run offline. It is a local
+  check, not a CI gate.
+- **Allowlist policy.** `tests/`, top-level and `docs/**/*.md` markdown, and
+  `scripts/claude-hooks/fixtures/` are allowlisted because they only contain
+  placeholder values, fake/ephemeral fixtures, or vendor-published example
+  tokens (e.g. `AKIAIOSFODNN7EXAMPLE`). Example templates are deliberately
+  **not** path-allowlisted: the root `.env.example` stays scanned, and the
+  placeholder values it carries (`replace-with-…`, `your-…-here`, `<…>`) are
+  filtered by the value patterns in `.gitleaks.toml`. Adding a new
   allowlist entry requires a comment in `.gitleaks.toml` justifying why the
   match is safe, and reviewers are expected to push back on entries that
   broaden the allowlist without a clear fixture/example rationale.
@@ -183,7 +196,15 @@ Every Python component is scanned on every PR, every push to `main`/`develop`, a
 
 - **Blocks merge:** any finding with OSV severity **HIGH** or **CRITICAL** (CVSS ≥ 7.0).
 - **Warn-only:** findings at **MEDIUM** or **LOW** severity, and findings with unknown severity — surfaced via `::warning::` annotations on the PR, not gated.
-- **Scope:** `digibase`, `digigraph`, `digiquant`, `digisearch`, `digismith`, `digikey`, `digiclaw`. Each component is installed with its `[dev]` extras and audited against the resolved transitive closure. `digiquant[nautilus]` is excluded (tracked in #42). `digichat/` (Node) is audited by a sibling `npm audit --omit=dev` job (follow-up).
+- **Scope:** `digibase`, `digigraph`, `digiquant`, `digisearch`, `digismith`, `digikey`, `digiclaw`. Each component is installed with its `[dev]` extras and audited against the resolved transitive closure. `digiquant[nautilus]` is excluded (tracked in #42).
+
+The JS workspaces are covered by the sibling [`npm audit` workflow](.github/workflows/security-npm-audit.yml) on the same cadence, auditing the whole `apps/*` + `packages/*` closure from the single root `package-lock.json`.
+
+- **Blocks merge:** any advisory npm reports as **HIGH** or **CRITICAL**.
+- **Warn-only:** **MODERATE**, **LOW** and unknown severities.
+- **Per-advisory acceptance:** the classifier matches the ignore list against each advisory individually, not against the package — a *new* advisory on a package that already has accepted ones still blocks.
+- **Fails closed:** an npm audit that could not reach the registry (error body, or no `vulnerabilities` key) fails the lane rather than reporting clean.
+- **Scope note:** accepted npm advisories live in [`npm-audit-ignore.txt`](npm-audit-ignore.txt) and follow the same justification requirement as the Python list below.
 
 ### Accepting a CVE
 

@@ -227,3 +227,83 @@ def test_orchestrator_invoke_web_search_empty_query_envelope_unchanged(
     body = r.json()
     assert body.get("ok") is False
     assert body.get("error") == "query is required"
+
+
+#: The real searxng provider, driven through the real service, returning a
+#: successful empty body that names two blocked engines (#4297).
+_UNRESPONSIVE_DIAGNOSTIC = "searxng(none; unresponsive=duckduckgo:access denied,wikidata:timeout)"
+
+
+def _searxng_empty_with_unresponsive_engines(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Run the real service against a MockTransport searxng (no network)."""
+    import digisearch.web_search.service as svc
+    from digisearch.web_search.searxng_provider import SearXNGWebSearchProvider
+
+    payload = {
+        "results": [],
+        "unresponsive_engines": [["duckduckgo", "access denied"], ["wikidata", "timeout"]],
+    }
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json=payload)
+
+    provider = SearXNGWebSearchProvider(
+        base_url="http://127.0.0.1:8080",
+        client=httpx.Client(transport=httpx.MockTransport(handler)),
+    )
+
+    class _Fetcher:
+        def __init__(self, *a: object, **k: object) -> None:
+            pass
+
+        def __enter__(self) -> _Fetcher:
+            return self
+
+        def __exit__(self, *a: object) -> bool:
+            return False
+
+        def fetch(self, url: str) -> object:
+            raise RuntimeError("no network in unit")
+
+    monkeypatch.setenv("DIGISEARCH_WEB_SEARCH_BACKEND", "searxng")
+    monkeypatch.setattr(svc, "SearXNGWebSearchProvider", lambda **k: provider)
+    monkeypatch.setattr(
+        svc, "DdgsWebSearchProvider", lambda *a, **k: pytest.fail("ddgs must not run")
+    )
+    monkeypatch.setattr(svc, "HttpFetcher", _Fetcher)
+
+
+@pytest.mark.unit
+def test_v1_web_search_empty_unresponsive_engines_reaches_client(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """An authenticated client can read which searxng engines failed (#4297).
+
+    The hosted container's only observability channel is this HTTP response, so
+    a successful empty body must name the blocked engines without changing the
+    ``{query, results, provider}`` shape.
+    """
+    _searxng_empty_with_unresponsive_engines(monkeypatch)
+    r = client.post("/v1/web_search", json={"query": "etf flows"})
+    assert r.status_code == 200
+    body = r.json()
+    assert body["results"] == []
+    assert body["provider"] == _UNRESPONSIVE_DIAGNOSTIC
+    assert set(body) == {"query", "results", "provider"}
+
+
+@pytest.mark.unit
+def test_orchestrator_invoke_web_search_empty_unresponsive_engines_reaches_client(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The hub path digiquant uses must carry the same diagnostic (#4297)."""
+    _searxng_empty_with_unresponsive_engines(monkeypatch)
+    r = client.post(
+        "/v1/orchestrator_invoke",
+        json={"tool": "web_search", "arguments": {"query": "etf flows"}},
+    )
+    assert r.status_code == 200
+    body = r.json()
+    assert body.get("ok") is True
+    assert body["data"]["results"] == []
+    assert body["data"]["provider"] == _UNRESPONSIVE_DIAGNOSTIC

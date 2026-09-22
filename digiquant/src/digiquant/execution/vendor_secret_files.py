@@ -1,7 +1,7 @@
 """Load gitignored digithings vendor secret files (names-first; never log values).
 
-After a human pastes Stripe / Mailgun / Alpaca OAuth into
-``.local/secrets/digithings-{stripe,mailgun,alpaca}.env``, this module is the
+After a human pastes Stripe / Cloudflare / Alpaca credentials into
+``.local/secrets/digithings-{stripe,notify,alpaca}.env``, this module is the
 resume path onto ``core`` Edge Function secrets. It reuses
 :data:`STAGING_REQUIRED_SECRETS` so apply and staging E2E cannot drift.
 """
@@ -24,7 +24,7 @@ CORE_PROJECT_REF: str = "rwagjbkvxkdwqmouagad"
 VENDOR_SECRETS_DIR: str = ".local/secrets"
 VENDOR_SECRET_FILENAMES: tuple[str, ...] = (
     "digithings-stripe.env",
-    "digithings-mailgun.env",
+    "digithings-notify.env",
     "digithings-alpaca.env",
 )
 BILLING_FUNCTIONS: tuple[str, ...] = (
@@ -112,8 +112,8 @@ def format_vendor_apply_blocked(report: VendorSecretLoad) -> str:
     detail = "; ".join(parts) if parts else "unknown"
     return (
         "execution vendor-secret apply blocked — "
-        f"{detail}. Write gitignored .local/secrets/digithings-{{stripe,mailgun,alpaca}}.env; "
-        "do not fake Stripe/Mailgun/Alpaca OAuth."
+        f"{detail}. Write gitignored .local/secrets/digithings-{{stripe,notify,alpaca}}.env; "
+        "do not fake Stripe/Cloudflare/Alpaca credentials."
     )
 
 

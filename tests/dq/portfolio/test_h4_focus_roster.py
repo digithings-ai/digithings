@@ -521,7 +521,7 @@ def test_h4_roster_identical_across_attention_modes(monkeypatch: pytest.MonkeyPa
 
     from digiquant.portfolio.phases import h4_opportunity_screener as h4
     from digiquant.research.research_attention import (
-        OLYMPUS_RESEARCH_ATTENTION_MODE_ENV,
+        DIGIQUANT_RESEARCH_ATTENTION_MODE_ENV,
         reset_attention_stores,
     )
 
@@ -530,7 +530,7 @@ def test_h4_roster_identical_across_attention_modes(monkeypatch: pytest.MonkeyPa
     node = h4.build_h4_opportunity_screener(client=None).nodes[0].run
     rosters: dict[str, str] = {}
     for mode in ("off", "shadow", "enforce"):
-        monkeypatch.setenv(OLYMPUS_RESEARCH_ATTENTION_MODE_ENV, mode)
+        monkeypatch.setenv(DIGIQUANT_RESEARCH_ATTENTION_MODE_ENV, mode)
         reset_attention_stores()
         out = node(state.model_copy())
         rosters[mode] = json.dumps(

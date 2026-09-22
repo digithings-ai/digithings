@@ -127,7 +127,7 @@ Before any phase executes, the agent performs a structured context load:
    (`simulated_pipeline` + `TestDurableH5H6LineageRoundTrip`) proves bases and
    amendments survive store serialize/reload across the H5→H6 boundary.
    Optional `PortfolioGraphDeps.evidence_bundle_store`; default graph leaves it
-   unwired; `OLYMPUS_EVIDENCE_BUNDLE_WRITER=off` gates append when injected.
+   unwired; `DIGIQUANT_EVIDENCE_BUNDLE_WRITER=off` gates append when injected.
 
 7. **Announce**: `"Context loaded. Starting Phase 1 of 9."`
 
@@ -389,7 +389,7 @@ The Next.js frontend reads from Supabase where wired, with `cloudflare/public/da
 
 ## Snapshot read path (frontend-consumable)
 
-**Goal:** the research frontend (Next.js dashboard at `cloudflare/dashboard/`) and any other consumer can fetch a daily run's full state with one query and zero pipeline-runtime imports. Issue [#302](https://github.com/digithings-ai/digithings/issues/302).
+**Goal:** the research frontend (Next.js dashboard at `apps/dashboard/`) and any other consumer can fetch a daily run's full state with one query and zero pipeline-runtime imports. Issue [#302](https://github.com/digithings-ai/digithings/issues/302).
 
 ### Source of truth
 

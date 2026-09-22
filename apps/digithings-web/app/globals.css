@@ -1,0 +1,301 @@
+@import "tailwindcss";
+@import "@digithings/design/tokens.css";
+/* layer(components): site.css ships a global reset (* { margin: 0 }); unlayered
+   it outranks @layer utilities and silently kills every margin utility —
+   including NavShell's mx-auto centering. Same fix as digiquant-web (#1401). */
+@import "@digithings/design/site/site.css" layer(components);
+/* Overlay animation utilities (Sheet/Collapsible enter/exit). BEFORE the
+   web-theme bridge on purpose: tw-animate-css carries its own
+   collapsible keyframes without the Base UI --collapsible-panel-height
+   fallback, and the kit's Base UI-aware pair must stay source-last so it
+   wins the Lightning CSS last-wins dedupe (wave-2 T1 ruling). */
+@import "tw-animate-css";
+@import "@digithings/ui/styles/web-theme.css";
+@import "@digithings/ui/styles/controls-core.css";
+@import "@digithings/ui/styles/controls-overlay.css";
+@import "@digithings/ui/styles/nav-shell.css";
+@import "@digithings/ui/styles/docs.css";
+@import "@digithings/ui/styles/terminal-manifest.css";
+/* Homepage primitives (#1450): NumberedStages spine (stages.css), the
+   digit-roll OdometerStrip metrics band (data-layout.css, #1452 promotion) and
+   the WordReveal pinned-blur claim (word-reveal.css). marquee.css is gone with
+   the stack Marquee it styled. Repository activity is the shared <RepoActivity>
+   family (repo-activity.css). digiquant-web still imports marquee.css. */
+@import "@digithings/ui/styles/stages.css";
+@import "@digithings/ui/styles/data-layout.css";
+@import "@digithings/ui/styles/repo-activity.css";
+@import "@digithings/ui/styles/word-reveal.css";
+/* Chat family primitives (#1418) — imported BEFORE the digichat-ui sheets so
+   the .dc- and .dt- rules keep winning same-specificity ties (e.g. the
+   caret's animation shorthand when an element carries both .chat-cursor
+   and .dt-cur). */
+@import "@digithings/ui/styles/chat-core.css";
+/* Math is a separate sheet because KaTeX's own CSS drags in 60 font files
+   (~1 MB). digithings-web iframes digichat /embed (CliThread / ChatMarkdown),
+   which reaches remark-math/rehype-katex; dashboard and the design reference
+   deliberately do not import this. Must come AFTER chat-core.css. */
+@import "@digithings/ui/styles/chat-math.css";
+@import "@digithings/ui/styles/chat-widgets.css";
+/* Terminal loaders sheet (legacy DigiChatSession Searching… chrome). Kept for
+   any residual .tl-* usage on the marketing shell; the live chat UI lives in
+   the iframe. AFTER chat-core.css. */
+@import "@digithings/ui/styles/terminal-loaders.css";
+/* DigiChat boot loader — the composer-outline cube field shown while the
+   digichat embed warms (the default DigiChat loading animation). AFTER
+   chat-core.css. */
+@import "@digithings/ui/styles/digichat-boot-loader.css";
+@import "@digithings/digichat-ui/styles/cursor.css";
+@import "@digithings/digichat-ui/styles/session.css";
+
+/* Tailwind must scan the shared components that carry token utilities —
+   paths relative to this file (packages/ui). Do NOT rewrite these
+   through node_modules/@digithings/ui: Tailwind's scanner does not traverse
+   the workspace symlink and silently generates nothing. */
+@source "../../../packages/ui/src/components/NavShell.tsx";
+/* Shared chrome atoms — Footer/Colophon/ModuleCard live in nav-shell.css, but
+   SkipLink/CtaLink/IconLink carry token utilities (the skip link's off-screen
+   hide, the CTA dress). Without this line the skip link renders permanently
+   visible: its `-translate-y-[200%]` is never generated. */
+@source "../../../packages/ui/src/components/chrome.tsx";
+@source "../../../packages/ui/src/components/TerminalManifest.tsx";
+@source "../../../packages/ui/src/components/docs";
+@source "../../../packages/ui/src/components/chat";
+@source "../../../packages/ui/src/components/stages";
+@source "../../../packages/ui/src/components/data-layout";
+@source "../../../packages/ui/src/components/repo-activity";
+@source "../../../packages/ui/src/components/typography";
+@source "../../../packages/ui/src/components/symbols";
+/* … and the terminal loaders' (<TerminalStepCaret> in the waiting turn). */
+@source "../../../packages/ui/src/components/terminal";
+/* … and the shared ContactMailto's pending dim. */
+@source "../../../packages/ui/src/components/contact";
+/* … and the promoted prose atoms (PageHead/RuledList/RuledRow/Mono) and the
+   `Fig N` Figure, which carry the long-form page grammar as utilities. */
+@source "../../../packages/ui/src/components/prose";
+@source "../../../packages/ui/src/components/figure";
+/* … and the vendored shadcn kit primitives (@digithings/ui/ui) — the Sheet,
+   Input/Label/Button/Alert/Badge family carries token-backed utilities. The
+   controls-layer Select/Table carry none (plain .ctl-* classes in
+   controls-core.css), so components/controls needs no line here. */
+@source "../../../packages/ui/src/ui";
+
+/* Point the token font families at the self-hosted next/font variable.
+   Utilitarian v0.1: mono is the default voice for claim, body, and chrome.
+   Do not re-point --font-display at a serif — tokens.css already ships Geist Mono. */
+:root[data-theme] {
+  --font-sans: var(--font-geist-mono), ui-monospace, monospace;
+  --font-mono: var(--font-geist-mono), ui-monospace, monospace;
+  --font-display: var(--font-mono);
+}
+
+/* ---- Neutral platform palette (digithings.ai only) ----
+   digithings is the platform; accent flavoring belongs to individual modules,
+   not the platform shell. The shared design tokens (tokens.css) define a teal
+   accent that digiquant.io legitimately uses for its green-candle identity — we
+   must NOT change that file (digiquant-web + dashboard consume it). Instead we
+   override the semantic accent tokens here, scoped to this app's stylesheet
+   only, collapsing accent to monochrome ink/white. Everything that reads
+   the accent token (terminal cursor, nav hovers, dt- and dc- UI, primary
+   buttons, graph nodes) inherits the neutral tone with no per-rule edits. */
+/* NB: must match tokens.css's `:root[data-theme=…]` specificity (0,2,0) and come
+   after it in source order — a bare `[data-theme=…]` (0,1,0) would lose and the
+   teal accent would leak through. */
+:root[data-theme="dark"] {
+  --accent: var(--ink);
+  --on-accent: var(--bg);
+  --accent-weak: color-mix(in srgb, var(--ink) 12%, transparent);
+}
+:root[data-theme="light"] {
+  --accent: var(--ink);
+  --on-accent: var(--surface);
+  /* stronger than dark-mode 12% so the fixed .glow wash reads on --bg */
+  --accent-weak: color-mix(in srgb, var(--ink) 20%, transparent);
+}
+
+/* The shared `.glow` (site.css) drifts vertically (keyframe `translate(…, 2%)`),
+   which leaves a faint un-tinted strip at the very top edge — most visible on
+   subpages and when the auto-hiding nav uncovers the top. Anchor it here so the
+   page shading always reaches the top border. (The shared file also feeds
+   digiquant.io, so we don't touch it.) */
+.glow { animation: none; transform: none; }
+
+/* ==========================================================================
+   v7 LANDING CHROME — originally ported from digiquant-web/app/globals.css
+   (itself from packages/design/demos/digiquant-landing/07-scroll-driven.html),
+   since slimmed by the canon migration (#1400): the scroll-aware nav lives in
+   @digithings/ui's NavShell (nav-shell.css), the /docs shell in the shared
+   docs family (docs.css), the clean layout/type rules moved into their
+   TSX as token utilities, and the terminal module manifest rides the shared
+   <TerminalManifest> primitive (terminal-manifest.css, #1416). What remains
+   below is what must stay CSS — the mesh-hero entrance art + keyframes.
+   Namespaced `dq*` so nothing collides with shared site.css. Consumes
+   [data-theme] tokens only → light/dark safe.
+   ========================================================================== */
+:root {
+  /* --nav-shell-h is the shared NavShell/nav-shell.css height knob (its
+     fallback is the same 62px). --dq-nav-h is this app's historical alias for
+     the many `pt-[var(--dq-nav-h)]` page paddings and anchor offsets;
+     digiquant-web declares the same direction. Keep the canonical value on
+     --nav-shell-h so the two can never drift. (Wave-3 T2 audit: the alias is
+     a token, not a class family — migrating every consumer would touch
+     digiquant-web/digichat-ui outside this task's scope for no visual gain.) */
+  --nav-shell-h: 62px;
+  --dq-nav-h: var(--nav-shell-h);
+  /* the shared docs shell (docs.css) reads its own offset token */
+  --docs-nav-h: var(--nav-shell-h);
+}
+
+/* /chat, /chat/occ (chat/page.tsx, chat/occ/page.tsx): DtNav there is
+   `autoHide="hover"` and its <main> deliberately reserves no top padding on
+   desktop, since a hover-hidden bar should overlay on reveal rather than
+   leave a permanent gap. But nav-shell.css forces the bar to stay visible —
+   never hidden — on touch/narrow viewports via the same
+   `(max-width: 768px), (hover: none)` query (touch has no mousemove to
+   reveal it with), so on those viewports the fixed nav permanently overlaps
+   the chat's own top row (the digichat embed header, incl. the language
+   selector) unless the page reserves that space too. Mirrors the query
+   exactly so the two rules can never drift out of sync. */
+@media (max-width: 768px), (hover: none) {
+  .dc-chat-main { padding-top: var(--nav-shell-h); }
+}
+
+/* anchor-scroll: center the whole architecture block (head + manifest) in the viewport */
+html {
+  scroll-behavior: auto;
+  scroll-padding-top: var(--dq-nav-h);
+}
+#architecture {
+  scroll-margin-top: var(--dq-nav-h);
+  min-height: calc(100svh - var(--dq-nav-h));
+  display: flex;
+  align-items: center;
+  padding-block: clamp(1.5rem, 4vh, 2.5rem);
+}
+#architecture .section-head {
+  margin-bottom: clamp(1.25rem, 2.5vw, 1.75rem);
+}
+#contact { scroll-margin-top: calc(var(--dq-nav-h) + 1.5rem); }
+
+@media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }
+
+/* DtNav's "ask digichat" tail entry is now the kit's <CtaLink variant="outline">
+   (buttonVariants), so the `.dc-nav-cta` family is gone — one CTA treatment in
+   the canon, not one per site (R1). */
+
+/* digichat embed boot loader (ChatEmbedShell.tsx) sits over the page's own
+   fixed .grain/.glow layers, not a plain app background. ContainerBootLoader's
+   shared .tl-boot class fills var(--bg) by default (right for its usual mode:
+   pinned over an app that has not rendered, with nothing behind it) -- scoped
+   override for this usage only, so .grain/.glow stay visible through the
+   loading phase instead of disappearing behind a flat rectangle that then pops
+   away once digichat itself loads. */
+.tl-boot.dc-embed-boot { background: transparent; }
+
+/* The boot dock mirrors the real composer: the loader's dboot default caps at
+   42rem (sized for the pre-wide DataTap port), while this embed runs the
+   thread full width (layout=page, wide=1) -- match it so the cube contour
+   traces the same box the real textarea occupies on handoff. */
+.dboot.dc-embed-boot .dboot-dock { max-width: none; width: 100%; }
+
+
+/* Landing / module cards continue below */
+
+/* ---- /docs API reference — app-owned CONTENT chrome only. The shell
+   (responsive sidebar + scroll-spy + mobile disclosure), hero, code blocks,
+   field-table hairlines and the HTTP-method color ramp live in the shared
+   docs family (@digithings/ui DocsLayout/CodeTabs/EndpointDoc + docs.css).
+   What remains here is digithings content structure: guides, per-module
+   sections, interface lists, related links. The copy-as-Markdown buttons and
+   the tier badges are the vendored kit's Button/Badge (wave 2, #4206), so the
+   old .docs-copy/.doc-badge dress went with them. */
+.doc-block { margin: 0; }
+.doc-block h3 { margin: 0 0 0.5rem; font-family: var(--font-mono); font-size: 0.72rem; letter-spacing: 0.14em; text-transform: uppercase; color: var(--ink-mute); font-weight: 500; }
+
+/* anchored sections get their scroll offset from the shared docs.css rule
+   (.docs-content :where([id])), driven by --docs-nav-h above. */
+.doc-mod { border-top: 1px solid var(--hair); padding-top: clamp(1.2rem, 3vw, 1.8rem); display: flex; flex-direction: column; gap: 0.7rem; }
+.doc-mod-head { display: flex; align-items: center; gap: 0.7rem; }
+.doc-mod-title { display: flex; flex-direction: column; gap: 0.1rem; margin-right: auto; }
+.doc-mod-title h2 { margin: 0; font-family: var(--font-mono); font-size: 1.05rem; font-weight: 500; letter-spacing: -0.01em; }
+.doc-mod-title .dt-d { color: var(--ink); }
+.doc-mod-title .dt-s { color: var(--accent); }
+.doc-mod-role { font-size: 0.78rem; color: var(--ink-mute); }
+.doc-tagline { margin: 0; color: var(--ink); font-size: 0.96rem; line-height: 1.5; }
+.doc-summary { margin: 0; color: var(--ink-soft); font-size: 0.88rem; line-height: 1.65; }
+
+.doc-links { display: flex; flex-wrap: wrap; gap: 1rem; margin-top: 0.2rem; }
+.doc-links a { font-family: var(--font-mono); font-size: 0.8rem; color: var(--accent); text-decoration: none; text-underline-offset: 2px; }
+.doc-links a:hover { text-decoration: underline; }
+.doc-links a .dt-d { color: var(--ink); }
+.doc-links a .dt-s { color: var(--accent); }
+
+/* ---- shared guides ---- */
+.doc-guide { border-top: 1px solid var(--hair); padding-top: clamp(1.2rem, 3vw, 1.8rem); display: flex; flex-direction: column; gap: 0.6rem; }
+.doc-guide-title { margin: 0; font-family: var(--font-display); font-weight: 400; font-size: clamp(1.4rem, 2.6vw, 1.9rem); letter-spacing: -0.01em; color: var(--ink); }
+.doc-guide-h { margin: 0.6rem 0 0; font-family: var(--font-mono); font-size: 0.74rem; letter-spacing: 0.12em; text-transform: uppercase; color: var(--ink-mute); font-weight: 500; }
+.doc-guide-list { margin: 0.2rem 0 0; padding-left: 1.1rem; display: flex; flex-direction: column; gap: 0.35rem; color: var(--ink-soft); font-size: 0.9rem; line-height: 1.6; }
+.doc-inline-link { color: var(--accent); text-decoration: none; text-underline-offset: 2px; }
+.doc-inline-link:hover { text-decoration: underline; }
+
+/* Wide shell for OpenAPI explorer (Swagger needs horizontal room). */
+.docs-shell--wide { max-width: 1180px; }
+
+/* ---- Swagger UI (vendored CSS) — re-tint toward site tokens; hide try-it chrome ---- */
+.docs-swagger .swagger-ui { font-family: var(--font-sans); color: var(--ink); }
+.docs-swagger .swagger-ui .info .title,
+.docs-swagger .swagger-ui .opblock-tag,
+.docs-swagger .swagger-ui .opblock .opblock-summary-path,
+.docs-swagger .swagger-ui .opblock .opblock-summary-description,
+.docs-swagger .swagger-ui .tab li,
+.docs-swagger .swagger-ui table thead tr td,
+.docs-swagger .swagger-ui table thead tr th,
+.docs-swagger .swagger-ui .parameter__name,
+.docs-swagger .swagger-ui .response-col_status,
+.docs-swagger .swagger-ui .response-col_description,
+.docs-swagger .swagger-ui .model-title,
+.docs-swagger .swagger-ui .prop-type,
+.docs-swagger .swagger-ui label,
+.docs-swagger .swagger-ui .scheme-container { color: var(--ink); }
+.docs-swagger .swagger-ui .info .base-url,
+.docs-swagger .swagger-ui .parameter__type,
+.docs-swagger .swagger-ui .prop-format,
+.docs-swagger .swagger-ui .model .property.primitive { color: var(--ink-soft); }
+.docs-swagger .swagger-ui .scheme-container,
+.docs-swagger .swagger-ui .opblock,
+.docs-swagger .swagger-ui section.models,
+.docs-swagger .swagger-ui .model-box { background: var(--surface); border-color: var(--hair); box-shadow: none; }
+.docs-swagger .swagger-ui .opblock .opblock-section-header { background: color-mix(in srgb, var(--ink) 4%, transparent); }
+.docs-swagger .swagger-ui .btn,
+.docs-swagger .swagger-ui select { border-radius: 0; }
+.docs-swagger .swagger-ui .topbar,
+.docs-swagger .swagger-ui .auth-wrapper,
+.docs-swagger .swagger-ui .try-out,
+.docs-swagger .swagger-ui .execute-wrapper,
+.docs-swagger .swagger-ui .btn.execute { display: none !important; }
+
+/* ---- public interface / mcp lists ---- */
+.doc-iface { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 0.5rem; }
+.doc-iface li { display: flex; flex-direction: column; gap: 0.2rem; }
+.doc-iface-desc { color: var(--ink-soft); font-size: 0.86rem; line-height: 1.55; }
+
+/* Chat iframe canvas: snapshot the theme's --bg token on the root (the config
+   variable from tokens.css, set per [data-theme]). Snapshotting on :root keeps
+   the value fixed even if a nested theme wrapper re-declares --bg, and leaves
+   the color fully config-driven - swap the theme config, the chat follows. */
+:root {
+  --chat-frame-canvas: var(--bg);
+  --chat-frame-scheme: light;
+}
+
+:root[data-theme="dark"] {
+  --chat-frame-canvas: var(--bg);
+  --chat-frame-scheme: dark;
+}
+
+/* Chat iframe container: paints the theme canvas (the --bg token snapshotted
+   on :root, per [data-theme]) so the moment before the embed's own CSS lands
+   is never a bare white/UA frame; the app then paints the same colour. */
+.dc-chat-frame {
+  background: var(--chat-frame-canvas);
+  color-scheme: var(--chat-frame-scheme);
+}

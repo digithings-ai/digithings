@@ -33,6 +33,8 @@ the broader delegation framework.
 |---|---|---|---|
 | Broken internal doc links | `pipeline-maintenance.yml` — `doc-links` job | weekly Mon 08:00 UTC | Runs `python3 scripts/check_doc_links.py`, files `[housekeeping] Broken internal doc links — <date>` if any found |
 | `agents.yml` ↔ `.claude/` drift | `pipeline-maintenance.yml` — `agents-drift` job | weekly Mon 08:00 UTC | Runs `make agents-init --check`, files an issue if regeneration is needed |
+| Per-module `ARCHITECTURE.md` drift | `pipeline-maintenance.yml` — `architecture-drift` job | weekly Mon 08:00 UTC | Runs `scripts/check_architecture_drift.py`: flags modules whose public-interface paths moved ≥3d after their `ARCHITECTURE.md` did (last 30d), one tracker issue for **human** triage. Advisory only — never edits docs |
+| ADR numbering | `pipeline-maintenance.yml` — `adr-numbering` job + `ci-docs.yml` | weekly + on PR | Runs `scripts/check_adr_numbering.py`: `docs/adr/NNNN-*.md` must be zero-padded, unique and gap-free; files `[housekeeping] ADR numbering violation — <date>` on breach |
 | Doc-link check on every PR | `ci-docs.yml` | on PR | Same check as above, gates PRs with broken links |
 
 ## Security
@@ -40,6 +42,7 @@ the broader delegation framework.
 | Coverage | Workflow | Cadence | What it does |
 |---|---|---|---|
 | Python dependency CVEs | `pipeline-maintenance.yml` — `dependency-audit` job + `security-pip-audit.yml` | weekly + on PR | Runs `pip-audit`, files one batched tracker issue (`security:finding`, dispatched at the cursor tier) |
+| npm dependency CVEs | `security-npm-audit.yml` (dispatched weekly by the cron Worker) + `ci.yml` — `npm-audit` lane | weekly Mon 06:37 UTC + on PR | Runs `npm audit` on the root `apps/*` + `packages/*` workspace closure, blocks HIGH/CRITICAL, surfaces lower severities (accepted advisories in `npm-audit-ignore.txt`) |
 | Secret leaks | `security-gitleaks.yml` | on push / PR | Scans for hard-coded secrets, fails CI if any found |
 | Protected-path edits | `scripts/claude-hooks/protected-path-guard.sh` | PreToolUse hook | Blocks `.github/workflows/`, `SECURITY.md`, `docs/scoring/`, `config/litellm.yaml`, `projects/` edits outside properly-named branches — in both the current checkout and the primary tree when the session is rooted in a linked worktree |
 | Live-trading path edits | `scripts/hooks/pre-push.sh` | pre-push | Requires `Human-Approved-By:` trailer on commits touching live-trading paths |
@@ -48,6 +51,7 @@ the broader delegation framework.
 
 | Coverage | Workflow | Cadence | What it does |
 |---|---|---|---|
+| Scheduled-workflow credential expiry | `token-canary.yml` (dispatched daily by the cron Worker) | daily 06:41 UTC | Runs `scripts/check_workflow_tokens.py`: validates `DIGITHINGS_PROJECT_TOKEN` (`GET /user`) and `GH_DISPATCH_TOKEN` (read-only Actions-permissions probe) without spend; files one `priority:high` tracker on failure. `CLAUDE_CODE_OAUTH_TOKEN` / `CURSOR_API_KEY` are presence-checked only — neither has a quota-free introspection endpoint (#3522) |
 | Scheduled-workflow failure digest | `pipeline-maintenance.yml` — `workflow-health` job | weekly Mon 08:00 UTC | Aggregates failed scheduled runs from the past 7 days, one tracker issue (dedup by title) |
 | PR-branch CI failures | `agent-ci-failure-triage.yml` | on workflow_run failure | Files a `ci:failure` triage issue per failed PR-branch workflow (dispatched at the cursor tier) |
 | digiquant pipeline trackers | `pipeline-digiquant-{prices,onchain,tearsheets}.yml` — tracker update on failure | per-run | Maintains one persistent tracker issue per pipeline (dedup by body marker, paginated) instead of a new issue each failure |
@@ -87,12 +91,9 @@ auth/crypto, brokers/live-trading, new external network exposure, PRs into
 
 ## Coverage gaps (follow-up)
 
-Tracked as issues (see #3533):
-
-- **Token validity monitoring** — no active test that credentials haven't expired; failure signal is correlated scheduled failures. → #3522
-- **npm audit for `cloudflare/`** — only Python CVEs are scanned today. → #3523
-- **ADR numbering audit** — no check that `docs/adr/NNNN-*.md` files are sequentially numbered or without duplicates. → #3524
-- **Per-module ARCHITECTURE.md drift** — no check that module architecture docs are updated when the module's public interface changes. → #3525
+Tracked as issues (see #3533): none currently open — token validity monitoring
+(#3522), npm audit for `apps/` + `packages/` (#3523) and the ADR numbering audit
+(#3524) are all implemented.
 
 ## Reference
 

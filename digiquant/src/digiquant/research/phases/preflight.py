@@ -87,7 +87,7 @@ class PreflightDeps:
     research_state_store: Any | None = None
     # WP15.6 (#2975): optional outcome-learning maturation stack for lesson pin.
     outcome_maturation_deps: Any | None = None
-    # Outer-retry attempt id (string form of OLYMPUS_ATTEMPT / DiagnosticsDeps.attempt).
+    # Outer-retry attempt id (string form of DIGIQUANT_ATTEMPT / DiagnosticsDeps.attempt).
     research_state_attempt_id: str | None = None
 
 
@@ -383,10 +383,10 @@ def _business_days_between(earlier: date, later: date) -> int:
 
 
 def _profile_config_store_for_pin(client: SupabaseClient, version_id: str) -> dict[str, Any]:
-    """Load one olympus_profile_config payload by exact id (fail closed if absent)."""
+    """Load one profile_config payload by exact id (fail closed if absent)."""
     try:
         response = (
-            client.table("olympus_profile_config")
+            client.table("profile_config")
             .select("id,payload")
             .eq("id", version_id)
             .limit(1)

@@ -491,43 +491,21 @@ def test_no_stale_qwen_model_ids_in_dashboard_config() -> None:
 
 @pytest.mark.unit
 def test_default_tier_is_cheap(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.delenv("OLYMPUS_MODEL_TIER", raising=False)
     monkeypatch.delenv("DIGIQUANT_MODEL_TIER", raising=False)
     assert get_digiquant_tier() == "cheap"
 
 
 @pytest.mark.unit
-def test_digiquant_model_tier_wins_over_dashboard_alias(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """#3381: DIGIQUANT_MODEL_TIER is canonical; the retired OLYMPUS_* name is ignored (#3784)."""
-    monkeypatch.setenv("DIGIQUANT_MODEL_TIER", "quality")
-    monkeypatch.setenv("OLYMPUS_MODEL_TIER", "cheap")
-    assert get_digiquant_tier() == "quality"
-
-
-@pytest.mark.unit
 def test_digiquant_model_tier_alone(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.delenv("OLYMPUS_MODEL_TIER", raising=False)
+    monkeypatch.delenv("DIGIQUANT_MODEL_TIER", raising=False)
     monkeypatch.setenv("DIGIQUANT_MODEL_TIER", "balanced")
     assert get_digiquant_tier() == "balanced"
 
 
 @pytest.mark.unit
-def test_olympus_model_tier_alone_is_ignored(monkeypatch: pytest.MonkeyPatch) -> None:
-    """#3784: sole-read — the retired OLYMPUS_MODEL_TIER no longer selects a tier."""
-    monkeypatch.delenv("DIGIQUANT_MODEL_TIER", raising=False)
-    monkeypatch.setenv("OLYMPUS_MODEL_TIER", "quality")
-    assert get_digiquant_tier() == "cheap"
-
-
-@pytest.mark.unit
-def test_empty_digiquant_model_tier_ignores_dashboard_alias(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
+def test_empty_digiquant_model_tier_is_cheap(monkeypatch: pytest.MonkeyPatch) -> None:
     """Canonical key presence (even empty) wins — matches envcompat kill-switch semantics."""
     monkeypatch.setenv("DIGIQUANT_MODEL_TIER", "")
-    monkeypatch.setenv("OLYMPUS_MODEL_TIER", "quality")
     assert get_digiquant_tier() == "cheap"
 
 
@@ -547,7 +525,6 @@ def test_edit_mode_segments_route_to_cheap_open_weight_models(
     monkeypatch: pytest.MonkeyPatch, phase_slug: str
 ) -> None:
     """#926 gate: default cheap tier pools open-weight models for edit-mode segment schemas."""
-    monkeypatch.delenv("OLYMPUS_MODEL_TIER", raising=False)
     monkeypatch.delenv("DIGIQUANT_MODEL_TIER", raising=False)
     assert get_digiquant_tier() == "cheap"
     model = get_model_for_phase(phase_slug)
