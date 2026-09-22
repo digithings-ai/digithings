@@ -117,3 +117,19 @@ class TestToolUseContract:
         contract = load_skill("macro")
         contract = contract[contract.index("## Tools") : contract.index("## Research memo")]
         assert "does not exist yet" in contract
+
+    def test_contract_skipped_for_tool_less_skills(self) -> None:
+        """#4490 review: these skills are called with no ``tools=`` and no ``execute_tool=``,
+        so ``run_tools`` is never entered and the contract's document/fetch instructions
+        would be false for them (``decision-reflector`` writes one JSON field;
+        ``beliefs-distillation`` persists under the key ``beliefs``, not its slug)."""
+        for slug in (
+            "decision-reflector",
+            "beliefs-distillation",
+            "digest",
+            "digest-subsection",
+            "monthly-synthesis",
+        ):
+            body = load_skill(slug)
+            assert "## Tools (read this before you plan a single call)" not in body, slug
+            assert "## Research memo (required)" not in body, slug

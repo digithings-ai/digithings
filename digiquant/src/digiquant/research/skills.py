@@ -86,12 +86,33 @@ def _is_research_memo_skill(slug: str) -> bool:
     return slug not in _NON_RESEARCH_MEMO_SKILLS
 
 
+# Skills that never bind tools, so TOOL_USE_CONTRACT would assert things that are false
+# for them (#4490 review). Every one of these is called with no ``tools=`` /
+# ``execute_tool=``, so ``digigraph.graph.research_agent`` short-circuits
+# ``tool_grounded = bool(tools) and execute_tool is not None`` and ``run_tools`` is never
+# entered — there is no loop to converge and no ``web_grounding`` block to read:
+#   * ``decision-reflector``  — research/decision_log.py:393; output is one ``reflection``
+#     field, not a document.
+#   * ``beliefs-distillation`` — persisted under the key ``beliefs`` (BELIEFS_DOCUMENT_KEY),
+#     not the slug, so the contract's ``document_key="{slug}"`` would be actively wrong.
+#   * ``digest`` / ``digest-subsection`` — phase7_synthesis.py:609,687,715.
+#   * ``monthly-synthesis`` — phase_monthly.py:42.
+# Telling those calls to "write today's document" and fetch their own prior one is the
+# same class of defect this contract exists to remove, so they are exempt.
+_TOOL_CONTRACT_EXEMPT_SKILLS = _NON_RESEARCH_MEMO_SKILLS
+
+
+def _tool_contract_applies(slug: str) -> bool:
+    return slug not in _TOOL_CONTRACT_EXEMPT_SKILLS
+
+
 def _render_tool_use_contract(slug: str) -> str:
     """Return :data:`TOOL_USE_CONTRACT` with ``{slug}`` filled in.
 
-    Separate from the constant so the two ``{slug}`` placeholders are substituted by
-    ``str.replace`` rather than ``str.format`` — the block quotes literal braces in
-    prose-adjacent text, and ``format`` would raise on any future one.
+    Separate from the constant so the ``{slug}`` placeholders are substituted by
+    ``str.replace`` rather than ``str.format``. Today the constant holds no other braces,
+    so ``format`` would also work — but ``replace`` cannot raise on a future literal brace,
+    at the cost of leaving an unknown ``{name}`` placeholder silently intact.
     """
     return TOOL_USE_CONTRACT.replace("{slug}", slug)
 
@@ -189,7 +210,7 @@ TOOL_USE_CONTRACT = """## Tools (read this before you plan a single call)
 
 Your toolset is exactly the functions listed in this request's tool schemas — nothing
 else. There is no shell, no URL fetcher, no browser, and no MCP client in this loop. If
-the instructions below name a tool that is not in your schema (`defuddle`, `WebFetch`,
+the instructions above name a tool that is not in your schema (`defuddle`, `WebFetch`,
 `curl`, `./scripts/fetch-market-data.sh`, "the MCP Polymarket tools", an X/Twitter or
 Reddit or Google Trends search), that instruction describes a different environment:
 **you cannot run it — do not try, and do not report its absence as a gap in the data.**
@@ -210,7 +231,7 @@ Reddit or Google Trends search), that instruction describes a different environm
 - **Reading a prior document is one call, not a search.** If you want your own prior
   document, call `fetch_prior_document(document_key="{slug}")` once and read it.
 - **A path is not a document key.** Entries like `docs/ops/data-sources.md`,
-  `config/watchlist.md` or `config/preferences.md` under `## Inputs` below are provenance
+  `config/watchlist.md` or `config/preferences.md` under `## Inputs` above are provenance
   for a human reader — files in the repository, not rows in Supabase. Never pass one to a
   tool.
 - **Data tools are ground truth where they exist.** When `get_price_technicals`,
@@ -272,7 +293,8 @@ def load_skill(slug: str) -> str:
     raw = path.read_text(encoding="utf-8")
     _, body = _split_frontmatter(raw)
     parts = [body.strip()]
-    parts.append(_render_tool_use_contract(slug))
+    if _tool_contract_applies(slug):
+        parts.append(_render_tool_use_contract(slug))
     if _is_research_memo_skill(slug):
         parts.append(RESEARCH_MEMO_RULES)
     if slug in _DIGEST_BRIEFING_SKILLS:
@@ -298,7 +320,8 @@ def load_skill_edit(slug: str) -> str:
     raw = path.read_text(encoding="utf-8")
     _, body = _split_frontmatter(raw)
     parts = [body.strip()]
-    parts.append(_render_tool_use_contract(slug))
+    if _tool_contract_applies(slug):
+        parts.append(_render_tool_use_contract(slug))
     if _is_research_memo_skill(slug):
         parts.append(RESEARCH_MEMO_RULES)
     if slug in _DIGEST_BRIEFING_SKILLS:

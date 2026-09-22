@@ -32,12 +32,14 @@ description: Run global macro analysis as part of the daily digest. Covers econo
 
 1. DB-first: read the latest macro levels from Supabase (`daily_snapshots.market_data` / `documents.payload`). Prefer embedded `market_data` / snapshot fields for **yield curve** (1M–30Y), **key spreads** (2s10s, 3m10y), **VIX + SKEW**, **commodities**, **FX**, **credit proxies**, and **crypto** — do not web-browse for numbers that already exist there.
 
-2. **Web search for** (not in the data files):
+2. **From the `web_grounding` block** (supplied in PHASE_INPUTS when the ingested FRED
+   layer is stale; it is the only web evidence available this run):
    - News catalysts explaining *why* things moved
    - Economic calendar: scheduled releases, consensus vs actual
    - Fed/ECB/BOJ speeches, statements, minutes
    - PMI, CPI, NFP, GDP prints and market reactions
    - Geopolitical events and escalation risk
+   If an item is not in the grounding, state that it is unavailable — do not search for it.
    - Inflation breakevens (TIPS) and real yields — use `get_macro_series` with series `T10YIE` (10Y breakeven), `T5YIE` (5Y breakeven), `DFII10` (10Y TIPS real yield)
    - Additional FRED series via `get_macro_series`: `CPIAUCSL` (CPI), `PCEPI` (PCE), `UNRATE`, `GDP`, `T10Y2Y` (2s10s spread), `T10Y3M` (3m10y spread), `VIXCLS`
 

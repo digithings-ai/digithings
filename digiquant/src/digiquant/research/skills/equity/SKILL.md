@@ -47,14 +47,15 @@ description: Run US equity market overview analysis. In the orchestrator pipelin
 2. In the **Technicals** step, quote numbers directly from the data file.
    No need to search for SPY/QQQ/IWM levels — they are in the table.
 
-3. **Web search for** (not in the data files):
+3. **From the `web_grounding` block** (the cited news summary supplied in PHASE_INPUTS):
    - Earnings reactions, guidance, analyst actions
    - News catalysts behind notable movers
-   - Market breadth indicators (A/D line, 52W H/L, % above 200DMA) — check Finviz/Barchart
+   - Market breadth colour (A/D line, 52W H/L, % above 200DMA)
    - McClellan Oscillator, breadth divergences
-   - Sector ETF flows (not price — ETF.com for flow data)
+   - Sector ETF flow colour (price-and-volume proxy via `get_etf_flows_proxy`)
+   If an item is not in the grounding, state that it is unavailable — do not search for it.
 
-> If that fails (sandbox), use the data tools directly (`get_price_technicals`, `get_macro_series`, etc.).
+> Use the data tools directly for numbers (`get_price_technicals`, `get_macro_series`, `get_market_breadth`, `get_sector_relative_strength`, `get_vix_term_structure`, `get_etf_flows_proxy`).
 
 ## Research Steps
 

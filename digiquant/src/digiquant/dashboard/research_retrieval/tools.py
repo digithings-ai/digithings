@@ -61,8 +61,9 @@ RESEARCH_TOOLS: list[dict[str, Any]] = [
                 "This is a read of stored rows: repeating a call with the same arguments "
                 "returns the same rows, and re-phrasing the same question with a different "
                 "subject/dataset/ticker cannot surface a row that was not already there. "
-                "The document you are writing today does not exist yet, so a query for the "
-                "run date returns nothing by design — that is an answer, not a failure. "
+                "The document your own segment is writing today does not exist yet, so an "
+                "exact fetch for it on the run date returns nothing by design — that is an "
+                "answer, not a failure. "
                 "Use it for continuity (one prior fetch per key) and stop; an empty result "
                 "means the evidence genuinely is not in the store."
             ),
