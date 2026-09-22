@@ -122,7 +122,10 @@ class TestContractScope:
     def test_not_appended_to_other_skills(self, slug: str) -> None:
         body = load_skill_full(slug)
         assert "## Forecast amendment" not in body
-        assert TOOL_HEADING not in body
+        # The deliberation tool contract specifically. The ``## Tools`` heading is shared
+        # with the general portfolio contract (#4524), so it is not the discriminator here.
+        assert DELIBERATION_TOOL_USE_CONTRACT not in body
+        assert "This is a conversation" not in body
 
 
 class TestContractImposesNoLimits:
