@@ -126,8 +126,8 @@ export function FaqList() {
   return (
     <div className="grid gap-0">
       {FAQ.map((item) => (
-        <details key={item.q} className="group border-b border-hair last:border-b-0">
-          <summary className="flex cursor-pointer items-center justify-between gap-[1rem] py-[1.1rem] font-mono text-[0.92rem] text-ink marker:content-none">
+        <details key={item.q} className="disclosure-row group border-b border-hair last:border-b-0">
+          <summary className="flex items-center justify-between gap-[1rem] py-[1.1rem] font-mono text-[0.92rem] text-ink">
             {item.q}
             <span
               aria-hidden="true"

@@ -51,6 +51,23 @@ const BASIS: Record<string, string> = {
  */
 const FOCUS_BASIS = "30rem";
 
+/**
+ * Scroll budget per module, in `vh`.
+ *
+ * The shared default is 90vh, which for eleven modules pinned the section for
+ * ~9,900px — well over half of the page's total height, and the single longest
+ * stretch of scrolling on a page whose whole premise is leanness. Because the
+ * track is `slideCount * vhPerSlide` tall with a 100vh sticky child, the scroll
+ * a reader actually spends per module is `(track - 100) / slideCount`: 90vh
+ * bought ~809px per module, 60vh buys ~510px, which still holds the focused
+ * cell's tagline, dependency chips and compose command for a comfortable dwell.
+ *
+ * Passed per-consumer rather than lowered on `scrollyTrackHeightVh` itself:
+ * that default is pinned by `scrolly-core.test.ts`, and a pin over taller or
+ * fewer slides may legitimately want the longer dwell.
+ */
+const VH_PER_MODULE = 60;
+
 function buildOutput(m: ModuleNode): string {
   return [m.tagline, "", ...m.summary].join("\n");
 }
@@ -110,7 +127,7 @@ export function ModuleGrid() {
   }
 
   return (
-    <div ref={trackRef} style={{ height: `${scrollyTrackHeightVh(ordered.length)}vh` }}>
+    <div ref={trackRef} style={{ height: `${scrollyTrackHeightVh(ordered.length, VH_PER_MODULE)}vh` }}>
       <div className="dg-stage">
         <div className="dg-mosaic" role="list" aria-label="digithings modules">
           {ordered.map((m, i) => {
