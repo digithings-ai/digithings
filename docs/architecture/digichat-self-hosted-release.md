@@ -38,7 +38,7 @@ Bite-sized tasks (release packaging → Profile A/B → install guide → gap fi
 | Artifact | Status | Notes |
 |---|---|---|
 | **Git tag** `digichat-vX.Y.Z` | Exists | [release-please-digichat.yml](../../.github/workflows/release-please-digichat.yml) on `develop`; changelog in `apps/digichat/CHANGELOG.md`. Current app version: `1.0.0` (`private: true` in package.json). `v0.9.3` remains on GHCR for DataTap / existing clients. |
-| **GHCR image** `ghcr.io/digithings-ai/digichat:vX.Y.Z` (+ `:latest`) | Exists | [publish-digichat-image.yml](../../.github/workflows/publish-digichat-image.yml) on `main` when `apps/digichat/**` changes; skips if that version tag already published. `/embed` CSP `frame-ancestors` is set at **runtime** from `DIGICHAT_EMBED_HOSTS` / `DIGICHAT_EMBED_TENANTS` (not baked at publish). |
+| **GHCR image** `ghcr.io/digithings-ai/digichat:vX.Y.Z` (+ `:latest`) | Exists | [publish-digichat-image.yml](../../.github/workflows/publish-digichat-image.yml) when release-please cuts the `digichat-vX.Y.Z` tag on `develop` (the release workflow dispatches it at the tag), and re-checked on a push to `main` touching `apps/digichat/**`; skips if that version tag already published. `/embed` CSP `frame-ancestors` is set at **runtime** from `DIGICHAT_EMBED_HOSTS` / `DIGICHAT_EMBED_TENANTS` (not baked at publish). |
 | **npm package for digichat Node** | Does **not** exist | App is `private: true`; clients do not `npm install digichat`. |
 | **`@digithings/digichat-ui`** | Workspace / site embed | Shared React UI for marketing shells and digichat itself — **not** the self-host install unit. |
 | **Compose local image** `digi-digichat:latest` | Dev / operator | Root `docker-compose.yml` **builds** from repo context; does not pull GHCR by default. |
@@ -53,8 +53,8 @@ Bite-sized tasks (release packaging → Profile A/B → install guide → gap fi
 5. **Not an install path:** publishing digichat Node to npm.
 
 ```text
-release-please (develop) → digichat-vX.Y.Z tag + CHANGELOG
-promote to main          → publish-digichat-image → ghcr.io/.../digichat:vX.Y.Z
+release-please (develop) → digichat-vX.Y.Z tag + CHANGELOG → publish-digichat-image → ghcr.io/.../digichat:vX.Y.Z
+promote develop → main   → cut release/vX.Y.Z from main (that version's patch line)
 client / digithings ops  → pull image + set env + choose profile A or B
 ```
 
