@@ -362,6 +362,23 @@ make doc-check          # validate internal markdown links
 ruff check . && ruff format .
 ```
 
+### `npm ci` on macOS strips the lockfile's `libc` selectors
+
+Running `npm ci` locally on macOS rewrites `package-lock.json` and drops the `libc`
+fields from the four Linux x64 native bindings
+(`@tailwindcss/oxide-linux-x64-{gnu,musl}`, `@unrs/resolver-binding-linux-x64-{gnu,musl}`).
+Committing that stripped lock fails CI's
+`tests/scripts/test_package_lock_platform_coverage.py` with
+`should declare libc [glibc], got None`.
+
+**Before committing any lockfile change, check it is not collateral:**
+`git diff origin/develop -- package-lock.json` should show only your intended edit.
+If the `libc` entries vanished, restore with
+`git checkout origin/develop -- package-lock.json` and re-apply your change.
+
+This is a local-tooling artifact, not a real dependency change — it has bitten
+three separate PRs.
+
 ---
 
 ## Cursor Cloud specific instructions
@@ -479,6 +496,23 @@ real deploy), not because CI passed. Merging early forecloses accumulation and
 forces the next commit into a brand-new release — three digichat releases (1.1.0,
 1.2.0, and a same-day 1.2.1 proposal) landed within ~48 hours this way, none of
 them tied to a deliberate release decision (2026-08-13).
+
+`release-please-digichat` keeps targeting `develop`, so the version bump — and
+the `digichat-vX.Y.Z` tag release-please cuts when it lands — stays on
+`develop`; do not re-target it at `main`, or the squashed promotion commit reads
+as a no-op and the changelog empties out.
+
+**Every release also gets its own branch, cut from `main`.** Once the promotion
+lands, cut `release/vX.Y.Z` from `main` at the promotion commit (the tagged
+commit is in `main`'s history by then) — one branch per released version. That
+branch is the version's **maintenance line**, not a staging gate: features
+accumulate on `develop`, and by the time the branch exists the version is
+already deployed. Patch releases continue the chain (`release/vX.Y.(Z+1)`
+branched from `release/vX.Y.Z`); the fix is cherry-picked onto `develop` so the
+next promotion carries it, and a release branch (or its version bump) is never
+merged into `main`. Recipes:
+[BRANCHING.md](BRANCHING.md#cutting-a-release) § Cutting a release / Patching a
+release, and [RELEASES.md](RELEASES.md#patching-a-released-version).
 
 ---
 

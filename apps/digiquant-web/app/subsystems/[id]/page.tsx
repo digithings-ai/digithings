@@ -1,10 +1,10 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import Link from "next/link";
-import { Footer, Emblem, Reveal, StackRow, subsystems, subsystemById } from "@digithings/ui";
+import { Emblem, Reveal, StackRow, subsystems, subsystemById } from "@digithings/ui";
 import { Card, buttonVariants } from "@digithings/ui/ui";
-import { DQ_FOOTER, DQ_FOOTER_META } from "../../_nav";
 import { SiteNav } from "@/components/landing/SiteNav";
+import { SiteFooter } from "@/components/landing/SiteFooter";
 
 // Poster grammar (canon §12): epithet ≤ 6 words, honest to function; fine
 // print is a job-word coordinate, not a retired package path. Posters wear
@@ -46,7 +46,7 @@ export default async function SubsystemPage({ params }: { params: Promise<{ id: 
   return (
     <>
       <SiteNav />
-      <main className="section dq-subpage">
+      <main className="section dq-subpage" id="main" tabIndex={-1}>
         <div className="wrap" style={{ maxWidth: 820 }}>
           <p style={{ fontFamily: "var(--font-mono)", fontSize: ".8rem", color: "var(--ink-mute)", marginBottom: "1.4rem" }}>
             <Link href="/#pipeline" style={{ color: "var(--ink-soft)" }}>pipeline</Link> / {s.name.toLowerCase()}
@@ -108,7 +108,7 @@ export default async function SubsystemPage({ params }: { params: Promise<{ id: 
           </div>
         </div>
       </main>
-      <Footer links={DQ_FOOTER} meta={DQ_FOOTER_META} />
+      <SiteFooter />
     </>
   );
 }

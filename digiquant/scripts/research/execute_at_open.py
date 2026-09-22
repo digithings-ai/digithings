@@ -411,7 +411,7 @@ def _hold_events_for_positions_not_in_rebalance(
     ``_prior_book_date(execution_date)`` (legacy prose callers). The ledger path must
     pass ``_prior_book_date(run_date)`` so HOLD uses the same prior *book date* as
     fill projection and does not display a later book's move. The displayed pp is
-    book-to-book, not the drifted H8 mark used to size the fill.
+    book-to-book, not the drifted sizing mark used to size the fill.
     """
     res = (
         _eq_house(sb.table("positions").select("ticker,weight_pct,thesis_id,rationale"))
@@ -470,7 +470,7 @@ def _hold_events_for_positions_not_in_rebalance(
 #
 # The prose builders are deliberately still here. Production's migration tail is 065, so
 # the ledger tables do not yet exist there and the ledger is the fallback's fallback until
-# 069/070 are applied and H9 has written a commit row. They also carry the whole #1743
+# 069/070 are applied and commit has written a commit row. They also carry the whole #1743
 # regression suite (the incident where the weight-diff ladder made EXIT unreachable and
 # classified every survivor as an OPEN). Removing them is a post-cutover follow-up, gated
 # on production reaching 070 — not part of this change. `--require-ledger` is the lever
@@ -653,7 +653,7 @@ def build_events_from_paper_fills(
 ) -> Tuple[Optional[List[Dict[str, Any]]], str, Optional[str]]:
     """Book the ledger's pending orders and project the fills into `position_events`.
 
-    `run_d` is the decision date (the date H9 committed a chain for) and `execution_d` the
+    `run_d` is the decision date (the date commit committed a chain for) and `execution_d` the
     morning the fills happen — normally the next trading day, which is why the two are
     separate.
 
@@ -738,7 +738,7 @@ def build_events_from_paper_fills(
     # Cold-start / opening snapshot (#2589): empty lots + non-empty prior book must not
     # reach execute_pending_orders (residuals would invent OPEN/EXIT). Auto-ensure once;
     # if still cold after, decline so --require-ledger exits 3 instead of mislabeling.
-    # The prior is the book *before* ``run_d`` — H9 already wrote today's targets onto
+    # The prior is the book *before* ``run_d`` — commit already wrote today's targets onto
     # ``run_date`` before the open, so ``_prior_book_date(execution_d)`` would compare
     # the fill against that new book and project ADD/TRIM of +0.0pp.
     prior_book_d = _prior_book_date(sb, run_d)
@@ -834,8 +834,8 @@ def build_events_from_paper_fills(
             weight_pct=weight_pct,
             # Display-only: the pre-commit ``positions`` book (``_prior_book_date(run_d)``).
             # Same prior *book date* as the OrderIntent, undrifted — the shown pp is
-            # book-to-book, not the marked-to-market H8 weights that sized the fill.
-            # Never the ``run_date`` book H9 already wrote before the open.
+            # book-to-book, not the marked-to-market sizing weights that sized the fill.
+            # Never the ``run_date`` book commit already wrote before the open.
             prev_weight_pct=prev_weight_pct,
             price=float(fill.price),
             reason=(
@@ -1076,7 +1076,7 @@ def main() -> int:
         "--require-ledger",
         action="store_true",
         help="Fail (exit 3) instead of falling back to prose when the ledger declines to speak. "
-        "Use this once migration 070 is applied in production and H9 commits every run.",
+        "Use this once migration 070 is applied in production and commit commits every run.",
     )
     args = ap.parse_args()
     d = args.date

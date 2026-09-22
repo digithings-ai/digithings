@@ -202,7 +202,7 @@ def test_amendment_requires_persisted_base() -> None:
 def test_amendment_reason_over_sql_cap_is_truncated() -> None:
     """079 `forecast_amendments_reason_check` is length 1..2000.
 
-    House GHA 33426508863: H6 BITO amendment reason exceeded the check, so the
+    House GHA 33426508863: deliberation BITO amendment reason exceeded the check, so the
     registry insert 23514'd (`h9 forecast registry degraded`) while the book was
     retained. Truncate at the write boundary — content_hash is over terms, not reason.
     """

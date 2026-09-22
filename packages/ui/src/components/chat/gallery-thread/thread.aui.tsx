@@ -48,6 +48,7 @@ import {
   type FileMessagePartComponent,
   type ImageMessagePartComponent,
   type ToolCallMessagePartComponent,
+  useAui,
   useAuiState,
   useThreadViewport,
 } from "@assistant-ui/react";
@@ -319,6 +320,12 @@ const ThreadRoot: FC<{
     >
       <ThreadPrimitive.Viewport
         turnAnchor="top"
+        // The top-anchored message carries `padding-top: 1.5rem` (chat-aui.css)
+        // so it does not sit flush against the viewport top. `tallerThan` scores
+        // the anchor's offsetHeight, which includes that padding, so it is
+        // raised by the same 1.5rem to keep the set of fully-pinned messages
+        // unchanged from before the padding was added.
+        topAnchorMessageClamp={{ tallerThan: "11.5em", visibleHeight: "6em" }}
         data-slot="aui_thread-viewport"
         className="relative flex flex-1 flex-col overflow-x-hidden overflow-y-scroll scroll-smooth digichat-thread__viewport"
       >
@@ -402,21 +409,45 @@ const ThreadScrollToBottom: FC = () => {
     };
   }, [viewportEl]);
 
-  // Show only when history is actually out of view: the viewport must
-  // overflow AND sit more than a line away from the bottom. A scroll of a few
-  // pixels with everything still visible (e.g. after the entrance settle)
-  // must not surface it.
+  // Show only when content is actually hidden under the composer: the message
+  // list's bottom must sit below the top edge of the composer shell. A scroll
+  // of a few pixels with everything still visible (e.g. after the entrance
+  // settle) must not surface it.
   useEffect(() => {
     if (!viewportEl) return;
+    let observedGroup: HTMLElement | null = null;
+    let observedComposer: HTMLElement | null = null;
     const measure = () => {
-      const overflow = viewportEl.scrollHeight - viewportEl.clientHeight;
-      const distance =
-        viewportEl.scrollHeight - viewportEl.scrollTop - viewportEl.clientHeight;
-      setScrolledAway(overflow > 4 && distance > 24);
+      // Re-query each run: neither node is guaranteed to be mounted yet (and
+      // either may remount), so a captured reference could go stale.
+      const group = viewportEl.querySelector<HTMLElement>(
+        '[data-slot="aui_message-group"]',
+      );
+      const composer = viewportEl.querySelector<HTMLElement>(
+        '[data-slot="aui_composer-shell"]',
+      );
+      if (!group || !composer) {
+        setScrolledAway(false);
+        return;
+      }
+      if (group !== observedGroup) {
+        if (observedGroup) ro.unobserve(observedGroup);
+        ro.observe(group);
+        observedGroup = group;
+      }
+      if (composer !== observedComposer) {
+        if (observedComposer) ro.unobserve(observedComposer);
+        ro.observe(composer);
+        observedComposer = composer;
+      }
+      setScrolledAway(
+        group.getBoundingClientRect().bottom >
+          composer.getBoundingClientRect().top + 1,
+      );
     };
+    const ro = new ResizeObserver(measure);
     measure();
     viewportEl.addEventListener("scroll", measure, { passive: true });
-    const ro = new ResizeObserver(measure);
     ro.observe(viewportEl);
     return () => {
       viewportEl.removeEventListener("scroll", measure);
@@ -615,6 +646,32 @@ const Composer: FC<{
 };
 
 const ComposerSendControls: FC = () => {
+  const aui = useAui();
+  // Mirrors `composerSendDisabled` from `@assistant-ui/core`'s primitive
+  // predicates. Inlined rather than imported: the predicate is not re-exported
+  // from `@assistant-ui/react` (the only assistant-ui package this one depends
+  // on), so a deep import would resolve only thanks to npm hoisting.
+  const sendDisabled = useAuiState(
+    (s) => !s.composer.canSend || (s.thread.isRunning && !s.thread.capabilities.queue),
+  );
+  const sendRef = useRef<HTMLButtonElement | null>(null);
+
+  // A `type="submit"` button already submits its form on activation, so the
+  // click must not also do it: `preventDefault()` suppresses that implicit
+  // submission, and the explicit `requestSubmit()` below replaces it with one
+  // we control. Without this the form's `submit` fires twice per click, and the
+  // free-turn gate mounted on `onSubmit` runs twice — holding or charging the
+  // turn more than once.
+  const submitComposer = (event: ReactMouseEvent<HTMLButtonElement>) => {
+    event.preventDefault();
+    const form = sendRef.current?.closest("form");
+    if (form) {
+      form.requestSubmit();
+      return;
+    }
+    aui.composer.send();
+  };
+
   return (
     <div className="aui-composer-send-controls flex shrink-0 items-center gap-1.5">
       <AuiIf condition={(s) => s.thread.capabilities.dictation}>
@@ -658,23 +715,24 @@ const ComposerSendControls: FC = () => {
         </AuiIf>
       </AuiIf>
       <AuiIf condition={(s) => !s.thread.isRunning}>
-        <ComposerPrimitive.Send asChild>
-          <TooltipIconButton
-            tooltip="Send (Enter)"
-            side="bottom"
-            type="button"
-            variant="ghost"
-            size="icon"
-            className="aui-composer-send size-7 rounded-full"
-            aria-label="Send message"
-          >
-            <DotMatrix
-              state="send"
-              label="Send"
-              className="aui-composer-send-icon size-3.5"
-            />
-          </TooltipIconButton>
-        </ComposerPrimitive.Send>
+        <TooltipIconButton
+          ref={sendRef}
+          tooltip="Send (Enter)"
+          side="bottom"
+          type="submit"
+          variant="ghost"
+          size="icon"
+          className="aui-composer-send size-7 rounded-full"
+          aria-label="Send message"
+          disabled={sendDisabled}
+          onClick={submitComposer}
+        >
+          <DotMatrix
+            state="send"
+            label="Send"
+            className="aui-composer-send-icon size-3.5"
+          />
+        </TooltipIconButton>
       </AuiIf>
       <AuiIf condition={(s) => s.thread.isRunning}>
         <ComposerPrimitive.Cancel asChild>

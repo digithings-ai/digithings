@@ -1,4 +1,4 @@
-"""Shared grounding helper for thesis-track portfolio nodes (H1–H4)."""
+"""Shared grounding helper for thesis-track portfolio nodes (thesis–screener)."""
 
 from __future__ import annotations
 

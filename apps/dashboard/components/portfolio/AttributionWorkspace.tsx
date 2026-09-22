@@ -131,12 +131,15 @@ export default function AttributionWorkspace({
 
   return (
     <div className="space-y-6">
-      <header className="border-y border-hair bg-surface">
+      {/* Workspace command band — flat on the page surface, hairlines only;
+          verdict one type step down from the old display hero (Q3b slice 1).
+          All honesty copy (sample size, range, as-of) verbatim. */}
+      <header className="border-y border-hair">
         <div className="grid gap-5 px-4 py-5 md:grid-cols-[minmax(0,1fr)_auto] md:items-end md:px-5">
           <div className="space-y-2">
             <p className="font-mono text-[11px] uppercase text-ink-mute">Decision monitor</p>
             <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
-              <strong className={`font-display text-2xl md:text-3xl ${state?.tone ?? 'text-ink'}`}>
+              <strong className={`font-display text-xl md:text-2xl ${state?.tone ?? 'text-ink'}`}>
                 {state?.label ?? 'Awaiting resolved outcomes'}
               </strong>
               <span className="text-xs text-ink-mute">

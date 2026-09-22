@@ -1,6 +1,6 @@
 """Task 2.4 — the authoritative paper-fill writer (#2420).
 
-:mod:`ledger_io` (H9) appends the decision→order half of the migration-069 chain and
+:mod:`ledger_io` (commit) appends the decision→order half of the migration-069 chain and
 stops at ``pending`` order intents. This module appends the other half: it consumes those
 pending intents and books the fill, the position lot, and the order's terminal status.
 Nothing else in the codebase may write ``portfolio_ledger_paper_executions`` or
@@ -217,7 +217,7 @@ class ExecutionResult:
 
     ``authoritative`` is the discriminator the caller needs before deciding that "no
     fills" means "nothing traded". It is False when no ``portfolio_ledger_commits`` row
-    exists for ``run_date`` — i.e. H9 never appended a chain for that date, so the ledger
+    exists for ``run_date`` — i.e. commit never appended a chain for that date, so the ledger
     has no opinion and an empty result says nothing about the day.
 
     ``deferred`` holds pending orders skipped because the venue calendar said closed
@@ -284,7 +284,7 @@ def ledger_is_authoritative(*, client: SupabaseClient, run_date: date) -> bool:
     and is easy to handle; the dangerous state is tables that exist and return zero
     pending intents, which is indistinguishable from "nothing traded today" and would let
     the executor write nothing, with no error, while the day's real activity went
-    unrecorded. A commit row is the discriminator: no commit for the run_date means H9
+    unrecorded. A commit row is the discriminator: no commit for the run_date means commit
     never spoke for that date (pre-cutover, or a failed upstream run), so a caller may
     legitimately fall back to a legacy projection. A commit row with zero pending order
     heads is a genuine no-op day, and booking nothing is then correct.
@@ -334,7 +334,7 @@ def _directions_by_order(
 
     Returns ``({order_intent_id: action}, {stale order_intent_ids})``. An order is *stale*
     when the approved target it descends from is no longer that symbol's approved head:
-    H8 re-approved a different target for the same run_date, so this order is an artefact
+    sizing re-approved a different target for the same run_date, so this order is an artefact
     of a superseded decision and filling it would execute a target nobody approved.
 
     Three ``in_`` reads, not one per order: the chain fans in by id, and the fan-out is
@@ -593,7 +593,7 @@ def approved_weights(*, client: SupabaseClient, run_date: date) -> dict[str, Dec
     The only weight the ledger holds. ``portfolio_ledger_commits`` carries no NAV column,
     so a *position* weight cannot be derived from the lots — shares and a cost basis do
     not make a fraction of a portfolio without a denominator. What migration 069 does
-    record is ``approved_targets.approved_weight``, H8's approved target, and that is what
+    record is ``approved_targets.approved_weight``, sizing's approved target, and that is what
     this returns: the weight the portfolio was *approved to hold*, not a weight measured
     from the book afterwards.
 

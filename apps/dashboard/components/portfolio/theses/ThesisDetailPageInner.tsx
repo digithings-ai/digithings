@@ -152,7 +152,7 @@ export default function ThesisDetailPageInner({ thesisId }: { thesisId: string }
             >
               <ArrowLeft size={16} /> Back to Theses
             </Link>
-            <h1 className="font-display text-2xl text-ink">Unlinked expressions</h1>
+            <h1 className="font-display text-xl font-normal tracking-tight text-ink">Unlinked expressions</h1>
             <p className="max-w-2xl text-sm leading-relaxed text-ink-soft">
               These holdings aren&apos;t yet tied to a named thesis. They&apos;ll roll up under a
               market view once the link is recorded.
@@ -186,7 +186,7 @@ export default function ThesisDetailPageInner({ thesisId }: { thesisId: string }
           className="border-y border-hair py-5"
         >
           <div className="flex flex-wrap items-start justify-between gap-4 pb-3">
-            <h1 className="font-display text-3xl leading-tight text-ink">{t.name}</h1>
+            <h1 className="font-display text-xl font-normal tracking-tight text-ink md:text-2xl">{t.name}</h1>
             {lastUpdated && <AsOfBadge date={lastUpdated} />}
           </div>
 

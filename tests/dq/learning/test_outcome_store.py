@@ -16,17 +16,17 @@ import pytest
 from digiquant.dashboard.learning.outcome_models import (
     AttributionComponent,
     AttributionMethod,
+    CommitExecutionLinks,
     ComponentAttributionReport,
     ComponentObservation,
     EpisodeDisposition,
     EvidenceQuality,
-    H8TargetLineage,
-    H9ExecutionLinks,
     LessonQualityState,
     OutcomeEpisode,
     OutcomeLessonVersion,
     OutcomeTemporalContract,
     RealizedReturnObservation,
+    SizingTargetLineage,
     episode_content_hash,
     episode_version_id,
     lesson_content_hash,
@@ -89,12 +89,12 @@ def _episode(**overrides: object) -> OutcomeEpisode:
         policy_version_id="policy-v1",
         disposition=EpisodeDisposition.AUTHORIZED,
         temporal=_temporal(),
-        h8_lineage=H8TargetLineage(
+        sizing_lineage=SizingTargetLineage(
             requested_weight=Decimal("0.05"),
             approved_weight=Decimal("0.04"),
             adjustment_codes=("risk_cap",),
         ),
-        h9_links=H9ExecutionLinks(
+        commit_links=CommitExecutionLinks(
             action_id=UUID("66666666-6666-4666-8666-666666666666"),
             order_id=UUID("77777777-7777-4777-8777-777777777777"),
             fill_ids=(UUID("88888888-8888-4888-8888-888888888888"),),
@@ -115,8 +115,8 @@ def _episode(**overrides: object) -> OutcomeEpisode:
         disposition=fields["disposition"],  # type: ignore[arg-type]
         temporal=fields["temporal"],  # type: ignore[arg-type]
         realized=fields.get("realized"),  # type: ignore[arg-type]
-        h8_lineage=fields.get("h8_lineage"),  # type: ignore[arg-type]
-        h9_links=fields.get("h9_links"),  # type: ignore[arg-type]
+        sizing_lineage=fields.get("sizing_lineage"),  # type: ignore[arg-type]
+        commit_links=fields.get("commit_links"),  # type: ignore[arg-type]
         evidence_bundle_id=fields.get("evidence_bundle_id"),  # type: ignore[arg-type]
         research_state_version_id=fields.get("research_state_version_id"),  # type: ignore[arg-type]
         context_manifest_id=fields.get("context_manifest_id"),  # type: ignore[arg-type]

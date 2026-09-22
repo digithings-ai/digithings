@@ -137,13 +137,13 @@ export const guides: Guide[] = [
       {
         kind: "code",
         lang: "bash",
-        code: "docker pull ghcr.io/digithings-ai/digichat:v0.9.3",
+        code: "docker pull ghcr.io/digithings-ai/digichat:v2.3.1",
       },
       {
         kind: "list",
         items: [
           "Git tag: `digichat-vX.Y.Z`",
-          "GHCR image: `ghcr.io/digithings-ai/digichat:vX.Y.Z` (currently published through `v0.9.3`)",
+          "GHCR image: `ghcr.io/digithings-ai/digichat:vX.Y.Z` (currently published through `v2.3.1`)",
           "Changelog: `apps/digichat/CHANGELOG.md`",
           "Pin a published tag — do not assume a version exists on GHCR until the digichat release workflow has published it from `main`.",
         ],

@@ -324,8 +324,8 @@ The 2026-06-24 Settings plan's "no accounts/login" constraint is **superseded** 
 workspace tenancy program: authenticated users edit versioned investment overlays, connect
 paper brokers, seal BYOK LLM keys, and open Stripe checkout/portal.
 
-Canonical tier ladder (see [`docs/agent-backlog/kairos-tenancy/PRICING.md`](../../docs/agent-backlog/kairos-tenancy/PRICING.md)
-and [`SETTINGS-IA.md`](../../docs/agent-backlog/kairos-tenancy/SETTINGS-IA.md)): **Observer**
+Canonical tier ladder (see [`docs/agent-backlog/execution-tenancy/PRICING.md`](../../docs/agent-backlog/execution-tenancy/PRICING.md)
+and [`SETTINGS-IA.md`](../../docs/agent-backlog/execution-tenancy/SETTINGS-IA.md)): **Observer**
 (`free`) → **Brief** → **Desk** → **Studio** / Enterprise. Do not document Baseline/Custom
 as Stripe products.
 
@@ -418,7 +418,7 @@ on the dashboard 404. Every in-app link, the command palette, and the legacy
 
 `app/page.tsx` is the daily decision workspace. It owns benchmark alignment,
 percentage-return calculations, book freshness, rebalance rationale joins, and a
-brief-only read of the anon-safe `atlas_run_health` view. It passes those truth
+brief-only read of the anon-safe `run_health` view. It passes those truth
 contracts into `components/today/daily-brief-workspace.tsx`, which follows one
 fixed daily-reader sequence:
 
@@ -501,7 +501,7 @@ values.
 > `USING (true)` still applies; gate shared hosts with **Cloudflare Access**
 > (staging overlay after T1; production Access comes off at cutover — D7).
 > Migration `033` drops anon SELECT on operator cost telemetry
-> (`atlas_run_diagnostics`); `pm_notes` is intentionally kept.
+> (`run_diagnostics`); `pm_notes` is intentionally kept.
 
 ## Daily snapshot envelope
 
@@ -535,7 +535,7 @@ renders from the payloads:
   decision, the per-ticker bull/bear `deliberation/{ticker}` debate summaries,
   and the portfolio-level `risk-debate` (#698). Segment-specific metric fields
   render generically so new segments display without frontend changes.
-- `components/library/PmDirectionDocumentView.tsx` — dedicated H7
+- `components/library/PmDirectionDocumentView.tsx` — dedicated direction
   `pm-direction-memo` view (not a key/value dump): date + memo, then roster
   sorted longs-then-flats by rank, with narrative, derived buy/hold/sell vs
   prior, rank, and confidence percent. Hides `forecast_reference` /

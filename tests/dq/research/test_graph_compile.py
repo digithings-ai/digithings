@@ -116,13 +116,13 @@ class TestBuildGraph:
 
         g = build_portfolio_graph(watchlist=["AAPL"])
         names = set(g.get_graph().nodes.keys())
-        # Thesis-first H1–H9 topology (Jun-20 greenfield).
+        # Thesis-first thesis–commit topology (Jun-20 greenfield).
         for expected in (
             "portfolio/thesis/market-review",
             "portfolio/thesis/market-exploration",
             "portfolio/thesis/vehicle-map",
             "portfolio/thesis/opportunity-screener",
-            # H5/H6 fan out over the runtime focus roster (computed by H4) via Send map-reduce,
+            # analyst/deliberation fan out over the runtime focus roster (computed by screener) via Send map-reduce,
             # so the compiled graph carries a single parallel worker node, not compile-time
             # per-ticker nodes.
             "portfolio/asset-analyst-worker",

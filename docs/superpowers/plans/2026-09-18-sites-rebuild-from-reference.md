@@ -1,8 +1,77 @@
 # Rebuild digithings.ai and digiquant.io (and the digiquant dashboard) from the design reference
 
-Status: draft for approval · 2026-09-18 · branch `feat/rebuild-sites-from-reference`
-(worktree `/var/folders/36/1mwn8lfs7qx58560qsmy12xw0000gn/T/opencode/wt-rebuild`, cut from
-`origin/develop` @ `44ff6d109`).
+Status: **approved, in execution** · re-baselined 2026-09-20 against `origin/develop` @ `cf5627b10`.
+
+Original draft: 2026-09-18, branch `feat/rebuild-sites-from-reference`, cut from `origin/develop` @ `44ff6d109`.
+
+## 0. Owner direction (2026-09-20) — READ THIS BEFORE §6
+
+Delivered after the first wave of workstream B, because the wave was drifting toward
+*refining* the existing pages rather than rebuilding them. It governs everything below.
+
+> "I wouldn't use the existing live pages as the design to use and go forward with. I would
+> take their content and the general structure and what I want to show, but in terms of
+> design, the design reference and the example websites take precedence. I want something
+> new. I don't want the same old. Don't use the existing website as something to lean on and
+> just do small modifications to. You're rewriting this from the ground up using our new
+> design language as we defined in design reference, using the SHADCN design reference and
+> examples, and using the example websites I like — OpenCode for digithings. As an example of
+> how to keep it simple and direct, I think we went over the top with our older versions and
+> I just want to bring it back to a utilitarian simplicity. **DigiChat is explicitly out of
+> scope — do not change the container, the embedded chat, or anything about it.**"
+
+Consequences, stated plainly because they overrule earlier readings of §6:
+
+1. **The existing pages are a CONTENT source, not a design source.** Take the words, the
+   facts, the general structure and what must be shown. The design comes from
+   `apps/reference` + `packages/ui` (the shadcn canon) and the reference sites.
+2. **Rewrite, do not restyle.** "Chrome-only" deltas are withdrawn. Every page is
+   re-composed on the new language.
+3. **Utilitarian simplicity is the single most important steer.** Fewer sections, less
+   decoration, flat surfaces, smaller type, no flourishes. If a section does not earn its
+   place, cut it. The hero canvas meshes, the 480vh scrolly pipeline and the ambient meshes
+   are precisely the "over the top" being removed — deleting them is the point.
+4. **No reused legacy art.** Repurposing `HeroMesh`/`HeroGraph` as a "media block" is
+   withdrawn. Build any such block fresh from canonical parts, or omit it.
+5. **digichat is untouched** — container, embedded chat, `/embed` postMessage protocol.
+   The `/chat` and `/chat/occ` shell pages may carry the site's new nav/footer like any
+   other page; nothing about the chat product changes.
+6. **Honesty and correctness constraints do not relax**: print layouts survive; every
+   figure single-sourced and traceable; in-sample/backtest wording wherever a performance
+   figure appears; no unmarked projections; no promise of live trading.
+
+
+## 0. Re-baseline (2026-09-20)
+
+That branch landed as **#4410** and was promoted to `main` (#4407). Measuring the plan
+against what actually shipped:
+
+| Task | State | Evidence |
+|---|---|---|
+| R0 reference consolidation | **DONE** | Target IA is live (all 15 routes); the route/specimen/layering/nav/chrome test suite shipped (`apps/reference/lib/{routes,specimens,layering,nav,chrome}.test.ts`, 38 tests) |
+| R1 shared chrome | **NOT STARTED** | Nav + footer are still per-site (`apps/digithings-web/components/DtNav.tsx`, `DtFooter.tsx` vs digiquant-web's own) |
+| D1 digithings-web page tree | **NOT STARTED** | `apps/digithings-web/app/page.tsx` last changed by the move commit `0fc56fbb0`, not a rebuild |
+| Q1 digiquant-web page tree | **NOT STARTED** | same — `0fc56fbb0` is the last commit on `apps/digiquant-web/app/page.tsx` |
+| Q2 dashboard chrome + gate | **NOT STARTED** | — |
+| Q3 dashboard surfaces | **NOT STARTED** | — |
+| C1 content audit | **NOT STARTED** | — |
+| C2 release certification | **NOT STARTED** | — |
+
+What #4410 *did* deliver, beyond R0: the `apps/*` + `packages/*` move, the kit capability
+promotions, the legacy controls-layer retirement, and the canon-audit fixes (390px overflow,
+AA contrast, reference nav/404/chatbot/slider). So the canonical layer is complete and the
+sites sit on the kit — they were simply never rebuilt, which is precisely the gap §1 describes.
+
+Execution order, by dependency: **R1 → (D1 ∥ Q1) → C1 → C2**, with **Q2/Q3** runnable in
+parallel with R1 since the dashboard has its own chrome.
+
+**The canonical-layer rule is enforced, not aspirational.** `scripts/check_frontend_canon.py`
+scans `apps/` + `packages/` and fails on raw palette utilities, pre-canon vocabulary, colour
+literals in component code, and — the family census — any *new* app-local component-class
+family, which is the mechanical form of "if you want something new, add it to the design
+reference first". Every slice below must keep it green; adding a needed part to the kit (with
+tests) is the sanctioned path, never an app-local re-implementation.
+
 
 ## 1. Why
 

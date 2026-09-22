@@ -347,7 +347,7 @@ def _timing_observations(
     observations: list[ComponentObservation] = []
 
     if diagnostics is not None:
-        action_id = episode.h9_links.action_id if episode.h9_links is not None else None
+        action_id = episode.commit_links.action_id if episode.commit_links is not None else None
         artifact_ids = (action_id,) if action_id is not None else ()
         observations.append(
             ComponentObservation(
@@ -426,9 +426,9 @@ def _sizing_observations(
 ) -> list[ComponentObservation]:
     observations: list[ComponentObservation] = []
 
-    if episode.h8_lineage is not None:
-        requested = episode.h8_lineage.requested_weight
-        approved = episode.h8_lineage.approved_weight
+    if episode.sizing_lineage is not None:
+        requested = episode.sizing_lineage.requested_weight
+        approved = episode.sizing_lineage.approved_weight
         if requested is not None and approved is not None:
             delta = approved - requested
             observations.append(
@@ -438,7 +438,7 @@ def _sizing_observations(
                     value=delta,
                     unit="weight_fraction",
                     uncertainty=None,
-                    baseline="requested_h8_weight",
+                    baseline="requested_sizing_weight",
                     artifact_ids=(),
                     evidence_quality=EvidenceQuality.DESCRIPTIVE,
                     method=AttributionMethod.OBSERVED,
@@ -706,9 +706,9 @@ class ComponentAttributor:
             knowledge_cutoff_at=cutoff,
         )
         timing_diagnostics: TimingDiagnosticsSlice | None = None
-        if episode.h9_links is not None:
+        if episode.commit_links is not None:
             timing_diagnostics = self._timing_reader.load_timing_diagnostics(
-                action_id=episode.h9_links.action_id,
+                action_id=episode.commit_links.action_id,
                 knowledge_cutoff_at=cutoff,
             )
 

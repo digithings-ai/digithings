@@ -325,7 +325,7 @@ def apply_web_grounding_to_inputs(
     flag; the run aborts rather than reasoning ungrounded (#3859).
 
     Skipped-by-design segments return ``inputs`` unchanged with no call and no
-    raise: ``live_search=False`` segments (H6, options, onchain, short folds)
+    raise: ``live_search=False`` segments (deliberation, options, onchain, short folds)
     and grounded-by-ingest segments (``live_search_is_fallback`` with a fresh
     ingested FRED layer, e.g. macro, #711), which ground on their in-process
     data tools instead of the paid web_search tool call.
@@ -402,6 +402,17 @@ class SegmentNodeSpec:
     ``GLOOMBERB_SESSION_COOKIE`` is unset, so CI/dev runs without a cookie never
     advertise a tool that would only return ``auth_required``. Enrichment only.
     """
+
+    use_research_tools: bool = True
+    """Equip this segment with the dashboard research tools (#930 / #4436).
+
+    Research segments read their own prior published documents for continuity.
+    ``research_phase="deliberation"`` drops ``query_portfolio`` (book access)
+    while allowing every research document key.
+    """
+
+    research_phase: str = "deliberation"
+    """Retrieval phase used for the research-tool blinding gate."""
 
 
 # Type aliases for the two factory seams.
@@ -767,7 +778,7 @@ class EditSegmentResult(NamedTuple):
 
 
 # Cap on the stored merge-failure reason. A Pydantic ValidationError message carries the
-# full offending body; ``atlas_run_diagnostics.breakdown`` is an operator-facing jsonb
+# full offending body; ``run_diagnostics.breakdown`` is an operator-facing jsonb
 # column, not a log sink, and the same cap is applied to ``master_digest_failed``.
 _MERGE_FALLBACK_REASON_MAX = 300
 
@@ -960,6 +971,8 @@ def build_segment_node(
             ai_portfolios=spec.ai_portfolios,
             live_search_is_fallback=spec.live_search_is_fallback,
             digifetch_tools=spec.digifetch_tools,
+            use_research_tools=spec.use_research_tools,
+            research_phase=spec.research_phase,
         )
         if web_grounding:
             inputs = {**inputs, "web_grounding": web_grounding}

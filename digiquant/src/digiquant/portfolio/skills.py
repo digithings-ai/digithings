@@ -58,7 +58,7 @@ def _skill_full_candidates(slug: str) -> tuple[Path, ...]:
 
     Conventional path is ``skills/<slug>/<slug>-full.md``. Hyphenated slugs may
     also live beside a parent skill: ``deliberation-analyst-response`` reads
-    ``skills/deliberation/analyst-response-full.md`` (H6 reply; not H5).
+    ``skills/deliberation/analyst-response-full.md`` (deliberation reply; not analyst).
     """
     root = _portfolio_data_root() / "skills"
     paths = [root / slug / f"{slug}-full.md"]
@@ -88,7 +88,7 @@ def load_skill_edit(slug: str) -> str:
 
     The shared DocumentPatch limits are appended here too (#1740) — portfolio
     analyst/thesis edit turns emit the same patch schema and hit the same
-    240-char ``reason`` cap (it took out the H5 asset-analyst run on 2026-07-24).
+    240-char ``reason`` cap (it took out the analyst asset-analyst run on 2026-07-24).
     """
     path = _skill_edit_path(slug)
     if not path.is_file():

@@ -37,7 +37,7 @@
 }
 
 :root[data-theme="light"] .dc-embed-shell [data-thread-skin="digichat"] {
-  --term-bg: #f1f0eb;
+  --term-bg: var(--embed-canvas, #f1f0eb);
 }
 
 .dc-attribution {
@@ -108,14 +108,16 @@
   z-index: 0;
 }
 
-/* digichat-skin embed: the shell shares the thread canvas (--surface) so the
-   composer row, turn counter, and attribution have no white band beneath. */
+/* digichat-skin embed: the shell shares the thread canvas so the composer row,
+   turn counter, and attribution have no white band beneath. --embed-canvas is
+   seeded server-side by the embed page from the tenant skin + paint theme; the
+   fallbacks keep every other surface on the same colour. */
 .dc-embed-shell[data-skin-canvas="1"]:not([data-wide="1"]) {
-  background: #f1f0eb;
+  background: var(--embed-canvas, #f1f0eb);
 }
 
 :root[data-theme="dark"] .dc-embed-shell[data-skin-canvas="1"]:not([data-wide="1"]) {
-  background: #121417;
+  background: var(--embed-canvas, #121417);
 }
 
 /* Collapse the sticky thread footer's bottom padding (was 24px) so the

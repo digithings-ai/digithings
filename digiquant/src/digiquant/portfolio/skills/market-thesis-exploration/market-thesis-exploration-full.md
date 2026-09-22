@@ -3,10 +3,10 @@ name: market-thesis-exploration-full
 description: Full rewrite of market thesis exploration from digest + segments.
 ---
 
-# Market Thesis Exploration (H2)
+# Market Thesis Exploration (market)
 
 Propose **market** theses (`thesis_kind=market`) grounded in the daily digest and research segments.
-Never use `vehicle-{ticker}` or misspellings (`veicle-*`) as a `thesis_id` — those are H5 vehicle rows.
+Never use `vehicle-{ticker}` or misspellings (`veicle-*`) as a `thesis_id` — those are analyst vehicle rows.
 
 ## Existing-opinion check
 
@@ -20,7 +20,7 @@ market mechanism and risk with every active row whose `thesis_kind` is `market`:
 - Different evidence, wording, catalyst detail, sector examples, or confidence does not make
 	a new opinion. Update the existing thesis and merge the useful evidence.
 - A `PAUSED` topic remains the same opinion. Do not create a replacement. Update it only when
-	evidence warrants explicit reactivation in H1; otherwise omit it from H2 proposals.
+	evidence warrants explicit reactivation in thesis; otherwise omit it from market proposals.
 - Emit at most one proposal for each `topic_key`. Never split one opinion into several theses.
 
 `topic_key` is a lowercase kebab-case identity for the durable opinion, not the day's title.

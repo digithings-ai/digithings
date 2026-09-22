@@ -1,8 +1,7 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
-import { Footer } from "@digithings/ui";
-import { DQ_FOOTER } from "../../_nav";
 import { SiteNav } from "@/components/landing/SiteNav";
+import { SiteFooter } from "@/components/landing/SiteFooter";
 import { TearsheetView } from "@/components/tearsheet/tearsheet-view";
 import { strategyDisplayName } from "@/components/tearsheet/strategy-names";
 
@@ -43,14 +42,14 @@ export default async function TearsheetPage({ params }: { params: Promise<{ id: 
   return (
     <>
       <SiteNav />
-      <main className="ts-page dq-subpage">
+      <main className="ts-page dq-subpage" id="main" tabIndex={-1}>
         <div className="wrap">
           <TearsheetView key={id} slug={id} />
         </div>
       </main>
       {/* Shared links so the footer can't drift from the rest of the site;
           tearsheet-specific meta is the one intentional per-page override. */}
-      <Footer links={DQ_FOOTER} meta="© 2026 digithings AI · backtest · illustrative, in-sample" />
+      <SiteFooter meta="© 2026 digithings AI · backtest · illustrative, in-sample" />
     </>
   );
 }

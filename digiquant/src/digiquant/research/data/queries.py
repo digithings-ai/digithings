@@ -18,7 +18,6 @@ from typing import (
 
 import polars as pl
 
-from digiquant.dashboard.tenancy import house_workspace_id
 from digiquant.data.prices.breadth import compute_breadth
 from digiquant.data.prices.correlation import pairwise_return_correlations
 from digiquant.data.prices.etf_flows import compute_etf_flows_proxy
@@ -849,16 +848,17 @@ def get_return_correlations(
 
 # ── Generic scoped data reader (Pillar 1D) ───────────────────────────────────
 #
-# One read-only, table-whitelisted reader the agents + PM call via the ``query_data``
-# tool — backed by the shared ``digibase`` Supabase connector, so we don't hand-roll
-# a bespoke tool per table or hand the model raw SQL. Scoped to the paper-book
-# tables + the trading calendar; operator-internal telemetry (decision_log,
-# atlas_run_diagnostics) is deliberately NOT readable.
+# The retired generic ``query_data`` reader (#4436) was the table-whitelisted
+# surface the agents + PM called — backed by the shared ``digibase`` Supabase
+# connector. It is superseded by ``dashboard.research_retrieval.search_research``
+# (``query_research``), which owns document + book retrieval with filters, R2
+# read-through and phase-scoped blinding. The constants below are kept for the
+# typed readers (``get_*``) and their house-scope guards.
 #
 # Market history (price_history, price_technicals, macro_series_observations)
 # moved to the versioned R2 cache (#3780, Task 7 cutover): it is served via
 # ``digiquant_get_price_technicals`` / ``digiquant_get_macro_series`` (MCP) and
-# the ``get_*`` readers below (in-process), never via this generic reader.
+# the ``get_*`` readers below (in-process).
 MARKET_TABLES_REMOVED: tuple[str, ...] = (
     "price_history",
     "price_technicals",
@@ -876,144 +876,19 @@ ALLOWED_READ_TABLES: frozenset[str] = frozenset(
     }
 )
 
-# Blinded-analyst scope for ``query_data``: with market tables removed from the
-# generic reader, only the calendar remains here. (Blinded nodes still get
-# market *values* via the injected ``market_context`` + dedicated readers.)
+# Blinded-analyst scope: with market tables removed from the generic reader,
+# only the calendar remains here. (Blinded nodes still get market *values* via
+# the injected ``market_context`` + dedicated readers.)
 MARKET_DATA_TABLES: frozenset[str] = frozenset({"trading_calendar"})
 
 # Group A private books: omitted workspace_id is the house, never an unfiltered
-# date scan. Overlay same-date rows must not seed house research via query_data.
+# date scan. Overlay same-date rows must not seed house research via
+# ``query_research``.
 HOUSE_BOOK_READ_TABLES: frozenset[str] = frozenset(
     {"positions", "nav_history", "position_events", "portfolio_metrics"}
 )
 
-_MAX_QUERY_ROWS = 500
-
-# columns must be "*" or a comma-separated list of bare column names. This blocks
-# PostgREST relationship/embedding syntax (e.g. "*,decision_log(*)") that would
-# otherwise read a NON-whitelisted table through an embedded select.
-_SAFE_COLUMNS_RE = re.compile(r"^(\*|[A-Za-z_][A-Za-z0-9_]*(\s*,\s*[A-Za-z_][A-Za-z0-9_]*)*)$")
-
-# Every column-bearing argument is shape-checked to a bare identifier: ``columns``
-# via :data:`_SAFE_COLUMNS_RE`, and order/filter keys via :data:`_BARE_COLUMN_RE`.
-# Together they keep PostgREST relationship syntax (e.g. "*,decision_log(*)") from
-# reaching a NON-whitelisted table through *any* argument, not just ``columns``.
+# Every column-bearing argument the retired generic reader shape-checked. Kept
+# as documentation of the PostgREST relationship/embedding syntax the typed
+# readers must never accept.
 _BARE_COLUMN_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
-
-
-def _filter_column_names(
-    *,
-    eq: dict[str, Any] | None = None,
-    gte: dict[str, Any] | None = None,
-    lte: dict[str, Any] | None = None,
-    in_: dict[str, list[Any] | tuple[Any, ...]] | None = None,
-    order: str | None = None,
-) -> list[str]:
-    """Central enumeration of the columns ``query_data`` filters/sorts on.
-
-    Each filter arg is coerced through ``dict()`` (mirroring ``_eq_for_query`` and
-    the connector) so mapping-convertible forms such as a list of pairs cannot
-    smuggle a column past the bare-column shape check. Single place to extend when
-    ``query_data`` grows a filter operator (#3959).
-    """
-    names: list[str] = []
-    for filt in (eq, gte, lte, in_):
-        if filt is None:
-            continue
-        try:
-            mapping = dict(filt)
-        except (TypeError, ValueError):
-            # Not mapping-like (e.g. a bare string/int); the connector rejects it.
-            continue
-        names.extend(str(key).strip() for key in mapping)
-    if order is not None:
-        names.append(str(order).strip())
-    return names
-
-
-def _eq_for_query(table: str, eq: dict[str, Any] | None) -> dict[str, Any] | None:
-    """Stamp house ``workspace_id`` on Group A books when the caller omitted it."""
-    filters = dict(eq or {})
-    if table in HOUSE_BOOK_READ_TABLES and "workspace_id" not in filters:
-        filters["workspace_id"] = str(house_workspace_id())
-    return filters or None
-
-
-def query_data(
-    *,
-    client: Any,
-    table: str,
-    columns: str = "*",
-    eq: dict[str, Any] | None = None,
-    gte: dict[str, Any] | None = None,
-    lte: dict[str, Any] | None = None,
-    in_: dict[str, list[Any] | tuple[Any, ...]] | None = None,
-    order: str | None = None,
-    desc: bool = True,
-    limit: int = 50,
-    allowed_tables: frozenset[str] | None = None,
-) -> dict[str, Any]:
-    """Read rows from a whitelisted table via the digibase connector.
-
-    Read-only and table-scoped: a table outside the active whitelist is refused
-    (the error is returned to the model, not raised). Callers may pass a narrower
-    ``allowed_tables`` (e.g. :data:`MARKET_DATA_TABLES` for blinded analyst nodes);
-    it is intersected with :data:`ALLOWED_READ_TABLES`. ``limit`` is capped at
-    :data:`_MAX_QUERY_ROWS` so one tool call can't pull unbounded rows.
-
-    Group A books (``positions``, ``nav_history``, ``position_events``,
-    ``portfolio_metrics``) default to the house ``workspace_id`` when ``eq``
-    omits it, so overlay same-date rows cannot seed house research. Pass
-    ``eq={"workspace_id": ...}`` to read another book.
-
-    Market history (``price_history`` / ``price_technicals`` /
-    ``macro_series_observations``) is not readable here (#3780): the table
-    allowlist refuses it and the dedicated R2-backed tools own those reads.
-    Explicit columns, ``order``, and filter keys are shape-checked to bare column
-    names (:data:`_BARE_COLUMN_RE`) so no argument can smuggle PostgREST
-    relationship syntax.
-    """
-    tables = (allowed_tables & ALLOWED_READ_TABLES) if allowed_tables else ALLOWED_READ_TABLES
-    if table not in tables:
-        return {"error": f"table {table!r} is not readable; choose one of {sorted(tables)}"}
-    safe_columns = (columns or "*").strip()
-    if not _SAFE_COLUMNS_RE.fullmatch(safe_columns):
-        # Block PostgREST relationship/embedding syntax that could reach other tables.
-        return {"error": "columns must be '*' or a comma-separated list of plain column names"}
-    # Filter/order keys are equally column-bearing: reject PostgREST syntax there too.
-    for col_name in _filter_column_names(eq=eq, gte=gte, lte=lte, in_=in_, order=order):
-        if not _BARE_COLUMN_RE.fullmatch(col_name):
-            return {
-                "error": (
-                    f"filter/order column {col_name!r} must be a bare column name "
-                    "(no PostgREST relationship or operator syntax)"
-                )
-            }
-    from digibase.connectors.supabase import SupabaseConnector
-
-    capped = max(1, min(int(limit), _MAX_QUERY_ROWS))
-
-    def _select():  # type: ignore[no-untyped-def]
-        select_result = SupabaseConnector(client).select(
-            table,
-            safe_columns,
-            eq=_eq_for_query(table, eq),
-            gte=gte or None,
-            lte=lte or None,
-            in_=in_ or None,
-            order=order,
-            desc=desc,
-            limit=capped,
-        )
-        # The connector swallows transport faults into success=False — re-raise
-        # retryable ones so transient disconnects / PGRST002 / 502s retry 3×
-        # (#3299). Anything else still lands in the {"error": …} below.
-        if not select_result.success:
-            raise _SupabaseSelectError(select_result.error or "unknown select error")
-        return select_result
-
-    try:
-        result = run_with_supabase_retry(_select, operation=f"query_data {table}")
-    except _SupabaseSelectError as exc:
-        return {"error": exc.detail}
-    return {"table": table, "row_count": len(result.rows), "rows": result.rows}

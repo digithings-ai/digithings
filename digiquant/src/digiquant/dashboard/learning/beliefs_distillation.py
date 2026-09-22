@@ -1,6 +1,6 @@
 """Daily beliefs blob distillation (dashboard WP-I / spec §11.1).
 
-Phase 9 evolution LLM (9A–9C) is **not** on the daily portfolio graph — H9
+Phase 9 evolution LLM (9A–9C) is **not** on the daily portfolio graph — commit
 ``commit_run`` owns terminal persist. This module folds resolved ``decision_log``
 lessons into a same-date ``documents`` row (``document_key=beliefs``,
 ``doc_type=Beliefs``) on every house chain:

@@ -459,7 +459,7 @@ def _latest_values(
     """``{ticker: value_col}`` from the latest row ≤ run_date per ticker (look-ahead-guarded).
 
     Legacy twin of ``commit_io._latest_values`` — this path is off the daily
-    pipeline (the H9 terminal books via ``commit_io``), so its Supabase body was
+    pipeline (the commit terminal books via ``commit_io``), so its Supabase body was
     not migrated to R2: migration 127 drops both tables (#4053), and a caller
     must not run this branch after the drop.
 
@@ -662,7 +662,7 @@ def build_materialize_node(deps: MaterializeDeps):
         # written the date. A re-dispatch after the engine step must not
         # clobber that value with a provisional recompute, so an existing
         # house row for this date keeps its stored NAV — fail-closed toward
-        # the engine. H9-owned ``cash_pct`` / ``invested_pct`` are still
+        # the engine. commit-owned ``cash_pct`` / ``invested_pct`` are still
         # refreshed so they track the just-booked weights. ``positions`` below
         # still book normally.
         existing_nav = load_nav_history_row(client, run_date)

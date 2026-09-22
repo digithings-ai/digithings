@@ -82,7 +82,7 @@ def _triage_map(state: ResearchState) -> dict[ArtifactKey, TriageSignal | None]:
     return out
 
 
-def _h4_roster(state: ResearchState) -> list[str]:
+def _screener_roster(state: ResearchState) -> list[str]:
     portfolio = state.phase_portfolio
     if portfolio is None or not portfolio.focus_roster:
         return []
@@ -123,7 +123,7 @@ def maybe_publish_attention_plan_shadow(
         artifacts=artifacts,
         prior_loader=_StatePriorLoader(state),
         triages=_triage_map(state),
-        h4_roster=_h4_roster(state),
+        screener_roster=_screener_roster(state),
         planner_mode=mode,
     )
     try:

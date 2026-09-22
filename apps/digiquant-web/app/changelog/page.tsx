@@ -1,8 +1,7 @@
 import type { Metadata } from "next";
-import { Footer, Reveal } from "@digithings/ui";
-import { DQ_FOOTER, DQ_FOOTER_META } from "../_nav";
+import { Reveal } from "@digithings/ui";
 import { SiteNav } from "@/components/landing/SiteNav";
-import { AmbientMesh } from "@/components/landing/AmbientMesh";
+import { SiteFooter } from "@/components/landing/SiteFooter";
 import releases from "@digithings/design/releases.json";
 
 export const metadata: Metadata = {
@@ -27,7 +26,6 @@ export default function ChangelogPage() {
     <>
       <SiteNav />
       <main className="dq-subpage" id="main" tabIndex={-1}>
-        <AmbientMesh />
         <section className="section">
           <div className="wrap">
             <Reveal>
@@ -71,7 +69,7 @@ export default function ChangelogPage() {
           </div>
         </section>
       </main>
-      <Footer links={DQ_FOOTER} meta={DQ_FOOTER_META} />
+      <SiteFooter />
     </>
   );
 }

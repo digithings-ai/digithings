@@ -1,6 +1,8 @@
 import "./chrome.css";
 import { AnnouncementBarReference } from "@/components/announcement-bar-reference";
 import { BreadcrumbsReference } from "@/components/chrome/breadcrumbs-reference";
+import { CtaReference } from "@/components/chrome/cta-reference";
+import { KbdReference } from "@/components/chrome/kbd-reference";
 import { CommandPaletteReference } from "@/components/command-palette-reference";
 import { FooterReference } from "@/components/footer-reference";
 import { ModuleCardReference } from "@/components/chrome/module-card-reference";
@@ -32,6 +34,8 @@ export default function ChromePage() {
       <ToastStackReference />
       <ScrollNavReference />
       <NavShellReference />
+      <CtaReference />
+      <KbdReference />
       <NavMenuReference />
       <BreadcrumbsReference />
       <PaginationReference />

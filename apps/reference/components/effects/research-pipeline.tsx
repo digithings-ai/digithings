@@ -1,7 +1,8 @@
 "use client";
 /**
- * Reference port of the digiquant.io landing `#pipeline` band — the
- * scroll-assembling research → execution walkthrough.
+ * Reference port of the former digiquant.io landing `#pipeline` band — the
+ * scroll-assembling research → execution walkthrough, retired in #4430 (the
+ * live band is a keycap-chip gallery now). Kept as the reference specimen.
  *
  * Source: apps/digiquant-web/components/landing/ResearchPipeline.tsx
  * (logic and class names verbatim; the outer section chrome is stripped so the

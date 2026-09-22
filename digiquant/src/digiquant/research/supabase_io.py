@@ -228,7 +228,7 @@ def _json_safe(value: Any) -> Any:
     The Supabase client serializes upsert bodies with httpx ``json.dumps``.
     LangGraph checkpoint rehydration yields plain dicts with raw ``date`` /
     ``datetime`` / ``UUID`` instead of a Pydantic ``model_dump(mode="json")``.
-    House GHA ``33426508863`` retried H9 ``publish_document`` after a ledger
+    House GHA ``33426508863`` retried commit ``publish_document`` after a ledger
     ``23502`` and died with ``TypeError: Object of type UUID is not JSON
     serializable``. Coercing at this write boundary covers every caller.
     """
@@ -464,14 +464,14 @@ def load_nav_history_row(
 ) -> dict[str, Any] | None:
     """Existing ``nav_history`` row for ``(workspace, run_date)``, or ``None`` (#3804).
 
-    Booking paths (H9 ``commit_io.book_portfolio``, legacy ``portfolio_materialize``)
+    Booking paths (commit ``commit_io.book_portfolio``, legacy ``portfolio_materialize``)
     write a provisional NAV at book time; the Nautilus schedule replay
     (``verify_nav_replay.py --write``) later overwrites ``nav`` with the
     authoritative engine value. A re-dispatch of the book pipeline *after* the
     engine step must not clobber that engine value with a provisional
     recompute, so both booking paths consult this read first: when a row
     already exists for the date they preserve the stored NAV and refresh only
-    the H9-owned ``cash_pct`` / ``invested_pct``.
+    the commit-owned ``cash_pct`` / ``invested_pct``.
 
     ``workspace_id`` omitted / ``None`` means the house workspace — never an
     unfiltered date scan. Overlay passes its id so a private book cannot see
@@ -514,7 +514,7 @@ def _slim_deliberation_summary(payload: dict[str, Any]) -> dict[str, Any]:
     Drops the full ``transcript`` (the bulk of the doc) — the carry is a slim
     excerpt, not the full debate dump. Preserves WP4.4 forecast lineage IDs,
     the effective forecast blob, and the accepted ``forecast_amendment`` dump so
-    quiet carries retain reconstructable identity for H9 registry retry (#2790).
+    quiet carries retain reconstructable identity for commit registry retry (#2790).
     """
     body = payload.get("body") if isinstance(payload.get("body"), dict) else payload
     conclusion = str(body.get("conclusion") or "").strip()

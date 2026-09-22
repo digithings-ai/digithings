@@ -35,7 +35,7 @@ into `$GITHUB_ENV` by the "Load pipeline configuration" step.
 | `DIGIQUANT_MODEL_TIER` | `cheap` | Routes LLM nodes via `config/digiquant_models.yaml` (`cheap` \| `balanced` \| `quality`) — cost lever, alongside edit-mode (see [Cost monitoring](#cost-monitoring)) |
 | `DIGIQUANT_STALE_FULL_DAYS` | `7` | Prior gap > N calendar days → `full` rewrite instead of `edit` |
 | `DIGIQUANT_BELIEFS_BACKLOG` | `20` | Additional trigger for a **full** beliefs rewrite when unfolded `decision_log` rows exceed the threshold. House runs already publish a **daily short fold**. |
-| `DIGIQUANT_MAX_ANALYSTS` | `30` (`.github/digiquant-pipeline.yml`) | Caps H4/H5/H6 fan-out width — enforced for the first time by #1767. Held tickers always survive (#936) and are the only sanctioned overshoot; thesis vehicles are prioritised *within* the cap, not exempt from it. `0` = uncapped |
+| `DIGIQUANT_MAX_ANALYSTS` | `30` (`.github/digiquant-pipeline.yml`) | Caps screener/analyst/deliberation fan-out width — enforced for the first time by #1767. Held tickers always survive (#936) and are the only sanctioned overshoot; thesis vehicles are prioritised *within* the cap, not exempt from it. `0` = uncapped |
 
 Operator full refresh: `workflow_dispatch` with `refresh_scope=all` or CLI
 `--refresh-scope all` — not a separate graph or cron.
@@ -201,9 +201,9 @@ The pipeline opens (or comments on) a single rolling issue titled
 
 ## Cost monitoring
 
-Per-run token counts land in `atlas_run_diagnostics` via `digiquant.research.diagnostics`
+Per-run token counts land in `run_diagnostics` via `digiquant.research.diagnostics`
 (LLM usage snapshot from `digigraph.usage`). Target **≤20 LLM calls** on a quiet day
-(re-baselined after thesis-first H1–H9 wiring).
+(re-baselined after thesis-first thesis–commit wiring).
 
 Flag runs where call count exceeds the rolling 4-week median by more than 3x — usually
 a triage miss (everything `full` instead of `skip`/`edit`) or a cache-control regression.

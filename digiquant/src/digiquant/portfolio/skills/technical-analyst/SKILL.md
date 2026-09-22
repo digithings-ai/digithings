@@ -16,7 +16,7 @@ Fetch `{{ticker}}`'s OWN computed indicators before rating the setup — do not 
 
 `get_price_technicals(ticker="{{ticker}}", lookback=20)`
 
-Cite exact values (e.g. "RSI_14 62, +4.2% vs SMA50, ADX 28"); **never invent a number** — every quantitative claim must come from a value you fetched. The tool returns a newest-first window of computed indicators; raw OHLCV bars are not readable through `query_data` (#3780). If a call returns no rows, say so explicitly and lower conviction (fall back to the `phase5_equity` memo).
+Cite exact values (e.g. "RSI_14 62, +4.2% vs SMA50, ADX 28"); **never invent a number** — every quantitative claim must come from a value you fetched. The tool returns a newest-first window of computed indicators; raw OHLCV bars are not readable through `query_research` (#3780). If a call returns no rows, say so explicitly and lower conviction (fall back to the `phase5_equity` memo).
 
 ## Inputs
 

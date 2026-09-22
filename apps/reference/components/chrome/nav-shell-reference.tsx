@@ -5,7 +5,7 @@ import { NavShell, GitHubGlyph, type NavLink } from "@digithings/ui";
 const LINKS: NavLink[] = [
   { label: "Product", href: "#" },
   { label: "Pricing", href: "#" },
-  { label: "Docs", href: "#" },
+  { label: "Docs", href: "/docs" },
   { label: "digiquant.io", href: "https://digiquant.io", external: true },
 ];
 
@@ -18,6 +18,7 @@ function DemoNav() {
         </span>
       }
       links={LINKS}
+      currentPath="/docs"
       homeLabel="digithings home"
       actions={
         <a

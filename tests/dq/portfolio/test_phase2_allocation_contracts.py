@@ -1,6 +1,6 @@
 """Integration Task 2.1 — lock Phase 2 allocation contracts (#2820).
 
-End-to-end composition gate across WP8–WP10: calibrated H8 path, PreTradeRiskReport
+End-to-end composition gate across WP8–WP10: calibrated sizing path, PreTradeRiskReport
 bind/persist identity, shadow isolation + challenger comparison. Challenger stays
 disabled in production; graph topology unchanged.
 """
@@ -27,7 +27,7 @@ from digiquant.portfolio.graph import (
 )
 from digiquant.portfolio.models.pm_direction import PMDirectionMemo, TickerDirection
 from digiquant.portfolio.phases import phase7e_risk_sizing
-from digiquant.portfolio.phases.h9_commit_run import CommitRunDeps
+from digiquant.portfolio.phases.commit import CommitRunDeps
 from digiquant.portfolio.phases.phase7e_risk_sizing import RiskSizingDeps
 from digiquant.portfolio.risk_policy import INCUMBENT_CONTROL_ORDER
 from digiquant.portfolio.shadow_optimizer import ShadowOptimizerStatus, book_to_weight_map
@@ -72,9 +72,9 @@ def _final_weights(book: dict[str, Any]) -> dict[str, float]:
 
 
 def _run_calibrated_h8(monkeypatch: pytest.MonkeyPatch) -> dict[str, Any]:
-    """H8 calibrated cutover with PreTradeRiskReport attach (WP8.4 + WP9.3)."""
-    from digiquant.portfolio.h8_risk_snapshots import H8RiskArtifacts
+    """sizing calibrated cutover with PreTradeRiskReport attach (WP8.4 + WP9.3)."""
     from digiquant.portfolio.phases.phase7e_risk_sizing import build_risk_sizing_node
+    from digiquant.portfolio.sizing_risk_snapshots import SizingRiskArtifacts
 
     from tests.dq.portfolio.test_allocation_inputs import _covariance, _risk_policy
     from tests.dq.portfolio.test_calibrated_sizing import _bundle
@@ -84,9 +84,9 @@ def _run_calibrated_h8(monkeypatch: pytest.MonkeyPatch) -> dict[str, Any]:
     bundle = _bundle(returns=returns)
     policy = _risk_policy()
     cov = _covariance(tickers)
-    artifacts = H8RiskArtifacts(policy=policy, covariance_snapshot=cov)
+    artifacts = SizingRiskArtifacts(policy=policy, covariance_snapshot=cov)
     monkeypatch.setattr(
-        "digiquant.portfolio.h8_risk_snapshots.resolve_h8_risk_artifacts",
+        "digiquant.portfolio.sizing_risk_snapshots.resolve_sizing_risk_artifacts",
         lambda **_kwargs: artifacts,
     )
     monkeypatch.setattr(
@@ -107,7 +107,7 @@ def _run_calibrated_h8(monkeypatch: pytest.MonkeyPatch) -> dict[str, Any]:
         "max_sector_pct": 100,
         "target_portfolio_vol": 1.0e6,
         "weight_increment_pct": 0,
-        "h8_sizing_input_mode": "calibrated",
+        "sizing_input_mode": "calibrated",
     }
     state = ResearchState(
         run_type="delta",
@@ -150,15 +150,15 @@ def test_portfolio_graph_topology_unchanged_by_phase2() -> None:
     assert PORTFOLIO_COMPILED_NODES.issubset(nodes)
     phase_names = {p.name for p in build_portfolio_phases_thesis(watchlist=["AAPL"], held=set())}
     for expected in (
-        "portfolio_h7_pm_direction",
-        "portfolio_h8_risk_sizing",
-        "portfolio_h9_commit_run",
+        "portfolio_direction",
+        "portfolio_sizing_risk_sizing",
+        "portfolio_commit",
     ):
         assert expected in phase_names
 
 
-def test_h7_owns_eligibility_h5_stance_cannot_reverse() -> None:
-    """H7 long roster → buy stances; H5 sell cannot reverse authorization."""
+def test_direction_owns_eligibility_analyst_stance_cannot_reverse() -> None:
+    """direction long roster → buy stances; analyst sell cannot reverse authorization."""
     roster = [
         TickerDirection(ticker="AAA", direction="long", conviction_rank=1),
         TickerDirection(ticker="BBB", direction="long", conviction_rank=2),
@@ -217,23 +217,23 @@ def test_incumbent_control_order_preserved() -> None:
     assert positions == sorted(positions)
 
 
-# --------------------------------------------------------------------------- H8 → report → H9 identity
+# --------------------------------------------------------------------------- sizing → report → commit identity
 
 
-def test_calibrated_h8_report_binds_final_book(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_calibrated_sizing_report_binds_final_book(monkeypatch: pytest.MonkeyPatch) -> None:
     result = _run_calibrated_h8(monkeypatch)
     book = result["book"]
     report: PreTradeRiskReport = result["report"]
     final = _final_weights(book)
-    assert book["h8_sizing_input_mode"] == "calibrated"
+    assert book["sizing_input_mode"] == "calibrated"
     assert book["allocation_input_bundle_hash"] == result["bundle"].bundle_content_hash
     assert report.final_book_weights_fingerprint == weights_fingerprint(final)
     assert book["pre_trade_risk_report_hash"] == report.report_content_hash
     assert report.allocation_input_bundle_hash == result["bundle"].bundle_content_hash
 
 
-def test_h9_validates_hashes_never_recomputes_report() -> None:
-    import digiquant.portfolio.phases.h9_commit_run as h9
+def test_commit_validates_hashes_never_recomputes_report() -> None:
+    import digiquant.portfolio.phases.commit as h9
     import digiquant.portfolio.writers.commit_io as commit_io
 
     for module in (h9, commit_io):
@@ -393,7 +393,7 @@ def test_replay_hard_failure_is_visible(tmp_path: pathlib.Path, monkeypatch) -> 
     assert "SIGABRT" in result.message
 
 
-def test_h9_validate_rejects_bundle_hash_mismatch() -> None:
+def test_commit_validate_rejects_bundle_hash_mismatch() -> None:
     artifact = phase2_shadow_artifact()
     state = ResearchState(
         run_type="delta",

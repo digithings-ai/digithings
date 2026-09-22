@@ -146,8 +146,8 @@ def upsert_thesis_row(
         row["thesis_kind"] = thesis_kind
     # Never persist a self-referential link (a vehicle/market thesis linked to
     # itself is meaningless and was the shape of ~140 legacy rows, #1563). This
-    # single write chokepoint neutralizes every source — the H5 resolver below,
-    # and H1's carry-forward of a prior row's stale link (persist_thesis_review).
+    # single write chokepoint neutralizes every source — the analyst resolver below,
+    # and thesis's carry-forward of a prior row's stale link (persist_thesis_review).
     if linked_market_thesis_id is not None and linked_market_thesis_id != thesis_id:
         row["linked_market_thesis_id"] = linked_market_thesis_id
     client.table("theses").upsert(row, on_conflict="date,thesis_id").execute()
@@ -161,9 +161,9 @@ def resolve_primary_market_thesis(
 ) -> str | None:
     """The market thesis a vehicle ticker primarily expresses, from ``thesis_vehicles``.
 
-    ``thesis_vehicles`` (written by H3) is the reliable ticker → market-thesis map —
-    unlike ``theses.linked_market_thesis_id``, which H5 left null and a same-date H3
-    back-fill could never populate (the vehicle row doesn't exist at H3 time). Prefer
+    ``thesis_vehicles`` (written by vehicle_map) is the reliable ticker → market-thesis map —
+    unlike ``theses.linked_market_thesis_id``, which analyst left null and a same-date vehicle_map
+    back-fill could never populate (the vehicle row doesn't exist at vehicle_map time). Prefer
     the current run's mapping; fall back to the most recent prior mapping so a
     carried held name still links. When a ticker maps to several market theses the
     PRIMARY is the lowest ``candidate_rank`` (ties → lexical ``thesis_id``), matching
@@ -238,7 +238,7 @@ def upsert_thesis_vehicles(
             continue
         # Best-effort re-link of any vehicle-{ticker} row that ALREADY exists for
         # this date (e.g. a prior same-day run). On a fresh date this no-ops (the
-        # row is created later by H5) — H5 is now the authoritative linker and
+        # row is created later by analyst) — analyst is now the authoritative linker and
         # resolves from this same ``thesis_vehicles`` map at creation time (#1563).
         try:
             client.table("theses").update({"linked_market_thesis_id": thesis_id}).eq(
@@ -259,7 +259,7 @@ def persist_thesis_review(
     active_theses: list[dict[str, Any]],
     workspace_id: UUID | str | None = None,
 ) -> int:
-    """Write status updates from H1 onto ``theses`` rows."""
+    """Write status updates from thesis onto ``theses`` rows."""
     if skip_overlay_shared_register(workspace_id):
         logger.info("overlay skip shared register theses (house-only UNIQUE(date, thesis_id))")
         return 0
@@ -268,14 +268,14 @@ def persist_thesis_review(
     for update in review.reviewed_theses:
         if vehicle_shaped_ticker(update.thesis_id) is not None:
             logger.info(
-                "H1 skip vehicle-shaped thesis_id %s (H5 owns vehicle rows)",
+                "thesis skip vehicle-shaped thesis_id %s (analyst owns vehicle rows)",
                 update.thesis_id,
             )
             continue
         prior_row = prior_by_id.get(update.thesis_id)
         if not prior_row:
             logger.info(
-                "H1 skip unknown thesis_id %s (does not mint market rows)",
+                "thesis skip unknown thesis_id %s (does not mint market rows)",
                 update.thesis_id,
             )
             continue
@@ -392,7 +392,7 @@ def persist_market_thesis_exploration(
     status_by_id: Mapping[str, str] | None = None,
     workspace_id: UUID | str | None = None,
 ) -> int:
-    """Insert/refresh market theses from H2 proposals."""
+    """Insert/refresh market theses from market proposals."""
     if skip_overlay_shared_register(workspace_id):
         logger.info("overlay skip shared register theses (house-only UNIQUE(date, thesis_id))")
         return 0
@@ -429,7 +429,7 @@ def persist_thesis_vehicle_map(
     source_exploration_key: str = "market-thesis-exploration",
     workspace_id: UUID | str | None = None,
 ) -> int:
-    """Upsert H3 vehicle mappings."""
+    """Upsert vehicle_map vehicle mappings."""
     if skip_overlay_shared_register(workspace_id):
         logger.info(
             "overlay skip shared register thesis_vehicles "
@@ -455,7 +455,7 @@ def invalidation_hits_from_signals(
     *,
     triggered_criteria: dict[str, list[str]] | None = None,
 ) -> dict[str, list[str]]:
-    """Resolve which theses have invalidation criteria hits for H1.
+    """Resolve which theses have invalidation criteria hits for thesis.
 
     ``triggered_criteria`` maps ``thesis_id`` → criterion strings that fired
     (typically from digest/regime signals or test fixtures).
@@ -482,13 +482,13 @@ def upsert_vehicle_thesis_from_analyst(
     linked_market_thesis_id: str | None = None,
     workspace_id: UUID | str | None = None,
 ) -> None:
-    """Create/update a vehicle-local thesis row when H5 covers an unlinked ticker.
+    """Create/update a vehicle-local thesis row when analyst covers an unlinked ticker.
 
     The vehicle row is linked to the market thesis it expresses at CREATION time
-    (#1563): the caller rarely supplies a valid link, and the legacy same-date H3
-    back-fill could never populate it (the row doesn't exist yet at H3), which
+    (#1563): the caller rarely supplies a valid link, and the legacy same-date vehicle_map
+    back-fill could never populate it (the row doesn't exist yet at vehicle_map), which
     left every vehicle thesis null-linked in prod. Resolve the link from the
-    reliable ``thesis_vehicles`` map instead — self-healing, since H5 rewrites a
+    reliable ``thesis_vehicles`` map instead — self-healing, since analyst rewrites a
     fresh vehicle row each run.
     """
     if skip_overlay_shared_register(workspace_id):

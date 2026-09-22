@@ -1,8 +1,8 @@
-"""WP13.4 — plan portfolio research attention after H4 without changing roster (#2930).
+"""WP13.4 — plan portfolio research attention after screener without changing roster (#2930).
 
-Invokes :func:`plan_research_attention` at H4 end over the fixed focus roster and
-branches in H5/H6 provider paths. ``off`` / ``shadow`` / ``enforce`` via
-``DIGIQUANT_RESEARCH_ATTENTION_MODE``. Not a graph node; cannot mutate H4 roster.
+Invokes :func:`plan_research_attention` at screener end over the fixed focus roster and
+branches in analyst/deliberation provider paths. ``off`` / ``shadow`` / ``enforce`` via
+``DIGIQUANT_RESEARCH_ATTENTION_MODE``. Not a graph node; cannot mutate screener roster.
 """
 
 from __future__ import annotations
@@ -25,7 +25,7 @@ from digiquant.dashboard.research_retrieval.planner import (
     AttentionPlan,
     AttentionRolloutMode,
     AttentionTargetKind,
-    build_h6_decision_features,
+    build_deliberation_decision_features,
     load_research_attention_policy,
     plan_research_attention,
     route_attention,
@@ -43,8 +43,8 @@ from digiquant.research.supabase_io import prior_book_current_weights
 
 logger = logging.getLogger(__name__)
 
-H5EnforcePath = Literal["carry", "metric_patch", "full"] | None
-H6EnforcePath = Literal["challenge", "carry"] | None
+AnalystEnforcePath = Literal["carry", "metric_patch", "full"] | None
+DeliberationEnforcePath = Literal["challenge", "carry"] | None
 
 _EXPLORATORY_REASONS = frozenset({"technical", "momentum", "other"})
 
@@ -125,7 +125,7 @@ def build_ticker_attention_features(
     *,
     analyst: Mapping[str, Any] | None = None,
 ) -> AttentionFeatures:
-    """Structured features for one portfolio ticker (H4 pre-provider or post-H5)."""
+    """Structured features for one portfolio ticker (screener pre-provider or post-analyst)."""
     entry = _roster_entry_for(state, ticker)
     roster_reason = entry.roster_reason if entry is not None else "other"
     held_set = set(holdings_from_prior_book(state.prior_context.prior_book))
@@ -143,7 +143,7 @@ def build_ticker_attention_features(
     prior_pub = _load_prior_analyst_published(state, ticker)
     pin_raw = _state_version_id(state)
     exploration_slot = roster_reason in _EXPLORATORY_REASONS
-    h6 = build_h6_decision_features(
+    deliberation = build_deliberation_decision_features(
         ticker=sym,
         roster_reason=roster_reason,
         held=held,
@@ -156,7 +156,7 @@ def build_ticker_attention_features(
         target_kind=AttentionTargetKind.TICKER,
         target_key=sym,
         state_version_id=str(pin_raw) if pin_raw is not None else None,
-        h6=h6,
+        deliberation=deliberation,
         has_prior=prior_pub is not None,
         force_full_rewrite=state.refresh_scope in ("all", "portfolio"),
         has_structured_delta=price_delta is not None,
@@ -166,7 +166,7 @@ def build_ticker_attention_features(
 
 
 def collect_portfolio_attention_features(state: PortfolioState) -> tuple[AttentionFeatures, ...]:
-    """All ticker targets from the fixed H4 focus roster."""
+    """All ticker targets from the fixed screener focus roster."""
     if state.custom_prompt:
         return ()
     return tuple(
@@ -176,7 +176,7 @@ def collect_portfolio_attention_features(state: PortfolioState) -> tuple[Attenti
 
 
 def plan_portfolio_research_attention(state: PortfolioState) -> AttentionPlan | None:
-    """Build the post-H4 research attention plan; ``None`` when mode is off."""
+    """Build the post-screener research attention plan; ``None`` when mode is off."""
     rollout = resolve_research_attention_rollout_mode()
     if rollout is AttentionRolloutMode.OFF:
         return None
@@ -200,13 +200,13 @@ def persist_portfolio_research_attention_plan(
 ) -> None:
     """Append portfolio plan + decisions to the run-scoped :class:`AttentionStore`."""
     stamp = recorded_at or datetime.now(tz=UTC)
-    resolved_attempt = attempt_id or f"portfolio-h4:{state.run_id}"
+    resolved_attempt = attempt_id or f"portfolio-screener:{state.run_id}"
     store = attention_store_for_run(str(state.run_id))
     store.append_plan(plan, attempt_id=resolved_attempt, recorded_at=stamp)
 
 
 def plan_and_persist_portfolio_research_attention(state: PortfolioState) -> AttentionPlan | None:
-    """Plan after H4 roster is fixed and persist reasons."""
+    """Plan after screener roster is fixed and persist reasons."""
     plan = plan_portfolio_research_attention(state)
     if plan is not None:
         persist_portfolio_research_attention_plan(state=state, plan=plan)
@@ -235,20 +235,20 @@ def resolve_portfolio_research_attention_plan(state: PortfolioState) -> Attentio
     if rollout is AttentionRolloutMode.ENFORCE:
         raise RuntimeError(
             "portfolio research attention plan missing before provider work "
-            f"(run_id={state.run_id}); H4 must plan first"
+            f"(run_id={state.run_id}); screener must plan first"
         )
     return None
 
 
-def h4_phase_attention_update(state: PortfolioState) -> dict[str, Any]:
-    """State update dict after H4 roster is fixed — plan before H5/H6 providers."""
+def screener_phase_attention_update(state: PortfolioState) -> dict[str, Any]:
+    """State update dict after screener roster is fixed — plan before analyst/deliberation providers."""
     plan = plan_and_persist_portfolio_research_attention(state)
     if plan is None:
         return {}
     return {"portfolio_research_attention_plan": plan.model_dump(mode="json")}
 
 
-def _h5_enforce_path_for_mode(mode: AttentionMode) -> H5EnforcePath:
+def _analyst_enforce_path_for_mode(mode: AttentionMode) -> AnalystEnforcePath:
     if mode is AttentionMode.CARRY:
         return "carry"
     if mode is AttentionMode.METRIC_PATCH:
@@ -258,12 +258,12 @@ def _h5_enforce_path_for_mode(mode: AttentionMode) -> H5EnforcePath:
     return None
 
 
-def research_attention_h5_enforce_path(
+def research_attention_analyst_enforce_path(
     state: PortfolioState,
     *,
     ticker: str,
-) -> H5EnforcePath:
-    """Return early H5 path under enforce mode; ``None`` for off/shadow/incumbent."""
+) -> AnalystEnforcePath:
+    """Return early analyst path under enforce mode; ``None`` for off/shadow/incumbent."""
     if resolve_research_attention_rollout_mode() is not AttentionRolloutMode.ENFORCE:
         return None
     plan = resolve_portfolio_research_attention_plan(state)
@@ -272,15 +272,15 @@ def research_attention_h5_enforce_path(
     decision = lookup_attention_decision(plan, ticker.strip().upper())
     if decision is None:
         return None
-    return _h5_enforce_path_for_mode(decision.mode)
+    return _analyst_enforce_path_for_mode(decision.mode)
 
 
-def resolve_h6_attention_decision(
+def resolve_deliberation_attention_decision(
     state: PortfolioState,
     ticker: str,
     analyst: Mapping[str, Any],
 ) -> AttentionDecision | None:
-    """Re-route one ticker after H5 features (conditional H6)."""
+    """Re-route one ticker after analyst features (conditional deliberation)."""
     rollout = resolve_research_attention_rollout_mode()
     if rollout is AttentionRolloutMode.OFF or state.custom_prompt:
         return None
@@ -290,15 +290,15 @@ def resolve_h6_attention_decision(
     return route_attention(features, policy, actuated=actuated)
 
 
-def research_attention_h6_enforce_path(
+def research_attention_deliberation_enforce_path(
     state: PortfolioState,
     ticker: str,
     analyst: Mapping[str, Any],
-) -> H6EnforcePath:
-    """Return H6 path under enforce after H5 features; ``None`` for off/shadow."""
+) -> DeliberationEnforcePath:
+    """Return deliberation path under enforce after analyst features; ``None`` for off/shadow."""
     if resolve_research_attention_rollout_mode() is not AttentionRolloutMode.ENFORCE:
         return None
-    decision = resolve_h6_attention_decision(state, ticker, analyst)
+    decision = resolve_deliberation_attention_decision(state, ticker, analyst)
     if decision is None:
         return None
     if decision.mode is AttentionMode.CHALLENGE:
@@ -313,7 +313,7 @@ def apply_analyst_metric_patch(
     *,
     roster_entry: Mapping[str, Any],
 ) -> dict[str, Any]:
-    """Deterministic H5 structured update — zero provider calls (#2930)."""
+    """Deterministic analyst structured update — zero provider calls (#2930)."""
     body = dict(prior.payload)
     inner = body.get("body") if isinstance(body.get("body"), dict) else body
     if not isinstance(inner, dict):
@@ -333,20 +333,20 @@ def apply_analyst_metric_patch(
 
 
 __all__ = [
-    "H5EnforcePath",
-    "H6EnforcePath",
+    "AnalystEnforcePath",
+    "DeliberationEnforcePath",
     "DIGIQUANT_RESEARCH_ATTENTION_MODE_ENV",
     "apply_analyst_metric_patch",
     "build_ticker_attention_features",
     "collect_portfolio_attention_features",
-    "h4_phase_attention_update",
+    "screener_phase_attention_update",
     "lookup_attention_decision",
     "persist_portfolio_research_attention_plan",
     "plan_and_persist_portfolio_research_attention",
     "plan_portfolio_research_attention",
-    "research_attention_h5_enforce_path",
-    "research_attention_h6_enforce_path",
-    "resolve_h6_attention_decision",
+    "research_attention_analyst_enforce_path",
+    "research_attention_deliberation_enforce_path",
+    "resolve_deliberation_attention_decision",
     "resolve_portfolio_research_attention_plan",
     "ticker_target_key",
 ]

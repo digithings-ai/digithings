@@ -455,7 +455,7 @@ export async function fetchThesisVehicleMap(): Promise<ThesisVehicleRow[]> {
 }
 
 /**
- * Coerce a `documents.payload` jsonb blob into the H5 `AnalystPayload` shape
+ * Coerce a `documents.payload` jsonb blob into the analyst `AnalystPayload` shape
  * (mirrors `digiquant/.../portfolio/models/analyst.py`). Defensive against partial/
  * malformed payloads — every field falls back to its schema default rather than
  * throwing, since this renders directly in the Ticker Dossier (#1562 PR2).
@@ -1074,7 +1074,7 @@ export async function getFullDashboardData(): Promise<DashboardData> {
 
   // Whether the committed book already covers the snapshot's date. When it
   // does, the positions table is the truth: it carries the POST-TURNOVER
-  // booked weights (H8 sizing + no-trade band + carry), which legitimately
+  // booked weights (sizing + no-trade band + carry), which legitimately
   // differ from the PM's proposal (e.g. a 20% target booked at 11.4%).
   const bookedCoversSnapshot = bookedCoversCommittedSnapshot(snapshot.date, latestPosDate);
 

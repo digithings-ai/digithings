@@ -2,7 +2,7 @@
 
 ``ci.yml`` runs ``validate_model_routing.py --routing`` against real config. The
 load-bearing logic is the offline resolver: exact ``phase_models`` pins, trailing-``-``
-prefix matches (per-ticker H6 deliberation slugs), and ``DIGI_LLM_MODE`` / default
+prefix matches (per-ticker deliberation slugs), and ``DIGI_LLM_MODE`` / default
 fallbacks when a slug is unpinned. Network ``--ping`` stays out of unit tests; the
 skip/strict bookkeeping is exercised with a fake ``digigraph.llm_client`` so no call
 leaves the process (#3939).
@@ -126,7 +126,7 @@ def test_inventory_slugs_includes_digiquant_capabilities(
                     "beliefs-distillation": {},
                 },
                 "phase_capability_prefixes": {
-                    "h6_analyst_response-": {},
+                    "deliberation_analyst_response-": {},
                 },
             }
         ),
@@ -136,7 +136,7 @@ def test_inventory_slugs_includes_digiquant_capabilities(
     slugs = {s for s, _ in mod.inventory_slugs()}
     assert "portfolio/pm-direction" in slugs
     assert "beliefs-distillation" in slugs
-    assert any(s.startswith("h6_analyst_response-") for s in slugs)
+    assert any(s.startswith("deliberation_analyst_response-") for s in slugs)
 
 
 def test_default_model_overrides_mode_table(
@@ -172,7 +172,7 @@ def test_provider_prefix_classification(routing: Any, model: str, provider: str)
     assert routing._provider(model) == provider
 
 
-def test_repo_config_pins_h6_deliberation_prefix_and_master_digest(
+def test_repo_config_pins_deliberation_prefix_and_master_digest(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """Smoke against committed config — CI --routing depends on these pins."""
