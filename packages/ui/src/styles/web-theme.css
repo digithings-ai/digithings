@@ -263,6 +263,16 @@ body {
 @media (min-width: 720px) { .dg-step { grid-template-columns: 1fr 1.2fr; align-items: center; } }
 @media (max-width: 900px) { .dg-stage-grid { grid-template-columns: 1fr; } .dg-rail { display: none; } }
 
+/* ── disclosure rows (native <details>/<summary>) ───────────────────────────
+   A summary that opens something must read as clickable, and a bare <summary>
+   computes `cursor: auto` — so the affordance is owned here rather than
+   hand-rolled as an app-local `cursor-pointer` on every FAQ (canon: pointer
+   cursors are kit-level; apps/ utilities are refused). `list-style: none` plus
+   the webkit marker rule drop the default triangle so the caller can draw its
+   own indicator. ─────────────────────────────────────────────────────────── */
+.disclosure-row > summary { cursor: pointer; list-style: none; }
+.disclosure-row > summary::-webkit-details-marker { display: none; }
+
 /* ── ScrollyFeatures (useScrollyFeatures reference skin) ────────────────────
    Pinned section + progress rail (Graphite pattern). The hook owns state; this
    is the reference CSS. Track height comes from scrollyTrackHeightVh() inline.
