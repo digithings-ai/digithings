@@ -18,7 +18,7 @@ This document reorganizes the remaining work around three decisions taken on
 | # | Decision | Source | Status |
 |---|----------|--------|--------|
 | **D0** | Route digichat work through the **module tier** (`module/digichat` as the hop into `develop`) | user, 2026-09-22 | **done** (sync PR #4503) |
-| **D1** | Build `modal` and `sidebar` as **real config-driven presentation surfaces**, not a fold into `/embed` | user, 2026-09-22 | to implement (Phase 2d) |
+| **D1** | Build `modal` and `sidebar` as **real config-driven presentation surfaces**, not a fold into `/embed` | user, 2026-09-22 | done — Phase 2d (#4515) |
 | **D2** | Maintain a **supported-backend matrix** where every backend yields the *same* chat end result (reasoning, tool calls, web search, all activity surfaced) | user, 2026-09-22 | to implement (Phase 5) |
 
 Already shipped and merged into `develop`:
@@ -197,10 +197,35 @@ Work items:
 6. **Config surface.** Keep `chrome.mode` as the selector; add `chrome.launcher`
    fields only if needed. Document each mode in `docs/digichat/`.
 
-**Open question for the user:** should `modal`/`sidebar` be **in-app surfaces**
-(this plan) or remain **host-side** concerns (the host page decides and iframes
-`/embed`)? D1 says implement, so this plan implements; the question is only
-whether the host-side path should also stay supported as an alias.
+**Done (issue #4515, PR into `module/digichat`):**
+
+- **Mode router** — `(digichat)/page.tsx` redirects only `embed`; `modal` and
+  `sidebar` now flow through the app paths (`const framed = mode === "modal" ||
+  mode === "sidebar"` keeps `ChatShell` for the full-page surface only).
+- **Frame** — new `apps/digichat/src/components/stock/presentation-frame.tsx`
+  (`PresentationFrame`, `isFramedPresentation`): `modal` mounts the existing
+  `DigichatLauncher` (title/aria-label from `chrome.title`/`chrome.launcher`),
+  `sidebar` mounts a docked `aside.digichat-presentation__panel` beside a
+  reserved canvas. Both wrap the same `ProductStockShell`, so skin, chrome and
+  theme are identical across modes.
+- **Mode reaches the shell** — `home-stock-client.tsx` now passes
+  `data-chrome-mode={mode}` (was hard-coded `"app"`) and uses `h-full` instead of
+  `h-dvh` for `modal` so the panel body does not overflow the launcher.
+- **Hotkey bound** — `DigichatLauncher` gained a `hotkey?: string` prop plus an
+  exported `matchesHotkey(event, hotkey)` helper (`mod` = ctrl-or-meta; unnamed
+  modifiers must be absent; `matchesHotkey` unit-tested). The listener only
+  opens — Escape and the backdrop keep owning dismissal.
+- **Per-mode formatting** — `apps/digichat/src/styles/product-chrome.css` has
+  `.digichat-presentation--sidebar`, `__canvas`, `__panel` (the modal mode needs
+  no rules: `digichat-launcher.css` already sizes the panel body).
+
+The host-side path (`public/widget.js` + the dashboard popup, both built on
+`buildPopupEmbedSrc`) stays supported and unchanged — an in-app `modal` surface
+and a host-side iframe popup are complementary, not alternatives.
+
+**Deferred within 2d:** the launcher panel is fixed-size (no resize/collapse
+affordance) and the sidebar width is a constant `min(380px, 100vw)` rather than
+`chrome.launcher`-driven. Revisit only if a deployment needs it.
 
 ---
 

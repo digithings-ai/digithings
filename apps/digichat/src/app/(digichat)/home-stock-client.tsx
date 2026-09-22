@@ -33,6 +33,7 @@ import {
   memoryThreadStorageKey,
 } from "@/lib/session-memory-thread-list";
 import { skinOwnsPageChrome } from "@/lib/thread-skins";
+import { PresentationFrame } from "@/components/stock/presentation-frame";
 
 function useShellThreadRuntime(
   clientConfig: DigichatClientConfig,
@@ -129,21 +130,27 @@ function HomeStockClientSingle({
     prefs.getEffort,
   );
 
+  const mode = clientConfig.chrome.mode;
+
   return (
     <StockChatPrefsHost value={prefs.prefsApi} panes={prefs.panes}>
       <div
-        className="flex h-dvh flex-col"
-        data-chrome-mode="app"
+        // `modal` fills the launcher panel body, which is already the viewport
+        // height; `h-dvh` there would overflow it.
+        className={mode === "modal" ? "flex h-full flex-col" : "flex h-dvh flex-col"}
+        data-chrome-mode={mode}
         data-persistence="none"
       >
-        <ProductStockShell
-          runtime={runtime}
-          clientConfig={clientConfig}
-          persistence="none"
-          sessionKey={sessionKey}
-          headerSlot={null}
-          onWebSearchChange={prefs.setWebSearch}
-        />
+        <PresentationFrame mode={mode} clientConfig={clientConfig}>
+          <ProductStockShell
+            runtime={runtime}
+            clientConfig={clientConfig}
+            persistence="none"
+            sessionKey={sessionKey}
+            headerSlot={null}
+            onWebSearchChange={prefs.setWebSearch}
+          />
+        </PresentationFrame>
       </div>
     </StockChatPrefsHost>
   );
@@ -213,22 +220,26 @@ function HomeStockClientMemory({
     runtimeHook,
   });
 
+  const mode = clientConfig.chrome.mode;
+
   return (
     <StockChatPrefsHost value={prefs.prefsApi} panes={prefs.panes}>
       <div
-        className="flex h-dvh flex-col"
-        data-chrome-mode="app"
+        className={mode === "modal" ? "flex h-full flex-col" : "flex h-dvh flex-col"}
+        data-chrome-mode={mode}
         data-persistence="memory"
       >
-        <ProductStockShell
-          runtime={runtime}
-          clientConfig={clientConfig}
-          persistence="memory"
-          sessionKey={sessionKey}
-          sideSlot={<MemoryThreadListSidebar />}
-          headerSlot={null}
-          onWebSearchChange={prefs.setWebSearch}
-        />
+        <PresentationFrame mode={mode} clientConfig={clientConfig}>
+          <ProductStockShell
+            runtime={runtime}
+            clientConfig={clientConfig}
+            persistence="memory"
+            sessionKey={sessionKey}
+            sideSlot={<MemoryThreadListSidebar />}
+            headerSlot={null}
+            onWebSearchChange={prefs.setWebSearch}
+          />
+        </PresentationFrame>
       </div>
     </StockChatPrefsHost>
   );
