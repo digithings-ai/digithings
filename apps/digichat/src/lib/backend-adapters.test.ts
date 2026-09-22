@@ -17,6 +17,8 @@ const read = (rel: string) => readFileSync(join(here, rel), "utf8");
 const TYPES: BackendType[] = ["digigraph", "foundry"];
 
 describe("backend adapter registry", () => {
+  // Exhaustiveness itself is pinned by the `Record<BackendType, BackendAdapter>`
+  // type on BACKEND_ADAPTERS; this test pins the key set at runtime.
   it("describes every backend type", () => {
     for (const type of TYPES) {
       expect(BACKEND_ADAPTERS[type]?.type).toBe(type);
@@ -76,10 +78,14 @@ describe("backend adapter registry", () => {
 describe("chat route backend selection", () => {
   // The registry is the single source of truth: the handler must choose its
   // streaming path from the adapter, not from a raw `backend.type` comparison.
-  const route = read("../app/api/chat/route.ts");
+  // Comments are stripped first so a future comment quoting the pattern does
+  // not fail the guard spuriously.
+  const route = read("../app/api/chat/route.ts").replace(/\/\/.*$/gm, "");
 
   it("never compares backend.type in the handler", () => {
-    expect(route).not.toMatch(/backend\??\.type\s*===/);
+    expect(route).not.toMatch(
+      /backend\??\.type\s*(===|!==|==|!=)|switch\s*\(\s*backend\??\.type/,
+    );
   });
 
   it("selects the streaming path from the adapter protocol and capabilities", () => {

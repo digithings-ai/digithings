@@ -16,6 +16,10 @@
  * `ActivitySpan` vocabulary in `lib/chat-activity.ts` and emit the same AI SDK
  * UI-message stream, so reasoning, tool calls, sources and activity render the
  * same way regardless of which backend produced them.
+ *
+ * In 5a only `protocol` and `capabilities.corpus` are load-bearing in the
+ * handler; the remaining capabilities are declared here for 5b/5c and asserted
+ * by the parity test, not yet read at runtime.
  */
 
 import type { DigichatDeployment } from "@/lib/deploy-config/schema";
@@ -139,14 +143,26 @@ export function backendAdapterFor(type: BackendType | undefined): BackendAdapter
   return BACKEND_ADAPTERS[type ?? DEFAULT_BACKEND_TYPE];
 }
 
-/** Narrow a config to the digigraph shape (for reading its own fields). */
+/**
+ * Narrow a config to the digigraph shape (for reading its own fields).
+ *
+ * Checks `type` only; the rest of the shape is guaranteed by the Zod schema
+ * (`BackendSchema`) and the tenant validator, both of which run before the
+ * handler ever sees a config.
+ */
 export function isDigigraphConfig(
   config: BackendConfig | undefined,
 ): config is DigigraphBackendConfig {
   return config?.type === "digigraph";
 }
 
-/** Narrow a config to the foundry shape (for reading its own fields). */
+/**
+ * Narrow a config to the foundry shape (for reading its own fields).
+ *
+ * Checks `type` only; `projectEndpoint` / `agentName` are guaranteed by the
+ * Zod schema and the tenant validator, which reject a foundry backend missing
+ * either field.
+ */
 export function isFoundryConfig(
   config: BackendConfig | undefined,
 ): config is FoundryBackendConfig {

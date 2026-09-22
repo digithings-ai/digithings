@@ -340,10 +340,16 @@ criterion for "every backend has the same end result".
   attachments, mcp, corpus). The handler resolves the adapter once
   (`backendAdapterFor(backend?.type)`) and chooses its streaming path from
   `adapter.protocol` and `adapter.capabilities.corpus` — there is no
-  `backend.type === "…"` comparison left in `route.ts`. `backend-adapters.test.ts`
-  pins exhaustiveness, both adapters' protocol/auth/capabilities, the
+  `backend.type === "…"` comparison left in `route.ts`. Exhaustiveness is pinned
+  by the `Record<BackendType, BackendAdapter>` type; `backend-adapters.test.ts`
+  pins the key set at runtime, both adapters' protocol/auth/capabilities, the
   reasoning+toolCalls parity invariant, the digigraph default, the type guards,
   and (as a source guard) that the handler never compares `backend.type`.
+  Note: in 5a only `protocol` and `capabilities.corpus` are read by the handler;
+  the rest are declared for 5b/5c and asserted by the parity test. A second
+  `backend.type` dispatch site remains in the tenant validator
+  (`lib/embed-tenants.ts` — `DIGICHAT_EMBED_TENANTS` parsing); migrating it to
+  the registry is a 5b/5c follow-up, out of 5a's chat-route scope.
 - **5b — AI-SDK backends.** `openai-completions`, `openai-responses`,
   `anthropic`, `google-vertex`. Reuses the installed `ai` v7 +
   `@ai-sdk/*` providers; each new provider package is a **new dependency**.
