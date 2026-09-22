@@ -12,6 +12,7 @@
     "doc",
     "docs",
     "glow",
+    "stack",
     "tl"
   ],
   "digiquant-web": [
@@ -50,5 +51,6 @@
     "dt",
     "dtc",
     "light"
-  ]
+  ],
+  "_stack": "digithings-web .stack-* is the /variants/mixed stack showcase (branch claude/home-variants): the bento grid as a map with a travelling focus, pinned by .stack-pin and dimmed per .stack-cell.is-active. Exploration only \u2014 if the showcase is picked it moves into @digithings/ui (data-layout styles + component + tests) and this entry is deleted with the app block."
 }

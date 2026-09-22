@@ -159,21 +159,15 @@
   .dc-chat-main { padding-top: var(--nav-shell-h); }
 }
 
-/* anchor-scroll: center the whole architecture block (head + manifest) in the viewport */
+/* anchor-scroll: the `#architecture` and `#contact` targets are ordinary document
+   sections now (D1, #4429), so they need the nav offset and nothing else. The old
+   viewport-centring rule (`min-height: calc(100svh - …)` + flex) went with the
+   bands it was built to fill — a document section is its content's height. */
 html {
   scroll-behavior: auto;
   scroll-padding-top: var(--dq-nav-h);
 }
-#architecture {
-  scroll-margin-top: var(--dq-nav-h);
-  min-height: calc(100svh - var(--dq-nav-h));
-  display: flex;
-  align-items: center;
-  padding-block: clamp(1.5rem, 4vh, 2.5rem);
-}
-#architecture .section-head {
-  margin-bottom: clamp(1.25rem, 2.5vw, 1.75rem);
-}
+#architecture { scroll-margin-top: var(--dq-nav-h); }
 #contact { scroll-margin-top: calc(var(--dq-nav-h) + 1.5rem); }
 
 @media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }
@@ -298,4 +292,60 @@ html {
 .dc-chat-frame {
   background: var(--chat-frame-canvas);
   color-scheme: var(--chat-frame-scheme);
+}
+
+/* ==========================================================================
+   VARIANT EXPLORATION ONLY (2026-09-21, branch claude/home-variants).
+
+   The stack showcase on /variants/mixed: the bento grid acts as a map and one
+   cell at a time takes focus as you scroll, with a detail card beside it. The
+   index is read from scroll progress in the component; everything below is the
+   part CSS has to own — sticky pinning, the grid, and the focus/dim states.
+
+   This lives in the app sheet, not in @digithings/ui, because it is not a
+   promoted part yet. If the showcase survives the picking it moves into
+   data-layout (styles + component + tests) and this block is deleted.
+   ========================================================================== */
+.stack-pin {
+  position: sticky;
+  top: calc(var(--dq-nav-h) + 1.6rem);
+}
+
+.stack-grid {
+  display: grid;
+  grid-auto-rows: minmax(7rem, auto);
+  gap: 0.75rem;
+}
+
+/* The focus ring: the active cell fills its livery hairline and lifts, every
+   other cell recedes. `--accent-<module>` is already set on the cell by
+   BentoCell's livery scope, so this needs no per-module rule. */
+.stack-cell {
+  transition:
+    border-color 0.22s var(--ease),
+    background-color 0.22s var(--ease),
+    transform 0.22s var(--ease),
+    opacity 0.22s var(--ease);
+}
+
+.stack-grid .stack-cell {
+  border-color: var(--hair);
+  opacity: 0.6;
+}
+
+.stack-grid .stack-cell.is-active {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 8%, var(--surface));
+  opacity: 1;
+  transform: translateY(-2px);
+}
+
+.stack-grid .stack-cell.is-active::before {
+  transform: scaleX(1);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .stack-cell {
+    transition: none;
+  }
 }

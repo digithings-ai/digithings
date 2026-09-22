@@ -87,10 +87,15 @@ export function Specimen({
   children: ReactNode;
   className?: string;
 }) {
+  // `min-w-0` matters: a frame whose child is a non-shrinking grid (the
+  // FeatureCell's two `minmax(0,1fr)` tracks) would otherwise push its own
+  // width, and then the page's, past the viewport on a narrow screen.
   return (
-    <div className={`border border-hair bg-surface p-[1.25rem]${className ? ` ${className}` : ""}`}>
+    <div
+      className={`min-w-0 border border-hair bg-surface p-[1.25rem]${className ? ` ${className}` : ""}`}
+    >
       {label ? (
-        <div className="mb-[1rem]">
+        <div className="mb-[1rem] min-w-0">
           <BlockLabel>{label}</BlockLabel>
         </div>
       ) : null}
