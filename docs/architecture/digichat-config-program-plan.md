@@ -60,18 +60,43 @@ Already shipped and merged into `develop`:
 
 Nothing here changes behaviour; it removes config that lies.
 
-- Delete `cli.enabled` (no consumer, advisory only).
-- Delete `gate.showLanguageSelector` (resolved, never read; the `/language`
-  composer row is always present).
-- Delete the derived `layout` (`loader.ts` → `embed-ui-flags.ts`, never read).
-- Delete client-projected-but-unread `gate.activityDetail` / `gate.consumeUrl`
-  from the client projection.
-- Delete `StockChromeBar` (imported only by its own test).
-- Either **wire** `?layout=embed` (emitted by `public/widget.js` and the
-  dashboard popup via `embed-popup-config.ts`) or **delete** it from all three
-  producers.
+**Done (issue #4508):**
+
+- Delete `StockChromeBar` (`apps/digichat/src/components/stock/stock-chrome-bar.tsx`)
+  and its test — imported only by its own test; two other tests assert its
+  absence.
+- Delete client-projected-but-unread `gate.activityDetail` from the client
+  projection (`client-projection.ts` type + `DEFAULT_CLIENT_CONFIG` + the
+  `toDigichatClientConfig` mapping). The server keeps it — `route.ts` reads it
+  for the trace adapter; only the browser projection was dead.
+
+**Investigated and RETAINED (not dead — do not retry the deletion):**
+
+- `cli.enabled` — advisory metadata by design (`CliSchema` comment: "Advisory
+  for operators; the web app never imports Ink"); set by `local-cli.yaml`;
+  `.strict()` schema, so removing it breaks that config.
+- `gate.showLanguageSelector` — RESERVED. `ARCHITECTURE.md:1428` documents it as
+  "Reserved; language chrome is not mounted on the stock baseline", and it is set
+  by 9 shipped configs (`config/examples/local-app.yaml`, `occ-embed.yaml`,
+  `datatap-mcp.yaml`, `digithings-ai-embed.yaml`, `dashboard-modal.yaml`, …).
+  `GateSchema` is `.strict()`, so removing the field makes every one of those
+  configs fail Zod validation at boot.
+- `layout` (`page` | `embed`) — a validated `DIGICHAT_EMBED_TENANTS` tenant
+  field (`embed-tenants.ts:126,391-392,533`; documented at `ARCHITECTURE.md:495`),
+  not a dead derived value. Removing it is a contract change with no benefit.
+- `?layout=embed` URL param — no reader today, but it is a documented popup
+  contract (the panel is deliberately "not full-page wide") pinned by three
+  tests (`embed-popup-config.test.ts`, `digichat-popup.test.ts`,
+  `digichat-popup.test.tsx`). Wiring it to the tenant `layout` field is the
+  better follow-up if it should become real; deleting it is not a clear win.
+- `gate.consumeUrl` — already never client-projected (server-side quota consume
+  only); nothing to remove.
+
+**Still open from the original list:**
+
 - Reconcile `features.modelPicker` vs `models.allowPicker` (both gate the same
-  picker, disagree in defaults).
+  picker, disagree in defaults). Deferred to Phase 2c (app/embed parity), where
+  the field set is decided per field.
 
 ## Phase 2b — authenticated-session gaps
 
