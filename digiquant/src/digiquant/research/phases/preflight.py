@@ -426,7 +426,7 @@ def _hydrate_config(
     current_weights = prior_book_current_weights(prior_book)
     if current_weights:
         # Mark-to-market (#955): drift prior weights by price moves since the last run so
-        # the H8 no-trade band compares against the actual current book, not stale targets.
+        # the sizing no-trade band compares against the actual current book, not stale targets.
         held = tuple(t for t in current_weights if not _is_cash_ticker(t))
         try:
             deltas = (
@@ -676,8 +676,8 @@ def build_preflight_node(deps: PreflightDeps) -> Callable[[ResearchState], dict]
         update.update(_pin_research_state_update(deps, state))
         update.update(_outcome_maturation_update(deps, state))
 
-        from digiquant.dashboard.research_retrieval.h7_prerequisites import (
-            build_h7_prerequisite_snapshot,
+        from digiquant.dashboard.research_retrieval.direction_prerequisites import (
+            build_direction_prerequisite_snapshot,
         )
 
         prior_effective_ids = tuple(
@@ -699,7 +699,7 @@ def build_preflight_node(deps: PreflightDeps) -> Callable[[ResearchState], dict]
         lesson_pin_raw = update.get("outcome_lesson_pin")
         if not isinstance(lesson_pin_raw, dict) and isinstance(state.outcome_lesson_pin, dict):
             lesson_pin_raw = state.outcome_lesson_pin
-        snapshot = build_h7_prerequisite_snapshot(
+        snapshot = build_direction_prerequisite_snapshot(
             client=deps.client,
             run_date=state.run_date,
             knowledge_cutoff_at=cutoff,
@@ -708,7 +708,7 @@ def build_preflight_node(deps: PreflightDeps) -> Callable[[ResearchState], dict]
             outcome_lesson_pin=lesson_pin_raw if isinstance(lesson_pin_raw, dict) else None,
         )
         if snapshot is not None:
-            update["h7_prerequisite_snapshot"] = snapshot.model_dump(mode="json")
+            update["direction_prerequisite_snapshot"] = snapshot.model_dump(mode="json")
 
         return update
 

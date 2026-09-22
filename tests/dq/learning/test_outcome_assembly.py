@@ -456,7 +456,7 @@ def test_excluded_episode_without_fabricated_returns() -> None:
     assert episode is not None
     assert episode.disposition is EpisodeDisposition.EXCLUDED
     assert episode.realized is None
-    assert episode.h9_links is None
+    assert episode.commit_links is None
 
 
 def test_no_op_lineage() -> None:
@@ -543,9 +543,9 @@ def test_authorized_links_accounting_benchmark_cost_risk() -> None:
     assert episode.expected_cost_id == expected_id
     assert episode.realized_cost_id == realized_cost_id
     assert episode.pre_trade_risk_report_id == risk_id
-    assert episode.h8_lineage is not None
-    assert episode.h8_lineage.requested_weight == Decimal("0.06")
-    assert episode.h8_lineage.approved_weight == Decimal("0.04")
+    assert episode.sizing_lineage is not None
+    assert episode.sizing_lineage.requested_weight == Decimal("0.06")
+    assert episode.sizing_lineage.approved_weight == Decimal("0.04")
 
 
 def test_capped_lineage_records_adjustment_codes() -> None:
@@ -572,8 +572,8 @@ def test_capped_lineage_records_adjustment_codes() -> None:
     result = asm.assemble_pass(as_of=_TS, knowledge_cutoff_at=_TS)
     episode = result.results[0].episode
     assert episode is not None
-    assert episode.h8_lineage is not None
-    assert "single_name_cap" in episode.h8_lineage.adjustment_codes
+    assert episode.sizing_lineage is not None
+    assert "single_name_cap" in episode.sizing_lineage.adjustment_codes
 
 
 def test_unreconciled_accounting_disables_portfolio_learning() -> None:

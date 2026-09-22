@@ -1,6 +1,6 @@
-"""Per-run telemetry → ``atlas_run_diagnostics`` (Pillar 1B).
+"""Per-run telemetry → ``run_diagnostics`` (Pillar 1B).
 
-Migration 032 created the ``atlas_run_diagnostics`` table and named this module as its
+Migration 032 created the ``run_diagnostics`` table and named this module as its
 writer, but the module never existed — so the table stayed empty and a run's health was
 invisible. This closes that gap: at the end of every chain run :func:`write_row` counts
 fresh / carried / failed segments from state, folds in the LLM usage snapshot
@@ -48,11 +48,11 @@ _SINGLE_SEGMENT_PHASE = "phase3_output"
 _CHAIN_ERROR_PHASE = "chain"
 _CORE_ENGINES = ("research", "portfolio")
 
-# ``phase`` stamped on a PhaseError raised by H9 commit-run (see
-# ``portfolio.phases.h9_commit_run.PHASE_NAME``). It carries a node-level phase (not "chain"),
+# ``phase`` stamped on a PhaseError raised by commit-run (see
+# ``portfolio.phases.commit.PHASE_NAME``). It carries a node-level phase (not "chain"),
 # so the chain-error gate never sees it — yet every one of its exits (coherence fail-closed,
 # idempotency conflict, memo-present-but-no-book) is a non-commit that must gate the run (#1555).
-_PORTFOLIO_COMMIT_PHASE = "portfolio_h9_commit_run"
+_PORTFOLIO_COMMIT_PHASE = "portfolio_commit"
 
 # Master-digest synthesis is a first-class run artifact (#1559): when it fails and
 # the run falls back to carrying the prior digest forward, the run must surface as
@@ -65,16 +65,16 @@ _MASTER_DIGEST_NODE = "master-digest"
 
 # portfolio/thesis phases whose PhaseErrors mean "a piece of the book's reasoning
 # died" (#1742). Deliberately an explicit allow-list of the five literals actually emitted
-# (``h6_deliberation.PHASE_NAME``, ``h7_pm_direction.PHASE_NAME``, the ``phase_portfolio``
+# (``deliberation.PHASE_NAME``, ``direction.PHASE_NAME``, the ``phase_portfolio``
 # marker shared by ``portfolio_common`` / ``thesis_common``, ``phase7d_pm``,
 # ``phase9_evolution``) rather than a ``portfolio_*`` prefix match: a prefix would also swallow
-# H1-H5 bookkeeping errors and ``portfolio_h9_commit_run``, which is already gated separately
+# thesis-analyst bookkeeping errors and ``portfolio_commit``, which is already gated separately
 # (#1555) and must NOT be double-counted here.
 _PORTFOLIO_FAILURE_PHASES = frozenset(
     {
         "phase_portfolio",
-        "portfolio_h6_deliberation",
-        "portfolio_h7_pm_direction",
+        "portfolio_deliberation",
+        "portfolio_direction",
         "phase7d_pm",
         "phase9_evolution",
     }
@@ -85,7 +85,7 @@ _DEGRADED_PCT_DEFAULT = 50.0
 # Default share of portfolio deliberations that may fail before the run is degraded (#1742).
 # Calibrated against production: 2026-07-31 (31 of 39 deliberations dead → 79%) and 07-29
 # (33 of 40 → 83%) must flip; the 07-26 baseline (1 of 50 → 2%) and 06-24 (9 of ~40 → 23%,
-# mostly benign ``max_rounds`` caps) must not. H6 emits the *same* ``(phase, node)`` for an
+# mostly benign ``max_rounds`` caps) must not. deliberation emits the *same* ``(phase, node)`` for an
 # LLM crash and a benign cap, and discriminating them would mean parsing message text — so
 # both are counted and the threshold is set wide enough that routine caps never trip it.
 _PORTFOLIO_DEGRADED_PCT_DEFAULT = 50.0
@@ -146,8 +146,8 @@ class RunSummary:
     status: str  # "ok" | "degraded" | "failed" | "cancelled"
     error_summary: str
     breakdown: dict[str, Any]
-    # portfolio H8/H9 terminal-book accounting (#1555). ``book_materialized`` = H8 produced a
-    # sized book; ``book_committed`` = H9 persisted it (a commit manifest with status
+    # portfolio sizing/commit terminal-book accounting (#1555). ``book_materialized`` = sizing produced a
+    # sized book; ``book_committed`` = commit persisted it (a commit manifest with status
     # committed/noop). A materialized-but-uncommitted book is a silent terminal failure —
     # it forces the run degraded (see :func:`summarize_run`) and is surfaced structurally in
     # the diagnostics breakdown so it survives the ``error_summary`` truncation cap.
@@ -261,9 +261,9 @@ def _snapshot_published(state: ResearchState) -> bool:
 
 
 def _book_status(state: ResearchState) -> tuple[bool, bool]:
-    """``(materialized, committed)`` for the portfolio H8/H9 terminal book (#1555).
+    """``(materialized, committed)`` for the portfolio sizing/commit terminal book (#1555).
 
-    ``materialized`` — H8 produced ``phase_portfolio.sized_book``. ``committed`` — H9
+    ``materialized`` — sizing produced ``phase_portfolio.sized_book``. ``committed`` — commit
     persisted it, evidenced by a ``commit_manifest`` whose status is ``committed`` or
     ``noop`` (an idempotent re-run of an already-booked day is committed, not a gap).
     Any other shape (no manifest, or a manifest without a terminal status) counts as
@@ -285,7 +285,7 @@ def book_committed(state: ResearchState) -> bool:
 def _portfolio_deliberation_health(state: ResearchState, errors: list[Any]) -> tuple[int, int]:
     """``(deliberations, portfolio_failures)`` — the density of dead portfolio reasoning (#1742).
 
-    On 2026-07-31 the H6 deliberation LLM failed for 31 of 39 tickers and the run still
+    On 2026-07-31 the deliberation LLM failed for 31 of 39 tickers and the run still
     reported ``ok``: each failure is a *node-level* PhaseError, so it never reached the
     chain-error gate, and it carries the analyst stance forward so no segment is marked
     failed either. The whole portfolio was then sized off carried stances.
@@ -293,7 +293,7 @@ def _portfolio_deliberation_health(state: ResearchState, errors: list[Any]) -> t
     The denominator is ``phase_portfolio.deliberation_summaries`` — the number of tickers the
     portfolio path actually deliberated on, i.e. the best available measure of portfolio fan-out
     width (the roster width itself is not in state at this point). The numerator counts every
-    :data:`_PORTFOLIO_FAILURE_PHASES` error, caps and crashes alike, because H6 emits an
+    :data:`_PORTFOLIO_FAILURE_PHASES` error, caps and crashes alike, because deliberation emits an
     identical ``(phase, node)`` for both and telling them apart would mean parsing message
     text — brittle, and it would silently stop counting the moment a message is reworded.
     """
@@ -315,7 +315,7 @@ def summarize_run(
     went wrong *after* the research segments used to be invisible: eight separate issues
     (#1736 #1732 #1735 #1738 #1737 #1733 #1763 #1742) are one defect wearing eight hats.
 
-    ``status`` — the health verdict the dashboard and ``atlas_run_diagnostics`` read:
+    ``status`` — the health verdict the dashboard and ``run_diagnostics`` read:
 
     - ``"failed"`` — nothing fresh was produced AND no snapshot was published; or a
       core research engine (research/portfolio) crashed at the chain level.
@@ -325,7 +325,7 @@ def summarize_run(
       "cancelled" (#814).
     - ``"degraded"`` — any non-core chain-level crash (publish/materialize/risk-sizing/
       beliefs/terminal), a master-digest synthesis failure, **any** failed research segment,
-      a majority of portfolio deliberations dead, an H9 non-commit (#1555), or research
+      a majority of portfolio deliberations dead, an commit non-commit (#1555), or research
       with no committed book at all.
     - ``"ok"`` — all other cases.
 
@@ -343,10 +343,10 @@ def summarize_run(
     # Same predicate the chain uses to decide whether to run portfolio at all — reused here so
     # the no-book gate below cannot fire on a run where portfolio was legitimately never reached.
     research_produced = total > 0 and not _research_chain_crashed(errors)
-    # Every H9 non-commit outcome, unified: (1) a book that materialized but never persisted
+    # Every commit non-commit outcome, unified: (1) a book that materialized but never persisted
     # (coherence fail-closed / idempotency conflict / no-manifest skip), OR (2) any
-    # ``portfolio_h9_commit_run`` PhaseError — which also covers the memo-present-but-no-book
-    # fail-closed where nothing materialized (``book_materialized`` is False). H9 never both
+    # ``portfolio_commit`` PhaseError — which also covers the memo-present-but-no-book
+    # fail-closed where nothing materialized (``book_materialized`` is False). commit never both
     # commits and errors, so this can't fire on a healthy committed run (#1555).
     portfolio_commit_error = any(
         getattr(e, "phase", None) == _PORTFOLIO_COMMIT_PHASE for e in errors
@@ -356,12 +356,12 @@ def summarize_run(
         f"{getattr(e, 'phase', '?')}/{getattr(e, 'node', '?')}: {getattr(e, 'message', '')}"
         for e in errors
     ]
-    # An H9 non-commit is the highest-signal failure of a portfolio run; place it at the HEAD so
+    # An commit non-commit is the highest-signal failure of a portfolio run; place it at the HEAD so
     # it survives the ``error_summary`` truncation cap even when research segment-validation
     # noise fills the tail (#1555). The structural ``breakdown["book_committed"]`` flag (see
     # ``_row``) is the truncation-proof source.
     if commit_failed:
-        error_parts.insert(0, "portfolio_h9_commit_run/uncommitted: H9 produced no committed book")
+        error_parts.insert(0, "portfolio_commit/uncommitted: commit produced no committed book")
     error_summary = "; ".join(error_parts)[:_ERROR_SUMMARY_MAX]
     if errors:
         breakdown["errors"] = [
@@ -424,10 +424,10 @@ def summarize_run(
     else:
         status = "ok"
 
-    # H9 commit gate (#1555): an H9 non-commit is a silent terminal failure — the coherence
+    # commit gate (#1555): an commit non-commit is a silent terminal failure — the coherence
     # fail-closed, idempotency conflict, no-manifest skip, and memo-present-but-no-book exit
-    # all present as ``ok`` today because an H9 PhaseError carries phase
-    # ``portfolio_h9_commit_run`` (not ``chain``) and so never reaches the degraded gate above.
+    # all present as ``ok`` today because an commit PhaseError carries phase
+    # ``portfolio_commit`` (not ``chain``) and so never reaches the degraded gate above.
     # Force it degraded regardless of the research-segment verdict, and never let it be
     # reported "ok"/"cancelled". ``failed`` (a worse verdict) is left intact.
     if commit_failed and status in ("ok", "cancelled"):
@@ -451,8 +451,8 @@ def summarize_run(
             ),
             # No-book gate: research produced research, portfolio was therefore run by the chain,
             # and yet nothing committed. Closes the residual detection hole behind #1766 —
-            # ``commit_failed`` above only fires when a book *materialized* first or H9 raised,
-            # so a silent "H9 produced nothing at all" day still reported "ok".
+            # ``commit_failed`` above only fires when a book *materialized* first or commit raised,
+            # so a silent "commit produced nothing at all" day still reported "ok".
             ("no_committed_book", research_produced and not book_committed_),
         ):
             if tripped:
@@ -673,7 +673,7 @@ def write_row(
     finished_at: datetime | None = None,
     attempt: int = 1,
 ) -> RunSummary | None:
-    """Upsert one ``atlas_run_diagnostics`` row (on ``run_id, attempt``). Fail-soft → ``None``
+    """Upsert one ``run_diagnostics`` row (on ``run_id, attempt``). Fail-soft → ``None``
     on any error (telemetry never breaks a run). Returns the :class:`RunSummary` on success.
 
     The conflict key is per-ATTEMPT since #1762. ``pipeline-digiquant.yml`` retries the chain up
@@ -696,7 +696,7 @@ def write_row(
             finished_at=finished_at,
             attempt=attempt,
         )
-        client.table("atlas_run_diagnostics").upsert(row, on_conflict="run_id,attempt").execute()
+        client.table("run_diagnostics").upsert(row, on_conflict="run_id,attempt").execute()
     except Exception as exc:  # telemetry write must never crash the run
         logger.warning("diagnostics: write_row failed (%s); run continues", exc)
         return None

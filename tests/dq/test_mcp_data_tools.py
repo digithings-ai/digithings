@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import json
+
 import pytest
 
 pytest.importorskip("mcp.server.fastmcp")
@@ -24,39 +26,84 @@ def test_data_tools_registered():
 
 
 @pytest.mark.unit
-def test_query_data_tool_registered():
-    """#925: external agents can fetch the paper book + market data via query_data."""
+def test_query_research_tool_registered():
+    """#4436: external agents search research output + the paper book by filters."""
     names = _tool_names(create_mcp_server())
-    assert "digiquant_query_data" in names, f"missing query_data tool; got {sorted(names)}"
+    assert "digiquant_query_research" in names, f"missing query_research tool; got {sorted(names)}"
 
 
 @pytest.mark.unit
-def test_query_data_inherits_in_process_allowlist():
-    """The MCP wrapper reuses the same table allowlist as the in-process agents.
-
-    The book tables the issue names (positions/nav_history/theses) are readable;
-    operator-internal telemetry stays unreadable. ``documents`` is intentionally
-    NOT added here — exposing every published doc externally is a separate
-    security decision (human gate), out of scope for this wiring.
-    """
-    from digiquant.research.data.queries import ALLOWED_READ_TABLES, MARKET_TABLES_REMOVED
-
-    for table in ("positions", "nav_history", "theses"):
-        assert table in ALLOWED_READ_TABLES
-    for blocked in ("decision_log", "atlas_run_diagnostics", "documents"):
-        assert blocked not in ALLOWED_READ_TABLES
-    # #3780 Task 7: market history left the generic reader for the R2 cache.
-    for removed in MARKET_TABLES_REMOVED:
-        assert removed not in ALLOWED_READ_TABLES
+def test_query_data_tool_removed():
+    """The generic raw-table reader was folded into query_research (#4436)."""
+    names = _tool_names(create_mcp_server())
+    assert "digiquant_query_data" not in names
 
 
 @pytest.mark.unit
-def test_query_data_tool_documents_house_default():
+def test_query_research_documents_house_scope():
+    """The MCP wrapper reads the house book; documents resolve through house scope."""
     server = create_mcp_server()
     if hasattr(server, "list_tools_sync"):
         tools = server.list_tools_sync()
     else:
         tools = server._tool_manager.list_tools()
-    qd = next(t for t in tools if t.name == "digiquant_query_data")
-    assert "house" in qd.description
-    assert "workspace_id" in qd.description
+    qr = next(t for t in tools if t.name == "digiquant_query_research")
+    assert "r2" in qr.description.lower()
+    assert "include_prior" in qr.description.lower()
+
+
+def _tool_fn(server, name: str):
+    if hasattr(server, "list_tools_sync"):
+        tools = server.list_tools_sync()
+    else:
+        tools = server._tool_manager.list_tools()
+    tool = next(t for t in tools if t.name == name)
+    return getattr(tool, "fn", None) or tool
+
+
+class _StubSupabaseConfig:
+    @classmethod
+    def from_env(cls) -> "_StubSupabaseConfig":
+        return cls()
+
+
+@pytest.mark.unit
+def test_query_research_forwards_phase_as_retrieval_phase(monkeypatch):
+    """#4467 F2: the wrapper must forward ``phase`` as ``retrieval_phase``.
+
+    The external read-scope tool could never request a blinded view — it ran
+    every search as ``research_edit``, returning ``beliefs`` and the digest.
+    """
+    import digiquant.dashboard.research_retrieval.queries as queries_mod
+    import digiquant.research.supabase_io as io_mod
+
+    captured: dict[str, object] = {}
+
+    def _fake_search_research(**kwargs):
+        captured.update(kwargs)
+        return {"row_count": 0, "rows": []}
+
+    monkeypatch.setattr(queries_mod, "search_research", _fake_search_research)
+    monkeypatch.setattr(io_mod, "SupabaseConfig", _StubSupabaseConfig)
+    monkeypatch.setattr(io_mod, "build_client", lambda _cfg: object())
+
+    fn = _tool_fn(create_mcp_server(scope="read"), "digiquant_query_research")
+
+    out = json.loads(fn(dataset="documents", phase="analyst"))
+    assert "error" not in out, out
+    assert captured["retrieval_phase"] == "analyst"
+
+    # D2 (owner directive): the external read-scope surface is blinded by
+    # default for the document/digest datasets ...
+    captured.clear()
+    fn(dataset="documents")
+    assert captured["retrieval_phase"] == "analyst"
+
+    captured.clear()
+    fn(dataset="daily_snapshots")
+    assert captured["retrieval_phase"] == "analyst"
+
+    # ... while the book datasets keep the operator default.
+    captured.clear()
+    fn(dataset="positions")
+    assert captured["retrieval_phase"] == "research_edit"

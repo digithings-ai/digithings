@@ -41,7 +41,7 @@ logger = logging.getLogger(__name__)
 
 
 def _pm_tools(state: PortfolioState, *, segment: str = "pm-rebalance"):
-    """Full-scope query_data + computed tools for the PM. As the decision-maker it MAY
+    """Full-scope query_research + computed tools for the PM. As the decision-maker it MAY
     read the book (positions/nav_history/theses) for rebalance + sizing context — it is
     not blinded like the analysts/debaters."""
     return build_grounding(
@@ -49,6 +49,8 @@ def _pm_tools(state: PortfolioState, *, segment: str = "pm-rebalance"):
         live_search=True,
         run_date=state.run_date,
         segment=segment,
+        use_research_tools=True,
+        research_phase="direction",
     )
 
 
@@ -331,7 +333,7 @@ def _pm_node(state: PortfolioState) -> dict[str, Any]:
             execute_tool=execute_tool,
         )
     except Exception as exc:  # LLM-output failure degrades legacy PM, never the chain (#1665)
-        # H8 prefers the H7 memo when present; the legacy rebalance is only the
+        # sizing prefers the direction memo when present; the legacy rebalance is only the
         # fallback path, so skipping it on an LLM failure is safe degradation.
         logger.warning(
             "pm-rebalance LLM failed (%s: %s); skipping legacy PM", type(exc).__name__, exc

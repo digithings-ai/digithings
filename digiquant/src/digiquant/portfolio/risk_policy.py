@@ -1,4 +1,4 @@
-"""Resolve incumbent H8 risk policy and covariance snapshots (#2692 / WP6.2).
+"""Resolve incumbent sizing risk policy and covariance snapshots (#2692 / WP6.2).
 
 Pure resolver — no Supabase I/O. Config/defaults/as-of correlation frames in;
 fully provenanced :class:`RiskPolicy` and :class:`CovarianceSnapshot` out.
@@ -481,7 +481,7 @@ def resolve_risk_policy(
 
 
 def sizing_caps_from_policy(policy: RiskPolicy) -> SizingCaps:
-    """Bridge helper for parity tests — not wired into production H8 in Phase 1."""
+    """Bridge helper for parity tests — not wired into production sizing in Phase 1."""
     if policy.status is PolicyArtifactStatus.UNAVAILABLE:
         raise ValueError("cannot derive sizing caps from unavailable policy")
     return SizingCaps(
@@ -490,7 +490,7 @@ def sizing_caps_from_policy(policy: RiskPolicy) -> SizingCaps:
 
 
 def breaker_config_from_policy(policy: RiskPolicy) -> BreakerConfig:
-    """Bridge helper for parity tests — not wired into production H8 in Phase 1."""
+    """Bridge helper for parity tests — not wired into production sizing in Phase 1."""
     if policy.status is PolicyArtifactStatus.UNAVAILABLE:
         raise ValueError("cannot derive breaker config from unavailable policy")
     return BreakerConfig(

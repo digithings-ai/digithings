@@ -1,4 +1,4 @@
-"""H5 edit-mode tests (dashboard #930 PR 4b)."""
+"""analyst edit-mode tests (dashboard #930 PR 4b)."""
 
 from __future__ import annotations
 
@@ -13,7 +13,7 @@ import pytest
 from digigraph.graph.pipeline_builder import build_pipeline
 from digiquant.dashboard.edit_mode import DocumentPatch, PatchOp
 from digiquant.portfolio.models.analyst import AnalystPayload
-from digiquant.portfolio.phases.h5_asset_analyst import build_h5_asset_analyst
+from digiquant.portfolio.phases.analyst import build_analyst
 from digiquant.research.state import (
     FocusRosterEntry,
     PhasePortfolioState,
@@ -109,7 +109,7 @@ class TestAnalystEdit:
             artifact_version="h5-full@1",
             price_anchor=PriceAnchor(
                 status=PriceAnchorStatus.UNAVAILABLE,
-                unavailable_reason="mark_price_not_available_in_h5_state",
+                unavailable_reason="mark_price_not_available_in_analyst_state",
             ),
             effective_at=cutoff,
             known_at=cutoff,
@@ -148,7 +148,7 @@ class TestAnalystEdit:
                 ),
             }
         )
-        compiled = build_pipeline(ResearchState, [build_h5_asset_analyst(["AAPL"], held={"AAPL"})])
+        compiled = build_pipeline(ResearchState, [build_analyst(["AAPL"], held={"AAPL"})])
 
         def fake(_m: str, msgs: list[dict[str, Any]], **_: Any) -> str:
             schema = next(
@@ -301,7 +301,7 @@ def _sample_terms() -> dict[str, object]:
 
 @pytest.mark.unit
 class TestH5ForecastMaterialization:
-    """WP4.3 — every new full H5 produces an immutable ForecastAssessment."""
+    """WP4.3 — every new full analyst produces an immutable ForecastAssessment."""
 
     def test_serializer_includes_assessment_and_anchor_reason(self) -> None:
         from datetime import UTC, datetime
@@ -331,7 +331,7 @@ class TestH5ForecastMaterialization:
             artifact_version="h5-full@1",
             price_anchor=PriceAnchor(
                 status=PriceAnchorStatus.UNAVAILABLE,
-                unavailable_reason="mark_price_not_available_in_h5_state",
+                unavailable_reason="mark_price_not_available_in_analyst_state",
             ),
             effective_at=cutoff,
             known_at=cutoff,
@@ -401,7 +401,7 @@ class TestH5ForecastMaterialization:
             artifact_version="h5-full@1",
             price_anchor=PriceAnchor(
                 status=PriceAnchorStatus.UNAVAILABLE,
-                unavailable_reason="mark_price_not_available_in_h5_state",
+                unavailable_reason="mark_price_not_available_in_analyst_state",
             ),
             effective_at=cutoff,
             known_at=cutoff,
@@ -497,7 +497,7 @@ class TestH5ForecastMaterialization:
             artifact_version="h5-full@1",
             price_anchor=PriceAnchor(
                 status=PriceAnchorStatus.UNAVAILABLE,
-                unavailable_reason="mark_price_not_available_in_h5_state",
+                unavailable_reason="mark_price_not_available_in_analyst_state",
             ),
             effective_at=cutoff,
             known_at=cutoff,
@@ -566,7 +566,7 @@ class TestH5ForecastMaterialization:
         state = state.model_copy(
             update={"knowledge_cutoff_at": datetime(2026, 6, 20, 12, 0, tzinfo=UTC)}
         )
-        compiled = build_pipeline(ResearchState, [build_h5_asset_analyst(["AAPL"], held={"AAPL"})])
+        compiled = build_pipeline(ResearchState, [build_analyst(["AAPL"], held={"AAPL"})])
 
         def fake_missing_forecast(_m: str, msgs: list[dict[str, Any]], **_: Any) -> str:
             schema = next(
@@ -612,7 +612,7 @@ class TestH5ForecastMaterialization:
         state = state.model_copy(
             update={"knowledge_cutoff_at": datetime(2026, 6, 20, 12, 0, tzinfo=UTC)}
         )
-        compiled = build_pipeline(ResearchState, [build_h5_asset_analyst(["AAPL"], held={"AAPL"})])
+        compiled = build_pipeline(ResearchState, [build_analyst(["AAPL"], held={"AAPL"})])
 
         def fake_with_forecast(_m: str, msgs: list[dict[str, Any]], **_: Any) -> str:
             return json.dumps(
@@ -650,8 +650,8 @@ class TestH5ForecastMaterialization:
 
 
 @pytest.mark.unit
-def test_h5_persists_before_provider_and_failure_leaves_bundle() -> None:
-    """WP11.2: publish base before provider; H5 failure retains typed bundle."""
+def test_analyst_persists_before_provider_and_failure_leaves_bundle() -> None:
+    """WP11.2: publish base before provider; analyst failure retains typed bundle."""
     from datetime import UTC, datetime
     from unittest.mock import MagicMock
     from uuid import UUID, uuid4

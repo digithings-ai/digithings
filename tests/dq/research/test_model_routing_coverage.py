@@ -48,7 +48,7 @@ _DYNAMIC_SLUG_EXAMPLES = (
     "research-manager-AAPL",
 )
 
-# portfolio H1–H7 phase_slug literals (see digiquant/portfolio/phases/*).
+# portfolio thesis–direction phase_slug literals (see digiquant/portfolio/phases/*).
 _PORTFOLIO_STATIC_SLUGS = (
     "portfolio/thesis/market-review",
     "portfolio/thesis/market-exploration",
@@ -58,8 +58,8 @@ _PORTFOLIO_STATIC_SLUGS = (
 
 _PORTFOLIO_DYNAMIC_SLUG_EXAMPLES = (
     "portfolio/asset-analyst-AAPL",
-    "h6_pm_challenge-AAPL",
-    "h6_analyst_response-AAPL",
+    "deliberation_pm_challenge-AAPL",
+    "deliberation_analyst_response-AAPL",
 )
 
 

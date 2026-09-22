@@ -49,7 +49,7 @@ _CLI = _REPO / "digiquant" / "scripts" / "research" / "compare_allocation_shadow
 _PRODUCTION_GUARD_PATHS = (
     _REPO / "digiquant/src/digiquant/portfolio/chain.py",
     _REPO / "digiquant/src/digiquant/portfolio/phases/phase7e_risk_sizing.py",
-    _REPO / "digiquant/src/digiquant/portfolio/phases/h9_commit_run.py",
+    _REPO / "digiquant/src/digiquant/portfolio/phases/commit.py",
     _REPO / "digiquant/src/digiquant/portfolio/shadow_artifact.py",
 )
 

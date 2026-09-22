@@ -1,8 +1,8 @@
 """Deterministic forecast calibrator (#2680 / WP5.3, #2684 / WP5.4).
 
 Core calibrator is pure (no Supabase). WP5.4 adds cutoff-safe attach helpers
-invoked at the existing H6→H7 boundary; H9 persists artifacts. WP8.4 feeds
-AVAILABLE ``CalibratedForecast`` slices into H8 via ``AllocationInputBundle``.
+invoked at the existing deliberation→direction boundary; commit persists artifacts. WP8.4 feeds
+AVAILABLE ``CalibratedForecast`` slices into allocation via ``AllocationInputBundle``.
 
 Shrinks cohort residual bias toward a declared zero-mean prior, reports
 Brier/log scores, and emits ``CalibratedForecast`` subjects with non-zero
@@ -99,7 +99,7 @@ _Z_NORMAL: dict[str, Decimal] = {
 
 @dataclass(frozen=True)
 class CalibrationBundle:
-    """Cohort metrics plus one calibrated subject for H8 bundle consumption."""
+    """Cohort metrics plus one calibrated subject for allocation bundle consumption."""
 
     calibration: ForecastCalibration
     calibrated_forecast: CalibratedForecast
@@ -107,7 +107,7 @@ class CalibrationBundle:
 
 @dataclass(frozen=True)
 class ShadowCalibrationAttachment:
-    """Cohort calibrations + per-subject shadows for one H6→H7 attach pass."""
+    """Cohort calibrations + per-subject shadows for one deliberation→direction attach pass."""
 
     calibrations: tuple[ForecastCalibration, ...]
     calibrated_forecasts: tuple[CalibratedForecast, ...]
@@ -494,7 +494,7 @@ def calibrate_subject(
 ) -> CalibratedForecast:
     """Build a shadow calibrated subject from cohort metrics + effective terms.
 
-    Does not feed incumbent H8. Unavailable calibration → typed unavailable subject.
+    Does not feed incumbent allocation. Unavailable calibration → typed unavailable subject.
     """
     try:
         known_at = require_utc_datetime(as_of, field_name="as_of")
@@ -646,7 +646,7 @@ def calibrate_forecast(
 
 
 def collect_effective_forecasts_from_state(state: object) -> list[EffectiveForecast]:
-    """Extract typed effective forecasts from H6 deliberation summaries.
+    """Extract typed effective forecasts from deliberation summaries.
 
     Missing or invalid dumps are skipped — never invented. Order is ticker-sorted
     for deterministic attach/persist.
@@ -680,7 +680,7 @@ def attach_shadow_calibrations(
     One ``ForecastCalibration`` per distinct cohort key; one ``CalibratedForecast``
     per subject. Empty subjects → empty attachment. Outcomes must already be
     cutoff-bounded by the caller (``known_at > as_of`` are ignored again inside
-    the calibrator). Does not write to Supabase here; WP8.4 H8 consumes the
+    the calibrator). Does not write to Supabase here; WP8.4 allocation consumes the
     attached dumps via ``AllocationInputBundle``.
     """
     known_at = require_utc_datetime(as_of, field_name="as_of")
@@ -746,7 +746,7 @@ def attach_shadow_calibrations_from_state(
     as_of: datetime | None = None,
     regime: str = "default",
 ) -> ShadowCalibrationAttachment:
-    """Attach shadows for H6 effectives on ``state`` using cutoff-bounded outcomes.
+    """Attach shadows for deliberation effectives on ``state`` using cutoff-bounded outcomes.
 
     Requires an explicit UTC ``as_of`` or ``state.knowledge_cutoff_at``. Never falls
     back to wall-clock time (identity would diverge — #2797).

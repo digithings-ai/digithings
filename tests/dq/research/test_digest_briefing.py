@@ -100,7 +100,7 @@ def test_digest_briefing_for_portfolio_is_date_body_regime_only() -> None:
             "body": "# Daily Digest — 2026-08-31\n\n## Market regime\n\nSlowing.\n",
             "regime_label": "Slowing / Cooling",
             "bias": "bearish",
-            "headline": "should not reach H1",
+            "headline": "should not reach thesis",
             "material_findings": [{"label": "x", "summary": "y"}],
         }
     )

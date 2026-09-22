@@ -58,7 +58,7 @@ class DayStageFlags(BaseModel):
     )
     deliberation: bool = Field(
         default=True,
-        description="Run portfolio deliberation (H1–H9 intent) on this weekday.",
+        description="Run portfolio deliberation (thesis–commit intent) on this weekday.",
     )
     execution: bool = Field(
         default=True,

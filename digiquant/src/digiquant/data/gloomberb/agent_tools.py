@@ -171,16 +171,16 @@ def gloomberb_envelope_json(
 #
 # Not all 33 tools everywhere (prompt budget): the equity/sector research
 # phases get company facts + analyst views, the macro phase gets rates/credit/
-# long-run valuation, and the portfolio PM (H5 analyst + H7 direction) gets a
+# long-run valuation, and the portfolio PM (analyst + direction) gets a
 # PM-fit mix of quotes/news/analyst views plus macro context. Every name is
 # declared in ``TOOL_ENTITLEMENTS``; ``available_digifetch_tools`` drops the
 # session-/pro-/preview-gated ones when no cookie is configured.
 #
-# H6 deliberation stays digifetch-free: it is research-tools-only by policy
+# deliberation stays digifetch-free: it is research-tools-only by policy
 # (#2908, no generic web search in the deliberation loop), and its evidence
 # path is the evidence bundle + amendment flow, not a new market-data family.
 # The legacy Phase 7D PM path (``phase7d_pm``, no live graph caller) is also
-# unwired; H7 is the portfolio direction phase.
+# unwired; direction is the portfolio direction phase.
 
 EQUITY_TOOLS: tuple[str, ...] = (
     "digifetch_quote",

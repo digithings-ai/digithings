@@ -1,7 +1,7 @@
 # portfolio — thesis-aware portfolio loop
 
 portfolio consumes a research [`DigestPayload`](../../research/snapshot.py) from
-[research](../research/) and runs **H1–H9**: market thesis review → exploration → vehicle map →
+[research](../research/) and runs **thesis–commit**: market thesis review → exploration → vehicle map →
 opportunity screener → unified asset analyst → PM↔analyst deliberation → PM direction →
 deterministic risk sizing → **`commit_run`** terminal booking.
 
@@ -9,17 +9,17 @@ See [ADR-0015](../../../../../docs/adr/0015-research-vs-portfolio.md) and
 [ADR-0020](../../../../../docs/adr/0020-dashboard-mvp-daily-delta.md). Full topology:
 [`ARCHITECTURE.md`](ARCHITECTURE.md).
 
-## Phases (live graph — H1–H9)
+## Phases (live graph — thesis–commit)
 
 | Step | Node | Purpose |
 |------|------|---------|
-| H1–H2 | thesis review + exploration | Market thesis lifecycle |
-| H3–H4 | vehicle map + screener | Roster for analyst fan-out |
-| H5 | `asset_analyst` (×N) | Unified `AnalystPayload` per ticker |
-| H6 | `deliberation` + `deliberation-analyst-response` (×N) | PM↔analyst meeting (chat transcript) |
-| H7 | `pm-direction` | `PMDirectionMemo` — direction + rank + confidence; no weights |
-| H8 | `risk-sizing` | Deterministic sizer (legacy 7E module) |
-| H9 | `commit_run` | Terminal: positions, nav, brief, `decision_log` |
+| thesis–market | thesis review + exploration | Market thesis lifecycle |
+| vehicle_map–screener | vehicle map + screener | Roster for analyst fan-out |
+| analyst | `asset_analyst` (×N) | Unified `AnalystPayload` per ticker |
+| deliberation | `deliberation` + `deliberation-analyst-response` (×N) | PM↔analyst meeting (chat transcript) |
+| direction | `pm-direction` | `PMDirectionMemo` — direction + rank + confidence; no weights |
+| sizing | `risk-sizing` | Deterministic sizer (legacy 7E module) |
+| commit | `commit_run` | Terminal: positions, nav, brief, `decision_log` |
 
 ## Code layout
 
@@ -28,22 +28,22 @@ digiquant/src/digiquant/portfolio/
 ├── graph.py                 ← build_portfolio_phases_thesis / build_portfolio_graph
 ├── chain.py                 ← run_research_then_portfolio (cron entry)
 ├── phases/
-│   ├── h1_thesis_review.py … h9_commit_run.py
-│   └── phase7e_risk_sizing.py   ← H8
+│   ├── thesis.py … commit.py
+│   └── phase7e_risk_sizing.py   ← sizing
 ├── skills/                  ← thesis, asset-analyst, deliberation, pm-direction, …
 └── docs/                    ← this directory
 ```
 
 ## CLI entry points
 
-- `python -m digiquant.portfolio.chain --cadence daily` — full research A0–A4 → portfolio H1–H9. **Cron uses this** (`.github/workflows/pipeline-digiquant.yml`).
+- `python -m digiquant.portfolio.chain --cadence daily` — full research A0–A4 → portfolio thesis–commit. **Cron uses this** (`.github/workflows/pipeline-digiquant.yml`).
 - `--refresh-scope` — operator full refresh (`all`, `segments`, `portfolio`, `digest`, `beliefs`)
 - `python -m digiquant.portfolio.graph --from-digest <path>` — portfolio only
 - Deprecated: `--run-type baseline|delta` (warns); `monthly` rejected
 
 ## Documents
 
-- [`ARCHITECTURE.md`](ARCHITECTURE.md) — canonical H1–H9 map
+- [`ARCHITECTURE.md`](ARCHITECTURE.md) — canonical thesis–commit map
 - [`PORTFOLIO_SUBGRAPH.md`](PORTFOLIO_SUBGRAPH.md) — historical Wave 2 spec (topology now shipped)
 - [`WAVE2_UNIT_SPECS.md`](WAVE2_UNIT_SPECS.md) — historical unit IDs
 - [`AGENTS.md`](AGENTS.md) — extension checklist

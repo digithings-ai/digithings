@@ -85,7 +85,7 @@ describe('PipelineTraceLedger', () => {
       event({
         sequence: index + 1,
         document_key: index % 2 === 0 ? 'macro' : 'analyst/QQQ',
-        phase: index % 2 === 0 ? 'phase1' : 'h5_analyst-QQQ',
+        phase: index % 2 === 0 ? 'phase1' : 'analyst-QQQ',
         operation: `Op${index + 1}`,
       }),
     );

@@ -147,5 +147,5 @@ phase_capability_prefixes:
   # ~1/3 of tickers on a CoT-style model (run 27984259662). `research` is JSON+tool
   # capable and matches the per-turn h6_* mappings below.
   portfolio/deliberation-: research
-  h6_pm_challenge-: research
-  h6_analyst_response-: research
+  deliberation_pm_challenge-: research
+  deliberation_analyst_response-: research
