@@ -14,14 +14,18 @@
 -- the old name so a reader that has not redeployed yet keeps working. Nothing
 -- here drops data.
 --
--- Ordering note: this rename is backwards compatible in both directions. The
--- old-name compat views are simple single-table views, and Postgres accepts
--- both `INSERT` and the writer's `INSERT ... ON CONFLICT DO UPDATE`
--- (`on_conflict="run_id,attempt"`) through them, so a not-yet-redeployed
--- `diagnostics.write_row` keeps persisting across the window — verified on the
--- local sim (all 136 migrations + this file), including the DO UPDATE branch,
--- an anon read of both health views, and an anon write being refused. Reads
--- are unchanged for the same reason.
+-- Ordering note: the old-name compat views are simple single-table views, so
+-- reads keep working for a dashboard build that has not redeployed yet.
+-- `atlas_run_diagnostics` additionally grants `UPDATE` to service_role (not
+-- just SELECT/INSERT) because a Postgres upsert — `INSERT ... ON CONFLICT
+-- (run_id, attempt) DO UPDATE`, which is what `diagnostics.write_row` issues —
+-- needs UPDATE on the view, and `security_invoker = true` forwards the check to
+-- the base table, where service_role still holds `ALL` from 060. Without that
+-- grant the legacy writer's upsert is refused (the same constraint 132
+-- documents for view-based upserts); with it a not-yet-redeployed writer keeps
+-- persisting across the window. The running writer already targets the base
+-- table (this PR renames the call site), so this only protects the deploy
+-- window. Reads are unchanged for the same reason.
 --
 -- Forward-only: migrations 001..136 are never edited. Run via db-migrate
 -- (single `psql --single-transaction` with the ledger INSERT), so this file
@@ -79,15 +83,15 @@ COMMENT ON TABLE public.run_diagnostics IS
     'atlas_run_diagnostics). Operator-internal: RLS on with no anon policy, and '
     'anon SELECT is revoked (033 / 129) — read it through run_health.';
 
--- Old-name compat view: keeps historical readers *and* the current writer
--- alive (the sim-verified ON CONFLICT path above), so no redeploy ordering is
--- required.
+-- Old-name compat view: keeps historical readers alive, and — because of the
+-- UPDATE grant below — a not-yet-redeployed writer's `ON CONFLICT DO UPDATE`
+-- upsert still persists (see the ordering note in the header).
 CREATE OR REPLACE VIEW public.atlas_run_diagnostics
     WITH (security_invoker = true) AS
 SELECT * FROM public.run_diagnostics;
 REVOKE ALL ON public.atlas_run_diagnostics
     FROM PUBLIC, anon, authenticated, service_role;
-GRANT SELECT, INSERT ON public.atlas_run_diagnostics TO service_role;
+GRANT SELECT, INSERT, UPDATE ON public.atlas_run_diagnostics TO service_role;
 
 -- ---------------------------------------------------------------------------
 -- Part A2: atlas_run_health -> run_health (curated anon-readable projection)
@@ -95,7 +99,29 @@ GRANT SELECT, INSERT ON public.atlas_run_diagnostics TO service_role;
 
 -- The view query references run_diagnostics by relation OID, so the rename
 -- alone keeps it correct; the COMMENT and the 041/060/129 grants follow.
-ALTER VIEW IF EXISTS public.atlas_run_health RENAME TO run_health;
+-- Guarded (rather than a bare `ALTER VIEW ... RENAME`) so a replay is a no-op:
+-- by then `run_health` already exists and `atlas_run_health` is the compat view
+-- below, so an unguarded rename would raise "relation run_health already exists".
+DO $do$
+BEGIN
+    IF EXISTS (
+        SELECT 1
+          FROM pg_class c
+          JOIN pg_namespace n ON n.oid = c.relnamespace
+         WHERE n.nspname = 'public'
+           AND c.relname = 'atlas_run_health'
+           AND c.relkind = 'v'
+    ) AND NOT EXISTS (
+        SELECT 1
+          FROM pg_class c
+          JOIN pg_namespace n ON n.oid = c.relnamespace
+         WHERE n.nspname = 'public'
+           AND c.relname = 'run_health'
+    ) THEN
+        ALTER VIEW public.atlas_run_health RENAME TO run_health;
+    END IF;
+END
+$do$;
 
 COMMENT ON VIEW public.run_health IS
     'Curated, anon-readable projection of run_diagnostics (#4471 W3; renamed '

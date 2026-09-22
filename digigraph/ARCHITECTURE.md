@@ -231,7 +231,7 @@ without `wraps` — raises `TypeError` for any node declaring `config`, `writer`
 `runtime`. `tests/dg/test_node_run_context.py::test_node_declaring_runnable_config_still_receives_it`
 is the regression guard.
 
-**Run identity.** `usage.start(run_id=...)` takes the `GITHUB_RUN_ID` that `atlas_run_diagnostics`
+**Run identity.** `usage.start(run_id=...)` takes the `GITHUB_RUN_ID` that `run_diagnostics`
 already writes with `on_conflict="run_id,attempt"`, so detailed telemetry and the diagnostics row
 join on one value. It is stored verbatim — truncating a join key would corrupt reconciliation. No
 second identifier is minted; `ResearchState.run_id` is a per-process `uuid4` that joins to
