@@ -21,7 +21,65 @@ from digiquant.research.skills import (
     _split_frontmatter,
 )
 
+_DELIBERATION_SKILLS = frozenset({"deliberation", "deliberation-analyst-response"})
+# Only the analyst turn model carries ``forecast_amendment``, and the debate loop reads it
+# from the analyst turn alone (``deliberation.py``); a PM turn's amendment is dropped.
+_DELIBERATION_AMENDMENT_SKILLS = frozenset({"deliberation-analyst-response"})
+
+DELIBERATION_AMENDMENT_CONTRACT = """\
+## Forecast amendment (only when the debate changed the economics)
+
+``forecast_amendment`` is an optional **complete replacement** ``ForecastTerms``, not a
+patch. Emit it only when this debate actually changed the scenario economics. If the
+analyst's terms still stand, omit the field entirely — do not send a partial object or an
+empty one.
+
+A partial or malformed amendment is **rejected outright**: the whole debate is discarded
+and the ticker silently carries the analyst stance, so a wrong amendment is worse than no
+amendment.
+
+When you do emit it, send a complete object. Every field below is required unless it
+says the system fills it for you:
+
+- ``bear_return``, ``base_return``, ``bull_return`` — scenario returns as **fractions**
+  (``-0.15``, not ``-15`` and not ``-15%``), ordered ``bear <= base <= bull``.
+- ``bear_probability``, ``base_probability``, ``bull_probability`` — non-negative and
+  summing to **exactly** ``1.0``. The system never renormalises: if they do not sum to 1
+  the amendment is rejected.
+- ``thesis_valid_probability`` — probability the analyst's thesis holds.
+- ``raw_uncertainty`` — exactly one of ``low``, ``medium``, ``high``.
+- ``horizon_sessions``, ``half_life_sessions`` — positive counts of **trading sessions**.
+  You may omit these two; the system copies them from the analyst's base forecast. They are
+  identity, not new economics — never restate them as calendar days.
+- ``evidence_ids``, ``counter_evidence_ids``, ``assumptions``, ``invalidation_rules`` —
+  optional lists. Do not invent IDs or timestamps; the system materializes identity.
+
+**Do not invent field names.** ``ForecastTerms`` has no price levels, entry triggers,
+targets, or conviction fields — an extra key such as ``conditional_entry`` or
+``convision_score`` rejects the whole object. Express the view through the scenario
+returns, the scenario probabilities, ``thesis_valid_probability`` and ``raw_uncertainty``.
+"""
+
+DELIBERATION_TOOL_USE_CONTRACT = """\
+## Tools (read this before you plan a single call)
+
+Your toolset is exactly the functions listed in this request's tool schemas — nothing else.
+There is no shell, no URL fetcher, and no MCP client in this loop. If an instruction names
+one, it cannot be run here.
+
+- The analyst's analysis for this ticker and the digest are **already in this request's
+  inputs**. Read them there; do not fetch your own analysis back out of the store.
+- Every retrieval tool is a read of stored rows: repeating a call with the same arguments
+  returns the same bytes, and re-phrasing the question cannot surface a row that was not
+  already there. An empty result is an answer, not a failure to retry.
+- Use as many calls as this meeting genuinely needs to test the analyst's claims — then
+  converge. This is a conversation: challenge, answer, close. Spend the turn on the
+  argument, not on re-querying evidence you already hold.
+"""
+
 __all__ = [
+    "DELIBERATION_AMENDMENT_CONTRACT",
+    "DELIBERATION_TOOL_USE_CONTRACT",
     "MalformedFrontmatterError",
     "SkillNotFoundError",
     "list_skill_slugs",
@@ -71,14 +129,27 @@ def _skill_full_candidates(slug: str) -> tuple[Path, ...]:
 
 @lru_cache(maxsize=64)
 def load_skill_full(slug: str) -> str:
-    """Return the Markdown body of a portfolio full skill (see ``_skill_full_candidates``)."""
+    """Return the Markdown body of a portfolio full skill (see ``_skill_full_candidates``).
+
+    The deliberation turn contracts (#4513) are appended here at the single load
+    chokepoint rather than copied into each file, for the same reason
+    ``EDIT_SCHEMA_CONSTRAINTS`` is appended in ``load_skill_edit``: it cannot drift
+    between them. ``DELIBERATION_AMENDMENT_CONTRACT`` reaches the analyst-reply skill
+    only — ``DeliberationAnalystTurn`` is the only turn model carrying
+    ``forecast_amendment`` and the only one the loop reads.
+    """
     last = _skill_full_path(slug)
     for path in _skill_full_candidates(slug):
         last = path
         if path.is_file():
             raw = path.read_text(encoding="utf-8")
             _, body = _split_frontmatter(raw)
-            return body.strip()
+            parts = [body.strip()]
+            if slug in _DELIBERATION_AMENDMENT_SKILLS:
+                parts.append(DELIBERATION_AMENDMENT_CONTRACT)
+            if slug in _DELIBERATION_SKILLS:
+                parts.append(DELIBERATION_TOOL_USE_CONTRACT)
+            return "\n\n".join(parts)
     raise SkillNotFoundError(f"full skill not found: {slug!r} (expected at {last})")
 
 
