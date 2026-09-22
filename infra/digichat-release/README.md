@@ -68,19 +68,27 @@ make digichat-config-check CONFIG=infra/digichat-release/config/digichat.yaml
 # prints the resolved deployment(s); fails loudly on an invalid file
 ```
 
-Validate **before** `up -d`. A missing file falls back to the built-in dev
-default silently; an invalid file fails the container at boot. `make
-digichat-config-check` catches both.
+Validate **before** `up -d`. A missing file falls back silently — to the
+`DIGICHAT_EMBED_TENANTS` registry when that is set, otherwise to the built-in dev
+default. An invalid file fails the container at boot. `make
+digichat-config-check` catches both (it reads the path you pass, not your `.env`,
+so pass the file explicitly).
 
-Two traps:
+Three traps:
 
 - **The mount replaces `/app/config`.** The image's baked
   `/app/config/examples/*` is *not* reachable in these profiles — copy any
   reference config you want into `config/`. For a catalog skin alone, set
-  `DIGICHAT_CHROME_SKIN=<id>` instead of editing YAML.
-- **Do not mix shapes.** `DIGICHAT_EMBED_TENANTS` (hosts mode) merges *with* a
-  `deployment:` block, registering a stray anonymous install. Use `hosts:` in the
-  file **or** the env registry — not both.
+  `DIGICHAT_CHROME_SKIN=<id>` instead of editing YAML. If you previously pointed
+  `DIGICHAT_CONFIG_PATH` at a baked example, copy that file into `config/`
+  first, or the path silently stops resolving.
+- **Pick one shape — the env templates already set the other one.** Every
+  `.env.profile-*.example` sets `DIGICHAT_EMBED_TENANTS` (hosts mode), and that
+  merges *with* a `deployment:` block rather than replacing it. The
+  `deployment:` block is what serves an unmatched host, so running the `cp`
+  above while keeping that env var leaves an anonymous, ungated fallback install
+  on your operator keys. Single client: delete `DIGICHAT_EMBED_TENANTS` from the
+  env file. Many hostnames: use `hosts:` in the file and drop `deployment:`.
 
 Full reference configs: [`apps/digichat/config/examples/`](../../apps/digichat/config/examples/).
 Client-facing guide: [`docs/digichat/INSTALL.md`](../../docs/digichat/INSTALL.md).

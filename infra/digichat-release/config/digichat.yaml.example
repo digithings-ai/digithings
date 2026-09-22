@@ -14,9 +14,19 @@ version: 1
 # Only `version` and one of `deployment:` (this single-client shape) or
 # `hosts:` (many hostnames in one container) are required. Everything else has
 # a documented default. Reference files: apps/digichat/config/examples/
+#
+# PICK ONE SHAPE. The release `.env.profile-*.example` templates already set
+# DIGICHAT_EMBED_TENANTS (hosts mode). The two merge rather than replace, and a
+# file `deployment:` block is what serves an *unmatched* host — so copying this
+# file while keeping that env var turns this block into an anonymous fallback
+# install on your operator keys, reachable from any /embed visitor. Either:
+#   - single client  -> delete DIGICHAT_EMBED_TENANTS from the env file and
+#                       keep the `deployment:` block below, or
+#   - many hostnames -> replace it with a `hosts:` block, and drop `deployment:`
 # ─────────────────────────────────────────────────────────────────────────────
 
 # Single client: the whole container is this deployment.
+# (delete this whole block if you use `hosts:` — see the note above)
 deployment:
   slug: client
 
@@ -55,8 +65,9 @@ deployment:
     attachments: true
     dictation: false
     speech: false
-    # reasoning / toolCalls disclosure:
-    #   off | collapsed | balanced | expanded | locked_open
+    # reasoning / toolCalls disclosure (legacy keys, folded into view/thinking):
+    #   off | collapsed | expanded | locked_open
+    # `balanced` is NOT valid here — it only exists on the forward `view:` key.
     reasoning: collapsed
     toolCalls: collapsed
     sources: true
@@ -104,6 +115,8 @@ deployment:
   gate:
     # ungated = no cap | turn_limited = N free then in-chat BYOK
     # trial_form = server-side per-IP free turns, then unlock
+    # This starter is permissive: ungated on operator keys. Before exposing
+    # /embed publicly, pick a capped mode and set `token:` below.
     mode: ungated
     activityDetail: labels   # off | labels | full
     llmAccess: operator

@@ -17,15 +17,21 @@ client. Fuller references live in `apps/digichat/config/examples/`
 (`local-app.yaml`, `occ-embed.yaml`, `skins/<id>.yaml`, …), and
 `docs/digichat/INSTALL.md` walks the install end to end.
 
-Two traps to know:
+Three traps to know:
 
 - **The mount replaces `/app/config`.** The image's baked
   `/app/config/examples/*` is therefore *not* reachable in the release
   profiles — copy any reference config you want into this directory. If you
   only want a different catalog skin, set `DIGICHAT_CHROME_SKIN=<id>` instead.
-- **Do not mix shapes.** `DIGICHAT_EMBED_TENANTS` (hosts mode) merges *with* a
-  `deployment:` block in the file, which would register a stray anonymous
-  install. Use `hosts:` in the file, or the env registry — not both.
+  A `DIGICHAT_CONFIG_PATH` that pointed at a baked example stops resolving
+  silently once this mount is in place.
+- **Pick one shape — the env templates already set the other one.** Every
+  `.env.profile-*.example` sets `DIGICHAT_EMBED_TENANTS` (hosts mode), which
+  merges *with* a `deployment:` block rather than replacing it. The
+  `deployment:` block is what serves an unmatched host, so copying
+  `digichat.yaml.example` while keeping that env var leaves an anonymous,
+  ungated fallback install on your operator keys. Single client: delete
+  `DIGICHAT_EMBED_TENANTS`. Many hostnames: use `hosts:` and drop `deployment:`.
 
 ## Other files
 

@@ -147,6 +147,9 @@ digichat-dev:
 # to the built-in dev default otherwise). CONFIG defaults to DIGICHAT_CONFIG_PATH
 # or /app/config/digichat.yaml.
 #   make digichat-config-check CONFIG=infra/digichat-release/config/digichat.yaml
+# CONFIG is made absolute before the recipe `cd`s, so it resolves against make's
+# working directory — run make from the repo root (a relative CONFIG passed from
+# a subdirectory would misresolve).
 digichat-config-check:
 	cd apps/digichat && npm run --silent config:check -- $(if $(CONFIG),$(abspath $(CONFIG)),)
 
