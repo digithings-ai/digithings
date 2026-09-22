@@ -10,7 +10,9 @@ schema field list because the model field is an untyped ``dict[str, Any]``.
 
 The contract closes that prompt gap at the single load chokepoint, the same way
 ``EDIT_SCHEMA_CONSTRAINTS`` (portfolio) and ``TOOL_USE_CONTRACT`` (research) are appended: it
-cannot drift between the two debate skills.
+cannot drift between the skills. The amendment half reaches the analyst-reply skill only —
+``DeliberationAnalystTurn`` is the only turn model carrying ``forecast_amendment`` and the only
+one the debate loop reads.
 """
 
 from __future__ import annotations
@@ -28,11 +30,11 @@ from digiquant.portfolio.skills import (
 pytestmark = pytest.mark.unit
 
 DELIBERATION_SLUGS = ("deliberation", "deliberation-analyst-response")
+AMENDMENT_SLUG = "deliberation-analyst-response"
 
 # Skills that must NOT receive the debate contract: ``forecast_amendment`` only exists on the
-# two deliberation turn models, and not all of these are tool-grounded
-# (``pipeline-evolution`` loads without tools), so the tool claims would be false there.
-# Mirrors the #4490 review finding.
+# analyst turn model, and not all of these are tool-grounded (``pipeline-evolution`` loads
+# without tools), so the tool claims would be false there. Mirrors the #4490 review finding.
 NON_DEBATE_SLUGS = (
     "asset-analyst",
     "coverage-director",
@@ -40,51 +42,79 @@ NON_DEBATE_SLUGS = (
     "pipeline-evolution",
 )
 
+AMENDMENT_MARKER = "optional lists"
+TOOL_HEADING = "## Tools (read this before you plan a single call)"
 
-def _required_terms_fields() -> list[str]:
-    return [name for name, field in ForecastTerms.model_fields.items() if field.is_required()]
+
+def _terms_fields(*, required: bool) -> list[str]:
+    return [
+        name
+        for name, field in ForecastTerms.model_fields.items()
+        if field.is_required() is required
+    ]
 
 
-class TestAmendmentContractReachesTheDebate:
-    @pytest.mark.parametrize("slug", DELIBERATION_SLUGS)
-    def test_contract_appended(self, slug: str) -> None:
-        body = load_skill_full(slug)
-        assert "## Forecast amendment" in body
-        assert "## Tools (read this before you plan a single call)" in body
+class TestAmendmentContractReachesTheAnalystTurn:
+    def test_contract_appended(self) -> None:
+        assert "## Forecast amendment" in load_skill_full(AMENDMENT_SLUG)
 
-    @pytest.mark.parametrize("slug", DELIBERATION_SLUGS)
-    def test_contract_names_every_required_field(self, slug: str) -> None:
-        body = load_skill_full(slug)
-        missing = [name for name in _required_terms_fields() if f"``{name}``" not in body]
+    def test_contract_names_every_required_field(self) -> None:
+        body = load_skill_full(AMENDMENT_SLUG)
+        missing = [name for name in _terms_fields(required=True) if f"``{name}``" not in body]
         assert missing == []
+
+    def test_optional_fields_are_not_presented_as_required(self) -> None:
+        # nit #5: the required/optional split must be visible, not just the field names. The
+        # optional block opens at the first optional field and everything before it is required.
+        body = load_skill_full(AMENDMENT_SLUG)
+        required = _terms_fields(required=True)
+        optional = _terms_fields(required=False)
+        marker = body.index(f"``{optional[0]}``")
+        assert all(body.index(name) < marker for name in required)
+        assert all(name in body[marker:] for name in optional)
+        assert AMENDMENT_MARKER in body[marker:]
 
     def test_contract_covers_the_observed_production_failures(self) -> None:
         # The exact fields the 2026-09-22 run omitted, and the keys it invented.
-        body = load_skill_full("deliberation-analyst-response")
+        body = load_skill_full(AMENDMENT_SLUG)
         for field in ("thesis_valid_probability", "raw_uncertainty", "bear_return", "base_return"):
             assert f"``{field}``" in body
         assert "conditional_entry" in body
         assert "convision_score" in body
 
-    @pytest.mark.parametrize("slug", DELIBERATION_SLUGS)
-    def test_contract_states_omit_when_unchanged(self, slug: str) -> None:
-        lowered = load_skill_full(slug).lower()
+    def test_contract_states_omit_when_unchanged(self) -> None:
+        lowered = load_skill_full(AMENDMENT_SLUG).lower()
         assert "omit the field" in lowered
         assert "complete replacement" in lowered
 
-    @pytest.mark.parametrize("slug", DELIBERATION_SLUGS)
-    def test_contract_states_the_economics_rules(self, slug: str) -> None:
-        body = load_skill_full(slug)
+    def test_contract_states_the_economics_rules(self) -> None:
+        body = load_skill_full(AMENDMENT_SLUG)
         assert "bear <= base <= bull" in body
         assert "exactly" in body
         assert "1.0" in body
         assert "renormalis" in body
 
-    @pytest.mark.parametrize("slug", DELIBERATION_SLUGS)
-    def test_tenor_is_identity_not_new_economics(self, slug: str) -> None:
-        body = load_skill_full(slug)
+    def test_tenor_is_identity_not_new_economics(self) -> None:
+        body = load_skill_full(AMENDMENT_SLUG)
         assert "copies them from the analyst's base forecast" in body
         assert "trading sessions" in body
+
+    def test_not_appended_to_the_pm_turn(self) -> None:
+        # finding #1: ``DeliberationPmTurn`` has no ``forecast_amendment`` field, so the
+        # amendment contract would assert something the PM turn cannot act on.
+        assert "## Forecast amendment" not in load_skill_full("deliberation")
+
+
+class TestToolContractReachesBothTurns:
+    @pytest.mark.parametrize("slug", DELIBERATION_SLUGS)
+    def test_contract_appended(self, slug: str) -> None:
+        assert TOOL_HEADING in load_skill_full(slug)
+
+    def test_constants_are_the_appended_blocks(self) -> None:
+        analyst = load_skill_full(AMENDMENT_SLUG)
+        assert DELIBERATION_AMENDMENT_CONTRACT in analyst
+        assert DELIBERATION_TOOL_USE_CONTRACT in analyst
+        assert DELIBERATION_TOOL_USE_CONTRACT in load_skill_full("deliberation")
 
 
 class TestContractScope:
@@ -92,12 +122,7 @@ class TestContractScope:
     def test_not_appended_to_other_skills(self, slug: str) -> None:
         body = load_skill_full(slug)
         assert "## Forecast amendment" not in body
-        assert "## Tools (read this before you plan a single call)" not in body
-
-    def test_constants_are_the_appended_blocks(self) -> None:
-        body = load_skill_full("deliberation")
-        assert DELIBERATION_AMENDMENT_CONTRACT in body
-        assert DELIBERATION_TOOL_USE_CONTRACT in body
+        assert TOOL_HEADING not in body
 
 
 class TestContractImposesNoLimits:
@@ -106,6 +131,13 @@ class TestContractImposesNoLimits:
         lowered = load_skill_full(slug).lower()
         for banned in ("call limit", "tool-call limit", "time limit", "minute limit", "budget of"):
             assert banned not in lowered, f"contract must not impose {banned!r}"
+        # nit #4: the blocklist alone only pins a few spellings of the opposite. Catch a limit
+        # stated as a cap on calls/rounds/time in any wording.
+        cap = re.compile(
+            r"\b(?:max(?:imum)?|at most|no more than|up to)\b[^.]{0,60}"
+            r"\b(?:calls?|tools?|rounds?|minutes?|seconds?)\b"
+        )
+        assert cap.search(lowered) is None, "contract must not cap calls, rounds, or time"
 
 
 class TestToolContractIsTrueForPortfolio:
