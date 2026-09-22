@@ -1,13 +1,18 @@
 "use client";
 
-import { Suspense } from "react";
+import { Suspense, useEffect } from "react";
 import { useSearchParams } from "next/navigation";
 import { AssistantRuntimeProvider } from "@assistant-ui/react";
 import { AssistantChatTransport, useChatRuntime } from "@assistant-ui/ai-sdk";
 import { ThreadSkinView } from "@/components/assistant-ui/skins";
+import { StockChatPrefsHost, useStockChatPrefs } from "@/components/stock/stock-chat-prefs-host";
+import { DEFAULT_CLIENT_CONFIG } from "@/lib/deploy-config";
 import { p } from "@/lib/base-path";
 import { cn } from "@/lib/utils";
 import { parseThreadSkin, THREAD_SKINS } from "@/lib/thread-skins";
+
+/** Stable no-ops: the catalog has no persisted session to reset or redo. */
+const noop = () => {};
 
 /**
  * Official assistant-ui templates (the 11 catalog ids) plus first-party
@@ -45,6 +50,30 @@ function BaselineClientInner() {
         };
       },
     }),
+  });
+
+  // The first-party skin's light palette hangs off `:root[data-theme="light"]`
+  // and `.light` (chat-aui.css), and its portal mirrors off
+  // `html.light:has(...)`. Without this the skin always renders its dark
+  // palette, so "light" mode looked like a dark theme.
+  useEffect(() => {
+    const root = document.documentElement;
+    root.dataset.theme = theme;
+    root.classList.toggle("light", theme === "light");
+    root.classList.toggle("dark", theme === "dark");
+  }, [theme]);
+
+  // The `digichat` skin's `/` command palette and @-mention menu are gated on the
+  // embed chat prefs (`useEmbedChatPrefsOptional`). Mount the same prefs host the
+  // embed/product shells use, with the least-privilege default config, so the
+  // catalog renders the same composer chrome as digithings.ai/chat instead of
+  // each surface having to re-implement the gate. Other catalog skins ignore it.
+  const { prefsApi, panes } = useStockChatPrefs({
+    clientConfig: DEFAULT_CLIENT_CONFIG,
+    sessionKey: "baseline",
+    hasSessions: false,
+    newThread: noop,
+    redo: noop,
   });
 
   const hrefFor = (nextSkin: string, nextTheme: string) => {
@@ -86,7 +115,9 @@ function BaselineClientInner() {
           </a>
         </nav>
         <div className="min-h-0 flex-1 bg-background text-foreground">
-          <ThreadSkinView skin={skin} />
+          <StockChatPrefsHost value={prefsApi} panes={panes}>
+            <ThreadSkinView skin={skin} />
+          </StockChatPrefsHost>
         </div>
       </div>
     </AssistantRuntimeProvider>

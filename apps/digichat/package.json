@@ -8,6 +8,7 @@
     "start": "node scripts/trusted-proxy-server.mjs",
     "lint": "eslint",
     "test": "vitest run",
+    "config:check": "tsx scripts/check-config.ts",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
     "db:seed": "tsx scripts/seed.ts",

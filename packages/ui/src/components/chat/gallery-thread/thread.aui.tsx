@@ -128,6 +128,12 @@ export type ThreadProps = {
   welcome?: string | undefined;
   /** `chrome.welcome.body`. */
   welcomeBody?: readonly string[] | undefined;
+  /**
+   * `chrome.suggestions` in deploy YAML. Static prompts for the new-chat
+   * welcome state; when non-empty they take precedence over the runtime's own
+   * suggestion adapter, which is the fallback.
+   */
+  suggestions?: readonly string[] | undefined;
   className?: string | undefined;
   /** Embed send-gate / system page-context attach. */
   onComposerSubmit?: (event: FormEvent<HTMLFormElement>) => void;
@@ -197,15 +203,19 @@ const ThreadGroupDisclosureContext = createContext<ThreadGroupDisclosure>(
 type ThreadChrome = {
   welcome: string;
   welcomeBody: readonly string[];
+  suggestions: readonly string[];
   onComposerSubmit?: (event: FormEvent<HTMLFormElement>) => void;
   className?: string;
   slash?: ThreadSlashTrigger;
   mention?: ThreadMentionTrigger;
 };
 
+const EMPTY_SUGGESTIONS: readonly string[] = [];
+
 const DEFAULT_CHROME: ThreadChrome = {
   welcome: "How can I help you today?",
   welcomeBody: [],
+  suggestions: EMPTY_SUGGESTIONS,
 };
 
 const ThreadChromeContext = createContext<ThreadChrome>(DEFAULT_CHROME);
@@ -255,6 +265,7 @@ export const Thread: FC<ThreadProps> = ({
   actions,
   welcome,
   welcomeBody,
+  suggestions,
   className,
   onComposerSubmit,
   slash,
@@ -270,6 +281,7 @@ export const Thread: FC<ThreadProps> = ({
   const chrome: ThreadChrome = {
     welcome: welcome ?? DEFAULT_CHROME.welcome,
     welcomeBody: welcomeBody ?? DEFAULT_CHROME.welcomeBody,
+    suggestions: suggestions ?? EMPTY_SUGGESTIONS,
     onComposerSubmit,
     className,
     slash,
@@ -311,9 +323,19 @@ const ThreadRoot: FC<{
         className,
       )}
       data-user-align="left"
+      // The skin scope marker: `apps/reference/…/chatbot.css` carries the whole
+      // first-party theme under `:is(.aui-theme-stage, [data-thread-skin="digichat"])`
+      // and the portal mirrors under `html:has([data-thread-skin="digichat"])`.
+      // Declaring it here means every mount path gets the same theme — the
+      // /baseline catalog, the embed shell, and the production shells — instead
+      // of each surface having to remember to wrap the Thread.
+      data-thread-skin="digichat"
       style={{
         ["--thread-max-width" as string]: "44rem",
-        ["--composer-bg" as string]: "var(--color-card)",
+        // `--card` (not `--color-card`) so a scoped palette wins: the
+        // Tailwind bridge declares `--color-card` at :root, so its var()
+        // resolves there and ignores `.digichat-thread`'s own `--card`.
+        ["--composer-bg" as string]: "var(--card)",
         ["--composer-radius" as string]: "0",
         ["--composer-padding" as string]: "8px",
       }}
@@ -485,23 +507,64 @@ const ThreadWelcome: FC = () => {
   );
 };
 
+/**
+ * Shared look for a welcome prompt row. The runtime-backed item and the static
+ * fallback render the same markup so a skin's examples look identical whether
+ * they came from the runtime or from `chrome.suggestions`.
+ */
+const SUGGESTION_BUTTON_CLASS =
+  "aui-thread-welcome-suggestion fade-in slide-in-from-bottom-1 animate-in fill-mode-both grid w-full cursor-pointer grid-cols-[1.25rem_minmax(0,1fr)] items-start gap-x-[0.55rem] rounded-none border-0 bg-transparent px-0 py-0.5 text-start text-sm font-normal duration-200";
+
 const ThreadSuggestions: FC = () => {
+  const { suggestions } = useContext(ThreadChromeContext);
   return (
     <div className="aui-thread-welcome-suggestions flex w-full flex-col items-stretch gap-0.5">
-      <ThreadPrimitive.Suggestions>
-        {() => <ThreadSuggestionItem />}
-      </ThreadPrimitive.Suggestions>
+      {suggestions.length > 0 ? (
+        suggestions.map((prompt, index) => (
+          <StaticSuggestionItem key={`${index}:${prompt}`} prompt={prompt} />
+        ))
+      ) : (
+        <ThreadPrimitive.Suggestions>
+          {() => <ThreadSuggestionItem />}
+        </ThreadPrimitive.Suggestions>
+      )}
     </div>
+  );
+};
+
+/** Static `chrome.suggestions` prompt. Appends the text like a typed message. */
+const StaticSuggestionItem: FC<{ prompt: string }> = ({ prompt }) => {
+  const aui = useAui();
+  return (
+    <button
+      type="button"
+      onClick={() => {
+        if (aui.thread.getState().isRunning) return;
+        aui.thread.append({
+          content: [{ type: "text", text: prompt }],
+          runConfig: aui.composer.getState().runConfig,
+        });
+      }}
+      className={SUGGESTION_BUTTON_CLASS}
+    >
+      <span className="aui-msg-marker" aria-hidden="true">
+        <DotMatrix
+          state="example"
+          label="Example"
+          className="aui-thread-welcome-suggestion-mark size-3.5"
+        />
+      </span>
+      <span className="aui-thread-welcome-suggestion-text min-w-0">
+        <span className="aui-thread-welcome-suggestion-text-1">{prompt}</span>
+      </span>
+    </button>
   );
 };
 
 const ThreadSuggestionItem: FC = () => {
   return (
     <SuggestionPrimitive.Trigger send asChild>
-      <button
-        type="button"
-        className="aui-thread-welcome-suggestion fade-in slide-in-from-bottom-1 animate-in fill-mode-both grid w-full cursor-pointer grid-cols-[1.25rem_minmax(0,1fr)] items-start gap-x-[0.55rem] rounded-none border-0 bg-transparent px-0 py-0.5 text-start text-sm font-normal duration-200"
-      >
+      <button type="button" className={SUGGESTION_BUTTON_CLASS}>
         <span className="aui-msg-marker" aria-hidden="true">
           <DotMatrix
             state="example"
