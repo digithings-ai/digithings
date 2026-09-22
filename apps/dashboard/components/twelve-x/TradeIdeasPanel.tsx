@@ -78,7 +78,7 @@ function LadderRow({ row }: { row: IdeaDetailLevelRow }) {
     <div
       className={
         boxed
-          ? 'flex flex-wrap items-center gap-x-2 gap-y-0.5 rounded-none border border-hair px-1.5 py-1 text-[11px]'
+          ? 'flex flex-wrap items-center gap-x-2 gap-y-0.5 rounded-none border border-hair bg-surface/40 px-1.5 py-1 text-[11px]'
           : 'flex flex-wrap items-center gap-x-2 gap-y-0.5 px-1.5 text-[11px]'
       }
     >

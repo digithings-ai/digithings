@@ -43,7 +43,7 @@ export function PortfolioContributionChart({
   return (
     <section
       data-testid="portfolio-contribution-chart"
-      className="border-x border-b border-hair"
+      className="border-x border-b border-hair bg-surface"
       aria-labelledby="portfolio-contribution-title"
     >
       <div className="flex flex-col gap-3 border-b border-hair px-5 py-3 lg:flex-row lg:items-center lg:justify-between">
@@ -51,7 +51,7 @@ export function PortfolioContributionChart({
           <p className="font-mono text-[0.62rem] uppercase tracking-wider text-ink-mute">
             cumulative contribution · percentage points
           </p>
-          <h2 id="portfolio-contribution-title" className="text-sm font-semibold text-ink">
+          <h2 id="portfolio-contribution-title" className="font-display text-xl text-ink">
             Return contribution
           </h2>
         {sourceNote ? (

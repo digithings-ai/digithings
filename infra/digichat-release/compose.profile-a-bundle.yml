@@ -103,6 +103,11 @@ services:
     env_file:
       - path: .env.profile-a-bundle
         required: false
+    # One config dir per deployment: the stack image + digichat both read it.
+    # `cp config/digichat.yaml.example config/digichat.yaml` then edit that one
+    # file (or point DIGICHAT_CONFIG_PATH at another file in this dir).
+    volumes:
+      - ./config:/app/config:ro
     environment:
       NODE_ENV: production
       AUTH_TRUST_HOST: ${AUTH_TRUST_HOST:-true}
@@ -110,7 +115,7 @@ services:
       AUTH_URL: ${AUTH_URL:-http://127.0.0.1:3005}
       DIGICHAT_DATABASE_URL: postgresql://digichat:${DIGICHAT_POSTGRES_PASSWORD:-digichat}@digichat-db:5432/digichat
       DIGICHAT_AUTO_MIGRATE: ${DIGICHAT_AUTO_MIGRATE:-1}
-      DIGICHAT_CONFIG_PATH: ${DIGICHAT_CONFIG_PATH:-}
+      DIGICHAT_CONFIG_PATH: ${DIGICHAT_CONFIG_PATH:-/app/config/digichat.yaml}
       DIGICHAT_CHROME_SKIN: ${DIGICHAT_CHROME_SKIN:-}
       DIGICHAT_EMBED_ENABLED: ${DIGICHAT_EMBED_ENABLED:-0}
       DIGICHAT_REQUIRE_ROOT_AUTH: ${DIGICHAT_REQUIRE_ROOT_AUTH:-0}

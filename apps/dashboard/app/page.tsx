@@ -17,6 +17,7 @@ import {
   type BriefRunHealth,
 } from '@/components/today/daily-brief-workspace';
 import { selectBriefLedgerDayEvents } from '@/lib/brief-book-event';
+import { buildDisplayRationaleByTicker } from '@/lib/pm-rationale';
 import { committedBookDate } from '@/lib/dashboard-ssot';
 import { isCashTicker } from '@/lib/book-reconciliation';
 import { chainNavContinuity } from '@/lib/accounting-views';
@@ -146,7 +147,39 @@ export default function OverviewPage() {
   const latestDate = portfolio.meta.last_updated || null;
   const runTypeLabel = portfolio.meta.latest_snapshot_run_type ?? null;
 
+  const pipe = data.pipeline_observability;
   const rebalanceActions = data.portfolio_management?.rebalance_actions ?? [];
+
+  // Per-ticker PM thesis for Brief / actions (#704). Prefer real direction/sizing narrative;
+  // never pass through sizing's mechanical fallback (historical docs still
+  // carry it until the next pipeline run after #3043).
+  const pmActions = (pipe?.pm_rebalance as { actions?: unknown } | null)?.actions;
+  const extrasByTicker: Record<string, string> = {};
+  for (const pos of positions) {
+    const key = pos.ticker.trim().toUpperCase();
+    if (!key || isCashTicker(key)) continue;
+    if (typeof pos.rationale === 'string' && pos.rationale.trim()) {
+      extrasByTicker[key] = pos.rationale.trim();
+    }
+  }
+  for (const doc of pipe?.deliberation_transcripts ?? []) {
+    const key = doc.ticker.trim().toUpperCase();
+    if (!key) continue;
+    const conclusion =
+      typeof doc.payload.conclusion === 'string'
+        ? doc.payload.conclusion
+        : typeof doc.payload.net_stance_reason === 'string'
+          ? doc.payload.net_stance_reason
+          : null;
+    if (conclusion?.trim() && !extrasByTicker[key]) {
+      extrasByTicker[key] = conclusion.trim();
+    }
+  }
+  const rationaleByTicker = buildDisplayRationaleByTicker({
+    pmRebalanceActions: pmActions,
+    pmDirectionMemo: pipe?.pm_direction_memo ?? null,
+    extrasByTicker,
+  });
 
   const performanceHistoryResolved = portfolio.snapshots ?? [];
   const positionDates = (data.position_history ?? []).map((row) => row.date);
@@ -218,11 +251,13 @@ export default function OverviewPage() {
       <DailyBriefWorkspace
         regime={strategy.regime}
         regimeLabel={regimeLabel}
+        headline={strategy.summary || null}
         confidence={strategy.theses?.[0]?.confidence ?? null}
         digestDate={latestDate}
         bookDate={bookAsOf}
         runType={runTypeLabel}
         actions={rebalanceActions}
+        rationaleByTicker={rationaleByTicker}
         returns={{
           sincePct,
           sinceDate,
