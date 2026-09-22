@@ -1,8 +1,9 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { Footer } from "@digithings/ui";
 import { buttonVariants } from "@digithings/ui/ui";
+import { DQ_FOOTER, DQ_FOOTER_META } from "./_nav";
 import { SiteNav } from "@/components/landing/SiteNav";
-import { SiteFooter } from "@/components/landing/SiteFooter";
 
 export const metadata: Metadata = {
   title: "No such page — digiquant",
@@ -13,7 +14,7 @@ export default function NotFound() {
   return (
     <>
       <SiteNav />
-      <main className="dq-subpage" id="main" tabIndex={-1}>
+      <main className="dq-subpage">
         <div className="wrap pb-[clamp(4.5rem,10vw,7rem)]">
           <header className="dq-sechead">
             <div className="kicker">{"// missing"}</div>
@@ -33,7 +34,7 @@ export default function NotFound() {
           </header>
         </div>
       </main>
-      <SiteFooter />
+      <Footer links={DQ_FOOTER} meta={DQ_FOOTER_META} />
     </>
   );
 }

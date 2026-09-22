@@ -18,12 +18,10 @@ description: Run commodities analysis as part of the daily digest. Covers energy
 - Cover the commodity ETFs in scope (e.g. GLD/SLV/USO/DBC) for trend and momentum.
 
 ## Inputs
-- `config/watchlist.md` (commodities section)
-- `config/preferences.md`
+- `config/watchlist.md` — repository provenance for a maintainer (commodities section); NOT retrievable by a tool.
+- `config/preferences.md` — repository provenance for a maintainer; NOT retrievable by a tool.
 - Macro regime output
 - Bonds output (real yields — key driver for gold)
-
-> **Web fetch**: use `defuddle parse <url> --md` instead of WebFetch for any OPEC news page, EIA report page, commodity news article, or central bank buying announcement URL. Not for API endpoints, `.json`, or `.md` files.
 
 ## Research Steps
 
