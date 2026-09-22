@@ -91,15 +91,17 @@ class TestSdcaCompositeWeights:
         assert "mayer" not in EXTRA_INDICATOR_NAMES
 
     def test_monthly_rsi_and_macd_default_to_zero_but_are_wired(self) -> None:
-        """Zero-weight by default (opt-in), but promoted into EXTRA_INDICATOR_NAMES
-        after the all-9 floor-diversified aggregate search (RESEARCH_STATE.md).
+        """Zero-weight by default (opt-in). Trimmed from the default
+        EXTRA_INDICATOR_NAMES search scope (one variant per oscillator style
+        kept: weekly_monthly_rsi/weekly_monthly_macd), but the field and its
+        build_extra_indicators wiring (allowlist=None path) still work.
         """
         w = SdcaCompositeWeights()
         assert w.monthly_rsi == pytest.approx(0.0)
         assert w.monthly_macd == pytest.approx(0.0)
         assert w.enabled_extras() == {}
-        assert "monthly_rsi" in EXTRA_INDICATOR_NAMES
-        assert "monthly_macd" in EXTRA_INDICATOR_NAMES
+        assert "monthly_rsi" not in EXTRA_INDICATOR_NAMES
+        assert "monthly_macd" not in EXTRA_INDICATOR_NAMES
 
     def test_monthly_rsi_and_macd_participate_in_extra_items_when_set(self) -> None:
         w = SdcaCompositeWeights(power_law=0.0, monthly_rsi=1.0)

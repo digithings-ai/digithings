@@ -165,10 +165,14 @@ class TestGenericTechnicalsFromAnyOhlcv:
         spec = SdcaOscillatorSpec()
         btc_z = technicals_from_ohlcv(btc_dates, btc_close, spec)
         eth_z = technicals_from_ohlcv(eth_dates, eth_close, spec)
-        assert set(btc_z) == set(eth_z) == set(GENERIC_TECHNICAL_NAMES)
-        assert len(btc_z["weekly_rsi"]) == n
-        assert len(eth_z["sma_band"]) == n
-        assert btc_z["weekly_rsi"] != eth_z["weekly_rsi"]
+        # technicals_from_ohlcv materializes every price-oscillator name
+        # (allowlist=None path), a superset of the trimmed default
+        # GENERIC_TECHNICAL_NAMES search scope.
+        assert set(btc_z) == set(eth_z)
+        assert set(GENERIC_TECHNICAL_NAMES).issubset(set(btc_z))
+        assert len(btc_z["weekly_monthly_rsi"]) == n
+        assert len(eth_z["weekly_monthly_macd"]) == n
+        assert btc_z["weekly_monthly_rsi"] != eth_z["weekly_monthly_rsi"]
 
     def test_calibrated_rsi_length_changes_z(self) -> None:
         n = 400
@@ -195,32 +199,21 @@ class TestGenericTechnicalsFromAnyOhlcv:
         extras = build_extra_indicators(
             dates,
             close,
-            SdcaCompositeWeights(power_law=1.0, weekly_rsi=0.4, sma_band=0.2),
+            SdcaCompositeWeights(power_law=1.0, weekly_monthly_rsi=0.4, weekly_monthly_macd=0.2),
             ExtraIndicatorSources(),
             oscillators=profile.oscillators,
             allowlist=profile.extra_indicators,
         )
-        # weekly_macd/monthly_rsi/monthly_macd/weekly_monthly_rsi/
-        # weekly_monthly_macd are allowlist-gated only (like weekly_rsi/
-        # sma_band), so they're still materialized here for display even
-        # though their weight is 0.
+        # eth_research_v1's default allowlist is GENERIC_TECHNICAL_NAMES
+        # (post-trim: only the weekly+monthly confluence variant of each
+        # oscillator style), so only those two names are materialized here.
         by_name = {e.name: e for e in extras}
         assert set(by_name) == {
-            "weekly_rsi",
-            "weekly_macd",
-            "sma_band",
-            "monthly_rsi",
-            "monthly_macd",
             "weekly_monthly_rsi",
             "weekly_monthly_macd",
         }
-        assert by_name["weekly_rsi"].enabled
-        assert by_name["sma_band"].enabled
-        assert not by_name["weekly_macd"].enabled
-        assert not by_name["monthly_rsi"].enabled
-        assert not by_name["monthly_macd"].enabled
-        assert not by_name["weekly_monthly_rsi"].enabled
-        assert not by_name["weekly_monthly_macd"].enabled
+        assert by_name["weekly_monthly_rsi"].enabled
+        assert by_name["weekly_monthly_macd"].enabled
 
 
 class TestSecondAssetSmoke:
@@ -247,7 +240,7 @@ class TestSecondAssetSmoke:
             extras = build_extra_indicators(
                 series_dates,
                 series_close,
-                SdcaCompositeWeights(power_law=1.0, weekly_rsi=0.3, sma_band=0.2),
+                SdcaCompositeWeights(power_law=1.0, weekly_monthly_rsi=0.3, weekly_monthly_macd=0.2),
                 ExtraIndicatorSources(),
                 oscillators=profile.oscillators,
                 allowlist=profile.extra_indicators,

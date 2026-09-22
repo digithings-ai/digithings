@@ -126,7 +126,7 @@ def _profile() -> SdcaAssetProfile:
                 ),
             )
         ),
-        extra_indicators=("weekly_rsi", "weekly_macd", "sma_band"),
+        extra_indicators=("weekly_monthly_rsi", "weekly_monthly_macd"),
     )
 
 
@@ -309,7 +309,7 @@ class TestFitSdcaWeightsMcp:
         assert "error" not in payload
         assert payload["symbol"] == "ETH-USD"
         assert "regularized_weights" in payload
-        assert "weekly_rsi_weight" in payload["regularized_weight_params"]
+        assert "weekly_monthly_rsi_weight" in payload["regularized_weight_params"]
         assert abs(sum(payload["regularized_weights"].values()) - 1.0) < 1e-6
 
     def test_mcp_unknown_profile_error_json(self) -> None:

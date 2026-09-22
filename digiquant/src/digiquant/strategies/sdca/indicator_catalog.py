@@ -113,12 +113,23 @@ MACRO_INDICATOR_NAMES: tuple[str, ...] = (
     "onchain_addr_ratio",
     "fear_greed",
 )
+# One variant per oscillator *style*, not per timeframe pairing. The catalog
+# previously carried 3 timeframe pairings each for RSI (weekly_rsi,
+# monthly_rsi, weekly_monthly_rsi) and MACD (weekly_macd, monthly_macd,
+# weekly_monthly_macd), plus sma_band -- 7 names for 2 underlying signal
+# families (momentum vs. moving-average-deviation), which biases any equal-
+# or floor-weighted composite toward whichever family has more variants
+# enabled. Trimmed to the weekly+monthly confluence variant of each family
+# (broadest timeframe coverage without a same-day noise leg): weekly_monthly_rsi
+# for momentum, weekly_monthly_macd for moving-average-deviation. sma_band is
+# dropped outright -- it's a different measure of the same underlying thing
+# MACD already captures (price/EMA-spread distance from a moving average).
+# weekly_rsi/monthly_rsi/weekly_macd/monthly_macd/sma_band and their
+# solo z-functions in price_oscillators.py are left in place (still used by
+# settings.json's live btc_sdca preset and historical tearsheets/provenance)
+# -- this only trims the default search/diagnostic scope, it does not delete
+# any indicator code or touch settings.json.
 PRICE_OSCILLATOR_NAMES: tuple[str, ...] = (
-    "weekly_rsi",
-    "weekly_macd",
-    "sma_band",
-    "monthly_rsi",
-    "monthly_macd",
     "weekly_monthly_rsi",
     "weekly_monthly_macd",
 )

@@ -56,9 +56,9 @@ _SHAPE = SdcaCurveShape(
 
 
 def test_search_names_with_data_keeps_allowlist_that_has_z() -> None:
-    extra_z = {"weekly_rsi": [0.0], "m2": [1.0], "sma_band": [0.0]}
+    extra_z = {"weekly_monthly_rsi": [0.0], "m2": [1.0], "weekly_monthly_macd": [0.0]}
     names = search_names_with_data(EXTRA_INDICATOR_NAMES, extra_z)
-    assert names == ("m2", "weekly_rsi", "sma_band")
+    assert names == ("m2", "weekly_monthly_rsi", "weekly_monthly_macd")
     assert "dxy" not in names
     assert "weekly_macd" not in names
 
@@ -501,9 +501,14 @@ def test_checked_in_weights_sidecar_searched_full_catalog() -> None:
     """Guards that this frozen search run didn't silently skip a name from its
     own recorded catalog. Compares against the sidecar's own ``catalog`` field
     (the catalog as of that search), not the live EXTRA_INDICATOR_NAMES --
-    the production sidecar is a point-in-time artifact and monthly_rsi/
-    monthly_macd have been promoted into the research catalog but not yet
-    re-searched into production (RESEARCH_STATE.md: needs Chris's accept).
+    the production sidecar is a point-in-time artifact: monthly_rsi/
+    monthly_macd were promoted into the research catalog but not yet
+    re-searched into production (RESEARCH_STATE.md: needs Chris's accept),
+    and weekly_rsi/weekly_macd/sma_band have since been trimmed out of the
+    *default* EXTRA_INDICATOR_NAMES search scope (indicator_catalog.py's
+    PRICE_OSCILLATOR_NAMES, one-variant-per-style pass) without touching this
+    frozen sidecar or settings.json. So this only checks internal consistency
+    of the sidecar itself, not containment in the live catalog.
     """
     payload = json.loads(
         (
@@ -512,7 +517,6 @@ def test_checked_in_weights_sidecar_searched_full_catalog() -> None:
         ).read_text()
     )
     assert set(payload["search_names"]) == set(payload["catalog"])
-    assert set(payload["catalog"]).issubset(set(EXTRA_INDICATOR_NAMES))
     assert payload["num_evaluations"] >= 128
     kept = {k: v for k, v in payload["weights"].items() if k != "power_law" and v > 0}
     assert kept == {}

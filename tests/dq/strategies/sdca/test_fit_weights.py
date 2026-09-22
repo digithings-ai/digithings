@@ -59,7 +59,7 @@ def _research_profile() -> SdcaAssetProfile:
                 ),
             )
         ),
-        extra_indicators=("weekly_rsi", "weekly_macd", "sma_band"),
+        extra_indicators=("weekly_monthly_rsi", "weekly_monthly_macd"),
     )
 
 
