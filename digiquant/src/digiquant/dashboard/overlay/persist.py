@@ -3,7 +3,7 @@
 Migration 110 narrows ``anon_read`` on workspace-scoped private books
 (``documents`` / ``positions`` / ``nav_history`` / ``portfolio_metrics``) to the
 house (and house+system for documents). Overlay may persist **documents** once
-an operator sets ``DIGIQUANT_OVERLAY_PERSIST=1`` (alias ``OLYMPUS_OVERLAY_PERSIST``)
+an operator sets ``DIGIQUANT_OVERLAY_PERSIST=1``
 on a target that has 110
 applied. Cutover 900 is still required before dropping the house teaser for
 anon / free JWTs; it is not the persist precondition.

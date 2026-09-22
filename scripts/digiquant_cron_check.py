@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Agent-runnable loud-fail probe for overlay, execution sync, route, and Mailgun cron env.
+"""Agent-runnable loud-fail probe for overlay, execution sync, route, and notify cron env.
 
 Usage (repo root)::
 

@@ -33,7 +33,7 @@ pytestmark = pytest.mark.unit
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 MIGRATION = REPO_ROOT / "digiquant" / "supabase" / "migrations" / "127_drop_market_data_tables.sql"
-WRANGLER = REPO_ROOT / "cloudflare" / "digithings-stack-cloudflare" / "wrangler.toml"
+WRANGLER = REPO_ROOT / "apps" / "digithings-stack-cloudflare" / "wrangler.toml"
 
 # Runtime tree only: tests, docs, historical migrations, openwiki and worktrees
 # are out of scope (tests legitimately seed the retired shapes; migrations are
@@ -50,9 +50,9 @@ RUNTIME_ROOTS: tuple[str, ...] = (
     "digiclaw/src",
     "digivault/src",
     ".github/workflows",
-    "cloudflare/dashboard/lib",
-    "cloudflare/digiquant-web/lib",
-    "cloudflare/digithings-stack-cloudflare/src",
+    "apps/dashboard/lib",
+    "apps/digiquant-web/lib",
+    "apps/digithings-stack-cloudflare/src",
 )
 _SUFFIXES = frozenset(
     {".py", ".ts", ".tsx", ".js", ".jsx", ".mjs", ".sh", ".sql", ".json", ".yml", ".yaml"}
@@ -154,10 +154,10 @@ TABLE_CALLS: dict[str, int] = {
 CLEAN_FILES: tuple[str, ...] = (
     ".github/workflows/pipeline-digiquant-prices.yml",
     ".github/workflows/pipeline-research-metrics.yml",
-    "cloudflare/dashboard/lib/database.types.ts",
-    "cloudflare/dashboard/lib/queries.ts",
-    "cloudflare/dashboard/lib/types.ts",
-    "cloudflare/digiquant-web/lib/live/market-data.ts",
+    "apps/dashboard/lib/database.types.ts",
+    "apps/dashboard/lib/queries.ts",
+    "apps/dashboard/lib/types.ts",
+    "apps/digiquant-web/lib/live/market-data.ts",
     "digiquant/src/digiquant/mcp_server.py",
     "digiquant/scripts/research/backfill_context.py",
     "digiquant/scripts/research/backfill_execution_prices.py",

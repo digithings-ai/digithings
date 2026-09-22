@@ -14,12 +14,14 @@ Flags:
   --date YYYY-MM-DD   Period date (default: today UTC)
   --dry-run           Assemble + compute + report; never INSERT
   --shadow            Persist labeled period + reconcile vs legacy nav day return
-                      (default when not --dry-run; also via OLYMPUS_ACCOUNTING_FINALIZER)
+                      (default when not --dry-run; also via DIGIQUANT_ACCOUNTING_FINALIZER)
 
 Writes estimated/incomplete/failed periods as labeled non-final rows. Only
 ``status=final`` with a complete child set is selectable via
 ``select_final_period``. Declines (exit 3) when the ledger is cold (open lots
-empty while a positions book exists) so no mislabeled partial final is published.
+empty while a positions book exists) or the most recent prior accounting tip
+closes at a negative ``closing_cash`` (#4105) — so no mislabeled partial final
+and no fabricated cash-stub book is published.
 
 Usage:
   python3 digiquant/scripts/research/finalize_period_accounting.py --supabase
@@ -28,7 +30,7 @@ Usage:
   python3 digiquant/scripts/research/finalize_period_accounting.py --supabase --shadow
 
 Exit codes: 0 ok · 1 hard failure · 2 reconcile miss (--strict-reconcile) · 3 declined
-Environment: SUPABASE_URL / CORE_SUPABASE_*, OLYMPUS_ACCOUNTING_FINALIZER
+Environment: SUPABASE_URL / CORE_SUPABASE_*, DIGIQUANT_ACCOUNTING_FINALIZER
 """
 
 from __future__ import annotations
@@ -60,6 +62,7 @@ from digiquant.dashboard.accounting.models import (
     PeriodFill,
     PeriodStatus,
 )
+from digiquant.dashboard.envcompat import ACCOUNTING_FINALIZER, env_lookup
 from digiquant.dashboard.tenancy import house_workspace_id
 from digiquant.portfolio.models.portfolio_ledger import (
     DecisionAction,
@@ -88,7 +91,7 @@ def _eq_house(query: Any) -> Any:
     return query.eq("workspace_id", str(house_workspace_id()))
 
 
-_ENV_MODE = "OLYMPUS_ACCOUNTING_FINALIZER"
+_ENV_MODE = ACCOUNTING_FINALIZER
 _OFF = frozenset({"0", "off", "false", "no", "disabled"})
 _DEFAULT_POLICY = "accounting-v1"
 _BENCHMARK = "SPY"
@@ -136,7 +139,7 @@ def resolve_mode(*, cli_mode: str | None, dry_run: bool, shadow: bool) -> str:
         return "dry-run"
     if shadow:
         return "shadow"
-    raw = (cli_mode or os.environ.get(_ENV_MODE) or "shadow").strip().lower()
+    raw = (cli_mode or env_lookup(ACCOUNTING_FINALIZER) or "shadow").strip().lower()
     if raw in _OFF:
         return "off"
     if raw in {"on", "shadow", "off", "dry-run"}:
@@ -174,7 +177,14 @@ def _mark_from_close(
 
 
 def _opening_cash(*, client: Any, period_date: date) -> Decimal:
-    """Prior accounting closing cash, else nav_history cash, else zero."""
+    """Prior accounting closing cash, else nav_history cash, else zero.
+
+    A negative prior accounting ``closing_cash`` is a broken ledger tip, not a
+    usable opening balance: skipping it and falling through to
+    ``nav * cash_pct / 100`` fabricates a cash-only stub book (2026-08-26 NAV
+    15.13 vs stitched 101.77, #4105). Decline finalization instead so the
+    caller exits 3 and the date stays on the legacy/stitched NAV fallback.
+    """
     prior = period_date - timedelta(days=1)
     # Walk back a few calendar days for weekends.
     for offset in range(0, 7):
@@ -184,6 +194,12 @@ def _opening_cash(*, client: Any, period_date: date) -> Decimal:
             cash = _decimal(head.get("closing_cash"))
             if cash is not None and cash >= 0:
                 return cash
+            if cash is not None and cash < 0:
+                raise FinalizerDeclined(
+                    f"prior accounting tip {day.isoformat()} has negative "
+                    f"closing_cash={cash} — decline finalization for "
+                    f"{period_date.isoformat()} (no fabricated cash stub, #4105)"
+                )
     resp = (
         _eq_house(client.table("nav_history").select("date, nav, cash_pct"))
         .lt("date", period_date.isoformat())
@@ -567,7 +583,7 @@ def main() -> int:
         "--mode",
         choices=("shadow", "on", "off", "dry-run"),
         default=None,
-        help="Override OLYMPUS_ACCOUNTING_FINALIZER (default shadow)",
+        help="Override DIGIQUANT_ACCOUNTING_FINALIZER (default shadow)",
     )
     ap.add_argument(
         "--strict-reconcile",
@@ -580,7 +596,7 @@ def main() -> int:
         return 1
     mode = resolve_mode(cli_mode=args.mode, dry_run=args.dry_run, shadow=args.shadow)
     if mode == "off":
-        print("OLYMPUS_ACCOUNTING_FINALIZER=off — skipping")
+        print("DIGIQUANT_ACCOUNTING_FINALIZER=off — skipping")
         return 0
     period_date = date.fromisoformat(args.date) if args.date else datetime.now(tz=UTC).date()
     try:

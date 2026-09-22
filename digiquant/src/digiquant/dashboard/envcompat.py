@@ -1,11 +1,13 @@
-"""Canonical DIGIQUANT_* env names with retired aliases.
+"""Canonical DIGIQUANT_* env names.
 
-Python packages stay ``digiquant.dashboard.*``. Operator secrets, kill switches,
-and flags use DIGIQUANT_* first. Retired production aliases in ``ALIASES``
-remain readable so live empty kill-switches stay off until rotated.
+Operator secrets, kill switches, and flags use DIGIQUANT_* exclusively. The
+former ``OLYMPUS_*`` / ``ATLAS_*`` / ``KAIROS_*`` read-aliases were removed once
+no deployment still set them (#4295); ``ALIASES`` is retained as an empty
+mapping so the module's public API and ``env_lookup`` signature stay stable.
 
-``pipeline-digiquant.yml`` still exports ``OLYMPUS_ATTEMPT``; do not rename that
-workflow until after the scheduled house proof. Readers accept both names.
+Python packages stay ``digiquant.dashboard.*``. Workflows
+(``pipeline-digiquant.yml``, ``pipeline-research-metrics.yml``,
+``digiquant-pipeline.yml``) emit the canonical names.
 """
 
 from __future__ import annotations
@@ -49,54 +51,17 @@ MACRO_STALE_DAYS = "DIGIQUANT_MACRO_STALE_DAYS"
 MAX_ANALYSTS = "DIGIQUANT_MAX_ANALYSTS"
 ONCHAIN_POSITIONING = "DIGIQUANT_ONCHAIN_POSITIONING"
 TOOL_ROUNDS_MAX = "DIGIQUANT_MAX_TOOL_ROUNDS"
+ACCOUNTING_FINALIZER = "DIGIQUANT_ACCOUNTING_FINALIZER"
 # First-party web_search tool knobs (digisearch service, #3853). Read via
 # env_lookup like the DIGIQUANT_* entries; no retired aliases.
 DIGISEARCH_URL = "DIGISEARCH_URL"
 DIGISEARCH_WEB_SEARCH_BACKEND = "DIGISEARCH_WEB_SEARCH_BACKEND"
 DIGISEARCH_SEARXNG_URL = "DIGISEARCH_SEARXNG_URL"
 
-# Retired names stay readable. Canonical presence (even empty) wins.
-ALIASES: dict[str, tuple[str, ...]] = {
-    EXECUTION_ROUTING: ("OLYMPUS_KAIROS_ROUTING",),
-    EXECUTION_WORKSPACE_ID: ("OLYMPUS_KAIROS_WORKSPACE_ID",),
-    OVERLAY_PERSIST: ("OLYMPUS_OVERLAY_PERSIST",),
-    STAGING_USER_JWT: ("KAIROS_STAGING_USER_JWT",),
-    STAGING_EMAIL: ("KAIROS_STAGING_EMAIL",),
-    STAGING_PASSWORD: ("KAIROS_STAGING_PASSWORD",),
-    STAGING_ANON_KEY: ("KAIROS_STAGING_ANON_KEY",),
-    STAGING_FUNCTIONS_BASE: ("KAIROS_STAGING_FUNCTIONS_BASE",),
-    STAGING_DIGEST_INBOX_CONFIRMED: ("KAIROS_STAGING_DIGEST_INBOX_CONFIRMED",),
-    ATTEMPT: ("OLYMPUS_ATTEMPT",),
-    BELIEFS_BACKLOG: ("OLYMPUS_BELIEFS_BACKLOG",),
-    MODEL_TIER: ("OLYMPUS_MODEL_TIER",),
-    H6_MATERIAL_WEIGHT_PCT: ("OLYMPUS_H6_MATERIAL_WEIGHT_PCT",),
-    H6_BOUNDARY_PRICE_DELTA: ("OLYMPUS_H6_BOUNDARY_PRICE_DELTA",),
-    H6_SELECTION_MODE: ("OLYMPUS_H6_SELECTION_MODE",),
-    STALE_FULL_DAYS: ("OLYMPUS_STALE_FULL_DAYS",),
-    POSITION_RISK_FIELDS: ("OLYMPUS_POSITION_RISK_FIELDS",),
-    PORTFOLIO_LEDGER: ("OLYMPUS_PORTFOLIO_LEDGER",),
-    PRETRADE_RISK_MODE: ("OLYMPUS_PRETRADE_RISK_MODE",),
-    EVIDENCE_BUNDLE_WRITER: ("OLYMPUS_EVIDENCE_BUNDLE_WRITER",),
-    RETRIEVAL_MANIFEST_MODE: ("OLYMPUS_RETRIEVAL_MANIFEST_MODE",),
-    CONTEXT_COMPILER_MODE: ("OLYMPUS_CONTEXT_COMPILER_MODE",),
-    RESEARCH_POLICY_PATH: ("OLYMPUS_RESEARCH_POLICY_PATH",),
-    SHADOW_ARTIFACT_MODE: ("OLYMPUS_SHADOW_ARTIFACT_MODE",),
-    SHADOW_ARTIFACT_DIR: ("OLYMPUS_SHADOW_ARTIFACT_DIR",),
-    PLANNER_MODE: ("OLYMPUS_PLANNER_MODE",),
-    RESEARCH_ATTENTION_MODE: ("OLYMPUS_RESEARCH_ATTENTION_MODE",),
-    RESEARCH_DATA_TOOLS: ("ATLAS_DATA_TOOLS",),
-    DELIBERATION_MAX_ROUNDS: ("ATLAS_DELIBERATION_MAX_ROUNDS",),
-    DELIBERATION_MIN_ROUNDS: ("ATLAS_DELIBERATION_MIN_ROUNDS",),
-    DEGRADED_RUN_PCT: ("ATLAS_DEGRADED_RUN_PCT",),
-    REFRESH_ON_DEMAND: ("ATLAS_REFRESH_ON_DEMAND",),
-    MACRO_STALE_DAYS: ("ATLAS_MACRO_STALE_DAYS",),
-    MAX_ANALYSTS: ("ATLAS_MAX_ANALYSTS",),
-    ONCHAIN_POSITIONING: ("ATLAS_ONCHAIN_POSITIONING",),
-    TOOL_ROUNDS_MAX: ("OLYMPUS_MAX_TOOL_ROUNDS",),
-    DIGISEARCH_URL: (),
-    DIGISEARCH_WEB_SEARCH_BACKEND: (),
-    DIGISEARCH_SEARXNG_URL: (),
-}
+# No retired read-aliases remain (#4295). The mapping is retained so the public
+# symbol and ``env_lookup`` fall-through behaviour stay stable; every canonical
+# name is now the sole key a deployment may set.
+ALIASES: dict[str, tuple[str, ...]] = {}
 
 
 def env_lookup(
@@ -105,7 +70,7 @@ def env_lookup(
     environ: Mapping[str, str] | None = None,
     default: str = "",
 ) -> str:
-    """Read ``canonical``, else its retired aliases. Canonical presence wins."""
+    """Read ``canonical``; canonical presence (even empty) wins, else *default*."""
     env: Mapping[str, str] = os.environ if environ is None else environ
     if canonical in env:
         raw = env.get(canonical)
@@ -118,6 +83,7 @@ def env_lookup(
 
 
 __all__ = [
+    "ACCOUNTING_FINALIZER",
     "ALIASES",
     "ATTEMPT",
     "BELIEFS_BACKLOG",

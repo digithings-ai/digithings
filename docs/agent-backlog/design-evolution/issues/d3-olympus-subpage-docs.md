@@ -1,6 +1,6 @@
 ## Goal
 
-Document **Olympus subpage chrome** (sticky tab bar, breadcrumbs, section headers) in design references so twelve-x and future subpages stay aligned with Cursor literal-nav pattern ([`EVOLUTION.md` §3](../../../../cloudflare/digiweb/design/EVOLUTION.md)).
+Document **Olympus subpage chrome** (sticky tab bar, breadcrumbs, section headers) in design references so twelve-x and future subpages stay aligned with Cursor literal-nav pattern ([`EVOLUTION.md` §3](../../../../packages/design/EVOLUTION.md)).
 
 ## Component
 
@@ -8,13 +8,13 @@ Document **Olympus subpage chrome** (sticky tab bar, breadcrumbs, section header
 
 ## Acceptance Criteria
 
-- [ ] New doc `cloudflare/digiweb/design/references/olympus-subpage-chrome.md` covering:
+- [ ] New doc `packages/design/references/olympus-subpage-chrome.md` covering:
   - Tab bar anatomy (`SubpageStickyTabBar`)
   - When to use tabs vs sidebar
   - Typography roles on dashboard (Instrument Serif display, mono labels)
   - Surface/border rules post-D1
   - Screenshot or ASCII wireframe of standard subpage layout
-- [ ] Linked from `cloudflare/digiweb/design/references/README.md` and `EVOLUTION.md` §11
+- [ ] Linked from `packages/design/references/README.md` and `EVOLUTION.md` §11
 - [ ] `cloudflare/olympus/ARCHITECTURE.md` cross-links to new doc
 - [ ] Docs-only PR; `make doc-check` passes
 
@@ -24,9 +24,9 @@ Document **Olympus subpage chrome** (sticky tab bar, breadcrumbs, section header
 
 ## Documentation to Update
 
-- [ ] `cloudflare/digiweb/design/references/olympus-subpage-chrome.md` (new)
-- [ ] `cloudflare/digiweb/design/references/README.md`
-- [ ] `cloudflare/digiweb/design/EVOLUTION.md` — twelve-x alignment gap closed
+- [ ] `packages/design/references/olympus-subpage-chrome.md` (new)
+- [ ] `packages/design/references/README.md`
+- [ ] `packages/design/EVOLUTION.md` — twelve-x alignment gap closed
 
 ## Out of Scope
 

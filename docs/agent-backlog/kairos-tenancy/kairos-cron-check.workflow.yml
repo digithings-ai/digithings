@@ -1,8 +1,8 @@
-# Production clock: Cloudflare Worker digithings-cron (cloudflare/digithings-cron). Schedule removed #3579.
+# Production clock: Cloudflare Worker digithings-cron (apps/digithings-cron). Schedule removed #3579.
 name: "Pipeline: execution cron check"
 
 # Fail-closed probe for overlay dispatch env, Alpaca paper sync env, route
-# kill-switch visibility, Mailgun names, and digest candidate counts.
+# kill-switch visibility, notify names, and digest candidate counts.
 # Separate process from pipeline-digiquant.yml on purpose: overlay usage.start is
 # process-global, so overlay must never share the house portfolio chain job.
 #
@@ -15,12 +15,12 @@ name: "Pipeline: execution cron check"
 # a read-only env probe, not a production apply.
 #
 # Expected red until GitHub secrets include CORE_SUPABASE_* (or SUPABASE_*)
-# plus MAILGUN_API_KEY / MAILGUN_DOMAIN / NOTIFY_FROM. Missing names fail
-# closed (exit 2). That is the production signal, not a skip.
+# plus CLOUDFLARE_EMAIL_API_TOKEN / CLOUDFLARE_ACCOUNT_ID / NOTIFY_FROM. Missing
+# names fail closed (exit 2). That is the production signal, not a skip.
 #
 # Installed at .github/workflows/execution-cron-check.yml — must match this spec
-# byte-for-byte (tests/scripts/test_execution_cron_workflow.py). Probe-only.
-# tests/scripts/test_execution_cron_workflow.py pins the probe-only invariants
+# byte-for-byte (tests/scripts/test_digiquant_cron_workflow.py). Probe-only.
+# tests/scripts/test_digiquant_cron_workflow.py pins the probe-only invariants
 # against this spec.
 
 on:
@@ -38,12 +38,12 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     env:
-      CORE_SUPABASE_URL: ${{ secrets.CORE_SUPABASE_URL || secrets.SUPABASE_URL }}
-      CORE_SUPABASE_SERVICE_KEY: ${{ secrets.CORE_SUPABASE_SERVICE_KEY || secrets.SUPABASE_SERVICE_ROLE_KEY }}
-      SUPABASE_URL: ${{ secrets.CORE_SUPABASE_URL || secrets.SUPABASE_URL }}
-      SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.CORE_SUPABASE_SERVICE_KEY || secrets.SUPABASE_SERVICE_ROLE_KEY }}
-      MAILGUN_API_KEY: ${{ secrets.MAILGUN_API_KEY }}
-      MAILGUN_DOMAIN: ${{ secrets.MAILGUN_DOMAIN }}
+      CORE_SUPABASE_URL: ${{ secrets.CORE_SUPABASE_URL }}
+      CORE_SUPABASE_SERVICE_KEY: ${{ secrets.CORE_SUPABASE_SERVICE_KEY }}
+      SUPABASE_URL: ${{ secrets.CORE_SUPABASE_URL }}
+      SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.CORE_SUPABASE_SERVICE_KEY }}
+      CLOUDFLARE_EMAIL_API_TOKEN: ${{ secrets.CLOUDFLARE_EMAIL_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
       NOTIFY_FROM: ${{ secrets.NOTIFY_FROM }}
     steps:
       - name: Check out source
@@ -59,7 +59,7 @@ jobs:
       - name: Install from lockfile
         run: uv sync --frozen --package digiquant --extra research
 
-      - name: Probe overlay + sync + route + Mailgun env
+      - name: Probe overlay + sync + route + notify env
         run: |
           set -euo pipefail
           uv run --frozen --no-sync python scripts/execution_cron_check.py

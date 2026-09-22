@@ -3,7 +3,7 @@
 The workflow retries the chain up to ``MAX_OUTER_ATTEMPTS`` times inside ONE job, all sharing
 one ``GITHUB_RUN_ID``. Since migration 065 the diagnostics row is keyed on
 ``(run_id, attempt)``, and the attempt number reaches Python through exactly one channel: the
-``OLYMPUS_ATTEMPT`` environment variable exported by that loop.
+``DIGIQUANT_ATTEMPT`` environment variable exported by that loop.
 
 **This is the failure mode these tests exist for.** If the export is dropped, renamed, or moved
 outside the loop body, `chain._outer_attempt()` falls back to 1, every attempt collides on
@@ -75,36 +75,36 @@ def _loop_body(script: str) -> str:
 
 class TestTheCounterReachesThePipeline:
     def test_the_attempt_is_exported(self, retry_step: str) -> None:
-        assert "OLYMPUS_ATTEMPT" in retry_step, (
-            "the retry loop must export OLYMPUS_ATTEMPT; without it every attempt's "
+        assert "DIGIQUANT_ATTEMPT" in retry_step, (
+            "the retry loop must export DIGIQUANT_ATTEMPT; without it every attempt's "
             "diagnostics row collides on (run_id, 1) and the last one overwrites the "
             "expensive attempt's cost — the #1762 defect, silently restored"
         )
 
     def test_the_export_carries_the_loop_counter_not_a_constant(self, retry_step: str) -> None:
-        """A hard-coded ``OLYMPUS_ATTEMPT=1`` would satisfy the test above and fix nothing."""
-        match = re.search(r"OLYMPUS_ATTEMPT=[\"']?\$\{?(\w+)", retry_step)
+        """A hard-coded ``DIGIQUANT_ATTEMPT=1`` would satisfy the test above and fix nothing."""
+        match = re.search(r"DIGIQUANT_ATTEMPT=[\"']?\$\{?(\w+)", retry_step)
         assert match is not None, (
-            "OLYMPUS_ATTEMPT must be assigned from a shell variable, not a literal"
+            "DIGIQUANT_ATTEMPT must be assigned from a shell variable, not a literal"
         )
         var = match.group(1)
         assert re.search(rf"{var}=\$\(\({var} \+ 1\)\)", retry_step), (
-            f"OLYMPUS_ATTEMPT is set from ${{{var}}}, but nothing increments {var} in this "
+            f"DIGIQUANT_ATTEMPT is set from ${{{var}}}, but nothing increments {var} in this "
             "step — so it would report the same attempt number on every retry"
         )
 
     def test_the_export_is_inside_the_loop(self, retry_step: str) -> None:
         """Hoisted above the loop it would freeze at 1 — the collision, reintroduced."""
-        assert "OLYMPUS_ATTEMPT" in _loop_body(retry_step), (
-            "the OLYMPUS_ATTEMPT export must sit inside the while-loop body; outside it, the "
+        assert "DIGIQUANT_ATTEMPT" in _loop_body(retry_step), (
+            "the DIGIQUANT_ATTEMPT export must sit inside the while-loop body; outside it, the "
             "value is evaluated once and every attempt reports attempt 1"
         )
 
     def test_it_is_exported_not_just_assigned(self, retry_step: str) -> None:
         """The command runs through a pipe into ``tee``, so a bare assignment on the same
         logical line as the invocation would not necessarily reach the child."""
-        assert re.search(r"export\s+OLYMPUS_ATTEMPT=", retry_step), (
-            "use `export OLYMPUS_ATTEMPT=...`; a bare assignment does not reliably reach a "
+        assert re.search(r"export\s+DIGIQUANT_ATTEMPT=", retry_step), (
+            "use `export DIGIQUANT_ATTEMPT=...`; a bare assignment does not reliably reach a "
             "command invoked through a pipeline"
         )
 

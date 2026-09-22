@@ -102,17 +102,17 @@ class TestH6SelectionConditions:
 
 class TestH6SelectionMode:
     def test_default_mode_is_shadow(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.delenv("OLYMPUS_H6_SELECTION_MODE", raising=False)
+        monkeypatch.delenv("DIGIQUANT_H6_SELECTION_MODE", raising=False)
         assert resolve_h6_selection_mode() is H6SelectionMode.SHADOW
 
     def test_unknown_mode_falls_back_to_shadow(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.setenv("OLYMPUS_H6_SELECTION_MODE", "bogus")
+        monkeypatch.setenv("DIGIQUANT_H6_SELECTION_MODE", "bogus")
         assert resolve_h6_selection_mode() is H6SelectionMode.SHADOW
 
     def test_enforce_and_off(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.setenv("OLYMPUS_H6_SELECTION_MODE", "enforce")
+        monkeypatch.setenv("DIGIQUANT_H6_SELECTION_MODE", "enforce")
         assert resolve_h6_selection_mode() is H6SelectionMode.ENFORCE
-        monkeypatch.setenv("OLYMPUS_H6_SELECTION_MODE", "off")
+        monkeypatch.setenv("DIGIQUANT_H6_SELECTION_MODE", "off")
         assert resolve_h6_selection_mode() is H6SelectionMode.OFF
 
 
