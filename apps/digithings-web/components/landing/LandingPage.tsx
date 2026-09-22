@@ -1,6 +1,6 @@
 "use client";
 
-import { ContactMailto, CopyCommand, CtaLink, SocialRow } from "@digithings/ui";
+import { ContactMailto, CopyCommand, CtaLink, Glow, MockupFrame, SocialRow } from "@digithings/ui";
 import { buttonVariants } from "@digithings/ui/ui";
 import { DT_CONTACT_EMAIL } from "@/app/_nav";
 import { ArgumentClaims, ArgumentCta, ArgumentSeams } from "@/components/landing/Argument";
@@ -53,7 +53,7 @@ function Hero() {
  */
 function Boot() {
   return (
-    <section className="line-b px-[var(--page-pad)] py-[var(--section-y-tight)]">
+    <section className="line-b overflow-x-clip px-[var(--page-pad)] py-[var(--section-y-tight)]">
       <div className="mx-auto grid max-w-[var(--frame-w)] grid-cols-[minmax(0,1fr)] gap-[1.6rem] min-[900px]:grid-cols-[minmax(0,1fr)_minmax(0,1fr)] min-[900px]:items-stretch">
         {/* `justify-between` over two clusters, not `justify-center` over three
             children: the terminal beside this is ~465px tall, so centring
@@ -82,7 +82,31 @@ function Boot() {
             </CtaLink>
           </div>
         </div>
-        <BootTerminal className="animate-appear min-h-[420px] min-w-0 opacity-0 delay-100 min-[900px]:min-h-0" />
+        {/* The artefact gets the kit's depth treatment — `MockupFrame` + `Glow`
+            were built for exactly this (D1) and went unused until now. The frame
+            is a translucent bezel around the terminal's own surface and shadow;
+            `Glow` lays a soft radial light behind it. `Glow` reads `--accent`,
+            which this app collapses to neutral ink, so the wash is white rather
+            than a colour — the monochrome canon holds.
+
+            No `fade-bottom` here, unlike the primitive's own example: the
+            terminal's bottom edge is the payload — the last services, the
+            `up · 12 services` line and the blinking cursor — and fading 35% of
+            it would erase the thing the animation exists for. The band's
+            `line-b` already gives it a clean edge.
+
+            `overflow-x-clip` on the section is load-bearing, not tidying: the
+            glow's ellipses are `w-[60%]` at `scale-[2.5]`, so they render ~2.5x
+            wider than the cell and would otherwise push the document 67px past
+            the viewport at 390px (measured 457 vs 390). `clip` rather than
+            `hidden` so the band is not turned into a scroll container, and only
+            on the x axis so the light still bleeds vertically. */}
+        <div className="relative min-w-0">
+          <Glow variant="top" />
+          <MockupFrame size="small" className="animate-appear opacity-0 delay-100">
+            <BootTerminal className="min-h-[420px] min-w-0 min-[900px]:min-h-0" />
+          </MockupFrame>
+        </div>
       </div>
     </section>
   );
