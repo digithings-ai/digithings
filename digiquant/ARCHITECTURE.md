@@ -451,7 +451,10 @@ seam helpers in `research/data/queries.py` — `r2_backend_enabled()`,
 the five ops scripts (`execute_at_open.py`, `fill-entry-prices.py`,
 `refresh_performance_metrics.py`, `verify_nav_replay.py`,
 `finalize_period_accounting.py`) plus the research/portfolio readers that
-previously hit the Supabase market tables. `r2_close_rows` fails loud on a
+previously hit the Supabase market tables. Price-technicals reads are R2-only
+since #4053 and expose `get_price_technicals_batch(*, client, tickers, lookback,
+as_of)` — the phase entry point that reads the sealed manifest once for the
+whole basket instead of once per ticker (#4600). `r2_close_rows` fails loud on a
 ticker with no sealed generation; readers whose documented contract is to read
 a missing ticker as "no signal" (`query_price_deltas`,
 `commit_io._interval_price_returns`, `get_sector_relative_strength`) call
