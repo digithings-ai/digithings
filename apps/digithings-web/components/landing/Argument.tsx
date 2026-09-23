@@ -124,7 +124,19 @@ const clamp = (v: number, a: number, b: number) => Math.max(a, Math.min(b, v));
 const DRAWER_MEDIA = "(prefers-reduced-motion: no-preference)";
 
 /** Extra scroll the drawer gets, in viewport heights (a short, continuous move). */
-const DRAWER_VH = 0.55;
+const DRAWER_VH = 0.28;
+
+/**
+ * How much of the run is spent before the pin engages, as a fraction of the
+ * run. Round 7: the owner said he had to scroll almost the whole band before
+ * seeing the drawer move — so the slide now begins while the table is still
+ * rising into its pin, and is finished well before the band's bottom.
+ */
+const DRAWER_HEAD_START = 0.35;
+
+/** The typewriter fill trails the slide slightly, so the words land as it settles. */
+const FILL_LAG = 0.15;
+const FILL_SPAN = 0.7;
 
 /**
  * The diagram: the same seven layers drawn twice, every one a seam.
@@ -145,6 +157,19 @@ const DRAWER_VH = 0.55;
  * `translateX(var(--seam-x))` inline style and the grid owns the variable, so
  * the seam and the owned side move as a unit; `data-seam` marks them for
  * measurement and nothing here adds an app-local CSS class.
+ *
+ * Round 7, on the owner's ask — "the sliding animation should happen much
+ * faster… it could start sliding much quicker… the page should stop with the
+ * title… remaining at the top until the animation moves or the shift to the
+ * right completes… the titles as it's shifting are like overlapping… we need to
+ *… fully hide… it's kind of filling the text with the typewriter effect" —
+ * four changes: the heading moved inside the pin; the run shortened
+ * (`DRAWER_VH` 0.55 → 0.28) and given a head start (`DRAWER_HEAD_START`) so it
+ * begins before the pin engages; the drawer's header got an opaque ground so
+ * the platform header can never show through it; and the owned body is split
+ * into words whose opacity is driven by `--seam-fill`, so it types itself out
+ * as the panel slides. The seam's dashed rule was also dropped — one line
+ * between sections was the ask.
  */
 export function ArgumentSeams() {
   const wrapRef = useRef<HTMLDivElement>(null);
@@ -176,11 +201,20 @@ export function ArgumentSeams() {
       // Ease-out: the drawer leaves promptly, then settles into its column.
       const e = 1 - Math.pow(1 - p, 3);
       grid.style.setProperty("--seam-x", `${-travel * (1 - e)}px`);
+      // The typewriter fill: each owned word carries its index and the word
+      // count, and the CSS turns `--seam-fill` into a per-word opacity, so the
+      // sentence types itself out as the panel slides. Default 1 (SSR, no JS
+      // and reduced motion all render the full line).
+      grid.style.setProperty(
+        "--seam-fill",
+        String(clamp((p - FILL_LAG) / FILL_SPAN, 0, 1)),
+      );
     };
 
     const reset = () => {
       wrap.style.height = "";
       grid.style.removeProperty("--seam-x");
+      grid.style.removeProperty("--seam-fill");
     };
 
     let ticking = false;
@@ -189,7 +223,8 @@ export function ArgumentSeams() {
       ticking = true;
       requestAnimationFrame(() => {
         const top = wrap.getBoundingClientRect().top;
-        apply(distance > 0 ? clamp((stickyTop - top) / distance, 0, 1) : 1);
+        const raw = distance > 0 ? (stickyTop - top) / distance : 1;
+        apply(clamp((raw + DRAWER_HEAD_START) / (1 + DRAWER_HEAD_START), 0, 1));
         ticking = false;
       });
     };
@@ -225,7 +260,15 @@ export function ArgumentSeams() {
 
   return (
     <div ref={wrapRef}>
-      <div className="sticky top-[calc(var(--dq-nav-h,4.5rem)+0.5rem)]">
+      <div className="sticky top-[calc(var(--dq-nav-h,4.5rem)+0.5rem)] flex flex-col gap-[1.6rem]">
+        {/* The heading rides inside the pin (round 7): the owner asked that the
+            page "stop with the title … remaining at the top until the animation
+            moves or the shift to the right completes". It used to live in
+            `LandingPage`, above this component, so it scrolled away while the
+            table was still pinned. */}
+        <h2 className="m-0 font-mono text-[length:var(--type-section-stand)] font-medium leading-[1.2] tracking-[-0.025em] text-ink">
+          Why digithings, not a managed platform
+        </h2>
         <div
           ref={gridRef}
           className="w-full max-w-[var(--frame-w)] border border-hair bg-surface"
@@ -242,7 +285,7 @@ export function ArgumentSeams() {
             />
             <p
               data-seam="panel"
-              className="relative z-[2] m-0 px-[1rem] py-[0.7rem] font-mono text-[length:var(--type-meta)] uppercase tracking-[var(--tracking-meta)] text-ink"
+              className="relative z-[2] m-0 bg-surface px-[1rem] py-[0.7rem] font-mono text-[length:var(--type-meta)] uppercase tracking-[var(--tracking-meta)] text-ink"
               style={{ transform: "translateX(var(--seam-x, 0px))" }}
             >
               digithings
@@ -265,14 +308,15 @@ export function ArgumentSeams() {
 
               {/* The seam itself — the one glyph carrying the argument, and part of
                   the drawer: it rides with the owned column, so the perforation
-                  lands on the boundary only once the drawer has settled. */}
+                  lands on the boundary only once the drawer has settled. Round 7
+                  dropped the dashed rule here: the owner asked for a single line
+                  between the two sections, so the glyph is the only marker left. */}
               <div
                 data-seam="seam"
                 className="relative z-[2] flex items-center justify-center"
                 style={{ transform: "translateX(var(--seam-x, 0px))" }}
                 aria-hidden="true"
               >
-                <span className="absolute inset-y-0 start-1/2 w-px border-s border-dashed border-ink-mute" />
                 <span className="relative font-mono text-[1.15rem] leading-none text-ink">
                   &#8644;
                 </span>
@@ -281,7 +325,9 @@ export function ArgumentSeams() {
               {/* Yours — the same cell, owned, and the drawer's face. The page's
                   accent is deliberately monochrome (globals.css collapses --accent
                   to --ink), so ownership is carried by ground + a solid rule + ink
-                  copy, never by a hue. */}
+                  copy, never by a hue. The body types itself out: each word carries
+                  its index and the count, and `.dg-seam-word` turns `--seam-fill`
+                  into a per-word opacity. */}
               <div
                 data-seam="panel"
                 className="relative z-[2] flex flex-col gap-[0.12rem] border-s-[3px] border-s-ink bg-surface-2 px-[1rem] py-[0.62rem]"
@@ -290,7 +336,17 @@ export function ArgumentSeams() {
                 <span className="font-mono text-[0.68rem] uppercase tracking-[var(--tracking-meta)] text-ink">
                   {l.layer}
                 </span>
-                <span className="text-[0.82rem] leading-[1.5] text-ink">{l.yours}</span>
+                <span className="text-[0.82rem] leading-[1.5] text-ink">
+                  {l.yours.split(" ").map((word, i, words) => (
+                    <span
+                      key={`${word}-${i}`}
+                      className="dg-seam-word"
+                      style={{ "--i": i, "--n": words.length } as React.CSSProperties}
+                    >
+                      {i < words.length - 1 ? `${word} ` : word}
+                    </span>
+                  ))}
+                </span>
               </div>
             </div>
           ))}

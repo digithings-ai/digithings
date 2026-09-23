@@ -305,6 +305,16 @@ body {
    pinned, and the lead paragraph is clamped, so the controls are always visible. */
 .dg-mosaic-copy { display: flex; flex-direction: column; gap: 0.6rem; min-height: 0; overflow: hidden; }
 .dg-cell.on .dg-mosaic-detail > .stack-row { flex: 0 0 auto; }
+
+/* The WHY drawer's typewriter fill. Each owned word carries its index (`--i`)
+   and the word count (`--n`), and the drawer writes a single `--seam-fill`
+   (0..1) on the grid; the clamp below turns that into a per-word opacity, so
+   the sentence types itself out as the panel slides right. `--seam-fill`
+   defaults to 1, so SSR, no-JS and prefers-reduced-motion all render the full
+   line with no reveal. */
+.dg-seam-word {
+  opacity: clamp(0, calc(var(--seam-fill, 1) * var(--n) - var(--i)), 1);
+}
 .dg-mosaic-tag { color: var(--ink-soft); font-family: var(--font-mono); font-size: 0.76rem; line-height: 1.6; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; overflow: hidden; }
 /* The compose command and the CTA share the last line. A tile is only as tall
    as one grid row, and stacking them cost a line the smallest modules did not

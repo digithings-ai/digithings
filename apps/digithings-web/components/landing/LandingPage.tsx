@@ -161,12 +161,12 @@ export function LandingPage() {
 
       <section id="why" className="line-b px-[var(--page-pad)] py-[var(--page-step)]">
         <div className="mx-auto flex max-w-[var(--frame-w)] flex-col gap-[2rem]">
-          <h2 className="m-0 font-mono text-[length:var(--type-section-stand)] font-medium leading-[1.2] tracking-[-0.025em] text-ink">
-            Why digithings, not a managed platform
-          </h2>
           {/* Point 10: the argument is the picture, not a column of prose.
               Round 3: the comparison is the whole section — the three claims
-              that used to sit below the diagram are retired. */}
+              that used to sit below the diagram are retired.
+              Round 7: the h2 moved inside `<ArgumentSeams/>` so it rides the
+              band's pin — the owner asked that the title stay at the top until
+              the drawer's slide completes. */}
           <ArgumentSeams />
         </div>
       </section>
