@@ -519,6 +519,85 @@ def test_get_price_technicals_helper_reads_r2_only(monkeypatch):
     assert got["latest"] == pytest.approx(want_window[0], nan_ok=True)
 
 
+def _count_manifest_reads(monkeypatch: pytest.MonkeyPatch) -> dict[str, int]:
+    """Wrap the fixture's manifest read to count calls (the batch cost seam)."""
+    real = mcp._read_manifest
+    calls = {"n": 0}
+
+    def _counted() -> dict:
+        calls["n"] += 1
+        return real()
+
+    monkeypatch.setattr(mcp, "_read_manifest", _counted)
+    return calls
+
+
+def test_get_price_technicals_batch_matches_single_ticker_calls(monkeypatch):
+    """#4600: the batch entry point returns the single-ticker envelope per ticker."""
+    _t7b_both(monkeypatch)
+    _use_r2(monkeypatch)
+    batch = q.get_price_technicals_batch(
+        client=_ExplodingMarketClient(),
+        tickers=list(_T7B_TICKERS),
+        lookback=20,
+        as_of=_T7B_RUN_DATE,
+    )
+    assert set(batch) == set(_T7B_TICKERS)
+    for ticker in _T7B_TICKERS:
+        single = q.get_price_technicals(
+            client=_ExplodingMarketClient(), ticker=ticker, lookback=20, as_of=_T7B_RUN_DATE
+        )
+        assert [r["date"] for r in batch[ticker]["window"]] == [r["date"] for r in single["window"]]
+        assert batch[ticker]["window"] == pytest.approx(single["window"], nan_ok=True)
+        assert batch[ticker]["latest"] == pytest.approx(single["latest"], nan_ok=True)
+
+
+def test_get_price_technicals_batch_reads_manifest_once(monkeypatch):
+    """#4600: N tickers share ONE manifest read (was one per ticker)."""
+    _t7b_both(monkeypatch)
+    _use_r2(monkeypatch)
+    calls = _count_manifest_reads(monkeypatch)
+    batch = q.get_price_technicals_batch(
+        client=_ExplodingMarketClient(),
+        tickers=list(_T7B_TICKERS),
+        lookback=20,
+        as_of=_T7B_RUN_DATE,
+    )
+    assert set(batch) == set(_T7B_TICKERS)
+    assert calls["n"] == 1
+
+
+def test_get_market_context_r2_reads_manifest_once(monkeypatch):
+    """#4600: the preflight market-context basket batches its technicals read."""
+    _t7b_both(monkeypatch)
+    _use_r2(monkeypatch)
+    calls = _count_manifest_reads(monkeypatch)
+    ctx = q.get_market_context(
+        client=_ExplodingMarketClient(),
+        tickers=list(_T7B_TICKERS),
+        series_ids=[],
+        run_date=_T7B_RUN_DATE,
+    )
+    assert sorted(ctx["price_technicals"]) == sorted(_T7B_TICKERS)
+    assert calls["n"] == 1
+
+
+def test_select_focus_tickers_reads_manifest_once(monkeypatch):
+    """#4600: H4 candidate scoring batches its technicals read."""
+    _t7b_both(monkeypatch)
+    _use_r2(monkeypatch)
+    calls = _count_manifest_reads(monkeypatch)
+    focus = select_focus_tickers(
+        client=_ExplodingMarketClient(),
+        watchlist=["SPY", "QQQ", "AAPL", "MSFT"],
+        run_date=_T7B_RUN_DATE,
+        holdings=["SPY"],
+        top_n=2,
+    )
+    assert "QQQ" in focus  # only SPY/QQQ have sealed generations
+    assert calls["n"] == 1
+
+
 def test_get_macro_series_helper_r2_matches_supabase(monkeypatch):
     _, _, sup = _t7b_both(monkeypatch)
     _use_supabase(monkeypatch)
