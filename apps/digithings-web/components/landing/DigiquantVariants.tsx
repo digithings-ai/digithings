@@ -1,10 +1,10 @@
 "use client";
 
 import {
+  CardRail,
   CtaLink,
   Kpi,
   KpiStrip,
-  LiveBadge,
   MultiTimeSeries,
   Pipeline,
   StockTicker,
@@ -264,7 +264,16 @@ function StageStrip({ className }: { className?: string }) {
   );
 }
 
-/** One strategy as a tearsheet card, with example reads. */
+/**
+ * One strategy as the *library* card — the same composition
+ * `apps/digiquant-web/components/tearsheet/strategy-card.tsx` renders on
+ * digiquant.io/strategies, minus the live badge.
+ *
+ * The owner: "use the library cards for each of the strategies don't put the
+ * live indicator though just show the library cards". The badge is dropped
+ * because these are example reads, not a live book, and a live mark over
+ * figures that are not live would be the one dishonest pixel on the page.
+ */
 function StrategyCard({ strategy }: { strategy: Strategy }) {
   return (
     <TearsheetCard href={`${DIGIQUANT_URL}/strategies/${strategy.slug}`}>
@@ -277,7 +286,6 @@ function StrategyCard({ strategy }: { strategy: Strategy }) {
             </span>
           </div>
         </div>
-        <LiveBadge label="example" ariaLabel="Example figures, not a digiquant result" className="ts-card-live" />
       </div>
       <TearsheetCardKpis>
         {strategy.kpis.map((k) => (
@@ -288,22 +296,16 @@ function StrategyCard({ strategy }: { strategy: Strategy }) {
   );
 }
 
+/** The strategies in the kit's horizontal rail (the promoted changelog rail). */
 function StrategyRail() {
   return (
-    <div className="h-scroll">
-      <div
-        className="h-scroll__track"
-        role="list"
-        aria-label="flagship digiquant strategies"
-        tabIndex={0}
-      >
-        {STRATEGIES.map((s) => (
-          <div key={s.slug} role="listitem" className="h-scroll__card">
-            <StrategyCard strategy={s} />
-          </div>
-        ))}
-      </div>
-    </div>
+    <CardRail ariaLabel="Flagship digiquant strategies">
+      {STRATEGIES.map((s) => (
+        <div key={s.slug} role="listitem" className="flex-[0_0_17rem] snap-start">
+          <StrategyCard strategy={s} />
+        </div>
+      ))}
+    </CardRail>
   );
 }
 
