@@ -39,6 +39,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "./ui/dropdown-menu";
+import { CreditFooter } from "@/components/stock/credit-footer";
 
 const messageActionButtonClassName =
   "flex size-8 items-center justify-center rounded-md text-[#5b5950] transition-colors hover:bg-[#1a1a18]/5 hover:text-[#1a1a18] dark:text-[#a3a098] dark:hover:bg-white/5 dark:hover:text-[#eee]";
@@ -58,9 +59,7 @@ export const Claude: FC = () => {
 
             <ThreadPrimitive.ViewportFooter className="sticky bottom-0 mx-auto mt-auto w-full max-w-3xl bg-linear-to-b from-transparent via-[#F0ECE0]/85 to-[#F0ECE0] pt-4 pb-2 dark:via-[#2b2a27]/85 dark:to-[#2b2a27]">
               <Composer />
-              <p className="pt-2 text-center text-xs text-[#8a8780] dark:text-[#a3a098]">
-                Claude can make mistakes. Please double-check responses.
-              </p>
+              <CreditFooter />
             </ThreadPrimitive.ViewportFooter>
           </ThreadPrimitive.Viewport>
         </AuiIf>
@@ -82,6 +81,7 @@ const EmptyState: FC = () => {
         </h1>
         <Composer />
         <ModeTabs />
+        <CreditFooter />
       </div>
     </div>
   );

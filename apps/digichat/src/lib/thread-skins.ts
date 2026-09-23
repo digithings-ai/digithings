@@ -10,6 +10,8 @@
  * They are vendored in the image — not a CDN switch and not shadcn styles.
  */
 
+import type { CSSProperties } from "react";
+
 export const THREAD_SKINS = [
   "base",
   "chatgpt",
@@ -85,6 +87,51 @@ export const LAYOUT_SKINS = [
 
 export type LayoutSkin = (typeof LAYOUT_SKINS)[number];
 
+/**
+ * The ink a skin paints its own text with, so the credit sitting inside that
+ * skin's DOM stays legible instead of matching the canvas.
+ *
+ * The catalog skins carry their palette as Tailwind classes on their own root
+ * element (`text-[#0d0d0d] dark:text-[#ececec]`, `text-[#1a1a18]`, …), not as
+ * a scoped CSS variable, and `ThreadPrimitive.Root` hard-codes
+ * `data-thread-skin="digichat"` for every skin — so there is nothing per-skin
+ * to inherit. These literals mirror the skin roots' *text* colour; keep them in
+ * step when a skin's palette changes. A skin with no entry (`base`, `digichat`,
+ * layout skins) falls through to `--muted-foreground`, which those skins
+ * already theme correctly.
+ *
+ * Never map this to the canvas colour: white ink on a white canvas is exactly
+ * the invisible-credit bug the review caught on the clone skins.
+ */
+const SKIN_INK: Partial<Record<ThreadSkin, { light: string; dark: string }>> = {
+  // canon-allow: each line mirrors a catalog skin's own Tailwind text colour
+  // (`text-[#0d0d0d] dark:text-[#ececec]`, `text-[#1a1a18]`, …). There is no kit
+  // token for a third-party palette, and they exist only so the credit stays
+  // legible inside the skin.
+  chatgpt: { light: "#0d0d0d", dark: "#ececec" }, // canon-allow
+  claude: { light: "#1a1a18", dark: "#eee" }, // canon-allow
+  grok: { light: "#0d0d0d", dark: "#ececec" }, // canon-allow
+  gemini: { light: "#1f1f1f", dark: "#e3e3e3" }, // canon-allow
+  perplexity: { light: "#1f1b17", dark: "#f5f2ed" }, // canon-allow
+};
+
+/**
+ * Ink for the credit line, as an inline custom property.
+ *
+ * Returns `{}` for a skin with no literal ink (`base`, `digichat`, layout
+ * skins), leaving `.dc-attribution` to its `--muted-foreground` fallback.
+ */
+export function skinCreditStyle(
+  skin: ThreadSkin,
+  theme: "light" | "dark",
+): CSSProperties {
+  const ink = SKIN_INK[skin];
+
+  if (!ink) return {};
+
+  return { "--credit-ink": ink[theme] } as CSSProperties;
+}
+
 export function threadSkinChoices(): string {
   return THREAD_SKINS.join(", ");
 }
@@ -99,6 +146,23 @@ export function isCloneSkin(value: ThreadSkin): value is CloneSkin {
 
 export function skinOwnsPageChrome(value: ThreadSkin): boolean {
   return (LAYOUT_SKINS as readonly string[]).includes(value);
+}
+
+export const FRAMED_CHROME_MODES = ["modal", "sidebar"] as const;
+export type FramedChromeMode = (typeof FRAMED_CHROME_MODES)[number];
+
+/**
+ * True for the modes that mount the chat inside a frame rather than the page.
+ *
+ * Lives here, not in `components/stock/presentation-frame.tsx`: that module is
+ * `"use client"`, and `app/(digichat)/page.tsx` is a server component, so
+ * importing the predicate from there made the server *invoke* a client function
+ * at render time ("Attempted to call isFramedPresentation() from the server but
+ * isFramedPresentation is on the client"). This module is plain, so both sides
+ * can share one definition of the invariant.
+ */
+export function isFramedPresentation(mode: string): mode is FramedChromeMode {
+  return (FRAMED_CHROME_MODES as readonly string[]).includes(mode);
 }
 
 /** Parse a query/env/YAML value; unknown → default. */

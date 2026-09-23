@@ -14,14 +14,13 @@
 import type { ReactNode } from "react";
 import { DigichatLauncher } from "@digithings/ui/chat/launcher";
 import type { DigichatClientConfig } from "@/lib/deploy-config";
-import { skinOwnsPageChrome } from "@/lib/thread-skins";
+import { isFramedPresentation, skinOwnsPageChrome } from "@/lib/thread-skins";
 
 type ChromeMode = DigichatClientConfig["chrome"]["mode"];
 
-/** True for the modes that mount the chat inside a frame rather than the page. */
-export function isFramedPresentation(mode: ChromeMode): boolean {
-  return mode === "modal" || mode === "sidebar";
-}
+// Re-exported so existing callers keep resolving it here. The definition lives
+// in `lib/thread-skins` (server-safe) — see the comment there.
+export { isFramedPresentation };
 
 export function PresentationFrame({
   mode,

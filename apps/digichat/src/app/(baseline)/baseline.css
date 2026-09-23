@@ -40,6 +40,35 @@
    label. Mirrors the package source the digichat app shell scans. */
 @source "../../../../../packages/ui/src/components/chat";
 
+/* The credit line reuses the product shell's `.dc-attribution` rule. The
+   baseline layout deliberately imports no digichat tokens, so only that one
+   block is inlined here — the rest of product-chrome.css stays out.
+   In normal flow below the composer, matching the catalog skins (m2357).
+   The negative top margin cancels most of the viewport footer's `gap` and the
+   matching bottom padding keeps the distance below it equal, same as the
+   product shell (m2474, m2536, m2558, m2557).
+
+   Wrapped in `@layer components` on purpose: a bare top-level rule here is not
+   emitted by the `(baseline)` Tailwind build, so the class matched but no rule
+   applied and the credit fell back to browser defaults (16px sans, no
+   underline) — the m2644 bug. Layered custom rules are emitted; unlayered ones
+   were silently dropped. Keep this block inside the layer. */
+@layer components {
+  .dc-attribution {
+    margin: -0.5rem 0 0;
+    padding: 0.25rem 0.75rem 0.25rem;
+    text-align: center;
+    font-size: 0.68rem;
+    line-height: 1.4;
+    color: color-mix(in oklch, var(--credit-ink, var(--muted-foreground, #71717a)) 70%, transparent);
+  }
+
+  .dc-attribution a {
+    color: color-mix(in oklch, var(--credit-ink, var(--muted-foreground, #71717a)) 90%, transparent);
+    text-decoration: underline;
+  }
+}
+
 @custom-variant dark (&:is(.dark *));
 
 @theme inline {
@@ -180,5 +209,17 @@
   body {
     @apply bg-background text-foreground;
     font-optical-sizing: auto;
+  }
+}
+
+/* The credit sits right below the composer, so the footer's own bottom padding
+   is what remains between the credit and the page bottom. Match the credit's
+   top air with a small symmetric value instead of the 16-24px default, so the
+   distances above and below the credit are equal on the catalog skins too
+   (m2558, m2557). Same reason as the credit block above: it must live inside
+   `@layer components` or the `(baseline)` build drops it (m2644). */
+@layer components {
+  .aui-thread-viewport-footer {
+    padding-bottom: 0.25rem;
   }
 }

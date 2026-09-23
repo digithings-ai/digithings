@@ -38,6 +38,7 @@ import {
 import { MarkdownText } from "@/app/(baseline)/stock/markdown-text";
 import { ToolFallback } from "@/app/(baseline)/stock/tool-fallback.aui";
 import { useComposerCopy } from "@/components/stock/skin-chrome";
+import { CreditFooter } from "@/components/stock/credit-footer";
 
 export const ChatGPT: FC = () => {
   const { placeholder } = useComposerCopy(
@@ -63,9 +64,7 @@ export const ChatGPT: FC = () => {
             <ThreadPrimitive.ViewportFooter className="sticky bottom-0 mx-auto mt-auto flex w-full max-w-3xl flex-col gap-2 overflow-visible rounded-t-3xl bg-white pb-2 dark:bg-black">
               <ThreadScrollToBottom />
               <Composer placeholder={placeholder} />
-              <p className="text-center text-xs text-[#5d5d5d] dark:text-[#afafaf]">
-                ChatGPT can make mistakes. Check important info.
-              </p>
+              <CreditFooter />
             </ThreadPrimitive.ViewportFooter>
           </ThreadPrimitive.Viewport>
         </AuiIf>
@@ -85,6 +84,7 @@ const EmptyState: FC = () => {
           {welcome}
         </h1>
         <Composer placeholder={placeholder} />
+        <CreditFooter />
       </div>
     </div>
   );

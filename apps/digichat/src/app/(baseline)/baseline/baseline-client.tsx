@@ -9,7 +9,7 @@ import { StockChatPrefsHost, useStockChatPrefs } from "@/components/stock/stock-
 import { DEFAULT_CLIENT_CONFIG } from "@/lib/deploy-config";
 import { p } from "@/lib/base-path";
 import { cn } from "@/lib/utils";
-import { parseThreadSkin, THREAD_SKINS } from "@/lib/thread-skins";
+import { parseThreadSkin, skinCreditStyle, THREAD_SKINS } from "@/lib/thread-skins";
 
 /** Stable no-ops: the catalog has no persisted session to reset or redo. */
 const noop = () => {};
@@ -114,7 +114,15 @@ function BaselineClientInner() {
             {theme === "dark" ? "light" : "dark"}
           </a>
         </nav>
-        <div className="min-h-0 flex-1 bg-background text-foreground">
+        {/* The credit renders inside each skin's own Thread (`components.Footer`),
+            below its composer, so it tracks the skin's canvas instead of the
+            page. `skinCreditStyle` still supplies the canvas literal the catalog
+            skin paints with its own Tailwind classes, which the Thread footer
+            inherits for its text colour (m2357). */}
+        <div
+          className="relative flex min-h-0 flex-1 flex-col bg-background text-foreground"
+          style={skinCreditStyle(skin, theme)}
+        >
           <StockChatPrefsHost value={prefsApi} panes={panes}>
             <ThreadSkinView skin={skin} />
           </StockChatPrefsHost>

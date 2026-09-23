@@ -39,6 +39,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "./ui/dropdown-menu";
+import { CreditFooter } from "@/components/stock/credit-footer";
 
 export const Gemini: FC = () => {
   const { welcome } = useComposerCopy(
@@ -61,6 +62,7 @@ export const Gemini: FC = () => {
                   />
                   <div className="relative z-10">
                     <Composer />
+                    <CreditFooter />
                   </div>
                 </div>
               </div>
@@ -73,9 +75,7 @@ export const Gemini: FC = () => {
             <ThreadPrimitive.Messages components={{ Message: ChatMessage }} />
             <ThreadPrimitive.ViewportFooter className="sticky bottom-0 mt-auto flex w-full flex-col items-center gap-1.5 bg-[#fdfcfc] px-4 pb-3 dark:bg-[#0c0c0c]">
               <Composer />
-              <p className="text-center text-xs text-[#5e6063] dark:text-[#9aa0a6]">
-                Gemini can make mistakes, so double-check it.
-              </p>
+              <CreditFooter />
             </ThreadPrimitive.ViewportFooter>
           </ThreadPrimitive.Viewport>
         </AuiIf>

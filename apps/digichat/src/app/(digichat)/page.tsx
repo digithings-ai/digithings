@@ -6,8 +6,7 @@ import {
   getPrimaryDeployment,
   getDigichatConfig,
 } from "@/lib/deploy-config/loader";
-import { skinOwnsPageChrome } from "@/lib/thread-skins";
-import { isFramedPresentation } from "@/components/stock/presentation-frame";
+import { isFramedPresentation, skinOwnsPageChrome } from "@/lib/thread-skins";
 import { HomeStockClient } from "./home-stock-client";
 
 /**

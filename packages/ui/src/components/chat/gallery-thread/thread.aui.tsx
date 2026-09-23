@@ -101,6 +101,12 @@ export type ThreadComponents = {
   ToolFallback?: ToolCallMessagePartComponent | undefined;
   /** Citation row (`source` parts): provider web search, RAG documents (#4552). */
   Source?: SourceMessagePartComponent | undefined;
+  /**
+   * The credit line under the composer. The host supplies it so the surface
+   * reads as a digithings product; absent means no footer (the package does
+   * not own the credit copy).
+   */
+  Footer?: ComponentType | undefined;
   ToolGroup?:
     | ComponentType<PropsWithChildren<{ group: ThreadGroupPart }>>
     | undefined;
@@ -317,7 +323,8 @@ const ThreadRoot: FC<{
   placeholder?: string | undefined;
   composerLayout: ComposerLayout;
 }> = ({ autoFocus, placeholder, composerLayout }) => {
-  const { Welcome = ThreadWelcome } = useContext(ThreadComponentsContext);
+  const { Welcome = ThreadWelcome, Footer } =
+    useContext(ThreadComponentsContext);
   const { className } = useContext(ThreadChromeContext);
 
   return (
@@ -386,6 +393,7 @@ const ThreadRoot: FC<{
               placeholder={placeholder}
               layout={composerLayout}
             />
+            {Footer ? <Footer /> : null}
           </ThreadPrimitive.ViewportFooter>
         </div>
       </ThreadPrimitive.Viewport>

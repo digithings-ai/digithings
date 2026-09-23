@@ -20,6 +20,7 @@ import {
   type TranscriptTurn,
 } from "@digithings/digichat-ui";
 import { DigichatThread, type ComposerLayout, type ThreadSlashTrigger } from "@digithings/ui/chat/thread";
+import { CreditFooter } from "@/components/stock/credit-footer";
 import {
   BASELINE_EMBED_PLACEHOLDER,
   BASELINE_EMBED_SUGGESTIONS,
@@ -49,6 +50,9 @@ import {
  * First-party digichat Thread. Explicit ThreadSkinView branch — never fall
  * through to product-page-assistant. Always left-aligned regardless of YAML.
  */
+/** Module-scope so it is a stable component reference, not recreated per render. */
+const DigichatFooter = () => <CreditFooter />;
+
 export function DigichatSkin({
   composerLayout,
 }: {
@@ -303,6 +307,7 @@ export function DigichatSkin({
       }
       reasoningMode={reasoningUi.mode}
       toolCallsMode={toolCallsUi.mode}
+      components={{ Footer: DigichatFooter }}
     />
   );
 }
