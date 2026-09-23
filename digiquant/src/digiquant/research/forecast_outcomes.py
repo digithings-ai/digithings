@@ -446,7 +446,10 @@ def _existing_outcome_keys(
                 client.table(OUTCOMES)
                 .select("effective_forecast_id, maturity_session")
                 .in_("effective_forecast_id", chunk)
+                # Order on the whole natural key so a .range() page boundary can
+                # never split a tie and skip a row (#3954, the _scan_all rule).
                 .order("effective_forecast_id")
+                .order("maturity_session")
                 .range(offset, offset + _OUTCOME_KEY_PAGE - 1)
                 .execute()
             )
