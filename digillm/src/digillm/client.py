@@ -1984,6 +1984,8 @@ def run_tools(
     def _produce_turn(
         turn_messages: list[ChatCompletionMessage],
         turn_tools: list[ToolDefinition] | None,
+        *,
+        response_format: JsonSchemaResponseFormat | None = None,
     ) -> tuple[str, list[ToolCallDict] | None]:
         """Produce one assistant turn as ``(content, tool_calls|None)``.
 
@@ -1998,12 +2000,16 @@ def run_tools(
         buffering is what keeps that turn's narration from ever reaching a consumer
         that would otherwise have shown it as an accepted answer. Trading live
         per-token delivery for that is only worth it under the explicit
-        ``require_tool_calls`` opt-in floor -- the tool-free wrap-up completion
-        (``turn_tools=None``) and the default ``tool_choice="auto"`` path are
-        unaffected and keep streaming deltas live, per the round_boundary comment
-        below.
+        ``require_tool_calls`` opt-in floor -- the default ``tool_choice="auto"``
+        path is unaffected and keeps streaming deltas live, per the round_boundary
+        comment below.
+
+        ``response_format`` (the forced wrap-up's schema, #4556) makes the turn
+        non-streaming: a schema-enforced completion cannot also emit live deltas,
+        and the schema guarantee is the more valuable one. Every other caller
+        leaves it ``None`` and keeps the streaming behaviour above.
         """
-        if stream_deltas:
+        if stream_deltas and response_format is None:
             gate_required = bool(turn_tools) and tool_choice == "required"
             buffered: list[tuple[str, str]] = []
 
@@ -2048,6 +2054,7 @@ def run_tools(
                 temperature=temperature,
                 tools=turn_tools,
                 tool_choice=tool_choice,
+                response_format=response_format,
             )
         )
 
@@ -2235,16 +2242,6 @@ def run_tools(
         # Enforcing the caller's output schema here stops the cheap model from
         # answering in prose or returning an empty body, which is what forced the
         # tool-free retry that could not re-ground.
-        if final_response_format is not None:
-            final, _ = _message_from_response(
-                completion(
-                    model,
-                    current,
-                    temperature=temperature,
-                    response_format=final_response_format,
-                )
-            )
-        else:
-            final, _ = _produce_turn(current, None)
+        final, _ = _produce_turn(current, None, response_format=final_response_format)
         return final or ""
     return content or ""

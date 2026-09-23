@@ -14,7 +14,8 @@ call them while reasoning. This module gives them an in-process surface:
   ``session`` / ``pro`` / ``preview`` tools when ``GLOOMBERB_SESSION_COOKIE`` is
   absent (the same zero-HTTP gate the MCP tools apply; without a cookie those
   tools would only return ``auth_required``).
-* :func:`build_digifetch_tool_dispatcher` — ``(name, args) -> json_str`` routed
+* :func:`build_digifetch_tool_dispatcher` — ``(name, args) -> {"content": <json
+  str>, "ok": bool}`` routed
   through the shared :class:`GloomberbClient` and serialized with the §7
   attribution envelope.
 

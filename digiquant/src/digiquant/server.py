@@ -758,7 +758,10 @@ def v1_orchestrator_invoke(req: OrchestratorInvokeRequest) -> dict[str, Any]:
         )
 
         if tool in DIGIFETCH_DISPATCH:
-            payload = json.loads(build_digifetch_tool_dispatcher()(tool, args))
+            # #4556: the dispatcher returns {"content": <envelope json>, "ok": bool};
+            # unwrap the content so the hub response shape is unchanged.
+            result = build_digifetch_tool_dispatcher()(tool, args)
+            payload = json.loads(result["content"] if isinstance(result, dict) else result)
             error = _digifetch_error_message(payload)
             if error is None and payload.get("error"):
                 # Client-fault path: the dispatcher answers {"error": ...}, not an envelope.
