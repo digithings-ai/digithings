@@ -298,11 +298,56 @@ export const OpenAiResponsesBackendSchema = z
   })
   .strict();
 
+/**
+ * Anthropic Messages API reached through the AI SDK (#4539).
+ *
+ * `apiKeyEnv` NAMES an env var with the same `DIGICHAT_BACKEND_` guard as the
+ * OpenAI pair, so a tenant config can never have the BFF ship `AUTH_SECRET` to
+ * a provider. There is no `baseUrl`: the provider defaults to
+ * `https://api.anthropic.com` — point a proxy at `openai-completions` instead.
+ */
+export const AnthropicBackendSchema = z
+  .object({
+    type: z.literal("anthropic"),
+    model: z.string().min(1),
+    apiKeyEnv: z
+      .string()
+      .regex(
+        /^DIGICHAT_BACKEND_[A-Z0-9_]+$/,
+        "apiKeyEnv must name a DIGICHAT_BACKEND_* env var",
+      ),
+  })
+  .strict();
+
+/**
+ * Google Vertex AI (Gemini) reached through the AI SDK (#4539).
+ *
+ * No credential field: the provider reads Application Default Credentials from
+ * the ambient environment (`google-auth-library`), so nothing secret is ever
+ * expressible in — or projectable from — the config.
+ *
+ * `project` / `location` therefore select which GCP project the BFF's ambient
+ * (cloud-platform scoped) credential is spent against. Config sources are
+ * operator-controlled today, so this is an authorization-scope note rather than
+ * a tenant-facing risk; add an allowlist here if tenant-authored config is ever
+ * accepted.
+ */
+export const GoogleVertexBackendSchema = z
+  .object({
+    type: z.literal("google-vertex"),
+    project: z.string().min(1),
+    location: z.string().min(1),
+    model: z.string().min(1),
+  })
+  .strict();
+
 export const BackendSchema = z.discriminatedUnion("type", [
   DigigraphBackendSchema,
   FoundryBackendSchema,
   OpenAiCompletionsBackendSchema,
   OpenAiResponsesBackendSchema,
+  AnthropicBackendSchema,
+  GoogleVertexBackendSchema,
 ]);
 
 export const ToolCatalogEntrySchema = z

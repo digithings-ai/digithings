@@ -53,6 +53,22 @@ export type EmbedBackendConfig =
       model: string;
       /** Env var NAMING the API key (DIGICHAT_BACKEND_*); never the key itself. */
       apiKeyEnv: string;
+    }
+  | {
+      type: "anthropic";
+      /** Model id passed to the provider. */
+      model: string;
+      /** Env var NAMING the API key (DIGICHAT_BACKEND_*); never the key itself. */
+      apiKeyEnv: string;
+    }
+  | {
+      type: "google-vertex";
+      /** GCP project id. */
+      project: string;
+      /** Vertex region, e.g. `us-central1`. */
+      location: string;
+      /** Model id passed to the provider. */
+      model: string;
     };
 
 /**
@@ -324,9 +340,46 @@ function validateEntry(hostKey: string, value: unknown): EmbedTenantConfig {
       model: backend.model,
       apiKeyEnv: backend.apiKeyEnv,
     };
+  } else if (backend?.type === "anthropic") {
+    // Anthropic Messages AI-SDK backend (#4539). No baseUrl: the provider
+    // defaults to https://api.anthropic.com. Same apiKeyEnv guard as the OpenAI
+    // pair so a tenant cannot exfiltrate AUTH_SECRET to a provider.
+    if (typeof backend.model !== "string" || !backend.model.trim()) {
+      throw new Error(`${ctx}: anthropic backend requires a "model"`);
+    }
+    if (
+      typeof backend.apiKeyEnv !== "string" ||
+      !/^DIGICHAT_BACKEND_[A-Z0-9_]+$/.test(backend.apiKeyEnv)
+    ) {
+      throw new Error(`${ctx}: backend.apiKeyEnv must name a DIGICHAT_BACKEND_* env var`);
+    }
+    backendCfg = {
+      type: "anthropic",
+      model: backend.model,
+      apiKeyEnv: backend.apiKeyEnv,
+    };
+  } else if (backend?.type === "google-vertex") {
+    // Google Vertex (Gemini) AI-SDK backend (#4539). Credentials come from
+    // Application Default Credentials in the ambient environment — nothing
+    // secret is expressible in the tenant config.
+    if (typeof backend.project !== "string" || !backend.project.trim()) {
+      throw new Error(`${ctx}: google-vertex backend requires a "project"`);
+    }
+    if (typeof backend.location !== "string" || !backend.location.trim()) {
+      throw new Error(`${ctx}: google-vertex backend requires a "location"`);
+    }
+    if (typeof backend.model !== "string" || !backend.model.trim()) {
+      throw new Error(`${ctx}: google-vertex backend requires a "model"`);
+    }
+    backendCfg = {
+      type: "google-vertex",
+      project: backend.project,
+      location: backend.location,
+      model: backend.model,
+    };
   } else {
     throw new Error(
-      `${ctx}: backend.type must be "digigraph", "foundry", "openai-completions", or "openai-responses"`,
+      `${ctx}: backend.type must be "digigraph", "foundry", "openai-completions", "openai-responses", "anthropic", or "google-vertex"`,
     );
   }
 
