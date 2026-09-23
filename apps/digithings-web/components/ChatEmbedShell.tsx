@@ -27,41 +27,22 @@ export const WARMUP_DELAY_MS = 700;
 /** Must cover the overlay's opacity transition below. */
 export const WARMUP_FADE_MS = 360;
 
-/** Default embed host for digithings.ai/chat (client #0). */
-export const DEFAULT_CHAT_EMBED_HOST = "digithings.ai";
-
-/** Virtual first-party host for digithings.ai/chat/occ (client #1). */
-export const OCC_CHAT_EMBED_HOST = "occ.digithings.ai";
-
 /**
- * Curated first-paint copy per host: the boot loader types it while the
- * container wakes, and the same strings ride the iframe URL so the ready hero
- * matches the loader it replaces. Keep every example a single line — the
- * chips render one row each.
+ * First-paint copy and the host keys it is indexed by now live in
+ * `@/lib/embedCopy`, so the landing page's FAQ band can mount the same
+ * conversation with the same welcome and the same examples. Re-exported here
+ * rather than moved away: this module's importers (the /chat routes, the
+ * contract test) keep the surface they already had.
  */
-export const EMBED_SHELL_COPY: Record<
-  string,
-  { welcome: string; suggestions: string[] }
-> = {
-  [DEFAULT_CHAT_EMBED_HOST]: {
-    welcome: "Ask about digithings",
-    suggestions: [
-      "What is digigraph?",
-      "Search the docs for NautilusTrader",
-      "How do I run the stack locally?",
-      "Summarize the digithings architecture",
-    ],
-  },
-  [OCC_CHAT_EMBED_HOST]: {
-    welcome: "Ask about Online Compliance Center",
-    suggestions: [
-      "How do I file a support ticket?",
-      "Search the help articles for onboarding",
-      "Show my open Zammad tickets",
-      "What is our data retention policy?",
-    ],
-  },
-};
+export {
+  DEFAULT_CHAT_EMBED_HOST,
+  EMBED_SHELL_COPY,
+  OCC_CHAT_EMBED_HOST,
+} from "@/lib/embedCopy";
+import {
+  DEFAULT_CHAT_EMBED_HOST,
+  EMBED_SHELL_COPY,
+} from "@/lib/embedCopy";
 
 export type EmbedShellTheme = "light" | "dark";
 
