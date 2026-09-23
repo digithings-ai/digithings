@@ -170,9 +170,17 @@ export function QuantSection({ className }: { className?: string }) {
         <div className="grid grid-cols-[minmax(0,1fr)] gap-[2rem] p-[1.4rem] min-[980px]:grid-cols-[minmax(0,0.85fr)_minmax(0,1.15fr)] min-[980px]:gap-[2.4rem]">
           {/* Left: the claim, in digiquant's own voice. */}
           <div className="flex min-w-0 flex-col gap-[1.2rem]">
-            <h3 className="m-0 font-mono text-[clamp(1.4rem,2.6vw,2rem)] font-medium leading-[1.2] tracking-[-0.02em] text-ink">
+            {/* `h2`, not `h3`: this band has no other heading, so an `h3` left
+                the document outline skipping a level between `#open-source`
+                and `#pricing`. Every other band's `h2` is its claim rather than
+                its product name, so the claim is the band's heading and the
+                brand chip in the header bar stays a span — it labels the card's
+                chrome, not the document section. The bespoke size is kept: this
+                is a framed product card, deliberately below the page's section
+                stand. */}
+            <h2 className="m-0 font-mono text-[clamp(1.4rem,2.6vw,2rem)] font-medium leading-[1.2] tracking-[-0.02em] text-ink">
               A hedge fund in a glass box you own.
-            </h3>
+            </h2>
             <p className="m-0 max-w-[var(--measure-prose)] text-[0.92rem] leading-[1.75] text-ink-soft">
               digiquant is the module that shows what the rest of the stack is for. Ideas are
               proposed against public data, every one is backtested through NautilusTrader before it
