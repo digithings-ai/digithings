@@ -392,9 +392,17 @@ criterion for "every backend has the same end result".
     route branch (after `coreMessages`, before the BYOK guard); the tenant
     validator branches (closing the 5a second-dispatch follow-up); and the
     widened `backendType` union in both projections.
-  - **Remaining for 5b:** `anthropic` (`@ai-sdk/anthropic`) and `google-vertex`
-    (Google provider) — each adds a provider package and one factory branch,
-    so they are independent follow-ups (one teammate/agent per provider).
+  - **Done (issue #4539, PR into `module/digichat`) — the last two AI-SDK
+    backends.** Added `@ai-sdk/anthropic` and `@ai-sdk/google-vertex` (the two
+    approved new dependencies). `anthropic` is `{ model, apiKeyEnv }` with the
+    same `DIGICHAT_BACKEND_*` guard and no `baseUrl` (the provider defaults to
+    `https://api.anthropic.com`; use `openai-completions` for a proxy);
+    `google-vertex` is `{ project, location, model }` with **no credential in
+    config** — Vertex reads Application Default Credentials from the ambient
+    environment. Both ride the same `streamText` → `toUIMessageStream` mapper
+    (protocols `anthropic-messages` / `gemini`, both already in
+    `AI_SDK_PROTOCOLS`), so reasoning, tool calls and sources render identically.
+    `resolveAiSdkModel` is now a four-arm exhaustive switch.
 - **5c — non-AI-SDK protocols.** `langgraph`, `ag-ui`, `a2a`. Each needs its
   own mapper; each is a **new dependency / new external surface**.
   **Human gate.**

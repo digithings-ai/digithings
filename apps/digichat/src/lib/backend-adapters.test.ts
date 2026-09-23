@@ -21,6 +21,8 @@ const TYPES: BackendType[] = [
   "foundry",
   "openai-completions",
   "openai-responses",
+  "anthropic",
+  "google-vertex",
 ];
 
 describe("backend adapter registry", () => {
@@ -67,6 +69,27 @@ describe("backend adapter registry", () => {
     }
   });
 
+  it("resolves the anthropic and vertex backends to their own protocol", () => {
+    const anthropic = BACKEND_ADAPTERS.anthropic;
+    expect(anthropic.protocol).toBe("anthropic-messages");
+    expect(anthropic.auth).toBe("env");
+    expect(AI_SDK_PROTOCOLS.has(anthropic.protocol)).toBe(true);
+
+    const vertex = BACKEND_ADAPTERS["google-vertex"];
+    expect(vertex.protocol).toBe("gemini");
+    // Vertex carries no credential: it uses ambient Application Default Credentials.
+    expect(vertex.auth).toBe("managed-identity");
+    expect(AI_SDK_PROTOCOLS.has(vertex.protocol)).toBe(true);
+
+    for (const type of ["anthropic", "google-vertex"] as const) {
+      const { capabilities } = BACKEND_ADAPTERS[type];
+      expect(capabilities.conversationContinuity).toBe(false);
+      expect(capabilities.corpus).toBe(false);
+      expect(capabilities.mcp).toBe(false);
+      expect(capabilities.turnMutation).toBe(false);
+    }
+  });
+
   it("every adapter surfaces reasoning and tool calls (the parity invariant)", () => {
     for (const type of TYPES) {
       const { capabilities } = BACKEND_ADAPTERS[type];
@@ -104,8 +127,21 @@ describe("backend adapter registry", () => {
       apiKeyEnv: "DIGICHAT_BACKEND_EXAMPLE_KEY",
     } as const;
     const responses = { ...completions, type: "openai-responses" } as const;
+    const anthropic = {
+      type: "anthropic",
+      model: "claude-sonnet-4-5",
+      apiKeyEnv: "DIGICHAT_BACKEND_ANTHROPIC_KEY",
+    } as const;
+    const vertex = {
+      type: "google-vertex",
+      project: "my-project",
+      location: "us-central1",
+      model: "gemini-2.5-pro",
+    } as const;
     expect(isAiSdkConfig(completions)).toBe(true);
     expect(isAiSdkConfig(responses)).toBe(true);
+    expect(isAiSdkConfig(anthropic)).toBe(true);
+    expect(isAiSdkConfig(vertex)).toBe(true);
     expect(isAiSdkConfig({ type: "digigraph" } as const)).toBe(false);
     expect(isAiSdkConfig(undefined)).toBe(false);
     expect(isDigigraphConfig(completions)).toBe(false);
