@@ -1,18 +1,15 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   StackRow,
-  TerminalManifest,
   modules,
   useScrollyFeatures,
   scrollyTrackHeightVh,
   type ModuleNode,
-  type TerminalManifestRow,
 } from "@digithings/ui";
-import { Button } from "@digithings/ui/ui";
 import { writeHandoff } from "@/lib/chatHandoff";
-import { grouped, moduleActivity, moduleLines } from "@/lib/repoActivity";
+import { grouped, moduleLines } from "@/lib/repoActivity";
 import { moduleCountLabel, moduleCounts, moduleVersion } from "@/lib/moduleCounts";
 
 /**
@@ -28,7 +25,23 @@ import { moduleCountLabel, moduleCounts, moduleVersion } from "@/lib/moduleCount
  *
  * The mechanical half is `useScrollyFeatures`: it owns the pinned-track progress
  * mapping and, on a small viewport or under `prefers-reduced-motion: reduce`,
- * flips to `stepper` so every module renders in plain flow — no pin, no scrub.
+ * flips to `stepper`. The mosaic then renders as a *stack* rather than a grid —
+ * the same boxes, one per row, opening in turn as the reader scrolls, and all
+ * open at once under reduced motion where nothing may move.
+ *
+ * v6 answers the two things the owner found next.
+ *
+ * **Fit.** The focused tile rendered every summary paragraph, so on the modules
+ * with the longest copy (digigraph, digivault) the compose command and the ask
+ * control were pushed past the box's edge and clipped. The copy block is now the
+ * only part allowed to shrink, the stack row and the foot are pinned, and the
+ * lead paragraph is line-clamped — so the controls are always visible.
+ *
+ * **Mobile.** `stepper` used to render `TerminalManifest` (a list you click to
+ * print a module's text). The owner wants the boxes kept on a phone, stacked, and
+ * opening sequentially as you scroll. The stack is the same tile markup with one
+ * tile per row, so there is a single tile to maintain and the two faces cannot
+ * drift apart.
  *
  * v4 (this version) fixes the two things the owner found in the walkthrough.
  *
@@ -101,7 +114,7 @@ const FOCUS_BOOST = 2.6;
  * this share with no boost at all, and a share below the weight it would hold
  * anyway must not shrink it.
  */
-const ROW_FOCUS_SHARE = 0.5;
+const ROW_FOCUS_SHARE = 0.56;
 /**
  * The least height any row keeps, as a share of the mosaic.
  *
@@ -113,6 +126,34 @@ const ROW_FOCUS_SHARE = 0.5;
 const ROW_MIN_SHARE = 0.19;
 
 const VH_PER_MODULE = 60;
+
+/**
+ * The stacked face's focal line, as a share of the viewport height. The tile
+ * whose top sits nearest this line is the one that opens, so the open tile
+ * tracks the reader's eye rather than the viewport edge.
+ */
+const STACK_FOCAL = 0.38;
+
+const REDUCED_MOTION_QUERY = "(prefers-reduced-motion: reduce)";
+
+/**
+ * Whether the reader asked for reduced motion. SSR cannot know the media query,
+ * so the first client render reports `false` to match the server markup and the
+ * real preference resolves one effect-tick later — the same hydration-safe shape
+ * as the kit's `useMotionSafe` (#2244).
+ */
+function usePrefersReducedMotion(): boolean {
+  const [reduced, setReduced] = useState(false);
+  useEffect(() => {
+    if (typeof matchMedia !== "function") return;
+    const mq = matchMedia(REDUCED_MOTION_QUERY);
+    const apply = () => setReduced(mq.matches);
+    apply();
+    mq.addEventListener("change", apply);
+    return () => mq.removeEventListener("change", apply);
+  }, []);
+  return reduced;
+}
 
 /**
  * Each module's size weight, on a log axis.
@@ -163,6 +204,15 @@ const ROW_OF = (() => {
 })();
 
 /**
+ * The stacked face: the same tiles in the same order, one per row.
+ *
+ * The mosaic is a fixed 4/4/3 outline, which needs width to read as a mosaic.
+ * On a phone there is none, so the rows become single-tile rows and the column
+ * grows with its content — the boxes stack, and only the active one is open.
+ */
+const STACK_ROWS: number[][] = ordered.map((_, i) => [i]);
+
+/**
  * The flex-grow value for every tile at a given focus. Pure in `(weights,
  * focus)`, so the same focus always draws the same mosaic.
  */
@@ -211,13 +261,6 @@ function factsLine(m: ModuleNode): string {
   return [lines === null ? "roadmap" : `${grouped(lines)} lines`, counts]
     .filter(Boolean)
     .join("  ·  ");
-}
-
-function buildOutput(m: ModuleNode): string {
-  /* The stepper is the narrow/reduced-motion face of the same mosaic, so it
-     carries the same facts: the size line, then the endpoint/MCP counts. */
-  const facts = [moduleActivity(m.id), moduleCountLabel(m.id)].filter(Boolean).join("  ·  ");
-  return [m.tagline, "", ...m.summary, ...(facts ? ["", facts] : [])].join("\n");
 }
 
 /**
@@ -299,9 +342,15 @@ async function copyText(text: string): Promise<boolean> {
 export function ModuleGrid() {
   const trackRef = useRef<HTMLDivElement>(null);
   const { activeIndex, stepper } = useScrollyFeatures(trackRef, { slideCount: ordered.length });
-  const [sel, setSel] = useState<string | null>(null);
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const copyTimer = useRef<number | null>(null);
+  const reduced = usePrefersReducedMotion();
+
+  /* The stacked face's active tile. The pinned mosaic's focus IS the scroll
+     position; the stack has no track to scrub, so the tile whose top sits nearest
+     the focal line is the one that opens, recomputed on scroll. */
+  const stackRefs = useRef<Array<HTMLElement | null>>([]);
+  const [stackActive, setStackActive] = useState(0);
 
   const copyCommand = (id: string, cmd: string) => {
     void copyText(cmd).then((ok) => {
@@ -312,71 +361,67 @@ export function ModuleGrid() {
     });
   };
 
-  if (stepper) {
-    /* The narrow / reduced-motion face of the same mosaic. Its rows focus
-       (select) a module — they never route — and only the footer's ask control
-       leaves the page, matching the pinned mosaic: a row click means "show me
-       this module", not "open the chat". The typed output panel is the focus,
-       since there is no pinned scroll here to grow a tile. */
-    const rows: TerminalManifestRow[] = ordered.map((m) => ({
-      id: m.id,
-      name: m.id,
-      status: m.tier === "roadmap" ? "roadmap" : "online",
-      blurb: m.role,
-      detail: buildOutput(m),
-    }));
-    return (
-      <section id="architecture">
-        <TerminalManifest
-          className="mx-auto max-w-[980px]"
-          prompt="//"
-          command="modules"
-          meta={`· ${ordered.length} modules`}
-          rows={rows}
-          namePrefix="digi"
-          hint="select a module"
-          selectedId={sel}
-          onSelect={setSel}
-          aria-label="digithings module manifest"
-          footer={
-            <Button
-              type="button"
-              variant="outline"
-              size="xs"
-              className="mt-auto self-end font-mono text-[0.78rem] text-ink-soft"
-              onClick={() => ask(sel)}
-            >
-              ask <span className="text-ink">digi</span>
-              <span className="text-accent">chat</span> →
-            </Button>
-          }
-        />
-      </section>
-    );
-  }
+  useEffect(() => {
+    if (!stepper || reduced) return;
+    let raf = 0;
+    const pick = () => {
+      raf = 0;
+      const line = window.innerHeight * STACK_FOCAL;
+      let best = 0;
+      let bestDistance = Number.POSITIVE_INFINITY;
+      stackRefs.current.forEach((el, i) => {
+        if (!el) return;
+        const distance = Math.abs(el.getBoundingClientRect().top - line);
+        if (distance < bestDistance) {
+          bestDistance = distance;
+          best = i;
+        }
+      });
+      setStackActive(best);
+    };
+    const onScroll = () => {
+      if (raf === 0) raf = window.requestAnimationFrame(pick);
+    };
+    pick();
+    window.addEventListener("scroll", onScroll, { passive: true });
+    window.addEventListener("resize", onScroll);
+    return () => {
+      window.removeEventListener("scroll", onScroll);
+      window.removeEventListener("resize", onScroll);
+      if (raf !== 0) window.cancelAnimationFrame(raf);
+    };
+  }, [stepper, reduced]);
 
   const focus = Math.max(activeIndex, 0);
   const tileGrow = solveTileGrow(focus);
   const rowGrow = solveRowGrow(focus);
+  const rows = stepper ? STACK_ROWS : ROWS;
 
   return (
     <section id="architecture">
-      <div ref={trackRef} style={{ height: `${scrollyTrackHeightVh(ordered.length, VH_PER_MODULE)}vh` }}>
-        <div className="dg-stage">
+      <div
+        ref={trackRef}
+        style={
+          stepper
+            ? undefined
+            : { height: `${scrollyTrackHeightVh(ordered.length, VH_PER_MODULE)}vh` }
+        }
+      >
+        <div className={stepper ? "dg-stack-wrap" : "dg-stage"}>
           <div
-            className="dg-mosaic dg-mosaic--rows"
+            className={`dg-mosaic ${stepper ? "dg-mosaic--stack" : "dg-mosaic--rows"}`}
             role="list"
             aria-label="digithings modules, sized by lines of code"
           >
-            {ROWS.map((members, row) => (
+            {rows.map((members, row) => (
               <div
                 key={`row-${row}`}
                 className="dg-mosaic-row"
-                style={{ flexGrow: rowGrow[row] } as React.CSSProperties}
+                style={stepper ? undefined : ({ flexGrow: rowGrow[row] } as React.CSSProperties)}
               >
                 {members.map((i) => {
                   const m = ordered[i];
-                  const on = i === focus;
+                  const on = stepper ? reduced || i === stackActive : i === focus;
                   const lines = moduleLines(m.id);
                   const counts = moduleCounts(m.id);
                   const version = moduleVersion(m.id);
@@ -385,9 +430,18 @@ export function ModuleGrid() {
                   return (
                     <div
                       key={m.id}
+                      ref={
+                        stepper
+                          ? (el) => {
+                              stackRefs.current[i] = el;
+                            }
+                          : undefined
+                      }
                       role="listitem"
                       className={`dg-cell${on ? " on" : ""}`}
-                      style={{ flexGrow: tileGrow[i] } as React.CSSProperties}
+                      style={
+                        stepper ? undefined : ({ flexGrow: tileGrow[i] } as React.CSSProperties)
+                      }
                       aria-current={on ? "true" : undefined}
                     >
                       {/* The whole tile is the focus target, but the focused
@@ -403,7 +457,9 @@ export function ModuleGrid() {
                         type="button"
                         className="dg-cell-focus"
                         aria-label={`Focus ${m.id} — ${m.role}, ${factsLine(m)}`}
-                        onClick={() => focusModule(trackRef.current, i)}
+                        onClick={() =>
+                          stepper ? setStackActive(i) : focusModule(trackRef.current, i)
+                        }
                       />
                       <div className="dg-cell-body">
                         <span className="dg-mosaic-head">
@@ -449,17 +505,23 @@ export function ModuleGrid() {
 
                         {on ? (
                           <span className="dg-mosaic-detail">
-                            {/* (e) the deeper description: the tagline sentence,
-                                then every summary paragraph. A resting tile is a
-                                fraction of a row tall, so this whole block is a
-                                focused-tile fact — the name, version, stats box
-                                and role are the resting tile's content. */}
-                            <span className="dg-mosaic-tag">{m.tagline}</span>
-                            {m.summary.map((para, k) => (
-                              <span key={k} className="dg-mosaic-serves">
-                                {para}
-                              </span>
-                            ))}
+                            {/* (e) the deeper description: the tagline sentence
+                                and the module's lead paragraph. The tile is one
+                                row tall, and rendering every paragraph pushed the
+                                compose command and the ask control out of the box
+                                on the modules with the longest copy (digigraph,
+                                digivault). So the copy is the one part allowed to
+                                shrink and is clamped by CSS, while the stack row
+                                and the foot below are pinned — the controls can
+                                never be the thing that clips. The rest of the
+                                summary is on the module's docs page and in the
+                                ask answer. */}
+                            <span className="dg-mosaic-copy">
+                              <span className="dg-mosaic-tag">{m.tagline}</span>
+                              {m.summary[0] ? (
+                                <span className="dg-mosaic-serves">{m.summary[0]}</span>
+                              ) : null}
+                            </span>
                             {/* (f) the packages used. */}
                             <StackRow items={m.stack} className="stack-row compact" />
                             <span className="dg-mosaic-foot">
