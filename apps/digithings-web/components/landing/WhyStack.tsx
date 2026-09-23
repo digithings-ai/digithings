@@ -2,44 +2,48 @@
 
 import { useEffect, useRef, useState } from "react";
 import { GROUPED_LABEL } from "./label";
-import { ConventionalStack, ModularStack } from "./why-stack-diagrams";
-import { OWNED_ARC, OWNED_STEPS, RENTED_STEPS, allParts, type WhyStep } from "@/lib/whyStack";
+import { OwnedStack, RentedStack } from "./why-stack-diagrams";
+import {
+  OWNED_ARC,
+  OWNED_MARKS,
+  OWNED_STEPS,
+  RENTED_MARKS,
+  RENTED_STEPS,
+  allMarks,
+  type WhyStep,
+} from "@/lib/whyStack";
 
 /**
  * The why-section composition (#4429 round 9), on the throwaway `/variants/why`.
  *
- * The owner's direction, after rejecting the four earlier takes:
+ * The owner's direction, after rejecting the four earlier takes: lay out the
+ * rented stack, "and then you throw DigiThings [at] them and explain how it's
+ * going to improve that stack."
  *
- *   "the first one should be like the conventional stack or the off-the-shelf
- *    stack. And we show what it would look like and how much it would cost for
- *    each component … And then DigiThings is suggesting a different approach,
- *    one that's well-informed, modular, scalable, affordable, and customized …
- *    for the conventional stack, we have this menu on the right side, the visual
- *    on the left side, and you go through each step of what it is. And then we
- *    kind of create a visual where we swipe that around and the text moves to the
- *    left side, and that's where you show DigiThings. And a new visual appears on
- *    the right, so it just gets swiped out of the way, and then DigiThings comes
- *    in. … That's basically laying out the trap, and then you throw DigiThings
- *    out [at] them and explain how it's going to improve that stack."
+ * Round 9b (this version) follows the follow-up: "I prefer the push variant …
+ * the two visuals … should be somewhat similar, just changing the components and
+ * the wiring … And most importantly, the cost, everything cost, cost, cost,
+ * cost, cost, and then you end up with a massive bill."
  *
- * So there is ONE stage with three layers: the rented diagram on the left, the
- * owned diagram on the right, and a single ten-step rail that begins on the
- * right and ends on the left. The swap is one custom property (`--why-swap`)
- * mapping the scroll onto a lateral translate, so the rail crosses the stage
- * while the rented visual leaves and the owned one arrives — no layout flip, no
- * reflow, nothing re-mounted.
+ * So there is ONE stage with three layers: the rented architecture, the owned
+ * architecture, and a rail that walks the steps. The push is one custom property
+ * (`--why-swap`) mapping the scroll onto a lateral translate — the rented view
+ * leaves to the left, the owned one arrives from the right, the rail crosses
+ * between the columns. No layout flip, no reflow, nothing re-mounted.
  *
- * `variant` is the only difference between the two treatments on the page:
- * `swipe` slides the rail across and cross-fades the visuals in place; `push`
- * sends the rented visual off the left edge while the owned one pushes in from
- * the right. Same DOM, same copy, different motion.
+ * The swipe treatment is gone: the owner picked push, and a second treatment was
+ * only ever there to be chosen between.
+ *
+ * Marks ACCUMULATE. The rented ledger has to visibly grow into a bill, so each
+ * step lights its own boxes and keeps the previous ones lit; the owned half does
+ * the same for the same reason (each step adds a slot you now run).
  *
  * Mechanics are the pattern proven three times on this page: one rAF-throttled
  * passive scroll listener writing `--why-p` and `--why-swap` straight to the DOM,
  * a pin whose track height is measured on mount and resize, and React state only
  * for the coarse step index (ten changes, not one per frame). `var(--why-p, 1)`
  * and `var(--why-swap, 1)` default to the finished state, so reduced motion and
- * no-JS get the owned half complete and stacked.
+ * no-JS get the owned half complete.
  */
 
 const NO_MOTION = "(prefers-reduced-motion: no-preference)";
@@ -56,6 +60,11 @@ const SWAP_END = 0.62;
 const STAGE_VH = 3.6;
 
 const clamp01 = (v: number) => Math.max(0, Math.min(1, v));
+
+/** The union of every mark from step 0 through `index` — the accumulating set. */
+function marksThrough(steps: readonly WhyStep[], index: number): string[] {
+  return allMarks(...steps.slice(0, index + 1).map((step) => step.marks));
+}
 
 function usePrefersReducedMotion(): boolean {
   const [reduced, setReduced] = useState(false);
@@ -97,7 +106,10 @@ function useStage(
     let lastStep = -1;
     const apply = (p: number) => {
       pin.style.setProperty("--why-p", p.toFixed(4));
-      pin.style.setProperty("--why-swap", clamp01((p - SWAP_START) / (SWAP_END - SWAP_START)).toFixed(4));
+      pin.style.setProperty(
+        "--why-swap",
+        clamp01((p - SWAP_START) / (SWAP_END - SWAP_START)).toFixed(4),
+      );
       const index = Math.max(0, Math.min(STEPS - 1, Math.floor(p * STEPS)));
       if (index !== lastStep) {
         lastStep = index;
@@ -194,7 +206,7 @@ function Rail({
   );
 }
 
-export function WhyStack({ variant = "swipe" }: { variant?: "swipe" | "push" }) {
+export function WhyStack() {
   const wrapRef = useRef<HTMLDivElement>(null);
   const pinRef = useRef<HTMLDivElement>(null);
   const [step, setStep] = useState(0);
@@ -202,23 +214,28 @@ export function WhyStack({ variant = "swipe" }: { variant?: "swipe" | "push" }) 
   useStage(wrapRef, pinRef, setStep);
 
   const owned = step >= RENTED_COUNT;
-  const marks = reduced
-    ? allParts([...RENTED_STEPS, ...OWNED_STEPS])
+  /* Marks accumulate, so the rented bill grows as the steps advance and the
+     owned diagram fills rather than flashing one box at a time. Reduced motion
+     is handed the finished state of both. */
+  const rentedLit = reduced
+    ? RENTED_MARKS
+    : marksThrough(RENTED_STEPS, Math.min(step, RENTED_COUNT - 1));
+  const ownedLit = reduced
+    ? OWNED_MARKS
     : owned
-      ? OWNED_STEPS[step - RENTED_COUNT].parts
-      : RENTED_STEPS[step].parts;
-  const progress = STEPS > 1 ? step / (STEPS - 1) : 1;
+      ? marksThrough(OWNED_STEPS, step - RENTED_COUNT)
+      : [];
 
   return (
-    <section className="whyx" data-variant={variant} data-phase={owned ? "owned" : "rented"}>
+    <section className="whyx" data-phase={owned ? "owned" : "rented"}>
       <div ref={wrapRef} className="whyx__wrap">
         <div ref={pinRef} className="whyx__pin">
           <div className="whyx__stage">
             <div className="whyx__panel whyx__panel--rented" aria-hidden={owned}>
-              <ConventionalStack marks={marks} progress={progress} />
+              <RentedStack lit={rentedLit} />
             </div>
             <div className="whyx__panel whyx__panel--owned" aria-hidden={!owned}>
-              <ModularStack marks={marks} progress={progress} />
+              <OwnedStack lit={ownedLit} />
             </div>
             <div className="whyx__rail-slot">
               {owned ? (

@@ -1,159 +1,163 @@
 "use client";
 
-import { CONVENTIONAL_PARTS, SEAM_LABELS } from "@/lib/whyStack";
+import { StackLogo } from "@digithings/ui";
+import {
+  OWNED_COMPONENTS,
+  RENTED_BILLS,
+  RENTED_COMPONENTS,
+  SEAM_LABELS,
+  SLOTS,
+  type StackComponent,
+} from "@/lib/whyStack";
 
 /**
- * The two diagrams the why-section composition swaps between (#4429 round 9).
+ * The two architecture views (round 9, #4429).
  *
- * Both draw the SAME five rentals, so the reader can map one onto the other:
- * `ConventionalStack` shows them as slabs inside one vendor boundary with the
- * cadence each one bills on; `ModularStack` shows the same set detached, each
- * with the seam you get back, your own endpoints outside the frame, and a slot
- * for the app you build on top.
+ * ONE grammar, drawn twice. The owner: "the two visuals … should be somewhat
+ * similar, just changing the components and the wiring to a certain degree …
+ * it could be an actual architecture visualization of how true designers and
+ * software developers would architect the platform … And most importantly, the
+ * cost, everything cost, cost, cost, cost, cost, and then you end up with a
+ * massive bill."
  *
- * `marks` is the set of part ids the current step lights — the parent computes it
- * from the step index, so the diagrams accumulate annotation as the reader
- * scrolls rather than animating per frame. `progress` is only used for the
- * boundary dissolve and the endpoint drift, and it is a plain number the parent
- * already has, not a per-frame subscription.
+ * So both views are HTML/CSS (not SVG) for two reasons: the vendor marks are the
+ * kit's `StackLogo` component and cannot be nested inside an `<svg>`, and the
+ * owner asked for the terminal look — "utilitarian, terminal-like … squared
+ * edges and simplicity … It's a bit too modern" — which is hairlines, mono type
+ * and `border-radius: 0`, not drawn shapes.
  *
- * Nothing here names a vendor and nothing carries a figure. The cadences are
- * cadences.
+ * Both views have the same anatomy, so the eye can diff them:
+ *   - a left rail of the five slots, top to bottom, in the same order;
+ *   - one or more boxes per slot, each a named thing with its icon and its
+ *     billing cadence;
+ *   - a vertical bus the slot rail hangs off, and a stub from each slot out to
+ *     the ledger on the right;
+ *   - a ledger column: on the rented side that is one invoice per box (which is
+ *     how the bill becomes "massive" — by count, not by an invented number); on
+ *     the owned side it is the single line "your provider accounts".
+ *
+ * The rented view also carries the SURFACE rule — the owner's "it's mostly just
+ * surface layer, you get the end products, you don't get to customize anything
+ * behind that, or create your own apps". Everything below the rule is marked as
+ * somebody else's.
+ *
+ * HONESTY: no amount, percentage or "Nx cheaper" appears anywhere. Every box
+ * states how the thing bills, which is public, and the ledger counts invoices.
  */
 
-export type DiagramProps = {
-  /** Part ids the current step lights up. */
-  marks: string[];
-  /** 0 → 1 across the whole stage. */
-  progress: number;
-};
+const seamFor = (slot: string): string | null =>
+  SEAM_LABELS.find((entry) => entry.id === slot)?.seam ?? null;
 
-export function ConventionalStack({ marks }: DiagramProps) {
-  const marked = new Set(marks);
+const boxesFor = (components: StackComponent[], slot: string): StackComponent[] =>
+  components.filter((component) => component.slot === slot);
+
+/** One box: the mark, the name, the cadence. Lit boxes are the current step's. */
+function Box({ component, lit }: { component: StackComponent; lit: boolean }) {
   return (
-    <svg
-      className="whyx-diagram whyx-diagram--rented"
-      viewBox="0 0 560 540"
-      role="img"
-      aria-label="Five rented components inside one vendor boundary, each with the cadence it bills on"
-      preserveAspectRatio="xMidYMid meet"
-    >
-      <rect className="whyx-boundary" x={30} y={44} width={400} height={460} rx={18} />
-      <text className="whyx-boundary-label" x={230} y={30} textAnchor="middle">
-        one vendor boundary · one release schedule
-      </text>
-
-      {CONVENTIONAL_PARTS.map((part, index) => {
-        const y = 78 + index * 86;
-        const on = marked.has(part.id);
-        return (
-          <g
-            key={part.id}
-            className={`whyx-slab${on ? " is-on" : ""}`}
-            style={{ "--i": index } as React.CSSProperties}
-          >
-            <rect className="whyx-slab__box" x={52} y={y} width={356} height={62} rx={6} />
-            <text className="whyx-slab__label" x={70} y={y + 26}>
-              {part.label}
-            </text>
-            <text className="whyx-slab__cadence" x={70} y={y + 48}>
-              {part.cadence}
-            </text>
-          </g>
-        );
-      })}
-
-      {/* The one everybody shares. It gets its own mark because it is the point:
-          a rented app is not a differentiator, it is a subscription. */}
-      {marked.has("app") ? (
-        <text className="whyx-shared" x={470} y={78 + 4 * 86 + 36} textAnchor="middle">
-          shared
-        </text>
-      ) : null}
-    </svg>
+    <div className="whyx-box" data-lit={lit ? "true" : "false"}>
+      <span className="whyx-box__mark">
+        <StackLogo item={{ name: component.name, icon: component.icon }} />
+      </span>
+      <span className="whyx-box__cadence">{component.cadence}</span>
+    </div>
   );
 }
 
-export function ModularStack({ marks, progress }: DiagramProps) {
-  const marked = new Set(marks);
-  /* The seven layers as three columns of detachable nodes. */
-  const nodes: { id: string; x: number; y: number }[] = [
-    { id: "models", x: 96, y: 96 },
-    { id: "data", x: 96, y: 188 },
-    { id: "telemetry", x: 96, y: 280 },
-    { id: "hosting", x: 96, y: 372 },
-    { id: "app", x: 336, y: 234 },
-  ];
-  const hubs = [
-    { x: 336, y: 140 },
-    { x: 336, y: 328 },
-    { x: 200, y: 96 },
-    { x: 200, y: 372 },
-  ];
-
+/** The slot rail — identical in both views. */
+function SlotRail({
+  components,
+  lit,
+  seams,
+}: {
+  components: StackComponent[];
+  lit: string[];
+  seams: boolean;
+}) {
   return (
-    <svg
-      className="whyx-diagram whyx-diagram--owned"
-      viewBox="0 0 560 540"
-      role="img"
-      aria-label="The same layers detached, each with the seam you get back, your own endpoints outside the frame, and a slot for the app you build"
-      preserveAspectRatio="xMidYMid meet"
-    >
-      {/* The perimeter is dissolving as you scroll — the boundary is the thing
-          you stop paying for. */}
-      <rect
-        className="whyx-boundary whyx-boundary--fading"
-        x={30}
-        y={44}
-        width={400}
-        height={460}
-        rx={18}
-        style={{ opacity: 0.18 * (1 - Math.min(Math.max(progress, 0), 1)) }}
-      />
+    <ol className="whyx-slots">
+      {SLOTS.map((slot) => (
+        <li key={slot.id} className="whyx-slot" data-slot={slot.id}>
+          <span className="whyx-slot__name">{slot.layer}</span>
+          <div className="whyx-slot__boxes">
+            {boxesFor(components, slot.id).map((component) => (
+              <Box key={component.name} component={component} lit={lit.includes(component.name)} />
+            ))}
+          </div>
+          <span className="whyx-slot__seam">
+            {seams ? seamFor(slot.id) : "their interface, their terms"}
+          </span>
+        </li>
+      ))}
+    </ol>
+  );
+}
 
-      <g className="whyx-endpoints" aria-hidden="true">
-        <text className="whyx-endpoint" x={470} y={104}>
-          your providers
-        </text>
-        <text className="whyx-endpoint" x={470} y={240}>
-          your store
-        </text>
-        <text className="whyx-endpoint" x={470} y={376}>
-          your hosts
-        </text>
-        <line className="whyx-endpoint-rule" x1={404} y1={100} x2={462} y2={100} />
-        <line className="whyx-endpoint-rule" x1={404} y1={236} x2={462} y2={236} />
-        <line className="whyx-endpoint-rule" x1={404} y1={372} x2={462} y2={372} />
-      </g>
+/**
+ * The rented stack. The ledger grows one invoice per box as the steps advance.
+ */
+export function RentedStack({ lit }: { lit: string[] }) {
+  const billed = RENTED_COMPONENTS.filter((component) => lit.includes(component.name));
+  return (
+    <div className="whyx-view" data-side="rented">
+      <div className="whyx-view__arch">
+        <div className="whyx-bus" aria-hidden="true" />
+        <SlotRail components={RENTED_COMPONENTS} lit={lit} seams={false} />
+        <p className="whyx-surface">
+          <span className="whyx-surface__rule" aria-hidden="true" />
+          the surface — everything below this line is somebody else&rsquo;s
+        </p>
+      </div>
+      <div className="whyx-ledger" aria-label="Invoices for the rented stack">
+        <p className="whyx-ledger__head">
+          <span>invoices</span>
+          <span className="whyx-ledger__count">
+            {billed.length}/{RENTED_BILLS}
+          </span>
+        </p>
+        <ul className="whyx-ledger__list">
+          {billed.map((component) => (
+            <li key={component.name} className="whyx-ledger__line">
+              <span className="whyx-ledger__vendor">{component.name}</span>
+              <span className="whyx-ledger__cadence">{component.cadence}</span>
+            </li>
+          ))}
+        </ul>
+        <p className="whyx-ledger__foot">
+          one meter per box · nothing consolidates · nothing above the surface line is yours to
+          change
+        </p>
+      </div>
+    </div>
+  );
+}
 
-      <g className="whyx-edges" aria-hidden="true">
-        {hubs.map((hub, index) => (
-          <line key={index} className="whyx-edge" x1={hub.x} y1={hub.y} x2={200} y2={234} />
-        ))}
-      </g>
-
-      {nodes.map((node, index) => {
-        const part = CONVENTIONAL_PARTS.find((entry) => entry.id === node.id);
-        const seam = SEAM_LABELS.find((entry) => entry.id === node.id);
-        const label = node.id === "app" ? "your app" : (part?.label ?? node.id);
-        const on = marked.has(node.id);
-        return (
-          <g
-            key={node.id}
-            className={`whyx-node${on ? " is-on" : ""}`}
-            transform={`translate(${node.x}, ${node.y})`}
-            style={{ "--i": index } as React.CSSProperties}
-          >
-            <rect className="whyx-node__box" x={-84} y={-26} width={168} height={52} rx={6} />
-            <text className="whyx-node__label" x={0} y={2} textAnchor="middle">
-              {label}
-            </text>
-            <text className="whyx-node__seam" x={0} y={22} textAnchor="middle">
-              {node.id === "app" ? "REST · MCP · CLI · container" : (seam?.seam ?? "")}
-            </text>
-          </g>
-        );
-      })}
-    </svg>
+/** The owned stack. The same anatomy; the ledger is your own accounts. */
+export function OwnedStack({ lit }: { lit: string[] }) {
+  return (
+    <div className="whyx-view" data-side="owned">
+      <div className="whyx-view__arch">
+        <div className="whyx-bus" aria-hidden="true" />
+        <SlotRail components={OWNED_COMPONENTS} lit={lit} seams />
+        <p className="whyx-surface whyx-surface--owned">
+          <span className="whyx-surface__rule" aria-hidden="true" />
+          no surface to break through — the seams are the product
+        </p>
+      </div>
+      <div className="whyx-ledger" aria-label="Accounts for the owned stack">
+        <p className="whyx-ledger__head">
+          <span>accounts</span>
+          <span className="whyx-ledger__count">yours</span>
+        </p>
+        <ul className="whyx-ledger__list">
+          <li className="whyx-ledger__line">
+            <span className="whyx-ledger__vendor">your provider accounts</span>
+            <span className="whyx-ledger__cadence">you already pay them directly</span>
+          </li>
+        </ul>
+        <p className="whyx-ledger__foot">
+          no meter in the middle · each layer scales where it already runs · you ship the app
+        </p>
+      </div>
+    </div>
   );
 }
