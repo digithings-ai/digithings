@@ -78,6 +78,10 @@ export { StatCounter, type CounterStat } from "./components/metrics/StatCounter"
 // promoted primitives (#1450)
 export { WordReveal, type WordRevealProps } from "./components/typography/WordReveal";
 export { MotionReveal, type MotionRevealProps } from "./components/typography/MotionReveal";
+export {
+  TypewriterReveal,
+  type TypewriterRevealProps,
+} from "./components/typography/TypewriterReveal";
 export { Marquee, type MarqueeItem, type MarqueeProps } from "./components/marquee/Marquee";
 export {
   TerminalManifest,

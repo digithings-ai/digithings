@@ -1,7 +1,7 @@
 import {
-  MotionReveal,
   RepoActivity,
   TestimonialWall,
+  TypewriterReveal,
   type TestimonialQuote,
 } from "@digithings/ui";
 import { CONTRIBUTING_URL, REPO_CLONE, REPO_URL, repoActivity } from "@/lib/repoActivity";
@@ -112,29 +112,36 @@ export function FaqList() {
  * voices are not both about one product) and no `orgs` strip — a "trusted by"
  * row with a single real name would read as more than it is.
  *
- * The quotes are set as quotes, in quotation marks, and the maintainer's is
- * motion text (`<MotionReveal/>`): the words deepen in order as the line rides
- * up the page, so the claim is spelled out rather than dropped in. DataTap's
- * stays plain — a customer's words about their own deployment should be
- * readable the instant they are on screen, not performed at the reader. Both
- * remain legible with no JS and under `prefers-reduced-motion`.
+ * The quotes are set as quotes, in quotation marks, and both are motion text
+ * (`<TypewriterReveal/>`): each one types itself out as it rides up the page, so
+ * the words arrive in the order they were written rather than appearing whole.
+ * Round 4 changed this from a word-level deepen on the maintainer's quote only —
+ * "we should use the digiweb animated text which could be typewritten as you're
+ * scrolling progressively... and I'd have them stacked or make it look cool" —
+ * so the two are stacked, one per row, at display size, and the reader meets them
+ * one at a time instead of comparing them side by side.
+ *
+ * The typewriter holds its own layout with a hidden ghost, so neither quote
+ * reflows as it types, and both render in full with no JS and under
+ * `prefers-reduced-motion`.
  */
 const VOICES: TestimonialQuote[] = [
   {
     quote: (
-      <MotionReveal
-        text={
-          "\u201CThe stack declines to bet on a provider. Models, vector stores and execution venues sit behind interfaces, so the field can move faster than this architecture needs to. Where a claim can be counted it is counted and dated; where it cannot, it is written down as a limit instead of dressed up as a feature.\u201D"
-        }
-      />
+      <span className="block text-[clamp(1.15rem,2.6vw,1.5rem)] leading-[1.35]">
+        <TypewriterReveal text={"\u201CThe stack declines to bet on a provider. Models, vector stores and execution venues sit behind interfaces, so the field can move without the architecture having to. Where a claim can be counted it is counted and dated; where it cannot, it is written down as a limit instead of dressed up as a feature.\u201D"} />
+      </span>
     ),
     name: "Chris",
     role: "maintainer",
     org: "digithings",
   },
   {
-    quote:
-      "\u201Cdigichat gave our users a way to understand the product in their own words — and it runs on our own infrastructure, against our own backend, so the conversation never leaves the environment we already control.\u201D",
+    quote: (
+      <span className="block text-[clamp(1.15rem,2.6vw,1.5rem)] leading-[1.35]">
+        <TypewriterReveal text={"\u201Cdigichat gave our users a way to understand the product in their own words — and it runs on our own infrastructure, against our own backend, so the conversation never leaves the environment we already control.\u201D"} />
+      </span>
+    ),
     name: "DataTap",
     role: "self-hosted digichat",
     org: "datatap.stream",
@@ -143,7 +150,7 @@ const VOICES: TestimonialQuote[] = [
 ];
 
 export function Testimonials() {
-  return <TestimonialWall columns={2} quotes={VOICES} className="w-full" />;
+  return <TestimonialWall columns={1} quotes={VOICES} className="w-full" />;
 }
 
 // ═══ Open source ════════════════════════════════════════════════════════════
