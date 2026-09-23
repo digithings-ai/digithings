@@ -476,7 +476,18 @@ body {
 /* ---- Layout rules: the persistent page geometry -------------------------
    A section that runs the full container height between two vertical hairlines
    reads as one built object rather than boxes in a column. `line-y` draws only
-   the inline edges (0 top/bottom), `line-x` only the block edges. */
+   the inline edges (0 top/bottom), `line-x` only the block edges.
+
+   These two are the *rails*, and they draw at `--hair-2` rather than `--hair`.
+   At `--hair` (9% white) the rail was invisible against the page ground, which
+   defeats the technique: a guide nobody can see is not geometry. One step up
+   (15%) registers at a glance while staying below any content edge, so the rail
+   reads as structure rather than as a border.
+
+   `line-t` / `line-b` deliberately stay at `--hair`. They are section
+   *dividers* — a different role, and there are dozens of them; raising those
+   would change the rhythm of every page rather than the frame around it. The
+   weight classes are: content edge > rail > divider > ground. */
 /* Plain CSS, not @apply and not a var()-based shorthand: Tailwind's utility
    generator resolves these at build time and a `var(--line-width, 1px)` inside
    a shorthand did not survive (the border rendered 0px). A literal `1px` is
@@ -485,14 +496,14 @@ body {
   border-left-width: 1px;
   border-right-width: 1px;
   border-style: solid;
-  border-color: var(--hair);
+  border-color: var(--hair-2);
 }
 
 @utility line-x {
   border-top-width: 1px;
   border-bottom-width: 1px;
   border-style: solid;
-  border-color: var(--hair);
+  border-color: var(--hair-2);
 }
 
 @utility line-t {

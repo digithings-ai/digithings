@@ -13,8 +13,8 @@ import { cn } from "../lib/utils";
  *
  * Technique read out of launch-ui's `components/ui/layout-lines.tsx` (MIT) and
  * re-expressed in this kit's tokens and width register. The width comes from
- * `--frame-w`, the same register the document grammar uses, so the rules land
- * exactly on the page column's edges.
+ * `--frame-w` plus a gutter on each side, the same register the document
+ * grammar uses.
  *
  * Renders nothing meaningful to AT and is `aria-hidden` by construction (an
  * empty decorative element). `fixed` + `inset-0` means it does not scroll,
@@ -23,7 +23,16 @@ import { cn } from "../lib/utils";
  * The rules used to land flush on the column, so text ran straight up to them.
  * `--line-pad` pushes the pair *outward* from the content: the inner hairline
  * grows by the gutter on each side while every section keeps its own
- * `--page-pad`, which is what gives the page air inside its own edges.
+ * `--page-pad`, which is what gives the page air inside its own edges. So the
+ * rails sit one gutter outside the content column rather than on it.
+ *
+ * They deliberately do NOT meet the section dividers. `line-t` / `line-b` on a
+ * section are full-bleed by design, and those full-width rules are part of the
+ * page's document feel; making them stop at the rails would turn every band
+ * into a framed box. Two roles, two weights: the dividers separate sections,
+ * the rails are a fixed vertical guide that the dividers cross. The rails draw
+ * at `--hair-2` because at `--hair` they were invisible — see the note beside
+ * `line-y` in web-theme.css.
  */
 export function LayoutLines({ className }: { className?: string }) {
   return (
