@@ -12,73 +12,59 @@ import {
 } from "@digithings/ui";
 import { Button } from "@digithings/ui/ui";
 import { writeHandoff } from "@/lib/chatHandoff";
-import { moduleLines } from "@/lib/repoActivity";
+import { moduleActivity, moduleLines } from "@/lib/repoActivity";
+import { moduleCountLabel, moduleCounts } from "@/lib/moduleCounts";
 
 /**
  * The module mosaic (v15, #4429), and the page's `#architecture` anchor.
  *
- * The anchor used to live on a heading above the mosaic — "Every module, one at
- * a time". The owner removed the title, so the id moved here: the nav and the
- * footer's `/#architecture` link still resolves, and it now lands the reader on
- * the mosaic itself rather than on a heading over it.
+ * The anchor used to live on a heading above the mosaic. The owner removed the
+ * title, so the id moved here: the nav and the footer's `/#architecture` link
+ * still resolves, and it now lands the reader on the mosaic itself.
  *
- * The owner's v13 ask was a grid of angular boxes that "hooks onto the scroll":
- * a box comes into focus, gains detail, and the focus walks on. The detail is
- * *inside* the focused cell, so the whole story stays in one view and a
- * navigator is unnecessary.
+ * The owner's ask was a grid of angular boxes that "hooks onto the scroll": a box
+ * comes into focus, gains detail, and the focus walks on. The detail is *inside*
+ * the focused cell, so the whole story stays in one view.
  *
- * The mechanical half is `useScrollyFeatures`: it owns the pinned-track
- * progress mapping and, on a small viewport or under
- * `prefers-reduced-motion: reduce`, flips to `stepper` so every module renders
- * in plain flow — no pin, no scrub.
+ * The mechanical half is `useScrollyFeatures`: it owns the pinned-track progress
+ * mapping and, on a small viewport or under `prefers-reduced-motion: reduce`,
+ * flips to `stepper` so every module renders in plain flow — no pin, no scrub.
  *
- * v1 set `flex-basis: 30rem` on the focused cell inside a *wrapping* flex row,
- * so growing one cell pushed its neighbours into the next row and the grid
- * re-shaped as the focus advanced. v2 fixed that by pinning every cell to an
- * explicit `grid-template-areas` slot, but a pinned slot cannot also grow, so
- * the focused cell's tagline, stack chips and compose command were cut off —
- * the owner's "we're not resizing them and shifting them around to make space
- * for what's inside of each tile".
+ * v4 (this version) fixes the two things the owner found in the walkthrough.
  *
- * v3 (this version) does both, and it rests on one observation: **a tile is one
- * grid row tall, always, and only its width carries meaning.**
+ * **Order.** v3 solved the sizes with `solveSpans` + `packGrid`, and `packGrid`
+ * placed tiles widest-first (`sort((a, b) => b.s - a.s)`) to make the rows pack
+ * flush. That silently made the *reading order* a function of tile size: at one
+ * focus the first row read digigraph -> digisearch, while `graphOrder` is
+ * digigraph -> digiquant. Worse, it re-solved on every focus step, so the tiles
+ * swapped places as the scroll advanced. The owner's rule is the opposite — the
+ * order is fixed and only the sizes move.
  *
- * Sizing a tile's *area* instead — a width and a height each — is what produced
- * cells one, two and three rows tall sitting side by side: no two neighbours
- * shared a baseline, the box ran past its own height, and the last two modules
- * wrapped onto a second screen. With every tile exactly one row tall, rows
- * always line up and nothing can overflow, and `width x the shared row height`
- * still makes a tile's area proportional to its width.
+ * **Motion.** There was none. Placement was two explicit grid lines per tile, and
+ * a `grid-column` span is not interpolable, so every focus step was a jump. The
+ * owner wants the focused tile to grow while its neighbours shrink to make room,
+ * which is exactly what `flex-grow` does natively.
  *
- * The spans are apportioned against the *whole* grid, not per row. Normalising
- * each row separately looks equivalent and is not: a row holding three modules
- * gives each of them a bigger share than a row holding four, so digivault
- * (5,003 lines) drew a five-column tile beside digiquant's (178,909 lines)
- * three. Apportioning globally keeps the printed figure and the tile size in
- * the same order.
+ * So the mosaic is a flex layout now, and its shape is decided at module scope:
  *
- * A global apportionment does not by itself pack into whole rows — the remainder
- * leaves one- and two-column gaps that `dense` cannot backfill, because the
- * narrowest tile is two columns wide, and the leftovers spill onto a fourth row.
- * So the spans are then *placed* into exactly `ROWS` rows of exactly `COLS` by a
- * backtracking partition, and each tile is positioned explicitly. That is what
- * makes the box flush at every focus rather than only on average.
- *
- * Finally the layout re-solves for the focused module: its weight is multiplied
- * by `FOCUS_BOOST`, so it takes the widest tile and its neighbours cede that
- * room and re-flow. That is the "shifting them around" the owner asked for, and
- * because the spans still sum to the whole grid the box stays a flush rectangle
- * at every focus.
+ *   - eleven tiles split into three fixed rows in `graphOrder` (4 / 4 / 3), so a
+ *     tile can never move between rows and reading order is permanent;
+ *   - rows are flex items of a column container, each growing in proportion to
+ *     its members' weight, so the row holding the focused tile grows and the
+ *     other two cede height;
+ *   - tiles are flex items of their row, each growing in proportion to its own
+ *     log weight, multiplied by `FOCUS_BOOST` while focused, so the focused tile
+ *     grows and its row-mates shrink proportionally;
+ *   - both levels animate `flex-grow`, and a tile's width is `flex-grow` share x
+ *     the row width, so the rows are flush by construction — the property v3
+ *     needed a backtracking partition to reach.
  */
 
 const ordered = [...modules].sort((a, b) => a.graphOrder - b.graphOrder);
 
-const COLS = 12;
-const ROWS = 3;
-/** No tile is narrower than this — a one-column tile wraps its own name. */
-const MIN_SPAN = 2;
-/** No tile is wider than this, so a boosted focus can always share its row. */
-const MAX_SPAN = 10;
+/** Tiles per row, top to bottom. Fixed, so reading order can never change. */
+const ROW_SIZES = [4, 4, 3] as const;
+
 /** The exponent on the normalised log weight. >1 spreads the field. */
 const WEIGHT = 1.2;
 /**
@@ -89,31 +75,48 @@ const WEIGHT = 1.2;
  */
 const WEIGHT_FLOOR = 0.35;
 /**
- * How much heavier the focused module counts while the layout is solved — this
- * is the "resize and shift to make space for what's inside" behaviour. The
- * focused tile takes the widest span in its row so its tagline, stack chips and
- * compose command have room.
+ * How much heavier the focused module counts while the layout is solved — the
+ * "resize and shift to make space for what's inside" behaviour.
  */
 const FOCUS_BOOST = 2.6;
-
-export { COLS as MOSAIC_COLS };
+/**
+ * The share of the mosaic's height the focused tile's row holds.
+ *
+ * A flat multiplier on the row's weight is not enough, because the rows' base
+ * weights differ by 2.7x: the same multiplier left the focused row in the
+ * lighter rows too short for its own detail — measured, digismith's clipped by
+ * 34px. Solving for the multiplier that reaches this share instead makes the
+ * guaranteed height the same wherever the focus lands.
+ *
+ * The floor of 1 on the multiplier matters: the heaviest row is already above
+ * this share with no boost at all, and a share below the weight it would hold
+ * anyway must not shrink it.
+ */
+const ROW_FOCUS_SHARE = 0.5;
+/**
+ * The least height any row keeps, as a share of the mosaic.
+ *
+ * The rows' base weights differ by 2.7x, so a strongly boosted focused row left
+ * the lightest row too short for even a resting tile's name, figures, role and
+ * chips — measured, a 7px clip on digivault. A floor here is cheaper and more
+ * honest than trimming a tile that has nothing left to trim.
+ */
+const ROW_MIN_SHARE = 0.19;
 
 const VH_PER_MODULE = 60;
-
-type Placement = { row: number; col: number; span: number };
 
 /**
  * Each module's size weight, on a log axis.
  *
  * The spread is extreme — digiquant is 178,909 lines and digismith is 951, a
- * factor of 188 — so a linear weight would make digismith a sliver and
- * digiquant most of the grid. On a log axis the ratio is about 1:2.9, which is
- * still legible as "bigger module, bigger tile".
+ * factor of 188 — so a linear weight would make digismith a sliver and digiquant
+ * most of the mosaic. On a log axis the ratio is about 1:2.9, which is still
+ * legible as "bigger module, bigger tile".
  *
  * The floor matters: without it the smallest module normalises to zero and an
- * earlier attempt's `|| 1` fallback promoted it, so the *smallest* module in
- * the stack drew the widest tile. The floor is applied before the exponent so
- * no module can ever reach zero.
+ * earlier attempt's `|| 1` fallback promoted it, so the *smallest* module in the
+ * stack drew the widest tile. The floor is applied before the exponent so no
+ * module can ever reach zero.
  */
 function moduleWeights(): number[] {
   const measured = ordered
@@ -132,130 +135,80 @@ function moduleWeights(): number[] {
 
 const BASE_WEIGHTS = moduleWeights();
 
+/** Row index -> the members' indices into `ordered`. Fixed at module scope. */
+const ROWS: number[][] = (() => {
+  const rows: number[][] = [];
+  let cursor = 0;
+  for (const size of ROW_SIZES) {
+    rows.push(ordered.slice(cursor, cursor + size).map((_, k) => cursor + k));
+    cursor += size;
+  }
+  return rows;
+})();
+
+/** Which row a tile sits in. */
+const ROW_OF = (() => {
+  const map = new Array<number>(ordered.length).fill(0);
+  ROWS.forEach((members, row) => members.forEach((i) => (map[i] = row)));
+  return map;
+})();
+
 /**
- * The column span for every module at a given focus, against the whole grid.
- *
- * Largest-remainder apportionment over `COLS * ROWS` cells gets the total exact
- * by construction. The focused module's boosted share can ask for more than a
- * whole row, so the widest tiles are then capped at `MAX_SPAN` and the freed
- * columns handed to the narrowest tiles — that keeps the total and stops one
- * tile swallowing the grid.
- *
- * Pure in `(weights, focus)`, so the same focus always draws the same mosaic
- * and the same focus always prints the figure that size was derived from.
+ * The flex-grow value for every tile at a given focus. Pure in `(weights,
+ * focus)`, so the same focus always draws the same mosaic.
  */
-function solveSpans(focus: number): number[] {
-  const weights = BASE_WEIGHTS.map((w, i) => (i === focus ? w * FOCUS_BOOST : w));
-  const total = weights.reduce((a, w) => a + w, 0) || 1;
-  const budget = COLS * ROWS;
-  const exact = weights.map((w) => (budget * w) / total);
-  const spans = exact.map(Math.floor);
-
-  let left = budget - spans.reduce((a, s) => a + s, 0);
-  const order = exact
-    .map((v, i) => ({ i, frac: v - Math.floor(v) }))
-    .sort((a, b) => b.frac - a.frac);
-  for (const { i } of order) {
-    if (left <= 0) break;
-    spans[i] += 1;
-    left -= 1;
-  }
-
-  let freed = 0;
-  for (let i = 0; i < spans.length; i += 1) {
-    if (spans[i] > MAX_SPAN) {
-      freed += spans[i] - MAX_SPAN;
-      spans[i] = MAX_SPAN;
-    }
-  }
-  let guard = 0;
-  while (freed > 0 && guard < budget) {
-    guard += 1;
-    let narrowest = -1;
-    for (let i = 0; i < spans.length; i += 1) {
-      if (spans[i] >= MAX_SPAN) continue;
-      if (narrowest === -1 || spans[i] < spans[narrowest]) narrowest = i;
-    }
-    if (narrowest === -1) break;
-    spans[narrowest] += 1;
-    freed -= 1;
-  }
-
-  for (let i = 0; i < spans.length; i += 1) if (spans[i] < MIN_SPAN) spans[i] = MIN_SPAN;
-  while (spans.reduce((a, s) => a + s, 0) > budget) {
-    let widest = -1;
-    for (let i = 0; i < spans.length; i += 1) {
-      if (spans[i] <= MIN_SPAN) continue;
-      if (widest === -1 || spans[i] > spans[widest]) widest = i;
-    }
-    if (widest === -1) break;
-    spans[widest] -= 1;
-  }
-
-  return spans;
+function solveTileGrow(focus: number): number[] {
+  return BASE_WEIGHTS.map((w, i) => (i === focus ? w * FOCUS_BOOST : w));
 }
 
 /**
- * Place the spans into exactly `ROWS` rows of exactly `COLS` columns.
- *
- * Tiles are placed widest first and each is dropped into the first row with
- * room for it, with the empty-unused-row symmetry broken so equivalent
- * orderings are not re-searched. That is a backtracking subset-sum over three
- * bins — trivial at eleven tiles, and it either fills every row exactly or
- * reports that it cannot.
- *
- * When it cannot (only reachable if the spans are unusually lumpy) the tiles
- * fall back to first-fit in reading order and an extra row is allowed to exist;
- * the stylesheet gives implicit rows a share of the same fixed height, so the
- * box still cannot overflow its stage.
+ * The flex-grow value for every row: the sum of its members' unboosted weights,
+ * with the focused row's lifted until it holds `ROW_FOCUS_SHARE` of the height.
+ * Unboosted members are deliberate — the tile boost already widens the focused
+ * tile inside the row; boosting the row on top of that would double-count the
+ * same emphasis.
  */
-function packGrid(spans: number[]): Placement[] {
-  const order = spans.map((s, i) => ({ i, s })).sort((a, b) => b.s - a.s);
-  const bins: number[][] = Array.from({ length: ROWS }, () => []);
-  const used = new Array<number>(ROWS).fill(0);
-  const placements = new Array<Placement>(spans.length);
+function solveRowGrow(focus: number): number[] {
+  const sums = ROWS.map((members) => members.reduce((acc, i) => acc + BASE_WEIGHTS[i], 0));
+  const focused = ROW_OF[focus];
+  const total = sums.reduce((acc, sum) => acc + sum, 0);
+  /* The heaviest row is already past the target, so its own share stands in. */
+  const focusShare = Math.max(ROW_FOCUS_SHARE, sums[focused] / total);
+  const rest = 1 - focusShare;
 
-  const place = (k: number): boolean => {
-    if (k === order.length) return used.every((u) => u === COLS);
-    const { i, s } = order[k];
-    for (let b = 0; b < ROWS; b += 1) {
-      if (b > 0 && bins[b - 1].length === 0) break;
-      if (used[b] + s > COLS) continue;
-      bins[b].push(i);
-      used[b] += s;
-      if (place(k + 1)) return true;
-      bins[b].pop();
-      used[b] -= s;
-    }
-    return false;
-  };
+  const others = sums.map((sum, row) => (row === focused ? 0 : sum));
+  const otherTotal = others.reduce((acc, sum) => acc + sum, 0) || 1;
+  const starving = sums.map(
+    (sum, row) => row !== focused && (rest * sum) / otherTotal < ROW_MIN_SHARE,
+  );
+  const floored = starving.filter(Boolean).length * ROW_MIN_SHARE;
+  const flexible = rest - floored;
+  const flexibleTotal = sums.reduce(
+    (acc, sum, row) => (starving[row] ? acc : acc + others[row]),
+    0,
+  );
 
-  if (place(0)) {
-    bins.forEach((bin, row) => {
-      let col = 1;
-      for (const index of bin) {
-        placements[index] = { row: row + 1, col, span: spans[index] };
-        col += spans[index];
-      }
-    });
-    return placements;
-  }
+  return sums.map((sum, row) => {
+    if (row === focused) return focusShare;
+    if (starving[row]) return ROW_MIN_SHARE;
+    return flexibleTotal > 0 ? (flexible * others[row]) / flexibleTotal : ROW_MIN_SHARE;
+  });
+}
 
-  const caps = new Array<number>(ROWS).fill(COLS);
-  for (let index = 0; index < spans.length; index += 1) {
-    let row = caps.findIndex((cap) => cap >= spans[index]);
-    if (row === -1) {
-      row = caps.length;
-      caps.push(COLS);
-    }
-    placements[index] = { row: row + 1, col: COLS - caps[row] + 1, span: spans[index] };
-    caps[row] -= spans[index];
-  }
-  return placements;
+/** One line per module for the terminal manifest and the tile's accessible name. */
+function factsLine(m: ModuleNode): string {
+  const lines = moduleLines(m.id);
+  const counts = moduleCountLabel(m.id);
+  return [lines === null ? "roadmap" : `${lines.toLocaleString("en-US")} lines`, counts]
+    .filter(Boolean)
+    .join("  ·  ");
 }
 
 function buildOutput(m: ModuleNode): string {
-  return [m.tagline, "", ...m.summary].join("\n");
+  /* The stepper is the narrow/reduced-motion face of the same mosaic, so it
+     carries the same facts: the size line, then the endpoint/MCP counts. */
+  const facts = [moduleActivity(m.id), moduleCountLabel(m.id)].filter(Boolean).join("  ·  ");
+  return [m.tagline, "", ...m.summary, ...(facts ? ["", facts] : [])].join("\n");
 }
 
 /**
@@ -314,77 +267,95 @@ export function ModuleGrid() {
     );
   }
 
-  const placements = packGrid(solveSpans(Math.max(activeIndex, 0)));
+  const focus = Math.max(activeIndex, 0);
+  const tileGrow = solveTileGrow(focus);
+  const rowGrow = solveRowGrow(focus);
 
   return (
     <section id="architecture">
       <div ref={trackRef} style={{ height: `${scrollyTrackHeightVh(ordered.length, VH_PER_MODULE)}vh` }}>
         <div className="dg-stage">
           <div
-            className="dg-mosaic dg-mosaic--grid"
-            style={{ "--cols": COLS, "--rows": ROWS } as React.CSSProperties}
+            className="dg-mosaic dg-mosaic--rows"
             role="list"
             aria-label="digithings modules, sized by lines of code"
           >
-            {ordered.map((m, i) => {
-              const on = i === activeIndex;
-              const lines = moduleLines(m.id);
-              const at = placements[i];
-              return (
-                <button
-                  key={m.id}
-                  type="button"
-                  role="listitem"
-                  className={`dg-cell${on ? " on" : ""}`}
-                  style={
-                    {
-                      gridColumn: `${at.col} / span ${at.span}`,
-                      gridRow: at.row,
-                    } as React.CSSProperties
-                  }
-                  aria-current={on ? "true" : undefined}
-                  aria-label={
-                    lines === null
-                      ? `${m.id} — ${m.role}, on the roadmap`
-                      : `${m.id} — ${m.role}, ${lines.toLocaleString("en-US")} lines`
-                  }
-                  onClick={() => ask(m.id)}
-                >
-                  <span className="dg-mosaic-name">
-                    <span className="text-ink-mute">digi</span>
-                    {m.id.replace(/^digi/, "")}
-                  </span>
-                  <span className="dg-mosaic-role">{m.role}</span>
-                  <span className="dg-loc">
-                    {lines === null ? "roadmap" : `${lines.toLocaleString("en-US")} lines`}
-                  </span>
-
-                  {on ? (
-                    <span className="dg-mosaic-detail">
-                      <span className="dg-mosaic-tag">{m.tagline}</span>
-                      {/* Four chips, icon-only: the same dense treatment the kit
-                          already uses in the graph's chrome (`chrome.tsx`). A
-                          tile is one grid row tall, so the named chips wrapped
-                          onto three lines and clipped the compose command on the
-                          smallest modules — the owner's "I don't fully see what's
-                          inside of each one". */}
-                      <StackRow items={m.stack.slice(0, 4)} className="stack-row compact" />
-                      <span className="dg-mosaic-foot">
-                        {m.dockerCmd ? (
-                          <span className="dg-docker">
-                            <span className="prompt">$</span> {m.dockerCmd}
+            {ROWS.map((members, row) => (
+              <div
+                key={`row-${row}`}
+                className="dg-mosaic-row"
+                style={{ flexGrow: rowGrow[row] } as React.CSSProperties}
+              >
+                {members.map((i) => {
+                  const m = ordered[i];
+                  const on = i === focus;
+                  const lines = moduleLines(m.id);
+                  const counts = moduleCounts(m.id);
+                  return (
+                    <button
+                      key={m.id}
+                      type="button"
+                      role="listitem"
+                      className={`dg-cell${on ? " on" : ""}`}
+                      style={{ flexGrow: tileGrow[i] } as React.CSSProperties}
+                      aria-current={on ? "true" : undefined}
+                      aria-label={`${m.id} — ${m.role}, ${factsLine(m)}`}
+                      onClick={() => ask(m.id)}
+                    >
+                      <span className="dg-mosaic-head">
+                        <span className="dg-mosaic-name">
+                          <span className="text-ink-mute">digi</span>
+                          {m.id.replace(/^digi/, "")}
+                        </span>
+                        <span className="dg-mosaic-figures">
+                          <span className="dg-loc">
+                            {lines === null ? "roadmap" : `${lines.toLocaleString("en-US")} lines`}
                           </span>
-                        ) : null}
-                        <span className="dg-mosaic-ask">
-                          ask <span className="text-ink">digi</span>
-                          <span className="text-accent">chat</span> →
+                          {counts.endpoints === null && counts.mcpTools === null ? null : (
+                            <span className="dg-loc dg-counts">
+                              {counts.endpoints !== null ? `${counts.endpoints} endpoints` : null}
+                              {counts.endpoints !== null && counts.mcpTools !== null ? " · " : null}
+                              {counts.mcpTools !== null ? `${counts.mcpTools} mcp tools` : null}
+                            </span>
+                          )}
                         </span>
                       </span>
-                    </span>
-                  ) : null}
-                </button>
-              );
-            })}
+                      <span className="dg-mosaic-role">{m.role}</span>
+
+                      {on ? (
+                        <span className="dg-mosaic-detail">
+                          <span className="dg-mosaic-tag">{m.tagline}</span>
+                          {/* The first summary paragraph, which is the one that says
+                              what the module is for. The tile that is not focused is
+                              too short to hold it, so it is a focused-tile fact. */}
+                          <span className="dg-mosaic-serves">{m.summary[0]}</span>
+                          {/* The whole stack while focused — the owner's "all the
+                              packages used". Icon-only while resting, because a
+                              resting tile is one row-share tall. */}
+                          <StackRow items={m.stack} className="stack-row" />
+                          <span className="dg-mosaic-foot">
+                            {m.dockerCmd ? (
+                              <span className="dg-docker">
+                                <span className="prompt">$</span> {m.dockerCmd}
+                              </span>
+                            ) : null}
+                            <span className="dg-mosaic-ask">
+                              ask <span className="text-ink">digi</span>
+                              <span className="text-accent">chat</span> →
+                            </span>
+                          </span>
+                        </span>
+                      ) : (
+                        <StackRow
+                          items={m.stack.slice(0, 4)}
+                          className="stack-row compact dg-mosaic-resting-stack"
+                        />
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+            ))}
           </div>
         </div>
       </div>

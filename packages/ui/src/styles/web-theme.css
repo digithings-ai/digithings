@@ -217,17 +217,48 @@ body {
    the canon's flat-corner grammar, where the graph above is the rounded one.
    The grid is sized so all modules fit one viewport without an internal
    scrollbar (12 cells at 4 columns = 3 rows). */
-/* Mosaic (v15, #4429): no rail, no side panel, no per-cell logo or tier colour.
-   One flex-wrap field of flat cells whose resting size follows `tier`; the
-   focused cell grows in place and reveals its detail, so the whole story stays
-   in a single view. Widths animate because flex-grow/min-height are animatable. */
-.dg-mosaic { display: flex; flex-wrap: wrap; align-content: stretch; gap: 1px; width: 100%; max-width: var(--frame-w); margin-inline: auto; background: var(--hair); border: 1px solid var(--hair); }
-.dg-mosaic-cell { display: flex; flex-direction: column; gap: 0.5rem; flex-grow: 1; min-height: clamp(6rem, 12vh, 8rem); padding: 0.8rem 0.9rem; margin: 0; background: var(--surface); border: 0; border-radius: 0; text-align: left; cursor: pointer; opacity: 0.5; overflow: hidden; transition: flex-basis .45s var(--ease), min-height .45s var(--ease), opacity .25s var(--ease), background .25s var(--ease); }
-.dg-mosaic-cell:hover { opacity: 0.82; }
-.dg-mosaic-cell.on { min-height: clamp(11rem, 22vh, 14rem); opacity: 1; background: var(--surface-2, var(--surface)); box-shadow: inset 0 0 0 1px var(--accent); cursor: default; }
+/* ── mosaic v4: a fixed order that only resizes ────────────────────────────
+   No rail, no side panel, no per-cell logo or tier colour. Three fixed rows of
+   flat tiles; the focused tile grows in place and reveals its detail, so the
+   whole story stays in a single view.
+
+   The order is decided at module scope (`ROW_SIZES`), never by the layout
+   engine, because the owner's rule is that the tiles keep their places and only
+   the sizes move. v3 packed them widest-first to make the rows flush, which
+   silently made reading order a function of tile size — and it re-solved on
+   every focus step, so the tiles swapped places as the scroll advanced.
+
+   Both levels resize with `flex-grow`, which interpolates natively; a grid
+   `span` does not, so v3 could only jump. The rows are flex items of a column
+   container and the tiles are flex items of their row, so a row's width is
+   always exactly its parent's and the rows are flush by construction — the
+   property v3 needed a backtracking partition to reach. */
+.dg-mosaic--rows {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  width: 100%;
+  max-width: var(--frame-w);
+  margin-inline: auto;
+  height: clamp(34rem, 78vh, 50rem);
+}
+.dg-mosaic-row { display: flex; flex: 1 1 0; min-height: 0; gap: 0.5rem; transition: flex-grow .45s var(--ease); }
+
+.dg-cell { display: flex; flex-direction: column; gap: 0.5rem; flex: 1 1 0; min-width: 0; min-height: 0; padding: 0.85rem 0.95rem; margin: 0; background: var(--surface); border: 1px solid var(--hair); border-radius: 0; text-align: left; cursor: pointer; overflow: hidden; opacity: 0.55; transition: flex-grow .45s var(--ease), opacity .25s var(--ease), background .25s var(--ease), box-shadow .25s var(--ease); }
+.dg-cell:hover { opacity: 0.85; }
+.dg-cell.on { opacity: 1; background: var(--surface-2, var(--surface)); box-shadow: inset 0 0 0 1px var(--accent); cursor: default; }
+
+/* Name left, figures right: the tile's two stated facts (its size in lines, and
+   its endpoint / MCP-tool counts) sit in the top-right corner where a reader
+   scanning the mosaic can compare them down a column without reading the copy.
+   The head wraps, and the figures carry `margin-left: auto` so they keep their
+   right edge on the line they land on — both halves are `nowrap`, so without the
+   wrap a narrow tile had its name run underneath the figure. */
+.dg-mosaic-head { display: flex; flex-wrap: wrap; align-items: flex-start; justify-content: space-between; gap: 0.25rem 0.6rem; min-width: 0; }
+.dg-mosaic-figures { display: flex; flex-direction: column; align-items: flex-end; gap: 0.1rem; margin-left: auto; min-width: 0; text-align: right; }
 .dg-mosaic-name { font-family: var(--font-mono); font-size: 0.82rem; font-weight: 500; color: var(--ink); }
 .dg-mosaic-role { font-family: var(--font-mono); font-size: 0.66rem; line-height: 1.5; color: var(--ink-mute); }
-.dg-mosaic-cell.on .dg-mosaic-role { color: var(--ink-soft); }
+.dg-cell.on .dg-mosaic-role { color: var(--ink-soft); }
 .dg-mosaic-detail { display: flex; flex-direction: column; gap: 0.6rem; margin-top: 0.4rem; min-width: 0; }
 .dg-mosaic-tag { color: var(--ink-soft); font-family: var(--font-mono); font-size: 0.76rem; line-height: 1.6; }
 /* The compose command and the CTA share the last line. A tile is only as tall
@@ -237,63 +268,51 @@ body {
 .dg-mosaic-foot .dg-docker { margin-top: 0; min-width: 0; }
 .dg-mosaic-ask { margin-left: auto; white-space: nowrap; font-family: var(--font-mono); font-size: 0.76rem; color: var(--ink-mute); }
 
-/* ── module mosaic v3: one row per tile, width carries the meaning ──────────
-   Earlier versions sized a tile's *area* — a width and a height each — so
-   cells spanned one, two and three rows at once. No two neighbours shared a
-   baseline, the box ran past its own height, and the last two modules wrapped
-   onto a second screen.
-
-   v3 gives every tile exactly one grid row and lets only its *width* carry the
-   meaning: area is `width x the shared row height`, so a wider tile is still a
-   bigger tile, and rows can never misalign. `ModuleGrid` apportions the spans
-   against the whole grid so a tile's width and its printed figure stay in the
-   same order, and `dense` backfills the one- or two-column gap an apportionment
-   can leave at the end of a row, so the box still tiles flush.
-   `grid-template-rows` is given in `1fr` tracks rather than `auto`, so no cell's
-   content can change a track — the outline holds while the focus moves. */
-.dg-mosaic--grid {
-  display: grid;
-  grid-template-columns: repeat(var(--cols, 12), minmax(0, 1fr));
-  grid-template-rows: repeat(var(--rows, 3), minmax(0, 1fr));
-  /* Implicit rows (only reachable if the packing falls back) share the same
-     fixed height rather than growing it, so the box can never overflow. */
-  grid-auto-rows: minmax(0, 1fr);
-  grid-auto-flow: dense;
-  gap: 0.5rem;
-  width: 100%;
-  max-width: var(--frame-w);
-  margin-inline: auto;
-  border: 0;
-  background: transparent;
-  height: clamp(34rem, 78vh, 50rem);
-}
-
-.dg-cell { display: flex; flex-direction: column; gap: 0.5rem; min-width: 0; min-height: 0; padding: 0.85rem 0.95rem; margin: 0; background: var(--surface); border: 1px solid var(--hair); border-radius: 0; text-align: left; cursor: pointer; overflow: hidden; opacity: 0.55; transition: opacity .25s var(--ease), background .25s var(--ease), box-shadow .25s var(--ease); }
-.dg-cell:hover { opacity: 0.85; }
-.dg-cell.on { opacity: 1; background: var(--surface-2, var(--surface)); box-shadow: inset 0 0 0 1px var(--accent); cursor: default; }
-
-/* The focused cell gets the widest span in its row because `ModuleGrid`
-   multiplies its weight by `FOCUS_BOOST` before solving the row, so the
-   tagline, stack chips and compose command have room without any cell having to
-   push a neighbour mid-transition. The detail is clipped rather than allowed to
-   push the tile: a cell that grew with its content would take a grid track with
-   it and break the flush tiling. */
-.dg-cell .dg-mosaic-detail { overflow: hidden; }
+/* The detail is clipped rather than allowed to push the tile: a tile that grew
+   with its content would take its row's height with it and break the mosaic's
+   fixed outline. The focused tile is sized to hold its detail — its own weight
+   boost and its row's — so anything past that is a bug to fix, not to scroll. */
+.dg-cell .dg-mosaic-detail { overflow: hidden; flex: 1 1 auto; min-height: 0; }
 .dg-cell.on .dg-mosaic-detail { min-height: 0; }
 .dg-cell.on .dg-docker { margin-top: 0; overflow: hidden; }
 
-/* The lines-of-code figure. It is stated on the cell, not implied by the cell's
+/* The first summary paragraph: what the module is for, in its own words. Only on
+   the focused tile — a resting tile is a fraction of a row tall, so it carries
+   the name, the role and the figures and nothing else. */
+.dg-mosaic-serves { color: var(--ink-mute); font-family: var(--font-mono); font-size: 0.72rem; line-height: 1.62; }
+
+/* The resting chips sit at the foot of the tile, so the field reads as rows of
+   equal-weight boxes sharing a chip baseline rather than text hanging in space. */
+.dg-mosaic-resting-stack { margin-top: auto; }
+
+/* The stated figures. They are printed on the cell rather than implied by its
    size, so the sizing is readable rather than felt — a reader can check that
-   digiquant's box is bigger because its figure is bigger. */
+   digiquant's box is bigger because its figure is bigger. Right-aligned inside
+   `.dg-mosaic-figures`, because that is the corner the reader compares down. */
 .dg-loc {
-  align-self: flex-start;
   font-family: var(--font-mono);
   font-size: 0.6rem;
   letter-spacing: 0.06em;
   color: var(--ink-mute);
   font-variant-numeric: tabular-nums;
+  white-space: nowrap;
 }
 .dg-cell.on .dg-loc { color: var(--ink-soft); }
+
+/* The counts line wraps rather than clipping. Both halves of the head are
+   `nowrap`, and a narrow tile is narrower than "15 endpoints · 15 mcp tools", so
+   the line used to run off the tile's left edge and lose its first characters —
+   a stated figure, silently truncated. Wrapping costs a line of head only on the
+   tiles narrow enough to need it. */
+.dg-counts { white-space: normal; }
+
+/* The flex-grow resize is the whole point of the mosaic, so the one place it
+   must not run is where motion is unwanted: focus then lands on the final
+   layout with no travel. */
+@media (prefers-reduced-motion: reduce) {
+  .dg-mosaic-row,
+  .dg-cell { transition: none; }
+}
 
 
 
