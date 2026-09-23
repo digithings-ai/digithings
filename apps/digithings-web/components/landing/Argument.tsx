@@ -1,20 +1,32 @@
 "use client";
 
 /**
- * The argument — a seam diagram (v15 Stage 5, #4429).
+ * The argument — a seam diagram (v15 Stage 5, #4429; reworked Round 3).
  *
  * Owner direction, point 10: "'Why digithings' more creatively built out — a
  * visual explanation, not a long sequential readout."
  *
- * So the section no longer walks a numbered spine through paragraphs. It draws
- * the same seven layers of the stack TWICE, side by side — once on the managed
- * platform, once on yours — and marks each one as a seam. The argument is the
- * picture: every layer is either theirs or yours, and on the right every one of
- * them moves by config. Three glanceable nodes below carry the three claims in
- * one line each. The old `ArgumentProse` / `ArgumentStages` / `ArgumentContrast`
- * / `ArgumentGlyphs` exports are retired with this change — a seven-row prose
- * table and a paragraph column were the "long sequential readout" the note
- * objected to.
+ * Owner direction, Round 3: "I wouldn't specifically name any of the modules…
+ * I'd just explain how it's implemented in digithings, how it's integrated…
+ * it's too direct. This section, it should be more explicative. So I'd give like
+ * a good line or two per cell to explain exactly what we mean… And then I think
+ * we could remove points one, two, and three below the table. I'd focus on
+ * making the managed platform versus digithings the highlight here."
+ *
+ * Two changes this round:
+ *
+ *  - No module is named anywhere in the diagram. The right column describes the
+ *    layer, not the package that fills it: the product names were doing the
+ *    explaining, and to a reader who has not met the packages yet they explain
+ *    nothing. The layer label already names the seam; the cell now says what
+ *    living on that seam means for you.
+ *  - Every cell is a line or two of explanation rather than a four-word
+ *    fragment. The fragments ("their hosted runtime", "their account and rate
+ *    limits") were the "too direct" reading the note objected to — they named
+ *    the difference without saying what follows from it.
+ *
+ * The three claims that used to sit below the diagram are retired (see
+ * `ArgumentClaims`), so the comparison is now the whole of the section.
  *
  * Honesty constraints, unchanged and non-negotiable:
  *  - Never claim open models *surpassed* frontier flagships. "At par or close"
@@ -25,6 +37,8 @@
  *    the diagram at all; the left column is the *shape*, not an accusation.
  *  - No performance figures, no backtest or in-sample wording, no promise of
  *    live trading.
+ *  - Encryption is described by what it is — a JWT, signed and scoped, carried
+ *    on the call — never by an unqualified superlative.
  */
 
 type Layer = {
@@ -38,28 +52,59 @@ type Layer = {
 
 // Seven layers, top to bottom, from weights down to metal. Every row is a seam
 // — there is deliberately no row that is *not* swappable, because that is the
-// whole claim. Keep each cell to a fragment: the diagram's job is the shape,
-// and a sentence here would put the paragraph back.
+// whole claim. Each cell is a line or two: enough to say what the consequence
+// is, not so much that the diagram turns back into the prose it replaced. No
+// module is named — the layer label names the seam, and the sentence explains
+// it.
 const LAYERS: Layer[] = [
   {
     layer: "models",
-    theirs: "their weights, their release schedule",
-    yours: "any provider behind one interface",
+    theirs:
+      "one vendor's weights, on their release schedule and their price tiers — you run the models they ship, when they ship them",
+    yours:
+      "any provider behind one interface — the weights change without a line changing anywhere above them",
   },
   {
     layer: "retrieval",
-    theirs: "their index, billed per vector",
-    yours: "digisearch over a store you choose",
+    theirs:
+      "their index, billed by the vector, tuned to their embedding family — your documents sit in their store",
+    yours:
+      "retrieval you point at a store you choose — the index, the embeddings and the documents stay yours",
   },
-  { layer: "tools", theirs: "their tool registry", yours: "MCP servers you run" },
-  { layer: "graph", theirs: "their hosted runtime", yours: "digigraph on your hosts" },
-  { layer: "keys", theirs: "their account and rate limits", yours: "digikey — your keys, your scopes" },
+  {
+    layer: "tools",
+    theirs:
+      "their tool registry, callable only from inside their runtime — the surface your agents reach is theirs to change",
+    yours:
+      "tool servers you run, reached over MCP — the same tools are callable from every agent in the stack",
+  },
+  {
+    layer: "graph",
+    theirs:
+      "their runtime executes the graph — your orchestration runs on their machine, inside their limits",
+    yours:
+      "the same graph runs on your hosts — orchestration, retries and state never leave your network",
+  },
+  {
+    layer: "keys",
+    theirs:
+      "one account, one key, their scopes and their rate limits — access is issued and revoked by them",
+    yours:
+      "keys you issue and revoke, JWT-signed and scoped on every call and every tool call, so permissions are yours to set",
+  },
   {
     layer: "audit",
-    theirs: "their logs, their retention",
-    yours: "digismith — append-only, on your disk",
+    theirs:
+      "their logs, their retention window — the record of what ran is theirs to keep or to drop",
+    yours:
+      "an append-only log on your disk — every call, tool and result recorded where you can read it",
   },
-  { layer: "hosts", theirs: "their cloud, in their regions", yours: "your machine, VM or cluster" },
+  {
+    layer: "hosts",
+    theirs:
+      "their cloud, in their regions, under their controls — the infrastructure is rented, never owned",
+    yours: "your machine, VM or cluster — the same stack on metal you already run",
+  },
 ];
 
 const GRID = "grid grid-cols-[minmax(0,1fr)_3.4rem_minmax(0,1fr)]";
@@ -129,83 +174,27 @@ export function ArgumentSeams() {
   );
 }
 
-type Claim = { num: string; label: string; note: string; };
-
 /**
- * Three claims. Owner's note this round: "the one two three — the model is not
- * the moat, the application is the moat, so every seam is a config change — you
- * just work on that presentation and the wording, not sure I quite agree with
- * the way it's being presented."
+ * Retired on the owner's instruction this round: "I think we could remove points
+ * one, two, and three below the table. I'd focus on making the managed platform
+ * versus digithings the highlight here."
  *
- * What changed and why:
+ * The three claims restated, in prose, what the diagram above already shows —
+ * the managed platform owns each layer, you own each seam — and they pushed the
+ * section's weight back from the picture to a readout. The comparison is the
+ * section now.
  *
- *  - The three were a *chain* dressed as a list ("so every seam is…"), which
- *    made the third read as a consequence of the first two rather than as the
- *    thing you actually do. They are three independent observations now: what
- *    is commoditised, where the value sits, and how little it costs you to act
- *    on it. Nothing depends on anything else.
- *  - "the moat" twice in a row was a slogan pair. The first claim is stated as
- *    the fact it is (any capable model is available to everyone), and the
- *    second as the consequence (the advantage is the wiring around it) — so the
- *    pair says something instead of rhyming.
- *  - Each note now names a *consequence the reader can check*, not a restatement
- *    of its own label. "the model is not the moat / open-weight models sit at
- *    par or close" told you the same thing twice; the note now says what that
- *    buys you.
- *
- * The honesty ceiling is unchanged: "at par or close" on most applied work is
- * the strongest claim the evidence supports, and open models are never said to
- * have surpassed the frontier flagships.
- */
-const CLAIMS: Claim[] = [
-  {
-    num: "01",
-    label: "a capable model is available to everyone",
-    note: "open-weight models sit at par or close on most applied work — so renting one is a choice, not a requirement",
-  },
-  {
-    num: "02",
-    label: "so the advantage is in the wiring",
-    note: "retrieval, tools, the graph and the audit trail are what a competitor cannot copy from a model card",
-  },
-  {
-    num: "03",
-    label: "which makes every layer a decision",
-    note: "each of those layers is behind a seam you own — moved on your schedule, not a vendor's release calendar",
-  },
-];
-
-/**
- * The three claims, glanceable in one row rather than read as a sequence.
- *
- * The presentation changed with the wording: the number is now a quiet rail
- * marker rather than a heading, the label is the line you read, and the note is
- * visibly subordinate. Before, all three sat at nearly the same weight, so the
- * row read as three equal paragraphs and the eye had nowhere to land.
+ * Kept as a named export only so the import in `LandingPage` fails loudly if it
+ * is ever wired back in without a decision. It renders nothing.
  */
 export function ArgumentClaims() {
-  return (
-    <div className="grid w-full max-w-[var(--frame-w)] gap-px border border-hair bg-hair min-[860px]:grid-cols-3">
-      {CLAIMS.map((c) => (
-        <div key={c.num} className="flex flex-col gap-[0.5rem] bg-surface p-[1.3rem]">
-          <span
-            aria-hidden="true"
-            className="font-mono text-[0.66rem] tracking-[var(--tracking-meta)] text-ink-mute"
-          >
-            {c.num}
-          </span>
-          <span className="font-mono text-[0.95rem] leading-[1.4] text-ink">{c.label}</span>
-          <span className="text-[0.84rem] leading-[1.65] text-ink-soft">{c.note}</span>
-        </div>
-      ))}
-    </div>
-  );
+  return null;
 }
 
 /**
- * Retired on the owner's instruction this round: "there's the read the docs
- * button there right below — there's read the docs buttons all over the place,
- * I just get rid of it."
+ * Retired on the owner's instruction in an earlier round: "there's the read the
+ * docs button there right below — there's read the docs buttons all over the
+ * place, I just get rid of it."
  *
  * Kept as a named export only so the import in `LandingPage` fails loudly if it
  * is ever wired back in without a decision. It renders nothing.
