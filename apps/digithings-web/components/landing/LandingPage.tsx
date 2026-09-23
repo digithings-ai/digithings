@@ -3,7 +3,7 @@
 import { ContactMailto, CopyCommand, CtaLink, Glow, MockupFrame, SocialRow } from "@digithings/ui";
 import { buttonVariants } from "@digithings/ui/ui";
 import { DT_CONTACT_EMAIL } from "@/app/_nav";
-import { ArgumentClaims, ArgumentCta, ArgumentSeams } from "@/components/landing/Argument";
+import { ArgumentClaims, ArgumentSeams } from "@/components/landing/Argument";
 import { BootTerminal } from "@/components/landing/BootTerminal";
 import { ContactForm } from "@/components/landing/ContactForm";
 import { ModuleGrid } from "@/components/landing/ModuleGrid";
@@ -191,7 +191,6 @@ export function LandingPage() {
           {/* Point 10: the argument is the picture, not a column of prose. */}
           <ArgumentSeams />
           <ArgumentClaims />
-          <ArgumentCta />
         </div>
       </section>
 

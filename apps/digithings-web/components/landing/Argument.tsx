@@ -1,7 +1,5 @@
 "use client";
 
-import { CtaLink } from "@digithings/ui";
-
 /**
  * The argument — a seam diagram (v15 Stage 5, #4429).
  *
@@ -131,52 +129,87 @@ export function ArgumentSeams() {
   );
 }
 
-type Claim = { num: string; label: string; note: string };
+type Claim = { num: string; label: string; note: string; };
 
-// Three claims, one line each. The note is a fragment, not a mechanism
-// sentence — anything longer and this becomes the readout again.
+/**
+ * Three claims. Owner's note this round: "the one two three — the model is not
+ * the moat, the application is the moat, so every seam is a config change — you
+ * just work on that presentation and the wording, not sure I quite agree with
+ * the way it's being presented."
+ *
+ * What changed and why:
+ *
+ *  - The three were a *chain* dressed as a list ("so every seam is…"), which
+ *    made the third read as a consequence of the first two rather than as the
+ *    thing you actually do. They are three independent observations now: what
+ *    is commoditised, where the value sits, and how little it costs you to act
+ *    on it. Nothing depends on anything else.
+ *  - "the moat" twice in a row was a slogan pair. The first claim is stated as
+ *    the fact it is (any capable model is available to everyone), and the
+ *    second as the consequence (the advantage is the wiring around it) — so the
+ *    pair says something instead of rhyming.
+ *  - Each note now names a *consequence the reader can check*, not a restatement
+ *    of its own label. "the model is not the moat / open-weight models sit at
+ *    par or close" told you the same thing twice; the note now says what that
+ *    buys you.
+ *
+ * The honesty ceiling is unchanged: "at par or close" on most applied work is
+ * the strongest claim the evidence supports, and open models are never said to
+ * have surpassed the frontier flagships.
+ */
 const CLAIMS: Claim[] = [
   {
     num: "01",
-    label: "the model is not the moat",
-    note: "open-weight models sit at par or close on most applied work",
+    label: "a capable model is available to everyone",
+    note: "open-weight models sit at par or close on most applied work — so renting one is a choice, not a requirement",
   },
   {
     num: "02",
-    label: "the application is the moat",
-    note: "retrieval, tools, graph and audit are where the advantage compounds",
+    label: "so the advantage is in the wiring",
+    note: "retrieval, tools, the graph and the audit trail are what a competitor cannot copy from a model card",
   },
   {
     num: "03",
-    label: "so every seam is a config change",
-    note: "moved on your schedule, not on a vendor's release calendar",
+    label: "which makes every layer a decision",
+    note: "each of those layers is behind a seam you own — moved on your schedule, not a vendor's release calendar",
   },
 ];
 
-/** The three claims, glanceable in one row rather than read as a sequence. */
+/**
+ * The three claims, glanceable in one row rather than read as a sequence.
+ *
+ * The presentation changed with the wording: the number is now a quiet rail
+ * marker rather than a heading, the label is the line you read, and the note is
+ * visibly subordinate. Before, all three sat at nearly the same weight, so the
+ * row read as three equal paragraphs and the eye had nowhere to land.
+ */
 export function ArgumentClaims() {
   return (
     <div className="grid w-full max-w-[var(--frame-w)] gap-px border border-hair bg-hair min-[860px]:grid-cols-3">
       {CLAIMS.map((c) => (
-        <div key={c.num} className="flex flex-col gap-[0.4rem] bg-surface p-[1.2rem]">
-          <span className="font-mono text-[0.66rem] tracking-[var(--tracking-meta)] text-ink-mute">
+        <div key={c.num} className="flex flex-col gap-[0.5rem] bg-surface p-[1.3rem]">
+          <span
+            aria-hidden="true"
+            className="font-mono text-[0.66rem] tracking-[var(--tracking-meta)] text-ink-mute"
+          >
             {c.num}
           </span>
-          <span className="font-mono text-[0.92rem] leading-[1.35] text-ink">{c.label}</span>
-          <span className="text-[0.84rem] leading-[1.6] text-ink-mute">{c.note}</span>
+          <span className="font-mono text-[0.95rem] leading-[1.4] text-ink">{c.label}</span>
+          <span className="text-[0.84rem] leading-[1.65] text-ink-soft">{c.note}</span>
         </div>
       ))}
     </div>
   );
 }
 
+/**
+ * Retired on the owner's instruction this round: "there's the read the docs
+ * button there right below — there's read the docs buttons all over the place,
+ * I just get rid of it."
+ *
+ * Kept as a named export only so the import in `LandingPage` fails loudly if it
+ * is ever wired back in without a decision. It renders nothing.
+ */
 export function ArgumentCta() {
-  return (
-    <div className="flex flex-wrap items-center gap-[1rem]">
-      <CtaLink href="/docs">Read the docs</CtaLink>
-      <CtaLink href="/security" variant="ghost">
-        How key custody works
-      </CtaLink>
-    </div>
-  );
+  return null;
 }
