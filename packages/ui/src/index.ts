@@ -37,6 +37,25 @@ export {
 } from "./components/account/AuthCard";
 export { ScrollyGraph, GraphSVG } from "./components/graph";
 export {
+  ArchitectureDiagram,
+  toMermaid,
+  type ArchitectureDiagramProps,
+  type ArchAlign,
+  type ArchEdge,
+  type ArchGroup,
+  type ArchIcon,
+  type ArchJunction,
+  type ArchService,
+  type ArchSide,
+  type ArchSpec,
+} from "./components/diagrams";
+export {
+  ArchitectureTour,
+  type ArchitectureTourProps,
+  type TourStep,
+  type TourVariant,
+} from "./components/diagrams";
+export {
   Footer,
   Colophon,
   ModuleCard,

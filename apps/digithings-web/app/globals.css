@@ -47,6 +47,10 @@
    nothing styles, so the benchmark line in the digiquant band computes
    `stroke: none` and renders invisible — a comparison chart with one series. */
 @import "@digithings/ui/styles/finance-tearsheet-overlay.css";
+/* The architecture-diagram family (#4429 round 10). Its `.arch-figure` rules are
+   plain CSS; the only utilities it needs are the frame's own, so the @source two
+   blocks down is what keeps Tailwind from tree-shaking them. */
+@import "@digithings/ui/styles/diagrams.css";
 /* Chat family primitives (#1418) — imported BEFORE the digichat-ui sheets so
    the .dc- and .dt- rules keep winning same-specificity ties (e.g. the
    caret's animation shorthand when an element carries both .chat-cursor
@@ -113,6 +117,9 @@
 @source "../../../packages/ui/src/components/finance-composites";
 @source "../../../packages/ui/src/components/finance-tearsheet";
 @source "../../../packages/ui/src/components/metrics";
+/* … and the architecture-diagram family (<ArchitectureDiagram>), which emits
+   mermaid source and frames the returned SVG. */
+@source "../../../packages/ui/src/components/diagrams";
 /* … and the pricing comparison matrix (PricingMatrix). Its table is built from
    arbitrary utilities (`min-w-[640px]`, `pe-[0.9rem]`, `bg-accent/6`), so without
    this line the matrix renders as an unstyled table. */
@@ -466,307 +473,253 @@ html {
   }
 }
 
-/* ==========================================================================
-   #why VARIATIONS (2026-09-23, branch claude/home-variants, #4429 round 9c).
-
-   One composition: the conventional architecture diagram, the digithings
-   architecture diagram, and a rail that walks the steps. Every value that moves
-   is driven by ONE custom property written by a scroll listener (`--why-p`,
-   0 -> 1) plus the coarse swap (`--why-swap`, 0 -> 1) that pushes the rented
-   view off the left edge and brings the owned one in from the right.
-
-   THE LOOK IS THE POINT: utilitarian and terminal-like. `border-radius: 0`
-   everywhere, mono for every label, hairline connectors, no soft panels, no
-   shadows. The owner: "try to give this more of the utilitarian, terminal-like
-   design look with squared edges and simplicity ... It's a bit too modern, I
-   find."
-
-   The two diagrams are the same SVG frame, so the eye can diff them: the same
-   boundary rectangle, the same rows, the same connector hairline. A box is drawn
-   dim when its step has not lit it yet, and a connector is drawn only when both
-   ends exist.
-
-   Everything defaults to the FINISHED state via `var(..., 1)`, so a no-JS or
-   reduced-motion reader sees both diagrams complete with no pin and no height.
-   ========================================================================== */
+/*
+ * #why VARIATIONS (2026-09-23, branch claude/home-variants, #4429 round 10)
+ *
+ * The throwaway /variants/why comparison: two C4 container diagrams, a
+ * capability table and a cost model. App-local because the page is an
+ * exploration — if a composition is picked, whatever survives folds into
+ * Argument.tsx and its classes move into the band's markup or the kit.
+ *
+ * Everything here is square-cornered and hairline-ruled to match the terminal
+ * look the owner asked for ("utilitarian, terminal-like ... squared edges and
+ * simplicity").
+ */
 
 .whyx {
-  padding-block: var(--page-step);
+  display: flex;
+  flex-direction: column;
 }
 
-.whyx__pin {
-  position: sticky;
-  top: calc(var(--dq-nav-h, 4.5rem) + 1rem);
-}
-
-.whyx__stage {
+.whyx__diagrams,
+.whyx__block {
   display: flex;
   flex-direction: column;
   gap: 1.6rem;
-  /* The push parks a whole panel outside the stage; without this the document
-     grows sideways by a full column. */
-  overflow: hidden;
+  padding: var(--page-step) var(--page-pad);
+  border-top: 1px solid var(--hair);
+}
+
+.whyx__diagrams > *,
+.whyx__block > * {
+  width: 100%;
   max-width: var(--frame-w);
   margin-inline: auto;
-  padding-inline: var(--page-pad);
 }
 
-/* The rail reads first on a phone, then the one panel that is current. */
-.whyx__rail-slot {
-  order: 1;
-}
-.whyx__panel {
-  order: 2;
-}
-.whyx__panel[aria-hidden="true"] {
-  display: none;
-}
+/* ── the two diagrams ───────────────────────────────────────────────── */
 
-.whyx-rail {
+.whyx__pair {
   display: grid;
-  gap: 0.7rem;
-  align-content: start;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 2.4rem;
+  margin-top: 0.4rem;
 }
 
-.whyx-arc {
-  margin: 0;
+.whyx__side {
+  display: flex;
+  flex-direction: column;
+  gap: 0.8rem;
+  min-width: 0;
+}
+
+.whyx__tag {
   font-family: var(--font-mono);
   font-size: 0.68rem;
   letter-spacing: 0.08em;
   text-transform: uppercase;
   color: var(--ink-mute);
 }
-.whyx-arc__item {
-  display: inline-flex;
-  gap: 0.4rem;
+
+.whyx__side--owned .whyx__tag {
+  color: var(--accent);
 }
 
-.whyx-steps {
-  list-style: none;
+.whyx__foot {
   margin: 0;
-  padding: 0;
-  display: grid;
-  gap: 0.1rem;
-}
-
-.whyx-step {
-  display: grid;
-  grid-template-columns: 2.2rem minmax(0, 1fr);
-  gap: 0.6rem;
-  border-inline-start: 1px solid var(--hair);
-  padding: 0.5rem 0 0.5rem 0.7rem;
-  opacity: 0.42;
-  transition: opacity 0.25s var(--ease), border-color 0.25s var(--ease);
-}
-.whyx-step.is-on {
-  opacity: 1;
-  border-inline-start-color: var(--accent);
-}
-.whyx-step__index {
   font-family: var(--font-mono);
-  font-size: 0.66rem;
-  color: var(--ink-mute);
-}
-.whyx-step__body {
-  display: grid;
-  gap: 0.15rem;
-  min-width: 0;
-}
-.whyx-step__label {
-  font-family: var(--font-mono);
-  font-size: 0.86rem;
-  color: var(--ink);
-}
-.whyx-step__line {
-  font-size: 0.8rem;
-  line-height: 1.55;
+  font-size: 0.74rem;
+  line-height: 1.6;
   color: var(--ink-soft);
 }
 
-/* ---- the architecture diagram: one SVG frame, drawn twice ---- */
+/* ── the capability table ───────────────────────────────────────────── */
 
-.whyx-view {
+.whyx-cap {
   display: flex;
   flex-direction: column;
-  gap: 0.6rem;
-  min-width: 0;
+  border-top: 1px solid var(--hair);
+  margin-top: 0.4rem;
 }
 
-.whyx-view__caption {
-  margin: 0;
-  font-family: var(--font-mono);
-  font-size: 0.68rem;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: var(--ink-mute);
-}
-
-.whyx-view__foot {
-  margin: 0;
-  max-width: 52ch;
-  font-family: var(--font-mono);
-  font-size: 0.72rem;
-  line-height: 1.6;
-  color: var(--ink-mute);
-}
-
-.whyx-graph {
-  display: block;
-  width: 100%;
-  height: auto;
-  /* The diagram keeps its own aspect ratio; cap it so the pin never outgrows a
-     laptop viewport. */
-  max-height: min(58vh, 34rem);
-}
-
-/* The boundary: dashed when it is somebody else's, solid when it is yours. */
-.whyx-graph__boundary {
-  fill: none;
-  stroke: var(--hair-2);
-  stroke-width: 1;
-  stroke-dasharray: 4 3;
-}
-.whyx-view[data-side="owned"] .whyx-graph__boundary {
-  stroke-dasharray: none;
-}
-
-.whyx-graph__boundary-label {
-  font-family: var(--font-mono);
-  font-size: 11px;
-  letter-spacing: 0.06em;
-  fill: var(--ink-mute);
-}
-
-/* A connector is a hairline; it brightens only when both ends are built. */
-.whyx-graph__edge {
-  stroke: var(--hair-2);
-  stroke-width: 1;
-  opacity: 0.22;
-  transition: opacity 0.25s var(--ease), stroke 0.25s var(--ease);
-}
-.whyx-graph__edge.is-on {
-  opacity: 1;
-  stroke: color-mix(in srgb, var(--accent) 45%, var(--hair-2));
-}
-
-/* A box is a squared module; unlit boxes stay dim so the assembly reads. */
-.whyx-graph__node {
-  opacity: 0.3;
-  transition: opacity 0.25s var(--ease);
-}
-.whyx-graph__node rect {
-  fill: var(--surface);
-  stroke: var(--hair);
-  stroke-width: 1;
-}
-.whyx-graph__node text {
-  font-family: var(--font-mono);
-  font-size: 12px;
-  text-anchor: middle;
-  fill: var(--ink-mute);
-}
-.whyx-graph__node.is-on {
-  opacity: 1;
-}
-.whyx-graph__node.is-on rect {
-  stroke: color-mix(in srgb, var(--accent) 55%, var(--hair));
-  fill: color-mix(in srgb, var(--accent) 5%, var(--surface));
-}
-.whyx-graph__node.is-on text {
-  fill: var(--ink);
-}
-/* The application is the one box you touch either way — mark it. */
-.whyx-graph__node[data-kind="app"] rect {
-  stroke-dasharray: 3 2;
-}
-.whyx-graph__node[data-kind="account"] rect,
-.whyx-graph__node[data-kind="infra"] rect {
-  fill: color-mix(in srgb, var(--ink) 4%, var(--surface));
-}
-
-.why-ledger {
-  list-style: none;
-  margin: 0 auto;
-  padding: 0;
-  max-width: var(--frame-w);
-  display: grid;
-}
-.why-ledger__row {
+.whyx-cap__row {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
   gap: 0.2rem 1.6rem;
   border-bottom: 1px solid var(--hair);
-  padding: 0.9rem 0;
+  padding: 0.85rem 0;
 }
-.why-ledger__row:last-child {
-  border-bottom: 0;
+
+.whyx-cap__row--head {
+  border-bottom-color: var(--hair-2);
 }
-.why-ledger__claim {
+
+.whyx-cap__key {
   font-family: var(--font-mono);
-  font-size: 0.92rem;
+  font-size: 0.78rem;
   color: var(--ink);
 }
-.why-ledger__because {
+
+.whyx-cap__row--head .whyx-cap__key,
+.whyx-cap__row--head .whyx-cap__cell {
+  font-family: var(--font-mono);
+  font-size: 0.62rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--ink-mute);
+}
+
+.whyx-cap__cell {
+  font-size: 0.86rem;
+  line-height: 1.6;
+  color: var(--ink-mute);
+}
+
+.whyx-cap__cell--owned {
+  color: var(--ink);
+}
+
+@media (min-width: 900px) {
+  .whyx-cap__row {
+    grid-template-columns: minmax(0, 0.7fr) minmax(0, 1.15fr) minmax(0, 1.15fr);
+  }
+}
+
+/* ── the cost model ─────────────────────────────────────────────────── */
+
+.whyx-assume,
+.whyx-caveat {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 0.35rem;
+}
+
+.whyx-assume {
+  border-inline-start: 2px solid var(--accent);
+  padding-inline-start: 0.9rem;
+}
+
+.whyx-caveat {
+  border-inline-start: 2px solid var(--hair);
+  padding-inline-start: 0.9rem;
+}
+
+.whyx-assume__item,
+.whyx-caveat__item {
+  font-family: var(--font-mono);
+  font-size: 0.74rem;
+  line-height: 1.65;
+}
+
+.whyx-assume__item {
+  color: var(--ink-soft);
+}
+
+.whyx-caveat__item {
+  color: var(--ink-mute);
+}
+
+.whyx-cost {
+  display: flex;
+  flex-direction: column;
+  border-top: 1px solid var(--hair);
+}
+
+.whyx-cost__row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 0.25rem 1.4rem;
+  border-bottom: 1px solid var(--hair);
+  padding: 0.95rem 0;
   font-size: 0.86rem;
   line-height: 1.6;
   color: var(--ink-soft);
 }
 
-/* ---- the wide stage: diagram left, rail right, then the push ---- */
+.whyx-cost__row--head {
+  border-bottom-color: var(--hair-2);
+}
+
+.whyx-cost__row--head > span {
+  font-family: var(--font-mono);
+  font-size: 0.62rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--ink-mute);
+}
+
+.whyx-cost__layer {
+  font-family: var(--font-mono);
+  font-size: 0.78rem;
+  color: var(--ink);
+}
+
+.whyx-cost__source {
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  line-height: 1.6;
+  color: var(--ink-mute);
+}
+
+.whyx-cost__body {
+  border-top: 1px solid var(--hair);
+  padding-top: 1.4rem;
+}
 
 @media (min-width: 900px) {
-  .why-ledger__row {
-    grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr);
+  .whyx-cost__row {
+    grid-template-columns: minmax(0, 0.55fr) minmax(0, 1.1fr) minmax(0, 1.1fr) minmax(0, 0.9fr);
   }
 }
 
-@media (min-width: 1024px) {
-  .whyx__stage {
-    display: grid;
-    grid-template-columns: minmax(0, 1.3fr) minmax(0, 0.7fr);
-    gap: 2.4rem;
-    align-items: start;
+@media (min-width: 1100px) {
+  .whyx__pair {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
-  .whyx__rail-slot {
-    order: 0;
-    grid-area: 1 / 2;
-  }
-  .whyx__panel {
-    order: 0;
-    grid-area: 1 / 1;
-  }
-  /* Both panels are mounted on the wide stage — that is what makes the push a
-     translate rather than a re-mount. */
-  .whyx__panel[aria-hidden="true"] {
-    display: block;
-  }
-  .whyx__panel--rented {
-    transform: translateX(calc(var(--why-swap, 1) * -100%));
-    opacity: calc(1 - var(--why-swap, 1));
-  }
-  .whyx__panel--owned {
-    transform: translateX(calc((1 - var(--why-swap, 1)) * 100%));
-    opacity: var(--why-swap, 1);
-  }
-  /* The rail stays in its own column. It used to translate across with the push,
-     which landed it on top of the arriving diagram — the rail's content swaps in
-     place instead, so both halves keep the same reading order. */
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .whyx__pin {
-    position: static;
+  .whyx *,
+  .whyx *::before,
+  .whyx *::after {
+    animation-duration: 0.001ms;
+    transition-duration: 0.001ms;
   }
-  .whyx__panel[aria-hidden="true"] {
-    display: block;
-  }
-  .whyx__panel--rented,
-  .whyx__panel--owned,
-  .whyx__rail-slot {
-    transform: none;
-    opacity: 1;
-  }
-  .whyx-step {
-    transition: none;
-  }
+}
+
+/* Round 10 — the guided walk. The three treatments live in the kit
+   (ArchitectureTour); these are only the app's stacking of them. */
+.whyx__tours {
+  display: flex;
+  flex-direction: column;
+  gap: 3rem;
+  margin-top: 0.4rem;
+}
+
+.whyx__tour {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  min-width: 0;
+}
+
+.whyx__tourtag {
+  margin: 0;
+  max-width: var(--measure-prose);
+  font-family: var(--font-mono);
+  font-size: 0.74rem;
+  line-height: 1.6;
+  color: var(--ink-soft);
 }
