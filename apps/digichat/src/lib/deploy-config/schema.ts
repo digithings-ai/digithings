@@ -325,6 +325,12 @@ export const AnthropicBackendSchema = z
  * No credential field: the provider reads Application Default Credentials from
  * the ambient environment (`google-auth-library`), so nothing secret is ever
  * expressible in — or projectable from — the config.
+ *
+ * `project` / `location` therefore select which GCP project the BFF's ambient
+ * (cloud-platform scoped) credential is spent against. Config sources are
+ * operator-controlled today, so this is an authorization-scope note rather than
+ * a tenant-facing risk; add an allowlist here if tenant-authored config is ever
+ * accepted.
  */
 export const GoogleVertexBackendSchema = z
   .object({

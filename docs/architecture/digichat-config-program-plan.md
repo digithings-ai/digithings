@@ -403,6 +403,14 @@ criterion for "every backend has the same end result".
     (protocols `anthropic-messages` / `gemini`, both already in
     `AI_SDK_PROTOCOLS`), so reasoning, tool calls and sources render identically.
     `resolveAiSdkModel` is now a four-arm exhaustive switch.
+  - **Known follow-ups from the #4540 review (not blocking):** the
+    `webSearch` / `sources` capability flags on the two new entries are
+    **declared for the matrix but not wired** — the shared mapper passes no
+    provider search tool to `streamText`, so no grounding citations flow yet
+    (same status as the OpenAI pair). Also deferred: importing
+    `@ai-sdk/google-vertex` dynamically so its eager `google-auth-library`
+    dependency is only loaded for Vertex requests (would make
+    `resolveAiSdkModel` async; the route is Node-only today).
 - **5c — non-AI-SDK protocols.** `langgraph`, `ag-ui`, `a2a`. Each needs its
   own mapper; each is a **new dependency / new external surface**.
   **Human gate.**

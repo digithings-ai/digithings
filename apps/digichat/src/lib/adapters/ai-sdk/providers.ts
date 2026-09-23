@@ -55,7 +55,7 @@ export function resolveAiSdkModel(backend: AiSdkBackendConfig): LanguageModel {
     }
     case "anthropic": {
       const apiKey = readBackendApiKey(backend.apiKeyEnv);
-      return createAnthropic({ apiKey, name: "anthropic" })(backend.model);
+      return createAnthropic({ apiKey, name: backend.type })(backend.model);
     }
     case "google-vertex":
       // Vertex reads Application Default Credentials from the ambient

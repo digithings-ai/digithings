@@ -205,7 +205,11 @@ export const BACKEND_ADAPTERS: Record<BackendType, BackendAdapter> = {
     capabilities: {
       reasoning: true,
       toolCalls: true,
+      // Declared for the matrix, not wired yet (#4539): the shared mapper
+      // passes no Anthropic server-side web-search tool to `streamText`.
       webSearch: true,
+      // Grounding citations only arrive with that tool, so this is the same
+      // aspiration as `webSearch` — matching the OpenAI pair's flags.
       sources: true,
       turnMutation: false,
       conversationContinuity: false,
@@ -221,7 +225,11 @@ export const BACKEND_ADAPTERS: Record<BackendType, BackendAdapter> = {
     capabilities: {
       reasoning: true,
       toolCalls: true,
+      // Declared for the matrix, not wired yet (#4539): no googleSearch
+      // grounding tool is passed to `streamText`, and Vertex only returns
+      // grounding citations when that tool is used.
       webSearch: true,
+      // Same aspiration as `webSearch` (see the anthropic entry).
       sources: true,
       turnMutation: false,
       conversationContinuity: false,

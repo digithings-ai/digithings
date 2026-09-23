@@ -44,6 +44,11 @@ export async function createAiSdkStreamResponse({
     });
   }
 
+  // NOTE (#4539): only the env-key backends (openai-*, anthropic) can fail
+  // here with a clean 502 — `readBackendApiKey` throws before any upstream
+  // call. `google-vertex` has no env var to pre-check: it resolves Application
+  // Default Credentials lazily, so an absent ADC surfaces as an upstream error
+  // from `streamText` rather than through this path.
   const result = streamText({
     model,
     messages,
