@@ -580,7 +580,10 @@
     font-size: 0.68rem;
     letter-spacing: 0.08em;
     text-transform: lowercase;
-    color: var(--accent);
+    /* The shared accent-as-small-text recipe, not the raw accent: at 0.68rem
+       the raw module accent fails AA on paper in light theme (4.14 for
+       accent-digiquant on white). See contrast.contract.test.ts. */
+    color: color-mix(in srgb, var(--accent) 70%, var(--ink));
     user-select: none;
     flex-shrink: 0;
   }
