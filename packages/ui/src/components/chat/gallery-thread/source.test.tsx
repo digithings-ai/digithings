@@ -86,4 +86,20 @@ describe("ThreadSource", () => {
     expect(host.textContent).toContain("https://example.com/grounding");
     unmount();
   });
+
+  it.each(["javascript:alert(1)", "data:text/html,<script>x</script>", ""])(
+    "does not build a link from a non-http(s) url: %s",
+    (url) => {
+      const { host, unmount } = mount(
+        <ThreadSource
+          {...({ ...urlSource, url, title: "Suspicious" } as SourceMessagePartProps)}
+        />,
+      );
+      // The row still renders (the citation is real), but nothing is clickable.
+      expect(host.querySelector("a")).toBeNull();
+      expect(host.querySelector('[data-slot="aui_source-url"]')).toBeNull();
+      expect(host.textContent).toContain("Suspicious");
+      unmount();
+    },
+  );
 });

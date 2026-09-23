@@ -640,7 +640,11 @@ export async function POST(req: Request) {
 
   return finish(
     createUIMessageStreamResponse({
-      stream: toUIMessageStream({ stream: result.stream }),
+      stream: toUIMessageStream({
+        stream: result.stream,
+        sendSources: true,
+        sendReasoning: true,
+      }),
       headers: responseHeaders,
     }),
   );

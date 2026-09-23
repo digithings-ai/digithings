@@ -19,11 +19,20 @@ import { cn } from "./cn";
  * plain text for a document. Kept deliberately plain — the citations are
  * supporting detail, not the answer.
  */
+
+/** Only http(s) survives as a link. A provider- or model-supplied `javascript:`
+ * or `data:` URL renders as plain text instead — the same contract
+ * `ChatMarkdownSource` applies to links in an answer. */
+function isHttpUrl(url: unknown): url is string {
+  return typeof url === "string" && /^https?:\/\//i.test(url);
+}
+
 const ThreadSourceImpl: SourceMessagePartComponent = (props) => {
   const { sourceType, title } = props;
   const isUrl = sourceType === "url";
   const detail = isUrl ? props.url : props.filename;
   const label = title?.trim() || detail?.trim() || "Source";
+  const href = isUrl && isHttpUrl(props.url) ? props.url : undefined;
 
   const rowClass = cn(
     "aui-source-row text-muted-foreground hover:text-foreground inline-flex max-w-full items-center gap-2 py-0.5 text-sm transition-colors",
@@ -40,11 +49,11 @@ const ThreadSourceImpl: SourceMessagePartComponent = (props) => {
     </>
   );
 
-  if (isUrl) {
+  if (href) {
     return (
       <a
         data-slot="aui_source-url"
-        href={props.url}
+        href={href}
         target="_blank"
         rel="noreferrer noopener"
         className={rowClass}

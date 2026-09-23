@@ -405,10 +405,11 @@ criterion for "every backend has the same end result".
     `resolveAiSdkModel` is now a four-arm exhaustive switch.
   - **Done (issue #4552, PR into `module/digichat`) — provider search is
     wired and citations render.** Three gaps closed together:
-    1. `toUIMessageStream` now runs with `sendSources: true`. It defaults to
-       **false** in AI SDK v7, so every `source-url` / `source-document` part —
-       provider grounding *and* the digigraph/foundry `retrieve` documents that
-       were already on the wire — was being dropped before the browser saw it.
+    1. `toUIMessageStream` now runs with `sendSources: true` on **both** call
+       sites (the AI-SDK adapter and the digigraph non-trace path in
+       `api/chat/route.ts`). It defaults to **false** in AI SDK v7, so
+       provider-supplied `source-url` / `source-document` citations were being
+       dropped before the browser saw them.
     2. `resolveAiSdkSearchTools(backend)` returns the provider's own built-in
        search tool, passed to `streamText` when the web-search gate is on:
        `openai-responses` → `openai.tools.webSearch()`, `anthropic` →
@@ -417,7 +418,11 @@ criterion for "every backend has the same end result".
        Chat Completions has no server-side search; vendors on that wire format
        bring their own (Perplexity's native web search, OpenRouter's `:online`).
     3. The Thread renders `source` parts (`ThreadSource`, overridable via
-       `components.Source`) as a compact citation row.
+       `components.Source`) as a compact citation row. This is what recovered
+       the digigraph / foundry / `retrieve` documents: those adapters never go
+       through `toUIMessageStream` — they emit `source-url` / `source-document`
+       straight from `lib/ui-stream-parts.ts` `writeSource` — so they were
+       dropped by the message part switch's `default`, not by `sendSources`.
     The same `clientWantsWeb && tenantAllowsWeb` gate now feeds both the
     digigraph `X-Digi-Enable-Web-Search` header and the AI-SDK tools, and the
     session path honours the deployment's `gate.webSearch` (previously only
@@ -434,7 +439,7 @@ criterion for "every backend has the same end result".
     | `openai-completions` | none (vendor-provided, e.g. Perplexity, OpenRouter `:online`) | whatever the vendor returns as tool output |
     | `anthropic` | `anthropic.tools.webSearch_20250305()` (+ `webFetch_*` available) | `source-url` |
     | `google-vertex` | `vertex.tools.googleSearch({})` (+ `urlContext`, `fileSearch`, `vertexRagStore` available) | `source-url` |
-    | `langgraph` / `ag-ui` / `a2a` | none (no built-in search channel) | `ag-ui`/`langgraph` normalizers can emit `retrieve` spans; `a2a` carries task status + artifacts only |
+    | `langgraph` / `ag-ui` / `a2a` | none (no built-in search channel) | the `ag-ui`/`langgraph` normalizers share `writeSource` (`lib/ui-stream-parts.ts`), so they emit `source-url` / `source-document` whenever the backend supplies activity documents; `a2a` carries task status + artifacts only |
 
     Non-provider search remains as it was: the `digisearch` catalog tool, and
     Exa through the hosted MCP server (`https://mcp.exa.ai/mcp`).
