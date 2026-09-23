@@ -403,14 +403,49 @@ criterion for "every backend has the same end result".
     (protocols `anthropic-messages` / `gemini`, both already in
     `AI_SDK_PROTOCOLS`), so reasoning, tool calls and sources render identically.
     `resolveAiSdkModel` is now a four-arm exhaustive switch.
-  - **Known follow-ups from the #4540 review (not blocking):** the
-    `webSearch` / `sources` capability flags on the two new entries are
-    **declared for the matrix but not wired** — the shared mapper passes no
-    provider search tool to `streamText`, so no grounding citations flow yet
-    (same status as the OpenAI pair). Also deferred: importing
-    `@ai-sdk/google-vertex` dynamically so its eager `google-auth-library`
-    dependency is only loaded for Vertex requests (would make
-    `resolveAiSdkModel` async; the route is Node-only today).
+  - **Done (issue #4552, PR into `module/digichat`) — provider search is
+    wired and citations render.** Three gaps closed together:
+    1. `toUIMessageStream` now runs with `sendSources: true` on **both** call
+       sites (the AI-SDK adapter and the digigraph non-trace path in
+       `api/chat/route.ts`). It defaults to **false** in AI SDK v7, so
+       provider-supplied `source-url` / `source-document` citations were being
+       dropped before the browser saw them.
+    2. `resolveAiSdkSearchTools(backend)` returns the provider's own built-in
+       search tool, passed to `streamText` when the web-search gate is on:
+       `openai-responses` → `openai.tools.webSearch()`, `anthropic` →
+       `anthropic.tools.webSearch_20250305()`, `google-vertex` →
+       `vertex.tools.googleSearch({})`. `openai-completions` returns nothing —
+       Chat Completions has no server-side search; vendors on that wire format
+       bring their own (Perplexity's native web search, OpenRouter's `:online`).
+    3. The Thread renders `source` parts (`ThreadSource`, overridable via
+       `components.Source`) as a compact citation row. This is what recovered
+       the digigraph / foundry / `retrieve` documents: those adapters never go
+       through `toUIMessageStream` — they emit `source-url` / `source-document`
+       straight from `lib/ui-stream-parts.ts` `writeSource` — so they were
+       dropped by the message part switch's `default`, not by `sendSources`.
+    The same `clientWantsWeb && tenantAllowsWeb` gate now feeds both the
+    digigraph `X-Digi-Enable-Web-Search` header and the AI-SDK tools, and the
+    session path honours the deployment's `gate.webSearch` (previously only
+    `DIGICHAT_WEB_SEARCH=1` could turn it on for a session;
+    `embedConfig.webSearch` remains authoritative for an embed tenant).
+
+    Per-backend search/citation surfaces:
+
+    | backend | built-in search | citation parts |
+    |---|---|---|
+    | `digigraph` | digisearch + digivault via the corpus/vault headers; `X-Digi-Enable-Web-Search` when gated | `source-url` / `source-document` from `retrieve` spans |
+    | `foundry` | `azure_ai_search` (the agent's own wiring) | `source-url` / `source-document` from `retrieve` spans |
+    | `openai-responses` | `openai.tools.webSearch()` | `source-url` |
+    | `openai-completions` | none (vendor-provided, e.g. Perplexity, OpenRouter `:online`) | whatever the vendor returns as tool output |
+    | `anthropic` | `anthropic.tools.webSearch_20250305()` (+ `webFetch_*` available) | `source-url` |
+    | `google-vertex` | `vertex.tools.googleSearch({})` (+ `urlContext`, `fileSearch`, `vertexRagStore` available) | `source-url` |
+    | `langgraph` / `ag-ui` / `a2a` | none (no built-in search channel) | the `ag-ui`/`langgraph` normalizers share `writeSource` (`lib/ui-stream-parts.ts`), so they emit `source-url` / `source-document` whenever the backend supplies activity documents; `a2a` carries task status + artifacts only |
+
+    Non-provider search remains as it was: the `digisearch` catalog tool, and
+    Exa through the hosted MCP server (`https://mcp.exa.ai/mcp`).
+  - **Deferred (not blocking):** importing `@ai-sdk/google-vertex` dynamically so
+    its eager `google-auth-library` dependency is only loaded for Vertex requests
+    (would make `resolveAiSdkModel` async; the route is Node-only today).
   - **Follow-up from the #4545 review (not blocking):** `lib/byok-openrouter.ts`
     still builds its provider with `createOpenAI` (`name: "openrouter-byok"`),
     so BYOK-OpenRouter reasoning is dropped for the same `reasoning_content`
