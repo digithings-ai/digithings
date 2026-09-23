@@ -12,10 +12,12 @@ import {
 import { byokRequiresModel } from "@/lib/byok-providers";
 import {
   AI_SDK_PROTOCOLS,
+  NON_AI_SDK_PROTOCOLS,
   backendAdapterFor,
   isAiSdkConfig,
   isDigigraphConfig,
   isFoundryConfig,
+  isNonAiSdkConfig,
 } from "@/lib/backend-adapters";
 import { createDigiGraphClient, digigraphModelName } from "@/lib/digigraph";
 import {
@@ -25,6 +27,7 @@ import {
 import { createDigigraphTraceStreamResponse } from "@/lib/adapters/digithings/stream";
 import { createFoundryStreamResponse } from "@/lib/adapters/foundry/stream";
 import { createAiSdkStreamResponse } from "@/lib/adapters/ai-sdk/stream";
+import { createNonAiSdkStreamResponse } from "@/lib/adapters/non-ai-sdk";
 import { resolveLanguageCode } from "@/lib/languages";
 import { requireDigiChatAuth } from "@/lib/request-auth";
 import { getEcosystemEndpoints } from "@/lib/ecosystem";
@@ -396,6 +399,28 @@ export async function POST(req: Request) {
       return foundryRes;
     }
     return finish(foundryRes);
+  }
+
+  // Non-AI-SDK backends (#4543): LangGraph / AG-UI / A2A each get their own
+  // mapper, dispatched from the adapter's protocol. Placed before the
+  // `coreMessages` conversion — these adapters take the UI messages and do
+  // their own text mapping, so a conversion failure must not be able to fail
+  // a request that would otherwise stream.
+  if (NON_AI_SDK_PROTOCOLS.has(adapter.protocol) && isNonAiSdkConfig(backend)) {
+    try {
+      return finish(
+        await createNonAiSdkStreamResponse({
+          backend,
+          messages,
+          responseHeaders,
+          activityDetail,
+          signal: req.signal,
+        }),
+      );
+    } catch (err) {
+      runLock.release();
+      throw err;
+    }
   }
 
   let coreMessages;

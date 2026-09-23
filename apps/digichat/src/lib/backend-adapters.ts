@@ -42,12 +42,23 @@ export type GoogleVertexBackendConfig = Extract<
   BackendConfig,
   { type: "google-vertex" }
 >;
+export type LangGraphBackendConfig = Extract<BackendConfig, { type: "langgraph" }>;
+export type AgUiBackendConfig = Extract<BackendConfig, { type: "ag-ui" }>;
+export type A2aBackendConfig = Extract<BackendConfig, { type: "a2a" }>;
 /** The AI-SDK family: one `streamText` mapper serves all of them (#4535, #4539). */
 export type AiSdkBackendConfig =
   | OpenAiCompletionsBackendConfig
   | OpenAiResponsesBackendConfig
   | AnthropicBackendConfig
   | GoogleVertexBackendConfig;
+/**
+ * The non-AI-SDK family (#4543): hand-rolled mappers that consume a
+ * server-sent event stream and normalize it onto `ActivitySpan`.
+ */
+export type NonAiSdkBackendConfig =
+  | LangGraphBackendConfig
+  | AgUiBackendConfig
+  | A2aBackendConfig;
 
 /**
  * The upstream wire protocol an adapter speaks. This is the adapter selector:
@@ -238,6 +249,66 @@ export const BACKEND_ADAPTERS: Record<BackendType, BackendAdapter> = {
       corpus: false,
     },
   },
+  // The non-AI-SDK family (#4543). Each protocol has its own mapper file under
+  // `lib/adapters/`; the credential is optional (LangGraph Cloud wants
+  // `x-api-key`, a private AG-UI/A2A server may want a bearer) and is named by
+  // an env var, never carried in the config.
+  langgraph: {
+    type: "langgraph",
+    protocol: "langgraph",
+    auth: "env",
+    capabilities: {
+      // `additional_kwargs.reasoning_content` is how LangChain surfaces the
+      // provider's thinking, so reasoning rides the same row as everywhere else.
+      reasoning: true,
+      toolCalls: true,
+      // Declared for the matrix, not wired yet (#4543): the adapter forwards no
+      // search tool, so a graph must bring its own.
+      webSearch: true,
+      sources: true,
+      turnMutation: false,
+      conversationContinuity: false,
+      attachments: false,
+      mcp: false,
+      corpus: false,
+    },
+  },
+  "ag-ui": {
+    type: "ag-ui",
+    protocol: "ag-ui",
+    auth: "env",
+    capabilities: {
+      // AG-UI has a native thinking channel (`THINKING_TEXT_MESSAGE_CONTENT`).
+      reasoning: true,
+      toolCalls: true,
+      webSearch: true,
+      sources: true,
+      turnMutation: false,
+      conversationContinuity: false,
+      attachments: false,
+      mcp: false,
+      corpus: false,
+    },
+  },
+  a2a: {
+    type: "a2a",
+    protocol: "a2a",
+    auth: "env",
+    capabilities: {
+      // A2A carries task status and artifacts only — there is no reasoning
+      // channel and no tool-call surface, so these are declared false rather
+      // than pretending (see the `BackendCapabilities` doc comment).
+      reasoning: false,
+      toolCalls: false,
+      webSearch: false,
+      sources: false,
+      turnMutation: false,
+      conversationContinuity: false,
+      attachments: false,
+      mcp: false,
+      corpus: false,
+    },
+  },
 };
 
 /** The default backend when a deployment declares none. */
@@ -301,4 +372,26 @@ export function isAiSdkConfig(
     config?.type === "anthropic" ||
     config?.type === "google-vertex"
   );
+}
+
+/**
+ * The non-AI-SDK protocols (#4543). Same idea as `AI_SDK_PROTOCOLS`: the
+ * handler tests protocol membership instead of naming backend types.
+ */
+export const NON_AI_SDK_PROTOCOLS: ReadonlySet<BackendProtocol> = new Set<BackendProtocol>([
+  "langgraph",
+  "ag-ui",
+  "a2a",
+]);
+
+/**
+ * Narrow a config to the non-AI-SDK family (for reading `apiUrl` /
+ * `assistantId` / `url` / `baseUrl` / `apiKeyEnv`). Checks `type` only; the
+ * rest of the shape is guaranteed by the Zod schema (`BackendSchema`) and the
+ * tenant validator, both of which run before the handler ever sees a config.
+ */
+export function isNonAiSdkConfig(
+  config: BackendConfig | undefined,
+): config is NonAiSdkBackendConfig {
+  return config?.type === "langgraph" || config?.type === "ag-ui" || config?.type === "a2a";
 }

@@ -427,14 +427,32 @@ criterion for "every backend has the same end result".
 - **5c — non-AI-SDK protocols.** `langgraph`, `ag-ui`, `a2a`. Each needs its
   own mapper; each is a **new dependency / new external surface**.
   **Human gate.**
-  - **Decision (deviation from the text above, toward fewer dependencies):** the
-    three mappers are hand-rolled with `fetch` + a small SSE / JSON-RPC parser,
-    adding **no** dependency. Rationale: the BFF only *consumes* a stream and
-    normalizes it onto `ActivitySpan` — exactly what `adapters/digithings/stream.ts`
-    and `adapters/foundry/stream.ts` already do by hand — and `@ag-ui/client`
-    alone drags in `rxjs`, `uuid`, `fast-json-patch`, `untruncate-json` and more,
-    plus another lockfile-churn / duplicate-`@ai-sdk/provider` risk. Reported to
-    the user; the config surface is unchanged either way.
+  - **Done (issue #4543, PR into `module/digichat`) — hand-rolled, no new
+    dependency.** The plan (and the owner's approval at m1091) assumed one
+    third-party SDK per protocol. On inspection the BFF only *consumes* and
+    normalizes a server-sent event stream — exactly what the digigraph and
+    foundry adapters already do by hand — while `@ag-ui/client` alone drags in
+    `rxjs`, `uuid`, `fast-json-patch` and `untruncate-json`, and every added
+    AI-SDK-family package has already cost a duplicate-`@ai-sdk/provider`
+    incident. So the three mappers are plain `fetch` + a shared SSE/JSON-RPC
+    reader: `adapters/shared/stream-utils.ts` (`iterateSse`, `createTextWriter`,
+    `writeGatedSpan`, `writeReasoningDelta`, `parseToolInput`) plus
+    `adapters/langgraph/stream.ts`, `adapters/ag-ui/stream.ts`,
+    `adapters/a2a/stream.ts`, dispatched by `adapters/non-ai-sdk.ts`. **This is
+    a deviation toward FEWER dependencies and was reported to the owner.**
+    Shapes: `langgraph` = `{ apiUrl, assistantId, apiKeyEnv? }` (`POST
+    /runs/stream`, `stream_mode: ["messages"]`, `x-api-key`);
+    `ag-ui` = `{ url, apiKeyEnv? }` (`POST`, `Bearer`); `a2a` = `{ baseUrl,
+    apiKeyEnv? }` (JSON-RPC `message/stream`, `Bearer`, handles both the SSE and
+    the blocking-JSON response). Every activity span flows through
+    `sanitizeActivitySpan` + `applyActivityDetail` + `writeStandardActivity`
+    (via `writeGatedSpan` / `writeFailureStatus`), so reasoning, tool calls and
+    sources render identically and error rows are capped and disclosure-gated
+    like every other span.
+    **Capability honesty:** `a2a` declares `reasoning`/`toolCalls`/`sources`
+    **false** — the protocol carries task status and artifacts only, with no
+    reasoning or tool-call channel — so the parity invariant is asserted for
+    every type *except* `a2a`, which is asserted false.
 - **5d — capability + parity tests** and the docs table.
 
 **Note:** 5b/5c add third-party runtime dependencies and network surfaces.

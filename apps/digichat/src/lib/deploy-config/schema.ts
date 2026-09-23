@@ -341,6 +341,53 @@ export const GoogleVertexBackendSchema = z
   })
   .strict();
 
+/**
+ * Non-AI-SDK protocol backends (#4543). Each is a stream the BFF consumes and
+ * normalizes itself, so there is no provider package behind them.
+ *
+ * All three take an OPTIONAL `apiKeyEnv` naming an env var (same
+ * `DIGICHAT_BACKEND_` prefix guard as the OpenAI pair, so a tenant config can
+ * never name `AUTH_SECRET`). LangGraph Cloud wants the key in `x-api-key`; a
+ * private AG-UI or A2A server usually wants a bearer. https-only URLs keep the
+ * credential off the wire in plaintext, matching the other backend types.
+ */
+const HttpsBackendUrl = z
+  .string()
+  .url()
+  .refine((u) => u.startsWith("https:"), "must be https");
+
+const OptionalBackendApiKeyEnv = z
+  .string()
+  .regex(/^DIGICHAT_BACKEND_[A-Z0-9_]+$/, "apiKeyEnv must name a DIGICHAT_BACKEND_* env var");
+
+/** LangGraph Platform `runs/stream` (stateless run, no thread management). */
+export const LangGraphBackendSchema = z
+  .object({
+    type: z.literal("langgraph"),
+    apiUrl: HttpsBackendUrl,
+    assistantId: z.string().min(1),
+    apiKeyEnv: OptionalBackendApiKeyEnv.optional(),
+  })
+  .strict();
+
+/** AG-UI event stream (`POST {url}`, SSE frames with a `type` discriminator). */
+export const AgUiBackendSchema = z
+  .object({
+    type: z.literal("ag-ui"),
+    url: HttpsBackendUrl,
+    apiKeyEnv: OptionalBackendApiKeyEnv.optional(),
+  })
+  .strict();
+
+/** A2A JSON-RPC 2.0 endpoint (`message/stream`, or a blocking `message/send`). */
+export const A2aBackendSchema = z
+  .object({
+    type: z.literal("a2a"),
+    baseUrl: HttpsBackendUrl,
+    apiKeyEnv: OptionalBackendApiKeyEnv.optional(),
+  })
+  .strict();
+
 export const BackendSchema = z.discriminatedUnion("type", [
   DigigraphBackendSchema,
   FoundryBackendSchema,
@@ -348,6 +395,9 @@ export const BackendSchema = z.discriminatedUnion("type", [
   OpenAiResponsesBackendSchema,
   AnthropicBackendSchema,
   GoogleVertexBackendSchema,
+  LangGraphBackendSchema,
+  AgUiBackendSchema,
+  A2aBackendSchema,
 ]);
 
 export const ToolCatalogEntrySchema = z
