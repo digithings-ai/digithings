@@ -105,7 +105,7 @@ class DiagnosticsDeps:
     client: Any
     run_id: str
     model: str | None = None
-    # Outer-retry attempt number (#1762). ``pipeline-digiquant.yml`` retries the chain up to 3
+    # Outer-retry attempt number (#1762). ``pipeline-digiquant.yml`` retries the chain up to 2
     # times inside ONE job, so ``GITHUB_RUN_ID`` — and therefore ``run_id`` — is identical
     # across attempts. Before this was part of the diagnostics key, the last attempt's upsert
     # replaced the previous attempt's tokens and cost, which is why 28 of 54 production rows

@@ -3131,7 +3131,7 @@ see below). **PostgREST timeout:** `build_client` sets
 Ledger writers, at-open (`execute_at_open.py`), and the opening-snapshot seed
 construct that client through `build_client`. `_insert` / `_execute` call
 `execute()` directly; hung I/O fails via httpx (no thread deadline). The
-research pipeline run step wraps each of 3 attempts in `timeout 70m` so a
+research pipeline run step wraps each of 2 attempts in `timeout 100m` so a
 hung attempt fails and the retry can fire; the step `timeout-minutes` is 230,
 under the 240-minute job cap. `_insert` raises if `workspace_id` is missing
 on a row. No client-level retries on this path (disconnect retries are a
@@ -3894,7 +3894,7 @@ returns it, which is why that function's name no longer matches the health verdi
 
 ### One row per retry ATTEMPT, not per workflow run (#1762)
 
-`pipeline-digiquant.yml` retries the chain up to `MAX_OUTER_ATTEMPTS=3` times **inside one job**,
+`pipeline-digiquant.yml` retries the chain up to `MAX_OUTER_ATTEMPTS=2` times **inside one job**,
 so every attempt sees the same `GITHUB_RUN_ID`. That was the entire upsert key, so the last
 attempt — usually the cheap checkpoint-resumed one — replaced the expensive attempt's tokens,
 cost, `status` and `error_summary`. 28 of 54 production rows were affected.
