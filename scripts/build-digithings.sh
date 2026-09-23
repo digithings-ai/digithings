@@ -38,6 +38,12 @@ echo "--- building digithings-web (Next.js static export) ---"
 # Same-hostname digichat Container by default; override for Tunnel staging.
 export NEXT_PUBLIC_DIGICHAT_EMBED_ORIGIN="${NEXT_PUBLIC_DIGICHAT_EMBED_ORIGIN:-https://digithings.ai}"
 echo "NEXT_PUBLIC_DIGICHAT_EMBED_ORIGIN=${NEXT_PUBLIC_DIGICHAT_EMBED_ORIGIN}"
+# The landing price tape reads the public R2-backed market-data Worker. prebuild
+# inlines this for the client fetch AND writes the origin into the CSP
+# connect-src (apps/digithings-web/lib/security-headers.mjs), so leaving it
+# unset would inline an empty base and strand the band on its connecting line.
+export NEXT_PUBLIC_MARKET_DATA_URL="${NEXT_PUBLIC_MARKET_DATA_URL:-https://graph.digithings.ai}"
+echo "NEXT_PUBLIC_MARKET_DATA_URL=${NEXT_PUBLIC_MARKET_DATA_URL}"
 # prebuild rewrites public/_headers frame-src from NEXT_PUBLIC_DIGICHAT_EMBED_ORIGIN
 # The workspace's own `build` script passes --webpack: Turbopack (Next 16's
 # build default) production-builds this home page into an intermittent React
