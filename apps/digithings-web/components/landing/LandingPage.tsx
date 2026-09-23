@@ -79,11 +79,18 @@ function Boot() {
   return (
     <section className="line-b overflow-x-clip px-[var(--page-pad)] py-[var(--section-y-tight)]">
       <div className="mx-auto flex max-w-[var(--frame-w)] flex-col gap-[1.6rem]">
-        <CopyCommand
-          samples={[{ label: "clone", protocol: "git clone", code: REPO_CLONE }]}
-          ariaLabel="Clone command"
-          inline
-        />
+        {/* `*:max-w-none` because `CopyCommand` caps itself at the prose
+            measure (691px). Alone that reads fine, but the terminal directly
+            beneath it spans the whole frame (1164px), so the band's two
+            elements disagreed about the column. The command is chrome, not
+            prose — it should share the terminal's width. */}
+        <div className="[&>*]:max-w-none">
+          <CopyCommand
+            samples={[{ label: "clone", protocol: "git clone", code: REPO_CLONE }]}
+            ariaLabel="Clone command"
+            inline
+          />
+        </div>
         <div className="relative min-w-0">
           <Glow variant="top" />
           <MockupFrame size="small" className="animate-appear opacity-0 delay-100">
