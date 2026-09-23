@@ -227,29 +227,52 @@ jobs:
         run: |
           uv run --frozen --no-sync python digiquant/scripts/research/validate-providers.py --skip-dry-run
 
-      - name: Warm digikey container (cold-start mitigation)
-        # #4050: key.digithings.ai is a Cloudflare Container that scales to zero;
-        # its first response after idle can take tens of seconds. Non-fatal by
-        # design — digibase.service_auth now retries the token exchange itself,
-        # so this only spares the pipeline the first cold wait.
+      - name: Wake stack container (digikey + digisearch)
+        # #4546: the stack container sleeps after 3 minutes idle, and a cold wake
+        # brings its loopback services up in parallel — digisearch can answer
+        # before digikey (:8005) serves the JWKS it needs to verify the token,
+        # which surfaced mid-run as 401 invalid_token / 503
+        # auth_backend_unavailable and destroyed whole attempts. Wake both public
+        # hostnames and wait until both answer. Bounded well above the loop's
+        # worst case (12 attempts x (2 curls x 10s + 5s sleep) = 300s) so a hung
+        # probe cannot blow the step budget and fail the job — the script is
+        # deliberately non-fatal and the pre-flight check is the real gate.
+        timeout-minutes: 8
         run: |
-          url="${DIGIKEY_URL:-https://key.digithings.ai}/healthz"
-          for attempt in 1 2 3; do
-            if curl -sf --max-time 10 "$url" >/dev/null; then
-              echo "digikey warm after attempt ${attempt}"
+          digikey_url="${DIGIKEY_URL:-https://key.digithings.ai}/healthz"
+          digisearch_url="${DIGISEARCH_URL:-https://search.digithings.ai}/healthz"
+          for attempt in $(seq 1 12); do
+            digikey_ok=false
+            digisearch_ok=false
+            if curl -sf --max-time 10 "$digikey_url" >/dev/null; then digikey_ok=true; fi
+            if curl -sf --max-time 10 "$digisearch_url" >/dev/null; then digisearch_ok=true; fi
+            if [ "$digikey_ok" = true ] && [ "$digisearch_ok" = true ]; then
+              echo "stack warm after attempt ${attempt}"
               exit 0
             fi
-            echo "::warning::digikey warm-up attempt ${attempt} failed; retrying in 5s"
+            echo "::warning::stack warm-up attempt ${attempt}: digikey=${digikey_ok} digisearch=${digisearch_ok}; retrying in 5s"
             sleep 5
           done
-          echo "::warning::digikey warm-up did not succeed; pipeline will exchange for a token itself"
+          echo "::warning::stack warm-up incomplete (digikey=${digikey_ok} digisearch=${digisearch_ok}); the pre-flight check will retry"
 
-      # #4198: fail fast when the search provider is down — every research
+      # #4198/#4546: fail fast when the search provider is down — every research
       # phase grounds on web_search, so running without it only burns hours
-      # before the same failure. One cheap probe; DIGISEARCH_URL is job-level.
+      # before the same failure. The probe is a real authenticated
+      # orchestrator_invoke round-trip, so retry it across a cold-wake window
+      # (digisearch may answer before the container's digikey :8005 serves JWKS)
+      # before declaring the provider dead. DIGISEARCH_URL is job-level.
       - name: Pre-flight web_search health check
-        timeout-minutes: 5
-        run: uv run --frozen --no-sync python -m digiquant web-search healthcheck
+        timeout-minutes: 10
+        run: |
+          for attempt in $(seq 1 6); do
+            if uv run --frozen --no-sync python -m digiquant web-search healthcheck; then
+              exit 0
+            fi
+            echo "::warning::web_search pre-flight attempt ${attempt} failed; retrying in 10s"
+            sleep 10
+          done
+          echo "::error::web_search pre-flight failed after 6 attempts"
+          exit 1
 
       - name: Run digiquant research pipeline
         id: run
