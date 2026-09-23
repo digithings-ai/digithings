@@ -1,13 +1,13 @@
 import {
-  RepoActivity,
   WordReveal,
   modules,
   type RepoContributor,
   type RepoModuleRelease,
 } from "@digithings/ui";
-import { CONTRIBUTING_URL, REPO_CLONE, REPO_URL, repoActivity } from "@/lib/repoActivity";
+import { REPO_URL } from "@/lib/repoActivity";
 import { moduleVersion } from "@/lib/moduleCounts";
 import { GROUPED_LABEL } from "./label";
+import { OpenSourceLive } from "./OpenSourceLive";
 
 /**
  * The open-source band, the FAQ and the voices (v12 → v15, #4429).
@@ -261,22 +261,14 @@ const MAINTAINER: RepoContributor = {
 };
 
 export function OpenSource() {
-  return (
-    /* The kit's component rather than a remix of it, at the full width of the
-       band. `min-w-0` keeps the grid's max-content heat frame from setting the
-       track's min-content and pushing the page sideways at narrow widths.
-       The activity variant is the middle ground the owner asked for: the summary
-       metrics and the contribution graph are kept, the two ledgers are dropped,
-       and the version ledger and the maintainer take their place. */
-    <RepoActivity
-      variant="activity"
-      snapshot={repoActivity}
-      repoUrl={REPO_URL}
-      cloneCommand={REPO_CLONE}
-      contributingUrl={CONTRIBUTING_URL}
-      moduleReleases={MODULE_RELEASES}
-      contributor={MAINTAINER}
-      className="min-w-0"
-    />
-  );
+  /* The kit's activity variant, at the full width of the band, rendered through
+     the app's one client shell so the version rail can refresh live (#4429).
+     The shell is `OpenSourceLive`; this server half owns the committed list and
+     the maintainer, and `min-w-0` there keeps the grid's max-content heat frame
+     from setting the track's min-content and pushing the page sideways at
+     narrow widths. The activity variant is the middle ground the owner asked
+     for: the summary metrics and the contribution graph are kept, the two
+     ledgers are dropped, and the version rail and the maintainer take their
+     place. */
+  return <OpenSourceLive moduleReleases={MODULE_RELEASES} contributor={MAINTAINER} />;
 }
