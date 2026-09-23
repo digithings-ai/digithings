@@ -16,6 +16,7 @@
  */
 import { useEffect, useRef, useState, type RefObject } from "react";
 
+import { CardRail } from "../data-layout";
 import { GitHubGlyph } from "../icons";
 import { fetchRepoActivityLive } from "./fetch";
 import { RepoHeatmap } from "./RepoHeatmap";
@@ -30,14 +31,27 @@ import {
 } from "./types";
 
 /**
- * One module's current version, for the activity variant's release ledger.
+ * One module's current version, for the activity variant's release rail.
  * `name` is the module (digichat, digigraph, …); `version` is the tag as it
  * should be read, without the module prefix repeated.
+ *
+ * `title` and `date` are the optional live layer. A host that has fetched the
+ * module's newest GitHub release fills them with that release's call-out line
+ * and publish date, and points `url` at the tag. A module with no release of
+ * its own leaves them out rather than inventing a feature line — the declared
+ * `version` is the fallback for exactly those modules, because release-please
+ * only cuts releases for digichat and digiskills, so most of the rail is the
+ * version each module declares for itself
+ * (see apps/digithings-web/lib/moduleCounts.ts).
  */
 export type RepoModuleRelease = {
   name: string;
   version: string;
   url?: string;
+  /** The newest release's call-out line, when a release exists. */
+  title?: string;
+  /** ISO publish stamp of that release (`2026-09-21T12:38:12Z`). */
+  date?: string;
 };
 
 /** The maintainer behind the repo, credited under the activity variant. */
@@ -272,7 +286,7 @@ function Compact({
 
 /**
  * The in-between variant: summary metrics beside the contribution grid, then a
- * ledger of every module's current version and the maintainer.
+ * horizontal rail of every module's current version and the maintainer.
  *
  * The detailed variant answers "what is happening" with two ledgers (merged
  * recently, open issues); the compact one answers "is this alive" with three
@@ -343,20 +357,17 @@ function Activity({
           {releases.length ? (
             <div className="ra-versions">
               <p className="ra-kicker">{"// current versions"}</p>
-              <ul className="ra-version-list" role="list">
+              {/* The ledger is the kit's own horizontal rail — the same element
+                  the strategy library uses, promoted from the design reference's
+                  changelog rail. The owner asked for the releases "in a
+                  horizontal scrollable pane like you'll find in the data page".
+                  The rail knows nothing about its children, so each release is a
+                  card carrying its own name, version and optional live line. */}
+              <CardRail ariaLabel="Current version of every module">
                 {releases.map((r) => (
-                  <li key={r.name} className="ra-version">
-                    <span className="ra-version-name">{r.name}</span>
-                    {r.url ? (
-                      <a href={r.url} target="_blank" rel="noreferrer">
-                        {r.version}
-                      </a>
-                    ) : (
-                      <span>{r.version}</span>
-                    )}
-                  </li>
+                  <ReleaseCard key={r.name} release={r} />
                 ))}
-              </ul>
+              </CardRail>
             </div>
           ) : null}
           {contributor ? (
@@ -385,6 +396,37 @@ function Activity({
         </div>
       ) : null}
     </>
+  );
+}
+
+/**
+ * One release card in the version rail. `role="listitem"` because the rail's
+ * track is the `role="list"`; the sizing and snap-align live in
+ * `repo-activity.css` (`.ra-release-card`), since the call site here is the kit
+ * itself rather than an app. A module whose version is only declared — no
+ * GitHub release — shows its name and version and stops there: no feature line
+ * and no date, because there is no release to read them from.
+ */
+function ReleaseCard({ release }: { release: RepoModuleRelease }) {
+  return (
+    <article className="ra-release-card" role="listitem">
+      <div className="ra-release-head">
+        <span className="ra-release-name">{release.name}</span>
+        {release.date ? (
+          <time className="ra-release-date" dateTime={release.date}>
+            {isoDay(release.date)}
+          </time>
+        ) : null}
+      </div>
+      {release.url ? (
+        <a className="ra-release-version" href={release.url} target="_blank" rel="noreferrer">
+          {release.version}
+        </a>
+      ) : (
+        <span className="ra-release-version">{release.version}</span>
+      )}
+      {release.title ? <p className="ra-release-title">{release.title}</p> : null}
+    </article>
   );
 }
 
