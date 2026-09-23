@@ -41,6 +41,35 @@ export function marketDataOriginForCsp(env = process.env) {
 }
 
 /**
+ * Origin of the digiquant Supabase project the landing band's live reads use
+ * (`public_accounting_nav_history`, `strategy_tearsheets`). Resolved from the
+ * same public var the digiquant site and dashboard use, so the three surfaces
+ * share one backend origin. Unset means no entry: the band falls back to its
+ * badged example series and the static export still builds.
+ * @param {NodeJS.ProcessEnv | Record<string, string | undefined>} [env]
+ * @returns {string | null}
+ */
+export function resolveSupabaseOrigin(env = process.env) {
+  const raw = env.NEXT_PUBLIC_SUPABASE_URL?.trim();
+  if (!raw) return null;
+  try {
+    return new URL(raw).origin;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Origin for CSP connect-src, or null when the env is unset — deliberately no
+ * production default: a hard-coded Supabase ref would either be wrong or would
+ * leak a project id into the repo.
+ * @param {NodeJS.ProcessEnv | Record<string, string | undefined>} [env]
+ */
+export function supabaseOriginForCsp(env = process.env) {
+  return resolveSupabaseOrigin(env);
+}
+
+/**
  * @param {NodeJS.ProcessEnv | Record<string, string | undefined>} [env]
  * @returns {string | null} absolute origin, or null if unset/invalid
  */
@@ -73,8 +102,22 @@ export function embedOriginForChat(env = process.env) {
 /**
  * @param {string} [frameSrc]
  * @param {string} [marketOrigin]
+ * @param {string | null} [supabaseOrigin]
  */
-export function digithingsCsp(frameSrc = frameSrcForCsp(), marketOrigin = marketDataOriginForCsp()) {
+export function digithingsCsp(
+  frameSrc = frameSrcForCsp(),
+  marketOrigin = marketDataOriginForCsp(),
+  supabaseOrigin = supabaseOriginForCsp(),
+) {
+  const connectSrc = [
+    "connect-src",
+    "'self'",
+    "https://api.github.com",
+    marketOrigin,
+    supabaseOrigin,
+  ]
+    .filter(Boolean)
+    .join(" ");
   return [
     "default-src 'self'",
     "script-src 'self' 'unsafe-inline'",
@@ -82,8 +125,9 @@ export function digithingsCsp(frameSrc = frameSrcForCsp(), marketOrigin = market
     "img-src 'self' data: https:",
     "font-src 'self' data:",
     // OpenAPI explorer loads same-origin /openapi/*.json; swagger-ui may use a blob worker.
-    // The market-data origin is the landing price tape's read (DEFAULT_MARKET_DATA_ORIGIN).
-    `connect-src 'self' https://api.github.com ${marketOrigin}`,
+    // The market-data origin is the landing price tape's read (DEFAULT_MARKET_DATA_ORIGIN);
+    // the Supabase origin is the digiquant band's live reads, when that env is set.
+    connectSrc,
     "worker-src 'self' blob:",
     `frame-src ${frameSrc}`,
     "frame-ancestors 'none'",
@@ -133,9 +177,10 @@ export function openwikiCsp() {
 /**
  * Cloudflare Pages `_headers` file body.
  * @param {string} [frameSrc]
+ * @param {string | null} [supabaseOrigin]
  */
-export function renderCloudflareHeaders(frameSrc = frameSrcForCsp()) {
-  const csp = digithingsCsp(frameSrc);
+export function renderCloudflareHeaders(frameSrc = frameSrcForCsp(), supabaseOrigin = supabaseOriginForCsp()) {
+  const csp = digithingsCsp(frameSrc, marketDataOriginForCsp(), supabaseOrigin);
   const wikiCsp = openwikiCsp();
   return [
     "# Cloudflare Pages headers for digithings.ai. Fonts are self-hosted (next/font).",
