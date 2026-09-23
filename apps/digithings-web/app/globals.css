@@ -41,6 +41,11 @@
 @import "@digithings/ui/styles/finance-composites.css";
 @import "@digithings/ui/styles/metrics.css";
 @import "@digithings/ui/styles/finance-tearsheet.css";
+/* … and its overlay extensions, which is where the second-series strokes live.
+   Without this sheet `tone: "mute"` and `dashed: true` generate class names that
+   nothing styles, so the benchmark line in the digiquant band computes
+   `stroke: none` and renders invisible — a comparison chart with one series. */
+@import "@digithings/ui/styles/finance-tearsheet-overlay.css";
 /* Chat family primitives (#1418) — imported BEFORE the digichat-ui sheets so
    the .dc- and .dt- rules keep winning same-specificity ties (e.g. the
    caret's animation shorthand when an element carries both .chat-cursor
@@ -111,6 +116,11 @@
    arbitrary utilities (`min-w-[640px]`, `pe-[0.9rem]`, `bg-accent/6`), so without
    this line the matrix renders as an unstyled table. */
 @source "../../../packages/ui/src/components/pricing";
+/* … and the effects-chrome family, for the <Pipeline> the digiquant band uses to
+   draw the research → portfolio → execution flow. Its nodes and detail panel are
+   built from arbitrary token utilities; only the state/structure rules live in
+   effects-chrome.css, so without this line the flow renders unstyled. */
+@source "../../../packages/ui/src/components/effects-chrome";
 /* … and the page-geometry parts (LayoutLines/Mockup/MockupFrame/Glow). Those
    components carry the ported `line-*` and `fade-*` utility classes, and
    Tailwind only emits a utility it has SEEN in scanned content — so without
