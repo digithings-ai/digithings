@@ -44,6 +44,16 @@ echo "NEXT_PUBLIC_DIGICHAT_EMBED_ORIGIN=${NEXT_PUBLIC_DIGICHAT_EMBED_ORIGIN}"
 # unset would inline an empty base and strand the band on its connecting line.
 export NEXT_PUBLIC_MARKET_DATA_URL="${NEXT_PUBLIC_MARKET_DATA_URL:-https://graph.digithings.ai}"
 echo "NEXT_PUBLIC_MARKET_DATA_URL=${NEXT_PUBLIC_MARKET_DATA_URL}"
+# The digiquant band reads the dashboard's own Supabase backend (published NAV
+# series + strategy index) through the same anon client digiquant.io uses — the
+# owner asked for one canonical backend across the three surfaces. Both vars are
+# read straight from the Pages project environment (a human deploy step, like the
+# digiquant site: set them on the Cloudflare Pages project, not in the repo).
+# Deliberately NO default here: a hard-coded project ref would either be wrong or
+# leak a project id. When unset the client is null, every read returns empty, the
+# band keeps its badged example series, and the CSP gains no extra origin.
+echo "NEXT_PUBLIC_SUPABASE_URL=${NEXT_PUBLIC_SUPABASE_URL:+set}"
+echo "NEXT_PUBLIC_SUPABASE_ANON_KEY=${NEXT_PUBLIC_SUPABASE_ANON_KEY:+set}"
 # prebuild rewrites public/_headers frame-src from NEXT_PUBLIC_DIGICHAT_EMBED_ORIGIN
 # The workspace's own `build` script passes --webpack: Turbopack (Next 16's
 # build default) production-builds this home page into an intermittent React

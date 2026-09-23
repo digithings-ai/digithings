@@ -12,6 +12,8 @@ import {
   renderCloudflareHeaders,
   resolveDigichatEmbedOrigin,
   resolveMarketDataOrigin,
+  resolveSupabaseOrigin,
+  supabaseOriginForCsp,
 } from "./security-headers.mjs";
 
 const headersPath = resolve(__dirname, "../public/_headers");
@@ -107,6 +109,24 @@ describe("digithings-web security-headers", () => {
     expect(digithingsCsp(undefined, "https://md.example")).toContain(
       "connect-src 'self' https://api.github.com https://md.example",
     );
+  });
+
+  it("adds the Supabase origin to connect-src only when the env is set", () => {
+    expect(resolveSupabaseOrigin({ NEXT_PUBLIC_SUPABASE_URL: "https://db.example/x/" })).toBe(
+      "https://db.example",
+    );
+    expect(resolveSupabaseOrigin({})).toBeNull();
+    expect(resolveSupabaseOrigin({ NEXT_PUBLIC_SUPABASE_URL: "not a url" })).toBeNull();
+
+    // Unset means no extra source: the committed default policy is unchanged, so
+    // the band's badged example series and the static export both still hold.
+    expect(supabaseOriginForCsp({})).toBeNull();
+    expect(digithingsCsp(undefined, "https://graph.digithings.ai", null)).not.toContain(
+      "connect-src 'self' https://api.github.com https://graph.digithings.ai ",
+    );
+    expect(
+      digithingsCsp(undefined, "https://graph.digithings.ai", "https://db.example"),
+    ).toContain("connect-src 'self' https://api.github.com https://graph.digithings.ai https://db.example");
   });
 
   it("keeps committed _headers aligned with default CSP", () => {

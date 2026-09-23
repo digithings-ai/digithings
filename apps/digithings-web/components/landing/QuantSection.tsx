@@ -18,6 +18,14 @@ import {
   type TearsheetSeriesPoint,
   type ViewWindow,
 } from "@digithings/ui";
+import {
+  cagrPct,
+  isDcaStrategy,
+  useLiveBand,
+  type NavPoint,
+  type PricePoint,
+  type StrategyRead,
+} from "@/lib/live/useLiveBand";
 import { GROUPED_LABEL } from "./label";
 
 /**
@@ -297,6 +305,96 @@ const STRATEGIES: {
 ];
 
 /**
+ * The four cards the band shows, in order — also the live read's membership, so
+ * an unexpected row in the table can never add a card here.
+ */
+const STRATEGY_SLUGS = STRATEGIES.map((strategy) => strategy.slug);
+
+/** The card shape, whether the reads are the live index or the example set. */
+type StrategyCardData = (typeof STRATEGIES)[number];
+
+function fmtPctValue(value: number | null): string {
+  if (value === null) return "—";
+  return `${value >= 0 ? "+" : "−"}${Math.abs(value).toFixed(1)}%`;
+}
+
+/**
+ * The six reads a card shows, computed from the stored tearsheet payload.
+ *
+ * A DCA strategy carries different headline fields than a long/short one (it has
+ * no win rate or profit factor), so the card shows the DCA set — the same split
+ * digiquant.io's own library card makes.
+ */
+function liveStrategyCard(read: StrategyRead): StrategyCardData {
+  const dca = isDcaStrategy(read.strategy);
+  const cagr = cagrPct(read.netProfitPct, read.periodStart, read.periodEnd);
+  const kpis = dca
+    ? [
+        { label: "Total return", value: fmtPctValue(read.netProfitPct) },
+        { label: "Max DD", value: fmtPctValue(read.maxDrawdownPct) },
+        { label: "Vs buy & hold", value: fmtPctValue(read.vsLumpPct) },
+        {
+          label: "Allocated",
+          value: read.allocatedPct === null ? "—" : `${read.allocatedPct.toFixed(1)}%`,
+        },
+        { label: "Trades", value: read.totalTrades.toLocaleString("en-US") },
+        { label: "Since", value: read.periodStart.slice(0, 7) },
+      ]
+    : [
+        { label: "CAGR", value: fmtPctValue(cagr) },
+        { label: "Max DD", value: fmtPctValue(read.maxDrawdownPct) },
+        {
+          label: "Profit factor",
+          value: read.profitFactor === null ? "—" : read.profitFactor.toFixed(2),
+        },
+        { label: "Win rate", value: fmtPctValue(read.winRatePct) },
+        { label: "Trades", value: read.totalTrades.toLocaleString("en-US") },
+        { label: "Since", value: read.periodStart.slice(0, 7) },
+      ];
+  return {
+    slug: read.strategy,
+    name: read.label ?? read.strategy,
+    symbol: read.symbol.replace(/-USD$/, ""),
+    kind: dca ? "accumulation" : "long / short",
+    kpis,
+  };
+}
+
+/** A live pair, each leg indexed to 100 at its own first point. */
+function indexLive(
+  nav: NavPoint[],
+  benchmark: PricePoint[],
+): { series: OverlaySeries[]; fullSpan: [string, string] } | null {
+  if (nav.length < 2) return null;
+  const baseNav = nav[0].nav;
+  if (!baseNav) return null;
+  const start = nav[0].date;
+  const portfolio: TearsheetSeriesPoint[] = nav.map((point) => ({
+    t: point.date,
+    v: (point.nav / baseNav) * 100,
+  }));
+  const prices = benchmark.filter((point) => point.date >= start);
+  const basePrice = prices[0]?.price ?? 0;
+  const benchmarkPoints: TearsheetSeriesPoint[] =
+    basePrice > 0
+      ? prices.map((point) => ({ t: point.date, v: (point.price / basePrice) * 100 }))
+      : [];
+  const series: OverlaySeries[] = [
+    { id: "portfolio", label: "digiquant portfolio", points: portfolio, tone: "accent", fill: true },
+  ];
+  if (benchmarkPoints.length > 1) {
+    series.push({
+      id: "benchmark",
+      label: "benchmark",
+      points: benchmarkPoints,
+      tone: "mute",
+      dashed: true,
+    });
+  }
+  return { series, fullSpan: [portfolio[0].t, portfolio[portfolio.length - 1].t] };
+}
+
+/**
  * The percent change across the *visible* window of an indexed series.
  *
  * `ViewWindow` is a normalized `[lo, hi]` slice of the full date span, so the
@@ -342,29 +440,43 @@ function fmtRelative(portfolio: number | null, benchmark: number | null): string
  * Values are deliberately untinted: the up/down money classes are reserved for
  * figures that are somebody's result, and none of these is.
  */
-function Book() {
+function Book({
+  series,
+  fullSpan,
+  live,
+}: {
+  series: OverlaySeries[];
+  fullSpan: [string, string];
+  live: boolean;
+}) {
   const [view, setView] = useState<ViewWindow | null>(null);
-  const active: LookbackPreset = (view && matchLookbackPreset(view, FULL_SPAN)) || "1y";
-  const window: ViewWindow = view ?? viewWindowForPreset("1y", FULL_SPAN);
-  const portfolioReturn = windowReturn(EXAMPLE.portfolio, window);
-  const benchmarkReturn = windowReturn(EXAMPLE.benchmark, window);
+  const active: LookbackPreset = (view && matchLookbackPreset(view, fullSpan)) || "1y";
+  const window: ViewWindow = view ?? viewWindowForPreset("1y", fullSpan);
+  const portfolioPoints = series.find((entry) => entry.id === "portfolio")?.points ?? [];
+  const benchmarkPoints = series.find((entry) => entry.id === "benchmark")?.points ?? [];
+  const portfolioReturn = windowReturn(portfolioPoints, window);
+  const benchmarkReturn = windowReturn(benchmarkPoints, window);
 
   return (
     <div className="flex min-w-0 flex-col gap-[0.8rem]">
-      <span className={GROUPED_LABEL}>the book · example</span>
+      <span className={GROUPED_LABEL}>{live ? "the book · live" : "the book · example"}</span>
       {/* Single column at the base for the same reason as the block above: an
           SVG chart measures its own pane, so an implicit `auto` track would size
           from that min-content and push the page wider than the viewport. */}
       <div className="grid grid-cols-[minmax(0,1fr)] gap-[1rem] min-[980px]:grid-cols-[minmax(0,1.55fr)_minmax(0,0.45fr)] min-[980px]:items-stretch min-[980px]:gap-[1.4rem]">
         <div className="h-[240px] overflow-hidden border border-hair">
           <MultiTimeSeries
-            series={PERFORMANCE_SERIES}
+            series={series}
             height={240}
             interactive
             view={view ?? undefined}
             onView={setView}
-            fullSpan={FULL_SPAN}
-            ariaLabel="Example performance, digiquant portfolio against a benchmark, indexed to 100 at the start (synthetic series)"
+            fullSpan={fullSpan}
+            ariaLabel={
+              live
+                ? "digiquant portfolio against a benchmark, indexed to 100 at the start"
+                : "Example performance, digiquant portfolio against a benchmark, indexed to 100 at the start (synthetic series)"
+            }
           />
         </div>
 
@@ -398,12 +510,14 @@ function Book() {
       </div>
       <div className="flex flex-wrap items-center justify-between gap-[0.6rem]">
         <p className="m-0 font-mono text-[0.68rem] text-ink-mute">
-          indexed to 100 · portfolio (solid) vs benchmark (dashed) · synthetic series
+          {live
+            ? "indexed to 100 · digiquant portfolio (solid) vs benchmark (dashed), from the dashboard's own series"
+            : "indexed to 100 · portfolio (solid) vs benchmark (dashed) · synthetic series"}
         </p>
         <SegToggle
           value={active}
           options={LOOKBACK_OPTIONS}
-          onChange={(preset) => setView(viewWindowForPreset(preset, FULL_SPAN))}
+          onChange={(preset) => setView(viewWindowForPreset(preset, fullSpan))}
           label="Lookback window"
         />
       </div>
@@ -412,6 +526,14 @@ function Book() {
 }
 
 export function QuantSection({ className }: { className?: string }) {
+  /* The dashboard's own backend, when this build has the public env. Without it
+     every read returns empty and the band keeps its badged example series. */
+  const live = useLiveBand(STRATEGY_SLUGS);
+  const liveIndex = live.nav.length > 1 ? indexLive(live.nav, live.benchmark) : null;
+  const book = liveIndex ?? { series: PERFORMANCE_SERIES, fullSpan: FULL_SPAN };
+  const cards: StrategyCardData[] =
+    live.strategies.length > 0 ? live.strategies.map(liveStrategyCard) : STRATEGIES;
+
   return (
     <div className={`accent-digiquant quant-band relative overflow-hidden ${className ?? ""}`}>
       {/* The dashboard mark, behind everything, faded and animated — the
@@ -464,7 +586,7 @@ export function QuantSection({ className }: { className?: string }) {
                 promoted from the design reference's changelog rail. */}
             <div className="flex min-w-0 flex-col justify-center">
               <CardRail ariaLabel="Flagship digiquant strategies">
-                {STRATEGIES.map((strategy) => (
+                {cards.map((strategy) => (
                   <div key={strategy.slug} role="listitem" className="flex-[0_0_17rem] snap-start">
                     <TearsheetCard href={`${DIGIQUANT_URL}/strategies/${strategy.slug}`}>
                       <div className="ts-card-head">
@@ -494,7 +616,7 @@ export function QuantSection({ className }: { className?: string }) {
             <StageStrip />
           </div>
 
-          <Book />
+          <Book series={book.series} fullSpan={book.fullSpan} live={Boolean(liveIndex)} />
         </div>
       </div>
     </div>
