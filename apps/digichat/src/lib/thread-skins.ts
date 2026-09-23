@@ -88,47 +88,48 @@ export const LAYOUT_SKINS = [
 export type LayoutSkin = (typeof LAYOUT_SKINS)[number];
 
 /**
- * The canvas a skin paints, so chrome that sits *outside* the skin's own DOM
- * (the credit watermark) can float over it without its own band.
+ * The ink a skin paints its own text with, so the credit sitting inside that
+ * skin's DOM stays legible instead of matching the canvas.
  *
  * The catalog skins carry their palette as Tailwind classes on their own root
- * element (`bg-white dark:bg-black`, `bg-[#F0ECE0] dark:bg-[#2b2a27]`, …), not
- * as a scoped CSS variable, and `ThreadPrimitive.Root` hard-codes
+ * element (`text-[#0d0d0d] dark:text-[#ececec]`, `text-[#1a1a18]`, …), not as
+ * a scoped CSS variable, and `ThreadPrimitive.Root` hard-codes
  * `data-thread-skin="digichat"` for every skin — so there is nothing per-skin
- * to inherit. These literals mirror the skin roots; keep them in step when a
- * skin's canvas changes. `null` means "let the token fall through"
- * (`--background`), which is what the `base` demo and the first-party
- * `digichat` skin want (they honour `--term-bg`).
+ * to inherit. These literals mirror the skin roots' *text* colour; keep them in
+ * step when a skin's palette changes. A skin with no entry (`base`, `digichat`,
+ * layout skins) falls through to `--muted-foreground`, which those skins
+ * already theme correctly.
+ *
+ * Never map this to the canvas colour: white ink on a white canvas is exactly
+ * the invisible-credit bug the review caught on the clone skins.
  */
-const SKIN_CANVAS: Partial<Record<ThreadSkin, { light: string; dark: string }>> = {
-  // canon-allow: each line mirrors a catalog skin's own Tailwind background
-  // (`bg-white dark:bg-black`, `bg-[#F0ECE0]`, …). They are surface colours the
-  // skins already hard-code; there is no kit token for a third-party palette,
-  // and they exist only so the credit watermark's halo matches the skin.
-  chatgpt: { light: "#ffffff", dark: "#000000" }, // canon-allow
-  claude: { light: "#F0ECE0", dark: "#2b2a27" }, // canon-allow
-  grok: { light: "#fdfdfd", dark: "#141414" }, // canon-allow
-  gemini: { light: "#fdfcfc", dark: "#0c0c0c" }, // canon-allow
-  perplexity: { light: "#f6f2ec", dark: "#171615" }, // canon-allow
+const SKIN_INK: Partial<Record<ThreadSkin, { light: string; dark: string }>> = {
+  // canon-allow: each line mirrors a catalog skin's own Tailwind text colour
+  // (`text-[#0d0d0d] dark:text-[#ececec]`, `text-[#1a1a18]`, …). There is no kit
+  // token for a third-party palette, and they exist only so the credit stays
+  // legible inside the skin.
+  chatgpt: { light: "#0d0d0d", dark: "#ececec" }, // canon-allow
+  claude: { light: "#1a1a18", dark: "#eee" }, // canon-allow
+  grok: { light: "#0d0d0d", dark: "#ececec" }, // canon-allow
+  gemini: { light: "#1f1f1f", dark: "#e3e3e3" }, // canon-allow
+  perplexity: { light: "#1f1b17", dark: "#f5f2ed" }, // canon-allow
 };
 
 /**
- * Canvas + ink for the credit watermark, as inline custom properties.
+ * Ink for the credit line, as an inline custom property.
  *
- * Returns `undefined` for a skin with no literal canvas (`base`, `digichat`,
- * layout skins), leaving `.dc-attribution` to its `--background` fallback.
+ * Returns `{}` for a skin with no literal ink (`base`, `digichat`, layout
+ * skins), leaving `.dc-attribution` to its `--muted-foreground` fallback.
  */
 export function skinCreditStyle(
   skin: ThreadSkin,
   theme: "light" | "dark",
 ): CSSProperties {
-  const canvas = SKIN_CANVAS[skin];
+  const ink = SKIN_INK[skin];
 
-  if (!canvas) return {};
+  if (!ink) return {};
 
-  const value = canvas[theme];
-
-  return { "--credit-canvas": value, "--credit-ink": value } as CSSProperties;
+  return { "--credit-ink": ink[theme] } as CSSProperties;
 }
 
 export function threadSkinChoices(): string {

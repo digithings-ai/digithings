@@ -59,7 +59,7 @@ export const Claude: FC = () => {
 
             <ThreadPrimitive.ViewportFooter className="sticky bottom-0 mx-auto mt-auto w-full max-w-3xl bg-linear-to-b from-transparent via-[#F0ECE0]/85 to-[#F0ECE0] pt-4 pb-2 dark:via-[#2b2a27]/85 dark:to-[#2b2a27]">
               <Composer />
-              <CreditFooter attribution />
+              <CreditFooter />
             </ThreadPrimitive.ViewportFooter>
           </ThreadPrimitive.Viewport>
         </AuiIf>
@@ -81,7 +81,7 @@ const EmptyState: FC = () => {
         </h1>
         <Composer />
         <ModeTabs />
-        <CreditFooter attribution />
+        <CreditFooter />
       </div>
     </div>
   );

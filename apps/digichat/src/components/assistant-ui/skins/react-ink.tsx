@@ -61,7 +61,7 @@ export function ReactInkWeb() {
           </ComposerPrimitive.Root>
         </div>
       </div>
-      <CreditFooter attribution className="text-center text-[11px] text-zinc-500" />
+      <CreditFooter className="text-center text-[11px] text-zinc-500" />
     </ThreadPrimitive.Root>
   );
 }

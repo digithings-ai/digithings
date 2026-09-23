@@ -24,15 +24,24 @@
  */
 
 import { cn } from "@/lib/utils";
+import { useAttribution } from "@/components/stock/skin-chrome";
 
 export function CreditFooter({
+  /**
+   * Explicit override. Omit it (the default for every skin mount) to read the
+   * host's resolved `attribution` from `SkinChromeProvider`, so an embed
+   * tenant's `attribution: false` opt-out actually suppresses the credit. Pass
+   * it only where there is no provider — the embed's gate/paywall branch, which
+   * has no Thread and resolved the placement itself.
+   */
   attribution,
   className,
 }: {
-  attribution: boolean;
+  attribution?: boolean;
   className?: string;
 }) {
-  if (!attribution) return null;
+  const fromContext = useAttribution();
+  if (attribution !== undefined ? !attribution : !fromContext) return null;
 
   return (
     <p className={cn("dc-attribution", className)} data-slot="aui_credit">

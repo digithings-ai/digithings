@@ -73,7 +73,7 @@ export const Perplexity: FC = () => {
 
             <ThreadPrimitive.ViewportFooter className="sticky bottom-0 mx-auto mt-auto w-full max-w-(--thread-max-width) bg-linear-to-b from-transparent via-[#f6f2ec]/85 to-[#f6f2ec] pt-6 pb-4 dark:via-[#171615]/85 dark:to-[#171615]">
               <Composer placeholder={followPlaceholder} />
-              <CreditFooter attribution />
+              <CreditFooter />
             </ThreadPrimitive.ViewportFooter>
           </ThreadPrimitive.Viewport>
         </AuiIf>
@@ -89,7 +89,7 @@ const EmptyState: FC<{ placeholder: string }> = ({ placeholder }) => {
           perplexity
         </p>
         <Composer placeholder={placeholder} />
-        <CreditFooter attribution />
+        <CreditFooter />
       </div>
     </div>
   );

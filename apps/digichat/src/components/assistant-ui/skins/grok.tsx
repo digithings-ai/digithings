@@ -47,7 +47,7 @@ export const Grok: FC = () => {
           <div className="flex h-full flex-col items-center justify-center">
             <GrokIcon className="mb-6 h-10 text-[#0d0d0d] dark:text-white" />
             <Composer />
-            <CreditFooter attribution className="mt-2" />
+            <CreditFooter className="mt-2" />
           </div>
         </AuiIf>
 
@@ -58,7 +58,7 @@ export const Grok: FC = () => {
             </ThreadPrimitive.Messages>
           </ThreadPrimitive.Viewport>
           <Composer />
-          <CreditFooter attribution className="mx-auto w-full max-w-3xl" />
+          <CreditFooter className="mx-auto w-full max-w-3xl" />
         </AuiIf>
       </ThreadPrimitive.Root>
   );

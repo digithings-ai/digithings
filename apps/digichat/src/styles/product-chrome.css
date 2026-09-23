@@ -65,6 +65,14 @@
    No canvas of its own: it inherits whatever the chat surface paints, so it
    reads as one surface with the transcript on every skin. */
 .dc-attribution {
+  /* Positioned so it can be lifted above the boot overlay: the overlay is an
+     opaque, absolutely-positioned sibling at `z-index: 40` (see
+     digichat-boot-loader.css), so an unpositioned credit would be painted
+     over and vanish for the whole loading animation. `position: relative`
+     plus a higher `z-index` keeps the credit on top of the overlay without
+     exempting the whole transcript column from the boot hide (m3). */
+  position: relative;
+  z-index: 60;
   margin: -0.5rem 0 0;
   padding: 0.25rem 0.75rem 0.25rem;
   text-align: center;
@@ -85,17 +93,20 @@
   background: transparent;
 }
 
-/* Boot: the transcript column keeps out of the way while the chain types on
-   top of the hero copy. The credit is exempted — it must stay on screen for
-   the whole animation on every host (baseline, embed, each mounted skin),
-   so both a direct child and a descendant carrying it are left visible. */
-[data-stock-product][data-boot-active="true"]
-  > :not(.dboot-overlay):not([data-slot="aui_credit"]):not(:has([data-slot="aui_credit"])) {
+/* Boot: only the transcript column keeps out of the way while the chain types
+   on top of the hero copy. The credit is NOT exempted here — exempting any
+   ancestor that merely *contains* it un-hid the whole column (the credit is a
+   descendant, not a direct child), so the column's content showed through a
+   transparent wide overlay. Instead the credit lifts itself above the overlay
+   with its own stacking context (`.dc-attribution` above), which keeps it
+   visible through the animation while the column still hides (m3). */
+[data-stock-product][data-boot-active="true"] > :not(.dboot-overlay) {
   visibility: hidden;
 }
 
-/* Inside such a hidden column the credit would still inherit the hidden
-   ancestor, so it re-asserts visibility for itself. */
+/* A hidden ancestor still hides the credit (visibility inherits), so the
+   credit re-asserts its own visibility — the stacking context above only
+   handles paint order, not the inherited hide. */
 [data-stock-product][data-boot-active="true"] [data-slot="aui_credit"] {
   visibility: visible;
 }
@@ -149,12 +160,13 @@
   padding-bottom: 0.25rem;
 }
 
-/* Terminal block caret: Chromium parses caret-shape but still paints the thin
-   OS caret, so hide that everywhere and promote the painted block overlay to
-   the tenant accent while the composer is focused (same metrics as the
-   reference chatbot.css overlay).
+/* Terminal block caret: engines that support `caret-shape: block` (Chromium)
+   keep their native block caret; engines that do not get the native caret made
+   transparent and the painted block overlay promoted to the tenant accent
+   while the composer is focused (same metrics as the reference chatbot.css
+   overlay).
 
-   The overlay only paints when the engine has no native block caret, so the
+   Because the overlay only paints on engines without a native block caret, the
    caret must be declared on the base rule too — otherwise `caret-color:
    transparent` removes the only caret the user can see (the reference
    chatbot.css declares `caret-color` + `caret-shape` unconditionally at

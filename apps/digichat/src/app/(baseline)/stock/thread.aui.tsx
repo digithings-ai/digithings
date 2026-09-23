@@ -227,7 +227,8 @@ const ThreadMessage: FC = () => {
   return <AssistantMessageComponent />;
 };
 
-const ThreadScrollToBottom: FC = () => {  return (
+const ThreadScrollToBottom: FC = () => {
+  return (
     <ThreadPrimitive.ScrollToBottom asChild>
       <TooltipIconButton
         tooltip="Scroll to bottom"
@@ -246,7 +247,7 @@ const ThreadScrollToBottom: FC = () => {  return (
  * credit so the surface reads as one product (m2357). A host can override or
  * suppress it through `components.Footer`.
  */
-const ThreadFooter: FC = () => <CreditFooter attribution />;
+const ThreadFooter: FC = () => <CreditFooter />;
 
 const ThreadWelcome: FC = () => {
   return (

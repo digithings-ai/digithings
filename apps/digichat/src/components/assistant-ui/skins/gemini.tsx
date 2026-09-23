@@ -62,7 +62,7 @@ export const Gemini: FC = () => {
                   />
                   <div className="relative z-10">
                     <Composer />
-                    <CreditFooter attribution />
+                    <CreditFooter />
                   </div>
                 </div>
               </div>
@@ -75,7 +75,7 @@ export const Gemini: FC = () => {
             <ThreadPrimitive.Messages components={{ Message: ChatMessage }} />
             <ThreadPrimitive.ViewportFooter className="sticky bottom-0 mt-auto flex w-full flex-col items-center gap-1.5 bg-[#fdfcfc] px-4 pb-3 dark:bg-[#0c0c0c]">
               <Composer />
-              <CreditFooter attribution />
+              <CreditFooter />
             </ThreadPrimitive.ViewportFooter>
           </ThreadPrimitive.Viewport>
         </AuiIf>

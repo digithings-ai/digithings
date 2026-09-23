@@ -365,6 +365,7 @@ export function ProductStockShell({
       accent: cfg.chrome.accent,
       modelPicker: features.modelPicker || cfg.models.allowPicker,
       pageContext: features.pageContext,
+      attribution: cfg.chrome.attribution,
     }),
     [
       cfg.chrome.skin,
@@ -376,6 +377,7 @@ export function ProductStockShell({
       cfg.chrome.placeholder,
       cfg.chrome.suggestions,
       cfg.chrome.accent,
+      cfg.chrome.attribution,
       features.modelPicker,
       features.pageContext,
       cfg.models.allowPicker,

@@ -190,7 +190,7 @@ const Thread: FC = () => {
         >
           <ThreadScrollToBottom />
           <Composer />
-          <CreditFooter attribution />
+          <CreditFooter />
           <AuiIf condition={isNewChatView}>
             <div className="aui-thread-welcome-suggestions-shell min-h-19">
               <AuiIf condition={(s) => s.composer.isEmpty}>

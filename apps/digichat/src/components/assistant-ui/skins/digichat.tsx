@@ -50,6 +50,9 @@ import {
  * First-party digichat Thread. Explicit ThreadSkinView branch — never fall
  * through to product-page-assistant. Always left-aligned regardless of YAML.
  */
+/** Module-scope so it is a stable component reference, not recreated per render. */
+const DigichatFooter = () => <CreditFooter />;
+
 export function DigichatSkin({
   composerLayout,
 }: {
@@ -288,8 +291,6 @@ export function DigichatSkin({
     },
     [slashPrefs, aui, gate, gateSubmit, copyExport, extra],
   );
-
-const DigichatFooter = () => <CreditFooter attribution />;
 
   return (
     <DigichatThread
