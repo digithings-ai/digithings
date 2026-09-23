@@ -21,15 +21,15 @@ def _tool_names(server) -> set[str]:
 @pytest.mark.unit
 def test_data_tools_registered():
     names = _tool_names(create_mcp_server())
-    assert "digiquant_get_price_technicals" in names, f"missing data tool; got {sorted(names)}"
-    assert "digiquant_get_macro_series" in names, f"missing data tool; got {sorted(names)}"
+    assert "get_price_technicals" in names, f"missing data tool; got {sorted(names)}"
+    assert "get_macro_series" in names, f"missing data tool; got {sorted(names)}"
 
 
 @pytest.mark.unit
 def test_query_research_tool_registered():
     """#4436: external agents search research output + the paper book by filters."""
     names = _tool_names(create_mcp_server())
-    assert "digiquant_query_research" in names, f"missing query_research tool; got {sorted(names)}"
+    assert "query_research" in names, f"missing query_research tool; got {sorted(names)}"
 
 
 @pytest.mark.unit
@@ -47,7 +47,7 @@ def test_query_research_documents_house_scope():
         tools = server.list_tools_sync()
     else:
         tools = server._tool_manager.list_tools()
-    qr = next(t for t in tools if t.name == "digiquant_query_research")
+    qr = next(t for t in tools if t.name == "query_research")
     assert "r2" in qr.description.lower()
     assert "include_prior" in qr.description.lower()
 
@@ -87,7 +87,7 @@ def test_query_research_forwards_phase_as_retrieval_phase(monkeypatch):
     monkeypatch.setattr(io_mod, "SupabaseConfig", _StubSupabaseConfig)
     monkeypatch.setattr(io_mod, "build_client", lambda _cfg: object())
 
-    fn = _tool_fn(create_mcp_server(scope="read"), "digiquant_query_research")
+    fn = _tool_fn(create_mcp_server(scope="read"), "query_research")
 
     out = json.loads(fn(dataset="documents", phase="analyst"))
     assert "error" not in out, out

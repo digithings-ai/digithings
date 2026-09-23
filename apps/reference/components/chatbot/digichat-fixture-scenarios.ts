@@ -243,7 +243,7 @@ Popup composer is the compact layout (attach · field · send on one row). The i
 | --- | --- |
 | \`digisearch_query\` | digisearch |
 | \`digivault_get_note\` | digivault |
-| \`digiquant_list_strategies\` / \`digiquant_run_backtest\` | digiquant |
+| \`list_strategies\` / \`run_backtest\` | digiquant |
 
 The website embed and the digiquant dashboard are different **hosts** of the same graph, not two orchestrators.
 `,
@@ -319,7 +319,7 @@ function dashboardScenario(prompt: string): FixtureScenario {
     tools: [
       tool(
         "dq-1",
-        "digiquant_list_strategies",
+        "list_strategies",
         {},
         jsonResult([
           {
@@ -349,7 +349,7 @@ function dashboardScenario(prompt: string): FixtureScenario {
       ),
       tool(
         "dq-2",
-        "digiquant_run_backtest",
+        "run_backtest",
         {
           strategy_name: "trend_xsec",
           symbols_json: JSON.stringify([symbol]),
@@ -358,7 +358,7 @@ function dashboardScenario(prompt: string): FixtureScenario {
         jsonResult(backtest),
       ),
     ],
-    reply: `Backtest finished on the dashboard path — Nautilus via \`digiquant_run_backtest\`.
+    reply: `Backtest finished on the dashboard path — Nautilus via \`run_backtest\`.
 
 | metric | value |
 | --- | --- |

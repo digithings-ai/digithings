@@ -1,6 +1,6 @@
 """SDCA ``RiskModel`` selector — bespoke power-law → generic trend → rolling z (#3175).
 
-``digiquant_build_sdca_risk_index`` dispatches on a string so new providers
+``build_sdca_risk_index`` dispatches on a string so new providers
 can be added without changing the MCP signature. This module is the one
 place that maps those strings onto constructors.
 

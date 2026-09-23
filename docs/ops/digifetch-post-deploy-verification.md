@@ -55,11 +55,11 @@ from mcp import ClientSession
 from mcp.client.streamable_http import streamablehttp_client
 
 COHORT = [
-    "digifetch_quote", "digifetch_quotes_batch", "digifetch_price_history",
-    "digifetch_ticker_financials", "digifetch_options_chain",
-    "digifetch_sec_filings", "digifetch_holders", "digifetch_analyst_research",
-    "digifetch_corporate_actions", "digifetch_earnings_calendar",
-    "digifetch_exchange_rate", "digifetch_search", "digifetch_news",
+    "gloomberb_get_quote", "gloomberb_get_quotes_batch", "gloomberb_get_price_history",
+    "gloomberb_get_ticker_financials", "gloomberb_get_options_chain",
+    "gloomberb_get_sec_filings", "gloomberb_get_holders", "gloomberb_get_analyst_research",
+    "gloomberb_get_corporate_actions", "yahoo_get_earnings_calendar",
+    "gloomberb_get_exchange_rate", "gloomberb_search", "gloomberb_get_news",
 ]
 
 
@@ -68,7 +68,10 @@ async def main() -> None:
         async with ClientSession(read, write) as session:
             await session.initialize()
             listed = await session.list_tools()
-    names = sorted(t.name for t in listed.tools if t.name.startswith("digifetch_"))
+    names = sorted(
+        t.name for t in listed.tools
+        if t.name.startswith("gloomberb_") or t.name == "yahoo_get_earnings_calendar"
+    )
     print(json.dumps({
         "digifetch_count": len(names),
         "cohort_missing": [n for n in COHORT if n not in names],

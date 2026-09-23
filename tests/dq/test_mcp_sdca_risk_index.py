@@ -1,4 +1,4 @@
-"""MCP tool wiring for ``digiquant_build_sdca_risk_index`` (#3168)."""
+"""MCP tool wiring for ``build_sdca_risk_index`` (#3168)."""
 
 from __future__ import annotations
 
@@ -25,7 +25,7 @@ _EXAMPLE_COEFFICIENTS = (
 
 def _tool():
     server = create_mcp_server()
-    return server._tool_manager.get_tool("digiquant_build_sdca_risk_index").fn
+    return server._tool_manager.get_tool("build_sdca_risk_index").fn
 
 
 def _write_cache(cache_dir: Path, ticker: str = "BTC-USD", n: int = 10) -> None:
@@ -46,7 +46,7 @@ class TestBuildSdcaRiskIndexTool:
     def test_registered(self) -> None:
         server = create_mcp_server()
         names = {t.name for t in server._tool_manager.list_tools()}
-        assert "digiquant_build_sdca_risk_index" in names
+        assert "build_sdca_risk_index" in names
 
     def test_missing_cache_returns_error_json(self, tmp_path: Path) -> None:
         payload = json.loads(

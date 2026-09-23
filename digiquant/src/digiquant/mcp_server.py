@@ -323,7 +323,7 @@ def _read_r2_macro_window(
     return out
 
 
-def digiquant_get_price_technicals(
+def get_price_technicals(
     ticker: str, lookback: int = 20, as_of: str | None = None
 ) -> str:
     """Technicals for *ticker* from the versioned R2 history (only path, #4053).
@@ -375,7 +375,7 @@ def digiquant_get_price_technicals(
         return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
 
 
-def digiquant_get_macro_series(
+def get_macro_series(
     series_ids: list[str], lookback: int = 6, as_of: str | None = None
 ) -> str:
     """Macro observations for *series_ids*, Supabase-backed by default or R2-backed.
@@ -424,7 +424,7 @@ def digiquant_get_macro_series(
         return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
 
 
-def digiquant_get_trade_levels(
+def get_trade_levels(
     direction: str,
     ohlc_json: str | None = None,
     pair: str | None = None,
@@ -488,50 +488,50 @@ def _require_mcp() -> type:
 #: policy-replay runs) is compute or mutate and stays on ``scope="full"`` only.
 READ_SCOPE_TOOLS: frozenset[str] = frozenset(
     {
-        "digiquant_list_strategies",
-        "digiquant_get_price_technicals",
-        "digiquant_get_macro_series",
-        "digiquant_get_trade_levels",
-        "digiquant_query_research",
+        "list_strategies",
+        "get_price_technicals",
+        "get_macro_series",
+        "get_trade_levels",
+        "query_research",
         "dashboard_get_policy_replay",
         "dashboard_get_policy_comparison",
         "dashboard_evaluate_policy_gate",
         "dashboard_get_policy_gate_evaluation",
-        "digiquant_list_coinmetrics_catalog",
-        "digifetch_quote",
-        "digifetch_quotes_batch",
-        "digifetch_price_history",
-        "digifetch_ticker_financials",
-        "digifetch_options_chain",
-        "digifetch_sec_filings",
-        "digifetch_holders",
-        "digifetch_analyst_research",
-        "digifetch_corporate_actions",
-        "digifetch_earnings_calendar",
-        "digifetch_exchange_rate",
-        "digifetch_search",
-        "digifetch_news",
-        "digifetch_econ_calendar",
-        "digifetch_econ_series",
-        "digifetch_yield_curve",
-        "digifetch_cds",
-        "digifetch_research_search",
-        "digifetch_congress_trades",
-        "digifetch_transcripts",
-        "digifetch_statements",
-        "digifetch_ticker_tweets",
-        "digifetch_tweet_search",
-        "digifetch_venues",
-        "digifetch_screener",
-        "digifetch_13f_funds",
-        "digifetch_13f_holdings",
-        "digifetch_shiller",
-        "digifetch_proxy_statements",
-        "digifetch_filing_events",
-        "digifetch_risk_reports",
-        "digifetch_short_interest",
-        "digifetch_equity_diagnostic",
-        "digifetch_saved_searches",
+        "coinmetrics_list_catalog",
+        "gloomberb_get_quote",
+        "gloomberb_get_quotes_batch",
+        "gloomberb_get_price_history",
+        "gloomberb_get_ticker_financials",
+        "gloomberb_get_options_chain",
+        "gloomberb_get_sec_filings",
+        "gloomberb_get_holders",
+        "gloomberb_get_analyst_research",
+        "gloomberb_get_corporate_actions",
+        "yahoo_get_earnings_calendar",
+        "gloomberb_get_exchange_rate",
+        "gloomberb_search",
+        "gloomberb_get_news",
+        "gloomberb_get_econ_calendar",
+        "gloomberb_get_econ_series",
+        "gloomberb_get_yield_curve",
+        "gloomberb_get_cds",
+        "gloomberb_search_research",
+        "gloomberb_get_congress_trades",
+        "gloomberb_get_transcripts",
+        "gloomberb_get_statements",
+        "gloomberb_get_ticker_tweets",
+        "gloomberb_search_tweet",
+        "gloomberb_list_venues",
+        "gloomberb_run_screener",
+        "gloomberb_get_13f_funds",
+        "gloomberb_get_13f_holdings",
+        "gloomberb_get_shiller",
+        "gloomberb_get_proxy_statements",
+        "gloomberb_get_filing_events",
+        "gloomberb_get_risk_reports",
+        "gloomberb_get_short_interest",
+        "gloomberb_get_equity_diagnostic",
+        "gloomberb_list_saved_searches",
     }
 )
 
@@ -578,15 +578,15 @@ def create_mcp_server(
 
         return _register
 
-    @_maybe_tool("digiquant_list_strategies")
-    def digiquant_list_strategies() -> str:
+    @_maybe_tool("list_strategies")
+    def list_strategies() -> str:
         """List registered strategies (name, aliases, description, default_params)."""
         from digiquant.service import service_list_strategies
 
         return json.dumps(service_list_strategies(), indent=2)
 
-    @_maybe_tool("digiquant_run_backtest")
-    def digiquant_run_backtest(
+    @_maybe_tool("run_backtest")
+    def run_backtest(
         strategy_name: str,
         symbols_json: str,
         data_dir: str | None = None,
@@ -607,8 +607,8 @@ def create_mcp_server(
         )
         return result.model_dump_json(indent=2)
 
-    @_maybe_tool("digiquant_run_optimize")
-    def digiquant_run_optimize(
+    @_maybe_tool("run_optimize")
+    def run_optimize(
         strategy_name: str,
         symbols_json: str,
         data_dir: str | None = None,
@@ -623,7 +623,7 @@ def create_mcp_server(
         ``strategy_name='sdca'`` / ``'btc_sdca'`` is Stage B walk-forward
         (vs-flat-DCA). Freeze Stage A weights by passing them in
         ``strategy_params_json`` as ``*_weight`` keys. Stage A itself is
-        ``digiquant_fit_sdca_weights``.
+        ``fit_sdca_weights``.
         """
         symbols: list[str] = json.loads(symbols_json)
         params = json.loads(strategy_params_json) if strategy_params_json else None
@@ -642,8 +642,8 @@ def create_mcp_server(
         )
         return result.model_dump_json(indent=2)
 
-    @_maybe_tool("digiquant_export")
-    def digiquant_export(
+    @_maybe_tool("export")
+    def export(
         strategy_name: str,
         target: str,
         params_json: str | None = None,
@@ -659,8 +659,8 @@ def create_mcp_server(
         )
         return result.model_dump_json(indent=2)
 
-    @_maybe_tool("digiquant_run_pipeline")
-    def digiquant_run_pipeline(
+    @_maybe_tool("run_pipeline")
+    def run_pipeline(
         strategy_name: str,
         symbols_json: str,
         data_dir: str | None = None,
@@ -699,7 +699,7 @@ def create_mcp_server(
         )
         return json.dumps(raw, indent=2)
 
-    @_maybe_tool("digiquant_get_price_technicals")
+    @_maybe_tool("get_price_technicals")
     def digiquant_get_price_technicals_tool(
         ticker: str, lookback: int = 20, as_of: str | None = None
     ) -> str:
@@ -710,9 +710,9 @@ def create_mcp_server(
         127 and is no longer read. Returns ``{"error": ...}`` if the data layer
         is unavailable.
         """
-        return digiquant_get_price_technicals(ticker, lookback=lookback, as_of=as_of)
+        return get_price_technicals(ticker, lookback=lookback, as_of=as_of)
 
-    @_maybe_tool("digiquant_get_macro_series")
+    @_maybe_tool("get_macro_series")
     def digiquant_get_macro_series_tool(
         series_ids: list[str], lookback: int = 6, as_of: str | None = None
     ) -> str:
@@ -723,9 +723,9 @@ def create_mcp_server(
         With ``DIGIQUANT_MARKET_DATA_BACKEND=r2``, reads the versioned R2
         history sealed at ``as_of`` (default: manifest seal) instead.
         """
-        return digiquant_get_macro_series(series_ids, lookback=lookback, as_of=as_of)
+        return get_macro_series(series_ids, lookback=lookback, as_of=as_of)
 
-    @_maybe_tool("digiquant_get_trade_levels")
+    @_maybe_tool("get_trade_levels")
     def digiquant_get_trade_levels_tool(
         direction: str,
         ohlc_json: str | None = None,
@@ -739,7 +739,7 @@ def create_mcp_server(
         Pass ``ohlc_json`` (a JSON array of OHLC bars) or a cached ``ticker``.
         Never places orders; returns candidate levels with full precision.
         """
-        return digiquant_get_trade_levels(
+        return get_trade_levels(
             direction,
             ohlc_json=ohlc_json,
             pair=pair,
@@ -748,8 +748,8 @@ def create_mcp_server(
             cache_dir=cache_dir,
         )
 
-    @_maybe_tool("digiquant_query_research")
-    def digiquant_query_research(
+    @_maybe_tool("query_research")
+    def query_research(
         dataset: str = "documents",
         run_type: str = "baseline",
         run_id: str | None = None,
@@ -790,8 +790,8 @@ def create_mcp_server(
         days for continuity; otherwise the range defaults to a single day
         (``as_of_date`` or today). ``limit`` is capped server-side and
         ``offset`` pages it.
-        Market history stays on ``digiquant_get_price_technicals`` /
-        ``digiquant_get_macro_series``. Returns ``{"error": ...}`` on failure.
+        Market history stays on ``get_price_technicals`` /
+        ``get_macro_series``. Returns ``{"error": ...}`` on failure.
         """
         from datetime import UTC, datetime
         from datetime import date as _date
@@ -851,8 +851,8 @@ def create_mcp_server(
 
         return str(Path(__file__).resolve().parents[3] / "scripts" / "validation")
 
-    @_maybe_tool("digiquant_fetch_coinbase_ohlcv")
-    def digiquant_fetch_coinbase_ohlcv(
+    @_maybe_tool("coinbase_fetch_ohlcv")
+    def coinbase_fetch_ohlcv(
         symbols_json: str = '["BTC/USD", "ETH/USD", "SOL/USD"]',
         start: str = "2015-07-20",
         end: str | None = None,
@@ -936,8 +936,8 @@ def create_mcp_server(
     # earnings tool is explicitly NOT attributed to Gloomberb. Never a pipeline
     # primary (15-minute delay / caps).
 
-    @_maybe_tool("digifetch_quote")
-    def digifetch_quote(symbol: str, exchange: str | None = None) -> str:
+    @_maybe_tool("gloomberb_get_quote")
+    def gloomberb_get_quote(symbol: str, exchange: str | None = None) -> str:
         """Latest quote for one listing via Gloomberb Cloud (anonymous; JSON envelope).
 
         `exchange` is optional. Enrichment only: free-tier data is delayed up
@@ -951,8 +951,8 @@ def create_mcp_server(
             return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
         return _gloomberb_envelope_json(envelope, symbol=symbol)
 
-    @_maybe_tool("digifetch_quotes_batch")
-    def digifetch_quotes_batch(symbols: list[str]) -> str:
+    @_maybe_tool("gloomberb_get_quotes_batch")
+    def gloomberb_get_quotes_batch(symbols: list[str]) -> str:
         """Batch quotes for 1-20 listings via Gloomberb Cloud (anonymous).
 
         Per-item status/stale is preserved: a stale listing returns a null quote
@@ -964,8 +964,8 @@ def create_mcp_server(
             return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
         return _gloomberb_envelope_json(envelope)
 
-    @_maybe_tool("digifetch_price_history")
-    def digifetch_price_history(
+    @_maybe_tool("gloomberb_get_price_history")
+    def gloomberb_get_price_history(
         symbol: str,
         resolution: str,
         range: str | None = None,
@@ -1000,8 +1000,8 @@ def create_mcp_server(
             return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
         return _gloomberb_envelope_json(envelope, symbol=symbol)
 
-    @_maybe_tool("digifetch_ticker_financials")
-    def digifetch_ticker_financials(
+    @_maybe_tool("gloomberb_get_ticker_financials")
+    def gloomberb_get_ticker_financials(
         symbol: str,
         exchange: str | None = None,
         extended_statements: bool = False,
@@ -1024,8 +1024,8 @@ def create_mcp_server(
             return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
         return _gloomberb_envelope_json(envelope, symbol=symbol)
 
-    @_maybe_tool("digifetch_options_chain")
-    def digifetch_options_chain(
+    @_maybe_tool("gloomberb_get_options_chain")
+    def gloomberb_get_options_chain(
         symbol: str,
         exchange: str | None = None,
         expiration: int | None = None,
@@ -1043,8 +1043,8 @@ def create_mcp_server(
             return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
         return _gloomberb_envelope_json(envelope, symbol=symbol)
 
-    @_maybe_tool("digifetch_sec_filings")
-    def digifetch_sec_filings(
+    @_maybe_tool("gloomberb_get_sec_filings")
+    def gloomberb_get_sec_filings(
         ticker: str,
         what: str = "filings",
         count: int = 15,
@@ -1073,8 +1073,8 @@ def create_mcp_server(
             return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
         return _gloomberb_envelope_json(envelope, symbol=ticker)
 
-    @_maybe_tool("digifetch_holders")
-    def digifetch_holders(symbol: str, owner_type: str = "all") -> str:
+    @_maybe_tool("gloomberb_get_holders")
+    def gloomberb_get_holders(symbol: str, owner_type: str = "all") -> str:
         """Holder records for one symbol (Gloomberb Cloud; session-gated).
 
         Requires GLOOMBERB_SESSION_COOKIE; without it the envelope data is a
@@ -1089,8 +1089,8 @@ def create_mcp_server(
             return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
         return _gloomberb_envelope_json(envelope, symbol=symbol)
 
-    @_maybe_tool("digifetch_analyst_research")
-    def digifetch_analyst_research(symbol: str, limit: int = 20) -> str:
+    @_maybe_tool("gloomberb_get_analyst_research")
+    def gloomberb_get_analyst_research(symbol: str, limit: int = 20) -> str:
         """Analyst recommendation, price target, and rating actions (session-gated).
 
         Requires GLOOMBERB_SESSION_COOKIE; returns typed `auth_required`
@@ -1104,8 +1104,8 @@ def create_mcp_server(
             return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
         return _gloomberb_envelope_json(envelope, symbol=symbol)
 
-    @_maybe_tool("digifetch_corporate_actions")
-    def digifetch_corporate_actions(symbol: str) -> str:
+    @_maybe_tool("gloomberb_get_corporate_actions")
+    def gloomberb_get_corporate_actions(symbol: str) -> str:
         """Dividends, splits, and earnings history for one symbol (session-gated).
 
         Requires GLOOMBERB_SESSION_COOKIE; returns typed `auth_required`
@@ -1117,8 +1117,8 @@ def create_mcp_server(
             return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
         return _gloomberb_envelope_json(envelope, symbol=symbol)
 
-    @_maybe_tool("digifetch_earnings_calendar")
-    def digifetch_earnings_calendar(symbols: list[str], horizon_days: int = 90) -> str:
+    @_maybe_tool("yahoo_get_earnings_calendar")
+    def yahoo_get_earnings_calendar(symbols: list[str], horizon_days: int = 90) -> str:
         """Upcoming earnings dates for 1-20 symbols (Yahoo via yfinance).
 
         No Cloud route exists for earnings, so this tool is NOT attributed to
@@ -1133,8 +1133,8 @@ def create_mcp_server(
             return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
         return _gloomberb_envelope_json(envelope, attributed=False)
 
-    @_maybe_tool("digifetch_exchange_rate")
-    def digifetch_exchange_rate(from_currency: str, to_currency: str = "USD") -> str:
+    @_maybe_tool("gloomberb_get_exchange_rate")
+    def gloomberb_get_exchange_rate(from_currency: str, to_currency: str = "USD") -> str:
         """USD exchange rate for an ISO-4217 `from_currency` (Gloomberb Cloud).
 
         The Cloud route is USD-based, so `to_currency` must be USD. The
@@ -1149,8 +1149,8 @@ def create_mcp_server(
             return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
         return _gloomberb_envelope_json(envelope)
 
-    @_maybe_tool("digifetch_search")
-    def digifetch_search(query: str, limit: int = 10) -> str:
+    @_maybe_tool("gloomberb_search")
+    def gloomberb_search(query: str, limit: int = 10) -> str:
         """Search listings across venues (Gloomberb Cloud; anonymous).
 
         `limit` is 1-10. Multi-venue results keep symbol/exchange per row so a
@@ -1162,8 +1162,8 @@ def create_mcp_server(
             return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
         return _gloomberb_envelope_json(envelope)
 
-    @_maybe_tool("digifetch_news")
-    def digifetch_news(
+    @_maybe_tool("gloomberb_get_news")
+    def gloomberb_get_news(
         feed: str = "latest",
         ticker: str | None = None,
         story_id: str | None = None,
@@ -1183,8 +1183,8 @@ def create_mcp_server(
             return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
         return _gloomberb_envelope_json(envelope, symbol=ticker)
 
-    @_maybe_tool("digifetch_econ_calendar")
-    def digifetch_econ_calendar() -> str:
+    @_maybe_tool("gloomberb_get_econ_calendar")
+    def gloomberb_get_econ_calendar() -> str:
         """Structured economic calendar (Gloomberb Cloud; anonymous).
 
         The route returns a fixed-size window (~105 rows; the upstream ignores
@@ -1199,8 +1199,8 @@ def create_mcp_server(
             return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
         return _gloomberb_envelope_json(envelope)
 
-    @_maybe_tool("digifetch_econ_series")
-    def digifetch_econ_series(series_id: str, limit: int = 100, sort_order: str = "desc") -> str:
+    @_maybe_tool("gloomberb_get_econ_series")
+    def gloomberb_get_econ_series(series_id: str, limit: int = 100, sort_order: str = "desc") -> str:
         """FRED-style macro series observations + metadata (Gloomberb Cloud; anonymous).
 
         `series_id` is the FRED id (e.g. CPIAUCSL); `sort_order` is asc/desc.
@@ -1214,8 +1214,8 @@ def create_mcp_server(
             return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
         return _gloomberb_envelope_json(envelope)
 
-    @_maybe_tool("digifetch_yield_curve")
-    def digifetch_yield_curve() -> str:
+    @_maybe_tool("gloomberb_get_yield_curve")
+    def gloomberb_get_yield_curve() -> str:
         """Treasury yield-curve tenors (Gloomberb Cloud; anonymous).
 
         Each point carries maturity/maturityYears/yield/asOf/stale; any stale
@@ -1227,8 +1227,8 @@ def create_mcp_server(
             return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
         return _gloomberb_envelope_json(envelope)
 
-    @_maybe_tool("digifetch_cds")
-    def digifetch_cds(issuer: str | None = None, days: int = 30, limit: int = 100) -> str:
+    @_maybe_tool("gloomberb_get_cds")
+    def gloomberb_get_cds(issuer: str | None = None, days: int = 30, limit: int = 100) -> str:
         """DTCC PPD CDS trade tape (Gloomberb Cloud; anonymous).
 
         `days` is bounded 1-90 and validated client-side, so an out-of-range
@@ -1243,8 +1243,8 @@ def create_mcp_server(
             return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
         return _gloomberb_envelope_json(envelope)
 
-    @_maybe_tool("digifetch_research_search")
-    def digifetch_research_search(query: str, limit: int = 10, offset: int = 0) -> str:
+    @_maybe_tool("gloomberb_search_research")
+    def gloomberb_search_research(query: str, limit: int = 10, offset: int = 0) -> str:
         """Full-text research search across transcripts/news/filings (session-gated).
 
         Requires GLOOMBERB_SESSION_COOKIE; HTTP 401 (or a missing cookie) is a
@@ -1261,8 +1261,8 @@ def create_mcp_server(
             return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
         return _gloomberb_envelope_json(envelope)
 
-    @_maybe_tool("digifetch_congress_trades")
-    def digifetch_congress_trades(year: int | None = None, limit: int = 50) -> str:
+    @_maybe_tool("gloomberb_get_congress_trades")
+    def gloomberb_get_congress_trades(year: int | None = None, limit: int = 50) -> str:
         """US House disclosure trades (Gloomberb Cloud; anonymous).
 
         The upstream OCR dependency is currently failing (HTTP 500, Mistral
@@ -1276,8 +1276,8 @@ def create_mcp_server(
             return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
         return _gloomberb_envelope_json(envelope)
 
-    @_maybe_tool("digifetch_transcripts")
-    def digifetch_transcripts(
+    @_maybe_tool("gloomberb_get_transcripts")
+    def gloomberb_get_transcripts(
         ticker: str | None = None,
         limit: int = 20,
         transcript_id: str | None = None,
@@ -1306,8 +1306,8 @@ def create_mcp_server(
             ticker = rows[0].ticker if rows else None
         return _gloomberb_envelope_json(envelope, symbol=ticker)
 
-    @_maybe_tool("digifetch_statements")
-    def digifetch_statements(
+    @_maybe_tool("gloomberb_get_statements")
+    def gloomberb_get_statements(
         symbol: str, period: str = "annual", exchange: str | None = None
     ) -> str:
         """Annual/quarterly financial statement rows (Gloomberb Cloud; session-gated).
@@ -1326,8 +1326,8 @@ def create_mcp_server(
             return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
         return _gloomberb_envelope_json(envelope, symbol=symbol)
 
-    @_maybe_tool("digifetch_ticker_tweets")
-    def digifetch_ticker_tweets(
+    @_maybe_tool("gloomberb_get_ticker_tweets")
+    def gloomberb_get_ticker_tweets(
         ticker: str,
         limit: int = 50,
         hours: int | None = None,
@@ -1355,8 +1355,8 @@ def create_mcp_server(
             return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
         return _gloomberb_envelope_json(envelope, symbol=ticker)
 
-    @_maybe_tool("digifetch_tweet_search")
-    def digifetch_tweet_search(
+    @_maybe_tool("gloomberb_search_tweet")
+    def gloomberb_search_tweet(
         query: str, query_type: str = "Latest", limit: int = 50, hours: int | None = None
     ) -> str:
         """Search X/Twitter posts by query (Gloomberb Cloud; session-gated).
@@ -1375,8 +1375,8 @@ def create_mcp_server(
             return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
         return _gloomberb_envelope_json(envelope)
 
-    @_maybe_tool("digifetch_venues")
-    def digifetch_venues() -> str:
+    @_maybe_tool("gloomberb_list_venues")
+    def gloomberb_list_venues() -> str:
         """Exchange venue metadata (Gloomberb Cloud; anonymous).
 
         No parameters. Rows carry mic/name/title/country/timezone and session
@@ -1388,8 +1388,8 @@ def create_mcp_server(
             return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
         return _gloomberb_envelope_json(envelope)
 
-    @_maybe_tool("digifetch_saved_searches")
-    def digifetch_saved_searches() -> str:
+    @_maybe_tool("gloomberb_list_saved_searches")
+    def gloomberb_list_saved_searches() -> str:
         """The signed-in session's saved searches (Gloomberb Cloud; session-gated).
 
         Requires GLOOMBERB_SESSION_COOKIE; without it the envelope is a typed
@@ -1404,8 +1404,8 @@ def create_mcp_server(
             return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
         return _gloomberb_envelope_json(envelope)
 
-    @_maybe_tool("digifetch_screener")
-    def digifetch_screener(category: str, count: int = 25, mode: str = "cache-first") -> str:
+    @_maybe_tool("gloomberb_run_screener")
+    def gloomberb_run_screener(category: str, count: int = 25, mode: str = "cache-first") -> str:
         """Market screener for gainers/losers/most-active (Gloomberb Cloud; **requires Pro**).
 
         Requires GLOOMBERB_SESSION_COOKIE **and** a Gloomberb Pro plan. A free
@@ -1422,8 +1422,8 @@ def create_mcp_server(
             return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
         return _gloomberb_envelope_json(envelope)
 
-    @_maybe_tool("digifetch_13f_funds")
-    def digifetch_13f_funds(
+    @_maybe_tool("gloomberb_get_13f_funds")
+    def gloomberb_get_13f_funds(
         what: str,
         query: str | None = None,
         quarter: str | None = None,
@@ -1459,8 +1459,8 @@ def create_mcp_server(
             return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
         return _gloomberb_envelope_json(envelope)
 
-    @_maybe_tool("digifetch_13f_holdings")
-    def digifetch_13f_holdings(
+    @_maybe_tool("gloomberb_get_13f_holdings")
+    def gloomberb_get_13f_holdings(
         what: str,
         cik: str | None = None,
         accession_number: str | None = None,
@@ -1499,8 +1499,8 @@ def create_mcp_server(
             return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
         return _gloomberb_envelope_json(envelope)
 
-    @_maybe_tool("digifetch_shiller")
-    def digifetch_shiller(limit: int = 240) -> str:
+    @_maybe_tool("gloomberb_get_shiller")
+    def gloomberb_get_shiller(limit: int = 240) -> str:
         """Robert Shiller's monthly valuation series (Gloomberb Cloud; anonymous).
 
         Returns the most recent `limit` monthly rows (default 240 = 20 years;
@@ -1515,8 +1515,8 @@ def create_mcp_server(
             return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
         return _gloomberb_envelope_json(envelope)
 
-    @_maybe_tool("digifetch_proxy_statements")
-    def digifetch_proxy_statements(ticker: str, what: str = "list", year: int | None = None) -> str:
+    @_maybe_tool("gloomberb_get_proxy_statements")
+    def gloomberb_get_proxy_statements(ticker: str, what: str = "list", year: int | None = None) -> str:
         """Executive-compensation proxy statements (Gloomberb Cloud; anonymous).
 
         Open public reads - no account or plan needed. `what=list` lists every
@@ -1533,8 +1533,8 @@ def create_mcp_server(
             return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
         return _gloomberb_envelope_json(envelope, symbol=ticker)
 
-    @_maybe_tool("digifetch_filing_events")
-    def digifetch_filing_events(ticker: str, limit: int = 20) -> str:
+    @_maybe_tool("gloomberb_get_filing_events")
+    def gloomberb_get_filing_events(ticker: str, limit: int = 20) -> str:
         """Classified 8-K filing events for one ticker (Gloomberb Cloud; anonymous).
 
         Rows carry item codes/labels/kinds, materiality, the SEC document URL,
@@ -1549,8 +1549,8 @@ def create_mcp_server(
             return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
         return _gloomberb_envelope_json(envelope, symbol=ticker)
 
-    @_maybe_tool("digifetch_risk_reports")
-    def digifetch_risk_reports(ticker: str, what: str = "list", year: int | None = None) -> str:
+    @_maybe_tool("gloomberb_get_risk_reports")
+    def gloomberb_get_risk_reports(ticker: str, what: str = "list", year: int | None = None) -> str:
         """10-K risk-factor reports, diffed year-over-year (Gloomberb Cloud; anonymous).
 
         `what=list` lists report years with counts and an overview;
@@ -1567,8 +1567,8 @@ def create_mcp_server(
             return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
         return _gloomberb_envelope_json(envelope, symbol=ticker)
 
-    @_maybe_tool("digifetch_short_interest")
-    def digifetch_short_interest(symbol: str, years: int = 3) -> str:
+    @_maybe_tool("gloomberb_get_short_interest")
+    def gloomberb_get_short_interest(symbol: str, years: int = 3) -> str:
         """Biweekly short-interest settlements (Gloomberb Cloud; session-gated).
 
         Requires GLOOMBERB_SESSION_COOKIE; without it the envelope is a typed
@@ -1584,8 +1584,8 @@ def create_mcp_server(
             return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
         return _gloomberb_envelope_json(envelope, symbol=symbol)
 
-    @_maybe_tool("digifetch_equity_diagnostic")
-    def digifetch_equity_diagnostic(
+    @_maybe_tool("gloomberb_get_equity_diagnostic")
+    def gloomberb_get_equity_diagnostic(
         symbol: str, exchange: str | None = None, mode: str = "cache-first"
     ) -> str:
         """AI evidence review for one listing (Gloomberb Cloud; session-gated).
@@ -1607,8 +1607,8 @@ def create_mcp_server(
             return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
         return _gloomberb_envelope_json(envelope, symbol=symbol)
 
-    @_maybe_tool("digiquant_fit_btc_power_law")
-    def digiquant_fit_btc_power_law(
+    @_maybe_tool("fit_btc_power_law")
+    def fit_btc_power_law(
         ticker: str = "BTC-USD",
         cache_dir: str | None = None,
         refresh: bool = True,
@@ -1670,7 +1670,7 @@ def create_mcp_server(
                 prices["date"],
                 prices["close"],
                 notes=notes
-                or f"Fit from cached {ticker!r} history via digiquant_fit_btc_power_law.",
+                or f"Fit from cached {ticker!r} history via fit_btc_power_law.",
             )
             path = save_coefficients(coefficients, Path(output_path) if output_path else None)
         except Exception as exc:  # surface as JSON, never crash the server
@@ -1686,8 +1686,8 @@ def create_mcp_server(
             indent=2,
         )
 
-    @_maybe_tool("digiquant_build_sdca_risk_index")
-    def digiquant_build_sdca_risk_index(
+    @_maybe_tool("build_sdca_risk_index")
+    def build_sdca_risk_index(
         ticker: str = "BTC-USD",
         cache_dir: str | None = None,
         refresh: bool = True,
@@ -1731,8 +1731,8 @@ def create_mcp_server(
             rolling_window=rolling_window,
         )
 
-    @_maybe_tool("digiquant_fetch_bitview_series")
-    def digiquant_fetch_bitview_series(
+    @_maybe_tool("bitview_fetch_series")
+    def bitview_fetch_series(
         series_ids_json: str = '["mvrv", "asopr_24h", "puell_multiple", "rhodl_ratio"]',
         cache_dir: str | None = None,
         timeout: float = 30.0,
@@ -1761,8 +1761,8 @@ def create_mcp_server(
             allow_derived=allow_derived,
         )
 
-    @_maybe_tool("digiquant_fetch_bgeometrics_series")
-    def digiquant_fetch_bgeometrics_series(
+    @_maybe_tool("bgeometrics_fetch_series")
+    def bgeometrics_fetch_series(
         metric: str = "mvrv",
         startday: str | None = None,
         endday: str | None = None,
@@ -1785,7 +1785,7 @@ def create_mcp_server(
         requests/hour, 15/day, shared across every metric — fetch **one
         metric per call**. History is capped at roughly the last 4 years;
         for deeper multi-cycle history use
-        ``digiquant_fetch_coinmetrics_series`` instead (MVRV back to 2010,
+        ``coinmetrics_fetch_series`` instead (MVRV back to 2010,
         no rate-limit concern). Fail-soft + timeout. The upstream base URL is
         fixed (SSRF guard, #3944) — it is not a caller parameter.
         """
@@ -1801,8 +1801,8 @@ def create_mcp_server(
             token=token,
         )
 
-    @_maybe_tool("digiquant_fetch_coinmetrics_series")
-    def digiquant_fetch_coinmetrics_series(
+    @_maybe_tool("coinmetrics_fetch_series")
+    def coinmetrics_fetch_series(
         metric: str = "CapMVRVCur",
         asset: str = "btc",
         start_time: str | None = None,
@@ -1815,7 +1815,7 @@ def create_mcp_server(
         """Fetch one on-chain metric for one asset from the CoinMetrics Community API.
 
         One metric/asset per call — comma-separated lists are rejected (use
-        ``digiquant_list_coinmetrics_catalog`` to discover what's available
+        ``coinmetrics_list_catalog`` to discover what's available
         per-asset first, rather than assuming BTC's metric set applies
         elsewhere). MVRV (``CapMVRVCur``) has full BTC history back to
         2010-07-18, unlike bgeometrics' ~4-year cap. No API key required for
@@ -1838,15 +1838,15 @@ def create_mcp_server(
             api_key=api_key,
         )
 
-    @_maybe_tool("digiquant_list_coinmetrics_catalog")
-    def digiquant_list_coinmetrics_catalog(
+    @_maybe_tool("coinmetrics_list_catalog")
+    def coinmetrics_list_catalog(
         asset: str | None = None,
         timeout: float = 30.0,
         api_key: str | None = None,
     ) -> str:
         """List which CoinMetrics community metrics exist for ``asset`` (or all assets).
 
-        Discovery tool — call before ``digiquant_fetch_coinmetrics_series``
+        Discovery tool — call before ``coinmetrics_fetch_series``
         to find real metric names instead of guessing from the BTC-only
         ``KNOWN_COMMUNITY_METRICS`` snapshot. Returns the raw
         ``catalog-v2/asset-metrics`` JSON. Fail-soft + timeout. The upstream
@@ -1856,8 +1856,8 @@ def create_mcp_server(
 
         return run_list_coinmetrics_catalog(asset=asset, timeout=timeout, api_key=api_key)
 
-    @_maybe_tool("digiquant_fit_sdca_weights")
-    def digiquant_fit_sdca_weights(
+    @_maybe_tool("fit_sdca_weights")
+    def fit_sdca_weights(
         profile: str = "btc_v1",
         profile_json: str | None = None,
         cache_dir: str | None = None,
@@ -1871,7 +1871,7 @@ def create_mcp_server(
     ) -> str:
         """Stage A: fit composite weights so risk overlaps cycle windows.
 
-        Not a second optimizer. Stage B is ``digiquant_run_optimize`` with
+        Not a second optimizer. Stage B is ``run_optimize`` with
         ``strategy_name='sdca'``; pass ``regularized_weight_params`` as
         ``strategy_params_json``. No live-trading. Do not ``--push-supabase``.
         """
@@ -1890,8 +1890,8 @@ def create_mcp_server(
             rolling_window=rolling_window,
         )
 
-    @_maybe_tool("digiquant_generate_slapper_tearsheet")
-    def digiquant_generate_slapper_tearsheet(
+    @_maybe_tool("generate_slapper_tearsheet")
+    def generate_slapper_tearsheet(
         strategy: str | None = None,
         cache_dir: str | None = None,
         signal_delay_days: int = 0,
@@ -1962,8 +1962,8 @@ def create_mcp_server(
                 failures[strat] = error or "unknown error"
         return json.dumps({"entries": entries, "failures": failures}, indent=2, default=str)
 
-    @_maybe_tool("digiquant_validate_slapper_vs_tradingview")
-    def digiquant_validate_slapper_vs_tradingview(
+    @_maybe_tool("validate_slapper_vs_tradingview")
+    def validate_slapper_vs_tradingview(
         strategy: str,
         ohlcv_csv: str,
         tv_export_csv: str,

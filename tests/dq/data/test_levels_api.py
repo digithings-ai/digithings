@@ -166,10 +166,10 @@ def test_cache_path_rejects_traversal(tmp_path, evil: str) -> None:
 
 
 def test_mcp_function_prefers_caller_frame() -> None:
-    from digiquant.mcp_server import digiquant_get_trade_levels
+    from digiquant.mcp_server import get_trade_levels
 
     payload = json.loads(
-        digiquant_get_trade_levels(
+        get_trade_levels(
             direction="long", ohlc_json=json.dumps(_bars(60)), pair="EUR/USD"
         )
     )
@@ -179,16 +179,16 @@ def test_mcp_function_prefers_caller_frame() -> None:
 
 
 def test_mcp_function_requires_a_data_source() -> None:
-    from digiquant.mcp_server import digiquant_get_trade_levels
+    from digiquant.mcp_server import get_trade_levels
 
-    payload = json.loads(digiquant_get_trade_levels(direction="long"))
+    payload = json.loads(get_trade_levels(direction="long"))
     assert "error" in payload
 
 
 def test_mcp_function_surfaces_bad_input_as_error() -> None:
-    from digiquant.mcp_server import digiquant_get_trade_levels
+    from digiquant.mcp_server import get_trade_levels
 
-    payload = json.loads(digiquant_get_trade_levels(direction="long", ohlc_json="[]"))
+    payload = json.loads(get_trade_levels(direction="long", ohlc_json="[]"))
     assert "error" in payload
 
 
@@ -198,13 +198,13 @@ def test_trade_levels_tool_is_read_scope() -> None:
 
     server = create_mcp_server(scope="read")
     names = {t.name for t in server._tool_manager.list_tools()}
-    assert "digiquant_get_trade_levels" in names
-    assert "digiquant_get_trade_levels" in READ_SCOPE_TOOLS
+    assert "get_trade_levels" in names
+    assert "get_trade_levels" in READ_SCOPE_TOOLS
 
 
 def test_orchestrator_manifest_includes_trade_levels() -> None:
     manifest = build_orchestrator_tool_manifest()
-    tool = next(row for row in manifest if row["function"]["name"] == "digiquant_get_trade_levels")
+    tool = next(row for row in manifest if row["function"]["name"] == "get_trade_levels")
     params = tool["function"]["parameters"]
     assert params["required"] == ["direction"]
     assert params["properties"]["direction"]["enum"] == ["long", "short"]
@@ -218,7 +218,7 @@ def test_orchestrator_invoke_dispatches_trade_levels() -> None:
 
     resp = v1_orchestrator_invoke(
         OrchestratorInvokeRequest(
-            tool="digiquant_get_trade_levels",
+            tool="get_trade_levels",
             arguments={"direction": "long", "ohlc_json": json.dumps(_bars(60)), "pair": "EUR/USD"},
         )
     )
@@ -232,7 +232,7 @@ def test_orchestrator_invoke_trade_levels_errors_surface() -> None:
 
     resp = v1_orchestrator_invoke(
         OrchestratorInvokeRequest(
-            tool="digiquant_get_trade_levels",
+            tool="get_trade_levels",
             arguments={"direction": "long", "ohlc_json": "[]"},
         )
     )

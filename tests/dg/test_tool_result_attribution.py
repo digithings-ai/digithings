@@ -24,7 +24,7 @@ _SOURCE_URL = "https://term.gloom.sh/?ticker=AAPL"
 
 
 def _envelope_text(rows: int = 120) -> str:
-    """A digifetch_price_history envelope as ``gloomberb_envelope_json`` emits it.
+    """A gloomberb_get_price_history envelope as ``gloomberb_envelope_json`` emits it.
 
     The §7 block is appended LAST (agent_tools.py:161-166) — the ordering that
     loses it to the 2,000-char scalar cap once the MCP client wraps the string
@@ -100,7 +100,7 @@ def test_structured_hub_envelope_keeps_attribution() -> None:
     raw = {
         "ok": True,
         "service": "digiquant",
-        "tool": "digifetch_quote",
+        "tool": "gloomberb_get_quote",
         "data": {
             "data": {"quote": {"symbol": "AAPL", "price": 200.0}},
             "attribution": _ATTRIBUTION,

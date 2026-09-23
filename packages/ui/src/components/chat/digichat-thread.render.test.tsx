@@ -61,7 +61,7 @@ const GLOOMBERB_MESSAGES: ThreadMessageLike[] = [
       {
         type: "tool-call",
         toolCallId: "g1",
-        toolName: "digifetch_quote",
+        toolName: "gloomberb_get_quote",
         argsText: '{"symbol":"AAPL"}',
         result: {
           result: {
@@ -109,7 +109,7 @@ const UNATTRIBUTED_MESSAGES: ThreadMessageLike[] = [
       {
         type: "tool-call",
         toolCallId: "u1",
-        toolName: "digifetch_earnings_calendar",
+        toolName: "yahoo_get_earnings_calendar",
         argsText: "{}",
         result: {
           result: { rows: [{ symbol: "AAPL", reportDate: "2026-09-18" }] },

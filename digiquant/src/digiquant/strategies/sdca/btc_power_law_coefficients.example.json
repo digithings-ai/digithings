@@ -4,7 +4,7 @@
   "fit_start": "2014-06-26",
   "fit_end": "2022-09-11",
   "fit_rows": 3000,
-  "notes": "SYNTHETIC placeholder -- fit against a generated power-law-shaped series, NOT real BTC history. Network access to price data and the reference artifact is blocked in the environment this was built in (#1082). Replace by running the digiquant_fit_btc_power_law MCP tool once BTC daily history is available.",
+  "notes": "SYNTHETIC placeholder -- fit against a generated power-law-shaped series, NOT real BTC history. Network access to price data and the reference artifact is blocked in the environment this was built in (#1082). Replace by running the fit_btc_power_law MCP tool once BTC daily history is available.",
   "quantiles": {
     "q01": {
       "c": 3.2947839075597276,

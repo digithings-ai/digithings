@@ -19,7 +19,7 @@ the network.
   message="… GLOOMBERB_SESSION_COOKIE is not set")` (`client.py:2248-2254`).
   Zero bytes leave the process.
 - **Pro-only tools return `pro_required` for a valid free session.** A verified
-  free session that calls `digifetch_transcripts` or `digifetch_screener` is
+  free session that calls `gloomberb_get_transcripts` or `gloomberb_run_screener` is
   entitled to be here but not to the route; the upstream plan gate is mapped to
   a typed, non-retryable `pro_required` (distinct from `auth_required`, so a
   caller can tell a missing session from a missing plan) (`client.py:307-322`).
@@ -41,9 +41,9 @@ entitlement (`entitlements.py:58-97`), as of 2026-09-16:
 
 | Entitlement | Tools |
 |---|---|
-| `session` (9) | `digifetch_holders`, `digifetch_analyst_research`, `digifetch_corporate_actions`, `digifetch_research_search`, `digifetch_statements`, `digifetch_ticker_tweets`, `digifetch_tweet_search`, `digifetch_short_interest`, `digifetch_saved_searches` |
-| `preview` (1) | `digifetch_equity_diagnostic` — a free session still gets a labeled `access="preview"` report instead of a hard gate |
-| `pro` (2) | `digifetch_transcripts`, `digifetch_screener` — a free session is gated with `pro_required` |
+| `session` (9) | `gloomberb_get_holders`, `gloomberb_get_analyst_research`, `gloomberb_get_corporate_actions`, `gloomberb_search_research`, `gloomberb_get_statements`, `gloomberb_get_ticker_tweets`, `gloomberb_search_tweet`, `gloomberb_get_short_interest`, `gloomberb_list_saved_searches` |
+| `preview` (1) | `gloomberb_get_equity_diagnostic` — a free session still gets a labeled `access="preview"` report instead of a hard gate |
+| `pro` (2) | `gloomberb_get_transcripts`, `gloomberb_run_screener` — a free session is gated with `pro_required` |
 
 The family total is **34 tools, 22 of them free** as of 2026-09-16; a rename or a
 new gated tool updates this doc in the same change (the repo-level test in

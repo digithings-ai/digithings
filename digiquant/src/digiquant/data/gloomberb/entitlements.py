@@ -21,7 +21,7 @@ Vocabulary:
 ``preview``
     Session required, but a free (email-verified) session still receives a
     labeled preview instead of a hard gate (today only
-    ``digifetch_equity_diagnostic``). The report carries ``access="preview"``
+    ``gloomberb_get_equity_diagnostic``). The report carries ``access="preview"``
     and the envelope carries the :data:`PREVIEW_ACCESS_WARNING` marker.
 ``pro``
     Session **and** a Gloomberb Pro plan. A valid free session is gated with
@@ -57,43 +57,43 @@ Entitlement = Literal["free", "session", "preview", "pro"]
 #: One declaration per digifetch tool (mirrors the MCP + manifest surfaces).
 TOOL_ENTITLEMENTS: dict[str, Entitlement] = {
     # free — anonymous reads
-    "digifetch_quote": "free",
-    "digifetch_quotes_batch": "free",
-    "digifetch_price_history": "free",
-    "digifetch_ticker_financials": "free",
-    "digifetch_options_chain": "free",
-    "digifetch_sec_filings": "free",
-    "digifetch_earnings_calendar": "free",
-    "digifetch_exchange_rate": "free",
-    "digifetch_search": "free",
-    "digifetch_news": "free",
-    "digifetch_econ_calendar": "free",
-    "digifetch_econ_series": "free",
-    "digifetch_yield_curve": "free",
-    "digifetch_cds": "free",
-    "digifetch_congress_trades": "free",
-    "digifetch_venues": "free",
-    "digifetch_13f_funds": "free",
-    "digifetch_13f_holdings": "free",
-    "digifetch_shiller": "free",
-    "digifetch_proxy_statements": "free",
-    "digifetch_filing_events": "free",
-    "digifetch_risk_reports": "free",
+    "gloomberb_get_quote": "free",
+    "gloomberb_get_quotes_batch": "free",
+    "gloomberb_get_price_history": "free",
+    "gloomberb_get_ticker_financials": "free",
+    "gloomberb_get_options_chain": "free",
+    "gloomberb_get_sec_filings": "free",
+    "yahoo_get_earnings_calendar": "free",
+    "gloomberb_get_exchange_rate": "free",
+    "gloomberb_search": "free",
+    "gloomberb_get_news": "free",
+    "gloomberb_get_econ_calendar": "free",
+    "gloomberb_get_econ_series": "free",
+    "gloomberb_get_yield_curve": "free",
+    "gloomberb_get_cds": "free",
+    "gloomberb_get_congress_trades": "free",
+    "gloomberb_list_venues": "free",
+    "gloomberb_get_13f_funds": "free",
+    "gloomberb_get_13f_holdings": "free",
+    "gloomberb_get_shiller": "free",
+    "gloomberb_get_proxy_statements": "free",
+    "gloomberb_get_filing_events": "free",
+    "gloomberb_get_risk_reports": "free",
     # session — GLOOMBERB_SESSION_COOKIE required (zero-HTTP auth_required without it)
-    "digifetch_holders": "session",
-    "digifetch_analyst_research": "session",
-    "digifetch_corporate_actions": "session",
-    "digifetch_research_search": "session",
-    "digifetch_statements": "session",
-    "digifetch_ticker_tweets": "session",
-    "digifetch_tweet_search": "session",
-    "digifetch_short_interest": "session",
-    "digifetch_saved_searches": "session",
+    "gloomberb_get_holders": "session",
+    "gloomberb_get_analyst_research": "session",
+    "gloomberb_get_corporate_actions": "session",
+    "gloomberb_search_research": "session",
+    "gloomberb_get_statements": "session",
+    "gloomberb_get_ticker_tweets": "session",
+    "gloomberb_search_tweet": "session",
+    "gloomberb_get_short_interest": "session",
+    "gloomberb_list_saved_searches": "session",
     # preview — session required; a free session gets a labeled preview
-    "digifetch_equity_diagnostic": "preview",
+    "gloomberb_get_equity_diagnostic": "preview",
     # pro — session + Gloomberb Pro; a free session gets pro_required
-    "digifetch_transcripts": "pro",
-    "digifetch_screener": "pro",
+    "gloomberb_get_transcripts": "pro",
+    "gloomberb_run_screener": "pro",
 }
 
 #: The sentence appended to the MCP/manifest description for each entitlement.

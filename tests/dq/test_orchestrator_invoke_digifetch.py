@@ -80,13 +80,13 @@ def test_digifetch_quote_returns_the_attributed_envelope(
     _patch_client(monkeypatch, _quote_handler)
     r = client.post(
         "/v1/orchestrator_invoke",
-        json={"tool": "digifetch_quote", "arguments": {"symbol": "AAPL"}},
+        json={"tool": "gloomberb_get_quote", "arguments": {"symbol": "AAPL"}},
     )
     assert r.status_code == 200
     body = r.json()
     assert body["ok"] is True
     assert body["service"] == "digiquant"
-    assert body["tool"] == "digifetch_quote"
+    assert body["tool"] == "gloomberb_get_quote"
     envelope = body["data"]
     assert envelope["data"]["quote"]["price"] == 200.0
     assert envelope["attribution"] == GLOOMBERB_ATTRIBUTION
@@ -106,8 +106,8 @@ def test_unknown_tools_still_400(client: TestClient, tool: str) -> None:
 @pytest.mark.parametrize(
     ("tool", "arguments"),
     [
-        ("digifetch_holders", {"symbol": "AAPL"}),
-        ("digifetch_transcripts", {"ticker": "AAPL"}),
+        ("gloomberb_get_holders", {"symbol": "AAPL"}),
+        ("gloomberb_get_transcripts", {"ticker": "AAPL"}),
     ],
 )
 def test_gated_tool_without_cookie_is_typed_auth_required(
@@ -136,7 +136,7 @@ def test_pro_tool_with_free_session_is_typed_pro_required(
     _patch_client(monkeypatch, handler, session_cookie="gloomberb.session_token=test")
     r = client.post(
         "/v1/orchestrator_invoke",
-        json={"tool": "digifetch_transcripts", "arguments": {"ticker": "AAPL"}},
+        json={"tool": "gloomberb_get_transcripts", "arguments": {"ticker": "AAPL"}},
     )
     assert r.status_code == 200
     body = r.json()
@@ -152,7 +152,7 @@ def test_invalid_args_are_typed_invalid_input_not_400(
     # `resolution` is required for price_history — the input model rejects it.
     r = client.post(
         "/v1/orchestrator_invoke",
-        json={"tool": "digifetch_price_history", "arguments": {"symbol": "AAPL"}},
+        json={"tool": "gloomberb_get_price_history", "arguments": {"symbol": "AAPL"}},
     )
     assert r.status_code == 200
     body = r.json()
@@ -181,7 +181,7 @@ def test_price_history_date_window_dispatches_through_the_endpoint(
     r = client.post(
         "/v1/orchestrator_invoke",
         json={
-            "tool": "digifetch_price_history",
+            "tool": "gloomberb_get_price_history",
             "arguments": {
                 "symbol": "AAPL",
                 "resolution": "1wk",
@@ -204,7 +204,7 @@ def test_family_kill_switch_disables_the_tool_not_the_name(
     _patch_client(monkeypatch, _fail_handler)
     r = client.post(
         "/v1/orchestrator_invoke",
-        json={"tool": "digifetch_quote", "arguments": {"symbol": "AAPL"}},
+        json={"tool": "gloomberb_get_quote", "arguments": {"symbol": "AAPL"}},
     )
     assert r.status_code == 200
     body = r.json()
@@ -225,7 +225,7 @@ def test_client_fault_returns_error_not_an_envelope(
     monkeypatch.setattr(agent_tools, "build_gloomberb_client", lambda: _Boom())
     r = client.post(
         "/v1/orchestrator_invoke",
-        json={"tool": "digifetch_quote", "arguments": {"symbol": "AAPL"}},
+        json={"tool": "gloomberb_get_quote", "arguments": {"symbol": "AAPL"}},
     )
     assert r.status_code == 200
     body = r.json()

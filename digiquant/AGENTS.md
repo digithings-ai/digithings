@@ -170,7 +170,7 @@ the full module map.
   `m2_liquidity` remains unregistered — same runtime-path pattern, not a
   second special case. Research parquets also come from
   `sdca/risk_index.py::build_risk_index()` + `write_risk_index()`, or the
-  `digiquant_build_sdca_risk_index` MCP tool — do not hand-assemble them.
+  `build_sdca_risk_index` MCP tool — do not hand-assemble them.
 - **`SdcaStrategy.on_bar()` must call `AccumDistCurve.value_at_risk()` and
   mirror `sdca/backtest.py::run_backtest()`'s buy/sell sizing loop, never
   reimplement it.** This is what keeps the Nautilus-run result and the
@@ -225,11 +225,11 @@ the full module map.
   when the committed `btc_power_law_coefficients.json` is present (#3173).
   `load_coefficients()` still falls back to the placeholder with a warning
   if the real file is deleted. Don't silence that warning.
-- **Fit real coefficients via the `digiquant_fit_btc_power_law` MCP tool**
+- **Fit real coefficients via the `fit_btc_power_law` MCP tool**
   (or `fit_btc_power_law()` + `save_coefficients()` directly), which sources
   price history through `data/prices/history_cache.py` — the same cache
   every other price consumer uses. Don't write a bespoke fetch path for this.
-  (`digiquant_fetch_coinbase_ohlcv`'s CCXT/Coinbase script pipeline writes to
+  (`coinbase_fetch_ohlcv`'s CCXT/Coinbase script pipeline writes to
   the *same* `data/price-history/` directory and ticker naming, not a
   separate cache — `history_cache.py` is still the right one to call from a
   new tool because it's the actively-maintained, incrementally-updating
@@ -259,8 +259,8 @@ on the extra-indicator allowlist.
    in this WP.
 5. Stage A backtest keep/drop (`optimize_stage_a_by_backtest` over
    `stage_a_search_names(profile)`) → Stage B → `regularize`. Cycle
-   overlap is diagnostic. Platform MCP: `digiquant_fit_sdca_weights` /
-   `digiquant_run_optimize` (`strategy_name=sdca`, freeze `*_weight` keys).
+   overlap is diagnostic. Platform MCP: `fit_sdca_weights` /
+   `run_optimize` (`strategy_name=sdca`, freeze `*_weight` keys).
    Do not publish until the backtest looks comfortable.
 6. Only then add `settings.json`. `SdcaAssetProfile.eth_research_v1()` is
    research-only — not `eth_sdca` in settings, no `--push-supabase`, no
@@ -268,7 +268,7 @@ on the extra-indicator allowlist.
 
 On-chain extras (#1086): Bitview/BRK is the free ingest source (`mvrv`,
 `asopr_24h`, `puell_multiple`, `rhodl_ratio`; no NUPL; no HTML scrape;
-fail-soft). MCP `digiquant_fetch_bitview_series` and CLI
+fail-soft). MCP `bitview_fetch_series` and CLI
 `digiquant onchain fetch-bitview` write parquet under `data/onchain/bitview/`
 and optionally upsert `macro_series_observations` (`source=bitview`). Scheduled
 job: `.github/workflows/pipeline-digiquant-onchain.yml` (persistent failure
@@ -323,8 +323,8 @@ from digiquant.strategies.sdca.optimize import persist_btc_optimized, run_sdca_w
 ```
 
 `run_optimize(strategy_name='sdca'|'btc_sdca', ...)` is the MCP/HTTP path
-(`digiquant_run_optimize`) — Stage B. Stage A is
-`digiquant_fit_sdca_weights` (cycle-window overlap; cannot honestly live
+(`run_optimize`) — Stage B. Stage A is
+`fit_sdca_weights` (cycle-window overlap; cannot honestly live
 inside `run_optimize`). Objective is maximize `vs_flat_dca_pct` subject to
 a 10% capital-deployed floor and a 50% drawdown cap — **not** vs-lump, **not**
 Sharpe. Extra-indicator weights (`m2_weight`, `rs_eth_weight`, `dxy_weight`,
@@ -339,7 +339,7 @@ that need them. Two-stage fit: published BTC Stage A
 (`optimize_stage_a_by_backtest`) grids every extra with data and keeps
 weights by in-sample `vs_flat_dca_pct` (frozen curve; OOS reported, not
 used to pick). Cycle overlap (`optimize_stage_a_weights` via
-`digiquant_fit_sdca_weights`) is diagnostic. Stage B freezes those
+`fit_sdca_weights`) is diagnostic. Stage B freezes those
 weights and runs this
 walk-forward; `persist_two_stage` writes aggressive vs regularized provenance.
 Linux Nautilus may SIGABRT (#42) — then inject `evaluate_sdca_trial_curve_sim`
@@ -478,21 +478,21 @@ and [`docs/adr/0021-digiquant-supabase-project-topology.md`](../docs/adr/0021-di
 It is the **only** place the `api.gloom.sh` URL/site logic lives — `digifetch`
 stays a generic transport engine (no URLs, no env reads).
 
-- **34 tools, read scope, default ON.** `digifetch_quote`, `digifetch_quotes_batch`,
-  `digifetch_price_history`, `digifetch_ticker_financials`, `digifetch_options_chain`,
-  `digifetch_sec_filings`, `digifetch_holders`, `digifetch_analyst_research`,
-  `digifetch_corporate_actions`, `digifetch_earnings_calendar`,
-  `digifetch_exchange_rate`, `digifetch_search`, `digifetch_news`, plus the #4110
-  phase-1 cohort `digifetch_econ_calendar`, `digifetch_econ_series`,
-  `digifetch_yield_curve`, `digifetch_cds`, `digifetch_research_search`,
-  `digifetch_congress_trades`, `digifetch_transcripts`, the #4110 phase-2
-  cohort `digifetch_statements`, `digifetch_ticker_tweets`,
-  `digifetch_tweet_search`, `digifetch_venues`, `digifetch_screener`,
-  `digifetch_13f_funds`, `digifetch_13f_holdings`, and the #4110 phase-3
-  cohort `digifetch_shiller`, `digifetch_proxy_statements`,
-  `digifetch_filing_events`, `digifetch_risk_reports`,
-  `digifetch_short_interest`, `digifetch_equity_diagnostic`, and the #4110
-  phase-4a `digifetch_saved_searches` (`digifetch_transcripts` also gained a
+- **34 tools, read scope, default ON.** `gloomberb_get_quote`, `gloomberb_get_quotes_batch`,
+  `gloomberb_get_price_history`, `gloomberb_get_ticker_financials`, `gloomberb_get_options_chain`,
+  `gloomberb_get_sec_filings`, `gloomberb_get_holders`, `gloomberb_get_analyst_research`,
+  `gloomberb_get_corporate_actions`, `yahoo_get_earnings_calendar`,
+  `gloomberb_get_exchange_rate`, `gloomberb_search`, `gloomberb_get_news`, plus the #4110
+  phase-1 cohort `gloomberb_get_econ_calendar`, `gloomberb_get_econ_series`,
+  `gloomberb_get_yield_curve`, `gloomberb_get_cds`, `gloomberb_search_research`,
+  `gloomberb_get_congress_trades`, `gloomberb_get_transcripts`, the #4110 phase-2
+  cohort `gloomberb_get_statements`, `gloomberb_get_ticker_tweets`,
+  `gloomberb_search_tweet`, `gloomberb_list_venues`, `gloomberb_run_screener`,
+  `gloomberb_get_13f_funds`, `gloomberb_get_13f_holdings`, and the #4110 phase-3
+  cohort `gloomberb_get_shiller`, `gloomberb_get_proxy_statements`,
+  `gloomberb_get_filing_events`, `gloomberb_get_risk_reports`,
+  `gloomberb_get_short_interest`, `gloomberb_get_equity_diagnostic`, and the #4110
+  phase-4a `gloomberb_list_saved_searches` (`gloomberb_get_transcripts` also gained a
   `transcript_id` detail mode) are registered in
   `mcp_server.py` (`_maybe_tool`, `READ_SCOPE_TOOLS`) and listed in
   `orchestrator_tools.py`. Keep them read-scope; the family is default-ON behind
@@ -508,7 +508,7 @@ stays a generic transport engine (no URLs, no env reads).
 - **Enrichment only, never a pipeline primary.** 15-minute free-tier delay, rate
   limits, and the §5.2 caps (5m→1wk … 1wk→5y, 1mo→all-time) disqualify Cloud as a
   source of record. Contract violations are **rejected** (`invalid_input`), never
-  clamped. `digifetch_price_history`'s explicit `start_date`/`end_date` window
+  clamped. `gloomberb_get_price_history`'s explicit `start_date`/`end_date` window
   (ISO `YYYY-MM-DD`, mutually exclusive with `range`, #4100) widens history reads
   past the caps by sending `rangeKey=ALL` + `startDate`/`endDate`; the
   delay/rate limits still stand. Do not rewire prices/history/technicals onto it.
@@ -528,7 +528,7 @@ stays a generic transport engine (no URLs, no env reads).
   and the open `/public/proxies/*` + `/public/risks/*` + `/public/events/*`
   filing reads stay anonymous (the `/cloud/search` research search is the
   cookie-gated one).
-- **Plan and upstream caveats (#4110 phase 1).** `digifetch_transcripts` requires
+- **Plan and upstream caveats (#4110 phase 1).** `gloomberb_get_transcripts` requires
   a **Gloomberb Pro** plan: a free (email-verified) session's non-JSON
   `Pro plan required` body maps to a typed `pro_required` with the upstream
   text — never an empty success and never a generic non-JSON error; the live
@@ -536,14 +536,14 @@ stays a generic transport engine (no URLs, no env reads).
   (a bare 402 with no recognizable plan body keeps the generic `auth_required`
   mapping), and the plan-gate path must not trip the circuit breaker. Read transcript rows from the upstream `calls`
   key (`companyName`/`callAt`/`webcastUrl`); `transcripts` is accepted only as a
-  wrapped variant. `digifetch_congress_trades` is exposed but its upstream
+  wrapped variant. `gloomberb_get_congress_trades` is exposed but its upstream
   Mistral OCR dependency currently answers HTTP 500 (`402 Customer monthly
   spending limit reached`), surfaced as a typed `upstream_error`; its typed
   fields follow the known live names (`memberName`/`assetName`/`sourceUrl`/
   `filingDate`/`notificationDate`) and extras carry the rest.
-  `digifetch_econ_calendar` takes **no parameters** — upstream ignores `limit`
+  `gloomberb_get_econ_calendar` takes **no parameters** — upstream ignores `limit`
   (fixed ~105-row window), so do not reintroduce a page-size knob.
-  `digifetch_cds.days` is bounded 1–90 in the **input model** (the upstream
+  `gloomberb_get_cds.days` is bounded 1–90 in the **input model** (the upstream
   would answer 400) so an out-of-range value is `invalid_input` with no
   request. The new `/cloud/*` routes answer direct payloads (bare arrays
   included) rather than the `/market/*` envelope —
@@ -553,7 +553,7 @@ stays a generic transport engine (no URLs, no env reads).
   the description rather than promising `data.delay_note`. Do not tighten the
   deliberately permissive wire types (`float | str`, `str | int`) for the
   partly-probed routes without a live probe.
-- **Plan and upstream caveats (#4110 phase 2).** `digifetch_screener` is the
+- **Plan and upstream caveats (#4110 phase 2).** `gloomberb_run_screener` is the
   second Pro-only tool and has **two plan-gate shapes** that must map to the
   same non-retryable `pro_required`: the 402 text body
   (`Pro plan required`) and the live free-session HTTP 200 envelope
@@ -564,13 +564,13 @@ stays a generic transport engine (no URLs, no env reads).
   `CloudMarketScreenerItem` (`rank`/`currency`/`tradeCount`/`high52w`/`low52w`/
   `dayHigh`/`dayLow`/`lastUpdated`/`dataSource`; no `marketCap`) with every
   field optional and extras open, so keep it that way until a Pro probe.
-  Tweets (`digifetch_ticker_tweets` / `digifetch_tweet_search`) are
+  Tweets (`gloomberb_get_ticker_tweets` / `gloomberb_search_tweet`) are
   session-gated; the upstream echoes `limit`/`hours` but applies neither
   (~375 rows for `limit=1`; ~394 rows spanning ~13 days for `hours=1`,
   live-verified), so the client **drops rows older than `now - hours` when
   `hours` is given, then slices to `limit`**, reporting
   `total_available`/`truncated` — never remove either reduction. 13F routes
-  are anonymous: `digifetch_13f_holdings` normalizes `cik` to the SEC's
+  are anonymous: `gloomberb_get_13f_holdings` normalizes `cik` to the SEC's
   10-digit zero-padded form and `accession_number` to the dashed
   `XXXXXXXXXX-YY-ZZZZZZ` form (an undashed value passed through would silently
   return an empty result set), validates `from_date`/`to_date` as ISO
@@ -581,24 +581,24 @@ stays a generic transport engine (no URLs, no env reads).
   `Forms13F 4xx for /route` body — the transport detects that body and maps it
   to non-retryable `invalid_input` **without retrying and without recording a
   breaker failure** (three such calls must never open the shared circuit).
-  `digifetch_13f_funds.what='holders'` is exposed against the documented shape
+  `gloomberb_get_13f_funds.what='holders'` is exposed against the documented shape
   but the upstream currently answers such a proxied 4xx for every
   `period_of_report` format probed. The `what`-discriminated inputs validate
   required fields per branch **before** any request (dashed quarters like
   `2026-Q2` are rejected client-side, since the upstream answers 500).
-- **Plan and upstream caveats (#4110 phase 3).** `digifetch_shiller` returns
+- **Plan and upstream caveats (#4110 phase 3).** `gloomberb_get_shiller` returns
   the **most recent** `limit` monthly rows (default 240, max 2000) — the
   upstream sends the whole ~1869-row series from 1871, so keep the tail slice
-  and the `total_available`/`truncated` flags. `digifetch_proxy_statements` and
-  `digifetch_risk_reports` read the anonymous **`/public/proxies`** and
+  and the `total_available`/`truncated` flags. `gloomberb_get_proxy_statements` and
+  `gloomberb_get_risk_reports` read the anonymous **`/public/proxies`** and
   **`/public/risks`** open products (list + per-year detail); the `year` for a
   proxy statement is the **proxy** (filing) year, not the fiscal year, and an
-  unknown ticker 404s to `not_found`. `digifetch_filing_events` is the
-  classified 8-K feed (newest first, `limit` ≤200). `digifetch_short_interest`
+  unknown ticker 404s to `not_found`. `gloomberb_get_filing_events` is the
+  classified 8-K feed (newest first, `limit` ≤200). `gloomberb_get_short_interest`
   is session-gated with `years` bounded **1–10 client-side** (live: 1→24
   points, 5→120, 10→209; 0/11/99 silently fall back to the 3-year window
-  upstream, so the contract must reject them first). `digifetch_equity_diagnostic`
-  is the only **POST** route outside `digifetch_quotes_batch` (#4069 POSTs
+  upstream, so the contract must reject them first). `gloomberb_get_equity_diagnostic`
+  is the only **POST** route outside `gloomberb_get_quotes_batch` (#4069 POSTs
   `/market/quotes/batch`) and the only **AI product endpoint**: its payload
   carries its own `status` (`generating`/`partial`/`complete`) rather than the
   CloudMarketResponse discriminator, so it is read with
@@ -614,18 +614,18 @@ stays a generic transport engine (no URLs, no env reads).
   in copy, never as advice. The remaining plugin panes are deliberately out of
   scope: correlation/relationship (client math over history), dividend yield /
   Yahoo fallback, world indices / FX / futures (quote composition), volatility /
-  credit conditions (FRED composition over `digifetch_econ_series`), treasury
+  credit conditions (FRED composition over `gloomberb_get_econ_series`), treasury
   auctions (fiscaldata), prediction markets (local model), scanner (websocket).
   See ARCHITECTURE §5 for the full list; the per-transcript detail route
-  (`/cloud/transcripts/{id}`) is `digifetch_transcripts`' `transcript_id` mode,
-  and `digifetch_saved_searches` covers `/cloud/search/saved`.
+  (`/cloud/transcripts/{id}`) is `gloomberb_get_transcripts`' `transcript_id` mode,
+  and `gloomberb_list_saved_searches` covers `/cloud/search/saved`.
 - **Entitlements (#4110 phase 5).** Every digifetch tool declares exactly one
   entitlement in `data/gloomberb/entitlements.py` (`TOOL_ENTITLEMENTS`):
   `free` (anonymous), `session` (`GLOOMBERB_SESSION_COOKIE` required; without
   it the tool returns `auth_required` with no HTTP request), `preview`
   (session required, but a free session still gets a labeled preview —
-  `digifetch_equity_diagnostic` only), or `pro` (session **and** a Gloomberb
-  Pro plan — `digifetch_transcripts`, `digifetch_screener`). The declaration is
+  `gloomberb_get_equity_diagnostic` only), or `pro` (session **and** a Gloomberb
+  Pro plan — `gloomberb_get_transcripts`, `gloomberb_run_screener`). The declaration is
   surfaced in the MCP registration (`_maybe_tool` sets `fn.entitlement` and
   appends the note to the description), as a top-level `entitlement` key on the
   orchestrator manifest entry plus the same description note, and therefore in
@@ -663,7 +663,7 @@ stays a generic transport engine (no URLs, no env reads).
   `available_digifetch_tools` returns no digifetch tools at all when
   `GLOOMBERB_ENABLED` disables the family, and drops session/preview/pro names
   when `GLOOMBERB_SESSION_COOKIE` is unset (CI has neither → never advertised);
-  the client still applies both gates per call. `digifetch_congress_trades`
+  the client still applies both gates per call. `gloomberb_get_congress_trades`
   stays MCP-only (its upstream OCR answers HTTP 500) and is not in `MACRO_TOOLS`.
   deliberation stays off (research-tools-only by #2908) and legacy Phase 7D is unwired.
   Enrichment-only is enforced structurally: the subset attaches **only when a

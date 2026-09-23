@@ -27,61 +27,61 @@ def _tool_names(server) -> set[str]:
     return {t.name for t in tools}
 
 
-READ_TOOLS_EXTRA = {"digiquant_list_coinmetrics_catalog"}
+READ_TOOLS_EXTRA = {"coinmetrics_list_catalog"}
 
 #: The 33 digifetch x Gloomberb enrichment reads (#4069, #4110) are read-scope
 #: only, default-ON behind GLOOMBERB_ENABLED.
 DIGIFETCH_TOOLS = {
-    "digifetch_quote",
-    "digifetch_quotes_batch",
-    "digifetch_price_history",
-    "digifetch_ticker_financials",
-    "digifetch_options_chain",
-    "digifetch_sec_filings",
-    "digifetch_holders",
-    "digifetch_analyst_research",
-    "digifetch_corporate_actions",
-    "digifetch_earnings_calendar",
-    "digifetch_exchange_rate",
-    "digifetch_search",
-    "digifetch_news",
-    "digifetch_econ_calendar",
-    "digifetch_econ_series",
-    "digifetch_yield_curve",
-    "digifetch_cds",
-    "digifetch_research_search",
-    "digifetch_congress_trades",
-    "digifetch_transcripts",
-    "digifetch_statements",
-    "digifetch_ticker_tweets",
-    "digifetch_tweet_search",
-    "digifetch_venues",
-    "digifetch_screener",
-    "digifetch_13f_funds",
-    "digifetch_13f_holdings",
-    "digifetch_shiller",
-    "digifetch_proxy_statements",
-    "digifetch_filing_events",
-    "digifetch_risk_reports",
-    "digifetch_short_interest",
-    "digifetch_equity_diagnostic",
-    "digifetch_saved_searches",
+    "gloomberb_get_quote",
+    "gloomberb_get_quotes_batch",
+    "gloomberb_get_price_history",
+    "gloomberb_get_ticker_financials",
+    "gloomberb_get_options_chain",
+    "gloomberb_get_sec_filings",
+    "gloomberb_get_holders",
+    "gloomberb_get_analyst_research",
+    "gloomberb_get_corporate_actions",
+    "yahoo_get_earnings_calendar",
+    "gloomberb_get_exchange_rate",
+    "gloomberb_search",
+    "gloomberb_get_news",
+    "gloomberb_get_econ_calendar",
+    "gloomberb_get_econ_series",
+    "gloomberb_get_yield_curve",
+    "gloomberb_get_cds",
+    "gloomberb_search_research",
+    "gloomberb_get_congress_trades",
+    "gloomberb_get_transcripts",
+    "gloomberb_get_statements",
+    "gloomberb_get_ticker_tweets",
+    "gloomberb_search_tweet",
+    "gloomberb_list_venues",
+    "gloomberb_run_screener",
+    "gloomberb_get_13f_funds",
+    "gloomberb_get_13f_holdings",
+    "gloomberb_get_shiller",
+    "gloomberb_get_proxy_statements",
+    "gloomberb_get_filing_events",
+    "gloomberb_get_risk_reports",
+    "gloomberb_get_short_interest",
+    "gloomberb_get_equity_diagnostic",
+    "gloomberb_list_saved_searches",
 }
 
 COMPUTE_TOOLS = {
-    "digiquant_run_backtest",
-    "digiquant_run_optimize",
-    "digiquant_export",
-    "digiquant_run_pipeline",
-    "digiquant_fetch_coinbase_ohlcv",
-    "digiquant_fit_btc_power_law",
-    "digiquant_build_sdca_risk_index",
-    "digiquant_fetch_bitview_series",
-    "digiquant_fetch_bgeometrics_series",
-    "digiquant_fetch_coinmetrics_series",
-    "digiquant_fit_sdca_weights",
-    "digiquant_generate_slapper_tearsheet",
-    "digiquant_validate_slapper_vs_tradingview",
+    "run_backtest",
+    "run_optimize",
+    "export",
+    "run_pipeline",
+    "coinbase_fetch_ohlcv",
+    "fit_btc_power_law",
+    "build_sdca_risk_index",
+    "bitview_fetch_series",
+    "bgeometrics_fetch_series",
+    "coinmetrics_fetch_series",
+    "fit_sdca_weights",
+    "generate_slapper_tearsheet",
+    "validate_slapper_vs_tradingview",
     "dashboard_run_policy_replay",
 }
 
@@ -150,8 +150,8 @@ def test_read_scope_includes_coinmetrics_catalog():
 @pytest.mark.unit
 def test_read_scope_includes_trade_levels():
     # Track E (#137): causal levels are a pure read/compute surface.
-    assert "digiquant_get_trade_levels" in READ_SCOPE_TOOLS
-    assert "digiquant_get_trade_levels" not in COMPUTE_TOOLS
+    assert "get_trade_levels" in READ_SCOPE_TOOLS
+    assert "get_trade_levels" not in COMPUTE_TOOLS
 
 
 @pytest.mark.unit

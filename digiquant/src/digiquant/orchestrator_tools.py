@@ -37,7 +37,7 @@ def build_digiquant_list_strategies_tool() -> dict[str, Any]:
     return {
         "type": "function",
         "function": {
-            "name": "digiquant_list_strategies",
+            "name": "list_strategies",
             "description": "List registered Nautilus strategies (name, aliases, description, default_params).",
             "parameters": {"type": "object", "properties": {}},
         },
@@ -48,7 +48,7 @@ def build_digiquant_run_backtest_tool() -> dict[str, Any]:
     return {
         "type": "function",
         "function": {
-            "name": "digiquant_run_backtest",
+            "name": "run_backtest",
             "description": "Run a Nautilus backtest for a strategy and symbols. Requires data_path or data_dir.",
             "parameters": {
                 "type": "object",
@@ -71,7 +71,7 @@ def build_digiquant_run_optimize_tool() -> dict[str, Any]:
     return {
         "type": "function",
         "function": {
-            "name": "digiquant_run_optimize",
+            "name": "run_optimize",
             "description": (
                 "Run parameter optimization (grid, bayesian, random). "
                 "strategy_name='sdca' is Stage B walk-forward (vs-flat-DCA); "
@@ -95,7 +95,7 @@ def build_digiquant_run_optimize_tool() -> dict[str, Any]:
                         "description": (
                             "Base/frozen params. For sdca Stage B, pass "
                             "valuation_weight / weekly_rsi_weight / ... from "
-                            "digiquant_fit_sdca_weights.regularized_weight_params."
+                            "fit_sdca_weights.regularized_weight_params."
                         ),
                     },
                 },
@@ -128,7 +128,7 @@ def build_digiquant_run_pipeline_tool() -> dict[str, Any]:
     return {
         "type": "function",
         "function": {
-            "name": "digiquant_run_pipeline",
+            "name": "run_pipeline",
             "description": "Run validate → backtest → optional optimize → optional export via internal LangGraph pipeline.",
             "parameters": _pipeline_parameters(),
         },
@@ -140,7 +140,7 @@ def build_digiquant_pipeline_delegate_tool() -> dict[str, Any]:
         "type": "function",
         "function": {
             "name": "digiquant_pipeline_delegate",
-            "description": "digigraph hub alias for digiquant_run_pipeline (same HTTP /v1/workflow behavior).",
+            "description": "digigraph hub alias for run_pipeline (same HTTP /v1/workflow behavior).",
             "parameters": _pipeline_parameters(),
         },
     }
@@ -150,7 +150,7 @@ def build_digiquant_fetch_coinbase_ohlcv_tool() -> dict[str, Any]:
     return {
         "type": "function",
         "function": {
-            "name": "digiquant_fetch_coinbase_ohlcv",
+            "name": "coinbase_fetch_ohlcv",
             "description": (
                 "Fetch OHLCV from Coinbase (CCXT) into the price-history "
                 "cache. Any Coinbase spot pair, any supported timeframe. "
@@ -187,7 +187,7 @@ def build_digifetch_quote_tool() -> dict[str, Any]:
     return {
         "type": "function",
         "function": {
-            "name": "digifetch_quote",
+            "name": "gloomberb_get_quote",
             "description": (
                 "Latest quote for one listing via Gloomberb Cloud (anonymous; "
                 "enrichment only — free-tier data is delayed up to 15 minutes). "
@@ -214,7 +214,7 @@ def build_digifetch_quotes_batch_tool() -> dict[str, Any]:
     return {
         "type": "function",
         "function": {
-            "name": "digifetch_quotes_batch",
+            "name": "gloomberb_get_quotes_batch",
             "description": (
                 "Batch quotes for 1-20 listings (Gloomberb Cloud, anonymous). "
                 "Per-item status/stale preserved: a stale listing is a null quote "
@@ -239,7 +239,7 @@ def build_digifetch_price_history_tool() -> dict[str, Any]:
     return {
         "type": "function",
         "function": {
-            "name": "digifetch_price_history",
+            "name": "gloomberb_get_price_history",
             "description": (
                 "OHLCV bars for one listing (Gloomberb Cloud). Caps per "
                 "resolution: 5m→1wk, 15m→1mo, 1h→3mo, 1d→5y (default), "
@@ -287,7 +287,7 @@ def build_digifetch_ticker_financials_tool() -> dict[str, Any]:
     return {
         "type": "function",
         "function": {
-            "name": "digifetch_ticker_financials",
+            "name": "gloomberb_get_ticker_financials",
             "description": (
                 "Quote, profile, fundamentals, statements, and price history "
                 "(Gloomberb Cloud). extended_statements=true requests the "
@@ -310,7 +310,7 @@ def build_digifetch_options_chain_tool() -> dict[str, Any]:
     return {
         "type": "function",
         "function": {
-            "name": "digifetch_options_chain",
+            "name": "gloomberb_get_options_chain",
             "description": (
                 "Options chain for one listing (Gloomberb Cloud). Calls/puts are "
                 "normalized to a side field per contract; the free-tier delay is "
@@ -336,7 +336,7 @@ def build_digifetch_sec_filings_tool() -> dict[str, Any]:
     return {
         "type": "function",
         "function": {
-            "name": "digifetch_sec_filings",
+            "name": "gloomberb_get_sec_filings",
             "description": (
                 "SEC filings, filing documents, or filing content (Gloomberb "
                 "Cloud /cloud/sec; anonymous, live-verified 200). what=documents/"
@@ -367,7 +367,7 @@ def build_digifetch_holders_tool() -> dict[str, Any]:
     return {
         "type": "function",
         "function": {
-            "name": "digifetch_holders",
+            "name": "gloomberb_get_holders",
             "description": (
                 "Holder records for one symbol (Gloomberb Cloud; session-gated). "
                 "Requires GLOOMBERB_SESSION_COOKIE — without it the envelope is a "
@@ -393,7 +393,7 @@ def build_digifetch_analyst_research_tool() -> dict[str, Any]:
     return {
         "type": "function",
         "function": {
-            "name": "digifetch_analyst_research",
+            "name": "gloomberb_get_analyst_research",
             "description": (
                 "Analyst recommendation, price target, and rating actions "
                 "(Gloomberb Cloud; session-gated). Requires "
@@ -415,7 +415,7 @@ def build_digifetch_corporate_actions_tool() -> dict[str, Any]:
     return {
         "type": "function",
         "function": {
-            "name": "digifetch_corporate_actions",
+            "name": "gloomberb_get_corporate_actions",
             "description": (
                 "Dividends, splits, and earnings history for one symbol "
                 "(Gloomberb Cloud; session-gated). Requires "
@@ -435,7 +435,7 @@ def build_digifetch_earnings_calendar_tool() -> dict[str, Any]:
     return {
         "type": "function",
         "function": {
-            "name": "digifetch_earnings_calendar",
+            "name": "yahoo_get_earnings_calendar",
             "description": (
                 "Upcoming earnings dates for 1-20 symbols (Yahoo via yfinance; "
                 "no Cloud route). horizon_days bounds the window from today; "
@@ -457,7 +457,7 @@ def build_digifetch_exchange_rate_tool() -> dict[str, Any]:
     return {
         "type": "function",
         "function": {
-            "name": "digifetch_exchange_rate",
+            "name": "gloomberb_get_exchange_rate",
             "description": (
                 "USD exchange rate for an ISO-4217 currency (Gloomberb Cloud). "
                 "The Cloud route is USD-based (to_currency must be USD); the "
@@ -479,7 +479,7 @@ def build_digifetch_search_tool() -> dict[str, Any]:
     return {
         "type": "function",
         "function": {
-            "name": "digifetch_search",
+            "name": "gloomberb_search",
             "description": (
                 "Search listings across venues (Gloomberb Cloud, anonymous). "
                 "limit is >=1; values above the wrapper cap of 10 are clamped "
@@ -508,7 +508,7 @@ def build_digifetch_news_tool() -> dict[str, Any]:
     return {
         "type": "function",
         "function": {
-            "name": "digifetch_news",
+            "name": "gloomberb_get_news",
             "description": (
                 "Aggregated market news headlines (Gloomberb Cloud, anonymous). "
                 "feed selects latest/top/breaking/ticker/sector/topic; ticker "
@@ -535,7 +535,7 @@ def build_digifetch_econ_calendar_tool() -> dict[str, Any]:
     return {
         "type": "function",
         "function": {
-            "name": "digifetch_econ_calendar",
+            "name": "gloomberb_get_econ_calendar",
             "description": (
                 "Structured economic calendar (Gloomberb Cloud, anonymous). The "
                 "route returns a fixed-size window (~105 rows; upstream ignores "
@@ -553,7 +553,7 @@ def build_digifetch_econ_series_tool() -> dict[str, Any]:
     return {
         "type": "function",
         "function": {
-            "name": "digifetch_econ_series",
+            "name": "gloomberb_get_econ_series",
             "description": (
                 "FRED-style macro series observations + metadata (Gloomberb "
                 "Cloud, anonymous). series_id is the FRED id (e.g. CPIAUCSL); "
@@ -579,7 +579,7 @@ def build_digifetch_yield_curve_tool() -> dict[str, Any]:
     return {
         "type": "function",
         "function": {
-            "name": "digifetch_yield_curve",
+            "name": "gloomberb_get_yield_curve",
             "description": (
                 "Treasury yield-curve tenors (Gloomberb Cloud, anonymous). "
                 "Each point carries maturity/maturityYears/yield/asOf/stale; "
@@ -594,7 +594,7 @@ def build_digifetch_cds_tool() -> dict[str, Any]:
     return {
         "type": "function",
         "function": {
-            "name": "digifetch_cds",
+            "name": "gloomberb_get_cds",
             "description": (
                 "DTCC PPD CDS trade tape (Gloomberb Cloud, anonymous). days is "
                 "bounded 1-90 and validated client-side (out-of-range is typed "
@@ -617,7 +617,7 @@ def build_digifetch_research_search_tool() -> dict[str, Any]:
     return {
         "type": "function",
         "function": {
-            "name": "digifetch_research_search",
+            "name": "gloomberb_search_research",
             "description": (
                 "Full-text research search across transcripts/news/filings "
                 "(Gloomberb Cloud; session-gated). Requires "
@@ -644,7 +644,7 @@ def build_digifetch_congress_trades_tool() -> dict[str, Any]:
     return {
         "type": "function",
         "function": {
-            "name": "digifetch_congress_trades",
+            "name": "gloomberb_get_congress_trades",
             "description": (
                 "US House disclosure trades (Gloomberb Cloud, anonymous). The "
                 "upstream OCR dependency is currently failing (HTTP 500, "
@@ -667,7 +667,7 @@ def build_digifetch_transcripts_tool() -> dict[str, Any]:
     return {
         "type": "function",
         "function": {
-            "name": "digifetch_transcripts",
+            "name": "gloomberb_get_transcripts",
             "description": (
                 "Earnings-call transcripts (Gloomberb Cloud; session-gated, "
                 "requires Gloomberb Pro). Requires GLOOMBERB_SESSION_COOKIE and "
@@ -693,7 +693,7 @@ def build_digifetch_statements_tool() -> dict[str, Any]:
     return {
         "type": "function",
         "function": {
-            "name": "digifetch_statements",
+            "name": "gloomberb_get_statements",
             "description": (
                 "Annual/quarterly financial statement rows (Gloomberb Cloud; "
                 "session-gated). Requires GLOOMBERB_SESSION_COOKIE — without it "
@@ -723,7 +723,7 @@ def build_digifetch_ticker_tweets_tool() -> dict[str, Any]:
     return {
         "type": "function",
         "function": {
-            "name": "digifetch_ticker_tweets",
+            "name": "gloomberb_get_ticker_tweets",
             "description": (
                 "Recent X/Twitter posts mentioning one ticker (Gloomberb Cloud; "
                 "session-gated). Requires GLOOMBERB_SESSION_COOKIE. The "
@@ -754,7 +754,7 @@ def build_digifetch_tweet_search_tool() -> dict[str, Any]:
     return {
         "type": "function",
         "function": {
-            "name": "digifetch_tweet_search",
+            "name": "gloomberb_search_tweet",
             "description": (
                 "Search X/Twitter posts by query (Gloomberb Cloud; "
                 "session-gated). Requires GLOOMBERB_SESSION_COOKIE. query_type "
@@ -786,7 +786,7 @@ def build_digifetch_venues_tool() -> dict[str, Any]:
     return {
         "type": "function",
         "function": {
-            "name": "digifetch_venues",
+            "name": "gloomberb_list_venues",
             "description": (
                 "Exchange venue metadata (Gloomberb Cloud, anonymous). No "
                 "parameters; rows carry mic/name/title/country/timezone plus "
@@ -802,7 +802,7 @@ def build_digifetch_saved_searches_tool() -> dict[str, Any]:
     return {
         "type": "function",
         "function": {
-            "name": "digifetch_saved_searches",
+            "name": "gloomberb_list_saved_searches",
             "description": (
                 "The signed-in session's saved searches (Gloomberb Cloud; "
                 "session-gated). Requires GLOOMBERB_SESSION_COOKIE - without it "
@@ -820,7 +820,7 @@ def build_digifetch_screener_tool() -> dict[str, Any]:
     return {
         "type": "function",
         "function": {
-            "name": "digifetch_screener",
+            "name": "gloomberb_run_screener",
             "description": (
                 "Market screener for gainers/losers/most-active (Gloomberb "
                 "Cloud; **requires Gloomberb Pro**). Requires "
@@ -859,7 +859,7 @@ def build_digifetch_13f_funds_tool() -> dict[str, Any]:
     return {
         "type": "function",
         "function": {
-            "name": "digifetch_13f_funds",
+            "name": "gloomberb_get_13f_funds",
             "description": (
                 "13F fund lookup (Gloomberb Cloud, anonymous). what=search "
                 "(query -> name), what=top (quarter in the live 2026Q2 form), "
@@ -898,7 +898,7 @@ def build_digifetch_13f_holdings_tool() -> dict[str, Any]:
     return {
         "type": "function",
         "function": {
-            "name": "digifetch_13f_holdings",
+            "name": "gloomberb_get_13f_holdings",
             "description": (
                 "13F filings / fund forms / one form's holdings (Gloomberb "
                 "Cloud, anonymous). what=filings (from_date+to_date, ISO "
@@ -938,7 +938,7 @@ def build_digifetch_shiller_tool() -> dict[str, Any]:
     return {
         "type": "function",
         "function": {
-            "name": "digifetch_shiller",
+            "name": "gloomberb_get_shiller",
             "description": (
                 "Robert Shiller's monthly valuation series (Gloomberb Cloud, "
                 "anonymous). Returns the most recent limit rows (default 240; "
@@ -961,7 +961,7 @@ def build_digifetch_proxy_statements_tool() -> dict[str, Any]:
     return {
         "type": "function",
         "function": {
-            "name": "digifetch_proxy_statements",
+            "name": "gloomberb_get_proxy_statements",
             "description": (
                 "Executive-compensation proxy statements (Gloomberb Cloud, "
                 "anonymous open reads). what=list lists every proxy for the "
@@ -987,7 +987,7 @@ def build_digifetch_filing_events_tool() -> dict[str, Any]:
     return {
         "type": "function",
         "function": {
-            "name": "digifetch_filing_events",
+            "name": "gloomberb_get_filing_events",
             "description": (
                 "Classified 8-K filing events for one ticker (Gloomberb Cloud, "
                 "anonymous). Rows carry item codes/labels/kinds, materiality, "
@@ -1012,7 +1012,7 @@ def build_digifetch_risk_reports_tool() -> dict[str, Any]:
     return {
         "type": "function",
         "function": {
-            "name": "digifetch_risk_reports",
+            "name": "gloomberb_get_risk_reports",
             "description": (
                 "10-K risk-factor reports, diffed year-over-year (Gloomberb "
                 "Cloud, anonymous). what=list lists report years with counts "
@@ -1038,7 +1038,7 @@ def build_digifetch_short_interest_tool() -> dict[str, Any]:
     return {
         "type": "function",
         "function": {
-            "name": "digifetch_short_interest",
+            "name": "gloomberb_get_short_interest",
             "description": (
                 "Biweekly short-interest settlements (Gloomberb Cloud; "
                 "session-gated). Requires GLOOMBERB_SESSION_COOKIE — without it "
@@ -1065,7 +1065,7 @@ def build_digifetch_equity_diagnostic_tool() -> dict[str, Any]:
     return {
         "type": "function",
         "function": {
-            "name": "digifetch_equity_diagnostic",
+            "name": "gloomberb_get_equity_diagnostic",
             "description": (
                 "AI evidence review for one listing (Gloomberb Cloud; "
                 "session-gated). Requires GLOOMBERB_SESSION_COOKIE. The first "
@@ -1099,7 +1099,7 @@ def build_digiquant_fit_btc_power_law_tool() -> dict[str, Any]:
     return {
         "type": "function",
         "function": {
-            "name": "digiquant_fit_btc_power_law",
+            "name": "fit_btc_power_law",
             "description": (
                 "Fit SDCA BTC power-law (RAQQR) rails from cached daily prices "
                 "via history_cache.py (not a bespoke fetch)."
@@ -1122,7 +1122,7 @@ def build_digiquant_build_sdca_risk_index_tool() -> dict[str, Any]:
     return {
         "type": "function",
         "function": {
-            "name": "digiquant_build_sdca_risk_index",
+            "name": "build_sdca_risk_index",
             "description": (
                 "Build the SDCA date/risk parquet from a RiskModel + cached "
                 "prices. profile=btc_v1|eth_research_v1 applies SdcaAssetProfile "
@@ -1155,7 +1155,7 @@ def build_digiquant_fetch_bitview_series_tool() -> dict[str, Any]:
     return {
         "type": "function",
         "function": {
-            "name": "digiquant_fetch_bitview_series",
+            "name": "bitview_fetch_series",
             "description": (
                 "Fetch Bitview/BRK on-chain day1 series (mvrv, asopr_24h, "
                 "puell_multiple, rhodl_ratio) into data/onchain/bitview. "
@@ -1189,7 +1189,7 @@ def build_digiquant_fetch_bgeometrics_series_tool() -> dict[str, Any]:
     return {
         "type": "function",
         "function": {
-            "name": "digiquant_fetch_bgeometrics_series",
+            "name": "bgeometrics_fetch_series",
             "description": (
                 "Fetch one Bitcoin valuation/on-chain metric from "
                 "bitcoin-data.com (BGeometrics): 700+ metrics (mvrv, "
@@ -1200,7 +1200,7 @@ def build_digiquant_fetch_bgeometrics_series_tool() -> dict[str, Any]:
                 "pass token or set BGEOMETRICS_API_TOKEN. Free tier: 10 "
                 "req/hour, 15/day shared across all metrics — fetch one "
                 "metric per call. History capped at ~4 years; for deeper "
-                "multi-cycle history use digiquant_fetch_coinmetrics_series "
+                "multi-cycle history use coinmetrics_fetch_series "
                 "instead. Fail-soft."
             ),
             "parameters": {
@@ -1232,11 +1232,11 @@ def build_digiquant_fetch_coinmetrics_series_tool() -> dict[str, Any]:
     return {
         "type": "function",
         "function": {
-            "name": "digiquant_fetch_coinmetrics_series",
+            "name": "coinmetrics_fetch_series",
             "description": (
                 "Fetch one on-chain metric for one asset from the CoinMetrics "
                 "Community API (free, no API key required). One metric/asset "
-                "per call — use digiquant_list_coinmetrics_catalog to discover "
+                "per call — use coinmetrics_list_catalog to discover "
                 "what's available per-asset. BTC's CapMVRVCur (MVRV valuation "
                 "ratio) has full history back to 2010-07-18. CC BY-NC — "
                 "research-only, do not republish derived series commercially. "
@@ -1271,11 +1271,11 @@ def build_digiquant_list_coinmetrics_catalog_tool() -> dict[str, Any]:
     return {
         "type": "function",
         "function": {
-            "name": "digiquant_list_coinmetrics_catalog",
+            "name": "coinmetrics_list_catalog",
             "description": (
                 "List which CoinMetrics community metrics exist for an asset "
                 "(or all assets). Discovery tool — call before "
-                "digiquant_fetch_coinmetrics_series to find real metric names "
+                "coinmetrics_fetch_series to find real metric names "
                 "instead of guessing. Fail-soft."
             ),
             "parameters": {
@@ -1297,11 +1297,11 @@ def build_digiquant_fit_sdca_weights_tool() -> dict[str, Any]:
     return {
         "type": "function",
         "function": {
-            "name": "digiquant_fit_sdca_weights",
+            "name": "fit_sdca_weights",
             "description": (
                 "Stage A: fit SDCA composite weights so risk overlaps the "
                 "asset's cycle windows, then regularize. Stage B is "
-                "digiquant_run_optimize strategy_name=sdca. Not a second "
+                "run_optimize strategy_name=sdca. Not a second "
                 "optimizer product. No live-trading."
             ),
             "parameters": {
@@ -1465,7 +1465,7 @@ def build_digiquant_get_trade_levels_tool() -> dict[str, Any]:
     return {
         "type": "function",
         "function": {
-            "name": "digiquant_get_trade_levels",
+            "name": "get_trade_levels",
             "description": (
                 "Compute causal trade levels (entry band, structural/ATR stop, "
                 "R-multiple take-profit ladder, trail policy) for a long or short "

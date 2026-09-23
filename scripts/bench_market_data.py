@@ -1,6 +1,6 @@
 """Load harness for the R2 market-data cutover (#3780, Task 10).
 
-Drives ``digiquant_get_price_technicals`` / ``digiquant_get_macro_series``
+Drives ``get_price_technicals`` / ``get_macro_series``
 through the UNMOCKED MCP serving path (fake R2 store serves real parquet
 bytes — no network, no creds) and compares p99 against the Task 1 Supabase
 numbers in ``docs/perf/baseline.json``.
@@ -158,9 +158,9 @@ def _bench_tool(tool: str, n: int, as_of: str) -> dict[str, float]:
         mcp._ttl.clear()
         start = time.perf_counter()
         if tool == _TECHNICALS:
-            out = mcp.digiquant_get_price_technicals("SPY", lookback=500, as_of=as_of)
+            out = mcp.get_price_technicals("SPY", lookback=500, as_of=as_of)
         else:
-            out = mcp.digiquant_get_macro_series(["DGS10", "VIXCLS"], lookback=6, as_of=as_of)
+            out = mcp.get_macro_series(["DGS10", "VIXCLS"], lookback=6, as_of=as_of)
         elapsed_ms = (time.perf_counter() - start) * 1000.0
         payload = json.loads(out)
         if "error" in payload:

@@ -616,7 +616,7 @@ class CongressTradesInput(_InputModel):
     limit: int = Field(default=50, ge=1, le=200)
 
 
-#: One transcript id from a `digifetch_transcripts` list row
+#: One transcript id from a `gloomberb_get_transcripts` list row
 #: (`/cloud/transcripts/{id}`; probe-pending shape, so the bound is generous).
 TranscriptId = Annotated[
     str, StringConstraints(strip_whitespace=True, min_length=1, max_length=200)

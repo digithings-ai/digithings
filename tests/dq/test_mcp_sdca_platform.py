@@ -31,15 +31,15 @@ from digiquant.mcp_server import create_mcp_server
 pytestmark = pytest.mark.unit
 
 _PLATFORM = {
-    "digiquant_fetch_bitview_series",
-    "digiquant_fetch_bgeometrics_series",
-    "digiquant_fetch_coinmetrics_series",
-    "digiquant_list_coinmetrics_catalog",
-    "digiquant_fit_sdca_weights",
-    "digiquant_build_sdca_risk_index",
-    "digiquant_run_optimize",
-    "digiquant_fit_btc_power_law",
-    "digiquant_fetch_coinbase_ohlcv",
+    "bitview_fetch_series",
+    "bgeometrics_fetch_series",
+    "coinmetrics_fetch_series",
+    "coinmetrics_list_catalog",
+    "fit_sdca_weights",
+    "build_sdca_risk_index",
+    "run_optimize",
+    "fit_btc_power_law",
+    "coinbase_fetch_ohlcv",
 }
 
 
@@ -140,27 +140,27 @@ class TestPlatformToolRegistration:
         assert not missing_orch, f"missing orchestrator tools: {sorted(missing_orch)}"
 
     def test_fetch_coinbase_ohlcv_exposes_timeframe_end_through_yesterday(self) -> None:
-        sig = inspect.signature(_mcp("digiquant_fetch_coinbase_ohlcv"))
+        sig = inspect.signature(_mcp("coinbase_fetch_ohlcv"))
         assert "timeframe" in sig.parameters
         assert "end" in sig.parameters
         assert "through_yesterday" in sig.parameters
 
     def test_run_optimize_exposes_stage_b_freeze_kwargs(self) -> None:
-        sig = inspect.signature(_mcp("digiquant_run_optimize"))
+        sig = inspect.signature(_mcp("run_optimize"))
         assert "param_grid_json" in sig.parameters
         assert "strategy_params_json" in sig.parameters
         rows = {row["function"]["name"]: row for row in build_orchestrator_tool_manifest()}
-        props = rows["digiquant_run_optimize"]["function"]["parameters"]["properties"]
+        props = rows["run_optimize"]["function"]["parameters"]["properties"]
         assert "strategy_params" in props
         assert "param_grid" in props
 
     def test_no_data_source_tool_schema_exposes_base_url(self) -> None:
         rows = {row["function"]["name"]: row for row in build_orchestrator_tool_manifest()}
         for name in (
-            "digiquant_fetch_bitview_series",
-            "digiquant_fetch_bgeometrics_series",
-            "digiquant_fetch_coinmetrics_series",
-            "digiquant_list_coinmetrics_catalog",
+            "bitview_fetch_series",
+            "bgeometrics_fetch_series",
+            "coinmetrics_fetch_series",
+            "coinmetrics_list_catalog",
         ):
             props = rows[name]["function"]["parameters"]["properties"]
             assert "base_url" not in props, f"{name} still exposes base_url (#3944)"
@@ -205,18 +205,18 @@ class TestFetchBitviewMcp:
         assert payload["series"]["nupl"]["row_count"] == 5
 
     def test_mcp_tool_registered_fail_soft(self) -> None:
-        raw = _mcp("digiquant_fetch_bitview_series")(series_ids_json="not-json")
+        raw = _mcp("bitview_fetch_series")(series_ids_json="not-json")
         payload = json.loads(raw)
         assert "error" in payload
 
     def test_mcp_tool_exposes_allow_derived_but_not_base_url(self) -> None:
-        sig = inspect.signature(_mcp("digiquant_fetch_bitview_series"))
+        sig = inspect.signature(_mcp("bitview_fetch_series"))
         assert "allow_derived" in sig.parameters
         assert "base_url" not in sig.parameters
 
     def test_mcp_bgeometrics_tool_rejects_caller_base_url(self) -> None:
         with pytest.raises(TypeError):
-            _mcp("digiquant_fetch_bgeometrics_series")(
+            _mcp("bgeometrics_fetch_series")(
                 metric="mvrv", base_url="http://169.254.169.254"
             )
 
@@ -238,7 +238,7 @@ class TestFetchBgeometricsMcp:
         assert Path(payload["path"]).exists()
 
     def test_mcp_tool_registered_fail_soft(self) -> None:
-        raw = _mcp("digiquant_fetch_bgeometrics_series")(metric="")
+        raw = _mcp("bgeometrics_fetch_series")(metric="")
         payload = json.loads(raw)
         assert "error" in payload
 
@@ -270,12 +270,12 @@ class TestFetchCoinmetricsMcp:
         assert Path(payload["path"]).exists()
 
     def test_mcp_tool_registered_fail_soft(self) -> None:
-        raw = _mcp("digiquant_fetch_coinmetrics_series")(metric="")
+        raw = _mcp("coinmetrics_fetch_series")(metric="")
         payload = json.loads(raw)
         assert "error" in payload
 
     def test_mcp_tool_exposes_page_size_api_key_but_not_base_url(self) -> None:
-        sig = inspect.signature(_mcp("digiquant_fetch_coinmetrics_series"))
+        sig = inspect.signature(_mcp("coinmetrics_fetch_series"))
         assert "page_size" in sig.parameters
         assert "api_key" in sig.parameters
         assert "base_url" not in sig.parameters
@@ -292,13 +292,13 @@ class TestListCoinmetricsCatalogMcp:
 
     def test_mcp_tool_registered_fail_soft(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setenv("DIGIQUANT_COINMETRICS_FETCH", "0")
-        raw = _mcp("digiquant_list_coinmetrics_catalog")(asset="btc")
+        raw = _mcp("coinmetrics_list_catalog")(asset="btc")
         payload = json.loads(raw)
         assert "error" in payload
         assert "disabled" in payload["error"]
 
     def test_mcp_tool_exposes_asset_api_key_but_not_base_url(self) -> None:
-        sig = inspect.signature(_mcp("digiquant_list_coinmetrics_catalog"))
+        sig = inspect.signature(_mcp("coinmetrics_list_catalog"))
         assert "asset" in sig.parameters
         assert "api_key" in sig.parameters
         assert "base_url" not in sig.parameters
@@ -330,7 +330,7 @@ class TestFitSdcaWeightsMcp:
         assert abs(sum(payload["regularized_weights"].values()) - 1.0) < 1e-6
 
     def test_mcp_unknown_profile_error_json(self) -> None:
-        payload = json.loads(_mcp("digiquant_fit_sdca_weights")(profile="nope"))
+        payload = json.loads(_mcp("fit_sdca_weights")(profile="nope"))
         assert "error" in payload
 
 
@@ -338,7 +338,7 @@ class TestBuildRiskIndexProfile:
     def test_profile_json_uses_rolling_z(self, tmp_path: Path) -> None:
         save_cached("ETH-USD", _ohlcv("ETH-USD", 40, date(2020, 1, 1)), tmp_path)
         payload = json.loads(
-            _mcp("digiquant_build_sdca_risk_index")(
+            _mcp("build_sdca_risk_index")(
                 ticker="ETH-USD",
                 cache_dir=str(tmp_path),
                 refresh=False,

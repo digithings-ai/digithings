@@ -408,11 +408,11 @@ def v1_orchestrator_invoke(req: OrchestratorInvokeRequest) -> dict[str, Any]:
     tool = (req.tool or "").strip()
     args = req.arguments if isinstance(req.arguments, dict) else {}
 
-    if tool == "digiquant_list_strategies":
+    if tool == "list_strategies":
         data = service_list_strategies()
         return {"ok": True, "service": "digiquant", "tool": tool, "data": data}
 
-    if tool == "digiquant_run_backtest":
+    if tool == "run_backtest":
         symbols = _normalize_symbols(args.get("symbols"))
         if not symbols or not args.get("strategy_name"):
             return {"ok": False, "error": "strategy_name and non-empty symbols required"}
@@ -446,7 +446,7 @@ def v1_orchestrator_invoke(req: OrchestratorInvokeRequest) -> dict[str, Any]:
             "data": result.model_dump(mode="json"),
         }
 
-    if tool == "digiquant_run_optimize":
+    if tool == "run_optimize":
         symbols = _normalize_symbols(args.get("symbols"))
         if not symbols or not args.get("strategy_name"):
             return {"ok": False, "error": "strategy_name and non-empty symbols required"}
@@ -539,7 +539,7 @@ def v1_orchestrator_invoke(req: OrchestratorInvokeRequest) -> dict[str, Any]:
             "data": result.as_orchestrator_data(),
         }
 
-    if tool in ("digiquant_run_pipeline", "digiquant_pipeline_delegate"):
+    if tool in ("run_pipeline", "digiquant_pipeline_delegate"):
         symbols = _normalize_symbols(args.get("symbols"))
         strategy = str(args.get("strategy_name") or "").strip()
         if not strategy or not symbols:
@@ -579,7 +579,7 @@ def v1_orchestrator_invoke(req: OrchestratorInvokeRequest) -> dict[str, Any]:
         )
         return {"ok": True, "service": "digiquant", "tool": tool, "data": raw}
 
-    if tool == "digiquant_build_sdca_risk_index":
+    if tool == "build_sdca_risk_index":
         from digiquant.sdca_mcp import run_build_sdca_risk_index
 
         payload = json.loads(
@@ -605,7 +605,7 @@ def v1_orchestrator_invoke(req: OrchestratorInvokeRequest) -> dict[str, Any]:
             return {"ok": False, "error": str(payload["error"]), "data": payload}
         return {"ok": True, "service": "digiquant", "tool": tool, "data": payload}
 
-    if tool == "digiquant_fetch_bitview_series":
+    if tool == "bitview_fetch_series":
         from digiquant.sdca_mcp import run_fetch_bitview_series
 
         series_ids = args.get("series_ids_json")
@@ -625,11 +625,11 @@ def v1_orchestrator_invoke(req: OrchestratorInvokeRequest) -> dict[str, Any]:
             return {"ok": False, "error": str(payload["error"]), "data": payload}
         return {"ok": True, "service": "digiquant", "tool": tool, "data": payload}
 
-    if tool == "digiquant_get_trade_levels":
-        from digiquant.mcp_server import digiquant_get_trade_levels
+    if tool == "get_trade_levels":
+        from digiquant.mcp_server import get_trade_levels
 
         payload = json.loads(
-            digiquant_get_trade_levels(
+            get_trade_levels(
                 direction=str(args.get("direction") or ""),
                 ohlc_json=args.get("ohlc_json"),
                 pair=args.get("pair"),
@@ -642,7 +642,7 @@ def v1_orchestrator_invoke(req: OrchestratorInvokeRequest) -> dict[str, Any]:
             return {"ok": False, "error": str(payload["error"]), "data": payload}
         return {"ok": True, "service": "digiquant", "tool": tool, "data": payload}
 
-    if tool == "digiquant_fit_sdca_weights":
+    if tool == "fit_sdca_weights":
         from digiquant.sdca_mcp import run_fit_sdca_weights
 
         payload = json.loads(
@@ -745,33 +745,32 @@ def v1_orchestrator_invoke(req: OrchestratorInvokeRequest) -> dict[str, Any]:
             "data": summary.model_dump(mode="json"),
         }
 
-    if tool.startswith("digifetch_"):
+    from digiquant.data.gloomberb.agent_tools import (
+        DIGIFETCH_DISPATCH,
+        build_digifetch_tool_dispatcher,
+    )
+
+    if tool in DIGIFETCH_DISPATCH:
         # digifetch x Gloomberb family (#4097): one shared in-process dispatcher
         # with the MCP + pipeline-agent surfaces, so hub callers get the same §7
         # attribution envelope. Gated names are deliberately *accepted* here
         # (unlike the pipeline's advertised-subset filter): with no
         # GLOOMBERB_SESSION_COOKIE the dispatcher answers the typed
         # auth_required/pro_required envelope with no request, never a 400.
-        from digiquant.data.gloomberb.agent_tools import (
-            DIGIFETCH_DISPATCH,
-            build_digifetch_tool_dispatcher,
-        )
-
-        if tool in DIGIFETCH_DISPATCH:
-            payload = json.loads(build_digifetch_tool_dispatcher()(tool, args))
-            error = _digifetch_error_message(payload)
-            if error is None and payload.get("error"):
-                # Client-fault path: the dispatcher answers {"error": ...}, not an envelope.
-                error = str(payload["error"])
-            if error is not None:
-                return {
-                    "ok": False,
-                    "service": "digiquant",
-                    "tool": tool,
-                    "error": error,
-                    "data": payload,
-                }
-            return {"ok": True, "service": "digiquant", "tool": tool, "data": payload}
+        payload = json.loads(build_digifetch_tool_dispatcher()(tool, args))
+        error = _digifetch_error_message(payload)
+        if error is None and payload.get("error"):
+            # Client-fault path: the dispatcher answers {"error": ...}, not an envelope.
+            error = str(payload["error"])
+        if error is not None:
+            return {
+                "ok": False,
+                "service": "digiquant",
+                "tool": tool,
+                "error": error,
+                "data": payload,
+            }
+        return {"ok": True, "service": "digiquant", "tool": tool, "data": payload}
 
     raise HTTPException(status_code=400, detail=f"Unknown orchestrator tool: {tool!r}")
 

@@ -39,7 +39,7 @@ _DIAGNOSTIC_COLUMNS = (
 
 
 class RiskIndexBuildResult(BaseModel):
-    """JSON-serializable summary returned by ``digiquant_build_sdca_risk_index``."""
+    """JSON-serializable summary returned by ``build_sdca_risk_index``."""
 
     model_config = ConfigDict(strict=True, frozen=True)
 

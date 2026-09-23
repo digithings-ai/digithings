@@ -35,7 +35,7 @@ def _schema_digiquant_pipeline_delegate(ctx: ToolContext) -> dict[str, Any]:
             _digi_bearer_from_context(ctx),
             ctx.request_id,
         )
-        t = by_name.get("digiquant_pipeline_delegate") or by_name.get("digiquant_run_pipeline")
+        t = by_name.get("digiquant_pipeline_delegate") or by_name.get("run_pipeline")
         if t:
             return t
     except _ORCHESTRATOR_CLIENT_ERRORS as exc:

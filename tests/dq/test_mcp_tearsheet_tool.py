@@ -1,6 +1,6 @@
 """MCP slapper-tearsheet tool wiring against the current tearsheet API (#1495).
 
-``digiquant_generate_slapper_tearsheet`` predated ``cal_source`` (#1064) and the
+``generate_slapper_tearsheet`` predated ``cal_source`` (#1064) and the
 #1389 spawn-per-strategy isolation, so every call raised ``TypeError`` — and an
 in-process fix would SIGABRT the long-lived MCP server on the second strategy
 (Nautilus Rust logging initializes once per process). These tests pin the
@@ -38,7 +38,7 @@ pytestmark = pytest.mark.unit
 def _tearsheet_tool():
     """The raw tool function (bypasses MCP transport for direct unit calls)."""
     server = create_mcp_server()
-    return server._tool_manager.get_tool("digiquant_generate_slapper_tearsheet").fn
+    return server._tool_manager.get_tool("generate_slapper_tearsheet").fn
 
 
 @pytest.fixture()
