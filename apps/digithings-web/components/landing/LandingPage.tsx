@@ -209,7 +209,12 @@ export function LandingPage() {
       </section>
 
       <section id="faq" className="line-b px-[var(--page-pad)] py-[var(--page-step)]">
-        <div className="mx-auto grid max-w-[var(--frame-w)] gap-[2.4rem] min-[960px]:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
+        {/* Not a 50/50 split: the chat column takes the larger share, so the
+            conversation has room to be read without the frame changing height
+            (round 5 — "it doesn't have to be 50 50 screen split with the
+            questions and answers on the left side, just to give more room for
+            the chat"). */}
+        <div className="mx-auto grid max-w-[var(--frame-w)] gap-[2.4rem] min-[960px]:grid-cols-[minmax(0,0.78fr)_minmax(0,1.22fr)]">
           <div className="flex flex-col gap-[1.6rem]">
             <h2 className="m-0 font-mono text-[length:var(--type-section-stand)] font-medium leading-[1.2] tracking-[-0.025em] text-ink">
               Questions, answered
