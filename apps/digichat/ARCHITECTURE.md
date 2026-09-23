@@ -19,7 +19,8 @@ Next.js 16 **BFF** (the public HTTP surface) plus an optional **default UI**
 (**stock** assistant-ui `Thread` — CLI flavor deferred). The browser never speaks
 directly to digigraph, Foundry, or any Python service. Backends and chrome are
 selected per **deployment config** (`digichat.yaml` / env overlay;
-`DIGICHAT_EMBED_TENANTS` compat) with `backend.type` `digigraph` | `foundry`. See
+`DIGICHAT_EMBED_TENANTS` compat) with `backend.type` `digigraph` | `foundry` |
+`openai-completions` | `openai-responses` | `anthropic` | `google-vertex`. See
 [`docs/architecture/digichat-modular-frontend.md`](../../docs/architecture/digichat-modular-frontend.md),
 [`docs/architecture/digichat-renderer-contract.md`](../../docs/architecture/digichat-renderer-contract.md),
 and [ADR-0018](../../docs/adr/0018-digichat-path-routing.md).

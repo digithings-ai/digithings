@@ -371,8 +371,12 @@ function EmbedChat({
   );
   /** Deploy `features.pageContext` — off / silent / visible (default). */
   const pageContextMode = stockClient.features.pageContext;
+  // Seed language for this tenant (#4532). A reload and `/new` reset back to
+  // the tenant's default, not a hard-coded English.
+  const tenantLanguage = stockClient.chrome.defaultLanguage || DEFAULT_LANGUAGE_CODE;
   const [chatPrefs, setChatPrefs] = useState<EmbedChatPrefs>(() => ({
     ...DEFAULT_EMBED_CHAT_PREFS,
+    language: tenantLanguage,
     view: stockClient.features.view,
     thinking: stockClient.features.thinking,
     extra: extraOffFromCatalog(catalogToolsFromClient(stockClient)),
@@ -1054,7 +1058,7 @@ function EmbedChat({
       reset: () =>
         setChatPrefs({
           ...DEFAULT_EMBED_CHAT_PREFS,
-          language: DEFAULT_LANGUAGE_CODE,
+          language: tenantLanguage,
           view: stockClient.features.view,
           thinking: stockClient.features.thinking,
           extra: extraOffFromCatalog(catalogTools),
@@ -1103,7 +1107,7 @@ function EmbedChat({
       newThread: () => {
         setChatPrefs({
           ...DEFAULT_EMBED_CHAT_PREFS,
-          language: DEFAULT_LANGUAGE_CODE,
+          language: tenantLanguage,
           view: stockClient.features.view,
           thinking: stockClient.features.thinking,
           extra: extraOffFromCatalog(catalogTools),
@@ -1113,7 +1117,7 @@ function EmbedChat({
       compactThread: () => {
         setChatPrefs({
           ...DEFAULT_EMBED_CHAT_PREFS,
-          language: DEFAULT_LANGUAGE_CODE,
+          language: tenantLanguage,
           view: stockClient.features.view,
           thinking: stockClient.features.thinking,
           extra: extraOffFromCatalog(catalogTools),

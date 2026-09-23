@@ -157,6 +157,29 @@ where the answer is "embed should honour it": `persistence`, `auth`,
 `features.dictation` / `speech` / `sources` / `branchPicker` / `modelPicker`,
 `tools.allowUserToggle`.
 
+**Done (issue #4532, PR into `module/digichat`):** an embed tenant can now set
+the four feature flags and the seed language; before this it silently inherited
+the client defaults because neither `EmbedTenantConfig` nor `toEmbedClientConfig`
+nor `clientConfigFromEmbedTenant` carried them.
+
+| field | decision |
+|-------|----------|
+| `features.dictation` / `speech` | **Embed honours it.** Added to `EmbedTenantConfig` (validated boolean) → `toEmbedClientConfig` (explicit `true` only, matching `attachments`) → bridge (`?? base.features`). |
+| `features.sources` / `branchPicker` | **Embed honours it.** Same chain, but `typeof === "boolean"` in the projection so an explicit `false` survives — these default **on**, so `false` is the only way to turn them off. |
+| `chrome.defaultLanguage` | **Embed honours it.** Validated against `LANGUAGE_CODES` (same set `schema.ts` builds); omit → the client default (`en`). |
+| `chrome.attribution` | **Already carried** (direct copy in the bridge). No change. |
+| `chrome.transcript.userAlign` | **Documented, not configurable.** The first-party `digichat` skin forces left alignment regardless of the value (`product-shell.tsx:349-350`), so exposing it on the embed would be a no-op for the one skin the embed ships. Other skins would honour it, but the embed cannot set it today. |
+| `tools.allowUserToggle` | **Documented, embed-fixed `true`.** The anonymous embed has no per-tool toggle UI of its own; the operator's `tools.catalog` is the control surface. |
+| `persistence` / `auth` / `chrome.mode` | **Embed-fixed by design** (`none` / `anonymous` / `embed`). A persisted, authenticated session is the `app` surface, not the iframe. |
+| `features.modelPicker` vs `models.allowPicker` | **`models.allowPicker` is the authoritative client-facing knob; `features.modelPicker` is the legacy YAML alias** kept for config back-compat. They are OR-ed at every consumer (`client-projection.ts:176-178`, `product-shell.tsx:366`, `stock-chat-prefs-host.tsx:61`, `embed-client.tsx:1025`), and the projection already folds the legacy flag into `allowPicker`, so the consumer re-OR is idempotent. They disagree only in `DEFAULT_CLIENT_CONFIG` (`models.allowPicker: true` vs `features.modelPicker: false`); flipping either risks the `/baseline` picker, so behaviour is kept and the redundancy documented. |
+
+Regression coverage: `apps/digichat/src/lib/embed-tenants.parity.test.ts` walks
+the whole chain (registry JSON → `parseEmbedTenants` → `toEmbedClientConfig` →
+`clientConfigFromEmbedTenant`) and asserts the four flags + `defaultLanguage`
+reach `DigichatClientConfig.features` / `.chrome.defaultLanguage`, that omitted
+keys keep the app defaults, and that a non-boolean flag or unknown language
+throws.
+
 ---
 
 ## Phase 2d — presentation modes (D1: implement)
@@ -332,13 +355,139 @@ criterion for "every backend has the same end result".
 - **5a — registry refactor, no new backends.** Extract the two hard-coded
   branches into the registry; digigraph and foundry behave identically to
   today. Ships behind the existing config. No new dependency. **Low risk.**
+  **Done (issue #4522):** `apps/digichat/src/lib/backend-adapters.ts` is the
+  registry — one entry per `backend.type` carrying `protocol` (`digigraph-trace`
+  | `foundry-responses` | …), `auth` (`upstream-bearer` | `managed-identity` |
+  `env` | `byok`), and a `capabilities` object (reasoning, reasoningSummary?,
+  toolCalls, webSearch, sources, turnMutation, conversationContinuity,
+  attachments, mcp, corpus). The handler resolves the adapter once
+  (`backendAdapterFor(backend?.type)`) and chooses its streaming path from
+  `adapter.protocol` and `adapter.capabilities.corpus` — there is no
+  `backend.type === "…"` comparison left in `route.ts`. Exhaustiveness is pinned
+  by the `Record<BackendType, BackendAdapter>` type; `backend-adapters.test.ts`
+  pins the key set at runtime, both adapters' protocol/auth/capabilities, the
+  reasoning+toolCalls parity invariant, the digigraph default, the type guards,
+  and (as a source guard) that the handler never compares `backend.type`.
+  Note: in 5a only `protocol` and `capabilities.corpus` are read by the handler;
+  the rest are declared for 5b/5c and asserted by the parity test. A second
+  `backend.type` dispatch site remains in the tenant validator
+  (`lib/embed-tenants.ts` — `DIGICHAT_EMBED_TENANTS` parsing); migrating it to
+  the registry is a 5b/5c follow-up, out of 5a's chat-route scope.
 - **5b — AI-SDK backends.** `openai-completions`, `openai-responses`,
   `anthropic`, `google-vertex`. Reuses the installed `ai` v7 +
   `@ai-sdk/*` providers; each new provider package is a **new dependency**.
   **Human gate.**
+  - **Done (issue #4535, PR into `module/digichat`) — the OpenAI pair, no new
+    dependency.** `@ai-sdk/openai` is already installed and exposes `.chat()`
+    (Completions) and `.responses()` (Responses API), so both new types ship
+    without a package. Added: the `openai-completions` / `openai-responses`
+    schemas (https-only `baseUrl`, `model`, and `apiKeyEnv` constrained to the
+    `DIGICHAT_BACKEND_*` prefix so a tenant config can never name `AUTH_SECRET`
+    and have the BFF ship it to an attacker `baseUrl`); the two `BACKEND_ADAPTERS`
+    entries (`auth: "env"`, `protocol` = the type); `AI_SDK_PROTOCOLS` +
+    `isAiSdkConfig`; the provider factory
+    `apps/digichat/src/lib/adapters/ai-sdk/providers.ts`; the shared mapper
+    `apps/digichat/src/lib/adapters/ai-sdk/stream.ts` (`streamText` →
+    `toUIMessageStream`, the same six wire parts the UI already renders); the
+    route branch (after `coreMessages`, before the BYOK guard); the tenant
+    validator branches (closing the 5a second-dispatch follow-up); and the
+    widened `backendType` union in both projections.
+  - **Done (issue #4539, PR into `module/digichat`) — the last two AI-SDK
+    backends.** Added `@ai-sdk/anthropic` and `@ai-sdk/google-vertex` (the two
+    approved new dependencies). `anthropic` is `{ model, apiKeyEnv }` with the
+    same `DIGICHAT_BACKEND_*` guard and no `baseUrl` (the provider defaults to
+    `https://api.anthropic.com`; use `openai-completions` for a proxy);
+    `google-vertex` is `{ project, location, model }` with **no credential in
+    config** — Vertex reads Application Default Credentials from the ambient
+    environment. Both ride the same `streamText` → `toUIMessageStream` mapper
+    (protocols `anthropic-messages` / `gemini`, both already in
+    `AI_SDK_PROTOCOLS`), so reasoning, tool calls and sources render identically.
+    `resolveAiSdkModel` is now a four-arm exhaustive switch.
+  - **Done (issue #4552, PR into `module/digichat`) — provider search is
+    wired and citations render.** Three gaps closed together:
+    1. `toUIMessageStream` now runs with `sendSources: true` on **both** call
+       sites (the AI-SDK adapter and the digigraph non-trace path in
+       `api/chat/route.ts`). It defaults to **false** in AI SDK v7, so
+       provider-supplied `source-url` / `source-document` citations were being
+       dropped before the browser saw them.
+    2. `resolveAiSdkSearchTools(backend)` returns the provider's own built-in
+       search tool, passed to `streamText` when the web-search gate is on:
+       `openai-responses` → `openai.tools.webSearch()`, `anthropic` →
+       `anthropic.tools.webSearch_20250305()`, `google-vertex` →
+       `vertex.tools.googleSearch({})`. `openai-completions` returns nothing —
+       Chat Completions has no server-side search; vendors on that wire format
+       bring their own (Perplexity's native web search, OpenRouter's `:online`).
+    3. The Thread renders `source` parts (`ThreadSource`, overridable via
+       `components.Source`) as a compact citation row. This is what recovered
+       the digigraph / foundry / `retrieve` documents: those adapters never go
+       through `toUIMessageStream` — they emit `source-url` / `source-document`
+       straight from `lib/ui-stream-parts.ts` `writeSource` — so they were
+       dropped by the message part switch's `default`, not by `sendSources`.
+    The same `clientWantsWeb && tenantAllowsWeb` gate now feeds both the
+    digigraph `X-Digi-Enable-Web-Search` header and the AI-SDK tools, and the
+    session path honours the deployment's `gate.webSearch` (previously only
+    `DIGICHAT_WEB_SEARCH=1` could turn it on for a session;
+    `embedConfig.webSearch` remains authoritative for an embed tenant).
+
+    Per-backend search/citation surfaces:
+
+    | backend | built-in search | citation parts |
+    |---|---|---|
+    | `digigraph` | digisearch + digivault via the corpus/vault headers; `X-Digi-Enable-Web-Search` when gated | `source-url` / `source-document` from `retrieve` spans |
+    | `foundry` | `azure_ai_search` (the agent's own wiring) | `source-url` / `source-document` from `retrieve` spans |
+    | `openai-responses` | `openai.tools.webSearch()` | `source-url` |
+    | `openai-completions` | none (vendor-provided, e.g. Perplexity, OpenRouter `:online`) | whatever the vendor returns as tool output |
+    | `anthropic` | `anthropic.tools.webSearch_20250305()` (+ `webFetch_*` available) | `source-url` |
+    | `google-vertex` | `vertex.tools.googleSearch({})` (+ `urlContext`, `fileSearch`, `vertexRagStore` available) | `source-url` |
+    | `langgraph` / `ag-ui` / `a2a` | none (no built-in search channel) | the `ag-ui`/`langgraph` normalizers share `writeSource` (`lib/ui-stream-parts.ts`), so they emit `source-url` / `source-document` whenever the backend supplies activity documents; `a2a` carries task status + artifacts only |
+
+    Non-provider search remains as it was: the `digisearch` catalog tool, and
+    Exa through the hosted MCP server (`https://mcp.exa.ai/mcp`).
+  - **Deferred (not blocking):** importing `@ai-sdk/google-vertex` dynamically so
+    its eager `google-auth-library` dependency is only loaded for Vertex requests
+    (would make `resolveAiSdkModel` async; the route is Node-only today).
+  - **Follow-up from the #4545 review (not blocking):** `lib/byok-openrouter.ts`
+    still builds its provider with `createOpenAI` (`name: "openrouter-byok"`),
+    so BYOK-OpenRouter reasoning is dropped for the same `reasoning_content`
+    reason #4545 fixed for the `openai-completions` backend. It has no caller in
+    `src/` today, so nothing is broken — switch it to
+    `createOpenAICompatible` when that path is next touched.
+  - **Backend additions free via `openai-completions` (no code needed):** xAI
+    (`https://api.x.ai/v1`, reasoning via `reasoning_content`, Grok 4 reportedly
+    omits it), Azure OpenAI (v1 API), Mistral, Together, Fireworks, Perplexity,
+    OpenRouter, DeepSeek (400s if `reasoning_content` is not round-tripped with
+    tool calls), Groq. Blocked by the https-only + SSRF policy: Ollama / vLLM /
+    LM Studio. Needing a bespoke adapter: Cohere, AWS Bedrock. Gemini AI Studio
+    ships an OpenAI-compat endpoint but only Vertex is wired today.
 - **5c — non-AI-SDK protocols.** `langgraph`, `ag-ui`, `a2a`. Each needs its
   own mapper; each is a **new dependency / new external surface**.
   **Human gate.**
+  - **Done (issue #4543, PR into `module/digichat`) — hand-rolled, no new
+    dependency.** The plan (and the owner's approval at m1091) assumed one
+    third-party SDK per protocol. On inspection the BFF only *consumes* and
+    normalizes a server-sent event stream — exactly what the digigraph and
+    foundry adapters already do by hand — while `@ag-ui/client` alone drags in
+    `rxjs`, `uuid`, `fast-json-patch` and `untruncate-json`, and every added
+    AI-SDK-family package has already cost a duplicate-`@ai-sdk/provider`
+    incident. So the three mappers are plain `fetch` + a shared SSE/JSON-RPC
+    reader: `adapters/shared/stream-utils.ts` (`iterateSse`, `createTextWriter`,
+    `writeGatedSpan`, `writeReasoningDelta`, `parseToolInput`) plus
+    `adapters/langgraph/stream.ts`, `adapters/ag-ui/stream.ts`,
+    `adapters/a2a/stream.ts`, dispatched by `adapters/non-ai-sdk.ts`. **This is
+    a deviation toward FEWER dependencies and was reported to the owner.**
+    Shapes: `langgraph` = `{ apiUrl, assistantId, apiKeyEnv? }` (`POST
+    /runs/stream`, `stream_mode: ["messages"]`, `x-api-key`);
+    `ag-ui` = `{ url, apiKeyEnv? }` (`POST`, `Bearer`); `a2a` = `{ baseUrl,
+    apiKeyEnv? }` (JSON-RPC `message/stream`, `Bearer`, handles both the SSE and
+    the blocking-JSON response). Every activity span flows through
+    `sanitizeActivitySpan` + `applyActivityDetail` + `writeStandardActivity`
+    (via `writeGatedSpan` / `writeFailureStatus`), so reasoning, tool calls and
+    sources render identically and error rows are capped and disclosure-gated
+    like every other span.
+    **Capability honesty:** `a2a` declares `reasoning`/`toolCalls`/`sources`
+    **false** — the protocol carries task status and artifacts only, with no
+    reasoning or tool-call channel — so the parity invariant is asserted for
+    every type *except* `a2a`, which is asserted false.
 - **5d — capability + parity tests** and the docs table.
 
 **Note:** 5b/5c add third-party runtime dependencies and network surfaces.

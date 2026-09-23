@@ -23,6 +23,10 @@ vi.mock("@/lib/adapters/foundry/stream", () => ({
   createFoundryStreamResponse: vi.fn(async () => new Response("foundry", { status: 200 })),
 }));
 
+vi.mock("@/lib/adapters/ai-sdk/stream", () => ({
+  createAiSdkStreamResponse: vi.fn(async () => new Response("ai-sdk", { status: 200 })),
+}));
+
 vi.mock("@/lib/adapters/digithings/stream", async () => {
   const actual =
     await vi.importActual<typeof import("@/lib/adapters/digithings/stream")>(
@@ -82,6 +86,7 @@ import { checkBffRateLimit } from "@/lib/bff-rate-limit";
 import { checkEmbedIpRateLimit } from "@/lib/embed-ip-rate-limit";
 import { resolveDigigraphUpstreamAuth } from "@/lib/digigraph-upstream";
 import { createFoundryStreamResponse } from "@/lib/adapters/foundry/stream";
+import { createAiSdkStreamResponse } from "@/lib/adapters/ai-sdk/stream";
 import { createDigigraphTraceStreamResponse } from "@/lib/adapters/digithings/stream";
 import { resetEmbedTrialQuotaForTests } from "@/lib/embed-turn-quota";
 import { resetChatRunLocksForTests } from "@/lib/chat-run-lock";
@@ -125,6 +130,7 @@ describe("POST /api/chat", () => {
     resetEmbedTrialQuotaForTests();
     resetChatRunLocksForTests();
 vi.mocked(createFoundryStreamResponse).mockClear();
+    vi.mocked(createAiSdkStreamResponse).mockClear();
     vi.mocked(createDigigraphTraceStreamResponse).mockClear();
     vi.mocked(createUIMessageStreamResponse).mockImplementation(
       ({ headers }: { headers?: HeadersInit }) =>
@@ -1577,6 +1583,70 @@ vi.mocked(createFoundryStreamResponse).mockClear();
           const ok = await POST(chatReq({ "x-digi-model": "only-this-model" }));
           expect(ok.status).toBe(200);
           expect(createFoundryStreamResponse).toHaveBeenCalledTimes(1);
+        } finally {
+          resetDigichatConfigForTests();
+        }
+      });
+
+      it("routes a session request to the deployment's AI-SDK backend (#4535)", async () => {
+        setDigichatConfigForTests(
+          parseDigichatConfig({
+            version: 1,
+            deployment: {
+              slug: "client",
+              backend: {
+                type: "openai-responses",
+                baseUrl: "https://api.example.com/v1",
+                model: "gpt-4o-mini",
+                apiKeyEnv: "DIGICHAT_BACKEND_EXAMPLE_KEY",
+              },
+            },
+          })
+        );
+        try {
+          const res = await POST(chatReq());
+          expect(res.status).toBe(200);
+          const opts = vi.mocked(createAiSdkStreamResponse).mock.calls.at(-1)?.[0] as {
+            backend: { type: string; model: string };
+          };
+          expect(opts.backend.type).toBe("openai-responses");
+          expect(opts.backend.model).toBe("gpt-4o-mini");
+          // The digigraph fallback must not run for an AI-SDK backend.
+          expect(createDigigraphTraceStreamResponse).not.toHaveBeenCalled();
+        } finally {
+          resetDigichatConfigForTests();
+        }
+      });
+
+      it("passes the web-search gate to the AI-SDK backend (#4552)", async () => {
+        setDigichatConfigForTests(
+          parseDigichatConfig({
+            version: 1,
+            deployment: {
+              slug: "client",
+              backend: {
+                type: "openai-responses",
+                baseUrl: "https://api.example.com/v1",
+                model: "gpt-4o-mini",
+                apiKeyEnv: "DIGICHAT_BACKEND_EXAMPLE_KEY",
+              },
+              gate: { mode: "ungated", webSearch: true },
+            },
+          })
+        );
+        try {
+          await POST(chatReq({ "x-digi-enable-web-search": "1" }));
+          const withHeader = vi.mocked(createAiSdkStreamResponse).mock.calls.at(-1)?.[0] as {
+            webSearch?: boolean;
+          };
+          expect(withHeader.webSearch).toBe(true);
+
+          // The tenant allows it, but the client never asked: stays off.
+          await POST(chatReq());
+          const withoutHeader = vi
+            .mocked(createAiSdkStreamResponse)
+            .mock.calls.at(-1)?.[0] as { webSearch?: boolean };
+          expect(withoutHeader.webSearch).toBe(false);
         } finally {
           resetDigichatConfigForTests();
         }

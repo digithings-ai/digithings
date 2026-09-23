@@ -200,6 +200,12 @@ export const FeaturesSchema = z.preprocess(
       /** Reasoning-only override on top of `view`. */
       thinking: ThinkingModeSchema.default(DEFAULT_THINKING_MODE),
       sources: z.boolean().default(true),
+      /**
+       * Legacy alias for `models.allowPicker` (#4532). Kept for config
+       * back-compat: the client projection folds it into `models.allowPicker`,
+       * which is the authoritative client-facing knob. Prefer
+       * `models.allowPicker` in new configs.
+       */
       modelPicker: z.boolean().default(false),
       branchPicker: z.boolean().default(true),
       pageContext: PageContextModeSchema.default("visible"),
@@ -211,6 +217,10 @@ export const ModelsSchema = z
   .object({
     default: z.string().min(1).optional(),
     available: z.array(z.string().min(1)).default([]),
+    /**
+     * Authoritative client-facing model-picker switch (#4532). The legacy
+     * `features.modelPicker` alias is folded into this during projection.
+     */
     allowPicker: z.boolean().optional(),
   })
   .strict();
@@ -244,9 +254,150 @@ export const FoundryBackendSchema = z
   })
   .strict();
 
+/**
+ * An OpenAI-compatible endpoint reached through the AI SDK (#4535).
+ *
+ * `apiKeyEnv` NAMES an env var; the key itself never lives in the config, so
+ * it cannot be projected to the browser. The `DIGICHAT_BACKEND_` prefix is
+ * enforced so a tenant config can never point at `AUTH_SECRET`,
+ * `DIGIKEY_BFF_TOKEN`, or `DIGIGRAPH_UPSTREAM_API_KEY` and have the BFF send
+ * that secret as a Bearer token to an attacker-controlled `baseUrl`. It bounds
+ * *which* vars are nameable; it does not bind an entry to its own key (every
+ * config source is operator-controlled today — add a per-entry binding such as
+ * `DIGICHAT_BACKEND_<SLUG>_KEY` if tenant-authored config is ever accepted).
+ * https-only keeps the key from crossing the wire in plaintext, matching
+ * `FoundryBackendSchema`'s `projectEndpoint` rule.
+ */
+const OpenAiCompatibleFields = {
+  baseUrl: z
+    .string()
+    .url()
+    .refine((u) => u.startsWith("https:"), "baseUrl must be https"),
+  model: z.string().min(1),
+  apiKeyEnv: z
+    .string()
+    .regex(
+      /^DIGICHAT_BACKEND_[A-Z0-9_]+$/,
+      "apiKeyEnv must name a DIGICHAT_BACKEND_* env var",
+    ),
+};
+
+/** OpenAI Chat Completions wire format (`/v1/chat/completions`). */
+export const OpenAiCompletionsBackendSchema = z
+  .object({
+    type: z.literal("openai-completions"),
+    ...OpenAiCompatibleFields,
+  })
+  .strict();
+
+/** OpenAI Responses wire format (`/v1/responses`). */
+export const OpenAiResponsesBackendSchema = z
+  .object({
+    type: z.literal("openai-responses"),
+    ...OpenAiCompatibleFields,
+  })
+  .strict();
+
+/**
+ * Anthropic Messages API reached through the AI SDK (#4539).
+ *
+ * `apiKeyEnv` NAMES an env var with the same `DIGICHAT_BACKEND_` guard as the
+ * OpenAI pair, so a tenant config can never have the BFF ship `AUTH_SECRET` to
+ * a provider. There is no `baseUrl`: the provider defaults to
+ * `https://api.anthropic.com` — point a proxy at `openai-completions` instead.
+ */
+export const AnthropicBackendSchema = z
+  .object({
+    type: z.literal("anthropic"),
+    model: z.string().min(1),
+    apiKeyEnv: z
+      .string()
+      .regex(
+        /^DIGICHAT_BACKEND_[A-Z0-9_]+$/,
+        "apiKeyEnv must name a DIGICHAT_BACKEND_* env var",
+      ),
+  })
+  .strict();
+
+/**
+ * Google Vertex AI (Gemini) reached through the AI SDK (#4539).
+ *
+ * No credential field: the provider reads Application Default Credentials from
+ * the ambient environment (`google-auth-library`), so nothing secret is ever
+ * expressible in — or projectable from — the config.
+ *
+ * `project` / `location` therefore select which GCP project the BFF's ambient
+ * (cloud-platform scoped) credential is spent against. Config sources are
+ * operator-controlled today, so this is an authorization-scope note rather than
+ * a tenant-facing risk; add an allowlist here if tenant-authored config is ever
+ * accepted.
+ */
+export const GoogleVertexBackendSchema = z
+  .object({
+    type: z.literal("google-vertex"),
+    project: z.string().min(1),
+    location: z.string().min(1),
+    model: z.string().min(1),
+  })
+  .strict();
+
+/**
+ * Non-AI-SDK protocol backends (#4543). Each is a stream the BFF consumes and
+ * normalizes itself, so there is no provider package behind them.
+ *
+ * All three take an OPTIONAL `apiKeyEnv` naming an env var (same
+ * `DIGICHAT_BACKEND_` prefix guard as the OpenAI pair, so a tenant config can
+ * never name `AUTH_SECRET`). LangGraph Cloud wants the key in `x-api-key`; a
+ * private AG-UI or A2A server usually wants a bearer. https-only URLs keep the
+ * credential off the wire in plaintext, matching the other backend types.
+ */
+const HttpsBackendUrl = z
+  .string()
+  .url()
+  .refine((u) => u.startsWith("https:"), "must be https");
+
+const OptionalBackendApiKeyEnv = z
+  .string()
+  .regex(/^DIGICHAT_BACKEND_[A-Z0-9_]+$/, "apiKeyEnv must name a DIGICHAT_BACKEND_* env var");
+
+/** LangGraph Platform `runs/stream` (stateless run, no thread management). */
+export const LangGraphBackendSchema = z
+  .object({
+    type: z.literal("langgraph"),
+    apiUrl: HttpsBackendUrl,
+    assistantId: z.string().min(1),
+    apiKeyEnv: OptionalBackendApiKeyEnv.optional(),
+  })
+  .strict();
+
+/** AG-UI event stream (`POST {url}`, SSE frames with a `type` discriminator). */
+export const AgUiBackendSchema = z
+  .object({
+    type: z.literal("ag-ui"),
+    url: HttpsBackendUrl,
+    apiKeyEnv: OptionalBackendApiKeyEnv.optional(),
+  })
+  .strict();
+
+/** A2A JSON-RPC 2.0 endpoint (`message/stream`, or a blocking `message/send`). */
+export const A2aBackendSchema = z
+  .object({
+    type: z.literal("a2a"),
+    baseUrl: HttpsBackendUrl,
+    apiKeyEnv: OptionalBackendApiKeyEnv.optional(),
+  })
+  .strict();
+
 export const BackendSchema = z.discriminatedUnion("type", [
   DigigraphBackendSchema,
   FoundryBackendSchema,
+  OpenAiCompletionsBackendSchema,
+  OpenAiResponsesBackendSchema,
+  AnthropicBackendSchema,
+  GoogleVertexBackendSchema,
+  LangGraphBackendSchema,
+  AgUiBackendSchema,
+  A2aBackendSchema,
 ]);
 
 export const ToolCatalogEntrySchema = z
