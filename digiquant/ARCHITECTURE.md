@@ -3975,6 +3975,24 @@ than a record, since a jsonb key and a log line are both passive.
 #1749/#1751 established that partial states are where the silent-staleness defects live. There
 are tests pinning the negative property; do not relax them into a ceiling without a new decision.
 
+**Token-derived fallback (#4596).** The house upstream reports no per-call cost, so the raw
+`cost_usd` in the usage snapshot is `0.0` on every run and this alert could never fire. `_row`
+therefore resolves `est_cost_usd` once — the reported cost when it is positive, otherwise
+`pricing.estimate_cost_usd(usage["by_model"])` against the committed per-model table in
+`research/pricing.py` — and feeds the SAME value to both `spend_alert` and the `est_cost_usd`
+column. The estimator returns `None` when no tokens were priced (no priced model, or a priced
+model whose tokens are all zero/junk), so behaviour is unchanged when no price is known (never
+fabricate `$0`).
+
+Each price is taken verbatim from the repo's own committed snapshot,
+`docs/providers/snapshots/<provider>.yaml` (`paid_tier.models[].cost_per_1m_input` /
+`cost_per_1m_output`); `deepseek/deepseek-v4-pro` deliberately uses the snapshot's **peak**
+rate. A price no snapshot corroborates fails
+`tests/dq/research/test_pricing.py::TestThePriceTable::test_every_committed_price_is_corroborated_by_a_committed_snapshot`.
+`google/gemini-3.7-flash` is a house slug with no price: it is absent from the committed
+`gemini.yaml` (the snapshot predates the model), so it is listed in `_UNPRICED_SLUGS` until
+that snapshot is refreshed.
+
 It is computed in `_row` rather than through `register_breakdown_contributor` because **that seam
 is `state -> dict` and spend does not live in state** — it arrives in the `digigraph.usage`
 snapshot, which is only in scope at that call site. `models`, `by_kind` and `cached_tokens` set
