@@ -1,108 +1,152 @@
 "use client";
 
-import { Fragment, useState } from "react";
 import {
   CtaLink,
-  PRICE_CHART_DEMO,
-  PerfMetrics,
-  PriceChart,
+  Kpi,
+  KpiStrip,
+  MultiTimeSeries,
+  Pipeline,
   StockTicker,
-  type PerfMetric,
+  type OverlaySeries,
+  type PipelineColumn,
+  type PipelineSummaryItem,
+  type TearsheetSeriesPoint,
 } from "@digithings/ui";
+import { PIPELINE_ENGINES, PIPELINE_PHASES } from "@/lib/digiquantPipeline";
 import { usePriceTape } from "@/lib/priceTape";
 import { GROUPED_LABEL } from "./label";
 
 /**
- * The digiquant band (v15 point 9, #4429; reworked in round 3).
+ * The digiquant band (v15 point 9, #4429; reworked in rounds 3 and 4).
  *
  * The owner's direction: "I'd build out the digiquant section properly… a
  * different background to stand out… If you took the digiquant website and
- * compressed it in the same way… that's what I want to see", and in round 3:
- * "make the background of the digiquant section expand the full width… it could
- * be its own section with its own background… I'd keep it simple, sweet, just as
- * a little view into the flagship product… And then if you click through every
- * step, you see what it does… we don't have to explain how strategies are built
- * in detail. We could just show a few of the flagship strategy metrics and
- * tearsheets, and links to the strategy page."
+ * compressed it in the same way… that's what I want to see", then: "make the
+ * background of the digiquant section expand the full width… it could be its own
+ * section with its own background", and in round 4: "use the proper flow digiweb
+ * element to describe the pipeline… by the pipeline I meant the actual digiquant
+ * pipeline, the one used in the dashboard, for research and then portfolio
+ * management decision making and then execution framework… we could show some
+ * strategies in a horizontal scrollable card… it'd be nice to also connect the
+ * performance of the digiquant dashboard and we could show the portfolio
+ * performance versus a benchmark with a line chart… and then the tearsheet of
+ * all the performance metrics as they appear in the digiquant tearsheet
+ * elements."
  *
  * So the band is full-bleed — the section in LandingPage carries no horizontal
  * padding, and this component paints digiquant's own livery and its own tinted
  * background (`accent-digiquant` + `.quant-band`) edge to edge while the content
  * stays on the page's frame.
  *
- * ROUND 3 CHANGES, and why:
- *  - the header bar is gone. It was a chrome strip naming the module, and the
- *    claim below it already says what the band is; a banner that only labels the
- *    card is one more thing between the reader and the product.
- *  - the pipeline is a click-through flow, not a node graph with node
- *    diagnostics. Selecting a stage shows what it actually does, plus its inputs
- *    and outputs, in the product's own vocabulary — and the stage ids are now
- *    described mechanics rather than internal component names.
- *  - the strategy block is a small library row with links out to the real
- *    tearsheets, instead of prose explaining how strategies are built.
+ * ROUND 4 CHANGES, and why:
+ *  - the pipeline is now the kit's `<Pipeline>` — the element the dashboard's
+ *    workflow view was promoted from — fed with digiquant's real phase list
+ *    (`research` 00–09, `portfolio` h1–h9 + the coverage director, `execution`
+ *    with no folders yet). It was a bespoke four-tab rail before; the real
+ *    pipeline has twenty stages across three engines, and the honest thing is to
+ *    draw the one that runs, not a summary of it. The stage list is a guarded
+ *    copy of the digiquant site's own source (see `lib/digiquantPipeline.ts`).
+ *  - the strategy block is a horizontal snap rail (`.h-scroll`, the marketing
+ *    site's own row primitive) instead of a wrapping grid.
+ *  - the candle chart is replaced by the performance line chart: portfolio
+ *    against a benchmark. The band already carries the market tape at the top,
+ *    so the second chart earns its place by comparing something rather than
+ *    repeating an instrument.
+ *  - the tearsheet metrics use the tearsheet's own `KpiStrip`/`Kpi` grammar.
  *
- * HONESTY (binding). The market tape is REAL: the latest daily close and the
- * real prior-session change for the majors, read from the public market-data
- * archive, labelled `markets · latest close` rather than anything that would
- * imply streaming. Everything else is illustrative — the candle chart, the
- * example tearsheet and the strategy cards — and the band's footnote says so
- * without hedging. Nothing here is a digiquant result: no return, no Sharpe and
- * no P&L is stated for the product.
+ * HONESTY (binding). The market tape is REAL: the latest daily close and the real
+ * prior-session change for the majors, read from the public market-data archive,
+ * labelled `markets · latest close` rather than anything implying a stream.
+ * Everything else on this band is synthetic and badged as such — the performance
+ * pair, the KPI strip and the strategy cards. No figure here is a digiquant
+ * result, and the two series are a deterministic example, not a reported return.
  */
 
 const DIGIQUANT_URL = "https://digiquant.io";
 
-/** A tearsheet's grade block, from the shared demo walk — labelled as example. */
-const TEARSHEET: PerfMetric[] = [
-  { label: "CAGR", value: "24.6%", tone: "up" },
-  { label: "Sharpe", value: "1.34" },
-  { label: "Sortino", value: "1.88" },
-  { label: "Max drawdown", value: "-18.2%", tone: "down" },
-  { label: "Win rate", value: "56.0%" },
-  { label: "Profit factor", value: "1.72" },
-];
+/** Years of weekly closes in the example pair. */
+const SERIES_WEEKS = 156;
 
 /**
- * The pipeline as four stages a reader can walk. `note` is what the stage does,
- * `inputs`/`outputs` are what it consumes and hands on — the whole point being
- * that clicking a stage tells you something you could not guess from its name.
- * No internal component name appears here.
+ * The example performance pair: portfolio against benchmark, both indexed to 100
+ * at the start.
+ *
+ * Synthetic and deterministic — two drifting walks with fixed periodic terms and
+ * no random source, so the drawn chart is identical on every build and nobody can
+ * read a change into a redeploy. This is the one figure on the page whose absence
+ * of a real source is worth stating plainly: the real portfolio series lives in
+ * digiquant's own tearsheet store, and reading it from here would mean giving
+ * this static-export site a second service dependency. When that trade is worth
+ * making, this function is the seam: it returns the shape the chart already
+ * takes.
  */
-const FLOW: { id: string; label: string; note: string; inputs: string; outputs: string }[] = [
-  {
-    id: "propose",
-    label: "propose",
-    note: "An idea is formed against public macro and market data. No private order flow and no broker feed goes in, so the direction is explainable from sources anyone can point at.",
-    inputs: "public macro + market data",
-    outputs: "candidate directions",
-  },
-  {
-    id: "backtest",
-    label: "backtest",
-    note: "The candidate is run over history before a number is shown to anyone. A result that only exists in the sample it was fitted to is not treated as a result.",
-    inputs: "candidate + price history",
-    outputs: "fills",
-  },
-  {
-    id: "optimize",
-    label: "optimize",
-    note: "Parameters are searched over a declared space rather than hand-tuned, so the fit is reproducible and anyone can re-run it against the same window.",
-    inputs: "candidate + parameter space",
-    outputs: "chosen parameters",
-  },
-  {
-    id: "size",
-    label: "size",
-    note: "The survivor becomes target weights, held until the rules fire. Nothing is routed to a venue — connecting execution is a separate, deliberate step, not a flag.",
-    inputs: "validated signal",
-    outputs: "target weights",
-  },
+function performance(): { portfolio: TearsheetSeriesPoint[]; benchmark: TearsheetSeriesPoint[] } {
+  const start = Date.UTC(2023, 0, 6);
+  const week = 7 * 24 * 60 * 60 * 1000;
+  const portfolio: TearsheetSeriesPoint[] = [];
+  const benchmark: TearsheetSeriesPoint[] = [];
+  let p = 100;
+  let b = 100;
+  for (let i = 0; i < SERIES_WEEKS; i += 1) {
+    const t = new Date(start + i * week).toISOString().slice(0, 10);
+    p *= 1 + 0.0018 + 0.014 * Math.sin(i / 7.3);
+    b *= 1 + 0.0009 + 0.011 * Math.sin(i / 5.1 + 1.2);
+    portfolio.push({ t, v: p });
+    benchmark.push({ t, v: b });
+  }
+  return { portfolio, benchmark };
+}
+
+const EXAMPLE = performance();
+
+const PERFORMANCE_SERIES: OverlaySeries[] = [
+  { id: "portfolio", label: "digiquant portfolio", points: EXAMPLE.portfolio, tone: "accent", fill: true },
+  { id: "benchmark", label: "benchmark", points: EXAMPLE.benchmark, tone: "mute", dashed: true },
 ];
 
 /**
- * The first four strategies the library shipped. `slug` is the real public
- * slug, so the link lands on that strategy's own tearsheet rather than the
- * catalog — the figures live there, where they are the real ones.
+ * The pipeline, in the dashboard's own terms.
+ *
+ * One column per engine, in run order, with every shipped phase as a node. The
+ * node's `note` is the phase's own one-line mechanism (`detail` in the source)
+ * prefixed with its real folder id, so the detail panel answers "what does this
+ * step do" rather than restating the name. No diagnostics are passed — this is
+ * the pipeline as a *definition*, not as a completed run, so there is no wall
+ * time or token count to report, and `Pipeline` omits the block rather than
+ * printing an em dash for each.
+ */
+const PIPELINE_COLUMNS: PipelineColumn[] = PIPELINE_ENGINES.map((engine) => ({
+  id: engine.id,
+  kind: "step" as const,
+  label: engine.phases.length > 0 ? `${engine.label} · ${engine.phases.length} phases` : engine.label,
+  nodes:
+    engine.phases.length > 0
+      ? engine.phases.map((phase) => ({
+          id: `${engine.id}-${phase.id}`,
+          label: phase.name,
+          status: "done" as const,
+          note: `${phase.id} · ${phase.detail}`,
+        }))
+      : [
+          {
+            id: "execution-pending",
+            label: "Not built",
+            status: "queued" as const,
+            note: engine.summary,
+          },
+        ],
+}));
+
+const PIPELINE_SUMMARY: PipelineSummaryItem[] = [
+  { label: "phases shipped", value: String(PIPELINE_PHASES.length) },
+  { label: "execution engine", value: "in development" },
+  { label: "live orders", value: "0" },
+];
+
+/**
+ * The first four strategies the library shipped. `slug` is the real public slug,
+ * so the link lands on that strategy's own tearsheet — the figures live there,
+ * where they are the real ones.
  */
 const FLAGSHIP: { slug: string; label: string; symbol: string; kind: string }[] = [
   { slug: "btc_slapper", label: "BTC Slapper", symbol: "BTC", kind: "long / short" },
@@ -112,8 +156,23 @@ const FLAGSHIP: { slug: string; label: string; symbol: string; kind: string }[] 
 ];
 
 /**
+ * The example tearsheet, in the tearsheet's own element. The values are neutral
+ * on purpose: the up/down money classes are reserved for figures that are
+ * somebody's result, and none of these is.
+ */
+const TEARSHEET_KPIS: { label: string; value: string; sub: string }[] = [
+  { label: "CAGR", value: "24.6%", sub: "example" },
+  { label: "Sharpe", value: "1.34", sub: "example" },
+  { label: "Sortino", value: "1.88", sub: "example" },
+  { label: "Max drawdown", value: "-18.2%", sub: "example" },
+  { label: "Win rate", value: "56.0%", sub: "example" },
+  { label: "Profit factor", value: "1.72", sub: "example" },
+];
+
+/**
  * The market tape. Empty until the read lands, and muted rather than blank when
- * it cannot — a strip that flashes an error would make decoration look load-bearing.
+ * it cannot — a strip that flashes an error would make decoration look
+ * load-bearing.
  */
 function Tape() {
   const { items } = usePriceTape();
@@ -134,67 +193,6 @@ function Tape() {
   );
 }
 
-/** The four-stage flow: a rail you click, and a panel that answers. */
-function Flow() {
-  const [selected, setSelected] = useState<string>(FLOW[0].id);
-  const stage = FLOW.find((entry) => entry.id === selected) ?? FLOW[0];
-
-  return (
-    <div className="flex min-w-0 flex-col gap-[1rem]">
-      <div
-        role="tablist"
-        aria-label="digiquant pipeline stages"
-        className="flex flex-wrap items-center gap-[0.5rem]"
-      >
-        {FLOW.map((entry, i) => (
-          <Fragment key={entry.id}>
-            {i > 0 ? (
-              <span aria-hidden className="font-mono text-[0.8rem] text-ink-mute">
-                →
-              </span>
-            ) : null}
-            <button
-              type="button"
-              role="tab"
-              id={`flow-tab-${entry.id}`}
-              aria-selected={selected === entry.id}
-              aria-controls="flow-panel"
-              onClick={() => setSelected(entry.id)}
-              className={`border px-[0.7rem] py-[0.35rem] font-mono text-[0.78rem] transition-colors duration-200 ${
-                selected === entry.id
-                  ? "border-accent bg-surface-2 text-ink"
-                  : "border-hair text-ink-soft hover:border-ink-mute hover:text-ink"
-              }`}
-            >
-              <span className="mr-[0.4rem] text-ink-mute">
-                {String(i + 1).padStart(2, "0")}
-              </span>
-              {entry.label}
-            </button>
-          </Fragment>
-        ))}
-      </div>
-
-      <div
-        role="tabpanel"
-        id="flow-panel"
-        aria-labelledby={`flow-tab-${stage.id}`}
-        className="grid gap-[1rem] border border-hair bg-surface p-[1rem] min-[760px]:grid-cols-[minmax(0,1.5fr)_minmax(0,1fr)]"
-      >
-        <p className="m-0 max-w-[var(--measure-prose)] text-[0.9rem] leading-[1.7] text-ink-soft">
-          {stage.note}
-        </p>
-        <dl className="m-0 grid grid-cols-[auto_minmax(0,1fr)] content-start gap-x-[1rem] gap-y-[0.5rem] font-mono text-[0.74rem]">
-          <dt className="text-ink-mute">in</dt>
-          <dd className="m-0 text-ink-soft">{stage.inputs}</dd>
-          <dt className="text-ink-mute">out</dt>
-          <dd className="m-0 text-ink-soft">{stage.outputs}</dd>
-        </dl>
-      </div>
-    </div>
-  );
-}
-
 export function QuantSection({ className }: { className?: string }) {
   return (
     <div className={`accent-digiquant quant-band ${className ?? ""}`}>
@@ -204,21 +202,17 @@ export function QuantSection({ className }: { className?: string }) {
         <div className="mx-auto flex max-w-[var(--frame-w)] flex-col gap-[2rem]">
           <Tape />
 
-          {/* Explicit single column at the base, exactly like the Boot band: the
-              chart bakes the pane's pixel width into its own canvases at first
-              measurement, so below 980px an implicit `auto` track would size
-              itself from that min-content and blow the page wider than the
-              viewport. minmax(0,1fr) + min-w-0 on each column pins the track to
-              the container, and the chart's autoSize re-measures to fit. */}
+          {/* Explicit single column at the base: an SVG chart measures its own
+              pane, so below 980px an implicit `auto` track would size itself from
+              that min-content and push the page wider than the viewport.
+              `minmax(0,1fr)` + `min-w-0` pin the track to the container. */}
           <div className="grid grid-cols-[minmax(0,1fr)] gap-[2rem] min-[980px]:grid-cols-[minmax(0,0.85fr)_minmax(0,1.15fr)] min-[980px]:gap-[2.4rem]">
             {/* Left: the claim, in digiquant's own voice. */}
             <div className="flex min-w-0 flex-col gap-[1.2rem]">
               {/* `h2`, not `h3`: this band has no other heading, so an `h3` left
                   the document outline skipping a level between `#open-source`
                   and `#pricing`. Every other band's `h2` is its claim rather than
-                  its product name, so the claim is the band's heading. The
-                  bespoke size is kept: this is a product band, deliberately below
-                  the page's section stand. */}
+                  its product name, so the claim is the band's heading. */}
               <h2 className="m-0 font-mono text-[clamp(1.4rem,2.6vw,2rem)] font-medium leading-[1.2] tracking-[-0.02em] text-ink">
                 A hedge fund in a glass box you own.
               </h2>
@@ -226,7 +220,7 @@ export function QuantSection({ className }: { className?: string }) {
                 digiquant is the module that shows what the rest of the stack is for. Ideas are
                 proposed against public data, every one is backtested before it is seen, and the
                 survivor is sized into target weights. It is the same glass box as the rest of
-                digithings — your hosts, your data, your keys — pointed at the finance work.
+                digithings — your hosts, data and keys — pointed at the finance work.
               </p>
 
               <div className="flex flex-wrap items-center gap-[0.8rem] pt-[0.4rem]">
@@ -239,79 +233,92 @@ export function QuantSection({ className }: { className?: string }) {
               </div>
             </div>
 
-            {/* Right: the operator surface — chart and tearsheet. */}
-            <div className="flex min-w-0 flex-col gap-[1.2rem]">
-              {/* PriceChart's host is `h-full w-full` and its pane auto-sizes, so
-                  it needs a definite-height parent or it collapses to a sliver.
-                  The pane also clips: the chart's baked canvases must never be
-                  allowed to push this figure's min-content past the track. */}
+            {/* Right: the operator surface — performance over time, then the
+                tearsheet readout in the tearsheet's own grammar. */}
+            <div className="flex min-w-0 flex-col gap-[1rem]">
               <figure className="m-0 flex min-w-0 flex-col gap-[0.5rem]">
-                <div className="h-[clamp(170px,22vh,230px)] overflow-hidden border border-hair">
-                  <PriceChart
-                    candles={PRICE_CHART_DEMO.candles}
-                    volume={PRICE_CHART_DEMO.volume}
-                    label="Example instrument — daily candles and volume (synthetic series)"
+                <div className="h-[clamp(190px,26vh,260px)] overflow-hidden border border-hair">
+                  <MultiTimeSeries
+                    series={PERFORMANCE_SERIES}
+                    height={240}
+                    interactive
+                    ariaLabel="Example performance, digiquant portfolio against a benchmark, indexed to 100 at the start (synthetic series)"
                   />
                 </div>
                 <figcaption className="font-mono text-[0.68rem] text-ink-mute">
-                  example instrument · daily candles + volume · synthetic series
+                  example · indexed to 100 · digiquant portfolio (solid) vs benchmark (dashed) ·
+                  synthetic series
                 </figcaption>
               </figure>
 
               <div className="flex flex-col gap-[0.8rem]">
-                <span className={GROUPED_LABEL}>example tearsheet</span>
-                {/*
-                  Three columns, not the primitive's default four. There are six
-                  metrics, so four columns filled the first row and left the
-                  second two-thirds empty — two 145x97 panels of the container's
-                  own background sitting under SORTINO and MAX DRAWDOWN, which
-                  reads as an unfinished grid. Three columns give two even rows of
-                  three. The alternative, padding the set to eight metrics, would
-                  mean inventing figures to fill space, which is the thing this
-                  band's own footnote disavows.
-                */}
-                <PerfMetrics metrics={TEARSHEET} columns={3} />
+                <span className={GROUPED_LABEL}>example tearsheet · synthetic</span>
+                <KpiStrip primary ariaLabel="Example tearsheet, synthetic series">
+                  {TEARSHEET_KPIS.map((kpi) => (
+                    <Kpi key={kpi.label} label={kpi.label} value={kpi.value} sub={kpi.sub} />
+                  ))}
+                </KpiStrip>
               </div>
             </div>
           </div>
 
           <div className="flex min-w-0 flex-col gap-[1rem]">
             <span className={GROUPED_LABEL}>the pipeline</span>
-            <Flow />
+            <Pipeline
+              columns={PIPELINE_COLUMNS}
+              summary={PIPELINE_SUMMARY}
+              defaultSelectedId="research-00"
+            />
           </div>
 
           <div className="flex min-w-0 flex-col gap-[1rem]">
             <span className={GROUPED_LABEL}>the strategy library</span>
-            <div className="grid grid-cols-[repeat(auto-fill,minmax(200px,1fr))] gap-[0.7rem]">
-              {FLAGSHIP.map((strategy) => (
-                <a
-                  key={strategy.slug}
-                  href={`${DIGIQUANT_URL}/strategies/${strategy.slug}`}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="flex min-w-0 flex-col gap-[0.4rem] border border-hair bg-surface p-[0.9rem] no-underline transition-colors duration-200 hover:border-ink-mute"
-                >
-                  <span className="flex flex-wrap items-baseline justify-between gap-[0.5rem]">
-                    <span className="font-mono text-[0.88rem] text-ink">{strategy.label}</span>
-                    <span className="font-mono text-[0.68rem] text-ink-mute">
-                      {strategy.symbol}
+            {/* The marketing site's own snap row: it masks its edges, scrolls
+                with the keyboard because the track is a focusable scroll
+                container, and stacks in flow under prefers-reduced-motion. */}
+            <div className="h-scroll">
+              <div
+                className="h-scroll__track"
+                role="list"
+                aria-label="flagship digiquant strategies"
+                tabIndex={0}
+              >
+                {FLAGSHIP.map((strategy) => (
+                  /* Wider than the primitive's 262px default so four cards
+                     overflow the frame and the row actually scrolls — the point
+                     of the element is the gesture, and four cards that happen to
+                     fit would just be a grid with an edge fade. */
+                  <a
+                    key={strategy.slug}
+                    role="listitem"
+                    href={`${DIGIQUANT_URL}/strategies/${strategy.slug}`}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="h-scroll__card min-w-[19rem] max-w-[19rem] no-underline"
+                  >
+                    <span className="flex flex-wrap items-baseline justify-between gap-[0.5rem]">
+                      <span className="font-mono text-[0.88rem] text-ink">{strategy.label}</span>
+                      <span className="font-mono text-[0.68rem] text-ink-mute">
+                        {strategy.symbol}
+                      </span>
                     </span>
-                  </span>
-                  <span className="font-mono text-[0.68rem] text-ink-mute">{strategy.kind}</span>
-                  <span className="mt-[0.2rem] font-mono text-[0.72rem] text-accent">
-                    full tearsheet ↗
-                  </span>
-                </a>
-              ))}
+                    <span className="font-mono text-[0.68rem] text-ink-mute">{strategy.kind}</span>
+                    <span className="mt-[0.2rem] font-mono text-[0.72rem] text-accent">
+                      full tearsheet ↗
+                    </span>
+                  </a>
+                ))}
+              </div>
             </div>
           </div>
 
           <p className="m-0 font-mono text-[0.72rem] leading-[1.6] text-ink-mute">
             Market prices above are the latest daily close from the public market-data archive —
-            real figures for real instruments, not a live stream. The candle chart, the example
-            tearsheet and the strategy cards are illustrative: this page states no return, no Sharpe
-            and no P&amp;L for digiquant. Live trading is guarded by a human review gate, not a
-            runtime interlock.
+            figures for real instruments, not a live stream. The performance pair, the tearsheet
+            readout and the strategy cards are drawn from a badged synthetic series: none of those
+            figures is a digiquant result, and this page states no return, no Sharpe and no P&amp;L
+            for the product. Live trading is guarded by a human review gate, not a runtime
+            interlock.
           </p>
         </div>
       </div>
