@@ -45,9 +45,10 @@ const env = workerEnvBinding as unknown as Env;
 export class DigiStackContainer extends Container {
   defaultPort = DIGIGRAPH_PORT;
   /**
-   * digigraph is required for Worker readiness. digikey (once Redis-wait + early
-   * priority make bind reliable under Firecracker) and digisearch (which starts
-   * behind the Chroma seed wait) are waited on per-request in fetch() instead.
+   * digigraph is required for Worker readiness. digikey and digisearch are waited
+   * on per-request in fetch() instead: digisearch starts behind the Chroma seed
+   * wait, and digikey is a hard dependency of every authenticated route (it serves
+   * the JWKS the verifiers fetch), so it can never be optional.
    */
   requiredPorts = [DIGIGRAPH_PORT];
   /** Cold starts are seamless (#4323); each wake bills the whole tail, so keep it minimal. */
@@ -122,13 +123,18 @@ export class DigiStackContainer extends Container {
     const targetPort = targetPortFromRequest(request);
     try {
       await this.startAndWaitForPorts({
-        // Per-target only: a search.digithings.ai request must not fail on a
-        // :8002 that has not bound yet (digisearch starts behind the seed wait),
-        // just as a key request must not race :8005. digigraph binds first for
-        // every request, so it is unconditional.
+        // digigraph binds first for every request, so it is unconditional.
+        // digisearch starts behind the Chroma seed wait, so it is waited on only
+        // for its own route.
+        // digikey is unconditional: digisearch verifies the digikey JWT against
+        // the :8005 JWKS on every authenticated call, so proxying a search request
+        // before :8005 binds is a cold-wake 401 invalid_token (and a 503 once the
+        // blocklist check runs). digikey refuses to bind until redis answers
+        // (container/start_digikey.sh), so waiting on :8005 also closes the
+        // Redis-readiness race. See #4546.
         ports: [
           DIGIGRAPH_PORT,
-          ...(targetPort === DIGIKEY_PORT ? [DIGIKEY_PORT] : []),
+          DIGIKEY_PORT,
           ...(targetPort === DIGISEARCH_PORT ? [DIGISEARCH_PORT] : []),
         ],
         cancellationOptions: {
