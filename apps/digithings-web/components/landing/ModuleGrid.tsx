@@ -243,6 +243,15 @@ function ask(id: string | null) {
  * follows the scroll and the tile grows as if the reader had scrolled to it. The
  * half-step lands mid-dwell, so the active index is unambiguous at both edges.
  *
+ * The jump is INSTANT (`behavior: "auto"`), not smooth. `activeIndex` is derived
+ * from the scroll position, so a smooth scroll means the index *walks* through
+ * every module between the one you left and the one you clicked — each tile
+ * taking focus in turn, which reads as the page scrolling itself instead of
+ * responding. An instant jump lands on the target index in one step, so exactly
+ * one tile animates, which is the zoom the click is meant to mean. (Owner:
+ * "when you click the module box, it's ... going through the full scroll
+ * animation instead of just skipping and jumping to it.")
+ *
  * Module scope and pure in `(element, index)` — it reads no render state — for
  * the same reason `ask` is: it must stay off the `react-hooks/immutability` rule.
  */
@@ -251,7 +260,7 @@ function focusModule(track: HTMLElement | null, index: number) {
   const top = track.getBoundingClientRect().top + window.scrollY;
   const span = Math.max(track.offsetHeight - window.innerHeight, 1);
   const target = top + ((index + 0.5) / ordered.length) * span;
-  window.scrollTo({ top: Math.max(target, 0), behavior: "smooth" });
+  window.scrollTo({ top: Math.max(target, 0), behavior: "auto" });
 }
 
 /**
