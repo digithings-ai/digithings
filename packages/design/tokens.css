@@ -278,7 +278,12 @@
   /* Terminal converts with the theme: light panel, dark ink. */
   --term-bg:   #F1F0EB;
   --term-ink:  #1A1E22;
-  --term-mute: #6B7177;
+  /* #6B7177 measured 3.90 on the title bar and 4.33 on the body — under AA at
+     the 11.5px the terminal uses. Darkened to clear 4.5 on the bar, which is
+     the worse of the two grounds (--term-fill is a 5% overlay toward the ink
+     side in each theme, so the bar is darker than the body here and lighter
+     than it in dark). The dark value needs no change. */
+  --term-mute: #5F656C;
   --term-hair: rgba(10, 15, 20, 0.12);
   --term-fill: rgba(10, 15, 20, 0.05);
 
