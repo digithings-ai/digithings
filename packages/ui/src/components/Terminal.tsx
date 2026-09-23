@@ -9,15 +9,34 @@ export type TermLine =
   | { kind: "ok" | "mod"; name: string; text: string }
   | { kind: "gap" };
 
-function Line({ l }: { l: TermLine }) {
+/**
+ * The column the `ok`/`mod` text starts at — one past the longest name in the
+ * list.
+ *
+ * This used to be a hard-coded `padEnd(15)`, which looks like it guarantees a
+ * gap and does not: once a name reaches 15 characters `padEnd` returns it
+ * unchanged and the text runs straight into it. `otel-collector` (v13) and
+ * `digi-digisearch` (v15) were both glued to the word after them, and both were
+ * worked around by renaming the service rather than by fixing the padding.
+ *
+ * Deriving the column from the lines in hand is what actually holds it: every
+ * list aligns to its own longest name, and no name can outgrow it.
+ */
+function nameColumn(lines: TermLine[]): number {
+  let longest = 0;
+  for (const l of lines) if ("name" in l) longest = Math.max(longest, l.name.length);
+  return longest + 1;
+}
+
+function Line({ l, col }: { l: TermLine; col: number }) {
   switch (l.kind) {
     case "gap": return <br />;
     case "cmd": return <span className="tl-cmd">{l.text}</span>;
     case "out": return <span className="tl-out">{l.text}</span>;
     case "install": return <span className="tl-install">{l.text}</span>;
     case "arrow": return <span className="tl-arrow">{l.text}</span>;
-    case "ok": return <span className="tl-ok"><b>{l.name.padEnd(15)}</b>{l.text}</span>;
-    case "mod": return <span className="tl-mod"><b>{l.name.padEnd(15)}</b>{l.text}  →</span>;
+    case "ok": return <span className="tl-ok"><b>{l.name.padEnd(col)}</b>{l.text}</span>;
+    case "mod": return <span className="tl-mod"><b>{l.name.padEnd(col)}</b>{l.text}  →</span>;
   }
 }
 
@@ -73,6 +92,7 @@ export function Terminal({
   const root = ["term", size === "compact" ? "term--compact" : "", fill ? "term--fill" : "", className]
     .filter(Boolean)
     .join(" ");
+  const col = nameColumn(lines);
 
   return (
     <div className={root}>
@@ -80,7 +100,7 @@ export function Terminal({
       <pre className="term-body">
         {lines.slice(0, n).map((l, k) => (
           <span key={k}>
-            <Line l={l} />{l.kind !== "gap" ? "\n" : ""}
+            <Line l={l} col={col} />{l.kind !== "gap" ? "\n" : ""}
           </span>
         ))}
         {n >= lines.length && <span className="term-cursor" />}
