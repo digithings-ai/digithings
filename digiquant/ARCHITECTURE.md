@@ -3975,6 +3975,14 @@ than a record, since a jsonb key and a log line are both passive.
 #1749/#1751 established that partial states are where the silent-staleness defects live. There
 are tests pinning the negative property; do not relax them into a ceiling without a new decision.
 
+**Token-derived fallback (#4596).** The house upstream reports no per-call cost, so the raw
+`cost_usd` in the usage snapshot is `0.0` on every run and this alert could never fire. `_row`
+therefore resolves `est_cost_usd` once — the reported cost when it is positive, otherwise
+`pricing.estimate_cost_usd(usage["by_model"])` against the committed per-model table in
+`research/pricing.py` — and feeds the SAME value to both `spend_alert` and the `est_cost_usd`
+column. An unpriced model set returns `None` from the estimator, so behaviour is unchanged when
+no price is known (never fabricate `$0`).
+
 It is computed in `_row` rather than through `register_breakdown_contributor` because **that seam
 is `state -> dict` and spend does not live in state** — it arrives in the `digigraph.usage`
 snapshot, which is only in scope at that call site. `models`, `by_kind` and `cached_tokens` set
