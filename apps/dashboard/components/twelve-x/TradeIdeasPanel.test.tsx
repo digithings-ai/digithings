@@ -83,7 +83,6 @@ function render(
         },
         children: createElement(TradeIdeasPanel, {
           ideas,
-          confluence: [],
           ideaHistory,
         }),
       } as never,
