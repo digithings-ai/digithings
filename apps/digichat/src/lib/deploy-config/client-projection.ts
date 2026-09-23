@@ -101,7 +101,7 @@ export type DigichatClientConfig = {
     webSearch?: boolean;
   };
   /** Discriminator only — never project endpoints / agent names */
-  backendType: "digigraph" | "foundry";
+  backendType: DigichatDeployment["backend"]["type"];
 };
 
 export const DEFAULT_CLIENT_CONFIG: DigichatClientConfig = {

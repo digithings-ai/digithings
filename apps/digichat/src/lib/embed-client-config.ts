@@ -85,7 +85,7 @@ export type EmbedTenantClientConfig = {
    * CliThread uses this to enable regenerate/edit when the BFF turn
    * mutation API is available (#3475).
    */
-  backendType?: "digigraph" | "foundry";
+  backendType?: EmbedTenantConfig["backend"]["type"];
 };
 
 /**
