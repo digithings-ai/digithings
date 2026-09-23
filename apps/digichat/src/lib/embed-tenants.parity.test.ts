@@ -2,6 +2,7 @@ import { describe, it, expect, afterEach, vi } from "vitest";
 import { parseEmbedTenants, resetEmbedTenantRegistryForTests } from "./embed-tenants";
 import { toEmbedClientConfig } from "./embed-client-config";
 import { clientConfigFromEmbedTenant } from "./deploy-config/embed-bridge";
+import { deploymentToEmbedTenant, embedTenantToDeployment } from "./deploy-config/loader";
 import { DEFAULT_LANGUAGE_CODE } from "./languages";
 
 afterEach(() => {
@@ -74,5 +75,42 @@ describe("embed tenant app/embed config parity (#4532)", () => {
     expect(() => parseEmbedTenants(entry({ defaultLanguage: "klingon" }))).toThrow(
       /defaultLanguage/,
     );
+  });
+});
+
+// The /embed first paint does NOT use toEmbedClientConfig directly — it resolves
+// the merged host deployment through embedTenantToDeployment and back out via
+// deploymentToEmbedTenant (#4532). Covering only the projection missed that.
+describe("embed tenant loader bridge parity (#4532)", () => {
+  it("round-trips the feature flags and language through the deployment bridge", () => {
+    const tenant = resolve({
+      dictation: true,
+      speech: true,
+      sources: false,
+      branchPicker: false,
+      defaultLanguage: "nl",
+    });
+    const dep = embedTenantToDeployment(tenant);
+    expect(dep.features.dictation).toBe(true);
+    expect(dep.features.speech).toBe(true);
+    expect(dep.features.sources).toBe(false);
+    expect(dep.features.branchPicker).toBe(false);
+    expect(dep.chrome.defaultLanguage).toBe("nl");
+
+    const back = deploymentToEmbedTenant(dep);
+    expect(back.dictation).toBe(true);
+    expect(back.speech).toBe(true);
+    expect(back.sources).toBe(false);
+    expect(back.branchPicker).toBe(false);
+    expect(back.defaultLanguage).toBe("nl");
+  });
+
+  it("keeps the app defaults through the deployment bridge when omitted", () => {
+    const dep = embedTenantToDeployment(resolve({}));
+    expect(dep.features.dictation).toBe(false);
+    expect(dep.features.speech).toBe(false);
+    expect(dep.features.sources).toBe(true);
+    expect(dep.features.branchPicker).toBe(true);
+    expect(dep.chrome.defaultLanguage).toBe(DEFAULT_LANGUAGE_CODE);
   });
 });
