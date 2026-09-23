@@ -244,19 +244,42 @@ body {
 }
 .dg-mosaic-row { display: flex; flex: 1 1 0; min-height: 0; gap: 0.5rem; transition: flex-grow .45s var(--ease); }
 
-.dg-cell { display: flex; flex-direction: column; gap: 0.5rem; flex: 1 1 0; min-width: 0; min-height: 0; padding: 0.85rem 0.95rem; margin: 0; background: var(--surface); border: 1px solid var(--hair); border-radius: 0; text-align: left; cursor: pointer; overflow: hidden; opacity: 0.55; transition: flex-grow .45s var(--ease), opacity .25s var(--ease), background .25s var(--ease), box-shadow .25s var(--ease); }
+.dg-cell { position: relative; display: flex; flex-direction: column; gap: 0.5rem; flex: 1 1 0; min-width: 0; min-height: 0; padding: 0.85rem 0.95rem; margin: 0; background: var(--surface); border: 1px solid var(--hair); border-radius: 0; text-align: left; cursor: pointer; overflow: hidden; opacity: 0.55; transition: flex-grow .45s var(--ease), opacity .25s var(--ease), background .25s var(--ease), box-shadow .25s var(--ease); }
 .dg-cell:hover { opacity: 0.85; }
 .dg-cell.on { opacity: 1; background: var(--surface-2, var(--surface)); box-shadow: inset 0 0 0 1px var(--accent); cursor: default; }
 
-/* Name left, figures right: the tile's two stated facts (its size in lines, and
-   its endpoint / MCP-tool counts) sit in the top-right corner where a reader
-   scanning the mosaic can compare them down a column without reading the copy.
-   The head wraps, and the figures carry `margin-left: auto` so they keep their
-   right edge on the line they land on — both halves are `nowrap`, so without the
-   wrap a narrow tile had its name run underneath the figure. */
+/* Name left, version right: the tile's identity line. The version sits in the
+   top-right corner where a reader scanning the mosaic can compare releases down
+   a column. The head wraps, and the version carries `margin-left: auto` so it
+   keeps its right edge on the line it lands on — both halves are `nowrap`, so
+   without the wrap a narrow tile had its name run underneath it. */
 .dg-mosaic-head { display: flex; flex-wrap: wrap; align-items: flex-start; justify-content: space-between; gap: 0.25rem 0.6rem; min-width: 0; }
-.dg-mosaic-figures { display: flex; flex-direction: column; align-items: flex-end; gap: 0.1rem; margin-left: auto; min-width: 0; text-align: right; }
+.dg-mosaic-version { margin-left: auto; text-align: right; }
 .dg-mosaic-name { font-family: var(--font-mono); font-size: 0.82rem; font-weight: 500; color: var(--ink); }
+
+/* The whole tile is the focus target, but the focused tile also owns real
+   controls (copy the compose command, ask digichat). A <button> cannot contain
+   another button, so the focus action is a transparent overlay *under* the body
+   rather than the body's parent; the body re-enables pointer events only on its
+   own controls, so every other click falls through to the overlay. The overlay
+   lives inside an `overflow: hidden` tile, so the global `:focus-visible`
+   outline (drawn outside the box) would be clipped — the ring is drawn just
+   inside the edge instead. */
+.dg-cell-focus { position: absolute; inset: 0; z-index: 0; width: 100%; height: 100%; margin: 0; padding: 0; border: 0; background: transparent; cursor: pointer; }
+.dg-cell.on .dg-cell-focus { cursor: default; }
+.dg-cell-focus:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.dg-cell-body { position: relative; z-index: 1; display: flex; flex-direction: column; gap: 0.5rem; flex: 1 1 auto; min-height: 0; pointer-events: none; }
+.dg-cell-body button { pointer-events: auto; }
+
+/* The three stated facts — lines of code, endpoints, MCP tools — stacked under
+   the name in every tile, focused or resting, so the box is a constant the
+   reader learns once. A label/value row each in the same `.dg-loc` mono
+   micro-type the corner figures used; the value is right-aligned with
+   `tabular-nums` so the column compares cleanly down the mosaic. */
+.dg-stats { display: flex; flex-direction: column; gap: 0.12rem; min-width: 0; }
+.dg-stat { display: flex; align-items: baseline; justify-content: space-between; gap: 0.6rem; min-width: 0; }
+.dg-stat-v { color: var(--ink-soft); }
+.dg-cell.on .dg-stat-v { color: var(--ink); }
 .dg-mosaic-role { font-family: var(--font-mono); font-size: 0.66rem; line-height: 1.5; color: var(--ink-mute); }
 .dg-cell.on .dg-mosaic-role { color: var(--ink-soft); }
 .dg-mosaic-detail { display: flex; flex-direction: column; gap: 0.6rem; margin-top: 0.4rem; min-width: 0; }
@@ -267,6 +290,15 @@ body {
 .dg-mosaic-foot { display: flex; align-items: center; flex-wrap: wrap; gap: 0.5rem 0.9rem; margin-top: auto; min-width: 0; }
 .dg-mosaic-foot .dg-docker { margin-top: 0; min-width: 0; }
 .dg-mosaic-ask { margin-left: auto; white-space: nowrap; font-family: var(--font-mono); font-size: 0.76rem; color: var(--ink-mute); }
+button.dg-mosaic-ask { background: none; border: 0; padding: 0; cursor: pointer; }
+button.dg-mosaic-ask:hover { color: var(--ink); }
+
+/* The compose command is a control in the focused tile: a click copies it. The
+   `.dg-docker` skin is shared with the graph panel, where the command is plain
+   text, so the pointer affordance is scoped to the button form. */
+button.dg-docker { cursor: pointer; text-align: left; }
+button.dg-docker:hover { border-color: var(--hair-2); }
+button.dg-docker.is-copied { color: var(--accent); }
 
 /* The detail is clipped rather than allowed to push the tile: a tile that grew
    with its content would take its row's height with it and break the mosaic's
@@ -276,19 +308,15 @@ body {
 .dg-cell.on .dg-mosaic-detail { min-height: 0; }
 .dg-cell.on .dg-docker { margin-top: 0; overflow: hidden; }
 
-/* The first summary paragraph: what the module is for, in its own words. Only on
-   the focused tile — a resting tile is a fraction of a row tall, so it carries
-   the name, the role and the figures and nothing else. */
+/* The deeper description paragraphs: what the module is for, in its own words.
+   Only on the focused tile — a resting tile is a fraction of a row tall, so it
+   carries the name, version, stats box and role and nothing else. */
 .dg-mosaic-serves { color: var(--ink-mute); font-family: var(--font-mono); font-size: 0.72rem; line-height: 1.62; }
-
-/* The resting chips sit at the foot of the tile, so the field reads as rows of
-   equal-weight boxes sharing a chip baseline rather than text hanging in space. */
-.dg-mosaic-resting-stack { margin-top: auto; }
 
 /* The stated figures. They are printed on the cell rather than implied by its
    size, so the sizing is readable rather than felt — a reader can check that
    digiquant's box is bigger because its figure is bigger. Right-aligned inside
-   `.dg-mosaic-figures`, because that is the corner the reader compares down. */
+   `.dg-stats`, because that is the column the reader compares down. */
 .dg-loc {
   font-family: var(--font-mono);
   font-size: 0.6rem;
@@ -298,13 +326,6 @@ body {
   white-space: nowrap;
 }
 .dg-cell.on .dg-loc { color: var(--ink-soft); }
-
-/* The counts line wraps rather than clipping. Both halves of the head are
-   `nowrap`, and a narrow tile is narrower than "15 endpoints · 15 mcp tools", so
-   the line used to run off the tile's left edge and lose its first characters —
-   a stated figure, silently truncated. Wrapping costs a line of head only on the
-   tiles narrow enough to need it. */
-.dg-counts { white-space: normal; }
 
 /* The flex-grow resize is the whole point of the mosaic, so the one place it
    must not run is where motion is unwanted: focus then lands on the final

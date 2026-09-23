@@ -12,8 +12,8 @@ import {
 } from "@digithings/ui";
 import { Button } from "@digithings/ui/ui";
 import { writeHandoff } from "@/lib/chatHandoff";
-import { moduleActivity, moduleLines } from "@/lib/repoActivity";
-import { moduleCountLabel, moduleCounts } from "@/lib/moduleCounts";
+import { grouped, moduleActivity, moduleLines } from "@/lib/repoActivity";
+import { moduleCountLabel, moduleCounts, moduleVersion } from "@/lib/moduleCounts";
 
 /**
  * The module mosaic (v15, #4429), and the page's `#architecture` anchor.
@@ -58,6 +58,15 @@ import { moduleCountLabel, moduleCounts } from "@/lib/moduleCounts";
  *   - both levels animate `flex-grow`, and a tile's width is `flex-grow` share x
  *     the row width, so the rows are flush by construction — the property v3
  *     needed a backtracking partition to reach.
+ *
+ * v5 gives the tile its facts and its own interactions. A tile used to route to
+ * `/chat` on click, which conflated "tell me about this module" with "open the
+ * assistant". The click now moves the scroll to that module's step — the same
+ * focus the scroll already drives, just addressed directly — and only the tile's
+ * "ask digichat" control navigates. The compose command became a copy control,
+ * and the three stated facts (lines of code, endpoints, MCP tools) and the
+ * declared version moved out of the corner into a fixed box under the name, so
+ * every tile states the same three things in the same order.
  */
 
 const ordered = [...modules].sort((a, b) => a.graphOrder - b.graphOrder);
@@ -199,7 +208,7 @@ function solveRowGrow(focus: number): number[] {
 function factsLine(m: ModuleNode): string {
   const lines = moduleLines(m.id);
   const counts = moduleCountLabel(m.id);
-  return [lines === null ? "roadmap" : `${lines.toLocaleString("en-US")} lines`, counts]
+  return [lines === null ? "roadmap" : `${grouped(lines)} lines`, counts]
     .filter(Boolean)
     .join("  ·  ");
 }
@@ -224,12 +233,82 @@ function ask(id: string | null) {
   window.location.href = "/chat";
 }
 
+/**
+ * Move the page so `index` is the step the scrolly pin is showing.
+ *
+ * `useScrollyFeatures` maps window scroll across the track's `start start` ..
+ * `end end` span onto the slides, so the inverse is exact: the centre of step
+ * `index` sits at `(index + 0.5) / count` of that span. Scrolling there — not
+ * routing — is what makes a tile click mean "focus this module": `activeIndex`
+ * follows the scroll and the tile grows as if the reader had scrolled to it. The
+ * half-step lands mid-dwell, so the active index is unambiguous at both edges.
+ *
+ * Module scope and pure in `(element, index)` — it reads no render state — for
+ * the same reason `ask` is: it must stay off the `react-hooks/immutability` rule.
+ */
+function focusModule(track: HTMLElement | null, index: number) {
+  if (!track) return;
+  const top = track.getBoundingClientRect().top + window.scrollY;
+  const span = Math.max(track.offsetHeight - window.innerHeight, 1);
+  const target = top + ((index + 0.5) / ordered.length) * span;
+  window.scrollTo({ top: Math.max(target, 0), behavior: "smooth" });
+}
+
+/**
+ * Copy text, preferring the async Clipboard API and falling back to a hidden
+ * textarea + `execCommand` where it is absent (an insecure context, a browser
+ * without the API, or a permission the page does not hold). Resolves to whether
+ * the copy happened, so the caller only flips to "copied" when it truly did — a
+ * refused copy must not claim success — and never throws.
+ */
+async function copyText(text: string): Promise<boolean> {
+  const clipboard = typeof navigator === "undefined" ? undefined : navigator.clipboard;
+  if (clipboard?.writeText) {
+    try {
+      await clipboard.writeText(text);
+      return true;
+    } catch {
+      /* fall through to the textarea path */
+    }
+  }
+  try {
+    const el = document.createElement("textarea");
+    el.value = text;
+    el.setAttribute("readonly", "");
+    el.style.position = "fixed";
+    el.style.top = "-9999px";
+    document.body.appendChild(el);
+    el.select();
+    const ok = document.execCommand("copy");
+    document.body.removeChild(el);
+    return ok;
+  } catch {
+    return false;
+  }
+}
+
 export function ModuleGrid() {
   const trackRef = useRef<HTMLDivElement>(null);
   const { activeIndex, stepper } = useScrollyFeatures(trackRef, { slideCount: ordered.length });
   const [sel, setSel] = useState<string | null>(null);
+  const [copiedId, setCopiedId] = useState<string | null>(null);
+  const copyTimer = useRef<number | null>(null);
+
+  const copyCommand = (id: string, cmd: string) => {
+    void copyText(cmd).then((ok) => {
+      if (!ok) return;
+      setCopiedId(id);
+      if (copyTimer.current !== null) window.clearTimeout(copyTimer.current);
+      copyTimer.current = window.setTimeout(() => setCopiedId(null), 1400);
+    });
+  };
 
   if (stepper) {
+    /* The narrow / reduced-motion face of the same mosaic. Its rows focus
+       (select) a module — they never route — and only the footer's ask control
+       leaves the page, matching the pinned mosaic: a row click means "show me
+       this module", not "open the chat". The typed output panel is the focus,
+       since there is no pinned scroll here to grow a tile. */
     const rows: TerminalManifestRow[] = ordered.map((m) => ({
       id: m.id,
       name: m.id,
@@ -291,67 +370,119 @@ export function ModuleGrid() {
                   const on = i === focus;
                   const lines = moduleLines(m.id);
                   const counts = moduleCounts(m.id);
+                  const version = moduleVersion(m.id);
+                  const dockerCmd = m.dockerCmd;
+                  const copied = copiedId === m.id;
                   return (
-                    <button
+                    <div
                       key={m.id}
-                      type="button"
                       role="listitem"
                       className={`dg-cell${on ? " on" : ""}`}
                       style={{ flexGrow: tileGrow[i] } as React.CSSProperties}
                       aria-current={on ? "true" : undefined}
-                      aria-label={`${m.id} — ${m.role}, ${factsLine(m)}`}
-                      onClick={() => ask(m.id)}
                     >
-                      <span className="dg-mosaic-head">
-                        <span className="dg-mosaic-name">
-                          <span className="text-ink-mute">digi</span>
-                          {m.id.replace(/^digi/, "")}
-                        </span>
-                        <span className="dg-mosaic-figures">
-                          <span className="dg-loc">
-                            {lines === null ? "roadmap" : `${lines.toLocaleString("en-US")} lines`}
+                      {/* The whole tile is the focus target, but the focused
+                          tile also owns real controls (copy the compose command,
+                          ask digichat). A <button> cannot contain another
+                          button, so the focus action is a transparent overlay
+                          *under* the body rather than the body's parent; the
+                          body re-enables pointer events only on its own
+                          controls, so every other click falls through to the
+                          overlay. Keyboard reach survives: the overlay is the
+                          tile's first tab stop, the controls follow. */}
+                      <button
+                        type="button"
+                        className="dg-cell-focus"
+                        aria-label={`Focus ${m.id} — ${m.role}, ${factsLine(m)}`}
+                        onClick={() => focusModule(trackRef.current, i)}
+                      />
+                      <div className="dg-cell-body">
+                        <span className="dg-mosaic-head">
+                          <span className="dg-mosaic-name">
+                            <span className="text-ink-mute">digi</span>
+                            {m.id.replace(/^digi/, "")}
                           </span>
-                          {counts.endpoints === null && counts.mcpTools === null ? null : (
-                            <span className="dg-loc dg-counts">
-                              {counts.endpoints !== null ? `${counts.endpoints} endpoints` : null}
-                              {counts.endpoints !== null && counts.mcpTools !== null ? " · " : null}
-                              {counts.mcpTools !== null ? `${counts.mcpTools} mcp tools` : null}
-                            </span>
-                          )}
+                          {/* The declared version, top-right. Roadmap modules
+                              declare none, so they read "roadmap" rather than a
+                              fabricated 0.0.0 — same honesty rule as the counts. */}
+                          <span className="dg-loc dg-mosaic-version">
+                            {version === null ? "roadmap" : `v${version}`}
+                          </span>
                         </span>
-                      </span>
-                      <span className="dg-mosaic-role">{m.role}</span>
 
-                      {on ? (
-                        <span className="dg-mosaic-detail">
-                          <span className="dg-mosaic-tag">{m.tagline}</span>
-                          {/* The first summary paragraph, which is the one that says
-                              what the module is for. The tile that is not focused is
-                              too short to hold it, so it is a focused-tile fact. */}
-                          <span className="dg-mosaic-serves">{m.summary[0]}</span>
-                          {/* The whole stack while focused — the owner's "all the
-                              packages used". Icon-only while resting, because a
-                              resting tile is one row-share tall. */}
-                          <StackRow items={m.stack} className="stack-row" />
-                          <span className="dg-mosaic-foot">
-                            {m.dockerCmd ? (
-                              <span className="dg-docker">
-                                <span className="prompt">$</span> {m.dockerCmd}
-                              </span>
-                            ) : null}
-                            <span className="dg-mosaic-ask">
-                              ask <span className="text-ink">digi</span>
-                              <span className="text-accent">chat</span> →
+                        {/* The three stated facts, stacked under the name in
+                            every tile. A module with no value reads "roadmap" or
+                            an em dash, never a fabricated zero: null is "does
+                            not expose this", not "exposes nothing". */}
+                        <span className="dg-stats">
+                          <span className="dg-stat">
+                            <span className="dg-loc">lines of code</span>
+                            <span className="dg-loc dg-stat-v">
+                              {lines === null ? "roadmap" : grouped(lines)}
+                            </span>
+                          </span>
+                          <span className="dg-stat">
+                            <span className="dg-loc">endpoints</span>
+                            <span className="dg-loc dg-stat-v">
+                              {counts.endpoints === null ? "—" : counts.endpoints}
+                            </span>
+                          </span>
+                          <span className="dg-stat">
+                            <span className="dg-loc">mcp tools</span>
+                            <span className="dg-loc dg-stat-v">
+                              {counts.mcpTools === null ? "—" : counts.mcpTools}
                             </span>
                           </span>
                         </span>
-                      ) : (
-                        <StackRow
-                          items={m.stack.slice(0, 4)}
-                          className="stack-row compact dg-mosaic-resting-stack"
-                        />
-                      )}
-                    </button>
+
+                        {/* (d) the short summary in a few words. */}
+                        <span className="dg-mosaic-role">{m.role}</span>
+
+                        {on ? (
+                          <span className="dg-mosaic-detail">
+                            {/* (e) the deeper description: the tagline sentence,
+                                then every summary paragraph. A resting tile is a
+                                fraction of a row tall, so this whole block is a
+                                focused-tile fact — the name, version, stats box
+                                and role are the resting tile's content. */}
+                            <span className="dg-mosaic-tag">{m.tagline}</span>
+                            {m.summary.map((para, k) => (
+                              <span key={k} className="dg-mosaic-serves">
+                                {para}
+                              </span>
+                            ))}
+                            {/* (f) the packages used. */}
+                            <StackRow items={m.stack} className="stack-row compact" />
+                            <span className="dg-mosaic-foot">
+                              {/* (g) the compose command, click-to-copy. */}
+                              {dockerCmd ? (
+                                <button
+                                  type="button"
+                                  className={`dg-docker${copied ? " is-copied" : ""}`}
+                                  aria-label={copied ? "Copied" : `Copy command: ${dockerCmd}`}
+                                  onClick={() => copyCommand(m.id, dockerCmd)}
+                                >
+                                  <span className="prompt" aria-hidden="true">
+                                    {copied ? "✓" : "$"}
+                                  </span>{" "}
+                                  {copied ? "copied" : dockerCmd}
+                                </button>
+                              ) : null}
+                              {/* (h) the one control that may navigate. */}
+                              <button
+                                type="button"
+                                className="dg-mosaic-ask"
+                                aria-label={`Ask digichat about ${m.id}`}
+                                onClick={() => ask(m.id)}
+                              >
+                                ask <span className="text-ink">digi</span>
+                                <span className="text-accent">chat</span> →
+                              </button>
+                            </span>
+                          </span>
+                        ) : null}
+                      </div>
+                    </div>
                   );
                 })}
               </div>
