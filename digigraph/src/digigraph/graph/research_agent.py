@@ -300,7 +300,7 @@ def run_research_agent(
         {"role": "user", "content": content_parts},
     ]
 
-    def traced_execute_tool(name: str, arguments: dict[str, Any]) -> str:
+    def traced_execute_tool(name: str, arguments: dict[str, Any]) -> str | dict[str, Any]:
         assert execute_tool is not None
         started = time.perf_counter()
         try:
@@ -315,11 +315,20 @@ def run_research_agent(
                 operation=schema_name,
             )
             raise
+        # Some dispatchers answer a failed upstream call with a string instead of
+        # raising (the digifetch family, by contract). They may mark that honestly
+        # with ``ok`` on a dict result (#4556); the model still only reads the
+        # ``content`` key (see digillm's tool-result handling). An ``ok``-less dict
+        # or a bare string means the call itself succeeded.
+        ok = True
+        if isinstance(result, dict) and "ok" in result:
+            ok = bool(result["ok"])
         _usage.record_tool_call(
             name=name,
             arguments=arguments,
             result=result,
             duration_ms=round((time.perf_counter() - started) * 1000),
+            ok=ok,
             phase=phase_slug,
             operation=schema_name,
         )
@@ -369,6 +378,12 @@ def run_research_agent(
                             execute_tool=traced_execute_tool,
                             temperature=temperature,
                             max_tool_rounds=max_tool_rounds if max_tool_rounds is not None else 5,
+                            # #4556: enforce the output schema on the loop's forced tool-free
+                            # wrap-up. The tool turns cannot carry ``response_format`` (tools and
+                            # json_schema are mutually exclusive), so without this the cheap model
+                            # could answer the wrap-up in prose or return an empty body — what
+                            # forced the ungrounded tool-free retry below.
+                            final_response_format=response_format,
                         )
                         parent_call_id = call.last_call_id
                 else:
