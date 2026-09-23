@@ -218,6 +218,124 @@ def read_archived_document(
         return None
 
 
+def _pointer_identity(source_key: dict[str, Any]) -> str:
+    """Canonical identity for an ``archive_objects.source_key`` object.
+
+    A pointer is addressed by the JSON object stored in ``source_key``. A batch
+    read has to match the rows PostgREST returns back to the keys it asked for,
+    and the row's own object is the only thing both sides share. Sorting plus a
+    fixed separator makes the identity independent of key order.
+    """
+    normalised = {str(col): _jsonable(val) for col, val in source_key.items()}
+    return json.dumps(normalised, sort_keys=True, separators=(",", ":"))
+
+
+def _decode_pointer(store: StorageBackend, row: dict[str, Any]) -> bytes:
+    """R2 GET -> sha256 verify -> decompress for one pointer row."""
+    blob = store.get(row["r2_key"])
+    if hashlib.sha256(blob).hexdigest() != row["sha256"]:
+        raise ArchiveVerifyError(f"stored object corrupted: {row['r2_key']}")
+    return decompress_payload(blob)
+
+
+def resolve_payloads(
+    client: Any, store: StorageBackend, source_table: str, source_keys: list[dict[str, Any]]
+) -> dict[str, bytes]:
+    """Batched :func:`resolve_payload`: one pointer query for many source keys.
+
+    Returns ``{_pointer_identity(source_key): decompressed bytes}`` for the
+    pointers that resolved. A pointer that is absent, whose object is missing
+    from the bucket, or whose bytes fail verification is left out of the map
+    rather than raised -- one bad version must not sink the batch, which is the
+    same degradation :func:`read_archived_document` applies per row.
+
+    The saving is round-trips: hydrating a page of NULL-payload ``documents``
+    rows used to cost one ``archive_objects`` select per row (#4562).
+    """
+    if not source_keys:
+        return {}
+    keys_by_column: dict[str, set[Any]] = {}
+    for source_key in source_keys:
+        for col, val in source_key.items():
+            keys_by_column.setdefault(str(col), set()).add(val)
+    if not keys_by_column:
+        return {}
+    query = client.table("archive_objects").select("*").eq("source_table", source_table)
+    for col, values in keys_by_column.items():
+        query = query.in_(f"source_key->>{col}", sorted(values, key=str))
+    rows = query.execute().data or []
+    wanted = {_pointer_identity(source_key) for source_key in source_keys}
+    resolved: dict[str, bytes] = {}
+    for row in rows:
+        source_key = row.get("source_key")
+        if not isinstance(source_key, dict):
+            continue
+        identity = _pointer_identity(source_key)
+        if identity not in wanted or identity in resolved:
+            continue
+        try:
+            resolved[identity] = _decode_pointer(store, row)
+        except ArchiveVerifyError:
+            logger.warning(
+                "archived object %s failed verification; treating as missing", row.get("r2_key")
+            )
+        except Exception:  # one bad pointer must not sink the batch
+            logger.warning(
+                "archived object %s read-through failed; treating as missing", row.get("r2_key")
+            )
+    return resolved
+
+
+def read_archived_documents(
+    client: Any,
+    store: StorageBackend | None,
+    *,
+    workspace_id: str,
+    keys: list[tuple[str, str]],
+) -> dict[tuple[str, str], Any]:
+    """Batched :func:`read_archived_document`: one pointer query for many versions.
+
+    ``keys`` are ``(document_key, date_str)`` pairs. Returns the decoded JSON
+    payload for each pair that resolved; every failure mode degrades to an
+    absent entry exactly as :func:`read_archived_document` degrades to ``None``
+    -- the daily graph must never hard-fail on an archived prior.
+    """
+    if not keys:
+        return {}
+    backend = maybe_archive_store(store)
+    if backend is None:
+        logger.warning(
+            "archive read-through disabled (no R2 backend); %d archived document(s) "
+            "need hydration but cannot be read -- treating as missing",
+            len(keys),
+        )
+        return {}
+    unique = list(dict.fromkeys(keys))
+    source_keys = [
+        {"workspace_id": str(workspace_id), "document_key": document_key, "date": date_str}
+        for document_key, date_str in unique
+    ]
+    pairs_by_identity = {
+        _pointer_identity(source_key): pair
+        for pair, source_key in zip(unique, source_keys, strict=True)
+    }
+    out: dict[tuple[str, str], Any] = {}
+    for identity, raw in resolve_payloads(client, backend, "documents", source_keys).items():
+        pair = pairs_by_identity.get(identity)
+        if pair is None:
+            continue
+        try:
+            out[pair] = json.loads(raw)
+        except (ValueError, UnicodeDecodeError):
+            logger.warning(
+                "archived document %s/%s/%s is not valid JSON; treating as missing",
+                workspace_id,
+                pair[1],
+                pair[0],
+            )
+    return out
+
+
 class StorageBackend(Protocol):
     """Object-store surface the archiver needs (R2, or a fake in tests)."""
 
@@ -857,9 +975,11 @@ __all__ = [
     "parse_postgrest_bytea",
     "previous_threads",
     "read_archived_document",
+    "read_archived_documents",
     "reconcile_ledger",
     "record_pointer",
     "resolve_payload",
+    "resolve_payloads",
     "restore_thread",
     "threads_older_than",
 ]

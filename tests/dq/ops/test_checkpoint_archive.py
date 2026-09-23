@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import hashlib
+import json
 import logging
 from dataclasses import dataclass, field
 from typing import Any
@@ -28,8 +30,10 @@ from digiquant.ops.checkpoint_archive import (  # noqa: E402
     parse_postgrest_bytea,
     previous_threads,
     read_archived_document,
+    read_archived_documents,
     reconcile_ledger,
     resolve_payload,
+    resolve_payloads,
     restore_thread,
     threads_older_than,
 )
@@ -49,6 +53,7 @@ class _Query:
     table_name: str
     store: dict[str, list[dict[str, Any]]]
     _filters: list[tuple[str, Any]] = field(default_factory=list)
+    _in_filters: list[tuple[str, tuple[Any, ...]]] = field(default_factory=list)
     _pending_update: dict[str, Any] | None = None
     _pending_delete: bool = False
     _order_cols: list[str] = field(default_factory=list)
@@ -82,6 +87,10 @@ class _Query:
         self._filters.append((col, val))
         return self
 
+    def in_(self, col: str, values: list[Any]) -> "_Query":
+        self._in_filters.append((col, tuple(values)))
+        return self
+
     def insert(self, row: dict[str, Any]) -> "_Query":
         if self.fail:
             raise RuntimeError(f"injected failure on {self.table_name}")
@@ -104,6 +113,15 @@ class _Query:
                     if row["source_key"].get(sub) != val:
                         return False
                 elif row.get(col) != val:
+                    return False
+            for col, values in self._in_filters:
+                if col.startswith("source_key->>"):
+                    sub = col.split("->>", 1)[1]
+                    if not isinstance(row.get("source_key"), dict):
+                        return False
+                    if row["source_key"].get(sub) not in values:
+                        return False
+                elif row.get(col) not in values:
                     return False
             return True
 
@@ -1133,6 +1151,110 @@ class TestReadArchivedDocumentSoftFailures:
                 "documents",
                 {"workspace_id": "house", "document_key": "thesis", "date": "2026-09-07"},
             )
+
+
+class TestBatchedArchiveReads:
+    """#4562: one ``archive_objects`` select per page, not one per version."""
+
+    @staticmethod
+    def _seed(store: FakeStore, client: FakeClient, *pairs: tuple[str, str]) -> None:
+        for document_key, date_str in pairs:
+            raw = json.dumps({"document_key": document_key, "date": date_str}).encode()
+            blob = compress_payload(raw)
+            r2_key = f"documents/house/{date_str}/{document_key}.zst"
+            store.put(r2_key, blob)
+            client.store.setdefault("archive_objects", []).append(
+                _document_pointer(
+                    source_key={
+                        "workspace_id": "house",
+                        "document_key": document_key,
+                        "date": date_str,
+                    },
+                    r2_key=r2_key,
+                    sha256=hashlib.sha256(blob).hexdigest(),
+                )
+            )
+
+    def test_resolve_payloads_batches_one_query(self) -> None:
+        client = FakeClient()
+        store = FakeStore()
+        pairs = [("thesis", "2026-09-07"), ("thesis", "2026-09-14"), ("macro", "2026-09-14")]
+        self._seed(store, client, *pairs)
+        client.log.clear()
+        source_keys = [
+            {"workspace_id": "house", "document_key": key, "date": date_str}
+            for key, date_str in pairs
+        ]
+        resolved = resolve_payloads(client, store, "documents", source_keys)
+        assert len(resolved) == 3
+        assert sorted(json.loads(blob)["document_key"] for blob in resolved.values()) == [
+            "macro",
+            "thesis",
+            "thesis",
+        ]
+        pointer_queries = [
+            entry for entry in client.log if ("source_table", "documents") in entry[1]
+        ]
+        assert len(pointer_queries) == 1
+
+    def test_resolve_payloads_skips_unresolvable(self) -> None:
+        client = FakeClient()
+        store = FakeStore()
+        self._seed(store, client, ("thesis", "2026-09-07"))
+        # A pointer whose recorded sha256 does not match the stored bytes.
+        raw = json.dumps({"document_key": "corrupt", "date": "2026-09-07"}).encode()
+        corrupt_key = "documents/house/2026-09-07/corrupt.zst"
+        store.put(corrupt_key, compress_payload(raw))
+        client.store["archive_objects"].append(
+            _document_pointer(
+                source_key={
+                    "workspace_id": "house",
+                    "document_key": "corrupt",
+                    "date": "2026-09-07",
+                },
+                r2_key=corrupt_key,
+                sha256="f" * 64,
+            )
+        )
+        resolved = resolve_payloads(
+            client,
+            store,
+            "documents",
+            [
+                {"workspace_id": "house", "document_key": "thesis", "date": "2026-09-07"},
+                {"workspace_id": "house", "document_key": "corrupt", "date": "2026-09-07"},
+                {"workspace_id": "house", "document_key": "absent", "date": "2026-09-07"},
+            ],
+        )
+        assert len(resolved) == 1
+        assert json.loads(next(iter(resolved.values())))["document_key"] == "thesis"
+
+    def test_read_archived_documents_round_trip(self) -> None:
+        client = FakeClient()
+        store = FakeStore()
+        self._seed(store, client, ("thesis", "2026-09-07"), ("macro", "2026-09-14"))
+        out = read_archived_documents(
+            client,
+            store,
+            workspace_id="house",
+            keys=[("thesis", "2026-09-07"), ("macro", "2026-09-14"), ("absent", "2026-09-14")],
+        )
+        assert out == {
+            ("thesis", "2026-09-07"): {"document_key": "thesis", "date": "2026-09-07"},
+            ("macro", "2026-09-14"): {"document_key": "macro", "date": "2026-09-14"},
+        }
+
+    def test_read_archived_documents_no_backend_warns_and_returns_empty(
+        self, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        for var in ("R2_ACCOUNT_ID", "R2_BUCKET", "R2_ACCESS_KEY_ID", "R2_SECRET_ACCESS_KEY"):
+            monkeypatch.delenv(var, raising=False)
+        with caplog.at_level(logging.WARNING, logger="digiquant.ops.checkpoint_archive"):
+            out = read_archived_documents(
+                FakeClient(), None, workspace_id="house", keys=[("thesis", "2026-09-07")]
+            )
+        assert out == {}
+        assert "read-through disabled" in caplog.text
 
 
 class TestStablePagination:

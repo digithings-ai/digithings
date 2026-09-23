@@ -32,7 +32,7 @@ from digiquant.dashboard.research_retrieval.cache import ResearchCache, _parse_r
 from digiquant.dashboard.research_retrieval.context import ContextItemKind, ContextManifest
 from digiquant.dashboard.research_retrieval.store import LoadedResearchState
 from digiquant.dashboard.tenancy import house_workspace_id
-from digiquant.ops.checkpoint_archive import read_archived_document
+from digiquant.ops.checkpoint_archive import read_archived_document, read_archived_documents
 from digiquant.research.decision_log import fetch_recent_lessons
 from digiquant.research.supabase_io import SupabaseClient
 from digiquant.supabase_retry import run_with_supabase_retry
@@ -192,6 +192,43 @@ def _hydrate_archived_row(
     if payload is None:
         return row
     return {**row, "payload": payload}
+
+
+def _hydrate_archived_rows(
+    client: SupabaseClient,
+    rows: list[dict[str, Any]],
+    *,
+    store: Any | None,
+) -> list[dict[str, Any]]:
+    """Read a whole page of NULL-payload rows in ONE archive query (#4562).
+
+    ``search_research`` returns up to 500 rows, and every NULL-payload row on
+    the page used to cost its own ``archive_objects`` select -- ~1 s each in
+    production, so a 7-version history walked sequentially. Collect the page's
+    ``(document_key, date)`` pairs, resolve them in one round-trip, and merge
+    the payloads back in. A row that does not resolve keeps its NULL payload,
+    which is the same degradation as the single-row helper.
+    """
+    pending: list[tuple[str, str]] = []
+    for row in rows:
+        if row.get("payload") is not None or not row.get("document_key") or not row.get("date"):
+            continue
+        pending.append((str(row["document_key"]), str(row["date"])))
+    if not pending:
+        return rows
+    payloads = read_archived_documents(
+        client, store, workspace_id=str(house_workspace_id()), keys=pending
+    )
+    if not payloads:
+        return rows
+    out: list[dict[str, Any]] = []
+    for row in rows:
+        if row.get("payload") is not None or not row.get("document_key") or not row.get("date"):
+            out.append(row)
+            continue
+        payload = payloads.get((str(row["document_key"]), str(row["date"])))
+        out.append({**row, "payload": payload} if payload is not None else row)
+    return out
 
 
 def _query_documents_row(
@@ -611,15 +648,17 @@ def _postprocess_search_rows(
             key = str(row.get("document_key") or "")
             if not research_document_allowed(retrieval_phase, key):
                 continue
-            row = _hydrate_archived_row(client, row, store=store)
         elif dataset == "daily_snapshots":
             # The snapshot IS the digest payload, so the same phase gate that
             # blinds ``documents/digest`` must apply here too.
             if not research_document_allowed(retrieval_phase, DIGEST_DOCUMENT_KEY):
                 continue
-        if dataset in {"documents", "daily_snapshots"} and not full_content:
-            row = _preview_row(row)
         out.append(row)
+    if dataset == "documents":
+        # Blinded keys are dropped above, so only visible rows are ever fetched.
+        out = _hydrate_archived_rows(client, out, store=store)
+    if dataset in {"documents", "daily_snapshots"} and not full_content:
+        out = [_preview_row(row) for row in out]
     return out
 
 
