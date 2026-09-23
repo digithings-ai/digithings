@@ -1,40 +1,68 @@
 {
   "schemaVersion": 1,
-  "pageVersion": "sha256:34319ba1893c7984bef88e9228cb7159aef52f338ca237def113c7c1112951f7",
+  "pageVersion": "sha256:722561e1a161671f49ca06e390a226a2f9be3016060ef85aa365009b37772362",
   "claims": [
     {
       "id": "claim_c305def821d044c4a2ac07f098d86b14",
-      "statement": "The portfolio sub-graph runs H1-H9 thesis-to-allocation phases via build_portfolio_phases_thesis, with H7 emitting a direction memo without weights, H8 sizing, and H9 as the commit terminal.",
+      "statement": "The portfolio sub-graph runs H1-H9 thesis-to-allocation phases via build_portfolio_phases_thesis, with H7 emitting a PMDirectionMemo without weights, H8 sizing via size_portfolio as the sole weight owner, and H9 commit_run as the terminal.",
       "evidence": [
         {
-          "resource": "repo://digiquant/src/digiquant/portfolio/docs/PORTFOLIO_SUBGRAPH.md#L1-L40",
-          "version": "repo-lines-v1:sha256:9ea846596c6efa7c3047f654df2379658b4179e6c84b17b6722d8acfc7c64a89:eyJzZWxlY3RlZExpbmVDb3VudCI6NDAsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjEzZjI0ZTc4M2YwZWMxODEwNzY5NWY2NGU5Mzg5ZGZhZTlmNDI5YjAxOWVjOGNiNmMyMWI4ZjZkOGIwNmFjZWUiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjE1YTdkMDNmMDhkNmQxYjlkZmRiNDVmZThiZjA5NTg2YTJhYjRjMDA4OGMwMzM0YjY5MWI0M2ZjMGFkOWYwNzgiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjowLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjliNGI0NGE2OGQ5MGZmMWJhNjY1Yzc3MmEyYjk0NDJkY2Y2MWQ5MzQ1MDE4YTI4NGM3ZWNhZDM5MDA1MDFlMDYifQ"
+          "resource": "repo://digiquant/src/digiquant/portfolio/graph.py#L106-L141",
+          "version": "repo-lines-v1:sha256:4964a94de469bdf5b467c7b8d18860ed4d12c76181df8dfb0a90021c2cd89696:eyJzZWxlY3RlZExpbmVDb3VudCI6MzYsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjdlMzEwOTFiNGRlN2NmYTg0NzRiYWMwZjkxZGE1Mzg5YjMzNTQ2MGJhNTM3MDI0NzdiZWE3NGQ0ZGQwZDliNDAiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjViMjZiMTI4ZjNkNDk5NzE4NmI2ODA2NDM0ZTQ0NTZmYjBjMjE4NjVkYzMwMTNiN2ZmNzI0M2I1YzZkYTA1ZmUiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjM2NjcwZjY2NTVjNDdhOTkxODc0ZjE0NmY0M2FiMzU0NWUxN2E3M2E3MTQyYzc3MzZkYjg3MTZkMDY2ZDkwOTEiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjdlNGExNzFiMTg1ZTNmMjFlODU2NWMxZTE5MDVjYjYzZjY5MDgzNDQ0Zjk2OTFiYTdjYWQ1NmUxY2M1ZTVlNDAifQ"
+        },
+        {
+          "resource": "repo://digiquant/src/digiquant/portfolio/phases/commit.py#L1-L55",
+          "version": "repo-lines-v1:sha256:d863fea5e3663d78840b42d1b9f2cfb2062f874c5ff513e9155664e309c0c252:eyJzZWxlY3RlZExpbmVDb3VudCI6NTUsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjlmOTNlODMwNGZjMTE0MDkxZDQyZWI2ZjExOTFkMTM3YzE2N2ZiZjQ1Nzc5NDA5YTUwNmRhYjhkOGY5YjM1MDUiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjdmYjgxOWI4MmUwZmNhZGM2OTdmOGZmMzcxNWZlNWY1MzJjYmE5ZTQwZjhjODdlMzg5MjViOGUzNWNlNGU3NzAiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjowLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjUxZGNjZGU4MTQwNzEwNzQ3YTdiMWJmZThhZmYyNGM5ZTNhOTRmYjVlNDJjYjc4ZTExNTY2NjQ0NTk4MTRlMDUifQ"
+        },
+        {
+          "resource": "repo://digiquant/src/digiquant/portfolio/phases/direction.py#L1-L52",
+          "version": "repo-lines-v1:sha256:13e1b715156610af14523bb75f4d0afe401a9c44c279c365ee1d7e1053993d06:eyJzZWxlY3RlZExpbmVDb3VudCI6NTIsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjU3YWUwMGE2M2U5ZDFhNWYyOGNmZTdjZTYxNDZmMDczNThjNzlkNTBiMDg3MTU0ODc3M2NiNWVjMWMxNTIzY2QiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQ0YmM1ZWZmOGVkZDUzNTFiNDQzNjI2NzM2NzA5MDdkMDdiZTc4Zjg5NDliZDhkYWZhMDNhN2ZmM2JlMDczMDEiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjowLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImM3Yjg3OTZkMzkyZTVlYTA3MmY0YmE5NjNkNzgzZTEyZTM2MjU3N2YxZjE4YWMyNTJlNGE0ZTU2MjY4N2QyNGYifQ"
+        },
+        {
+          "resource": "repo://digiquant/src/digiquant/portfolio/phases/phase7e_risk_sizing.py#L1-L70",
+          "version": "repo-lines-v1:sha256:217d9b72ebfc5100001d612194b663c49132720b9be1d81654937c327f5d06a9:eyJzZWxlY3RlZExpbmVDb3VudCI6NzAsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQ2MTljYzA1ODZhZDdmZWFlYTc4YzY3NzU4ZmY3ODRhODNmNDAzNDhlMjZlY2VhZDY4YTNmMmRiYmNlN2JjYWYiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImEwNDE5Y2Q1ZDIyZDk0NDZjYWY2NTRkZTg4YmU1MTQwYzkxNzE1ZjcxOWFiOTMxZTM2OGZmYzBkN2JmZWNhNjkiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjowLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6Ijc0ZmNiN2U2ZDgwNTNhMzkyZjZhMDc1ZWQ4NTFmODA4ZWQxY2Q5OWQyNDY0YTU1NGQwM2Q4MzJkMWU3ODkwODUifQ"
         }
       ]
     },
     {
       "id": "claim_da8e4c9ecdc54f1b921c3867ed82a33d",
-      "statement": "Daily cadence is one graph with cost control via model tier plus per-artifact edit modes (skip/edit/full with prior resolution and stale-gap forcing), and attention plans stay shadow-only.",
+      "statement": "Daily cadence is one graph with cost control via DIGIQUANT_MODEL_TIER plus per-artifact edit modes (skip/edit/full resolved by resolve_edit_mode with prior resolution and stale-gap forcing via DIGIQUANT_STALE_FULL_DAYS default 7), and attention plans stay shadow-only (off/shadow, enforce absent).",
       "evidence": [
         {
-          "resource": "repo://digiquant/AGENTS.md#L90-L140",
-          "version": "repo-lines-v1:sha256:316d07c77e2a3b8e9d700550d015e919446c292c4179c16d278bda4750598432:eyJzZWxlY3RlZExpbmVDb3VudCI6NTEsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjAxYmE0NzE5YzgwYjZmZTkxMWIwOTFhN2MwNTEyNGI2NGVlZWNlOTY0ZTA5YzA1OGVmOGY5ODA1ZGFjYTU0NmIiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjAxYmE0NzE5YzgwYjZmZTkxMWIwOTFhN2MwNTEyNGI2NGVlZWNlOTY0ZTA5YzA1OGVmOGY5ODA1ZGFjYTU0NmIiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjU3Y2U5ZWQ0MTY0MjEwYzZjZWJjOWQxNGMzNzYzOTUwYTM2MjM2NGNkNDFmNjUyNjRlMjU5ODA0MGQ4ZTkwOWQiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6Ijk2ZGQzMjM0NzU2ODQ3MDg1ZmY3YWI5YWU2ZGJhZGVmMjkwNzU4NTgyZGZlZmJlM2YyMTBmZmZjNDA1YTU2N2IifQ"
+          "resource": "repo://digiquant/AGENTS.md#L98-L133",
+          "version": "repo-lines-v1:sha256:1e79d7c72e36ea63ebc98d504797ee88ab176b6787f42678da31786e836e2e9a:eyJzZWxlY3RlZExpbmVDb3VudCI6MzYsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjNmYjkyYmZjMzg0ZjU4MDhjZjJmMWVkNTFlMTk4MjU3OWU5ZjZkOTIyOTExODdkZDU3Y2Q1YTFlYWJmYzM2YzIiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjAxYmE0NzE5YzgwYjZmZTkxMWIwOTFhN2MwNTEyNGI2NGVlZWNlOTY0ZTA5YzA1OGVmOGY5ODA1ZGFjYTU0NmIiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjAwMWYyZWMxNzU5M2MxMDU0ZWI0NjM2N2Q4NDUzZWYyNGExNzNjZTk2YjcxMTdkOTFmOWE2OGQ0NGZlZjhiMDEiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImZlZWQ3MzZiMjM0NmRhYzcyNTM3OGUwNDc3MjQ4MWYxYjIwMTk2YzMyMjQwMjY0MTkzMmNmNzRiYTdiMGJhYzYifQ"
+        },
+        {
+          "resource": "repo://digiquant/src/digiquant/dashboard/attention_plan.py#L1-L79",
+          "version": "repo-lines-v1:sha256:d172cafb86c2d050759e88fd5764abc9572b696c4f3cebb4b253b438386e7e3e:eyJzZWxlY3RlZExpbmVDb3VudCI6NzksImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImY2MzNhYjk3M2Y1NTg3NGUwNTc0ZGFjNGQ0ZTM5ZTVhY2JjYjI2N2Q4ZWJjMzI1MzVhNzRlMTJkYjM4MGQ0YmMiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjMwYzFmMTg4ZjE0MmVkN2E4MjQ2ODBiMjA3MTcyYzU1MTliYzYxNGE0OGZkYTdjZjE2N2VkYjhkZGY3OTk1NmMiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjowLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjZlZjBkNWZlNzAzZTFkOWM4ZWEyYWVlMjkyYzdjYmRhODVhNmYxMTc3NWNjNDQwNWZkYTRlMzdkMjAyYzA3YTUifQ"
+        },
+        {
+          "resource": "repo://digiquant/src/digiquant/dashboard/edit_mode/config.py#L1-L20",
+          "version": "repo-lines-v1:sha256:bbd996be4a1f3dc21d5d71fffe7f1d660b742d0b756d1da1bf99b2b871a541af:eyJzZWxlY3RlZExpbmVDb3VudCI6MjAsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjcxYzlmMmIzNWQ5NGI1ZDEwZWQ3YWZkODBmNzEwMTAyMTYxM2RhMTRkMzU2NzIzZmFiZjI3YTgxOTNhMWIxMGUiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImM5NGIzMzM1MTVmMjM4NjY2YmI5OGI5ZDRlM2E4MmI0Y2Y3NmE5MzhhNzg4ZGEwNGRkMjM4MjQyMjQ3N2UwYTEiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjowLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjowLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUifQ"
+        },
+        {
+          "resource": "repo://digiquant/src/digiquant/dashboard/edit_mode/resolve.py#L12-L46",
+          "version": "repo-lines-v1:sha256:5b11755d46242948e95a37e7cbfbe48c9a025342095ecc7e35e103e3bc05dd3f:eyJzZWxlY3RlZExpbmVDb3VudCI6MzUsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImM3YWVjOTIxN2FlZWZhOGNhNmU1MjY5ZWRmZTJmYmNhNTM2M2Q1NzBjMzExZWNjOWY5YTM5YTFmZTMxZjQyOGQiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImQxNGRjYTU0MGZiYmJhZDRkNWIyYjM1MTQ3NDdkYjk2ODA2ZWZmNGE2ZGNmNGUzYmY5NWI3NDBlM2M0MjJmOGMiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImI4ODdmNjNkOWYxNmUwZTE3NDgwZTkxNzE1MzE3ZTA1Yzg0ZWVkYzAxMWQ3ODRhNjJhZTgxMjA4ZTk0MzVmZWMiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjowLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUifQ"
         }
       ]
     },
     {
       "id": "claim_f0bd13e705144048bc36b13d1ea99924",
-      "statement": "Group A book reads and writes pin workspace_id with house as the omitted default, mirrored dashboard-side by houseBook().",
+      "statement": "Group A book reads and writes pin workspace_id; omitted/None means house via resolved_workspace_id/house_workspace_id, queries filter through eq_house_workspace, and the dashboard mirrors this server-side through houseBook().",
       "evidence": [
         {
-          "resource": "repo://digiquant/AGENTS.md#L30-L60",
-          "version": "repo-lines-v1:sha256:30e499184003d8df152ed4a000b739844971bdb80224737b017e9145a6e1e230:eyJzZWxlY3RlZExpbmVDb3VudCI6MzEsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImQ1ODJiOTE5MjQ2YjVhYzExNzcyYmZjZDY3YjY3OTNlYzQ4NzE2Zjk3ODY2YTdmM2Q5NTJlYThjNzcyOTk4MjYiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjY5ZTIzNjZjOGY5NmVkNzk2ZDc5MjY0YWU1ZDdmNmViYWI0M2RhMDc0ODFjODU1OTIyYzY2YjUwODAyNjc1ZmYiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImUwODY0NWRiNjJiZmIyZTExMjE5MThmMzAzZjZhODliZjMzNThlOTVlMWUxMTQ3MzFmZjNmZTA5MGYzYjhjZTMiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjBkNzgwMDcwNzRhNDVlYjBlYWY5OWYyMzI1ZjYwMjViOGJkM2EzMDZkNjY4ZWNmNWFmZjY0Y2RkNDg0MDEwNmQifQ"
+          "resource": "repo://digiquant/AGENTS.md#L34-L34",
+          "version": "repo-lines-v1:sha256:556d9c332f4917a50cfd973c823902fb22a726961bebf6557ec0f999c2e3a826:eyJzZWxlY3RlZExpbmVDb3VudCI6MSwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiNTU2ZDljMzMyZjQ5MTdhNTBjZmQ5NzNjODIzOTAyZmIyMmE3MjY5NjFiZWJmNjU1N2VjMGY5OTljMmUzYTgyNiIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiNTU2ZDljMzMyZjQ5MTdhNTBjZmQ5NzNjODIzOTAyZmIyMmE3MjY5NjFiZWJmNjU1N2VjMGY5OTljMmUzYTgyNiIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiZmNlOTZlZGMyNTBkMWVlYTViMWNiMzliMDYxNGQ4ZWI2ZGMzNzVjNTBmMTc1ZWFkYWYyZjk3ZDg4ZGYyMTdjNiIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiMDAxZjJlYzE3NTkzYzEwNTRlYjQ2MzY3ZDg0NTNlZjI0YTE3M2NlOTZiNzExN2Q5MWY5YTY4ZDQ0ZmVmOGIwMSJ9"
+        },
+        {
+          "resource": "repo://digiquant/src/digiquant/dashboard/tenancy.py#L106-L126",
+          "version": "repo-lines-v1:sha256:66275bf56dd84679e634bf1bc894a5adba1e49e61bf7a304683b8118d4fc4c0c:eyJzZWxlY3RlZExpbmVDb3VudCI6MjEsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjMyODM4MTg0NGM1NDVkNjNmZjYwYTkxNGMzOThhMjgwZWJmYWM4NmFlYzM1MGRmOWY4YWYwZTEyMmZlYmNjZmUiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjhiZGNlOWNmMGY0NTYwZDkwM2I5MWIyNzY5Mzc2MzZiNzVhYmUyMzA3YzQ0NGNiMjQ4ZWI5YzRjMDc5NDFjNmIiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImM2MzFlZGFkMzlkY2M4MDhlMzg2ODRjMDNjNjU2OTg4MTBiMWFlNGU2ZjZmODcxOTM0ODBjZjE3YjVkZjJhNjQiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjFjYTc5MmM3NzY3M2U0MTBhZmI3Njg5NjkzMjFkOGNjNzU5OTg3Y2IwNDI3YzE1YWFmYjRhOTYwNWM2ZDkxOGUifQ"
         }
       ]
     }
   ],
   "verification": {
     "by": "openwiki/0.5.0",
-    "at": "2026-09-09T14:37:17.158Z"
+    "at": "2026-09-23T13:25:31.068Z"
   }
 }

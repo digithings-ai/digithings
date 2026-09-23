@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "pageVersion": "sha256:5e05e9e6ff898cb01375e4a7a44dad762103e0dd185fa85bb8ed6e44dd279615",
+  "pageVersion": "sha256:ce26567d9f3253f81f98d3388f36cca0439908a329aa61aeec8f8ca589b91a15",
   "claims": [
     {
       "id": "claim_22aa66ad4cde4b2291ed64fff1a94dd3",
@@ -25,10 +25,46 @@
           "version": "repo-lines-v1:sha256:41ca819a79fb6654f3aac4950b9422bb730addf683e60cb52a38389f0bfed7de:eyJzZWxlY3RlZExpbmVDb3VudCI6MjEsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjAxYmE0NzE5YzgwYjZmZTkxMWIwOTFhN2MwNTEyNGI2NGVlZWNlOTY0ZTA5YzA1OGVmOGY5ODA1ZGFjYTU0NmIiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjYxOTM4Y2MyY2QyZGMwZjBiNzA5Yzc3NGJlNDU4NWMwNTc5YmY2MDE2ODFhNTQ2MjFiZmM1YzZkNGY2MzU5ZDUiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6Ijc2MzJjZjlhMGRkNTIxZjA2ODU1NTM3MTI4MGE2YmNkYWZmMWI3N2FjMzNlY2Q0NjA0MDM0ZWY1ZWQ5MjllZDkiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImM3Mjk4YTIyODkyMDFkYWFjMDNmNmFkYjExNDRlN2JkMWM5MTFkMzQxMWMwOWVkMmUwY2U5ZDFiZWQwZWVkN2MifQ"
         }
       ]
+    },
+    {
+      "id": "claim_ace30cbdd02d4130b16b6e718e0e867b",
+      "statement": "The `web-watch-tick` agent (continuous, 60s) defaults lifecycle to `stopped` — `enabled: true` in the YAML only marks the schedule eligible; the agent must be explicitly activated with `digiclaw schedule start web-watch-tick`, and `start` is idempotent when the agent is already RUNNING (re-arms, exit 0).",
+      "evidence": [
+        {
+          "resource": "repo://digiclaw/ARCHITECTURE.md#L106-L108",
+          "version": "repo-lines-v1:sha256:c9e87672a998f13f4c114f60a3df988261befcf4069d7f5c7ee7e4b0e1188dfc:eyJzZWxlY3RlZExpbmVDb3VudCI6MywiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiNTBhYjczNmEwOGFlYjM0NDBlYjI3MWVkMGE5NzY1ZTdkYTVjYjBjYjhkMWY4OTdhOTQzMGE3MjgxZmZhNzcxZSIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiYTJlYjE2MWNhOGViNzIwY2M5M2NkNjk3MTlmYmUzMzY4NTdiNzcyZTUxMmI3ZTdmYjNkN2I0ZWUwYmIyMDMwMiIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiZDQ5MGM1OTMyMzA2MWE3MzhmZjE1ZTVmNzhiYjIxYWEwM2YyZGNhN2M1NmUyNWVhODI0YjRjOGRiZGMwMjYwZCIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiNjdiNDIyMzc5MWI4OTk3NDNmY2VkZmYwZTQ2YWJiNDM0NzM5YWYxYzg2ZjRkNmZlZDQ0NDAwMThlMjZjNTRhYSJ9"
+        },
+        {
+          "resource": "repo://digiclaw/agents/web-watch-tick.yaml",
+          "version": "repo-file-v1:sha256:a31e29416fa2455e526c3100f0c78841a27122ffe69b360f918f9f2a49e50ac5"
+        },
+        {
+          "resource": "repo://digiclaw/src/digiclaw/scheduler.py#L53-L53",
+          "version": "repo-lines-v1:sha256:c45b08ece0c1b1186ec0814cb74193e5f20cda6f1084417da812f83427de7353:eyJzZWxlY3RlZExpbmVDb3VudCI6MSwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiYzQ1YjA4ZWNlMGMxYjExODZlYzA4MTRjYjc0MTkzZTVmMjBjZGE2ZjEwODQ0MTdkYTgxMmY4MzQyN2RlNzM1MyIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiYzQ1YjA4ZWNlMGMxYjExODZlYzA4MTRjYjc0MTkzZTVmMjBjZGE2ZjEwODQ0MTdkYTgxMmY4MzQyN2RlNzM1MyIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiZmJjM2JkNzdiYmUwZTI2NTgwMWExOTJjMjgyZjE3N2IwY2MxZGNkNjJkMjk1NGUyMjg2ZDc2OGZmOGY1MGE5ZCIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiNzE5NGFlNGU0MDNhMTRmNjBiNDg3MmEyNjFlYWU4OTZmZjU2NTc3NDIwYjE3NmZjYTg0YWIwNTBiM2NhY2ZkOCJ9"
+        }
+      ]
+    },
+    {
+      "id": "claim_475d369125814bc5b253359c1f2227f7",
+      "statement": "When the scheduler's `tick()` finds `web-watch-tick` due, `cli._dispatch_agent` maps it to `digiclaw.monitors_tick.run_due_monitors()`, which POSTs `{DIGISEARCH_URL}/v1/monitors/tick` with a digikey service JWT and returns run/failed counts.",
+      "evidence": [
+        {
+          "resource": "repo://digiclaw/ARCHITECTURE.md#L102-L104",
+          "version": "repo-lines-v1:sha256:05ac62cb12e8e7e61522acb020dbb44dd773a5ced73f25a2e1ed9084747ef974:eyJzZWxlY3RlZExpbmVDb3VudCI6MywiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiNWExOTQ3MDhmNDZlYTFmNjVlYjEwMjBlNjcyZThiNDU1NjM2ZjkwN2M5YmVmZDkwMDUyMGQ3ZWFjMGZkMGQ2MSIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiYTk1M2FkMzM4OTlkNWIzNTgzZWZkNzczMmQ1NDA4YzkxODEyMjc4MjYxNDIyOGZhMDNkMjIzMDlmMTgwMzBlOCIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiZmYwZGQ0MDkyOTA4M2Q0YzJkMDVkMjViODA3Y2VhOGMyNDY2ZmM3ZmY3NGI0ODNkYmVlOWM2Y2MzZGNhZWI0MyIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiYzFlMWU0NDFlYjI3MDI0MjVmNzZjNDMwMDcxMWFlM2UzMzA3MTdhZmY0NzhkMzliMzZiNTNmNDhkNTE4ZTM4MCJ9"
+        },
+        {
+          "resource": "repo://digiclaw/src/digiclaw/cli.py#L109-L114",
+          "version": "repo-lines-v1:sha256:b051225d0da593b45341ff53db32b7b363da7966267488b8945bc7f2e6505152:eyJzZWxlY3RlZExpbmVDb3VudCI6NiwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiZDJkZDdmZjU3ODgzMjkwNDM3MDY0MWE3ZjJmZGFlZWViYzA1ZjA3NTY3NGU0YThjODk2YjU1OWY0ZjE5NzE5NSIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiMmYxZTA1ODBmMzQ1ZmJkZWYyM2RiYjVmNmU0NDI0Y2ExZjNkZTJjODY3MTg1ZjZlMDFjNGVhODIxYWU2Mzc2NSIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiOGNjNGE3ZDFjYzc5NmFiYTNlNDY3MjMzMjdmNTE3ZTlmODExOTgyZDI1MGYwNzAyOTg2ZTRiNTc2NGFkOTU4OSIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiYjRhNjk3NTU5MDc3NDlmMjM3MTg5Yzk1Zjg3MWI0ZjVkOWM3YWUxMzBjYzA0MWRiNWFkMzFmOGRlZjJhYmYyNyJ9"
+        },
+        {
+          "resource": "repo://digiclaw/src/digiclaw/monitors_tick.py#L46-L73",
+          "version": "repo-lines-v1:sha256:b3be796dac36cc760d9ced101b4bbd898cd09c25396a768720559dca7434e0c4:eyJzZWxlY3RlZExpbmVDb3VudCI6MjgsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImZjNDg5OTU4MDg5NTZhZmVkMTZkMjlmNWMyYzM4MzFkOTlmMGE3ZGE1YzVkNTMwMDc2NDYzMmJjYjUwNzg2NDIiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjBiYjNhODJjMjVkZjYwZTQzY2IxOWY3YWZiZGI0ZThlOWVlMWFhMzg3OWMwOTEyNDIzODIyMWQ2OWEyNTk5YzIiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjFkZWNjZDgyNDIxN2FhNGMxNDk2ZDk3NDI3ZmY0OTFlODFiN2Q4ODRlMmZjMDNhZDUyZTE1ODUxYTEwZWFiNGYiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjowLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUifQ"
+        }
+      ]
     }
   ],
   "verification": {
     "by": "openwiki/0.5.0",
-    "at": "2026-09-09T14:37:17.158Z"
+    "at": "2026-09-23T13:25:31.068Z"
   }
 }
