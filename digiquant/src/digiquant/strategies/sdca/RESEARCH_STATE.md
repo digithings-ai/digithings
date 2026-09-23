@@ -567,6 +567,99 @@ explicit that they're still blocked on Stage 2's OHLC plumbing.)
      across all three (505→507 passed as new tests were added alongside
      each round, 38 skipped for optional deps throughout).
 
+10. **SDCA post-mortem follow-up: band-bug fix, baseline-relative
+    evaluator, re-score, iterative ablation** (2026-09-24; the post-mortem
+    published after item 9 above flagged that `power_law`'s apparent
+    search-dominance may trace to two real bugs, not genuine edge — see
+    the plan at the top of this session's work). Four phases, all
+    diagnostic — `settings.json` and this file's "Current best validated
+    candidate" section untouched throughout:
+    - **Phase 1 (band-crossing fix).** `btc_power_law.py`'s
+      `_evaluate_rails()` and `quantile_rails.py`'s
+      `evaluate_quadratic_log10()` both used a row-wise `np.sort()` to
+      force `low < median < high`, which can silently splice a
+      *different* quantile's raw curve into a mislabeled slot once two
+      rails cross. Replaced both with `rearrange_non_crossing()` (clamps
+      each quantile toward its already-reconciled inner neighbor —
+      identity-preserving, never swaps labels) plus a `detect_crossings()`
+      warning. **The bug is real and large**: real-data runs this session
+      logged reconciliation on up to 856/856 rows in a fold's in-sample
+      window (see `_evaluate_rails` warnings in any script's stdout) —
+      not a rare edge case.
+    - **Phase 2 (baseline-relative evaluator).** New
+      `curve_shape.risk50_linear_reference_curve()` (buy below composite
+      risk 50 / sell above, linear rate schedule, no optimization) and
+      `baseline_evaluator.run_sdca_walk_forward_vs_baseline()` (runs
+      candidate + risk50-linear baseline under identical folds/rails,
+      returns both plus the delta). `optimize.py`'s `run_sdca_walk_forward`
+      gained an additive `fold_weighting: Literal["unweighted",
+      "duration"]` param; `SdcaWalkForwardResult` now always carries both
+      the unweighted and duration-weighted mean OOS.
+    - **Phase 3 (re-score, `scripts/run_baseline_relative_rescore.py`).**
+      Re-ran the four live/recent candidates against the *fixed* rails and
+      the new baseline. **Notable finding: the currently-accepted
+      validated baseline itself changes under the fix** —
+      `power_law=1.0, m2=0.5, dxy=0.5` now scores `+21.73%`
+      duration-weighted OOS (down from the `+84.90%` on file, dated
+      2026-09-03, which was computed pre-fix), still
+      `beats_flat_dca_oos=True` but `beats_baseline_oos=False` (loses to
+      the naive risk50-linear baseline's `+22.49%` by `-0.76%`) and
+      `sensitivity.stable=False`. `live_settings_json` still loses
+      outright (`-34.80%`, confirms the known discrepancy).
+      `task93_round2`/`round3` both now clearly beat the baseline
+      (`+53.52%`/`+46.85%` delta) but neither is a promotable candidate on
+      its own steam (`round2` `beats_flat_dca_oos=True` at a thin
+      `+4.07%`; `round3` `beats_flat_dca_oos=False`).
+    - **Phase 4 (iterative ablation, `ablation.py` +
+      `scripts/run_iterative_ablation.py`).** Reweight the full
+      12-indicator pool (`power_law` + all 11 `EXTRA_INDICATOR_NAMES`),
+      drop whichever comes out dominant, repeat, gated by a fast
+      per-round sanity check. Full 8-round real-data run:
+      `stop_reason=budget_exhausted`; dominant indicator per round —
+      R1 `onchain_rhodl`, R2 `onchain_addr_ratio`, **R3 `power_law`**
+      (only once two other ceiling-tied indicators are cleared — direct
+      evidence that `power_law`'s historical round-1 dominance was partly
+      a coarse-grid tie-break artifact, not privileged weighting), R4
+      `onchain_mvrv`, R5 `weekly_monthly_macd`, R6 `onchain_puell`, R7
+      `dxy`, R8 `m2`. Best round: **#8**, surviving pool
+      `m2=1.0, rs_eth=0.1, onchain_asopr=0.1, fear_greed=0.1,
+      weekly_monthly_rsi=0.1` (`power_law=0.0` — dropped entirely by
+      round 8), fast-gate `+52.01%` duration-weighted OOS.
+      **Full-resolution re-validation** of round 8
+      (`scripts/run_ablation_best_round_full_resolution.py`, n_random=3000
+      curve search + full walk-forward vs. baseline): confirms
+      `+52.01%` OOS, `beats_flat_dca_oos=True`, **and
+      `beats_baseline_oos=True`** (`+9.13%` over the risk50-linear
+      baseline's own `+42.87%`) — the first candidate this session to
+      clear that bar. But `sensitivity.stable=False`
+      (`max_abs_delta_oos_pct=4.25` vs. the 2.0pp threshold), and
+      **fold 1 (2019-09-12→2022-01-14) — one of the two OOS windows
+      that have failed under every technique tried to date — is still
+      `feasible=False`** (`capital_deployed_pct=-506%`, a degenerate
+      simulation, not a real loss). Fold 2 (2022-01-15→2024-05-19, the
+      other historically-failing window) is now feasible with a real if
+      modest edge (`+8.23%`) — a genuine improvement over prior rounds,
+      but fold 1's failure mode persists unchanged. **Not promoted** —
+      same stability-gate failure as every other candidate tried under
+      Task #93 and this follow-up.
+    - **Net read for the Phase 5 decision**: fixing the crossing bug and
+      searching the full pool (a) confirms `power_law`'s search-dominance
+      was partly artifactual, (b) lowers the accepted baseline's own
+      apparent edge from `+84.90%` to `+21.73%` and now shows it losing to
+      a naive linear baseline, (c) produces one new candidate (round 8)
+      that clears the baseline-relative bar Chris asked for, but (d) that
+      candidate still fails the sensitivity-stability gate on the same
+      2019-09-12→2022-01-14 window that has broken every technique tried
+      across this entire research program. Presented to Chris as the
+      sharpened choice the original plan anticipated: pursue a genuinely
+      new, uncorrelated data source for that window, or accept that no
+      technique explored so far — including this session's full ablation
+      over 12 indicators — resolves it, and treat the current baseline
+      (now understood to be weaker than believed, `+21.73%` not
+      `+84.90%`) as the practical ceiling until new data arrives.
+    - `tests/dq/strategies/sdca/` stayed green throughout (571 passed, 38
+      skipped for optional deps, by the end of Phase 4).
+
 ## North-star ceiling (benchmark only — NEVER a trading candidate)
 
 Chris's 2026-09-11 direction, after pausing new-indicator work to sanity-check
