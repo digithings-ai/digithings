@@ -411,9 +411,48 @@ criterion for "every backend has the same end result".
     `@ai-sdk/google-vertex` dynamically so its eager `google-auth-library`
     dependency is only loaded for Vertex requests (would make
     `resolveAiSdkModel` async; the route is Node-only today).
+  - **Follow-up from the #4545 review (not blocking):** `lib/byok-openrouter.ts`
+    still builds its provider with `createOpenAI` (`name: "openrouter-byok"`),
+    so BYOK-OpenRouter reasoning is dropped for the same `reasoning_content`
+    reason #4545 fixed for the `openai-completions` backend. It has no caller in
+    `src/` today, so nothing is broken — switch it to
+    `createOpenAICompatible` when that path is next touched.
+  - **Backend additions free via `openai-completions` (no code needed):** xAI
+    (`https://api.x.ai/v1`, reasoning via `reasoning_content`, Grok 4 reportedly
+    omits it), Azure OpenAI (v1 API), Mistral, Together, Fireworks, Perplexity,
+    OpenRouter, DeepSeek (400s if `reasoning_content` is not round-tripped with
+    tool calls), Groq. Blocked by the https-only + SSRF policy: Ollama / vLLM /
+    LM Studio. Needing a bespoke adapter: Cohere, AWS Bedrock. Gemini AI Studio
+    ships an OpenAI-compat endpoint but only Vertex is wired today.
 - **5c — non-AI-SDK protocols.** `langgraph`, `ag-ui`, `a2a`. Each needs its
   own mapper; each is a **new dependency / new external surface**.
   **Human gate.**
+  - **Done (issue #4543, PR into `module/digichat`) — hand-rolled, no new
+    dependency.** The plan (and the owner's approval at m1091) assumed one
+    third-party SDK per protocol. On inspection the BFF only *consumes* and
+    normalizes a server-sent event stream — exactly what the digigraph and
+    foundry adapters already do by hand — while `@ag-ui/client` alone drags in
+    `rxjs`, `uuid`, `fast-json-patch` and `untruncate-json`, and every added
+    AI-SDK-family package has already cost a duplicate-`@ai-sdk/provider`
+    incident. So the three mappers are plain `fetch` + a shared SSE/JSON-RPC
+    reader: `adapters/shared/stream-utils.ts` (`iterateSse`, `createTextWriter`,
+    `writeGatedSpan`, `writeReasoningDelta`, `parseToolInput`) plus
+    `adapters/langgraph/stream.ts`, `adapters/ag-ui/stream.ts`,
+    `adapters/a2a/stream.ts`, dispatched by `adapters/non-ai-sdk.ts`. **This is
+    a deviation toward FEWER dependencies and was reported to the owner.**
+    Shapes: `langgraph` = `{ apiUrl, assistantId, apiKeyEnv? }` (`POST
+    /runs/stream`, `stream_mode: ["messages"]`, `x-api-key`);
+    `ag-ui` = `{ url, apiKeyEnv? }` (`POST`, `Bearer`); `a2a` = `{ baseUrl,
+    apiKeyEnv? }` (JSON-RPC `message/stream`, `Bearer`, handles both the SSE and
+    the blocking-JSON response). Every activity span flows through
+    `sanitizeActivitySpan` + `applyActivityDetail` + `writeStandardActivity`
+    (via `writeGatedSpan` / `writeFailureStatus`), so reasoning, tool calls and
+    sources render identically and error rows are capped and disclosure-gated
+    like every other span.
+    **Capability honesty:** `a2a` declares `reasoning`/`toolCalls`/`sources`
+    **false** — the protocol carries task status and artifacts only, with no
+    reasoning or tool-call channel — so the parity invariant is asserted for
+    every type *except* `a2a`, which is asserted false.
 - **5d — capability + parity tests** and the docs table.
 
 **Note:** 5b/5c add third-party runtime dependencies and network surfaces.
