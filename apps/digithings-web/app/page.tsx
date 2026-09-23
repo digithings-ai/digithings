@@ -33,8 +33,8 @@ export const metadata: Metadata = {
   title: "digithings — AI infrastructure in a glass box",
   description:
     "Open-source, MIT-licensed AI infrastructure: nine modules that plug into the stack you already "
-    + "run — not a replacement for it. Self-hosted anywhere, your own keys and providers, every step "
-    + "traceable.",
+    + "run, rather than replacing it. Self-host on your own hosts, with your own keys and providers, "
+    + "and a traced request path.",
 };
 
 export default function Home() {

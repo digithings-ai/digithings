@@ -62,7 +62,7 @@ const LAYERS: Layer[] = [
     theirs:
       "one vendor's weights, on their release schedule and their price tiers — you run the models they ship, when they ship them",
     yours:
-      "any provider behind one interface — the weights change without a line changing anywhere above them",
+      "any provider behind one interface — swap the weights without changing any code above them",
   },
   {
     layer: "retrieval",
@@ -90,7 +90,7 @@ const LAYERS: Layer[] = [
     theirs:
       "one account, one key, their scopes and their rate limits — access is issued and revoked by them",
     yours:
-      "keys you issue and revoke, JWT-signed and scoped on every call and every tool call, so permissions are yours to set",
+      "keys you issue and revoke, JWT-signed and scoped on every call, so permissions are yours to set",
   },
   {
     layer: "audit",
@@ -102,7 +102,7 @@ const LAYERS: Layer[] = [
   {
     layer: "hosts",
     theirs:
-      "their cloud, in their regions, under their controls — the infrastructure is rented, never owned",
+      "their cloud, under their controls — the infrastructure is rented, never owned",
     yours: "your machine, VM or cluster — the same stack on metal you already run",
   },
 ];
@@ -167,8 +167,8 @@ export function ArgumentSeams() {
       ))}
 
       <p className="m-0 border-t border-hair px-[1rem] py-[0.7rem] font-mono text-[0.68rem] text-ink-mute">
-        the same seven layers, drawn twice. on the right, every one of them is a seam you can move
-        — provider, store, tool registry, runtime, keys, log and host.
+        seven layers, drawn twice. on the right, each one is a seam you can move — provider,
+        store, tools, runtime, keys, log, host.
       </p>
     </div>
   );

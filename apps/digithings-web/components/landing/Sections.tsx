@@ -56,7 +56,7 @@ const FAQ: { q: string; a: string }[] = [
   },
   {
     q: "What is not built?",
-    a: "Two modules are roadmap rather than shipped, there is no hosted product, and the broker adapters raise NotImplementedError — live trading is guarded by a human review gate, not a runtime interlock. The security page states every limit.",
+    a: "Two modules are roadmap rather than shipped, there is no hosted product, and the broker adapters raise NotImplementedError — live trading is guarded by a human review gate, not a runtime interlock. The security page lists the known limits.",
   },
   {
     q: "Does it need NautilusTrader?",

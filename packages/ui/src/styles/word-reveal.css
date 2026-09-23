@@ -181,9 +181,13 @@ html.no-js .word {
 
 /* Reduced motion never types (the component renders the whole line), so the
    caret has nothing to point at — and a blinking cursor under a motion
-   preference is exactly the thing the preference is asking not to see. */
+   preference is exactly the thing the preference is asking not to see. Both
+   declarations: `display: none` takes it out of the line, and `animation: none`
+   is what the reduced-motion contract test requires of any infinite animation
+   in this sheet, whether or not the element is painted. */
 @media (prefers-reduced-motion: reduce) {
   .tw-caret {
     display: none;
+    animation: none;
   }
 }
