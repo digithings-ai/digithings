@@ -10,7 +10,7 @@ import {
 } from "@digithings/ui";
 import { writeHandoff } from "@/lib/chatHandoff";
 import { grouped, moduleLines } from "@/lib/repoActivity";
-import { moduleCountLabel, moduleCounts, moduleVersion } from "@/lib/moduleCounts";
+import { moduleCountLabel, moduleVersion } from "@/lib/moduleCounts";
 
 /**
  * The module mosaic (v15, #4429), and the page's `#architecture` anchor.
@@ -82,7 +82,24 @@ import { moduleCountLabel, moduleCounts, moduleVersion } from "@/lib/moduleCount
  * every tile states the same three things in the same order.
  */
 
-const ordered = [...modules].sort((a, b) => a.graphOrder - b.graphOrder);
+/**
+ * Reading order: by size, biggest first — "we have to order the modules based on
+ * lines of code. The biggest one should be in the top left." So the mosaic's
+ * first tile is its largest module and the last is its smallest, and because the
+ * reading order is also the scroll order, the focus walks biggest to smallest.
+ *
+ * `graphOrder` is only the tie-break, and roadmap modules (which declare no
+ * lines) sink to the end rather than sorting as zero — a module with no code is
+ * not a module with no size.
+ */
+const ordered = [...modules].sort((a, b) => {
+  const la = moduleLines(a.id);
+  const lb = moduleLines(b.id);
+  if (la === null && lb === null) return a.graphOrder - b.graphOrder;
+  if (la === null) return 1;
+  if (lb === null) return -1;
+  return lb - la;
+});
 
 /** Tiles per row, top to bottom. Fixed, so reading order can never change. */
 const ROW_SIZES = [4, 4, 3] as const;
@@ -254,13 +271,22 @@ function solveRowGrow(focus: number): number[] {
   });
 }
 
-/** One line per module for the terminal manifest and the tile's accessible name. */
+/**
+ * The module's stated facts as one line — the tile's only numbers.
+ *
+ * The owner asked for the three-row figures block to go: "it's a little messy
+ * with all the lines of code endpoints and MCP tool accounts. Those could be
+ * moved somewhere else." So the figures moved out of every resting tile and out
+ * of a three-row block, and into the focused tile as a single mono line — the
+ * size is still checkable (the whole mosaic is sized by the first of them), but
+ * no tile is a spreadsheet.
+ */
 function factsLine(m: ModuleNode): string {
   const lines = moduleLines(m.id);
   const counts = moduleCountLabel(m.id);
   return [lines === null ? "roadmap" : `${grouped(lines)} lines`, counts]
     .filter(Boolean)
-    .join("  ·  ");
+    .join(" · ");
 }
 
 /**
@@ -422,8 +448,6 @@ export function ModuleGrid() {
                 {members.map((i) => {
                   const m = ordered[i];
                   const on = stepper ? reduced || i === stackActive : i === focus;
-                  const lines = moduleLines(m.id);
-                  const counts = moduleCounts(m.id);
                   const version = moduleVersion(m.id);
                   const dockerCmd = m.dockerCmd;
                   const copied = copiedId === m.id;
@@ -469,87 +493,73 @@ export function ModuleGrid() {
                           </span>
                           {/* The declared version, top-right. Roadmap modules
                               declare none, so they read "roadmap" rather than a
-                              fabricated 0.0.0 — same honesty rule as the counts. */}
+                              fabricated 0.0.0 — same honesty rule as the facts. */}
                           <span className="dg-loc dg-mosaic-version">
                             {version === null ? "roadmap" : `v${version}`}
                           </span>
                         </span>
 
-                        {/* The three stated facts, stacked under the name in
-                            every tile. A module with no value reads "roadmap" or
-                            an em dash, never a fabricated zero: null is "does
-                            not expose this", not "exposes nothing". */}
-                        <span className="dg-stats">
-                          <span className="dg-stat">
-                            <span className="dg-loc">lines of code</span>
-                            <span className="dg-loc dg-stat-v">
-                              {lines === null ? "roadmap" : grouped(lines)}
-                            </span>
-                          </span>
-                          <span className="dg-stat">
-                            <span className="dg-loc">endpoints</span>
-                            <span className="dg-loc dg-stat-v">
-                              {counts.endpoints === null ? "—" : counts.endpoints}
-                            </span>
-                          </span>
-                          <span className="dg-stat">
-                            <span className="dg-loc">mcp tools</span>
-                            <span className="dg-loc dg-stat-v">
-                              {counts.mcpTools === null ? "—" : counts.mcpTools}
-                            </span>
-                          </span>
-                        </span>
-
-                        {/* (d) the short summary in a few words. */}
+                        {/* One line of prose, in both states. The tile used to
+                            carry three (the short summary, a headline tagline and
+                            a lead paragraph) plus a three-row figures block —
+                            "there's just too many sections", the owner said. So
+                            the role is the resting line, the description appears
+                            only in focus, and the numbers are one line. */}
                         <span className="dg-mosaic-role">{m.role}</span>
 
                         {on ? (
                           <span className="dg-mosaic-detail">
-                            {/* (e) the deeper description: the tagline sentence
-                                and the module's lead paragraph. The tile is one
-                                row tall, and rendering every paragraph pushed the
-                                compose command and the ask control out of the box
-                                on the modules with the longest copy (digigraph,
-                                digivault). So the copy is the one part allowed to
-                                shrink and is clamped by CSS, while the stack row
-                                and the foot below are pinned — the controls can
-                                never be the thing that clips. The rest of the
-                                summary is on the module's docs page and in the
-                                ask answer. */}
-                            <span className="dg-mosaic-copy">
-                              <span className="dg-mosaic-tag">{m.tagline}</span>
-                              {m.summary[0] ? (
-                                <span className="dg-mosaic-serves">{m.summary[0]}</span>
-                              ) : null}
-                            </span>
-                            {/* (f) the packages used. */}
-                            <StackRow items={m.stack} className="stack-row compact" />
-                            <span className="dg-mosaic-foot">
-                              {/* (g) the compose command, click-to-copy. */}
-                              {dockerCmd ? (
-                                <button
-                                  type="button"
-                                  className={`dg-docker${copied ? " is-copied" : ""}`}
-                                  aria-label={copied ? "Copied" : `Copy command: ${dockerCmd}`}
-                                  onClick={() => copyCommand(m.id, dockerCmd)}
-                                >
-                                  <span className="prompt" aria-hidden="true">
-                                    {copied ? "✓" : "$"}
-                                  </span>{" "}
-                                  {copied ? "copied" : dockerCmd}
-                                </button>
-                              ) : null}
-                              {/* (h) the one control that may navigate. */}
+                            <span className="dg-mosaic-facts">{factsLine(m)}</span>
+                            {/* The deeper description: the module's lead
+                                paragraph. The tile is one row tall, and rendering
+                                every paragraph pushed the compose command and the
+                                ask control out of the box on the modules with the
+                                longest copy (digigraph, digivault). So the copy is
+                                the one part allowed to shrink and is clamped by
+                                CSS, while the stack row and the foot below are
+                                pinned — the controls can never be the thing that
+                                clips. The rest of the summary is on the module's
+                                docs page and in the ask answer. */}
+                            {m.summary[0] ? (
+                              <span className="dg-mosaic-serves">{m.summary[0]}</span>
+                            ) : null}
+                          </span>
+                        ) : null}
+
+                        {/* The packages, in every tile — the owner: "i would make
+                            the packages that are used in every module visible in
+                            the non-expanded view." Named chips, not the icon-only
+                            compact row, because the point is to read them. */}
+                        <span className="dg-mosaic-stack">
+                          <StackRow items={m.stack} className="stack-row" />
+                        </span>
+
+                        {on ? (
+                          <span className="dg-mosaic-foot">
+                            {/* The compose command, click-to-copy. */}
+                            {dockerCmd ? (
                               <button
                                 type="button"
-                                className="dg-mosaic-ask"
-                                aria-label={`Ask digichat about ${m.id}`}
-                                onClick={() => ask(m.id)}
+                                className={`dg-docker${copied ? " is-copied" : ""}`}
+                                aria-label={copied ? "Copied" : `Copy command: ${dockerCmd}`}
+                                onClick={() => copyCommand(m.id, dockerCmd)}
                               >
-                                ask <span className="text-ink">digi</span>
-                                <span className="text-accent">chat</span> →
+                                <span className="prompt" aria-hidden="true">
+                                  {copied ? "✓" : "$"}
+                                </span>{" "}
+                                {copied ? "copied" : dockerCmd}
                               </button>
-                            </span>
+                            ) : null}
+                            {/* The one control that may navigate. */}
+                            <button
+                              type="button"
+                              className="dg-mosaic-ask"
+                              aria-label={`Ask digichat about ${m.id}`}
+                              onClick={() => ask(m.id)}
+                            >
+                              ask <span className="text-ink">digi</span>
+                              <span className="text-accent">chat</span> →
+                            </button>
                           </span>
                         ) : null}
                       </div>

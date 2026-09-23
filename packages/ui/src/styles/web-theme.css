@@ -203,7 +203,7 @@ body {
 .dg-panel-head { display: flex; align-items: center; gap: 0.9rem; }
 .dg-panel-head h3 { font-family: var(--font-display); font-weight: 400; font-size: 1.9rem; letter-spacing: -0.01em; }
 .dg-tag { color: var(--ink-soft); margin: 0.7rem 0 0.4rem; }
-.dg-docker { font-family: var(--font-mono); font-size: 0.86rem; color: var(--term-ink); background: var(--term-bg); border: 1px solid var(--term-hair); border-radius: 0; padding: 0.5rem 0.7rem; margin-top: 0.8rem; overflow-x: auto; white-space: nowrap; }
+.dg-docker { font-family: var(--font-mono); font-size: 0.9rem; color: var(--term-ink); background: var(--term-bg); border: 1px solid var(--term-hair); border-radius: 0; padding: 0.5rem 0.7rem; margin-top: 0.8rem; overflow-x: auto; white-space: nowrap; }
 .dg-docker .prompt { color: var(--accent); }
 .dg-more { display: inline-block; margin-top: 0.9rem; font-family: var(--font-mono); font-size: 0.82rem; color: var(--accent); }
 
@@ -270,7 +270,7 @@ body {
    without the wrap a narrow tile had its name run underneath it. */
 .dg-mosaic-head { display: flex; flex-wrap: wrap; align-items: flex-start; justify-content: space-between; gap: 0.25rem 0.6rem; min-width: 0; }
 .dg-mosaic-version { margin-left: auto; text-align: right; }
-.dg-mosaic-name { font-family: var(--font-mono); font-size: 1.15rem; font-weight: 500; color: var(--ink); }
+.dg-mosaic-name { font-family: var(--font-mono); font-size: 1.35rem; font-weight: 500; letter-spacing: -0.01em; color: var(--ink); }
 
 /* The whole tile is the focus target, but the focused tile also owns real
    controls (copy the compose command, ask digichat). A <button> cannot contain
@@ -291,11 +291,14 @@ body {
    reader learns once. A label/value row each in the same `.dg-loc` mono
    micro-type the corner figures used; the value is right-aligned with
    `tabular-nums` so the column compares cleanly down the mosaic. */
-.dg-stats { display: flex; flex-direction: column; gap: 0.12rem; min-width: 0; }
-.dg-stat { display: flex; align-items: baseline; justify-content: space-between; gap: 0.6rem; min-width: 0; }
-.dg-stat-v { color: var(--ink-soft); }
-.dg-cell.on .dg-stat-v { color: var(--ink); }
-.dg-mosaic-role { font-family: var(--font-mono); font-size: 0.78rem; line-height: 1.5; color: var(--ink-mute); }
+.dg-mosaic-facts { font-family: var(--font-mono); font-size: 0.86rem; line-height: 1.5; letter-spacing: 0.01em; color: var(--ink-soft); font-variant-numeric: tabular-nums; }
+/* The packages sit at the foot of every tile, expanded or resting. `margin-top:
+   auto` pins them to the bottom so the boxes line up whether or not the tile is
+   open; the chips print their names, because the owner asked for the packages to
+   be readable "in the non-expanded view". */
+.dg-mosaic-stack { display: block; margin-top: auto; min-width: 0; }
+.dg-mosaic-stack .stack-row { margin-top: 0; }
+.dg-mosaic-role { font-family: var(--font-mono); font-size: 0.9rem; line-height: 1.5; color: var(--ink-mute); }
 .dg-cell.on .dg-mosaic-role { color: var(--ink-soft); }
 .dg-mosaic-detail { display: flex; flex-direction: column; gap: 0.6rem; margin-top: 0.4rem; min-width: 0; }
 /* The one part of the focused tile allowed to shrink. The tile is one row tall,
@@ -303,8 +306,6 @@ body {
    the compose command and the ask control out of the box on the longest modules
    (digigraph, digivault). The copy shrinks, the stack row and the foot below are
    pinned, and the lead paragraph is clamped, so the controls are always visible. */
-.dg-mosaic-copy { display: flex; flex-direction: column; gap: 0.6rem; min-height: 0; overflow: hidden; }
-.dg-cell.on .dg-mosaic-detail > .stack-row { flex: 0 0 auto; }
 
 /* The WHY drawer's typewriter fill. Each owned word carries its index (`--i`)
    and the word count (`--n`), and the drawer writes a single `--seam-fill`
@@ -315,13 +316,12 @@ body {
 .dg-seam-word {
   opacity: clamp(0, calc(var(--seam-fill, 1) * var(--n) - var(--i)), 1);
 }
-.dg-mosaic-tag { color: var(--ink-soft); font-family: var(--font-mono); font-size: 0.9rem; line-height: 1.55; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; overflow: hidden; }
 /* The compose command and the CTA share the last line. A tile is only as tall
    as one grid row, and stacking them cost a line the smallest modules did not
    have — the command was the thing getting clipped. */
 .dg-mosaic-foot { display: flex; align-items: center; flex-wrap: wrap; gap: 0.5rem 0.9rem; margin-top: auto; min-width: 0; flex: 0 0 auto; }
 .dg-mosaic-foot .dg-docker { margin-top: 0; min-width: 0; }
-.dg-mosaic-ask { margin-left: auto; white-space: nowrap; font-family: var(--font-mono); font-size: 0.86rem; color: var(--ink-mute); }
+.dg-mosaic-ask { margin-left: auto; white-space: nowrap; font-family: var(--font-mono); font-size: 0.9rem; color: var(--ink-mute); }
 button.dg-mosaic-ask { background: none; border: 0; padding: 0; cursor: pointer; }
 button.dg-mosaic-ask:hover { color: var(--ink); }
 
@@ -343,7 +343,7 @@ button.dg-docker.is-copied { color: var(--accent); }
 /* The deeper description paragraphs: what the module is for, in its own words.
    Only on the focused tile — a resting tile is a fraction of a row tall, so it
    carries the name, version, stats box and role and nothing else. */
-.dg-mosaic-serves { color: var(--ink-mute); font-family: var(--font-mono); font-size: 0.86rem; line-height: 1.55; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 4; line-clamp: 4; overflow: hidden; }
+.dg-mosaic-serves { color: var(--ink-mute); font-family: var(--font-mono); font-size: 0.94rem; line-height: 1.5; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 5; line-clamp: 5; overflow: hidden; }
 
 /* The stated figures. They are printed on the cell rather than implied by its
    size, so the sizing is readable rather than felt — a reader can check that
@@ -351,7 +351,7 @@ button.dg-docker.is-copied { color: var(--accent); }
    `.dg-stats`, because that is the column the reader compares down. */
 .dg-loc {
   font-family: var(--font-mono);
-  font-size: 0.72rem;
+  font-size: 0.82rem;
   letter-spacing: 0.06em;
   color: var(--ink-mute);
   font-variant-numeric: tabular-nums;
