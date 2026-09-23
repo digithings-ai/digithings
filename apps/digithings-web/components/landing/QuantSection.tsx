@@ -232,7 +232,17 @@ export function QuantSection({ className }: { className?: string }) {
 
             <div className="flex flex-col gap-[0.8rem]">
               <span className={GROUPED_LABEL}>example tearsheet</span>
-              <PerfMetrics metrics={TEARSHEET} />
+              {/*
+                Three columns, not the primitive's default four. There are six
+                metrics, so four columns filled the first row and left the
+                second two-thirds empty — two 145x97 panels of the container's
+                own background sitting under SORTINO and MAX DRAWDOWN, which
+                reads as an unfinished grid. Three columns give two even rows of
+                three. The alternative, padding the set to eight metrics, would
+                mean inventing figures to fill space, which is the thing this
+                band's own footnote disavows.
+              */}
+              <PerfMetrics metrics={TEARSHEET} columns={3} />
             </div>
 
             <div className="flex min-w-0 flex-col gap-[1rem]">
