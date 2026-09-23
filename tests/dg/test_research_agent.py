@@ -287,9 +287,21 @@ class TestRunResearchAgent:
         assert second_messages[-1]["role"] == "user"
         assert "did not validate" in second_messages[-1]["content"]
         # A recovered first attempt is the designed retry path (#1739), not an alarm:
-        # it is logged, but must not be a WARNING.
-        assert "research_agent attempt 1/2 failed for _SampleOutput" in caplog.text
-        assert not [r for r in caplog.records if r.levelno >= logging.WARNING]
+        # it is logged at INFO, and must not be a WARNING.
+        recoverable = [
+            r
+            for r in caplog.records
+            if r.levelno == logging.INFO
+            and "research_agent attempt 1/2 failed for _SampleOutput" in r.getMessage()
+        ]
+        assert recoverable
+        # Scoped to this module's logger: caplog.records also holds records from any
+        # other logger that happened to emit during the test.
+        assert not [
+            r
+            for r in caplog.records
+            if r.name == "digigraph.graph.research_agent" and r.levelno >= logging.WARNING
+        ]
 
     def test_structured_repair_links_to_rejected_call(self) -> None:
         bad = json.dumps({"regime": "x"})
