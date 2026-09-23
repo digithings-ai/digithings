@@ -28,6 +28,7 @@ import {
   parseSseValue,
   parseToolInput,
   stringField,
+  writeFailureStatus,
   writeGatedSpan,
   writeReasoningDelta,
   type TextWriter,
@@ -40,6 +41,8 @@ type Consumer = {
   text: TextWriter;
   activityDetail: ActivityDetail;
   toolNames: Map<string, string>;
+  /** Partial JSON args accumulated from `tool_call_chunks`. */
+  toolArgs: Map<string, string>;
 };
 
 /** Answer text from a LangChain chunk: a plain string or content blocks. */
@@ -75,12 +78,17 @@ function consumeChunk(chunk: Record<string, unknown>, c: Consumer): void {
   const text = contentText(chunk.content);
   if (text) c.text.delta(text);
 
-  // Streaming tool calls: `tool_call_chunks: [{ id, name, args }]`.
+  // Streaming tool calls: `tool_call_chunks: [{ id, name, args }]`. The args
+  // arrive as JSON fragments, so they are accumulated and used as the input
+  // when the row completes (a graph that only streams chunks and never settles
+  // `tool_calls` would otherwise render a tool row with no input).
   const chunks = Array.isArray(chunk.tool_call_chunks) ? chunk.tool_call_chunks : [];
   for (const raw of chunks) {
     if (!isRecord(raw)) continue;
     const callId = stringField(raw, "id") ?? `tool-${String(raw.index ?? "0")}`;
     const name = stringField(raw, "name");
+    const argsDelta = stringField(raw, "args");
+    if (argsDelta) c.toolArgs.set(callId, (c.toolArgs.get(callId) ?? "") + argsDelta);
     if (name) c.toolNames.set(callId, name);
     if (!name || c.ctx.rowByCallId.has(callId)) continue;
     c.text.close();
@@ -98,7 +106,7 @@ function consumeChunk(chunk: Record<string, unknown>, c: Consumer): void {
     if (!isRecord(raw)) continue;
     const callId = stringField(raw, "id") ?? "tool";
     const name = stringField(raw, "name") ?? c.toolNames.get(callId) ?? "tool";
-    const input = parseToolInput(raw.args);
+    const input = parseToolInput(raw.args) ?? parseToolInput(c.toolArgs.get(callId));
     c.text.close();
     writeGatedSpan(
       c.writer,
@@ -120,6 +128,7 @@ function consumeChunk(chunk: Record<string, unknown>, c: Consumer): void {
     const callId = stringField(chunk, "tool_call_id") ?? stringField(chunk, "id") ?? "tool";
     const name = c.toolNames.get(callId) ?? stringField(chunk, "name") ?? "tool";
     const result = contentText(chunk.content);
+    const input = parseToolInput(c.toolArgs.get(callId));
     c.text.close();
     writeGatedSpan(
       c.writer,
@@ -130,6 +139,7 @@ function consumeChunk(chunk: Record<string, unknown>, c: Consumer): void {
         label: name,
         toolName: name,
         callId,
+        ...(input ? { toolInput: input } : {}),
         ...(result ? { toolResult: { content: result } } : {}),
       },
       c.activityDetail,
@@ -164,6 +174,7 @@ export async function createLangGraphStreamResponse(opts: {
       const ctx = createActivityWriteContext();
       const text = createTextWriter(writer, ctx);
       const toolNames = new Map<string, string>();
+      const toolArgs = new Map<string, string>();
       try {
         const res = await fetch(url, {
           method: "POST",
@@ -172,11 +183,10 @@ export async function createLangGraphStreamResponse(opts: {
           signal: opts.signal,
         });
         if (!res.ok || !res.body) {
-          writer.write({
-            type: "data-status",
-            id: "langgraph-error",
-            data: { status: "failed", label: `LangGraph ${res.status}` },
-          });
+          // Never leave an abandoned body holding a socket (the digigraph
+          // adapter cancels explicitly for the same reason).
+          await res.body?.cancel().catch(() => {});
+          writeFailureStatus(writer, ctx, `LangGraph ${res.status}`, opts.activityDetail);
           return;
         }
         for await (const evt of iterateSse(res.body, opts.signal)) {
@@ -185,7 +195,7 @@ export async function createLangGraphStreamResponse(opts: {
           if (value === null) continue;
           const frames = Array.isArray(value) ? value : [value];
           for (const frame of frames) {
-            if (isRecord(frame)) consumeChunk(frame, { writer, ctx, text, activityDetail: opts.activityDetail, toolNames });
+            if (isRecord(frame)) consumeChunk(frame, { writer, ctx, text, activityDetail: opts.activityDetail, toolNames, toolArgs });
           }
         }
       } finally {

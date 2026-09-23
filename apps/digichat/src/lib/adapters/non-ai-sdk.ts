@@ -32,7 +32,7 @@ export async function createNonAiSdkStreamResponse(opts: {
       const message = err instanceof Error ? err.message : "backend_credential_error";
       return new Response(JSON.stringify({ error: "backend_unavailable", message }), {
         status: 502,
-        headers: { "content-type": "application/json" },
+        headers: { "content-type": "application/json", ...opts.responseHeaders },
       });
     }
   }

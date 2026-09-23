@@ -22,6 +22,13 @@ import {
 
 export type SseEvent = { event: string | null; data: string };
 
+/**
+ * SSE frame delimiter. `\r\n\r\n` is the spec-valid CRLF form and the default
+ * of the Python `sse-starlette` stack that A2A and AG-UI servers are built on,
+ * so a bare `\n\n` scan silently yields nothing against them (#4543 review).
+ */
+const SSE_DELIMITER = /\r?\n\r?\n/;
+
 /** Read an SSE body into `{ event, data }` blocks. Cancels the reader on exit. */
 export async function* iterateSse(
   body: ReadableStream<Uint8Array>,
@@ -38,10 +45,10 @@ export async function* iterateSse(
       const { done, value } = await reader.read();
       if (done) break;
       buf += decoder.decode(value, { stream: true });
-      let idx: number;
-      while ((idx = buf.indexOf("\n\n")) !== -1) {
-        const block = buf.slice(0, idx);
-        buf = buf.slice(idx + 2);
+      let match: RegExpExecArray | null;
+      while ((match = SSE_DELIMITER.exec(buf)) !== null) {
+        const block = buf.slice(0, match.index);
+        buf = buf.slice(match.index + match[0].length);
         let event: string | null = null;
         const dataLines: string[] = [];
         for (const rawLine of block.split("\n")) {
@@ -177,4 +184,18 @@ export function parseToolInput(raw: unknown): Record<string, unknown> | null {
   } catch {
     return { value: raw };
   }
+}
+
+/**
+ * A failed run/transport status as a gated row. Every other span in this family
+ * goes through `writeGatedSpan`, so error labels are capped and disclosure-gated
+ * the same way — an uncapped upstream string must not be the one exception.
+ */
+export function writeFailureStatus(
+  writer: UiStreamWriter,
+  ctx: StandardActivityContext,
+  label: string,
+  activityDetail: ActivityDetail,
+): void {
+  writeGatedSpan(writer, ctx, { operation: "chat", status: "failed", label }, activityDetail);
 }

@@ -26,6 +26,7 @@ import {
   parseSseJson,
   parseToolInput,
   stringField,
+  writeFailureStatus,
   writeGatedSpan,
   writeReasoningDelta,
   type TextWriter,
@@ -121,11 +122,7 @@ function consumeEvent(event: Record<string, unknown>, c: Consumer): void {
     case "RUN_ERROR": {
       const message = stringField(event, "message") ?? "AG-UI run failed";
       c.text.close();
-      c.writer.write({
-        type: "data-status",
-        id: "ag-ui-error",
-        data: { status: "failed", label: message },
-      });
+      writeFailureStatus(c.writer, c.ctx, message, c.activityDetail);
       return;
     }
     default:
@@ -171,11 +168,8 @@ export async function createAgUiStreamResponse(opts: {
           signal: opts.signal,
         });
         if (!res.ok || !res.body) {
-          writer.write({
-            type: "data-status",
-            id: "ag-ui-error",
-            data: { status: "failed", label: `AG-UI ${res.status}` },
-          });
+          await res.body?.cancel().catch(() => {});
+          writeFailureStatus(writer, ctx, `AG-UI ${res.status}`, opts.activityDetail);
           return;
         }
         for await (const evt of iterateSse(res.body, opts.signal)) {

@@ -26,6 +26,7 @@ import {
   iterateSse,
   parseSseJson,
   stringField,
+  writeFailureStatus,
   writeGatedSpan,
   type TextWriter,
 } from "@/lib/adapters/shared/stream-utils";
@@ -36,6 +37,8 @@ type Consumer = {
   ctx: StandardActivityContext;
   text: TextWriter;
   activityDetail: ActivityDetail;
+  /** Text each artifact has already contributed, so resends emit only the tail. */
+  artifacts: Map<string, string>;
 };
 
 /** Text of an A2A `Part[]` (text parts joined; data/file parts are ignored). */
@@ -51,6 +54,24 @@ function partsText(parts: unknown): string {
 
 /** Terminal A2A task states that mean the run failed. */
 const FAILED_STATES = new Set(["failed", "canceled", "cancelled", "rejected"]);
+
+/**
+ * New text for an artifact. A2A `TaskArtifactUpdateEvent` may resend the
+ * cumulative artifact (`append: false`) and a `task` snapshot repeats the
+ * artifacts it already carried, so only the delta against what this artifact
+ * contributed is emitted — otherwise the answer text duplicates.
+ */
+function artifactDelta(
+  artifact: Record<string, unknown>,
+  emitted: Map<string, string>,
+): string {
+  const id = stringField(artifact, "artifactId") ?? "artifact";
+  const full = partsText(artifact.parts);
+  const previous = emitted.get(id) ?? "";
+  if (full === previous) return "";
+  emitted.set(id, full);
+  return previous && full.startsWith(previous) ? full.slice(previous.length) : full;
+}
 
 function consumeResult(result: Record<string, unknown>, c: Consumer): void {
   const kind = stringField(result, "kind");
@@ -70,7 +91,7 @@ function consumeResult(result: Record<string, unknown>, c: Consumer): void {
     const artifacts = Array.isArray(result.artifacts) ? result.artifacts : [];
     for (const artifact of artifacts) {
       if (!isRecord(artifact)) continue;
-      const text = partsText(artifact.parts);
+      const text = artifactDelta(artifact, c.artifacts);
       if (text) c.text.delta(text);
     }
     return;
@@ -78,7 +99,7 @@ function consumeResult(result: Record<string, unknown>, c: Consumer): void {
 
   if (kind === "artifact-update") {
     const artifact = isRecord(result.artifact) ? result.artifact : null;
-    const text = artifact ? partsText(artifact.parts) : "";
+    const text = artifact ? artifactDelta(artifact, c.artifacts) : "";
     if (text) c.text.delta(text);
     return;
   }
@@ -137,6 +158,7 @@ export async function createA2aStreamResponse(opts: {
     execute: async ({ writer }) => {
       const ctx = createActivityWriteContext();
       const text = createTextWriter(writer, ctx);
+      const artifacts = new Map<string, string>();
       try {
         const res = await fetch(opts.backend.baseUrl, {
           method: "POST",
@@ -145,11 +167,8 @@ export async function createA2aStreamResponse(opts: {
           signal: opts.signal,
         });
         if (!res.ok) {
-          writer.write({
-            type: "data-status",
-            id: "a2a-error",
-            data: { status: "failed", label: `A2A ${res.status}` },
-          });
+          await res.body?.cancel().catch(() => {});
+          writeFailureStatus(writer, ctx, `A2A ${res.status}`, opts.activityDetail);
           return;
         }
         const contentType = res.headers.get("content-type") ?? "";
@@ -157,7 +176,7 @@ export async function createA2aStreamResponse(opts: {
           // Blocking server: one JSON-RPC envelope, no stream.
           const envelope = (await res.json()) as unknown;
           if (isRecord(envelope)) {
-            if (isRecord(envelope.result)) consumeResult(envelope.result, { writer, ctx, text, activityDetail: opts.activityDetail });
+            if (isRecord(envelope.result)) consumeResult(envelope.result, { writer, ctx, text, activityDetail: opts.activityDetail, artifacts });
             else if (isRecord(envelope.error)) {
               writeGatedSpan(
                 writer,
@@ -173,7 +192,7 @@ export async function createA2aStreamResponse(opts: {
         for await (const evt of iterateSse(res.body, opts.signal)) {
           const envelope = parseSseJson(evt.data);
           if (!envelope) continue;
-          if (isRecord(envelope.result)) consumeResult(envelope.result, { writer, ctx, text, activityDetail: opts.activityDetail });
+          if (isRecord(envelope.result)) consumeResult(envelope.result, { writer, ctx, text, activityDetail: opts.activityDetail, artifacts });
           else if (isRecord(envelope.error)) {
             writeGatedSpan(
               writer,

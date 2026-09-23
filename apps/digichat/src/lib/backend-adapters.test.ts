@@ -189,7 +189,13 @@ describe("backend adapter registry", () => {
     expect(isNonAiSdkConfig(langgraph)).toBe(true);
     expect(isNonAiSdkConfig(agui)).toBe(true);
     expect(isNonAiSdkConfig(a2a)).toBe(true);
-    expect(isNonAiSdkConfig({ type: "foundry" } as const)).toBe(false);
+    expect(
+      isNonAiSdkConfig({
+        type: "foundry",
+        projectEndpoint: "https://example.openai.azure.com",
+        agentName: "agent",
+      } as const),
+    ).toBe(false);
     expect(isNonAiSdkConfig(undefined)).toBe(false);
     expect(isAiSdkConfig(langgraph)).toBe(false);
   });

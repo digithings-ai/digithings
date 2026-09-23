@@ -70,9 +70,12 @@ describe("langgraph mapper (#4543)", () => {
     expect(body).toContain('"tool-input-start"');
     expect(body).toContain("search");
     expect(body).toContain("3 results");
+    // The partial `tool_call_chunks` args are accumulated, so the completed row
+    // carries the input even though no settled `tool_calls` frame arrived.
+    expect(body).toContain("coffee");
 
     // Stateless run: the assistant id and the chat messages go upstream.
-    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    const [url, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
     expect(url).toBe("https://lg.example.com/runs/stream");
     const sent = JSON.parse(String(init.body)) as {
       assistant_id: string;
@@ -80,6 +83,21 @@ describe("langgraph mapper (#4543)", () => {
     };
     expect(sent.assistant_id).toBe("agent");
     expect(sent.input.messages).toEqual([{ role: "user", content: "hello" }]);
+  });
+
+  it("reads a CRLF-delimited stream (the sse-starlette default)", async () => {
+    stubUpstream(CANNED.replace(/\n/g, "\r\n"));
+    const res = await createLangGraphStreamResponse({
+      backend: { type: "langgraph", apiUrl: "https://lg.example.com", assistantId: "agent" },
+      messages: [USER_MESSAGE],
+      responseHeaders: HEADERS,
+      activityDetail: "full",
+      apiKey: null,
+    });
+    const body = await bodyOf(res);
+    expect(body).toContain("Hello ");
+    expect(body).toContain("Done.");
+    expect(body).toContain('"tool-input-start"');
   });
 
   it("sends the key from the named env var as x-api-key", async () => {
@@ -96,7 +114,7 @@ describe("langgraph mapper (#4543)", () => {
       responseHeaders: HEADERS,
       activityDetail: "full",
     });
-    const [, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    const [, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
     expect((init.headers as Record<string, string>)["x-api-key"]).toBe("lg-secret");
   });
 });
@@ -129,7 +147,7 @@ describe("ag-ui mapper (#4543)", () => {
     expect(body).toContain("lookup");
     expect(body).toContain("ok");
 
-    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    const [url, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
     expect(url).toBe("https://agui.example.com/run");
     expect((init.headers as Record<string, string>).Authorization).toBe("Bearer agui-secret");
   });
@@ -173,10 +191,30 @@ describe("a2a mapper (#4543)", () => {
     // A2A has no reasoning channel — nothing may claim otherwise.
     expect(body).not.toContain('"reasoning-delta"');
 
-    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    const [url, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
     expect(url).toBe("https://a2a.example.com");
     const sent = JSON.parse(String(init.body)) as { method: string };
     expect(sent.method).toBe("message/stream");
+  });
+
+  it("emits only the delta when an artifact update resends cumulative text", async () => {
+    stubUpstream(
+      [
+        'data: {"jsonrpc":"2.0","id":"1","result":{"kind":"artifact-update","artifact":{"artifactId":"a1","parts":[{"kind":"text","text":"Part one."}]}}}\n\n',
+        'data: {"jsonrpc":"2.0","id":"1","result":{"kind":"artifact-update","artifact":{"artifactId":"a1","parts":[{"kind":"text","text":"Part one. Part two."}]}}}\n\n',
+      ].join(""),
+    );
+    const res = await createA2aStreamResponse({
+      backend: { type: "a2a", baseUrl: "https://a2a.example.com" },
+      messages: [USER_MESSAGE],
+      responseHeaders: HEADERS,
+      activityDetail: "full",
+      apiKey: null,
+    });
+    const body = await bodyOf(res);
+    // The resend contributes only " Part two." — the shared prefix is not replayed.
+    expect(body).toContain(" Part two.");
+    expect(body.match(/Part one\./g)?.length).toBe(1);
   });
 
   it("handles a blocking JSON-RPC server that answers with one envelope", async () => {

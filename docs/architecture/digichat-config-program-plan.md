@@ -431,9 +431,11 @@ criterion for "every backend has the same end result".
     /runs/stream`, `stream_mode: ["messages"]`, `x-api-key`);
     `ag-ui` = `{ url, apiKeyEnv? }` (`POST`, `Bearer`); `a2a` = `{ baseUrl,
     apiKeyEnv? }` (JSON-RPC `message/stream`, `Bearer`, handles both the SSE and
-    the blocking-JSON response). Every span still flows through
-    `sanitizeActivitySpan` + `applyActivityDetail` + `writeStandardActivity`, so
-    reasoning, tool calls and sources render identically.
+    the blocking-JSON response). Every activity span flows through
+    `sanitizeActivitySpan` + `applyActivityDetail` + `writeStandardActivity`
+    (via `writeGatedSpan` / `writeFailureStatus`), so reasoning, tool calls and
+    sources render identically and error rows are capped and disclosure-gated
+    like every other span.
     **Capability honesty:** `a2a` declares `reasoning`/`toolCalls`/`sources`
     **false** — the protocol carries task status and artifacts only, with no
     reasoning or tool-call channel — so the parity invariant is asserted for
