@@ -3,9 +3,11 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import {
+  AI_SDK_PROTOCOLS,
   BACKEND_ADAPTERS,
   backendAdapterFor,
   DEFAULT_BACKEND_TYPE,
+  isAiSdkConfig,
   isDigigraphConfig,
   isFoundryConfig,
   type BackendType,
@@ -14,7 +16,12 @@ import {
 const here = dirname(fileURLToPath(import.meta.url));
 const read = (rel: string) => readFileSync(join(here, rel), "utf8");
 
-const TYPES: BackendType[] = ["digigraph", "foundry"];
+const TYPES: BackendType[] = [
+  "digigraph",
+  "foundry",
+  "openai-completions",
+  "openai-responses",
+];
 
 describe("backend adapter registry", () => {
   // Exhaustiveness itself is pinned by the `Record<BackendType, BackendAdapter>`
@@ -45,6 +52,20 @@ describe("backend adapter registry", () => {
     expect(adapter.capabilities.mcp).toBe(false);
   });
 
+  it("resolves the OpenAI AI-SDK backends to their own protocol with env auth", () => {
+    for (const type of ["openai-completions", "openai-responses"] as const) {
+      const adapter = BACKEND_ADAPTERS[type];
+      expect(adapter.protocol).toBe(type);
+      expect(adapter.auth).toBe("env");
+      expect(AI_SDK_PROTOCOLS.has(adapter.protocol)).toBe(true);
+      // No external conversation id / corpus scope / operator MCP on this path.
+      expect(adapter.capabilities.conversationContinuity).toBe(false);
+      expect(adapter.capabilities.corpus).toBe(false);
+      expect(adapter.capabilities.mcp).toBe(false);
+    }
+    expect(BACKEND_ADAPTERS["openai-responses"].protocol).toBe("openai-responses");
+  });
+
   it("every adapter surfaces reasoning and tool calls (the parity invariant)", () => {
     for (const type of TYPES) {
       const { capabilities } = BACKEND_ADAPTERS[type];
@@ -73,6 +94,21 @@ describe("backend adapter registry", () => {
     expect(isDigigraphConfig(undefined)).toBe(false);
     expect(isFoundryConfig(undefined)).toBe(false);
   });
+
+  it("narrows the AI-SDK family and excludes the others", () => {
+    const completions = {
+      type: "openai-completions",
+      baseUrl: "https://api.example.com/v1",
+      model: "gpt-4o-mini",
+      apiKeyEnv: "DIGICHAT_BACKEND_EXAMPLE_KEY",
+    } as const;
+    const responses = { ...completions, type: "openai-responses" } as const;
+    expect(isAiSdkConfig(completions)).toBe(true);
+    expect(isAiSdkConfig(responses)).toBe(true);
+    expect(isAiSdkConfig({ type: "digigraph" } as const)).toBe(false);
+    expect(isAiSdkConfig(undefined)).toBe(false);
+    expect(isDigigraphConfig(completions)).toBe(false);
+  });
 });
 
 describe("chat route backend selection", () => {
@@ -92,5 +128,11 @@ describe("chat route backend selection", () => {
     expect(route).toMatch(/const adapter = backendAdapterFor\(backend\?\.type\)/);
     expect(route).toMatch(/adapter\.protocol === "foundry-responses"/);
     expect(route).toMatch(/adapter\.capabilities\.corpus/);
+  });
+
+  it("routes the AI-SDK protocols through the shared mapper", () => {
+    expect(route).toMatch(/AI_SDK_PROTOCOLS\.has\(adapter\.protocol\)/);
+    expect(route).toMatch(/isAiSdkConfig\(backend\)/);
+    expect(route).toMatch(/createAiSdkStreamResponse\(/);
   });
 });

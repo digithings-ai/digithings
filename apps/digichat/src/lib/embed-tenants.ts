@@ -44,7 +44,16 @@ export type EmbedBackendConfig =
       /** digivault path prefix forwarded as X-Digi-Vault-Prefix */
       vaultPathPrefix?: string;
     }
-  | { type: "foundry"; projectEndpoint: string; agentName: string };
+  | { type: "foundry"; projectEndpoint: string; agentName: string }
+  | {
+      type: "openai-completions" | "openai-responses";
+      /** https OpenAI-compatible base URL. */
+      baseUrl: string;
+      /** Model id passed to the provider. */
+      model: string;
+      /** Env var NAMING the API key (DIGICHAT_BACKEND_*); never the key itself. */
+      apiKeyEnv: string;
+    };
 
 /**
  * How this tenant expects visitors to pay for LLM spend.
@@ -282,8 +291,43 @@ function validateEntry(hostKey: string, value: unknown): EmbedTenantConfig {
       throw new Error(`${ctx}: foundry backend requires an "agentName"`);
     }
     backendCfg = { type: "foundry", projectEndpoint: backend.projectEndpoint, agentName: backend.agentName };
+  } else if (backend?.type === "openai-completions" || backend?.type === "openai-responses") {
+    // OpenAI-compatible AI-SDK backends (#4535). Same field shape for both; the
+    // wire format is the only difference. `apiKeyEnv` must name a
+    // DIGICHAT_BACKEND_* var so a tenant cannot exfiltrate AUTH_SECRET.
+    if (typeof backend.baseUrl !== "string" || !backend.baseUrl.trim()) {
+      throw new Error(`${ctx}: ${backend.type} backend requires a "baseUrl"`);
+    }
+    let parsed: URL;
+    try {
+      parsed = new URL(backend.baseUrl);
+    } catch {
+      throw new Error(`${ctx}: backend.baseUrl is not a valid URL`);
+    }
+    if (parsed.protocol !== "https:") {
+      throw new Error(`${ctx}: backend.baseUrl must be https`);
+    }
+    if (typeof backend.model !== "string" || !backend.model.trim()) {
+      throw new Error(`${ctx}: ${backend.type} backend requires a "model"`);
+    }
+    if (
+      typeof backend.apiKeyEnv !== "string" ||
+      !/^DIGICHAT_BACKEND_[A-Z0-9_]+$/.test(backend.apiKeyEnv)
+    ) {
+      throw new Error(
+        `${ctx}: backend.apiKeyEnv must name a DIGICHAT_BACKEND_* env var`,
+      );
+    }
+    backendCfg = {
+      type: backend.type,
+      baseUrl: backend.baseUrl,
+      model: backend.model,
+      apiKeyEnv: backend.apiKeyEnv,
+    };
   } else {
-    throw new Error(`${ctx}: backend.type must be "digigraph" or "foundry"`);
+    throw new Error(
+      `${ctx}: backend.type must be "digigraph", "foundry", "openai-completions", or "openai-responses"`,
+    );
   }
 
   if (v.gateMode !== "turn_limited" && v.gateMode !== "ungated" && v.gateMode !== "trial_form") {

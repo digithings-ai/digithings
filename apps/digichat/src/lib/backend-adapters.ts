@@ -28,6 +28,18 @@ export type BackendConfig = DigichatDeployment["backend"];
 export type BackendType = BackendConfig["type"];
 export type DigigraphBackendConfig = Extract<BackendConfig, { type: "digigraph" }>;
 export type FoundryBackendConfig = Extract<BackendConfig, { type: "foundry" }>;
+export type OpenAiCompletionsBackendConfig = Extract<
+  BackendConfig,
+  { type: "openai-completions" }
+>;
+export type OpenAiResponsesBackendConfig = Extract<
+  BackendConfig,
+  { type: "openai-responses" }
+>;
+/** The AI-SDK family: one `streamText` mapper serves all of them (#4535). */
+export type AiSdkBackendConfig =
+  | OpenAiCompletionsBackendConfig
+  | OpenAiResponsesBackendConfig;
 
 /**
  * The upstream wire protocol an adapter speaks. This is the adapter selector:
@@ -133,6 +145,44 @@ export const BACKEND_ADAPTERS: Record<BackendType, BackendAdapter> = {
       corpus: false,
     },
   },
+  // The AI-SDK family (#4535): one `streamText` → `toUIMessageStream` mapper
+  // serves both OpenAI wire formats. The credential comes from the env var the
+  // config names, so `auth: "env"`.
+  "openai-completions": {
+    type: "openai-completions",
+    protocol: "openai-completions",
+    auth: "env",
+    capabilities: {
+      reasoning: true,
+      toolCalls: true,
+      // Provider-side tools (web search, file search) surface as tool calls and
+      // source parts on the same UI-message stream.
+      webSearch: true,
+      sources: true,
+      turnMutation: true,
+      // No external conversation id is round-tripped on these backends.
+      conversationContinuity: false,
+      attachments: true,
+      mcp: false,
+      corpus: false,
+    },
+  },
+  "openai-responses": {
+    type: "openai-responses",
+    protocol: "openai-responses",
+    auth: "env",
+    capabilities: {
+      reasoning: true,
+      toolCalls: true,
+      webSearch: true,
+      sources: true,
+      turnMutation: true,
+      conversationContinuity: false,
+      attachments: true,
+      mcp: false,
+      corpus: false,
+    },
+  },
 };
 
 /** The default backend when a deployment declares none. */
@@ -167,4 +217,28 @@ export function isFoundryConfig(
   config: BackendConfig | undefined,
 ): config is FoundryBackendConfig {
   return config?.type === "foundry";
+}
+
+/**
+ * The AI-SDK protocols. The handler tests `AI_SDK_PROTOCOLS.has(protocol)`
+ * rather than naming backend types, which keeps the "no `backend.type`
+ * comparison in the handler" invariant the source guard pins.
+ */
+export const AI_SDK_PROTOCOLS: ReadonlySet<BackendProtocol> = new Set<BackendProtocol>([
+  "openai-completions",
+  "openai-responses",
+  "anthropic-messages",
+  "gemini",
+]);
+
+/**
+ * Narrow a config to the AI-SDK family (for reading `baseUrl` / `model` /
+ * `apiKeyEnv`). Checks `type` only; the rest of the shape is guaranteed by the
+ * Zod schema (`BackendSchema`) and the tenant validator, both of which run
+ * before the handler ever sees a config.
+ */
+export function isAiSdkConfig(
+  config: BackendConfig | undefined,
+): config is AiSdkBackendConfig {
+  return config?.type === "openai-completions" || config?.type === "openai-responses";
 }

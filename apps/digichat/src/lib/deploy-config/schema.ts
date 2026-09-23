@@ -254,9 +254,52 @@ export const FoundryBackendSchema = z
   })
   .strict();
 
+/**
+ * An OpenAI-compatible endpoint reached through the AI SDK (#4535).
+ *
+ * `apiKeyEnv` NAMES an env var; the key itself never lives in the config, so
+ * it cannot be projected to the browser. The `DIGICHAT_BACKEND_` prefix is
+ * enforced so a tenant config can never point at `AUTH_SECRET`,
+ * `DIGIKEY_BFF_TOKEN`, or `DIGIGRAPH_UPSTREAM_API_KEY` and have the BFF send
+ * that secret as a Bearer token to an attacker-controlled `baseUrl`.
+ * https-only keeps the key from crossing the wire in plaintext, matching
+ * `FoundryBackendSchema`'s `projectEndpoint` rule.
+ */
+const OpenAiCompatibleFields = {
+  baseUrl: z
+    .string()
+    .url()
+    .refine((u) => u.startsWith("https:"), "baseUrl must be https"),
+  model: z.string().min(1),
+  apiKeyEnv: z
+    .string()
+    .regex(
+      /^DIGICHAT_BACKEND_[A-Z0-9_]+$/,
+      "apiKeyEnv must name a DIGICHAT_BACKEND_* env var",
+    ),
+};
+
+/** OpenAI Chat Completions wire format (`/v1/chat/completions`). */
+export const OpenAiCompletionsBackendSchema = z
+  .object({
+    type: z.literal("openai-completions"),
+    ...OpenAiCompatibleFields,
+  })
+  .strict();
+
+/** OpenAI Responses wire format (`/v1/responses`). */
+export const OpenAiResponsesBackendSchema = z
+  .object({
+    type: z.literal("openai-responses"),
+    ...OpenAiCompatibleFields,
+  })
+  .strict();
+
 export const BackendSchema = z.discriminatedUnion("type", [
   DigigraphBackendSchema,
   FoundryBackendSchema,
+  OpenAiCompletionsBackendSchema,
+  OpenAiResponsesBackendSchema,
 ]);
 
 export const ToolCatalogEntrySchema = z

@@ -10,14 +10,20 @@ import {
   normalizeOpenRouterModel,
 } from "@/lib/byok-openrouter";
 import { byokRequiresModel } from "@/lib/byok-providers";
-import { backendAdapterFor, isDigigraphConfig, isFoundryConfig } from "@/lib/backend-adapters";
-import { createDigiGraphClient, digigraphModelName } from "@/lib/digigraph";
+import {
+  AI_SDK_PROTOCOLS,
+  backendAdapterFor,
+  isAiSdkConfig,
+  isDigigraphConfig,
+  isFoundryConfig,
+} from "@/lib/backend-adapters";import { createDigiGraphClient, digigraphModelName } from "@/lib/digigraph";
 import {
   DigigraphUpstreamAuthError,
   resolveDigigraphUpstreamAuth,
 } from "@/lib/digigraph-upstream";
 import { createDigigraphTraceStreamResponse } from "@/lib/adapters/digithings/stream";
 import { createFoundryStreamResponse } from "@/lib/adapters/foundry/stream";
+import { createAiSdkStreamResponse } from "@/lib/adapters/ai-sdk/stream";
 import { resolveLanguageCode } from "@/lib/languages";
 import { requireDigiChatAuth } from "@/lib/request-auth";
 import { getEcosystemEndpoints } from "@/lib/ecosystem";
@@ -404,6 +410,26 @@ export async function POST(req: Request) {
   } catch (err) {
     runLock.release();
     throw err;
+  }
+
+  // AI-SDK backends (#4535): OpenAI Completions / Responses run through one
+  // `streamText` mapper. Sits after `coreMessages` (already built) and before
+  // the BYOK guard, so foundry/digigraph behaviour is untouched and BYOK stays
+  // a digigraph-only concern — the AI-SDK credential is the configured env key.
+  if (AI_SDK_PROTOCOLS.has(adapter.protocol) && isAiSdkConfig(backend)) {
+    try {
+      return finish(
+        await createAiSdkStreamResponse({
+          backend,
+          messages: coreMessages,
+          responseHeaders,
+          signal: req.signal,
+        }),
+      );
+    } catch (err) {
+      runLock.release();
+      throw err;
+    }
   }
 
   // Non-OpenAI BYOK requires a model slug before forwarding to digigraph.
