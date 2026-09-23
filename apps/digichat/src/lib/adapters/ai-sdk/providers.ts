@@ -16,6 +16,7 @@
 import { createAnthropic } from "@ai-sdk/anthropic";
 import { createVertex } from "@ai-sdk/google-vertex";
 import { createOpenAI } from "@ai-sdk/openai";
+import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
 import type { LanguageModel } from "ai";
 import type { AiSdkBackendConfig } from "@/lib/backend-adapters";
 
@@ -39,19 +40,33 @@ export function readBackendApiKey(apiKeyEnv: string): string {
 /** Resolve the model for an AI-SDK backend config. Server-only. */
 export function resolveAiSdkModel(backend: AiSdkBackendConfig): LanguageModel {
   switch (backend.type) {
-    case "openai-completions":
+    case "openai-completions": {
+      // The *compatible* provider, not `@ai-sdk/openai` (#4544). The OpenAI
+      // product client parses only OpenAI-native reasoning fields, so a vendor
+      // that emits the widely-used `reasoning_content` (xAI, DeepSeek, Groq,
+      // Mistral, OpenRouter, GLM, a LiteLLM proxy) would stream text and tool
+      // calls while silently dropping its thinking — even though this adapter
+      // declares `reasoning: true`. `@ai-sdk/openai-compatible` reads
+      // `reasoning_content` / `reasoning` and emits them as reasoning parts.
+      const apiKey = readBackendApiKey(backend.apiKeyEnv);
+      const provider = createOpenAICompatible({
+        name: backend.type,
+        baseURL: backend.baseUrl,
+        apiKey,
+      });
+      return provider.chatModel(backend.model);
+    }
     case "openai-responses": {
+      // The Responses wire format is OpenAI-native (reasoning summaries,
+      // encrypted reasoning, `*_call` output items), so this arm keeps the
+      // OpenAI provider — it is the only one that exposes `.responses()`.
       const apiKey = readBackendApiKey(backend.apiKeyEnv);
       const provider = createOpenAI({
         baseURL: backend.baseUrl,
         apiKey,
         name: backend.type,
       });
-      // `openai-responses` speaks the Responses wire format; `openai-completions`
-      // the Chat Completions one. Both are the installed `@ai-sdk/openai` provider.
-      return backend.type === "openai-responses"
-        ? provider.responses(backend.model)
-        : provider.chat(backend.model);
+      return provider.responses(backend.model);
     }
     case "anthropic": {
       const apiKey = readBackendApiKey(backend.apiKeyEnv);

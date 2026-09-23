@@ -4,6 +4,8 @@ const {
   chat,
   responses,
   createOpenAI,
+  compatibleChatModel,
+  createOpenAICompatible,
   anthropicMessages,
   createAnthropic,
   vertexModel,
@@ -12,6 +14,8 @@ const {
   const chat = vi.fn((model: string) => ({ model, kind: "chat" }));
   const responses = vi.fn((model: string) => ({ model, kind: "responses" }));
   const createOpenAI = vi.fn(() => ({ chat, responses }));
+  const compatibleChatModel = vi.fn((model: string) => ({ model, kind: "compatible-chat" }));
+  const createOpenAICompatible = vi.fn(() => ({ chatModel: compatibleChatModel }));
   const anthropicMessages = vi.fn((model: string) => ({ model, kind: "anthropic" }));
   const createAnthropic = vi.fn(() => anthropicMessages);
   const vertexModel = vi.fn((model: string) => ({ model, kind: "vertex" }));
@@ -20,6 +24,8 @@ const {
     chat,
     responses,
     createOpenAI,
+    compatibleChatModel,
+    createOpenAICompatible,
     anthropicMessages,
     createAnthropic,
     vertexModel,
@@ -28,6 +34,7 @@ const {
 });
 
 vi.mock("@ai-sdk/openai", () => ({ createOpenAI }));
+vi.mock("@ai-sdk/openai-compatible", () => ({ createOpenAICompatible }));
 vi.mock("@ai-sdk/anthropic", () => ({ createAnthropic }));
 vi.mock("@ai-sdk/google-vertex", () => ({ createVertex }));
 
@@ -65,11 +72,19 @@ describe("resolveAiSdkModel (#4535)", () => {
     expect(model).toEqual({ model: "gpt-4o-mini", kind: "responses" });
   });
 
-  it("uses Chat Completions for openai-completions", () => {
+  it("uses the OpenAI-compatible provider for openai-completions (#4544)", () => {
     const model = resolveAiSdkModel({ ...BASE, type: "openai-completions" });
-    expect(chat).toHaveBeenCalledWith("gpt-4o-mini");
-    expect(responses).not.toHaveBeenCalled();
-    expect(model).toEqual({ model: "gpt-4o-mini", kind: "chat" });
+    expect(createOpenAICompatible).toHaveBeenCalledWith({
+      name: "openai-completions",
+      baseURL: BASE.baseUrl,
+      apiKey: "sk-test",
+    });
+    expect(compatibleChatModel).toHaveBeenCalledWith("gpt-4o-mini");
+    // The OpenAI product client parses only OpenAI-native reasoning fields and
+    // drops `reasoning_content`, so it must not sit behind a generic
+    // compatible endpoint — that would lose the model's thinking silently.
+    expect(createOpenAI).not.toHaveBeenCalled();
+    expect(model).toEqual({ model: "gpt-4o-mini", kind: "compatible-chat" });
   });
 
   it("throws a credential error naming the env var when the key is unset", () => {
@@ -80,6 +95,7 @@ describe("resolveAiSdkModel (#4535)", () => {
     expect(() => resolveAiSdkModel({ ...BASE, type: "openai-completions" })).toThrow(
       /DIGICHAT_BACKEND_EXAMPLE_KEY/,
     );
+    expect(createOpenAICompatible).not.toHaveBeenCalled();
     expect(createOpenAI).not.toHaveBeenCalled();
   });
 
