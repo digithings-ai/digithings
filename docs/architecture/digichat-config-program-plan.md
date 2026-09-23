@@ -411,6 +411,19 @@ criterion for "every backend has the same end result".
     `@ai-sdk/google-vertex` dynamically so its eager `google-auth-library`
     dependency is only loaded for Vertex requests (would make
     `resolveAiSdkModel` async; the route is Node-only today).
+  - **Follow-up from the #4545 review (not blocking):** `lib/byok-openrouter.ts`
+    still builds its provider with `createOpenAI` (`name: "openrouter-byok"`),
+    so BYOK-OpenRouter reasoning is dropped for the same `reasoning_content`
+    reason #4545 fixed for the `openai-completions` backend. It has no caller in
+    `src/` today, so nothing is broken — switch it to
+    `createOpenAICompatible` when that path is next touched.
+  - **Backend additions free via `openai-completions` (no code needed):** xAI
+    (`https://api.x.ai/v1`, reasoning via `reasoning_content`, Grok 4 reportedly
+    omits it), Azure OpenAI (v1 API), Mistral, Together, Fireworks, Perplexity,
+    OpenRouter, DeepSeek (400s if `reasoning_content` is not round-tripped with
+    tool calls), Groq. Blocked by the https-only + SSRF policy: Ollama / vLLM /
+    LM Studio. Needing a bespoke adapter: Cohere, AWS Bedrock. Gemini AI Studio
+    ships an OpenAI-compat endpoint but only Vertex is wired today.
 - **5c — non-AI-SDK protocols.** `langgraph`, `ag-ui`, `a2a`. Each needs its
   own mapper; each is a **new dependency / new external surface**.
   **Human gate.**
