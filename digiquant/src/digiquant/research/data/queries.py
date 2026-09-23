@@ -66,14 +66,16 @@ def _r2_manifest() -> dict[str, Any]:
     return _read_manifest()  # type: ignore[no-any-return]
 
 
-def _resolve_r2_as_of(as_of: date | None) -> str:
+def _resolve_r2_as_of(as_of: date | None, manifest: dict[str, Any] | None = None) -> str:
     """ISO ``as_of`` for an R2 read: explicit date, else the manifest watermark.
 
-    The default is the seal — never wall-clock (settled-close semantics).
+    The default is the seal — never wall-clock (settled-close semantics). A
+    pre-read ``manifest`` (batch callers) is reused instead of a second GET.
     """
     if as_of is not None:
         return as_of.isoformat()
-    return str(_r2_manifest()["as_of"])
+    manifest = manifest if manifest is not None else _r2_manifest()
+    return str(manifest["as_of"])
 
 
 class UnknownTickerError(LookupError):
@@ -310,12 +312,67 @@ def get_price_technicals(
     return _r2_price_technicals(ticker=ticker, lookback=lookback, as_of=as_of)
 
 
-def _r2_price_technicals(*, ticker: str, lookback: int, as_of: date | None) -> dict[str, Any]:
-    """The sole :func:`get_price_technicals` read path (#4053; see it for the contract)."""
+def get_price_technicals_batch(
+    *,
+    client: Any,
+    tickers: list[str] | tuple[str, ...],
+    lookback: int = 20,
+    as_of: date | None = None,
+) -> dict[str, dict[str, Any]]:
+    """Batch :func:`get_price_technicals` over many tickers in one manifest read.
+
+    Returns ``{ticker: {"ticker", "latest", "window"}}`` — the exact per-ticker
+    envelope the single-ticker helper returns, keyed by ticker and covering
+    every requested ticker (unknown tickers carry the empty latest/window).
+    Requested tickers are de-duplicated with first-seen order preserved.
+
+    This is the phase entry point (#4600): :func:`get_market_context` and
+    ``portfolio.candidates.select_focus_tickers`` call it once per phase
+    instead of looping the single-ticker helper, so the sealed R2 manifest is
+    read once for the whole basket instead of once per ticker. Values are
+    unchanged — each ticker still reads its own sealed generation through the
+    same :func:`_r2_price_technicals` shaping. ``client`` is kept for
+    caller-signature stability and is never read.
+
+    Fail-soft parity with the pre-#4600 per-ticker loop: a ``LookupError``
+    (``KeyError`` included) resolving the shared manifest yields the empty
+    latest/window envelope for every requested ticker instead of propagating.
+    """
+    ordered = list(dict.fromkeys(tickers))
+    if not ordered:
+        return {}
+    try:
+        manifest = _r2_manifest()
+    except LookupError:
+        return {ticker: {"ticker": ticker, "latest": {}, "window": []} for ticker in ordered}
+    return {
+        ticker: _r2_price_technicals(
+            ticker=ticker, lookback=lookback, as_of=as_of, manifest=manifest
+        )
+        for ticker in ordered
+    }
+
+
+def _r2_price_technicals(
+    *,
+    ticker: str,
+    lookback: int,
+    as_of: date | None,
+    manifest: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """The sole :func:`get_price_technicals` read path (#4053; see it for the contract).
+
+    ``manifest`` lets a batch caller share one manifest read across tickers
+    (:func:`get_price_technicals_batch`); omit it and :func:`_read_r2_window`
+    resolves the seal itself, exactly as before #4600 (so the single-ticker
+    path keeps its manifest read at the window seam). That read sits inside
+    the ``except LookupError`` below, so a ``LookupError``-shaped manifest
+    read stays fail-soft (empty envelope).
+    """
     from digiquant.mcp_server import _read_r2_window
 
     try:
-        rows = _read_r2_window(ticker, _resolve_r2_as_of(as_of))
+        rows = _read_r2_window(ticker, _resolve_r2_as_of(as_of, manifest), manifest)
     except LookupError:
         return {"ticker": ticker, "latest": {}, "window": []}
     shaped = [
@@ -406,9 +463,10 @@ def get_market_context(
     - Technicals: one bulk query over ``tickers`` for the trailing
       ``price_window_days``; the newest row per ticker wins. Tickers absent
       from ``price_technicals`` are simply omitted. Under the R2 backend the
-      same newest-row-per-ticker is read from the sealed generations via
-      :func:`get_price_technicals` (one call per ticker — the helper owns the
-      backend, so the envelope never changes).
+      same newest-row-per-ticker is read from the sealed generations via one
+      :func:`get_price_technicals_batch` call for the whole basket (one shared
+      manifest read, #4600 — the helper owns the backend, so the envelope
+      never changes).
     - Macro: re-uses :func:`get_macro_series` (per-series latest two
       observations — series cadences are mixed, so a bulk newest-first query
       would starve monthly series behind daily ones).
@@ -424,13 +482,13 @@ def get_market_context(
             # whose newest sealed row predates the window is omitted (the
             # preflight basket-gap probe depends on the omission).
             since = (run_date - timedelta(days=price_window_days)).isoformat()
-            for ticker in tickers:
-                tech = get_price_technicals(
-                    client=client,
-                    ticker=ticker,
-                    lookback=price_window_days,
-                    as_of=run_date,
-                )
+            batch = get_price_technicals_batch(
+                client=client,
+                tickers=list(tickers),
+                lookback=price_window_days,
+                as_of=run_date,
+            )
+            for ticker, tech in batch.items():
                 if tech["latest"] and str(tech["latest"].get("date") or "") >= since:
                     out["price_technicals"][ticker] = tech["latest"]
             # Newest-row-per-ticker already holds (lookback window, latest
