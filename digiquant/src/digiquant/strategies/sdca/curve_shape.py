@@ -101,4 +101,31 @@ class SdcaCurveShape(BaseModel):
                 )
 
 
-__all__ = ["SdcaCurveShape"]
+def risk50_linear_reference_curve(max_rate: float, *, eps: float = 0.1) -> SdcaCurveShape:
+    """Naive symmetric baseline: buy below risk 50, sell above 50, dead-simple linear.
+
+    No curvature, no wide dead zone -- a straight linear ramp from
+    ``max_rate`` at risk 0 down to 0 at risk 50, then from 0 down to
+    ``-max_rate`` at risk 100. Used as the non-optimized comparator for
+    baseline-relative evaluation, not as a candidate to be tuned itself.
+
+    ``SdcaCurveShape`` forbids an exactly-zero-width dead zone
+    (``buy_knee_risk < sell_knee_risk`` strict), so the knees sit at
+    ``50 - eps``/``50 + eps``. On the 5-wide ``RISK_NODES`` grid (0, 5, ...,
+    100) only the node at risk 50 falls inside that gap, so for any
+    ``eps`` small enough not to reach the neighboring 45/55 nodes this is
+    indistinguishable from a single knee at exactly 50.
+    """
+    if not (0.0 < eps < 5.0):
+        raise ValueError(f"eps must be in (0, 5) to stay inside the 45..55 node gap, got {eps}")
+    return SdcaCurveShape(
+        buy_max_rate=max_rate,
+        buy_knee_risk=50.0 - eps,
+        sell_knee_risk=50.0 + eps,
+        sell_max_rate=max_rate,
+        buy_curvature=1.0,
+        sell_curvature=1.0,
+    )
+
+
+__all__ = ["SdcaCurveShape", "risk50_linear_reference_curve"]
