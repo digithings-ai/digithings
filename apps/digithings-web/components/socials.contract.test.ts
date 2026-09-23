@@ -8,7 +8,9 @@ function load(rel: string): string {
 
 describe("digithings.ai socials import", () => {
   it("puts SocialRow on the contact band, not a live /brand kit page", () => {
-    const home = load("../app/page.tsx");
+    // The landing page is composed in LandingPage.tsx; app/page.tsx renders it.
+    // The contract is about the band, so it follows the band.
+    const home = load("../components/landing/LandingPage.tsx");
     expect(home).toContain("SocialRow");
     // The contact band's anchor, not its marketing copy: #contact is the stable
     // contract (the nav and footer link to /#contact), and the prose there is

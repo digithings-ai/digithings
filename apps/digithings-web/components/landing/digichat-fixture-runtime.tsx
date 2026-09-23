@@ -10,11 +10,16 @@
  * draws the real tool rows, reasoning trace and markdown of the product
  * conversation, with no backend and no container.
  *
- * This is a **simulation**. Nothing here is connected to digichat. The landing
- * page intercepts every send and routes to /chat (see `QuickAsk.tsx`), so the
- * adapter exists to satisfy `useLocalRuntime` and to keep the pane honest if a
- * turn ever does run: the canned scenarios cite real doc paths and state no
- * figure.
+ * This is a **simulation**. Nothing here is connected to digichat. The band lets
+ * the canned turn run in place — the owner asked for it ("make sure we're
+ * actually responding in this cube… they'd get an answer streamed in this
+ * embedded view"), so `QuickAsk` no longer intercepts the send. What it does do
+ * is publish the transcript upward, so the moment the reader wants the real
+ * thing the whole conversation travels to `/chat` with them.
+ *
+ * The canned scenarios cite real doc paths and state no figure, and the box is
+ * badged as an example, so a simulated answer is never mistaken for the
+ * container's.
  */
 import {
   AuiConfig,
@@ -27,7 +32,7 @@ import {
   type ChatModelAdapter,
   type SuggestionConfig,
 } from "@assistant-ui/react";
-import { useSyncExternalStore, type ReactNode } from "react";
+import { useEffect, useSyncExternalStore, type ReactNode } from "react";
 
 import { lastUserText, pickFixtureScenario, type FixtureTool } from "./digichat-fixture-scenarios";
 
@@ -131,9 +136,18 @@ const serverMounted = () => false;
 export function DigichatFixtureRuntime({
   children,
   suggestions = [],
+  onTranscript,
 }: {
   children: ReactNode;
   suggestions?: readonly WelcomeSuggestion[];
+  /**
+   * Called with the whole conversation whenever it changes — the band needs it
+   * to offer "take this to the real chat", since the transcript lives in this
+   * runtime's state and nowhere else. Plain `{role, content}` pairs, tool and
+   * reasoning parts dropped: that is all the embed's seed protocol accepts, so
+   * sending more would only be discarded on the other side.
+   */
+  onTranscript?: (messages: { role: "user" | "assistant"; content: string }[]) => void;
 }) {
   /* localStorage-free hydration signal: the runtime is client-only, and a
      mount effect whose sole job is a synchronous setState is the pattern this
@@ -150,16 +164,20 @@ export function DigichatFixtureRuntime({
     );
   }
   return (
-    <DigichatFixtureRuntimeInner suggestions={suggestions}>{children}</DigichatFixtureRuntimeInner>
+    <DigichatFixtureRuntimeInner suggestions={suggestions} onTranscript={onTranscript}>
+      {children}
+    </DigichatFixtureRuntimeInner>
   );
 }
 
 function DigichatFixtureRuntimeInner({
   children,
   suggestions,
+  onTranscript,
 }: {
   children: ReactNode;
   suggestions: readonly WelcomeSuggestion[];
+  onTranscript?: (messages: { role: "user" | "assistant"; content: string }[]) => void;
 }) {
   const runtime = useLocalRuntime(adapter, {
     adapters: {
@@ -169,6 +187,33 @@ function DigichatFixtureRuntimeInner({
       ]),
     },
   });
+
+  useEffect(() => {
+    if (!onTranscript) return;
+    const thread = runtime.thread;
+    // `subscribe`, not a render-time read: the transcript is what the *expand*
+    // button hands to /chat, and it has to be current the moment it is pressed,
+    // including the assistant turn still streaming when the reader decides.
+    const publish = () => {
+      const messages = thread
+        .getState()
+        .messages.map((message) => ({
+          role: message.role,
+          content: message.content
+            .filter((part): part is { type: "text"; text: string } => part.type === "text")
+            .map((part) => part.text)
+            .join(""),
+        }))
+        .filter(
+          (message): message is { role: "user" | "assistant"; content: string } =>
+            (message.role === "user" || message.role === "assistant") && message.content.length > 0,
+        );
+      onTranscript(messages);
+    };
+    publish();
+    return thread.subscribe(publish);
+  }, [onTranscript, runtime]);
+
   const config =
     suggestions.length > 0
       ? AuiConfig({
