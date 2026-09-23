@@ -1,7 +1,4 @@
-import { ContactMailto, CtaLink, SortableTable, type SortableColumn } from "@digithings/ui";
-import { buttonVariants } from "@digithings/ui/ui";
-import { DT_CONTACT_EMAIL } from "@/app/_nav";
-import { GROUPED_LABEL } from "./label";
+import { SortableTable, type SortableColumn } from "@digithings/ui";
 
 /**
  * The pricing band (v15, stage 7, #4429 — point 12).
@@ -15,6 +12,11 @@ import { GROUPED_LABEL } from "./label";
  * That replaces the v13 two-up, which double-stated the same two types under
  * two headings. The CTAs stay (they were the useful half of the cards), one row
  * per type, so nothing about the offer is lost — only the prose volume.
+ *
+ * Round 2: the CTA block the cards carried is gone too. The owner's instruction
+ * was "remove the buttons, I just want that comparison table here", and it was
+ * the same "read the docs buttons all over the place" complaint he raised for
+ * the argument band. The table plus its footnote is the whole section now.
  *
  * Two honesty positions from the cards survive verbatim in the footnote, because
  * neither is a formatting choice: there are still no public prices (that is the
@@ -68,35 +70,6 @@ export function Pricing() {
         rowKey={(r) => r.type}
         defaultSort={{ key: "type", dir: "asc" }}
       />
-
-      {/* The CTAs the cards carried — one row per type, so the table can stay
-          text-only and the two ways in stay side by side. */}
-      <div className="grid gap-[1rem] border-t border-hair pt-[1.4rem] min-[900px]:grid-cols-2">
-        <div className="flex flex-col gap-[0.7rem]">
-          <p className={`m-0 ${GROUPED_LABEL}`}>self-host</p>
-          <div className="flex flex-wrap items-center gap-[0.8rem]">
-            <CtaLink href="/docs">Read the docs</CtaLink>
-            <CtaLink href="/chat" variant="ghost">
-              Ask digichat
-            </CtaLink>
-          </div>
-        </div>
-        <div className="flex flex-col gap-[0.7rem]">
-          <p className={`m-0 ${GROUPED_LABEL}`}>integration service</p>
-          <div className="flex flex-wrap items-center gap-[0.8rem]">
-            <ContactMailto
-              email={DT_CONTACT_EMAIL}
-              className={buttonVariants({ variant: "default" })}
-              subject="digithings%20services%20inquiry"
-            >
-              Discuss a project
-            </ContactMailto>
-            <CtaLink href="/services" variant="ghost">
-              What we do
-            </CtaLink>
-          </div>
-        </div>
-      </div>
 
       <p className="m-0 max-w-[var(--measure-prose)] text-[0.78rem] leading-[1.7] text-ink-mute">
         There are no public package prices: the work is scoped for each environment, so a number
