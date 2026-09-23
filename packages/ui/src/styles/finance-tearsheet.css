@@ -109,6 +109,10 @@
 }
 @media (prefers-reduced-motion: reduce) {
   .ts-tab-pane { animation: none; }
+  /* The live dot pulses forever, which is precisely the kind of unbounded
+     motion this query exists to stop. The dot itself stays — it still reads as
+     the status mark next to "example" / "live" — only the pulse is dropped. */
+  .ts-live-dot { animation: none; }
 }
 .ts-metrics-table th[scope="row"] { font-weight: 500; color: var(--ink-soft); white-space: nowrap; }
 .ts-metrics-table th[scope="col"] { font-size: 0.68rem; letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink-mute); }
