@@ -1,14 +1,13 @@
 import {
   RepoActivity,
-  TestimonialWall,
-  TypewriterReveal,
+  WordReveal,
   modules,
   type RepoContributor,
   type RepoModuleRelease,
-  type TestimonialQuote,
 } from "@digithings/ui";
 import { CONTRIBUTING_URL, REPO_CLONE, REPO_URL, repoActivity } from "@/lib/repoActivity";
 import { moduleVersion } from "@/lib/moduleCounts";
+import { GROUPED_LABEL } from "./label";
 
 /**
  * The open-source band, the FAQ and the voices (v12 → v15, #4429).
@@ -25,8 +24,8 @@ import { moduleVersion } from "@/lib/moduleCounts";
  * `QuantSplit`) were retired once the Boot band and the digiquant band were
  * rebuilt — the live bands are `BootTerminal` and `QuantSection`, and the dead
  * exports only made this file harder to read. The hand-rolled two-blockquote
- * `Quotes` band is gone too: it is now `Testimonials`, one `TestimonialWall`
- * (v15 point 5).
+ * `Quotes` band is gone too: it is now `Testimonials`, a standalone pull-quote
+ * per voice revealed with the kit's `<WordReveal/>` (v15 point 5; reveal in v16).
  */
 
 // ═══ Repository ═════════════════════════════════════════════════════════════
@@ -96,56 +95,76 @@ export function FaqList() {
 // ═══ Voices ═════════════════════════════════════════════════════════════════
 
 /**
- * The consolidated voice band (v15 point 5).
+ * The voices band, revealed as standalone quotes (v15 → v16, #4429).
  *
- * The owner asked for the quotes to stop being two separate items — a band of
- * their own plus a line in the hero — and become one section. There are exactly
- * two voices and both are real:
+ * The owner's ask, verbatim: "the quotes i want to show like we have in the
+ * typography page ... this word reveal animation i think that's what i'd want
+ * ... essentially revealing the quotes as you scroll down but there shouldn't
+ * be a box around them they should appear as standalone quotes of their own".
  *
- * - the maintainer's, which is the statement the page has carried all along:
- *   the stack declines to bet on a provider, and where a claim cannot be counted
- *   it is written down as a limit rather than dressed up as a feature;
+ * So the boxed `TestimonialWall` presentation is gone. Each voice is a
+ * `<WordReveal/>` — the kit's pinned-blur reveal, the exact one the typography
+ * reference renders — whose words fill from blur as the line rides up the
+ * viewport. There is no border, card or surface: a pull-quote is the words and
+ * their attribution, nothing else. The quotation marks are the frame now, so
+ * the marks stay (U+201C/U+201D) and the wording is unchanged.
+ *
+ * ## The pinning trade-off (recorded, because this file argues about it)
+ *
+ * `WordReveal` pins a 150vh track per call, and this band holds two quotes, so
+ * it adds ~300vh of pinned scroll. That is a real cost, and this file's other
+ * docblocks — `Boot` above, and the Colophon note in app/page.tsx — argue
+ * against exactly this kind of dead scroll. The owner asked for the reveal
+ * anyway, so the only open question is how to spend it:
+ *
+ * - Two adjacent tracks (what is built). Each quote owns its own reveal and the
+ *   reader meets them one at a time, which is the voice doctrine this band has
+ *   carried all along — "the reader meets them one at a time instead of
+ *   comparing them side by side". Composed by mapping `<WordReveal/>` over the
+ *   two voices; no new primitive.
+ * - One shared track. `WordReveal` takes a single `text` string, so putting both
+ *   quotes on one pinned track means either a new primitive or a fork of the
+ *   kit's scroll mapping, and the task ruled that out. It would save ~150vh but
+ *   buy it with a primitive the kit does not have — the wrong trade.
+ *
+ * The 150vh track is also what lets the reveal finish by mid-viewport and never
+ * scroll away half-read, and `word-reveal.css` collapses it to a static,
+ * fully-legible block under `prefers-reduced-motion` and under `html.no-js`, so
+ * the quotes are never gated behind the animation.
+ *
+ * Both voices are real:
+ *
+ * - the maintainer's, the statement the page has carried all along: the stack
+ *   declines to bet on a provider, and where a claim cannot be counted it is
+ *   written down as a limit rather than dressed up as a feature;
  * - DataTap's, quoted as *their* words about *their* integration — the
  *   documented self-hosted one. DataTap runs digichat on their own container
  *   host against their own Azure AI Foundry backend (see
  *   docs/architecture/digichat-self-hosted-release.md), and digithings does not
  *   host their instance. Their org links to its own public site.
  *
- * The voice doctrine is the primitive's contract and it holds here: real orgs
- * only, no invented orgs, no invented numbers. There is no `lockup` (the two
- * voices are not both about one product) and no `orgs` strip — a "trusted by"
- * row with a single real name would read as more than it is.
- *
- * The quotes are set as quotes, in quotation marks, and both are motion text
- * (`<TypewriterReveal/>`): each one types itself out as it rides up the page, so
- * the words arrive in the order they were written rather than appearing whole.
- * Round 4 changed this from a word-level deepen on the maintainer's quote only —
- * "we should use the digiweb animated text which could be typewritten as you're
- * scrolling progressively... and I'd have them stacked or make it look cool" —
- * so the two are stacked, one per row, at display size, and the reader meets them
- * one at a time instead of comparing them side by side.
- *
- * The typewriter holds its own layout with a hidden ghost, so neither quote
- * reflows as it types, and both render in full with no JS and under
- * `prefers-reduced-motion`.
+ * The voice doctrine is the data's contract and it holds here: real orgs only,
+ * no invented orgs, no invented numbers.
  */
-const VOICES: TestimonialQuote[] = [
+type Voice = {
+  /** The quote, typographic marks included (U+201C/U+201D). Revealed word by word. */
+  text: string;
+  name: string;
+  role: string;
+  org: string;
+  /** Public site for the org, when it has one. */
+  href?: string;
+};
+
+const VOICES: Voice[] = [
   {
-    quote: (
-      <span className="block text-[clamp(1.15rem,2.6vw,1.5rem)] leading-[1.35]">
-        <TypewriterReveal text={"\u201CThe stack declines to bet on a provider. Models, vector stores and execution venues sit behind interfaces, so the field can move without the architecture having to. Where a claim can be counted it is counted and dated; where it cannot, it is written down as a limit instead of dressed up as a feature.\u201D"} />
-      </span>
-    ),
+    text: "\u201CThe stack declines to bet on a provider. Models, vector stores and execution venues sit behind interfaces, so the field can move without the architecture having to. Where a claim can be counted it is counted and dated; where it cannot, it is written down as a limit instead of dressed up as a feature.\u201D",
     name: "Chris",
     role: "maintainer",
     org: "digithings",
   },
   {
-    quote: (
-      <span className="block text-[clamp(1.15rem,2.6vw,1.5rem)] leading-[1.35]">
-        <TypewriterReveal text={"\u201Cdigichat gave our users a way to understand the product in their own words — and it runs on our own infrastructure, against our own backend, so the conversation never leaves the environment we already control.\u201D"} />
-      </span>
-    ),
+    text: "\u201Cdigichat gave our users a way to understand the product in their own words — and it runs on our own infrastructure, against our own backend, so the conversation never leaves the environment we already control.\u201D",
     name: "DataTap",
     role: "self-hosted digichat",
     org: "datatap.stream",
@@ -154,7 +173,37 @@ const VOICES: TestimonialQuote[] = [
 ];
 
 export function Testimonials() {
-  return <TestimonialWall columns={1} quotes={VOICES} className="w-full" />;
+  return (
+    /* Two tracks, one per voice, in document order — the reader meets the
+       maintainer's claim, then DataTap's. The `<figure>` is semantics only:
+       `m-0`, no border, no background, so nothing draws a box around the
+       quote. The attribution is a sibling of the track, so it reads beneath the
+       quote once the pinned hold releases. */
+    <div className="flex flex-col">
+      {VOICES.map((voice) => (
+        <figure key={voice.name} className="m-0">
+          <blockquote className="m-0">
+            <WordReveal text={voice.text} />
+          </blockquote>
+          <figcaption className={`mt-[0.9rem] ${GROUPED_LABEL}`}>
+            {voice.name} · {voice.role} ·{" "}
+            {voice.href ? (
+              <a
+                className="underline-offset-[3px] hover:text-ink hover:underline"
+                href={voice.href}
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                {voice.org}
+              </a>
+            ) : (
+              voice.org
+            )}
+          </figcaption>
+        </figure>
+      ))}
+    </div>
+  );
 }
 
 // ═══ Open source ════════════════════════════════════════════════════════════
