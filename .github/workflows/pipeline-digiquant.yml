@@ -233,8 +233,11 @@ jobs:
         # before digikey (:8005) serves the JWKS it needs to verify the token,
         # which surfaced mid-run as 401 invalid_token / 503
         # auth_backend_unavailable and destroyed whole attempts. Wake both public
-        # hostnames and wait until both answer.
-        timeout-minutes: 5
+        # hostnames and wait until both answer. Bounded well above the loop's
+        # worst case (12 attempts x (2 curls x 10s + 5s sleep) = 300s) so a hung
+        # probe cannot blow the step budget and fail the job — the script is
+        # deliberately non-fatal and the pre-flight check is the real gate.
+        timeout-minutes: 8
         run: |
           digikey_url="${DIGIKEY_URL:-https://key.digithings.ai}/healthz"
           digisearch_url="${DIGISEARCH_URL:-https://search.digithings.ai}/healthz"

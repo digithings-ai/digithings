@@ -129,9 +129,13 @@ export class DigiStackContainer extends Container {
         // digikey is unconditional: digisearch verifies the digikey JWT against
         // the :8005 JWKS on every authenticated call, so proxying a search request
         // before :8005 binds is a cold-wake 401 invalid_token (and a 503 once the
-        // blocklist check runs). digikey refuses to bind until redis answers
-        // (container/start_digikey.sh), so waiting on :8005 also closes the
-        // Redis-readiness race. See #4546.
+        // blocklist check runs). This gates every route, including the auth-exempt
+        // ones (/healthz, the /_stack/mcp/* proxies) — intentional: an unready
+        // digikey is the failure we are fixing, not a distinct case worth a second
+        // code path. digikey waits up to 30s for redis before binding
+        // (container/start_digikey.sh; it binds anyway after the wait), so in
+        // practice this also covers the blocklist 503 window — redis is a
+        // supervisord priority-10 program, so it is up first. See #4546.
         ports: [
           DIGIGRAPH_PORT,
           DIGIKEY_PORT,

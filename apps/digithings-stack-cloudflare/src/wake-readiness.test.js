@@ -17,8 +17,10 @@ import { describe, expect, it } from "vitest";
  * web-grounding pre-pass treats that as fatal (#3859), so a transient cold wake
  * discarded whole attempts.
  *
- * DIGIKEY_PORT is therefore unconditional: waiting on :8005 also closes the
- * redis-readiness race, because digikey refuses to bind until redis answers.
+ * DIGIKEY_PORT is therefore unconditional. In practice this also covers the
+ * blocklist 503 window: digikey waits up to 30s for redis before binding
+ * (container/start_digikey.sh) and redis is a supervisord priority-10 program,
+ * so redis is up first.
  *
  * Deliberately plain `.js`, same reason as container-bind.test.js: tsconfig
  * scopes `types` to @cloudflare/workers-types only.
