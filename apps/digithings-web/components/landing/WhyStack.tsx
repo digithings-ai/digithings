@@ -32,7 +32,8 @@ import {
   COST_FRAMING,
   COST_LINES,
   DIGITHINGS_ARCH,
-  TOUR_STEPS,
+  OWNED_TOUR_STEPS,
+  RENTED_TOUR_STEPS,
 } from "@/lib/whyStack";
 
 const HEADLINE = "m-0 font-mono text-[clamp(1.3rem,2.4vw,1.85rem)] font-medium leading-[1.2] tracking-[-0.02em] text-ink";
@@ -78,28 +79,21 @@ function Tour() {
         The same diagram, walked
       </h2>
       <p className={LEDE}>
-        Three treatments of one drawing, from still to moving. All three use the same seven steps and
-        the same diagram, so the only thing that changes is how the page carries you through it. Scroll
-        each one.
+        Scroll. The walk starts on the rented stack and lights each box it is talking about; when it
+        has finished that side the page pushes the second diagram in behind it, and the camera takes
+        over and moves with the walk.
       </p>
 
       <div className="whyx__tours">
         <div className="whyx__tour">
-          <span className="whyx__tag">02 · guided, boxes ring</span>
-          <p className="whyx__tourtag">
-            The frame parks and the step advances as you scroll. The boxes the step is about take a
-            ring; nothing moves.
-          </p>
-          <ArchitectureTour spec={DIGITHINGS_ARCH} steps={TOUR_STEPS} variant="highlight" />
-        </div>
-
-        <div className="whyx__tour">
-          <span className="whyx__tag">03 · guided, camera follows</span>
-          <p className="whyx__tourtag">
-            Same steps, but the frame pans and zooms so the boxes under discussion sit in the middle.
-            It opens wide on the whole system and comes in.
-          </p>
-          <ArchitectureTour spec={DIGITHINGS_ARCH} steps={TOUR_STEPS} variant="camera" />
+          <span className="whyx__tag">02 · guided, rented then owned</span>
+          <ArchitectureTour
+            sides={[
+              { spec: CONVENTIONAL_ARCH, steps: RENTED_TOUR_STEPS, tag: "rented" },
+              { spec: DIGITHINGS_ARCH, steps: OWNED_TOUR_STEPS, tag: "owned" },
+            ]}
+            variant="camera"
+          />
         </div>
       </div>
     </section>

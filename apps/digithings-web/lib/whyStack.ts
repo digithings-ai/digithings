@@ -126,6 +126,46 @@ export const DIGITHINGS_ARCH: ArchSpec = {
 /* ══════════════════════ A2. the guided walk ══════════════════════ */
 
 /**
+ * The walk over `CONVENTIONAL_ARCH` — the rented side of the swipe-through.
+ *
+ * The owner: "we start with the diagram for the off-the-shelf solution and then
+ * we swipe over to the digi things solution the guided camera". So the tour
+ * spends its first four steps on the rented stack (glow only — no camera, since
+ * a walk that both zooms in and later has to pull back out is the thing that
+ * read as broken), then pushes across to the owned diagram and hands the camera
+ * to `OWNED_TOUR_STEPS`.
+ *
+ * The sets grow by one step at a time and the last one includes the `platform`
+ * boundary group, so the walk ends on the closed wall rather than on a box.
+ */
+export const RENTED_TOUR_STEPS: TourStep[] = [
+  {
+    id: "surface",
+    label: "The surface you own",
+    line: "One box is yours: the application. Everything it calls sits behind somebody else's interface.",
+    ids: ["app"],
+  },
+  {
+    id: "gateway",
+    label: "One vendor entry point",
+    line: "A single gateway is the only way in. Its shape, its limits and its version are decided above you.",
+    ids: ["app", "gateway"],
+  },
+  {
+    id: "services",
+    label: "Every layer a contract",
+    line: "Models, vectors, the database and the queue are four separate contracts, four meters and four things you cannot change.",
+    ids: ["app", "gateway", "model", "vector", "rdbms", "queue"],
+  },
+  {
+    id: "closed",
+    label: "One closed boundary",
+    line: "Traces, compute and the account all sit behind the same wall. The diagram is not smaller than digithings — it is the same diagram with nothing movable in it.",
+    ids: ["app", "gateway", "model", "vector", "rdbms", "queue", "obs", "cloud", "platform"],
+  },
+];
+
+/**
  * The walk, step by step, over `DIGITHINGS_ARCH`. The first step names no boxes
  * on purpose: the tour opens on the whole diagram and then comes in, which is
  * the owner's "at the beginning we show the full diagram and as we go through
@@ -134,7 +174,7 @@ export const DIGITHINGS_ARCH: ArchSpec = {
  * Every id here must exist in `DIGITHINGS_ARCH` — the tour resolves them against
  * the ids mermaid puts on the rendered groups.
  */
-export const TOUR_STEPS: TourStep[] = [
+export const OWNED_TOUR_STEPS: TourStep[] = [
   {
     id: "overview",
     label: "The whole system",

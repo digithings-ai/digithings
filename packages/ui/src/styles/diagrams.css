@@ -113,6 +113,38 @@
 }
 
 /*
+ * Terminal polish. The owner: "make it more still terminal look simplicity but
+ * still modern polish". mermaid's default chrome is a soft floating glyph on an
+ * unfilled plate; the house grammar is a stamped chip on a hairline, square, in
+ * the mono ramp — so the plate gets a border, and the type goes on the ramp
+ * rather than mermaid's own family.
+ */
+.arch-figure__body svg svg rect[width="80"],
+.arch-figure__body svg svg rect[width="60"] {
+  stroke: var(--hair) !important;
+  stroke-width: 1 !important;
+}
+
+.arch-figure__body svg .architecture-service text {
+  font-size: 12px;
+  letter-spacing: 0.01em;
+}
+
+/*
+ * mermaid sizes an edge label's box to the raw string and lets it wrap, which
+ * splits a word when the box is narrow ("heartbea / t"). The label is one line
+ * of mono here, so it is allowed to be wider than the box mermaid guessed.
+ */
+.arch-figure__body svg foreignObject {
+  overflow: visible !important;
+}
+
+.arch-figure__body svg foreignObject > div {
+  white-space: nowrap !important;
+  overflow: visible !important;
+}
+
+/*
  * ── the tour ────────────────────────────────────────────────────────────────
  * Three treatments of one diagram. Static is the frame plus the steps; the two
  * pinned treatments park the frame and let scroll drive it. The camera element
@@ -139,7 +171,21 @@
   overflow: hidden;
 }
 
+/* The swipe. Each pane is one stage wide, so shifting the strip by one pane is
+ * `-100% / sides` of its own width and the page never re-lays out to do it. */
+.arch-tour__strip {
+  display: flex;
+  width: calc(100% * var(--sides, 1));
+  transform: translateX(calc(var(--arch-swap, 0) * -100% / var(--sides, 1)));
+}
+
+.arch-tour__pane {
+  flex: 0 0 calc(100% / var(--sides, 1));
+  min-width: 0;
+}
+
 .arch-tour__camera {
+  position: relative;
   transform-origin: 0 0;
   transition: transform 0.7s cubic-bezier(0.22, 1, 0.36, 1);
   will-change: transform;
@@ -156,16 +202,66 @@
   display: none;
 }
 
+/* The selected box glows and everything outside it drops back into the page.
+ * The huge flat shadow is the spotlight: it dims the whole pane except the
+ * rectangle it is cast from, and the stage's own overflow clips it, so there is
+ * no second layer to keep in step with the camera. */
 .arch-tour__spot {
   position: absolute;
-  border: 2px solid var(--accent);
-  background: color-mix(in srgb, var(--accent) 8%, transparent);
   pointer-events: none;
+  border: 1px solid color-mix(in srgb, var(--accent) 55%, transparent);
+  background: color-mix(in srgb, var(--accent) 5%, transparent);
+  box-shadow: 0 0 0 9999px color-mix(in srgb, var(--bg) 78%, transparent);
   transition:
     left 0.45s var(--ease),
     top 0.45s var(--ease),
     width 0.45s var(--ease),
     height 0.45s var(--ease);
+}
+
+/* The glow itself breathes on its own layer so only opacity is animated — an
+ * animated 9999px spread would repaint the whole frame every tick. */
+.arch-tour__spot::after {
+  content: "";
+  position: absolute;
+  inset: -1px;
+  box-shadow:
+    0 0 18px 2px color-mix(in srgb, var(--accent) 30%, transparent),
+    inset 0 0 10px color-mix(in srgb, var(--accent) 16%, transparent);
+  animation: arch-glow 2.6s ease-in-out infinite;
+}
+
+@keyframes arch-glow {
+  0%,
+  100% {
+    opacity: 0.45;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+/* The no-motion treatment renders both sides stacked, so it owns its own gap. */
+.arch-tour__static {
+  display: flex;
+  flex-direction: column;
+  gap: 1.2rem;
+  min-width: 0;
+}
+
+.arch-tour__tag,
+.arch-tour__side-tag {
+  font-family: var(--font-mono);
+  font-size: 0.62rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--ink-mute);
+}
+
+.arch-tour__side-tag {
+  display: block;
+  margin-bottom: 0.15rem;
+  color: var(--accent);
 }
 
 .arch-tour__grid {
@@ -236,6 +332,20 @@
   color: var(--ink-soft);
 }
 
+/*
+ * The rail is an index, not a transcript: only the step being walked prints its
+ * line. Eleven full entries made the rail 1423px tall — taller than the viewport
+ * — and a sticky element taller than the viewport cannot hold, so the whole
+ * pinned treatment slid away instead of parking.
+ */
+.arch-tour__line {
+  display: none;
+}
+
+.arch-tour__step.on .arch-tour__line {
+  display: block;
+}
+
 @media (min-width: 960px) {
   .arch-tour:not([data-variant="static"]) .arch-tour__grid {
     grid-template-columns: minmax(0, 1.35fr) minmax(0, 0.65fr);
@@ -245,10 +355,30 @@
 
 @media (prefers-reduced-motion: reduce) {
   .arch-tour__camera,
+  .arch-tour__strip,
   .arch-tour__spot,
   .arch-tour__step,
   .arch-tour__rail::before {
     transition: none;
+  }
+
+  .arch-tour__spot::after {
+    animation: none;
+    opacity: 1;
+  }
+
+  .arch-tour__strip {
+    transform: none;
+    display: block;
+    width: 100%;
+  }
+
+  .arch-tour__pane {
+    display: block;
+  }
+
+  .arch-tour__pane + .arch-tour__pane {
+    margin-top: 1.2rem;
   }
 
   .arch-tour__rail::before {
