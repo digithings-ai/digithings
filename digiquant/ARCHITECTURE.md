@@ -3131,7 +3131,7 @@ see below). **PostgREST timeout:** `build_client` sets
 Ledger writers, at-open (`execute_at_open.py`), and the opening-snapshot seed
 construct that client through `build_client`. `_insert` / `_execute` call
 `execute()` directly; hung I/O fails via httpx (no thread deadline). The
-research pipeline run step wraps each of 3 attempts in `timeout 70m` so a
+research pipeline run step wraps each of 2 attempts in `timeout 100m` so a
 hung attempt fails and the retry can fire; the step `timeout-minutes` is 230,
 under the 240-minute job cap. `_insert` raises if `workspace_id` is missing
 on a row. No client-level retries on this path (disconnect retries are a

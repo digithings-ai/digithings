@@ -117,3 +117,4 @@ def test_research_pipeline_run_step_has_per_attempt_timeout() -> None:
     assert "timeout --kill-after=30s" in script
     assert "${ATTEMPT_TIMEOUT}" in script
     assert "MAX_OUTER_ATTEMPTS=2" in script
+    assert "OUTER_BACKOFF=(0 300)" in script

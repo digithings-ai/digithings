@@ -25,7 +25,7 @@ Both files share:
 - identical "Resolve run date" step
 - identical "Validate providers (preflight)" step with identical env vars
   (`OPENROUTER_ALLOWED_MODELS`, `OPENROUTER_COST_QUALITY_TRADEOFF`)
-- identical outer-retry shell loop (2 attempts, `OUTER_BACKOFF=(0 300)`)
+- identical outer-retry shell loop (3 attempts, `OUTER_BACKOFF=(0 300 900)`)
 - identical "Upload logs" step (differing only in the artifact name prefix)
 - near-identical "Open or update failure issue" step (differing only in `TITLE`)
 - identical Python entry point (`python -m digiquant.olympus.hermes.chain`)
