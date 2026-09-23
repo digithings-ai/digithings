@@ -93,6 +93,16 @@
   outline-offset: 2px;
 }
 
+/* The card the arrows have selected — the one sitting at the rail's leading
+   edge. `CardRail` marks it `data-active`; only the tearsheet cards dress it, so
+   the releases rail keeps its plain strip. The owner asked for exactly this
+   reading: "the arrows ... should cycle between one at a time ... Initially we
+   should have the first strategy selected". */
+.cr-track > [data-active="true"] .ts-card {
+  border-color: color-mix(in srgb, var(--accent) 55%, var(--hair));
+  background: color-mix(in srgb, var(--accent) 5%, transparent);
+}
+
 @media (prefers-reduced-motion: reduce) {
   .cr-arrow {
     transition: none;
