@@ -39,6 +39,7 @@
 
 import { useEffect, useId, useRef, useState } from "react";
 
+import { ArchitectureSvg, hasLayout } from "./architecture-svg";
 import { tokenThemeVariables } from "./mermaid-theme";
 
 /** The five icons mermaid's architecture grammar ships with. */
@@ -54,14 +55,31 @@ export interface ArchGroup {
   icon?: ArchIcon;
   /** Id of the group this one sits inside. */
   parent?: string;
+  /**
+   * Grid rect for the kit's own SVG renderer: top-left cell plus the span. All
+   * four are required for a declared rect; omit them and the rect is computed
+   * from the group's members.
+   */
+  col?: number;
+  row?: number;
+  cols?: number;
+  rows?: number;
 }
 
-/** One service box. `group` places it inside a boundary. */
+/**
+ * One service box. `group` places it inside a boundary.
+ *
+ * `col`/`row` are the kit SVG renderer's grid slot. When every service carries
+ * one, `ArchitectureDiagram` draws its own positioned SVG (see
+ * `architecture-svg.tsx` for why); otherwise it falls back to mermaid.
+ */
 export interface ArchService {
   id: string;
   label: string;
   icon?: ArchIcon;
   group?: string;
+  col?: number;
+  row?: number;
 }
 
 /** One connector. Sides are explicit because mermaid cannot fan out a side. */
@@ -211,16 +229,22 @@ export type ArchitectureDiagramProps = {
   spec: ArchSpec;
   /** Mono caption under the figure. Defaults to the spec title. */
   caption?: string;
+  /** Service and group ids to mark as the current step (the tour's handles). */
+  lit?: readonly string[];
   className?: string;
 };
 
-export function ArchitectureDiagram({ spec, caption, className }: ArchitectureDiagramProps) {
+export function ArchitectureDiagram({ spec, caption, lit, className }: ArchitectureDiagramProps) {
   const [svg, setSvg] = useState("");
   const [failed, setFailed] = useState(false);
   const [themeTick, setThemeTick] = useState(0);
   const hostRef = useRef<HTMLElement>(null);
   const id = `arch-${useId().replace(/[^a-zA-Z0-9]/g, "")}`;
   const source = toMermaid(spec);
+  // A spec that declares a grid slot per service is drawn by the kit's own
+  // positioned renderer; mermaid is the fallback for a spec without one (see
+  // architecture-svg.tsx for why the beta grammar could not be repaired).
+  const laidOut = hasLayout(spec);
 
   useEffect(() => {
     const observer = new MutationObserver(() => setThemeTick((n) => n + 1));
@@ -233,7 +257,7 @@ export function ArchitectureDiagram({ spec, caption, className }: ArchitectureDi
 
   useEffect(() => {
     const host = hostRef.current;
-    if (!host) return;
+    if (!host || laidOut) return;
     let cancelled = false;
 
     void (async () => {
@@ -265,25 +289,24 @@ export function ArchitectureDiagram({ spec, caption, className }: ArchitectureDi
     return () => {
       cancelled = true;
     };
-  }, [source, id, themeTick]);
+  }, [source, id, themeTick, laidOut]);
 
-  const drawn = Boolean(svg) && !failed;
+  const drawn = laidOut || (Boolean(svg) && !failed);
   const cls = ["arch-figure", className ?? ""].filter(Boolean).join(" ");
+  const state = laidOut ? "diagram" : failed ? "source" : drawn ? "diagram" : "pending";
 
   return (
-    <figure
-      ref={hostRef}
-      className={cls}
-      data-state={failed ? "source" : drawn ? "diagram" : "pending"}
-    >
+    <figure ref={hostRef} className={cls} data-state={state}>
       <div
         className="arch-figure__body"
         role="img"
         aria-label={`${spec.title}. ${spec.description}`}
-        // mermaid.render returns a sanitized SVG string under
-        // securityLevel: "strict" — see ChatMermaidBlock's docblock.
-        dangerouslySetInnerHTML={drawn ? { __html: svg } : undefined}
-      />
+        // For the mermaid fallback: mermaid.render returns a sanitized SVG
+        // string under securityLevel: "strict" — see ChatMermaidBlock.
+        dangerouslySetInnerHTML={!laidOut && drawn ? { __html: svg } : undefined}
+      >
+        {laidOut ? <ArchitectureSvg spec={spec} lit={lit} /> : null}
+      </div>
       {!drawn ? (
         <pre className="arch-figure__source">
           <code>{source}</code>
