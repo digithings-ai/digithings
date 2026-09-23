@@ -107,6 +107,10 @@
 @source "../../../packages/ui/src/components/finance-composites";
 @source "../../../packages/ui/src/components/finance-tearsheet";
 @source "../../../packages/ui/src/components/metrics";
+/* … and the pricing comparison matrix (PricingMatrix). Its table is built from
+   arbitrary utilities (`min-w-[640px]`, `pe-[0.9rem]`, `bg-accent/6`), so without
+   this line the matrix renders as an unstyled table. */
+@source "../../../packages/ui/src/components/pricing";
 /* … and the page-geometry parts (LayoutLines/Mockup/MockupFrame/Glow). Those
    components carry the ported `line-*` and `fade-*` utility classes, and
    Tailwind only emits a utility it has SEEN in scanned content — so without
