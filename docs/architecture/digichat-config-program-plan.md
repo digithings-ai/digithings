@@ -377,6 +377,24 @@ criterion for "every backend has the same end result".
   `anthropic`, `google-vertex`. Reuses the installed `ai` v7 +
   `@ai-sdk/*` providers; each new provider package is a **new dependency**.
   **Human gate.**
+  - **Done (issue #4535, PR into `module/digichat`) — the OpenAI pair, no new
+    dependency.** `@ai-sdk/openai` is already installed and exposes `.chat()`
+    (Completions) and `.responses()` (Responses API), so both new types ship
+    without a package. Added: the `openai-completions` / `openai-responses`
+    schemas (https-only `baseUrl`, `model`, and `apiKeyEnv` constrained to the
+    `DIGICHAT_BACKEND_*` prefix so a tenant config can never name `AUTH_SECRET`
+    and have the BFF ship it to an attacker `baseUrl`); the two `BACKEND_ADAPTERS`
+    entries (`auth: "env"`, `protocol` = the type); `AI_SDK_PROTOCOLS` +
+    `isAiSdkConfig`; the provider factory
+    `apps/digichat/src/lib/adapters/ai-sdk/providers.ts`; the shared mapper
+    `apps/digichat/src/lib/adapters/ai-sdk/stream.ts` (`streamText` →
+    `toUIMessageStream`, the same six wire parts the UI already renders); the
+    route branch (after `coreMessages`, before the BYOK guard); the tenant
+    validator branches (closing the 5a second-dispatch follow-up); and the
+    widened `backendType` union in both projections.
+  - **Remaining for 5b:** `anthropic` (`@ai-sdk/anthropic`) and `google-vertex`
+    (Google provider) — each adds a provider package and one factory branch,
+    so they are independent follow-ups (one teammate/agent per provider).
 - **5c — non-AI-SDK protocols.** `langgraph`, `ag-ui`, `a2a`. Each needs its
   own mapper; each is a **new dependency / new external surface**.
   **Human gate.**

@@ -1,0 +1,58 @@
+/**
+ * Shared AI-SDK stream mapper (Phase 5b, #4535).
+ *
+ * Every AI-SDK backend (OpenAI Completions, OpenAI Responses, and the Anthropic
+ * / Google Vertex providers that follow) runs through this one function, so
+ * provider-native reasoning, tool calls, sources and data all land on the same
+ * AI SDK UI-message stream the chat UI already renders. That is the parity
+ * invariant the backend matrix is built on: the UI never learns which backend
+ * produced a part.
+ */
+
+import {
+  createUIMessageStreamResponse,
+  smoothStream,
+  streamText,
+  toUIMessageStream,
+  type LanguageModel,
+  type ModelMessage,
+} from "ai";
+import type { AiSdkBackendConfig } from "@/lib/backend-adapters";
+import { resolveAiSdkModel } from "./providers";
+
+export async function createAiSdkStreamResponse({
+  backend,
+  messages,
+  responseHeaders,
+  signal,
+}: {
+  backend: AiSdkBackendConfig;
+  messages: ModelMessage[];
+  responseHeaders: Record<string, string>;
+  signal: AbortSignal;
+}): Promise<Response> {
+  let model: LanguageModel;
+  try {
+    model = resolveAiSdkModel(backend);
+  } catch (err) {
+    // A missing credential is an operator misconfiguration, not a client error:
+    // answer 502 with the env var NAME (never its value) and no upstream call.
+    const message = err instanceof Error ? err.message : "backend_credential_error";
+    return new Response(JSON.stringify({ error: "backend_unavailable", message }), {
+      status: 502,
+      headers: { "content-type": "application/json" },
+    });
+  }
+
+  const result = streamText({
+    model,
+    messages,
+    abortSignal: signal,
+    experimental_transform: smoothStream({ chunking: "word" }),
+  });
+
+  return createUIMessageStreamResponse({
+    stream: toUIMessageStream({ stream: result.stream }),
+    headers: responseHeaders,
+  });
+}
