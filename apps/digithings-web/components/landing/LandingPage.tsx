@@ -6,11 +6,11 @@ import { DT_CONTACT_EMAIL } from "@/app/_nav";
 import { ArgumentSeams } from "@/components/landing/Argument";
 import { BootTerminal } from "@/components/landing/BootTerminal";
 import { ContactForm } from "@/components/landing/ContactForm";
+import { FaqMorph } from "@/components/landing/FaqMorph";
 import { ModuleGrid } from "@/components/landing/ModuleGrid";
 import { Pricing } from "@/components/landing/Pricing";
 import { QuantSection } from "@/components/landing/QuantSection";
-import { QuickAsk } from "@/components/landing/QuickAsk";
-import { FaqList, OpenSource, Testimonials } from "@/components/landing/Sections";
+import { OpenSource, Testimonials } from "@/components/landing/Sections";
 import { REPO_CLONE } from "@/lib/repoActivity";
 
 /**
@@ -209,20 +209,13 @@ export function LandingPage() {
       </section>
 
       <section id="faq" className="line-b px-[var(--page-pad)] py-[var(--page-step)]">
-        {/* Not a 50/50 split: the chat column takes the larger share, so the
-            conversation has room to be read without the frame changing height
-            (round 5 — "it doesn't have to be 50 50 screen split with the
-            questions and answers on the left side, just to give more room for
-            the chat"). */}
-        <div className="mx-auto grid max-w-[var(--frame-w)] gap-[2.4rem] min-[960px]:grid-cols-[minmax(0,0.78fr)_minmax(0,1.22fr)]">
-          <div className="flex flex-col gap-[1.6rem]">
-            <h2 className="m-0 font-mono text-[length:var(--type-section-stand)] font-medium leading-[1.2] tracking-[-0.025em] text-ink">
-              Questions, answered
-            </h2>
-            <FaqList />
-          </div>
-          <QuickAsk className="min-w-0" />
-        </div>
+        {/* The band's inner grid now rides the scroll-driven zoom-morph: the
+            chat starts large over the frame and retracts into the right column
+            as the FAQ list rises in on the left. The two-column grid, the h2,
+            the `details` list and the `full screen chat` handoff are all owned
+            by `<FaqMorph/>`; see its docblock for the mechanics and the
+            reduced-motion / no-JS fallback. */}
+        <FaqMorph />
       </section>
 
       <Contact />

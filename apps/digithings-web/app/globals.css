@@ -413,3 +413,55 @@ html {
     transition: none;
   }
 }
+
+/* ==========================================================================
+   FAQ BAND ZOOM-MORPH (2026-09-23, branch claude/home-variants, #4429).
+
+   The owner's ask: "show the chat container large and then it retracts and it
+   shows some of the frequently asked questions or you could ask in the live
+   chat". The reference gallery's zoom-morph section transition
+   (apps/reference/components/effects/section-morph.tsx) gives the mechanic;
+   `components/landing/FaqMorph.tsx` carries the scroll handler and the measured
+   geometry. This sheet owns only what must stay CSS: the taller-than-content
+   track, the sticky pin under the nav, and the collapse back to the plain
+   two-column grid — the same shape as the `/variants/mixed` stack showcase
+   below, kept app-local for the same reason (an exploration, not a promoted
+   part; if it is picked it moves into @digithings/ui and this block goes with
+   the component's family entry in scripts/frontend_class_families.json).
+
+   The morph itself is inline transforms written per frame by the component, so
+   nothing here animates on its own. The track height is written inline (it
+   depends on the pinned content's measured height), which is why the fallback
+   below is JS-free: with the media query off, `FaqMorph` never writes a height
+   or a transform, so the band is the natural layout again.
+   ========================================================================== */
+.faq-morph {
+  position: relative;
+}
+
+.faq-morph__pin {
+  position: sticky;
+  top: calc(var(--dq-nav-h) + 1rem);
+}
+
+.faq-morph__chat-inner {
+  will-change: transform;
+}
+
+.faq-morph__faq {
+  will-change: opacity, transform;
+}
+
+/* Below the grid's two-column breakpoint and under reduced motion the morph is
+   off: the pin releases, the track is the band's natural height, and the grid
+   renders exactly as it did before the morph existed. */
+@media (max-width: 959.98px), (prefers-reduced-motion: reduce) {
+  .faq-morph__pin {
+    position: static;
+  }
+
+  .faq-morph__chat-inner,
+  .faq-morph__faq {
+    will-change: auto;
+  }
+}
