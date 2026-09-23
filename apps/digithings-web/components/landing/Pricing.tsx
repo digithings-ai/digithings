@@ -26,6 +26,12 @@ import { REPO_URL } from "@/lib/repoActivity";
  * existing product into your environment, no custom work), and enterprise
  * (maintenance, upgrades, custom implementations).
  *
+ * Round 7 kept the shape and filled it in: "I like how simple it is. I would
+ * just center it on the screen and add more detail so it's professional." So the
+ * table is centred (`mx-auto`) and four rows joined — what each tier covers, how
+ * the work starts, what we need from you, and who owns the result — bringing it
+ * to eleven rows without going back to the sixteen-row sprawl he cut.
+ *
  * The only figure on the table is the true one: $0 for the MIT self-host path.
  * No `popular` column — flagging one of three would invent a recommendation —
  * and no billing toggle, because there is no billing cycle.
@@ -41,7 +47,7 @@ const TIERS: PricingMatrixTier[] = [
     name: "self-host",
     price: "$0",
     cta: (
-      <CtaLink href={REPO_URL} external className="text-[0.82rem]">
+      <CtaLink href={REPO_URL} external className="text-[0.84rem]">
         Clone the repo
       </CtaLink>
     ),
@@ -67,6 +73,10 @@ const GROUPS: PricingMatrixGroup[] = [
         cells: ["$0 — MIT, no account", "scoped to the deployment", "scoped to the work"],
       },
       {
+        label: "what it covers",
+        cells: ["everything, no ceiling", "the deployment itself", "the engagement, end to end"],
+      },
+      {
         label: "what is quoted",
         cells: ["nothing to quote", "the deployment, in writing", "the scope and the timeline"],
       },
@@ -80,6 +90,14 @@ const GROUPS: PricingMatrixGroup[] = [
         cells: ["you", "we deploy it", "we build it"],
       },
       {
+        label: "how it starts",
+        cells: [
+          "clone it and read the docs",
+          "a short call, then a written plan",
+          "a scoping call and a proposal",
+        ],
+      },
+      {
         label: "what lands",
         cells: [
           "the monorepo, every module",
@@ -91,6 +109,10 @@ const GROUPS: PricingMatrixGroup[] = [
         label: "what you can change",
         cells: ["anything", "what the stack already exposes", "whatever the engagement needs"],
       },
+      {
+        label: "what we need from you",
+        cells: ["nothing", "hosts, keys and access", "hosts, keys and a named owner"],
+      },
     ],
   },
   {
@@ -101,8 +123,20 @@ const GROUPS: PricingMatrixGroup[] = [
         cells: ["you do", "you do — we wire them up", "you do — we build around them"],
       },
       {
+        label: "who owns the result",
+        cells: [
+          "you — MIT, so it stays yours",
+          "you, on the same MIT terms",
+          "you, and the custom work is handed over",
+        ],
+      },
+      {
         label: "support",
-        cells: ["docs, OpenAPI, issue tracker", "deployment, documentation, handover", "ongoing maintenance and upgrades"],
+        cells: [
+          "docs, OpenAPI, issue tracker",
+          "deployment, documentation, handover",
+          "ongoing maintenance and upgrades",
+        ],
       },
     ],
   },
@@ -110,12 +144,12 @@ const GROUPS: PricingMatrixGroup[] = [
 
 export function Pricing() {
   return (
-    <div className="max-w-[52rem]">
+    <div className="mx-auto max-w-[56rem]">
       <PricingMatrix
         tiers={TIERS}
         groups={GROUPS}
         featureColumnLabel="the detail"
-        className="min-w-0 [&_table]:text-[0.92rem] [&_th]:text-[0.98rem] [&_td]:text-[0.84rem]"
+        className="min-w-0 [&_table]:text-[0.94rem] [&_th]:text-[1rem] [&_td]:text-[0.86rem]"
       />
     </div>
   );
