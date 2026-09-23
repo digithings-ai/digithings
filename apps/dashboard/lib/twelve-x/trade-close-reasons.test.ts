@@ -78,14 +78,6 @@ describe('closeReason (Trades close column)', () => {
     expect(closeReason(row({ lifecycle: 'unscored' })).label).toBe('Unscored');
   });
 
-  it('labels a still-live row that is awaiting rates as No data, not Live', () => {
-    expect(closeReason(row({ lifecycle: 'live', evalStatus: 'missing_rates' }))).toEqual({
-      kind: 'live',
-      label: 'No data',
-      detail: 'Missing rates',
-    });
-  });
-
   it('calls a level band that never filled out as never filled', () => {
     expect(
       closeReason(

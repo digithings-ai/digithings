@@ -113,7 +113,7 @@ describe('assembleTradeHistory', () => {
     expect(rows[1].hasLevels).toBe(true);
   });
 
-  it('marks missing_rates as live (transient), unscored and level-less ideas honestly', () => {
+  it('marks missing_rates as no_data, unscored and level-less ideas honestly', () => {
     const rows: TradeHistoryRow[] = assembleTradeHistory(
       [
         idea({ run_date: '2026-07-20', rank: 1, trade_levels: {} }),
@@ -123,8 +123,8 @@ describe('assembleTradeHistory', () => {
     );
     const missing = rows.find((r) => r.runDate === '2026-07-20');
     const unscored = rows.find((r) => r.runDate === '2026-07-21');
-    // missing_rates is a transient grade state, not a closure — still live.
-    expect(missing?.lifecycle).toBe('live');
+    // An ungradeable idea (missing_rates) is NOT live: kept out of the live book.
+    expect(missing?.lifecycle).toBe('no_data');
     expect(missing?.evalStatus).toBe('missing_rates');
     expect(missing?.directionalWin).toBeNull();
     expect(unscored?.lifecycle).toBe('unscored');
@@ -159,9 +159,8 @@ describe('displayableTradeHistory / tradeResult', () => {
       ],
     );
     const shown = displayableTradeHistory(rows);
-    // missing_rates is transient-live, so the un-graded newest board is shown.
+    // missing_rates is no_data, so the un-gradeable board is filtered out.
     expect(shown.map((r) => `${r.runDate}:${tradeResult(r)}`).sort()).toEqual([
-      '2026-07-20:live',
       '2026-07-24:right',
       '2026-07-25:live',
     ]);

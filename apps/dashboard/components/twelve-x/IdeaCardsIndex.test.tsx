@@ -95,7 +95,7 @@ describe('IdeaCardsIndex (live trade ideas view)', () => {
     expect(html).toContain('1 idea');
   });
 
-  it('shows an awaiting-rates idea as live instead of hiding it', () => {
+  it('keeps an ungradeable idea out of the live book', () => {
     const awaitingIdea: FxTradeIdeaRow = {
       ...liveIdea,
       run_date: '2026-09-23',
@@ -114,8 +114,8 @@ describe('IdeaCardsIndex (live trade ideas view)', () => {
       n_sessions: 0,
     };
     const html = render(vi.fn(), [awaitingIdea], [awaitingEval]);
-    expect(html).toContain('USD/CNY');
-    expect(html).toContain('1 idea');
-    expect(html).not.toContain('No live trade ideas right now');
+    // An ungradeable idea is no_data, not live: it must stay out of the live book.
+    expect(html).not.toContain('USD/CNY');
+    expect(html).toContain('No live trade ideas right now');
   });
 });
