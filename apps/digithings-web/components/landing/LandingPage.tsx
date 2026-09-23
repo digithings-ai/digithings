@@ -103,29 +103,6 @@ function Boot() {
 }
 
 /**
- * The module-grid header, and the page's `#architecture` anchor.
- *
- * The nav and the footer both link `/#architecture`, which was a real section on
- * the pre-rebuild page ("Nine modules. One toolkit." over the module manifest).
- * The redesign replaced that section with this header plus the mosaic but left
- * the nav pointing at it, so the anchor had no target and the link scrolled
- * nowhere. The id lives here rather than on the mosaic itself because this is
- * where a reader arriving from the nav should land: the heading, with the
- * modules pinned directly below it.
- */
-function StackHeader() {
-  return (
-    <section id="architecture" className="line-t px-[var(--page-pad)] pt-[var(--section-y-tight)]">
-      <div className="mx-auto flex max-w-[var(--frame-w)] flex-col gap-[1.2rem]">
-        <h2 className="m-0 font-mono text-[length:var(--type-section-stand)] font-medium leading-[1.2] tracking-[-0.025em] text-ink">
-          Every module, one at a time
-        </h2>
-      </div>
-    </section>
-  );
-}
-
-/**
  * The contact section, shared verbatim with the full profile's two-column shape.
  *
  * Point 14 ("swap form and contact info") is already the arrangement here: the
@@ -180,7 +157,6 @@ export function LandingPage() {
     <>
       <Hero />
       <Boot />
-      <StackHeader />
       <ModuleGrid />
 
       <section id="why" className="line-b px-[var(--page-pad)] py-[var(--page-step)]">
