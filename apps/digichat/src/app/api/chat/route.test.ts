@@ -1617,6 +1617,40 @@ vi.mocked(createFoundryStreamResponse).mockClear();
           resetDigichatConfigForTests();
         }
       });
+
+      it("passes the web-search gate to the AI-SDK backend (#4552)", async () => {
+        setDigichatConfigForTests(
+          parseDigichatConfig({
+            version: 1,
+            deployment: {
+              slug: "client",
+              backend: {
+                type: "openai-responses",
+                baseUrl: "https://api.example.com/v1",
+                model: "gpt-4o-mini",
+                apiKeyEnv: "DIGICHAT_BACKEND_EXAMPLE_KEY",
+              },
+              gate: { mode: "ungated", webSearch: true },
+            },
+          })
+        );
+        try {
+          await POST(chatReq({ "x-digi-enable-web-search": "1" }));
+          const withHeader = vi.mocked(createAiSdkStreamResponse).mock.calls.at(-1)?.[0] as {
+            webSearch?: boolean;
+          };
+          expect(withHeader.webSearch).toBe(true);
+
+          // The tenant allows it, but the client never asked: stays off.
+          await POST(chatReq());
+          const withoutHeader = vi
+            .mocked(createAiSdkStreamResponse)
+            .mock.calls.at(-1)?.[0] as { webSearch?: boolean };
+          expect(withoutHeader.webSearch).toBe(false);
+        } finally {
+          resetDigichatConfigForTests();
+        }
+      });
     });
   });
 });

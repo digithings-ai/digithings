@@ -17,7 +17,7 @@ import { createAnthropic } from "@ai-sdk/anthropic";
 import { createVertex } from "@ai-sdk/google-vertex";
 import { createOpenAI } from "@ai-sdk/openai";
 import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
-import type { LanguageModel } from "ai";
+import type { LanguageModel, ToolSet } from "ai";
 import type { AiSdkBackendConfig } from "@/lib/backend-adapters";
 
 /** Raised when the configured `apiKeyEnv` is missing or empty. */
@@ -83,5 +83,53 @@ export function resolveAiSdkModel(backend: AiSdkBackendConfig): LanguageModel {
         project: backend.project,
         location: backend.location,
       })(backend.model);
+  }
+}
+
+/**
+ * The provider's own built-in web-search / grounding tool, when it has one
+ * (#4552).
+ *
+ * These are provider-executed services — the provider runs the search upstream
+ * inside the same request and returns citations — so they carry the provider's
+ * separate search pricing, not a local tool call. The citations come back as
+ * `source-url` / `source-document` parts, which the shared mapper forwards once
+ * `sendSources` is on.
+ *
+ * Returning `undefined` means the backend has no built-in search:
+ * `openai-completions` is that case, because Chat Completions has no
+ * server-side search — vendors on that wire format bring their own (Perplexity's
+ * native web search, OpenRouter's `:online`).
+ */
+export function resolveAiSdkSearchTools(
+  backend: AiSdkBackendConfig,
+): ToolSet | undefined {
+  switch (backend.type) {
+    case "openai-completions":
+      return undefined;
+    case "openai-responses": {
+      const apiKey = readBackendApiKey(backend.apiKeyEnv);
+      const provider = createOpenAI({
+        baseURL: backend.baseUrl,
+        apiKey,
+        name: backend.type,
+      });
+      return { web_search: provider.tools.webSearch() };
+    }
+    case "anthropic": {
+      const apiKey = readBackendApiKey(backend.apiKeyEnv);
+      const provider = createAnthropic({ apiKey, name: backend.type });
+      // Newer dated versions exist (`webSearch_20260209`, `webSearch_20260318`);
+      // the provider adds the required beta header itself either way.
+      return { web_search: provider.tools.webSearch_20250305() };
+    }
+    case "google-vertex": {
+      const provider = createVertex({
+        project: backend.project,
+        location: backend.location,
+      });
+      // Google Search grounding for Gemini on Vertex.
+      return { google_search: provider.tools.googleSearch({}) };
+    }
   }
 }
