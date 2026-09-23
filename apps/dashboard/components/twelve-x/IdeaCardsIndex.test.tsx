@@ -63,7 +63,11 @@ const closedEval: FxIdeaEvalRow = {
   closed_by: 'successor',
 };
 
-function render(openIdea = vi.fn()) {
+function render(
+  openIdea = vi.fn(),
+  ideas: FxTradeIdeaRow[] = [liveIdea, closedIdea],
+  ideaEval: FxIdeaEvalRow[] = [liveEval, closedEval],
+) {
   return renderToStaticMarkup(
     createElement(TwelveXProvider, {
       value: {
@@ -74,8 +78,8 @@ function render(openIdea = vi.fn()) {
         watchlist: { tickers: [], has: () => false, toggle: vi.fn() } as never,
       },
       children: createElement(IdeaCardsIndex, {
-        ideas: [liveIdea, closedIdea],
-        ideaEval: [liveEval, closedEval],
+        ideas,
+        ideaEval,
         onBack: vi.fn(),
       }),
     } as never),
@@ -89,5 +93,29 @@ describe('IdeaCardsIndex (live trade ideas view)', () => {
     expect(html).toContain('USD/JPY');
     expect(html).not.toContain('EUR/USD');
     expect(html).toContain('1 idea');
+  });
+
+  it('shows an awaiting-rates idea as live instead of hiding it', () => {
+    const awaitingIdea: FxTradeIdeaRow = {
+      ...liveIdea,
+      run_date: '2026-09-23',
+      pair: 'USD/CNY',
+      direction: 'short',
+      title: 'USD/CNY short',
+    };
+    const awaitingEval: FxIdeaEvalRow = {
+      ...liveEval,
+      run_date: '2026-09-23',
+      pair: 'USD/CNY',
+      direction: 'short',
+      status: 'missing_rates',
+      entry_date: null,
+      entry_fix: null,
+      n_sessions: 0,
+    };
+    const html = render(vi.fn(), [awaitingIdea], [awaitingEval]);
+    expect(html).toContain('USD/CNY');
+    expect(html).toContain('1 idea');
+    expect(html).not.toContain('No live trade ideas right now');
   });
 });
