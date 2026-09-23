@@ -2800,7 +2800,7 @@ separately so research nodes never pay the per-ticker decision-artifact token ta
   Tool-only with an unconditional abort: a requested search must succeed or raise
   `DashboardWebSearchError` — the run aborts rather than reasoning ungrounded.
   A scoped search that returns zero rows retries once without `include_domains`
-  (logged; `relaxed_domains: true` on the tool result) before failing (#4086),
+  (logged at debug level; `relaxed_domains: true` on the tool result) before failing (#4086),
   because the hosted `ddgs` provider can only post-filter, not bias, by domain.
   There is no synthesis fallback and no fail-soft flag.
 - Fail-fast web_search pre-flight (#4198): `python -m digiquant web-search healthcheck`
