@@ -161,7 +161,11 @@ def published_indicator_weights(
     raw = json.loads(path.read_text())
     block = raw["strategies"]["btc_sdca"]["sdca"]["indicator_weights"]
     return SdcaCompositeWeights(
-        power_law=float(block.get("power_law", 1.0)),
+        # settings.json persists the power-law weight under the on-disk key
+        # "valuation" (see btc_composite_*.json / *_provenance.json), not
+        # "power_law" -- that key never existed here, so this previously
+        # always fell through to the 1.0 default regardless of the file.
+        power_law=float(block.get("valuation", 1.0)),
         m2=float(block.get("m2", 0.0)),
         rs_eth=float(block.get("rs_eth", 0.0)),
         dxy=float(block.get("dxy", 0.0)),

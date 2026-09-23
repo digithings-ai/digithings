@@ -11,7 +11,7 @@ import pytest
 from click.testing import CliRunner
 from digiquant.cli import main as digiquant_main
 from digiquant.strategies.sdca.backtest import run_backtest
-from digiquant.strategies.sdca.curve import AccumDistCurve
+from digiquant.strategies.sdca.curve import RISK_NODES, AccumDistCurve
 from digiquant.strategies.sdca.curve_optimize import (
     CONTINUOUS_CROSSING_EPS,
     CURVE_SEARCH_BOUNDS,
@@ -42,7 +42,6 @@ from digiquant.strategies.sdca.curve_optimize import (
     shape_from_bounds_ok,
     sweep_dead_zone_width,
 )
-from digiquant.strategies.sdca.curve import RISK_NODES
 from digiquant.strategies.sdca.curve_shape import SdcaCurveShape
 from digiquant.strategies.sdca.presets import load_preset
 from digiquant.strategy_specs import get_param_specs
@@ -277,9 +276,7 @@ class TestSampleContinuousCurveTrials:
         assert len(trials) > 0
         for params in trials:
             shape = SdcaCurveShape(**params)
-            dead_nodes = [
-                r for r in RISK_NODES if shape.buy_knee_risk <= r <= shape.sell_knee_risk
-            ]
+            dead_nodes = [r for r in RISK_NODES if shape.buy_knee_risk <= r <= shape.sell_knee_risk]
             assert len(dead_nodes) <= 1
 
     def test_grid_and_random_are_independent_knobs(self) -> None:
@@ -399,7 +396,9 @@ class TestDeadZoneShapeParams:
         assert params["sell_knee_risk"] == pytest.approx(60.0)
 
     def test_large_width_near_an_edge_clips_to_valid_knee_bounds(self) -> None:
-        params = dead_zone_shape_params(5.0, 50.0, 15.0, 15.0, 1.5, 1.5, knee_floor=0.5, knee_ceiling=99.5)
+        params = dead_zone_shape_params(
+            5.0, 50.0, 15.0, 15.0, 1.5, 1.5, knee_floor=0.5, knee_ceiling=99.5
+        )
         assert params["buy_knee_risk"] == pytest.approx(0.5)
         assert params["buy_knee_risk"] < params["sell_knee_risk"]
         # every width, including this clipped edge case, must yield a valid shape
@@ -677,6 +676,30 @@ class TestSearchAndPersist:
         # Richer published composite (#3304): cycle-scaled oscillators, not 90-day z.
         assert weights.weekly_rsi == pytest.approx(0.25)
         assert weights.weekly_macd == pytest.approx(0.5)
+
+    def test_power_law_weight_reads_the_on_disk_valuation_key(self, tmp_path: Path) -> None:
+        """settings.json persists the power-law weight under "valuation", not
+        "power_law" -- a non-default value here would silently fall through
+        to the 1.0 default under the old (pre-fix) key lookup."""
+        settings_path = tmp_path / "settings.json"
+        settings_path.write_text(
+            json.dumps(
+                {
+                    "strategies": {
+                        "btc_sdca": {
+                            "sdca": {
+                                "indicator_weights": {
+                                    "valuation": 0.35,
+                                    "m2": 0.0,
+                                }
+                            }
+                        }
+                    }
+                }
+            )
+        )
+        weights = published_indicator_weights(settings_path=settings_path)
+        assert weights.power_law == pytest.approx(0.35)
 
     def test_cli_help_lists_command(self) -> None:
         result = CliRunner().invoke(digiquant_main, ["sdca-optimize-curve", "--help"])

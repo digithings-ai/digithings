@@ -153,6 +153,9 @@ def detect_crossings(values: object) -> object:
     return crossed
 
 
+_STRICT_SEPARATION_EPS = 1e-9
+
+
 def rearrange_non_crossing(values: object) -> object:
     """Identity-preserving replacement for row-wise ``np.sort``.
 
@@ -161,9 +164,18 @@ def rearrange_non_crossing(values: object) -> object:
     median column. This is unlike a plain row-wise sort, which — once a
     quantile's raw fitted curve falls out of rank order — silently splices a
     *different* quantile's raw value into that output slot under the
-    original column's label. Preserves ``low < median < high`` exactly like
-    the sort does; needs no re-fit of the underlying coefficients. Rows with
-    any non-finite value pass through unchanged.
+    original column's label. Needs no re-fit of the underlying coefficients.
+    Rows with any non-finite value pass through unchanged.
+
+    The clamp is strict (each column ends up ``> `` its inner neighbor by a
+    ``1 + 1e-9`` relative factor), not merely non-decreasing: once two raw
+    quantile curves have crossed for an entire stretch (BTC's power-law
+    rails do this increasingly often as the sell-side band narrows — see
+    #3175/postmortem), a plain non-strict clamp pins the outer column to
+    *exactly* its neighbor's value there, and callers dividing by adjacent-
+    quantile gaps (``power_law_zscore.power_law_z_score``) then divide by
+    zero. The epsilon is far below any real fitted-curve separation, so it
+    is a no-op wherever nothing crosses.
     """
     import numpy as np
 
@@ -171,9 +183,11 @@ def rearrange_non_crossing(values: object) -> object:
     out = arr.copy()
     finite = np.isfinite(out).all(axis=1)
     for k in range(MEDIAN_INDEX + 1, out.shape[1]):
-        out[finite, k] = np.maximum(out[finite, k], out[finite, k - 1])
+        floor = out[finite, k - 1] * (1.0 + _STRICT_SEPARATION_EPS)
+        out[finite, k] = np.maximum(out[finite, k], floor)
     for k in range(MEDIAN_INDEX - 1, -1, -1):
-        out[finite, k] = np.minimum(out[finite, k], out[finite, k + 1])
+        ceiling = out[finite, k + 1] * (1.0 - _STRICT_SEPARATION_EPS)
+        out[finite, k] = np.minimum(out[finite, k], ceiling)
     return out
 
 

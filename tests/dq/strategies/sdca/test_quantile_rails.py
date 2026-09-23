@@ -103,6 +103,32 @@ class TestRearrangeNonCrossing:
         assert np.isnan(out[0]).all()
         assert (np.diff(out[1]) >= 0).all()
 
+    def test_a_column_collapsed_entirely_onto_its_neighbor_stays_strictly_separated(
+        self,
+    ) -> None:
+        """Real BTC power-law history hits this: once two quantile curves
+        cross for an entire evaluated span (not just one row), a plain
+        non-decreasing clamp pins the outer column to *exactly* its
+        neighbor's reconciled value there. Callers that divide by
+        adjacent-quantile gaps (power_law_zscore.power_law_z_score) then
+        divide by zero -- the clamp must be strict, never an exact tie."""
+        from digiquant.strategies.sdca.quantile_rails import rearrange_non_crossing
+
+        # q95 (idx 5) is below q75 (idx 4) at every row -- a whole-span
+        # crossing, not a single-row inversion.
+        raw = np.array(
+            [
+                [1.0, 2.0, 3.0, 4.0, 10.0, 9.0, 20.0],
+                [1.0, 2.0, 3.0, 4.0, 11.0, 9.5, 21.0],
+                [1.0, 2.0, 3.0, 4.0, 12.0, 9.9, 22.0],
+            ]
+        )
+        out = rearrange_non_crossing(raw)
+        assert (np.diff(out, axis=1) > 0).all()
+        # Still clamped up toward q75's own reconciled value, not swapped
+        # for a different quantile or left untouched.
+        np.testing.assert_allclose(out[:, 5], out[:, 4], rtol=1e-6)
+
 
 class TestEvaluateQuadraticLog10:
     def _coeffs(self, values: dict[str, tuple[float, float]]):
