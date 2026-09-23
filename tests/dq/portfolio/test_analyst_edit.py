@@ -277,16 +277,17 @@ class TestEvidenceDerivedConviction:
         assert against_trend.conviction_score == -3
 
     def test_balanced_call_derives_zero_for_a_directional_stance(self) -> None:
-        """Production 2026-09-22 ``analyst/IBIT``: buy with 4 confirming / 4 against.
+        """A balanced call is a *weak* directional call, not a missing one.
 
-        A directional stance at 0 is a *weak* call, not a missing one — ``stance``
-        carries the direction and the net counts carry the magnitude, so the pair is
-        coherent and the call is honestly unpromoted.
+        ``stance`` carries the direction and the net counts carry the magnitude, so the
+        pair is coherent and the call is honestly unpromoted. (The production
+        2026-09-22 ``analyst/IBIT`` vector was 4/4, which assigns 8 families over the
+        five-family universe — a separate schema laxity, #4585.)
         """
         balanced = self._payload(
             "buy",
-            independent_confirming_signals=4,
-            contradicting_signals=4,
+            independent_confirming_signals=2,
+            contradicting_signals=2,
             catalyst_within_horizon=True,
             evidence_quality="high",
         )
@@ -373,7 +374,18 @@ class TestStanceEditRequiresEvidence:
             prior_body,
         )
 
-    def test_stance_edit_that_only_removes_evidence_is_rejected(self) -> None:
+    @pytest.mark.parametrize(
+        "evidence_op",
+        [
+            PatchOp(op="remove", path="/body/evidence"),
+            PatchOp(op="append", path="/body/evidence", value={"evidence_quality": "high"}),
+            PatchOp(op="set", path="/body/evidence", value=None),
+            PatchOp(op="set", path="/body/evidence/evidence_quality", value="high"),
+        ],
+        ids=["remove", "append", "null-set", "nested-set"],
+    )
+    def test_evidence_ops_that_do_not_reitemize_are_rejected(self, evidence_op: PatchOp) -> None:
+        """Only a non-null ``set`` of the whole block re-itemizes the counts."""
         from digiquant.dashboard.edit_mode.merge import MergeError
         from digiquant.portfolio.phases.portfolio_common import (
             reject_stance_edit_without_evidence,
@@ -386,12 +398,65 @@ class TestStanceEditRequiresEvidence:
         }
         with pytest.raises(MergeError, match="re-itemized"):
             reject_stance_edit_without_evidence(
+                self._patch(PatchOp(op="set", path="/body/stance", value="buy"), evidence_op),
+                prior_body,
+            )
+
+    def test_whole_body_set_must_carry_evidence(self) -> None:
+        from digiquant.dashboard.edit_mode.merge import MergeError
+        from digiquant.portfolio.phases.portfolio_common import (
+            reject_stance_edit_without_evidence,
+        )
+
+        prior_body: dict[str, Any] = {
+            "ticker": "AAPL",
+            "stance": "hold",
+            "evidence": {"evidence_quality": "high"},
+        }
+        reject_stance_edit_without_evidence(
+            self._patch(
+                PatchOp(
+                    op="set",
+                    path="/body",
+                    value={
+                        "ticker": "AAPL",
+                        "stance": "buy",
+                        "evidence": {"evidence_quality": "high"},
+                    },
+                )
+            ),
+            prior_body,
+        )
+        with pytest.raises(MergeError, match="re-itemized"):
+            reject_stance_edit_without_evidence(
                 self._patch(
-                    PatchOp(op="set", path="/body/stance", value="buy"),
-                    PatchOp(op="remove", path="/body/evidence"),
+                    PatchOp(op="set", path="/body", value={"ticker": "AAPL", "stance": "buy"})
                 ),
                 prior_body,
             )
+
+    def test_null_evidence_prior_and_skipped_patch_are_unaffected(self) -> None:
+        from digiquant.portfolio.phases.portfolio_common import (
+            reject_stance_edit_without_evidence,
+        )
+
+        stance_only = PatchOp(op="set", path="/body/stance", value="buy")
+        # A prior whose evidence key is present but null does not re-derive.
+        reject_stance_edit_without_evidence(
+            self._patch(stance_only),
+            {"ticker": "AAPL", "stance": "hold", "evidence": None},
+        )
+        # A skipped patch's ops are ignored by the merge.
+        reject_stance_edit_without_evidence(
+            DocumentPatch(
+                date=date(2026, 6, 20),
+                prior_date=date(2026, 6, 19),
+                target_document_key="analyst/AAPL",
+                status="skipped",
+                ops=[stance_only],
+            ),
+            {"ticker": "AAPL", "stance": "hold", "evidence": {"evidence_quality": "high"}},
+        )
 
     def test_legacy_prior_without_evidence_is_unaffected(self) -> None:
         from digiquant.portfolio.phases.portfolio_common import (

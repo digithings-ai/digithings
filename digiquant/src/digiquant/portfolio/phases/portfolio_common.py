@@ -18,6 +18,7 @@ from pydantic import BaseModel, ValidationError
 from digiquant.dashboard.edit_mode import (
     DocumentPatch,
     EditMode,
+    PatchOp,
     PriorPublished,
     artifact_document_key,
     merge_document_patch,
@@ -73,6 +74,7 @@ _FORECAST_ASSESSMENT_PATHS = frozenset({"/body/forecast_assessment", "/forecast_
 _FORECAST_NESTED_PREFIXES = ("/body/forecast/", "/forecast/")
 _STANCE_PATHS = frozenset({"/body/stance", "/stance"})
 _EVIDENCE_PATHS = frozenset({"/body/evidence", "/evidence"})
+_BODY_PATHS = frozenset({"/body", ""})
 
 
 def _resolve_linked_thesis(
@@ -264,6 +266,22 @@ def reject_partial_forecast_edits(patch: DocumentPatch) -> None:
             raise MergeError("partial nested forecast edit rejected; replace entire /body/forecast")
 
 
+def _carries_fresh_evidence(ops: list[PatchOp]) -> bool:
+    """True when the patch re-itemizes the evidence block.
+
+    Only a ``set`` with a non-null value re-itemizes: a ``remove``, an ``append``, or a
+    null ``set`` all leave ``AnalystPayload`` reading the prior call's counts.
+    """
+    for op in ops:
+        if op.op != "set":
+            continue
+        if op.path in _EVIDENCE_PATHS and op.value is not None:
+            return True
+        if op.path in _BODY_PATHS and isinstance(op.value, Mapping) and op.value.get("evidence"):
+            return True
+    return False
+
+
 def reject_stance_edit_without_evidence(
     patch: DocumentPatch, prior_body: Mapping[str, Any] | None
 ) -> None:
@@ -275,17 +293,19 @@ def reject_stance_edit_without_evidence(
     call and publish a stance/score pair the derivation cannot explain. Legacy priors
     without an evidence block keep their stored score, so they are unaffected.
     """
-    if not isinstance(prior_body, Mapping) or "evidence" not in prior_body:
+    if not isinstance(prior_body, Mapping) or not prior_body.get("evidence"):
         return
-    if not any(op.path in _STANCE_PATHS for op in patch.ops):
+    if patch.status == "skipped":
         return
-    # A removal is not a re-itemization: it would drop the block and fall back to the
-    # prior call's stored ``conviction_score`` for the new stance.
-    if not any(op.path in _EVIDENCE_PATHS and op.op != "remove" for op in patch.ops):
-        raise MergeError(
-            "stance edit without a re-itemized /body/evidence rejected; "
-            "conviction is derived from the counts"
-        )
+    touches_stance = any(op.path in _STANCE_PATHS for op in patch.ops) or any(
+        op.path in _BODY_PATHS for op in patch.ops
+    )
+    if not touches_stance or _carries_fresh_evidence(patch.ops):
+        return
+    raise MergeError(
+        "stance edit without a re-itemized /body/evidence rejected; "
+        "conviction is derived from the counts"
+    )
 
 
 def materialize_forecast_assessment(

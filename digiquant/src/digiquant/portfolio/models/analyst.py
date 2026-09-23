@@ -49,7 +49,7 @@ class EvidenceAssessment(BaseModel):
     catalyst_within_horizon: bool = Field(
         description=(
             "True only when a specific, dated/window-bound catalyst inside your call's "
-            "horizon is identified in the thesis text."
+            "horizon is identified in this payload's thesis text."
         ),
     )
     trend_alignment: Literal["with", "against", "mixed"] = Field(

@@ -2091,11 +2091,11 @@ entry until that cutover. Prompt / structured-output walk for the same pass:
   serializer includes assessment; legacy priors without typed forecast force
   full; skip preserves identity; partial nested forecast edits are rejected, and a
   stance edit on an evidence-bearing prior must re-itemize `/body/evidence` in the
-  same patch — `conviction_score` is derived from those counts, so a stance flip
-  alone would re-derive from the prior call's counts (#4583). The counts are
+  same patch, because `conviction_score` is derived from those counts and would
+  otherwise be re-derived from the prior call's counts (#4583). Those counts are
   itemized against the analyst's **own call** (its `stance`), not against the market
   thesis the vehicle is mapped to: an analyst may disagree with the thesis it carries,
-  and the families contradicting that thesis then confirm the call (#4583).
+  and the families contradicting that thesis then confirm the call.
   deliberation appends optional evidence-linked `ForecastAmendment` without rewriting the base;
   LLM envelopes that nest economics under `terms` (SLV/IAU in house GHA 33426508863)
   unwrap before validate, and missing `horizon_sessions` / `half_life_sessions` copy
