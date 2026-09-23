@@ -24,16 +24,20 @@ import { REPO_CLONE } from "@/lib/repoActivity";
  * sections only ever *removes* assertions, never rewords one.
  */
 
-/** The hero: the statement piece, and nothing else. */
+/**
+ * The hero: the statement piece, and nothing else.
+ *
+ * The owner's direction for this round: "open core mit self-hosted remove that
+ * just keep the title then i would place everything left aligned". The eyebrow
+ * badge is gone, so the h1 is the whole hero and the section is a single
+ * left-aligned column — which is what the frame already was; the badge was the
+ * only thing that made it read as a two-item stack.
+ */
 function Hero() {
   return (
     <section className="px-[var(--page-pad)] pb-0 pt-[clamp(3rem,6vw,5rem)]">
       <div className="mx-auto flex max-w-[var(--frame-w)] flex-col">
-        <span className="animate-appear inline-flex w-fit items-center gap-[0.5rem] border border-hair px-[0.7rem] py-[0.25rem] font-mono text-[0.68rem] uppercase tracking-[var(--tracking-meta)] text-ink-mute opacity-0">
-          open core · MIT · self-hosted
-        </span>
-
-        <h1 className="animate-appear relative z-10 mt-[1.4rem] mb-0 font-mono text-[clamp(1.45rem,3.1vw,2.6rem)] font-medium leading-[1.15] tracking-[-0.03em] text-ink opacity-0 delay-100">
+        <h1 className="animate-appear relative z-10 m-0 font-mono text-[clamp(1.45rem,3.1vw,2.6rem)] font-medium leading-[1.15] tracking-[-0.03em] text-ink opacity-0">
           AI infrastructure,{" "}
           <span className="text-accent">in a glass box you own.</span>
         </h1>
@@ -43,68 +47,47 @@ function Hero() {
 }
 
 /**
- * The boot terminal, beside the clone command (v15 point 7).
+ * The clone command, with the deployment terminal beneath it (round 2).
  *
- * The terminal is a fixed-height box on the right and never grows as it types
- * (`size="compact"` + `fill`); the clone command and the two CTAs sit on the
- * left. The clone is shown on its own line — the `make up` that follows it is
- * the terminal's first line, right beside it. On narrow viewports the two stack
- * and the terminal keeps a fixed height so the section does not jump.
+ * The owner's direction: "just have the git clone button and the terminal
+ * should be below it" — so the eyebrow label is gone, the two CTAs are gone
+ * (they were the first of the "read the docs buttons all over the place" this
+ * round removes), and the band is a single left-aligned column. The clone
+ * command is the call to action here; it is the one thing a reader can act on.
+ *
+ * The terminal's height is now fixed, and that is a bug fix rather than a
+ * tidy-up. It used to be content-sized, so every line the script typed grew the
+ * box and pushed the rest of the page down as you watched it — the owner's "it
+ * shifts the website down". A definite height plus the primitive's `fill` (which
+ * sets `min-height: 0` and `overflow: hidden` on the body) means the box is the
+ * same size from the first frame to the last and the typed lines simply fill it.
+ *
+ * `Glow` + `MockupFrame` give it the kit's depth treatment — both were built for
+ * exactly this in D1 and went unused until this branch. The frame is a
+ * translucent bezel around the terminal's own surface and shadow; `Glow` lays a
+ * soft radial light behind it, reading `--accent`, which this app collapses to
+ * neutral ink, so the wash is white and the monochrome canon holds.
+ *
+ * `overflow-x-clip` on the section is load-bearing, not tidying: the glow's
+ * ellipses are `w-[60%]` at `scale-[2.5]`, so they render ~2.5x wider than the
+ * band and would otherwise push the document 67px past the viewport at 390px
+ * (measured 457 vs 390). `clip` rather than `hidden` so the band is not turned
+ * into a scroll container, and only on the x axis so the light still bleeds
+ * vertically.
  */
 function Boot() {
   return (
     <section className="line-b overflow-x-clip px-[var(--page-pad)] py-[var(--section-y-tight)]">
-      <div className="mx-auto grid max-w-[var(--frame-w)] grid-cols-[minmax(0,1fr)] gap-[1.6rem] min-[900px]:grid-cols-[minmax(0,1fr)_minmax(0,1fr)] min-[900px]:items-stretch">
-        {/* `justify-between` over two clusters, not `justify-center` over three
-            children: the terminal beside this is ~465px tall, so centring
-            ~135px of copy left ~165px of dead space directly under the hero and
-            the page's first screen read as two unrelated halves. Grouping the
-            label with the command and pinning the CTAs to the bottom instead
-            puts the clone instruction at the terminal's title bar and the two
-            actions on its last line, so the cells read as one object. Below
-            900px the grid is single-column and the cell is auto-height, so this
-            has no effect there. */}
-        <div className="flex min-w-0 flex-col justify-between gap-[1.2rem]">
-          <div className="flex flex-col gap-[1.2rem]">
-            <p className="animate-appear m-0 font-mono text-[0.7rem] uppercase tracking-[var(--tracking-meta)] text-ink-mute opacity-0">
-              clone it · one make up brings the stack up
-            </p>
-            <CopyCommand
-              samples={[{ label: "clone", protocol: "git clone", code: REPO_CLONE }]}
-              ariaLabel="Clone command"
-              inline
-            />
-          </div>
-          <div className="flex flex-wrap items-center gap-[0.8rem]">
-            <CtaLink href="/docs">Read the docs</CtaLink>
-            <CtaLink href="/chat" variant="ghost">
-              Ask digichat
-            </CtaLink>
-          </div>
-        </div>
-        {/* The artefact gets the kit's depth treatment — `MockupFrame` + `Glow`
-            were built for exactly this (D1) and went unused until now. The frame
-            is a translucent bezel around the terminal's own surface and shadow;
-            `Glow` lays a soft radial light behind it. `Glow` reads `--accent`,
-            which this app collapses to neutral ink, so the wash is white rather
-            than a colour — the monochrome canon holds.
-
-            No `fade-bottom` here, unlike the primitive's own example: the
-            terminal's bottom edge is the payload — the last services, the
-            `up · 12 services` line and the blinking cursor — and fading 35% of
-            it would erase the thing the animation exists for. The band's
-            `line-b` already gives it a clean edge.
-
-            `overflow-x-clip` on the section is load-bearing, not tidying: the
-            glow's ellipses are `w-[60%]` at `scale-[2.5]`, so they render ~2.5x
-            wider than the cell and would otherwise push the document 67px past
-            the viewport at 390px (measured 457 vs 390). `clip` rather than
-            `hidden` so the band is not turned into a scroll container, and only
-            on the x axis so the light still bleeds vertically. */}
+      <div className="mx-auto flex max-w-[var(--frame-w)] flex-col gap-[1.6rem]">
+        <CopyCommand
+          samples={[{ label: "clone", protocol: "git clone", code: REPO_CLONE }]}
+          ariaLabel="Clone command"
+          inline
+        />
         <div className="relative min-w-0">
           <Glow variant="top" />
           <MockupFrame size="small" className="animate-appear opacity-0 delay-100">
-            <BootTerminal className="min-h-[420px] min-w-0 min-[900px]:min-h-0" />
+            <BootTerminal className="h-[clamp(18.5rem,30vh,20.5rem)] min-w-0" />
           </MockupFrame>
         </div>
       </div>
