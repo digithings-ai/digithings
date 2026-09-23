@@ -95,6 +95,23 @@ MODE_ERROR = "error"
 _SOFT_FAIL_MODES = frozenset({MODE_HISTORY_ONLY, MODE_ERROR})
 
 LIVE_WINDOW_DAYS = 45
+# The live fetch window must span at least one publication period of the series
+# (#4588). LIVE_WINDOW_DAYS assumes a series that publishes inside 45 days; for a
+# monthly series the newest observation can legitimately sit ~90 days behind the
+# run (release lag plus the pending release), so the 45-day window came back empty
+# and the run was marked stale. Widening the window makes the fetch *non-empty*
+# (it contains the seal row) so the existing up-to-date path covers it; an empty
+# window is still a soft fail, since a dead feed looks the same as a slow one.
+#
+# Only ``monthly``/``quarterly`` actually widen: a weekly seal is at most ~7 days
+# old, so the 45-day default already spans several publications, and widening it
+# would only raise the age at which a dead weekly feed is noticed.
+_CADENCE_WINDOW_DAYS: dict[str, int] = {
+    "daily": LIVE_WINDOW_DAYS,
+    "weekly": LIVE_WINDOW_DAYS,
+    "monthly": 120,
+    "quarterly": 240,
+}
 FULL_HISTORY_START = "1990-01-01"
 PRICE_VALUE_COLS = ("open", "high", "low", "close", "volume")
 MACRO_VALUE_COLS = ("obs_date", "value")
@@ -634,7 +651,7 @@ def build_core_supabase_client() -> Any | None:
 
 def mirror_macro_to_core(
     store: Any,
-    specs: list[tuple[str, str]],
+    specs: list[tuple[str, str, str | None]],
     *,
     run: str,
     client: Any | None,
@@ -652,7 +669,9 @@ def mirror_macro_to_core(
     upsert error is recorded and never fails the R2 refresh.
     """
     summary: dict[str, Any] = {"rows": 0, "series": 0, "skipped": []}
-    targets = [(s.lower(), sid) for s, sid in specs if s.lower() in CORE_MIRROR_MACRO_SOURCES]
+    targets = [
+        (s.lower(), sid) for s, sid, _cadence in specs if s.lower() in CORE_MIRROR_MACRO_SOURCES
+    ]
     if client is None or not targets:
         summary["skipped"] = [f"{s}__{sid}: no core client" for s, sid in targets]
         return summary
@@ -677,6 +696,19 @@ def mirror_macro_to_core(
     return summary
 
 
+def _live_window_days(cadence: str | None) -> int:
+    """Live fetch window for a series' declared cadence (default: daily, 45d)."""
+    if not cadence:
+        return LIVE_WINDOW_DAYS
+    key = cadence.strip().lower()
+    try:
+        return _CADENCE_WINDOW_DAYS[key]
+    except KeyError:
+        raise ValueError(
+            f"unknown cadence {cadence!r}; expected one of {sorted(_CADENCE_WINDOW_DAYS)}"
+        ) from None
+
+
 def refresh_macro_series(
     source: str,
     series: str,
@@ -684,6 +716,7 @@ def refresh_macro_series(
     manifest: dict[str, Any] | None = None,
     *,
     as_of: str | None = None,
+    cadence: str | None = None,
 ) -> dict[str, Any]:
     """Refresh one macro series (FRED revisions use the same restatement rule)."""
     source = source.lower()
@@ -699,7 +732,7 @@ def refresh_macro_series(
     except Exception as exc:
         return _outcome(name, MODE_ERROR, note=f"history read failed: {type(exc).__name__}: {exc}")
     seal = _max_date(hist, "obs_date") or str(manifest.get("as_of") or run)
-    start, end = _shift_days(run, -LIVE_WINDOW_DAYS), _shift_days(run, 1)
+    start, end = _shift_days(run, -_live_window_days(cadence)), _shift_days(run, 1)
 
     def _fetch_full() -> pl.DataFrame:
         rows = store.fetch_macro_full(source, series, end)
@@ -997,22 +1030,32 @@ def build_store(postgres_uri: str) -> tuple[RefreshStore, dict[str, Any]]:
     return adapter, manifest
 
 
-def _resolve_macro_specs(cli_specs: list[str], manifest_path: str) -> list[tuple[str, str]]:
-    """``--macro-series SOURCE:SERIES`` or the research manifest + Yahoo FX."""
+def _resolve_macro_specs(
+    cli_specs: list[str], manifest_path: str
+) -> list[tuple[str, str, str | None]]:
+    """``--macro-series SOURCE:SERIES`` or the research manifest + Yahoo FX.
+
+    The third element is the series' native cadence (``None`` means daily), which
+    sets the live fetch window in :func:`refresh_macro_series`.
+    """
     if cli_specs:
-        out: list[tuple[str, str]] = []
+        out: list[tuple[str, str, str | None]] = []
         for spec in cli_specs:
             source, _, series = spec.partition(":")
             if not source or not series:
                 raise SystemExit(f"--macro-series expects SOURCE:SERIES, got {spec!r}")
-            out.append((source.lower(), series))
+            out.append((source.lower(), series, None))
         return out
     try:
         from digiquant.data.prices.macro_ingest import YAHOO_FX_DEFAULT, MacroManifest
 
         macro_manifest = MacroManifest.from_yaml(manifest_path)
-        fred = [("fred", str(s.get("id"))) for s in macro_manifest.fred_series if s.get("id")]
-        yahoo = [("yahoo", cfg["series_id"]) for cfg in YAHOO_FX_DEFAULT.values()]
+        fred = [
+            ("fred", str(s.get("id")), s.get("cadence"))
+            for s in macro_manifest.fred_series
+            if s.get("id")
+        ]
+        yahoo = [("yahoo", cfg["series_id"], None) for cfg in YAHOO_FX_DEFAULT.values()]
         return fred + yahoo
     except Exception as exc:
         print(f"warn: macro manifest unreadable ({exc}); skipping macro refresh")
@@ -1072,7 +1115,7 @@ def main(argv: list[str] | None = None) -> int:
     if args.dry_run:
         for ticker in universe:
             print(f"plan: refresh {normalize_ticker(ticker)}")
-        for source, series in macro_specs:
+        for source, series, _cadence in macro_specs:
             print(f"plan: refresh {source}__{series}")
         return 0
     if not args.postgres_uri:
@@ -1083,9 +1126,11 @@ def main(argv: list[str] | None = None) -> int:
         universe, store, manifest, as_of=run, sealed=args.sealed, progress=print
     )
     macro_outcomes = []
-    for source, series in macro_specs:
+    for source, series, cadence in macro_specs:
         try:
-            outcome = refresh_macro_series(source, series, store, manifest, as_of=run)
+            outcome = refresh_macro_series(
+                source, series, store, manifest, as_of=run, cadence=cadence
+            )
         except Exception as exc:
             outcome = _outcome(
                 f"{source}__{series}",
