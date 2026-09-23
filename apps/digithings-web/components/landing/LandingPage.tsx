@@ -120,10 +120,10 @@ function Contact() {
         </div>
         <div className="flex flex-col gap-[1.4rem]">
           <h2 className="m-0 max-w-[24ch] font-mono text-[length:var(--type-page-title)] font-medium leading-[1.2] tracking-[-0.02em] text-balance text-ink">
-            You own the stack, the keys, and the infrastructure.
+            You own the stack and the keys.
           </h2>
           <p className="m-0 max-w-[var(--measure-prose)] text-[length:var(--type-body)] leading-[var(--leading-prose)] text-ink-soft">
-            The whole monorepo is MIT-licensed and public — take it and run it yourself. What we sell
+            The whole monorepo is MIT-licensed and public. What we sell
             is the integration work: fitting these modules to the stack you already have.
           </p>
           <div className="flex flex-wrap items-center gap-[0.8rem]">
@@ -162,7 +162,7 @@ export function LandingPage() {
       <section id="why" className="line-b px-[var(--page-pad)] py-[var(--page-step)]">
         <div className="mx-auto flex max-w-[var(--frame-w)] flex-col gap-[2rem]">
           <h2 className="m-0 font-mono text-[length:var(--type-section-stand)] font-medium leading-[1.2] tracking-[-0.025em] text-ink">
-            Why digithings, not the ready-made platform
+            Why digithings, not a managed platform
           </h2>
           {/* Point 10: the argument is the picture, not a column of prose.
               Round 3: the comparison is the whole section — the three claims
@@ -174,7 +174,7 @@ export function LandingPage() {
       <section id="open-source" className="line-b px-[var(--page-pad)] py-[var(--page-step)]">
         <div className="mx-auto flex max-w-[var(--frame-w)] flex-col gap-[2rem]">
           <h2 className="m-0 font-mono text-[length:var(--type-section-stand)] font-medium leading-[1.2] tracking-[-0.025em] text-ink">
-            Open source, and still moving
+            Open source, and still shipping
           </h2>
           <OpenSource />
         </div>
@@ -201,7 +201,7 @@ export function LandingPage() {
       <section id="voices" className="line-b px-[var(--page-pad)] py-[var(--page-step)]">
         <div className="mx-auto flex max-w-[var(--frame-w)] flex-col gap-[2rem]">
           <h2 className="m-0 font-mono text-[length:var(--type-section-stand)] font-medium leading-[1.2] tracking-[-0.025em] text-ink">
-            Two voices, both real
+            Two voices
           </h2>
           {/* Point 5: the quotes are one section now, not a band and a hero line. */}
           <Testimonials />
