@@ -37,14 +37,21 @@ def _row(ticker: str, **overrides):
 
 
 def _install_technicals(monkeypatch: pytest.MonkeyPatch, rows: list[dict]) -> None:
-    """Stub the R2 technicals seam (#4053) — get_price_technicals is R2-only now."""
+    """Stub the R2 technicals batch seam (#4053, #4600) — R2-only now."""
     by_ticker = {row["ticker"]: row for row in rows}
 
-    def fake(*, client, ticker, lookback, as_of):
-        latest = by_ticker.get(ticker) or by_ticker.get(ticker.upper(), {})
-        return {"ticker": ticker, "latest": latest, "window": [latest] if latest else []}
+    def fake(*, client, tickers, lookback, as_of):
+        out: dict[str, dict] = {}
+        for ticker in tickers:
+            latest = by_ticker.get(ticker) or by_ticker.get(ticker.upper(), {})
+            out[ticker] = {
+                "ticker": ticker,
+                "latest": latest,
+                "window": [latest] if latest else [],
+            }
+        return out
 
-    monkeypatch.setattr("digiquant.research.data.queries.get_price_technicals", fake)
+    monkeypatch.setattr("digiquant.research.data.queries.get_price_technicals_batch", fake)
 
 
 class TestScore:
@@ -103,7 +110,7 @@ class TestSelectFocusTickers:
         def _boom(**kwargs):
             raise RuntimeError("boom")
 
-        monkeypatch.setattr("digiquant.research.data.queries.get_price_technicals", _boom)
+        monkeypatch.setattr("digiquant.research.data.queries.get_price_technicals_batch", _boom)
         focus = select_focus_tickers(
             client=_Exploding(canned_reads={}),
             watchlist=["A", "B", "C"],
@@ -143,7 +150,9 @@ class TestSelectFocusTickers:
         def _must_not_run(**kwargs):
             raise AssertionError("scoring query should not run when top_n=0")
 
-        monkeypatch.setattr("digiquant.research.data.queries.get_price_technicals", _must_not_run)
+        monkeypatch.setattr(
+            "digiquant.research.data.queries.get_price_technicals_batch", _must_not_run
+        )
         focus = select_focus_tickers(
             client=_MustNotQuery(canned_reads={}),
             watchlist=["A", "B"],
@@ -151,3 +160,26 @@ class TestSelectFocusTickers:
             top_n=0,
         )
         assert focus == load_portfolio_holdings()
+
+    def test_scoring_uses_one_batch_call_not_one_per_candidate(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """#4600: the whole candidate pool is fetched in one batch call."""
+        calls: list[list[str]] = []
+
+        def _counting_batch(*, client, tickers, lookback, as_of):
+            calls.append(list(tickers))
+            return {t: {"ticker": t, "latest": _row(t), "window": [_row(t)]} for t in tickers}
+
+        monkeypatch.setattr(
+            "digiquant.research.data.queries.get_price_technicals_batch", _counting_batch
+        )
+        focus = select_focus_tickers(
+            client=object(),
+            watchlist=["A", "B", "C", "D"],
+            run_date=RUN_DATE,
+            top_n=2,
+            holdings=[],
+        )
+        assert calls == [["A", "B", "C", "D"]]
+        assert focus == ["A", "B"]
