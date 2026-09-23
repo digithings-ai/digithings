@@ -1,5 +1,7 @@
 "use client";
 
+import { useEffect, useRef } from "react";
+
 /**
  * The argument — a seam diagram (v15 Stage 5, #4429; reworked Round 3).
  *
@@ -116,60 +118,184 @@ const GRID = "grid grid-cols-[minmax(0,1fr)_3.4rem_minmax(0,1fr)]";
 // so the headers read as headers: headers `--type-meta`, row labels 0.68rem.
 // Nothing here goes below the page's smallest established size.
 
-/** The diagram: the same seven layers drawn twice, every one a seam. */
+const clamp = (v: number, a: number, b: number) => Math.max(a, Math.min(b, v));
+
+/** Active only where motion is welcome; otherwise the table is static. */
+const DRAWER_MEDIA = "(prefers-reduced-motion: no-preference)";
+
+/** Extra scroll the drawer gets, in viewport heights (a short, continuous move). */
+const DRAWER_VH = 0.55;
+
+/**
+ * The diagram: the same seven layers drawn twice, every one a seam.
+ *
+ * Round 6 animation, on the owner's ask: "i would animate the table between the
+ * manage platform and digi things in some way… the digi things portion would
+ * start on top of the managed platform and just… it's like a drawer it would
+ * slide over to the right side". So the owned column and the seam are one
+ * drawer: at the start of the band's pin it sits over the managed-platform
+ * column, and it slides right into its true column as the reader scrolls,
+ * uncovering the platform beneath it. The slide is the section's own claim
+ * performed — the same seven layers, and yours slides into place over theirs.
+ *
+ * The mechanic is the FAQ band's (see `FaqMorph`): a passive scroll handler
+ * writing straight to the DOM (no per-frame React state), a short sticky pin,
+ * and a media-query gate so `prefers-reduced-motion` gets the static table with
+ * no track height and no transform. The moving columns carry a
+ * `translateX(var(--seam-x))` inline style and the grid owns the variable, so
+ * the seam and the owned side move as a unit; `data-seam` marks them for
+ * measurement and nothing here adds an app-local CSS class.
+ */
 export function ArgumentSeams() {
+  const wrapRef = useRef<HTMLDivElement>(null);
+  const gridRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const wrap = wrapRef.current;
+    const grid = gridRef.current;
+    if (!wrap || !grid) return;
+    const pin = wrap.firstElementChild as HTMLElement | null;
+    const mq = window.matchMedia(DRAWER_MEDIA);
+
+    let travel = 0;
+    let distance = 0;
+    let stickyTop = 78;
+
+    const measure = () => {
+      stickyTop = pin ? parseFloat(getComputedStyle(pin).top) || 78 : 78;
+      const panel = grid.querySelector<HTMLElement>('[data-seam="panel"]');
+      const seam = grid.querySelector<HTMLElement>('[data-seam="seam"]');
+      travel = (panel?.offsetWidth ?? 0) + (seam?.offsetWidth ?? 0);
+      distance = Math.round(window.innerHeight * DRAWER_VH);
+      if (pin) {
+        wrap.style.height = `${Math.round(pin.getBoundingClientRect().height + distance)}px`;
+      }
+    };
+
+    const apply = (p: number) => {
+      // Ease-out: the drawer leaves promptly, then settles into its column.
+      const e = 1 - Math.pow(1 - p, 3);
+      grid.style.setProperty("--seam-x", `${-travel * (1 - e)}px`);
+    };
+
+    const reset = () => {
+      wrap.style.height = "";
+      grid.style.removeProperty("--seam-x");
+    };
+
+    let ticking = false;
+    const onScroll = () => {
+      if (ticking) return;
+      ticking = true;
+      requestAnimationFrame(() => {
+        const top = wrap.getBoundingClientRect().top;
+        apply(distance > 0 ? clamp((stickyTop - top) / distance, 0, 1) : 1);
+        ticking = false;
+      });
+    };
+
+    const onResize = () => {
+      measure();
+      onScroll();
+    };
+
+    const enable = () => {
+      measure();
+      onScroll();
+      window.addEventListener("scroll", onScroll, { passive: true });
+      window.addEventListener("resize", onResize, { passive: true });
+    };
+    const disable = () => {
+      window.removeEventListener("scroll", onScroll);
+      window.removeEventListener("resize", onResize);
+      reset();
+    };
+    const onMediaChange = () => {
+      if (mq.matches) enable();
+      else disable();
+    };
+
+    onMediaChange();
+    mq.addEventListener("change", onMediaChange);
+    return () => {
+      mq.removeEventListener("change", onMediaChange);
+      disable();
+    };
+  }, []);
+
   return (
-    <div className="w-full max-w-[var(--frame-w)] border border-hair bg-surface">
-      <div className={`${GRID} border-b border-hair`}>
-        <p className="m-0 px-[1rem] py-[0.7rem] font-mono text-[length:var(--type-meta)] uppercase tracking-[var(--tracking-meta)] text-ink-mute">
-          the managed platform
-        </p>
-        <span aria-hidden="true" />
-        <p className="m-0 px-[1rem] py-[0.7rem] font-mono text-[length:var(--type-meta)] uppercase tracking-[var(--tracking-meta)] text-ink">
-          digithings
-        </p>
-      </div>
-
-      {LAYERS.map((l) => (
-        <div key={l.layer} className={`${GRID} items-stretch border-b border-hair last:border-b-0`}>
-          {/* Theirs — a hollow cell: a hairline rule, transparent ground, muted
-              copy. Nothing of yours is in here, and it should look like it. */}
-          <div className="flex flex-col gap-[0.12rem] border-s-[3px] border-s-hair px-[1rem] py-[0.62rem]">
-            <span className="font-mono text-[0.68rem] uppercase tracking-[var(--tracking-meta)] text-ink-mute">
-              {l.layer}
-            </span>
-            <span className="text-[0.82rem] leading-[1.5] text-ink-mute">{l.theirs}</span>
+    <div ref={wrapRef}>
+      <div className="sticky top-[calc(var(--dq-nav-h,4.5rem)+0.5rem)]">
+        <div
+          ref={gridRef}
+          className="w-full max-w-[var(--frame-w)] border border-hair bg-surface"
+        >
+          <div className={`${GRID} border-b border-hair`}>
+            <p className="m-0 px-[1rem] py-[0.7rem] font-mono text-[length:var(--type-meta)] uppercase tracking-[var(--tracking-meta)] text-ink-mute">
+              the managed platform
+            </p>
+            <span
+              aria-hidden="true"
+              data-seam="seam"
+              className="relative z-[2]"
+              style={{ transform: "translateX(var(--seam-x, 0px))" }}
+            />
+            <p
+              data-seam="panel"
+              className="relative z-[2] m-0 px-[1rem] py-[0.7rem] font-mono text-[length:var(--type-meta)] uppercase tracking-[var(--tracking-meta)] text-ink"
+              style={{ transform: "translateX(var(--seam-x, 0px))" }}
+            >
+              digithings
+            </p>
           </div>
 
-          {/* The seam itself — the one glyph carrying the argument.
-              It was the faintest thing in the diagram (a 7.7px glyph at
-              --ink-soft over a 9% dashed rule), which is backwards: the seam is
-              the claim. The rule steps up to --ink-mute and the glyph to full
-              ink at 1.15rem, so the perforation and the swap both read at a
-              glance. The rule stays a 1px hairline so it cannot compete with
-              the right column's 3px solid ink edge — the diagram still has one
-              loudest line, and it is the owned side's. */}
-          <div className="relative flex items-center justify-center" aria-hidden="true">
-            <span className="absolute inset-y-0 start-1/2 w-px border-s border-dashed border-ink-mute" />
-            <span className="relative font-mono text-[1.15rem] leading-none text-ink">&#8644;</span>
-          </div>
+          {LAYERS.map((l) => (
+            <div
+              key={l.layer}
+              className={`${GRID} items-stretch border-b border-hair last:border-b-0`}
+            >
+              {/* Theirs — a hollow cell: a hairline rule, transparent ground, muted
+                  copy. Nothing of yours is in here, and it should look like it. */}
+              <div className="flex flex-col gap-[0.12rem] border-s-[3px] border-s-hair px-[1rem] py-[0.62rem]">
+                <span className="font-mono text-[0.68rem] uppercase tracking-[var(--tracking-meta)] text-ink-mute">
+                  {l.layer}
+                </span>
+                <span className="text-[0.82rem] leading-[1.5] text-ink-mute">{l.theirs}</span>
+              </div>
 
-          {/* Yours — the same cell, owned. The page's accent is deliberately
-              monochrome (globals.css collapses --accent to --ink), so ownership
-              is carried by ground + a solid rule + ink copy, never by a hue. */}
-          <div className="flex flex-col gap-[0.12rem] border-s-[3px] border-s-ink bg-surface-2 px-[1rem] py-[0.62rem]">
-            <span className="font-mono text-[0.68rem] uppercase tracking-[var(--tracking-meta)] text-ink">
-              {l.layer}
-            </span>
-            <span className="text-[0.82rem] leading-[1.5] text-ink">{l.yours}</span>
-          </div>
+              {/* The seam itself — the one glyph carrying the argument, and part of
+                  the drawer: it rides with the owned column, so the perforation
+                  lands on the boundary only once the drawer has settled. */}
+              <div
+                data-seam="seam"
+                className="relative z-[2] flex items-center justify-center"
+                style={{ transform: "translateX(var(--seam-x, 0px))" }}
+                aria-hidden="true"
+              >
+                <span className="absolute inset-y-0 start-1/2 w-px border-s border-dashed border-ink-mute" />
+                <span className="relative font-mono text-[1.15rem] leading-none text-ink">
+                  &#8644;
+                </span>
+              </div>
+
+              {/* Yours — the same cell, owned, and the drawer's face. The page's
+                  accent is deliberately monochrome (globals.css collapses --accent
+                  to --ink), so ownership is carried by ground + a solid rule + ink
+                  copy, never by a hue. */}
+              <div
+                data-seam="panel"
+                className="relative z-[2] flex flex-col gap-[0.12rem] border-s-[3px] border-s-ink bg-surface-2 px-[1rem] py-[0.62rem]"
+                style={{ transform: "translateX(var(--seam-x, 0px))" }}
+              >
+                <span className="font-mono text-[0.68rem] uppercase tracking-[var(--tracking-meta)] text-ink">
+                  {l.layer}
+                </span>
+                <span className="text-[0.82rem] leading-[1.5] text-ink">{l.yours}</span>
+              </div>
+            </div>
+          ))}
         </div>
-      ))}
-
-      <p className="m-0 border-t border-hair px-[1rem] py-[0.7rem] font-mono text-[0.68rem] text-ink-mute">
-        seven layers, drawn twice. on the right, each one is a seam you can move — provider,
-        store, tools, runtime, keys, log, host.
-      </p>
+      </div>
     </div>
   );
 }

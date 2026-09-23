@@ -7,7 +7,6 @@ import { writeHandoff, type ChatMessage } from "@/lib/chatHandoff";
 import { DigichatFixtureRuntime } from "./digichat-fixture-runtime";
 import { DigichatThreadWelcome } from "./digichat-thread-welcome";
 import { ASK_PLACEHOLDER, ASK_SUGGESTIONS, ASK_WELCOME, welcomeBody } from "./digichat-welcome-config";
-import { GROUPED_LABEL } from "./label";
 
 /**
  * The FAQ band's right pane: the real digichat skin as a self-contained
@@ -47,9 +46,10 @@ import { GROUPED_LABEL } from "./label";
  * directly could never do this: its transcript would be cross-origin and
  * unreachable.
  *
- * It is still a simulation, and it says so: the canned answers are badged
- * `example`, and the note under the box states that nothing typed here reaches
- * the container. Opening the full chat is the moment that stops being true.
+ * It is still a simulation, and the canned answers are badged `example`. Round 6
+ * dropped the note under the box that spelled that out ("the answers are canned
+ * and nothing typed…") — the owner called it text to remove — so the badge and
+ * the working full-chat control carry it instead.
  */
 
 /** Module scope so the message tree does not re-render on parent updates. */
@@ -91,25 +91,26 @@ export function QuickAsk({ className }: { className?: string }) {
   return (
     <div className={className}>
       <div className="flex flex-col gap-[0.7rem]">
-        <div className="flex flex-wrap items-center justify-between gap-x-[1rem] gap-y-[0.4rem]">
-          <p className={`m-0 ${GROUPED_LABEL}`}>digichat</p>
-          {/* The way out, in the header rather than floating over the frame. It
-              is always available: before a turn it opens the chat fresh, after
-              one it opens the chat already holding the conversation. The copy
-              that used to spell that out ("the full chat opens in the
-              container") is gone — the button says it. */}
+        {/* The way out, icon-only, at the pane's top-right. The owner: "the full
+            screen chat button should be... in the top left or the top right just
+            just the logo of full screen", and "i'd remove the digi chat title in
+            the left just so we give more room to the chat pane". So the header
+            row is now only the control — the `digichat` label is gone and the
+            stage below spans the full column. The icon carries the meaning; the
+            label lives in `aria-label` and `title` for anyone who needs words. */}
+        <div className="flex items-center justify-end">
           <Button
             type="button"
             variant="outline"
             size="xs"
             onClick={expand}
             aria-label="Open this conversation in the full chat"
-            className="font-mono text-[0.68rem] uppercase tracking-[0.06em] text-ink-soft"
+            title="Full screen chat"
+            className="px-[0.5rem] text-ink-soft"
           >
-            <span aria-hidden="true" className="text-[0.8rem] leading-none">
+            <span aria-hidden="true" className="text-[0.9rem] leading-none">
               ⤢
             </span>
-            full screen chat
           </Button>
         </div>
         <div
@@ -125,10 +126,6 @@ export function QuickAsk({ className }: { className?: string }) {
             />
           </DigichatFixtureRuntime>
         </div>
-        <p className="m-0 font-mono text-[0.68rem] leading-[1.6] text-ink-mute">
-          These answers are canned, and nothing typed here reaches the container. The same
-          conversation continues in the full chat.
-        </p>
       </div>
     </div>
   );

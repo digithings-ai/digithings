@@ -76,6 +76,11 @@
   overflow-x: auto;
   padding: 0.2rem 2.2rem;
   scroll-snap-type: x mandatory;
+  /* The track is padded so the first card clears the edge fade. Without matching
+     the snapport to that padding, mandatory snap aligns the first card's start
+     edge to the unpadded start and rests the rail at ~2.2rem instead of zero —
+     which reads as "scrolled slightly right" and fades the first card. */
+  scroll-padding-inline: 2.2rem;
   scrollbar-width: none;
 }
 

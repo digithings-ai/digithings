@@ -270,7 +270,7 @@ body {
    without the wrap a narrow tile had its name run underneath it. */
 .dg-mosaic-head { display: flex; flex-wrap: wrap; align-items: flex-start; justify-content: space-between; gap: 0.25rem 0.6rem; min-width: 0; }
 .dg-mosaic-version { margin-left: auto; text-align: right; }
-.dg-mosaic-name { font-family: var(--font-mono); font-size: 0.82rem; font-weight: 500; color: var(--ink); }
+.dg-mosaic-name { font-family: var(--font-mono); font-size: 0.95rem; font-weight: 500; color: var(--ink); }
 
 /* The whole tile is the focus target, but the focused tile also owns real
    controls (copy the compose command, ask digichat). A <button> cannot contain
