@@ -486,11 +486,15 @@ function Book({
             background ... a cleaner way of showing these with no background and
             more simplistic styling", and "the chart should be the same height as
             the performance metrics" — so the reads are plain label/value rows
-            pinned to the pane's own 240px. */}
+            pinned to the pane's own 240px, under the timeframe selector that
+            drives them. */}
         <div className="flex min-w-0 flex-col justify-center gap-[0.6rem] min-[980px]:h-[240px]">
-          <span className="font-mono text-[0.6rem] uppercase tracking-[0.06em] text-ink-mute">
-            over the window
-          </span>
+          <SegToggle
+            value={active}
+            options={LOOKBACK_OPTIONS}
+            onChange={(preset) => setView(viewWindowForPreset(preset, fullSpan))}
+            label="Lookback window"
+          />
           {[
             { label: "portfolio", value: fmtSignedPct(portfolioReturn) },
             { label: "benchmark", value: fmtSignedPct(benchmarkReturn) },
@@ -507,19 +511,6 @@ function Book({
             </div>
           ))}
         </div>
-      </div>
-      <div className="flex flex-wrap items-center justify-between gap-[0.6rem]">
-        <p className="m-0 font-mono text-[0.68rem] text-ink-mute">
-          {live
-            ? "indexed to 100 · digiquant portfolio (solid) vs benchmark (dashed), from the dashboard's own series"
-            : "indexed to 100 · portfolio (solid) vs benchmark (dashed) · synthetic series"}
-        </p>
-        <SegToggle
-          value={active}
-          options={LOOKBACK_OPTIONS}
-          onChange={(preset) => setView(viewWindowForPreset(preset, fullSpan))}
-          label="Lookback window"
-        />
       </div>
     </div>
   );
