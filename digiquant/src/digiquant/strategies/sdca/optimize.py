@@ -304,6 +304,7 @@ def load_sdca_extra_z(
     data_path: str | Path | None,
     data_dir: str | Path | None,
     oscillators: SdcaOscillatorSpec | None = None,
+    extra_windows: dict[str, int] | None = None,
 ) -> dict[str, list[float | None]]:
     """Load independent extras from sibling files next to the BTC OHLCV CSV.
 
@@ -320,6 +321,12 @@ def load_sdca_extra_z(
     weekly_macd, sma_band, monthly_rsi, monthly_macd, weekly_monthly_rsi,
     weekly_monthly_macd) at periods a period search has already picked,
     instead of silently reverting to defaults tuned for a different formula.
+
+    ``extra_windows`` passes through to ``extra_z_vectors`` /
+    ``build_extra_indicators`` -- an optional per-indicator override of the
+    shared macro/on-chain rolling-z window (m2, dxy, onchain_mvrv,
+    onchain_asopr, onchain_puell, onchain_rhodl, onchain_addr_ratio,
+    fear_greed). Absent or ``None``, every extra keeps the shared default.
     """
     root = Path(data_path).parent if data_path is not None else None
     if root is None and data_dir is not None:
@@ -340,7 +347,11 @@ def load_sdca_extra_z(
         onchain_addr_ratio=1.0 if sources.onchain_addr_ratio_dates is not None else 0.0,
         fear_greed=1.0 if sources.fear_greed_dates is not None else 0.0,
     )
-    extra.update(extra_z_vectors(date_s, price_s, weights, sources, oscillators=oscillators))
+    extra.update(
+        extra_z_vectors(
+            date_s, price_s, weights, sources, oscillators=oscillators, extra_windows=extra_windows
+        )
+    )
     return extra
 
 

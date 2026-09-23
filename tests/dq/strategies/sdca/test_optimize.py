@@ -430,3 +430,31 @@ class TestLoadSdcaExtraZOscillators:
                 f"{name} did not change with a different oscillators spec -- "
                 "load_sdca_extra_z is silently ignoring `oscillators` again"
             )
+
+
+class TestLoadSdcaExtraZWindows:
+    """``extra_windows`` must reach the per-indicator z computation through
+    both ``load_sdca_extra_z`` and ``extra_z_vectors`` -- a per-indicator
+    period-search result (e.g. dxy at 60 days) should not be silently
+    dropped back to the shared default window."""
+
+    def test_extra_windows_overrides_reach_load_sdca_extra_z(self, tmp_path: Path) -> None:
+        dates = [date(2018, 1, 1) + timedelta(days=i) for i in range(400)]
+        import math
+
+        prices = [30_000.0 * (1.0 + 0.4 * math.sin(i / 45.0)) for i in range(len(dates))]
+        dxy_values = [90.0 + 10.0 * math.sin(i / 20.0) for i in range(len(dates))]
+        pl.DataFrame({"date": dates, "value": dxy_values}).write_csv(tmp_path / "DTWEXBGS.csv")
+
+        extra_overridden = load_sdca_extra_z(
+            dates, prices, data_path=None, data_dir=str(tmp_path), extra_windows={"dxy": 60}
+        )
+        extra_default = load_sdca_extra_z(
+            dates, prices, data_path=None, data_dir=str(tmp_path), extra_windows=None
+        )
+
+        assert extra_overridden["dxy"] != extra_default["dxy"], (
+            "extra_windows={'dxy': 60} did not change the dxy z-series -- "
+            "load_sdca_extra_z is not threading extra_windows through to "
+            "build_extra_indicators"
+        )

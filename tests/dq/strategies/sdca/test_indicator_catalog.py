@@ -458,6 +458,38 @@ class TestBuildExtraIndicators:
         expected = onchain_addr_ratio_z(dates, price, dates, addr, window=10, min_samples=5)
         assert by_name["onchain_addr_ratio"].z.to_list() == expected.to_list()
 
+    def test_extra_windows_overrides_per_indicator_window(self) -> None:
+        """extra_windows lets dxy use its own period while m2 (absent from the
+        dict) still falls back to the shared `window` kwarg, unchanged."""
+        dates = _dates(60)
+        price = pl.Series([100.0 + 0.5 * i for i in range(60)])
+        dxy = pl.Series([90.0 + 0.2 * i for i in range(60)])
+        m2 = pl.Series([1000.0 + i for i in range(60)])
+        sources = ExtraIndicatorSources(
+            dxy_dates=dates, dxy_values=dxy, m2_dates=dates, m2_values=m2
+        )
+        extras = build_extra_indicators(
+            dates,
+            price,
+            SdcaCompositeWeights(power_law=1.0, dxy=1.0, m2=1.0),
+            sources,
+            window=10,
+            min_samples=5,
+            roc_days=5,
+            extra_windows={"dxy": 20},
+        )
+        by_name = {e.name: e for e in extras}
+
+        # (a) dxy, present in extra_windows, is computed at its own window (20)
+        # rather than the shared default (10).
+        expected_dxy = dxy_z(dates, dates, dxy, window=20, min_samples=5)
+        assert by_name["dxy"].z.to_list() == expected_dxy.to_list()
+
+        # (b) m2, absent from extra_windows, keeps the prior shared-default
+        # behavior: computed at the shared `window` kwarg (10), unchanged.
+        expected_m2 = m2_liquidity_z(dates, dates, m2, roc_days=5, window=10, min_samples=5)
+        assert by_name["m2"].z.to_list() == expected_m2.to_list()
+
     def test_window_slice_keeps_alignment(self) -> None:
         dates = [date(2020, 1, 1) + _dt.timedelta(days=i) for i in range(10)]
         extra_z = {"m2": [float(i) for i in range(10)]}

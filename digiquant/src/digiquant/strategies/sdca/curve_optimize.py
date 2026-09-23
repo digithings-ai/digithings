@@ -975,6 +975,7 @@ def load_frozen_index(
     ticker: str = "BTC-USD",
     weights: SdcaCompositeWeights | None = None,
     oscillators: SdcaOscillatorSpec | None = None,
+    extra_windows: dict[str, int] | None = None,
 ) -> tuple[pl.Series, pl.Series, pl.Series, SdcaCompositeWeights]:
     """Composite risk on the delayed cache, sliced from ``trade_start``.
 
@@ -985,7 +986,12 @@ def load_frozen_index(
     ``SdcaOscillatorSpec()``'s production periods; pass an explicit spec to
     freeze indicator construction periods a Stage-2-style period search has
     already picked, instead of silently falling back to defaults tuned for a
-    different indicator formula.
+    different indicator formula. ``extra_windows`` passes through to
+    ``build_extra_indicators`` -- an optional per-indicator override of the
+    shared macro/on-chain rolling-z window (m2, dxy, onchain_mvrv,
+    onchain_asopr, onchain_puell, onchain_rhodl, onchain_addr_ratio,
+    fear_greed). Absent or ``None``, every extra keeps the shared default
+    (unchanged behavior).
     """
     ohlcv = load_cached(ticker, cache_dir)
     if ohlcv is None or ohlcv.is_empty():
@@ -998,7 +1004,9 @@ def load_frozen_index(
     requested = weights if weights is not None else published_indicator_weights()
     sources = load_sdca_extra_sources(cache_dir)
     resolved = drop_extras_missing_sources(requested, sources)
-    extras = build_extra_indicators(dates, ohlcv["close"], resolved, sources, oscillators=oscillators)
+    extras = build_extra_indicators(
+        dates, ohlcv["close"], resolved, sources, oscillators=oscillators, extra_windows=extra_windows
+    )
     index = build_risk_index(
         dates,
         ohlcv["close"],

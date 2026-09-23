@@ -692,6 +692,7 @@ def build_extra_indicators(
     roc_days: int = 365,
     oscillators: SdcaOscillatorSpec | None = None,
     allowlist: Sequence[str] | None = None,
+    extra_windows: dict[str, int] | None = None,
 ) -> list[IndicatorWeight]:
     """Materialize enabled extras, plus the always-on price oscillators for display.
 
@@ -712,9 +713,23 @@ def build_extra_indicators(
     extras (M2 / rs_eth / DXY) are BTC-oriented plugins; pass ``allowlist``
     from ``SdcaAssetProfile.extra_indicators`` so a second asset cannot
     silently vote with BTC-only series.
+
+    ``extra_windows`` optionally overrides the shared ``window`` on a
+    per-indicator basis for the simple macro/on-chain extras (m2, dxy,
+    onchain_mvrv, onchain_asopr, onchain_puell, onchain_rhodl,
+    onchain_addr_ratio, fear_greed) -- e.g. ``{"dxy": 60}`` computes dxy_z at
+    window=60 while every other extra not present in the dict keeps using
+    the shared ``window`` exactly as before. Absent or ``None``, every extra
+    uses the shared ``window`` (unchanged behavior).
     """
     spec = oscillators or SdcaOscillatorSpec()
     enabled = weights.enabled_extras()
+
+    def _window_for(name: str) -> int:
+        if extra_windows is not None and name in extra_windows:
+            return extra_windows[name]
+        return window
+
     if allowlist is not None:
         forbidden = [name for name in enabled if name not in allowlist]
         if forbidden:
@@ -730,7 +745,7 @@ def build_extra_indicators(
                     m2_dates,
                     sources.m2_values,  # type: ignore[arg-type]
                     roc_days=roc_days,
-                    window=window,
+                    window=_window_for("m2"),
                     min_samples=min_samples,
                 ),
                 weight=enabled["m2"],
@@ -766,7 +781,7 @@ def build_extra_indicators(
                     dates,
                     dxy_dates,
                     sources.dxy_values,  # type: ignore[arg-type]
-                    window=window,
+                    window=_window_for("dxy"),
                     min_samples=min_samples,
                 ),
                 weight=enabled["dxy"],
@@ -783,7 +798,7 @@ def build_extra_indicators(
                     dates,
                     mvrv_dates,
                     sources.onchain_mvrv_values,  # type: ignore[arg-type]
-                    window=window,
+                    window=_window_for("onchain_mvrv"),
                     min_samples=min_samples,
                 ),
                 weight=enabled["onchain_mvrv"],
@@ -800,7 +815,7 @@ def build_extra_indicators(
                     dates,
                     asopr_dates,
                     sources.onchain_asopr_values,  # type: ignore[arg-type]
-                    window=window,
+                    window=_window_for("onchain_asopr"),
                     min_samples=min_samples,
                 ),
                 weight=enabled["onchain_asopr"],
@@ -817,7 +832,7 @@ def build_extra_indicators(
                     dates,
                     puell_dates,
                     sources.onchain_puell_values,  # type: ignore[arg-type]
-                    window=window,
+                    window=_window_for("onchain_puell"),
                     min_samples=min_samples,
                 ),
                 weight=enabled["onchain_puell"],
@@ -834,7 +849,7 @@ def build_extra_indicators(
                     dates,
                     rhodl_dates,
                     sources.onchain_rhodl_values,  # type: ignore[arg-type]
-                    window=window,
+                    window=_window_for("onchain_rhodl"),
                     min_samples=min_samples,
                 ),
                 weight=enabled["onchain_rhodl"],
@@ -854,7 +869,7 @@ def build_extra_indicators(
                     btc_price,
                     addr_dates,
                     sources.onchain_addr_ratio_values,  # type: ignore[arg-type]
-                    window=window,
+                    window=_window_for("onchain_addr_ratio"),
                     min_samples=min_samples,
                 ),
                 weight=enabled["onchain_addr_ratio"],
@@ -871,7 +886,7 @@ def build_extra_indicators(
                     dates,
                     fg_dates,
                     sources.fear_greed_values,  # type: ignore[arg-type]
-                    window=window,
+                    window=_window_for("fear_greed"),
                     min_samples=min_samples,
                 ),
                 weight=enabled["fear_greed"],
@@ -1043,8 +1058,13 @@ def extra_z_vectors(
     roc_days: int = 365,
     oscillators: SdcaOscillatorSpec | None = None,
     allowlist: Sequence[str] | None = None,
+    extra_windows: dict[str, int] | None = None,
 ) -> dict[str, list[float | None]]:
-    """Full-calendar extra-z for walk-forward slicing (causal; no OOS leak)."""
+    """Full-calendar extra-z for walk-forward slicing (causal; no OOS leak).
+
+    ``extra_windows`` passes through to ``build_extra_indicators`` -- see its
+    docstring for the per-indicator override semantics.
+    """
     extras = build_extra_indicators(
         dates,
         btc_price,
@@ -1055,6 +1075,7 @@ def extra_z_vectors(
         roc_days=roc_days,
         oscillators=oscillators,
         allowlist=allowlist,
+        extra_windows=extra_windows,
     )
     vectors = {ind.name: ind.z.to_list() for ind in extras}
     # Always precompute oscillators from close so a later trial can enable them.
