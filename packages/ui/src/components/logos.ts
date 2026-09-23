@@ -8,29 +8,21 @@
  * StackLogo needs).
  */
 import {
-  siAnthropic, siDatadog, siDocker, siDrizzle, siElastic, siFastapi, siGrafana,
-  siGooglegemini, siGooglecloud, siLangchain, siLanggraph, siModelcontextprotocol,
-  siMongodb, siNextdotjs, siOpenai, siOpentelemetry, siOptuna, siPolars,
-  siPostgresql, siPrometheus, siPydantic, siReact, siRedis, siSnowflake, siSqlite,
-  siStripe, siSupabase, siVercel,
+  siDocker, siDrizzle, siFastapi, siLangchain, siLanggraph,
+  siModelcontextprotocol, siNextdotjs, siOpenai, siOpentelemetry, siOptuna,
+  siPolars, siPostgresql, siPrometheus, siPydantic, siReact, siRedis, siSqlite,
+  siSupabase, siVercel,
 } from "simple-icons";
 
 export interface SimpleIcon { hex: string; path: string }
 
 export const ICONS: Record<string, SimpleIcon> = {
-  anthropic: siAnthropic,
-  datadog: siDatadog,
   docker: siDocker,
   drizzle: siDrizzle,
-  elastic: siElastic,
   fastapi: siFastapi,
-  grafana: siGrafana,
-  googlegemini: siGooglegemini,
-  googlecloud: siGooglecloud,
   langchain: siLangchain,
   langgraph: siLanggraph,
   modelcontextprotocol: siModelcontextprotocol,
-  mongodb: siMongodb,
   nextdotjs: siNextdotjs,
   openai: siOpenai,
   opentelemetry: siOpentelemetry,
@@ -41,9 +33,7 @@ export const ICONS: Record<string, SimpleIcon> = {
   pydantic: siPydantic,
   react: siReact,
   redis: siRedis,
-  snowflake: siSnowflake,
   sqlite: siSqlite,
-  stripe: siStripe,
   supabase: siSupabase,
   vercel: siVercel,
 };

@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { GROUPED_LABEL } from "./label";
-import { OwnedStack, RentedStack } from "./why-stack-diagrams";
+import { OwnedArch, RentedArch } from "./why-stack-diagrams";
 import {
   OWNED_ARC,
   OWNED_MARKS,
@@ -20,10 +20,11 @@ import {
  * rented stack, "and then you throw DigiThings [at] them and explain how it's
  * going to improve that stack."
  *
- * Round 9b (this version) follows the follow-up: "I prefer the push variant …
- * the two visuals … should be somewhat similar, just changing the components and
- * the wiring … And most importantly, the cost, everything cost, cost, cost,
- * cost, cost, and then you end up with a massive bill."
+ * Round 9c redraws both sides as what the owner asked for next — "a visual graph
+ * with nodes and lines connecting the different services … the specific graph
+ * that you typically build when you're designing a system" — dropping the named
+ * vendors and the invoice column. Both halves are now node-and-edge architecture
+ * diagrams with the same frame, the same connectors and the same walker.
  *
  * So there is ONE stage with three layers: the rented architecture, the owned
  * architecture, and a rail that walks the steps. The push is one custom property
@@ -232,10 +233,10 @@ export function WhyStack() {
         <div ref={pinRef} className="whyx__pin">
           <div className="whyx__stage">
             <div className="whyx__panel whyx__panel--rented" aria-hidden={owned}>
-              <RentedStack lit={rentedLit} />
+              <RentedArch lit={rentedLit} />
             </div>
             <div className="whyx__panel whyx__panel--owned" aria-hidden={!owned}>
-              <OwnedStack lit={ownedLit} />
+              <OwnedArch lit={ownedLit} />
             </div>
             <div className="whyx__rail-slot">
               {owned ? (
