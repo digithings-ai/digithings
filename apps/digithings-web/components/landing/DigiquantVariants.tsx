@@ -6,11 +6,14 @@ import {
   KpiStrip,
   LiveBadge,
   MultiTimeSeries,
+  Pipeline,
   StockTicker,
   TearsheetCard,
   TearsheetCardKpi,
   TearsheetCardKpis,
   type OverlaySeries,
+  type PipelineColumn,
+  type PipelineSummaryItem,
   type TearsheetSeriesPoint,
 } from "@digithings/ui";
 import { usePriceTape } from "@/lib/priceTape";
@@ -182,6 +185,29 @@ const EXAMPLE = performance();
 const PERFORMANCE_SERIES: OverlaySeries[] = [
   { id: "portfolio", label: "digiquant portfolio", points: EXAMPLE.portfolio, tone: "accent", fill: true },
   { id: "benchmark", label: "benchmark", points: EXAMPLE.benchmark, tone: "mute", dashed: true },
+];
+
+/* The six stages as the kit's `Pipeline` — one column per stage, so the flow is
+   a single row that fits the band, with the detail panel under it. This is the
+   promoted `effects/pipeline` element the reference gallery renders
+   (`apps/reference/components/pipeline-reference.tsx`), not a hand-rolled
+   strip. */
+const PIPELINE_COLUMNS: PipelineColumn[] = STAGES.map((stage) => ({
+  id: stage.id,
+  kind: "step",
+  nodes: [
+    {
+      id: stage.id,
+      label: stage.label,
+      status: "done",
+      note: `${stage.detail} Inside it: ${stage.steps.join(", ")}.`,
+    },
+  ],
+}));
+
+const PIPELINE_SUMMARY: PipelineSummaryItem[] = [
+  { label: "stages", value: "6" },
+  { label: "live orders", value: "0" },
 ];
 
 const HEADLINE = [
@@ -369,6 +395,25 @@ function VariantB() {
   return (
     <Band>
       <Tape />
+      {/* Title on the left, the tearsheet rail beside it. */}
+      <div className="grid grid-cols-[minmax(0,1fr)] gap-[1.6rem] min-[980px]:grid-cols-[minmax(0,0.72fr)_minmax(0,1.28fr)]">
+        <div className="flex flex-col gap-[1rem]">
+          <h2 className="m-0 font-mono text-[clamp(1.5rem,3vw,2.2rem)] font-medium leading-[1.15] tracking-[-0.02em] text-ink">
+            A hedge fund in a glass box you own.
+          </h2>
+          <Lede>
+            Ideas are proposed against public data, every one is backtested before it is seen, and the
+            survivor is sized into target weights. The same glass box as the rest of digithings —
+            your hosts, data and keys — pointed at the finance work.
+          </Lede>
+          <Ctas />
+        </div>
+        <div className="flex min-w-0 flex-col gap-[0.7rem]">
+          <span className={GROUPED_LABEL}>the strategy library · example</span>
+          <StrategyRail />
+        </div>
+      </div>
+      {/* The book, in the middle. */}
       <div className="flex flex-col gap-[0.7rem]">
         <span className={GROUPED_LABEL}>the book · example</span>
         <figure className="m-0 flex flex-col gap-[0.5rem]">
@@ -385,52 +430,15 @@ function VariantB() {
           </figcaption>
         </figure>
       </div>
-      <div className="grid grid-cols-[minmax(0,1fr)] gap-[1.6rem] min-[980px]:grid-cols-[minmax(0,0.85fr)_minmax(0,1.15fr)]">
-        <div className="flex flex-col gap-[1rem]">
-          <h2 className="m-0 font-mono text-[clamp(1.5rem,3vw,2.2rem)] font-medium leading-[1.15] tracking-[-0.02em] text-ink">
-            A hedge fund in a glass box you own.
-          </h2>
-          <Lede>
-            Ideas are proposed against public data, every one is backtested before it is seen, and the
-            survivor is sized into target weights. The same glass box as the rest of digithings —
-            your hosts, data and keys — pointed at the finance work.
-          </Lede>
-          <Ctas />
-        </div>
-        <div className="grid grid-cols-[repeat(auto-fill,minmax(150px,1fr))] gap-[0.6rem]">
-          {STRATEGIES.map((s) => (
-            <div key={s.slug} className="flex flex-col gap-[0.4rem] border border-hair bg-surface p-[0.8rem]">
-              <span className="font-mono text-[0.8rem] text-ink">{s.name}</span>
-              <span className="font-mono text-[0.6rem] uppercase tracking-[0.06em] text-ink-mute">
-                {s.kind}
-              </span>
-              <dl className="m-0 mt-[0.3rem] flex flex-col gap-[0.25rem]">
-                {s.kpis.slice(0, 3).map((k) => (
-                  <div key={k.label} className="flex items-baseline justify-between gap-[0.5rem]">
-                    <dt className="font-mono text-[0.62rem] text-ink-mute">{k.label}</dt>
-                    <dd
-                      className={`m-0 font-mono text-[0.72rem] ${k.tone === "pos" ? "is-pos" : k.tone === "neg" ? "is-neg" : "text-ink"}`}
-                    >
-                      {k.value}
-                    </dd>
-                  </div>
-                ))}
-              </dl>
-              <CtaLink
-                href={`${DIGIQUANT_URL}/strategies/${s.slug}`}
-                external
-                variant="ghost"
-                className="text-[0.7rem]"
-              >
-                tearsheet ↗
-              </CtaLink>
-            </div>
-          ))}
-        </div>
-      </div>
+      {/* The pipeline, below — the kit's flow element, one row of stages with the
+          detail panel under it. */}
       <div className="flex flex-col gap-[0.7rem]">
         <span className={GROUPED_LABEL}>the pipeline</span>
-        <StageStrip />
+        <Pipeline
+          columns={PIPELINE_COLUMNS}
+          summary={PIPELINE_SUMMARY}
+          defaultSelectedId="research"
+        />
       </div>
       <FootNote />
     </Band>
