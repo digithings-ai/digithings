@@ -10,6 +10,8 @@ import {
   isAiSdkConfig,
   isDigigraphConfig,
   isFoundryConfig,
+  isNonAiSdkConfig,
+  NON_AI_SDK_PROTOCOLS,
   type BackendType,
 } from "./backend-adapters";
 
@@ -23,6 +25,9 @@ const TYPES: BackendType[] = [
   "openai-responses",
   "anthropic",
   "google-vertex",
+  "langgraph",
+  "ag-ui",
+  "a2a",
 ];
 
 describe("backend adapter registry", () => {
@@ -93,10 +98,36 @@ describe("backend adapter registry", () => {
   it("every adapter surfaces reasoning and tool calls (the parity invariant)", () => {
     for (const type of TYPES) {
       const { capabilities } = BACKEND_ADAPTERS[type];
+      if (type === "a2a") {
+        // A2A carries task status and artifacts only — no reasoning channel and
+        // no tool-call surface, so it declares both false rather than pretending.
+        expect(capabilities.reasoning).toBe(false);
+        expect(capabilities.toolCalls).toBe(false);
+        expect(capabilities.sources).toBe(false);
+        continue;
+      }
       expect(capabilities.reasoning).toBe(true);
       expect(capabilities.toolCalls).toBe(true);
       expect(capabilities.sources).toBe(true);
     }
+  });
+
+  it("resolves the non-AI-SDK protocols to their own protocol", () => {
+    for (const type of ["langgraph", "ag-ui", "a2a"] as const) {
+      const adapter = BACKEND_ADAPTERS[type];
+      expect(adapter.protocol).toBe(type);
+      expect(NON_AI_SDK_PROTOCOLS.has(adapter.protocol)).toBe(true);
+      expect(AI_SDK_PROTOCOLS.has(adapter.protocol)).toBe(false);
+      expect(adapter.capabilities.corpus).toBe(false);
+      expect(adapter.capabilities.mcp).toBe(false);
+      expect(adapter.capabilities.turnMutation).toBe(false);
+      expect(adapter.capabilities.conversationContinuity).toBe(false);
+      expect(adapter.capabilities.attachments).toBe(false);
+    }
+    // Credentials are optional and always named, never inlined.
+    expect(BACKEND_ADAPTERS.langgraph.auth).toBe("env");
+    expect(BACKEND_ADAPTERS["ag-ui"].auth).toBe("env");
+    expect(BACKEND_ADAPTERS.a2a.auth).toBe("env");
   });
 
   it("defaults to digigraph when the deployment declares no backend", () => {
@@ -146,6 +177,22 @@ describe("backend adapter registry", () => {
     expect(isAiSdkConfig(undefined)).toBe(false);
     expect(isDigigraphConfig(completions)).toBe(false);
   });
+
+  it("narrows the non-AI-SDK family and excludes the others", () => {
+    const langgraph = {
+      type: "langgraph",
+      apiUrl: "https://lg.example.com",
+      assistantId: "agent",
+    } as const;
+    const agui = { type: "ag-ui", url: "https://agui.example.com/run" } as const;
+    const a2a = { type: "a2a", baseUrl: "https://a2a.example.com" } as const;
+    expect(isNonAiSdkConfig(langgraph)).toBe(true);
+    expect(isNonAiSdkConfig(agui)).toBe(true);
+    expect(isNonAiSdkConfig(a2a)).toBe(true);
+    expect(isNonAiSdkConfig({ type: "foundry" } as const)).toBe(false);
+    expect(isNonAiSdkConfig(undefined)).toBe(false);
+    expect(isAiSdkConfig(langgraph)).toBe(false);
+  });
 });
 
 describe("chat route backend selection", () => {
@@ -171,5 +218,11 @@ describe("chat route backend selection", () => {
     expect(route).toMatch(/AI_SDK_PROTOCOLS\.has\(adapter\.protocol\)/);
     expect(route).toMatch(/isAiSdkConfig\(backend\)/);
     expect(route).toMatch(/createAiSdkStreamResponse\(/);
+  });
+
+  it("routes the non-AI-SDK protocols through their own dispatcher", () => {
+    expect(route).toMatch(/NON_AI_SDK_PROTOCOLS\.has\(adapter\.protocol\)/);
+    expect(route).toMatch(/isNonAiSdkConfig\(backend\)/);
+    expect(route).toMatch(/createNonAiSdkStreamResponse\(/);
   });
 });

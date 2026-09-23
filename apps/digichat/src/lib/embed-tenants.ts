@@ -69,6 +69,29 @@ export type EmbedBackendConfig =
       location: string;
       /** Model id passed to the provider. */
       model: string;
+    }
+  | {
+      type: "langgraph";
+      /** LangGraph Platform base URL; the adapter appends `/runs/stream`. */
+      apiUrl: string;
+      /** Graph (assistant) id to run. */
+      assistantId: string;
+      /** Optional env var NAMING the API key; never the key itself. */
+      apiKeyEnv?: string;
+    }
+  | {
+      type: "ag-ui";
+      /** AG-UI endpoint receiving the run request. */
+      url: string;
+      /** Optional env var NAMING the API key; never the key itself. */
+      apiKeyEnv?: string;
+    }
+  | {
+      type: "a2a";
+      /** A2A JSON-RPC base URL. */
+      baseUrl: string;
+      /** Optional env var NAMING the API key; never the key itself. */
+      apiKeyEnv?: string;
     };
 
 /**
@@ -257,6 +280,18 @@ export function normalizeEmbedHost(input: string | null | undefined): string | n
   return host || null;
 }
 
+/**
+ * Same `DIGICHAT_BACKEND_*` guard the YAML schema applies (#4539, #4543): the
+ * prefix bounds *which* env vars a config may name, so a tenant cannot point a
+ * backend at `AUTH_SECRET` and have the BFF ship that secret upstream.
+ */
+function validateApiKeyEnv(value: unknown, ctx: string): string {
+  if (typeof value !== "string" || !/^DIGICHAT_BACKEND_[A-Z0-9_]+$/.test(value)) {
+    throw new Error(`${ctx}: backend.apiKeyEnv must name a DIGICHAT_BACKEND_* env var`);
+  }
+  return value;
+}
+
 function validateEntry(hostKey: string, value: unknown): EmbedTenantConfig {
   const ctx = `DIGICHAT_EMBED_TENANTS["${hostKey}"]`;
   if (typeof value !== "object" || value === null || Array.isArray(value)) {
@@ -377,9 +412,54 @@ function validateEntry(hostKey: string, value: unknown): EmbedTenantConfig {
       location: backend.location,
       model: backend.model,
     };
+  } else if (
+    backend?.type === "langgraph" ||
+    backend?.type === "ag-ui" ||
+    backend?.type === "a2a"
+  ) {
+    // Non-AI-SDK protocol backends (#4543). Same https + apiKeyEnv guards as
+    // the other types; the credential is optional and always named, never
+    // inlined.
+    const urlField = backend.type === "langgraph" ? "apiUrl" : backend.type === "ag-ui" ? "url" : "baseUrl";
+    const rawUrl = backend[urlField];
+    if (typeof rawUrl !== "string" || !rawUrl.trim()) {
+      throw new Error(`${ctx}: ${backend.type} backend requires a "${urlField}"`);
+    }
+    let parsedUrl: URL;
+    try {
+      parsedUrl = new URL(rawUrl);
+    } catch {
+      throw new Error(`${ctx}: backend.${urlField} is not a valid URL`);
+    }
+    if (parsedUrl.protocol !== "https:") {
+      throw new Error(`${ctx}: backend.${urlField} must be https`);
+    }
+    if (backend.type === "langgraph") {
+      if (typeof backend.assistantId !== "string" || !backend.assistantId.trim()) {
+        throw new Error(`${ctx}: langgraph backend requires an "assistantId"`);
+      }
+      backendCfg = {
+        type: "langgraph",
+        apiUrl: rawUrl,
+        assistantId: backend.assistantId,
+        ...(backend.apiKeyEnv !== undefined ? { apiKeyEnv: validateApiKeyEnv(backend.apiKeyEnv, ctx) } : {}),
+      };
+    } else if (backend.type === "ag-ui") {
+      backendCfg = {
+        type: "ag-ui",
+        url: rawUrl,
+        ...(backend.apiKeyEnv !== undefined ? { apiKeyEnv: validateApiKeyEnv(backend.apiKeyEnv, ctx) } : {}),
+      };
+    } else {
+      backendCfg = {
+        type: "a2a",
+        baseUrl: rawUrl,
+        ...(backend.apiKeyEnv !== undefined ? { apiKeyEnv: validateApiKeyEnv(backend.apiKeyEnv, ctx) } : {}),
+      };
+    }
   } else {
     throw new Error(
-      `${ctx}: backend.type must be "digigraph", "foundry", "openai-completions", "openai-responses", "anthropic", or "google-vertex"`,
+      `${ctx}: backend.type must be "digigraph", "foundry", "openai-completions", "openai-responses", "anthropic", "google-vertex", "langgraph", "ag-ui", or "a2a"`,
     );
   }
 
