@@ -12,10 +12,12 @@ import {
 import { byokRequiresModel } from "@/lib/byok-providers";
 import {
   AI_SDK_PROTOCOLS,
+  NON_AI_SDK_PROTOCOLS,
   backendAdapterFor,
   isAiSdkConfig,
   isDigigraphConfig,
   isFoundryConfig,
+  isNonAiSdkConfig,
 } from "@/lib/backend-adapters";
 import { createDigiGraphClient, digigraphModelName } from "@/lib/digigraph";
 import {
@@ -25,6 +27,7 @@ import {
 import { createDigigraphTraceStreamResponse } from "@/lib/adapters/digithings/stream";
 import { createFoundryStreamResponse } from "@/lib/adapters/foundry/stream";
 import { createAiSdkStreamResponse } from "@/lib/adapters/ai-sdk/stream";
+import { createNonAiSdkStreamResponse } from "@/lib/adapters/non-ai-sdk";
 import { resolveLanguageCode } from "@/lib/languages";
 import { requireDigiChatAuth } from "@/lib/request-auth";
 import { getEcosystemEndpoints } from "@/lib/ecosystem";
@@ -398,6 +401,28 @@ export async function POST(req: Request) {
     return finish(foundryRes);
   }
 
+  // Non-AI-SDK backends (#4543): LangGraph / AG-UI / A2A each get their own
+  // mapper, dispatched from the adapter's protocol. Placed before the
+  // `coreMessages` conversion — these adapters take the UI messages and do
+  // their own text mapping, so a conversion failure must not be able to fail
+  // a request that would otherwise stream.
+  if (NON_AI_SDK_PROTOCOLS.has(adapter.protocol) && isNonAiSdkConfig(backend)) {
+    try {
+      return finish(
+        await createNonAiSdkStreamResponse({
+          backend,
+          messages,
+          responseHeaders,
+          activityDetail,
+          signal: req.signal,
+        }),
+      );
+    } catch (err) {
+      runLock.release();
+      throw err;
+    }
+  }
+
   let coreMessages;
   try {
     coreMessages = await convertToModelMessages(
@@ -413,6 +438,21 @@ export async function POST(req: Request) {
     throw err;
   }
 
+  // Opt-in web search (#3420): client must ask AND tenant/env must allow.
+  // Never forward on a silent default — corpus-only unless both gates pass.
+  // Computed here so the AI-SDK backends (#4552) can pass their provider's
+  // built-in search tool under the SAME gate the digigraph header below uses.
+  // An embed tenant is authoritative for itself; on the session path the
+  // deployment config decides, with `DIGICHAT_WEB_SEARCH` kept as the
+  // documented fallback for installs that never set `gate.webSearch` (#4552).
+  const clientWantsWeb =
+    (req.headers.get("x-digi-enable-web-search") || "").trim().toLowerCase() === "1" ||
+    (req.headers.get("x-digi-enable-web-search") || "").trim().toLowerCase() === "true";
+  const tenantAllowsWeb = embedConfig
+    ? embedConfig.webSearch === true
+    : dep?.gate.webSearch === true || process.env.DIGICHAT_WEB_SEARCH === "1";
+  const webSearchEnabled = clientWantsWeb && tenantAllowsWeb;
+
   // AI-SDK backends (#4535): OpenAI Completions / Responses run through one
   // `streamText` mapper. Sits after `coreMessages` (already built) and before
   // the BYOK guard, so foundry/digigraph behaviour is untouched and BYOK stays
@@ -424,6 +464,7 @@ export async function POST(req: Request) {
           backend,
           messages: coreMessages,
           responseHeaders,
+          webSearch: webSearchEnabled,
           signal: req.signal,
         }),
       );
@@ -546,15 +587,9 @@ export async function POST(req: Request) {
     // Invalid deploy config — do not forward force-tool / disabled-tools / MCP.
   }
 
-  // Opt-in web search (#3420): client must ask AND tenant/env must allow.
-  // Never forward on a silent default — corpus-only unless both gates pass.
-  const clientWantsWeb =
-    (req.headers.get("x-digi-enable-web-search") || "").trim().toLowerCase() === "1" ||
-    (req.headers.get("x-digi-enable-web-search") || "").trim().toLowerCase() === "true";
-  const tenantAllowsWeb =
-    embedConfig?.webSearch === true ||
-    (!embedConfig && process.env.DIGICHAT_WEB_SEARCH === "1");
-  if (clientWantsWeb && tenantAllowsWeb) {
+  // The web-search gate itself is computed above, shared with the AI-SDK
+  // backends (#4552); only the digigraph upstream header is written here.
+  if (webSearchEnabled) {
     upstreamHeaders["X-Digi-Enable-Web-Search"] = "1";
   }
 
@@ -605,7 +640,11 @@ export async function POST(req: Request) {
 
   return finish(
     createUIMessageStreamResponse({
-      stream: toUIMessageStream({ stream: result.stream }),
+      stream: toUIMessageStream({
+        stream: result.stream,
+        sendSources: true,
+        sendReasoning: true,
+      }),
       headers: responseHeaders,
     }),
   );

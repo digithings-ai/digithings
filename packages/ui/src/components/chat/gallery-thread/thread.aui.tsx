@@ -47,6 +47,7 @@ import {
   ThreadPrimitive,
   type FileMessagePartComponent,
   type ImageMessagePartComponent,
+  type SourceMessagePartComponent,
   type ToolCallMessagePartComponent,
   useAui,
   useAuiState,
@@ -68,6 +69,7 @@ import {
 import { ComposerTriggerPopover } from "./composer-trigger-popover.aui";
 import { MessageError } from "./message-error.aui";
 import { ComposerBlockCaret } from "./block-caret";
+import { ThreadSource } from "./source";
 import { TypedWelcomeCopy } from "./typed-welcome-copy";
 
 export type ThreadGroupPart = MessagePrimitive.GroupedParts.GroupPart;
@@ -97,6 +99,8 @@ export type ThreadComponents = {
   AssistantMessage?: ComponentType | undefined;
   Welcome?: ComponentType | undefined;
   ToolFallback?: ToolCallMessagePartComponent | undefined;
+  /** Citation row (`source` parts): provider web search, RAG documents (#4552). */
+  Source?: SourceMessagePartComponent | undefined;
   ToolGroup?:
     | ComponentType<PropsWithChildren<{ group: ThreadGroupPart }>>
     | undefined;
@@ -865,6 +869,7 @@ const AssistantMessage: FC = () => {
     ToolFallback: ToolFallbackComponent = ToolFallback,
     ToolGroup,
     ReasoningGroup,
+    Source: SourceComponent = ThreadSource,
   } = useContext(ThreadComponentsContext);
   const { reasoning: reasoningMode, toolCalls: toolCallsMode } = useContext(
     ThreadGroupDisclosureContext,
@@ -970,6 +975,8 @@ const AssistantMessage: FC = () => {
                 );
               case "indicator":
                 return <AssistantWorkingIndicator />;
+              case "source":
+                return <SourceComponent {...part} />;
               default:
                 return null;
             }
