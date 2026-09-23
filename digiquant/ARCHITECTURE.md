@@ -471,6 +471,34 @@ same-day execution (`d > seal` — `execute_at_open` / `fill-entry-prices`
 price opens and fills from `price_history`; D3) and `FEDPROB/*`
 prediction-market odds (`get_fed_rate_probabilities`; no R2 generation; D2).
 
+`scripts/refresh_market_data_r2.py` also exits non-zero when any macro series
+lands in a soft-fail mode (`history-only`/`error`), so the live fetch window has
+to span at least one publication period of the series (#4588). `LIVE_WINDOW_DAYS`
+(45) assumes a daily series; a monthly FRED series (`M2SL`, `UNRATE`, `MANEMP`,
+`CPIAUCSL`, `PCEPI`) legitimately has no new observation inside it — release lag
+plus the pending release puts the newest month up to ~90 days behind the run — so
+the window came back empty, `_fetch_macro` raised `empty live window`, and every
+scheduled refresh was marked stale. Each entry in
+`research/config/macro_series.yaml` may now declare a `cadence`
+(`daily`/`weekly`/`monthly`/`quarterly`), which selects the window
+(`_CADENCE_WINDOW_DAYS`: 45/60/120/240 days; absent = daily). The widened window
+then *contains* the series' seal row, so the live fetch is non-empty and the
+existing benign `up-to-date` path covers it. Note what does **not** change: an
+empty live window still returns `history-only` — `_fetch_macro` raises on empty
+and the `except FetchError` arm maps it to the soft-fail mode — because an empty
+window is genuinely ambiguous (a dead feed looks the same as a very slow one).
+The fix is the window containing the observation, not a new benign-empty branch.
+A series whose seal falls outside the widened window still fails the run, so a
+genuinely dead feed is detected (though at the slower cadence: up to 120 days for
+monthly, versus 45 before; weekly keeps the 45-day default because several weekly
+publications already fit inside it). Contract tests:
+`tests/scripts/test_refresh_market_data_r2_macro.py`. A cadence outside the map
+raises `ValueError` rather than silently defaulting. Second-order effect of the
+wider monthly window: a revision to a monthly print that is 45–120 days old is now
+inside the window and takes the `_restated` path (a full-history re-pull) where it
+used to be invisible; that is the intended sealing behaviour, at the cost of an
+occasional extra re-pull.
+
 #### Market-data R2 read path (#3780 Task 10)
 
 `DIGIQUANT_MARKET_DATA_BACKEND=r2` routes the price/macro tools through
