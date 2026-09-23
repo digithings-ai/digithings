@@ -3,12 +3,15 @@ import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 import {
   DEFAULT_DIGICHAT_EMBED_ORIGIN,
+  DEFAULT_MARKET_DATA_ORIGIN,
   digithingsCsp,
   embedOriginForChat,
   frameSrcForCsp,
+  marketDataOriginForCsp,
   openwikiCsp,
   renderCloudflareHeaders,
   resolveDigichatEmbedOrigin,
+  resolveMarketDataOrigin,
 } from "./security-headers.mjs";
 
 const headersPath = resolve(__dirname, "../public/_headers");
@@ -87,6 +90,23 @@ describe("digithings-web security-headers", () => {
   it("aligns /chat iframe origin with CSP (Containers same-host default)", () => {
     expect(embedOriginForChat({})).toBe("https://digithings.ai");
     expect(embedOriginForChat({})).toBe(frameSrcForCsp({}));
+  });
+
+  // The landing page's price tape reads the public market-data Worker, so the
+  // strict connect-src must allow that origin or the browser blocks the fetch
+  // and the band sits on its connecting line forever.
+  it("allows the market-data origin in connect-src, env-overridable", () => {
+    expect(resolveMarketDataOrigin({ NEXT_PUBLIC_MARKET_DATA_URL: "https://md.example/api/" })).toBe(
+      "https://md.example",
+    );
+    expect(resolveMarketDataOrigin({})).toBeNull();
+    expect(resolveMarketDataOrigin({ NEXT_PUBLIC_MARKET_DATA_URL: "not a url" })).toBeNull();
+
+    expect(marketDataOriginForCsp({})).toBe(DEFAULT_MARKET_DATA_ORIGIN);
+    expect(DEFAULT_MARKET_DATA_ORIGIN).toBe("https://graph.digithings.ai");
+    expect(digithingsCsp(undefined, "https://md.example")).toContain(
+      "connect-src 'self' https://api.github.com https://md.example",
+    );
   });
 
   it("keeps committed _headers aligned with default CSP", () => {

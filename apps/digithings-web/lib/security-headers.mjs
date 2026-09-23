@@ -10,6 +10,37 @@
 export const DEFAULT_DIGICHAT_EMBED_ORIGIN = "https://digithings.ai";
 
 /**
+ * R2-backed market-data Worker the landing page's price tape reads
+ * (`GET /v1/market/closes`). The same public endpoint digiquant.io uses; the
+ * landing tape takes only this keyless read.
+ */
+export const DEFAULT_MARKET_DATA_ORIGIN = "https://graph.digithings.ai";
+
+/**
+ * @param {NodeJS.ProcessEnv | Record<string, string | undefined>} [env]
+ * @returns {string | null} absolute origin, or null if unset/invalid
+ */
+export function resolveMarketDataOrigin(env = process.env) {
+  const raw = env.NEXT_PUBLIC_MARKET_DATA_URL?.trim();
+  if (!raw) return null;
+  try {
+    return new URL(raw).origin;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Origin for CSP connect-src: market-data env when valid, else production
+ * default. Without this the browser blocks the tape's fetch under the strict
+ * `connect-src 'self'` and the band is stuck on its connecting line.
+ * @param {NodeJS.ProcessEnv | Record<string, string | undefined>} [env]
+ */
+export function marketDataOriginForCsp(env = process.env) {
+  return resolveMarketDataOrigin(env) ?? DEFAULT_MARKET_DATA_ORIGIN;
+}
+
+/**
  * @param {NodeJS.ProcessEnv | Record<string, string | undefined>} [env]
  * @returns {string | null} absolute origin, or null if unset/invalid
  */
@@ -41,8 +72,9 @@ export function embedOriginForChat(env = process.env) {
 
 /**
  * @param {string} [frameSrc]
+ * @param {string} [marketOrigin]
  */
-export function digithingsCsp(frameSrc = frameSrcForCsp()) {
+export function digithingsCsp(frameSrc = frameSrcForCsp(), marketOrigin = marketDataOriginForCsp()) {
   return [
     "default-src 'self'",
     "script-src 'self' 'unsafe-inline'",
@@ -50,7 +82,8 @@ export function digithingsCsp(frameSrc = frameSrcForCsp()) {
     "img-src 'self' data: https:",
     "font-src 'self' data:",
     // OpenAPI explorer loads same-origin /openapi/*.json; swagger-ui may use a blob worker.
-    "connect-src 'self' https://api.github.com",
+    // The market-data origin is the landing price tape's read (DEFAULT_MARKET_DATA_ORIGIN).
+    `connect-src 'self' https://api.github.com ${marketOrigin}`,
     "worker-src 'self' blob:",
     `frame-src ${frameSrc}`,
     "frame-ancestors 'none'",
