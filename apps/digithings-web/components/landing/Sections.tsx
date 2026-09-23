@@ -2,9 +2,13 @@ import {
   RepoActivity,
   TestimonialWall,
   TypewriterReveal,
+  modules,
+  type RepoContributor,
+  type RepoModuleRelease,
   type TestimonialQuote,
 } from "@digithings/ui";
 import { CONTRIBUTING_URL, REPO_CLONE, REPO_URL, repoActivity } from "@/lib/repoActivity";
+import { moduleVersion } from "@/lib/moduleCounts";
 
 /**
  * The open-source band, the FAQ and the voices (v12 → v15, #4429).
@@ -174,17 +178,55 @@ export function Testimonials() {
  * rounded here.
  */
 
+/**
+ * The current version of every shipped module — the activity variant's ledger.
+ *
+ * The owner's round-5 note: "the latest releases for every module we should have
+ * the latest versions for every module not just digi chat". The changelog can't
+ * answer that — release-please only cuts releases for digichat and digiskills, so
+ * a ledger built from `releases.json` listed two modules and silently dropped the
+ * other seven. The version each module declares for itself is the fact that does
+ * cover every one, so it comes from the generated `module-counts.json`
+ * (`moduleVersion`), walked in the same `graphOrder` the mosaic uses.
+ *
+ * Roadmap modules (digistore, digilink) declare no version and are absent, not
+ * shown as `0.0.0`. No `url` is set: there is no per-module release page to point
+ * at, and the band's own "browse the repo" link already goes to GitHub.
+ */
+const MODULE_RELEASES: RepoModuleRelease[] = [...modules]
+  .sort((a, b) => a.graphOrder - b.graphOrder)
+  .flatMap((m) => {
+    const version = moduleVersion(m.id);
+    return version ? [{ name: m.id, version }] : [];
+  });
+
+/**
+ * The maintainer. No `avatarUrl` is set: the kit falls back to a monogram, and
+ * inventing an avatar URL would be a guess. Supply the GitHub handle (or a
+ * hosted image) to show the face.
+ */
+const MAINTAINER: RepoContributor = {
+  name: "Chris",
+  role: "maintainer · digithings",
+  url: REPO_URL,
+};
+
 export function OpenSource() {
   return (
     /* The kit's component rather than a remix of it, at the full width of the
        band. `min-w-0` keeps the grid's max-content heat frame from setting the
-       track's min-content and pushing the page sideways at narrow widths. */
+       track's min-content and pushing the page sideways at narrow widths.
+       The activity variant is the middle ground the owner asked for: the summary
+       metrics and the contribution graph are kept, the two ledgers are dropped,
+       and the version ledger and the maintainer take their place. */
     <RepoActivity
-      variant="detailed"
+      variant="activity"
       snapshot={repoActivity}
       repoUrl={REPO_URL}
       cloneCommand={REPO_CLONE}
       contributingUrl={CONTRIBUTING_URL}
+      moduleReleases={MODULE_RELEASES}
+      contributor={MAINTAINER}
       className="min-w-0"
     />
   );

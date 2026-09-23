@@ -15,7 +15,8 @@
 
 @layer components {
   .ra-compact,
-  .ra-detailed {
+  .ra-detailed,
+  .ra-activity {
     border: 1px solid var(--hair);
     background: var(--surface);
     padding: 1.15rem 1.25rem;
@@ -369,6 +370,35 @@
   padding: 0;
 }
 
+/* Fit mode: the squares scale to the column instead of the body scrolling.
+   The count still picks how many weeks are drawn (RepoActivity's `weeksThatFit`,
+   which sizes for the 10px floor); this only spends the leftover width, so the
+   grid is never wider than its column and never scrolls. Cells keep a 1:1
+   aspect ratio at every width — they are squares, just larger or smaller ones. */
+.ra-heat--fit .ra-heat-body {
+  overflow-x: visible;
+}
+.ra-heat--fit .ra-heat-frame,
+.ra-heat--fit .ra-heat-grid {
+  width: 100%;
+}
+.ra-heat--fit .ra-heat-cell {
+  width: auto;
+  height: auto;
+  aspect-ratio: 1;
+}
+.ra-heat--fit .ra-heat-row {
+  align-items: stretch;
+}
+.ra-heat--fit .ra-heat-days {
+  grid-template-rows: repeat(7, 1fr);
+  line-height: 1;
+}
+.ra-heat--fit .ra-heat-legend .ra-heat-cell {
+  width: 10px;
+  height: 10px;
+}
+
 @media (forced-colors: active) {
   .ra-heat-cell {
     forced-color-adjust: none;
@@ -377,5 +407,121 @@
 @media (max-width: 720px) {
   .ra-cols {
     grid-template-columns: 1fr;
+  }
+}
+
+/* ── activity variant ─────────────────────────────────────────────────────
+   Counts left, graph right, then the version ledger and the maintainer. The
+   graph column is the wide one and the metrics column is sized to its content,
+   so the empty right-hand half of the first rows is spent on the graph rather
+   than left as ground. */
+.ra-activity-top {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 1.4rem;
+}
+
+.ra-activity-metrics .ra-group + .ra-group {
+  margin-top: 1.15rem;
+  padding-top: 1.05rem;
+  border-top: 1px solid var(--hair);
+}
+
+.ra-activity-foot {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1.4rem 2rem;
+  margin-top: 1.4rem;
+  padding-top: 1.2rem;
+  border-top: 1px solid var(--hair);
+}
+
+.ra-version-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem 0.6rem;
+  margin-top: 0.75rem;
+  padding: 0;
+  list-style: none;
+}
+
+.ra-version {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.4rem;
+  border: 1px solid var(--hair);
+  padding: 0.3rem 0.55rem;
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+}
+
+.ra-version-name {
+  color: var(--ink-mute);
+}
+
+.ra-version a,
+.ra-version > span:last-child {
+  color: var(--ink);
+}
+
+.ra-version a:hover {
+  color: var(--accent);
+}
+
+.ra-contributor-body {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  margin-top: 0.75rem;
+  font-family: var(--font-mono);
+  font-size: 0.8rem;
+  color: var(--ink);
+}
+
+.ra-contributor-body a {
+  color: var(--ink);
+}
+
+.ra-contributor-body a:hover {
+  color: var(--accent);
+}
+
+.ra-contributor-role {
+  display: block;
+  font-size: 0.72rem;
+  color: var(--ink-mute);
+}
+
+.ra-avatar {
+  display: block;
+  width: 28px;
+  height: 28px;
+  border-radius: 0;
+  object-fit: cover;
+  border: 1px solid var(--hair);
+  background: var(--surface-2, var(--surface));
+}
+
+.ra-avatar--mono {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--font-mono);
+  font-size: 0.8rem;
+  color: var(--ink-soft);
+}
+
+@media (min-width: 900px) {
+  .ra-activity-top {
+    grid-template-columns: minmax(13rem, 0.62fr) minmax(0, 1.38fr);
+    align-items: start;
+  }
+}
+
+@media (max-width: 720px) {
+  .ra-activity-foot {
+    flex-direction: column;
   }
 }

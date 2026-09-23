@@ -355,25 +355,44 @@ def _to_daily(
     end: datetime,
     total: int = YEAR_DAYS,
 ) -> list[dict]:
-    counts: dict[str, int] = {}
+    """One row per day, with the total and its three sources kept apart.
 
-    def add(stamp: str | None) -> None:
+    The landing's activity card shows the split on hover — "93 contributions: 60
+    commits, 30 PRs, 3 issues" — so the three buckets ride alongside the sum
+    instead of being collapsed into it. `count` stays the sum, so the heat level
+    and the heading total are unchanged, and a consumer that only reads `count`
+    sees exactly what it saw before.
+    """
+    counts: dict[str, int] = {}
+    buckets: dict[str, dict[str, int]] = {"commits": {}, "pulls": {}, "issues": {}}
+
+    def add(bucket: str, stamp: str | None) -> None:
         day = _day_key(stamp)
-        if day:
-            counts[day] = counts.get(day, 0) + 1
+        if not day:
+            return
+        counts[day] = counts.get(day, 0) + 1
+        buckets[bucket][day] = buckets[bucket].get(day, 0) + 1
 
     for c in commits:
-        add((c.get("commit") or {}).get("committer", {}).get("date"))
-    for s in (*merged, *closed):
-        add(s)
+        add("commits", (c.get("commit") or {}).get("committer", {}).get("date"))
+    for s in merged:
+        add("pulls", s)
+    for s in closed:
+        add("issues", s)
     start = (end - timedelta(days=total - 1)).date()
-    return [
-        {
-            "date": (start + timedelta(days=i)).isoformat(),
-            "count": counts.get((start + timedelta(days=i)).isoformat(), 0),
-        }
-        for i in range(total)
-    ]
+    out: list[dict] = []
+    for i in range(total):
+        day = (start + timedelta(days=i)).isoformat()
+        out.append(
+            {
+                "date": day,
+                "count": counts.get(day, 0),
+                "commits": buckets["commits"].get(day, 0),
+                "pulls": buckets["pulls"].get(day, 0),
+                "issues": buckets["issues"].get(day, 0),
+            }
+        )
+    return out
 
 
 def _search_pages(query: str) -> list[str]:
@@ -679,15 +698,28 @@ def check(max_age_days: int | None = None) -> int:
     if not isinstance(dc, list) or len(dc) != YEAR_DAYS:
         print(f"❌  dailyContributions must be a list of {YEAR_DAYS} days", file=sys.stderr)
         return 1
+    # `date` + `count` are required; the per-source split is optional so a
+    # snapshot written before the split existed still validates, but when it is
+    # present every bucket must be a non-negative int and must sum to `count`.
+    split_keys = ("commits", "pulls", "issues")
     if any(
         not isinstance(d, dict)
-        or set(d) != {"date", "count"}
+        or not {"date", "count"} <= set(d)
+        or not set(d) <= {"date", "count", *split_keys}
         or not isinstance(d["count"], int)
         or isinstance(d["count"], bool)
         or d["count"] < 0
+        or any(
+            not isinstance(d[k], int) or isinstance(d[k], bool) or d[k] < 0 for k in split_keys if k in d
+        )
+        or (all(k in d for k in split_keys) and sum(d[k] for k in split_keys) != d["count"])
         for d in dc
     ):
-        print("❌  dailyContributions entries must be {date, count >= 0}", file=sys.stderr)
+        print(
+            "❌  dailyContributions entries must be {date, count >= 0} with an optional "
+            "commits/pulls/issues split that sums to count",
+            file=sys.stderr,
+        )
         return 1
     if [d["date"] for d in dc] != sorted(d["date"] for d in dc):
         print("❌  dailyContributions must be sorted oldest → newest", file=sys.stderr)

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Write the per-module endpoint and MCP-tool counts the landing page prints.
+"""Write the per-module endpoint, MCP-tool and version facts the landing prints.
 
 The module mosaic sizes each tile by lines of code and states two more numbers
 beside it: how many public HTTP endpoints the module serves, and how many MCP
@@ -20,6 +20,12 @@ Sources:
   * mcp tools — the decorator sites in each module's server. Counted by regex
     over the source, so adding a tool with `@mcp.tool` moves the number without
     anyone remembering to edit a table.
+  * versions — the version each module declares for itself: `version` in its
+    `pyproject.toml`, or `version` in `apps/digichat/package.json`. This is the
+    only honest per-module version source. The changelog in
+    `packages/design/releases.json` tracks releases, and release-please only
+    cuts them for digichat and digiskills, so a ledger built from it would list
+    two modules and silently omit the rest.
 
 Run from the repo root:
 
@@ -45,6 +51,24 @@ MCP_SOURCES: dict[str, tuple[str, str]] = {
     "digiquant": ("digiquant/src/digiquant/mcp_server.py", r"^\s*@_maybe_tool"),
     "digisearch": ("digisearch/src/digisearch/mcp_server.py", r"^\s*@mcp\.tool"),
     "digivault": ("digivault/src/digivault/tool_dispatch.py", r"^\s*@mcp\.tool"),
+}
+
+# module id -> the file that declares the module's own version. digichat is the
+# one Node package (its version is bumped by release-please, so it runs ahead of
+# the changelog tag); every other shipped module is Python and declares its
+# version in pyproject.toml. digistore and digilink are roadmap and have no
+# directory, so they have no version and are simply absent from the map.
+VERSION_SOURCES: dict[str, str] = {
+    "digigraph": "digigraph/pyproject.toml",
+    "digiquant": "digiquant/pyproject.toml",
+    "digisearch": "digisearch/pyproject.toml",
+    "digichat": "apps/digichat/package.json",
+    "digikey": "digikey/pyproject.toml",
+    "digismith": "digismith/pyproject.toml",
+    "digiclaw": "digiclaw/pyproject.toml",
+    "digibase": "digibase/pyproject.toml",
+    "digivault": "digivault/pyproject.toml",
+    "digiskills": "digiskills/pyproject.toml",
 }
 
 # module id -> the OpenAPI spec stem under docs/openapi/. Only the services that
@@ -81,6 +105,20 @@ def mcp_tool_count(module: str) -> int | None:
     return sum(1 for line in path.read_text(encoding="utf-8").splitlines() if matcher.match(line))
 
 
+def module_version(module: str) -> str | None:
+    rel = VERSION_SOURCES.get(module)
+    if rel is None:
+        return None
+    path = REPO / rel
+    if not path.is_file():
+        return None
+    text = path.read_text(encoding="utf-8")
+    if path.name == "package.json":
+        return json.loads(text).get("version")
+    match = re.search(r'^\s*version\s*=\s*["\']([^"\']+)["\']', text, re.MULTILINE)
+    return match.group(1) if match else None
+
+
 def main() -> int:
     modules: dict[str, dict[str, int]] = {}
     for module in sorted(set(SPEC_SOURCES) | set(MCP_SOURCES)):
@@ -96,16 +134,26 @@ def main() -> int:
         if facts:
             modules[module] = facts
 
+    versions: dict[str, str] = {}
+    for module in sorted(VERSION_SOURCES):
+        version = module_version(module)
+        if version:
+            versions[module] = version
+
     payload = {
         "generatedAt": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
         "endpointSource": "docs/openapi/*.json (paths)",
         "mcpSource": "module MCP server decorator sites",
+        "versionSource": "pyproject.toml / package.json declared version",
         "modules": modules,
+        "versions": versions,
     }
     OUT.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
     print(f"wrote {OUT.relative_to(REPO)} ({len(modules)} modules)")
     for module, facts in modules.items():
         print(f"  {module}: {facts}")
+    for module, version in versions.items():
+        print(f"  {module}: {version}")
     return 0
 
 

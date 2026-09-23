@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
-import { moduleCountLabel, moduleCounts } from "./moduleCounts";
+import { moduleCountLabel, moduleCounts, moduleVersion } from "./moduleCounts";
 import counts from "./module-counts.json";
 
 /**
@@ -35,8 +35,33 @@ const MCP_SOURCES: Record<string, [string, RegExp]> = {
   digivault: ["digivault/src/digivault/tool_dispatch.py", /^\s*@mcp\.tool/],
 };
 
+/* module id -> the file that declares its own version. Mirrors
+   `VERSION_SOURCES` in scripts/fetch_module_counts.py. */
+const VERSION_SOURCES: Record<string, string> = {
+  digigraph: "digigraph/pyproject.toml",
+  digiquant: "digiquant/pyproject.toml",
+  digisearch: "digisearch/pyproject.toml",
+  digichat: "apps/digichat/package.json",
+  digikey: "digikey/pyproject.toml",
+  digismith: "digismith/pyproject.toml",
+  digiclaw: "digiclaw/pyproject.toml",
+  digibase: "digibase/pyproject.toml",
+  digivault: "digivault/pyproject.toml",
+  digiskills: "digiskills/pyproject.toml",
+};
+
 function read(path: string): string {
   return readFileSync(resolve(REPO, path), "utf8");
+}
+
+function declaredVersion(path: string): string {
+  const text = read(path);
+  if (path.endsWith("package.json")) {
+    return (JSON.parse(text) as { version: string }).version;
+  }
+  const match = text.match(/^\s*version\s*=\s*["']([^"']+)["']/m);
+  if (!match) throw new Error(`no version in ${path}`);
+  return match[1];
 }
 
 describe("module-counts.json", () => {
@@ -69,6 +94,17 @@ describe("module-counts.json", () => {
   it("labels the two numbers a module does publish", () => {
     expect(moduleCountLabel("digiquant")).toBe("22 endpoints · 58 mcp tools");
     expect(moduleCountLabel("digismith")).toBe("3 endpoints");
+  });
+
+  it("matches the version each module declares for itself", () => {
+    for (const [id, path] of Object.entries(VERSION_SOURCES)) {
+      expect(moduleVersion(id), `${id} version`).toBe(declaredVersion(path));
+    }
+    /* Roadmap modules have no directory, so they declare no version — null,
+       not a made-up 0.0.0. */
+    for (const id of ["digistore", "digilink"]) {
+      expect(moduleVersion(id), `${id} version`).toBeNull();
+    }
   });
 
   it("carries a generated timestamp", () => {

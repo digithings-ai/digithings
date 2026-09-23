@@ -367,6 +367,8 @@ export {
   type RepoHeatmapProps,
   type RepoActivityLiveConfig,
   type RepoActivitySnapshot,
+  type RepoContributor,
+  type RepoModuleRelease,
   type RepoFeature,
   type RepoIssueItem,
   type RepoModuleActivity,

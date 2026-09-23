@@ -1,6 +1,6 @@
 {
   "endpointSource": "docs/openapi/*.json (paths)",
-  "generatedAt": "2026-09-23T10:53:01Z",
+  "generatedAt": "2026-09-23T13:06:20Z",
   "mcpSource": "module MCP server decorator sites",
   "modules": {
     "digichat": {
@@ -28,5 +28,18 @@
       "endpoints": 14,
       "mcpTools": 5
     }
+  },
+  "versionSource": "pyproject.toml / package.json declared version",
+  "versions": {
+    "digibase": "0.1.0",
+    "digichat": "2.3.2",
+    "digiclaw": "0.1.0",
+    "digigraph": "0.1.0",
+    "digikey": "0.1.0",
+    "digiquant": "0.1.0",
+    "digisearch": "0.1.0",
+    "digiskills": "0.2.1",
+    "digismith": "0.1.0",
+    "digivault": "0.1.0"
   }
 }
