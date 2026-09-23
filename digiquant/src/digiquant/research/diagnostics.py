@@ -32,6 +32,7 @@ from dataclasses import dataclass
 from datetime import date, datetime
 from typing import Any  # score:allow untyped any — scored-lint: duck-typed Supabase client + rows
 
+from digiquant.research import pricing
 from digiquant.research.phases.fail_soft import NODE_FAILED_REASON
 from digiquant.research.state import ResearchState
 
@@ -567,6 +568,24 @@ def _emit_ci_warning(message: str) -> None:
         logger.debug("could not emit CI warning annotation (%s)", exc)
 
 
+def _estimated_cost_usd(usage: Mapping[str, Any]) -> Any:
+    """The row's ``est_cost_usd``: the reported cost when there is one, else a token estimate.
+
+    ``usage["cost_usd"]`` is the actual USD the provider reported — ``0.0`` when it reported
+    none, which is precisely why the column read ``$0`` on every run and the spend alert could
+    never fire (#4596). A positive reported cost is authoritative and wins. Otherwise
+    :func:`digiquant.research.pricing.estimate_cost_usd` prices the per-model tokens; only when
+    that is also unknown does the original value (``0.0`` or ``None``) stand, so a run with no
+    estimate behaves exactly as before.
+    """
+    actual = usage.get("cost_usd")
+    if isinstance(actual, (int, float)) and not isinstance(actual, bool) and actual > 0:
+        return actual
+    by_model = usage.get("by_model")
+    estimate = pricing.estimate_cost_usd(by_model) if isinstance(by_model, Mapping) else None
+    return estimate if estimate is not None else actual
+
+
 def _row(
     *,
     run_id: str,
@@ -616,7 +635,11 @@ def _row(
     # fail-soft ``try``, so an exception raised while announcing an alert would be swallowed by
     # that handler and the diagnostics row would never be written. An alert must never cost the
     # row it annotates. See :func:`_announce_spend_alert`.
-    alert = _telemetry.spend_alert(usage.get("cost_usd"))
+    #
+    # The token-derived fallback (#4596) is resolved once, here, and the SAME value feeds both
+    # the alert and the row below so the two can never disagree about what the run cost.
+    est_cost_usd = _estimated_cost_usd(usage)
+    alert = _telemetry.spend_alert(est_cost_usd)
     if alert is not None:
         breakdown[_telemetry.SPEND_ALERT_KEY] = alert
     # Keep the `model` column a single stable slug for GROUP BY (the full per-run set lives in
@@ -645,7 +668,7 @@ def _row(
         "prompt_tokens": usage.get("prompt_tokens"),
         "completion_tokens": usage.get("completion_tokens"),
         "total_tokens": usage.get("total_tokens"),
-        "est_cost_usd": usage.get("cost_usd"),
+        "est_cost_usd": est_cost_usd,
         "search_calls": usage.get("search_calls"),
         "sources_used": usage.get("sources_used"),
         "grounding_ok": usage.get("grounding_ok"),
