@@ -386,6 +386,89 @@ class TestPersistAndDispatch:
         assert result.best_params["power_law_weight"] == pytest.approx(0.4)
 
 
+class TestFoldWeighting:
+    """``fold_weighting`` (default ``"unweighted"``) must reproduce every
+    existing caller byte-for-byte; both weighted means are always populated
+    regardless of which is primary."""
+
+    def test_default_matches_explicit_unweighted_byte_for_byte(self) -> None:
+        dates = _dates(200)
+        prices = [100.0 + i for i in range(len(dates))]
+        default = run_sdca_walk_forward(
+            dates,
+            prices,
+            [dict(_HIDDEN)],
+            rails_fitter=_fitter,
+            evaluator=_evaluator,
+            evaluator_label="synthetic_fixture",
+        )
+        explicit = run_sdca_walk_forward(
+            dates,
+            prices,
+            [dict(_HIDDEN)],
+            rails_fitter=_fitter,
+            evaluator=_evaluator,
+            evaluator_label="synthetic_fixture",
+            fold_weighting="unweighted",
+        )
+        assert default.fold_weighting == "unweighted"
+        assert default.mean_is_vs_flat_dca_pct == pytest.approx(explicit.mean_is_vs_flat_dca_pct)
+        assert default.mean_oos_vs_flat_dca_pct == pytest.approx(explicit.mean_oos_vs_flat_dca_pct)
+        assert default.sensitivity.max_abs_delta_oos_pct == pytest.approx(
+            explicit.sensitivity.max_abs_delta_oos_pct
+        )
+        assert default.beats_flat_dca_oos == explicit.beats_flat_dca_oos
+
+    def test_both_weighted_means_always_populated(self) -> None:
+        dates = _dates(200)
+        prices = [100.0 + i for i in range(len(dates))]
+        result = run_sdca_walk_forward(
+            dates,
+            prices,
+            [dict(_HIDDEN)],
+            rails_fitter=_fitter,
+            evaluator=_evaluator,
+            evaluator_label="synthetic_fixture",
+        )
+        # Unweighted is primary here, so the primary field must equal the
+        # unweighted sidecar -- and the duration sidecar must still be there.
+        assert result.mean_oos_vs_flat_dca_pct == pytest.approx(
+            result.mean_oos_vs_flat_dca_pct_unweighted
+        )
+        assert isinstance(result.mean_oos_vs_flat_dca_pct_duration_weighted, float)
+
+    def test_duration_weighting_shifts_mean_is_toward_the_longer_expanding_fold(self) -> None:
+        # IS windows expand fold-over-fold (fold 0 shortest, fold 2 longest);
+        # OOS windows all tile the same fixed length, so mean_oos is identical
+        # either way -- only the expanding IS leg can diverge.
+        dates = _dates(200)
+        prices = [100.0 + i for i in range(len(dates))]
+        unweighted = run_sdca_walk_forward(
+            dates,
+            prices,
+            [dict(_HIDDEN)],
+            rails_fitter=_fitter,
+            evaluator=_evaluator,
+            evaluator_label="synthetic_fixture",
+        )
+        duration = run_sdca_walk_forward(
+            dates,
+            prices,
+            [dict(_HIDDEN)],
+            rails_fitter=_fitter,
+            evaluator=_evaluator,
+            evaluator_label="synthetic_fixture",
+            fold_weighting="duration",
+        )
+        assert duration.fold_weighting == "duration"
+        assert duration.mean_oos_vs_flat_dca_pct == pytest.approx(unweighted.mean_oos_vs_flat_dca_pct)
+        assert duration.mean_is_vs_flat_dca_pct != pytest.approx(unweighted.mean_is_vs_flat_dca_pct)
+        # The evaluator's `- 0.02 * len(dates)` penalty makes vs_flat_dca_pct
+        # decrease as the IS window grows, so weighting toward the longest
+        # (last) fold must pull the duration-weighted mean IS down.
+        assert duration.mean_is_vs_flat_dca_pct < unweighted.mean_is_vs_flat_dca_pct
+
+
 class TestLoadSdcaExtraZOscillators:
     """A frozen ``oscillators`` spec must actually change the price-oscillator
     extras -- #3174's walk-forward silently reverted weekly_monthly_rsi/macd,

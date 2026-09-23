@@ -9,8 +9,11 @@ import pytest
 from digiquant.strategies.sdca.curve_shape import SdcaCurveShape
 from digiquant.strategies.sdca.risk_model import RiskModel
 from digiquant.strategies.sdca.walk_forward import (
+    FoldScore,
     SdcaOptimizeObjective,
     SdcaTrialMetrics,
+    WalkForwardFold,
+    duration_weighted_mean,
     is_feasible,
     make_walk_forward_folds,
     max_drawdown_magnitude_pct,
@@ -160,3 +163,111 @@ class TestRailsRefitPerFold:
             assert window == (fold.is_start, fold.is_end)
             assert window[1] < fold.oos_start
             assert window[1] < holdout[0]
+
+
+def _metrics(vs_flat_dca_pct: float) -> SdcaTrialMetrics:
+    return SdcaTrialMetrics(
+        vs_flat_dca_pct=vs_flat_dca_pct,
+        vs_lump_pct=0.0,
+        capital_deployed_pct=40.0,
+        max_drawdown_pct=10.0,
+    )
+
+
+def _fold_score(
+    fold_idx: int,
+    *,
+    is_span: tuple[date, date],
+    oos_span: tuple[date, date],
+    is_value: float,
+    oos_value: float,
+) -> FoldScore:
+    fold = WalkForwardFold(
+        fold=fold_idx,
+        is_start=is_span[0],
+        is_end=is_span[1],
+        oos_start=oos_span[0],
+        oos_end=oos_span[1],
+    )
+    return FoldScore(
+        fold=fold,
+        in_sample=_metrics(is_value),
+        out_of_sample=_metrics(oos_value),
+        feasible=True,
+    )
+
+
+class TestDurationWeightedMean:
+    def test_equal_duration_folds_match_unweighted_mean(self) -> None:
+        scores = [
+            _fold_score(
+                0,
+                is_span=(date(2020, 1, 1), date(2020, 6, 30)),
+                oos_span=(date(2020, 7, 1), date(2020, 7, 10)),
+                is_value=1.0,
+                oos_value=2.0,
+            ),
+            _fold_score(
+                1,
+                is_span=(date(2020, 1, 1), date(2020, 6, 30)),
+                oos_span=(date(2020, 8, 1), date(2020, 8, 10)),
+                is_value=1.0,
+                oos_value=8.0,
+            ),
+        ]
+        # Both OOS spans are the same 10-day length, so duration weighting
+        # must reproduce the plain average.
+        assert duration_weighted_mean(scores) == pytest.approx((2.0 + 8.0) / 2.0)
+
+    def test_unequal_duration_folds_diverge_toward_the_longer_fold(self) -> None:
+        scores = [
+            _fold_score(
+                0,
+                is_span=(date(2020, 1, 1), date(2020, 6, 30)),
+                oos_span=(date(2020, 7, 1), date(2020, 7, 10)),  # 10-day fold, low value
+                is_value=0.0,
+                oos_value=1.0,
+            ),
+            _fold_score(
+                1,
+                is_span=(date(2020, 1, 1), date(2020, 6, 30)),
+                oos_span=(date(2020, 8, 1), date(2021, 8, 1)),  # ~1-year fold, high value
+                is_value=0.0,
+                oos_value=9.0,
+            ),
+        ]
+        unweighted = (1.0 + 9.0) / 2.0
+        weighted = duration_weighted_mean(scores)
+        short_days = (date(2020, 7, 10) - date(2020, 7, 1)).days + 1
+        long_days = (date(2021, 8, 1) - date(2020, 8, 1)).days + 1
+        expected = (1.0 * short_days + 9.0 * long_days) / (short_days + long_days)
+        # The long, high-value fold should pull the duration-weighted mean
+        # above the unweighted mean, not just match it.
+        assert weighted > unweighted
+        assert weighted == pytest.approx(expected)
+
+    def test_in_sample_leg_uses_is_span_and_values(self) -> None:
+        scores = [
+            _fold_score(
+                0,
+                is_span=(date(2020, 1, 1), date(2020, 1, 10)),  # 10-day, low value
+                oos_span=(date(2020, 2, 1), date(2020, 2, 28)),
+                is_value=1.0,
+                oos_value=0.0,
+            ),
+            _fold_score(
+                1,
+                is_span=(date(2019, 1, 1), date(2020, 1, 10)),  # ~1-year, high value
+                oos_span=(date(2020, 2, 1), date(2020, 2, 28)),
+                is_value=9.0,
+                oos_value=0.0,
+            ),
+        ]
+        weighted = duration_weighted_mean(scores, leg="in_sample")
+        short_days = (date(2020, 1, 10) - date(2020, 1, 1)).days + 1
+        long_days = (date(2020, 1, 10) - date(2019, 1, 1)).days + 1
+        expected = (1.0 * short_days + 9.0 * long_days) / (short_days + long_days)
+        assert weighted == pytest.approx(expected)
+
+    def test_empty_scores_is_negative_infinity(self) -> None:
+        assert duration_weighted_mean([]) == float("-inf")

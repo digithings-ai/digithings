@@ -18,7 +18,7 @@ from __future__ import annotations
 
 from collections.abc import Callable, Mapping, Sequence
 from datetime import date
-from typing import Protocol
+from typing import Literal, Protocol
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -284,6 +284,38 @@ def sensitivity_neighbors(
     return neighbors
 
 
+def duration_weighted_mean(
+    scores: Sequence[FoldScore],
+    *,
+    leg: Literal["in_sample", "out_of_sample"] = "out_of_sample",
+) -> float:
+    """Mean ``vs_flat_dca_pct`` across folds, weighted by each fold's calendar span.
+
+    ``_mean_oos``/``_mean_is`` (``optimize.py``) are a plain unweighted mean
+    across folds -- a 3-week fold counts the same as a 3-year one. This
+    weights each fold's contribution by its ``leg``'s inclusive day span
+    (``oos_end - oos_start`` or ``is_end - is_start``, both dates inclusive),
+    so long folds dominate the mean instead of being diluted to parity with
+    short ones.
+    """
+    if not scores:
+        return float("-inf")
+    weighted_sum = 0.0
+    total_weight = 0.0
+    for score in scores:
+        if leg == "out_of_sample":
+            metrics = score.out_of_sample
+            span_days = (score.fold.oos_end - score.fold.oos_start).days + 1
+        else:
+            metrics = score.in_sample
+            span_days = (score.fold.is_end - score.fold.is_start).days + 1
+        weighted_sum += metrics.vs_flat_dca_pct * span_days
+        total_weight += span_days
+    if total_weight <= 0.0:
+        return float("-inf")
+    return weighted_sum / total_weight
+
+
 def is_feasible(metrics: SdcaTrialMetrics, objective: SdcaOptimizeObjective) -> bool:
     """Capital-deployed floor and drawdown cap. Drawdown is a positive magnitude."""
     if metrics.capital_deployed_pct < objective.capital_deployed_floor_pct:
@@ -308,6 +340,7 @@ __all__ = [
     "SdcaTrialEvaluator",
     "SdcaTrialMetrics",
     "WalkForwardFold",
+    "duration_weighted_mean",
     "is_feasible",
     "make_walk_forward_folds",
     "max_drawdown_magnitude_pct",
