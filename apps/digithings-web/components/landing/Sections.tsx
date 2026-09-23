@@ -1,15 +1,10 @@
 import {
-  CtaLink,
   MotionReveal,
-  ReleaseRail,
   RepoActivity,
   TestimonialWall,
-  type ReleaseRailItem,
   type TestimonialQuote,
 } from "@digithings/ui";
-import releases from "@digithings/design/releases.json";
 import { CONTRIBUTING_URL, REPO_CLONE, REPO_URL, repoActivity } from "@/lib/repoActivity";
-import { GROUPED_LABEL } from "./label";
 
 /**
  * The open-source band, the FAQ and the voices (v12 → v15, #4429).
@@ -154,118 +149,36 @@ export function Testimonials() {
 // ═══ Open source ════════════════════════════════════════════════════════════
 
 /**
- * The open-source section (v13 → v15, #4429).
+ * The open-source section (v13 → v15, #4429; cut back in round 4).
  *
- * The owner's direction: "show some insights on how it's open source and
+ * The owner's direction was "show some insights on how it's open source and
  * highlight that it's an open source stack... the activity graph is interesting
  * there... reiterate the clone, git clone links to GitHub. And we could show a
  * few of the recent releases. Keep it at that. I think a more in-depth repo
  * view could be a separate page."
  *
- * So this is deliberately three plain things and nothing more: the six-month
- * contribution grid with its counted signals, the clone command as a single
- * copyable box, and the last few tagged releases. A fuller repo view lives at
- * /changelog, linked rather than reproduced. Every figure comes from the
- * committed snapshot or the shipped releases file — nothing is recomputed or
+ * Round 4 removed the releases half. The kit's detailed repo view already
+ * renders the clone command with its own copy button, the contributing and repo
+ * links, the last-30-day counts, the current backlog and both ledgers, so the
+ * hand-rolled block beside it was repeating the same band — and the "recent
+ * releases" rail that came with it had a second answer to "what shipped last"
+ * that had to be reconciled with the snapshot's own. One source, one answer, one
+ * card. Every figure comes from the committed snapshot; nothing is recomputed or
  * rounded here.
- *
- * Type scale is taken from the repo/changelog vocabulary rather than invented:
- * micro-caps labels use the page's `--type-meta` (0.75rem) via `GROUPED_LABEL`,
- * the clone command matches the primitives' mono meta scale (0.78rem, as
- * `.ra-clone code` does), and the prose is `--type-body`.
  */
-
-// The last few tagged releases, straight from the shipped changelog data. The
-// version keeps the redundant product prefix stripped so the row reads as
-// `v2.3.1` next to its own `digichat` label, exactly as /changelog renders it.
-const RECENT_RELEASES: ReleaseRailItem[] = (releases as {
-  date: string;
-  version: string;
-  title: string;
-  href: string;
-  tag?: string;
-  product: string;
-}[]
-)
-  .slice(0, 4)
-  .map((release) => ({
-    product: release.product,
-    version: release.version.replace(`${release.product} `, ""),
-    date: release.date,
-    title: release.title,
-    href: release.href,
-    tag: release.tag,
-  }));
-
-/**
- * The newest tag, in the shape the repo primitives want.
- *
- * The snapshot's own `latestRelease` is written by the periodic
- * `fetch_repo_activity.py` job and lags the tag list beside it: the committed
- * snapshot (generated 2026-09-15) still names `digichat-v1.5.0` from 2026-09-05
- * while the newest tag is `v2.3.1` from 2026-09-20. Passing the snapshot
- * straight to the detailed view would put two different "latest releases" in the
- * same band — the same contradiction the old counted row was written to avoid.
- * So the view is handed the newest release the rail also renders: one source,
- * one answer.
- */
-const REPO_LATEST = RECENT_RELEASES[0]
-  ? {
-      tag: `${RECENT_RELEASES[0].product}-${RECENT_RELEASES[0].version}`,
-      name: RECENT_RELEASES[0].title,
-      publishedAt: RECENT_RELEASES[0].date,
-      url: RECENT_RELEASES[0].href,
-    }
-  : repoActivity.latestRelease;
-
-const REPO_SNAPSHOT = { ...repoActivity, latestRelease: REPO_LATEST };
 
 export function OpenSource() {
   return (
-    <div className="grid gap-[2.4rem]">
-      {/* Full width of the band, and the kit's component rather than a remix of
-          it. `min-w-0` keeps the grid's max-content heat frame from setting the
-          track's min-content and pushing the page sideways at narrow widths. */}
-      <RepoActivity
-        variant="detailed"
-        snapshot={REPO_SNAPSHOT}
-        repoUrl={REPO_URL}
-        cloneCommand={REPO_CLONE}
-        contributingUrl={CONTRIBUTING_URL}
-        className="min-w-0"
-      />
-
-      <div className="grid gap-[1.6rem] border-t border-hair pt-[2rem] min-[900px]:grid-cols-[minmax(0,1fr)_minmax(0,1.4fr)]">
-        {/* `content-start` because this column is stretched to the rail's height
-            by the parent grid, and a grid distributes that extra height across
-            its own rows by default — which inflated each block well past its
-            content. The blocks now take their natural height and the slack sits
-            below them as page ground, which is invisible. */}
-        <div className="grid content-start gap-[1.2rem]">
-          <p className="m-0 max-w-[var(--measure-prose)] text-[length:var(--type-body)] leading-[var(--leading-prose)] text-ink-soft">
-            One MIT-licensed monorepo. Every module, test and CI definition is readable without an
-            account — take it and run it yourself.
-          </p>
-          <div className="flex flex-wrap items-center gap-[0.8rem]">
-            <CtaLink href={REPO_URL} external>
-              Browse the repository
-            </CtaLink>
-            <CtaLink href={CONTRIBUTING_URL} external variant="ghost">
-              Contributing
-            </CtaLink>
-          </div>
-        </div>
-
-        <div className="min-w-0">
-          <p className={`m-0 mb-[1.2rem] ${GROUPED_LABEL}`}>recent releases</p>
-          <ReleaseRail items={RECENT_RELEASES} />
-          <p className="mt-[1.6rem] mb-0 font-mono text-[0.75rem] text-ink-mute">
-            <CtaLink href="/changelog" variant="ghost" className="text-[0.75rem]">
-              All tagged releases
-            </CtaLink>
-          </p>
-        </div>
-      </div>
-    </div>
+    /* The kit's component rather than a remix of it, at the full width of the
+       band. `min-w-0` keeps the grid's max-content heat frame from setting the
+       track's min-content and pushing the page sideways at narrow widths. */
+    <RepoActivity
+      variant="detailed"
+      snapshot={repoActivity}
+      repoUrl={REPO_URL}
+      cloneCommand={REPO_CLONE}
+      contributingUrl={CONTRIBUTING_URL}
+      className="min-w-0"
+    />
   );
 }
