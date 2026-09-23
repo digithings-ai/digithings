@@ -53,6 +53,10 @@ export function resolveAiSdkModel(backend: AiSdkBackendConfig): LanguageModel {
         name: backend.type,
         baseURL: backend.baseUrl,
         apiKey,
+        // `@ai-sdk/openai-compatible` only asks for the trailing usage chunk
+        // when this is set, whereas `@ai-sdk/openai`'s chat path always did.
+        // Without it the request shape changes for every compatible vendor.
+        includeUsage: true,
       });
       return provider.chatModel(backend.model);
     }

@@ -78,6 +78,9 @@ describe("resolveAiSdkModel (#4535)", () => {
       name: "openai-completions",
       baseURL: BASE.baseUrl,
       apiKey: "sk-test",
+      // The compatible provider only asks for the trailing usage chunk when
+      // this is set; `@ai-sdk/openai`'s chat path always did.
+      includeUsage: true,
     });
     expect(compatibleChatModel).toHaveBeenCalledWith("gpt-4o-mini");
     // The OpenAI product client parses only OpenAI-native reasoning fields and
