@@ -311,10 +311,10 @@ jobs:
           mkdir -p artifacts
           set -o pipefail
 
-          MAX_OUTER_ATTEMPTS=3
-          OUTER_BACKOFF=(0 300 900)
-          # Per-attempt cap so a hung attempt fails and attempts 2/3 can still run.
-          ATTEMPT_TIMEOUT=70m
+          MAX_OUTER_ATTEMPTS=2
+          OUTER_BACKOFF=(0 300)
+          # Per-attempt cap so a hung attempt fails and attempt 2 can still run.
+          ATTEMPT_TIMEOUT=100m
           attempt=1
           while : ; do
             sleep "${OUTER_BACKOFF[$((attempt-1))]}"

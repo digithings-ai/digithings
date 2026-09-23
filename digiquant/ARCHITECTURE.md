@@ -3894,7 +3894,7 @@ returns it, which is why that function's name no longer matches the health verdi
 
 ### One row per retry ATTEMPT, not per workflow run (#1762)
 
-`pipeline-digiquant.yml` retries the chain up to `MAX_OUTER_ATTEMPTS=3` times **inside one job**,
+`pipeline-digiquant.yml` retries the chain up to `MAX_OUTER_ATTEMPTS=2` times **inside one job**,
 so every attempt sees the same `GITHUB_RUN_ID`. That was the entire upsert key, so the last
 attempt — usually the cheap checkpoint-resumed one — replaced the expensive attempt's tokens,
 cost, `status` and `error_summary`. 28 of 54 production rows were affected.

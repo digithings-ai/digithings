@@ -113,7 +113,7 @@ def test_research_pipeline_run_step_has_per_attempt_timeout() -> None:
     assert isinstance(step_timeout, int)
     assert step_timeout < job_timeout
     script = step["run"]
-    assert "ATTEMPT_TIMEOUT=70m" in script
+    assert "ATTEMPT_TIMEOUT=100m" in script
     assert "timeout --kill-after=30s" in script
     assert "${ATTEMPT_TIMEOUT}" in script
-    assert "MAX_OUTER_ATTEMPTS=3" in script
+    assert "MAX_OUTER_ATTEMPTS=2" in script
