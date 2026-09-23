@@ -157,6 +157,29 @@ where the answer is "embed should honour it": `persistence`, `auth`,
 `features.dictation` / `speech` / `sources` / `branchPicker` / `modelPicker`,
 `tools.allowUserToggle`.
 
+**Done (issue #4532, PR into `module/digichat`):** an embed tenant can now set
+the four feature flags and the seed language; before this it silently inherited
+the client defaults because neither `EmbedTenantConfig` nor `toEmbedClientConfig`
+nor `clientConfigFromEmbedTenant` carried them.
+
+| field | decision |
+|-------|----------|
+| `features.dictation` / `speech` | **Embed honours it.** Added to `EmbedTenantConfig` (validated boolean) → `toEmbedClientConfig` (explicit `true` only, matching `attachments`) → bridge (`?? base.features`). |
+| `features.sources` / `branchPicker` | **Embed honours it.** Same chain, but `typeof === "boolean"` in the projection so an explicit `false` survives — these default **on**, so `false` is the only way to turn them off. |
+| `chrome.defaultLanguage` | **Embed honours it.** Validated against `LANGUAGE_CODES` (same set `schema.ts` builds); omit → the client default (`en`). |
+| `chrome.attribution` | **Already carried** (direct copy in the bridge). No change. |
+| `chrome.transcript.userAlign` | **Documented, not configurable.** The first-party `digichat` skin forces left alignment regardless of the value (`product-shell.tsx:349-350`), so exposing it on the embed would be a no-op for the one skin the embed ships. Other skins would honour it, but the embed cannot set it today. |
+| `tools.allowUserToggle` | **Documented, embed-fixed `true`.** The anonymous embed has no per-tool toggle UI of its own; the operator's `tools.catalog` is the control surface. |
+| `persistence` / `auth` / `chrome.mode` | **Embed-fixed by design** (`none` / `anonymous` / `embed`). A persisted, authenticated session is the `app` surface, not the iframe. |
+| `features.modelPicker` vs `models.allowPicker` | **`models.allowPicker` is the authoritative client-facing knob; `features.modelPicker` is the legacy YAML alias** kept for config back-compat. They are OR-ed at every consumer (`client-projection.ts:176-178`, `product-shell.tsx:366`, `stock-chat-prefs-host.tsx:61`, `embed-client.tsx:1025`), and the projection already folds the legacy flag into `allowPicker`, so the consumer re-OR is idempotent. They disagree only in `DEFAULT_CLIENT_CONFIG` (`models.allowPicker: true` vs `features.modelPicker: false`); flipping either risks the `/baseline` picker, so behaviour is kept and the redundancy documented. |
+
+Regression coverage: `apps/digichat/src/lib/embed-tenants.parity.test.ts` walks
+the whole chain (registry JSON → `parseEmbedTenants` → `toEmbedClientConfig` →
+`clientConfigFromEmbedTenant`) and asserts the four flags + `defaultLanguage`
+reach `DigichatClientConfig.features` / `.chrome.defaultLanguage`, that omitted
+keys keep the app defaults, and that a non-boolean flag or unknown language
+throws.
+
 ---
 
 ## Phase 2d — presentation modes (D1: implement)

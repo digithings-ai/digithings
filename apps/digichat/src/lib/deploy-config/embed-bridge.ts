@@ -47,6 +47,7 @@ export function clientConfigFromEmbedTenant(
       placeholder: embed.placeholder ?? base.chrome.placeholder,
       accent: embed.accent,
       attribution: embed.attribution,
+      defaultLanguage: embed.defaultLanguage ?? base.chrome.defaultLanguage,
     },
     persistence: "none",
     auth: "anonymous",
@@ -56,6 +57,11 @@ export function clientConfigFromEmbedTenant(
       pageContext: embed.pageContext ?? base.features.pageContext,
       view: embed.view ?? base.features.view,
       thinking: embed.thinking ?? base.features.thinking,
+      // Feature parity (#4532): omitted keys keep the app defaults.
+      dictation: embed.dictation ?? base.features.dictation,
+      speech: embed.speech ?? base.features.speech,
+      sources: embed.sources ?? base.features.sources,
+      branchPicker: embed.branchPicker ?? base.features.branchPicker,
     },
     models: {
       ...(embed.models?.default ? { default: embed.models.default } : base.models),
