@@ -29,8 +29,28 @@ import {
   type RepoPullItem,
 } from "./types";
 
+/**
+ * One module's current version, for the activity variant's release ledger.
+ * `name` is the module (digichat, digigraph, …); `version` is the tag as it
+ * should be read, without the module prefix repeated.
+ */
+export type RepoModuleRelease = {
+  name: string;
+  version: string;
+  url?: string;
+};
+
+/** The maintainer behind the repo, credited under the activity variant. */
+export type RepoContributor = {
+  name: string;
+  role?: string;
+  /** Avatar URL; a monogram is drawn when it is absent. */
+  avatarUrl?: string;
+  url?: string;
+};
+
 export type RepoActivityProps = {
-  variant: "compact" | "detailed";
+  variant: "compact" | "detailed" | "activity";
   snapshot: RepoActivitySnapshot;
   repoUrl: string;
   /** When set, fetch public GitHub data after mount; keep snapshot on any failure. */
@@ -44,6 +64,10 @@ export type RepoActivityProps = {
    * scrolling. Defaults to 53 — a full year, GitHub-style.
    */
   weeks?: number;
+  /** Activity variant: the current version of every module, newest first. */
+  moduleReleases?: RepoModuleRelease[];
+  /** Activity variant: the maintainer credited under the ledger. */
+  contributor?: RepoContributor;
   className?: string;
 };
 
@@ -55,6 +79,8 @@ export function RepoActivity({
   cloneCommand,
   contributingUrl,
   weeks = 53,
+  moduleReleases,
+  contributor,
   className,
 }: RepoActivityProps) {
   const [data, setData] = useState(snapshot);
@@ -86,14 +112,32 @@ export function RepoActivity({
   // Shorten the grid to the column instead of letting it scroll. Guarded on
   // ResizeObserver so the server and jsdom keep rendering exactly `weeks`, which
   // is what every existing snapshot assertion expects.
+  //
+  // The width is read from the element, and the element can measure 0 on the
+  // first pass (before the parent grid has laid out, or on a route where the
+  // band is still below the fold). Feeding that 0 to `weeksThatFit` would floor
+  // the result at MIN_HEAT_WEEKS and then the effect's own `[weeks]` dep would
+  // keep re-clamping to the shortened value, so the graph stayed at 12 weeks
+  // even after the column reached full width. Two guards: skip a zero-width
+  // measurement so the default (`weeks`) holds, and re-measure once on the next
+  // frame, because a ResizeObserver only fires on a size *change* and will not
+  // report a width that was already correct by the time it attached.
   useEffect(() => {
     const el = heatRef.current;
     if (!el || typeof ResizeObserver === "undefined") return;
-    const measure = () => setFitWeeks(weeksThatFit(el.clientWidth, weeks));
+    const measure = () => {
+      const width = el.clientWidth;
+      if (width <= 0) return;
+      setFitWeeks(weeksThatFit(width, weeks));
+    };
     measure();
+    const frame = requestAnimationFrame(measure);
     const observer = new ResizeObserver(measure);
     observer.observe(el);
-    return () => observer.disconnect();
+    return () => {
+      cancelAnimationFrame(frame);
+      observer.disconnect();
+    };
   }, [weeks]);
 
   const heatWeeks = fitWeeks ?? weeks;
@@ -104,7 +148,11 @@ export function RepoActivity({
     ? data.dailyContributions.slice(-heatWeeks * 7)
     : undefined;
 
-  const cls = ["ra", variant === "compact" ? "ra-compact" : "ra-detailed", className ?? ""]
+  const cls = [
+    "ra",
+    variant === "compact" ? "ra-compact" : variant === "activity" ? "ra-activity" : "ra-detailed",
+    className ?? "",
+  ]
     .filter(Boolean)
     .join(" ");
 
@@ -117,6 +165,17 @@ export function RepoActivity({
     >
       {variant === "compact" ? (
         <Compact data={data} repoUrl={repoUrl} source={source} />
+      ) : variant === "activity" ? (
+        <Activity
+          data={data}
+          repoUrl={repoUrl}
+          source={source}
+          heatRef={heatRef}
+          heatWeeks={heatWeeks}
+          heatData={heatData}
+          moduleReleases={moduleReleases}
+          contributor={contributor}
+        />
       ) : (
         <Detailed
           data={data}
@@ -148,6 +207,10 @@ const HEAT_RAIL = 26.4 + 7.2;
 const MIN_HEAT_WEEKS = 12;
 
 function weeksThatFit(columnWidth: number, ceiling: number): number {
+  // An unmeasured column is not a narrow one: shorten nothing until a real
+  // width exists. The caller already skips zero-width reads, so this is the
+  // belt to that braces.
+  if (!Number.isFinite(columnWidth) || columnWidth <= 0) return ceiling;
   const columns = Math.floor(
     (columnWidth - HEAT_RAIL + HEAT_CELL_GAP) / (HEAT_CELL + HEAT_CELL_GAP),
   );
@@ -204,6 +267,148 @@ function Compact({
         </ol>
       ) : null}
     </>
+  );
+}
+
+/**
+ * The in-between variant: summary metrics beside the contribution grid, then a
+ * ledger of every module's current version and the maintainer.
+ *
+ * The detailed variant answers "what is happening" with two ledgers (merged
+ * recently, open issues); the compact one answers "is this alive" with three
+ * counts. This one answers "is this alive, and what has shipped" — the metrics
+ * and the graph are kept, the ledgers are dropped for the version ledger, and
+ * the graph is asked to fit (`fit`) so it fills its column instead of scrolling
+ * and its squares scale with the width.
+ *
+ * The grid sits in the right column because it is the widest element and the
+ * metrics are narrow: putting the counts left and the graph right is what keeps
+ * the first rows from being mostly empty, and the graph then expands into
+ * whatever width is left. Below 900px it stacks.
+ */
+function Activity({
+  data,
+  repoUrl,
+  source,
+  heatRef,
+  heatWeeks,
+  heatData,
+  moduleReleases,
+  contributor,
+}: {
+  data: RepoActivitySnapshot;
+  repoUrl: string;
+  source: "snapshot" | "live";
+  heatRef: RefObject<HTMLDivElement | null>;
+  heatWeeks: number;
+  heatData: RepoActivitySnapshot["dailyContributions"];
+  moduleReleases?: RepoModuleRelease[];
+  contributor?: RepoContributor;
+}) {
+  const releases = moduleReleases ?? [];
+  return (
+    <>
+      <div className="ra-activity-top">
+        <div className="ra-activity-metrics">
+          <div className="ra-group">
+            <p className="ra-kicker">{`// last ${data.windowDays} days on ${data.branch}`}</p>
+            <ul className="ra-metrics" role="list">
+              <Metric n={data.commits} label="commits" />
+              <Metric n={data.pullsMerged} label="PRs merged" />
+              <Metric n={data.issuesClosed} label="issues closed" />
+            </ul>
+          </div>
+          <div className="ra-group">
+            <p className="ra-kicker">{"// current backlog"}</p>
+            <ul className="ra-metrics" role="list">
+              <Metric n={data.pullsOpen} label="PRs open" />
+              <Metric n={data.issuesOpen} label="issues open" />
+            </ul>
+          </div>
+          <div className="ra-meta">
+            <ReleaseLink release={data.latestRelease} />
+            <Stamp source={source} at={data.generatedAt} />
+          </div>
+        </div>
+        <div className="ra-group ra-activity-heat" ref={heatRef}>
+          <p className="ra-kicker">{`// contributions — ${
+            heatWeeks >= 50 ? "last year" : `last ${heatWeeks} weeks`
+          }`}</p>
+          <RepoHeatmap pulls={data.mergedPulls} data={heatData} weeks={heatWeeks} fit />
+        </div>
+      </div>
+
+      {releases.length || contributor ? (
+        <div className="ra-activity-foot">
+          {releases.length ? (
+            <div className="ra-versions">
+              <p className="ra-kicker">{"// current versions"}</p>
+              <ul className="ra-version-list" role="list">
+                {releases.map((r) => (
+                  <li key={r.name} className="ra-version">
+                    <span className="ra-version-name">{r.name}</span>
+                    {r.url ? (
+                      <a href={r.url} target="_blank" rel="noreferrer">
+                        {r.version}
+                      </a>
+                    ) : (
+                      <span>{r.version}</span>
+                    )}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ) : null}
+          {contributor ? (
+            <div className="ra-contributor">
+              <p className="ra-kicker">{"// maintainer"}</p>
+              <div className="ra-contributor-body">
+                <ContributorAvatar contributor={contributor} />
+                <div>
+                  {contributor.url ? (
+                    <a href={contributor.url} target="_blank" rel="noreferrer">
+                      {contributor.name}
+                    </a>
+                  ) : (
+                    <span>{contributor.name}</span>
+                  )}
+                  {contributor.role ? (
+                    <span className="ra-contributor-role">{contributor.role}</span>
+                  ) : null}
+                </div>
+              </div>
+            </div>
+          ) : null}
+          <div className="ra-meta">
+            <RepoLink href={repoUrl} />
+          </div>
+        </div>
+      ) : null}
+    </>
+  );
+}
+
+function ContributorAvatar({ contributor }: { contributor: RepoContributor }) {
+  if (contributor.avatarUrl) {
+    return (
+      // Plain <img>: the kit ships no next/image dependency and the avatar is a
+      // single fixed-size square.
+      // eslint-disable-next-line @next/next/no-img-element
+      <img
+        className="ra-avatar"
+        src={contributor.avatarUrl}
+        alt=""
+        width={28}
+        height={28}
+        loading="lazy"
+      />
+    );
+  }
+  const initial = contributor.name.trim().charAt(0).toUpperCase();
+  return (
+    <span className="ra-avatar ra-avatar--mono" aria-hidden="true">
+      {initial}
+    </span>
   );
 }
 
