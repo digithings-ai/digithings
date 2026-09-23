@@ -3,7 +3,7 @@
 import { ContactMailto, CopyCommand, CtaLink, Glow, MockupFrame, SocialRow } from "@digithings/ui";
 import { buttonVariants } from "@digithings/ui/ui";
 import { DT_CONTACT_EMAIL } from "@/app/_nav";
-import { ArgumentClaims, ArgumentSeams } from "@/components/landing/Argument";
+import { ArgumentSeams } from "@/components/landing/Argument";
 import { BootTerminal } from "@/components/landing/BootTerminal";
 import { ContactForm } from "@/components/landing/ContactForm";
 import { ModuleGrid } from "@/components/landing/ModuleGrid";
@@ -164,9 +164,10 @@ export function LandingPage() {
           <h2 className="m-0 font-mono text-[length:var(--type-section-stand)] font-medium leading-[1.2] tracking-[-0.025em] text-ink">
             Why digithings, not the ready-made platform
           </h2>
-          {/* Point 10: the argument is the picture, not a column of prose. */}
+          {/* Point 10: the argument is the picture, not a column of prose.
+              Round 3: the comparison is the whole section — the three claims
+              that used to sit below the diagram are retired. */}
           <ArgumentSeams />
-          <ArgumentClaims />
         </div>
       </section>
 
