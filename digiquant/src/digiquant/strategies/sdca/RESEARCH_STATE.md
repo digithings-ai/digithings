@@ -70,6 +70,65 @@ If a trial's own weight set is later validated and accepted, replace the
 "Current best validated candidate" section above — don't leave two entries
 that could both be read as "the baseline."
 
+## Phase B: indicator validation gate
+
+`indicator_catalog.py`'s per-field comments (`adx`, `stochastic`, `vol_regime`,
+`halving_cycle`) refer to a staged "Phase B" gate for admitting a new
+indicator into the composite. That gate was never written up here — this
+section is the missing write-up, reconstructed from those comments and from
+the (mostly uncommitted, one-off) scripts they name. It runs *before* the
+"Standard trial protocol" above: Phase B decides whether a candidate
+indicator is worth carrying into a full trial at all; the standard protocol
+then governs how any resulting weight/curve change gets accepted.
+
+Four stages, in order — a candidate must clear one to be tried at the next:
+
+1. **Solo-validation.** Score the candidate alone (not blended into any
+   existing pool) via a `combined` cycle-overlap-style objective against a
+   `0.00` noise baseline, via a one-off `scripts/run_<indicator>_solo_
+   validation.py` script (`.scratch/`-style, not committed per the
+   project's "persist last" convention — these are cheap to regenerate and
+   not meant to live in the repo).
+2. **Fixed-baseline reweight.** Add the candidate at a positive weight on
+   top of the current validated baseline (`power_law=1.0, m2=0.5, dxy=0.5`)
+   and check whether it improves the objective at any positive weight.
+3. **Joint reweight.** Re-run the full pool search
+   (`optimize_stage_a_weights_combined`/`_multi_ratio`) with the candidate
+   included, to see how it behaves once every other indicator is free to
+   move too (not just added on top of a fixed set).
+4. **Curve + OOS walk-forward.** Only Stage-3 survivors get a curve re-fit
+   and a full 3-fold walk-forward OOS check — at that point they've entered
+   the "Standard trial protocol" above and are gated the same as any other
+   trial (Chris's explicit accept before touching this file or
+   `settings.json`).
+
+**Where each candidate currently stands:**
+
+- `adx`, `stochastic` — cleared Stage 1 (2026-09-17, via
+  `scripts/run_adx_stochastic_solo_validation.py`, script no longer in the
+  repo). **Not yet reached Stage 2** — blocked on `ExtraIndicatorSources`
+  OHLC high/low plumbing not yet wired into `build_extra_indicators` (every
+  other indicator in the catalog derives from close alone; ADX/stochastic
+  need high/low).
+- `vol_regime` — cleared Stage 1 (2026-09-18, best `short=60/long=180`,
+  `combined=71.11`, via `run_vol_regime_solo_validation.py`). **Stage 2
+  REJECTED** (dead end #21, via `run_vol_regime_stage2_fixed_baseline.py`):
+  any positive weight on top of the fixed baseline monotonically degrades
+  the objective.
+- `halving_cycle` — cleared Stage 1 (2026-09-18, best
+  `cycle_length=1317.6d/phase_shift=+0.30`, `combined=140.42`, via
+  `run_halving_cycle_solo_validation.py`; confirmed not an edge-of-grid
+  artifact by widening the phase-shift grid). **Stage 2 REJECTED** (dead
+  end #22, via `run_halving_cycle_stage2_fixed_baseline.py`): same
+  monotonic-degradation pattern as `vol_regime`.
+
+None of the four has reached Stage 3 or 4 yet. (`indicator_catalog.py`'s
+`halving_cycle` comment describes its rejection as following "the same
+pattern as adx/stochastic/vol_regime" — read that as referring to the
+general fixed-baseline-degradation pattern, not as a claim that adx/
+stochastic have themselves been Stage-2-tested; their own comment is
+explicit that they're still blocked on Stage 2's OHLC plumbing.)
+
 ## Immediate backlog (proposed order)
 
 1. Fresh Stage-A weight search on the dead-zone-fixed rolling composite
@@ -440,6 +499,73 @@ that could both be read as "the baseline."
    directly — pending his read on the sell-side result and any further
    iteration on the bounds/objective per his own framing ("we'll have to
    play around with those variables").
+
+9. **Task #93: full 17-indicator recalibration pass — three rounds, all
+   rejected** (2026-09-23; worked from the existing 17-survivor pool
+   (11 original + 6 on-chain/sentiment extras) as-is, predating the SDCA
+   post-mortem's finding that `power_law`'s apparent search-dominance may
+   trace to the band-crossing bug / sell-side z-score-denominator shrink
+   rather than genuine edge):
+   - **Round 1** (`81e5f1dc5`: `run_dual_timeframe_composite_search.py`
+     Stage 1 extended to all 17 survivors +
+     `run_aggregate_reweight_full17.py`/`_aggregate_reweight_parallel.py`
+     Stage 2 floor-diversified reweight — exhaustive `2*2**16=131072`-combo
+     coarse grid, fork-based multiprocessing + `run_full_recalibration.py`
+     Stage 1-4 driver): Stage 3 in-sample curve search (5112 evals)
+     `beats_baseline_return=False`, `beats_baseline_concentration=False`
+     against the live 5-weight preset. Stage 4 walk-forward:
+     `beats_flat_dca_oos=True` but thin and fragile — mean OOS vs. flat-DCA
+     `+7.64%` (vs. the validated baseline's `+84.90%`), 2 of 3 folds
+     infeasible (near-zero/negative `capital_deployed_pct`), held-out tail
+     slightly negative (`-1.44%`), `sensitivity.stable=False`
+     (`max_abs_delta_oos=5.71pp` under a ±5% weight perturbation).
+     **REJECT.** Also closed two `.gitignore` gaps hit producing this run's
+     artifacts: the data-cache glob only covered 2 levels under any `data/`
+     dir (missed `digiquant/data/onchain/<source>/*.parquet`'s 3-level
+     cache path) — generalized to `**/data/**/*.ext` for any nesting depth;
+     and `.scratch/` (repeatedly described in this doc as "gitignored")
+     had no actual ignore rule — added one.
+   - **Round 2** (`60cf0777c`): found and fixed a window-default bug —
+     `build_extra_indicators` (and its callers `extra_z_vectors`/
+     `load_sdca_extra_z`/`load_frozen_index`) computed every macro/on-chain
+     extra at one shared `window` kwarg, silently discarding each
+     indicator's own Stage 1 period-search result. Added an opt-in
+     `extra_windows: dict[str, int] | None` override, resolved
+     per-indicator — an indicator present in the dict uses its own window,
+     one absent (or the dict absent/`None`) keeps the prior shared-default
+     behavior unchanged (additive, no existing caller affected). Re-ran the
+     Stage 2b reweight + Stage 4 gate against the fixed index with each
+     extra's real Stage 1 period (`dxy=60`, `onchain_*=365`,
+     `fear_greed=270`) instead of the shared 90-day default:
+     `beats_flat_dca_oos=True`, `sensitivity_stable=False`
+     (`max_abs_delta_oos_pct=2.79` vs. the 2.0 threshold — improved from
+     Round 1's 5.71 but still fails the stability gate). **Diagnostic
+     only, not promoted.**
+   - **Round 3** (`54c4a95f9`): built an opt-in, additive feasibility-aware
+     curve-search objective (`curve_optimize_feasibility.py`,
+     `score_shape_on_index_feasibility_aware`/
+     `search_wide_knee_curve_feasibility_aware`) that penalizes/hard-
+     rejects in-sample curve shapes whose `capital_deployed_pct` falls
+     outside the walk-forward gate's own `[capital_deployed_floor_pct,
+     100%]` band — aimed at the failure mode behind both prior rounds'
+     rejections (OOS folds with 0%/negative capital deployed);
+     `curve_optimize.py` itself untouched byte-for-byte. Re-ran Stage 4
+     with Round 2's unchanged Stage 1 oscillators + Stage 2b weights,
+     swapping in the feasibility-aware Stage 3b curve winner. **REJECT**
+     — the new objective didn't rescue this round's curve winner:
+     `beats_flat_dca_oos=False` (mean OOS `-2.66%`, down from Round 2's
+     positive result), `sensitivity_stable=False`
+     (`max_abs_delta_oos_pct=3.18`, worse than Round 2's 2.79),
+     `feasible_fold_count=1/3` unchanged from Round 2 (fold 0 feasible,
+     folds 1-2 still 0%-deployed OOS). It steered the in-sample search
+     away from low-deployment shapes as designed, but the resulting curve
+     still produced 0%-deployed OOS folds on data the in-sample search
+     never saw.
+   - All three rounds diagnostic only — `settings.json` and this file's
+     "Current best validated candidate" section untouched throughout, per
+     the standing accept gate. `tests/dq/strategies/sdca/` stayed green
+     across all three (505→507 passed as new tests were added alongside
+     each round, 38 skipped for optional deps throughout).
 
 ## North-star ceiling (benchmark only — NEVER a trading candidate)
 
