@@ -363,14 +363,15 @@ def _r2_price_technicals(
     """The sole :func:`get_price_technicals` read path (#4053; see it for the contract).
 
     ``manifest`` lets a batch caller share one manifest read across tickers
-    (:func:`get_price_technicals_batch`); omit it to read the seal here. The
-    seal is resolved INSIDE the ``except LookupError`` (as before #4600), so a
-    ``LookupError``-shaped manifest read stays fail-soft (empty envelope).
+    (:func:`get_price_technicals_batch`); omit it and :func:`_read_r2_window`
+    resolves the seal itself, exactly as before #4600 (so the single-ticker
+    path keeps its manifest read at the window seam). That read sits inside
+    the ``except LookupError`` below, so a ``LookupError``-shaped manifest
+    read stays fail-soft (empty envelope).
     """
     from digiquant.mcp_server import _read_r2_window
 
     try:
-        manifest = manifest if manifest is not None else _r2_manifest()
         rows = _read_r2_window(ticker, _resolve_r2_as_of(as_of, manifest), manifest)
     except LookupError:
         return {"ticker": ticker, "latest": {}, "window": []}
