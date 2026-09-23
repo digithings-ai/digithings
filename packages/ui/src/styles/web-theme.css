@@ -240,8 +240,23 @@ body {
   width: 100%;
   max-width: var(--frame-w);
   margin-inline: auto;
-  height: clamp(34rem, 78vh, 50rem);
+  height: clamp(34rem, 82vh, 54rem);
 }
+
+/* The stacked face — the same boxes on a phone, one per row.
+   There is no pinned track here, so the column is in normal flow and grows with
+   its content; only the active tile is open (`.dg-cell.on`), which is what makes
+   the boxes open in turn as the reader scrolls. The wrap carries the page's own
+   gutter because there is no stage to centre it. */
+.dg-stack-wrap { padding-inline: var(--page-pad); }
+.dg-mosaic--stack { height: auto; gap: 0.5rem; }
+.dg-mosaic--stack .dg-mosaic-row { flex: 0 0 auto; transition: none; }
+/* One tile per row, so the tile fills the row's width. `flex: 0 0 auto` here
+   would size the tile to its own max-content — which measured 760px on a 420px
+   viewport and pushed the whole page sideways. Height is content-driven because
+   the row is `flex: 0 0 auto` inside the column. */
+.dg-mosaic--stack .dg-cell { flex: 1 1 auto; min-width: 0; opacity: 0.72; transition: opacity .25s var(--ease), background .25s var(--ease), box-shadow .25s var(--ease); }
+.dg-mosaic--stack .dg-cell.on { opacity: 1; }
 .dg-mosaic-row { display: flex; flex: 1 1 0; min-height: 0; gap: 0.5rem; transition: flex-grow .45s var(--ease); }
 
 .dg-cell { position: relative; display: flex; flex-direction: column; gap: 0.5rem; flex: 1 1 0; min-width: 0; min-height: 0; padding: 0.85rem 0.95rem; margin: 0; background: var(--surface); border: 1px solid var(--hair); border-radius: 0; text-align: left; cursor: pointer; overflow: hidden; opacity: 0.55; transition: flex-grow .45s var(--ease), opacity .25s var(--ease), background .25s var(--ease), box-shadow .25s var(--ease); }
@@ -283,11 +298,18 @@ body {
 .dg-mosaic-role { font-family: var(--font-mono); font-size: 0.66rem; line-height: 1.5; color: var(--ink-mute); }
 .dg-cell.on .dg-mosaic-role { color: var(--ink-soft); }
 .dg-mosaic-detail { display: flex; flex-direction: column; gap: 0.6rem; margin-top: 0.4rem; min-width: 0; }
-.dg-mosaic-tag { color: var(--ink-soft); font-family: var(--font-mono); font-size: 0.76rem; line-height: 1.6; }
+/* The one part of the focused tile allowed to shrink. The tile is one row tall,
+   and the earlier version let the copy take as much as it wanted — which pushed
+   the compose command and the ask control out of the box on the longest modules
+   (digigraph, digivault). The copy shrinks, the stack row and the foot below are
+   pinned, and the lead paragraph is clamped, so the controls are always visible. */
+.dg-mosaic-copy { display: flex; flex-direction: column; gap: 0.6rem; min-height: 0; overflow: hidden; }
+.dg-cell.on .dg-mosaic-detail > .stack-row { flex: 0 0 auto; }
+.dg-mosaic-tag { color: var(--ink-soft); font-family: var(--font-mono); font-size: 0.76rem; line-height: 1.6; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; overflow: hidden; }
 /* The compose command and the CTA share the last line. A tile is only as tall
    as one grid row, and stacking them cost a line the smallest modules did not
    have — the command was the thing getting clipped. */
-.dg-mosaic-foot { display: flex; align-items: center; flex-wrap: wrap; gap: 0.5rem 0.9rem; margin-top: auto; min-width: 0; }
+.dg-mosaic-foot { display: flex; align-items: center; flex-wrap: wrap; gap: 0.5rem 0.9rem; margin-top: auto; min-width: 0; flex: 0 0 auto; }
 .dg-mosaic-foot .dg-docker { margin-top: 0; min-width: 0; }
 .dg-mosaic-ask { margin-left: auto; white-space: nowrap; font-family: var(--font-mono); font-size: 0.76rem; color: var(--ink-mute); }
 button.dg-mosaic-ask { background: none; border: 0; padding: 0; cursor: pointer; }
@@ -311,7 +333,7 @@ button.dg-docker.is-copied { color: var(--accent); }
 /* The deeper description paragraphs: what the module is for, in its own words.
    Only on the focused tile — a resting tile is a fraction of a row tall, so it
    carries the name, version, stats box and role and nothing else. */
-.dg-mosaic-serves { color: var(--ink-mute); font-family: var(--font-mono); font-size: 0.72rem; line-height: 1.62; }
+.dg-mosaic-serves { color: var(--ink-mute); font-family: var(--font-mono); font-size: 0.72rem; line-height: 1.62; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 5; line-clamp: 5; overflow: hidden; }
 
 /* The stated figures. They are printed on the cell rather than implied by its
    size, so the sizing is readable rather than felt — a reader can check that

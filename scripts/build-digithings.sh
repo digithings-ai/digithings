@@ -76,12 +76,13 @@ grep -F "frame-src ${FRAME_SRC}" dist/_headers >/dev/null \
 echo "--- writing dist/build-info.json ---"
 bash scripts/write-build-info.sh dist/build-info.json digithings.ai
 
-# Sanity: landing must exist and carry the module manifest (the per-module pages
-# were folded into the home-page terminal manifest, so /modules/* no longer exists).
-# Match the aria-label, not an implementation class — the pane is the shared
-# <TerminalManifest> primitive since #1416 (was app-local .dt-manifest markup).
+# Sanity: landing must exist and carry the module listing (the per-module pages
+# were folded into the home-page module mosaic, so /modules/* no longer exists).
+# Match the mosaic's aria-label, not an implementation class — the mosaic became
+# the listing in v15 (#4429), replacing the TerminalManifest pane that used to
+# carry this label.
 [ -f dist/index.html ] || { echo "ERROR: dist/index.html missing — build did not export" >&2; exit 1; }
-grep -q 'aria-label="digithings module manifest"' dist/index.html || { echo "ERROR: module manifest missing from home page" >&2; exit 1; }
+grep -q 'aria-label="digithings modules, sized by lines of code"' dist/index.html || { echo "ERROR: module listing missing from home page" >&2; exit 1; }
 [ -f dist/build-info.json ] || { echo "ERROR: dist/build-info.json missing — the deploy freshness probe would report every deploy as unstamped (#1759)" >&2; exit 1; }
 
 # Public OpenAPI explorer (#2058): committed specs + Swagger UI assets must ship.

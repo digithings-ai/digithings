@@ -547,7 +547,16 @@ a.ra-release-version:hover {
 }
 
 @media (max-width: 720px) {
+  /* Stacking the foot turns its main axis vertical, and a wrapping column flex
+     container sizes each line to its *content* — so `align-items: stretch` alone
+     left the version rail at its max-content (11 cards, ~2350px) and blew the
+     page sideways instead of letting the rail scroll inside its own track. An
+     explicit width pins every row to the column's width. */
   .ra-activity-foot {
     flex-direction: column;
+    align-items: stretch;
+  }
+  .ra-activity-foot > * {
+    width: 100%;
   }
 }
