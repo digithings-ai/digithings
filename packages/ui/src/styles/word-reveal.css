@@ -112,3 +112,78 @@ html.no-js .word {
   transform: none !important;
   filter: none !important;
 }
+
+/* ── TypewriterReveal ───────────────────────────────────────────────────────
+   The unpinned third sibling: characters appear in order with a caret as the
+   line travels. No track and no pin, so it adds no height to the band.
+
+   The ghost is the whole point. Revealing characters one at a time reflows the
+   paragraph on every tick, so the full text is laid out once in a `visibility:
+   hidden` copy and the typed copy is drawn on top of it — the box is the size of
+   the finished quote from the first frame, and nothing below it moves.
+   `visibility: hidden` rather than `display: none` or `opacity: 0`, because only
+   `visibility` keeps the text's layout contribution while taking it out of the
+   accessibility tree's way (the component also marks it aria-hidden, and the
+   visible layers with it, exposing the full line once in `.tw-sr`). */
+.tw {
+  position: relative;
+  display: block;
+}
+
+.tw-ghost {
+  visibility: hidden;
+}
+
+/* Overlaid on the ghost, so the two wrap at exactly the same width. */
+.tw-live {
+  position: absolute;
+  inset-block-start: 0;
+  inset-inline: 0;
+}
+
+/* The caret rides at the type edge. Net-zero width, like the chat caret, so
+   appearing and retiring never rewraps the line it is attached to. */
+.tw-caret {
+  display: inline-block;
+  width: 0.55em;
+  height: 1.05em;
+  margin-inline-start: 0.08em;
+  margin-inline-end: -0.63em;
+  vertical-align: text-bottom;
+  background: var(--accent);
+  animation: tw-caret-blink 1.06s steps(1) infinite;
+}
+
+@keyframes tw-caret-blink {
+  0%,
+  49% {
+    opacity: 1;
+  }
+  50%,
+  100% {
+    opacity: 0;
+  }
+}
+
+/* The one readable copy. The visual layers are aria-hidden, so assistive tech
+   gets the finished quote exactly once rather than a partial, still-typing one. */
+.tw-sr {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* Reduced motion never types (the component renders the whole line), so the
+   caret has nothing to point at — and a blinking cursor under a motion
+   preference is exactly the thing the preference is asking not to see. */
+@media (prefers-reduced-motion: reduce) {
+  .tw-caret {
+    display: none;
+  }
+}

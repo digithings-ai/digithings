@@ -6,7 +6,8 @@
  * never invented. Attribution avatars are mono initials derived from the
  * name; the optional org strip closes the band under a hairline. A quote may
  * carry an `href` so a named customer's org links to its own public site, and
- * `columns` drops the wall to two for a band holding two voices. The quote body
+ * `columns` drops the wall to two for a band holding two voices — or to one, to
+ * stack them. The quote body
  * accepts a node, so a caller can hand it motion text (`<MotionReveal/>`) that
  * spells the line out on scroll. Entirely
  * token-backed utilities — no family CSS rules. Server component — no state.
@@ -43,9 +44,10 @@ export type TestimonialWallProps = {
   /**
    * Columns at the widest breakpoint (collapses to one below 820px). Default
    * 3; use 2 for a wall holding two voices, so the row fills instead of
-   * leaving an empty third cell.
+   * leaving an empty third cell, or 1 to stack them — a band where each voice
+   * should be read on its own, at its own width, rather than compared.
    */
-  columns?: 2 | 3;
+  columns?: 1 | 2 | 3;
   /** Product half of the `{org} × {product}` lockup; omit to drop it. */
   lockup?: string;
   /** Org names for the quiet strip under the wall; omit to drop the strip. */
@@ -77,7 +79,7 @@ export function TestimonialWall({
     <div className={className}>
       <div
         className={`grid gap-[0.9rem] max-[820px]:grid-cols-1 ${
-          columns === 2 ? "grid-cols-2" : "grid-cols-3"
+          columns === 1 ? "grid-cols-1" : columns === 2 ? "grid-cols-2" : "grid-cols-3"
         }`}
       >
         {quotes.map((q) => (
