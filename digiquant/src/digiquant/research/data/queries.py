@@ -333,11 +333,18 @@ def get_price_technicals_batch(
     unchanged — each ticker still reads its own sealed generation through the
     same :func:`_r2_price_technicals` shaping. ``client`` is kept for
     caller-signature stability and is never read.
+
+    Fail-soft parity with the pre-#4600 per-ticker loop: a ``LookupError``
+    (``KeyError`` included) resolving the shared manifest yields the empty
+    latest/window envelope for every requested ticker instead of propagating.
     """
     ordered = list(dict.fromkeys(tickers))
     if not ordered:
         return {}
-    manifest = _r2_manifest()
+    try:
+        manifest = _r2_manifest()
+    except LookupError:
+        return {ticker: {"ticker": ticker, "latest": {}, "window": []} for ticker in ordered}
     return {
         ticker: _r2_price_technicals(
             ticker=ticker, lookback=lookback, as_of=as_of, manifest=manifest
@@ -356,12 +363,14 @@ def _r2_price_technicals(
     """The sole :func:`get_price_technicals` read path (#4053; see it for the contract).
 
     ``manifest`` lets a batch caller share one manifest read across tickers
-    (:func:`get_price_technicals_batch`); omit it to read the seal here.
+    (:func:`get_price_technicals_batch`); omit it to read the seal here. The
+    seal is resolved INSIDE the ``except LookupError`` (as before #4600), so a
+    ``LookupError``-shaped manifest read stays fail-soft (empty envelope).
     """
     from digiquant.mcp_server import _read_r2_window
 
-    manifest = manifest if manifest is not None else _r2_manifest()
     try:
+        manifest = manifest if manifest is not None else _r2_manifest()
         rows = _read_r2_window(ticker, _resolve_r2_as_of(as_of, manifest), manifest)
     except LookupError:
         return {"ticker": ticker, "latest": {}, "window": []}
