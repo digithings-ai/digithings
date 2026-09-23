@@ -2,8 +2,7 @@
 
 import { useMemo, useState } from 'react';
 import { Badge, Button, Card } from '@digithings/ui/ui';
-import { ChevronDown, ChevronRight } from 'lucide-react';
-import type { FxTradeIdeaRow, FxConfluenceSnapshotRow } from '@/lib/twelve-x/types';
+import type { FxTradeIdeaRow } from '@/lib/twelve-x/types';
 import {
   continuityForBoard,
   continuityKey,
@@ -212,17 +211,14 @@ function ContinuityStamp({ meta }: { meta: IdeaContinuityMeta | undefined }) {
 
 export default function TradeIdeasPanel({
   ideas,
-  confluence,
   highlightRanks,
   ideaHistory = [],
 }: {
   ideas: FxTradeIdeaRow[];
-  confluence: FxConfluenceSnapshotRow[];
   highlightRanks?: ReadonlySet<number>;
   ideaHistory?: Pick<FxTradeIdeaRow, 'run_date' | 'pair' | 'direction' | 'as_of'>[];
 }) {
   const { crossLink } = useTwelveX();
-  const [expanded, setExpanded] = useState(false);
   const [openRank, setOpenRank] = useState<number | null>(null);
   const toggleIdea = (rank: number) => setOpenRank((v) => (v === rank ? null : rank));
 
@@ -350,46 +346,6 @@ export default function TradeIdeasPanel({
           {openRank === idea.rank ? <IdeaDetail idea={idea} /> : null}
         </Button>
       ))}
-
-      {/* Expand → confluence reads */}
-      {confluence.length > 0 ? (
-        <div>
-          <Button
-            type="button"
-            variant="ghost"
-            size="xs"
-            className="h-auto justify-start gap-1 p-0 text-[11px] font-normal text-ink-soft hover:bg-transparent hover:text-accent"
-            onClick={() => setExpanded((v) => !v)}
-            aria-expanded={expanded}
-          >
-            {expanded ? <ChevronDown size={13} /> : <ChevronRight size={13} />}
-            {expanded ? 'Hide' : 'Expand'} confluence reads ({confluence.length})
-          </Button>
-          {expanded ? (
-            <ul className="mt-2 grid gap-1">
-              {confluence.map((c) => (
-                <li
-                  key={`${c.run_date}-${c.rank}`}
-                  className="flex items-center gap-2 rounded-none border border-hair px-3 py-1.5 text-xs"
-                >
-                  <span className="font-mono text-[10px] text-ink-mute">#{c.rank}</span>
-                  <span className="font-semibold text-ink">{c.currency}</span>
-                  <span className={`uppercase ${dirClass(c.direction)}`}>{c.direction}</span>
-                  <Button
-                    type="button"
-                    variant="link"
-                    size="xs"
-                    className="ml-auto h-auto p-0 text-accent"
-                    onClick={() => crossLink({ kind: 'currency', currency: c.currency })}
-                  >
-                    trend →
-                  </Button>
-                </li>
-              ))}
-            </ul>
-          ) : null}
-        </div>
-      ) : null}
     </Card>
   );
 }
