@@ -1,80 +1,123 @@
-# Review — #4552 / PR #4553: provider built-in web search + citations
+# Review — #4552 provider built-in web search and citations
 
-**Reviewer:** independent fresh-context subagent (`lively-golden-falcon`), did not write this code.
-**Subject:** commit `7eba91ba` on `task/4552-digichat-provider-search`, PR **#4553** into `module/digichat`.
-**Issue:** #4552.
-**Verdict:** APPROVE WITH NITS — **0 blocker / 0 major / 2 minor / 2 nit**.
-**Tooling caveat stated by the reviewer:** no shell tool in its environment. Static verification only — on-disk reads, installed `node_modules` `.d.ts`, GitHub API (`get_diff`, `get_commit`, `get_check_runs`), and the upstream TS PR for the one language-semantics question. It could not run `tsc`, `vitest`, or `eslint`; the author session ran those and reports them below.
+**Reviewer:** `lively-golden-falcon` — independent, fresh-context subagent (did not write the code).
+**Subject:** PR #4553, branch `task/4552-digichat-provider-search`, commit `7eba91ba0`, base `module/digichat`.
+**Issue:** #4552 — digichat: surface provider built-in web search and citations (sources) in the chat.
+**Verdict:** APPROVE WITH NITS
+**Severity:** 0 blocker / 0 major / 2 minor / 2 nit
+**Tooling disclosure:** the reviewer had no shell tool. Verification was static: on-disk reads, installed `node_modules` declarations, and the GitHub API (`get_diff`, `get_commit`, `get_check_runs`). It stated explicitly where it could not verify.
 
 ---
 
-## Verified clean (claims A–H)
+## Verified clean
 
-| # | Claim | Result |
-|---|-------|--------|
-| A | `toUIMessageStream` receives `sendSources: true` / `sendReasoning: true`; option names correct; `sendSources` defaults false | ✅ `ai@7.0.111` `UIMessageStreamOptions` at `ai/dist/index.d.ts:2706`, defaults documented at `:2732-2741`; `toUIMessageStream` at `:6327`. `stream.ts:69-78` |
-| B | `resolveAiSdkSearchTools` returns the right tool per arm; factories exist; `ToolSet`-assignable | ✅ factories at `openai/dist/index.d.ts:1283`, `anthropic/dist/index.d.ts:1283`, `google-vertex/dist/index.d.ts:89`; `providers.ts:104-135`. Assignability verified **structurally** (`ToolSet` at `@ai-sdk/provider-utils/dist/index.d.ts:2712`, `ProviderExecutedTool` at `:2128`) — not by compiler |
-| C | Gate computed once, hoisted; `webSearch` passed; header written exactly once; no `backend.type ===` introduced | ✅ `route.ts:448-454`, `:467`, `:590-594`; `grep webSearch` returns only `447/452/453/454/467/592` |
-| D | Session-path gate widening is behaviour-preserving for embeds | ✅ embed arm algebraically identical (`embedConfig.webSearch === true`); session arm a strict superset (`env === "1"` retained as `||`). Cannot disable where env was sole enabler |
-| E | The UI switch really sees `type: "source"` | ✅ `@assistant-ui/ai-sdk/src/converters/convertMessage.ts:334-348` (`source-url`) and `:359-374` (`source-document`) both map to `{ type: "source", sourceType }`; `groupParts.ts:95` leaves it ungrouped; `thread.aui.tsx:978-979` |
-| F | Union narrowing correct; external link safe | ✅ `SourceMessagePart` is a discriminated union (`core/src/types/message.ts:33-53`), document arm has `readonly url?: undefined`. Aliased-discriminant narrowing (TS 4.4, PR #44730) applies through the destructured `sourceType`. `target="_blank"` + `rel="noreferrer noopener"` at `source.tsx:45-49` |
-| G | Tests real and non-vacuous | ✅ removing `sendSources: true` fails `stream.test.ts` test 1; removing the tools spread fails test 2; `providers.test.ts` fails on 3 of 4 if the fn returned `undefined`; `source.test.tsx` mounts and asserts DOM; `route.test.ts` fails if `webSearch` not passed. Casts weaken *type* coverage only (Nit 1), not assertion strength |
-| H | Docs table matches code | ✅ for the 4 AI-SDK arms. ⚠️ Minor 1 — one attribution is wrong |
+### A — `sendSources` / `sendReasoning` names and defaults
+`apps/digichat/src/lib/adapters/ai-sdk/stream.ts:69-78` passes `sendSources: true, sendReasoning: true`.
+`ai@7.0.111`, `ai/dist/index.d.ts`: options type `UIMessageStreamOptions` at :2706; defaults documented at :2732-2741 —
 
-CI (`get_check_runs`): `web / lint`, `digichat / test`, `dashboard / test`, `gate` all `success`. `web / lint` includes `Typecheck design-reference`, which pulls `@digithings/ui` sources (`test-web.yml:129-132`) — so UI type errors would redden it, and it is green.
-
-## Hunt items — clean
-
-1. **Secret to a config-controlled host / inline credential** — none. `resolveAiSdkSearchTools` mirrors `resolveAiSdkModel`: the credential is read from the env var the config *names* (`readBackendApiKey`, `providers.ts:32-38`), never from config. Nothing credential-bearing is returned to the browser. Clean.
-2. **Regressions to digigraph / foundry / non-AI-SDK** — branch order unchanged (`foundry` → non-AI-SDK → `coreMessages` → gate → AI-SDK → BYOK → upstream → digigraph); `runLock.release()` untouched; the only digigraph change is the intentional gate widening in D. Clean.
-3. **`sendSources` vs `activityDetail`** — `activityDetail` (`route.ts:211`) is passed only to `foundry` (`:387`), non-AI-SDK (`:416`) and the digigraph trace adapter (`:623`); the AI-SDK mapper (`:460-475`) never applied it, before or after this PR, so nothing is bypassed. Provider citations on the AI-SDK path are answer content, not activity. Defensible; worth a conscious decision for embeds.
-4. **Provider tool on non-tool models** — `tools` only passed when the client opted in and the tenant allowed it; `toolChoice` defaults to `auto`, `stopWhen` to one step. Low risk.
-5. **Type-checks but misbehaves** — nothing beyond Minors 2/3.
-
-## Findings
-
-### Minor 1 — doc credits `sendSources` with the digigraph/foundry source recovery (wrong cause)
-
-`docs/architecture/digichat-config-program-plan.md` says `sendSources: true` fixed "provider grounding **and the digigraph/foundry `retrieve` documents that were already on the wire**".
-
-**Confirmed independently by the author session:** `grep toUIMessageStream apps/digichat/src` returns only `ai-sdk/stream.ts:70` and `route.ts:643`. The digigraph/foundry adapters never touch `toUIMessageStream` — they emit `source-url` / `source-document` straight from their own SSE writer (`lib/ui-stream-parts.ts:239-261` `writeSource`, consumed by `digithings/stream.ts`, `foundry/stream.ts`, `ag-ui/stream.ts`, `langgraph/stream.ts`, `a2a/stream.ts`). Those documents were dropped by the **UI** part switch, fixed by new point 3 (`case "source"`), not by `sendSources`.
-
-**Resolution:** corrected in the docs — point 1 now credits `sendSources` with AI-SDK provider citations only; point 3 credits the UI case with the digigraph/foundry/documents path.
-
-### Minor 2 — second `toUIMessageStream` call site omits `sendSources`
-
-`apps/digichat/src/app/api/chat/route.ts:641-646` (digigraph path when the trace UI is off, i.e. `DIGICHAT_TRACE_UI=0` or `x-digichat-trace: 0`):
 ```ts
-    createUIMessageStreamResponse({
-      stream: toUIMessageStream({ stream: result.stream }),
-      headers: responseHeaders,
-    }),
+    /**
+     * Send reasoning parts to the client.
+     * Default to true.
+     */
+    sendReasoning?: boolean;
+    /**
+     * Send source parts to the client.
+     * Default to false.
+     */
+    sendSources?: boolean;
 ```
-No `sendSources: true`, so the doc's blanket "now runs with" is not true here. If the custom digigraph provider surfaces `source` parts on this path they are still stripped. The reviewer could not verify whether it can.
 
-**Resolution:** fixed — `sendSources: true, sendReasoning: true` added for parity, matching `ai-sdk/stream.ts`.
+`toUIMessageStream` at :6327 accepts `{ stream } & UIMessageStreamOptions<UI_MESSAGE>`. Names and call shape correct; `sendSources` genuinely defaults to **false**.
 
-### Minor 3 — `ThreadSource` renders a provider-controlled URL with no scheme allowlist
+### B — `resolveAiSdkSearchTools` factories
+`apps/digichat/src/lib/adapters/ai-sdk/providers.ts:104-135` matches the claim arm for arm. Factory names verified against the installed declarations:
 
-`packages/ui/src/components/chat/gallery-thread/source.tsx:43-54` puts `props.url` straight into `href`. That URL is model/provider-controlled (OpenAI / Anthropic / Vertex citations) — `writeSource` guards with `isHttpUrl` for digigraph docs, but AI-SDK provider annotations are not re-checked. A non-`http(s)` scheme (`javascript:`, `data:`) would render as a clickable link; React's `javascript:` handling is version-dependent. `rel="noreferrer noopener"` is correct but does not cover the scheme.
+- `openai-responses` → `createOpenAI({baseURL,apiKey,name}).tools.webSearch()` — `openaiTools.webSearch` at `@ai-sdk/openai/dist/index.d.ts:1283`; `OpenAIProvider.tools: typeof openaiTools` at :1658; `createOpenAI` at :1699.
+- `anthropic` → `createAnthropic({apiKey,name}).tools.webSearch_20250305()` — `anthropicTools.webSearch_20250305` at `@ai-sdk/anthropic/dist/index.d.ts:1283`; `AnthropicProvider.tools` at :1467; `createAnthropic` at :1506.
+- `google-vertex` → `createVertex({project,location}).tools.googleSearch({})` — `googleVertexTools.googleSearch` at `@ai-sdk/google-vertex/dist/index.d.ts:89`; `GoogleVertexProvider.tools` at :147; `createVertex` alias at :304; settings at :187-191.
+- `openai-completions` → `undefined` (providers.ts:108-109).
 
-**Confirmed independently by the author session:** this repo already has the guard pattern, twice — `apps/digichat/src/lib/ui-stream-parts.ts:64` `isHttpUrl` and `packages/ui/src/components/chat/ChatMarkdownSource.tsx:106-109` `safeHref` ("Only http(s) links survive; anything else (javascript:, data:) renders as text"), with tests asserting `javascript:` never survives.
+Assignability to `ToolSet` verified **structurally only** (`@ai-sdk/provider-utils/dist/index.d.ts:2712` `type ToolSet = Record<...>`; `ProviderExecutedTool` at :2128; `Tool` union at :2155). The factories return a `ProviderExecutedTool`, a member of the `Tool` union, and the `Pick`ed members are optional, so `{ web_search: … }` is assignable. **Not compiler-verified** — no shell.
 
-**Resolution:** fixed — a local `isHttpUrl` guard in `source.tsx`; a non-http(s) URL renders as a text row (`data-slot="aui_source-url"` retained but no `href`), matching `ChatMarkdownSource`'s established contract. Test added.
+### C — Route gate hoisted once, header written once
+`route.ts:448-454` computes `clientWantsWeb` / `tenantAllowsWeb` / `webSearchEnabled` once; `:467` passes `webSearch: webSearchEnabled` to `createAiSdkStreamResponse`; `:590-594` writes `X-Digi-Enable-Web-Search` under the same variable, exactly once. `grep webSearch route.ts` returns only lines 447/452/453/454/467/592. No `backend.type ===` comparison added; branch ordering and `runLock.release()` untouched.
 
-### Nit 1 — casts/mocks weaken type coverage
-`source.test.tsx` uses `as unknown as SourceMessagePartProps`; `stream.test.ts` / `providers.test.ts` fully `vi.mock` the provider packages, so a wrong `.tools` method name or prop-shape drift would not be caught by them — only by the reviewer's manual `.d.ts` reading (B).
-**Resolution:** accepted. The real factory names are pinned by `providers.test.ts` asserting the exact `.tools` member is invoked, and the CI typecheck would catch a renamed method; a duplicate compile-time assertion would add little.
+### D — Session-path gate: behaviour-preserving for embeds, widening only for sessions
+Old: `embedConfig?.webSearch === true || (!embedConfig && env === "1")`.
+New (`route.ts:451-453`): `embedConfig ? embedConfig.webSearch === true : dep?.gate.webSearch === true || env === "1"`.
 
-### Nit 2 — doc "ag-ui/langgraph normalizers can emit `retrieve` spans"
-Hedged with "can" and plausible given the shared `writeSource`, but not verified per adapter.
-**Resolution:** fixed — the doc now says the ag-ui/langgraph normalizers *share* `writeSource`, so they emit source parts when the backend supplies documents, and cites `ui-stream-parts.ts`.
+- Embed tenant (truthy `embedConfig`): old reduces to `embedConfig.webSearch === true || false`; new is exactly `embedConfig.webSearch === true`. **Identical.**
+- Session path (falsy): old = `env === "1"`; new = `env === "1" || dep?.gate.webSearch === true`. **Strict superset** — the env term is retained as `||`, so it cannot disable where env was the sole enabler. It can enable only when the deployment sets `gate.webSearch: true` **and** the client sends `x-digi-enable-web-search`, which is the intended opt-in widening.
+- Residual, pre-existing (not a regression): `dep.gate.webSearch === false` still loses to `DIGICHAT_WEB_SEARCH=1`.
 
-## Author-session re-verification (commands run)
+### E — Part type reaching the switch really is `"source"`
+`@assistant-ui/ai-sdk` `src/converters/convertMessage.ts:334-348` maps `source-url` → `{ type: "source", sourceType: "url", id, url, title? }`; `:359-374` maps `source-document` → `{ type: "source", sourceType: "document", id, title, mediaType, filename? }`. `groupParts.ts:95` returns `lookup[part.type] ?? []` and `thread.aui.tsx:893-897` maps only `reasoning` / `tool-call` / `standalone-tool-call`, so `source` stays an individual part leaf. `thread.aui.tsx:978-979` adds `case "source": return <SourceComponent {...part} />;`; default `Source: SourceComponent = ThreadSource` at :872; slot type at :102. The raw wire names never reach the switch.
+
+### F — Union narrowing correct; external link safe
+`SourceMessagePart` (`@assistant-ui/core/src/types/message.ts:33-53`) is a discriminated union whose document member carries `readonly url?: undefined` and only it has `filename`. `source.tsx` uses the destructured `sourceType` as the discriminant. The reviewer initially suspected TS2339 on `props.filename`, then correctly refuted itself: aliased-discriminant analysis (TypeScript PR #44730, TS 4.4) narrows the original object through a destructured discriminant — its own example `f3` does `const { kind } = obj; if (kind === 'foo') obj.foo; // Ok`. `props` is an unassigned parameter and `sourceType` is `readonly`, so narrowing applies. Corroborated by the green `web / lint` job, whose `Typecheck design-reference` step pulls `@digithings/ui` sources (`test-web.yml:129-132`). Links carry `target="_blank"` + `rel="noreferrer noopener"`; documents render as a `<span>`.
+
+### G — Tests are real and non-vacuous
+1. `stream.test.ts` — removing `sendSources: true` fails test 1; removing the `...(tools ? { tools } : {})` spread fails test 2. Not vacuous as a file.
+2. `providers.test.ts` — if the function returned `undefined` for every arm, only the `openai-completions` case passes; the other three assert exact factory args and `toEqual`. Non-vacuous.
+3. `source.test.tsx` — genuinely mounts via `createRoot` + `act` and asserts DOM. The `as unknown as SourceMessagePartProps` cast weakens type coverage only, not assertion strength.
+4. `route.test.ts:1620-1649` — asserts `webSearch: true` with the header and `false` without; would fail if `webSearch` were not passed. Proves the gate reaches the mapper.
+
+### H — Docs table
+Per-backend built-in search matches the code for the four AI-SDK arms. `ag-ui` / `langgraph` emitting `retrieve` spans is hedged and plausible given the shared `writeSource`. One attribution was wrong — see Minor 1.
+
+### Hunt items — all clean
+1. **No secret to a config-controlled host.** `resolveAiSdkSearchTools` mirrors `resolveAiSdkModel`: the credential is read from the env var the config *names* (`readBackendApiKey`, `providers.ts:32-38`), never from config; `baseURL` is config-controlled exactly as before; Anthropic uses its default base URL; Vertex uses ADC. Nothing credential-bearing reaches the browser.
+2. **No digigraph / foundry / non-AI-SDK regression.** Branch order unchanged (`foundry` → non-AI-SDK → `coreMessages` → gate → AI-SDK → BYOK → upstream → digigraph); the hoisted gate is consumed only by the digigraph header, still once; `runLock.release()` in each catch is untouched.
+3. **`sendSources` bypasses no `activityDetail` gate.** `activityDetail` (`route.ts:211`) is passed only to `foundry` (:387), non-AI-SDK (:416), and the digigraph trace adapter (:623); the AI-SDK mapper (:460-475) never applied it, before or after. Digigraph's own source emission *is* gated (`mapDigigraphTraceToSpans(payload, opts.activityDetail)`, `digithings/stream.ts:413`). Provider citations are answer content, not activity.
+4. **Provider tool on non-tool models.** `tools` is passed only on opt-in; `openai-completions` gets none; `toolChoice` defaults `auto` and `stopWhen` to one step, which suits provider-executed search. Low risk.
+5. **Nothing type-checks-but-misbehaves** beyond Minors 2/3.
+
+**CI at review time:** `web / lint`, `digichat / test`, `dashboard / test`, `gate` all `success`.
+
+---
+
+## Findings and resolutions
+
+### Minor 1 — Doc credited `sendSources` with recovering the digigraph/foundry documents (wrong cause)
+The plan's new point 1 claimed `sendSources: true` recovered "provider grounding **and the digigraph/foundry `retrieve` documents that were already on the wire**".
+The digigraph/foundry adapters never go through `toUIMessageStream` — they emit source chunks from their own SSE writer (`lib/ui-stream-parts.ts:239-261` `writeSource`), consumed by `digithings/stream.ts`, `foundry/stream.ts`, `ag-ui/stream.ts`, `langgraph/stream.ts`, `a2a/stream.ts`. `grep toUIMessageStream apps/digichat/src` returns only `ai-sdk/stream.ts:70` and `route.ts:643`. Those documents were dropped by the **UI** part switch, fixed by point 3.
+**Resolution — FIXED.** `docs/architecture/digichat-config-program-plan.md:408` now scopes point 1 to `toUIMessageStream` on **both** call sites, and :425 states explicitly that the digigraph/foundry documents "were dropped by the message part switch's `default`, not by `sendSources`".
+
+### Minor 2 — Second `toUIMessageStream` call site omitted `sendSources`
+`route.ts:641-646` (digigraph path when the trace UI is off: `DIGICHAT_TRACE_UI=0` or `x-digichat-trace: 0`) called `toUIMessageStream({ stream: result.stream })`, so the doc's blanket claim was not true there and source parts on that path were still stripped.
+**Resolution — FIXED.** Now `toUIMessageStream({ stream: result.stream, sendSources: true, sendReasoning: true })` (`route.ts:643-647`), matching `ai-sdk/stream.ts`.
+
+### Minor 3 — `ThreadSource` linked a provider-controlled URL with no scheme allowlist
+`source.tsx` put `props.url` straight into `href`; a `javascript:` / `data:` citation would render as a clickable link. The repo already had the guard pattern twice: `apps/digichat/src/lib/ui-stream-parts.ts:64` `isHttpUrl`, and `packages/ui/src/components/chat/ChatMarkdownSource.tsx:106-109` `safeHref`.
+**Resolution — FIXED.** `source.tsx:26` defines a local `isHttpUrl`, `:35` computes `const href = isUrl && isHttpUrl(props.url) ? props.url : undefined;`, and the link branch is `if (href)` (`:52`) — non-http(s) renders as the text row `data-slot="aui-source-document"`, with no `<a>` and no `aui_source-url`, matching `ChatMarkdownSource`. A guard test was added via `it.each(["javascript:alert(1)", "data:text/html,<script>x</script>", ""])` asserting `host.querySelector("a")` is null, `[data-slot="aui-source-url"]` is null, and the title text still renders. First run failed with `expected undefined to be null` because the assertion used `null?.getAttribute(...)`; the assertion was corrected (the implementation was right), then 7/7 passed.
+
+### Nit 1 — casts / mocks weaken type coverage (ACCEPTED)
+`source.test.tsx` casts through `as unknown as SourceMessagePartProps`; `stream.test.ts` / `providers.test.ts` fully `vi.mock` the provider packages. Accepted: the real factory member names are pinned by `providers.test.ts` asserting the exact `.tools` member is invoked, and CI typechecks `@digithings/ui` sources.
+
+### Nit 2 — doc pointer for the `retrieve`-span claim (FIXED)
+The `ag-ui` / `langgraph` table row now says those normalizers **share** `writeSource` (`lib/ui-stream-parts.ts`) and cites the file.
+
+---
+
+## Commands used by the author session to re-verify the findings
+
+```bash
+rg -n "isHttpUrl|href" packages/ui/src/components/chat/gallery-thread/source.tsx
+rg -n "sendSources|case \"source\"|retrieve documents" docs/architecture/digichat-config-program-plan.md
+rg -n "toUIMessageStream" apps/digichat/src
+```
+
+## Post-fix verification (author session)
 
 ```
-rg -n "toUIMessageStream" apps/digichat/src          → ai-sdk/stream.ts:70, route.ts:643 only
-sed -n '635,655p' apps/digichat/src/app/api/chat/route.ts → confirms Minor 2
-rg -n "isHttpUrl" apps/digichat/src packages/ui/src  → ui-stream-parts.ts:64,245
-rg -n "javascript:" packages/ui/src                  → ChatMarkdownSource safeHref + tests
+apps/digichat   npx vitest run src/lib/adapters/ai-sdk/{providers,stream}.test.ts  2 files / 14 tests passed
+apps/digichat   npx vitest run src/app/api/chat/route.test.ts                      1 file / 63 tests passed
+packages/ui     npx vitest run src/components/chat/gallery-thread/source.test.tsx  1 file / 7 tests passed
+apps/digichat   npm run test       133 files / 1331 tests passed
+apps/digichat   npm run lint       30 problems, 0 errors (all pre-existing warnings)
+apps/digichat   npm run build      type-checks clean
+packages/ui     npm run test       63 files / 456 tests passed
+repo root       python3 scripts/check_frontend_canon.py   frontend canon guard: clean
+repo root       python3 scripts/check_doc_links.py        OK (418 markdown files scanned)
 ```
