@@ -467,349 +467,252 @@ html {
 }
 
 /* ==========================================================================
-   #why VARIATIONS (2026-09-23, branch claude/home-variants, #4429 round 8).
+   #why VARIATIONS (2026-09-23, branch claude/home-variants, #4429 round 9).
 
-   Four compositions of the seven-layer argument, on the throwaway page
-   /variants/why. The owner asked for "a few versions of this" and to see the
-   stack "turn into a fully modular, customizable infrastructure that you
-   actually own".
+   The trap, then the shoe that fits — on the throwaway page /variants/why.
+   One stage: the rented stack's diagram on the left, the owned stack's on the
+   right, and a single ten-step rail that starts on the right and ends on the
+   left. The scroll writes two custom properties, `--why-p` (0 → 1 across the
+   stage) and `--why-swap` (0 → 1 across the lateral swap); everything here is a
+   function of them. React state carries only the coarse step index.
 
-   Every version writes exactly one custom property — `--why-p` (0 → 1), set by
-   the scroll handler in components/landing/WhyVariants.tsx — and everything here
-   is a function of it. `var(--why-p, 1)` defaults to the FINISHED state, which is
-   what renders under prefers-reduced-motion and with no JS: nothing is written in
-   those cases, so the band is simply the end state.
+   `var(--why-p, 1)` and `var(--why-swap, 1)` default to the FINISHED state, so
+   reduced motion and no-JS get the owned half complete.
    ========================================================================== */
-.why-variants {
-  display: flex;
-  flex-direction: column;
-}
-
-.why-v {
+.whyx {
   border-top: 1px solid var(--hair);
-  padding: var(--page-step) var(--page-pad);
 }
 
-.why-v__head {
-  display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
-  max-width: var(--frame-w);
-  margin-inline: auto;
-  margin-bottom: 2rem;
+.whyx__wrap {
+  position: relative;
 }
 
-.why-v__index {
-  font-family: var(--font-mono);
-  font-size: 0.7rem;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: var(--ink-mute);
-}
-
-.why-v__pin {
+.whyx__pin {
   position: sticky;
   top: calc(var(--dq-nav-h, 4.5rem) + 1rem);
-  display: flex;
-  justify-content: center;
 }
 
-.why-v__pin > * {
-  width: 100%;
-  max-width: var(--frame-w);
-  margin-inline: auto;
-}
-
-/* ── V1: the seam on the rule ─────────────────────────────────────────── */
-.why-seam {
-  border: 1px solid var(--hair);
-  background: var(--surface);
-  /* The drawer starts shifted a full panel to the left, so at progress 0 the
-     seam sits just outside this frame. Clipping keeps it inside the border
-     (it slides in) instead of poking into the page gutter. */
-  overflow: hidden;
-}
-
-.why-seam__row {
-  position: relative;
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) 3.4rem minmax(0, 1fr);
-  align-items: stretch;
-  border-bottom: 1px solid var(--hair);
-}
-
-.why-seam__row:last-child {
-  border-bottom: 0;
-}
-
-/* ONE rule, spanning the whole row. The arrow sits on top of it with the row's
-   own surface behind, so the line reads as broken by the arrow. */
-.why-seam__rule {
-  position: absolute;
-  inset-inline: 0;
-  top: 50%;
-  height: 1px;
-  background: var(--hair-2);
-}
-
-.why-seam__arrow {
-  position: relative;
-  z-index: 3;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 1.9rem;
-  height: 1.9rem;
-  background: var(--surface);
-  font-size: 1.15rem;
-  line-height: 1;
-  color: var(--ink);
-}
-
-.why-seam__seam {
-  position: relative;
-  z-index: 2;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  transform: translateX(calc(var(--seam-travel, 0px) * (var(--why-p, 1) - 1)));
-}
-
-.why-seam__theirs,
-.why-seam__yours {
-  display: flex;
-  flex-direction: column;
-  gap: 0.3rem;
-  padding: 0.85rem 1rem;
-}
-
-.why-seam__theirs {
-  border-inline-start: 3px solid var(--hair);
-}
-
-.why-seam__yours {
-  position: relative;
-  z-index: 2;
-  border-inline-start: 3px solid var(--ink);
-  background: var(--surface-2);
-  transform: translateX(calc(var(--seam-travel, 0px) * (var(--why-p, 1) - 1)));
-}
-
-.why-seam__layername {
-  font-family: var(--font-mono);
-  font-size: 0.68rem;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: var(--ink-mute);
-}
-
-.why-seam__copy {
-  font-size: 0.82rem;
-  line-height: 1.55;
-}
-
-.why-seam__theirs .why-seam__copy {
-  color: var(--ink-mute);
-}
-
-.why-seam__yours .why-seam__copy {
-  color: var(--ink);
-}
-
-.why-seam__col-label {
-  margin: 0;
-  padding: 0.7rem 1rem;
-  font-family: var(--font-mono);
-  font-size: var(--type-meta);
-  letter-spacing: var(--tracking-meta);
-  text-transform: uppercase;
-  color: var(--ink-mute);
-}
-
-.why-seam__col-label--own {
-  color: var(--ink);
-  background: var(--surface);
-  transform: translateX(calc(var(--seam-travel, 0px) * (var(--why-p, 1) - 1)));
-}
-
-.why-seam__head {
-  transform: translateX(calc(var(--seam-travel, 0px) * (var(--why-p, 1) - 1)));
-}
-
-/* The typewriter fill: each word carries its index and the row's length, and the
-   shared progress decides how many have arrived. */
-.why-seam__word {
-  opacity: clamp(0, calc(((var(--why-p, 1) - 0.15) / 0.7) * var(--n) - var(--i)), 1);
-}
-
-/* ── The diagrams (V2, V3, V4) ────────────────────────────────────────── */
-.why-diagram {
-  width: 100%;
-  height: auto;
-  max-height: 62vh;
-}
-
-.why-part {
-  transform: translate(
-    calc(var(--x0) * (1 - var(--why-p, 1)) + var(--x1) * var(--why-p, 1)),
-    calc(var(--y0) * (1 - var(--why-p, 1)) + var(--y1) * var(--why-p, 1))
-  );
-}
-
-.why-part__slab,
-.why-explode__slab {
-  fill: color-mix(in srgb, var(--accent) 7%, var(--surface));
-  stroke: var(--hair-2);
-  stroke-width: 1;
-}
-
-.why-part__label,
-.why-explode__label {
-  font-family: var(--font-mono);
-  font-size: 15px;
-  fill: var(--ink);
-}
-
-.why-part__seam,
-.why-explode__seam {
-  font-family: var(--font-mono);
-  font-size: 12px;
-  fill: var(--ink-mute);
-}
-
-.why-morph__boundary,
-.why-explode__boundary,
-.why-evo__boundary {
-  fill: none;
-  stroke: var(--hair-2);
-  stroke-width: 1.4;
-}
-
-.why-morph__boundary,
-.why-morph__account {
-  opacity: calc(1 - var(--why-p, 1));
-}
-
-.why-morph__account,
-.why-explode__account,
-.why-evo__badge {
-  font-family: var(--font-mono);
-  font-size: 12px;
-  fill: var(--ink-mute);
-}
-
-.why-morph__edges line,
-.why-evo__edges line {
-  stroke: var(--accent);
-  stroke-width: 1.2;
-  opacity: calc(var(--why-p, 1) * 0.5);
-}
-
-.why-part__seam {
-  opacity: var(--why-p, 1);
-}
-
-.why-explode__row {
-  transform: translateY(calc(var(--why-p, 1) * var(--i) * 12px));
-}
-
-.why-explode__seam {
-  opacity: var(--why-p, 1);
-}
-
-/* V4: three frames cross-fading on one progress value. `--why-p` has no abs(),
-   so the middle frame is built from max() on either side of 0.5. */
-.why-evo {
+.whyx__stage {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
   gap: 1.6rem;
+  align-items: center;
+  max-width: var(--frame-w);
+  margin-inline: auto;
+  padding: var(--page-step) var(--page-pad);
 }
 
-.why-evo__stage {
-  position: relative;
-  aspect-ratio: 920 / 520;
+.whyx__panel {
+  min-width: 0;
 }
 
-.why-evo__frame {
-  position: absolute;
-  inset: 0;
+/* One diagram at a time on a narrow screen — a lateral swap needs two columns
+   to read as a swap. */
+.whyx[data-phase="rented"] .whyx__panel--owned,
+.whyx[data-phase="owned"] .whyx__panel--rented {
+  display: none;
 }
 
-.why-evo__frame--1 {
-  opacity: clamp(0, calc(1 - var(--why-p, 1) * 3), 1);
+.whyx-rail {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  max-width: 34rem;
 }
 
-.why-evo__frame--2 {
-  opacity: clamp(0, calc(1 - 3 * max(var(--why-p, 1) - 0.5, 0.5 - var(--why-p, 1))), 1);
+.whyx-steps {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
 }
 
-.why-evo__frame--3 {
-  opacity: clamp(0, calc(var(--why-p, 1) * 3 - 2), 1);
-}
-
-.why-evo__part,
-.why-evo__app rect {
-  fill: color-mix(in srgb, var(--accent) 7%, var(--surface));
-  stroke: var(--hair-2);
-  stroke-width: 1;
-}
-
-.why-evo__app text {
-  font-family: var(--font-mono);
-  font-size: 15px;
-  fill: var(--ink);
-}
-
-.why-evo__app-sub {
-  font-size: 12px;
-  fill: var(--ink-mute);
-}
-
-.why-evo__legend {
-  position: relative;
+.whyx-step {
   display: grid;
-  gap: 0.9rem;
+  grid-template-columns: 2.2rem minmax(0, 1fr);
+  gap: 0.4rem 0.8rem;
+  padding: 0.8rem 0;
+  border-top: 1px solid var(--hair);
+  opacity: 0.45;
+  transition: opacity 0.3s var(--ease);
 }
 
-.why-evo__legend-item {
-  display: grid;
-  gap: 0.2rem;
-  border-inline-start: 2px solid var(--hair);
-  padding-inline-start: 0.9rem;
+.whyx-step:first-child {
+  border-top: 0;
 }
 
-.why-evo__legend-item--1 {
-  border-inline-start-color: color-mix(in srgb, var(--accent) calc((1 - var(--why-p, 1)) * 100%), var(--hair));
+.whyx-step.is-on {
+  opacity: 1;
 }
 
-.why-evo__legend-item--3 {
-  border-inline-start-color: color-mix(in srgb, var(--accent) calc(var(--why-p, 1) * 100%), var(--hair));
-}
-
-.why-evo__step {
+.whyx-step__index {
   font-family: var(--font-mono);
   font-size: 0.68rem;
+  letter-spacing: 0.08em;
   color: var(--ink-mute);
 }
 
-.why-evo__title {
+.whyx-step__body {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  min-width: 0;
+}
+
+.whyx-step__label {
   font-family: var(--font-mono);
-  font-size: 0.95rem;
+  font-size: 0.98rem;
   color: var(--ink);
 }
 
-.why-evo__line {
+.whyx-step__line {
   font-size: 0.86rem;
   line-height: 1.55;
   color: var(--ink-soft);
 }
 
-/* ── The benefit ledger ───────────────────────────────────────────────── */
+.whyx-arc {
+  display: flex;
+  gap: 0.6rem;
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: 0.68rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink-mute);
+}
+
+.whyx-arc__item {
+  display: inline-flex;
+  gap: 0.6rem;
+}
+
+/* ── the diagrams ───────────────────────────────────────────────────────── */
+
+.whyx-diagram {
+  display: block;
+  width: 100%;
+  height: auto;
+  max-height: 54vh;
+}
+
+.whyx-boundary {
+  fill: none;
+  stroke: var(--hair-2);
+  stroke-width: 1.4;
+}
+
+.whyx-boundary--fading {
+  stroke-dasharray: 5 5;
+}
+
+.whyx-boundary-label,
+.whyx-shared,
+.whyx-endpoint {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  fill: var(--ink-mute);
+}
+
+.whyx-endpoint-rule {
+  stroke: var(--hair-2);
+  stroke-width: 1;
+}
+
+.whyx-slab__box,
+.whyx-node__box {
+  fill: color-mix(in srgb, var(--accent) 5%, var(--surface));
+  stroke: var(--hair-2);
+  stroke-width: 1;
+  transition:
+    fill 0.3s var(--ease),
+    stroke 0.3s var(--ease);
+}
+
+.whyx-slab.is-on .whyx-slab__box,
+.whyx-node.is-on .whyx-node__box {
+  fill: color-mix(in srgb, var(--accent) 12%, var(--surface));
+  stroke: var(--accent);
+}
+
+.whyx-slab__label,
+.whyx-node__label {
+  font-family: var(--font-mono);
+  font-size: 15px;
+  fill: var(--ink);
+}
+
+.whyx-slab__cadence,
+.whyx-node__seam {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  fill: var(--ink-mute);
+}
+
+.whyx-edge {
+  stroke: var(--accent);
+  stroke-width: 1.2;
+  opacity: 0.35;
+}
+
+/* ── the swap ───────────────────────────────────────────────────────────── */
+
+@media (min-width: 1024px) {
+  .whyx__stage {
+    grid-template-columns: minmax(0, 1.35fr) minmax(0, 1fr);
+    gap: 2.4rem;
+    min-height: 30rem;
+    /* The swap translates a panel a full column past its own track, so without
+       this the off-stage panel extends the document's scroll width (measured:
+       +363px on the push treatment). Clipping the stage makes the incoming
+       panel enter from the stage's edge instead. */
+    overflow: hidden;
+  }
+
+  .whyx[data-phase] .whyx__panel {
+    display: block;
+  }
+
+  .whyx__panel--rented {
+    grid-area: 1 / 1;
+  }
+
+  .whyx__panel--owned {
+    grid-area: 1 / 2;
+  }
+
+  /* The rail begins in the right column beside the rented diagram and crosses
+     to the left as the swap runs, so the text ends up on the left with the
+     owned diagram on the right — exactly the movement the owner described. */
+  .whyx__rail-slot {
+    grid-area: 1 / 2;
+    z-index: 2;
+    transform: translateX(calc(var(--why-swap, 1) * (-100% - 2.4rem)));
+  }
+
+  .whyx__panel--rented {
+    transform: translateX(calc(var(--why-swap, 1) * (-100% - 2.4rem)));
+    opacity: calc(1 - var(--why-swap, 1));
+  }
+
+  .whyx__panel--owned {
+    opacity: var(--why-swap, 1);
+  }
+
+  /* Treatment B: instead of cross-fading in place, DigiThings pushes in from
+     the right edge. */
+  .whyx[data-variant="push"] .whyx__panel--owned {
+    transform: translateX(calc((1 - var(--why-swap, 1)) * (100% + 2.4rem)));
+  }
+}
+
+/* ── the ledger ─────────────────────────────────────────────────────────── */
+
 .why-ledger {
   list-style: none;
-  margin: 0 auto;
+  margin: 0;
   padding: 0;
-  max-width: var(--frame-w);
   display: grid;
 }
 
@@ -817,8 +720,8 @@ html {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
   gap: 0.2rem 1.6rem;
-  border-bottom: 1px solid var(--hair);
   padding: 0.9rem 0;
+  border-bottom: 1px solid var(--hair);
 }
 
 .why-ledger__row:last-child {
@@ -838,21 +741,30 @@ html {
 }
 
 @media (min-width: 900px) {
-  .why-evo {
-    grid-template-columns: minmax(0, 1.25fr) minmax(0, 0.75fr);
-    align-items: center;
-  }
-
   .why-ledger__row {
     grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr);
   }
 }
 
-/* Below the drawer's breakpoint and under reduced motion the pins release and
-   every version is the finished state: no height is written, `--why-p` is unset,
-   and `var(--why-p, 1)` resolves to 1 everywhere. */
+/* Reduced motion: no pin, no height, no transform — both halves complete and
+   stacked, with every mark lit (the parent passes the union of the steps). */
 @media (prefers-reduced-motion: reduce) {
-  .why-v__pin {
+  .whyx__pin {
     position: static;
+  }
+
+  .whyx__stage {
+    min-height: 0;
+  }
+
+  .whyx[data-phase] .whyx__panel {
+    display: block;
+  }
+
+  .whyx__panel--rented,
+  .whyx__panel--owned,
+  .whyx__rail-slot {
+    transform: none;
+    opacity: 1;
   }
 }
