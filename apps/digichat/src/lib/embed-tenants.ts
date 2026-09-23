@@ -14,6 +14,7 @@
 
 import type { ActivityDetail } from "@/lib/chat-activity";
 import type { PageContextMode } from "@/lib/deploy-config/schema";
+import { LANGUAGES } from "@/lib/languages";
 import {
   THINKING_MODES,
   VIEW_MODES,
@@ -28,6 +29,7 @@ import {
 } from "@/lib/thread-skins";
 
 const PAGE_CONTEXT_MODES: readonly PageContextMode[] = ["off", "silent", "visible"];
+const LANGUAGE_CODES = new Set(LANGUAGES.map((l) => l.code));
 
 /**
  * digichat Node backends: digigraph (digithings stack) or foundry (client Azure).
@@ -66,6 +68,11 @@ export type EmbedTenantConfig = {
   backend: EmbedBackendConfig;
   gateMode: "turn_limited" | "ungated" | "trial_form";
   theme: "dark" | "light";
+  /**
+   * Seed language for this tenant's embed session (#4532). Omit falls back to
+   * the client default (English). Mirrors the YAML `chrome.defaultLanguage`.
+   */
+  defaultLanguage?: string;
   /** Which vendored assistant-ui Thread to mount. */
   skin?: ThreadSkin;
   accent?: { color: string; foreground: string };
@@ -149,6 +156,16 @@ export type EmbedTenantConfig = {
   };
   /** User file picker on the composer. JSON omit stays off (Foundry/DataTap). */
   attachments?: boolean;
+  /**
+   * Feature parity with the YAML `features:` block (#4532). An embed tenant
+   * could not set these before, so it silently inherited the client defaults.
+   * Omitted keys keep the app defaults: `dictation`/`speech` off, `sources` on,
+   * `branchPicker` on — the same defaults the standalone app uses.
+   */
+  dictation?: boolean;
+  speech?: boolean;
+  sources?: boolean;
+  branchPicker?: boolean;
   /**
    * Popup widget page-context injection. `off` ignores `digichat:page-context`
    * messages; `silent` still sends the snapshot to the model but renders no
@@ -366,6 +383,18 @@ function validateEntry(hostKey: string, value: unknown): EmbedTenantConfig {
   if (v.attachments !== undefined && typeof v.attachments !== "boolean") {
     throw new Error(`${ctx}: attachments must be a boolean`);
   }
+  // Feature parity with the YAML `features:` block (#4532).
+  for (const key of ["dictation", "speech", "sources", "branchPicker"] as const) {
+    if (v[key] !== undefined && typeof v[key] !== "boolean") {
+      throw new Error(`${ctx}: ${key} must be a boolean`);
+    }
+  }
+  if (
+    v.defaultLanguage !== undefined &&
+    (typeof v.defaultLanguage !== "string" || !LANGUAGE_CODES.has(v.defaultLanguage))
+  ) {
+    throw new Error(`${ctx}: defaultLanguage must be a known language code`);
+  }
   if (v.pageContext !== undefined) {
     if (
       typeof v.pageContext !== "string" ||
@@ -527,6 +556,14 @@ function validateEntry(hostKey: string, value: unknown): EmbedTenantConfig {
       ? (v.thinking as ThinkingMode)
       : undefined,
     attachments: typeof v.attachments === "boolean" ? v.attachments : undefined,
+    dictation: typeof v.dictation === "boolean" ? v.dictation : undefined,
+    speech: typeof v.speech === "boolean" ? v.speech : undefined,
+    sources: typeof v.sources === "boolean" ? v.sources : undefined,
+    branchPicker: typeof v.branchPicker === "boolean" ? v.branchPicker : undefined,
+    defaultLanguage:
+      typeof v.defaultLanguage === "string" && LANGUAGE_CODES.has(v.defaultLanguage)
+        ? v.defaultLanguage
+        : undefined,
     pageContext: PAGE_CONTEXT_MODES.includes(v.pageContext as PageContextMode)
       ? (v.pageContext as PageContextMode)
       : undefined,

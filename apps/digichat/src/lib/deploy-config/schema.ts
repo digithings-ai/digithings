@@ -200,6 +200,12 @@ export const FeaturesSchema = z.preprocess(
       /** Reasoning-only override on top of `view`. */
       thinking: ThinkingModeSchema.default(DEFAULT_THINKING_MODE),
       sources: z.boolean().default(true),
+      /**
+       * Legacy alias for `models.allowPicker` (#4532). Kept for config
+       * back-compat: the client projection folds it into `models.allowPicker`,
+       * which is the authoritative client-facing knob. Prefer
+       * `models.allowPicker` in new configs.
+       */
       modelPicker: z.boolean().default(false),
       branchPicker: z.boolean().default(true),
       pageContext: PageContextModeSchema.default("visible"),
@@ -211,6 +217,10 @@ export const ModelsSchema = z
   .object({
     default: z.string().min(1).optional(),
     available: z.array(z.string().min(1)).default([]),
+    /**
+     * Authoritative client-facing model-picker switch (#4532). The legacy
+     * `features.modelPicker` alias is folded into this during projection.
+     */
     allowPicker: z.boolean().optional(),
   })
   .strict();
