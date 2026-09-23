@@ -7,11 +7,14 @@
  * snapshot never blanks. Stars/forks/watchers are not collected. 30-day
  * velocity and the current backlog are labeled as different measurements.
  *
+ * The detailed contribution grid shortens as its column narrows rather than
+ * scrolling horizontally (`weeks`, below).
+ *
  * Wiring (in the consuming app):
  *   globals.css   @import "@digithings/ui/styles/repo-activity.css";
  *                 @source "<path-to>/packages/ui/src/components/repo-activity";
  */
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState, type RefObject } from "react";
 
 import { GitHubGlyph } from "../icons";
 import { fetchRepoActivityLive } from "./fetch";
@@ -34,6 +37,13 @@ export type RepoActivityProps = {
   live?: RepoActivityLiveConfig;
   cloneCommand?: string;
   contributingUrl?: string;
+  /**
+   * Weeks of contribution history to request, for the detailed variant. The
+   * grid never exceeds this, but it is measured down when the column is too
+   * narrow for it (see `weeksThatFit`), so the history shortens instead of
+   * scrolling. Defaults to 53 — a full year, GitHub-style.
+   */
+  weeks?: number;
   className?: string;
 };
 
@@ -44,10 +54,14 @@ export function RepoActivity({
   live,
   cloneCommand,
   contributingUrl,
+  weeks = 53,
   className,
 }: RepoActivityProps) {
   const [data, setData] = useState(snapshot);
   const [source, setSource] = useState<"snapshot" | "live">("snapshot");
+  const heatRef = useRef<HTMLDivElement | null>(null);
+  /** Measured fit; null until a browser measures, so SSR keeps `weeks`. */
+  const [fitWeeks, setFitWeeks] = useState<number | null>(null);
 
   useEffect(() => {
     if (!live) return;
@@ -69,6 +83,27 @@ export function RepoActivity({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // Shorten the grid to the column instead of letting it scroll. Guarded on
+  // ResizeObserver so the server and jsdom keep rendering exactly `weeks`, which
+  // is what every existing snapshot assertion expects.
+  useEffect(() => {
+    const el = heatRef.current;
+    if (!el || typeof ResizeObserver === "undefined") return;
+    const measure = () => setFitWeeks(weeksThatFit(el.clientWidth, weeks));
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [weeks]);
+
+  const heatWeeks = fitWeeks ?? weeks;
+  // RepoHeatmap labels the window from `weeks` but totals EVERY cell it is
+  // handed, so the series has to be cut to the same window or the heading would
+  // count weeks the grid does not draw.
+  const heatData = data.dailyContributions
+    ? data.dailyContributions.slice(-heatWeeks * 7)
+    : undefined;
+
   const cls = ["ra", variant === "compact" ? "ra-compact" : "ra-detailed", className ?? ""]
     .filter(Boolean)
     .join(" ");
@@ -89,10 +124,39 @@ export function RepoActivity({
           source={source}
           cloneCommand={cloneCommand}
           contributingUrl={contributingUrl}
+          heatRef={heatRef}
+          heatWeeks={heatWeeks}
+          heatData={heatData}
         />
       )}
     </article>
   );
+}
+
+/**
+ * The detailed grid is a fixed 10px cell with a 3px gap, sitting after a 1.65rem
+ * day rail and a 0.45rem gap (`repo-activity.css`), so a W-week frame measures
+ * `33.6 + 13W` px. Past the container it would scroll horizontally
+ * (`.ra-heat-body { overflow-x: auto }`), which reads as a cut-off history; the
+ * owner asked for the history to shorten instead. So the width picks the week
+ * count — 53 at a desktop frame (~720px of grid), fewer as the column narrows,
+ * and never below a quarter so the graph stays readable.
+ */
+const HEAT_CELL = 10;
+const HEAT_CELL_GAP = 3;
+const HEAT_RAIL = 26.4 + 7.2;
+const MIN_HEAT_WEEKS = 12;
+
+function weeksThatFit(columnWidth: number, ceiling: number): number {
+  const columns = Math.floor(
+    (columnWidth - HEAT_RAIL + HEAT_CELL_GAP) / (HEAT_CELL + HEAT_CELL_GAP),
+  );
+  // The grid draws calendar weeks, so a W-week span can occupy W+1 columns when
+  // the range starts or ends mid-week. Reserve that column — without it the
+  // frame overruns the body by one cell and the body scrolls after all, which
+  // is the behaviour this exists to remove.
+  const weeks = columns - 1;
+  return Math.max(Math.min(MIN_HEAT_WEEKS, ceiling), Math.min(ceiling, weeks));
 }
 
 function applyLive(
@@ -149,12 +213,18 @@ function Detailed({
   source,
   cloneCommand,
   contributingUrl,
+  heatRef,
+  heatWeeks,
+  heatData,
 }: {
   data: RepoActivitySnapshot;
   repoUrl: string;
   source: "snapshot" | "live";
   cloneCommand?: string;
   contributingUrl?: string;
+  heatRef: RefObject<HTMLDivElement | null>;
+  heatWeeks: number;
+  heatData: RepoActivitySnapshot["dailyContributions"];
 }) {
   const pulls = (data.mergedPulls ?? []).slice(0, 6);
   const issues = (data.openIssues ?? []).slice(0, 6);
@@ -177,13 +247,11 @@ function Detailed({
           <Metric n={data.issuesOpen} label="issues open" />
         </ul>
       </div>
-      <div className="ra-group">
-        <p className="ra-kicker">{"// contributions — last year"}</p>
-        <RepoHeatmap
-          pulls={data.mergedPulls}
-          data={data.dailyContributions}
-          weeks={53}
-        />
+      <div className="ra-group" ref={heatRef}>
+        <p className="ra-kicker">{`// contributions — ${
+          heatWeeks >= 50 ? "last year" : `last ${heatWeeks} weeks`
+        }`}</p>
+        <RepoHeatmap pulls={data.mergedPulls} data={heatData} weeks={heatWeeks} />
       </div>
       <div className="ra-meta">
         <ReleaseLink release={data.latestRelease} />
