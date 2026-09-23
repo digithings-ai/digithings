@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import logging
 from contextlib import contextmanager
 from unittest.mock import MagicMock, patch
 from uuid import uuid4
@@ -258,13 +259,18 @@ class TestRunResearchAgent:
             )
         assert out.regime == "r"
 
-    def test_retry_once_on_validation_error_then_succeed(self) -> None:
+    def test_retry_once_on_validation_error_then_succeed(
+        self, caplog: pytest.LogCaptureFixture
+    ) -> None:
         bad = json.dumps({"regime": "x"})  # missing confidence
         good = json.dumps({"regime": "x", "confidence": 0.4})
-        with patch(
-            "digigraph.graph.research_agent.completion_text",
-            side_effect=[bad, good],
-        ) as mock:
+        with (
+            caplog.at_level(logging.INFO, logger="digigraph.graph.research_agent"),
+            patch(
+                "digigraph.graph.research_agent.completion_text",
+                side_effect=[bad, good],
+            ) as mock,
+        ):
             out = run_research_agent(
                 skill_text="x",
                 phase_inputs={},
@@ -280,6 +286,10 @@ class TestRunResearchAgent:
         assert second_messages[-2]["role"] == "assistant"
         assert second_messages[-1]["role"] == "user"
         assert "did not validate" in second_messages[-1]["content"]
+        # A recovered first attempt is the designed retry path (#1739), not an alarm:
+        # it is logged, but must not be a WARNING.
+        assert "research_agent attempt 1/2 failed for _SampleOutput" in caplog.text
+        assert not [r for r in caplog.records if r.levelno >= logging.WARNING]
 
     def test_structured_repair_links_to_rejected_call(self) -> None:
         bad = json.dumps({"regime": "x"})
@@ -506,11 +516,16 @@ class TestRunResearchAgent:
         assert len(calls) == 1
         assert calls[0].no_artifact_reason is NoArtifactReason.CONSUMED_INLINE
 
-    def test_raises_validation_error_after_exhausting_retries(self) -> None:
+    def test_raises_validation_error_after_exhausting_retries(
+        self, caplog: pytest.LogCaptureFixture
+    ) -> None:
         bad = json.dumps({"regime": "x"})
-        with patch(
-            "digigraph.graph.research_agent.completion_text",
-            side_effect=[bad, bad],
+        with (
+            caplog.at_level(logging.INFO, logger="digigraph.graph.research_agent"),
+            patch(
+                "digigraph.graph.research_agent.completion_text",
+                side_effect=[bad, bad],
+            ),
         ):
             with pytest.raises(ValidationError):
                 run_research_agent(
@@ -521,6 +536,13 @@ class TestRunResearchAgent:
                     model="test-model",
                     max_retries=1,
                 )
+        # The give-up attempt is the actionable one and must stay a WARNING.
+        assert [
+            r
+            for r in caplog.records
+            if r.levelno == logging.WARNING
+            and "research_agent attempt 2/2 failed for _SampleOutput" in r.getMessage()
+        ]
 
     def test_passes_response_format_to_completion(self) -> None:
         """run_research_agent must pass response_format derived from output_model to completion_text."""
