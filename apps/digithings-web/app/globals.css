@@ -465,3 +465,394 @@ html {
     will-change: auto;
   }
 }
+
+/* ==========================================================================
+   #why VARIATIONS (2026-09-23, branch claude/home-variants, #4429 round 8).
+
+   Four compositions of the seven-layer argument, on the throwaway page
+   /variants/why. The owner asked for "a few versions of this" and to see the
+   stack "turn into a fully modular, customizable infrastructure that you
+   actually own".
+
+   Every version writes exactly one custom property — `--why-p` (0 → 1), set by
+   the scroll handler in components/landing/WhyVariants.tsx — and everything here
+   is a function of it. `var(--why-p, 1)` defaults to the FINISHED state, which is
+   what renders under prefers-reduced-motion and with no JS: nothing is written in
+   those cases, so the band is simply the end state.
+   ========================================================================== */
+.why-variants {
+  display: flex;
+  flex-direction: column;
+}
+
+.why-v {
+  border-top: 1px solid var(--hair);
+  padding: var(--page-step) var(--page-pad);
+}
+
+.why-v__head {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  max-width: var(--frame-w);
+  margin-inline: auto;
+  margin-bottom: 2rem;
+}
+
+.why-v__index {
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink-mute);
+}
+
+.why-v__pin {
+  position: sticky;
+  top: calc(var(--dq-nav-h, 4.5rem) + 1rem);
+  display: flex;
+  justify-content: center;
+}
+
+.why-v__pin > * {
+  width: 100%;
+  max-width: var(--frame-w);
+  margin-inline: auto;
+}
+
+/* ── V1: the seam on the rule ─────────────────────────────────────────── */
+.why-seam {
+  border: 1px solid var(--hair);
+  background: var(--surface);
+  /* The drawer starts shifted a full panel to the left, so at progress 0 the
+     seam sits just outside this frame. Clipping keeps it inside the border
+     (it slides in) instead of poking into the page gutter. */
+  overflow: hidden;
+}
+
+.why-seam__row {
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 3.4rem minmax(0, 1fr);
+  align-items: stretch;
+  border-bottom: 1px solid var(--hair);
+}
+
+.why-seam__row:last-child {
+  border-bottom: 0;
+}
+
+/* ONE rule, spanning the whole row. The arrow sits on top of it with the row's
+   own surface behind, so the line reads as broken by the arrow. */
+.why-seam__rule {
+  position: absolute;
+  inset-inline: 0;
+  top: 50%;
+  height: 1px;
+  background: var(--hair-2);
+}
+
+.why-seam__arrow {
+  position: relative;
+  z-index: 3;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.9rem;
+  height: 1.9rem;
+  background: var(--surface);
+  font-size: 1.15rem;
+  line-height: 1;
+  color: var(--ink);
+}
+
+.why-seam__seam {
+  position: relative;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transform: translateX(calc(var(--seam-travel, 0px) * (var(--why-p, 1) - 1)));
+}
+
+.why-seam__theirs,
+.why-seam__yours {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  padding: 0.85rem 1rem;
+}
+
+.why-seam__theirs {
+  border-inline-start: 3px solid var(--hair);
+}
+
+.why-seam__yours {
+  position: relative;
+  z-index: 2;
+  border-inline-start: 3px solid var(--ink);
+  background: var(--surface-2);
+  transform: translateX(calc(var(--seam-travel, 0px) * (var(--why-p, 1) - 1)));
+}
+
+.why-seam__layername {
+  font-family: var(--font-mono);
+  font-size: 0.68rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink-mute);
+}
+
+.why-seam__copy {
+  font-size: 0.82rem;
+  line-height: 1.55;
+}
+
+.why-seam__theirs .why-seam__copy {
+  color: var(--ink-mute);
+}
+
+.why-seam__yours .why-seam__copy {
+  color: var(--ink);
+}
+
+.why-seam__col-label {
+  margin: 0;
+  padding: 0.7rem 1rem;
+  font-family: var(--font-mono);
+  font-size: var(--type-meta);
+  letter-spacing: var(--tracking-meta);
+  text-transform: uppercase;
+  color: var(--ink-mute);
+}
+
+.why-seam__col-label--own {
+  color: var(--ink);
+  background: var(--surface);
+  transform: translateX(calc(var(--seam-travel, 0px) * (var(--why-p, 1) - 1)));
+}
+
+.why-seam__head {
+  transform: translateX(calc(var(--seam-travel, 0px) * (var(--why-p, 1) - 1)));
+}
+
+/* The typewriter fill: each word carries its index and the row's length, and the
+   shared progress decides how many have arrived. */
+.why-seam__word {
+  opacity: clamp(0, calc(((var(--why-p, 1) - 0.15) / 0.7) * var(--n) - var(--i)), 1);
+}
+
+/* ── The diagrams (V2, V3, V4) ────────────────────────────────────────── */
+.why-diagram {
+  width: 100%;
+  height: auto;
+  max-height: 62vh;
+}
+
+.why-part {
+  transform: translate(
+    calc(var(--x0) * (1 - var(--why-p, 1)) + var(--x1) * var(--why-p, 1)),
+    calc(var(--y0) * (1 - var(--why-p, 1)) + var(--y1) * var(--why-p, 1))
+  );
+}
+
+.why-part__slab,
+.why-explode__slab {
+  fill: color-mix(in srgb, var(--accent) 7%, var(--surface));
+  stroke: var(--hair-2);
+  stroke-width: 1;
+}
+
+.why-part__label,
+.why-explode__label {
+  font-family: var(--font-mono);
+  font-size: 15px;
+  fill: var(--ink);
+}
+
+.why-part__seam,
+.why-explode__seam {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  fill: var(--ink-mute);
+}
+
+.why-morph__boundary,
+.why-explode__boundary,
+.why-evo__boundary {
+  fill: none;
+  stroke: var(--hair-2);
+  stroke-width: 1.4;
+}
+
+.why-morph__boundary,
+.why-morph__account {
+  opacity: calc(1 - var(--why-p, 1));
+}
+
+.why-morph__account,
+.why-explode__account,
+.why-evo__badge {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  fill: var(--ink-mute);
+}
+
+.why-morph__edges line,
+.why-evo__edges line {
+  stroke: var(--accent);
+  stroke-width: 1.2;
+  opacity: calc(var(--why-p, 1) * 0.5);
+}
+
+.why-part__seam {
+  opacity: var(--why-p, 1);
+}
+
+.why-explode__row {
+  transform: translateY(calc(var(--why-p, 1) * var(--i) * 12px));
+}
+
+.why-explode__seam {
+  opacity: var(--why-p, 1);
+}
+
+/* V4: three frames cross-fading on one progress value. `--why-p` has no abs(),
+   so the middle frame is built from max() on either side of 0.5. */
+.why-evo {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 1.6rem;
+}
+
+.why-evo__stage {
+  position: relative;
+  aspect-ratio: 920 / 520;
+}
+
+.why-evo__frame {
+  position: absolute;
+  inset: 0;
+}
+
+.why-evo__frame--1 {
+  opacity: clamp(0, calc(1 - var(--why-p, 1) * 3), 1);
+}
+
+.why-evo__frame--2 {
+  opacity: clamp(0, calc(1 - 3 * max(var(--why-p, 1) - 0.5, 0.5 - var(--why-p, 1))), 1);
+}
+
+.why-evo__frame--3 {
+  opacity: clamp(0, calc(var(--why-p, 1) * 3 - 2), 1);
+}
+
+.why-evo__part,
+.why-evo__app rect {
+  fill: color-mix(in srgb, var(--accent) 7%, var(--surface));
+  stroke: var(--hair-2);
+  stroke-width: 1;
+}
+
+.why-evo__app text {
+  font-family: var(--font-mono);
+  font-size: 15px;
+  fill: var(--ink);
+}
+
+.why-evo__app-sub {
+  font-size: 12px;
+  fill: var(--ink-mute);
+}
+
+.why-evo__legend {
+  position: relative;
+  display: grid;
+  gap: 0.9rem;
+}
+
+.why-evo__legend-item {
+  display: grid;
+  gap: 0.2rem;
+  border-inline-start: 2px solid var(--hair);
+  padding-inline-start: 0.9rem;
+}
+
+.why-evo__legend-item--1 {
+  border-inline-start-color: color-mix(in srgb, var(--accent) calc((1 - var(--why-p, 1)) * 100%), var(--hair));
+}
+
+.why-evo__legend-item--3 {
+  border-inline-start-color: color-mix(in srgb, var(--accent) calc(var(--why-p, 1) * 100%), var(--hair));
+}
+
+.why-evo__step {
+  font-family: var(--font-mono);
+  font-size: 0.68rem;
+  color: var(--ink-mute);
+}
+
+.why-evo__title {
+  font-family: var(--font-mono);
+  font-size: 0.95rem;
+  color: var(--ink);
+}
+
+.why-evo__line {
+  font-size: 0.86rem;
+  line-height: 1.55;
+  color: var(--ink-soft);
+}
+
+/* ── The benefit ledger ───────────────────────────────────────────────── */
+.why-ledger {
+  list-style: none;
+  margin: 0 auto;
+  padding: 0;
+  max-width: var(--frame-w);
+  display: grid;
+}
+
+.why-ledger__row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 0.2rem 1.6rem;
+  border-bottom: 1px solid var(--hair);
+  padding: 0.9rem 0;
+}
+
+.why-ledger__row:last-child {
+  border-bottom: 0;
+}
+
+.why-ledger__claim {
+  font-family: var(--font-mono);
+  font-size: 0.92rem;
+  color: var(--ink);
+}
+
+.why-ledger__because {
+  font-size: 0.86rem;
+  line-height: 1.6;
+  color: var(--ink-soft);
+}
+
+@media (min-width: 900px) {
+  .why-evo {
+    grid-template-columns: minmax(0, 1.25fr) minmax(0, 0.75fr);
+    align-items: center;
+  }
+
+  .why-ledger__row {
+    grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr);
+  }
+}
+
+/* Below the drawer's breakpoint and under reduced motion the pins release and
+   every version is the finished state: no height is written, `--why-p` is unset,
+   and `var(--why-p, 1)` resolves to 1 everywhere. */
+@media (prefers-reduced-motion: reduce) {
+  .why-v__pin {
+    position: static;
+  }
+}
