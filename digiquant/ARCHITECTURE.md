@@ -471,6 +471,22 @@ same-day execution (`d > seal` — `execute_at_open` / `fill-entry-prices`
 price opens and fills from `price_history`; D3) and `FEDPROB/*`
 prediction-market odds (`get_fed_rate_probabilities`; no R2 generation; D2).
 
+`scripts/refresh_market_data_r2.py` also exits non-zero when any macro series
+lands in a soft-fail mode (`history-only`/`error`), so the live fetch window has
+to span at least one publication period of the series (#4588). `LIVE_WINDOW_DAYS`
+(45) assumes a daily series; a monthly FRED series (`M2SL`, `UNRATE`, `MANEMP`,
+`CPIAUCSL`, `PCEPI`) legitimately has no new observation inside it — release lag
+plus the pending release puts the newest month up to ~90 days behind the run — so
+the window came back empty and marked every scheduled refresh stale. Each entry in
+`research/config/macro_series.yaml` may now declare a `cadence`
+(`daily`/`weekly`/`monthly`/`quarterly`), which selects the window
+(`_CADENCE_WINDOW_DAYS`: 45/60/120/240 days; absent = daily). An in-cadence empty
+window then falls through to the benign `up-to-date` path, while a genuinely dead
+series — no observation in the widened window — still returns `history-only` and
+still fails the run, so the alarm keeps its meaning. Contract tests:
+`tests/scripts/test_refresh_market_data_r2_macro.py`. A cadence outside the map
+raises `ValueError` rather than silently defaulting.
+
 #### Market-data R2 read path (#3780 Task 10)
 
 `DIGIQUANT_MARKET_DATA_BACKEND=r2` routes the price/macro tools through

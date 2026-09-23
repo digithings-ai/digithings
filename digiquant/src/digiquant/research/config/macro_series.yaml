@@ -77,37 +77,47 @@ fred:
       unit: index
     # Macro-liquidity regime gauge (#1085) — M2 + DXY + labor + mfg activity.
     - id: M2SL
+      cadence: monthly
       title: "M2 money stock (seasonally adjusted)"
       unit: billions_usd
     - id: UNRATE
+      cadence: monthly
       title: "Unemployment rate"
       unit: percent
     # FRED does not carry live ISM PMI; MANEMP YoY is the manufacturing-activity
     # vote in MacroLiquidityModel (named ``pmi`` in the blend for consumers).
     - id: MANEMP
+      cadence: monthly
       title: "All employees, manufacturing (SA)"
       unit: thousands_persons
     - id: CPIAUCSL
+      cadence: monthly
       title: "CPI all urban consumers"
       unit: index
     - id: PCEPI
+      cadence: monthly
       title: "PCE price index"
       unit: index
     - id: NFCI
+      cadence: weekly
       title: "Chicago Fed National Financial Conditions Index"
       unit: index
     - id: STLFSI4
+      cadence: weekly
       title: "St. Louis Fed Financial Stress Index"
       unit: index
     - id: MORTGAGE30US
+      cadence: weekly
       title: "30-year fixed rate mortgage average"
       unit: percent
     - id: DCOILWTICO
       title: "WTI crude oil spot (EIA via FRED)"
       unit: usd_per_barrel
     - id: WALCL
+      cadence: weekly
       title: "Fed total assets (weekly H.4.1)"
       unit: millions_usd
     - id: ICSA
+      cadence: weekly
       title: "Initial jobless claims (weekly)"
       unit: persons
