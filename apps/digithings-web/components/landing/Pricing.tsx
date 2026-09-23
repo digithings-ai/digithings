@@ -1,81 +1,97 @@
-import { SortableTable, type SortableColumn } from "@digithings/ui";
+import {
+  PricingMatrix,
+  type PricingMatrixGroup,
+  type PricingMatrixTier,
+} from "@digithings/ui";
 
 /**
- * The pricing band (v15, stage 7, #4429 — point 12).
+ * The pricing band (v15, stage 7, #4429 — point 12; Round 3, #4429 — point 9).
  *
- * The owner asked for this as a *digiweb table*, not two prose cards: the rows
- * are the two integration TYPES — self-host the MIT stack yourself, or take the
- * scoped integration service — and the columns answer the question a buyer
- * actually asks: what it costs, what you run, who holds the keys, who supports
- * it. Sorting is the point of the primitive, so the frame stays out of its way.
+ * Round 3: the owner asked for the *digiweb comparison table* here — the one the
+ * pricing page uses — instead of the sortable row list. So this is the kit's
+ * `PricingMatrix`: one column per integration type, one group per axis, and the
+ * price stated in the tier header. His instruction for the pricing column was
+ * exact: show **zero** for self-hosting, because it is all open source and MIT,
+ * and for the service show **on contact**, determined by the project scope.
  *
- * That replaces the v13 two-up, which double-stated the same two types under
- * two headings. The CTAs stay (they were the useful half of the cards), one row
- * per type, so nothing about the offer is lost — only the prose volume.
+ * Round 2 context that still holds: the CTA block is gone ("remove the buttons,
+ * I just want that comparison table here"). No `popular` tier either — flagging
+ * one column would invent a recommendation the offer does not make — and no
+ * billing toggle, because there is no billing cycle to toggle.
  *
- * Round 2: the CTA block the cards carried is gone too. The owner's instruction
- * was "remove the buttons, I just want that comparison table here", and it was
- * the same "read the docs buttons all over the place" complaint he raised for
- * the argument band. The table plus its footnote is the whole section now.
+ * Two honesty positions survive in the footnote, because neither is a formatting
+ * choice: there are no public package prices (that is the same position /services
+ * states, and inventing a number would contradict it), and the hosted docs MCP is
+ * still roadmap, not shipped — today the MCP surfaces are the ones the stack runs
+ * itself, on your host.
  *
- * Two honesty positions from the cards survive verbatim in the footnote, because
- * neither is a formatting choice: there are still no public prices (that is the
- * same position /services states, and inventing a number would contradict it),
- * and the hosted docs MCP is still roadmap, not shipped — today the MCP surfaces
- * are the ones the stack runs itself, on your host.
- *
- * No `tone` on any column: the up/down money colours are reserved for figures,
- * and there are no figures here to colour.
+ * The only figure on this table is the true one: $0 for the MIT self-host path.
  */
 
-type IntegrationRow = {
-  type: string;
-  cost: string;
-  youRun: string;
-  keys: string;
-  support: string;
-};
-
-const ROWS: IntegrationRow[] = [
-  {
-    type: "01 self-host",
-    cost: "$0 · MIT, no account",
-    youRun: "the monorepo, on your hosts",
-    keys: "yours, end to end",
-    support: "docs, OpenAPI, issue tracker",
-  },
-  {
-    type: "02 integration service",
-    cost: "scoped · quoted in writing",
-    youRun: "the modules you need, fitted in",
-    keys: "yours — we wire them up",
-    support: "deploy, docs, handover",
-  },
+const TIERS: PricingMatrixTier[] = [
+  { name: "self-host", price: "$0" },
+  { name: "integration service", price: "on contact" },
 ];
 
-const COLUMNS: SortableColumn<IntegrationRow>[] = [
-  { key: "type", label: "integration type", emphasis: true },
-  { key: "cost", label: "cost basis" },
-  { key: "youRun", label: "what you run" },
-  { key: "keys", label: "who holds the keys" },
-  { key: "support", label: "support" },
+const GROUPS: PricingMatrixGroup[] = [
+  {
+    label: "cost basis",
+    rows: [
+      {
+        label: "what you pay",
+        cells: ["$0 · MIT, no account", "on contact, scoped to the project"],
+      },
+      {
+        label: "what is quoted",
+        cells: ["nothing to quote", "the scope, in writing, before work starts"],
+      },
+    ],
+  },
+  {
+    label: "what you take",
+    rows: [
+      { label: "the code", cells: ["the whole monorepo, MIT", "the modules you need"] },
+      {
+        label: "the setup",
+        cells: ["you run it, on your hosts", "we fit them into your environment"],
+      },
+      {
+        label: "the updates",
+        cells: ["pull from main, any time", "brought forward as the work lands"],
+      },
+    ],
+  },
+  {
+    label: "the terms",
+    rows: [
+      {
+        label: "who holds the keys",
+        cells: ["yours, end to end", "yours — we wire them together"],
+      },
+      {
+        label: "support",
+        cells: ["docs, OpenAPI, issue tracker", "deploy, documentation, handover"],
+      },
+      { label: "after handover", cells: ["—", "the stack is yours to run"] },
+    ],
+  },
 ];
 
 export function Pricing() {
   return (
     <div className="flex flex-col gap-[1.4rem]">
-      <SortableTable
-        rows={ROWS}
-        columns={COLUMNS}
-        rowKey={(r) => r.type}
-        defaultSort={{ key: "type", dir: "asc" }}
+      <PricingMatrix
+        tiers={TIERS}
+        groups={GROUPS}
+        featureColumnLabel="the detail"
+        className="min-w-0"
       />
 
       <p className="m-0 max-w-[var(--measure-prose)] text-[0.78rem] leading-[1.7] text-ink-mute">
-        There are no public package prices: the work is scoped for each environment, so a number
-        before the scope would be a guess dressed as a rate. A hosted docs MCP — one public
-        endpoint an agent can point at — is roadmap, not shipped; today the MCP surfaces are the
-        ones you run yourself.
+        There are no public package prices: self-hosting is free and MIT-licensed, and the
+        integration work is scoped for each environment, so a number before the scope would be a
+        guess dressed as a rate. A hosted docs MCP — one public endpoint an agent can point at — is
+        roadmap, not shipped; today the MCP surfaces are the ones you run yourself.
       </p>
     </div>
   );
