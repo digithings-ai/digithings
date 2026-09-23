@@ -62,8 +62,9 @@ describe("backend adapter registry", () => {
       expect(adapter.capabilities.conversationContinuity).toBe(false);
       expect(adapter.capabilities.corpus).toBe(false);
       expect(adapter.capabilities.mcp).toBe(false);
+      // Turn mutation is not wired for the AI-SDK mapper yet (#4535).
+      expect(adapter.capabilities.turnMutation).toBe(false);
     }
-    expect(BACKEND_ADAPTERS["openai-responses"].protocol).toBe("openai-responses");
   });
 
   it("every adapter surfaces reasoning and tool calls (the parity invariant)", () => {

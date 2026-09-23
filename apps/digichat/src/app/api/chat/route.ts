@@ -16,7 +16,8 @@ import {
   isAiSdkConfig,
   isDigigraphConfig,
   isFoundryConfig,
-} from "@/lib/backend-adapters";import { createDigiGraphClient, digigraphModelName } from "@/lib/digigraph";
+} from "@/lib/backend-adapters";
+import { createDigiGraphClient, digigraphModelName } from "@/lib/digigraph";
 import {
   DigigraphUpstreamAuthError,
   resolveDigigraphUpstreamAuth,

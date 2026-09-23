@@ -261,7 +261,10 @@ export const FoundryBackendSchema = z
  * it cannot be projected to the browser. The `DIGICHAT_BACKEND_` prefix is
  * enforced so a tenant config can never point at `AUTH_SECRET`,
  * `DIGIKEY_BFF_TOKEN`, or `DIGIGRAPH_UPSTREAM_API_KEY` and have the BFF send
- * that secret as a Bearer token to an attacker-controlled `baseUrl`.
+ * that secret as a Bearer token to an attacker-controlled `baseUrl`. It bounds
+ * *which* vars are nameable; it does not bind an entry to its own key (every
+ * config source is operator-controlled today — add a per-entry binding such as
+ * `DIGICHAT_BACKEND_<SLUG>_KEY` if tenant-authored config is ever accepted).
  * https-only keeps the key from crossing the wire in plaintext, matching
  * `FoundryBackendSchema`'s `projectEndpoint` rule.
  */

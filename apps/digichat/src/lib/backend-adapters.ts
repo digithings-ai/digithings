@@ -65,9 +65,10 @@ export type BackendAuth =
   | "byok";
 
 /**
- * What the adapter can surface in the chat. Drives the UI and the parity test:
- * a backend that cannot produce reasoning must not pretend it can, and a test
- * asserts each adapter's canned stream normalizes to the declared parts.
+ * What the adapter can surface in the chat. Drives the UI and the parity
+ * contract: a backend that cannot produce reasoning must not pretend it can.
+ * The per-backend canned-stream normalization fixture lands in 5d; for now the
+ * parity test asserts the boolean flags themselves.
  */
 export type BackendCapabilities = {
   /** Chain-of-thought / reasoning content. */
@@ -159,7 +160,10 @@ export const BACKEND_ADAPTERS: Record<BackendType, BackendAdapter> = {
       // source parts on the same UI-message stream.
       webSearch: true,
       sources: true,
-      turnMutation: true,
+      // Regenerate / edit-last-user are not wired yet: `createAiSdkStreamResponse`
+      // accepts no `turnMode` and the client gate only enables the chrome for
+      // digigraph/foundry. Declared false until the mapper threads it (#4535).
+      turnMutation: false,
       // No external conversation id is round-tripped on these backends.
       conversationContinuity: false,
       attachments: true,
@@ -176,7 +180,8 @@ export const BACKEND_ADAPTERS: Record<BackendType, BackendAdapter> = {
       toolCalls: true,
       webSearch: true,
       sources: true,
-      turnMutation: true,
+      // See the openai-completions entry: turn mutation is not wired yet.
+      turnMutation: false,
       conversationContinuity: false,
       attachments: true,
       mcp: false,
