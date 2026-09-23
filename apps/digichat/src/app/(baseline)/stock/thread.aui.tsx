@@ -28,6 +28,7 @@ import { Skeleton } from "./ui/skeleton";
 import { cn } from "@/lib/utils";
 import { useStockComposerGateSubmit } from "@/components/stock/stock-send-gate";
 import { MessageError } from "@/components/stock/message-error.aui";
+import { CreditFooter } from "@/components/stock/credit-footer";
 import { useDisclosureUi, useDeployUi } from "@/components/stock/deploy-ui-context";
 import {
   ActionBarMorePrimitive,
@@ -79,6 +80,12 @@ export type ThreadGroupPart = MessagePrimitive.GroupedParts.GroupPart;
 export type ThreadComponents = {
   AssistantMessage?: ComponentType | undefined;
   Welcome?: ComponentType | undefined;
+  /**
+   * The credit line under the composer. Every skin hosts one so the surface
+   * reads as a digithings product; hosts override it to change or suppress it
+   * (m2357).
+   */
+  Footer?: ComponentType | undefined;
   ToolFallback?: ToolCallMessagePartComponent | undefined;
   ToolGroup?:
     | ComponentType<PropsWithChildren<{ group: ThreadGroupPart }>>
@@ -97,7 +104,6 @@ const EMPTY_COMPONENTS: ThreadComponents = {};
 
 const ThreadComponentsContext =
   createContext<ThreadComponents>(EMPTY_COMPONENTS);
-
 // Startup exposes a loading placeholder thread; treat it as a new chat so
 // the composer mounts centered. Loads after startup keep the docked layout.
 const isNewChatView = (s: AssistantState) =>
@@ -149,7 +155,8 @@ const ThreadRoot: FC<{ isEmpty: boolean; autoFocus: boolean }> = ({
   isEmpty,
   autoFocus,
 }) => {
-  const { Welcome = ThreadWelcome } = useContext(ThreadComponentsContext);
+  const { Welcome = ThreadWelcome, Footer = ThreadFooter } =
+    useContext(ThreadComponentsContext);
 
   return (
     <ThreadPrimitive.Root
@@ -198,6 +205,7 @@ const ThreadRoot: FC<{ isEmpty: boolean; autoFocus: boolean }> = ({
             <ThreadScrollToBottom />
             <ThreadFollowupSuggestions />
             <Composer autoFocus={autoFocus} />
+            <Footer />
             <AuiIf condition={(s) => isNewChatView(s) && s.composer.isEmpty}>
               <ThreadSuggestions />
             </AuiIf>
@@ -219,8 +227,7 @@ const ThreadMessage: FC = () => {
   return <AssistantMessageComponent />;
 };
 
-const ThreadScrollToBottom: FC = () => {
-  return (
+const ThreadScrollToBottom: FC = () => {  return (
     <ThreadPrimitive.ScrollToBottom asChild>
       <TooltipIconButton
         tooltip="Scroll to bottom"
@@ -232,6 +239,14 @@ const ThreadScrollToBottom: FC = () => {
     </ThreadPrimitive.ScrollToBottom>
   );
 };
+
+/**
+ * Default credit line. The catalog skins each carried their own "can make
+ * mistakes" disclaimer; this replaces every one of them with the digithings
+ * credit so the surface reads as one product (m2357). A host can override or
+ * suppress it through `components.Footer`.
+ */
+const ThreadFooter: FC = () => <CreditFooter attribution />;
 
 const ThreadWelcome: FC = () => {
   return (

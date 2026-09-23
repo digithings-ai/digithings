@@ -21,6 +21,7 @@ import { Button } from "@/components/ui/button";
 import { ByokCliFlow } from "@/components/byok-cli-flow";
 import { ContactMailto } from "@digithings/ui";
 import { ProductStockShell } from "@/components/stock/product-shell";
+import { CreditFooter } from "@/components/stock/credit-footer";
 import {
   DEFAULT_EMBED_CHAT_PREFS,
   EmbedChatPrefsProvider,
@@ -1181,15 +1182,11 @@ function EmbedChat({
     </header>
   ) : null;
 
-  const footerSlot = footerAttribution ? (
-    <p className="dc-attribution">
-      powered by digichat — a{" "}
-      <a href="https://digithings.ai" target="_blank" rel="noreferrer noopener">
-        digithings
-      </a>{" "}
-      product.
-    </p>
-  ) : null;
+  /* The settle path (ProductStockShell + the skin's Thread) renders its own
+     credit inside the thread footer, so this slot is only used where there is
+     no Thread at all — the gate / paywall branch below. Passing it through
+     `ProductStockShell` as well double-rendered the credit on /embed (m2502). */
+  const footerSlot = <CreditFooter attribution={footerAttribution} />;
 
   const turnCounterSlot = isTrialForm ? (
     <p
@@ -1280,7 +1277,6 @@ function EmbedChat({
               </div>
             ) : null}
             {turnCounterSlot}
-            {footerSlot}
           </>
         }
       />

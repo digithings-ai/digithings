@@ -32,6 +32,14 @@
 /* The credit sits below the thread, outside its palette scope: mirror the
    chat canvas at the shell so the strip reads as one surface with the
    transcript (no band edge, no hairline) and paint the attribution with it. */
+.dc-embed-shell {
+  --term-bg: #08090b;
+}
+
+:root[data-theme="light"] .dc-embed-shell {
+  --term-bg: var(--embed-canvas, #f1f0eb);
+}
+
 .dc-embed-shell [data-thread-skin="digichat"] {
   --term-bg: #08090b;
 }
@@ -40,25 +48,32 @@
   --term-bg: var(--embed-canvas, #f1f0eb);
 }
 
+/* The credit sits in normal flow BELOW the composer, the way every catalog
+   skin places its own "can make mistakes" line — not an absolute overlay.
+   An overlay lost the race with the composer (it painted over the credit
+   once a turn was submitted, and the centered empty-thread composer
+   overlapped it at first paint), so the credit now takes real space and
+   nothing can overflow onto it (m2357).
+
+   The parent viewport footer spaces its children with `gap`, so the credit
+   starts one gap (~16px) below the composer. A smaller negative top margin
+   cancels most of that gap, leaving a deliberate hairline of air above the
+   credit; the matching bottom padding keeps the distance below it equal, so
+   the credit reads as attached to the composer without being glued to it
+   (m2558 equal distances, m2557 add a little air back).
+
+   No canvas of its own: it inherits whatever the chat surface paints, so it
+   reads as one surface with the transcript on every skin. */
 .dc-attribution {
-  padding: 0.25rem 0.75rem 0.5rem;
+  margin: -0.5rem 0 0;
+  padding: 0.25rem 0.75rem 0.25rem;
   text-align: center;
   font-size: 0.68rem;
-  color: color-mix(in oklch, var(--muted-foreground) 55%, transparent);
-  /* No canvas of its own: the footer shares the app surface everywhere, and
-     sits above the boot overlay so the disclaimer is visible from the very
-     first frame (an anchor at the bottom of the page). */
-  background: transparent;
-  position: relative;
-  z-index: 60;
+  line-height: 1.4;
+  color: color-mix(in oklch, var(--credit-ink, var(--muted-foreground)) 70%, transparent);
 }
-
-/* The credit strip is always transparent: canvas, composer and strip share
-   one background on every surface, so the footer can never read as a band -
-   in either theme, and before the wide flag lands. */
-
 .dc-attribution a {
-  color: color-mix(in oklch, var(--muted-foreground) 75%, transparent);
+  color: color-mix(in oklch, var(--credit-ink, var(--muted-foreground)) 90%, transparent);
   text-decoration: underline;
 }
 
@@ -70,12 +85,19 @@
   background: transparent;
 }
 
-/* The settled thread keeps out of the way while the boot is on screen
-   (otherwise the chain types on top of the hero copy). The flag follows the
-   overlay's actual visibility, so an instant-ready load ships the thread
-   visible and never hides it. */
-[data-stock-product][data-boot-active="true"] > :not(.dboot-overlay) {
+/* Boot: the transcript column keeps out of the way while the chain types on
+   top of the hero copy. The credit is exempted — it must stay on screen for
+   the whole animation on every host (baseline, embed, each mounted skin),
+   so both a direct child and a descendant carrying it are left visible. */
+[data-stock-product][data-boot-active="true"]
+  > :not(.dboot-overlay):not([data-slot="aui_credit"]):not(:has([data-slot="aui_credit"])) {
   visibility: hidden;
+}
+
+/* Inside such a hidden column the credit would still inherit the hidden
+   ancestor, so it re-asserts visibility for itself. */
+[data-stock-product][data-boot-active="true"] [data-slot="aui_credit"] {
+  visibility: visible;
 }
 
 .dc-inline-link {
@@ -121,17 +143,37 @@
 }
 
 /* Collapse the sticky thread footer's bottom padding (was 24px) so the
-   in-flow turn counter hugs the composer; no overlap with its background. */
+   in-flow turn counter hugs the composer; no overlap with its background.
+   The credit's own bottom padding still supplies its equal air below. */
 .dc-embed-shell[data-skin-canvas="1"] .aui-thread-viewport-footer {
-  padding-bottom: 0;
+  padding-bottom: 0.25rem;
 }
 
 /* Terminal block caret: Chromium parses caret-shape but still paints the thin
    OS caret, so hide that everywhere and promote the painted block overlay to
    the tenant accent while the composer is focused (same metrics as the
-   reference chatbot.css overlay). */
+   reference chatbot.css overlay).
+
+   The overlay only paints when the engine has no native block caret, so the
+   caret must be declared on the base rule too — otherwise `caret-color:
+   transparent` removes the only caret the user can see (the reference
+   chatbot.css declares `caret-color` + `caret-shape` unconditionally at
+   chatbot.css:149-150 and only makes the native caret transparent inside
+   `@supports not (caret-shape: block)`). */
 .dc-embed-shell [data-thread-skin] .aui-composer-input {
-  caret-color: transparent;
+  caret-color: var(--tenant-accent, var(--accent, var(--primary)));
+  caret-shape: block;
+}
+
+@supports not (caret-shape: block) {
+  .dc-embed-shell [data-thread-skin] .aui-composer-input {
+    caret-color: transparent;
+  }
+
+  .dc-embed-shell [data-thread-skin] .aui-composer-input:focus + .aui-block-caret,
+  .dc-embed-shell [data-thread-skin] .aui-composer-input-wrap:focus-within .aui-block-caret {
+    display: block;
+  }
 }
 
 .dc-embed-shell [data-thread-skin] .aui-block-caret {
@@ -147,11 +189,6 @@
   font-size: 0.88rem;
   pointer-events: none;
   animation: aui-caret-blink 1.06s steps(1) infinite;
-}
-
-.dc-embed-shell [data-thread-skin] .aui-composer-input:focus + .aui-block-caret,
-.dc-embed-shell [data-thread-skin] .aui-composer-input-wrap:focus-within .aui-block-caret {
-  display: block;
 }
 
 .dc-embed-shell [data-thread-skin] [data-layout="expanded"] .aui-block-caret {

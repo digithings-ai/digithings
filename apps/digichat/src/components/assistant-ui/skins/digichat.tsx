@@ -20,6 +20,7 @@ import {
   type TranscriptTurn,
 } from "@digithings/digichat-ui";
 import { DigichatThread, type ComposerLayout, type ThreadSlashTrigger } from "@digithings/ui/chat/thread";
+import { CreditFooter } from "@/components/stock/credit-footer";
 import {
   BASELINE_EMBED_PLACEHOLDER,
   BASELINE_EMBED_SUGGESTIONS,
@@ -288,6 +289,8 @@ export function DigichatSkin({
     [slashPrefs, aui, gate, gateSubmit, copyExport, extra],
   );
 
+const DigichatFooter = () => <CreditFooter attribution />;
+
   return (
     <DigichatThread
       welcome={welcome}
@@ -303,6 +306,7 @@ export function DigichatSkin({
       }
       reasoningMode={reasoningUi.mode}
       toolCallsMode={toolCallsUi.mode}
+      components={{ Footer: DigichatFooter }}
     />
   );
 }

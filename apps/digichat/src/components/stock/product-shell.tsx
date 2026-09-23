@@ -52,7 +52,7 @@ import {
   type ChainDisclosureMode,
 } from "@/lib/view-modes";
 import { cn } from "@/lib/utils";
-import { skinOwnsPageChrome } from "@/lib/thread-skins";
+import { skinCreditStyle, skinOwnsPageChrome } from "@/lib/thread-skins";
 import { useEmbedChatPrefsOptional } from "@/components/stock/embed-chat-prefs";
 import {
   StockSendGateProvider,
@@ -510,7 +510,10 @@ export function ProductStockShell({
                 </div>
               )}
               {ownsPage ? null : sideSlot}
-              <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+              <div
+                className="relative flex min-h-0 min-w-0 flex-1 flex-col"
+                style={skinCreditStyle(cfg.chrome.skin, cfg.chrome.theme)}
+              >
                 {ownsPage || cfg.chrome.skin === "digichat" ? null : headerSlot}
                 {!ownsPage && sessionKey && cfg.chrome.mode === "app" ? (
                   <ToolCatalogBar
@@ -527,9 +530,14 @@ export function ProductStockShell({
                     composerLayout={composerLayout}
                   />
                 </div>
-                {footerSlot}
                 {/* Placeholder attribute for stock composer — AuiConfig composer key varies by version */}
                 <span className="sr-only" data-composer-placeholder={inputPlaceholder} />
+                {/* The credit is not placed here: each skin's Thread renders it
+                    in its own viewport footer, below the composer, so it tracks
+                    the skin's canvas and can never be painted over (m2357).
+                    `footerSlot` is still honoured for hosts (embed) that own
+                    their own footer content. */}
+                {footerSlot ?? null}
               </div>
             </div>
             </SkinChromeProvider>

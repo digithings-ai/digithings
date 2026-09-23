@@ -10,6 +10,7 @@ import {
 } from "@assistant-ui/react";
 import { MarkdownText } from "@/app/(baseline)/stock/markdown-text";
 import { useComposerCopy } from "@/components/stock/skin-chrome";
+import { CreditFooter } from "@/components/stock/credit-footer";
 
 /**
  * Web facsimile of the official React Ink Terminal Assistant.
@@ -60,6 +61,7 @@ export function ReactInkWeb() {
           </ComposerPrimitive.Root>
         </div>
       </div>
+      <CreditFooter attribution className="text-center text-[11px] text-zinc-500" />
     </ThreadPrimitive.Root>
   );
 }
