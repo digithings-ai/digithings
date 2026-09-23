@@ -1,260 +1,210 @@
-"use client";
-
-import { useEffect, useRef, useState } from "react";
-import { GROUPED_LABEL } from "./label";
-import { OwnedArch, RentedArch } from "./why-stack-diagrams";
-import {
-  OWNED_ARC,
-  OWNED_MARKS,
-  OWNED_STEPS,
-  RENTED_MARKS,
-  RENTED_STEPS,
-  allMarks,
-  type WhyStep,
-} from "@/lib/whyStack";
-
 /**
- * The why-section composition (#4429 round 9), on the throwaway `/variants/why`.
+ * The `/variants/why` comparison (round 10, #4429).
  *
- * The owner's direction, after rejecting the four earlier takes: lay out the
- * rented stack, "and then you throw DigiThings [at] them and explain how it's
- * going to improve that stack."
+ * The owner asked for the industry convention rather than a simple node graph:
+ * "there's a convention for this that's standard practice amongst software
+ * companies ... the specific graph that you typically build when you're
+ * designing a system or an architecture". That convention is the C4 model, and
+ * the drawing below is its CONTAINER view — one box per runtime unit, one
+ * connector per call, external systems outside the boundary.
  *
- * Round 9c redraws both sides as what the owner asked for next — "a visual graph
- * with nodes and lines connecting the different services … the specific graph
- * that you typically build when you're designing a system" — dropping the named
- * vendors and the invoice column. Both halves are now node-and-edge architecture
- * diagrams with the same frame, the same connectors and the same walker.
+ * Three blocks, in the order he asked for them (research, then the plan per
+ * diagram, then the costs):
  *
- * So there is ONE stage with three layers: the rented architecture, the owned
- * architecture, and a rail that walks the steps. The push is one custom property
- * (`--why-swap`) mapping the scroll onto a lateral translate — the rented view
- * leaves to the left, the owned one arrives from the right, the rail crosses
- * between the columns. No layout flip, no reflow, nothing re-mounted.
+ *   1. the two container diagrams, same silhouette, boxes swapped
+ *   2. the capability comparison — the same questions asked of both stacks
+ *   3. the cost model — per-layer market rates, the assumptions they ride on,
+ *      and the framing that stops a rate from reading as a quote
  *
- * The swipe treatment is gone: the owner picked push, and a second treatment was
- * only ever there to be chosen between.
- *
- * Marks ACCUMULATE. The rented ledger has to visibly grow into a bill, so each
- * step lights its own boxes and keeps the previous ones lit; the owned half does
- * the same for the same reason (each step adds a slot you now run).
- *
- * Mechanics are the pattern proven three times on this page: one rAF-throttled
- * passive scroll listener writing `--why-p` and `--why-swap` straight to the DOM,
- * a pin whose track height is measured on mount and resize, and React state only
- * for the coarse step index (ten changes, not one per frame). `var(--why-p, 1)`
- * and `var(--why-swap, 1)` default to the finished state, so reduced motion and
- * no-JS get the owned half complete.
+ * Server component: the diagrams are the only client pieces, and they are client
+ * components in their own right (`<ArchitectureDiagram>` lazily imports mermaid),
+ * so nothing here ships a bundle.
  */
 
-const NO_MOTION = "(prefers-reduced-motion: no-preference)";
+import { ArchitectureDiagram, ArchitectureTour } from "@digithings/ui";
 
-const RENTED_COUNT = RENTED_STEPS.length;
-const OWNED_COUNT = OWNED_STEPS.length;
-const STEPS = RENTED_COUNT + OWNED_COUNT;
+import {
+  ARCH_CAPTIONS,
+  CAPABILITIES,
+  CONVENTIONAL_ARCH,
+  COST_ASSUMPTIONS,
+  COST_CAVEATS,
+  COST_FRAMING,
+  COST_LINES,
+  DIGITHINGS_ARCH,
+  TOUR_STEPS,
+} from "@/lib/whyStack";
 
-/** The swap opens inside the last rented step and closes as the owned half starts. */
-const SWAP_START = 0.54;
-const SWAP_END = 0.62;
+const HEADLINE = "m-0 font-mono text-[clamp(1.3rem,2.4vw,1.85rem)] font-medium leading-[1.2] tracking-[-0.02em] text-ink";
+const LEDE = "m-0 max-w-[var(--measure-prose)] text-[0.9rem] leading-[1.7] text-ink-soft";
 
-/** How much scroll the stage owns, in viewport heights. Ten steps, so a long one. */
-const STAGE_VH = 3.6;
-
-const clamp01 = (v: number) => Math.max(0, Math.min(1, v));
-
-/** The union of every mark from step 0 through `index` — the accumulating set. */
-function marksThrough(steps: readonly WhyStep[], index: number): string[] {
-  return allMarks(...steps.slice(0, index + 1).map((step) => step.marks));
-}
-
-function usePrefersReducedMotion(): boolean {
-  const [reduced, setReduced] = useState(false);
-  useEffect(() => {
-    if (typeof matchMedia !== "function") return;
-    const mq = matchMedia("(prefers-reduced-motion: reduce)");
-    const apply = () => setReduced(mq.matches);
-    apply();
-    mq.addEventListener("change", apply);
-    return () => mq.removeEventListener("change", apply);
-  }, []);
-  return reduced;
-}
-
-/** One scroll listener → two custom properties + the coarse step index. */
-function useStage(
-  wrapRef: React.RefObject<HTMLDivElement | null>,
-  pinRef: React.RefObject<HTMLDivElement | null>,
-  onStep: (index: number) => void,
-) {
-  const stepRef = useRef(onStep);
-  /* Kept in a ref so an inline callback cannot re-run the scroll effect. */
-  useEffect(() => {
-    stepRef.current = onStep;
-  });
-
-  useEffect(() => {
-    const wrap = wrapRef.current;
-    const pin = pinRef.current;
-    if (!wrap || !pin) return;
-    const motion = typeof matchMedia === "function" ? matchMedia(NO_MOTION) : null;
-
-    let distance = 0;
-    const measure = () => {
-      distance = Math.round(window.innerHeight * STAGE_VH);
-      wrap.style.height = `${pin.offsetHeight + distance}px`;
-    };
-
-    let lastStep = -1;
-    const apply = (p: number) => {
-      pin.style.setProperty("--why-p", p.toFixed(4));
-      pin.style.setProperty(
-        "--why-swap",
-        clamp01((p - SWAP_START) / (SWAP_END - SWAP_START)).toFixed(4),
-      );
-      const index = Math.max(0, Math.min(STEPS - 1, Math.floor(p * STEPS)));
-      if (index !== lastStep) {
-        lastStep = index;
-        stepRef.current(index);
-      }
-    };
-
-    const reset = () => {
-      wrap.style.height = "";
-      pin.style.removeProperty("--why-p");
-      pin.style.removeProperty("--why-swap");
-    };
-
-    let raf = 0;
-    const onScroll = () => {
-      raf = 0;
-      const stickyTop = Number.parseFloat(getComputedStyle(pin).top) || 0;
-      const raw = distance > 0 ? (stickyTop - wrap.getBoundingClientRect().top) / distance : 1;
-      apply(clamp01(raw));
-    };
-    const schedule = () => {
-      if (raf === 0) raf = window.requestAnimationFrame(onScroll);
-    };
-    const onResize = () => {
-      measure();
-      schedule();
-    };
-
-    const enable = () => {
-      measure();
-      onScroll();
-      window.addEventListener("scroll", schedule, { passive: true });
-      window.addEventListener("resize", onResize);
-    };
-    const disable = () => {
-      window.removeEventListener("scroll", schedule);
-      window.removeEventListener("resize", onResize);
-      if (raf !== 0) window.cancelAnimationFrame(raf);
-      raf = 0;
-      reset();
-    };
-
-    if (!motion || motion.matches) enable();
-    const onChange = () => (motion?.matches ? enable() : disable());
-    motion?.addEventListener("change", onChange);
-    return () => {
-      motion?.removeEventListener("change", onChange);
-      disable();
-    };
-  }, [wrapRef, pinRef]);
-}
-
-function Rail({
-  steps,
-  activeIndex,
-  title,
-  arc,
-}: {
-  steps: readonly WhyStep[];
-  activeIndex: number;
-  title: string;
-  arc?: boolean;
-}) {
+function Diagrams() {
   return (
-    <div className="whyx-rail">
-      {arc ? (
-        <p className="whyx-arc">
-          {OWNED_ARC.map((word, index) => (
-            <span key={word} className="whyx-arc__item">
-              {index > 0 ? <span aria-hidden="true">→</span> : null}
-              {word}
-            </span>
-          ))}
-        </p>
-      ) : (
-        <p className={GROUPED_LABEL}>{title}</p>
-      )}
-      <ol className="whyx-steps">
-        {steps.map((step, index) => (
-          <li
-            key={step.id}
-            className={`whyx-step${index === activeIndex ? " is-on" : ""}`}
-            aria-current={index === activeIndex ? "true" : undefined}
-          >
-            <span className="whyx-step__index">{String(index + 1).padStart(2, "0")}</span>
-            <span className="whyx-step__body">
-              <span className="whyx-step__label">{step.label}</span>
-              <span className="whyx-step__line">{step.line}</span>
-            </span>
-          </li>
-        ))}
-      </ol>
-    </div>
-  );
-}
+    <section className="whyx__diagrams" aria-labelledby="whyx-diagrams">
+      <h2 className={HEADLINE} id="whyx-diagrams">
+        The same system, drawn twice
+      </h2>
+      <p className={LEDE}>
+        One container diagram per stack: each box is something that runs, each line is a call between
+        two of them, and the rectangle is the boundary you own. The boxes and the wiring are
+        deliberately the same shape on both sides, because the difference that matters is not the
+        architecture — it is who holds each box.
+      </p>
 
-export function WhyStack() {
-  const wrapRef = useRef<HTMLDivElement>(null);
-  const pinRef = useRef<HTMLDivElement>(null);
-  const [step, setStep] = useState(0);
-  const reduced = usePrefersReducedMotion();
-  useStage(wrapRef, pinRef, setStep);
+      <div className="whyx__pair">
+        <div className="whyx__side">
+          <span className="whyx__tag">01 · full view — rented</span>
+          <ArchitectureDiagram
+            spec={CONVENTIONAL_ARCH}
+            caption={ARCH_CAPTIONS.conventional.caption}
+          />
+          <p className="whyx__foot">{ARCH_CAPTIONS.conventional.foot}</p>
+        </div>
 
-  const owned = step >= RENTED_COUNT;
-  /* Marks accumulate, so the rented bill grows as the steps advance and the
-     owned diagram fills rather than flashing one box at a time. Reduced motion
-     is handed the finished state of both. */
-  const rentedLit = reduced
-    ? RENTED_MARKS
-    : marksThrough(RENTED_STEPS, Math.min(step, RENTED_COUNT - 1));
-  const ownedLit = reduced
-    ? OWNED_MARKS
-    : owned
-      ? marksThrough(OWNED_STEPS, step - RENTED_COUNT)
-      : [];
-
-  return (
-    <section className="whyx" data-phase={owned ? "owned" : "rented"}>
-      <div ref={wrapRef} className="whyx__wrap">
-        <div ref={pinRef} className="whyx__pin">
-          <div className="whyx__stage">
-            <div className="whyx__panel whyx__panel--rented" aria-hidden={owned}>
-              <RentedArch lit={rentedLit} />
-            </div>
-            <div className="whyx__panel whyx__panel--owned" aria-hidden={!owned}>
-              <OwnedArch lit={ownedLit} />
-            </div>
-            <div className="whyx__rail-slot">
-              {owned ? (
-                <Rail
-                  steps={OWNED_STEPS}
-                  activeIndex={step - RENTED_COUNT}
-                  title="own the layers"
-                  arc
-                />
-              ) : (
-                <Rail steps={RENTED_STEPS} activeIndex={step} title="the stack you rent" />
-              )}
-            </div>
-          </div>
+        <div className="whyx__side whyx__side--owned">
+          <span className="whyx__tag">01 · full view — owned</span>
+          <ArchitectureDiagram spec={DIGITHINGS_ARCH} caption={ARCH_CAPTIONS.digithings.caption} />
+          <p className="whyx__foot">{ARCH_CAPTIONS.digithings.foot}</p>
         </div>
       </div>
     </section>
   );
 }
 
-export { OWNED_COUNT, RENTED_COUNT };
+function Tour() {
+  return (
+    <section className="whyx__block" aria-labelledby="whyx-tour">
+      <h2 className={HEADLINE} id="whyx-tour">
+        The same diagram, walked
+      </h2>
+      <p className={LEDE}>
+        Three treatments of one drawing, from still to moving. All three use the same seven steps and
+        the same diagram, so the only thing that changes is how the page carries you through it. Scroll
+        each one.
+      </p>
+
+      <div className="whyx__tours">
+        <div className="whyx__tour">
+          <span className="whyx__tag">02 · guided, boxes ring</span>
+          <p className="whyx__tourtag">
+            The frame parks and the step advances as you scroll. The boxes the step is about take a
+            ring; nothing moves.
+          </p>
+          <ArchitectureTour spec={DIGITHINGS_ARCH} steps={TOUR_STEPS} variant="highlight" />
+        </div>
+
+        <div className="whyx__tour">
+          <span className="whyx__tag">03 · guided, camera follows</span>
+          <p className="whyx__tourtag">
+            Same steps, but the frame pans and zooms so the boxes under discussion sit in the middle.
+            It opens wide on the whole system and comes in.
+          </p>
+          <ArchitectureTour spec={DIGITHINGS_ARCH} steps={TOUR_STEPS} variant="camera" />
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function Capabilities() {
+  return (
+    <section className="whyx__block" aria-labelledby="whyx-capabilities">
+      <h2 className={HEADLINE} id="whyx-capabilities">
+        What changes, question by question
+      </h2>
+      <p className={LEDE}>
+        The same nine questions asked of both stacks. Each answer is what is structurally true, not
+        what is advertised — which is why none of them needs an adjective.
+      </p>
+
+      <div className="whyx-cap" role="table" aria-label="Capability comparison">
+        <div className="whyx-cap__row whyx-cap__row--head" role="row">
+          <span className="whyx-cap__key" role="columnheader">
+            the question
+          </span>
+          <span className="whyx-cap__cell" role="columnheader">
+            rented
+          </span>
+          <span className="whyx-cap__cell whyx-cap__cell--owned" role="columnheader">
+            on digithings
+          </span>
+        </div>
+
+        {CAPABILITIES.map((row) => (
+          <div className="whyx-cap__row" key={row.capability} role="row">
+            <span className="whyx-cap__key" role="rowheader">
+              {row.capability}
+            </span>
+            <span className="whyx-cap__cell" role="cell">
+              {row.rented}
+            </span>
+            <span className="whyx-cap__cell whyx-cap__cell--owned" role="cell">
+              {row.owned}
+            </span>
+          </div>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function Costs() {
+  return (
+    <section className="whyx__block" aria-labelledby="whyx-costs">
+      <h2 className={HEADLINE} id="whyx-costs">
+        What it costs
+      </h2>
+      <p className={LEDE}>{COST_FRAMING.headline}</p>
+
+      <ul className="whyx-assume">
+        {COST_ASSUMPTIONS.map((assumption) => (
+          <li className="whyx-assume__item" key={assumption}>
+            {assumption}
+          </li>
+        ))}
+      </ul>
+
+      <div className="whyx-cost" role="table" aria-label="Per-layer market rates">
+        <div className="whyx-cost__row whyx-cost__row--head" role="row">
+          <span role="columnheader">layer</span>
+          <span role="columnheader">what the rented stack bills for</span>
+          <span role="columnheader">what running it costs</span>
+          <span role="columnheader">the figure, as published</span>
+        </div>
+        {COST_LINES.map((line) => (
+          <div className="whyx-cost__row" key={line.layer} role="row">
+            <span className="whyx-cost__layer" role="rowheader">
+              {line.layer}
+            </span>
+            <span role="cell">{line.rented}</span>
+            <span role="cell">{line.owned}</span>
+            <span className="whyx-cost__source" role="cell">
+              {line.source}
+            </span>
+          </div>
+        ))}
+      </div>
+
+      <p className={`${LEDE} whyx-cost__body`}>{COST_FRAMING.body}</p>
+
+      <ul className="whyx-caveat">
+        {COST_CAVEATS.map((caveat) => (
+          <li className="whyx-caveat__item" key={caveat}>
+            {caveat}
+          </li>
+        ))}
+      </ul>
+    </section>
+  );
+}
+
+export function WhyStack() {
+  return (
+    <div className="whyx">
+      <Diagrams />
+      <Tour />
+      <Capabilities />
+      <Costs />
+    </div>
+  );
+}

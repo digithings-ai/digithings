@@ -1,289 +1,349 @@
 /**
- * The data behind `/variants/why` (round 9c, #4429).
+ * The data behind `/variants/why` (round 10, #4429).
  *
- * One architecture grammar, drawn twice. The owner's round-9c direction, after
- * rejecting the vendor-marked slabs and the invoice column:
+ * The owner's round-10 direction, after rejecting the simple node graph:
  *
- *   "i don't like that we're naming openai anthropic gemini specifically i don't
- *    want to name the stack elements i don't like that there's the invoice i want
- *    a visual like a graph like a design document or a design graph an
+ *   "i want a visual like a graph like a design document or a design graph an
  *    architecture graph this is a visual graph with nodes and lines connecting
  *    the different services from a database to a cloud infrastructure the
- *    specific graph that you typically build when you're designing a system or an
- *    architecture that's what i want to show and we basically compare what that
- *    looks like for the conventional off-the-shelf solution versus what that
- *    would look like for digi things if you were to use all the digi things
- *    modules"
+ *    specific graph that you typically build when you're designing a system or
+ *    an architecture"
  *
- * So: two node-and-edge diagrams, both drawn from the same box/line vocabulary
- * and the same viewBox, differing only in what the boxes are called and how they
- * are wired. The conventional side names NO vendor — it names the generic parts
- * an engineer would draw (an application, an API, a managed model, an index, a
- * database, a queue, telemetry, a cache, a cloud, an account). The digithings
- * side names the actual modules, because the owner asked for exactly that
- * ("if you were to use all the digi things modules") and the module names are
- * the product, not a third party.
+ *   "i can't say that i wouldn't have done a simple graph like that ... there's a
+ *    convention for this that's standard practice amongst software companies ...
+ *    we need to accurately describe the design of ... an architecture diagram of
+ *    an AI stack for a company with all the services that we have in digithings
+ *    and kind of estimate the costs ..."
  *
- * The only edge between the two diagrams is the shape: same boundary rectangle,
- * same rows, same connectors. On the rented side the boundary is dashed and
- * everything behind the surface belongs to one vendor; on the owned side the
- * boundary is solid and every node is a process you run.
+ * THE CONVENTION IS THE C4 MODEL (Simon Brown): Context -> Container ->
+ * Component -> Code. What he described is specifically the CONTAINER diagram —
+ * one box per deployable/runtime unit, a labelled connector per call, external
+ * systems outside the boundary. Both specs below are written in that grammar,
+ * and both are handed to the same renderer, so the two drawings share a
+ * silhouette and diff only in what the boxes are and how they are wired.
  *
- * HONESTY: no amount, percentage, "Nx cheaper", contract-terms claim or
- * performance figure appears anywhere in this module. The cost argument is made
- * by the SHAPE — one closed boundary with no seams you can move — not by a
- * number the repository cannot source.
+ * HONESTY RULES THIS MODULE OBEYS
+ *  - The conventional side names NO vendor. Round 9b taught that lesson twice.
+ *    Every box is a CATEGORY an engineer would draw ("managed vector store"),
+ *    never a brand.
+ *  - Nothing is asserted about any platform's unpublished pricing or contract
+ *    terms.
+ *  - No figure in `COST_LINES` is ours. Each is a published third-party list
+ *    rate, labelled with what it is and when it was read, and the framing says
+ *    outright that it is a model and not a quote.
+ *  - No performance, backtest or trading figure appears anywhere.
  *
  * Plain data, therefore server-safe: the variants page is a server component and
  * cannot reach a client module's exports.
  */
 
-/** What a box is, so the diagram can style the few that are not plain services. */
-export type ArchKind = "app" | "service" | "infra" | "account";
+import type { ArchSpec, TourStep } from "@digithings/ui";
 
-/** One box on the diagram. `x`/`y` are the box centre in the shared viewBox. */
-export interface ArchNode {
-  id: string;
-  label: string;
-  kind: ArchKind;
-  x: number;
-  y: number;
-}
-
-/** One connector. Drawn only when both ends are lit. */
-export interface ArchEdge {
-  a: string;
-  b: string;
-}
-
-/** The rectangle every box sits inside — the boundary, drawn on both sides. */
-export interface ArchBoundary {
-  x: number;
-  y: number;
-  w: number;
-  h: number;
-  /** Uppercase mono caption on the boundary's top edge. */
-  label: string;
-}
-
-export interface ArchGraph {
-  nodes: ArchNode[];
-  edges: ArchEdge[];
-  boundary: ArchBoundary;
-  aria: string;
-}
-
-/** Box geometry, shared by both diagrams so they diff at a glance. */
-export const NODE_W = 168;
-export const NODE_H = 42;
-/** The shared drawing frame. */
-export const VIEW = { w: 960, h: 600 };
+/* ══════════════════════ A. the conventional stack ══════════════════════ */
 
 /**
- * The conventional off-the-shelf stack: the generic parts, no vendors named.
- *
- * The layout is what an engineer sketches for a managed platform — your app on
- * top of one vendor API, the managed services fanned out behind it, the cloud
- * underneath, and one account that governs all of it.
+ * The rented stack, drawn at the container level for an organisation of a few
+ * hundred seats: your application calling one vendor API, the managed services
+ * fanned out behind it, and one boundary that governs all of it.
  */
-export const RENTED_GRAPH: ArchGraph = {
-  aria: "Architecture diagram: an application calling one vendor API, behind which sit a managed model, a managed index, a managed database, a managed queue, managed telemetry, a managed cache and the vendor's cloud, all inside one vendor boundary governed by one account.",
-  boundary: { x: 48, y: 104, w: 864, h: 456, label: "the managed platform · one account · one release schedule" },
-  nodes: [
-    { id: "app", label: "your app", kind: "app", x: 480, y: 46 },
-    { id: "api", label: "vendor api", kind: "service", x: 480, y: 140 },
-    { id: "llm", label: "managed model", kind: "service", x: 150, y: 258 },
-    { id: "index", label: "managed index", kind: "service", x: 350, y: 258 },
-    { id: "db", label: "managed database", kind: "service", x: 560, y: 258 },
-    { id: "queue", label: "managed queue", kind: "service", x: 770, y: 258 },
-    { id: "obs", label: "managed telemetry", kind: "service", x: 250, y: 388 },
-    { id: "cache", label: "managed cache", kind: "service", x: 480, y: 388 },
-    { id: "cloud", label: "their cloud", kind: "infra", x: 720, y: 388 },
-    { id: "account", label: "their accounts", kind: "account", x: 480, y: 512 },
+export const CONVENTIONAL_ARCH: ArchSpec = {
+  title: "A conventional managed AI stack",
+  description:
+    "Container diagram: an application calls one vendor API, behind which sit a managed models API, a vector store, a managed database, a managed queue and managed traces, running on the vendor's infrastructure — all inside a single vendor boundary governed by one account.",
+  groups: [
+    {
+      id: "platform",
+      label: "one vendor · one account · one release schedule",
+      icon: "cloud",
+    },
+  ],
+  services: [
+    { id: "app", label: "your application", icon: "internet" },
+    { id: "gateway", label: "api gateway", icon: "server", group: "platform" },
+    { id: "model", label: "managed models", icon: "server", group: "platform" },
+    { id: "vector", label: "vector store", icon: "database", group: "platform" },
+    { id: "rdbms", label: "managed database", icon: "database", group: "platform" },
+    { id: "queue", label: "managed queue", icon: "disk", group: "platform" },
+    { id: "obs", label: "managed traces", icon: "server", group: "platform" },
+    { id: "cloud", label: "their compute", icon: "cloud", group: "platform" },
   ],
   edges: [
-    { a: "app", b: "api" },
-    { a: "api", b: "llm" },
-    { a: "api", b: "index" },
-    { a: "api", b: "db" },
-    { a: "api", b: "queue" },
-    { a: "llm", b: "obs" },
-    { a: "index", b: "cache" },
-    { a: "db", b: "cache" },
-    { a: "queue", b: "cloud" },
-    { a: "obs", b: "cloud" },
-    { a: "cache", b: "cloud" },
-    { a: "api", b: "account" },
+    { from: "app", to: "gateway", fromSide: "B", toSide: "T", label: "https" },
+    { from: "gateway", to: "model", fromSide: "R", toSide: "L", label: "inference" },
+    { from: "gateway", to: "vector", fromSide: "L", toSide: "R", label: "retrieval" },
+    { from: "gateway", to: "rdbms", fromSide: "B", toSide: "T", label: "sql" },
+    { from: "model", to: "obs", fromSide: "R", toSide: "L", label: "traces" },
+    { from: "vector", to: "queue", fromSide: "B", toSide: "T", label: "ingest" },
+    { from: "rdbms", to: "cloud", fromSide: "R", toSide: "L", label: "storage" },
+    { from: "queue", to: "cloud", fromSide: "B", toSide: "T", label: "events" },
   ],
 };
 
+/* ══════════════════════ B. the same system on digithings ══════════════════════ */
+
 /**
- * The same system built from the digithings modules.
- *
- * Same frame, same rows, same connector vocabulary — the boxes are the modules
- * and the dashed vendored services have become processes you run. The edges are
- * the real module topology (the same pairs `packages/ui/src/data/modules.ts`
- * declares), so the diagram is the product's actual architecture and not a
- * drawing of one.
+ * The same container diagram, same silhouette, every box swapped for the module
+ * that does that job and the boundary relabelled. The comparison is the point:
+ * the calls are the same, the difference is who owns the boxes and whether the
+ * boundary has seams in it.
  */
-export const OWNED_GRAPH: ArchGraph = {
-  aria: "Architecture diagram: your app on top of digigraph, with digiquant, digisearch, digivault and digichat alongside it, digikey, digismith and digiclaw beneath, and digibase under all of it — every node a module you run inside your own boundary.",
-  boundary: { x: 48, y: 104, w: 864, h: 456, label: "your hosts · your regions · your accounts" },
-  nodes: [
-    { id: "app", label: "your app", kind: "app", x: 480, y: 46 },
-    { id: "graph", label: "digigraph", kind: "service", x: 480, y: 140 },
-    { id: "quant", label: "digiquant", kind: "service", x: 150, y: 258 },
-    { id: "search", label: "digisearch", kind: "service", x: 350, y: 258 },
-    { id: "vault", label: "digivault", kind: "service", x: 560, y: 258 },
-    { id: "chat", label: "digichat", kind: "service", x: 770, y: 258 },
-    { id: "key", label: "digikey", kind: "service", x: 250, y: 388 },
-    { id: "smith", label: "digismith", kind: "service", x: 480, y: 388 },
-    { id: "claw", label: "digiclaw", kind: "service", x: 720, y: 388 },
-    { id: "base", label: "digibase", kind: "infra", x: 480, y: 512 },
+export const DIGITHINGS_ARCH: ArchSpec = {
+  title: "The same stack on digithings",
+  description:
+    "Container diagram: the same application, but every service behind it is a digithings module — digigraph routing to digiquant, digisearch, digivault and digichat, with digikey, digismith, digiclaw and digibase beneath — all inside your own boundary.",
+  groups: [
+    {
+      id: "hosts",
+      label: "your hosts · your regions · your accounts",
+      icon: "server",
+    },
+  ],
+  services: [
+    { id: "app", label: "your application", icon: "internet" },
+    { id: "graph", label: "digigraph", icon: "server", group: "hosts" },
+    { id: "quant", label: "digiquant", icon: "server", group: "hosts" },
+    { id: "search", label: "digisearch", icon: "database", group: "hosts" },
+    { id: "vault", label: "digivault", icon: "disk", group: "hosts" },
+    { id: "chat", label: "digichat", icon: "internet", group: "hosts" },
+    { id: "smith", label: "digismith", icon: "server", group: "hosts" },
+    { id: "key", label: "digikey", icon: "server", group: "hosts" },
+    { id: "claw", label: "digiclaw", icon: "server", group: "hosts" },
+    { id: "base", label: "digibase", icon: "disk", group: "hosts" },
   ],
   edges: [
-    { a: "app", b: "graph" },
-    { a: "graph", b: "quant" },
-    { a: "graph", b: "search" },
-    { a: "graph", b: "vault" },
-    { a: "graph", b: "chat" },
-    { a: "graph", b: "key" },
-    { a: "graph", b: "smith" },
-    { a: "graph", b: "claw" },
-    { a: "chat", b: "key" },
-    { a: "chat", b: "search" },
-    { a: "claw", b: "quant" },
-    { a: "smith", b: "chat" },
-    { a: "search", b: "base" },
+    { from: "app", to: "graph", fromSide: "B", toSide: "T", label: "https" },
+    { from: "graph", to: "quant", fromSide: "R", toSide: "L", label: "research" },
+    { from: "graph", to: "search", fromSide: "L", toSide: "R", label: "retrieval" },
+    { from: "graph", to: "vault", fromSide: "B", toSide: "T", label: "notes" },
+    { from: "quant", to: "smith", fromSide: "R", toSide: "L", label: "traces" },
+    { from: "search", to: "chat", fromSide: "B", toSide: "T", label: "context" },
+    { from: "vault", to: "key", fromSide: "R", toSide: "L", label: "scope" },
+    { from: "chat", to: "base", fromSide: "B", toSide: "T", label: "shared" },
+    { from: "key", to: "claw", fromSide: "B", toSide: "T", label: "heartbeat" },
   ],
 };
 
-export interface WhyStep {
-  id: string;
-  /** The stepper's line. */
-  label: string;
-  /** One sentence of mechanism — what is true, not what is promised. */
-  line: string;
-  /** Node ids this step lights up. Marks accumulate in the walker. */
-  marks: string[];
-}
+/* ══════════════════════ A2. the guided walk ══════════════════════ */
 
 /**
- * The rented half: the diagram assembles the way a managed platform is sold —
- * surface first, then the services behind it, then the boundary that closes.
+ * The walk, step by step, over `DIGITHINGS_ARCH`. The first step names no boxes
+ * on purpose: the tour opens on the whole diagram and then comes in, which is
+ * the owner's "at the beginning we show the full diagram and as we go through
+ * every step we kind of have this guided view".
+ *
+ * Every id here must exist in `DIGITHINGS_ARCH` — the tour resolves them against
+ * the ids mermaid puts on the rendered groups.
  */
-export const RENTED_STEPS: WhyStep[] = [
+export const TOUR_STEPS: TourStep[] = [
   {
-    id: "app",
-    label: "The surface",
-    line: "You get an application and one endpoint. The application is the surface — it is the only part you actually touch.",
-    marks: ["app"],
+    id: "overview",
+    label: "The whole system",
+    line: "One application, nine modules and a shared library under them. Every box is a process you run, inside a boundary that is yours.",
+    ids: [],
   },
   {
-    id: "api",
-    label: "One vendor api",
-    line: "Behind it a single API decides what you can reach. You do not choose the services behind the API, and you cannot replace one of them.",
-    marks: ["app", "api"],
+    id: "route",
+    label: "A request arrives",
+    line: "Your application calls digigraph. That is the only entry point, and what happens next is a graph you can read and edit rather than a route you are given.",
+    ids: ["app", "graph"],
   },
   {
-    id: "services",
-    label: "Managed services",
-    line: "The model, the index, the database and the queue are four separate products, each rented and each metered. None of them is yours to swap.",
-    marks: ["app", "api", "llm", "index", "db", "queue"],
+    id: "research",
+    label: "Research and backtests",
+    line: "digiquant proposes ideas against public data, backtests them before anyone sees a number, and sizes the survivor into weights.",
+    ids: ["quant"],
   },
   {
-    id: "plumbing",
-    label: "The plumbing",
-    line: "Telemetry, cache and the cloud underneath are rented too. The traces expire on the vendor's schedule and the capacity is theirs to allocate.",
-    marks: ["app", "api", "llm", "index", "db", "queue", "obs", "cache", "cloud"],
+    id: "retrieval",
+    label: "Answers with sources",
+    line: "digisearch indexes whatever you point it at — documents, your own stores, the open web — and digichat is the surface that asks the question.",
+    ids: ["search", "chat"],
   },
   {
-    id: "boundary",
-    label: "One closed boundary",
-    line: "One account governs all of it, and the release schedule is the vendor's. Inside the boundary there is no seam you can move — that is the whole shape.",
-    marks: RENTED_GRAPH.nodes.map((node) => node.id),
-  },
-];
-
-/** The owned half's arc, shown above its steps. */
-export const OWNED_ARC = ["rented", "modular", "yours"] as const;
-export type OwnedArc = (typeof OWNED_ARC)[number];
-
-export interface OwnedStep extends WhyStep {
-  arc: OwnedArc;
-}
-
-/**
- * The owned half: the SAME frame, rebuilt node by node. Each step adds modules
- * and keeps the previous ones, so the diagram fills up rather than flashing one
- * box at a time.
- */
-export const OWNED_STEPS: OwnedStep[] = [
-  {
-    id: "graph",
-    label: "One graph on your hosts",
-    line: "digigraph routes every request. It is a process you run, not an endpoint you call, so the path a request takes is visible and editable.",
-    marks: ["app", "graph"],
-    arc: "modular",
+    id: "notes",
+    label: "Your own documents",
+    line: "digivault keeps a markdown vault with wikilinks and backlinks, so the knowledge stays in files you can open in any editor.",
+    ids: ["vault"],
   },
   {
-    id: "modules",
-    label: "The capabilities",
-    line: "Quant, retrieval, the vault and chat are separate modules with separate state. Swap one and the others keep running — no module assumes another.",
-    marks: ["app", "graph", "quant", "search", "vault", "chat"],
-    arc: "modular",
-  },
-  {
-    id: "guards",
+    id: "trust",
     label: "Keys, traces, heartbeat",
-    line: "Auth issues the keys and scopes them on every call, tracing records what ran, and the heartbeat keeps it alive — all three run where the rest runs.",
-    marks: ["app", "graph", "quant", "search", "vault", "chat", "key", "smith", "claw"],
-    arc: "yours",
+    line: "digikey issues the keys and scopes them on every call, digismith records what ran, and digiclaw keeps the whole thing alive.",
+    ids: ["key", "smith", "claw"],
   },
   {
-    id: "library",
-    label: "Yours to build on",
-    line: "One shared library under all of it, and every capability is also a REST endpoint, an MCP tool, a CLI command and a container. You ship the app.",
-    marks: OWNED_GRAPH.nodes.map((node) => node.id),
-    arc: "yours",
+    id: "foundation",
+    label: "One shared library",
+    line: "digibase sits under all of it. A change to HTTP, audit or settings lands once instead of nine times, which is what keeps nine modules one product.",
+    ids: ["base"],
   },
 ];
 
-/** Everything in a set of mark lists — what a reduced-motion reader sees. */
-export function allMarks(...groups: string[][]): string[] {
-  const seen = new Set<string>();
-  groups.forEach((group) => group.forEach((mark) => seen.add(mark)));
-  return [...seen];
-}
+/** The foot line under each diagram. */
+export const ARCH_CAPTIONS = {
+  conventional: {
+    caption:
+      "container view · every box below your application is a rented product with its own meter",
+    foot: "You own the application. Everything under it is a contract you did not write, wired in an order you cannot change, released on someone else's schedule.",
+  },
+  digithings: {
+    caption: "container view · every box is a process you run, on infrastructure you already pay for",
+    foot: "Same shape, same calls. The difference is that each box is a module you can replace on its own — which is what makes the rest of this page true.",
+  },
+} as const;
 
-/** One node id per node, in draw order — the "everything lit" state. */
-export const RENTED_MARKS = RENTED_GRAPH.nodes.map((node) => node.id);
-export const OWNED_MARKS = OWNED_GRAPH.nodes.map((node) => node.id);
+/* ══════════════════════ C. the capability comparison ══════════════════════ */
 
 /**
- * The benefit ledger, as structural consequences rather than figures.
- *
- * Each of these is what changes about the structure — the claim the four
- * benefit words ("cheaper, more efficient, easier to scale, yours to build on")
- * actually cash out to. No number appears in any of them.
+ * The same nine questions asked of both stacks. Written as structural
+ * consequences, not adjectives — "you ship against their API" rather than
+ * "less flexible".
  */
-export const LEDGER: { claim: string; because: string }[] = [
+export interface CapabilityRow {
+  capability: string;
+  rented: string;
+  owned: string;
+}
+
+export const CAPABILITIES: CapabilityRow[] = [
   {
-    claim: "you pay providers, not a platform",
-    because:
-      "the middle of your bill becomes your own provider accounts — nothing sits between you and a layer you already pay for",
+    capability: "the source",
+    rented: "closed — you get the product, never the code",
+    owned: "an MIT monorepo; every module, test and CI definition is readable",
   },
   {
-    claim: "a layer swaps without a migration",
-    because:
-      "no module assumes you are running any other one, so replacing a store or a model is a local change",
+    capability: "what you can change",
+    rented: "the surface only; everything below the API is theirs",
+    owned: "any layer — swap a store or a model without a migration",
   },
   {
-    claim: "each layer scales where it already runs",
-    because: "your metal, your region — there is no vendor capacity ceiling to queue behind",
+    capability: "how you reach it",
+    rented: "their API and their SDK, inside their limits",
+    owned: "a REST endpoint, an MCP tool, a CLI command and a container, per capability",
   },
   {
-    claim: "you ship your own app on top",
-    because: "every capability is a REST endpoint, an MCP tool, a CLI command and a container",
+    capability: "who holds the keys",
+    rented: "one account; scopes and rate limits are set for you",
+    owned: "keys you issue and revoke, JWT-signed and scoped on every call",
   },
+  {
+    capability: "where it runs",
+    rented: "their regions, on their capacity",
+    owned: "your hosts, in your regions, next to your data",
+  },
+  {
+    capability: "the record of what ran",
+    rented: "their logs, inside their retention window",
+    owned: "an append-only log on your disk, kept as long as you keep it",
+  },
+  {
+    capability: "scaling a layer",
+    rented: "their ceiling — you queue behind every other tenant",
+    owned: "each layer scales where it already runs; no shared ceiling",
+  },
+  {
+    capability: "building on top",
+    rented: "you ship against their API and take each release",
+    owned: "you ship your own app on the same primitives the product uses",
+  },
+  {
+    capability: "the cost shape",
+    rented: "a platform margin on every layer, on top of the provider price",
+    owned: "the provider's list price, plus your own metal and your own time",
+  },
+];
+
+/* ══════════════════════ D. the cost model ══════════════════════ */
+
+/**
+ * Assumptions every figure below is conditioned on. Deliberately changeable —
+ * a reader who disagrees with one of these has the lever in their hand, which is
+ * the difference between a model and a claim.
+ */
+export const COST_ASSUMPTIONS: string[] = [
+  "≈200 people using the system, a mix of chat users and agent runs",
+  "a chat turn is one inference call; an agentic task averages 10–20 calls, so the same headcount can be 5–30× the token volume",
+  "embedding and index maintenance run continuously over the document set",
+  "the system is on the provider's published list price, with no negotiated discount",
+  "self-hosting adds engineering time — this model does not pretend it is free",
+];
+
+export interface CostLine {
+  layer: string;
+  /** What the rented stack is billed for. */
+  rented: string;
+  /** What the same layer costs when you run it. */
+  owned: string;
+  /** Where the figure comes from. Every one of these is third-party. */
+  source: string;
+}
+
+/**
+ * Per-layer market rates, as published. Each `source` names what kind of figure
+ * it is and when it was read; none of these is a quote, and none is our own
+ * measurement.
+ */
+export const COST_LINES: CostLine[] = [
+  {
+    layer: "inference",
+    rented: "the same list price either way — the model provider bills you directly or through the platform",
+    owned: "unchanged, or lower: hosted open-weight models list at roughly 1/10th of frontier rates, and self-hosted changes the unit to your own metal",
+    source: "frontier list rates per 1M tokens, in / out: $2.50 / $15.00, $3.00 / $15.00, $1.25 / $10.00; budget tier $0.10–$1.00 in",
+  },
+  {
+    layer: "embeddings",
+    rented: "a metered line you do not see itemised on a platform invoice",
+    owned: "the same embedding API, billed to your own account, or an open model you host",
+    source: "text-embedding class list rates around $0.02 per 1M tokens, read Sep 2026",
+  },
+  {
+    layer: "vector store",
+    rented: "per GB stored, per read, per query, plus a plan minimum",
+    owned: "your own index on your own disk — the compute you already pay for",
+    source: "managed vector tiers list from ~$0 to ~$5,000/mo; hosted units around $2.64 per unit",
+  },
+  {
+    layer: "database and queue",
+    rented: "per instance, per GB, per operation, per seat",
+    owned: "one process on the machine you already bought",
+    source: "published managed-instance tiers, read Sep 2026",
+  },
+  {
+    layer: "observability",
+    rented: "per host, per seat, per custom metric, per retained event",
+    owned: "Prometheus, OpenTelemetry and a log file — the cost is the disk",
+    source: "platform monitoring commonly lands at $2,200–$11,000/mo; self-hosted equivalents $500–$2,000/mo",
+  },
+  {
+    layer: "compute",
+    rented: "an instance rate with a margin over the underlying resource",
+    owned: "whatever you already run, or a specialist GPU rate",
+    source: "H100 $1.99–$2.50/hr from specialists vs $4.59–$8.90/hr on the hyperscalers, read Sep 2026",
+  },
+  {
+    layer: "engineering time",
+    rented: "near zero to start, and you cannot spend it on the parts you want to change",
+    owned: "$1,500–$4,000/mo of operations for a small deployment, and more as it grows — the honest other side of the ledger",
+    source: "published ops-rate estimates at $150–$200/hr, read Sep 2026",
+  },
+];
+
+/**
+ * The framing that makes the table honest. Without this paragraph the numbers
+ * above read as a promise; with it they read as arithmetic.
+ */
+export const COST_FRAMING = {
+  headline: "You pay the same provider price either way. The difference is the layer on top.",
+  body: "Both stacks rent the same frontier models from the same providers at the same list rates — that part of the bill is identical and no diagram changes it. What differs is everything wrapped around them. A managed platform charges a margin on each layer it resells, and every layer is metered separately: storage, reads, seats, hosts, custom metrics, retained events. Running the same layers yourself removes that margin and replaces it with two costs that no vendor invoice shows — your own infrastructure, and the engineering time to operate it. Whether that trade wins depends entirely on volume: the crossover generally sits in the millions of tokens per day, so a small deployment is usually cheaper rented and a large one is usually cheaper owned. Every figure in the table above is a published list rate, not a quote, and this model assumes no negotiated discount — the two things that would move it most.",
+} as const;
+
+/**
+ * What the model deliberately does not do, said out loud so nobody reads more
+ * into the table than is there.
+ */
+export const COST_CAVEATS: string[] = [
+  "no single monthly total: it would be an invented number, because the same stack costs wildly different amounts at a chatbot's volume and at an agent fleet's",
+  "no negotiated discount, no committed-use pricing, no reserved capacity",
+  "no claim about any named vendor's contract terms or unpublished pricing",
+  "self-hosted model quality is not priced here — that is a capability question, answered above",
 ];

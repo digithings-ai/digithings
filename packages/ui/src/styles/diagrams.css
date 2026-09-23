@@ -1,0 +1,270 @@
+/*
+ * diagrams.css — the architecture-diagram family.
+ *
+ * The mermaid SVG brings its own inline stylesheet, so this file does two jobs
+ * only:
+ *   1. FRAME the figure (border, surface, caption, source fallback) in the same
+ *      hairline grammar as every other figure on the site.
+ *   2. RE-ASSERT the tokens mermaid cannot know about. Its architecture
+ *      stylesheet hardcodes `#fff` for service label text, which is correct on
+ *      the dark canon palette by luck and wrong on the light one, and it draws
+ *      group borders dashed by default — the boundary is a solid box in this
+ *      system.
+ *
+ * Import once in an app's globals.css, after web-theme.css:
+ *   @import "@digithings/ui/styles/diagrams.css";
+ * and add the source path so Tailwind sees the family:
+ *   @source "<path-to>/packages/ui/src/components/diagrams";
+ */
+
+.arch-figure {
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  min-width: 0;
+}
+
+.arch-figure__body {
+  min-width: 0;
+  overflow-x: auto;
+  border: 1px solid var(--hair);
+  background: var(--surface);
+  padding: 1.1rem;
+}
+
+.arch-figure[data-state="pending"] .arch-figure__body {
+  min-height: 14rem;
+}
+
+.arch-figure__body > svg {
+  display: block;
+  width: 100%;
+  height: auto;
+  max-width: 100%;
+}
+
+.arch-figure__source {
+  margin: 0;
+  padding: 1rem 1.1rem;
+  border: 1px solid var(--hair);
+  background: var(--surface);
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  line-height: 1.6;
+  color: var(--ink-soft);
+  overflow-x: auto;
+}
+
+.arch-figure__caption {
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: 0.68rem;
+  line-height: 1.55;
+  color: var(--ink-mute);
+}
+
+/* mermaid's own chrome, brought back onto the palette. */
+.arch-figure__body svg text,
+.arch-figure__body svg .node-icon-text > div {
+  font-family: var(--font-mono);
+  color: var(--ink);
+}
+
+.arch-figure__body svg .node-icon-text > div {
+  fill: var(--ink);
+}
+
+.arch-figure__body svg .node-bkg {
+  stroke-dasharray: none;
+}
+
+/*
+ * mermaid's architecture chrome, forced back onto the palette.
+ *
+ * These need `!important` and that is not sloppiness: mermaid injects its own
+ * stylesheet from inside the rendered SVG, so it lands later in the document
+ * than this file and out-ranks it in source order. The icon plates are worse —
+ * they are drawn by mermaid's bundled icon set as an inline `style="fill:#087ebf"`
+ * on the plate rect, which nothing short of `!important` can reach.
+ *
+ * The icon plate is the only place a vendor-blue can appear, and it appears on
+ * every service, so leaving it is the difference between a canon diagram and a
+ * screenshot of one. If mermaid ever changes the built-in icon palette these
+ * overrides stop matching and the diagram reverts to mermaid's own colour —
+ * degraded, never broken.
+ */
+.arch-figure__body svg svg rect[width="80"],
+.arch-figure__body svg svg rect[width="60"] {
+  fill: color-mix(in srgb, var(--ink) 9%, var(--surface)) !important;
+}
+
+.arch-figure__body svg svg circle,
+.arch-figure__body svg svg path,
+.arch-figure__body svg svg line,
+.arch-figure__body svg svg polyline,
+.arch-figure__body svg svg polygon {
+  stroke: var(--ink) !important;
+}
+
+/* the boundary is a rule in this system, not a dashed sketch. */
+.arch-figure__body svg .node-bkg {
+  stroke-dasharray: none !important;
+}
+
+/*
+ * ── the tour ────────────────────────────────────────────────────────────────
+ * Three treatments of one diagram. Static is the frame plus the steps; the two
+ * pinned treatments park the frame and let scroll drive it. The camera element
+ * gets its transform inline from JS (measured against the rendered SVG), so the
+ * only thing CSS owns here is the frame, the rail and the easing.
+ */
+
+.arch-tour {
+  display: flex;
+  flex-direction: column;
+  gap: 1.6rem;
+  min-width: 0;
+}
+
+.arch-tour__frame {
+  border: 1px solid var(--hair);
+  background: var(--surface);
+  padding: 1.1rem;
+  min-width: 0;
+}
+
+.arch-tour__stage {
+  position: relative;
+  overflow: hidden;
+}
+
+.arch-tour__camera {
+  transform-origin: 0 0;
+  transition: transform 0.7s cubic-bezier(0.22, 1, 0.36, 1);
+  will-change: transform;
+}
+
+/* the frame already draws the box; the diagram inside must not draw a second. */
+.arch-tour__camera .arch-figure__body {
+  border: 0;
+  background: transparent;
+  padding: 0;
+}
+
+.arch-tour__camera .arch-figure__caption {
+  display: none;
+}
+
+.arch-tour__spot {
+  position: absolute;
+  border: 2px solid var(--accent);
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
+  pointer-events: none;
+  transition:
+    left 0.45s var(--ease),
+    top 0.45s var(--ease),
+    width 0.45s var(--ease),
+    height 0.45s var(--ease);
+}
+
+.arch-tour__grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 1.8rem;
+  align-items: start;
+}
+
+.arch-tour__pin {
+  position: sticky;
+  top: calc(var(--dq-nav-h, 4.5rem) + 1rem);
+}
+
+.arch-tour__rail {
+  position: relative;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 0.9rem;
+}
+
+.arch-tour__rail::before {
+  content: "";
+  position: absolute;
+  inset-block: 0;
+  inset-inline-start: 0;
+  width: 1px;
+  background: var(--accent);
+  transform-origin: 0 0;
+  transform: scaleY(var(--arch-p, 0));
+  transition: transform 0.15s linear;
+}
+
+.arch-tour__step {
+  display: grid;
+  gap: 0.15rem;
+  border-inline-start: 1px solid var(--hair);
+  padding-inline-start: 0.9rem;
+  opacity: 0.42;
+  transition:
+    opacity 0.3s var(--ease),
+    border-color 0.3s var(--ease);
+}
+
+.arch-tour__step.on {
+  opacity: 1;
+  border-inline-start-color: var(--accent);
+}
+
+.arch-tour__index {
+  font-family: var(--font-mono);
+  font-size: 0.62rem;
+  letter-spacing: 0.1em;
+  color: var(--ink-mute);
+}
+
+.arch-tour__label {
+  font-family: var(--font-mono);
+  font-size: 0.9rem;
+  color: var(--ink);
+}
+
+.arch-tour__line {
+  font-size: 0.82rem;
+  line-height: 1.6;
+  color: var(--ink-soft);
+}
+
+@media (min-width: 960px) {
+  .arch-tour:not([data-variant="static"]) .arch-tour__grid {
+    grid-template-columns: minmax(0, 1.35fr) minmax(0, 0.65fr);
+    gap: 2.4rem;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .arch-tour__camera,
+  .arch-tour__spot,
+  .arch-tour__step,
+  .arch-tour__rail::before {
+    transition: none;
+  }
+
+  .arch-tour__rail::before {
+    transform: none;
+    display: none;
+  }
+}
+
+/*
+ * mermaid parks a boundary's title on the boundary's own top edge, so it lands
+ * on top of whatever the force layout put nearest. A surface-coloured halo
+ * behind the glyphs (paint-order: stroke) makes it legible without moving it.
+ */
+.arch-figure__body svg .architecture-groups text {
+  paint-order: stroke;
+  stroke: var(--surface);
+  stroke-width: 4px;
+  stroke-linejoin: round;
+}
