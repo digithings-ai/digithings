@@ -1173,7 +1173,16 @@ class TestSearchResearch:
                         "content": "body",
                         "payload": None,
                         "workspace_id": str(house_workspace_id()),
-                    }
+                    },
+                    {
+                        "date": "2026-06-12",
+                        "document_key": "macro",
+                        "doc_type": "macro",
+                        "run_type": "baseline",
+                        "content": "body",
+                        "payload": None,
+                        "workspace_id": str(house_workspace_id()),
+                    },
                 ]
             },
             store={},
@@ -1181,22 +1190,28 @@ class TestSearchResearch:
         # Patch the archive store resolver into the fake client's store path.
         import digiquant.dashboard.research_retrieval.queries as q
 
-        orig = q.read_archived_document
+        orig = q.read_archived_documents
+        calls: list[list[tuple[str, str]]] = []
 
-        def _fake_read(_client, _store, *, workspace_id, document_key, date_str):
-            return payload
+        def _fake_read(_client, _store, *, workspace_id, keys):
+            calls.append(list(keys))
+            return {pair: payload for pair in keys}
 
-        q.read_archived_document = _fake_read  # type: ignore[assignment]
+        q.read_archived_documents = _fake_read  # type: ignore[assignment]
         try:
             out = search_research(
                 client,
                 run_date=date(2026, 6, 19),
                 document_key="macro",
+                include_prior=True,
                 store=store,
             )
         finally:
-            q.read_archived_document = orig  # type: ignore[assignment]
-        assert out["rows"][0]["payload"] == payload
+            q.read_archived_documents = orig  # type: ignore[assignment]
+        # #4562: the whole page hydrates in one batched read, not one per row,
+        # and every NULL-payload row on the page gets its payload merged back.
+        assert [row["payload"] for row in out["rows"]] == [payload, payload]
+        assert calls == [[("macro", "2026-06-19"), ("macro", "2026-06-12")]]
 
     def test_blinded_phase_drops_blocked_document(self) -> None:
         client = FakeSupabaseClient(
