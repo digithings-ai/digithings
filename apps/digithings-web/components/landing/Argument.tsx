@@ -66,16 +66,23 @@ const LAYERS: Layer[] = [
 
 const GRID = "grid grid-cols-[minmax(0,1fr)_3.4rem_minmax(0,1fr)]";
 
+// Type scale for the diagram's labels, which used to sit below the page's own
+// floor: the column headers were 0.62rem (9.92px) and the layer names 0.6rem
+// (9.6px), while every other micro-caps label on this page is `--type-meta`
+// (12px) and the repo primitives' smallest is 0.68rem (10.88px). Two steps now,
+// so the headers read as headers: headers `--type-meta`, row labels 0.68rem.
+// Nothing here goes below the page's smallest established size.
+
 /** The diagram: the same seven layers drawn twice, every one a seam. */
 export function ArgumentSeams() {
   return (
     <div className="w-full max-w-[var(--frame-w)] border border-hair bg-surface">
       <div className={`${GRID} border-b border-hair`}>
-        <p className="m-0 px-[1rem] py-[0.7rem] font-mono text-[0.62rem] uppercase tracking-[var(--tracking-meta)] text-ink-mute">
+        <p className="m-0 px-[1rem] py-[0.7rem] font-mono text-[length:var(--type-meta)] uppercase tracking-[var(--tracking-meta)] text-ink-mute">
           the managed platform
         </p>
         <span aria-hidden="true" />
-        <p className="m-0 px-[1rem] py-[0.7rem] font-mono text-[0.62rem] uppercase tracking-[var(--tracking-meta)] text-ink">
+        <p className="m-0 px-[1rem] py-[0.7rem] font-mono text-[length:var(--type-meta)] uppercase tracking-[var(--tracking-meta)] text-ink">
           digithings
         </p>
       </div>
@@ -85,7 +92,7 @@ export function ArgumentSeams() {
           {/* Theirs — a hollow cell: a hairline rule, transparent ground, muted
               copy. Nothing of yours is in here, and it should look like it. */}
           <div className="flex flex-col gap-[0.12rem] border-s-[3px] border-s-hair px-[1rem] py-[0.62rem]">
-            <span className="font-mono text-[0.6rem] uppercase tracking-[var(--tracking-meta)] text-ink-mute">
+            <span className="font-mono text-[0.68rem] uppercase tracking-[var(--tracking-meta)] text-ink-mute">
               {l.layer}
             </span>
             <span className="text-[0.82rem] leading-[1.5] text-ink-mute">{l.theirs}</span>
@@ -108,7 +115,7 @@ export function ArgumentSeams() {
               monochrome (globals.css collapses --accent to --ink), so ownership
               is carried by ground + a solid rule + ink copy, never by a hue. */}
           <div className="flex flex-col gap-[0.12rem] border-s-[3px] border-s-ink bg-surface-2 px-[1rem] py-[0.62rem]">
-            <span className="font-mono text-[0.6rem] uppercase tracking-[var(--tracking-meta)] text-ink">
+            <span className="font-mono text-[0.68rem] uppercase tracking-[var(--tracking-meta)] text-ink">
               {l.layer}
             </span>
             <span className="text-[0.82rem] leading-[1.5] text-ink">{l.yours}</span>
