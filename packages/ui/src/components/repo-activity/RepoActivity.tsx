@@ -183,7 +183,6 @@ export function RepoActivity({
         <Activity
           data={data}
           repoUrl={repoUrl}
-          source={source}
           heatRef={heatRef}
           heatWeeks={heatWeeks}
           heatData={heatData}
@@ -299,11 +298,15 @@ function Compact({
  * metrics are narrow: putting the counts left and the graph right is what keeps
  * the first rows from being mostly empty, and the graph then expands into
  * whatever width is left. Below 900px it stacks.
+ *
+ * No latest-release line and no snapshot stamp here — the owner called that
+ * "ai slop like the latest digichat v1.5 snapshot date ... isn't necessary" and
+ * the version rail already carries every module's release. The repo link moves
+ * to the foot's bottom-right corner, where "browse the repo" belongs.
  */
 function Activity({
   data,
   repoUrl,
-  source,
   heatRef,
   heatWeeks,
   heatData,
@@ -312,7 +315,6 @@ function Activity({
 }: {
   data: RepoActivitySnapshot;
   repoUrl: string;
-  source: "snapshot" | "live";
   heatRef: RefObject<HTMLDivElement | null>;
   heatWeeks: number;
   heatData: RepoActivitySnapshot["dailyContributions"];
@@ -338,10 +340,6 @@ function Activity({
               <Metric n={data.pullsOpen} label="PRs open" />
               <Metric n={data.issuesOpen} label="issues open" />
             </ul>
-          </div>
-          <div className="ra-meta">
-            <ReleaseLink release={data.latestRelease} />
-            <Stamp source={source} at={data.generatedAt} />
           </div>
         </div>
         <div className="ra-group ra-activity-heat" ref={heatRef}>
@@ -440,8 +438,8 @@ function ContributorAvatar({ contributor }: { contributor: RepoContributor }) {
         className="ra-avatar"
         src={contributor.avatarUrl}
         alt=""
-        width={28}
-        height={28}
+        width={36}
+        height={36}
         loading="lazy"
       />
     );

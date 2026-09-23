@@ -10,7 +10,7 @@ import { FaqMorph } from "@/components/landing/FaqMorph";
 import { ModuleGrid } from "@/components/landing/ModuleGrid";
 import { Pricing } from "@/components/landing/Pricing";
 import { QuantSection } from "@/components/landing/QuantSection";
-import { OpenSource, Testimonials } from "@/components/landing/Sections";
+import { OpenSource } from "@/components/landing/Sections";
 import { REPO_CLONE } from "@/lib/repoActivity";
 
 /**
@@ -195,16 +195,6 @@ export function LandingPage() {
             The software is free. The integration is the work.
           </h2>
           <Pricing />
-        </div>
-      </section>
-
-      <section id="voices" className="line-b px-[var(--page-pad)] py-[var(--page-step)]">
-        <div className="mx-auto flex max-w-[var(--frame-w)] flex-col gap-[2rem]">
-          <h2 className="m-0 font-mono text-[length:var(--type-section-stand)] font-medium leading-[1.2] tracking-[-0.025em] text-ink">
-            Two voices
-          </h2>
-          {/* Point 5: the quotes are one section now, not a band and a hero line. */}
-          <Testimonials />
         </div>
       </section>
 

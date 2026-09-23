@@ -438,6 +438,13 @@
   border-top: 1px solid var(--hair);
 }
 
+/* "Browse the repo" belongs in the bottom-right corner (owner, round 6).
+   `margin-left: auto` pins it there even when the maintainer is absent. */
+.ra-activity-foot .ra-meta {
+  margin-left: auto;
+  margin-top: 0;
+}
+
 /* The version ledger is a CardRail (see RepoActivity's activity variant): one
    release card per module, in the same horizontal rail the strategy library
    uses. The card's flex basis and snap-align live here rather than on the call
@@ -522,8 +529,8 @@ a.ra-release-version:hover {
 
 .ra-avatar {
   display: block;
-  width: 28px;
-  height: 28px;
+  width: 36px;
+  height: 36px;
   border-radius: 0;
   object-fit: cover;
   border: 1px solid var(--hair);

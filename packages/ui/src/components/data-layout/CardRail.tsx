@@ -45,10 +45,20 @@ export function CardRail({ children, ariaLabel, className }: CardRailProps) {
     const el = railRef.current;
     if (!el) return;
     update();
+    /* A rail opens at its first card. Scroll-snap can restore a previous offset
+       and a padded track can settle a pixel or two in, either of which faded the
+       first card on load — the owner: "it should default to being scrolled all
+       the way to the left ... it fades out the first card". Re-asserted after
+       the first paint, because the snap position is applied after layout. */
+    el.scrollLeft = 0;
+    const raf = requestAnimationFrame(() => {
+      el.scrollLeft = 0;
+    });
     el.addEventListener("scroll", update, { passive: true });
     const observer = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(update);
     observer?.observe(el);
     return () => {
+      cancelAnimationFrame(raf);
       el.removeEventListener("scroll", update);
       observer?.disconnect();
     };
