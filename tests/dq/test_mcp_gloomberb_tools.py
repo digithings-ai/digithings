@@ -33,64 +33,64 @@ from digifetch import HttpFetcher, RateLimiter, RetryPolicy  # noqa: E402
 from digiquant import mcp_server  # noqa: E402
 
 DIGIFETCH_TOOLS = {
-    "digifetch_quote",
-    "digifetch_quotes_batch",
-    "digifetch_price_history",
-    "digifetch_ticker_financials",
-    "digifetch_options_chain",
-    "digifetch_sec_filings",
-    "digifetch_holders",
-    "digifetch_analyst_research",
-    "digifetch_corporate_actions",
-    "digifetch_earnings_calendar",
-    "digifetch_exchange_rate",
-    "digifetch_search",
-    "digifetch_news",
+    "gloomberb_get_quote",
+    "gloomberb_get_quotes_batch",
+    "gloomberb_get_price_history",
+    "gloomberb_get_ticker_financials",
+    "gloomberb_get_options_chain",
+    "gloomberb_get_sec_filings",
+    "gloomberb_get_holders",
+    "gloomberb_get_analyst_research",
+    "gloomberb_get_corporate_actions",
+    "yahoo_get_earnings_calendar",
+    "gloomberb_get_exchange_rate",
+    "gloomberb_search",
+    "gloomberb_get_news",
     # coverage expansion (#4110 phase 1)
-    "digifetch_econ_calendar",
-    "digifetch_econ_series",
-    "digifetch_yield_curve",
-    "digifetch_cds",
-    "digifetch_research_search",
-    "digifetch_congress_trades",
-    "digifetch_transcripts",
+    "gloomberb_get_econ_calendar",
+    "gloomberb_get_econ_series",
+    "gloomberb_get_yield_curve",
+    "gloomberb_get_cds",
+    "gloomberb_search_research",
+    "gloomberb_get_congress_trades",
+    "gloomberb_get_transcripts",
     # coverage expansion (#4110 phase 2)
-    "digifetch_statements",
-    "digifetch_ticker_tweets",
-    "digifetch_tweet_search",
-    "digifetch_venues",
-    "digifetch_screener",
-    "digifetch_13f_funds",
-    "digifetch_13f_holdings",
+    "gloomberb_get_statements",
+    "gloomberb_get_ticker_tweets",
+    "gloomberb_search_tweet",
+    "gloomberb_list_venues",
+    "gloomberb_run_screener",
+    "gloomberb_get_13f_funds",
+    "gloomberb_get_13f_holdings",
     # coverage expansion (#4110 phase 3)
-    "digifetch_shiller",
-    "digifetch_proxy_statements",
-    "digifetch_filing_events",
-    "digifetch_risk_reports",
-    "digifetch_short_interest",
-    "digifetch_equity_diagnostic",
+    "gloomberb_get_shiller",
+    "gloomberb_get_proxy_statements",
+    "gloomberb_get_filing_events",
+    "gloomberb_get_risk_reports",
+    "gloomberb_get_short_interest",
+    "gloomberb_get_equity_diagnostic",
     # coverage expansion (#4110 phase 4a)
-    "digifetch_saved_searches",
+    "gloomberb_list_saved_searches",
 }
 
 #: Tools whose payload carries a term.gloom.sh deep link (one listing).
 LINKED_TOOLS = {
-    "digifetch_quote",
-    "digifetch_price_history",
-    "digifetch_ticker_financials",
-    "digifetch_options_chain",
-    "digifetch_sec_filings",
-    "digifetch_holders",
-    "digifetch_analyst_research",
-    "digifetch_corporate_actions",
-    "digifetch_transcripts",
-    "digifetch_statements",
-    "digifetch_ticker_tweets",
-    "digifetch_proxy_statements",
-    "digifetch_filing_events",
-    "digifetch_risk_reports",
-    "digifetch_short_interest",
-    "digifetch_equity_diagnostic",
+    "gloomberb_get_quote",
+    "gloomberb_get_price_history",
+    "gloomberb_get_ticker_financials",
+    "gloomberb_get_options_chain",
+    "gloomberb_get_sec_filings",
+    "gloomberb_get_holders",
+    "gloomberb_get_analyst_research",
+    "gloomberb_get_corporate_actions",
+    "gloomberb_get_transcripts",
+    "gloomberb_get_statements",
+    "gloomberb_get_ticker_tweets",
+    "gloomberb_get_proxy_statements",
+    "gloomberb_get_filing_events",
+    "gloomberb_get_risk_reports",
+    "gloomberb_get_short_interest",
+    "gloomberb_get_equity_diagnostic",
 }
 
 AAPL_QUOTE = {
@@ -461,11 +461,11 @@ def test_orchestrator_manifest_lists_each_tool_with_attribution() -> None:
     rows = {row["function"]["name"]: row for row in build_orchestrator_tool_manifest()}
     missing = DIGIFETCH_TOOLS - set(rows)
     assert not missing, f"missing orchestrator tools: {sorted(missing)}"
-    for name in sorted(DIGIFETCH_TOOLS - {"digifetch_earnings_calendar"}):
+    for name in sorted(DIGIFETCH_TOOLS - {"yahoo_get_earnings_calendar"}):
         description = rows[name]["function"]["description"]
         assert "Gloomberb" in description, f"{name} description must name the source"
     # The earnings calendar is Yahoo-backed; it must not claim Gloomberb.
-    earnings_description = rows["digifetch_earnings_calendar"]["function"]["description"]
+    earnings_description = rows["yahoo_get_earnings_calendar"]["function"]["description"]
     assert "Yahoo" in earnings_description
     assert "Gloomberb" not in earnings_description
 
@@ -478,7 +478,7 @@ def test_anon_quote_returns_attributed_envelope(monkeypatch: pytest.MonkeyPatch)
         return _envelope(AAPL_QUOTE)
 
     _patch_client(monkeypatch, handler)
-    payload = json.loads(_mcp("digifetch_quote")("AAPL"))
+    payload = json.loads(_mcp("gloomberb_get_quote")("AAPL"))
     assert payload["data"]["quote"]["price"] == 200.0
     assert payload["stale"] is False
     assert payload["delay_note"] == "Free-tier data delayed up to 15 minutes"
@@ -498,7 +498,7 @@ def test_holders_without_cookie_is_auth_required_without_request(
         return _envelope({"symbol": "AAPL", "holders": []})
 
     _patch_client(monkeypatch, handler)
-    payload = json.loads(_mcp("digifetch_holders")("AAPL"))
+    payload = json.loads(_mcp("gloomberb_get_holders")("AAPL"))
     assert payload["data"]["code"] == "auth_required"
     assert "GLOOMBERB_SESSION_COOKIE" in payload["data"]["message"]
     assert calls == []
@@ -508,7 +508,7 @@ def test_kill_switch_disabled_returns_typed_error(monkeypatch: pytest.MonkeyPatc
     # No builder patch: the env-seam path builds a real client, and the kill
     # switch short-circuits before any request, so this stays offline.
     monkeypatch.setenv("GLOOMBERB_ENABLED", "0")
-    payload = json.loads(_mcp("digifetch_quote")("AAPL"))
+    payload = json.loads(_mcp("gloomberb_get_quote")("AAPL"))
     assert payload["data"]["code"] == "upstream_error"
     assert "kill switch" in payload["data"]["message"]
 
@@ -518,7 +518,7 @@ def test_session_cookie_is_never_echoed_in_payloads(monkeypatch: pytest.MonkeyPa
         return _envelope({"symbol": "AAPL", "holders": []})
 
     _patch_client(monkeypatch, handler, session_cookie="super-secret-token")
-    result = _mcp("digifetch_holders")("AAPL")
+    result = _mcp("gloomberb_get_holders")("AAPL")
     assert "super-secret-token" not in result
     assert json.loads(result)["data"]["holders"] == []
 
@@ -529,7 +529,7 @@ def test_earnings_calendar_reports_missing_yfinance(monkeypatch: pytest.MonkeyPa
 
     _patch_client(monkeypatch, handler)
     monkeypatch.setitem(sys.modules, "yfinance", None)
-    payload = json.loads(_mcp("digifetch_earnings_calendar")(["AAPL"]))
+    payload = json.loads(_mcp("yahoo_get_earnings_calendar")(["AAPL"]))
     assert payload["data"]["code"] == "upstream_error"
     assert "yfinance" in payload["data"]["message"]
 
@@ -546,7 +546,7 @@ def test_earnings_calendar_returns_events(monkeypatch: pytest.MonkeyPatch) -> No
             EarningsEvent(symbol=symbol, earnings_date=date(2026, 9, 20), eps_estimate=1.2)
         ],
     )
-    payload = json.loads(_mcp("digifetch_earnings_calendar")(["AAPL"], 90))
+    payload = json.loads(_mcp("yahoo_get_earnings_calendar")(["AAPL"], 90))
     assert payload["data"]["events"][0]["earnings_date"] == "2026-09-20"
 
 
@@ -560,7 +560,7 @@ def test_price_history_rejects_out_of_contract_request_before_any_request(
         return _envelope([])
 
     _patch_client(monkeypatch, handler)
-    payload = json.loads(_mcp("digifetch_price_history")("AAPL", "5m", "5Y"))
+    payload = json.loads(_mcp("gloomberb_get_price_history")("AAPL", "5m", "5Y"))
     assert payload["data"]["code"] == "invalid_input"
     assert calls == []
 
@@ -577,7 +577,7 @@ def test_price_history_date_window_widens_the_request(monkeypatch: pytest.Monkey
         )
 
     _patch_client(monkeypatch, handler)
-    payload = json.loads(_mcp("digifetch_price_history")("AAPL", "1wk", start_date="2015-01-01"))
+    payload = json.loads(_mcp("gloomberb_get_price_history")("AAPL", "1wk", start_date="2015-01-01"))
     assert "interval=1week" in seen["url"]
     assert "rangeKey=ALL" in seen["url"]
     assert "startDate=2015-01-01" in seen["url"]
@@ -596,7 +596,7 @@ def test_price_history_window_with_range_is_invalid_input_without_request(
 
     _patch_client(monkeypatch, handler)
     payload = json.loads(
-        _mcp("digifetch_price_history")("AAPL", "1wk", "5Y", start_date="2015-01-01")
+        _mcp("gloomberb_get_price_history")("AAPL", "1wk", "5Y", start_date="2015-01-01")
     )
     assert payload["data"]["code"] == "invalid_input"
     assert calls == []
@@ -604,7 +604,7 @@ def test_price_history_window_with_range_is_invalid_input_without_request(
 
 def test_price_history_manifest_and_description_expose_the_date_window() -> None:
     rows = {row["function"]["name"]: row for row in build_orchestrator_tool_manifest()}
-    function = rows["digifetch_price_history"]["function"]
+    function = rows["gloomberb_get_price_history"]["function"]
     properties = function["parameters"]["properties"]
     assert {"start_date", "end_date"} <= set(properties)
     assert "YYYY-MM-DD" in properties["start_date"]["description"]
@@ -618,7 +618,7 @@ def test_news_with_ticker_carries_deep_link(monkeypatch: pytest.MonkeyPatch) -> 
         )
 
     _patch_client(monkeypatch, handler)
-    payload = json.loads(_mcp("digifetch_news")("ticker", "AAPL"))
+    payload = json.loads(_mcp("gloomberb_get_news")("ticker", "AAPL"))
     assert payload["data"]["items"][0]["headline"] == "Headline"
     assert payload["source_url"] == "https://term.gloom.sh/?ticker=AAPL"
     assert payload["attribution"] == GLOOMBERB_ATTRIBUTION
@@ -638,39 +638,39 @@ def test_env_seam_builder_caches_per_env_pair_and_defaults_on(
 
 
 TOOL_CALLS: dict[str, tuple[Any, ...]] = {
-    "digifetch_quote": ("AAPL",),
-    "digifetch_quotes_batch": (["AAPL"],),
-    "digifetch_price_history": ("AAPL", "1wk", "5Y"),
-    "digifetch_ticker_financials": ("AAPL",),
-    "digifetch_options_chain": ("AAPL",),
-    "digifetch_sec_filings": ("MSFT",),
-    "digifetch_holders": ("AAPL",),
-    "digifetch_analyst_research": ("AAPL",),
-    "digifetch_corporate_actions": ("AAPL",),
-    "digifetch_earnings_calendar": (["AAPL"],),
-    "digifetch_exchange_rate": ("EUR",),
-    "digifetch_search": ("apple",),
-    "digifetch_news": ("latest",),
-    "digifetch_econ_calendar": (),
-    "digifetch_econ_series": ("CPIAUCSL",),
-    "digifetch_yield_curve": (),
-    "digifetch_cds": (),
-    "digifetch_research_search": ("inflation",),
-    "digifetch_congress_trades": (),
-    "digifetch_transcripts": ("AAPL",),
-    "digifetch_statements": ("AAPL",),
-    "digifetch_ticker_tweets": ("AAPL",),
-    "digifetch_tweet_search": ("tariffs",),
-    "digifetch_venues": (),
-    "digifetch_screener": ("gainers",),
-    "digifetch_13f_funds": ("search", "berkshire"),
-    "digifetch_13f_holdings": ("forms", "1067983"),
-    "digifetch_shiller": (),
-    "digifetch_proxy_statements": ("AAPL",),
-    "digifetch_filing_events": ("AAPL",),
-    "digifetch_risk_reports": ("AAPL",),
-    "digifetch_short_interest": ("AAPL",),
-    "digifetch_equity_diagnostic": ("AAPL",),
+    "gloomberb_get_quote": ("AAPL",),
+    "gloomberb_get_quotes_batch": (["AAPL"],),
+    "gloomberb_get_price_history": ("AAPL", "1wk", "5Y"),
+    "gloomberb_get_ticker_financials": ("AAPL",),
+    "gloomberb_get_options_chain": ("AAPL",),
+    "gloomberb_get_sec_filings": ("MSFT",),
+    "gloomberb_get_holders": ("AAPL",),
+    "gloomberb_get_analyst_research": ("AAPL",),
+    "gloomberb_get_corporate_actions": ("AAPL",),
+    "yahoo_get_earnings_calendar": (["AAPL"],),
+    "gloomberb_get_exchange_rate": ("EUR",),
+    "gloomberb_search": ("apple",),
+    "gloomberb_get_news": ("latest",),
+    "gloomberb_get_econ_calendar": (),
+    "gloomberb_get_econ_series": ("CPIAUCSL",),
+    "gloomberb_get_yield_curve": (),
+    "gloomberb_get_cds": (),
+    "gloomberb_search_research": ("inflation",),
+    "gloomberb_get_congress_trades": (),
+    "gloomberb_get_transcripts": ("AAPL",),
+    "gloomberb_get_statements": ("AAPL",),
+    "gloomberb_get_ticker_tweets": ("AAPL",),
+    "gloomberb_search_tweet": ("tariffs",),
+    "gloomberb_list_venues": (),
+    "gloomberb_run_screener": ("gainers",),
+    "gloomberb_get_13f_funds": ("search", "berkshire"),
+    "gloomberb_get_13f_holdings": ("forms", "1067983"),
+    "gloomberb_get_shiller": (),
+    "gloomberb_get_proxy_statements": ("AAPL",),
+    "gloomberb_get_filing_events": ("AAPL",),
+    "gloomberb_get_risk_reports": ("AAPL",),
+    "gloomberb_get_short_interest": ("AAPL",),
+    "gloomberb_get_equity_diagnostic": ("AAPL",),
 }
 
 
@@ -686,7 +686,7 @@ def test_every_tool_returns_attributed_json(
     )
     payload = json.loads(_mcp(name)(*args))
     assert "data" in payload, f"{name} returned no data slot"
-    attributed = name != "digifetch_earnings_calendar"
+    attributed = name != "yahoo_get_earnings_calendar"
     if attributed:
         assert payload["attribution"] == GLOOMBERB_ATTRIBUTION
         assert payload["delay_notice"] == GLOOMBERB_DELAY_NOTICE
@@ -741,7 +741,7 @@ def test_sec_filings_documents_via_wrapper(monkeypatch: pytest.MonkeyPatch) -> N
 
     _patch_client(monkeypatch, handler)
     payload = json.loads(
-        _mcp("digifetch_sec_filings")("MSFT", "documents", 15, "789019", "0001-26-1")
+        _mcp("gloomberb_get_sec_filings")("MSFT", "documents", 15, "789019", "0001-26-1")
     )
     assert "/cloud/sec/filing/documents" in seen["url"]
     assert payload["data"]["documents"][0]["type"] == "10-Q"
@@ -753,7 +753,7 @@ def test_sec_filings_content_via_wrapper(monkeypatch: pytest.MonkeyPatch) -> Non
 
     _patch_client(monkeypatch, handler)
     payload = json.loads(
-        _mcp("digifetch_sec_filings")("MSFT", "content", 15, "789019", "0001-26-1")
+        _mcp("gloomberb_get_sec_filings")("MSFT", "content", 15, "789019", "0001-26-1")
     )
     assert payload["data"]["content"] == "<html/>"
 
@@ -771,7 +771,7 @@ def test_research_search_without_cookie_is_auth_required_without_request(
         return _envelope({"hits": []})
 
     _patch_client(monkeypatch, handler)
-    payload = json.loads(_mcp("digifetch_research_search")("inflation"))
+    payload = json.loads(_mcp("gloomberb_search_research")("inflation"))
     assert payload["data"]["code"] == "auth_required"
     assert calls == []
 
@@ -786,7 +786,7 @@ def test_cds_out_of_range_days_is_invalid_input_without_request(
         return _envelope({"trades": []})
 
     _patch_client(monkeypatch, handler)
-    payload = json.loads(_mcp("digifetch_cds")(None, 91))
+    payload = json.loads(_mcp("gloomberb_get_cds")(None, 91))
     assert payload["data"]["code"] == "invalid_input"
     assert calls == []
 
@@ -798,7 +798,7 @@ def test_transcripts_plan_required_maps_to_pro_required(
         return httpx.Response(200, text="Pro plan required")
 
     _patch_client(monkeypatch, handler, session_cookie="gloomberb.session_token=test")
-    payload = json.loads(_mcp("digifetch_transcripts")("AAPL"))
+    payload = json.loads(_mcp("gloomberb_get_transcripts")("AAPL"))
     assert payload["data"]["code"] == "pro_required"
     assert "Pro plan" in payload["data"]["message"]
     assert payload["attribution"] == GLOOMBERB_ATTRIBUTION
@@ -813,7 +813,7 @@ def test_transcripts_402_plan_required_maps_to_pro_required(
         return httpx.Response(status, text="Pro plan required")
 
     _patch_client(monkeypatch, handler, session_cookie="gloomberb.session_token=test")
-    payload = json.loads(_mcp("digifetch_transcripts")("AAPL"))
+    payload = json.loads(_mcp("gloomberb_get_transcripts")("AAPL"))
     assert payload["data"]["code"] == "pro_required"
     assert "Pro plan" in payload["data"]["message"]
 
@@ -825,7 +825,7 @@ def test_research_search_402_maps_to_auth_required(
         return httpx.Response(402, json={"message": "Payment Required"})
 
     _patch_client(monkeypatch, handler, session_cookie="gloomberb.session_token=test")
-    payload = json.loads(_mcp("digifetch_research_search")("inflation"))
+    payload = json.loads(_mcp("gloomberb_search_research")("inflation"))
     assert payload["data"]["code"] == "auth_required"
 
 
@@ -849,7 +849,7 @@ def test_transcripts_wrapper_maps_the_upstream_calls_payload(
         )
 
     _patch_client(monkeypatch, handler, session_cookie="gloomberb.session_token=test")
-    payload = json.loads(_mcp("digifetch_transcripts")("AAPL"))
+    payload = json.loads(_mcp("gloomberb_get_transcripts")("AAPL"))
     row = payload["data"]["transcripts"][0]
     assert row["company_name"] == "Apple Inc."
     assert row["call_at"] == "2026-08-01T16:30:00Z"
@@ -865,7 +865,7 @@ def test_congress_trades_upstream_500_maps_to_upstream_error(
         )
 
     _patch_client(monkeypatch, handler)
-    payload = json.loads(_mcp("digifetch_congress_trades")())
+    payload = json.loads(_mcp("gloomberb_get_congress_trades")())
     assert payload["data"]["code"] == "upstream_error"
 
 
@@ -879,7 +879,7 @@ def test_yield_curve_tool_returns_points_without_a_deep_link(
         )
 
     _patch_client(monkeypatch, handler)
-    payload = json.loads(_mcp("digifetch_yield_curve")())
+    payload = json.loads(_mcp("gloomberb_get_yield_curve")())
     assert payload["data"]["points"][0]["yield_"] == 4.2
     assert "source_url" not in payload
 
@@ -897,7 +897,7 @@ def test_statements_without_cookie_is_auth_required_without_request(
         return httpx.Response(200, json={"status": "success", "data": {}})
 
     _patch_client(monkeypatch, handler)
-    payload = json.loads(_mcp("digifetch_statements")("AAPL"))
+    payload = json.loads(_mcp("gloomberb_get_statements")("AAPL"))
     assert payload["data"]["code"] == "auth_required"
     assert calls == []
 
@@ -918,7 +918,7 @@ def test_statements_wrapper_maps_rows_and_deep_link(monkeypatch: pytest.MonkeyPa
         )
 
     _patch_client(monkeypatch, handler, session_cookie="gloomberb.session_token=test")
-    payload = json.loads(_mcp("digifetch_statements")("AAPL", "annual"))
+    payload = json.loads(_mcp("gloomberb_get_statements")("AAPL", "annual"))
     assert payload["data"]["annual_statements"][0]["date"] == "2021-09-30"
     assert payload["source_url"] == "https://term.gloom.sh/?ticker=AAPL"
 
@@ -933,7 +933,7 @@ def test_ticker_tweets_wrapper_slices_to_the_requested_limit(
         )
 
     _patch_client(monkeypatch, handler, session_cookie="gloomberb.session_token=test")
-    payload = json.loads(_mcp("digifetch_ticker_tweets")("AAPL", 2))
+    payload = json.loads(_mcp("gloomberb_get_ticker_tweets")("AAPL", 2))
     assert len(payload["data"]["tweets"]) == 2
     assert payload["data"]["total_available"] == 5
     assert payload["data"]["truncated"] is True
@@ -950,7 +950,7 @@ def test_tweet_search_without_cookie_is_auth_required_without_request(
         return httpx.Response(200, json={"query": "tariffs", "tweets": []})
 
     _patch_client(monkeypatch, handler)
-    payload = json.loads(_mcp("digifetch_tweet_search")("tariffs"))
+    payload = json.loads(_mcp("gloomberb_search_tweet")("tariffs"))
     assert payload["data"]["code"] == "auth_required"
     assert calls == []
 
@@ -967,7 +967,7 @@ def test_screener_pro_required_envelope_maps_to_pro_required(
         )
 
     _patch_client(monkeypatch, handler, session_cookie="gloomberb.session_token=test")
-    payload = json.loads(_mcp("digifetch_screener")("gainers"))
+    payload = json.loads(_mcp("gloomberb_run_screener")("gainers"))
     assert payload["data"]["code"] == "pro_required"
     assert "Pro plan" in payload["data"]["message"]
     assert payload["data"]["retryable"] is False
@@ -980,7 +980,7 @@ def test_screener_402_text_body_maps_to_the_same_error(
         return httpx.Response(402, text="Pro plan required")
 
     _patch_client(monkeypatch, handler, session_cookie="gloomberb.session_token=test")
-    payload = json.loads(_mcp("digifetch_screener")("gainers"))
+    payload = json.loads(_mcp("gloomberb_run_screener")("gainers"))
     assert payload["data"]["code"] == "pro_required"
     assert "Pro plan" in payload["data"]["message"]
 
@@ -995,7 +995,7 @@ def test_screener_without_cookie_is_auth_required_without_request(
         return httpx.Response(200, json={"status": "success", "data": []})
 
     _patch_client(monkeypatch, handler)
-    payload = json.loads(_mcp("digifetch_screener")("gainers"))
+    payload = json.loads(_mcp("gloomberb_run_screener")("gainers"))
     assert payload["data"]["code"] == "auth_required"
     assert calls == []
 
@@ -1013,7 +1013,7 @@ def test_13f_holdings_forms_normalizes_cik_and_sends_it(
         )
 
     _patch_client(monkeypatch, handler)
-    payload = json.loads(_mcp("digifetch_13f_holdings")("forms", "1067983"))
+    payload = json.loads(_mcp("gloomberb_get_13f_holdings")("forms", "1067983"))
     assert "cik=0001067983" in seen["url"]
     assert payload["data"]["forms"][0]["company_name"] == "Berkshire"
 
@@ -1028,7 +1028,7 @@ def test_13f_holdings_missing_required_field_is_invalid_input_without_request(
         return httpx.Response(200, json=[])
 
     _patch_client(monkeypatch, handler)
-    payload = json.loads(_mcp("digifetch_13f_holdings")("forms"))
+    payload = json.loads(_mcp("gloomberb_get_13f_holdings")("forms"))
     assert payload["data"]["code"] == "invalid_input"
     assert calls == []
 
@@ -1043,7 +1043,7 @@ def test_13f_funds_topfunds_wrapper_sends_the_quarter(
         return httpx.Response(200, json=[{"cik": "0001907544", "name": "Magma"}])
 
     _patch_client(monkeypatch, handler)
-    payload = json.loads(_mcp("digifetch_13f_funds")("top", None, "2026Q2"))
+    payload = json.loads(_mcp("gloomberb_get_13f_funds")("top", None, "2026Q2"))
     assert "quarter=2026Q2" in seen["url"]
     assert payload["data"]["top_funds"][0]["name"] == "Magma"
 
@@ -1057,7 +1057,7 @@ def test_13f_funds_holders_wrapper_maps_the_ciks(monkeypatch: pytest.MonkeyPatch
 
     _patch_client(monkeypatch, handler)
     payload = json.loads(
-        _mcp("digifetch_13f_funds")("holders", None, None, None, "037833100", "2026-06-30")
+        _mcp("gloomberb_get_13f_funds")("holders", None, None, None, "037833100", "2026-06-30")
     )
     holders = payload["data"]["holders"]
     assert holders["period_of_report"] == "2026-06-30"
@@ -1072,7 +1072,7 @@ def test_13f_holders_proxied_4xx_maps_to_invalid_input(
 
     _patch_client(monkeypatch, handler)
     payload = json.loads(
-        _mcp("digifetch_13f_funds")("holders", None, None, None, "037833100", "2026-06-30")
+        _mcp("gloomberb_get_13f_funds")("holders", None, None, None, "037833100", "2026-06-30")
     )
     assert payload["data"]["code"] == "invalid_input"
     assert payload["data"]["retryable"] is False
@@ -1100,7 +1100,7 @@ def test_ticker_tweets_wrapper_applies_the_hours_window(
         session_cookie="gloomberb.session_token=test",
         now=lambda: datetime(2026, 9, 15, 17, 0, tzinfo=timezone.utc),
     )
-    payload = json.loads(_mcp("digifetch_ticker_tweets")("AAPL", 50, 24))
+    payload = json.loads(_mcp("gloomberb_get_ticker_tweets")("AAPL", 50, 24))
     data = payload["data"]
     assert [tweet["id"] for tweet in data["tweets"]] == ["recent"]
     assert data["total_available"] == 2
@@ -1125,7 +1125,7 @@ def test_shiller_wrapper_slices_the_series(monkeypatch: pytest.MonkeyPatch) -> N
         )
 
     _patch_client(monkeypatch, handler)
-    payload = json.loads(_mcp("digifetch_shiller")(2))
+    payload = json.loads(_mcp("gloomberb_get_shiller")(2))
     data = payload["data"]
     assert [row["date"] for row in data["observations"]] == ["2026-04-01", "2026-05-01"]
     assert data["total_available"] == 5
@@ -1171,11 +1171,11 @@ def test_proxy_statements_wrapper_lists_and_fetches_one(
         )
 
     _patch_client(monkeypatch, handler)
-    listed = json.loads(_mcp("digifetch_proxy_statements")("AAPL"))
+    listed = json.loads(_mcp("gloomberb_get_proxy_statements")("AAPL"))
     assert listed["data"]["proxies"][0]["proxy_year"] == 2026
     assert listed["source_url"] == "https://term.gloom.sh/?ticker=AAPL"
 
-    one = json.loads(_mcp("digifetch_proxy_statements")("AAPL", "statement", 2026))
+    one = json.loads(_mcp("gloomberb_get_proxy_statements")("AAPL", "statement", 2026))
     assert one["data"]["statement"]["ceo"]["name"] == "Tim Cook"
     assert "/public/proxies/AAPL/2026" in seen["url"]
 
@@ -1190,7 +1190,7 @@ def test_proxy_statement_without_year_is_invalid_input_without_request(
         return httpx.Response(200, json={})
 
     _patch_client(monkeypatch, handler)
-    payload = json.loads(_mcp("digifetch_proxy_statements")("AAPL", "statement"))
+    payload = json.loads(_mcp("gloomberb_get_proxy_statements")("AAPL", "statement"))
     assert payload["data"]["code"] == "invalid_input"
     assert calls == []
 
@@ -1205,7 +1205,7 @@ def test_risk_report_without_year_is_invalid_input_without_request(
         return httpx.Response(200, json={})
 
     _patch_client(monkeypatch, handler)
-    payload = json.loads(_mcp("digifetch_risk_reports")("AAPL", "report"))
+    payload = json.loads(_mcp("gloomberb_get_risk_reports")("AAPL", "report"))
     assert payload["data"]["code"] == "invalid_input"
     assert calls == []
 
@@ -1230,7 +1230,7 @@ def test_filing_events_wrapper_maps_rows(monkeypatch: pytest.MonkeyPatch) -> Non
         )
 
     _patch_client(monkeypatch, handler)
-    payload = json.loads(_mcp("digifetch_filing_events")("AAPL", 5))
+    payload = json.loads(_mcp("gloomberb_get_filing_events")("AAPL", 5))
     event = payload["data"]["events"][0]
     assert event["items"] == ["2.02"]
     assert payload["source_url"] == "https://term.gloom.sh/?ticker=AAPL"
@@ -1246,7 +1246,7 @@ def test_short_interest_without_cookie_is_auth_required_without_request(
         return _envelope({"symbol": "AAPL", "points": []})
 
     _patch_client(monkeypatch, handler)
-    payload = json.loads(_mcp("digifetch_short_interest")("AAPL"))
+    payload = json.loads(_mcp("gloomberb_get_short_interest")("AAPL"))
     assert payload["data"]["code"] == "auth_required"
     assert calls == []
 
@@ -1261,7 +1261,7 @@ def test_short_interest_out_of_range_years_is_invalid_input_without_request(
         return _envelope({"symbol": "AAPL", "points": []})
 
     _patch_client(monkeypatch, handler, session_cookie="gloomberb.session_token=test")
-    payload = json.loads(_mcp("digifetch_short_interest")("AAPL", 11))
+    payload = json.loads(_mcp("gloomberb_get_short_interest")("AAPL", 11))
     assert payload["data"]["code"] == "invalid_input"
     assert calls == []
 
@@ -1277,7 +1277,7 @@ def test_short_interest_wrapper_maps_points(monkeypatch: pytest.MonkeyPatch) -> 
         )
 
     _patch_client(monkeypatch, handler, session_cookie="gloomberb.session_token=test")
-    payload = json.loads(_mcp("digifetch_short_interest")("AAPL", 1))
+    payload = json.loads(_mcp("gloomberb_get_short_interest")("AAPL", 1))
     point = payload["data"]["points"][0]
     assert point["settlement_date"] == "2026-08-31"
     assert point["shares_short"] == 1.0
@@ -1294,12 +1294,12 @@ def test_equity_diagnostic_pending_is_mapped_and_not_client_cached(
         return httpx.Response(202, json={"status": "generating", "retryAfterMs": 2000})
 
     _patch_client(monkeypatch, handler, session_cookie="gloomberb.session_token=test")
-    first = json.loads(_mcp("digifetch_equity_diagnostic")("AAPL"))
+    first = json.loads(_mcp("gloomberb_get_equity_diagnostic")("AAPL"))
     assert first["data"]["pending"]["retry_after_ms"] == 2000
     assert first["data"]["report"] is None
     # A pending payload must not enter the 900s client cache: the retry hits
     # the wire again.
-    second = json.loads(_mcp("digifetch_equity_diagnostic")("AAPL"))
+    second = json.loads(_mcp("gloomberb_get_equity_diagnostic")("AAPL"))
     assert second["data"]["pending"]["status"] == "generating"
     assert calls == [1, 1]
 
@@ -1332,7 +1332,7 @@ def test_equity_diagnostic_report_is_mapped(monkeypatch: pytest.MonkeyPatch) -> 
         )
 
     _patch_client(monkeypatch, handler, session_cookie="gloomberb.session_token=test")
-    payload = json.loads(_mcp("digifetch_equity_diagnostic")("AAPL"))
+    payload = json.loads(_mcp("gloomberb_get_equity_diagnostic")("AAPL"))
     report = payload["data"]["report"]
     assert report["access"] == "preview"
     assert report["verdict"] == "risk_skewed"
@@ -1351,7 +1351,7 @@ def test_equity_diagnostic_without_cookie_is_auth_required_without_request(
         return httpx.Response(200, json={"status": "generating", "retryAfterMs": 1})
 
     _patch_client(monkeypatch, handler)
-    payload = json.loads(_mcp("digifetch_equity_diagnostic")("AAPL"))
+    payload = json.loads(_mcp("gloomberb_get_equity_diagnostic")("AAPL"))
     assert payload["data"]["code"] == "auth_required"
     assert calls == []
 
@@ -1378,7 +1378,7 @@ def test_equity_diagnostic_preview_report_carries_the_marker(
         )
 
     _patch_client(monkeypatch, handler, session_cookie="gloomberb.session_token=test")
-    payload = json.loads(_mcp("digifetch_equity_diagnostic")("AAPL"))
+    payload = json.loads(_mcp("gloomberb_get_equity_diagnostic")("AAPL"))
     assert payload["data"]["report"]["access"] == "preview"
     assert PREVIEW_ACCESS_WARNING in payload["warnings"]
 
@@ -1396,22 +1396,22 @@ def test_declared_entitlements_match_the_gate_behavior() -> None:
     from digiquant.data.gloomberb.entitlements import TOOL_ENTITLEMENTS
 
     assert {name for name, value in TOOL_ENTITLEMENTS.items() if value == "pro"} == {
-        "digifetch_transcripts",
-        "digifetch_screener",
+        "gloomberb_get_transcripts",
+        "gloomberb_run_screener",
     }
     assert {name for name, value in TOOL_ENTITLEMENTS.items() if value == "preview"} == {
-        "digifetch_equity_diagnostic"
+        "gloomberb_get_equity_diagnostic"
     }
     assert {name for name, value in TOOL_ENTITLEMENTS.items() if value == "session"} == {
-        "digifetch_holders",
-        "digifetch_analyst_research",
-        "digifetch_corporate_actions",
-        "digifetch_research_search",
-        "digifetch_statements",
-        "digifetch_ticker_tweets",
-        "digifetch_tweet_search",
-        "digifetch_short_interest",
-        "digifetch_saved_searches",
+        "gloomberb_get_holders",
+        "gloomberb_get_analyst_research",
+        "gloomberb_get_corporate_actions",
+        "gloomberb_search_research",
+        "gloomberb_get_statements",
+        "gloomberb_get_ticker_tweets",
+        "gloomberb_search_tweet",
+        "gloomberb_get_short_interest",
+        "gloomberb_list_saved_searches",
     }
 
 
@@ -1433,7 +1433,7 @@ def test_entitlement_zero_http_gating_matches_the_declaration(
     _patch_client(monkeypatch, handler, earnings_provider=lambda symbol: [])
     payload = json.loads(_mcp(name)(*args))
     # The Yahoo-backed earnings calendar never touches the Cloud transport.
-    expected_calls = [] if name == "digifetch_earnings_calendar" else [1]
+    expected_calls = [] if name == "yahoo_get_earnings_calendar" else [1]
     if entitlement == "free":
         # Anonymous tools are never gated: the request goes out and succeeds.
         assert calls == expected_calls, name
@@ -1466,7 +1466,7 @@ def test_entitlement_wire_access_with_a_session_cookie(
         earnings_provider=lambda symbol: [],
     )
     payload = json.loads(_mcp(name)(*args))
-    expected_calls = [] if name == "digifetch_earnings_calendar" else [1]
+    expected_calls = [] if name == "yahoo_get_earnings_calendar" else [1]
     assert calls == expected_calls, name
     assert "code" not in payload["data"], name
 
@@ -1478,7 +1478,7 @@ def test_pro_route_plan_gates_and_bare_402_fallback(monkeypatch: pytest.MonkeyPa
         return httpx.Response(200, text="Pro plan required")
 
     _patch_client(monkeypatch, transcripts_plan, session_cookie="gloomberb.session_token=test")
-    transcripts = json.loads(_mcp("digifetch_transcripts")("AAPL"))
+    transcripts = json.loads(_mcp("gloomberb_get_transcripts")("AAPL"))
     assert transcripts["data"]["code"] == "pro_required"
     assert transcripts["data"]["retryable"] is False
 
@@ -1489,14 +1489,14 @@ def test_pro_route_plan_gates_and_bare_402_fallback(monkeypatch: pytest.MonkeyPa
         )
 
     _patch_client(monkeypatch, screener_envelope, session_cookie="gloomberb.session_token=test")
-    screener = json.loads(_mcp("digifetch_screener")("gainers"))
+    screener = json.loads(_mcp("gloomberb_run_screener")("gainers"))
     assert screener["data"]["code"] == "pro_required"
 
     def bare_402(request: httpx.Request) -> httpx.Response:
         return httpx.Response(402, text="payment required, no plan wording")
 
     _patch_client(monkeypatch, bare_402, session_cookie="gloomberb.session_token=test")
-    fallback = json.loads(_mcp("digifetch_transcripts")("AAPL"))
+    fallback = json.loads(_mcp("gloomberb_get_transcripts")("AAPL"))
     # A bare 402 with no recognizable plan body keeps the generic mapping.
     assert fallback["data"]["code"] == "auth_required"
     assert fallback["data"]["retryable"] is False
@@ -1526,7 +1526,7 @@ def test_transcripts_detail_mode_maps_the_wrapped_payload(
         return httpx.Response(200, json={"companyName": "Apple Inc."})
 
     _patch_client(monkeypatch, handler, session_cookie="gloomberb.session_token=test")
-    payload = json.loads(_mcp("digifetch_transcripts")(None, 20, "t1"))
+    payload = json.loads(_mcp("gloomberb_get_transcripts")(None, 20, "t1"))
     row = payload["data"]["transcripts"][0]
     assert row["id"] == "t1"
     assert row["company_name"] == "Apple Inc."
@@ -1544,7 +1544,7 @@ def test_saved_searches_without_cookie_is_auth_required_without_request(
         return _envelope({"searches": []})
 
     _patch_client(monkeypatch, handler)
-    payload = json.loads(_mcp("digifetch_saved_searches")())
+    payload = json.loads(_mcp("gloomberb_list_saved_searches")())
     assert payload["data"]["code"] == "auth_required"
     assert calls == []
     assert payload["attribution"] == GLOOMBERB_ATTRIBUTION
@@ -1559,5 +1559,5 @@ def test_saved_searches_maps_rows_with_a_session(
         return httpx.Response(200, json={"searches": [{"id": "s1", "name": "AI capex"}]})
 
     _patch_client(monkeypatch, handler, session_cookie="gloomberb.session_token=test")
-    payload = json.loads(_mcp("digifetch_saved_searches")())
+    payload = json.loads(_mcp("gloomberb_list_saved_searches")())
     assert payload["data"]["searches"][0]["name"] == "AI capex"

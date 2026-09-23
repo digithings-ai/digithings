@@ -32,7 +32,7 @@ def test_technicals_r2_backend_returns_asof_envelope(monkeypatch):
         return (rows, False) if return_stale else rows
 
     monkeypatch.setattr(mcp, "_read_r2_window", _window)
-    out = json.loads(mcp.digiquant_get_price_technicals("SPY", lookback=20, as_of="2024-12-31"))
+    out = json.loads(mcp.get_price_technicals("SPY", lookback=20, as_of="2024-12-31"))
     assert out["as_of"] == "2024-12-31"
     assert out["rows"][0]["date"] == "2024-12-31"
 
@@ -47,7 +47,7 @@ def test_technicals_serves_r2_without_the_flag(monkeypatch):
         return (rows, False) if return_stale else rows
 
     monkeypatch.setattr(mcp, "_read_r2_window", _window)
-    out = json.loads(mcp.digiquant_get_price_technicals("SPY", lookback=20, as_of="2024-12-31"))
+    out = json.loads(mcp.get_price_technicals("SPY", lookback=20, as_of="2024-12-31"))
     assert out["as_of"] == "2024-12-31"
     assert out["rows"][0]["date"] == "2024-12-31"
 
@@ -55,7 +55,7 @@ def test_technicals_serves_r2_without_the_flag(monkeypatch):
 def test_technicals_r2_manifest_version_mismatch(monkeypatch):
     monkeypatch.setenv("DIGIQUANT_MARKET_DATA_BACKEND", "r2")
     monkeypatch.setattr(mcp, "_read_manifest", lambda: {"version": 2, "as_of": "2024-12-31"})
-    out = json.loads(mcp.digiquant_get_price_technicals("SPY", lookback=20, as_of="2024-12-31"))
+    out = json.loads(mcp.get_price_technicals("SPY", lookback=20, as_of="2024-12-31"))
     assert "unsupported manifest version" in out["error"]
 
 
@@ -67,7 +67,7 @@ def test_technicals_r2_unknown_ticker_envelope(monkeypatch):
         raise LookupError(f"unknown ticker {ticker!r}")
 
     monkeypatch.setattr(mcp, "_read_r2_window", _boom)
-    out = json.loads(mcp.digiquant_get_price_technicals("FOO", lookback=20, as_of="2024-12-31"))
+    out = json.loads(mcp.get_price_technicals("FOO", lookback=20, as_of="2024-12-31"))
     assert "unknown ticker" in out["error"]
 
 
@@ -133,7 +133,7 @@ def test_macro_r2_boto_client_error_pointer_miss_yields_error_envelope(monkeypat
     manifest = {"version": 1, "as_of": "2024-12-31", "datasets": {}}
     monkeypatch.setattr(mcp, "_read_manifest", lambda: manifest)
     monkeypatch.setattr(mcp, "_get_r2_store", lambda: _NoPointer(b""))
-    out = json.loads(mcp.digiquant_get_macro_series(["DGS10"], lookback=6, as_of="2024-12-31"))
+    out = json.loads(mcp.get_macro_series(["DGS10"], lookback=6, as_of="2024-12-31"))
     assert "DGS10" in out["error"]
 
 
@@ -162,7 +162,7 @@ def test_macro_r2_stray_keyerror_after_pointer_is_not_unknown_series(monkeypatch
     monkeypatch.setattr(mcp, "_get_r2_store", lambda: _GenerationMiss(b""))
     with pytest.raises(KeyError):
         mcp._read_r2_macro_window(["DGS10"], "2024-12-31", manifest)
-    out = json.loads(mcp.digiquant_get_macro_series(["DGS10"], lookback=6, as_of="2024-12-31"))
+    out = json.loads(mcp.get_macro_series(["DGS10"], lookback=6, as_of="2024-12-31"))
     assert "unknown macro series" not in out["error"]
 
 
@@ -177,8 +177,8 @@ def test_technicals_r2_ttl_caches_window(monkeypatch):
         return (rows, False) if return_stale else rows
 
     monkeypatch.setattr(mcp, "_read_r2_window", _counting)
-    first = mcp.digiquant_get_price_technicals("SPY", lookback=20, as_of="2024-12-31")
-    second = mcp.digiquant_get_price_technicals("SPY", lookback=20, as_of="2024-12-31")
+    first = mcp.get_price_technicals("SPY", lookback=20, as_of="2024-12-31")
+    second = mcp.get_price_technicals("SPY", lookback=20, as_of="2024-12-31")
     assert first == second
     assert len(calls) == 1
 
@@ -199,9 +199,9 @@ def test_technicals_r2_stale_payload_skips_ttl_store(monkeypatch):
         return (rows, True) if return_stale else rows
 
     monkeypatch.setattr(mcp, "_read_r2_window", _stale_window)
-    first = mcp.digiquant_get_price_technicals("SPY", lookback=20, as_of="2024-12-31")
+    first = mcp.get_price_technicals("SPY", lookback=20, as_of="2024-12-31")
     assert json.loads(first)["stale"] is True
-    second = mcp.digiquant_get_price_technicals("SPY", lookback=20, as_of="2024-12-31")
+    second = mcp.get_price_technicals("SPY", lookback=20, as_of="2024-12-31")
     assert json.loads(second)["stale"] is True
     assert len(calls) == 2
 
@@ -217,9 +217,9 @@ def test_macro_r2_stale_payload_skips_ttl_store(monkeypatch):
         return series
 
     monkeypatch.setattr(mcp, "_read_r2_macro_window", _counting)
-    first = mcp.digiquant_get_macro_series(["CPI"], lookback=6, as_of="2024-12-31")
+    first = mcp.get_macro_series(["CPI"], lookback=6, as_of="2024-12-31")
     assert json.loads(first)["stale"] is True
-    mcp.digiquant_get_macro_series(["CPI"], lookback=6, as_of="2024-12-31")
+    mcp.get_macro_series(["CPI"], lookback=6, as_of="2024-12-31")
     assert len(calls) == 2
 
 
@@ -232,7 +232,7 @@ def test_technicals_r2_lookback_slices_tail(monkeypatch):
         return (rows, False) if return_stale else rows
 
     monkeypatch.setattr(mcp, "_read_r2_window", _window)
-    out = json.loads(mcp.digiquant_get_price_technicals("SPY", lookback=2, as_of="2024-12-31"))
+    out = json.loads(mcp.get_price_technicals("SPY", lookback=2, as_of="2024-12-31"))
     assert [r["date"] for r in out["rows"]] == ["2024-12-30", "2024-12-31"]
 
 
@@ -243,7 +243,7 @@ def test_macro_r2_backend_returns_asof_envelope(monkeypatch):
     monkeypatch.setattr(
         mcp, "_read_r2_macro_window", lambda series_ids, as_of, manifest=None: series
     )
-    out = json.loads(mcp.digiquant_get_macro_series(["CPI"], lookback=6, as_of="2024-12-31"))
+    out = json.loads(mcp.get_macro_series(["CPI"], lookback=6, as_of="2024-12-31"))
     assert out["as_of"] == "2024-12-31"
     assert out["series"]["CPI"]["latest"]["obs_date"] == "2024-12-31"
 
@@ -254,7 +254,7 @@ def test_macro_r2_backend_returns_asof_envelope(monkeypatch):
 
 
 def test_envelope_docstrings_distinguish_both_stale_signals():
-    for fn in (mcp.digiquant_get_price_technicals, mcp.digiquant_get_macro_series):
+    for fn in (mcp.get_price_technicals, mcp.get_macro_series):
         assert "writer-side" in fn.__doc__ and "reader-side" in fn.__doc__
         assert "Task 10" in fn.__doc__
 
@@ -326,7 +326,7 @@ def test_technicals_r2_live_fetch_failure_yields_error_envelope(monkeypatch):
         raise RuntimeError("boom")
 
     monkeypatch.setattr("digiquant.data.prices.fetchers.fetch_batch", _boom)
-    out = json.loads(mcp.digiquant_get_price_technicals("SPY", lookback=20, as_of="2025-01-15"))
+    out = json.loads(mcp.get_price_technicals("SPY", lookback=20, as_of="2025-01-15"))
     assert "boom" in out["error"]
     assert "rows" not in out
 
@@ -338,7 +338,7 @@ def test_macro_r2_missing_sha_yields_error_envelope(monkeypatch):
     manifest = {"version": 1, "as_of": "2024-12-31", "datasets": {}}
     monkeypatch.setattr(mcp, "_read_manifest", lambda: manifest)
     monkeypatch.setattr(mcp, "_get_r2_store", lambda: _FakeR2Store(b""))
-    out = json.loads(mcp.digiquant_get_macro_series(["CPI"], lookback=6, as_of="2024-12-31"))
+    out = json.loads(mcp.get_macro_series(["CPI"], lookback=6, as_of="2024-12-31"))
     assert "CPI" in out["error"]
 
 
@@ -352,7 +352,7 @@ def test_macro_r2_missing_pointer_yields_error_envelope(monkeypatch):
             raise KeyError(pointer_key)
 
     monkeypatch.setattr(mcp, "_get_r2_store", lambda: _NoPointer(b""))
-    out = json.loads(mcp.digiquant_get_macro_series(["DGS10"], lookback=6, as_of="2024-12-31"))
+    out = json.loads(mcp.get_macro_series(["DGS10"], lookback=6, as_of="2024-12-31"))
     assert "DGS10" in out["error"]
 
 

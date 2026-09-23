@@ -1,7 +1,7 @@
 """`digiquant strategy …` subcommands (#160).
 
 Wraps :func:`digiquant.service.service_list_strategies` — same path as HTTP
-``GET /strategies`` and MCP ``digiquant_list_strategies``.
+``GET /strategies`` and MCP ``list_strategies``.
 """
 
 from __future__ import annotations
@@ -35,7 +35,7 @@ def _filter_strategies(query: str) -> list[dict]:
 
 @strategy.command("list")
 def strategy_list() -> None:
-    """List registered strategies (JSON; same payload as MCP digiquant_list_strategies)."""
+    """List registered strategies (JSON; same payload as MCP list_strategies)."""
     from digiquant.service import service_list_strategies
 
     click.echo(json.dumps(service_list_strategies(), indent=2))

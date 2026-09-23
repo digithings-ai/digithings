@@ -179,7 +179,7 @@ def test_r2_backend_matches_supabase_goldens(monkeypatch):
         )
         # NOTE: _FakeR2Store.get_generation matches on sha; the manifest entry
         # object key above is what a real Task 5 backfill writes.
-        live = json.loads(mcp.digiquant_get_price_technicals("SPY", lookback=500, as_of=seal))
+        live = json.loads(mcp.get_price_technicals("SPY", lookback=500, as_of=seal))
         assert live["as_of"] == seal
         assert live["stale"] is False
         assert [str(r["date"]) for r in live["rows"]] == dates
@@ -202,7 +202,7 @@ def test_r2_technicals_values_match_compute_indicators(monkeypatch):
         "datasets": {"SPY": {"object": "gen", "sha256": sha, "rows": len(dates), "as_of": seal}},
     }
     _r2_env(monkeypatch, _FakeR2Store({"gen": (payload, sha)}), manifest)
-    live = json.loads(mcp.digiquant_get_price_technicals("SPY", lookback=500, as_of=seal))
+    live = json.loads(mcp.get_price_technicals("SPY", lookback=500, as_of=seal))
     hist = pl.read_parquet(io.BytesIO(payload)).with_columns(pl.col("date").cast(pl.Date))
     expected = compute_indicators(hist.rename({"date": "timestamp"}))
     assert len(live["rows"]) == expected.height
@@ -228,7 +228,7 @@ def test_r2_macro_matches_supabase_goldens_exactly(monkeypatch):
     manifest = {"version": 1, "as_of": latest_obs, "datasets": datasets}
     _r2_env(monkeypatch, _FakeR2Store(pointer_map), manifest)
     live = json.loads(
-        mcp.digiquant_get_macro_series(golden["series_ids"], lookback=6, as_of=latest_obs)
+        mcp.get_macro_series(golden["series_ids"], lookback=6, as_of=latest_obs)
     )
     assert live["as_of"] == latest_obs
     assert live["stale"] is False
@@ -250,7 +250,7 @@ def test_r2_as_of_seals_rows_at_run_date(monkeypatch):
     }
     _r2_env(monkeypatch, _FakeR2Store({"gen": (payload, sha)}), manifest)
     mid = dates[len(dates) // 2]
-    live = json.loads(mcp.digiquant_get_price_technicals("SPY", lookback=500, as_of=mid))
+    live = json.loads(mcp.get_price_technicals("SPY", lookback=500, as_of=mid))
     assert [str(r["date"]) for r in live["rows"]] == [d for d in dates if d <= mid]
 
 
@@ -273,7 +273,7 @@ def test_r2_stale_manifest_marks_envelope_stale(monkeypatch):
     # Seal +30d is stale on any weekday alignment; the live overlap is empty so
     # the served rows are exactly the sealed history, flagged stale.
     as_of = (_dt_date.fromisoformat(seal) + _tdelta_mod(days=30)).isoformat()
-    live = json.loads(mcp.digiquant_get_price_technicals("SPY", lookback=500, as_of=as_of))
+    live = json.loads(mcp.get_price_technicals("SPY", lookback=500, as_of=as_of))
     assert live["stale"] is True
     assert [str(r["date"]) for r in live["rows"]] == dates
 
@@ -297,7 +297,7 @@ def test_r2_per_ticker_error_entry_serves_history_only_and_marks_stale(monkeypat
     # Seal +1d keeps the gate fresh on any weekday alignment, isolating the
     # error-entry flag: rows are history-only AND stale solely via the entry.
     as_of = (_dt_date.fromisoformat(seal) + _tdelta_mod(days=1)).isoformat()
-    live = json.loads(mcp.digiquant_get_price_technicals("SPY", lookback=500, as_of=as_of))
+    live = json.loads(mcp.get_price_technicals("SPY", lookback=500, as_of=as_of))
     assert [str(r["date"]) for r in live["rows"]] == dates
     assert [r["close"] for r in live["rows"]] == pytest.approx(closes)
     assert live["stale"] is True

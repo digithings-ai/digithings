@@ -99,13 +99,13 @@ def _r2_seal(monkeypatch: pytest.MonkeyPatch) -> None:
 
 def test_no_row_newer_than_asof(_r2_seal: None) -> None:
     for as_of in _AS_OFS:
-        out = json.loads(mcp.digiquant_get_price_technicals("SPY", lookback=500, as_of=as_of))
+        out = json.loads(mcp.get_price_technicals("SPY", lookback=500, as_of=as_of))
         assert out["rows"], f"sealed history covers {as_of}, window must not be vacuous"
         assert all(r["date"] <= as_of for r in out["rows"])
 
 
 def test_asof_before_first_bar_returns_empty_rows(_r2_seal: None) -> None:
-    out = json.loads(mcp.digiquant_get_price_technicals("SPY", lookback=20, as_of="2000-01-01"))
+    out = json.loads(mcp.get_price_technicals("SPY", lookback=20, as_of="2000-01-01"))
     assert out["rows"] == []
 
 

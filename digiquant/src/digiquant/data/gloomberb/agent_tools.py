@@ -183,50 +183,50 @@ def gloomberb_envelope_json(
 # unwired; direction is the portfolio direction phase.
 
 EQUITY_TOOLS: tuple[str, ...] = (
-    "digifetch_quote",
-    "digifetch_quotes_batch",
-    "digifetch_price_history",
-    "digifetch_ticker_financials",
-    "digifetch_analyst_research",
-    "digifetch_corporate_actions",
-    "digifetch_earnings_calendar",
-    "digifetch_sec_filings",
-    "digifetch_holders",
-    "digifetch_news",
-    "digifetch_ticker_tweets",
-    "digifetch_short_interest",
-    "digifetch_statements",
-    "digifetch_risk_reports",
-    "digifetch_filing_events",
-    "digifetch_research_search",
+    "gloomberb_get_quote",
+    "gloomberb_get_quotes_batch",
+    "gloomberb_get_price_history",
+    "gloomberb_get_ticker_financials",
+    "gloomberb_get_analyst_research",
+    "gloomberb_get_corporate_actions",
+    "yahoo_get_earnings_calendar",
+    "gloomberb_get_sec_filings",
+    "gloomberb_get_holders",
+    "gloomberb_get_news",
+    "gloomberb_get_ticker_tweets",
+    "gloomberb_get_short_interest",
+    "gloomberb_get_statements",
+    "gloomberb_get_risk_reports",
+    "gloomberb_get_filing_events",
+    "gloomberb_search_research",
 )
 
 MACRO_TOOLS: tuple[str, ...] = (
-    "digifetch_econ_calendar",
-    "digifetch_econ_series",
-    "digifetch_yield_curve",
-    "digifetch_cds",
-    "digifetch_shiller",
-    "digifetch_news",
-    "digifetch_research_search",
+    "gloomberb_get_econ_calendar",
+    "gloomberb_get_econ_series",
+    "gloomberb_get_yield_curve",
+    "gloomberb_get_cds",
+    "gloomberb_get_shiller",
+    "gloomberb_get_news",
+    "gloomberb_search_research",
 )
-# ``digifetch_congress_trades`` stays MCP-only for now (#4146 review F9): its
+# ``gloomberb_get_congress_trades`` stays MCP-only for now (#4146 review F9): its
 # upstream OCR dependency answers HTTP 500, so a pipeline tool could only return
 # a typed upstream_error. Re-add to MACRO_TOOLS when upstream recovers.
 
 PM_TOOLS: tuple[str, ...] = (
-    "digifetch_quote",
-    "digifetch_quotes_batch",
-    "digifetch_news",
-    "digifetch_econ_calendar",
-    "digifetch_econ_series",
-    "digifetch_yield_curve",
-    "digifetch_analyst_research",
-    "digifetch_research_search",
-    "digifetch_corporate_actions",
-    "digifetch_earnings_calendar",
-    "digifetch_shiller",
-    "digifetch_cds",
+    "gloomberb_get_quote",
+    "gloomberb_get_quotes_batch",
+    "gloomberb_get_news",
+    "gloomberb_get_econ_calendar",
+    "gloomberb_get_econ_series",
+    "gloomberb_get_yield_curve",
+    "gloomberb_get_analyst_research",
+    "gloomberb_search_research",
+    "gloomberb_get_corporate_actions",
+    "yahoo_get_earnings_calendar",
+    "gloomberb_get_shiller",
+    "gloomberb_get_cds",
 )
 
 
@@ -309,50 +309,50 @@ class DigifetchDispatch(NamedTuple):
 #: wrapper for that tool (same Pydantic input model, same client method, same
 #: deep-link/attribution choice); the parity test pins both directions.
 DIGIFETCH_DISPATCH: dict[str, DigifetchDispatch] = {
-    "digifetch_quote": DigifetchDispatch(QuoteInput, "quote", "symbol"),
-    "digifetch_quotes_batch": DigifetchDispatch(QuotesBatchInput, "quotes_batch"),
-    "digifetch_price_history": DigifetchDispatch(PriceHistoryInput, "price_history", "symbol"),
-    "digifetch_ticker_financials": DigifetchDispatch(
+    "gloomberb_get_quote": DigifetchDispatch(QuoteInput, "quote", "symbol"),
+    "gloomberb_get_quotes_batch": DigifetchDispatch(QuotesBatchInput, "quotes_batch"),
+    "gloomberb_get_price_history": DigifetchDispatch(PriceHistoryInput, "price_history", "symbol"),
+    "gloomberb_get_ticker_financials": DigifetchDispatch(
         TickerFinancialsInput, "ticker_financials", "symbol"
     ),
-    "digifetch_options_chain": DigifetchDispatch(OptionsChainInput, "options_chain", "symbol"),
-    "digifetch_sec_filings": DigifetchDispatch(SecFilingsInput, "sec_filings", "ticker"),
-    "digifetch_holders": DigifetchDispatch(HoldersInput, "holders", "symbol"),
-    "digifetch_analyst_research": DigifetchDispatch(
+    "gloomberb_get_options_chain": DigifetchDispatch(OptionsChainInput, "options_chain", "symbol"),
+    "gloomberb_get_sec_filings": DigifetchDispatch(SecFilingsInput, "sec_filings", "ticker"),
+    "gloomberb_get_holders": DigifetchDispatch(HoldersInput, "holders", "symbol"),
+    "gloomberb_get_analyst_research": DigifetchDispatch(
         AnalystResearchInput, "analyst_research", "symbol"
     ),
-    "digifetch_corporate_actions": DigifetchDispatch(
+    "gloomberb_get_corporate_actions": DigifetchDispatch(
         CorporateActionsInput, "corporate_actions", "symbol"
     ),
-    "digifetch_earnings_calendar": DigifetchDispatch(
+    "yahoo_get_earnings_calendar": DigifetchDispatch(
         EarningsCalendarInput, "earnings_calendar", attributed=False
     ),
-    "digifetch_exchange_rate": DigifetchDispatch(ExchangeRateInput, "exchange_rate"),
-    "digifetch_search": DigifetchDispatch(SearchInput, "search"),
-    "digifetch_news": DigifetchDispatch(NewsInput, "news", "ticker"),
-    "digifetch_econ_calendar": DigifetchDispatch(EconCalendarInput, "econ_calendar"),
-    "digifetch_econ_series": DigifetchDispatch(EconSeriesInput, "econ_series"),
-    "digifetch_yield_curve": DigifetchDispatch(YieldCurveInput, "yield_curve"),
-    "digifetch_cds": DigifetchDispatch(CdsInput, "cds"),
-    "digifetch_research_search": DigifetchDispatch(ResearchSearchInput, "research_search"),
-    "digifetch_congress_trades": DigifetchDispatch(CongressTradesInput, "congress_trades"),
-    "digifetch_transcripts": DigifetchDispatch(TranscriptsInput, "transcripts", "ticker"),
-    "digifetch_statements": DigifetchDispatch(StatementsInput, "statements", "symbol"),
-    "digifetch_ticker_tweets": DigifetchDispatch(TickerTweetsInput, "ticker_tweets", "ticker"),
-    "digifetch_tweet_search": DigifetchDispatch(TweetSearchInput, "tweet_search"),
-    "digifetch_venues": DigifetchDispatch(VenuesInput, "venues"),
-    "digifetch_saved_searches": DigifetchDispatch(SavedSearchesInput, "saved_searches"),
-    "digifetch_screener": DigifetchDispatch(ScreenerInput, "screener"),
-    "digifetch_13f_funds": DigifetchDispatch(ThirteenFFundsInput, "thirteen_f_funds"),
-    "digifetch_13f_holdings": DigifetchDispatch(ThirteenFHoldingsInput, "thirteen_f_holdings"),
-    "digifetch_shiller": DigifetchDispatch(ShillerInput, "shiller"),
-    "digifetch_proxy_statements": DigifetchDispatch(
+    "gloomberb_get_exchange_rate": DigifetchDispatch(ExchangeRateInput, "exchange_rate"),
+    "gloomberb_search": DigifetchDispatch(SearchInput, "search"),
+    "gloomberb_get_news": DigifetchDispatch(NewsInput, "news", "ticker"),
+    "gloomberb_get_econ_calendar": DigifetchDispatch(EconCalendarInput, "econ_calendar"),
+    "gloomberb_get_econ_series": DigifetchDispatch(EconSeriesInput, "econ_series"),
+    "gloomberb_get_yield_curve": DigifetchDispatch(YieldCurveInput, "yield_curve"),
+    "gloomberb_get_cds": DigifetchDispatch(CdsInput, "cds"),
+    "gloomberb_search_research": DigifetchDispatch(ResearchSearchInput, "research_search"),
+    "gloomberb_get_congress_trades": DigifetchDispatch(CongressTradesInput, "congress_trades"),
+    "gloomberb_get_transcripts": DigifetchDispatch(TranscriptsInput, "transcripts", "ticker"),
+    "gloomberb_get_statements": DigifetchDispatch(StatementsInput, "statements", "symbol"),
+    "gloomberb_get_ticker_tweets": DigifetchDispatch(TickerTweetsInput, "ticker_tweets", "ticker"),
+    "gloomberb_search_tweet": DigifetchDispatch(TweetSearchInput, "tweet_search"),
+    "gloomberb_list_venues": DigifetchDispatch(VenuesInput, "venues"),
+    "gloomberb_list_saved_searches": DigifetchDispatch(SavedSearchesInput, "saved_searches"),
+    "gloomberb_run_screener": DigifetchDispatch(ScreenerInput, "screener"),
+    "gloomberb_get_13f_funds": DigifetchDispatch(ThirteenFFundsInput, "thirteen_f_funds"),
+    "gloomberb_get_13f_holdings": DigifetchDispatch(ThirteenFHoldingsInput, "thirteen_f_holdings"),
+    "gloomberb_get_shiller": DigifetchDispatch(ShillerInput, "shiller"),
+    "gloomberb_get_proxy_statements": DigifetchDispatch(
         ProxyStatementsInput, "proxy_statements", "ticker"
     ),
-    "digifetch_filing_events": DigifetchDispatch(FilingEventsInput, "filing_events", "ticker"),
-    "digifetch_risk_reports": DigifetchDispatch(RiskReportsInput, "risk_reports", "ticker"),
-    "digifetch_short_interest": DigifetchDispatch(ShortInterestInput, "short_interest", "symbol"),
-    "digifetch_equity_diagnostic": DigifetchDispatch(
+    "gloomberb_get_filing_events": DigifetchDispatch(FilingEventsInput, "filing_events", "ticker"),
+    "gloomberb_get_risk_reports": DigifetchDispatch(RiskReportsInput, "risk_reports", "ticker"),
+    "gloomberb_get_short_interest": DigifetchDispatch(ShortInterestInput, "short_interest", "symbol"),
+    "gloomberb_get_equity_diagnostic": DigifetchDispatch(
         EquityDiagnosticInput, "equity_diagnostic", "symbol"
     ),
 }

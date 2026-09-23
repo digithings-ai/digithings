@@ -12,6 +12,7 @@ from digiquant.data.gloomberb import (
     EQUITY_TOOLS,
     GLOOMBERB_ATTRIBUTION,
     GLOOMBERB_SESSION_COOKIE_ENV,
+    TOOL_ENTITLEMENTS,
     GloomberbClient,
     agent_tools,
 )
@@ -61,7 +62,7 @@ def test_build_grounding_omits_digifetch_by_default() -> None:
         use_data_tools=True, live_search=False, run_date=date(2026, 9, 15)
     )
     assert tools is not None and execute_tool is not None
-    assert not any(t["function"]["name"].startswith("digifetch_") for t in tools)
+    assert not any(t["function"]["name"] in TOOL_ENTITLEMENTS for t in tools)
 
 
 @pytest.mark.unit
@@ -77,11 +78,11 @@ def test_build_grounding_adds_the_flagged_subset_and_routes_a_call(
     )
     assert tools is not None and execute_tool is not None
     names = {t["function"]["name"] for t in tools}
-    assert "digifetch_quote" in names
+    assert "gloomberb_get_quote" in names
     # Session-gated names drop out without GLOOMBERB_SESSION_COOKIE.
-    assert "digifetch_analyst_research" not in names
+    assert "gloomberb_get_analyst_research" not in names
 
-    payload = json.loads(execute_tool("digifetch_quote", {"symbol": "AAPL"}))
+    payload = json.loads(execute_tool("gloomberb_get_quote", {"symbol": "AAPL"}))
     assert payload["data"]["quote"]["price"] == 200.0
     assert payload["attribution"] == GLOOMBERB_ATTRIBUTION
 
@@ -104,7 +105,7 @@ def test_build_grounding_adds_session_tools_with_a_cookie(
     )
     assert tools is not None
     names = {t["function"]["name"] for t in tools}
-    assert "digifetch_analyst_research" in names  # session-gated, cookie present
+    assert "gloomberb_get_analyst_research" in names  # session-gated, cookie present
 
 
 @pytest.mark.unit
@@ -142,9 +143,9 @@ def test_build_grounding_composes_data_and_digifetch_executors(
     names = {t["function"]["name"] for t in tools}
     # query_data was retired in #4436; the typed macro reader is the data-family
     # marker that proves the data executor composed alongside digifetch.
-    assert {"get_macro_series", "digifetch_quote"}.issubset(names)
+    assert {"get_macro_series", "gloomberb_get_quote"}.issubset(names)
     # The combined dispatcher routes by family and rejects unknown names.
-    payload = json.loads(execute_tool("digifetch_quote", {"symbol": "AAPL"}))
+    payload = json.loads(execute_tool("gloomberb_get_quote", {"symbol": "AAPL"}))
     assert payload["data"]["quote"]["price"] == 200.0
     assert execute_tool("definitely_not_a_tool", {}).startswith("Error:")
 
@@ -166,7 +167,7 @@ def test_build_grounding_kill_switch_disables_digifetch(
         digifetch_tools=EQUITY_TOOLS,
     )
     names = set() if tools is None else {t["function"]["name"] for t in tools}
-    assert not any(name.startswith("digifetch_") for name in names)
+    assert not any(name in TOOL_ENTITLEMENTS for name in names)
 
     monkeypatch.setenv("DIGIQUANT_RESEARCH_DATA_TOOLS", "1")
     tools, _execute_tool, _ = _node_factory.build_grounding(
@@ -176,4 +177,4 @@ def test_build_grounding_kill_switch_disables_digifetch(
         digifetch_tools=EQUITY_TOOLS,
     )
     assert tools is not None
-    assert "digifetch_quote" in {t["function"]["name"] for t in tools}
+    assert "gloomberb_get_quote" in {t["function"]["name"] for t in tools}

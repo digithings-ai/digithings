@@ -57,7 +57,7 @@ def test_dispatcher_routes_get_price_technicals(r2_market):
     """The in-process price-technicals tool is dispatched, not rejected (#3972).
 
     The research/portfolio skills execute against DATA_TOOLS, so pointing them
-    at the MCP-only `digiquant_get_price_technicals` produced
+    at the MCP-only `get_price_technicals` produced
     ``Error: unknown tool``. This pins the unprefixed in-process name. The rows
     come from the sealed R2 generation (#4053) — no Supabase market body.
     """

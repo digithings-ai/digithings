@@ -112,7 +112,7 @@ def test_portfolio_grounding_equips_the_free_pm_subset(
     # Session-gated names are absent without a cookie.
     assert names.isdisjoint(gated_pm)
 
-    payload = json.loads(execute_tool("digifetch_quote", {"symbol": "AAPL"}))
+    payload = json.loads(execute_tool("gloomberb_get_quote", {"symbol": "AAPL"}))
     assert payload["data"]["quote"]["price"] == 200.0
 
 
@@ -157,4 +157,4 @@ def test_deliberation_grounding_stays_digifetch_free() -> None:
     # its evidence path is the bundle + amendment flow, not a new data family.
     tools, _execute_tool, _ = _deliberation_grounding(_state())
     assert tools is not None
-    assert not any(t["function"]["name"].startswith("digifetch_") for t in tools)
+    assert not any(t["function"]["name"] in TOOL_ENTITLEMENTS for t in tools)

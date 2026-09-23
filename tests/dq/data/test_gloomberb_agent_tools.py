@@ -46,6 +46,14 @@ MANIFEST = {t["function"]["name"]: t for t in build_orchestrator_tool_manifest()
 
 _REPO_ROOT = Path(__file__).resolve().parents[3]
 
+
+def _is_digifetch_family(name: str) -> bool:
+    """Name-only membership test for the digifetch x Gloomberb family (ADR 0030):
+    ``gloomberb_*`` plus the one source-specific exception reclassified to its
+    own source prefix, ``yahoo_get_earnings_calendar``.
+    """
+    return name.startswith("gloomberb_") or name == "yahoo_get_earnings_calendar"
+
 AAPL_QUOTE = {
     "symbol": "AAPL",
     "currency": "USD",
@@ -104,7 +112,7 @@ def test_schemas_are_the_manifest_entries_for_the_entitled_names() -> None:
     # TOOL_ENTITLEMENTS filter: a builder added to the manifest without a
     # declaration fails here instead of being silently dropped from the
     # in-process surface (#4146 review F4).
-    manifest_digifetch = {name for name in MANIFEST if name.startswith("digifetch_")}
+    manifest_digifetch = {name for name in MANIFEST if _is_digifetch_family(name)}
     assert set(TOOL_ENTITLEMENTS) == manifest_digifetch
     assert set(names) == manifest_digifetch
     for tool in DIGIFETCH_TOOLS:
@@ -146,7 +154,7 @@ def _mcp_envelope_contract() -> dict[str, tuple[str | None, bool]]:
     contract: dict[str, tuple[str | None, bool]] = {}
     for chunk in source.split('@_maybe_tool("')[1:]:
         name, _, body = chunk.partition('"')
-        if not name.startswith("digifetch_"):
+        if not _is_digifetch_family(name):
             continue
         flat = " ".join(body.split())
         call = re.search(r"_gloomberb_envelope_json\(([^)]*)\)", flat)
@@ -203,9 +211,9 @@ def test_available_digifetch_tools_defaults_to_every_schema(
 
 
 def test_pro_tool_gate_is_cookie_presence(monkeypatch: pytest.MonkeyPatch) -> None:
-    assert available_digifetch_tools(("digifetch_transcripts",)) == []
+    assert available_digifetch_tools(("gloomberb_get_transcripts",)) == []
     monkeypatch.setenv(GLOOMBERB_SESSION_COOKIE_ENV, "token")
-    assert len(available_digifetch_tools(("digifetch_transcripts",))) == 1
+    assert len(available_digifetch_tools(("gloomberb_get_transcripts",))) == 1
 
 
 def test_available_digifetch_tools_rejects_an_unknown_name() -> None:
@@ -234,7 +242,7 @@ def test_available_digifetch_tools_respects_the_family_kill_switch(
 
 def test_dispatcher_routes_and_returns_the_attributed_envelope() -> None:
     execute = build_digifetch_tool_dispatcher(client=make_client(_sweep_handler))
-    payload = json.loads(execute("digifetch_quote", {"symbol": "AAPL"}))
+    payload = json.loads(execute("gloomberb_get_quote", {"symbol": "AAPL"}))
     assert payload["data"]["quote"]["price"] == 200.0
     assert payload["attribution"] == GLOOMBERB_ATTRIBUTION
     assert payload["delay_notice"] == GLOOMBERB_DELAY_NOTICE
@@ -247,15 +255,15 @@ def test_dispatcher_defaults_to_the_shared_env_client(
     client = make_client(_sweep_handler)
     monkeypatch.setattr(agent_tools, "build_gloomberb_client", lambda: client)
     execute = build_digifetch_tool_dispatcher()
-    payload = json.loads(execute("digifetch_quote", {"symbol": "AAPL"}))
+    payload = json.loads(execute("gloomberb_get_quote", {"symbol": "AAPL"}))
     assert payload["data"]["quote"]["price"] == 200.0
 
 
 def test_dispatcher_uses_the_ticker_field_for_the_deep_link() -> None:
     execute = build_digifetch_tool_dispatcher(client=make_client(_sweep_handler))
-    news = json.loads(execute("digifetch_news", {"ticker": "AAPL"}))
+    news = json.loads(execute("gloomberb_get_news", {"ticker": "AAPL"}))
     assert news["source_url"] == "https://term.gloom.sh/?ticker=AAPL"
-    filings = json.loads(execute("digifetch_sec_filings", {"ticker": "AAPL"}))
+    filings = json.loads(execute("gloomberb_get_sec_filings", {"ticker": "AAPL"}))
     assert filings["source_url"] == "https://term.gloom.sh/?ticker=AAPL"
 
 
@@ -273,7 +281,7 @@ def test_dispatcher_routes_a_price_history_date_window() -> None:
     execute = build_digifetch_tool_dispatcher(client=make_client(handler))
     payload = json.loads(
         execute(
-            "digifetch_price_history",
+            "gloomberb_get_price_history",
             {"symbol": "AAPL", "resolution": "1wk", "start_date": "2015-01-01"},
         )
     )
@@ -288,7 +296,7 @@ def test_dispatcher_routes_a_price_history_date_window() -> None:
 def test_dispatcher_does_not_attribute_the_yahoo_earnings_calendar() -> None:
     client = make_client(_sweep_handler, earnings_provider=lambda symbol: [])
     execute = build_digifetch_tool_dispatcher(client=client)
-    payload = json.loads(execute("digifetch_earnings_calendar", {"symbols": ["AAPL"]}))
+    payload = json.loads(execute("yahoo_get_earnings_calendar", {"symbols": ["AAPL"]}))
     assert "data" in payload
     assert "attribution" not in payload
     assert "source_url" not in payload
@@ -300,7 +308,7 @@ def test_dispatcher_maps_invalid_args_to_a_typed_error_without_a_request() -> No
 
     execute = build_digifetch_tool_dispatcher(client=make_client(_fail))
     # resolution is required for price_history — the Pydantic model rejects it.
-    payload = json.loads(execute("digifetch_price_history", {"symbol": "AAPL"}))
+    payload = json.loads(execute("gloomberb_get_price_history", {"symbol": "AAPL"}))
     assert payload["data"]["code"] == "invalid_input"
     assert payload["data"]["retryable"] is False
     # The raw payload still supplies the deep link the MCP wrapper emits (#4146
@@ -313,7 +321,7 @@ def test_dispatcher_non_mapping_args_return_typed_invalid_input() -> None:
         raise AssertionError("non-mapping args must not reach the wire")
 
     execute = build_digifetch_tool_dispatcher(client=make_client(_fail))
-    payload = json.loads(execute("digifetch_quote", ["AAPL"]))  # type: ignore[arg-type]
+    payload = json.loads(execute("gloomberb_get_quote", ["AAPL"]))  # type: ignore[arg-type]
     assert payload["data"]["code"] == "invalid_input"
     assert payload["data"]["retryable"] is False
     assert payload["attribution"] == GLOOMBERB_ATTRIBUTION
@@ -324,7 +332,7 @@ def test_session_gated_tool_without_a_cookie_is_auth_required_without_a_request(
         raise AssertionError("a missing cookie must gate before any request")
 
     execute = build_digifetch_tool_dispatcher(client=make_client(_fail))
-    payload = json.loads(execute("digifetch_holders", {"symbol": "AAPL"}))
+    payload = json.loads(execute("gloomberb_get_holders", {"symbol": "AAPL"}))
     assert payload["data"]["code"] == "auth_required"
     # The MCP wrapper deep-links even the typed error; the dispatcher matches.
     assert payload["source_url"] == "https://term.gloom.sh/?ticker=AAPL"
@@ -335,7 +343,7 @@ def test_dispatcher_never_raises_on_a_client_fault() -> None:
         def quote(self, request: Any) -> Any:
             raise RuntimeError("nope")
 
-    payload = json.loads(build_digifetch_tool_dispatcher(client=_Boom())("digifetch_quote", {}))
+    payload = json.loads(build_digifetch_tool_dispatcher(client=_Boom())("gloomberb_get_quote", {}))
     assert "RuntimeError" in payload["error"]
 
 

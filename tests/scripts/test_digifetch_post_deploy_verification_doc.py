@@ -24,19 +24,19 @@ DOC = REPO_ROOT / "docs" / "ops" / "digifetch-post-deploy-verification.md"
 #: find on the served surface (mcp_server.py:501-513). #4110 later grew the
 #: family to 33 — the count is reported, the cohort is required.
 PHASE0_COHORT = (
-    "digifetch_quote",
-    "digifetch_quotes_batch",
-    "digifetch_price_history",
-    "digifetch_ticker_financials",
-    "digifetch_options_chain",
-    "digifetch_sec_filings",
-    "digifetch_holders",
-    "digifetch_analyst_research",
-    "digifetch_corporate_actions",
-    "digifetch_earnings_calendar",
-    "digifetch_exchange_rate",
-    "digifetch_search",
-    "digifetch_news",
+    "gloomberb_get_quote",
+    "gloomberb_get_quotes_batch",
+    "gloomberb_get_price_history",
+    "gloomberb_get_ticker_financials",
+    "gloomberb_get_options_chain",
+    "gloomberb_get_sec_filings",
+    "gloomberb_get_holders",
+    "gloomberb_get_analyst_research",
+    "gloomberb_get_corporate_actions",
+    "yahoo_get_earnings_calendar",
+    "gloomberb_get_exchange_rate",
+    "gloomberb_search",
+    "gloomberb_get_news",
 )
 
 
@@ -55,7 +55,16 @@ def test_cohort_names_are_registered_read_scope_tools() -> None:
     from digiquant.mcp_server import READ_SCOPE_TOOLS
 
     assert set(PHASE0_COHORT) <= READ_SCOPE_TOOLS
-    assert len({n for n in READ_SCOPE_TOOLS if n.startswith("digifetch_")}) >= 13
+    assert (
+        len(
+            {
+                n
+                for n in READ_SCOPE_TOOLS
+                if n.startswith("gloomberb_") or n == "yahoo_get_earnings_calendar"
+            }
+        )
+        >= 13
+    )
 
 
 def test_doc_commands_match_the_shipped_serving_path() -> None:

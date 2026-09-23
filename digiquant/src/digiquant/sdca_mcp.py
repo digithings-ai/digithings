@@ -2,7 +2,7 @@
 
 MCP ``mcp_server.py`` and HTTP ``orchestrator_invoke`` both call these so
 Stage A, the risk index, and Bitview ingest stay on the same Pydantic path
-as ``digiquant_run_optimize``.
+as ``run_optimize``.
 """
 
 from __future__ import annotations
@@ -116,7 +116,7 @@ def run_fetch_coinmetrics_series(
     """Fail-soft CoinMetrics Community API fetch. Returns JSON (never raises).
 
     One asset/metric per call (comma lists are rejected by the client — see
-    ``digiquant_list_coinmetrics_catalog`` to discover what's available first).
+    ``coinmetrics_list_catalog`` to discover what's available first).
     Free community tier exposes a narrow metric set per asset; of the
     valuation family only CapMVRVCur (MVRV) is included for BTC, with full
     history back to 2010-07-18. CC BY-NC — research-only.

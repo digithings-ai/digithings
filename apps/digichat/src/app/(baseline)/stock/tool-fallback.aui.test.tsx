@@ -213,7 +213,7 @@ describe("stock ToolFallbackAttribution", () => {
 });
 
 describe("stock ToolFallback attribution wiring", () => {
-  function renderCompleted(result: unknown, toolName = "digifetch_quote") {
+  function renderCompleted(result: unknown, toolName = "gloomberb_get_quote") {
     return render(
       <ToolFallback
         type="tool-call"
@@ -260,7 +260,7 @@ describe("stock ToolFallback attribution wiring", () => {
   it("keeps the expanded Result pane unchanged for an unattributed payload", () => {
     renderCompleted(
       { result: { rows: [{ symbol: "AAPL" }] }, durationMs: 12 },
-      "digifetch_earnings_calendar",
+      "yahoo_get_earnings_calendar",
     );
     fireEvent.click(screen.getByRole("button"));
     expect(screen.getByText("Result:")).toBeTruthy();

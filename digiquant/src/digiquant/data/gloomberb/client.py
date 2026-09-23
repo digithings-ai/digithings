@@ -405,7 +405,7 @@ def _coerce_earnings_date(value: Any) -> date | None:
 
 
 def yfinance_earnings_events(symbol: str) -> list[EarningsEvent]:
-    """Default Yahoo earnings provider for ``digifetch_earnings_calendar``.
+    """Default Yahoo earnings provider for ``yahoo_get_earnings_calendar``.
 
     Uses ``yfinance``'s calendar dict (no pandas frame on this path). The import
     is lazy: yfinance is an existing digiquant extra, not a hard dependency of

@@ -857,7 +857,7 @@ def get_return_correlations(
 #
 # Market history (price_history, price_technicals, macro_series_observations)
 # moved to the versioned R2 cache (#3780, Task 7 cutover): it is served via
-# ``digiquant_get_price_technicals`` / ``digiquant_get_macro_series`` (MCP) and
+# ``get_price_technicals`` / ``get_macro_series`` (MCP) and
 # the ``get_*`` readers below (in-process).
 MARKET_TABLES_REMOVED: tuple[str, ...] = (
     "price_history",

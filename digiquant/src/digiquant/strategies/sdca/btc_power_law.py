@@ -11,7 +11,7 @@ Each quantile's ``(c, a, b)`` is fit independently via quantile regression
 module has no hard dependency on it at import time — see the ``nautilus``/
 ``indicators`` extras in ``pyproject.toml``). ``mu`` centers ``x`` on the fit
 sample and must travel with the coefficients so later predictions use the same
-centering. Fitting is exposed here as a plain function; the ``digiquant_fit_btc_power_law``
+centering. Fitting is exposed here as a plain function; the ``fit_btc_power_law``
 MCP tool (``mcp_server.py``) is the orchestration layer that sources price history
 and calls it — this module has zero data-fetching or MCP dependency, matching the
 rest of the ``sdca`` package.
@@ -218,7 +218,7 @@ def load_coefficients(path: Path | None = None) -> BtcPowerLawCoefficients:
     back to the checked-in placeholder (``btc_power_law_coefficients.example.json``
     — synthetic, NOT fit to real BTC history) when the real file is absent
     (fresh tree, or a checkout that deleted it). The fallback still logs a
-    warning. Re-fit via ``digiquant_fit_btc_power_law`` (or ``fit_btc_power_law``
+    warning. Re-fit via ``fit_btc_power_law`` (or ``fit_btc_power_law``
     + ``save_coefficients``) when new history should move the window.
     """
     p = path or (_COEFFICIENTS_PATH if _COEFFICIENTS_PATH.exists() else _COEFFICIENTS_EXAMPLE_PATH)

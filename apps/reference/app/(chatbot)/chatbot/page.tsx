@@ -28,8 +28,8 @@ export default function ChatbotPage() {
           cubes snap on and off. Reasoning: hairline rail, no pill. A send
           streams website retrieval (<code>digisearch_query</code> then{" "}
           <code>digivault_get_note</code>) or a dashboard backtest (
-          <code>digiquant_list_strategies</code> then{" "}
-          <code>digiquant_run_backtest</code>). Theme toggle still flips
+          <code>list_strategies</code> then{" "}
+          <code>run_backtest</code>). Theme toggle still flips
           light/dark.
         </p>
       </header>
