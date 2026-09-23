@@ -98,12 +98,17 @@ LIVE_WINDOW_DAYS = 45
 # The live fetch window must span at least one publication period of the series
 # (#4588). LIVE_WINDOW_DAYS assumes a series that publishes inside 45 days; for a
 # monthly series the newest observation can legitimately sit ~90 days behind the
-# run (release lag plus the pending release), so the 45-day window came back
-# empty and the run was marked stale. Widening the window lets the existing
-# MODE_UP_TO_DATE path handle it, and keeps a genuinely dead series failing.
+# run (release lag plus the pending release), so the 45-day window came back empty
+# and the run was marked stale. Widening the window makes the fetch *non-empty*
+# (it contains the seal row) so the existing up-to-date path covers it; an empty
+# window is still a soft fail, since a dead feed looks the same as a slow one.
+#
+# Only ``monthly``/``quarterly`` actually widen: a weekly seal is at most ~7 days
+# old, so the 45-day default already spans several publications, and widening it
+# would only raise the age at which a dead weekly feed is noticed.
 _CADENCE_WINDOW_DAYS: dict[str, int] = {
     "daily": LIVE_WINDOW_DAYS,
-    "weekly": 60,
+    "weekly": LIVE_WINDOW_DAYS,
     "monthly": 120,
     "quarterly": 240,
 }
