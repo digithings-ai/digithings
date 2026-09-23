@@ -42,126 +42,142 @@ import type { ArchSpec, TourStep } from "@digithings/ui";
 /* ══════════════════════ A. the conventional stack ══════════════════════ */
 
 /**
- * The rented stack, drawn at the container level for an organisation of a few
- * hundred seats: your application calling one vendor API, the managed services
- * fanned out behind it, and one boundary that governs all of it.
+ * The rented stack, at the container level and kept deliberately generic: no
+ * vendor is named, because the point is the SHAPE — a product that calls one
+ * interface, and every layer behind that interface rented back to it.
+ *
+ * Round 12 (owner): "The diagrams should be a little more comprehensive and high
+ * level. You don't have to reference specifically all the different Digi modules.
+ * It's just a philosophical representation of what digithings is versus what the
+ * current industry options are." So the boxes are categories a client grasps —
+ * their interface, their models, their index, their data, their monitoring,
+ * their machines, their terms — never brands, never digi module names.
+ *
+ * Eight nodes here and eight on the owned side, same ids, same topology, so the
+ * two drawings read as one diagram whose box wording flipped.
  */
 export const CONVENTIONAL_ARCH: ArchSpec = {
-  title: "A conventional managed AI stack",
+  title: "A conventional off-the-shelf AI stack",
   description:
-    "Container diagram: an application calls one vendor API, behind which sit a managed models API, a vector store, a managed database, a managed queue and managed traces, running on the vendor's infrastructure — all inside a single vendor boundary governed by one account.",
+    "Container diagram: a product calls one vendor interface, behind which sit the model, the index, the data store, the monitoring and the machines — every one of them a rented layer inside a single boundary governed by one account and one release schedule.",
   groups: [
     {
       id: "platform",
       label: "one vendor · one account · one release schedule",
       icon: "cloud",
+      col: 0,
+      row: 1,
+      cols: 3,
+      rows: 3,
     },
   ],
   services: [
-    { id: "app", label: "your application", icon: "internet" },
-    { id: "gateway", label: "api gateway", icon: "server", group: "platform" },
-    { id: "model", label: "managed models", icon: "server", group: "platform" },
-    { id: "vector", label: "vector store", icon: "database", group: "platform" },
-    { id: "rdbms", label: "managed database", icon: "database", group: "platform" },
-    { id: "queue", label: "managed queue", icon: "disk", group: "platform" },
-    { id: "obs", label: "managed traces", icon: "server", group: "platform" },
-    { id: "cloud", label: "their compute", icon: "cloud", group: "platform" },
+    { id: "app", label: "your product", icon: "internet", col: 0, row: 0 },
+    { id: "api", label: "their interface", icon: "server", group: "platform", col: 1, row: 1 },
+    { id: "model", label: "their models", icon: "server", group: "platform", col: 0, row: 2 },
+    { id: "memory", label: "their index", icon: "database", group: "platform", col: 1, row: 2 },
+    { id: "record", label: "their data", icon: "database", group: "platform", col: 2, row: 2 },
+    { id: "oversight", label: "their monitoring", icon: "server", group: "platform", col: 0, row: 3 },
+    { id: "metal", label: "their machines", icon: "cloud", group: "platform", col: 1, row: 3 },
+    { id: "terms", label: "their terms", icon: "disk", group: "platform", col: 2, row: 3 },
   ],
   edges: [
-    { from: "app", to: "gateway", fromSide: "B", toSide: "T", label: "https" },
-    { from: "gateway", to: "model", fromSide: "R", toSide: "L", label: "inference" },
-    { from: "gateway", to: "vector", fromSide: "L", toSide: "R", label: "retrieval" },
-    { from: "gateway", to: "rdbms", fromSide: "B", toSide: "T", label: "sql" },
-    { from: "model", to: "obs", fromSide: "R", toSide: "L", label: "traces" },
-    { from: "vector", to: "queue", fromSide: "B", toSide: "T", label: "ingest" },
-    { from: "rdbms", to: "cloud", fromSide: "R", toSide: "L", label: "storage" },
-    { from: "queue", to: "cloud", fromSide: "B", toSide: "T", label: "events" },
+    { from: "app", to: "api", fromSide: "B", toSide: "T", label: "requests" },
+    { from: "api", to: "model", fromSide: "R", toSide: "L", label: "inference" },
+    { from: "api", to: "memory", fromSide: "L", toSide: "R", label: "retrieval" },
+    { from: "api", to: "record", fromSide: "B", toSide: "T", label: "storage" },
+    { from: "model", to: "oversight", fromSide: "B", toSide: "T", label: "traces" },
+    { from: "memory", to: "metal", fromSide: "B", toSide: "T", label: "index" },
+    { from: "record", to: "metal", fromSide: "B", toSide: "L", label: "data" },
+    { from: "metal", to: "terms", fromSide: "R", toSide: "L", label: "metered" },
   ],
 };
 
 /* ══════════════════════ B. the same system on digithings ══════════════════════ */
 
 /**
- * The same container diagram, same silhouette, every box swapped for the module
- * that does that job and the boundary relabelled. The comparison is the point:
- * the calls are the same, the difference is who owns the boxes and whether the
- * boundary has seams in it.
+ * The same container diagram — same node ids, same positions, same wiring — with
+ * every box flipped from "theirs" to "yours". The comparison is the point: the
+ * calls do not change, only who owns the layer and whether the boundary has
+ * seams in it. No digi module is named here either; the modules belong in the
+ * capability ledger below, not in a diagram a client has to decode.
  */
 export const DIGITHINGS_ARCH: ArchSpec = {
-  title: "The same stack on digithings",
+  title: "The same stack, owned",
   description:
-    "Container diagram: the same application, but every service behind it is a digithings module — digigraph routing to digiquant, digisearch, digivault and digichat, with digikey, digismith, digiclaw and digibase beneath — all inside your own boundary.",
+    "Container diagram: the same product over the same calls, but every layer behind it is a piece you run — the interface, the model, the index, the data, the monitoring, the machines and the keys are all yours, inside your own boundary.",
   groups: [
     {
       id: "hosts",
       label: "your hosts · your regions · your accounts",
       icon: "server",
+      col: 0,
+      row: 1,
+      cols: 3,
+      rows: 3,
     },
   ],
   services: [
-    { id: "app", label: "your application", icon: "internet" },
-    { id: "graph", label: "digigraph", icon: "server", group: "hosts" },
-    { id: "quant", label: "digiquant", icon: "server", group: "hosts" },
-    { id: "search", label: "digisearch", icon: "database", group: "hosts" },
-    { id: "vault", label: "digivault", icon: "disk", group: "hosts" },
-    { id: "chat", label: "digichat", icon: "internet", group: "hosts" },
-    { id: "smith", label: "digismith", icon: "server", group: "hosts" },
-    { id: "key", label: "digikey", icon: "server", group: "hosts" },
-    { id: "claw", label: "digiclaw", icon: "server", group: "hosts" },
-    { id: "base", label: "digibase", icon: "disk", group: "hosts" },
+    { id: "app", label: "your product", icon: "internet", col: 0, row: 0 },
+    { id: "api", label: "your interface", icon: "server", group: "hosts", col: 1, row: 1 },
+    { id: "model", label: "any model", icon: "server", group: "hosts", col: 0, row: 2 },
+    { id: "memory", label: "your index", icon: "database", group: "hosts", col: 1, row: 2 },
+    { id: "record", label: "your data", icon: "database", group: "hosts", col: 2, row: 2 },
+    { id: "oversight", label: "your log", icon: "server", group: "hosts", col: 0, row: 3 },
+    { id: "metal", label: "your machines", icon: "cloud", group: "hosts", col: 1, row: 3 },
+    { id: "terms", label: "your keys", icon: "disk", group: "hosts", col: 2, row: 3 },
   ],
   edges: [
-    { from: "app", to: "graph", fromSide: "B", toSide: "T", label: "https" },
-    { from: "graph", to: "quant", fromSide: "R", toSide: "L", label: "research" },
-    { from: "graph", to: "search", fromSide: "L", toSide: "R", label: "retrieval" },
-    { from: "graph", to: "vault", fromSide: "B", toSide: "T", label: "notes" },
-    { from: "quant", to: "smith", fromSide: "R", toSide: "L", label: "traces" },
-    { from: "search", to: "chat", fromSide: "B", toSide: "T", label: "context" },
-    { from: "vault", to: "key", fromSide: "R", toSide: "L", label: "scope" },
-    { from: "chat", to: "base", fromSide: "B", toSide: "T", label: "shared" },
-    { from: "key", to: "claw", fromSide: "B", toSide: "T", label: "heartbeat" },
+    { from: "app", to: "api", fromSide: "B", toSide: "T", label: "requests" },
+    { from: "api", to: "model", fromSide: "R", toSide: "L", label: "inference" },
+    { from: "api", to: "memory", fromSide: "L", toSide: "R", label: "retrieval" },
+    { from: "api", to: "record", fromSide: "B", toSide: "T", label: "storage" },
+    { from: "model", to: "oversight", fromSide: "B", toSide: "T", label: "traces" },
+    { from: "memory", to: "metal", fromSide: "B", toSide: "T", label: "index" },
+    { from: "record", to: "metal", fromSide: "B", toSide: "L", label: "data" },
+    { from: "metal", to: "terms", fromSide: "R", toSide: "L", label: "yours" },
   ],
 };
 
 /* ══════════════════════ A2. the guided walk ══════════════════════ */
 
 /**
- * The walk over `CONVENTIONAL_ARCH` — the rented side of the swipe-through.
+ * The walk over `CONVENTIONAL_ARCH` — the rented side of the walk-through.
  *
  * The owner: "we start with the diagram for the off-the-shelf solution and then
  * we swipe over to the digi things solution the guided camera". So the tour
- * spends its first four steps on the rented stack (glow only — no camera, since
- * a walk that both zooms in and later has to pull back out is the thing that
- * read as broken), then pushes across to the owned diagram and hands the camera
- * to `OWNED_TOUR_STEPS`.
+ * spends its four steps on the rented stack (glow only — no camera, since a walk
+ * that both zooms in and later has to pull back out is the thing that read as
+ * broken), then pushes across to the owned diagram and hands the camera to
+ * `OWNED_TOUR_STEPS`.
  *
- * The sets grow by one step at a time and the last one includes the `platform`
+ * The sets grow a layer at a time and the last one includes the `platform`
  * boundary group, so the walk ends on the closed wall rather than on a box.
  */
 export const RENTED_TOUR_STEPS: TourStep[] = [
   {
     id: "surface",
-    label: "The surface you own",
-    line: "One box is yours: the application. Everything it calls sits behind somebody else's interface.",
+    label: "You own the surface",
+    line: "One box is yours: the product. Everything it calls belongs to somebody else.",
     ids: ["app"],
   },
   {
-    id: "gateway",
-    label: "One vendor entry point",
-    line: "A single gateway is the only way in. Its shape, its limits and its version are decided above you.",
-    ids: ["app", "gateway"],
+    id: "interface",
+    label: "Their interface, their rules",
+    line: "A single interface is the only way in. Its shape, its limits and its version are decided above you.",
+    ids: ["app", "api"],
   },
   {
     id: "services",
-    label: "Every layer a contract",
-    line: "Models, vectors, the database and the queue are four separate contracts, four meters and four things you cannot change.",
-    ids: ["app", "gateway", "model", "vector", "rdbms", "queue"],
+    label: "Every layer below is rented",
+    line: "The model, the index and the data are three separate contracts, three meters and three things you cannot change.",
+    ids: ["app", "api", "model", "memory", "record"],
   },
   {
     id: "closed",
     label: "One closed boundary",
-    line: "Traces, compute and the account all sit behind the same wall. The diagram is not smaller than digithings — it is the same diagram with nothing movable in it.",
-    ids: ["app", "gateway", "model", "vector", "rdbms", "queue", "obs", "cloud", "platform"],
+    line: "Monitoring, machines and the terms all sit behind the same wall. The diagram is not smaller than digithings — it is the same diagram with nothing movable in it.",
+    ids: ["app", "api", "model", "memory", "record", "oversight", "metal", "terms", "platform"],
   },
 ];
 
@@ -172,50 +188,45 @@ export const RENTED_TOUR_STEPS: TourStep[] = [
  * every step we kind of have this guided view".
  *
  * Every id here must exist in `DIGITHINGS_ARCH` — the tour resolves them against
- * the ids mermaid puts on the rendered groups.
+ * the ids mermaid puts on the rendered groups. Kept to six steps so the phase
+ * count stays comparable to the rented four.
  */
 export const OWNED_TOUR_STEPS: TourStep[] = [
   {
     id: "overview",
-    label: "The whole system",
-    line: "One application, nine modules and a shared library under them. Every box is a process you run, inside a boundary that is yours.",
+    label: "The same stack, owned",
+    line: "One product over the same calls — except every box behind it is a process you run, inside a boundary that is yours.",
     ids: [],
   },
   {
-    id: "route",
-    label: "A request arrives",
-    line: "Your application calls digigraph. That is the only entry point, and what happens next is a graph you can read and edit rather than a route you are given.",
-    ids: ["app", "graph"],
+    id: "surface",
+    label: "The same surface",
+    line: "Your product is still the top box. It calls an interface, exactly as before; the difference is who publishes that interface.",
+    ids: ["app"],
   },
   {
-    id: "research",
-    label: "Research and backtests",
-    line: "digiquant proposes ideas against public data, backtests them before anyone sees a number, and sizes the survivor into weights.",
-    ids: ["quant"],
+    id: "intelligence",
+    label: "Swap the model, no migration",
+    line: "The interface and the model are separate layers. Move to a different model behind the same call whenever a better or cheaper one lands.",
+    ids: ["api", "model"],
   },
   {
-    id: "retrieval",
-    label: "Answers with sources",
-    line: "digisearch indexes whatever you point it at — documents, your own stores, the open web — and digichat is the surface that asks the question.",
-    ids: ["search", "chat"],
+    id: "memory",
+    label: "Your index, your data",
+    line: "The retrieval layer and the store are yours to point anywhere. The vectors and the records stay where you put them.",
+    ids: ["memory", "record"],
   },
   {
-    id: "notes",
-    label: "Your own documents",
-    line: "digivault keeps a markdown vault with wikilinks and backlinks, so the knowledge stays in files you can open in any editor.",
-    ids: ["vault"],
+    id: "operations",
+    label: "Your log, your machines",
+    line: "The record of what ran and the metal it ran on are both inside your boundary — your regions, your accounts, your audit trail.",
+    ids: ["oversight", "metal"],
   },
   {
-    id: "trust",
-    label: "Keys, traces, heartbeat",
-    line: "digikey issues the keys and scopes them on every call, digismith records what ran, and digiclaw keeps the whole thing alive.",
-    ids: ["key", "smith", "claw"],
-  },
-  {
-    id: "foundation",
-    label: "One shared library",
-    line: "digibase sits under all of it. A change to HTTP, audit or settings lands once instead of nine times, which is what keeps nine modules one product.",
-    ids: ["base"],
+    id: "keys",
+    label: "The keys stay yours",
+    line: "Access is issued and revoked by you, carried on every call, so the boundary is a set of seams you can move rather than a wall you rent.",
+    ids: ["terms"],
   },
 ];
 

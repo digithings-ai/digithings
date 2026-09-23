@@ -50,6 +50,10 @@ export {
   type ArchSpec,
 } from "./components/diagrams";
 export {
+  ArchitectureSvg,
+  type ArchitectureSvgProps,
+} from "./components/diagrams";
+export {
   ArchitectureTour,
   type ArchitectureTourProps,
   type TourStep,

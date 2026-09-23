@@ -16,8 +16,19 @@
  *   - the first side's steps hold the frame still and light its boxes (a glow,
  *     not a ring, with a spotlight that drops everything outside the box back
  *     into the page);
- *   - the last fraction of the final step slides the first diagram off and the
- *     second one in;
+ *   - the last fraction of the final step runs the SWAP. Each side is ONE group
+ *     — its diagram and its own step list — and the groups swap by sliding, not
+ *     by fading: the rented group (diagram left, list right) leaves to the LEFT
+ *     as a unit, then the owned group arrives from the RIGHT (list left and
+ *     bottom-aligned, diagram right). The rail does not cross the page on its
+ *     own; it travels with its diagram. The owner asked for exactly this: "the
+ *     diagram slides to the left, the rented text also goes left with it. And
+ *     then from the right side of the screen appears the owned text with its
+ *     diagram … they don't continue one another. One replaces the other so that
+ *     you should see them slide on and off the screen." So neither group is ever
+ *     faded — no opacity anywhere on the swap — and the two never share the
+ *     frame: the exit runs over the first half of the window and the entrance
+ *     over the second;
  *   - the second side's steps then drive the camera as well as the glow.
  *
  * The camera is deliberately only on the LAST side. It can only ever zoom IN
@@ -33,14 +44,14 @@
  * MutationObserver on the stage) and again on resize, always while that pane's
  * camera is untransformed so the numbers are in unscaled pane space.
  *
- * MOTION BUDGET. One rAF-throttled passive scroll listener writing ONE custom
- * property (`--arch-swap` on the strip; `--arch-p` on the pin); React state
- * changes only when the coarse step index changes. Reduced motion gets the
- * static treatment, and so does anything narrower than the breakpoint at which
- * the pinned layout fits.
+ * MOTION BUDGET. One rAF-throttled passive scroll listener writing custom
+ * properties (`--arch-out` / `--arch-in` on the grid; `--arch-p` on the pin);
+ * React state changes only when the coarse step index changes. Reduced motion
+ * gets the static treatment, and so does anything narrower than the breakpoint
+ * at which the pinned layout fits.
  */
 
-import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 import { ArchitectureDiagram, type ArchSpec } from "./ArchitectureDiagram";
 
@@ -85,7 +96,9 @@ interface SideMeasure {
 }
 
 const NO_MOTION = "(prefers-reduced-motion: reduce)";
-const PIN_MEDIA = "(min-width: 960px)";
+// Must agree with the two-column grid breakpoint in diagrams.css: below it the
+// rail has nowhere to travel to, so the animated treatment cannot hold.
+const PIN_MEDIA = "(min-width: 1024px)";
 
 const clamp01 = (n: number): number => Math.max(0, Math.min(1, n));
 const smooth = (n: number): number => {
@@ -143,7 +156,7 @@ export function ArchitectureTour({
   const trackRef = useRef<HTMLDivElement | null>(null);
   const pinRef = useRef<HTMLDivElement | null>(null);
   const stageRef = useRef<HTMLDivElement | null>(null);
-  const stripRef = useRef<HTMLDivElement | null>(null);
+  const gridRef = useRef<HTMLDivElement | null>(null);
   const paneRefs = useRef<Array<HTMLDivElement | null>>([]);
   const cameraRefs = useRef<Array<HTMLDivElement | null>>([]);
   /** Set by the scroll effect so a late-arriving SVG can resize the track. */
@@ -280,9 +293,17 @@ export function ArchitectureTour({
       let swap = 0;
       if (sides.length > 1) {
         if (index >= swapAt) swap = 1;
-        else if (index === swapAt - 1) swap = smooth((frac - 0.5) / 0.5);
+        else if (index === swapAt - 1) swap = smooth((frac - 0.35) / 0.65);
       }
-      stripRef.current?.style.setProperty("--arch-swap", swap.toFixed(4));
+      const grid = gridRef.current;
+      if (grid) {
+        // "get rid of the old, in with the new": the rented group leaves over
+        // the first half of the window and the owned group arrives over the
+        // second, so the two are never in the frame together and nothing has to
+        // be faded to hide the hand-off.
+        grid.style.setProperty("--arch-out", clamp01(swap * 2).toFixed(4));
+        grid.style.setProperty("--arch-in", clamp01(swap * 2 - 1).toFixed(4));
+      }
 
       setStep((current) => (current === index ? current : index));
     };
@@ -412,79 +433,89 @@ export function ArchitectureTour({
     );
   }
 
-  const stageStyle = { "--sides": String(sides.length) } as CSSProperties;
-
   return (
     <div className={`arch-tour${className ? ` ${className}` : ""}`} data-variant={mode}>
       <div className="arch-tour__track" ref={trackRef}>
         <div className="arch-tour__pin" ref={pinRef}>
-          <div className="arch-tour__grid">
-            <div className="arch-tour__frame">
-              <div className="arch-tour__stage" ref={stageRef} style={stageStyle}>
-                <div className="arch-tour__strip" ref={stripRef}>
-                  {sides.map((side, si) => (
-                    <div
-                      className="arch-tour__pane"
-                      key={si}
-                      ref={(el) => {
-                        paneRefs.current[si] = el;
-                      }}
-                    >
+          <div className="arch-tour__grid" ref={gridRef}>
+            {sides.map((side, si) => {
+              const base = sides.slice(0, si).reduce((n, s) => n + s.steps.length, 0);
+              const mod =
+                sides.length > 1
+                  ? si === 0
+                    ? " arch-tour__side--leaving"
+                    : " arch-tour__side--entering"
+                  : "";
+              return (
+                <div className={`arch-tour__side${mod}`} key={si}>
+                  <div className="arch-tour__frame">
+                    <div className="arch-tour__stage" ref={si === 0 ? stageRef : undefined}>
                       <div
-                        className="arch-tour__camera"
+                        className="arch-tour__pane"
                         ref={(el) => {
-                          cameraRefs.current[si] = el;
+                          paneRefs.current[si] = el;
                         }}
                       >
-                        <ArchitectureDiagram spec={side.spec} />
-                        {si === activeSide
-                          ? activeIds.map((id) => {
-                              const box = measures[si]?.boxes[id];
-                              if (!box) return null;
-                              return (
-                                <span
-                                  className="arch-tour__spot"
-                                  key={id}
-                                  aria-hidden="true"
-                                  style={{
-                                    left: `${box.x}px`,
-                                    top: `${box.y}px`,
-                                    width: `${box.w}px`,
-                                    height: `${box.h}px`,
-                                  }}
-                                />
-                              );
-                            })
-                          : null}
+                        <div
+                          className="arch-tour__camera"
+                          ref={(el) => {
+                            cameraRefs.current[si] = el;
+                          }}
+                        >
+                          <ArchitectureDiagram spec={side.spec} lit={si === activeSide ? activeIds : undefined} />
+                          {si === activeSide ? (() => {
+                            // ONE spotlight over the union of the lit boxes, never
+                            // one per box: each `.arch-tour__spot` carries a 9999px
+                            // dim shadow, so N spots stack that dim N times and the
+                            // last rented steps — which light most of the diagram —
+                            // went to near-black and read as an unreadable blur.
+                            const lit0 = activeIds
+                              .map((id) => measures[si]?.boxes[id])
+                              .filter(Boolean) as Box[];
+                            if (lit0.length === 0) return null;
+                            const minX = Math.min(...lit0.map((b) => b.x));
+                            const minY = Math.min(...lit0.map((b) => b.y));
+                            const maxX = Math.max(...lit0.map((b) => b.x + b.w));
+                            const maxY = Math.max(...lit0.map((b) => b.y + b.h));
+                            const pad = 6;
+                            return (
+                              <span
+                                className="arch-tour__spot"
+                                aria-hidden="true"
+                                style={{
+                                  left: `${minX - pad}px`,
+                                  top: `${minY - pad}px`,
+                                  width: `${maxX - minX + pad * 2}px`,
+                                  height: `${maxY - minY + pad * 2}px`,
+                                }}
+                              />
+                            );
+                          })() : null}
+                        </div>
                       </div>
                     </div>
-                  ))}
-                </div>
-              </div>
-            </div>
+                  </div>
 
-            <ol className="arch-tour__rail">
-              {flat.map((entry, index) => {
-                const on = index === step;
-                const first = index === 0 || flat[index - 1].side !== entry.side;
-                return (
-                  <li
-                    className={`arch-tour__step${on ? " on" : ""}`}
-                    key={`${entry.side}-${entry.id}`}
-                    data-side={entry.side}
-                  >
-                    <span className="arch-tour__index">
-                      {first && sides[entry.side]?.tag ? (
-                        <span className="arch-tour__side-tag">{sides[entry.side].tag}</span>
-                      ) : null}
-                      {String(index + 1).padStart(2, "0")}
-                    </span>
-                    <span className="arch-tour__label">{entry.label}</span>
-                    <span className="arch-tour__line">{entry.line}</span>
-                  </li>
-                );
-              })}
-            </ol>
+                  <ol className="arch-tour__rail">
+                    {side.steps.map((entry, index) => {
+                      const on = base + index === step;
+                      return (
+                        <li className={`arch-tour__step${on ? " on" : ""}`} key={entry.id}>
+                          <span className="arch-tour__index">
+                            {side.tag ? (
+                              <span className="arch-tour__side-tag">{side.tag}</span>
+                            ) : null}
+                            {String(index + 1).padStart(2, "0")}
+                          </span>
+                          <span className="arch-tour__label">{entry.label}</span>
+                          <span className="arch-tour__line">{entry.line}</span>
+                        </li>
+                      );
+                    })}
+                  </ol>
+                </div>
+              );
+            })}
           </div>
         </div>
       </div>

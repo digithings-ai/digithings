@@ -11,6 +11,7 @@ export {
   type ArchSide,
   type ArchSpec,
 } from "./ArchitectureDiagram";
+export { ArchitectureSvg, type ArchitectureSvgProps } from "./architecture-svg";
 export {
   ArchitectureTour,
   type ArchitectureTourProps,

@@ -125,9 +125,32 @@
   stroke-width: 1 !important;
 }
 
+/*
+ * The icon is a fixed 80px plate in an 80px cell and mermaid draws the label on
+ * its bottom edge, so at full size each node reads as a wall of squares with the
+ * text sitting on top of the glyph. Scaling the plate back to half its cell
+ * gives the label clear air beneath it and turns the icon into what it should be
+ * here — a small monogram beside the words, not the whole node.
+ */
+.arch-figure__body svg [viewBox="0 0 80 80"] {
+  transform: scale(0.5);
+  transform-origin: 50% 50%;
+}
+
 .arch-figure__body svg .architecture-service text {
-  font-size: 12px;
-  letter-spacing: 0.01em;
+  font-size: 11px;
+  letter-spacing: 0.02em;
+  fill: var(--ink) !important;
+}
+
+/*
+ * mermaid leaves the edge labels at the browser default — nearly half again the
+ * size of a node label — which pulls the eye off the boxes and reads as clutter.
+ * Everything in the drawing sits on the same mono step.
+ */
+.arch-figure__body svg text {
+  font-size: 11px;
+  letter-spacing: 0.02em;
 }
 
 /*
@@ -166,22 +189,42 @@
   min-width: 0;
 }
 
+/*
+ * One diagram per side. The stage clips, which is what lets a leaving group
+ * travel past the frame edge and disappear instead of widening the page.
+ */
 .arch-tour__stage {
   position: relative;
   overflow: hidden;
-}
-
-/* The swipe. Each pane is one stage wide, so shifting the strip by one pane is
- * `-100% / sides` of its own width and the page never re-lays out to do it. */
-.arch-tour__strip {
-  display: flex;
-  width: calc(100% * var(--sides, 1));
-  transform: translateX(calc(var(--arch-swap, 0) * -100% / var(--sides, 1)));
+  display: grid;
 }
 
 .arch-tour__pane {
-  flex: 0 0 calc(100% / var(--sides, 1));
+  grid-area: 1 / 1;
   min-width: 0;
+}
+
+/*
+ * The swap. Each side is one group — its diagram and its own step list — so the
+ * rented group leaves to the left as a unit (list travelling with its diagram)
+ * and the owned group arrives from the right. No opacity anywhere: the two never
+ * share the frame, so nothing has to be faded in. `--arch-out` runs over the
+ * first half of the window and `--arch-in` over the second, so they pass each
+ * other off-screen rather than crossing in view.
+ */
+.arch-tour__side {
+  display: grid;
+  gap: 1.8rem;
+  min-width: 0;
+  transition: transform 0.8s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.arch-tour__side--leaving {
+  transform: translateX(calc(var(--arch-out, 0) * -112%));
+}
+
+.arch-tour__side--entering {
+  transform: translateX(calc((1 - var(--arch-in, 1)) * 112%));
 }
 
 .arch-tour__camera {
@@ -202,16 +245,20 @@
   display: none;
 }
 
-/* The selected box glows and everything outside it drops back into the page.
- * The huge flat shadow is the spotlight: it dims the whole pane except the
- * rectangle it is cast from, and the stage's own overflow clips it, so there is
- * no second layer to keep in step with the camera. */
+/* The selected box glows and everything outside it drops back a step. The huge
+ * flat shadow is the spotlight: it dims the whole pane except the rectangle it
+ * is cast from, and the stage's own overflow clips it, so there is no second
+ * layer to keep in step with the camera. There is exactly ONE such rectangle per
+ * step (the union of the lit boxes) — with one per box the dim stacked once per
+ * lit box and the last rented steps, which light most of the diagram, went to
+ * near-black. The dim stays light for the same reason: the architecture outside
+ * the glow has to remain readable. */
 .arch-tour__spot {
   position: absolute;
   pointer-events: none;
-  border: 1px solid color-mix(in srgb, var(--accent) 55%, transparent);
-  background: color-mix(in srgb, var(--accent) 5%, transparent);
-  box-shadow: 0 0 0 9999px color-mix(in srgb, var(--bg) 78%, transparent);
+  border: 1px solid color-mix(in srgb, var(--accent) 45%, transparent);
+  background: color-mix(in srgb, var(--accent) 4%, transparent);
+  box-shadow: 0 0 0 9999px color-mix(in srgb, var(--bg) 22%, transparent);
   transition:
     left 0.45s var(--ease),
     top 0.45s var(--ease),
@@ -282,7 +329,9 @@
   margin: 0;
   padding: 0;
   display: grid;
+  align-content: start;
   gap: 0.9rem;
+  min-width: 0;
 }
 
 .arch-tour__rail::before {
@@ -346,16 +395,57 @@
   display: block;
 }
 
-@media (min-width: 960px) {
+/*
+ * The two-column row, and with it the swap. Each side lays out as one row —
+ * diagram wide, its own step list narrow beside it — and the two sides are
+ * stacked in the same grid cell so each can slide as a unit. The owned side
+ * mirrors its tracks so its list lands in the bottom-left corner and its diagram
+ * to the right. The grid clips, which is what keeps a group parked off-screen
+ * from widening the page.
+ */
+@media (min-width: 1024px) {
   .arch-tour:not([data-variant="static"]) .arch-tour__grid {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 0;
+    overflow: hidden;
+  }
+
+  .arch-tour:not([data-variant="static"]) .arch-tour__side {
+    grid-area: 1 / 1;
     grid-template-columns: minmax(0, 1.35fr) minmax(0, 0.65fr);
     gap: 2.4rem;
+    align-items: start;
+  }
+
+  .arch-tour:not([data-variant="static"]) .arch-tour__side--entering {
+    grid-template-columns: minmax(0, 0.65fr) minmax(0, 1.35fr);
+  }
+
+  /* Both children are pinned to row 1: the owned side lists its columns in the
+   * opposite order, and grid auto-placement would otherwise drop the rail onto a
+   * second row below the diagram (which also made the pin taller than the
+   * viewport, so it could not hold). */
+  .arch-tour:not([data-variant="static"]) .arch-tour__side .arch-tour__frame,
+  .arch-tour:not([data-variant="static"]) .arch-tour__side .arch-tour__rail {
+    grid-row: 1;
+  }
+
+  .arch-tour:not([data-variant="static"]) .arch-tour__side--entering .arch-tour__frame {
+    grid-column: 2;
+  }
+
+  .arch-tour:not([data-variant="static"]) .arch-tour__side--entering .arch-tour__rail {
+    grid-column: 1;
+    align-self: end;
   }
 }
 
 @media (prefers-reduced-motion: reduce) {
   .arch-tour__camera,
-  .arch-tour__strip,
+  .arch-tour__frame,
+  .arch-tour__rail,
+  .arch-tour__side,
+  .arch-tour__pane,
   .arch-tour__spot,
   .arch-tour__step,
   .arch-tour__rail::before {
@@ -367,18 +457,14 @@
     opacity: 1;
   }
 
-  .arch-tour__strip {
+  /* The component renders the static treatment under reduced motion, so the
+   * animated markup is not on the page — this is belt-and-braces for the case
+   * where the media query flips after mount. */
+  .arch-tour__pane,
+  .arch-tour__frame,
+  .arch-tour__rail,
+  .arch-tour__side {
     transform: none;
-    display: block;
-    width: 100%;
-  }
-
-  .arch-tour__pane {
-    display: block;
-  }
-
-  .arch-tour__pane + .arch-tour__pane {
-    margin-top: 1.2rem;
   }
 
   .arch-tour__rail::before {
@@ -397,4 +483,136 @@
   stroke: var(--surface);
   stroke-width: 4px;
   stroke-linejoin: round;
+}
+
+/* ════════════════════════════════════════════════════════════════════════════
+ * The kit's own architecture SVG (architecture-svg.tsx)
+ *
+ * Drawn, not solved: a box with the label inside it, a 22px kind glyph on the
+ * left, orthogonal hairline connectors, and the boundary title ABOVE its rule
+ * instead of painted onto it. Mono, squared, one accent — the terminal look.
+ * The tour's glow rides the same .is-on hook the mermaid path used, so nothing
+ * in the tour changed when the renderer did.
+ * ════════════════════════════════════════════════════════════════════════════ */
+
+.arch-svg {
+  display: block;
+  width: 100%;
+  height: auto;
+  max-width: 100%;
+  overflow: visible;
+  font-family: var(--font-mono);
+}
+
+.arch-svg text {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.02em;
+}
+
+/* ── boundaries ─────────────────────────────────────────────────────────── */
+
+.arch-svg .arch-group__box {
+  fill: color-mix(in srgb, var(--ink) 3%, transparent);
+  stroke: var(--hair-2);
+  stroke-width: 1;
+  stroke-dasharray: 4 3;
+  transition: stroke 0.25s var(--ease), fill 0.25s var(--ease);
+}
+
+.arch-svg .arch-group.is-on .arch-group__box {
+  stroke: color-mix(in srgb, var(--accent) 55%, var(--hair-2));
+  fill: color-mix(in srgb, var(--accent) 5%, transparent);
+}
+
+.arch-svg .arch-group__label {
+  fill: var(--ink-mute);
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.arch-svg .arch-group.is-on .arch-group__label {
+  fill: var(--ink-soft);
+}
+
+/* ── connectors ─────────────────────────────────────────────────────────── */
+
+.arch-svg .arch-edge__line {
+  fill: none;
+  stroke: var(--hair-2);
+  stroke-width: 1;
+  opacity: 0.5;
+  transition: stroke 0.25s var(--ease), opacity 0.25s var(--ease);
+}
+
+.arch-svg .arch-edge.is-on .arch-edge__line {
+  stroke: color-mix(in srgb, var(--accent) 60%, var(--hair-2));
+  opacity: 1;
+}
+
+.arch-svg .arch-arrow {
+  fill: var(--hair-2);
+  stroke: none;
+}
+
+.arch-svg .arch-edge.is-on .arch-arrow {
+  fill: color-mix(in srgb, var(--accent) 60%, var(--hair-2));
+}
+
+.arch-svg .arch-edge__label {
+  fill: var(--ink-soft);
+  font-size: 10px;
+  text-anchor: middle;
+  paint-order: stroke;
+  stroke: var(--surface);
+  stroke-width: 3px;
+  stroke-linejoin: round;
+}
+
+/* ── services ───────────────────────────────────────────────────────────── */
+
+.arch-svg .arch-node__box {
+  fill: var(--surface);
+  stroke: var(--hair);
+  stroke-width: 1;
+  transition: stroke 0.25s var(--ease), fill 0.25s var(--ease);
+}
+
+.arch-svg .arch-node.is-on .arch-node__box {
+  fill: color-mix(in srgb, var(--accent) 6%, var(--surface));
+  stroke: color-mix(in srgb, var(--accent) 55%, var(--hair));
+}
+
+.arch-svg .arch-node__glyph {
+  color: var(--ink-mute);
+  transition: color 0.25s var(--ease);
+}
+
+.arch-svg .arch-node.is-on .arch-node__glyph {
+  color: var(--accent);
+}
+
+.arch-svg .arch-node__label {
+  fill: var(--ink-soft);
+  font-size: 11.5px;
+  transition: fill 0.25s var(--ease);
+}
+
+.arch-svg .arch-node.is-on .arch-node__label {
+  fill: var(--ink);
+}
+
+.arch-svg .arch-node__glyph svg {
+  overflow: visible;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .arch-svg .arch-group__box,
+  .arch-svg .arch-edge__line,
+  .arch-svg .arch-node__box,
+  .arch-svg .arch-node__glyph,
+  .arch-svg .arch-node__label {
+    transition: none;
+  }
 }
