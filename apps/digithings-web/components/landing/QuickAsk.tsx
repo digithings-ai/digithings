@@ -25,20 +25,31 @@ import { GROUPED_LABEL } from "./label";
  * visitor who clicked an example watched the pane leave rather than reply. The
  * owner asked for the opposite — "make sure we're actually responding in this
  * cube… they'd get an answer streamed in this embedded view" — so the
- * interception is gone and the canned turn streams in place. What replaces it is
- * the way out: as soon as an answer exists, an expand control appears in the
- * frame's top-right corner and takes the whole conversation to the real chat.
+ * interception is gone and the canned turn streams in place.
  *
- * That last part is why the transcript is held here. The in-page Thread owns the
- * conversation in its own state, and `ChatEmbedShell` seeds the real embed from a
- * handoff of `{role, content}` pairs — so passing the transcript through on
- * expand is what makes `/chat` open with the conversation already in it, rather
- * than a fresh thread. A cube that iframed `/embed` directly could never do this:
- * its transcript would be cross-origin and unreachable.
+ * ROUND 5: the way out is a plain button in the header row, next to the
+ * `digichat` label, and the frame has ONE height. Round 4 grew the frame from
+ * 17rem to a reading height the moment an answer landed and floated an overlay
+ * control in the top-right corner; the owner rejected both — "you made this box
+ * expand… it should be a fixed height", and the overlay was a full-height
+ * column because the gallery sheet's `.aui-theme-stage > * { height: 100% }`
+ * applies to every direct child, positioned or not. So the control moved out of
+ * the stage (and out of that selector's reach) and into the header, the copy
+ * that used to explain the container was replaced by the button itself, and the
+ * frame is fixed — a taller, wider reading pane rather than one that changes
+ * size under the reader's cursor.
+ *
+ * The transcript is held here because it is what the button carries. The
+ * in-page Thread owns the conversation in its own state, and `ChatEmbedShell`
+ * seeds the real embed from a handoff of `{role, content}` pairs — so passing
+ * the transcript through is what makes `/chat` open with the conversation
+ * already in it, rather than a fresh thread. A cube that iframed `/embed`
+ * directly could never do this: its transcript would be cross-origin and
+ * unreachable.
  *
  * It is still a simulation, and it says so: the canned answers are badged
  * `example`, and the note under the box states that nothing typed here reaches
- * the container. Expanding is the moment that stops being true.
+ * the container. Opening the full chat is the moment that stops being true.
  */
 
 /** Module scope so the message tree does not re-render on parent updates. */
@@ -51,25 +62,25 @@ const THREAD_COMPONENTS: ThreadComponents = {
 /**
  * The stage frame. Inline because every value has to outrank the gallery sheet.
  *
- * The height is the round-4 change: `17rem` is the measured height of the empty
- * cluster (welcome, example rows, composer), and the frame grows to a reading
- * height the moment there is an answer — "try to make it as tall as possible so
- * you could actually read the answer". `position: relative` is for the expand
- * control in the corner; `--surface` keeps the whole widget on one panel tone.
+ * Fixed at a reading height (round 5). Round 4 varied it with the transcript,
+ * which meant the band reflowed under the reader mid-answer; the owner asked for
+ * one height — "it should be a fixed height, it shouldn't get longer" — and for
+ * the extra room to come from the band's split instead, which is why the FAQ grid
+ * in `LandingPage.tsx` now gives this column more than half the frame.
+ *
+ * `position: relative` is kept for the corner the old overlay used; nothing
+ * absolute is positioned against it any more, but the Thread's own sticky footer
+ * relies on a positioned ancestor for its scrollport.
  */
 const STAGE_STYLE = {
-  height: "17rem",
+  height: "clamp(22rem, 40vh, 30rem)",
   marginTop: 0,
   background: "var(--surface)",
   position: "relative",
-  transition: "height .45s var(--ease)",
 } as const;
-
-const STAGE_OPEN_STYLE = { ...STAGE_STYLE, height: "clamp(24rem, 48vh, 32rem)" } as const;
 
 export function QuickAsk({ className }: { className?: string }) {
   const [transcript, setTranscript] = useState<ChatMessage[]>([]);
-  const answered = transcript.some((message) => message.role === "assistant");
 
   /** Take the whole conversation to the real chat, which seeds from it. */
   function expand() {
@@ -80,36 +91,31 @@ export function QuickAsk({ className }: { className?: string }) {
   return (
     <div className={className}>
       <div className="flex flex-col gap-[0.7rem]">
-        <div className="flex flex-wrap items-baseline justify-between gap-x-[1rem] gap-y-[0.4rem]">
+        <div className="flex flex-wrap items-center justify-between gap-x-[1rem] gap-y-[0.4rem]">
           <p className={`m-0 ${GROUPED_LABEL}`}>digichat</p>
-          <p className="m-0 font-mono text-[0.68rem] text-ink-mute">
-            example answers · the full chat opens in the container
-          </p>
+          {/* The way out, in the header rather than floating over the frame. It
+              is always available: before a turn it opens the chat fresh, after
+              one it opens the chat already holding the conversation. The copy
+              that used to spell that out ("the full chat opens in the
+              container") is gone — the button says it. */}
+          <Button
+            type="button"
+            variant="outline"
+            size="xs"
+            onClick={expand}
+            aria-label="Open this conversation in the full chat"
+            className="font-mono text-[0.68rem] uppercase tracking-[0.06em] text-ink-soft"
+          >
+            <span aria-hidden="true" className="text-[0.8rem] leading-none">
+              ⤢
+            </span>
+            full screen chat
+          </Button>
         </div>
         <div
           className="aui-theme-stage [&_.aui-thread-root]:bg-surface! [&_.aui-thread-viewport-footer]:bg-surface!"
-          style={answered ? STAGE_OPEN_STYLE : STAGE_STYLE}
+          style={STAGE_STYLE}
         >
-          {/* The way out, and it only appears once there is something to take.
-              An expand affordance rather than a "continue" button because the
-              conversation is the thing being opened, not a question being
-              forwarded — the visitor already has the answer, and /chat should
-              open with it, not ahead of it. */}
-          {answered ? (
-            <Button
-              type="button"
-              variant="outline"
-              size="xs"
-              onClick={expand}
-              aria-label="Open this conversation in digichat"
-              className="absolute end-[0.6rem] top-[0.6rem] z-10 bg-surface font-mono text-[0.68rem] uppercase tracking-[0.06em] text-ink-soft"
-            >
-              <span aria-hidden="true" className="text-[0.8rem] leading-none">
-                ⤢
-              </span>
-              expand
-            </Button>
-          ) : null}
           <DigichatFixtureRuntime suggestions={ASK_SUGGESTIONS} onTranscript={setTranscript}>
             <Thread
               autoFocus={false}
@@ -120,8 +126,8 @@ export function QuickAsk({ className }: { className?: string }) {
           </DigichatFixtureRuntime>
         </div>
         <p className="m-0 font-mono text-[0.68rem] leading-[1.6] text-ink-mute">
-          These answers are canned, and nothing typed here reaches the container. Expand once an
-          answer lands and the same conversation continues in the real chat.
+          These answers are canned, and nothing typed here reaches the container. The same
+          conversation continues in the full chat.
         </p>
       </div>
     </div>
