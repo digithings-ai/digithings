@@ -10,6 +10,7 @@ from uuid import UUID
 from digiquant.dashboard.research_retrieval.direction_decision_context import (
     DirectionPrerequisiteSnapshot,
 )
+from digiquant.dashboard.research_retrieval.models import content_digest
 from digiquant.dashboard.temporal import require_utc_datetime
 from digiquant.research.forecast_outcomes import (
     ForecastOutcomeIntegrityError,
@@ -20,6 +21,29 @@ from digiquant.research.supabase_io import SupabaseClient
 logger = logging.getLogger(__name__)
 
 _ACCOUNTING_PERIODS = "accounting_periods"
+
+# Identity columns for the tip-period version pin (#4556). ``accounting_periods``
+# has never had a stored ``content_hash`` (see 072_olympus_period_accounting.sql);
+# the original h7 select asked for one anyway, so every run 400'd with ``42703``
+# and the accounting pin was silently dropped. Pin the row identity locally.
+_PERIOD_PIN_FIELDS = (
+    "id",
+    "period_date",
+    "status",
+    "policy_version_id",
+    "supersedes_id",
+    "recorded_at",
+)
+# PostgREST select list for that identity pin.
+_PERIOD_PIN_COLUMNS = ", ".join(_PERIOD_PIN_FIELDS)
+
+
+def _period_version_pin(row: dict[str, Any]) -> str | None:
+    """Locally computed version pin for one accounting-period row (#4556)."""
+    identity = {key: row.get(key) for key in _PERIOD_PIN_FIELDS if row.get(key) is not None}
+    if not identity:
+        return None
+    return content_digest({"kind": _ACCOUNTING_PERIODS, "period": identity})
 
 
 def _parse_uuid(raw: Any) -> UUID | None:
@@ -36,11 +60,11 @@ def _load_latest_accounting_period(
     *,
     before_date: date,
 ) -> tuple[UUID | None, str | None]:
-    """Return tip accounting period id + content_hash strictly before run_date."""
+    """Return tip accounting-period id + a locally computed version pin before run_date."""
     try:
         resp = (
             client.table(_ACCOUNTING_PERIODS)
-            .select("id, period_date, content_hash")
+            .select(_PERIOD_PIN_COLUMNS)
             .lt("period_date", before_date.isoformat())
             .order("period_date", desc=True)
             .limit(1)
@@ -54,10 +78,9 @@ def _load_latest_accounting_period(
         return None, None
     row = rows[0]
     period_id = _parse_uuid(row.get("id"))
-    content_hash = row.get("content_hash")
-    if period_id is None or not content_hash:
+    if period_id is None:
         return None, None
-    return period_id, str(content_hash)
+    return period_id, _period_version_pin(row)
 
 
 def build_direction_prerequisite_snapshot(
