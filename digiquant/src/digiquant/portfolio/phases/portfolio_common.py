@@ -7,6 +7,7 @@ import logging
 from datetime import UTC, date, datetime
 from typing import (  # scored-lint suppression: heterogeneous graph / dict shapes
     Any,
+    Mapping,
     TypeVar,
 )
 
@@ -70,6 +71,8 @@ T = TypeVar("T", bound=BaseModel)
 _FORECAST_WHOLE_PATHS = frozenset({"/body/forecast", "/forecast"})
 _FORECAST_ASSESSMENT_PATHS = frozenset({"/body/forecast_assessment", "/forecast_assessment"})
 _FORECAST_NESTED_PREFIXES = ("/body/forecast/", "/forecast/")
+_STANCE_PATHS = frozenset({"/body/stance", "/stance"})
+_EVIDENCE_PATHS = frozenset({"/body/evidence", "/evidence"})
 
 
 def _resolve_linked_thesis(
@@ -259,6 +262,30 @@ def reject_partial_forecast_edits(patch: DocumentPatch) -> None:
             continue
         if any(path.startswith(prefix) for prefix in _FORECAST_NESTED_PREFIXES):
             raise MergeError("partial nested forecast edit rejected; replace entire /body/forecast")
+
+
+def reject_stance_edit_without_evidence(
+    patch: DocumentPatch, prior_body: Mapping[str, Any] | None
+) -> None:
+    """A stance change must carry a re-itemized evidence block (#4583).
+
+    ``AnalystPayload`` re-derives ``conviction_score`` from ``evidence`` whenever the
+    block is present, and the counts are itemized against the *prior* call. Editing
+    ``stance`` alone would therefore re-derive the score from counts about a different
+    call and publish a stance/score pair the derivation cannot explain. Legacy priors
+    without an evidence block keep their stored score, so they are unaffected.
+    """
+    if not isinstance(prior_body, Mapping) or "evidence" not in prior_body:
+        return
+    if not any(op.path in _STANCE_PATHS for op in patch.ops):
+        return
+    # A removal is not a re-itemization: it would drop the block and fall back to the
+    # prior call's stored ``conviction_score`` for the new stance.
+    if not any(op.path in _EVIDENCE_PATHS and op.op != "remove" for op in patch.ops):
+        raise MergeError(
+            "stance edit without a re-itemized /body/evidence rejected; "
+            "conviction is derived from the counts"
+        )
 
 
 def materialize_forecast_assessment(
@@ -705,6 +732,7 @@ def run_asset_analyst_llm(
         patch = coerce_document_patch(result)
         try:
             reject_partial_forecast_edits(patch)
+            reject_stance_edit_without_evidence(patch, prior_body)
             merge_result = merge_document_patch(
                 prior.payload,
                 patch,

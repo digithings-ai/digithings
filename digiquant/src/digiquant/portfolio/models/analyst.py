@@ -20,25 +20,35 @@ class EvidenceAssessment(BaseModel):
     Production data showed the LLM-chosen score collapsing to a single mode (77% of
     decisions at exactly +2). Central tendency cannot be prompted away, so the number
     is taken away from the model: it itemizes evidence, code derives conviction.
+
+    Both counts are measured against **your own call** (the ``stance`` you declare),
+    not against the market thesis the vehicle is mapped to — the same frame
+    ``trend_alignment`` already uses. The analyst may legitimately disagree with the
+    thesis it carries, and when it does, the families contradicting that thesis are
+    the families *confirming* the call. Counting against the thesis instead makes the
+    derived score meaningless whenever the two disagree.
     """
 
     independent_confirming_signals: int = Field(
         ge=0,
         le=5,
         description=(
-            "How many INDEPENDENT signal families confirm the thesis today: technicals, "
-            "fundamentals, flows/positioning, macro regime, sentiment/news. Count a family "
-            "only on concrete evidence cited in this payload — not vibes."
+            "How many INDEPENDENT signal families confirm YOUR CALL (your stated stance) "
+            "today: technicals, fundamentals, flows/positioning, macro regime, "
+            "sentiment/news. Count a family only on concrete evidence cited in this "
+            "payload — not vibes. Count against your call, not against the market thesis "
+            "you are mapped to: if you would sell a bullish thesis, the bearish families "
+            "are the ones confirming your call."
         ),
     )
     contradicting_signals: int = Field(
         ge=0,
         le=5,
-        description="Signal families actively CONTRADICTING the thesis today (same families).",
+        description="Signal families actively CONTRADICTING YOUR CALL today (same families).",
     )
     catalyst_within_horizon: bool = Field(
         description=(
-            "True only when a specific, dated/window-bound catalyst inside the thesis "
+            "True only when a specific, dated/window-bound catalyst inside your call's "
             "horizon is identified in the thesis text."
         ),
     )
@@ -61,6 +71,12 @@ def derive_conviction(evidence: EvidenceAssessment, stance: str) -> int:
     therefore structurally requires ≥4 confirming families, ≤~1 contradicting, a
     dated catalyst, high-quality evidence, and not fighting the trend — naturally
     scarce. hold/watch clamp to ±1 (a strong view IS a buy/sell stance).
+
+    Both counts are relative to the stated call (see :class:`EvidenceAssessment`), so
+    ``magnitude`` is support for *that* call and the sign flip for ``sell`` is
+    coherent: a sell whose own call is confirmed by 5 families is −5, not 0. A call
+    whose own evidence is balanced derives 0 — a directional stance at 0 is a weak
+    call, not a missing one.
     """
     magnitude = max(0, evidence.independent_confirming_signals - evidence.contradicting_signals)
     if not evidence.catalyst_within_horizon:
