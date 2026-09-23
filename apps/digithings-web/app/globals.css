@@ -23,6 +23,7 @@
    family (repo-activity.css). digiquant-web still imports marquee.css. */
 @import "@digithings/ui/styles/stages.css";
 @import "@digithings/ui/styles/data-layout.css";
+@import "@digithings/ui/styles/card-rail.css";
 @import "@digithings/ui/styles/repo-activity.css";
 @import "@digithings/ui/styles/word-reveal.css";
 /* effects-chrome.css owns the effects/primitive chrome that is not token-backed
