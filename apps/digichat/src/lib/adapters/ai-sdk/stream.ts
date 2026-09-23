@@ -16,24 +16,33 @@ import {
   toUIMessageStream,
   type LanguageModel,
   type ModelMessage,
+  type ToolSet,
 } from "ai";
 import type { AiSdkBackendConfig } from "@/lib/backend-adapters";
-import { resolveAiSdkModel } from "./providers";
+import { resolveAiSdkModel, resolveAiSdkSearchTools } from "./providers";
 
 export async function createAiSdkStreamResponse({
   backend,
   messages,
   responseHeaders,
+  webSearch = false,
   signal,
 }: {
   backend: AiSdkBackendConfig;
   messages: ModelMessage[];
   responseHeaders: Record<string, string>;
+  /**
+   * The client asked for web search AND the tenant allows it. Passes the
+   * provider's built-in search/grounding tool so its citations flow.
+   */
+  webSearch?: boolean;
   signal: AbortSignal;
 }): Promise<Response> {
   let model: LanguageModel;
+  let tools: ToolSet | undefined;
   try {
     model = resolveAiSdkModel(backend);
+    tools = webSearch ? resolveAiSdkSearchTools(backend) : undefined;
   } catch (err) {
     // A missing credential is an operator misconfiguration, not a client error:
     // answer 502 with the env var NAME (never its value) and no upstream call.
@@ -52,12 +61,21 @@ export async function createAiSdkStreamResponse({
   const result = streamText({
     model,
     messages,
+    ...(tools ? { tools } : {}),
     abortSignal: signal,
     experimental_transform: smoothStream({ chunking: "word" }),
   });
 
   return createUIMessageStreamResponse({
-    stream: toUIMessageStream({ stream: result.stream }),
+    stream: toUIMessageStream({
+      stream: result.stream,
+      // Provider citations (web search, grounding, RAG) travel as `source-url` /
+      // `source-document` parts and `sendSources` is OFF by default in v7, so
+      // without this a grounded answer arrives with its citations stripped
+      // (#4552). `sendReasoning` already defaults true; pinned for intent.
+      sendSources: true,
+      sendReasoning: true,
+    }),
     headers: responseHeaders,
   });
 }

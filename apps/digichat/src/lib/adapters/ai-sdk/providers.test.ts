@@ -10,16 +10,34 @@ const {
   createAnthropic,
   vertexModel,
   createVertex,
+  openaiWebSearch,
+  anthropicWebSearch,
+  vertexGoogleSearch,
 } = vi.hoisted(() => {
   const chat = vi.fn((model: string) => ({ model, kind: "chat" }));
   const responses = vi.fn((model: string) => ({ model, kind: "responses" }));
-  const createOpenAI = vi.fn(() => ({ chat, responses }));
+  const openaiWebSearch = vi.fn(() => ({ kind: "openai-web-search" }));
+  const createOpenAI = vi.fn(() => ({
+    chat,
+    responses,
+    tools: { webSearch: openaiWebSearch },
+  }));
   const compatibleChatModel = vi.fn((model: string) => ({ model, kind: "compatible-chat" }));
   const createOpenAICompatible = vi.fn(() => ({ chatModel: compatibleChatModel }));
   const anthropicMessages = vi.fn((model: string) => ({ model, kind: "anthropic" }));
-  const createAnthropic = vi.fn(() => anthropicMessages);
+  const anthropicWebSearch = vi.fn(() => ({ kind: "anthropic-web-search" }));
+  const createAnthropic = vi.fn(() =>
+    Object.assign(anthropicMessages, {
+      tools: { webSearch_20250305: anthropicWebSearch },
+    }),
+  );
   const vertexModel = vi.fn((model: string) => ({ model, kind: "vertex" }));
-  const createVertex = vi.fn(() => vertexModel);
+  const vertexGoogleSearch = vi.fn(() => ({ kind: "vertex-google-search" }));
+  const createVertex = vi.fn(() =>
+    Object.assign(vertexModel, {
+      tools: { googleSearch: vertexGoogleSearch },
+    }),
+  );
   return {
     chat,
     responses,
@@ -30,6 +48,9 @@ const {
     createAnthropic,
     vertexModel,
     createVertex,
+    openaiWebSearch,
+    anthropicWebSearch,
+    vertexGoogleSearch,
   };
 });
 
@@ -42,6 +63,7 @@ import {
   BackendCredentialError,
   readBackendApiKey,
   resolveAiSdkModel,
+  resolveAiSdkSearchTools,
 } from "./providers";
 
 const BASE = {
@@ -142,5 +164,56 @@ describe("resolveAiSdkModel (#4535)", () => {
       }),
     ).toThrow(/DIGICHAT_BACKEND_ANTHROPIC_KEY/);
     expect(createAnthropic).not.toHaveBeenCalled();
+  });
+});
+
+describe("resolveAiSdkSearchTools (#4552)", () => {
+  it("returns nothing for openai-completions, which has no built-in search", () => {
+    expect(
+      resolveAiSdkSearchTools({ ...BASE, type: "openai-completions" }),
+    ).toBeUndefined();
+    expect(createOpenAICompatible).not.toHaveBeenCalled();
+    expect(createOpenAI).not.toHaveBeenCalled();
+  });
+
+  it("wires the OpenAI web-search tool for openai-responses", () => {
+    const tools = resolveAiSdkSearchTools({ ...BASE, type: "openai-responses" });
+    expect(createOpenAI).toHaveBeenCalledWith({
+      baseURL: BASE.baseUrl,
+      apiKey: "sk-test",
+      name: "openai-responses",
+    });
+    expect(openaiWebSearch).toHaveBeenCalled();
+    expect(tools).toEqual({ web_search: { kind: "openai-web-search" } });
+  });
+
+  it("wires Anthropic's server-side web search", () => {
+    vi.stubEnv("DIGICHAT_BACKEND_ANTHROPIC_KEY", "sk-ant-test");
+    const tools = resolveAiSdkSearchTools({
+      type: "anthropic",
+      model: "claude-sonnet-4-5",
+      apiKeyEnv: "DIGICHAT_BACKEND_ANTHROPIC_KEY",
+    });
+    expect(createAnthropic).toHaveBeenCalledWith({
+      apiKey: "sk-ant-test",
+      name: "anthropic",
+    });
+    expect(anthropicWebSearch).toHaveBeenCalled();
+    expect(tools).toEqual({ web_search: { kind: "anthropic-web-search" } });
+  });
+
+  it("wires Google Search grounding for Vertex", () => {
+    const tools = resolveAiSdkSearchTools({
+      type: "google-vertex",
+      project: "my-project",
+      location: "us-central1",
+      model: "gemini-2.5-pro",
+    });
+    expect(createVertex).toHaveBeenCalledWith({
+      project: "my-project",
+      location: "us-central1",
+    });
+    expect(vertexGoogleSearch).toHaveBeenCalled();
+    expect(tools).toEqual({ google_search: { kind: "vertex-google-search" } });
   });
 });
