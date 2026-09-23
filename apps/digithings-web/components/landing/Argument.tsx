@@ -58,7 +58,7 @@ type Layer = {
 // is, not so much that the diagram turns back into the prose it replaced. No
 // module is named — the layer label names the seam, and the sentence explains
 // it.
-const LAYERS: Layer[] = [
+export const LAYERS: Layer[] = [
   {
     layer: "models",
     theirs:

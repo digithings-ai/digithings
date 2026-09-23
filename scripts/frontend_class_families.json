@@ -14,7 +14,8 @@
     "faq",
     "glow",
     "stack",
-    "tl"
+    "tl",
+    "why"
   ],
   "digiquant-web": [
     "dq",
@@ -54,5 +55,6 @@
     "light"
   ],
   "_stack": "digithings-web .stack-* is the /variants/mixed stack showcase (branch claude/home-variants): the bento grid as a map with a travelling focus, pinned by .stack-pin and dimmed per .stack-cell.is-active. Exploration only \u2014 if the showcase is picked it moves into @digithings/ui (data-layout styles + component + tests) and this entry is deleted with the app block.",
-  "_faq": "digithings-web .faq-morph* is the #faq band's scroll-driven zoom-morph (branch claude/home-variants): the chat container starts large over the frame and retracts into the right column as the FAQ list rises in on the left (#4429). Same shape and same status as the .stack-* family \u2014 the pinned track and sticky pin live in the app sheet because the geometry is this band's own two-column grid; if the owner picks the morph it promotes into @digithings/ui and this entry is deleted with the app block."
+  "_faq": "digithings-web .faq-morph* is the #faq band's scroll-driven zoom-morph (branch claude/home-variants): the chat container starts large over the frame and retracts into the right column as the FAQ list rises in on the left (#4429). Same shape and same status as the .stack-* family \u2014 the pinned track and sticky pin live in the app sheet because the geometry is this band's own two-column grid; if the owner picks the morph it promotes into @digithings/ui and this entry is deleted with the app block.",
+  "_why": "#why variations (round 8). The four compositions on the throwaway /variants/why page: `why-v*` (frame, head, pin), `why-seam*` (V1's punched rule), `why-part*`/`why-morph*`/`why-explode*`/`why-evo*` (the SVG diagrams) and `why-ledger*`. App-local because the page is an exploration: if one is picked it folds into Argument.tsx and the class it needs moves into the band's own markup or @digithings/ui."
 }
