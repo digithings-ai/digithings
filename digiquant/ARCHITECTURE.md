@@ -338,7 +338,7 @@ window date is clamped to the effective `as_of`); the default is a single day
 unless `include_prior` widens it to `date_from`. Every `documents` read is gated
 by `research_document_allowed(retrieval_phase, key)` (phase-scoped blinding), and
 portfolio datasets are gated by `portfolio_tool_allowed`. Archived
-`documents.payload` bodies hydrate read-through from R2 (`_hydrate_archived_row`);
+`documents.payload` bodies hydrate read-through from R2 (`_hydrate_archived_rows`);
 `documents.content` is never archived. `content` is preview-truncated to 500
 chars unless `full_content`. In-pipeline wiring:
 `research/phases/_node_factory.SegmentNodeSpec.use_research_tools` /

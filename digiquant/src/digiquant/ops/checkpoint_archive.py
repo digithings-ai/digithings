@@ -260,10 +260,16 @@ def resolve_payloads(
             keys_by_column.setdefault(str(col), set()).add(val)
     if not keys_by_column:
         return {}
-    query = client.table("archive_objects").select("*").eq("source_table", source_table)
-    for col, values in keys_by_column.items():
-        query = query.in_(f"source_key->>{col}", sorted(values, key=str))
-    rows = query.execute().data or []
+    rows = _scan_all(
+        client,
+        "archive_objects",
+        "*",
+        filters=(("source_table", source_table),),
+        in_filters=tuple(
+            (f"source_key->>{col}", tuple(sorted(values, key=str)))
+            for col, values in keys_by_column.items()
+        ),
+    )
     wanted = {_pointer_identity(source_key) for source_key in source_keys}
     resolved: dict[str, bytes] = {}
     for row in rows:
@@ -302,15 +308,15 @@ def read_archived_documents(
     """
     if not keys:
         return {}
+    unique = list(dict.fromkeys(keys))
     backend = maybe_archive_store(store)
     if backend is None:
         logger.warning(
             "archive read-through disabled (no R2 backend); %d archived document(s) "
             "need hydration but cannot be read -- treating as missing",
-            len(keys),
+            len(unique),
         )
         return {}
-    unique = list(dict.fromkeys(keys))
     source_keys = [
         {"workspace_id": str(workspace_id), "document_key": document_key, "date": date_str}
         for document_key, date_str in unique
@@ -319,8 +325,16 @@ def read_archived_documents(
         _pointer_identity(source_key): pair
         for pair, source_key in zip(unique, source_keys, strict=True)
     }
+    try:
+        resolved = resolve_payloads(client, backend, "documents", source_keys)
+    except Exception:  # registry fault: degrade the page, never raise on a read path
+        logger.warning(
+            "archived document batch read-through failed for %d version(s); treating as missing",
+            len(unique),
+        )
+        return {}
     out: dict[tuple[str, str], Any] = {}
-    for identity, raw in resolve_payloads(client, backend, "documents", source_keys).items():
+    for identity, raw in resolved.items():
         pair = pairs_by_identity.get(identity)
         if pair is None:
             continue
@@ -355,6 +369,7 @@ def _scan_all(
     cols: str,
     *,
     filters: tuple[tuple[str, Any], ...] = (),
+    in_filters: tuple[tuple[str, tuple[Any, ...]], ...] = (),
     order: tuple[str, ...] = (),
 ) -> list[dict[str, Any]]:
     """Paginated select past the PostgREST 1000-row response cap (#3789).
@@ -374,6 +389,8 @@ def _scan_all(
         query = client.table(table).select(cols)
         for col, val in filters:
             query = query.eq(col, val)
+        for col, values in in_filters:
+            query = query.in_(col, list(values))
         for col in stable_order:
             query = query.order(col)
         page = query.range(offset, offset + DOC_SCAN_PAGE_SIZE - 1).execute().data or []

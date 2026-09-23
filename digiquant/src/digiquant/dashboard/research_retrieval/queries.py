@@ -690,7 +690,7 @@ def search_research(
 
     Storage routing is transparent: live rows come from Supabase, and archived
     older ``documents.payload`` cells are hydrated through the R2 pointer
-    (``_hydrate_archived_row``). Market history is served by the dedicated
+    (``_hydrate_archived_rows``, one batched pointer read per page). Market history is served by the dedicated
     price/macro tools, never here. No raw table or column name is accepted, so
     the generic PostgREST surface that ``query_data`` exposed is gone.
     """

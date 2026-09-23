@@ -1173,7 +1173,16 @@ class TestSearchResearch:
                         "content": "body",
                         "payload": None,
                         "workspace_id": str(house_workspace_id()),
-                    }
+                    },
+                    {
+                        "date": "2026-06-12",
+                        "document_key": "macro",
+                        "doc_type": "macro",
+                        "run_type": "baseline",
+                        "content": "body",
+                        "payload": None,
+                        "workspace_id": str(house_workspace_id()),
+                    },
                 ]
             },
             store={},
@@ -1194,13 +1203,15 @@ class TestSearchResearch:
                 client,
                 run_date=date(2026, 6, 19),
                 document_key="macro",
+                include_prior=True,
                 store=store,
             )
         finally:
             q.read_archived_documents = orig  # type: ignore[assignment]
-        assert out["rows"][0]["payload"] == payload
-        # #4562: the whole page hydrates in one batched read, not one per row.
-        assert calls == [[("macro", "2026-06-19")]]
+        # #4562: the whole page hydrates in one batched read, not one per row,
+        # and every NULL-payload row on the page gets its payload merged back.
+        assert [row["payload"] for row in out["rows"]] == [payload, payload]
+        assert calls == [[("macro", "2026-06-19"), ("macro", "2026-06-12")]]
 
     def test_blinded_phase_drops_blocked_document(self) -> None:
         client = FakeSupabaseClient(

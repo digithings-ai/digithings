@@ -1256,6 +1256,54 @@ class TestBatchedArchiveReads:
         assert out == {}
         assert "read-through disabled" in caplog.text
 
+    def test_read_archived_documents_skips_undecodable_bytes(
+        self, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        client = FakeClient()
+        store = FakeStore()
+        self._seed(store, client, ("thesis", "2026-09-07"))
+        # Valid zstd whose checksum matches, but the bytes are not JSON.
+        blob = compress_payload(b"not json")
+        r2_key = "documents/house/2026-09-07/broken.zst"
+        store.put(r2_key, blob)
+        client.store["archive_objects"].append(
+            _document_pointer(
+                source_key={
+                    "workspace_id": "house",
+                    "document_key": "broken",
+                    "date": "2026-09-07",
+                },
+                r2_key=r2_key,
+                sha256=hashlib.sha256(blob).hexdigest(),
+            )
+        )
+        with caplog.at_level(logging.WARNING, logger="digiquant.ops.checkpoint_archive"):
+            out = read_archived_documents(
+                client,
+                store,
+                workspace_id="house",
+                keys=[("thesis", "2026-09-07"), ("broken", "2026-09-07")],
+            )
+        assert set(out) == {("thesis", "2026-09-07")}
+        assert "is not valid JSON" in caplog.text
+
+    def test_read_archived_documents_registry_failure_degrades(
+        self, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        class _RaisingClient:
+            def table(self, name: str) -> Any:
+                raise RuntimeError("registry unavailable")
+
+        with caplog.at_level(logging.WARNING, logger="digiquant.ops.checkpoint_archive"):
+            out = read_archived_documents(
+                _RaisingClient(),
+                FakeStore(),
+                workspace_id="house",
+                keys=[("thesis", "2026-09-07")],
+            )
+        assert out == {}
+        assert "batch read-through failed" in caplog.text
+
 
 class TestStablePagination:
     """#3954: offset pages must carry a unique ORDER BY tiebreak."""
