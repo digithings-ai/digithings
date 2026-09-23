@@ -1,8 +1,7 @@
 import {
   CtaLink,
-  Mono,
   ReleaseRail,
-  RepoHeatmap,
+  RepoActivity,
   TestimonialWall,
   type ReleaseRailItem,
   type TestimonialQuote,
@@ -32,68 +31,13 @@ import { GROUPED_LABEL } from "./label";
 
 // ═══ Repository ═════════════════════════════════════════════════════════════
 
-// A six-month window, not a year. `RepoActivity variant="detailed"` hard-codes
-// 53 weeks, so the six-month cut calls RepoHeatmap directly — the primitive is
-// exported and its "the last N weeks" label adapts to whatever `weeks` says.
-//
-// The total in that label is summed over every cell it is handed, not clipped
-// to `weeks`, so the series must be sliced here first: the snapshot carries 371
-// days (a year plus a day) and passing all of it under `weeks={26}` would print
-// a 26-week heading above a 53-week total. Trim to the last `weeks * 7` days —
-// the primitive indexes `days[0]`/`days[days.length - 1]` for its range, so the
-// slice also has to be what defines the grid.
-const HEATMAP_WEEKS = 26;
-const HEATMAP_DAYS = (repoActivity.dailyContributions ?? []).slice(-HEATMAP_WEEKS * 7);
-
-// ── Activity grid (the owner's pick) ────────────────────────────────────────
-// The contribution grid plus the few signals that say "and it is still moving":
-// the last release, and a link to the changelog for anyone who wants the detail
-// rather than a summary of it.
-//
-// The counted-signal row wears the repo primitives' own mono meta scale
-// (`0.78rem`, as `.ra-release` / `.ra-repo` / `.ra-cta a` do in
-// `repo-activity.css`) so it reads as the same ledger as the rest of the repo
-// vocabulary rather than as a caption that drifted.
-export function RepoGrid() {
-  return (
-    <div className="grid grid-cols-[minmax(0,1fr)] gap-[1.8rem]">
-      {/* The heatmap's coordinate frame is width:max-content (deliberately —
-          repo-activity.css explains why capping it reintroduces month-label
-          drift), so its min-content is the full 26-week grid plus the days
-          gutter. Below ~420px that is wider than the padded column, and an
-          implicit `auto` track would take the min-content and push the whole
-          page sideways. minmax(0,1fr) + min-w-0 pins the track instead, so
-          `.ra-heat-body`'s own overflow-x:auto does the scrolling. */}
-      <RepoHeatmap
-        pulls={repoActivity.mergedPulls}
-        data={HEATMAP_DAYS}
-        weeks={HEATMAP_WEEKS}
-        className="min-w-0"
-      />
-      <div className="flex flex-wrap items-baseline gap-x-[2rem] gap-y-[0.6rem] font-mono text-[0.78rem] text-ink-soft">
-        {/* Read from the same array the rail below renders, not from the
-            snapshot's own `latestRelease`. Those are two sources and they had
-            already drifted: the snapshot still said `digichat-v1.5.0` while the
-            rail two rows down said `v2.3.1`, so the band contradicted itself. */}
-        <span>
-          <Mono>{newestReleaseLabel()}</Mono> latest release
-        </span>
-        <span>
-          <Mono>{repoActivity.pullsMerged.toLocaleString("en-US")}</Mono> pulls merged
-        </span>
-        <span>
-          <Mono>{repoActivity.issuesClosed.toLocaleString("en-US")}</Mono> issues closed
-        </span>
-      </div>
-      <div className="flex flex-wrap items-center gap-[0.8rem]">
-        <CtaLink href="/changelog">Full changelog</CtaLink>
-        <CtaLink href={REPO_URL} external variant="ghost">
-          Browse the repository
-        </CtaLink>
-      </div>
-    </div>
-  );
-}
+// The band is the kit's own detailed repo view (`RepoActivity variant="detailed"`).
+// The owner asked for the shared component here rather than a hand-rolled grid,
+// and it carries everything the hand-rolled version did and more: the 30-day
+// velocity, the current backlog, the contribution grid, the latest release, the
+// clone command with its copy button, and the merged-PR / open-issue ledgers.
+// Its contribution grid shortens with the column instead of scrolling, so the
+// band needs no window constant of its own.
 
 // ═══ FAQ ════════════════════════════════════════════════════════════════════
 
@@ -241,59 +185,54 @@ const RECENT_RELEASES: ReleaseRailItem[] = (releases as {
   }));
 
 /**
- * `digichat v2.3.1` — the newest entry in the same array the releases rail
- * renders. Declared as a function so `RepoGrid` above can call it without this
- * file having to interleave data with components; hoisting makes the order safe.
+ * The newest tag, in the shape the repo primitives want.
  *
- * It exists because the counted row used to read the snapshot's
- * `repoActivity.latestRelease` instead, which is a *second* source for the same
- * fact. The two had already drifted — the snapshot named `digichat-v1.5.0`
- * (published 2026-09-05) while the rail named `v2.3.1` (2026-09-20) — so the band
- * asserted two different "latest releases" four rows apart. One source cannot
- * disagree with itself.
+ * The snapshot's own `latestRelease` is written by the periodic
+ * `fetch_repo_activity.py` job and lags the tag list beside it: the committed
+ * snapshot (generated 2026-09-15) still names `digichat-v1.5.0` from 2026-09-05
+ * while the newest tag is `v2.3.1` from 2026-09-20. Passing the snapshot
+ * straight to the detailed view would put two different "latest releases" in the
+ * same band — the same contradiction the old counted row was written to avoid.
+ * So the view is handed the newest release the rail also renders: one source,
+ * one answer.
  */
-function newestReleaseLabel(): string {
-  const newest = RECENT_RELEASES[0];
-  return newest ? `${newest.product} ${newest.version}` : "—";
-}
+const REPO_LATEST = RECENT_RELEASES[0]
+  ? {
+      tag: `${RECENT_RELEASES[0].product}-${RECENT_RELEASES[0].version}`,
+      name: RECENT_RELEASES[0].title,
+      publishedAt: RECENT_RELEASES[0].date,
+      url: RECENT_RELEASES[0].href,
+    }
+  : repoActivity.latestRelease;
+
+const REPO_SNAPSHOT = { ...repoActivity, latestRelease: REPO_LATEST };
 
 export function OpenSource() {
   return (
     <div className="grid gap-[2.4rem]">
-      <RepoGrid />
+      {/* Full width of the band, and the kit's component rather than a remix of
+          it. `min-w-0` keeps the grid's max-content heat frame from setting the
+          track's min-content and pushing the page sideways at narrow widths. */}
+      <RepoActivity
+        variant="detailed"
+        snapshot={REPO_SNAPSHOT}
+        repoUrl={REPO_URL}
+        cloneCommand={REPO_CLONE}
+        contributingUrl={CONTRIBUTING_URL}
+        className="min-w-0"
+      />
 
       <div className="grid gap-[1.6rem] border-t border-hair pt-[2rem] min-[900px]:grid-cols-[minmax(0,1fr)_minmax(0,1.4fr)]">
         {/* `content-start` because this column is stretched to the rail's height
             by the parent grid, and a grid distributes that extra height across
             its own rows by default — which inflated each block well past its
-            content. Measured before: the clone panel was 204px tall holding 83px
-            of content, the paragraph 207px, the CTA row 148px, because the rail
-            beside them is 597px. The three blocks now take their natural height
-            and the slack sits below them as page ground, which is invisible. */}
+            content. The blocks now take their natural height and the slack sits
+            below them as page ground, which is invisible. */}
         <div className="grid content-start gap-[1.2rem]">
           <p className="m-0 max-w-[var(--measure-prose)] text-[length:var(--type-body)] leading-[var(--leading-prose)] text-ink-soft">
             One MIT-licensed monorepo. Every module, test and CI definition is readable without an
             account — take it and run it yourself.
           </p>
-          <div className="border border-hair bg-surface">
-            <div
-              className={`flex items-center justify-between px-[1rem] py-[0.5rem] ${GROUPED_LABEL}`}
-            >
-              <span>clone</span>
-              <a
-                className="text-ink-mute underline-offset-[3px] hover:text-ink hover:underline"
-                href={REPO_URL}
-                target="_blank"
-                rel="noopener noreferrer"
-              >
-                github.com/digithings-ai
-              </a>
-            </div>
-            <div className="border-t border-hair px-[1rem] py-[0.85rem] font-mono text-[0.78rem] text-ink">
-              <span className="text-ink-mute">$ </span>
-              {REPO_CLONE}
-            </div>
-          </div>
           <div className="flex flex-wrap items-center gap-[0.8rem]">
             <CtaLink href={REPO_URL} external>
               Browse the repository
