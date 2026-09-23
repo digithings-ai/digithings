@@ -467,21 +467,27 @@ html {
 }
 
 /* ==========================================================================
-   #why VARIATIONS (2026-09-23, branch claude/home-variants, #4429 round 9b).
+   #why VARIATIONS (2026-09-23, branch claude/home-variants, #4429 round 9c).
 
-   One composition: the rented architecture, the owned architecture, and a rail
-   that walks ten steps. Every value that moves is driven by ONE custom property
-   written by a scroll listener (`--why-p`, 0 -> 1) plus the coarse swap
-   (`--why-swap`, 0 -> 1) that pushes the rented view off the left edge and
-   brings the owned one in from the right.
+   One composition: the conventional architecture diagram, the digithings
+   architecture diagram, and a rail that walks the steps. Every value that moves
+   is driven by ONE custom property written by a scroll listener (`--why-p`,
+   0 -> 1) plus the coarse swap (`--why-swap`, 0 -> 1) that pushes the rented
+   view off the left edge and brings the owned one in from the right.
 
    THE LOOK IS THE POINT: utilitarian and terminal-like. `border-radius: 0`
-   everywhere, mono for every label, hairline rules, no soft panels, no shadows.
-   The owner: "try to give this more of the utilitarian, terminal-like design
-   look with squared edges and simplicity ... It's a bit too modern, I find."
+   everywhere, mono for every label, hairline connectors, no soft panels, no
+   shadows. The owner: "try to give this more of the utilitarian, terminal-like
+   design look with squared edges and simplicity ... It's a bit too modern, I
+   find."
+
+   The two diagrams are the same SVG frame, so the eye can diff them: the same
+   boundary rectangle, the same rows, the same connector hairline. A box is drawn
+   dim when its step has not lit it yet, and a connector is drawn only when both
+   ends exist.
 
    Everything defaults to the FINISHED state via `var(..., 1)`, so a no-JS or
-   reduced-motion reader sees the owned half complete with no pin and no height.
+   reduced-motion reader sees both diagrams complete with no pin and no height.
    ========================================================================== */
 
 .whyx {
@@ -577,48 +583,17 @@ html {
   color: var(--ink-soft);
 }
 
-/* ---- the two architecture views: one grammar, so they diff at a glance ---- */
+/* ---- the architecture diagram: one SVG frame, drawn twice ---- */
 
 .whyx-view {
-  display: grid;
-  gap: 1.2rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  min-width: 0;
 }
 
-.whyx-view__arch {
-  position: relative;
-  padding-inline-start: 1.1rem;
-  display: grid;
-  gap: 0.5rem;
-}
-
-/* The bus the slot rail hangs off — the wiring, drawn once. */
-.whyx-bus {
-  position: absolute;
-  inset-block: 0.6rem;
-  inset-inline-start: 0.3rem;
-  width: 1px;
-  background: var(--hair-2);
-}
-
-.whyx-slots {
-  list-style: none;
+.whyx-view__caption {
   margin: 0;
-  padding: 0;
-  display: grid;
-  gap: 0.45rem;
-}
-
-.whyx-slot {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr);
-  gap: 0.35rem 0.8rem;
-  align-items: center;
-  border: 1px solid var(--hair);
-  border-radius: 0;
-  padding: 0.45rem 0.6rem;
-}
-
-.whyx-slot__name {
   font-family: var(--font-mono);
   font-size: 0.68rem;
   letter-spacing: 0.08em;
@@ -626,125 +601,87 @@ html {
   color: var(--ink-mute);
 }
 
-.whyx-slot__boxes {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.4rem;
-  min-width: 0;
-}
-
-.whyx-slot__seam {
-  font-family: var(--font-mono);
-  font-size: 0.64rem;
-  color: var(--ink-mute);
-}
-
-.whyx-box {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.5rem;
-  border: 1px solid var(--hair);
-  border-radius: 0;
-  padding: 0.28rem 0.45rem;
-  opacity: 0.4;
-  transition: opacity 0.2s var(--ease), border-color 0.2s var(--ease),
-    background-color 0.2s var(--ease);
-}
-.whyx-box[data-lit="true"] {
-  opacity: 1;
-  border-color: color-mix(in srgb, var(--accent) 55%, var(--hair));
-  background: color-mix(in srgb, var(--accent) 5%, transparent);
-}
-.whyx-box .stack-chip {
-  border: 0;
-  background: none;
-  padding: 0;
-  gap: 0.4rem;
-}
-.whyx-box .stack-name {
-  font-family: var(--font-mono);
-  font-size: 0.74rem;
-  color: var(--ink);
-}
-.whyx-box__cadence {
-  font-family: var(--font-mono);
-  font-size: 0.62rem;
-  color: var(--ink-mute);
-  white-space: nowrap;
-}
-
-/* The surface rule: what a rented stack shows you, and where it stops. */
-.whyx-surface {
-  position: relative;
-  margin: 0.4rem 0 0;
-  padding-top: 0.6rem;
-  font-family: var(--font-mono);
-  font-size: 0.62rem;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  color: var(--ink-mute);
-}
-.whyx-surface__rule {
-  position: absolute;
-  inset-inline: 0;
-  top: 0;
-  border-top: 1px dashed var(--hair-2);
-}
-.whyx-surface--owned .whyx-surface__rule {
-  border-top-style: solid;
-}
-
-/* ---- the ledger: one invoice per rented box; one line for the owned half ---- */
-
-.whyx-ledger {
-  display: grid;
-  align-content: start;
-  gap: 0.5rem;
-  border: 1px solid var(--hair);
-  border-radius: 0;
-  padding: 0.7rem;
-}
-.whyx-ledger__head {
-  display: flex;
-  justify-content: space-between;
+.whyx-view__foot {
   margin: 0;
-  font-family: var(--font-mono);
-  font-size: 0.66rem;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: var(--ink-mute);
-}
-.whyx-ledger__count {
-  color: var(--ink);
-}
-.whyx-ledger__list {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  display: grid;
-}
-.whyx-ledger__line {
-  display: grid;
-  gap: 0.1rem;
-  border-top: 1px solid var(--hair);
-  padding: 0.3rem 0;
-}
-.whyx-ledger__vendor {
+  max-width: 52ch;
   font-family: var(--font-mono);
   font-size: 0.72rem;
-  color: var(--ink);
-}
-.whyx-ledger__cadence {
-  font-family: var(--font-mono);
-  font-size: 0.62rem;
+  line-height: 1.6;
   color: var(--ink-mute);
 }
-.whyx-ledger__foot {
-  margin: 0;
+
+.whyx-graph {
+  display: block;
+  width: 100%;
+  height: auto;
+  /* The diagram keeps its own aspect ratio; cap it so the pin never outgrows a
+     laptop viewport. */
+  max-height: min(58vh, 34rem);
+}
+
+/* The boundary: dashed when it is somebody else's, solid when it is yours. */
+.whyx-graph__boundary {
+  fill: none;
+  stroke: var(--hair-2);
+  stroke-width: 1;
+  stroke-dasharray: 4 3;
+}
+.whyx-view[data-side="owned"] .whyx-graph__boundary {
+  stroke-dasharray: none;
+}
+
+.whyx-graph__boundary-label {
   font-family: var(--font-mono);
-  font-size: 0.62rem;
-  line-height: 1.5;
-  color: var(--ink-mute);
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  fill: var(--ink-mute);
+}
+
+/* A connector is a hairline; it brightens only when both ends are built. */
+.whyx-graph__edge {
+  stroke: var(--hair-2);
+  stroke-width: 1;
+  opacity: 0.22;
+  transition: opacity 0.25s var(--ease), stroke 0.25s var(--ease);
+}
+.whyx-graph__edge.is-on {
+  opacity: 1;
+  stroke: color-mix(in srgb, var(--accent) 45%, var(--hair-2));
+}
+
+/* A box is a squared module; unlit boxes stay dim so the assembly reads. */
+.whyx-graph__node {
+  opacity: 0.3;
+  transition: opacity 0.25s var(--ease);
+}
+.whyx-graph__node rect {
+  fill: var(--surface);
+  stroke: var(--hair);
+  stroke-width: 1;
+}
+.whyx-graph__node text {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  text-anchor: middle;
+  fill: var(--ink-mute);
+}
+.whyx-graph__node.is-on {
+  opacity: 1;
+}
+.whyx-graph__node.is-on rect {
+  stroke: color-mix(in srgb, var(--accent) 55%, var(--hair));
+  fill: color-mix(in srgb, var(--accent) 5%, var(--surface));
+}
+.whyx-graph__node.is-on text {
+  fill: var(--ink);
+}
+/* The application is the one box you touch either way — mark it. */
+.whyx-graph__node[data-kind="app"] rect {
+  stroke-dasharray: 3 2;
+}
+.whyx-graph__node[data-kind="account"] rect,
+.whyx-graph__node[data-kind="infra"] rect {
+  fill: color-mix(in srgb, var(--ink) 4%, var(--surface));
 }
 
 .why-ledger {
@@ -775,19 +712,7 @@ html {
   color: var(--ink-soft);
 }
 
-/* ---- the wide stage: architecture left, rail right, then the push ---- */
-
-@media (min-width: 768px) {
-  .whyx-view {
-    grid-template-columns: minmax(0, 1fr) minmax(0, 0.5fr);
-  }
-  .whyx-slot {
-    grid-template-columns: 7.5rem minmax(0, 1fr) minmax(0, 9rem);
-  }
-  .whyx-slot__seam {
-    text-align: end;
-  }
-}
+/* ---- the wide stage: diagram left, rail right, then the push ---- */
 
 @media (min-width: 900px) {
   .why-ledger__row {
@@ -823,9 +748,9 @@ html {
     transform: translateX(calc((1 - var(--why-swap, 1)) * 100%));
     opacity: var(--why-swap, 1);
   }
-  .whyx__rail-slot {
-    transform: translateX(calc(var(--why-swap, 1) * (-100% - 2.4rem)));
-  }
+  /* The rail stays in its own column. It used to translate across with the push,
+     which landed it on top of the arriving diagram — the rail's content swaps in
+     place instead, so both halves keep the same reading order. */
 }
 
 @media (prefers-reduced-motion: reduce) {
