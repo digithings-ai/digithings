@@ -26,6 +26,15 @@ import { REPO_URL } from "@/lib/repoActivity";
  *   - "remove the description of there is no public package prices... keep it
  *     simple with the table" — the footnote is gone.
  *
+ * Round 5: "the free self-host versus integration service comparison table is
+ * good well formatted i would just add more detail give it more information
+ * detail of what we do". So the table gained a fourth group — "the work", which
+ * describes the engagement itself (how it starts, who does it, what lands, how
+ * long, what we need) — and three rows on the existing axes (how a price is
+ * reached, the interface you build against, the audit trail). Every new cell is
+ * still a description of a real practice, not a restatement of the tier name,
+ * and no new figure is introduced.
+ *
  * The only figure on this table is the true one: $0 for the MIT self-host path.
  * No `popularLabel`: with one offer, "most popular" would be a claim the page
  * cannot support.
@@ -65,6 +74,13 @@ const GROUPS: PricingMatrixGroup[] = [
         label: "what recurs",
         cells: ["nothing", "nothing — further work is a new scope"],
       },
+      {
+        label: "how the number is reached",
+        cells: [
+          "you read the docs and decide; there is no quote to request",
+          "one working session against your environment, then a written scope",
+        ],
+      },
     ],
   },
   {
@@ -77,8 +93,46 @@ const GROUPS: PricingMatrixGroup[] = [
         cells: ["yours, BYOK throughout", "yours — we wire the provider config"],
       },
       {
+        label: "the interface you build against",
+        cells: [
+          "the OpenAPI specs and the MCP tools, as documented",
+          "the same surface, fitted to the clients you already have",
+        ],
+      },
+      {
         label: "the updates",
         cells: ["pull from main whenever you want", "brought forward as each release lands, until handover"],
+      },
+    ],
+  },
+  {
+    label: "the work",
+    rows: [
+      {
+        label: "how it starts",
+        cells: [
+          "you clone it; no call is required",
+          "a short call, then read access to what you are running today",
+        ],
+      },
+      {
+        label: "who does it",
+        cells: ["you and whoever you have", "the maintainers of the modules you are wiring"],
+      },
+      {
+        label: "what lands at the end",
+        cells: [
+          "a running stack, and the docs it ships with",
+          "the deployment, a runbook, and a walkthrough of the seams we moved",
+        ],
+      },
+      {
+        label: "how long it takes",
+        cells: ["however long you give it", "quoted with the scope, in working days"],
+      },
+      {
+        label: "what we need from you",
+        cells: ["—", "a point of contact, your providers, and access to a staging environment"],
       },
     ],
   },
@@ -87,6 +141,13 @@ const GROUPS: PricingMatrixGroup[] = [
     rows: [
       { label: "who holds the keys", cells: ["you do, on your host", "you do — we wire them together"] },
       { label: "support", cells: ["docs, OpenAPI, issue tracker", "the same, plus a runbook for your deployment"] },
+      {
+        label: "the audit trail",
+        cells: [
+          "every call, tool and result in a log on your disk",
+          "the same log, plus a deployment checklist you can hand to security",
+        ],
+      },
       {
         label: "when a module breaks upstream",
         cells: ["pin a version, or send a patch", "we take it upstream and bring the fix back"],
