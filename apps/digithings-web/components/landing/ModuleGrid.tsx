@@ -17,55 +17,46 @@ import { writeHandoff } from "@/lib/chatHandoff";
  * The module mosaic (v15, #4429).
  *
  * The owner's v13 ask was a grid of angular boxes that "hooks onto the scroll":
- * a box comes into focus, gains detail, and the focus walks on. This is that
- * grid, refined by v15 point 8 — no module logos, no per-tier colouring, no
- * dots-on-a-rail navigator and no separate right-hand panel. The detail is
+ * a box comes into focus, gains detail, and the focus walks on. The detail is
  * *inside* the focused cell, which grows in place while the rest recede, so the
  * whole story stays in one view and a navigator is unnecessary.
  *
- * The mechanical half is still `useScrollyFeatures`: it owns the pinned-track
+ * The mechanical half is `useScrollyFeatures`: it owns the pinned-track
  * progress mapping and, on a small viewport or under
  * `prefers-reduced-motion: reduce`, flips to `stepper` so every module renders
  * in plain flow — no pin, no scrub.
  *
- * Each cell's resting size follows its `tier` (core wider than support, wider
- * than roadmap); the active cell takes the remaining room. Content is the
- * shared `modules` registry — the real `tagline`, `stack` and `dockerCmd`.
+ * v2 fixes the owner's one real complaint: "the box grid should remain the same
+ * size the whole time … the outline stays the same and the sizes change
+ * internally". The v1 mosaic set `flex-basis: 30rem` on the focused cell inside
+ * a *wrapping* flex row, so growing one cell pushed its neighbours into the next
+ * row and the grid visibly re-shaped as the focus advanced. Measured over the
+ * eleven steps: the focused cell swung 459px → 628px, the mosaic's height swung
+ * 337px → 464px, and the row composition changed at steps 5, 7, 8 and 10.
+ *
+ * v2 gives each layout an explicit `grid-template-areas` with every cell named
+ * and absolute row tracks, so the box is byte-identical at every focus and only
+ * the interior moves. Four layouts are built as alternatives (`MOSAIC_LAYOUTS`)
+ * for the owner to choose between; `MOSAIC_LAYOUT` selects the live one.
  */
 
 const ordered = [...modules].sort((a, b) => a.graphOrder - b.graphOrder);
 
-/** Resting flex basis, by importance: core > support > roadmap. */
-const BASIS: Record<string, string> = {
-  core: "9rem",
-  support: "7.5rem",
-  roadmap: "6.5rem",
-};
-
 /**
- * The focused cell's basis. Set explicitly rather than left to free-space
- * distribution: with eleven cells wrapping into rows, `flex-grow` alone gives
- * the active cell whatever slack its row happens to have, which can leave the
- * detail clipped in a crowded row. A fixed, generous basis makes the focused
- * tile always wide enough to hold its tagline and command.
+ * The four alternative layouts. Each maps the eleven modules to grid areas in
+ * reading order, and each is a *different shape of grid* rather than a different
+ * animation — the point being that the outline is frozen in all four, so the
+ * owner is choosing a composition, not a motion.
+ *
+ * All four are twelve-column-free except `b`, which is deliberately dense so the
+ * comparison includes one field-like layout against three calmer ones.
  */
-const FOCUS_BASIS = "30rem";
+export const MOSAIC_LAYOUTS = ["a", "b", "c", "d"] as const;
+export type MosaicLayout = (typeof MOSAIC_LAYOUTS)[number];
 
-/**
- * Scroll budget per module, in `vh`.
- *
- * The shared default is 90vh, which for eleven modules pinned the section for
- * ~9,900px — well over half of the page's total height, and the single longest
- * stretch of scrolling on a page whose whole premise is leanness. Because the
- * track is `slideCount * vhPerSlide` tall with a 100vh sticky child, the scroll
- * a reader actually spends per module is `(track - 100) / slideCount`: 90vh
- * bought ~809px per module, 60vh buys ~510px, which still holds the focused
- * cell's tagline, dependency chips and compose command for a comfortable dwell.
- *
- * Passed per-consumer rather than lowered on `scrollyTrackHeightVh` itself:
- * that default is pinned by `scrolly-core.test.ts`, and a pin over taller or
- * fewer slides may legitimately want the longer dwell.
- */
+/** Which layout is live. Change this one line to compare. */
+const MOSAIC_LAYOUT: MosaicLayout = "a";
+
 const VH_PER_MODULE = 60;
 
 function buildOutput(m: ModuleNode): string {
@@ -129,7 +120,11 @@ export function ModuleGrid() {
   return (
     <div ref={trackRef} style={{ height: `${scrollyTrackHeightVh(ordered.length, VH_PER_MODULE)}vh` }}>
       <div className="dg-stage">
-        <div className="dg-mosaic" role="list" aria-label="digithings modules">
+        <div
+          className={`dg-mosaic dg-mosaic--grid dg-mosaic--${MOSAIC_LAYOUT}`}
+          role="list"
+          aria-label="digithings modules"
+        >
           {ordered.map((m, i) => {
             const on = i === activeIndex;
             return (
@@ -137,8 +132,7 @@ export function ModuleGrid() {
                 key={m.id}
                 type="button"
                 role="listitem"
-                className={`dg-mosaic-cell${on ? " on" : ""}`}
-                style={{ flexBasis: on ? FOCUS_BASIS : (BASIS[m.tier] ?? "7.5rem") }}
+                className={`dg-cell f${i + 1}${on ? " on" : ""}`}
                 aria-current={on ? "true" : undefined}
                 aria-label={`${m.id} — ${m.role}`}
                 onClick={() => ask(m.id)}

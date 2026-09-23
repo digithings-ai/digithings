@@ -232,6 +232,77 @@ body {
 .dg-mosaic-tag { color: var(--ink-soft); font-family: var(--font-mono); font-size: 0.76rem; line-height: 1.6; }
 .dg-mosaic-ask { align-self: flex-start; margin-top: auto; font-family: var(--font-mono); font-size: 0.76rem; color: var(--ink-mute); }
 
+/* ── module mosaic v2: a fixed grid whose outline never changes ─────────────
+   The v1 mosaic let the focused cell take `flex-basis: 30rem` inside a
+   wrapping flex row, so growing a cell re-flowed its neighbours into the next
+   row and the whole box changed shape as the focus walked. Measured across the
+   eleven steps: the focused cell swung 459px → 628px and the mosaic's height
+   swung 337px → 464px, and the row composition changed at step 5, 7, 8 and 10.
+   The owner's read — "the outline has to stay the same, and the sizes change
+   internally" — is exactly right, so v2 fixes the box and lets only the
+   interior move.
+
+   Four explicit grid modes. Each names every cell's slot, so the layout is
+   identical at every focus: `grid-template-areas` cannot reflow, and
+   `grid-template-rows` is given in absolute track sizes rather than `auto`, so
+   the box's height cannot depend on its content either. ─────────────────── */
+.dg-mosaic--grid { display: grid; gap: 0.5rem; width: 100%; max-width: var(--frame-w); margin-inline: auto; border: 0; background: transparent; }
+
+/* A — three tracks, every cell named, height fixed at 30rem. Reading order
+   walks left to right, wrapping: a hero strip over a 4-up over a 6-up. */
+.dg-mosaic--a {
+  grid-template-columns: repeat(12, minmax(0, 1fr));
+  grid-template-rows: repeat(3, minmax(0, 1fr));
+  grid-template-areas:
+    "f1 f1 f1 f2 f2 f3 f3 f4 f4 f5 f5 f5"
+    "f6 f6 f6 f6 f7 f7 f7 f7 f8 f8 f8 f8"
+    "f9 f9 f10 f10 f10 f10 f11 f11 f11 f11 f11 f11";
+}
+/* B — the same tracks, different spans: a narrow lead-in and a wide tail, so
+   the field reads as uneven without any cell moving. */
+.dg-mosaic--b {
+  grid-template-columns: repeat(12, minmax(0, 1fr));
+  grid-template-rows: repeat(3, minmax(0, 1fr));
+  grid-template-areas:
+    "f1 f1 f2 f2 f2 f3 f3 f3 f4 f4 f4 f4"
+    "f5 f5 f5 f6 f6 f6 f6 f7 f7 f7 f7 f7"
+    "f8 f8 f8 f8 f9 f9 f9 f10 f10 f10 f11 f11";
+}
+/* C — nine columns: a 5-wide focus with a stacked pair beside it, then a band. */
+.dg-mosaic--c {
+  grid-template-columns: repeat(9, minmax(0, 1fr));
+  grid-template-rows: repeat(3, minmax(0, 1fr));
+  grid-template-areas:
+    "f1 f1 f1 f1 f1 f2 f2 f3 f3"
+    "f4 f4 f4 f5 f5 f6 f6 f7 f7"
+    "f8 f8 f8 f9 f9 f10 f10 f11 f11";
+}
+/* D — five columns: three rows of widening cards, the calmest of the four. */
+.dg-mosaic--d {
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  grid-template-rows: repeat(4, minmax(0, 1fr));
+  grid-template-areas:
+    "f1 f1 f1 f2 f3"
+    "f4 f4 f5 f5 f6"
+    "f7 f7 f8 f9 f10"
+    "f11 f11 f11 f11 f11";
+}
+
+.dg-mosaic--grid { grid-auto-rows: minmax(0, 1fr); height: clamp(30rem, 68vh, 46rem); }
+
+.dg-cell { display: flex; flex-direction: column; gap: 0.5rem; min-width: 0; min-height: 0; padding: 0.85rem 0.95rem; margin: 0; background: var(--surface); border: 1px solid var(--hair); border-radius: 0; text-align: left; cursor: pointer; overflow: hidden; opacity: 0.55; transition: opacity .25s var(--ease), background .25s var(--ease), box-shadow .25s var(--ease); }
+.dg-cell:hover { opacity: 0.85; }
+.dg-cell.on { opacity: 1; background: var(--surface-2, var(--surface)); box-shadow: inset 0 0 0 1px var(--accent); cursor: default; }
+/* The focused cell's detail is a fixed-height panel pinned to the cell's floor:
+   the grid decides the box, so the content has to fit it, not the reverse. */
+.dg-cell .dg-mosaic-detail { overflow: hidden; }
+.dg-cell.on .dg-mosaic-detail { min-height: 0; }
+.dg-cell.on .dg-docker { margin-top: 0; overflow: hidden; }
+.dg-cell.f1 { grid-area: f1; } .dg-cell.f2 { grid-area: f2; } .dg-cell.f3 { grid-area: f3; }
+.dg-cell.f4 { grid-area: f4; } .dg-cell.f5 { grid-area: f5; } .dg-cell.f6 { grid-area: f6; }
+.dg-cell.f7 { grid-area: f7; } .dg-cell.f8 { grid-area: f8; } .dg-cell.f9 { grid-area: f9; }
+.dg-cell.f10 { grid-area: f10; } .dg-cell.f11 { grid-area: f11; }
+
 /* Terminal registers (v15, #4429): the boot playback is a fixed box on the
    landing page, so it must not grow as lines type in. `fill` stretches .term
    to the wrapper's height; `compact` drops the body type a step. Both are
