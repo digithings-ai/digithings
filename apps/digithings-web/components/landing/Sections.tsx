@@ -1,5 +1,6 @@
 import {
   CtaLink,
+  MotionReveal,
   ReleaseRail,
   RepoActivity,
   TestimonialWall,
@@ -115,18 +116,30 @@ export function FaqList() {
  * only, no invented orgs, no invented numbers. There is no `lockup` (the two
  * voices are not both about one product) and no `orgs` strip — a "trusted by"
  * row with a single real name would read as more than it is.
+ *
+ * The quotes are set as quotes, in quotation marks, and the maintainer's is
+ * motion text (`<MotionReveal/>`): the words deepen in order as the line rides
+ * up the page, so the claim is spelled out rather than dropped in. DataTap's
+ * stays plain — a customer's words about their own deployment should be
+ * readable the instant they are on screen, not performed at the reader. Both
+ * remain legible with no JS and under `prefers-reduced-motion`.
  */
 const VOICES: TestimonialQuote[] = [
   {
-    quote:
-      "The stack declines to bet on a provider. Models, vector stores and execution venues sit behind interfaces, so the field can move faster than this architecture needs to. Where a claim can be counted it is counted and dated; where it cannot, it is written down as a limit instead of dressed up as a feature.",
+    quote: (
+      <MotionReveal
+        text={
+          "\u201CThe stack declines to bet on a provider. Models, vector stores and execution venues sit behind interfaces, so the field can move faster than this architecture needs to. Where a claim can be counted it is counted and dated; where it cannot, it is written down as a limit instead of dressed up as a feature.\u201D"
+        }
+      />
+    ),
     name: "Chris",
     role: "maintainer",
     org: "digithings",
   },
   {
     quote:
-      "digichat gave our users a way to understand the product in their own words — and it runs on our own infrastructure, against our own backend, so the conversation never leaves the environment we already control.",
+      "\u201Cdigichat gave our users a way to understand the product in their own words — and it runs on our own infrastructure, against our own backend, so the conversation never leaves the environment we already control.\u201D",
     name: "DataTap",
     role: "self-hosted digichat",
     org: "datatap.stream",

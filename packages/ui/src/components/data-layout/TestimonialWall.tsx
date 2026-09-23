@@ -6,15 +6,24 @@
  * never invented. Attribution avatars are mono initials derived from the
  * name; the optional org strip closes the band under a hairline. A quote may
  * carry an `href` so a named customer's org links to its own public site, and
- * `columns` drops the wall to two for a band holding two voices. Entirely
+ * `columns` drops the wall to two for a band holding two voices. The quote body
+ * accepts a node, so a caller can hand it motion text (`<MotionReveal/>`) that
+ * spells the line out on scroll. Entirely
  * token-backed utilities — no family CSS rules. Server component — no state.
  *
  * Wiring (in the consuming app):
  *   globals.css   @source "<path-to>/packages/ui/src/components/data-layout";
  */
+import type { ReactNode } from "react";
+
 export type TestimonialQuote = {
-  /** The pull-quote itself. */
-  quote: string;
+  /**
+   * The pull-quote itself. A string for plain copy; pass an element instead
+   * (e.g. `<MotionReveal text="…" />`) when the quote should spell itself out
+   * as it rides up the page. The primitive renders it as-is, so any inline
+   * motion text is the caller's choice, not the wall's.
+   */
+  quote: ReactNode;
   /** Attributed name — initials are derived for the avatar disc. */
   name: string;
   /** Role line — "Systematic PM". */
