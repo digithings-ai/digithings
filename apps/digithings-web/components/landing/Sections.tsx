@@ -71,8 +71,12 @@ export function RepoGrid() {
         className="min-w-0"
       />
       <div className="flex flex-wrap items-baseline gap-x-[2rem] gap-y-[0.6rem] font-mono text-[0.78rem] text-ink-soft">
+        {/* Read from the same array the rail below renders, not from the
+            snapshot's own `latestRelease`. Those are two sources and they had
+            already drifted: the snapshot still said `digichat-v1.5.0` while the
+            rail two rows down said `v2.3.1`, so the band contradicted itself. */}
         <span>
-          <Mono>{repoActivity.latestRelease?.tag ?? "—"}</Mono> latest release
+          <Mono>{newestReleaseLabel()}</Mono> latest release
         </span>
         <span>
           <Mono>{repoActivity.pullsMerged.toLocaleString("en-US")}</Mono> pulls merged
@@ -236,13 +240,37 @@ const RECENT_RELEASES: ReleaseRailItem[] = (releases as {
     tag: release.tag,
   }));
 
+/**
+ * `digichat v2.3.1` — the newest entry in the same array the releases rail
+ * renders. Declared as a function so `RepoGrid` above can call it without this
+ * file having to interleave data with components; hoisting makes the order safe.
+ *
+ * It exists because the counted row used to read the snapshot's
+ * `repoActivity.latestRelease` instead, which is a *second* source for the same
+ * fact. The two had already drifted — the snapshot named `digichat-v1.5.0`
+ * (published 2026-09-05) while the rail named `v2.3.1` (2026-09-20) — so the band
+ * asserted two different "latest releases" four rows apart. One source cannot
+ * disagree with itself.
+ */
+function newestReleaseLabel(): string {
+  const newest = RECENT_RELEASES[0];
+  return newest ? `${newest.product} ${newest.version}` : "—";
+}
+
 export function OpenSource() {
   return (
     <div className="grid gap-[2.4rem]">
       <RepoGrid />
 
       <div className="grid gap-[1.6rem] border-t border-hair pt-[2rem] min-[900px]:grid-cols-[minmax(0,1fr)_minmax(0,1.4fr)]">
-        <div className="grid gap-[1.2rem]">
+        {/* `content-start` because this column is stretched to the rail's height
+            by the parent grid, and a grid distributes that extra height across
+            its own rows by default — which inflated each block well past its
+            content. Measured before: the clone panel was 204px tall holding 83px
+            of content, the paragraph 207px, the CTA row 148px, because the rail
+            beside them is 597px. The three blocks now take their natural height
+            and the slack sits below them as page ground, which is invisible. */}
+        <div className="grid content-start gap-[1.2rem]">
           <p className="m-0 max-w-[var(--measure-prose)] text-[length:var(--type-body)] leading-[var(--leading-prose)] text-ink-soft">
             One MIT-licensed monorepo. Every module, test and CI definition is readable without an
             account — take it and run it yourself.
