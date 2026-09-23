@@ -14,6 +14,7 @@
 
 import type { ActivityDetail } from "@/lib/chat-activity";
 import type { PageContextMode } from "@/lib/deploy-config/schema";
+import { LANGUAGES } from "@/lib/languages";
 import {
   THINKING_MODES,
   VIEW_MODES,
@@ -28,6 +29,7 @@ import {
 } from "@/lib/thread-skins";
 
 const PAGE_CONTEXT_MODES: readonly PageContextMode[] = ["off", "silent", "visible"];
+const LANGUAGE_CODES = new Set(LANGUAGES.map((l) => l.code));
 
 /**
  * digichat Node backends: digigraph (digithings stack) or foundry (client Azure).
@@ -42,7 +44,32 @@ export type EmbedBackendConfig =
       /** digivault path prefix forwarded as X-Digi-Vault-Prefix */
       vaultPathPrefix?: string;
     }
-  | { type: "foundry"; projectEndpoint: string; agentName: string };
+  | { type: "foundry"; projectEndpoint: string; agentName: string }
+  | {
+      type: "openai-completions" | "openai-responses";
+      /** https OpenAI-compatible base URL. */
+      baseUrl: string;
+      /** Model id passed to the provider. */
+      model: string;
+      /** Env var NAMING the API key (DIGICHAT_BACKEND_*); never the key itself. */
+      apiKeyEnv: string;
+    }
+  | {
+      type: "anthropic";
+      /** Model id passed to the provider. */
+      model: string;
+      /** Env var NAMING the API key (DIGICHAT_BACKEND_*); never the key itself. */
+      apiKeyEnv: string;
+    }
+  | {
+      type: "google-vertex";
+      /** GCP project id. */
+      project: string;
+      /** Vertex region, e.g. `us-central1`. */
+      location: string;
+      /** Model id passed to the provider. */
+      model: string;
+    };
 
 /**
  * How this tenant expects visitors to pay for LLM spend.
@@ -66,6 +93,11 @@ export type EmbedTenantConfig = {
   backend: EmbedBackendConfig;
   gateMode: "turn_limited" | "ungated" | "trial_form";
   theme: "dark" | "light";
+  /**
+   * Seed language for this tenant's embed session (#4532). Omit falls back to
+   * the client default (English). Mirrors the YAML `chrome.defaultLanguage`.
+   */
+  defaultLanguage?: string;
   /** Which vendored assistant-ui Thread to mount. */
   skin?: ThreadSkin;
   accent?: { color: string; foreground: string };
@@ -149,6 +181,16 @@ export type EmbedTenantConfig = {
   };
   /** User file picker on the composer. JSON omit stays off (Foundry/DataTap). */
   attachments?: boolean;
+  /**
+   * Feature parity with the YAML `features:` block (#4532). An embed tenant
+   * could not set these before, so it silently inherited the client defaults.
+   * Omitted keys keep the app defaults: `dictation`/`speech` off, `sources` on,
+   * `branchPicker` on — the same defaults the standalone app uses.
+   */
+  dictation?: boolean;
+  speech?: boolean;
+  sources?: boolean;
+  branchPicker?: boolean;
   /**
    * Popup widget page-context injection. `off` ignores `digichat:page-context`
    * messages; `silent` still sends the snapshot to the model but renders no
@@ -265,8 +307,80 @@ function validateEntry(hostKey: string, value: unknown): EmbedTenantConfig {
       throw new Error(`${ctx}: foundry backend requires an "agentName"`);
     }
     backendCfg = { type: "foundry", projectEndpoint: backend.projectEndpoint, agentName: backend.agentName };
+  } else if (backend?.type === "openai-completions" || backend?.type === "openai-responses") {
+    // OpenAI-compatible AI-SDK backends (#4535). Same field shape for both; the
+    // wire format is the only difference. `apiKeyEnv` must name a
+    // DIGICHAT_BACKEND_* var so a tenant cannot exfiltrate AUTH_SECRET.
+    if (typeof backend.baseUrl !== "string" || !backend.baseUrl.trim()) {
+      throw new Error(`${ctx}: ${backend.type} backend requires a "baseUrl"`);
+    }
+    let parsed: URL;
+    try {
+      parsed = new URL(backend.baseUrl);
+    } catch {
+      throw new Error(`${ctx}: backend.baseUrl is not a valid URL`);
+    }
+    if (parsed.protocol !== "https:") {
+      throw new Error(`${ctx}: backend.baseUrl must be https`);
+    }
+    if (typeof backend.model !== "string" || !backend.model.trim()) {
+      throw new Error(`${ctx}: ${backend.type} backend requires a "model"`);
+    }
+    if (
+      typeof backend.apiKeyEnv !== "string" ||
+      !/^DIGICHAT_BACKEND_[A-Z0-9_]+$/.test(backend.apiKeyEnv)
+    ) {
+      throw new Error(
+        `${ctx}: backend.apiKeyEnv must name a DIGICHAT_BACKEND_* env var`,
+      );
+    }
+    backendCfg = {
+      type: backend.type,
+      baseUrl: backend.baseUrl,
+      model: backend.model,
+      apiKeyEnv: backend.apiKeyEnv,
+    };
+  } else if (backend?.type === "anthropic") {
+    // Anthropic Messages AI-SDK backend (#4539). No baseUrl: the provider
+    // defaults to https://api.anthropic.com. Same apiKeyEnv guard as the OpenAI
+    // pair so a tenant cannot exfiltrate AUTH_SECRET to a provider.
+    if (typeof backend.model !== "string" || !backend.model.trim()) {
+      throw new Error(`${ctx}: anthropic backend requires a "model"`);
+    }
+    if (
+      typeof backend.apiKeyEnv !== "string" ||
+      !/^DIGICHAT_BACKEND_[A-Z0-9_]+$/.test(backend.apiKeyEnv)
+    ) {
+      throw new Error(`${ctx}: backend.apiKeyEnv must name a DIGICHAT_BACKEND_* env var`);
+    }
+    backendCfg = {
+      type: "anthropic",
+      model: backend.model,
+      apiKeyEnv: backend.apiKeyEnv,
+    };
+  } else if (backend?.type === "google-vertex") {
+    // Google Vertex (Gemini) AI-SDK backend (#4539). Credentials come from
+    // Application Default Credentials in the ambient environment — nothing
+    // secret is expressible in the tenant config.
+    if (typeof backend.project !== "string" || !backend.project.trim()) {
+      throw new Error(`${ctx}: google-vertex backend requires a "project"`);
+    }
+    if (typeof backend.location !== "string" || !backend.location.trim()) {
+      throw new Error(`${ctx}: google-vertex backend requires a "location"`);
+    }
+    if (typeof backend.model !== "string" || !backend.model.trim()) {
+      throw new Error(`${ctx}: google-vertex backend requires a "model"`);
+    }
+    backendCfg = {
+      type: "google-vertex",
+      project: backend.project,
+      location: backend.location,
+      model: backend.model,
+    };
   } else {
-    throw new Error(`${ctx}: backend.type must be "digigraph" or "foundry"`);
+    throw new Error(
+      `${ctx}: backend.type must be "digigraph", "foundry", "openai-completions", "openai-responses", "anthropic", or "google-vertex"`,
+    );
   }
 
   if (v.gateMode !== "turn_limited" && v.gateMode !== "ungated" && v.gateMode !== "trial_form") {
@@ -365,6 +479,18 @@ function validateEntry(hostKey: string, value: unknown): EmbedTenantConfig {
   }
   if (v.attachments !== undefined && typeof v.attachments !== "boolean") {
     throw new Error(`${ctx}: attachments must be a boolean`);
+  }
+  // Feature parity with the YAML `features:` block (#4532).
+  for (const key of ["dictation", "speech", "sources", "branchPicker"] as const) {
+    if (v[key] !== undefined && typeof v[key] !== "boolean") {
+      throw new Error(`${ctx}: ${key} must be a boolean`);
+    }
+  }
+  if (
+    v.defaultLanguage !== undefined &&
+    (typeof v.defaultLanguage !== "string" || !LANGUAGE_CODES.has(v.defaultLanguage))
+  ) {
+    throw new Error(`${ctx}: defaultLanguage must be a known language code`);
   }
   if (v.pageContext !== undefined) {
     if (
@@ -527,6 +653,14 @@ function validateEntry(hostKey: string, value: unknown): EmbedTenantConfig {
       ? (v.thinking as ThinkingMode)
       : undefined,
     attachments: typeof v.attachments === "boolean" ? v.attachments : undefined,
+    dictation: typeof v.dictation === "boolean" ? v.dictation : undefined,
+    speech: typeof v.speech === "boolean" ? v.speech : undefined,
+    sources: typeof v.sources === "boolean" ? v.sources : undefined,
+    branchPicker: typeof v.branchPicker === "boolean" ? v.branchPicker : undefined,
+    defaultLanguage:
+      typeof v.defaultLanguage === "string" && LANGUAGE_CODES.has(v.defaultLanguage)
+        ? v.defaultLanguage
+        : undefined,
     pageContext: PAGE_CONTEXT_MODES.includes(v.pageContext as PageContextMode)
       ? (v.pageContext as PageContextMode)
       : undefined,

@@ -10,6 +10,13 @@ import {
   normalizeOpenRouterModel,
 } from "@/lib/byok-openrouter";
 import { byokRequiresModel } from "@/lib/byok-providers";
+import {
+  AI_SDK_PROTOCOLS,
+  backendAdapterFor,
+  isAiSdkConfig,
+  isDigigraphConfig,
+  isFoundryConfig,
+} from "@/lib/backend-adapters";
 import { createDigiGraphClient, digigraphModelName } from "@/lib/digigraph";
 import {
   DigigraphUpstreamAuthError,
@@ -17,6 +24,7 @@ import {
 } from "@/lib/digigraph-upstream";
 import { createDigigraphTraceStreamResponse } from "@/lib/adapters/digithings/stream";
 import { createFoundryStreamResponse } from "@/lib/adapters/foundry/stream";
+import { createAiSdkStreamResponse } from "@/lib/adapters/ai-sdk/stream";
 import { resolveLanguageCode } from "@/lib/languages";
 import { requireDigiChatAuth } from "@/lib/request-auth";
 import { getEcosystemEndpoints } from "@/lib/ecosystem";
@@ -194,6 +202,9 @@ export async function POST(req: Request) {
   // Embed wins wherever both exist so the embed surface stays byte-identical;
   // the change is the session surface gaining the deployment config.
   const backend = embedConfig?.backend ?? dep?.backend;
+  // The registry describes the backend once (#4522): the streaming path is
+  // chosen from `adapter.protocol`, never from a `backend.type` comparison.
+  const adapter = backendAdapterFor(backend?.type);
   const activityDetail = embedConfig?.activityDetail ?? dep?.gate.activityDetail ?? "labels";
   const requiredPlanTier = embedConfig?.requiredPlanTier ?? dep?.gate.requiredPlanTier;
 
@@ -360,7 +371,7 @@ export async function POST(req: Request) {
     }
   }
 
-  if (backend?.type === "foundry") {
+  if (adapter.protocol === "foundry-responses" && isFoundryConfig(backend)) {
     const foundryBackend = backend;
     let foundryRes: Response;
     try {
@@ -400,6 +411,26 @@ export async function POST(req: Request) {
   } catch (err) {
     runLock.release();
     throw err;
+  }
+
+  // AI-SDK backends (#4535): OpenAI Completions / Responses run through one
+  // `streamText` mapper. Sits after `coreMessages` (already built) and before
+  // the BYOK guard, so foundry/digigraph behaviour is untouched and BYOK stays
+  // a digigraph-only concern — the AI-SDK credential is the configured env key.
+  if (AI_SDK_PROTOCOLS.has(adapter.protocol) && isAiSdkConfig(backend)) {
+    try {
+      return finish(
+        await createAiSdkStreamResponse({
+          backend,
+          messages: coreMessages,
+          responseHeaders,
+          signal: req.signal,
+        }),
+      );
+    } catch (err) {
+      runLock.release();
+      throw err;
+    }
   }
 
   // Non-OpenAI BYOK requires a model slug before forwarding to digigraph.
@@ -448,7 +479,7 @@ export async function POST(req: Request) {
     "X-Digi-Caller": "digichat",
     Authorization: `Bearer ${upstreamBearer}`,
   };
-  if (backend?.type === "digigraph") {
+  if (adapter.capabilities.corpus && isDigigraphConfig(backend)) {
     const digigraphBackend = backend;
     if (digigraphBackend.digisearchIndex) {
       upstreamHeaders["X-Digi-Corpus-Index"] = digigraphBackend.digisearchIndex;

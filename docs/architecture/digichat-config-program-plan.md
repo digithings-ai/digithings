@@ -157,6 +157,29 @@ where the answer is "embed should honour it": `persistence`, `auth`,
 `features.dictation` / `speech` / `sources` / `branchPicker` / `modelPicker`,
 `tools.allowUserToggle`.
 
+**Done (issue #4532, PR into `module/digichat`):** an embed tenant can now set
+the four feature flags and the seed language; before this it silently inherited
+the client defaults because neither `EmbedTenantConfig` nor `toEmbedClientConfig`
+nor `clientConfigFromEmbedTenant` carried them.
+
+| field | decision |
+|-------|----------|
+| `features.dictation` / `speech` | **Embed honours it.** Added to `EmbedTenantConfig` (validated boolean) → `toEmbedClientConfig` (explicit `true` only, matching `attachments`) → bridge (`?? base.features`). |
+| `features.sources` / `branchPicker` | **Embed honours it.** Same chain, but `typeof === "boolean"` in the projection so an explicit `false` survives — these default **on**, so `false` is the only way to turn them off. |
+| `chrome.defaultLanguage` | **Embed honours it.** Validated against `LANGUAGE_CODES` (same set `schema.ts` builds); omit → the client default (`en`). |
+| `chrome.attribution` | **Already carried** (direct copy in the bridge). No change. |
+| `chrome.transcript.userAlign` | **Documented, not configurable.** The first-party `digichat` skin forces left alignment regardless of the value (`product-shell.tsx:349-350`), so exposing it on the embed would be a no-op for the one skin the embed ships. Other skins would honour it, but the embed cannot set it today. |
+| `tools.allowUserToggle` | **Documented, embed-fixed `true`.** The anonymous embed has no per-tool toggle UI of its own; the operator's `tools.catalog` is the control surface. |
+| `persistence` / `auth` / `chrome.mode` | **Embed-fixed by design** (`none` / `anonymous` / `embed`). A persisted, authenticated session is the `app` surface, not the iframe. |
+| `features.modelPicker` vs `models.allowPicker` | **`models.allowPicker` is the authoritative client-facing knob; `features.modelPicker` is the legacy YAML alias** kept for config back-compat. They are OR-ed at every consumer (`client-projection.ts:176-178`, `product-shell.tsx:366`, `stock-chat-prefs-host.tsx:61`, `embed-client.tsx:1025`), and the projection already folds the legacy flag into `allowPicker`, so the consumer re-OR is idempotent. They disagree only in `DEFAULT_CLIENT_CONFIG` (`models.allowPicker: true` vs `features.modelPicker: false`); flipping either risks the `/baseline` picker, so behaviour is kept and the redundancy documented. |
+
+Regression coverage: `apps/digichat/src/lib/embed-tenants.parity.test.ts` walks
+the whole chain (registry JSON → `parseEmbedTenants` → `toEmbedClientConfig` →
+`clientConfigFromEmbedTenant`) and asserts the four flags + `defaultLanguage`
+reach `DigichatClientConfig.features` / `.chrome.defaultLanguage`, that omitted
+keys keep the app defaults, and that a non-boolean flag or unknown language
+throws.
+
 ---
 
 ## Phase 2d — presentation modes (D1: implement)
@@ -332,10 +355,62 @@ criterion for "every backend has the same end result".
 - **5a — registry refactor, no new backends.** Extract the two hard-coded
   branches into the registry; digigraph and foundry behave identically to
   today. Ships behind the existing config. No new dependency. **Low risk.**
+  **Done (issue #4522):** `apps/digichat/src/lib/backend-adapters.ts` is the
+  registry — one entry per `backend.type` carrying `protocol` (`digigraph-trace`
+  | `foundry-responses` | …), `auth` (`upstream-bearer` | `managed-identity` |
+  `env` | `byok`), and a `capabilities` object (reasoning, reasoningSummary?,
+  toolCalls, webSearch, sources, turnMutation, conversationContinuity,
+  attachments, mcp, corpus). The handler resolves the adapter once
+  (`backendAdapterFor(backend?.type)`) and chooses its streaming path from
+  `adapter.protocol` and `adapter.capabilities.corpus` — there is no
+  `backend.type === "…"` comparison left in `route.ts`. Exhaustiveness is pinned
+  by the `Record<BackendType, BackendAdapter>` type; `backend-adapters.test.ts`
+  pins the key set at runtime, both adapters' protocol/auth/capabilities, the
+  reasoning+toolCalls parity invariant, the digigraph default, the type guards,
+  and (as a source guard) that the handler never compares `backend.type`.
+  Note: in 5a only `protocol` and `capabilities.corpus` are read by the handler;
+  the rest are declared for 5b/5c and asserted by the parity test. A second
+  `backend.type` dispatch site remains in the tenant validator
+  (`lib/embed-tenants.ts` — `DIGICHAT_EMBED_TENANTS` parsing); migrating it to
+  the registry is a 5b/5c follow-up, out of 5a's chat-route scope.
 - **5b — AI-SDK backends.** `openai-completions`, `openai-responses`,
   `anthropic`, `google-vertex`. Reuses the installed `ai` v7 +
   `@ai-sdk/*` providers; each new provider package is a **new dependency**.
   **Human gate.**
+  - **Done (issue #4535, PR into `module/digichat`) — the OpenAI pair, no new
+    dependency.** `@ai-sdk/openai` is already installed and exposes `.chat()`
+    (Completions) and `.responses()` (Responses API), so both new types ship
+    without a package. Added: the `openai-completions` / `openai-responses`
+    schemas (https-only `baseUrl`, `model`, and `apiKeyEnv` constrained to the
+    `DIGICHAT_BACKEND_*` prefix so a tenant config can never name `AUTH_SECRET`
+    and have the BFF ship it to an attacker `baseUrl`); the two `BACKEND_ADAPTERS`
+    entries (`auth: "env"`, `protocol` = the type); `AI_SDK_PROTOCOLS` +
+    `isAiSdkConfig`; the provider factory
+    `apps/digichat/src/lib/adapters/ai-sdk/providers.ts`; the shared mapper
+    `apps/digichat/src/lib/adapters/ai-sdk/stream.ts` (`streamText` →
+    `toUIMessageStream`, the same six wire parts the UI already renders); the
+    route branch (after `coreMessages`, before the BYOK guard); the tenant
+    validator branches (closing the 5a second-dispatch follow-up); and the
+    widened `backendType` union in both projections.
+  - **Done (issue #4539, PR into `module/digichat`) — the last two AI-SDK
+    backends.** Added `@ai-sdk/anthropic` and `@ai-sdk/google-vertex` (the two
+    approved new dependencies). `anthropic` is `{ model, apiKeyEnv }` with the
+    same `DIGICHAT_BACKEND_*` guard and no `baseUrl` (the provider defaults to
+    `https://api.anthropic.com`; use `openai-completions` for a proxy);
+    `google-vertex` is `{ project, location, model }` with **no credential in
+    config** — Vertex reads Application Default Credentials from the ambient
+    environment. Both ride the same `streamText` → `toUIMessageStream` mapper
+    (protocols `anthropic-messages` / `gemini`, both already in
+    `AI_SDK_PROTOCOLS`), so reasoning, tool calls and sources render identically.
+    `resolveAiSdkModel` is now a four-arm exhaustive switch.
+  - **Known follow-ups from the #4540 review (not blocking):** the
+    `webSearch` / `sources` capability flags on the two new entries are
+    **declared for the matrix but not wired** — the shared mapper passes no
+    provider search tool to `streamText`, so no grounding citations flow yet
+    (same status as the OpenAI pair). Also deferred: importing
+    `@ai-sdk/google-vertex` dynamically so its eager `google-auth-library`
+    dependency is only loaded for Vertex requests (would make
+    `resolveAiSdkModel` async; the route is Node-only today).
 - **5c — non-AI-SDK protocols.** `langgraph`, `ag-ui`, `a2a`. Each needs its
   own mapper; each is a **new dependency / new external surface**.
   **Human gate.**
