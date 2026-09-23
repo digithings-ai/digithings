@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, type FormEvent, type MouseEvent } from "react";
+import { CtaLink } from "@digithings/ui";
 import { Thread, type ThreadComponents } from "@digithings/ui/chat/thread";
 import { writeHandoff } from "@/lib/chatHandoff";
 import { DigichatFixtureRuntime } from "./digichat-fixture-runtime";
@@ -46,8 +47,25 @@ const THREAD_COMPONENTS: ThreadComponents = {
   },
 };
 
-/** The stage frame's own height. Inline because it must outrank the sheet. */
-const STAGE_STYLE = { height: "clamp(19rem, 34vh, 25rem)", marginTop: 0 } as const;
+/**
+ * The stage frame's own height and ground. Inline because both must outrank
+ * the sheet.
+ *
+ * `17rem` is the measured height of the empty cluster — the welcome, its four
+ * example rows and the composer come to 259px, and the gallery frame was
+ * `min(72vh, 46rem)`, which on this band left ~80px of dead black above the
+ * copy (the footer docks to the bottom, so the slack all piles up top). The
+ * frame is sized to the thing it contains instead.
+ *
+ * `--surface` is the panel tone: the app sheet pins the Thread root and its
+ * docked footer to the same colour, so the stage reads as one widget set into
+ * the page rather than three near-blacks in a stack.
+ */
+const STAGE_STYLE = {
+  height: "17rem",
+  marginTop: 0,
+  background: "var(--surface)",
+} as const;
 
 export function QuickAsk({ className }: { className?: string }) {
   /** Hand any question — an example or a typed one — to the real chat. */
@@ -81,12 +99,19 @@ export function QuickAsk({ className }: { className?: string }) {
       <div className="flex flex-col gap-[0.7rem]">
         <div className="flex flex-wrap items-baseline justify-between gap-x-[1rem] gap-y-[0.4rem]">
           <p className={`m-0 ${GROUPED_LABEL}`}>digichat</p>
-          <p className="m-0 font-mono text-[0.68rem] text-ink-mute">
-            example turns · a question opens the real chat
-          </p>
+          <p className="m-0 font-mono text-[0.68rem] text-ink-mute">example turns</p>
         </div>
         <div
-          className="aui-theme-stage"
+          /* One panel, not a stack of near-blacks. The gallery sheet is written
+             for a full-page specimen where the frame and the page are the same
+             ground: `.aui-theme-stage` paints `--bg`, the Thread root paints
+             its own terminal `--term-bg` (#08090b) and the docked footer paints
+             `--bg` again. Pinning both descendants to the stage's `--surface`
+             is the app's call, so it lives here as an arbitrary-variant
+             utility rather than a new `.aui-*` rule in the app sheet (which the
+             canon guard would read as a new component family). The two-class
+             variant outranks the single-class `bg-background` on both. */
+          className="aui-theme-stage [&_.aui-thread-root]:bg-surface! [&_.aui-thread-viewport-footer]:bg-surface!"
           style={STAGE_STYLE}
           onClickCapture={handleClickCapture}
         >
@@ -99,6 +124,18 @@ export function QuickAsk({ className }: { className?: string }) {
               onComposerSubmit={handleSubmit}
             />
           </DigichatFixtureRuntime>
+        </div>
+        {/* The way out, said out loud. Clicking an example row or sending from
+            the composer already leaves for /chat, but nothing on the box said
+            so — the only hint was the micro-caption beside the label. A plain
+            link is the affordance for a visitor who would rather not type. */}
+        <div className="flex flex-wrap items-center justify-between gap-x-[1rem] gap-y-[0.5rem]">
+          <p className="m-0 font-mono text-[0.68rem] text-ink-mute">
+            the turns above are canned — ask anything to continue in the real chat
+          </p>
+          <CtaLink href="/chat" variant="ghost">
+            Continue in digichat
+          </CtaLink>
         </div>
       </div>
     </div>
