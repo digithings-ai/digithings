@@ -9,8 +9,9 @@
  *
  * Phase 5a is a faithful extraction of the two existing backends — `digigraph`
  * and `foundry` behave exactly as before, and no new dependency is introduced.
- * Phase 5b/5c add the AI SDK and non-AI-SDK backends (each a new dependency and
- * therefore human-gated).
+ * Phase 5b adds the AI SDK backends (`openai-completions`, `openai-responses`,
+ * `anthropic`, `google-vertex`); 5c adds the non-AI-SDK protocols (each a new
+ * dependency and therefore human-gated).
  *
  * The UI never changes per backend: both adapters normalize onto the same
  * `ActivitySpan` vocabulary in `lib/chat-activity.ts` and emit the same AI SDK
@@ -36,10 +37,17 @@ export type OpenAiResponsesBackendConfig = Extract<
   BackendConfig,
   { type: "openai-responses" }
 >;
-/** The AI-SDK family: one `streamText` mapper serves all of them (#4535). */
+export type AnthropicBackendConfig = Extract<BackendConfig, { type: "anthropic" }>;
+export type GoogleVertexBackendConfig = Extract<
+  BackendConfig,
+  { type: "google-vertex" }
+>;
+/** The AI-SDK family: one `streamText` mapper serves all of them (#4535, #4539). */
 export type AiSdkBackendConfig =
   | OpenAiCompletionsBackendConfig
-  | OpenAiResponsesBackendConfig;
+  | OpenAiResponsesBackendConfig
+  | AnthropicBackendConfig
+  | GoogleVertexBackendConfig;
 
 /**
  * The upstream wire protocol an adapter speaks. This is the adapter selector:
@@ -188,6 +196,48 @@ export const BACKEND_ADAPTERS: Record<BackendType, BackendAdapter> = {
       corpus: false,
     },
   },
+  // The AI-SDK family, continued (#4539). Same shared mapper; the credential
+  // source differs: Anthropic names an env var, Vertex uses ambient ADC.
+  anthropic: {
+    type: "anthropic",
+    protocol: "anthropic-messages",
+    auth: "env",
+    capabilities: {
+      reasoning: true,
+      toolCalls: true,
+      // Declared for the matrix, not wired yet (#4539): the shared mapper
+      // passes no Anthropic server-side web-search tool to `streamText`.
+      webSearch: true,
+      // Grounding citations only arrive with that tool, so this is the same
+      // aspiration as `webSearch` — matching the OpenAI pair's flags.
+      sources: true,
+      turnMutation: false,
+      conversationContinuity: false,
+      attachments: true,
+      mcp: false,
+      corpus: false,
+    },
+  },
+  "google-vertex": {
+    type: "google-vertex",
+    protocol: "gemini",
+    auth: "managed-identity",
+    capabilities: {
+      reasoning: true,
+      toolCalls: true,
+      // Declared for the matrix, not wired yet (#4539): no googleSearch
+      // grounding tool is passed to `streamText`, and Vertex only returns
+      // grounding citations when that tool is used.
+      webSearch: true,
+      // Same aspiration as `webSearch` (see the anthropic entry).
+      sources: true,
+      turnMutation: false,
+      conversationContinuity: false,
+      attachments: true,
+      mcp: false,
+      corpus: false,
+    },
+  },
 };
 
 /** The default backend when a deployment declares none. */
@@ -237,13 +287,18 @@ export const AI_SDK_PROTOCOLS: ReadonlySet<BackendProtocol> = new Set<BackendPro
 ]);
 
 /**
- * Narrow a config to the AI-SDK family (for reading `baseUrl` / `model` /
- * `apiKeyEnv`). Checks `type` only; the rest of the shape is guaranteed by the
- * Zod schema (`BackendSchema`) and the tenant validator, both of which run
- * before the handler ever sees a config.
+ * Narrow a config to the AI-SDK family (for reading `model` / `baseUrl` /
+ * `apiKeyEnv` / `project`). Checks `type` only; the rest of the shape is
+ * guaranteed by the Zod schema (`BackendSchema`) and the tenant validator, both
+ * of which run before the handler ever sees a config.
  */
 export function isAiSdkConfig(
   config: BackendConfig | undefined,
 ): config is AiSdkBackendConfig {
-  return config?.type === "openai-completions" || config?.type === "openai-responses";
+  return (
+    config?.type === "openai-completions" ||
+    config?.type === "openai-responses" ||
+    config?.type === "anthropic" ||
+    config?.type === "google-vertex"
+  );
 }

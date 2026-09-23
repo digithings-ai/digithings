@@ -1,13 +1,35 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-const { chat, responses, createOpenAI } = vi.hoisted(() => {
+const {
+  chat,
+  responses,
+  createOpenAI,
+  anthropicMessages,
+  createAnthropic,
+  vertexModel,
+  createVertex,
+} = vi.hoisted(() => {
   const chat = vi.fn((model: string) => ({ model, kind: "chat" }));
   const responses = vi.fn((model: string) => ({ model, kind: "responses" }));
   const createOpenAI = vi.fn(() => ({ chat, responses }));
-  return { chat, responses, createOpenAI };
+  const anthropicMessages = vi.fn((model: string) => ({ model, kind: "anthropic" }));
+  const createAnthropic = vi.fn(() => anthropicMessages);
+  const vertexModel = vi.fn((model: string) => ({ model, kind: "vertex" }));
+  const createVertex = vi.fn(() => vertexModel);
+  return {
+    chat,
+    responses,
+    createOpenAI,
+    anthropicMessages,
+    createAnthropic,
+    vertexModel,
+    createVertex,
+  };
 });
 
 vi.mock("@ai-sdk/openai", () => ({ createOpenAI }));
+vi.mock("@ai-sdk/anthropic", () => ({ createAnthropic }));
+vi.mock("@ai-sdk/google-vertex", () => ({ createVertex }));
 
 import {
   BackendCredentialError,
@@ -59,5 +81,47 @@ describe("resolveAiSdkModel (#4535)", () => {
       /DIGICHAT_BACKEND_EXAMPLE_KEY/,
     );
     expect(createOpenAI).not.toHaveBeenCalled();
+  });
+
+  it("uses the Anthropic provider with the key from the named env var (#4539)", () => {
+    vi.stubEnv("DIGICHAT_BACKEND_ANTHROPIC_KEY", "sk-ant-test");
+    const model = resolveAiSdkModel({
+      type: "anthropic",
+      model: "claude-sonnet-4-5",
+      apiKeyEnv: "DIGICHAT_BACKEND_ANTHROPIC_KEY",
+    });
+    expect(createAnthropic).toHaveBeenCalledWith({
+      apiKey: "sk-ant-test",
+      name: "anthropic",
+    });
+    expect(anthropicMessages).toHaveBeenCalledWith("claude-sonnet-4-5");
+    expect(model).toEqual({ model: "claude-sonnet-4-5", kind: "anthropic" });
+  });
+
+  it("uses the Vertex provider with project + location and no credential (#4539)", () => {
+    const model = resolveAiSdkModel({
+      type: "google-vertex",
+      project: "my-project",
+      location: "us-central1",
+      model: "gemini-2.5-pro",
+    });
+    expect(createVertex).toHaveBeenCalledWith({
+      project: "my-project",
+      location: "us-central1",
+    });
+    expect(vertexModel).toHaveBeenCalledWith("gemini-2.5-pro");
+    expect(model).toEqual({ model: "gemini-2.5-pro", kind: "vertex" });
+  });
+
+  it("throws for anthropic when its key env var is unset", () => {
+    vi.stubEnv("DIGICHAT_BACKEND_ANTHROPIC_KEY", "");
+    expect(() =>
+      resolveAiSdkModel({
+        type: "anthropic",
+        model: "claude-sonnet-4-5",
+        apiKeyEnv: "DIGICHAT_BACKEND_ANTHROPIC_KEY",
+      }),
+    ).toThrow(/DIGICHAT_BACKEND_ANTHROPIC_KEY/);
+    expect(createAnthropic).not.toHaveBeenCalled();
   });
 });
