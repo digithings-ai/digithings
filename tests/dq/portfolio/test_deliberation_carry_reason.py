@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import typing
 
+import digiquant.portfolio.models.deliberation as deliberation
 import pytest
 from digiquant.portfolio.models.deliberation import (
     CARRY_ATTENTION,
@@ -36,10 +37,25 @@ _ALL_CARRY_REASONS = (
 )
 
 
+def _discovered_carry_reasons() -> set[str]:
+    """Every module-level ``CARRY_*`` string constant, found without hardcoding."""
+    return {
+        value
+        for name, value in vars(deliberation).items()
+        if name.startswith("CARRY_") and isinstance(value, str)
+    }
+
+
+def test_discovered_carry_constants_match_the_named_set() -> None:
+    """A new ``CARRY_*`` constant the tests do not name must fail here, not silently pass."""
+    assert _discovered_carry_reasons() == set(_ALL_CARRY_REASONS)
+
+
 def test_every_carry_reason_constant_is_in_the_literal() -> None:
     """A reason the node can set must be a value the model accepts."""
     allowed = set(typing.get_args(CarryReason))
-    assert set(_ALL_CARRY_REASONS) <= allowed, sorted(set(_ALL_CARRY_REASONS) - allowed)
+    missing = _discovered_carry_reasons() - allowed
+    assert not missing, sorted(missing)
 
 
 @pytest.mark.parametrize("reason", _ALL_CARRY_REASONS)
@@ -49,7 +65,7 @@ def test_deliberation_summary_accepts_each_carry_reason(reason: str) -> None:
 
 
 def test_attention_carry_summary_constructs() -> None:
-    """The exact shape the H6 node builds for ``h6_enforce == "carry"`` (#2930)."""
+    """The exact shape the H6 node builds for ``deliberation_enforce == "carry"`` (#2930)."""
     carried = DeliberationSummary(
         ticker="XLE",
         converged=True,
