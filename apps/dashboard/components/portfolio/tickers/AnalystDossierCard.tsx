@@ -170,7 +170,7 @@ export default function AnalystDossierCard({
               <EvidenceCell label="Quality" value={payload.evidence.evidence_quality || null} />
             </dl>
             <p className="mt-2 text-[11px] leading-relaxed text-ink-mute/70">
-              Counts are against the analyst's own call. Conviction is computed from them —
+              Counts are against the analyst&apos;s own call. Conviction is computed from them —
               high requires ≥4 confirming families, ≤1 contradiction, a dated catalyst, and
               high-quality evidence.
             </p>
