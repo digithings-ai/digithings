@@ -91,28 +91,6 @@ export function QuickAsk({ className }: { className?: string }) {
   return (
     <div className={className}>
       <div className="flex flex-col gap-[0.7rem]">
-        {/* The way out, icon-only, at the pane's top-right. The owner: "the full
-            screen chat button should be... in the top left or the top right just
-            just the logo of full screen", and "i'd remove the digi chat title in
-            the left just so we give more room to the chat pane". So the header
-            row is now only the control — the `digichat` label is gone and the
-            stage below spans the full column. The icon carries the meaning; the
-            label lives in `aria-label` and `title` for anyone who needs words. */}
-        <div className="flex items-center justify-end">
-          <Button
-            type="button"
-            variant="outline"
-            size="xs"
-            onClick={expand}
-            aria-label="Open this conversation in the full chat"
-            title="Full screen chat"
-            className="px-[0.5rem] text-ink-soft"
-          >
-            <span aria-hidden="true" className="text-[0.9rem] leading-none">
-              ⤢
-            </span>
-          </Button>
-        </div>
         <div
           className="aui-theme-stage [&_.aui-thread-root]:bg-surface! [&_.aui-thread-viewport-footer]:bg-surface!"
           style={STAGE_STYLE}
@@ -125,6 +103,32 @@ export function QuickAsk({ className }: { className?: string }) {
               composerLayout="compact"
             />
           </DigichatFixtureRuntime>
+          {/* The way out, overlaid on the stage's own top-right corner. The
+              owner: "the full-screen control should just place the full screen
+              shot overlaid in the top right corner". The outer layer is
+              `pointer-events-none` and the button re-enables its own, because
+              the gallery sheet's `.aui-theme-stage > * { height: 100% }` sets
+              height on every direct child — which is what turned round 4's bare
+              overlay button into a full-height column. A wrapper that spans the
+              stage is fine; the button inside keeps its natural size. */}
+          <span
+            aria-hidden="false"
+            className="pointer-events-none absolute inset-0 z-10 flex items-start justify-end p-[0.5rem]"
+          >
+            <Button
+              type="button"
+              variant="outline"
+              size="xs"
+              onClick={expand}
+              aria-label="Open this conversation in the full chat"
+              title="Full screen chat"
+              className="pointer-events-auto bg-surface px-[0.5rem] text-ink-soft"
+            >
+              <span aria-hidden="true" className="text-[0.9rem] leading-none">
+                ⤢
+              </span>
+            </Button>
+          </span>
         </div>
       </div>
     </div>
