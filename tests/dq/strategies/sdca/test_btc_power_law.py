@@ -356,3 +356,133 @@ class TestBtcPowerLawRiskModel:
             BtcPowerLawRiskModel(
                 load_coefficients(_COEFFICIENTS_EXAMPLE_PATH), low_quantile=0.75, high_quantile=0.25
             )
+
+
+class TestRailsCrossingReconciliation:
+    """Deliberately-crossing synthetic coefficients reproduce the real failure
+    mode (a quantile's raw fitted curve falling out of rank order at some x),
+    not just re-check ordering the old row-wise np.sort already passed."""
+
+    def _crossing_coefficients(self):
+        from digiquant.strategies.sdca.btc_power_law import (
+            BtcPowerLawCoefficients,
+            QuantileCoefficients,
+        )
+
+        # q75's slope (a=0.9) is steeper than q95's (a=0.55): independently
+        # fit, they start in natural rank order at x=0 but q75 overtakes q95
+        # once x grows past ~1.9 -- exactly the "independently-fit curves can
+        # cross" scenario the module docstring describes. b=0 (linear) keeps
+        # the arithmetic easy to hand-verify.
+        coeffs = {
+            "q01": QuantileCoefficients(c=1.0, a=0.5, b=0.0),
+            "q10": QuantileCoefficients(c=1.5, a=0.55, b=0.0),
+            "q25": QuantileCoefficients(c=2.0, a=0.6, b=0.0),
+            "q50": QuantileCoefficients(c=2.5, a=0.65, b=0.0),
+            "q75": QuantileCoefficients(c=3.0, a=0.9, b=0.0),
+            "q95": QuantileCoefficients(c=3.3, a=0.55, b=0.0),
+            "q99": QuantileCoefficients(c=3.5, a=0.95, b=0.0),
+        }
+        return BtcPowerLawCoefficients(
+            genesis=date(1900, 1, 1),
+            mu=0.0,
+            fit_start=date(1900, 1, 1),
+            fit_end=date(1900, 1, 11),
+            fit_rows=10,
+            notes="synthetic crossing fixture, not a real fit",
+            quantiles=coeffs,
+        )
+
+    def _raw_values(self, coefficients, dates: list[date]):
+        """Same formula as _evaluate_rails, without reconciliation -- what
+        the pre-fix code path would have handed to np.sort."""
+        from digiquant.strategies.sdca.btc_power_law import QUANTILE_LABELS
+
+        days_since_genesis = np.array(
+            [(d - coefficients.genesis).days for d in dates], dtype=float
+        )
+        x = np.log(days_since_genesis) - coefficients.mu
+        raw = np.full((len(dates), len(QUANTILE_LABELS)), np.nan)
+        for j, label in enumerate(QUANTILE_LABELS):
+            coeff = coefficients.quantiles[label]
+            raw[:, j] = 10.0 ** (coeff.c + coeff.a * x + coeff.b * x**2)
+        return raw
+
+    def test_reconciled_q95_is_its_own_value_clamped_not_a_swapped_quantile(self) -> None:
+        from digiquant.strategies.sdca.btc_power_law import (
+            QUANTILE_LABELS,
+            BtcPowerLawRiskModel,
+        )
+
+        coefficients = self._crossing_coefficients()
+        model = BtcPowerLawRiskModel(coefficients)
+        # x=0 (day 1, no crossing) and x=ln(10) (day 10, q75 overtakes q95).
+        dates = [date(1900, 1, 2), date(1900, 1, 11)]
+        raw = self._raw_values(coefficients, dates)
+
+        full = model.rails_full(pl.Series("date", dates, dtype=pl.Date))
+        values = full.select(list(QUANTILE_LABELS)).to_numpy()
+
+        q50_idx, q75_idx, q95_idx = 3, 4, 5
+
+        # Row 1 (x=ln(10)) genuinely crossed in the raw fit: q75 > q95.
+        assert raw[1, q75_idx] > raw[1, q95_idx]
+        # Non-crossing invariant holds on the reconciled output.
+        assert (np.diff(values, axis=1) >= 0).all()
+        # Reconciled q95 is its OWN raw value clamped up to reconciled q75 --
+        # not the raw q50 value that a plain ascending np.sort would relabel
+        # into the q95 slot (np.sort(raw[1])[q95_idx] would equal raw q50).
+        assert values[1, q95_idx] == pytest.approx(max(raw[1, q95_idx], values[1, q75_idx]))
+        assert values[1, q95_idx] != pytest.approx(raw[1, q50_idx])
+        assert values[1, q95_idx] != pytest.approx(np.sort(raw[1])[q50_idx])
+        # Median is never touched by reconciliation.
+        assert values[1, q50_idx] == pytest.approx(raw[1, q50_idx])
+        # Row 0 had no raw crossing -- reconciliation is a no-op there.
+        np.testing.assert_allclose(values[0], raw[0])
+
+    def test_warns_when_a_raw_row_crosses(self, caplog) -> None:
+        from digiquant.strategies.sdca.btc_power_law import BtcPowerLawRiskModel
+
+        coefficients = self._crossing_coefficients()
+        model = BtcPowerLawRiskModel(coefficients)
+        dates = pl.Series("date", [date(1900, 1, 2), date(1900, 1, 11)], dtype=pl.Date)
+        with caplog.at_level("WARNING"):
+            model.rails_full(dates)
+        assert any("crossing" in rec.message.lower() for rec in caplog.records)
+
+    def test_no_warning_when_nothing_crosses(self, caplog) -> None:
+        from digiquant.strategies.sdca.btc_power_law import (
+            _COEFFICIENTS_EXAMPLE_PATH,
+            BTC_GENESIS_DATE,
+            BtcPowerLawRiskModel,
+            load_coefficients,
+        )
+
+        model = BtcPowerLawRiskModel(load_coefficients(_COEFFICIENTS_EXAMPLE_PATH))
+        dates = pl.Series(
+            "date",
+            [BTC_GENESIS_DATE + timedelta(days=2000 + 30 * i) for i in range(20)],
+            dtype=pl.Date,
+        )
+        caplog.clear()
+        with caplog.at_level("WARNING"):
+            model.rails_full(dates)
+        assert not any("crossing" in rec.message.lower() for rec in caplog.records)
+
+    def test_matches_np_sort_when_real_coefficients_never_cross(self) -> None:
+        """Regression guard: where the real committed coefficients never cross
+        today, rearrange_non_crossing must reproduce what row-wise np.sort
+        produced before this fix -- a no-op until a rail actually crosses."""
+        from digiquant.strategies.sdca.btc_power_law import (
+            _COEFFICIENTS_EXAMPLE_PATH,
+            BTC_GENESIS_DATE,
+            load_coefficients,
+        )
+        from digiquant.strategies.sdca.quantile_rails import rearrange_non_crossing
+
+        coefficients = load_coefficients(_COEFFICIENTS_EXAMPLE_PATH)
+        dates = [BTC_GENESIS_DATE + timedelta(days=2000 + 15 * i) for i in range(200)]
+        raw = self._raw_values(coefficients, dates)
+
+        reconciled = rearrange_non_crossing(raw)
+        np.testing.assert_allclose(reconciled, np.sort(raw, axis=1))

@@ -18,10 +18,13 @@ rest of the ``sdca`` package.
 
 **Independently-fit quantile curves can cross** (a lower quantile's curve
 overtaking a higher one at some ``x``), which would violate ``low < median < high``
-downstream in ``power_law_zscore.py``. ``rails()``/``rails_full()`` fix this with the
-standard rearrangement method (Chernozhukov et al.): sort each row's 7 quantile
-values ascending before returning them, rather than trusting the raw regression
-output to already be monotonic.
+downstream in ``power_law_zscore.py``. ``rails()``/``rails_full()`` fix this via
+``quantile_rails.rearrange_non_crossing()``: each quantile's own fitted value is
+clamped toward its already-reconciled inner neighbor, walking outward from the
+median — never spliced from a *different* quantile's raw curve under a stale
+label, unlike a plain row-wise sort (which does exactly that once a quantile's
+raw fitted curve falls out of rank order). ``quantile_rails.detect_crossings()``
+logs a warning whenever a crossing is actually reconciled.
 """
 
 from __future__ import annotations
@@ -33,6 +36,8 @@ from pathlib import Path
 
 import polars as pl
 from pydantic import BaseModel, ConfigDict, field_validator
+
+from digiquant.strategies.sdca.quantile_rails import detect_crossings, rearrange_non_crossing
 
 logger = logging.getLogger(__name__)
 
@@ -263,9 +268,22 @@ def _evaluate_rails(coefficients: BtcPowerLawCoefficients, dates: pl.Series) -> 
         values[:, j] = 10.0 ** (coeff.c + coeff.a * x + coeff.b * x**2)
     values[~valid, :] = np.nan
 
-    # Rearrangement: sort each row ascending so the 7 curves never cross, even
-    # though they were fit independently per quantile.
-    values = np.sort(values, axis=1)
+    # Reconciliation: each quantile's own fitted value clamped toward its
+    # inner neighbor, walking outward from the median — never a different
+    # quantile's raw curve spliced in under a stale label (see module
+    # docstring). Warn (cheaply — no-op when nothing crossed) so this class
+    # of bug is observable instead of silent.
+    crossed = detect_crossings(values)
+    if crossed.any():
+        logger.warning(
+            "_evaluate_rails: %d/%d rows have raw quantile-curve crossings "
+            "(a lower quantile's fitted value exceeds a higher quantile's "
+            "before reconciliation) — reconciled via rearrange_non_crossing, "
+            "not a row-wise sort.",
+            int(crossed.sum()),
+            len(date_list),
+        )
+    values = rearrange_non_crossing(values)
 
     return pl.DataFrame(
         {

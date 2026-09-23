@@ -200,3 +200,73 @@ class TestFullHistoryGenericRails:
         complete = frame.filter(pl.col("risk").is_not_null())
         assert complete.height == 2000
         assert complete["risk"].is_finite().all()
+
+
+class TestRailsCrossingReconciliation:
+    """Deliberately-crossing synthetic coefficients through the shared
+    evaluate_quadratic_log10 call site -- same fixture shape as
+    test_btc_power_law.py's TestRailsCrossingReconciliation, exercising
+    the generic_valuation.py call-site swap specifically."""
+
+    def _crossing_coefficients(self):
+        from digiquant.strategies.sdca.generic_valuation import GenericValuationCoefficients
+        from digiquant.strategies.sdca.quantile_rails import QuantileCoefficients
+
+        # q75's slope (a=0.9) is steeper than q95's (a=0.55): natural rank
+        # order at x=0, but q75 overtakes q95 once x grows past ~1.9.
+        coeffs = {
+            "q01": QuantileCoefficients(c=1.0, a=0.5, b=0.0),
+            "q10": QuantileCoefficients(c=1.5, a=0.55, b=0.0),
+            "q25": QuantileCoefficients(c=2.0, a=0.6, b=0.0),
+            "q50": QuantileCoefficients(c=2.5, a=0.65, b=0.0),
+            "q75": QuantileCoefficients(c=3.0, a=0.9, b=0.0),
+            "q95": QuantileCoefficients(c=3.3, a=0.55, b=0.0),
+            "q99": QuantileCoefficients(c=3.5, a=0.95, b=0.0),
+        }
+        return GenericValuationCoefficients(
+            origin=date(1900, 1, 1),
+            mu=0.0,
+            form="log_linear",
+            widen_factor=1.0,
+            fit_start=date(1900, 1, 1),
+            fit_end=date(1900, 1, 11),
+            fit_rows=10,
+            notes="synthetic crossing fixture, not a real fit",
+            quantiles=coeffs,
+        )
+
+    def test_reconciled_rails_are_non_crossing_and_warn(self, caplog) -> None:
+        coefficients = self._crossing_coefficients()
+        model = GenericValuationRiskModel(coefficients)
+        # generic_valuation's x is linear calendar days since origin (unlike
+        # BTC power-law's log time) -- x=0 at the origin date itself (no
+        # crossing), x=10 ten days later (q75 overtakes q95).
+        dates = pl.Series("date", [date(1900, 1, 1), date(1900, 1, 11)], dtype=pl.Date)
+        with caplog.at_level("WARNING"):
+            full = model.rails_full(dates)
+        values = full.select(list(QUANTILE_LABELS)).to_numpy()
+        assert (np.diff(values, axis=1) >= 0).all()
+        assert any("crossing" in rec.message.lower() for rec in caplog.records)
+
+    def test_reconciled_q95_matches_clamped_identity_not_np_sort_relabel(self) -> None:
+        coefficients = self._crossing_coefficients()
+        model = GenericValuationRiskModel(coefficients)
+        dates = [date(1900, 1, 1), date(1900, 1, 11)]
+
+        t = np.array([(d - coefficients.origin).days for d in dates], dtype=float)
+        x = t - coefficients.mu
+        raw = np.full((len(dates), len(QUANTILE_LABELS)), np.nan)
+        for j, label in enumerate(QUANTILE_LABELS):
+            coeff = coefficients.quantiles[label]
+            raw[:, j] = 10.0 ** (coeff.c + coeff.a * x + coeff.b * x**2)
+
+        full = model.rails_full(pl.Series("date", dates, dtype=pl.Date))
+        values = full.select(list(QUANTILE_LABELS)).to_numpy()
+
+        q50_idx, q75_idx, q95_idx = 3, 4, 5
+        assert raw[1, q75_idx] > raw[1, q95_idx]
+        assert values[1, q95_idx] == pytest.approx(max(raw[1, q95_idx], values[1, q75_idx]))
+        assert values[1, q95_idx] != pytest.approx(raw[1, q50_idx])
+        assert values[1, q50_idx] == pytest.approx(raw[1, q50_idx])
+        # Row 0 (x near 0) had no raw crossing -- reconciliation is a no-op.
+        np.testing.assert_allclose(values[0], raw[0])

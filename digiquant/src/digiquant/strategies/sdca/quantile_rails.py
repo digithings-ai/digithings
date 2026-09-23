@@ -15,10 +15,13 @@ module does not require the ``nautilus`` / ``indicators`` extras.
 
 from __future__ import annotations
 
+import logging
 from datetime import date
 
 import polars as pl
 from pydantic import BaseModel, ConfigDict
+
+logger = logging.getLogger(__name__)
 
 QUANTILES: tuple[float, ...] = (0.01, 0.10, 0.25, 0.50, 0.75, 0.95, 0.99)
 QUANTILE_LABELS: tuple[str, ...] = ("q01", "q10", "q25", "q50", "q75", "q95", "q99")
@@ -132,11 +135,53 @@ def fit_quantile_regression(
     return quantile_coeffs
 
 
+def detect_crossings(values: object) -> object:
+    """Boolean mask of rows whose raw (pre-reconciliation) quantiles invert.
+
+    ``True`` at row ``i`` means some adjacent pair ``QUANTILE_LABELS[k]``,
+    ``QUANTILE_LABELS[k+1]`` has ``values[i, k] > values[i, k+1]`` — the
+    independently-fit curves crossed at that ``x``. Rows with any non-finite
+    value are never flagged (nothing meaningful to compare).
+    """
+    import numpy as np
+
+    arr = np.asarray(values, dtype=float)
+    finite = np.isfinite(arr).all(axis=1)
+    crossed = np.zeros(arr.shape[0], dtype=bool)
+    for k in range(arr.shape[1] - 1):
+        crossed |= finite & (arr[:, k] > arr[:, k + 1])
+    return crossed
+
+
+def rearrange_non_crossing(values: object) -> object:
+    """Identity-preserving replacement for row-wise ``np.sort``.
+
+    A column's output is always *its own* fitted value, clamped toward its
+    inner neighbor's already-reconciled value — walking outward from the
+    median column. This is unlike a plain row-wise sort, which — once a
+    quantile's raw fitted curve falls out of rank order — silently splices a
+    *different* quantile's raw value into that output slot under the
+    original column's label. Preserves ``low < median < high`` exactly like
+    the sort does; needs no re-fit of the underlying coefficients. Rows with
+    any non-finite value pass through unchanged.
+    """
+    import numpy as np
+
+    arr = np.asarray(values, dtype=float)
+    out = arr.copy()
+    finite = np.isfinite(out).all(axis=1)
+    for k in range(MEDIAN_INDEX + 1, out.shape[1]):
+        out[finite, k] = np.maximum(out[finite, k], out[finite, k - 1])
+    for k in range(MEDIAN_INDEX - 1, -1, -1):
+        out[finite, k] = np.minimum(out[finite, k], out[finite, k + 1])
+    return out
+
+
 def evaluate_quadratic_log10(
     quantiles: dict[str, QuantileCoefficients],
     x: object,
 ) -> object:
-    """Evaluate ``10 ** (c + a*x + b*x**2)`` per rail and rearrange (sort) rows."""
+    """Evaluate ``10 ** (c + a*x + b*x**2)`` per rail and reconcile into non-crossing order."""
     import numpy as np
 
     x_arr = np.asarray(x, dtype=float)
@@ -148,7 +193,17 @@ def evaluate_quadratic_log10(
         coeff = quantiles[label]
         values[finite, j] = 10.0 ** (coeff.c + coeff.a * xf + coeff.b * xf**2)
     if finite.any():
-        values[finite, :] = np.sort(values[finite, :], axis=1)
+        crossed = detect_crossings(values)
+        if crossed.any():
+            logger.warning(
+                "evaluate_quadratic_log10: %d/%d rows have raw quantile-curve "
+                "crossings (a lower quantile's fitted value exceeds a higher "
+                "quantile's before reconciliation) — reconciled via "
+                "rearrange_non_crossing, not a row-wise sort.",
+                int(crossed.sum()),
+                int(finite.sum()),
+            )
+        values[finite, :] = rearrange_non_crossing(values[finite, :])
     return values
 
 
@@ -230,6 +285,8 @@ __all__ = [
     "QuantileCoefficients",
     "validate_fit_series",
     "fit_quantile_regression",
+    "detect_crossings",
+    "rearrange_non_crossing",
     "evaluate_quadratic_log10",
     "widen_quantile_matrix",
     "quantile_frame",
