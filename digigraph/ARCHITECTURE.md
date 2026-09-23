@@ -177,6 +177,10 @@ usage totals, source count, and code-generated shape summaries. All public text 
 It never stores prompts, argument or result values, document bodies, credentials, PII-heavy
 values, model output, or chain-of-thought. `events_snapshot()` returns the ordered body-free
 records; aggregate `snapshot()` includes them under `events` for the research diagnostics writer.
+`snapshot()` also carries `by_kind` (per-call-kind) and `by_model` (per-model
+`calls`/`prompt_tokens`/`completion_tokens`/`cached_tokens`/`cost`) splits. `by_model` is the
+input digiquant's token-derived cost estimate (#4596) prices; `cost_usd` itself stays the
+ACTUAL reported figure and is never substituted with an estimate here.
 
 #### Logical provider-call boundary
 
