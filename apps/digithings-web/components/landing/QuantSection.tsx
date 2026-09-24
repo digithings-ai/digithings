@@ -28,7 +28,7 @@ import {
   type StrategyRead,
 } from "@/lib/live/useLiveBand";
 import { GROUPED_LABEL } from "./label";
-import { fmtRatio, windowAlpha, windowBeta, windowInfoRatio, windowSharpe, windowSortino } from "@/lib/bookMath";
+import { windowAlpha, windowBeta } from "@/lib/bookMath";
 
 /**
  * The digiquant band (v15 point 9, #4429; reworked across rounds 3–5).
@@ -439,13 +439,6 @@ function fmtSignedPct(value: number | null): string {
   return `${value >= 0 ? "+" : "−"}${Math.abs(value).toFixed(1)}%`;
 }
 
-/** The portfolio's excess over the benchmark, in percentage points. */
-function fmtRelative(portfolio: number | null, benchmark: number | null): string {
-  if (portfolio === null || benchmark === null) return "—";
-  const diff = portfolio - benchmark;
-  return `${diff >= 0 ? "+" : "−"}${Math.abs(diff).toFixed(1)} pts`;
-}
-
 /** An alpha read, or an em dash when the window cannot be measured. */
 function fmtAlpha(alpha: number | null): string {
   if (alpha === null) return "—";
@@ -482,11 +475,11 @@ function ReadRows({ rows }: { rows: { label: string; value: string; title?: stri
  *
  * The preset drives the view, so the buttons are the control; a drag on the
  * chart writes a view back through `onView` and the active button follows the
- * window rather than the click that started it. The reads split into two
- * blocks — the book on its own (net return, annualized CAGR, Sharpe,
- * Sortino) and the book against the dotted benchmark leg (excess, info
- * ratio, alpha, beta) — all computed from the SAME window the chart is
- * drawing, so change the preset and the numbers move with it.
+ * window rather than the click that started it. The reads are three rows —
+ * net return and annualized CAGR for the book on its own, then alpha against
+ * the dotted benchmark leg (beta in its hover title) — all computed from the
+ * SAME window the chart is drawing, so change the preset and the numbers move
+ * with it.
  *
  * The chart itself draws percent return rebased to zero at the window's left
  * edge (`rebaseToWindow`), not the stored index levels: switching from 1Y to
@@ -518,9 +511,9 @@ function Book({
      chart's own `sliceByView`, so the numbers and the curves are the same
      window and can never disagree — plus alpha, the window's portfolio return
      minus beta times the benchmark's, with beta from the in-window daily
-     returns paired by date, shown as its own fourth row. An empty leg renders
-     an em dash rather than a fabricated zero, the same rule the rest of the
-     band follows. */
+     returns paired by date (beta shows in alpha's hover title). An empty leg
+     renders an em dash rather than a fabricated zero, the same rule the rest
+     of the band follows. */
   const drawnPortfolio = sliceByView(
     drawn.find((entry) => entry.id === "portfolio")?.points ?? [],
     window,
@@ -538,10 +531,8 @@ function Book({
   const beta = windowBeta(drawnPortfolio, drawnBenchmark);
   const alpha = windowAlpha(portfolioReturn, benchmarkReturn, beta);
   const betaTitle = beta === null ? undefined : `Beta ${beta.toFixed(2)} vs benchmark, this window`;
-  /* Absolute block: the book on its own. CAGR annualizes the window's own
-     return over the actual calendar span, and is withheld under ~2 months —
-     annualizing a 1M window is noise. Sharpe/Sortino annualize on 252 trading
-     days (see TRADING_DAYS_PER_YEAR in bookMath). */
+  /* CAGR annualizes the window's own return over the actual calendar span,
+     and is withheld under ~2 months — annualizing a 1M window is noise. */
   const windowEnd = drawnPortfolio.length > 0 ? drawnPortfolio[drawnPortfolio.length - 1].t : null;
   const windowDays =
     drawnPortfolio.length > 1 && windowEnd
@@ -551,10 +542,6 @@ function Book({
     windowDays >= 60 && portfolioReturn !== null && windowEnd
       ? cagrPct(portfolioReturn, drawnPortfolio[0].t, windowEnd)
       : null;
-  const sharpe = windowSharpe(drawnPortfolio);
-  const sortino = windowSortino(drawnPortfolio);
-  /* Relative block: the book against the dotted benchmark leg. */
-  const infoRatio = windowInfoRatio(drawnPortfolio, drawnBenchmark);
 
   return (
     <div className="flex min-w-0 flex-col gap-[0.8rem]">
@@ -581,8 +568,7 @@ function Book({
           />
         </div>
 
-        {/* The window's own reads, in two blocks: the book on its own, then
-            the book against the dotted benchmark leg. Round 7: "The
+        {/* The window's own reads: three rows, no background. Round 7: "The
             performance metrics shouldn't have a background ... a cleaner way
             of showing these with no background and more simplistic styling",
             and "the chart should be the same height as the performance
@@ -601,35 +587,7 @@ function Book({
             rows={[
               { label: "net return", value: fmtSignedPct(portfolioReturn) },
               { label: "CAGR (ann.)", value: fmtSignedPct(cagr) },
-              {
-                label: "Sharpe",
-                value: fmtRatio(sharpe),
-                title: "annualized on 252 trading days, rf 0",
-              },
-              {
-                label: "Sortino",
-                value: fmtRatio(sortino),
-                title: "annualized on 252 trading days, downside deviation",
-              },
-            ]}
-          />
-          <span className="font-mono text-[0.68rem] uppercase tracking-[0.06em] text-ink-mute">
-            vs SPY · dotted
-          </span>
-          <ReadRows
-            rows={[
-              { label: "excess", value: fmtRelative(portfolioReturn, benchmarkReturn) },
-              {
-                label: "info ratio",
-                value: fmtRatio(infoRatio),
-                title: "annualized on 252 trading days",
-              },
               { label: "alpha", value: fmtAlpha(alpha), title: betaTitle },
-              {
-                label: "beta",
-                value: beta === null ? "—" : beta.toFixed(2),
-                title: "beta of the book to the benchmark over the visible window",
-              },
             ]}
           />
         </div>
