@@ -3,7 +3,7 @@
 Date: 2026-09-24
 Status: in progress (see per-phase status below)
 Owners: digiquant / SDCA strategy research
-Related: `src/digiquant/strategies/sdca/RESEARCH_STATE.md` ("Standard trial protocol", "Immediate backlog"), `scripts/run_ablation_best_round_full_resolution.py` (round 8 baseline, -61.32% max drawdown, unpromoted)
+Related: `src/digiquant/strategies/sdca/RESEARCH_STATE.md` ("Standard trial protocol", "Immediate backlog"), `scripts/run_ablation_best_round_full_resolution.py` (round 8 baseline, unpromoted). Round 8's drawdown has two documented figures, both real, measured differently: `scripts/build_round8_diagnostic_tearsheet.py` reports -61.32% from one continuous full-history (2015–2026) backtest; `.scratch/ablation/best_round_full_resolution.json` reports per-walk-forward-fold OOS drawdown (27.18% / 51.19% / 20.29%, 33.82% holdout) over the shorter fold windows. Phase 4 below compares against the walk-forward figures, since that's the apples-to-apples metric `run_sdca_walk_forward_vs_baseline` produces.
 
 ## 1. Problem
 
@@ -49,9 +49,9 @@ Three changes, one search:
 
 | Phase | Scope | Status |
 |---|---|---|
-| 1 | Floored 12-name weight search | planned |
+| 1 | Floored 12-name weight search | **done** — `scripts/run_full_pool_floored_search.py`; first run used wrong (default) Stage 1 oscillator/extra windows, fixed and re-run; primary (3:1) winner: power_law=1.0, m2/rs_eth/dxy/onchain_mvrv/onchain_asopr/onchain_puell/onchain_rhodl/onchain_addr_ratio/fear_greed/weekly_monthly_rsi=0.1 (floor), weekly_monthly_macd=0.5; every extra indicator sits at or above floor, ratio-stable (2:1/3:1/5:1 pick the same weights) |
 | 2 | M2 EMA smoothing + RSI curve power | **done** — `composite_risk.py`, `indicator_catalog.py`, `price_oscillators.py`; tests added/extended, `pytest tests/dq/strategies/sdca/` green |
-| 3 | Drawdown cap + wider curve bounds + crash override | planned |
+| 3 | Drawdown cap + wider curve bounds + crash override | **done** — `curve_optimize_feasibility.py`, `curve_optimize.py`; crash override verified against real 2020-03-12 COVID crash data, no new wiring needed; tests added, `pytest tests/dq/strategies/sdca/` green (585 passed) |
 | 4 | Combined search + calibration loop | planned |
 
 ## 4. Gate
