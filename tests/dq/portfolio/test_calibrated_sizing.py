@@ -1,4 +1,4 @@
-"""WP8.4 — feed calibrated forecasts into incumbent H8 raw sizing (#2734).
+"""WP8.4 — feed calibrated forecasts into incumbent sizing raw sizing (#2734).
 
 Control shell (caps / corr / vol / breaker / grid) stays unchanged; only the raw-weight
 stage switches from rank→conviction / fixed-premium Kelly to calibrated μ/σ/reliability.
@@ -39,7 +39,7 @@ _POLICY_ID = UUID("11111111-1111-4111-8111-111111111111")
 _POLICY_HASH = "a" * 64
 _CAL_HASH_A = "b" * 64
 _CAL_HASH_B = "c" * 64
-_H7_HASH = "e" * 64
+_DIRECTION_HASH = "e" * 64
 
 
 def _permissive(**over: float | str) -> SizingCaps:
@@ -98,7 +98,7 @@ def _bundle(
         risk_policy_id=_POLICY_ID,
     )
     source = build_source_hashes(
-        h7_memo_hash=_H7_HASH,
+        direction_memo_hash=_DIRECTION_HASH,
         risk_policy_hash=_POLICY_HASH,
         prior_entries=(),
         calibrated_hashes=tuple((t, cal_hashes[t]) for t in tickers),
@@ -231,8 +231,8 @@ def test_rank_gap_change_with_fixed_forecasts_does_not_change_raw_weights() -> N
     assert a.requested_pct == b.requested_pct
 
 
-def test_h5_stance_does_not_affect_calibrated_eligibility() -> None:
-    """H7 memo path stamps buy even when H5 says sell; calibrated sizing uses that map."""
+def test_analyst_stance_does_not_affect_calibrated_eligibility() -> None:
+    """direction memo path stamps buy even when analyst says sell; calibrated sizing uses that map."""
     from digiquant.portfolio.models.pm_direction import PMDirectionMemo, TickerDirection
 
     memo = PMDirectionMemo(
@@ -277,16 +277,16 @@ def test_zero_uncertainty_rejected() -> None:
 
 def test_resolve_sizing_input_mode_versioned() -> None:
     assert (
-        phase7e_risk_sizing.resolve_h8_sizing_input_mode({})
-        == phase7e_risk_sizing.H8_SIZING_INPUT_MODE_CALIBRATED
+        phase7e_risk_sizing.resolve_sizing_input_mode({})
+        == phase7e_risk_sizing.SIZING_INPUT_MODE_CALIBRATED
     )
     assert (
-        phase7e_risk_sizing.resolve_h8_sizing_input_mode({"h8_sizing_input_mode": "incumbent"})
-        == phase7e_risk_sizing.H8_SIZING_INPUT_MODE_INCUMBENT
+        phase7e_risk_sizing.resolve_sizing_input_mode({"sizing_input_mode": "incumbent"})
+        == phase7e_risk_sizing.SIZING_INPUT_MODE_INCUMBENT
     )
     assert (
-        phase7e_risk_sizing.resolve_h8_sizing_input_mode({"h8_sizing_input_mode": "nope"})
-        == phase7e_risk_sizing.H8_SIZING_INPUT_MODE_CALIBRATED
+        phase7e_risk_sizing.resolve_sizing_input_mode({"sizing_input_mode": "nope"})
+        == phase7e_risk_sizing.SIZING_INPUT_MODE_CALIBRATED
     )
 
 
@@ -365,12 +365,12 @@ def test_identical_raw_weights_yield_identical_post_control_book() -> None:
 def test_calibrated_book_stamps_bundle_hash(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    from digiquant.portfolio.h8_risk_snapshots import H8RiskArtifacts
     from digiquant.portfolio.models.pm_direction import PMDirectionMemo, TickerDirection
     from digiquant.portfolio.phases.phase7e_risk_sizing import (
         RiskSizingDeps,
         build_risk_sizing_node,
     )
+    from digiquant.portfolio.sizing_risk_snapshots import SizingRiskArtifacts
     from digiquant.research.state import (
         PhasePortfolioState,
         ResearchConfigBundle,
@@ -383,10 +383,10 @@ def test_calibrated_book_stamps_bundle_hash(
     bundle = _bundle(returns={"AAPL": ("0.06", "0.02", "1.0"), "MSFT": ("0.03", "0.02", "1.0")})
     policy = _risk_policy()
     cov = _covariance(("AAPL", "MSFT"))
-    artifacts = H8RiskArtifacts(policy=policy, covariance_snapshot=cov)
+    artifacts = SizingRiskArtifacts(policy=policy, covariance_snapshot=cov)
 
     monkeypatch.setattr(
-        "digiquant.portfolio.h8_risk_snapshots.resolve_h8_risk_artifacts",
+        "digiquant.portfolio.sizing_risk_snapshots.resolve_sizing_risk_artifacts",
         lambda **_kwargs: artifacts,
     )
     monkeypatch.setattr(
@@ -412,7 +412,7 @@ def test_calibrated_book_stamps_bundle_hash(
                 "max_sector_pct": 100,
                 "target_portfolio_vol": 1.0e6,
                 "weight_increment_pct": 0,
-                "h8_sizing_input_mode": "calibrated",
+                "sizing_input_mode": "calibrated",
             }
         ),
         phase_portfolio=PhasePortfolioState(pm_direction_memo=memo),
@@ -428,7 +428,7 @@ def test_calibrated_book_stamps_bundle_hash(
     out = build_risk_sizing_node(RiskSizingDeps(client=client))(state)
     book = out["phase_portfolio"].sized_book
     assert book is not None
-    assert book["h8_sizing_input_mode"] == "calibrated"
+    assert book["sizing_input_mode"] == "calibrated"
     assert book["allocation_input_bundle_hash"] == bundle.bundle_content_hash
     assert "allocation_input_bundle_hash=" in book["notes"]
     weights = {row["ticker"]: row["target_pct"] for row in book["recommended_portfolio"]}
@@ -438,12 +438,12 @@ def test_calibrated_book_stamps_bundle_hash(
 def test_empty_calibrated_coverage_falls_back_to_incumbent(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    from digiquant.portfolio.h8_risk_snapshots import H8RiskArtifacts
     from digiquant.portfolio.models.pm_direction import PMDirectionMemo, TickerDirection
     from digiquant.portfolio.phases.phase7e_risk_sizing import (
         RiskSizingDeps,
         build_risk_sizing_node,
     )
+    from digiquant.portfolio.sizing_risk_snapshots import SizingRiskArtifacts
     from digiquant.research.state import (
         PhasePortfolioState,
         ResearchConfigBundle,
@@ -457,9 +457,9 @@ def test_empty_calibrated_coverage_falls_back_to_incumbent(
     base = _bundle(returns={"AAPL": ("0.05", "0.02", "1.0")})
     policy = _risk_policy()
     cov = _covariance(("AAPL",))
-    artifacts = H8RiskArtifacts(policy=policy, covariance_snapshot=cov)
+    artifacts = SizingRiskArtifacts(policy=policy, covariance_snapshot=cov)
     monkeypatch.setattr(
-        "digiquant.portfolio.h8_risk_snapshots.resolve_h8_risk_artifacts",
+        "digiquant.portfolio.sizing_risk_snapshots.resolve_sizing_risk_artifacts",
         lambda **_kwargs: artifacts,
     )
     monkeypatch.setattr(
@@ -487,7 +487,7 @@ def test_empty_calibrated_coverage_falls_back_to_incumbent(
                 "max_sector_pct": 100,
                 "target_portfolio_vol": 1.0e6,
                 "weight_increment_pct": 0,
-                "h8_sizing_input_mode": "calibrated",
+                "sizing_input_mode": "calibrated",
             }
         ),
         phase_portfolio=PhasePortfolioState(pm_direction_memo=memo),
@@ -502,6 +502,6 @@ def test_empty_calibrated_coverage_falls_back_to_incumbent(
     out = build_risk_sizing_node(RiskSizingDeps(client=client))(state)
     book = out["phase_portfolio"].sized_book
     assert book is not None
-    assert book["h8_sizing_input_mode"] == "incumbent_fallback"
+    assert book["sizing_input_mode"] == "incumbent_fallback"
     assert book["allocation_input_bundle_hash"] == base.bundle_content_hash
     assert any(row["ticker"] == "AAPL" for row in book["recommended_portfolio"])

@@ -78,7 +78,7 @@ function rationaleFor(
   rationaleByTicker: Record<string, string>
 ): string | null {
   const key = action.ticker.trim().toUpperCase();
-  // Never surface H8's mechanical sizing fallback as a "reason" — prefer real
+  // Never surface sizing's mechanical fallback as a "reason" — prefer real
   // PM thesis text already filtered into rationaleByTicker, else action+ticker only.
   return resolvePmRationale(action.rationale, rationaleByTicker[key]);
 }

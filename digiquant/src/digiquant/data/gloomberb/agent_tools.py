@@ -14,7 +14,8 @@ call them while reasoning. This module gives them an in-process surface:
   ``session`` / ``pro`` / ``preview`` tools when ``GLOOMBERB_SESSION_COOKIE`` is
   absent (the same zero-HTTP gate the MCP tools apply; without a cookie those
   tools would only return ``auth_required``).
-* :func:`build_digifetch_tool_dispatcher` — ``(name, args) -> json_str`` routed
+* :func:`build_digifetch_tool_dispatcher` — ``(name, args) -> {"content": <json
+  str>, "ok": bool}`` routed
   through the shared :class:`GloomberbClient` and serialized with the §7
   attribution envelope.
 
@@ -171,16 +172,16 @@ def gloomberb_envelope_json(
 #
 # Not all 33 tools everywhere (prompt budget): the equity/sector research
 # phases get company facts + analyst views, the macro phase gets rates/credit/
-# long-run valuation, and the portfolio PM (H5 analyst + H7 direction) gets a
+# long-run valuation, and the portfolio PM (analyst + direction) gets a
 # PM-fit mix of quotes/news/analyst views plus macro context. Every name is
 # declared in ``TOOL_ENTITLEMENTS``; ``available_digifetch_tools`` drops the
 # session-/pro-/preview-gated ones when no cookie is configured.
 #
-# H6 deliberation stays digifetch-free: it is research-tools-only by policy
+# deliberation stays digifetch-free: it is research-tools-only by policy
 # (#2908, no generic web search in the deliberation loop), and its evidence
 # path is the evidence bundle + amendment flow, not a new market-data family.
 # The legacy Phase 7D PM path (``phase7d_pm``, no live graph caller) is also
-# unwired; H7 is the portfolio direction phase.
+# unwired; direction is the portfolio direction phase.
 
 EQUITY_TOOLS: tuple[str, ...] = (
     "digifetch_quote",
@@ -380,8 +381,14 @@ def _symbol_for(spec: DigifetchDispatch, request: Any) -> str | None:
 
 def build_digifetch_tool_dispatcher(
     client: Any | None = None,
-) -> Callable[[str, dict[str, Any]], str]:
-    """Return an ``execute_tool(name, args) -> json_str`` bound to a client.
+) -> Callable[[str, dict[str, Any]], str | dict[str, Any]]:
+    """Return an ``execute_tool(name, args) -> result`` bound to a client.
+
+    Each result is ``{"content": <attribution-enveloped JSON string>, "ok": bool}``
+    (#4556): ``content`` is what the model reads, and ``ok`` is the honest
+    success flag the tool-call telemetry records. The upstream is a live read, so
+    a wire 5xx that survives the client's own retries is a failed tool call even
+    though the dispatcher, by contract, still returns a string instead of raising.
 
     ``client`` is the patchable seam tests inject (MockTransport-backed); when
     omitted, the shared env-keyed :func:`build_gloomberb_client` is resolved on
@@ -390,17 +397,18 @@ def build_digifetch_tool_dispatcher(
 
     Args are validated through the tool's Pydantic input model; invalid args
     fall through to the client, which maps them to a typed ``invalid_input``
-    envelope with no request (the same contract as the MCP wrappers). Every
-    result is attribution-enveloped JSON and the dispatcher never raises.
+    envelope with no request (the same contract as the MCP wrappers). The
+    ``content`` half of every result is attribution-enveloped JSON and the
+    dispatcher never raises.
     """
 
     def _resolve_client() -> Any:
         return client if client is not None else build_gloomberb_client()
 
-    def execute_tool(name: str, args: dict[str, Any]) -> str:
+    def execute_tool(name: str, args: dict[str, Any]) -> str | dict[str, Any]:
         spec = DIGIFETCH_DISPATCH.get(name)
         if spec is None:
-            return f"Error: unknown digifetch tool {name!r}"
+            return {"content": f"Error: unknown digifetch tool {name!r}", "ok": False}
         try:
             payload = dict(args or {})
             request: Any = spec.input_model.model_validate(payload)
@@ -414,23 +422,36 @@ def build_digifetch_tool_dispatcher(
             # client: answer with the same typed invalid_input shape (#4146
             # review F2) instead of raising out of the tool loop.
             logger.warning("digifetch tool %s got non-mapping args: %s", name, exc)
-            return gloomberb_envelope_json(
-                DigifetchEnvelope(
-                    data=DigifetchError(
-                        code="invalid_input",
-                        message=(f"tool args must be an object; got {type(args).__name__}: {exc}"),
-                        retryable=False,
-                    )
+            return {
+                "content": gloomberb_envelope_json(
+                    DigifetchEnvelope(
+                        data=DigifetchError(
+                            code="invalid_input",
+                            message=(
+                                f"tool args must be an object; got {type(args).__name__}: {exc}"
+                            ),
+                            retryable=False,
+                        )
+                    ),
+                    attributed=spec.attributed,
                 ),
-                attributed=spec.attributed,
-            )
+                "ok": False,
+            }
         try:
             envelope = getattr(_resolve_client(), spec.client_method)(request)
         except Exception as exc:  # mirror the MCP wrappers: never raise to the loop
             logger.warning("digifetch tool %s failed: %s", name, exc)
-            return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
-        return gloomberb_envelope_json(
-            envelope, symbol=_symbol_for(spec, request), attributed=spec.attributed
-        )
+            return {
+                "content": json.dumps({"error": f"{type(exc).__name__}: {exc}"}),
+                "ok": False,
+            }
+        return {
+            "content": gloomberb_envelope_json(
+                envelope, symbol=_symbol_for(spec, request), attributed=spec.attributed
+            ),
+            # An envelope whose ``data`` slot is a typed error is still a failed
+            # call: the model gets the error text, telemetry records ok=False.
+            "ok": not isinstance(envelope.data, DigifetchError),
+        }
 
     return execute_tool

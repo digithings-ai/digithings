@@ -2,7 +2,7 @@
 title: "digikey — API reference"
 type: reference
 status: generated
-created: 2026-08-10
+created: 2026-09-22
 tags:
   - api
   - support
@@ -38,7 +38,7 @@ uvicorn digikey.server:app
 ```
 
 ## Configuration
-- `DIGIKEY_DATABASE_URL` — required, no fallback: Postgres or SQLite URL for key storage. The service refuses to start without it (#4080).
+- `DIGIKEY_DATABASE_URL` — required: Postgres or SQLite URL for key storage. Required with no fallback — the service refuses to start if unset (#4080).
 - `DIGIKEY_PRIVATE_KEY_PEM`: RSA 2048 PEM for RS256 signing (prod).
 - `DIGIKEY_ADMIN_TOKEN` — required: Bearer for POST /v1/admin/keys.
 - `DIGIKEY_BFF_TOKEN`: Bearer for grant_type=bff_session (digichat).

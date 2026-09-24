@@ -1,8 +1,8 @@
 /**
  * PM position rationale for Brief / actions UI.
  *
- * Historical `pm-rebalance` rows often carry the H8 mechanical fallback
- * ("Position weight set by deterministic risk sizing.") even when H7 already
+ * Historical `pm-rebalance` rows often carry the sizing mechanical fallback
+ * ("Position weight set by deterministic risk sizing.") even when direction already
  * published a real roster narrative. Never surface that boilerplate as a
  * "reason" — prefer usable PM thesis text, else show action + ticker only.
  *
@@ -18,7 +18,7 @@ const MECHANICAL_SIZING_RE =
 const DERIVED_BOOK_REASON_RE =
   /derived from positions book|proposed_positions|rebalance_decision\.json|digest (proposed_positions )?unavailable/i;
 
-/** True when the string is empty or the known H8 sizing fallback (and close variants). */
+/** True when the string is empty or the known sizing fallback (and close variants). */
 export function isMechanicalSizingRationale(raw: string | null | undefined): boolean {
   const t = (raw ?? '').replace(/\s+/g, ' ').trim();
   if (!t) return true;
@@ -40,8 +40,8 @@ export function usablePmRationale(raw: string | null | undefined): string | null
 }
 
 /**
- * First usable PM reason among candidates (action row → map → H7 → H6 → H5).
- * Matches the backend priority in H8 `_selection_rationale_by_ticker`, minus the
+ * First usable PM reason among candidates (action row → map → direction → deliberation → analyst).
+ * Matches the backend priority in sizing `_selection_rationale_by_ticker`, minus the
  * mechanical fallback — callers must not invent a reason when this returns null.
  */
 export function resolvePmRationale(
@@ -54,7 +54,7 @@ export function resolvePmRationale(
   return null;
 }
 
-/** Extract H7 roster narratives from a `pm-direction-memo` document payload. */
+/** Extract direction roster narratives from a `pm-direction-memo` document payload. */
 export function narrativesFromPmDirectionMemo(
   memo: Record<string, unknown> | null | undefined
 ): Record<string, string> {
@@ -76,9 +76,9 @@ export function narrativesFromPmDirectionMemo(
 }
 
 /**
- * Build the Brief/actions rationale map: prefer real PM text over H8 fallback.
+ * Build the Brief/actions rationale map: prefer real PM text over sizing fallback.
  *
- * Order per ticker: usable `pm-rebalance` action rationale → H7 roster narrative
+ * Order per ticker: usable `pm-rebalance` action rationale → direction roster narrative
  * → optional extras (deliberation conclusion, thesis). Mechanical strings never
  * enter the map.
  */

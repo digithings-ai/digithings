@@ -3,7 +3,7 @@
 Resolves only :class:`~digiquant.dashboard.replay.models.PolicyVersionRef`
 entries registered in-memory (or injected store). Cutoff-bound reads filter
 ``known_at <= replay_as_of``. Missing research output is typed unavailable —
-never fabricate H5/H6 counterfactuals. No network/provider calls.
+never fabricate analyst/deliberation counterfactuals. No network/provider calls.
 """
 
 from __future__ import annotations

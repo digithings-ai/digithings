@@ -105,7 +105,7 @@ def test_operator_scripts_use_digiquant_prefix() -> None:
 def test_cron_probe_workflow_keeps_house_pipeline_separate() -> None:
     installed = REPO_ROOT / ".github" / "workflows" / "execution-cron-check.yml"
     spec = (
-        REPO_ROOT / "docs" / "agent-backlog" / "kairos-tenancy" / "kairos-cron-check.workflow.yml"
+        REPO_ROOT / "docs" / "agent-backlog" / "execution-tenancy" / "kairos-cron-check.workflow.yml"
     )
     assert installed.is_file()
     assert spec.is_file()

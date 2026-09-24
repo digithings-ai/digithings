@@ -1,7 +1,9 @@
 import type { Metadata } from "next";
-import { CtaLink, PageHead } from "@digithings/ui";
+import Link from "next/link";
+import { buttonVariants } from "@digithings/ui/ui";
 import { DtNav } from "@/components/DtNav";
 import { DtFooter } from "@/components/DtFooter";
+import { PageHead } from "./_company/prose";
 
 export const metadata: Metadata = {
   title: "No such page — digithings",
@@ -12,18 +14,20 @@ export default function NotFound() {
   return (
     <>
       <DtNav />
-      <main id="main" tabIndex={-1} className="pt-[var(--dq-nav-h)]">
+      <main className="pt-[var(--dq-nav-h)]">
         <PageHead kicker="// 404" title="No such page.">
           The address does not match anything on this site. The docs index is the
           fastest way back.
         </PageHead>
         <section className="section">
           <div className="wrap">
-            <div className="flex flex-wrap items-center gap-[0.8rem]">
-              <CtaLink href="/">Back to top</CtaLink>
-              <CtaLink href="/docs" variant="ghost">
+            <div className="flex flex-wrap gap-[0.8rem]">
+              <Link className={buttonVariants({ variant: "default" })} href="/">
+                Back to top
+              </Link>
+              <Link className={buttonVariants({ variant: "ghost" })} href="/docs">
                 Browse the docs
-              </CtaLink>
+              </Link>
             </div>
           </div>
         </section>

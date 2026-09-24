@@ -9,7 +9,7 @@ import {
 } from './pm-rationale';
 
 describe('isMechanicalSizingRationale', () => {
-  it('treats the canonical H8 fallback as empty', () => {
+  it('treats the canonical sizing fallback as empty', () => {
     expect(isMechanicalSizingRationale('Position weight set by deterministic risk sizing.')).toBe(
       true
     );
@@ -49,7 +49,7 @@ describe('isDerivedBookReason', () => {
 });
 
 describe('resolvePmRationale / buildDisplayRationaleByTicker', () => {
-  it('skips mechanical rebalance text and prefers H7 roster narrative', () => {
+  it('skips mechanical rebalance text and prefers direction roster narrative', () => {
     const map = buildDisplayRationaleByTicker({
       pmRebalanceActions: [
         {
@@ -87,17 +87,17 @@ describe('resolvePmRationale / buildDisplayRationaleByTicker', () => {
     ).toBeNull();
   });
 
-  it('keeps a real pm-rebalance rationale over H7 when both exist', () => {
+  it('keeps a real pm-rebalance rationale over direction when both exist', () => {
     const map = buildDisplayRationaleByTicker({
       pmRebalanceActions: [{ ticker: 'NVDA', rationale: 'Valuation stretched into earnings.' }],
       pmDirectionMemo: {
-        roster: [{ ticker: 'NVDA', narrative: 'Older H7 narrative for NVDA.' }],
+        roster: [{ ticker: 'NVDA', narrative: 'Older direction narrative for NVDA.' }],
       },
     });
     expect(map.NVDA).toBe('Valuation stretched into earnings.');
   });
 
-  it('extracts H7 narratives and ignores blank rows', () => {
+  it('extracts direction narratives and ignores blank rows', () => {
     expect(
       narrativesFromPmDirectionMemo({
         roster: [

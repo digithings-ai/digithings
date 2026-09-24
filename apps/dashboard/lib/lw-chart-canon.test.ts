@@ -39,7 +39,9 @@ const MIGRATED = ALL_COMPONENTS.filter((rel) => read(rel).includes("from 'lightw
 
 /** Categorical/composition surfaces — sanctioned to stay on recharts. */
 const RECHARTS_SANCTIONED = [
+  'components/portfolio/sleeve-stacked-chart.tsx',
   'components/observability/AttributionTab.tsx',
+  'components/observability/DecisionScorecardTab.tsx',
   'components/twelve-x/ConsensusTab.tsx',
 ];
 

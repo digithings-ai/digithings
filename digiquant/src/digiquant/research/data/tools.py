@@ -22,7 +22,6 @@ from digiquant.research.data.queries import (
     get_price_technicals,
     get_sector_relative_strength,
     get_vix_term_structure,
-    query_data,
 )
 from digiquant.supabase_retry import run_with_supabase_retry
 
@@ -34,51 +33,6 @@ class _UnknownToolError(ValueError):
 
 
 DATA_TOOLS: list[dict[str, Any]] = [
-    {
-        "type": "function",
-        "function": {
-            "name": "query_data",
-            "description": (
-                "Generic read of any book/calendar table to ground a claim in real numbers "
-                "(backed by digibase, scoped read-only to the data tables). Allowed tables: "
-                "positions, nav_history, theses, thesis_vehicles, position_events, "
-                "portfolio_metrics, trading_calendar. "
-                "Market history (price_history, price_technicals, macro_series_observations) "
-                "is NOT readable here — it left the generic reader for the versioned R2 "
-                "cache (#3780). Ground price/macro claims with the dedicated tools "
-                "(get_price_technicals for per-ticker indicators; get_macro_series for "
-                "macro series) and the injected market context instead. "
-                "positions/nav_history/position_events/portfolio_metrics default to the "
-                "house workspace_id (overlay same-date rows are excluded); pass "
-                "eq.workspace_id to read another book. "
-                "Filter with eq/gte/lte/in_, sort with order+desc, cap with limit. Examples: "
-                "{table:'theses', eq:{ticker:'SPY'}, order:'date', desc:true, limit:10} "
-                "or {table:'position_events', eq:{ticker:'SPY'}, order:'date', desc:true, limit:20} "
-                "or {table:'trading_calendar', gte:{date:'2026-01-01'}, limit:10}."
-            ),
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "table": {"type": "string", "description": "One of the allowed tables."},
-                    "columns": {
-                        "type": "string",
-                        "description": "Comma-separated columns, or '*' (default).",
-                    },
-                    "eq": {"type": "object", "description": "Equality filters {column: value}."},
-                    "gte": {"type": "object", "description": ">= filters {column: value}."},
-                    "lte": {"type": "object", "description": "<= filters {column: value}."},
-                    "in_": {
-                        "type": "object",
-                        "description": "Membership filters {column: [values]}.",
-                    },
-                    "order": {"type": "string", "description": "Column to sort by."},
-                    "desc": {"type": "boolean", "description": "Sort descending (default true)."},
-                    "limit": {"type": "integer", "description": "Max rows (default 50, max 500)."},
-                },
-                "required": ["table"],
-            },
-        },
-    },
     {
         "type": "function",
         "function": {
@@ -109,7 +63,7 @@ DATA_TOOLS: list[dict[str, Any]] = [
                 "sma/rsi/macd/adx/atr/zscore and friends. Use to ground trend, momentum, "
                 "and relative-strength claims with real values. Reads the maintained "
                 "price_technicals reader (the R2 cache under the cutover flag, #3780); "
-                "price_history/price_technicals are NOT readable through query_data."
+                "price_history/price_technicals are NOT readable through query_research."
             ),
             "parameters": {
                 "type": "object",
@@ -190,16 +144,6 @@ DATA_TOOLS: list[dict[str, Any]] = [
 ]
 
 
-def _coerce_bool(value: Any, *, default: bool = True) -> bool:
-    """Coerce a tool-call arg to bool. Tool args may arrive as strings, so treat
-    'false'/'0'/'no'/'' as False rather than letting ``bool('false')`` be True."""
-    if isinstance(value, bool):
-        return value
-    if value is None:
-        return default
-    return str(value).strip().lower() not in ("false", "0", "no", "")
-
-
 def build_data_tool_dispatcher(
     client: Any,
     run_date: date | None = None,
@@ -211,8 +155,8 @@ def build_data_tool_dispatcher(
     run's logical date so tool outputs are reproducible and look-ahead-safe for
     backfills and delta runs. Defaults to today for interactive/MCP callers.
 
-    ``allowed_tables`` narrows the tables ``query_data`` may read (e.g. market-data
-    only for blinded analyst nodes); ``None`` keeps the full read whitelist.
+    ``allowed_tables`` is retained for callers that narrow the (typed-reader) data
+    surface; ``None`` keeps the full read whitelist.
     """
     as_of = run_date or datetime.now(UTC).date()
 
@@ -232,32 +176,6 @@ def build_data_tool_dispatcher(
         return json.dumps(result, default=str)
 
     def _dispatch(name: str, args: dict[str, Any]) -> Any:
-        if name == "query_data":
-            table = args.get("table")
-            if not table:
-                return (
-                    "Error: query_data requires a 'table' argument. "
-                    "Allowed tables: positions, nav_history, theses, "
-                    "thesis_vehicles, position_events, portfolio_metrics, trading_calendar."
-                )
-            # Market history (price_history / price_technicals /
-            # macro_series_observations) is not served by query_data (#3780):
-            # the reader's table allowlist refuses those tables, and the
-            # dedicated R2-backed tools own the reads. No macro
-            # 'date' -> 'obs_date' rewrite is needed on this path.
-            return query_data(
-                client=client,
-                table=table,
-                columns=str(args.get("columns", "*")),
-                eq=args.get("eq"),
-                gte=args.get("gte"),
-                lte=args.get("lte"),
-                in_=args.get("in_"),
-                order=args.get("order"),
-                desc=_coerce_bool(args.get("desc", True)),
-                limit=int(args.get("limit", 50)),
-                allowed_tables=allowed_tables,
-            )
         if name == "get_macro_series":
             return get_macro_series(
                 client=client,

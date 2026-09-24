@@ -48,15 +48,15 @@ class TestChainBaseline:
         assert final.phase7_digest is not None
         assert "master-digest" in (final.phase7_digest.get("segment") or "")
 
-        # Analysis outputs (portfolio H5–H8).
+        # Analysis outputs (portfolio analyst–sizing).
         assert "AAPL" in final.phase_portfolio.asset_analysts, (
-            "portfolio H5 should have populated phase_portfolio.asset_analysts"
+            "portfolio analyst should have populated phase_portfolio.asset_analysts"
         )
         assert final.phase_portfolio.pm_direction_memo is not None, (
-            "portfolio H7 should have populated pm_direction_memo"
+            "portfolio direction should have populated pm_direction_memo"
         )
         assert final.phase_portfolio.sized_book is not None, (
-            "portfolio H8 should have populated sized_book"
+            "portfolio sizing should have populated sized_book"
         )
 
     def test_baseline_chain_publish_writes_after_portfolio(self) -> None:
@@ -99,7 +99,7 @@ class TestChainBaseline:
 @pytest.mark.unit
 class TestChainMaterialization:
     def test_pm_decision_materializes_positions_and_nav(self) -> None:
-        """H8 sized book materializes to positions + base-100 NAV (#700)."""
+        """sizing sized book materializes to positions + base-100 NAV (#700)."""
         with simulated_pipeline(
             watchlist=("AAPL",),
             preferences={
@@ -376,7 +376,7 @@ class TestChainKnowledgeCutoff:
 def test_safe_invoke_graph_reraises_overlay_legacy_book_blocked() -> None:
     """House fail-soft must not swallow overlay leftover-UNIQUE refuse.
 
-    Overlay H9 ``book_portfolio`` raises ``OverlayLegacyBookBlocked``. If the
+    Overlay commit ``book_portfolio`` raises ``OverlayLegacyBookBlocked``. If the
     chain records-and-continues, ``execute_overlay`` finishes succeeded and
     the remaining hop lights without cutover 113.
     """

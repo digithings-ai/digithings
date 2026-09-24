@@ -70,6 +70,7 @@ const LEVELS_IDEA: FxTradeIdeaRow = {
 function render(
   ideas: FxTradeIdeaRow[],
   ideaHistory?: Pick<FxTradeIdeaRow, 'run_date' | 'pair' | 'direction' | 'as_of'>[],
+  openIdea: ReturnType<typeof vi.fn> = vi.fn(),
 ): string {
   return renderToStaticMarkup(
     createElement(
@@ -79,11 +80,11 @@ function render(
           runDate: '2026-07-22',
           crossLink: vi.fn(),
           openBrief: vi.fn(),
+          openIdea,
           watchlist: { tickers: [], has: () => false, toggle: vi.fn() } as never,
         },
         children: createElement(TradeIdeasPanel, {
           ideas,
-          confluence: [],
           ideaHistory,
         }),
       } as never,
@@ -100,12 +101,13 @@ describe('TradeIdeasPanel', () => {
     expect(html).toContain('#2');
   });
 
-  it('idea rows expand in place — ideas are run artifacts with no brief to open (#1664)', () => {
+  it('cards open the idea sidebar instead of expanding in place (#1664)', () => {
     const html = render(IDEAS);
-    // Every idea button is a collapsed disclosure, not a brief link.
-    expect(html).toContain('aria-expanded="false"');
-    // Contributing-desk detail only appears once a row is expanded.
+    // Cards are plain buttons that open the sidebar; no inline disclosure state.
+    expect(html).not.toContain('aria-expanded="false"');
+    // Detail (contributing desks, levels) only lives in the sidebar, never inline.
     expect(html).not.toContain('Contributing desks');
+    expect(html).not.toContain('Levels');
   });
 
   it('keeps direction off the P&L tokens', () => {

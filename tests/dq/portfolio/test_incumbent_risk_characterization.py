@@ -1,4 +1,4 @@
-"""WP6.1 — golden characterization of incumbent H8 risk policy (#2687).
+"""WP6.1 — golden characterization of incumbent sizing risk policy (#2687).
 
 Freezes distributed defaults (``SizingCaps``, ``BreakerConfig``, control order,
 correlation buckets, vol fallbacks, rank→conviction mapping, effective-input

@@ -96,11 +96,11 @@ def test_missing_research_output_surfaces_unavailable() -> None:
     registered = _registered(
         PolicyFamily.RESEARCH_PLAN,
         "plan-empty",
-        payload={"status": "unavailable", "reason": "no_h5_output"},
+        payload={"status": "unavailable", "reason": "no_analyst_output"},
     )
     registry.register(registered)
 
-    with pytest.raises(PolicyRegistryUnavailableError, match="no_h5_output"):
+    with pytest.raises(PolicyRegistryUnavailableError, match="no_analyst_output"):
         registry.resolve(_ref(registered), replay_as_of=_CUTOFF)
 
 

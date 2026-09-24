@@ -16,7 +16,7 @@ description: Gathers 7-day positioning signals, public commentary, and disclosed
 The world's best investors — both fundamental and systematic — leave signal trails. Their public commentary, SEC filings, and media appearances reveal conviction changes and regime views. This skill systematically gathers available signals from tracked funds across 4 strategy archetypes. Run in the Institutional Intelligence phase.
 
 ## Inputs
-- `config/hedge-funds.md` — master fund reference with sources and investment style
+- `config/hedge-funds.md` — repository provenance for a maintainer (master fund reference with sources and investment style); NOT retrievable by a tool.
 
 ## Workflow (from registry — keep in sync)
 
@@ -30,8 +30,6 @@ The world's best investors — both fundamental and systematic — leave signal 
 - **Bearish**: 3+ funds with recent sells, shorts, or negative commentary
 - **Mixed**: funds disagree
 - **No Signal**: no material intelligence available
-
-> **Web fetch**: use `defuddle parse <url> --md` instead of WebFetch for any media interview page, EDGAR filing, investor letter, or fund commentary URL. Not for API endpoints, `.json`, or `.md` files.
 
 ---
 

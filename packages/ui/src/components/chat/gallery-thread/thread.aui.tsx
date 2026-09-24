@@ -47,7 +47,9 @@ import {
   ThreadPrimitive,
   type FileMessagePartComponent,
   type ImageMessagePartComponent,
+  type SourceMessagePartComponent,
   type ToolCallMessagePartComponent,
+  useAui,
   useAuiState,
   useThreadViewport,
 } from "@assistant-ui/react";
@@ -67,6 +69,7 @@ import {
 import { ComposerTriggerPopover } from "./composer-trigger-popover.aui";
 import { MessageError } from "./message-error.aui";
 import { ComposerBlockCaret } from "./block-caret";
+import { ThreadSource } from "./source";
 import { TypedWelcomeCopy } from "./typed-welcome-copy";
 
 export type ThreadGroupPart = MessagePrimitive.GroupedParts.GroupPart;
@@ -96,6 +99,8 @@ export type ThreadComponents = {
   AssistantMessage?: ComponentType | undefined;
   Welcome?: ComponentType | undefined;
   ToolFallback?: ToolCallMessagePartComponent | undefined;
+  /** Citation row (`source` parts): provider web search, RAG documents (#4552). */
+  Source?: SourceMessagePartComponent | undefined;
   ToolGroup?:
     | ComponentType<PropsWithChildren<{ group: ThreadGroupPart }>>
     | undefined;
@@ -127,6 +132,12 @@ export type ThreadProps = {
   welcome?: string | undefined;
   /** `chrome.welcome.body`. */
   welcomeBody?: readonly string[] | undefined;
+  /**
+   * `chrome.suggestions` in deploy YAML. Static prompts for the new-chat
+   * welcome state; when non-empty they take precedence over the runtime's own
+   * suggestion adapter, which is the fallback.
+   */
+  suggestions?: readonly string[] | undefined;
   className?: string | undefined;
   /** Embed send-gate / system page-context attach. */
   onComposerSubmit?: (event: FormEvent<HTMLFormElement>) => void;
@@ -196,15 +207,19 @@ const ThreadGroupDisclosureContext = createContext<ThreadGroupDisclosure>(
 type ThreadChrome = {
   welcome: string;
   welcomeBody: readonly string[];
+  suggestions: readonly string[];
   onComposerSubmit?: (event: FormEvent<HTMLFormElement>) => void;
   className?: string;
   slash?: ThreadSlashTrigger;
   mention?: ThreadMentionTrigger;
 };
 
+const EMPTY_SUGGESTIONS: readonly string[] = [];
+
 const DEFAULT_CHROME: ThreadChrome = {
   welcome: "How can I help you today?",
   welcomeBody: [],
+  suggestions: EMPTY_SUGGESTIONS,
 };
 
 const ThreadChromeContext = createContext<ThreadChrome>(DEFAULT_CHROME);
@@ -254,6 +269,7 @@ export const Thread: FC<ThreadProps> = ({
   actions,
   welcome,
   welcomeBody,
+  suggestions,
   className,
   onComposerSubmit,
   slash,
@@ -269,6 +285,7 @@ export const Thread: FC<ThreadProps> = ({
   const chrome: ThreadChrome = {
     welcome: welcome ?? DEFAULT_CHROME.welcome,
     welcomeBody: welcomeBody ?? DEFAULT_CHROME.welcomeBody,
+    suggestions: suggestions ?? EMPTY_SUGGESTIONS,
     onComposerSubmit,
     className,
     slash,
@@ -310,15 +327,31 @@ const ThreadRoot: FC<{
         className,
       )}
       data-user-align="left"
+      // The skin scope marker: `apps/reference/…/chatbot.css` carries the whole
+      // first-party theme under `:is(.aui-theme-stage, [data-thread-skin="digichat"])`
+      // and the portal mirrors under `html:has([data-thread-skin="digichat"])`.
+      // Declaring it here means every mount path gets the same theme — the
+      // /baseline catalog, the embed shell, and the production shells — instead
+      // of each surface having to remember to wrap the Thread.
+      data-thread-skin="digichat"
       style={{
         ["--thread-max-width" as string]: "44rem",
-        ["--composer-bg" as string]: "var(--color-card)",
+        // `--card` (not `--color-card`) so a scoped palette wins: the
+        // Tailwind bridge declares `--color-card` at :root, so its var()
+        // resolves there and ignores `.digichat-thread`'s own `--card`.
+        ["--composer-bg" as string]: "var(--card)",
         ["--composer-radius" as string]: "0",
         ["--composer-padding" as string]: "8px",
       }}
     >
       <ThreadPrimitive.Viewport
         turnAnchor="top"
+        // The top-anchored message carries `padding-top: 1.5rem` (chat-aui.css)
+        // so it does not sit flush against the viewport top. `tallerThan` scores
+        // the anchor's offsetHeight, which includes that padding, so it is
+        // raised by the same 1.5rem to keep the set of fully-pinned messages
+        // unchanged from before the padding was added.
+        topAnchorMessageClamp={{ tallerThan: "11.5em", visibleHeight: "6em" }}
         data-slot="aui_thread-viewport"
         className="relative flex flex-1 flex-col overflow-x-hidden overflow-y-scroll scroll-smooth digichat-thread__viewport"
       >
@@ -402,21 +435,45 @@ const ThreadScrollToBottom: FC = () => {
     };
   }, [viewportEl]);
 
-  // Show only when history is actually out of view: the viewport must
-  // overflow AND sit more than a line away from the bottom. A scroll of a few
-  // pixels with everything still visible (e.g. after the entrance settle)
-  // must not surface it.
+  // Show only when content is actually hidden under the composer: the message
+  // list's bottom must sit below the top edge of the composer shell. A scroll
+  // of a few pixels with everything still visible (e.g. after the entrance
+  // settle) must not surface it.
   useEffect(() => {
     if (!viewportEl) return;
+    let observedGroup: HTMLElement | null = null;
+    let observedComposer: HTMLElement | null = null;
     const measure = () => {
-      const overflow = viewportEl.scrollHeight - viewportEl.clientHeight;
-      const distance =
-        viewportEl.scrollHeight - viewportEl.scrollTop - viewportEl.clientHeight;
-      setScrolledAway(overflow > 4 && distance > 24);
+      // Re-query each run: neither node is guaranteed to be mounted yet (and
+      // either may remount), so a captured reference could go stale.
+      const group = viewportEl.querySelector<HTMLElement>(
+        '[data-slot="aui_message-group"]',
+      );
+      const composer = viewportEl.querySelector<HTMLElement>(
+        '[data-slot="aui_composer-shell"]',
+      );
+      if (!group || !composer) {
+        setScrolledAway(false);
+        return;
+      }
+      if (group !== observedGroup) {
+        if (observedGroup) ro.unobserve(observedGroup);
+        ro.observe(group);
+        observedGroup = group;
+      }
+      if (composer !== observedComposer) {
+        if (observedComposer) ro.unobserve(observedComposer);
+        ro.observe(composer);
+        observedComposer = composer;
+      }
+      setScrolledAway(
+        group.getBoundingClientRect().bottom >
+          composer.getBoundingClientRect().top + 1,
+      );
     };
+    const ro = new ResizeObserver(measure);
     measure();
     viewportEl.addEventListener("scroll", measure, { passive: true });
-    const ro = new ResizeObserver(measure);
     ro.observe(viewportEl);
     return () => {
       viewportEl.removeEventListener("scroll", measure);
@@ -454,23 +511,64 @@ const ThreadWelcome: FC = () => {
   );
 };
 
+/**
+ * Shared look for a welcome prompt row. The runtime-backed item and the static
+ * fallback render the same markup so a skin's examples look identical whether
+ * they came from the runtime or from `chrome.suggestions`.
+ */
+const SUGGESTION_BUTTON_CLASS =
+  "aui-thread-welcome-suggestion fade-in slide-in-from-bottom-1 animate-in fill-mode-both grid w-full cursor-pointer grid-cols-[1.25rem_minmax(0,1fr)] items-start gap-x-[0.55rem] rounded-none border-0 bg-transparent px-0 py-0.5 text-start text-sm font-normal duration-200";
+
 const ThreadSuggestions: FC = () => {
+  const { suggestions } = useContext(ThreadChromeContext);
   return (
     <div className="aui-thread-welcome-suggestions flex w-full flex-col items-stretch gap-0.5">
-      <ThreadPrimitive.Suggestions>
-        {() => <ThreadSuggestionItem />}
-      </ThreadPrimitive.Suggestions>
+      {suggestions.length > 0 ? (
+        suggestions.map((prompt, index) => (
+          <StaticSuggestionItem key={`${index}:${prompt}`} prompt={prompt} />
+        ))
+      ) : (
+        <ThreadPrimitive.Suggestions>
+          {() => <ThreadSuggestionItem />}
+        </ThreadPrimitive.Suggestions>
+      )}
     </div>
+  );
+};
+
+/** Static `chrome.suggestions` prompt. Appends the text like a typed message. */
+const StaticSuggestionItem: FC<{ prompt: string }> = ({ prompt }) => {
+  const aui = useAui();
+  return (
+    <button
+      type="button"
+      onClick={() => {
+        if (aui.thread.getState().isRunning) return;
+        aui.thread.append({
+          content: [{ type: "text", text: prompt }],
+          runConfig: aui.composer.getState().runConfig,
+        });
+      }}
+      className={SUGGESTION_BUTTON_CLASS}
+    >
+      <span className="aui-msg-marker" aria-hidden="true">
+        <DotMatrix
+          state="example"
+          label="Example"
+          className="aui-thread-welcome-suggestion-mark size-3.5"
+        />
+      </span>
+      <span className="aui-thread-welcome-suggestion-text min-w-0">
+        <span className="aui-thread-welcome-suggestion-text-1">{prompt}</span>
+      </span>
+    </button>
   );
 };
 
 const ThreadSuggestionItem: FC = () => {
   return (
     <SuggestionPrimitive.Trigger send asChild>
-      <button
-        type="button"
-        className="aui-thread-welcome-suggestion fade-in slide-in-from-bottom-1 animate-in fill-mode-both grid w-full cursor-pointer grid-cols-[1.25rem_minmax(0,1fr)] items-start gap-x-[0.55rem] rounded-none border-0 bg-transparent px-0 py-0.5 text-start text-sm font-normal duration-200"
-      >
+      <button type="button" className={SUGGESTION_BUTTON_CLASS}>
         <span className="aui-msg-marker" aria-hidden="true">
           <DotMatrix
             state="example"
@@ -615,6 +713,32 @@ const Composer: FC<{
 };
 
 const ComposerSendControls: FC = () => {
+  const aui = useAui();
+  // Mirrors `composerSendDisabled` from `@assistant-ui/core`'s primitive
+  // predicates. Inlined rather than imported: the predicate is not re-exported
+  // from `@assistant-ui/react` (the only assistant-ui package this one depends
+  // on), so a deep import would resolve only thanks to npm hoisting.
+  const sendDisabled = useAuiState(
+    (s) => !s.composer.canSend || (s.thread.isRunning && !s.thread.capabilities.queue),
+  );
+  const sendRef = useRef<HTMLButtonElement | null>(null);
+
+  // A `type="submit"` button already submits its form on activation, so the
+  // click must not also do it: `preventDefault()` suppresses that implicit
+  // submission, and the explicit `requestSubmit()` below replaces it with one
+  // we control. Without this the form's `submit` fires twice per click, and the
+  // free-turn gate mounted on `onSubmit` runs twice — holding or charging the
+  // turn more than once.
+  const submitComposer = (event: ReactMouseEvent<HTMLButtonElement>) => {
+    event.preventDefault();
+    const form = sendRef.current?.closest("form");
+    if (form) {
+      form.requestSubmit();
+      return;
+    }
+    aui.composer.send();
+  };
+
   return (
     <div className="aui-composer-send-controls flex shrink-0 items-center gap-1.5">
       <AuiIf condition={(s) => s.thread.capabilities.dictation}>
@@ -658,23 +782,24 @@ const ComposerSendControls: FC = () => {
         </AuiIf>
       </AuiIf>
       <AuiIf condition={(s) => !s.thread.isRunning}>
-        <ComposerPrimitive.Send asChild>
-          <TooltipIconButton
-            tooltip="Send (Enter)"
-            side="bottom"
-            type="button"
-            variant="ghost"
-            size="icon"
-            className="aui-composer-send size-7 rounded-full"
-            aria-label="Send message"
-          >
-            <DotMatrix
-              state="send"
-              label="Send"
-              className="aui-composer-send-icon size-3.5"
-            />
-          </TooltipIconButton>
-        </ComposerPrimitive.Send>
+        <TooltipIconButton
+          ref={sendRef}
+          tooltip="Send (Enter)"
+          side="bottom"
+          type="submit"
+          variant="ghost"
+          size="icon"
+          className="aui-composer-send size-7 rounded-full"
+          aria-label="Send message"
+          disabled={sendDisabled}
+          onClick={submitComposer}
+        >
+          <DotMatrix
+            state="send"
+            label="Send"
+            className="aui-composer-send-icon size-3.5"
+          />
+        </TooltipIconButton>
       </AuiIf>
       <AuiIf condition={(s) => s.thread.isRunning}>
         <ComposerPrimitive.Cancel asChild>
@@ -744,6 +869,7 @@ const AssistantMessage: FC = () => {
     ToolFallback: ToolFallbackComponent = ToolFallback,
     ToolGroup,
     ReasoningGroup,
+    Source: SourceComponent = ThreadSource,
   } = useContext(ThreadComponentsContext);
   const { reasoning: reasoningMode, toolCalls: toolCallsMode } = useContext(
     ThreadGroupDisclosureContext,
@@ -849,6 +975,8 @@ const AssistantMessage: FC = () => {
                 );
               case "indicator":
                 return <AssistantWorkingIndicator />;
+              case "source":
+                return <SourceComponent {...part} />;
               default:
                 return null;
             }

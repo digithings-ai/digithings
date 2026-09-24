@@ -75,7 +75,7 @@ _CAL_HASH_A = "b" * 64
 _CAL_HASH_B = "c" * 64
 _COST_HASH_A = "d" * 64
 _COST_HASH_B = "e" * 64
-_H7_HASH = "f" * 64
+_DIRECTION_HASH = "f" * 64
 _COV_HASH = "1" * 64
 
 _OPTIMIZER = (
@@ -106,7 +106,7 @@ _PRODUCTION_GUARD_PATHS = (
     / "digiquant"
     / "portfolio"
     / "phases"
-    / "h9_commit_run.py",
+    / "commit.py",
     pathlib.Path(__file__).resolve().parents[3]
     / "digiquant"
     / "src"
@@ -218,7 +218,7 @@ def _bundle(
         if item.calibrated_forecast_content_hash is not None
     )
     source = build_source_hashes(
-        h7_memo_hash=_H7_HASH,
+        direction_memo_hash=_DIRECTION_HASH,
         risk_policy_hash=_POLICY_HASH,
         prior_entries=tuple((entry.ticker, entry.weight_pct) for entry in prior_book.entries),
         calibrated_hashes=cal_hashes,

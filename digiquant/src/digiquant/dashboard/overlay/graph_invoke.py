@@ -75,7 +75,7 @@ def _overlay_chain_deps(
     # Dependency-isolation: portfolio/research pull digillm; cron unit tests never call this.
     from digiquant.portfolio.chain import ChainDeps
     from digiquant.portfolio.graph import PortfolioGraphDeps, ThesisGraphDeps
-    from digiquant.portfolio.phases.h9_commit_run import CommitRunDeps
+    from digiquant.portfolio.phases.commit import CommitRunDeps
     from digiquant.portfolio.phases.phase7e_risk_sizing import RiskSizingDeps
     from digiquant.research.graph import ResearchGraphDeps
     from digiquant.research.phases.preflight import PreflightDeps, PreflightReflectDeps

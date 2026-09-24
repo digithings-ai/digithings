@@ -237,7 +237,7 @@ export default function TickerDossierView({
   return (
     <div className="flex min-h-full flex-col">
       <PortfolioSectionNav active="holdings" />
-      <div className={`${SUBPAGE_MAX} flex-1 space-y-6 py-5 md:py-6`}>
+      <main className={`${SUBPAGE_MAX} flex-1 space-y-6 py-5 md:py-6`}>
         <Link
           href="/portfolio"
           className="inline-flex items-center gap-2 text-sm text-accent hover:underline"
@@ -543,7 +543,7 @@ export default function TickerDossierView({
             <ConvictionHistory decisions={decisions} />
           </>
         )}
-      </div>
+      </main>
     </div>
   );
 }

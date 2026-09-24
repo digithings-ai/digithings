@@ -26,14 +26,14 @@ from digiquant.dashboard.learning.component_attribution import (
 from digiquant.dashboard.learning.outcome_models import (
     AttributionComponent,
     AttributionMethod,
+    CommitExecutionLinks,
     ComponentEligibility,
     EpisodeDisposition,
     EvidenceQuality,
-    H8TargetLineage,
-    H9ExecutionLinks,
     OutcomeEpisode,
     OutcomeTemporalContract,
     RealizedReturnObservation,
+    SizingTargetLineage,
     UnavailableReason,
     episode_content_hash,
     episode_version_id,
@@ -91,12 +91,12 @@ def _episode(**overrides: object) -> OutcomeEpisode:
         policy_version_id="policy-v1",
         disposition=EpisodeDisposition.AUTHORIZED,
         temporal=_temporal(),
-        h8_lineage=H8TargetLineage(
+        sizing_lineage=SizingTargetLineage(
             requested_weight=Decimal("0.05"),
             approved_weight=Decimal("0.04"),
             adjustment_codes=("risk_cap",),
         ),
-        h9_links=H9ExecutionLinks(
+        commit_links=CommitExecutionLinks(
             action_id=UUID("66666666-6666-4666-8666-666666666666"),
             order_id=UUID("77777777-7777-4777-8777-777777777777"),
             fill_ids=(UUID("88888888-8888-4888-8888-888888888888"),),
@@ -132,8 +132,8 @@ def _episode(**overrides: object) -> OutcomeEpisode:
         disposition=fields["disposition"],  # type: ignore[arg-type]
         temporal=fields["temporal"],  # type: ignore[arg-type]
         realized=fields.get("realized"),  # type: ignore[arg-type]
-        h8_lineage=fields.get("h8_lineage"),  # type: ignore[arg-type]
-        h9_links=fields.get("h9_links"),  # type: ignore[arg-type]
+        sizing_lineage=fields.get("sizing_lineage"),  # type: ignore[arg-type]
+        commit_links=fields.get("commit_links"),  # type: ignore[arg-type]
         evidence_bundle_id=fields.get("evidence_bundle_id"),  # type: ignore[arg-type]
         research_state_version_id=fields.get("research_state_version_id"),  # type: ignore[arg-type]
         context_manifest_id=fields.get("context_manifest_id"),  # type: ignore[arg-type]
@@ -315,7 +315,7 @@ def test_sizing_pnl_with_valid_paired_replay() -> None:
     replay = PairedReplayEvidence(
         replay_artifact_id=_REPLAY_ARTIFACT,
         paired_manifest_hash="manifest-hash-abc",
-        baseline="approved_h8_policy",
+        baseline="approved_sizing_policy",
         sizing_pnl_bps=Decimal("15.0"),
     )
     report = _attributor(FakeReaders(forecast=_forecast_slice())).attribute(
@@ -325,7 +325,7 @@ def test_sizing_pnl_with_valid_paired_replay() -> None:
     obs = _obs_by_metric(report, "sizing_pnl_bps")
     assert obs.method is AttributionMethod.COUNTERFACTUAL_REPLAY
     assert obs.replay_artifact_id == _REPLAY_ARTIFACT
-    assert obs.baseline == "approved_h8_policy"
+    assert obs.baseline == "approved_sizing_policy"
     assert obs.value == Decimal("15.0")
 
 
@@ -334,7 +334,7 @@ def test_rejects_one_at_a_time_deltas_from_different_replay_artifacts() -> None:
         PairedReplayEvidence(
             replay_artifact_id=_REPLAY_ARTIFACT,
             paired_manifest_hash="manifest-hash-abc",
-            baseline="approved_h8_policy",
+            baseline="approved_sizing_policy",
             sizing_pnl_bps=Decimal("10.0"),
             timing_pnl_bps=Decimal("-3.0"),
             timing_replay_artifact_id=_OTHER_REPLAY,
@@ -390,8 +390,8 @@ def test_missing_forecast_slice_marks_forecast_unavailable() -> None:
 def test_excluded_episode_marks_forecast_unavailable() -> None:
     episode = _episode(
         disposition=EpisodeDisposition.EXCLUDED,
-        h8_lineage=None,
-        h9_links=None,
+        sizing_lineage=None,
+        commit_links=None,
         realized=None,
         component_eligibility=(
             ComponentEligibility(

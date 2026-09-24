@@ -76,7 +76,7 @@ class ChainDeps:
     """Dependencies for the research → portfolio chain.
 
     research-side deps (preflight, triage, preflight-reflect) come from
-    :class:`ResearchGraphDeps`. portfolio-side deps (H1–H9 thesis path) come from
+    :class:`ResearchGraphDeps`. portfolio-side deps (thesis–commit thesis path) come from
     :class:`PortfolioGraphDeps`. Phase 9 evolution LLM (9A–9C) is **not** on the
     daily graph — beliefs distillation runs after publish via
     :func:`run_beliefs_distillation_if_triggered` (daily short fold; full
@@ -88,10 +88,10 @@ class ChainDeps:
     research: ResearchGraphDeps
     portfolio: PortfolioGraphDeps
     publish: PublishDeps | None = None
-    # Phase 7E / H8 risk-sizing runs inside the portfolio graph (PR 4c). ``risk_sizing`` is
-    # wired via ``PortfolioGraphDeps`` for the H8 node — not as a chain terminal phase.
+    # Phase 7E / sizing risk-sizing runs inside the portfolio graph (PR 4c). ``risk_sizing`` is
+    # wired via ``PortfolioGraphDeps`` for the sizing node — not as a chain terminal phase.
     risk_sizing: Any | None = None  # legacy ChainDeps field; use portfolio.risk_sizing
-    # Phase 9D paper-portfolio materialization folded into portfolio H9 (PR 4d).
+    # Phase 9D paper-portfolio materialization folded into portfolio commit (PR 4d).
     materialize: Any | None = None  # legacy ChainDeps field — use portfolio.commit_run
     # Per-run telemetry row (#726, 1B). None → skip the diagnostics write (dry-run /
     # legacy). Always wired by ``cli_main`` so every real run records its health.
@@ -100,12 +100,12 @@ class ChainDeps:
 
 @dataclass(frozen=True)
 class DiagnosticsDeps:
-    """Wiring for the ``atlas_run_diagnostics`` telemetry write (Pillar 1B)."""
+    """Wiring for the ``run_diagnostics`` telemetry write (Pillar 1B)."""
 
     client: Any
     run_id: str
     model: str | None = None
-    # Outer-retry attempt number (#1762). ``pipeline-digiquant.yml`` retries the chain up to 3
+    # Outer-retry attempt number (#1762). ``pipeline-digiquant.yml`` retries the chain up to 2
     # times inside ONE job, so ``GITHUB_RUN_ID`` — and therefore ``run_id`` — is identical
     # across attempts. Before this was part of the diagnostics key, the last attempt's upsert
     # replaced the previous attempt's tokens and cost, which is why 28 of 54 production rows
@@ -239,8 +239,8 @@ def _retry_worthy(state: ResearchState, *, degraded_pct: float) -> bool:
     work — re-running it just burns the outer loop's backoff sleeps on a good book (the
     inception baseline sat ~20 min in retry sleeps after a successful materialization; #809).
 
-    #1555 generalizes the #809 guard from *materialized* to *committed*: a book that H8
-    materialized but H9 never persisted (coherence fail-closed / idempotency conflict / silent
+    #1555 generalizes the #809 guard from *materialized* to *committed*: a book that sizing
+    materialized but commit never persisted (coherence fail-closed / idempotency conflict / silent
     skip) is NOT durable work — it must retry. A book-less degraded run (research failed / portfolio
     skipped) still retries as before.
     """
@@ -418,7 +418,7 @@ def _run_beliefs_fold(state: ResearchState, deps: ChainDeps, research_input: Res
         return
     if skip_overlay_shared_register(state.config.workspace_id):
         # Overlay persist-on still reaches this post-publish fold after a
-        # fail-soft H9 ``legacy_book_unique``. Distillation reads every
+        # fail-soft commit ``legacy_book_unique``. Distillation reads every
         # unfolded house ``decision_log`` row and stamps ``beliefs_folded_at``
         # by id — a shared-register smash, same class as ``resolve_pending``.
         _logger.info("chain: overlay workspace skips beliefs fold (shared decision_log)")
@@ -636,7 +636,7 @@ def run_research_then_portfolio(
                 deliberation_enabled = refreshed.deliberation.status != "disabled"
 
         # Research-sufficiency gate (#944): portfolio books a rebalance + decision_log rows
-        # INSIDE its own graph (H9 commit-run), so it must NOT run when the research pass
+        # INSIDE its own graph (commit-run), so it must NOT run when the research pass
         # produced no fresh research — otherwise the PM commits decisions on stale prior
         # context. Exception: research schedule-disabled still allows deliberation when
         # enabled (preflight loaded priors; policy skip ≠ research crash).
@@ -678,7 +678,7 @@ def run_research_then_portfolio(
                     status="ran",
                     reason=None,
                 )
-            # WP10.1: one-way shadow artifact after H9. Fail-soft — never reruns or
+            # WP10.1: one-way shadow artifact after commit. Fail-soft — never reruns or
             # mutates the production booking path / graph.
             _maybe_export_shadow_allocation_artifact(state)
         elif not deliberation_enabled:
@@ -724,7 +724,7 @@ def run_research_then_portfolio(
 
         state = _persist_stage_report(state, stage_report)
 
-        # Terminal phase — research artifacts only; portfolio terminal is H9 in-graph.
+        # Terminal phase — research artifacts only; portfolio terminal is commit in-graph.
         publish_started = _stage_start(4, 5, "publish")
         state = _run_terminal_phase(deps.publish, build_publish_phase, state, "publish")
         _stage_done(4, 5, "publish", publish_started)
@@ -963,7 +963,7 @@ def cli_main(argv: list[str] | None = None) -> int:
         triage=TriageDeps(client=client),
         preflight_reflect=PreflightReflectDeps(client=client),
     )
-    from digiquant.portfolio.phases.h9_commit_run import CommitRunDeps
+    from digiquant.portfolio.phases.commit import CommitRunDeps
     from digiquant.portfolio.phases.phase7e_risk_sizing import RiskSizingDeps
 
     portfolio_deps = PortfolioGraphDeps(
@@ -984,7 +984,7 @@ def cli_main(argv: list[str] | None = None) -> int:
     # a bad URI / unreachable Postgres degrades to an uncheckpointed run (#667).
     _checkpointer = _acquire_checkpointer()
     _thread_base = getattr(args, "resume_run_id", None) or run_id
-    # portfolio H4 builds ``phase_portfolio.focus_roster`` in-graph; research watchlist is
+    # portfolio screener builds ``phase_portfolio.focus_roster`` in-graph; research watchlist is
     # the research scope. Prior-book holdings still thread to the 7C/7CD cap (#936).
     _holdings: list[str] = []
     if not args.watchlist.strip():
@@ -1026,14 +1026,14 @@ def cli_main(argv: list[str] | None = None) -> int:
     retry_worthy = _retry_worthy_summary(run_summary)
     # ``degraded`` keeps its pre-#1736 meaning (= the retry signal) so nothing parsing run.log
     # changes shape; ``status`` is the honest health verdict that lands in
-    # ``atlas_run_diagnostics``. Both are printed because they legitimately disagree — a day
+    # ``run_diagnostics``. Both are printed because they legitimately disagree — a day
     # that lost segments but committed its book is ``status=degraded, degraded=false`` (#1736).
     summary["degraded"] = run_summary.retry_signal
     summary["status"] = run_summary.status
     summary["book_materialized"] = final_state.phase_portfolio.sized_book is not None
     # #1555: a green run must be *provably* a committed run. ``book_committed`` sits beside
     # ``book_materialized`` so an operator never again reads ``ok:true, book_materialized:true``
-    # and assumes the book persisted — the silent H4→H9 freeze (2026-06-26) presented exactly
+    # and assumes the book persisted — the silent screener→commit freeze (2026-06-26) presented exactly
     # that shape while nothing committed for weeks.
     summary["book_committed"] = run_summary.book_committed
     json.dump({"ok": not retry_worthy, "summary": summary}, sys.stdout, default=str)

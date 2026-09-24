@@ -145,7 +145,10 @@ const Thread: FC = () => {
       className="aui-root aui-thread-root bg-background @container flex h-full flex-col"
       style={{
         ["--thread-max-width" as string]: "44rem",
-        ["--composer-bg" as string]: "var(--color-card)",
+        // `--card`, not `--color-card`: the bridge alias resolves at :root,
+        // so it would keep the page card colour instead of the brand palette
+        // the skin injects on its wrapper.
+        ["--composer-bg" as string]: "var(--card)",
         ["--composer-radius" as string]: "var(--radius-thread)",
         ["--composer-padding" as string]: "8px",
       }}

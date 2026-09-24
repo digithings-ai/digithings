@@ -93,20 +93,23 @@ export function embedTenantToDeployment(cfg: EmbedTenantConfig): DigichatDeploym
       placeholder: cfg.placeholder,
       accent: cfg.accent,
       attribution: cfg.attribution,
-      defaultLanguage: DEFAULT_LANGUAGE_CODE,
+      defaultLanguage: cfg.defaultLanguage ?? DEFAULT_LANGUAGE_CODE,
       transcript: { userAlign: "right" },
     },
     persistence: "none",
     auth: "anonymous",
     features: {
       attachments: cfg.attachments === true,
-      dictation: false,
-      speech: false,
+      // Feature parity (#4532): carry the tenant's flags instead of dropping
+      // them. The off-by-default pair is explicit-true-only; the on-by-default
+      // pair honours an explicit false — the same asymmetry as the projection.
+      dictation: cfg.dictation === true,
+      speech: cfg.speech === true,
       view: cfg.view ?? DEFAULT_VIEW_MODE,
       thinking: cfg.thinking ?? DEFAULT_THINKING_MODE,
-      sources: true,
+      sources: cfg.sources !== false,
       modelPicker: false,
-      branchPicker: true,
+      branchPicker: cfg.branchPicker !== false,
       pageContext: cfg.pageContext ?? "visible",
     },
     models: {
@@ -162,6 +165,18 @@ export function deploymentToEmbedTenant(dep: DigichatDeployment): EmbedTenantCon
     showByok: dep.gate.showByok,
     showLanguageSelector: dep.gate.showLanguageSelector,
     attachments: dep.features.attachments === true,
+    // Feature parity (#4532): the reverse direction must carry the same flags,
+    // or the /embed first paint loses what the tenant set. Only non-default
+    // values are projected, so a tenant that set nothing keeps the client
+    // config it had before.
+    dictation: dep.features.dictation === true ? true : undefined,
+    speech: dep.features.speech === true ? true : undefined,
+    sources: dep.features.sources === false ? false : undefined,
+    branchPicker: dep.features.branchPicker === false ? false : undefined,
+    defaultLanguage:
+      dep.chrome.defaultLanguage === DEFAULT_LANGUAGE_CODE
+        ? undefined
+        : dep.chrome.defaultLanguage,
     pageContext: dep.features.pageContext,
     view: dep.features.view,
     thinking: dep.features.thinking,

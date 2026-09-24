@@ -35,7 +35,7 @@ WP8.4 (#2734): when ``calibrated_scores`` is provided, raw weights come from tho
 (approved policy: reliability × max(0, μ) / σ_ε). Rank→conviction and fixed-premium Kelly
 are not used on that path. Downstream controls are unchanged.
 
-WP-H: optional ``confidence_scales`` (H7 ``confidence`` ∈ [0, 1] per long) haircut each
+WP-H: optional ``confidence_scales`` (direction ``confidence`` ∈ [0, 1] per long) haircut each
 name **after** vol-target / breaker and **before** the 5% grid. That is reduce-only /
 cash-first: leftover stays cash and is never renormalized into peers (vol-target must
 not absorb the haircut). Rank remains display/order only on the calibrated path.
@@ -135,15 +135,15 @@ class SizingResult:
     # pass made (caps / de-dup / vol-scale / breaker / grid-rounding). Explanation-only —
     # never changes a weight, never persisted. Empty list is valid (nothing was adjusted).
     adjustments: list[SizingAdjustment] = field(default_factory=list)
-    # H8's own pre-cap/pre-scale request for every selected ticker (the "requested"
+    # sizing's own pre-cap/pre-scale request for every selected ticker (the "requested"
     # side of a requested->approved delta), keyed by ticker, in percent. Distinct from
     # ``SizedPosition.pre_cap_pct`` in that it also covers tickers this pass dropped
     # entirely (min-floor, sector cap, corr-dedup) — those never make it into
-    # ``positions`` at all, so a caller reconciling "what did H8 want" needs this map,
+    # ``positions`` at all, so a caller reconciling "what did sizing want" needs this map,
     # not just the survivors.
     requested_pct: dict[str, float] = field(default_factory=dict)
     # Set only on a fully-flat (100% cash) result, distinguishing WHY the book is
-    # empty — never conflate an H7-driven flat decision with a sizing-side dropout.
+    # empty — never conflate an direction-driven flat decision with a sizing-side dropout.
     flat_reason: Literal["no_conviction_cleared_bar", "all_candidates_dropped"] | None = None
 
 
@@ -523,7 +523,7 @@ def _apply_confidence_scales(
     confidence_scales: Mapping[str, float] | None,
     events: list[SizingAdjustment],
 ) -> dict[str, float]:
-    """Reduce-only per-name scale from H7 confidence. Leftover stays cash.
+    """Reduce-only per-name scale from direction confidence. Leftover stays cash.
 
     Applied after vol-target / breaker so an unused vol budget cannot redistribute a
     haircut into other names. A ticker omitted from ``confidence_scales`` is left
@@ -588,7 +588,7 @@ def size_portfolio(
         breaker_scale: ≤ 1.0 multiplier from the drawdown circuit breaker (raises cash).
         calibrated_scores: optional WP8.4 scores (reliability × max(0, μ) / σ_ε). When set,
             drives selection + raw weights; rank→conviction and Kelly premium are unused.
-        confidence_scales: optional per-ticker H7 confidence in ``[0, 1]``. Applied
+        confidence_scales: optional per-ticker direction confidence in ``[0, 1]``. Applied
             after vol-target / breaker, cash-first (no renormalize). Omitted tickers
             are unchanged; callers fill missing values with the documented default.
 

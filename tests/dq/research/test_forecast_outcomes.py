@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal
 from typing import Any  # score:allow untyped any — scored-lint: heterogeneous dict / client shapes
@@ -82,7 +82,11 @@ class _MergingQuery(_FakeQuery):
 
 @dataclass
 class OutcomesFake(FakeSupabaseClient):
+    # Records each table() call so a test can count round trips (#4579).
+    calls: list[str] = field(default_factory=list)
+
     def table(self, name: str) -> _MergingQuery:
+        self.calls.append(name)
         return _MergingQuery(
             table_name=name,
             store=self.store,
@@ -129,7 +133,7 @@ def _assessment(
     else:
         anchor = PriceAnchor(
             status=PriceAnchorStatus.UNAVAILABLE,
-            unavailable_reason="mark_price_not_available_in_h5_state",
+            unavailable_reason="mark_price_not_available_in_analyst_state",
         )
     return ForecastAssessment(
         forecast_id=forecast_assessment_id(
@@ -297,6 +301,62 @@ class TestResolveMaturedOutcomes:
         assert second.resolved == 0
         assert second.skipped == 1
         assert len(client.store[fo.OUTCOMES]) == 1
+
+    def test_batched_existence_probe_issues_one_read(self) -> None:
+        """#4579 — one existence read covers every candidate, not one each."""
+        client = OutcomesFake(
+            canned_reads={
+                "price_history": [
+                    {"ticker": "AAPL", "date": "2026-08-13", "close": "106"},
+                    {"ticker": "MSFT", "date": "2026-08-13", "close": "106"},
+                ],
+            }
+        )
+        _seed_assessment(client, _assessment(ticker="AAPL"))
+        _seed_assessment(client, _assessment(ticker="MSFT"))
+
+        first = fo.resolve_matured_forecast_outcomes(
+            client=client,
+            run_date=RUN_DATE,
+            knowledge_cutoff_at=CUTOFF,
+            trading_sessions=SESSIONS,
+        )
+        assert first.resolved == 2
+        assert len(client.store[fo.OUTCOMES]) == 2
+
+        client.calls.clear()
+        second = fo.resolve_matured_forecast_outcomes(
+            client=client,
+            run_date=RUN_DATE,
+            knowledge_cutoff_at=CUTOFF,
+            trading_sessions=SESSIONS,
+        )
+        assert second.resolved == 0
+        assert second.skipped == 2
+        assert client.calls.count(fo.OUTCOMES) == 1
+
+    def test_no_candidates_issues_no_existence_read(self) -> None:
+        """#4579 — the batched probe is skipped entirely when nothing is due."""
+        assessment = _assessment(source_run_id=CURRENT_RUN)
+        client = OutcomesFake(
+            canned_reads={
+                "price_history": [
+                    {"ticker": "AAPL", "date": "2026-08-13", "close": "106"},
+                ],
+            }
+        )
+        _seed_assessment(client, assessment)
+
+        result = fo.resolve_matured_forecast_outcomes(
+            client=client,
+            run_date=RUN_DATE,
+            knowledge_cutoff_at=CUTOFF,
+            current_run_id=CURRENT_RUN,
+            trading_sessions=SESSIONS,
+        )
+        assert result.resolved == 0
+        assert result.skipped == 1
+        assert client.calls.count(fo.OUTCOMES) == 0
 
     def test_not_due_before_maturity_stays_pending(self) -> None:
         assessment = _assessment()

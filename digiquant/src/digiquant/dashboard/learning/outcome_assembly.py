@@ -21,15 +21,15 @@ from digiquant.dashboard.accounting.io import contribution_row_id
 from digiquant.dashboard.accounting.models import PeriodStatus
 from digiquant.dashboard.learning.outcome_models import (
     AttributionComponent,
+    CommitExecutionLinks,
     ComponentEligibility,
     EpisodeDisposition,
-    H8TargetLineage,
-    H9ExecutionLinks,
     OutcomeEpisode,
     OutcomeQualityCode,
     OutcomeQualityIssue,
     OutcomeTemporalContract,
     RealizedReturnObservation,
+    SizingTargetLineage,
     UnavailableReason,
     episode_content_hash,
     episode_version_id,
@@ -250,7 +250,7 @@ def _adjustment_codes(adjustments: tuple[TargetAdjustment, ...]) -> tuple[str, .
     return tuple(codes)
 
 
-def _h8_lineage(lineage: SymbolLineage | None) -> H8TargetLineage | None:
+def _sizing_lineage(lineage: SymbolLineage | None) -> SizingTargetLineage | None:
     if lineage is None or lineage.requested is None:
         return None
     requested_weight = lineage.requested.requested_weight
@@ -258,17 +258,17 @@ def _h8_lineage(lineage: SymbolLineage | None) -> H8TargetLineage | None:
     codes = _adjustment_codes(lineage.adjustments)
     if requested_weight is None and approved_weight is None and not codes:
         return None
-    return H8TargetLineage(
+    return SizingTargetLineage(
         requested_weight=requested_weight,
         approved_weight=approved_weight,
         adjustment_codes=codes,
     )
 
 
-def _h9_links(lineage: SymbolLineage | None) -> H9ExecutionLinks | None:
+def _commit_links(lineage: SymbolLineage | None) -> CommitExecutionLinks | None:
     if lineage is None or lineage.decision is None or lineage.execution is None:
         return None
-    return H9ExecutionLinks(
+    return CommitExecutionLinks(
         action_id=lineage.decision.id,
         order_id=lineage.order.id if lineage.order is not None else None,
         fill_ids=(lineage.execution.id,),
@@ -560,8 +560,10 @@ class OutcomeEpisodeAssembler:
             partial_fill=partial_fill,
         )
 
-        h8_lineage = _h8_lineage(lineage)
-        h9_links = _h9_links(lineage) if disposition is EpisodeDisposition.AUTHORIZED else None
+        sizing_lineage = _sizing_lineage(lineage)
+        commit_links = (
+            _commit_links(lineage) if disposition is EpisodeDisposition.AUTHORIZED else None
+        )
 
         prior = self._store.select_episode_as_of(
             episode_key=episode_key,
@@ -581,8 +583,8 @@ class OutcomeEpisodeAssembler:
             disposition=disposition,
             temporal=temporal,
             realized=realized,
-            h8_lineage=h8_lineage,
-            h9_links=h9_links,
+            sizing_lineage=sizing_lineage,
+            commit_links=commit_links,
             evidence_bundle_id=binding.evidence_bundle_id,
             research_state_version_id=binding.research_state_version_id,
             context_manifest_id=binding.context_manifest_id,
@@ -626,8 +628,8 @@ class OutcomeEpisodeAssembler:
             policy_version_id=binding.policy_version_id,
             disposition=disposition,
             temporal=temporal,
-            h8_lineage=h8_lineage,
-            h9_links=h9_links,
+            sizing_lineage=sizing_lineage,
+            commit_links=commit_links,
             realized=realized,
             expected_cost_id=cost_ref.expected_cost_id if cost_ref else None,
             realized_cost_id=cost_ref.realized_cost_id if cost_ref else None,

@@ -59,7 +59,9 @@ priceFormat.
 
 | File | Chart(s) | Why it stays |
 |---|---|---|
+| `components/portfolio/sleeve-stacked-chart.tsx` | 100%-stacked sleeve allocation area (+ click-to-select date) | Composition over time — lightweight-charts has no stacking grammar. |
 | `components/observability/AttributionTab.tsx` | Contribution by position bars | Categorical (x = ticker). |
+| `components/observability/DecisionScorecardTab.tsx` | Hit-rate by conviction bucket bars | Categorical (x = conviction bucket). |
 | `components/twelve-x/ConsensusTab.tsx` | Consensus score lines (x = run_date) + position-split stacked area | The stacked split is composition (no lw grammar) and both panes share one currency-selection/smoothing state; splitting one view across two engines costs more than canon buys. Honest note: the score-lines pane *is* time-indexed — if it is ever decoupled from the split pane it becomes a migrate candidate. |
 
 `components/tearsheet/DashboardTearsheetView.tsx` (`PerformanceTearsheetView`) renders the shared
