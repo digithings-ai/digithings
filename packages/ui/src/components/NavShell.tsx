@@ -81,11 +81,13 @@ export interface NavShellProps {
    * behavior, everywhere). "hover" is for a surface that doesn't scroll at
    * all (a fixed-height app view, not a document) — the bar starts hidden
    * and reveals only while the cursor sits in the top strip, so content can
-   * run all the way to the top the rest of the time. Keyboard/focus reach
-   * is unaffected either way: a hidden bar is still tab-reachable and
+   * run all the way to the top the rest of the time. "pinned" settles after
+   * 8px like "scroll" but never yields — for a document page whose bar
+   * should stay fixed to the top. Keyboard/focus reach is unaffected in
+   * every mode: a hidden bar is still tab-reachable and
    * `:focus-within` reveals it (nav-shell.css).
    */
-  autoHide?: "scroll" | "hover";
+  autoHide?: "scroll" | "hover" | "pinned";
   /**
    * Clip the bar's own band (its scrolled backdrop + bottom hairline) to the
    * page column instead of the viewport edges. The row was always capped to
@@ -500,16 +502,19 @@ export function NavShell({
 
   // Scroll grammar (canon: settle, then yield). Class flips outside React
   // state: scroll fires per frame and the bar's dress is pure presentation.
-  // Only for autoHide="scroll" — a surface using "hover" below typically
-  // doesn't scroll at all (window.scrollY would just stay pinned at 0), and
-  // even if it did, the two grammars shouldn't fight over the same class.
+  // "pinned" settles like "scroll" but never yields — the bar stays fixed
+  // to the top. Only for autoHide="hover" is this skipped below — a surface
+  // using "hover" typically doesn't scroll at all (window.scrollY would just
+  // stay pinned at 0), and even if it did, the two grammars shouldn't fight
+  // over the same class.
   useEffect(() => {
     const nav = navRef.current;
-    if (!nav || autoHide !== "scroll") return;
+    if (!nav || (autoHide !== "scroll" && autoHide !== "pinned")) return;
     let last = 0;
     const onScroll = () => {
       const y = window.scrollY;
       nav.classList.toggle("is-scrolled", y > 8);
+      if (autoHide !== "scroll") return;
       if (y > last && y > 180) nav.classList.add("is-hidden");
       else nav.classList.remove("is-hidden");
       last = y;

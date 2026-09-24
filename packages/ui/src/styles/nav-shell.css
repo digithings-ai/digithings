@@ -68,11 +68,14 @@
   content: "";
   position: absolute;
   inset-block: 0;
-  /* Centred, capped to the frame register — mirrors LayoutLines' geometry. */
+  /* Centred, capped to the rails — mirrors LayoutLines' geometry
+     (`max-w-[calc(var(--frame-w)+2*var(--line-pad))]`, where `--line-pad`
+     is the page gutter), so the band's edges land exactly on the rules and
+     the bar reads full-width between the vertical grid. */
   inset-inline-start: 50%;
   translate: -50% 0;
   width: 100%;
-  max-width: var(--frame-w, var(--wrap, 1180px));
+  max-width: calc(var(--frame-w, var(--wrap, 1180px)) + 2 * var(--page-pad, var(--gutter, 1.5rem)));
   z-index: -1;
   pointer-events: none;
   background: transparent;
