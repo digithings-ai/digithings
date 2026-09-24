@@ -28,7 +28,7 @@ import {
   type StrategyRead,
 } from "@/lib/live/useLiveBand";
 import { GROUPED_LABEL } from "./label";
-import { windowAlpha, windowBeta } from "@/lib/bookMath";
+import { fmtRatio, windowAlpha, windowBeta, windowInfoRatio, windowSharpe, windowSortino } from "@/lib/bookMath";
 
 /**
  * The digiquant band (v15 point 9, #4429; reworked across rounds 3–5).
@@ -452,18 +452,41 @@ function fmtAlpha(alpha: number | null): string {
   return `${alpha >= 0 ? "+" : "−"}${Math.abs(alpha).toFixed(1)} pts`;
 }
 
+/** One block of the book's window reads: plain label/value rows, no background. */
+function ReadRows({ rows }: { rows: { label: string; value: string; title?: string }[] }) {
+  return (
+    <>
+      {rows.map((row) => (
+        <div
+          key={row.label}
+          className="flex items-baseline justify-between gap-[0.8rem] border-b border-hair/60 pb-[0.55rem] last:border-b-0 last:pb-0"
+        >
+          <span className="font-mono text-[0.68rem] uppercase tracking-[0.06em] text-ink-mute">
+            {row.label}
+          </span>
+          <span
+            className="font-mono text-[1.05rem] tabular-nums text-ink"
+            {...(row.title ? { title: row.title } : {})}
+          >
+            {row.value}
+          </span>
+        </div>
+      ))}
+    </>
+  );
+}
+
 /**
- * Portfolio against benchmark, compressed, with the window's three reads beside
+ * Portfolio against benchmark, compressed, with the window's reads beside
  * it and the lookback controls the owner asked for.
  *
  * The preset drives the view, so the buttons are the control; a drag on the
  * chart writes a view back through `onView` and the active button follows the
- * window rather than the click that started it. The three reads — returns,
- * relative returns, alpha — are computed from the SAME window the chart is
- * drawing, so "relative performance over the period selected in the chart"
- * is literally what the middle figure reports — change the preset and the
- * numbers move with it. Alpha is the window's portfolio return minus beta
- * times the benchmark's, with beta from the in-window daily returns.
+ * window rather than the click that started it. The reads split into two
+ * blocks — the book on its own (net return, annualized CAGR, Sharpe,
+ * Sortino) and the book against the dotted benchmark leg (excess, info
+ * ratio, alpha, beta) — all computed from the SAME window the chart is
+ * drawing, so change the preset and the numbers move with it.
  *
  * The chart itself draws percent return rebased to zero at the window's left
  * edge (`rebaseToWindow`), not the stored index levels: switching from 1Y to
@@ -515,6 +538,23 @@ function Book({
   const beta = windowBeta(drawnPortfolio, drawnBenchmark);
   const alpha = windowAlpha(portfolioReturn, benchmarkReturn, beta);
   const betaTitle = beta === null ? undefined : `Beta ${beta.toFixed(2)} vs benchmark, this window`;
+  /* Absolute block: the book on its own. CAGR annualizes the window's own
+     return over the actual calendar span, and is withheld under ~2 months —
+     annualizing a 1M window is noise. Sharpe/Sortino annualize on 252 trading
+     days (see TRADING_DAYS_PER_YEAR in bookMath). */
+  const windowEnd = drawnPortfolio.length > 0 ? drawnPortfolio[drawnPortfolio.length - 1].t : null;
+  const windowDays =
+    drawnPortfolio.length > 1 && windowEnd
+      ? (Date.parse(windowEnd) - Date.parse(drawnPortfolio[0].t)) / 86_400_000
+      : 0;
+  const cagr =
+    windowDays >= 60 && portfolioReturn !== null && windowEnd
+      ? cagrPct(portfolioReturn, drawnPortfolio[0].t, windowEnd)
+      : null;
+  const sharpe = windowSharpe(drawnPortfolio);
+  const sortino = windowSortino(drawnPortfolio);
+  /* Relative block: the book against the dotted benchmark leg. */
+  const infoRatio = windowInfoRatio(drawnPortfolio, drawnBenchmark);
 
   return (
     <div className="flex min-w-0 flex-col gap-[0.8rem]">
@@ -541,14 +581,15 @@ function Book({
           />
         </div>
 
-        {/* The window's own reads. Four, as the owner asked — the dashboard
-            shows more, but here the point is the shape of the period, not a
-            blotter. Round 7: "The performance metrics shouldn't have a
-            background ... a cleaner way of showing these with no background and
-            more simplistic styling", and "the chart should be the same height as
-            the performance metrics" — so the reads are plain label/value rows
-            pinned to the pane's own 240px, under the timeframe selector that
-            drives them. */}
+        {/* The window's own reads, in two blocks: the book on its own, then
+            the book against the dotted benchmark leg. Round 7: "The
+            performance metrics shouldn't have a background ... a cleaner way
+            of showing these with no background and more simplistic styling",
+            and "the chart should be the same height as the performance
+            metrics" — so the reads are plain label/value rows pinned to the
+            pane's own 240px, under the timeframe selector that drives them.
+            An empty leg renders an em dash rather than a fabricated zero,
+            the same rule the rest of the band follows. */}
         <div className="flex min-w-0 flex-col justify-center gap-[0.6rem] min-[980px]:h-[240px]">
           <SegToggle
             value={active}
@@ -556,32 +597,41 @@ function Book({
             onChange={(preset) => setView(viewWindowForPreset(preset, fullSpan))}
             label="Lookback window"
           />
-          {(
-            [
-              { label: "returns", value: fmtSignedPct(portfolioReturn) },
-              { label: "relative returns", value: fmtRelative(portfolioReturn, benchmarkReturn) },
+          <ReadRows
+            rows={[
+              { label: "net return", value: fmtSignedPct(portfolioReturn) },
+              { label: "CAGR (ann.)", value: fmtSignedPct(cagr) },
+              {
+                label: "Sharpe",
+                value: fmtRatio(sharpe),
+                title: "annualized on 252 trading days, rf 0",
+              },
+              {
+                label: "Sortino",
+                value: fmtRatio(sortino),
+                title: "annualized on 252 trading days, downside deviation",
+              },
+            ]}
+          />
+          <span className="font-mono text-[0.68rem] uppercase tracking-[0.06em] text-ink-mute">
+            vs SPY · dotted
+          </span>
+          <ReadRows
+            rows={[
+              { label: "excess", value: fmtRelative(portfolioReturn, benchmarkReturn) },
+              {
+                label: "info ratio",
+                value: fmtRatio(infoRatio),
+                title: "annualized on 252 trading days",
+              },
               { label: "alpha", value: fmtAlpha(alpha), title: betaTitle },
               {
                 label: "beta",
                 value: beta === null ? "—" : beta.toFixed(2),
                 title: "beta of the book to the benchmark over the visible window",
-              },            ] as { label: string; value: string; title?: string }[]
-          ).map((row) => (
-            <div
-              key={row.label}
-              className="flex items-baseline justify-between gap-[0.8rem] border-b border-hair/60 pb-[0.55rem] last:border-b-0 last:pb-0"
-            >
-              <span className="font-mono text-[0.68rem] uppercase tracking-[0.06em] text-ink-mute">
-                {row.label}
-              </span>
-              <span
-                className="font-mono text-[1.05rem] tabular-nums text-ink"
-                {...(row.title ? { title: row.title } : {})}
-              >
-                {row.value}
-              </span>
-            </div>
-          ))}
+              },
+            ]}
+          />
         </div>
       </div>
     </div>
