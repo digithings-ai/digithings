@@ -817,7 +817,7 @@ def list_resolved_outcomes_as_of_memoized(
         return list(cached)
     resolved = list_resolved_outcomes_as_of(client=client, knowledge_cutoff_at=cutoff)
     memo[key] = resolved
-    return resolved
+    return list(resolved)
 
 
 def list_resolved_outcomes_as_of(
