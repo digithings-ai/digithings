@@ -881,7 +881,21 @@ explicit that they're still blocked on Stage 2's OHLC plumbing.)
      `sell_max_rate=90` reverted back to round 2's `30`)**, fold 2
      `+20.72%`. Net: undoing round 3's sell-rate regression helps fold
      0/2/mean substantially, but **fold 1 remains unsolved** by any
-     width choice available to this search. `tests/dq/strategies/sdca/`
+     width choice available to this search. Per-fold `max_drawdown_pct`
+     from this same Phase 4 walk-forward pass, against Chris's original
+     ≤30% target (round 8 was `-61.32%`): fold 0 `17.0%`, fold 1 `16.8%`,
+     **fold 2 `34.4%` (over target)**, holdout `23.8%`. `beats_flat_dca_oos
+     =True` (`+14.50%>0`), `beats_baseline_oos=True` (delta `+32.27%>0`).
+     `sensitivity_stable` **could not be computed** — it comes from
+     `optimize._sensitivity_of`, which perturbs the winning params and
+     re-scores them via `run_sdca_walk_forward`'s Nautilus-typed
+     `evaluator`/`rails_fitter`, the same dependency this whole session's
+     driver scripts have had to route around (see `walk_forward.py`'s
+     `SdcaTrialEvaluator` Protocol docstring: "Production implementations
+     must use Nautilus fills" — no concrete non-Nautilus implementation
+     exists in `src/`, and `nautilus_trader` is not installed in this
+     environment). This is a hard environmental gap, not a skipped step.
+     `tests/dq/strategies/sdca/`
      green throughout (585 passed, 38 skipped); no `src/` changes this round
      (pre-existing mechanisms only) —
      `.scratch/recalibration_v1_round4.py` is the driver, not committed
