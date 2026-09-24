@@ -5,7 +5,7 @@ import { SessionProvider } from "next-auth/react";
 import type { Session } from "next-auth";
 import { ThemeProvider } from "@digithings/ui";
 import { LocalBootstrapGate } from "@/components/local-bootstrap-gate";
-import { TooltipProvider } from "@/components/ui/tooltip";
+import { TooltipProvider } from "@digithings/ui/ui";
 import { BASE_PATH } from "@/lib/base-path";
 
 /**

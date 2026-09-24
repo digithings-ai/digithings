@@ -86,14 +86,15 @@ describe("gallery Thread is the product digichat skin", () => {
   it("product tooltip suppresses the canonical kit rotated-square arrow", () => {
     const product = read("gallery-thread/ui/tooltip.tsx");
     // The single canonical tooltip is the kit's; the chat adapter opts out of
-    // its arrow via `data-tooltip-arrow="none"` + a descendant hide. The
+    // its arrow via the kit's `hideArrow` prop (no CSS-hack override). The
     // reference canon uses the kit tooltip directly (the old unreferenced
     // `apps/reference/components/ui/tooltip.tsx` radix duplicate was deleted in
     // the #4306 consolidation).
-    expect(product).toContain('data-tooltip-arrow="none"');
-    expect(product).toMatch(/\[&>\[aria-hidden\]\]:hidden/);
+    expect(product).toContain("hideArrow");
+    expect(product).not.toMatch(/\[&>\[aria-hidden\]\]:hidden/);
     const kit = read("../../ui/tooltip.tsx");
     expect(kit).toMatch(/TooltipPrimitive\.Arrow/);
+    expect(kit).toMatch(/hideArrow/);
   });
 
   it("markdown lists keep markers inside padding so a scrollport cannot clip them", () => {
