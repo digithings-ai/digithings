@@ -33,22 +33,34 @@ export function DocsLayout({
   nav,
   hero,
   children,
+  rail,
+  railLabel = "on this page",
+  search,
   contentsLabel = "contents",
   ariaLabel = "docs",
 }: {
   nav: DocsNavGroup[];
   hero?: DocsHero;
   children: ReactNode;
+  /** On-this-page entries: a second, narrower rail on wide viewports. */
+  rail?: DocsNavItem[];
+  /** Heading above the on-this-page rail. */
+  railLabel?: ReactNode;
+  /** Search affordance, rendered above the hero. */
+  search?: ReactNode;
   /** Label on the collapsed mobile disclosure. */
   contentsLabel?: string;
   /** aria-label shared by both renderings of the nav. */
   ariaLabel?: string;
 }) {
-  const [active, setActive] = useState(nav[0]?.items[0]?.id ?? "");
+  const [active, setActive] = useState(nav[0]?.items[0]?.id ?? rail?.[0]?.id ?? "");
 
   // Scroll-spy over every nav-item id. Keyed on the joined id list, not the
   // nav array identity, so inline props don't re-subscribe every render.
-  const idsKey = nav.map((g) => g.items.map((i) => i.id).join("\n")).join("\n");
+  const idsKey = [
+    ...nav.flatMap((g) => g.items.map((i) => i.id)),
+    ...(rail ?? []).map((i) => i.id),
+  ].join("\n");
   useEffect(() => {
     const els = idsKey
       .split("\n")
@@ -67,6 +79,21 @@ export function DocsLayout({
     return () => obs.disconnect();
   }, [idsKey]);
 
+  const itemLink = (it: DocsNavItem) => (
+    <a
+      key={it.id}
+      href={`#${it.id}`}
+      aria-current={active === it.id ? "true" : undefined}
+      className={`rounded-none border-s-2 px-[0.6rem] py-[0.28rem] font-mono text-[0.82rem] no-underline transition-colors duration-150 ease-brand ${
+        active === it.id
+          ? "border-s-accent bg-accent-weak text-ink"
+          : "border-s-transparent text-ink-soft hover:bg-accent-weak hover:text-ink"
+      }`}
+    >
+      {it.label}
+    </a>
+  );
+
   const sideNav = (
     <nav aria-label={ariaLabel} className="flex flex-col gap-[0.1rem]">
       {nav.map((g, gi) => (
@@ -74,24 +101,24 @@ export function DocsLayout({
           <span className="mb-[0.2rem] px-[0.6rem] font-mono text-[0.68rem] uppercase tracking-[0.12em] text-ink-mute">
             {g.label}
           </span>
-          {g.items.map((it) => (
-            <a
-              key={it.id}
-              href={`#${it.id}`}
-              aria-current={active === it.id ? "true" : undefined}
-              className={`rounded-none border-s-2 px-[0.6rem] py-[0.28rem] font-mono text-[0.82rem] no-underline transition-colors duration-150 ease-brand ${
-                active === it.id
-                  ? "border-s-accent bg-accent-weak text-ink"
-                  : "border-s-transparent text-ink-soft hover:bg-accent-weak hover:text-ink"
-              }`}
-            >
-              {it.label}
-            </a>
-          ))}
+          {g.items.map(itemLink)}
         </div>
       ))}
     </nav>
   );
+
+  const railNav =
+    rail && rail.length > 0 ? (
+      <nav
+        aria-label={typeof railLabel === "string" ? railLabel : "on this page"}
+        className="flex flex-col gap-[0.1rem]"
+      >
+        <span className="mb-[0.2rem] px-[0.6rem] font-mono text-[0.68rem] uppercase tracking-[0.12em] text-ink-mute">
+          {railLabel}
+        </span>
+        {rail.map(itemLink)}
+      </nav>
+    ) : null;
 
   return (
     <div className="docs-shell">
@@ -104,6 +131,8 @@ export function DocsLayout({
           </summary>
           {sideNav}
         </details>
+
+        {search != null && <div className="docs-search">{search}</div>}
 
         {hero && (
           <header className="docs-hero">
@@ -124,6 +153,8 @@ export function DocsLayout({
 
         {children}
       </div>
+
+      {railNav && <aside className="docs-rail">{railNav}</aside>}
     </div>
   );
 }

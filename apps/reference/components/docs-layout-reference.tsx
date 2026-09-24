@@ -1,16 +1,19 @@
 /**
  * Docs layout — the shared @digithings/ui docs family in one contained
  * specimen: the sticky scroll-spied sidebar (a native <details> disclosure
- * below 860px — the sidebar never just vanishes, canon §17), endpoint chrome
- * with theme-aware HTTP-method chips, and label-tabbed code samples with a
- * hover-revealed copy button. Everything below is an invented "ordersvc" API —
- * illustrative only, badged as such. Static display template plus the family's
- * own client interactivity (tabs, copy, scroll-spy).
+ * below 860px — the sidebar never just vanishes, canon §17), a third
+ * on-this-page rail above 1200px, the `⌘K` search affordance that filters the
+ * page's own headings on the client, endpoint chrome with theme-aware HTTP
+ * method chips, and label-tabbed code samples with a hover-revealed copy
+ * button. Everything below is an invented "ordersvc" API — illustrative only,
+ * badged as such. Static display template plus the family's own client
+ * interactivity (tabs, copy, scroll-spy, search).
  */
 import type { CSSProperties } from "react";
 import {
   DocsCodeBlock,
   DocsLayout,
+  DocsSearch,
   EndpointDoc,
   MethodBadge,
   type DocsEndpoint,
@@ -32,6 +35,13 @@ const NAV: DocsNavGroup[] = [
       { id: "docs-demo-orders", label: "Orders" },
     ],
   },
+];
+
+const RAIL = [
+  { id: "docs-demo-start", label: "Getting started" },
+  { id: "docs-demo-auth", label: "Authentication" },
+  { id: "docs-demo-methods", label: "Methods" },
+  { id: "docs-demo-orders", label: "Orders" },
 ];
 
 const GET_ORDER: DocsEndpoint = {
@@ -84,10 +94,12 @@ export function DocsLayoutReference() {
       <p className="section-copy">
         The shared documentation family from <code>@digithings/ui</code>: a sticky sidebar that
         scroll-spies the content on desktop and collapses into a native <code>details</code>{" "}
-        disclosure on mobile, endpoint cards with method chips, field tables, and label-tabbed
-        code samples whose copy button reveals on hover. The method chips consume the family&apos;s{" "}
-        <code>var(--method-*)</code> custom props — each hue mixed 20% toward the theme&apos;s ink,
-        so one rule stays legible on both themes.
+        disclosure on mobile, a third <em>on this page</em> rail once the viewport clears 1200px, a{" "}
+        <code>⌘K</code> field that filters the page&apos;s own headings on the client, endpoint
+        cards with method chips, field tables, and label-tabbed code samples whose copy button
+        reveals on hover. The method chips consume the family&apos;s <code>var(--method-*)</code>{" "}
+        custom props — each hue mixed 20% toward the theme&apos;s ink, so one rule stays legible on
+        both themes.
       </p>
       <p className="mt-[0.9rem] inline-block rounded-none border border-hair px-[0.6rem] py-[0.15rem] font-mono text-[0.58rem] uppercase tracking-[0.08em] text-ink-mute">
         Example data · not live
@@ -99,6 +111,8 @@ export function DocsLayoutReference() {
       >
         <DocsLayout
           nav={NAV}
+          rail={RAIL}
+          search={<DocsSearch items={RAIL} />}
           ariaLabel="ordersvc docs"
           hero={{
             kicker: "// api docs",
