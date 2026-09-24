@@ -694,6 +694,64 @@ explicit that they're still blocked on Stage 2's OHLC plumbing.)
      pegged at the floor, not the whole run). `tests/dq/strategies/sdca/`
      green throughout (576 passed after adding coverage for
      `causal_ema_smooth` and the M2 step-vs-ramp behavior).
+   - **Round 1 result (2026-09-24, commit `9abe32429`)** — Phase 3's blanket
+     `MAX_DRAWDOWN_CAP_PCT`/`MAX_DRAWDOWN_COMFORT_PCT` gate set to 30.0/25.0
+     (a binding search-time constraint, not a backstop) and Phase 4 run with
+     `crash_override_enabled=True` (`trigger_z=-2.0, ramp_z=1.0,
+     override_risk=95.0, window=14`). Winning shape: `buy_max_rate=15.0,
+     buy_knee_risk=30.0, sell_knee_risk=45.0, sell_max_rate=15.0,
+     buy_curvature=1.5, sell_curvature=1.0`. **Failed**: mean OOS
+     (duration-weighted) `-37.31%` vs. flat DCA, `beats_flat_dca_oos=False`,
+     `beats_baseline_oos=False` (that run's own risk50-linear baseline came
+     in at `-27.32%`). A hollow win by construction — the tight cap forced
+     the search to resolve the drawdown/capital-deployed tension by
+     starving capital deployment (fold 0 `capital_deployed=-94.1%`, fold 1
+     `0.3%`, fold 2 `-9.4%` — barely investing) instead of finding a
+     genuinely safer shape. Not promoted.
+   - **Round 2 result (2026-09-24→25, commit `f748630`)** — per Chris's
+     direction to use `crash_override` as the primary crash-response lever
+     instead of the blanket cap: loosened `MAX_DRAWDOWN_CAP_PCT`/
+     `MAX_DRAWDOWN_COMFORT_PCT` to 50.0/45.0 (a true backstop, no longer the
+     dominant force shaping the curve search); `crash_override` itself left
+     unchanged and independently re-verified against the real Feb–Mar 2020
+     COVID crash (fires exactly on 2020-03-12 "Black Thursday", forces risk
+     to 95 for ~10 days, back to baseline by 03-26 — no retuning needed).
+     Winning shape: `buy_max_rate=25.0, buy_knee_risk=40.0,
+     sell_knee_risk=70.0, sell_max_rate=30.0, buy_curvature=1.5,
+     sell_curvature=1.0`. Headline result is real and clears both bars for
+     the first time this round: mean OOS (duration-weighted) `+3.53%`,
+     `beats_flat_dca_oos=True`, `beats_baseline_oos=True` (`+36.30%` over
+     that run's baseline of `-32.76%`). Two problems remain unresolved:
+     (a) fold 2 `max_drawdown_pct=50.8%`, above both the original ~30%
+     target and the loosened 50% backstop itself; (b) **all three OOS
+     folds still fail `walk_forward.py`'s own
+     `SdcaOptimizeObjective.capital_deployed_floor_pct=10.0` gate** (fold 0
+     `-28.5%`, fold 1 `-1.1%`, fold 2 `-7.8%` — net sellers over each OOS
+     window, not net buyers). The improved headline return is coming from a
+     sell-and-stay-out curve correctly avoiding two bad windows, not from
+     staying invested through them — fold 1's OOS window
+     (2019-09-12→2022-01-14) swallows the entire 2020-21 bull run and
+     fold 2's (2022-01-15→2024-05-19) swallows the 2023-24 recovery, both
+     missed entirely (the "non-participation problem"). Two
+     `test_curve_optimize_feasibility.py` drawdown-gate fixture tests
+     needed recalibrating to the new 50/45 band (same commit).
+     `tests/dq/strategies/sdca/` green (585 passed, 38 skipped). Not
+     promoted.
+   - **Phase 2 audit (2026-09-25)**: Chris flagged that round 1's own chat
+     report described Phase 2 as "folded into Phase 1's indicator-breadth
+     widening", which read as possibly not a real, separate code change.
+     Checked against the bullet immediately above (already correct) and
+     against current source: `causal_ema_smooth` (`composite_risk.py`),
+     `_M2_SMOOTHING_HALFLIFE_DAYS=5.0` (`indicator_catalog.py`), and
+     `_RSI_CURVE_POWER=3.5` (`price_oscillators.py`, moved from 4.0) are
+     all still in place exactly as landed in commit `4e05eda9c`
+     ("fix(sdca): damp M2/RSI composite z-score spikiness at the source"),
+     confirmed via `git log -L` on each symbol's line — no round 1 or
+     round 2 work touched or reverted any of it. **Real, implemented,
+     unchanged — not open work.** The chat-report phrasing was just
+     imprecise about timing (it landed as its own commit before Phase 1's,
+     not "inside" Phase 1); RESEARCH_STATE.md's own record (bullet above)
+     had it right all along.
 
 ## North-star ceiling (benchmark only — NEVER a trading candidate)
 
