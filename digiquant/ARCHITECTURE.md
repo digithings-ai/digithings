@@ -2130,6 +2130,18 @@ entry until that cutover. Prompt / structured-output walk for the same pass:
   itemized against the analyst's **own call** (its `stance`), not against the market
   thesis the vehicle is mapped to: an analyst may disagree with the thesis it carries,
   and the families contradicting that thesis then confirm the call.
+  **Five-family evidence sum (#4585).** Both counts are drawn from one five-family
+  universe — technicals, fundamentals, flows/positioning, macro regime, sentiment/news —
+  and each family is itemized once, on the confirming or the contradicting side.
+  `EvidenceAssessment` enforces `independent_confirming_signals + contradicting_signals
+  <= 5` with a cross-field `model_validator` that **rejects** an overcount (the pre-fix
+  schema bounded each field at `le=5` independently, so `analyst/IBIT` 2026-09-22 stored
+  `4 + 4` — eight families over five). A **persisted/prior** body that violates the sum is
+  repaired on read by `repair_legacy_evidence_counts` (skip/carry, metric-patch, and
+  edit-fallback paths): it preserves the net `confirming - contradicting` — so the derived
+  `conviction_score` is unchanged — while reducing the pair to fit (`4+4 -> 2+2`,
+  `5+2 -> 4+1`, `2+5 -> 1+4`). Fresh LLM output is validated strictly, so an impossible
+  generation is caught and retried rather than silently rewritten.
   deliberation appends optional evidence-linked `ForecastAmendment` without rewriting the base;
   LLM envelopes that nest economics under `terms` (SLV/IAU in house GHA 33426508863)
   unwrap before validate, and missing `horizon_sessions` / `half_life_sessions` copy
