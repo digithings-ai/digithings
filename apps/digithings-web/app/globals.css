@@ -474,21 +474,26 @@ html {
 }
 
 /*
- * #why VARIATIONS (2026-09-23, branch claude/home-variants, #4429 round 10)
+ * #why — the composition (2026-09-23, branch claude/home-variants, #4429 round 15)
  *
- * The throwaway /variants/why comparison: two C4 container diagrams, a
- * capability table and a cost model. App-local because the page is an
- * exploration — if a composition is picked, whatever survives folds into
- * Argument.tsx and its classes move into the band's markup or the kit.
+ * The live band is now the `/variants/why` "guided, rented then owned"
+ * composition: two C4 container diagrams, the guided walk with the camera, the
+ * capability comparison and the cost model. The classes were app-local on the
+ * throwaway variants page; they are still app-local here because the
+ * composition is this page's own argument. Everything is square-cornered and
+ * hairline-ruled to match the terminal look ("utilitarian, terminal-like ...
+ * squared edges and simplicity").
  *
- * Everything here is square-cornered and hairline-ruled to match the terminal
- * look the owner asked for ("utilitarian, terminal-like ... squared edges and
- * simplicity").
+ * The band supplies the padding and the band rule (`#why` carries `line-b`),
+ * so the blocks inside only separate themselves with a hairline.
  */
 
 .whyx {
   display: flex;
   flex-direction: column;
+  gap: var(--page-step);
+  max-width: var(--frame-w);
+  margin-inline: auto;
 }
 
 .whyx__diagrams,
@@ -496,16 +501,8 @@ html {
   display: flex;
   flex-direction: column;
   gap: 1.6rem;
-  padding: var(--page-step) var(--page-pad);
-  border-top: 1px solid var(--hair);
 }
 
-.whyx__diagrams > *,
-.whyx__block > * {
-  width: 100%;
-  max-width: var(--frame-w);
-  margin-inline: auto;
-}
 
 /* ── the two diagrams ───────────────────────────────────────────────── */
 

@@ -15,7 +15,6 @@
     "glow",
     "stack",
     "tl",
-    "why",
     "whyx"
   ],
   "digiquant-web": [
@@ -57,6 +56,5 @@
   ],
   "_stack": "digithings-web .stack-* is the /variants/mixed stack showcase (branch claude/home-variants): the bento grid as a map with a travelling focus, pinned by .stack-pin and dimmed per .stack-cell.is-active. Exploration only \u2014 if the showcase is picked it moves into @digithings/ui (data-layout styles + component + tests) and this entry is deleted with the app block.",
   "_faq": "digithings-web .faq-morph* is the #faq band's scroll-driven zoom-morph (branch claude/home-variants): the chat container starts large over the frame and retracts into the right column as the FAQ list rises in on the left (#4429). Same shape and same status as the .stack-* family \u2014 the pinned track and sticky pin live in the app sheet because the geometry is this band's own two-column grid; if the owner picks the morph it promotes into @digithings/ui and this entry is deleted with the app block.",
-  "_why": "why \u2014 the throwaway /variants/why page (#4429): `whyx*` (the rented/owned stack composition and its two swap treatments) and `why-ledger*` (the benefit ledger). App-local because the page is an exploration: when one is picked it folds into Argument.tsx and the classes move into the band's markup or @digithings/ui.",
-  "_whyx": "whyx \u2014 the rented-vs-owned stack composition on the throwaway /variants/why page (#4429): the two diagrams, the ten-step rail and the lateral swap. App-local because the page is an exploration; on a pick it folds into Argument.tsx and the classes move into the band's markup or @digithings/ui."
+  "_whyx": "whyx \u2014 the #why band's composition (#4429 round 15): `whyx*` (the rented/owned container diagrams, the guided walk, the capability table and the cost model). App-local because the composition is digithings.ai's own argument, folded in from the /variants/why exploration the owner picked."
 }

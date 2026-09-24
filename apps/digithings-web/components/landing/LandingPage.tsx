@@ -3,7 +3,6 @@
 import { ContactMailto, CopyCommand, CtaLink, Glow, MockupFrame, SocialRow } from "@digithings/ui";
 import { buttonVariants } from "@digithings/ui/ui";
 import { DT_CONTACT_EMAIL } from "@/app/_nav";
-import { ArgumentSeams } from "@/components/landing/Argument";
 import { BootTerminal } from "@/components/landing/BootTerminal";
 import { ContactForm } from "@/components/landing/ContactForm";
 import { FaqMorph } from "@/components/landing/FaqMorph";
@@ -11,6 +10,7 @@ import { ModuleGrid } from "@/components/landing/ModuleGrid";
 import { Pricing } from "@/components/landing/Pricing";
 import { QuantSection } from "@/components/landing/QuantSection";
 import { OpenSource } from "@/components/landing/Sections";
+import { WhyStack } from "@/components/landing/WhyStack";
 import { REPO_CLONE } from "@/lib/repoActivity";
 
 /**
@@ -159,16 +159,14 @@ export function LandingPage() {
       <Boot />
       <ModuleGrid />
 
+      {/* Round 15: the band is now the `/variants/why` "guided, rented then
+          owned" composition the owner picked — two container diagrams, the
+          guided walk with the camera, the capability comparison and the cost
+          model — rather than the seven-layer drawer. `WhyStack` owns every
+          block and their headings; the section keeps only the anchor and the
+          band rules. */}
       <section id="why" className="line-b px-[var(--page-pad)] py-[var(--page-step)]">
-        <div className="mx-auto flex max-w-[var(--frame-w)] flex-col gap-[2rem]">
-          {/* Point 10: the argument is the picture, not a column of prose.
-              Round 3: the comparison is the whole section — the three claims
-              that used to sit below the diagram are retired.
-              Round 7: the h2 moved inside `<ArgumentSeams/>` so it rides the
-              band's pin — the owner asked that the title stay at the top until
-              the drawer's slide completes. */}
-          <ArgumentSeams />
-        </div>
+        <WhyStack />
       </section>
 
       <section id="open-source" className="line-b px-[var(--page-pad)] py-[var(--page-step)]">
