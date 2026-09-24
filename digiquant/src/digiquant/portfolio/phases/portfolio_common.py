@@ -40,7 +40,7 @@ from digiquant.dashboard.research_retrieval.store import EvidenceBundleStore, Re
 from digiquant.dashboard.temporal import require_knowledge_cutoff_at
 from digiquant.data.gloomberb.agent_tools import PM_TOOLS
 from digiquant.portfolio.candidates import holdings_from_prior_book
-from digiquant.portfolio.models.analyst import AnalystPayload
+from digiquant.portfolio.models.analyst import AnalystPayload, repair_legacy_evidence_counts
 from digiquant.portfolio.models.forecast import (
     ForecastAssessment,
     ForecastTerms,
@@ -607,7 +607,10 @@ def run_asset_analyst_llm(
         body_raw = patched.get("body", patched)
         if not isinstance(body_raw, dict):
             body_raw = prior_body or {}
-        payload = AnalystPayload.model_validate({**body_raw, "ticker": ticker})
+        # Legacy prior body — a persisted overcounted evidence pair is repaired (#4585).
+        payload = AnalystPayload.model_validate(
+            {**repair_legacy_evidence_counts(body_raw), "ticker": ticker}
+        )
         enriched = _attach_forecast_lineage(
             payload=payload,
             state=state,
@@ -640,7 +643,10 @@ def run_asset_analyst_llm(
             phase_slug=phase_slug,
             store=evidence_bundle_store,
         )
-        payload = AnalystPayload.model_validate({**prior_body, "ticker": ticker})
+        # Persisted prior body — repair a legacy overcounted evidence pair on read (#4585).
+        payload = AnalystPayload.model_validate(
+            {**repair_legacy_evidence_counts(prior_body), "ticker": ticker}
+        )
         enriched = _attach_forecast_lineage(
             payload=payload,
             state=state,
@@ -766,7 +772,10 @@ def run_asset_analyst_llm(
                 PhaseError(phase="phase_portfolio", node=phase_slug, message=str(exc)[:500])
             )
             body_raw = prior_body or {}
-            payload = AnalystPayload.model_validate({**body_raw, "ticker": ticker})
+            # Edit-merge fallback carries the prior body — repair a legacy overcount (#4585).
+            payload = AnalystPayload.model_validate(
+                {**repair_legacy_evidence_counts(body_raw), "ticker": ticker}
+            )
             enriched = _attach_forecast_lineage(
                 payload=payload,
                 state=state,
@@ -782,6 +791,9 @@ def run_asset_analyst_llm(
         body_raw = materialized.get("body", materialized)
         if not isinstance(body_raw, dict):
             body_raw = {}
+        # merge_document_patch already ran the strict AnalystPayload validator on this same
+        # body, so an overcounted prior would have raised and taken the fallback above —
+        # no repair is reachable at this edit-success site (#4585).
         payload = AnalystPayload.model_validate({**body_raw, "ticker": ticker})
         enriched = _attach_forecast_lineage(
             payload=payload,
