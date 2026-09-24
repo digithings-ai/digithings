@@ -34,6 +34,7 @@ from digiquant.portfolio.phases.thesis import build_thesis
 from digiquant.portfolio.phases.vehicle_map import build_vehicle_map
 from digiquant.portfolio.pipeline_builder import PipelinePhase, build_pipeline
 from digiquant.portfolio.state import PortfolioState
+from digiquant.research.forecast_outcomes import ResolvedOutcomesMemo
 from digiquant.research.state import ResearchState
 from digiquant.research.supabase_io import SupabaseClient
 
@@ -53,6 +54,9 @@ class ThesisGraphDeps:
     """Optional Supabase client for thesis–analyst thesis/analyst row writers."""
 
     client: SupabaseClient | None = None
+    # Run-scoped resolved-outcome cohort memo shared with research preflight
+    # (#4617). One dict per (run, client); None reads directly.
+    resolved_outcomes_memo: ResolvedOutcomesMemo | None = None
 
 
 @dataclass(frozen=True)
@@ -135,7 +139,13 @@ def build_portfolio_phases_thesis(
             research_state_store=state_store,
         )
     )
-    phases.append(build_direction(client=shared_client, research_state_store=state_store))
+    phases.append(
+        build_direction(
+            client=shared_client,
+            research_state_store=state_store,
+            resolved_outcomes_memo=deps.thesis.resolved_outcomes_memo if deps.thesis else None,
+        )
+    )
     phases.append(_build_sizing_risk_sizing(deps))
     phases.append(build_commit(deps.commit_run))
     return phases

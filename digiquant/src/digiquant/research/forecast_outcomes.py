@@ -782,6 +782,44 @@ _OUTCOME_FIELDS = frozenset(
 )
 
 
+# Run-scoped memo for the cutoff-bounded resolved-outcome cohort (#4617).
+#
+# Each daily run issued the byte-identical ``list_resolved_outcomes_as_of`` GET
+# twice — once at research preflight (direction prerequisites) and once in the
+# portfolio direction phase (shadow calibration). Both call sites share one
+# client and one pinned ``knowledge_cutoff_at`` per run, so the second read is
+# a cache hit. Keyed by ``(id(client), cutoff_iso)``: no TTL clocks, no round
+# caps, no cross-client contamination. Errors (including
+# ``ForecastOutcomeIntegrityError``) are never stored, so the #4298 fail-loud
+# and generic-``Exception`` fail-soft contracts of both callers are unchanged.
+ResolvedOutcomesMemo = dict[tuple[int, str], list[ForecastOutcome]]
+
+
+def list_resolved_outcomes_as_of_memoized(
+    *,
+    client: SupabaseClient,
+    knowledge_cutoff_at: datetime,
+    memo: ResolvedOutcomesMemo | None,
+) -> list[ForecastOutcome]:
+    """Share one ``list_resolved_outcomes_as_of`` GET across a run's readers (#4617).
+
+    Contract: share a single ``memo`` dict per (run, client) — production wires
+    one instance through preflight and the direction phase. ``memo=None``
+    degrades to a direct read. Hits return a copy so neither reader can mutate
+    the cohort the other one sees.
+    """
+    if memo is None:
+        return list_resolved_outcomes_as_of(client=client, knowledge_cutoff_at=knowledge_cutoff_at)
+    cutoff = require_utc_datetime(knowledge_cutoff_at, field_name="knowledge_cutoff_at")
+    key = (id(client), cutoff.isoformat())
+    cached = memo.get(key)
+    if cached is not None:
+        return list(cached)
+    resolved = list_resolved_outcomes_as_of(client=client, knowledge_cutoff_at=cutoff)
+    memo[key] = resolved
+    return resolved
+
+
 def list_resolved_outcomes_as_of(
     *,
     client: SupabaseClient,
@@ -1235,7 +1273,9 @@ __all__ = [
     "ForecastOutcomeHashRepairPlan",
     "ForecastOutcomeIntegrityError",
     "OutcomeResolveResult",
+    "ResolvedOutcomesMemo",
     "list_resolved_outcomes_as_of",
+    "list_resolved_outcomes_as_of_memoized",
     "plan_forecast_outcome_cascade_repairs",
     "plan_forecast_outcome_hash_repairs",
     "resolve_matured_forecast_outcomes",
