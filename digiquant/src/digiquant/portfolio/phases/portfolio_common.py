@@ -791,11 +791,10 @@ def run_asset_analyst_llm(
         body_raw = materialized.get("body", materialized)
         if not isinstance(body_raw, dict):
             body_raw = {}
-        # Merged body passed the strict validator above; repair is defensive for a
-        # prior-derived overcount that a patch left untouched (#4585).
-        payload = AnalystPayload.model_validate(
-            {**repair_legacy_evidence_counts(body_raw), "ticker": ticker}
-        )
+        # merge_document_patch already ran the strict AnalystPayload validator on this same
+        # body, so an overcounted prior would have raised and taken the fallback above —
+        # no repair is reachable at this edit-success site (#4585).
+        payload = AnalystPayload.model_validate({**body_raw, "ticker": ticker})
         enriched = _attach_forecast_lineage(
             payload=payload,
             state=state,

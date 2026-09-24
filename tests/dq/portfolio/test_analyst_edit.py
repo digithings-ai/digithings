@@ -319,10 +319,20 @@ class TestEvidenceDerivedConviction:
                             ).conviction_score
                         )
         counts = Counter(scores)
+        n = len(scores)
         # A balanced-or-negative net derives 0, so 0 is the honest mode of the valid
         # space; what must not happen (#1672) is a single *nonzero* score eating the
         # distribution, or high conviction becoming unreachable.
         assert len(counts) >= 5, f"distribution collapsed: {counts}"
+        nonzero = {k: v for k, v in counts.items() if k != 0}
+        assert nonzero, f"no nonzero conviction is reachable: {counts}"
+        dominant = max(nonzero.values())
+        # The #1672 "no single mode dominates" guard, read on the surviving nonzero
+        # scores: 0 legitimately leads, but no nonzero value may.
+        assert dominant * 2 < n, f"a single nonzero score holds a majority: {counts}"
+        assert dominant * 2 < sum(nonzero.values()), (
+            f"a single nonzero score dominates the nonzero scores: {counts}"
+        )
         high = sum(v for k, v in counts.items() if k >= 4)
         low = sum(v for k, v in counts.items() if k in (0, 1))
         assert high < low, f"high must be scarcer than low: {counts}"
