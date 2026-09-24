@@ -152,7 +152,7 @@ function Contact() {
   );
 }
 
-export function LandingPage() {
+export function LandingPage({ embedOrigin }: { embedOrigin: string }) {
   return (
     <>
       <Hero />
@@ -200,10 +200,10 @@ export function LandingPage() {
         {/* The band's inner grid now rides the scroll-driven zoom-morph: the
             chat starts large over the frame and retracts into the right column
             as the FAQ list rises in on the left. The two-column grid, the h2,
-            the `details` list and the `full screen chat` handoff are all owned
+            the `details` list and the `full screen chat` control are all owned
             by `<FaqMorph/>`; see its docblock for the mechanics and the
             reduced-motion / no-JS fallback. */}
-        <FaqMorph />
+        <FaqMorph embedOrigin={embedOrigin} />
       </section>
 
       <Contact />
