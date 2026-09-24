@@ -495,8 +495,9 @@ function Book({
      chart's own `sliceByView`, so the numbers and the curves are the same
      window and can never disagree — plus alpha, the window's portfolio return
      minus beta times the benchmark's, with beta from the in-window daily
-     returns paired by date. An empty leg renders an em dash rather than a
-     fabricated zero, the same rule the rest of the band follows. */
+     returns paired by date, shown as its own fourth row. An empty leg renders
+     an em dash rather than a fabricated zero, the same rule the rest of the
+     band follows. */
   const drawnPortfolio = sliceByView(
     drawn.find((entry) => entry.id === "portfolio")?.points ?? [],
     window,
@@ -540,7 +541,7 @@ function Book({
           />
         </div>
 
-        {/* The window's own reads. Three, as the owner asked — the dashboard
+        {/* The window's own reads. Four, as the owner asked — the dashboard
             shows more, but here the point is the shape of the period, not a
             blotter. Round 7: "The performance metrics shouldn't have a
             background ... a cleaner way of showing these with no background and
@@ -560,7 +561,11 @@ function Book({
               { label: "returns", value: fmtSignedPct(portfolioReturn) },
               { label: "relative returns", value: fmtRelative(portfolioReturn, benchmarkReturn) },
               { label: "alpha", value: fmtAlpha(alpha), title: betaTitle },
-            ] as { label: string; value: string; title?: string }[]
+              {
+                label: "beta",
+                value: beta === null ? "—" : beta.toFixed(2),
+                title: "beta of the book to the benchmark over the visible window",
+              },            ] as { label: string; value: string; title?: string }[]
           ).map((row) => (
             <div
               key={row.label}
