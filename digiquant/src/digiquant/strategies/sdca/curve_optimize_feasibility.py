@@ -89,16 +89,20 @@ INFEASIBLE_SCORE: float = -1_000_000.0
 SOFT_ZONE_PENALTY_SCALE: float = 5.0
 
 # Mirrors the capital-deployed floor/comfort/cap pattern above, but for
-# ``max_drawdown_pct`` (2026-09-24 recalibration, round 8's realized -61.32%
-# OOS drawdown). Chris's target is "best possible risk-adjusted return, with
-# a drawdown around 30%, not exactly 30%" -- so 30.0 is a hard cap the
-# search itself refuses to cross (never trade this off against return past
-# that point), and 25.0 a comfort margin below it: same overfitting risk as
-# capital deployment -- an in-sample shape that only just clears the cap is
-# a good bet to land over it out-of-sample, so it is penalized, not treated
-# as equally good as one with headroom.
-MAX_DRAWDOWN_CAP_PCT: float = 30.0
-MAX_DRAWDOWN_COMFORT_PCT: float = 25.0
+# ``max_drawdown_pct``. 2026-09-24 recalibration round 2: a tight 30/25
+# cap/comfort here was found to fight the capital-deployed feasibility gate
+# -- the search resolved the tension by starving capital deployment instead
+# of finding a genuinely lower-drawdown shape (a "hollow win": low in-sample
+# drawdown from barely investing, which then cratered OOS return). Per
+# Chris's direction, crash_override (crash_override.py, applied at
+# walk-forward-evaluation time on top of whatever curve this search picks)
+# is now the primary, event-driven crash-response lever -- it should only
+# bind during genuine fast-crash conditions. This gate becomes a true
+# backstop instead: 50.0/45.0 is well above what a working curve should
+# ever hit, so it stops being the dominant force shaping the curve search
+# and only guards against a shape that is actually broken.
+MAX_DRAWDOWN_CAP_PCT: float = 50.0
+MAX_DRAWDOWN_COMFORT_PCT: float = 45.0
 
 
 class FeasibilityAwareCurveTrialScore(BaseModel):

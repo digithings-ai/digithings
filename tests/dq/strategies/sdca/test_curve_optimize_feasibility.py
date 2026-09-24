@@ -93,14 +93,23 @@ def _dip_cycle(
 ) -> tuple[pl.Series, pl.Series, pl.Series]:
     """Mild pre-decline, then a dip of ``dip_frac`` off a $90 base, then a rip.
 
-    Calibrated (see the 2026-09-24 recalibration's drawdown-gate diagnostic
-    sweep) so that ``dip_frac`` maps monotonically onto
-    ``base.max_drawdown_pct`` across the comfort/cap band while
-    ``capital_deployed_pct`` stays pinned around 43% -- comfortably above
-    ``CAPITAL_DEPLOYED_COMFORT_PCT`` (15%) throughout, isolating the
-    drawdown gate from the capital-deployed gate. Approximate mapping with
-    the default ``_shape(buy_max_rate=15.0)``: 0.50 -> ~24.4% (below
-    comfort), 0.55 -> ~26.5% (soft zone), 0.65 -> ~30.7% (hard reject).
+    Calibrated (see the 2026-09-24 recalibration round 2's drawdown-gate
+    diagnostic sweep, re-run after ``MAX_DRAWDOWN_CAP_PCT``/
+    ``MAX_DRAWDOWN_COMFORT_PCT`` moved from 30.0/25.0 to 50.0/45.0) so that
+    ``dip_frac`` maps monotonically onto ``base.max_drawdown_pct`` for a
+    given ``n_pre``. ``dip_frac`` alone tops out well short of the new cap
+    -- capital already deployed pre-dip is the ceiling on how much of the
+    portfolio can draw down, since BTC value can't go below zero, so
+    ``n_pre`` (how many buy-favorable days run before the dip, deploying
+    more capital) is the lever that raises the achievable ceiling, not a
+    deeper ``dip_frac`` alone. With the default ``n_pre=40`` and
+    ``_shape(buy_max_rate=15.0)``: 0.50 -> ~24.4% (below comfort, capital
+    deployed ~43%). Widening ``n_pre`` to 60 with ``dip_frac=0.78`` ->
+    ~47.6% (soft zone, capital deployed ~57%); ``n_pre=80`` with
+    ``dip_frac=0.80`` -> ~57.3% (comfortably above the 50% cap, capital
+    deployed ~68%) -- both stay well clear of
+    ``CAPITAL_DEPLOYED_COMFORT_PCT`` (15%), isolating the drawdown gate
+    from the capital-deployed gate.
     """
     prices: list[float] = []
     risks: list[float] = []
@@ -270,7 +279,7 @@ class TestScoreShapeOnIndexFeasibilityAware:
         assert aware.feasibility_adjusted_score == pytest.approx(aware.risk_adjusted_return)
 
     def test_soft_zone_drawdown_penalty_isolated_from_capital_deployed_gate(self) -> None:
-        dates, prices, risk = _dip_cycle(0.55)
+        dates, prices, risk = _dip_cycle(0.78, n_pre=60)
         shape = _shape(buy_max_rate=15.0)
         aware = score_shape_on_index_feasibility_aware(dates, prices, risk, shape, 1000.0)
 
@@ -290,7 +299,7 @@ class TestScoreShapeOnIndexFeasibilityAware:
         assert aware.feasibility_adjusted_score > INFEASIBLE_SCORE
 
     def test_hard_reject_above_drawdown_cap_isolated_from_capital_deployed_gate(self) -> None:
-        dates, prices, risk = _dip_cycle(0.65)
+        dates, prices, risk = _dip_cycle(0.80, n_pre=80)
         shape = _shape(buy_max_rate=15.0)
         aware = score_shape_on_index_feasibility_aware(dates, prices, risk, shape, 1000.0)
 
