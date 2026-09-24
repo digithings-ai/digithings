@@ -337,7 +337,7 @@ def _risk_metrics_from_nav_history(sb, as_of: str) -> dict[str, float] | None:
     }
 
 
-def upsert_portfolio_metrics_daily(sb, as_of: str) -> None:
+def upsert_portfolio_metrics_daily(sb, as_of: str, *, mark_through: bool = False) -> None:
     """Ensure one ``portfolio_metrics`` row per calendar day (dashboard continuity).
 
     If a ``tearsheet`` row already exists for ``as_of``, updates only its persisted
@@ -438,9 +438,12 @@ def upsert_portfolio_metrics_daily(sb, as_of: str) -> None:
         alpha = prev.get("alpha")
 
     ts = datetime.now(tz=timezone.utc).isoformat()
-    computed_from = (
-        "refresh_script" if has_sufficient_history else "refresh_script_insufficient_history"
-    )
+    if mark_through:
+        computed_from = "refresh_script_mark_through"
+    else:
+        computed_from = (
+            "refresh_script" if has_sufficient_history else "refresh_script_insufficient_history"
+        )
     row = {
         "date": as_of,
         "workspace_id": _house_id(),
@@ -638,7 +641,7 @@ def refresh_nav_point(sb, as_of: str) -> None:
     print(f"✅ nav_history {as_of}: engine row present (nav={float(rows[0]['nav']):.4f})")
 
 
-def run_one_day(sb, metrics_date: str) -> None:
+def run_one_day(sb, metrics_date: str, *, mark_through: bool = False) -> None:
     """Fail-closed on missing engine NAV, then positions/event/metrics.
 
     The engine row is asserted FIRST: a day the engine step missed aborts
@@ -654,7 +657,7 @@ def run_one_day(sb, metrics_date: str) -> None:
     e = refresh_event_cumulative(sb, metrics_date)
     print(f"   position_events cumulative filled: {e}")
     refresh_nav_point(sb, metrics_date)
-    upsert_portfolio_metrics_daily(sb, metrics_date)
+    upsert_portfolio_metrics_daily(sb, metrics_date, mark_through=mark_through)
 
 
 def fill_calendar_through(sb, end: date) -> None:
@@ -689,6 +692,15 @@ def main() -> int:
         help="Refresh latest snapshot, then carry-forward + metrics for each day through this date (inclusive)",
     )
     ap.add_argument("--supabase", action="store_true", help="Required flag for clarity")
+    ap.add_argument(
+        "--mark-through-book",
+        action="store_true",
+        help=(
+            "Scheduled path only: when the house run committed no book for today, "
+            "carry the last book forward and stamp carried marks instead of "
+            "exiting 3 (provenance: computed_from='refresh_script_mark_through')"
+        ),
+    )
     args = ap.parse_args()
     if not args.supabase:
         ap.error("Pass --supabase to run against Supabase")
@@ -705,8 +717,18 @@ def main() -> int:
     try:
         metrics_date = resolve_scheduled_metrics_date(sb, datetime.now(tz=timezone.utc).date())
     except StaleBookError as exc:
-        print(f"❌ {exc}", file=sys.stderr)
-        return _EXIT_STALE_BOOK
+        if not args.mark_through_book:
+            print(f"❌ {exc}", file=sys.stderr)
+            return _EXIT_STALE_BOOK
+        today = datetime.now(tz=timezone.utc).date().isoformat()
+        print(
+            f"⚠️  stale book with --mark-through-book: carrying the last book "
+            f"forward into {today} and stamping carried marks "
+            f"(computed_from='refresh_script_mark_through')"
+        )
+        carry_forward_positions(sb, today)
+        run_one_day(sb, today, mark_through=True)
+        return 0
     run_one_day(sb, metrics_date)
     return 0
 
