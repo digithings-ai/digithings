@@ -660,6 +660,41 @@ explicit that they're still blocked on Stage 2's OHLC plumbing.)
     - `tests/dq/strategies/sdca/` stayed green throughout (571 passed, 38
       skipped for optional deps, by the end of Phase 4).
 
+7. **2026-09-24 — SDCA recalibration v1** (Chris: increase indicator breadth,
+   fix M2/RSI z-score spikiness, add a drawdown cap + widen the curve search
+   + enable crash_override, re-run and calibrate toward ~30% drawdown; "operate
+   independently... treat this as exploration"). Design doc:
+   `docs/superpowers/specs/2026-09-24-sdca-recalibration-v1-design.md`.
+   - Phase 1 (floored 12-name weight search,
+     `scripts/run_full_pool_floored_search.py`), Phase 3 (drawdown cap in
+     `curve_optimize_feasibility.py`, widened `WIDE_KNEE_SEARCH_BOUNDS`/
+     `WIDE_KNEE_COARSE_GRID`, `crash_override_enabled=True`) and Phase 4
+     (combined re-run/calibration, `scripts/run_recalibration_v1_full_resolution.py`)
+     are the diagnostic search work this backlog item covers — same
+     never-writes-settings.json protocol as every prior round; see the design
+     doc for the full walk-forward result once Phase 4 completes.
+   - Phase 2 (z-score spikiness) landed as code, not just search config:
+     `composite_risk.py` gained a `causal_ema_smooth` helper, applied only
+     inside `m2_liquidity_z` (`indicator_catalog.py`, short 5-day halflife —
+     the root cause is monthly FRED data forward-filled daily then
+     rolling-z'd over a window with ~3 distinct real prints, a literal step
+     function). `price_oscillators.py`'s `_RSI_CURVE_POWER` moved from 4.0
+     (quartic, chosen 2026-09-07 specifically to stop a linear map from
+     pegging a bull market at the z floor — see that section's
+     `test_mid_bull_rsi_does_not_sit_at_floor_for_entire_bull` regression
+     guard) to 3.5: quartic's near-zero read through ordinary 55-75 RSI
+     followed by a steep run-up near the extremes, compounded with
+     `agreement_scaled_blend`'s up-to-1.5x same-sign amplification, was
+     reading as a flatline-then-spike. 3.5 is the lowest power that stays
+     clear of the 2026-09-07 guard (empirically, power ≤3.25 already pushes
+     that guard's mean mid-bull `|z|` back over its 1.25 threshold — the old
+     pegging problem returns before reaching the originally-guessed 2.5-3.0
+     range) while still measurably softening the ordinary-range flatline and
+     verified clean against the real 2023-2024 BTC bull run (~4% of days
+     pegged at the floor, not the whole run). `tests/dq/strategies/sdca/`
+     green throughout (576 passed after adding coverage for
+     `causal_ema_smooth` and the M2 step-vs-ramp behavior).
+
 ## North-star ceiling (benchmark only — NEVER a trading candidate)
 
 Chris's 2026-09-11 direction, after pausing new-indicator work to sanity-check
