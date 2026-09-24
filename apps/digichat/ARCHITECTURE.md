@@ -159,8 +159,9 @@ keep `rounded-full`). Type is Geist Mono for claim, body, and chrome
 with the marketing sites) and a `MutationObserver` (`ThemeClassSync` in
 `providers.tsx`) mirrors every later `[data-theme]` flip onto the `.dark`/`.light`
 classes for the Tailwind `dark:` variant. The old `@digithings/digichat-ui`
-`tokens-shadcn-bridge.css` (shadcn vars → token names, the reverse direction) is
-no longer imported; `/embed` sets `[data-theme]` on the root from the effective
+`tokens-shadcn-bridge.css` (shadcn vars → token names, the reverse direction) was
+deleted in WS5 (export + file removed — it was imported nowhere); `/embed` sets
+`[data-theme]` on the root from the effective
 theme (URL `?theme=`, parent `digichat:theme` postMessage, or tenant `theme` —
 its own iframe document) and per-tenant accent hexes still override at the
 wrapper. Because the shared `ThemeProvider` (in `providers.tsx`, which wraps

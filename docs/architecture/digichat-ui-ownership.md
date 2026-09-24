@@ -2,8 +2,9 @@
 
 Tracked companion to the untracked preparation note
 `docs/architecture/digichat-ui-simplification.md` (never commit that file; its
-content is folded in below). Status: WS6 landed; WS1–WS5 queued on branch
-`task/4605-digichat-footer-chrome`, one PR into `module/digichat` at the end.
+content is folded in below). Status: WS6, WS2, WS1, WS3, WS4 (steps 1–4), WS5
+landed on branch `task/4605-digichat-footer-chrome`, one PR into `module/digichat`
+at the end. WS4 step 5 (per-skin `React.lazy`) is deferred to owner opt-in.
 
 ## Verdict
 
@@ -80,6 +81,8 @@ Order: **WS6 → WS2 → WS1 → WS3 → WS4 → WS5**.
   footer (`stock/thread.aui.tsx`), the F4 "route folder as shared library" surface.
 - **WS5** — package-boundary cleanup: `digichat-ui` vs `ui` split, dead exports, archive
   location. Low-medium, mostly deletions (minus the F8 vendored sources, which stay).
+  ✅ Landed: the dead `tokens-shadcn-bridge.css` export + file are deleted (it was
+  imported nowhere).
 
 Each step must keep `packages/ui` tests, `apps/digichat` tests, `npm run lint`
 (0 errors) and `npm run build` green, plus a visual check of `/baseline?skin=digichat`
@@ -89,9 +92,12 @@ Each step must keep `packages/ui` tests, `apps/digichat` tests, `npm run lint`
 
 ✅ Done: the `chatbot.css` shim (WS1 — deleted with the sheet move); the gallery tooltip
 adapter's Tailwind hack (WS2 — collapsed to a `hideArrow` thin wrapper, zero visual
-change). Still open: duplicate `TooltipIconButton` / `tooltip.tsx` copies; two of three
-carets; the dead `tokens-shadcn-bridge.css`; any `(baseline)/stock/` file identical to
-a package equivalent. (The two app `@theme inline` bridges are already collapsed — WS1.)
+change); the dead `tokens-shadcn-bridge.css` (WS5 — export + file deleted).
+Still open: duplicate `TooltipIconButton` / `tooltip.tsx` copies; two of three
+carets (both need a product ruling — no visual change allowed); any leftover
+`(baseline)/stock/` file identical to a package equivalent. (The two app `@theme
+inline` bridges are already collapsed — WS1; `stock/` itself moved into the
+package — WS4.)
 
 ## Non-goals (push back if proposed)
 
