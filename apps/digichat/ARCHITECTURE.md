@@ -1433,7 +1433,7 @@ part-driven vs chrome-driven is indexed in digiweb
 vendored under `src/components/assistant-ui/skins/`, or first-party `digichat`
 (`DigichatThread` from `@digithings/ui/chat/thread` **is** the first-party
 Thread — `gallery-thread/thread.aui.tsx` + slots + cube glyphs — plus
-`@digithings/ui/styles/chatbot.css`. Design-reference `/chatbot` mounts that
+`@digithings/ui/styles/chat-digichat.css`. Design-reference `/chatbot` mounts that
 same subpath with a fixture runtime. Contract:
 [`packages/ui/CHAT_THEME.md`](../../packages/ui/CHAT_THEME.md)).
 
@@ -1606,7 +1606,7 @@ Healthcheck: `curl -sf http://127.0.0.1:3000/api/health`.
 
 Three-stage build:
 1. `deps` (node:22-alpine): `npm ci` to populate `node_modules`.
-2. `builder` (node:22-alpine): copies deps, copies source, runs `next build`. `NEXT_TELEMETRY_DISABLED=1`. Both Dockerfiles also COPY `apps/reference/app/(chatbot)/chatbot/chatbot.css` — the product `chrome.skin: digichat` sheet `@import`s that path from `packages/ui/src/styles/chatbot.css`, and `COPY packages/ui` does not include `reference/` (#3717).
+2. `builder` (node:22-alpine): copies deps, copies source, runs `next build`. `NEXT_TELEMETRY_DISABLED=1`. The product `chrome.skin: digichat` sheet lives in the package (`packages/ui/src/styles/chat-digichat.css`), so no gallery COPY is needed — the old `apps/reference/…/chatbot.css` COPY closed with WS1 (#3717).
 3. `runner` (node:22-alpine): copies only `public/`, `.next/standalone/`, `.next/static/`. Adds `curl` for the Compose healthcheck. Runs as non-root `nextjs` user (uid 1001). `next.config.ts` sets `output: "standalone"` to enable this. Both this Dockerfile and `Dockerfile.digichat-cloudflare` write `/etc/digichat-version` from `package.json` (or `ARG DIGICHAT_VERSION`) and set `ENV DIGICHAT_VERSION`.
 
 The standalone output is a self-contained Node.js server (`server.js`) with only production

@@ -31,7 +31,7 @@ import {
 import { type FC, useState } from "react";
 import { useAttachmentSrc } from "@/app/(baseline)/stock/use-attachment-src";
 import { MarkdownText } from "@/app/(baseline)/stock/markdown-text";
-import { useComposerCopy } from "@/components/stock/skin-chrome";
+import { useComposerCopy } from "@digithings/ui/chat/stock";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -39,7 +39,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "./ui/dropdown-menu";
-import { CreditFooter } from "@/components/stock/credit-footer";
+import { CreditFooter } from "@digithings/ui/chat/stock";
 
 export const Gemini: FC = () => {
   const { welcome } = useComposerCopy(

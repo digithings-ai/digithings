@@ -7,8 +7,8 @@
  */
 
 import { createContext, useContext } from "react";
-import { DEFAULT_THREAD_SKIN, type ThreadSkin } from "@/lib/thread-skins";
-import type { ChromeMode, PageContextMode } from "@/lib/deploy-config";
+import { DEFAULT_THREAD_SKIN, type ThreadSkin } from "../skins/thread-skins";
+import type { ChromeMode, PageContextMode } from "./skin-types";
 
 export type SkinChromeValue = {
   skin: ThreadSkin;

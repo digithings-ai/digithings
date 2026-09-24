@@ -28,9 +28,8 @@ collapse duplicated surfaces — **not** "move UI into one folder".
 
 ## Findings
 
-- **F1** — `packages/ui/src/styles/chatbot.css` is 4 lines reaching into the
-  `apps/reference` tree, pinned by `chatbot-css.share.test.ts`. Move the sheet into
-  the package (e.g. `chat-digichat.css`); `apps/reference` imports it; delete the shim.
+- **F1** — ✅ Landed (WS1): the sheet moved to `packages/ui/src/styles/chat-digichat.css`,
+  `apps/reference` imports it back, and the 4-line `chatbot.css` shim is deleted.
 - **F2** — Three palettes / three bridges for one product (`packages/design/tokens.css`,
   `chat-aui.css`, `chatbot.css`), plus two app entry sheets re-declaring their own
   `@theme inline` instead of importing the shared bridge. Direct cause of the white
@@ -48,10 +47,13 @@ collapse duplicated surfaces — **not** "move UI into one folder".
   (`@digithings/ui/chat/thread`); no other app can reuse a skin. Move registry + skins
   into the package (or new `packages/chat-skins`).
 - **F6** (strongest structural signal) — "What a skin needs to render correctly" is
-  implicit: `/baseline` needed four accommodations, each a bug
+  implicit: `/baseline` needed five accommodations, each a bug
   (`data-thread-skin="digichat"` marker; `@source` into `packages/ui`; `--font-geist-mono`;
-  `useStockChatPrefs` host). Direction: self-describing skin descriptor carrying its own
+  theme dataset + `.light`/`.dark` classes on `<html>`; `useStockChatPrefs` host).
+  Direction: self-describing skin descriptor carrying its own
   provider and stylesheet list, so a host mounts `<Skin />` and cannot get it subtly wrong.
+  Landed as WS3 (`src/lib/thread-skin-host-contract.ts` + contract test); WS4 carries the
+  descriptor into the package.
 - **F7** — Two overlapping UI packages (`packages/ui`, `packages/digichat-ui`);
   `tokens-shadcn-bridge.css` is exported but imported nowhere. State the split explicitly;
   delete dead exports.
@@ -72,7 +74,7 @@ Order: **WS6 → WS2 → WS1 → WS3 → WS4 → WS5**.
   4px), which is an F2 symptom.
 - **WS2** — primitive dedup (`hideArrow`, one `TooltipIconButton`, one caret). Low,
   mechanical, no visual changes per owner scope ruling.
-- **WS3** — skin encapsulation via descriptor (medium, kills the F6 class).
+- **WS3** (landed) — skin encapsulation via descriptor (medium, kills the F6 class).
 - **WS4** — move registry + skins + stock primitives into the package (medium-high,
   largest diff; full move per owner reusability ruling). Also settles the base thread
   footer (`stock/thread.aui.tsx`), the F4 "route folder as shared library" surface.
@@ -85,10 +87,11 @@ Each step must keep `packages/ui` tests, `apps/digichat` tests, `npm run lint`
 
 ## Deletion targets
 
-The `chatbot.css` shim (once the sheet moves); the gallery tooltip adapter; duplicate
-`TooltipIconButton` / `tooltip.tsx` copies; two of three carets; the dead
-`tokens-shadcn-bridge.css`; the duplicate `@theme inline` bridges; any
-`(baseline)/stock/` file identical to a package equivalent.
+✅ Done: the `chatbot.css` shim (WS1 — deleted with the sheet move); the gallery tooltip
+adapter's Tailwind hack (WS2 — collapsed to a `hideArrow` thin wrapper, zero visual
+change). Still open: duplicate `TooltipIconButton` / `tooltip.tsx` copies; two of three
+carets; the dead `tokens-shadcn-bridge.css`; any `(baseline)/stock/` file identical to
+a package equivalent. (The two app `@theme inline` bridges are already collapsed — WS1.)
 
 ## Non-goals (push back if proposed)
 

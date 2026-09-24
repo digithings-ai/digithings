@@ -9,10 +9,62 @@ import { StockChatPrefsHost, useStockChatPrefs } from "@/components/stock/stock-
 import { DEFAULT_CLIENT_CONFIG } from "@/lib/deploy-config";
 import { p } from "@/lib/base-path";
 import { cn } from "@/lib/utils";
-import { parseThreadSkin, skinCreditStyle, THREAD_SKINS } from "@/lib/thread-skins";
+import {
+  parseThreadSkin,
+  skinCreditStyle,
+  THREAD_SKINS,
+} from "@digithings/ui/chat/skins";
+import { SkinRuntimeProvider } from "@digithings/ui/chat/stock";
+import { parseEmbedChatError, formatEmbedChatError } from "@/lib/embed-chat-error";
+import { EmbedComposerMenu, type ComposerMenuKind } from "@/components/stock/embed-composer-menu";
+import {
+  connectedMcpConfigs,
+  mcpSessionOverlayHeaderValue,
+  replaceMcpConfig,
+} from "@/components/stock/embed-mcp-flow";
+import {
+  DEFAULT_LANGUAGE_CODE,
+  detectBrowserLanguageCode,
+  tryResolveLanguageInput,
+} from "@/lib/languages";
 
 /** Stable no-ops: the catalog has no persisted session to reset or redo. */
 const noop = () => {};
+
+/** Skin runtime: the catalog gets the same error copy as the product shell. */
+const SKIN_RUNTIME = {
+  errorParsers: {
+    parseError: parseEmbedChatError,
+    formatError: formatEmbedChatError,
+  },
+};
+
+/** Prefs deps: the same app functions the product shell passes (WS4 Step 3). */
+const PREFS_DEPS = {
+  defaultLanguageCode: DEFAULT_LANGUAGE_CODE,
+  detectLanguage: detectBrowserLanguageCode,
+  resolveLanguage: tryResolveLanguageInput,
+  mcpOps: {
+    replace: replaceMcpConfig,
+    connected: connectedMcpConfigs,
+    headerValue: mcpSessionOverlayHeaderValue,
+  },
+  renderMenuPanes: (menu: {
+    kind: ComposerMenuKind;
+    models: readonly string[];
+    providerSeed?: string;
+    mcpSeed?: string;
+    onClose: () => void;
+  }) => (
+    <EmbedComposerMenu
+      kind={menu.kind}
+      models={menu.models}
+      onClose={menu.onClose}
+      providerSeed={menu.providerSeed}
+      mcpSeed={menu.mcpSeed}
+    />
+  ),
+};
 
 /**
  * Official assistant-ui templates (the 11 catalog ids) plus first-party
@@ -69,11 +121,27 @@ function BaselineClientInner() {
   // catalog renders the same composer chrome as digithings.ai/chat instead of
   // each surface having to re-implement the gate. Other catalog skins ignore it.
   const { prefsApi, panes } = useStockChatPrefs({
-    clientConfig: DEFAULT_CLIENT_CONFIG,
+    config: {
+      catalog: DEFAULT_CLIENT_CONFIG.tools.catalog,
+      servers: DEFAULT_CLIENT_CONFIG.mcp.servers,
+      defaultLanguage: DEFAULT_CLIENT_CONFIG.chrome.defaultLanguage,
+      defaultModel: DEFAULT_CLIENT_CONFIG.models.default,
+      availableModels: DEFAULT_CLIENT_CONFIG.models.available,
+      allowModelPicker:
+        DEFAULT_CLIENT_CONFIG.models.allowPicker === true ||
+        DEFAULT_CLIENT_CONFIG.features.modelPicker === true,
+      view: DEFAULT_CLIENT_CONFIG.features.view,
+      thinking: DEFAULT_CLIENT_CONFIG.features.thinking,
+      tenantAllowsWeb: DEFAULT_CLIENT_CONFIG.gate.webSearch === true,
+      showByok: DEFAULT_CLIENT_CONFIG.gate.showByok === true,
+      allowUserServers: DEFAULT_CLIENT_CONFIG.mcp.allowUserServers,
+      allowAddForm: DEFAULT_CLIENT_CONFIG.mcp.allowAddForm,
+    },
+    deps: PREFS_DEPS,
     sessionKey: "baseline",
     hasSessions: false,
-    newThread: noop,
-    redo: noop,
+    newThread: () => {},
+    redo: () => {},
   });
 
   const hrefFor = (nextSkin: string, nextTheme: string) => {
@@ -124,7 +192,9 @@ function BaselineClientInner() {
           style={skinCreditStyle(skin, theme)}
         >
           <StockChatPrefsHost value={prefsApi} panes={panes}>
-            <ThreadSkinView skin={skin} />
+            <SkinRuntimeProvider value={SKIN_RUNTIME}>
+              <ThreadSkinView skin={skin} />
+            </SkinRuntimeProvider>
           </StockChatPrefsHost>
         </div>
       </div>

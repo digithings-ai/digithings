@@ -37,8 +37,8 @@ import {
 } from "lucide-react";
 import { MarkdownText } from "@/app/(baseline)/stock/markdown-text";
 import { ToolFallback } from "@/app/(baseline)/stock/tool-fallback.aui";
-import { useComposerCopy } from "@/components/stock/skin-chrome";
-import { CreditFooter } from "@/components/stock/credit-footer";
+import { useComposerCopy } from "@digithings/ui/chat/stock";
+import { CreditFooter } from "@digithings/ui/chat/stock";
 
 export const ChatGPT: FC = () => {
   const { placeholder } = useComposerCopy(

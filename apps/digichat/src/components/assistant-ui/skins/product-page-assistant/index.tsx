@@ -3,7 +3,7 @@
 import { Thread } from "@/app/(baseline)/stock/thread.aui";
 import { AssistantModal } from "./assistant-modal";
 import { ProductDashboard } from "./product-dashboard";
-import { useComposerCopy } from "@/components/stock/skin-chrome";
+import { useComposerCopy } from "@digithings/ui/chat/stock";
 
 export function ProductPageAssistant() {
   const { title } = useComposerCopy("How can I help?", "Describe the issue");

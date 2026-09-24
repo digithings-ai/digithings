@@ -201,7 +201,7 @@ skin. That isolation is what keeps the catalog honest, but it means a skin can
 render subtly wrong with no error. These five have each caused a real bug:
 
 1. **The skin scope marker.** The first-party theme in
-   `apps/reference/app/(chatbot)/chatbot/chatbot.css` is scoped to
+   `packages/ui/src/styles/chat-digichat.css` is scoped to
    `:is(.aui-theme-stage, [data-thread-skin="digichat"])` and its portal rules to
    `html:has([data-thread-skin="digichat"])`. The gallery Thread root declares
    `data-thread-skin="digichat"` itself, which is why `/baseline`, `/embed` and
@@ -221,6 +221,10 @@ render subtly wrong with no error. These five have each caused a real bug:
    `/` palette plus `@`-mentions are silently absent.
 5. **The theme attribute.** See "Selector chrome" — `data-theme` / `.light` on
    `<html>` is what makes the first-party light palette match.
+
+Machine-readable version of this list: `src/lib/thread-skin-host-contract.ts`
+(`DIGICHAT_SKIN_HOST_CONTRACT`, pinned by `thread-skin-host-contract.test.ts`).
+A new host must satisfy every item there before a skin can render correctly.
 
 ---
 
@@ -254,7 +258,7 @@ decision.
 | Where is the catalog page / selector? | `apps/digichat/src/app/(baseline)/baseline/baseline-client.tsx` |
 | Where is the backend wired? | `apps/digichat/src/app/api/baseline-chat/route.ts`, `apps/digichat/src/lib/baseline-preview.ts` |
 | Where do tools / menus / features come from? | `apps/digichat/src/components/stock/stock-chat-prefs-host.tsx`, `apps/digichat/src/lib/deploy-config/client-projection.ts` |
-| Where does the first-party theme live? | `apps/reference/app/(chatbot)/chatbot/chatbot.css`, `packages/ui/src/styles/chat-aui.css` |
+| Where does the first-party theme live? | `packages/ui/src/styles/chat-digichat.css`, `packages/ui/src/styles/chat-aui.css` |
 | Skin provenance / vendored sources | `apps/digichat/src/components/assistant-ui/skins/SOURCE.md` |
 
 Related: [`STOCK-SMOKE.md`](STOCK-SMOKE.md) (manual checklist on the product

@@ -9,6 +9,7 @@ import {
 import type { FC } from "react";
 import { Button } from "@digithings/ui/ui";
 import { parseEmbedChatError, formatEmbedChatError } from "@/lib/embed-chat-error";
+import { useSkinRuntime, type SkinErrorParsers } from "@digithings/ui/chat/stock";
 
 function messageStatusErrorText(status: {
   type?: string;
@@ -32,11 +33,19 @@ function messageStatusErrorText(status: {
 const SUMMARY_CLASS = "cursor-pointer select-none"; // canon-allow: native <details>/<summary>; the kit owns no disclosure-summary part
 
 /** assistant-ui error banner: short copy plus optional API-detail disclosure. */
-export const MessageError: FC = () => {
+export const MessageError: FC<Partial<SkinErrorParsers>> = ({
+  parseError,
+  formatError,
+}) => {
+  const runtime = useSkinRuntime();
+  const parse =
+    parseError ?? runtime.errorParsers?.parseError ?? parseEmbedChatError;
+  const format =
+    formatError ?? runtime.errorParsers?.formatError ?? formatEmbedChatError;
   const raw = useAuiState((s) => messageStatusErrorText(s.message.status ?? {}));
-  const parsed = parseEmbedChatError(raw ? new Error(raw) : undefined);
+  const parsed = parse(raw ? new Error(raw) : undefined);
   const title =
-    formatEmbedChatError(raw ? new Error(raw) : undefined) ??
+    format(raw ? new Error(raw) : undefined) ??
     parsed?.message ??
     (raw && raw.trim() ? raw : "The request failed.");
   const detail = parsed?.detail;

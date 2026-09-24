@@ -3,7 +3,7 @@
 import "@digithings/ui/styles/chat-core.css";
 import "@digithings/ui/styles/chat-widgets.css";
 import "@digithings/ui/styles/chat-aui.css";
-import "@digithings/ui/styles/chatbot.css";
+import "@digithings/ui/styles/chat-digichat.css";
 import "@digithings/ui/styles/digichat-boot-loader.css";
 
 import { useCallback, useMemo, type FormEvent } from "react";
@@ -20,16 +20,19 @@ import {
   type TranscriptTurn,
 } from "@digithings/digichat-ui";
 import { DigichatThread, type ComposerLayout, type ThreadSlashTrigger } from "@digithings/ui/chat/thread";
-import { CreditFooter } from "@/components/stock/credit-footer";
+import { CreditFooter } from "@digithings/ui/chat/stock";
 import {
   BASELINE_EMBED_PLACEHOLDER,
   BASELINE_EMBED_SUGGESTIONS,
   BASELINE_EMBED_WELCOME,
 } from "@/lib/baseline-embed";
-import { useComposerCopy, useSkinChrome } from "@/components/stock/skin-chrome";
-import { useDisclosureUi } from "@/components/stock/deploy-ui-context";
+import { useComposerCopy, useSkinChrome } from "@digithings/ui/chat/stock";
+import { useDisclosureUi } from "@digithings/ui/chat/stock";
 import { PAGE_CONTEXT_ATTACHMENT_NAME } from "@/lib/embed-page-context-messages";
-import { useStockComposerGateSubmit, useStockSendGate } from "@/components/stock/stock-send-gate";
+import {
+  useStockComposerGateSubmit,
+  useStockSendGate,
+} from "@digithings/ui/chat/stock";
 import { useEmbedChatPrefsOptional } from "@/components/stock/embed-chat-prefs";
 import {
   buildProductSlashCommands,

@@ -3,8 +3,10 @@
 
 import { describe, expect, it, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
-import { SkinChromeProvider } from "@/components/stock/skin-chrome";
-import { DEFAULT_SKIN_CHROME } from "@/components/stock/skin-chrome";
+import {
+  SkinChromeProvider,
+  DEFAULT_SKIN_CHROME,
+} from "@digithings/ui/chat/stock";
 import { DigichatSkin } from "./digichat";
 
 vi.mock("@assistant-ui/react", async () => {

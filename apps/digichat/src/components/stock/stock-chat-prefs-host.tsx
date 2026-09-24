@@ -3,6 +3,11 @@
 /**
  * Session prefs for full-app stock chrome (#3736). Same session toggles as
  * the embed — no sign-in required. MCP URLs never live here.
+ *
+ * WS4 Step 3: the hook takes a narrow structural config plus injectable deps
+ * instead of the product `DigichatClientConfig`, so the module moves into the
+ * package without importing app code. Behavior is unchanged — hosts pass the
+ * same app functions and values.
  */
 
 import { useCallback, useMemo, useRef, useState, type ReactNode } from "react";
@@ -10,42 +15,105 @@ import {
   DEFAULT_EMBED_CHAT_PREFS,
   EmbedChatPrefsProvider,
   catalogToolsFromClient,
+  createDefaultEmbedChatPrefs,
   disabledCatalogIds,
   extraOffFromCatalog,
+  type CatalogToolRow,
   type EmbedChatPrefs,
   type EmbedChatPrefsApi,
 } from "@/components/stock/embed-chat-prefs";
-import { EmbedComposerMenu, type ComposerMenuKind } from "@/components/stock/embed-composer-menu";
-import { replaceMcpConfig, connectedMcpConfigs, mcpSessionOverlayHeaderValue } from "@/components/stock/embed-mcp-flow";
-import type { DigichatClientConfig } from "@/lib/deploy-config";
-import {
-  DEFAULT_LANGUAGE_CODE,
-  detectBrowserLanguageCode,
-  tryResolveLanguageInput,
-} from "@/lib/languages";
-import { isWebSearchEnabled } from "@/lib/web-search-pref";
+import type { ComposerMenuKind } from "@/components/stock/embed-composer-menu";
+import type { SessionMcpConfig } from "@/components/stock/embed-mcp-flow";
+import type { ThinkingMode, ViewMode } from "@/lib/view-modes";
+
+/** Narrow structural config: only the fields the prefs hook reads. */
+export type StockChatPrefsConfig = {
+  catalog: CatalogToolRow[];
+  servers: CatalogToolRow[];
+  defaultLanguage?: string;
+  defaultModel?: string;
+  availableModels: readonly string[];
+  /** Host pre-computes models.allowPicker || features.modelPicker. */
+  allowModelPicker?: boolean;
+  view: ViewMode;
+  thinking: ThinkingMode;
+  tenantAllowsWeb: boolean;
+  showByok: boolean;
+  allowUserServers?: boolean;
+  allowAddForm?: boolean;
+};
+
+/** Injectable product deps: pure app functions the package must not import. */
+export type StockChatPrefsDeps = {
+  defaultLanguageCode: string;
+  detectLanguage?: () => string | undefined;
+  resolveLanguage?: (code: string) => string | null | undefined;
+  resolveWebSearch?: (tenantAllows: boolean, userPref: boolean) => boolean;
+  mcpOps: {
+    replace: (
+      list: readonly SessionMcpConfig[],
+      previousId: string,
+      next: SessionMcpConfig,
+    ) => SessionMcpConfig[];
+    connected: (
+      operator: readonly CatalogToolRow[],
+      custom: readonly SessionMcpConfig[],
+    ) => SessionMcpConfig[];
+    headerValue: (
+      configs: readonly SessionMcpConfig[],
+      extraToolOn: (id: string) => boolean,
+      allowSessionUrls: boolean,
+    ) => string | undefined;
+  };
+  renderMenuPanes?: (args: {
+    kind: ComposerMenuKind;
+    models: readonly string[];
+    providerSeed?: string;
+    mcpSeed?: string;
+    onClose: () => void;
+  }) => ReactNode;
+  onOpenSessions?: () => void;
+};
+
+const defaultResolveWebSearch = (tenantAllows: boolean, userPref: boolean) =>
+  tenantAllows && userPref;
+
+const defaultOpenSessions = () => {
+  document.querySelector("[data-memory-thread-list]")?.scrollIntoView({
+    block: "nearest",
+  });
+};
 
 export function useStockChatPrefs({
-  clientConfig,
+  config,
+  deps,
   sessionKey,
   hasSessions,
   newThread,
   redo,
 }: {
-  clientConfig: DigichatClientConfig;
+  config: StockChatPrefsConfig;
+  deps: StockChatPrefsDeps;
   sessionKey: string;
   hasSessions: boolean;
   newThread: () => void;
   redo: () => void;
 }) {
-  const catalogTools = useMemo(() => catalogToolsFromClient(clientConfig), [clientConfig]);
+  const catalogTools = useMemo(
+    () =>
+      catalogToolsFromClient({
+        tools: { catalog: config.catalog },
+        mcp: { servers: config.servers },
+      }),
+    [config.catalog, config.servers],
+  );
   const [chatPrefs, setChatPrefs] = useState<EmbedChatPrefs>(() => ({
     ...DEFAULT_EMBED_CHAT_PREFS,
-    language: clientConfig.chrome.defaultLanguage || detectBrowserLanguageCode(),
-    model: clientConfig.models.default ?? clientConfig.models.available[0] ?? "",
+    language: (config.defaultLanguage || deps.detectLanguage?.()) ?? deps.defaultLanguageCode,
+    model: config.defaultModel ?? config.availableModels[0] ?? "",
     extra: extraOffFromCatalog(catalogTools),
-    view: clientConfig.features.view,
-    thinking: clientConfig.features.thinking,
+    view: config.view,
+    thinking: config.thinking,
   }));
   const [composerMenu, setComposerMenu] = useState<null | ComposerMenuKind>(null);
   const [providerSeed, setProviderSeed] = useState<string | undefined>();
@@ -54,12 +122,10 @@ export function useStockChatPrefs({
   // eslint-disable-next-line react-hooks/refs -- send-time useLatest (#1339)
   chatPrefsRef.current = chatPrefs;
 
-  const catalog = clientConfig.tools.catalog;
-  const tenantAllowsWeb = clientConfig.gate.webSearch === true;
-  const showByok = clientConfig.gate.showByok === true;
-  const showModels =
-    (clientConfig.models.allowPicker === true || clientConfig.features.modelPicker === true) &&
-    clientConfig.models.available.length > 0;
+  const catalog = config.catalog;
+  const tenantAllowsWeb = config.tenantAllowsWeb;
+  const showByok = config.showByok;
+  const showModels = config.allowModelPicker === true && config.availableModels.length > 0;
 
   const getLanguage = useCallback(() => chatPrefsRef.current.language, []);
   const getModel = useCallback(() => {
@@ -73,20 +139,17 @@ export function useStockChatPrefs({
   const getEffort = useCallback(() => chatPrefsRef.current.effort, []);
   const getMcpSession = useCallback(
     () =>
-      mcpSessionOverlayHeaderValue(
-        connectedMcpConfigs(clientConfig.mcp.servers, chatPrefsRef.current.mcpCustom),
+      deps.mcpOps.headerValue(
+        deps.mcpOps.connected(config.servers, chatPrefsRef.current.mcpCustom),
         (id) => chatPrefsRef.current.extra[id] !== false,
-        clientConfig.mcp.allowUserServers === true,
+        config.allowUserServers === true,
       ),
-    [clientConfig.mcp.servers, clientConfig.mcp.allowUserServers],
+    [config.servers, config.allowUserServers, deps.mcpOps],
   );
+  const resolveWebSearch = deps.resolveWebSearch ?? defaultResolveWebSearch;
   const getEnableWebSearch = useCallback(
-    () =>
-      isWebSearchEnabled({
-        tenantAllows: tenantAllowsWeb,
-        userPref: chatPrefsRef.current.webSearch,
-      }),
-    [tenantAllowsWeb],
+    () => resolveWebSearch(tenantAllowsWeb, chatPrefsRef.current.webSearch),
+    [tenantAllowsWeb, resolveWebSearch],
   );
 
   const prefsApi = useMemo<EmbedChatPrefsApi>(
@@ -101,7 +164,7 @@ export function useStockChatPrefs({
       setMcpConfig: (config, previousId) =>
         setChatPrefs((p) => ({
           ...p,
-          mcpCustom: replaceMcpConfig(p.mcpCustom, previousId ?? config.id, config),
+          mcpCustom: deps.mcpOps.replace(p.mcpCustom, previousId ?? config.id, config),
         })),
       removeMcpConfig: (id) =>
         setChatPrefs((p) => ({
@@ -109,7 +172,7 @@ export function useStockChatPrefs({
           mcpCustom: p.mcpCustom.filter((s) => s.id !== id),
         })),
       setLanguage: (code) => {
-        const resolved = tryResolveLanguageInput(code) ?? DEFAULT_LANGUAGE_CODE;
+        const resolved = (deps.resolveLanguage ?? ((c) => c))(code) ?? deps.defaultLanguageCode;
         setChatPrefs((p) => ({ ...p, language: resolved }));
       },
       setView: (mode) => setChatPrefs((p) => ({ ...p, view: mode })),
@@ -118,11 +181,10 @@ export function useStockChatPrefs({
       setEffort: (effort) => setChatPrefs((p) => ({ ...p, effort })),
       reset: () =>
         setChatPrefs({
-          ...DEFAULT_EMBED_CHAT_PREFS,
-          language: DEFAULT_LANGUAGE_CODE,
+          ...createDefaultEmbedChatPrefs({ language: deps.defaultLanguageCode }),
           extra: extraOffFromCatalog(catalogTools),
-          view: clientConfig.features.view,
-          thinking: clientConfig.features.thinking,
+          view: config.view,
+          thinking: config.thinking,
         }),
       tenantAllowsWeb,
       showByok,
@@ -130,10 +192,10 @@ export function useStockChatPrefs({
       hasDigisearch: catalog.some((e) => e.id === "digisearch"),
       hasVault: catalog.some((e) => e.id === "digivault"),
       hasSessions,
-      allowUserMcp: clientConfig.mcp.allowUserServers === true,
-      allowAddMcp: clientConfig.mcp.allowAddForm === true,
+      allowUserMcp: config.allowUserServers === true,
+      allowAddMcp: config.allowAddForm === true,
       catalogTools,
-      mcpServers: clientConfig.mcp.servers,
+      mcpServers: config.servers,
       sessionKey,
       openSettings: () => {
         setComposerMenu("settings");
@@ -164,28 +226,22 @@ export function useStockChatPrefs({
       openLanguage: () => {
         setComposerMenu("language");
       },
-      openSessions: () => {
-        document.querySelector("[data-memory-thread-list]")?.scrollIntoView({
-          block: "nearest",
-        });
-      },
+      openSessions: deps.onOpenSessions ?? defaultOpenSessions,
       newThread: () => {
         setChatPrefs({
-          ...DEFAULT_EMBED_CHAT_PREFS,
-          language: DEFAULT_LANGUAGE_CODE,
+          ...createDefaultEmbedChatPrefs({ language: deps.defaultLanguageCode }),
           extra: extraOffFromCatalog(catalogTools),
-          view: clientConfig.features.view,
-          thinking: clientConfig.features.thinking,
+          view: config.view,
+          thinking: config.thinking,
         });
         newThread();
       },
       compactThread: () => {
         setChatPrefs({
-          ...DEFAULT_EMBED_CHAT_PREFS,
-          language: DEFAULT_LANGUAGE_CODE,
+          ...createDefaultEmbedChatPrefs({ language: deps.defaultLanguageCode }),
           extra: extraOffFromCatalog(catalogTools),
-          view: clientConfig.features.view,
-          thinking: clientConfig.features.thinking,
+          view: config.view,
+          thinking: config.thinking,
         });
         newThread();
       },
@@ -203,26 +259,30 @@ export function useStockChatPrefs({
       hasSessions,
       newThread,
       redo,
-      clientConfig.mcp.allowUserServers,
-      clientConfig.mcp.allowAddForm,
-      clientConfig.mcp.servers,
-      clientConfig.features.view,
-      clientConfig.features.thinking,
+      config.allowUserServers,
+      config.allowAddForm,
+      config.servers,
+      config.view,
+      config.thinking,
+      deps.mcpOps,
+      deps.resolveLanguage,
+      deps.defaultLanguageCode,
+      deps.onOpenSessions,
     ],
   );
 
   const panes = composerMenu ? (
-    <EmbedComposerMenu
-      kind={composerMenu}
-      models={clientConfig.models.available}
-      onClose={() => {
+    deps.renderMenuPanes?.({
+      kind: composerMenu,
+      models: config.availableModels,
+      providerSeed,
+      mcpSeed,
+      onClose: () => {
         setComposerMenu(null);
         setProviderSeed(undefined);
         setMcpSeed(undefined);
-      }}
-      providerSeed={providerSeed}
-      mcpSeed={mcpSeed}
-    />
+      },
+    }) ?? null
   ) : null;
 
   return {

@@ -1,7 +1,7 @@
 "use client";
 
 import { Thread } from "@/app/(baseline)/stock/thread.aui";
-import { useComposerCopy } from "@/components/stock/skin-chrome";
+import { useComposerCopy } from "@digithings/ui/chat/stock";
 
 /**
  * Web facsimile of the official Expo React Native Assistant.

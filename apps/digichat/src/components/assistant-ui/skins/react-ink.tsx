@@ -9,8 +9,8 @@ import {
   ThreadPrimitive,
 } from "@assistant-ui/react";
 import { MarkdownText } from "@/app/(baseline)/stock/markdown-text";
-import { useComposerCopy } from "@/components/stock/skin-chrome";
-import { CreditFooter } from "@/components/stock/credit-footer";
+import { useComposerCopy } from "@digithings/ui/chat/stock";
+import { CreditFooter } from "@digithings/ui/chat/stock";
 
 /**
  * Web facsimile of the official React Ink Terminal Assistant.

@@ -36,7 +36,10 @@ describe("product CSS isolation", () => {
     expect(importLines).toMatch(/product-chrome\.css/);
     expect(importLines).toMatch(/@digithings\/ui\/styles\/chat-core\.css/);
     expect(importLines).toMatch(/@digithings\/ui\/styles\/chat-aui\.css/);
-    expect(importLines).toMatch(/@digithings\/ui\/styles\/chatbot\.css/);
+    expect(importLines).toMatch(/@digithings\/ui\/styles\/chat-digichat\.css/);
+    expect(importLines).toMatch(
+      /@digithings\/ui\/styles\/digichat-app-theme\.css/,
+    );
   });
 
   it("layout catalog templates own / instead of ChatShell", () => {
@@ -46,10 +49,13 @@ describe("product CSS isolation", () => {
   });
 
   it("uses stock Inter theme tokens like the baseline preview", () => {
-    const css = read("globals.css");
-    expect(css).toMatch(/--font-sans:\s*var\(--font-inter\)/);
-    expect(css).toMatch(/--font-mono:\s*var\(--font-ibm-plex-mono\)/);
-    expect(css).toMatch(/--background:\s*oklch\(1 0 0\)/);
+    // Tokens live in the shared bridge globals.css imports (WS1).
+    const bridge = read(
+      "../../../../../packages/ui/src/styles/digichat-app-theme.css",
+    );
+    expect(bridge).toMatch(/--font-sans:\s*var\(--font-inter\)/);
+    expect(bridge).toMatch(/--font-mono:\s*var\(--font-ibm-plex-mono\)/);
+    expect(bridge).toMatch(/--background:\s*oklch\(1 0 0\)/);
   });
 
   it("ChatShell alone pulls the CLI sheet bundle", () => {

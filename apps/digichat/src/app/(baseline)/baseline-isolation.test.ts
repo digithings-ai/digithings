@@ -21,15 +21,26 @@ describe("baseline preview isolation", () => {
     // shell — never its `data-theme` wiring.
     expect(layout).toMatch(/variable:\s*"--font-geist-mono"/);
     expect(layout).not.toMatch(/data-theme/);
-    expect(css).not.toMatch(/@digithings\//);
+    // The shared theme bridge is the only package import allowed here —
+    // it carries the stock shadcn tokens both entry sheets used to duplicate.
+    const bridge = "@digithings/ui/styles/digichat-app-theme.css";
+    expect(css).toContain(bridge);
+    const rest = css
+      .split("\n")
+      .filter((l) => !l.includes(bridge))
+      .join("\n");
+    expect(rest).not.toMatch(/@digithings\//);
     expect(css).not.toMatch(/assistant-ui-cli/);
     expect(css).not.toMatch(/chat-core/);
   });
 
   it("uses the official assistant-ui template theme tokens", () => {
-    const css = read("baseline.css");
-    expect(css).toMatch(/--background:\s*oklch\(1 0 0\)/);
-    expect(css).toMatch(/--font-sans:\s*var\(--font-inter\)/);
+    // Tokens live in the shared bridge now; baseline.css only imports it.
+    const bridge = read(
+      "../../../../../packages/ui/src/styles/digichat-app-theme.css",
+    );
+    expect(bridge).toMatch(/--background:\s*oklch\(1 0 0\)/);
+    expect(bridge).toMatch(/--font-sans:\s*var\(--font-inter\)/);
   });
 
   it("mounts ThreadSkinView for the official assistant-ui templates", () => {

@@ -1,3 +1,5 @@
+"use client";
+
 /**
  * The "powered by digichat" credit line.
  *
@@ -23,8 +25,8 @@
  * paints, so it reads as one surface with the transcript on every skin.
  */
 
-import { cn } from "@/lib/utils";
-import { useAttribution } from "@/components/stock/skin-chrome";
+import { cn } from "../../../lib/utils";
+import { useAttribution } from "./skin-chrome";
 
 export function CreditFooter({
   /**

@@ -10,7 +10,10 @@
 
 import { describe, expect, it, vi } from "vitest";
 import { render } from "@testing-library/react";
-import { SkinChromeProvider, DEFAULT_SKIN_CHROME } from "@/components/stock/skin-chrome";
+import {
+  SkinChromeProvider,
+  DEFAULT_SKIN_CHROME,
+} from "@digithings/ui/chat/stock";
 import {
   EmbedChatPrefsProvider,
   DEFAULT_EMBED_CHAT_PREFS,

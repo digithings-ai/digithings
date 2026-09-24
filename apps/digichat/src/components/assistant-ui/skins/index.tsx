@@ -7,7 +7,7 @@ import {
   isCloneSkin,
   type CloneSkin,
   type ThreadSkin,
-} from "@/lib/thread-skins";
+} from "@digithings/ui/chat/skins";
 import { ChatGPT } from "./chatgpt";
 import { Claude } from "./claude";
 import { Grok } from "./grok";
@@ -30,8 +30,6 @@ const CLONE_THREADS: Record<CloneSkin, FC> = {
 
 export type ThreadSkinViewProps = {
   skin: ThreadSkin;
-  /** Welcome headline — unused on official clones / layouts (they keep demo copy). */
-  welcome?: string;
   /** Explicit composer layout for the digichat skin (else mode-derived). */
   composerLayout?: ComposerLayout;
 };

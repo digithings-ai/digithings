@@ -26,10 +26,13 @@ import { TooltipIconButton } from "./tooltip-icon-button";
 import { Button } from "./ui/button";
 import { Skeleton } from "./ui/skeleton";
 import { cn } from "@/lib/utils";
-import { useStockComposerGateSubmit } from "@/components/stock/stock-send-gate";
+import { useStockComposerGateSubmit } from "@digithings/ui/chat/stock";
 import { MessageError } from "@/components/stock/message-error.aui";
-import { CreditFooter } from "@/components/stock/credit-footer";
-import { useDisclosureUi, useDeployUi } from "@/components/stock/deploy-ui-context";
+import { CreditFooter } from "@digithings/ui/chat/stock";
+import {
+  useDisclosureUi,
+  useDeployUi,
+} from "@digithings/ui/chat/stock";
 import {
   ActionBarMorePrimitive,
   ActionBarPrimitive,

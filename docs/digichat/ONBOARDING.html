@@ -245,7 +245,7 @@
       </tr>
       <tr>
         <td><code>apps/reference</code></td><td><code>design-reference</code></td>
-        <td>The design reference app. <strong>Important:</strong> the canonical first-party digichat stylesheet lives here at <code>app/(chatbot)/chatbot/chatbot.css</code> and is re-exported by <code>packages/ui</code> as <code>styles/chatbot.css</code>. This is the source of truth for the digichat look.</td>
+        <td>The design reference app. <strong>Important:</strong> the reference app imports the canonical first-party digichat stylesheet from <code>packages/ui/src/styles/chat-digichat.css</code> — the package is the source of truth for the digichat look (WS1).</td>
       </tr>
       <tr>
         <td><code>apps/digithings-web</code></td><td><code>digithings-web</code></td>
@@ -401,7 +401,7 @@
     <div class="layer l1"><div class="lbl">① <code>packages/design/tokens.css</code></div><div class="sub">The palette itself: <code>--bg --surface --ink --hair --term-* --accent</code>, dark and light, keyed on <code>[data-theme]</code>. Nothing renders without this.</div></div>
     <div class="layer l2"><div class="lbl">② <code>packages/ui/styles/web-theme.css</code></div><div class="sub">The Tailwind v4 <code>@theme inline</code> bridge: maps those tokens onto utility names (<code>--color-background: var(--bg)</code>, <code>--color-card: var(--surface)</code>…). <em>inline</em> is load-bearing — it keeps utilities resolving at the use site so a scoped theme flip works.</div></div>
     <div class="layer l3"><div class="lbl">③ <code>packages/ui/styles/chat-aui.css</code></div><div class="sub">The digichat skin palette. Declares the dark values on <code>.digichat-thread</code> and the light values behind <code>:root[data-theme="light"] .digichat-thread</code>, plus the assistant-ui variable bridge and the thread-list/attachment/tool rhythm.</div></div>
-    <div class="layer l4"><div class="lbl">④ <code>packages/ui/styles/chatbot.css</code> → <code>apps/reference/app/(chatbot)/chatbot/chatbot.css</code></div><div class="sub">A 4-line re-export. The <strong>real</strong> first-party grammar — welcome copy, composer, block caret, markdown, reasoning, tool UI, portal mirrors — scoped to <code>:is(.aui-theme-stage, [data-thread-skin="digichat"])</code>. Source of truth lives in the reference app.</div></div>
+    <div class="layer l4"><div class="lbl">④ <code>packages/ui/styles/chat-digichat.css</code> — the reference app imports it back</div><div class="sub">The <strong>real</strong> first-party grammar — welcome copy, composer, block caret, markdown, reasoning, tool UI, portal mirrors — scoped to <code>:is(.aui-theme-stage, [data-thread-skin="digichat"])</code>. Source of truth lives in the package (WS1).</div></div>
     <div class="layer l1"><div class="lbl">⑤ Component sheets</div><div class="sub"><code>chat-core.css</code> (transcript, markdown, mermaid) · <code>chat-widgets.css</code> (tool-call + reasoning disclosure) · <code>digichat-boot-loader.css</code> (boot animation) · <code>digichat-launcher.css</code> (corner launcher) · <code>terminal-*.css</code> (CLI) · <code>product-chrome.css</code> (attribution, embed shell, embed caret) · <code>digichat-ui/styles/cursor.css</code>.</div></div>
   </div>
 
@@ -786,7 +786,7 @@ npm run build --workspace digichat</pre>
       <tr><td>Auth gate</td><td><code>apps/digichat/src/lib/request-auth.ts</code></td></tr>
       <tr><td>Upstream credential exchange</td><td><code>apps/digichat/src/lib/digigraph-upstream.ts</code>, <code>lib/digikey-exchange.ts</code></td></tr>
       <tr><td>The first-party Thread</td><td><code>packages/ui/src/components/chat/gallery-thread/thread.aui.tsx</code></td></tr>
-      <tr><td>The digichat theme (source of truth)</td><td><code>apps/reference/app/(chatbot)/chatbot/chatbot.css</code></td></tr>
+      <tr><td>The digichat theme (source of truth)</td><td><code>packages/ui/src/styles/chat-digichat.css</code></td></tr>
       <tr><td>Skin registry</td><td><code>apps/digichat/src/lib/thread-skins.ts</code></td></tr>
       <tr><td>Self-host install guide</td><td><code>docs/digichat/INSTALL.md</code></td></tr>
       <tr><td>Operator runbook</td><td><code>apps/digichat/OPERATIONS.md</code></td></tr>

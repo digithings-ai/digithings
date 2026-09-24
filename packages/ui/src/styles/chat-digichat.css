@@ -1,3 +1,9 @@
+/* digichat chat grammar — first-party Thread + product skin (WS1/F1).
+   Moved into @digithings/ui from apps/reference/app/(chatbot)/chatbot/
+   chatbot.css so the package owns its theme; the reference gallery now
+   imports this sheet back. Grammar is shared; the .aui-theme-stage
+   specimen frame (height/border) is gallery-only. */
+
 /* Chatbot gallery + product `chrome.skin: digichat`.
    Grammar is shared. The specimen frame (height/border) is gallery-only. */
 

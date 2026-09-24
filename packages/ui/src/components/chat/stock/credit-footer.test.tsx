@@ -8,10 +8,14 @@
  * ignored and a titled opted-out tenant rendered two credits (m2502 review, M2).
  */
 
-import { describe, expect, it } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { afterEach, describe, expect, it } from "vitest";
+import { cleanup, render, screen } from "@testing-library/react";
 import { CreditFooter } from "./credit-footer";
 import { SkinChromeProvider, DEFAULT_SKIN_CHROME } from "./skin-chrome";
+
+// No globals auto-cleanup in this package (vitest environment is node) —
+// unmount between tests so getBy* queries see one render.
+afterEach(() => cleanup());
 
 describe("CreditFooter", () => {
   it("renders by default when no provider and no prop", () => {

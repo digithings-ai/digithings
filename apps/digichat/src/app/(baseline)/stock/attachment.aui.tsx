@@ -35,7 +35,7 @@ import {
 import { Avatar, AvatarImage, AvatarFallback } from "./ui/avatar";
 import { TooltipIconButton } from "./tooltip-icon-button";
 import { useAttachmentSrc } from "./use-attachment-src";
-import { useSkinChrome } from "@/components/stock/skin-chrome";
+import { useSkinChrome } from "@digithings/ui/chat/stock";
 import { PAGE_CONTEXT_ATTACHMENT_NAME } from "@/lib/embed-page-context-messages";
 import { cn } from "@/lib/utils";
 

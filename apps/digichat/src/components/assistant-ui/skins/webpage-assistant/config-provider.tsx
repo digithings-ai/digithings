@@ -3,7 +3,7 @@
 import { docsAssistantConfig } from "./assistant-config";
 import { defaultBrandTheme, defaultDocsHostUi } from "./host-ui";
 import type { BrandTheme, DocsAssistantConfig, DocsHostUiSpec } from "./types";
-import { useSkinChrome } from "@/components/stock/skin-chrome";
+import { useSkinChrome } from "@digithings/ui/chat/stock";
 import {
   createContext,
   useContext,

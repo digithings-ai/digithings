@@ -21,7 +21,7 @@ import { Button } from "@/components/ui/button";
 import { ByokCliFlow } from "@/components/byok-cli-flow";
 import { ContactMailto } from "@digithings/ui";
 import { ProductStockShell } from "@/components/stock/product-shell";
-import { CreditFooter } from "@/components/stock/credit-footer";
+import { CreditFooter } from "@digithings/ui/chat/stock";
 import {
   DEFAULT_EMBED_CHAT_PREFS,
   EmbedChatPrefsProvider,
@@ -35,7 +35,7 @@ import { EmbedComposerMenu, type ComposerMenuKind } from "@/components/stock/emb
 import { replaceMcpConfig, connectedMcpConfigs, mcpSessionOverlayHeaderValue } from "@/components/stock/embed-mcp-flow";
 import { useAui, useAuiEvent } from "@assistant-ui/react";
 import { clientConfigFromEmbedTenant } from "@/lib/deploy-config";
-import { skinOwnsPageChrome } from "@/lib/thread-skins";
+import { skinOwnsPageChrome } from "@digithings/ui/chat/skins";
 import {
   useBYOKKey,
   type BYOKProvider,

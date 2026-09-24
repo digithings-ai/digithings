@@ -14,12 +14,15 @@
 import type { ReactNode } from "react";
 import { DigichatLauncher } from "@digithings/ui/chat/launcher";
 import type { DigichatClientConfig } from "@/lib/deploy-config";
-import { isFramedPresentation, skinOwnsPageChrome } from "@/lib/thread-skins";
+import {
+  isFramedPresentation,
+  skinOwnsPageChrome,
+} from "@digithings/ui/chat/skins";
 
 type ChromeMode = DigichatClientConfig["chrome"]["mode"];
 
 // Re-exported so existing callers keep resolving it here. The definition lives
-// in `lib/thread-skins` (server-safe) — see the comment there.
+// in `@digithings/ui/chat/skins` (server-safe) — see the comment there.
 export { isFramedPresentation };
 
 export function PresentationFrame({

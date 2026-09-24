@@ -6,8 +6,7 @@
  */
 
 import { createContext, useContext } from "react";
-import type { UserAlign } from "@/lib/deploy-config/schema";
-import type { ChainDisclosureMode } from "@/lib/view-modes";
+import type { ChainDisclosureMode, UserAlign } from "./skin-types";
 
 export type DeployUiValue = {
   /** Effective reasoning disclosure (view mode + thinking override). */

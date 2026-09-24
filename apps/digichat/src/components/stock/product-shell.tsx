@@ -51,21 +51,26 @@ import {
   effectiveToolCallsMode,
   type ChainDisclosureMode,
 } from "@/lib/view-modes";
+import { parseEmbedChatError, formatEmbedChatError } from "@/lib/embed-chat-error";
 import { cn } from "@/lib/utils";
-import { skinCreditStyle, skinOwnsPageChrome } from "@/lib/thread-skins";
+import {
+  skinCreditStyle,
+  skinOwnsPageChrome,
+} from "@digithings/ui/chat/skins";
 import { useEmbedChatPrefsOptional } from "@/components/stock/embed-chat-prefs";
 import {
   StockSendGateProvider,
   type StockSendGateHandlers,
-} from "@/components/stock/stock-send-gate";
+} from "@digithings/ui/chat/stock";
 import {
   DeployUiProvider,
   type DeployUiValue,
-} from "@/components/stock/deploy-ui-context";
+} from "@digithings/ui/chat/stock";
 import {
   SkinChromeProvider,
+  SkinRuntimeProvider,
   type SkinChromeValue,
-} from "@/components/stock/skin-chrome";
+} from "@digithings/ui/chat/stock";
 import { ToolCatalogBar } from "@/components/stock/tool-catalog-bar";
 import { SessionPrefsToolBridge } from "@/components/stock/session-prefs-tool-bridge";
 
@@ -73,6 +78,14 @@ import { SessionPrefsToolBridge } from "@/components/stock/session-prefs-tool-br
 const BOOT_MIN_MS = 1400;
 /** Overlay fade before the settled boot unmounts. */
 const BOOT_FADE_MS = 320;
+
+/** Skin runtime for the catalog skins: same error copy as the direct import. */
+const SKIN_RUNTIME = {
+  errorParsers: {
+    parseError: parseEmbedChatError,
+    formatError: formatEmbedChatError,
+  },
+};
 
 export type ProductShellProps = {
   runtime: AssistantRuntime;
@@ -526,11 +539,12 @@ export function ProductStockShell({
                   />
                 ) : null}
                 <div className="min-h-0 flex-1">
-                  <ThreadSkinView
-                    skin={cfg.chrome.skin}
-                    welcome={headline}
-                    composerLayout={composerLayout}
-                  />
+                  <SkinRuntimeProvider value={SKIN_RUNTIME}>
+                    <ThreadSkinView
+                      skin={cfg.chrome.skin}
+                      composerLayout={composerLayout}
+                    />
+                  </SkinRuntimeProvider>
                 </div>
                 {/* Placeholder attribute for stock composer — AuiConfig composer key varies by version */}
                 <span className="sr-only" data-composer-placeholder={inputPlaceholder} />

@@ -31,7 +31,7 @@ import {
 import { useState, type FC } from "react";
 import { useAttachmentSrc } from "@/app/(baseline)/stock/use-attachment-src";
 import { MarkdownText } from "@/app/(baseline)/stock/markdown-text";
-import { useComposerCopy } from "@/components/stock/skin-chrome";
+import { useComposerCopy } from "@digithings/ui/chat/stock";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -39,7 +39,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "./ui/dropdown-menu";
-import { CreditFooter } from "@/components/stock/credit-footer";
+import { CreditFooter } from "@digithings/ui/chat/stock";
 
 const messageActionButtonClassName =
   "flex size-8 items-center justify-center rounded-md text-[#5b5950] transition-colors hover:bg-[#1a1a18]/5 hover:text-[#1a1a18] dark:text-[#a3a098] dark:hover:bg-white/5 dark:hover:text-[#eee]";

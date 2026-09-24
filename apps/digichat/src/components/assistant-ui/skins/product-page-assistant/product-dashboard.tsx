@@ -9,7 +9,7 @@ import {
   ServerCogIcon,
 } from "lucide-react";
 import type { CSSProperties } from "react";
-import { useSkinChrome } from "@/components/stock/skin-chrome";
+import { useSkinChrome } from "@digithings/ui/chat/stock";
 
 export function ProductDashboard() {
   const chrome = useSkinChrome();

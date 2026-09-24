@@ -10,7 +10,7 @@ import { DotMatrix } from "./ui/dot-matrix";
 import { MessageTiming } from "./elements/message-timing.aui";
 import { ToolFallback } from "@/app/(baseline)/stock/tool-fallback.aui";
 import { MessageError } from "@/components/stock/message-error.aui";
-import { CreditFooter } from "@/components/stock/credit-footer";
+import { CreditFooter } from "@digithings/ui/chat/stock";
 import {
   ToolGroupContent,
   ToolGroupRoot,
@@ -27,7 +27,10 @@ import {
 import { Button } from "@/app/(baseline)/stock/ui/button";
 import { Skeleton } from "@/app/(baseline)/stock/ui/skeleton";
 import { cn } from "@/lib/utils";
-import { useComposerCopy, useSkinChrome } from "@/components/stock/skin-chrome";
+import {
+  useComposerCopy,
+  useSkinChrome,
+} from "@digithings/ui/chat/stock";
 import {
   ComposerQuotePreview,
   QuoteBlock,

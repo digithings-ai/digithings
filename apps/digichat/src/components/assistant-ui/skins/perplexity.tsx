@@ -2,7 +2,7 @@
 
 import { cn } from "@/lib/utils";
 import { MarkdownText } from "@/app/(baseline)/stock/markdown-text";
-import { useSkinChrome } from "@/components/stock/skin-chrome";
+import { useSkinChrome } from "@digithings/ui/chat/stock";
 import {
   ActionBarPrimitive,
   AuiIf,
@@ -39,7 +39,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "./ui/dropdown-menu";
-import { CreditFooter } from "@/components/stock/credit-footer";
+import { CreditFooter } from "@digithings/ui/chat/stock";
 
 const composerPrimaryActionClassName =
   "absolute inset-0 flex items-center justify-center rounded-full transition-all duration-200 ease-out";

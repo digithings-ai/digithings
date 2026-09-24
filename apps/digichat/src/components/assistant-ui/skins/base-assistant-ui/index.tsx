@@ -4,7 +4,7 @@ import { useMemo } from "react";
 import { Base } from "@/components/assistant-ui/skins/base/thread";
 import { BaseConfigProvider } from "./config-provider";
 import { defaultBaseConfig, type ResolvedBaseConfig } from "./defaults";
-import { useSkinChrome } from "@/components/stock/skin-chrome";
+import { useSkinChrome } from "@digithings/ui/chat/stock";
 
 /** Configurable Base catalog entry — official Base Thread + brandTheme shell. */
 export function ConfigurableBase() {

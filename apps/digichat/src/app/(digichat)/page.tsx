@@ -6,7 +6,10 @@ import {
   getPrimaryDeployment,
   getDigichatConfig,
 } from "@/lib/deploy-config/loader";
-import { isFramedPresentation, skinOwnsPageChrome } from "@/lib/thread-skins";
+import {
+  isFramedPresentation,
+  skinOwnsPageChrome,
+} from "@digithings/ui/chat/skins";
 import { HomeStockClient } from "./home-stock-client";
 
 /**
