@@ -499,6 +499,10 @@ backend type rather than adding them unilaterally.
 
 ## Phase 4 — docs truth
 
+Status: landed 2026-09-24 (WS6) — version reads `2.3.2` from
+`apps/digichat/package.json`; index at `docs/digichat/README.md`; ownership plan at
+`docs/architecture/digichat-ui-ownership.md`. Bullets below kept as the record.
+
 - Fix the `apps/digichat/AGENTS.md` claim that only `/api/health` is public
   (`deploy/chrome`, `embed/tenant-config`, `mcp/oauth/callback`, `plan-proof`
   and the dev-only `baseline-chat` are also unauthenticated).

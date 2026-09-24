@@ -26,7 +26,7 @@ Primary install unit: a **pinned GHCR image** — not npm (`private: true`), not
 `:latest` in production.
 
 ```bash
-docker pull ghcr.io/digithings-ai/digichat:v1.0.0
+docker pull ghcr.io/digithings-ai/digichat:v2.3.2
 ```
 
 | Artifact | Value |
@@ -34,11 +34,11 @@ docker pull ghcr.io/digithings-ai/digichat:v1.0.0
 | Git tag | `digichat-vX.Y.Z` |
 | GHCR image | `ghcr.io/digithings-ai/digichat:vX.Y.Z` |
 | Changelog | `apps/digichat/CHANGELOG.md` |
-| Current app version | `1.0.0` |
+| Current app version | `2.3.2` |
 
 **Existing clients (DataTap and others) stay on `v0.9.3`.** That GHCR tag remains
 published and is not deleted — only new installs / digithings’ own cut should move
-to `v1.0.0` until those clients choose to upgrade.
+to `v2.3.2` until those clients choose to upgrade.
 
 Compose overlays and env templates live under
 [`infra/digichat-release/`](../../infra/digichat-release/).
@@ -102,7 +102,7 @@ LiteLLM uses the public berriai image. Pin stack and digichat tags separately:
 
 | Variable | Example | Services |
 |---|---|---|
-| `DIGICHAT_VERSION` | `1.0.0` | digichat → `…/digichat:v1.0.0` |
+| `DIGICHAT_VERSION` | `2.3.2` | digichat → `…/digichat:v2.3.2` |
 | `DIGI_IMAGE_TAG` | `sha-<12>` or `v0.1.0` | digikey, digigraph, digivault |
 
 ```bash
@@ -246,7 +246,7 @@ Optional seed list of known hosts: `apps/digichat/embed-hosts.txt` (not baked in
 ## Smoke
 
 ```bash
-docker pull ghcr.io/digithings-ai/digichat:v1.0.0
+docker pull ghcr.io/digithings-ai/digichat:v2.3.2
 curl -sf http://127.0.0.1:3005/api/health | jq .
 # Embed (clients always pass token):
 # open http://127.0.0.1:3005/embed?host=client.example.com&token=…

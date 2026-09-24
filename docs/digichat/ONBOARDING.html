@@ -716,12 +716,11 @@
   </div>
 
   <div class="note">
-    <b>Known doc drift — trust the code.</b> Several guides still say the current version is <code>1.0.0</code>
-    or that publishing stopped at <code>v0.9.3</code>; the marketing copy says <code>v2.3.1</code>. The truth is
-    <code>apps/digichat/package.json</code> → <strong>2.3.2</strong>. Also, <code>apps/digichat/AGENTS.md</code>
-    says <code>GET /api/health</code> is the only public route, but <code>/api/deploy/chrome</code>,
-    <code>/api/embed/tenant-config</code>, <code>/api/mcp/oauth/callback</code> and <code>/api/plan-proof</code>
-    are intentionally unauthenticated too (they serve client-safe projections or have their own token check).
+    <b>Doc drift — resolved 2026-09.</b> The guides now state the current version
+    (<code>apps/digichat/package.json</code> → <strong>2.3.2</strong>) and
+    <code>apps/digichat/AGENTS.md</code> lists the full public / self-authenticating
+    route set. <code>v0.9.3</code> remaining on GHCR for existing clients is intentional
+    retention, not drift.
   </div>
 </section>
 
