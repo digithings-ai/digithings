@@ -33,6 +33,36 @@ const GAP_Y = 62;
 const GROUP_PAD = 18;
 const GROUP_HEAD = 46;
 const GLYPH = 22;
+/** The label column: the text starts after the glyph and its gutter. */
+const LABEL_X = 48;
+/** Roughly how many characters fit the label column at the label's size. */
+const LABEL_MAX_CHARS = 15;
+
+/**
+ * Break a service label onto at most two lines so it never runs past its box.
+ * A box is `BOX_W` wide and the label column starts at `LABEL_X`, so the budget
+ * is ~15 monospace characters; anything longer splits on the first space that
+ * balances the two lines, and a single word that still overruns is left to the
+ * box's own clip rather than broken mid-word. Returns one line when it fits.
+ */
+function wrapLabel(label: string): string[] {
+  if (label.length <= LABEL_MAX_CHARS) return [label];
+  const words = label.split(" ");
+  if (words.length === 1) return [label];
+  let best: string[] = [label];
+  let bestDelta = Infinity;
+  for (let cut = 1; cut < words.length; cut += 1) {
+    const line1 = words.slice(0, cut).join(" ");
+    const line2 = words.slice(cut).join(" ");
+    if (line1.length > LABEL_MAX_CHARS || line2.length > LABEL_MAX_CHARS) continue;
+    const delta = Math.abs(line1.length - line2.length);
+    if (delta < bestDelta) {
+      bestDelta = delta;
+      best = [line1, line2];
+    }
+  }
+  return best;
+}
 
 /** A laid-out service: a spec service that carries a grid slot. */
 export type PlacedService = ArchService & { col: number; row: number };
@@ -261,8 +291,16 @@ export function ArchitectureSvg({ spec, lit, className }: ArchitectureSvgProps) 
             <g className="arch-node__glyph" transform={`translate(${r.x + 14} ${r.y + (BOX_H - GLYPH) / 2}) scale(${GLYPH / 20})`}>
               <Glyph kind={service.icon} />
             </g>
-            <text className="arch-node__label" x={r.x + 48} y={r.y + BOX_H / 2} dominantBaseline="middle">
-              {service.label}
+            <text className="arch-node__label" x={r.x + LABEL_X} y={r.y + BOX_H / 2} dominantBaseline="middle">
+              {(() => {
+                const lines = wrapLabel(service.label);
+                if (lines.length === 1) return lines[0];
+                return lines.map((line, i) => (
+                  <tspan key={line} x={r.x + LABEL_X} dy={i === 0 ? -6 : 13}>
+                    {line}
+                  </tspan>
+                ));
+              })()}
             </text>
           </g>
         );

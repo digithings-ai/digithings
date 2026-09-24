@@ -51,7 +51,7 @@
  * at which the pinned layout fits.
  */
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 
 import { ArchitectureDiagram, type ArchSpec } from "./ArchitectureDiagram";
 
@@ -86,6 +86,11 @@ export interface ArchitectureTourProps {
   variant?: TourVariant;
   /** Scroll spent per step, in viewport heights. */
   vhPerStep?: number;
+  /**
+   * Held inside the pin, above the diagram, so a title/lede stays on screen for
+   * the whole walk instead of scrolling away when the walk begins.
+   */
+  header?: ReactNode;
   className?: string;
 }
 
@@ -151,7 +156,8 @@ function usePinned(): boolean {
 export function ArchitectureTour({
   sides,
   variant = "static",
-  vhPerStep = 1.15,
+  vhPerStep = 1.6,
+  header,
   className,
 }: ArchitectureTourProps) {
   const reduced = usePrefersReducedMotion();
@@ -354,7 +360,7 @@ export function ArchitectureTour({
        below (which is longer now) so a second flick in the same movement is
        swallowed rather than advancing again — that is what makes the walk read
        as continuous instead of jumpy. */
-    const GESTURE_COOLDOWN_MS = 900;
+    const GESTURE_COOLDOWN_MS = 1250;
     let lockUntil = 0;
 
     const avail = () => Math.max(1, track.offsetHeight - pin.offsetHeight);
@@ -522,6 +528,7 @@ export function ArchitectureTour({
     <div className={`arch-tour${className ? ` ${className}` : ""}`} data-variant={mode}>
       <div className="arch-tour__track" ref={trackRef}>
         <div className="arch-tour__pin" ref={pinRef}>
+          {header ? <div className="arch-tour__head">{header}</div> : null}
           <div className="arch-tour__grid" ref={gridRef}>
             {sides.map((side, si) => {
               const base = sides.slice(0, si).reduce((n, s) => n + s.steps.length, 0);

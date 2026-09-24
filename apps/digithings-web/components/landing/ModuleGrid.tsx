@@ -142,7 +142,7 @@ const ROW_FOCUS_SHARE = 0.56;
  */
 const ROW_MIN_SHARE = 0.19;
 
-const VH_PER_MODULE = 60;
+const VH_PER_MODULE = 90;
 
 /**
  * The stacked face's focal line, as a share of the viewport height. The tile
@@ -526,12 +526,16 @@ export function ModuleGrid() {
                           </span>
                         ) : null}
 
-                        {/* The packages, in every tile — the owner: "i would make
-                            the packages that are used in every module visible in
-                            the non-expanded view." Named chips, not the icon-only
-                            compact row, because the point is to read them. */}
+                        {/* The packages. Collapsed tiles show only the logos —
+                            the owner: "when the module cards are colapse we
+                            should just show the logo of the packages not the
+                            full name in order to save on space." The focused
+                            tile gets the named chips. */}
                         <span className="dg-mosaic-stack">
-                          <StackRow items={m.stack} className="stack-row" />
+                          <StackRow
+                            items={m.stack}
+                            className={on ? "stack-row" : "stack-row compact"}
+                          />
                         </span>
 
                         {on ? (
