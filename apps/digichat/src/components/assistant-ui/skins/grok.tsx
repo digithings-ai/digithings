@@ -42,13 +42,13 @@ import { CreditFooter } from "@/components/stock/credit-footer";
 
 export const Grok: FC = () => {
   return (
-    <ThreadPrimitive.Root className="flex h-full flex-col items-stretch bg-[#fdfdfd] px-4 dark:bg-[#141414]">
+    <ThreadPrimitive.Root className="relative flex h-full flex-col items-stretch bg-[#fdfdfd] px-4 dark:bg-[#141414]">
         <AuiIf condition={(s) => s.thread.isEmpty}>
           <div className="flex h-full flex-col items-center justify-center">
             <GrokIcon className="mb-6 h-10 text-[#0d0d0d] dark:text-white" />
             <Composer />
-            <CreditFooter className="mt-2" />
           </div>
+          <CreditFooter className="absolute inset-x-0 bottom-0 pb-2" />
         </AuiIf>
 
         <AuiIf condition={(s) => s.thread.isEmpty === false}>

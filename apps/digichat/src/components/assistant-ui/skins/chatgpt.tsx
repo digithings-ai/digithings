@@ -46,7 +46,7 @@ export const ChatGPT: FC = () => {
     "Ask anything",
   );
   return (
-    <ThreadPrimitive.Root className="flex h-full flex-col items-stretch bg-white px-4 text-[#0d0d0d] dark:bg-black dark:text-[#ececec]">
+    <ThreadPrimitive.Root className="relative flex h-full flex-col items-stretch bg-white px-4 text-[#0d0d0d] dark:bg-black dark:text-[#ececec]">
         <AuiIf condition={(s) => s.thread.isEmpty}>
           <EmptyState />
         </AuiIf>
@@ -78,14 +78,14 @@ const EmptyState: FC = () => {
     "Ask anything",
   );
   return (
-    <div className="flex grow flex-col items-center justify-center px-4 pb-[16vh]">
+    <div className="flex grow flex-col items-center justify-center px-4">
       <div className="mx-auto flex w-full max-w-3xl flex-col items-stretch gap-6">
         <h1 className="text-center text-2xl leading-7 font-normal text-[#0d0d0d] dark:text-[#ececec]">
           {welcome}
         </h1>
         <Composer placeholder={placeholder} />
-        <CreditFooter />
       </div>
+      <CreditFooter className="absolute inset-x-0 bottom-0 pb-2" />
     </div>
   );
 };

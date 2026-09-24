@@ -46,7 +46,7 @@ const messageActionButtonClassName =
 
 export const Claude: FC = () => {
   return (
-    <ThreadPrimitive.Root className="flex h-full flex-col items-stretch bg-[#F0ECE0] font-serif text-[#1a1a18] dark:bg-[#2b2a27] dark:text-[#eee]">
+    <ThreadPrimitive.Root className="relative flex h-full flex-col items-stretch bg-[#F0ECE0] font-serif text-[#1a1a18] dark:bg-[#2b2a27] dark:text-[#eee]">
         <AuiIf condition={(s) => s.thread.isEmpty}>
           <EmptyState />
         </AuiIf>
@@ -81,8 +81,8 @@ const EmptyState: FC = () => {
         </h1>
         <Composer />
         <ModeTabs />
-        <CreditFooter />
       </div>
+      <CreditFooter className="absolute inset-x-0 bottom-0 pb-2" />
     </div>
   );
 };

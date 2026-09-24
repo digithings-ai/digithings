@@ -56,7 +56,7 @@ export const Perplexity: FC = () => {
   const followPlaceholder = chrome.placeholder?.trim() || "Ask a follow-up...";
   return (
     <ThreadPrimitive.Root
-        className="flex h-full flex-col bg-[#f6f2ec] text-[#1f1b17] dark:bg-[#171615] dark:text-[#f5f2ed]"
+        className="relative flex h-full flex-col bg-[#f6f2ec] text-[#1f1b17] dark:bg-[#171615] dark:text-[#f5f2ed]"
         style={{
           ["--thread-max-width" as string]: "40rem",
         }}
@@ -89,8 +89,8 @@ const EmptyState: FC<{ placeholder: string }> = ({ placeholder }) => {
           perplexity
         </p>
         <Composer placeholder={placeholder} />
-        <CreditFooter />
       </div>
+      <CreditFooter className="absolute inset-x-0 bottom-0 pb-4" />
     </div>
   );
 };
