@@ -3,7 +3,6 @@
 import { useState } from "react";
 import {
   CardRail,
-  CtaLink,
   DigiquantMark,
   LOOKBACK_OPTIONS,
   MultiTimeSeries,
@@ -547,20 +546,19 @@ export function QuantSection({ className }: { className?: string }) {
               from that min-content and push the page wider than the viewport.
               `minmax(0,1fr)` + `min-w-0` pin the track to the container. */}
           <div className="grid grid-cols-[minmax(0,1fr)] gap-[2rem] min-[980px]:grid-cols-[minmax(0,0.72fr)_minmax(0,1.28fr)] min-[980px]:gap-[2.4rem]">
-            {/* Left: the claim and the two ways into the product. The owner
-                wanted the space beside the title filled — "Put the buttons there
-                to open the dashboard with the DigiQuant dashboard logo. And then
-                tier sheets as another button below it ... aligned properly." */}
-            <div className="flex min-w-0 flex-col justify-center gap-[1.4rem]">
+            {/* Left: the product name as a link to digiquant.io, with the claim
+                below it. Round 16 (owner): "top of the digiquant.io seciton
+                should have a hyperlink to the website that serves as the section
+                title too" and then "I want the text digiquant.io visible that was
+                suposed to be the hyperlink" — so the visible title is the domain,
+                linking to the product site, and the slogan sits under it. The two
+                CTA buttons were removed in the same pass ("remove the open
+                dashboard and tearsheet buttons"). */}
+            <div className="flex min-w-0 flex-col justify-center gap-[1rem]">
               {/* `h2`, not `h3`: this band has no other heading, so an `h3` left
                   the document outline skipping a level between `#open-source`
-                  and `#pricing`. Every other band's `h2` is its claim rather than
-                  its product name, so the claim is the band's heading.
-
-                  Round 16 (owner): "top of the digiquant.io seciton should have a
-                  hyperlink to the website that serves as the section title too."
-                  So the title carried by the h2 is the hyperlink to digiquant.io
-                  — the band's own product page is the section's heading link. */}
+                  and `#pricing`. The band's heading is its product name; the
+                  slogan under it carries the claim. */}
               <h2 className="m-0 font-mono text-[clamp(1.4rem,2.6vw,2rem)] font-medium leading-[1.2] tracking-[-0.02em] text-ink">
                 <a
                   href={DIGIQUANT_URL}
@@ -568,21 +566,12 @@ export function QuantSection({ className }: { className?: string }) {
                   rel="noopener noreferrer"
                   className="text-ink underline decoration-hair decoration-1 underline-offset-[0.2em] transition-colors hover:decoration-accent focus-visible:decoration-accent"
                 >
-                  A hedge fund in a glass box you own.
+                  digiquant.io
                 </a>
               </h2>
-              <div className="flex flex-col items-start gap-[0.6rem]">
-                <CtaLink
-                  href={`${DIGIQUANT_URL}/dashboard`}
-                  external
-                  icon={<DigiquantMark size={16} />}
-                >
-                  Open the dashboard
-                </CtaLink>
-                <CtaLink href={`${DIGIQUANT_URL}/strategies`} external variant="ghost">
-                  Tearsheets
-                </CtaLink>
-              </div>
+              <p className="m-0 max-w-[var(--measure-prose)] text-[0.92rem] leading-[1.6] text-ink-soft">
+                A hedge fund in a glass box you own.
+              </p>
             </div>
 
             {/* Right: the library, in the kit's horizontal rail — the element

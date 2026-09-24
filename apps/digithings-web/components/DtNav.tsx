@@ -9,13 +9,17 @@
  * the tail, and the "Ask digichat" CTA (sheet, plus a compact tail link on wide
  * viewports). The CTA treatments are the kit's CtaLink/IconLink, so the button
  * dress lives once in buttonVariants — no `.dc-nav-cta` stays here.
+ *
+ * The bar is pinned: it settles after 8px but never yields on scroll-down
+ * (owner: the top bar should stay fixed to the top). Pass
+ * `autoHide="hover"` explicitly for the non-scrolling chat shells.
  */
 import { usePathname } from "next/navigation";
 import { NavShell, GitHubGlyph, IconLink, CtaLink } from "@digithings/ui";
 import { Brand, DT_NAV_PRIMARY } from "@/app/_nav";
 import { DigiChatMark } from "@digithings/digichat-ui";
 
-export function DtNav({ autoHide }: { autoHide?: "scroll" | "hover" }) {
+export function DtNav({ autoHide = "pinned" }: { autoHide?: "scroll" | "hover" | "pinned" }) {
   const pathname = usePathname();
   return (
     <NavShell
