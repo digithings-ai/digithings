@@ -553,7 +553,7 @@
   .ts-lib-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 0.85rem; margin-bottom: 0.5rem; }
   .ts-lib-toolbar { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 1rem; margin-bottom: 1rem; }
   .ts-card-kind { font-family: var(--font-mono); font-size: 0.64rem; letter-spacing: 0.06em; text-transform: uppercase; color: var(--accent); }
-  .ts-card { display: flex; flex-direction: column; gap: 0.7rem; border: 1px solid var(--hair); border-radius: var(--r-md); background: linear-gradient(180deg, var(--surface), var(--surface-2)); padding: 1rem 1.05rem; transition: transform 0.25s var(--ease), border-color 0.25s var(--ease); }
+  .ts-card { display: flex; flex-direction: column; gap: 0.7rem; border: 1px solid var(--hair); border-radius: var(--r-md); background: transparent; padding: 1rem 1.05rem; transition: transform 0.25s var(--ease), border-color 0.25s var(--ease); }
   .ts-card-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 0.65rem; }
   .ts-card-title { display: flex; align-items: center; gap: 0.65rem; min-width: 0; flex: 1; }
   .ts-card-title-text { display: flex; flex-direction: column; gap: 0.1rem; min-width: 0; }

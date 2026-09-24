@@ -1,9 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import { modules, type RepoContributor, type RepoModuleRelease } from "@digithings/ui";
+import { type RepoContributor } from "@digithings/ui";
 import { REPO_URL } from "@/lib/repoActivity";
-import { moduleVersion } from "@/lib/moduleCounts";
 import { OpenSourceLive } from "./OpenSourceLive";
 
 /**
@@ -132,28 +131,6 @@ export function FaqList() {
  */
 
 /**
- * The current version of every shipped module — the activity variant's ledger.
- *
- * The owner's round-5 note: "the latest releases for every module we should have
- * the latest versions for every module not just digi chat". The changelog can't
- * answer that — release-please only cuts releases for digichat and digiskills, so
- * a ledger built from `releases.json` listed two modules and silently dropped the
- * other seven. The version each module declares for itself is the fact that does
- * cover every one, so it comes from the generated `module-counts.json`
- * (`moduleVersion`), walked in the same `graphOrder` the mosaic uses.
- *
- * Roadmap modules (digistore, digilink) declare no version and are absent, not
- * shown as `0.0.0`. No `url` is set: there is no per-module release page to point
- * at, and the band's own "browse the repo" link already goes to GitHub.
- */
-const MODULE_RELEASES: RepoModuleRelease[] = [...modules]
-  .sort((a, b) => a.graphOrder - b.graphOrder)
-  .flatMap((m) => {
-    const version = moduleVersion(m.id);
-    return version ? [{ name: m.id, version }] : [];
-  });
-
-/**
  * The maintainer, with the face from the site's own `public/team/chris.png`
  * (the owner: "we also need to add like the maintainer chris there's a profile
  * picture on the main digi things website you could take it there").
@@ -167,13 +144,10 @@ const MAINTAINER: RepoContributor = {
 
 export function OpenSource() {
   /* The kit's activity variant, at the full width of the band, rendered through
-     the app's one client shell so the version rail can refresh live (#4429).
-     The shell is `OpenSourceLive`; this server half owns the committed list and
-     the maintainer, and `min-w-0` there keeps the grid's max-content heat frame
-     from setting the track's min-content and pushing the page sideways at
-     narrow widths. The activity variant is the middle ground the owner asked
-     for: the summary metrics and the contribution graph are kept, the two
-     ledgers are dropped, and the version rail and the maintainer take their
-     place. */
-  return <OpenSourceLive moduleReleases={MODULE_RELEASES} contributor={MAINTAINER} />;
+     the app's one client shell (#4429). `min-w-0` there keeps the grid's
+     max-content heat frame from setting the track's min-content and pushing the
+     page sideways at narrow widths. The per-module version rail was removed on
+     the owner's request ("remove the // current versions section form the live
+     repo status view"); the maintainer credit stays. */
+  return <OpenSourceLive contributor={MAINTAINER} />;
 }
