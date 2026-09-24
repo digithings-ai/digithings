@@ -33,6 +33,7 @@
     "./chat/surfaces": "./src/components/chat/chat-surfaces.ts",
     "./chat/dot-matrix": "./src/components/chat/DotMatrix.tsx",
     "./chat/skins": "./src/components/chat/skins/index.ts",
+    "./chat/skins/digichat": "./src/components/chat/skins/digichat.tsx",
     "./chat/stock": "./src/components/chat/stock/index.ts",
     "./chat/stock/thread": "./src/components/chat/stock/thread.aui.tsx",
     "./chat/transcript": "./src/components/chat/transcript/index.ts",

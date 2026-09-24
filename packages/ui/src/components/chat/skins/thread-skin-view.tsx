@@ -1,22 +1,55 @@
 "use client";
 
-import type { FC } from "react";
+import { lazy, Suspense, type FC, type LazyExoticComponent } from "react";
 import type { ComposerLayout } from "@digithings/ui/chat/thread";
-import { Base } from "./base/thread";
 import { isCloneSkin, type CloneSkin, type ThreadSkin } from "./thread-skins";
-import { ChatGPT } from "./chatgpt";
-import { Claude } from "./claude";
-import { Grok } from "./grok";
-import { Gemini } from "./gemini";
-import { Perplexity } from "./perplexity";
-import { ReactInkWeb } from "./react-ink";
-import { ExpoReactNative } from "./expo-react-native";
-import { ConfigurableBase } from "./base-assistant-ui";
-import { WebpageAssistant } from "./webpage-assistant";
-import { ProductPageAssistant } from "./product-page-assistant";
-import { DigichatSkin, type DigichatSkinOptions } from "./digichat";
+import type { DigichatSkinOptions } from "./digichat";
 
-const CLONE_THREADS: Record<CloneSkin, FC> = {
+// Per-skin on-demand chunks (WS4 Step 5): each skin ships only when its id is
+// selected. The `.then` interop maps the named export to the default that
+// lazy() expects. Imports of types only (above) are erased, so they pull no
+// chunk; the DigichatSkin *value* must stay out of the barrel for the same
+// reason (hosts render it exclusively through ThreadSkinView).
+const Base = lazy(() =>
+  import("./base/thread").then((m) => ({ default: m.Base })),
+);
+const ChatGPT = lazy(() =>
+  import("./chatgpt").then((m) => ({ default: m.ChatGPT })),
+);
+const Claude = lazy(() =>
+  import("./claude").then((m) => ({ default: m.Claude })),
+);
+const Grok = lazy(() =>
+  import("./grok").then((m) => ({ default: m.Grok })),
+);
+const Gemini = lazy(() =>
+  import("./gemini").then((m) => ({ default: m.Gemini })),
+);
+const Perplexity = lazy(() =>
+  import("./perplexity").then((m) => ({ default: m.Perplexity })),
+);
+const ReactInkWeb = lazy(() =>
+  import("./react-ink").then((m) => ({ default: m.ReactInkWeb })),
+);
+const ExpoReactNative = lazy(() =>
+  import("./expo-react-native").then((m) => ({ default: m.ExpoReactNative })),
+);
+const ConfigurableBase = lazy(() =>
+  import("./base-assistant-ui").then((m) => ({ default: m.ConfigurableBase })),
+);
+const WebpageAssistant = lazy(() =>
+  import("./webpage-assistant").then((m) => ({ default: m.WebpageAssistant })),
+);
+const ProductPageAssistant = lazy(() =>
+  import("./product-page-assistant").then((m) => ({
+    default: m.ProductPageAssistant,
+  })),
+);
+const DigichatSkin = lazy(() =>
+  import("./digichat").then((m) => ({ default: m.DigichatSkin })),
+);
+
+const CLONE_THREADS: Record<CloneSkin, LazyExoticComponent<FC>> = {
   chatgpt: ChatGPT,
   claude: Claude,
   grok: Grok,
@@ -44,7 +77,18 @@ export type ThreadSkinViewProps = {
  * `react-ink` and `expo-react-native` are web facsimiles; TTY / Expo sources
  * stay under `reference/assistant-ui-templates/` and are not imported here.
  */
-export function ThreadSkinView({
+export function ThreadSkinView(props: ThreadSkinViewProps) {
+  // Suspense boundary for the per-skin chunks above. Fallback is null so no
+  // loading chrome flashes when a newly selected skin's chunk arrives late;
+  // once loaded the render is identical to the static version (WS4 Step 5).
+  return (
+    <Suspense fallback={null}>
+      <ThreadSkinSwitch {...props} />
+    </Suspense>
+  );
+}
+
+function ThreadSkinSwitch({
   skin,
   composerLayout,
   digichat,

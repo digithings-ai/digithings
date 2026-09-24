@@ -21,7 +21,7 @@ import {
 } from "@digithings/ui/chat/stock";
 import { takePendingWebSearchForce } from "@/lib/pending-chat-headers";
 import { DIGICHAT_SKIN_OPTIONS } from "@/lib/digichat-skin-options";
-import { DigichatSkin } from "@digithings/ui/chat/skins";
+import { DigichatSkin } from "@digithings/ui/chat/skins/digichat";
 const composerState = vi.hoisted(() => ({ text: "" }));
 const capture = vi.hoisted(() => ({
   submit: null as null | ((event: { preventDefault: () => void }) => void),

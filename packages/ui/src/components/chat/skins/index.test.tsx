@@ -29,17 +29,21 @@ vi.mock("./digichat", () => ({
 }));
 
 describe("ThreadSkinView composerLayout", () => {
-  it("forwards an explicit composerLayout to the digichat skin", () => {
+  it("forwards an explicit composerLayout to the digichat skin", async () => {
     render(<ThreadSkinView skin="digichat" composerLayout="compact" />);
     expect(
-      screen.getByTestId("digichat-skin").getAttribute("data-composer-layout"),
+      (await screen.findByTestId("digichat-skin")).getAttribute(
+        "data-composer-layout",
+      ),
     ).toBe("compact");
   });
 
-  it("passes undefined through when no composerLayout is given", () => {
+  it("passes undefined through when no composerLayout is given", async () => {
     render(<ThreadSkinView skin="digichat" />);
     expect(
-      screen.getByTestId("digichat-skin").getAttribute("data-composer-layout"),
+      (await screen.findByTestId("digichat-skin")).getAttribute(
+        "data-composer-layout",
+      ),
     ).toBe("");
   });
 });

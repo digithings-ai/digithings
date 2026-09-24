@@ -4,8 +4,11 @@
  * first-party wiring through the `digichat` prop (see DigichatSkinOptions).
  */
 export { ThreadSkinView, type ThreadSkinViewProps } from "./thread-skin-view";
+// NOTE: DigichatSkin (the component value) is intentionally NOT re-exported
+// here — its stylesheet side-effect imports would force the chunk into every
+// barrel importer's graph and defeat the per-skin lazy split (WS4 Step 5).
+// Import it via the deep export `@digithings/ui/chat/skins/digichat` instead.
 export {
-  DigichatSkin,
   type DigichatSkinCopy,
   type DigichatSkinOptions,
   type DigichatSkinSlash,
