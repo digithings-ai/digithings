@@ -837,7 +837,8 @@ explicit that they're still blocked on Stage 2's OHLC plumbing.)
      width sweep scored against fold 1's own regime rather than through the
      expanding-IS-window proxy, flagged for Chris/coordinator rather than run
      unilaterally given it revisits how much OOS-adjacent data a search
-     proxy may see.
+     proxy may see. Committed as `30c79b920` (`curve_optimize_feasibility.py`
+     + this entry).
 
 ## North-star ceiling (benchmark only — NEVER a trading candidate)
 
