@@ -39,7 +39,8 @@ from digiquant.portfolio.skills import load_skill_full
 from digiquant.portfolio.state import PortfolioState
 from digiquant.research.forecast_outcomes import (
     ForecastOutcomeIntegrityError,
-    list_resolved_outcomes_as_of,
+    ResolvedOutcomesMemo,
+    list_resolved_outcomes_as_of_memoized,
 )
 from digiquant.research.phases._node_factory import (
     _shared_context,
@@ -113,12 +114,15 @@ def _load_cutoff_outcomes(
     *,
     client: SupabaseClient | None,
     state: PortfolioState,
+    resolved_outcomes_memo: ResolvedOutcomesMemo | None = None,
 ) -> list[ForecastOutcome]:
     cutoff = state.knowledge_cutoff_at
     if client is None or cutoff is None:
         return []
     try:
-        return list_resolved_outcomes_as_of(client=client, knowledge_cutoff_at=cutoff)
+        return list_resolved_outcomes_as_of_memoized(
+            client=client, knowledge_cutoff_at=cutoff, memo=resolved_outcomes_memo
+        )
     except ForecastOutcomeIntegrityError:
         # #4298: a persisted digest that no longer matches its canonical payload is a
         # deterministic data-integrity failure, not a transient load error. It must
@@ -139,6 +143,7 @@ def _attach_shadow_calibration(
     state: PortfolioState,
     *,
     client: SupabaseClient | None,
+    resolved_outcomes_memo: ResolvedOutcomesMemo | None = None,
 ) -> ShadowCalibrationAttachment:
     """Observational attach at deliberation→direction boundary.
 
@@ -146,9 +151,14 @@ def _attach_shadow_calibration(
     persisted-digest integrity failure (:class:`ForecastOutcomeIntegrityError`,
     #4298) is deliberately NOT caught here: the run fails with the named error
     instead of silently calibrating against an emptied cohort.
+
+    ``resolved_outcomes_memo`` reuses the cohort preflight already fetched
+    (#4617); ``None`` reads directly.
     """
     try:
-        outcomes = _load_cutoff_outcomes(client=client, state=state)
+        outcomes = _load_cutoff_outcomes(
+            client=client, state=state, resolved_outcomes_memo=resolved_outcomes_memo
+        )
         return attach_shadow_calibrations_from_state(state, outcomes=outcomes)
     except ForecastOutcomeIntegrityError:
         raise
@@ -178,10 +188,13 @@ def _direction_node(
     *,
     client: SupabaseClient | None = None,
     research_state_store: ResearchStateStore | None = None,
+    resolved_outcomes_memo: ResolvedOutcomesMemo | None = None,
 ) -> dict[str, Any]:
     """direction node body; ``client`` optional for cutoff-safe outcome load (WP5.4)."""
     # WP5.4: attach before LLM so fail-soft memo path still carries shadows.
-    shadow = _attach_shadow_calibration(state, client=client)
+    shadow = _attach_shadow_calibration(
+        state, client=client, resolved_outcomes_memo=resolved_outcomes_memo
+    )
 
     current_weights = _current_weights_from_config(state)
     lesson_pin = state.outcome_lesson_pin if isinstance(state.outcome_lesson_pin, dict) else None
@@ -288,11 +301,21 @@ def build_direction(
     *,
     client: SupabaseClient | None = None,
     research_state_store: ResearchStateStore | None = None,
+    resolved_outcomes_memo: ResolvedOutcomesMemo | None = None,
 ) -> PipelinePhase:
-    """Build direction; optional ``client`` loads cutoff-safe outcomes for shadow calibration."""
+    """Build direction; optional ``client`` loads cutoff-safe outcomes for shadow calibration.
+
+    ``resolved_outcomes_memo`` is the run-scoped cohort memo shared with preflight
+    (#4617); ``None`` reads directly.
+    """
 
     def _bound(state: PortfolioState) -> dict[str, Any]:
-        return _direction_node(state, client=client, research_state_store=research_state_store)
+        return _direction_node(
+            state,
+            client=client,
+            research_state_store=research_state_store,
+            resolved_outcomes_memo=resolved_outcomes_memo,
+        )
 
     return PipelinePhase(
         name=PHASE_NAME,

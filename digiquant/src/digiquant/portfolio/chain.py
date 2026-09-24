@@ -41,6 +41,7 @@ from digiquant.portfolio.stage_gates import (
 from digiquant.research import diagnostics as _diagnostics
 from digiquant.research import provider_telemetry as _provider_telemetry
 from digiquant.research.diagnostics import register_breakdown_contributor
+from digiquant.research.forecast_outcomes import ResolvedOutcomesMemo
 from digiquant.research.graph import (
     ResearchGraphDeps,
     ResearchInput,
@@ -954,10 +955,15 @@ def cli_main(argv: list[str] | None = None) -> int:
     from digiquant.research.supabase_io import SupabaseConfig, build_client
 
     client = build_client(SupabaseConfig.from_env())
+    # One resolved-outcome cohort memo per run: research preflight and the
+    # portfolio direction phase share the client and the pinned cutoff, so the
+    # second reader reuses the first reader's GET (#4617).
+    direction_outcomes_memo: ResolvedOutcomesMemo = {}
     research_deps = ResearchGraphDeps(
         preflight=PreflightDeps(
             client=client,
             config_loader=_make_default_config_loader(research_input.watchlist),
+            resolved_outcomes_memo=direction_outcomes_memo,
         ),
         publish=None,  # chain handles publish at the end
         triage=TriageDeps(client=client),
@@ -967,7 +973,7 @@ def cli_main(argv: list[str] | None = None) -> int:
     from digiquant.portfolio.phases.phase7e_risk_sizing import RiskSizingDeps
 
     portfolio_deps = PortfolioGraphDeps(
-        thesis=ThesisGraphDeps(client=client),
+        thesis=ThesisGraphDeps(client=client, resolved_outcomes_memo=direction_outcomes_memo),
         risk_sizing=RiskSizingDeps(client=client),
         commit_run=CommitRunDeps(client=client),
     )
