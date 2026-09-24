@@ -442,17 +442,28 @@ def run_research_agent(
                     return output_model.model_validate(data)
                 except (json.JSONDecodeError, ValidationError, ValueError) as exc:
                     last_error = exc
-                    logger.warning(
+                    if attempt == max_retries:
+                        logger.warning(
+                            "research_agent attempt %d/%d failed for %s: %s",
+                            attempt + 1,
+                            max_retries + 1,
+                            schema_name,
+                            exc,
+                        )
+                        if call is not None:
+                            call.set_no_artifact_reason(NoArtifactReason.VALIDATION_REJECTED)
+                        break
+                    # The retry below is the designed recovery path (#1739), not an alarm:
+                    # log it at INFO so the terminal WARNING above stays the only one an
+                    # operator has to look at. Measured on run 35857376877: 15 such
+                    # first-attempt failures, every one recovered, none terminal.
+                    logger.info(
                         "research_agent attempt %d/%d failed for %s: %s",
                         attempt + 1,
                         max_retries + 1,
                         schema_name,
                         exc,
                     )
-                    if attempt == max_retries:
-                        if call is not None:
-                            call.set_no_artifact_reason(NoArtifactReason.VALIDATION_REJECTED)
-                        break
                     if call is not None:
                         call.set_no_artifact_reason(NoArtifactReason.VALIDATION_REJECTED)
                     messages = messages + [

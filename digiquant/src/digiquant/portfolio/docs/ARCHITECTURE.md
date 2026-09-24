@@ -355,6 +355,12 @@ the immutable analyst base — never broad re-grounding.
 | `low_value_carry` | WP11.3 enforce selection (#2902) | `true` | deterministic skip; zero provider calls |
 | `attention_carry` | WP13.4 enforce attention (#2930) | `true` | post-analyst re-route skipped deliberation; zero provider calls |
 
+These four are exactly the members of the `CarryReason` `Literal`
+(`models/deliberation.py`) — a constant that is not in the Literal is a value the
+constructing node raises `ValidationError` on. `CARRY_ATTENTION` was defined and used
+by the H6 node but missing from the Literal, so every attention-enforced carry raised
+until #4592; `tests/dq/portfolio/test_deliberation_carry_reason.py` now pins the set.
+
 Consequences of `llm_failure`, all downstream of the flag:
 
 - **State.** `converged=false` — there is no debate to converge, so direction's `debate_summaries`

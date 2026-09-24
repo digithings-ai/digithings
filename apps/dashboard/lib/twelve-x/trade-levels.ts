@@ -389,19 +389,19 @@ function buildLadderRows(
       }
     : null;
 
-  // Multi-target ladder: price-descending for display (labels follow display order).
-  const targetsByPriceDesc = [...tradeLevels.targets].sort((a, b) => {
-    const na = Number(a.value);
-    const nb = Number(b.value);
-    if (Number.isFinite(na) && Number.isFinite(nb)) return nb - na;
-    return 0;
-  });
-  const targetRows: IdeaDetailLevelRow[] = targetsByPriceDesc.map((target, index) => ({
-    label: index === 0 ? 'Target' : `Target ${index + 1}`,
-    value: formatLevelValue(target.value, pair, target.provenance),
-    chip: provenanceChipLabel(target),
-    role: 'target',
-  }));
+  // Single primary target: the pipeline caps ideas to one target (LEVELS_MAX_TARGETS),
+  // so publish only the primary rung — never a "Target 2/3…" ladder.
+  const primaryTarget = tradeLevels.targets[0];
+  const targetRows: IdeaDetailLevelRow[] = primaryTarget
+    ? [
+        {
+          label: 'Target',
+          value: formatLevelValue(primaryTarget.value, pair, primaryTarget.provenance),
+          chip: provenanceChipLabel(primaryTarget),
+          role: 'target',
+        },
+      ]
+    : [];
 
   const long = isLongDirection(direction);
   const rows: IdeaDetailLevelRow[] = [];

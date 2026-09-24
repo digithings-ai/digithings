@@ -522,7 +522,9 @@ export interface AnalystPayload {
   evidence: AnalystEvidence | null;
 }
 
-/** #1672 evidence assessment — mirrors portfolio/models/analyst.py:EvidenceAssessment. */
+/** #1672 evidence assessment — mirrors portfolio/models/analyst.py:EvidenceAssessment.
+ *  The two counts share one five-family universe, so `confirming + contradicting <= 5`
+ *  is enforced backend-side (#4585); legacy rows are repaired (net-preserved) on carry. */
 export interface AnalystEvidence {
   independent_confirming_signals: number | null;
   contradicting_signals: number | null;
