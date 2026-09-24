@@ -1,14 +1,34 @@
 {
   "schemaVersion": 1,
-  "pageVersion": "sha256:8f20028e7039d1add13647e508f57858932587f84530bcb61f742fe764cf8f0e",
+  "pageVersion": "sha256:6d0b5e2437c5549af0507ca68fca106dc042d957db57ade0702536385adf8c37",
   "claims": [
     {
       "id": "claim_833ed63831fe44b6b1de03b1788c1bf4",
-      "statement": "Six Nautilus strategies plus the SDCA engine register with aliases, resolved through the single canonical STRATEGY_ALIASES map with PARAM_SPEC_NAMES for differing optimize keys.",
+      "statement": "Eleven Nautilus strategies (ema_cross, ema_cross_long, ema_cross_trailing, rsi_momentum, bollinger_mr, macd_trend, btc_sdca, btc_slapper, eth_slapper, sol_slapper, rs_rotation) register with aliases resolved through the static STRATEGY_ALIASES map merged with runtime _ALIASES from register(...), and PARAM_SPEC_NAMES maps btc_sdca to sdca for differing optimize keys; m2_liquidity is imported but not registered.",
       "evidence": [
         {
-          "resource": "repo://digiquant/ARCHITECTURE.md#L64-L80",
-          "version": "repo-lines-v1:sha256:d83835afff77baa630a0ac554c042667153e422b4e2be15219cb50218e1ab3e3:eyJzZWxlY3RlZExpbmVDb3VudCI6MTcsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjdjYTY0ZTJmMzI1OTc0MDFiZTQxMmNlNmE3NDliYzY1MjAxNTgyODQzNDM1MGRjNThkOTg0YTllNzM2NzI5NTgiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImUzZTc2ZmMzODI4ZmY3M2ZmNWEyNDQxYmU0ZmEzOTc4YmU2OThhOTJiMzIwYjE3OTRlNzQzNDFhZmNmMGI0ZTEiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImEyMTMwYWZkZmNmNWIzZTk5OGJlZGI3NDNmZjU5ZmIyMDYzMzg1MGM3MDZlMzAyYWEzOGRiNzQ3ODY0NDZjZDMiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjI1ZWUyZGMzOTAwYjVhMTQ0Nzk2YzFmMDQzZjAzY2FiYzlmM2U5NThiMjJmMDViOTg1ZDA2ZDVmNjc5MGFkMTQifQ"
+          "resource": "repo://digiquant/src/digiquant/strategies/__init__.py#L3-L23",
+          "version": "repo-lines-v1:sha256:b3389793d54a49ca1b744b8eef5bb22921c7be708b6977f0d946b5f17e9b5855:eyJzZWxlY3RlZExpbmVDb3VudCI6MjEsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjA2ZTgzM2ZjYjRiNWZmYmJiZmFlYmE3MDczNGNlYzVkNDRhYWYyY2I3Zjk1ZDBjODVmYTIxNjNjODg5YjhkZmQiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjJmMGYzZWY2NTkzZmM2YTdhZGFlZDBlNjQxMzY3MTZlNDU1ZjFlZTY5N2NiM2Q5MjQwNmY0Y2Y5Mjc3ZGY4NDUiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjoyLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjA4MDEyMTI4YWNiM2Y3MDE5ZmQxZmNjMjY3NmNlMWJlMDBiNGJjN2NmMTUwOWE5YTFlNjBkNWExNDZhN2I2OTIiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjY2ZDc0YzBkZDg1YjBkNTQ4NjQ1MWFhN2RlOTZjN2YzZTg3NzkxMzNlNWViMWFiMzU3YWMyMTE3NjVmZTNhMWIifQ"
+        },
+        {
+          "resource": "repo://digiquant/src/digiquant/strategies/ema_cross.py#L9-L20",
+          "version": "repo-lines-v1:sha256:9e548f72da7c376b5bdf8ff381125bbe711e1b7a6a6e9661495fbf005720ad60:eyJzZWxlY3RlZExpbmVDb3VudCI6MTIsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQxMzZjNWNhY2NmYzA5MWE0YjZkZWIwN2E4MjhlMjA0NjhjNjFmZDc5NzJkOTRjMzMxY2MwODQzNjMyMTlhMTAiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImZhZmJhMDUyN2MzOTUzYzRiNmUwZTViNTczOWJhODM2MTJmODA1M2JjZGM5NDY2NzMwMTkzY2QxZDU5MGI0MDgiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjJkZDhjNjNjNDhiNzI1Yzg5YjFhNzg3NGY4MGE4ZDk5ZWI3ZTkzZGFiODM3YjVjNjM4MTYyOGJjNzJhMzYzMGMiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjowLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUifQ"
+        },
+        {
+          "resource": "repo://digiquant/src/digiquant/strategies/registry.py#L28-L61",
+          "version": "repo-lines-v1:sha256:17416127a159d60193072aa8e79407fb27c576a24d824f404954fc1f3e593ef8:eyJzZWxlY3RlZExpbmVDb3VudCI6MzQsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjUyOWI1ZWJiNDM0MWY2Y2ZiZTdmNWFhYjJlYjM2ZWE1ZDFkZjQ1YmQ0ODNhMzY5YjcwNzQwMTRkMWNkODc0ZWUiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImMzODExN2ZmZGMzZDJmZDdlNGQxZjViNjNiOGIzNTgxMTRlMDIxZTYzODUzOWM4NjMyZmM2Yjg0YWYxODE1YmMiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjViM2QxNzFiZDdkNWI0MzI1OTk4MDEyN2NhYTJmNDQ2YTgxNmQ1OGI3NzEwMjYzZjZhNjNhZWRmZjYzMGU4NDMiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjQ4Mzk1YTgxNmVjM2NkYjgxNjA2MTQ5ZjBmNDE3MjNmZTNkN2YwNjU3NjhmZjkyYjhlOGFkMWJkYjM2ODYzNDIifQ"
+        },
+        {
+          "resource": "repo://digiquant/src/digiquant/strategies/rotation/nautilus_strategy.py#L180-L192",
+          "version": "repo-lines-v1:sha256:41cc6cd7e23f730e8ceb12159810f48395a91ac570ab3e886183575b31ef5c92:eyJzZWxlY3RlZExpbmVDb3VudCI6MTMsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQxMzZjNWNhY2NmYzA5MWE0YjZkZWIwN2E4MjhlMjA0NjhjNjFmZDc5NzJkOTRjMzMxY2MwODQzNjMyMTlhMTAiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImZhZmJhMDUyN2MzOTUzYzRiNmUwZTViNTczOWJhODM2MTJmODA1M2JjZGM5NDY2NzMwMTkzY2QxZDU5MGI0MDgiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImFjMTBkZDNkMWU5YjQ3YzM1OGZiNTUwN2NlMmYyOGYzMzFkZGUwNzc0Y2ZlNzhkMjFlOTJjYTAzYTcwMWIzODIiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjowLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUifQ"
+        },
+        {
+          "resource": "repo://digiquant/src/digiquant/strategies/sdca/nautilus_strategy.py#L360-L371",
+          "version": "repo-lines-v1:sha256:861f6172130af87d7c0d56565e5cc19580252d75b38a3124d26c1189323d656f:eyJzZWxlY3RlZExpbmVDb3VudCI6MTIsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQxMzZjNWNhY2NmYzA5MWE0YjZkZWIwN2E4MjhlMjA0NjhjNjFmZDc5NzJkOTRjMzMxY2MwODQzNjMyMTlhMTAiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImZhZmJhMDUyN2MzOTUzYzRiNmUwZTViNTczOWJhODM2MTJmODA1M2JjZGM5NDY2NzMwMTkzY2QxZDU5MGI0MDgiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImIyMjc0NjVhOGYzNjIxNDE3NDhiNGEzNmEzYTg0YWYwMTVkM2UyYTY2MTFkZmFlOGUzNDg2MTVlZmFmZTYzNWUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImFjNTViZjM3NWEyY2JlZmY2OThjNDFjYmI4OWVlZTk0OGU5M2YxZWFlY2MzZmUwMGRjODQ4MTA0YTgwMTE0YWYifQ"
+        },
+        {
+          "resource": "repo://digiquant/src/digiquant/strategies/slapper.py#L453-L478",
+          "version": "repo-lines-v1:sha256:15152aa1f95629f457afc82d0681350a84a5dbe49a2932bde4c840cb8c7748e1:eyJzZWxlY3RlZExpbmVDb3VudCI6MjYsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQxMzZjNWNhY2NmYzA5MWE0YjZkZWIwN2E4MjhlMjA0NjhjNjFmZDc5NzJkOTRjMzMxY2MwODQzNjMyMTlhMTAiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImZhZmJhMDUyN2MzOTUzYzRiNmUwZTViNTczOWJhODM2MTJmODA1M2JjZGM5NDY2NzMwMTkzY2QxZDU5MGI0MDgiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjI2OGRlYmIwZmJkN2MwNWMzNDllZTM2NmQ1YTI4MGQxN2VmZWNjYTgxOTYwNjczZGFjMjA3NGRkNmEwYjYyNmMiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjowLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUifQ"
         },
         {
           "resource": "repo://digiquant/src/digiquant/strategy_aliases.py#L15-L28",
@@ -32,21 +52,75 @@
     },
     {
       "id": "claim_903268d5d1f84649927f74ff308c3d1c",
-      "statement": "BacktestResult carries run identity, window, PnL, return, Sharpe, drawdown, and trade counts with ok/partial/error status; OptimizeResult adds best_params with the best trial's backtest under OptimizationConstraints.",
+      "statement": "BacktestResult carries run identity, window, PnL, return, Sharpe, drawdown, and trade counts with ok/partial/error status (a computed success property is True unless status is error), OptimizeResult adds best_params with the best trial's backtest, and OptimizationConstraints declares the hard limits candidates must satisfy.",
       "evidence": [
         {
-          "resource": "repo://digiquant/src/digiquant/models.py#L46-L67",
-          "version": "repo-lines-v1:sha256:60a51a7e9516864bc2835a7e73ff37a5accdd836e48596c896068d4e93de9046:eyJzZWxlY3RlZExpbmVDb3VudCI6MjIsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjgzZTVhOGRmMjZmYWJhZWI5ZGNlZGYxYzZiNzg5ZDRhZmVhZjI1ZmNjNWY4ODhlZDlkNGU1MGU1OWRmMjE0NWQiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjZhNjdmMTJkODYxMzBhZjQ0NTRhYTM0NGQyYThjYjc4YWI5Y2E2NGJjNzExMDAxODU1MzJiOTlkN2E2MTI2YjQiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImFiNDY2Njk1OWJmYzNiMDBmNzFhMmVlZDkxODk3YzljYmUzMzVjMjQ1Zjc5MzJkMjgzN2ZlOGQ0YTAwNWY5NDciLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjowLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUifQ"
+          "resource": "repo://digiquant/src/digiquant/models.py#L38-L49",
+          "version": "repo-lines-v1:sha256:bceb463ba4807ac40f2d8822ed2782a9159b524abead5c239e3b49b11c41a803:eyJzZWxlY3RlZExpbmVDb3VudCI6MTIsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjgzZDg2NTg4YTdiZTJlNTg2YzM2YWVkZTQ2YTdlNTMyMDhhMmJmMWM0ZWIxMWI4MTQ4M2VhMjNiMTlhNzdmZmUiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6Ijk4ZmFmNjBkOTdmYjczNzQ1MWU1ZDA4NjIwMWNhNWVmZDcxMzc2YzYyMmVkZGI2NmI0Njc4Yzc3YjZlZTYwZGUiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjliYTQwNThhYjA0Y2E2ZGJiZTA0ZmYyZmJiYmM2MzA2YTk5OWRkYTI0YmMwNGRhOWM1ZWIzY2VjZTUxMjllODciLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjFiNTYwODAzYjEyMjEyZTc5YjVmZGUwYzkwZDMxYzkzNDU0OTBkYzI1MWMyNDJiNGQ5ZDUwNTBhNDA1MmM1MjUifQ"
         },
         {
-          "resource": "repo://digiquant/src/digiquant/models.py#L8-L40",
-          "version": "repo-lines-v1:sha256:0cda94949d7d88add341bbe0350ec2abf5c1a53b1de8fa208418290471bb64e8:eyJzZWxlY3RlZExpbmVDb3VudCI6MzMsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQ2ODkzYTczODQ1YTk2ZjI2MmIyNDM5YjIzMWU5NzE4ZDQ3OGEzYjNmM2U4OWIwNDdjNGUxYWUxNDU0MDZhNmMiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6Ijg4YTAxOGVhYTcyY2MxOTVlNmRlYjUxNjM1NGNiZTg4NjdjNmZjOTg3OGQzZDAzYTQxNmQ5ZTdmMzRhMDQwMjgiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImVlYWJlZjFkNTE5ZGM0YzlmNDMwNjFiMGJjNDkzNDE2MWNkMzNhOWJmNmYyZWJiODg5YzgxYThhNjc4ZWU0NjYiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImZiMDYwNjYzOGMyZTNmNGEwZTIyZWUyMjg4NjUyNDJhN2UyMmI0ZTIyOTkzMTUwOTNiOTJiOGM4MTg1ZWIyZWIifQ"
+          "resource": "repo://digiquant/src/digiquant/models.py#L52-L67",
+          "version": "repo-lines-v1:sha256:afb0f03d0c356fa6fc876e136adc4daf3147d85c2001a0222d6427ce33b0cef8:eyJzZWxlY3RlZExpbmVDb3VudCI6MTYsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjgzZTVhOGRmMjZmYWJhZWI5ZGNlZGYxYzZiNzg5ZDRhZmVhZjI1ZmNjNWY4ODhlZDlkNGU1MGU1OWRmMjE0NWQiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjAxYmE0NzE5YzgwYjZmZTkxMWIwOTFhN2MwNTEyNGI2NGVlZWNlOTY0ZTA5YzA1OGVmOGY5ODA1ZGFjYTU0NmIiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImFiNDY2Njk1OWJmYzNiMDBmNzFhMmVlZDkxODk3YzljYmUzMzVjMjQ1Zjc5MzJkMjgzN2ZlOGQ0YTAwNWY5NDciLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjYwZGZkNmUxZDBkMjg0NWQ2NDgyZWFiMDI5MzA5NTIzMTQyNmVmYTdlYWM4Mzk2NjU4ODA3OTcyODMyYzkyNjIifQ"
+        },
+        {
+          "resource": "repo://digiquant/src/digiquant/models.py#L8-L35",
+          "version": "repo-lines-v1:sha256:d763a4feec3329f42967637d4847ae22c8d007ff4f34577dab0da28288efd31e:eyJzZWxlY3RlZExpbmVDb3VudCI6MjgsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQ2ODkzYTczODQ1YTk2ZjI2MmIyNDM5YjIzMWU5NzE4ZDQ3OGEzYjNmM2U4OWIwNDdjNGUxYWUxNDU0MDZhNmMiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjBkZDkzODJlOGIxOTJjNjg0ZjkxNmQ5ODA1M2ExZWIyNzlhOWEyYjUwNTc5N2I4ZTRjYTMxYjY4OGJjZDU0MGIiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImUyYTllMzU1NmE0ZmNmZjI4ODAxODFiZGJiN2E2MjZkYmMzOGU2ODYzOTlkY2M4ODdiMDQwMjY4MWM0NzIzZGMiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImM1Y2Y0OGFjN2U0MjAyNzFjZTI5ZWJiZTE3MzJhZDQ5M2U4OTJjNmJlYmI5YTFmMjdkZmI5OGZkNzhlNmZlMzgifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_3d6b461521004332bb8b8bb6fb7b67a4",
+      "statement": "After each successful backtest via the HTTP /run_backtest endpoint, if the result has a non-None sharpe_ratio, the server records it into addm.record_sharpe(strategy_name, sharpe) for the rolling ADDM drift detection window.",
+      "evidence": [
+        {
+          "resource": "repo://digiquant/src/digiquant/addm.py#L42-L47",
+          "version": "repo-lines-v1:sha256:7cccef8d698be2d409c5713b2082f75c0958a249eb7de7cec48b61b8f1eb1295:eyJzZWxlY3RlZExpbmVDb3VudCI6NiwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiNDlmM2NlMjBiOTJiZjQxNGQyNWYxMDg5NmEwODlkNjdmOGIyM2I3NWQwY2Y0ZjBkZGI4ZTM1YTYyYTQzYjg5OCIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiZmE3NWEyZTc2YTg0YWM3NWRhZTM0NjE0MjYzZDJiNDVlYWI2ZTJmYjIzZGRhMGI2NTYxNDI0YzhiMjA1NDBkMCIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiNmFlMWExYTU4NmYxNzRmYmZjNTNkZmZkZDM0ZTg5ZDEzZDMwOGJmM2E2YzBlZjkxYmEyNjk1OGU0MGQ3ZDhmMiIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiMmYxZTY0Nzk4OTk1YjU0ZmUzODhkNWFjZGIyYjhjNTM4YzUwOTgzM2FhNDBiZGI4ZjYyN2ZhNTBlZGIwZjM5OSJ9"
+        },
+        {
+          "resource": "repo://digiquant/src/digiquant/server.py#L281-L282",
+          "version": "repo-lines-v1:sha256:96d8d880a5014e809b3454310cbad07a30cec374d6fb13fdfa4653b2dd4b2e9d:eyJzZWxlY3RlZExpbmVDb3VudCI6MiwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiYzNmMzg4Y2MzNjkzZjc2MTgxMjM2Yjc3MDQ1ODQ1OGZhYTM2ZWFiZTRjMDM5NGRkMDdiNDkxMmNkMzMyMzNhYiIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiYjdkNTliMTg1MGNkMTZmNGIwYjcyMGY0MjQ5ZmM0YzVlNzcxYjA4MTY0NjBhZDMxMWMwYzUxNzZiNzFmZTAwZiIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiNmU3ZGNmYWUwMDIwMGMwOTQ1YzZmNDIyYjdiMGU5ZDkwNTAzYzUwNjg2YWMyNDQzMWVjN2JmYzg0OThjMzEyZiIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiZDcyMjMxMDZmZDg3NDJiNzBlYTIzM2Y5ZGMzNTlmNGIwMmJiYjA2OWI3MjgzZWVmNzYyNDk5NTE2YmQ3YjljOCJ9"
+        }
+      ]
+    },
+    {
+      "id": "claim_a0112351b3ba4afc9c43cb4d2edb82af",
+      "statement": "run_optimize dispatches to a dedicated SDCA walk-forward path when the resolved strategy name is 'sdca', using vs_flat_dca_pct as objective with capital-deployed floor and drawdown cap, refitting power-law rails per fold on the in-sample window only.",
+      "evidence": [
+        {
+          "resource": "repo://digiquant/src/digiquant/optimize.py#L205-L215",
+          "version": "repo-lines-v1:sha256:6b1212c9ca2a37b3ee45c8ae262be9ba33e3d0290a0976379913368a7ef5447d:eyJzZWxlY3RlZExpbmVDb3VudCI6MTEsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImVjNmY3MDUwZTdiMjNjMTk2YTQ0NTM1ZDUxOGQzNmNlZTEzNzViMzk1Y2JjMTM2NzhhZDBiODA1MWIxZDFhZDUiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjU5MDlhNTNhNjE4ZDAyOGUxZDMwMDBjMGE3YWJjZWVjYmU1ZmIzN2Y0ZTUxMWVmZTQ2NjQzZmFkNmU2Njg3MmYiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImJjYzUyZjk2NmFiMjJkNzBjY2JjYWQ4ZDJmOGQ0Zjk2YWExNjk4NmU3MWQ2YWY4N2Q5ZmRiYmEyMDVlYjFjNDciLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjQ1MzQzM2VjMTAwMTBjY2YyYjZlN2RkZGM5YjdmYjcxOGFlODQ5MjY4N2NkZDFjMDdjYjJhZjAxNWY3ZWNiODgifQ"
+        },
+        {
+          "resource": "repo://digiquant/src/digiquant/optimize.py#L342-L382",
+          "version": "repo-lines-v1:sha256:4cdcc101908d0b30d8c1695a0bd620a52f0d36ed24647d443abffcbc7c3cc468:eyJzZWxlY3RlZExpbmVDb3VudCI6NDEsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjRkYjMxNmIyN2I0ZDA5NWI5MGE3ZGUyZjc1NGQ5NzMyYzgyODQ3MDU2YjU4YmZkNjlkMzI0ZTQwN2FkNGEzNjMiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQ3NGM3Y2U0M2U0M2IxZTFlMjMxMWYyYzI3YmM2YjBkYjY4Y2Y2NzM4NzQ3YjJhMzFlNWIxZTc3NDk4YjA1NGEiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjhjYzRhN2QxY2M3OTZhYmEzZTQ2NzIzMzI3ZjUxN2U5ZjgxMTk4MmQyNTBmMDcwMjk4NmU0YjU3NjRhZDk1ODkiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjowLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUifQ"
+        },
+        {
+          "resource": "repo://digiquant/src/digiquant/strategies/sdca/optimize.py#L132-L139",
+          "version": "repo-lines-v1:sha256:722d54be1af79f341647623b2b701043ba95294763f91b3c761a54c3c60e873a:eyJzZWxlY3RlZExpbmVDb3VudCI6OCwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiMDQwZjlmNWQ0MTE2MTE0YTExZDkzMzk2MDYxMzgwYzE1ZmQ0NTQ3NmU2YzMzZjZmMGZiNTkyYzViYjhkZjI5NiIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiM2QyYTI0OWVhNjYzMTcxMjBmNGYyMTI3MGIyNDFkMWU5ZmE2NzMwNGU5ODdlMmUyNmExODJlOTY3MDhkNTYzMSIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiMjYyZDRiODQwMDQ5OGI3ZTFiZTRhZjBjZmRkZWQ3ZDQxYmUyNGRmMzU1MjQ4M2NiNDZlYzA1ZDk3N2Y2ZGU3ZCIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiMzUyMmMxZDMzMDkzNjdiYjEzNjRlYzY4MTk0NDljYWYzNDIzN2U3YzhhODRjZTIyZjU3NTc3NzFlY2VlYWU5ZiJ9"
+        },
+        {
+          "resource": "repo://digiquant/src/digiquant/strategies/sdca/walk_forward.py#L40-L51",
+          "version": "repo-lines-v1:sha256:0bff1f7b9ece25764b16570f8f03c2c1bafa67f921aa01033898bce427b15976:eyJzZWxlY3RlZExpbmVDb3VudCI6MTIsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjhkNDc4ZDhlOWI1NzYzY2FkMzEyMGZlNDVkMmZmYTc1NzRlNDZlOWQ4ZmM2M2UzMjc1MThkNDg1N2Y1Yjg0NGIiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6Ijg5YWY4MjE1NzRiNmNlMDU5YmQ4ZDA1NmQ2YWJjMTY2YzljOGY4YWVjZWNhZjYzMTAxYjIxZjMzMjgzZjE1YzYiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjM5ZDBkYzE1OWQ0MWY0ZmQyYjA3MTJlY2IxY2ZjMzY2YWRhYmJiZmZmZDVlYjI0ZGVlMjcyYjNjZTMwZjU1ZGMiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjE0NjVkMDY1M2I0YmI5MmE2NTQyZGFkNWIwMmNjZjFlODA4MmYzZTVkYzgyYWM1MTE5MTBkY2E2NDhiMWU4NDgifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_4e55118187624fdea49190451151bb32",
+      "statement": "run_export confines output directories under an allowed export root (EXPORT_OUTPUT_DIR or digiquant/results/exports) via path relative-to validation, rejecting path-traversal attempts.",
+      "evidence": [
+        {
+          "resource": "repo://digiquant/src/digiquant/export.py#L25-L36",
+          "version": "repo-lines-v1:sha256:e6adba8c0bc4a08d794e8c8574f0047c184aa3a2e6e14b1c110ff368cee2484f:eyJzZWxlY3RlZExpbmVDb3VudCI6MTIsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjJlZGFmMTc1M2JjZTk4NDI4ZTVkOWRhNjFjYTYwNTdmYTE3NDA1ZDYyMDU2MjIxMTJlNmRiMjkwMGQ1ZjFmOWUiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjU5MDlhNTNhNjE4ZDAyOGUxZDMwMDBjMGE3YWJjZWVjYmU1ZmIzN2Y0ZTUxMWVmZTQ2NjQzZmFkNmU2Njg3MmYiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjU4Y2ZlYWU1NTI3ZWY3Y2I5ZGJhYTEzNzcxZGI1NGI1YWIxMmNlOWE2MTAzMDljOTM2ZTMwYzExZDIwNTg3OGIiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImFlOTAyOWU5YzdjZWZkOTk4NzcxYWFjNWZkMjg0ZjJiMmY2MjFiYjI5ZmE4OGRjOTkyYmI2YzVlMTdlYWMxOGIifQ"
+        },
+        {
+          "resource": "repo://digiquant/src/digiquant/export.py#L96-L99",
+          "version": "repo-lines-v1:sha256:8864f5b601d5dcd9117d8232b9f29f72d76c7e566077963c7b8e64d6a0c4f91e:eyJzZWxlY3RlZExpbmVDb3VudCI6NCwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiYzRlYmVkNGE1N2Q4OGUwNWJlMWNiODgyN2VjZmMyMWVhMzMxM2NkYTY4ZTNmYzY5YWRmZDc2Mzk2NWIxYzQ0NSIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiNDY4NDczMjdiMjMyYmQwZjBkMDFhZjI1NjljOTc0MGNiZWU2YzgxNzdmN2Y0M2RiYTI4NTYzMzZhNmVmZWQ0ZCIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiMWJjYWMzNWNhYzMzOTEzMjk2MWZlZjVjYTYzODBjYjRiOGRmZGFjYTExM2NkYWZhODc0Nzc1OWNhMmI0NjNiYyIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiYjYxYTgxOTY1YjFjODQ0ZmUyYjQyNWYzZWFhZGIyMTVmZmYwODA3OGFkMjQ3ZTc5OWI1NzcwNzJhNjI0MTljMyJ9"
         }
       ]
     }
   ],
   "verification": {
     "by": "openwiki/0.5.0",
-    "at": "2026-09-09T14:37:17.158Z"
+    "at": "2026-09-23T13:25:31.068Z"
   }
 }

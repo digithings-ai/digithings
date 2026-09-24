@@ -1,6 +1,6 @@
 # Files
 
-- [digichat Architecture](architecture.md) - BFF design of the digichat chat UI — Next.js route handlers, backend adapters, shared UI package, and the never-in-browser credential invariant.
-- [digichat Auth and Chat](auth-and-chat.md) - digichat login, digikey token exchange, streaming chat route with regen/edit, and conversation persistence.
-- [digichat Operations](operations.md) - Running digichat — dev servers, Postgres and migrations, machine keys, env vars, and the container profile.
-- [digichat Quickstart](quickstart.md) - Run the digichat dev server against a local stack, verify chat, and run the frontend test gates.
+- [digichat Architecture](architecture.md) - Architecture of digichat 2.0 at apps/digichat/ — Next.js 16 BFF, assistant-ui Thread skins, AI SDK v7, deployment-config YAML, multi-backend adapters (digigraph, Foundry, OpenAI-completions/anthropic/vertex, langgraph, ag-ui, a2a), conversation persistence, quant runs, embed trial support, design-canon theming, and the never-in-browser credential invariant.
+- [digichat Auth and Chat](auth-and-chat.md) - Complete auth-to-stream flow — Auth.js v5 login, request auth, digikey token exchange, POST /api/chat streaming with turn modes and rate limiting, POST /api/plan-proof HMAC tier gate, conversation persistence, and markdown export.
+- [digichat Operations](operations.md) - Running digichat 2.0 — local dev with make digichat-dev, Postgres provisioning and Drizzle migrations (auto-migrate), machine API key creation, container build (multi-stage Node 22, standalone output, trusted-proxy-server.mjs), embed host resolution, health endpoint, and key env vars for 2.0.
+- [digichat Quickstart](quickstart.md) - Run the digichat 2.0 dev server against a local stack, verify chat, run the Vitest/ESLint/type-check gates, and optionally persist history to Postgres.

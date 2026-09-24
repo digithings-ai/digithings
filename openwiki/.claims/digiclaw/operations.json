@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "pageVersion": "sha256:be33eb9a1a022a51cb9d9cb21b6a799f1438ae05f3e3c7c7705810a73ace4153",
+  "pageVersion": "sha256:c435e13d8d0e12ba31a9f35f679cd906983756cf7862e995e8bc48fdfd69275d",
   "claims": [
     {
       "id": "claim_8da502feb6a340b1913abe805c363752",
@@ -53,10 +53,94 @@
           "version": "repo-lines-v1:sha256:d9ba63de1c9bf84a6215924c382bba1ff7d03b82ca95d3fd53005f8190662aed:eyJzZWxlY3RlZExpbmVDb3VudCI6MzEsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImVlZjVmOTVhMDMyMzliZDgyODQyZmIwODJkNjAwZjEzYjc5MzY2Yjk0MTkyNjUwMWU5NjQ4ZTI1YTNmYmRjMDYiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjAxYmE0NzE5YzgwYjZmZTkxMWIwOTFhN2MwNTEyNGI2NGVlZWNlOTY0ZTA5YzA1OGVmOGY5ODA1ZGFjYTU0NmIiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImMzY2RhMjA4ZWY1MDFlZTQ1MGE2NzIyN2ZlNjYzOTEwMDRiYWMyNTc1NGI4ODc2Y2ViNzNmMmM4YzMwMDBkN2QiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6Ijk0YTZmN2ZkNDJhYjQzM2Q2M2VjMGY2Yjg2ZTY3YmM4MDBlODMxNmE0YmIyODg4NTljMTRlY2Q4Yjg2ZTI3MWEifQ"
         }
       ]
+    },
+    {
+      "id": "claim_be0762e8e3894c838b5c061e8f82cba2",
+      "statement": "The heartbeat profile entrypoint in docker-compose.yml runs three processes in a single shell: bootstrap (digiclaw schedule start web-watch-tick || exit 1), a backgrounded heartbeat loop (python -m digiclaw every 1800s), and a foreground scheduler tick loop (digiclaw schedule tick every 60s). The repo root is mounted read-only at /workspace and scheduler state lives on a named volume digiclaw_state.",
+      "evidence": [
+        {
+          "resource": "repo://docker-compose.yml#L464-L504",
+          "version": "repo-lines-v1:sha256:35e689c1b71fa618d7fdf34f53d25e869fcf12d512137f0f7838535d21f15d20:eyJzZWxlY3RlZExpbmVDb3VudCI6NDEsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImY2YzFiODVjMDk3MGY4NmJkMjAxMzI3MWYwZWY4YzkyNGZiZmMwNzU2NDdjOWYzYTZlNjk3NTczNmJhOTBlMGIiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjYyZTYxNmRkNDBkZGIyNjg1NjM5OGY2Yzk1NThiODIyNjJkMjhjMzk0YzkwNTQwMGU2OWQ5OTMxODYzOGVlZTUiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImVjYTBjYmY1MTBlYmU1YWI3MWE4ZWFlNzU0ZGYwNzQxYTY0NmRjMGY1YzdlMDMzZWVkMTYzMWU4OTgwOTIzNmYiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6Ijk5OGUwMDZjZGY1YzE3MDE0ZGYxMjk4MjlhOGY3Nzg0M2UyMjZlNzkwMzM4ODlhZmQ0YTU1N2Q3NzI1ODQ3N2EifQ"
+        },
+        {
+          "resource": "repo://docker-compose.yml#L492-L499",
+          "version": "repo-lines-v1:sha256:ea626917c6ddae16dbcb0b68d324f29f584404ef87a57516fea3ccc4a1cd4a4a:eyJzZWxlY3RlZExpbmVDb3VudCI6OCwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiY2M4MWFjODM4YTMwMjE1ZDg3OWE3OTBlNWRlYTY0ZTExMzc4ZDM1ZmI3ZWEwZDQyMDUyMmI3ZDcyYTA2OGM2YiIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiZGZmOGExZjE5NDI1ZjFiMzBmYjZkMjg2MmVhNjZjNTJjYWZkZDNjOTYyNDJhYjU3YmFiODk1YzZhMDI4N2M2NSIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiNGEzODg2Yzc2YjgzNjM3OTU1ZTA1OTgyZmE2ZGIxNTY3YTBhNDIwNWYxNmFkN2M5MmQzNTJhMGQ4NDQ0NDQzMCIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiNTNkNzJiZGIyMWMyMjBiOTg4MTNjZGY4ZGRjODA0NmYwMWIxYTE2MGE3MmQ0NjBiMTNlZjFmNmI5MTdmYzA1NCJ9"
+        }
+      ]
+    },
+    {
+      "id": "claim_16ba85b4fe6d4b2e8a9d23f306e0bfd6",
+      "statement": "Compose overrides loopback defaults to internal Docker service names: DIGIGRAPH_URL=http://digigraph:8000, DIGIQUANT_URL=http://digiquant:8001, DIGISEARCH_URL=http://digisearch:8002, DIGIKEY_URL=http://digikey:8005, DIGICLAW_AGENTS_DIR=/workspace/digiclaw/agents, DIGICLAW_SCHEDULER_STATE=/state/scheduler_state.json, and AUDIT_LOG_PATH=/audit/events.jsonl.",
+      "evidence": [
+        {
+          "resource": "repo://docker-compose.yml#L475-L487",
+          "version": "repo-lines-v1:sha256:19524d83c7d81dc52d8be76889e7e34ebadf87b6cceeeb41b8296c7d88fbea6d:eyJzZWxlY3RlZExpbmVDb3VudCI6MTMsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjIyNzQ2MzM0ZmRiZDY1MTMyMzlmMTMyNmRiOGI2MTI3NTdiNWIzMmMwODA4YjUwODFhOTkzN2Y2NTMzYjhkYjkiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImM0NGRjZGIzOWVlYTFmNTNhMGQ1OTRiNTE4YTBiYTNlMjE3MzgzOGFiMzA2MTkzNDVkMzdjMjI3OWM4NGI4ZjEiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjM1M2IzZTMxNTgwMjliZDU5NWFhMWI4YzFhNzg2ZmYzYzFkYzIzNzY4MDMxODRhNDczZDQxNTRiOTdiZDY2NWEiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjEzM2QzMTQzNDU0MzI4ZGRjNjc4ZjA3NThhYWM1YjU5MGI3Y2FkOWU2MGRkYmNkM2IyMjFjODUxOWYxOGU0OTIifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_fb9e1bb574cb4553a78b66d03f435d52",
+      "statement": "The web-watch-tick agent (digiclaw/agents/web-watch-tick.yaml) is a continuous schedule with interval_seconds: 60 and enabled: true; it is the only non-no-op agent runner — every other agent name keeps the scheduler's default_agent_runner no-op placeholder.",
+      "evidence": [
+        {
+          "resource": "repo://digiclaw/agents/web-watch-tick.yaml#L1-L6",
+          "version": "repo-lines-v1:sha256:a31e29416fa2455e526c3100f0c78841a27122ffe69b360f918f9f2a49e50ac5:eyJzZWxlY3RlZExpbmVDb3VudCI6NiwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiZjRmOGUxNmFlMWYzOWQ5ODliY2Y4MmYzZWFmNGFjZjRhNWIyMTFmNTBlZWM3ZTM1YjAzZGZjNjFkOWM5ZTNkMiIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiNzhhMWNhNWE4YTU2NzhmMTlhOGYwYjliYjlhY2M4NjQ2NDY2ODY4YjMxOGM0MDA2MjE3ZGRkNGM3ZmY4MGM4MCIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjAsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiZTNiMGM0NDI5OGZjMWMxNDlhZmJmNGM4OTk2ZmI5MjQyN2FlNDFlNDY0OWI5MzRjYTQ5NTk5MWI3ODUyYjg1NSIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjAsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiZTNiMGM0NDI5OGZjMWMxNDlhZmJmNGM4OTk2ZmI5MjQyN2FlNDFlNDY0OWI5MzRjYTQ5NTk5MWI3ODUyYjg1NSJ9"
+        },
+        {
+          "resource": "repo://digiclaw/src/digiclaw/cli.py#L109-L114",
+          "version": "repo-lines-v1:sha256:b051225d0da593b45341ff53db32b7b363da7966267488b8945bc7f2e6505152:eyJzZWxlY3RlZExpbmVDb3VudCI6NiwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiZDJkZDdmZjU3ODgzMjkwNDM3MDY0MWE3ZjJmZGFlZWViYzA1ZjA3NTY3NGU0YThjODk2YjU1OWY0ZjE5NzE5NSIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiMmYxZTA1ODBmMzQ1ZmJkZWYyM2RiYjVmNmU0NDI0Y2ExZjNkZTJjODY3MTg1ZjZlMDFjNGVhODIxYWU2Mzc2NSIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiOGNjNGE3ZDFjYzc5NmFiYTNlNDY3MjMzMjdmNTE3ZTlmODExOTgyZDI1MGYwNzAyOTg2ZTRiNTc2NGFkOTU4OSIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiYjRhNjk3NTU5MDc3NDlmMjM3MTg5Yzk1Zjg3MWI0ZjVkOWM3YWUxMzBjYzA0MWRiNWFkMzFmOGRlZjJhYmYyNyJ9"
+        },
+        {
+          "resource": "repo://digiclaw/src/digiclaw/scheduler.py#L140-L142",
+          "version": "repo-lines-v1:sha256:57b45ccb60ed6774c8944b2b114ecaf7740c469dc22c14fe31f02a7320d1bcf0:eyJzZWxlY3RlZExpbmVDb3VudCI6MywiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiODNlYmM2YzY5MDFiN2M0NDVmNTliNTBlYjA1YTFlY2RkOTM0Y2Q3NWExNzJjMTUyZDU1MGRlODU4NjhlZjEzNiIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiNmI0ZTM1ZDc5NjVlZDU2ZThmYmU1NzhhYWFmOGNjMzhmODU0ZDdmN2I4Y2QxM2JhZmMyNGUzOWEzMDdkYWE5YiIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiZDhjNWM2YzRmNzMxZmY0OTkzMTkyNWVjODRmMDlmMDQyNTZkNTU2MTI3ODg1MTQxMWVjOGYzODA4NTk0ZTQ3NyIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiYTQ1MTMwMTcyM2VlYzFkN2IxMDU5N2I4ZGFkZDI3MGJhNzg0YzJmMmNiODZmYWFlNzU1MDNhODBmOWNjZDhmYiJ9"
+        }
+      ]
+    },
+    {
+      "id": "claim_c0cb22a6f04049ee86331f875e08644d",
+      "statement": "run_due_monitors() mints a digikey service JWT via a fully qualified lazy import of digibase.service_auth.get_service_jwt using key_env=DIGICLAW_DIGIKEY_API_KEY, digikey_url_env=DIGIKEY_URL, and scopes=(digisearch:query,). An explicit bearer_token argument skips minting; missing key or token-exchange failures raise rather than returning an empty tick, and the scheduler persists them as last_status=error + last_error.",
+      "evidence": [
+        {
+          "resource": "repo://digiclaw/src/digiclaw/monitors_tick.py#L1-L16",
+          "version": "repo-lines-v1:sha256:95caa889c33067dbf5f6e645c54a75c45dadf0c1f00034cb1af61500fb864fbd:eyJzZWxlY3RlZExpbmVDb3VudCI6MTYsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImI2ZmE2MWE5ZmE3ZmM3MDJlZThkMjViMTJhOTdmYmE4ZjVmZDJkODJkODQ2ZjdkZjc5NDY4MjZiZWRiZTMxYTQiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImEzMDNlY2RkNGE0ZDEwZjE5YzczZmQ0MmZkMTI0MzdmZDMzNTRhODI2ODE2MDVkYTUyNTVhOTdhMzkwNjhkYmIiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjowLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImQ0Zjk4NzIxOGQxNmQwMDI5NmRmODhjNmQ2MDg1MDcxNGUzNmU0YzViZGVmMDNjNTgyYmU3MGFkNWQ5NmI1ZGUifQ"
+        },
+        {
+          "resource": "repo://digiclaw/src/digiclaw/monitors_tick.py#L46-L70",
+          "version": "repo-lines-v1:sha256:2b0fd75cfa81e4078948aee65b03470eb267a35a989c31a453a8f5f84ebc5fc3:eyJzZWxlY3RlZExpbmVDb3VudCI6MjUsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImZjNDg5OTU4MDg5NTZhZmVkMTZkMjlmNWMyYzM4MzFkOTlmMGE3ZGE1YzVkNTMwMDc2NDYzMmJjYjUwNzg2NDIiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImIwZDdhZjc3ZWU2OGRkZmU2ZWJmNmU5MDhlMWMxOTQyNmRiYWQwOTJkZmRiMzE3ZDRiMDYyNWM3M2M1NTdlMTQiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjFkZWNjZDgyNDIxN2FhNGMxNDk2ZDk3NDI3ZmY0OTFlODFiN2Q4ODRlMmZjMDNhZDUyZTE1ODUxYTEwZWFiNGYiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImUzMDAxYTM4NjNjMTM1Y2M0Nzg2Y2FjN2FjOGJiYmZmOTZkYjY5MmYwZTYyNzExZmM4ODkzMjNhMTkzZjUzNzEifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_b353e4b1f5f140b4ba082efb57374327",
+      "statement": "The tick POSTs {DIGISEARCH_URL}/v1/monitors/tick with a 120s httpx timeout and raise_for_status(), returns {runs: n, failed: m} where failed counts per-watch status==failed runs. The base URL resolves as explicit digisearch_url arg → DIGISEARCH_URL env → http://127.0.0.1:8002 default, with trailing / normalized and blank env falling through.",
+      "evidence": [
+        {
+          "resource": "repo://digiclaw/src/digiclaw/monitors_tick.py#L29-L73",
+          "version": "repo-lines-v1:sha256:d0fc36eb3f81d5c8478d64bbbcfa1f1bebc95d4f867b30e0b6eb6ac5a0e11268:eyJzZWxlY3RlZExpbmVDb3VudCI6NDUsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImNjOTlhOTdkMDY5ZjZlMjFhZTdiYWFmMWFlZmU2NjZmZDQ3NjI5NjUzOTJkN2MwMzk4MjUyZjJiN2M0Nzc5OGMiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjBiYjNhODJjMjVkZjYwZTQzY2IxOWY3YWZiZGI0ZThlOWVlMWFhMzg3OWMwOTEyNDIzODIyMWQ2OWEyNTk5YzIiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjM1M2RhZjcxM2ZhZDU0ZGMyZTYwOTg0M2NmM2ZhYTdlMDRmNzFjNDc5YjIxZjVkYTRkZGQ4Y2E5NmExZDM3YmQiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjowLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_bf12837537404cf29250d4254ac826de",
+      "statement": "Scheduler state is persisted as atomic tmp-file-replace JSON at DIGICLAW_SCHEDULER_STATE (default {DIGI_WORKSPACE}/.digiclaw/scheduler_state.json). On restore, running agents whose next_run_at is overdue or marked pending are re-queued immediately; each tick invokes the runner in isolation so one failing agent never poisons the next schedule.",
+      "evidence": [
+        {
+          "resource": "repo://digiclaw/src/digiclaw/scheduler.py#L178-L211",
+          "version": "repo-lines-v1:sha256:beac32df3224b957204768f0016870cb286010ee2c4c21ceb1b20a74803f4442:eyJzZWxlY3RlZExpbmVDb3VudCI6MzQsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjliNWM4MzNkNmIzY2JmNjRmY2IyNDA3MGVhYTEzOWRhZjUzZjY4ZjU4MzU4ODk5NmJjMzkxMWQxYTcxNDdhZTciLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjA0Mjc3M2U1YmFjZjYwYzVkN2E1YWFmZDNiMGE2YjMxYTViMWRjNjdhZTg3Y2Q0ZTczODI4MzBmMDUxYTQyZDkiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImEwNjk5ODM0M2I3ZjBmM2NhYzY4ZjE1NTdkNThjOTE1MTYxYzk0YjI3YjYyOGVjNWYyZTcxZGZhMjE1ODUzZmQiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjExMGZjY2NjMjlmMzU1NGNiMGFmMTFmNzRmNDQ4Y2UzYzZkOTYxZGQ5NTY2MzQ2ZjYzYTcwYmUyNjUwM2QyYTcifQ"
+        },
+        {
+          "resource": "repo://digiclaw/src/digiclaw/scheduler.py#L318-L339",
+          "version": "repo-lines-v1:sha256:27e28f971654d7fd00ae2af98bf9bf459c313904bdf0c2a16f52e0b252d1c7cd:eyJzZWxlY3RlZExpbmVDb3VudCI6MjIsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6Ijg2NmJhYjEwYWViZWFhMmRlYTUxNTc1MzVlZWNhNWFlYzVjODI0NjA1ZjcwZGZmZTZiZWI5NDYyNDhmZTM4YjQiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjA4YTgyOWE1M2IyZjA5ZDEwMjY4N2I5MGMxZWNlOGM3NTRlNWFhNGEwN2ExMzI5Y2FiZjFkNTQ1Y2M0ZGM2ZTUiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjhlYjI2ZTk4NDU1ZTY3OTBlYWU2YjIxMTcxZDdjYzUxNTA0ZjgzYzgzMzg2NzgyZDQxMDljMDQ2ODg3OGYzNDIiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjhlMzUzMjg1NjNiM2Q2YjQ5ZGM5Y2I4NGRhOGI1OTA4MWQ1NzgyYmY5NjIwMTk1YTUyNzhkMWU2Zjc3MzAxMmIifQ"
+        },
+        {
+          "resource": "repo://digiclaw/src/digiclaw/scheduler.py#L99-L121",
+          "version": "repo-lines-v1:sha256:acbba6da06b3df6e92cc425cd4125cf99e7c3d8cb5c44ba28fae2f133c057aee:eyJzZWxlY3RlZExpbmVDb3VudCI6MjMsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjNkOWJkYmEzZTAzYTI2YjEzOTYyZWIwN2E0YThiNTg2NzEwMWU4OGJmOTM0YzY4MTM2N2I2M2Y4ODIzMGMxMzgiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjAxYmE0NzE5YzgwYjZmZTkxMWIwOTFhN2MwNTEyNGI2NGVlZWNlOTY0ZTA5YzA1OGVmOGY5ODA1ZGFjYTU0NmIiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjhiZWJiOTU4OTkzMTU2ZjFjZmEzZDVjMzBiZGRlOWMyMWYzZmRmODQ1MTA3OGIyZWM0ZmE1N2Y0ZmJlN2MwYzQiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImFjZGM1MDc0Yzg2NjBmYmI2MTgzMzg3YWZiOTBkYjFmNGU0ZTkzNTEzNTdmNmY4OTE4OWU5Y2JlMmE0YjhmY2EifQ"
+        }
+      ]
     }
   ],
   "verification": {
     "by": "openwiki/0.5.0",
-    "at": "2026-09-09T14:37:17.158Z"
+    "at": "2026-09-23T13:25:31.068Z"
   }
 }

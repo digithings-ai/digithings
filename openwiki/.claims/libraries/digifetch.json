@@ -1,18 +1,34 @@
 {
   "schemaVersion": 1,
-  "pageVersion": "sha256:7ea8cb5c1c9b62fc127030fccf419368b1de7196f19847b91e66a0194395aba2",
+  "pageVersion": "sha256:e005ba82afa386f312cf41828d0d1120f0a14b2bd582d291952940b8d1f3edc0",
   "claims": [
     {
       "id": "claim_477ea9b029ee4557a413119186d4c091",
-      "statement": "HttpFetcher offers fetch and size-capped download over httpx with a Playwright cookie hand-off, and the package never uses requests.",
+      "statement": "HttpFetcher offers fetch() returning FetchResult and size-capped download() returning DownloadResult over httpx, with a cookies_from_playwright() hand-off from Playwright context.cookies(), and the package never uses requests.",
       "evidence": [
         {
-          "resource": "repo://digifetch/src/digifetch/http.py#L100-L197",
-          "version": "repo-lines-v1:sha256:e575a3b957013b6ecf4f51fe115a3a9cdac8f1a70b253c4d3f2ff1ac9c49a7e9:eyJzZWxlY3RlZExpbmVDb3VudCI6OTgsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjIzN2RlNjAwNmQ5YTQ2NjU5OTMwZDBmMjk3YWVmOWE1MDlhZmE5NDViYWEyZmZlZjI4MTQ5MGMzNjdkOTJlZGYiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImExODY4MDJkZmQ0YzE4ODgyOGI0MzI1YWY1YjIxOTg5YjBhYzFkZTVkOTc1ZjE0ZWU0MWJkNjliNjVkNGMxNjAiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjBiNDY4YWQwYWJkNWRmODYyMGJiOTRiZGZmZTg1ZjQyMTEwZWNkYThhZjc2NGE0ZDVjM2JhMDZiYWE1Zjc3M2YiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImE2Y2JhNGMzN2VmNjY3NjU1NzQ1NTNhOTJkMTIwNTljMjNhNDY5ODBkZjlmZWM0NjZmZTkzNTk3ZjNjMGEwNjUifQ"
+          "resource": "repo://digifetch/pyproject.toml#L12-L19",
+          "version": "repo-lines-v1:sha256:0bbe11a4bb54f46d839d59bef9bd6f250b322201c2dd9639c8eaf1361f40340e:eyJzZWxlY3RlZExpbmVDb3VudCI6OCwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiYWQ5NWY1ZTllZGUwMTgxNjA0M2MwNzk3YWNlOGRhMmFjNGU5OWE4YTZhNjEwZmE5ODU3MGVmMzRiOTM1NjEwOSIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiNTRlZDMxYzkzZjliZjY1ZTBlNjA1YWE4Y2Q5YWExNzAwN2IyMmY5YjdkYmViNzFiNTNmY2EzZjIxOGE0NzAzZiIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiOGJlNGVkMWRhOTFjNGJlYjE5OWViZjg4YTZiMDI3ZGU4NzJlYjAxZjMyNzIwYTEyYThlMzNlMGVhOGQ5NzFhMiIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiMTQzNGRhZWIyMmM4Y2E1M2JmOTlmZjJkNmRkMjAxMmNjNjAzYWQyNzBjODk3OGMzYmIwY2M0Y2FjZDIwZWJhZCJ9"
         },
         {
-          "resource": "repo://digifetch/src/digifetch/http.py#L83-L100",
-          "version": "repo-lines-v1:sha256:4f9ff820049dcaddb4d72626691d23c4e9da584945c9c2b0d182b4a9b49406a7:eyJzZWxlY3RlZExpbmVDb3VudCI6MTgsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjkyOWJkZTg2YmU3YmZiYjgyOWNjYmQ2MjNiMjJhODlmZWYwZGZlMzU1Y2Q3MDQ1ZDg2MmJlOGZjOTUwZWZjNDYiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjIzN2RlNjAwNmQ5YTQ2NjU5OTMwZDBmMjk3YWVmOWE1MDlhZmE5NDViYWEyZmZlZjI4MTQ5MGMzNjdkOTJlZGYiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImRmYWRiYmIzNTVlOWZiNDMzNDQzMzljODZlNmM5ODM5ZjI5MDhlY2FkMTEyNGRlNmRkZWVjYzYxM2EwZmQzZTkiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjgzOTdmOTU4MDMxNzI2YmJmOWE0NTJhMTQ0MjI1OTBlZGZiNWVmOGY2NDUyZGM3YjE3ZjJlYTBiOGNkY2NmOTMifQ"
+          "resource": "repo://digifetch/src/digifetch/http.py#L115-L262",
+          "version": "repo-lines-v1:sha256:4fd52657e2d116ffcad1bad3884163cf6e6d370899d230fbf7807c49bee8e41a:eyJzZWxlY3RlZExpbmVDb3VudCI6MTQ4LCJmaXJzdFNlbGVjdGVkTGluZUhhc2giOiIyMzdkZTYwMDZkOWE0NjY1OTkzMGQwZjI5N2FlZjlhNTA5YWZhOTQ1YmFhMmZmZWYyODE0OTBjMzY3ZDkyZWRmIiwibGFzdFNlbGVjdGVkTGluZUhhc2giOiI4MWRkZmU0MTRkNzNlZTQ1MDFjYzY3NzE4YmYwOWFhMDM3NjM4YjMzNTUwYjAwMTBlNTFjNjMwZGNlMmZhZjNmIiwicHJlY2VkaW5nQ29udGV4dExpbmVDb3VudCI6MywicHJlY2VkaW5nQ29udGV4dEhhc2giOiIwYjQ2OGFkMGFiZDVkZjg2MjBiYjk0YmRmZmU4NWY0MjExMGVjZGE4YWY3NjRhNGQ1YzNiYTA2YmFhNWY3NzNmIiwiZm9sbG93aW5nQ29udGV4dExpbmVDb3VudCI6MywiZm9sbG93aW5nQ29udGV4dEhhc2giOiI1MjljMjZmOTM0M2I4ZjJmMmI5MjYxMjMzYjQ0YmY3NzY5OWNkYjM5M2UyZGU3MzJlOGJjNTc0NjY0OTNiNDNmIn0"
+        },
+        {
+          "resource": "repo://digifetch/src/digifetch/http.py#L264-L324",
+          "version": "repo-lines-v1:sha256:35309f87e9e3508b64220585022db5039d646ad3391b1937848fa1d6c2260baf:eyJzZWxlY3RlZExpbmVDb3VudCI6NjEsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImExODY4MDJkZmQ0YzE4ODgyOGI0MzI1YWY1YjIxOTg5YjBhYzFkZTVkOTc1ZjE0ZWU0MWJkNjliNjVkNGMxNjAiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImIyOWExMmJmMDk2ZDA4OTYzMGZiOWEwMjgwMGI2N2Y1YzRkNTU0MTgxOWU5OGFlZDc5MzVjMzRkYzU5YTAyYjQiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6Ijc5NDYzMTA4NTg3ZmEwOTZlZjhjYzkyYzQxMjE2NDc0ODFiNTdmZDQ4OGIyNDBmOWEyN2I2ZjU3NzRkYWVhZGIiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjowLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUifQ"
+        },
+        {
+          "resource": "repo://digifetch/src/digifetch/http.py#L40-L48",
+          "version": "repo-lines-v1:sha256:bd593f6c9e6344344953cc45b6c7c523ee2272ca794fbb4e598e715cc4563a92:eyJzZWxlY3RlZExpbmVDb3VudCI6OSwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiNzBlMjU4OWVmOGExMmFlZmMyNTc0OTk5MTQ3YmNjZWM1NzQ2MWNkNTE2MzgxYzI4OGNhMjExZjJiZTUxMTRhMiIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiOWYzOGJmZTdhNTVmOTEzNDcxZDI4NDAzZmU3M2IzMDVhZWVmM2MyZTRkYmU3MzAxMzE0YTM3OWYyZmY2OTRmNiIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiMWRiOTg1MWE4ODQxM2U3NDA1ZjE3NGZlNWVlYjI5ODkxZmI2OGRjMGVlYTBjODFiMDkyYjg1MGJlNjNjZjY1OSIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiNzIzNmQ0MjBiYTQ3MWEyYzJlMWY0NjA1NzY4NWJmNTMzOTY5Y2Y0ZTRhMmRiYjFiZjFkM2VmOGUwNWQ3OTM0MSJ9"
+        },
+        {
+          "resource": "repo://digifetch/src/digifetch/http.py#L59-L92",
+          "version": "repo-lines-v1:sha256:adf31cd27db42f04c78a04f6cf8bb625f0a581e336b0504fe02e64fce12ec6a6:eyJzZWxlY3RlZExpbmVDb3VudCI6MzQsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjJhMGVmY2FkNjNhZmU4MmZhZTJjMWE1Y2ZiNmMwMzdkNDI2NDY4Yzg3MjJlNTM4ZTBiODcwM2FlY2FlNTgyYTMiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjAxYmE0NzE5YzgwYjZmZTkxMWIwOTFhN2MwNTEyNGI2NGVlZWNlOTY0ZTA5YzA1OGVmOGY5ODA1ZGFjYTU0NmIiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjMxZjg3M2Y5ZGUzMGM4NDNjZjJiMjM0YzhkNzM3MDQ0YzYwYWM5MmEyMjMwZjI1NWUwYmU5Y2FhOGRhMDUwNGYiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImQ3ODM3OWY0NGIzZGMwNGM0MmZjY2VkYzMwOGJhMWJhZWNiMjBlOWQwMTdjNTBhMGEwM2EyZGUwZGM0M2JlNjMifQ"
+        },
+        {
+          "resource": "repo://digifetch/src/digifetch/http.py#L98-L112",
+          "version": "repo-lines-v1:sha256:fb9cbcd88e2b0936a509a6ee95d59d5b24603c586cb2736316db3ad3e5778381:eyJzZWxlY3RlZExpbmVDb3VudCI6MTUsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjkyOWJkZTg2YmU3YmZiYjgyOWNjYmQ2MjNiMjJhODlmZWYwZGZlMzU1Y2Q3MDQ1ZDg2MmJlOGZjOTUwZWZjNDYiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjU0NTI2YWZkNzhlMmJiZGM0N2QwODZmNjliOTdhZjYwZTQ5MjAzZDNjNDlhMTAwMDNmNTQxNzEyODlmOTYxZTQiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImRmYWRiYmIzNTVlOWZiNDMzNDQzMzljODZlNmM5ODM5ZjI5MDhlY2FkMTEyNGRlNmRkZWVjYzYxM2EwZmQzZTkiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjZlZjI1NzVjYzE2ZDEwYTFjNWE2NDM2MDgzZWQ1ZGEwZTNiMDEzZTcwYmI5NjE0MjVhZGY1NmMxZTIzN2FlMWUifQ"
         }
       ]
     },
@@ -28,21 +44,87 @@
     },
     {
       "id": "claim_6073eb2612d3400791a571fb7bc14116",
-      "statement": "Browser symbols resolve through a lazy PEP 562 shim so import digifetch never launches or imports a browser, and the 0.1.0 interface is provisional with twelve-x as the single consumer.",
+      "statement": "Browser symbols resolve through a lazy PEP 562 __getattr__ shim so import digifetch never launches or imports a browser, and the 0.1.0 interface is provisional with twelve-x as the single consumer.",
       "evidence": [
         {
-          "resource": "repo://digifetch/ARCHITECTURE.md#L10-L30",
-          "version": "repo-lines-v1:sha256:9f13a1036079002bfbeacd6302651eba7e1fb2f9b4dc583049c7ac0b2665cf5c:eyJzZWxlY3RlZExpbmVDb3VudCI6MjEsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjA2ZjdkMWE3YWI4OTVhMGUyYWY2ODBiZDcxY2Q4MDhmNDQ4ZWMwMmYzNTI0ZGI4MWQ5MGMyZTg4ZmJjYzg3Y2YiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImIxZjg0MGEzY2MxZTUzNDFlYTcwNGU4NjQyYWU1M2E2ZjRmNGJmODhmODg4NTcxYjkzMGNkMGYzMWE3YmViMWUiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjVmNDM4OGYwYjVhMGYyZWVkOGJjYTNmMmI4ZjQ4ZTJjNmY1YTg3NGY5YjU3NWI1NTA2Mjc4ZTAwY2YxNTVlM2IiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjNmMTA5ZTI5MjE2ZDFmMzk4MTVlODBiMTgzMWRiZmI4MDExYTQ5ZGRkNjQxMjhjYjMyY2YxOWI4YWNiMjc5ZDkifQ"
+          "resource": "repo://digifetch/ARCHITECTURE.md#L10-L39",
+          "version": "repo-lines-v1:sha256:12cd59b4b6fabf16af5eece96b2fcabea67d0883bc6c90141eccc99cb7a5baa0:eyJzZWxlY3RlZExpbmVDb3VudCI6MzAsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjA2ZjdkMWE3YWI4OTVhMGUyYWY2ODBiZDcxY2Q4MDhmNDQ4ZWMwMmYzNTI0ZGI4MWQ5MGMyZTg4ZmJjYzg3Y2YiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjAxYmE0NzE5YzgwYjZmZTkxMWIwOTFhN2MwNTEyNGI2NGVlZWNlOTY0ZTA5YzA1OGVmOGY5ODA1ZGFjYTU0NmIiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjVmNDM4OGYwYjVhMGYyZWVkOGJjYTNmMmI4ZjQ4ZTJjNmY1YTg3NGY5YjU3NWI1NTA2Mjc4ZTAwY2YxNTVlM2IiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImMyZTg3NTQ1OWMwMzBmN2M5MTM4ZjQ5Nzk1MTg5NTE5NWVjMWM5NjBmNjc0NzU4YTI2NTRkZWJhZjAyNjRiYmIifQ"
         },
         {
-          "resource": "repo://digifetch/src/digifetch/__init__.py#L20-L56",
-          "version": "repo-lines-v1:sha256:41cf040d722cbdc1f4374417db29919ade0ce7fc0a9976811e17e2c99da40295:eyJzZWxlY3RlZExpbmVDb3VudCI6MzcsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6Ijg5MmUzYzcyNzI2ZWJlYmQ2OWY0MzkxNTJlOWY4MjUzMTI3NjA0MDUyMTI0MjdhZDg5YzAzMGY1ZmM2MTRjYjAiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImQ2MjRjOTM4ZGZlOGM5OTU4M2YwZDJhNzQxOWQzN2U1NzI1NGJmMWY0MjgxYjFjMDIxNjJmOWZlMDAwZWI5MmIiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjQ1OGI2OWFjYzBmNjdmMGIwMDk5NGUyYTczYzZmNDFlYzIwZGM2NDRjNDJjMzA5YmUwYTNlMDlkZjcxMzM2MGYiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjdhMDdmNDk1OWU4Njk3ZWU1NmY0NWM4NzU1OTI1M2UzNjE0NzhmMWY4M2RlNTAxMTgyYWZhMWFlNWU0ZjI2NjYifQ"
+          "resource": "repo://digifetch/pyproject.toml#L6-L7",
+          "version": "repo-lines-v1:sha256:9ad334f501f3e64cb8dc744a1e807d473000fcc74dbccc62b45c117d7d4eb9d6:eyJzZWxlY3RlZExpbmVDb3VudCI6MiwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiMTZmNWJhNjQ4MGMwMDAyYTUyMzYxMTllNTk2MmZlZTA1MGM4MWUwZmQxMTljYTNlZmIxNDEyOGUwMmNjNTFhNyIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiNjhlMWRhYzBiZDczYjg3MzFmMDU2Mjk3YWIwNTI0NWRjNWJkZWE4NWNiMzQyNjNlMDk3NzQ3MGVhOTMzZTIwZSIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiOTRhNDYwMmJlNzcxMDBiMzk4NTVkM2RkZGI1YjY3NzA1ZTBkNGY5ZDVlNWI3YzhmZmI4YzI0NzQzNWNiOGE2NSIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiYjI5NTMyYjIwN2M1ZTg0ZGE1OGI3ZmVmYTZiMzk1OWNiMTUwMDhiZjE0OTYzZmEwOWM0ZTA4MTIyM2MwOTI1OCJ9"
+        },
+        {
+          "resource": "repo://digifetch/src/digifetch/__init__.py#L63-L108",
+          "version": "repo-lines-v1:sha256:ab7765128a27a802245babb698a9ae92f845651edf58adf980452aacec4c287f:eyJzZWxlY3RlZExpbmVDb3VudCI6NDYsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjJhNzQ0ZDBkZGIwYTA4OWQ4YTNmMTk5NDMwNjAwNGYwMWMwNDA2ZDNlNjNjOGZmMWFjNzE0M2Q5MDM4MTIzNGYiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjFlM2NmY2ViMzNlMDExZjliNjk1MDg4ZTBiM2FhODNiMTYwM2Q2OWRiNGRjNjU4MDNhYTgzNjM1M2U4MWIwZDciLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImQ4NTdmOTE2MjY4NTY4MzlhYjFhYjcwOTZhMGM4YWVjOTJhZWFkYTRkZjIzNDBhNzQ1YTg0MDlkNzJkMmU3N2MiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjoxLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjgzOWMzOTU1NmJiN2VjZjE2MmM5ZTExNzY0YWZlN2U4NTM0ODdkOTYwOWQ4ZTZlYmI2NjAxMWE3NTBkMzFmM2EifQ"
+        },
+        {
+          "resource": "repo://digifetch/tests/test_package.py#L16-L29",
+          "version": "repo-lines-v1:sha256:f55cc84e86cc019ef7321eca4508bd313caac0860e12459b59b2b09f88631751:eyJzZWxlY3RlZExpbmVDb3VudCI6MTQsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImQ1NzJlZTgxZmNiZWQ5YTAzZDgwYmI4ZTE1ZjQ2NzZiYzMwOWY3YjkxNzA0ODIxMWVhMTYwZDFkZDBlMThhZTIiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjIwOWU0NmZlMjRiYWU1MDQyZTkzYmE2ZjMwNDdjMTY4ZjNmMGE5Y2I3YWI5OTBlNGU2Y2QxNzgxMjE1ODA4ZmMiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjZmOGY5ZGE0MjYxNTRjODVhNDJkOGNiYjgyNWYyNjc3YmY1MzkyMmY3YzgyMmE4MGNhYjJjOGYwOTE0OTBiODgiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjQ2NjJiOGFkMzc3ZjRiMjZiNTA4ZTBhMGUyMmJjZDZhNDlmYmZlNWI1MjYxMTRjOWI1MDVhNjM2ZDFjZDE4OTEifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_6ea59a1f6e2e4d6caf2d38bf0b87987c",
+      "statement": "validate_fetch_url() in digifetch.ssrf is the single SSRF guard applied before every fetch/download request — initial URL and each redirect hop — refusing non-http(s) schemes, blocked literal hostnames (metadata, rebind suffixes, local suffixes), WHATWG-style IPv4 shorthand, and any host that resolves to a non-globally-routable address, with an operator-supplied allowed_hosts escape hatch.",
+      "evidence": [
+        {
+          "resource": "repo://digifetch/src/digifetch/http.py#L189-L191",
+          "version": "repo-lines-v1:sha256:1f7fdf796a2204d0b44f1f31ba9c3b551ba7524292abf6c7a3604c6de3d4f9be:eyJzZWxlY3RlZExpbmVDb3VudCI6MywiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiMzllMjM2NjVkOGM4ODMzMWQ3ZGE2ZTUzZTExN2U0MjkwNDIxMDdhOTRmYTM5ZmQxMDc0ZDE1MThkMGI3ZjQ3MiIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiNDZkZWY3ODhiMzQ5MmU4MDk1NDAwMzNlYTlkN2JlMGE2ZDg0MGU0MDU5YzdhZTc0M2RkNWE4NWZhN2U5YzU1NyIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiYjE1YmI4MmI5MTc2YTM1Mjc5MGEyOWU2YmE2OWIzYjY4ODY5M2YzMjMxY2Q3YmEzM2EzZjRhZmYyYzEwNTRlYSIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiMWJmMWNkNzI0NWRmY2Y3NWFlYWY5ZDc1ZDE0N2M5OGU3ODc2NWFiMGU0YzI0MGFjNWQ4NjIxZmJhNmVmM2Y3ZCJ9"
+        },
+        {
+          "resource": "repo://digifetch/src/digifetch/ssrf.py#L1-L222",
+          "version": "repo-lines-v1:sha256:132cbc85c9f9f079184928ddfac6ff232557efd88331d58d169c4d8bd3db6d58:eyJzZWxlY3RlZExpbmVDb3VudCI6MjIyLCJmaXJzdFNlbGVjdGVkTGluZUhhc2giOiI1MzJlYjE3ZWZjZjZlNTZhYzM0YThkYTE4M2MxNTY5MDBjNDdkN2RjYTA5Njc5ZTQ0NGIyNmZlZGJhNmVmZjU2IiwibGFzdFNlbGVjdGVkTGluZUhhc2giOiJjNjQyYzRlMTA0YTJmMWRkNGJiODJhNTc5OTU0ZTEyMGIxYzkxM2NiMzk5YzAxODk5Y2Y4YTM1YTdlMjZkNmY0IiwicHJlY2VkaW5nQ29udGV4dExpbmVDb3VudCI6MCwicHJlY2VkaW5nQ29udGV4dEhhc2giOiJlM2IwYzQ0Mjk4ZmMxYzE0OWFmYmY0Yzg5OTZmYjkyNDI3YWU0MWU0NjQ5YjkzNGNhNDk1OTkxYjc4NTJiODU1IiwiZm9sbG93aW5nQ29udGV4dExpbmVDb3VudCI6MCwiZm9sbG93aW5nQ29udGV4dEhhc2giOiJlM2IwYzQ0Mjk4ZmMxYzE0OWFmYmY0Yzg5OTZmYjkyNDI3YWU0MWU0NjQ5YjkzNGNhNDk1OTkxYjc4NTJiODU1In0"
+        },
+        {
+          "resource": "repo://digifetch/tests/test_ssrf.py#L1-L159",
+          "version": "repo-lines-v1:sha256:c3ad846347db2ce98c1952e5590c0d8a44c61d627117de6e71eb72771d6576cd:eyJzZWxlY3RlZExpbmVDb3VudCI6MTU5LCJmaXJzdFNlbGVjdGVkTGluZUhhc2giOiJhOGM1MzlkYTI4MTg1NDBlMDhiMjFjZTMwZTgwYTI1YWVjZjcxYjEwMDMzMGQ5YzFlYjA5ZjA5M2I4ZjRhMGFmIiwibGFzdFNlbGVjdGVkTGluZUhhc2giOiI3MWQ2MWM4NzhiZTBjN2YzNjVmNDI0MzRhMGY0OWMxYzgzMjRiMzIxZmE4ZWYzZTA2YTQ0MjUzOGQ1Njg2NTE1IiwicHJlY2VkaW5nQ29udGV4dExpbmVDb3VudCI6MCwicHJlY2VkaW5nQ29udGV4dEhhc2giOiJlM2IwYzQ0Mjk4ZmMxYzE0OWFmYmY0Yzg5OTZmYjkyNDI3YWU0MWU0NjQ5YjkzNGNhNDk1OTkxYjc4NTJiODU1IiwiZm9sbG93aW5nQ29udGV4dExpbmVDb3VudCI6MCwiZm9sbG93aW5nQ29udGV4dEhhc2giOiJlM2IwYzQ0Mjk4ZmMxYzE0OWFmYmY0Yzg5OTZmYjkyNDI3YWU0MWU0NjQ5YjkzNGNhNDk1OTkxYjc4NTJiODU1In0"
+        }
+      ]
+    },
+    {
+      "id": "claim_6d5c53f246b349b981882a51e4bcb2c1",
+      "statement": "HttpFetcher.fetch() and .download() follow redirects manually per-hop (capped at MAX_REDIRECTS=5), re-validating each target through the SSRF guard, and per-call cookies are forwarded only to same-origin hops — a cross-origin redirect drops them to prevent session credential leakage.",
+      "evidence": [
+        {
+          "resource": "repo://digifetch/src/digifetch/http.py#L204-L262",
+          "version": "repo-lines-v1:sha256:db26e02f719c809794da9cd82ae1a0bb6e318ed6386e69a3dda3f09d65621038:eyJzZWxlY3RlZExpbmVDb3VudCI6NTksImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjNhNTk4YWIzOGNmZmVlMTc5NDUwYzllODQ5ZDlmOTk3NmQzMjQ2MDE1OTUzODk4OTJiY2RkODkwMmYyZmJjYmUiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjgxZGRmZTQxNGQ3M2VlNDUwMWNjNjc3MThiZjA5YWEwMzc2MzhiMzM1NTBiMDAxMGU1MWM2MzBkY2UyZmFmM2YiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImRmM2NkMzM5MDIzNTU2MjNlZDdmOWQ2ZjJlYzQzZDg3NzJlMDE2NGU5M2E1MzQ2OGRhZWU1MzlmM2Y5MjZkZDAiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjUyOWMyNmY5MzQzYjhmMmYyYjkyNjEyMzNiNDRiZjc3Njk5Y2RiMzkzZTJkZTczMmU4YmM1NzQ2NjQ5M2I0M2YifQ"
+        },
+        {
+          "resource": "repo://digifetch/src/digifetch/http.py#L264-L324",
+          "version": "repo-lines-v1:sha256:35309f87e9e3508b64220585022db5039d646ad3391b1937848fa1d6c2260baf:eyJzZWxlY3RlZExpbmVDb3VudCI6NjEsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImExODY4MDJkZmQ0YzE4ODgyOGI0MzI1YWY1YjIxOTg5YjBhYzFkZTVkOTc1ZjE0ZWU0MWJkNjliNjVkNGMxNjAiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImIyOWExMmJmMDk2ZDA4OTYzMGZiOWEwMjgwMGI2N2Y1YzRkNTU0MTgxOWU5OGFlZDc5MzVjMzRkYzU5YTAyYjQiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6Ijc5NDYzMTA4NTg3ZmEwOTZlZjhjYzkyYzQxMjE2NDc0ODFiNTdmZDQ4OGIyNDBmOWEyN2I2ZjU3NzRkYWVhZGIiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjowLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUifQ"
+        },
+        {
+          "resource": "repo://digifetch/src/digifetch/http.py#L46-L48",
+          "version": "repo-lines-v1:sha256:10de20dcabdd54589a920ba2703696d6ecd66dd94d88efd9e5189a3693a0022f:eyJzZWxlY3RlZExpbmVDb3VudCI6MywiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiNTE3ODE4NjNhYmQ5ZTJjYTBhYjRmNjcyNzdiYWM3ZjdjNmFjZjkyZjQ0ODZmN2EyMGQ2NjJhNmRmODc1YTZhNyIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiOWYzOGJmZTdhNTVmOTEzNDcxZDI4NDAzZmU3M2IzMDVhZWVmM2MyZTRkYmU3MzAxMzE0YTM3OWYyZmY2OTRmNiIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiMTVlNTlmMThhNmQxNjdmNWI3MzYyY2Q5ZWJhODM4NDkyZDkyMjdhOTQwZjcyZTczZjg5NzM1ZmZjODQ5YWY1ZCIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiNzIzNmQ0MjBiYTQ3MWEyYzJlMWY0NjA1NzY4NWJmNTMzOTY5Y2Y0ZTRhMmRiYjFiZjFkM2VmOGUwNWQ3OTM0MSJ9"
+        },
+        {
+          "resource": "repo://digifetch/tests/test_http.py#L175-L206",
+          "version": "repo-lines-v1:sha256:1fb342f9d0d28776c37a97a8ec77fd8ff68362fa6ed9a9dda372f9d0b39098ea:eyJzZWxlY3RlZExpbmVDb3VudCI6MzIsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImY3MWJjODc1NDZkOWVmMzc1N2Q0YjQ5MmI1NTdiZTY4YjUyNTJmZmQxOTdlZjkxYWZjYWFmMGE4YmY2MmM0NDIiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImFmZDgxNzY2YjdkOTJlOWQwY2MwMjZhY2MwMzdlYzFjZjVkYzdiZTJiNzkxOWIxMGE0NzU2ZTA4NzJjMmI5Y2QiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjFiMmRhOTgzYmY4OTZlZWQ3Y2RhMTQ2NzExZDZmNzcyNzJkMTAzNzAxNGNlMWYwZGYyN2ExODdjNGQ4YzA4MTIiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImNiNTcyMzU4YTFmYWE3OTMwMmVjOTA3NDFmYTlkOGI0YjFjM2Q4ODQxY2NjMGVmM2E3YzNlOWI5MDkzMDliODIifQ"
+        },
+        {
+          "resource": "repo://digifetch/tests/test_http.py#L209-L223",
+          "version": "repo-lines-v1:sha256:f39dc2b176bfe2e3d1c90e347cd6ea82fb34a43c40453362526817de3bca20dd:eyJzZWxlY3RlZExpbmVDb3VudCI6MTUsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImQ3MDE1MjYwMWY0OTM1MjU1ZmYwNmUyYzFmYjM5YWI0YTBjNjBlMGMwMWZlNzAwYTU0ODczYzc2Yjk3OTE4MTQiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjA3ZGE0MTZhZmU4N2UyMTE0MjIxZjAwZTRiYWRjMWI5ODNjMWEwMzUxMTFjNzhhNTc2MTlmM2ZjNDM5ODRhMzkiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6Ijc3OWQwYzQzMDQ1ZGMxYTE3YzZiOTE4YzBmYWZjOGQ0Zjk0YjhmMzk3ZjVhMjM2NTk3YjY3OTc5MzU2MzBlZjQiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjowLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_7a5cbfced4064cfe9a007fedb564cc07",
+      "statement": "HttpFetcher.download() streams the response body via iter_bytes(), accumulating chunks and aborting mid-stream with DownloadTooLargeError when total exceeds the configured max_bytes cap (default 32 MiB) — the payload is never fully buffered for an oversized response.",
+      "evidence": [
+        {
+          "resource": "repo://digifetch/src/digifetch/http.py#L264-L324",
+          "version": "repo-lines-v1:sha256:35309f87e9e3508b64220585022db5039d646ad3391b1937848fa1d6c2260baf:eyJzZWxlY3RlZExpbmVDb3VudCI6NjEsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImExODY4MDJkZmQ0YzE4ODgyOGI0MzI1YWY1YjIxOTg5YjBhYzFkZTVkOTc1ZjE0ZWU0MWJkNjliNjVkNGMxNjAiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImIyOWExMmJmMDk2ZDA4OTYzMGZiOWEwMjgwMGI2N2Y1YzRkNTU0MTgxOWU5OGFlZDc5MzVjMzRkYzU5YTAyYjQiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6Ijc5NDYzMTA4NTg3ZmEwOTZlZjhjYzkyYzQxMjE2NDc0ODFiNTdmZDQ4OGIyNDBmOWEyN2I2ZjU3NzRkYWVhZGIiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjowLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUifQ"
+        },
+        {
+          "resource": "repo://digifetch/tests/test_http.py#L134-L141",
+          "version": "repo-lines-v1:sha256:f712297dac114e9824a93ba1bfc88ba826d7b9514c85fe9714dc08f0515d49dd:eyJzZWxlY3RlZExpbmVDb3VudCI6OCwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiNTZlYmFlYzZmNzRlZjkwOTkyNzFiYjVlZWExY2JiNzU3MTMwM2VlMGFkNzYxMmNiNWIyNzc5MmY3YzgzNDkzYiIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiYjRhYmEwMGYxNDBhNWU5NWQ1NWY0MmIzMzNkZTc1YTU3NmNmYWFiOGViZTRjY2ExMTdmN2U1OGNmZGNjMTE3ZiIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiN2Q5OTI1NjhiODNiZDFjNzUzYjY2YzQ0MDc5NjFjNTdjMDEyOWMxZmY0OTAxMTg3YTJhMzA1YTdkZjY4NTE3MyIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiMjVkMGM0NzI1YmIyYjU1ZjZkYzhjODA2NzlkODFjNzUwZDlmMDYzNGRiZTljNzJhNDZmNTBiNGFkNjg5YWY0MCJ9"
         }
       ]
     }
   ],
   "verification": {
     "by": "openwiki/0.5.0",
-    "at": "2026-09-09T14:37:17.158Z"
+    "at": "2026-09-23T13:25:31.068Z"
   }
 }
