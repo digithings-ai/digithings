@@ -2048,8 +2048,11 @@ entry until that cutover. Prompt / structured-output walk for the same pass:
   only — analyst/deliberation/direction provider wiring is WP14.2–14.4; drill-down manifest pinning is
   WP14.4. **WP14.2 (#2942)** wires analyst/deliberation via
   `research_retrieval/context_wiring.py` (`DIGIQUANT_CONTEXT_COMPILER_MODE`
-  `off|shadow|enforce`): shadow records compiled capsule/manifest beside incumbent
-  `phase_inputs`; enforce strips portfolio/PM keys and injects `structured_context`
+  `off|shadow|enforce`): shadow compiles the capsule/manifest and returns them on
+  `RoleContextWireResult` (since #4609 it no longer re-serializes the shadow
+  blobs into the uncached `phase_inputs` by default — set
+  `DIGIQUANT_CONTEXT_SHADOW_IN_PROMPT=1` to restore the old in-prompt blobs);
+  enforce strips portfolio/PM keys and injects `structured_context`
   with manifest linkage fields for WP1 telemetry. Prompt guards live in
   `research_retrieval/blinding.py` (`assert_blinded_analyst_prompt` /
   `assert_blinded_deliberation_prompt`). **WP14.3 (#2946)** wires direction via the same mode knob:
