@@ -28,6 +28,7 @@ import {
   type StrategyRead,
 } from "@/lib/live/useLiveBand";
 import { GROUPED_LABEL } from "./label";
+import { windowAlpha, windowBeta } from "@/lib/bookMath";
 
 /**
  * The digiquant band (v15 point 9, #4429; reworked across rounds 3–5).
@@ -445,16 +446,24 @@ function fmtRelative(portfolio: number | null, benchmark: number | null): string
   return `${diff >= 0 ? "+" : "−"}${Math.abs(diff).toFixed(1)} pts`;
 }
 
+/** An alpha read, or an em dash when the window cannot be measured. */
+function fmtAlpha(alpha: number | null): string {
+  if (alpha === null) return "—";
+  return `${alpha >= 0 ? "+" : "−"}${Math.abs(alpha).toFixed(1)} pts`;
+}
+
 /**
  * Portfolio against benchmark, compressed, with the window's three reads beside
  * it and the lookback controls the owner asked for.
  *
  * The preset drives the view, so the buttons are the control; a drag on the
  * chart writes a view back through `onView` and the active button follows the
- * window rather than the click that started it. The three reads are computed
- * from the SAME window the chart is drawing, so "relative performance over the
- * period selected in the chart" is literally what the middle figure reports —
- * change the preset and the numbers move with it.
+ * window rather than the click that started it. The three reads — returns,
+ * relative returns, alpha — are computed from the SAME window the chart is
+ * drawing, so "relative performance over the period selected in the chart"
+ * is literally what the middle figure reports — change the preset and the
+ * numbers move with it. Alpha is the window's portfolio return minus beta
+ * times the benchmark's, with beta from the in-window daily returns.
  *
  * The chart itself draws percent return rebased to zero at the window's left
  * edge (`rebaseToWindow`), not the stored index levels: switching from 1Y to
@@ -484,8 +493,10 @@ function Book({
   const drawn = rebaseToWindow(series, window, fullSpan);
   /* The reads are the last drawn values of the rebased legs — sliced by the
      chart's own `sliceByView`, so the numbers and the curves are the same
-     window and can never disagree. An empty leg renders an em dash rather
-     than a fabricated zero, the same rule the rest of the band follows. */
+     window and can never disagree — plus alpha, the window's portfolio return
+     minus beta times the benchmark's, with beta from the in-window daily
+     returns paired by date. An empty leg renders an em dash rather than a
+     fabricated zero, the same rule the rest of the band follows. */
   const drawnPortfolio = sliceByView(
     drawn.find((entry) => entry.id === "portfolio")?.points ?? [],
     window,
@@ -500,6 +511,9 @@ function Book({
     drawnPortfolio.length > 0 ? drawnPortfolio[drawnPortfolio.length - 1].v : null;
   const benchmarkReturn =
     drawnBenchmark.length > 0 ? drawnBenchmark[drawnBenchmark.length - 1].v : null;
+  const beta = windowBeta(drawnPortfolio, drawnBenchmark);
+  const alpha = windowAlpha(portfolioReturn, benchmarkReturn, beta);
+  const betaTitle = beta === null ? undefined : `Beta ${beta.toFixed(2)} vs benchmark, this window`;
 
   return (
     <div className="flex min-w-0 flex-col gap-[0.8rem]">
@@ -541,11 +555,13 @@ function Book({
             onChange={(preset) => setView(viewWindowForPreset(preset, fullSpan))}
             label="Lookback window"
           />
-          {[
-            { label: "portfolio", value: fmtSignedPct(portfolioReturn) },
-            { label: "benchmark", value: fmtSignedPct(benchmarkReturn) },
-            { label: "relative", value: fmtRelative(portfolioReturn, benchmarkReturn) },
-          ].map((row) => (
+          {(
+            [
+              { label: "returns", value: fmtSignedPct(portfolioReturn) },
+              { label: "relative returns", value: fmtRelative(portfolioReturn, benchmarkReturn) },
+              { label: "alpha", value: fmtAlpha(alpha), title: betaTitle },
+            ] as { label: string; value: string; title?: string }[]
+          ).map((row) => (
             <div
               key={row.label}
               className="flex items-baseline justify-between gap-[0.8rem] border-b border-hair/60 pb-[0.55rem] last:border-b-0 last:pb-0"
@@ -553,7 +569,12 @@ function Book({
               <span className="font-mono text-[0.68rem] uppercase tracking-[0.06em] text-ink-mute">
                 {row.label}
               </span>
-              <span className="font-mono text-[1.05rem] tabular-nums text-ink">{row.value}</span>
+              <span
+                className="font-mono text-[1.05rem] tabular-nums text-ink"
+                {...(row.title ? { title: row.title } : {})}
+              >
+                {row.value}
+              </span>
             </div>
           ))}
         </div>
