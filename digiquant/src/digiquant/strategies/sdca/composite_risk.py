@@ -47,6 +47,22 @@ def causal_rolling_z(
     return ((values - mu) / sigma.clip(lower_bound=_SIGMA_FLOOR)).clip(-3.0, 3.0)
 
 
+def causal_ema_smooth(
+    values: pl.Series,
+    *,
+    half_life: float,
+    min_samples: int = 1,
+) -> pl.Series:
+    """Causal EMA: each day's output uses only that day and prior values, no
+    look-ahead. Damps day-to-day spikiness already present in a computed
+    series (e.g. a rolling-z built from sparse/forward-filled source data)
+    without touching how that series was derived.
+    """
+    if half_life <= 0:
+        raise ValueError(f"causal_ema_smooth half_life must be > 0, got {half_life}")
+    return values.ewm_mean(half_life=half_life, min_samples=min_samples, ignore_nulls=True)
+
+
 def compute_composite_risk(
     indicators: list[IndicatorWeight],
     *,
@@ -155,6 +171,7 @@ def z_to_risk(z: float) -> float:
 __all__ = [
     "IndicatorWeight",
     "Z_TO_RISK_SCALE",
+    "causal_ema_smooth",
     "causal_rolling_z",
     "compute_composite_risk",
     "z_to_risk",

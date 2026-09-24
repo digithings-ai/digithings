@@ -111,7 +111,26 @@ _WEEK_DAYS = 6  # Monday start + 6 days → Sunday (ISO week complete)
 _RSI_MID = 50.0
 _RSI_EXTREME_LOW = 20.0
 _RSI_EXTREME_HIGH = 85.0
-_RSI_CURVE_POWER = 4.0
+# 2026-09-07 raised this from linear (power 1, which pegged a bull market at
+# the z floor for the whole run -- see module docstring, and the regression
+# guard in test_price_oscillators.py::test_mid_bull_rsi_does_not_sit_at_floor_
+# for_entire_bull) to quartic (4.0).
+# 2026-09-24: quartic's near-zero output through ordinary 55-75 RSI followed
+# by a steep run-up right at the extremes reads, through
+# ``agreement_scaled_blend``'s own up-to-1.5x amplification (see
+# ``weekly_monthly_rsi_confluence_z``), as a flatline-then-spike rather than
+# a ramp. Lowering the power measurably softens that (e.g. RSI=70 maps to
+# -0.32 at power 4.0 vs -0.42 at 3.5), but the 2026-09-07 regression guard
+# above is the actual boundary, not a guess: on this repo's synthetic
+# mid-bull fixture, power 3.25 and below already pushes the mean mid-bull
+# |z| back over that guard's 1.25 threshold (verified empirically), i.e.
+# the old pegging problem starts coming back before reaching the
+# directive's originally-suggested 2.5-3.0 range. 3.5 is the lowest value
+# that stays comfortably clear of that guard (mean |z| 1.20 vs the 1.25
+# cutoff) while still real-world verified against the 2023-2024 BTC bull
+# run (only ~4% of days pegged at the floor, vs. the whole run for the
+# original linear map).
+_RSI_CURVE_POWER = 3.5
 _LMACD_BOTTOM_DEAD = -0.02
 _LMACD_BOTTOM_EXTREME = -0.10
 _LMACD_TOP_ANCHOR_YEAR = 2013

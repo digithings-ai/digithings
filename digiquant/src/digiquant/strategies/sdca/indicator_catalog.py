@@ -88,7 +88,11 @@ from pathlib import Path
 import polars as pl
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-from digiquant.strategies.sdca.composite_risk import IndicatorWeight, causal_rolling_z
+from digiquant.strategies.sdca.composite_risk import (
+    IndicatorWeight,
+    causal_ema_smooth,
+    causal_rolling_z,
+)
 from digiquant.strategies.sdca.price_oscillators import (
     SdcaOscillatorSpec,
     agreement_scaled_blend,
@@ -142,6 +146,14 @@ _MIN_SAMPLES = 20
 # docstring); the z-normalization stage still reuses DEFAULT_ROLLING_WINDOW.
 _FAST_CRASH_VOL_WINDOW = 14
 _FAST_CRASH_VOL_MIN_SAMPLES = 7
+# M2's source is monthly FRED data forward-filled to daily, so a
+# DEFAULT_ROLLING_WINDOW (90d) rolling-z window sees only ~3 distinct real
+# prints -- the z-score is a step function that reads as a spike each time a
+# new print lands. Smoothing the z-score output itself (not the rolling-z
+# window, which would just trade this problem for a laggier one) turns that
+# step into a short ramp. Short halflife is fine: M2 is inherently a slow,
+# monthly-cadence signal, so a few days of lag costs nothing.
+_M2_SMOOTHING_HALFLIFE_DAYS = 5.0
 _RS_ETH_CONFLUENCE_SLOW_WEIGHT = 0.5
 _RS_ETH_CONFLUENCE_AGREEMENT_BOOST = 0.5
 _RS_ETH_CONFLUENCE_DISAGREEMENT_DAMP = 0.5
@@ -438,10 +450,17 @@ def m2_liquidity_z(
     window: int = DEFAULT_ROLLING_WINDOW,
     min_samples: int = _MIN_SAMPLES,
 ) -> pl.Series:
-    """YoY (or ``roc_days``) M2 growth, rolling-z. Expanding liquidity → +z (buy)."""
+    """YoY (or ``roc_days``) M2 growth, rolling-z, causal-EMA smoothed.
+
+    The rolling-z step function jumps once per monthly FRED print (see
+    ``_M2_SMOOTHING_HALFLIFE_DAYS``); a short-halflife causal EMA turns each
+    jump into a ramp without materially lagging this slow-cadence signal.
+    Expanding liquidity → +z (buy).
+    """
     aligned = align_to_dates(dates, m2_dates, m2_values, forward_fill=True)
     roc = aligned / aligned.shift(roc_days) - 1.0
-    return causal_rolling_z(roc, window=window, min_samples=min_samples)
+    z = causal_rolling_z(roc, window=window, min_samples=min_samples)
+    return causal_ema_smooth(z, half_life=_M2_SMOOTHING_HALFLIFE_DAYS)
 
 
 def rs_eth_z(

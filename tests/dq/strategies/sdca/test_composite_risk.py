@@ -6,9 +6,40 @@ import math
 
 import polars as pl
 import pytest
-from digiquant.strategies.sdca.composite_risk import IndicatorWeight, compute_composite_risk
+from digiquant.strategies.sdca.composite_risk import (
+    IndicatorWeight,
+    causal_ema_smooth,
+    compute_composite_risk,
+)
 
 pytestmark = pytest.mark.unit
+
+
+class TestCausalEmaSmooth:
+    def test_is_causal_later_spike_does_not_change_early_output(self) -> None:
+        base = [1.0] * 20
+        s1 = causal_ema_smooth(pl.Series(base), half_life=3.0)
+        spiked = base.copy()
+        spiked[-1] = 100.0
+        s2 = causal_ema_smooth(pl.Series(spiked), half_life=3.0)
+        assert s1[5] == pytest.approx(s2[5])
+
+    def test_smooths_a_step_into_a_ramp(self) -> None:
+        step = [0.0] * 10 + [3.0] * 20
+        smoothed = causal_ema_smooth(pl.Series(step), half_life=3.0).to_list()
+        # Immediately after the step, output has not fully jumped yet...
+        assert 0.0 < smoothed[10] < 3.0
+        # ...and converges back to the new level given enough halflives.
+        assert smoothed[-1] == pytest.approx(3.0, abs=0.05)
+
+    def test_constant_series_is_unchanged(self) -> None:
+        smoothed = causal_ema_smooth(pl.Series([2.0] * 15), half_life=4.0)
+        for v in smoothed.to_list():
+            assert v == pytest.approx(2.0)
+
+    def test_non_positive_half_life_raises(self) -> None:
+        with pytest.raises(ValueError, match="half_life must be > 0"):
+            causal_ema_smooth(pl.Series([1.0, 2.0]), half_life=0.0)
 
 
 class TestComputeCompositeRisk:

@@ -143,6 +143,35 @@ class TestNamedExtras:
         assert tail, "expected some non-null m2 z after warmup"
         assert sum(tail) / len(tail) > 0
 
+    def test_m2_smooths_monthly_print_steps(self) -> None:
+        n = 500
+        dates = _dates(n)
+        # Monthly FRED prints forward-filled to daily, like the real source
+        # -- each print jumps M2 by a fixed step, so the unsmoothed
+        # rolling-z is a literal step function (see the module comment on
+        # ``_M2_SMOOTHING_HALFLIFE_DAYS``). The causal-EMA post-step should
+        # turn that step into a ramp, i.e. strictly damp the day-over-day
+        # jump relative to the same rolling-z with no smoothing.
+        m2_dates = pl.Series(
+            "date", [dates[0] + _dt.timedelta(days=30 * i) for i in range(n // 30 + 1)], dtype=pl.Date
+        )
+        m2_values = pl.Series([100.0 * (1.01**i) for i in range(m2_dates.len())])
+        smoothed = m2_liquidity_z(dates, m2_dates, m2_values, roc_days=90, window=180, min_samples=60)
+
+        aligned = align_to_dates(dates, m2_dates, m2_values, forward_fill=True)
+        roc = aligned / aligned.shift(90) - 1.0
+        unsmoothed = causal_rolling_z(roc, window=180, min_samples=60)
+
+        def max_jump(z: pl.Series) -> float:
+            vals = z.to_list()
+            return max(
+                abs(a - b)
+                for a, b in zip(vals[1:], vals[:-1], strict=True)
+                if a is not None and b is not None
+            )
+
+        assert max_jump(smoothed) < max_jump(unsmoothed)
+
     def test_dxy_strength_is_negative_z(self) -> None:
         n = 50
         dates = _dates(n)
