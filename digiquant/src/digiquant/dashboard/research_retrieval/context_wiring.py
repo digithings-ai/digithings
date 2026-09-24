@@ -8,7 +8,11 @@ from enum import StrEnum
 from typing import Any  # score:allow untyped any — scored-lint: heterogeneous dict / client shapes
 from uuid import UUID
 
-from digiquant.dashboard.envcompat import CONTEXT_COMPILER_MODE, env_lookup
+from digiquant.dashboard.envcompat import (
+    CONTEXT_COMPILER_MODE,
+    CONTEXT_SHADOW_IN_PROMPT,
+    env_lookup,
+)
 from digiquant.dashboard.research_retrieval.blinding import (
     assert_blinded_analyst_prompt,
     assert_blinded_deliberation_prompt,
@@ -216,6 +220,42 @@ def _attach_manifest_linkage(
     return out
 
 
+_SHADOW_IN_PROMPT_TRUTHY = frozenset({"1", "true", "yes", "on"})
+
+
+def _shadow_blobs_in_prompt() -> bool:
+    """Whether to re-serialize shadow blobs into ``phase_inputs`` (#4609).
+
+    Default off. The compiled ``capsule`` / ``manifest`` / ``direction_decision_context``
+    already ride on :class:`RoleContextWireResult`, so writing them into the uncached
+    ``phase_inputs`` prompt block only duplicated bytes. Set
+    ``DIGIQUANT_CONTEXT_SHADOW_IN_PROMPT`` truthy to restore the pre-diet behaviour.
+    """
+    raw = env_lookup(CONTEXT_SHADOW_IN_PROMPT, default="").strip().lower()
+    return raw in _SHADOW_IN_PROMPT_TRUTHY
+
+
+def _attach_shadow_blobs(
+    phase_inputs: dict[str, Any],
+    *,
+    capsule: ContextCapsule,
+    manifest: ContextManifest,
+    direction_context: DirectionDecisionContext | None = None,
+) -> dict[str, Any]:
+    """Legacy in-prompt shadow blobs, gated by the #4609 escape hatch.
+
+    A no-op unless ``DIGIQUANT_CONTEXT_SHADOW_IN_PROMPT`` is truthy.
+    """
+    if not _shadow_blobs_in_prompt():
+        return phase_inputs
+    out = dict(phase_inputs)
+    out["context_capsule_shadow"] = capsule.model_dump(mode="json")
+    out["context_manifest_shadow"] = manifest.model_dump(mode="json")
+    if direction_context is not None:
+        out["direction_decision_context_shadow"] = direction_context.model_dump(mode="json")
+    return out
+
+
 def wire_analyst_phase_inputs(
     phase_inputs: dict[str, Any],
     *,
@@ -267,8 +307,7 @@ def wire_analyst_phase_inputs(
         )
 
     out = dict(phase_inputs)
-    out["context_capsule_shadow"] = capsule.model_dump(mode="json")
-    out["context_manifest_shadow"] = manifest.model_dump(mode="json")
+    out = _attach_shadow_blobs(out, capsule=capsule, manifest=manifest)
     out = _attach_manifest_linkage(out, manifest=manifest, capsule=capsule)
     out = _attach_outcome_lesson_linkage(out, outcome_lesson_pin=outcome_lesson_pin)
     return RoleContextWireResult(
@@ -337,8 +376,7 @@ def wire_deliberation_phase_inputs(
         )
 
     out = dict(phase_inputs)
-    out["context_capsule_shadow"] = capsule.model_dump(mode="json")
-    out["context_manifest_shadow"] = manifest.model_dump(mode="json")
+    out = _attach_shadow_blobs(out, capsule=capsule, manifest=manifest)
     out = _attach_manifest_linkage(out, manifest=manifest, capsule=capsule)
     return RoleContextWireResult(
         phase_inputs=out,
@@ -450,9 +488,12 @@ def wire_direction_phase_inputs(
         )
 
     out = dict(phase_inputs)
-    out["context_capsule_shadow"] = capsule.model_dump(mode="json")
-    out["context_manifest_shadow"] = manifest.model_dump(mode="json")
-    out["direction_decision_context_shadow"] = decision_ctx.model_dump(mode="json")
+    out = _attach_shadow_blobs(
+        out,
+        capsule=capsule,
+        manifest=manifest,
+        direction_context=decision_ctx,
+    )
     if prerequisites is None or prerequisites.state_version_id is None:
         out["direction_context_degraded"] = "missing_versioned_prerequisites"
     out = _attach_manifest_linkage(out, manifest=manifest, capsule=capsule)

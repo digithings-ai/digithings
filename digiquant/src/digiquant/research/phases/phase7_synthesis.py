@@ -459,13 +459,16 @@ def _subsection_payloads(state: ResearchState) -> dict[str, dict[str, Any]]:
 
 
 def _digest_phase_inputs(state: ResearchState) -> dict[str, Any]:
-    """Stitcher inputs: subsections + two full prior briefings + bias row."""
+    """Stitcher inputs: subsections + bias row.
+
+    ``prior_digests`` lives once in ``_digest_shared_context`` (the cached block);
+    re-serializing it here would duplicate the prior briefings every digest call (#4609).
+    """
     phase_inputs: dict[str, Any] = {
         "segment": "master-digest",
         "document_key": _digest_document_key(state),
         "bias_row": state.phase6_bias_row or {},
         "subsections": _subsection_payloads(state),
-        "prior_digests": _prior_digest_bodies(state, limit=2),
     }
     if state.custom_prompt:
         phase_inputs["custom_prompt"] = state.custom_prompt
@@ -478,7 +481,6 @@ def _subsection_phase_inputs(slug: str, state: ResearchState) -> dict[str, Any]:
     inputs: dict[str, Any] = {
         "segment": f"digest-{slug}",
         "subsection": slug,
-        "prior_digests": _prior_digest_bodies(state, limit=2),
     }
     if spec.phase == "phase1":
         inputs["phase1"] = _bodies(state.phase1_outputs, per_segment)
