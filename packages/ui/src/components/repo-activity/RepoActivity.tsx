@@ -16,7 +16,6 @@
  */
 import { useEffect, useRef, useState, type RefObject } from "react";
 
-import { CardRail } from "../data-layout";
 import { GitHubGlyph } from "../icons";
 import { fetchRepoActivityLive } from "./fetch";
 import { RepoHeatmap } from "./RepoHeatmap";
@@ -78,8 +77,6 @@ export type RepoActivityProps = {
    * scrolling. Defaults to 53 — a full year, GitHub-style.
    */
   weeks?: number;
-  /** Activity variant: the current version of every module, newest first. */
-  moduleReleases?: RepoModuleRelease[];
   /** Activity variant: the maintainer credited under the ledger. */
   contributor?: RepoContributor;
   className?: string;
@@ -93,7 +90,6 @@ export function RepoActivity({
   cloneCommand,
   contributingUrl,
   weeks = 53,
-  moduleReleases,
   contributor,
   className,
 }: RepoActivityProps) {
@@ -186,7 +182,6 @@ export function RepoActivity({
           heatRef={heatRef}
           heatWeeks={heatWeeks}
           heatData={heatData}
-          moduleReleases={moduleReleases}
           contributor={contributor}
         />
       ) : (
@@ -310,7 +305,6 @@ function Activity({
   heatRef,
   heatWeeks,
   heatData,
-  moduleReleases,
   contributor,
 }: {
   data: RepoActivitySnapshot;
@@ -318,10 +312,8 @@ function Activity({
   heatRef: RefObject<HTMLDivElement | null>;
   heatWeeks: number;
   heatData: RepoActivitySnapshot["dailyContributions"];
-  moduleReleases?: RepoModuleRelease[];
   contributor?: RepoContributor;
 }) {
-  const releases = moduleReleases ?? [];
   return (
     <>
       <div className="ra-activity-top">
@@ -350,24 +342,8 @@ function Activity({
         </div>
       </div>
 
-      {releases.length || contributor ? (
+      {contributor ? (
         <div className="ra-activity-foot">
-          {releases.length ? (
-            <div className="ra-versions">
-              <p className="ra-kicker">{"// current versions"}</p>
-              {/* The ledger is the kit's own horizontal rail — the same element
-                  the strategy library uses, promoted from the design reference's
-                  changelog rail. The owner asked for the releases "in a
-                  horizontal scrollable pane like you'll find in the data page".
-                  The rail knows nothing about its children, so each release is a
-                  card carrying its own name, version and optional live line. */}
-              <CardRail ariaLabel="Current version of every module">
-                {releases.map((r) => (
-                  <ReleaseCard key={r.name} release={r} />
-                ))}
-              </CardRail>
-            </div>
-          ) : null}
           {contributor ? (
             <div className="ra-contributor">
               <p className="ra-kicker">{"// maintainer"}</p>
@@ -394,37 +370,6 @@ function Activity({
         </div>
       ) : null}
     </>
-  );
-}
-
-/**
- * One release card in the version rail. `role="listitem"` because the rail's
- * track is the `role="list"`; the sizing and snap-align live in
- * `repo-activity.css` (`.ra-release-card`), since the call site here is the kit
- * itself rather than an app. A module whose version is only declared — no
- * GitHub release — shows its name and version and stops there: no feature line
- * and no date, because there is no release to read them from.
- */
-function ReleaseCard({ release }: { release: RepoModuleRelease }) {
-  return (
-    <article className="ra-release-card" role="listitem">
-      <div className="ra-release-head">
-        <span className="ra-release-name">{release.name}</span>
-        {release.date ? (
-          <time className="ra-release-date" dateTime={release.date}>
-            {isoDay(release.date)}
-          </time>
-        ) : null}
-      </div>
-      {release.url ? (
-        <a className="ra-release-version" href={release.url} target="_blank" rel="noreferrer">
-          {release.version}
-        </a>
-      ) : (
-        <span className="ra-release-version">{release.version}</span>
-      )}
-      {release.title ? <p className="ra-release-title">{release.title}</p> : null}
-    </article>
   );
 }
 

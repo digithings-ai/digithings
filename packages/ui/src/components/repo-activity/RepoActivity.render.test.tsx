@@ -58,37 +58,25 @@ describe("RepoActivity snapshot render", () => {
     expect(html).not.toMatch(/stars|forks|watchers/i);
   });
 
-  it("activity renders the per-module versions in the kit's rail", () => {
+  it("activity shows the metrics, the graph and the maintainer — not a version rail", () => {
     const html = renderToStaticMarkup(
       <RepoActivity
         variant="activity"
         snapshot={REPO_ACTIVITY_DEMO}
         repoUrl={REPO_ACTIVITY_DEMO_URL}
-        moduleReleases={[
-          {
-            name: "digichat",
-            version: "2.3.2",
-            title: "hold the fourth turn",
-            date: "2026-09-21T12:38:12Z",
-            url: "https://github.com/digithings-ai/digithings/releases/tag/digichat-v2.3.2",
-          },
-          // A declared version only: no title and no date, and nothing invented.
-          { name: "digigraph", version: "0.1.0" },
-        ]}
         contributor={{ name: "Chris", role: "maintainer" }}
       />,
     );
     expect(html).toContain('data-variant="activity"');
-    expect(html).toContain("// current versions");
-    expect(html).toContain("cr-track");
-    expect(html).toContain('role="listitem"');
-    expect(html).toContain("digichat");
-    expect(html).toContain("2.3.2");
-    expect(html).toContain("hold the fourth turn");
-    expect(html).toContain("2026-09-21");
-    expect(html).toContain("digigraph");
-    expect(html).toContain("0.1.0");
+    expect(html).toContain("// last 30 days on main");
+    expect(html).toContain("// current backlog");
+    expect(html).toContain("ra-heat");
     expect(html).toContain("// maintainer");
+    expect(html).toContain("Chris");
+    // The version ledger was removed; nothing should render it.
+    expect(html).not.toContain("// current versions");
+    expect(html).not.toContain("ra-versions");
+    expect(html).not.toContain("ra-release-card");
     expect(html).not.toMatch(/stars|forks|watchers/i);
   });
 });
