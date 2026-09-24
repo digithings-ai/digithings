@@ -184,7 +184,7 @@ const EXAMPLE = performance();
 
 const PERFORMANCE_SERIES: OverlaySeries[] = [
   { id: "portfolio", label: "digiquant portfolio", points: EXAMPLE.portfolio, tone: "accent", fill: true },
-  { id: "benchmark", label: "benchmark", points: EXAMPLE.benchmark, tone: "mute", dashed: true },
+  { id: "benchmark", label: "benchmark", points: EXAMPLE.benchmark, tone: "mute", dotted: true },
 ];
 
 /* The six stages as the kit's `Pipeline` — one column per stage, so the flow is

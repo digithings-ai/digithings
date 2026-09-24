@@ -304,6 +304,7 @@ export {
   viewWindowLastYear,
   matchLookbackPreset,
   viewsNear,
+  sliceByView,
   PRINT_FULL_VIEW,
   runTearsheetPrint,
   isOpenTrade,

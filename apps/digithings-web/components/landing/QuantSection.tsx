@@ -12,6 +12,7 @@ import {
   TearsheetCardKpis,
   fmtCompact,
   matchLookbackPreset,
+  sliceByView,
   viewWindowForPreset,
   type LookbackPreset,
   type OverlaySeries,
@@ -140,7 +141,7 @@ const EXAMPLE = performance();
 
 const PERFORMANCE_SERIES: OverlaySeries[] = [
   { id: "portfolio", label: "digiquant portfolio", points: EXAMPLE.portfolio, tone: "accent", fill: true },
-  { id: "benchmark", label: "benchmark", points: EXAMPLE.benchmark, tone: "mute", dashed: true },
+  { id: "benchmark", label: "benchmark", points: EXAMPLE.benchmark, tone: "mute", dotted: true },
 ];
 
 const FULL_SPAN: [string, string] = [
@@ -389,7 +390,7 @@ function indexLive(
       label: "benchmark",
       points: benchmarkPoints,
       tone: "mute",
-      dashed: true,
+      dotted: true,
     });
   }
   return { series, fullSpan: [portfolio[0].t, portfolio[portfolio.length - 1].t] };
@@ -407,8 +408,9 @@ function indexLive(
  * in percent. The base is found by date (the same edge the chart slices on),
  * not by index fraction, so the drawn first point is exactly zero. Values
  * outside the window are rebased too but never drawn — the chart still slices
- * by date itself — and the window reads beside the chart are unaffected (they
- * already measure the same window).
+ * by date itself — and the window reads beside the chart are the last drawn
+ * values of these same rebased legs, so the numbers and the curves cannot
+ * disagree.
  */
 function rebaseToWindow(
   series: OverlaySeries[],
@@ -428,25 +430,6 @@ function rebaseToWindow(
       points: leg.points.map((point) => ({ t: point.t, v: (point.v / base - 1) * 100 })),
     };
   });
-}
-
-/**
- * The percent change across the *visible* window of an indexed series.
- *
- * `ViewWindow` is a normalized `[lo, hi]` slice of the full date span, so the
- * window maps onto point indices by fraction. Returns `null` when the window is
- * too narrow to hold two points — the caller renders an em dash rather than a
- * fabricated zero, the same rule the rest of the band follows.
- */
-function windowReturn(points: TearsheetSeriesPoint[], view: ViewWindow): number | null {
-  const last = points.length - 1;
-  if (last < 1) return null;
-  const from = Math.max(0, Math.min(last, Math.round(view.lo * last)));
-  const to = Math.max(0, Math.min(last, Math.round(view.hi * last)));
-  if (to <= from) return null;
-  const start = points[from].v;
-  if (!start) return null;
-  return (points[to].v / start - 1) * 100;
 }
 
 /** A signed percent, or an em dash when the window cannot be measured. */
@@ -494,16 +477,29 @@ function Book({
   const [view, setView] = useState<ViewWindow | null>(null);
   const active: LookbackPreset = (view && matchLookbackPreset(view, fullSpan)) || "1y";
   const window: ViewWindow = view ?? viewWindowForPreset("1y", fullSpan);
-  const portfolioPoints = series.find((entry) => entry.id === "portfolio")?.points ?? [];
-  const benchmarkPoints = series.find((entry) => entry.id === "benchmark")?.points ?? [];
-  const portfolioReturn = windowReturn(portfolioPoints, window);
-  const benchmarkReturn = windowReturn(benchmarkPoints, window);
   /* Percent from the window's own start, so the drawn curves always begin at
-     0% no matter which preset (or drag) set the window. Slicing, drag and the
-     reads above are untouched — this only changes the drawn values. No
-     useMemo: a few hundred points per render is trivial, and the React
-     Compiler memoizes the component itself. */
+     0% no matter which preset (or drag) set the window. No useMemo: a few
+     hundred points per render is trivial, and the React Compiler memoizes the
+     component itself. */
   const drawn = rebaseToWindow(series, window, fullSpan);
+  /* The reads are the last drawn values of the rebased legs — sliced by the
+     chart's own `sliceByView`, so the numbers and the curves are the same
+     window and can never disagree. An empty leg renders an em dash rather
+     than a fabricated zero, the same rule the rest of the band follows. */
+  const drawnPortfolio = sliceByView(
+    drawn.find((entry) => entry.id === "portfolio")?.points ?? [],
+    window,
+    fullSpan,
+  );
+  const drawnBenchmark = sliceByView(
+    drawn.find((entry) => entry.id === "benchmark")?.points ?? [],
+    window,
+    fullSpan,
+  );
+  const portfolioReturn =
+    drawnPortfolio.length > 0 ? drawnPortfolio[drawnPortfolio.length - 1].v : null;
+  const benchmarkReturn =
+    drawnBenchmark.length > 0 ? drawnBenchmark[drawnBenchmark.length - 1].v : null;
 
   return (
     <div className="flex min-w-0 flex-col gap-[0.8rem]">
