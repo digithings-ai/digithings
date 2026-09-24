@@ -214,9 +214,22 @@
  */
 .arch-tour__side {
   display: grid;
+  /* Two tracks: the side tag on its own row at the top, then the diagram + its
+   * step list below. Without the explicit row the tag auto-placed into the
+   * diagram's cell and landed bottom-left. */
+  grid-template-rows: auto minmax(0, 1fr);
   gap: 1.8rem;
   min-width: 0;
   transition: transform 0.8s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+/* Each rail's progress bar reads that side's own walk, not the whole walk. */
+.arch-tour__side:nth-child(1) .arch-tour__rail {
+  --arch-rail-p: var(--arch-r0, 0);
+}
+
+.arch-tour__side:nth-child(2) .arch-tour__rail {
+  --arch-rail-p: var(--arch-r1, 0);
 }
 
 .arch-tour__side--leaving {
@@ -311,6 +324,17 @@
   color: var(--accent);
 }
 
+/* The side tag prints ONCE per side, on its own row at the TOP, right-aligned
+ * above the step column — never on every step and never bottom-left. */
+.arch-tour__side > .arch-tour__side-tag {
+  grid-row: 1;
+  grid-column: -2 / -1;
+  justify-self: end;
+  align-self: start;
+  margin-bottom: 0;
+  text-align: end;
+}
+
 .arch-tour__grid {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
@@ -342,7 +366,10 @@
   width: 1px;
   background: var(--accent);
   transform-origin: 0 0;
-  transform: scaleY(var(--arch-p, 0));
+  /* The side-local walk progress, not the whole-walk value: on the rented rail
+   * the global value filled only its share and on the owned rail it was already
+   * full before that side began. Each side sets --arch-r<si> for its own rail. */
+  transform: scaleY(var(--arch-rail-p, 0));
   transition: transform 0.15s linear;
 }
 
@@ -413,7 +440,8 @@
   .arch-tour:not([data-variant="static"]) .arch-tour__side {
     grid-area: 1 / 1;
     grid-template-columns: minmax(0, 1.35fr) minmax(0, 0.65fr);
-    gap: 2.4rem;
+    grid-template-rows: auto minmax(0, 1fr);
+    gap: 0.6rem 2.4rem;
     align-items: start;
   }
 
@@ -421,13 +449,25 @@
     grid-template-columns: minmax(0, 0.65fr) minmax(0, 1.35fr);
   }
 
-  /* Both children are pinned to row 1: the owned side lists its columns in the
-   * opposite order, and grid auto-placement would otherwise drop the rail onto a
-   * second row below the diagram (which also made the pin taller than the
-   * viewport, so it could not hold). */
+  /* The tag sits above the RAIL column, so it must follow the rail as the
+   * tracks mirror: right column on the leaving side, left column on the
+   * entering side. */
+  .arch-tour:not([data-variant="static"]) .arch-tour__side > .arch-tour__side-tag {
+    grid-row: 1;
+    grid-column: 2;
+  }
+
+  .arch-tour:not([data-variant="static"]) .arch-tour__side--entering > .arch-tour__side-tag {
+    grid-column: 1;
+  }
+
+  /* Both runtime children are pinned to row 2: the tag owns row 1, and the
+   * owned side lists its columns in the opposite order, so grid auto-placement
+   * would otherwise drop the rail onto a third row below the diagram (which also
+   * made the pin taller than the viewport, so it could not hold). */
   .arch-tour:not([data-variant="static"]) .arch-tour__side .arch-tour__frame,
   .arch-tour:not([data-variant="static"]) .arch-tour__side .arch-tour__rail {
-    grid-row: 1;
+    grid-row: 2;
   }
 
   .arch-tour:not([data-variant="static"]) .arch-tour__side--entering .arch-tour__frame {
@@ -436,7 +476,6 @@
 
   .arch-tour:not([data-variant="static"]) .arch-tour__side--entering .arch-tour__rail {
     grid-column: 1;
-    align-self: end;
   }
 }
 

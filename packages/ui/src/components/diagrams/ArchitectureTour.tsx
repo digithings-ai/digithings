@@ -285,6 +285,18 @@ export function ArchitectureTour({
       const p = clamp01((pinOffset() - track.getBoundingClientRect().top) / avail);
       pin.style.setProperty("--arch-p", p.toFixed(4));
 
+      // Each rail's own progress bar would otherwise read the whole-walk value:
+      // on the rented rail that fills only its share then the side slides away,
+      // and on the owned rail it is already full before that side starts. So
+      // each side gets a local 0→1 across its own steps.
+      let seen = 0;
+      for (let si = 0; si < sides.length; si += 1) {
+        const total = sides[si].steps.length;
+        const local = clamp01((p * count - seen) / Math.max(1, total));
+        pin.style.setProperty(`--arch-r${si}`, local.toFixed(4));
+        seen += total;
+      }
+
       // The swipe lives in the tail of the last step of the earlier side, so the
       // reader finishes that walk before the page changes diagram under them.
       const v = p * count;
@@ -557,15 +569,15 @@ export function ArchitectureTour({
                     </div>
                   </div>
 
+                  {side.tag ? (
+                    <span className="arch-tour__side-tag">{side.tag}</span>
+                  ) : null}
                   <ol className="arch-tour__rail">
                     {side.steps.map((entry, index) => {
                       const on = base + index === step;
                       return (
                         <li className={`arch-tour__step${on ? " on" : ""}`} key={entry.id}>
                           <span className="arch-tour__index">
-                            {side.tag ? (
-                              <span className="arch-tour__side-tag">{side.tag}</span>
-                            ) : null}
                             {String(index + 1).padStart(2, "0")}
                           </span>
                           <span className="arch-tour__label">{entry.label}</span>
