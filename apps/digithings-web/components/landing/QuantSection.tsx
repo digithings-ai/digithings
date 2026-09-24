@@ -10,6 +10,7 @@ import {
   TearsheetCard,
   TearsheetCardKpi,
   TearsheetCardKpis,
+  fmtCompact,
   matchLookbackPreset,
   viewWindowForPreset,
   type LookbackPreset,
@@ -359,7 +360,8 @@ function liveStrategyCard(read: StrategyRead): StrategyCardData {
   };
 }
 
-/** A live pair, each leg indexed to 100 at its own first point. */
+/** A live pair, each leg indexed to 100 at its own first point. `Book` rebases
+ * the drawn window to 0% at its left date edge before it reaches the chart. */
 function indexLive(
   nav: NavPoint[],
   benchmark: PricePoint[],
@@ -391,6 +393,41 @@ function indexLive(
     });
   }
   return { series, fullSpan: [portfolio[0].t, portfolio[portfolio.length - 1].t] };
+}
+
+/**
+ * Rebase every leg to percent return from the *visible* window's start.
+ *
+ * The legs arrive indexed to 100 at the full series' start (`indexLive`, or
+ * the example pair) — the right stored shape but the wrong drawn one. On a 1M
+ * window the curves would otherwise start at whatever index level the book
+ * had drifted to, and the axis would read in index points. Rebasing maps each
+ * leg to `(v / v0 - 1) * 100`, where `v0` is the leg's value at the window's
+ * left date edge, so the visible chart always starts at 0% and the axis reads
+ * in percent. The base is found by date (the same edge the chart slices on),
+ * not by index fraction, so the drawn first point is exactly zero. Values
+ * outside the window are rebased too but never drawn — the chart still slices
+ * by date itself — and the window reads beside the chart are unaffected (they
+ * already measure the same window).
+ */
+function rebaseToWindow(
+  series: OverlaySeries[],
+  window: ViewWindow,
+  fullSpan: [string, string],
+): OverlaySeries[] {
+  const t0 = new Date(fullSpan[0]).getTime();
+  const t1 = new Date(fullSpan[1]).getTime();
+  const span = t1 - t0;
+  if (!Number.isFinite(span) || span <= 0) return series;
+  const loT = t0 + window.lo * span;
+  return series.map((leg) => {
+    const base = leg.points.find((point) => new Date(point.t).getTime() >= loT)?.v ?? 0;
+    if (!base) return leg;
+    return {
+      ...leg,
+      points: leg.points.map((point) => ({ t: point.t, v: (point.v / base - 1) * 100 })),
+    };
+  });
 }
 
 /**
@@ -436,6 +473,12 @@ function fmtRelative(portfolio: number | null, benchmark: number | null): string
  * period selected in the chart" is literally what the middle figure reports —
  * change the preset and the numbers move with it.
  *
+ * The chart itself draws percent return rebased to zero at the window's left
+ * edge (`rebaseToWindow`), not the stored index levels: switching from 1Y to
+ * 1M re-anchors the curves at 0% and the axis reads in percent, with the area
+ * filled to the zero line. The y-domain stays the chart's own tight auto fit,
+ * so the whole progression of the period fills the pane.
+ *
  * Values are deliberately untinted: the up/down money classes are reserved for
  * figures that are somebody's result, and none of these is.
  */
@@ -455,6 +498,12 @@ function Book({
   const benchmarkPoints = series.find((entry) => entry.id === "benchmark")?.points ?? [];
   const portfolioReturn = windowReturn(portfolioPoints, window);
   const benchmarkReturn = windowReturn(benchmarkPoints, window);
+  /* Percent from the window's own start, so the drawn curves always begin at
+     0% no matter which preset (or drag) set the window. Slicing, drag and the
+     reads above are untouched — this only changes the drawn values. No
+     useMemo: a few hundred points per render is trivial, and the React
+     Compiler memoizes the component itself. */
+  const drawn = rebaseToWindow(series, window, fullSpan);
 
   return (
     <div className="flex min-w-0 flex-col gap-[0.8rem]">
@@ -465,16 +514,18 @@ function Book({
       <div className="grid grid-cols-[minmax(0,1fr)] gap-[1rem] min-[980px]:grid-cols-[minmax(0,1.55fr)_minmax(0,0.45fr)] min-[980px]:items-stretch min-[980px]:gap-[1.4rem]">
         <div className="h-[240px] overflow-hidden border border-hair">
           <MultiTimeSeries
-            series={series}
+            series={drawn}
             height={240}
             interactive
+            zeroBaseline
+            fmt={(v) => `${fmtCompact(v)}%`}
             view={view ?? undefined}
             onView={setView}
             fullSpan={fullSpan}
             ariaLabel={
               live
-                ? "digiquant portfolio against a benchmark, indexed to 100 at the start"
-                : "Example performance, digiquant portfolio against a benchmark, indexed to 100 at the start (synthetic series)"
+                ? "digiquant portfolio percent return against a benchmark, rebased to zero at the start of the visible window"
+                : "Example performance, digiquant portfolio percent return against a benchmark, rebased to zero at the start of the visible window (synthetic series)"
             }
           />
         </div>
