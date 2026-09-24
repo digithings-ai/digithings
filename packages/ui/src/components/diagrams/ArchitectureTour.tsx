@@ -277,6 +277,9 @@ export function ArchitectureTour({
     if (typeof ResizeObserver !== "undefined") {
       observer = new ResizeObserver(() => {
         measure();
+        // The SVG resizing also means the pin/track geometry moved, so anchor the
+        // scroll to the same step as well as retaking the box snapshot.
+        remeasureRef.current?.();
       });
       for (const pane of panes) {
         const svg = pane.querySelector("svg");
@@ -294,6 +297,7 @@ export function ArchitectureTour({
         : null;
     const onDpr = (): void => {
       measure();
+      remeasureRef.current?.();
     };
     dprQuery?.addEventListener("change", onDpr);
 
@@ -321,6 +325,45 @@ export function ArchitectureTour({
     const measureTrack = () => {
       distance = Math.round(window.innerHeight * vhPerStep);
       track.style.height = `${pin.offsetHeight + distance}px`;
+    };
+
+    /**
+     * Re-measure the track WITHOUT moving the reader.
+     *
+     * The track's height depends on `window.innerHeight`, so a viewport or zoom
+     * change resizes it — and because the track sits at a fixed document offset,
+     * its top edge and every step's scroll position move with it. Left alone that
+     * lands the reader on a different step of the walk, which is what "it moves
+     * around as I zoom" was. So read the current step first, resize, then put the
+     * scroll position back on the same step.
+     */
+    const remeasure = () => {
+      const pinEl = pinRef.current;
+      const trackEl = trackRef.current;
+      if (!pinEl || !trackEl) {
+        measureTrack();
+        update();
+        return;
+      }
+      // The fraction of the walk the reader is currently on, before the resize.
+      const beforeAvail = Math.max(1, trackEl.offsetHeight - pinEl.offsetHeight);
+      const beforeTop = trackEl.getBoundingClientRect().top + window.scrollY;
+      const beforeP = clamp01((pinOffset() - beforeTop) / beforeAvail);
+
+      measureTrack();
+
+      // After the resize, put the scroll back so the same fraction sits under the
+      // pin. Only do it while the walk actually holds the pin — outside it the
+      // reader is just scrolling the page and must not be moved at all.
+      const afterAvail = Math.max(1, trackEl.offsetHeight - pinEl.offsetHeight);
+      const afterTop = trackEl.getBoundingClientRect().top + window.scrollY;
+      const target = afterTop - pinOffset() + beforeP * afterAvail;
+      // A zoom keeps the anchor scrollY ratio, so the browser may already be at
+      // the right place; only nudge when the step would actually change.
+      if (Math.abs(window.scrollY - target) > 2) {
+        window.scrollTo({ top: Math.max(0, Math.round(target)), behavior: "auto" });
+      }
+      update();
     };
 
     const update = () => {
@@ -372,11 +415,10 @@ export function ArchitectureTour({
       frame = requestAnimationFrame(update);
     };
     const onResize = () => {
-      measureTrack();
-      update();
+      remeasure();
     };
 
-    remeasureRef.current = measureTrack;
+    remeasureRef.current = remeasure;
     measureTrack();
     update();
     window.addEventListener("scroll", onScroll, { passive: true });
