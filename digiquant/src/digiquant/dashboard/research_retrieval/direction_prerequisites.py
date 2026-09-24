@@ -14,7 +14,8 @@ from digiquant.dashboard.research_retrieval.models import content_digest
 from digiquant.dashboard.temporal import require_utc_datetime
 from digiquant.research.forecast_outcomes import (
     ForecastOutcomeIntegrityError,
-    list_resolved_outcomes_as_of,
+    ResolvedOutcomesMemo,
+    list_resolved_outcomes_as_of_memoized,
 )
 from digiquant.research.supabase_io import SupabaseClient
 
@@ -91,8 +92,15 @@ def build_direction_prerequisite_snapshot(
     research_state_pin: dict[str, object] | None,
     prior_effective_forecast_ids: tuple[str, ...] = (),
     outcome_lesson_pin: dict[str, object] | None = None,
+    resolved_outcomes_memo: ResolvedOutcomesMemo | None = None,
 ) -> DirectionPrerequisiteSnapshot | None:
-    """Pin versioned WP3/WP5/WP15 inputs for direction context compile at preflight."""
+    """Pin versioned WP3/WP5/WP15 inputs for direction context compile at preflight.
+
+    ``resolved_outcomes_memo`` is the run-scoped cohort memo shared with the
+    portfolio direction phase (#4617): the first reader issues the
+    ``list_resolved_outcomes_as_of`` GET and the second reuses it. ``None``
+    reads directly (legacy behavior).
+    """
     state_version_id: UUID | None = None
     if isinstance(research_state_pin, dict):
         state_version_id = _parse_uuid(research_state_pin.get("state_version_id"))
@@ -118,7 +126,9 @@ def build_direction_prerequisite_snapshot(
         if knowledge_cutoff_at is not None:
             try:
                 cutoff = require_utc_datetime(knowledge_cutoff_at, field_name="knowledge_cutoff_at")
-                resolved = list_resolved_outcomes_as_of(client=client, knowledge_cutoff_at=cutoff)
+                resolved = list_resolved_outcomes_as_of_memoized(
+                    client=client, knowledge_cutoff_at=cutoff, memo=resolved_outcomes_memo
+                )
                 matured_set = {str(o.outcome_id) for o in resolved}
                 matured_ids = tuple(sorted(matured_set))
                 resolved_effective = {str(o.effective_forecast_id) for o in resolved}
