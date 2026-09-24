@@ -211,7 +211,7 @@ class TestEvidenceDerivedConviction:
         p = self._payload("buy")
         # 3 confirming − 1 contradicting = 2; caps don't bind → 2 (computed, not parked)
         assert p.conviction_score == 2
-        p2 = self._payload("buy", contradicting_signals=3)
+        p2 = self._payload("buy", independent_confirming_signals=2, contradicting_signals=3)
         assert p2.conviction_score == 0, "net evidence drives the score, not the default"
 
     def test_high_conviction_requires_the_full_bar(self) -> None:
@@ -223,7 +223,8 @@ class TestEvidenceDerivedConviction:
             evidence_quality="high",
         )
         assert self._payload("buy", **full_bar).conviction_score == 5
-        # Remove any single requirement → high (>=4) is unreachable
+        # Weaken any single requirement (or add a contradiction, keeping the five-family
+        # sum valid) → high (>=4) is unreachable
         assert (
             self._payload("buy", **{**full_bar, "catalyst_within_horizon": False}).conviction_score
             <= 3
@@ -233,7 +234,11 @@ class TestEvidenceDerivedConviction:
         )
         assert self._payload("buy", **{**full_bar, "evidence_quality": "low"}).conviction_score <= 2
         assert (
-            self._payload("buy", **{**full_bar, "contradicting_signals": 2}).conviction_score <= 3
+            self._payload(
+                "buy",
+                **{**full_bar, "independent_confirming_signals": 4, "contradicting_signals": 1},
+            ).conviction_score
+            <= 3
         )
 
     def test_sell_mirrors_negative_and_hold_clamps(self) -> None:
@@ -252,29 +257,31 @@ class TestEvidenceDerivedConviction:
         """#4583 — the counts are itemized against the CALL, not the market thesis.
 
         Production 2026-09-10 ``analyst/XLY`` declared ``sell`` on a *bullish*
-        mean-reversion thesis, with five families contradicting that thesis. Read as
-        thesis-relative counts (confirming 1, contradicting 5) the derivation returns
-        ``0`` — the unexplainable ``stance: sell`` / ``conviction_score: 0`` pair.
-        Read against the call, those five families confirm the sell.
+        mean-reversion thesis, with four families reading against that thesis.
+        Read as thesis-relative counts (confirming 1, contradicting 4) the
+        derivation returns ``0`` — the unexplainable ``stance: sell`` /
+        ``conviction_score: 0`` pair. Read against the call, those four families
+        confirm the sell (and one contradicts it): ``4/1`` is a valid vector over
+        the five-family universe (#4585).
         """
         supported = self._payload(
             "sell",
-            independent_confirming_signals=5,
+            independent_confirming_signals=4,
             contradicting_signals=1,
             catalyst_within_horizon=True,
             evidence_quality="high",
             trend_alignment="with",
         )
-        assert supported.conviction_score == -4
+        assert supported.conviction_score == -3
         against_trend = self._payload(
             "sell",
-            independent_confirming_signals=5,
+            independent_confirming_signals=4,
             contradicting_signals=1,
             catalyst_within_horizon=True,
             evidence_quality="high",
             trend_alignment="against",
         )
-        assert against_trend.conviction_score == -3
+        assert against_trend.conviction_score == -2
 
     def test_balanced_call_derives_zero_for_a_directional_stance(self) -> None:
         """A balanced call is a *weak* directional call, not a missing one.
@@ -297,8 +304,9 @@ class TestEvidenceDerivedConviction:
         from collections import Counter
 
         scores = []
+        # Only vectors that fit the five-family universe: confirming + contradicting <= 5 (#4585).
         for confirming in range(6):
-            for contradicting in range(4):
+            for contradicting in range(6 - confirming):
                 for catalyst in (True, False):
                     for quality in ("high", "medium", "low"):
                         scores.append(
@@ -311,8 +319,10 @@ class TestEvidenceDerivedConviction:
                             ).conviction_score
                         )
         counts = Counter(scores)
-        n = len(scores)
-        assert max(counts.values()) / n < 0.5, f"single-mode collapse: {counts}"
+        # A balanced-or-negative net derives 0, so 0 is the honest mode of the valid
+        # space; what must not happen (#1672) is a single *nonzero* score eating the
+        # distribution, or high conviction becoming unreachable.
+        assert len(counts) >= 5, f"distribution collapsed: {counts}"
         high = sum(v for k, v in counts.items() if k >= 4)
         low = sum(v for k, v in counts.items() if k in (0, 1))
         assert high < low, f"high must be scarcer than low: {counts}"
@@ -758,6 +768,117 @@ class TestH5ForecastMaterialization:
         assert payload.forecast_assessment.forecast_id == assessment.forecast_id
         assert doc is not None
         assert doc["body"]["forecast_assessment"]["forecast_id"] == str(assessment.forecast_id)
+
+    def test_skip_carries_a_legacy_overcounted_evidence_body_with_net_preserved(self) -> None:
+        """#4585 — a persisted ``4 + 4`` row still carries, repaired to ``2 + 2``.
+
+        The evidence counts are two halves of one five-family universe, so ``4 + 4``
+        is impossible. A bare cross-field validator would degrade every legacy row
+        that overcounted; the skip/carry path repairs the pair on read instead,
+        preserving the net (here ``0``) so the derived conviction is unchanged.
+        """
+        from datetime import UTC, datetime
+
+        from digiquant.portfolio.models.forecast import (
+            ForecastTerms,
+            PriceAnchor,
+            PriceAnchorStatus,
+        )
+        from digiquant.portfolio.phases.portfolio_common import (
+            materialize_forecast_assessment,
+            run_asset_analyst_llm,
+        )
+
+        terms = ForecastTerms.model_validate(_sample_terms())
+        cutoff = datetime(2026, 6, 19, 15, 0, tzinfo=UTC)
+        assessment = materialize_forecast_assessment(
+            ticker="AAPL",
+            terms=terms,
+            source_run_id="run-prior",
+            provider_invocation_id="inv-prior",
+            prompt_version="asset-analyst-full@prior",
+            artifact_version="h5-full@1",
+            price_anchor=PriceAnchor(
+                status=PriceAnchorStatus.UNAVAILABLE,
+                unavailable_reason="mark_price_not_available_in_analyst_state",
+            ),
+            effective_at=cutoff,
+            known_at=cutoff,
+        )
+        prior_body = {
+            "ticker": "AAPL",
+            "conviction_score": 0,
+            "stance": "hold",
+            "thesis": "prior thesis",
+            "risks": "prior risk",
+            "sources": [],
+            "fingerprint_news_hash": "abc",
+            "forecast": terms.model_dump(mode="json"),
+            "forecast_assessment": assessment.model_dump(mode="json"),
+            # Impossible pre-#4585 vector: 8 family assignments over 5 families.
+            "evidence": {
+                "independent_confirming_signals": 4,
+                "contradicting_signals": 4,
+                "catalyst_within_horizon": True,
+                "trend_alignment": "with",
+                "evidence_quality": "high",
+            },
+        }
+        state = _state(
+            prior={
+                "date": "2026-06-19",
+                "stance": "hold",
+                "conviction_score": 0,
+                "fingerprint_news_hash": "abc",
+            }
+        )
+        state = state.model_copy(
+            update={
+                "price_deltas": {"AAPL": 0.0},
+                "knowledge_cutoff_at": datetime(2026, 6, 20, 12, 0, tzinfo=UTC),
+                "prior_context": state.prior_context.model_copy(
+                    update={
+                        "latest_segments": {
+                            "analyst/AAPL": {
+                                "date": "2026-06-19",
+                                "payload": {"body": prior_body},
+                            }
+                        },
+                        "prior_analyst_by_ticker": {
+                            "AAPL": {
+                                "date": "2026-06-19",
+                                "stance": "hold",
+                                "conviction_score": 0,
+                                "fingerprint_news_hash": "abc",
+                            }
+                        },
+                    }
+                ),
+            }
+        )
+        with patch(
+            "digiquant.portfolio.ticker_fingerprint.news_hash_for_ticker",
+            return_value="abc",
+        ):
+            from digiquant.portfolio.phases.portfolio_common import resolve_analyst_edit_mode
+
+            assert resolve_analyst_edit_mode(state, "AAPL") == "skip"
+            payload, doc, errors, _bundle = run_asset_analyst_llm(
+                state=state,
+                ticker="AAPL",
+                roster_entry={"ticker": "AAPL", "roster_reason": "held"},
+                phase_slug="portfolio/asset-analyst-AAPL",
+            )
+        assert not errors
+        assert payload is not None
+        assert payload.evidence is not None
+        assert payload.evidence.independent_confirming_signals == 2
+        assert payload.evidence.contradicting_signals == 2
+        # Net 0 preserved → the derived conviction is unchanged by the repair.
+        assert payload.conviction_score == 0
+        assert doc is not None
+        assert doc["body"]["evidence"]["independent_confirming_signals"] == 2
+        assert doc["body"]["evidence"]["contradicting_signals"] == 2
 
     def test_partial_nested_forecast_edit_rejected(self) -> None:
         from datetime import UTC, datetime
