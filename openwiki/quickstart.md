@@ -1,8 +1,10 @@
 ---
-type: quickstart
-title: digithings Quickstart
-description: Task-routing map for the digithings wiki — which section answers which question — plus the digismith tracing quickstart.
-tags: [digithings, quickstart, routing]
+type: "Reference"
+title: "digithings Quickstart"
+openwiki_generated: true
+verified:
+  - by: openwiki/0.5.0
+    at: 2026-09-23T13:25:31.068Z
 sources:
   - id: openwiki-source-4b2266e051b2270b6ec5aa4f
     resource: repo://BRANCHING.md
@@ -30,11 +32,9 @@ sources:
     resource: repo://digivault/AGENTS.md
   - id: openwiki-source-a49bd70bd0f6d776441b838b
     resource: repo://docs/agents/CODE_REVIEW_POLICY.md
-generated: { by: "opencode", at: "2026-09-07T22:38:58.074Z" }
-verified:
-  - by: openwiki/0.5.0
-    at: 2026-09-09T14:37:17.158Z
+generated: { by: "openwiki/0.5.0", at: "2026-09-23T13:25:31.068Z" }
 ---
+
 
 # digithings Quickstart
 
@@ -49,26 +49,26 @@ service, verify with health/status curls, run the unit gates — per its
 |----------|------------|
 | Run the hub, call a workflow, stream chat | [digigraph Quickstart](/openwiki/digigraph/quickstart.md) |
 | Backtest / optimize a strategy | [digiquant Quickstart](/openwiki/digiquant/quickstart.md) |
-| Ingest docs, run RAG queries | [digisearch Quickstart](/openwiki/digisearch/quickstart.md) |
+| Ingest docs, run RAG queries, web search, monitors | [digisearch Quickstart](/openwiki/digisearch/quickstart.md) |
 | Add LangSmith tracing, check trace status | [digismith quickstart](#digismith-tracing) (below) |
 | Work with the markdown vault | [digivault Quickstart](/openwiki/digivault/quickstart.md) |
 | Issue keys, exchange JWTs | [digikey Quickstart](/openwiki/digikey/quickstart.md) |
-| Run the chat UI | [digichat Quickstart](/openwiki/digichat/quickstart.md) |
-| Heartbeat, audit log, schedules | [digiclaw Quickstart](/openwiki/digiclaw/quickstart.md) |
+| Run the chat UI (assistant-ui skins, multi-backend, deploy-config) | [digichat Quickstart](/openwiki/digichat/quickstart.md) |
+| Heartbeat, audit log, drift check, monitors_tick | [digiclaw Quickstart](/openwiki/digiclaw/quickstart.md) |
 | Shared helpers (errors, metrics, OTel, audit) | [digibase Library Guide](/openwiki/digibase/library-guide.md) |
 | LLM client, fetch engine, skill compiler | [digillm](/openwiki/libraries/digillm.md), [digifetch](/openwiki/libraries/digifetch.md), [digiskills](/openwiki/libraries/digiskills.md) |
-| Operator views (research, portfolio, tearsheet) | [Dashboard Architecture](/openwiki/dashboard/architecture.md) |
+| Operator dashboard — research, portfolio, tearsheet | [Dashboard Architecture](/openwiki/dashboard/architecture.md) |
 | Branches, make targets, review/merge rules | [Repo Workflow](/openwiki/repo/workflow.md) |
 
 ## Stack-wide verify
 
 ```bash
-make stack-local     # host backends (8000–8003, 8005) or: make up
-curl -s http://localhost:8000/healthz   # digigraph
-curl -s http://localhost:8001/healthz   # digiquant
-curl -s http://localhost:8002/health    # digisearch
-curl -s http://localhost:8003/healthz   # digismith
-curl -s http://localhost:8005/healthz   # digikey
+make stack-local # host backends (8000–8003, 8005) or: make up
+curl -s http://localhost:8000/healthz # digigraph
+curl -s http://localhost:8001/healthz # digiquant
+curl -s http://localhost:8002/health # digisearch
+curl -s http://localhost:8003/healthz # digismith
+curl -s http://localhost:8005/healthz # digikey
 pytest tests/ -m unit -k "digigraph or digiquant or digisearch or digismith or digikey" -v
 ```
 
@@ -91,9 +91,9 @@ def chat_completion(...): ...
 ```
 
 - With `LANGSMITH_API_KEY` set and the `langsmith` package installed, calls
-  emit LangSmith spans scrubbed by the built-in PII redactor.
+emit LangSmith spans scrubbed by the built-in PII redactor.
 - Without either, the decorator returns your function unchanged — no
-  wrapper, no overhead, tests stay green.
+wrapper, no overhead, tests stay green.
 
 Gate optional behavior at runtime with `tracing_enabled()`, which re-reads
 the environment on every call:
@@ -127,8 +127,8 @@ The image installs `digismith[langsmith]` and serves
 ### 3. Verify it
 
 ```bash
-curl -s http://localhost:8003/healthz    # {"ok": true} — liveness
-curl -s http://localhost:8003/v1/status  # tracing diagnostic
+curl -s http://localhost:8003/healthz # {"ok": true} — liveness
+curl -s http://localhost:8003/v1/status # tracing diagnostic
 ```
 
 `GET /healthz` answers "is the process up". `GET /v1/status` answers "is
@@ -148,8 +148,8 @@ ruff check digismith/ && ruff format --check digismith/
 ### Where next
 
 - [digismith Architecture](/openwiki/digismith/architecture.md) — library
-  vs service, conditional-tracing pattern, consumer boundaries.
+vs service, conditional-tracing pattern, consumer boundaries.
 - [Tracing and Redaction](/openwiki/digismith/tracing-and-redaction.md) —
-  decorator semantics, config helpers, PII patterns, `DIGI_PII_PATTERNS`.
+decorator semantics, config helpers, PII patterns, `DIGI_PII_PATTERNS`.
 - [Status API and Operations](/openwiki/digismith/status-api-and-operations.md) —
-  health, status, metrics, CORS, OTel, container wiring.
+health, status, metrics, CORS, OTel, container wiring.

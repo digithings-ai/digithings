@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "pageVersion": "sha256:c1f7022a5d5e743f8670286d23331d265194e93e40669eaba6f49b88681fca6c",
+  "pageVersion": "sha256:75458a12afb9a9d8a3c09041974c87723a83ecc5490dafa66e953debb9715123",
   "claims": [
     {
       "id": "claim_19a3f21ad9b844a187919d532516e1dc",
@@ -48,17 +48,59 @@
         },
         {
           "resource": "repo://digisearch/AGENTS.md#L45-L45",
-          "version": "repo-lines-v1:sha256:ada774867113be1049b3f5c98a19a5db753cb84d63c6cd212ee5cc70ea568d12:eyJzZWxlY3RlZExpbmVDb3VudCI6MSwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiYWRhNzc0ODY3MTEzYmUxMDQ5YjNmNWM5OGExOWE1ZGI3NTNjYjg0ZDYzYzZjZDIxMmVlNWNjNzBlYTU2OGQxMiIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiYWRhNzc0ODY3MTEzYmUxMDQ5YjNmNWM5OGExOWE1ZGI3NTNjYjg0ZDYzYzZjZDIxMmVlNWNjNzBlYTU2OGQxMiIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiMzJiYTMxN2IyMTRiMTM3ZmQ1YmEwN2UxZWVmZjgxZmU4MTVjZDExY2EwYmJmZjlhNTA0NDQ0ODliMGYwNDAzYiIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiYjJiMDA5OTQzMjE5NWU2NmEyNzkzYTAyZjc0YTA1MWFjY2Y2NmNjYjBhMTUxODkwZGIxMDFiNWVkMzQ5MTY2YyJ9"
+          "version": "repo-lines-v1:sha256:447b7108a2ffa99eccba60899ab34cdbba94dbca74a60cbb62f96bfda7665cdb:eyJzZWxlY3RlZExpbmVDb3VudCI6MSwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiNDQ3YjcxMDhhMmZmYTk5ZWNjYmE2MDg5OWFiMzRjZGJiYTk0ZGJjYTc0YTYwY2JiNjJmOTZiZmRhNzY2NWNkYiIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiNDQ3YjcxMDhhMmZmYTk5ZWNjYmE2MDg5OWFiMzRjZGJiYTk0ZGJjYTc0YTYwY2JiNjJmOTZiZmRhNzY2NWNkYiIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiMzJiYTMxN2IyMTRiMTM3ZmQ1YmEwN2UxZWVmZjgxZmU4MTVjZDExY2EwYmJmZjlhNTA0NDQ0ODliMGYwNDAzYiIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiYjJiMDA5OTQzMjE5NWU2NmEyNzkzYTAyZjc0YTA1MWFjY2Y2NmNjYjBhMTUxODkwZGIxMDFiNWVkMzQ5MTY2YyJ9"
         },
         {
           "resource": "repo://digisearch/AGENTS.md#L48-L48",
           "version": "repo-lines-v1:sha256:8837539d05596ccbb49cf604105f92776993f5d1fd2e44b8ba3078b3e39835c9:eyJzZWxlY3RlZExpbmVDb3VudCI6MSwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiODgzNzUzOWQwNTU5NmNjYmI0OWNmNjA0MTA1ZjkyNzc2OTkzZjVkMWZkMmU0NGI4YmEzMDc4YjNlMzk4MzVjOSIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiODgzNzUzOWQwNTU5NmNjYmI0OWNmNjA0MTA1ZjkyNzc2OTkzZjVkMWZkMmU0NGI4YmEzMDc4YjNlMzk4MzVjOSIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiODE2M2NjN2Y5Yjc5NzVjNzZjODEwOTVjYzIwMjIyOTU1MGQ1MjFhYWJlMTgwYjNmNWExMzFmYjFkMDc0MWI0NCIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiZWQxODllMGRkYzYyNjE4ZDc2ODRiNWQ4MmVlZDAxMjhhYjU3NWRjOTkxNjg1NGJhYjliYWQyOTE1NDVmY2U3OSJ9"
         }
       ]
+    },
+    {
+      "id": "claim_7946112031b549748d8f5af97dd98389",
+      "statement": "ingest_url fetches a URL through digifetch's SSRF validation (validate_fetch_url + HttpFetcher), gates content types to text/* and application/xhtml+xml, extracts markdown via trafilatura, stages to a locked 0o700 temp dir, and indexes through the same ingest_source filesystem pipeline with merged source_url and evidence_tier metadata.",
+      "evidence": [
+        {
+          "resource": "repo://digisearch/AGENTS.md#L45-L45",
+          "version": "repo-lines-v1:sha256:447b7108a2ffa99eccba60899ab34cdbba94dbca74a60cbb62f96bfda7665cdb:eyJzZWxlY3RlZExpbmVDb3VudCI6MSwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiNDQ3YjcxMDhhMmZmYTk5ZWNjYmE2MDg5OWFiMzRjZGJiYTk0ZGJjYTc0YTYwY2JiNjJmOTZiZmRhNzY2NWNkYiIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiNDQ3YjcxMDhhMmZmYTk5ZWNjYmE2MDg5OWFiMzRjZGJiYTk0ZGJjYTc0YTYwY2JiNjJmOTZiZmRhNzY2NWNkYiIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiMzJiYTMxN2IyMTRiMTM3ZmQ1YmEwN2UxZWVmZjgxZmU4MTVjZDExY2EwYmJmZjlhNTA0NDQ0ODliMGYwNDAzYiIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiYjJiMDA5OTQzMjE5NWU2NmEyNzkzYTAyZjc0YTA1MWFjY2Y2NmNjYjBhMTUxODkwZGIxMDFiNWVkMzQ5MTY2YyJ9"
+        },
+        {
+          "resource": "repo://digisearch/src/digisearch/pipeline/url_ingest.py#L108-L213",
+          "version": "repo-lines-v1:sha256:e34b92a1f38827bf8518a142bd4b812c8678b7d916668060689de4290ffabf78:eyJzZWxlY3RlZExpbmVDb3VudCI6MTA2LCJmaXJzdFNlbGVjdGVkTGluZUhhc2giOiIzYTE4NzEzMjUyYWE1ZjA4YWRlODNkYzIxNWI4OTJjNjA0ODYzMWQzYTFjYmRmNTA0NGZkNmQ0NzU0NTA0NWIzIiwibGFzdFNlbGVjdGVkTGluZUhhc2giOiIzYWUyOGJlZTQ3MjU4MjhiNjU3ZTkzOTYzMDljNDA0ZGM0NDZhZGI2MDNlM2Q2MDcyYTBkNjJlMzc3OWVmZDBjIiwicHJlY2VkaW5nQ29udGV4dExpbmVDb3VudCI6MywicHJlY2VkaW5nQ29udGV4dEhhc2giOiIwNjQwODMwNzI1ZWNmMmRjNjEwZmI4MmYwMGE2MWMzYjM3OWM2N2U1MDkzOGE3YTJjYWE5N2Q1M2I3NzE2NTcyIiwiZm9sbG93aW5nQ29udGV4dExpbmVDb3VudCI6MywiZm9sbG93aW5nQ29udGV4dEhhc2giOiI0ZDU5OGI2MzMzZWU5MzEwNTcwZmMwNGIwZGYyYTIzZDE5Zjk1NTA0MGRmMGM3N2ZlNzhiN2UyYjQzZGFiNTViIn0"
+        }
+      ]
+    },
+    {
+      "id": "claim_9cfc1a123a794880b1d512170b7ccaaa",
+      "statement": "route_add_chunks routes ingest writes in fixed order — Vectorize when Cloudflare credentials are set, Chroma HTTP (CHROMA_HOST), Chroma disk (CHROMA_PATH), in-memory stub (DIGISEARCH_ALLOW_STUB=1 only), then RuntimeError — and returns the backend id; every backend construction passes an explicit embedding_provider from resolve_backend_embedding_provider.",
+      "evidence": [
+        {
+          "resource": "repo://digisearch/src/digisearch/search/_stub.py#L308-L391",
+          "version": "repo-lines-v1:sha256:ad716ac90e16ecdb117b7fdf362c67c251fe37344545c2fa09674630f0ebe3c7:eyJzZWxlY3RlZExpbmVDb3VudCI6ODQsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImMxNDVjNzg0MGFjMGM5NWY4NGRkZWJkOTZlZmUzODZhYjVkMjk1MmM4ZjAwODQ4NzY0YjMwZTVmMzI3NjgyYTgiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjAxYmE0NzE5YzgwYjZmZTkxMWIwOTFhN2MwNTEyNGI2NGVlZWNlOTY0ZTA5YzA1OGVmOGY5ODA1ZGFjYTU0NmIiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjZkOGI5Yjk5OTA3NTI3NjgzNTY1NzhjZmRmODU2ZjljNjk5YjM4ZThhNDdkMGFlODJjMWE4NDg5MDUzZjIyODAiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjExMDFjNzBlZjk0ZGY1NmIzM2ViMmI5ZGI2MTUxZGRkNzlmN2M0NGIxZGRjNzEyYTZmMGZjNzkzNGRkN2JkMGQifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_5751a08091124a9691af7258991b009a",
+      "statement": "The embedding pipeline resolves DIGISEARCH_EMBEDDING_PROVIDER → config embedding: block → default minilm, builds a raw EmbeddingProvider, then wraps it as EmbeddingCache (SQLite, model-namespaced SHA-256 hash with batched SELECT) inside BatchEmbedder (sub-batches of configurable size, retries with backoff); DIGISEARCH_EMBED=0 disables pipeline-level embedding and misconfigured providers raise EmbeddingConfigError.",
+      "evidence": [
+        {
+          "resource": "repo://digisearch/src/digisearch/embedding/batch.py#L49-L97",
+          "version": "repo-lines-v1:sha256:be8678accab959e3dfa3b38670e0037615330ebf4189e011e3f2786609c64aab:eyJzZWxlY3RlZExpbmVDb3VudCI6NDksImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjNhNTc0OTAxYmQ2ZjRmYzBmNTU5MThmMjM5OWIyYTVkOWIzYTQ5YjMxMmEyOTdjY2Y4MTg1Mzc2M2YzN2VjMjMiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjU5MDlhNTNhNjE4ZDAyOGUxZDMwMDBjMGE3YWJjZWVjYmU1ZmIzN2Y0ZTUxMWVmZTQ2NjQzZmFkNmU2Njg3MmYiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjYzYzJmMGNlYzQyNTIzOGNiYWVkNzViMDk0YzdjZjM5NzJkYTExOTVkMzNkY2JhYjI5MDBjMDE4YzliYjRlNTQiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjoxLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjJiYjU0MmE5MDcwY2FhNGM5OTg5ZmQxN2U0NGE5NmIwMmViNTBmY2JjZWQ2N2VhMGU0N2FjODgzZTg5NjgwZGUifQ"
+        },
+        {
+          "resource": "repo://digisearch/src/digisearch/embedding/cache.py#L48-L130",
+          "version": "repo-lines-v1:sha256:08de27cf1ae8058695f116576f41b8d4abcc4817fe51096bdee61cd6da29a6dc:eyJzZWxlY3RlZExpbmVDb3VudCI6ODMsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjUyYjU4NmMyYjIzYTA1ZDNhNGQxMzMzYzMwOTExZjVkYzkxZTdiODNkNWQ3NzllMWNhYjZkOWJlODUwMTdkNWYiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImMwMWI1ODYyZjg4YjhkMmI5OTIyNDdjM2U4YjRmMjgzYzEwODM3NjkxZTc3MzVjZWFjNDEzOTFlNzYxOWE4ZmUiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjMyMmU0ZTlmOGVlZjY1ZjQzZGZjZDY0NTljZGRmMTU3OTg1MGRiODRkNzE0NmRhYjY2MzkwMzhhNTQ5MTJmNTgiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjowLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUifQ"
+        },
+        {
+          "resource": "repo://digisearch/src/digisearch/embedding/factory.py#L102-L249",
+          "version": "repo-lines-v1:sha256:a8415a1cef05a0ac3d4ed2d3ffbde1bb988ccda0451a0cea13128c64839f980c:eyJzZWxlY3RlZExpbmVDb3VudCI6MTQ4LCJmaXJzdFNlbGVjdGVkTGluZUhhc2giOiIwMWJhNDcxOWM4MGI2ZmU5MTFiMDkxYTdjMDUxMjRiNjRlZWVjZTk2NGUwOWMwNThlZjhmOTgwNWRhY2E1NDZiIiwibGFzdFNlbGVjdGVkTGluZUhhc2giOiI5NGU4YjVjYjMyMjNiZGE0MzZlMDkxZTI2MTA3MTkxZWIwNTkzMGZmNTkyMzRjNzM2ZjMxZmVlMTRiM2Q2OGE3IiwicHJlY2VkaW5nQ29udGV4dExpbmVDb3VudCI6MywicHJlY2VkaW5nQ29udGV4dEhhc2giOiJjYWY5MjExOTEyYjQ2MjA3Zjk5ZDNmZmZjOGQwODAyM2VkNjJhNDZjOGFjNWQ0ZmI0ZjRlZWQyYzBlOTAzZTg0IiwiZm9sbG93aW5nQ29udGV4dExpbmVDb3VudCI6MywiZm9sbG93aW5nQ29udGV4dEhhc2giOiIzYjIzNjdiZDBkZjBhNjJkZmMzZDEyMTk5MWIyOThmZTRlOWMzZDMyNjc1MmU2OTg1NTk0M2I2Y2Y0YjI0ODNkIn0"
+        }
+      ]
     }
   ],
   "verification": {
     "by": "openwiki/0.5.0",
-    "at": "2026-09-09T14:37:17.158Z"
+    "at": "2026-09-23T13:25:31.068Z"
   }
 }

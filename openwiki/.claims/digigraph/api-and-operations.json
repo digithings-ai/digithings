@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "pageVersion": "sha256:d555fadfeb7df0e464360dc302d40093b3ccc2f4e58b34affde3d820b15e6e52",
+  "pageVersion": "sha256:caa5f73b1c32bb261430c3d57fe5d312ac1f04dba28a3f6111ee2e74556278ca",
   "claims": [
     {
       "id": "claim_618875c28d944fe6bc1f61c287598052",
@@ -36,11 +36,35 @@
     },
     {
       "id": "claim_ffb32ced5251461b9c7b7f251c8b8a8d",
-      "statement": "The MCP server runs streamable-http on 8766 (or --stdio for trusted local clients) with no built-in API-key layer, requiring loopback binding plus DIGI_MCP_REQUIRE_AUTH beyond localhost.",
+      "statement": "The MCP server serves streamable-http on port 8766 (--stdio for trusted local clients). Without DIGI_MCP_REQUIRE_AUTH it is unauthenticated; with that flag, every tool verifies a digikey-issued RS256 bearer token (signature via DIGIKEY_JWKS_URL / DIGIKEY_PUBLIC_KEY_PEM, plus issuer/audience/exp), applies the same fail-closed blocklist revocation policy as DigiAuthMiddleware, enforces per-tool scopes (digigraph:workflow, digigraph:chat, digigraph:mcp), and refuses every call when auth is required but no verifier is configured (stdio also fails closed).",
       "evidence": [
         {
-          "resource": "repo://digigraph/src/digigraph/mcp_server.py#L9-L16",
-          "version": "repo-lines-v1:sha256:4edf6a957ce4853b581c7a1cae4c4e5b0866f463443d5e32a29ddb9d2360b0f4:eyJzZWxlY3RlZExpbmVDb3VudCI6OCwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiN2ZjOTkxMGJjNDUwOTRjZTEyYjk5OTQ2Nzg0ZDZiNGI0ZjZkZjEyN2MyNWFkYTZjNTljY2FmZjIzOGVlYjIyNyIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiMDFiYTQ3MTljODBiNmZlOTExYjA5MWE3YzA1MTI0YjY0ZWVlY2U5NjRlMDljMDU4ZWY4Zjk4MDVkYWNhNTQ2YiIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiNzM3OWNjNDM0OWM4ZWMyODcxODU0YzA4MGVkNjI0NTE5MjNjMTkyNWZmMDFmMDE2MjQxNDcwNDVhYmQ5NTU2MCIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiMGRhZDM0MjljMDNkNGYwMmEyMTgyN2YyNjYxZmNkYWJkOTRiMDRlNTlhMmY1M2FkODBjODQ3Mjc0NmMxYTAwOCJ9"
+          "resource": "repo://digigraph/src/digigraph/mcp_server.py#L102-L152",
+          "version": "repo-lines-v1:sha256:4754812170181800cea5dff2b71afefa02fa171b5ce1ab55228aad4a573a695d:eyJzZWxlY3RlZExpbmVDb3VudCI6NTEsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjUwNWE0NjYwM2Q2YjdmZDhiYWNiODJkNDRmMjZkY2NjNjY4MWE2NWYzODhjYWYxY2EzYzhhNDEzZTk2MzhhZjQiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjhlMDU2N2YxN2E5MWVjYTU0MTM4ODk2YjBkNTUwYjhjYzBiNWIzMDhiNmEzYTY2ODFhOTA0YzE4NTA1YmI0N2YiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImM2MDI4ZmM2OThkODQwMzllMjQyZjdkZDI0NmU3YmU1ZTYzOWFiYTMyMzI3N2U1MjU5YzE5YWM2NmY3ZjM1OTYiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjYyYjNjZTU3M2ZkNjFiZDBkMmMwOTg2MTM0M2UyMGI2YTlmODNiMWFkNTdhYzVjYzBjMGU2M2ViNzJiZTRmN2UifQ"
+        },
+        {
+          "resource": "repo://digigraph/src/digigraph/mcp_server.py#L155-L167",
+          "version": "repo-lines-v1:sha256:c4d9e390363da946224334f9d6a5e109b85c67eb039635b30cac6f64b1241629:eyJzZWxlY3RlZExpbmVDb3VudCI6MTMsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjBhNWVjYTU3OWU1YmMzMDg1ZTMwMjRjYmI5ZjZjYTcxMzIyY2E1ODMwZDA2MDUwODM5OTlhM2NhNWY4Mzk0MDciLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImQ4ZTk3MzhmZWMzMDFjNjg1MWViOWYzNWY2YmU5ZGE3MjIwMGY3YzQ4NDMyMmQwNjE3MTdhNzkyM2JlYjBiYTEiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjE5ZDdjMGM0MWQwNmE4NWI3MjRlN2FlYWVkMDc4MjM1YmY5M2E5ODY4NDkzMjliYTI2MzNhNmU5ZTQ0YmQ4ZjEiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjA3ZTIzYWM3OTI0MDExNjQ5MDI0OTFkMmRmZWY5NDQ4OTJiYzUwMDcyMzgyNjNhODAyZDM2OWEwNmViZTk3NjMifQ"
+        },
+        {
+          "resource": "repo://digigraph/src/digigraph/mcp_server.py#L170-L171",
+          "version": "repo-lines-v1:sha256:e607d3bf9cbd572a27d3bd6b1fb1a23f6ea7cf28c02e6017d0c3feae9ca25b0e:eyJzZWxlY3RlZExpbmVDb3VudCI6MiwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiMWRjYTg3ODM4OTlhYzdhM2IyOTExYjc0OGVjNGRlNDNjY2MyN2JkM2Q4ZTJhMGZkMTc2MWY0ZGU0OGUwMzg3YSIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiZWI4YjUxNzNjOTE5MzIwNzA1MDlmNjUyY2I3NWMzYTk4ODUwZjk2OTYxODE5MTM4YWFmMmQ1NDkzMDk3YmZlNSIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiZjIxYTgyYjUyNzYwZDlmMzU0Zjk5NTFjMDdkY2NkY2ZlNTU3YTIzNmZkY2QzZTEyYTQ0MzJmZTgwMGMzYzY3NyIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiMjc1ODQ0Y2M4ZDg0MTcwZGVhZTI4NDc0MTM2MWJhMjFmYmNmZDg1ZDFiZjZlZTVmM2M2MWExOTMxYTVmMzc2OCJ9"
+        },
+        {
+          "resource": "repo://digigraph/src/digigraph/mcp_server.py#L220-L395",
+          "version": "repo-lines-v1:sha256:4e067c0be6a478f9edcd7db18fefcb6dd07eb86b78bcc361f020da4d272a41ad:eyJzZWxlY3RlZExpbmVDb3VudCI6MTc2LCJmaXJzdFNlbGVjdGVkTGluZUhhc2giOiI0NzEzMGRiMzVjODY0MzZlNWM2ODhhOTU1NTQ3YmRhYzcwODBmMTI4MjQwY2NmMzA1NzcyN2FiYmI4ZWE2YTA1IiwibGFzdFNlbGVjdGVkTGluZUhhc2giOiJhM2JiMjg2YTk3OTBlMTMzMDc2MTkxMjQyOTA3MDlhYWQ0ZDYwMGM4MTY2ZGMxZDQwOGQxODA3M2RhMWRhMzNkIiwicHJlY2VkaW5nQ29udGV4dExpbmVDb3VudCI6MywicHJlY2VkaW5nQ29udGV4dEhhc2giOiJhNWIxZTk4NWNkMDQxZjQ3ZWM1NzMyMjAzYmUyZjI3MzA2YzRmNDc3MzJjYjllZmZjZjljZTk1NTY1MjlkNDJhIiwiZm9sbG93aW5nQ29udGV4dExpbmVDb3VudCI6MywiZm9sbG93aW5nQ29udGV4dEhhc2giOiIyNzc4NzJhMGFkZjY1ODQ1NzBjNzRlYmI3YjE0YWE1YTBlZWFjZGM0YzE0MWYyYThlMjg1Y2RhODQ0MzU0MzE4In0"
+        },
+        {
+          "resource": "repo://digigraph/src/digigraph/mcp_server.py#L30-L34",
+          "version": "repo-lines-v1:sha256:7fc3223c3e153f6ae516e5a70b701a080c036f02ce9377f5f9d813baffa42998:eyJzZWxlY3RlZExpbmVDb3VudCI6NSwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiY2Q1ZmUyNzlhZDNjOThlZWViZGZmNTc3MjdhNzZmZGY5YzQwYzZlMWQ5MGEyZmEzZTc4NjlhZTRjNGFhMWZiNyIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiNDVkZGVmZTMzZmZhZWQ1MDBiYzliOTVlYTBiY2VlMWZiYjFmY2U4YTFkMDJkMjgxZTFkNTUwOTA1MTFmYmE1NyIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiYjZiNDU4NDRmZTliZWNmYjM4ODM0ZjQ0YTljMjA1MDJkODFjODQ3NGY3YjczZGJiYjAxNDFlOGY0MGQ5NzdhZCIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiM2FkNjc0MjNmM2I5YzY1MDA4NDYyOGFjMmNmN2NlYzk2YjQ2OTNhYTc4ZDBlMjQyMTMyNDcyY2Y4MThlZjU1YyJ9"
+        },
+        {
+          "resource": "repo://digigraph/src/digigraph/mcp_server.py#L69-L73",
+          "version": "repo-lines-v1:sha256:9cc796eab87f21f84107a12b0a6c8b3a7ae7f23c2a6a141f8ca5c87cf85205c1:eyJzZWxlY3RlZExpbmVDb3VudCI6NSwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiYTAyM2I0ZWU5ZTJlMzdiNzUyNTIxYTFkNzhjZjE1MzhiODIwMTUyZmVkMzkyNWM0NmYyMzA1OTkxN2JiNmFjYyIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiMzBjMWYxODhmMTQyZWQ3YTgyNDY4MGIyMDcxNzJjNTUxOWJjNjE0YTQ4ZmRhN2NmMTY3ZWRiOGRkZjc5OTU2YyIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiYTk4YjA2M2Q5YjQ3ZTY1Mzc5NjI1NTcyY2NlMTk3NjY5ZDU3NjdlMTJjMThiZTA3NTY1MmI4Y2Q5ODFjZThkNSIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiMzZmMzFkOTUwMDhhMmFkYzFiZWY1ODMxMWY4MjBjMGU2Y2I0Nzg3ZWZjODFlZjMwMDFmNGQzYjYwZjEyYmUwZiJ9"
+        },
+        {
+          "resource": "repo://digigraph/src/digigraph/mcp_server.py#L80-L85",
+          "version": "repo-lines-v1:sha256:37fd4c4571a24251065c0fb777ce27685d417e1d49e3a3f30f259886189d9e66:eyJzZWxlY3RlZExpbmVDb3VudCI6NiwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiNGMyNmU3ZTRkYzk4ZTljNGMwYzgyYzc2ZGU4MTQ5M2MwMDdhOGMyMjMzZTNlZjdiOGI0NWRkY2Q2ZDllMDZkMSIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiMzBjMWYxODhmMTQyZWQ3YTgyNDY4MGIyMDcxNzJjNTUxOWJjNjE0YTQ4ZmRhN2NmMTY3ZWRiOGRkZjc5OTU2YyIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiNjI4ZGEwNzFiOTg5NzZmZTFhNGIwZjQ5YmUzNmQyMjA2YTRmZGUyMDM3M2E2ZDZkNTA4MmIzZTNiMDJmOWI1ZSIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiZjI5YTIxMGVjYTRkZDk0Y2RhMTFjZDQzZjgzZTU2NGFjNGEwMmExODZmMTMxMTExYjZjYTQ2MjUxNzJjOWUxNiJ9"
         }
       ]
     },
@@ -53,10 +77,70 @@
           "version": "repo-lines-v1:sha256:74f966548a55949899aee2cf4da379737456c1b89528de0a8f9ce53a2db84945:eyJzZWxlY3RlZExpbmVDb3VudCI6NDMsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjMyNmEwNWMxMTY1NDMwMzI5OGFlZTc2MDhlYzdhZjU0MmQ5ZTFhYzk0YjMxNzNkZTQzMzFlODJkMDg2MWEyZjUiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImY5NDE2ZTA5Zjc4YmEzMTZjMDMyNTY4MjEzYjg1NWVlNzU2ZTQxNTY1ZDkxOGYwOTUxOWM4MWZkNjIwZjQwNjAiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjowLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjowLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUifQ"
         }
       ]
+    },
+    {
+      "id": "claim_07ddd3a313c042deb105ef873cbb70ce",
+      "statement": "The MCP server exposes five tools: workflow (scope digigraph:workflow), chat (digigraph:chat, calls FastAPI /v1/chat/completions in-process via TestClient), thread_state (digigraph:mcp, calls FastAPI /threads/{id}/state in-process), list_orchestrator_tools, and list_orchestrator_tools_detailed. The in-process calls forward the verified caller bearer via Authorization header so DigiAuthMiddleware re-verifies it. create_mcp_server() sets DIGI_ENABLE_THREAD_API=1 in the process.",
+      "evidence": [
+        {
+          "resource": "repo://digigraph/src/digigraph/mcp_server.py#L174-L182",
+          "version": "repo-lines-v1:sha256:13cf64b3dc402d676d711172045c042cff67c4c41d532f7ea7877b96b9c7e071:eyJzZWxlY3RlZExpbmVDb3VudCI6OSwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiODRiZDNjZjYyNTkxZTM3MjJjM2UyNzNhN2M2ZjA1MmFhZGU0YWRmZGU1MTMwYTkyMWI0NzNjYmYxMGU5NTBjZiIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiZWVkMTdlZDkyYTUyNTU1YjY3ZDRjNDYxOGNkZmRiZDkwMzJjMTZiMjVlMzJkYzEzZDRjZGQ0NjM0MDdmZDAyOSIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiMjg0ZjAzMDA5NGIxZDk3NjU3MjZiM2QyNzZiNzdhMDY5YjE3NjVmN2Q4YzdkN2Y0OTU5YTgzZWY5MWEwZWM1NiIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiNTYzYTQ4MWQzMjJjMjRlNjAwNWQ4MjY4ZGE4ZjYwMTQ2Y2I0MTgxNTBjMzE3NDgzYTFjYjljYTk3M2UxZmZiOSJ9"
+        },
+        {
+          "resource": "repo://digigraph/src/digigraph/mcp_server.py#L220-L395",
+          "version": "repo-lines-v1:sha256:4e067c0be6a478f9edcd7db18fefcb6dd07eb86b78bcc361f020da4d272a41ad:eyJzZWxlY3RlZExpbmVDb3VudCI6MTc2LCJmaXJzdFNlbGVjdGVkTGluZUhhc2giOiI0NzEzMGRiMzVjODY0MzZlNWM2ODhhOTU1NTQ3YmRhYzcwODBmMTI4MjQwY2NmMzA1NzcyN2FiYmI4ZWE2YTA1IiwibGFzdFNlbGVjdGVkTGluZUhhc2giOiJhM2JiMjg2YTk3OTBlMTMzMDc2MTkxMjQyOTA3MDlhYWQ0ZDYwMGM4MTY2ZGMxZDQwOGQxODA3M2RhMWRhMzNkIiwicHJlY2VkaW5nQ29udGV4dExpbmVDb3VudCI6MywicHJlY2VkaW5nQ29udGV4dEhhc2giOiJhNWIxZTk4NWNkMDQxZjQ3ZWM1NzMyMjAzYmUyZjI3MzA2YzRmNDc3MzJjYjllZmZjZjljZTk1NTY1MjlkNDJhIiwiZm9sbG93aW5nQ29udGV4dExpbmVDb3VudCI6MywiZm9sbG93aW5nQ29udGV4dEhhc2giOiIyNzc4NzJhMGFkZjY1ODQ1NzBjNzRlYmI3YjE0YWE1YTBlZWFjZGM0YzE0MWYyYThlMjg1Y2RhODQ0MzU0MzE4In0"
+        },
+        {
+          "resource": "repo://digigraph/src/digigraph/mcp_server.py#L233-L233",
+          "version": "repo-lines-v1:sha256:c95811c5a8d5d8e071eaebb4f8863f4ffb28a20e8fa608c160a823da6c4f09ee:eyJzZWxlY3RlZExpbmVDb3VudCI6MSwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiYzk1ODExYzVhOGQ1ZDhlMDcxZWFlYmI0Zjg4NjNmNGZmYjI4YTIwZThmYTYwOGMxNjBhODIzZGE2YzRmMDllZSIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiYzk1ODExYzVhOGQ1ZDhlMDcxZWFlYmI0Zjg4NjNmNGZmYjI4YTIwZThmYTYwOGMxNjBhODIzZGE2YzRmMDllZSIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiYTYxZjMzNmIxMjJmMzY5MmUyNzY5MzI4Mjc5YjAxMDgxZDM2OWJlMjNjMDlkYzE5MjhjNDRkN2JiMjY0ZGFhNCIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiYzZiMTM2MDQzMTQwZWM4YTFhYTQwY2RlODU2ZDcyNTAzZmJkYjdhOWI2MDM1YzkyNTMxZGQ5NzA2YmJjYmMyYiJ9"
+        },
+        {
+          "resource": "repo://digigraph/src/digigraph/mcp_server.py#L259-L303",
+          "version": "repo-lines-v1:sha256:e6f4f753fcecccd75cf2055a889bfbfd97ccc56cdd7f3d8a2b550dfb333aace2:eyJzZWxlY3RlZExpbmVDb3VudCI6NDUsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQ2OTNiOThmNWJlOTZjNTU5N2I4ZjVmMjgwOGViMzFhOGU2YjdkMWRjZDUxZTA5YWQ1NGQxZTgwYmE1MDI5MzYiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjU1MDMyZTk2NGQwOTMyMzUxZTVkMTg1MjY5MjgxYjE3MWEzYTA5YjA4YjI4NmU2NjFlYTQ3MDMyM2M4MmViNGQiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImEzMWRiMWMxN2M1OWM3ZTg2MjBlNTU5ODU2YzRjZDFhMjQ3MDkwYWNjMTY4ZTVkYzBhYThlZmI4NTQzYjRkZTgiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImM1MDY3OWZhYjNhN2ZiNmU1ZDk0ZDUzYTg3MWY5ZjUwMWU5N2NkZGI3OWE5OWUzMDEwMTM2NGU4NmVkZWZkYzMifQ"
+        },
+        {
+          "resource": "repo://digigraph/src/digigraph/mcp_server.py#L308-L359",
+          "version": "repo-lines-v1:sha256:8463e2c66443855bebc2915fd2ac528d590036777bf3d369318242600b8b4454:eyJzZWxlY3RlZExpbmVDb3VudCI6NTIsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQ2OTNiOThmNWJlOTZjNTU5N2I4ZjVmMjgwOGViMzFhOGU2YjdkMWRjZDUxZTA5YWQ1NGQxZTgwYmE1MDI5MzYiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjMyYzczZjRiNWI5NTVjZjE2YjIzNzMxMzRhNjdkMmQ2MDZlNTllZDFiODNiYWVkMTMyZmY3OTFhN2UwOGNmYzAiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjMwN2ZkMGMxNDZmOTkyZTFkMmNhMWEzMDJkOTNhMzk1MDJkOWIyNzNjNmY4MmRlNmM0ZjFmZGNlNTk5MmE1ZTQiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImY4ZmU2NGYzNDA1YTI3NjljOWE5NmRjNTA0YWE2ZTY3YTBmMjQzYzdhZDEyNTI0YzMzMjEyODNlM2Q4ZmJlMGMifQ"
+        },
+        {
+          "resource": "repo://digigraph/src/digigraph/mcp_server.py#L361-L393",
+          "version": "repo-lines-v1:sha256:55948d48cccd2c718ea90b4ed99fda3dac17edf24ab24d1b6f51fc163fe753c3:eyJzZWxlY3RlZExpbmVDb3VudCI6MzMsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQ2OTNiOThmNWJlOTZjNTU5N2I4ZjVmMjgwOGViMzFhOGU2YjdkMWRjZDUxZTA5YWQ1NGQxZTgwYmE1MDI5MzYiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjFmZDMwOTA1YmE5NWYxZGU4MGIwNTk4MWI4OWNhMmJhYTg1NTU2NDAxZDdmMzkxMjA3NjM5YjJhNTgxZjZiMjYiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjRjNDNlZWJjMzVmOGM5ZGM1M2JmYWIzZTBlMGRiYzg3MTg2ZTJmMWI1ZThlZTNiM2NlMTJiZDViOWM5Yzc1NjkiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjQ2ZmFlNWUzYjMwOTBmOGE2ZjdkZDIyYzEzMDgyZWNkODkzYjFlODE4YjlkMTIwNjFmNzg5NmJhNGJkYzllMDIifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_3629aaeeb548453db985d46cd3ad31d4",
+      "statement": "The per-IP sliding-window rate limiter buckets IPv6 addresses by /64 to defeat trivial address rotation, uses OrderedDict with idle-bucket eviction every ~1000 checks, and supports DIGI_TRUSTED_PROXIES (comma-separated hosts/CIDRs) for rightmost-walk X-Forwarded-For resolution; without it, X-Forwarded-For is ignored.",
+      "evidence": [
+        {
+          "resource": "repo://digigraph/src/digigraph/rate_limit.py#L158-L203",
+          "version": "repo-lines-v1:sha256:d4b8534b8194f6f2907a0135072793dbcf66c39e44fcc572fc2be26761dda7a1:eyJzZWxlY3RlZExpbmVDb3VudCI6NDYsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImYwNzdhZjUyZTI3NTc3ODBjOTcwODFiMmM1MjZiYWY4ODE2MGJiMDhjNjk1OTM3NTVhY2VmNmM0NjQ5Yjc1MjAiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjZlYzQ4YTIzOGFjMzgzNTg3OGM1ZTNiYjczYTkyNzY0OGJkMGNkZmFiOTRhNDczYjc4OTFjNWIzMjE1NGE3YTIiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImJiYTYxYjNmZGIyMGFiYzJlNjgwYTg2Zjc3ZjAwYmE5ODI5OTM2NGI2NmNjZDllY2MxYzljMjM0ZTNiMTJkMTYiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6Ijg1ZTlkMzgxYzJhMGJmN2VhNGZjZTA5ODM1M2VlMDQ1MjU5ZDk4NTljOWRlZThhYTBmNDNlNDMzNWZjYzI4ZWQifQ"
+        },
+        {
+          "resource": "repo://digigraph/src/digigraph/rate_limit.py#L205-L220",
+          "version": "repo-lines-v1:sha256:fe6d974323bfd5714eec2badcb06ca991608bfc9abdb07cdf013e6f2768a3aea:eyJzZWxlY3RlZExpbmVDb3VudCI6MTYsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQxYWJjZDBjYzY5MTNkNGY1MWViMjFlNGY1YWZjMmU5MGY4NmQzNmE0NTBiYjQyY2IwNWM2ZjNlMGQ3MDZmOGMiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjE5MjUxM2I2NDcxMDcwYzg4Njc5OTFjYTRmOWFjNzMzMDIwNjZhNWYwNGE5NzM3OTBlYWIzNGRmZGNhNDYwMmIiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImQyYTQ2ODEyZTVkOTlkMDYxNTBjZGUxNDM5NjFlODQxODc2ZDMzZTVhMDI1MDZhMjUwMzAzY2JkMDRmMGU1ZDMiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjM5YzhmYWRkYTU2MjIyMDBhMDRlNDA1YTdkZTdkMWFlMDY3NGQ1YjU5ZjA5YmFkMWRkZWQ1MmJhMDhmMTk2MzQifQ"
+        },
+        {
+          "resource": "repo://digigraph/src/digigraph/rate_limit.py#L29-L29",
+          "version": "repo-lines-v1:sha256:9e1e3ff5aa389624dbf7f7a5ae156df09606d4f7b12c30446bb0c4a0f05264eb:eyJzZWxlY3RlZExpbmVDb3VudCI6MSwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiOWUxZTNmZjVhYTM4OTYyNGRiZjdmN2E1YWUxNTZkZjA5NjA2ZDRmN2IxMmMzMDQ0NmJiMGM0YTBmMDUyNjRlYiIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiOWUxZTNmZjVhYTM4OTYyNGRiZjdmN2E1YWUxNTZkZjA5NjA2ZDRmN2IxMmMzMDQ0NmJiMGM0YTBmMDUyNjRlYiIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiMWRiZjFkMjEzODc4ZGY5MWJkYjU0Yzc0ZDdlNjYwZGFmZTY0ODY4NjM1MTk5OTU5MWM3NGIxNmRkYWE0ZjY0ZCIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiYzM0M2VhZTZiMTExMWE3MTkyMjc1MDY3NTExMmIwN2FhNTFiNDk4ODNmMDQ5YWQ1YTE0MDMyNDEzMzZiMTk3OCJ9"
+        },
+        {
+          "resource": "repo://digigraph/src/digigraph/rate_limit.py#L42-L42",
+          "version": "repo-lines-v1:sha256:397e169a615629bbf2950b09a62122b993294507ec36581d3b2c47c993b086bf:eyJzZWxlY3RlZExpbmVDb3VudCI6MSwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiMzk3ZTE2OWE2MTU2MjliYmYyOTUwYjA5YTYyMTIyYjk5MzI5NDUwN2VjMzY1ODFkM2IyYzQ3Yzk5M2IwODZiZiIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiMzk3ZTE2OWE2MTU2MjliYmYyOTUwYjA5YTYyMTIyYjk5MzI5NDUwN2VjMzY1ODFkM2IyYzQ3Yzk5M2IwODZiZiIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiODgxOTg2NGMxYzAwOGI2YjA4ODE4ZTQ2ZTEwYmZjYzVlYmYyZWZhOTk0ZWJkZGUxNTQxOTlkYjdmMjhiMDkzOSIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiOGRjZTQ5NzlkOGMzMzg3ZmY2NWZhNzIxMjA1NTc2NjI1Njc1MWE0YzgxODFlOWZkMmIxZTdkYWNlNGRkNWIxYSJ9"
+        },
+        {
+          "resource": "repo://digigraph/src/digigraph/rate_limit.py#L45-L68",
+          "version": "repo-lines-v1:sha256:43b7570df42adfd76b92ac40715a5afedb57daab1d7e9aee4c0282f6c9850b8a:eyJzZWxlY3RlZExpbmVDb3VudCI6MjQsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjhiZjNiNTE5NTVhZmY5MjBkMjIwNTc0YjRmNDUzOWZmNzIxZTg1MWY3ODFmMWRlZTk1NTUwYWZjYzc5Nzk1NGIiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjZmNWU4MTIzNGIxZjhjNzgyM2ZlYWE4MjlhYWIwYTFmYWZmODE4NTBjMzFlMmM0ZGFkN2ZhMTYyODE3NGRlY2UiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjJiNDhjYjFkYzUwMTNmNmE0ZjBlMGIyMjI2MzdkYWRhNzllYzcyM2E2MTBkZTk1M2YxMjZjMzM5YmJhOGJhMjciLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImMyNGUzNjJkN2I0MzQxNzhiYzdiMDAwYWQzNjY1NGY4MjBhZGMzZTk5NjNmZDMwYzZmZGI0YmQ3ZTdhNDY5OWEifQ"
+        },
+        {
+          "resource": "repo://digigraph/src/digigraph/rate_limit.py#L80-L138",
+          "version": "repo-lines-v1:sha256:96af077d04244d3cc23db1a99720e1b362a4fbd71b56f021ec9f3677a9e8dbb2:eyJzZWxlY3RlZExpbmVDb3VudCI6NTksImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjgwOTNiYTU2NDc1YWQ2YzJjNmZiOThlMmU5MGU0ODU3YzVhM2QyNzBjNTJlZjE3OGQ3OTIyZWI2MTIwZDZlMTQiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImJlY2I4M2RjMmMxMGU4YjY0ODNlYWMzZmQwM2QxZWI4MjA5ZDY4ODU5ZjMxMmY0MDg3ZTk2ZTk5Mzk5YTdmZDMiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjIzYjMxY2I4Yzg3YjEzNzZmNjAyM2M4YmU1MGE5NmRmNTUzNjY2MGIxMWFjM2QxMTU5MzQyNTk1NjQ2NDAxZGMiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImVlZGU3MTJiNzFiMmZiODRlMmI0YWFjYWFhYTE5ZTY0ZDc2ZjkxYTc4NTBhODJkMDNkZjJmNWZlODQ2MTFkYmIifQ"
+        }
+      ]
     }
   ],
   "verification": {
     "by": "openwiki/0.5.0",
-    "at": "2026-09-09T14:37:17.158Z"
+    "at": "2026-09-23T13:25:31.068Z"
   }
 }
