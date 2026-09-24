@@ -4,6 +4,7 @@ import { Colophon, LayoutLines } from "@digithings/ui";
 import { DtFooter } from "@/components/DtFooter";
 import { DtNav } from "@/components/DtNav";
 import { LandingPage } from "@/components/landing/LandingPage";
+import { embedOriginForChat } from "@/lib/security-headers.mjs";
 
 // The landing page (v15, D1, #4429).
 //
@@ -44,7 +45,7 @@ export default function Home() {
       <DtNav />
 
       <main id="main" tabIndex={-1} className="landing relative z-10 pt-[var(--dq-nav-h)]">
-        <LandingPage />
+        <LandingPage embedOrigin={embedOriginForChat()} />
       </main>
 
       <Colophon name="digi" suffix="things" sweep />

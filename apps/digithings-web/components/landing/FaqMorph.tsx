@@ -2,7 +2,7 @@
 
 import { useEffect, useRef } from "react";
 import { FaqList } from "./Sections";
-import { QuickAsk } from "./QuickAsk";
+import { LiveAsk } from "./LiveAsk";
 
 /**
  * The FAQ band's scroll-driven zoom-morph (#4429, branch claude/home-variants).
@@ -19,8 +19,8 @@ import { QuickAsk } from "./QuickAsk";
  *
  * It is the same *mechanic* as the specimen, but not the same *part*. The
  * specimen morphs one hero panel into a docked card beside synthetic copy; here
- * the thing that moves is a real, interactive product surface (the fixture
- * Thread) that must stay mounted, stay focusable and keep its conversation
+ * the thing that moves is a real, interactive product surface (the live
+ * digichat embed) that must stay mounted, stay focusable and keep its conversation
  * across the whole motion, and the geometry is the band's own two-column grid.
  * A generic `MorphSection` would have to take its docked geometry, its copy
  * layout and its interactive child as configuration — generalising a one-off,
@@ -85,7 +85,7 @@ const NAV_CLEARANCE_PX = 24;
 const FAQ_DELAY = 0.15;
 const FAQ_SPAN = 0.85;
 
-export function FaqMorph() {
+export function FaqMorph({ embedOrigin }: { embedOrigin: string }) {
   const wrapRef = useRef<HTMLDivElement>(null);
   const pinRef = useRef<HTMLDivElement>(null);
   const gridRef = useRef<HTMLDivElement>(null);
@@ -226,7 +226,7 @@ export function FaqMorph() {
           </div>
           <div ref={chatRef} className="faq-morph__chat min-w-0">
             <div ref={chatInnerRef} className="faq-morph__chat-inner">
-              <QuickAsk />
+              <LiveAsk embedOrigin={embedOrigin} />
             </div>
           </div>
         </div>
