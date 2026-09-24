@@ -89,7 +89,7 @@ function Tour() {
           <span className="whyx__tag">02 · guided, rented then owned</span>
           <ArchitectureTour
             sides={[
-              { spec: CONVENTIONAL_ARCH, steps: RENTED_TOUR_STEPS, tag: "rented" },
+              { spec: CONVENTIONAL_ARCH, steps: RENTED_TOUR_STEPS, tag: "rented", rail: "end" },
               { spec: DIGITHINGS_ARCH, steps: OWNED_TOUR_STEPS, tag: "owned" },
             ]}
             variant="camera"

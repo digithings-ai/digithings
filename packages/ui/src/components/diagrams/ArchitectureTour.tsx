@@ -69,6 +69,13 @@ export interface TourSide {
   /** Short marker for the rail, e.g. "rented" / "owned". */
   tag?: string;
   caption?: string;
+  /**
+   * Which edge this side's step column shows its progress rule on, and with it
+   * the step text alignment: "start" (default, rule left) or "end" (rule right,
+   * text right-aligned to it). Per side, so the rented column can sit right
+   * while the owned one keeps the left.
+   */
+  rail?: "start" | "end";
 }
 
 export type TourVariant = "static" | "highlight" | "camera";
@@ -144,7 +151,7 @@ function usePinned(): boolean {
 export function ArchitectureTour({
   sides,
   variant = "static",
-  vhPerStep = 0.8,
+  vhPerStep = 1.15,
   className,
 }: ArchitectureTourProps) {
   const reduced = usePrefersReducedMotion();
@@ -341,8 +348,13 @@ export function ArchitectureTour({
        So while the pin is held we take the wheel/touch gesture and advance
        EXACTLY one step, then lock for the settle window. A gesture that arrives
        outside the pin, or once the walk is finished and the pin about to
-       release, is left alone so the page never traps the reader. */
-    const GESTURE_COOLDOWN_MS = 620;
+       release, is left alone so the page never traps the reader.
+
+       The lock is deliberately generous: it has to outlast the smooth scroll
+       below (which is longer now) so a second flick in the same movement is
+       swallowed rather than advancing again — that is what makes the walk read
+       as continuous instead of jumpy. */
+    const GESTURE_COOLDOWN_MS = 900;
     let lockUntil = 0;
 
     const avail = () => Math.max(1, track.offsetHeight - pin.offsetHeight);
@@ -520,7 +532,7 @@ export function ArchitectureTour({
                     : " arch-tour__side--entering"
                   : "";
               return (
-                <div className={`arch-tour__side${mod}`} key={si}>
+                <div className={`arch-tour__side${mod}`} key={si} data-rail={side.rail ?? "start"}>
                   <div className="arch-tour__frame">
                     <div className="arch-tour__stage" ref={si === 0 ? stageRef : undefined}>
                       <div
