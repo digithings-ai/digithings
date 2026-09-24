@@ -345,9 +345,14 @@
 .arch-tour__pin {
   position: sticky;
   top: calc(var(--dq-nav-h, 4.5rem) + 1rem);
-  /* Centre the whole held block in the viewport so the title stays in view and
-   * the diagram sits centred while the camera walks. The held block is capped
-   * at the viewport so the sticky pin can always hold. */
+  /* Fill the space left under the nav, then centre the held block inside it.
+   * `justify-content: center` needs free space to distribute: without a
+   * min-height the pin is only as tall as its content and the block sits at
+   * the top of the viewport, which is what read as top-aligned. The min-height
+   * makes the pin symmetric about the viewport centre (it fills the box it is
+   * stuck into), and the cap keeps it shorter than the viewport so the sticky
+   * can still hold. */
+  min-height: min(calc(100svh - var(--dq-nav-h, 4.5rem) - 2rem), 46rem);
   display: flex;
   flex-direction: column;
   gap: 1rem;
