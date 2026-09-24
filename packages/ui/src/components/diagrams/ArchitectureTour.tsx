@@ -322,10 +322,71 @@ export function ArchitectureTour({
     update();
     window.addEventListener("scroll", onScroll, { passive: true });
     window.addEventListener("resize", onResize);
+
+    /* ── one gesture, one step ─────────────────────────────────────────
+       Without this the walk is pure position: a single trackpad flick keeps
+       feeding scroll events and carries the reader through every step at once.
+       So while the pin is held we take the wheel/touch gesture and advance
+       EXACTLY one step, then lock for the settle window. A gesture that arrives
+       outside the pin, or once the walk is finished and the pin about to
+       release, is left alone so the page never traps the reader. */
+    const GESTURE_COOLDOWN_MS = 620;
+    let lockUntil = 0;
+
+    const avail = () => Math.max(1, track.offsetHeight - pin.offsetHeight);
+
+    const stepScrollTop = (next: number) => {
+      const trackTop = track.getBoundingClientRect().top + window.scrollY;
+      const target = trackTop - pinOffset() + (next / count) * avail();
+      return Math.max(0, Math.round(target));
+    };
+
+    const pinned = () => {
+      const p = clamp01((pinOffset() - track.getBoundingClientRect().top) / avail());
+      return p > 0 && p < 1;
+    };
+
+    const nudge = (dir: number) => {
+      const now = performance.now();
+      if (now < lockUntil) return true;
+      if (!pinned()) return false;
+      const p = clamp01((pinOffset() - track.getBoundingClientRect().top) / avail());
+      const current = Math.min(count - 1, Math.floor(p * count));
+      const next = Math.max(0, Math.min(count - 1, current + dir));
+      // At either end, hand the gesture back to the page so the reader can
+      // leave the band by continuing to scroll.
+      if (next === current) return false;
+      lockUntil = now + GESTURE_COOLDOWN_MS;
+      window.scrollTo({ top: stepScrollTop(next + 0.5), behavior: "smooth" });
+      return true;
+    };
+
+    const onWheel = (event: WheelEvent) => {
+      if (Math.abs(event.deltaY) < 2 || event.ctrlKey) return;
+      if (nudge(event.deltaY > 0 ? 1 : -1)) event.preventDefault();
+    };
+    let touchStartY = 0;
+    const onTouchStart = (event: TouchEvent) => {
+      touchStartY = event.touches[0]?.clientY ?? 0;
+    };
+    const onTouchMove = (event: TouchEvent) => {
+      const dy = touchStartY - (event.touches[0]?.clientY ?? 0);
+      if (Math.abs(dy) < 24) return;
+      if (nudge(dy > 0 ? 1 : -1)) event.preventDefault();
+      touchStartY = event.touches[0]?.clientY ?? 0;
+    };
+
+    pin.addEventListener("wheel", onWheel, { passive: false });
+    pin.addEventListener("touchstart", onTouchStart, { passive: true });
+    pin.addEventListener("touchmove", onTouchMove, { passive: false });
+
     return () => {
       cancelAnimationFrame(frame);
       window.removeEventListener("scroll", onScroll);
       window.removeEventListener("resize", onResize);
+      pin.removeEventListener("wheel", onWheel);
+      pin.removeEventListener("touchstart", onTouchStart);
+      pin.removeEventListener("touchmove", onTouchMove);
       track.style.height = "";
     };
   }, [mode, count, swapAt, sides.length, vhPerStep]);

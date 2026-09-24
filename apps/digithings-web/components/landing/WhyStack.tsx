@@ -163,7 +163,7 @@ function Costs() {
           <span role="columnheader">layer</span>
           <span role="columnheader">what the rented stack bills for</span>
           <span role="columnheader">what running it costs</span>
-          <span role="columnheader">the figure, as published</span>
+          <span role="columnheader">the figure, dated and labelled</span>
         </div>
         {COST_LINES.map((line) => (
           <div className="whyx-cost__row" key={line.layer} role="row">

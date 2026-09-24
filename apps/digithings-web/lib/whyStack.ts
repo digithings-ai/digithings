@@ -235,11 +235,11 @@ export const ARCH_CAPTIONS = {
   conventional: {
     caption:
       "container view · every box below your application is a rented product with its own meter",
-    foot: "You own the application. Everything under it is a contract you did not write, wired in an order you cannot change, released on someone else's schedule.",
+    foot: "One shape, sold to everyone — custom nowhere. You own the application, and everything under it is a contract you did not write, wired in an order you cannot change, released on someone else's schedule.",
   },
   digithings: {
     caption: "container view · every box is a process you run, on infrastructure you already pay for",
-    foot: "Same shape, same calls. The difference is that each box is a module you can replace on its own — which is what makes the rest of this page true.",
+    foot: "Same shape, same calls — but every box is a module you can replace on its own. Modular and custom by construction; your hosts and your keys make it private and secure; one margin lighter makes it cost-effective.",
   },
 } as const;
 
@@ -257,6 +257,11 @@ export interface CapabilityRow {
 }
 
 export const CAPABILITIES: CapabilityRow[] = [
+  {
+    capability: "what you are buying",
+    rented: "a product built for everyone — one-size-fits-all, so it fits nobody exactly",
+    owned: "an architecture you compose: take the modules you need, leave the rest",
+  },
   {
     capability: "the source",
     rented: "closed — you get the product, never the code",
@@ -280,7 +285,7 @@ export const CAPABILITIES: CapabilityRow[] = [
   {
     capability: "where it runs",
     rented: "their regions, on their capacity",
-    owned: "your hosts, in your regions, next to your data",
+    owned: "your hosts, in your regions, next to your data — private by construction",
   },
   {
     capability: "the record of what ran",
@@ -299,7 +304,7 @@ export const CAPABILITIES: CapabilityRow[] = [
   },
   {
     capability: "the cost shape",
-    rented: "a platform margin on every layer, on top of the provider price",
+    rented: "a plan minimum and a platform margin on every layer, whatever you use",
     owned: "the provider's list price, plus your own metal and your own time",
   },
 ];
@@ -313,9 +318,10 @@ export const CAPABILITIES: CapabilityRow[] = [
  */
 export const COST_ASSUMPTIONS: string[] = [
   "≈200 people using the system, a mix of chat users and agent runs",
-  "a chat turn is one inference call; an agentic task averages 10–20 calls, so the same headcount can be 5–30× the token volume",
+  "a chat turn is one inference call; an agentic task averages 10–20 calls, so the same headcount can be 5–30× the token volume (Gartner, Aug 2026)",
+  "at enterprise scale the average LLM bill is real money: a16z's Jan-2026 survey of Global-2000 CIOs puts average enterprise LLM spend near $7m a year and rising",
   "embedding and index maintenance run continuously over the document set",
-  "the system is on the provider's published list price, with no negotiated discount",
+  "the system is on the provider's published list price, with no negotiated discount and no reserved capacity",
   "self-hosting adds engineering time — this model does not pretend it is free",
 ];
 
@@ -337,45 +343,51 @@ export interface CostLine {
 export const COST_LINES: CostLine[] = [
   {
     layer: "inference",
-    rented: "the same list price either way — the model provider bills you directly or through the platform",
-    owned: "unchanged, or lower: hosted open-weight models list at roughly 1/10th of frontier rates, and self-hosted changes the unit to your own metal",
-    source: "frontier list rates per 1M tokens, in / out: $2.50 / $15.00, $3.00 / $15.00, $1.25 / $10.00; budget tier $0.10–$1.00 in",
+    rented: "the provider's list rate, plus the platform's markup on the way through — and an agentic task can cost 5–30× a chat turn",
+    owned: "the same provider list rate if you call them directly, or an open model on your own metal",
+    source: "frontier list rates per 1M tokens in/out: Claude Opus 4.6 $5/$25, Sonnet 4.6 $3/$15, GPT-5.4 ~$2.50/$15, nano floor $0.05 in [V, read 2026-09-24]; Gartner: agentic AI uses 5–30× the tokens of a chatbot and a $0.01 chat task can reach $1.50 [A, 2026-08-19]",
   },
   {
     layer: "embeddings",
-    rented: "a metered line you do not see itemised on a platform invoice",
-    owned: "the same embedding API, billed to your own account, or an open model you host",
-    source: "text-embedding class list rates around $0.02 per 1M tokens, read Sep 2026",
+    rented: "a metered line you rarely see itemised on a platform invoice",
+    owned: "the same embedding API billed to your own account, or an open model you host",
+    source: "text-embedding class list rates around $0.02 per 1M tokens [V, read Sep 2026]",
   },
   {
     layer: "vector store",
-    rented: "per GB stored, per read, per query, plus a plan minimum",
+    rented: "a plan minimum, then per GB stored, per read unit and per GB egress",
     owned: "your own index on your own disk — the compute you already pay for",
-    source: "managed vector tiers list from ~$0 to ~$5,000/mo; hosted units around $2.64 per unit",
+    source: "Pinecone: Builder $20/mo, Standard $50/mo minimum, $0.33/GB-mo stored, $16–18 per M read units, $0.10/GB egress; Weaviate Flex from $45/mo [V, pinecone.io/pricing, read 2026-09]",
   },
   {
     layer: "database and queue",
     rented: "per instance, per GB, per operation, per seat",
     owned: "one process on the machine you already bought",
-    source: "published managed-instance tiers, read Sep 2026",
+    source: "published managed-instance tiers, read Sep 2026 [V]",
   },
   {
     layer: "observability",
-    rented: "per host, per seat, per custom metric, per retained event",
-    owned: "Prometheus, OpenTelemetry and a log file — the cost is the disk",
-    source: "platform monitoring commonly lands at $2,200–$11,000/mo; self-hosted equivalents $500–$2,000/mo",
+    rented: "per host, per seat, per custom metric, per retained event — traced spans are metered too",
+    owned: "OpenTelemetry and a log file — the cost is the disk and part of an engineer's month",
+    source: "Datadog infra $15/host/mo and APM $31/host/mo list; Langfuse Core $29/mo, Pro $199/mo, Enterprise $2,499/mo; self-hosted Grafana/LGTM is 10–40 engineer-hours a month [V, read 2026-09]",
   },
   {
     layer: "compute",
-    rented: "an instance rate with a margin over the underlying resource",
+    rented: "an instance rate with a hyperscaler premium over the same silicon",
     owned: "whatever you already run, or a specialist GPU rate",
-    source: "H100 $1.99–$2.50/hr from specialists vs $4.59–$8.90/hr on the hyperscalers, read Sep 2026",
+    source: "H100 per GPU-hour: $1.38–$2.89 from specialists and marketplaces vs $6.88 AWS, $6.98–$15.98 Azure, $11.06 GCP [V/3P, read Sep 2026]",
+  },
+  {
+    layer: "data transfer",
+    rented: "egress is billed on every layer, and it is easy to miss",
+    owned: "charged at cost, or free on object storage that does not meter it",
+    source: "internet egress $0.09/GB on AWS, $0.087 Azure, $0.12 GCP vs $0.00 on Cloudflare R2; data transfer is 10–30% of a typical AWS bill [V, read 2026-09]",
   },
   {
     layer: "engineering time",
-    rented: "near zero to start, and you cannot spend it on the parts you want to change",
-    owned: "$1,500–$4,000/mo of operations for a small deployment, and more as it grows — the honest other side of the ledger",
-    source: "published ops-rate estimates at $150–$200/hr, read Sep 2026",
+    rented: "near zero to start, and you cannot spend it on the parts you want to change — but licence and re-migration costs are real",
+    owned: "the honest other side: operations and maintenance, roughly 0.5–2 engineers' worth at a loaded $400–600k each a year",
+    source: "Gartner: a 'simple' enterprise RAG build is $750k–$1m lifetime with only 10–20% in the initial build, plus 0.5–2 FTE; a modelled ground-up RAG build is $3.34m in year one with 70% of it payroll [A/3P, 2026]",
   },
 ];
 
@@ -384,8 +396,8 @@ export const COST_LINES: CostLine[] = [
  * above read as a promise; with it they read as arithmetic.
  */
 export const COST_FRAMING = {
-  headline: "You pay the same provider price either way. The difference is the layer on top.",
-  body: "Both stacks rent the same frontier models from the same providers at the same list rates — that part of the bill is identical and no diagram changes it. What differs is everything wrapped around them. A managed platform charges a margin on each layer it resells, and every layer is metered separately: storage, reads, seats, hosts, custom metrics, retained events. Running the same layers yourself removes that margin and replaces it with two costs that no vendor invoice shows — your own infrastructure, and the engineering time to operate it. Whether that trade wins depends entirely on volume: the crossover generally sits in the millions of tokens per day, so a small deployment is usually cheaper rented and a large one is usually cheaper owned. Every figure in the table above is a published list rate, not a quote, and this model assumes no negotiated discount — the two things that would move it most.",
+  headline: "A managed stack is priced for everyone. You pay for that average.",
+  body: "A managed platform is one-size-fits-all by construction: it is built to serve every customer at once, so it charges for the whole menu — a plan minimum here, a per-seat line there, a markup on every layer it resells — whether or not you use that layer. You pay for the average, and you get the average. digithings is the opposite bet: you take the modules you need, run them where you already run things, and pay the provider's own list price on the parts you do use. That is the custom-architecture advantage, and it shows up in three places at once. Cost: the middle margin disappears and the bill tracks your actual usage instead of a plan tier. Fit: a layer that does not suit you is swapped, not negotiated — swap the model or the store without a migration, because no module assumes the others are the same vendor's. Control: your hosts, your keys, your log, so privacy and security are properties you hold rather than promises you are given. None of that is free: self-hosting moves spend from a vendor invoice to your own metal and your own engineering time, and whether that trade wins depends on volume. But the direction of the trade is not in question — a one-size-fits-all bill grows with your headcount, while a custom architecture grows with the work you actually do.",
 } as const;
 
 /**
@@ -393,6 +405,7 @@ export const COST_FRAMING = {
  * into the table than is there.
  */
 export const COST_CAVEATS: string[] = [
+  "every figure is labelled by its source: [V] a vendor's published list price, [A] an analyst estimate, [3P] a third-party model or tracker — never presented as what any one company pays",
   "no single monthly total: it would be an invented number, because the same stack costs wildly different amounts at a chatbot's volume and at an agent fleet's",
   "no negotiated discount, no committed-use pricing, no reserved capacity",
   "no claim about any named vendor's contract terms or unpublished pricing",
