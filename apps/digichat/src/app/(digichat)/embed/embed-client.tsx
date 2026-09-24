@@ -30,7 +30,7 @@ import {
   extraOffFromCatalog,
   type EmbedChatPrefs,
   type EmbedChatPrefsApi,
-} from "@/components/stock/embed-chat-prefs";
+} from "@digithings/ui/chat/stock";
 import { EmbedComposerMenu, type ComposerMenuKind } from "@/components/stock/embed-composer-menu";
 import { replaceMcpConfig, connectedMcpConfigs, mcpSessionOverlayHeaderValue } from "@/components/stock/embed-mcp-flow";
 import { useAui, useAuiEvent } from "@assistant-ui/react";

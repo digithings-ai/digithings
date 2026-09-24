@@ -28,7 +28,8 @@ import {
   type DictationAdapter,
   type SpeechSynthesisAdapter,
 } from "@assistant-ui/react";
-import { ThreadSkinView } from "@/components/assistant-ui/skins";
+import { ThreadSkinView } from "@digithings/ui/chat/skins";
+import { DIGICHAT_SKIN_OPTIONS } from "@/lib/digichat-skin-options";
 import type { ComposerLayout } from "@digithings/ui/chat/thread";
 import {
   BootLabOverlay,
@@ -57,7 +58,7 @@ import {
   skinCreditStyle,
   skinOwnsPageChrome,
 } from "@digithings/ui/chat/skins";
-import { useEmbedChatPrefsOptional } from "@/components/stock/embed-chat-prefs";
+import { useEmbedChatPrefsOptional } from "@digithings/ui/chat/stock";
 import {
   StockSendGateProvider,
   type StockSendGateHandlers,
@@ -543,6 +544,7 @@ export function ProductStockShell({
                     <ThreadSkinView
                       skin={cfg.chrome.skin}
                       composerLayout={composerLayout}
+                      digichat={DIGICHAT_SKIN_OPTIONS}
                     />
                   </SkinRuntimeProvider>
                 </div>

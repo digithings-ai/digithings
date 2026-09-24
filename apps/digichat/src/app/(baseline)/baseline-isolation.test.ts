@@ -45,9 +45,9 @@ describe("baseline preview isolation", () => {
 
   it("mounts ThreadSkinView for the official assistant-ui templates", () => {
     const client = read("baseline/baseline-client.tsx");
-    const thread = read("stock/thread.aui.tsx");
+    const thread = read("../../../../../packages/ui/src/components/chat/stock/thread.aui.tsx");
     expect(client).toMatch(/ThreadSkinView/);
-    expect(client).toMatch(/@\/components\/assistant-ui\/skins/);
+    expect(client).toMatch(/@digithings\/ui\/chat\/skins/);
     expect(client).toMatch(/THREAD_SKINS/);
     expect(thread).toContain("How can I help you today?");
     expect(thread).toContain("aui-thread-root");

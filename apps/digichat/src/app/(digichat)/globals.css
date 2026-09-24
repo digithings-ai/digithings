@@ -16,8 +16,8 @@
 @import "@digithings/ui/styles/chat-digichat.css";
 @import "@digithings/ui/styles/digichat-launcher.css";
 
-@source "../(baseline)/stock";
-@source "../../components/assistant-ui/skins";
+
+
 @source "../../components/stock";
 @source "../../components/ui";
 @source "../../components/byok-cli-flow.tsx";

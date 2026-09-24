@@ -4,8 +4,12 @@ import { Suspense, useEffect } from "react";
 import { useSearchParams } from "next/navigation";
 import { AssistantRuntimeProvider } from "@assistant-ui/react";
 import { AssistantChatTransport, useChatRuntime } from "@assistant-ui/ai-sdk";
-import { ThreadSkinView } from "@/components/assistant-ui/skins";
-import { StockChatPrefsHost, useStockChatPrefs } from "@/components/stock/stock-chat-prefs-host";
+import { ThreadSkinView } from "@digithings/ui/chat/skins";
+import { DIGICHAT_SKIN_OPTIONS } from "@/lib/digichat-skin-options";
+import {
+  StockChatPrefsHost,
+  useStockChatPrefs,
+} from "@digithings/ui/chat/stock";
 import { DEFAULT_CLIENT_CONFIG } from "@/lib/deploy-config";
 import { p } from "@/lib/base-path";
 import { cn } from "@/lib/utils";
@@ -193,7 +197,7 @@ function BaselineClientInner() {
         >
           <StockChatPrefsHost value={prefsApi} panes={panes}>
             <SkinRuntimeProvider value={SKIN_RUNTIME}>
-              <ThreadSkinView skin={skin} />
+              <ThreadSkinView skin={skin} digichat={DIGICHAT_SKIN_OPTIONS} />
             </SkinRuntimeProvider>
           </StockChatPrefsHost>
         </div>

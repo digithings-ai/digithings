@@ -19,7 +19,7 @@ import { MemoryThreadListSidebar } from "@/components/stock/memory-thread-list-s
 import {
   StockChatPrefsHost,
   useStockChatPrefs,
-} from "@/components/stock/stock-chat-prefs-host";
+} from "@digithings/ui/chat/stock";
 import { p } from "@/lib/base-path";
 import type { DigichatClientConfig } from "@/lib/deploy-config";
 import {

@@ -70,7 +70,7 @@ export const DIGICHAT_SKIN_HOST_CONTRACT: SkinHostContract = {
     hostClient: "src/app/(baseline)/baseline/baseline-client.tsx",
   },
   prefsHost: {
-    module: "@/components/stock/stock-chat-prefs-host",
+    module: "@digithings/ui/chat/stock",
     hook: "useStockChatPrefs",
     hostClient: "src/app/(baseline)/baseline/baseline-client.tsx",
   },

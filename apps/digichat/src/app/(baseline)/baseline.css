@@ -6,9 +6,9 @@
 @import "@digithings/ui/styles/digichat-app-theme.css";
 
 /* Official assistant-ui template CSS (templates/default/app/globals.css). */
-@source "./stock";
+
 @source "./baseline";
-@source "../../components/assistant-ui/skins";
+
 /* The first-party `digichat` skin mounts the gallery Thread from the shared UI
    package, whose source lives in packages/ui. Tailwind only emits utilities it
    can see, so without this the catalog silently dropped kit-only classes — e.g.

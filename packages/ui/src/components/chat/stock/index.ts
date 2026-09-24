@@ -39,3 +39,33 @@ export {
   type SkinErrorParsers,
   type SkinRuntimeValue,
 } from "./skin-runtime";
+// WS4: catalog primitives + prefs shell moved from the app. Hosts import
+// ThreadSkinView from `@digithings/ui/chat/skins` and the prefs host from here.
+export { MessageError } from "./message-error.aui";
+export {
+  EmbedChatPrefsProvider,
+  useEmbedChatPrefs,
+  useEmbedChatPrefsOptional,
+  DEFAULT_EMBED_CHAT_PREFS,
+  createDefaultEmbedChatPrefs,
+  disabledCatalogIds,
+  catalogToolsFromClient,
+  extraOffFromCatalog,
+  type EmbedChatPrefs,
+  type EmbedChatPrefsApi,
+  type CatalogToolRow,
+} from "./embed-chat-prefs";
+export {
+  useStockChatPrefs,
+  StockChatPrefsHost,
+  type StockChatPrefsConfig,
+  type StockChatPrefsDeps,
+} from "./stock-chat-prefs-host";
+export { Thread } from "./thread.aui";
+export {
+  ToolFallback,
+  ToolFallbackAttribution,
+  formatToolDuration,
+  type ToolFallbackRootProps,
+} from "./tool-fallback.aui";
+export { toolRowTitle } from "./tool-display";

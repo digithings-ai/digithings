@@ -1,8 +1,10 @@
 # WS4 Phase 1 — Option B inversion plan (skins + stock → packages/ui)
 
-Status: proposed (plan mode). Owner direction: build it properly (Option B), accept
-risky refactoring where it scales best; follow-up goal is runtime skin/token swapping
-without redeploying (selection + tokens as runtime data — NOT remote modules).
+Status: Steps 1–3 landed as `3994d20a6` (WS1 theme ownership + WS4 scaffolding, pure
+moves, interface cuts). Step 4 (below) is the remaining work. Owner direction: build
+it properly (Option B), accept risky refactoring where it scales best; follow-up goal
+is runtime skin/token swapping without redeploying (selection + tokens as runtime
+data — NOT remote modules).
 
 Constraints (standing): structural only, zero visual/rendering change. Every step keeps
 `packages/ui` tests, `apps/digichat` tests, `npm run lint` (0 errors), `npm run build`
@@ -88,6 +90,55 @@ props with same defaults (already shadowed by context). `tool-fallback.aui.tsx`:
 5. **(Optional, same branch)** per-skin `React.lazy` — recon found NO blockers (all
    `"use client"`, sync exports, no `next/*` in skins). Boundary must sit below the
    providers; `digichat.tsx:3-7` kit CSS side effects need one host loader.
+
+## Step 4 detailed design (from final recon — execute in build mode)
+
+`digichat.tsx` (336 lines) becomes `DigichatSkin({ composerLayout?, copy?,
+hiddenAttachmentName?, slash? })` where `copy?` carries `{ welcome?, placeholder?,
+suggestions? }` (fallbacks `copy?.x ?? ""` / `?? []`), `hiddenAttachmentName?`
+defaults to the `"page-context.html"` literal (with source-of-truth comment pointing
+at `embed-page-context-messages.ts:158`), and `slash?` carries `{ buildCommands,
+extraDefs, prefixAdapter, shouldDraft, submitAction, executeDef, executeFromComposer,
+armForceTool, setForceTool, setWebSearchForce }`. `enableSlash =
+Boolean(slashPrefs) && Boolean(slash)`; `onComposerSubmit` guards
+`if (slashPrefs && slash)`. `useAui()`, `threadTurns` (pure, moves verbatim), and the
+`copyExport`/per-id command overrides stay inside. New package types:
+`SkinSlashCommand { id, label?, execute?, [k: string]: unknown }` and
+`SkinSlashAction` (`block | none | force{text,forceTool} | force-web{text} |
+run{command,arg}`). `composerLayout={composerLayout ?? (mode === "app" ? "expanded"
+: "compact")}` stays byte-identical (pinned by `product-isolation.test.ts:71-76`).
+`ThreadSkinView` gains `digichat?: DigichatSkinOptions`, forwarded to the digichat
+branch only; the two hosts build it from app modules (copy = `BASELINE_EMBED_*`
+constants, slash/pending = real fns, hidden name = `PAGE_CONTEXT_ATTACHMENT_NAME`).
+
+Serializers move to the kit: `transcript-markdown.ts` + `activity-view.ts` (+
+`types.ts` after an import check — they import only `./activity-view`, type-only
+`@digithings/ui`, and local types) relocate to `packages/ui`, with
+`packages/digichat-ui` re-exporting for compat. `toolRowTitle`
+(`tool-display.ts:3-6`, pure) co-moves to package `stock/`; `ToolFallback` keeps
+`title={toolRowTitle(toolName)}` via a relative import — no prop needed, test
+assertions byte-identical. `PAGE_CONTEXT_ATTACHMENT_NAME` stays in app; the package
+uses the literal default.
+
+Test keep/move: `digichat.test.tsx` and `skins/index.test.tsx` move with the skins
+(relative mocks; drop the `product-slash-commands` mock at rewrite).
+`digichat-force-web.test.tsx` and `tool-fallback.aui.test.tsx` STAY IN APP as
+app-wiring integration tests (they import `@/lib/pending-chat-headers`,
+`@/components/stock/embed-chat-prefs`, `@/lib/ui-stream-parts` which all stay):
+only their skin/component imports re-point to the package; force-web passes
+slash+pending as the new props with real app fns. `skins-isolation.test.ts` moves
+with updated paths. Mock re-points (specifier-only, identical factories):
+`product-shell.test:18`, `chat-panel.test:122`, `home-stock-client.memory:45` →
+`@digithings/ui/chat/skins`; `product-shell.test:14` → NEW deep export
+`./chat/stock/thread` (barrel would widen blast radius onto product-shell's
+send-gate/deploy-ui/chrome imports). Path-as-text updates: `baseline-isolation:48`
+(read package `stock/thread.aui.tsx`), `:50` (new `@digithings/ui/chat/skins`
+specifier); `product-isolation:72` (read package `skins/digichat.tsx`).
+`presentation-modes` needs no change. CSS: delete `baseline.css:9,11` and
+`globals.css:19,20` `@source` lines (covered by the kit scan lines `:17` / `:26`).
+`skins/index.tsx` dispatch stays in `skins/index.ts` (overwrite the Step-2 barrel,
+add `export *` for registry + contract). Embed gate-form branch renders no skins —
+no provider needed there.
 
 ## Explicitly out of scope
 

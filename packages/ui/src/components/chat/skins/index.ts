@@ -1,7 +1,19 @@
 /**
- * Skin registry + host contract (WS4). ThreadSkinView and the 12 skins move
- * here in Step 4; the registry and contract move first so hosts can re-point.
+ * Skin registry + host contract + ThreadSkinView dispatch (WS4). The 12
+ * skins live here; hosts mount them via ThreadSkinView and provide
+ * first-party wiring through the `digichat` prop (see DigichatSkinOptions).
  */
+export { ThreadSkinView, type ThreadSkinViewProps } from "./thread-skin-view";
+export {
+  DigichatSkin,
+  type DigichatSkinCopy,
+  type DigichatSkinOptions,
+  type DigichatSkinSlash,
+  type SkinSlashAction,
+  type SkinSlashAdapterLike,
+  type SkinSlashCommand,
+  type SkinSlashExtraDef,
+} from "./digichat";
 export {
   CLONE_SKINS,
   DEFAULT_THREAD_SKIN,

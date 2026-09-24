@@ -20,3 +20,44 @@ export type ChainDisclosureMode =
   | "collapsed"
   | "balanced"
   | "expanded";
+
+/**
+ * Prefs value literals (WS4). Structural twins of `ViewMode` /
+ * `ThinkingMode` (`VIEW_MODES`, `THINKING_MODES` in
+ * `apps/digichat/src/lib/view-modes.ts`, defaults `"balanced"` / `"auto"`).
+ */
+export type ViewMode = "hidden" | "compact" | "balanced" | "detailed";
+
+export type ThinkingMode = "auto" | "collapsed" | "open";
+
+/**
+ * Session MCP server config (WS4). Structural twin of `SessionMcpConfig` in
+ * `apps/digichat/src/components/stock/embed-mcp-flow.ts` (`auth` /
+ * `source` literals mirror `McpAuthKind` / `McpSource`). The app type stays
+ * the source of truth for BFF validation; identical shape keeps host values
+ * assignable across the boundary.
+ */
+export type SkinMcpServerConfig = {
+  id: string;
+  label: string;
+  url: string;
+  auth: "none" | "bearer" | "oauth";
+  token: string;
+  extra: Record<string, string>;
+  source: "operator" | "session";
+};
+
+/**
+ * Composer menu pane ids (WS4). Structural twin of `ComposerMenuKind` in
+ * `apps/digichat/src/components/stock/embed-composer-menu.tsx`.
+ */
+export type StockComposerMenuKind =
+  | "settings"
+  | "models"
+  | "mcp"
+  | "tools"
+  | "language"
+  | "effort"
+  | "view"
+  | "thinking"
+  | "provider";

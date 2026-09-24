@@ -18,9 +18,10 @@ import {
   EmbedChatPrefsProvider,
   DEFAULT_EMBED_CHAT_PREFS,
   type EmbedChatPrefsApi,
-} from "@/components/stock/embed-chat-prefs";
+} from "@digithings/ui/chat/stock";
 import { takePendingWebSearchForce } from "@/lib/pending-chat-headers";
-import { DigichatSkin } from "./digichat";
+import { DIGICHAT_SKIN_OPTIONS } from "@/lib/digichat-skin-options";
+import { DigichatSkin } from "@digithings/ui/chat/skins";
 const composerState = vi.hoisted(() => ({ text: "" }));
 const capture = vi.hoisted(() => ({
   submit: null as null | ((event: { preventDefault: () => void }) => void),
@@ -108,7 +109,7 @@ function submitAs(api: EmbedChatPrefsApi, text: string): void {
   render(
     <SkinChromeProvider value={{ ...DEFAULT_SKIN_CHROME, mode: "embed" }}>
       <EmbedChatPrefsProvider value={api}>
-        <DigichatSkin />
+        <DigichatSkin slash={DIGICHAT_SKIN_OPTIONS.slash} />
       </EmbedChatPrefsProvider>
     </SkinChromeProvider>,
   );

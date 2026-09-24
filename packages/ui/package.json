@@ -34,6 +34,8 @@
     "./chat/dot-matrix": "./src/components/chat/DotMatrix.tsx",
     "./chat/skins": "./src/components/chat/skins/index.ts",
     "./chat/stock": "./src/components/chat/stock/index.ts",
+    "./chat/stock/thread": "./src/components/chat/stock/thread.aui.tsx",
+    "./chat/transcript": "./src/components/chat/transcript/index.ts",
     "./styles/controls-core.css": "./src/styles/controls-core.css",
     "./styles/controls-overlay.css": "./src/styles/controls-overlay.css",
     "./styles/finance-composites.css": "./src/styles/finance-composites.css",

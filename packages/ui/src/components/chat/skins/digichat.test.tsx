@@ -1,0 +1,112 @@
+// @vitest-environment happy-dom
+"use client";
+
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { cleanup, render, screen } from "@testing-library/react";
+
+afterEach(() => {
+  cleanup();
+});
+import {
+  SkinChromeProvider,
+  DEFAULT_SKIN_CHROME,
+} from "../stock";
+import { DigichatSkin } from "./digichat";
+
+vi.mock("@assistant-ui/react", async () => {
+  const actual = await vi.importActual<typeof import("@assistant-ui/react")>(
+    "@assistant-ui/react",
+  );
+  const aui = {
+    composer: {
+      getState: () => ({ text: "" }),
+      setText: vi.fn(),
+      clearAttachments: vi.fn(),
+      send: vi.fn(),
+    },
+    thread: () => ({ getState: () => ({ messages: [] as unknown[] }) }),
+    threads: { switchToNewThread: vi.fn() },
+  };
+  return {
+    ...actual,
+    useAui: () => aui,
+    unstable_useSlashCommandAdapter: () => ({ adapter: {}, action: {} }),
+    unstable_useMentionAdapter: () => ({ adapter: {}, directive: {} }),
+  };
+});
+
+vi.mock("@digithings/ui/chat/thread", () => ({
+  DigichatThread: ({
+    composerLayout,
+    hiddenAttachmentNames,
+  }: {
+    composerLayout?: string;
+    hiddenAttachmentNames?: string[];
+  }) => (
+    <div
+      data-testid="digichat-thread"
+      data-composer-layout={composerLayout ?? ""}
+      data-hidden-attachments={(hiddenAttachmentNames ?? []).join(",")}
+    />
+  ),
+}));
+
+vi.mock("@digithings/digichat-ui", () => ({
+  copyMarkdownWithFallback: vi.fn(),
+  downloadMarkdown: vi.fn(),
+  serializeAssistantMarkdown: () => "",
+  serializeThreadMarkdown: () => "",
+}));
+
+function renderSkin(
+  mode: "app" | "embed",
+  composerLayout?: "expanded" | "compact",
+) {
+  render(
+    <SkinChromeProvider value={{ ...DEFAULT_SKIN_CHROME, mode }}>
+      <DigichatSkin composerLayout={composerLayout} />
+    </SkinChromeProvider>,
+  );
+  return screen.getByTestId("digichat-thread").getAttribute(
+    "data-composer-layout",
+  );
+}
+
+describe("DigichatSkin composerLayout", () => {
+  it("derives expanded from app mode by default", () => {
+    expect(renderSkin("app")).toBe("expanded");
+  });
+
+  it("an explicit compact prop wins over app mode", () => {
+    expect(renderSkin("app", "compact")).toBe("compact");
+  });
+
+  it("derives compact from embed mode by default", () => {
+    expect(renderSkin("embed")).toBe("compact");
+  });
+});
+
+function renderSkinPageContext(pageContext: "visible" | "silent" | "off") {
+  render(
+    <SkinChromeProvider
+      value={{ ...DEFAULT_SKIN_CHROME, mode: "embed", pageContext }}
+    >
+      <DigichatSkin />
+    </SkinChromeProvider>,
+  );
+  return screen.getByTestId("digichat-thread");
+}
+
+describe("DigichatSkin pageContext", () => {
+  it("hides the page-context chip attachment when the deploy mode is silent", () => {
+    const thread = renderSkinPageContext("silent");
+    expect(thread.getAttribute("data-hidden-attachments")).toBe(
+      "page-context.html",
+    );
+  });
+
+  it("shows the page-context chip attachment when the deploy mode is visible", () => {
+    const thread = renderSkinPageContext("visible");
+    expect(thread.getAttribute("data-hidden-attachments")).toBe("");
+  });
+});
