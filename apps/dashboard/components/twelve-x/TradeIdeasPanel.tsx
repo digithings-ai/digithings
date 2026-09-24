@@ -218,9 +218,7 @@ export default function TradeIdeasPanel({
   highlightRanks?: ReadonlySet<number>;
   ideaHistory?: Pick<FxTradeIdeaRow, 'run_date' | 'pair' | 'direction' | 'as_of'>[];
 }) {
-  const { crossLink } = useTwelveX();
-  const [openRank, setOpenRank] = useState<number | null>(null);
-  const toggleIdea = (rank: number) => setOpenRank((v) => (v === rank ? null : rank));
+  const { crossLink, openIdea } = useTwelveX();
 
   const boardDate = ideas[0]?.run_date ?? '';
   const continuity = useMemo(() => {
@@ -295,8 +293,7 @@ export default function TradeIdeasPanel({
           top.rank,
           'block h-auto w-full justify-start whitespace-normal rounded-none border border-accent/30 bg-accent/[0.06] p-4 text-left text-xs font-normal transition-colors hover:border-accent/50 hover:bg-accent/[0.06]',
         )}
-        onClick={() => toggleIdea(top.rank)}
-        aria-expanded={openRank === top.rank}
+        onClick={() => openIdea(top.run_date, top.rank)}
       >
         <div className="flex min-w-0 items-start gap-2">
           <div className="flex min-w-0 flex-1 flex-wrap items-center gap-x-2 gap-y-0.5">
@@ -309,17 +306,11 @@ export default function TradeIdeasPanel({
           <ContinuityStamp meta={metaFor(top)} />
         </div>
         <p className="mt-1 text-sm text-ink">{top.title}</p>
-        {openRank === top.rank ? (
-          <IdeaDetail idea={top} />
-        ) : (
-          <>
-            {top.thesis ? <p className="mt-1 line-clamp-2 text-xs text-ink-soft">{top.thesis}</p> : null}
-            {top.catalyst ? <p className="mt-1 text-[11px] text-ink-mute">Catalyst: {top.catalyst}</p> : null}
-          </>
-        )}
+        {top.thesis ? <p className="mt-1 line-clamp-2 text-xs text-ink-soft">{top.thesis}</p> : null}
+        {top.catalyst ? <p className="mt-1 text-[11px] text-ink-mute">Catalyst: {top.catalyst}</p> : null}
       </Button>
 
-      {/* #2…N rows — expand in place; ideas are run artifacts with no brief */}
+      {/* #2…N rows — clicking opens the idea sidebar */}
       {rest.map((idea) => (
         <Button
           key={`${idea.run_date}-${idea.rank}`}
@@ -329,8 +320,7 @@ export default function TradeIdeasPanel({
             idea.rank,
             'block h-auto w-full justify-start whitespace-normal rounded-none border border-hair px-3 py-2 text-left text-xs font-normal transition-colors hover:border-accent/50 hover:bg-transparent',
           )}
-          onClick={() => toggleIdea(idea.rank)}
-          aria-expanded={openRank === idea.rank}
+          onClick={() => openIdea(idea.run_date, idea.rank)}
         >
           <span className="flex min-w-0 items-start gap-2">
             <span className="flex min-w-0 flex-1 flex-wrap items-center gap-x-2 gap-y-0.5">
@@ -343,7 +333,6 @@ export default function TradeIdeasPanel({
             </span>
             <ContinuityStamp meta={metaFor(idea)} />
           </span>
-          {openRank === idea.rank ? <IdeaDetail idea={idea} /> : null}
         </Button>
       ))}
     </Card>

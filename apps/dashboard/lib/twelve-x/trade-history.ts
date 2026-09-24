@@ -108,12 +108,12 @@ function evalKey(runDate: string, rank: number): string {
 
 function lifecycleOf(status: string | undefined): TradeLifecycle {
   if (!status) return 'unscored';
-  // 'missing_rates' is TRANSIENT, not a verdict: an idea published before its
-  // session's rates have landed has not been graded yet, but it is still live
-  // on the book (closeReason renders it as "No data · Missing rates"). Mapping
-  // it to 'no_data' hid the newest idea from the live view while Today's raw
-  // snapshot still showed it.
-  if (status === 'carried' || status === 'missing_rates') return 'live';
+  // 'carried' is the only genuinely-live state. 'missing_rates' means the idea
+  // could not be graded against prices at all (e.g. an ungradeable pair), so it
+  // is NOT live: it is surfaced as 'no_data' and kept out of the live book. The
+  // pipeline is responsible for not publishing ideas it cannot grade.
+  if (status === 'carried') return 'live';
+  if (status === 'missing_rates') return 'no_data';
   // 'dropped' (bookkeeper verdict) and anything else land here: closed, and
   // hidden downstream since dropped rows carry no directional verdict.
   return 'closed';
@@ -432,11 +432,6 @@ export interface TradeCloseReason {
  */
 export function closeReason(row: TradeHistoryRow): TradeCloseReason {
   if (row.lifecycle === 'live') {
-    // Still live, but un-graded until the session's rates land — be honest
-    // rather than claiming a plain "Live" we cannot yet score.
-    if (row.evalStatus === 'missing_rates') {
-      return { kind: 'live', label: 'No data', detail: 'Missing rates' };
-    }
     return { kind: 'live', label: 'Live' };
   }
   if (row.evalStatus === 'missing_rates' || row.lifecycle === 'no_data') {
