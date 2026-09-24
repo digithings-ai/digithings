@@ -555,9 +555,21 @@ export function QuantSection({ className }: { className?: string }) {
               {/* `h2`, not `h3`: this band has no other heading, so an `h3` left
                   the document outline skipping a level between `#open-source`
                   and `#pricing`. Every other band's `h2` is its claim rather than
-                  its product name, so the claim is the band's heading. */}
+                  its product name, so the claim is the band's heading.
+
+                  Round 16 (owner): "top of the digiquant.io seciton should have a
+                  hyperlink to the website that serves as the section title too."
+                  So the title carried by the h2 is the hyperlink to digiquant.io
+                  — the band's own product page is the section's heading link. */}
               <h2 className="m-0 font-mono text-[clamp(1.4rem,2.6vw,2rem)] font-medium leading-[1.2] tracking-[-0.02em] text-ink">
-                A hedge fund in a glass box you own.
+                <a
+                  href={DIGIQUANT_URL}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-ink underline decoration-hair decoration-1 underline-offset-[0.2em] transition-colors hover:decoration-accent focus-visible:decoration-accent"
+                >
+                  A hedge fund in a glass box you own.
+                </a>
               </h2>
               <div className="flex flex-col items-start gap-[0.6rem]">
                 <CtaLink
