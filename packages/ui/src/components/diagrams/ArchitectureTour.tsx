@@ -265,11 +265,45 @@ export function ArchitectureTour({
     };
     window.addEventListener("resize", onResize);
 
+    // A browser/page ZOOM (ctrl +/-, pinch, or a devicePixelRatio change) scales
+    // every CSS-pixel measurement but does NOT reliably raise a `resize` event, so
+    // the box coordinates kept describing the pre-zoom layout while the camera read
+    // `stage.clientWidth` live — the two frames no longer agreed and the focus
+    // drifted or clipped. A ResizeObserver on each pane's SVG fires whenever that
+    // element's own box changes, which is exactly what a zoom does, so the snapshot
+    // is retaken and the camera recomputes against matching geometry.
+    const panes = paneRefs.current.filter(Boolean) as HTMLDivElement[];
+    let observer: ResizeObserver | null = null;
+    if (typeof ResizeObserver !== "undefined") {
+      observer = new ResizeObserver(() => {
+        measure();
+      });
+      for (const pane of panes) {
+        const svg = pane.querySelector("svg");
+        if (svg) observer.observe(svg);
+      }
+    }
+
+    // devicePixelRatio is the other half: a zoom can change it (and a bare
+    // resolution change can change it without moving any element), and there is
+    // no event for it, so watch the media query that describes it.
+    const dpr = window.devicePixelRatio || 1;
+    const dprQuery =
+      typeof window.matchMedia === "function"
+        ? window.matchMedia(`(resolution: ${dpr}dppx)`)
+        : null;
+    const onDpr = (): void => {
+      measure();
+    };
+    dprQuery?.addEventListener("change", onDpr);
+
     return () => {
       cancelAnimationFrame(frame);
       if (timer) window.clearInterval(timer);
       window.clearTimeout(ceiling);
       window.removeEventListener("resize", onResize);
+      observer?.disconnect();
+      dprQuery?.removeEventListener("change", onDpr);
     };
   }, [sides, mode]);
 
@@ -467,10 +501,33 @@ export function ArchitectureTour({
         return;
       }
 
-      const minX = Math.min(...picked.map((b) => b.x));
-      const minY = Math.min(...picked.map((b) => b.y));
-      const maxX = Math.max(...picked.map((b) => b.x + b.w));
-      const maxY = Math.max(...picked.map((b) => b.y + b.h));
+      // The snapshot's box coordinates are CSS pixels measured at whatever the
+      // zoom was when `measure()` last ran. The stage below is read live, so if a
+      // zoom has resized the diagram since, the two are on different scales and
+      // the transform lands off-target. Re-read the pane's own SVG and, when it
+      // disagrees with the snapshot, scale the snapshot's coordinates onto the
+      // current size so the camera still frames the same boxes.
+      const svg = paneRefs.current[si]?.querySelector("svg");
+      const liveW = svg?.getBoundingClientRect().width ?? 0;
+      let scale = 1;
+      let contentW = m.w;
+      let contentH = m.h;
+      if (svg && liveW > 0 && Math.abs(liveW - m.w) > 0.5) {
+        scale = liveW / m.w;
+        contentW = m.w * scale;
+        contentH = m.h * scale;
+      }
+      const metrics = picked.map((b) => ({
+        x: b.x * scale,
+        y: b.y * scale,
+        w: b.w * scale,
+        h: b.h * scale,
+      }));
+
+      const minX = Math.min(...metrics.map((b) => b.x));
+      const minY = Math.min(...metrics.map((b) => b.y));
+      const maxX = Math.max(...metrics.map((b) => b.x + b.w));
+      const maxY = Math.max(...metrics.map((b) => b.y + b.h));
       const width = Math.max(maxX - minX, 1);
       const height = Math.max(maxY - minY, 1);
 
@@ -496,7 +553,7 @@ export function ArchitectureTour({
         return Math.min(0, Math.max(low, span / (2 * k) - centre));
       };
 
-      camera.style.transform = `scale(${k.toFixed(4)}) translate(${pan(stageW, m.w, cx).toFixed(2)}px, ${pan(stageH, m.h, cy).toFixed(2)}px)`;
+      camera.style.transform = `scale(${k.toFixed(4)}) translate(${pan(stageW, contentW, cx).toFixed(2)}px, ${pan(stageH, contentH, cy).toFixed(2)}px)`;
     });
   }, [mode, activeSide, activeIds, measures]);
 
