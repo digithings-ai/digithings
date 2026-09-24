@@ -274,11 +274,13 @@ jobs:
         with:
           enable-cache: true
       # execute_at_open.py imports supabase and dotenv lazily inside functions;
-      # both are already in digiquant's locked closure, so the same
-      # `--extra prices` sync the sibling jobs use covers this one too rather
-      # than installing two packages unpinned.
+      # both are already in digiquant's locked closure. Since #4013 the open
+      # marks read the R2 manifest (`r2_manifest_seal` → R2Backend → boto3),
+      # and boto3 lives only in the `research` extra — so this job syncs both
+      # extras (same pattern as pipeline-market-data-refresh.yml) rather than
+      # installing packages unpinned.
       - name: Install from lockfile
-        run: uv sync --frozen --package digiquant --extra prices
+        run: uv sync --frozen --package digiquant --extra prices --extra research
       - name: execute_at_open.py (prior-trading-day rebalance)
         # `#2589` cutover: `ensure_legacy_opening_snapshot` auto-seeds open lots from the
         # prior `positions` book (one labeled `legacy_opening_snapshot` chain) when lots are
