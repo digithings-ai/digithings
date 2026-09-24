@@ -27,19 +27,23 @@ const LEDE = "m-0 max-w-[var(--measure-prose)] text-[0.9rem] leading-[1.7] text-
 function Tour() {
   return (
     <section className="whyx__block" aria-labelledby="whyx-tour">
-      <h2 className={HEADLINE} id="whyx-tour">
-        Rent the whole stack, or own every layer.
-      </h2>
-      <p className={LEDE}>
-        Buy a managed platform and you rent one shape, priced for the average customer, on somebody
-        else&rsquo;s release schedule. Build on digithings and you run the same architecture as your
-        own — every layer a piece you can swap, on your hosts, with your keys, at your provider&rsquo;s
-        own rates. Scroll to watch one become the other: the stack you rent, then the stack you own.
-      </p>
-
       <div className="whyx__tours">
         <div className="whyx__tour">
           <ArchitectureTour
+            header={
+              <>
+                <h2 className={HEADLINE} id="whyx-tour">
+                  Rent the whole stack, or own every layer.
+                </h2>
+                <p className={LEDE}>
+                  Buy a managed platform and you rent one shape, priced for the average customer, on
+                  somebody else&rsquo;s release schedule. Build on digithings and you run the same
+                  architecture as your own — every layer a piece you can swap, on your hosts, with
+                  your keys, at your provider&rsquo;s own rates. Scroll to watch one become the
+                  other: the stack you rent, then the stack you own.
+                </p>
+              </>
+            }
             sides={[
               { spec: CONVENTIONAL_ARCH, steps: RENTED_TOUR_STEPS, tag: "rented", rail: "end" },
               { spec: DIGITHINGS_ARCH, steps: OWNED_TOUR_STEPS, tag: "owned" },
