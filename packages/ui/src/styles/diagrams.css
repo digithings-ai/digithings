@@ -220,7 +220,7 @@
   grid-template-rows: auto minmax(0, 1fr);
   gap: 1.8rem;
   min-width: 0;
-  transition: transform 0.8s cubic-bezier(0.22, 1, 0.36, 1);
+  transition: transform 1.25s cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 /* Each rail's progress bar reads that side's own walk, not the whole walk. */
@@ -243,7 +243,7 @@
 .arch-tour__camera {
   position: relative;
   transform-origin: 0 0;
-  transition: transform 0.7s cubic-bezier(0.22, 1, 0.36, 1);
+  transition: transform 1.15s cubic-bezier(0.22, 1, 0.36, 1);
   will-change: transform;
 }
 
@@ -273,10 +273,10 @@
   background: color-mix(in srgb, var(--accent) 4%, transparent);
   box-shadow: 0 0 0 9999px color-mix(in srgb, var(--bg) 22%, transparent);
   transition:
-    left 0.45s var(--ease),
-    top 0.45s var(--ease),
-    width 0.45s var(--ease),
-    height 0.45s var(--ease);
+    left 0.9s cubic-bezier(0.22, 1, 0.36, 1),
+    top 0.9s cubic-bezier(0.22, 1, 0.36, 1),
+    width 0.9s cubic-bezier(0.22, 1, 0.36, 1),
+    height 0.9s cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 /* The glow itself breathes on its own layer so only opacity is animated — an
@@ -356,6 +356,10 @@
   align-content: start;
   gap: 0.9rem;
   min-width: 0;
+  /* The rail owns the side it draws its rule on: the step column is text-start
+   * by default, and a right-side rail flips both the rule and the alignment
+   * (see [data-rail="end"]). */
+  --rail-rule: start;
 }
 
 .arch-tour__rail::before {
@@ -370,7 +374,7 @@
    * the global value filled only its share and on the owned rail it was already
    * full before that side began. Each side sets --arch-r<si> for its own rail. */
   transform: scaleY(var(--arch-rail-p, 0));
-  transition: transform 0.15s linear;
+  transition: transform 0.35s linear;
 }
 
 .arch-tour__step {
@@ -380,13 +384,42 @@
   padding-inline-start: 0.9rem;
   opacity: 0.42;
   transition:
-    opacity 0.3s var(--ease),
-    border-color 0.3s var(--ease);
+    opacity 0.6s var(--ease),
+    border-color 0.6s var(--ease);
 }
 
 .arch-tour__step.on {
   opacity: 1;
   border-inline-start-color: var(--accent);
+}
+
+/* Right-side rail: the vertical progress rule moves to the rail's right edge
+ * and the step text aligns to it. Set per side through `rail="end"`, so the
+ * rented column can sit right while the owned one keeps the left. */
+.arch-tour__side[data-rail="end"] .arch-tour__rail {
+  --rail-rule: end;
+}
+
+.arch-tour__side[data-rail="end"] .arch-tour__rail::before {
+  inset-inline-start: auto;
+  inset-inline-end: 0;
+  transform-origin: 100% 0;
+}
+
+.arch-tour__side[data-rail="end"] .arch-tour__step {
+  border-inline-start: 0;
+  border-inline-end: 1px solid var(--hair);
+  padding-inline-start: 0;
+  padding-inline-end: 0.9rem;
+  text-align: end;
+}
+
+.arch-tour__side[data-rail="end"] .arch-tour__step.on {
+  border-inline-end-color: var(--accent);
+}
+
+.arch-tour__side[data-rail="end"] > .arch-tour__side-tag {
+  text-align: end;
 }
 
 .arch-tour__index {
@@ -459,6 +492,9 @@
 
   .arch-tour:not([data-variant="static"]) .arch-tour__side--entering > .arch-tour__side-tag {
     grid-column: 1;
+    /* The owned column sits left, so its tag sits top-LEFT with it. */
+    justify-self: start;
+    text-align: start;
   }
 
   /* Both runtime children are pinned to row 2: the tag owns row 1, and the
