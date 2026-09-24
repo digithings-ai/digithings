@@ -437,11 +437,21 @@ def search_continuous_curve(
 # the sell-rate ceiling well past that, to let the optimizer actually explore
 # selling the position down toward empty at extreme risk if that's what
 # improves risk_adjusted_return.
+# 2026-09-24 recalibration: widened on the sell side only (buy side
+# untouched) so the search can reach more aggressive medium-dip selling --
+# lower sell_knee_risk (starts selling earlier, before a dip becomes a large
+# drawdown), lower sell_curvature (front-loaded: rate ramps up right after
+# the knee instead of staying near-zero until close to risk=100 -- see
+# SdcaCurveShape.rate_at's t**curvature), and a higher sell_max_rate ceiling.
+# Safe to widen unconditionally: curve_optimize_feasibility.py's new
+# MAX_DRAWDOWN_CAP_PCT gate rejects any shape that doesn't actually reduce
+# drawdown, so a wider search space can only find more candidates, never
+# accept a worse one it wouldn't have accepted before.
 WIDE_KNEE_SEARCH_BOUNDS: dict[str, tuple[float, float]] = {
     "buy_max_rate": (5.0, 40.0),
     "buy_knee_risk": (20.0, 48.0),
-    "sell_knee_risk": (52.0, 80.0),
-    "sell_max_rate": (5.0, 95.0),
+    "sell_knee_risk": (40.0, 80.0),
+    "sell_max_rate": (5.0, 100.0),
     "buy_curvature": (1.0, 6.0),
     "sell_curvature": (1.0, 6.0),
 }
@@ -449,10 +459,10 @@ WIDE_KNEE_SEARCH_BOUNDS: dict[str, tuple[float, float]] = {
 WIDE_KNEE_COARSE_GRID: dict[str, tuple[float, ...]] = {
     "buy_max_rate": (15.0, 25.0, 35.0),
     "buy_knee_risk": (30.0, 35.0, 40.0, 45.0),
-    "sell_knee_risk": (55.0, 60.0, 65.0, 70.0),
-    "sell_max_rate": (15.0, 30.0, 50.0, 70.0, 90.0),
+    "sell_knee_risk": (45.0, 50.0, 55.0, 60.0, 65.0, 70.0),
+    "sell_max_rate": (15.0, 30.0, 50.0, 70.0, 90.0, 100.0),
     "buy_curvature": (1.5, 2.5, 4.0),
-    "sell_curvature": (1.5, 2.5, 4.0),
+    "sell_curvature": (1.0, 1.5, 2.5, 4.0),
 }
 
 

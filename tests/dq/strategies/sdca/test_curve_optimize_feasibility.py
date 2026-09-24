@@ -18,7 +18,10 @@ from digiquant.strategies.sdca.curve_optimize_feasibility import (
     CAPITAL_DEPLOYED_FLOOR_PCT,
     CAPITAL_DEPLOYED_UPPER_PCT,
     INFEASIBLE_SCORE,
+    MAX_DRAWDOWN_CAP_PCT,
+    MAX_DRAWDOWN_COMFORT_PCT,
     _capital_deployed_penalty,
+    _drawdown_penalty,
     score_shape_on_index_feasibility_aware,
     search_wide_knee_curve_feasibility_aware,
 )
@@ -85,6 +88,46 @@ def _dead_zone(n: int = 120) -> tuple[pl.Series, pl.Series, pl.Series]:
     return dates, prices, risk
 
 
+def _dip_cycle(
+    dip_frac: float, n_pre: int = 40, n_dip: int = 20, n_flat: int = 20, n_rich: int = 40
+) -> tuple[pl.Series, pl.Series, pl.Series]:
+    """Mild pre-decline, then a dip of ``dip_frac`` off a $90 base, then a rip.
+
+    Calibrated (see the 2026-09-24 recalibration's drawdown-gate diagnostic
+    sweep) so that ``dip_frac`` maps monotonically onto
+    ``base.max_drawdown_pct`` across the comfort/cap band while
+    ``capital_deployed_pct`` stays pinned around 43% -- comfortably above
+    ``CAPITAL_DEPLOYED_COMFORT_PCT`` (15%) throughout, isolating the
+    drawdown gate from the capital-deployed gate. Approximate mapping with
+    the default ``_shape(buy_max_rate=15.0)``: 0.50 -> ~24.4% (below
+    comfort), 0.55 -> ~26.5% (soft zone), 0.65 -> ~30.7% (hard reject).
+    """
+    prices: list[float] = []
+    risks: list[float] = []
+    for i in range(n_pre):
+        t = i / max(n_pre - 1, 1)
+        prices.append(100.0 - 10.0 * t)
+        risks.append(20.0 + 5.0 * t)
+    p0 = 90.0
+    for i in range(n_dip):
+        t = i / max(n_dip - 1, 1)
+        prices.append(p0 - (p0 * dip_frac) * t)
+        risks.append(25.0 + 10.0 * t)
+    pbot = p0 * (1 - dip_frac)
+    for i in range(n_flat):
+        t = i / max(n_flat - 1, 1)
+        prices.append(pbot + 3.0 * t)
+        risks.append(35.0 + 10.0 * t)
+    for i in range(n_rich):
+        t = i / max(n_rich - 1, 1)
+        prices.append(pbot + 3.0 + 70.0 * t)
+        risks.append(45.0 + 40.0 * t)
+    # Rich window lands in 2025, same require_2025_sells rationale as _v_cycle.
+    shifted = [date(2022, 1, 1) + timedelta(days=i) for i in range(n_pre + n_dip + n_flat)]
+    shifted.extend(date(2025, 6, 1) + timedelta(days=i) for i in range(n_rich))
+    return pl.Series("date", shifted, dtype=pl.Date), pl.Series(prices), pl.Series(risks)
+
+
 class TestCapitalDeployedPenalty:
     """Direct tests of the ``(floor, comfort, upper)`` band, edge to edge."""
 
@@ -123,6 +166,41 @@ class TestCapitalDeployedPenalty:
         assert reject_b is False
         assert at_comfort == pytest.approx(5.0)
         assert well_above == pytest.approx(5.0)
+
+
+class TestDrawdownPenalty:
+    """Direct tests of the ``(comfort, cap)`` band, edge to edge."""
+
+    def test_below_comfort_is_unpenalized(self) -> None:
+        score, reject = _drawdown_penalty(MAX_DRAWDOWN_COMFORT_PCT - 5.0, 5.0)
+        assert reject is False
+        assert score == pytest.approx(5.0)
+
+    def test_at_comfort_exactly_is_unpenalized(self) -> None:
+        score, reject = _drawdown_penalty(MAX_DRAWDOWN_COMFORT_PCT, 5.0)
+        assert reject is False
+        assert score == pytest.approx(5.0)
+
+    def test_just_above_comfort_is_penalized_but_feasible(self) -> None:
+        score, reject = _drawdown_penalty(MAX_DRAWDOWN_COMFORT_PCT + 0.5, 5.0)
+        assert reject is False
+        assert score < 5.0
+
+    def test_soft_zone_penalty_grows_toward_cap_line(self) -> None:
+        near_comfort_score, _ = _drawdown_penalty(MAX_DRAWDOWN_COMFORT_PCT + 0.5, 5.0)
+        near_cap_score, _ = _drawdown_penalty(MAX_DRAWDOWN_CAP_PCT - 0.5, 5.0)
+        assert near_cap_score < near_comfort_score < 5.0
+
+    def test_at_cap_exactly_is_feasible_but_fully_penalized(self) -> None:
+        score, reject = _drawdown_penalty(MAX_DRAWDOWN_CAP_PCT, 5.0)
+        assert reject is False
+        # Full soft-zone deduction (overage_frac == 1.0) but not yet rejected.
+        assert score == pytest.approx(0.0)
+
+    def test_above_cap_hard_rejects(self) -> None:
+        score, reject = _drawdown_penalty(MAX_DRAWDOWN_CAP_PCT + 0.01, 5.0)
+        assert reject is True
+        assert score == INFEASIBLE_SCORE
 
 
 class TestScoreShapeOnIndexFeasibilityAware:
@@ -176,6 +254,55 @@ class TestScoreShapeOnIndexFeasibilityAware:
         base = score_shape_on_index(dates, prices, risk, shape, 1000.0)
         assert not hasattr(base, "capital_deployed_pct")
         assert not hasattr(base, "feasibility_adjusted_score")
+
+    def test_below_drawdown_comfort_is_unpenalized_by_drawdown_gate(self) -> None:
+        dates, prices, risk = _dip_cycle(0.50)
+        shape = _shape(buy_max_rate=15.0)
+        aware = score_shape_on_index_feasibility_aware(dates, prices, risk, shape, 1000.0)
+
+        assert aware.base.max_drawdown_pct < MAX_DRAWDOWN_COMFORT_PCT, (
+            f"fixture drifted above the comfort line "
+            f"({aware.base.max_drawdown_pct}); this test needs drawdown "
+            "comfortably below MAX_DRAWDOWN_COMFORT_PCT to be meaningful"
+        )
+        assert aware.capital_deployed_reject is False
+        assert aware.drawdown_reject is False
+        assert aware.feasibility_adjusted_score == pytest.approx(aware.risk_adjusted_return)
+
+    def test_soft_zone_drawdown_penalty_isolated_from_capital_deployed_gate(self) -> None:
+        dates, prices, risk = _dip_cycle(0.55)
+        shape = _shape(buy_max_rate=15.0)
+        aware = score_shape_on_index_feasibility_aware(dates, prices, risk, shape, 1000.0)
+
+        assert MAX_DRAWDOWN_COMFORT_PCT < aware.base.max_drawdown_pct < MAX_DRAWDOWN_CAP_PCT, (
+            f"fixture drifted out of the soft zone "
+            f"({aware.base.max_drawdown_pct}); this test needs drawdown "
+            "strictly between comfort and cap to be meaningful"
+        )
+        assert aware.capital_deployed_reject is False
+        assert aware.drawdown_reject is False
+        expected_score, expected_reject = _drawdown_penalty(
+            aware.base.max_drawdown_pct, aware.risk_adjusted_return
+        )
+        assert expected_reject is False
+        assert aware.feasibility_adjusted_score == pytest.approx(expected_score)
+        assert aware.feasibility_adjusted_score < aware.risk_adjusted_return
+        assert aware.feasibility_adjusted_score > INFEASIBLE_SCORE
+
+    def test_hard_reject_above_drawdown_cap_isolated_from_capital_deployed_gate(self) -> None:
+        dates, prices, risk = _dip_cycle(0.65)
+        shape = _shape(buy_max_rate=15.0)
+        aware = score_shape_on_index_feasibility_aware(dates, prices, risk, shape, 1000.0)
+
+        assert aware.base.max_drawdown_pct > MAX_DRAWDOWN_CAP_PCT, (
+            f"fixture drifted below the cap line ({aware.base.max_drawdown_pct}); "
+            "this test needs drawdown comfortably above MAX_DRAWDOWN_CAP_PCT "
+            "to be meaningful"
+        )
+        assert aware.base.feasible is True
+        assert aware.capital_deployed_reject is False
+        assert aware.drawdown_reject is True
+        assert aware.feasibility_adjusted_score == INFEASIBLE_SCORE
 
 
 class TestSearchWideKneeCurveFeasibilityAware:

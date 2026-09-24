@@ -88,14 +88,28 @@ INFEASIBLE_SCORE: float = -1_000_000.0
 # the comfort line.
 SOFT_ZONE_PENALTY_SCALE: float = 5.0
 
+# Mirrors the capital-deployed floor/comfort/cap pattern above, but for
+# ``max_drawdown_pct`` (2026-09-24 recalibration, round 8's realized -61.32%
+# OOS drawdown). Chris's target is "best possible risk-adjusted return, with
+# a drawdown around 30%, not exactly 30%" -- so 30.0 is a hard cap the
+# search itself refuses to cross (never trade this off against return past
+# that point), and 25.0 a comfort margin below it: same overfitting risk as
+# capital deployment -- an in-sample shape that only just clears the cap is
+# a good bet to land over it out-of-sample, so it is penalized, not treated
+# as equally good as one with headroom.
+MAX_DRAWDOWN_CAP_PCT: float = 30.0
+MAX_DRAWDOWN_COMFORT_PCT: float = 25.0
+
 
 class FeasibilityAwareCurveTrialScore(BaseModel):
-    """``score_shape_on_index``'s trial, plus a capital-deployment-aware score.
+    """``score_shape_on_index``'s trial, plus capital-deployment- and
+    drawdown-aware scoring.
 
     ``risk_adjusted_return`` / ``capital_deployed_pct`` are the raw,
     unpenalized numbers (same definitions as ``CurveTrialScore`` /
-    ``SdcaTrialMetrics``). ``feasibility_adjusted_score`` is what a
-    feasibility-aware search should rank candidates on.
+    ``SdcaTrialMetrics``; ``base.max_drawdown_pct`` carries the drawdown
+    equivalent). ``feasibility_adjusted_score`` is what a feasibility-aware
+    search should rank candidates on.
     """
 
     model_config = ConfigDict(frozen=True, strict=True)
@@ -109,6 +123,11 @@ class FeasibilityAwareCurveTrialScore(BaseModel):
         "[CAPITAL_DEPLOYED_FLOOR_PCT, CAPITAL_DEPLOYED_UPPER_PCT] (the same "
         "band the walk-forward gate enforces OOS), or score_shape_on_index's "
         "own gates already rejected this shape."
+    )
+    drawdown_reject: bool = Field(
+        description="True when base.max_drawdown_pct exceeded "
+        "MAX_DRAWDOWN_CAP_PCT, or score_shape_on_index's own gates already "
+        "rejected this shape."
     )
     base: CurveTrialScore
 
@@ -127,6 +146,24 @@ def _capital_deployed_penalty(
             CAPITAL_DEPLOYED_COMFORT_PCT - CAPITAL_DEPLOYED_FLOOR_PCT
         )
         return risk_adjusted_return - SOFT_ZONE_PENALTY_SCALE * shortfall_frac, False
+    return risk_adjusted_return, False
+
+
+def _drawdown_penalty(max_drawdown_pct: float, risk_adjusted_return: float) -> tuple[float, bool]:
+    """Return ``(feasibility_adjusted_score, hard_reject)`` for one trial.
+
+    Same soft-then-hard shape as ``_capital_deployed_penalty``, just
+    inverted: here the trial is penalized for being *above* a threshold
+    (too much drawdown) instead of *below* one (too little capital
+    deployed).
+    """
+    if max_drawdown_pct > MAX_DRAWDOWN_CAP_PCT:
+        return INFEASIBLE_SCORE, True
+    if max_drawdown_pct > MAX_DRAWDOWN_COMFORT_PCT:
+        overage_frac = (max_drawdown_pct - MAX_DRAWDOWN_COMFORT_PCT) / (
+            MAX_DRAWDOWN_CAP_PCT - MAX_DRAWDOWN_COMFORT_PCT
+        )
+        return risk_adjusted_return - SOFT_ZONE_PENALTY_SCALE * overage_frac, False
     return risk_adjusted_return, False
 
 
@@ -154,18 +191,37 @@ def score_shape_on_index_feasibility_aware(
     if not base.feasible:
         # score_shape_on_index's own gates (no_sells, negative_cash,
         # long_only, ...) already win outright -- healthy capital deployment
-        # can't rescue an otherwise-infeasible shape.
-        feasibility_adjusted_score, hard_reject = INFEASIBLE_SCORE, True
+        # or drawdown can't rescue an otherwise-infeasible shape.
+        feasibility_adjusted_score = INFEASIBLE_SCORE
+        capital_deployed_reject = True
+        drawdown_reject = True
     else:
-        feasibility_adjusted_score, hard_reject = _capital_deployed_penalty(
+        capital_score, capital_deployed_reject = _capital_deployed_penalty(
             capital_deployed_pct, base.risk_adjusted_return
         )
+        drawdown_score, drawdown_reject = _drawdown_penalty(
+            base.max_drawdown_pct, base.risk_adjusted_return
+        )
+        if capital_deployed_reject or drawdown_reject:
+            feasibility_adjusted_score = INFEASIBLE_SCORE
+        else:
+            # Both penalties are independent soft-zone deductions from the
+            # same base.risk_adjusted_return -- combine by summing the two
+            # deductions rather than taking the worse (min) score, so a
+            # trial that is only-just-okay on both dimensions is penalized
+            # for both, not let off for whichever one looks less bad.
+            capital_penalty = base.risk_adjusted_return - capital_score
+            drawdown_penalty = base.risk_adjusted_return - drawdown_score
+            feasibility_adjusted_score = (
+                base.risk_adjusted_return - capital_penalty - drawdown_penalty
+            )
     return FeasibilityAwareCurveTrialScore(
         shape=shape,
         risk_adjusted_return=base.risk_adjusted_return,
         capital_deployed_pct=capital_deployed_pct,
         feasibility_adjusted_score=feasibility_adjusted_score,
-        capital_deployed_reject=hard_reject,
+        capital_deployed_reject=capital_deployed_reject,
+        drawdown_reject=drawdown_reject,
         base=base,
     )
 
@@ -182,6 +238,11 @@ class FeasibilityAwareCurveSearchResult(BaseModel):
         description="Trials with capital_deployed_reject=True, i.e. outside "
         "[CAPITAL_DEPLOYED_FLOOR_PCT, CAPITAL_DEPLOYED_UPPER_PCT] or already "
         "rejected by score_shape_on_index's own gates."
+    )
+    num_drawdown_rejected: int = Field(
+        description="Trials with drawdown_reject=True, i.e. "
+        "base.max_drawdown_pct > MAX_DRAWDOWN_CAP_PCT or already rejected by "
+        "score_shape_on_index's own gates."
     )
     notes: str
 
@@ -235,24 +296,30 @@ def search_wide_knee_curve_feasibility_aware(
     if not scored:
         raise ValueError("no valid curve trials to evaluate")
     best = max(scored, key=lambda s: s.feasibility_adjusted_score)
-    n_rejected = sum(1 for s in scored if s.capital_deployed_reject)
+    n_capital_rejected = sum(1 for s in scored if s.capital_deployed_reject)
+    n_drawdown_rejected = sum(1 for s in scored if s.drawdown_reject)
     notes = (
         "Objective=feasibility_adjusted_score (risk_adjusted_return, "
-        f"penalized below capital_deployed_pct={CAPITAL_DEPLOYED_COMFORT_PCT:.1f}%, "
-        f"hard-rejected outside [{CAPITAL_DEPLOYED_FLOOR_PCT:.1f}%, "
-        f"{CAPITAL_DEPLOYED_UPPER_PCT:.1f}%] or score_shape_on_index's own gates). "
+        f"penalized below capital_deployed_pct={CAPITAL_DEPLOYED_COMFORT_PCT:.1f}% "
+        f"and above max_drawdown_pct={MAX_DRAWDOWN_COMFORT_PCT:.1f}%, hard-rejected "
+        f"outside [{CAPITAL_DEPLOYED_FLOOR_PCT:.1f}%, {CAPITAL_DEPLOYED_UPPER_PCT:.1f}%] "
+        f"capital deployed, above {MAX_DRAWDOWN_CAP_PCT:.1f}% drawdown, or already "
+        "rejected by score_shape_on_index's own gates). "
         f"best feasibility_adjusted_score={best.feasibility_adjusted_score:.4f} "
         f"(risk_adjusted_return={best.risk_adjusted_return:.4f}, "
-        f"capital_deployed_pct={best.capital_deployed_pct:.2f}%) "
+        f"capital_deployed_pct={best.capital_deployed_pct:.2f}%, "
+        f"max_drawdown_pct={best.base.max_drawdown_pct:.2f}%) "
         f"shape={params_from_shape(best.shape)}. "
-        f"{n_rejected}/{len(scored)} trials capital-deployed-rejected. "
+        f"{n_capital_rejected}/{len(scored)} trials capital-deployed-rejected, "
+        f"{n_drawdown_rejected}/{len(scored)} trials drawdown-rejected. "
         "In-sample only -- still subject to the walk-forward OOS gate."
     )
     return FeasibilityAwareCurveSearchResult(
         best=best,
         baseline=baseline,
         num_evaluations=len(scored),
-        num_capital_deployed_rejected=n_rejected,
+        num_capital_deployed_rejected=n_capital_rejected,
+        num_drawdown_rejected=n_drawdown_rejected,
         notes=notes,
     )
 
@@ -262,6 +329,8 @@ __all__ = [
     "CAPITAL_DEPLOYED_FLOOR_PCT",
     "CAPITAL_DEPLOYED_UPPER_PCT",
     "INFEASIBLE_SCORE",
+    "MAX_DRAWDOWN_CAP_PCT",
+    "MAX_DRAWDOWN_COMFORT_PCT",
     "SOFT_ZONE_PENALTY_SCALE",
     "FeasibilityAwareCurveSearchResult",
     "FeasibilityAwareCurveTrialScore",
