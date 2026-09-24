@@ -795,6 +795,10 @@ def test_wire_shadow_prompt_byte_delta(monkeypatch: pytest.MonkeyPatch) -> None:
     diet_size = _size()
     monkeypatch.setenv("DIGIQUANT_CONTEXT_SHADOW_IN_PROMPT", "1")
     legacy_size = _size()
+    # Exact sizes are pinned so the numbers quoted in
+    # docs/research/token-budget.md (#4609) stay reproducible from this fixture.
+    assert diet_size == 1_219
+    assert legacy_size == 2_785
     assert legacy_size > diet_size
 
 

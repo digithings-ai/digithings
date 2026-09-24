@@ -224,7 +224,8 @@ third) time per call:
   full serialized capsule/manifest bodies (policy caps 24k / 32k / 48k chars) on
   **every** analyst (H5) / deliberation (H6) / direction (H7) call. Nothing read
   them: the `capsule` / `manifest` / `direction_decision_context` objects already
-  ride on `RoleContextWireResult`, and callers keep only `.phase_inputs`. #4609
+  ride on `RoleContextWireResult`, and callers consume `.phase_inputs` plus the
+  typed `capsule` / `manifest` fields. #4609
   stops writing them. Escape hatch:
   `DIGIQUANT_CONTEXT_SHADOW_IN_PROMPT=1` restores the old in-prompt blobs.
 - **Duplicate `prior_digests`.** The digest subsections + stitcher each carried
@@ -234,16 +235,17 @@ third) time per call:
   #4609 keeps the cached copy and drops the two uncached copies.
 
 **Measured effect** (`tests/dq/research/test_context_diet.py`,
-`tests/dq/dashboard/test_context_compiler.py`). With a fixture whose two prior
-briefings are ~24k chars each, the stitcher's uncached `phase_inputs` falls
-**67,122 → 18,952 bytes (−48,170, −72%)**; the shadow-blob drop removes the
-serialized capsule + manifest from the uncached block (fixture H5
-**2,415 → 507 bytes**, H6 **2,821 → 1,255 bytes**; the fixture capsule is ~1.3k
-bytes, and the drop scales with the real capsule up to the policy cap). The
-byte drop is real, not already-compacted: `compact_messages` tier-1 truncates
-**only tool results** ("Non-tool messages are never truncated by tier 1"), and
-tier-2 only evicts whole messages past the 80k-token threshold with
-`keep_recent=10` — a digest call is a single user turn, so neither fires.
+`tests/dq/dashboard/test_context_compiler.py`, both pin the exact sizes below).
+The digest stitcher's uncached `phase_inputs` falls **18,643 → 1,587 bytes
+(−17,056, −91%)**; the shadow-blob drop removes the serialized capsule +
+manifest from the deliberation (H6) uncached block (**2,785 → 1,219 bytes,
+−1,566**). The drop scales with the real capsule up to the policy cap (the
+fixture capsule is ~1.3k bytes; the digest fixture's two prior briefings
+serialize to ~17k bytes). The byte drop is real, not already-compacted:
+`compact_messages` tier-1 truncates **only tool results** ("Non-tool messages
+are never truncated by tier 1"), and tier-2 only evicts whole messages past the
+80k-token threshold with `keep_recent=10` — a digest call is a single user turn,
+so neither fires.
 
 ---
 

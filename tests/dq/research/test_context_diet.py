@@ -549,6 +549,10 @@ def test_digest_phase_inputs_drops_prior_digest_bytes() -> None:
 
     removed = _size({"prior_digests": shared["prior_context"]["prior_digests"]})
     assert removed > 1_000, "fixture prior_digests too small to prove the diet"
+    # Exact sizes are pinned so the numbers quoted in
+    # docs/research/token-budget.md (#4609) stay reproducible from this fixture.
+    assert removed == 17_056
+    assert _size(stitch_inputs) == 1_587
     # The pre-#4609 phase_inputs was this dict plus the duplicate copy.
     with_duplicate = {**stitch_inputs, "prior_digests": shared["prior_context"]["prior_digests"]}
     assert _size(with_duplicate) - _size(stitch_inputs) == removed
