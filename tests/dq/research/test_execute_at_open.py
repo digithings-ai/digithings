@@ -641,7 +641,7 @@ class _Ledger:
     ) -> "_Ledger":
         """A pending order head plus the approved→requested→decision chain above it.
 
-        ``action`` is H7's vocabulary (`add`/`trim`/`exit`), which is deliberately *not*
+        ``action`` is direction's vocabulary (`add`/`trim`/`exit`), which is deliberately *not*
         the event name: the executor derives direction from it, and the projection derives
         the event from the resulting position. ``mark`` absent means no `price_history.open`
         row, which is how a `data_unavailable` rejection is set up. ``weight`` absent means
@@ -1008,7 +1008,7 @@ class TestBuildEventsFromPaperFills:
     def test_prev_weight_is_the_precommit_book_when_run_date_already_has_targets(
         self,
     ) -> None:
-        """Production shape after H9 books targets on ``run_date`` before the open.
+        """Production shape after commit books targets on ``run_date`` before the open.
 
         ``_prior_book_date(execution_d)`` finds that already-committed new book, so
         ADD/TRIM land at 0.0000pp (or get collapsed to HOLD). The prior used to size
@@ -1071,7 +1071,7 @@ class TestBuildEventsFromPaperFills:
     def test_a_trim_that_closes_the_position_is_an_exit(self) -> None:
         """The #1743 class of mislabelling, from the other direction.
 
-        H7 said `trim`; the sell consumed every share on the record. Naming the event from
+        direction said `trim`; the sell consumed every share on the record. Naming the event from
         the action would write TRIM and leave a phantom position in Activity forever —
         which is how the table accumulated 31 OPENs and zero EXITs.
         """

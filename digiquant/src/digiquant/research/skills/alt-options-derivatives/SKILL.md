@@ -25,9 +25,7 @@ description: Analyzes options market structure, volatility term structure, gamma
 Options markets reveal institutional hedging, speculative bets, and gamma dynamics that can force dealer hedging flows and cause accelerated price moves. This skill reads the options market as a forward-looking intelligence source. Run before segment analysis.
 
 ## Inputs
-- `docs/ops/data-sources.md` (options/vol sources)
-
-> **Web fetch**: use `defuddle parse <url> --md` instead of WebFetch for any options data page, analysis article, or vol commentary URL. Not for API endpoints, `.json`, or `.md` files.
+- `docs/ops/data-sources.md` — repository provenance for a maintainer (options/vol sources); NOT retrievable by a tool.
 
 ---
 

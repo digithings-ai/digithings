@@ -25,7 +25,7 @@ export const Brand = () => (
 
 export const DQ_NAV_PRIMARY: NavLink[] = [
   { label: "Pipeline", href: "/#pipeline" },
-  { label: "Desk", href: "/#live-portfolio" },
+  { label: "Desk", href: "/#desk" },
   { label: "Strategies", href: "/#strategies" },
   { label: "Pricing", href: "/#pricing" },
   { label: "Changelog", href: "/changelog" },
@@ -34,7 +34,7 @@ export const DQ_NAV_PRIMARY: NavLink[] = [
 
 export const DQ_FOOTER: NavLink[] = [
   { label: "Pipeline", href: "/#pipeline" },
-  { label: "Desk", href: "/#live-portfolio" },
+  { label: "Desk", href: "/#desk" },
   { label: "Strategies", href: "/#strategies" },
   { label: "Pricing", href: "/#pricing" },
   { label: "Changelog", href: "/changelog" },

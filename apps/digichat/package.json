@@ -1,6 +1,6 @@
 {
   "name": "digichat",
-  "version": "2.3.1",
+  "version": "2.3.2",
   "private": true,
   "scripts": {
     "dev": "next dev --hostname 127.0.0.1",
@@ -8,14 +8,18 @@
     "start": "node scripts/trusted-proxy-server.mjs",
     "lint": "eslint",
     "test": "vitest run",
+    "config:check": "tsx scripts/check-config.ts",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
     "db:seed": "tsx scripts/seed.ts",
     "db:create-key": "tsx scripts/create-api-key.ts"
   },
   "dependencies": {
-    "@ai-sdk/openai": "^4.0.59",
-    "@ai-sdk/react": "^4.0.96",
+    "@ai-sdk/anthropic": "^4.0.60",
+    "@ai-sdk/google-vertex": "^5.0.90",
+    "@ai-sdk/openai": "^4.0.72",
+    "@ai-sdk/openai-compatible": "^3.0.53",
+    "@ai-sdk/react": "^4.0.114",
     "@assistant-ui/ai-sdk": "^0.0.4",
     "@assistant-ui/react": "^0.15.18",
     "@assistant-ui/react-lexical": "^0.2.12",
@@ -26,7 +30,7 @@
     "@digithings/design": "*",
     "@digithings/digichat-ui": "*",
     "@digithings/ui": "*",
-    "ai": "^7.0.93",
+    "ai": "^7.0.111",
     "bcryptjs": "^3.0.3",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",

@@ -16,10 +16,8 @@ description: Analyzes CFTC Commitments of Traders (COT) data and systematic/CTA 
 CTAs (Commodity Trading Advisors) and systematic funds move markets mechanically when trends break. Their crowding creates explosive reversals. This skill quantifies their current positioning so we can anticipate forced de-risking or momentum chasing. Run before macro and segment analysis.
 
 ## Inputs
-- `docs/ops/data-sources.md` (CFTC, futures positioning sources)
+- `docs/ops/data-sources.md` — repository provenance for a maintainer (CFTC, futures positioning sources); NOT retrievable by a tool.
 - Previous session's CTA output for week-over-week comparison
-
-> **Web fetch**: use `defuddle parse <url> --md` instead of WebFetch for any CFTC page, COT report URL, or news article. Not for API endpoints, `.json`, or `.md` files.
 
 ---
 

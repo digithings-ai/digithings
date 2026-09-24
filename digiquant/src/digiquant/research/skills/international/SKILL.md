@@ -14,13 +14,13 @@ description: Deep-dive analysis of international and emerging markets. Covers De
   computed indicators (sma/rsi/macd/adx/atr/zscore), newest first — use those
   values; **never invent a number** — every quantitative claim must cite a value you fetched.
   If a call returns no rows for a symbol, say so and lower conviction. Market history is not
-  readable through `query_data` (#3780) — never use it to fetch prices or technicals.
+  readable through `query_research` (#3780) — never use it to fetch prices or technicals.
 - Cover the regional ETFs in scope (e.g. EFA/EEM/FXI/EWJ/VGK).
 - A pre-fetched **`web_grounding`** block (when present) covers non-US markets and stale non-US M2 / policy data; cite its URLs.
 
 ## Inputs
-- `config/watchlist.md` (international ETFs: EEM, MCHI, EWJ, EWG, EFA, EWZ, EWT, EMB)
-- `config/preferences.md`
+- `config/watchlist.md` — repository provenance for a maintainer (international ETFs: EEM, MCHI, EWJ, EWG, EFA, EWZ, EWT, EMB); NOT retrievable by a tool.
+- `config/preferences.md` — repository provenance for a maintainer; NOT retrievable by a tool.
 - Macro regime output (regime context for risk appetite)
 - Forex output (DXY and EM FX context)
 
@@ -28,16 +28,13 @@ description: Deep-dive analysis of international and emerging markets. Covers De
 
 ## Data Layer
 
-For structured country-level macro data use `mcp_world-bank_get_indicator_for_country` with:
-- `NY.GDP.MKTP.KD.ZG` — GDP growth rate (annual %)
-- `FP.CPI.TOTL.ZG` — CPI inflation (annual %)
-- `GC.DOD.TOTL.GD.ZS` — central government debt as % of GDP
-- `NE.TRD.GNFS.ZS` — trade (% of GDP)
-- `BN.CAB.XOKA.GD.ZS` — current account balance (% of GDP)
+There is no MCP client and no World-Bank indicator tool in this loop. Ground country
+macro on the `web_grounding` block (its allowlist covers reuters.com, apnews.com,
+ft.com, cnbc.com, imf.org), the FRED macro series via `get_macro_series`, and the
+regional ETF technicals via `get_price_technicals`. If a figure such as GDP growth or
+CPI is not in any of those, state that it is unavailable rather than hunting for a tool.
 
 Useful country codes: `CN` (China), `JP` (Japan), `DE` (Germany), `GB` (UK), `BR` (Brazil), `IN` (India), `KR` (South Korea), `MX` (Mexico), `TR` (Turkey).
-
-> **Web fetch**: use `defuddle parse <url> --md` instead of WebFetch for any regional news article, central bank statement, PBOC/BOJ/ECB policy page, or geopolitical report URL. Not for API endpoints, `.json`, or `.md` files.
 
 ---
 

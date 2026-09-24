@@ -1,4 +1,4 @@
-"""Shared helpers for H5/H6 portfolio-track portfolio nodes."""
+"""Shared helpers for analyst/deliberation portfolio-track portfolio nodes."""
 
 from __future__ import annotations
 
@@ -7,6 +7,7 @@ import logging
 from datetime import UTC, date, datetime
 from typing import (  # scored-lint suppression: heterogeneous graph / dict shapes
     Any,
+    Mapping,
     TypeVar,
 )
 
@@ -17,6 +18,7 @@ from pydantic import BaseModel, ValidationError
 from digiquant.dashboard.edit_mode import (
     DocumentPatch,
     EditMode,
+    PatchOp,
     PriorPublished,
     artifact_document_key,
     merge_document_patch,
@@ -25,20 +27,20 @@ from digiquant.dashboard.edit_mode import (
 from digiquant.dashboard.edit_mode.merge import MergeError, coerce_document_patch
 from digiquant.dashboard.envcompat import ATTEMPT, env_lookup
 from digiquant.dashboard.research_retrieval.blinding import RetrievalPhase
-from digiquant.dashboard.research_retrieval.context_wiring import wire_h5_phase_inputs
+from digiquant.dashboard.research_retrieval.context_wiring import wire_analyst_phase_inputs
 from digiquant.dashboard.research_retrieval.evidence_bundle import (
-    build_h5_evidence_bundle,
+    build_analyst_evidence_bundle,
     cite_evidence_bundle_on_forecast,
     facts_from_phase_inputs,
-    publish_h5_evidence_bundle,
-    resolve_h5_state_version_id,
+    publish_analyst_evidence_bundle,
+    resolve_analyst_state_version_id,
 )
 from digiquant.dashboard.research_retrieval.models import TickerEvidenceBundle, TypedProvenance
 from digiquant.dashboard.research_retrieval.store import EvidenceBundleStore, ResearchStateStore
 from digiquant.dashboard.temporal import require_knowledge_cutoff_at
 from digiquant.data.gloomberb.agent_tools import PM_TOOLS
 from digiquant.portfolio.candidates import holdings_from_prior_book
-from digiquant.portfolio.models.analyst import AnalystPayload
+from digiquant.portfolio.models.analyst import AnalystPayload, repair_legacy_evidence_counts
 from digiquant.portfolio.models.forecast import (
     ForecastAssessment,
     ForecastTerms,
@@ -49,7 +51,7 @@ from digiquant.portfolio.models.forecast import (
 )
 from digiquant.portfolio.research_attention import (
     apply_analyst_metric_patch,
-    research_attention_h5_enforce_path,
+    research_attention_analyst_enforce_path,
 )
 from digiquant.portfolio.skills import load_skill_edit, load_skill_full
 from digiquant.portfolio.state import PortfolioState
@@ -70,6 +72,9 @@ T = TypeVar("T", bound=BaseModel)
 _FORECAST_WHOLE_PATHS = frozenset({"/body/forecast", "/forecast"})
 _FORECAST_ASSESSMENT_PATHS = frozenset({"/body/forecast_assessment", "/forecast_assessment"})
 _FORECAST_NESTED_PREFIXES = ("/body/forecast/", "/forecast/")
+_STANCE_PATHS = frozenset({"/body/stance", "/stance"})
+_EVIDENCE_PATHS = frozenset({"/body/evidence", "/evidence"})
+_BODY_PATHS = frozenset({"/body", ""})
 
 
 def _resolve_linked_thesis(
@@ -261,6 +266,48 @@ def reject_partial_forecast_edits(patch: DocumentPatch) -> None:
             raise MergeError("partial nested forecast edit rejected; replace entire /body/forecast")
 
 
+def _carries_fresh_evidence(ops: list[PatchOp]) -> bool:
+    """True when the patch re-itemizes the evidence block.
+
+    Only a ``set`` with a non-null value re-itemizes: a ``remove``, an ``append``, or a
+    null ``set`` all leave ``AnalystPayload`` reading the prior call's counts.
+    """
+    for op in ops:
+        if op.op != "set":
+            continue
+        if op.path in _EVIDENCE_PATHS and op.value is not None:
+            return True
+        if op.path in _BODY_PATHS and isinstance(op.value, Mapping) and op.value.get("evidence"):
+            return True
+    return False
+
+
+def reject_stance_edit_without_evidence(
+    patch: DocumentPatch, prior_body: Mapping[str, Any] | None
+) -> None:
+    """A stance change must carry a re-itemized evidence block (#4583).
+
+    ``AnalystPayload`` re-derives ``conviction_score`` from ``evidence`` whenever the
+    block is present, and the counts are itemized against the *prior* call. Editing
+    ``stance`` alone would therefore re-derive the score from counts about a different
+    call and publish a stance/score pair the derivation cannot explain. Legacy priors
+    without an evidence block keep their stored score, so they are unaffected.
+    """
+    if not isinstance(prior_body, Mapping) or not prior_body.get("evidence"):
+        return
+    if patch.status == "skipped":
+        return
+    touches_stance = any(op.path in _STANCE_PATHS for op in patch.ops) or any(
+        op.path in _BODY_PATHS for op in patch.ops
+    )
+    if not touches_stance or _carries_fresh_evidence(patch.ops):
+        return
+    raise MergeError(
+        "stance edit without a re-itemized /body/evidence rejected; "
+        "conviction is derived from the counts"
+    )
+
+
 def materialize_forecast_assessment(
     *,
     ticker: str,
@@ -294,11 +341,11 @@ def materialize_forecast_assessment(
     )
 
 
-def _h5_price_anchor(_state: PortfolioState, _ticker: str) -> PriceAnchor:
-    """H5 state carries pct deltas, not absolute marks — typed unavailability."""
+def _analyst_price_anchor(_state: PortfolioState, _ticker: str) -> PriceAnchor:
+    """analyst state carries pct deltas, not absolute marks — typed unavailability."""
     return PriceAnchor(
         status=PriceAnchorStatus.UNAVAILABLE,
-        unavailable_reason="mark_price_not_available_in_h5_state",
+        unavailable_reason="mark_price_not_available_in_analyst_state",
     )
 
 
@@ -367,7 +414,7 @@ def _attach_forecast_lineage(
     Full mode without ``ForecastTerms`` retains analyst prose (shadow rollout) and
     records ``forecast_unavailable`` rather than dropping the ticker.
 
-    When materializing a **new** assessment, cite the H5 base bundle / evidence
+    When materializing a **new** assessment, cite the analyst base bundle / evidence
     IDs on ``ForecastTerms.evidence_ids`` (WP11.2). Skip / identical-content
     carries preserve prior identity without re-citing.
     """
@@ -389,7 +436,7 @@ def _attach_forecast_lineage(
         else:
             if mode == "full":
                 logger.warning(
-                    "H5 full analysis for %s missing ForecastTerms; "
+                    "analyst full analysis for %s missing ForecastTerms; "
                     "forecast_unavailable (analyst payload retained)",
                     ticker,
                 )
@@ -397,7 +444,7 @@ def _attach_forecast_lineage(
                     PhaseError(
                         phase="phase_portfolio",
                         node=phase_slug,
-                        message="forecast_unavailable: full H5 missing ForecastTerms",
+                        message="forecast_unavailable: full analyst missing ForecastTerms",
                     )
                 )
             return payload
@@ -425,14 +472,14 @@ def _attach_forecast_lineage(
         ),
         prompt_version=prompt_version,
         artifact_version=artifact_version,
-        price_anchor=_h5_price_anchor(state, ticker),
+        price_anchor=_analyst_price_anchor(state, ticker),
         effective_at=cutoff,
         known_at=cutoff,
     )
     return payload.model_copy(update={"forecast": terms, "forecast_assessment": assessment})
 
 
-def _h5_attempt_id() -> str:
+def _analyst_attempt_id() -> str:
     raw = env_lookup(ATTEMPT).strip()
     return raw or "1"
 
@@ -449,8 +496,8 @@ def _publish_base_bundle_before_provider(
     cutoff = _cutoff_or_run_date(state)
     recorded_at = cutoff
     run_id = str(state.run_id)
-    attempt_id = _h5_attempt_id()
-    state_version_id = resolve_h5_state_version_id(
+    attempt_id = _analyst_attempt_id()
+    state_version_id = resolve_analyst_state_version_id(
         state.research_state_pin if isinstance(state.research_state_pin, dict) else None,
         source_run_id=run_id,
     )
@@ -464,7 +511,7 @@ def _publish_base_bundle_before_provider(
         attempt_id=attempt_id,
         artifact_id=f"artifact-h5-{ticker.strip().upper()}",
     )
-    built = build_h5_evidence_bundle(
+    built = build_analyst_evidence_bundle(
         ticker=ticker,
         source_run_id=run_id,
         attempt_id=attempt_id,
@@ -474,9 +521,9 @@ def _publish_base_bundle_before_provider(
         provenance=provenance,
         missing_fields=missing,
     )
-    bundle = publish_h5_evidence_bundle(built=built, store=store)
+    bundle = publish_analyst_evidence_bundle(built=built, store=store)
     logger.info(
-        "H5 evidence bundle published for %s bundle_id=%s durable=%s phase=%s",
+        "analyst evidence bundle published for %s bundle_id=%s durable=%s phase=%s",
         ticker,
         bundle.bundle_id,
         store is not None,
@@ -486,15 +533,15 @@ def _publish_base_bundle_before_provider(
 
 
 def _portfolio_grounding(state: PortfolioState, *, phase: RetrievalPhase, segment: str = ""):
-    """Grounding for H5 (asset analyst) + H7 (PM direction).
+    """Grounding for analyst (asset analyst) + direction (PM direction).
 
     #4146: both equip ``PM_TOOLS`` — a PM-fit digifetch subset (quotes/news,
     analyst views, earnings/corporate actions, macro/credit/valuation context);
-    it also fits the ticker-scoped H5 analyst, which is why the two phases
+    it also fits the ticker-scoped analyst, which is why the two phases
     share it rather than taking two near-identical subsets. Session-gated names
     drop out when no ``GLOOMBERB_SESSION_COOKIE`` is configured.
 
-    H6 deliberation deliberately stays digifetch-free: it is research-tools-only
+    deliberation deliberately stays digifetch-free: it is research-tools-only
     by policy (#2908), and its evidence path is the bundle + amendment flow.
     """
     return build_grounding(
@@ -527,7 +574,7 @@ def run_asset_analyst_llm(
     errors: list[PhaseError] = []
     artifact_key = analyst_artifact_key(ticker)
     mode = resolve_analyst_edit_mode(state, ticker)
-    enforce_path = research_attention_h5_enforce_path(state, ticker=ticker)
+    enforce_path = research_attention_analyst_enforce_path(state, ticker=ticker)
     if enforce_path == "full":
         mode = "full"
     elif enforce_path == "carry" and mode != "full":
@@ -560,7 +607,10 @@ def run_asset_analyst_llm(
         body_raw = patched.get("body", patched)
         if not isinstance(body_raw, dict):
             body_raw = prior_body or {}
-        payload = AnalystPayload.model_validate({**body_raw, "ticker": ticker})
+        # Legacy prior body — a persisted overcounted evidence pair is repaired (#4585).
+        payload = AnalystPayload.model_validate(
+            {**repair_legacy_evidence_counts(body_raw), "ticker": ticker}
+        )
         enriched = _attach_forecast_lineage(
             payload=payload,
             state=state,
@@ -593,7 +643,10 @@ def run_asset_analyst_llm(
             phase_slug=phase_slug,
             store=evidence_bundle_store,
         )
-        payload = AnalystPayload.model_validate({**prior_body, "ticker": ticker})
+        # Persisted prior body — repair a legacy overcounted evidence pair on read (#4585).
+        payload = AnalystPayload.model_validate(
+            {**repair_legacy_evidence_counts(prior_body), "ticker": ticker}
+        )
         enriched = _attach_forecast_lineage(
             payload=payload,
             state=state,
@@ -617,7 +670,7 @@ def run_asset_analyst_llm(
         load_skill_edit("asset-analyst") if mode == "edit" else load_skill_full("asset-analyst")
     )
     tools, execute_tool, web_grounding = _portfolio_grounding(
-        state, phase="h5_analyst", segment=phase_slug
+        state, phase="analyst", segment=phase_slug
     )
     _active = list(state.prior_context.active_theses)
     phase_inputs: dict[str, Any] = {
@@ -644,7 +697,7 @@ def run_asset_analyst_llm(
     if prior is not None:
         phase_inputs["prior_analyst"] = dict(prior.payload)
 
-    # WP11.2: one base bundle per H5-attempted ticker — before provider call.
+    # WP11.2: one base bundle per analyst-attempted ticker — before provider call.
     evidence_bundle = _publish_base_bundle_before_provider(
         state=state,
         ticker=ticker,
@@ -666,7 +719,7 @@ def run_asset_analyst_llm(
                 "prior_document": prior.payload,
             }
         )
-        phase_inputs = wire_h5_phase_inputs(
+        phase_inputs = wire_analyst_phase_inputs(
             phase_inputs,
             ticker=ticker,
             bundle=evidence_bundle,
@@ -689,7 +742,7 @@ def run_asset_analyst_llm(
             )
         except Exception as exc:
             logger.warning(
-                "H5 analyst edit LLM failed for %s (%s: %s); bundle retained",
+                "analyst edit LLM failed for %s (%s: %s); bundle retained",
                 ticker,
                 type(exc).__name__,
                 exc,
@@ -705,6 +758,7 @@ def run_asset_analyst_llm(
         patch = coerce_document_patch(result)
         try:
             reject_partial_forecast_edits(patch)
+            reject_stance_edit_without_evidence(patch, prior_body)
             merge_result = merge_document_patch(
                 prior.payload,
                 patch,
@@ -713,12 +767,15 @@ def run_asset_analyst_llm(
                 ),
             )
         except (MergeError, ValidationError) as exc:
-            logger.warning("H5 analyst edit merge failed for %s (%s)", ticker, exc)
+            logger.warning("analyst edit merge failed for %s (%s)", ticker, exc)
             errors.append(
                 PhaseError(phase="phase_portfolio", node=phase_slug, message=str(exc)[:500])
             )
             body_raw = prior_body or {}
-            payload = AnalystPayload.model_validate({**body_raw, "ticker": ticker})
+            # Edit-merge fallback carries the prior body — repair a legacy overcount (#4585).
+            payload = AnalystPayload.model_validate(
+                {**repair_legacy_evidence_counts(body_raw), "ticker": ticker}
+            )
             enriched = _attach_forecast_lineage(
                 payload=payload,
                 state=state,
@@ -734,6 +791,9 @@ def run_asset_analyst_llm(
         body_raw = materialized.get("body", materialized)
         if not isinstance(body_raw, dict):
             body_raw = {}
+        # merge_document_patch already ran the strict AnalystPayload validator on this same
+        # body, so an overcounted prior would have raised and taken the fallback above —
+        # no repair is reachable at this edit-success site (#4585).
         payload = AnalystPayload.model_validate({**body_raw, "ticker": ticker})
         enriched = _attach_forecast_lineage(
             payload=payload,
@@ -753,7 +813,7 @@ def run_asset_analyst_llm(
         )
         return enriched, doc, errors, evidence_bundle
 
-    phase_inputs = wire_h5_phase_inputs(
+    phase_inputs = wire_analyst_phase_inputs(
         phase_inputs,
         ticker=ticker,
         bundle=evidence_bundle,
@@ -776,7 +836,7 @@ def run_asset_analyst_llm(
         )
     except Exception as exc:  # LLM-output failure degrades this ticker, never the chain (#1665)
         logger.warning(
-            "H5 analyst LLM failed for %s (%s: %s); skipping ticker (bundle retained)",
+            "analyst LLM failed for %s (%s: %s); skipping ticker (bundle retained)",
             ticker,
             type(exc).__name__,
             exc,

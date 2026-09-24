@@ -4,7 +4,6 @@ import { useMemo, useState } from 'react';
 import { Button, Card } from '@digithings/ui/ui';
 import { CalendarClock } from 'lucide-react';
 import type {
-  FxConfluenceSnapshotRow,
   FxConsensusDivergence,
   FxConsensusSnapshotRow,
   FxEconomicCalendarRow,
@@ -26,7 +25,6 @@ export default function TodayTab({
   digest,
   tradeIdeas,
   tradeIdeaHistory = [],
-  confluence,
   briefs,
   events,
   series,
@@ -36,7 +34,6 @@ export default function TodayTab({
   digest: DigestData;
   tradeIdeas: FxTradeIdeaRow[];
   tradeIdeaHistory?: Pick<FxTradeIdeaRow, 'run_date' | 'pair' | 'direction' | 'as_of'>[];
-  confluence: FxConfluenceSnapshotRow[];
   briefs: FxBriefRow[];
   events: FxEconomicCalendarRow[];
   series: FxConsensusSnapshotRow[];
@@ -83,7 +80,7 @@ export default function TodayTab({
     <div className="flex flex-col gap-4">
       <div className="flex flex-wrap items-center gap-3 px-1">
         <CalendarClock size={18} className="shrink-0 text-accent" aria-hidden />
-        <h2 className="font-display text-xl tracking-tight text-ink">Today&rsquo;s read</h2>
+        <h2 className="font-display text-2xl tracking-tight text-ink">Today&rsquo;s read</h2>
       </div>
 
       {disputeCount > 0 ? (
@@ -106,12 +103,11 @@ export default function TodayTab({
       <div className="today-main grid grid-cols-1 items-start gap-4 lg:grid-cols-[minmax(0,0.95fr)_minmax(0,1.25fr)]">
         <div className="flex min-w-0 flex-col gap-4">
           <DigestBrief digest={digest} />
-          <TradeIdeasPanel
-            ideas={tradeIdeas}
-            ideaHistory={tradeIdeaHistory}
-            confluence={confluence}
-            highlightRanks={highlightRanks}
-          />
+        <TradeIdeasPanel
+          ideas={tradeIdeas}
+          ideaHistory={tradeIdeaHistory}
+          highlightRanks={highlightRanks}
+        />
           <TodayConsensusChart series={series} />
         </div>
 
@@ -155,7 +151,7 @@ export default function TodayTab({
                         <Button
                           type="button"
                           variant="ghost"
-                          className="block h-auto w-full justify-start whitespace-normal rounded-none border border-hair p-3 text-left text-xs font-normal transition-colors hover:border-accent/50"
+                          className="block h-auto w-full justify-start whitespace-normal rounded-none border border-hair bg-term-bg p-3 text-left text-xs font-normal transition-colors hover:border-accent/50 hover:bg-term-bg"
                           onClick={() => openBrief(b.source_file, b.run_date)}
                         >
                           <div className="flex min-w-0 items-center gap-2 text-[11px] text-ink-mute">

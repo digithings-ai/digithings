@@ -131,7 +131,7 @@ owned); do not encode it in this repo.
 
 Before T1 cutover, production `/dashboard/*` may still use Access as the only gate. Until Access is live on that path, treat the URL as public. Migration
 [`033_revoke_anon_run_diagnostics.sql`](../../digiquant/supabase/migrations/033_revoke_anon_run_diagnostics.sql)
-already drops anon SELECT on operator cost telemetry (`atlas_run_diagnostics`);
+already drops anon SELECT on operator cost telemetry (`run_diagnostics`);
 `positions.pm_notes` stays readable (PM commentary the dashboard renders).
 
 ## Why not the alternatives

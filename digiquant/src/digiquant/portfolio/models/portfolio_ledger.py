@@ -8,7 +8,7 @@ append-only Pydantic contracts that separate those concepts into one explicit,
 replayable chain:
 
     PortfolioCommit (daily anchor)
-        -> DecisionIntent (H7/H8 symbol-level decision: add/trim/exit/no_op/reject)
+        -> DecisionIntent (direction/sizing symbol-level decision: add/trim/exit/no_op/reject)
         -> RequestedTarget (raw pre-adjustment weight/quantity)
         -> TargetAdjustment (cap/rounding/carry applied to a RequestedTarget)
         -> ApprovedTarget (final approved weight/quantity, supersedable same-date)
@@ -16,8 +16,8 @@ replayable chain:
         -> PaperExecution (immutable fill, idempotent on retry)
         -> HoldingLot (position lot opened/closed by a PaperExecution)
 
-Scope — contracts and schema only. This module does not change H7/H8/H9 ownership and
-does not touch any live-trading or broker path. ``portfolio/writers/commit_io.py`` (H9)
+Scope — contracts and schema only. This module does not change direction/sizing/commit ownership and
+does not touch any live-trading or broker path. ``portfolio/writers/commit_io.py`` (commit)
 remains the sole authoritative writer of the ``positions`` **book** — the portfolio's
 official state. That is a narrower claim than "the only writer of these tables": since
 #2420 (Task 2.4) ``portfolio/writers/execution_io.py`` appends ``PaperExecution`` and
@@ -26,7 +26,7 @@ what the portfolio *is*, and it neither writes nor rewrites the book.
 
 Since #2418 these models are **no longer dark**: ``portfolio/writers/ledger_io.py`` appends
 the first five links of the chain (including ``TargetAdjustment`` since #2768) from
-every H9 run that actually commits, unless the ``DIGIQUANT_PORTFOLIO_LEDGER`` kill switch
+every commit run that actually commits, unless the ``DIGIQUANT_PORTFOLIO_LEDGER`` kill switch
 is off (see ``digiquant/ARCHITECTURE.md``), and ``execution_io.py`` appends the last two.
 A run that short-circuits as ``status="noop"`` returns before the append — "no rows" on
 that path is intentional, not a missing producer.
@@ -40,7 +40,7 @@ whole point of having a lineage. A contract with a producer and no consumer is a
 this one is now a data path, so a change to a field below has a reader to break.
 
 Anti-goals carried over from the issue: no broker/live-trading paths, no mutable fills,
-no second H9 writer. Every quantity/weight/price field below is ``Decimal`` (never
+no second commit writer. Every quantity/weight/price field below is ``Decimal`` (never
 ``float``) and, where a value could be economically meaningful or absent, is modeled as
 ``Decimal | None`` rather than defaulting to zero — this is a deliberate break from
 ``commit_io.py``'s legacy ``_coerce_float`` convention (silent 0.0 on failure), which
@@ -86,7 +86,7 @@ SignedAmount: TypeAlias = Annotated[Decimal, Field(allow_inf_nan=False)]
 
 
 class DecisionAction(StrEnum):
-    """Closed vocabulary of H7/H8 symbol-level decisions."""
+    """Closed vocabulary of direction/sizing symbol-level decisions."""
 
     ADD = "add"
     TRIM = "trim"
@@ -133,27 +133,27 @@ class TargetAdjustmentType(StrEnum):
 
     ``CAP``, ``ROUNDING``, and ``CARRY`` are the original (#2415) coarse-grained
     values and remain for backward compatibility with existing persisted rows
-    and tests. The remaining members are the 12 canonical H8 adjustment reasons
+    and tests. The remaining members are the 12 canonical sizing adjustment reasons
     defined by ``portfolio.sizing_events.SizingAdjustmentType`` (#2417), added here
     as an additive superset so a persisted ``TargetAdjustment`` row can carry the
     same fine-grained reason an in-memory ``SizingAdjustment`` event carries,
     without a breaking rename of the coarse legacy values.
 
     Migration 095 widened the ``adjustment_type`` CHECK on
-    ``portfolio_ledger_target_adjustments`` to this full vocabulary; H9
+    ``portfolio_ledger_target_adjustments`` to this full vocabulary; commit
     (``ledger_io.append_commit_chain``, #2768) is the producer.
 
     This enum and ``SizingAdjustmentType`` are deliberately kept as two separate
     types rather than unified into one: this one governs a persisted,
     append-only ledger row, while ``SizingAdjustmentType`` governs the in-memory
-    explanation object returned alongside H8's sized book.
+    explanation object returned alongside sizing's sized book.
     """
 
     CAP = "cap"
     ROUNDING = "rounding"
     CARRY = "carry"
 
-    # The 12 canonical H8 adjustment reasons (#2417), mirrored from
+    # The 12 canonical sizing adjustment reasons (#2417), mirrored from
     # ``portfolio.sizing_events.SizingAdjustmentType``. CHECK-constrained by
     # migration 095 (069 originally allowed only cap/rounding/carry).
     CONVICTION_FLOOR = "conviction_floor"
@@ -232,7 +232,7 @@ class PortfolioLedgerModel(BaseModel):
     migration 097. The house pipeline is the only producer today, so the field defaults
     to :func:`house_workspace_id`; overlay / multi-workspace writers (T4) will pass an
     explicit id. Without this field, read-back via ``model_validate`` rejects stamped
-    rows (``extra="forbid"``) and degrades H9 cost-liquidity evidence.
+    rows (``extra="forbid"``) and degrades commit cost-liquidity evidence.
 
     Known limitation (accepted, LOW severity): Pydantic v2's ``model_copy(update=...)``
     bypasses both ``frozen=True`` and every ``model_validator`` — it is a shallow
@@ -274,7 +274,7 @@ class TimedPortfolioLedgerRecord(PortfolioLedgerModel):
 class PortfolioCommit(TimedPortfolioLedgerRecord):
     """Daily lineage-chain anchor/root for one ``run_date``.
 
-    Not a duplicate of H9's commit manifest (``writers/commit_io.py``) — this is a
+    Not a duplicate of commit's commit manifest (``writers/commit_io.py``) — this is a
     read-side lineage anchor that every other record in the chain points back to
     (directly or transitively), not a booking/write-path artifact.
 
@@ -301,7 +301,7 @@ class PortfolioCommit(TimedPortfolioLedgerRecord):
 
 
 class DecisionIntent(TimedPortfolioLedgerRecord):
-    """One symbol-level decision produced by H7/H8 deliberation for a ``run_date``."""
+    """One symbol-level decision produced by direction/sizing deliberation for a ``run_date``."""
 
     id: UUID
     portfolio_commit_id: UUID
@@ -356,8 +356,8 @@ class RequestedTarget(TimedPortfolioLedgerRecord):
 # correlation-dedup record is exactly as invalid as an increasing cap one.
 # ``GRID_ROUNDING`` always rounds down to the sizing grid (never to nearest —
 # see ``sizing._round_to_grid``'s own reduce-only invariant), and ``FLAT_EXIT``
-# always drives a held position to exactly 0 (an H7-flat exit or a PM-exit —
-# see ARCHITECTURE.md's H8 adjustment-event taxonomy table), so both belong
+# always drives a held position to exactly 0 (an direction-flat exit or a PM-exit —
+# see ARCHITECTURE.md's sizing adjustment-event taxonomy table), so both belong
 # here alongside the caps/dedup/breaker set. ``VOLATILITY_SCALE`` and
 # ``FINAL_GROSS_SCALE`` are deliberately absent: both can scale a book UP as
 # well as down (vol-target up-scale toward an under-filled budget, #943; a

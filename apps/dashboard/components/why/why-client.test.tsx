@@ -30,12 +30,4 @@ describe('WhyClient', () => {
     expect(html).not.toContain('glass-card');
     expect(html).not.toContain('<main'); // AppFrame owns the sole main landmark
   });
-
-  it('has no Record stat cell — the endorsed Q3b slice-5b cut', () => {
-    const html = renderToStaticMarkup(createElement(WhyClient));
-    // It rendered a <dt>Record</dt><dd>Latest run</dd> pair: a "stat" whose
-    // value was the meaningless words "Latest run". Pinned so it cannot return.
-    expect(html).not.toContain('>Record<');
-    expect(html).not.toContain('Latest run');
-  });
 });

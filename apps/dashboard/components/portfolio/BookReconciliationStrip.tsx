@@ -6,8 +6,7 @@ import { ledgerHref } from '@/lib/portfolio-url-state';
 
 /**
  * Slim Holdings summary: invested / cash / count / as-of in one compact row so
- * the positions table owns the viewport on mobile and desktop. Flat on the page
- * surface — hairlines carry the structure, no fill (Q3b slice 3, slice 1 precedent).
+ * the positions table owns the viewport on mobile and desktop.
  */
 export default function BookReconciliationStrip({
   reconciliation,
@@ -24,7 +23,7 @@ export default function BookReconciliationStrip({
     <div
       data-testid="command-band"
       aria-label="Book exposure summary"
-      className="flex flex-wrap items-baseline gap-x-5 gap-y-1 border-y border-hair px-4 py-2.5 font-mono text-[0.68rem] md:px-6"
+      className="flex flex-wrap items-baseline gap-x-5 gap-y-1 border-y border-hair bg-surface/80 px-4 py-2.5 font-mono text-[0.68rem] md:px-6"
     >
       <div data-region="identity" className="inline-flex items-baseline gap-2">
         <span className="uppercase tracking-wider text-ink-mute">Invested</span>

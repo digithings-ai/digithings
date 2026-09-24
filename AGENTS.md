@@ -381,6 +381,21 @@ three separate PRs.
 
 ---
 
+## Artifact + worktree placement
+
+- Task worktrees live at `.worktrees/task/N-slug/` — create them with
+  `make task ISSUE=N`, remove with `scripts/worktree_task.sh remove N`
+  after the PR merges. Never leave detached temp worktrees under
+  `/tmp/opencode/wt-*` behind; remove them once their branch is merged
+  or abandoned.
+- Screenshots are throwaway verification artifacts: save ad-hoc captures
+  to `/tmp/` or the session temp dir, never to the repo root, and delete
+  them when done. The only committed PNGs are the tracked fixtures under
+  `frontend/dashboard/fixtures/screenshots/` — do not add new ones without
+  a test that reads them.
+
+---
+
 ## Cursor Cloud specific instructions
 
 ### Runtime prerequisites (one-time on a fresh VM)
@@ -496,6 +511,23 @@ real deploy), not because CI passed. Merging early forecloses accumulation and
 forces the next commit into a brand-new release — three digichat releases (1.1.0,
 1.2.0, and a same-day 1.2.1 proposal) landed within ~48 hours this way, none of
 them tied to a deliberate release decision (2026-08-13).
+
+`release-please-digichat` keeps targeting `develop`, so the version bump — and
+the `digichat-vX.Y.Z` tag release-please cuts when it lands — stays on
+`develop`; do not re-target it at `main`, or the squashed promotion commit reads
+as a no-op and the changelog empties out.
+
+**Every release also gets its own branch, cut from `main`.** Once the promotion
+lands, cut `release/vX.Y.Z` from `main` at the promotion commit (the tagged
+commit is in `main`'s history by then) — one branch per released version. That
+branch is the version's **maintenance line**, not a staging gate: features
+accumulate on `develop`, and by the time the branch exists the version is
+already deployed. Patch releases continue the chain (`release/vX.Y.(Z+1)`
+branched from `release/vX.Y.Z`); the fix is cherry-picked onto `develop` so the
+next promotion carries it, and a release branch (or its version bump) is never
+merged into `main`. Recipes:
+[BRANCHING.md](BRANCHING.md#cutting-a-release) § Cutting a release / Patching a
+release, and [RELEASES.md](RELEASES.md#patching-a-released-version).
 
 ---
 

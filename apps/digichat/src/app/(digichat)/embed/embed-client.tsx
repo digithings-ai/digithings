@@ -371,8 +371,12 @@ function EmbedChat({
   );
   /** Deploy `features.pageContext` — off / silent / visible (default). */
   const pageContextMode = stockClient.features.pageContext;
+  // Seed language for this tenant (#4532). A reload and `/new` reset back to
+  // the tenant's default, not a hard-coded English.
+  const tenantLanguage = stockClient.chrome.defaultLanguage || DEFAULT_LANGUAGE_CODE;
   const [chatPrefs, setChatPrefs] = useState<EmbedChatPrefs>(() => ({
     ...DEFAULT_EMBED_CHAT_PREFS,
+    language: tenantLanguage,
     view: stockClient.features.view,
     thinking: stockClient.features.thinking,
     extra: extraOffFromCatalog(catalogToolsFromClient(stockClient)),
@@ -505,17 +509,21 @@ function EmbedChat({
   const heldForceToolRef = useRef<string | undefined>(undefined);
   const sentHeldRef = useRef<string | null>(null);
   /**
-   * Set (never incremented directly) by every gated send below, then charged
-   * by the settle effect near `chat` once the turn actually finishes. chat.send
-   * is fire-and-forget — useChat's sendMessage has no success/failure return —
-   * so a synchronous gate.increment() right after calling it charges the
-   * visitor's free-tier quota regardless of outcome. Verified live: three
-   * consecutive failed sends (backend down) fully exhausted the 3-turn quota
-   * with zero real answers delivered, permanently gating a visitor who got no
-   * value at all. See the settle effect for why chat.rawError is the correct
-   * signal to gate the charge on.
+   * Charge the free tier at send time and remember the charge so the settle
+   * effect near `chat` can refund it if that turn fails. Charging at send time
+   * is what keeps the counter and `locked` honest: the deferred charge used to
+   * land one turn late, so the visitor saw `0/3` after their first answer, the
+   * client never locked at `3/3`, and the fourth question was sent to the
+   * server (which 402'd it) instead of being held for the trial form.
+   * Refunding on `chat.rawError` keeps the documented guarantee: a failed send
+   * never costs the visitor a free turn (verified live — three consecutive
+   * backend failures once exhausted the 3-turn quota with zero answers).
    */
-  const pendingGateChargeRef = useRef(false);
+  const pendingGateRefundRef = useRef(false);
+  const armGateCharge = useCallback(() => {
+    gate.increment();
+    pendingGateRefundRef.current = true;
+  }, [gate]);
   /** Visible-page context from popup widget (`digichat:page-context`); consumed once. */
   const pageContextRef = useRef<PageContextMessage | null>(null);
   const [pageContextAttached, setPageContextAttached] = useState(false);
@@ -574,17 +582,15 @@ function EmbedChat({
     features: stockClient.features,
   });
 
-  // Charge the free-tier gate only once a gated send actually settles
-  // successfully — never at send time. useChat's setStatus({status:
-  // "submitted", error: void 0}) clears the previous error synchronously
-  // before this turn's request goes out, so by the time chat.busy flips back
-  // to false, chat.rawError reflects only THIS turn's outcome, not a stale
-  // one. A failed turn (chat.rawError set) drops the pending charge instead
-  // of billing it — a visitor who got no answer keeps their free turn.
+  // Refund a turn that was charged at send time but settled as a failure.
+  // useChat's setStatus({status: "submitted", error: void 0}) clears the
+  // previous error synchronously before this turn's request goes out, so by
+  // the time chat.busy flips back to false, chat.rawError reflects only THIS
+  // turn's outcome, not a stale one.
   useEffect(() => {
-    if (chat.busy || !pendingGateChargeRef.current) return;
-    pendingGateChargeRef.current = false;
-    if (shouldChargeGateOnSettle(Boolean(chat.rawError))) gate.increment();
+    if (chat.busy || !pendingGateRefundRef.current) return;
+    pendingGateRefundRef.current = false;
+    if (!shouldChargeGateOnSettle(Boolean(chat.rawError))) gate.decrement();
   }, [chat.busy, chat.rawError, gate]);
 
   // Free-tier / rate-limit / model-remediable → stop turn + open in-chat BYOK.
@@ -638,7 +644,7 @@ function EmbedChat({
           ...(forceTool ? { forceTool } : {}),
           pageContext: consumePageContext(),
         });
-        if (!ungated) pendingGateChargeRef.current = true;
+        if (!ungated) armGateCharge();
         return;
       }
       chat.onRetry?.();
@@ -652,7 +658,7 @@ function EmbedChat({
         ...(forceTool ? { forceTool } : {}),
         pageContext: consumePageContext(),
       });
-      if (!ungated) pendingGateChargeRef.current = true;
+      if (!ungated) armGateCharge();
     }
   }, [
     byokIsSet,
@@ -849,7 +855,7 @@ function EmbedChat({
       ...(forceTool ? { forceTool } : {}),
       pageContext: ctx,
     });
-    if (!ungated) pendingGateChargeRef.current = true;
+    if (!ungated) armGateCharge();
     emit("embed_turn_submitted", {
       accent,
       turn: gate.turns + 1,
@@ -952,7 +958,7 @@ function EmbedChat({
         byok: byokIsSet,
         page_context: hadCtx,
       });
-      if (!ungated) pendingGateChargeRef.current = true;
+      if (!ungated) armGateCharge();
     },
     [chat, gate, trialLocked, ungated, accent, byokIsSet, llmAccess, consumePageContext],
   );
@@ -990,7 +996,7 @@ function EmbedChat({
       },
       onAllowSend: () => {
         if (shouldArmGateCharge(ungated)) {
-          pendingGateChargeRef.current = true;
+          armGateCharge();
         }
         emit("embed_turn_submitted", {
           accent,
@@ -1052,7 +1058,7 @@ function EmbedChat({
       reset: () =>
         setChatPrefs({
           ...DEFAULT_EMBED_CHAT_PREFS,
-          language: DEFAULT_LANGUAGE_CODE,
+          language: tenantLanguage,
           view: stockClient.features.view,
           thinking: stockClient.features.thinking,
           extra: extraOffFromCatalog(catalogTools),
@@ -1101,7 +1107,7 @@ function EmbedChat({
       newThread: () => {
         setChatPrefs({
           ...DEFAULT_EMBED_CHAT_PREFS,
-          language: DEFAULT_LANGUAGE_CODE,
+          language: tenantLanguage,
           view: stockClient.features.view,
           thinking: stockClient.features.thinking,
           extra: extraOffFromCatalog(catalogTools),
@@ -1111,7 +1117,7 @@ function EmbedChat({
       compactThread: () => {
         setChatPrefs({
           ...DEFAULT_EMBED_CHAT_PREFS,
-          language: DEFAULT_LANGUAGE_CODE,
+          language: tenantLanguage,
           view: stockClient.features.view,
           thinking: stockClient.features.thinking,
           extra: extraOffFromCatalog(catalogTools),

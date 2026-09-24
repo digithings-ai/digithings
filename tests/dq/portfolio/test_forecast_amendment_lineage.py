@@ -1,4 +1,4 @@
-"""WP4.4 H6 quiet-carry + amendment lineage attachment."""
+"""WP4.4 deliberation quiet-carry + amendment lineage attachment."""
 
 from __future__ import annotations
 
@@ -23,8 +23,8 @@ from digiquant.portfolio.models.forecast import (
     materialize_forecast_amendment,
     resolve_effective_forecast,
 )
-from digiquant.portfolio.phases import h6_deliberation
-from digiquant.portfolio.phases.h6_deliberation import build_h6_from_state
+from digiquant.portfolio.phases import deliberation
+from digiquant.portfolio.phases.deliberation import build_deliberation_from_state
 from digiquant.research.state import FocusRosterEntry, PriorContext, ResearchConfigBundle
 
 pytestmark = pytest.mark.unit
@@ -132,13 +132,13 @@ class TestH6ForecastLineageCarry:
                     "amendment_id": str(prior_eff.amendment_id),
                     "effective_forecast_id": str(prior_eff.effective_id),
                     "amendment_outcome": AmendmentOutcome.ACCEPTED.value,
-                    # Round-trip dump so H9 can re-persist after fail-soft (#2790).
+                    # Round-trip dump so commit can re-persist after fail-soft (#2790).
                     "forecast_amendment": amendment.model_dump(mode="json"),
                 }
             }
         )
-        with patch.object(h6_deliberation, "deliberation_skip_signal", return_value=True):
-            out = build_h6_from_state().worker.run(with_fanout_ticker(state, "AAPL"))
+        with patch.object(deliberation, "deliberation_skip_signal", return_value=True):
+            out = build_deliberation_from_state().worker.run(with_fanout_ticker(state, "AAPL"))
         summary = out["phase_portfolio"].deliberation_summaries["AAPL"]
         assert summary["carry_reason"] == "fingerprint_skip"
         assert summary["effective_forecast_id"] == str(prior_eff.effective_id)
@@ -158,7 +158,7 @@ class TestH6ForecastLineageCarry:
             knowledge_cutoff_at=_TS,
             phase_portfolio=out["phase_portfolio"],
         )
-        # H5 assessment still on the input state path for registry; attach for collect.
+        # analyst assessment still on the input state path for registry; attach for collect.
         collected_state.phase_portfolio = PhasePortfolioState(
             asset_analysts=state.phase_portfolio.asset_analysts,
             deliberation_summaries=out["phase_portfolio"].deliberation_summaries,
@@ -171,11 +171,11 @@ class TestH6ForecastLineageCarry:
         base = _assessment()
         state = _state(assessment=base)
         with patch.object(
-            h6_deliberation,
+            deliberation,
             "run_deliberation_loop",
             side_effect=ValueError("boom"),
         ):
-            out = build_h6_from_state().worker.run(with_fanout_ticker(state, "AAPL"))
+            out = build_deliberation_from_state().worker.run(with_fanout_ticker(state, "AAPL"))
         summary = out["phase_portfolio"].deliberation_summaries["AAPL"]
         assert summary["carry_reason"] == "llm_failure"
         assert summary["base_forecast_id"] == str(base.forecast_id)

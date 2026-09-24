@@ -1,4 +1,4 @@
-"""H5 edit-mode tests (dashboard #930 PR 4b)."""
+"""analyst edit-mode tests (dashboard #930 PR 4b)."""
 
 from __future__ import annotations
 
@@ -13,7 +13,7 @@ import pytest
 from digigraph.graph.pipeline_builder import build_pipeline
 from digiquant.dashboard.edit_mode import DocumentPatch, PatchOp
 from digiquant.portfolio.models.analyst import AnalystPayload
-from digiquant.portfolio.phases.h5_asset_analyst import build_h5_asset_analyst
+from digiquant.portfolio.phases.analyst import build_analyst
 from digiquant.research.state import (
     FocusRosterEntry,
     PhasePortfolioState,
@@ -109,7 +109,7 @@ class TestAnalystEdit:
             artifact_version="h5-full@1",
             price_anchor=PriceAnchor(
                 status=PriceAnchorStatus.UNAVAILABLE,
-                unavailable_reason="mark_price_not_available_in_h5_state",
+                unavailable_reason="mark_price_not_available_in_analyst_state",
             ),
             effective_at=cutoff,
             known_at=cutoff,
@@ -148,7 +148,7 @@ class TestAnalystEdit:
                 ),
             }
         )
-        compiled = build_pipeline(ResearchState, [build_h5_asset_analyst(["AAPL"], held={"AAPL"})])
+        compiled = build_pipeline(ResearchState, [build_analyst(["AAPL"], held={"AAPL"})])
 
         def fake(_m: str, msgs: list[dict[str, Any]], **_: Any) -> str:
             schema = next(
@@ -211,7 +211,7 @@ class TestEvidenceDerivedConviction:
         p = self._payload("buy")
         # 3 confirming − 1 contradicting = 2; caps don't bind → 2 (computed, not parked)
         assert p.conviction_score == 2
-        p2 = self._payload("buy", contradicting_signals=3)
+        p2 = self._payload("buy", independent_confirming_signals=2, contradicting_signals=3)
         assert p2.conviction_score == 0, "net evidence drives the score, not the default"
 
     def test_high_conviction_requires_the_full_bar(self) -> None:
@@ -223,7 +223,8 @@ class TestEvidenceDerivedConviction:
             evidence_quality="high",
         )
         assert self._payload("buy", **full_bar).conviction_score == 5
-        # Remove any single requirement → high (>=4) is unreachable
+        # Weaken any single requirement (or add a contradiction, keeping the five-family
+        # sum valid) → high (>=4) is unreachable
         assert (
             self._payload("buy", **{**full_bar, "catalyst_within_horizon": False}).conviction_score
             <= 3
@@ -233,7 +234,11 @@ class TestEvidenceDerivedConviction:
         )
         assert self._payload("buy", **{**full_bar, "evidence_quality": "low"}).conviction_score <= 2
         assert (
-            self._payload("buy", **{**full_bar, "contradicting_signals": 2}).conviction_score <= 3
+            self._payload(
+                "buy",
+                **{**full_bar, "independent_confirming_signals": 4, "contradicting_signals": 1},
+            ).conviction_score
+            <= 3
         )
 
     def test_sell_mirrors_negative_and_hold_clamps(self) -> None:
@@ -248,12 +253,60 @@ class TestEvidenceDerivedConviction:
         assert abs(self._payload("hold", **strong).conviction_score) <= 1
         assert self._payload("watch", trend_alignment="mixed").conviction_score == 0
 
+    def test_call_relative_counts_do_not_zero_a_supported_contrarian_call(self) -> None:
+        """#4583 — the counts are itemized against the CALL, not the market thesis.
+
+        Production 2026-09-10 ``analyst/XLY`` declared ``sell`` on a *bullish*
+        mean-reversion thesis, with four families reading against that thesis.
+        Read as thesis-relative counts (confirming 1, contradicting 4) the
+        derivation returns ``0`` — the unexplainable ``stance: sell`` /
+        ``conviction_score: 0`` pair. Read against the call, those four families
+        confirm the sell (and one contradicts it): ``4/1`` is a valid vector over
+        the five-family universe (#4585).
+        """
+        supported = self._payload(
+            "sell",
+            independent_confirming_signals=4,
+            contradicting_signals=1,
+            catalyst_within_horizon=True,
+            evidence_quality="high",
+            trend_alignment="with",
+        )
+        assert supported.conviction_score == -3
+        against_trend = self._payload(
+            "sell",
+            independent_confirming_signals=4,
+            contradicting_signals=1,
+            catalyst_within_horizon=True,
+            evidence_quality="high",
+            trend_alignment="against",
+        )
+        assert against_trend.conviction_score == -2
+
+    def test_balanced_call_derives_zero_for_a_directional_stance(self) -> None:
+        """A balanced call is a *weak* directional call, not a missing one.
+
+        ``stance`` carries the direction and the net counts carry the magnitude, so the
+        pair is coherent and the call is honestly unpromoted. (The production
+        2026-09-22 ``analyst/IBIT`` vector was 4/4, which assigns 8 families over the
+        five-family universe — a separate schema laxity, #4585.)
+        """
+        balanced = self._payload(
+            "buy",
+            independent_confirming_signals=2,
+            contradicting_signals=2,
+            catalyst_within_horizon=True,
+            evidence_quality="high",
+        )
+        assert balanced.conviction_score == 0
+
     def test_distribution_over_realistic_grid_is_spread_and_high_is_rare(self) -> None:
         from collections import Counter
 
         scores = []
+        # Only vectors that fit the five-family universe: confirming + contradicting <= 5 (#4585).
         for confirming in range(6):
-            for contradicting in range(4):
+            for contradicting in range(6 - confirming):
                 for catalyst in (True, False):
                     for quality in ("high", "medium", "low"):
                         scores.append(
@@ -267,7 +320,19 @@ class TestEvidenceDerivedConviction:
                         )
         counts = Counter(scores)
         n = len(scores)
-        assert max(counts.values()) / n < 0.5, f"single-mode collapse: {counts}"
+        # A balanced-or-negative net derives 0, so 0 is the honest mode of the valid
+        # space; what must not happen (#1672) is a single *nonzero* score eating the
+        # distribution, or high conviction becoming unreachable.
+        assert len(counts) >= 5, f"distribution collapsed: {counts}"
+        nonzero = {k: v for k, v in counts.items() if k != 0}
+        assert nonzero, f"no nonzero conviction is reachable: {counts}"
+        dominant = max(nonzero.values())
+        # The #1672 "no single mode dominates" guard, read on the surviving nonzero
+        # scores: 0 legitimately leads, but no nonzero value may.
+        assert dominant * 2 < n, f"a single nonzero score holds a majority: {counts}"
+        assert dominant * 2 < sum(nonzero.values()), (
+            f"a single nonzero score dominates the nonzero scores: {counts}"
+        )
         high = sum(v for k, v in counts.items() if k >= 4)
         low = sum(v for k, v in counts.items() if k in (0, 1))
         assert high < low, f"high must be scarcer than low: {counts}"
@@ -278,6 +343,247 @@ class TestEvidenceDerivedConviction:
 
         p = AnalystPayload.model_validate({"ticker": "SPY", "conviction_score": 4, "stance": "buy"})
         assert p.conviction_score == 4, "legacy docs keep their stored score"
+
+
+@pytest.mark.unit
+class TestStanceEditRequiresEvidence:
+    """#4583 — a stance edit may not re-derive conviction from the prior call's counts."""
+
+    @staticmethod
+    def _patch(*ops: PatchOp) -> DocumentPatch:
+        return DocumentPatch(
+            date=date(2026, 6, 20),
+            prior_date=date(2026, 6, 19),
+            target_document_key="analyst/AAPL",
+            status="updated",
+            ops=list(ops),
+        )
+
+    def test_stance_only_edit_on_an_evidence_bearing_prior_is_rejected(self) -> None:
+        from digiquant.dashboard.edit_mode.merge import MergeError
+        from digiquant.portfolio.phases.portfolio_common import (
+            reject_stance_edit_without_evidence,
+        )
+
+        prior_body: dict[str, Any] = {
+            "ticker": "AAPL",
+            "stance": "hold",
+            "evidence": {"evidence_quality": "high"},
+        }
+        with pytest.raises(MergeError, match="re-itemized"):
+            reject_stance_edit_without_evidence(
+                self._patch(PatchOp(op="set", path="/body/stance", value="buy")),
+                prior_body,
+            )
+
+    def test_stance_edit_with_fresh_evidence_is_allowed(self) -> None:
+        from digiquant.portfolio.phases.portfolio_common import (
+            reject_stance_edit_without_evidence,
+        )
+
+        prior_body: dict[str, Any] = {
+            "ticker": "AAPL",
+            "stance": "hold",
+            "evidence": {"evidence_quality": "high"},
+        }
+        reject_stance_edit_without_evidence(
+            self._patch(
+                PatchOp(op="set", path="/body/stance", value="buy"),
+                PatchOp(op="set", path="/body/evidence", value={"evidence_quality": "high"}),
+            ),
+            prior_body,
+        )
+
+    @pytest.mark.parametrize(
+        "evidence_op",
+        [
+            PatchOp(op="remove", path="/body/evidence"),
+            PatchOp(op="append", path="/body/evidence", value={"evidence_quality": "high"}),
+            PatchOp(op="set", path="/body/evidence", value=None),
+            PatchOp(op="set", path="/body/evidence/evidence_quality", value="high"),
+        ],
+        ids=["remove", "append", "null-set", "nested-set"],
+    )
+    def test_evidence_ops_that_do_not_reitemize_are_rejected(self, evidence_op: PatchOp) -> None:
+        """Only a non-null ``set`` of the whole block re-itemizes the counts."""
+        from digiquant.dashboard.edit_mode.merge import MergeError
+        from digiquant.portfolio.phases.portfolio_common import (
+            reject_stance_edit_without_evidence,
+        )
+
+        prior_body: dict[str, Any] = {
+            "ticker": "AAPL",
+            "stance": "hold",
+            "evidence": {"evidence_quality": "high"},
+        }
+        with pytest.raises(MergeError, match="re-itemized"):
+            reject_stance_edit_without_evidence(
+                self._patch(PatchOp(op="set", path="/body/stance", value="buy"), evidence_op),
+                prior_body,
+            )
+
+    def test_whole_body_set_must_carry_evidence(self) -> None:
+        from digiquant.dashboard.edit_mode.merge import MergeError
+        from digiquant.portfolio.phases.portfolio_common import (
+            reject_stance_edit_without_evidence,
+        )
+
+        prior_body: dict[str, Any] = {
+            "ticker": "AAPL",
+            "stance": "hold",
+            "evidence": {"evidence_quality": "high"},
+        }
+        reject_stance_edit_without_evidence(
+            self._patch(
+                PatchOp(
+                    op="set",
+                    path="/body",
+                    value={
+                        "ticker": "AAPL",
+                        "stance": "buy",
+                        "evidence": {"evidence_quality": "high"},
+                    },
+                )
+            ),
+            prior_body,
+        )
+        with pytest.raises(MergeError, match="re-itemized"):
+            reject_stance_edit_without_evidence(
+                self._patch(
+                    PatchOp(op="set", path="/body", value={"ticker": "AAPL", "stance": "buy"})
+                ),
+                prior_body,
+            )
+
+    def test_null_evidence_prior_and_skipped_patch_are_unaffected(self) -> None:
+        from digiquant.portfolio.phases.portfolio_common import (
+            reject_stance_edit_without_evidence,
+        )
+
+        stance_only = PatchOp(op="set", path="/body/stance", value="buy")
+        # A prior whose evidence key is present but null does not re-derive.
+        reject_stance_edit_without_evidence(
+            self._patch(stance_only),
+            {"ticker": "AAPL", "stance": "hold", "evidence": None},
+        )
+        # A skipped patch's ops are ignored by the merge.
+        reject_stance_edit_without_evidence(
+            DocumentPatch(
+                date=date(2026, 6, 20),
+                prior_date=date(2026, 6, 19),
+                target_document_key="analyst/AAPL",
+                status="skipped",
+                ops=[stance_only],
+            ),
+            {"ticker": "AAPL", "stance": "hold", "evidence": {"evidence_quality": "high"}},
+        )
+
+    def test_legacy_prior_without_evidence_is_unaffected(self) -> None:
+        from digiquant.portfolio.phases.portfolio_common import (
+            reject_stance_edit_without_evidence,
+        )
+
+        prior_body: dict[str, Any] = {"ticker": "AAPL", "stance": "hold", "conviction_score": 2}
+        reject_stance_edit_without_evidence(
+            self._patch(PatchOp(op="set", path="/body/stance", value="buy")),
+            prior_body,
+        )
+
+    def test_edit_node_degrades_to_skip_on_a_stance_only_patch(self) -> None:
+        """End-to-end: the guard fires in the node and the prior call is carried."""
+        from datetime import UTC, datetime
+
+        from digiquant.portfolio.models.forecast import (
+            ForecastTerms,
+            PriceAnchor,
+            PriceAnchorStatus,
+        )
+        from digiquant.portfolio.phases.portfolio_common import (
+            materialize_forecast_assessment,
+            run_asset_analyst_llm,
+        )
+
+        terms = ForecastTerms.model_validate(_sample_terms())
+        cutoff = datetime(2026, 6, 19, 15, 0, tzinfo=UTC)
+        assessment = materialize_forecast_assessment(
+            ticker="AAPL",
+            terms=terms,
+            source_run_id="run-prior",
+            provider_invocation_id="inv-prior",
+            prompt_version="asset-analyst-full@prior",
+            artifact_version="h5-full@1",
+            price_anchor=PriceAnchor(
+                status=PriceAnchorStatus.UNAVAILABLE,
+                unavailable_reason="mark_price_not_available_in_analyst_state",
+            ),
+            effective_at=cutoff,
+            known_at=cutoff,
+        )
+        prior_body = {
+            "ticker": "AAPL",
+            "conviction_score": 2,
+            "stance": "hold",
+            "thesis": "prior thesis",
+            "risks": "prior risk",
+            "sources": [],
+            "fingerprint_news_hash": "stale",
+            "forecast": terms.model_dump(mode="json"),
+            "forecast_assessment": assessment.model_dump(mode="json"),
+            "evidence": {
+                "independent_confirming_signals": 3,
+                "contradicting_signals": 1,
+                "catalyst_within_horizon": False,
+                "trend_alignment": "with",
+                "evidence_quality": "medium",
+            },
+        }
+        state = _state(
+            prior={
+                "date": "2026-06-19",
+                "stance": "hold",
+                "conviction_score": 2,
+                "fingerprint_news_hash": "stale",
+            }
+        )
+        state = state.model_copy(
+            update={
+                "knowledge_cutoff_at": datetime(2026, 6, 20, 12, 0, tzinfo=UTC),
+                "prior_context": state.prior_context.model_copy(
+                    update={
+                        "latest_segments": {
+                            "analyst/AAPL": {
+                                "date": "2026-06-19",
+                                "payload": {"body": prior_body},
+                            }
+                        }
+                    }
+                ),
+            }
+        )
+        stance_only = DocumentPatch(
+            date=date(2026, 6, 20),
+            prior_date=date(2026, 6, 19),
+            target_document_key="analyst/AAPL",
+            status="updated",
+            ops=[PatchOp(op="set", path="/body/stance", value="buy")],
+        )
+
+        def fake(_m: str, msgs: list[dict[str, Any]], **_: Any) -> str:
+            return json.dumps(stance_only.model_dump(mode="json"))
+
+        with patch("digigraph.graph.research_agent.completion_text", side_effect=fake):
+            payload, _doc, errors, _bundle = run_asset_analyst_llm(
+                state=state,
+                ticker="AAPL",
+                roster_entry={"ticker": "AAPL", "roster_reason": "held"},
+                phase_slug="portfolio/asset-analyst-AAPL",
+            )
+        assert payload is not None
+        assert any("re-itemized" in e.message for e in errors)
+        # The desynced pair was never published: the prior call is carried instead,
+        # with its score re-derived from its own (unchanged) counts — hold leans ≤1.
+        assert payload.stance == "hold"
+        assert payload.conviction_score == 1
 
 
 def _sample_terms() -> dict[str, object]:
@@ -301,7 +607,7 @@ def _sample_terms() -> dict[str, object]:
 
 @pytest.mark.unit
 class TestH5ForecastMaterialization:
-    """WP4.3 — every new full H5 produces an immutable ForecastAssessment."""
+    """WP4.3 — every new full analyst produces an immutable ForecastAssessment."""
 
     def test_serializer_includes_assessment_and_anchor_reason(self) -> None:
         from datetime import UTC, datetime
@@ -331,7 +637,7 @@ class TestH5ForecastMaterialization:
             artifact_version="h5-full@1",
             price_anchor=PriceAnchor(
                 status=PriceAnchorStatus.UNAVAILABLE,
-                unavailable_reason="mark_price_not_available_in_h5_state",
+                unavailable_reason="mark_price_not_available_in_analyst_state",
             ),
             effective_at=cutoff,
             known_at=cutoff,
@@ -401,7 +707,7 @@ class TestH5ForecastMaterialization:
             artifact_version="h5-full@1",
             price_anchor=PriceAnchor(
                 status=PriceAnchorStatus.UNAVAILABLE,
-                unavailable_reason="mark_price_not_available_in_h5_state",
+                unavailable_reason="mark_price_not_available_in_analyst_state",
             ),
             effective_at=cutoff,
             known_at=cutoff,
@@ -473,6 +779,117 @@ class TestH5ForecastMaterialization:
         assert doc is not None
         assert doc["body"]["forecast_assessment"]["forecast_id"] == str(assessment.forecast_id)
 
+    def test_skip_carries_a_legacy_overcounted_evidence_body_with_net_preserved(self) -> None:
+        """#4585 — a persisted ``4 + 4`` row still carries, repaired to ``2 + 2``.
+
+        The evidence counts are two halves of one five-family universe, so ``4 + 4``
+        is impossible. A bare cross-field validator would degrade every legacy row
+        that overcounted; the skip/carry path repairs the pair on read instead,
+        preserving the net (here ``0``) so the derived conviction is unchanged.
+        """
+        from datetime import UTC, datetime
+
+        from digiquant.portfolio.models.forecast import (
+            ForecastTerms,
+            PriceAnchor,
+            PriceAnchorStatus,
+        )
+        from digiquant.portfolio.phases.portfolio_common import (
+            materialize_forecast_assessment,
+            run_asset_analyst_llm,
+        )
+
+        terms = ForecastTerms.model_validate(_sample_terms())
+        cutoff = datetime(2026, 6, 19, 15, 0, tzinfo=UTC)
+        assessment = materialize_forecast_assessment(
+            ticker="AAPL",
+            terms=terms,
+            source_run_id="run-prior",
+            provider_invocation_id="inv-prior",
+            prompt_version="asset-analyst-full@prior",
+            artifact_version="h5-full@1",
+            price_anchor=PriceAnchor(
+                status=PriceAnchorStatus.UNAVAILABLE,
+                unavailable_reason="mark_price_not_available_in_analyst_state",
+            ),
+            effective_at=cutoff,
+            known_at=cutoff,
+        )
+        prior_body = {
+            "ticker": "AAPL",
+            "conviction_score": 0,
+            "stance": "hold",
+            "thesis": "prior thesis",
+            "risks": "prior risk",
+            "sources": [],
+            "fingerprint_news_hash": "abc",
+            "forecast": terms.model_dump(mode="json"),
+            "forecast_assessment": assessment.model_dump(mode="json"),
+            # Impossible pre-#4585 vector: 8 family assignments over 5 families.
+            "evidence": {
+                "independent_confirming_signals": 4,
+                "contradicting_signals": 4,
+                "catalyst_within_horizon": True,
+                "trend_alignment": "with",
+                "evidence_quality": "high",
+            },
+        }
+        state = _state(
+            prior={
+                "date": "2026-06-19",
+                "stance": "hold",
+                "conviction_score": 0,
+                "fingerprint_news_hash": "abc",
+            }
+        )
+        state = state.model_copy(
+            update={
+                "price_deltas": {"AAPL": 0.0},
+                "knowledge_cutoff_at": datetime(2026, 6, 20, 12, 0, tzinfo=UTC),
+                "prior_context": state.prior_context.model_copy(
+                    update={
+                        "latest_segments": {
+                            "analyst/AAPL": {
+                                "date": "2026-06-19",
+                                "payload": {"body": prior_body},
+                            }
+                        },
+                        "prior_analyst_by_ticker": {
+                            "AAPL": {
+                                "date": "2026-06-19",
+                                "stance": "hold",
+                                "conviction_score": 0,
+                                "fingerprint_news_hash": "abc",
+                            }
+                        },
+                    }
+                ),
+            }
+        )
+        with patch(
+            "digiquant.portfolio.ticker_fingerprint.news_hash_for_ticker",
+            return_value="abc",
+        ):
+            from digiquant.portfolio.phases.portfolio_common import resolve_analyst_edit_mode
+
+            assert resolve_analyst_edit_mode(state, "AAPL") == "skip"
+            payload, doc, errors, _bundle = run_asset_analyst_llm(
+                state=state,
+                ticker="AAPL",
+                roster_entry={"ticker": "AAPL", "roster_reason": "held"},
+                phase_slug="portfolio/asset-analyst-AAPL",
+            )
+        assert not errors
+        assert payload is not None
+        assert payload.evidence is not None
+        assert payload.evidence.independent_confirming_signals == 2
+        assert payload.evidence.contradicting_signals == 2
+        # Net 0 preserved → the derived conviction is unchanged by the repair.
+        assert payload.conviction_score == 0
+        assert doc is not None
+        assert doc["body"]["evidence"]["independent_confirming_signals"] == 2
+        assert doc["body"]["evidence"]["contradicting_signals"] == 2
+
     def test_partial_nested_forecast_edit_rejected(self) -> None:
         from datetime import UTC, datetime
 
@@ -497,7 +914,7 @@ class TestH5ForecastMaterialization:
             artifact_version="h5-full@1",
             price_anchor=PriceAnchor(
                 status=PriceAnchorStatus.UNAVAILABLE,
-                unavailable_reason="mark_price_not_available_in_h5_state",
+                unavailable_reason="mark_price_not_available_in_analyst_state",
             ),
             effective_at=cutoff,
             known_at=cutoff,
@@ -566,7 +983,7 @@ class TestH5ForecastMaterialization:
         state = state.model_copy(
             update={"knowledge_cutoff_at": datetime(2026, 6, 20, 12, 0, tzinfo=UTC)}
         )
-        compiled = build_pipeline(ResearchState, [build_h5_asset_analyst(["AAPL"], held={"AAPL"})])
+        compiled = build_pipeline(ResearchState, [build_analyst(["AAPL"], held={"AAPL"})])
 
         def fake_missing_forecast(_m: str, msgs: list[dict[str, Any]], **_: Any) -> str:
             schema = next(
@@ -612,7 +1029,7 @@ class TestH5ForecastMaterialization:
         state = state.model_copy(
             update={"knowledge_cutoff_at": datetime(2026, 6, 20, 12, 0, tzinfo=UTC)}
         )
-        compiled = build_pipeline(ResearchState, [build_h5_asset_analyst(["AAPL"], held={"AAPL"})])
+        compiled = build_pipeline(ResearchState, [build_analyst(["AAPL"], held={"AAPL"})])
 
         def fake_with_forecast(_m: str, msgs: list[dict[str, Any]], **_: Any) -> str:
             return json.dumps(
@@ -650,8 +1067,8 @@ class TestH5ForecastMaterialization:
 
 
 @pytest.mark.unit
-def test_h5_persists_before_provider_and_failure_leaves_bundle() -> None:
-    """WP11.2: publish base before provider; H5 failure retains typed bundle."""
+def test_analyst_persists_before_provider_and_failure_leaves_bundle() -> None:
+    """WP11.2: publish base before provider; analyst failure retains typed bundle."""
     from datetime import UTC, datetime
     from unittest.mock import MagicMock
     from uuid import UUID, uuid4

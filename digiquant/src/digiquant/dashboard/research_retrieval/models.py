@@ -5,9 +5,9 @@ Prose ``documents`` / digests are deterministic *views*. Authoritative research
 memory is these structured, append-only entities. Persistence (WP12.2) and
 preflight pins (WP12.3) consume this surface; this module defines contracts only.
 
-WP11.1 adds immutable H5 :class:`TickerEvidenceBundle` plus append-only
+WP11.1 adds immutable analyst :class:`TickerEvidenceBundle` plus append-only
 :class:`MissingFactRequest` / :class:`EvidenceBundleAmendment` vocabulary.
-H6 selection cutover is WP11.3 (`research_retrieval/planner.py`) — these
+deliberation selection cutover is WP11.3 (`research_retrieval/planner.py`) — these
 contracts do not own fan-out; selection consumes bundle IDs as features.
 
 Distinct from Track B ``research_corpus`` (#2613): corpus pins are tenant-agnostic
@@ -52,7 +52,7 @@ _EVIDENCE_BUNDLE_AMENDMENT_ID_NS = UUID("c1a0e509-4b8d-5f2a-9c17-3d6e8f0a1b22")
 # Identifiers / short keys aligned with DB CHECK (length … BETWEEN 1 AND 500).
 NonEmptyStr: TypeAlias = Annotated[str, Field(min_length=1, max_length=500)]
 # Free-text prose (evidence/belief/patch summaries). No max_length — silent
-# truncation and 500-char caps crashed H5 on long web_grounding (#3063).
+# truncation and 500-char caps crashed analyst on long web_grounding (#3063).
 NonEmptyText: TypeAlias = Annotated[str, Field(min_length=1)]
 Confidence: TypeAlias = Annotated[
     Decimal, Field(ge=0, le=1, allow_inf_nan=False, max_digits=16, decimal_places=8)
@@ -784,7 +784,7 @@ def ticker_evidence_bundle_content_hash(
     evidence_ids: tuple[UUID, ...],
     source: str,
 ) -> str:
-    """Canonical digest for an H5 base ticker evidence bundle body."""
+    """Canonical digest for an analyst base ticker evidence bundle body."""
     return content_digest(
         {
             "ticker": ticker.strip().upper(),
@@ -832,7 +832,7 @@ def evidence_bundle_amendment_id(
     missing_fact_request_id: UUID,
     content_hash: str,
 ) -> UUID:
-    """Deterministic H6 amendment identity bound to one base + one request."""
+    """Deterministic deliberation amendment identity bound to one base + one request."""
     if not content_hash.strip():
         raise ValueError("content_hash is required")
     return uuid5(
@@ -860,10 +860,10 @@ def evidence_bundle_amendment_content_hash(
 
 
 class TickerEvidenceBundle(ResearchStateModel):
-    """Immutable H5 base evidence bundle for one ticker in one run.
+    """Immutable analyst base evidence bundle for one ticker in one run.
 
-    WP11.1 contract — H6 selection (WP11.3) may cite ``bundle_id`` as a
-    selection feature. Base rows never mutate; H6 may only append
+    WP11.1 contract — deliberation selection (WP11.3) may cite ``bundle_id`` as a
+    selection feature. Base rows never mutate; deliberation may only append
     :class:`EvidenceBundleAmendment` rows (WP11.4).
     """
 
@@ -926,7 +926,7 @@ class TickerEvidenceBundle(ResearchStateModel):
 
 
 class MissingFactRequest(ResearchStateModel):
-    """Named missing-fact request H6 may answer — always linked to one base bundle."""
+    """Named missing-fact request deliberation may answer — always linked to one base bundle."""
 
     request_id: UUID
     base_bundle_id: UUID
@@ -972,7 +972,7 @@ class MissingFactRequest(ResearchStateModel):
 
 
 class EvidenceBundleAmendment(ResearchStateModel):
-    """Append-only H6 supplement for one missing-fact request on one base bundle.
+    """Append-only deliberation supplement for one missing-fact request on one base bundle.
 
     Never mutates :class:`TickerEvidenceBundle`. Unlinked amendments are refused
     by the store (WP11.1 metric: zero unlinked amendments).

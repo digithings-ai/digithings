@@ -58,6 +58,35 @@ in operator runbooks.
    already-applied migration is edited in place. The de-brand lands as
    forward changes, wave by wave, each linked to #3762.
 
+## Amendment (2026-09-22, #4471)
+
+Decision point 3 ("Internal phase IDs stay. A0–A4 and H1–H9 remain graph
+coordinates") is superseded as a *naming* rule. The `h` markers were the
+retired atlas / hermes / kairos vocabulary leaking back in as step names:
+`h5_asset_analyst`, `h6_deliberation`, `h7_pm_direction`, `portfolio_h9_commit_run`
+and so on. Pipeline steps are now named for their job.
+
+1. **Step names are the job words.** `thesis`, `market`, `vehicle_map`,
+   `screener`, `analyst`, `deliberation`, `direction`, `sizing`, `commit`
+   (`research_edit` unchanged). The rename covers module filenames, Python
+   symbols, the `RetrievalPhase` / `PromptRole` literals, `PHASE_NAME` values,
+   config routing slugs, and doc prose.
+2. **`NODE_ID` values were already semantic** (`portfolio/asset-analyst`,
+   `portfolio/deliberation`, …) and are unchanged. The independent `phaseN`
+   execution scheme (`phase7e_risk_sizing`, `phase9_evolution`, …) is out of
+   scope for this amendment.
+3. **Database objects still move only by forward migration.** `atlas_run_diagnostics`,
+   `atlas_run_health`, and the `h8_risk_run_refs` compat-view alias are renamed
+   in a later wave, never by editing an applied migration. Until then the DB
+   object names stay as written.
+4. **Stored contracts are kept, names notwithstanding.** The env-var string
+   values `DIGIQUANT_H6_*` / `OLYMPUS_H6_*`, the persisted source labels
+   `"h5:base"` / `"h6:missing_fact"`, the `h8_risk_run_refs` alias, and every
+   already-applied migration and historical ADR body remain. Only the Python
+   identifiers around them were renamed.
+5. **This amends, it does not rewrite.** No historical ADR body and no applied
+   migration is edited in place. Delivery: #4471.
+
 ## Links
 
 - Scope: [docs/plans/2026-08-30-product-rebrand-scope.md](../plans/2026-08-30-product-rebrand-scope.md)

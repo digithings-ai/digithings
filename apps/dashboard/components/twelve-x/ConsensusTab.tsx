@@ -2,17 +2,29 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Button, Card, SegmentedControl } from '@digithings/ui/ui';
-import { MultiTimeSeries, type OverlaySeries } from '@digithings/ui';
 import { LineChart as LineChartIcon } from 'lucide-react';
+import {
+  CartesianGrid,
+  Line,
+  LineChart,
+  ReferenceArea,
+  ReferenceLine,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
+} from 'recharts';
 import {
   LEAN_BAND,
   SCORE_MAX,
   STRONG_BAND,
   currencyColor,
 } from '@/lib/twelve-x/consensus-bar';
+import { useChartColors, withAlpha } from '@/lib/chart-colors';
 import type {
   ConsensusDeltaSet,
   FxBriefRow,
+  FxConfluenceSnapshotRow,
   FxConsensusDivergence,
   FxConsensusSnapshotRow,
   IntelligenceWhy,
@@ -60,6 +72,7 @@ export default function ConsensusTab({
   focusCcy,
   intelligenceWhy,
   researchBriefs,
+  confluence = [],
   initialView = 'table',
 }: {
   series: FxConsensusSnapshotRow[];
@@ -70,9 +83,11 @@ export default function ConsensusTab({
   focusCcy?: string | null;
   intelligenceWhy: IntelligenceWhy;
   researchBriefs: FxBriefRow[];
+  confluence?: FxConfluenceSnapshotRow[];
   initialView?: ConsensusView;
 }) {
-  const { openBrief } = useTwelveX();
+  const chart = useChartColors();
+  const { crossLink, openBrief } = useTwelveX();
   const [view, setView] = useState<ConsensusView>(initialView);
   const [drilldownCcy, setDrilldownCcy] = useState<string | null>(null);
   const [divergenceCcy, setDivergenceCcy] = useState<string | null>(null);
@@ -113,29 +128,6 @@ export default function ConsensusTab({
 
   const hasSeries = scoreSeries.length > 0 && currencies.length > 0;
 
-  // Kit overlay series (Q3b slice 5a, #4443): one solid line per visible
-  // currency plus its dashed stale extension. Gaps stay gaps — the old
-  // connectNulls bridging is gone deliberately (an interpolated segment is
-  // a claim about data that does not exist).
-  const overlaySeries = useMemo<OverlaySeries[]>(() => {
-    const out: OverlaySeries[] = [];
-    for (const c of currencies) {
-      if (!visibleCurrencies.has(c)) continue;
-      const color = currencyColor(c);
-      const live: { t: string; v: number }[] = [];
-      const stale: { t: string; v: number }[] = [];
-      for (const row of scoreSeries) {
-        const v = row[c];
-        if (typeof v === 'number' && Number.isFinite(v)) live.push({ t: row.run_date, v });
-        const s = row[`${c}__stale`];
-        if (typeof s === 'number' && Number.isFinite(s)) stale.push({ t: row.run_date, v: s });
-      }
-      out.push({ id: c, label: c, points: live, color });
-      out.push({ id: `${c}__stale`, label: `${c} (stale)`, points: stale, color, dashed: true });
-    }
-    return out;
-  }, [currencies, scoreSeries, visibleCurrencies]);
-
   const drilldownRow = consensusRows.find((r) => r.currency === drilldownCcy) ?? null;
   const drilldownIntelligence = intelligenceWhy.items.find((item) => item.currency === drilldownCcy) ?? null;
   const divergencePanelItem = divergenceCcy ? divergenceByCurrency[divergenceCcy] ?? null : null;
@@ -173,7 +165,7 @@ export default function ConsensusTab({
     <div className="space-y-5">
       <div className="flex flex-wrap items-center gap-3 px-1">
         <LineChartIcon size={18} className="shrink-0 text-accent" aria-hidden />
-        <h2 className="font-display text-xl tracking-tight text-ink">G10 consensus</h2>
+        <h2 className="font-display text-2xl tracking-tight text-ink">G10 consensus</h2>
       </div>
 
       <p className="text-xs text-ink-mute max-w-2xl">
@@ -247,27 +239,77 @@ export default function ConsensusTab({
             </div>
 
             {hasSeries ? (
-              <div className="w-full">
-                <MultiTimeSeries
-                  series={overlaySeries}
-                  height={360}
-                  fmt={(v: number) => v.toFixed(2)}
-                  domain={[SCORE_MIN, SCORE_MAX]}
-                  references={{
-                    bands: [
-                      { from: STRONG_BAND, to: SCORE_MAX, tone: 'accent' },
-                      { from: SCORE_MIN, to: -STRONG_BAND, tone: 'warn' },
-                    ],
-                    lines: [
-                      { value: STRONG_BAND, tone: 'accent', label: `Strong +${STRONG_BAND}` },
-                      { value: LEAN_BAND, tone: 'accent', label: `Lean +${LEAN_BAND}` },
-                      { value: 0, tone: 'mute', dashed: false, label: 'Zero' },
-                      { value: -LEAN_BAND, tone: 'warn', label: `Lean ${-LEAN_BAND}` },
-                      { value: -STRONG_BAND, tone: 'warn', label: `Strong ${-STRONG_BAND}` },
-                    ],
-                  }}
-                  ariaLabel={`G10 consensus score over time, ${SCORE_MIN} (most bearish) to ${SCORE_MAX} (most bullish)`}
-                />
+              <div className="h-[min(420px,55vh)] min-h-[300px] w-full">
+                <ResponsiveContainer width="100%" height="100%">
+                  <LineChart data={scoreSeries} margin={{ top: 8, right: 16, left: 0, bottom: 8 }}>
+                    <CartesianGrid stroke={chart.hair} />
+                    <ReferenceArea y1={STRONG_BAND} y2={SCORE_MAX} fill={chart.accent} fillOpacity={0.06} />
+                    <ReferenceArea y1={SCORE_MIN} y2={-STRONG_BAND} fill={chart.warn} fillOpacity={0.06} />
+                    <ReferenceLine y={STRONG_BAND} stroke={chart.accent} strokeOpacity={0.5} strokeDasharray="4 4" />
+                    <ReferenceLine y={LEAN_BAND} stroke={chart.accent} strokeOpacity={0.3} strokeDasharray="2 4" />
+                    <ReferenceLine y={0} stroke={withAlpha(chart.ink, 0.25)} />
+                    <ReferenceLine y={-LEAN_BAND} stroke={chart.warn} strokeOpacity={0.3} strokeDasharray="2 4" />
+                    <ReferenceLine y={-STRONG_BAND} stroke={chart.warn} strokeOpacity={0.5} strokeDasharray="4 4" />
+                    <XAxis
+                      dataKey="run_date"
+                      tick={{ fill: chart.axis, fontSize: 11 }}
+                      tickFormatter={(d: string) => d?.slice(5)}
+                      label={{ value: 'Run date', position: 'insideBottom', offset: -4, fill: chart.axis, fontSize: 10 }}
+                    />
+                    <YAxis
+                      domain={[SCORE_MIN, SCORE_MAX]}
+                      ticks={[-2, -1.25, -0.35, 0, 0.35, 1.25, 2]}
+                      tick={{ fill: chart.axis, fontSize: 11 }}
+                      width={44}
+                    />
+                    <Tooltip
+                      contentStyle={{
+                        background: 'var(--term-bg)',
+                        border: '1px solid var(--hair)',
+                        color: 'var(--ink)',
+                        borderRadius: 0,
+                        fontSize: '0.8rem',
+                      }}
+                      formatter={(val, name) => {
+                        const n = val == null ? NaN : typeof val === 'number' ? val : Number(val);
+                        return [Number.isNaN(n) ? '—' : n.toFixed(2), String(name)];
+                      }}
+                    />
+                    {currencies.map((c) => {
+                      const isVisible = visibleCurrencies.has(c);
+                      if (!isVisible) return null;
+                      return (
+                        <Line
+                          key={c}
+                          type="monotone"
+                          dataKey={c}
+                          name={c}
+                          stroke={currencyColor(c)}
+                          strokeWidth={1.5}
+                          dot={false}
+                          connectNulls
+                        />
+                      );
+                    })}
+                    {currencies.map((c) => {
+                      const isVisible = visibleCurrencies.has(c);
+                      if (!isVisible) return null;
+                      return (
+                        <Line
+                          key={`${c}__stale`}
+                          type="monotone"
+                          dataKey={`${c}__stale`}
+                          stroke={currencyColor(c)}
+                          strokeWidth={1.5}
+                          strokeDasharray="3 3"
+                          dot={false}
+                          connectNulls
+                          legendType="none"
+                        />
+                      );
+                    })}
+                  </LineChart>
+                </ResponsiveContainer>
               </div>
             ) : (
               <div className="h-[300px] flex items-center justify-center text-ink-mute text-sm">
@@ -276,6 +318,46 @@ export default function ConsensusTab({
             )}
           </Card>
         </div>
+      ) : null}
+
+      {/* Confluence reads — where independent desks align on an axis. */}
+      {confluence.length > 0 ? (
+        <Card data-reveal className="gap-0 space-y-3 p-4 md:p-5">
+          <div className="flex items-baseline justify-between gap-2">
+            <h3 className="font-display text-lg tracking-tight text-ink">Confluence reads</h3>
+            <span className="font-mono text-[10px] text-ink-mute">
+              {confluence.length}
+            </span>
+          </div>
+          <ul className="grid gap-1">
+            {confluence.map((c) => (
+              <li
+                key={`${c.rank}-${c.currency}`}
+                className="flex items-center gap-2 border-t border-hair pt-1 first:border-t-0 first:pt-0"
+              >
+                <span className="font-mono text-[10px] text-ink-mute">#{c.rank}</span>
+                <span className="font-semibold text-ink">{c.currency}</span>
+                <span
+                  className={`text-xs font-semibold uppercase ${
+                    c.direction === 'bullish' || c.direction === 'long'
+                      ? 'text-accent'
+                      : 'text-warn'
+                  }`}
+                >
+                  {c.direction}
+                </span>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="ml-auto h-auto px-1 py-0 text-[11px] text-ink-soft"
+                  onClick={() => crossLink({ kind: 'currency', currency: c.currency })}
+                >
+                  trend →
+                </Button>
+              </li>
+            ))}
+          </ul>
+        </Card>
       ) : null}
 
       <CurrencyDrilldownPanel

@@ -10,6 +10,15 @@ import {
   normalizeOpenRouterModel,
 } from "@/lib/byok-openrouter";
 import { byokRequiresModel } from "@/lib/byok-providers";
+import {
+  AI_SDK_PROTOCOLS,
+  NON_AI_SDK_PROTOCOLS,
+  backendAdapterFor,
+  isAiSdkConfig,
+  isDigigraphConfig,
+  isFoundryConfig,
+  isNonAiSdkConfig,
+} from "@/lib/backend-adapters";
 import { createDigiGraphClient, digigraphModelName } from "@/lib/digigraph";
 import {
   DigigraphUpstreamAuthError,
@@ -17,6 +26,8 @@ import {
 } from "@/lib/digigraph-upstream";
 import { createDigigraphTraceStreamResponse } from "@/lib/adapters/digithings/stream";
 import { createFoundryStreamResponse } from "@/lib/adapters/foundry/stream";
+import { createAiSdkStreamResponse } from "@/lib/adapters/ai-sdk/stream";
+import { createNonAiSdkStreamResponse } from "@/lib/adapters/non-ai-sdk";
 import { resolveLanguageCode } from "@/lib/languages";
 import { requireDigiChatAuth } from "@/lib/request-auth";
 import { getEcosystemEndpoints } from "@/lib/ecosystem";
@@ -39,6 +50,7 @@ import {
   resolveEmbedChatTenant,
 } from "@/lib/embed-chat-tenant";
 import { isPlanTierSatisfied } from "@/lib/embed-tenants";
+import type { DigichatDeployment } from "@/lib/deploy-config/schema";
 import { verifyPlanProof } from "@/lib/plan-proof";
 import {
   acquireChatRunLock,
@@ -157,6 +169,48 @@ export async function POST(req: Request) {
 
   const embedConfig = embedConfigOf(tenantCtx);
 
+  // Resolve the deployment once for the whole handler. `embedConfig` only
+  // exists on the embed surface, so every gate below (plan tier, activity
+  // detail, backend type, corpus index) used to apply only there — an
+  // authenticated session ignored its own deployment config entirely.
+  // Fall back to the embed tenant, and never let a config read throw 500 a
+  // request that used to work.
+  let dep: DigichatDeployment | null = null;
+  // A config read error must keep failing closed for an explicit model, so
+  // track it separately from "no deployment matched this host".
+  let configFailed = false;
+  try {
+    const { resolveDeploymentForHost, getDigichatConfig, embedTenantToDeployment } =
+      await import("@/lib/deploy-config/loader");
+    try {
+      const config = getDigichatConfig();
+      // Host selection is never authorization. On the embed surface the host
+      // has already been verified (token / first-party origin) before we get
+      // here, so X-Embed-Host is safe to consult. On the authenticated session
+      // path it is just a client-supplied header — use the config's own
+      // deployment block instead of letting a caller name another host.
+      dep = embedConfig
+        ? resolveDeploymentForHost(req.headers.get("x-embed-host"), config)
+        : (config.deployment ?? null);
+    } catch {
+      configFailed = true;
+      dep = null;
+    }
+    if (!dep && embedConfig) dep = embedTenantToDeployment(embedConfig);
+  } catch {
+    // Unreadable loader must never 500 a request that used to work.
+    configFailed = true;
+    dep = null;
+  }
+  // Embed wins wherever both exist so the embed surface stays byte-identical;
+  // the change is the session surface gaining the deployment config.
+  const backend = embedConfig?.backend ?? dep?.backend;
+  // The registry describes the backend once (#4522): the streaming path is
+  // chosen from `adapter.protocol`, never from a `backend.type` comparison.
+  const adapter = backendAdapterFor(backend?.type);
+  const activityDetail = embedConfig?.activityDetail ?? dep?.gate.activityDetail ?? "labels";
+  const requiredPlanTier = embedConfig?.requiredPlanTier ?? dep?.gate.requiredPlanTier;
+
   // Desk+ tier gate (#3662, Chris lock): when the embed config declares a
   // requiredPlanTier, the caller must present a valid HMAC-signed plan proof
   // token (X-Embed-Plan-Proof header) OR an authenticated digichat session
@@ -165,7 +219,7 @@ export async function POST(req: Request) {
   // spoofable.  Fail closed when proof is absent or tier below threshold.
   // Scoped to tenants with requiredPlanTier set — digithings.ai and all
   // other tenants are untouched.
-  if (embedConfig?.requiredPlanTier) {
+  if (requiredPlanTier) {
     let callerTier: string | null = null;
 
     // Prefer: HMAC-signed plan proof token from the dashboard popup.
@@ -184,11 +238,11 @@ export async function POST(req: Request) {
 
     // NEVER trust raw X-Embed-Plan-Tier / ?plan_tier= — client-asserted and spoofable.
 
-    if (!isPlanTierSatisfied(embedConfig, callerTier)) {
+    if (!isPlanTierSatisfied({ requiredPlanTier }, callerTier)) {
       return jsonError(
         403,
         "plan_tier_required",
-        `Chat requires ${embedConfig.requiredPlanTier}+ plan tier.`,
+        `Chat requires ${requiredPlanTier}+ plan tier.`,
       );
     }
   }
@@ -269,16 +323,68 @@ export async function POST(req: Request) {
 
   const finish = (res: Response) => releaseChatRunLockOnResponseEnd(res, runLock.release);
 
-  if (embedConfig?.backend.type === "foundry") {
+  // Deploy `models.available` allowlist (fail closed when non-empty). Resolved
+  // before the backend branch so it applies to foundry too, not just digigraph.
+  // Prefer X-Digi-Model on the house path. Bound BYOK spends the visitor's
+  // provider models — the CI picker must not reject those ids (#3829).
+  let modelId = digigraphModelName();
+  const requestedModel = req.headers.get("x-digi-model")?.trim() || undefined;
+  try {
+    const { allowlistModelId } = await import("@/lib/deploy-config");
+    if (byokKey) {
+      if (requestedModel) modelId = requestedModel;
+    } else if (dep?.models && (dep.models.available?.length ?? 0) > 0) {
+      const allowed = allowlistModelId(dep.models, requestedModel);
+      if (requestedModel && allowed === undefined) {
+        runLock.release();
+        return new Response(
+          JSON.stringify({
+            error: "model_not_allowed",
+            message: "Requested model is not in the deployment allowlist.",
+          }),
+          { status: 400, headers: { "content-type": "application/json" } },
+        );
+      }
+      if (allowed) modelId = allowed;
+    } else if (configFailed && requestedModel) {
+      // The deployment config could not be read, so we cannot prove the model
+      // is allowed → fail closed rather than forward an unverified id.
+      runLock.release();
+      return new Response(
+        JSON.stringify({
+          error: "model_not_allowed",
+          message: "Deployment model allowlist could not be loaded.",
+        }),
+        { status: 400, headers: { "content-type": "application/json" } },
+      );
+    } else if (requestedModel) {
+      modelId = requestedModel;
+    }
+  } catch {
+    // Invalid deploy config with an explicit request → fail closed.
+    if (requestedModel) {
+      runLock.release();
+      return new Response(
+        JSON.stringify({
+          error: "model_not_allowed",
+          message: "Deployment model allowlist could not be loaded.",
+        }),
+        { status: 400, headers: { "content-type": "application/json" } },
+      );
+    }
+  }
+
+  if (adapter.protocol === "foundry-responses" && isFoundryConfig(backend)) {
+    const foundryBackend = backend;
     let foundryRes: Response;
     try {
       foundryRes = await createFoundryStreamResponse({
-        projectEndpoint: embedConfig.backend.projectEndpoint,
-        agentName: embedConfig.backend.agentName,
+        projectEndpoint: foundryBackend.projectEndpoint,
+        agentName: foundryBackend.agentName,
         messages,
         conversationId: externalConversation,
         responseHeaders,
-        activityDetail: embedConfig.activityDetail,
+        activityDetail,
         signal: req.signal,
         responseLanguage: languageCode,
         turnMode,
@@ -295,6 +401,28 @@ export async function POST(req: Request) {
     return finish(foundryRes);
   }
 
+  // Non-AI-SDK backends (#4543): LangGraph / AG-UI / A2A each get their own
+  // mapper, dispatched from the adapter's protocol. Placed before the
+  // `coreMessages` conversion — these adapters take the UI messages and do
+  // their own text mapping, so a conversion failure must not be able to fail
+  // a request that would otherwise stream.
+  if (NON_AI_SDK_PROTOCOLS.has(adapter.protocol) && isNonAiSdkConfig(backend)) {
+    try {
+      return finish(
+        await createNonAiSdkStreamResponse({
+          backend,
+          messages,
+          responseHeaders,
+          activityDetail,
+          signal: req.signal,
+        }),
+      );
+    } catch (err) {
+      runLock.release();
+      throw err;
+    }
+  }
+
   let coreMessages;
   try {
     coreMessages = await convertToModelMessages(
@@ -308,6 +436,42 @@ export async function POST(req: Request) {
   } catch (err) {
     runLock.release();
     throw err;
+  }
+
+  // Opt-in web search (#3420): client must ask AND tenant/env must allow.
+  // Never forward on a silent default — corpus-only unless both gates pass.
+  // Computed here so the AI-SDK backends (#4552) can pass their provider's
+  // built-in search tool under the SAME gate the digigraph header below uses.
+  // An embed tenant is authoritative for itself; on the session path the
+  // deployment config decides, with `DIGICHAT_WEB_SEARCH` kept as the
+  // documented fallback for installs that never set `gate.webSearch` (#4552).
+  const clientWantsWeb =
+    (req.headers.get("x-digi-enable-web-search") || "").trim().toLowerCase() === "1" ||
+    (req.headers.get("x-digi-enable-web-search") || "").trim().toLowerCase() === "true";
+  const tenantAllowsWeb = embedConfig
+    ? embedConfig.webSearch === true
+    : dep?.gate.webSearch === true || process.env.DIGICHAT_WEB_SEARCH === "1";
+  const webSearchEnabled = clientWantsWeb && tenantAllowsWeb;
+
+  // AI-SDK backends (#4535): OpenAI Completions / Responses run through one
+  // `streamText` mapper. Sits after `coreMessages` (already built) and before
+  // the BYOK guard, so foundry/digigraph behaviour is untouched and BYOK stays
+  // a digigraph-only concern — the AI-SDK credential is the configured env key.
+  if (AI_SDK_PROTOCOLS.has(adapter.protocol) && isAiSdkConfig(backend)) {
+    try {
+      return finish(
+        await createAiSdkStreamResponse({
+          backend,
+          messages: coreMessages,
+          responseHeaders,
+          webSearch: webSearchEnabled,
+          signal: req.signal,
+        }),
+      );
+    } catch (err) {
+      runLock.release();
+      throw err;
+    }
   }
 
   // Non-OpenAI BYOK requires a model slug before forwarding to digigraph.
@@ -346,52 +510,6 @@ export async function POST(req: Request) {
   const eco = await getEcosystemEndpoints();
   const provider = createDigiGraphClient(eco.digigraphUrl, upstreamBearer);
 
-  // Deploy `models.available` allowlist (fail closed when non-empty).
-  // Prefer X-Digi-Model on the house path. Bound BYOK spends the visitor's
-  // provider models — the CI picker must not reject those ids (#3829).
-  let modelId = digigraphModelName();
-  const requestedModel = req.headers.get("x-digi-model")?.trim() || undefined;
-  try {
-    const { allowlistModelId } = await import("@/lib/deploy-config");
-    const {
-      resolveDeploymentForHost,
-      getDigichatConfig,
-      embedTenantToDeployment,
-    } = await import("@/lib/deploy-config/loader");
-    const embedHost = req.headers.get("x-embed-host");
-    let dep = resolveDeploymentForHost(embedHost, getDigichatConfig());
-    if (!dep && embedConfig) dep = embedTenantToDeployment(embedConfig);
-    if (byokKey) {
-      if (requestedModel) modelId = requestedModel;
-    } else if (dep?.models && (dep.models.available?.length ?? 0) > 0) {
-      const allowed = allowlistModelId(dep.models, requestedModel);
-      if (requestedModel && allowed === undefined) {
-        runLock.release();
-        return new Response(
-          JSON.stringify({
-            error: "model_not_allowed",
-            message: "Requested model is not in the deployment allowlist.",
-          }),
-          { status: 400, headers: { "content-type": "application/json" } },
-        );
-      }
-      if (allowed) modelId = allowed;
-    } else if (requestedModel) {
-      modelId = requestedModel;
-    }
-  } catch {
-    // Invalid deploy config with an explicit request → fail closed.
-    if (requestedModel) {
-      runLock.release();
-      return new Response(
-        JSON.stringify({
-          error: "model_not_allowed",
-          message: "Deployment model allowlist could not be loaded.",
-        }),
-        { status: 400, headers: { "content-type": "application/json" } },
-      );
-    }
-  }
   const model = provider(modelId);
 
   const upstreamHeaders: Record<string, string> = {
@@ -402,12 +520,13 @@ export async function POST(req: Request) {
     "X-Digi-Caller": "digichat",
     Authorization: `Bearer ${upstreamBearer}`,
   };
-  if (embedConfig?.backend.type === "digigraph") {
-    if (embedConfig.backend.digisearchIndex) {
-      upstreamHeaders["X-Digi-Corpus-Index"] = embedConfig.backend.digisearchIndex;
+  if (adapter.capabilities.corpus && isDigigraphConfig(backend)) {
+    const digigraphBackend = backend;
+    if (digigraphBackend.digisearchIndex) {
+      upstreamHeaders["X-Digi-Corpus-Index"] = digigraphBackend.digisearchIndex;
     }
-    if (embedConfig.backend.vaultPathPrefix) {
-      upstreamHeaders["X-Digi-Vault-Prefix"] = embedConfig.backend.vaultPathPrefix;
+    if (digigraphBackend.vaultPathPrefix) {
+      upstreamHeaders["X-Digi-Vault-Prefix"] = digigraphBackend.vaultPathPrefix;
     }
   }
   if (litellmProxyApiKey) {
@@ -437,15 +556,7 @@ export async function POST(req: Request) {
       mergeMcpSessionOverlay,
       mcpUpstreamHeaderValue,
     } = await import("@/lib/deploy-config");
-    const {
-      resolveDeploymentForHost,
-      getDigichatConfig,
-      embedTenantToDeployment,
-    } = await import("@/lib/deploy-config/loader");
-    const rawEmbedHost = req.headers.get("x-embed-host");
-    const embedHost = rawEmbedHost?.trim() ? rawEmbedHost.trim() : null;
-    let dep = resolveDeploymentForHost(embedHost, getDigichatConfig());
-    if (!dep && embedConfig) dep = embedTenantToDeployment(embedConfig);
+    // `dep` is resolved once at the top of the handler.
     const operator = operatorMcpServersForUpstream(dep);
     const overlay = parseMcpSessionOverlay(req.headers.get("x-digi-mcp-session"));
     const merged = mergeMcpSessionOverlay({
@@ -476,15 +587,9 @@ export async function POST(req: Request) {
     // Invalid deploy config — do not forward force-tool / disabled-tools / MCP.
   }
 
-  // Opt-in web search (#3420): client must ask AND tenant/env must allow.
-  // Never forward on a silent default — corpus-only unless both gates pass.
-  const clientWantsWeb =
-    (req.headers.get("x-digi-enable-web-search") || "").trim().toLowerCase() === "1" ||
-    (req.headers.get("x-digi-enable-web-search") || "").trim().toLowerCase() === "true";
-  const tenantAllowsWeb =
-    embedConfig?.webSearch === true ||
-    (!embedConfig && process.env.DIGICHAT_WEB_SEARCH === "1");
-  if (clientWantsWeb && tenantAllowsWeb) {
+  // The web-search gate itself is computed above, shared with the AI-SDK
+  // backends (#4552); only the digigraph upstream header is written here.
+  if (webSearchEnabled) {
     upstreamHeaders["X-Digi-Enable-Web-Search"] = "1";
   }
 
@@ -515,7 +620,7 @@ export async function POST(req: Request) {
           digigraphBaseUrl: eco.digigraphUrl ?? "",
           upstreamHeaders,
           responseHeaders,
-          activityDetail: embedConfig?.activityDetail ?? "full",
+          activityDetail,
           signal: req.signal,
         }),
       );
@@ -535,7 +640,11 @@ export async function POST(req: Request) {
 
   return finish(
     createUIMessageStreamResponse({
-      stream: toUIMessageStream({ stream: result.stream }),
+      stream: toUIMessageStream({
+        stream: result.stream,
+        sendSources: true,
+        sendReasoning: true,
+      }),
       headers: responseHeaders,
     }),
   );

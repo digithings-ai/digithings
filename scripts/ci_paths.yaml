@@ -32,12 +32,12 @@ digiquant:
   - digiquant/**
   - tests/dq/**
   - .github/workflows/test-digiquant.yml
-  # The browser half of the live price feed is guarded from Python, because
-  # apps/digiquant-web has no test runner at all (#1807). Without this entry a
-  # frontend-only edit to useLivePrices.ts fires the `web` lane (eslint + build) and
-  # never runs tests/dq/test_prices_live_subscriber.py — the exact change class that
-  # guard exists to catch. eslint does not flag re-adding `private: true`, collapsing
-  # the per-instance Realtime topic, or reinstating a broadcast subscription.
+  # The browser half of the live price feed keeps a Python-side guard. Since #4448
+  # apps/digiquant-web runs its own vitest suite in the `web` lane, but this entry is
+  # still needed: without it a frontend-only edit to useLivePrices.ts never runs
+  # tests/dq/test_prices_live_subscriber.py — the guard for re-adding `private: true`,
+  # collapsing the per-instance Realtime topic, or reinstating a broadcast
+  # subscription, none of which eslint flags.
   - apps/digiquant-web/lib/live/**
 
 digisearch:
@@ -104,6 +104,12 @@ dashboard:
 web:
   - apps/digithings-web/**
   - apps/digiquant-web/**
+  # digiquant-web's pipeline-data pin re-reads this file at test time and asserts the
+  # site's portfolio chips match its `phases.append(...)` sequence in order (#4441).
+  # Without this entry the pin only runs when the APP changes — a backend-only phase
+  # rename or reorder would never fire the lane, which is precisely the drift the pin
+  # was written to catch. One file, not digiquant/**: the pin reads nothing else.
+  - digiquant/src/digiquant/portfolio/graph.py
   # Org-wide Cloudflare cron Worker. This lane owns its Vitest + typecheck
   # because it already installs the root npm workspaces.
   - apps/digithings-cron/**

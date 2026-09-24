@@ -280,7 +280,7 @@ describe('buildIdeaDetailModel', () => {
     expect(model.levelRows.map((r) => r.role)).toEqual(['target', 'entry', 'stop']);
   });
 
-  it('sorts multi-target rows price-descending for display', () => {
+  it('publishes only the primary target from a legacy multi-target ladder', () => {
     const model = buildIdeaDetailModel({
       ...LEVELS_IDEA,
       pair: 'EUR/USD',
@@ -295,8 +295,10 @@ describe('buildIdeaDetailModel', () => {
       },
     });
     const targets = model.levelRows.filter((r) => r.role === 'target');
-    expect(targets.map((r) => r.value)).toEqual(['1.2', '1.18', '1.17']);
-    expect(targets.map((r) => r.label)).toEqual(['Target', 'Target 2', 'Target 3']);
+    // The pipeline caps ideas to a single target (LEVELS_MAX_TARGETS), so the
+    // stale multi-broker ladder must never render as a "Target 2/3…" list.
+    expect(targets.map((r) => r.value)).toEqual(['1.17']);
+    expect(targets.map((r) => r.label)).toEqual(['Target']);
   });
 
   it('returns empty blocks when trade_levels and evidence are absent', () => {

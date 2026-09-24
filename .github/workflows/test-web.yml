@@ -48,8 +48,8 @@ jobs:
       # digithings-web gained vitest in #1868 (2026-08-05) — chatHandoff and the CSP
       # contract — but no lane ever ran it, so those two files could not fail. That is
       # the same silent-pass defect as a green build with no reviewer attached, caught
-      # a day later while adding a third test file. digiquant-web has no `test`
-      # script; add the step when it gets one.
+      # a day later while adding a third test file. (digiquant-web had the same gap,
+      # left dark until #4448 — see its Test step beside its lint below.)
       - name: Test digithings-web
         run: npm run test --workspace digithings-web
 
@@ -78,6 +78,33 @@ jobs:
 
       - name: Lint digiquant-web
         run: npm run lint --workspace digiquant-web
+
+      # digiquant-web declared `"test": "vitest run"` but no lane invoked it, so its
+      # suite could not fail (#4448) — the last app in this lane still dark after
+      # #4445 lit the design reference.
+      #
+      # This step used to carry a load-bearing pin, components/landing/pipeline-data.test.ts,
+      # which re-read digiquant/src/digiquant/portfolio/graph.py at test time and
+      # asserted chip-for-chip, in-order equality with the site's portfolio chips. It
+      # existed because the site once asserted a false claim about our own pipeline in
+      # a user-facing tooltip (#4441 — 19 vs 20 phases, and an `h7e` label for what is
+      # H8 = phase7e_risk_sizing). The Q1 website revert (#4489) removed that pin with
+      # the component it guarded. The restored component asserts no portfolio phase total
+      # (it does say "Ten phases" for research, which matches research/phases/), and its
+      # `h7e` chip is the portfolio phase id for the real `phase7e_risk_sizing` module,
+      # with no `phase8_*` module to contradict it, so it does not restate the #4441 falsehood —
+      # but its portfolio chip list is unguarded, so drift between it and graph.py now goes
+      # unnoticed. Re-adding a pin for the restored component is open work.
+      #
+      # Scope: this lane fires on apps/digiquant-web/** and, via ci_paths.yaml, on
+      # digiquant/src/digiquant/portfolio/graph.py. The graph.py trigger outlived the
+      # pin that read it; it is kept so that re-adding the pin needs no second change.
+      #
+      # Placement constraint, deliberate: vitest.config.ts includes only
+      # `components/**` + `lib/**`, so an app/-placed test would be silently
+      # uncollected — green because it never runs, not because it passes.
+      - name: Test digiquant-web
+        run: npm run test --workspace digiquant-web
 
       # Nothing in .github/workflows built, linted or type-checked the design reference
       # until these two steps — the only `run build` calls are test-digichat.yml and

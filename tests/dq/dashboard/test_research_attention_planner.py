@@ -14,7 +14,7 @@ from digiquant.dashboard.research_retrieval.planner import (
     AttentionReason,
     AttentionRolloutMode,
     AttentionTargetKind,
-    H6DecisionFeatures,
+    DeliberationDecisionFeatures,
     ResearchAttentionPolicy,
     apply_session_budget,
     attention_plan_id,
@@ -39,7 +39,7 @@ def _policy() -> ResearchAttentionPolicy:
 
 
 def _ticker_features(**overrides: object) -> AttentionFeatures:
-    h6_base: dict[str, object] = {
+    deliberation_base: dict[str, object] = {
         "ticker": "AAPL",
         "roster_reason": "held",
         "held": True,
@@ -48,18 +48,18 @@ def _ticker_features(**overrides: object) -> AttentionFeatures:
         "conviction_score": 1,
         "raw_uncertainty": "low",
     }
-    h6_overrides = {k: v for k, v in overrides.items() if k in H6DecisionFeatures.model_fields}
-    h6_base.update(h6_overrides)
-    ticker = str(h6_base.get("ticker", "AAPL"))
+    deliberation_overrides = {k: v for k, v in overrides.items() if k in DeliberationDecisionFeatures.model_fields}
+    deliberation_base.update(deliberation_overrides)
+    ticker = str(deliberation_base.get("ticker", "AAPL"))
     feature_overrides = {
-        k: v for k, v in overrides.items() if k not in H6DecisionFeatures.model_fields
+        k: v for k, v in overrides.items() if k not in DeliberationDecisionFeatures.model_fields
     }
     return AttentionFeatures(
         target_kind=AttentionTargetKind.TICKER,
         target_key=ticker,
         state_version_id=str(STATE_VERSION),
         has_prior=True,
-        h6=H6DecisionFeatures.model_validate(h6_base),
+        deliberation=DeliberationDecisionFeatures.model_validate(deliberation_base),
         **feature_overrides,  # type: ignore[arg-type]
     )
 
@@ -117,7 +117,7 @@ class TestAttentionRouting:
         )
         assert decision.mode is AttentionMode.CHALLENGE
         assert decision.reason is AttentionReason.CONFLICT
-        assert decision.budget.min_h6_rounds >= 2
+        assert decision.budget.min_deliberation_rounds >= 2
 
     def test_structured_delta_routes_to_metric_patch(self) -> None:
         decision = route_attention(

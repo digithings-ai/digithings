@@ -1,61 +1,80 @@
-"use client";
 /**
  * DtNav — digithings.ai's composition of the shared <NavShell/> primitive
  * (@digithings/ui). Supersedes the app-local DigiNav copy: the scroll grammar
  * (settle after 8px, yield past 180px, return on scroll-up), the hamburger
- * portal sheet, body scroll lock, Escape/scrim dismissal and focus return are
- * owned by NavShell; everything digithings-specific arrives here as props — the
- * brand mark, the wayfinding links, the skip-link target, the GitHub icon in
- * the tail, and the "Ask digichat" CTA (sheet, plus a compact tail link on wide
- * viewports). The CTA treatments are the kit's CtaLink/IconLink, so the button
- * dress lives once in buttonVariants — no `.dc-nav-cta` stays here.
+ * portal sheet, body scroll lock and Escape/scrim dismissal are owned by
+ * NavShell; everything digithings-specific arrives here as props — the QR
+ * brand mark, the wayfinding links, the GitHub icon in the tail, and the
+ * "Ask digichat" CTA — in the narrow-viewport sheet, and as a compact tail
+ * button right of the GitHub glyph on wide viewports (#1450 round 3).
  */
-import { usePathname } from "next/navigation";
-import { NavShell, GitHubGlyph, IconLink, CtaLink } from "@digithings/ui";
+import Link from "next/link";
+import { NavShell, GitHubGlyph } from "@digithings/ui";
+import { buttonVariants } from "@digithings/ui/ui";
 import { Brand, DT_NAV_PRIMARY } from "@/app/_nav";
 import { DigiChatMark } from "@digithings/digichat-ui";
 
 export function DtNav({ autoHide }: { autoHide?: "scroll" | "hover" }) {
-  const pathname = usePathname();
   return (
-    <NavShell
-      brand={<Brand />}
-      links={DT_NAV_PRIMARY}
-      currentPath={pathname ?? undefined}
-      skipTo="#main"
-      homeLabel="digithings home"
-      autoHide={autoHide}
-      actions={
-        <>
-          <IconLink
-            href="https://github.com/digithings-ai"
-            label="digithings on GitHub"
-            external
-          >
-            <GitHubGlyph />
-          </IconLink>
-          {/* Desktop twin of the sheet CTA below — the quiet `outline` dress
-              (the same buttonVariants vocabulary as every other CTA) rather
-              than a filled pill, so it recedes next to the GitHub glyph.
-              Hides at the same 880px breakpoint where the inline links yield to
-              the hamburger, so narrow viewports keep the sheet button as the
-              only digichat entry. */}
-          <CtaLink
+    <>
+      {/* Skip-to-content (full-UI-suite critique, digithings-web target, P2):
+          every page mounts DtNav first, so it is the one place that reaches
+          every page's persistent nav ahead of #main. Visually hidden until
+          keyboard focus (translate off-screen, restored on :focus-visible) --
+          same pattern as the design reference's own .skip-link. Plain Tailwind
+          utilities rather than a new CSS class: the frontend canon guard's
+          family census (#1421) would reject an app-local class here. */}
+      <a
+        href="#main"
+        className="fixed top-2 left-2 z-30 -translate-y-[200%] rounded-none bg-[var(--accent)] px-[0.9rem] py-2 font-mono text-[0.72rem] text-[var(--on-accent)] no-underline focus-visible:translate-y-0"
+      >
+        Skip to content
+      </a>
+      <NavShell
+        brand={<Brand />}
+        links={DT_NAV_PRIMARY}
+        homeLabel="digithings home"
+        autoHide={autoHide}
+        actions={
+          <>
+            <a
+              className={buttonVariants({ variant: "ghost", size: "icon-sm" })}
+              href="https://github.com/digithings-ai"
+              target="_blank"
+              rel="noopener noreferrer"
+              aria-label="digithings on GitHub"
+            >
+              <GitHubGlyph />
+            </a>
+            {/* Desktop twin of the sheet CTA below — same destination, plain
+                wordmark-style link rather than a solid kit primary-button pill: next
+                to the quiet GitHub glyph and inline links, a filled button read
+                as a bright, standoffish box. `.dc-nav-cta` (globals.css) is
+                just icon + label in the theme's own ink tone, no button chrome.
+                Hides at the same 880px breakpoint where the inline links yield
+                to the hamburger, so narrow viewports keep the sheet button as
+                the only digichat entry. */}
+            <Link
+              className="dc-nav-cta max-[880px]:hidden!"
+              href="/chat"
+              aria-label="Ask digichat"
+            >
+              <DigiChatMark size={16} />
+              ask digichat
+            </Link>
+          </>
+        }
+        cta={
+          <Link
+            className={buttonVariants({ variant: "default" })}
             href="/chat"
-            variant="outline"
-            className="max-[880px]:hidden!"
             aria-label="Ask digichat"
-            icon={<DigiChatMark size={16} />}
           >
-            ask digichat
-          </CtaLink>
-        </>
-      }
-      cta={
-        <CtaLink href="/chat" aria-label="Ask digichat" icon={<DigiChatMark size={18} />}>
-          Ask digichat
-        </CtaLink>
-      }
-    />
+            <DigiChatMark size={18} />
+            Ask digichat
+          </Link>
+        }
+      />
+    </>
   );
 }

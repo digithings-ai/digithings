@@ -12,7 +12,7 @@ from digiquant.research.state import RebalancePayload
 
 
 def analyst_payloads(state: PortfolioState) -> dict[str, dict[str, Any]]:
-    """Per-ticker unified analyst payloads (H5)."""
+    """Per-ticker unified analyst payloads (analyst)."""
     return {
         ticker: {k: v for k, v in payload.items() if k != "_document"}
         for ticker, payload in state.phase_portfolio.asset_analysts.items()
@@ -20,7 +20,7 @@ def analyst_payloads(state: PortfolioState) -> dict[str, dict[str, Any]]:
 
 
 def sized_book(state: PortfolioState) -> RebalancePayload | None:
-    """H8 sized portfolio — sole weight owner on the thesis-first path."""
+    """sizing sized portfolio — sole weight owner on the thesis-first path."""
     book = state.phase_portfolio.sized_book
     if book is not None:
         return book
@@ -37,7 +37,7 @@ def _deliberation_rounds_count(rounds: Any) -> int:
 
 
 def _is_pm_analyst_transcript(rounds: Any) -> bool:
-    """True when ``rounds`` is an H6 PM↔analyst chat (role + message), not bull/bear args."""
+    """True when ``rounds`` is an deliberation PM↔analyst chat (role + message), not bull/bear args."""
     if not isinstance(rounds, list) or not rounds:
         return False
     first = next((r for r in rounds if isinstance(r, dict)), None)
@@ -56,7 +56,7 @@ def _shaped_theses(
 ) -> tuple[str, str]:
     """Bull/bear fields for the published document.
 
-    H6 ``DeliberationSummary`` has no real bull/bear theses — only a PM↔analyst
+    deliberation ``DeliberationSummary`` has no real bull/bear theses — only a PM↔analyst
     ``transcript``. Falling both sides back to ``conclusion`` produced two identical
     cards in the UI and hid the real debate. When a chat transcript is present and
     no explicit theses were supplied, leave both empty so consumers render the chat.
@@ -87,7 +87,7 @@ def _shaped_theses(
 
 
 def deliberation_summaries(state: PortfolioState) -> dict[str, dict[str, Any]]:
-    """Per-ticker deliberation summaries (H6) — PM-compatible debate shape.
+    """Per-ticker deliberation summaries (deliberation) — PM-compatible debate shape.
 
     Persists the convergence metadata (``converged`` / ``escalated`` / ``cap_reason`` /
     ``rounds_count``) alongside the legacy bull/bear shape, so the published
@@ -100,7 +100,7 @@ def deliberation_summaries(state: PortfolioState) -> dict[str, dict[str, Any]]:
     sides back to the same ``conclusion`` produced two byte-identical theses and made a
     debate that never happened look two-sided (#1742).
 
-    H6 chat turns are published under both ``transcript`` (canonical) and ``rounds``
+    deliberation chat turns are published under both ``transcript`` (canonical) and ``rounds``
     (legacy alias used by ``rounds_count`` / older consumers). When the transcript is a
     real PM↔analyst exchange, ``bull_thesis`` / ``bear_thesis`` are left empty unless the
     summary already carried distinct theses — the UI renders the chat, not mirrored cards.
@@ -117,7 +117,7 @@ def deliberation_summaries(state: PortfolioState) -> dict[str, dict[str, Any]]:
             "ticker": ticker,
             "converged": summary.get("converged", True),
             "conclusion": summary.get("conclusion", ""),
-            # Canonical chat key + legacy alias (same list when H6 ran a debate).
+            # Canonical chat key + legacy alias (same list when deliberation ran a debate).
             "transcript": list(rounds)
             if chat
             else (
@@ -140,7 +140,7 @@ def deliberation_summaries(state: PortfolioState) -> dict[str, dict[str, Any]]:
             "amendment_outcome": summary.get("amendment_outcome"),
             "forecast_degradation": summary.get("forecast_degradation"),
             "effective_forecast": summary.get("effective_forecast"),
-            # Full amendment dump for H9 registry retry after fail-soft (#2790).
+            # Full amendment dump for commit registry retry after fail-soft (#2790).
             "forecast_amendment": summary.get("forecast_amendment"),
         }
     return out

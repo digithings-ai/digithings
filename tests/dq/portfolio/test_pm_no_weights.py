@@ -1,4 +1,4 @@
-"""H7 PMDirectionMemo must not accept weight-bearing fields (PR 4c / §11.2).
+"""direction PMDirectionMemo must not accept weight-bearing fields (PR 4c / §11.2).
 
 WP4.5 (#2660): also reject forecast/weight mutation fields; ForecastReference is
 bound deterministically after the LLM — never fabricated for missing lineage.

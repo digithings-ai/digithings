@@ -4,7 +4,7 @@ import { TrendingDown, TrendingUp } from 'lucide-react';
 import type { AnalystPayload } from '@/lib/types';
 
 /**
- * Renders the full H5 analyst payload (#1562 PR2, #1615 flat editorial workspace)
+ * Renders the full analyst payload (#1562 PR2, #1615 flat editorial workspace)
  * — every section the blueprint names, keyed off the exact backend field names
  * (`digiquant/.../portfolio/models/analyst.py:AnalystPayload`).
  *
@@ -170,8 +170,9 @@ export default function AnalystDossierCard({
               <EvidenceCell label="Quality" value={payload.evidence.evidence_quality || null} />
             </dl>
             <p className="mt-2 text-[11px] leading-relaxed text-ink-mute/70">
-              Conviction is computed from these counts — high requires ≥4 confirming families,
-              ≤1 contradiction, a dated catalyst, and high-quality evidence.
+              Counts are against the analyst&apos;s own call. Conviction is computed from them —
+              high requires ≥4 confirming families, ≤1 contradiction, a dated catalyst, and
+              high-quality evidence.
             </p>
           </div>
         )}

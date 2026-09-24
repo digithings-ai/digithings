@@ -52,6 +52,44 @@ Compose overlays and env templates live under
 
 Adapters only: `digigraph` \| `foundry`. digigraph owns digillm→LiteLLM and digivault.
 
+### The deployment config — one file
+
+Every profile mounts [`infra/digichat-release/config/`](../../infra/digichat-release/config/)
+at `/app/config` and reads `/app/config/digichat.yaml`. That one YAML file defines
+the install — skin, chrome, gate, tools, MCP servers, backend:
+
+```bash
+cp infra/digichat-release/config/digichat.yaml.example \
+   infra/digichat-release/config/digichat.yaml
+# edit it: slug, chrome.skin, title/welcome, gate, backend
+
+make digichat-config-check CONFIG=infra/digichat-release/config/digichat.yaml
+```
+
+`make digichat-config-check` prints the resolved deployment(s) and fails on an
+invalid file — run it before `up -d`. A missing file falls back silently — to the
+`DIGICHAT_EMBED_TENANTS` registry when that is set, otherwise to the built-in dev
+default. An invalid file fails the container at boot.
+
+Three traps:
+
+- **The mount replaces `/app/config`.** The image's baked
+  `/app/config/examples/*` is *not* reachable in the release profiles. Copy any
+  reference config you want into `config/`. For a different catalog skin alone,
+  set `DIGICHAT_CHROME_SKIN=<id>` (`chatgpt`, `claude`, `grok`, …) instead. If you
+  previously pointed `DIGICHAT_CONFIG_PATH` at a baked example, copy that file
+  into `config/` first, or the path silently stops resolving.
+- **Pick one shape — the env templates already set the other one.** Every
+  `.env.profile-*.example` sets `DIGICHAT_EMBED_TENANTS` (hosts mode), and that
+  merges *with* a `deployment:` block rather than replacing it. The
+  `deployment:` block is what serves an unmatched host, so running the `cp` above
+  while keeping that env var leaves an anonymous, ungated fallback install on your
+  operator keys. Single client: delete `DIGICHAT_EMBED_TENANTS`. Many hostnames:
+  use `hosts:` and drop `deployment:`.
+
+Reference configs: [`apps/digichat/config/examples/`](../../apps/digichat/config/examples/)
+(`local-app.yaml`, `occ-embed.yaml`, `datatap-mcp.yaml`, `skins/*.yaml`, …).
+
 ### Profile A — digigraph stack
 
 ```text
@@ -92,7 +130,7 @@ Containers) instead of N GHCR services — `make digichat-profile-a-bundle-up`
 ([`compose.profile-a-bundle.yml`](../../infra/digichat-release/compose.profile-a-bundle.yml)).
 Clients who want per-service pins keep multi-image Profile A above.
 
-Config for LiteLLM / digigraph is vendored under
+Config for LiteLLM / digigraph / digichat is vendored under
 [`infra/digichat-release/config/`](../../infra/digichat-release/config/) (no monorepo
 `config/` clone required). Stack GHCR packages appear after
 `publish-service-images.yml` runs on `main` (promote #2023, then first publish).

@@ -3,12 +3,12 @@
  *
  * Reads the decision track record (`decision_log`) the Decision Scorecard needs, plus
  * — via `fetchResearchRunDiagnostics` — run health from the anon-readable
- * `atlas_run_health` view (migration 041). Kept separate from `getFullDashboardData`
+ * `run_health` view (migration 041). Kept separate from `getFullDashboardData`
  * so the main Morning Read bundle stays lean; these fire only when their consumer mounts.
  *
  * Attribution and recommendation quality now live on Portfolio Attribution; per-position
- * risk remains on Holdings. Pipeline + Brief read run telemetry from `atlas_run_health` —
- * the curated projection that bypasses the base-table RLS on `atlas_run_diagnostics`
+ * risk remains on Holdings. Pipeline + Brief read run telemetry from `run_health` —
+ * the curated projection that bypasses the base-table RLS on `run_diagnostics`
  * (migration 033). Spend telemetry (cost, tokens, error_summary, breakdown) is intentionally
  * excluded from the view; economics tiles render "—" on the public anon-key dashboard.
  *
@@ -183,15 +183,15 @@ export async function fetchObservabilityData(): Promise<ObservabilityData> {
 const RUN_DIAGNOSTICS_LIMIT = 90;
 
 /**
- * Read run health from the anon-readable `atlas_run_health` view (migration 041).
+ * Read run health from the anon-readable `run_health` view (migration 041).
  * Cost/tokens/grounding fields are null on the public dashboard — the view
  * deliberately omits operator-internal spend telemetry. Fail-soft: empty array
  * on missing source / RLS deny.
  */
 export async function fetchResearchRunDiagnostics(): Promise<ResearchRunDiagnostics[]> {
-  const res = await safeSelect<ViewRow<'atlas_run_health'>>('atlas_run_health', (sb) =>
+  const res = await safeSelect<ViewRow<'run_health'>>('run_health', (sb) =>
     sb
-      .from('atlas_run_health')
+      .from('run_health')
       .select('*')
       .order('created_at', { ascending: false })
       .limit(RUN_DIAGNOSTICS_LIMIT)

@@ -37,6 +37,11 @@ services:
     env_file:
       - path: .env.profile-b
         required: false
+    # Single-client container: `cp config/digichat.yaml.example config/digichat.yaml`
+    # then edit that one file. It defines the client's skin, chrome, gate, and
+    # backend; the Foundry credential comes from the host's Azure identity.
+    volumes:
+      - ./config:/app/config:ro
     environment:
       NODE_ENV: production
       AUTH_TRUST_HOST: ${AUTH_TRUST_HOST:-true}
@@ -44,7 +49,7 @@ services:
       AUTH_URL: ${AUTH_URL:-https://digichat.client.example}
       DIGICHAT_DATABASE_URL: postgresql://digichat:${DIGICHAT_POSTGRES_PASSWORD:-digichat}@digichat-db:5432/digichat
       DIGICHAT_AUTO_MIGRATE: ${DIGICHAT_AUTO_MIGRATE:-1}
-      DIGICHAT_CONFIG_PATH: ${DIGICHAT_CONFIG_PATH:-}
+      DIGICHAT_CONFIG_PATH: ${DIGICHAT_CONFIG_PATH:-/app/config/digichat.yaml}
       DIGICHAT_CHROME_SKIN: ${DIGICHAT_CHROME_SKIN:-}
       DIGICHAT_EMBED_ENABLED: ${DIGICHAT_EMBED_ENABLED:-0}
       DIGICHAT_EMBED_TENANTS: ${DIGICHAT_EMBED_TENANTS:-}

@@ -1,25 +1,16 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 import {
-  Figure,
-  Mono,
   NumberedStages,
   OdometerStrip,
-  PageHead,
-  RuledList,
-  RuledRow,
+  Reveal,
   type NumberedStage,
   type OdometerStat,
 } from "@digithings/ui";
-import { CtaLink } from "@digithings/ui";
+import { buttonVariants } from "@digithings/ui/ui";
 import { DtFooter } from "@/components/DtFooter";
+import { Mono, PageHead, RuledList, RuledRow } from "../_company/prose";
 import { DtNav } from "@/components/DtNav";
-import {
-  CI_WORKFLOWS,
-  COUNTED_AT,
-  FRONTEND_TEST_FILES,
-  PYTHON_TEST_FILES,
-  TEST_LANES,
-} from "@/lib/siteCounts";
 
 export const metadata: Metadata = {
   title: "quality — the gates a change has to clear",
@@ -29,34 +20,63 @@ export const metadata: Metadata = {
     "account of what the gate is and is not.",
 };
 
-// /quality — the engineering-process page, re-composed flat (D1, #4429).
+// /quality — the engineering-process page, written from the repository.
 //
-// Every figure is single-sourced in lib/siteCounts.ts, where each snapshot
-// carries the exact command that produced it and the date it was run — the page
-// invites the reader to reproduce them, so a number that does not reproduce is
-// worse than no number.
+// COUNTS ARE A SNAPSHOT. Every figure in COUNTED_AT / METRICS below was counted
+// on the date named, at the commit this page was written against, with the
+// commands recorded next to each entry. They drift as the repo grows, so they
+// are collected here in one block: refreshing the page is one edit, and the
+// date is rendered on the page so a stale number reads as dated rather than
+// as a false claim.
 //
-// The honest framing this page keeps: the four-dimension gate is TWO things, and
-// conflating them would be a lie of omission.
+// The honest framing this page has to keep: the four-dimension gate is TWO
+// things, and conflating them would be a lie of omission.
 //   1. scripts/score.py — a stdlib-only regex heuristic. It runs in CI as the
-//      `score` job against the PR diff and exits non-zero below threshold, so it
-//      really does block. Its own docstring says it is "NOT a full static
-//      analyzer" and to "Treat results as a checklist aide, not a gate" — quoted
-//      whole below.
+//      `score` job against the PR diff and exits non-zero below threshold, so
+//      it really does block. Its own docstring (scripts/score.py:14-15) says it
+//      is "NOT a full static analyzer" and to "Treat results as a checklist
+//      aide, not a gate" — quote that clause WHOLE. Lifting the first half while
+//      asserting the script blocks is exactly the selective move this page
+//      spends four paragraphs claiming not to make, so the page prints the
+//      disclaimer verbatim and then reconciles it against the workflow.
 //   2. docs/scoring/*.md — four ten-criterion rubrics the PR author self-scores
 //      in the pull-request template. Judgement, recorded; not machine-checked.
-// The individual rubric files' headers disagree with the thresholds score.py,
-// docs/scoring/README.md and CLAUDE.md agree on; the page names that rather
-// than papering over it, and cites the stricter reading.
+// apps/** and packages/** are excluded from the score job (the rubrics are Python-oriented
+// and misfire on JS/CSS), as are the hook scripts that DEFINE the live-trading
+// detection regex and would otherwise self-match.
+//
+// Note also: the rubric files' own headers say "< 7 blocks merge" (SECURITY,
+// QUALITY), "< 8" (ACCURACY), "< 6" (OPTIMIZATION), while docs/scoring/README.md
+// and score.py's THRESHOLDS dict block below the target itself. The page links
+// docs/scoring/, so a reader who follows the link meets that disagreement — it
+// is therefore NAMED on the page rather than quietly omitted, and the page cites
+// the stricter 8 / 8 / 7 / 9 that score.py, the README and CLAUDE.md agree on.
+// The doc fix belongs in a docs change; do not silently paper over it here.
 
+const COUNTED_AT = "5 August 2026";
+
+// Every figure below is the output of the command above it, run on a clean
+// checkout of develop. Re-run them when you touch this block: the page invites
+// the reader to, so a number that does not reproduce is worse than no number.
+// (The python count read 319 here until 2026-08-05 while the command returned
+// 321 — it never reproduced, including at the commit it was written on.)
+//
+// find tests -name 'test_*.py' | wc -l                                  → 321
+// find frontend -path '*/node_modules' -prune -o \( -name '*.test.ts*'
+//   -o -name '*.spec.ts*' -o -name '*.test.js' -o -name '*.test.mjs' \) -print  → 180
+//   ^ the -print is load-bearing: without it find's implicit print also emits the
+//     pruned node_modules directories, and the command returns 186 instead.
+// ls .github/workflows/ | grep -c '\.yml$'                              → 63
+// ls .github/workflows/ | grep -c '^test-'                              → 17
 const METRICS: OdometerStat[] = [
-  { value: String(PYTHON_TEST_FILES), label: "python test files" },
-  { value: String(FRONTEND_TEST_FILES), label: "frontend test files" },
-  { value: String(CI_WORKFLOWS), label: "ci workflows" },
-  { value: String(TEST_LANES), label: "test lanes" },
+  { value: "321", label: "python test files" },
+  { value: "180", label: "frontend test files" },
+  { value: "63", label: "ci workflows" },
+  { value: "17", label: "test lanes" },
 ];
 
-// The four dimensions, with the threshold as the tag.
+// The four dimensions, with the threshold as the tag. Each `mech` names what
+// the dimension actually looks for, drawn from that rubric's criteria table.
 const DIMENSIONS: NumberedStage[] = [
   {
     num: "01",
@@ -103,31 +123,35 @@ const LANES: { term: string; body: string }[] = [
   {
     term: "Per-component test lanes",
     body:
-      `${TEST_LANES} test workflows, most of them one per component, fired by a path filter so a ` +
-      "change to digikey does not wait on the quant suite. Four are cross-cutting instead: " +
-      "end-to-end, the scoring job, the isolated Nautilus run, and the research graph spec.",
+      "Seventeen test workflows, most of them one per component, fired by a path filter so a change " +
+      "to digikey does not wait on the quant suite. Four of the seventeen are cross-cutting instead: " +
+      "end-to-end, the scoring job, the isolated Nautilus run, and the research graph spec. Adding a " +
+      "component means wiring its lane; the filter is explicit rather than inferred.",
   },
   {
     term: "An isolated Nautilus lane",
     body:
       "Tests that import NautilusTrader run in their own workflow and are ignored during ordinary " +
       "collection. The Rust engine initialises its logger once per process, so real-engine tests " +
-      "cannot share a run with everything else — the isolation is a correctness requirement.",
+      "cannot share a run with everything else — the isolation is a correctness requirement, not " +
+      "a preference.",
   },
   {
     term: "Type checking",
     body:
-      "A dedicated mypy workflow over the shared Python libraries — digibase and digikey — on " +
-      "every pull request that touches them. The frontend apps have no type-check lane of their " +
-      "own: they are type-checked by the production build, which CI runs as a deploy check.",
+      "A dedicated mypy workflow over the shared Python libraries — digibase and digikey — on every " +
+      "pull request that touches them. The frontend apps have no type-check lane of their own: they " +
+      "are type-checked by the production build, which CI runs as a deploy check on any pull request " +
+      "touching an app or the shared design packages, and which fails on a type error. Strict typing " +
+      "is a rubric criterion too, so an untyped signature also costs a score point.",
   },
   {
     term: "The frontend canon guard",
     body:
       "A script that scans every tracked frontend file for raw Tailwind palette utilities, " +
       "pre-canon class vocabulary and colour literals in component code, and ratchets on new " +
-      "app-local CSS class families. Pages assemble from the shared design system rather than " +
-      "growing private dress — this page was built under that constraint.",
+      "app-local CSS class families. Pages have to assemble from the shared design system rather " +
+      "than growing private dress — this page was built under that constraint.",
   },
   {
     term: "Documentation link checking",
@@ -144,8 +168,8 @@ const LANES: { term: string; body: string }[] = [
   {
     term: "Pull-request hygiene",
     body:
-      "Every change traces to a GitHub issue — a task branch carrying the issue number, or a " +
-      "closing keyword in the pull request. Documentation and chore branches are deliberately " +
+      "Every change has to trace to a GitHub issue — a task branch carrying the issue number, or " +
+      "a closing keyword in the pull request. Documentation and chore branches are deliberately " +
       "exempt, so the rule stays enforceable instead of routinely waived.",
   },
 ];
@@ -157,31 +181,35 @@ const LIMITS: { term: string; body: string }[] = [
     body:
       "The scoring script is regular expressions over a diff, standard library only. It catches " +
       "known anti-patterns — a pandas import, a bare exec, a blocking sleep in an async handler — " +
-      "and it will miss a novel one. Its own docstring says so.",
+      "and it will miss a novel one. Its own docstring says so, and this page is not going to say " +
+      "otherwise.",
   },
   {
     term: "Half the gate is self-assessed",
     body:
       "The forty rubric criteria are evaluated by the change's author in the pull-request " +
-      "template. That is a design choice with a real failure mode: an author who scores generously " +
-      "produces a green gate. Named human-review triggers exist because the self-score alone is " +
-      "not sufficient.",
+      "template. That is a design choice with a real failure mode: an author who scores " +
+      "generously produces a green gate. Named human-review triggers — auth and crypto changes, " +
+      "broker or live-trading paths, a score below threshold twice, a new external dependency, " +
+      "novel architecture — exist because the self-score alone is not sufficient.",
   },
   {
     term: "Frontend is scored differently",
     body:
-      "The score job scores a diff that excludes apps/** and packages/** by pathspec, so the rubrics never see JS or CSS — rightly, " +
-      "since the heuristics are Python-oriented and misfire on them. Presentation work is gated instead by secret scanning, the canon " +
-      "guard, lint, typecheck, and a production build that fails on a type error. Most frontend suites run in CI — digithings-web, the dashboard, digichat, the shared ui packages, cron, and the Cloudflare workers all have a lane that runs them. " +
-      "The exception is digiquant-web, which ships a test script no lane invokes (test-web.yml lints it only), " +
-      "so its pipeline-data pin is a local discipline — a narrower net, honestly narrower.",
+      "The score job's diff excludes apps/** and packages/** by pathspec — the app frontend's JS and CSS are " +
+      "never scored — rightly, since the heuristics are Python-oriented and misfire on them. Presentation work " +
+      "is gated instead by secret scanning, the canon guard, lint, and a production build that type-checks each " +
+      "app and fails on a type error. The frontend suites run in CI: the web lane runs digithings-web, digiquant-web, the design " +
+      "reference, the shared ui packages, cron and the Cloudflare workers, and digichat and the dashboard have " +
+      "their own lanes. A narrower net than a coverage gate, honestly narrower.",
   },
   {
     term: "Test count is not coverage",
     body:
       "The figures above count files, not lines exercised, and a file count says nothing about " +
-      "assertion quality. The rubrics push at that directly, but a published coverage percentage " +
-      "is not something this page claims.",
+      "assertion quality. The rubrics push at that directly — meaningful assertions, no test " +
+      "deleted or weakened to go green — but a published coverage percentage is not something " +
+      "this page claims.",
   },
 ];
 
@@ -201,76 +229,109 @@ export default function QualityPage() {
         >
           Every change to this repository clears the same path: a per-component test lane, a
           four-dimension score against published rubrics, and a set of named triggers that force a
-          human to look. Here is what that path checks — and, at the bottom, where it is weaker than
-          it sounds.
+          human to look. Here is what that path actually checks — and, at the bottom, where it is
+          weaker than it sounds.
         </PageHead>
 
         <section className="section">
           <div className="wrap">
-            <span className="kicker">{"// counted, not estimated"}</span>
-            <Figure
-              n={1}
-              caption={`counted ${COUNTED_AT} · they grow · file counts, not coverage`}
-              className="mt-[1.2rem]"
-            >
-              <OdometerStrip stats={METRICS} />
-            </Figure>
+            <Reveal className="section-head center">
+              <span className="kicker">{"// counted, not estimated"}</span>
+              <h2>Four figures from the repository.</h2>
+              <p>
+                Counted from the tree with the commands recorded in this page&rsquo;s source, so
+                anyone can reproduce them.
+              </p>
+            </Reveal>
+            <Reveal>
+              <OdometerStrip stats={METRICS} className="mx-auto max-w-[880px]" />
+            </Reveal>
+            <p className="mx-auto mt-[1.1rem] max-w-[880px] text-center font-mono text-[0.72rem] text-ink-mute">
+              counted {COUNTED_AT} · they grow · file counts, not coverage
+            </p>
           </div>
         </section>
 
         <section className="section section-alt">
           <div className="wrap">
-            <span className="kicker">{"// the scoring gate"}</span>
-            <p className="mt-[0.7rem] max-w-[64ch] text-[1rem] leading-[1.7] text-ink-soft">
-              Four rubrics live in <Mono>docs/scoring/</Mono>, ten criteria each, one point per
-              criterion, no partial credit. A change is scored on all four and every one has to
-              clear its own bar.
-            </p>
-            <NumberedStages stages={DIMENSIONS} className="mt-[2rem] max-w-[760px]" />
+            <Reveal className="section-head">
+              <span className="kicker">{"// the scoring gate"}</span>
+              <h2>Four dimensions, four thresholds.</h2>
+              <p>
+                Four rubrics live in <Mono>docs/scoring/</Mono>, ten criteria each, one point per
+                criterion, no partial credit. A change is scored on all four and every one has to
+                clear its own bar.
+              </p>
+            </Reveal>
+            <NumberedStages stages={DIMENSIONS} className="max-w-[760px]" />
           </div>
         </section>
 
         <section className="section">
           <div className="wrap">
-            <span className="kicker">{"// how the gate runs"}</span>
-            <p className="mt-[0.7rem] max-w-[64ch] text-[1rem] leading-[1.7] text-ink-soft">
-              <Mono>scripts/score.py</Mono> runs as a CI job against the pull request&rsquo;s diff and
-              exits non-zero when any dimension is under threshold, so the check goes red and the
-              merge waits. Its own header is blunter than that:{" "}
-              <em>
-                &ldquo;a heuristic scanner — it flags known anti-patterns by regex&hellip; It is NOT a
-                full static analyzer. Treat results as a checklist aide, not a gate.&rdquo;
-              </em>{" "}
-              Both halves are true together: the script disclaims being a gate because a regex cannot
-              judge a novel anti-pattern, and the workflow uses it as one anyway because a known
-              anti-pattern should not need a reviewer to catch it.
+            <Reveal className="section-head">
+              <span className="kicker">{"// how the gate runs"}</span>
+              <h2>One half is machine-checked. Say which.</h2>
+            </Reveal>
+            <div className="grid gap-[1.1rem] md:grid-cols-2">
+              <Reveal className="mod-card">
+                <div className="mod-card-top">
+                  <h3>The scanner</h3>
+                  <span className="dg-tier t-core">blocking</span>
+                </div>
+                <p className="text-[0.92rem] leading-[1.65] text-ink-soft">
+                  {/* Explicit {" "}: when <Mono> is the FIRST child of the
+                      paragraph, the SWC JSX transform drops the space that
+                      follows the closing tag (verified in the exported HTML —
+                      it rendered "score.pyruns"). Every other Mono on these
+                      pages has a real text or expression child before it and
+                      keeps its space; this one needs the separator spelled out. */}
+                  <Mono>scripts/score.py</Mono>{" "}
+                  runs as a CI job against the pull request&rsquo;s
+                  diff and exits non-zero when any dimension is under threshold, so the check goes
+                  red and the merge waits. Its own header is blunter than that:{" "}
+                  <em>
+                    &ldquo;a heuristic scanner — it flags known anti-patterns by regex&hellip; It is
+                    NOT a full static analyzer. Treat results as a checklist aide, not a gate.&rdquo;
+                  </em>{" "}
+                  Both halves are true and worth stating together: the script disclaims being a gate
+                  because a regex cannot judge a novel anti-pattern, and the workflow uses it as one
+                  anyway because a known anti-pattern should not need a reviewer to catch it.
+                </p>
+              </Reveal>
+              <Reveal className="mod-card">
+                <div className="mod-card-top">
+                  <h3>The rubrics</h3>
+                  <span className="dg-tier">self-scored</span>
+                </div>
+                <p className="text-[0.92rem] leading-[1.65] text-ink-soft">
+                  The forty criteria are worked through by the author in the pull-request template:
+                  check what you pass, write a note for what you do not and why it is acceptable,
+                  leave anything you are unsure about unchecked. Recorded judgement, visible in the
+                  pull request, reviewable by whoever comes next.
+                </p>
+              </Reveal>
+            </div>
+            <p className="mt-[1.8rem] max-w-[64ch] text-[0.95rem] leading-[1.7] text-ink-soft">
+              Thresholds are Security 8, Quality 8, Optimization 7, Accuracy 9 — the figures the
+              scanner&rsquo;s own table, the rubric index and the repository&rsquo;s contributor rules
+              all carry. The individual rubric files disagree: each one&rsquo;s header adds a second,
+              lower number below which merge is blocked. That contradiction is in the repository, not
+              resolved by this page, and the stricter reading is the one quoted here.
             </p>
-            <RuledList>
-              <RuledRow term="The scanner">
-                A blocking CI job. Regex over the diff, stdlib only. Catches known anti-patterns; it
-                will miss a novel one.
-              </RuledRow>
-              <RuledRow term="The rubrics">
-                Self-scored by the author in the pull-request template — forty criteria, recorded
-                judgement, visible in the pull request and reviewable by whoever comes next.
-              </RuledRow>
-              <RuledRow term="Thresholds">
-                Security 8, Quality 8, Optimization 7, Accuracy 9 — the figures the scanner&rsquo;s
-                own table, the rubric index and the repository&rsquo;s contributor rules carry. The
-                individual rubric files disagree, each header adding a second, lower number; the
-                stricter reading is the one quoted here.
-              </RuledRow>
-            </RuledList>
           </div>
         </section>
 
         <section className="section section-alt">
           <div className="wrap">
-            <span className="kicker">{"// the lanes"}</span>
-            <p className="mt-[0.7rem] max-w-[64ch] text-[1rem] leading-[1.7] text-ink-soft">
-              {CI_WORKFLOWS} workflow files, most of them fired by path filters so a change pays only
-              for the surface it touched.
-            </p>
+            <Reveal className="section-head">
+              <span className="kicker">{"// the lanes"}</span>
+              <h2>What runs before a merge.</h2>
+              <p>
+                Sixty-three workflow files, most of them fired by path filters so a change pays only
+                for the surface it touched.
+              </p>
+            </Reveal>
             <RuledList>
               {LANES.map((r) => (
                 <RuledRow key={r.term} term={r.term}>
@@ -283,11 +344,14 @@ export default function QualityPage() {
 
         <section className="section">
           <div className="wrap">
-            <span className="kicker">{"// limits"}</span>
-            <p className="mt-[0.7rem] max-w-[64ch] text-[1rem] leading-[1.7] text-ink-soft">
-              A quality page that only lists gates is a marketing page. These are the four things
-              worth knowing before you take the numbers above as a guarantee.
-            </p>
+            <Reveal className="section-head">
+              <span className="kicker">{"// limits"}</span>
+              <h2>Where this is weaker than it sounds.</h2>
+              <p>
+                A quality page that only lists gates is a marketing page. These are the four things
+                worth knowing before you take the numbers above as a guarantee.
+              </p>
+            </Reveal>
             <RuledList>
               {LIMITS.map((r) => (
                 <RuledRow key={r.term} term={r.term}>
@@ -295,21 +359,26 @@ export default function QualityPage() {
                 </RuledRow>
               ))}
             </RuledList>
-            <p className="mt-[1.6rem] max-w-[64ch] text-[0.95rem] leading-[1.7] text-ink-soft">
+            <p className="mt-[1.8rem] max-w-[64ch] text-[0.95rem] leading-[1.7] text-ink-soft">
               The rubrics themselves are in the repository, so you can judge the bar rather than
               take our word for where it sits.{" "}
-              <a className="text-accent [text-underline-offset:2px] hover:text-ink" href="/security">
+              <Link className="text-accent [text-underline-offset:2px] hover:text-ink" href="/security">
                 The security page
-              </a>{" "}
+              </Link>{" "}
               does the same for the runtime posture.
             </p>
-            <div className="mt-[1.6rem] flex flex-wrap items-center gap-[0.8rem]">
-              <CtaLink href="https://github.com/digithings-ai/digithings/tree/main/docs/scoring" external>
-                Read the rubrics
-              </CtaLink>
-              <CtaLink href="/docs" variant="ghost">
+            <div className="mt-[2rem] flex flex-wrap gap-[0.8rem]">
+              <a
+                className={buttonVariants({ variant: "default" })}
+                href="https://github.com/digithings-ai/digithings/tree/main/docs/scoring"
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                Read the rubrics <span aria-hidden="true">→</span>
+              </a>
+              <Link className={buttonVariants({ variant: "ghost" })} href="/docs">
                 API reference
-              </CtaLink>
+              </Link>
             </div>
           </div>
         </section>
