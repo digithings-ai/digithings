@@ -1071,3 +1071,124 @@ class TestSliceWritePath:
         rows = {r["date"]: r["nav"] for r in sb.store["nav_history"]}
         assert rows["2026-07-17"] == 100.0
         assert "2026-06-23" not in rows
+
+
+class TestMarkThroughBook:
+    """--mark-through-book: no-book days stamp carried marks instead of exit 3 (#4642)."""
+
+    @staticmethod
+    def _nav_history(as_of: str, prior_nav: float = 105.0, nav: float = 110.0) -> list[dict]:
+        rows = [{"date": f"2026-05-{i + 1:02d}", "nav": 100.0 + i * 0.1} for i in range(24)]
+        rows.append({"date": "2026-06-11", "nav": prior_nav})
+        rows.append({"date": as_of, "nav": nav})
+        return rows
+
+    def _sb_for_upsert(self, as_of: str) -> FakeSupabaseClient:
+        return _fake_with(
+            {
+                "portfolio_metrics": [],
+                "position_attribution": [],
+                "nav_history": self._nav_history(as_of),
+                "positions": [
+                    {"ticker": "T0", "date": as_of, "weight_pct": 60.0},
+                    {"ticker": "T1", "date": as_of, "weight_pct": 40.0},
+                ],
+            }
+        )
+
+    def test_default_provenance_is_unchanged(self) -> None:
+        sb = self._sb_for_upsert("2026-06-12")
+        upsert_portfolio_metrics_daily(sb, "2026-06-12")
+        assert sb.store["portfolio_metrics"][0]["computed_from"] == "refresh_script"
+
+    def test_mark_through_sets_provenance(self) -> None:
+        sb = self._sb_for_upsert("2026-06-12")
+        upsert_portfolio_metrics_daily(sb, "2026-06-12", mark_through=True)
+        assert sb.store["portfolio_metrics"][0]["computed_from"] == "refresh_script_mark_through"
+
+    def test_flag_path_carries_book_and_stamps_carried_marks(self, r2_market) -> None:
+        """Stale book + flag: carry 06-11 forward, stamp the 06-11 close as carried."""
+        pos = {
+            "ticker": "SPY",
+            "date": "2026-06-11",
+            "entry_price": 530.0,
+            "entry_date": "2026-06-01",
+            "unrealized_pnl_pct": None,
+            "day_change_pct": None,
+            "since_entry_return_pct": None,
+            "metrics_as_of": None,
+            "current_price": None,
+        }
+        sb = _fake_with(
+            {
+                "positions": [pos],
+                "nav_history": self._nav_history("2026-06-12"),
+                "portfolio_metrics": [],
+                "position_attribution": [],
+                "position_events": [],
+            }
+        )
+        assert _mod.carry_forward_positions(sb, "2026-06-12") == 1
+        # The carried rows now exist in the DB: make the SELECT seam see them.
+        sb.canned_reads["positions"].extend(
+            [r for r in sb.store["positions"] if r.get("date") == "2026-06-12"]
+        )
+        _seal_market(r2_market, [{"ticker": "SPY", "date": "2026-06-11", "close": 533.0}])
+        _mod.run_one_day(sb, "2026-06-12", mark_through=True)
+        carried = [r for r in sb.store["positions"] if r.get("date") == "2026-06-12"]
+        assert len(carried) == 1
+        assert carried[0]["current_price"] == 533.0
+        assert carried[0]["metrics_as_of"] == "2026-06-11"
+        assert carried[0]["day_change_pct"] is None
+        pm_rows = sb.store["portfolio_metrics"]
+        assert len(pm_rows) == 1
+        assert pm_rows[0]["computed_from"] == "refresh_script_mark_through"
+        assert sb.store.get("position_events", []) == []
+
+    def test_scheduled_path_without_flag_still_exits_3(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Without the flag the stale-book guard keeps its exit-3 fail-closed."""
+        import datetime as _dt
+
+        sb = _fake_with({"positions": [{"date": "2026-06-11", "ticker": "SPY"}]})
+
+        class _FrozenDatetime(_dt.datetime):
+            @classmethod
+            def now(cls, tz=None):
+                return _dt.datetime(2026, 6, 12, 22, 5, tzinfo=tz)
+
+        monkeypatch.setattr(_mod, "datetime", _FrozenDatetime)
+        monkeypatch.setattr(_mod, "_sb", lambda: sb)
+        monkeypatch.setattr(sys, "argv", ["refresh_performance_metrics.py", "--supabase"])
+        assert _mod.main() == 3
+        assert sb.store == {}
+
+    def test_vendor_gap_ticker_stays_null(self, r2_market) -> None:
+        """A ticker with no close in the window is an honest blank, never fabricated."""
+        spy = {
+            "ticker": "SPY",
+            "date": "2026-06-12",
+            "entry_price": 530.0,
+            "entry_date": "2026-06-01",
+            "unrealized_pnl_pct": None,
+            "day_change_pct": None,
+            "since_entry_return_pct": None,
+            "metrics_as_of": None,
+            "current_price": None,
+        }
+        zzz = dict(spy, ticker="ZZZ", entry_price=None)
+        sb = FakeSupabaseClient(canned_reads={"positions": [spy, zzz]})
+        sb.store["positions"] = [dict(spy), dict(zzz)]
+        _seal_market(
+            r2_market,
+            [
+                {"ticker": "SPY", "date": "2026-06-11", "close": 533.0},
+                {"ticker": "SPY", "date": "2026-06-12", "close": 535.0},
+            ],
+        )
+        refresh_positions_metrics(sb, "2026-06-12")
+        by_ticker = {r["ticker"]: r for r in sb.store["positions"]}
+        assert by_ticker["SPY"]["current_price"] == 535.0
+        assert by_ticker["ZZZ"]["current_price"] is None
+        assert by_ticker["ZZZ"]["metrics_as_of"] is None
