@@ -839,6 +839,60 @@ explicit that they're still blocked on Stage 2's OHLC plumbing.)
      unilaterally given it revisits how much OOS-adjacent data a search
      proxy may see. Committed as `30c79b920` (`curve_optimize_feasibility.py`
      + this entry).
+   - **Round 4 result (2026-09-25)** — coordinator directive: use the
+     pre-existing `curve_optimize.sweep_dead_zone_width` mechanism to target
+     fold 1's dead-zone-occupancy problem directly (the "safer" of the two
+     round-3 follow-ups), explicitly WITHOUT touching which windows the
+     search proxy sees — the OOS-adjacency tradeoff stays off-limits pending
+     Chris's sign-off. Held round 2's shape's crossing point/rates/curvatures
+     fixed (`buy_max_rate=25.0, sell_max_rate=30.0, buy_curvature=1.5,
+     sell_curvature=1.0`, `crossing_risk=55.0`, the midpoint of round 2's own
+     `40`/`70` knees) and swept ONLY dead-zone width across
+     `curve_optimize.DEAD_ZONE_WIDTH_GRID` (pre-existing, unedited:
+     `0.5..50.0`), scoring each width with round 3's own
+     `score_shape_on_windows_robust` (worst-case `vs_flat_dca_pct` across
+     full history + fold 0/1/2 IS, gated on drawdown) plus an explicit
+     fold-1-IS-only readout per width.
+     **Negative/structural result**: every width narrower than round 2's own
+     30 scores *monotonically worse* on **every** available proxy window,
+     fold1_IS included (`fold1_IS_vs_flat_dca` runs from `-79.42%` at
+     width=30 down to `-86.18%` at width=0.5) — narrowing the dead zone
+     (i.e., trading more) never looks better in-sample, because fold1_IS
+     (2015-01-01→2019-09-11) is itself an expanding window still dominated
+     by the same explosive 2015-2017 early history that broke round 3's
+     search proxy. Widths ≥40 do score better on the aggregate objective
+     (`-34.06%`/`-25.37%` at 40/50) but blow through the drawdown cap
+     (`52.3%`/`61.0%` vs the 50% cap) and are rejected — the feasible
+     region's optimum lands exactly back on round 2's original width
+     (`30.0`), i.e. **the sweep re-selects round 2's unchanged shape**;
+     it cannot choose anything narrower under this objective no matter how
+     the grid is walked. This is the same structural mechanism diagnosed in
+     round 3, now confirmed from the opposite direction: there is no
+     available IS-only proxy window that isn't dominated by 2015-2017, so no
+     safe (non-leaking) objective can currently reward the fold-1-specific
+     fix the dead-zone hypothesis predicts should exist.
+     Re-evaluating round 2's own shape through this round's simplified
+     non-Nautilus evaluator (`window_report`, same as round 3's, with the
+     same caveat that its absolute numbers are only comparable to round 3,
+     not to round 2's original Nautilus-evaluator figures) gives: mean OOS
+     `+14.50%` (vs round 3's `+1.91%` on the same evaluator), fold 0
+     `+48.56%`, **fold 1 `-25.79%` (still negative — narrower-dead-zone
+     search found nothing better; this is just round 3's aggressive
+     `sell_max_rate=90` reverted back to round 2's `30`)**, fold 2
+     `+20.72%`. Net: undoing round 3's sell-rate regression helps fold
+     0/2/mean substantially, but **fold 1 remains unsolved** by any
+     width choice available to this search. `tests/dq/strategies/sdca/`
+     green throughout (585 passed, 38 skipped); no `src/` changes this round
+     (pre-existing mechanisms only) —
+     `.scratch/recalibration_v1_round4.py` is the driver, not committed
+     (gitignored). **Not promoted.** Per the coordinator's explicit
+     instruction, stopping here rather than proceeding unilaterally to the
+     OOS-adjacency option: fold 1 (2019-09-12→2022-01-14) has now failed
+     under every technique tried in this entire research program (see item
+     6's ablation-program history above, which hit the identical wall) --
+     flagged back for a decision on whether to accept the OOS-adjacency
+     tradeoff, accept fold 1 as an unfixable regime under the current
+     curve-shape-only lever, or explore a different lever entirely.
 
 ## North-star ceiling (benchmark only — NEVER a trading candidate)
 
