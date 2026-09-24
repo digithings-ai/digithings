@@ -1078,9 +1078,7 @@ class TestMarkThroughBook:
 
     @staticmethod
     def _nav_history(as_of: str, prior_nav: float = 105.0, nav: float = 110.0) -> list[dict]:
-        rows = [
-            {"date": f"2026-05-{i + 1:02d}", "nav": 100.0 + i * 0.1} for i in range(24)
-        ]
+        rows = [{"date": f"2026-05-{i + 1:02d}", "nav": 100.0 + i * 0.1} for i in range(24)]
         rows.append({"date": "2026-06-11", "nav": prior_nav})
         rows.append({"date": as_of, "nav": nav})
         return rows

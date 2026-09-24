@@ -356,7 +356,9 @@ def upsert_portfolio_metrics_daily(sb, as_of: str, *, mark_through: bool = False
     - ``sharpe`` / ``volatility`` / ``max_drawdown`` computed from nav_history when
       there are >= 20 rows; otherwise NULL.  ``alpha`` is carried from the prior row
       when history is sufficient.  ``computed_from`` is
-      ``'refresh_script_insufficient_history'`` when the history gate fails.
+      ``'refresh_script_insufficient_history'`` when the history gate fails, or
+      ``'refresh_script_mark_through'`` when ``mark_through`` is set (the
+      ``--mark-through-book`` scheduled path: carried book, carried marks).
     """
     ex = (
         _eq_house(sb.table("portfolio_metrics").select("computed_from"))
