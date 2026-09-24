@@ -328,6 +328,179 @@ def search_wide_knee_curve_feasibility_aware(
     )
 
 
+class RobustCurveTrialScore(BaseModel):
+    """A trial's worst-case ``vs_flat_dca_pct`` across several windows.
+
+    ``capital_deployed_pct`` is end-of-window ``initial_cash - cash``
+    (``backtest.py::SdcaBacktestReport.capital_deployed_pct``) -- a cash
+    SNAPSHOT, not a participation measure. It goes negative whenever a curve
+    has sold more (in realized dollars) than it ever bought, which is exactly
+    what a curve *should* do if it sells appreciated BTC into a rally near a
+    window's end. Round 2's own OOS fold 0 proves this isn't a defect on its
+    own: ``vs_flat_dca=+37.21%`` (crushes the benchmark) with
+    ``capital_deployed=-28.5%`` (recalibration_v1_round2.log). Fold 1 and
+    fold 2, by contrast, show real underperformance (``vs_flat_dca=-13.30%``,
+    ``-13.31%``) alongside their own negative capital_deployed_pct -- that
+    pairing, not the capital_deployed sign alone, is what marks genuine
+    non-participation. This type ranks on worst-case ``vs_flat_dca_pct``
+    directly instead.
+    """
+
+    model_config = ConfigDict(frozen=True, strict=True)
+
+    shape: SdcaCurveShape
+    worst_vs_flat_dca_pct: float
+    worst_max_drawdown_pct: float
+    capital_deployed_pct: float = Field(
+        description="capital_deployed_pct on the primary (first) window, "
+        "informational only -- not gated on. See class docstring."
+    )
+    feasible: bool
+    base: CurveTrialScore
+
+
+def score_shape_on_windows_robust(
+    windows: list[tuple[pl.Series, pl.Series, pl.Series]],
+    shape: SdcaCurveShape,
+    initial_cash: float,
+    *,
+    gates: CurveOptimizeGates | None = None,
+) -> RobustCurveTrialScore:
+    """Rank a shape on worst-case ``vs_flat_dca_pct`` across ``windows``
+    (SDCA non-participation follow-up, 2026-09-25).
+
+    Pass ``windows`` as the full-history index plus each walk-forward fold's
+    IS window (``walk_forward.make_walk_forward_folds`` / ``window_slice``,
+    sliced against the same risk series). ``windows[0]`` is the "primary"
+    window: ``score_shape_on_index``'s own hard gates (``feasible``) are
+    taken from it, same as the rest of this module. The drawdown cap/comfort
+    (``MAX_DRAWDOWN_CAP_PCT``/``MAX_DRAWDOWN_COMFORT_PCT``) is still enforced,
+    using the worst drawdown across all windows -- unlike capital_deployed_pct,
+    a large intra-window drawdown is bad regardless of where the window ends,
+    so that check is not endpoint-dependent the way capital_deployed_pct is.
+    """
+    if not windows:
+        raise ValueError("windows must be non-empty")
+    g = gates or CurveOptimizeGates()
+    primary_dates, primary_prices, primary_risk = windows[0]
+    base = score_shape_on_index(
+        primary_dates, primary_prices, primary_risk, shape, initial_cash, gates=g
+    )
+    primary_report, _frame = run_backtest(
+        primary_dates, primary_prices, primary_risk, AccumDistCurve(shape.to_nodes()), initial_cash
+    )
+    if not base.feasible:
+        return RobustCurveTrialScore(
+            shape=shape,
+            worst_vs_flat_dca_pct=base.vs_flat_dca_pct,
+            worst_max_drawdown_pct=base.max_drawdown_pct,
+            capital_deployed_pct=primary_report.capital_deployed_pct,
+            feasible=False,
+            base=base,
+        )
+    vs_flat_dca_pcts = [base.vs_flat_dca_pct]
+    max_drawdown_pcts = [base.max_drawdown_pct]
+    for w_dates, w_prices, w_risk in windows[1:]:
+        w_score = score_shape_on_index(w_dates, w_prices, w_risk, shape, initial_cash, gates=g)
+        vs_flat_dca_pcts.append(w_score.vs_flat_dca_pct)
+        max_drawdown_pcts.append(w_score.max_drawdown_pct)
+    worst_vs_flat_dca_pct = min(vs_flat_dca_pcts)
+    worst_max_drawdown_pct = max(max_drawdown_pcts)
+    _drawdown_score, drawdown_reject = _drawdown_penalty(worst_max_drawdown_pct, base.risk_adjusted_return)
+    return RobustCurveTrialScore(
+        shape=shape,
+        worst_vs_flat_dca_pct=worst_vs_flat_dca_pct,
+        worst_max_drawdown_pct=worst_max_drawdown_pct,
+        capital_deployed_pct=primary_report.capital_deployed_pct,
+        feasible=not drawdown_reject,
+        base=base,
+    )
+
+
+def search_wide_knee_curve_multi_window_robust(
+    windows: list[tuple[pl.Series, pl.Series, pl.Series]],
+    *,
+    initial_cash: float,
+    n_random: int = 3000,
+    seed: int = 42,
+    include_grid: bool = True,
+    bounds: dict[str, tuple[float, float]] = WIDE_KNEE_SEARCH_BOUNDS,
+    grid: dict[str, tuple[float, ...]] = WIDE_KNEE_COARSE_GRID,
+    gates: CurveOptimizeGates | None = None,
+) -> "RobustCurveSearchResult":
+    """Same trial grid as ``search_wide_knee_curve_feasibility_aware``, ranked
+    on worst-case ``vs_flat_dca_pct`` across ``windows`` instead of raw
+    in-sample ``risk_adjusted_return`` on a single index.
+
+    Additive and opt-in: every other search function in this module and
+    ``curve_optimize.py`` is untouched. In-sample only -- a winner here still
+    has to clear the walk-forward OOS gate at Stage 4.
+    """
+    g = gates or CurveOptimizeGates()
+    trials = sample_wide_knee_curve_trials(
+        n_random=n_random, seed=seed, include_grid=include_grid, bounds=bounds, grid=grid
+    )
+    baseline = score_shape_on_windows_robust(
+        windows, published_curve_shape(), initial_cash, gates=g
+    )
+    scored: list[RobustCurveTrialScore] = []
+    for params in trials:
+        try:
+            shape = SdcaCurveShape(
+                buy_max_rate=float(params["buy_max_rate"]),
+                buy_knee_risk=float(params["buy_knee_risk"]),
+                sell_knee_risk=float(params["sell_knee_risk"]),
+                sell_max_rate=float(params["sell_max_rate"]),
+                buy_curvature=float(params["buy_curvature"]),
+                sell_curvature=float(params["sell_curvature"]),
+            )
+        except (KeyError, TypeError, ValueError):
+            continue
+        scored.append(score_shape_on_windows_robust(windows, shape, initial_cash, gates=g))
+    if not scored:
+        raise ValueError("no valid curve trials to evaluate")
+    feasible_scored = [s for s in scored if s.feasible]
+    pool = feasible_scored or scored
+    best = max(pool, key=lambda s: s.worst_vs_flat_dca_pct)
+    n_drawdown_rejected = sum(1 for s in scored if not s.feasible)
+    notes = (
+        "Objective=worst-case vs_flat_dca_pct across "
+        f"{len(windows)} windows (full history + each walk-forward fold's IS "
+        f"window), subject to max_drawdown_pct<={MAX_DRAWDOWN_CAP_PCT:.1f}% "
+        "(comfort-penalized above "
+        f"{MAX_DRAWDOWN_COMFORT_PCT:.1f}%) on the worst window, or already "
+        "rejected by score_shape_on_index's own gates on the primary window. "
+        f"capital_deployed_pct is reported, not gated on (endpoint snapshot -- "
+        "see RobustCurveTrialScore docstring). "
+        f"best worst_vs_flat_dca_pct={best.worst_vs_flat_dca_pct:.2f}% "
+        f"(worst_max_drawdown_pct={best.worst_max_drawdown_pct:.2f}%, "
+        f"capital_deployed_pct[primary]={best.capital_deployed_pct:.2f}%) "
+        f"shape={params_from_shape(best.shape)}. "
+        f"{n_drawdown_rejected}/{len(scored)} trials drawdown-rejected "
+        f"({len(feasible_scored)}/{len(scored)} feasible). "
+        "In-sample only -- still subject to the walk-forward OOS gate."
+    )
+    return RobustCurveSearchResult(
+        best=best,
+        baseline=baseline,
+        num_evaluations=len(scored),
+        num_drawdown_rejected=n_drawdown_rejected,
+        notes=notes,
+    )
+
+
+class RobustCurveSearchResult(BaseModel):
+    """Outcome of ``search_wide_knee_curve_multi_window_robust``."""
+
+    model_config = ConfigDict(frozen=True, strict=True)
+
+    best: RobustCurveTrialScore
+    baseline: RobustCurveTrialScore
+    num_evaluations: int
+    num_drawdown_rejected: int
+    notes: str
+
+
 __all__ = [
     "CAPITAL_DEPLOYED_COMFORT_PCT",
     "CAPITAL_DEPLOYED_FLOOR_PCT",
@@ -338,6 +511,10 @@ __all__ = [
     "SOFT_ZONE_PENALTY_SCALE",
     "FeasibilityAwareCurveSearchResult",
     "FeasibilityAwareCurveTrialScore",
+    "RobustCurveSearchResult",
+    "RobustCurveTrialScore",
     "score_shape_on_index_feasibility_aware",
+    "score_shape_on_windows_robust",
     "search_wide_knee_curve_feasibility_aware",
+    "search_wide_knee_curve_multi_window_robust",
 ]

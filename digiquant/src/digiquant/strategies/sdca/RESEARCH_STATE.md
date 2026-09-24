@@ -752,6 +752,92 @@ explicit that they're still blocked on Stage 2's OHLC plumbing.)
      imprecise about timing (it landed as its own commit before Phase 1's,
      not "inside" Phase 1); RESEARCH_STATE.md's own record (bullet above)
      had it right all along.
+   - **Round 3 result (2026-09-25)** — Chris flagged that round 2 "wins on
+     headline OOS return but does it by exiting and staying out through
+     entire bull/recovery windows... capital_deployed negative in all 3 OOS
+     folds, failing `walk_forward.py`'s own `capital_deployed_floor_pct=10.0`
+     gate. That's not what 'best risk-adjusted return' should mean for a DCA
+     strategy." Investigated three angles Chris raised (buy-side bounds,
+     `crash_override`'s ramp-down, the Phase 2 RSI/M2 fix) plus a diagnostic
+     of composite-risk zone occupancy through the OOS windows themselves.
+     **Important metric-definition finding, not previously documented**:
+     `capital_deployed_pct` (`backtest.py`) is `(initial_cash - cash) /
+     initial_cash` measured at the END of a window — a cash *snapshot*, not a
+     participation measure. It goes sharply negative whenever a curve sells
+     more (in realized dollars) than it ever bought by a window's close,
+     which is exactly what a GOOD curve does when it sells appreciated BTC
+     late in a window — round 2's own fold 0 proves this
+     (`vs_flat_dca=+37.21%`, crushing the benchmark, alongside
+     `capital_deployed=-28.5%`, which the floor gate flags as infeasible).
+     Fold 1/fold 2's negative `capital_deployed_pct` pairs with genuine
+     underperformance (`vs_flat_dca=-13.30%`/`-13.31%`) — that pairing, not
+     the sign of `capital_deployed_pct` alone, is the real non-participation
+     signal. `curve_optimize_feasibility.py`'s existing feasibility gate also
+     only ever checked `capital_deployed_pct` against the full 2015-2026
+     history (an 11-year average across many regimes), never against
+     individual walk-forward fold windows — a shape can clear that average
+     (round 2: `86.2%`) while being a severe net seller in a specific
+     regime nested inside it (round 2's shape: `-724.4%` on fold 2's IS
+     window alone). Root behavioral cause (zone-occupancy diagnostic,
+     round 2's shape, real composite risk incl. `crash_override`): composite
+     risk sits in the "dead zone" between `buy_knee_risk` (40) and
+     `sell_knee_risk` (70) — neither buying nor selling — for **65.2% of
+     fold 1's OOS window and 55.6% of fold 2's**, versus `crash_override`
+     itself only pushing 14 buy-zone days out per fold (4.4–8.3% of days) —
+     the dead zone, not `crash_override`'s ramp-down, is the dominant driver.
+     Buy-side bounds were not the binding constraint either: round 2's
+     `buy_knee_risk=40.0` sits well inside its `(20, 48)` bound, not pinned
+     at the edge.
+     **Fix applied**: added `curve_optimize_feasibility.
+     search_wide_knee_curve_multi_window_robust` (additive; the
+     capital-deployed-gated multi-window functions from the same file were
+     replaced, not kept, once proven structurally unsatisfiable — see below)
+     — ranks candidates on **worst-case `vs_flat_dca_pct`** across {full
+     2015-2026 history, fold 0/1/2 IS windows}, gated only on the existing
+     drawdown cap (legitimate — drawdown magnitude isn't endpoint-dependent
+     the way `capital_deployed_pct` is). `capital_deployed_pct` is still
+     computed and reported for visibility, never hard-gated on, in this or
+     any future round. (A first attempt gated the same multi-window search on
+     worst-case `capital_deployed_pct` instead and rejected **100% of the
+     7844-trial search space** — direct proof of the metric-definition
+     finding above; discarded before being run through Phase 4.)
+     **Round 3 outcome, full walk-forward** (`crash_override` enabled, same
+     params as round 2): winning shape `buy_max_rate=35.0,
+     buy_knee_risk=40.0, sell_knee_risk=70.0, sell_max_rate=90.0,
+     buy_curvature=1.5, sell_curvature=1.0` — **same knees as round 2**,
+     only the sell rate changed. Mean OOS `+1.91%` (vs round 2's `+3.53%` —
+     *lower*), `beats_flat_dca_oos=True`. Per fold: fold 0 `+30.68%`
+     (down from round 2's `+37.21%`, still strongly positive), **fold 1
+     `-29.49%` (worse than round 2's `-13.30%` — regressed)**, **fold 2
+     `+4.54%` (up from round 2's `-13.31%` — flipped positive, the 2023-24
+     recovery non-participation is genuinely fixed)**. Mixed result: the
+     dead-zone hypothesis is confirmed correct for fold 2 but round 3's
+     specific search did not carry the fix through to fold 1
+     (2019-09-12→2022-01-14, the window that has now failed under every
+     technique tried across this entire research program — see item 6 above).
+     Diagnosed why: scoring the search objective against each fold's own
+     *expanding* IS window makes all three fold-IS scores converge to
+     roughly the same value (~-78% `vs_flat_dca_pct` in-sample for the
+     round-3 winner on every fold IS window) because each expanding window is
+     dominated by the same explosive 2015-2017 early history — the search
+     effectively could not distinguish candidates on later-regime robustness
+     and fell back to whichever shape did best on the full-history window
+     (favoring an aggressive `sell_max_rate`, which then hurt fold 1's actual
+     OOS more than it helped). Feasibility-gate note for future rounds:
+     `capital_deployed_pct` is `feasible=False` on every OOS fold and the
+     baseline comparison uses a simplified non-Nautilus evaluator built for
+     this round (`window_report` in
+     `.scratch/recalibration_v1_round3.py`), so its
+     `delta_mean_oos_vs_flat_dca_pct`/`beats_baseline_oos` numbers are not
+     directly comparable to round 2's Nautilus-evaluator baseline figures —
+     comparable within round 3 only. `tests/dq/strategies/sdca/` green
+     throughout (585 passed, 38 skipped). **Not promoted** — net headline OOS
+     is a regression vs round 2 despite fixing one of the two known-bad
+     windows; next well-motivated step (not yet run) is a direct dead-zone
+     width sweep scored against fold 1's own regime rather than through the
+     expanding-IS-window proxy, flagged for Chris/coordinator rather than run
+     unilaterally given it revisits how much OOS-adjacent data a search
+     proxy may see.
 
 ## North-star ceiling (benchmark only — NEVER a trading candidate)
 
