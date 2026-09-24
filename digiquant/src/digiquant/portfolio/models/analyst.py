@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from typing import (  # scored-lint suppression: heterogeneous graph / dict shapes
     Annotated,
     Any,
@@ -12,6 +13,21 @@ from pydantic import BaseModel, Field, model_validator
 from pydantic.json_schema import SkipJsonSchema
 
 from digiquant.portfolio.models.forecast import ForecastAssessment, ForecastTerms
+
+# The one universe both evidence counts are drawn from (#4585). Every family is
+# itemized once, on the confirming side or the contradicting side — never both.
+_EVIDENCE_FAMILIES = (
+    "technicals",
+    "fundamentals",
+    "flows/positioning",
+    "macro regime",
+    "sentiment/news",
+)
+_MAX_EVIDENCE_FAMILIES = len(_EVIDENCE_FAMILIES)
+_FAMILY_SUM_ERROR = (
+    "confirming + contradicting signals must be <= 5 "
+    f"(the five signal families: {', '.join(_EVIDENCE_FAMILIES)})"
+)
 
 
 class EvidenceAssessment(BaseModel):
@@ -61,6 +77,76 @@ class EvidenceAssessment(BaseModel):
             "'low' = thin/stale inputs — be honest, this caps conviction."
         ),
     )
+
+    @model_validator(mode="after")
+    def _enforce_single_family_universe(self) -> "EvidenceAssessment":
+        """The two counts are disjoint halves of one five-family universe (#4585).
+
+        Both fields are ``le=5`` independently, which alone lets a payload assign
+        up to ten family slots — ``analyst/IBIT`` 2026-09-22 stored ``4 + 4``, eight
+        families over five. Reject rather than clamp: clamping would silently
+        rewrite the model's itemization, so persisted overcounts are instead
+        repaired on read by :func:`repair_legacy_evidence_counts`.
+        """
+        total = self.independent_confirming_signals + self.contradicting_signals
+        if total > _MAX_EVIDENCE_FAMILIES:
+            raise ValueError(_FAMILY_SUM_ERROR)
+        return self
+
+
+def repair_evidence_counts(confirming: int, contradicting: int) -> tuple[int, int]:
+    """Net-preserving repair of a legacy ``(confirming, contradicting)`` pair (#4585).
+
+    A pair that already fits the five-family universe (``sum <= 5``) is returned
+    unchanged. An overcount is rebalanced while preserving the net
+    ``confirming - contradicting`` — so a repaired legacy row still derives the same
+    ``conviction_score`` — using the canonical reduction::
+
+        4+4 -> 2+2   3+3 -> 2+2   5+2 -> 4+1   5+1 -> 4+0
+        2+5 -> 1+4   4+3 -> 3+2   3+2 -> 3+2   0+0 -> 0+0
+    """
+    if confirming + contradicting <= _MAX_EVIDENCE_FAMILIES:
+        return confirming, contradicting
+    net = confirming - contradicting
+    if net >= 0:
+        contradicting = min(contradicting, (_MAX_EVIDENCE_FAMILIES - net) // 2)
+        confirming = contradicting + net
+    else:
+        confirming = min(confirming, (_MAX_EVIDENCE_FAMILIES + net) // 2)
+        contradicting = confirming - net
+    return confirming, contradicting
+
+
+def repair_legacy_evidence_counts(body: Mapping[str, Any]) -> dict[str, Any]:
+    """Return *body* with an overcounted ``evidence`` pair repaired (#4585).
+
+    Called only where a **persisted/prior** analyst body is re-validated (skip
+    carry, metric patch, edit fallback) so a legacy overcounted row still carries
+    instead of degrading. Fresh LLM output is validated strictly — a bad
+    generation must be rejected and retried, never silently rewritten. A body with
+    no evidence block, or evidence fields that are not counts, is returned as a
+    shallow copy unchanged.
+    """
+    evidence = body.get("evidence")
+    if not isinstance(evidence, Mapping):
+        return dict(body)
+    confirming = evidence.get("independent_confirming_signals")
+    contradicting = evidence.get("contradicting_signals")
+    if isinstance(confirming, bool) or isinstance(contradicting, bool):
+        return dict(body)
+    if not isinstance(confirming, int) or not isinstance(contradicting, int):
+        return dict(body)
+    repaired = repair_evidence_counts(confirming, contradicting)
+    if repaired == (confirming, contradicting):
+        return dict(body)
+    return {
+        **body,
+        "evidence": {
+            **evidence,
+            "independent_confirming_signals": repaired[0],
+            "contradicting_signals": repaired[1],
+        },
+    }
 
 
 def derive_conviction(evidence: EvidenceAssessment, stance: str) -> int:
