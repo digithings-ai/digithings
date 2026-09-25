@@ -3,8 +3,10 @@
 import { useEffect, useRef, useState } from "react";
 import {
   ModuleShowcase,
+  PipelineCard,
   StackRow,
   modules,
+  pipelineCards,
   useScrollyFeatures,
   scrollyTrackHeightVh,
   type ModuleNode,
@@ -633,15 +635,19 @@ export function ModuleGrid() {
 
                         {/* The complete card, grown in place (#4429). Only on
                             the focused-and-expanded tile: the module's
-                            purpose-built showcase (hero visual, strip,
-                            capabilities, snippet, proof) for ALL eleven
-                            modules — roadmap ones render muted with a badge.
-                            Head/role/detail render above, stack + foot pin to
-                            the bottom below — this block is the middle. The
-                            only clickables are the foot's own buttons. */}
+                            navigable pipeline card when one exists (the
+                            public tool surface, restart), else the
+                            purpose-built showcase. Head/role/detail render
+                            above, stack + foot pin to the bottom below —
+                            this block is the middle. The only clickables
+                            are the foot's own buttons. */}
                         {open ? (
                           <div className="dg-cell-full">
-                            <ModuleShowcase module={m} />
+                            {pipelineCards[m.id] ? (
+                              <PipelineCard card={pipelineCards[m.id]} />
+                            ) : (
+                              <ModuleShowcase module={m} />
+                            )}
                           </div>
                         ) : null}
 
