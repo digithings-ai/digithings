@@ -1,0 +1,23 @@
+# dashboard-api — central read-only dashboard API (issue #4651).
+
+Standalone Cloudflare Worker. Contract: `CONTRACT.md` in this directory.
+Dashboard surfaces in `apps/dashboard` become thin renderers over these
+routes and compute nothing locally.
+
+No new public hostname or routes on any domain (human gate) — this worker
+deploys with no custom domain until a follow-up decision.
+
+name = "dashboard-api"
+main = "src/index.ts"
+compatibility_date = "2026-09-04"
+workers_dev = true
+
+[observability]
+enabled = true
+
+[vars]
+SUPABASE_URL = ""
+
+# Secrets (wrangler secret put; never commit values):
+#   SUPABASE_SERVICE_ROLE_KEY — house-book reads via PostgREST. Lives ONLY in
+#   worker secrets. Never in the static bundle, no NEXT_PUBLIC_ service key.
