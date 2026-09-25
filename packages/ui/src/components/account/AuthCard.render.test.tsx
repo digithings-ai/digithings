@@ -56,4 +56,19 @@ describe("AuthCard", () => {
     expect(html).toContain("strong");
     expect(html).not.toContain("dashboard");
   });
+
+  it("branded signup shows the client marker and line, unbranded shows neither", () => {
+    const branded = renderToStaticMarkup(
+      <AuthCard
+        layout="compact"
+        mode="signup"
+        brand={{ marker: "12X", line: "Purpose-built for the 12X desk" }}
+      />,
+    );
+    expect(branded).toContain("acct-auth-invite-marker");
+    expect(branded).toContain("12X");
+    expect(branded).toContain("Purpose-built for the 12X desk");
+    const plain = renderToStaticMarkup(<AuthCard layout="compact" mode="signup" />);
+    expect(plain).not.toContain("acct-auth-invite-marker");
+  });
 });

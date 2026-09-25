@@ -30,6 +30,7 @@ export {
 export {
   AuthCard,
   passwordStrength,
+  type AuthCardBrand,
   type AuthCardLayout,
   type AuthCardMode,
   type AuthCardProps,
