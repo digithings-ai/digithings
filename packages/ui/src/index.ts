@@ -66,6 +66,7 @@ export {
   ModuleFlowStrip,
   ModuleFlowDiagram,
   ModuleStageList,
+  ModuleShowcase,
   type FlowStage,
   type ModuleFlowStripProps,
   type ModuleFlowDiagramProps,

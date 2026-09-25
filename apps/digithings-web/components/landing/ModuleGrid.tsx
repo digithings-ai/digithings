@@ -2,8 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import {
-  ModuleFlowDiagram,
-  ModuleStageList,
+  ModuleShowcase,
   StackRow,
   modules,
   useScrollyFeatures,
@@ -525,7 +524,7 @@ export function ModuleGrid() {
               const rowOpen = members.some((i) => {
                 const mm = ordered[i];
                 const mmOn = stepper ? reduced || i === stackActive : i === focus;
-                return expandId === mm.id && mmOn && mm.flow !== undefined;
+                return expandId === mm.id && mmOn;
               });
               return (
               <div
@@ -536,7 +535,7 @@ export function ModuleGrid() {
                 {members.map((i) => {
                   const m = ordered[i];
                   const on = stepper ? reduced || i === stackActive : i === focus;
-                  const open = expandId === m.id && on && m.flow !== undefined;
+                  const open = expandId === m.id && on;
                   const version = moduleVersion(m.id);
                   const dockerCmd = m.dockerCmd;
                   const copied = copiedId === m.id;
@@ -556,7 +555,7 @@ export function ModuleGrid() {
                         stepper ? undefined : ({ flexGrow: tileGrow[i] } as React.CSSProperties)
                       }
                       aria-current={on ? "true" : undefined}
-                      data-expandable={m.flow && on ? "true" : undefined}
+                      data-expandable={on ? "true" : undefined}
                     >
                       {/* The whole tile is the focus target, but the focused
                           tile also owns real controls (copy the compose command,
@@ -575,16 +574,16 @@ export function ModuleGrid() {
                             ? `Collapse the ${m.id} card`
                             : `Focus ${m.id} — ${m.role}, ${factsLine(m)}`
                         }
-                        aria-expanded={m.flow && on ? open : undefined}
+                        aria-expanded={on ? open : undefined}
                         onClick={() => {
                           /* Click-anywhere expand: the focused tile toggles
                              its full card in place (real controls sit above
                              this overlay and keep their own clicks); an
-                             unfocused tile focuses as before. Flow-less
-                             modules have no fuller card, so their click
-                             stays a focus. */
+                             unfocused tile focuses as before. Every module
+                             has a showcase card, so every focused tile
+                             toggles. */
                           const focused = stepper ? reduced || i === stackActive : i === focus;
-                          if (focused && m.flow) setExpandId(open ? null : m.id);
+                          if (focused) setExpandId(open ? null : m.id);
                           else if (stepper) setStackActive(i);
                           else focusModule(trackRef.current, i);
                         }}
@@ -633,40 +632,16 @@ export function ModuleGrid() {
                         ) : null}
 
                         {/* The complete card, grown in place (#4429). Only on
-                            the focused-and-expanded tile, and only the deep
-                            dive: diagram, stages, every summary paragraph,
-                            api, usage snippet. Head/role/detail render
-                            above, stack + foot pin to the bottom below — this
-                            block is the middle, so the buttons stay at the
-                            bottom like the other tiles. No source links, no
-                            related-module jumps: keep it simple, keep it
-                            clean. The only clickables are the foot's own
-                            buttons (docker copy, ask digichat). */}
-                        {open && m.flow ? (
+                            the focused-and-expanded tile: the module's
+                            purpose-built showcase (hero visual, strip,
+                            capabilities, snippet, proof) for ALL eleven
+                            modules — roadmap ones render muted with a badge.
+                            Head/role/detail render above, stack + foot pin to
+                            the bottom below — this block is the middle. The
+                            only clickables are the foot's own buttons. */}
+                        {open ? (
                           <div className="dg-cell-full">
-                            <ModuleFlowDiagram stages={m.flow.stages} label={m.id} />
-                            <ModuleStageList stages={m.flow.stages} />
-                            <div className="m-fullcard-summary">
-                              {m.summary.map((p, k) => (
-                                <p key={k}>{p}</p>
-                              ))}
-                            </div>
-                            {m.api.length > 0 ? (
-                              <ul className="m-fullcard-api">
-                                {m.api.map((a, k) => (
-                                  <li key={k}>
-                                    {a.label ? <span className="k">{a.label}</span> : null}
-                                    <code>{a.code}</code>
-                                  </li>
-                                ))}
-                              </ul>
-                            ) : null}
-                            {/* Usage, copy-pasteable (#4429). The snippet is
-                                the module's own initSnippet — real commands
-                                from the repo, never invented. */}
-                            <pre className="m-fullcard-code">
-                              <code>{m.initSnippet.code}</code>
-                            </pre>
+                            <ModuleShowcase module={m} />
                           </div>
                         ) : null}
 
