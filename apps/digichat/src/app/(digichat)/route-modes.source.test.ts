@@ -67,8 +67,23 @@ describe("single route / with ?mode=", () => {
     );
     expect(config).toMatch(/source: "\/baseline"/);
     expect(config).toMatch(/destination: "\/\?mode=catalog"/);
-    // /embed keeps serving directly: production splits / (Pages) from
-    // /embed* (Container), so redirecting it would strand tenant iframes.
-    expect(config).not.toMatch(/destination: "[^"]*mode=embed/);
+    // /embed keeps serving directly (never a redirect): production splits /
+    // (Pages) from /embed* (Container), so redirecting it would strand
+    // tenant iframes. The rewrite below is internal, not a redirect — it
+    // carries no `permanent` flag.
+    expect(config).not.toMatch(/source: "\/embed[^"]*", destination[^}]*permanent/);
+  });
+
+  it("aliases /embed into the single route internally (rewrite, no redirect)", () => {
+    const config = readFileSync(
+      join(here, "..", "..", "..", "next.config.ts"),
+      "utf8",
+    );
+    expect(config).toMatch(
+      /\{ source: "\/embed", destination: "\/\?mode=embed" \}/,
+    );
+    expect(config).toMatch(
+      /\{ source: "\/embed\/", destination: "\/\?mode=embed" \}/,
+    );
   });
 });

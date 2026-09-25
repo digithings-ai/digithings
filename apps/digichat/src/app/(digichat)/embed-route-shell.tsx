@@ -7,7 +7,10 @@
  * which removes the dark→light flash a client-only resolve would cause.
  * Reading `headers()` opts consumers into dynamic rendering, which is
  * correct and required: the response varies per tenant token, so a cached
- * or prerendered copy would serve one tenant's theme to another.
+ * or prerendered copy would serve one tenant's theme to another. It also
+ * owns the `dc-embed-shell` wrapper div and the transparent first-paint
+ * style (moved from `app/(digichat)/embed/layout.tsx` so the `?mode=embed`
+ * rewrite serves byte-identical HTML).
  */
 
 import { resolveEmbedHostParamOrReferer } from "@/lib/embed-client-config";
@@ -74,7 +77,22 @@ export default async function EmbedRouteShell({
       : "var(--background)";
 
   return (
-    <>
+    <div className="dc-embed-shell flex h-dvh w-full flex-col overflow-hidden bg-background text-foreground">
+      {/* The embed paints no colour of its own until the canvas below streams
+          the tenant's surface (moved verbatim from `app/(digichat)/embed/layout.tsx`):
+          the root layout's no-JS default is dark, and the light `--background`
+          that follows is white — two frames the visitor should never see. Stay
+          transparent instead, the same surface the attribution strip sits on, so
+          footer and chat space always move together; the canvas rule below
+          replaces this in the same streamed document. `body.bg-background`
+          (0-1-1) beats the root body's Tailwind utility (0-1-0); the canvas
+          rule's later rule of the same shape wins the tie. */}
+      <style
+        dangerouslySetInnerHTML={{
+          __html:
+            "html{background:transparent}body.bg-background{background:transparent}.dc-embed-shell{background:transparent}",
+        }}
+      />
       {/* The app owns its canvas, and it owns exactly ONE of them. The colour
           is resolved server-side (skin + paint theme) into `--embed-canvas`,
           so body, shell, thread and the attribution strip all paint the same
@@ -105,6 +123,6 @@ export default async function EmbedRouteShell({
         }}
       />
       <EmbedClient initialTenantCfg={seededCfg} initialBoot={first(params.boot) ?? null} />
-    </>
+    </div>
   );
 }

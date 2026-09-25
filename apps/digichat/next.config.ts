@@ -62,6 +62,20 @@ const nextConfig: NextConfig = {
       { source: "/baseline/", destination: "/?mode=catalog", permanent: false },
     ];
   },
+  /**
+   * Stable embed alias (single-route unification). `/embed` is served
+   * INTERNALLY from the single route (`/?mode=embed`) — no 307, so the
+   * browser URL, query (?host=, ?token=), edge routing (Container), tenant
+   * iframes, and widget snippets all behave exactly as before. One
+   * implementation serves every spelling; `/?mode=embed` is canonical for
+   * new single-server integrations.
+   */
+  async rewrites() {
+    return [
+      { source: "/embed", destination: "/?mode=embed" },
+      { source: "/embed/", destination: "/?mode=embed" },
+    ];
+  },
 };
 
 export default nextConfig;

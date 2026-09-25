@@ -25,6 +25,12 @@ export async function generateMetadata({
 }): Promise<Metadata> {
   const params = await searchParams;
   if (params.mode !== "embed" && params.mode !== "catalog") return {};
+  if (params.mode === "embed")
+    return {
+      title: "digichat",
+      description: "Embedded digichat preview.",
+      robots: { index: false, follow: false },
+    };
   return { robots: { index: false, follow: false } };
 }
 
