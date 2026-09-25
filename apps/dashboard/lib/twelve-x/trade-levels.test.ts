@@ -52,6 +52,32 @@ describe('parseTradeLevels', () => {
     expect(tl?.targets).toHaveLength(1);
     expect(hasTradeLevels(tl)).toBe(true);
   });
+
+  it('parses llm-provenance levels (level-author brackets)', () => {
+    const tl = parseTradeLevels({
+      entry_low: { value: '1.139942', provenance: 'llm', source_ref: 'llm@2026-09-24' },
+      entry_high: { value: '1.140418', provenance: 'llm', source_ref: 'llm@2026-09-24' },
+      stop: { value: '1.141471', provenance: 'llm', source_ref: 'llm@2026-09-24' },
+      targets: [{ value: '1.135693', provenance: 'llm', source_ref: 'llm@2026-09-24' }],
+      risk_reward: 3.4756003098373354,
+      status: 'complete',
+    });
+    expect(tl?.status).toBe('complete');
+    expect(tl?.stop?.value).toBe('1.141471');
+    expect(tl?.targets).toHaveLength(1);
+    expect(hasTradeLevels(tl)).toBe(true);
+  });
+
+  it('parses technical and retail-book provenances', () => {
+    const tl = parseTradeLevels({
+      stop: { value: '1.14', provenance: 'technical', source_ref: 'fib' },
+      targets: [{ value: '1.18', provenance: 'pmt_retail_book', source_ref: 'snap:1' }],
+      status: 'partial',
+    });
+    expect(tl?.stop?.provenance).toBe('technical');
+    expect(tl?.targets).toHaveLength(1);
+    expect(hasTradeLevels(tl)).toBe(true);
+  });
 });
 
 describe('provenanceChipLabel', () => {
@@ -100,6 +126,22 @@ describe('provenanceChipLabel', () => {
         source_ref: 'snap:1',
       }),
     ).toBe('bank trade');
+  });
+
+  it('labels model, technical, and retail-book levels', () => {
+    expect(
+      provenanceChipLabel({ value: '1.14', provenance: 'llm', source_ref: 'llm@2026-09-24' }),
+    ).toBe('model');
+    expect(
+      provenanceChipLabel({ value: '1.14', provenance: 'technical', source_ref: 'fib' }),
+    ).toBe('technical');
+    expect(
+      provenanceChipLabel({
+        value: '1.14',
+        provenance: 'pmt_retail_book',
+        source_ref: 'snap:1',
+      }),
+    ).toBe('retail book');
   });
 });
 
@@ -159,6 +201,11 @@ describe('formatLevelValue + pair decimals', () => {
     expect(pairPriceDecimals('EUR/USD')).toBe(5);
     expect(formatLevelValue('148.501234', 'USD/JPY', 'computed')).toBe('148.501');
     expect(formatLevelValue('1.08501234', 'EUR/USD', 'computed')).toBe('1.08501');
+  });
+
+  it('keeps model/technical precision (trim zeros only)', () => {
+    expect(formatLevelValue('1.141471', 'EUR/USD', 'llm')).toBe('1.141471');
+    expect(formatLevelValue('1.1500', 'EUR/USD', 'technical')).toBe('1.15');
   });
 
   it('formats R:R to one decimal', () => {
