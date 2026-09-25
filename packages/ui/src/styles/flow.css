@@ -163,18 +163,17 @@
   color: var(--ink);
 }
 
-.m-fullcard-links {
-  display: inline-flex;
-  flex-wrap: wrap;
-  gap: 0.25rem 0.75rem;
+/* Usage snippet: the module's own initSnippet, copy-pasteable. Pre-wrap
+   keeps long commands inside the tile instead of pushing the page wide. */
+.m-fullcard-code {
+  margin: 1.25rem 0 0;
+  padding: 0.8rem 0.9rem;
+  border: 1px solid var(--hair);
+  background: color-mix(in srgb, var(--ink) 4%, transparent);
   font-family: var(--font-mono);
-  font-size: 0.85rem;
-}
-
-.m-fullcard-links a {
-  color: var(--ink-soft);
-}
-
-.m-fullcard-links a:hover {
+  font-size: 0.8rem;
+  line-height: 1.65;
   color: var(--ink);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
 }
