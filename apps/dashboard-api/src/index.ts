@@ -15,6 +15,9 @@
  * `register*Routes` through `adaptOnGet` (slice 0004), and
  * `tryHandleLedger` (slice 0005), all over the clearly-marked stub doubles
  * in `./stubs` (the rewire slice swaps those for real Supabase reads).
+ * Slice 0007 decision (a): CONTRACT §6.1 documents the envelope builder's
+ * `invested.definition` key, so GET /portfolio is served by the envelope
+ * mount like every other route — no quarantine.
  * `POST /mcp` exposes the same routes as JSON-RPC tools (see `./mcp`).
  */
 
@@ -120,28 +123,6 @@ function normalizePath(pathname: string): string {
   return pathname || "/";
 }
 
-interface BookFetch {
-  getJson(path: string): Promise<unknown>;
-}
-
-function restClient(env: Env, retrievalPin: string | null): BookFetch {
-  const base = (env.SUPABASE_URL ?? "").replace(/\/$/, "");
-  const key = env.SUPABASE_SERVICE_ROLE_KEY ?? "";
-  return {
-    async getJson(path: string): Promise<unknown> {
-      const headers: Record<string, string> = {
-        apikey: key,
-        Authorization: `Bearer ${key}`,
-      };
-      // Contract section 4: forward the pin unchanged so traces join.
-      if (retrievalPin !== null) headers["X-Retrieval-Pin"] = retrievalPin;
-      const res = await fetch(`${base}/rest/v1/${path}`, { headers });
-      if (!res.ok) throw new Error(`upstream ${res.status} for ${path.split("?")[0]}`);
-      return res.json() as Promise<unknown>;
-    },
-  };
-}
-
 /** Latest positions date on or before the committed snapshot; else null. */
 export function committedBookDate(
   snapshotDate: string | null | undefined,
@@ -213,120 +194,19 @@ export function buildPortfolioBody(
   };
 }
 
-async function handlePortfolio(request: Request, env: Env): Promise<Response> {
-  const url = new URL(request.url);
-  let params: CommonParams;
-  try {
-    params = parseCommonParams(url);
-  } catch (e) {
-    return e as Response;
-  }
-  const { asOf, retrievalPin } = params;
-
-  if (!env.SUPABASE_URL || !env.SUPABASE_SERVICE_ROLE_KEY) {
-    // Fail closed — never synthesize numbers without the book upstream.
-    return errorResponse("upstream_empty", "book upstream not configured", retrievalPin);
-  }
-  const rest = restClient(env, retrievalPin);
-  try {
-    const snapshotPath =
-      `daily_snapshots?select=date&order=date.desc&limit=1` +
-      (asOf ? `&date=lte.${asOf}` : "");
-    const snapshots = (await rest.getJson(snapshotPath)) as Array<{ date: string }>;
-    const snapshotDate = snapshots[0]?.date ?? null;
-    if (!snapshotDate) {
-      return errorResponse("not_found", "no committed book for asOf", retrievalPin, { asOf });
-    }
-
-    const posDates = (await rest.getJson(
-      `positions?select=date&workspace_id=eq.${HOUSE_WORKSPACE_ID}&order=date.desc&limit=500`,
-    )) as Array<{ date: string }>;
-    const bookAsOf = committedBookDate(
-      snapshotDate,
-      posDates.map((r) => r.date),
-    );
-    if (!bookAsOf) {
-      // Never silently substitute the latest position date as "committed".
-      return errorResponse("not_found", "no committed book for asOf", retrievalPin, {
-        snapshot_date: snapshotDate,
-      });
-    }
-
-    const [navRows, positionRows] = await Promise.all([
-      rest.getJson(
-        `public_accounting_nav_history?select=date,nav,invested_pct,cash_pct,contract&order=date.desc&limit=1`,
-      ) as Promise<
-        Array<{
-          date: string;
-          nav: number;
-          invested_pct: number | null;
-          cash_pct: number | null;
-          contract: string | null;
-        }>
-      >,
-      rest.getJson(
-        `positions?select=ticker,weight_pct&workspace_id=eq.${HOUSE_WORKSPACE_ID}&date=eq.${bookAsOf}&limit=500`,
-      ) as Promise<Array<{ ticker: string; weight_pct: number | null }>>,
-    ]);
-    const tip = navRows[0] ?? null;
-    const navTip: NavTip | null = tip
-      ? {
-          date: tip.date,
-          nav: tip.nav,
-          contract:
-            tip.contract === "finalized_accounting" || tip.contract === "legacy_estimate"
-              ? tip.contract
-              : null,
-          invested_pct: tip.invested_pct,
-          cash_pct: tip.cash_pct,
-        }
-      : null;
-    const positions: PositionRow[] = positionRows.map((r) => ({
-      ticker: r.ticker,
-      weight_pct: Number(r.weight_pct ?? 0),
-      is_cash: r.ticker.trim().toUpperCase() === "CASH",
-    }));
-
-    const provenance = buildProvenance({
-      source: "public_accounting_nav_history+daily_snapshots+positions",
-      tip_date: tipDate(tip),
-      contract: navTip?.contract ?? null,
-      seam: tipDate(tip) !== bookAsOf,
-      marks: "unavailable",
-    });
-    return Response.json({
-      data: buildPortfolioBody(bookAsOf, navTip, positions),
-      as_of: bookAsOf,
-      retrieval_pin: retrievalPin,
-      provenance,
-    });
-  } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
-    return errorResponse("upstream_empty", `book upstream read failed: ${message}`, retrievalPin);
-  }
-}
-
-function tipDate(tip: { date: string } | null): string | null {
-  return tip?.date ?? null;
-}
-
 async function handleHealthz(): Promise<Response> {
   return Response.json({ ok: true, service: "dashboard-api" });
 }
 
 // --- Slice 0006 wiring ------------------------------------------------------
-// One route table over the slice builders. GET /portfolio stays on the
-// scaffold's handlePortfolio above (its exact-shape suite pins the §6.1
-// body without the envelope slice's extra `definition` key), so the
-// envelope mount's /portfolio registration is dropped after mounting —
-// every other envelope/brief/perf/live/benchmarks/ledger route goes live.
+// One route table over the slice builders (slice 0007 serves GET /portfolio
+// from the envelope mount too — CONTRACT §6.1 documents `invested.definition`).
 function buildRouteTable(): Map<string, RouteHandler> {
   const routes = new Map<string, RouteHandler>();
   const addRoute: AddRoute = (method, path, handler) => {
     routes.set(`${method} ${path}`, handler);
   };
   mountEnvelopeRoutes(addRoute, stubEnvelopeSource());
-  routes.delete("GET /portfolio");
   const onGet = adaptOnGet(addRoute);
   registerBriefRoutes(onGet, stubBriefDeps());
   registerPerformanceRoutes(onGet, stubPerformanceDeps());
@@ -343,7 +223,6 @@ async function routeGet(request: Request, env: Env): Promise<Response> {
   const url = new URL(request.url);
   const path = normalizePath(url.pathname);
   if (request.method === "GET" && path === "/healthz") return handleHealthz();
-  if (request.method === "GET" && path === "/portfolio") return handlePortfolio(request, env);
   if (request.method === "GET" && path === "/ledger") {
     const res = await tryHandleLedger(request, STUB_LEDGER);
     if (res) return res;

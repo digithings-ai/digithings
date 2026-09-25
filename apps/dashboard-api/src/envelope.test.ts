@@ -4,8 +4,9 @@
  * and delegation to the pure builders — all against a stub `EnvelopeSource`
  * (no network, no secrets).
  */
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, type Mock } from 'vitest';
 import { mountEnvelopeRoutes } from './envelope';
+import type { MarketCloseFill } from './allocations';
 import type {
   AddRoute,
   CommittedBookSnapshot,
@@ -62,12 +63,24 @@ function harness(source: EnvelopeSource): Map<string, RouteHandler> {
 }
 
 function stubSource(
-  overrides: Partial<EnvelopeSource> = {},
+  overrides: Omit<Partial<EnvelopeSource>, "loadMarketCloses"> = {},
   snapshot: CommittedBookSnapshot | null = SNAPSHOT,
-): EnvelopeSource & { loadMarketCloses: ReturnType<typeof vi.fn> } {
+): EnvelopeSource & {
+  loadMarketCloses: Mock<
+    (
+      tickers: readonly string[],
+      retrievalPin: string | null,
+    ) => Promise<ReadonlyMap<string, MarketCloseFill>>
+  >;
+} {
   return {
     loadBook: async () => snapshot,
-    loadMarketCloses: vi.fn(async () => new Map()),
+    loadMarketCloses: vi.fn(async () => new Map()) as Mock<
+      (
+        tickers: readonly string[],
+        retrievalPin: string | null,
+      ) => Promise<ReadonlyMap<string, MarketCloseFill>>
+    >,
     ...overrides,
   };
 }

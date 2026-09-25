@@ -2,7 +2,7 @@
  * Scaffold vitest suite: error envelope + GET /healthz + GET /portfolio
  * (book_as_of gate folded in per CONTRACT.md section 0).
  */
-import { describe, expect, it, vi, afterEach } from "vitest";
+import { describe, expect, it } from "vitest";
 import app, {
   buildPortfolioBody,
   buildProvenance,
@@ -11,63 +11,9 @@ import app, {
   parseCommonParams,
   type Env,
 } from "./index";
+import { STUB_NULL_AS_OF } from "./stubs";
 
 const NO_ENV: Env = {};
-
-afterEach(() => {
-  vi.unstubAllGlobals();
-});
-
-function stubRest(routes: Record<string, { status: number; body: unknown }>) {
-  vi.stubGlobal(
-    "fetch",
-    vi.fn(async (input: unknown) => {
-      const url = String(input);
-      const path = url.split("/rest/v1/")[1] ?? url;
-      for (const [key, value] of Object.entries(routes)) {
-        if (path.startsWith(key)) return Response.json(value.body, { status: value.status });
-      }
-      return Response.json({ message: "no stub" }, { status: 500 });
-    }),
-  );
-}
-
-const BOOK_ENV: Env = {
-  SUPABASE_URL: "https://example.supabase.co",
-  SUPABASE_SERVICE_ROLE_KEY: "secret",
-};
-
-function bookStubs() {
-  stubRest({
-    "daily_snapshots": {
-      status: 200,
-      body: [{ date: "2026-09-24" }],
-    },
-    "positions?select=date": {
-      status: 200,
-      body: [{ date: "2026-09-24" }, { date: "2026-09-23" }],
-    },
-    "public_accounting_nav_history": {
-      status: 200,
-      body: [
-        {
-          date: "2026-09-24",
-          nav: 99.909,
-          invested_pct: 35.13,
-          cash_pct: 64.87,
-          contract: "legacy_estimate",
-        },
-      ],
-    },
-    "positions?select=ticker": {
-      status: 200,
-      body: [
-        { ticker: "XLV", weight_pct: 20.0 },
-        { ticker: "CASH", weight_pct: 64.87 },
-      ],
-    },
-  });
-}
 
 describe("error envelope", () => {
   it("matches the contract shape with retrieval_pin echo", async () => {
@@ -140,67 +86,48 @@ describe("router", () => {
 });
 
 describe("GET /portfolio", () => {
-  it("fails closed with upstream_empty when secrets are absent", async () => {
+  // Slice 0007 decision (a): the route is served by the envelope mount over
+  // the stub double (CONTRACT §6.1 documents `invested.definition`), so no
+  // Supabase env is needed and the null-book convention is the stub's
+  // `asOf=2020-01-01`. The rewire slice swaps the stub for real book reads.
+  it("serves the stub book with no secrets configured", async () => {
     const res = await app.fetch(
       new Request("https://x/portfolio?retrieval_pin=pin-9"),
       NO_ENV,
     );
-    expect(res.status).toBe(502);
+    expect(res.status).toBe(200);
     const body = (await res.json()) as {
-      error: { code: string; retrieval_pin: string };
+      retrieval_pin: string;
     };
-    expect(body.error.code).toBe("upstream_empty");
-    expect(body.error.retrieval_pin).toBe("pin-9");
+    expect(body.retrieval_pin).toBe("pin-9");
   });
 
   it("rejects malformed asOf with bad_request", async () => {
-    const res = await app.fetch(new Request("https://x/portfolio?asOf=soon"), BOOK_ENV);
+    const res = await app.fetch(new Request("https://x/portfolio?asOf=soon"), NO_ENV);
     expect(res.status).toBe(400);
   });
 
-  it("returns 404 when no committed snapshot exists", async () => {
-    stubRest({ "daily_snapshots": { status: 200, body: [] } });
-    const res = await app.fetch(new Request("https://x/portfolio"), BOOK_ENV);
+  it("returns 404 on the stub null-book asOf", async () => {
+    const res = await app.fetch(
+      new Request(`https://x/portfolio?asOf=${STUB_NULL_AS_OF}`),
+      NO_ENV,
+    );
     expect(res.status).toBe(404);
     const body = (await res.json()) as { error: { code: string } };
     expect(body.error.code).toBe("not_found");
   });
 
-  it("returns 404 when positions never reach the snapshot (never substitutes latest)", async () => {
-    stubRest({
-      "daily_snapshots": { status: 200, body: [{ date: "2026-09-24" }] },
-      "positions?select=date": { status: 200, body: [{ date: "2026-09-25" }] },
-    });
-    const res = await app.fetch(new Request("https://x/portfolio"), BOOK_ENV);
-    expect(res.status).toBe(404);
-  });
-
-  it("returns 502 when the upstream read fails", async () => {
-    stubRest({ "daily_snapshots": { status: 200, body: [{ date: "2026-09-24" }] } });
-    const res = await app.fetch(
-      new Request("https://x/portfolio?retrieval_pin=pin-2"),
-      BOOK_ENV,
-    );
-    expect(res.status).toBe(502);
-    const body = (await res.json()) as {
-      error: { code: string; retrieval_pin: string };
-    };
-    expect(body.error.code).toBe("upstream_empty");
-    expect(body.error.retrieval_pin).toBe("pin-2");
-  });
-
   it("serves the committed book with envelope and provenance", async () => {
-    bookStubs();
     const res = await app.fetch(
       new Request("https://x/portfolio?retrieval_pin=pin-3"),
-      BOOK_ENV,
+      NO_ENV,
     );
     expect(res.status).toBe(200);
     const body = (await res.json()) as {
       data: {
         book_as_of: string;
         nav_tip: { invested_pct: number; cash_pct: number; contract: string };
-        invested: { kpi_pct: number; envelope_pct: number; cash_pct: number };
+        invested: { kpi_pct: number; envelope_pct: number; cash_pct: number; definition: string };
         positions: Array<{ ticker: string; is_cash: boolean }>;
       };
       as_of: string;
@@ -211,8 +138,13 @@ describe("GET /portfolio", () => {
     expect(body.as_of).toBe("2026-09-24");
     expect(body.retrieval_pin).toBe("pin-3");
     expect(body.data.nav_tip.invested_pct).toBe(35.13);
-    expect(body.data.invested).toEqual({ kpi_pct: 35.13, envelope_pct: 35.13, cash_pct: 64.87 });
-    expect(body.data.positions.find((p) => p.ticker === "CASH")?.is_cash).toBe(true);
+    expect(body.data.invested).toEqual({
+      kpi_pct: 35.13,
+      envelope_pct: 35.13,
+      cash_pct: 64.87,
+      definition: "accounting_nav_tip",
+    });
+    expect(body.data.positions.find((p) => p.ticker === "XLV")).toBeDefined();
     expect(Object.keys(body.provenance).sort()).toEqual(
       ["contract", "marks", "seam", "source", "tip_date"].sort(),
     );
