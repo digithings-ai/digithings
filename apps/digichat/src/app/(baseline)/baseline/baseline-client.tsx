@@ -10,7 +10,10 @@ import {
   StockChatPrefsHost,
   useStockChatPrefs,
 } from "@digithings/ui/chat/stock";
-import { DEFAULT_CLIENT_CONFIG } from "@/lib/deploy-config";
+import {
+  resolveRouteClientConfig,
+  toStockChatPrefsConfig,
+} from "@/lib/route-client-config";
 import { p } from "@/lib/base-path";
 import { cn } from "@/lib/utils";
 import {
@@ -125,22 +128,7 @@ function BaselineClientInner() {
   // catalog renders the same composer chrome as digithings.ai/chat instead of
   // each surface having to re-implement the gate. Other catalog skins ignore it.
   const { prefsApi, panes } = useStockChatPrefs({
-    config: {
-      catalog: DEFAULT_CLIENT_CONFIG.tools.catalog,
-      servers: DEFAULT_CLIENT_CONFIG.mcp.servers,
-      defaultLanguage: DEFAULT_CLIENT_CONFIG.chrome.defaultLanguage,
-      defaultModel: DEFAULT_CLIENT_CONFIG.models.default,
-      availableModels: DEFAULT_CLIENT_CONFIG.models.available,
-      allowModelPicker:
-        DEFAULT_CLIENT_CONFIG.models.allowPicker === true ||
-        DEFAULT_CLIENT_CONFIG.features.modelPicker === true,
-      view: DEFAULT_CLIENT_CONFIG.features.view,
-      thinking: DEFAULT_CLIENT_CONFIG.features.thinking,
-      tenantAllowsWeb: DEFAULT_CLIENT_CONFIG.gate.webSearch === true,
-      showByok: DEFAULT_CLIENT_CONFIG.gate.showByok === true,
-      allowUserServers: DEFAULT_CLIENT_CONFIG.mcp.allowUserServers,
-      allowAddForm: DEFAULT_CLIENT_CONFIG.mcp.allowAddForm,
-    },
+    config: toStockChatPrefsConfig(resolveRouteClientConfig({ mode: "catalog" })),
     deps: PREFS_DEPS,
     sessionKey: "baseline",
     hasSessions: false,

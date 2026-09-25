@@ -1,7 +1,7 @@
 import { auth } from "@/auth";
 import { ChatShell } from "@/components/chat-shell";
 import { redirect } from "next/navigation";
-import { clientConfigFromDeployment } from "@/lib/deploy-config";
+import { resolveRouteClientConfig } from "@/lib/route-client-config";
 import {
   getPrimaryDeployment,
   getDigichatConfig,
@@ -26,7 +26,7 @@ export default async function Home() {
   } catch {
     deployment = null;
   }
-  const client = clientConfigFromDeployment(deployment);
+  const client = resolveRouteClientConfig({ mode: "product", deployment });
   const mode = client.chrome.mode;
   const layoutSkin = skinOwnsPageChrome(client.chrome.skin);
   // modal and sidebar are real in-app surfaces now; only `embed` bounces out.

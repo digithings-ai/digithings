@@ -22,6 +22,7 @@ import {
 } from "@digithings/ui/chat/stock";
 import { p } from "@/lib/base-path";
 import type { DigichatClientConfig } from "@/lib/deploy-config";
+import { toStockChatPrefsConfig } from "@/lib/route-client-config";
 import {
   takePendingForceTool,
   takePendingTurnMode,
@@ -73,23 +74,7 @@ const PREFS_DEPS = {
   ),
 };
 
-function prefsConfigFor(clientConfig: DigichatClientConfig) {
-  return {
-    catalog: clientConfig.tools.catalog,
-    servers: clientConfig.mcp.servers,
-    defaultLanguage: clientConfig.chrome.defaultLanguage,
-    defaultModel: clientConfig.models.default,
-    availableModels: clientConfig.models.available,
-    allowModelPicker:
-      clientConfig.models.allowPicker === true || clientConfig.features.modelPicker === true,
-    view: clientConfig.features.view,
-    thinking: clientConfig.features.thinking,
-    tenantAllowsWeb: clientConfig.gate.webSearch === true,
-    showByok: clientConfig.gate.showByok === true,
-    allowUserServers: clientConfig.mcp.allowUserServers,
-    allowAddForm: clientConfig.mcp.allowAddForm,
-  };
-}
+
 
 function useShellThreadRuntime(
   clientConfig: DigichatClientConfig,
@@ -169,7 +154,7 @@ function HomeStockClientSingle({
 }) {
   const sessionKey = userId ? `app:${userId}` : "app:anon";
   const prefs = useStockChatPrefs({
-    config: prefsConfigFor(clientConfig),
+    config: toStockChatPrefsConfig(clientConfig),
     deps: PREFS_DEPS,
     sessionKey,
     hasSessions: false,
@@ -223,7 +208,7 @@ function HomeStockClientMemory({
 }) {
   const sessionKey = userId ? `app:${userId}` : "app:anon";
   const prefs = useStockChatPrefs({
-    config: prefsConfigFor(clientConfig),
+    config: toStockChatPrefsConfig(clientConfig),
     deps: PREFS_DEPS,
     sessionKey,
     hasSessions: true,

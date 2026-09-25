@@ -34,7 +34,7 @@ import {
 import { EmbedComposerMenu, type ComposerMenuKind } from "@/components/stock/embed-composer-menu";
 import { replaceMcpConfig, connectedMcpConfigs, mcpSessionOverlayHeaderValue } from "@/components/stock/embed-mcp-flow";
 import { useAui, useAuiEvent } from "@assistant-ui/react";
-import { clientConfigFromEmbedTenant } from "@/lib/deploy-config";
+import { resolveRouteClientConfig } from "@/lib/route-client-config";
 import { skinOwnsPageChrome } from "@digithings/ui/chat/skins";
 import {
   useBYOKKey,
@@ -367,7 +367,7 @@ function EmbedChat({
   const llmAccess = tenantCfg.llmAccess;
   const uiFlags = resolveEmbedUiFlags(tenantCfg);
   const stockClient = useMemo(
-    () => clientConfigFromEmbedTenant(tenantCfg),
+    () => resolveRouteClientConfig({ mode: "embed", tenant: tenantCfg }),
     [tenantCfg],
   );
   /** Deploy `features.pageContext` — off / silent / visible (default). */

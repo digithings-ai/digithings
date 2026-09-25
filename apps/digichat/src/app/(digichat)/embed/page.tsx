@@ -26,12 +26,12 @@
  */
 
 import { resolveEmbedHostParamOrReferer } from "@/lib/embed-client-config";
-import { isEmbedHexColor } from "@/lib/embed-accent-style";
+
 import {
   embedOriginHostOf,
   resolveEmbedClientConfigForPaint,
 } from "@/lib/embed-chat-tenant";
-import { parseEmbedThemeParam } from "@/lib/embed-theme-messages";
+import { resolveEmbedSeededTenant } from "@/lib/route-client-config";
 import { headers } from "next/headers";
 import EmbedClient from "./embed-client";
 
@@ -83,55 +83,17 @@ export default async function EmbedPage({
     resolveEmbedHostParamOrReferer(first(params.host), referer),
     embedOriginHostOf(hdrs),
   );
-  const urlTheme = parseEmbedThemeParam(first(params.theme));
+  const { seeded: seededCfg, urlTheme } = resolveEmbedSeededTenant(
+    initialTenantCfg,
+    params,
+  );
   const paintTheme = urlTheme ?? initialTenantCfg.theme;
   // The host's URL overrides (welcome / placeholder / suggestions / accent)
   // seed the first paint too: the client hook applies them post-mount, which
   // let the generic default copy ("Ask a question") and other unconfigured
   // chrome flash before the configured values landed. Never show a
   // placeholder that is not configured.
-  const uiWelcome = first(params.welcome);
-  const uiPlaceholder = first(params.placeholder);
-  const rawSuggestions = first(params.suggestions);
-  const uiSuggestions = rawSuggestions
-    ? (() => {
-        try {
-          const parsed = JSON.parse(rawSuggestions) as unknown;
-          if (Array.isArray(parsed)) {
-            return parsed.filter(
-              (s): s is string => typeof s === "string" && s.trim().length > 0,
-            );
-          }
-        } catch {
-          /* fall through to the pipe-separated form */
-        }
-        return rawSuggestions
-          .split("|")
-          .map((s) => s.trim())
-          .filter(Boolean);
-      })()
-    : undefined;
-  const uiAccent = isEmbedHexColor(first(params.accent))
-    ? first(params.accent)
-    : undefined;
-  const uiAccentForeground = isEmbedHexColor(first(params.accentForeground))
-    ? first(params.accentForeground)
-    : undefined;
-  const themedCfg =
-    urlTheme && urlTheme !== initialTenantCfg.theme
-      ? { ...initialTenantCfg, theme: urlTheme }
-      : initialTenantCfg;
-  const seededCfg = {
-    ...themedCfg,
-    ...(uiWelcome ? { welcome: uiWelcome } : {}),
-    ...(uiPlaceholder ? { placeholder: uiPlaceholder } : {}),
-    ...(uiSuggestions && uiSuggestions.length
-      ? { suggestions: uiSuggestions }
-      : {}),
-    ...(uiAccent && uiAccentForeground
-      ? { accent: { color: uiAccent, foreground: uiAccentForeground } }
-      : {}),
-  };
+
   // The canvas walk: the attribution strip is transparent and sits on the
   // shell, while the thread paints its own canvas — two surfaces that must be
   // the same colour from the first byte, not (as they were) white until a

@@ -50,8 +50,11 @@ export interface SkinHostContract {
 export const DIGICHAT_SKIN_HOST_CONTRACT: SkinHostContract = {
   scopeMarker: {
     attribute: "data-thread-skin",
+    // Step 1 (single-route plan): ProductStockShell delegates its render core
+    // to DigiChatHost, which now renders the marker for all product/embed
+    // traffic. chat-shell + embed-client keep their own wrapper markers.
     setBy: [
-      "src/components/stock/product-shell.tsx",
+      "src/components/stock/digichat-host.tsx",
       "src/components/chat-shell.tsx",
       "src/app/(digichat)/embed/embed-client.tsx",
     ],
