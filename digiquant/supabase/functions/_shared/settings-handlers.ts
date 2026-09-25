@@ -67,6 +67,7 @@ import {
   FX_HUB_PRODUCT,
   planFloorOutranks,
   redeemProductInvite,
+  resolveInviteBrand,
   type InviteStore,
 } from "./invite.ts";
 
@@ -194,8 +195,7 @@ export async function handleSettingsRequest(
   }
   if (method === "GET" && path === "/access/twelvex-session") {
     return getTwelvexSession(req, deps);
-  }
-  return jsonError(404, "NOT_FOUND", "Unknown settings route");
+  }  return jsonError(404, "NOT_FOUND", "Unknown settings route");
 }
 
 /** Matches migration 103 CHECK (email ~ '^[^@]+@[^@]+\.[^@]+$'). */
@@ -1564,7 +1564,7 @@ function postgrestInviteStore(
     async listActiveCodes(productKey) {
       const { data, error } = await admin
         .from("product_invite_codes")
-        .select("id, code_hash, max_redemptions, redemption_count, revoked_at, plan_floor")
+        .select("id, code_hash, max_redemptions, redemption_count, revoked_at, plan_floor, brand_marker, brand_line")
         .eq("product_key", productKey);
       if (error || !Array.isArray(data)) return [];
       return data.filter((row): row is {
@@ -1574,6 +1574,8 @@ function postgrestInviteStore(
         redemption_count: number;
         revoked_at: string | null;
         plan_floor: string | null;
+        brand_marker: string | null;
+        brand_line: string | null;
       } => typeof row.id === "string" && typeof row.code_hash === "string");
     },
     async hasGrant(email, productKey) {
@@ -1659,6 +1661,33 @@ function postgrestInviteStore(
       });
     },
   };
+}
+
+/**
+ * GET /access/invite-brand — PUBLIC (no session). Returns the display
+ * branding of an invite code so the signup card can show the client's
+ * marker before the visitor has an account. Always 200 with
+ * `{ marker, line }` (nulls = default card): unknown, revoked, exhausted,
+ * and unbranded codes are indistinguishable here, and nothing returned
+ * grants access or reveals PII.
+ */
+export async function getInviteBrand(
+  req: Request,
+  deps: { admin?: AdminClient; inviteStore?: InviteStore; inviteHash?: string | null },
+): Promise<Response> {
+  const url = new URL(req.url);
+  const store = deps.inviteStore ??
+    (deps.admin
+      ? postgrestInviteStore(deps.admin, () => crypto.randomUUID(), undefined)
+      : null);
+  if (!store) return jsonOk({ marker: null, line: null });
+  const brand = await resolveInviteBrand({
+    productKey: url.searchParams.get("product_key"),
+    code: url.searchParams.get("code"),
+    envHash: deps.inviteHash,
+    store,
+  });
+  return jsonOk({ marker: brand?.marker ?? null, line: brand?.line ?? null });
 }
 
 async function redeemInvite(req: Request, deps: SettingsDeps): Promise<Response> {
