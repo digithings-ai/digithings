@@ -345,12 +345,25 @@ export function ArchitectureTour({
         update();
         return;
       }
-      // The fraction of the walk the reader is currently on, before the resize.
+      // The fraction of the walk the reader is currently on, before the
+      // resize — UNCLAMPED. At or past either edge the walk does not hold
+      // the pin, so the reader is just scrolling the page and must not be
+      // moved at all. That bail is what stops the scroll-jump-on-load: on a
+      // fresh load the pin sits far below the viewport (fraction 0) while
+      // late layout (fonts, mermaid draw, the chat iframe) fires the pane
+      // observers, and without it every one of those callbacks scrollTo'd
+      // the tour start.
       const beforeAvail = Math.max(1, trackEl.offsetHeight - pinEl.offsetHeight);
       const beforeTop = trackEl.getBoundingClientRect().top + window.scrollY;
-      const beforeP = clamp01((pinOffset() - beforeTop) / beforeAvail);
+      const beforeRaw = (pinOffset() - beforeTop) / beforeAvail;
 
       measureTrack();
+
+      if (!(beforeRaw > 0 && beforeRaw < 1)) {
+        update();
+        return;
+      }
+      const beforeP = clamp01(beforeRaw);
 
       // After the resize, put the scroll back so the same fraction sits under the
       // pin. Only do it while the walk actually holds the pin — outside it the
