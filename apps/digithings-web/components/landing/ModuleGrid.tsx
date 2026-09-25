@@ -123,16 +123,19 @@ const ROW_SIZES = [4, 4, 3] as const;
 const WEIGHT = 1.2;
 /**
  * The share of the biggest module the smallest still draws, before weighting.
- * 0.18 spreads the field about 5.6x end to end — the owner wants a stock-grid
- * read (heavyweights top-left, lightweights bottom-right, size gap obvious),
- * and the row floor plus the focus boost keep the smallest tile usable.
+ * HISTORIC — the flex solver that consumed weights is retired (square-cell
+ * grid era): tileGrow/rowGrow styles are still passed but grid ignores
+ * flex-grow, so every cell is an equal square and order carries size.
+ * Kept (not deleted) so the LOC ordering constants beside it stay meaningful.
  */
 const WEIGHT_FLOOR = 0.18;
 /**
- * How much heavier the focused module counts while the layout is solved — the
- * "resize and shift to make space for what's inside" behaviour.
+ * No zoom on focus (owner, #4429) — kept at 1 so the solver output is
+ * uniform. The mosaic is a square-cell grid now, and grid ignores flex-grow
+ * anyway; focus is highlight-only (`.on` ring + full opacity) and the click
+ * opens the full card. Size differences speak through order, not geometry.
  */
-const FOCUS_BOOST = 2.6;
+const FOCUS_BOOST = 1;
 /**
  * The share of the mosaic's height the focused tile's row holds.
  *
