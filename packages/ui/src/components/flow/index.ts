@@ -4,3 +4,4 @@
  * facts/summary detail; the flow lives only in the expanded card.
  */
 export { ModuleFlowStrip, ModuleFlowDiagram, ModuleStageList, type FlowStage, type ModuleFlowStripProps, type ModuleFlowDiagramProps, type ModuleStageListProps } from "./ModuleFlow";
+export { ModuleShowcase } from "./ModuleShowcase";

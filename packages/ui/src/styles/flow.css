@@ -177,3 +177,115 @@
   white-space: pre-wrap;
   overflow-wrap: anywhere;
 }
+
+/* Module showcase — data-driven family, unique hero per module (#4429).
+   One order every module: hero, strip, capabilities, code, proof. The hero
+   is the only livery in view (via --show-accent); the rest is ink/hairline.
+   Roadmap cards render muted with a badge, never a live dot. */
+.m-show {
+  display: grid;
+  gap: 1rem;
+  margin-top: 1rem;
+}
+
+.m-show-hero {
+  display: block;
+  width: 100%;
+  height: auto;
+  max-height: 9rem;
+  border: 1px solid var(--hair);
+  background: var(--surface);
+}
+
+.m-show.is-planned .m-show-hero {
+  opacity: 0.75;
+  border-style: dashed;
+}
+
+.m-show-roadmap {
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  letter-spacing: 0.06em;
+  color: var(--ink-mute);
+}
+
+.m-show-roadmap-badge {
+  display: inline-block;
+  border: 1px solid var(--ink-mute);
+  text-transform: uppercase;
+  padding: 0.1rem 0.45rem;
+  margin-right: 0.5rem;
+  color: var(--ink-soft);
+}
+
+.m-show-caps {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 0.7rem;
+  grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr));
+}
+
+.m-show-cap-title {
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: 0.78rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--ink);
+}
+
+.m-show-cap-line {
+  margin: 0.25rem 0 0;
+  font-size: 0.85rem;
+  line-height: 1.6;
+  color: var(--ink-soft);
+}
+
+.m-show-code-lang {
+  margin: 0 0 0.3rem;
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink-mute);
+}
+
+.m-show-planned-note {
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: 0.78rem;
+  color: var(--ink-mute);
+}
+
+.m-show-proof {
+  margin: 0;
+  display: grid;
+  border-top: 1px solid var(--hair);
+}
+
+.m-show-proof-row {
+  display: flex;
+  gap: 1rem;
+  align-items: baseline;
+  padding: 0.4rem 0;
+  border-bottom: 1px solid var(--hair);
+  font-family: var(--font-mono);
+  font-size: 0.78rem;
+}
+
+.m-show-proof-row dt {
+  flex: none;
+  min-width: 8rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--ink-mute);
+}
+
+.m-show-proof-row dd {
+  margin: 0;
+  color: var(--ink);
+  overflow-wrap: anywhere;
+}
