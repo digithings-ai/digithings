@@ -259,9 +259,14 @@ body {
 .dg-stage--mosaic {
   top: var(--dq-nav-h, 62px);
   height: calc(100dvh - var(--dq-nav-h, 62px));
+  /* Dock padding (owner choreography): the grid breathes below the bar and
+     above the viewport bottom instead of sticking to either edge. Scoped to
+     the mosaic stage only; box-sizing keeps the padding inside the height. */
+  padding-block: clamp(1rem, 3vh, 2.5rem);
+  box-sizing: border-box;
 }
 .dg-mosaic--rows.is-ready {
-  height: 100%;
+  height: calc(100% - 2 * clamp(1rem, 3vh, 2.5rem));
 }
 @media (prefers-reduced-motion: reduce) {
   .dg-mosaic--rows {
