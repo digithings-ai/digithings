@@ -243,14 +243,10 @@ body {
   height: clamp(34rem, 82vh, 54rem);
   position: relative;
 }
-/* Click-expanded tile (#4429): the open card is taller than any row share,
-   so the tile leaves the row flow and covers the whole mosaic in place —
-   the other rows stay laid out behind it, out of the way. The mosaic grows
-   to near-viewport height so the complete card fits with no internal
-   scroll on tall viewports; short ones keep the tile's overflow fallback. */
-.dg-mosaic--rows:has(.dg-cell.is-expanded) {
-  height: min(94vh, 70rem);
-}
+/* Click-expanded tile (#4429): the open card leaves the row flow and covers
+   the mosaic in place — capped at the grid's own box, never bigger (owner:
+   "it should just expand to the full size of the grid itself, but no
+   bigger"). Content taller than the box keeps the tile's overflow fallback. */
 
 /* The stacked face — the same boxes on a phone, one per row.
    There is no pinned track here, so the column is in normal flow and grows with

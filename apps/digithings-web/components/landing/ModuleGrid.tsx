@@ -90,8 +90,8 @@ import { moduleCountLabel, moduleVersion } from "@/lib/moduleCounts";
  *
  * v7 grows the tile itself on click — no button, no elsewhere. Clicking the
  * focused tile (anywhere except its real controls) expands it to full row
- * width with the complete card inside (stages, full copy, api, links,
- * related); the row's siblings get out of the way and the row takes the
+ * width with the complete card inside (diagram, stages, full copy, api,
+ * usage snippet); the row's siblings get out of the way and the row takes the
  * lion's share, the card scrolling internally past that. Scrolling the focus
  * on, or Escape, collapses; the id is retained so scrolling back re-opens.
  */
@@ -634,12 +634,14 @@ export function ModuleGrid() {
 
                         {/* The complete card, grown in place (#4429). Only on
                             the focused-and-expanded tile, and only the deep
-                            dive: diagram, strip, stages, every summary
-                            paragraph, api, links. Head/role/detail render
+                            dive: diagram, stages, every summary paragraph,
+                            api, usage snippet. Head/role/detail render
                             above, stack + foot pin to the bottom below — this
                             block is the middle, so the buttons stay at the
-                            bottom like the other tiles. No related-module
-                            jumps: keep it simple, keep it clean. */}
+                            bottom like the other tiles. No source links, no
+                            related-module jumps: keep it simple, keep it
+                            clean. The only clickables are the foot's own
+                            buttons (docker copy, ask digichat). */}
                         {open && m.flow ? (
                           <div className="dg-cell-full">
                             <ModuleFlowDiagram stages={m.flow.stages} label={m.id} />
@@ -659,15 +661,12 @@ export function ModuleGrid() {
                                 ))}
                               </ul>
                             ) : null}
-                            {m.links.length > 0 ? (
-                              <span className="m-fullcard-links">
-                                {m.links.map((l) => (
-                                  <a key={l.href + l.label} href={l.href}>
-                                    {l.label} →
-                                  </a>
-                                ))}
-                              </span>
-                            ) : null}
+                            {/* Usage, copy-pasteable (#4429). The snippet is
+                                the module's own initSnippet — real commands
+                                from the repo, never invented. */}
+                            <pre className="m-fullcard-code">
+                              <code>{m.initSnippet.code}</code>
+                            </pre>
                           </div>
                         ) : null}
 
