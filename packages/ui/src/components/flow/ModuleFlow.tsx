@@ -1,18 +1,15 @@
 /**
- * Module pipeline strip + full-card stage list (#4429).
+ * Module pipeline strip, diagram + full-card stage list (#4429).
  *
- * The mosaic's focused tile shows the pipeline, not the prose: a mono strip
- * of stage labels joined by arrows (`ModuleFlowStrip`, marked `data-flow`
- * for tests and probes). Clicking the tile's Expand control opens the
- * complete module card as an in-flow panel below the mosaic
- * (`ModuleStageList` renders the stage-by-stage tour inside it) — the mosaic
- * section takes the room the full card needs, no dialog, no compact-only
- * view. The app owns the panel chrome (header, meta, foot); the kit owns
- * the strip and the stage list.
+ * The mosaic's focused tile shows exactly what it always showed (facts,
+ * lead paragraph, stack, foot). The pipeline lives in the click-expanded
+ * card: `ModuleFlowDiagram` (an SVG node chain with flowing connectors),
+ * `ModuleFlowStrip` (the mono stage labels), and `ModuleStageList` (the
+ * stage-by-stage tour). No dialog anywhere — the card grows in place.
  *
  * No global CSS beyond `m-flow*`: classes live in styles/flow.css, imported
- * by the app's globals. No animation here — motion belongs to the mosaic
- * pin, not the card.
+ * by the app's globals. The diagram's dash flow freezes under
+ * `prefers-reduced-motion: reduce`, per kit convention.
  */
 "use client";
 
@@ -67,5 +64,51 @@ export function ModuleStageList({ stages, className }: ModuleStageListProps) {
         </li>
       ))}
     </ol>
+  );
+}
+
+export interface ModuleFlowDiagramProps {
+  stages: FlowStage[];
+  /** Module id, for the accessible name (e.g. "digiquant"). */
+  label: string;
+  className?: string;
+}
+
+/**
+ * Pipeline node chain for the top of the expanded card: one node per stage,
+ * flowing connectors between them. Pure SVG + one CSS dash animation (frozen
+ * under reduced motion); `role="img"` with the full stage order in the name
+ * so AT gets the same journey sighted readers do.
+ */
+export function ModuleFlowDiagram({ stages, label, className }: ModuleFlowDiagramProps) {
+  const step = 150;
+  const width = Math.max(stages.length * step, step);
+  const cx = (i: number) => i * step + step / 2;
+  return (
+    <svg
+      className={cn("m-flowdiag", className)}
+      viewBox={`0 0 ${width} 64`}
+      role="img"
+      aria-label={`${label} pipeline: ${stages.map((s) => s.label).join(" to ")}`}
+    >
+      {stages.slice(1).map((_, i) => (
+        <line
+          key={`c${i}`}
+          className="m-flowdiag-dash"
+          x1={cx(i) + 8}
+          y1={20}
+          x2={cx(i + 1) - 8}
+          y2={20}
+        />
+      ))}
+      {stages.map((stage, i) => (
+        <g key={stage.label}>
+          <circle className="m-flowdiag-node" cx={cx(i)} cy={20} r={5} />
+          <text className="m-flowdiag-label" x={cx(i)} y={44} textAnchor="middle">
+            {stage.label}
+          </text>
+        </g>
+      ))}
+    </svg>
   );
 }

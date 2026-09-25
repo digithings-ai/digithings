@@ -241,6 +241,15 @@ body {
   max-width: var(--frame-w);
   margin-inline: auto;
   height: clamp(34rem, 82vh, 54rem);
+  position: relative;
+}
+/* Click-expanded tile (#4429): the open card is taller than any row share,
+   so the tile leaves the row flow and covers the whole mosaic in place —
+   the other rows stay laid out behind it, out of the way. The mosaic grows
+   to near-viewport height so the complete card fits with no internal
+   scroll on tall viewports; short ones keep the tile's overflow fallback. */
+.dg-mosaic--rows:has(.dg-cell.is-expanded) {
+  height: min(94vh, 70rem);
 }
 
 /* The stacked face — the same boxes on a phone, one per row.
@@ -319,7 +328,7 @@ body {
 /* The compose command and the CTA share the last line. A tile is only as tall
    as one grid row, and stacking them cost a line the smallest modules did not
    have — the command was the thing getting clipped. */
-.dg-mosaic-foot { display: flex; align-items: center; flex-wrap: wrap; gap: 0.5rem 0.9rem; margin-top: auto; min-width: 0; flex: 0 0 auto; }
+.dg-mosaic-foot { display: flex; align-items: center; flex-wrap: wrap; gap: 0.5rem 0.9rem; margin-top: 0; min-width: 0; flex: 0 0 auto; }
 .dg-mosaic-foot .dg-docker { margin-top: 0; min-width: 0; }
 .dg-mosaic-ask { margin-left: auto; white-space: nowrap; font-family: var(--font-mono); font-size: 0.9rem; color: var(--ink-mute); }
 button.dg-mosaic-ask { background: none; border: 0; padding: 0; cursor: pointer; }
@@ -330,7 +339,10 @@ button.dg-mosaic-ask:hover { color: var(--ink); }
    past the row height, so the pinned stage never breaks. The stack face
    flows naturally, so its open tile just grows. */
 .dg-mosaic-row.is-expanded-row .dg-cell:not(.is-expanded) { display: none; }
-.dg-cell.is-expanded { overflow-x: hidden; overflow-y: auto; cursor: zoom-out; }
+.dg-cell.is-expanded { position: absolute; inset: 0; z-index: 5; overflow-x: hidden; overflow-y: auto; cursor: zoom-out; }
+/* The open card carries every summary paragraph, so the focused detail's
+   lead would duplicate summary[0] and blow the height budget — hide it. */
+.dg-cell.is-expanded .dg-mosaic-detail { display: none; }
 .dg-cell.on[data-expandable="true"] .dg-cell-focus { cursor: zoom-in; }
 /* The grown-in-place deep dive: stages, full copy, api, links, related. The
    head/strip/preview/stack/foot already render above; this is the rest. */

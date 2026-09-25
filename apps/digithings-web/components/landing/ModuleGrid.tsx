@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import {
-  ModuleFlowStrip,
+  ModuleFlowDiagram,
   ModuleStageList,
   StackRow,
   modules,
@@ -147,10 +147,11 @@ const FOCUS_BOOST = 2.6;
  */
 const ROW_FOCUS_SHARE = 0.56;
 /* Click-to-expand (#4429): the expanded tile owns its row full-width with
-   the complete card inside, so the row takes the lion's share. 0.62 leaves
-   exactly two ROW_MIN_SHARE floors for the other rows; the card scrolls
-   internally past that. */
-const EXPANDED_ROW_SHARE = 0.62;
+   the complete card inside, so the row takes the lion's share. 0.72 fits the
+   full card (diagram, stages, summaries, api, links) with no internal
+   scroll; the other rows drop to the expanded floor, which still fits a
+   resting tile's name, role and chips. */
+const EXPANDED_ROW_SHARE = 0.72;
 /**
  * The least height any row keeps, as a share of the mosaic.
  *
@@ -160,6 +161,10 @@ const EXPANDED_ROW_SHARE = 0.62;
  * honest than trimming a tile that has nothing left to trim.
  */
 const ROW_MIN_SHARE = 0.19;
+/* Floor while a row is expanded (#4429). The other rows show resting tiles
+   only (name, role, chips ≈ 130px), so 0.14 still fits them and frees the
+   open row to hold the full card with no internal scroll. */
+const ROW_MIN_SHARE_EXPANDED = 0.14;
 
 const VH_PER_MODULE = 90;
 
@@ -278,10 +283,11 @@ function solveRowGrow(focus: number, expandedRow = -1): number[] {
 
   const others = sums.map((sum, row) => (row === shareRow ? 0 : sum));
   const otherTotal = others.reduce((acc, sum) => acc + sum, 0) || 1;
+  const floor = expandedRow >= 0 ? ROW_MIN_SHARE_EXPANDED : ROW_MIN_SHARE;
   const starving = sums.map(
-    (sum, row) => row !== shareRow && (rest * sum) / otherTotal < ROW_MIN_SHARE,
+    (sum, row) => row !== shareRow && (rest * sum) / otherTotal < floor,
   );
-  const floored = starving.filter(Boolean).length * ROW_MIN_SHARE;
+  const floored = starving.filter(Boolean).length * floor;
   const flexible = rest - floored;
   const flexibleTotal = sums.reduce(
     (acc, sum, row) => (starving[row] ? acc : acc + others[row]),
@@ -290,8 +296,8 @@ function solveRowGrow(focus: number, expandedRow = -1): number[] {
 
   return sums.map((sum, row) => {
     if (row === shareRow) return focusShare;
-    if (starving[row]) return ROW_MIN_SHARE;
-    return flexibleTotal > 0 ? (flexible * others[row]) / flexibleTotal : ROW_MIN_SHARE;
+    if (starving[row]) return floor;
+    return flexibleTotal > 0 ? (flexible * others[row]) / flexibleTotal : floor;
   });
 }
 
@@ -606,35 +612,63 @@ export function ModuleGrid() {
                         <span className="dg-mosaic-role">{m.role}</span>
 
                         {on ? (
-                          m.flow ? (
-                            /* The pipeline plus its compressed preview (#4429):
-                               the strip, one clamped lead paragraph, then the
-                               stack pinned at the bottom by CSS. The full copy
-                               lives in the click-expanded card. */
-                            <>
-                              <ModuleFlowStrip stages={m.flow.stages} />
-                              {m.summary[0] ? (
-                                <span className="dg-mosaic-serves">{m.summary[0]}</span>
-                              ) : null}
-                            </>
-                          ) : (
-                            <span className="dg-mosaic-detail">
-                              <span className="dg-mosaic-facts">{factsLine(m)}</span>
-                              {/* The deeper description: the module's lead
-                                  paragraph. The tile is one row tall, and rendering
-                                  every paragraph pushed the compose command and the
-                                  ask control out of the box on the modules with the
-                                  longest copy (digigraph, digivault). So the copy is
-                                  the one part allowed to shrink and is clamped by
-                                  CSS, while the stack row and the foot below are
-                                  pinned — the controls can never be the thing that
-                                  clips. The rest of the summary is on the module's
-                                  docs page and in the ask answer. */}
-                              {m.summary[0] ? (
-                                <span className="dg-mosaic-serves">{m.summary[0]}</span>
-                              ) : null}
-                            </span>
-                          )
+                          <span className="dg-mosaic-detail">
+                            <span className="dg-mosaic-facts">{factsLine(m)}</span>
+                            {/* The deeper description: the module's lead
+                                paragraph. The tile is one row tall, and rendering
+                                every paragraph pushed the compose command and the
+                                ask control out of the box on the modules with the
+                                longest copy (digigraph, digivault). So the copy is
+                                the one part allowed to shrink and is clamped by
+                                CSS, while the stack row and the foot below are
+                                pinned — the controls can never be the thing that
+                                clips. The rest of the summary is on the module's
+                                docs page and in the ask answer. The pipeline
+                                strip lives in the click-expanded card (#4429),
+                                never here: focus shows exactly this. */}
+                            {m.summary[0] ? (
+                              <span className="dg-mosaic-serves">{m.summary[0]}</span>
+                            ) : null}
+                          </span>
+                        ) : null}
+
+                        {/* The complete card, grown in place (#4429). Only on
+                            the focused-and-expanded tile, and only the deep
+                            dive: diagram, strip, stages, every summary
+                            paragraph, api, links. Head/role/detail render
+                            above, stack + foot pin to the bottom below — this
+                            block is the middle, so the buttons stay at the
+                            bottom like the other tiles. No related-module
+                            jumps: keep it simple, keep it clean. */}
+                        {open && m.flow ? (
+                          <div className="dg-cell-full">
+                            <ModuleFlowDiagram stages={m.flow.stages} label={m.id} />
+                            <ModuleStageList stages={m.flow.stages} />
+                            <div className="m-fullcard-summary">
+                              {m.summary.map((p, k) => (
+                                <p key={k}>{p}</p>
+                              ))}
+                            </div>
+                            {m.api.length > 0 ? (
+                              <ul className="m-fullcard-api">
+                                {m.api.map((a, k) => (
+                                  <li key={k}>
+                                    {a.label ? <span className="k">{a.label}</span> : null}
+                                    <code>{a.code}</code>
+                                  </li>
+                                ))}
+                              </ul>
+                            ) : null}
+                            {m.links.length > 0 ? (
+                              <span className="m-fullcard-links">
+                                {m.links.map((l) => (
+                                  <a key={l.href + l.label} href={l.href}>
+                                    {l.label} →
+                                  </a>
+                                ))}
+                              </span>
+                            ) : null}
+                          </div>
                         ) : null}
 
                         {/* The packages. Collapsed tiles show only the logos —
@@ -678,65 +712,6 @@ export function ModuleGrid() {
                             {/* No expand button: the tile itself toggles —
                                 click anywhere except the real controls. */}
                           </span>
-                        ) : null}
-                        {/* The complete card, grown in place (#4429). Only on
-                            the focused-and-expanded tile: stages, every
-                            summary paragraph, api, links and related jumps.
-                            Head/role/strip/preview/stack/docker/ask already
-                            render above; this is the deep dive. Related jumps
-                            walk the scrolly to that module instead of opening
-                            it — the walk owns focus. */}
-                        {open && m.flow ? (
-                          <div className="dg-cell-full">
-                            <ModuleStageList stages={m.flow.stages} />
-                            <div className="m-fullcard-summary">
-                              {m.summary.map((p, k) => (
-                                <p key={k}>{p}</p>
-                              ))}
-                            </div>
-                            {m.api.length > 0 ? (
-                              <ul className="m-fullcard-api">
-                                {m.api.map((a, k) => (
-                                  <li key={k}>
-                                    {a.label ? <span className="k">{a.label}</span> : null}
-                                    <code>{a.code}</code>
-                                  </li>
-                                ))}
-                              </ul>
-                            ) : null}
-                            {m.links.length > 0 ? (
-                              <span className="m-fullcard-links">
-                                {m.links.map((l) => (
-                                  <a key={l.href + l.label} href={l.href}>
-                                    {l.label} →
-                                  </a>
-                                ))}
-                              </span>
-                            ) : null}
-                            {m.related.length > 0 ? (
-                              <span className="m-fullcard-related">
-                                {m.related.map((r) => {
-                                  const j = ordered.findIndex((x) => x.id === r);
-                                  return (
-                                    <button
-                                      key={r}
-                                      type="button"
-                                      onClick={() => {
-                                        setExpandId(null);
-                                        if (stepper) {
-                                          if (j >= 0) setStackActive(j);
-                                        } else if (j >= 0) {
-                                          focusModule(trackRef.current, j);
-                                        }
-                                      }}
-                                    >
-                                      {r} →
-                                    </button>
-                                  );
-                                })}
-                              </span>
-                            ) : null}
-                          </div>
                         ) : null}
                       </div>
                     </div>
