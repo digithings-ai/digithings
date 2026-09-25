@@ -324,6 +324,11 @@ body {
 .dg-mosaic-ask { margin-left: auto; white-space: nowrap; font-family: var(--font-mono); font-size: 0.9rem; color: var(--ink-mute); }
 button.dg-mosaic-ask { background: none; border: 0; padding: 0; cursor: pointer; }
 button.dg-mosaic-ask:hover { color: var(--ink); }
+/* The expand control shares the foot's mono voice (#4429). It sits beside the
+   ask control rather than pushing it — ask keeps `margin-left: auto`. */
+.dg-mosaic-expand { white-space: nowrap; font-family: var(--font-mono); font-size: 0.9rem; color: var(--ink-mute); }
+button.dg-mosaic-expand { background: none; border: 0; padding: 0; cursor: pointer; }
+button.dg-mosaic-expand:hover { color: var(--ink); }
 
 /* The compose command is a control in the focused tile: a click copies it. The
    `.dg-docker` skin is shared with the graph panel, where the command is plain
