@@ -9,7 +9,7 @@ import {
   ThreadPrimitive,
 } from "@assistant-ui/react";
 import { MarkdownText } from "../stock/markdown-text";
-import { useComposerCopy } from "../stock";
+import { SkinCredit, useComposerCopy } from "../stock";
 
 
 /**
@@ -58,10 +58,11 @@ export function ReactInkWeb() {
             <ComposerPrimitive.Send className="sr-only">
               send
             </ComposerPrimitive.Send>
-          </ComposerPrimitive.Root>
+            </ComposerPrimitive.Root>
         </div>
       </div>
 
+        <SkinCredit className="mt-1 font-mono text-zinc-500 opacity-100" />
     </ThreadPrimitive.Root>
   );
 }

@@ -31,7 +31,7 @@ import {
 import { type FC, useState } from "react";
 import { useAttachmentSrc } from "../stock/use-attachment-src";
 import { MarkdownText } from "../stock/markdown-text";
-import { useComposerCopy } from "../stock";
+import { SkinCredit, useComposerCopy } from "../stock";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -62,10 +62,13 @@ export const Gemini: FC = () => {
                   />
                   <div className="relative z-10">
                     <Composer />
-     
+      
                   </div>
                 </div>
               </div>
+            </div>
+            <div className="pointer-events-none absolute inset-x-0 bottom-0 px-4 pb-1.5">
+              <SkinCredit />
             </div>
           </div>
         </AuiIf>
@@ -73,9 +76,9 @@ export const Gemini: FC = () => {
         <AuiIf condition={(s) => s.thread.messages.length > 0}>
           <ThreadPrimitive.Viewport className="flex grow flex-col overflow-y-scroll pt-12">
             <ThreadPrimitive.Messages components={{ Message: ChatMessage }} />
-            <ThreadPrimitive.ViewportFooter className="sticky bottom-0 mt-auto flex w-full flex-col items-center gap-1.5 bg-[#fdfcfc] px-4 pb-3 dark:bg-[#0c0c0c]">
+            <ThreadPrimitive.ViewportFooter className="sticky bottom-0 mt-auto flex w-full flex-col items-center gap-1.5 bg-[#fdfcfc] px-4 pb-1.5 dark:bg-[#0c0c0c]">
               <Composer />
-
+              <SkinCredit />
             </ThreadPrimitive.ViewportFooter>
           </ThreadPrimitive.Viewport>
         </AuiIf>

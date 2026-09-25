@@ -124,7 +124,10 @@ export type DigichatSkinCopy = {
 };
 
 export type DigichatSkinOptions = {
-  /** Explicit override — embed forces compact regardless of chrome mode. */
+  /**
+   * Explicit override — a deployment can still force compact regardless of
+   * chrome mode. Omitted means the expanded composer everywhere.
+   */
   composerLayout?: ComposerLayout;
   /** Welcome/placeholder/suggestion copy (host: BASELINE_EMBED_* constants). */
   copy?: DigichatSkinCopy;
@@ -156,7 +159,7 @@ export function DigichatSkin({
     copy?.welcome ?? "",
     copy?.placeholder ?? "",
   );
-  const { mode, pageContext } = useSkinChrome();
+  const { pageContext } = useSkinChrome();
   const reasoningUi = useDisclosureUi("reasoning");
   const toolCallsUi = useDisclosureUi("toolCalls");
   const gateSubmit = useStockComposerGateSubmit();
@@ -395,7 +398,7 @@ export function DigichatSkin({
       }
       placeholder={placeholder}
       onComposerSubmit={onComposerSubmit}
-      composerLayout={composerLayout ?? (mode === "app" ? "expanded" : "compact")}
+      composerLayout={composerLayout ?? "expanded"}
       slash={enableSlash ? slashTrigger : undefined}
       mention={enableSlash ? mentionTrigger : undefined}
       hiddenAttachmentNames={

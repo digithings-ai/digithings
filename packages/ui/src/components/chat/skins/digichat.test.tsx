@@ -81,8 +81,8 @@ describe("DigichatSkin composerLayout", () => {
     expect(renderSkin("app", "compact")).toBe("compact");
   });
 
-  it("derives compact from embed mode by default", () => {
-    expect(renderSkin("embed")).toBe("compact");
+  it("derives expanded from embed mode by default", () => {
+    expect(renderSkin("embed")).toBe("expanded");
   });
 });
 

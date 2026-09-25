@@ -59,7 +59,7 @@ const CLONE_THREADS: Record<CloneSkin, LazyExoticComponent<FC>> = {
 
 export type ThreadSkinViewProps = {
   skin: ThreadSkin;
-  /** Explicit composer layout for the digichat skin (else mode-derived). */
+  /** Explicit composer layout for the digichat skin (else expanded). */
   composerLayout?: ComposerLayout;
   /**
    * First-party skin wiring (product copy, slash commands, pending headers).

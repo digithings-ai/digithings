@@ -28,6 +28,7 @@ import { Button } from "../../stock/ui/button";
 import { Skeleton } from "../../stock/ui/skeleton";
 import { cn } from "@/lib/utils";
 import {
+  SkinCredit,
   useComposerCopy,
   useSkinChrome,
 } from "../../stock";
@@ -187,13 +188,16 @@ const Thread: FC = () => {
 
         <ThreadPrimitive.ViewportFooter
           className={cn(
-            "aui-thread-viewport-footer bg-background mx-auto flex w-full max-w-(--thread-max-width) flex-col gap-4 overflow-visible pb-4 md:pb-6",
+            "aui-thread-viewport-footer bg-background mx-auto flex w-full max-w-(--thread-max-width) flex-col gap-4 overflow-visible pb-2 md:pb-3",
             !isEmpty &&
               "sticky bottom-0 mt-auto rounded-t-(--composer-radius)",
           )}
         >
           <ThreadScrollToBottom />
           <Composer />
+          <AuiIf condition={(s) => !s.thread.isEmpty}>
+            <SkinCredit />
+          </AuiIf>
 
           <AuiIf condition={isNewChatView}>
             <div className="aui-thread-welcome-suggestions-shell min-h-19">
@@ -203,6 +207,11 @@ const Thread: FC = () => {
             </div>
           </AuiIf>
         </ThreadPrimitive.ViewportFooter>
+        <AuiIf condition={isNewChatView}>
+          <div className="pointer-events-none absolute inset-x-0 bottom-0 px-4 pb-2">
+            <SkinCredit />
+          </div>
+        </AuiIf>
       </ThreadPrimitive.Viewport>
 
       <SelectionToolbar />

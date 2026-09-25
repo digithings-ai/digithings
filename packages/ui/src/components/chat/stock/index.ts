@@ -61,6 +61,7 @@ export {
   type StockChatPrefsConfig,
   type StockChatPrefsDeps,
 } from "./stock-chat-prefs-host";
+export { SkinCredit, SKIN_CREDIT_TEXT } from "./skin-credit";
 export { Thread } from "./thread.aui";
 export {
   ToolFallback,

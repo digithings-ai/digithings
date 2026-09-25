@@ -37,7 +37,7 @@ import {
 } from "lucide-react";
 import { MarkdownText } from "../stock/markdown-text";
 import { ToolFallback } from "../stock/tool-fallback.aui";
-import { useComposerCopy } from "../stock";
+import { SkinCredit, useComposerCopy } from "../stock";
 
 
 export const ChatGPT: FC = () => {
@@ -61,10 +61,10 @@ export const ChatGPT: FC = () => {
               }}
             </ThreadPrimitive.Messages>
 
-            <ThreadPrimitive.ViewportFooter className="sticky bottom-0 mx-auto mt-auto flex w-full max-w-3xl flex-col gap-2 overflow-visible rounded-t-3xl bg-white pb-2 dark:bg-black">
+            <ThreadPrimitive.ViewportFooter className="sticky bottom-0 mx-auto mt-auto flex w-full max-w-3xl flex-col gap-2 overflow-visible rounded-t-3xl bg-white pb-1 dark:bg-black">
               <ThreadScrollToBottom />
               <Composer placeholder={placeholder} />
-
+              <SkinCredit />
             </ThreadPrimitive.ViewportFooter>
           </ThreadPrimitive.Viewport>
         </AuiIf>
@@ -78,13 +78,15 @@ const EmptyState: FC = () => {
     "Ask anything",
   );
   return (
-    <div className="flex grow flex-col items-center justify-center px-4 pb-[16vh]">
+    <div className="relative flex grow flex-col items-center justify-center px-4 pb-[16vh]">
       <div className="mx-auto flex w-full max-w-3xl flex-col items-stretch gap-6">
         <h1 className="text-center text-2xl leading-7 font-normal text-[#0d0d0d] dark:text-[#ececec]">
           {welcome}
         </h1>
         <Composer placeholder={placeholder} />
-
+      </div>
+      <div className="pointer-events-none absolute inset-x-0 bottom-0 px-4 pb-2">
+        <SkinCredit />
       </div>
     </div>
   );

@@ -34,6 +34,14 @@ describe("baseline preview isolation", () => {
     expect(css).not.toMatch(/chat-core/);
   });
 
+  it("leaves thread footer geometry to the skin", () => {
+    // Footer bottom air is single-sourced in the gallery Thread (pb-4
+    // md:pb-6). A host override here would silently fork the footer position
+    // per surface — catalog, product, and embed must share it.
+    const css = read("baseline.css");
+    expect(css).not.toMatch(/aui-thread-viewport-footer/);
+  });
+
   it("uses the official assistant-ui template theme tokens", () => {
     // Tokens live in the shared bridge now; baseline.css only imports it.
     const bridge = read(

@@ -68,10 +68,19 @@ describe("product CSS isolation", () => {
     expect(cli).toMatch(/terminal-loaders/);
   });
 
-  it("first-party digichat skin uses the compact composer off app chrome", () => {
+  it("leaves thread footer spacing to the skin", () => {
+    // Footer bottom air is single-sourced in the gallery Thread (pb-4
+    // md:pb-6). A host padding override here would silently fork the footer
+    // position per surface — catalog, product, and embed must share it.
+    // (Background-only rules like the wide-transparent strip are fine.)
+    const chrome = read("../../styles/product-chrome.css");
+    expect(chrome).not.toMatch(/\.aui-thread-viewport-footer[^}]*padding/);
+  });
+
+  it("first-party digichat skin defaults to the expanded composer", () => {
     const skin = read("../../../../../packages/ui/src/components/chat/skins/digichat.tsx");
     expect(skin).toMatch(
-      /composerLayout=\{composerLayout \?\? \(mode === "app" \? "expanded" : "compact"\)\}/
+      /composerLayout=\{composerLayout \?\? "expanded"\}/
     );
   });
 });

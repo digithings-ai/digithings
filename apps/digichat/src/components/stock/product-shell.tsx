@@ -97,7 +97,7 @@ export type ProductShellProps = {
   /** localStorage scope for web search; defaults to sessionKey. */
   webSearchScope?: string;
   onWebSearchChange?: (enabled: boolean) => void;
-  /** Explicit composer layout for the digichat skin (else mode-derived). */
+  /** Explicit composer layout for the digichat skin (else expanded). */
   composerLayout?: ComposerLayout;
   /**
    * Boot-lab variant threaded from the embed server (local iteration). When

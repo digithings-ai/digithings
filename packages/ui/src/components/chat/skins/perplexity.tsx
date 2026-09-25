@@ -2,7 +2,7 @@
 
 import { cn } from "@/lib/utils";
 import { MarkdownText } from "../stock/markdown-text";
-import { useSkinChrome } from "../stock";
+import { SkinCredit, useSkinChrome } from "../stock";
 import {
   ActionBarPrimitive,
   AuiIf,
@@ -71,9 +71,9 @@ export const Perplexity: FC = () => {
               {() => <ChatMessage />}
             </ThreadPrimitive.Messages>
 
-            <ThreadPrimitive.ViewportFooter className="sticky bottom-0 mx-auto mt-auto w-full max-w-(--thread-max-width) bg-linear-to-b from-transparent via-[#f6f2ec]/85 to-[#f6f2ec] pt-6 pb-4 dark:via-[#171615]/85 dark:to-[#171615]">
+            <ThreadPrimitive.ViewportFooter className="sticky bottom-0 mx-auto mt-auto w-full max-w-(--thread-max-width) bg-linear-to-b from-transparent via-[#f6f2ec]/85 to-[#f6f2ec] pt-6 pb-2 dark:via-[#171615]/85 dark:to-[#171615]">
               <Composer placeholder={followPlaceholder} />
-
+              <SkinCredit />
             </ThreadPrimitive.ViewportFooter>
           </ThreadPrimitive.Viewport>
         </AuiIf>
@@ -83,13 +83,15 @@ export const Perplexity: FC = () => {
 
 const EmptyState: FC<{ placeholder: string }> = ({ placeholder }) => {
   return (
-    <div className="flex h-full flex-col justify-center px-4">
+    <div className="relative flex h-full flex-col justify-center px-4">
       <div className="mx-auto w-full max-w-(--thread-max-width)">
         <p className="font-display mb-8 text-center text-5xl leading-none tracking-[-0.06em] text-[#25211c] sm:text-[3.1rem] dark:text-[#f5f2ed]">
           perplexity
         </p>
         <Composer placeholder={placeholder} />
-
+      </div>
+      <div className="pointer-events-none absolute inset-x-0 bottom-0 px-4 pb-2">
+        <SkinCredit />
       </div>
     </div>
   );

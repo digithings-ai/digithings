@@ -21,14 +21,8 @@
 /* Dark variant, shadcn @theme, :root, .dark, @layer base now live in the
    shared bridge imported at the top of this file. */
 
-/* The credit sits right below the composer, so the footer's own bottom padding
-   is what remains between the credit and the page bottom. Match the credit's
-   top air with a small symmetric value instead of the 16-24px default, so the
-   distances above and below the credit are equal on the catalog skins too
-   (m2558, m2557). Same reason as the credit block above: it must live inside
-   `@layer components` or the `(baseline)` build drops it (m2644). */
-@layer components {
-  .aui-thread-viewport-footer {
-    padding-bottom: 0.25rem;
-  }
-}
+/* Footer bottom air is NOT set here: the thread footer owns its own padding
+   (pb-4 md:pb-6 in the gallery Thread), so catalog, product, and embed all
+   share one source. A host override here would silently fork the footer
+   position per surface — and in `@layer components` it would lose to the
+   pb-4/pb-6 utilities anyway. */

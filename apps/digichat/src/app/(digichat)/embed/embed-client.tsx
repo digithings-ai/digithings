@@ -1239,8 +1239,7 @@ function EmbedChat({
         runtime={chat.runtime}
         clientConfig={stockClient}
         persistence="none"
-          composerLayout="compact"
-          bootLabVariant={bootLab}
+        bootLabVariant={bootLab}
         sendGate={sendGate}
         sessionKey={gate.host}
         webSearchScope={webSearchScope}

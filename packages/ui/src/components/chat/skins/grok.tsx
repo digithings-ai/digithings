@@ -30,7 +30,7 @@ import { useState, type FC } from "react";
 import { useAttachmentSrc } from "../stock/use-attachment-src";
 import { MarkdownText } from "../stock/markdown-text";
 import { GrokIcon } from "./grok-icon";
-import { useComposerCopy } from "../stock";
+import { SkinCredit, useComposerCopy } from "../stock";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -44,10 +44,12 @@ export const Grok: FC = () => {
   return (
     <ThreadPrimitive.Root className="flex h-full flex-col items-stretch bg-[#fdfdfd] px-4 dark:bg-[#141414]">
         <AuiIf condition={(s) => s.thread.isEmpty}>
-          <div className="flex h-full flex-col items-center justify-center">
+          <div className="relative flex h-full flex-col items-center justify-center">
             <GrokIcon className="mb-6 h-10 text-[#0d0d0d] dark:text-white" />
             <Composer />
-
+            <div className="pointer-events-none absolute inset-x-0 bottom-0 px-4 pb-2">
+              <SkinCredit />
+            </div>
           </div>
         </AuiIf>
 
@@ -58,7 +60,7 @@ export const Grok: FC = () => {
             </ThreadPrimitive.Messages>
           </ThreadPrimitive.Viewport>
           <Composer />
-
+          <SkinCredit />
         </AuiIf>
       </ThreadPrimitive.Root>
   );
@@ -74,7 +76,7 @@ const Composer: FC = () => {
 
   return (
     <ComposerPrimitive.Root
-      className="group/composer mx-auto mb-3 w-full max-w-3xl"
+      className="group/composer mx-auto mb-1.5 w-full max-w-3xl"
       data-empty={isEmpty}
       data-running={isRunning}
     >

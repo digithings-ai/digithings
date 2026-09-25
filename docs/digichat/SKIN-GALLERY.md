@@ -193,6 +193,38 @@ immediately (HMR); nothing else to register.
 
 ---
 
+## Branding credit + surface parity
+
+The `digichat` skin renders one shared branding line below the composer on
+every surface (catalog, product, embed): `SkinCredit`
+(`packages/ui/src/components/chat/stock/skin-credit.tsx`) — `powered by
+digichat — a digithings product.`, with `digithings` linked to
+https://digithings.ai. It is a watermark, not a disclaimer: always visible,
+empty thread included. It returns null only when the host opted out
+(`chrome.attribution: false` / embed `attribution: false`).
+
+Placement rule: in-flow inside the sticky viewport footer once messages
+exist; a click-transparent absolute bottom pin in empty states whose
+composer floats mid-page (the clones, stock Thread, base). The gallery
+Thread (the `digichat` skin itself) needs no pin — its footer is
+bottom-docked in every state, so in-flow is already bottom-pinned there; an
+overlay painted over the composer. Send controls pin themselves right with
+`ml-auto`, so the submit stays right even when the deployment disables
+attachments and the attach button is absent.
+
+Parity rule: the skin owns all footer/composer geometry (footer `pb-4
+md:pb-6` halved to `pb-2 md:pb-3` alongside the credit's own `pt-0.5`,
+composer layout). Hosts must not override it per surface — the embed and
+catalog shells each once collapsed the footer padding and forked the footer
+position three ways. Two isolation tests pin this (`baseline-isolation`,
+`product-isolation`: no host `.aui-thread-viewport-footer` padding rules).
+
+Composer layout default is `expanded` on every surface
+(`composerLayout ?? "expanded"` in `skins/digichat.tsx`); `compact` is an
+explicit per-deployment override, not a mode derivation.
+
+---
+
 ## Gotchas that make a skin render wrong
 
 The catalog page is deliberately isolated: its own root layout and

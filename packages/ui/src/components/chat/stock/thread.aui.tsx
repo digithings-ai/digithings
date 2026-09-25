@@ -28,6 +28,7 @@ import { Skeleton } from "./ui/skeleton";
 import { cn } from "@/lib/utils";
 import { useStockComposerGateSubmit } from "./stock-send-gate";
 import { MessageError } from "./message-error.aui";
+import { SkinCredit } from "./skin-credit";
 
 import { useDisclosureUi, useDeployUi } from "./deploy-ui-context";
 import {
@@ -196,7 +197,7 @@ const ThreadRoot: FC<{ isEmpty: boolean; autoFocus: boolean }> = ({
 
           <ThreadPrimitive.ViewportFooter
             className={cn(
-              "aui-thread-viewport-footer bg-background flex flex-col gap-4 overflow-visible pb-4 md:pb-6",
+              "aui-thread-viewport-footer bg-background flex flex-col gap-4 overflow-visible pb-2 md:pb-3",
               !isEmpty &&
                 "sticky bottom-0 mt-auto rounded-t-(--composer-radius)",
             )}
@@ -209,6 +210,11 @@ const ThreadRoot: FC<{ isEmpty: boolean; autoFocus: boolean }> = ({
               <ThreadSuggestions />
             </AuiIf>
           </ThreadPrimitive.ViewportFooter>
+          {isEmpty && (
+            <div className="pointer-events-none absolute inset-x-0 bottom-0 px-4 pb-2">
+              <SkinCredit />
+            </div>
+          )}
         </div>
       </ThreadPrimitive.Viewport>
     </ThreadPrimitive.Root>
@@ -241,8 +247,15 @@ const ThreadScrollToBottom: FC = () => {
 };
 
 
-// Credit removed by owner (re-add cleanly later); the Footer slot stays for hosts.
-const ThreadFooter: FC = () => null;
+// Branding footer: "powered by digichat" in normal flow below the composer
+// once messages exist. Empty threads get the same line pinned to the page
+// bottom (see the absolute block after ViewportFooter). Hosts can still
+// override the whole Footer slot.
+const ThreadFooter: FC = () => (
+  <AuiIf condition={(s) => !s.thread.isEmpty}>
+    <SkinCredit />
+  </AuiIf>
+);
 
 const ThreadWelcome: FC = () => {
   return (

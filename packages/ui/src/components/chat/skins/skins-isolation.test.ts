@@ -42,10 +42,10 @@ describe("assistant-ui skin isolation", () => {
     const index = readFileSync(join(here, "thread-skin-view.tsx"), "utf8");
     expect(index).toMatch(/composerLayout/);
     const skin = readFileSync(join(here, "digichat.tsx"), "utf8");
-    expect(skin).toMatch(/composerLayout \?\? \(mode === ["']app["']/);
+    expect(skin).toMatch(/composerLayout=\{composerLayout \?\? "expanded"\}/);
   });
 
-  it("embed passes compact composerLayout through the product shell", () => {
+  it("embed leaves composerLayout to the expanded default", () => {
     const shell = readFileSync(
       join(
         here,
@@ -84,6 +84,6 @@ describe("assistant-ui skin isolation", () => {
       ),
       "utf8",
     );
-    expect(embed).toMatch(/composerLayout="compact"/);
+    expect(embed).not.toMatch(/composerLayout=/);
   });
 });

@@ -31,7 +31,7 @@ import {
 import { useState, type FC } from "react";
 import { useAttachmentSrc } from "../stock/use-attachment-src";
 import { MarkdownText } from "../stock/markdown-text";
-import { useComposerCopy } from "../stock";
+import { SkinCredit, useComposerCopy } from "../stock";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -57,9 +57,9 @@ export const Claude: FC = () => {
               {() => <ChatMessage />}
             </ThreadPrimitive.Messages>
 
-            <ThreadPrimitive.ViewportFooter className="sticky bottom-0 mx-auto mt-auto w-full max-w-3xl bg-linear-to-b from-transparent via-[#F0ECE0]/85 to-[#F0ECE0] pt-4 pb-2 dark:via-[#2b2a27]/85 dark:to-[#2b2a27]">
+            <ThreadPrimitive.ViewportFooter className="sticky bottom-0 mx-auto mt-auto w-full max-w-3xl bg-linear-to-b from-transparent via-[#F0ECE0]/85 to-[#F0ECE0] pt-4 pb-1 dark:via-[#2b2a27]/85 dark:to-[#2b2a27]">
               <Composer />
-
+              <SkinCredit />
             </ThreadPrimitive.ViewportFooter>
           </ThreadPrimitive.Viewport>
         </AuiIf>
@@ -73,7 +73,7 @@ const EmptyState: FC = () => {
     "How can I help you today?",
   );
   return (
-    <div className="flex grow flex-col items-center justify-center px-4">
+    <div className="relative flex grow flex-col items-center justify-center px-4">
       <div className="mx-auto flex w-full max-w-2xl flex-col items-stretch gap-5">
         <h1 className="flex items-center justify-center gap-3 font-serif text-3xl text-[#1a1a18] sm:text-4xl dark:text-[#eee]">
           <Sparkle className="size-7 fill-[#c96442] text-[#c96442]" />
@@ -81,7 +81,9 @@ const EmptyState: FC = () => {
         </h1>
         <Composer />
         <ModeTabs />
-
+      </div>
+      <div className="pointer-events-none absolute inset-x-0 bottom-0 px-4 pb-2">
+        <SkinCredit />
       </div>
     </div>
   );
