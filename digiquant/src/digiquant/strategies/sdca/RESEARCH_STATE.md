@@ -939,6 +939,52 @@ explicit that they're still blocked on Stage 2's OHLC plumbing.)
      (same pre-existing gap the production `/strategies` library page has
      locally) — it resolves normally wherever those vars are configured.
      No `src/` changes; `tests/dq/strategies/sdca/` unaffected.
+   - **Full comparison-set expansion (2026-09-25)** — Chris: "round 8 is by
+     far better and the only one worth keeping... add the full set of all
+     the sdca start attempts to the tearsheet collection so i can see how
+     they compare" against "the current version of the strategy and any
+     previous strategy calibrations." Ablation rounds 1-8 already had
+     tearsheets (previous bullet); this pass adds the four remaining
+     candidates that had persisted `best_params` but no visualization:
+     `scripts/build_validated_baseline_diagnostic_tearsheet.py` (item 10
+     Phase 3's `validated_baseline` — this file's own "Current best
+     validated candidate" banner), `build_live_settings_diagnostic_tearsheet.py`
+     (item 10 Phase 3's `live_settings_json` — what's actually deployed
+     right now), and `build_task93_round{2,3}_diagnostic_tearsheet.py`
+     (Task #93's two rejected rounds, item 9). All four reconstruct their
+     `SdcaCurveShape`/`SdcaCompositeWeights` purely from the frozen
+     `best_params` snapshots in `.scratch/baseline_relative_rescore.json`
+     via `shape_from_params`/`composite_weights_from_params` (never reading
+     live `settings.json` presets), so none can silently drift if
+     `settings.json` changes later. Same standing guardrails as every prior
+     round: never writes `settings.json`, never touches this file's
+     validated-candidate section, never pushes to Supabase; `beats_flat_dca
+     _oos` set per the sensitivity-gate precedent (`False` for
+     `live_settings_json` and `task93_round2` despite a numerically-positive
+     raw result on the latter, `False` for `task93_round3`'s unambiguous
+     reject, and `True` for `validated_baseline` — respecting this file's
+     own standing canonical verdict, with the caveat below disclosed in the
+     tearsheet's own notes rather than silently overriding it).
+     **Flagged for Chris, not a change to the banner**: the
+     `validated_baseline` tearsheet's notes now surface, visually, the
+     discrepancy item 10 Phase 3 already recorded numerically — the
+     `+84.90%` OOS banner (dated 2026-09-03, pre band-crossing-fix) versus
+     `+21.73%` duration-weighted OOS under the fixed rails
+     (`beats_baseline_oos=False`, loses to the naive risk50-linear reference
+     curve by `-0.76%`, `sensitivity.stable=False`). No file besides this
+     one and the four new scripts/slugs below was touched to produce that
+     framing — the banner itself is untouched pending Chris's explicit
+     accept/reject. New slugs wired into
+     `apps/digiquant-web/app/strategies/[id]/page.tsx`'s `PUBLISHED` map
+     (`btc_sdca_validated_baseline`, `btc_sdca_live_settings`,
+     `btc_sdca_task93_round2`, `btc_sdca_task93_round3`) and into
+     `components/tearsheet/sdca-recalibration-comparison.tsx`, reorganized
+     into four labeled sections ("Ablation rounds 1–4 and 8", "Validated
+     baseline vs. live production", "Task #93", "Current live candidate")
+     so the arc of every attempt is visible at a glance. Verified locally
+     (`next dev`): all four new `/strategies/<slug>` routes return 200 and
+     render correctly. No `src/` library changes; `tests/dq/strategies/sdca/`
+     unaffected (diagnostic scripts only, no production code touched).
 
 ## North-star ceiling (benchmark only — NEVER a trading candidate)
 

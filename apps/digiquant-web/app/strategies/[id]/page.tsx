@@ -27,6 +27,18 @@ const PUBLISHED: Record<string, { label: string; symbol: string }> = {
   // never pushed to Supabase, data comes from the static-JSON fallback in
   // lib/live/strategies.ts. Not a published/validated strategy.
   btc_sdca_round8: { label: "BTC-SDCA (Round 8 diagnostic)", symbol: "BTC-USD" },
+  // Local-only research diagnostics: full comparison set requested by Chris
+  // (2026-09-25) so the current live config, the canonical validated
+  // baseline, and Task #93's rejected rounds 2/3 are all one click away from
+  // round8. Never pushed to Supabase, data comes from the static-JSON
+  // fallback in lib/live/strategies.ts. Not published/validated strategies.
+  btc_sdca_validated_baseline: {
+    label: "BTC-SDCA (Validated baseline, 2026-09-03)",
+    symbol: "BTC-USD",
+  },
+  btc_sdca_live_settings: { label: "BTC-SDCA (Live settings.json)", symbol: "BTC-USD" },
+  btc_sdca_task93_round2: { label: "BTC-SDCA (Task #93 Round 2 diagnostic)", symbol: "BTC-USD" },
+  btc_sdca_task93_round3: { label: "BTC-SDCA (Task #93 Round 3 diagnostic)", symbol: "BTC-USD" },
 };
 
 export const dynamicParams = false;
