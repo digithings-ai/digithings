@@ -299,16 +299,17 @@ class TestPowerLawConfluenceZ:
                 assert blended[i] == pytest.approx(med_val, abs=1e-9)
                 continue
             base = long_term_weight * long_val + (1.0 - long_term_weight) * med_val
-            if long_val == 0.0 or med_val == 0.0:
+            denom = max(abs(long_val), abs(med_val))
+            if denom == 0.0:
                 multiplier = 1.0
-            elif (long_val > 0) == (med_val > 0):
-                saw_agreement = True
-                multiplier = 1.0 + agreement_boost * (
-                    min(abs(long_val), abs(med_val)) / max(abs(long_val), abs(med_val))
-                )
             else:
-                saw_disagreement = True
-                multiplier = disagreement_damp
+                frac = min(abs(long_val), abs(med_val)) / denom
+                if (long_val > 0) == (med_val > 0):
+                    saw_agreement = True
+                    multiplier = 1.0 + agreement_boost * frac
+                else:
+                    saw_disagreement = True
+                    multiplier = 1.0 - (1.0 - disagreement_damp) * frac
             expected = max(-3.0, min(3.0, base * multiplier))
             assert blended[i] == pytest.approx(expected, abs=1e-9)
 

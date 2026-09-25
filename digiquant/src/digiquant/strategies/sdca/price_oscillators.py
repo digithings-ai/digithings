@@ -486,13 +486,15 @@ def agreement_scaled_blend(
             blended.append(mv)
         else:
             base = long_term_weight * float(lv) + medium_term_weight * float(mv)
-            if lv == 0.0 or mv == 0.0:
+            denom = max(abs(lv), abs(mv))
+            if denom == 0.0:
                 multiplier = 1.0
-            elif (lv > 0) == (mv > 0):
-                agreement_frac = min(abs(lv), abs(mv)) / max(abs(lv), abs(mv))
-                multiplier = 1.0 + agreement_boost * agreement_frac
             else:
-                multiplier = disagreement_damp
+                agreement_frac = min(abs(lv), abs(mv)) / denom
+                if (lv > 0) == (mv > 0):
+                    multiplier = 1.0 + agreement_boost * agreement_frac
+                else:
+                    multiplier = 1.0 - (1.0 - disagreement_damp) * agreement_frac
             blended.append(max(-3.0, min(3.0, base * multiplier)))
     return pl.Series(name, blended, dtype=pl.Float64)
 

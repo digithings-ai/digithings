@@ -358,15 +358,17 @@ class TestRsiConfluenceZ:
                 assert c == pytest.approx(w, abs=1e-9)
                 continue
             base = 0.5 * w + 0.5 * d
-            if w == 0.0 or d == 0.0:
+            denom = max(abs(w), abs(d))
+            if denom == 0.0:
                 expected = base
-            elif (w > 0) == (d > 0):
-                frac = min(abs(w), abs(d)) / max(abs(w), abs(d))
-                expected = max(-3.0, min(3.0, base * (1.0 + 0.5 * frac)))
-                saw_agreement = True
             else:
-                expected = max(-3.0, min(3.0, base * 0.5))
-                saw_disagreement = True
+                frac = min(abs(w), abs(d)) / denom
+                if (w > 0) == (d > 0):
+                    expected = max(-3.0, min(3.0, base * (1.0 + 0.5 * frac)))
+                    saw_agreement = True
+                else:
+                    expected = max(-3.0, min(3.0, base * (1.0 - (1.0 - 0.5) * frac)))
+                    saw_disagreement = True
             assert c == pytest.approx(expected, abs=1e-9)
 
         assert saw_agreement, "fixture never hit the agreement branch"
@@ -480,15 +482,17 @@ class TestMonthlyRsiConfluenceZ:
                 assert c == pytest.approx(m, abs=1e-9)
                 continue
             base = 0.5 * m + 0.5 * d
-            if m == 0.0 or d == 0.0:
+            denom = max(abs(m), abs(d))
+            if denom == 0.0:
                 expected = base
-            elif (m > 0) == (d > 0):
-                frac = min(abs(m), abs(d)) / max(abs(m), abs(d))
-                expected = max(-3.0, min(3.0, base * (1.0 + 0.5 * frac)))
-                saw_agreement = True
             else:
-                expected = max(-3.0, min(3.0, base * 0.5))
-                saw_disagreement = True
+                frac = min(abs(m), abs(d)) / denom
+                if (m > 0) == (d > 0):
+                    expected = max(-3.0, min(3.0, base * (1.0 + 0.5 * frac)))
+                    saw_agreement = True
+                else:
+                    expected = max(-3.0, min(3.0, base * (1.0 - (1.0 - 0.5) * frac)))
+                    saw_disagreement = True
             assert c == pytest.approx(expected, abs=1e-9)
 
         assert saw_agreement, "fixture never hit the agreement branch"
@@ -592,6 +596,48 @@ class TestAgreementScaledBlend:
         )
         assert z.to_list() == [None, 1.0]
 
+    def test_multiplier_continuous_across_sign_crossing(self) -> None:
+        # Sweep medium_term_z across a sign crossing while long_term_z stays
+        # fixed and positive; the multiplier (and hence the blended output)
+        # must not jump — adjacent samples 0.05 apart differ by a small bound.
+        long_term = pl.Series("lt", [1.5] * 41, dtype=pl.Float64)
+        medium_values = [round(-1.0 + 0.05 * i, 4) for i in range(41)]
+        medium_term = pl.Series("mt", medium_values, dtype=pl.Float64)
+        blended = agreement_scaled_blend(
+            long_term,
+            medium_term,
+            long_term_weight=0.6,
+            agreement_boost=0.5,
+            disagreement_damp=0.5,
+            name="blend",
+        ).to_list()
+        deltas = [abs(blended[i] - blended[i - 1]) for i in range(1, len(blended))]
+        assert max(deltas) < 0.1
+
+    def test_far_tail_behavior_matches_pre_fix_values(self) -> None:
+        # Same-sign, strong agreement: multiplier -> 1 + agreement_boost.
+        same_sign = agreement_scaled_blend(
+            pl.Series("lt", [2.0]),
+            pl.Series("mt", [2.0]),
+            long_term_weight=0.6,
+            agreement_boost=0.5,
+            disagreement_damp=0.5,
+            name="blend",
+        ).to_list()
+        base = 0.6 * 2.0 + 0.4 * 2.0
+        assert same_sign[0] == pytest.approx(base * 1.5)
+        # Opposite-sign, strong disagreement: multiplier -> disagreement_damp.
+        opposite_sign = agreement_scaled_blend(
+            pl.Series("lt", [2.0]),
+            pl.Series("mt", [-2.0]),
+            long_term_weight=0.6,
+            agreement_boost=0.5,
+            disagreement_damp=0.5,
+            name="blend",
+        ).to_list()
+        base_opp = 0.6 * 2.0 + 0.4 * -2.0
+        assert opposite_sign[0] == pytest.approx(base_opp * 0.5)
+
 
 class TestDailyMacdZ:
     def test_clipped_to_unit_interval(self) -> None:
@@ -668,15 +714,17 @@ class TestMacdConfluenceZ:
                 assert c == pytest.approx(w, abs=1e-9)
                 continue
             base = 0.5 * w + 0.5 * d
-            if w == 0.0 or d == 0.0:
+            denom = max(abs(w), abs(d))
+            if denom == 0.0:
                 expected = base
-            elif (w > 0) == (d > 0):
-                frac = min(abs(w), abs(d)) / max(abs(w), abs(d))
-                expected = max(-3.0, min(3.0, base * (1.0 + 0.5 * frac)))
-                saw_agreement = True
             else:
-                expected = max(-3.0, min(3.0, base * 0.5))
-                saw_disagreement = True
+                frac = min(abs(w), abs(d)) / denom
+                if (w > 0) == (d > 0):
+                    expected = max(-3.0, min(3.0, base * (1.0 + 0.5 * frac)))
+                    saw_agreement = True
+                else:
+                    expected = max(-3.0, min(3.0, base * (1.0 - (1.0 - 0.5) * frac)))
+                    saw_disagreement = True
             assert c == pytest.approx(expected, abs=1e-9)
 
         assert saw_agreement, "fixture never hit the agreement branch"
@@ -777,15 +825,17 @@ class TestMonthlyMacdConfluenceZ:
                 assert c == pytest.approx(m, abs=1e-9)
                 continue
             base = 0.5 * m + 0.5 * d
-            if m == 0.0 or d == 0.0:
+            denom = max(abs(m), abs(d))
+            if denom == 0.0:
                 expected = base
-            elif (m > 0) == (d > 0):
-                frac = min(abs(m), abs(d)) / max(abs(m), abs(d))
-                expected = max(-3.0, min(3.0, base * (1.0 + 0.5 * frac)))
-                saw_agreement = True
             else:
-                expected = max(-3.0, min(3.0, base * 0.5))
-                saw_disagreement = True
+                frac = min(abs(m), abs(d)) / denom
+                if (m > 0) == (d > 0):
+                    expected = max(-3.0, min(3.0, base * (1.0 + 0.5 * frac)))
+                    saw_agreement = True
+                else:
+                    expected = max(-3.0, min(3.0, base * (1.0 - (1.0 - 0.5) * frac)))
+                    saw_disagreement = True
             assert c == pytest.approx(expected, abs=1e-9)
 
         assert saw_agreement, "fixture never hit the agreement branch"
@@ -891,15 +941,17 @@ class TestSmaBandConfluenceZ:
                 assert c == pytest.approx(s, abs=1e-9)
                 continue
             base = 0.5 * s + 0.5 * f
-            if s == 0.0 or f == 0.0:
+            denom = max(abs(s), abs(f))
+            if denom == 0.0:
                 expected = base
-            elif (s > 0) == (f > 0):
-                frac = min(abs(s), abs(f)) / max(abs(s), abs(f))
-                expected = max(-3.0, min(3.0, base * (1.0 + 0.5 * frac)))
-                saw_agreement = True
             else:
-                expected = max(-3.0, min(3.0, base * 0.5))
-                saw_disagreement = True
+                frac = min(abs(s), abs(f)) / denom
+                if (s > 0) == (f > 0):
+                    expected = max(-3.0, min(3.0, base * (1.0 + 0.5 * frac)))
+                    saw_agreement = True
+                else:
+                    expected = max(-3.0, min(3.0, base * (1.0 - (1.0 - 0.5) * frac)))
+                    saw_disagreement = True
             assert c == pytest.approx(expected, abs=1e-9)
 
         assert saw_agreement, "fixture never hit the agreement branch"

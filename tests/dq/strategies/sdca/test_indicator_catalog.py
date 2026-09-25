@@ -343,15 +343,17 @@ class TestRsEthConfluenceZ:
                 assert c == pytest.approx(s, abs=1e-9)
                 continue
             base = 0.5 * s + 0.5 * f
-            if s == 0.0 or f == 0.0:
+            denom = max(abs(s), abs(f))
+            if denom == 0.0:
                 expected = base
-            elif (s > 0) == (f > 0):
-                frac = min(abs(s), abs(f)) / max(abs(s), abs(f))
-                expected = max(-3.0, min(3.0, base * (1.0 + 0.5 * frac)))
-                saw_agreement = True
             else:
-                expected = max(-3.0, min(3.0, base * 0.5))
-                saw_disagreement = True
+                frac = min(abs(s), abs(f)) / denom
+                if (s > 0) == (f > 0):
+                    expected = max(-3.0, min(3.0, base * (1.0 + 0.5 * frac)))
+                    saw_agreement = True
+                else:
+                    expected = max(-3.0, min(3.0, base * (1.0 - (1.0 - 0.5) * frac)))
+                    saw_disagreement = True
             assert c == pytest.approx(expected, abs=1e-9)
 
         assert saw_agreement, "fixture never hit the agreement branch"
