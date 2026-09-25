@@ -985,6 +985,74 @@ explicit that they're still blocked on Stage 2's OHLC plumbing.)
      (`next dev`): all four new `/strategies/<slug>` routes return 200 and
      render correctly. No `src/` library changes; `tests/dq/strategies/sdca/`
      unaffected (diagnostic scripts only, no production code touched).
+   - **Blend attempts: combining round 8 and Task #93 Round 2 (2026-09-25)**
+     — Chris: "I like the valuation index shape of the 17 indicator strat,
+     then the performance and behavior of the round 8 [strategy]," and asked
+     for 3 concrete blend mechanisms to be tried, in order, against the same
+     admissible 17-name `SURVIVING_INDICATORS` ceiling Task #93 used (no
+     bigger universe; `vol_regime`/`halving_cycle` stay Stage-2 rejected;
+     `adx`/`stochastic` stay blocked on OHLC plumbing; `fast_crash_vol` stays
+     out of a valuation-index reweight). All three used Task #93 Round 2's
+     `ROUND23_OSCILLATORS`/`ROUND23_EXTRA_WINDOWS` config throughout —
+     **none beats round 8, and none clears the standing accept gate**
+     (numeric OOS win AND `sensitivity.stable`).
+     - **Approach 1** (`scripts/run_blend_approach1_round2index_round8curve.py`)
+       froze Round 2's 17-indicator weights exactly as scored, then re-ran
+       round 8's own full-resolution feasibility-aware curve search
+       (`search_wide_knee_curve_feasibility_aware`, n_random=3000) on top of
+       that fixed index. Result: `mean_oos_vs_flat_dca_pct=-13.84%` (both
+       weightings), `beats_flat_dca_oos=False` — **loses outright to flat
+       DCA**, despite beating the risk50-linear baseline
+       (`delta_mean_oos_vs_flat_dca_pct=+35.79%`, `beats_baseline_oos=True`).
+       `sensitivity.max_abs_delta_oos_pct=3.35` (vs 2.0 threshold, unstable).
+       Surprising: Round 2's valuation-index shape does not carry round 8's
+       edge through a fresh curve search. REJECT.
+     - **Approach 2** (`scripts/run_blend_approach2_full17_ablation.py`) ran
+       round 8's own iterative-elimination ablation loop from scratch,
+       seeded with the full 17-name `SURVIVING_INDICATORS` pool (confirmed:
+       round 1's starting pool matches that tuple exactly, in order) instead
+       of round 8's narrower starting pool. All 8 rounds ran (stopped at
+       `budget_exhausted`, the `MAX_ROUNDS` cap); best-seen was round 1
+       itself (`power_law`/`onchain_addr_ratio`/`weekly_monthly_macd` each
+       at weight 1.0, everything else in the 17-pool at a 0.1 floor) —
+       every later round (dropping the prior dominant indicator) scored
+       worse, several sharply negative (as low as -27.60%). Full-resolution
+       curve search + walk-forward on round 1's weights:
+       `mean_oos_vs_flat_dca_pct=+3.52%` (both weightings),
+       `beats_flat_dca_oos=True` (barely, numerically),
+       `sensitivity.max_abs_delta_oos_pct=6.03` (vs 2.0 threshold, unstable)
+       — roughly matches Task #93 Round 2's own weak magnitude (+4.07% OOS)
+       but with worse instability (6.03 vs 2.79). Broadening the ablation
+       pool to the full 17 names surfaced nothing round 8's narrower search
+       missed. REJECT.
+     - **Approach 3** (`scripts/run_blend_approach3_hybrid_weights.py`) built
+       a literal hybrid weight vector — round 8's 5 nonzero weights as fixed
+       floors, Round 2's other ~12 nonzero weights layered in at half their
+       Round 2 value — and reused round 8's actual curve params unchanged
+       (no new curve search). Result: `mean_oos_vs_flat_dca_pct=+41.57%`
+       (both weightings), `beats_flat_dca_oos=True` (numerically),
+       `delta_mean_oos_vs_flat_dca_pct=+73.18%`,
+       `beats_baseline_oos=True` — the closest of the three to round 8's own
+       magnitude (+52.01%), but
+       `sensitivity.max_abs_delta_oos_pct=10.92` (vs 2.0 threshold) is more
+       than double round 8's own 4.25 — layering in Round 2's weights at
+       half strength sharply amplifies instability rather than damping it.
+       REJECT.
+     All three never write `settings.json` or this file's "Current best
+     validated candidate" section, never push to Supabase. Diagnostic
+     tearsheets built via `scripts/build_blend{1,2,3}_diagnostic_tearsheet.py`
+     (each reconstructing its `SdcaCurveShape`/`SdcaCompositeWeights` purely
+     from its own frozen `.scratch/blend/approach{1,2,3}_*.json` result, via
+     `shape_from_params`/`composite_weights_from_params`), with
+     `beats_flat_dca_oos=False` in every payload per the sensitivity-gate
+     precedent (none clears the full gate, so none may display a win). New
+     slugs `btc_sdca_blend1`, `btc_sdca_blend2`, `btc_sdca_blend3` wired into
+     `apps/digiquant-web/app/strategies/[id]/page.tsx`'s `PUBLISHED` map and
+     into `components/tearsheet/sdca-recalibration-comparison.tsx` as a new
+     "Blend attempts" section placing all 3 alongside round 8's and Task #93
+     Round 2's existing cards, per Chris's explicit request to see all 5
+     together. No `src/` library changes; `tests/dq/strategies/sdca/`
+     unaffected (diagnostic scripts only, no production code touched).
 
 ## North-star ceiling (benchmark only — NEVER a trading candidate)
 

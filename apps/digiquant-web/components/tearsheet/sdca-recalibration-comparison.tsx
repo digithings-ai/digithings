@@ -71,6 +71,33 @@ const SECTIONS: Section[] = [
     ],
   },
   {
+    title: "Blend attempts (2026-09-25) — combining round 8's shape with Task #93 Round 2's index",
+    description:
+      "Chris liked the valuation-index shape of Task #93 Round 2's 17-indicator strategy and the performance/behavior of round 8. Three blend mechanisms were tried; none clears the full accept gate (numeric OOS win + sensitivity-stable). Shown alongside the two source candidates for reference.",
+    rounds: [
+      {
+        slug: "btc_sdca_round8",
+        caption: "Reference: +52.01% mean OOS, numerically beats flat DCA — but fails the sensitivity gate (4.25 vs. 2.0).",
+      },
+      {
+        slug: "btc_sdca_task93_round2",
+        caption: "Reference: +4.07% mean OOS, numerically beats flat DCA — but fails the sensitivity gate (2.79 vs. 2.0).",
+      },
+      {
+        slug: "btc_sdca_blend1",
+        caption: "Round 2's index frozen + a fresh round-8-style curve search — LOSES outright to flat DCA (-13.84% OOS). Curve search does not recover round 8's edge on this index. REJECT.",
+      },
+      {
+        slug: "btc_sdca_blend2",
+        caption: "Round 8's ablation loop re-seeded with the full 17-indicator pool — best round collapses back to +3.52% mean OOS, worse stability than Task #93 Round 2 (6.03 vs. 2.79). Broader pool found nothing new. REJECT.",
+      },
+      {
+        slug: "btc_sdca_blend3",
+        caption: "Literal hybrid weight vector (round 8's 5 weights as floors + half of Round 2's other weights), round 8's curve reused — +41.57% mean OOS but sharply more unstable than round 8 itself (10.92 vs. 4.25). REJECT.",
+      },
+    ],
+  },
+  {
     title: "Current live candidate",
     rounds: [
       {

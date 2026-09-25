@@ -39,6 +39,14 @@ const PUBLISHED: Record<string, { label: string; symbol: string }> = {
   btc_sdca_live_settings: { label: "BTC-SDCA (Live settings.json)", symbol: "BTC-USD" },
   btc_sdca_task93_round2: { label: "BTC-SDCA (Task #93 Round 2 diagnostic)", symbol: "BTC-USD" },
   btc_sdca_task93_round3: { label: "BTC-SDCA (Task #93 Round 3 diagnostic)", symbol: "BTC-USD" },
+  // Local-only research diagnostics: 3 blend attempts combining round 8's
+  // shape/curve with Task #93 Round 2's 17-indicator valuation index, per
+  // Chris's request (2026-09-25). Never pushed to Supabase, data comes from
+  // the static-JSON fallback in lib/live/strategies.ts. Not published/
+  // validated strategies.
+  btc_sdca_blend1: { label: "BTC-SDCA (Blend 1: Round 2 index + Round 8 curve)", symbol: "BTC-USD" },
+  btc_sdca_blend2: { label: "BTC-SDCA (Blend 2: Full-pool ablation reweight)", symbol: "BTC-USD" },
+  btc_sdca_blend3: { label: "BTC-SDCA (Blend 3: Hybrid weights, Round 8 curve)", symbol: "BTC-USD" },
 };
 
 export const dynamicParams = false;
