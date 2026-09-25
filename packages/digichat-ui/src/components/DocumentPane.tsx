@@ -3,8 +3,7 @@
 import { IconButton } from "@digithings/ui/ui";
 
 import { MiniMarkdown } from "./MiniMarkdown";
-import { readableSnippet } from "../activity-view";
-import type { VaultHitSummary } from "../types";
+import { readableSnippet, type VaultHitSummary } from "@digithings/ui/chat/transcript";
 
 function isHttpUrl(path: string): boolean {
   return /^https?:\/\//i.test(path);

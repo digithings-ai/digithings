@@ -8,8 +8,9 @@ import { useEffect, useState, type CSSProperties, type RefObject } from "react";
  * `caret-shape: block` is Chromium-only, so on engines without it the native
  * caret is made transparent (see the `@supports not (caret-shape: block)`
  * rules in the reference chatbot.css) and this painted block tracks it. The
- * digichat embed promotes the painted block on every engine (see
- * product-chrome.css), so the tracking must be runtime-robust.
+ * digichat embed likewise promotes the painted block ONLY on engines without a
+ * native block caret (inside the same `@supports not (caret-shape: block)`
+ * guard in product-chrome.css), so the tracking must be runtime-robust.
  *
  * Positioning is pure row/col math over the textarea value + selection offset
  * (the composer input is font-mono, so columns map to `ch` units and rows to

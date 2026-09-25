@@ -36,7 +36,10 @@ describe("product CSS isolation", () => {
     expect(importLines).toMatch(/product-chrome\.css/);
     expect(importLines).toMatch(/@digithings\/ui\/styles\/chat-core\.css/);
     expect(importLines).toMatch(/@digithings\/ui\/styles\/chat-aui\.css/);
-    expect(importLines).toMatch(/@digithings\/ui\/styles\/chatbot\.css/);
+    expect(importLines).toMatch(/@digithings\/ui\/styles\/chat-digichat\.css/);
+    expect(importLines).toMatch(
+      /@digithings\/ui\/styles\/digichat-app-theme\.css/,
+    );
   });
 
   it("layout catalog templates own / instead of ChatShell", () => {
@@ -46,10 +49,13 @@ describe("product CSS isolation", () => {
   });
 
   it("uses stock Inter theme tokens like the baseline preview", () => {
-    const css = read("globals.css");
-    expect(css).toMatch(/--font-sans:\s*var\(--font-inter\)/);
-    expect(css).toMatch(/--font-mono:\s*var\(--font-ibm-plex-mono\)/);
-    expect(css).toMatch(/--background:\s*oklch\(1 0 0\)/);
+    // Tokens live in the shared bridge globals.css imports (WS1).
+    const bridge = read(
+      "../../../../../packages/ui/src/styles/digichat-app-theme.css",
+    );
+    expect(bridge).toMatch(/--font-sans:\s*var\(--font-inter\)/);
+    expect(bridge).toMatch(/--font-mono:\s*var\(--font-ibm-plex-mono\)/);
+    expect(bridge).toMatch(/--background:\s*oklch\(1 0 0\)/);
   });
 
   it("ChatShell alone pulls the CLI sheet bundle", () => {
@@ -62,10 +68,19 @@ describe("product CSS isolation", () => {
     expect(cli).toMatch(/terminal-loaders/);
   });
 
-  it("first-party digichat skin uses the compact composer off app chrome", () => {
-    const skin = read("../../components/assistant-ui/skins/digichat.tsx");
+  it("leaves thread footer spacing to the skin", () => {
+    // Footer bottom air is single-sourced in the gallery Thread (pb-4
+    // md:pb-6). A host padding override here would silently fork the footer
+    // position per surface — catalog, product, and embed must share it.
+    // (Background-only rules like the wide-transparent strip are fine.)
+    const chrome = read("../../styles/product-chrome.css");
+    expect(chrome).not.toMatch(/\.aui-thread-viewport-footer[^}]*padding/);
+  });
+
+  it("first-party digichat skin defaults to the expanded composer", () => {
+    const skin = read("../../../../../packages/ui/src/components/chat/skins/digichat.tsx");
     expect(skin).toMatch(
-      /composerLayout=\{composerLayout \?\? \(mode === "app" \? "expanded" : "compact"\)\}/
+      /composerLayout=\{composerLayout \?\? "expanded"\}/
     );
   });
 });

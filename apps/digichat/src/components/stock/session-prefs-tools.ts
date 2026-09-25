@@ -6,7 +6,7 @@
 import {
   isEffortCode,
 } from "@digithings/digichat-ui";
-import type { EmbedChatPrefsApi } from "@/components/stock/embed-chat-prefs";
+import type { EmbedChatPrefsApi } from "@digithings/ui/chat/stock";
 import {
   MCP_ID_RE,
   connectedMcpConfigs,

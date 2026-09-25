@@ -499,6 +499,10 @@ backend type rather than adding them unilaterally.
 
 ## Phase 4 — docs truth
 
+Status: landed 2026-09-24 (WS6) — version reads `2.3.2` from
+`apps/digichat/package.json`; index at `docs/digichat/README.md`; ownership plan at
+`docs/architecture/digichat-ui-ownership.md`. Bullets below kept as the record.
+
 - Fix the `apps/digichat/AGENTS.md` claim that only `/api/health` is public
   (`deploy/chrome`, `embed/tenant-config`, `mcp/oauth/callback`, `plan-proof`
   and the dev-only `baseline-chat` are also unauthenticated).
@@ -512,12 +516,13 @@ backend type rather than adding them unilaterally.
 
 Carried over from the approved plan (unchanged intent):
 
-- **6.1** Move the canonical theme sheet out of
-  `apps/reference/app/(chatbot)/chatbot/chatbot.css` into
-  `packages/ui/src/styles/`; delete the 4-line re-export shim; collapse the two
-  app `@theme inline` bridges.
-- **6.2** Add `hideArrow` to `packages/ui/src/ui/tooltip.tsx`; delete the
-  gallery tooltip adapter; one `TooltipIconButton`; one caret.
+- **6.1** ✅ Landed (WS1): the sheet is `packages/ui/src/styles/chat-digichat.css`,
+  imported back by `apps/reference`; the 4-line shim is deleted; both app entry
+  sheets import the shared `digichat-app-theme.css` bridge.
+- **6.2** ✅ Partially landed (WS2): `hideArrow` added to
+  `packages/ui/src/ui/tooltip.tsx`; gallery adapter collapsed to a thin wrapper;
+  dead app re-export deleted. `TooltipIconButton` unification and caret dedup
+  deferred — both change rendering (sharp-vs-rounded split awaits a product ruling).
 - **6.3** Skin encapsulation — a descriptor carrying provider + styles per skin.
 - **6.4** Move the skin registry, dispatch, the 12 skins, and
   `(baseline)/stock/` into the package.

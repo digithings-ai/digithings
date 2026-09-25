@@ -9,11 +9,10 @@ function read(rel: string): string {
   return readFileSync(join(here, rel), "utf8");
 }
 
-function readReferenceCss(): string {
-  return readFileSync(
-    join(here, "..", "..", "..", "..", "..", "..", "apps", "reference", "app", "(chatbot)", "chatbot", "chatbot.css"),
-    "utf8",
-  );
+function readPackageCss(): string {
+  // WS1: the digichat grammar sheet moved from the reference gallery into the
+  // package (packages/ui/src/styles/chat-digichat.css).
+  return readFileSync(join(here, "..", "..", "..", "styles", "chat-digichat.css"), "utf8");
 }
 
 /** Slice css from the first occurrence of `from` (inclusive) to the first `to` after it. */
@@ -33,7 +32,7 @@ describe("gallery-thread composer renders the Safari block-caret overlay", () =>
   });
 
   it("documents the Safari fallback before the feature guard", () => {
-    const css = readReferenceCss();
+    const css = readPackageCss();
     const comment = css.indexOf("Painted block caret");
     const guard = css.indexOf("@supports not (caret-shape: block)");
     expect(comment).toBeGreaterThanOrEqual(0);
@@ -41,21 +40,21 @@ describe("gallery-thread composer renders the Safari block-caret overlay", () =>
   });
 
   it("hides the overlay where the native block caret works", () => {
-    const css = readReferenceCss();
+    const css = readPackageCss();
     const hideBlock = sliceBetween(css, "@supports (caret-shape: block)", "@supports not (caret-shape: block)");
     expect(hideBlock).toContain(".aui-block-caret");
     expect(hideBlock).toMatch(/display:\s*none/);
   });
 
   it("paints the block and hides the native caret only without caret-shape support", () => {
-    const css = readReferenceCss();
+    const css = readPackageCss();
     const paintBlock = sliceBetween(css, "@supports not (caret-shape: block)", "@keyframes aui-caret-blink");
     expect(paintBlock).toMatch(/\.aui-composer-input\s*\{[^}]*caret-color:\s*transparent/);
     expect(paintBlock).toMatch(/\.aui-block-caret\s*\{[^}]*display:\s*block/);
   });
 
   it("keeps the block static under reduced motion", () => {
-    const css = readReferenceCss();
+    const css = readPackageCss();
     const motionBlock = sliceBetween(css, "@media (prefers-reduced-motion: reduce)", "@keyframes aui-caret-blink");
     expect(motionBlock).toContain(".aui-block-caret");
     expect(motionBlock).toMatch(/animation:\s*none/);

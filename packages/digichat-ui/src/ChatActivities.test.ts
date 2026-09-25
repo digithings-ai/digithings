@@ -1,5 +1,8 @@
 import { describe, it, expect } from "vitest";
-import type { DigiChatActivity, VaultHitSummary } from "./types";
+import type {
+  DigiChatActivity,
+  VaultHitSummary,
+} from "@digithings/ui/chat/transcript";
 
 function assertNever(x: never): never {
   throw new Error(`unexpected: ${JSON.stringify(x)}`);
