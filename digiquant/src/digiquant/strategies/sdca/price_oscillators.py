@@ -77,6 +77,8 @@ from datetime import date
 import polars as pl
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+from digiquant.strategies.sdca.composite_risk import causal_ema_smooth
+
 _RSI_LENGTH = 14
 _RSI_DAILY_LENGTH = 14
 _RSI_CONFLUENCE_WEEKLY_WEIGHT = 0.5
@@ -139,6 +141,13 @@ _LMACD_TOP_DECAY_PER_YEAR = 0.005
 _LMACD_TOP_FLOOR = 0.09
 _LMACD_TOP_CEILING = 0.16
 _LMACD_RICH_FRAC = 0.20
+# Cadence-appropriate EMA half-lives for the weekly/monthly oscillator
+# legs' as-of daily broadcast (_asof_to_daily is a pure step function —
+# same structural pattern M2 had before its own smoothing fix). Weekly
+# prints ramp faster than monthly prints; M2's 5.0-day value (tuned for
+# a monthly print) is the reference point for the monthly legs here.
+_WEEKLY_OSCILLATOR_SMOOTHING_HALFLIFE_DAYS = 2.0
+_MONTHLY_OSCILLATOR_SMOOTHING_HALFLIFE_DAYS = 5.0
 
 
 class SdcaOscillatorSpec(BaseModel):
@@ -336,7 +345,10 @@ def weekly_rsi_z(
     weekly = completed_weekly_closes(dates, close)
     rsi = _wilder_rsi(weekly["close"], length=length)
     z = rsi_continuous_z(rsi)
-    return _asof_to_daily(dates, weekly["week_end"], z).alias("weekly_rsi")
+    daily_z = _asof_to_daily(dates, weekly["week_end"], z)
+    return causal_ema_smooth(
+        daily_z, half_life=_WEEKLY_OSCILLATOR_SMOOTHING_HALFLIFE_DAYS, min_samples=1
+    ).alias("weekly_rsi")
 
 
 def monthly_rsi_z(
@@ -349,7 +361,10 @@ def monthly_rsi_z(
     monthly = completed_monthly_closes(dates, close)
     rsi = _wilder_rsi(monthly["close"], length=length)
     z = rsi_continuous_z(rsi)
-    return _asof_to_daily(dates, monthly["month_end"], z).alias("monthly_rsi")
+    daily_z = _asof_to_daily(dates, monthly["month_end"], z)
+    return causal_ema_smooth(
+        daily_z, half_life=_MONTHLY_OSCILLATOR_SMOOTHING_HALFLIFE_DAYS, min_samples=1
+    ).alias("monthly_rsi")
 
 
 def mtf_rsi_z(
@@ -581,7 +596,10 @@ def weekly_macd_z(
         for v, week_end in zip(lmacd.to_list(), week_ends, strict=True)
     ]
     z = pl.Series("weekly_macd", z_vals, dtype=pl.Float64)
-    return _asof_to_daily(dates, weekly["week_end"], z).alias("weekly_macd")
+    daily_z = _asof_to_daily(dates, weekly["week_end"], z)
+    return causal_ema_smooth(
+        daily_z, half_life=_WEEKLY_OSCILLATOR_SMOOTHING_HALFLIFE_DAYS, min_samples=1
+    ).alias("weekly_macd")
 
 
 def monthly_macd_z(
@@ -615,7 +633,10 @@ def monthly_macd_z(
         for v, month_end in zip(lmacd.to_list(), month_ends, strict=True)
     ]
     z = pl.Series("monthly_macd", z_vals, dtype=pl.Float64)
-    return _asof_to_daily(dates, monthly["month_end"], z).alias("monthly_macd")
+    daily_z = _asof_to_daily(dates, monthly["month_end"], z)
+    return causal_ema_smooth(
+        daily_z, half_life=_MONTHLY_OSCILLATOR_SMOOTHING_HALFLIFE_DAYS, min_samples=1
+    ).alias("monthly_macd")
 
 
 def daily_macd_z(

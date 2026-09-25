@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import datetime as _dt
 import math
-from datetime import date
+from datetime import date, timedelta
 
 import polars as pl
 import pytest
@@ -1129,3 +1129,103 @@ class TestCatalogWiring:
         assert w.weekly_macd == pytest.approx(0.0)
         assert w.sma_band == pytest.approx(0.0)
         assert w.enabled_extras() == {}
+
+
+class TestCadenceBroadcastSmoothing:
+    def test_weekly_rsi_z_smooths_weekly_print_steps(self) -> None:
+        # A weekly RSI print that jumps hard between two weekly values should
+        # ramp over multiple days, not step instantly, once broadcast to daily.
+        # Create alternating weeks: all up then all down, to trigger extreme RSI.
+        n = 1000
+        dates = pl.date_range(date(2020, 1, 1), date(2020, 1, 1) + timedelta(days=n - 1), "1d", eager=True)
+        # Alternate weeks: one week goes straight up (RSI~100, z~-3),
+        # next week goes straight down (RSI~0, z~+3). At week boundaries,
+        # this creates a step jump of ~6 z-units that should be smoothed.
+        prices = []
+        price = 100.0
+        for i in range(n):
+            week_num = i // 7
+            day_in_week = i % 7
+            if week_num % 2 == 0:  # up week: prices increase
+                price += 10.0 / 7
+            else:  # down week: prices decrease
+                price -= 10.0 / 7
+            prices.append(price)
+        price_s = pl.Series("price", prices, dtype=pl.Float64)
+        z = weekly_rsi_z(dates, price_s)
+        deltas = [
+            abs(a - b)
+            for a, b in zip(z.to_list()[1:], z.to_list()[:-1], strict=True)
+            if a is not None and b is not None
+        ]
+        assert deltas, "expected at least one non-null adjacent pair"
+        assert max(deltas) < 3.0  # smoothing should keep day-to-day changes bounded
+
+    def test_monthly_rsi_z_smooths_monthly_print_steps(self) -> None:
+        n = 2000
+        dates = pl.date_range(date(2018, 1, 1), date(2018, 1, 1) + timedelta(days=n - 1), "1d", eager=True)
+        # Alternate months: up then down, to trigger extreme RSI with step-function broadcast.
+        prices = []
+        price = 100.0
+        for i in range(n):
+            month_num = i // 30
+            if month_num % 2 == 0:  # up month
+                price += 30.0 / 30
+            else:  # down month
+                price -= 30.0 / 30
+            prices.append(price)
+        price_s = pl.Series("price", prices, dtype=pl.Float64)
+        z = monthly_rsi_z(dates, price_s)
+        deltas = [
+            abs(a - b)
+            for a, b in zip(z.to_list()[1:], z.to_list()[:-1], strict=True)
+            if a is not None and b is not None
+        ]
+        assert deltas, "expected at least one non-null adjacent pair"
+        assert max(deltas) < 3.0
+
+    def test_weekly_macd_z_smooths_weekly_print_steps(self) -> None:
+        n = 1000
+        dates = pl.date_range(date(2020, 1, 1), date(2020, 1, 1) + timedelta(days=n - 1), "1d", eager=True)
+        # Alternate weeks: up then down, to trigger extreme MACD with step broadcast.
+        prices = []
+        price = 100.0
+        for i in range(n):
+            week_num = i // 7
+            if week_num % 2 == 0:  # up week
+                price += 10.0 / 7
+            else:  # down week
+                price -= 10.0 / 7
+            prices.append(price)
+        price_s = pl.Series("price", prices, dtype=pl.Float64)
+        z = weekly_macd_z(dates, price_s)
+        deltas = [
+            abs(a - b)
+            for a, b in zip(z.to_list()[1:], z.to_list()[:-1], strict=True)
+            if a is not None and b is not None
+        ]
+        assert deltas, "expected at least one non-null adjacent pair"
+        assert max(deltas) < 3.0
+
+    def test_monthly_macd_z_smooths_monthly_print_steps(self) -> None:
+        n = 2000
+        dates = pl.date_range(date(2018, 1, 1), date(2018, 1, 1) + timedelta(days=n - 1), "1d", eager=True)
+        # Alternate months: up then down, to trigger extreme MACD with step broadcast.
+        prices = []
+        price = 100.0
+        for i in range(n):
+            month_num = i // 30
+            if month_num % 2 == 0:  # up month
+                price += 30.0 / 30
+            else:  # down month
+                price -= 30.0 / 30
+            prices.append(price)
+        price_s = pl.Series("price", prices, dtype=pl.Float64)
+        z = monthly_macd_z(dates, price_s)
+        deltas = [
+            abs(a - b)
+            for a, b in zip(z.to_list()[1:], z.to_list()[:-1], strict=True)
+            if a is not None and b is not None
+        ]
+        assert deltas, "expected at least one non-null adjacent pair"
+        assert max(deltas) < 3.0
