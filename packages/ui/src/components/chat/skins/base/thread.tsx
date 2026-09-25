@@ -187,7 +187,7 @@ const Thread: FC = () => {
 
         <ThreadPrimitive.ViewportFooter
           className={cn(
-            "aui-thread-viewport-footer bg-background mx-auto flex w-full max-w-(--thread-max-width) flex-col gap-4 overflow-visible pb-4 md:pb-6",
+            "aui-thread-viewport-footer bg-background mx-auto flex w-full max-w-(--thread-max-width) flex-col gap-4 overflow-visible pb-4",
             // Unconditional: every skin pins its footer the same way (single-route
     // plan) — the gallery Thread never conditioned on isEmpty either.
     "sticky bottom-0 mt-auto rounded-t-(--composer-radius)",

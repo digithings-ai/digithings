@@ -31,7 +31,7 @@
    were silently dropped. Keep this block inside the layer. */
 @layer components {
   .dc-attribution {
-    margin: -0.5rem 0 0;
+    margin: 0;
     padding: 0.25rem 0.75rem 0.25rem;
     text-align: center;
     font-size: 0.68rem;
