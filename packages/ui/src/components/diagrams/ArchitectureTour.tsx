@@ -619,7 +619,7 @@ export function ArchitectureTour({
       <div className={`arch-tour${className ? ` ${className}` : ""}`} data-variant="static">
         {sides.map((side, si) => (
           <div className="arch-tour__static" key={si}>
-            {side.tag ? <span className="arch-tour__tag">{side.tag}</span> : null}
+            {side.tag ? <span className="arch-tour__tag" data-tag={side.tag}>{side.tag}</span> : null}
             <ArchitectureDiagram spec={side.spec} caption={side.caption} />
             <ol className="arch-tour__rail">
               {side.steps.map((entry, index) => (
@@ -701,7 +701,7 @@ export function ArchitectureTour({
                   </div>
 
                   {side.tag ? (
-                    <span className="arch-tour__side-tag">{side.tag}</span>
+                    <span className="arch-tour__side-tag" data-tag={side.tag}>{side.tag}</span>
                   ) : null}
                   <ol className="arch-tour__rail">
                     {side.steps.map((entry, index) => {

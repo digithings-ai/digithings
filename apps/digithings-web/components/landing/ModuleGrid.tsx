@@ -411,15 +411,20 @@ export function ModuleGrid() {
 
   /**
    * The mosaic's default state is unselected: nothing carries the focus until
-   * the reader actually arrives. The latch flips once the scroll reaches the
-   * track's top edge — the exact point the scrolly pin engages (`start
-   * start`), so "in view" means the walk has started, not merely that stage
-   * pixels peek at the viewport bottom on a tall screen. From then on the
-   * focus is the scroll position, so the first element is selected once the
-   * mosaic is in view. (Owner: "the default state of the module grid should
-   * be unselected, once its in view then the first element is selected".)
+   * the reader actually arrives — and focus lives ONLY while the mosaic is
+   * centered and ready. The `ready` latch flips once the mosaic box's centre
+   * crosses into the viewport's middle third (the sticky pin has taken up and
+   * the stage is centred), and flips back off the moment it leaves: scrolled
+   * past, above, or entering off-centre, no tile is focused and nothing zooms
+   * (owner ship list: "no more zooming on scroll... when table scrolled past /
+   * not fullscreen → out of focus, none highlighted"; "zero focus until
+   * centered and ready, then focus animation starts"). The old track-top
+   * latch fired too early and never released, so tiles grew while arriving
+   * and stayed grown after the table left. `started` below still drives the
+   * mobile stack, which has no centred stage to gate on.
    */
   const [started, setStarted] = useState(false);
+  const [ready, setReady] = useState(false);
   useEffect(() => {
     let raf = 0;
     const check = () => {
@@ -428,6 +433,12 @@ export function ModuleGrid() {
       if (!track) return;
       const top = track.getBoundingClientRect().top + window.scrollY;
       if (window.scrollY >= top - 1) setStarted(true);
+      const mosaic = track.querySelector(".dg-mosaic");
+      if (!mosaic) return;
+      const rect = mosaic.getBoundingClientRect();
+      const vh = window.innerHeight || 1;
+      const center = rect.top + rect.height / 2;
+      setReady(center > vh * 0.33 && center < vh * 0.67);
     };
     const onScroll = () => {
       if (raf === 0) raf = window.requestAnimationFrame(check);
@@ -482,7 +493,7 @@ export function ModuleGrid() {
     };
   }, [stepper, reduced, started]);
 
-  const focus = started ? Math.max(activeIndex, 0) : -1;
+  const focus = ready ? Math.max(activeIndex, 0) : -1;
   /* Click-to-expand (#4429): no button, no elsewhere. Clicking the focused
      tile — anywhere except its real controls — grows the tile itself to full
      row width with the complete card inside; the row's siblings get out of

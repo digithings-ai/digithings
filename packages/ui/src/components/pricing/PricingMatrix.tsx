@@ -113,7 +113,7 @@ export function PricingMatrix({
                   key={i}
                   className={cx(
                     "border-b border-hair px-[0.9rem] pt-[0.8rem] pb-[1rem] text-start align-top",
-                    tier.popular && "rounded-none border-t-2 border-t-accent bg-accent/6",
+                    tier.popular && "pm-popular rounded-none border-t-2 border-t-accent bg-accent/6",
                   )}
                 >
                   <span className="block text-[0.95rem]">{tier.name}</span>
@@ -155,7 +155,7 @@ export function PricingMatrix({
                       className={cx(
                         "border-b border-hair/60 px-[0.9rem] py-[0.55rem] font-mono text-[0.74rem]",
                         cell === "—" && "text-ink-mute",
-                        tiers[ci]?.popular && "bg-accent/6",
+                        tiers[ci]?.popular && "pm-popular bg-accent/6",
                       )}
                     >
                       {cell}

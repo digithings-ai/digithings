@@ -324,6 +324,29 @@
   color: var(--accent);
 }
 
+/* Rented vs owned must read at a glance (#4429 ship list): the conventional
+   off-the-shelf side wears a muted amber, the digithings-owned side the
+   accent. The tag text itself ("rented"/"owned") is the discriminator, so
+   the hook is a data attribute, not a second class family. */
+.arch-tour__tag[data-tag="rented"],
+.arch-tour__side-tag[data-tag="rented"] {
+  color: #c98a3d;
+  border: 1px solid color-mix(in srgb, #c98a3d 45%, transparent);
+  padding: 0.1rem 0.45rem;
+}
+.arch-tour__tag[data-tag="owned"],
+.arch-tour__side-tag[data-tag="owned"] {
+  color: var(--accent);
+  border: 1px solid color-mix(in srgb, var(--accent) 45%, transparent);
+  padding: 0.1rem 0.45rem;
+}
+/* The why headline's rent half wears the same muted amber as the rented tag
+   (#4429 ship list). Kit-level class — the canon guard refuses color literals
+   in app files, so the headline reaches the color through this hook. */
+.why-rent {
+  color: #c98a3d;
+}
+
 /* The side tag prints ONCE per side, on its own row at the TOP, right-aligned
  * above the step column — never on every step and never bottom-left. */
 .arch-tour__side > .arch-tour__side-tag {

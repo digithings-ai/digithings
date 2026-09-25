@@ -76,7 +76,17 @@ const clamp = (v: number, a: number, b: number) => Math.max(a, Math.min(b, v));
 const MORPH_MEDIA = "(min-width: 960px) and (prefers-reduced-motion: no-preference)";
 
 /** Extra scroll the morph gets, in viewport heights (a short, continuous move). */
-const MORPH_VH = 0.9;
+const MORPH_VH = 1.2;
+
+/**
+ * Pinned hold at the fullscreen state, in viewport heights (#4429 ship
+ * list). The chat arrives big and STAYS big for a full viewport of scroll
+ * so there is time to read and to ask before the retract starts; only after
+ * the hold does `p` run 0→1 and the template questions (the FAQ list) rise
+ * in on the left. No dead hold after the morph — the release still lands
+ * exactly on the docked layout.
+ */
+const HOLD_VH = 1.0;
 
 /** Clearance kept under the nav when the chat is scaled up, so it never clips. */
 const NAV_CLEARANCE_PX = 24;
@@ -108,6 +118,7 @@ export function FaqMorph({ embedOrigin }: { embedOrigin: string }) {
     let dx = 0;
     let dy = 0;
     let scale = 1;
+    let hold = 0;
     let distance = 0;
     let stickyTop = 78;
 
@@ -133,8 +144,9 @@ export function FaqMorph({ embedOrigin }: { embedOrigin: string }) {
       const fitH = (window.innerHeight - stickyTop - NAV_CLEARANCE_PX) / chatH;
       scale = Math.max(1, Math.min(frameW / chatW, fitH));
 
+      hold = Math.round(window.innerHeight * HOLD_VH);
       distance = Math.round(window.innerHeight * MORPH_VH);
-      wrap.style.height = `${Math.round(pin.getBoundingClientRect().height + distance)}px`;
+      wrap.style.height = `${Math.round(pin.getBoundingClientRect().height + hold + distance)}px`;
     };
 
     const apply = (p: number) => {
@@ -166,7 +178,9 @@ export function FaqMorph({ embedOrigin }: { embedOrigin: string }) {
       ticking = true;
       requestAnimationFrame(() => {
         const top = wrap.getBoundingClientRect().top;
-        apply(distance > 0 ? clamp((stickyTop - top) / distance, 0, 1) : 0);
+        // The hold: p stays 0 for the first HOLD_VH of scroll (chat stays big
+        // and askable), then runs 0→1 over the morph distance.
+        apply(distance > 0 ? clamp((stickyTop - top - hold) / distance, 0, 1) : 0);
         ticking = false;
       });
     };

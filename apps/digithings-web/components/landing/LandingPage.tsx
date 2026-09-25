@@ -37,7 +37,7 @@ import { REPO_CLONE } from "@/lib/repoActivity";
  */
 function Hero() {
   return (
-    <section className="px-[var(--page-pad)] pb-[var(--section-y-tight)] pt-[clamp(3rem,6vw,5rem)]">
+    <section className="px-[var(--page-pad)] pb-[clamp(0.75rem,2vw,1.5rem)] pt-[clamp(3rem,6vw,5rem)]">
       <div className="mx-auto flex max-w-[var(--frame-w)] flex-col gap-[1.4rem]">
         <h1 className="animate-appear relative z-10 m-0 font-mono text-[clamp(1.45rem,3.1vw,2.6rem)] font-medium leading-[1.15] tracking-[-0.03em] text-ink opacity-0">
           <span className="block">AI infrastructure,</span>
@@ -48,16 +48,17 @@ function Hero() {
           research, and quant modules on your own keys and hardware. The
           software is free; the integration is the work.
         </p>
-        {/* `*:max-w-none` because `CopyCommand` caps itself at the prose
-            measure (691px). The command is chrome, not prose — it should span
-            the frame like the terminal it replaces did. */}
-        <div className="[&>*]:max-w-none">
-          <CopyCommand
-            samples={[{ label: "clone", protocol: "git clone", code: REPO_CLONE }]}
-            ariaLabel="Clone command"
-            inline
-          />
-        </div>
+        {/* `max-w-none` as a prop, not a wrapper override: `CopyCommand`
+            caps itself at the prose measure and the old `[&>*]` wrapper hack
+            lost the specificity race, so the command never spanned the frame.
+            `className` merges through `cn` (tailwind-merge), which resolves
+            the conflict deterministically. Chrome, not prose — full width. */}
+        <CopyCommand
+          samples={[{ label: "clone", protocol: "git clone", code: REPO_CLONE }]}
+          ariaLabel="Clone command"
+          inline
+          className="max-w-none"
+        />
       </div>
     </section>
   );
@@ -147,11 +148,10 @@ export function LandingPage({ embedOrigin }: { embedOrigin: string }) {
         <QuantSection />
       </section>
 
+      {/* No section title here by owner direction (#4429 ship list): the
+          comparison table suffices on its own. */}
       <section id="pricing" className="line-b px-[var(--page-pad)] py-[var(--page-step)]">
         <div className="mx-auto flex max-w-[var(--frame-w)] flex-col gap-[2rem]">
-          <h2 className="m-0 font-mono text-[length:var(--type-section-stand)] font-medium leading-[1.2] tracking-[-0.025em] text-ink">
-            The software is free. The integration is the work.
-          </h2>
           <Pricing />
         </div>
       </section>
