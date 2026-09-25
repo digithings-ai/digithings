@@ -1,13 +1,10 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useDashboard } from '@/lib/dashboard-context';
 import { useLiveBriefKpis } from '@/lib/hooks/use-live-brief-kpis';
-import type { ResearchRunDiagnostics, BenchmarkHistoryMap, NavChartPoint } from '@/lib/types';
-import {
-  DEFAULT_BRIEF_BENCHMARK_TICKER,
-  pickBriefBenchmarkTicker,
-} from '@/lib/benchmark-tickers';
+import type { ResearchRunDiagnostics } from '@/lib/types';
+import { DEFAULT_BRIEF_BENCHMARK_TICKER } from '@/lib/benchmark-tickers';
 import { fetchResearchRunDiagnostics } from '@/lib/observability-queries';
 import { SUBPAGE_MAX } from '@/components/layout-constants';
 import { Button, EmptyState } from '@digithings/ui/ui';
@@ -18,54 +15,16 @@ import {
 } from '@/components/today/daily-brief-workspace';
 import { selectBriefLedgerDayEvents } from '@/lib/brief-book-event';
 import { buildDisplayRationaleByTicker } from '@/lib/pm-rationale';
-import { committedBookDate } from '@/lib/dashboard-ssot';
 import { isCashTicker } from '@/lib/book-reconciliation';
-import { chainNavContinuity } from '@/lib/accounting-views';
-import {
-  buildPerformanceSsotMeta,
-  isLiveMarksOverlay,
-  persistedHeadlinesFromNav,
-  persistedInsightMetrics,
-} from '@/lib/performance-ssot';
+import { isLiveMarksOverlay } from '@/lib/performance-ssot';
 // Performance SSOT (#3580): persisted headlines from the same accounting NAV
 // adapter as Tearsheet (`getPerformanceBundle` / public_accounting_nav_history).
 // Live marks are a badged overlay only — never a silent second truth.
 
-/**
- * Portfolio vs benchmark over the aligned return window (first portfolio point →
- * last portfolio point, clipped to available benchmark history). `startDate` keeps the label
- * honest ("since {date}", not a dishonest "inception"). Defaults to SPY when present.
- */
-function inceptionVsBenchmark(
-  snaps: NavChartPoint[],
-  benchmarks: BenchmarkHistoryMap
-): { ticker: string; portPct: number; benchPct: number; excessPct: number; startDate: string } | null {
-  const ticker = pickBriefBenchmarkTicker(benchmarks);
-  if (!ticker || snaps.length < 2) return null;
-  const hist = benchmarks[ticker]?.history;
-  if (!hist?.length) return null;
-  // #3767 / #4014: chain the source runs (same continuity index as the
-  // since-inception tile) so the legacy→finalized seam never enters the
-  // vs-benchmark window and the window spans the tracked history.
-  const run = chainNavContinuity(snaps);
-  if (run.length < 2) return null;
-  const sortedBench = [...hist].sort((a, b) => a.date.localeCompare(b.date));
-  const first = run[0];
-  const last = run[run.length - 1];
-  const startBench = sortedBench.find((p) => p.date >= first.date);
-  const endBench = [...sortedBench].reverse().find((p) => p.date <= last.date);
-  if (!startBench || !endBench || startBench.date > endBench.date) return null;
-  if (last.nav <= 0 || first.nav <= 0 || startBench.price <= 0 || endBench.price <= 0) return null;
-  const portPct = (last.nav / first.nav - 1) * 100;
-  const benchPct = (endBench.price / startBench.price - 1) * 100;
-  const startDate = first.date > startBench.date ? first.date : startBench.date;
-  return { ticker, portPct, benchPct, excessPct: portPct - benchPct, startDate };
-}
-
 // ─── Today ──────────────────────────────────────────────────────────────────────
 
 export default function OverviewPage() {
-  const { data, loading, error } = useDashboard();
+  const { data, api, loading, error } = useDashboard();
   const dashboardDate = data?.portfolio?.meta.last_updated ?? null;
   const [runHealth, setRunHealth] = useState<BriefRunHealth | null>();
   const [runDiagnostics, setRunDiagnostics] = useState<ResearchRunDiagnostics[]>([]);
@@ -106,10 +65,6 @@ export default function OverviewPage() {
     };
   }, [dashboardDate]);
 
-  const benchmarkBlurb = useMemo(() => {
-    if (!data?.portfolio?.snapshots?.length || !data.benchmarks) return null;
-    return inceptionVsBenchmark(data.portfolio.snapshots, data.benchmarks);
-  }, [data]);
 
   const performanceHistory = data?.portfolio?.snapshots ?? [];
   const liveKpis = useLiveBriefKpis(
@@ -119,7 +74,7 @@ export default function OverviewPage() {
   );
 
   if (loading) return <PageSkeleton />;
-  if (error || !data)
+  if (error || !data || !api)
     return (
       <div className={`${SUBPAGE_MAX} py-12`}>
         <EmptyState
@@ -181,69 +136,37 @@ export default function OverviewPage() {
     extrasByTicker,
   });
 
-  const performanceHistoryResolved = portfolio.snapshots ?? [];
+  // Scoreboard numbers come from the Workers API (GET /brief + GET /performance):
+  // the persisted-vs-overlay decision is made server-side, never re-derived
+  // here. The live overlay (Realtime marks) still engages client-side and is
+  // always badged — never a silent second truth.
   const positionDates = (data.position_history ?? []).map((row) => row.date);
-  const openBookPositions = positions.filter((p) => !isCashTicker(p.ticker));
-  const bookWeightInvestedPct = openBookPositions.reduce(
-    (sum, p) => sum + (p.weight_actual ?? 0),
-    0
-  );
-  const persisted = persistedHeadlinesFromNav(performanceHistoryResolved, {
-    bookWeightInvestedPct,
-    metricsInvestedPct: data.server_portfolio_metrics?.invested_pct ?? null,
-  });
-  const performanceSsot = buildPerformanceSsotMeta({
-    navRows: performanceHistoryResolved.map((row) => ({
-      date: row.date,
-      nav: row.nav,
-      cash_pct: row.cash_pct ?? null,
-      invested_pct: row.invested_pct ?? null,
-      day_return_pct: row.day_return_pct ?? null,
-      source: row.source ?? 'legacy_nav_history',
-      contract: row.contract ?? 'legacy_estimate',
-      series_seam: row.series_seam === true,
-    })),
-    metricsAsOf:
-      data.server_portfolio_metrics?.as_of_date ?? data.server_portfolio_metrics?.date ?? null,
-    snapshotDate: latestDate,
-    positionDates,
-    positionMetricsAsOf: openBookPositions.map((p) => p.metrics_as_of ?? null),
-    bookWeightInvestedPct,
-    metricsInvestedPct: data.server_portfolio_metrics?.invested_pct ?? null,
-  });
-  // Book as-of = committedBookDate — never imply Sep-4 chrome on yesterday's book.
-  const bookAsOf =
-    committedBookDate(latestDate, positionDates) ??
-    performanceSsot.bookAsOf ??
-    persisted.navAsOf;
+  const brief = api.brief;
+  const perf = api.performance;
+  const performanceSsot = perf.ssot;
+  const bookAsOf = brief.book_as_of;
   const liveOverlay = isLiveMarksOverlay(liveKpis?.liveVsMarkPct);
-  const spyHistory =
-    data.benchmarks?.[pickBriefBenchmarkTicker(data.benchmarks) ?? '']?.history?.map((p) => ({
-      date: p.date,
-      price: p.price,
-    })) ?? undefined;
-  const persistedInsights = persistedInsightMetrics(performanceHistoryResolved, spyHistory);
   // Persisted path matches Tearsheet when live overlay is off; live marks are badged.
   const sincePct = liveOverlay
-    ? (liveKpis?.sinceInceptionPct ?? persisted.sinceInceptionPct)
-    : persisted.sinceInceptionPct;
+    ? (liveKpis?.sinceInceptionPct ?? brief.since_inception_pct)
+    : brief.since_inception_pct;
   const sinceDate = liveOverlay
-    ? (liveKpis?.sinceInceptionStartDate ?? persisted.sinceInceptionStartDate)
-    : persisted.sinceInceptionStartDate;
+    ? (liveKpis?.sinceInceptionStartDate ?? brief.since_inception_start_date)
+    : brief.since_inception_start_date;
   const dailyRet = liveOverlay
-    ? (liveKpis?.dayReturnPct ?? persisted.dayReturnPct)
-    : persisted.dayReturnPct;
+    ? (liveKpis?.dayReturnPct ?? brief.day_return_pct)
+    : brief.day_return_pct;
   const priceAsOf = liveOverlay
-    ? (liveKpis?.priceAsOfDate ?? bookAsOf)
-    : (persisted.navAsOf ?? bookAsOf);
+    ? (liveKpis?.priceAsOfDate ?? brief.nav_tip.date ?? bookAsOf)
+    : (brief.nav_tip.date ?? bookAsOf);
   // Excess stays on the persisted aligned window unless live marks are badged.
   // Alpha / IR are series metrics — render whenever overlap exists, overlay or not.
   const excessPct = liveOverlay
-    ? (liveKpis?.excessReturnPct ?? benchmarkBlurb?.excessPct ?? null)
-    : (benchmarkBlurb?.excessPct ?? persistedInsights.excessReturnPct);
+    ? (liveKpis?.excessReturnPct ?? perf.metrics.excess_return_pct)
+    : perf.metrics.excess_return_pct;
   const benchTicker =
     (liveOverlay ? liveKpis?.benchmarkTicker : null) ??
-    benchmarkBlurb?.ticker ??
+    perf.benchmark.ticker ??
     (excessPct != null ? DEFAULT_BRIEF_BENCHMARK_TICKER : null);
 
   return (
@@ -268,11 +191,11 @@ export default function OverviewPage() {
           excessPct,
           excessAsOf: priceAsOf,
           alphaPct: liveOverlay
-            ? (liveKpis?.alphaPct ?? persistedInsights.alphaPct)
-            : persistedInsights.alphaPct,
+            ? (liveKpis?.alphaPct ?? perf.metrics.alpha_pct)
+            : perf.metrics.alpha_pct,
           informationRatio: liveOverlay
-            ? (liveKpis?.informationRatio ?? persistedInsights.informationRatio)
-            : persistedInsights.informationRatio,
+            ? (liveKpis?.informationRatio ?? perf.metrics.information_ratio)
+            : perf.metrics.information_ratio,
         }}
         metrics={{
           maxDrawdown:
@@ -280,7 +203,7 @@ export default function OverviewPage() {
           volatility:
             data.server_portfolio_metrics?.volatility ?? data.calculated?.volatility ?? null,
         }}
-        investedPct={persisted.investedPct}
+        investedPct={brief.invested_pct}
         performanceSsot={performanceSsot}
         liveMarks={liveOverlay}
         positions={positions}

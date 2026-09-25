@@ -157,6 +157,7 @@ Response `data`:
   "book_as_of": "2026-09-24",
   "invested_pct": 35.13,
   "cash_pct": 64.87,
+  "invested_definition": "accounting_nav_tip",
   "rows": [
     {
       "ticker": "DBO",
@@ -168,7 +169,8 @@ Response `data`:
       "marks": "unavailable",
       "marks_as_of": null
     }
-  ]
+  ],
+  "marks_unstamped": true
 }
 ```
 
@@ -179,13 +181,18 @@ Valuation per row: prefer stored `unrealized_pnl_pct` /
 `current_price`; when the nightly metrics stamp is missing, fill the mark
 from the market API (`GET /v1/market/closes`; R2-API-only — empty when unset,
 no Supabase fallback); fail closed to null without basis or mark.
-`marksUnstamped` when the open book is empty or any row lacks
-`metrics_as_of`. Mid-session NULL marks affect marks only, never weights.
+`marks_unstamped` is true when the open book is empty or any row lacks
+`metrics_as_of` (the `performance-ssot.ts` `marksUnstamped` chrome contract).
+`invested_definition` names the §6.1 precedence winner
+(`accounting_nav_tip | book_weights | portfolio_metrics | unavailable`).
+Mid-session NULL marks affect marks only, never weights.
 
 ### 6.3 `GET /brief`
 
 Brief scoreboard KPIs with the persisted-vs-overlay decision made in one
-place. Replaces the split page/hooks/ssot decision.
+place. Replaces the split page/hooks/ssot decision. `since_inception_start_date`
+is the first date of the chained NAV series the since-% is measured from
+(null when the series is empty).
 
 Query: `asOf?`, `retrieval_pin?`, `overlay?: "auto" | "off"`
 (default `"auto"`).
@@ -198,6 +205,7 @@ Response `data`:
   "nav_tip": { "date": "2026-09-24", "nav": 99.909, "contract": "legacy_estimate" },
   "day_return_pct": null,
   "since_inception_pct": 8.4,
+  "since_inception_start_date": "2026-08-20",
   "overlay": { "active": false, "live_vs_mark_pct": 0, "badge": "finalized accounting" },
   "invested_pct": 35.13,
   "session_events": []
@@ -235,7 +243,8 @@ Response `data`:
     "overlap_days": 21
   },
   "benchmark": { "ticker": "SPY", "aligned_start": "2025-09-24" },
-  "stale": { "lag_days": 1, "lag_direction": "metrics lag", "metrics_as_of": "2026-09-23" }
+  "stale": { "lag_days": 1, "lag_direction": "metrics lag", "metrics_as_of": "2026-09-23" },
+  "ssot": { "tipCashPct": 64.9, "tipInvestedPct": 35.1, "investedDefinition": "accounting_nav_tip", "bookAsOf": "2026-09-24", "marksUnstamped": false }
 }
 ```
 
@@ -248,7 +257,13 @@ daily return pairs (`MIN_OVERLAP_DAYS`) — null below the floor, never
 invented from endpoints. Benchmark prices come from paginated
 `fetchComparablePriceHistory`, not a single bulk fetch. Lag is signed UTC
 calendar days and symmetric (`metrics lag` / `nav lag`); `metricsAsOf` is
-the metrics stamp, never overwritten with the NAV tip.
+the metrics stamp, never overwritten with the NAV tip. `ssot` is the full
+`PerformanceSsotMeta` object (same builder the client used: `tipCashPct`,
+`tipInvestedPct`, `investedDefinition`, `tipDate`, `metricsAsOf`,
+`navContract`, `metricsLag`, `bookAsOf`, `marksUnstamped`,
+`metricsDivergenceBadgeLabel`, `navContractBadgeLabel`,
+`performanceFreshnessNote`, `isLiveMarksOverlay`) so the Brief scoreboard
+can consume it unchanged.
 
 ### 6.5 `GET /kpis/live`
 
@@ -358,7 +373,38 @@ without fill price or cost basis. `cumulative_return_since_event_pct` is
 post-event drift and must not be presented as trade return. Empty range →
 success with `"events": []` plus honest `provenance`.
 
-## 7. Deferred (explicitly not in this contract)
+## 7. Generic table reads
+
+`GET /v1/tables/:table` serves the dashboard's long-tail direct reads
+through one allowlisted worker route so the static bundle never needs the
+service-role key. The route proxies PostgREST with the service key and
+enforces the §3 house pin server-side.
+
+Allowlisted tables: `daily_snapshots`, `positions`, `instruments`,
+`theses`, `portfolio_metrics`, `documents`, `position_events`,
+`macro_series_observations`, `decision_log`, `run_health`,
+`position_attribution`, `run_event_trace`, `public_accounting_nav_history`,
+`thesis_vehicles`, `analyst_coverage`,
+`public_daily_realized_attribution` (dossier + observability reads;
+main-project tables with no house pin).
+Unknown tables → `not_found` (404).
+
+Query: `select?` (comma list, default `*`), repeatable `order=<col>.<asc|desc>`,
+`limit?` (default 100, cap 5000), `offset?`, and repeatable filters
+`eq.<col>=<v>`, `ilike.<col>=<pattern>`, `like.<col>=<pattern>`,
+`in.<col>=(a,b)`, `lt|lte|gt|gte.<col>=<v>`.
+
+Rules: the house pin (`workspace_id = <house>`) is appended server-side for
+`positions`, `position_events`, and `portfolio_metrics` and is never
+forwarded from the caller; `retrieval_pin` is echoed, never forwarded
+upstream. No stub lane — without the service-role key the route fails
+closed (`upstream_empty`, 502), never an empty success.
+
+Out of scope for this route: the twelve-x suite (separate Supabase
+project with its own session-RLS model — stays direct), Realtime
+subscriptions, and Edge Function calls (billing/Alpaca — stay direct).
+
+## 8. Deferred (explicitly not in this contract)
 
 - Write paths: none — all routes are read-only; execution/commit flows
   stay where they are.

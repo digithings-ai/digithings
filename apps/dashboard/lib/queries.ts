@@ -1,23 +1,22 @@
 /**
- * Data access layer — All data from Supabase. No static JSON fallback.
- * Components call these functions; never touch Supabase directly.
+ * Data access layer — all data via the dashboard Workers API. No static JSON fallback.
+ * Components call these functions; never touch Supabase or fetch directly.
  *
- * Session-aware (T1): `supabase` is the PKCE client when
- * `NEXT_PUBLIC_DASHBOARD_AUTH=1` (JWT from supabase-js storage; RLS scopes rows).
- * Flag off → classic anon client. Group A book tables always go through
- * `houseBook()` so a signed-in Custom member's overlay rows cannot mix into
- * the public house dashboard (migration 109 SELECT is house OR membership).
+ * Slice 0008 rewire: every read goes through `lib/api-client.ts`
+ * (`GET /v1/...` specific routes + `GET /v1/tables/:table` allowlisted reads).
+ * The service-role key lives only in the Worker; the static bundle carries no
+ * Supabase credentials. Out of scope (separate backends, stay direct):
+ * twelve-x reads (`lib/twelve-x/`), Realtime overlays, Edge Functions.
  */
-import { supabase, isSupabaseConfigured } from './supabase';
+import { apiTable, apiMaybeSingle, isApiConfigured } from './api-client';
+import { apiDb, apiHouseBook, type ApiDb } from './api-query';
 import {
   assertDailySnapshotQueryOk,
   bookedCoversCommittedSnapshot,
   committedBookDate,
   previousBookDate,
 } from './dashboard-ssot';
-import type { SupabaseClient } from '@supabase/supabase-js';
-import type { Database, TableRow } from './database.types';
-import type {
+import type { Database, TableRow } from './database.types';import type {
   DashboardData,
   Position,
   Thesis,
@@ -65,7 +64,6 @@ import { normalizePositionEvent } from './position-events';
 import { ledgerEventEconomics } from './position-event-economics';
 import { thesisIdEquals } from './thesis-id';
 import type { ThesisVehicleRow } from './thesis-story';
-import { houseBook } from './house-workspace';
 import { fetchMarketCloses, type MarketClose } from './market-data';
 
 /** Coerce a jsonb column that should be a string[] into one, tolerating null/non-arrays. */
@@ -98,21 +96,21 @@ export function mapThesisRow(t: TableRow<'theses'>): Thesis {
   };
 }
 
-type SB = SupabaseClient<Database>;
+type SB = ApiDb;
 
 async function querySupabase<T>(
   queryFn: (sb: SB) => PromiseLike<{ data: T | null; error: unknown }>,
   { retries = 3, delayMs = 500 }: { retries?: number; delayMs?: number } = {}
 ): Promise<T> {
-  if (!isSupabaseConfigured() || !supabase) {
+  if (!isApiConfigured()) {
     throw new Error(
-      'Supabase is not configured. Set NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY.'
+      'Dashboard API is not configured. Set NEXT_PUBLIC_DASHBOARD_API_URL.'
     );
   }
   let lastError: unknown;
   for (let attempt = 0; attempt < retries; attempt++) {
     try {
-      const { data, error } = await queryFn(supabase);
+      const { data, error } = await queryFn(apiDb);
       if (error) throw error;
       if (data === null) throw new Error('No data returned');
       return data;
@@ -289,7 +287,7 @@ function tickerFromNestedDocKey(document_key: string, folder: string, date: stri
 }
 
 async function fetchPipelineObservabilityForDate(dashboardDate: string): Promise<PipelineObservabilityBundle> {
-  const sb = supabase as SB;
+  const sb: SB = apiDb;
   const kExpl = `market-thesis-exploration/${dashboardDate}.json`;
   const kMap = `thesis-vehicle-map/${dashboardDate}.json`;
   const kMemo = `pm-allocation-memo/${dashboardDate}.json`;
@@ -395,13 +393,12 @@ export async function fetchThesisPipelinePayloadsForDate(runDate: string): Promi
   market_thesis_exploration: Record<string, unknown> | null;
   thesis_vehicle_map: Record<string, unknown> | null;
 }> {
-  if (!isSupabaseConfigured() || !supabase) {
+  if (!isApiConfigured()) {
     return { market_thesis_exploration: null, thesis_vehicle_map: null };
   }
   const kExpl = `market-thesis-exploration/${runDate}.json`;
   const kMap = `thesis-vehicle-map/${runDate}.json`;
-  const { data, error } = await supabase
-    .from('documents')
+  const { data, error } = await apiDb.from('documents')
     .select('document_key, payload')
     .eq('date', runDate)
     .in('document_key', [kExpl, kMap]);
@@ -431,9 +428,8 @@ const THESIS_VEHICLES_LIMIT = 2000;
  * to `[]` so the tab renders an empty spine rather than an error wall.
  */
 export async function fetchThesisVehicleMap(): Promise<ThesisVehicleRow[]> {
-  if (!isSupabaseConfigured() || !supabase) return [];
-  const { data, error } = await supabase
-    .from('thesis_vehicles')
+  if (!isApiConfigured()) return [];
+  const { data, error } = await apiDb.from('thesis_vehicles')
     .select('date,thesis_id,ticker,rationale,candidate_rank')
     .order('date', { ascending: false })
     .limit(THESIS_VEHICLES_LIMIT);
@@ -527,24 +523,21 @@ export async function fetchTickerDossier(ticker: string): Promise<TickerDossier>
     decisions: [],
     latestAttribution: null,
   };
-  if (!t || !isSupabaseConfigured() || !supabase) return empty;
+  if (!t || !isApiConfigured()) return empty;
 
   const [docRes, decRes, covRes, attributionRes] = await Promise.all([
-    supabase
-      .from('documents')
+    apiDb.from('documents')
       .select('date, payload')
       .eq('document_key', `analyst/${t}`)
       .order('date', { ascending: false })
       .limit(1),
-    supabase.from('decision_log').select('*').ilike('ticker', t).order('run_date', { ascending: false }),
-    supabase
-      .from('analyst_coverage')
+    apiDb.from('decision_log').select('*').ilike('ticker', t).order('run_date', { ascending: false }),
+    apiDb.from('analyst_coverage')
       .select('date, ticker, thesis_ids, current_recommendation_key, last_updated')
       .ilike('ticker', t)
       .order('last_updated', { ascending: false })
       .limit(1),
-    supabase
-      .from('position_attribution')
+    apiDb.from('position_attribution')
       .select('*')
       .ilike('ticker', t)
       .order('date', { ascending: false })
@@ -607,18 +600,17 @@ export function resolveTickerUniverse(
  * table doesn't blank the whole union.
  */
 export async function fetchAllTickers(): Promise<string[]> {
-  if (!isSupabaseConfigured() || !supabase) return [];
+  if (!isApiConfigured()) return [];
   const TICKER_UNION_LIMIT = 2000;
 
   const [posRes, decRes, docRes, covRes] = await Promise.all([
-    houseBook(supabase, 'positions', 'ticker').limit(TICKER_UNION_LIMIT),
-    supabase.from('decision_log').select('ticker').limit(TICKER_UNION_LIMIT),
-    supabase
-      .from('documents')
+    apiHouseBook('positions', 'ticker').limit(TICKER_UNION_LIMIT),
+    apiDb.from('decision_log').select('ticker').limit(TICKER_UNION_LIMIT),
+    apiDb.from('documents')
       .select('sector')
       .like('document_key', 'analyst/%')
       .limit(TICKER_UNION_LIMIT),
-    supabase.from('analyst_coverage').select('ticker').limit(TICKER_UNION_LIMIT),
+    apiDb.from('analyst_coverage').select('ticker').limit(TICKER_UNION_LIMIT),
   ]);
 
   const out = new Set<string>();
@@ -694,11 +686,10 @@ type PositionEventRowPick = Pick<
 >;
 
 async function fetchPositionEventsForDashboard(): Promise<PositionEventRowPick[]> {
-  if (!supabase) return [];
+  if (!isApiConfigured()) return [];
   return paginatedFetch<PositionEventRowPick>(
     async (offset, pageSize) => {
-      const { data, error } = await houseBook(
-        supabase!,
+      const { data, error } = await apiHouseBook(
         'position_events',
         'id,date,ticker,event,weight_pct,prev_weight_pct,price,thesis_id,reason',
       )
@@ -719,10 +710,10 @@ type DocumentsIndexRow = Pick<
 
 /** Paginated fetch for the documents metadata index (Research Library calendar). */
 async function fetchDocumentsIndexForDashboard(): Promise<DocumentsIndexRow[]> {
-  if (!supabase) return [];
+  if (!isApiConfigured()) return [];
   return paginatedFetch<DocumentsIndexRow>(
     async (offset, pageSize) => {
-      const { data, error } = await supabase!
+      const { data, error } = await apiDb
         .from('documents')
         .select('id, date, title, doc_type, phase, category, segment, sector, run_type, document_key')
         .order('date', { ascending: false })
@@ -739,9 +730,9 @@ async function fetchDocumentsIndexForDashboard(): Promise<DocumentsIndexRow[]> {
  * Load the complete dashboard data assembled from Supabase tables.
  */
 export async function getFullDashboardData(): Promise<DashboardData> {
-  if (!isSupabaseConfigured() || !supabase) {
+  if (!isApiConfigured()) {
     throw new Error(
-      'Supabase is not configured. Set NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY.'
+      'Dashboard API is not configured. Set NEXT_PUBLIC_DASHBOARD_API_URL.'
     );
   }
 
@@ -752,40 +743,36 @@ export async function getFullDashboardData(): Promise<DashboardData> {
   ] = await Promise.all([
     // maybeSingle: empty RLS (or no Sunday run) must not 406/PGRST116 — Brief
     // falls through to the empty-digest shell instead of a hard query failure.
-    supabase.from('daily_snapshots').select('id,date,run_type,baseline_date,snapshot,digest_markdown,created_at').order('date', { ascending: false }).limit(1).maybeSingle(),
-    houseBook(supabase, 'positions').order('date', { ascending: false }).limit(5000),
-    supabase.from('instruments').select('*').order('ticker', { ascending: true }),
-    supabase.from('theses').select('*').order('date', { ascending: false }).limit(50),
+    apiDb.from('daily_snapshots').select('id,date,run_type,baseline_date,snapshot,digest_markdown,created_at').order('date', { ascending: false }).limit(1).maybeSingle(),
+    apiHouseBook('positions').order('date', { ascending: false }).limit(5000),
+    apiDb.from('instruments').select('*').order('ticker', { ascending: true }),
+    apiDb.from('theses').select('*').order('date', { ascending: false }).limit(50),
     // Curated NAV (#2599): finalized tips + labeled legacy. Rollback → nav_history / public_nav_history.
-    supabase
-      .from(ACCOUNTING_NAV_VIEW)
+    apiDb.from(ACCOUNTING_NAV_VIEW)
       .select('date,nav,cash_pct,invested_pct,day_return_pct,source,contract,series_seam')
       .order('date', { ascending: true }),
-    houseBook(supabase, 'portfolio_metrics').order('date', { ascending: false }).limit(1).maybeSingle(),
+    apiHouseBook('portfolio_metrics').order('date', { ascending: false }).limit(1).maybeSingle(),
     // Documents index (metadata only — no payload) used for the Research Library.
     // Paginated via fetchDocumentsIndexForDashboard so the calendar never truncates
     // regardless of history depth (~45 docs/day × DOCUMENTS_INDEX_MAX rows supported).
     fetchDocumentsIndexForDashboard().then((rows) => ({ data: rows, error: null })),
-    supabase
-      .from('documents')
+    apiDb.from('documents')
       .select('date, payload')
       .eq('document_key', 'delta-request.json')
       .order('date', { ascending: false })
       .limit(400),
-    supabase
-      .from('documents')
+    apiDb.from('documents')
       .select('date, payload')
       .ilike('document_key', 'research-changelog/%')
       .order('date', { ascending: false })
       .limit(400),
-    supabase.from('daily_snapshots').select('date, run_type').order('date', { ascending: false }).limit(500),
+    apiDb.from('daily_snapshots').select('date, run_type').order('date', { ascending: false }).limit(500),
     // Fetch the latest pm-rebalance doc upfront so it is available before
     // proposedPositions is computed (the late fetchPipelineObservabilityForDate
     // call happens after that block and cannot be used as the primary source).
     // Guard: we compare its `.date` against the dashboard date below — stale
     // rows (date mismatch) are silently ignored and the UI falls back to [].
-    supabase
-      .from('documents')
+    apiDb.from('documents')
       .select('date, payload')
       .eq('document_key', 'pm-rebalance')
       .order('date', { ascending: false })
@@ -1307,8 +1294,7 @@ export async function getFullDashboardData(): Promise<DashboardData> {
   const macro_series_preview: Record<string, MacroSeriesPoint[]> = {};
 
   if (MACRO_PREVIEW_SERIES_IDS.length > 0) {
-    const macroRes = await supabase
-      .from('macro_series_observations')
+    const macroRes = await apiDb.from('macro_series_observations')
       .select('series_id,obs_date,value')
       .in('series_id', MACRO_PREVIEW_SERIES_IDS)
       .order('obs_date', { ascending: false })
@@ -1448,11 +1434,10 @@ export async function getFullDashboardData(): Promise<DashboardData> {
  * Historical rows for one thesis_id from the theses table (status / name evolution).
  */
 export async function getThesisHistoryById(thesisId: string): Promise<ThesisHistoryPoint[]> {
-  if (!isSupabaseConfigured() || !supabase) return [];
+  if (!isApiConfigured()) return [];
   const id = thesisId.trim();
   if (!id) return [];
-  const { data, error } = await supabase
-    .from('theses')
+  const { data, error } = await apiDb.from('theses')
     .select('date,thesis_id,name,status,notes')
     .ilike('thesis_id', id)
     .order('date', { ascending: true });
@@ -1605,9 +1590,9 @@ function subtractIsoDaysForChart(iso: string, days: number): string {
 
 /** Resolve markdown + structured view for the Research Library. */
 export async function getLibraryDocumentById(id: string): Promise<LibraryDocumentResult> {
-  if (!isSupabaseConfigured() || !supabase) {
+  if (!isApiConfigured()) {
     throw new Error(
-      'Supabase is not configured. Set NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY.'
+      'Dashboard API is not configured. Set NEXT_PUBLIC_DASHBOARD_API_URL.'
     );
   }
 
@@ -1616,8 +1601,7 @@ export async function getLibraryDocumentById(id: string): Promise<LibraryDocumen
     'id' | 'content' | 'payload' | 'date' | 'document_key'
   >;
 
-  const { data: row, error } = await supabase
-    .from('documents')
+  const { data: row, error } = await apiDb.from('documents')
     .select('id, content, payload, date, document_key')
     .eq('id', id)
     .maybeSingle();
@@ -1654,8 +1638,7 @@ export async function getLibraryDocumentById(id: string): Promise<LibraryDocumen
   }
 
   if (!md && doc.document_key === 'digest') {
-    const { data: snapRow } = await supabase
-      .from('daily_snapshots')
+    const { data: snapRow } = await apiDb.from('daily_snapshots')
       .select('digest_markdown, snapshot')
       .eq('date', doc.date)
       .maybeSingle();
@@ -1721,14 +1704,13 @@ async function loadDigestDiffAnchors(targetDate: string): Promise<{
   resolvedDeltaBaseline: string | null;
   previousDigestDate: string | null;
 }> {
-  if (!isSupabaseConfigured() || !supabase) {
+  if (!isApiConfigured()) {
     throw new Error(
-      'Supabase is not configured. Set NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY.'
+      'Dashboard API is not configured. Set NEXT_PUBLIC_DASHBOARD_API_URL.'
     );
   }
 
-  const { data: deltaRow, error: deltaErr } = await supabase
-    .from('documents')
+  const { data: deltaRow, error: deltaErr } = await apiDb.from('documents')
     .select('payload')
     .eq('date', targetDate)
     .eq('document_key', 'delta-request.json')
@@ -1746,8 +1728,7 @@ async function loadDigestDiffAnchors(targetDate: string): Promise<{
     deltaPayloadBaseline = b && b !== targetDate ? b : null;
   }
 
-  const { data: targetSnapMeta, error: targetMetaErr } = await supabase
-    .from('daily_snapshots')
+  const { data: targetSnapMeta, error: targetMetaErr } = await apiDb.from('daily_snapshots')
     .select('baseline_date')
     .eq('date', targetDate)
     .maybeSingle();
@@ -1759,8 +1740,7 @@ async function loadDigestDiffAnchors(targetDate: string): Promise<{
 
   const resolvedDeltaBaseline = deltaPayloadBaseline || rowBaselineOk;
 
-  const { data: prev, error: prevErr } = await supabase
-    .from('daily_snapshots')
+  const { data: prev, error: prevErr } = await apiDb.from('daily_snapshots')
     .select('date')
     .lt('date', targetDate)
     .order('date', { ascending: false })
@@ -1775,9 +1755,9 @@ async function loadDigestDiffAnchors(targetDate: string): Promise<{
 
 /** Digest comparison anchors only (no snapshot markdown fetch). */
 export async function fetchDigestDiffContext(targetDate: string): Promise<DigestDiffContext> {
-  if (!isSupabaseConfigured() || !supabase) {
+  if (!isApiConfigured()) {
     throw new Error(
-      'Supabase is not configured. Set NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY.'
+      'Dashboard API is not configured. Set NEXT_PUBLIC_DASHBOARD_API_URL.'
     );
   }
   const { changeCount, resolvedDeltaBaseline, previousDigestDate } = await loadDigestDiffAnchors(targetDate);
@@ -1797,12 +1777,12 @@ export async function loadDigestLibraryDiff(
   compareKind: DigestCompareKind = 'previous_digest',
   customCompareDate?: string
 ): Promise<{ context: DigestDiffContext; pair: DigestMarkdownDiffPair | null }> {
-  if (!isSupabaseConfigured() || !supabase) {
+  if (!isApiConfigured()) {
     throw new Error(
-      'Supabase is not configured. Set NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY.'
+      'Dashboard API is not configured. Set NEXT_PUBLIC_DASHBOARD_API_URL.'
     );
   }
-  const sb = supabase;
+  const sb: SB = apiDb;
   const { changeCount, resolvedDeltaBaseline, previousDigestDate } = await loadDigestDiffAnchors(targetDate);
 
   const context: DigestDiffContext = {
@@ -1914,7 +1894,7 @@ export async function getPositionHistory(
   fromDate?: string
 ): Promise<Pick<TableRow<'positions'>, 'date' | 'ticker' | 'weight_pct'>[]> {
   return querySupabase((sb) => {
-    let q = houseBook(sb, 'positions', 'date, ticker, weight_pct').order('date', {
+    let q = apiHouseBook( 'positions', 'date, ticker, weight_pct').order('date', {
       ascending: true,
     });
     if (fromDate) q = q.gte('date', fromDate);
@@ -1927,7 +1907,7 @@ export async function getPositionEvents(
   ticker?: string
 ): Promise<TableRow<'position_events'>[]> {
   return querySupabase((sb) => {
-    let q = houseBook(sb, 'position_events').order('date', { ascending: false });
+    let q = apiHouseBook( 'position_events').order('date', { ascending: false });
     if (fromDate) q = q.gte('date', fromDate);
     if (ticker) q = q.eq('ticker', ticker);
     return q.limit(200);
@@ -2015,10 +1995,10 @@ export async function fetchDocumentDiffAnchors(
   documentKey: string,
   payload: Record<string, unknown> | null
 ): Promise<DocumentDiffAnchors> {
-  if (!isSupabaseConfigured() || !supabase) {
+  if (!isApiConfigured()) {
     return { previousDayDate: null, deltaBaselineDate: null };
   }
-  const sb = supabase;
+  const sb: SB = apiDb;
   const key = documentKey.toLowerCase();
   let deltaBaselineDate: string | null = null;
   try {
@@ -2069,8 +2049,8 @@ export async function loadDocumentDiff(
   payload: Record<string, unknown> | null,
   opts?: DocumentDiffLoadOptions
 ): Promise<DocumentDiffPair | null> {
-  if (!isSupabaseConfigured() || !supabase) return null;
-  const sb = supabase;
+  if (!isApiConfigured()) return null;
+  const sb: SB = apiDb;
   const compare = opts?.compare ?? 'previous_day';
   const customRaw = (opts?.customCompareDate ?? '').trim();
   const customOk = ISO_DATE_RE.test(customRaw) && customRaw !== targetDate ? customRaw : null;
