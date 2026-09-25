@@ -237,11 +237,15 @@ body {
   display: flex;
   flex-direction: column;
   gap: 0.5rem;
-  /* Full-bleed + full-height (#4429): the mosaic fills the sticky stage
-     corner to corner — no frame cap, no auto margins, no clamped band.
-     The stage is sticky 100vh flex, so 100vh fills it exactly; rows
-     flex-fill below. Hero and other sections keep their own frame. */
+  /* Rail-bounded (#4429): the mosaic spans rail to rail — never the full
+     viewport — with one page-pad of air inside each rail, the same grammar
+     every section uses (Tailwind preflight is border-box, so the padding
+     insets inside the max-width). Tiles size against the frame width, not
+     the window. Height still fills the sticky 100vh stage. */
   width: 100%;
+  max-width: calc(var(--frame-w) + 2 * var(--page-pad));
+  margin-inline: auto;
+  padding-inline: var(--page-pad);
   height: 100vh;
 }
 
