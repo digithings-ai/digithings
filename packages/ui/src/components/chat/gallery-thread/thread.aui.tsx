@@ -34,6 +34,7 @@ import { Button } from "../../../ui/button";
 import { DotMatrix } from "../DotMatrix";
 import { Skeleton } from "../../../ui/skeleton";
 import { cn } from "./cn";
+import { SkinCredit } from "../stock/skin-credit";
 import {
   ActionBarMorePrimitive,
   ActionBarPrimitive,
@@ -102,9 +103,7 @@ export type ThreadComponents = {
   /** Citation row (`source` parts): provider web search, RAG documents (#4552). */
   Source?: SourceMessagePartComponent | undefined;
   /**
-   * The credit line under the composer. The host supplies it so the surface
-   * reads as a digithings product; absent means no footer (the package does
-   * not own the credit copy).
+   * Optional footer slot below the composer; absent means no footer.
    */
   Footer?: ComponentType | undefined;
   ToolGroup?:
@@ -318,12 +317,22 @@ export const Thread: FC<ThreadProps> = ({
   );
 };
 
+/**
+ * Default branding footer: "powered by digichat" in normal flow below the
+ * composer in every state. This footer's `sticky bottom-0 mt-auto` docks it
+ * to the page bottom unconditionally, so in-flow is already bottom-pinned —
+ * an absolute overlay would paint over the composer (it did; the textbox
+ * cut the credit off in app, product, and embed modes). Hosts can still
+ * override the whole Footer slot.
+ */
+const ThreadFooter: FC = () => <SkinCredit />;
+
 const ThreadRoot: FC<{
   autoFocus: boolean;
   placeholder?: string | undefined;
   composerLayout: ComposerLayout;
 }> = ({ autoFocus, placeholder, composerLayout }) => {
-  const { Welcome = ThreadWelcome, Footer } =
+  const { Welcome = ThreadWelcome, Footer = ThreadFooter } =
     useContext(ThreadComponentsContext);
   const { className } = useContext(ThreadChromeContext);
 
@@ -376,7 +385,7 @@ const ThreadRoot: FC<{
             </ThreadPrimitive.Messages>
           </div>
 
-          <ThreadPrimitive.ViewportFooter className="aui-thread-viewport-footer digichat-thread__footer bg-background sticky bottom-0 mt-auto flex flex-col gap-4 overflow-visible pb-4 md:pb-6">
+          <ThreadPrimitive.ViewportFooter className="aui-thread-viewport-footer digichat-thread__footer bg-background sticky bottom-0 mt-auto flex flex-col gap-4 overflow-visible pb-2 md:pb-3">
             <ThreadScrollToBottom />
             <ThreadFollowupSuggestions />
             <AuiIf condition={isNewChatView}>
@@ -748,7 +757,7 @@ const ComposerSendControls: FC = () => {
   };
 
   return (
-    <div className="aui-composer-send-controls flex shrink-0 items-center gap-1.5">
+      <div className="aui-composer-send-controls ml-auto flex shrink-0 items-center gap-1.5">
       <AuiIf condition={(s) => s.thread.capabilities.dictation}>
         <AuiIf condition={(s) => s.composer.dictation == null}>
           <ComposerPrimitive.Dictate asChild>
@@ -831,6 +840,9 @@ const ComposerSendControls: FC = () => {
 };
 
 const ComposerAction: FC = () => {
+  // Send controls pin themselves right with ml-auto (not just this
+  // justify-between): when the deployment disables attachments,
+  // AddAttachment renders null and a lone child would collapse left.
   return (
     <div className="aui-composer-action-wrapper relative flex items-center justify-between">
       <ComposerAddAttachment />

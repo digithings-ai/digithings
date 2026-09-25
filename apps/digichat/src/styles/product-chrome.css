@@ -48,42 +48,8 @@
   --term-bg: var(--embed-canvas, #f1f0eb);
 }
 
-/* The credit sits in normal flow BELOW the composer, the way every catalog
-   skin places its own "can make mistakes" line — not an absolute overlay.
-   An overlay lost the race with the composer (it painted over the credit
-   once a turn was submitted, and the centered empty-thread composer
-   overlapped it at first paint), so the credit now takes real space and
-   nothing can overflow onto it (m2357).
 
-   The parent viewport footer spaces its children with `gap`, so the credit
-   starts one gap (~16px) below the composer. A smaller negative top margin
-   cancels most of that gap, leaving a deliberate hairline of air above the
-   credit; the matching bottom padding keeps the distance below it equal, so
-   the credit reads as attached to the composer without being glued to it
-   (m2558 equal distances, m2557 add a little air back).
 
-   No canvas of its own: it inherits whatever the chat surface paints, so it
-   reads as one surface with the transcript on every skin. */
-.dc-attribution {
-  /* Positioned so it can be lifted above the boot overlay: the overlay is an
-     opaque, absolutely-positioned sibling at `z-index: 40` (see
-     digichat-boot-loader.css), so an unpositioned credit would be painted
-     over and vanish for the whole loading animation. `position: relative`
-     plus a higher `z-index` keeps the credit on top of the overlay without
-     exempting the whole transcript column from the boot hide (m3). */
-  position: relative;
-  z-index: 60;
-  margin: -0.5rem 0 0;
-  padding: 0.25rem 0.75rem 0.25rem;
-  text-align: center;
-  font-size: 0.68rem;
-  line-height: 1.4;
-  color: color-mix(in oklch, var(--credit-ink, var(--muted-foreground)) 70%, transparent);
-}
-.dc-attribution a {
-  color: color-mix(in oklch, var(--credit-ink, var(--muted-foreground)) 90%, transparent);
-  text-decoration: underline;
-}
 
 /* The boot overlay paints the theme surface while the chain runs; wide/page
    embeds paint no canvas of their own (the host page shows through), so the
@@ -153,12 +119,10 @@
   background: var(--embed-canvas, #121417);
 }
 
-/* Collapse the sticky thread footer's bottom padding (was 24px) so the
-   in-flow turn counter hugs the composer; no overlap with its background.
-   The credit's own bottom padding still supplies its equal air below. */
-.dc-embed-shell[data-skin-canvas="1"] .aui-thread-viewport-footer {
-  padding-bottom: 0.25rem;
-}
+/* Footer bottom air is NOT collapsed here: the thread footer owns its own
+   padding, shared by catalog, product, and embed. (The old 0.25rem collapse
+   existed so the host-level turn counter hugged the composer; the counter
+   keeps its own spacing and the footer stays identical everywhere.) */
 
 /* Terminal block caret: engines that support `caret-shape: block` (Chromium)
    keep their native block caret; engines that do not get the native caret made

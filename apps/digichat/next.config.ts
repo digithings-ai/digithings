@@ -48,6 +48,34 @@ const nextConfig: NextConfig = {
       },
     ];
   },
+  /**
+   * Compat shims (single-route plan, Step 5). `/baseline` is dev-only with no
+   * external contract, so it collapses into the single route (Next merges the
+   * query: `/baseline?skin=x` → `/?mode=catalog&skin=x`). `/embed` keeps
+   * serving directly: production splits `/` (Pages) from `/embed*`
+   * (Container), so an `/embed` redirect would strand tenant iframes on
+   * Pages. permanent:false → 307 (method-preserving).
+   */
+  async redirects() {
+    return [
+      { source: "/baseline", destination: "/?mode=catalog", permanent: false },
+      { source: "/baseline/", destination: "/?mode=catalog", permanent: false },
+    ];
+  },
+  /**
+   * Stable embed alias (single-route unification). `/embed` is served
+   * INTERNALLY from the single route (`/?mode=embed`) — no 307, so the
+   * browser URL, query (?host=, ?token=), edge routing (Container), tenant
+   * iframes, and widget snippets all behave exactly as before. One
+   * implementation serves every spelling; `/?mode=embed` is canonical for
+   * new single-server integrations.
+   */
+  async rewrites() {
+    return [
+      { source: "/embed", destination: "/?mode=embed" },
+      { source: "/embed/", destination: "/?mode=embed" },
+    ];
+  },
 };
 
 export default nextConfig;

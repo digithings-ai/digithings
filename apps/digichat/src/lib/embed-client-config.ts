@@ -27,7 +27,10 @@ import {
   BASELINE_EMBED_WELCOME,
   BASELINE_EMBED_WELCOME_BODY,
 } from "@/lib/baseline-embed";
-import { defaultThreadSkinForTenant, type ThreadSkin } from "@/lib/thread-skins";
+import {
+  defaultThreadSkinForTenant,
+  type ThreadSkin,
+} from "@digithings/ui/chat/skins";
 
 export type EmbedTenantClientConfig = {
   slug: string;

@@ -22,7 +22,7 @@ import { createPortal } from "react-dom";
 import { CircleIcon } from "lucide-react";
 import { Button, Input, Label } from "@digithings/ui/ui";
 import { nextPaletteIndex } from "@digithings/digichat-ui";
-import { useEmbedChatPrefs } from "@/components/stock/embed-chat-prefs";
+import { useEmbedChatPrefs } from "@digithings/ui/chat/stock";
 import {
   applyWellKnownMcp,
   wellKnownMcpGrouped,
