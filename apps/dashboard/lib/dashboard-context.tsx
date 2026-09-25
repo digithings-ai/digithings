@@ -31,19 +31,22 @@ const DashboardContext = createContext<DashboardContextValue | null>(null);
 export function DashboardProvider({ children }: { children: ReactNode }) {
   const [data, setData] = useState<DashboardData | null>(null);
   const [api, setApi] = useState<DashboardApiData | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [reachable, setReachable] = useState(true);
+  // The Workers API base URL is static per session, so the unconfigured state
+  // is set lazily here instead of via setState inside the effect below
+  // (react-hooks/set-state-in-effect).
+  const [loading, setLoading] = useState(() => isApiConfigured());
+  const [error, setError] = useState<string | null>(() =>
+    isApiConfigured()
+      ? null
+      : 'Dashboard API is not configured (NEXT_PUBLIC_DASHBOARD_API_URL).',
+  );
+  const [reachable, setReachable] = useState(() => isApiConfigured());
 
   useEffect(() => {
     // The Workers API is required: both the long-tail tables (via
     // getFullDashboardData) and the specific-route payloads come from it.
-    if (!isApiConfigured()) {
-      setReachable(false);
-      setError('Dashboard API is not configured (NEXT_PUBLIC_DASHBOARD_API_URL).');
-      setLoading(false);
-      return;
-    }
+    // Unconfigured state is already reflected in the initial values above.
+    if (!isApiConfigured()) return;
     Promise.all([
       getFullDashboardData(),
       apiGet<ApiEnvelope<DashboardApiData['portfolio']>>('/portfolio').then((r) => r.data),
