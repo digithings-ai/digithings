@@ -28,9 +28,9 @@ config, resolved to a `ThreadSkin` id. The gallery is the surface that exercises
 
 | Layer | What it is | Where it lives |
 |-------|-----------|----------------|
-| Skin registry | The 12 skin ids + parsing/defaults | [`apps/digichat/src/lib/thread-skins.ts`](../../apps/digichat/src/lib/thread-skins.ts) |
-| Skin dispatch | id → React component | [`apps/digichat/src/components/assistant-ui/skins/index.tsx`](../../apps/digichat/src/components/assistant-ui/skins/index.tsx) |
-| Skin implementations | The components themselves | `apps/digichat/src/components/assistant-ui/skins/` |
+| Skin registry | The 12 skin ids + parsing/defaults | [`packages/ui/src/components/chat/skins/thread-skins.ts`](../../packages/ui/src/components/chat/skins/thread-skins.ts) |
+| Skin dispatch | id → React component | [`packages/ui/src/components/chat/skins/index.ts`](../../packages/ui/src/components/chat/skins/index.ts) |
+| Skin implementations | The components themselves | `packages/ui/src/components/chat/skins/` |
 | Catalog page | Selector chrome + runtime | `apps/digichat/src/app/(baseline)/baseline/` |
 | Backend | One BFF route, one upstream | `apps/digichat/src/app/api/baseline-chat/route.ts` |
 
@@ -169,16 +169,16 @@ change is enough to test a feature across skins without touching a component.
 ## Adding or changing a skin
 
 **Modify an existing skin:** edit its component under
-`apps/digichat/src/components/assistant-ui/skins/`. The gallery picks it up
+`packages/ui/src/components/chat/skins/`. The gallery picks it up
 immediately (HMR); nothing else to register.
 
 **Add a new skin:**
 
 1. Create the component at
-   `apps/digichat/src/components/assistant-ui/skins/<id>.tsx` (or a directory,
+   `packages/ui/src/components/chat/skins/<id>.tsx` (or a directory,
    if it ships several files).
 2. Add the id to `THREAD_SKINS` in
-   `apps/digichat/src/lib/thread-skins.ts` (lowercase, dashes).
+   `packages/ui/src/components/chat/skins/thread-skins.ts` (lowercase, dashes).
 3. Add its branch to `ThreadSkinView` in `skins/index.tsx` — or to
    `CLONE_THREADS` if it is a clone-skin variant. Note the final `return` is the
    `ProductPageAssistant` fallback, so an unregistered id silently renders that;
@@ -189,7 +189,7 @@ immediately (HMR); nothing else to register.
    new skin appears in the selector with no UI change.
 6. Keep the skin tests green (`skins/index.test.tsx`,
    `skins-isolation.test.ts`) and note provenance in
-   `apps/digichat/src/components/assistant-ui/skins/SOURCE.md`.
+   `packages/ui/src/components/chat/skins/SOURCE.md`.
 
 ---
 
@@ -285,13 +285,13 @@ decision.
 
 | Question | File |
 |----------|------|
-| What skins exist, what is the default? | `apps/digichat/src/lib/thread-skins.ts` |
-| Which component renders skin X? | `apps/digichat/src/components/assistant-ui/skins/index.tsx` |
+| What skins exist, what is the default? | `packages/ui/src/components/chat/skins/thread-skins.ts` |
+| Which component renders skin X? | `packages/ui/src/components/chat/skins/index.ts` |
 | Where is the catalog page / selector? | `apps/digichat/src/app/(baseline)/baseline/baseline-client.tsx` |
 | Where is the backend wired? | `apps/digichat/src/app/api/baseline-chat/route.ts`, `apps/digichat/src/lib/baseline-preview.ts` |
 | Where do tools / menus / features come from? | `apps/digichat/src/components/stock/stock-chat-prefs-host.tsx`, `apps/digichat/src/lib/deploy-config/client-projection.ts` |
 | Where does the first-party theme live? | `packages/ui/src/styles/chat-digichat.css`, `packages/ui/src/styles/chat-aui.css` |
-| Skin provenance / vendored sources | `apps/digichat/src/components/assistant-ui/skins/SOURCE.md` |
+| Skin provenance / vendored sources | `packages/ui/src/components/chat/skins/SOURCE.md` |
 
 Related: [`STOCK-SMOKE.md`](STOCK-SMOKE.md) (manual checklist on the product
 `/embed` path), [`DESIGN-THEMES.md`](DESIGN-THEMES.md) (theme tokens),
