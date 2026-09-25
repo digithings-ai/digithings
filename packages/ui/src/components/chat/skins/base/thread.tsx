@@ -10,7 +10,7 @@ import { DotMatrix } from "./ui/dot-matrix";
 import { MessageTiming } from "./elements/message-timing.aui";
 import { ToolFallback } from "../../stock/tool-fallback.aui";
 import { MessageError } from "../../stock/message-error.aui";
-import { CreditFooter } from "../../stock";
+
 import {
   ToolGroupContent,
   ToolGroupRoot,
@@ -194,7 +194,7 @@ const Thread: FC = () => {
         >
           <ThreadScrollToBottom />
           <Composer />
-          <CreditFooter />
+
           <AuiIf condition={isNewChatView}>
             <div className="aui-thread-welcome-suggestions-shell min-h-19">
               <AuiIf condition={(s) => s.composer.isEmpty}>

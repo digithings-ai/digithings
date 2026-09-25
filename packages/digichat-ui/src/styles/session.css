@@ -583,18 +583,6 @@
   color: var(--down, #e0654b);
 }
 
-.dc-attribution {
-  border-top: 1px solid var(--hair);
-  padding: 0.5rem 0.75rem;
-  text-align: center;
-  font-size: 0.68rem;
-  color: var(--ink-soft);
-}
-.dc-attribution a {
-  color: var(--accent);
-  text-decoration: underline;
-}
-
 .dc-session-main {
   display: flex;
   flex: 1;

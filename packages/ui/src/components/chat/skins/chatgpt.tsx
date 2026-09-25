@@ -38,7 +38,7 @@ import {
 import { MarkdownText } from "../stock/markdown-text";
 import { ToolFallback } from "../stock/tool-fallback.aui";
 import { useComposerCopy } from "../stock";
-import { CreditFooter } from "../stock";
+
 
 export const ChatGPT: FC = () => {
   const { placeholder } = useComposerCopy(
@@ -64,7 +64,7 @@ export const ChatGPT: FC = () => {
             <ThreadPrimitive.ViewportFooter className="sticky bottom-0 mx-auto mt-auto flex w-full max-w-3xl flex-col gap-2 overflow-visible rounded-t-3xl bg-white pb-2 dark:bg-black">
               <ThreadScrollToBottom />
               <Composer placeholder={placeholder} />
-              <CreditFooter />
+
             </ThreadPrimitive.ViewportFooter>
           </ThreadPrimitive.Viewport>
         </AuiIf>
@@ -84,7 +84,7 @@ const EmptyState: FC = () => {
           {welcome}
         </h1>
         <Composer placeholder={placeholder} />
-        <CreditFooter />
+
       </div>
     </div>
   );

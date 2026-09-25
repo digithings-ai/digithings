@@ -24,7 +24,7 @@ import {
   type ComposerLayout,
   type ThreadSlashTrigger,
 } from "../DigichatThread";
-import { CreditFooter } from "../stock/credit-footer";
+
 import {
   useComposerCopy,
   useSkinChrome,
@@ -142,7 +142,7 @@ export type DigichatSkinOptions = {
  * through to product-page-assistant. Always left-aligned regardless of YAML.
  */
 /** Module-scope so it is a stable component reference, not recreated per render. */
-const DigichatFooter = () => <CreditFooter />;
+
 
 export function DigichatSkin({
   composerLayout,
@@ -403,7 +403,7 @@ export function DigichatSkin({
       }
       reasoningMode={reasoningUi.mode}
       toolCallsMode={toolCallsUi.mode}
-      components={{ Footer: DigichatFooter }}
+
     />
   );
 }

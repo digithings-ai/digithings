@@ -3,7 +3,7 @@
  * (skin-chrome, message-error, embed-chat-prefs, prefs-host) get their cuts in
  * Step 3. Skins + the rest of stock/ move here in Step 4.
  */
-export { CreditFooter } from "./credit-footer";
+
 export {
   DEFAULT_DEPLOY_UI,
   DeployUiProvider,

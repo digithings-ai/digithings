@@ -28,7 +28,6 @@ describe("skins land in the package under components/chat", () => {
     );
     expect(existsSync(join(here, "skins/digichat.tsx"))).toBe(true);
     expect(existsSync(join(here, "stock/skin-chrome.tsx"))).toBe(true);
-    expect(existsSync(join(here, "stock/credit-footer.tsx"))).toBe(true);
     expect(existsSync(join(here, "stock/stock-send-gate.tsx"))).toBe(true);
     expect(existsSync(join(here, "stock/deploy-ui-context.tsx"))).toBe(true);
     expect(existsSync(join(here, "stock/thread.aui.tsx"))).toBe(true);

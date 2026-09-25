@@ -21,7 +21,7 @@ import {
 } from "@assistant-ui/react";
 import {
   ThreadSkinView,
-  skinCreditStyle,
+
 } from "@digithings/ui/chat/skins";
 import {
   StockSendGateProvider,
@@ -257,7 +257,7 @@ export function DigiChatHost({
               {ownsPage ? null : sideSlot}
               <div
                 className="relative flex min-h-0 min-w-0 flex-1 flex-col"
-                style={skinCreditStyle(clientConfig.chrome.skin, clientConfig.chrome.theme)}
+
               >
                 {ownsPage || clientConfig.chrome.skin === "digichat" ? null : headerSlot}
                 {!ownsPage && sessionKey && clientConfig.chrome.mode === "app" ? (

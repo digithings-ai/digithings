@@ -28,7 +28,7 @@ import { Skeleton } from "./ui/skeleton";
 import { cn } from "@/lib/utils";
 import { useStockComposerGateSubmit } from "./stock-send-gate";
 import { MessageError } from "./message-error.aui";
-import { CreditFooter } from "./credit-footer";
+
 import { useDisclosureUi, useDeployUi } from "./deploy-ui-context";
 import {
   ActionBarMorePrimitive,
@@ -81,9 +81,8 @@ export type ThreadComponents = {
   AssistantMessage?: ComponentType | undefined;
   Welcome?: ComponentType | undefined;
   /**
-   * The credit line under the composer. Every skin hosts one so the surface
-   * reads as a digithings product; hosts override it to change or suppress it
-   * (m2357).
+   * Optional footer slot below the composer (credit removed by owner;
+   * hosts may render their own footer here).
    */
   Footer?: ComponentType | undefined;
   ToolFallback?: ToolCallMessagePartComponent | undefined;
@@ -241,13 +240,9 @@ const ThreadScrollToBottom: FC = () => {
   );
 };
 
-/**
- * Default credit line. The catalog skins each carried their own "can make
- * mistakes" disclaimer; this replaces every one of them with the digithings
- * credit so the surface reads as one product (m2357). A host can override or
- * suppress it through `components.Footer`.
- */
-const ThreadFooter: FC = () => <CreditFooter />;
+
+// Credit removed by owner (re-add cleanly later); the Footer slot stays for hosts.
+const ThreadFooter: FC = () => null;
 
 const ThreadWelcome: FC = () => {
   return (

@@ -102,9 +102,7 @@ export type ThreadComponents = {
   /** Citation row (`source` parts): provider web search, RAG documents (#4552). */
   Source?: SourceMessagePartComponent | undefined;
   /**
-   * The credit line under the composer. The host supplies it so the surface
-   * reads as a digithings product; absent means no footer (the package does
-   * not own the credit copy).
+   * Optional footer slot below the composer; absent means no footer.
    */
   Footer?: ComponentType | undefined;
   ToolGroup?:

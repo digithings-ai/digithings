@@ -30,7 +30,7 @@ export {
   isFramedPresentation,
   isThreadSkin,
   parseThreadSkin,
-  skinCreditStyle,
+
   skinOwnsPageChrome,
   threadSkinChoices,
   type CloneSkin,

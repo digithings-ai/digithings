@@ -18,7 +18,7 @@ import { p } from "@/lib/base-path";
 import { cn } from "@/lib/utils";
 import {
   parseThreadSkin,
-  skinCreditStyle,
+
   THREAD_SKINS,
 } from "@digithings/ui/chat/skins";
 import { SkinRuntimeProvider } from "@digithings/ui/chat/stock";
@@ -174,14 +174,10 @@ function BaselineClientInner() {
             {theme === "dark" ? "light" : "dark"}
           </a>
         </nav>
-        {/* The credit renders inside each skin's own Thread (`components.Footer`),
-            below its composer, so it tracks the skin's canvas instead of the
-            page. `skinCreditStyle` still supplies the canvas literal the catalog
-            skin paints with its own Tailwind classes, which the Thread footer
-            inherits for its text colour (m2357). */}
+        {/* Thread canvas wrapper. */}
         <div
           className="relative flex min-h-0 flex-1 flex-col bg-background text-foreground"
-          style={skinCreditStyle(skin, theme)}
+
         >
           <StockChatPrefsHost value={prefsApi} panes={panes}>
             <SkinRuntimeProvider value={SKIN_RUNTIME}>
