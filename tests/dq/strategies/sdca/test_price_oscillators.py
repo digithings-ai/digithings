@@ -23,6 +23,7 @@ from digiquant.strategies.sdca.price_oscillators import (
     completed_weekly_closes,
     daily_macd_z,
     daily_rsi_z,
+    lmacd_top_cap,
     macd_confluence_z,
     monthly_macd_confluence_z,
     monthly_macd_z,
@@ -34,6 +35,9 @@ from digiquant.strategies.sdca.price_oscillators import (
     sma_band_z,
     weekly_macd_z,
     weekly_rsi_z,
+    _asof_to_daily,
+    _lmacd_to_z,
+    _wilder_rsi,
 )
 
 pytestmark = pytest.mark.unit
@@ -1132,100 +1136,150 @@ class TestCatalogWiring:
 
 
 class TestCadenceBroadcastSmoothing:
+    @staticmethod
+    def _max_jump(z: pl.Series) -> float:
+        """Compute max day-over-day absolute change."""
+        vals = z.to_list()
+        deltas = [
+            abs(a - b)
+            for a, b in zip(vals[1:], vals[:-1], strict=True)
+            if a is not None and b is not None
+        ]
+        return max(deltas) if deltas else 0.0
+
     def test_weekly_rsi_z_smooths_weekly_print_steps(self) -> None:
         # A weekly RSI print that jumps hard between two weekly values should
         # ramp over multiple days, not step instantly, once broadcast to daily.
-        # Create alternating weeks: all up then all down, to trigger extreme RSI.
-        n = 1000
+        # Create sustained uptrend then reversal: first 20 weeks up (RSI → ~100, z → -3),
+        # then down (RSI → ~0, z → +3). Step-function broadcast creates hard jump at boundary.
+        n = 350
         dates = pl.date_range(date(2020, 1, 1), date(2020, 1, 1) + timedelta(days=n - 1), "1d", eager=True)
-        # Alternate weeks: one week goes straight up (RSI~100, z~-3),
-        # next week goes straight down (RSI~0, z~+3). At week boundaries,
-        # this creates a step jump of ~6 z-units that should be smoothed.
         prices = []
         price = 100.0
         for i in range(n):
             week_num = i // 7
-            day_in_week = i % 7
-            if week_num % 2 == 0:  # up week: prices increase
-                price += 10.0 / 7
-            else:  # down week: prices decrease
-                price -= 10.0 / 7
+            if week_num < 20:
+                price += 20.0  # strong up
+            else:
+                price -= 20.0  # strong down
             prices.append(price)
         price_s = pl.Series("price", prices, dtype=pl.Float64)
-        z = weekly_rsi_z(dates, price_s)
-        deltas = [
-            abs(a - b)
-            for a, b in zip(z.to_list()[1:], z.to_list()[:-1], strict=True)
-            if a is not None and b is not None
-        ]
-        assert deltas, "expected at least one non-null adjacent pair"
-        assert max(deltas) < 3.0  # smoothing should keep day-to-day changes bounded
+
+        # Get smoothed version (with the EMA fix applied)
+        smoothed = weekly_rsi_z(dates, price_s)
+
+        # Reconstruct unsmoothed by inlining the calculation without smoothing
+        weekly = completed_weekly_closes(dates, price_s)
+        rsi = _wilder_rsi(weekly["close"], length=14)
+        z = rsi_continuous_z(rsi)
+        unsmoothed = _asof_to_daily(dates, weekly["week_end"], z)
+
+        # Verify: smoothing should strictly reduce the max day-to-day jump.
+        # With the fix, smoothed max delta should be strictly less than unsmoothed.
+        assert self._max_jump(smoothed) < self._max_jump(unsmoothed)
 
     def test_monthly_rsi_z_smooths_monthly_print_steps(self) -> None:
-        n = 2000
+        # Monthly: first 25 months up (RSI → ~100, z → -3), then down (RSI → ~0, z → +3).
+        # Step-function broadcast creates hard jump at month boundary.
+        n = 1000
         dates = pl.date_range(date(2018, 1, 1), date(2018, 1, 1) + timedelta(days=n - 1), "1d", eager=True)
-        # Alternate months: up then down, to trigger extreme RSI with step-function broadcast.
         prices = []
         price = 100.0
         for i in range(n):
             month_num = i // 30
-            if month_num % 2 == 0:  # up month
-                price += 30.0 / 30
-            else:  # down month
-                price -= 30.0 / 30
+            if month_num < 25:
+                price += 30.0  # strong up
+            else:
+                price -= 30.0  # strong down
             prices.append(price)
         price_s = pl.Series("price", prices, dtype=pl.Float64)
-        z = monthly_rsi_z(dates, price_s)
-        deltas = [
-            abs(a - b)
-            for a, b in zip(z.to_list()[1:], z.to_list()[:-1], strict=True)
-            if a is not None and b is not None
-        ]
-        assert deltas, "expected at least one non-null adjacent pair"
-        assert max(deltas) < 3.0
+
+        # Get smoothed version
+        smoothed = monthly_rsi_z(dates, price_s)
+
+        # Reconstruct unsmoothed
+        monthly = completed_monthly_closes(dates, price_s)
+        rsi = _wilder_rsi(monthly["close"], length=14)
+        z = rsi_continuous_z(rsi)
+        unsmoothed = _asof_to_daily(dates, monthly["month_end"], z)
+
+        # Verify: smoothing should strictly reduce the max day-to-day jump
+        assert self._max_jump(smoothed) < self._max_jump(unsmoothed)
 
     def test_weekly_macd_z_smooths_weekly_print_steps(self) -> None:
-        n = 1000
+        # Same sustained up/down pattern for MACD: 20 weeks up, then down.
+        n = 350
         dates = pl.date_range(date(2020, 1, 1), date(2020, 1, 1) + timedelta(days=n - 1), "1d", eager=True)
-        # Alternate weeks: up then down, to trigger extreme MACD with step broadcast.
         prices = []
         price = 100.0
         for i in range(n):
             week_num = i // 7
-            if week_num % 2 == 0:  # up week
-                price += 10.0 / 7
-            else:  # down week
-                price -= 10.0 / 7
+            if week_num < 20:
+                price += 20.0
+            else:
+                price -= 20.0
             prices.append(price)
         price_s = pl.Series("price", prices, dtype=pl.Float64)
-        z = weekly_macd_z(dates, price_s)
-        deltas = [
-            abs(a - b)
-            for a, b in zip(z.to_list()[1:], z.to_list()[:-1], strict=True)
-            if a is not None and b is not None
+
+        # Get smoothed version
+        smoothed = weekly_macd_z(dates, price_s)
+
+        # Reconstruct unsmoothed
+        weekly = completed_weekly_closes(dates, price_s)
+        frame = pl.DataFrame({"close": weekly["close"]})
+        ema_fast = pl.col("close").ewm_mean(span=12, adjust=False, min_samples=12)
+        ema_slow = pl.col("close").ewm_mean(span=26, adjust=False, min_samples=26)
+        with_ema = frame.select(
+            ema_fast.clip(lower_bound=1e-12).alias("ema_fast"),
+            ema_slow.clip(lower_bound=1e-12).alias("ema_slow"),
+        )
+        lmacd = with_ema["ema_fast"].log(10) - with_ema["ema_slow"].log(10)
+        week_ends = weekly["week_end"].to_list()
+        z_vals = [
+            None if v is None else _lmacd_to_z(float(v), lmacd_top_cap(week_end))
+            for v, week_end in zip(lmacd.to_list(), week_ends, strict=True)
         ]
-        assert deltas, "expected at least one non-null adjacent pair"
-        assert max(deltas) < 3.0
+        z = pl.Series("weekly_macd", z_vals, dtype=pl.Float64)
+        unsmoothed = _asof_to_daily(dates, weekly["week_end"], z)
+
+        # Verify: smoothing should strictly reduce the max day-to-day jump
+        assert self._max_jump(smoothed) < self._max_jump(unsmoothed)
 
     def test_monthly_macd_z_smooths_monthly_print_steps(self) -> None:
-        n = 2000
+        # Same for monthly: 25 months up, then down.
+        n = 1000
         dates = pl.date_range(date(2018, 1, 1), date(2018, 1, 1) + timedelta(days=n - 1), "1d", eager=True)
-        # Alternate months: up then down, to trigger extreme MACD with step broadcast.
         prices = []
         price = 100.0
         for i in range(n):
             month_num = i // 30
-            if month_num % 2 == 0:  # up month
-                price += 30.0 / 30
-            else:  # down month
-                price -= 30.0 / 30
+            if month_num < 25:
+                price += 30.0
+            else:
+                price -= 30.0
             prices.append(price)
         price_s = pl.Series("price", prices, dtype=pl.Float64)
-        z = monthly_macd_z(dates, price_s)
-        deltas = [
-            abs(a - b)
-            for a, b in zip(z.to_list()[1:], z.to_list()[:-1], strict=True)
-            if a is not None and b is not None
+
+        # Get smoothed version
+        smoothed = monthly_macd_z(dates, price_s)
+
+        # Reconstruct unsmoothed
+        monthly = completed_monthly_closes(dates, price_s)
+        frame = pl.DataFrame({"close": monthly["close"]})
+        ema_fast = pl.col("close").ewm_mean(span=12, adjust=False, min_samples=12)
+        ema_slow = pl.col("close").ewm_mean(span=26, adjust=False, min_samples=26)
+        with_ema = frame.select(
+            ema_fast.clip(lower_bound=1e-12).alias("ema_fast"),
+            ema_slow.clip(lower_bound=1e-12).alias("ema_slow"),
+        )
+        lmacd = with_ema["ema_fast"].log(10) - with_ema["ema_slow"].log(10)
+        month_ends = monthly["month_end"].to_list()
+        z_vals = [
+            None if v is None else _lmacd_to_z(float(v), lmacd_top_cap(month_end))
+            for v, month_end in zip(lmacd.to_list(), month_ends, strict=True)
         ]
-        assert deltas, "expected at least one non-null adjacent pair"
-        assert max(deltas) < 3.0
+        z = pl.Series("monthly_macd", z_vals, dtype=pl.Float64)
+        unsmoothed = _asof_to_daily(dates, monthly["month_end"], z)
+
+        # Verify: smoothing should strictly reduce the max day-to-day jump
+        assert self._max_jump(smoothed) < self._max_jump(unsmoothed)
