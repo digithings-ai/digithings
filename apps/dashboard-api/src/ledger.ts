@@ -8,7 +8,12 @@
  *
  * Self-contained: no worker runtime imports, no secrets, no network.
  * Slice 0002 (worker scaffold) owns `src/index.ts` wiring; this module drops
- * in by importing `parseLedgerQuery` / `buildLedgerPage` / `errorEnvelope`.
+ * in at merge via `LEDGER_ROUTE` + `tryHandleLedger` (the mount function).
+ * Nothing here imports `index.ts` — the contract surface only. The book
+ * reader is injected as a minimal structural `LedgerBook` (same shape as the
+ * scaffold's rest client), so tests run on a fake and merge supplies the
+ * service-role reader. Reconcile the duplicated envelope/provenance shapes
+ * with `index.ts` helpers at merge.
  *
  * All digi product names stay lowercase.
  */
@@ -418,4 +423,135 @@ export function buildLedgerPage(input: LedgerPageInput): LedgerPage {
       provenance,
     },
   };
+}
+
+// ---------------------------------------------------------------------------
+// mount function (merge-time wiring; no index.ts import)
+// ---------------------------------------------------------------------------
+
+export const LEDGER_ROUTE = '/ledger';
+
+/** Page size / row cap mirror the dashboard client precedent (no new budgets). */
+export const LEDGER_FETCH_PAGE = 2500;
+export const LEDGER_FETCH_MAX = 80000;
+
+/**
+ * Minimal structural book reader — same shape as the scaffold rest client, so
+ * merge passes it straight through. Never constructed here (no secrets).
+ */
+export type LedgerBook = {
+  getJson(path: string): Promise<unknown>;
+};
+
+function ledgerEventPath(offset: number, query: LedgerQuery): string {
+  let path =
+    `position_events?select=id,date,ticker,event,weight_pct,prev_weight_pct,` +
+    `price,thesis_id,reason&workspace_id=eq.${HOUSE_WORKSPACE_ID}` +
+    `&order=date.desc&limit=${LEDGER_FETCH_PAGE}&offset=${offset}`;
+  if (query.asOf != null) path += `&date=lte.${query.asOf}`;
+  if (query.ticker != null) path += `&ticker=eq.${query.ticker}`;
+  return path;
+}
+
+function ledgerMarksPath(offset: number, asOf: string | null): string {
+  let path =
+    `positions?select=date,ticker,entry_price` +
+    `&workspace_id=eq.${HOUSE_WORKSPACE_ID}` +
+    `&order=date.desc&limit=${LEDGER_FETCH_PAGE}&offset=${offset}`;
+  if (asOf != null) path += `&date=lte.${asOf}`;
+  return path;
+}
+
+async function pagedBookRead<T>(book: LedgerBook, buildPath: (offset: number) => string): Promise<T[]> {
+  const out: T[] = [];
+  let offset = 0;
+  for (;;) {
+    const page = (await book.getJson(buildPath(offset))) as T[];
+    if (!Array.isArray(page) || page.length === 0) break;
+    out.push(...page);
+    offset += page.length;
+    if (page.length < LEDGER_FETCH_PAGE || out.length >= LEDGER_FETCH_MAX) break;
+  }
+  return out.slice(0, LEDGER_FETCH_MAX);
+}
+
+/** House-book `position_events` rows for the query (paged, mirrors the client). */
+export function fetchLedgerRows(book: LedgerBook, query: LedgerQuery): Promise<PositionEventRow[]> {
+  return pagedBookRead<PositionEventRow>(book, (offset) => ledgerEventPath(offset, query));
+}
+
+/** Committed-book cost-basis marks (`positions.entry_price`) for the query. */
+export function fetchLedgerEntryMarks(
+  book: LedgerBook,
+  asOf: string | null,
+): Promise<EntryPriceMark[]> {
+  return pagedBookRead<EntryPriceMark>(book, (offset) => ledgerMarksPath(offset, asOf));
+}
+
+function normalizeLedgerPath(pathname: string): string {
+  if (pathname.length > 1 && pathname.endsWith('/')) return pathname.slice(0, -1);
+  return pathname || '/';
+}
+
+function toResponse(page: LedgerPage): Response {
+  return Response.json(page.body, { status: page.status });
+}
+
+function toErrorResponse(error: LedgerError): Response {
+  return Response.json(error.body, { status: error.status });
+}
+
+/**
+ * Mount function for GET /ledger. Returns null when the request is not this
+ * route (the scaffold router keeps owning 404s/methods). Otherwise parses,
+ * reads the house book, and returns the contract §6.8 response. Required
+ * upstream reads fail closed with `upstream_empty` — never synthesized.
+ */
+export async function tryHandleLedger(request: Request, book: LedgerBook): Promise<Response | null> {
+  const url = new URL(request.url);
+  if (request.method !== 'GET' || normalizeLedgerPath(url.pathname) !== LEDGER_ROUTE) {
+    return null;
+  }
+  const parsed = parseLedgerQuery({
+    asOf: url.searchParams.get('asOf'),
+    retrieval_pin: url.searchParams.get('retrieval_pin'),
+    ticker: url.searchParams.get('ticker'),
+    limit: url.searchParams.get('limit'),
+    cursor: url.searchParams.get('cursor'),
+  });
+  if (!('query' in parsed)) return toErrorResponse(parsed.error);
+  const { query } = parsed;
+
+  let rows: PositionEventRow[];
+  let marks: EntryPriceMark[];
+  try {
+    [rows, marks] = await Promise.all([
+      fetchLedgerRows(book, query),
+      fetchLedgerEntryMarks(book, query.asOf),
+    ]);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    return toErrorResponse(
+      errorEnvelope('upstream_empty', `book upstream read failed: ${message}`, query.retrievalPin, 502),
+    );
+  }
+
+  let tipDate: string | null = null;
+  for (const row of rows) {
+    if (typeof row.date === 'string' && (tipDate == null || row.date > tipDate)) tipDate = row.date;
+  }
+  return toResponse(
+    buildLedgerPage({
+      rows,
+      positions: marks,
+      query,
+      provenance: {
+        source: 'position_events+positions',
+        tip_date: tipDate,
+        contract: null,
+        seam: false,
+        marks: marks.length > 0 ? 'stored' : 'unavailable',
+      },
+    }),
+  );
 }

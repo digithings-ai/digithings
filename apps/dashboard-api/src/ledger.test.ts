@@ -5,11 +5,14 @@ import {
   buildLedgerPage,
   decodeLedgerCursor,
   encodeLedgerCursor,
+  HOUSE_WORKSPACE_ID,
   ledgerEventEconomics,
   parseLedgerQuery,
   realizedReturnVsAverageEntry,
   soldWeightPct,
+  tryHandleLedger,
   type EntryPriceMark,
+  type LedgerBook,
   type LedgerProvenance,
   type PositionEventRow,
 } from './ledger';
@@ -348,5 +351,122 @@ describe('buildLedgerPage', () => {
     expect(page.body.data.events).toEqual([]);
     expect(page.body.data.next_cursor).toBeNull();
     expect(page.body.provenance).toEqual(PROVENANCE);
+  });
+});
+
+describe('tryHandleLedger (mount function)', () => {
+  const EVENTS: PositionEventRow[] = [
+    { date: '2026-09-03', ticker: 'XLF', event: 'TRIM', weight_pct: 4.9, prev_weight_pct: 9.9, price: 54.1, thesis_id: null, reason: null },
+    { date: '2026-08-20', ticker: 'GLD', event: 'TRIM', weight_pct: 5, prev_weight_pct: 10, price: 199.5, thesis_id: null, reason: null },
+    { date: '2026-08-01', ticker: 'GLD', event: 'HOLD', weight_pct: 5, prev_weight_pct: 5, price: null, thesis_id: null, reason: null },
+    { date: '2026-06-01', ticker: 'GLD', event: 'OPEN', weight_pct: 10, prev_weight_pct: 0, price: 180, thesis_id: null, reason: null },
+  ];
+  const MARKS = [
+    { date: '2026-08-01', ticker: 'XLF', entry_price: 52.0 },
+    { date: '2026-07-15', ticker: 'GLD', entry_price: 190 },
+  ];
+
+  /** In-memory fake of the scaffold rest client shape. */
+  function fakeBook(): LedgerBook & { seen: string[] } {
+    const seen: string[] = [];
+    return {
+      seen,
+      async getJson(path: string): Promise<unknown> {
+        seen.push(path);
+        const [, query = ''] = path.split('?');
+        const params = new URLSearchParams(query);
+        if (!params.get('workspace_id')?.includes(HOUSE_WORKSPACE_ID)) {
+          throw new Error('missing house workspace pin');
+        }
+        const table = path.split('?')[0];
+        const source = table === 'position_events' ? EVENTS : MARKS;
+        let rows = [...source];
+        const lte = params.get('date')?.match(/^lte\.(.+)$/)?.[1];
+        if (lte) rows = rows.filter((r) => (r as { date: string }).date <= (lte as string));
+        const ticker = params.get('ticker')?.match(/^eq\.(.+)$/)?.[1];
+        if (ticker) rows = rows.filter((r) => (r as { ticker: string }).ticker === ticker);
+        const limit = Number(params.get('limit') ?? '1000');
+        const offset = Number(params.get('offset') ?? '0');
+        return rows.slice(offset, offset + limit);
+      },
+    };
+  }
+
+  function get(path: string): Request {
+    return new Request(`https://dashboard-api.test${path}`, { method: 'GET' });
+  }
+
+  it('returns null for non-ledger routes and non-GET methods', async () => {
+    const book = fakeBook();
+    expect(await tryHandleLedger(get('/portfolio'), book)).toBeNull();
+    expect(
+      await tryHandleLedger(
+        new Request('https://dashboard-api.test/ledger', { method: 'POST' }),
+        book,
+      ),
+    ).toBeNull();
+    expect(book.seen).toEqual([]);
+  });
+
+  it('serves the contract event stream with economics + provenance', async () => {
+    const res = await tryHandleLedger(get('/ledger'), fakeBook());
+    expect(res?.status).toBe(200);
+    const body = (await res?.json()) as {
+      data: { events: { ticker: string; type: string; realized_pct: number | null }[]; next_cursor: null };
+      provenance: LedgerProvenance;
+    };
+    expect(body.data.events.map((e) => `${e.ticker}:${e.type}`)).toEqual([
+      'XLF:TRIM',
+      'GLD:TRIM',
+      'GLD:OPEN',
+    ]);
+    expect(body.data.next_cursor).toBeNull();
+    expect(body.provenance.source).toBe('position_events+positions');
+    expect(body.provenance.tip_date).toBe('2026-09-03');
+    expect(body.provenance.marks).toBe('stored');
+    expect(body.data.events[0]?.realized_pct).toBeCloseTo((54.1 / 52.0 - 1) * 100, 5);
+  });
+
+  it('paginates through the mount and echoes the pin', async () => {
+    const book = fakeBook();
+    const first = await tryHandleLedger(get('/ledger?limit=2&retrieval_pin=pin-1'), book);
+    const firstBody = (await first?.json()) as {
+      data: { events: unknown[]; next_cursor: string };
+      retrieval_pin: string;
+    };
+    expect(firstBody.data.events).toHaveLength(2);
+    expect(firstBody.retrieval_pin).toBe('pin-1');
+
+    const second = await tryHandleLedger(
+      get(`/ledger?limit=2&cursor=${encodeURIComponent(firstBody.data.next_cursor)}`),
+      book,
+    );
+    const secondBody = (await second?.json()) as {
+      data: { events: unknown[]; next_cursor: null };
+    };
+    expect(secondBody.data.events).toHaveLength(1);
+    expect(secondBody.data.next_cursor).toBeNull();
+  });
+
+  it('fails closed with the error envelope on bad params', async () => {
+    const res = await tryHandleLedger(get('/ledger?limit=9999&retrieval_pin=pin-9'), fakeBook());
+    expect(res?.status).toBe(400);
+    const body = (await res?.json()) as {
+      error: { code: string; retrieval_pin: string };
+    };
+    expect(body.error.code).toBe('bad_request');
+    expect(body.error.retrieval_pin).toBe('pin-9');
+  });
+
+  it('returns upstream_empty when a required book read fails', async () => {
+    const failing: LedgerBook = {
+      async getJson(): Promise<unknown> {
+        throw new Error('boom');
+      },
+    };
+    const res = await tryHandleLedger(get('/ledger'), failing);
+    expect(res?.status).toBe(502);
+    const body = (await res?.json()) as { error: { code: string } };
+    expect(body.error.code).toBe('upstream_empty');
   });
 });
