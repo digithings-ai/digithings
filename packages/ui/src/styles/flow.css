@@ -1,6 +1,21 @@
-/* Module pipeline strip + full-card stage list (#4429). Scoped m-flow,
-   m-stages, and the m-fullcard content classes the tile's grown-in-place
-   deep dive reuses (summary, api, links, related). */
+/* Module pipeline diagram, strip + full-card stage list (#4429). Scoped
+   m-flow, m-flowdiag, m-stages, and the m-fullcard content classes the
+   tile's grown-in-place deep dive reuses (summary, api, links). */
+
+.m-flow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.35rem 0.15rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--ink-soft);
+}
 
 .m-flow {
   display: flex;
@@ -32,6 +47,46 @@
   color: var(--ink);
 }
 
+/* Pipeline node chain at the top of the expanded card: one node per stage,
+   flowing connectors between them. The dash drift freezes under
+   prefers-reduced-motion, per kit convention. */
+.m-flowdiag {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+.m-flowdiag-dash {
+  stroke: var(--hair-2, var(--hair));
+  stroke-width: 1.5;
+  stroke-dasharray: 4 4;
+  animation: m-flowdash 1.2s linear infinite;
+}
+
+.m-flowdiag-node {
+  fill: var(--accent);
+}
+
+.m-flowdiag-label {
+  fill: var(--ink-mute);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+@keyframes m-flowdash {
+  to {
+    stroke-dashoffset: -8;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .m-flowdiag-dash {
+    animation: none;
+  }
+}
+
 .m-stages {
   margin: 0;
   padding: 0;
@@ -56,7 +111,8 @@
 .m-stage-label {
   margin: 0;
   font-family: var(--font-mono);
-  font-size: 0.78rem;
+  font-size: 0.85rem;
+  font-weight: 600;
   letter-spacing: 0.08em;
   text-transform: uppercase;
   color: var(--ink);
@@ -111,6 +167,8 @@
   display: inline-flex;
   flex-wrap: wrap;
   gap: 0.25rem 0.75rem;
+  font-family: var(--font-mono);
+  font-size: 0.85rem;
 }
 
 .m-fullcard-links a {
@@ -118,24 +176,5 @@
 }
 
 .m-fullcard-links a:hover {
-  color: var(--ink);
-}
-
-.m-fullcard-related {
-  display: inline-flex;
-  flex-wrap: wrap;
-  gap: 0.25rem 0.75rem;
-}
-
-.m-fullcard-related button {
-  background: none;
-  border: 0;
-  padding: 0;
-  cursor: pointer;
-  font: inherit;
-  color: var(--ink-mute);
-}
-
-.m-fullcard-related button:hover {
   color: var(--ink);
 }

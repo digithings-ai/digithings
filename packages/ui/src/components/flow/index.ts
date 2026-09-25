@@ -1,5 +1,6 @@
 /**
- * Module pipeline strip + full-card stage list (#4429) — focused mosaic
- * tiles show the flow, click expands the complete in-flow module card.
+ * Module pipeline strip, diagram + full-card stage list (#4429) — the
+ * click-expanded tile's deep dive. Focused tiles show the pre-existing
+ * facts/summary detail; the flow lives only in the expanded card.
  */
-export { ModuleFlowStrip, ModuleStageList, type FlowStage, type ModuleFlowStripProps, type ModuleStageListProps } from "./ModuleFlow";
+export { ModuleFlowStrip, ModuleFlowDiagram, ModuleStageList, type FlowStage, type ModuleFlowStripProps, type ModuleFlowDiagramProps, type ModuleStageListProps } from "./ModuleFlow";
