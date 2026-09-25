@@ -2,11 +2,8 @@
 
 import { useEffect, useRef, useState } from "react";
 import {
-  ModuleShowcase,
-  PipelineCard,
   StackRow,
   modules,
-  pipelineCards,
   useScrollyFeatures,
   scrollyTrackHeightVh,
   type ModuleNode,
@@ -83,18 +80,6 @@ import { moduleCountLabel, moduleVersion } from "@/lib/moduleCounts";
  * and the three stated facts (lines of code, endpoints, MCP tools) and the
  * declared version moved out of the corner into a fixed box under the name, so
  * every tile states the same three things in the same order.
- *
- * v6 replaces the focused tile's prose with the pipeline (#4429): modules that
- * declare a `flow` show the stage strip plus one clamped lead paragraph on
- * focus, with the stack pinned at the bottom as before. Modules without a
- * flow keep the v5 detail as the fallback.
- *
- * v7 grows the tile itself on click — no button, no elsewhere. Clicking the
- * focused tile (anywhere except its real controls) expands it to full row
- * width with the complete card inside (diagram, stages, full copy, api,
- * usage snippet); the row's siblings get out of the way and the row takes the
- * lion's share, the card scrolling internally past that. Scrolling the focus
- * on, or Escape, collapses; the id is retained so scrolling back re-opens.
  */
 
 /**
@@ -123,19 +108,16 @@ const ROW_SIZES = [4, 4, 3] as const;
 const WEIGHT = 1.2;
 /**
  * The share of the biggest module the smallest still draws, before weighting.
- * HISTORIC — the flex solver that consumed weights is retired (square-cell
- * grid era): tileGrow/rowGrow styles are still passed but grid ignores
- * flex-grow, so every cell is an equal square and order carries size.
- * Kept (not deleted) so the LOC ordering constants beside it stay meaningful.
+ * 0.18 spreads the field about 5.6x end to end — the owner wants a stock-grid
+ * read (heavyweights top-left, lightweights bottom-right, size gap obvious),
+ * and the row floor plus the focus boost keep the smallest tile usable.
  */
 const WEIGHT_FLOOR = 0.18;
 /**
- * No zoom on focus (owner, #4429) — kept at 1 so the solver output is
- * uniform. The mosaic is a square-cell grid now, and grid ignores flex-grow
- * anyway; focus is highlight-only (`.on` ring + full opacity) and the click
- * opens the full card. Size differences speak through order, not geometry.
+ * How much heavier the focused module counts while the layout is solved — the
+ * "resize and shift to make space for what's inside" behaviour.
  */
-const FOCUS_BOOST = 1;
+const FOCUS_BOOST = 2.6;
 /**
  * The share of the mosaic's height the focused tile's row holds.
  *
@@ -150,12 +132,6 @@ const FOCUS_BOOST = 1;
  * anyway must not shrink it.
  */
 const ROW_FOCUS_SHARE = 0.56;
-/* Click-to-expand (#4429): the expanded tile owns its row full-width with
-   the complete card inside, so the row takes the lion's share. 0.72 fits the
-   full card (diagram, stages, summaries, api, links) with no internal
-   scroll; the other rows drop to the expanded floor, which still fits a
-   resting tile's name, role and chips. */
-const EXPANDED_ROW_SHARE = 0.72;
 /**
  * The least height any row keeps, as a share of the mosaic.
  *
@@ -165,10 +141,6 @@ const EXPANDED_ROW_SHARE = 0.72;
  * honest than trimming a tile that has nothing left to trim.
  */
 const ROW_MIN_SHARE = 0.19;
-/* Floor while a row is expanded (#4429). The other rows show resting tiles
-   only (name, role, chips ≈ 130px), so 0.14 still fits them and frees the
-   open row to hold the full card with no internal scroll. */
-const ROW_MIN_SHARE_EXPANDED = 0.14;
 
 const VH_PER_MODULE = 90;
 
@@ -270,28 +242,24 @@ function solveTileGrow(focus: number): number[] {
  * with the focused row's lifted until it holds `ROW_FOCUS_SHARE` of the height.
  * Unboosted members are deliberate — the tile boost already widens the focused
  * tile inside the row; boosting the row on top of that would double-count the
- * same emphasis. `expandedRow` is the row holding a click-expanded tile, or
- * -1: that row takes EXPANDED_ROW_SHARE instead of ROW_FOCUS_SHARE.
+ * same emphasis.
  */
-function solveRowGrow(focus: number, expandedRow = -1): number[] {
+function solveRowGrow(focus: number): number[] {
   const sums = ROWS.map((members) => members.reduce((acc, i) => acc + BASE_WEIGHTS[i], 0));
   const total = sums.reduce((acc, sum) => acc + sum, 0) || 1;
   /* No focus yet (the mosaic is still off-screen): rows hold base shares. */
   if (focus < 0 || ROW_OF[focus] === undefined) return sums.map((sum) => sum / total);
   const focused = ROW_OF[focus];
   /* The heaviest row is already past the target, so its own share stands in. */
-  const shareRow = expandedRow >= 0 ? expandedRow : focused;
-  const targetShare = expandedRow >= 0 ? EXPANDED_ROW_SHARE : ROW_FOCUS_SHARE;
-  const focusShare = Math.max(targetShare, sums[shareRow] / total);
+  const focusShare = Math.max(ROW_FOCUS_SHARE, sums[focused] / total);
   const rest = 1 - focusShare;
 
-  const others = sums.map((sum, row) => (row === shareRow ? 0 : sum));
+  const others = sums.map((sum, row) => (row === focused ? 0 : sum));
   const otherTotal = others.reduce((acc, sum) => acc + sum, 0) || 1;
-  const floor = expandedRow >= 0 ? ROW_MIN_SHARE_EXPANDED : ROW_MIN_SHARE;
   const starving = sums.map(
-    (sum, row) => row !== shareRow && (rest * sum) / otherTotal < floor,
+    (sum, row) => row !== focused && (rest * sum) / otherTotal < ROW_MIN_SHARE,
   );
-  const floored = starving.filter(Boolean).length * floor;
+  const floored = starving.filter(Boolean).length * ROW_MIN_SHARE;
   const flexible = rest - floored;
   const flexibleTotal = sums.reduce(
     (acc, sum, row) => (starving[row] ? acc : acc + others[row]),
@@ -299,9 +267,9 @@ function solveRowGrow(focus: number, expandedRow = -1): number[] {
   );
 
   return sums.map((sum, row) => {
-    if (row === shareRow) return focusShare;
-    if (starving[row]) return floor;
-    return flexibleTotal > 0 ? (flexible * others[row]) / flexibleTotal : floor;
+    if (row === focused) return focusShare;
+    if (starving[row]) return ROW_MIN_SHARE;
+    return flexibleTotal > 0 ? (flexible * others[row]) / flexibleTotal : ROW_MIN_SHARE;
   });
 }
 
@@ -497,26 +465,9 @@ export function ModuleGrid() {
   }, [stepper, reduced, started]);
 
   const focus = ready ? Math.max(activeIndex, 0) : -1;
-  /* Click-to-expand (#4429): no button, no elsewhere. Clicking the focused
-     tile — anywhere except its real controls — grows the tile itself to full
-     row width with the complete card inside; the row's siblings get out of
-     the way via CSS and the row takes EXPANDED_ROW_SHARE. Scrolling the
-     focus on, or Escape, collapses; expandId is retained so scrolling back
-     re-opens. Expansion only ever shows on the focused tile. */
-  const [expandId, setExpandId] = useState<string | null>(null);
-  const openRow =
-    !stepper && focus >= 0 && expandId === ordered[focus]?.id ? (ROW_OF[focus] ?? -1) : -1;
   const tileGrow = solveTileGrow(focus);
-  const rowGrow = solveRowGrow(focus, openRow);
+  const rowGrow = solveRowGrow(focus);
   const rows = stepper ? STACK_ROWS : ROWS;
-  useEffect(() => {
-    if (!expandId) return;
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") setExpandId(null);
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [expandId]);
 
   return (
     <section id="architecture">
@@ -534,24 +485,15 @@ export function ModuleGrid() {
             role="list"
             aria-label="digithings modules, sized by lines of code"
           >
-            {rows.map((members, row) => {
-              /* The row holding the open tile drops its siblings (CSS) so
-                 the expanded tile owns the full row width in place. */
-              const rowOpen = members.some((i) => {
-                const mm = ordered[i];
-                const mmOn = stepper ? reduced || i === stackActive : i === focus;
-                return expandId === mm.id && mmOn;
-              });
-              return (
+            {rows.map((members, row) => (
               <div
                 key={`row-${row}`}
-                className={`dg-mosaic-row${rowOpen ? " is-expanded-row" : ""}`}
+                className="dg-mosaic-row"
                 style={stepper ? undefined : ({ flexGrow: rowGrow[row] } as React.CSSProperties)}
               >
                 {members.map((i) => {
                   const m = ordered[i];
                   const on = stepper ? reduced || i === stackActive : i === focus;
-                  const open = expandId === m.id && on;
                   const version = moduleVersion(m.id);
                   const dockerCmd = m.dockerCmd;
                   const copied = copiedId === m.id;
@@ -566,12 +508,11 @@ export function ModuleGrid() {
                           : undefined
                       }
                       role="listitem"
-                      className={`dg-cell${on ? " on" : ""}${open ? " is-expanded" : ""}`}
+                      className={`dg-cell${on ? " on" : ""}`}
                       style={
                         stepper ? undefined : ({ flexGrow: tileGrow[i] } as React.CSSProperties)
                       }
                       aria-current={on ? "true" : undefined}
-                      data-expandable={on ? "true" : undefined}
                     >
                       {/* The whole tile is the focus target, but the focused
                           tile also owns real controls (copy the compose command,
@@ -585,24 +526,10 @@ export function ModuleGrid() {
                       <button
                         type="button"
                         className="dg-cell-focus"
-                        aria-label={
-                          open
-                            ? `Collapse the ${m.id} card`
-                            : `Focus ${m.id} — ${m.role}, ${factsLine(m)}`
+                        aria-label={`Focus ${m.id} — ${m.role}, ${factsLine(m)}`}
+                        onClick={() =>
+                          stepper ? setStackActive(i) : focusModule(trackRef.current, i)
                         }
-                        aria-expanded={on ? open : undefined}
-                        onClick={() => {
-                          /* Click-anywhere expand: the focused tile toggles
-                             its full card in place (real controls sit above
-                             this overlay and keep their own clicks); an
-                             unfocused tile focuses as before. Every module
-                             has a showcase card, so every focused tile
-                             toggles. */
-                          const focused = stepper ? reduced || i === stackActive : i === focus;
-                          if (focused) setExpandId(open ? null : m.id);
-                          else if (stepper) setStackActive(i);
-                          else focusModule(trackRef.current, i);
-                        }}
                       />
                       <div className="dg-cell-body">
                         <span className="dg-mosaic-head">
@@ -638,31 +565,11 @@ export function ModuleGrid() {
                                 CSS, while the stack row and the foot below are
                                 pinned — the controls can never be the thing that
                                 clips. The rest of the summary is on the module's
-                                docs page and in the ask answer. The pipeline
-                                strip lives in the click-expanded card (#4429),
-                                never here: focus shows exactly this. */}
+                                docs page and in the ask answer. */}
                             {m.summary[0] ? (
                               <span className="dg-mosaic-serves">{m.summary[0]}</span>
                             ) : null}
                           </span>
-                        ) : null}
-
-                        {/* The complete card, grown in place (#4429). Only on
-                            the focused-and-expanded tile: the module's
-                            navigable pipeline card when one exists (the
-                            public tool surface, restart), else the
-                            purpose-built showcase. Head/role/detail render
-                            above, stack + foot pin to the bottom below —
-                            this block is the middle. The only clickables
-                            are the foot's own buttons. */}
-                        {open ? (
-                          <div className="dg-cell-full">
-                            {pipelineCards[m.id] ? (
-                              <PipelineCard card={pipelineCards[m.id]} />
-                            ) : (
-                              <ModuleShowcase module={m} />
-                            )}
-                          </div>
                         ) : null}
 
                         {/* The packages. Collapsed tiles show only the logos —
@@ -703,8 +610,6 @@ export function ModuleGrid() {
                               ask <span className="text-ink">digi</span>
                               <span className="text-accent">chat</span> →
                             </button>
-                            {/* No expand button: the tile itself toggles —
-                                click anywhere except the real controls. */}
                           </span>
                         ) : null}
                       </div>
@@ -712,8 +617,7 @@ export function ModuleGrid() {
                   );
                 })}
               </div>
-              );
-            })}
+            ))}
           </div>
         </div>
       </div>

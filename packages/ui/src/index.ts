@@ -60,20 +60,6 @@ export {
   type TourStep,
   type TourVariant,
 } from "./components/diagrams";
-// module pipeline diagram, strip + full-card stage list (#4429) — the
-// click-expanded tile's deep dive. Focused tiles show the pre-existing
-// facts/summary detail; the flow lives only in the expanded card.
-export {
-  ModuleFlowStrip,
-  ModuleFlowDiagram,
-  ModuleStageList,
-  ModuleShowcase,
-  PipelineCard,
-  type FlowStage,
-  type ModuleFlowStripProps,
-  type ModuleFlowDiagramProps,
-  type ModuleStageListProps,
-} from "./components/flow";
 export {
   Footer,
   Colophon,
@@ -419,7 +405,6 @@ export {
 } from "./components/repo-activity";
 
 export { modules, edges, moduleById, type ModuleNode, type StackItem, type Tier } from "./data/modules";
-export { pipelineCards, digiquantCard, type PipelineCardData, type PipelineCardSnippet } from "./data/pipelineCards";
 export { subsystems, subsystemById, type Subsystem } from "./data/subsystems";
 export {
   GLOOMBERB_ATTRIBUTION,
