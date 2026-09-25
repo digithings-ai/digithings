@@ -907,6 +907,38 @@ explicit that they're still blocked on Stage 2's OHLC plumbing.)
      flagged back for a decision on whether to accept the OOS-adjacency
      tradeoff, accept fold 1 as an unfixable regime under the current
      curve-shape-only lever, or explore a different lever entirely.
+   - **Visualization (2026-09-25)** — Chris asked to see rounds 1-4's real
+     tearsheets in the site's own UI instead of reading tables. Added
+     `scripts/build_round{1,2,3,4}_diagnostic_tearsheet.py`, one per round,
+     mirroring `scripts/build_round8_diagnostic_tearsheet.py`'s exact
+     pattern: each round's own actual `SdcaCompositeWeights`/`SdcaCurveShape`
+     (round 1-4 all use `PHASE1_WEIGHTS`; shapes are the round-specific
+     winners above — round 4's is numerically identical to round 2's, since
+     the dead-zone-width sweep re-selected it unchanged) feeding
+     `from_nautilus_run` to write
+     `apps/digiquant-web/public/strategies/btc_sdca_round{1,2,3,4}.json`.
+     Same standing guardrails as round 8's script: never writes
+     `settings.json`, never touches this file's validated-candidate section,
+     never pushes to Supabase; every script sets `beats_flat_dca_oos=False`
+     regardless of a round's raw headline sign, since none of rounds 1-4
+     were promoted. Slugs wired into
+     `apps/digiquant-web/app/strategies/[id]/page.tsx`'s `PUBLISHED` map
+     alongside the existing `btc_sdca_round8` entry, and `toIndexEntry` was
+     exported from `apps/digiquant-web/lib/live/strategies.ts` so a page can
+     project any fetched tearsheet into a library-style index card without
+     going through the Supabase-only `fetchStrategyIndex()`. New page
+     `apps/digiquant-web/app/strategies/sdca-recalibration/page.tsx` (+
+     `components/tearsheet/sdca-recalibration-comparison.tsx`) lists all six
+     — round 1 → 2 → 3 → 4 → 8 → the live `btc_sdca` baseline — as
+     `StrategyCard`s with a one-line per-round caption, reusing the existing
+     card component rather than inventing new UI. Verified locally
+     (`next dev`): all 6 `/strategies/<slug>` tearsheet routes and the new
+     `/strategies/sdca-recalibration` comparison route return 200 and render
+     correctly; the live-baseline card shows "unavailable" in local dev only
+     because `NEXT_PUBLIC_SUPABASE_*` env vars aren't set in this worktree
+     (same pre-existing gap the production `/strategies` library page has
+     locally) — it resolves normally wherever those vars are configured.
+     No `src/` changes; `tests/dq/strategies/sdca/` unaffected.
 
 ## North-star ceiling (benchmark only — NEVER a trading candidate)
 

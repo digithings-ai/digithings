@@ -18,7 +18,7 @@ import { supabase } from "./supabaseClient";
 const TABLE = "strategy_tearsheets";
 
 /** Project the index-card fields out of a full tearsheet payload. */
-function toIndexEntry(m: TearsheetData): StrategyIndexEntry {
+export function toIndexEntry(m: TearsheetData): StrategyIndexEntry {
   return {
     strategy: m.strategy,
     label: m.label,
@@ -44,15 +44,32 @@ function toIndexEntry(m: TearsheetData): StrategyIndexEntry {
   };
 }
 
+/**
+ * Local-only fallback for a slug not in the live store — e.g. a research
+ * diagnostic tearsheet that is deliberately never pushed to Supabase (see
+ * `digiquant/scripts/build_round8_diagnostic_tearsheet.py`). Reads the static
+ * JSON some build step dropped at `public/strategies/<slug>.json`; production
+ * ships no such files for published strategies, so this is a no-op there.
+ */
+async function fetchTearsheetFromStaticJson(slug: string): Promise<TearsheetData | null> {
+  try {
+    const res = await fetch(`/strategies/${slug}.json`);
+    if (!res.ok) return null;
+    return (await res.json()) as TearsheetData;
+  } catch {
+    return null;
+  }
+}
+
 /** Full tearsheet payload for one strategy, or `null` if unavailable. */
 export async function fetchTearsheet(slug: string): Promise<TearsheetData | null> {
-  if (!supabase) return null;
+  if (!supabase) return fetchTearsheetFromStaticJson(slug);
   const { data, error } = await supabase
     .from(TABLE)
     .select("metrics")
     .eq("strategy_id", slug)
     .maybeSingle();
-  if (error || !data) return null;
+  if (error || !data) return fetchTearsheetFromStaticJson(slug);
   return data.metrics as TearsheetData;
 }
 

@@ -16,6 +16,17 @@ const PUBLISHED: Record<string, { label: string; symbol: string }> = {
   eth_slapper: { label: "ETH L/S", symbol: "ETH-USD" },
   sol_slapper: { label: "SOL L/S", symbol: "SOL-USD" },
   btc_sdca: { label: "BTC-SDCA", symbol: "BTC-USD" },
+  // Local-only research diagnostics (SDCA recalibration v1, rounds 1-4) —
+  // never pushed to Supabase, data comes from the static-JSON fallback in
+  // lib/live/strategies.ts. Not published/validated strategies.
+  btc_sdca_round1: { label: "BTC-SDCA (Round 1 diagnostic)", symbol: "BTC-USD" },
+  btc_sdca_round2: { label: "BTC-SDCA (Round 2 diagnostic)", symbol: "BTC-USD" },
+  btc_sdca_round3: { label: "BTC-SDCA (Round 3 diagnostic)", symbol: "BTC-USD" },
+  btc_sdca_round4: { label: "BTC-SDCA (Round 4 diagnostic)", symbol: "BTC-USD" },
+  // Local-only research diagnostic (post-mortem follow-up ablation round 8) —
+  // never pushed to Supabase, data comes from the static-JSON fallback in
+  // lib/live/strategies.ts. Not a published/validated strategy.
+  btc_sdca_round8: { label: "BTC-SDCA (Round 8 diagnostic)", symbol: "BTC-USD" },
 };
 
 export const dynamicParams = false;
