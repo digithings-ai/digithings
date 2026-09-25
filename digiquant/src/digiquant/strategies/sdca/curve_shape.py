@@ -19,6 +19,7 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 from digiquant.strategies.sdca.curve import RISK_NODES
 
 _RATE_EPS = 1e-12
+_MID_TIER_RATE_FRAC = 0.5
 
 
 class SdcaCurveShape(BaseModel):
@@ -37,6 +38,10 @@ class SdcaCurveShape(BaseModel):
     sell_max_rate: float = Field(ge=0.0, le=100.0)
     buy_curvature: float = Field(ge=1.0)
     sell_curvature: float = Field(ge=1.0)
+    buy_mid_knee_risk: float | None = Field(default=None, gt=0.0, lt=100.0)
+    buy_mid_curvature: float = Field(default=1.0, ge=1.0)
+    sell_mid_knee_risk: float | None = Field(default=None, gt=0.0, lt=100.0)
+    sell_mid_curvature: float = Field(default=1.0, ge=1.0)
 
     @model_validator(mode="after")
     def _enforce_shape_invariants(self) -> SdcaCurveShape:
@@ -50,20 +55,56 @@ class SdcaCurveShape(BaseModel):
                 "sell_knee_risk must be < 100 when sell_max_rate > 0 "
                 f"(got sell_knee_risk={self.sell_knee_risk})"
             )
+        if self.buy_mid_knee_risk is not None and not (0.0 < self.buy_mid_knee_risk < self.buy_knee_risk):
+            raise ValueError(
+                f"buy_mid_knee_risk ({self.buy_mid_knee_risk}) must sit strictly between "
+                f"0 and buy_knee_risk ({self.buy_knee_risk})"
+            )
+        if self.sell_mid_knee_risk is not None and not (
+            self.sell_knee_risk < self.sell_mid_knee_risk < 100.0
+        ):
+            raise ValueError(
+                f"sell_mid_knee_risk ({self.sell_mid_knee_risk}) must sit strictly between "
+                f"sell_knee_risk ({self.sell_knee_risk}) and 100"
+            )
         self._assert_generated_invariants(self.to_nodes())
         return self
 
     def rate_at(self, risk: float) -> float:
         """Daily trade rate (%) at ``risk`` in [0, 100]."""
         if risk < self.buy_knee_risk:
+            return self._buy_rate(risk)
+        if risk <= self.sell_knee_risk:
+            return 0.0
+        return self._sell_rate(risk)
+
+    def _buy_rate(self, risk: float) -> float:
+        if self.buy_mid_knee_risk is None:
             span = self.buy_knee_risk
             t = (self.buy_knee_risk - risk) / span
             return self.buy_max_rate * (t**self.buy_curvature)
-        if risk <= self.sell_knee_risk:
-            return 0.0
-        span = 100.0 - self.sell_knee_risk
-        t = (risk - self.sell_knee_risk) / span
-        return -self.sell_max_rate * (t**self.sell_curvature)
+        mid_rate = self.buy_max_rate * _MID_TIER_RATE_FRAC
+        if risk >= self.buy_mid_knee_risk:
+            span = self.buy_knee_risk - self.buy_mid_knee_risk
+            t = (self.buy_knee_risk - risk) / span
+            return mid_rate * (t**self.buy_curvature)
+        span = self.buy_mid_knee_risk
+        t = (self.buy_mid_knee_risk - risk) / span
+        return mid_rate + (self.buy_max_rate - mid_rate) * (t**self.buy_mid_curvature)
+
+    def _sell_rate(self, risk: float) -> float:
+        if self.sell_mid_knee_risk is None:
+            span = 100.0 - self.sell_knee_risk
+            t = (risk - self.sell_knee_risk) / span
+            return -self.sell_max_rate * (t**self.sell_curvature)
+        mid_rate = self.sell_max_rate * _MID_TIER_RATE_FRAC
+        if risk <= self.sell_mid_knee_risk:
+            span = self.sell_mid_knee_risk - self.sell_knee_risk
+            t = (risk - self.sell_knee_risk) / span
+            return -(mid_rate * (t**self.sell_curvature))
+        span = 100.0 - self.sell_mid_knee_risk
+        t = (risk - self.sell_mid_knee_risk) / span
+        return -(mid_rate + (self.sell_max_rate - mid_rate) * (t**self.sell_mid_curvature))
 
     def to_nodes(self) -> tuple[float, ...]:
         """21 nodes accepted by ``AccumDistCurve``."""

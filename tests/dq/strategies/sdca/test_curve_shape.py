@@ -181,3 +181,60 @@ class TestRisk50LinearReferenceCurve:
             risk50_linear_reference_curve(10.0, eps=5.0)
         with pytest.raises(ValueError, match="eps"):
             risk50_linear_reference_curve(10.0, eps=0.0)
+
+
+class TestTieredSdcaCurveShape:
+    def test_defaults_recover_single_knee_behavior(self) -> None:
+        baseline = _shape()
+        tiered_but_collapsed = _shape()  # no mid-tier overrides -> both None
+        for r in RISK_NODES:
+            assert tiered_but_collapsed.rate_at(r) == pytest.approx(baseline.rate_at(r))
+
+    def test_buy_mid_knee_reaches_half_of_max_rate(self) -> None:
+        shape = _shape(buy_max_rate=20.0, buy_knee_risk=40.0, buy_mid_knee_risk=10.0)
+        assert shape.rate_at(10.0) == pytest.approx(10.0)
+
+    def test_sell_mid_knee_reaches_half_of_max_rate(self) -> None:
+        shape = _shape(sell_max_rate=20.0, sell_knee_risk=60.0, sell_mid_knee_risk=90.0)
+        assert shape.rate_at(90.0) == pytest.approx(-10.0)
+
+    def test_buy_extreme_still_reaches_full_max_rate_when_tiered(self) -> None:
+        shape = _shape(buy_max_rate=20.0, buy_knee_risk=40.0, buy_mid_knee_risk=10.0)
+        assert shape.rate_at(0.0) == pytest.approx(20.0)
+
+    def test_sell_extreme_still_reaches_full_max_rate_when_tiered(self) -> None:
+        shape = _shape(sell_max_rate=20.0, sell_knee_risk=60.0, sell_mid_knee_risk=90.0)
+        assert shape.rate_at(100.0) == pytest.approx(-20.0)
+
+    def test_continuous_at_buy_mid_knee_boundary(self) -> None:
+        shape = _shape(buy_max_rate=20.0, buy_knee_risk=40.0, buy_mid_knee_risk=10.0, buy_curvature=2.0, buy_mid_curvature=1.5)
+        just_above = shape.rate_at(10.0 + 1e-6)
+        just_below = shape.rate_at(10.0 - 1e-6)
+        assert just_above == pytest.approx(just_below, abs=1e-4)
+
+    def test_continuous_at_sell_mid_knee_boundary(self) -> None:
+        shape = _shape(sell_max_rate=20.0, sell_knee_risk=60.0, sell_mid_knee_risk=90.0, sell_curvature=2.0, sell_mid_curvature=1.5)
+        just_above = shape.rate_at(90.0 + 1e-6)
+        just_below = shape.rate_at(90.0 - 1e-6)
+        assert just_above == pytest.approx(just_below, abs=1e-4)
+
+    def test_tiered_nodes_are_monotonic_non_increasing(self) -> None:
+        shape = _shape(
+            buy_max_rate=20.0, buy_knee_risk=40.0, buy_mid_knee_risk=15.0, buy_mid_curvature=2.0,
+            sell_max_rate=20.0, sell_knee_risk=60.0, sell_mid_knee_risk=85.0, sell_mid_curvature=2.0,
+        )
+        nodes = shape.to_nodes()
+        for a, b in itertools.pairwise(nodes):
+            assert a >= b - 1e-9
+
+    def test_buy_mid_knee_must_sit_strictly_inside_outer_knee(self) -> None:
+        with pytest.raises(ValueError):
+            _shape(buy_knee_risk=40.0, buy_mid_knee_risk=40.0)
+        with pytest.raises(ValueError):
+            _shape(buy_knee_risk=40.0, buy_mid_knee_risk=0.0)
+
+    def test_sell_mid_knee_must_sit_strictly_inside_outer_knee(self) -> None:
+        with pytest.raises(ValueError):
+            _shape(sell_knee_risk=60.0, sell_mid_knee_risk=60.0)
+        with pytest.raises(ValueError):
+            _shape(sell_knee_risk=60.0, sell_mid_knee_risk=100.0)
