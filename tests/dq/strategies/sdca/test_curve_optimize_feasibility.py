@@ -12,7 +12,12 @@ from datetime import date, timedelta
 
 import polars as pl
 import pytest
-from digiquant.strategies.sdca.curve_optimize import score_shape_on_index
+from digiquant.strategies.sdca.curve_optimize import (
+    _MID_TIER_KEYS,
+    WIDE_KNEE_TIERED_COARSE_GRID,
+    WIDE_KNEE_TIERED_SEARCH_BOUNDS,
+    score_shape_on_index,
+)
 from digiquant.strategies.sdca.curve_optimize_feasibility import (
     CAPITAL_DEPLOYED_COMFORT_PCT,
     CAPITAL_DEPLOYED_FLOOR_PCT,
@@ -329,3 +334,56 @@ class TestSearchWideKneeCurveFeasibilityAware:
         assert result.num_evaluations > 0
         assert result.best.capital_deployed_reject is False
         assert result.best.feasibility_adjusted_score > INFEASIBLE_SCORE
+
+
+class TestSearchWideKneeCurveFeasibilityAwareTiered:
+    """Regression guard for the mid-tier search-space plumbing added on top
+    of ``search_wide_knee_curve_feasibility_aware`` -- without also
+    extending its inline ``SdcaCurveShape(...)`` construction (not just the
+    ``sample_wide_knee_curve_trials`` call), the tiered bounds/grid would be
+    sampled but silently dropped before scoring, a no-op that
+    ``num_evaluations > 0`` alone would not catch.
+    """
+
+    def test_accepts_tiered_bounds_and_grid(self) -> None:
+        dates, prices, risk = _v_cycle()
+        result = search_wide_knee_curve_feasibility_aware(
+            dates,
+            prices,
+            risk,
+            initial_cash=1000.0,
+            n_random=20,
+            seed=1,
+            include_grid=False,
+            bounds=WIDE_KNEE_TIERED_SEARCH_BOUNDS,
+            grid=WIDE_KNEE_TIERED_COARSE_GRID,
+            extra_keys=_MID_TIER_KEYS,
+        )
+        assert result.num_evaluations > 0
+        # Proves the mid-tier fields actually reached the scored shape, not
+        # just the sampled params dict -- WIDE_KNEE_TIERED_SEARCH_BOUNDS pins
+        # buy_mid_knee_risk to (2, 18), strictly below WIDE_KNEE_SEARCH_BOUNDS'
+        # buy_knee_risk floor of 20 (and sell_mid_knee_risk to (82, 98),
+        # strictly above sell_knee_risk's ceiling of 80), so every valid
+        # sampled trial satisfies SdcaCurveShape's strictly-between
+        # invariant and should carry both mid-tier fields through.
+        assert result.best.shape.buy_mid_knee_risk is not None
+        assert result.best.shape.sell_mid_knee_risk is not None
+
+    def test_default_call_unaffected(self) -> None:
+        # Existing non-tiered callers must see byte-identical behavior --
+        # this is a regression guard against the additive bounds/grid/
+        # extra_keys params changing default behavior.
+        dates, prices, risk = _v_cycle()
+        result = search_wide_knee_curve_feasibility_aware(
+            dates,
+            prices,
+            risk,
+            initial_cash=1000.0,
+            n_random=20,
+            seed=1,
+            include_grid=False,
+        )
+        assert result.num_evaluations > 0
+        assert result.best.shape.buy_mid_knee_risk is None
+        assert result.best.shape.sell_mid_knee_risk is None
