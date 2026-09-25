@@ -241,12 +241,32 @@ body {
      viewport — with one page-pad of air inside each rail, the same grammar
      every section uses (Tailwind preflight is border-box, so the padding
      insets inside the max-width). Tiles size against the frame width, not
-     the window. Height still fills the sticky 100vh stage. */
+     the window.
+     Landing fit + walk expansion: resting height is compact so the grid
+     shares the landing viewport with the hero; once the walk centres
+     (`is-ready` from the same centered-gate that drives focus) it takes the
+     full stage height below the top bar. Height interpolates natively. */
   width: 100%;
   max-width: calc(var(--frame-w) + 2 * var(--page-pad));
   margin-inline: auto;
   padding-inline: var(--page-pad);
-  height: 100vh;
+  height: clamp(20rem, 44vh, 32rem);
+  transition: height 0.45s var(--ease);
+}
+/* The mosaic's own stage sits below the pinned top bar — never behind it —
+   so the walk plays in the remaining viewport, vertically centred. Scoped
+   to the mosaic; the tour keeps the fullscreen stage. */
+.dg-stage--mosaic {
+  top: var(--dq-nav-h, 62px);
+  height: calc(100dvh - var(--dq-nav-h, 62px));
+}
+.dg-mosaic--rows.is-ready {
+  height: 100%;
+}
+@media (prefers-reduced-motion: reduce) {
+  .dg-mosaic--rows {
+    transition: none;
+  }
 }
 
 /* The stacked face — the same boxes on a phone, one per row.

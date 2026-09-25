@@ -491,9 +491,9 @@ export function ModuleGrid() {
             : { height: `${scrollyTrackHeightVh(ordered.length, VH_PER_MODULE)}vh` }
         }
       >
-        <div className={stepper ? "dg-stack-wrap" : "dg-stage"}>
+        <div className={stepper ? "dg-stack-wrap" : "dg-stage dg-stage--mosaic"}>
           <div
-            className={`dg-mosaic ${stepper ? "dg-mosaic--stack" : "dg-mosaic--rows"}`}
+            className={`dg-mosaic ${stepper ? "dg-mosaic--stack" : "dg-mosaic--rows"}${!stepper && ready ? " is-ready" : ""}`}
             role="list"
             aria-label="digithings modules, sized by lines of code"
           >
