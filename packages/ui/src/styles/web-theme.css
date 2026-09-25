@@ -237,10 +237,12 @@ body {
   display: flex;
   flex-direction: column;
   gap: 0.5rem;
+  /* Full-bleed + full-height (#4429): the mosaic fills the sticky stage
+     corner to corner — no frame cap, no auto margins, no clamped band.
+     The stage is sticky 100vh flex, so 100vh fills it exactly; rows
+     flex-fill below. Hero and other sections keep their own frame. */
   width: 100%;
-  max-width: var(--frame-w);
-  margin-inline: auto;
-  height: clamp(34rem, 82vh, 54rem);
+  height: 100vh;
 }
 
 /* The stacked face — the same boxes on a phone, one per row.
