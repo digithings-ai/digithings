@@ -1,4 +1,6 @@
-/* Module pipeline strip + full-card stage list (#4429). Scoped m-flow, m-stages, m-fullcard classes only. */
+/* Module pipeline strip + full-card stage list (#4429). Scoped m-flow,
+   m-stages, and the m-fullcard content classes the tile's grown-in-place
+   deep dive reuses (summary, api, links, related). */
 
 .m-flow {
   display: flex;
@@ -67,65 +69,6 @@
   color: var(--ink-soft);
 }
 
-/* The expanded full module card: an in-flow panel below the mosaic that
-   takes the room the complete card needs. Width follows the page frame. */
-
-.m-fullcard {
-  width: min(var(--frame-w, 1180px), 100% - 2 * var(--page-pad, 1.5rem));
-  margin: 0 auto;
-  padding: 1.75rem 0 2.5rem;
-}
-
-.m-fullcard-head {
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
-  gap: 1rem;
-  margin-bottom: 0.4rem;
-}
-
-.m-fullcard-title {
-  margin: 0;
-  font-family: var(--font-sans);
-  font-size: clamp(1.5rem, 3vw, 2.1rem);
-  font-weight: 600;
-  letter-spacing: -0.02em;
-  color: var(--ink);
-}
-
-.m-fullcard-role {
-  margin: 0.3rem 0 0;
-  font-family: var(--font-mono);
-  font-size: 0.8rem;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  color: var(--ink-soft);
-}
-
-.m-fullcard-tagline {
-  margin: 0.6rem 0 1.25rem;
-  font-size: 1rem;
-  line-height: 1.6;
-  color: var(--ink-soft);
-  max-width: var(--measure-prose, 42rem);
-}
-
-.m-fullcard-close {
-  flex: none;
-  border: 1px solid var(--hair);
-  background: transparent;
-  color: var(--ink-soft);
-  font-family: var(--font-mono);
-  font-size: 0.8rem;
-  padding: 0.4rem 0.8rem;
-  cursor: pointer;
-}
-
-.m-fullcard-close:hover {
-  color: var(--ink);
-  border-color: var(--ink-mute);
-}
-
 .m-fullcard-summary {
   margin: 1.25rem 0 0;
   display: grid;
@@ -138,10 +81,6 @@
 
 .m-fullcard-summary p {
   margin: 0;
-}
-
-.m-fullcard-stack {
-  margin-top: 1.25rem;
 }
 
 .m-fullcard-api {
@@ -166,22 +105,6 @@
 
 .m-fullcard-api code {
   color: var(--ink);
-}
-
-.m-fullcard-foot {
-  margin-top: 1.5rem;
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 0.5rem 0.9rem;
-  border-top: 1px solid var(--hair);
-  padding-top: 1rem;
-  font-family: var(--font-mono);
-  font-size: 0.85rem;
-}
-
-.m-fullcard-foot .dg-mosaic-ask {
-  margin-left: auto;
 }
 
 .m-fullcard-links {
