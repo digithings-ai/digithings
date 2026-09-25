@@ -1,6 +1,7 @@
 import { auth } from "@/auth";
 import { ChatShell } from "@/components/chat-shell";
-import { redirect } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
+import type { Metadata } from "next";
 import { resolveRouteClientConfig } from "@/lib/route-client-config";
 import {
   getPrimaryDeployment,
@@ -11,15 +12,66 @@ import {
   skinOwnsPageChrome,
 } from "@digithings/ui/chat/skins";
 import { HomeStockClient } from "./home-stock-client";
+import { BaselineClient } from "../(baseline)/baseline/baseline-client";
+import EmbedRouteShell from "./embed-route-shell";
+
+export const dynamic = "force-dynamic";
+
+export async function generateMetadata({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
+}): Promise<Metadata> {
+  const params = await searchParams;
+  const mode =
+    params.mode === "embed"
+      ? "embed"
+      : params.mode === "catalog"
+        ? "catalog"
+        : "product";
+  if (mode === "product") return {};
+  return { robots: { index: false, follow: false } };
+}
 
 /**
- * Root `/` — chrome.mode from deployment config selects the presentation.
- * - embed (default): redirect to /embed (anonymous iframe surface)
- * - modal | sidebar: framed stock shell (launcher panel / docked panel, #4515)
- * - app + auth session: ChatShell (server persistence) or stock shell (memory/none)
- * - app + anonymous: stock shell against POST /api/chat without Auth.js wall
+ * Root `/` — the single digichat route (single-route plan, Step 3).
+ * `?mode=` selects the surface; the default is the product presentation.
+ * - embed: tenant iframe surface (same shell as /embed)
+ * - catalog: skin catalog (same client as /baseline; production → notFound)
+ * - product (default): chrome.mode from deployment config selects presentation:
+ *   - embed (default): redirect to /embed (anonymous iframe surface)
+ *   - modal | sidebar: framed stock shell (launcher panel / docked panel, #4515)
+ *   - app + auth session: ChatShell (server persistence) or stock shell (memory/none)
+ *   - app + anonymous: stock shell against POST /api/chat without Auth.js wall
  */
-export default async function Home() {
+export default async function Home({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
+}) {
+  const params = await searchParams;
+  const routeMode =
+    params.mode === "embed"
+      ? "embed"
+      : params.mode === "catalog"
+        ? "catalog"
+        : "product";
+
+  if (routeMode === "catalog") {
+    if (process.env.NODE_ENV === "production") {
+      notFound();
+    }
+    return (
+      <div data-route-mode="catalog" className="contents">
+        <BaselineClient />
+      </div>
+    );
+  }
+
+  if (routeMode === "embed") {
+    return <EmbedRouteShell params={params} />;
+  }
+
   let deployment;
   try {
     deployment = getPrimaryDeployment(getDigichatConfig());
