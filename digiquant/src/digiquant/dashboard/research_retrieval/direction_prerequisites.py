@@ -10,16 +10,41 @@ from uuid import UUID
 from digiquant.dashboard.research_retrieval.direction_decision_context import (
     DirectionPrerequisiteSnapshot,
 )
+from digiquant.dashboard.research_retrieval.models import content_digest
 from digiquant.dashboard.temporal import require_utc_datetime
 from digiquant.research.forecast_outcomes import (
     ForecastOutcomeIntegrityError,
-    list_resolved_outcomes_as_of,
+    ResolvedOutcomesMemo,
+    list_resolved_outcomes_as_of_memoized,
 )
 from digiquant.research.supabase_io import SupabaseClient
 
 logger = logging.getLogger(__name__)
 
 _ACCOUNTING_PERIODS = "accounting_periods"
+
+# Identity columns for the tip-period version pin (#4556). ``accounting_periods``
+# has never had a stored ``content_hash`` (see 072_olympus_period_accounting.sql);
+# the original h7 select asked for one anyway, so every run 400'd with ``42703``
+# and the accounting pin was silently dropped. Pin the row identity locally.
+_PERIOD_PIN_FIELDS = (
+    "id",
+    "period_date",
+    "status",
+    "policy_version_id",
+    "supersedes_id",
+    "recorded_at",
+)
+# PostgREST select list for that identity pin.
+_PERIOD_PIN_COLUMNS = ", ".join(_PERIOD_PIN_FIELDS)
+
+
+def _period_version_pin(row: dict[str, Any]) -> str | None:
+    """Locally computed version pin for one accounting-period row (#4556)."""
+    identity = {key: row.get(key) for key in _PERIOD_PIN_FIELDS if row.get(key) is not None}
+    if not identity:
+        return None
+    return content_digest({"kind": _ACCOUNTING_PERIODS, "period": identity})
 
 
 def _parse_uuid(raw: Any) -> UUID | None:
@@ -36,11 +61,11 @@ def _load_latest_accounting_period(
     *,
     before_date: date,
 ) -> tuple[UUID | None, str | None]:
-    """Return tip accounting period id + content_hash strictly before run_date."""
+    """Return tip accounting-period id + a locally computed version pin before run_date."""
     try:
         resp = (
             client.table(_ACCOUNTING_PERIODS)
-            .select("id, period_date, content_hash")
+            .select(_PERIOD_PIN_COLUMNS)
             .lt("period_date", before_date.isoformat())
             .order("period_date", desc=True)
             .limit(1)
@@ -54,10 +79,9 @@ def _load_latest_accounting_period(
         return None, None
     row = rows[0]
     period_id = _parse_uuid(row.get("id"))
-    content_hash = row.get("content_hash")
-    if period_id is None or not content_hash:
+    if period_id is None:
         return None, None
-    return period_id, str(content_hash)
+    return period_id, _period_version_pin(row)
 
 
 def build_direction_prerequisite_snapshot(
@@ -68,8 +92,15 @@ def build_direction_prerequisite_snapshot(
     research_state_pin: dict[str, object] | None,
     prior_effective_forecast_ids: tuple[str, ...] = (),
     outcome_lesson_pin: dict[str, object] | None = None,
+    resolved_outcomes_memo: ResolvedOutcomesMemo | None = None,
 ) -> DirectionPrerequisiteSnapshot | None:
-    """Pin versioned WP3/WP5/WP15 inputs for direction context compile at preflight."""
+    """Pin versioned WP3/WP5/WP15 inputs for direction context compile at preflight.
+
+    ``resolved_outcomes_memo`` is the run-scoped cohort memo shared with the
+    portfolio direction phase (#4617): the first reader issues the
+    ``list_resolved_outcomes_as_of`` GET and the second reuses it. ``None``
+    reads directly (legacy behavior).
+    """
     state_version_id: UUID | None = None
     if isinstance(research_state_pin, dict):
         state_version_id = _parse_uuid(research_state_pin.get("state_version_id"))
@@ -95,7 +126,9 @@ def build_direction_prerequisite_snapshot(
         if knowledge_cutoff_at is not None:
             try:
                 cutoff = require_utc_datetime(knowledge_cutoff_at, field_name="knowledge_cutoff_at")
-                resolved = list_resolved_outcomes_as_of(client=client, knowledge_cutoff_at=cutoff)
+                resolved = list_resolved_outcomes_as_of_memoized(
+                    client=client, knowledge_cutoff_at=cutoff, memo=resolved_outcomes_memo
+                )
                 matured_set = {str(o.outcome_id) for o in resolved}
                 matured_ids = tuple(sorted(matured_set))
                 resolved_effective = {str(o.effective_forecast_id) for o in resolved}

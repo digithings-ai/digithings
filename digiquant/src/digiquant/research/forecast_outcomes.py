@@ -26,6 +26,7 @@ from pydantic import ValidationError
 from digiquant.dashboard.temporal import require_utc_datetime
 from digiquant.portfolio.models.forecast import (
     AmendmentOutcome,
+    EffectiveForecast,
     ForecastAmendment,
     ForecastAssessment,
     PriceAnchorStatus,
@@ -56,6 +57,13 @@ OUTCOMES = "forecast_outcomes"
 DEFAULT_VENUE = "NYSE"
 # US equity cash close proxy when price_history has no observation timestamp.
 _SESSION_CLOSE_HOUR_UTC = 20
+
+# Batched existence probe sizing (#4579). ``_existing_outcome_keys`` asks for one
+# chunk of distinct ``effective_forecast_id`` values per request so a long
+# assessment list cannot blow the request URL apart, and pages below the
+# PostgREST 1000-row response cap (#3789) the way ``_scan_all`` does.
+_OUTCOME_KEY_CHUNK = 100
+_OUTCOME_KEY_PAGE = 1000
 
 
 class ForecastOutcomeIntegrityError(RuntimeError):
@@ -414,6 +422,46 @@ def _existing_outcome(
     return rows[0] if rows else None
 
 
+def _existing_outcome_keys(
+    *,
+    client: SupabaseClient,
+    keys: list[tuple[UUID, date]],
+) -> set[tuple[str, str]]:
+    """Natural keys from ``keys`` that already have an ``OUTCOMES`` row (#4579).
+
+    The per-assessment probe was one round trip each — 44 of them in run
+    35857376877 — so the resolver asks once for every candidate instead. The
+    table is append-only (migration 080), so a read-only batch sees only
+    committed rows. No request is issued when there is nothing to check.
+    """
+    ids = sorted({str(effective_id) for effective_id, _ in keys})
+    if not ids:
+        return set()
+    found: set[tuple[str, str]] = set()
+    for start in range(0, len(ids), _OUTCOME_KEY_CHUNK):
+        chunk = ids[start : start + _OUTCOME_KEY_CHUNK]
+        offset = 0
+        while True:
+            resp = (
+                client.table(OUTCOMES)
+                .select("effective_forecast_id, maturity_session")
+                .in_("effective_forecast_id", chunk)
+                # Order on the whole natural key so a .range() page boundary can
+                # never split a tie and skip a row (#3954, the _scan_all rule).
+                .order("effective_forecast_id")
+                .order("maturity_session")
+                .range(offset, offset + _OUTCOME_KEY_PAGE - 1)
+                .execute()
+            )
+            rows = list(getattr(resp, "data", None) or [])
+            for row in rows:
+                found.add((str(row["effective_forecast_id"]), str(row["maturity_session"])))
+            if len(rows) < _OUTCOME_KEY_PAGE:
+                break
+            offset += _OUTCOME_KEY_PAGE
+    return found
+
+
 def _outcome_row(outcome: ForecastOutcome) -> dict[str, Any]:
     return {
         "outcome_id": str(outcome.outcome_id),
@@ -570,6 +618,9 @@ def resolve_matured_forecast_outcomes(
     conflicts: list[str] = []
     run_key = (current_run_id or "").strip()
 
+    # Pass 1 — resolve every assessment that is actually due, without touching
+    # OUTCOMES. The existence probe is batched afterwards (#4579).
+    candidates: list[tuple[ForecastAssessment, EffectiveForecast, date, date]] = []
     for assessment in assessments:
         if run_key and assessment.source_run_id.strip() == run_key:
             skipped += 1
@@ -616,12 +667,16 @@ def resolve_matured_forecast_outcomes(
             pending += 1
             continue
 
-        existing = _existing_outcome(
-            client=client,
-            effective_forecast_id=effective.effective_id,
-            maturity_session=maturity_session,
-        )
-        if existing is not None:
+        candidates.append((assessment, effective, reference_session, maturity_session))
+
+    # Pass 2 — one batched existence read for every candidate natural key (#4579).
+    existing_keys = _existing_outcome_keys(
+        client=client,
+        keys=[(candidate[1].effective_id, candidate[3]) for candidate in candidates],
+    )
+
+    for assessment, effective, reference_session, maturity_session in candidates:
+        if (str(effective.effective_id), maturity_session.isoformat()) in existing_keys:
             skipped += 1
             continue
 
@@ -725,6 +780,44 @@ _OUTCOME_FIELDS = frozenset(
         "known_at",
     }
 )
+
+
+# Run-scoped memo for the cutoff-bounded resolved-outcome cohort (#4617).
+#
+# Each daily run issued the byte-identical ``list_resolved_outcomes_as_of`` GET
+# twice — once at research preflight (direction prerequisites) and once in the
+# portfolio direction phase (shadow calibration). Both call sites share one
+# client and one pinned ``knowledge_cutoff_at`` per run, so the second read is
+# a cache hit. Keyed by ``(id(client), cutoff_iso)``: no TTL clocks, no round
+# caps, no cross-client contamination. Errors (including
+# ``ForecastOutcomeIntegrityError``) are never stored, so the #4298 fail-loud
+# and generic-``Exception`` fail-soft contracts of both callers are unchanged.
+ResolvedOutcomesMemo = dict[tuple[int, str], list[ForecastOutcome]]
+
+
+def list_resolved_outcomes_as_of_memoized(
+    *,
+    client: SupabaseClient,
+    knowledge_cutoff_at: datetime,
+    memo: ResolvedOutcomesMemo | None,
+) -> list[ForecastOutcome]:
+    """Share one ``list_resolved_outcomes_as_of`` GET across a run's readers (#4617).
+
+    Contract: share a single ``memo`` dict per (run, client) — production wires
+    one instance through preflight and the direction phase. ``memo=None``
+    degrades to a direct read. Hits return a copy so neither reader can mutate
+    the cohort the other one sees.
+    """
+    if memo is None:
+        return list_resolved_outcomes_as_of(client=client, knowledge_cutoff_at=knowledge_cutoff_at)
+    cutoff = require_utc_datetime(knowledge_cutoff_at, field_name="knowledge_cutoff_at")
+    key = (id(client), cutoff.isoformat())
+    cached = memo.get(key)
+    if cached is not None:
+        return list(cached)
+    resolved = list_resolved_outcomes_as_of(client=client, knowledge_cutoff_at=cutoff)
+    memo[key] = resolved
+    return list(resolved)
 
 
 def list_resolved_outcomes_as_of(
@@ -1180,7 +1273,9 @@ __all__ = [
     "ForecastOutcomeHashRepairPlan",
     "ForecastOutcomeIntegrityError",
     "OutcomeResolveResult",
+    "ResolvedOutcomesMemo",
     "list_resolved_outcomes_as_of",
+    "list_resolved_outcomes_as_of_memoized",
     "plan_forecast_outcome_cascade_repairs",
     "plan_forecast_outcome_hash_repairs",
     "resolve_matured_forecast_outcomes",

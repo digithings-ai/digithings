@@ -338,7 +338,7 @@ window date is clamped to the effective `as_of`); the default is a single day
 unless `include_prior` widens it to `date_from`. Every `documents` read is gated
 by `research_document_allowed(retrieval_phase, key)` (phase-scoped blinding), and
 portfolio datasets are gated by `portfolio_tool_allowed`. Archived
-`documents.payload` bodies hydrate read-through from R2 (`_hydrate_archived_row`);
+`documents.payload` bodies hydrate read-through from R2 (`_hydrate_archived_rows`);
 `documents.content` is never archived. `content` is preview-truncated to 500
 chars unless `full_content`. In-pipeline wiring:
 `research/phases/_node_factory.SegmentNodeSpec.use_research_tools` /
@@ -451,7 +451,10 @@ seam helpers in `research/data/queries.py` — `r2_backend_enabled()`,
 the five ops scripts (`execute_at_open.py`, `fill-entry-prices.py`,
 `refresh_performance_metrics.py`, `verify_nav_replay.py`,
 `finalize_period_accounting.py`) plus the research/portfolio readers that
-previously hit the Supabase market tables. `r2_close_rows` fails loud on a
+previously hit the Supabase market tables. Price-technicals reads are R2-only
+since #4053 and expose `get_price_technicals_batch(*, client, tickers, lookback,
+as_of)` — the phase entry point that reads the sealed manifest once for the
+whole basket instead of once per ticker (#4600). `r2_close_rows` fails loud on a
 ticker with no sealed generation; readers whose documented contract is to read
 a missing ticker as "no signal" (`query_price_deltas`,
 `commit_io._interval_price_returns`, `get_sector_relative_strength`) call
@@ -470,6 +473,34 @@ days — breach keeps the prior objects serving, writes the manifest
 same-day execution (`d > seal` — `execute_at_open` / `fill-entry-prices`
 price opens and fills from `price_history`; D3) and `FEDPROB/*`
 prediction-market odds (`get_fed_rate_probabilities`; no R2 generation; D2).
+
+`scripts/refresh_market_data_r2.py` also exits non-zero when any macro series
+lands in a soft-fail mode (`history-only`/`error`), so the live fetch window has
+to span at least one publication period of the series (#4588). `LIVE_WINDOW_DAYS`
+(45) assumes a daily series; a monthly FRED series (`M2SL`, `UNRATE`, `MANEMP`,
+`CPIAUCSL`, `PCEPI`) legitimately has no new observation inside it — release lag
+plus the pending release puts the newest month up to ~90 days behind the run — so
+the window came back empty, `_fetch_macro` raised `empty live window`, and every
+scheduled refresh was marked stale. Each entry in
+`research/config/macro_series.yaml` may now declare a `cadence`
+(`daily`/`weekly`/`monthly`/`quarterly`), which selects the window
+(`_CADENCE_WINDOW_DAYS`: 45/60/120/240 days; absent = daily). The widened window
+then *contains* the series' seal row, so the live fetch is non-empty and the
+existing benign `up-to-date` path covers it. Note what does **not** change: an
+empty live window still returns `history-only` — `_fetch_macro` raises on empty
+and the `except FetchError` arm maps it to the soft-fail mode — because an empty
+window is genuinely ambiguous (a dead feed looks the same as a very slow one).
+The fix is the window containing the observation, not a new benign-empty branch.
+A series whose seal falls outside the widened window still fails the run, so a
+genuinely dead feed is detected (though at the slower cadence: up to 120 days for
+monthly, versus 45 before; weekly keeps the 45-day default because several weekly
+publications already fit inside it). Contract tests:
+`tests/scripts/test_refresh_market_data_r2_macro.py`. A cadence outside the map
+raises `ValueError` rather than silently defaulting. Second-order effect of the
+wider monthly window: a revision to a monthly print that is 45–120 days old is now
+inside the window and takes the `_restated` path (a full-history re-pull) where it
+used to be invisible; that is the intended sealing behaviour, at the cost of an
+occasional extra re-pull.
 
 #### Market-data R2 read path (#3780 Task 10)
 
@@ -2017,8 +2048,11 @@ entry until that cutover. Prompt / structured-output walk for the same pass:
   only — analyst/deliberation/direction provider wiring is WP14.2–14.4; drill-down manifest pinning is
   WP14.4. **WP14.2 (#2942)** wires analyst/deliberation via
   `research_retrieval/context_wiring.py` (`DIGIQUANT_CONTEXT_COMPILER_MODE`
-  `off|shadow|enforce`): shadow records compiled capsule/manifest beside incumbent
-  `phase_inputs`; enforce strips portfolio/PM keys and injects `structured_context`
+  `off|shadow|enforce`): shadow compiles the capsule/manifest and returns them on
+  `RoleContextWireResult` (since #4609 it no longer re-serializes the shadow
+  blobs into the uncached `phase_inputs` by default — set
+  `DIGIQUANT_CONTEXT_SHADOW_IN_PROMPT=1` to restore the old in-prompt blobs);
+  enforce strips portfolio/PM keys and injects `structured_context`
   with manifest linkage fields for WP1 telemetry. Prompt guards live in
   `research_retrieval/blinding.py` (`assert_blinded_analyst_prompt` /
   `assert_blinded_deliberation_prompt`). **WP14.3 (#2946)** wires direction via the same mode knob:
@@ -2089,7 +2123,25 @@ entry until that cutover. Prompt / structured-output walk for the same pass:
   materializes an immutable `ForecastAssessment` via
   `portfolio/phases/portfolio_common.py` (`materialize_forecast_assessment`,
   serializer includes assessment; legacy priors without typed forecast force
-  full; skip preserves identity; partial nested forecast edits are rejected).
+  full; skip preserves identity; partial nested forecast edits are rejected, and a
+  stance edit on an evidence-bearing prior must re-itemize `/body/evidence` in the
+  same patch, because `conviction_score` is derived from those counts and would
+  otherwise be re-derived from the prior call's counts (#4583). Those counts are
+  itemized against the analyst's **own call** (its `stance`), not against the market
+  thesis the vehicle is mapped to: an analyst may disagree with the thesis it carries,
+  and the families contradicting that thesis then confirm the call.
+  **Five-family evidence sum (#4585).** Both counts are drawn from one five-family
+  universe — technicals, fundamentals, flows/positioning, macro regime, sentiment/news —
+  and each family is itemized once, on the confirming or the contradicting side.
+  `EvidenceAssessment` enforces `independent_confirming_signals + contradicting_signals
+  <= 5` with a cross-field `model_validator` that **rejects** an overcount (the pre-fix
+  schema bounded each field at `le=5` independently, so `analyst/IBIT` 2026-09-22 stored
+  `4 + 4` — eight families over five). A **persisted/prior** body that violates the sum is
+  repaired on read by `repair_legacy_evidence_counts` (skip/carry, metric-patch, and
+  edit-fallback paths): it preserves the net `confirming - contradicting` — so the derived
+  `conviction_score` is unchanged — while reducing the pair to fit (`4+4 -> 2+2`,
+  `5+2 -> 4+1`, `2+5 -> 1+4`). Fresh LLM output is validated strictly, so an impossible
+  generation is caught and retried rather than silently rewritten.
   deliberation appends optional evidence-linked `ForecastAmendment` without rewriting the base;
   LLM envelopes that nest economics under `terms` (SLV/IAU in house GHA 33426508863)
   unwrap before validate, and missing `horizon_sessions` / `half_life_sessions` copy
@@ -2800,7 +2852,7 @@ separately so research nodes never pay the per-ticker decision-artifact token ta
   Tool-only with an unconditional abort: a requested search must succeed or raise
   `DashboardWebSearchError` — the run aborts rather than reasoning ungrounded.
   A scoped search that returns zero rows retries once without `include_domains`
-  (logged; `relaxed_domains: true` on the tool result) before failing (#4086),
+  (logged at debug level; `relaxed_domains: true` on the tool result) before failing (#4086),
   because the hosted `ddgs` provider can only post-filter, not bias, by domain.
   There is no synthesis fallback and no fail-soft flag.
 - Fail-fast web_search pre-flight (#4198): `python -m digiquant web-search healthcheck`
@@ -3131,7 +3183,7 @@ see below). **PostgREST timeout:** `build_client` sets
 Ledger writers, at-open (`execute_at_open.py`), and the opening-snapshot seed
 construct that client through `build_client`. `_insert` / `_execute` call
 `execute()` directly; hung I/O fails via httpx (no thread deadline). The
-research pipeline run step wraps each of 3 attempts in `timeout 70m` so a
+research pipeline run step wraps each of 2 attempts in `timeout 100m` so a
 hung attempt fails and the retry can fire; the step `timeout-minutes` is 230,
 under the 240-minute job cap. `_insert` raises if `workspace_id` is missing
 on a row. No client-level retries on this path (disconnect retries are a
@@ -3894,7 +3946,7 @@ returns it, which is why that function's name no longer matches the health verdi
 
 ### One row per retry ATTEMPT, not per workflow run (#1762)
 
-`pipeline-digiquant.yml` retries the chain up to `MAX_OUTER_ATTEMPTS=3` times **inside one job**,
+`pipeline-digiquant.yml` retries the chain up to `MAX_OUTER_ATTEMPTS=2` times **inside one job**,
 so every attempt sees the same `GITHUB_RUN_ID`. That was the entire upsert key, so the last
 attempt — usually the cheap checkpoint-resumed one — replaced the expensive attempt's tokens,
 cost, `status` and `error_summary`. 28 of 54 production rows were affected.
@@ -3940,6 +3992,24 @@ than a record, since a jsonb key and a log line are both passive.
 `retry_signal`, or the exit code. A mid-run abort would leave a partially-published run, and
 #1749/#1751 established that partial states are where the silent-staleness defects live. There
 are tests pinning the negative property; do not relax them into a ceiling without a new decision.
+
+**Token-derived fallback (#4596).** The house upstream reports no per-call cost, so the raw
+`cost_usd` in the usage snapshot is `0.0` on every run and this alert could never fire. `_row`
+therefore resolves `est_cost_usd` once — the reported cost when it is positive, otherwise
+`pricing.estimate_cost_usd(usage["by_model"])` against the committed per-model table in
+`research/pricing.py` — and feeds the SAME value to both `spend_alert` and the `est_cost_usd`
+column. The estimator returns `None` when no tokens were priced (no priced model, or a priced
+model whose tokens are all zero/junk), so behaviour is unchanged when no price is known (never
+fabricate `$0`).
+
+Each price is taken verbatim from the repo's own committed snapshot,
+`docs/providers/snapshots/<provider>.yaml` (`paid_tier.models[].cost_per_1m_input` /
+`cost_per_1m_output`); `deepseek/deepseek-v4-pro` deliberately uses the snapshot's **peak**
+rate. A price no snapshot corroborates fails
+`tests/dq/research/test_pricing.py::TestThePriceTable::test_every_committed_price_is_corroborated_by_a_committed_snapshot`.
+`google/gemini-3.7-flash` is a house slug with no price: it is absent from the committed
+`gemini.yaml` (the snapshot predates the model), so it is listed in `_UNPRICED_SLUGS` until
+that snapshot is refreshed.
 
 It is computed in `_row` rather than through `register_breakdown_contributor` because **that seam
 is `state -> dict` and spend does not live in state** — it arrives in the `digigraph.usage`

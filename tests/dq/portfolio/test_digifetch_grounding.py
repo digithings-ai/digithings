@@ -28,6 +28,14 @@ from digiquant.research.state import (
 
 from digifetch import HttpFetcher, RateLimiter, RetryPolicy
 
+
+def _content(result: str | dict[str, Any]) -> str:
+    """Unwrap a digifetch dispatcher result: ``{"content": <json str>, "ok": bool}`` (#4556)."""
+    if isinstance(result, str):
+        return result
+    return str(result["content"])
+
+
 AAPL_QUOTE = {
     "symbol": "AAPL",
     "currency": "USD",
@@ -112,7 +120,7 @@ def test_portfolio_grounding_equips_the_free_pm_subset(
     # Session-gated names are absent without a cookie.
     assert names.isdisjoint(gated_pm)
 
-    payload = json.loads(execute_tool("digifetch_quote", {"symbol": "AAPL"}))
+    payload = json.loads(_content(execute_tool("digifetch_quote", {"symbol": "AAPL"})))
     assert payload["data"]["quote"]["price"] == 200.0
 
 

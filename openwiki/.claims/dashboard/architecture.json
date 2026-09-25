@@ -1,62 +1,142 @@
 {
   "schemaVersion": 1,
-  "pageVersion": "sha256:cdebc633d493e1326a92757f83997f1b4cd04286f384bddb2b3fab1869be8a90",
+  "pageVersion": "sha256:7fcda273cbb1ffbcab4fae2a0687fc550eb5678210a5724d9304ab41db8e93bb",
   "claims": [
     {
       "id": "claim_9d93f0468d144364aa1d19dd36534c4e",
       "statement": "The dashboard is a Next.js 16 + React 19 static-export app (output export, unoptimized images, trailingSlash) served under the sole public basePath /dashboard/, with a check:static-export build step.",
       "evidence": [
         {
-          "resource": "repo://frontend/dashboard/next.config.mjs#L1-L20",
-          "version": "repo-lines-v1:sha256:ef23e9fd58196a9037e261b88bf3d297561680ea29bdbdb9be9de5b8a5a0a949:eyJzZWxlY3RlZExpbmVDb3VudCI6MjIsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjYzYjAwNDFmM2M1M2YyMWM5Y2NlOWYwYWFjOGI1NjdkODY1NjcyNDA1ZmI5ZTk2MDQ1ZmQ5YzJjMWVkOTIyN2YiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjAxYmE0NzE5YzgwYjZmZTkxMWIwOTFhN2MwNTEyNGI2NGVlZWNlOTY0ZTA5YzA1OGVmOGY5ODA1ZGFjYTU0NmIiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjowLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjoxLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjVjYmMxN2NhOGY3MzU5NDc2NzgzMGEzNmVlZWFjNGNlNWZlYTVkZDM4Nzg1NWVhNzRmNDUxOTE5MTk1ZDVjMTMifQ"
+          "resource": "repo://apps/dashboard/next.config.mjs#L1-L21",
+          "version": "repo-lines-v1:sha256:f769cadd331f0f6ba15482fadd6b9086ea8532ee573a684eea65cf482c4fd95d:eyJzZWxlY3RlZExpbmVDb3VudCI6MjEsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjYzYjAwNDFmM2M1M2YyMWM5Y2NlOWYwYWFjOGI1NjdkODY1NjcyNDA1ZmI5ZTk2MDQ1ZmQ5YzJjMWVkOTIyN2YiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImFhMWQxYTYzMzkwMjI5Yzc5ODM0N2U4M2EwNDA1NDQxYzk0MDAwMzUyODRhZDE2OGMxYmY2Y2RmMWQ3MGEzNzAiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjowLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjoyLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImQzMTNiNzljZmY3ODk3NmJkY2FmNDdkNGM4Yzg0NGI0MGUxMzExMzU3ZDBmMjlkY2QyYzIyZjYwZDU2Mzk0OTkifQ"
         },
         {
-          "resource": "repo://frontend/dashboard/package.json#L1-L15",
-          "version": "repo-lines-v1:sha256:4271a6140288dfdb52a524e9f9e218219fedefe78da4febca37d55712386949c:eyJzZWxlY3RlZExpbmVDb3VudCI6MTUsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImE2ZmIwOGZkYTFhY2I5NTdiNjExNmJkMzc4MTFhMWZlNDFhMDE2MTFjMDYzMWVkYmY3ODZkNjg4OWEyN2E1NWMiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjZkNGNiYjU0NGMyZDQ5NTkzMmI0MDg3ZmNhYmJjMThkMTg3Y2YwYzk3NjM3YWQwMmZmOWQ4ZjRiMTEyYzIyZDkiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjowLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjZmMjM3YWFhNGY1NmNiZDRkOWM5NDRkOTA2MTdjYjU1NWEzYjNkMmY5NTVlODZiOTgxMGM0MWUwMmUzNjE5ODYifQ"
+          "resource": "repo://apps/dashboard/package.json#L5-L12",
+          "version": "repo-lines-v1:sha256:8d8dc260e2ddac3fba18c0307115eca46dcca3fe5475e03d72ff6d67bfe92103:eyJzZWxlY3RlZExpbmVDb3VudCI6OCwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiMzQ4MzNkNTk0OWMwM2E0MGNhOTUyNDkxNjEwYTY2NTk2NDRiM2FhNDY2MzYyZjc5OTAyMGRiZjE5ODE1NDdkYiIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiNGQ1Y2QyZmI0ZjNkZjg4NDUxNTI1NWIzOTUyM2YyZjhiNTQ3MmJlZWE5ZjU2NmZmY2EyMDRkYjgwMjU2MTA0MSIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiZTI3ZTM0ZjE1NDYzOWRhN2ZiZWNmYjAxODMwNjVhOTlkOTZjMTJlZjBjY2JlNWI5YWQ4NjNmNTNkZjU1M2QxNCIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiZGM4NTBkZmU2NmIyZjFmYWQ0ZDQ1ZmIwZDNjYWQxZmVkZjJkOGYzNTY3ZDUyNWYxMWNhYWM4ODRmODk5YWFjZCJ9"
         }
       ]
     },
     {
       "id": "claim_c21cfce1a0ce448687a30e66c100cde8",
-      "statement": "Styling consumes the shared design system via @digithings/design workspace tokens plus the Tailwind v4 bridge from @digithings/web (transpilePackages), layered in app/globals.css.",
+      "statement": "Styling consumes the shared design system via @digithings/design canon tokens plus the Tailwind v4 bridge from @digithings/ui (web-theme.css, the @theme inline bridge), layered in app/globals.css; the dashboard declares no @theme bridge of its own.",
       "evidence": [
         {
-          "resource": "repo://frontend/dashboard/README.md#L1-L15",
-          "version": "repo-lines-v1:sha256:b1fc1d74cef3adf73a61aa947abd5fe46370b235feeb3b025b220a8baf86be2d:eyJzZWxlY3RlZExpbmVDb3VudCI6MTUsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjdiYjBlMjgwMDM4ZmJmZGJhYjM0ZThlMGM3ZmEzNzY3ODU4YWM1NzNiY2YzZjM2MjMzY2Q1ZDcwZDI1ZThhYjEiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImUxMTgyNmQyNzBjN2U5YjQ0YzcxMWExN2VjNjczMTU1ZDE4MTExNTNlNTQzNjUyMDQxODJmOTQ1NTc2NTM3ZjYiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjowLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImZiNzZjZTRhZDBlMGFjZDJlYzkyY2VlNGVlNTFiZTI0MDJhMTUzZGM1Y2ZkN2U2NTU5ZTY0YzA4MDY0ZTZkMjEifQ"
+          "resource": "repo://apps/dashboard/README.md#L6-L19",
+          "version": "repo-lines-v1:sha256:22cd68003500e600b41a0e3e21e04d819c9b57bf5267b1ca012d7417896ba2cf:eyJzZWxlY3RlZExpbmVDb3VudCI6MTQsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjFjNGQ0NzRlODhhZmJmNTdjNmI1NmQxN2E0MjMxNjM2Y2E3NDYwNjNlMDViMGU5MGM2OWJkZjEwODE4YWI2ODIiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQ3YzA2YzU2MWQ1YzMyNzM0MzY4NTI2OGE0NmIzMzkxZjM5OThlZWU4OTBkMmJlNTFmMGQyMWNjNGE1M2FlNmQiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjFhNjY4NzJiN2JjNTU1OWVlZDMyYjNjNGU3ZjhkMzcwZTQzZGRiMzVjNzNhOTkwOTMwODQ5Nzk1MWM3OWU0YWQiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjNmZTBlMTRhYjU4N2U4ZTI4NmViMzM2YzY5ZGM5NTFhZDUzZDdmNGI5NjFlYzJmMjI3ZmU5Nzg3NmU4ZjcwMTgifQ"
         },
         {
-          "resource": "repo://frontend/dashboard/package.json#L15-L20",
-          "version": "repo-lines-v1:sha256:c7405cfd506c2c1a7b015f0872425a9a11c0564124c27060b5eaf61656bd2772:eyJzZWxlY3RlZExpbmVDb3VudCI6NiwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiNmQ0Y2JiNTQ0YzJkNDk1OTMyYjQwODdmY2FiYmMxOGQxODdjZjBjOTc2MzdhZDAyZmY5ZDhmNGIxMTJjMjJkOSIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiZDVjMzk3NzFjZTQ3NTc4NTAyM2Q2NGMwMDJkMzBmNDRjYmRjNzhhNzQyNmNmZjk4YTYwMTYyNzcxMDQ3MGM0MSIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiYzQzN2I5NjEzZDI2YTU1N2M1MGQ5ZTRmNzYwYzlmYThjNmQwZjExYjJmOTZkOTZkOTJlZjEzMDYyNWZhZjM4NCIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiMzFjMTc2NGRjMDg2NWU3NjE5NTdkZTg5Nzg4NDVkYmE4YjE0YTY5MjhmZTA3ZTkzNDkyNzdhNDg5ZTIwMTljNyJ9"
+          "resource": "repo://apps/dashboard/app/globals.css#L1-L46",
+          "version": "repo-lines-v1:sha256:e6ee1457e09b21b64ede628f4897170b9704dfec0748ea7f815fdb912245eb37:eyJzZWxlY3RlZExpbmVDb3VudCI6NDYsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQyMDcwZTBiNDViYjIwMWIyYjgzOGE1MmFhYWE2ZTk2NWY5NjRlMGI1NDJkOTdmMWZlNTE3ZmU1OWM0Yjc1YTgiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImZhZmZmMmM5ODE2NTNiNjg5NjlhY2ExNmJlZjYzMzlmOGUyMjBkZWQ4MTA4Yjk0ZGVlOTI1MjRlMTAzYTIwZTIiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjowLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjY0ZGE0MDI1ZmQ1OTQ4M2NhMWU4N2NkNDNhMmVjY2FiZjdkNjE4NTQ5NWNiNjA1NmNiNjNiYTE1YTk3NDgyY2EifQ"
+        },
+        {
+          "resource": "repo://apps/dashboard/package.json#L13-L27",
+          "version": "repo-lines-v1:sha256:0cf2cb71aa970c3b548191b5d75fc3f60d5c1ede8b4b7c81b2e25ff0e18965d7:eyJzZWxlY3RlZExpbmVDb3VudCI6MTUsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImJhM2I0NjlkOWUwOTc1NzIyNDY2NjczNGM5ZWY3YjI1NGQ4ODUzNGY1ZDViYjcwOTg5NjA4MDVjNTUzZGMzMDciLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjZhMWI1N2FlY2U4ODM5OTNkMGZmYTZhYzEyMTcxMjc5YWYzMjFlYmMxZTdjZjc3NGY4NTNiMDY0YjJmNjY4YmMiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImM2NjMxMjQ2ZDYxN2NjYWM2ODg2OTliOWVhNDNiOGJiMjJlM2E4MGZlOTM3OTFjNDgyY2I3MGJmNmE0YTg0MzIiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjBiMmZhNTFhMmNkM2M5YTI2NmY1MTE2MGFiYzE5ZjRiMjNmZjUyMjk5ODZiNmRjYzI3M2E5NjQwM2I5ODhkZGYifQ"
         }
       ]
     },
     {
       "id": "claim_fdbeba59985a4e768b2bc9d7cda48e4f",
-      "statement": "The root layout self-hosts fonts via next/font for CSP compliance and scopes pages to the digiquant accent and blueprint background with a version/env label.",
+      "statement": "The root layout self-hosts a single Geist Mono face via next/font for CSP compliance (font-src 'self' data:) and scopes pages to the blueprint background (qn-blueprint-bg), wiring ThemeProvider, MotionLayer, AuthProvider, and AuthGate around the page; the version/env label (NEXT_PUBLIC_DASHBOARD_VERSION, fallback v0.1 · dev) is rendered in settings chrome, not the layout.",
       "evidence": [
         {
-          "resource": "repo://frontend/dashboard/app/layout.tsx#L1-L30",
-          "version": "repo-lines-v1:sha256:fc462f25121d0d609c2346117377bfa9f8c82fd6b3447a6ef5109132ae90d341:eyJzZWxlY3RlZExpbmVDb3VudCI6MzAsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImZhZjU4NjQxMTA4ZGE0OGM0YmI5MzE5MjQ2NWU5OTM3NTRjMGYxMThhZjhiYjJiMTdlM2E0YWJhZGMxMGFkMTciLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImI2YWQ2YTljOWQ1Yjk3ZWEyZWQ0NjZkZTZhZjE0NWMxY2U1M2Y4NTlmZTRlYThjMzNkMTM3ZjAzN2MzMTdhODgiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjowLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjQ4OTIxMjU5MGQ0MmFmODIwMTc1OWMzMTg4ZGY4ZTRjOTg3OTgwMDY1OTYyMDE0MDg4Nzc1MjhlZDA5OWY0NGQifQ"
+          "resource": "repo://apps/dashboard/app/globals.css#L114-L128",
+          "version": "repo-lines-v1:sha256:03704815aa12668c96cad8710542698f48fce6e5059ab338c0d5936d92830089:eyJzZWxlY3RlZExpbmVDb3VudCI6MTUsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImZiZWI4NmUzYjAwYmEwNWU5ZjY5Y2JkODU2ZGIwYWY0ZGQwZjlkOWVjNDU4NDQ4N2NmYzZlMjE5YTg0YWJlZjkiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQxMmNhMzQ1Y2NmNzViZjljMDgwNmJjZTY5NWJlOGRlODA4Yjc5OTg0MjUxYTdhNTRkMjAyY2Y2MTAxZGQ0NTEiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImFkMWYxNTM0MTFiYjdiZTM4NDE4MmQ0NDI3NGUwNjJhZGRiYjIyMjIwOTMzYzhkZmEzYzY2NzE5NjU3YjE3MjciLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjRhNDQyMzZhNzliMTYzM2Q4NDc2ODhhNDAzZTBiMWJiODhhMzVkNjQyM2U2ZTZlZWNjYmI2MDU5OTc1Nzg4Y2YifQ"
+        },
+        {
+          "resource": "repo://apps/dashboard/app/layout.tsx#L13-L67",
+          "version": "repo-lines-v1:sha256:400712c69c68fcb46934f432ccb2c5db0f004d1f7e697b3cd390c11ddd58c85d:eyJzZWxlY3RlZExpbmVDb3VudCI6NTUsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQwOTM4MWEyNDg1OWM0N2M5N2ExYjk0ZGMxZDFjMTc5N2M1ZDBkZGU2NjgzZDY2ZDY4YTc2NmZlZGEyNmE1MTgiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjYzODE4Zjk5ZDQ5M2ZiNWNjYmEyZmM0MTdlOWQ2ZTFiYzczOTE5MmM0N2Q2NzU1MmMxMzQxMDc2Y2YzNDVmNmQiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjMwOGUzODRjYTY3ZWQ2MTBhZDQ4YTI3OGE2MzUwZmE0YmQ3OTMzNTBjMWE4OWRiZjUxODM0ZTA4NGIwOGM2YjAiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjM1ODRhODM2Y2ZjZmIyZjVmYjI1M2M3MmEyMGU5ZDk1NDY0MmMwYjM5MWJkNWVmOTZlMDgwZGJhZDMyMGQxMjAifQ"
+        },
+        {
+          "resource": "repo://apps/dashboard/components/sidebar-settings.tsx#L72-L72",
+          "version": "repo-lines-v1:sha256:dd549724620cad2ce9b5935b4758a50be91c2a07d889150f43099715772b762d:eyJzZWxlY3RlZExpbmVDb3VudCI6MSwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiZGQ1NDk3MjQ2MjBjYWQyY2U5YjU5MzViNDc1OGE1MGJlOTFjMmEwN2Q4ODkxNTBmNDMwOTk3MTU3NzJiNzYyZCIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiZGQ1NDk3MjQ2MjBjYWQyY2U5YjU5MzViNDc1OGE1MGJlOTFjMmEwN2Q4ODkxNTBmNDMwOTk3MTU3NzJiNzYyZCIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiNjgwODA3MWQ4MGUwZmQ0MTNlNTFlYzExYjlkOWFiY2YxYmUyNmFhNWJjYjIyNGY0YWYxMjFlMWRmOWRkNzkyNCIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiMDQxMDBlNzJlMWEwOTEwOGVhZTk0NTRmZDAyN2EzZGMzNWUzNzA4ZTZhYTMxNGZkY2YzZWE0N2Y2MmJkYTNlNyJ9"
         }
       ]
     },
     {
       "id": "claim_cea8d7c3e4194ad2bf4f17014d8c241c",
-      "statement": "Route groups under app/ cover research, portfolio, performance, library, pipeline, and system; lib/ owns book reconciliation and auth gating with fail-closed accounting unit tests.",
+      "statement": "Route groups under app/ cover research, portfolio (absorbing legacy performance), library, pipeline (absorbing why/system/observability/architecture), strategy, house, auth/login/signup, settings, and twelve-x; lib/ owns book reconciliation, accounting views, auth context/gate, and entitlements, with fail-closed accounting unit tests.",
       "evidence": [
         {
-          "resource": "repo://frontend/dashboard/app/page.tsx#L1-L30",
-          "version": "repo-lines-v1:sha256:b20ffca293577df99170040185b6512dd2800640d4987cb7ef09a9b9f3479caf:eyJzZWxlY3RlZExpbmVDb3VudCI6NDAsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjNmMzdkYjFiOGRiM2ZiZWEzNmE1ZDJhNmZmZDVmMzM5M2E1M2VmMDUwNDdlMGI1ZTZlMTRhNDM0ZTQwNmZkZmMiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImNhMzBkNDE0NDQ0NDUyYjUwZTU1Y2Y0ZTgyMGQ0ODM2OWY4ODczM2U3NTI5NWJhNzczYTNkMTg5ZDE2OGM3YjciLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjowLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjliYjc1ZDY3MTMyYWZlN2E5NWYxNDI1ZDgyMmNlZTEyM2I0NGZkMTQzNTViMTJmYjVmMmMyM2I4NzAxNjE1ZDkifQ"
+          "resource": "repo://apps/dashboard/lib/accounting-views.ts#L8-L18",
+          "version": "repo-lines-v1:sha256:b83dbc6698f47cd697735f7b2e17d160e75417415d2275acdcb649483dea3684:eyJzZWxlY3RlZExpbmVDb3VudCI6MTEsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImU4MmZlNTk4OTZhYjY5MGNlODE4NzUxNzYzYmIwMmVjZTg0NGUyY2RhNjg1MTlmZDM3YTAyOTdiYjFiMTAzMTYiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjY1NjQzZTk1ODRiMjI4M2M0MTQ2YjlmNjQ4YTBkMzhkOWJhZjI1MWQwZThkMzMxMmE4YTQ1MjU0OWQ3NzIzZmQiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjQ3M2JjMzcwNmMyY2U0MWFlZjM0ZWYyZGRiNjVlZmNmN2FmYTI5NmI3NDIwZTcyMTU2OWRkMmU5YjIzZjJjMjciLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImQ2NWE1MzlmZmZlYjUzMjhjY2ZkOTJkM2M2MWU3ZTFhYzg3ZjVkZDAwYzE3ZTExZThkMjhjOTlkNjc4NzhmZjEifQ"
         },
         {
-          "resource": "repo://frontend/dashboard/lib/book-reconciliation.ts#L1-L30",
-          "version": "repo-lines-v1:sha256:9d9a7d90b18ff5b7c58a8fa45544f533ef8f7c99288975cf3aac3a573de80178:eyJzZWxlY3RlZExpbmVDb3VudCI6MzAsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImUyMTVjZDUxYjZlYmI3OTI3ZDJkMzJjMjIyYTlkYTUzN2U2MTQxNDMxNTZhYTI1NjhiNWNhOGMzZDliYzdiOWYiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6Ijk3M2M2YTkzMTNhNTQ3ODI0MTRiMzhmNzk4YzY3NDgxMjJkMzg2ZGQ0NmI2M2ExY2M3YmQzMmNlMzliYWI0YmQiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjowLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjViODhiMGRmZmNhZWRhMjJlZWUzOTkwMTdjMTYzNmQ1YWE0ODI2N2NkY2NjN2NhMzVhYzExMzczMDllODhmNzYifQ"
+          "resource": "repo://apps/dashboard/lib/book-reconciliation.ts#L43-L78",
+          "version": "repo-lines-v1:sha256:b5b2eccc71b12b36d87759641739866a5203868bde000a8c7dd138421fdba9d8:eyJzZWxlY3RlZExpbmVDb3VudCI6MzYsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6Ijg2MWMzZTY1MzMwZTdlNjk0YjhjYmZkZDFmNTY1ZmI4ODlkOGZkYTgxYWYyZmEzODNiNzZkYzRiMzYyYzc1YTMiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQxMmNhMzQ1Y2NmNzViZjljMDgwNmJjZTY5NWJlOGRlODA4Yjc5OTg0MjUxYTdhNTRkMjAyY2Y2MTAxZGQ0NTEiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImUwZmE4NjgyYTYyZWM1MWE4YTMyNWY5ZjM1OTIxZTliNmE1N2FiYzc4MzBhNGZhNTU5YWE2OTBjMzNmMGFhZjgiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjJlODlkMGY5NmJhNjE0OTc1ODNlMWRmOTBhODc1ZTdjYTgxYzkxZjQ4NWY4NWVlN2JhZjc5MDBkOWUxZDY3NzIifQ"
+        },
+        {
+          "resource": "repo://apps/dashboard/lib/nav.ts#L24-L29",
+          "version": "repo-lines-v1:sha256:550954fd49ee5b4340611553b67514ec8f05f31d2dcd450e90669c40e8e9ec90:eyJzZWxlY3RlZExpbmVDb3VudCI6NiwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiNjYzOTIwMDgwZTQzMWEwMGYxMzkwYzVlYmUyODlmMzE3MDUxNjZhYWJlMmEwNjZjNWU2NWE4NTJmMTZiNjc2YyIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiYjAyZDJjMGQ2ZGM1ZTc0ZDkyZmExNGI5MWRiZWEyNjQwOTBiZWIzNWZkYjkxODhkOWIzNDExODFkY2U5ZjRjZSIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiMWEyMzllZDFiNmM2OWFjMzA3ZDU5YzIyYjA4Y2E5OWVlZjUyYjhhODc5YWQ3ZDIzNjRkNmJkMmE5OWZhOGJiYiIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiMzM5ZGRiODg2NDYxODc5MWZjZmVjM2E1OGI2MDMyMjM2NzU5NzQwMzRjMmJjMDc0ZDYxYTBkOWUxMWIyMjMzNiJ9"
+        }
+      ]
+    },
+    {
+      "id": "claim_d911bc04ab4d46e8a84b9f521a6b886b",
+      "statement": "The plan ladder is Observer (free) → Brief → Desk → Studio / Enterprise, driven by the plan-tier → artifact-class matrix in lib/entitlements.ts; effectivePlanTier elevates the JWT claim by a creator/ops plan_floor, and when auth is off (pre-cutover) tierFromSession returns enterprise so the operator UI stays fully visible.",
+      "evidence": [
+        {
+          "resource": "repo://apps/dashboard/lib/entitlements.ts#L117-L132",
+          "version": "repo-lines-v1:sha256:64b902adedefff5df987b3ad825e8389fa404464975a92b532b380368caf21ce:eyJzZWxlY3RlZExpbmVDb3VudCI6MTYsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImYxMWRkYjNhOWM3ZGJmZTZkYjk4OWVlNzA2NGExZTUwNjhhMGExZDJjNjkxOTRjZDZjMTFmYzM2MmEyMGFiN2EiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQxMmNhMzQ1Y2NmNzViZjljMDgwNmJjZTY5NWJlOGRlODA4Yjc5OTg0MjUxYTdhNTRkMjAyY2Y2MTAxZGQ0NTEiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjJiNTNkYWM3MTkyOWUxMDFiZWIyNGZiYjY3M2QzNTY0YmYyZDk4OWZlYmQ0Njc4NmM1ZDE2YzNjNmI5ZjljYmEiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImIxMDI1OWJlYmI1ODQ2YmNkZDc4NjVkYWU0MTFkMDJhYjA2MmUyYzJhYzVkOTViMjUxMTYyMjYzYzc5NjBiY2QifQ"
+        },
+        {
+          "resource": "repo://apps/dashboard/lib/entitlements.ts#L36-L87",
+          "version": "repo-lines-v1:sha256:889cf3b69fe50de87057ef3cc92027b653ec2a59346489a20d79a525b2c0cb3b:eyJzZWxlY3RlZExpbmVDb3VudCI6NTIsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImQ1OWFhNDM2ZjhmMGQ5YTVkYWYxZDExZjQ0NjAzNzlkYmYyN2MzMmRkNDdkYmFhM2YyY2Q0MmFhODkyYTQ1ODIiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImFhMWQxYTYzMzkwMjI5Yzc5ODM0N2U4M2EwNDA1NDQxYzk0MDAwMzUyODRhZDE2OGMxYmY2Y2RmMWQ3MGEzNzAiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjcxZDI4MjVhZTRmNjJjNmM0NWMxNGJlOTZjZmI0MmZiMDU0MzMwZjk5NTA5YjdiZjQ1MWMxM2RlNGU2NzZhY2QiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImQ5NDFjNjU1MDI1YTFkM2Y1ODU1N2Y4YWM1ZWIxOTRhNzYzYzdhM2JmMDhjNDAzNGVmNDhiOWUyNmE5YTFiYWUifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_f45d51ae24a746cc9d78accdf7df5de2",
+      "statement": "Billing (dashboard Settings) links Stripe checkout/portal for Brief / Desk / Studio with a display catalog in lib/pricing-catalog.ts (Brief $10/mo or $96/yr, Desk $30/mo or $288/yr, Studio $100/mo or $960/yr, annual = 20% off twelve months); annual is the default interval.",
+      "evidence": [
+        {
+          "resource": "repo://apps/dashboard/README.md#L354-L360",
+          "version": "repo-lines-v1:sha256:4b43ee11ecec4eccd6ae2419b77feebefc0ee7eed235f7d9dcf8fdc46ccbd51f:eyJzZWxlY3RlZExpbmVDb3VudCI6NywiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiYTRhMjFlODY0MzQ5YzJkYjgyYWJhM2E3NGJmNmE0YjYyYjRkYTNlMTZiN2Q0ZmRjNTIzYjAxZDllZDhiZTAxNiIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiZDJmYjVmZjAyNmQwMTZhMGYwOWZmMzVlMzMxMzRhMDg1MzY4Zjk4ZGE3NDQ3YjNmODk5ZThhZTg3OTFhNTNjNyIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiMDNkNzVhMjk3ZTVkZGExNTc5ZWE3Y2YwMDRkNjg4NTY1ZWNmNzI2MWQ1MGZiNzFjOTZmNjQyNDgyMDkyZDM4OSIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiOTgwNjExNDBkZDBmMzcwZTM0ZDVlM2E0YzQzMWI2Mjc0ZTY5YzA4MGQ3OGE1NzliNjNhYWUzYjkyNjM4NmE1NyJ9"
+        },
+        {
+          "resource": "repo://apps/dashboard/lib/pricing-catalog.ts#L28-L50",
+          "version": "repo-lines-v1:sha256:a51bb1b1f94abb9d2e77b0fa9afab3e34a95ad13313eb99e0c59bee754d7bbd1:eyJzZWxlY3RlZExpbmVDb3VudCI6MjMsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjgzZTZkYmQ4ODZmODlhNzU2M2QxMzdlY2MyOGE1YjdiYjk0MjlhNGJkYmYxOGZhNTAyMDQ2NWZmMTYyZmE4Y2EiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImIwMmQyYzBkNmRjNWU3NGQ5MmZhMTRiOTFkYmVhMjY0MDkwYmViMzVmZGI5MTg4ZDliMzQxMTgxZGNlOWY0Y2UiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImMyOGZjZGJjODZhYmY4MGZjOWIwYzljNWI5Y2EzNzM1YzVmNTBlZGJkNTAzNzM3NDZjZGY2NWVjMjMxNjJiMDkiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImYyMTlhMDM3YTE3OGZhZTIzODA1ZmY1N2NkYzNmYjJlMWIxMDY2OGJiNzFmOWFhMDZjZDg1OTMxMWFiZGI4MzMifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_331d316c011741c3ad4b604f3de70011",
+      "statement": "The Desk+ digichat popup gates on glassbox_economics (Desk+): Desk/Studio/Enterprise get full chat in an iframe of digichat /embed?layout=embed, while Brief/Observer see the same launcher with an upgrade CTA panel and no iframe; it sends sanitized page context (HTML ≤12k + text ≤8k chars) deduped by an FNV-1a signature.",
+      "evidence": [
+        {
+          "resource": "repo://apps/dashboard/components/digichat-popup.tsx#L109-L117",
+          "version": "repo-lines-v1:sha256:c89fba4f475b905c6cc24f1d8700aaea8c0ed7c029815f55db82810584d1f899:eyJzZWxlY3RlZExpbmVDb3VudCI6OSwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiYjMwNzBkYWYzZjk4N2QyOWM4OWNlY2YwOGViNzNmYzYxMjg3MDEzMGU3ZDJiNjViNWE4ZjY5OTE1OGFiMTFhMyIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiZWFkMWJiYmM1MDQ3YmM5MDkzMDc4OWYzYzcxMzRiOTliNzBiZDg2NjlkNjYzMGI3MWIxYzlmMDZkNmNiOWU2NCIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiMzFhMmRmYzkwY2NlY2YzNDdjYzY3NzU5NTMxMmUxMDcxYmM5YmZhOWQwMzA5YjBjZGY0ZmNiN2NiNWE0YTUyNyIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiNjRjYzA2ZDQ3ZjQwN2E0OWI0ZDM4Mjc1MDU4YTQ1MjgxYWE5MTIyMWU2MDIyMmNlZGYyZjczNWE5M2JjM2JmOCJ9"
+        },
+        {
+          "resource": "repo://apps/dashboard/lib/digichat-popup.ts#L111-L120",
+          "version": "repo-lines-v1:sha256:3cc5ccd533705d4439127d41d948bd347df7ff30126ac66b2b19fc3911fb3b46:eyJzZWxlY3RlZExpbmVDb3VudCI6MTAsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImVhZjIyY2YwNzMyNTkyYzI0NzE0MWNiZTYxZWZhMTEwMTI2MTJmNWEzMTIyYjlhZjliYmFmNTJmNTcyNGQxOTQiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQxMmNhMzQ1Y2NmNzViZjljMDgwNmJjZTY5NWJlOGRlODA4Yjc5OTg0MjUxYTdhNTRkMjAyY2Y2MTAxZGQ0NTEiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjJkZGU0NjRmN2NjNDk3NGI1MzZlNWIxMzllMjA4ZGEyYTc2Mzg1ZWIxYTE3ZWU0NGYyMjlkODBkZGZhODkwNTkiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjE0ZTNhYzk4NDQ1ZjI3NzhkYjhkZmMyZTE4MzA1YWNjZmUxNmI3MTkzMzYwNzFlZTIwODA1ZTFmOWZlZjE5MTYifQ"
+        },
+        {
+          "resource": "repo://apps/dashboard/lib/digichat-popup.ts#L338-L364",
+          "version": "repo-lines-v1:sha256:80fc98586fb8728adf8ae6b331c15f40204aee339fc7996f0aabce69b038970a:eyJzZWxlY3RlZExpbmVDb3VudCI6MjcsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImVhZjIyY2YwNzMyNTkyYzI0NzE0MWNiZTYxZWZhMTEwMTI2MTJmNWEzMTIyYjlhZjliYmFmNTJmNTcyNGQxOTQiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQxMmNhMzQ1Y2NmNzViZjljMDgwNmJjZTY5NWJlOGRlODA4Yjc5OTg0MjUxYTdhNTRkMjAyY2Y2MTAxZGQ0NTEiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjgxMzBlNmRiMDVmN2Y4MmExNTg1YzRlMzIwOGUzZTY3Yzg2MjcxMWQ2OTBmZTFlZjU2ODFkM2VhMjY5MzJiN2QiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjY0YThmZGVhYTE3MmNlMGVhNmQ3MDU5MzQwMzMyNGQ2MTFlZmQxMmM2OTNiNWQ0ZGNkYzc2MWJkODAyYmU5MjEifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_7f146d094f914a17ae6a992b56596c2b",
+      "statement": "digichat never trusts a client-asserted X-Embed-Plan-Tier header or ?plan_tier= query: after digichat:ready the dashboard posts digichat:plan-tier carrying the Supabase access_token (tier is a UI hint only), the embed exchanges it at POST /api/plan-proof (verifying app_metadata.plan_tier) for an HMAC proof sent as X-Embed-Plan-Proof on every chat request, using secret DIGICHAT_PLAN_PROOF_SECRET.",
+      "evidence": [
+        {
+          "resource": "repo://apps/dashboard/README.md#L300-L307",
+          "version": "repo-lines-v1:sha256:f9384d207ee3ee8e44a3d6d006bc1d5bdcf4776dc2f6d71ea4b1a18b39ecc0db:eyJzZWxlY3RlZExpbmVDb3VudCI6OCwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiM2I1ZTU2ZGI3MjE3MzI0NjhkYmQ4ZDkyZGU4MGNiZDU0ZDA4Y2FjMzk1N2E0NDdiNmExZjU5ZDllNTQ2MTdjOSIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiMDJlMmI0NmJjZWI0NTAzYTc1OWQzNDFiYjc3Y2Y5MzkzNjBlZTNlNDkxYzI3ZDU4Y2VmMzg1YzgwNzM1ZDIxYyIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiZGU1ZDE4N2MzZTU4MmZkYmQwMTkyOGZlODRiMjViODkzY2YxNzNkOWY5ZTE0YTQzNTc3ZmI3YjFhNWJkNjczYyIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiMzlhZDY0ZjU2NmJlN2RiMDY3MzYyZDc5NWFkNjEwZWUxOWI3YjI2NjZiMTEwYmJhNzY0ZDJkY2I5ZmYxNzZkMiJ9"
+        },
+        {
+          "resource": "repo://apps/dashboard/lib/digichat-popup.ts#L434-L448",
+          "version": "repo-lines-v1:sha256:0055943b7b7a815e979954c895e8593302c5b6bdaba6aeec2786663e6a820529:eyJzZWxlY3RlZExpbmVDb3VudCI6MTUsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImVhZjIyY2YwNzMyNTkyYzI0NzE0MWNiZTYxZWZhMTEwMTI2MTJmNWEzMTIyYjlhZjliYmFmNTJmNTcyNGQxOTQiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQxMmNhMzQ1Y2NmNzViZjljMDgwNmJjZTY5NWJlOGRlODA4Yjc5OTg0MjUxYTdhNTRkMjAyY2Y2MTAxZGQ0NTEiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjI4ODQzM2E4MzgwNGVmODMyZDBlZjhiODkxMTEyMTgzNGFjNTM3YjNhOGVhMmNjMzU5NjZiNDE0MTk0NmVjMTIiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjowLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUifQ"
+        },
+        {
+          "resource": "repo://apps/digichat/src/app/api/plan-proof/route.ts#L1-L31",
+          "version": "repo-lines-v1:sha256:cbc08aac3b4c2433a07a941782d08e68ba1ed06c905c9abb341673cdd0b3c0a1:eyJzZWxlY3RlZExpbmVDb3VudCI6MzEsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImVhZjIyY2YwNzMyNTkyYzI0NzE0MWNiZTYxZWZhMTEwMTI2MTJmNWEzMTIyYjlhZjliYmFmNTJmNTcyNGQxOTQiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjExNmE1ZWE4NTUxNmFjMWZkOWI5ZDc3YjcxNDQ5ZDQ5ZTBjNzRmMmU1NGY2MDE2NGRhZDQwMzRhMTFiZTg5MWMiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjowLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjE0YWM2YTk1ODQxYjg1M2IzNzM0NGM3MjQ3Y2I5ZGNiMzlhOTMyMDA4MzRjYzg4OTkzZTBlYWNlZTkxNWRhZjEifQ"
         }
       ]
     }
   ],
   "verification": {
     "by": "openwiki/0.5.0",
-    "at": "2026-09-09T14:37:17.158Z"
+    "at": "2026-09-23T13:25:31.068Z"
   }
 }

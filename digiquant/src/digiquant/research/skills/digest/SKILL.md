@@ -31,11 +31,13 @@ The `phase_inputs` block contains:
   `institutional`, `asset-classes`, `us-equities`). These are the authority.
   Sector leadership lives in the US-equities subsection (the 11 GICS memos);
   there is no rolled-up `sector-scorecard`.
-- `prior_digests` — the last **two full** digest briefing bodies (yesterday and
-  the day before). Use them for continuity sentences ("yesterday called for
-  cooling; today's print confirms…"). Do not slim them to a headline.
 - `custom_prompt` (optional) — operator override. Address it explicitly in the
   briefing.
+
+The `SHARED_CONTEXT` block carries `prior_digests` — the last **two full** digest
+briefing bodies (yesterday and the day before). Use them for continuity sentences
+("yesterday called for cooling; today's print confirms…"). Do not slim them to a
+headline.
 
 ## Output
 

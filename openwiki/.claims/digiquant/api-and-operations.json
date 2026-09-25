@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "pageVersion": "sha256:2383fa6453c9d7084eab3abfabf8e829bee7a570f16fb3e2bc90d7d9ca0f5209",
+  "pageVersion": "sha256:51c0f18daf419866b4283280f024a44b06bbfa735e6562450858f47e7f9b3615",
   "claims": [
     {
       "id": "claim_45ab64bfaaf249c1979e43120519a1b5",
@@ -28,11 +28,15 @@
     },
     {
       "id": "claim_8e44968555974f1a9e83b44c6f0920a6",
-      "statement": "MCP tools for backtest, optimize, export, and the strategy catalog attach via streamable-http on 8767 or stdio and require the digiquant[mcp] extra.",
+      "statement": "The digiquant MCP server is scope-gated (full vs read) with 34+ registered tools: pipeline (backtest, optimize, export, pipeline), strategy catalog, market data (price technicals and macro series with R2 or Supabase backend), trade levels, research query, SDCA risk-index building and on-chain/crypto fetches (Bitview, BGeometrics, CoinMetrics), Coinbase OHLCV, BTC power-law fitting, Slapper tearsheets, TradingView parity validation, 33 digifetch/Gloomberb enrichment reads, and dashboard policy-replay tools; it serves via streamable-http on 8767 or stdio (Claude Desktop) and requires digiquant[mcp].",
       "evidence": [
         {
-          "resource": "repo://digiquant/src/digiquant/mcp_server.py#L1-L46",
-          "version": "repo-lines-v1:sha256:a413ed0eb10934dcd28cc1b814059b67dd7b5d6c6eef1c3f150056ec2eb60dd4:eyJzZWxlY3RlZExpbmVDb3VudCI6NDYsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjY3YzI1MzU4YWY4MzE2MmNkNmIzNTQxYzM3MjdhZjUxZjEyODU2MzYyYzAxNGZkY2ZkYWM5YjNjYTE1MzQwMjYiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQ2OTNiOThmNWJlOTZjNTU5N2I4ZjVmMjgwOGViMzFhOGU2YjdkMWRjZDUxZTA5YWQ1NGQxZTgwYmE1MDI5MzYiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjowLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjVhZjQ5YjdlZTNmNWMyNzQxZmVkYzNlODI1ZjczNjM1NDRlYWVkMGI2NWNiYzFmNmRkNWUzNmEyNTZlYzYyNTMifQ"
+          "resource": "repo://digiquant/src/digiquant/mcp_server.py#L468-L536",
+          "version": "repo-lines-v1:sha256:f1f8a6a99ca9955d44a64f1120d11e7478fd2a3b72761d6c809276f11abd344a:eyJzZWxlY3RlZExpbmVDb3VudCI6NjksImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImMxYzVhZWI1YmMwNjg0MDRhYTVmNGI1NTAxNzQ0YzMxYmUyMmQ4NWY2NTQ4ZGFmMGJiNzVlNjkxMDgzMjJjNjgiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImZhZmJhMDUyN2MzOTUzYzRiNmUwZTViNTczOWJhODM2MTJmODA1M2JjZGM5NDY2NzMwMTkzY2QxZDU5MGI0MDgiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImQxNzVkYmQ1NzZiMzUwYTcxZDAxZTMzNTFmNDg1ZjMzZTJlMzI4NTgzNTU1NzFhZDJkMTkzNjZhN2E3NTZmZjUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjgwZDA5ODE2NTZlYmE1NzE5OWUzNGMwMjRmNmY2MWJkZDIwZTM2N2NkNWE5NmE5ZTA0NmNiMWVlMTc3OWUwMzkifQ"
+        },
+        {
+          "resource": "repo://digiquant/src/digiquant/mcp_server.py#L541-L2106",
+          "version": "repo-lines-v1:sha256:36956c8d7870164cfe763f99e10ce9a42cd961890e0294aa895482d59c4c9695:eyJzZWxlY3RlZExpbmVDb3VudCI6MTU2NiwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiZThjY2EwNGJhOWZkOGE0ZmUwMDViNTZiMWE3MDk0ZDYzMDI4Y2UyNzUxODc0NWRkNjZjNzVlZjhjY2M3NzZjNyIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiMTYzZmRkMzBhOWRlYTI5NDExMjQ2ODhiMThjNWNmYzVlOTJlOTg2OGVkYTZjZmFlYjgzODIyMWM3MGVkNmI4NiIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiMDQ1ZDg1OTczN2U0ZDA2NTIxYjUzNDI0OWNhM2E5NWRiM2Q3MjQwMmY5OTdlODQ4MWY3Nzk3ZTJkYzVmMWYwYSIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjAsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiZTNiMGM0NDI5OGZjMWMxNDlhZmJmNGM4OTk2ZmI5MjQyN2FlNDFlNDY0OWI5MzRjYTQ5NTk5MWI3ODUyYjg1NSJ9"
         }
       ]
     },
@@ -49,10 +53,40 @@
           "version": "repo-lines-v1:sha256:7bf5a00f65f782124f322d1408134bdf289ea4ad68da63fc12cbd7c8c24a6ed3:eyJzZWxlY3RlZExpbmVDb3VudCI6MzgsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjZlOTA0MGI2YzE2YjY1ZTM5NDI5ZTEzZmZmMTg5OWZhZmUzYzgwNDJlNzQ2MWNkNDdiYzlmY2RlYmUwZDUzNzAiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImUyMDg0YzliY2Q3NGE4MDY0MGRiZDA1NzFmYjE1MjU2YWVhY2Q1MzAwNzZhOGM3YTZhNzA2MzIzZjEyMWViM2QiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjgxYmY4MzE5NzNhZDM4YzYwZDM5MTA0NzlmYzdkMjRhODE3MThjMjM4MmEyYTg0NjVhZWNhZDE3OGIzYWFkMmMiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImI2ODE0YzZlZjI4MTJhNTNmYjFlMjI0NzFlYWM4NDM2NzZmZWQ4ZmQ4YzgxMGQxNGRkYzU4OTliZDU5ZDZkNzkifQ"
         }
       ]
+    },
+    {
+      "id": "claim_7fb93ba764394d7cb7a7dc3b164db18d",
+      "statement": "A dedicated Dockerfile.mcp container runs the MCP server with digiquant[research,mcp] only (no Nautilus engine), defaults to DIGIQUANT_MCP_SCOPE=read on 0.0.0.0:8767, while local python -m digiquant.mcp_server defaults to full scope.",
+      "evidence": [
+        {
+          "resource": "repo://digiquant/Dockerfile.mcp#L1-L36",
+          "version": "repo-lines-v1:sha256:4067d3aeb624938e5e828dc0a99fa1380222a7a6474bdce7f7c687e88fca39f3:eyJzZWxlY3RlZExpbmVDb3VudCI6MzYsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjJkNjQ1YTRlMzUzYTFiYTk3NWY1MDA1NmE3MDM2OGRmOWY1ODM1NWY4YzFkMjRhN2FlMTFhODRmZmMyY2YwODMiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImU5NzUxNDBiNDg2MGFhMjhiMjEwYmE3NDY0ZjdhYzYwMWIzZjg3ZjU1ZGFhNzYxOWE1YTZhZDQwMTc5ZGZhYTkiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjowLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjowLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_6e5303b4167748fcb3fadb5762ea0d39",
+      "statement": "DIGIQUANT_MARKET_DATA_BACKEND=r2 routes the price/macro MCP tools through versioned R2 history (SHA-verified generations sealed at manifest as_of, merged with up to 30 calendar days of live overlap, staleness-gated at 5 trading days behind as_of); the default Supabase path remains available when unset or set to supabase.",
+      "evidence": [
+        {
+          "resource": "repo://digiquant/src/digiquant/mcp_server.py#L33-L111",
+          "version": "repo-lines-v1:sha256:4b72148da2446d4c0498b9fc31251f143818d24590ae1ab719804cab13f24c95:eyJzZWxlY3RlZExpbmVDb3VudCI6NzksImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6Ijc3M2U1ZmRhYjY4M2FlMDc5OGVhZWQ0NDM4YjY4OGE3OWE4MTY3MjczZmEwN2VjZTBlNzA4YWU0MmNhMDY2NTQiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjhlZjRkMGQ3N2IyMWUxYTJmNmQ3OTEwNDI5MmFmYzUwNjkyNjQwMDg2YzIwNGVhOTliMzhiNzMzODVkYjU0ZjUiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImU1YzFjNDYyZTJhMzlkNzQ3NTlmNWUxYjEyNmY3NjgzYTJiNzMwMTE4ZTE4ZjUxMjJiMDhjZWRlZWI2NTBlMjMiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjVhZmIwNTk0MWZmZDg2MmFiZDBiMTRlMmYwODU4Y2M0MTIxMDViYTg0N2ZjZWVkYTEzZWZjYjI4MWUxMjcxYjQifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_00e677e0a7eb4ce18fddf8c1289bd1a3",
+      "statement": "Per-IP sliding-window rate limiting is enforced on pipeline/backtest paths (10 req/min), /v1/orchestrator_tools (30 req/min), and all other paths (30 req/min), with /health and /healthz exempt; can be disabled via DIGI_DISABLE_RATE_LIMIT=1.",
+      "evidence": [
+        {
+          "resource": "repo://digiquant/src/digiquant/server.py#L62-L116",
+          "version": "repo-lines-v1:sha256:793e4b63a00b755e0bb940edb3b48cd990ac7d0541689ae56db4409f489e5fd9:eyJzZWxlY3RlZExpbmVDb3VudCI6NTUsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImIyMTc3ZDJjYTk0Y2MyM2Y1YzVkMTY1M2IzYmEzZjkzZmZiZDBlODgzYjdiYmQxYWI5MzY0MjkwMGM3YWZhNTYiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImFhNzk2NWE0ZDljMzVkNjczNGIzNmQyYTFkMjkzNzk5MWY3MmQ1MWYwZjhmMWI0ZGM1ZWI3NDU5Y2M2MTBkOTkiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjU4ZmIwMzZhODlkZjMzYzRhMDY1MTkxZDA5NmI1N2I0YzJhNTBhM2I2M2U5OWYwYmEzZDViODY3MWJkZjgyNjciLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjkzYzM0NmFjMzBiNzVkY2M4MzQyYWNhNmRhZWU3OTk3OGViZTllNmY2ZDhiZDM2NjY5OWI0MjYwOGVkYWU3N2UifQ"
+        }
+      ]
     }
   ],
   "verification": {
     "by": "openwiki/0.5.0",
-    "at": "2026-09-09T14:37:17.158Z"
+    "at": "2026-09-23T13:25:31.068Z"
   }
 }

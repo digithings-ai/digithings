@@ -204,4 +204,46 @@ describe('LoginScreen', () => {
     expect(container.textContent).toMatch(/Auth SMTP is not delivering/i);
     expect(container.textContent).not.toContain('Check your email to confirm');
   });
+
+  it('signup with an invite shows a recognition banner above the default card', async () => {
+    window.history.replaceState(null, '', '/dashboard/signup/?invite=12x-brand-invite-alpha');
+    process.env.NEXT_PUBLIC_SUPABASE_URL = 'https://example.supabase.co';
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY = 'anon-key';
+    const fetchMock = vi.fn(async () =>
+      Response.json({ marker: '12X', line: 'Sign up to activate your FX Hub access.' }),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+    try {
+      await act(async () => {
+        root.render(createElement(LoginScreen, { initialMode: 'signup' }));
+      });
+      const banner = container.querySelector('.acct-invite-banner');
+      expect(banner?.textContent).toContain('Join 12X on digiquant');
+      expect(banner?.textContent).toContain(
+        "Create your account to get started. Your invite unlocks your team's workspace.",
+      );
+      expect(container.querySelector('.acct-auth-invite-marker')).toBeNull();
+      expect(fetchMock).toHaveBeenCalledOnce();
+    } finally {
+      vi.unstubAllGlobals();
+      delete process.env.NEXT_PUBLIC_SUPABASE_URL;
+      delete process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+      window.history.replaceState(null, '', '/dashboard/signup/');
+    }
+  });
+
+  it('signup without an invite fetches no brand and shows no marker', async () => {
+    window.history.replaceState(null, '', '/dashboard/signup/');
+    const fetchMock = vi.fn(async () => Response.json({ marker: '12X', line: null }));
+    vi.stubGlobal('fetch', fetchMock);
+    try {
+      await act(async () => {
+        root.render(createElement(LoginScreen, { initialMode: 'signup' }));
+      });
+      expect(container.querySelector('.acct-auth-invite-marker')).toBeNull();
+      expect(fetchMock).not.toHaveBeenCalled();
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
 });
