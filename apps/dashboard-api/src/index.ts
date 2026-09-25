@@ -9,13 +9,39 @@
  * Slice 2 scaffold: router + error envelope + provenance builder +
  * GET /healthz + GET /portfolio (with the book_as_of gate folded in per
  * CONTRACT.md section 0 — there is no standalone /book-date route).
+ *
+ * Slice 0006 wiring: all other contracted routes are mounted onto the
+ * slice builders via `mountEnvelopeRoutes` (slice 0003),
+ * `register*Routes` through `adaptOnGet` (slice 0004), and
+ * `tryHandleLedger` (slice 0005), all over the clearly-marked stub doubles
+ * in `./stubs` (the rewire slice swaps those for real Supabase reads).
+ * `POST /mcp` exposes the same routes as JSON-RPC tools (see `./mcp`).
  */
+
+import { adaptOnGet } from "./adapters";
+import { mountEnvelopeRoutes, type AddRoute, type RouteHandler } from "./envelope";
+import { tryHandleLedger } from "./ledger";
+import { registerBriefRoutes } from "./brief";
+import { registerPerformanceRoutes } from "./performance";
+import { registerLiveRoutes } from "./kpis-live";
+import { registerBenchmarksRoutes } from "./benchmarks";
+import {
+  stubBenchmarksDeps,
+  stubBriefDeps,
+  stubEnvelopeSource,
+  stubLedgerBook,
+  stubLiveDeps,
+  stubPerformanceDeps,
+} from "./stubs";
+import { MCP_PATH, handleMcp } from "./mcp";
 
 export const HOUSE_WORKSPACE_ID = "6b753576-ced9-5319-9bfa-c5d0aacd9319" as const;
 
 export interface Env {
   SUPABASE_URL?: string;
   SUPABASE_SERVICE_ROLE_KEY?: string;
+  /** Secret for POST /mcp (`x-digi-mcp-key`); unset = deny all (fail closed). */
+  MCP_EDGE_KEY?: string;
 }
 
 export type ErrorCode = "bad_request" | "not_found" | "upstream_empty" | "internal";
@@ -288,12 +314,52 @@ async function handleHealthz(): Promise<Response> {
   return Response.json({ ok: true, service: "dashboard-api" });
 }
 
+// --- Slice 0006 wiring ------------------------------------------------------
+// One route table over the slice builders. GET /portfolio stays on the
+// scaffold's handlePortfolio above (its exact-shape suite pins the §6.1
+// body without the envelope slice's extra `definition` key), so the
+// envelope mount's /portfolio registration is dropped after mounting —
+// every other envelope/brief/perf/live/benchmarks/ledger route goes live.
+function buildRouteTable(): Map<string, RouteHandler> {
+  const routes = new Map<string, RouteHandler>();
+  const addRoute: AddRoute = (method, path, handler) => {
+    routes.set(`${method} ${path}`, handler);
+  };
+  mountEnvelopeRoutes(addRoute, stubEnvelopeSource());
+  routes.delete("GET /portfolio");
+  const onGet = adaptOnGet(addRoute);
+  registerBriefRoutes(onGet, stubBriefDeps());
+  registerPerformanceRoutes(onGet, stubPerformanceDeps());
+  registerLiveRoutes(onGet, stubLiveDeps());
+  registerBenchmarksRoutes(onGet, stubBenchmarksDeps());
+  return routes;
+}
+
+const ROUTES = buildRouteTable();
+const STUB_LEDGER = stubLedgerBook();
+
+/** GET dispatch shared by HTTP and the MCP tools (same builders, one path). */
+async function routeGet(request: Request, env: Env): Promise<Response> {
+  const url = new URL(request.url);
+  const path = normalizePath(url.pathname);
+  if (request.method === "GET" && path === "/healthz") return handleHealthz();
+  if (request.method === "GET" && path === "/portfolio") return handlePortfolio(request, env);
+  if (request.method === "GET" && path === "/ledger") {
+    const res = await tryHandleLedger(request, STUB_LEDGER);
+    if (res) return res;
+  }
+  if (request.method === "GET") {
+    const handler = ROUTES.get(`GET ${path}`);
+    if (handler) return handler(request);
+  }
+  return errorResponse("bad_request", `unknown route ${path}`, null, { path });
+}
+
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
     const url = new URL(request.url);
     const path = normalizePath(url.pathname);
-    if (request.method === "GET" && path === "/healthz") return handleHealthz();
-    if (request.method === "GET" && path === "/portfolio") return handlePortfolio(request, env);
-    return errorResponse("bad_request", `unknown route ${path}`, null, { path });
+    if (path === MCP_PATH) return handleMcp(request, env, (req) => routeGet(req, env));
+    return routeGet(request, env);
   },
 };
