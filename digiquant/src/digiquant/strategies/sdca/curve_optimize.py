@@ -77,6 +77,13 @@ _SHAPE_KEYS = (
     "sell_curvature",
 )
 
+_MID_TIER_KEYS = (
+    "buy_mid_knee_risk",
+    "buy_mid_curvature",
+    "sell_mid_knee_risk",
+    "sell_mid_curvature",
+)
+
 
 class CurveOptimizeGates(BaseModel):
     """Hard gates. Risk-adjusted return is maximized only among trials that pass.
@@ -187,41 +194,64 @@ def shape_from_bounds_ok(
     params: dict[str, float | int | str],
     *,
     bounds: dict[str, tuple[float, float]] | None = None,
+    extra_keys: tuple[str, ...] = (),
 ) -> bool:
-    """True when params form a valid shape inside ``bounds`` (default ``CURVE_SEARCH_BOUNDS``)."""
+    """True when params form a valid shape inside ``bounds`` (default ``CURVE_SEARCH_BOUNDS``).
+
+    ``extra_keys`` optionally includes additional shape fields (e.g.
+    ``_MID_TIER_KEYS``) from ``params`` when present -- absent from
+    ``params`` or from ``extra_keys`` (the default), behavior is identical
+    to the original 6-field-only check.
+    """
     b = bounds if bounds is not None else CURVE_SEARCH_BOUNDS
     try:
-        shape = SdcaCurveShape(
-            buy_max_rate=float(params["buy_max_rate"]),
-            buy_knee_risk=float(params["buy_knee_risk"]),
-            sell_knee_risk=float(params["sell_knee_risk"]),
-            sell_max_rate=float(params["sell_max_rate"]),
-            buy_curvature=float(params["buy_curvature"]),
-            sell_curvature=float(params["sell_curvature"]),
-        )
+        kwargs: dict[str, float] = {key: float(params[key]) for key in _SHAPE_KEYS}
+        for key in extra_keys:
+            value = params.get(key)
+            if value is not None:
+                kwargs[key] = float(value)
+        shape = SdcaCurveShape(**kwargs)
     except (KeyError, TypeError, ValueError):
         return False
     for key, (lo, hi) in b.items():
-        value = float(getattr(shape, key))
+        raw = getattr(shape, key, None)
+        if raw is None:
+            # Optional field (e.g. a mid-tier knee) not set on this shape --
+            # nothing to range-check, same "absent -> omitted" convention as
+            # params_from_shape/round_shape_for_preset use for these fields.
+            continue
+        value = float(raw)
         if value < lo - 1e-9 or value > hi + 1e-9:
             return False
     return shape.sell_max_rate > 0.0
 
 
-def params_from_shape(shape: SdcaCurveShape) -> dict[str, float]:
-    return {key: float(getattr(shape, key)) for key in _SHAPE_KEYS}
+def params_from_shape(
+    shape: SdcaCurveShape, *, extra_keys: tuple[str, ...] = ()
+) -> dict[str, float]:
+    out = {key: float(getattr(shape, key)) for key in _SHAPE_KEYS}
+    for key in extra_keys:
+        value = getattr(shape, key)
+        if value is not None:
+            out[key] = float(value)
+    return out
 
 
 def round_shape_for_preset(shape: SdcaCurveShape) -> SdcaCurveShape:
     """One-decimal published curve; re-validates dead zone / signs."""
-    return SdcaCurveShape(
-        buy_max_rate=round(shape.buy_max_rate, 1),
-        buy_knee_risk=round(shape.buy_knee_risk, 1),
-        sell_knee_risk=round(shape.sell_knee_risk, 1),
-        sell_max_rate=round(shape.sell_max_rate, 1),
-        buy_curvature=round(shape.buy_curvature, 1),
-        sell_curvature=round(shape.sell_curvature, 1),
-    )
+    kwargs: dict[str, float] = {
+        "buy_max_rate": round(shape.buy_max_rate, 1),
+        "buy_knee_risk": round(shape.buy_knee_risk, 1),
+        "sell_knee_risk": round(shape.sell_knee_risk, 1),
+        "sell_max_rate": round(shape.sell_max_rate, 1),
+        "buy_curvature": round(shape.buy_curvature, 1),
+        "sell_curvature": round(shape.sell_curvature, 1),
+    }
+    for key in _MID_TIER_KEYS:
+        value = getattr(shape, key)
+        if value is not None:
+            kwargs[key] = round(value, 1)
+    return SdcaCurveShape(**kwargs)
 
 
 def sample_curve_trials(
@@ -350,8 +380,12 @@ def sample_continuous_curve_trials(
     seen: set[tuple[float, ...]] = set()
     out: list[dict[str, float]] = []
 
-    def _add(crossing: float, buy_rate: float, sell_rate: float, buy_curv: float, sell_curv: float) -> None:
-        params = continuous_shape_params(crossing, buy_rate, sell_rate, buy_curv, sell_curv, eps=eps)
+    def _add(
+        crossing: float, buy_rate: float, sell_rate: float, buy_curv: float, sell_curv: float
+    ) -> None:
+        params = continuous_shape_params(
+            crossing, buy_rate, sell_rate, buy_curv, sell_curv, eps=eps
+        )
         if not continuous_shape_ok(params):
             return
         key = tuple(round(params[k], 6) for k in _SHAPE_KEYS)
@@ -465,6 +499,27 @@ WIDE_KNEE_COARSE_GRID: dict[str, tuple[float, ...]] = {
     "sell_curvature": (1.0, 1.5, 2.5, 4.0),
 }
 
+# Tiered search space: same base 6 dimensions as WIDE_KNEE_SEARCH_BOUNDS,
+# plus a mid-tier knee/curvature per side. Per the design spec (2.2), the
+# mid knee must sit strictly between its side's outer knee and the true
+# extreme (0 for buy, 100 for sell) -- see SdcaCurveShape's validator,
+# which rejects any draw outside that range regardless of these bounds.
+WIDE_KNEE_TIERED_SEARCH_BOUNDS: dict[str, tuple[float, float]] = {
+    **WIDE_KNEE_SEARCH_BOUNDS,
+    "buy_mid_knee_risk": (2.0, 18.0),
+    "buy_mid_curvature": (1.0, 4.0),
+    "sell_mid_knee_risk": (82.0, 98.0),
+    "sell_mid_curvature": (1.0, 4.0),
+}
+
+WIDE_KNEE_TIERED_COARSE_GRID: dict[str, tuple[float, ...]] = {
+    **WIDE_KNEE_COARSE_GRID,
+    "buy_mid_knee_risk": (5.0, 10.0, 15.0),
+    "buy_mid_curvature": (1.0, 2.0),
+    "sell_mid_knee_risk": (85.0, 90.0, 95.0),
+    "sell_mid_curvature": (1.0, 2.0),
+}
+
 
 def sample_wide_knee_curve_trials(
     *,
@@ -473,15 +528,22 @@ def sample_wide_knee_curve_trials(
     include_grid: bool = True,
     bounds: dict[str, tuple[float, float]] = WIDE_KNEE_SEARCH_BOUNDS,
     grid: dict[str, tuple[float, ...]] = WIDE_KNEE_COARSE_GRID,
+    extra_keys: tuple[str, ...] = (),
 ) -> list[dict[str, float]]:
-    """Rerunnable trial list for the wide-knee curve fit (buy/sell knees free)."""
+    """Rerunnable trial list for the wide-knee curve fit (buy/sell knees free).
+
+    ``extra_keys`` (e.g. ``_MID_TIER_KEYS``) extends both the sampled
+    dimensions (when present in ``bounds``/``grid``) and the dedup key, so
+    trials differing only in a mid-tier param are never silently collapsed.
+    """
     seen: set[tuple[float, ...]] = set()
     out: list[dict[str, float]] = []
+    dedup_keys = (*_SHAPE_KEYS, *extra_keys)
 
     def _add(params: dict[str, float]) -> None:
-        if not shape_from_bounds_ok(params, bounds=bounds):
+        if not shape_from_bounds_ok(params, bounds=bounds, extra_keys=extra_keys):
             return
-        key = tuple(round(params[k], 6) for k in _SHAPE_KEYS)
+        key = tuple(round(params[k], 6) for k in dedup_keys if k in params)
         if key in seen:
             return
         seen.add(key)
@@ -519,6 +581,45 @@ def search_wide_knee_curve(
     """
     trials = sample_wide_knee_curve_trials(
         n_random=n_random, seed=seed, include_grid=include_grid, bounds=bounds, grid=grid
+    )
+    return search_curve(
+        dates,
+        prices,
+        risk,
+        trials,
+        initial_cash=initial_cash,
+        baseline=published_curve_shape(),
+        frozen_weights=frozen_weights,
+        gates=gates,
+        evaluator="curve_simulator",
+    )
+
+
+def search_wide_knee_curve_tiered(
+    dates: pl.Series,
+    prices: pl.Series,
+    risk: pl.Series,
+    *,
+    initial_cash: float,
+    frozen_weights: SdcaCompositeWeights,
+    n_random: int = 3000,
+    seed: int = 42,
+    include_grid: bool = True,
+    bounds: dict[str, tuple[float, float]] = WIDE_KNEE_TIERED_SEARCH_BOUNDS,
+    grid: dict[str, tuple[float, ...]] = WIDE_KNEE_TIERED_COARSE_GRID,
+    gates: CurveOptimizeGates | None = None,
+) -> CurveOptimizeResult:
+    """Tiered-knee entry: fit buy/sell curves with a mid-tier knee/curvature
+    per side, on a frozen index. Same evaluator and baseline as
+    ``search_wide_knee_curve`` -- only the search-space dimensions differ.
+    """
+    trials = sample_wide_knee_curve_trials(
+        n_random=n_random,
+        seed=seed,
+        include_grid=include_grid,
+        bounds=bounds,
+        grid=grid,
+        extra_keys=_MID_TIER_KEYS,
     )
     return search_curve(
         dates,
@@ -681,14 +782,19 @@ def search_curve(
     ranked: list[CurveTrialScore] = []
     for params in trials:
         try:
-            shape = SdcaCurveShape(
-                buy_max_rate=float(params["buy_max_rate"]),
-                buy_knee_risk=float(params["buy_knee_risk"]),
-                sell_knee_risk=float(params["sell_knee_risk"]),
-                sell_max_rate=float(params["sell_max_rate"]),
-                buy_curvature=float(params["buy_curvature"]),
-                sell_curvature=float(params["sell_curvature"]),
-            )
+            kwargs: dict[str, float] = {
+                "buy_max_rate": float(params["buy_max_rate"]),
+                "buy_knee_risk": float(params["buy_knee_risk"]),
+                "sell_knee_risk": float(params["sell_knee_risk"]),
+                "sell_max_rate": float(params["sell_max_rate"]),
+                "buy_curvature": float(params["buy_curvature"]),
+                "sell_curvature": float(params["sell_curvature"]),
+            }
+            for key in _MID_TIER_KEYS:
+                value = params.get(key)
+                if value is not None:
+                    kwargs[key] = float(value)
+            shape = SdcaCurveShape(**kwargs)
         except (KeyError, TypeError, ValueError):
             continue
         ranked.append(score_shape_on_index(dates, prices, risk, shape, initial_cash, gates=g))
@@ -1019,7 +1125,12 @@ def load_frozen_index(
     sources = load_sdca_extra_sources(cache_dir)
     resolved = drop_extras_missing_sources(requested, sources)
     extras = build_extra_indicators(
-        dates, ohlcv["close"], resolved, sources, oscillators=oscillators, extra_windows=extra_windows
+        dates,
+        ohlcv["close"],
+        resolved,
+        sources,
+        oscillators=oscillators,
+        extra_windows=extra_windows,
     )
     index = build_risk_index(
         dates,
@@ -1081,6 +1192,8 @@ __all__ = [
     "PUBLISHED_SELL_KNEE",
     "WIDE_KNEE_COARSE_GRID",
     "WIDE_KNEE_SEARCH_BOUNDS",
+    "WIDE_KNEE_TIERED_COARSE_GRID",
+    "WIDE_KNEE_TIERED_SEARCH_BOUNDS",
     "CurveOptimizeGates",
     "CurveOptimizeResult",
     "CurveTrialScore",
@@ -1107,6 +1220,7 @@ __all__ = [
     "search_continuous_curve",
     "search_curve",
     "search_wide_knee_curve",
+    "search_wide_knee_curve_tiered",
     "sample_wide_knee_curve_trials",
     "shape_from_bounds_ok",
     "sweep_dead_zone_width",

@@ -13,6 +13,8 @@ from digiquant.cli import main as digiquant_main
 from digiquant.strategies.sdca.backtest import run_backtest
 from digiquant.strategies.sdca.curve import RISK_NODES, AccumDistCurve
 from digiquant.strategies.sdca.curve_optimize import (
+    _MID_TIER_KEYS,
+    _SHAPE_KEYS,
     CONTINUOUS_CROSSING_EPS,
     CURVE_SEARCH_BOUNDS,
     DEAD_ZONE_WIDTH_GRID,
@@ -20,7 +22,9 @@ from digiquant.strategies.sdca.curve_optimize import (
     DEEP_RICH_RISK,
     PUBLISHED_BUY_KNEE,
     PUBLISHED_SELL_KNEE,
+    WIDE_KNEE_COARSE_GRID,
     WIDE_KNEE_SEARCH_BOUNDS,
+    WIDE_KNEE_TIERED_SEARCH_BOUNDS,
     CurveOptimizeGates,
     FillConcentration,
     beats_baseline_concentration,
@@ -28,7 +32,9 @@ from digiquant.strategies.sdca.curve_optimize import (
     continuous_shape_params,
     dead_zone_shape_params,
     fill_concentration,
+    params_from_shape,
     persist_curve_winner,
+    published_curve_shape,
     published_indicator_weights,
     round_shape_for_preset,
     sample_continuous_curve_trials,
@@ -39,6 +45,7 @@ from digiquant.strategies.sdca.curve_optimize import (
     search_continuous_curve,
     search_curve,
     search_wide_knee_curve,
+    search_wide_knee_curve_tiered,
     shape_from_bounds_ok,
     sweep_dead_zone_width,
 )
@@ -224,6 +231,75 @@ class TestSearchSpace:
             assert shape.sell_max_rate > 0.0
 
 
+class TestMidTierShapePlumbing:
+    def test_params_from_shape_includes_mid_tier_when_present(self) -> None:
+        shape = SdcaCurveShape(
+            buy_max_rate=10.0,
+            buy_knee_risk=35.0,
+            sell_knee_risk=80.0,
+            sell_max_rate=10.0,
+            buy_curvature=1.0,
+            sell_curvature=1.0,
+            buy_mid_knee_risk=10.0,
+            buy_mid_curvature=2.0,
+        )
+        params = params_from_shape(shape, extra_keys=_MID_TIER_KEYS)
+        assert params["buy_mid_knee_risk"] == pytest.approx(10.0)
+        assert params["buy_mid_curvature"] == pytest.approx(2.0)
+        assert "sell_mid_knee_risk" not in params  # None on the shape -> omitted
+
+    def test_params_from_shape_default_extra_keys_matches_pre_change_output(self) -> None:
+        shape = published_curve_shape()
+        assert params_from_shape(shape) == {k: float(getattr(shape, k)) for k in _SHAPE_KEYS}
+
+    def test_shape_from_bounds_ok_validates_mid_tier_when_extra_keys_passed(self) -> None:
+        params = {
+            "buy_max_rate": 10.0,
+            "buy_knee_risk": 35.0,
+            "sell_knee_risk": 80.0,
+            "sell_max_rate": 10.0,
+            "buy_curvature": 1.0,
+            "sell_curvature": 1.0,
+            "buy_mid_knee_risk": 10.0,
+            "buy_mid_curvature": 2.0,
+        }
+        assert shape_from_bounds_ok(
+            params, bounds=WIDE_KNEE_TIERED_SEARCH_BOUNDS, extra_keys=_MID_TIER_KEYS
+        )
+
+    def test_shape_from_bounds_ok_rejects_mid_knee_outside_bounds(self) -> None:
+        params = {
+            "buy_max_rate": 10.0,
+            "buy_knee_risk": 35.0,
+            "sell_knee_risk": 80.0,
+            "sell_max_rate": 10.0,
+            "buy_curvature": 1.0,
+            "sell_curvature": 1.0,
+            "buy_mid_knee_risk": 34.9,
+            "buy_mid_curvature": 2.0,  # collapses onto outer knee
+        }
+        assert not shape_from_bounds_ok(
+            params,
+            bounds={**WIDE_KNEE_TIERED_SEARCH_BOUNDS, "buy_mid_knee_risk": (1.0, 5.0)},
+            extra_keys=_MID_TIER_KEYS,
+        )
+
+    def test_round_shape_for_preset_round_trips_mid_tier_fields(self) -> None:
+        shape = SdcaCurveShape(
+            buy_max_rate=10.0,
+            buy_knee_risk=35.0,
+            sell_knee_risk=80.0,
+            sell_max_rate=10.0,
+            buy_curvature=1.0,
+            sell_curvature=1.0,
+            buy_mid_knee_risk=10.049,
+            buy_mid_curvature=1.951,
+        )
+        rounded = round_shape_for_preset(shape)
+        assert rounded.buy_mid_knee_risk == pytest.approx(10.0)
+        assert rounded.buy_mid_curvature == pytest.approx(2.0)
+
+
 class TestContinuousCurveParams:
     def test_crossing_risk_splits_into_a_tiny_symmetric_knee_gap(self) -> None:
         params = continuous_shape_params(50.0, 20.0, 20.0, 2.0, 2.0)
@@ -352,6 +428,29 @@ class TestSampleWideKneeCurveTrials:
         assert a == b
 
 
+class TestSampleWideKneeCurveTrialsTiered:
+    def test_distinct_mid_tier_trials_are_not_deduped_together(self) -> None:
+        bounds = {
+            **WIDE_KNEE_SEARCH_BOUNDS,
+            "buy_mid_knee_risk": (2.0, 15.0),
+            "buy_mid_curvature": (1.0, 3.0),
+            "sell_mid_knee_risk": (85.0, 98.0),
+            "sell_mid_curvature": (1.0, 3.0),
+        }
+        grid = {
+            **WIDE_KNEE_COARSE_GRID,
+            "buy_mid_knee_risk": (5.0, 10.0),
+            "buy_mid_curvature": (1.5,),
+            "sell_mid_knee_risk": (90.0,),
+            "sell_mid_curvature": (1.5,),
+        }
+        trials = sample_wide_knee_curve_trials(
+            n_random=0, include_grid=True, bounds=bounds, grid=grid, extra_keys=_MID_TIER_KEYS
+        )
+        mid_knee_values = {t["buy_mid_knee_risk"] for t in trials}
+        assert mid_knee_values == {5.0, 10.0}
+
+
 class TestSearchWideKneeCurve:
     def test_search_wide_knee_curve_picks_a_feasible_shape(self) -> None:
         dates, prices, risk = _v_cycle()
@@ -382,6 +481,23 @@ class TestSearchWideKneeCurve:
             include_grid=False,
         )
         assert result.baseline.shape == _published_shape()
+
+
+class TestSearchWideKneeCurveTiered:
+    def test_search_wide_knee_curve_tiered_returns_feasible_result(self) -> None:
+        dates, prices, risk = _v_cycle()
+        result = search_wide_knee_curve_tiered(
+            dates,
+            prices,
+            risk,
+            initial_cash=1000.0,
+            frozen_weights=published_indicator_weights(),
+            n_random=60,
+            seed=5,
+            include_grid=False,
+        )
+        assert result.num_evaluations > 0
+        assert result.beats_flat_dca_oos is False
 
 
 class TestDeadZoneShapeParams:
