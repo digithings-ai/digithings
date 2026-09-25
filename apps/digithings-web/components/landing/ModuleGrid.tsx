@@ -2,6 +2,8 @@
 
 import { useEffect, useRef, useState } from "react";
 import {
+  ModuleFlowStrip,
+  ModuleStageList,
   StackRow,
   modules,
   useScrollyFeatures,
@@ -80,6 +82,14 @@ import { moduleCountLabel, moduleVersion } from "@/lib/moduleCounts";
  * and the three stated facts (lines of code, endpoints, MCP tools) and the
  * declared version moved out of the corner into a fixed box under the name, so
  * every tile states the same three things in the same order.
+ *
+ * v6 replaces the focused tile's prose with the pipeline (#4429): modules that
+ * declare a `flow` show the stage strip on focus instead of the facts line and
+ * lead paragraph, and an Expand control opens the complete module card as an
+ * in-flow panel below the mosaic — every summary paragraph, named stack,
+ * pipeline, api, docker, links, ask, related. Modules without a flow expand
+ * to the same card minus the pipeline. No dialog: the section takes the room
+ * the full card needs.
  */
 
 /**
@@ -457,6 +467,20 @@ export function ModuleGrid() {
   const tileGrow = solveTileGrow(focus);
   const rowGrow = solveRowGrow(focus);
   const rows = stepper ? STACK_ROWS : ROWS;
+  /* The expanded module tour. A focused tile shows the pipeline strip; the
+     full stage-by-stage tour opens on demand and closes on Escape/backdrop.
+     Module scope for the id only — the overlay itself reads render state. */
+  const [expandId, setExpandId] = useState<string | null>(null);
+  const expanded = expandId ? (ordered.find((m) => m.id === expandId) ?? null) : null;
+  /* Opening the full card scrolls it into view instantly (behavior auto —
+     smooth would walk the scrolly focus, per focusModule). Related jumps
+     re-fire the effect via expandId and land on the new card. */
+  const panelRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (expandId && panelRef.current) {
+      panelRef.current.scrollIntoView({ behavior: "auto", block: "start" });
+    }
+  }, [expandId]);
 
   return (
     <section id="architecture">
@@ -543,22 +567,30 @@ export function ModuleGrid() {
                         <span className="dg-mosaic-role">{m.role}</span>
 
                         {on ? (
-                          <span className="dg-mosaic-detail">
-                            <span className="dg-mosaic-facts">{factsLine(m)}</span>
-                            {/* The deeper description: the module's lead
-                                paragraph. The tile is one row tall, and rendering
-                                every paragraph pushed the compose command and the
-                                ask control out of the box on the modules with the
-                                longest copy (digigraph, digivault). So the copy is
-                                the one part allowed to shrink and is clamped by
-                                CSS, while the stack row and the foot below are
-                                pinned — the controls can never be the thing that
-                                clips. The rest of the summary is on the module's
-                                docs page and in the ask answer. */}
-                            {m.summary[0] ? (
-                              <span className="dg-mosaic-serves">{m.summary[0]}</span>
-                            ) : null}
-                          </span>
+                          m.flow ? (
+                            /* The pipeline, not the prose. Modules with a flow
+                               show the strip on focus (#4429) — the facts line
+                               and lead paragraph move into the expanded tour,
+                               which is why the focused tile stays compact. */
+                            <ModuleFlowStrip stages={m.flow.stages} />
+                          ) : (
+                            <span className="dg-mosaic-detail">
+                              <span className="dg-mosaic-facts">{factsLine(m)}</span>
+                              {/* The deeper description: the module's lead
+                                  paragraph. The tile is one row tall, and rendering
+                                  every paragraph pushed the compose command and the
+                                  ask control out of the box on the modules with the
+                                  longest copy (digigraph, digivault). So the copy is
+                                  the one part allowed to shrink and is clamped by
+                                  CSS, while the stack row and the foot below are
+                                  pinned — the controls can never be the thing that
+                                  clips. The rest of the summary is on the module's
+                                  docs page and in the ask answer. */}
+                              {m.summary[0] ? (
+                                <span className="dg-mosaic-serves">{m.summary[0]}</span>
+                              ) : null}
+                            </span>
+                          )
                         ) : null}
 
                         {/* The packages. Collapsed tiles show only the logos —
@@ -599,6 +631,19 @@ export function ModuleGrid() {
                               ask <span className="text-ink">digi</span>
                               <span className="text-accent">chat</span> →
                             </button>
+                            {/* The full stage-by-stage tour, for modules that
+                                declare a flow. Opens the overlay; the strip
+                                above is the preview, this is the detail. */}
+                            {m.flow ? (
+                              <button
+                                type="button"
+                                className="dg-mosaic-expand"
+                                aria-label={`Expand the ${m.id} pipeline tour`}
+                                onClick={() => setExpandId(m.id)}
+                              >
+                                expand +
+                              </button>
+                            ) : null}
                           </span>
                         ) : null}
                       </div>
@@ -610,6 +655,100 @@ export function ModuleGrid() {
           </div>
         </div>
       </div>
+      {/* The expanded full module card (#4429). NOT a dialog: the mosaic
+          section itself takes the room the complete card needs — an in-flow
+          panel below the track with everything the node declares (facts,
+          every summary paragraph, named stack, pipeline, api, docker, links,
+          ask, related). Flow-less modules expand to the same card minus the
+          pipeline. Closes back to the mosaic; opening scrolls the card into
+          view instantly (behavior auto — a smooth scroll would walk the
+          scrolly focus through every step, per focusModule). */}
+      {expanded ? (
+        <div className="m-fullcard" ref={panelRef} data-fullcard={expanded.id}>
+          <div className="m-fullcard-head">
+            <div>
+              <h2 className="m-fullcard-title">
+                <span className="text-ink-mute">digi</span>
+                {expanded.id.replace(/^digi/, "")}
+                <span className="dg-loc"> v{moduleVersion(expanded.id) ?? "roadmap"}</span>
+              </h2>
+              <p className="m-fullcard-role">
+                {expanded.role} · {factsLine(expanded)}
+              </p>
+              <p className="m-fullcard-tagline">{expanded.tagline}</p>
+            </div>
+            <button
+              type="button"
+              className="m-fullcard-close"
+              aria-label={`Collapse the ${expanded.id} card`}
+              onClick={() => setExpandId(null)}
+            >
+              collapse −
+            </button>
+          </div>
+          {expanded.flow ? <ModuleStageList stages={expanded.flow.stages} /> : null}
+          <div className="m-fullcard-summary">
+            {expanded.summary.map((p, i) => (
+              <p key={i}>{p}</p>
+            ))}
+          </div>
+          <div className="m-fullcard-stack">
+            <StackRow items={expanded.stack} className="stack-row" />
+          </div>
+          {expanded.api.length > 0 ? (
+            <ul className="m-fullcard-api">
+              {expanded.api.map((a, i) => (
+                <li key={i}>
+                  {a.label ? <span className="k">{a.label}</span> : null}
+                  <code>{a.code}</code>
+                </li>
+              ))}
+            </ul>
+          ) : null}
+          <div className="m-fullcard-foot">
+            {expanded.dockerCmd ? (
+              <button
+                type="button"
+                className={`dg-docker${copiedId === expanded.id ? " is-copied" : ""}`}
+                aria-label={copiedId === expanded.id ? "Copied" : `Copy command: ${expanded.dockerCmd}`}
+                onClick={() => copyCommand(expanded.id, expanded.dockerCmd as string)}
+              >
+                <span className="prompt" aria-hidden="true">
+                  {copiedId === expanded.id ? "✓" : "$"}
+                </span>{" "}
+                {copiedId === expanded.id ? "copied" : expanded.dockerCmd}
+              </button>
+            ) : null}
+            <button
+              type="button"
+              className="dg-mosaic-ask"
+              aria-label={`Ask digichat about ${expanded.id}`}
+              onClick={() => ask(expanded.id)}
+            >
+              ask <span className="text-ink">digi</span>
+              <span className="text-accent">chat</span> →
+            </button>
+            {expanded.links.length > 0 ? (
+              <span className="m-fullcard-links">
+                {expanded.links.map((l) => (
+                  <a key={l.href + l.label} href={l.href}>
+                    {l.label} →
+                  </a>
+                ))}
+              </span>
+            ) : null}
+            {expanded.related.length > 0 ? (
+              <span className="m-fullcard-related">
+                {expanded.related.map((r) => (
+                  <button key={r} type="button" onClick={() => setExpandId(r)}>
+                    {r} →
+                  </button>
+                ))}
+              </span>
+            ) : null}
+          </div>
+        </div>
+      ) : null}
     </section>
   );
 }

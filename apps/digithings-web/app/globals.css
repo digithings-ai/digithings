@@ -51,6 +51,12 @@
    plain CSS; the only utilities it needs are the frame's own, so the @source two
    blocks down is what keeps Tailwind from tree-shaking them. */
 @import "@digithings/ui/styles/diagrams.css";
+/* Module pipeline strip + expandable tour (#4429). Scoped m-flow and m-tour
+   classes for the focused mosaic tile strip and the module tour dialog.
+   Relative workspace path (like the @source lines below): the package
+   resolver rejects new styles-subpath exports under the style condition,
+   while node itself resolves the same entry fine. */
+@import "../../../packages/ui/src/styles/flow.css";
 /* Chat family primitives (#1418) — imported BEFORE the digichat-ui sheets so
    the .dc- and .dt- rules keep winning same-specificity ties (e.g. the
    caret's animation shorthand when an element carries both .chat-cursor
@@ -120,6 +126,9 @@
 /* … and the architecture-diagram family (<ArchitectureDiagram>), which emits
    mermaid source and frames the returned SVG. */
 @source "../../../packages/ui/src/components/diagrams";
+/* … and the module pipeline strip + tour dialog (ModuleFlowStrip /
+   ModuleTourOverlay carry token utilities for the mosaic + tour). */
+@source "../../../packages/ui/src/components/flow";
 /* … and the pricing comparison matrix (PricingMatrix). Its table is built from
    arbitrary utilities (`min-w-[640px]`, `pe-[0.9rem]`, `bg-accent/6`), so without
    this line the matrix renders as an unstyled table. */

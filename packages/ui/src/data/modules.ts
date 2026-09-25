@@ -25,6 +25,12 @@ export interface ModuleNode {
   role: string;
   tagline: string;
   summary: string[];
+  /**
+   * Pipeline stages for the focused mosaic tile strip + the expandable
+   * module tour (#4429). Optional — populated for digiquant + digichat
+   * first as the pattern; tiles without it keep the facts/summary detail.
+   */
+  flow?: { stages: { label: string; detail: string }[] };
   stack: StackItem[];
   dockerCmd: string | null;
   initSnippet: { lang: string; code: string };
@@ -98,6 +104,14 @@ export const modules: ModuleNode[] = [
       "Scheduled research turns into a sized book; backtests run on a real NautilusTrader engine with Optuna driving the parameter search.",
       "Every run writes an append-only audit trail and a tearsheet. No broker adapter ships wired — the IB, Alpaca, and QuantConnect adapters are declared stubs, so reaching a live venue is your own deliberate integration.",
     ],
+    flow: {
+      stages: [
+        { label: "market data", detail: "Daily closes served from the keyless R2 market-data worker (parquet bars + manifest)." },
+        { label: "research", detail: "NautilusTrader backtests over the slapper + sdca strategy library, Optuna on the parameters." },
+        { label: "allocation", detail: "Sized fills per strategy into one book; weights published as allocated_pct." },
+        { label: "the book", detail: "Daily NAV published to public_accounting_nav_history; tearsheets per strategy." },
+      ],
+    },
     stack: [
       { name: "NautilusTrader", icon: null, mono: "NT" },
       { name: "Optuna", icon: "optuna" },
@@ -165,6 +179,14 @@ export const modules: ModuleNode[] = [
       "A Next.js and React BFF streaming digigraph through the Vercel AI SDK, your key forwarded per request — never stored, never logged.",
       "NextAuth handles identity; Postgres and Drizzle persist sessions for humans and agents alike.",
     ],
+    flow: {
+      stages: [
+        { label: "embed", detail: "The /embed iframe drops into any page; theme + suggestions passed as query params." },
+        { label: "session", detail: "digikey mints the session JWT (embed tenant registry); per-request keys forwarded, never stored." },
+        { label: "digigraph", detail: "LangGraph routes the turn — chat, retrieval via digisearch, grounding via digivault." },
+        { label: "stream", detail: "LiteLLM streams provider tokens back through the Vercel AI SDK; Postgres persists the thread." },
+      ],
+    },
     stack: [
       { name: "Next.js", icon: "nextdotjs" },
       { name: "React", icon: "react" },
