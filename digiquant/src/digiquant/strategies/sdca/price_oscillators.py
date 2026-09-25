@@ -470,8 +470,8 @@ def agreement_scaled_blend(
     is the anchor. When both legs share sign, the blend is scaled up toward
     ``1 + agreement_boost`` (more so the closer their magnitudes are — full
     agreement, not just same-sign noise). When they disagree in sign, the
-    blend is damped to ``disagreement_damp`` of its value — the timeframes
-    are fighting, so the combined vote should say less, not more. Either leg
+    blend is damped toward ``disagreement_damp`` (more so the closer their
+    magnitudes are — full damping only when magnitudes match). Either leg
     sitting at exactly 0 passes the other through unscaled: a silent
     timeframe is not a disagreement. Result stays clipped to ``[-3, 3]``.
     """
