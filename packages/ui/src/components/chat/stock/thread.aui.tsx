@@ -198,9 +198,8 @@ const ThreadRoot: FC<{ isEmpty: boolean; autoFocus: boolean }> = ({
           <ThreadPrimitive.ViewportFooter
             className={cn(
               "aui-thread-viewport-footer bg-background flex flex-col gap-4 overflow-visible pb-4",
-              // Single-route plan: sticky in all states (the gallery Thread never
-              // conditioned on isEmpty either) — empty footers pin to the bottom.
-              "sticky bottom-0 mt-auto rounded-t-(--composer-radius)",
+              !isEmpty &&
+                "sticky bottom-0 mt-auto rounded-t-(--composer-radius)",
             )}
           >
             <ThreadScrollToBottom />

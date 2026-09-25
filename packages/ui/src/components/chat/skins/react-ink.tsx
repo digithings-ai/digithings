@@ -24,7 +24,7 @@ export function ReactInkWeb() {
     "Type a message... (Enter to send)",
   );
   return (
-      <ThreadPrimitive.Root className="relative flex h-full flex-col bg-zinc-950 p-4 font-mono text-[13px] leading-5 text-zinc-100">
+    <ThreadPrimitive.Root className="flex h-full flex-col bg-zinc-950 p-4 font-mono text-[13px] leading-5 text-zinc-100">
       <div className="mb-2 shrink-0">
         <span className="font-bold text-cyan-400">{title || "demo-agent"}</span>
         <span className="text-zinc-500">{"  ~/acme-app"}</span>
@@ -61,7 +61,7 @@ export function ReactInkWeb() {
           </ComposerPrimitive.Root>
         </div>
       </div>
-      <CreditFooter className="absolute inset-x-0 bottom-0 pb-2 text-center text-[11px] text-zinc-500" />
+      <CreditFooter className="text-center text-[11px] text-zinc-500" />
     </ThreadPrimitive.Root>
   );
 }
