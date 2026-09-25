@@ -194,7 +194,7 @@ browser-QA deltas: [`CONTROLS.md`](CONTROLS.md).
 
 | File | Purpose |
 |---|---|
-| `src/app/page.tsx` | Server component: Option A default redirects `/` → `/embed`; `DIGICHAT_REQUIRE_ROOT_AUTH=1` keeps Auth.js gate → `ChatShell` (no session redirects to `/embed` too — no standalone login page ships) |
+| `src/app/page.tsx` | Server component: bare `/` renders the mode menu (no chat); `?mode=product` runs the Option A flow (`DIGICHAT_REQUIRE_ROOT_AUTH=1` gates `ChatShell`, anonymous/session branches redirect to `/embed`); `?mode=embed\|catalog` replay the embed/catalog surfaces (`/baseline` redirects to `/?mode=catalog`) |
 | `src/lib/root-auth.ts` | `isRootAuthRequired()` — root `/` Auth.js wall (default OFF) |
 | `src/app/layout.tsx` | Root layout with `Providers` (session, tooltips) |
 | `src/app/api/chat/route.ts` | Primary BFF chat endpoint |
@@ -379,12 +379,17 @@ src/auth.ts             # Auth.js configuration
 src/instrumentation.ts  # Auto-migrate hook
 ```
 
-The root `page.tsx` is a **React Server Component**. By default
-(`DIGICHAT_REQUIRE_ROOT_AUTH` unset/`0` — Option A) it redirects to `/embed`. When
-`DIGICHAT_REQUIRE_ROOT_AUTH=1` (Option B — no shipped deployment uses this today),
-it calls `auth()` and, with no session, also redirects to `/embed` — there is no
-standalone `/login` page; a session must come from an OIDC callback, a machine
-key, or the dev-only local-bootstrap credentials provider. `ChatShell` is a
+The root `page.tsx` is a **React Server Component**. Bare `/` renders the mode
+menu (brand + product/embed/catalog cards, zero JS) — no chat thread. `?mode=product`
+runs the Option A flow: per deployment chrome it serves the stock shell (or redirects
+to `/embed` for embed-mode deployments); `DIGICHAT_REQUIRE_ROOT_AUTH=1` (Option B —
+no shipped deployment uses this today) calls `auth()` and gates `ChatShell` — there
+is no standalone `/login` page; a session must come from an OIDC callback, a machine
+key, or the dev-only local-bootstrap credentials provider. `?mode=embed` replays the
+tenant iframe surface (same `EmbedRouteShell` as `/embed`, which keeps serving directly:
+production splits `/` (Pages) from `/embed*` (Container), so redirecting it would
+strand tenant iframes on Pages). `?mode=catalog` replays the skin catalog (`/baseline`
+redirects here; production → `notFound`). `ChatShell` is a
 `"use client"` component that owns all thread state as React state; the server
 renders nothing but the initial HTML shell for it.
 
@@ -422,8 +427,10 @@ BFF route handler
 
 ### Auth.js session flow
 
-1. User visits `/`. If `DIGICHAT_REQUIRE_ROOT_AUTH` is not enabled (default), redirect
-   to `/embed` (tenant `gateMode` applies there — digithings dogfood uses `ungated`).
+1. User visits `/` and gets the mode menu (no chat thread). `?mode=product` runs the
+   Option A flow (embed-mode deployments redirect to `/embed`, where tenant `gateMode`
+   applies — digithings dogfood uses `ungated`); `DIGICHAT_REQUIRE_ROOT_AUTH=1` gates
+   `?mode=product` behind the session wall instead.
 2. When root auth is required, the server component calls `auth()` — reads and decrypts
    the session JWT from the httpOnly `__Secure-authjs.session-token` cookie.
 3. No session → `redirect("/embed")` (no standalone `/login` page ships).

@@ -59,4 +59,16 @@ describe("single route / with ?mode=", () => {
     );
     expect(embedPage).not.toMatch(/resolveEmbedClientConfigForPaint/);
   });
+
+  it("shims /baseline to /?mode=catalog and keeps /embed direct", () => {
+    const config = readFileSync(
+      join(here, "..", "..", "..", "next.config.ts"),
+      "utf8",
+    );
+    expect(config).toMatch(/source: "\/baseline"/);
+    expect(config).toMatch(/destination: "\/\?mode=catalog"/);
+    // /embed keeps serving directly: production splits / (Pages) from
+    // /embed* (Container), so redirecting it would strand tenant iframes.
+    expect(config).not.toMatch(/destination: "[^"]*mode=embed/);
+  });
 });
