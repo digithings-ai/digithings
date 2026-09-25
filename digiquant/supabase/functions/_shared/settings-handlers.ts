@@ -195,7 +195,8 @@ export async function handleSettingsRequest(
   }
   if (method === "GET" && path === "/access/twelvex-session") {
     return getTwelvexSession(req, deps);
-  }  return jsonError(404, "NOT_FOUND", "Unknown settings route");
+  }
+  return jsonError(404, "NOT_FOUND", "Unknown settings route");
 }
 
 /** Matches migration 103 CHECK (email ~ '^[^@]+@[^@]+\.[^@]+$'). */

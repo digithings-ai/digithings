@@ -409,9 +409,9 @@ export type InviteBrandApiOptions = {
 
 /**
  * Public invite-card branding for pre-signup visitors (no session yet —
- * deliberately sends no Authorization header). Display-only: nulls render
- * the default card. Never rejects — a failed lookup is indistinguishable
- * from an unbranded code.
+ * sends only the gateway anon key, never a session token). Display-only:
+ * nulls render the default card. Never rejects — a failed lookup is
+ * indistinguishable from an unbranded code.
  */
 export async function getInviteBrand(
   opts: InviteBrandApiOptions,

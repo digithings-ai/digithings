@@ -40,9 +40,10 @@ export type InviteCodeRow = {
    *  product grant — e.g. an fx_hub code that also raises the redeemer to
    *  'desk'. Null means "product grant only, no tier bump". */
   plan_floor: string | null;
-  /** Optional client branding for the invite signup card — e.g. a team
-   *  marker ("12X") plus a short line ("Purpose-built for the 12X desk").
-   *  Display-only; nulls render the default card. */
+  /** Optional client branding for the invite signup banner — a short team
+   *  marker ("12X"), the only per-invite variable. brand_line is reserved
+   *  for a future per-invite override; the client currently renders a fixed
+   *  generic line. Display-only; null/blank marker renders the default card. */
   brand_marker?: string | null;
   brand_line?: string | null;
 };

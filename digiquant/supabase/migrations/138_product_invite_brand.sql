@@ -1,10 +1,11 @@
 -- 138_product_invite_brand.sql
 --
 -- Branded invite signup: a product_invite_codes row can now carry display
--- branding for the pre-signup card — a short team marker (e.g. '12X') plus
--- an optional line (e.g. 'Purpose-built for the 12X desk'). Served by the
--- public GET /access/invite-brand (display-only, no grant signal); NULL
--- marker renders the default card.
+-- branding for the pre-signup banner — a short team marker (e.g. '12X'),
+-- the only per-invite variable, plus a reserved brand_line for a future
+-- per-invite override (the client currently renders a fixed generic line).
+-- Served by the public GET /access/invite-brand (display-only, no grant
+-- signal); NULL marker renders the default card.
 
 ALTER TABLE public.product_invite_codes
     ADD COLUMN IF NOT EXISTS brand_marker text
@@ -17,4 +18,4 @@ ALTER TABLE public.product_invite_codes
 COMMENT ON COLUMN public.product_invite_codes.brand_marker IS
     'Short client marker shown on the invite signup card (e.g. 12X). NULL = default card.';
 COMMENT ON COLUMN public.product_invite_codes.brand_line IS
-    'Optional line under the marker on the invite signup card. NULL = marker only.';
+    'Reserved per-invite line override for the signup banner. Currently unused by the client (fixed generic line).';
