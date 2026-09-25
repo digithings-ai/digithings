@@ -4,9 +4,9 @@
  * All dashboard data pulls go through the Worker (`NEXT_PUBLIC_DASHBOARD_API_URL`)
  * instead of direct Supabase reads from the browser. Two route families:
  *
- * - Specific routes (`/v1/portfolio`, `/v1/brief`, `/v1/performance`,
- *   `/v1/kpis/live`, `/v1/nav-series`, `/v1/benchmarks`, `/v1/valuations`,
- *   `/v1/ledger`) — use {@link apiGet}.
+ * - Specific routes (`/portfolio`, `/brief`, `/performance`,
+ *   `/kpis/live`, `/nav-series`, `/benchmarks`, `/ledger`) — use
+ *   {@link apiGet}.
  * - Allowlisted generic reads (`GET /v1/tables/:table`, CONTRACT §7) for the
  *   long tail — use {@link apiTable} / {@link apiMaybeSingle}.
  *

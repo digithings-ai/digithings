@@ -165,7 +165,7 @@ export default function PipelineNodeDetail({
   );
 }
 
-/** Fetch a document by document_key + date via Supabase. Falls back gracefully. */
+/** Fetch a document by document_key + date via the dashboard API. Falls back gracefully. */
 async function fetchByDocumentKey(
   documentKey: string,
   date: string,

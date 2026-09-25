@@ -31,8 +31,10 @@ Final route list: `GET /portfolio`, `GET /allocations`, `GET /brief`,
 - Common query params on every route: `asOf?: string` (calendar date
   `YYYY-MM-DD`; default = latest committed), `retrieval_pin?: string`
   (opaque caller-supplied pin, see §4).
-- Every success response is an object with `data`, plus `as_of`,
-  `retrieval_pin` (echo, see §4), and `provenance` (see below).
+- Every success response on the eight specific routes (§6) is an object
+  with `data`, plus `as_of`, `retrieval_pin` (echo, see §4), and
+  `provenance` (see below). The generic §7 tables route instead returns a
+  bare row array (no envelope, no pin echo) — see §7.
 - `provenance` object (every route): `{ source: string; tip_date: string |
   null; contract: "finalized_accounting" | "legacy_estimate" | null;
   seam: boolean; marks: "stored" | "market_api" | "unavailable" }`. Badges
@@ -124,7 +126,7 @@ Response `data`:
   "seam": { "crosses_nav_seam": true, "lag_days": 1, "lag_direction": "metrics lag" },
   "invested": { "kpi_pct": 35.13, "envelope_pct": 35.13, "cash_pct": 64.87, "definition": "accounting_nav_tip" },
   "positions": [
-    { "ticker": "XLV", "weight_pct": 20.0, "is_cash": false }
+    { "ticker": "XLV", "weight_pct": 20.0, "scaled_weight_pct": 20.0, "is_cash": false }
   ]
 }
 ```
@@ -257,13 +259,13 @@ daily return pairs (`MIN_OVERLAP_DAYS`) — null below the floor, never
 invented from endpoints. Benchmark prices come from paginated
 `fetchComparablePriceHistory`, not a single bulk fetch. Lag is signed UTC
 calendar days and symmetric (`metrics lag` / `nav lag`); `metricsAsOf` is
-the metrics stamp, never overwritten with the NAV tip. `ssot` is the full
-`PerformanceSsotMeta` object (same builder the client used: `tipCashPct`,
-`tipInvestedPct`, `investedDefinition`, `tipDate`, `metricsAsOf`,
-`navContract`, `metricsLag`, `bookAsOf`, `marksUnstamped`,
-`metricsDivergenceBadgeLabel`, `navContractBadgeLabel`,
-`performanceFreshnessNote`, `isLiveMarksOverlay`) so the Brief scoreboard
-can consume it unchanged.
+the metrics stamp, never overwritten with the NAV tip. `ssot` is the full `PerformanceSsotMeta` object (same builder the client
+used — exactly these 11 plain-data fields: `bookAsOf`,
+`investedDefinition`, `marksUnstamped`, `metricsAsOf`, `metricsLagDays`,
+`metricsLagging`, `navAsOf`, `navContract`, `tipCashPct`,
+`tipDayReturnPct`, `tipInvestedPct`) so the Brief scoreboard can consume it
+unchanged. The `*BadgeLabel` / `*FreshnessNote` / `isLiveMarksOverlay`
+helpers stay client-side label functions, not JSON.
 
 ### 6.5 `GET /kpis/live`
 
@@ -305,7 +307,7 @@ Response `data`:
 ```json
 {
   "tip": { "date": "2026-09-24", "contract": "legacy_estimate" },
-  "points": [{ "date": "2026-09-24", "nav": 99.909, "day_return_pct": null, "contract": "legacy_estimate" }]
+  "points": [{ "index": 0, "date": "2026-09-24", "nav": 99.909, "day_return_pct": null, "contract": "legacy_estimate" }]
 }
 ```
 
@@ -395,10 +397,14 @@ Query: `select?` (comma list, default `*`), repeatable `order=<col>.<asc|desc>`,
 `in.<col>=(a,b)`, `lt|lte|gt|gte.<col>=<v>`.
 
 Rules: the house pin (`workspace_id = <house>`) is appended server-side for
-`positions`, `position_events`, and `portfolio_metrics` and is never
-forwarded from the caller; `retrieval_pin` is echoed, never forwarded
-upstream. No stub lane — without the service-role key the route fails
-closed (`upstream_empty`, 502), never an empty success.
+`positions`, `position_events`, and `portfolio_metrics`, and the
+house+system pin (`workspace_id = in.(<house>,<system>)`, matching anon RLS
+per migration `110_anon_house_only_private_books.sql`) is appended for
+`documents`; neither is ever forwarded from the caller. The tables route
+returns a bare row array (no §1 envelope, no `retrieval_pin` echo — the pin
+is accepted and ignored, never forwarded upstream). No stub lane — without
+the service-role key the route fails closed (`upstream_empty`, 502), never
+an empty success.
 
 Out of scope for this route: the twelve-x suite (separate Supabase
 project with its own session-RLS model — stays direct), Realtime

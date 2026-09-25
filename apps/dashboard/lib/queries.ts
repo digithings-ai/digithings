@@ -16,7 +16,8 @@ import {
   committedBookDate,
   previousBookDate,
 } from './dashboard-ssot';
-import type { Database, TableRow } from './database.types';import type {
+import type { TableRow } from './database.types';
+import type {
   DashboardData,
   Position,
   Thesis,

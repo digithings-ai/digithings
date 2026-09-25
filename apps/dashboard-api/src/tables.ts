@@ -7,10 +7,12 @@
  * allowlisted tables are served; house-scoped tables get the workspace pin
  * enforced server-side (the caller cannot widen it).
  *
- * No privilege widening pre-cutover: anon RLS is `USING (true)` (see
- * `digiquant/supabase/migrations/011_anon_read_daily_snapshots.sql`), so
- * every row served here is already readable with the public anon key. The
- * allowlist serves strictly less than anon can read.
+ * No privilege widening pre-cutover: anon RLS is broadly `USING (true)`
+ * (see `digiquant/supabase/migrations/001_initial_schema.sql:174-181`),
+ * narrowed to house-only books and house+system documents by migration
+ * `110_anon_house_only_private_books.sql`. Every row served here is already
+ * readable with the public anon key: house tables carry the workspace pin
+ * and `documents` carries the house+system pin, matching anon RLS exactly.
  *
  * Supported query language (exactly what the dashboard uses):
  *   select=col1,col2   order=col.asc|desc (repeatable)   limit=N (cap 5000)
@@ -25,6 +27,8 @@
 import { hasSupabaseEnv, supaGet, type SupabaseEnv } from './supabase';
 
 export const HOUSE_WORKSPACE_ID = '6b753576-ced9-5319-9bfa-c5d0aacd9319';
+/** System workspace (research library); anon RLS reads house OR system documents. */
+export const SYSTEM_WORKSPACE_ID = '1105372f-4109-5815-be5a-21091ccfc8ad';
 
 /** Tables the dashboard reads directly (mirrors `apps/dashboard/lib/*.ts`). */
 const TABLE_ALLOWLIST = new Set([
@@ -49,6 +53,11 @@ const TABLE_ALLOWLIST = new Set([
 
 /** Tables that must always be scoped to the house workspace. */
 const HOUSE_PINNED = new Set(['positions', 'position_events', 'portfolio_metrics']);
+/**
+ * Tables scoped to house OR system (anon RLS parity: migration
+ * `110_anon_house_only_private_books.sql` reads house+system documents).
+ */
+const HOUSE_OR_SYSTEM_PINNED = new Set(['documents']);
 
 const MAX_LIMIT = 5000;
 
@@ -113,6 +122,9 @@ export function buildTableQuery(table: string, params: URLSearchParams): string 
   }
   if (HOUSE_PINNED.has(table)) {
     out.append('workspace_id', `eq.${HOUSE_WORKSPACE_ID}`);
+  }
+  if (HOUSE_OR_SYSTEM_PINNED.has(table)) {
+    out.append('workspace_id', `in.(${HOUSE_WORKSPACE_ID},${SYSTEM_WORKSPACE_ID})`);
   }
   const orders = params.getAll('order');
   if (orders.length > 0) {

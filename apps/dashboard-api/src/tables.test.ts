@@ -6,7 +6,12 @@
 
 import { describe, expect, it, vi, afterEach } from 'vitest';
 import app, { type Env } from './index';
-import { buildTableQuery, HOUSE_WORKSPACE_ID, TablesQueryError } from './tables';
+import {
+  buildTableQuery,
+  HOUSE_WORKSPACE_ID,
+  SYSTEM_WORKSPACE_ID,
+  TablesQueryError,
+} from './tables';
 
 const ENV: Env = {
   SUPABASE_URL: 'https://test.supabase.co',
@@ -64,6 +69,14 @@ describe('buildTableQuery', () => {
     expect(q).toContain(`workspace_id=eq.${HOUSE_WORKSPACE_ID}`);
     const free = buildTableQuery('daily_snapshots', qs({ select: '*' }));
     expect(free).not.toContain('workspace_id');
+  });
+
+  it('pins documents to the house+system workspaces (anon RLS parity)', () => {
+    const q = buildTableQuery('documents', qs({ select: 'date,payload' }));
+    // Note: URLSearchParams percent-encodes the parens/comma of `in.(a,b)`.
+    expect(q).toContain(
+      `workspace_id=in.%28${HOUSE_WORKSPACE_ID}%2C${SYSTEM_WORKSPACE_ID}%29`,
+    );
   });
 
   it('never forwards retrieval_pin upstream', () => {

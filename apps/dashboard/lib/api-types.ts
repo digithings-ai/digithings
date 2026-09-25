@@ -1,15 +1,16 @@
 /**
  * Wire shapes for the Workers dashboard API (`apps/dashboard-api`, contract
  * `apps/dashboard-api/CONTRACT.md`). All specific routes return the §1
- * envelope `{ ok: true, data, provenance }`; this module types the `data`
- * payloads the dashboard consumes. Generic table reads (`GET
+ * envelope `{ data, as_of, retrieval_pin, provenance }`; this module types
+ * the `data` payloads the dashboard consumes. Generic table reads (`GET
  * /v1/tables/:table`) return bare row arrays and are typed at each call site.
  */
 import type { PerformanceSsotMeta } from './performance-ssot';
 
 export interface ApiEnvelope<T> {
-  ok: boolean;
   data: T;
+  as_of: string | null;
+  retrieval_pin: string | null;
   provenance: {
     source: string;
     tip_date: string | null;

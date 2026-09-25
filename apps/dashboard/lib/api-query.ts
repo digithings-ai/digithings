@@ -162,7 +162,7 @@ export type ApiDb = typeof apiDb;
  * the table union mirrors `HouseBookTable` in `lib/house-workspace.ts`.
  */
 export function apiHouseBook(
-  table: 'positions' | 'position_events' | 'nav_history' | 'portfolio_metrics',
+  table: 'positions' | 'position_events' | 'portfolio_metrics',
   columns = '*',
 ): ApiQueryBuilder {
   return new ApiQueryBuilder(table).select(columns);
