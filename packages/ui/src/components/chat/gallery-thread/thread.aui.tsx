@@ -376,7 +376,7 @@ const ThreadRoot: FC<{
             </ThreadPrimitive.Messages>
           </div>
 
-          <ThreadPrimitive.ViewportFooter className="aui-thread-viewport-footer digichat-thread__footer bg-background sticky bottom-0 mt-auto flex flex-col gap-4 overflow-visible pb-4">
+          <ThreadPrimitive.ViewportFooter className="aui-thread-viewport-footer digichat-thread__footer bg-background sticky bottom-0 mt-auto flex flex-col gap-4 overflow-visible pb-4 md:pb-6">
             <ThreadScrollToBottom />
             <ThreadFollowupSuggestions />
             <AuiIf condition={isNewChatView}>

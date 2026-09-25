@@ -62,11 +62,11 @@ export const Gemini: FC = () => {
                   />
                   <div className="relative z-10">
                     <Composer />
+                    <CreditFooter />
                   </div>
                 </div>
               </div>
             </div>
-            <CreditFooter className="absolute inset-x-0 bottom-0 pb-3" />
           </div>
         </AuiIf>
 

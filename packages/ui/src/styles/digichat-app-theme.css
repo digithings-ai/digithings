@@ -181,15 +181,3 @@
     font-optical-sizing: auto;
   }
 }
-
-@layer components {
-  /* Catalog mode on the single route keeps the catalog footer spacing: the
-     credit sits right below the composer, so the footer's own bottom padding
-     is what remains between the credit and the page bottom (m2558, m2557).
-     Scoped to [data-route-mode="catalog"] so /embed and /product keep their
-     own spacing. The copy in (baseline)/baseline.css stays until Step 6
-     deletes the old route. Must live inside @layer components (m2644). */
-  [data-route-mode="catalog"] .aui-thread-viewport-footer {
-    padding-bottom: 0.25rem;
-  }
-}

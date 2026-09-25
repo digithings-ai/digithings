@@ -73,22 +73,12 @@
      exempting the whole transcript column from the boot hide (m3). */
   position: relative;
   z-index: 60;
-  margin: 0;
+  margin: -0.5rem 0 0;
   padding: 0.25rem 0.75rem 0.25rem;
   text-align: center;
   font-size: 0.68rem;
   line-height: 1.4;
   color: color-mix(in oklch, var(--credit-ink, var(--muted-foreground)) 70%, transparent);
-}
-/* Single-route footer (owner mandate): ChatShell routes load the CLI session
-   sheet after these globals, and its `.dc-attribution` draws a top hairline
-   with wider padding. Product threads render the credit borderless with
-   symmetric spacing, so scope the reset to the stock product tree (higher
-   specificity wins regardless of order); session/CLI surfaces keep theirs. */
-[data-stock-product] .dc-attribution {
-  border-top: none;
-  margin-top: 0;
-  padding: 0.25rem 0.75rem;
 }
 .dc-attribution a {
   color: color-mix(in oklch, var(--credit-ink, var(--muted-foreground)) 90%, transparent);
