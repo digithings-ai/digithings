@@ -31,14 +31,12 @@ import {
   type PortfolioTabId,
 } from '@/lib/portfolio-url-state';
 import { normalizeThesisId } from '@/lib/thesis-id';
-import { isCashTicker } from '@/lib/book-reconciliation';
-import { resolveInvestedPct } from '@/lib/performance-ssot';
 import AllocationsTab from './tabs/AllocationsTab';
 import ThesesTab from './tabs/ThesesTab';
 import PageSkeleton from '@/components/page-skeleton';
 
 export default function PortfolioShellInner() {
-  const { data, loading, error } = useDashboard();
+  const { data, api, loading, error } = useDashboard();
   const searchParams = useSearchParams();
   const router = useRouter();
   const pathname = usePathname();
@@ -193,7 +191,7 @@ export default function PortfolioShellInner() {
   const sectionActive: PortfolioSectionId = tab;
 
   if (loading) return <PageSkeleton />;
-  if (error || !data || !metrics)
+  if (error || !data || !api || !metrics)
     return (
       <div className="flex min-h-full flex-col">
         <PortfolioSectionNav active={sectionActive} />
@@ -218,16 +216,8 @@ export default function PortfolioShellInner() {
       </div>
     );
 
-  const tipInvested = data.portfolio.snapshots.at(-1)?.invested_pct ?? null;
-  const bookWeightInvestedPct = positions
-    .filter((p) => !isCashTicker(p.ticker))
-    .reduce((sum, p) => sum + (p.weight_actual ?? 0), 0);
-  const holdingsInvestedPct = resolveInvestedPct({
-    tipInvestedPct: tipInvested,
-    bookWeightInvestedPct,
-    metricsInvestedPct:
-      data.server_portfolio_metrics?.invested_pct ?? metrics.total_invested ?? null,
-  }).investedPct;
+  // Invested precedence is served by GET /portfolio (same ssot as the Brief).
+  const holdingsInvestedPct = api.portfolio.invested.kpi_pct;
 
   return (
     <div className="flex min-h-full flex-col">

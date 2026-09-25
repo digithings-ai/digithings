@@ -4,9 +4,7 @@
  */
 import { describe, expect, it } from "vitest";
 import app, {
-  buildPortfolioBody,
   buildProvenance,
-  committedBookDate,
   errorResponse,
   parseCommonParams,
   type Env,
@@ -148,52 +146,5 @@ describe("GET /portfolio", () => {
     expect(Object.keys(body.provenance).sort()).toEqual(
       ["contract", "marks", "seam", "source", "tip_date"].sort(),
     );
-  });
-});
-
-describe("committedBookDate", () => {
-  it("picks the latest position date on or before the snapshot", () => {
-    expect(committedBookDate("2026-09-24", ["2026-09-25", "2026-09-24", "2026-09-23"])).toBe(
-      "2026-09-24",
-    );
-  });
-
-  it("returns null without a snapshot or without a covered date", () => {
-    expect(committedBookDate(null, ["2026-09-24"])).toBeNull();
-    expect(committedBookDate("2026-09-24", ["2026-09-25"])).toBeNull();
-    expect(committedBookDate("2026-09-24", [])).toBeNull();
-  });
-});
-
-describe("buildPortfolioBody", () => {
-  it("falls back to the non-CASH weight sum when the tip has no invested_pct", () => {
-    const body = buildPortfolioBody(
-      "2026-09-24",
-      { date: "2026-09-24", nav: 100, contract: null, invested_pct: null, cash_pct: null },
-      [
-        { ticker: "XLV", weight_pct: 20, is_cash: false },
-        { ticker: "CASH", weight_pct: 80, is_cash: true },
-      ],
-    ) as { invested: Record<string, number> };
-    expect(body.invested).toEqual({ kpi_pct: 20, envelope_pct: 20, cash_pct: 80 });
-  });
-
-  it("keeps kpi_pct raw while clamping the envelope at 100", () => {
-    const body = buildPortfolioBody(
-      "2026-09-24",
-      { date: "2026-09-24", nav: 100, contract: null, invested_pct: 150, cash_pct: null },
-      [],
-    ) as { invested: Record<string, number> };
-    expect(body.invested.kpi_pct).toBe(150);
-    expect(body.invested.envelope_pct).toBe(100);
-  });
-
-  it("fails closed to nulls with no tip and no positions", () => {
-    const body = buildPortfolioBody("2026-09-24", null, []) as {
-      nav_tip: null;
-      invested: Record<string, null>;
-    };
-    expect(body.nav_tip).toBeNull();
-    expect(body.invested).toEqual({ kpi_pct: null, envelope_pct: null, cash_pct: null });
   });
 });

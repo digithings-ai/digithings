@@ -3,6 +3,8 @@
 import { useEffect, useState } from 'react';
 import { Skeleton, SkeletonGroup } from '@digithings/ui/ui';
 import { getLibraryDocumentById, type LibraryDocumentResult } from '@/lib/queries';
+import { apiDb } from '@/lib/api-query';
+import { isApiConfigured } from '@/lib/api-client';
 import { pipelineNodeRunStatusLabel } from '@/lib/pipeline-layout';
 import type { LaidOutNode } from '@/lib/pipeline-layout';
 import { PIPELINE_TOPOLOGY, pipelineNodeExplanation } from '@/lib/pipeline-topology';
@@ -163,29 +165,18 @@ export default function PipelineNodeDetail({
   );
 }
 
-/** Fetch a document by document_key + date via Supabase. Falls back gracefully. */
+/** Fetch a document by document_key + date via the dashboard API. Falls back gracefully. */
 async function fetchByDocumentKey(
   documentKey: string,
   date: string,
 ): Promise<LibraryDocumentResult | null> {
-  const { createClient } = await import('@supabase/supabase-js');
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-  if (!url || !key) return null;
+  if (!isApiConfigured()) return null;
 
-  // Secondary client — do not share GoTrue storage with the auth singleton.
-  const supabase = createClient(url, key, {
-    auth: {
-      persistSession: false,
-      autoRefreshToken: false,
-      detectSessionInUrl: false,
-    },
-  });
   // Defensive limit(1) rather than .maybeSingle(): maybeSingle ERRORS on >1
   // row, which rendered as "No output found" — the same failure class as the
   // #1538 digest headline (a retried/backfilled publish can duplicate a
   // (document_key, date) pair even though none exist today).
-  const { data, error } = await supabase
+  const { data, error } = await apiDb
     .from('documents')
     .select('id')
     .eq('document_key', documentKey)

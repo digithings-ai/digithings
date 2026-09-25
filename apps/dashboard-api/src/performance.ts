@@ -13,6 +13,7 @@
 
 import {
   buildContinuityNavSeries,
+  buildPerformanceSsotMeta,
   calendarDaysBetween,
   crossesNavSeam,
   currentNavRun,
@@ -26,6 +27,7 @@ import {
   pickBenchmarkPoints,
   type BenchmarkPoint,
   type NavRowInput,
+  type PerformanceSsotMeta,
 } from './ssot';
 
 export type PerformanceWindow = 'inception' | '1y' | '6m' | '3m';
@@ -42,6 +44,16 @@ export interface PerformanceBook {
   /** Metrics stamp, never overwritten with the NAV tip. */
   metricsAsOf: string | null;
   benchmarkHistory: BenchmarkPoint[];
+  /**
+   * SSOT-chrome legs for the nested `ssot` object. Optional so stub/test
+   * books keep working — absent legs degrade honestly (bookAsOf null,
+   * marksUnstamped true) rather than failing the route.
+   */
+  snapshotDate?: string | null;
+  positionDates?: string[];
+  positionMetricsAsOf?: (string | null)[];
+  bookWeightInvestedPct?: number | null;
+  metricsInvestedPct?: number | null;
 }
 
 export interface PerformanceData {
@@ -65,6 +77,12 @@ export interface PerformanceData {
     lag_direction: 'metrics lag' | 'nav lag' | null;
     metrics_as_of: string | null;
   };
+  /**
+   * Full SSOT chrome (camelCase `PerformanceSsotMeta` shape, identical to the
+   * dashboard client's type). Served so dashboard surfaces can consume the
+   * invested precedence + seam/marks chrome without re-deriving it.
+   */
+  ssot: PerformanceSsotMeta;
 }
 
 export interface PerformanceQuery {
@@ -173,8 +191,19 @@ export function getPerformanceBundle(
           : null,
   }));
 
+  const ssot = buildPerformanceSsotMeta({
+    navRows: book.navRows,
+    metricsAsOf: book.metricsAsOf,
+    snapshotDate: book.snapshotDate ?? null,
+    positionDates: book.positionDates ?? [],
+    positionMetricsAsOf: book.positionMetricsAsOf ?? [],
+    bookWeightInvestedPct: book.bookWeightInvestedPct ?? null,
+    metricsInvestedPct: book.metricsInvestedPct ?? null,
+  });
+
   return {
     nav: { tip_date: tipDate, base100_tip: base100Tip, points },
+    ssot,
     metrics: {
       day_return_pct: dayReturn,
       since_inception_pct: sincePct,

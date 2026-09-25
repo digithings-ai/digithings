@@ -116,6 +116,9 @@ describe('buildBriefData', () => {
     expect(data.invested_pct).toBe(35.13);
     expect(data.session_events).toHaveLength(1);
   });
+  it('reports the since-inception start date from the chained series', () => {
+    expect(buildBriefData(book(), 'off').since_inception_start_date).toBe('2026-08-20');
+  });
   it('overlay engages only on a nonzero live move and wears live marks', () => {
     const live = {
       liveVsMarkPct: 0.2,
