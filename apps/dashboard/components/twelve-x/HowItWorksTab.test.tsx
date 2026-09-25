@@ -2,7 +2,6 @@ import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it, vi } from 'vitest';
 
-import { LEAN_BAND, STRONG_BAND } from '@/lib/twelve-x/consensus-bar';
 import HowItWorksTab from './HowItWorksTab';
 import TwelveXHeading from './TwelveXHeading';
 import { TwelveXProvider } from './context';
@@ -32,46 +31,62 @@ function renderTab(): string {
 }
 
 describe('HowItWorksTab', () => {
-  it('renders the full six-stage pipeline story with its store names, without data', () => {
+  it('renders the short flow strip + levels + scope story, without data', () => {
     const html = renderTab();
     expect(html).toContain('data-testid="twelvex-how-it-works"');
-    for (const title of [
+    expect(html).toContain('data-testid="hiw-flow"');
+    expect(html).toContain('data-testid="hiw-levels"');
+    expect(html).toContain('data-testid="hiw-scope"');
+    for (const step of [
+      'Calendar',
       'Ingest desk research',
       'Score relevance',
-      'Build consensus',
-      'Find confluence',
-      'Write the digest',
-      'Rank trade ideas',
+      'Digest',
+      'Synthesize ideas',
+      'Attach levels',
+      'Daily board',
     ]) {
-      expect(html).toContain(title);
-    }
-    for (const store of [
-      'fx_research_history',
-      'fx_relevance_ledger',
-      'fx_consensus_snapshot',
-      'fx_confluence_snapshot',
-      'fx_daily_digest',
-      'fx_trade_ideas_snapshot',
-      'economic_calendar',
-    ]) {
-      expect(html).toContain(store);
+      expect(html).toContain(step);
     }
   });
 
-  it('draws the consensus scale from the real band constants', () => {
+  it('explains the level stack in trader terms with provenance chips', () => {
     const html = renderTab();
-    expect(html).toContain('data-testid="hiw-scale"');
-    expect(html).toContain(`+${STRONG_BAND}`);
-    expect(html).toContain(`+${LEAN_BAND}`);
+    expect(html).toContain('How entry / stop / targets are set');
+    expect(html).toContain('never blank the bracket');
+    expect(html).toContain('minimum R:R');
+    for (const chip of [
+      'broker',
+      'bank trade',
+      'seasonality',
+      'position book',
+      'retail book',
+      'computed',
+      'technical',
+      'model',
+    ]) {
+      expect(html).toContain(chip);
+    }
   });
 
-  it('explains provenance as three tiers ending at named desk reports', () => {
+  it('states what the tool is and is not — no execution, no directives', () => {
     const html = renderTab();
-    expect(html).toContain('data-testid="hiw-provenance"');
-    expect(html).toContain('Tier 1');
-    expect(html).toContain('Tier 2');
-    expect(html).toContain('Tier 3');
-    expect(html).toContain('never executes');
+    expect(html).toContain('What this is / isn');
+    expect(html).toContain('never executes trades');
+    expect(html).toContain('display filter only');
+    expect(html).toContain('not wired yet');
+    expect(html).toContain('source chain');
+  });
+
+  it('dropped the old essay structure — no stages, scale, freshness, or tiers', () => {
+    const html = renderTab();
+    expect(html).not.toContain('data-testid="hiw-scale"');
+    expect(html).not.toContain('data-testid="hiw-provenance"');
+    expect(html).not.toContain('six stages');
+    expect(html).not.toContain('Freshness');
+    expect(html).not.toContain('Tier 1');
+    expect(html).not.toContain('fx_research_history');
+    expect(html).not.toContain('fx_trade_ideas_snapshot');
   });
 
   it('follows the flat dashboard grammar — no glass, no main, no P&L tokens', () => {
