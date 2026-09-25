@@ -324,11 +324,17 @@ body {
 .dg-mosaic-ask { margin-left: auto; white-space: nowrap; font-family: var(--font-mono); font-size: 0.9rem; color: var(--ink-mute); }
 button.dg-mosaic-ask { background: none; border: 0; padding: 0; cursor: pointer; }
 button.dg-mosaic-ask:hover { color: var(--ink); }
-/* The expand control shares the foot's mono voice (#4429). It sits beside the
-   ask control rather than pushing it — ask keeps `margin-left: auto`. */
-.dg-mosaic-expand { white-space: nowrap; font-family: var(--font-mono); font-size: 0.9rem; color: var(--ink-mute); }
-button.dg-mosaic-expand { background: none; border: 0; padding: 0; cursor: pointer; }
-button.dg-mosaic-expand:hover { color: var(--ink); }
+/* Click-to-expand (#4429): no button — the focused tile itself toggles. The
+   open tile owns its row full-width: the row's siblings get out of the way
+   and the row takes EXPANDED_ROW_SHARE. The complete card scrolls internally
+   past the row height, so the pinned stage never breaks. The stack face
+   flows naturally, so its open tile just grows. */
+.dg-mosaic-row.is-expanded-row .dg-cell:not(.is-expanded) { display: none; }
+.dg-cell.is-expanded { overflow-x: hidden; overflow-y: auto; cursor: zoom-out; }
+.dg-cell.on[data-expandable="true"] .dg-cell-focus { cursor: zoom-in; }
+/* The grown-in-place deep dive: stages, full copy, api, links, related. The
+   head/strip/preview/stack/foot already render above; this is the rest. */
+.dg-cell-full { display: flex; flex-direction: column; gap: 0.9rem; margin-top: 0.6rem; border-top: 1px solid var(--hair); padding-top: 0.9rem; }
 
 /* The compose command is a control in the focused tile: a click copies it. The
    `.dg-docker` skin is shared with the graph panel, where the command is plain

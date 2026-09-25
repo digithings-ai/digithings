@@ -84,12 +84,16 @@ import { moduleCountLabel, moduleVersion } from "@/lib/moduleCounts";
  * every tile states the same three things in the same order.
  *
  * v6 replaces the focused tile's prose with the pipeline (#4429): modules that
- * declare a `flow` show the stage strip on focus instead of the facts line and
- * lead paragraph, and an Expand control opens the complete module card as an
- * in-flow panel below the mosaic — every summary paragraph, named stack,
- * pipeline, api, docker, links, ask, related. Modules without a flow expand
- * to the same card minus the pipeline. No dialog: the section takes the room
- * the full card needs.
+ * declare a `flow` show the stage strip plus one clamped lead paragraph on
+ * focus, with the stack pinned at the bottom as before. Modules without a
+ * flow keep the v5 detail as the fallback.
+ *
+ * v7 grows the tile itself on click — no button, no elsewhere. Clicking the
+ * focused tile (anywhere except its real controls) expands it to full row
+ * width with the complete card inside (stages, full copy, api, links,
+ * related); the row's siblings get out of the way and the row takes the
+ * lion's share, the card scrolling internally past that. Scrolling the focus
+ * on, or Escape, collapses; the id is retained so scrolling back re-opens.
  */
 
 /**
@@ -142,6 +146,11 @@ const FOCUS_BOOST = 2.6;
  * anyway must not shrink it.
  */
 const ROW_FOCUS_SHARE = 0.56;
+/* Click-to-expand (#4429): the expanded tile owns its row full-width with
+   the complete card inside, so the row takes the lion's share. 0.62 leaves
+   exactly two ROW_MIN_SHARE floors for the other rows; the card scrolls
+   internally past that. */
+const EXPANDED_ROW_SHARE = 0.62;
 /**
  * The least height any row keeps, as a share of the mosaic.
  *
@@ -252,22 +261,25 @@ function solveTileGrow(focus: number): number[] {
  * with the focused row's lifted until it holds `ROW_FOCUS_SHARE` of the height.
  * Unboosted members are deliberate — the tile boost already widens the focused
  * tile inside the row; boosting the row on top of that would double-count the
- * same emphasis.
+ * same emphasis. `expandedRow` is the row holding a click-expanded tile, or
+ * -1: that row takes EXPANDED_ROW_SHARE instead of ROW_FOCUS_SHARE.
  */
-function solveRowGrow(focus: number): number[] {
+function solveRowGrow(focus: number, expandedRow = -1): number[] {
   const sums = ROWS.map((members) => members.reduce((acc, i) => acc + BASE_WEIGHTS[i], 0));
   const total = sums.reduce((acc, sum) => acc + sum, 0) || 1;
   /* No focus yet (the mosaic is still off-screen): rows hold base shares. */
   if (focus < 0 || ROW_OF[focus] === undefined) return sums.map((sum) => sum / total);
   const focused = ROW_OF[focus];
   /* The heaviest row is already past the target, so its own share stands in. */
-  const focusShare = Math.max(ROW_FOCUS_SHARE, sums[focused] / total);
+  const shareRow = expandedRow >= 0 ? expandedRow : focused;
+  const targetShare = expandedRow >= 0 ? EXPANDED_ROW_SHARE : ROW_FOCUS_SHARE;
+  const focusShare = Math.max(targetShare, sums[shareRow] / total);
   const rest = 1 - focusShare;
 
-  const others = sums.map((sum, row) => (row === focused ? 0 : sum));
+  const others = sums.map((sum, row) => (row === shareRow ? 0 : sum));
   const otherTotal = others.reduce((acc, sum) => acc + sum, 0) || 1;
   const starving = sums.map(
-    (sum, row) => row !== focused && (rest * sum) / otherTotal < ROW_MIN_SHARE,
+    (sum, row) => row !== shareRow && (rest * sum) / otherTotal < ROW_MIN_SHARE,
   );
   const floored = starving.filter(Boolean).length * ROW_MIN_SHARE;
   const flexible = rest - floored;
@@ -277,7 +289,7 @@ function solveRowGrow(focus: number): number[] {
   );
 
   return sums.map((sum, row) => {
-    if (row === focused) return focusShare;
+    if (row === shareRow) return focusShare;
     if (starving[row]) return ROW_MIN_SHARE;
     return flexibleTotal > 0 ? (flexible * others[row]) / flexibleTotal : ROW_MIN_SHARE;
   });
@@ -464,22 +476,25 @@ export function ModuleGrid() {
   }, [stepper, reduced, started]);
 
   const focus = started ? Math.max(activeIndex, 0) : -1;
-  const tileGrow = solveTileGrow(focus);
-  const rowGrow = solveRowGrow(focus);
-  const rows = stepper ? STACK_ROWS : ROWS;
-  /* The expanded module tour. A focused tile shows the pipeline strip; the
-     full stage-by-stage tour opens on demand and closes on Escape/backdrop.
-     Module scope for the id only — the overlay itself reads render state. */
+  /* Click-to-expand (#4429): no button, no elsewhere. Clicking the focused
+     tile — anywhere except its real controls — grows the tile itself to full
+     row width with the complete card inside; the row's siblings get out of
+     the way via CSS and the row takes EXPANDED_ROW_SHARE. Scrolling the
+     focus on, or Escape, collapses; expandId is retained so scrolling back
+     re-opens. Expansion only ever shows on the focused tile. */
   const [expandId, setExpandId] = useState<string | null>(null);
-  const expanded = expandId ? (ordered.find((m) => m.id === expandId) ?? null) : null;
-  /* Opening the full card scrolls it into view instantly (behavior auto —
-     smooth would walk the scrolly focus, per focusModule). Related jumps
-     re-fire the effect via expandId and land on the new card. */
-  const panelRef = useRef<HTMLDivElement>(null);
+  const openRow =
+    !stepper && focus >= 0 && expandId === ordered[focus]?.id ? (ROW_OF[focus] ?? -1) : -1;
+  const tileGrow = solveTileGrow(focus);
+  const rowGrow = solveRowGrow(focus, openRow);
+  const rows = stepper ? STACK_ROWS : ROWS;
   useEffect(() => {
-    if (expandId && panelRef.current) {
-      panelRef.current.scrollIntoView({ behavior: "auto", block: "start" });
-    }
+    if (!expandId) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setExpandId(null);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
   }, [expandId]);
 
   return (
@@ -498,15 +513,24 @@ export function ModuleGrid() {
             role="list"
             aria-label="digithings modules, sized by lines of code"
           >
-            {rows.map((members, row) => (
+            {rows.map((members, row) => {
+              /* The row holding the open tile drops its siblings (CSS) so
+                 the expanded tile owns the full row width in place. */
+              const rowOpen = members.some((i) => {
+                const mm = ordered[i];
+                const mmOn = stepper ? reduced || i === stackActive : i === focus;
+                return expandId === mm.id && mmOn && mm.flow !== undefined;
+              });
+              return (
               <div
                 key={`row-${row}`}
-                className="dg-mosaic-row"
+                className={`dg-mosaic-row${rowOpen ? " is-expanded-row" : ""}`}
                 style={stepper ? undefined : ({ flexGrow: rowGrow[row] } as React.CSSProperties)}
               >
                 {members.map((i) => {
                   const m = ordered[i];
                   const on = stepper ? reduced || i === stackActive : i === focus;
+                  const open = expandId === m.id && on && m.flow !== undefined;
                   const version = moduleVersion(m.id);
                   const dockerCmd = m.dockerCmd;
                   const copied = copiedId === m.id;
@@ -521,11 +545,12 @@ export function ModuleGrid() {
                           : undefined
                       }
                       role="listitem"
-                      className={`dg-cell${on ? " on" : ""}`}
+                      className={`dg-cell${on ? " on" : ""}${open ? " is-expanded" : ""}`}
                       style={
                         stepper ? undefined : ({ flexGrow: tileGrow[i] } as React.CSSProperties)
                       }
                       aria-current={on ? "true" : undefined}
+                      data-expandable={m.flow && on ? "true" : undefined}
                     >
                       {/* The whole tile is the focus target, but the focused
                           tile also owns real controls (copy the compose command,
@@ -539,10 +564,24 @@ export function ModuleGrid() {
                       <button
                         type="button"
                         className="dg-cell-focus"
-                        aria-label={`Focus ${m.id} — ${m.role}, ${factsLine(m)}`}
-                        onClick={() =>
-                          stepper ? setStackActive(i) : focusModule(trackRef.current, i)
+                        aria-label={
+                          open
+                            ? `Collapse the ${m.id} card`
+                            : `Focus ${m.id} — ${m.role}, ${factsLine(m)}`
                         }
+                        aria-expanded={m.flow && on ? open : undefined}
+                        onClick={() => {
+                          /* Click-anywhere expand: the focused tile toggles
+                             its full card in place (real controls sit above
+                             this overlay and keep their own clicks); an
+                             unfocused tile focuses as before. Flow-less
+                             modules have no fuller card, so their click
+                             stays a focus. */
+                          const focused = stepper ? reduced || i === stackActive : i === focus;
+                          if (focused && m.flow) setExpandId(open ? null : m.id);
+                          else if (stepper) setStackActive(i);
+                          else focusModule(trackRef.current, i);
+                        }}
                       />
                       <div className="dg-cell-body">
                         <span className="dg-mosaic-head">
@@ -568,11 +607,16 @@ export function ModuleGrid() {
 
                         {on ? (
                           m.flow ? (
-                            /* The pipeline, not the prose. Modules with a flow
-                               show the strip on focus (#4429) — the facts line
-                               and lead paragraph move into the expanded tour,
-                               which is why the focused tile stays compact. */
-                            <ModuleFlowStrip stages={m.flow.stages} />
+                            /* The pipeline plus its compressed preview (#4429):
+                               the strip, one clamped lead paragraph, then the
+                               stack pinned at the bottom by CSS. The full copy
+                               lives in the click-expanded card. */
+                            <>
+                              <ModuleFlowStrip stages={m.flow.stages} />
+                              {m.summary[0] ? (
+                                <span className="dg-mosaic-serves">{m.summary[0]}</span>
+                              ) : null}
+                            </>
                           ) : (
                             <span className="dg-mosaic-detail">
                               <span className="dg-mosaic-facts">{factsLine(m)}</span>
@@ -631,124 +675,79 @@ export function ModuleGrid() {
                               ask <span className="text-ink">digi</span>
                               <span className="text-accent">chat</span> →
                             </button>
-                            {/* The full stage-by-stage tour, for modules that
-                                declare a flow. Opens the overlay; the strip
-                                above is the preview, this is the detail. */}
-                            {m.flow ? (
-                              <button
-                                type="button"
-                                className="dg-mosaic-expand"
-                                aria-label={`Expand the ${m.id} pipeline tour`}
-                                onClick={() => setExpandId(m.id)}
-                              >
-                                expand +
-                              </button>
-                            ) : null}
+                            {/* No expand button: the tile itself toggles —
+                                click anywhere except the real controls. */}
                           </span>
+                        ) : null}
+                        {/* The complete card, grown in place (#4429). Only on
+                            the focused-and-expanded tile: stages, every
+                            summary paragraph, api, links and related jumps.
+                            Head/role/strip/preview/stack/docker/ask already
+                            render above; this is the deep dive. Related jumps
+                            walk the scrolly to that module instead of opening
+                            it — the walk owns focus. */}
+                        {open && m.flow ? (
+                          <div className="dg-cell-full">
+                            <ModuleStageList stages={m.flow.stages} />
+                            <div className="m-fullcard-summary">
+                              {m.summary.map((p, k) => (
+                                <p key={k}>{p}</p>
+                              ))}
+                            </div>
+                            {m.api.length > 0 ? (
+                              <ul className="m-fullcard-api">
+                                {m.api.map((a, k) => (
+                                  <li key={k}>
+                                    {a.label ? <span className="k">{a.label}</span> : null}
+                                    <code>{a.code}</code>
+                                  </li>
+                                ))}
+                              </ul>
+                            ) : null}
+                            {m.links.length > 0 ? (
+                              <span className="m-fullcard-links">
+                                {m.links.map((l) => (
+                                  <a key={l.href + l.label} href={l.href}>
+                                    {l.label} →
+                                  </a>
+                                ))}
+                              </span>
+                            ) : null}
+                            {m.related.length > 0 ? (
+                              <span className="m-fullcard-related">
+                                {m.related.map((r) => {
+                                  const j = ordered.findIndex((x) => x.id === r);
+                                  return (
+                                    <button
+                                      key={r}
+                                      type="button"
+                                      onClick={() => {
+                                        setExpandId(null);
+                                        if (stepper) {
+                                          if (j >= 0) setStackActive(j);
+                                        } else if (j >= 0) {
+                                          focusModule(trackRef.current, j);
+                                        }
+                                      }}
+                                    >
+                                      {r} →
+                                    </button>
+                                  );
+                                })}
+                              </span>
+                            ) : null}
+                          </div>
                         ) : null}
                       </div>
                     </div>
                   );
                 })}
               </div>
-            ))}
+              );
+            })}
           </div>
         </div>
       </div>
-      {/* The expanded full module card (#4429). NOT a dialog: the mosaic
-          section itself takes the room the complete card needs — an in-flow
-          panel below the track with everything the node declares (facts,
-          every summary paragraph, named stack, pipeline, api, docker, links,
-          ask, related). Flow-less modules expand to the same card minus the
-          pipeline. Closes back to the mosaic; opening scrolls the card into
-          view instantly (behavior auto — a smooth scroll would walk the
-          scrolly focus through every step, per focusModule). */}
-      {expanded ? (
-        <div className="m-fullcard" ref={panelRef} data-fullcard={expanded.id}>
-          <div className="m-fullcard-head">
-            <div>
-              <h2 className="m-fullcard-title">
-                <span className="text-ink-mute">digi</span>
-                {expanded.id.replace(/^digi/, "")}
-                <span className="dg-loc"> v{moduleVersion(expanded.id) ?? "roadmap"}</span>
-              </h2>
-              <p className="m-fullcard-role">
-                {expanded.role} · {factsLine(expanded)}
-              </p>
-              <p className="m-fullcard-tagline">{expanded.tagline}</p>
-            </div>
-            <button
-              type="button"
-              className="m-fullcard-close"
-              aria-label={`Collapse the ${expanded.id} card`}
-              onClick={() => setExpandId(null)}
-            >
-              collapse −
-            </button>
-          </div>
-          {expanded.flow ? <ModuleStageList stages={expanded.flow.stages} /> : null}
-          <div className="m-fullcard-summary">
-            {expanded.summary.map((p, i) => (
-              <p key={i}>{p}</p>
-            ))}
-          </div>
-          <div className="m-fullcard-stack">
-            <StackRow items={expanded.stack} className="stack-row" />
-          </div>
-          {expanded.api.length > 0 ? (
-            <ul className="m-fullcard-api">
-              {expanded.api.map((a, i) => (
-                <li key={i}>
-                  {a.label ? <span className="k">{a.label}</span> : null}
-                  <code>{a.code}</code>
-                </li>
-              ))}
-            </ul>
-          ) : null}
-          <div className="m-fullcard-foot">
-            {expanded.dockerCmd ? (
-              <button
-                type="button"
-                className={`dg-docker${copiedId === expanded.id ? " is-copied" : ""}`}
-                aria-label={copiedId === expanded.id ? "Copied" : `Copy command: ${expanded.dockerCmd}`}
-                onClick={() => copyCommand(expanded.id, expanded.dockerCmd as string)}
-              >
-                <span className="prompt" aria-hidden="true">
-                  {copiedId === expanded.id ? "✓" : "$"}
-                </span>{" "}
-                {copiedId === expanded.id ? "copied" : expanded.dockerCmd}
-              </button>
-            ) : null}
-            <button
-              type="button"
-              className="dg-mosaic-ask"
-              aria-label={`Ask digichat about ${expanded.id}`}
-              onClick={() => ask(expanded.id)}
-            >
-              ask <span className="text-ink">digi</span>
-              <span className="text-accent">chat</span> →
-            </button>
-            {expanded.links.length > 0 ? (
-              <span className="m-fullcard-links">
-                {expanded.links.map((l) => (
-                  <a key={l.href + l.label} href={l.href}>
-                    {l.label} →
-                  </a>
-                ))}
-              </span>
-            ) : null}
-            {expanded.related.length > 0 ? (
-              <span className="m-fullcard-related">
-                {expanded.related.map((r) => (
-                  <button key={r} type="button" onClick={() => setExpandId(r)}>
-                    {r} →
-                  </button>
-                ))}
-              </span>
-            ) : null}
-          </div>
-        </div>
-      ) : null}
     </section>
   );
 }
