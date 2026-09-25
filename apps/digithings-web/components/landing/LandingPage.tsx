@@ -31,9 +31,9 @@ import { REPO_CLONE } from "@/lib/repoActivity";
  * and remove the deployment terminal, with the module grid moving up to sit
  * directly under the hero. So this section is a single left-aligned column:
  * the two-line h1, the mission paragraph, and the clone command (which moves
- * up from the old `Boot` band; chrome, not prose, so it keeps the
- * `*:max-w-none` override that let it share the terminal's old full-frame
- * width). The terminal, its glow and its frame are gone.
+ * up from the old `Boot` band. The clone box is natural width — just the
+ * size of the text inside it (owner direction); no full-frame override.
+ * The terminal, its glow and its frame are gone.
  */
 function Hero() {
   return (
@@ -48,16 +48,13 @@ function Hero() {
           research, and quant modules on your own keys and hardware. The
           software is free; the integration is the work.
         </p>
-        {/* `max-w-none` as a prop, not a wrapper override: `CopyCommand`
-            caps itself at the prose measure and the old `[&>*]` wrapper hack
-            lost the specificity race, so the command never spanned the frame.
-            `className` merges through `cn` (tailwind-merge), which resolves
-            the conflict deterministically. Chrome, not prose — full width. */}
+        {/* Natural width (owner direction): the box is only as wide as the
+            command text inside it. `CopyCommand` caps itself at the prose
+            measure on its own — no width override. */}
         <CopyCommand
           samples={[{ label: "clone", protocol: "git clone", code: REPO_CLONE }]}
           ariaLabel="Clone command"
           inline
-          className="max-w-none"
         />
       </div>
     </section>

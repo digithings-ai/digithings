@@ -234,15 +234,27 @@ body {
    always exactly its parent's and the rows are flush by construction — the
    property v3 needed a backtracking partition to reach. */
 .dg-mosaic--rows {
-  display: flex;
-  flex-direction: column;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-auto-flow: row;
   gap: 0.5rem;
   width: 100%;
   max-width: var(--frame-w);
   margin-inline: auto;
-  height: clamp(34rem, 82vh, 54rem);
+  /* Square cells at any width (#4429): cell w = (W-3g)/4, cell h = (H-2g)/3,
+     so H = 3(W-3g)/4 + 2g — at the 1180px frame with 0.5rem gutters that is
+     883px. No zoom on focus (owner): every cell stays its square, focus is
+     highlight-only, and size differences speak through order (biggest
+     top-left), not geometry — squares + exact fill + varied sizes cannot all
+     hold in one box. */
+  aspect-ratio: 1180 / 883;
   position: relative;
 }
+/* Rows are grouping only in grid mode — the cells are the grid items, so DOM
+   order (biggest first) is visual order, 4/4/3. The stacked face keeps real
+   row boxes (rule below, scoped to --stack). */
+.dg-mosaic--rows .dg-mosaic-row { display: contents; }
+.dg-mosaic--rows .dg-cell { aspect-ratio: 1 / 1; min-height: 0; }
 /* Click-expanded tile (#4429): the open card leaves the row flow and covers
    the mosaic in place — capped at the grid's own box, never bigger (owner:
    "it should just expand to the full size of the grid itself, but no
