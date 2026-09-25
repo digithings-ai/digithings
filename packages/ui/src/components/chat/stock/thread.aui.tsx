@@ -82,8 +82,8 @@ export type ThreadComponents = {
   AssistantMessage?: ComponentType | undefined;
   Welcome?: ComponentType | undefined;
   /**
-   * Optional footer slot below the composer (credit removed by owner;
-   * hosts may render their own footer here).
+   * Optional footer slot below the composer (defaults to the shared
+   * "powered by digichat" credit; hosts may render their own footer here).
    */
   Footer?: ComponentType | undefined;
   ToolFallback?: ToolCallMessagePartComponent | undefined;
