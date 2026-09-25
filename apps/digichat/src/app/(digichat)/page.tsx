@@ -14,6 +14,7 @@ import {
 import { HomeStockClient } from "./home-stock-client";
 import { BaselineClient } from "../(baseline)/baseline/baseline-client";
 import EmbedRouteShell from "./embed-route-shell";
+import { RouteMenu } from "./route-menu";
 
 export const dynamic = "force-dynamic";
 
@@ -23,22 +24,16 @@ export async function generateMetadata({
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }): Promise<Metadata> {
   const params = await searchParams;
-  const mode =
-    params.mode === "embed"
-      ? "embed"
-      : params.mode === "catalog"
-        ? "catalog"
-        : "product";
-  if (mode === "product") return {};
+  if (params.mode !== "embed" && params.mode !== "catalog") return {};
   return { robots: { index: false, follow: false } };
 }
 
 /**
- * Root `/` — the single digichat route (single-route plan, Step 3).
- * `?mode=` selects the surface; the default is the product presentation.
+ * Root `/` — the single digichat route (single-route plan, Step 3 + menu root).
+ * `?mode=` selects the surface; bare `/` renders the menu (no chat).
  * - embed: tenant iframe surface (same shell as /embed)
  * - catalog: skin catalog (same client as /baseline; production → notFound)
- * - product (default): chrome.mode from deployment config selects presentation:
+ * - product: chrome.mode from deployment config selects presentation:
  *   - embed (default): redirect to /embed (anonymous iframe surface)
  *   - modal | sidebar: framed stock shell (launcher panel / docked panel, #4515)
  *   - app + auth session: ChatShell (server persistence) or stock shell (memory/none)
@@ -55,7 +50,11 @@ export default async function Home({
       ? "embed"
       : params.mode === "catalog"
         ? "catalog"
-        : "product";
+        : params.mode === "product"
+          ? "product"
+          : "menu";
+
+  if (routeMode === "menu") return <RouteMenu />;
 
   if (routeMode === "catalog") {
     if (process.env.NODE_ENV === "production") {

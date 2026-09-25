@@ -7,8 +7,8 @@ const here = dirname(fileURLToPath(import.meta.url));
 const read = (rel: string) => readFileSync(join(here, rel), "utf8");
 
 /**
- * Single route `/` with `?mode=` (single-route plan, Step 3).
- * Product is the default; embed/catalog modes render the shared shells.
+ * Single route `/` with `?mode=` (single-route plan, Step 3 + menu root).
+ * Bare `/` renders the menu (no chat); product/embed/catalog via `?mode=`.
  * Old routes stay alive until Step 6 (compat shims = Step 5).
  */
 describe("single route / with ?mode=", () => {
@@ -23,6 +23,12 @@ describe("single route / with ?mode=", () => {
     expect(page).toMatch(/params\.mode === "catalog"/);
     expect(page).toMatch(/<EmbedRouteShell params=\{params\} \/>/);
     expect(page).toMatch(/<BaselineClient \/>/);
+  });
+
+  it("renders the menu at bare / and product only on ?mode=product", () => {
+    expect(page).toMatch(/params\.mode === "product"/);
+    expect(page).toMatch(/<RouteMenu \/>/);
+    expect(page).toMatch(/from "\.\/route-menu"/);
   });
 
   it("guards catalog in production and de-indexes non-product modes", () => {
