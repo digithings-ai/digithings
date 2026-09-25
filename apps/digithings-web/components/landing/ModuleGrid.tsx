@@ -232,9 +232,21 @@ const STACK_ROWS: number[][] = ordered.map((_, i) => [i]);
 /**
  * The flex-grow value for every tile at a given focus. Pure in `(weights,
  * focus)`, so the same focus always draws the same mosaic.
+ *
+ * Normalized per row: this Chromium distributes only Σgrow of the free space
+ * when a row's factors sum to less than 1 instead of normalizing (proven
+ * in-page — three 0.18 grows in an 1180px row rendered 210px each and left
+ * 46% undistributed, the dead space right of digilink). Rows whose sum is
+ * below 1 are scaled up to exactly 1, so every row fills its line while LOC
+ * proportions inside the row are preserved bit-for-bit.
  */
 function solveTileGrow(focus: number): number[] {
-  return BASE_WEIGHTS.map((w, i) => (i === focus ? w * FOCUS_BOOST : w));
+  const raw = BASE_WEIGHTS.map((w, i) => (i === focus ? w * FOCUS_BOOST : w));
+  return raw.map((g, i) => {
+    const row = ROW_OF[i];
+    const sum = ROWS[row].reduce((acc, j) => acc + raw[j], 0);
+    return sum < 1 && sum > 0 ? g / sum : g;
+  });
 }
 
 /**
