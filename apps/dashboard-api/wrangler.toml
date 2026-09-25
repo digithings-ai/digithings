@@ -16,7 +16,7 @@ workers_dev = true
 enabled = true
 
 [vars]
-SUPABASE_URL = ""
+SUPABASE_URL = "https://rwagjbkvxkdwqmouagad.supabase.co"
 
 # Secrets (wrangler secret put; never commit values):
 #   SUPABASE_SERVICE_ROLE_KEY — house-book reads via PostgREST. Lives ONLY in
