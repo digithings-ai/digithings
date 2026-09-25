@@ -15,9 +15,7 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
   AuiConfig,
-  AssistantRuntimeProvider,
   CompositeAttachmentAdapter,
-  RuntimeAdapterProvider,
   SimpleImageAttachmentAdapter,
   SimpleTextAttachmentAdapter,
   Suggestions,
@@ -28,15 +26,12 @@ import {
   type DictationAdapter,
   type SpeechSynthesisAdapter,
 } from "@assistant-ui/react";
-import { ThreadSkinView } from "@digithings/ui/chat/skins";
-import { DIGICHAT_SKIN_OPTIONS } from "@/lib/digichat-skin-options";
+
 import type { ComposerLayout } from "@digithings/ui/chat/thread";
 import {
-  BootLabOverlay,
   resolveBootLabVariant,
   type BootLabVariant,
 } from "@digithings/ui/chat/boot-lab";
-import { DigichatBootLoader } from "@digithings/ui/chat/boot-loader";
 import {
   DIGI_CHAT_READY_EVENT,
   hasDigichatReady,
@@ -50,43 +45,29 @@ import { DEFAULT_CLIENT_CONFIG } from "@/lib/deploy-config";
 import {
   effectiveReasoningMode,
   effectiveToolCallsMode,
-  type ChainDisclosureMode,
 } from "@/lib/view-modes";
-import { parseEmbedChatError, formatEmbedChatError } from "@/lib/embed-chat-error";
-import { cn } from "@/lib/utils";
 import {
-  skinCreditStyle,
   skinOwnsPageChrome,
 } from "@digithings/ui/chat/skins";
 import { useEmbedChatPrefsOptional } from "@digithings/ui/chat/stock";
 import {
-  StockSendGateProvider,
   type StockSendGateHandlers,
 } from "@digithings/ui/chat/stock";
 import {
-  DeployUiProvider,
   type DeployUiValue,
 } from "@digithings/ui/chat/stock";
 import {
-  SkinChromeProvider,
-  SkinRuntimeProvider,
   type SkinChromeValue,
 } from "@digithings/ui/chat/stock";
-import { ToolCatalogBar } from "@/components/stock/tool-catalog-bar";
-import { SessionPrefsToolBridge } from "@/components/stock/session-prefs-tool-bridge";
+
+import { DigiChatHost } from "./digichat-host";
 
 /** Minimum cube sweep before the boot parks (keeps the contour visible). */
 const BOOT_MIN_MS = 1400;
 /** Overlay fade before the settled boot unmounts. */
 const BOOT_FADE_MS = 320;
 
-/** Skin runtime for the catalog skins: same error copy as the direct import. */
-const SKIN_RUNTIME = {
-  errorParsers: {
-    parseError: parseEmbedChatError,
-    formatError: formatEmbedChatError,
-  },
-};
+
 
 export type ProductShellProps = {
   runtime: AssistantRuntime;
@@ -152,52 +133,7 @@ export function buildProductRuntimeAdapters(
   return adapters;
 }
 
-/** Hide reasoning / tool / source part UIs when features disable them. */
-function FeatureCss({
-  features,
-  hideModelPicker,
-  reasoningMode,
-  toolCallsMode,
-}: {
-  features: DigichatClientFeatures;
-  hideModelPicker: boolean;
-  reasoningMode: ChainDisclosureMode;
-  toolCallsMode: ChainDisclosureMode;
-}) {
-  const rules: string[] = [];
-  if (reasoningMode === "off") {
-    rules.push(
-      '[data-stock-product] [data-slot="aui_reasoning"], [data-stock-product] .aui-reasoning-root { display: none !important; }',
-    );
-  }
-  if (toolCallsMode === "off") {
-    rules.push(
-      '[data-stock-product] [data-slot="aui_tool-fallback"], [data-stock-product] .aui-tool-fallback-root { display: none !important; }',
-    );
-  }
-  if (!features.sources) {
-    rules.push(
-      '[data-stock-product] [data-message-part-type^="source"], [data-stock-product] a[data-source] { display: none !important; }',
-    );
-  }
-  if (!features.attachments) {
-    rules.push(
-      '[data-stock-product] [data-slot="aui_composer-add-attachment"], [data-stock-product] .aui-composer-add-attachment { display: none !important; }',
-    );
-  }
-  if (!features.branchPicker) {
-    rules.push(
-      '[data-stock-product] [data-slot="aui_branch-picker"], [data-stock-product] .aui-branch-picker-root { display: none !important; }',
-    );
-  }
-  if (hideModelPicker) {
-    rules.push(
-      "[data-stock-product] [data-deploy-model-picker] { display: none !important; }",
-    );
-  }
-  if (rules.length === 0) return null;
-  return <style dangerouslySetInnerHTML={{ __html: rules.join("\n") }} />;
-}
+
 
 /**
  * Mount the selected assistant-ui Thread with deploy-config adapters and chrome.
@@ -458,110 +394,43 @@ export function ProductStockShell({
   };
 
   return (
-    <AssistantRuntimeProvider runtime={runtime} config={auiConfig}>
-      <RuntimeAdapterProvider
-        adapters={{
-          ...(adapters.attachments ? { attachments: adapters.attachments } : {}),
-        }}
-      >
-        <StockSendGateProvider handlers={sendGate}>
-          <DeployUiProvider value={deployUi}>
-            <SkinChromeProvider value={skinChrome}>
-            <FeatureCss
-              features={features}
-              hideModelPicker={!skinChrome.modelPicker}
-              reasoningMode={reasoningMode}
-              toolCallsMode={toolCallsMode}
-            />
-            <SessionPrefsToolBridge />
-            <div
-              data-stock-product
-              data-chrome-mode={cfg.chrome.mode}
-              data-thread-skin={cfg.chrome.skin}
-              data-persistence={mode}
-              data-view={view}
-              data-thinking={thinking}
-              data-reasoning={reasoningMode}
-              data-tool-calls={toolCallsMode}
-              data-user-align={deployUi.userAlign}
-              data-theme={cfg.chrome.theme}
-              data-boot-reveal={bootRevealed && handoff?.reveal ? "true" : "false"}
-              data-boot-drift={bootRevealed && handoff?.drift ? "true" : "false"}
-              data-boot-active={bootVisible && !bootHidden ? "true" : "false"}
-              className={cn(
-                "relative flex h-full min-h-0 flex-1",
-                sideSlot && !ownsPage ? "flex-row" : "flex-col",
-                cfg.chrome.skin === "digichat" && "accent-digichat",
-                className,
-              )}
-              style={accentStyle}
-            >
-              {!bootVisible || bootHidden ? null : (
-                <div
-                  className="dboot-overlay bg-background"
-                  data-done={bootDone ? "true" : "false"}
-                  data-instant={bootVariant && !handoffLive ? "true" : "false"}
-                  data-drift={handoff?.drift ? "true" : "false"}
-                >
-                  {bootVariant ? (
-                    <BootLabOverlay
-                      variant={bootVariant}
-                      ready={bootReady}
-                      onSettled={onBootSettled}
-                      accent={cfg.chrome.accent?.color}
-                      facts={bootFacts}
-                    />
-                  ) : (
-                    <DigichatBootLoader
-                      ready={bootReady}
-                      onSettled={onBootSettled}
-                      welcome={headline}
-                      welcomeBody={(skinChrome.welcomeBody ?? []).join(" ")}
-                      suggestions={chips}
-                      placeholder={inputPlaceholder}
-                      accent={cfg.chrome.accent?.color}
-                      showAttachment={features.attachments}
-                    />
-                  )}
-                </div>
-              )}
-              {ownsPage ? null : sideSlot}
-              <div
-                className="relative flex min-h-0 min-w-0 flex-1 flex-col"
-                style={skinCreditStyle(cfg.chrome.skin, cfg.chrome.theme)}
-              >
-                {ownsPage || cfg.chrome.skin === "digichat" ? null : headerSlot}
-                {!ownsPage && sessionKey && cfg.chrome.mode === "app" ? (
-                  <ToolCatalogBar
-                    clientConfig={cfg}
-                    sessionKey={sessionKey}
-                    webSearchScope={webSearchScope}
-                    onWebSearchChange={onWebSearchChange}
-                  />
-                ) : null}
-                <div className="min-h-0 flex-1">
-                  <SkinRuntimeProvider value={SKIN_RUNTIME}>
-                    <ThreadSkinView
-                      skin={cfg.chrome.skin}
-                      composerLayout={composerLayout}
-                      digichat={DIGICHAT_SKIN_OPTIONS}
-                    />
-                  </SkinRuntimeProvider>
-                </div>
-                {/* Placeholder attribute for stock composer — AuiConfig composer key varies by version */}
-                <span className="sr-only" data-composer-placeholder={inputPlaceholder} />
-                {/* The credit is not placed here: each skin's Thread renders it
-                    in its own viewport footer, below the composer, so it tracks
-                    the skin's canvas and can never be painted over (m2357).
-                    `footerSlot` is still honoured for hosts (embed) that own
-                    their own footer content. */}
-                {footerSlot ?? null}
-              </div>
-            </div>
-            </SkinChromeProvider>
-          </DeployUiProvider>
-        </StockSendGateProvider>
-      </RuntimeAdapterProvider>
-    </AssistantRuntimeProvider>
+    <DigiChatHost
+      runtime={runtime}
+      auiConfig={auiConfig}
+      adapters={adapters}
+      sendGate={sendGate}
+      clientConfig={cfg}
+      features={features}
+      deployUi={deployUi}
+      skinChrome={skinChrome}
+      reasoningMode={reasoningMode}
+      toolCallsMode={toolCallsMode}
+      view={view}
+      thinking={thinking}
+      mode={mode}
+      headline={headline}
+      chips={chips}
+      inputPlaceholder={inputPlaceholder}
+      bootVisible={bootVisible}
+      bootHidden={bootHidden}
+      bootDone={bootDone}
+      bootReady={bootReady}
+      bootVariant={bootVariant}
+      handoff={handoff}
+      handoffLive={handoffLive}
+      bootRevealed={bootRevealed}
+      bootFacts={bootFacts}
+      onBootSettled={onBootSettled}
+      accentStyle={accentStyle}
+      ownsPage={ownsPage}
+      sideSlot={sideSlot}
+      headerSlot={headerSlot}
+      footerSlot={footerSlot}
+      sessionKey={sessionKey}
+      webSearchScope={webSearchScope}
+      onWebSearchChange={onWebSearchChange}
+      className={className}
+      composerLayout={composerLayout}
+    />
   );
 }
