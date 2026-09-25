@@ -24,6 +24,7 @@ import { useChartColors, withAlpha } from '@/lib/chart-colors';
 import type {
   ConsensusDeltaSet,
   FxBriefRow,
+  FxConfluenceSnapshotRow,
   FxConsensusDivergence,
   FxConsensusSnapshotRow,
   IntelligenceWhy,
@@ -71,6 +72,7 @@ export default function ConsensusTab({
   focusCcy,
   intelligenceWhy,
   researchBriefs,
+  confluence = [],
   initialView = 'table',
 }: {
   series: FxConsensusSnapshotRow[];
@@ -81,10 +83,11 @@ export default function ConsensusTab({
   focusCcy?: string | null;
   intelligenceWhy: IntelligenceWhy;
   researchBriefs: FxBriefRow[];
+  confluence?: FxConfluenceSnapshotRow[];
   initialView?: ConsensusView;
 }) {
   const chart = useChartColors();
-  const { openBrief } = useTwelveX();
+  const { crossLink, openBrief } = useTwelveX();
   const [view, setView] = useState<ConsensusView>(initialView);
   const [drilldownCcy, setDrilldownCcy] = useState<string | null>(null);
   const [divergenceCcy, setDivergenceCcy] = useState<string | null>(null);
@@ -315,6 +318,46 @@ export default function ConsensusTab({
             )}
           </Card>
         </div>
+      ) : null}
+
+      {/* Confluence reads — where independent desks align on an axis. */}
+      {confluence.length > 0 ? (
+        <Card data-reveal className="gap-0 space-y-3 p-4 md:p-5">
+          <div className="flex items-baseline justify-between gap-2">
+            <h3 className="font-display text-lg tracking-tight text-ink">Confluence reads</h3>
+            <span className="font-mono text-[10px] text-ink-mute">
+              {confluence.length}
+            </span>
+          </div>
+          <ul className="grid gap-1">
+            {confluence.map((c) => (
+              <li
+                key={`${c.rank}-${c.currency}`}
+                className="flex items-center gap-2 border-t border-hair pt-1 first:border-t-0 first:pt-0"
+              >
+                <span className="font-mono text-[10px] text-ink-mute">#{c.rank}</span>
+                <span className="font-semibold text-ink">{c.currency}</span>
+                <span
+                  className={`text-xs font-semibold uppercase ${
+                    c.direction === 'bullish' || c.direction === 'long'
+                      ? 'text-accent'
+                      : 'text-warn'
+                  }`}
+                >
+                  {c.direction}
+                </span>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="ml-auto h-auto px-1 py-0 text-[11px] text-ink-soft"
+                  onClick={() => crossLink({ kind: 'currency', currency: c.currency })}
+                >
+                  trend →
+                </Button>
+              </li>
+            ))}
+          </ul>
+        </Card>
       ) : null}
 
       <CurrencyDrilldownPanel

@@ -28,10 +28,20 @@ export function passwordStrength(password: string): number {
   return Math.min(score, 4);
 }
 
+export type AuthCardBrand = {
+  /** Short client marker (e.g. "12X") shown top-right of the card. */
+  marker: string;
+  /** Optional line under the brand row (e.g. "Purpose-built for the 12X desk"). */
+  line?: string | null;
+};
+
 export type AuthCardProps = {
   layout: AuthCardLayout;
   mode?: AuthCardMode;
   productName?: string;
+  /** Invite branding — wraps sign-in or sign-up so the invitee knows the
+   *  product was built for their team. Null/undefined renders the default card. */
+  brand?: AuthCardBrand | null;
   mark?: ReactNode;
   email?: string;
   password?: string;
@@ -87,6 +97,7 @@ export function AuthCard({
   layout,
   mode = "signin",
   productName = "digiquant",
+  brand = null,
   mark,
   email = "",
   password = "",
@@ -172,15 +183,24 @@ export function AuthCard({
 
   const submitLabel = pending === "email" ? (signUp ? "Creating…" : "Signing in…") : signUp ? "Sign up" : "Sign in";
   const markNode = mark ?? <DigiquantMark size={28} />;
-  const brand =
+  const inviteMarker = brand?.marker?.trim() ? brand.marker.trim() : null;
+  const inviteLine = brand?.line?.trim() ? brand.line.trim() : null;
+  const brandRow =
     layout === "compact" ? (
       <div className="acct-auth-brand">
         <div className="acct-auth-mark">{markNode}</div>
         <span className="acct-auth-wordmark">{productName}</span>
+        {inviteMarker ? <span className="acct-auth-invite-marker">{inviteMarker}</span> : null}
       </div>
     ) : (
       <div className="acct-auth-mark">{markNode}</div>
     );
+  const inviteBrand =
+    inviteMarker && layout !== "compact" ? (
+      <div className="acct-auth-invite">
+        <span className="acct-auth-invite-marker">{inviteMarker}</span>
+      </div>
+    ) : null;
 
   let body: ReactNode;
   switch (layout) {
@@ -267,7 +287,9 @@ export function AuthCard({
 
   return (
     <form className="acct-auth" data-layout={layout} data-mode={mode} onSubmit={handleSubmit} noValidate>
-      {brand}
+      {brandRow}
+      {inviteBrand}
+      {inviteLine ? <p className="acct-auth-invite-line">{inviteLine}</p> : null}
       {body}
       <p className="acct-auth-switch">
         {signUp ? <a href={href}>Sign in</a> : <a href={href}>Create an account</a>}

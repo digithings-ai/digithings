@@ -108,6 +108,10 @@ function evalKey(runDate: string, rank: number): string {
 
 function lifecycleOf(status: string | undefined): TradeLifecycle {
   if (!status) return 'unscored';
+  // 'carried' is the only genuinely-live state. 'missing_rates' means the idea
+  // could not be graded against prices at all (e.g. an ungradeable pair), so it
+  // is NOT live: it is surfaced as 'no_data' and kept out of the live book. The
+  // pipeline is responsible for not publishing ideas it cannot grade.
   if (status === 'carried') return 'live';
   if (status === 'missing_rates') return 'no_data';
   // 'dropped' (bookkeeper verdict) and anything else land here: closed, and
@@ -427,7 +431,9 @@ export interface TradeCloseReason {
  * no-data fallback for missing rates (12x desk ask).
  */
 export function closeReason(row: TradeHistoryRow): TradeCloseReason {
-  if (row.lifecycle === 'live') return { kind: 'live', label: 'Live' };
+  if (row.lifecycle === 'live') {
+    return { kind: 'live', label: 'Live' };
+  }
   if (row.evalStatus === 'missing_rates' || row.lifecycle === 'no_data') {
     return { kind: 'no-data', label: 'No data', detail: 'Missing rates' };
   }

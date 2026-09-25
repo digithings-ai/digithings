@@ -665,9 +665,141 @@ def test_wire_analyst_shadow_records_manifest_beside_incumbent(
     assert result.capsule is not None
     assert result.manifest is not None
     assert result.phase_inputs["prior_book"] == incumbent["prior_book"]
+    # #4609: shadow blobs no longer ride in the uncached prompt block — the
+    # capsule/manifest objects on the result carry the data.
+    assert "context_capsule_shadow" not in result.phase_inputs
+    assert "context_manifest_shadow" not in result.phase_inputs
+    assert result.phase_inputs["context_manifest_id"] == str(result.manifest.manifest_id)
+
+
+def test_wire_h5_shadow_omits_capsule_from_prompt(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """#4609: the shadow capsule/manifest must not be re-serialized into the
+    uncached ``phase_inputs`` prompt block — the objects on the result carry them."""
+    monkeypatch.setenv("DIGIQUANT_CONTEXT_COMPILER_MODE", "shadow")
+    monkeypatch.delenv("DIGIQUANT_CONTEXT_SHADOW_IN_PROMPT", raising=False)
+    ev = _evidence(summary="Filed 8-K")
+    loaded = _loaded_state(evidence=(ev,))
+    store, pin, version_id = _seed_loaded_state(loaded)
+    bundle = _bundle(state_version_id=version_id)
+    incumbent = {"ticker": _TICKER, "prior_book": [{"ticker": "MSFT"}]}
+    from digiquant.dashboard.research_retrieval.context_wiring import wire_analyst_phase_inputs
+
+    result = wire_analyst_phase_inputs(
+        incumbent,
+        ticker=_TICKER,
+        bundle=bundle,
+        research_state_pin=pin,
+        research_state_store=store,
+        changed_evidence_ids=frozenset({ev.evidence_id}),
+    )
+    assert result.capsule is not None
+    assert result.manifest is not None
+    assert "context_capsule_shadow" not in result.phase_inputs
+    assert "context_manifest_shadow" not in result.phase_inputs
+    # Linkage still present (cheap ids, not the blob).
+    assert result.phase_inputs["context_capsule_id"] == str(result.capsule.capsule_id)
+    assert result.phase_inputs["context_manifest_id"] == str(result.manifest.manifest_id)
+
+
+def test_wire_h5_shadow_escape_hatch_restores_in_prompt_blobs(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """#4609 escape hatch: truthy ``DIGIQUANT_CONTEXT_SHADOW_IN_PROMPT`` restores
+    the pre-diet in-prompt shadow blobs."""
+    monkeypatch.setenv("DIGIQUANT_CONTEXT_COMPILER_MODE", "shadow")
+    monkeypatch.setenv("DIGIQUANT_CONTEXT_SHADOW_IN_PROMPT", "1")
+    ev = _evidence(summary="Filed 8-K")
+    loaded = _loaded_state(evidence=(ev,))
+    store, pin, version_id = _seed_loaded_state(loaded)
+    bundle = _bundle(state_version_id=version_id)
+    incumbent = {"ticker": _TICKER, "prior_book": [{"ticker": "MSFT"}]}
+    from digiquant.dashboard.research_retrieval.context_wiring import wire_analyst_phase_inputs
+
+    result = wire_analyst_phase_inputs(
+        incumbent,
+        ticker=_TICKER,
+        bundle=bundle,
+        research_state_pin=pin,
+        research_state_store=store,
+        changed_evidence_ids=frozenset({ev.evidence_id}),
+    )
     assert "context_capsule_shadow" in result.phase_inputs
     assert "context_manifest_shadow" in result.phase_inputs
-    assert result.phase_inputs["context_manifest_id"] == str(result.manifest.manifest_id)
+
+
+def test_wire_h6_shadow_omits_capsule_and_keeps_incumbent_bundle(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """#4609: the deliberation (H6) shadow blob is also dropped, and the incumbent
+    ``base_evidence_bundle`` it was compiled from is left in place."""
+    monkeypatch.setenv("DIGIQUANT_CONTEXT_COMPILER_MODE", "shadow")
+    monkeypatch.delenv("DIGIQUANT_CONTEXT_SHADOW_IN_PROMPT", raising=False)
+    ev = _evidence(summary="Bundle evidence")
+    loaded = _loaded_state(evidence=(ev,))
+    store, pin, version_id = _seed_loaded_state(loaded)
+    bundle = _bundle(state_version_id=version_id)
+    incumbent = {
+        "ticker": _TICKER,
+        "analyst_payload": {"stance": "buy", "ticker": _TICKER},
+        "transcript": [{"role": "pm", "message": "challenge"}],
+        "base_evidence_bundle": bundle.model_dump(mode="json"),
+    }
+    from digiquant.dashboard.research_retrieval.context_wiring import wire_deliberation_phase_inputs
+
+    result = wire_deliberation_phase_inputs(
+        incumbent,
+        ticker=_TICKER,
+        bundle=bundle,
+        research_state_pin=pin,
+        research_state_store=store,
+    )
+    assert result.capsule is not None
+    assert result.manifest is not None
+    assert "context_capsule_shadow" not in result.phase_inputs
+    assert "context_manifest_shadow" not in result.phase_inputs
+    assert result.phase_inputs["base_evidence_bundle"] == incumbent["base_evidence_bundle"]
+
+
+def test_wire_shadow_prompt_byte_delta(monkeypatch: pytest.MonkeyPatch) -> None:
+    """#4609 byte yardstick: the shadow blob is real serialized weight in the
+    uncached prompt block — turning the escape hatch on puts it back."""
+    import json
+
+    ev = _evidence(summary="Bundle evidence")
+    loaded = _loaded_state(evidence=(ev,))
+    store, pin, version_id = _seed_loaded_state(loaded)
+    bundle = _bundle(state_version_id=version_id)
+    incumbent = {
+        "ticker": _TICKER,
+        "analyst_payload": {"stance": "buy", "ticker": _TICKER},
+        "transcript": [{"role": "pm", "message": "challenge"}],
+        "base_evidence_bundle": bundle.model_dump(mode="json"),
+    }
+    from digiquant.dashboard.research_retrieval.context_wiring import wire_deliberation_phase_inputs
+
+    monkeypatch.setenv("DIGIQUANT_CONTEXT_COMPILER_MODE", "shadow")
+
+    def _size() -> int:
+        result = wire_deliberation_phase_inputs(
+            incumbent,
+            ticker=_TICKER,
+            bundle=bundle,
+            research_state_pin=pin,
+            research_state_store=store,
+        )
+        return len(json.dumps(result.phase_inputs, default=str, sort_keys=True))
+
+    monkeypatch.delenv("DIGIQUANT_CONTEXT_SHADOW_IN_PROMPT", raising=False)
+    diet_size = _size()
+    monkeypatch.setenv("DIGIQUANT_CONTEXT_SHADOW_IN_PROMPT", "1")
+    legacy_size = _size()
+    # Exact sizes are pinned so the numbers quoted in
+    # docs/research/token-budget.md (#4609) stay reproducible from this fixture.
+    assert diet_size == 1_219
+    assert legacy_size == 2_785
+    assert legacy_size > diet_size
 
 
 def test_wire_analyst_enforce_strips_portfolio_and_injects_capsule(

@@ -88,14 +88,23 @@ def _overlay_chain_deps(
             profile_version_id=requested_version_id,
         )
 
+    # One resolved-outcome cohort memo per run, shared by preflight and the
+    # portfolio direction phase so the second reader reuses the first GET (#4617).
+    from digiquant.research.forecast_outcomes import ResolvedOutcomesMemo
+
+    direction_outcomes_memo: ResolvedOutcomesMemo = {}
     research = ResearchGraphDeps(
-        preflight=PreflightDeps(client=client, config_loader=config_loader),
+        preflight=PreflightDeps(
+            client=client,
+            config_loader=config_loader,
+            resolved_outcomes_memo=direction_outcomes_memo,
+        ),
         publish=None,
         triage=TriageDeps(client=client),
         preflight_reflect=PreflightReflectDeps(client=client),
     )
     portfolio = PortfolioGraphDeps(
-        thesis=ThesisGraphDeps(client=client),
+        thesis=ThesisGraphDeps(client=client, resolved_outcomes_memo=direction_outcomes_memo),
         risk_sizing=RiskSizingDeps(client=client),
         commit_run=CommitRunDeps(client=client),
     )

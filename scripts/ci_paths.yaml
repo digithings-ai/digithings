@@ -254,6 +254,10 @@ ruff_and_scripts:
   # Python schedule invariants parse the Worker's typed job map and wrangler
   # triggers after #3579 moved production clocks out of workflow `schedule:`.
   - apps/digithings-cron/**
+  # Central read-only dashboard API worker (#4651). Same orphan-class cover as
+  # the cron entry above: the root npm install resolves this workspace's
+  # manifest, so an edit here must redden a lane that runs.
+  - apps/dashboard-api/**
   # This job's "Validate model routing (config only)" step runs
   # scripts/validate_model_routing.py --routing against the REAL
   # config/model_modes.yaml -- the only CI check that does; tests/dg/test_model_config.py

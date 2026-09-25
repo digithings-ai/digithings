@@ -42,10 +42,11 @@ export default function PrivacyPage() {
               </p>
               <p className="mt-[1rem] text-[1rem] leading-[1.75] text-ink-soft">
                 The site stores a small number of preferences in your browser using local storage:
-                your colour theme and, if you choose to configure chat, your selected provider,
-                model, and API key. Those values remain in your browser until you clear them. The
-                provider key is sent to our Cloudflare Function only when you test it or send a chat
-                request; the function forwards it to the provider you selected and does not persist
+                your colour theme and, if you choose to configure chat, your selected provider and
+                model. Those values remain in your browser until you clear them. A provider key you
+                enter is different: it is held in memory for the current tab only, never written to
+                browser storage. It reaches our Cloudflare Function when you test it or send a chat
+                request, and the function forwards it to the provider you selected without persisting
                 it in an application database.
               </p>
             </div>
@@ -108,10 +109,11 @@ export default function PrivacyPage() {
                 </RuledRow>
                 <RuledRow term="Provider keys">
                   <p>
-                    If you bring your own key, it is stored in local storage in your browser. Each
-                    chat or key-test request sends it through our Function to OpenRouter, OpenAI,
-                    Anthropic, or Google, according to your selection. We do not write the key to an
-                    application database.
+                    If you bring your own key, it stays in memory for the current tab. It is never
+                    written to local storage or any other browser storage, and it is gone when you
+                    close or refresh the tab. Each chat or key-test request sends it through our
+                    Function to OpenRouter, OpenAI, Anthropic, Google, or xAI, according to your
+                    selection. We do not write the key to an application database.
                   </p>
                 </RuledRow>
                 <RuledRow term="Abuse prevention">
@@ -137,8 +139,9 @@ export default function PrivacyPage() {
               <div className="mt-[1.2rem] grid gap-[1rem] text-[1rem] leading-[1.75] text-ink-soft">
                 <p>
                   Theme and chat-provider settings remain until you remove them through your browser
-                  or clear the saved key in chat settings. Chat messages normally remain in the
-                  current page&rsquo;s memory and disappear when that page is closed or refreshed.
+                  or clear them in chat settings. Chat messages, and any provider key you entered,
+                  remain in the current page&rsquo;s memory and disappear when that page is closed
+                  or refreshed.
                 </p>
                 <p>
                   When the homepage opens a conversation in the full chat page, it temporarily puts

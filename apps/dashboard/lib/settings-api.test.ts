@@ -4,6 +4,7 @@ import {
   connectProviderKey,
   getAppUrls,
   getFills,
+  getInviteBrand,
   getJobs,
   getNotificationLog,
   getNotifications,
@@ -312,5 +313,45 @@ describe('settings-api', () => {
       { code: '12x-desk-invite-alpha', product_key: 'fx_hub' },
     );
     expect(result).toEqual({ ok: true, already_granted: false, product_key: 'fx_hub' });
+  });
+
+  it('getInviteBrand sends only the gateway anon key, never a session token', async () => {
+    const fetchImpl = vi.fn(async (url: string, init?: RequestInit) => {
+      expect(String(url)).toContain('/settings/access/invite-brand?');
+      expect(String(url)).toContain('code=12x-brand-invite-alpha');
+      expect(init?.headers).toMatchObject({
+        apikey: 'anon-key',
+        Authorization: 'Bearer anon-key',
+      });
+      return new Response(
+        JSON.stringify({ marker: '12X', line: 'Purpose-built for the 12X desk' }),
+        { status: 200 },
+      );
+    });
+    const result = await getInviteBrand(
+      {
+        functionsBaseUrl: 'https://example.supabase.co/functions/v1',
+        anonKey: 'anon-key',
+        fetchImpl: fetchImpl as unknown as typeof fetch,
+      },
+      { code: '12x-brand-invite-alpha', product_key: 'fx_hub' },
+    );
+    expect(result).toEqual({ marker: '12X', line: 'Purpose-built for the 12X desk' });
+    expect(fetchImpl).toHaveBeenCalledOnce();
+  });
+
+  it('getInviteBrand returns null brand when the backend has none', async () => {
+    const fetchImpl = vi.fn(async () => {
+      return new Response(JSON.stringify({ marker: null, line: null }), { status: 200 });
+    });
+    const result = await getInviteBrand(
+      {
+        functionsBaseUrl: 'https://example.supabase.co/functions/v1',
+        anonKey: 'anon-key',
+        fetchImpl: fetchImpl as unknown as typeof fetch,
+      },
+      { code: 'totally-wrong-invite' },
+    );
+    expect(result).toEqual({ marker: null, line: null });
   });
 });
