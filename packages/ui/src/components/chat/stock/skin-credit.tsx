@@ -24,9 +24,17 @@ import { useAttribution } from "./skin-chrome";
 
 export const SKIN_CREDIT_TEXT = "powered by digichat — a digithings product.";
 
-export const SkinCredit: FC<{ className?: string }> = ({ className }) => {
-  const attribution = useAttribution();
-  if (!attribution) return null;
+export const SkinCredit: FC<{
+  className?: string;
+  /**
+   * Explicit override for surfaces with no SkinChromeProvider — the embed's
+   * gate/paywall branch, which resolved placement itself. Omit everywhere
+   * else to read the host's resolved `attribution` from context.
+   */
+  attribution?: boolean;
+}> = ({ className, attribution }) => {
+  const fromContext = useAttribution();
+  if (attribution !== undefined ? !attribution : !fromContext) return null;
 
   return (
     <p

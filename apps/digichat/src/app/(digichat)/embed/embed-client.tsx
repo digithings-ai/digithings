@@ -21,10 +21,10 @@ import { Button } from "@/components/ui/button";
 import { ByokCliFlow } from "@/components/byok-cli-flow";
 import { ContactMailto } from "@digithings/ui";
 import { ProductStockShell } from "@/components/stock/product-shell";
-
 import {
   DEFAULT_EMBED_CHAT_PREFS,
   EmbedChatPrefsProvider,
+  SkinCredit,
   catalogToolsFromClient,
   disabledCatalogIds,
   extraOffFromCatalog,
@@ -1155,6 +1155,7 @@ function EmbedChat({
     headerTitle,
   });
 
+  const footerAttribution = attributionAt === "footer";
   const headerAttribution = attributionAt === "header";
 
   // Language is `/language` on the composer (#3418 / #3733). First-party
@@ -1182,6 +1183,13 @@ function EmbedChat({
     </header>
   ) : null;
 
+  /* The settle path (ProductStockShell + the skin's Thread) renders its own
+     credit inside the thread footer, so this slot is only used where there is
+     no Thread at all — the gate / paywall branch below. Passing it through
+     `ProductStockShell` as well double-rendered the credit on /embed (m2502). */
+  const footerSlot = footerAttribution ? (
+    <SkinCredit attribution={footerAttribution} />
+  ) : null;
   const turnCounterSlot = isTrialForm ? (
     <p
       className="dc-turn-counter relative z-10 mx-auto w-full max-w-2xl select-none pb-1 pt-1.5 pr-3 text-right text-xs font-normal leading-none tabular-nums tracking-wide text-muted-foreground"
@@ -1222,7 +1230,7 @@ function EmbedChat({
         {headerSlot}
         <div className="flex flex-1 items-center justify-center p-4">{gateForm}</div>
         {turnCounterSlot}
-
+        {footerSlot}
       </div>
     );
   }
