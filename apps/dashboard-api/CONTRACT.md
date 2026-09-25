@@ -44,6 +44,13 @@ Final route list: `GET /portfolio`, `GET /allocations`, `GET /brief`,
 - No timeouts, retries, or call caps are specified anywhere in this
   contract — surfaces fail closed with the error envelope (§2) instead.
 - Realtime stays client-side (§5): this API serves snapshots only.
+- CORS: every response carries `Vary: Origin` plus
+  `Access-Control-Allow-Origin` (echoed) and `Access-Control-Allow-Methods:
+  GET, OPTIONS` when the request `Origin` exactly matches the allowlist
+  (default: `https://digiquant.io`, `https://digithings.ai`, and
+  localhost/127.0.0.1 dev ports; override via the
+  `DASHBOARD_API_ALLOWED_ORIGINS` worker env var). `OPTIONS` preflights
+  return `204` with the same headers (`Access-Control-Max-Age: 86400`).
 
 ## 2. Error envelope
 
