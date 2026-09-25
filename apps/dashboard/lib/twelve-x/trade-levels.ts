@@ -9,7 +9,7 @@ import type {
   FxTradeLevels,
 } from './types';
 
-const PROVENANCES: readonly FxLevelProvenance[] = [
+export const PROVENANCES: readonly FxLevelProvenance[] = [
   'broker_quoted',
   'pmt_bank_trade',
   'pmt_seasonality_target',
