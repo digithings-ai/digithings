@@ -67,6 +67,7 @@ export {
   ModuleFlowDiagram,
   ModuleStageList,
   ModuleShowcase,
+  PipelineCard,
   type FlowStage,
   type ModuleFlowStripProps,
   type ModuleFlowDiagramProps,
@@ -417,6 +418,7 @@ export {
 } from "./components/repo-activity";
 
 export { modules, edges, moduleById, type ModuleNode, type StackItem, type Tier } from "./data/modules";
+export { pipelineCards, digiquantCard, type PipelineCardData, type PipelineCardSnippet } from "./data/pipelineCards";
 export { subsystems, subsystemById, type Subsystem } from "./data/subsystems";
 export {
   GLOOMBERB_ATTRIBUTION,

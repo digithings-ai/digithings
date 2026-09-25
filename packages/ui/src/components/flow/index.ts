@@ -5,3 +5,4 @@
  */
 export { ModuleFlowStrip, ModuleFlowDiagram, ModuleStageList, type FlowStage, type ModuleFlowStripProps, type ModuleFlowDiagramProps, type ModuleStageListProps } from "./ModuleFlow";
 export { ModuleShowcase } from "./ModuleShowcase";
+export { PipelineCard } from "./PipelineCard";
