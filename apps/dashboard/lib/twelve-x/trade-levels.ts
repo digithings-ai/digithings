@@ -14,7 +14,10 @@ const PROVENANCES: readonly FxLevelProvenance[] = [
   'pmt_bank_trade',
   'pmt_seasonality_target',
   'pmt_position_cluster',
+  'pmt_retail_book',
   'computed',
+  'technical',
+  'llm',
 ];
 
 const STATUSES: readonly FxTradeLevels['status'][] = ['complete', 'partial', 'incomplete'];
@@ -65,6 +68,9 @@ const PRESENTED_PRECISION: ReadonlySet<FxLevelProvenance> = new Set([
   'pmt_bank_trade',
   'pmt_seasonality_target',
   'pmt_position_cluster',
+  'pmt_retail_book',
+  'technical',
+  'llm',
 ]);
 
 function isProvenance(value: unknown): value is FxLevelProvenance {
@@ -219,6 +225,12 @@ export function provenanceChipLabel(level: FxTradeLevel): string {
       return 'seasonality';
     case 'pmt_position_cluster':
       return 'position book';
+    case 'pmt_retail_book':
+      return 'retail book';
+    case 'technical':
+      return 'technical';
+    case 'llm':
+      return 'model';
     default: {
       const _exhaustive: never = level.provenance;
       return _exhaustive;
