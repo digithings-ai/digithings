@@ -122,7 +122,7 @@ Response `data`:
     "day_return_pct": null
   },
   "seam": { "crosses_nav_seam": true, "lag_days": 1, "lag_direction": "metrics lag" },
-  "invested": { "kpi_pct": 35.13, "envelope_pct": 35.13, "cash_pct": 64.87 },
+  "invested": { "kpi_pct": 35.13, "envelope_pct": 35.13, "cash_pct": 64.87, "definition": "accounting_nav_tip" },
   "positions": [
     { "ticker": "XLV", "weight_pct": 20.0, "is_cash": false }
   ]
@@ -134,7 +134,10 @@ do not clamp `>100` under an `accounting_nav_tip` label). Row weights are
 laid out inside the clamped-100 `reconcileBook` envelope; that envelope is
 not the KPI. Fallback order for invested: NAV tip → non-CASH
 `positions.weight_pct` sum on the committed book →
-`portfolio_metrics.invested_pct` → null. `book_as_of =
+`portfolio_metrics.invested_pct` → null. `invested.definition` names the
+winning source (`accounting_nav_tip` | `book_weights` |
+`portfolio_metrics` | `unavailable`) so surfaces can badge which fallback
+produced the KPI. `book_as_of =
 committedBookDate(daily_snapshots.date, positions.date)`; null (with
 `not_found`) when the snapshot is missing — never silently substitute the
 latest position date as "committed". `day_return_pct` is null across NAV

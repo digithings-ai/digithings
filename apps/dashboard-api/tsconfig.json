@@ -8,7 +8,12 @@
     "strict": true,
     "skipLibCheck": true,
     "noEmit": true,
-    "isolatedModules": true
+    "isolatedModules": true,
+    "paths": {
+      "@digithings/ui": [
+        "../../packages/ui/src/components/finance-tearsheet/live-performance-kpis.ts"
+      ]
+    }
   },
   "include": ["src/**/*.ts"]
 }

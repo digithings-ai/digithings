@@ -15,6 +15,7 @@ async function bodyOf(res: Response): Promise<Record<string, unknown>> {
 
 describe("wired contracted routes", () => {
   const cases: Array<{ path: string; dataKey: string }> = [
+    { path: "/portfolio", dataKey: "invested" },
     { path: "/allocations", dataKey: "rows" },
     { path: "/nav-series", dataKey: "points" },
     { path: "/brief?overlay=off", dataKey: "book_as_of" },
