@@ -108,11 +108,11 @@ const ROW_SIZES = [4, 4, 3] as const;
 const WEIGHT = 1.2;
 /**
  * The share of the biggest module the smallest still draws, before weighting.
- * 0.35 spreads the field about 2.9x end to end, which is the strongest size
- * difference a reader can still compare at a glance without the smallest tile
- * becoming a sliver.
+ * 0.18 spreads the field about 5.6x end to end — the owner wants a stock-grid
+ * read (heavyweights top-left, lightweights bottom-right, size gap obvious),
+ * and the row floor plus the focus boost keep the smallest tile usable.
  */
-const WEIGHT_FLOOR = 0.35;
+const WEIGHT_FLOOR = 0.18;
 /**
  * How much heavier the focused module counts while the layout is solved — the
  * "resize and shift to make space for what's inside" behaviour.
@@ -246,8 +246,10 @@ function solveTileGrow(focus: number): number[] {
  */
 function solveRowGrow(focus: number): number[] {
   const sums = ROWS.map((members) => members.reduce((acc, i) => acc + BASE_WEIGHTS[i], 0));
+  const total = sums.reduce((acc, sum) => acc + sum, 0) || 1;
+  /* No focus yet (the mosaic is still off-screen): rows hold base shares. */
+  if (focus < 0 || ROW_OF[focus] === undefined) return sums.map((sum) => sum / total);
   const focused = ROW_OF[focus];
-  const total = sums.reduce((acc, sum) => acc + sum, 0);
   /* The heaviest row is already past the target, so its own share stands in. */
   const focusShare = Math.max(ROW_FOCUS_SHARE, sums[focused] / total);
   const rest = 1 - focusShare;
@@ -376,7 +378,40 @@ export function ModuleGrid() {
      position; the stack has no track to scrub, so the tile whose top sits nearest
      the focal line is the one that opens, recomputed on scroll. */
   const stackRefs = useRef<Array<HTMLElement | null>>([]);
-  const [stackActive, setStackActive] = useState(0);
+  const [stackActive, setStackActive] = useState(-1);
+
+  /**
+   * The mosaic's default state is unselected: nothing carries the focus until
+   * the reader actually arrives. The latch flips once the scroll reaches the
+   * track's top edge — the exact point the scrolly pin engages (`start
+   * start`), so "in view" means the walk has started, not merely that stage
+   * pixels peek at the viewport bottom on a tall screen. From then on the
+   * focus is the scroll position, so the first element is selected once the
+   * mosaic is in view. (Owner: "the default state of the module grid should
+   * be unselected, once its in view then the first element is selected".)
+   */
+  const [started, setStarted] = useState(false);
+  useEffect(() => {
+    let raf = 0;
+    const check = () => {
+      raf = 0;
+      const track = trackRef.current;
+      if (!track) return;
+      const top = track.getBoundingClientRect().top + window.scrollY;
+      if (window.scrollY >= top - 1) setStarted(true);
+    };
+    const onScroll = () => {
+      if (raf === 0) raf = window.requestAnimationFrame(check);
+    };
+    check();
+    window.addEventListener("scroll", onScroll, { passive: true });
+    window.addEventListener("resize", onScroll);
+    return () => {
+      window.removeEventListener("scroll", onScroll);
+      window.removeEventListener("resize", onScroll);
+      if (raf !== 0) window.cancelAnimationFrame(raf);
+    };
+  }, []);
 
   const copyCommand = (id: string, cmd: string) => {
     void copyText(cmd).then((ok) => {
@@ -388,7 +423,7 @@ export function ModuleGrid() {
   };
 
   useEffect(() => {
-    if (!stepper || reduced) return;
+    if (!stepper || reduced || !started) return;
     let raf = 0;
     const pick = () => {
       raf = 0;
@@ -416,9 +451,9 @@ export function ModuleGrid() {
       window.removeEventListener("resize", onScroll);
       if (raf !== 0) window.cancelAnimationFrame(raf);
     };
-  }, [stepper, reduced]);
+  }, [stepper, reduced, started]);
 
-  const focus = Math.max(activeIndex, 0);
+  const focus = started ? Math.max(activeIndex, 0) : -1;
   const tileGrow = solveTileGrow(focus);
   const rowGrow = solveRowGrow(focus);
   const rows = stepper ? STACK_ROWS : ROWS;
