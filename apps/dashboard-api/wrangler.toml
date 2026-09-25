@@ -1,4 +1,4 @@
-# dashboard-api — central read-only dashboard API (issue #4647).
+# dashboard-api — central read-only dashboard API (issue #4651).
 
 Standalone Cloudflare Worker. Contract: `CONTRACT.md` in this directory.
 Dashboard surfaces in `apps/dashboard` become thin renderers over these
