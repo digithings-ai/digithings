@@ -17,6 +17,19 @@
   background: color-mix(in srgb, var(--accent) 6%, var(--surface));
 }
 
+/* ── popular matrix column: the flat accent wash comes from the `bg-accent/6`
+   utility; this unlayered rule layers a slight top-down gradient over it so
+   the featured column reads as a band, not a highlight row (#4429 ship list).
+   Unlayered author CSS wins over the layered utility by cascade order. */
+th.pm-popular,
+td.pm-popular {
+  background-image: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--accent) 9%, transparent),
+    color-mix(in srgb, var(--accent) 2%, transparent)
+  );
+}
+
 /* ── ✓ check-marker grammar on feature rows (li.pricing-feature) ────────── */
 /* --accent, not --up: this marks "feature included," a generic positive/
    selection signal, not a P&L read — --up/--down stay reserved for money. */

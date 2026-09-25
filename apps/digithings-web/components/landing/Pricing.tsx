@@ -55,6 +55,10 @@ const TIERS: PricingMatrixTier[] = [
   {
     name: "service",
     price: "on contact",
+    // Featured column (#4429 ship list): the table carries the section, so
+    // the custom-build middle tier gets the gradient band. No `popularLabel`
+    // — tinting is emphasis, not a recommendation of one tier over the others.
+    popular: true,
     cta: <CtaLink href="/#contact">Talk to us</CtaLink>,
   },
   {

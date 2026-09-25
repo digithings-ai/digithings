@@ -33,7 +33,8 @@ function Tour() {
             header={
               <>
                 <h2 className={HEADLINE} id="whyx-tour">
-                  Rent the whole stack, or own every layer.
+                  <span className="why-rent">Rent the whole stack,</span>{" "}
+                  <span className="text-accent">or own every layer.</span>
                 </h2>
                 <p className={LEDE}>
                   Buy a managed platform and you rent one shape, priced for the average customer, on

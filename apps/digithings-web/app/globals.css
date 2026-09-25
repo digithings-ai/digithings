@@ -51,6 +51,9 @@
    plain CSS; the only utilities it needs are the frame's own, so the @source two
    blocks down is what keeps Tailwind from tree-shaking them. */
 @import "@digithings/ui/styles/diagrams.css";
+/* Pricing matrix featured-column gradient (#4429 ship list) — the
+   `pm-popular` hook lives here; utilities alone can't do the gradient. */
+@import "@digithings/ui/styles/pricing.css";
 /* Module pipeline strip + expandable tour (#4429). Scoped m-flow and m-tour
    classes for the focused mosaic tile strip and the module tour dialog.
    Relative workspace path (like the @source lines below): the package

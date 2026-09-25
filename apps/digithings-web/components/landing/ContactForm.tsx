@@ -100,7 +100,7 @@ export function ContactForm({ className }: { className?: string }) {
         value={message}
         onChange={(e) => setMessage(e.target.value)}
         placeholder="What are you running today, and what would you like to build?"
-        className="mt-[0.4rem] w-full resize-y border border-hair bg-surface px-[0.8rem] py-[0.7rem] font-mono text-[0.85rem] leading-[1.7] text-ink outline-none placeholder:text-ink-mute focus-visible:border-accent"
+        className="mt-[0.4rem] max-h-[24rem] min-h-[8rem] w-full resize-y border border-hair bg-surface px-[0.8rem] py-[0.7rem] font-mono text-[0.85rem] leading-[1.7] text-ink outline-none placeholder:text-ink-mute focus-visible:border-accent"
       />
 
       {state.kind === "error" ? (
@@ -113,9 +113,6 @@ export function ContactForm({ className }: { className?: string }) {
         <Button type="submit" variant="default" disabled={state.kind === "sending"}>
           {state.kind === "sending" ? "Sending…" : "Send"}
         </Button>
-        <span className="font-mono text-[0.72rem] text-ink-mute">
-          Goes to contact@digithings.ai — no form service in between.
-        </span>
       </div>
     </form>
   );
