@@ -1,5 +1,73 @@
 # Changelog
 
+## [2.4.0](https://github.com/digithings-ai/digithings/compare/digichat-v2.3.2...digichat-v2.4.0) (2026-09-25)
+
+
+### Features
+
+* **digichat:** add openai-compatible AI-SDK backends ([eecda7e](https://github.com/digithings-ai/digithings/commit/eecda7e6aea629f6f4042e9ee315ad351b1d562c))
+* **digichat:** add openai-compatible AI-SDK backends ([e16c625](https://github.com/digithings-ai/digithings/commit/e16c625975859722a2f4acb55ba69ae8226d3e73)), closes [#4535](https://github.com/digithings-ai/digithings/issues/4535)
+* **digichat:** add openai-compatible AI-SDK backends ([#4536](https://github.com/digithings-ai/digithings/issues/4536)) ([eecda7e](https://github.com/digithings-ai/digithings/commit/eecda7e6aea629f6f4042e9ee315ad351b1d562c))
+* **digichat:** add the anthropic and google-vertex AI-SDK backends ([94f2602](https://github.com/digithings-ai/digithings/commit/94f2602fe0339fb41342a610645acdc23ae8c685))
+* **digichat:** add the anthropic and google-vertex AI-SDK backends ([4c33771](https://github.com/digithings-ai/digithings/commit/4c337710ea34c9d87fe0d440e8ea4f3317bf4810)), closes [#4539](https://github.com/digithings-ai/digithings/issues/4539)
+* **digichat:** add the anthropic and google-vertex AI-SDK backends ([#4540](https://github.com/digithings-ai/digithings/issues/4540)) ([94f2602](https://github.com/digithings-ai/digithings/commit/94f2602fe0339fb41342a610645acdc23ae8c685))
+* **digichat:** add the langgraph, ag-ui and a2a backends ([a8d6331](https://github.com/digithings-ai/digithings/commit/a8d63315bc4b177947a7f34d1484967d00e7d6d4))
+* **digichat:** add the langgraph, ag-ui and a2a backends ([43bd2e4](https://github.com/digithings-ai/digithings/commit/43bd2e4af4fef30e85fdc89d0822b1e1bdb36093)), closes [#4543](https://github.com/digithings-ai/digithings/issues/4543)
+* **digichat:** add the langgraph, ag-ui and a2a backends ([#4548](https://github.com/digithings-ai/digithings/issues/4548)) ([a8d6331](https://github.com/digithings-ai/digithings/commit/a8d63315bc4b177947a7f34d1484967d00e7d6d4))
+* **digichat:** bare / renders a mode menu instead of the product chat ([7f1cfe4](https://github.com/digithings-ai/digithings/commit/7f1cfe40a05266e6856532a08bb03e91bb21bbc4))
+* **digichat:** drive a release install from one digichat.yaml ([d1ab48b](https://github.com/digithings-ai/digithings/commit/d1ab48b976e2c47425a4dbbcbeab83b389cd9686))
+* **digichat:** drive a release install from one digichat.yaml ([27ec4ef](https://github.com/digithings-ai/digithings/commit/27ec4efacf7b21cfc92aa6e4b55570afe2bc3bb2)), closes [#4500](https://github.com/digithings-ai/digithings/issues/4500)
+* **digichat:** drive a release install from one digichat.yaml ([#4501](https://github.com/digithings-ai/digithings/issues/4501)) ([d1ab48b](https://github.com/digithings-ai/digithings/commit/d1ab48b976e2c47425a4dbbcbeab83b389cd9686))
+* **digichat:** let embed tenants set the feature flags and seed language ([d4653a1](https://github.com/digithings-ai/digithings/commit/d4653a1ddfd8483b4c651e3c585e032a9fe292dc))
+* **digichat:** let embed tenants set the feature flags and seed language ([701e1b6](https://github.com/digithings-ai/digithings/commit/701e1b6b76cbbb0d0beb62e7add9e3d7a55ebded)), closes [#4532](https://github.com/digithings-ai/digithings/issues/4532)
+* **digichat:** let embed tenants set the feature flags and seed language ([#4533](https://github.com/digithings-ai/digithings/issues/4533)) ([d4653a1](https://github.com/digithings-ai/digithings/commit/d4653a1ddfd8483b4c651e3c585e032a9fe292dc))
+* **digichat:** make chrome.mode modal and sidebar real presentation surfaces ([ea21106](https://github.com/digithings-ai/digithings/commit/ea2110677bb67d7bc77c27beab7829b2acb765dd))
+* **digichat:** make chrome.mode modal and sidebar real presentation surfaces ([cc3d240](https://github.com/digithings-ai/digithings/commit/cc3d240b338b471fd7d9285cec9189138c2f53e9)), closes [#4515](https://github.com/digithings-ai/digithings/issues/4515)
+* **digichat:** make chrome.mode modal and sidebar real presentation surfaces ([#4518](https://github.com/digithings-ai/digithings/issues/4518)) ([ea21106](https://github.com/digithings-ai/digithings/commit/ea2110677bb67d7bc77c27beab7829b2acb765dd))
+* **digichat:** mode-aware proxy for single-route framing and no-store (single-route step 4) ([9c1a67d](https://github.com/digithings-ai/digithings/commit/9c1a67d7142e34031518389e5c1be12ed1f97f11))
+* **digichat:** serve /embed through the single route via internal rewrite (single-route option B) ([0a5ac15](https://github.com/digithings-ai/digithings/commit/0a5ac15f46be4a613f078fdf65319d047022e794))
+* **digichat:** shared branding credit + catalog/product/embed parity ([abe2892](https://github.com/digithings-ai/digithings/commit/abe2892c24714b58a44de09e51338adcc5bc5984))
+* **digichat:** shim /baseline to /?mode=catalog, keep /embed direct (single-route step 5) ([ef99803](https://github.com/digithings-ai/digithings/commit/ef998036473c1b82fb55c815972bd2cb07c1e9e3))
+* **digichat:** single route / with ?mode= plus unified footer behavior (single-route step 3) ([02b579b](https://github.com/digithings-ai/digithings/commit/02b579b0001a90a93326f41af5003ec59d91e5fd))
+* **digichat:** surface provider built-in web search and citations ([#4553](https://github.com/digithings-ai/digithings/issues/4553)) ([609d453](https://github.com/digithings-ai/digithings/commit/609d453a9614524728b4a66f8cde6e38e1de063e)), closes [#4552](https://github.com/digithings-ai/digithings/issues/4552)
+
+
+### Bug Fixes
+
+* **digichat:** borderless symmetric thread footer credit on all skins ([ba58d37](https://github.com/digithings-ai/digithings/commit/ba58d3701861769f08ae2430bfc8f9c4f1b28d0b))
+* **digichat:** carry the embed feature flags through the loader bridge ([c8132bc](https://github.com/digithings-ai/digithings/commit/c8132bc888bad9d64fd74e3b441d309bf85eb7a5)), closes [#4532](https://github.com/digithings-ai/digithings/issues/4532)
+* **digichat:** charge the free-turn counter at send time so it stops lagging a turn ([#4468](https://github.com/digithings-ai/digithings/issues/4468)) ([44de2d0](https://github.com/digithings-ai/digithings/commit/44de2d00b26dd1e48503b9efd66659d72a6e1364))
+* **digichat:** close the AI-SDK backend review findings ([0eedf9c](https://github.com/digithings-ai/digithings/commit/0eedf9cddd146b847d4e1a7928e412feb3635c9a)), closes [#4535](https://github.com/digithings-ai/digithings/issues/4535)
+* **digichat:** close the anthropic/vertex review findings ([25a914b](https://github.com/digithings-ai/digithings/commit/25a914b0f98c6063cc74033dfba88189696be5bd)), closes [#4539](https://github.com/digithings-ai/digithings/issues/4539)
+* **digichat:** close the non-AI-SDK backend review findings ([9ee8a61](https://github.com/digithings-ai/digithings/commit/9ee8a6112eef1ac78c786b259e56babc8caf7b4c)), closes [#4543](https://github.com/digithings-ai/digithings/issues/4543)
+* **digichat:** close the presentation-modes review findings ([e36f69c](https://github.com/digithings-ai/digithings/commit/e36f69cb739805394bffa8baadd89f991c2537f4)), closes [#4515](https://github.com/digithings-ai/digithings/issues/4515)
+* **digichat:** close the session-path review findings ([962a97e](https://github.com/digithings-ai/digithings/commit/962a97e08f7a8a591fb5c92b92497f1974d1a6ab)), closes [#4510](https://github.com/digithings-ai/digithings/issues/4510)
+* **digichat:** guarantee the product credit, fix the / 500 and the invisible caret ([0fe827c](https://github.com/digithings-ai/digithings/commit/0fe827c4fd0f46e6cbfd4cbf8563126dd067fd99)), closes [#4605](https://github.com/digithings-ai/digithings/issues/4605)
+* **digichat:** guarantee the product credit, fix the / 500 and the invisible caret ([#4606](https://github.com/digithings-ai/digithings/issues/4606)) ([e06cef2](https://github.com/digithings-ai/digithings/commit/e06cef2554257cb42cf1c46e11ea08bbdd61a0d2))
+* **digichat:** honour the deployment config on the authenticated-session path ([518bfcb](https://github.com/digithings-ai/digithings/commit/518bfcb43023ff2bc3c016563451dd21ce138b5f))
+* **digichat:** honour the deployment config on the authenticated-session path ([392caba](https://github.com/digithings-ai/digithings/commit/392cabafb1e2071d00120772b064ec4d2d206e7a)), closes [#4510](https://github.com/digithings-ai/digithings/issues/4510)
+* **digichat:** honour the deployment config on the authenticated-session path ([#4512](https://github.com/digithings-ai/digithings/issues/4512)) ([518bfcb](https://github.com/digithings-ai/digithings/commit/518bfcb43023ff2bc3c016563451dd21ce138b5f))
+* **digichat:** keep stream usage on the openai-compatible backend ([3594ca4](https://github.com/digithings-ai/digithings/commit/3594ca4e0faa121a100a908fe1a1cdae6131ac51)), closes [#4544](https://github.com/digithings-ai/digithings/issues/4544)
+* **digichat:** make the /baseline catalog render the first-party skin like /embed ([2b41c72](https://github.com/digithings-ai/digithings/commit/2b41c728d5d2b099da143e475b949b263a0d60b7))
+* **digichat:** make the /baseline catalog render the first-party skin like /embed ([1bed163](https://github.com/digithings-ai/digithings/commit/1bed1632e2d26462da2701d8fa5b8e50a0df70f0)), closes [#4498](https://github.com/digithings-ai/digithings/issues/4498)
+* **digichat:** make the /baseline catalog render the first-party skin like /embed ([#4499](https://github.com/digithings-ai/digithings/issues/4499)) ([2b41c72](https://github.com/digithings-ai/digithings/commit/2b41c728d5d2b099da143e475b949b263a0d60b7))
+* **digichat:** make the credit legible, attribution-aware and boot-visible ([e87d6da](https://github.com/digithings-ai/digithings/commit/e87d6da8b13197a98a59a0d6fec988347f2551df)), closes [#4605](https://github.com/digithings-ai/digithings/issues/4605)
+* **digichat:** pin the credit to the page bottom in the empty-state skins ([1ad29fa](https://github.com/digithings-ai/digithings/commit/1ad29faff63450f61df81ed86ede09fd4e0cdeeb))
+* **digichat:** surface reasoning from openai-compatible backends ([33c7016](https://github.com/digithings-ai/digithings/commit/33c7016618b33a8aab7d467562b929892cced262))
+* **digichat:** surface reasoning from openai-compatible backends ([37a6cc2](https://github.com/digithings-ai/digithings/commit/37a6cc23f597e9a9cc70f9918cec04a5ed3ee2d2)), closes [#4544](https://github.com/digithings-ai/digithings/issues/4544)
+* **digichat:** surface reasoning from openai-compatible backends ([#4545](https://github.com/digithings-ai/digithings/issues/4545)) ([33c7016](https://github.com/digithings-ai/digithings/commit/33c7016618b33a8aab7d467562b929892cced262))
+* **digichat:** tighten the backend-registry review findings ([c9e0637](https://github.com/digithings-ai/digithings/commit/c9e06372827c2a89a84fcb337d677bfa1bc47c94)), closes [#4522](https://github.com/digithings-ai/digithings/issues/4522)
+
+
+### Performance Improvements
+
+* **digichat:** per-skin React.lazy code-splitting (WS4 step 5) ([1ef394c](https://github.com/digithings-ai/digithings/commit/1ef394cbc55a26ef5a02ddadfe7e6b3eca3d41b3))
+
+
+### Reverts
+
+* **digichat:** restore default skin footer/credit behavior (owner: keep defaults, message-only change) ([81324eb](https://github.com/digithings-ai/digithings/commit/81324eb50ab1869f7bc81b1e30ad60e27ef5bbfe))
+
 ## [2.3.2](https://github.com/digithings-ai/digithings/compare/digichat-v2.3.1...digichat-v2.3.2) (2026-09-21)
 
 
