@@ -23,6 +23,7 @@
  */
 
 import { adaptOnGet } from "./adapters";
+import { corsHeaders, resolveAllowlist, withCors } from "./cors";
 import { mountEnvelopeRoutes, type AddRoute, type RouteHandler } from "./envelope";
 import { tryHandleLedger } from "./ledger";
 import { tryHandleTables } from "./tables";
@@ -53,6 +54,9 @@ export interface Env {
   SUPABASE_SERVICE_ROLE_KEY?: string;
   /** Secret for POST /mcp (`x-digi-mcp-key`); unset = deny all (fail closed). */
   MCP_EDGE_KEY?: string;
+  /** Comma-separated CORS allowlist override (issue #4679); defaults cover
+   * the production dashboard plus local dashboard dev servers. */
+  DASHBOARD_API_ALLOWED_ORIGINS?: string;
 }
 
 export type ErrorCode = "bad_request" | "not_found" | "upstream_empty" | "internal";
@@ -222,9 +226,15 @@ async function routeGet(request: Request, env: Env): Promise<Response> {
 
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
+    // CORS (issue #4679): preflight short-circuit + ACAO/Vary on every
+    // response, mirroring the stack market-data worker. No ACAO for
+    // non-allowlisted origins (Vary: Origin still attached).
+    const cors = corsHeaders(request.headers.get("Origin"), resolveAllowlist(env));
+    if (request.method === "OPTIONS") return new Response(null, { status: 204, headers: cors });
     const url = new URL(request.url);
     const path = normalizePath(url.pathname);
-    if (path === MCP_PATH) return handleMcp(request, env, (req) => routeGet(req, env));
-    return routeGet(request, env);
+    const res =
+      path === MCP_PATH ? await handleMcp(request, env, (req) => routeGet(req, env)) : await routeGet(request, env);
+    return withCors(res, cors);
   },
 };
