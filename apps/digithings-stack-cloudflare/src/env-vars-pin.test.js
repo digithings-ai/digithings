@@ -70,6 +70,14 @@ const WORKER_SCOPED_VARS = new Set([
   "MARKET_DATA_ALLOWED_ORIGINS",
   "MCP_EDGE_KEY",
   "MCP_EDGE_KEYS",
+  // Folded dashboard-api (#4687): read by the Worker's own /dashboard-api/*
+  // handler (src/dashboard-api.ts forwards worker env to the folded route
+  // code); no container process reads them, so they stay Worker-scoped like
+  // MARKET_DATA_ALLOWED_ORIGINS above.
+  "SUPABASE_URL",
+  "SUPABASE_SERVICE_ROLE_KEY",
+  "MARKET_DATA_URL",
+  "DASHBOARD_API_ALLOWED_ORIGINS",
 ]);
 
 // Deliberately throws rather than returning an empty match -- a re-indented
