@@ -231,7 +231,7 @@ npx wrangler secret put DIGICHAT_EMBED_TENANTS -c $CFG
 - `CLOUDFLARE_API_TOKEN` exported in the shell makes wrangler authenticate as
   that token and fail with auth error 10000 — run with `env -u CLOUDFLARE_API_TOKEN`.
 - `secret put` needs no redeploy, but containers serve their start-time env
-  until recycled (R5) — bump the `SHARED_*_CONTAINER_ID` marker after rotation.
+  until recycled — bump the `SHARED_*_CONTAINER_ID` marker after rotation.
 - Verify by names only; never print values, never write them to repo files.
 
 ## Refreshing this inventory
