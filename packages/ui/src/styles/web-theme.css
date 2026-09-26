@@ -300,9 +300,20 @@ body {
    its content; only the active tile is open (`.dg-cell.on`), which is what makes
    the boxes open in turn as the reader scrolls. The wrap carries the page's own
    gutter because there is no stage to centre it. */
-.dg-stack-wrap { padding-inline: var(--page-pad); }
+.dg-stack-wrap {
+  padding-inline: var(--page-pad);
+  /* Breathing room below the section's top separator: the first card must sit
+     a step down from the line-t rule, not touch it. */
+  padding-block: clamp(1rem, 3vh, 2rem);
+}
 .dg-mosaic--stack { height: auto; gap: 0.5rem; }
 .dg-mosaic--stack .dg-mosaic-row { flex: 0 0 auto; transition: none; }
+/* The slide-up entrance wrapper (kit Reveal) is the row's flex child, not the
+   tile — so it carries the tile's flex share and stretches the tile to fill
+   it. Without this the wrapper would size to content and the tile would never
+   fill the row width. */
+.dg-mosaic--stack .dg-stack-reveal { flex: 1 1 auto; min-width: 0; display: flex; }
+.dg-mosaic--stack .dg-stack-reveal > .dg-cell { flex: 1 1 auto; }
 /* One tile per row, so the tile fills the row's width. `flex: 0 0 auto` here
    would size the tile to its own max-content — which measured 760px on a 420px
    viewport and pushed the whole page sideways. Height is content-driven because
