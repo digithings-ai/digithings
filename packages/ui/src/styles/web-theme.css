@@ -242,19 +242,21 @@ body {
      every section uses (Tailwind preflight is border-box, so the padding
      insets inside the max-width). Tiles size against the frame width, not
      the window.
-     Landing fit + walk expansion: resting height is compact so the grid
-     shares the landing viewport with the hero; once the walk centres
-     (`is-ready` from the same centered-gate that drives focus) it takes the
-     full stage height below the top bar. Height interpolates natively. */
+     Always-full (v16): the mosaic fills the stage at every scroll position —
+     landing, walk, and release. The old resting/docked two-state (compact
+     clamp until the centered-gate fired) left a dead void under the grid at
+     landing and collapsed the grid as the pin released, which read as a gap
+     before the next section. There is no height transition because height no
+     longer changes; the focus walk's size morph is owned by motion `layout`
+     on the rows and tiles, not by CSS. On viewports taller than the cap the
+     grid stops growing instead of going cavernous (owner: if the page gets
+     too large the sections below should still come into view). */
   width: 100%;
   max-width: calc(var(--frame-w) + 2 * var(--page-pad));
   margin-inline: auto;
   padding-inline: var(--page-pad);
-  height: clamp(20rem, 44vh, 32rem);
-  /* The dock growth eases over scroll (owner: smooth, never aggressive).
-     Slow ease so the grid swells into the dock instead of snapping; the
-     centered-gate + hysteresis decide WHEN, this decides HOW. */
-  transition: height 0.45s var(--ease);
+  height: 100%;
+  max-height: 64rem;
 }
 /* The mosaic's own stage sits below the pinned top bar — never behind it —
    so the walk plays in the remaining viewport, vertically centred. Scoped
@@ -267,14 +269,10 @@ body {
      the mosaic stage only; box-sizing keeps the padding inside the height. */
   padding-block: clamp(1rem, 3vh, 2.5rem);
   box-sizing: border-box;
-  /* Landing placement: the resting grid sits right under the hero instead of
-     centering in the full-height stage (which left a ~260px void between the
-     clone command and the grid). When docked the mosaic fills the stage, so
-     justification is irrelevant there. */
-  justify-content: flex-start;
-}
-.dg-mosaic--rows.is-ready {
-  height: calc(100% - 2 * clamp(1rem, 3vh, 2.5rem));
+  /* Centred: the mosaic is full-height in every state that matters, so this
+     only binds on viewports taller than its cap — the grid sits mid-stage
+     instead of sticking to the hero. */
+  justify-content: center;
 }
 
 /* The stacked face — the same boxes on a phone, one per row.
@@ -291,9 +289,9 @@ body {
    the row is `flex: 0 0 auto` inside the column. */
 .dg-mosaic--stack .dg-cell { flex: 1 1 auto; min-width: 0; opacity: 0.72; transition: opacity .25s var(--ease), background .25s var(--ease), box-shadow .25s var(--ease); }
 .dg-mosaic--stack .dg-cell.on { opacity: 1; }
-.dg-mosaic-row { display: flex; flex: 1 1 0; min-height: 0; gap: 0.5rem; /* The walk's growth eases (owner: smooth proportions at every size — the LOC weights never change, only the box). */ transition: flex-grow 0.35s var(--ease); }
+.dg-mosaic-row { display: flex; flex: 1 1 0; min-height: 0; gap: 0.5rem; /* No size transition here: the walk's growth is motion `layout` on the row/tiles (owner: smooth proportions at every size — the LOC weights never change, only the box). CSS keeps only the paint transitions below. */ }
 
-.dg-cell { position: relative; display: flex; flex-direction: column; gap: 0.5rem; flex: 1 1 0; min-width: 0; min-height: 0; padding: 0.85rem 0.95rem; margin: 0; background: var(--surface); border: 1px solid var(--hair); border-radius: 0; text-align: left; cursor: pointer; overflow: hidden; opacity: 0.55; transition: opacity .25s var(--ease), background .25s var(--ease), box-shadow .25s var(--ease), flex-grow .35s var(--ease); }
+.dg-cell { position: relative; display: flex; flex-direction: column; gap: 0.5rem; flex: 1 1 0; min-width: 0; min-height: 0; padding: 0.85rem 0.95rem; margin: 0; background: var(--surface); border: 1px solid var(--hair); border-radius: 0; text-align: left; cursor: pointer; overflow: hidden; opacity: 0.55; transition: opacity .25s var(--ease), background .25s var(--ease), box-shadow .25s var(--ease); }
 .dg-cell:hover { opacity: 0.85; }
 .dg-cell.on { opacity: 1; background: var(--surface-2, var(--surface)); box-shadow: inset 0 0 0 1px var(--accent); cursor: default; }
 

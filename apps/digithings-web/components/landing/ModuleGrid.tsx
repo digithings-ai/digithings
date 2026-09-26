@@ -2,8 +2,11 @@
 
 import { useEffect, useRef, useState } from "react";
 import {
+  EASE,
   StackRow,
+  m as motion,
   modules,
+  useMotionSafe,
   useScrollyFeatures,
   scrollyTrackHeightVh,
   type ModuleNode,
@@ -79,7 +82,16 @@ import { moduleCountLabel, moduleVersion } from "@/lib/moduleCounts";
  * "ask digichat" control navigates. The compose command became a copy control,
  * and the three stated facts (lines of code, endpoints, MCP tools) and the
  * declared version moved out of the corner into a fixed box under the name, so
- * every tile states the same three things in the same order.
+ *  every tile states the same three things in the same order.
+ *
+ * v16 answers the owner's grid-fill pass: the mosaic is always full stage
+ * height — landing fills to the viewport bottom, the walk plays full-size,
+ * and the release hands a full-size grid on (no resting/docked two-state, no
+ * retraction, no gap before the next section). The size morph runs on motion
+ * `layout` with the kit's brand easing instead of a CSS flex-grow transition,
+ * and the weight spread widened (floor 0.12, exponent 1.5, ~8.3x end to end,
+ * roadmaps at half floor) so each tile's area reads as its proportionate LOC
+ * portion.
  */
 
 /**
@@ -105,14 +117,26 @@ const ordered = [...modules].sort((a, b) => {
 const ROW_SIZES = [4, 4, 3] as const;
 
 /** The exponent on the normalised log weight. >1 spreads the field. */
-const WEIGHT = 1.2;
+const WEIGHT = 1.5;
 /**
- * The share of the biggest module the smallest still draws, before weighting.
- * 0.18 spreads the field about 5.6x end to end — the owner wants a stock-grid
- * read (heavyweights top-left, lightweights bottom-right, size gap obvious),
- * and the row floor plus the focus boost keep the smallest tile usable.
+ * The share of the biggest module the smallest shipped module still draws,
+ * before weighting. 0.12 with the 1.5 exponent spreads the field about 8.3x
+ * end to end — the owner wants a stock-grid read (heavyweights top-left,
+ * lightweights bottom-right, size gap obvious, each tile's area its
+ * proportionate LOC portion), and the row floor plus the focus boost keep the
+ * smallest tile usable.
  */
-const WEIGHT_FLOOR = 0.18;
+const WEIGHT_FLOOR = 0.12;
+/**
+ * Roadmap modules declare no lines, so they draw half the floor rather than
+ * the floor itself — a module with no code is not a module with no size, but
+ * it is honestly smaller than the smallest shipped one. The half step is
+ * load-bearing, not cosmetic: a light row whose weights sum below 1 is scaled
+ * up uniformly (see `solveTileGrow`), which preserves ratios but would draw
+ * equal tiles from equal weights — full-floor roadmaps would erase
+ * digismith's size in its own row.
+ */
+const ROADMAP_WEIGHT = WEIGHT_FLOOR * 0.5;
 /**
  * How much heavier the focused module counts while the layout is solved — the
  * "resize and shift to make space for what's inside" behaviour.
@@ -176,14 +200,17 @@ function usePrefersReducedMotion(): boolean {
  * Each module's size weight, on a log axis.
  *
  * The spread is extreme — digiquant is 178,909 lines and digismith is 951, a
- * factor of 188 — so a linear weight would make digismith a sliver and digiquant
- * most of the mosaic. On a log axis the ratio is about 1:2.9, which is still
- * legible as "bigger module, bigger tile".
+ * factor of 188 — so a linear weight would make digismith a sliver and
+ * digiquant most of the mosaic. On a log axis (log10 2.978..5.253, span
+ * 2.274) with the floor and exponent above, digiquant draws ~27% of the
+ * mosaic's weight and digismith ~3%: still legible as "bigger module, bigger
+ * tile", with the size gap obvious.
  *
  * The floor matters: without it the smallest module normalises to zero and an
- * earlier attempt's `|| 1` fallback promoted it, so the *smallest* module in the
- * stack drew the widest tile. The floor is applied before the exponent so no
- * module can ever reach zero.
+ * earlier attempt's `|| 1` fallback promoted it, so the *smallest* module in
+ * the stack drew the widest tile. The floor is applied before the exponent so
+ * no shipped module can ever reach zero; roadmap modules take
+ * `ROADMAP_WEIGHT` instead (see its comment).
  */
 function moduleWeights(): number[] {
   const measured = ordered
@@ -194,7 +221,7 @@ function moduleWeights(): number[] {
   const span = Math.max(logMax - logMin, 1);
   return ordered.map((m) => {
     const n = moduleLines(m.id);
-    if (n === null) return WEIGHT_FLOOR;
+    if (n === null) return ROADMAP_WEIGHT;
     const t = (Math.log10(n) - logMin) / span;
     return WEIGHT_FLOOR + (1 - WEIGHT_FLOOR) * Math.pow(t, WEIGHT);
   });
@@ -385,6 +412,11 @@ export function ModuleGrid() {
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const copyTimer = useRef<number | null>(null);
   const reduced = usePrefersReducedMotion();
+  /* Motion `layout` on the rows and tiles eases the focus walk's size morph
+     on the kit's brand curve (web-theme keeps paint transitions only, so the
+     two never fight). Off under reduced motion, where the stepper face is
+     static anyway. */
+  const safe = useMotionSafe();
 
   /* The stacked face's active tile. The pinned mosaic's focus IS the scroll
      position; the stack has no track to scrub, so the tile whose top sits nearest
@@ -395,7 +427,7 @@ export function ModuleGrid() {
   /**
    * The mosaic's default state is unselected: nothing carries the focus until
    * the reader actually arrives — and focus lives ONLY while the mosaic is
-   * centered and ready. The `ready` latch flips once the mosaic box's centre
+   * centered and ready. The `ready` latch flips once the stage box's centre
    * crosses into the viewport's middle third (the sticky pin has taken up and
    * the stage is centred), and flips back off the moment it leaves: scrolled
    * past, above, or entering off-centre, no tile is focused and nothing zooms
@@ -405,13 +437,23 @@ export function ModuleGrid() {
    * latch fired too early and never released, so tiles grew while arriving
    * and stayed grown after the table left. `started` below still drives the
    * mobile stack, which has no centred stage to gate on.
+   *
+   * v16: the gate drives focus ONLY. It used to drive the mosaic's height as
+   * well (compact clamp at rest, full stage once centred), which left a dead
+   * void under the grid at landing and collapsed the grid as the pin
+   * released — the "big gap" before the next section. The mosaic is now
+   * always full stage height (see web-theme), so there is nothing to gate:
+   * landing fills to the viewport bottom, the walk plays full-size, and the
+   * release hands a full-size grid to the section below with no shrink. Gate
+   * on the STAGE box, not the mosaic box (the deadlock lesson stands: the
+   * mosaic's height WAS the docked state, so gating on it deadlocked —
+   * resting centre sat just above the band and ready never fired).
    */
   const [started, setStarted] = useState(false);
-  const [ready, setReady] = useState(false);
   /* Focus engagement (owner: digiquant lights up only once the grid is fully
      expanded and in view, after a bit more scrolling — not the moment the
-     dock engages). `ready` is the dock; `engaged` adds ~8% of walk progress
-     before the first focus lands, then holds until the dock releases. */
+     dock engages). The dock is now permanent, so `engaged` adds ~8% of walk
+     progress before the first focus lands, then holds until the stage exits. */
   const [engaged, setEngaged] = useState(false);
   const readyRef = useRef(false);
   useEffect(() => {
@@ -442,7 +484,6 @@ export function ModuleGrid() {
         ? center > vh * 0.3 && center < vh * 0.7
         : center > vh * 0.33 && center < vh * 0.67;
       readyRef.current = inside;
-      setReady(inside);
       const span = Math.max(track.offsetHeight - vh, 1);
       const progress = (window.scrollY - top) / span;
       if (inside && progress > 0.08) setEngaged(true);
@@ -556,14 +597,16 @@ export function ModuleGrid() {
       >
         <div className={stepper ? "dg-stack-wrap" : "dg-stage dg-stage--mosaic"}>
           <div
-            className={`dg-mosaic ${stepper ? "dg-mosaic--stack" : "dg-mosaic--rows"}${!stepper && ready ? " is-ready" : ""}`}
+            className={`dg-mosaic ${stepper ? "dg-mosaic--stack" : "dg-mosaic--rows"}`}
             role="list"
             aria-label="digithings modules, sized by lines of code"
           >
             {rows.map((members, row) => (
-              <div
+              <motion.div
                 key={`row-${row}`}
                 className="dg-mosaic-row"
+                layout={safe && !stepper}
+                transition={{ duration: 0.4, ease: EASE }}
                 style={stepper ? undefined : ({ flexGrow: rowGrow[row] } as React.CSSProperties)}
               >
                 {members.map((i) => {
@@ -573,7 +616,7 @@ export function ModuleGrid() {
                   const dockerCmd = m.dockerCmd;
                   const copied = copiedId === m.id;
                   return (
-                    <div
+                    <motion.div
                       key={m.id}
                       data-mod={m.id}
                       ref={
@@ -585,6 +628,8 @@ export function ModuleGrid() {
                       }
                       role="listitem"
                       className={`dg-cell${on ? " on" : ""}`}
+                      layout={safe && !stepper}
+                      transition={{ duration: 0.4, ease: EASE }}
                       style={
                         stepper ? undefined : ({ flexGrow: tileGrow[i] } as React.CSSProperties)
                       }
@@ -689,10 +734,10 @@ export function ModuleGrid() {
                           </span>
                         ) : null}
                       </div>
-                    </div>
+                    </motion.div>
                   );
                 })}
-              </div>
+              </motion.div>
             ))}
           </div>
         </div>
