@@ -212,7 +212,7 @@ describe("warning sink", () => {
 });
 
 describe("getStackStatus", () => {
-  it("reports all five groups as unloaded before any traffic", () => {
+  it("reports all six groups as unloaded before any traffic", () => {
     expect(getStackStatus()).toEqual({
       ok: true,
       service: "digithings-stack",
@@ -221,6 +221,7 @@ describe("getStackStatus", () => {
         "mcp-edge": { state: "unloaded", lastError: null },
         "market-data": { state: "unloaded", lastError: null },
         "dashboard-api": { state: "unloaded", lastError: null },
+        digichat: { state: "unloaded", lastError: null },
         "container-routes": { state: "unloaded", lastError: null },
       },
     });
@@ -261,6 +262,11 @@ describe("index.ts isolation wiring", () => {
     expect(source).toContain('"dashboard-api"');
     expect(source).toContain('() => import("./dashboard-api")');
     expect(source).toContain("handleDashboardApi(request, workerEnv, url)");
+    expect(source).toContain('"digichat"');
+    expect(source).toContain('() => import("./digichat")');
+    expect(source).toContain("shouldProxyToDigiChat(url.pathname)");
+    expect(source).toContain("getContainer(workerEnv.DIGICHAT, SHARED_DIGICHAT_CONTAINER_ID)");
+    expect(source).toContain("switchPort(request, DIGICHAT_PORT)");
     expect(source).toContain('runIsolated("container-routes", () => import("./ports")');
   });
 
