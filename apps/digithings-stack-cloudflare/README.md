@@ -10,7 +10,10 @@ CI pipeline. Auth-exempt on every host is only the shared service allowlist —
 `/health`, `/healthz`, `/metrics`, `/docs`, `/redoc`, `/openapi.json`, plus
 OPTIONS preflights (CORS is enforced separately) — and the Worker-served paths
 `/_stack/meta`, `/v1/market/tickers|closes`, `/_stack/key/*` (proxied to
-digikey). `/_stack/mcp/zammad/*` (the read-only OCC Zammad MCP, proxied to
+digikey). `/_stack/status` reports per-module health (`loaded` / `degraded` +
+last error, never secrets) for the fault-isolated route groups (#4685); like
+`/_stack/meta` it never touches a module loader, so it stays up when groups
+degrade. `/_stack/mcp/zammad/*` (the read-only OCC Zammad MCP, proxied to
 the stack container's :8770) is **not** auth-exempt: it requires `x-digi-mcp-key`
 matching the `MCP_EDGE_KEY` secret or returns a fail-closed 401.
 Secrets only via `npx wrangler secret put` — never commit values. Operator

@@ -27,7 +27,13 @@
  */
 import { Container, getContainer, switchPort } from "@cloudflare/containers";
 import { env as workerEnvBinding } from "cloudflare:workers";
-import { handleMarketData } from "./market-data";
+import { getStackStatus, runIsolated } from "./route-modules";
+// ports.ts stays a static import: the two Container subclasses below need
+// their ports synchronously at instantiation (class fields cannot await), and
+// the file is dependency-free constants, so it cannot fail independently of
+// the worker bundle. Every fetch() route group additionally lazy-loads it
+// through runIsolated (per-group import() + try/catch, #4685), so a future
+// load failure degrades only its own paths.
 import {
   DIGIGRAPH_PORT,
   DIGIKEY_PORT,
@@ -333,10 +339,21 @@ export default {
       });
     }
 
+    // Per-module health (#4685): served directly, never touches a module
+    // loader, so it stays up even when every route group is degraded.
+    // Payload is state + last error message only — never secrets.
+    if (url.pathname === "/_stack/status") {
+      return Response.json(getStackStatus());
+    }
+
     // workers.dev digikey probe without custom domain: /_stack/key/healthz
     if (url.pathname === "/_stack/key" || url.pathname.startsWith("/_stack/key/")) {
-      const container = getContainer(workerEnv.STACK, SHARED_STACK_CONTAINER_ID);
-      return container.fetch(switchPort(rewriteKeyStackPath(request), DIGIKEY_PORT));
+      // Lazy ports import per route group (#4685): a failing import degrades
+      // only these paths (503); every other group keeps serving.
+      return runIsolated("key-proxy", () => import("./ports"), async ({ SHARED_STACK_CONTAINER_ID, DIGIKEY_PORT }) => {
+        const container = getContainer(workerEnv.STACK, SHARED_STACK_CONTAINER_ID);
+        return container.fetch(switchPort(rewriteKeyStackPath(request), DIGIKEY_PORT));
+      });
     }
 
     // Read-only Zammad MCP for the OCC embed, reached over a secret-gated edge
@@ -356,15 +373,20 @@ export default {
         if (!expected || !provided || provided !== expected) {
           return new Response("digithings-stack: unauthorized", { status: 401 });
         }
-        let stripped = slash === -1 ? "/" : rest.slice(slash);
-        if (!stripped.endsWith("/")) {
-          stripped += "/";
-        }
-        const target = new URL(url.toString());
-        target.pathname = stripped;
-        const forwarded = new Request(target.toString(), request);
-        const container = getContainer(workerEnv.STACK, SHARED_STACK_CONTAINER_ID);
-        return container.fetch(switchPort(forwarded, port));
+        // Lazy ports import per route group (#4685): a failing import
+        // degrades only these paths (503); the fail-closed 401 above stays
+        // synchronous and untouched.
+        return runIsolated("mcp-edge", () => import("./ports"), async ({ SHARED_STACK_CONTAINER_ID }) => {
+          let stripped = slash === -1 ? "/" : rest.slice(slash);
+          if (!stripped.endsWith("/")) {
+            stripped += "/";
+          }
+          const target = new URL(url.toString());
+          target.pathname = stripped;
+          const forwarded = new Request(target.toString(), request);
+          const container = getContainer(workerEnv.STACK, SHARED_STACK_CONTAINER_ID);
+          return container.fetch(switchPort(forwarded, port));
+        });
       }
     }
 
@@ -374,7 +396,12 @@ export default {
     // in migration 127, #4053); no writes, no auth, CORS limited to
     // MARKET_DATA_ALLOWED_ORIGINS.
     if (url.pathname === "/v1/market/tickers" || url.pathname === "/v1/market/closes") {
-      return handleMarketData(request, workerEnv, url);
+      // Lazy market-data import (#4685): hyparquet evaluation is deferred to
+      // the first market-data request, and a failing import degrades only
+      // these paths (503).
+      return runIsolated("market-data", () => import("./market-data"), async ({ handleMarketData }) => {
+        return handleMarketData(request, workerEnv, url);
+      });
     }
 
     // Dedicated digiquant-mcp container (#3780 Task 8): reachable only via the
@@ -383,20 +410,27 @@ export default {
     // MCP tools are unauthenticated localhost today). No workers.dev forwarding
     // route ships: an unauthenticated /_stack/mcp/* forwarder must not go live.
     if (isMcpHostname(url.hostname)) {
-      const container = getContainer(workerEnv.MCP_STACK, MCP_CONTAINER_ID);
-      return container.fetch(request);
+      // Lazy ports import per route group (#4685).
+      return runIsolated("container-routes", () => import("./ports"), async ({ MCP_CONTAINER_ID }) => {
+        const container = getContainer(workerEnv.MCP_STACK, MCP_CONTAINER_ID);
+        return container.fetch(request);
+      });
     }
 
-    const port = portForHostname(url.hostname);
-    if (port === null) {
-      return new Response(
-        "digithings-stack: unknown host. Use graph.digithings.ai, " +
-          "key.digithings.ai, search.digithings.ai, or /_stack/key/* on workers.dev. " +
-          "(mcp.digithings.ai is reserved; its route is not yet enabled.)",
-        { status: 404 },
-      );
-    }
-    const container = getContainer(workerEnv.STACK, SHARED_STACK_CONTAINER_ID);
-    return container.fetch(switchPort(request, port));
+    // Lazy ports import per route group (#4685): unknown-host 404 and the
+    // shared-container proxy degrade only under this group on failure.
+    return runIsolated("container-routes", () => import("./ports"), async ({ SHARED_STACK_CONTAINER_ID, portForHostname }) => {
+      const port = portForHostname(url.hostname);
+      if (port === null) {
+        return new Response(
+          "digithings-stack: unknown host. Use graph.digithings.ai, " +
+            "key.digithings.ai, search.digithings.ai, or /_stack/key/* on workers.dev. " +
+            "(mcp.digithings.ai is reserved; its route is not yet enabled.)",
+          { status: 404 },
+        );
+      }
+      const container = getContainer(workerEnv.STACK, SHARED_STACK_CONTAINER_ID);
+      return container.fetch(switchPort(request, port));
+    });
   },
 };
