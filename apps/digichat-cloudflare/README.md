@@ -47,6 +47,8 @@ Mac Compose remains **dev-only** — see
 
 ## Deploy
 
+Canonical deploy is the digithings-stack worker ([`deploy-digithings-stack-cloudflare.yml`](../../.github/workflows/deploy-digithings-stack-cloudflare.yml)) — the standalone below stays until cutover.
+
 From **repo root** (Dockerfile context is monorepo root):
 
 ```bash

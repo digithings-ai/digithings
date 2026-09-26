@@ -598,7 +598,7 @@ export default {
       if (port === null) {
         return new Response(
           "digithings-stack: unknown host. Use graph.digithings.ai, " +
-            "key.digithings.ai, search.digithings.ai, or /_stack/key/* on workers.dev. " +
+            "key.digithings.ai, or search.digithings.ai. " +
             "(mcp.digithings.ai is reserved; its route is not yet enabled.)",
           { status: 404 },
         );
