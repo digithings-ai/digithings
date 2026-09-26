@@ -9,7 +9,7 @@ import {
   type ModuleNode,
 } from "@digithings/ui";
 import { writeHandoff } from "@/lib/chatHandoff";
-import { treemapAreasConstrained, type TreemapMins } from "@/lib/treemap";
+import { treemapAnchored, treemapAreasConstrained, type TreemapMins } from "@/lib/treemap";
 import { grouped, moduleLines } from "@/lib/repoActivity";
 import { moduleCountLabel, moduleVersion } from "@/lib/moduleCounts";
 
@@ -101,6 +101,13 @@ import { moduleCountLabel, moduleVersion } from "@/lib/moduleCounts";
  * vocabulary is transform/opacity only, so rect interpolation lives in CSS,
  * driven by motion's `useScroll` walk upstream. The v4 flex-rows description
  * below is history.
+ *
+ * v18 anchors the focus (owner: "the module that's open should not be
+ * rearranged... the module that expands stays"). The rest layout is solved
+ * once and never moves; the focused tile keeps its rest top-left and grows
+ * there, while the other tiles repack into the strips around it. Within a
+ * strip, weight ratios stay exact; global cross-strip proportions are
+ * approximate — followability won that trade.
  */
 
 /**
@@ -686,9 +693,30 @@ export function ModuleGrid() {
     }
     return { minW: REST_MIN.minW + TREEMAP_GAP, minH: REST_MIN.minH + TREEMAP_GAP };
   });
+  /* v18: the rest layout is the stable map — solved once with unfocused
+     weights, so every tile's resting spot never moves between foci. The
+     focused tile keeps its rest top-left and grows there; the rest reflow
+     around it (see `treemapAnchored`). */
+  const restMins = BASE_WEIGHTS.map(() => ({
+    minW: REST_MIN.minW + TREEMAP_GAP,
+    minH: REST_MIN.minH + TREEMAP_GAP,
+  }));
+  const restRects =
+    !stepper && box.w > 0 && box.h > 0
+      ? treemapAreasConstrained(BASE_WEIGHTS, box.w, box.h, restMins)
+      : null;
   const rects =
     !stepper && box.w > 0 && box.h > 0
-      ? treemapAreasConstrained(weights, box.w, box.h, mins)
+      ? (() => {
+          if (focus < 0 || !restRects) return restRects;
+          const grown = treemapAreasConstrained(weights, box.w, box.h, mins);
+          const size = grown[focus];
+          if (!size) return restRects;
+          return treemapAnchored(weights, box.w, box.h, mins, restRects, focus, {
+            w: size.w,
+            h: size.h,
+          });
+        })()
       : null;
 
   return (
