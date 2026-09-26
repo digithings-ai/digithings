@@ -19,6 +19,10 @@ describe("dashboard security-headers", () => {
     expect(DASHBOARD_CSP).toContain("wss://*.supabase.co");
   });
 
+  it("allows the dashboard-api worker origin in connect-src (#4681)", () => {
+    expect(DASHBOARD_CSP).toContain("https://dashboard-api.chris-stefan.workers.dev");
+  });
+
   it("allows digichat iframe origins for the Desk+ popup (#3422)", () => {
     expect(DASHBOARD_CSP).toContain("frame-src");
     expect(DASHBOARD_CSP).toContain("https://digithings.ai");
