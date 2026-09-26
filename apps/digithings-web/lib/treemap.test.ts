@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { treemapAreas } from "@/lib/treemap";
+import { treemapAreas, treemapAreasConstrained } from "@/lib/treemap";
 
 const W = 1284;
 const H = 1002;
@@ -62,5 +62,80 @@ describe("treemapAreas", () => {
   it("fills the box with a single weight and returns [] for none", () => {
     expect(treemapAreas([3], W, H)).toEqual([{ x: 0, y: 0, w: W, h: H }]);
     expect(treemapAreas([], W, H)).toEqual([]);
+  });
+});
+
+describe("treemapAreasConstrained", () => {
+  const weights = [1, 0.84, 0.536, 0.426, 0.277, 0.207, 0.182, 0.162, 0.12, 0.06, 0.06];
+
+  it("lifts narrow tiles to their minimum width when the box allows it", () => {
+    const mins = weights.map(() => ({ minW: 176, minH: 84 }));
+    const rects = treemapAreasConstrained(weights, W, H, mins);
+    expect(rects).toHaveLength(weights.length);
+    rects.forEach((r) => {
+      expect(r.w).toBeGreaterThanOrEqual(176 - 1);
+      expect(r.h).toBeGreaterThanOrEqual(84 - 1);
+    });
+    const total = rects.reduce((acc, r) => acc + r.w * r.h, 0);
+    expect(total).toBeCloseTo(W * H, 4);
+  });
+
+  it("guarantees a focused tile's content minimum", () => {
+    const mins = weights.map((_, i) =>
+      i === 10 ? { minW: 300, minH: 260 } : { minW: 176, minH: 84 },
+    );
+    const boosted = weights.map((w, i) => (i === 10 ? Math.max(w * 1.3, 0.5) : w));
+    const rects = treemapAreasConstrained(boosted, W, H, mins);
+    expect(rects[10].w).toBeGreaterThanOrEqual(300 - 1);
+    expect(rects[10].h).toBeGreaterThanOrEqual(260 - 1);
+  });
+
+  it("holds every minimum jointly in a narrow box with a large focused tile", () => {
+    // Live regression (1000px viewport): a 368x776 focused tile starved a
+    // roadmap tile to 101px wide against its 184px minimum — the iterative
+    // chase froze their ratios instead of satisfying both.
+    const NW = 1000;
+    const NH = 784;
+    const boosted = weights.map((w, i) => (i === 3 ? Math.max(w * 1.3, 0.5) : w));
+    const mins = weights.map((_, i) =>
+      i === 3 ? { minW: 308, minH: 383 } : { minW: 184, minH: 92 },
+    );
+    const rects = treemapAreasConstrained(boosted, NW, NH, mins);
+    expect(rects).toHaveLength(weights.length);
+    rects.forEach((r) => {
+      expect(r.w).toBeGreaterThanOrEqual(184 - 1);
+      expect(r.h).toBeGreaterThanOrEqual(92 - 1);
+    });
+    expect(rects[3].w).toBeGreaterThanOrEqual(308 - 1);
+    expect(rects[3].h).toBeGreaterThanOrEqual(383 - 1);
+    const total = rects.reduce((acc, r) => acc + r.w * r.h, 0);
+    expect(total).toBeCloseTo(NW * NH, 4);
+  });
+
+  it("packs sane aspects when boosts invert the LOC order", () => {
+    // needExtra top-ups can make a late (small) tile outweigh digiquant.
+    // Without a descending sort per solve, squarified degrades into slivers.
+    const skewed = [1, 0.84, 0.536, 0.426, 0.277, 0.207, 0.182, 0.162, 0.12, 2.1, 1.4];
+    const total = skewed.reduce((acc, w) => acc + w, 0);
+    const loose = skewed.map(() => ({ minW: 1, minH: 1 }));
+    treemapAreasConstrained(skewed, W, H, loose).forEach((r, i) => {
+      expect((r.w * r.h) / (W * H)).toBeCloseTo(skewed[i] / total, 6);
+    });
+    const tight = skewed.map(() => ({ minW: 184, minH: 92 }));
+    treemapAreasConstrained(skewed, W, H, tight).forEach((r) => {
+      expect(Math.max(r.w / r.h, r.h / r.w)).toBeLessThan(4);
+    });
+  });
+
+  it("matches the pure solve when nothing violates, and terminates best-effort when the box cannot fit", () => {    const loose = weights.map(() => ({ minW: 1, minH: 1 }));
+    expect(treemapAreasConstrained(weights, W, H, loose)).toEqual(treemapAreas(weights, W, H));
+    const impossible = weights.map(() => ({ minW: 5000, minH: 5000 }));
+    const rects = treemapAreasConstrained(weights, W, H, impossible, 3);
+    expect(rects).toHaveLength(weights.length);
+    rects.forEach((r) => {
+      expect(Number.isFinite(r.x + r.y + r.w + r.h)).toBe(true);
+      expect(r.w).toBeGreaterThan(0);
+      expect(r.h).toBeGreaterThan(0);
+    });
   });
 });

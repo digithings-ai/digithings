@@ -323,6 +323,10 @@ body {
 .dg-mosaic-head { display: flex; flex-wrap: wrap; align-items: flex-start; justify-content: space-between; gap: 0.25rem 0.6rem; min-width: 0; }
 .dg-mosaic-version { margin-left: auto; text-align: right; }
 .dg-mosaic-name { font-family: var(--font-mono); font-size: 1.35rem; font-weight: 500; letter-spacing: -0.01em; color: var(--ink); }
+/* Mini tiles step the name down a notch instead of clipping it: the full
+   name still shows (never an abbreviation), just set smaller next to the
+   version, so the head fits ~135px with padding. */
+.dg-cell[data-tier="mini"] .dg-mosaic-name { font-size: 1.1rem; }
 
 /* The whole tile is the focus target, but the focused tile also owns real
    controls (copy the compose command, ask digichat). A <button> cannot contain
@@ -350,6 +354,12 @@ body {
    be readable "in the non-expanded view". */
 .dg-mosaic-stack { display: block; margin-top: auto; min-width: 0; }
 .dg-mosaic-stack .stack-row { margin-top: 0; }
+/* Collapsed tiles keep the logo-only row on one scrolling line: wrapping
+   would spend unpredictable vertical room in narrow tiles (measured as a
+   46px overflow), while a horizontal scroll matches the docker chip grammar
+   and bounds the row to one line at every width. Focused tiles use the
+   wrapping named chips — the focus minimums always give them the room. */
+.dg-mosaic-stack .stack-row.compact { flex-wrap: nowrap; overflow-x: auto; }
 .dg-mosaic-role { font-family: var(--font-mono); font-size: 0.9rem; line-height: 1.5; color: var(--ink-mute); }
 .dg-cell.on .dg-mosaic-role { color: var(--ink-soft); }
 .dg-mosaic-detail { display: flex; flex-direction: column; gap: 0.6rem; margin-top: 0.4rem; min-width: 0; }
@@ -398,12 +408,13 @@ button.dg-docker.is-copied { color: var(--accent); }
 .dg-mosaic-serves { color: var(--ink-mute); font-family: var(--font-mono); font-size: 0.94rem; line-height: 1.5; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 5; line-clamp: 5; overflow: hidden; }
 
 /* Card density tiers (owner: a tile shows whatever fits, never clipped).
-   The tile's tier is set from its measured height (see ModuleGrid): full
-   shows everything; medium drops the package row; mini keeps name + version
-   only. Tiers CROSS-FADE (opacity + visibility) instead of flipping display:
-   tiles clip (overflow hidden on .dg-cell) and the hidden content keeps its
-   layout, so a tier change is paint-only — no pop, no reflow. Proportions
-   stay constant at every grid size because all sizing is LOC weights. */
+   The tile's tier is set from its measured width and height (see
+   ModuleGrid): full shows everything; medium keeps the head plus the
+   logo-only package row and drops the role prose (the collapsed tile keeps
+   the owner's logo packages); mini keeps name + version only. Tiers
+   CROSS-FADE (opacity + visibility) instead of flipping display: tiles clip
+   (overflow hidden on .dg-cell) and the hidden content keeps its layout, so
+   a tier change is paint-only — no pop, no reflow. */
 .dg-cell .dg-mosaic-stack,
 .dg-cell .dg-mosaic-role,
 .dg-cell .dg-mosaic-detail {
@@ -411,16 +422,25 @@ button.dg-docker.is-copied { color: var(--accent); }
   visibility: visible;
   transition: opacity 0.3s var(--ease), visibility 0s;
 }
-.dg-cell[data-tier="medium"] .dg-mosaic-stack,
-.dg-cell[data-tier="mini"] .dg-mosaic-stack,
+.dg-cell[data-tier="medium"] .dg-mosaic-role,
+.dg-cell[data-tier="medium"] .dg-mosaic-detail,
 .dg-cell[data-tier="mini"] .dg-mosaic-role,
+.dg-cell[data-tier="mini"] .dg-mosaic-stack,
 .dg-cell[data-tier="mini"] .dg-mosaic-detail {
   opacity: 0;
   visibility: hidden;
   transition: opacity 0.3s var(--ease), visibility 0s 0.3s;
 }
+/* Tile bodies crossfade on every reflow: the body re-mounts per focus step
+   (keyed in ModuleGrid) and fades/slides in while rects morph, so mid-flight
+   widths never catch text half-fitting. Transform/opacity only, per the
+   kit's motion vocabulary. */
+.dg-cell-body { animation: dg-cell-in 0.28s var(--ease); }
+@keyframes dg-cell-in {
+  from { opacity: 0; transform: translateY(6px); }
+}
 /* Reduced motion: every mosaic transition above goes instant — dock,
-   growth, tier fades. State changes still apply, with no animation. */
+   growth, tier fades, body crossfade. State changes still apply, with no animation. */
 @media (prefers-reduced-motion: reduce) {
   .dg-mosaic--rows,
   .dg-mosaic-row,
@@ -430,6 +450,7 @@ button.dg-docker.is-copied { color: var(--accent); }
   .dg-cell .dg-mosaic-detail {
     transition: none;
   }
+  .dg-cell-body { animation: none; }
 }
 
 /* The stated figures. They are printed on the cell rather than implied by its

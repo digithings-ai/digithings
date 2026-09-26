@@ -86,3 +86,76 @@ export function treemapAreas(weights: number[], W: number, H: number): TreemapRe
   if (row.length > 0) layRow(row, x, y, w, h, w < h);
   return out;
 }
+
+export interface TreemapMins {
+  minW: number;
+  minH: number;
+}
+
+/**
+ * Constrained solve: every tile's weight first covers its minimum area
+ * outright (margin 1.5x for aspect slop), then one pure partition, then a
+ * short gentle polish for packing-geometry residuals.
+ *
+ * Deliberately NOT an iterative weight chase: when several tiles violate at
+ * once, joint multiplicative lifts freeze their ratios and can starve a
+ * small tile forever (measured live: a roadmap tile ended 101px wide against
+ * a 184px minimum while the loop insisted it was "lifting" it). Direct
+ * floors cannot freeze — areas always match weights exactly — so the minimums
+ * hold jointly whenever the box can fit them. Past that (a box smaller than
+ * every minimum combined) it degrades best-effort: still a full partition,
+ * still finite, still no overlaps.
+ *
+ * Squarified packing assumes descending weights, but boosts, floors and
+ * measured top-ups can invert the LOC order (a floored roadmap can outweigh
+ * digiquant), which degrades aspect quality into slivers — measured live as
+ * 107px-wide resting tiles with clipped titles beside a 776px focused one.
+ * So every solve sorts descending first and maps rects back; packing quality
+ * never depends on focus luck. The sort is stable, so equal weights keep
+ * their LOC order.
+ *
+ * The landing mosaic uses this to guarantee the owner's floor: every tile
+ * wide enough for its title + version with padding, every focused tile large
+ * enough for its detail. Minimums are in cell space (the render insets the
+ * gutter afterwards), so callers inflate them by the gutter.
+ */
+export function treemapAreasConstrained(
+  weights: number[],
+  W: number,
+  H: number,
+  mins: TreemapMins[],
+  maxIters = 3,
+): TreemapRect[] {
+  const total = weights.reduce((acc, w) => acc + w, 0) || 1;
+  const boxArea = Math.max(W * H, 1);
+  const order = weights.map((_, i) => i).sort((a, b) => weights[b] - weights[a]);
+  const sorted = order.map((i) => weights[i]);
+  const sortedMins = order.map((i) => mins[i]);
+  const floored = sorted.map((w, k) => {
+    const m = sortedMins[k];
+    if (!m) return w;
+    return Math.max(w, ((m.minW * m.minH * 1.5) / boxArea) * total);
+  });
+  const lifted = [...floored];
+  const solveAll = () => treemapAreas(lifted, W, H);
+  let sortedRects = solveAll();
+  for (let k = 0; k < maxIters; k++) {
+    let clean = true;
+    for (let s = 0; s < sortedRects.length; s++) {
+      const m = sortedMins[s];
+      if (!m) continue;
+      const r = sortedRects[s];
+      if (r.w < m.minW || r.h < m.minH) {
+        clean = false;
+        lifted[s] *= 1.3;
+      }
+    }
+    if (clean) break;
+    sortedRects = solveAll();
+  }
+  const out: TreemapRect[] = new Array(weights.length);
+  sortedRects.forEach((r, s) => {
+    out[order[s]] = r;
+  });
+  return out;
+}
