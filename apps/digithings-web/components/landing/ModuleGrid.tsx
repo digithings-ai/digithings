@@ -9,7 +9,7 @@ import {
   type ModuleNode,
 } from "@digithings/ui";
 import { writeHandoff } from "@/lib/chatHandoff";
-import { treemapAreas } from "@/lib/treemap";
+import { treemapAreasConstrained, type TreemapMins } from "@/lib/treemap";
 import { grouped, moduleLines } from "@/lib/repoActivity";
 import { moduleCountLabel, moduleVersion } from "@/lib/moduleCounts";
 
@@ -157,6 +157,19 @@ const ROADMAP_WEIGHT = WEIGHT_FLOOR * 0.5;
  */
 const FOCUS_MULT = 1.3;
 const FOCUS_FLOOR = 0.5;
+/**
+ * The owner's floor: every tile stays wide enough for its title + version
+ * with padding (the version wraps below the name where the tile is narrow —
+ * both fully shown, never clipped), and every focused tile stays large enough
+ * for its detail. Mini tiles set the name a notch smaller (full text, never
+ * an abbreviation), so 150px clears the longest name plus padding; the
+ * version wraps beneath. Focused detail (facts + lead + stack + foot) needs
+ * ~300×260, refined per module by live measurement (see needExtra).
+ * Minimums are inflated by the gutter at the call site — the solver works in
+ * cell space.
+ */
+const REST_MIN: TreemapMins = { minW: 150, minH: 84 };
+const FOCUS_MIN: TreemapMins = { minW: 300, minH: 260 };
 /** The gutter between packed tiles, in px — the 0.5rem rhythm as a number, so
  * the render can inset each rect by half. */
 const TREEMAP_GAP = 8;
@@ -462,16 +475,19 @@ export function ModuleGrid() {
   const focus = engaged ? Math.max(activeIndex, 0) : -1;
 
   /**
-   * Card density tiers (owner: a tile shows whatever fits — full with
-   * packages at the bottom, medium with title + subtitle + version, mini
-   * with title + version only — and never clips). Tiers key off measured
-   * tile height with an 8px hysteresis skirt so a tile hovering a boundary
-   * can't flap between states (more scroll jitter): full at >=200px,
-   * medium 112–200px, mini below. Rest heights measure 280/113/50 and
-   * focused tiles 200+, so each tier's content fits its box. Applied via
-   * data-tier (no react state — pure presentation, no render loops); the
-   * effect re-runs on focus change (detail mounts/unmounts) and observes
-   * resizes for flex regrowth.
+   * Card density tiers (owner: a tile shows whatever fits — and never clips;
+   * at least the title and the version always show fully, with padding).
+   * Tiers key off measured tile WIDTH and HEIGHT with an 8px hysteresis skirt
+   * per dimension so a tile hovering a boundary can't flap between states:
+   * full at >=210x200 (head + role + logos), medium at >=175x170 (head +
+   * logos, role hidden — the collapsed tile keeps the owner's logo-only
+   * packages), mini below (head only: name + version ≈ 82px, always inside
+   * the 84px rest minimum). Height-only tiers clipped wrapped prose in
+   * narrow tiles (a two-line head plus a three-line role needs ~165px, once
+   * measured as a 35px overflow), so both axes gate. Applied via data-tier
+   * (no react state — pure presentation, no render loops); the effect re-runs
+   * on focus change (detail mounts/unmounts) and observes resizes for
+   * treemap regrowth.
    */
   const tierRef = useRef<Record<string, number>>({});
   useEffect(() => {
@@ -481,11 +497,14 @@ export function ModuleGrid() {
       track.querySelectorAll<HTMLElement>(".dg-cell").forEach((cell) => {
         const id = cell.dataset.mod ?? "";
         const h = cell.clientHeight;
+        const w = cell.clientWidth;
         const t = tierRef.current[id] ?? 0;
-        let next = h >= 200 ? 0 : h >= 112 ? 1 : 2;
-        if (t === 0 && h >= 192) next = 0;
-        else if (t === 1 && h >= 104 && h < 208) next = 1;
-        else if (t === 2 && h < 120) next = 2;
+        let next: number;
+        if (h >= 210 && w >= 200) next = 0;
+        else if (t === 0 && h >= 202 && w >= 192) next = 0;
+        else if (h >= 175 && w >= 170) next = 1;
+        else if (t === 1 && h >= 167 && w >= 162) next = 1;
+        else next = 2;
         tierRef.current[id] = next;
         cell.dataset.tier = next === 0 ? "full" : next === 1 ? "medium" : "mini";
       });
@@ -498,9 +517,13 @@ export function ModuleGrid() {
   /**
    * A tile's inside: the focus overlay plus the body. Shared by both faces —
    * the stacked face wraps it in a plain flow tile, the mosaic face in a
-   * motion-positioned tile — so the two faces cannot drift apart.
+   * packed tile — so the two faces cannot drift apart. The body carries
+   * `rev` (the current focus step) as its key, so it re-mounts and
+   * crossfades on every reflow while rects morph — mid-flight widths never
+   * catch text half-fitting. The overlay and the tile box itself are stable,
+   * so keyboard focus and tier observation survive the swap.
    */
-  const tileContent = (index: number, on: boolean) => {
+  const tileContent = (index: number, on: boolean, rev: number) => {
     const m = ordered[index];
     const version = moduleVersion(m.id);
     const dockerCmd = m.dockerCmd;
@@ -522,7 +545,7 @@ export function ModuleGrid() {
           aria-label={`Focus ${m.id} — ${m.role}, ${factsLine(m)}`}
           onClick={() => (stepper ? setStackActive(index) : focusModule(trackRef.current, index))}
         />
-        <div className="dg-cell-body">
+        <div className="dg-cell-body" key={rev}>
           <span className="dg-mosaic-head">
             <span className="dg-mosaic-name">
               <span className="text-ink-mute">digi</span>
@@ -615,7 +638,58 @@ export function ModuleGrid() {
   const weights = BASE_WEIGHTS.map((w, i) =>
     i === focus ? Math.max(w * FOCUS_MULT, FOCUS_FLOOR) : w,
   );
-  const rects = !stepper && box.w > 0 && box.h > 0 ? treemapAreas(weights, box.w, box.h) : null;
+  /**
+   * Measured top-up per module id: the solver sizes the focused tile from
+   * `FOCUS_MIN`, but detail height depends on wrapping (lead length, chip
+   * count, docker presence) at the solved width, which no static number can
+   * predict. One settle-tick after each focus lands, the effect below
+   * measures the focused body's true shortfall and records it here; that
+   * module's minimum becomes the measured need plus slack. Monotonic (only
+   * ever grows) and generous in one jump, so it lands in a single round —
+   * and a wider re-solve can only shrink the true need, never reopen a clip.
+   */
+  const [needExtra, setNeedExtra] = useState<Record<string, number>>({});
+  useEffect(() => {
+    if (stepper) return;
+    let timer: number | null = null;
+    const measure = () => {
+      timer = null;
+      const tile = trackRef.current?.querySelector<HTMLElement>(".dg-cell.on");
+      const body = tile?.querySelector<HTMLElement>(".dg-cell-body");
+      if (!tile || !body) return;
+      const shortfall = body.scrollHeight - body.clientHeight;
+      if (shortfall > 4) {
+        const id = tile.dataset.mod ?? "";
+        setNeedExtra((prev) => {
+          const want = Math.ceil(tile.clientHeight + shortfall + 32);
+          return want > (prev[id] ?? 0) ? { ...prev, [id]: want } : prev;
+        });
+      }
+    };
+    /* Past the rect morph (0.45s) and the body fade (0.28s): measuring
+       mid-flight would record a transient width's need and over-provision. */
+    timer = window.setTimeout(measure, 650);
+    return () => {
+      if (timer !== null) window.clearTimeout(timer);
+    };
+    /* `needExtra` is a dep so a correction that still falls short schedules
+       its own settled re-measure and heals itself; the record only ever grows
+       while a real shortfall exists, so the loop always terminates. */
+  }, [focus, stepper, box, needExtra]);
+  const mins = BASE_WEIGHTS.map((_, i) => {
+    if (i === focus) {
+      const extra = needExtra[ordered[i].id] ?? 0;
+      return {
+        minW: FOCUS_MIN.minW + TREEMAP_GAP,
+        minH: Math.max(FOCUS_MIN.minH, extra) + TREEMAP_GAP,
+      };
+    }
+    return { minW: REST_MIN.minW + TREEMAP_GAP, minH: REST_MIN.minH + TREEMAP_GAP };
+  });
+  const rects =
+    !stepper && box.w > 0 && box.h > 0
+      ? treemapAreasConstrained(weights, box.w, box.h, mins)
+      : null;
 
   return (
     <section id="architecture" className="line-t line-b">
@@ -653,7 +727,7 @@ export function ModuleGrid() {
                         className={`dg-cell${on ? " on" : ""}`}
                         aria-current={on ? "true" : undefined}
                       >
-                        {tileContent(i, on)}
+                        {tileContent(i, on, -1)}
                       </div>
                     );
                   })}
@@ -691,7 +765,7 @@ export function ModuleGrid() {
                         : ({ visibility: "hidden" } as React.CSSProperties)
                     }
                   >
-                    {tileContent(i, on)}
+                    {tileContent(i, on, focus)}
                   </div>
                 );
               })
