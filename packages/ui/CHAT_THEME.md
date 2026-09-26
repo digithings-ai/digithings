@@ -34,8 +34,8 @@ assistant-ui has no theme CDN. Custom look is:
 4. **One portaled-menu sheet** — the portaled menu skin
    (`.aui-action-bar-more-content`, `.aui-composer-trigger-popover`,
    `.dc-composer-menu`, code-header buttons) is owned by the gallery sheet
-   (`reference/app/(chatbot)/chatbot/chatbot.css`), which the product wrapper
-   `@digithings/ui/styles/chatbot.css` imports. `chat-aui.css` loads first and
+   (`packages/ui/src/styles/chat-digichat.css` — moved out of the reference app,
+   which now imports it back). `chat-aui.css` loads first and
    keeps only the rules the gallery sheet has no twin for: the `.digichat-thread`
    code-header hover (the unwrapped `/baseline` mount), catalog-skin popover
    items, tooltip/dialog accent tokens, and hidden tooltip arrows. Do not
@@ -46,7 +46,7 @@ Keep defaults. Prefer a CSS-variable change over a slot override; prefer a
 
 ## Increments
 
-1. **Shell** — radius 0, monochrome ink on canvas (`chatbot.css`, `--composer-radius`).
+1. **Shell** — radius 0, monochrome ink on canvas (`chat-digichat.css`, `--composer-radius`).
 2. **Welcome** — `Thread` `components.Welcome` in `ViewportFooter`,
    immediately above the composer. Bottom-aligned in the thread. Left-aligned
    title + body from deploy-shaped config (`GALLERY_WELCOME` / `chrome.welcome`).
@@ -140,8 +140,7 @@ Keep defaults. Prefer a CSS-variable change over a slot override; prefer a
 `chrome.skin: digichat` is the only first-party look. It **renders this
 gallery Thread** — the same `@digithings/ui/chat/thread` subpath the isolated
 `/chatbot` page imports (never the `@digithings/ui` main barrel). CSS is
-`@digithings/ui/styles/chatbot.css` (Container COPY of gallery
-`chatbot.css` is required — #3717). Welcome in `ViewportFooter`, radius 0,
+`@digithings/ui/styles/chat-digichat.css`. Welcome in `ViewportFooter`, radius 0,
 Geist Mono, both roles left, cube status/action glyphs, no assistant role
 arrow, hover hints a hairline box with no rotated-square arrow (same as
 `/chatbot`), tools collapsed when settled. Catalog / third-party default remains

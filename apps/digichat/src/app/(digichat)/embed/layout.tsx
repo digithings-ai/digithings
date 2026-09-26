@@ -31,24 +31,8 @@ export const metadata: Metadata = {
 };
 
 export default function EmbedLayout({ children }: { children: ReactNode }) {
-  return (
-    <div className="dc-embed-shell flex h-dvh w-full flex-col overflow-hidden bg-background text-foreground">
-      {/* The embed paints no colour of its own until the page streams the
-          tenant's canvas (page.tsx): the root layout's no-JS default is dark,
-          and the light `--background` that follows is white — two frames the
-          visitor should never see. Stay transparent instead, the same surface
-          the attribution strip sits on, so footer and chat space always move
-          together; the page replaces this with `--embed-canvas` in the same
-          streamed document. `body.bg-background` (0-1-1) beats the root body's
-          Tailwind utility (0-1-0); the page's later rule of the same shape
-          wins the tie. */}
-      <style
-        dangerouslySetInnerHTML={{
-          __html:
-            "html{background:transparent}body.bg-background{background:transparent}.dc-embed-shell{background:transparent}",
-        }}
-      />
-      {children}
-    </div>
-  );
+  // Shell div + transparent first-paint style moved into EmbedRouteShell
+  // (single-route rewrite serves /embed through the / page now). This layout
+  // keeps metadata only until Step 6 deletes the route.
+  return <>{children}</>;
 }

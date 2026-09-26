@@ -11,7 +11,7 @@ image publish) and the promotion to `main` has landed:
 | GHCR image | `ghcr.io/digithings-ai/digichat:vX.Y.Z` |
 | Changelog | `apps/digichat/CHANGELOG.md` |
 | Install unit | **GHCR image** — not npm (`private: true`) |
-| Current app version | `1.0.0` (`apps/digichat/package.json`) |
+| Current app version | `2.3.2` (`apps/digichat/package.json`) |
 
 `ghcr.io/digithings-ai/digichat:v0.9.3` remains on GHCR for existing clients
 (DataTap and others). Do not delete or retag it.

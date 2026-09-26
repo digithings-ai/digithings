@@ -72,7 +72,10 @@ describe("createAiSdkStreamResponse", () => {
   it("passes no tools when web search is off", async () => {
     await createAiSdkStreamResponse(opts);
     expect(providers.resolveAiSdkSearchTools).not.toHaveBeenCalled();
-    const call = ai.streamText.mock.calls.at(-1)?.[0] as Record<string, unknown>;
+    const call = ai.streamText.mock.calls.at(-1)?.[0] as unknown as Record<
+      string,
+      unknown
+    >;
     expect(call).not.toHaveProperty("tools");
   });
 

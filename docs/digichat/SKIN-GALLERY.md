@@ -28,9 +28,9 @@ config, resolved to a `ThreadSkin` id. The gallery is the surface that exercises
 
 | Layer | What it is | Where it lives |
 |-------|-----------|----------------|
-| Skin registry | The 12 skin ids + parsing/defaults | [`apps/digichat/src/lib/thread-skins.ts`](../../apps/digichat/src/lib/thread-skins.ts) |
-| Skin dispatch | id → React component | [`apps/digichat/src/components/assistant-ui/skins/index.tsx`](../../apps/digichat/src/components/assistant-ui/skins/index.tsx) |
-| Skin implementations | The components themselves | `apps/digichat/src/components/assistant-ui/skins/` |
+| Skin registry | The 12 skin ids + parsing/defaults | [`packages/ui/src/components/chat/skins/thread-skins.ts`](../../packages/ui/src/components/chat/skins/thread-skins.ts) |
+| Skin dispatch | id → React component | [`packages/ui/src/components/chat/skins/index.ts`](../../packages/ui/src/components/chat/skins/index.ts) |
+| Skin implementations | The components themselves | `packages/ui/src/components/chat/skins/` |
 | Catalog page | Selector chrome + runtime | `apps/digichat/src/app/(baseline)/baseline/` |
 | Backend | One BFF route, one upstream | `apps/digichat/src/app/api/baseline-chat/route.ts` |
 
@@ -169,16 +169,16 @@ change is enough to test a feature across skins without touching a component.
 ## Adding or changing a skin
 
 **Modify an existing skin:** edit its component under
-`apps/digichat/src/components/assistant-ui/skins/`. The gallery picks it up
+`packages/ui/src/components/chat/skins/`. The gallery picks it up
 immediately (HMR); nothing else to register.
 
 **Add a new skin:**
 
 1. Create the component at
-   `apps/digichat/src/components/assistant-ui/skins/<id>.tsx` (or a directory,
+   `packages/ui/src/components/chat/skins/<id>.tsx` (or a directory,
    if it ships several files).
 2. Add the id to `THREAD_SKINS` in
-   `apps/digichat/src/lib/thread-skins.ts` (lowercase, dashes).
+   `packages/ui/src/components/chat/skins/thread-skins.ts` (lowercase, dashes).
 3. Add its branch to `ThreadSkinView` in `skins/index.tsx` — or to
    `CLONE_THREADS` if it is a clone-skin variant. Note the final `return` is the
    `ProductPageAssistant` fallback, so an unregistered id silently renders that;
@@ -189,7 +189,39 @@ immediately (HMR); nothing else to register.
    new skin appears in the selector with no UI change.
 6. Keep the skin tests green (`skins/index.test.tsx`,
    `skins-isolation.test.ts`) and note provenance in
-   `apps/digichat/src/components/assistant-ui/skins/SOURCE.md`.
+   `packages/ui/src/components/chat/skins/SOURCE.md`.
+
+---
+
+## Branding credit + surface parity
+
+The `digichat` skin renders one shared branding line below the composer on
+every surface (catalog, product, embed): `SkinCredit`
+(`packages/ui/src/components/chat/stock/skin-credit.tsx`) — `powered by
+digichat — a digithings product.`, with `digithings` linked to
+https://digithings.ai. It is a watermark, not a disclaimer: always visible,
+empty thread included. It returns null only when the host opted out
+(`chrome.attribution: false` / embed `attribution: false`).
+
+Placement rule: in-flow inside the sticky viewport footer once messages
+exist; a click-transparent absolute bottom pin in empty states whose
+composer floats mid-page (the clones, stock Thread, base). The gallery
+Thread (the `digichat` skin itself) needs no pin — its footer is
+bottom-docked in every state, so in-flow is already bottom-pinned there; an
+overlay painted over the composer. Send controls pin themselves right with
+`ml-auto`, so the submit stays right even when the deployment disables
+attachments and the attach button is absent.
+
+Parity rule: the skin owns all footer/composer geometry (footer `pb-4
+md:pb-6` halved to `pb-2 md:pb-3` alongside the credit's own `pt-0.5`,
+composer layout). Hosts must not override it per surface — the embed and
+catalog shells each once collapsed the footer padding and forked the footer
+position three ways. Two isolation tests pin this (`baseline-isolation`,
+`product-isolation`: no host `.aui-thread-viewport-footer` padding rules).
+
+Composer layout default is `expanded` on every surface
+(`composerLayout ?? "expanded"` in `skins/digichat.tsx`); `compact` is an
+explicit per-deployment override, not a mode derivation.
 
 ---
 
@@ -201,7 +233,7 @@ skin. That isolation is what keeps the catalog honest, but it means a skin can
 render subtly wrong with no error. These five have each caused a real bug:
 
 1. **The skin scope marker.** The first-party theme in
-   `apps/reference/app/(chatbot)/chatbot/chatbot.css` is scoped to
+   `packages/ui/src/styles/chat-digichat.css` is scoped to
    `:is(.aui-theme-stage, [data-thread-skin="digichat"])` and its portal rules to
    `html:has([data-thread-skin="digichat"])`. The gallery Thread root declares
    `data-thread-skin="digichat"` itself, which is why `/baseline`, `/embed` and
@@ -221,6 +253,10 @@ render subtly wrong with no error. These five have each caused a real bug:
    `/` palette plus `@`-mentions are silently absent.
 5. **The theme attribute.** See "Selector chrome" — `data-theme` / `.light` on
    `<html>` is what makes the first-party light palette match.
+
+Machine-readable version of this list: `src/lib/thread-skin-host-contract.ts`
+(`DIGICHAT_SKIN_HOST_CONTRACT`, pinned by `thread-skin-host-contract.test.ts`).
+A new host must satisfy every item there before a skin can render correctly.
 
 ---
 
@@ -249,13 +285,13 @@ decision.
 
 | Question | File |
 |----------|------|
-| What skins exist, what is the default? | `apps/digichat/src/lib/thread-skins.ts` |
-| Which component renders skin X? | `apps/digichat/src/components/assistant-ui/skins/index.tsx` |
+| What skins exist, what is the default? | `packages/ui/src/components/chat/skins/thread-skins.ts` |
+| Which component renders skin X? | `packages/ui/src/components/chat/skins/index.ts` |
 | Where is the catalog page / selector? | `apps/digichat/src/app/(baseline)/baseline/baseline-client.tsx` |
 | Where is the backend wired? | `apps/digichat/src/app/api/baseline-chat/route.ts`, `apps/digichat/src/lib/baseline-preview.ts` |
 | Where do tools / menus / features come from? | `apps/digichat/src/components/stock/stock-chat-prefs-host.tsx`, `apps/digichat/src/lib/deploy-config/client-projection.ts` |
-| Where does the first-party theme live? | `apps/reference/app/(chatbot)/chatbot/chatbot.css`, `packages/ui/src/styles/chat-aui.css` |
-| Skin provenance / vendored sources | `apps/digichat/src/components/assistant-ui/skins/SOURCE.md` |
+| Where does the first-party theme live? | `packages/ui/src/styles/chat-digichat.css`, `packages/ui/src/styles/chat-aui.css` |
+| Skin provenance / vendored sources | `packages/ui/src/components/chat/skins/SOURCE.md` |
 
 Related: [`STOCK-SMOKE.md`](STOCK-SMOKE.md) (manual checklist on the product
 `/embed` path), [`DESIGN-THEMES.md`](DESIGN-THEMES.md) (theme tokens),

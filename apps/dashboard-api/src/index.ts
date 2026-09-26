@@ -13,8 +13,9 @@
  * Slice 0006 wiring: all other contracted routes are mounted onto the
  * slice builders via `mountEnvelopeRoutes` (slice 0003),
  * `register*Routes` through `adaptOnGet` (slice 0004), and
- * `tryHandleLedger` (slice 0005), all over the clearly-marked stub doubles
- * in `./stubs` (the rewire slice swaps those for real Supabase reads).
+ * `tryHandleLedger` (slice 0005), over the `./supabase` real source when the
+ * worker carries `SUPABASE_SERVICE_ROLE_KEY`, else the clearly-marked stub
+ * doubles in `./stubs` (slice 0008 rewire).
  * Slice 0007 decision (a): CONTRACT §6.1 documents the envelope builder's
  * `invested.definition` key, so GET /portfolio is served by the envelope
  * mount like every other route — no quarantine.
@@ -22,8 +23,10 @@
  */
 
 import { adaptOnGet } from "./adapters";
+import { corsHeaders, resolveAllowlist, withCors } from "./cors";
 import { mountEnvelopeRoutes, type AddRoute, type RouteHandler } from "./envelope";
 import { tryHandleLedger } from "./ledger";
+import { tryHandleTables } from "./tables";
 import { registerBriefRoutes } from "./brief";
 import { registerPerformanceRoutes } from "./performance";
 import { registerLiveRoutes } from "./kpis-live";
@@ -36,6 +39,12 @@ import {
   stubLiveDeps,
   stubPerformanceDeps,
 } from "./stubs";
+import {
+  UpstreamError,
+  createSupabaseSource,
+  hasSupabaseEnv,
+  type SupabaseSource,
+} from "./supabase";
 import { MCP_PATH, handleMcp } from "./mcp";
 
 export const HOUSE_WORKSPACE_ID = "6b753576-ced9-5319-9bfa-c5d0aacd9319" as const;
@@ -45,6 +54,9 @@ export interface Env {
   SUPABASE_SERVICE_ROLE_KEY?: string;
   /** Secret for POST /mcp (`x-digi-mcp-key`); unset = deny all (fail closed). */
   MCP_EDGE_KEY?: string;
+  /** Comma-separated CORS allowlist override (issue #4679); defaults cover
+   * the production dashboard plus local dashboard dev servers. */
+  DASHBOARD_API_ALLOWED_ORIGINS?: string;
 }
 
 export type ErrorCode = "bad_request" | "not_found" | "upstream_empty" | "internal";
@@ -123,112 +135,90 @@ function normalizePath(pathname: string): string {
   return pathname || "/";
 }
 
-/** Latest positions date on or before the committed snapshot; else null. */
-export function committedBookDate(
-  snapshotDate: string | null | undefined,
-  positionDates: readonly string[],
-): string | null {
-  if (!snapshotDate) return null;
-  let best: string | null = null;
-  for (const d of positionDates) {
-    if (d <= snapshotDate && (best === null || d > best)) best = d;
-  }
-  return best;
-}
-
-function diffDays(a: string, b: string): number {
-  const ms = Date.parse(`${a}T00:00:00Z`) - Date.parse(`${b}T00:00:00Z`);
-  return Math.round(ms / 86_400_000);
-}
-
-export interface NavTip {
-  date: string;
-  nav: number;
-  contract: "finalized_accounting" | "legacy_estimate" | null;
-  invested_pct: number | null;
-  cash_pct: number | null;
-}
-
-export interface PositionRow {
-  ticker: string;
-  weight_pct: number;
-  is_cash: boolean;
-}
-
-/** Contract section 6.1 response body builder (pure — vitest parity target). */
-export function buildPortfolioBody(
-  bookAsOf: string,
-  navTip: NavTip | null,
-  positions: PositionRow[],
-): Record<string, unknown> {
-  const heldSum = positions
-    .filter((p) => !p.is_cash)
-    .reduce((acc, p) => acc + (Number.isFinite(p.weight_pct) ? p.weight_pct : 0), 0);
-  // Fallback order: NAV tip -> non-CASH weight sum -> null. Never invent.
-  const kpiPct = navTip?.invested_pct ?? (positions.length > 0 ? heldSum : null);
-  const envelopePct = kpiPct === null ? null : Math.min(100, kpiPct);
-  const cashPct = envelopePct === null ? null : 100 - envelopePct;
-  const tipDate = navTip?.date ?? null;
-  // Scaffold seam: calendar-day lag between the NAV tip and the committed
-  // book. Slice 0004 refines this with the metrics stamp.
-  const lagDays = tipDate === null ? 0 : diffDays(tipDate, bookAsOf);
-  return {
-    book_as_of: bookAsOf,
-    nav_tip: navTip
-      ? {
-          date: navTip.date,
-          nav: navTip.nav,
-          contract: navTip.contract,
-          invested_pct: navTip.invested_pct,
-          cash_pct: navTip.cash_pct,
-          day_return_pct: null,
-        }
-      : null,
-    seam: {
-      crosses_nav_seam: lagDays !== 0,
-      lag_days: lagDays,
-      lag_direction: lagDays >= 0 ? "metrics lag" : "nav lag",
-    },
-    invested: { kpi_pct: kpiPct, envelope_pct: envelopePct, cash_pct: cashPct },
-    positions,
-  };
-}
-
 async function handleHealthz(): Promise<Response> {
   return Response.json({ ok: true, service: "dashboard-api" });
 }
 
-// --- Slice 0006 wiring ------------------------------------------------------
-// One route table over the slice builders (slice 0007 serves GET /portfolio
-// from the envelope mount too — CONTRACT §6.1 documents `invested.definition`).
-function buildRouteTable(): Map<string, RouteHandler> {
+// --- Slice 0006 wiring (slice 0008: real sources) ------------------------------
+// Route table is built per request from `env`: when the worker carries the
+// Supabase service-role key the builders read real house-book rows; otherwise
+// (local tests, secretless dev) the clearly-marked `./stubs` doubles serve.
+// Fail-closed: an `UpstreamError` from a real read becomes the contract §2
+// `upstream_empty` (502) envelope — never a silent stub fallback.
+
+/** Wrap a route handler so upstream failures fail closed with 502. */
+function failClosed(handler: RouteHandler): RouteHandler {
+  return async (req: Request) => {
+    try {
+      return await handler(req);
+    } catch (err) {
+      if (err instanceof UpstreamError) {
+        const pin = new URL(req.url).searchParams.get("retrieval_pin");
+        return errorResponse("upstream_empty", err.message, pin, { upstream_status: err.status });
+      }
+      throw err;
+    }
+  };
+}
+
+function buildRouteTable(env: Env): { routes: Map<string, RouteHandler>; ledgerBook: SupabaseSource["ledger"] } {
   const routes = new Map<string, RouteHandler>();
   const addRoute: AddRoute = (method, path, handler) => {
-    routes.set(`${method} ${path}`, handler);
+    routes.set(`${method} ${path}`, failClosed(handler));
   };
+  if (hasSupabaseEnv(env)) {
+    const source = createSupabaseSource(env);
+    mountEnvelopeRoutes(addRoute, source.envelope);
+    const onGet = adaptOnGet(addRoute);
+    registerBriefRoutes(onGet, source.brief);
+    registerPerformanceRoutes(onGet, source.performance);
+    registerLiveRoutes(onGet, source.live);
+    registerBenchmarksRoutes(onGet, source.benchmarks);
+    return { routes, ledgerBook: source.ledger };
+  }
   mountEnvelopeRoutes(addRoute, stubEnvelopeSource());
   const onGet = adaptOnGet(addRoute);
   registerBriefRoutes(onGet, stubBriefDeps());
   registerPerformanceRoutes(onGet, stubPerformanceDeps());
   registerLiveRoutes(onGet, stubLiveDeps());
   registerBenchmarksRoutes(onGet, stubBenchmarksDeps());
-  return routes;
+  return { routes, ledgerBook: stubLedgerBook() };
 }
-
-const ROUTES = buildRouteTable();
-const STUB_LEDGER = stubLedgerBook();
 
 /** GET dispatch shared by HTTP and the MCP tools (same builders, one path). */
 async function routeGet(request: Request, env: Env): Promise<Response> {
+  const { routes, ledgerBook } = buildRouteTable(env);
   const url = new URL(request.url);
   const path = normalizePath(url.pathname);
   if (request.method === "GET" && path === "/healthz") return handleHealthz();
   if (request.method === "GET" && path === "/ledger") {
-    const res = await tryHandleLedger(request, STUB_LEDGER);
-    if (res) return res;
+    try {
+      const res = await tryHandleLedger(request, ledgerBook);
+      if (res) return res;
+    } catch (err) {
+      if (err instanceof UpstreamError) {
+        return errorResponse("upstream_empty", err.message, url.searchParams.get("retrieval_pin"), {
+          upstream_status: err.status,
+        });
+      }
+      throw err;
+    }
+  }
+  if (request.method === "GET" && path.startsWith("/v1/tables/")) {
+    try {
+      const res = await tryHandleTables(request, env);
+      if (res) return res;
+    } catch (err) {
+      if (err instanceof UpstreamError) {
+        return errorResponse("upstream_empty", err.message, url.searchParams.get("retrieval_pin"), {
+          upstream_status: err.status,
+        });
+      }
+      throw err;
+    }
   }
   if (request.method === "GET") {
-    const handler = ROUTES.get(`GET ${path}`);
+    const handler = routes.get(`GET ${path}`);
     if (handler) return handler(request);
   }
   return errorResponse("bad_request", `unknown route ${path}`, null, { path });
@@ -236,9 +226,15 @@ async function routeGet(request: Request, env: Env): Promise<Response> {
 
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
+    // CORS (issue #4679): preflight short-circuit + ACAO/Vary on every
+    // response, mirroring the stack market-data worker. No ACAO for
+    // non-allowlisted origins (Vary: Origin still attached).
+    const cors = corsHeaders(request.headers.get("Origin"), resolveAllowlist(env));
+    if (request.method === "OPTIONS") return new Response(null, { status: 204, headers: cors });
     const url = new URL(request.url);
     const path = normalizePath(url.pathname);
-    if (path === MCP_PATH) return handleMcp(request, env, (req) => routeGet(req, env));
-    return routeGet(request, env);
+    const res =
+      path === MCP_PATH ? await handleMcp(request, env, (req) => routeGet(req, env)) : await routeGet(request, env);
+    return withCors(res, cors);
   },
 };
