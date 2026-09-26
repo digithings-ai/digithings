@@ -2,16 +2,14 @@
 
 import { useEffect, useRef, useState } from "react";
 import {
-  EASE,
   StackRow,
-  m as motion,
   modules,
-  useMotionSafe,
   useScrollyFeatures,
   scrollyTrackHeightVh,
   type ModuleNode,
 } from "@digithings/ui";
 import { writeHandoff } from "@/lib/chatHandoff";
+import { treemapAreas } from "@/lib/treemap";
 import { grouped, moduleLines } from "@/lib/repoActivity";
 import { moduleCountLabel, moduleVersion } from "@/lib/moduleCounts";
 
@@ -87,11 +85,22 @@ import { moduleCountLabel, moduleVersion } from "@/lib/moduleCounts";
  * v16 answers the owner's grid-fill pass: the mosaic is always full stage
  * height — landing fills to the viewport bottom, the walk plays full-size,
  * and the release hands a full-size grid on (no resting/docked two-state, no
- * retraction, no gap before the next section). The size morph runs on motion
- * `layout` with the kit's brand easing instead of a CSS flex-grow transition,
- * and the weight spread widened (floor 0.12, exponent 1.5, ~8.3x end to end,
- * roadmaps at half floor) so each tile's area reads as its proportionate LOC
- * portion.
+ * retraction, no gap before the next section). The weight spread widened
+ * (floor 0.12, exponent 1.5, ~8.3x end to end, roadmaps at half floor) so
+ * each tile's area reads as its proportionate LOC portion.
+ *
+ * v17 replaces the v4 fixed rows with a squarified treemap (owner: the
+ * focused tile should grow only as much as its content needs, neighbours must
+ * keep their proportionate sizes without stretching, and tiles may reflow
+ * freely — "it could be a bit more disorganized"). Focusing re-solves the
+ * whole partition with a lifted focused weight (a modest multiplier for big
+ * tiles, a content-fit floor for small ones), so every tile's area stays its LOC portion at every focus: no row-mate is ever
+ * stretched by the focused tile's height, and nothing below is ever
+ * compressed by it. Each tile eases to its new rect on a CSS
+ * left/top/width/height transition over the brand curve — the kit's motion
+ * vocabulary is transform/opacity only, so rect interpolation lives in CSS,
+ * driven by motion's `useScroll` walk upstream. The v4 flex-rows description
+ * below is history.
  */
 
 /**
@@ -113,9 +122,6 @@ const ordered = [...modules].sort((a, b) => {
   return lb - la;
 });
 
-/** Tiles per row, top to bottom. Fixed, so reading order can never change. */
-const ROW_SIZES = [4, 4, 3] as const;
-
 /** The exponent on the normalised log weight. >1 spreads the field. */
 const WEIGHT = 1.5;
 /**
@@ -123,48 +129,37 @@ const WEIGHT = 1.5;
  * before weighting. 0.12 with the 1.5 exponent spreads the field about 8.3x
  * end to end — the owner wants a stock-grid read (heavyweights top-left,
  * lightweights bottom-right, size gap obvious, each tile's area its
- * proportionate LOC portion), and the row floor plus the focus boost keep the
- * smallest tile usable.
+ * proportionate LOC portion), and the focus boost keeps the smallest tile
+ * usable wherever the focus lands.
  */
 const WEIGHT_FLOOR = 0.12;
 /**
  * Roadmap modules declare no lines, so they draw half the floor rather than
  * the floor itself — a module with no code is not a module with no size, but
  * it is honestly smaller than the smallest shipped one. The half step is
- * load-bearing, not cosmetic: a light row whose weights sum below 1 is scaled
- * up uniformly (see `solveTileGrow`), which preserves ratios but would draw
- * equal tiles from equal weights — full-floor roadmaps would erase
- * digismith's size in its own row.
+ * load-bearing, not cosmetic: the treemap normalises by the total, so ratios
+ * hold bit-for-bit — full-floor roadmaps would draw the same rect as
+ * digismith and erase its size.
  */
 const ROADMAP_WEIGHT = WEIGHT_FLOOR * 0.5;
 /**
- * How much heavier the focused module counts while the layout is solved — the
- * "resize and shift to make space for what's inside" behaviour.
- */
-const FOCUS_BOOST = 2.6;
-/**
- * The share of the mosaic's height the focused tile's row holds.
+ * How the focused module's weight is lifted while the layout is solved.
  *
- * A flat multiplier on the row's weight is not enough, because the rows' base
- * weights differ by 2.7x: the same multiplier left the focused row in the
- * lighter rows too short for its own detail — measured, digismith's clipped by
- * 34px. Solving for the multiplier that reaches this share instead makes the
- * guaranteed height the same wherever the focus lands.
- *
- * The floor of 1 on the multiplier matters: the heaviest row is already above
- * this share with no boost at all, and a share below the weight it would hold
- * anyway must not shrink it.
+ * Two-sided, because "just big enough to fit" means different things at the
+ * two ends of the field: the multiplier keeps big tiles modest (digiquant
+ * grows ~13%, not ×2.6 — its detail fits in far less than a doubled share),
+ * while the floor guarantees small tiles their content fit (a ×1.3 digismith
+ * would still clip its own detail by ~40px, measured). Everything unfocused
+ * keeps its exact weight ratio against the rest, so the field holds its
+ * proportions while making exactly the space the focus needs. Both numbers
+ * were sized by driving all eleven foci in-page until every focused tile's
+ * visible content fits with nothing clipped.
  */
-const ROW_FOCUS_SHARE = 0.56;
-/**
- * The least height any row keeps, as a share of the mosaic.
- *
- * The rows' base weights differ by 2.7x, so a strongly boosted focused row left
- * the lightest row too short for even a resting tile's name, figures, role and
- * chips — measured, a 7px clip on digivault. A floor here is cheaper and more
- * honest than trimming a tile that has nothing left to trim.
- */
-const ROW_MIN_SHARE = 0.19;
+const FOCUS_MULT = 1.3;
+const FOCUS_FLOOR = 0.5;
+/** The gutter between packed tiles, in px — the 0.5rem rhythm as a number, so
+ * the render can inset each rect by half. */
+const TREEMAP_GAP = 8;
 
 const VH_PER_MODULE = 90;
 
@@ -229,88 +224,15 @@ function moduleWeights(): number[] {
 
 const BASE_WEIGHTS = moduleWeights();
 
-/** Row index -> the members' indices into `ordered`. Fixed at module scope. */
-const ROWS: number[][] = (() => {
-  const rows: number[][] = [];
-  let cursor = 0;
-  for (const size of ROW_SIZES) {
-    rows.push(ordered.slice(cursor, cursor + size).map((_, k) => cursor + k));
-    cursor += size;
-  }
-  return rows;
-})();
-
-/** Which row a tile sits in. */
-const ROW_OF = (() => {
-  const map = new Array<number>(ordered.length).fill(0);
-  ROWS.forEach((members, row) => members.forEach((i) => (map[i] = row)));
-  return map;
-})();
-
 /**
  * The stacked face: the same tiles in the same order, one per row.
  *
- * The mosaic is a fixed 4/4/3 outline, which needs width to read as a mosaic.
- * On a phone there is none, so the rows become single-tile rows and the column
- * grows with its content — the boxes stack, and only the active one is open.
+ * The mosaic needs width to read as a mosaic. On a phone there is none, so
+ * the tiles stack in normal flow and the column grows with its content —
+ * the boxes open in turn as the reader scrolls, and all open at once under
+ * reduced motion where nothing may move.
  */
 const STACK_ROWS: number[][] = ordered.map((_, i) => [i]);
-
-/**
- * The flex-grow value for every tile at a given focus. Pure in `(weights,
- * focus)`, so the same focus always draws the same mosaic.
- *
- * Normalized per row: this Chromium distributes only Σgrow of the free space
- * when a row's factors sum to less than 1 instead of normalizing (proven
- * in-page — three 0.18 grows in an 1180px row rendered 210px each and left
- * 46% undistributed, the dead space right of digilink). Rows whose sum is
- * below 1 are scaled up to exactly 1, so every row fills its line while LOC
- * proportions inside the row are preserved bit-for-bit.
- */
-function solveTileGrow(focus: number): number[] {
-  const raw = BASE_WEIGHTS.map((w, i) => (i === focus ? w * FOCUS_BOOST : w));
-  return raw.map((g, i) => {
-    const row = ROW_OF[i];
-    const sum = ROWS[row].reduce((acc, j) => acc + raw[j], 0);
-    return sum < 1 && sum > 0 ? g / sum : g;
-  });
-}
-
-/**
- * The flex-grow value for every row: the sum of its members' unboosted weights,
- * with the focused row's lifted until it holds `ROW_FOCUS_SHARE` of the height.
- * Unboosted members are deliberate — the tile boost already widens the focused
- * tile inside the row; boosting the row on top of that would double-count the
- * same emphasis.
- */
-function solveRowGrow(focus: number): number[] {
-  const sums = ROWS.map((members) => members.reduce((acc, i) => acc + BASE_WEIGHTS[i], 0));
-  const total = sums.reduce((acc, sum) => acc + sum, 0) || 1;
-  /* No focus yet (the mosaic is still off-screen): rows hold base shares. */
-  if (focus < 0 || ROW_OF[focus] === undefined) return sums.map((sum) => sum / total);
-  const focused = ROW_OF[focus];
-  /* The heaviest row is already past the target, so its own share stands in. */
-  const focusShare = Math.max(ROW_FOCUS_SHARE, sums[focused] / total);
-  const rest = 1 - focusShare;
-
-  const others = sums.map((sum, row) => (row === focused ? 0 : sum));
-  const otherTotal = others.reduce((acc, sum) => acc + sum, 0) || 1;
-  const starving = sums.map(
-    (sum, row) => row !== focused && (rest * sum) / otherTotal < ROW_MIN_SHARE,
-  );
-  const floored = starving.filter(Boolean).length * ROW_MIN_SHARE;
-  const flexible = rest - floored;
-  const flexibleTotal = sums.reduce(
-    (acc, sum, row) => (starving[row] ? acc : acc + others[row]),
-    0,
-  );
-
-  return sums.map((sum, row) => {
-    if (row === focused) return focusShare;
-    if (starving[row]) return ROW_MIN_SHARE;
-    return flexibleTotal > 0 ? (flexible * others[row]) / flexibleTotal : ROW_MIN_SHARE;
-  });
-}
 
 /**
  * The module's stated facts as one line — the tile's only numbers.
@@ -412,11 +334,6 @@ export function ModuleGrid() {
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const copyTimer = useRef<number | null>(null);
   const reduced = usePrefersReducedMotion();
-  /* Motion `layout` on the rows and tiles eases the focus walk's size morph
-     on the kit's brand curve (web-theme keeps paint transitions only, so the
-     two never fight). Off under reduced motion, where the stepper face is
-     static anyway. */
-  const safe = useMotionSafe();
 
   /* The stacked face's active tile. The pinned mosaic's focus IS the scroll
      position; the stack has no track to scrub, so the tile whose top sits nearest
@@ -578,9 +495,127 @@ export function ModuleGrid() {
     applyTiers();
     return () => ro.disconnect();
   }, [focus]);
-  const tileGrow = solveTileGrow(focus);
-  const rowGrow = solveRowGrow(focus);
-  const rows = stepper ? STACK_ROWS : ROWS;
+  /**
+   * A tile's inside: the focus overlay plus the body. Shared by both faces —
+   * the stacked face wraps it in a plain flow tile, the mosaic face in a
+   * motion-positioned tile — so the two faces cannot drift apart.
+   */
+  const tileContent = (index: number, on: boolean) => {
+    const m = ordered[index];
+    const version = moduleVersion(m.id);
+    const dockerCmd = m.dockerCmd;
+    const copied = copiedId === m.id;
+    return (
+      <>
+        {/* The whole tile is the focus target, but the focused
+            tile also owns real controls (copy the compose command,
+            ask digichat). A <button> cannot contain another
+            button, so the focus action is a transparent overlay
+            *under* the body rather than the body's parent; the
+            body re-enables pointer events only on its own
+            controls, so every other click falls through to the
+            overlay. Keyboard reach survives: the overlay is the
+            tile's first tab stop, the controls follow. */}
+        <button
+          type="button"
+          className="dg-cell-focus"
+          aria-label={`Focus ${m.id} — ${m.role}, ${factsLine(m)}`}
+          onClick={() => (stepper ? setStackActive(index) : focusModule(trackRef.current, index))}
+        />
+        <div className="dg-cell-body">
+          <span className="dg-mosaic-head">
+            <span className="dg-mosaic-name">
+              <span className="text-ink-mute">digi</span>
+              {m.id.replace(/^digi/, "")}
+            </span>
+            {/* The declared version, top-right. Roadmap modules
+                declare none, so they read "roadmap" rather than a
+                fabricated 0.0.0 — same honesty rule as the facts. */}
+            <span className="dg-loc dg-mosaic-version">
+              {version === null ? "roadmap" : `v${version}`}
+            </span>
+          </span>
+
+          {/* One line of prose, in both states. The tile used to
+              carry three (the short summary, a headline tagline and
+              a lead paragraph) plus a three-row figures block —
+              "there's just too many sections", the owner said. So
+              the role is the resting line, the description appears
+              only in focus, and the numbers are one line. */}
+          <span className="dg-mosaic-role">{m.role}</span>
+
+          {on ? (
+            <span className="dg-mosaic-detail">
+              <span className="dg-mosaic-facts">{factsLine(m)}</span>
+              {/* The deeper description: the module's lead
+                  paragraph. The copy is the one part allowed to
+                  shrink and is clamped by CSS, while the stack row
+                  and the foot below are pinned — the controls can
+                  never be the thing that clips. The rest of the
+                  summary is on the module's docs page and in the
+                  ask answer. */}
+              {m.summary[0] ? <span className="dg-mosaic-serves">{m.summary[0]}</span> : null}
+            </span>
+          ) : null}
+
+          {/* The packages. Collapsed tiles show only the logos —
+              the owner: "when the module cards are colapse we
+              should just show the logo of the packages not the
+              full name in order to save on space." The focused
+              tile gets the named chips. */}
+          <span className="dg-mosaic-stack">
+            <StackRow items={m.stack} className={on ? "stack-row" : "stack-row compact"} />
+          </span>
+
+          {on ? (
+            <span className="dg-mosaic-foot">
+              {/* The compose command, click-to-copy. */}
+              {dockerCmd ? (
+                <button
+                  type="button"
+                  className={`dg-docker${copied ? " is-copied" : ""}`}
+                  aria-label={copied ? "Copied" : `Copy command: ${dockerCmd}`}
+                  onClick={() => copyCommand(m.id, dockerCmd)}
+                >
+                  <span className="prompt" aria-hidden="true">
+                    {copied ? "✓" : "$"}
+                  </span>{" "}
+                  {copied ? "copied" : dockerCmd}
+                </button>
+              ) : null}
+              {/* The one control that may navigate. */}
+              <button
+                type="button"
+                className="dg-mosaic-ask"
+                aria-label={`Ask digichat about ${m.id}`}
+                onClick={() => ask(m.id)}
+              >
+                ask <span className="text-ink">digi</span>
+                <span className="text-accent">chat</span> →
+              </button>
+            </span>
+          ) : null}
+        </div>
+      </>
+    );
+  };
+  /* The mosaic box, measured: the treemap solves in pixels against the real
+     box, so the tiles fill it exactly at every viewport size. */
+  const mosaicRef = useRef<HTMLDivElement>(null);
+  const [box, setBox] = useState({ w: 0, h: 0 });
+  useEffect(() => {
+    const el = mosaicRef.current;
+    if (!el) return;
+    const apply = () => setBox({ w: el.clientWidth, h: el.clientHeight });
+    apply();
+    const ro = new ResizeObserver(apply);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [stepper]);
+  const weights = BASE_WEIGHTS.map((w, i) =>
+    i === focus ? Math.max(w * FOCUS_MULT, FOCUS_FLOOR) : w,
+  );
+  const rects = !stepper && box.w > 0 && box.h > 0 ? treemapAreas(weights, box.w, box.h) : null;
 
   return (
     <section id="architecture" className="line-t line-b">
@@ -597,148 +632,70 @@ export function ModuleGrid() {
       >
         <div className={stepper ? "dg-stack-wrap" : "dg-stage dg-stage--mosaic"}>
           <div
+            ref={mosaicRef}
             className={`dg-mosaic ${stepper ? "dg-mosaic--stack" : "dg-mosaic--rows"}`}
             role="list"
             aria-label="digithings modules, sized by lines of code"
           >
-            {rows.map((members, row) => (
-              <motion.div
-                key={`row-${row}`}
-                className="dg-mosaic-row"
-                layout={safe && !stepper}
-                transition={{ duration: 0.4, ease: EASE }}
-                style={stepper ? undefined : ({ flexGrow: rowGrow[row] } as React.CSSProperties)}
-              >
-                {members.map((i) => {
-                  const m = ordered[i];
-                  const on = stepper ? reduced || i === stackActive : i === focus;
-                  const version = moduleVersion(m.id);
-                  const dockerCmd = m.dockerCmd;
-                  const copied = copiedId === m.id;
-                  return (
-                    <motion.div
-                      key={m.id}
-                      data-mod={m.id}
-                      ref={
-                        stepper
-                          ? (el) => {
-                              stackRefs.current[i] = el;
-                            }
-                          : undefined
-                      }
-                      role="listitem"
-                      className={`dg-cell${on ? " on" : ""}`}
-                      layout={safe && !stepper}
-                      transition={{ duration: 0.4, ease: EASE }}
-                      style={
-                        stepper ? undefined : ({ flexGrow: tileGrow[i] } as React.CSSProperties)
-                      }
-                      aria-current={on ? "true" : undefined}
-                    >
-                      {/* The whole tile is the focus target, but the focused
-                          tile also owns real controls (copy the compose command,
-                          ask digichat). A <button> cannot contain another
-                          button, so the focus action is a transparent overlay
-                          *under* the body rather than the body's parent; the
-                          body re-enables pointer events only on its own
-                          controls, so every other click falls through to the
-                          overlay. Keyboard reach survives: the overlay is the
-                          tile's first tab stop, the controls follow. */}
-                      <button
-                        type="button"
-                        className="dg-cell-focus"
-                        aria-label={`Focus ${m.id} — ${m.role}, ${factsLine(m)}`}
-                        onClick={() =>
-                          stepper ? setStackActive(i) : focusModule(trackRef.current, i)
-                        }
-                      />
-                      <div className="dg-cell-body">
-                        <span className="dg-mosaic-head">
-                          <span className="dg-mosaic-name">
-                            <span className="text-ink-mute">digi</span>
-                            {m.id.replace(/^digi/, "")}
-                          </span>
-                          {/* The declared version, top-right. Roadmap modules
-                              declare none, so they read "roadmap" rather than a
-                              fabricated 0.0.0 — same honesty rule as the facts. */}
-                          <span className="dg-loc dg-mosaic-version">
-                            {version === null ? "roadmap" : `v${version}`}
-                          </span>
-                        </span>
-
-                        {/* One line of prose, in both states. The tile used to
-                            carry three (the short summary, a headline tagline and
-                            a lead paragraph) plus a three-row figures block —
-                            "there's just too many sections", the owner said. So
-                            the role is the resting line, the description appears
-                            only in focus, and the numbers are one line. */}
-                        <span className="dg-mosaic-role">{m.role}</span>
-
-                        {on ? (
-                          <span className="dg-mosaic-detail">
-                            <span className="dg-mosaic-facts">{factsLine(m)}</span>
-                            {/* The deeper description: the module's lead
-                                paragraph. The tile is one row tall, and rendering
-                                every paragraph pushed the compose command and the
-                                ask control out of the box on the modules with the
-                                longest copy (digigraph, digivault). So the copy is
-                                the one part allowed to shrink and is clamped by
-                                CSS, while the stack row and the foot below are
-                                pinned — the controls can never be the thing that
-                                clips. The rest of the summary is on the module's
-                                docs page and in the ask answer. */}
-                            {m.summary[0] ? (
-                              <span className="dg-mosaic-serves">{m.summary[0]}</span>
-                            ) : null}
-                          </span>
-                        ) : null}
-
-                        {/* The packages. Collapsed tiles show only the logos —
-                            the owner: "when the module cards are colapse we
-                            should just show the logo of the packages not the
-                            full name in order to save on space." The focused
-                            tile gets the named chips. */}
-                        <span className="dg-mosaic-stack">
-                          <StackRow
-                            items={m.stack}
-                            className={on ? "stack-row" : "stack-row compact"}
-                          />
-                        </span>
-
-                        {on ? (
-                          <span className="dg-mosaic-foot">
-                            {/* The compose command, click-to-copy. */}
-                            {dockerCmd ? (
-                              <button
-                                type="button"
-                                className={`dg-docker${copied ? " is-copied" : ""}`}
-                                aria-label={copied ? "Copied" : `Copy command: ${dockerCmd}`}
-                                onClick={() => copyCommand(m.id, dockerCmd)}
-                              >
-                                <span className="prompt" aria-hidden="true">
-                                  {copied ? "✓" : "$"}
-                                </span>{" "}
-                                {copied ? "copied" : dockerCmd}
-                              </button>
-                            ) : null}
-                            {/* The one control that may navigate. */}
-                            <button
-                              type="button"
-                              className="dg-mosaic-ask"
-                              aria-label={`Ask digichat about ${m.id}`}
-                              onClick={() => ask(m.id)}
-                            >
-                              ask <span className="text-ink">digi</span>
-                              <span className="text-accent">chat</span> →
-                            </button>
-                          </span>
-                        ) : null}
+            {stepper ? (
+              STACK_ROWS.map((members, row) => (
+                <div key={`row-${row}`} className="dg-mosaic-row">
+                  {members.map((i) => {
+                    const on = reduced || i === stackActive;
+                    return (
+                      <div
+                        key={ordered[i].id}
+                        data-mod={ordered[i].id}
+                        ref={(el) => {
+                          stackRefs.current[i] = el;
+                        }}
+                        role="listitem"
+                        className={`dg-cell${on ? " on" : ""}`}
+                        aria-current={on ? "true" : undefined}
+                      >
+                        {tileContent(i, on)}
                       </div>
-                    </motion.div>
-                  );
-                })}
-              </motion.div>
-            ))}
+                    );
+                  })}
+                </div>
+              ))
+            ) : (
+              ordered.map((m, i) => {
+                const r = rects?.[i];
+                const on = i === focus;
+                return (
+                  <div
+                    key={m.id}
+                    data-mod={m.id}
+                    role="listitem"
+                    className={`dg-cell${on ? " on" : ""}`}
+                    aria-current={on ? "true" : undefined}
+                    /* Hidden until the first solve lands: the box is measured
+                       one effect-tick after mount, and unpositioned tiles must
+                       not flash piled at the corner. `visibility` (not
+                       opacity) so the CSS rest/focus/hover opacities stay
+                       the owners of fading. Geometry rides the CSS rect
+                       transition in web-theme on the brand curve — the kit's
+                       motion vocabulary is transform/opacity only, so rect
+                       interpolation lives in CSS, driven by motion's
+                       `useScroll` walk upstream. */
+                    style={
+                      r
+                        ? ({
+                            visibility: "visible",
+                            left: r.x + TREEMAP_GAP / 2,
+                            top: r.y + TREEMAP_GAP / 2,
+                            width: Math.max(r.w - TREEMAP_GAP, 0),
+                            height: Math.max(r.h - TREEMAP_GAP, 0),
+                          } as React.CSSProperties)
+                        : ({ visibility: "hidden" } as React.CSSProperties)
+                    }
+                  >
+                    {tileContent(i, on)}
+                  </div>
+                );
+              })
+            )}
           </div>
         </div>
       </div>
