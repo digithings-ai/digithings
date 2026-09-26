@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { treemapAreas, treemapAreasConstrained } from "@/lib/treemap";
+import { treemapAnchored, treemapAreas, treemapAreasConstrained } from "@/lib/treemap";
 
 const W = 1284;
 const H = 1002;
@@ -137,5 +137,95 @@ describe("treemapAreasConstrained", () => {
       expect(r.w).toBeGreaterThan(0);
       expect(r.h).toBeGreaterThan(0);
     });
+  });
+});
+
+describe("treemapAnchored", () => {
+  const weights = [1, 0.84, 0.536, 0.426, 0.277, 0.207, 0.182, 0.162, 0.12, 0.06, 0.06];
+  const restMins = weights.map(() => ({ minW: 158, minH: 92 }));
+  const rest = treemapAreasConstrained(weights, W, H, restMins);
+
+  function anchored(focus: number, bw = W, bh = H) {
+    const mins = weights.map((_, i) =>
+      i === focus ? { minW: 308, minH: 268 } : { minW: 158, minH: 92 },
+    );
+    const boosted = weights.map((w, i) => (i === focus ? Math.max(w * 1.3, 0.5) : w));
+    const grown = treemapAreasConstrained(boosted, bw, bh, mins);
+    return treemapAnchored(boosted, bw, bh, mins, rest, focus, {
+      w: grown[focus].w,
+      h: grown[focus].h,
+    });
+  }
+
+  it("keeps the focused tile on its rest top-left while meeting its minimum", () => {
+    for (const focus of [0, 3, 7, 10]) {
+      const rects = anchored(focus);
+      expect(rects[focus].x).toBeCloseTo(
+        Math.min(rest[focus].x, W - rects[focus].w),
+        6,
+      );
+      expect(rects[focus].y).toBeCloseTo(
+        Math.min(rest[focus].y, H - rects[focus].h),
+        6,
+      );
+      expect(rects[focus].w).toBeGreaterThanOrEqual(308 - 1);
+      expect(rects[focus].h).toBeGreaterThanOrEqual(268 - 1);
+    }
+  });
+
+  it("stays a full partition with no overlaps and no escapes", () => {
+    for (const focus of [0, 5, 10]) {
+      const rects = anchored(focus);
+      expect(rects).toHaveLength(weights.length);
+      rects.forEach((r) => {
+        expect(r.x).toBeGreaterThanOrEqual(-EPS);
+        expect(r.y).toBeGreaterThanOrEqual(-EPS);
+        expect(r.x + r.w).toBeLessThanOrEqual(W + EPS);
+        expect(r.y + r.h).toBeLessThanOrEqual(H + EPS);
+        expect(r.w).toBeGreaterThan(0);
+        expect(r.h).toBeGreaterThan(0);
+      });
+      for (let a = 0; a < rects.length; a++) {
+        for (let b = a + 1; b < rects.length; b++) {
+          const A = rects[a];
+          const B = rects[b];
+          const overlapX = Math.min(A.x + A.w, B.x + B.w) - Math.max(A.x, B.x);
+          const overlapY = Math.min(A.y + A.h, B.y + B.h) - Math.max(A.y, B.y);
+          expect(Math.min(overlapX, overlapY)).toBeLessThanOrEqual(EPS);
+        }
+      }
+      const total = rects.reduce((acc, r) => acc + r.w * r.h, 0);
+      expect(total).toBeCloseTo(W * H, 4);
+    }
+  });
+
+  it("holds up in a narrow box with a large focused tile", () => {
+    const NW = 1000;
+    const NH = 784;
+    const narrowRest = treemapAreasConstrained(weights, NW, NH, restMins);
+    const mins = weights.map((_, i) =>
+      i === 3 ? { minW: 308, minH: 383 } : { minW: 158, minH: 92 },
+    );
+    const boosted = weights.map((w, i) => (i === 3 ? Math.max(w * 1.3, 0.5) : w));
+    const grown = treemapAreasConstrained(boosted, NW, NH, mins);
+    const rects = treemapAnchored(boosted, NW, NH, mins, narrowRest, 3, {
+      w: grown[3].w,
+      h: grown[3].h,
+    });
+    expect(rects[3].x).toBeCloseTo(Math.min(narrowRest[3].x, NW - rects[3].w), 6);
+    expect(rects[3].y).toBeCloseTo(Math.min(narrowRest[3].y, NH - rects[3].h), 6);
+    rects.forEach((r) => {
+      expect(r.x + r.w).toBeLessThanOrEqual(NW + EPS);
+      expect(r.y + r.h).toBeLessThanOrEqual(NH + EPS);
+    });
+    for (let a = 0; a < rects.length; a++) {
+      for (let b = a + 1; b < rects.length; b++) {
+        const A = rects[a];
+        const B = rects[b];
+        const overlapX = Math.min(A.x + A.w, B.x + B.w) - Math.max(A.x, B.x);
+        const overlapY = Math.min(A.y + A.h, B.y + B.h) - Math.max(A.y, B.y);
+        expect(Math.min(overlapX, overlapY)).toBeLessThanOrEqual(EPS);
+      }
+    }
   });
 });
