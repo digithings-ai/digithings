@@ -46,7 +46,8 @@ const indexSource = readFileSync(
 // MCP-scoped vars (#3780 Task 8): forwarded by DigiQuantMcpContainer.envVars
 // ONLY — never duplicated into DigiStackContainer.envVars (the stack container
 // ignores them; duplication was removed in review finding 6). The first
-// envVars block below is the stack container's, the second the MCP one's.
+// envVars block below is the stack container's, the second the MCP one's,
+// the third the digichat one's (#4689).
 const MCP_SCOPED_VARS = new Set([
   "DIGIQUANT_MCP_SCOPE",
   "DIGIQUANT_MARKET_DATA_BACKEND",
@@ -55,6 +56,28 @@ const MCP_SCOPED_VARS = new Set([
   "R2_BUCKET",
   "R2_ACCESS_KEY_ID",
   "R2_SECRET_ACCESS_KEY",
+]);
+
+// Digichat-scoped vars (#4689): forwarded by DigiChatContainer.envVars ONLY —
+// never duplicated into DigiStackContainer.envVars (the stack container runs
+// digikey/digigraph/digisearch, never the Next process). Exception:
+// DIGIKEY_BFF_TOKEN is legitimately shared (both containers read it), so it
+// is not in this set. Pinned present on the digichat block and absent from
+// the stack block below.
+const DIGICHAT_SCOPED_VARS = new Set([
+  "DIGICHAT_EMBED_ENABLED",
+  "DIGICHAT_REQUIRE_ROOT_AUTH",
+  "DIGICHAT_EMBED_HOSTS",
+  "DIGICHAT_AUTO_MIGRATE",
+  "DIGICHAT_TRUSTED_PROXIES",
+  "DIGICHAT_ENABLED_SERVICES",
+  "AUTH_SECRET",
+  "DIGICHAT_EMBED_TENANTS",
+  "DIGIGRAPH_INTERNAL_URL",
+  "DIGIKEY_URL",
+  "DIGICHAT_PLAN_PROOF_SECRET",
+  "DIGICHAT_DASHBOARD_SUPABASE_URL",
+  "DIGICHAT_DASHBOARD_SUPABASE_ANON_KEY",
 ]);
 
 // Worker-scoped vars: read by the Worker's own request handling and
@@ -78,6 +101,12 @@ const WORKER_SCOPED_VARS = new Set([
   "SUPABASE_SERVICE_ROLE_KEY",
   "MARKET_DATA_URL",
   "DASHBOARD_API_ALLOWED_ORIGINS",
+  // Folded digichat (#4689): DIGICHAT_LEGACY_EMBED_ENABLED is folded into the
+  // forwarded DIGICHAT_EMBED_ENABLED at Worker evaluation time (see the
+  // DigiChatContainer.envVars entry); the container never sees this name, so
+  // it stays Worker-scoped. (The deprecated DIGICHAT_EMBED_ENABLED alias IS a
+  // forwarded key, like on the standalone worker.)
+  "DIGICHAT_LEGACY_EMBED_ENABLED",
 ]);
 
 // Deliberately throws rather than returning an empty match -- a re-indented
@@ -185,7 +214,7 @@ describe("Env / envVars parity", () => {
 
   it("keeps MCP-scoped vars on the MCP container block only", () => {
     const blocks = extractAllEnvVarsBlocks(indexSource);
-    expect(blocks.length).toBe(2);
+    expect(blocks.length).toBe(3);
     const stackKeys = new Set(extractEnvVarsKeysFromBody(blocks[0]));
     const mcpKeys = new Set(extractEnvVarsKeysFromBody(blocks[1]));
     const duplicated = [...MCP_SCOPED_VARS].filter((name) => stackKeys.has(name));
@@ -197,6 +226,23 @@ describe("Env / envVars parity", () => {
     expect(
       mcpMissing,
       `MCP-scoped var(s) missing from DigiQuantMcpContainer.envVars: ${mcpMissing}`,
+    ).toEqual([]);
+  });
+
+  it("keeps digichat-scoped vars on the digichat container block only", () => {
+    const blocks = extractAllEnvVarsBlocks(indexSource);
+    expect(blocks.length).toBe(3);
+    const stackKeys = new Set(extractEnvVarsKeysFromBody(blocks[0]));
+    const chatKeys = new Set(extractEnvVarsKeysFromBody(blocks[2]));
+    const duplicated = [...DIGICHAT_SCOPED_VARS].filter((name) => stackKeys.has(name));
+    expect(
+      duplicated,
+      `digichat-scoped var(s) duplicated into DigiStackContainer.envVars: ${duplicated}`,
+    ).toEqual([]);
+    const chatMissing = [...DIGICHAT_SCOPED_VARS].filter((name) => !chatKeys.has(name));
+    expect(
+      chatMissing,
+      `digichat-scoped var(s) missing from DigiChatContainer.envVars: ${chatMissing}`,
     ).toEqual([]);
   });
 

@@ -118,6 +118,25 @@ max_instances = 1
 # p50 <50ms / p99 <200ms per 500-bar indicator window was budgeted on standard-2.
 instance_type = "standard-2"
 
+# Folded digichat (#4689). Same image as the standalone digichat worker
+# (Next standalone on :3000, one shared instance for digithings + OCC + future
+# tenants via the embed registry) — NOT part of the Profile A image above.
+# Auth stays in-container: the Worker applies no edge gating on digichat
+# paths. The standalone digichat worker stays deployed until cutover; no
+# DNS/Pages/route changes in this slice.
+[[containers]]
+class_name = "DigiChatContainer"
+# Build context MUST be the monorepo root (same #4046 lesson as above):
+# Dockerfile.digichat-cloudflare COPYs package.json, apps/digichat and
+# packages/* with repo-root-relative paths. Resolved relative to this config
+# file: ../.. is the repo root.
+image = "../../Dockerfile.digichat-cloudflare"
+image_build_context = "../.."
+max_instances = 5
+# Next standalone needs real RAM/disk (lite = 256MiB is far too small);
+# explicit instance_type required — matches the two entries above.
+instance_type = "standard-2"
+
 # Ops SSH (wrangler containers ssh) — ed25519 debug key (private key not in repo).
 [[containers.authorized_keys]]
 name = "stack-debug"
@@ -131,6 +150,10 @@ class_name = "DigiStackContainer"
 name = "MCP_STACK"
 class_name = "DigiQuantMcpContainer"
 
+[[durable_objects.bindings]]
+name = "DIGICHAT"
+class_name = "DigiChatContainer"
+
 [[migrations]]
 tag = "v1"
 new_sqlite_classes = ["DigiStackContainer"]
@@ -138,6 +161,10 @@ new_sqlite_classes = ["DigiStackContainer"]
 [[migrations]]
 tag = "v2"
 new_sqlite_classes = ["DigiQuantMcpContainer"]
+
+[[migrations]]
+tag = "v3"
+new_sqlite_classes = ["DigiChatContainer"]
 
 # Secrets (wrangler secret put) — never commit values:
 #   DIGIKEY_BFF_TOKEN
@@ -204,6 +231,19 @@ new_sqlite_classes = ["DigiQuantMcpContainer"]
 #   DIGIGRAPH_INTERNAL_URL=https://graph.digithings.ai
 #   DIGIKEY_URL=https://key.digithings.ai
 #   DIGIKEY_BFF_TOKEN=<same as stack>
+# Folded digichat (#4689): the stack worker's own DIGICHAT binding needs the
+# same secrets (wrangler secret put on THIS worker) — the standalone worker
+# stays deployed until cutover, so set both until then:
+#   AUTH_SECRET                    # same value as the standalone digichat worker
+#   DIGICHAT_EMBED_TENANTS         # digithings + occ JSON — see apps/digichat-cloudflare/README
+#   DIGIGRAPH_INTERNAL_URL=https://graph.digithings.ai
+#   DIGIKEY_URL=https://key.digithings.ai
+#   DIGIKEY_BFF_TOKEN=<same as stack>
+#   DIGICHAT_PLAN_PROOF_SECRET
+#   DIGICHAT_DASHBOARD_SUPABASE_URL
+#   DIGICHAT_DASHBOARD_SUPABASE_ANON_KEY
+# (DIGICHAT_DATABASE_URL stays intentionally unset: the Cloudflare deployment
+# is DB-less, same as the standalone worker — see apps/digichat-cloudflare/wrangler.toml.)
 
 [vars]
 DIGIKEY_ISSUER = "https://key.digithings.ai"
@@ -232,5 +272,13 @@ DIGIVAULT_ROOT = "/data/vault"
 # `npx wrangler secret put DIGIKEY_DATABASE_URL` (see the secrets list above), or
 # digikey refuses to start.
 DIGISEARCH_INDEX = "digithings_docs"
+# Folded digichat (#4689) non-secret defaults — same values as the standalone
+# digichat worker's [vars] (apps/digichat-cloudflare/wrangler.toml). Secrets
+# (above) land via `wrangler secret put`; nothing secret ships here.
+DIGICHAT_REQUIRE_ROOT_AUTH = "0"
+DIGICHAT_EMBED_HOSTS = "digithings.ai,www.digithings.ai,occ.digithings.ai,digiquant.io,www.digiquant.io"
+# Profile A: digisearch/digivault are loopback inside the stack container;
+# digichat only talks to digigraph (+ digikey for bff_session).
+DIGICHAT_ENABLED_SERVICES = "digigraph"
 # Defense-in-depth corpus map (headers from digichat still win).
 DIGI_TENANT_CORPUS_MAP = "{\"digithings\":{\"digisearchIndex\":\"digithings_docs\",\"vaultPathPrefix\":\"clients/digithings\"},\"occ\":{\"digisearchIndex\":\"occ_help\",\"vaultPathPrefix\":\"clients/online-compliance-center\"}}"
