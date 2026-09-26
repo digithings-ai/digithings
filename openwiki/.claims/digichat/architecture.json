@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "pageVersion": "sha256:e1ac1596f3632aed8fd14a98618ed1b3203b0bbe2a7227869daa3e1113bb5421",
+  "pageVersion": "sha256:147d711dfeb313f4863b2c64cfd792bfda88e2289a7bc993400a8a5a3eb33566",
   "claims": [
     {
       "id": "claim_438170df43654ce587dde6b7f5116049",
@@ -22,11 +22,11 @@
     },
     {
       "id": "claim_d241d69821384fbb83727a41276a9608",
-      "statement": "User-supplied service URLs pass the isAllowedServiceUrl SSRF guard, and every API route except GET /api/health requires requireDigiChatAuth.",
+      "statement": "User-supplied service URLs pass the isAllowedServiceUrl SSRF guard, and every API route requires requireDigiChatAuth() except the intentionally public routes (GET /api/health, GET /api/deploy/chrome, GET /api/embed/tenant-config, dev-only POST /api/baseline-chat) and the self-authenticating routes (POST /api/plan-proof, /api/ecosystem/config, GET /api/mcp/oauth/callback).",
       "evidence": [
         {
           "resource": "repo://apps/digichat/AGENTS.md#L43-L44",
-          "version": "repo-lines-v1:sha256:9de32379b07bbf8f95189c578ef3b1db60faf60d1e9c9b3a572bd6a58a374bb7:eyJzZWxlY3RlZExpbmVDb3VudCI6MiwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiZDIyZTllNWQ5NzRkOWYxNGRlZGQzZGIxYzg0YmQ1NDM4YWJiYzUzYmM4MGQ4ZGZiMTFjZTkzMGU1MjU3MGFhNyIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiYmJiMjI3NDE1ZDE4YzZjNTk5NmZiYjBmMjRhMDQyYjY5Mzk0YjQ2ZmMzMTE2ZTIwZWUwMjFmOTJlMjIyNzkyZSIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiZDdiZDdmODRiYTg1ZWNjOTYwZjFhNzIxZjlkOWVmZTM2NWQyY2FmNjQ0YzYxYTRiMTVjYWQwNTkxNDY3NzNhYyIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiMGQzMTg5ZDU1OTQ5ZWExM2JjZGMwMWFmNzAzNmZhOWQ0ZDIwODAzZjRiNWVmZGJhZTk4M2Q2NzM2NWUxMTFlZSJ9"
+          "version": "repo-lines-v1:sha256:b149892c275c836eb207ad4971aa03afd06056033607f07b7a26b5b23230360d:eyJzZWxlY3RlZExpbmVDb3VudCI6MiwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiNTM2YjI1MzVhN2JmZDM4MDFhYjA2NjdiODEwOWYyMGFkYWYwNjEyNjE0OTI0NzVjZjNhN2U4YzJlYTQyOWY0NiIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiYmJiMjI3NDE1ZDE4YzZjNTk5NmZiYjBmMjRhMDQyYjY5Mzk0YjQ2ZmMzMTE2ZTIwZWUwMjFmOTJlMjIyNzkyZSIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiZDdiZDdmODRiYTg1ZWNjOTYwZjFhNzIxZjlkOWVmZTM2NWQyY2FmNjQ0YzYxYTRiMTVjYWQwNTkxNDY3NzNhYyIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiMGQzMTg5ZDU1OTQ5ZWExM2JjZGMwMWFmNzAzNmZhOWQ0ZDIwODAzZjRiNWVmZGJhZTk4M2Q2NzM2NWUxMTFlZSJ9"
         },
         {
           "resource": "repo://apps/digichat/src/lib/ecosystem.ts#L33-L62",
@@ -77,6 +77,6 @@
   ],
   "verification": {
     "by": "openwiki/0.5.0",
-    "at": "2026-09-23T13:25:31.068Z"
+    "at": "2026-09-26T12:43:34.078Z"
   }
 }

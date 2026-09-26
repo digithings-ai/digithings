@@ -3,9 +3,6 @@ type: behavior-guide
 title: digiquant Research and Portfolio
 description: digiquant research and portfolio sub-graphs plus the dashboard backend — phases, edit-mode, attention plans, chain orchestration, and book scope.
 tags: [digiquant, research, portfolio, dashboard]
-verified:
-  - by: openwiki/0.5.0
-    at: 2026-09-23T13:25:31.068Z
 sources:
   - id: openwiki-source-3cca7b16d985d38458390d9a
     resource: repo://digiquant/AGENTS.md
@@ -19,13 +16,18 @@ sources:
     resource: repo://digiquant/src/digiquant/dashboard/tenancy.py
   - id: openwiki-source-6088906826891f8e21b0be8a
     resource: repo://digiquant/src/digiquant/portfolio/graph.py
+  - id: openwiki-source-59ed49db22fae22eaf76a938
+    resource: repo://digiquant/src/digiquant/portfolio/models/pm_direction.py
   - id: openwiki-source-cd70721f10bdd6e6c64ac824
     resource: repo://digiquant/src/digiquant/portfolio/phases/commit.py
   - id: openwiki-source-aead886b86e31de618b4af13
     resource: repo://digiquant/src/digiquant/portfolio/phases/direction.py
   - id: openwiki-source-8f5f7ae01a7df21f2186a118
     resource: repo://digiquant/src/digiquant/portfolio/phases/phase7e_risk_sizing.py
-generated: { by: "openwiki/0.5.0", at: "2026-09-23T13:25:31.068Z" }
+generated: { by: "openwiki/0.5.0", at: "2026-09-26T12:43:34.078Z" }
+verified:
+  - by: openwiki/0.5.0
+    at: 2026-09-26T12:43:34.078Z
 ---
 
 # digiquant Research and Portfolio
@@ -74,7 +76,7 @@ an allocation:
 | — | `portfolio/coverage/director` | Coverage director (PM role): narrow screener roster to refresh/explore/skip buckets via LLM |
 | H5 | `portfolio/analyst/*` | Per-ticker blinded analyst recommendation (fan-out) |
 | H6 | `portfolio/deliberation/*` | Analyst↔PM cyclic deliberation per ticker (fan-out, max 6 rounds) |
-| H7 | `portfolio/pm-direction` | PM direction memo — **direction, rank, and confidence only; no weights** (`PMDirectionMemo`) |
+| H7 | `portfolio/pm-direction` | PM direction memo — **direction, rank only; no weights** (`PMDirectionMemo`); WP4.5 `ForecastReference` audit pointers bound deterministically from effective-forecast map (never LLM-supplied); WP-G `confidence` ∈ `[0, 1]` on roster rows, rank remains ordinal |
 | H8 | `portfolio/risk-sizing` | Deterministic risk sizing via `size_portfolio` — the sole weight owner |
 | H9 | `portfolio/commit-run` | Terminal `commit_run`: persist positions, decision_log, portfolio brief, risk policy snapshots, cost liquidity bundles, forecast lineage, sizing risk snapshots, and ledger append |
 
@@ -83,6 +85,13 @@ Grounding and phase blinding wire through `build_grounding` (in
 New phases extend `build_portfolio_phases_thesis`. Direction must not emit
 weights — sizing is the sole weight owner, and commit is the terminal; no
 parallel `portfolio_materialize` phase is added on the daily path.
+
+The thesis-first topology accepts an optional `PortfolioGraphDeps` carrying
+`evidence_bundle_store` and `research_state_store`, which are wired into
+analyst and deliberation phases for immutable evidence bundles and pinned
+research state. `build_direction` also receives `research_state_store` and
+an optional `resolved_outcomes_memo` for run-scoped forecast outcome cohort
+sharing with research preflight.
 
 ### Coverage director
 

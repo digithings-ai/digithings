@@ -3,9 +3,6 @@ type: behavior-guide
 title: digichat Auth and Chat
 description: Complete auth-to-stream flow — Auth.js v5 login, request auth, digikey token exchange, POST /api/chat streaming with turn modes and rate limiting, POST /api/plan-proof HMAC tier gate, conversation persistence, and markdown export.
 tags: [digichat, auth, chat, bff, rate-limit, plan-proof]
-verified:
-  - by: openwiki/0.5.0
-    at: 2026-09-23T13:25:31.068Z
 sources:
   - id: openwiki-source-a37d4bc55fb634d7ed1c18df
     resource: repo://apps/digichat/src/app/api/chat/route.ts
@@ -43,9 +40,12 @@ sources:
     resource: repo://apps/digichat/src/lib/thread-local.ts
   - id: openwiki-source-fcae9903633520c119ff31d6
     resource: repo://apps/digichat/src/lib/turn-mode.ts
-  - id: openwiki-source-38e983c30539f11e9fd6b2a7
-    resource: repo://packages/digichat-ui/src/transcript-markdown.ts
-generated: { by: "openwiki/0.5.0", at: "2026-09-23T13:25:31.068Z" }
+  - id: openwiki-source-7ea8e81095f128777cc2f93f
+    resource: repo://packages/ui/src/components/chat/transcript/transcript-markdown.ts
+generated: { by: "openwiki/0.5.0", at: "2026-09-26T12:43:34.078Z" }
+verified:
+  - by: openwiki/0.5.0
+    at: 2026-09-26T12:43:34.078Z
 ---
 
 # digichat Auth and Chat
@@ -425,10 +425,14 @@ localStorage-only mode.
 
 ## Markdown export
 
-Turn and thread markdown export lives in the shared `@digithings/digichat-ui`
-package (`serializeAssistantMarkdown`, `serializeThreadMarkdown`,
-`copyMarkdownWithFallback`). Both `ChatPanel` and embed sessions use it
-with the fallback chain:
+Turn and thread markdown export is implemented in `@digithings/ui` at
+`packages/ui/src/components/chat/transcript/transcript-markdown.ts`
+(`serializeAssistantMarkdown`, `serializeThreadMarkdown`,
+`copyMarkdownWithFallback`, plus the print/mailto/txt/html helpers).
+`@digithings/digichat-ui` re-exports the same helpers from
+`@digithings/ui/chat/transcript` via `packages/digichat-ui/src/index.ts`, so
+callers may import them from either package. Both `ChatPanel` and embed
+sessions use the fallback chain:
 
 1. **Clipboard** — `navigator.clipboard.writeText()`. Works in standard
    browsing contexts; fails silently in cross-origin iframes.

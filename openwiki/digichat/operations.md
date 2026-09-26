@@ -3,9 +3,6 @@ type: operations-guide
 title: digichat Operations
 description: Running digichat 2.0 — local dev with make digichat-dev, Postgres provisioning and Drizzle migrations (auto-migrate), machine API key creation, container build (multi-stage Node 22, standalone output, trusted-proxy-server.mjs), embed host resolution, health endpoint, and key env vars for 2.0.
 tags: [digichat, operations, postgres, docker]
-verified:
-  - by: openwiki/0.5.0
-    at: 2026-09-23T13:25:31.068Z
 sources:
   - id: openwiki-source-97bb67e20dc2eb34fa13391f
     resource: repo://apps/digichat/Dockerfile
@@ -26,6 +23,9 @@ sources:
   - id: openwiki-source-9905da197df2ad533543ef5a
     resource: repo://apps/digichat/src/proxy.ts
 generated: { by: "openwiki/0.5.0", at: "2026-09-23T13:25:31.068Z" }
+verified:
+  - by: openwiki/0.5.0
+    at: 2026-09-26T12:43:34.078Z
 ---
 
 # digichat Operations

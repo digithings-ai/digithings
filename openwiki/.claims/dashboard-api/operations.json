@@ -1,0 +1,160 @@
+{
+  "schemaVersion": 1,
+  "pageVersion": "sha256:0ab5f49cc1ec2f240dbef6277bf106a9f449a2cee7918a347332d97a3fb1e55f",
+  "claims": [
+    {
+      "id": "claim_f55f5df40edc419fa33454f670f2ea53",
+      "statement": "The dashboard-api development commands are defined in apps/dashboard-api/package.json: `npm run dev` invokes `wrangler dev`, `npm run test` invokes `vitest run`, `npm run typecheck` invokes `tsc --noEmit`, and `npm run deploy` invokes `wrangler deploy`.",
+      "evidence": [
+        {
+          "resource": "repo://apps/dashboard-api/package.json#L5-L9",
+          "version": "repo-lines-v1:sha256:6c86a0b933266f37f67a2e19701f53678c8548d2056616c9c9421bba67b8d28a:eyJzZWxlY3RlZExpbmVDb3VudCI6NSwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiMzQ4MzNkNTk0OWMwM2E0MGNhOTUyNDkxNjEwYTY2NTk2NDRiM2FhNDY2MzYyZjc5OTAyMGRiZjE5ODE1NDdkYiIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiNWI2YjI0YTYyMzk0YWUyNmFiNjU1YjdiNmY1NGQ2YTRmM2UyYWNlY2MwNzNjN2E2ZmU5YjRhZjRiYjY0ODIyMSIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiMzQzZmFhZTMyYzMyNTVmMzJmMGZjZTMwMWE2OTBlNTVmZWQxMzJiOWUyODZkYzU5YTdlYTM4ZjFlYjJkOTBjOCIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiZDNmN2E0YjlkYTIyMDFjYTZhYThmOGU3ZTRmNTQ1NThmZjhiYmY4OGNjNzAxMDFmYzAyNmQxZDk5MzRlNjNjMiJ9"
+        }
+      ]
+    },
+    {
+      "id": "claim_9f1fb087c47a4b9ab259b0b55f54f454",
+      "statement": "SUPABASE_SERVICE_ROLE_KEY must live ONLY in Cloudflare Worker secrets (set via `wrangler secret put` or the CI deploy workflow's secrets input). It must never appear in wrangler.toml [vars], any static bundle, or any NEXT_PUBLIC_-prefixed environment variable.",
+      "evidence": [
+        {
+          "resource": "repo://.github/workflows/deploy-dashboard-api.yml#L49-L52",
+          "version": "repo-lines-v1:sha256:3b4bafbcdac3478a4b408767c20e62738641f25b2b1b1d55b0c96ab228280f18:eyJzZWxlY3RlZExpbmVDb3VudCI6NCwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiOTg5Nzg2ZDU5MWMyNjNiYzE1Zjg5NzBjYjgxOGFmNzYyNDAzMWRhYjRlMGQzMWRiZTY1YjMwNDE0NmI3MTFmMCIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiNzg1ZTQ0YzU1NDNhMDJkODIwNzA5OTE1MDQ1MTExYjEzMWQ2ZmQ2NjM3YjQ3NWRkN2ZkMTVmYWQxMmU4NDIzNyIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiZTc1YjU2YzU1YjY5NzRlZmFlNjQ0ZjBmYjE0ZmU2NDI3YTYzNmQ2OGMxM2NjNzcxNGM2MDdiMDE5ZWI4YTNjZCIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjAsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiZTNiMGM0NDI5OGZjMWMxNDlhZmJmNGM4OTk2ZmI5MjQyN2FlNDFlNDY0OWI5MzRjYTQ5NTk5MWI3ODUyYjg1NSJ9"
+        },
+        {
+          "resource": "repo://apps/dashboard-api/README.md#L26-L29",
+          "version": "repo-lines-v1:sha256:6653d32f825566f089e938e6f4cf9c5cf8017f0d53ac882e97b6800f890b6213:eyJzZWxlY3RlZExpbmVDb3VudCI6NCwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiNGM2ZmI5ZDg4MzBmYzJmYjY4YjQ5NzVlZmI1NTZmZTMzMTJlM2FjM2RmZmFkZWIyYWEyNmNmMWY2YzZkNTM0ZCIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiMWY0ZTQ0Yjg5NDhkMzY0NjRlNDVhYWRhMWFkYTIxZGY1OTg4NjgyOTA1MDQ1ZTljOTFhODBjODRmNmIxY2EzNyIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiNGRjMDQ0ZmM5MzE0MWJlNGUzZmY0Zjc3NzU2MzYzZGMzZjc2NzU2MGQ3ZTE4YTU5NTNhYjU3MTJlMzZlYzExNCIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiNGNlZDBlZDhmYWZjMjM1YWVlMzNkM2RkNjlmY2RkZGE2MjA0ZTc2MzgzMDNhYjkyMTc0YTIzODY5NjQ4MWU5NyJ9"
+        },
+        {
+          "resource": "repo://apps/dashboard-api/wrangler.toml#L21-L23",
+          "version": "repo-lines-v1:sha256:c569044bb34ee18bac378bcf74bb9f71610abc273f43b8af3d25b921426a0fd9:eyJzZWxlY3RlZExpbmVDb3VudCI6MywiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiZmM4ODM5MDAxNjFlZDk2OTE0ZWZkZDgwMGI5ZmM3YmNiOGI4MWU2ZGU1NjU3MTMwNmQxYTg5OTRhMDFlMWZjZiIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiMGE2NTgyMGEyYTE1ZGM4MDA3NzA2NmM3ZmMxNjVlZmRjYWNhN2UxMDAyZDU1ZDY4YmQwZmQ5NTI0YTU3MzhiZSIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiMGQ0ZmQ2YjdhYWEzZjNiNTNiZGVkMmM5NTAxZTRjNWVjNTUzNDI5OGJjYTY2OTc4NzlhNTI3ZjMxZWJlYjE3MiIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjAsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiZTNiMGM0NDI5OGZjMWMxNDlhZmJmNGM4OTk2ZmI5MjQyN2FlNDFlNDY0OWI5MzRjYTQ5NTk5MWI3ODUyYjg1NSJ9"
+        }
+      ]
+    },
+    {
+      "id": "claim_ef50bea80c7645d7932d8605c53a4783",
+      "statement": "The MCP_EDGE_KEY worker secret gates POST /mcp access: the `x-digi-mcp-key` request header must match the secret. When the secret is unset, the header is missing, or the values mismatch, `mcpAuthorized()` returns false and the worker responds with a plain 401 (no contract envelope).",
+      "evidence": [
+        {
+          "resource": "repo://apps/dashboard-api/src/mcp.ts#L121-L126",
+          "version": "repo-lines-v1:sha256:619fb068551cc7c1e983fe2a719e6ef0a2254b2d303d6f6cb382343241f2370d:eyJzZWxlY3RlZExpbmVDb3VudCI6NiwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiOTljYTg0M2ViYWRlN2U1NjVmNDYxZDMwY2UyYmE2YjFjZjkwZGY1NTQ0MDgzNTY4NzhlYmRkZjBlNjIyYTc5NyIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiNDEyY2EzNDVjY2Y3NWJmOWMwODA2YmNlNjk1YmU4ZGU4MDhiNzk5ODQyNTFhN2E1NGQyMDJjZjYxMDFkZDQ1MSIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiZmE2YjUwNDZiZTI2MWJkYzRmM2MzYWQ3YTNkNGM3Nzg0YjVjNDk0YWQ5Zjc2NGI3YTA4YzM0NzIwODI4Y2QyNCIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiNzcyOWM5MGRhNTQxODFhNGJlOTBlY2JiODgyNGEzNGY1YjkwMTA2OTc5MGE3NGI4YjBjYzJkZDVlZDNiMjU2YyJ9"
+        },
+        {
+          "resource": "repo://apps/dashboard-api/src/mcp.ts#L201-L215",
+          "version": "repo-lines-v1:sha256:49fca9b01297a36506859b0a35f5f758f05b5adc16450bd25a579cca032af6bd:eyJzZWxlY3RlZExpbmVDb3VudCI6MTUsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQxNDYzZjk2YjA4NTI1NTIwOTYwMTMwZDlmMjFjZWJlOGJjZDIzYzUzOGNkYzUwMDgwODhlMTU3MTkxZWZlOTEiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjI3ZTU3ODhkNWQ5ZDczZDI0YTgxZGJjMGE1YTc0YmZhODJjOWMzYjNhZjk5ZTUyYWY3OTZlOTBiNDY4YThhM2QiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjE4ZmU5ODk1YjgxYzlkOWZmZDEyMGE5ZTc5NDM4MmEyYzRhNmI2ZWM4NDAyYjZkZWIwZDE0YTY5MDU5ZmY3OTUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjRhOGRjOGE1ZWRlNDQ1MjY0NjE1ZjM3MDM2ZmRmN2IyMTE0NjY0MDIwMGRkZTlmYzc2YzljZGYzNDFjYmEzMWMifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_10b511b747f34d5287ee765f2da11855",
+      "statement": "The stub-vs-real lane switch happens in `buildRouteTable()` in src/index.ts: when `hasSupabaseEnv()` returns true (SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY both present), routes are wired through `createSupabaseSource()` real PostgREST readers; otherwise, clearly-marked stub doubles from `./stubs.ts` serve every route.",
+      "evidence": [
+        {
+          "resource": "repo://apps/dashboard-api/src/index.ts#L164-L186",
+          "version": "repo-lines-v1:sha256:a31962309b968d7aea08dff26967cb73780b726c6c9dc77de3710e6a9c57383e:eyJzZWxlY3RlZExpbmVDb3VudCI6MjMsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImUwODMxMGQyNTUzNTk1MjAyODk0YjlmZGRjMWQwZTNkOGY1NjEwYjRkZjY1NzI0ODYzMjcxOWFkYjlmZThmM2IiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQxMmNhMzQ1Y2NmNzViZjljMDgwNmJjZTY5NWJlOGRlODA4Yjc5OTg0MjUxYTdhNTRkMjAyY2Y2MTAxZGQ0NTEiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjkyMDQwZTA5NWE5NGUyYWRhNzRlNDIxZjM3MTg3NTFhOTFhODEwYmZkNjZmNDhmNGU5MzljN2I3NDgwZWI2NzAiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjU2YjY0MGZjMWY0OTI0NGFlN2Y0MjdlZjJkZGYwMjE4YWRkYjQ1M2ExNDA2MzU4MGI5ZDcyNTE1N2MwMTAxZmYifQ"
+        },
+        {
+          "resource": "repo://apps/dashboard-api/src/supabase.ts#L44-L47",
+          "version": "repo-lines-v1:sha256:6d31aeb33eeb30638c447f861517e4f4b8ef5f2e15098bd8e96bd0b0aff2a478:eyJzZWxlY3RlZExpbmVDb3VudCI6NCwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiMDk3NzA1OTQ0ZTIwMWJlMjIwODE0MGYyZTNmMWU1YmRmNWViMDNhZjE3YTNhYTlmYWM5YjU5M2M2YTExNWRmZCIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiNDEyY2EzNDVjY2Y3NWJmOWMwODA2YmNlNjk1YmU4ZGU4MDhiNzk5ODQyNTFhN2E1NGQyMDJjZjYxMDFkZDQ1MSIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiNDRhN2RiZDU3MzliZDQyNzY2ZWYzN2Q1NmRlZDllZjU4NzM4YWRiZDBmOGI0MDhhMTA5MDljNWNjZWY5NDNiMSIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiYzVjMDRlYjdmYjg4N2RhMTg0NzA0NmNhYzA0NTk0MzUzMjUxZmE2NWEwM2EwMTJmY2Y5ZGYwYmJiMGZlMTI1MyJ9"
+        }
+      ]
+    },
+    {
+      "id": "claim_dbd85f2409084c7f8f1af2fb2473fb39",
+      "statement": "Every real-lane route handler is wrapped with `failClosed()`, which catches `UpstreamError` thrown by `supaGet()` on any non-OK PostgREST response and maps it to the contract §2 `upstream_empty` (502) error envelope with `upstream_status` in details. The worker never silently falls back to stubs when the service-role key is present.",
+      "evidence": [
+        {
+          "resource": "repo://apps/dashboard-api/src/index.ts#L150-L162",
+          "version": "repo-lines-v1:sha256:4851d8cb020bf87f8778d35121b4b8c1ad50a2855a67aef61cbbbc33a9fb5311:eyJzZWxlY3RlZExpbmVDb3VudCI6MTMsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImI2MTc0YTYxZWE3YWE5NWI4NmU3OGM4MzlmNzY2MjQ2YTBlMDQ2ZmEwZGZiYTdmNGVmZDQ5MjBiNGQ1NDkzNjEiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQxMmNhMzQ1Y2NmNzViZjljMDgwNmJjZTY5NWJlOGRlODA4Yjc5OTg0MjUxYTdhNTRkMjAyY2Y2MTAxZGQ0NTEiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjExZTI1ZDYxMzVlNGJhZjY4MDY1ZjIzNDQ0Y2VhYTQ1MTQwZTk5M2Y3MzE4NGIwNzg5MDE3MTMwZjFkODk1YjgiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjJjODM0MDQ0YWNjZmMyZjQxNDdkZDUzM2UzMWE1MjY3YWZmNzI2ODY5OTExYmJhMDJjY2M3N2QzOThlNjU3YTcifQ"
+        },
+        {
+          "resource": "repo://apps/dashboard-api/src/supabase.ts#L49-L58",
+          "version": "repo-lines-v1:sha256:1b4d5a964a3849f44b8495693eccd3a66a08176b221ec6590c5cde3df3e52389:eyJzZWxlY3RlZExpbmVDb3VudCI6MTAsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjE1NzYzYWUyOWFjNzMxNGQ4MjkzZTY3ZmNmYWYxMGJjYjlhYzMyYmNlMDg5YThkMTQ5OTkwYTVmMTk0NTQ3NjAiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjI3ZTU3ODhkNWQ5ZDczZDI0YTgxZGJjMGE1YTc0YmZhODJjOWMzYjNhZjk5ZTUyYWY3OTZlOTBiNDY4YThhM2QiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjI5ZGE1NTU4ZWQ1ZTQ1MDg1ODE3YmU1MGJiOGU4NzgyNGI0NDNlNmU0Mjc1ZTQ2M2QwZWY2OGRkOWIxNjM2ZTYiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImEzY2M3NGY0Y2EwODM2M2E0MWE4NmYwMWQxMGYzMDExMTdlYmZmZjMyZWEzMTI3MDJiMDY5MzQxY2QzYjE1MTIifQ"
+        },
+        {
+          "resource": "repo://apps/dashboard-api/src/supabase.ts#L66-L77",
+          "version": "repo-lines-v1:sha256:324938fc3a6c278fae0653c1d04c219e594995d42c68118bb5370ce74bbd5d1b:eyJzZWxlY3RlZExpbmVDb3VudCI6MTIsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjYxZDBhYmRkODEwMjM0ZWZjNmRlZTJjODUwM2NiNmFlMjg2YjhkYmI0NTQxMGIwMzYyNTQyNjA2NmM1YzYzM2UiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjMwMzBlYjI4ZWE2OThmOWRmMzEzZTNkMWEzNDUzM2MzNjI0NmQ5MjMzMDFmNGFlM2QwNDA5ODQyOWQ2NmE5YmMiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjU4Mzg0YjlmYTEwNGJlMWQwNjA3ZWRkN2EwMTJlMGYyMjFmMmIyYThmZmY5NzUwMTQ1ZjdiZjIzOGNiMGIwMTMiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjdhNjE2MWFlOTViZTcyZTZjOWJlNWQ0ZmIyOTE0MjMyYTJiMDAwYTZlOWFjNzZhMmZkMzZiNzkzMTNkM2M1MGEifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_a0be5ec95fd9457ea226345b6cf947c9",
+      "statement": "CORS is configured in src/cors.ts with a default allowlist covering production dashboards (https://digiquant.io, https://digithings.ai) and local development ports (localhost:3000, :3100, :3101 and their 127.0.0.1 equivalents). The allowlist is fully overridable via the DASHBOARD_API_ALLOWED_ORIGINS env var; it is not merged with defaults.",
+      "evidence": [
+        {
+          "resource": "repo://apps/dashboard-api/src/cors.ts#L15-L31",
+          "version": "repo-lines-v1:sha256:2a4a40b4ad34fa3e0ddb73bb2a1b0ddd01e9112a9324e763905d4367f5e35a3a:eyJzZWxlY3RlZExpbmVDb3VudCI6MTcsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImJiYjQ1MzNkODk3YzBlN2FkNDRiMTRmZWNmYTgzNjI4M2ViN2JlMzRmMDdlMmFhYjc0YzA2ODdhNGExNjI0MDciLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQxMmNhMzQ1Y2NmNzViZjljMDgwNmJjZTY5NWJlOGRlODA4Yjc5OTg0MjUxYTdhNTRkMjAyY2Y2MTAxZGQ0NTEiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImRiMTJlYWE0YjY2MzU5ZmM0MjU2NzEyYTcwYTNjOGFhNTVlNTNhNDA2OTY4MjgwNWVlOTM1NmM3Zjc5MTU2ZDQiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjIxZDY5OGFiNjdhZWZhZWQxZDRhOWI4MTJkMjZhMDg3NWFlZmUyYzQ0YmIwMzg2YmIwY2Y3YWIyNzM5NDE3ZTEifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_7e2392a1b89640cba8b1c6895984ea93",
+      "statement": "CI/CD deployment is handled by .github/workflows/deploy-dashboard-api.yml: it triggers on path-filtered push to develop/main (apps/dashboard-api/** or the workflow file itself) and workflow_dispatch, runs npm ci → test → typecheck, then deploys via cloudflare/wrangler-action@v3 with SUPABASE_SERVICE_ROLE_KEY synced from GitHub secrets into worker secrets.",
+      "evidence": [
+        {
+          "resource": "repo://.github/workflows/deploy-dashboard-api.yml#L1-L52",
+          "version": "repo-lines-v1:sha256:2cdc44e8f07a61bf0a785c811672f124544a5b80bc8f4dea949ab7fd4f25d315:eyJzZWxlY3RlZExpbmVDb3VudCI6NTIsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImRlZGFlNjQ1YjJjYzZmYmI3ZjE3MzNhM2Y3MjEwYzg5OTIzYmM2M2QxYTZmZTRjNTZiYWJkZDdjMTIzNWFjZGEiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6Ijc4NWU0NGM1NTQzYTAyZDgyMDcwOTkxNTA0NTExMWIxMzFkNmZkNjYzN2I0NzVkZDdmZDE1ZmFkMTJlODQyMzciLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjowLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjowLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_cff1c18cadba499ea001a823df73d76a",
+      "statement": "MCP tools never reimplement route logic: each `tools/call` builds a synthetic GET Request for the matching route path and dispatches it through the worker's own `routeGet()` handler, so the JSON-RPC response is byte-identical to the HTTP response from the same builder functions.",
+      "evidence": [
+        {
+          "resource": "repo://apps/dashboard-api/src/mcp.ts#L184-L192",
+          "version": "repo-lines-v1:sha256:7eb2538a526869fa30e41d751cae69c6d37fa072cc1cda0197d4a155125983e0:eyJzZWxlY3RlZExpbmVDb3VudCI6OSwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiZGI3YTQ1Yjc1NjBkYzQ3MzQwOWMzODRkOGMwNjhiYjRjYzE1NmRiOWY4NzExMDJkYjkxNzg4ZTdhNWI4MzM2YyIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiYWQ5ZTEyNTQ2NDI1NTc2ZDNkZWFlOGM5YjlkYmYxMjhkNWQ2ZGRhZjVkN2ZlODU3OTM0OTI3ZGVmZmEzYjlkZCIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiNGQ0OWQyYjY1NGJlMTExNmFlYTdjMjFlMzE2NmM2M2UxYTgxYWZjYTg2ZjRlZmM2YTEyNzBiYTk2ZTg3OGI4OCIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiM2Y5Y2ZhYjBmYTU5MDA0MDQ2ODI0MzU0NmIzNjYxNTYzNzU5N2U4YjM4NTYxM2Q0YjBhYmYyN2FiZDZkN2Q3YyJ9"
+        },
+        {
+          "resource": "repo://apps/dashboard-api/src/mcp.ts#L4-L14",
+          "version": "repo-lines-v1:sha256:1a8c78d57541f64018da7d75613228b84959dfd3cfe7f87684aa525046eb307d:eyJzZWxlY3RlZExpbmVDb3VudCI6MTEsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImE4NmI0ZWIyMDg4NGQyNjhkYTQ5MWQ2M2JkMzAwOGNlODMxNzc5MDA0ZTRlYTU0ZmM5ZWExY2RjNWVmZTY4YjQiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjM2MTllZmI2Zjc1NzlhZjdhMDE2ZWExZjU0YzVlNDk4NGFiN2JkYmFjN2Y0NjkxNzU1ZmY5NWFmMzRmYjQ0ZGUiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjExMTU5MDhmYjQ3ZDI5NTgyMDIzZmI5YWU3Njk1NmYxYmEyZGU2Mjk0MDU3NTUxNmUwMTI0YmM3MjNlMjNjNzEiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImI3NjM3ODY1Y2IzNGYyYzJmZTVhNzM5NjU3Njk0ZjhkMjM4M2FiYjE3N2NiNjIxYTlkMzRjMGFlZTM3Mjg1MzIifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_c21461e0879047908cdc9e1494e71f19",
+      "statement": "Market data reads (closes, tickers, benchmark history) follow a soft-failure rule: when MARKET_DATA_URL is unset or the market API returns non-OK, `loadMarketClosesMap()` returns an empty map and builders flow the honest-empty path (e.g., `marks: \"unavailable\"` in provenance). Market closes never fall back to Supabase.",
+      "evidence": [
+        {
+          "resource": "repo://apps/dashboard-api/src/supabase.ts#L11-L14",
+          "version": "repo-lines-v1:sha256:ea7ec3bd9f5657ea953a79e0c5225ffa79f42b8bf0042e2fa7f4f1afd93e264c:eyJzZWxlY3RlZExpbmVDb3VudCI6NCwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiNTExMjE3NWJlNGM5MzM0Y2Q1OTlkMmYwMDdiYzk2N2U2Zjk3Y2ZiZDIyZGQ0NDNhZjc5ODE3OGE0N2U3NmY5MyIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiNTkwOGI0Y2Q5MmE0ZTQ0MmRlYjIxMzg3OTgyYjAzMGRjNjRhNzQ3OThhYWUyZjAzMDYyNzIxODU1NWNhNmY1YiIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiOWFmYmIyOTE5OTFlODllYWVkMDNhMmY0ZDNjMzI3NzYxNDE0NjFiZjRiMzg2M2VlMTYxYTU3Mjc4OGVjY2Q1YyIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiNTIyMjFlMDJhY2YzNzQxOTU5ZDFiZGVlMzgwOWUwNGNmN2ZlMGU1OGQ4MjEzOGY5ZmJlN2M2NjhkOGQ4NDFkYiJ9"
+        },
+        {
+          "resource": "repo://apps/dashboard-api/src/supabase.ts#L236-L264",
+          "version": "repo-lines-v1:sha256:d168038f7b549d2066f016485d48d17b28dcd3898f788e121f0faa5b15a3fe09:eyJzZWxlY3RlZExpbmVDb3VudCI6MjksImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImU4NDg2ZGUwZWY0M2JlZDBhNzg3ZjY4YzI4M2VmNTZlOTdlNjdiMDcwYzFjMDBiOGZkYTMwOTIxNjZjOWE5YmIiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQxMmNhMzQ1Y2NmNzViZjljMDgwNmJjZTY5NWJlOGRlODA4Yjc5OTg0MjUxYTdhNTRkMjAyY2Y2MTAxZGQ0NTEiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjE2MzNlNTA4YmEwOGZlNDlmMWE2MjE3YjNiNDE3NWVkODBhZDUxNzcyZWJjMWI4ZGJhZDE3MWRlNTA0MjI5YTYiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjJiODQ1MGMyNTAzOWYzOGViMGZjZTlmNTM3YTYzZmQ0NjhjM2I2OTdkM2U0ODRiMDg1ZjY1NTEyNzVkOTJmMTUifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_f5b1bba0da5a48e69aef660cc513b390",
+      "statement": "The stub doubles in src/stubs.ts use a null-book convention: passing `asOf === '2020-01-01'` to any stub loader returns `null`, allowing wiring tests to exercise the `not_found` path without a real database.",
+      "evidence": [
+        {
+          "resource": "repo://apps/dashboard-api/src/stubs.ts#L118-L120",
+          "version": "repo-lines-v1:sha256:96b11b1933f606c0a1f6fd1435ff8847e74db9da999fd318dbb6f7e29af1d146:eyJzZWxlY3RlZExpbmVDb3VudCI6MywiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiMDk1ZmEwZjExMTdiNWVhNDA0MzQxNDBkZGUxYTM0MGM3MjBkZGJmMzI2MjEyZTE5MTgzOGQ0YjE1NmQzMTZiYyIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiNTdkNDljMDU4ZWQwN2RmODRiZjIzNzA5YmMxNTdjY2UwODZiYzQ0NDZlZjU1M2Y4NjI0OGFhODhlMmRkY2Q3ZiIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiNGVmMWU0ZmVmZGVjNjBhYWE2OTJkNWFiOTU4M2ZiY2Q2OGJiYzZkMGY2NTc5MWRiZDE0NTdjOTMwNTY5NmNlMyIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiMmY4NDRhOGE0ZDRkYzZmZGI4OTY5YThmNDgwYmMwMDVjNmJiODk0Yzg5NzFmMWQ3MzYxZGE4MGU4MTBiODNhMSJ9"
+        },
+        {
+          "resource": "repo://apps/dashboard-api/src/stubs.ts#L12-L13",
+          "version": "repo-lines-v1:sha256:298b52647a3e27a4b8838963b99605d609ff56c45d9a26caf446267ce91bf43d:eyJzZWxlY3RlZExpbmVDb3VudCI6MiwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiMmUyMzk5NzA3YTE5MzJkYmE0YTc1YzllMWNiY2NhNzBmZjIzODAwNDUwYWM0YmNhMTBiNmMwYzMzODE2ZGRiZCIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiODY3MjY3YjAzZGFkNzRiMzMzYzRhOGNjNGEwMzc3NWI0NGRkOTEyYzI5NmRkZmVkZWZmODA0ODE5NTAyNTk0YiIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiZTVmOTlkNTBiYWNiODIyNWQ5ZDMwNTYxYzQ0YWQ2ZjAzNTZjOGZhMTllNDVjYjM2NWEzMzAyMzhjOGEzMDI5ZSIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiN2JjZTM4Y2E1YmQ4NGFlYmFkOTY0ODA5YTUxYzkwOTc0ODliZWQ2ZmI4MWE0N2IzODU4MWFhYWE0ZjkzNTQwMyJ9"
+        },
+        {
+          "resource": "repo://apps/dashboard-api/src/stubs.ts#L145-L147",
+          "version": "repo-lines-v1:sha256:331af20542f08cd0bd14cfe03a7f348fa335ba0614974313de8f202f80749f80:eyJzZWxlY3RlZExpbmVDb3VudCI6MywiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiNWMzNzE5MzA4MGE5MGMyMjczZDM0YzQ0ODcyZjU1OWE5Njk1MmI5Mjk0ZDNmNDM1N2RmYjQ0MTMzYjNlZmFhNCIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiNDJhMmNiMjVhMTIyYjQ0MjIxYTYyMzRlYzY2MGE3YjVmYjdmOWJkZTdiM2I5ZTJiM2M1NTlhMGQ5NmZhYzczOSIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiMDgzNTI2MGM1MTliNjgxMTIxYmZjMzhlMGE2MjdlZjlhODIzYmIzZWM1YzY2NGU4ZTMzMzNhZTQzMTgwOGRhNiIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiNGJmZjI4YTcyMzQ1MDc1YTBkOWE2ZWQ3MWVjNzlmNTJkMWQ0YjU2ZDliODg3YTQwYzVhMDJjZGNjYmJhMDJhNCJ9"
+        }
+      ]
+    },
+    {
+      "id": "claim_803cac676ab04e66850aabd9dc2e93c1",
+      "statement": "The dashboard-api Worker deploys with `workers_dev = true` and no custom domain or route configured — it is reachable only at its `*.workers.dev` subdomain until a follow-up human-gate decision.",
+      "evidence": [
+        {
+          "resource": "repo://apps/dashboard-api/wrangler.toml#L6-L13",
+          "version": "repo-lines-v1:sha256:8c8af0e86ac95d4280b3dbbb9fedbd7d1fbbf65bbe3510c6997d8853d89132de:eyJzZWxlY3RlZExpbmVDb3VudCI6OCwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiMzJjNDg1OGUyMmNjMmM5NjdiNDIxNTBmYTU1MDU2MmEyYzgzOWMyY2ViY2FhYjkxY2FiZGY2ZjRkYTAyMDAyMiIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiZjU4NGZiMjAwZGY0YWM3YTBmMWQyMGJjNGVjNDMzNDQ4NTIwZDhjOTM2ZWNkNTBlNDM1YjAyZDQwNzY5MWI1NiIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiYjRiYzcyYjY3NmMyN2YwOWVhYjEyYmIwNjRlNTI2NTJjZGM0OTViZDBkNGNiMWE0OTY3NWJkNzY3ZjY0ZjVkZCIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiOTFjM2QyOTA2ZTNlNmVlNDYwOTgyODEzYjViMWZjN2I3ZTliOGQ0YWEzNzJjNGYwMGE5YTg5ZDM2ZDc4OGJmMiJ9"
+        }
+      ]
+    }
+  ],
+  "verification": {
+    "by": "openwiki/0.5.0",
+    "at": "2026-09-26T12:43:34.078Z"
+  }
+}

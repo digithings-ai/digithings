@@ -6,6 +6,13 @@ generated: { by: "openwiki/0.5.0", at: "2026-09-23T13:25:31.068Z" }
 verified:
   - by: openwiki/0.5.0
     at: 2026-09-23T13:25:31.068Z
+sources:
+  - id: openwiki-source-3cca7b16d985d38458390d9a
+    resource: repo://digiquant/AGENTS.md
+  - id: openwiki-source-f049bd9504f8ed6c09ceb7ff
+    resource: repo://digiquant/ARCHITECTURE.md
+  - id: openwiki-source-8badead4d7a511a5b90a8ab1
+    resource: repo://digiquant/data/README.md
 ---
 
 

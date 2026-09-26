@@ -1,0 +1,250 @@
+{
+  "schemaVersion": 1,
+  "pageVersion": "sha256:5f937a1a49f380fc1038c0752bd91ee0c4f528ab247f276ec7c1ca6268acb723",
+  "claims": [
+    {
+      "id": "claim_54f3ed738bc647abb5eda49722cc98db",
+      "statement": "The dashboard-api worker serves 8 contracted specific routes (GET /portfolio, /allocations, /brief, /performance, /kpis/live, /nav-series, /benchmarks, /ledger) plus GET /v1/tables/:table and GET /healthz, all read-only with no request body.",
+      "evidence": [
+        {
+          "resource": "repo://apps/dashboard-api/CONTRACT.md#L24-L27",
+          "version": "repo-lines-v1:sha256:8e585a899a8cf15483e8989c48603359c2bf97808ba11489b5cf1afeeae8d132:eyJzZWxlY3RlZExpbmVDb3VudCI6NCwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiZThhYjJiMGJiYzExYWU2ZWZhNjFmYjZmZWE3MTczZWFhMWNhODkzYzkyMDc5NTg2Mzg1OGI5YTcwZjdhZThjMiIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiMDFiYTQ3MTljODBiNmZlOTExYjA5MWE3YzA1MTI0YjY0ZWVlY2U5NjRlMDljMDU4ZWY4Zjk4MDVkYWNhNTQ2YiIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiMGY3NDk4MTg1YTIzNmNkMDdlN2RhNDgyOTQzOTlhMGFlNmIzMDNkNGZiMTQ3NGZkNzMyYmQ5Nzc4MDk1MzZjNSIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiMmQxYjZiYjQzZTAyNTlmOWMxNTFmYTNhYTVjZGFiZDBkZjJhM2QyMTExMzc2ZWExODgwZGYwZDI5MDY1MmEwYyJ9"
+        },
+        {
+          "resource": "repo://apps/dashboard-api/src/index.ts#L189-L225",
+          "version": "repo-lines-v1:sha256:1e391787c566414031b45e56239743bef20ebc7e26142549482f7b67c26b88ec:eyJzZWxlY3RlZExpbmVDb3VudCI6MzcsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6Ijk1NmY5NWViYmQ4MDA0NjE4ZDMyZTNlMGE0NTQ1Y2JhNmFkYjgwMTBhMmU1NWFjNTA1YjkzNjJmNzg4MWNkN2YiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQxMmNhMzQ1Y2NmNzViZjljMDgwNmJjZTY5NWJlOGRlODA4Yjc5OTg0MjUxYTdhNTRkMjAyY2Y2MTAxZGQ0NTEiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImUzNDY5YWM3NzQ5Y2U4MmJmNzU3MWYwODJmNDFlNWIyYzRmMzBmYzE2YjEyZTQwNGI1NzVhNzMyNWIyNDhlOTQiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjY4YTFkYmNhYmM5OWYwMWVhYmU4NjA5NDBlMmVjMGQ2NjM4NTkzOTA5NzhhMzZiNjEwZDFjMjc1ZGZlZmFmMDUifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_0d60e5be372246d4a06c7f919256287f",
+      "statement": "Every route accepts common query params asOf (YYYY-MM-DD, default latest committed) and retrieval_pin (opaque, max 128 chars). /kpis/live and /benchmarks reject asOf.",
+      "evidence": [
+        {
+          "resource": "repo://apps/dashboard-api/src/benchmarks.ts#L41-L51",
+          "version": "repo-lines-v1:sha256:2030540eb4a1fe77a83af8bf1a79279aaca829e88c18b7409d35d54c491072d8:eyJzZWxlY3RlZExpbmVDb3VudCI6MTEsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6Ijc1MDE4OTIyNGNhODRlZmI1MDQ0YjA1OGZhNjM4OTUxM2Y5NTdjNDU5ZDA1ZGMwZTEzYTVkZTE0NjQ1MGVlMWIiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImNiNDBlZTdkYmRjYzk2ZDBhYWM3MWE5MWMyMmM3MTkwZmQ5MzQxY2I5ZjkwMGQ0YjMwZGE4OGE2NTdhZTY5YzMiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImJjZjQzMmFjMmIyNGRhY2UwMTg1Yzc1ZTYzZDkwZGMyZTI2YTA4OGFlNmZhY2ZjOGRmNmJhZTIzYzk0OTUxYjQiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjNiMDA4ZjVmNmFmOWM4MjkzYmZmNTM5NDk0MzRjOTU4OWQ4M2VhZTE2NmM0Zjg4ODYzMmNjNGRkOGQ2YmFmM2YifQ"
+        },
+        {
+          "resource": "repo://apps/dashboard-api/src/index.ts#L114-L131",
+          "version": "repo-lines-v1:sha256:f1fd7a65124e5392c26518b2cd9ee0137bb9b9f7ff8af7d4c05f059399eb235c:eyJzZWxlY3RlZExpbmVDb3VudCI6MTgsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjExYjgyYmY2MzNiMWNmMjU5Y2YxNzhjMTVhOTA0ZjM2MjMyMDMyODNiM2MxYjZkZGIyMzFhYzk2ZjY4ODBlYjIiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQxMmNhMzQ1Y2NmNzViZjljMDgwNmJjZTY5NWJlOGRlODA4Yjc5OTg0MjUxYTdhNTRkMjAyY2Y2MTAxZGQ0NTEiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjBiZjZmN2NkMDU1YWY2OTZjNTYxYWQ2M2E4Y2JlNDJkODY1OTEzOWFmNjc4YzVjM2E0ZjIwMzc3ZTEyNmJjNTciLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImMwYjRlYTExMzE2ZDUyYmI0MDgyZTcyZTRmZmUzYzk5NDI4MDMzNzk3M2JjYjJmZjFjMTRlZDRmNGZhZWY3MzEifQ"
+        },
+        {
+          "resource": "repo://apps/dashboard-api/src/kpis-live.ts#L128-L139",
+          "version": "repo-lines-v1:sha256:e631533094ab14b57e2b4909ac281c775de1aceda30b808de35ae1cd776dc1c8:eyJzZWxlY3RlZExpbmVDb3VudCI6MTIsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImVjZGI3NzU0M2U5NmRhZjgyYmJhYjUwOWI3Nzk2ZGIzNmUwMWQ2ZGU3NGIyMGM5NGVlMzBkOTVjNmY0ZmFlMDgiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQxMmNhMzQ1Y2NmNzViZjljMDgwNmJjZTY5NWJlOGRlODA4Yjc5OTg0MjUxYTdhNTRkMjAyY2Y2MTAxZGQ0NTEiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjQ3NzRkMzRlMmU5YWE0YmIyYzNiMWYyM2U5MzhjN2E4NzZjNDc4ZGI0YjM2M2RjYzQ5ZTgzNWU5YzcwYTQ2N2QiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjNlY2RhNTk1ZTU1MTdiOWI3MDExZDM0MGE1MDkyNTI0OGNlZTY5MmUxYzEyM2IwYTA1YzVhZjM4ZDhmYzMxNWEifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_1f58da77867e46cabf94051b5513da90",
+      "statement": "All success responses on the eight specific routes carry a { data, as_of, retrieval_pin, provenance } envelope. The generic /v1/tables/:table route returns a bare row array with no envelope.",
+      "evidence": [
+        {
+          "resource": "repo://apps/dashboard-api/CONTRACT.md#L35-L38",
+          "version": "repo-lines-v1:sha256:b37f99f97f112553f62e8692199dc6afb2dff3ad3604a33f256b71159793a1cf:eyJzZWxlY3RlZExpbmVDb3VudCI6NCwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiYTAyNWQ1MTFhYjYyYmViMzExMzdhYzYxMDMxZWVmYzMwY2U5ZGFjMDRkZDFjMWMxODA1ODY1OTg4OWM3OGU2OCIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiZjM4MmMxNzE2ZDEyZjBkZGUzMGNhYzkyYzRhMmUxOGE5YmU5NjlkYzcwODA4MDE5NTQxZjRjZjM5YWNmOGIwZiIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiZjNjOTAyYTQxYzJjZDgxNmY3YzQxZTc4MzAzNGI3MzQ4Mzc4ZmMzZTYwNGU3YzgyOTk1ZjZiNDUyMjVlODQ0YiIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiNjkyZTM5ZTMzZDdhODUwYzQwMjM3Mjk2NDQwMDNmMjkxNmEyN2U2OTVlY2JjZGEyMTQ2MDBiMzRiOTY3ZDgzYyJ9"
+        },
+        {
+          "resource": "repo://apps/dashboard-api/src/envelope.ts#L108-L119",
+          "version": "repo-lines-v1:sha256:353dae26ddbffa0b30f2685bf35ef8f466e24d28a9d14bcda95a896b7facf32a:eyJzZWxlY3RlZExpbmVDb3VudCI6MTIsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImFmZThhNDk0NWQ4YTk2NzUyNTY5ZWZhNWE0YzUxMGQ5NmExYTQ3MmQ4YThlMDkzNzFjMzZmNWJmYjk4ZGIwODEiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjNhM2U0NmY5NDI3NmI2ZjZmNGVkMWYwMmFmNzhiZWY2YTJlZTFjNDM5ZGQ1NTg0Yjk3Mzk0ODMxMzIxNGQyYjciLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjQ2OWI2YzZkN2RlNzk5YjcyNjljMTNhNzZlZDhiM2YwNzAxZTcwODI1YWI0ZGQ3ZTEzMzhhMzIyNWU0ZWYwM2UiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImMyN2VlNzQzMDVmNTgxODliODQ0Mzk5NDJhNGMwZjBiODZjNzRhZDY1YjkwMjBlZTM0ZTY5MTNmM2JmYzBkOTgifQ"
+        },
+        {
+          "resource": "repo://apps/dashboard-api/src/tables.ts#L188-L189",
+          "version": "repo-lines-v1:sha256:7e5086ec64ff158d32c15cd7f94e37db7a95c48de65c6fe1e29add5aa7c2be0e:eyJzZWxlY3RlZExpbmVDb3VudCI6MiwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiZTc0MjBhMzA2MGI5NDA1ZDE3OWI4YTE3NWZjNjU3Y2JhY2Y5ZjQ5NTc4N2ZjNDVkZjE4MjcyNDY3NWFhM2RiYSIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiMjZmZjRlYzQ1NDQ4ZDdjYmVlMjYwMTI5OWJmZThlNjc4NzY4NTA5NWNlN2EzZWQ1ZGMwNDFmZmEwZGM0ZDEyMCIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiMTQwNGNiNWIwOTE3NWVjYjQwYmNmMjQ0ODU2ZDNmYTA3OTc4M2JjNzBjZGIwMDBkN2EwZDMyMTkwMDY1ZjgwNyIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjEsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiNDEyY2EzNDVjY2Y3NWJmOWMwODA2YmNlNjk1YmU4ZGU4MDhiNzk5ODQyNTFhN2E1NGQyMDJjZjYxMDFkZDQ1MSJ9"
+        }
+      ]
+    },
+    {
+      "id": "claim_38bc18a7e04c42beabf2cf54d56c48cf",
+      "statement": "The provenance object carries source, tip_date, contract (finalized_accounting | legacy_estimate | null), seam (boolean), and marks (stored | market_api | unavailable) — badges always describe the source of the displayed numbers.",
+      "evidence": [
+        {
+          "resource": "repo://apps/dashboard-api/src/index.ts#L64-L70",
+          "version": "repo-lines-v1:sha256:39c459be315cce9978a5fa946456a1a3757b29fdd377f1357b79afd66b3c3698:eyJzZWxlY3RlZExpbmVDb3VudCI6NywiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiNDNmNzEzYmU0YzZkM2RkZDU1YjEyYTYwMDk1ODc4MDA4ZmI4ZmUyMmJmZDQzZDZiYjQzMGZiOGQ4ZTI4ZDMxOCIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiNDEyY2EzNDVjY2Y3NWJmOWMwODA2YmNlNjk1YmU4ZGU4MDhiNzk5ODQyNTFhN2E1NGQyMDJjZjYxMDFkZDQ1MSIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiNDU2YmIyNTVjZTE4MzE3ZjI2MGM1NzM5NTU2MjFmNjAxN2I5NDAwYmFiNGIxZTM4YWZkY2JhZTg0ZjU2ZDAxMiIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiMGVhOGJjMjc1MTBkZWMxNzBhMjExMDhiZTgyNTAyY2ViMDE0YTNhOWU0ZDFmNzU0Yjc1NWFiOWM0NzhjYmQ2OCJ9"
+        },
+        {
+          "resource": "repo://apps/dashboard-api/src/index.ts#L93-L101",
+          "version": "repo-lines-v1:sha256:2d5aaa41e1bc62c9dcdecae99c7fcdcb19c83332e96db6a7bb1d12c8238fc973:eyJzZWxlY3RlZExpbmVDb3VudCI6OSwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiM2IxNjA5NDE5ZjNlYWZlZTQ3NDZjNjBmMmFiNDIzY2Q1MTMyY2YyNTA2YjExZmZkNzM1NjI3NWFjYjgzOWFmNiIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiNDEyY2EzNDVjY2Y3NWJmOWMwODA2YmNlNjk1YmU4ZGU4MDhiNzk5ODQyNTFhN2E1NGQyMDJjZjYxMDFkZDQ1MSIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiZWE5ZTQ0OWEyNWVlOWRmMGRmMzliYmNjM2VlZjdiNzZhNzlmMzIzMzUwNzMxNTkyNzAzOTVlNjU4Y2Y2OWMyMSIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiMDU3NmY4YjY1MGEyNzQxMTQ0MTdjYWE3MGJlZmRkMDA0MDJhOTVkMzFlZGU4OTQ1YTg0YzllNTY3NTBmMGM3MiJ9"
+        }
+      ]
+    },
+    {
+      "id": "claim_9285a68ad52b48b9b6833a677bc40a38",
+      "statement": "All failures return a single error envelope shape: { error: { code, message, details, retrieval_pin } }. Error codes are bad_request (400), not_found (404), upstream_empty (502), internal (500). Empty sessions are success with empty arrays, never errors.",
+      "evidence": [
+        {
+          "resource": "repo://apps/dashboard-api/CONTRACT.md#L59-L76",
+          "version": "repo-lines-v1:sha256:c2aefe3c5740bd416025d60ef4c477aab3ffd2d7382ff175d4da25bd5b6017f4:eyJzZWxlY3RlZExpbmVDb3VudCI6MTgsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjA5N2NhMDgyNDE3MmI1YzM0MzU0YmFiOTAxNTY5YjY2MjFlNDQ0Nzk0MmUwODI2ZmIxOTZhMmEzN2UyMjdlMjEiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImFhNzI2MGYyYjE5NTQxYzRmMDAzZTAwNzU0YWVkYmIyMThmYzViOTZkYmJkNDA2MzYyYTUwM2UwODc3N2MzZDgiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6Ijk0ZDVmNGYyZDgzNGRkYTk2OWYwY2RjYzkyMzZlZjQ4MmJiMmM0OTQ0MTQ1MTJiNjY3NjNjNDJiMzczNzU1OTkiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImQzNGJjMWFiMWYxYzExMzdmOWYzNWIzMGNlYmFiNzc4YzExNzNjNjU3MTliZjY2N2M4Y2ZhYmUxNmQ1YmI5OTQifQ"
+        },
+        {
+          "resource": "repo://apps/dashboard-api/src/index.ts#L62-L90",
+          "version": "repo-lines-v1:sha256:bc653e4a1c4248380bf085db1079da40ccb917ce965b6c2d3570a63edbdafcec:eyJzZWxlY3RlZExpbmVDb3VudCI6MjksImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjhjODVmMDAxYzc3MmJjYmI2Y2ZiMTRkM2E1ZGYxNTYyMmZkMTUxZDY0M2U3Y2UyMzkxNDlmODA2YzczOTAyYzQiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQxMmNhMzQ1Y2NmNzViZjljMDgwNmJjZTY5NWJlOGRlODA4Yjc5OTg0MjUxYTdhNTRkMjAyY2Y2MTAxZGQ0NTEiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjIzODY4Y2UxZTVjZGQ4ZDBiYjZmNGE1ZWUxNzAxMWI2NWZmNzEwMjVlZTI2ZjQ3MDJkY2VjYzAyNTliMGE5NTQiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImQ4MmZlNDZkMjgxNDBlNmU1NWM1MjI3M2QxZGY1YTBlNWRkMGViMTU1ZDRhY2U5ZGIyYmJmZjViYWNiNWY1MGQifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_4b7316172ba74255a3d8b2629667cdf2",
+      "statement": "retrieval_pin is echoed in every success and error, forwarded unchanged to upstream market-data fetches (GET /v1/market/closes, GET /v1/market/tickers), and rejected when >128 chars. For the tables route it is accepted and ignored.",
+      "evidence": [
+        {
+          "resource": "repo://apps/dashboard-api/CONTRACT.md#L92-L98",
+          "version": "repo-lines-v1:sha256:b5f030ac51a5efc6f35baa43ab76bfab5325c6983fd3960a470c99241a993b18:eyJzZWxlY3RlZExpbmVDb3VudCI6NywiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiYmQ2YmU0NDY5MDAzZjJjYzYxZjIwZWI4NjQ2N2I0MjA0ZGZhOTI3ZWMzODJhOGZkMjUxNDczNDViMzMwMjRiOSIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiNzg5ZjQzYzczYzE2Zjg3NWRlOWRiNjEyN2Y1NDlhMmU3YTdiOGZiZTMzMWQwY2U0NGY5ZmEzNTY1ODVhODdhOSIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiOWJlOGEzMjI1N2Y2OTRjMTNkYjJkMzVhMDQ1NzhhZWZhYzQ2MTE0OThiMzJkZDdhOGNjZmM1ZDRjYmU0MGRkMiIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiMmM5ODI3ODMyYWQxZjM3OGEzNTAwODI0ZmExZjFjYWQ3NmZkZjAxYTRmMTc0OGFmYWZmMmU3NjdiZTI5YTMxNSJ9"
+        },
+        {
+          "resource": "repo://apps/dashboard-api/src/index.ts#L114-L121",
+          "version": "repo-lines-v1:sha256:9f2b9153d4ccb404970a8e698654f4ee001da340f60dd5b80ee353b148450068:eyJzZWxlY3RlZExpbmVDb3VudCI6OCwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiMTFiODJiZjYzM2IxY2YyNTljZjE3OGMxNWE5MDRmMzYyMzIwMzI4M2IzYzFiNmRkYjIzMWFjOTZmNjg4MGViMiIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiNGRlNzQxNDIxMTFlZTUxNzRhY2FkNWViYTYxMGVkOWUxYjE5Njc4MDkwYTM3NGVjYTZjODEyMjllNzBlNGFjYSIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiMGJmNmY3Y2QwNTVhZjY5NmM1NjFhZDYzYThjYmU0MmQ4NjU5MTM5YWY2NzhjNWMzYTRmMjAzNzdlMTI2YmM1NyIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiZTAxMzc1ZTE2MDk5OTFmM2EzMzVhNmIxZTM0MzE1YTE5ZDM0Y2FlMzJhOWRlZWE4NTQzZjc3OThiODIxOGM1ZiJ9"
+        },
+        {
+          "resource": "repo://apps/dashboard-api/src/tables.ts#L99-L110",
+          "version": "repo-lines-v1:sha256:79980a0c18b26b9f59842c8af4348784d71c4626259bc469fd2ffe9b169b8d6b:eyJzZWxlY3RlZExpbmVDb3VudCI6MTIsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImQ1ZGI3N2FhM2QwZjcyOGFlZjJjZmQ3YzI2NDUzNjIyMDk4ZDM4NDAzODdmYzllMjY0OWEzYmZkNmMyZTU0NmEiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImQ1YWU2OWNmMTEzNDYzZmU4Zjc2YmQ1Mzc2YTY5MzE3NDBkOWJmM2M0NmVlZDVlMmExMzRiZWEzYTBmZDE3OGMiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjgyN2RkNGJmYWI3YzQ5NGRjYjEzYjc0NjRhOWU3ZjhjZDRhMGY0Zjc2ZGJkYmNkNTg5YTE2MWI0MmQ0YjA5YjEiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjE4MDRjMmUxNTRlYmE2MDQ2MDRlMGYzNjY5MzRlNDJhODRhNzU4YjBhNzJkZmUyN2QzMWZhNzUzNjRlZmU0MTQifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_cc9529b43d184cc7a7204e3df5f4d1db",
+      "statement": "No route opens a WebSocket, SSE stream, or subscription. Live marks arrive only through client-side Supabase Realtime postgres_changes on prices_live. GET /kpis/live is a point-in-time snapshot, not a stream, and must never be polled as a realtime substitute.",
+      "evidence": [
+        {
+          "resource": "repo://apps/dashboard-api/CONTRACT.md#L100-L109",
+          "version": "repo-lines-v1:sha256:8bcad0a225732a613aaa0306ebc4f9ddae2a5db369c66051da0509614429bc9c:eyJzZWxlY3RlZExpbmVDb3VudCI6MTAsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjNkM2FmY2Y0OTRiNzI2YTllYzdlM2U1NjM4ZjUyYjVmYWEyMWI5NmQzMjVjOWJlZTY1NWMzZTNjMmVlMWFjNDkiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQ5MmQyMDdlNjlhNmI0ODAxZTM3YjI5MDcxZGI2M2Q2N2M3YWMyOWQxYjU2MmYwZjdiODFiOTljYmE0YjVmNWMiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjNjNmZlYzVjMjFhOTQzN2ViYjNmNTE4N2EzNjI0YTZiNWE0YmIwMTgxZTE1ZDNiNmUzOWE5MTMyYzIwNGQwZGMiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjQwNWFmYjQxNmMxYmM5NzEzZmZhYzMxZGMwYTg3ZDA1YWQxMDg5NjMwYzA4YTliNTZlZmVkMGJiNGIxMDYwMzQifQ"
+        },
+        {
+          "resource": "repo://apps/dashboard-api/src/kpis-live.ts#L1-L14",
+          "version": "repo-lines-v1:sha256:875ac74bf71041141f5e358af7d5bbd08ae700b7a51cf0067d65344d6bf29f29:eyJzZWxlY3RlZExpbmVDb3VudCI6MTQsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImVhZjIyY2YwNzMyNTkyYzI0NzE0MWNiZTYxZWZhMTEwMTI2MTJmNWEzMTIyYjlhZjliYmFmNTJmNTcyNGQxOTQiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImY2OTJjMjM1NjE2MzIyNmMzZGUzM2Q0N2U2YWRmZDM1M2YyZjEyMGNjNTA0NWRhYzZmYjg1NzRhNzY3OTU0MWUiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjowLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImEwZDkyY2MyMzk2YWEyMzBlYTBhMTlhOGI5ODllZmFkNWQ4Yjc2NGQ2OGE5OTEyNTE4MWNmZWUxOTMzOGJiYjYifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_c41e4db2f232421994c8ec882d9f8ea5",
+      "statement": "GET /portfolio returns committed-book snapshot + invested envelope + folded book-date gate: book_as_of, nav_tip, seam, invested (with kpi_pct, envelope_pct, cash_pct, definition), and positions. invested.kpi_pct is unclamped — never clamped >100 under an accounting_nav_tip label. book_as_of is null with not_found when snapshot is missing.",
+      "evidence": [
+        {
+          "resource": "repo://apps/dashboard-api/src/invested.ts#L80-L100",
+          "version": "repo-lines-v1:sha256:513be81b2d5af3178dfa7b2247910ceeb284ad501735ebfa0daebbd677531b92:eyJzZWxlY3RlZExpbmVDb3VudCI6MjEsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjdjNzM1NjdiMTFlMzgyN2NmZDJjMjA5NWYyYjQzNGU0NWExNjkzYTQ2NjQ5NDgxYWQxNmZkOTg5NGI1NDk3NmUiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQxMmNhMzQ1Y2NmNzViZjljMDgwNmJjZTY5NWJlOGRlODA4Yjc5OTg0MjUxYTdhNTRkMjAyY2Y2MTAxZGQ0NTEiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjZjODc3MmUwYjc1ODc1ZDdjZTIxNWEzZDcxZDk3ZTllYjhiOGRjODg2YWJkY2YxOTVhYWEwZjgyOWZlZjA1MGIiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjowLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUifQ"
+        },
+        {
+          "resource": "repo://apps/dashboard-api/src/portfolio.ts#L67-L142",
+          "version": "repo-lines-v1:sha256:a0c1fa96dc267c7c5b5ccf5766400bf6b4f60362504d646f01e2941368492b72:eyJzZWxlY3RlZExpbmVDb3VudCI6NzYsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImU1MGJhYmRmZDQ4Y2EzOTU0ZmU5Mzg1MDA1NTgzYjA5MmU3Mzc3MzdjOWMzNTkzOTcyMmEyNTNhODYyOGJmZWMiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQxMmNhMzQ1Y2NmNzViZjljMDgwNmJjZTY5NWJlOGRlODA4Yjc5OTg0MjUxYTdhNTRkMjAyY2Y2MTAxZGQ0NTEiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjYwZGU4ZmNlOTE3YmYyNDE1MTEyYzA4YWYxNWQzYzQ1MTdkNTMzNTJmNzc5NGU4YTJlYWEyNTljNWUzODM0OGEiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjowLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_9f8652ed02f04f9fb5546a383bc3a949",
+      "statement": "GET /allocations returns reconciled allocation rows with folded per-row valuations. Valuation precedence: stored unrealized_pnl_pct / since_entry_return_pct first; then derived from entry_price vs current_price; then market API fill when nightly stamp is missing; fail closed to null without basis or mark.",
+      "evidence": [
+        {
+          "resource": "repo://apps/dashboard-api/CONTRACT.md#L186-L198",
+          "version": "repo-lines-v1:sha256:2bf0a35f1a452568cb78a936738ad3fc14344596bc816ea8103af89f1fef8103:eyJzZWxlY3RlZExpbmVDb3VudCI6MTMsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImRiYjdkMzU4NTcyZmNmN2U3NmMwMTVjY2E3NDA5YzlmNGE1ZWVhNzA5Y2ViOTJhOTNjNTg0ODRkNzI3NWJhYTQiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjAxYmE0NzE5YzgwYjZmZTkxMWIwOTFhN2MwNTEyNGI2NGVlZWNlOTY0ZTA5YzA1OGVmOGY5ODA1ZGFjYTU0NmIiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6Ijg4MDkxOGFjNjQzMDcwNDAzMDA0MzI3OGFiYjE2NzAwMWM2ODM0M2ZjNWEzYWRmN2Y4MmI2MTY5NTI5Yjg0YWYiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImQwOGM0ZWI5NTA3Y2UyOTMwMWQ5MmFlZjgyNjhhODliMGUxNmU4OTNjYzczMWIxMjVlZmJkZDUyNWY3ODdiZWIifQ"
+        },
+        {
+          "resource": "repo://apps/dashboard-api/src/allocations.ts#L67-L164",
+          "version": "repo-lines-v1:sha256:7482b72ef08a6a10e987fc8b4ef852433ee556137a858feac01fbfaa52ae891f:eyJzZWxlY3RlZExpbmVDb3VudCI6OTgsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjgwMTNmODdiMTZkMjljOWJhZTg0YWY2N2JjZjllYWFlNDRiNGUxYjA1NTQ0YmIwMDkxYTM4MWZjYTMwMmIzMTgiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQxMmNhMzQ1Y2NmNzViZjljMDgwNmJjZTY5NWJlOGRlODA4Yjc5OTg0MjUxYTdhNTRkMjAyY2Y2MTAxZGQ0NTEiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjZiZGM2MTU5MzYxMDUyOTIyZjk5MTdkNDU5YWQxMWI3ZmUzZjI0YjU3NDUzOGJiNDhmOGI3MGUxYmFmODBmZmIiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjowLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_88362e9a783449e69838c1b1d6a2d2e4",
+      "statement": "GET /brief returns scoreboard KPIs with a persisted-vs-overlay decision made server-side. The live overlay engages only when |liveVsMarkPct| > 1e-9 and the tile is labeled 'live marks' — never finalized accounting. Overlay-off output must match the Tearsheet within 0.05 pp.",
+      "evidence": [
+        {
+          "resource": "repo://apps/dashboard-api/src/brief.ts#L101-L150",
+          "version": "repo-lines-v1:sha256:c51f9168327f546db6b72aeb93942556346519f7c3be395f6e1d359be30d594a:eyJzZWxlY3RlZExpbmVDb3VudCI6NTAsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjkyMjczZDc4YTZiZDE5ZWUyNDdkODA1M2Q2NzJkYmIyMWIyZDI0ZTJhZDIxZjliZWE0OGMxZWQ2NjU0MmI2YmMiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQxMmNhMzQ1Y2NmNzViZjljMDgwNmJjZTY5NWJlOGRlODA4Yjc5OTg0MjUxYTdhNTRkMjAyY2Y2MTAxZGQ0NTEiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjdiNGJmNjlhY2Q2NmY4YmVmMjE0OTdmZGU5NjJhYTRiNzllMDk0MDJiMDI2Yjc4Y2Y0ZDMwOGZhNWZlZGIzOGMiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImMyZmRjMzAwODc4NTBiMWExYzE4YTI0NDliOGY4OTZhYzhhZGM0YTYwNWQ3MDQyOTIyZTcwYzY3Mzc2ODc5NjQifQ"
+        },
+        {
+          "resource": "repo://apps/dashboard-api/src/ssot.ts#L504-L506",
+          "version": "repo-lines-v1:sha256:2e11f126443cbbf0ca3902467ec30d204e4edce7a29588c09bed5c3d4d2e2732:eyJzZWxlY3RlZExpbmVDb3VudCI6MywiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiNjBhMjI4MzBlZTYzYmMxY2E2MjY4YjQ3NzA1MjcxMTlkZjBkZTRmYWRmM2JmMzk3OWJhNDM0YzY4NjNlMzljMyIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiNDEyY2EzNDVjY2Y3NWJmOWMwODA2YmNlNjk1YmU4ZGU4MDhiNzk5ODQyNTFhN2E1NGQyMDJjZjYxMDFkZDQ1MSIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiYThmYjA5MDAyOTg1ODI0ZWI1OTk0NjY5ZGQwYjkyYjU5MGUxMzU3MjI0M2Q4NTM3M2JmZjQ0MWI4MDAyZTY1OSIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiZTQwMDVmZjRiODA0MzM3NTg1NTc0ZTE3MjFiMThkMjM5NDVlOTk4ZjEzZTRiMTExODRiZjU5NGI3YjAyMzU4YiJ9"
+        }
+      ]
+    },
+    {
+      "id": "claim_262252740851480696ac2d6df380b6b2",
+      "statement": "GET /performance returns a tearsheet bundle: base-100 continuity NAV series, benchmark-relative headline, overlap-gated alpha/IR. Alpha (Jensen) and IR need >=20 overlapping daily return pairs (MIN_OVERLAP_DAYS) — null below the floor, never invented.",
+      "evidence": [
+        {
+          "resource": "repo://apps/dashboard-api/src/performance.ts#L127-L219",
+          "version": "repo-lines-v1:sha256:647fb3463ac926e65ad32bc00053a8dfd0a209e6c44c22f31bc03724fcc73c33:eyJzZWxlY3RlZExpbmVDb3VudCI6OTMsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImI5OWE0NDczZjY3ZTYxZGFmZTQyMjFjNTg2OTVjZjEzODliMzAxOGJmMzIxYWE1NjE5MDRiMzRmMWJhZjFjNjYiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQxMmNhMzQ1Y2NmNzViZjljMDgwNmJjZTY5NWJlOGRlODA4Yjc5OTg0MjUxYTdhNTRkMjAyY2Y2MTAxZGQ0NTEiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImI5MjY3NGMyYTM2ODZkY2QxYThmMmY5ZmM3OWJkZjUzMzNiNTJiYWNkNTNlODJjNzAxOWE1ZDgxNmI1ZmE5NzUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjI2ODNiNWRlNTljZDlmNTBmMTJjMWEwZGZiZGNiYmUxYWI2NzMxYWQ2Y2QzNGUxOTQ4MTc0YTczNDA5ZGRmN2IifQ"
+        },
+        {
+          "resource": "repo://apps/dashboard-api/src/ssot.ts#L24-L25",
+          "version": "repo-lines-v1:sha256:d5c7e4da9a6e8000dfdc81133cfe8502a91b259ea3db5afb2f4367f9a056e223:eyJzZWxlY3RlZExpbmVDb3VudCI6MiwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiMWNmNzE0ZjM0MGYzMjhjOTdmMDY0N2VkZDUwNjVlMWYwMWUxZWFmOWRkN2M3NTYzNGM0YWU0MmI1ODQ2NmRmMSIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiYjIwZTA4YWUyYzI0ZGY2NmY2NGM1NjY3MWU2ZWU1YjgzY2I1OWY5YzY1NGEzMWI5ZjdlMjAwN2UxZmZmZGI3OSIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiOGVlMzc2NzJiY2Y4MmJmYzI3MTY4YWQwZmIwNjhiMTZkMjY0YTUwYWYxMzdjMzgxZDc0NWFjYTYxZDcwZDY3ZSIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiNjdiZTMzMTdkOGM2ZmVkYTMxMzFhZGQzMzUwYmM2ZDdjYjM5MTIwZWY2NWFmZTU2ZWY4OGRhOTg0YmRlMDhkNiJ9"
+        }
+      ]
+    },
+    {
+      "id": "claim_14996fa64ff64e9d9f504f71c117a4cd",
+      "statement": "GET /nav-series returns seam-chained NAV series with per-point contract labels and continuity index. Calendar gaps <=4 days are forward-filled flat; wider gaps stay broken. Per-point contract labels (finalized_accounting | legacy_estimate) are preserved.",
+      "evidence": [
+        {
+          "resource": "repo://apps/dashboard-api/CONTRACT.md#L304-L324",
+          "version": "repo-lines-v1:sha256:a7c729e8c718a959b978a24de5859f9d47b2517f3169a37fb8528ff8d72059d6:eyJzZWxlY3RlZExpbmVDb3VudCI6MjEsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjZjOTgxZDI1NzQxMGRhNjU2ZGE0OWE2Y2E1OTI4ZWZkZDBjNGI0N2VjMmEyMDgyNWIwNzZlNjA4OTk2NWRhZmYiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjY1YzdhNTg2OTI2N2I4ODdjZTg4NzQ5NDM4Yzc5OTJmZGY2ODRmMzczYjU1ZmVlMGY2YWI2OTgwZjc4ZjY1MGIiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjJiZmZjNzhjODcwMDNmOTY3NzcwYmE5YjU1OTgwODI5MjQyNWU4NGQ3NjczMmFiNzYwNGUyODlmZmFjNzkzYWEiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjY5ZDVhMGNiOTMwNmI1NDBjZWZjMzhjYmFhMDk3NDNlMjFmZTI3NmI4ZDhjMDIwZWMyZTE1ZjdhNzVkMWM3NGQifQ"
+        },
+        {
+          "resource": "repo://apps/dashboard-api/src/nav-series.ts#L160-L209",
+          "version": "repo-lines-v1:sha256:25701a85f8f41733584c60367e7d5d6974c455258c9b627abd9aa6cd2fce66ae:eyJzZWxlY3RlZExpbmVDb3VudCI6NTAsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImJiZDAwMGJhODU0ZmM4MDY1YTMyNWEwOWQ2NTJiNDM4ZjE5MWRmYjFiMGY3NzNiOTk1NjdhYjg5YWIwMmY5MTYiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQxMmNhMzQ1Y2NmNzViZjljMDgwNmJjZTY5NWJlOGRlODA4Yjc5OTg0MjUxYTdhNTRkMjAyY2Y2MTAxZGQ0NTEiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjA4ODQzZjc2ZmI1ZDFmN2E5N2M4MGY5YTM3MjA0NDNkMzFkNDMzN2FkYWUxYWFkMGViMGE0M2RhZDJlNzQ1NTEiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjowLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_28c22d7fed354e32a74ef28b8fd08270",
+      "statement": "GET /benchmarks returns benchmark universe + aligned series for a NAV window, R2-API-only with benchmark-key fallback. Universe resolution: explicit tickers win, else market API GET /v1/market/tickers, else DASHBOARD_BENCHMARK_TICKERS.",
+      "evidence": [
+        {
+          "resource": "repo://apps/dashboard-api/src/benchmarks.ts#L127-L152",
+          "version": "repo-lines-v1:sha256:c6b91975f18bc1262791e0d306e59ceac4ebf33b57aa349f430b8cdcd26f2481:eyJzZWxlY3RlZExpbmVDb3VudCI6MjYsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImVkMWFiMDQ2NDU0MWVkODYzMzY3ZDcyY2Q5YjI5M2MxMjlkYmI0MDBmNWI2MGZjZTY2ZDA5ZjEzNDViZjdmNDUiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQxMmNhMzQ1Y2NmNzViZjljMDgwNmJjZTY5NWJlOGRlODA4Yjc5OTg0MjUxYTdhNTRkMjAyY2Y2MTAxZGQ0NTEiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImYxZTk4NWM2MjAxMWE2MDJlNTk3YjE0MmE4NDU4OTJkN2JlMWE5NTk3NGE0MGJmNTBiMWNkZjQ1YThkODVmMWQiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjZkYjAxZTk1YzQ5ODhkMjYyMTc3ODk5ODg5YjEyNjQ3NjI4ZGVlZWU1MGY0Nzg2YTEyYWJjN2M5NTc0YTU5NDkifQ"
+        },
+        {
+          "resource": "repo://apps/dashboard-api/src/benchmarks.ts#L82-L89",
+          "version": "repo-lines-v1:sha256:da2e022688f6fd49f7884c10bae3ba4a512e457eb0f066416a48ee03b2c66397:eyJzZWxlY3RlZExpbmVDb3VudCI6OCwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiOGQyYmI4YTZjNmIwOTllZGU5N2NiYTBkYTIxNDAwMzc5YTlmY2VhNzg0MDg4MzMyNjgyMDg2ZGRlOGNmZDdmZCIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiNDEyY2EzNDVjY2Y3NWJmOWMwODA2YmNlNjk1YmU4ZGU4MDhiNzk5ODQyNTFhN2E1NGQyMDJjZjYxMDFkZDQ1MSIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiN2ZjYzI0MTVhYjhhY2JmMjAxNTBjOGRlYmZkMzYyYzkyN2M5NGZiNTZhZDUzYTIyOTk3YzFmOWNjZTliMGZjOSIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiZjFmNmY1NDExZTUyZTI5NjY0ZTU0NDU2YmMzMDUyNzU1ZGMyM2VmY2U1MjE4YzgzMmI4Njc1NGJlYzExNzYzOCJ9"
+        }
+      ]
+    },
+    {
+      "id": "claim_ecfa5fc516084b7fb19cd163cefbb61f",
+      "statement": "GET /ledger returns paginated position_events stream with cursor-based pagination. Event types are OPEN | ADD | EXIT | TRIM. Realized % for sells is vs average entry. Cursor is offset-based opaque base64url. Empty range returns success with [] and honest provenance.",
+      "evidence": [
+        {
+          "resource": "repo://apps/dashboard-api/src/ledger.ts#L145-L167",
+          "version": "repo-lines-v1:sha256:e6216cc4e5b1a184eea81f1b6b37dd4281e59b17b1491840f0f6557cc38bcff1:eyJzZWxlY3RlZExpbmVDb3VudCI6MjMsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImNkNDdmZWJjNjk3NTNkNjE0YTMzNDY1MjJmYTIzMzZhYTliYzA0ZmIyZWIzNDM4NzFkZDdiN2QyZjllZTYyMWYiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQxMmNhMzQ1Y2NmNzViZjljMDgwNmJjZTY5NWJlOGRlODA4Yjc5OTg0MjUxYTdhNTRkMjAyY2Y2MTAxZGQ0NTEiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImZiNTgwZTk2NGY4M2E0NzNmNDNkNDQzODQ2Mjk0OWQ2OGI1NjAwZmRhNzg3ZjE2Mzc0NWQwMGRlODljYmYzNmEiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjMyMDRlMjcxNjUzNGFiNjUzYTI2MDA4OTRiYjdlYzRjNWQ2MzIzNDQzNGUwYzVkMzU4NzllNGM5YzkxNWExMWQifQ"
+        },
+        {
+          "resource": "repo://apps/dashboard-api/src/ledger.ts#L291-L355",
+          "version": "repo-lines-v1:sha256:cb91dd0747f9440b47305dcca37235b72106f0981b4951017bf8f2a56bcd98c0:eyJzZWxlY3RlZExpbmVDb3VudCI6NjUsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6Ijg3YzQxYzY0YTE3NDcxNGZjZGZmY2UxNzcwZjY2NDEzMzk2NTIyOTIwNDk0MTE5ODY2NzdiYzFkOGNmOGNlNDAiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6Ijg5ZWRiZDk0ZDFkMmY0NWFmOGU0MTBiOGI1OTM2NjBjMjZiMzdkMTA4NDU5ZjY1YTBkMTljNTcxMTU1YWVhMzMiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjMwZWJmZTA5MmM1ZWM5NDdhNDk5NDYyMzM2YzhjY2I1MmUzNWQ2NGZlZmU4NTk4NjQxNzhhZmUyMmMzZWNiN2UiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImUxMjhiNWRjNDA5NTI4ZjU4ODkzNTY0ZGZkMTMwMGM0OTE5NjJkNTJkNDA4ZTVmNGUyNTViOTdhZTZjODVjYmMifQ"
+        },
+        {
+          "resource": "repo://apps/dashboard-api/src/ledger.ts#L401-L426",
+          "version": "repo-lines-v1:sha256:40b999ad7a7f1d0623ffd543751add7e46853a25f9d6a290fa39560460ec4a70:eyJzZWxlY3RlZExpbmVDb3VudCI6MjYsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjcwMDhkZjljN2NhYzdkNjg1Yzg5NDAyYWQ2ZjQzYzFmNjA4OTFjMjJkOGNmMDUxMDdiNjM1NmJiMGVlNzk1NDAiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQxMmNhMzQ1Y2NmNzViZjljMDgwNmJjZTY5NWJlOGRlODA4Yjc5OTg0MjUxYTdhNTRkMjAyY2Y2MTAxZGQ0NTEiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImUwNjU0MTZjMzdjODYxODhjZTlmNTMxODM1MzVjNWU2NDU5NzM5MzU1NmVjODM1ODI5OGNjODYwNmMwYmE4ODgiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjhiNTRmNmU0YzYxNzU3ODkxNjI0ZmIyY2QwZTkyNmY0NGVjMWRjOGJmMTgyYjA4MDc5ZWNhYjgxZDdmZGNiYTkifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_83991be0b42448349ce0cb00db6bfbb7",
+      "statement": "GET /v1/tables/:table proxies allowlisted PostgREST reads with the service-role key. 17 tables are allowlisted. House-pinned tables (positions, position_events, portfolio_metrics) get workspace_id=eq.{house} appended server-side; documents gets house+system pin. Unknown tables return not_found (404).",
+      "evidence": [
+        {
+          "resource": "repo://apps/dashboard-api/src/tables.ts#L34-L61",
+          "version": "repo-lines-v1:sha256:d73fafc5c9cb9df00c456d5f28b24e3225817a2a4fa5a3908d6fc3077b3de731:eyJzZWxlY3RlZExpbmVDb3VudCI6MjgsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImEyYzJlZDg5MTE3YzllNmRiNDE1NTNhOWZiMTFmMzk1ODRjYzE5NDk3NzMxMDJlNzhlYzU0YWI3YTlkMWI2MzkiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjAxYmE0NzE5YzgwYjZmZTkxMWIwOTFhN2MwNTEyNGI2NGVlZWNlOTY0ZTA5YzA1OGVmOGY5ODA1ZGFjYTU0NmIiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImFjOGI2ZjgxMDM2ZDA2NDg2NDA4MDRhMWNjZDI3YjUzMWFmNGZkNTU0NmU2ZWEwNjBhZGIwZjI3M2I1MWNjOTIiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImM0YzE4NmE4NTg2MDJmZDRmNGFhYTIzMWE5ZjkyMmE5MWU4ZjUwMjY1NDc0NGFmZGJjMDcyYWVmOGRhZmI1ZTkifQ"
+        },
+        {
+          "resource": "repo://apps/dashboard-api/src/tables.ts#L99-L159",
+          "version": "repo-lines-v1:sha256:381291231d2f659728c8c11da2c6d526d891b77f214067e59d4cbd81dbfbb43a:eyJzZWxlY3RlZExpbmVDb3VudCI6NjEsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImQ1ZGI3N2FhM2QwZjcyOGFlZjJjZmQ3YzI2NDUzNjIyMDk4ZDM4NDAzODdmYzllMjY0OWEzYmZkNmMyZTU0NmEiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQxMmNhMzQ1Y2NmNzViZjljMDgwNmJjZTY5NWJlOGRlODA4Yjc5OTg0MjUxYTdhNTRkMjAyY2Y2MTAxZGQ0NTEiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjgyN2RkNGJmYWI3YzQ5NGRjYjEzYjc0NjRhOWU3ZjhjZDRhMGY0Zjc2ZGJkYmNkNTg5YTE2MWI0MmQ0YjA5YjEiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjRlNmVkZWViOTEzNWFhOTYwYTY0M2M3NDQ0ZjJlYzU0NzcyNmY0NDYxNGRhZWRiMGQyMmE1YTM0NDk2OGJiOWEifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_790dcdb14d2847118dfc9205d374e939",
+      "statement": "The tables route supports a query language: select (comma list, default *), repeatable order=col.asc|desc, limit (default 100, cap 5000), offset, and filters eq.col, ilike.col, like.col, in.col, lt.col, lte.col, gt.col, gte.col. The in filter takes caller CSV and converts to PostgREST in.(a,b,c) format.",
+      "evidence": [
+        {
+          "resource": "repo://apps/dashboard-api/CONTRACT.md#L392-L414",
+          "version": "repo-lines-v1:sha256:181a7953630f4e34f3f43569e02179b583a6980fa1e380c9ff36af5832c9b0de:eyJzZWxlY3RlZExpbmVDb3VudCI6MjMsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjczNWE2YTdlMWQyNTcwZGI4Yjk2ZWIwOTViNWIwN2MxODFkOTVjYWVmNTBmYzY1Mjc1NWQ2ZGY0MTk1M2FmOTIiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjI1ZmEwNTA5Y2Q4ZGVjNDg0OTQ3MjZlOTUxMjhlOTM2NTJkN2M0YzFiMTc4ZDUyYzE3NWU0YTcyYjBjMzc4YjIiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjVlZTQwMTExMWExYzRlYjBkZjJkNTI2MGNmZDZiZTcyY2U3OGVhOWM2NzY0MDExZDg2MjIxZWFmOWVjNmVmMjgiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjY3OWUwYjAzNWNiNjhlMTQxY2Y2MTUxYjllYzJjMWI4OTExOTczMGZmOGUwNzI1MmRiOWUwZmY0Y2U0OTk1MWQifQ"
+        },
+        {
+          "resource": "repo://apps/dashboard-api/src/tables.ts#L64-L158",
+          "version": "repo-lines-v1:sha256:70f078f6c1095d4e5b6f54fcc4832929c118cd66fe6d637c068a5ba37568f320:eyJzZWxlY3RlZExpbmVDb3VudCI6OTUsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImRjYjhiZGQyOWRmMzc3YjYwZTMyMDhkOGY1MDczZDk4Y2ViYzE1OWVkODRkMGM4ZGM2YmQzOWRjYzA2ODQ5ZmMiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjIwYzMzODBjMTQyMTE2Yjc4ZmZkNjlkMTYyOGRmNDQyOWY3ZTFkY2MzODZkMmMxY2M1NmU0ODVlMzE5MjU2NGMiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjhjNWYyNzBjNjczNGFjZTBkZWMyNGY0NGZmZjc5NDJmNTE2Yjc0MDQzMTU5YzMyMjExY2EzNGQ0MzhmZTA2NTUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjM3OTI5ZTkxZTBmOTljM2U4MjVkZTY5YjQzNWZiNjQ4NGQxYjBhMWRmMmY0NjU2MWFiZjFhMjlmMDQxODhiODgifQ"
+        }
+      ]
+    }
+  ],
+  "verification": {
+    "by": "openwiki/0.5.0",
+    "at": "2026-09-26T12:43:34.078Z"
+  }
+}

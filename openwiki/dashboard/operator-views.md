@@ -3,18 +3,19 @@ type: frontend-guide
 title: Dashboard Operator Views
 description: Operator-facing views of the digiquant dashboard — brief/today, portfolio (holdings, performance tearsheet, ledger, attribution, theses, tickers), research, pipeline, settings, system, observability, twelve-x, house, library, strategy, architecture, why — each backed by fail-closed contracts and shared SSOT helpers.
 tags: [dashboard, digiquant, portfolio, tearsheet, ledger, attribution, research, pipeline]
-verified:
-  - by: openwiki/0.5.0
-    at: 2026-09-23T13:25:31.068Z
 sources:
+  - id: openwiki-source-b7d50021cb021628a4d3f1e0
+    resource: repo://apps/dashboard-api/src/tables.ts
   - id: openwiki-source-85221aa402153c771b314594
     resource: repo://apps/dashboard/lib/accounting-views.ts
+  - id: openwiki-source-7ae89103abf26f385eb7ef02
+    resource: repo://apps/dashboard/lib/api-client.ts
+  - id: openwiki-source-9b041c93ca39486506b88e9b
+    resource: repo://apps/dashboard/lib/api-query.ts
   - id: openwiki-source-8a7a17e9a899f3930a5c4c63
     resource: repo://apps/dashboard/lib/digichat-popup.ts
   - id: openwiki-source-4cac2ac8f07d77951dc2b672
     resource: repo://apps/dashboard/lib/house-workspace.test.ts
-  - id: openwiki-source-a9e59e8cc238958ba3d5acf9
-    resource: repo://apps/dashboard/lib/house-workspace.ts
   - id: openwiki-source-6d9cdb1078237cf717390fec
     resource: repo://apps/dashboard/lib/market-data.ts
   - id: openwiki-source-de1d9ec92ca3775a29f1459f
@@ -25,16 +26,22 @@ sources:
     resource: repo://apps/dashboard/lib/TABLES.md
   - id: openwiki-source-5a929f63280e765f1f3d432a
     resource: repo://apps/dashboard/README.md
-generated: { by: "openwiki/0.5.0", at: "2026-09-23T13:25:31.068Z" }
+generated: { by: "openwiki/0.5.0", at: "2026-09-26T12:43:34.078Z" }
+verified:
+  - by: openwiki/0.5.0
+    at: 2026-09-26T12:43:34.078Z
 ---
 
 # Dashboard Operator Views
 
 The dashboard (`apps/dashboard`) renders persisted research and portfolio state
-from Supabase-backed book tables. Every view shares two invariants: **house book
-scope** (Group A reads go through `houseBook()` so overlay weights never seed
-the public book) and **fail-closed P&L** (missing basis or mark renders `—`; the
-UI never invents numbers).
+through the central dashboard-api Worker (`apps/dashboard-api`) rather than
+direct browser Supabase reads — see /openwiki/dashboard-api/architecture.md.
+Every view shares two invariants: **house book scope** (Group A reads go through
+`apiHouseBook()`, which executes `GET /v1/tables/:table` and lets the Worker pin
+`workspace_id` server-side, so overlay weights never seed the public book) and
+**fail-closed P&L** (missing basis or mark renders `—`; the UI never invents
+numbers).
 
 ## View inventory
 
@@ -60,9 +67,10 @@ The top-level route groups at `app/` define the operator surface:
 | `/architecture` | Redirects to `/system` → `/pipeline` |
 
 All views render inside the shared `AppFrame` shell (sidebar + mobile app bar +
-command palette). When the Supabase backend is down, the shell stays mounted and
-swaps the page body for a `DbUnavailable` card on non-exempt routes
-(`apps/dashboard/README.md#L68-L73`).
+command palette). When the dashboard API backend is unconfigured or unreachable,
+the shell stays mounted and swaps the page body for a `DbUnavailable` card on
+non-exempt routes (`components/app-frame.tsx#L26-L41`,
+`lib/dashboard-context.tsx#L45-L74`).
 
 ## Daily Brief (`app/page.tsx`)
 
@@ -321,21 +329,29 @@ launcher disappears after hydrate (#3561).
 
 ## House book scope
 
-Every house-dashboard Group A read (`positions`, `nav_history`,
-`position_events`, `portfolio_metrics`) goes through `houseBook()`, which pins
-the house `workspace_id` (`6b753576-ced9-5319-9bfa-c5d0aacd9319`). Migration 109
-lets an authenticated Custom member SELECT their own overlay rows or house, so
-omitting the workspace filter would mix overlay weights into the public Brief /
-Holdings / Performance surfaces. Shared teasers without `workspace_id`
-(`daily_snapshots`, `theses`, `instruments`) stay date-only.
+Every house-dashboard Group A book read (`positions`, `position_events`,
+`portfolio_metrics`) goes through `apiHouseBook()` in `lib/api-query.ts`, which
+executes `GET /v1/tables/:table` against the dashboard-api Worker
+(`lib/api-client.ts` → `apps/dashboard-api/src/tables.ts`). The Worker — not the
+client — pins the house `workspace_id`
+(`6b753576-ced9-5319-9bfa-c5d0aacd9319`); the bundle sends no Supabase
+credentials and no `workspace_id`, so the caller cannot widen the scope
+(CONTRACT §7). Migration 109 lets an authenticated Custom member SELECT their
+own overlay rows or house, so an unscoped read would mix overlay weights into
+the public Brief / Holdings / Performance surfaces. Shared teasers without
+`workspace_id` (`daily_snapshots`, `theses`, `instruments`) stay date-only.
 
 The accounting NAV reads `public_accounting_nav_history` (security definer;
-house-only until a later view rewrite). Rollback to legacy views is a constant
-repoint (`LEGACY_PUBLIC_NAV_VIEW = 'public_nav_history'`).
+house-only until a later view rewrite) through the plain `apiDb` root — no house
+pin. Rollback to legacy views is a constant repoint
+(`LEGACY_PUBLIC_NAV_VIEW = 'public_nav_history'`).
 
-(`apps/dashboard/lib/house-workspace.ts#L1-L45`,
-`apps/dashboard/lib/house-workspace.test.ts#L54-L73`,
-`apps/dashboard/lib/accounting-views.ts#L1-L12`)
+(`apps/dashboard/lib/api-query.ts#L159-L168`,
+`apps/dashboard/lib/api-client.ts#L131-L155`,
+`apps/dashboard-api/src/tables.ts#L54-L60`,
+`apps/dashboard-api/src/tables.ts#L123-L128`,
+`apps/dashboard/lib/house-workspace.test.ts#L54-L78`,
+`apps/dashboard/lib/accounting-views.ts#L8-L12`)
 
 ## Performance SSOT (#3580 / #3604)
 
