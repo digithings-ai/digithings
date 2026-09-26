@@ -27,7 +27,7 @@ export const DASHBOARD_CSP = [
   "style-src 'self' 'unsafe-inline'",
   "img-src 'self' data: blob: https:",
   "font-src 'self' data:",
-  "connect-src 'self' https://*.supabase.co wss://*.supabase.co",
+  "connect-src 'self' https://*.supabase.co wss://*.supabase.co https://dashboard-api.chris-stefan.workers.dev",
   `frame-src ${DASHBOARD_DIGICHAT_FRAME_SRC}`,
   "frame-ancestors 'none'",
   "base-uri 'self'",
