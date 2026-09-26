@@ -408,6 +408,12 @@ export function ModuleGrid() {
    */
   const [started, setStarted] = useState(false);
   const [ready, setReady] = useState(false);
+  /* Focus engagement (owner: digiquant lights up only once the grid is fully
+     expanded and in view, after a bit more scrolling — not the moment the
+     dock engages). `ready` is the dock; `engaged` adds ~8% of walk progress
+     before the first focus lands, then holds until the dock releases. */
+  const [engaged, setEngaged] = useState(false);
+  const readyRef = useRef(false);
   useEffect(() => {
     let raf = 0;
     const check = () => {
@@ -418,10 +424,29 @@ export function ModuleGrid() {
       if (window.scrollY >= top - 1) setStarted(true);
       const mosaic = track.querySelector(".dg-mosaic");
       if (!mosaic) return;
-      const rect = mosaic.getBoundingClientRect();
+      /* Gate on the STAGE box, not the mosaic box: the stage is the unit
+         that docks (top: nav height, full viewport height), so its centre
+         sits mid-viewport whenever docked. The mosaic box can't be the
+         metric — its height IS the docked state (resting 459px vs docked
+         856px), so gating on it deadlocks: resting centre sits just above
+         the band, ready never fires, is-ready never applies, height never
+         grows. Measured live: resting centre 323px vs 344px band edge. */
+      const stage = track.querySelector(".dg-stage--mosaic");
+      const rect = (stage ?? mosaic).getBoundingClientRect();
       const vh = window.innerHeight || 1;
       const center = rect.top + rect.height / 2;
-      setReady(center > vh * 0.33 && center < vh * 0.67);
+      /* Hysteresis against dock-edge flapping (part of the scroll jitter):
+         enter on the middle third, release on a wider skirt, so a centre
+         hovering the boundary can't strobe focus and height. */
+      const inside = readyRef.current
+        ? center > vh * 0.3 && center < vh * 0.7
+        : center > vh * 0.33 && center < vh * 0.67;
+      readyRef.current = inside;
+      setReady(inside);
+      const span = Math.max(track.offsetHeight - vh, 1);
+      const progress = (window.scrollY - top) / span;
+      if (inside && progress > 0.08) setEngaged(true);
+      else if (!inside) setEngaged(false);
     };
     const onScroll = () => {
       if (raf === 0) raf = window.requestAnimationFrame(check);
@@ -476,13 +501,51 @@ export function ModuleGrid() {
     };
   }, [stepper, reduced, started]);
 
-  const focus = ready ? Math.max(activeIndex, 0) : -1;
+  const focus = engaged ? Math.max(activeIndex, 0) : -1;
+
+  /**
+   * Card density tiers (owner: a tile shows whatever fits — full with
+   * packages at the bottom, medium with title + subtitle + version, mini
+   * with title + version only — and never clips). Tiers key off measured
+   * tile height with an 8px hysteresis skirt so a tile hovering a boundary
+   * can't flap between states (more scroll jitter): full at >=200px,
+   * medium 112–200px, mini below. Rest heights measure 280/113/50 and
+   * focused tiles 200+, so each tier's content fits its box. Applied via
+   * data-tier (no react state — pure presentation, no render loops); the
+   * effect re-runs on focus change (detail mounts/unmounts) and observes
+   * resizes for flex regrowth.
+   */
+  const tierRef = useRef<Record<string, number>>({});
+  useEffect(() => {
+    const track = trackRef.current;
+    if (!track) return;
+    const applyTiers = () => {
+      track.querySelectorAll<HTMLElement>(".dg-cell").forEach((cell) => {
+        const id = cell.dataset.mod ?? "";
+        const h = cell.clientHeight;
+        const t = tierRef.current[id] ?? 0;
+        let next = h >= 200 ? 0 : h >= 112 ? 1 : 2;
+        if (t === 0 && h >= 192) next = 0;
+        else if (t === 1 && h >= 104 && h < 208) next = 1;
+        else if (t === 2 && h < 120) next = 2;
+        tierRef.current[id] = next;
+        cell.dataset.tier = next === 0 ? "full" : next === 1 ? "medium" : "mini";
+      });
+    };
+    const ro = new ResizeObserver(() => applyTiers());
+    track.querySelectorAll(".dg-cell").forEach((c) => ro.observe(c));
+    applyTiers();
+    return () => ro.disconnect();
+  }, [focus]);
   const tileGrow = solveTileGrow(focus);
   const rowGrow = solveRowGrow(focus);
   const rows = stepper ? STACK_ROWS : ROWS;
 
   return (
-    <section id="architecture">
+    <section id="architecture" className="line-t line-b">
+      {/* Standard section delimiters above and below the grid (owner: the
+          same line-t/line-b grammar every other section uses). The stub
+          dotted verticals are gone — that space stays empty by direction. */}
       <div
         ref={trackRef}
         style={
@@ -512,6 +575,7 @@ export function ModuleGrid() {
                   return (
                     <div
                       key={m.id}
+                      data-mod={m.id}
                       ref={
                         stepper
                           ? (el) => {
