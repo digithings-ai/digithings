@@ -234,29 +234,49 @@ body {
    always exactly its parent's and the rows are flush by construction — the
    property v3 needed a backtracking partition to reach. */
 .dg-mosaic--rows {
-  display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
+  display: block;
+  position: relative;
   /* Rail-bounded (#4429): the mosaic spans rail to rail — never the full
      viewport — with one page-pad of air inside each rail, the same grammar
      every section uses (Tailwind preflight is border-box, so the padding
      insets inside the max-width). Tiles size against the frame width, not
      the window.
      Always-full (v16): the mosaic fills the stage at every scroll position —
-     landing, walk, and release. The old resting/docked two-state (compact
-     clamp until the centered-gate fired) left a dead void under the grid at
-     landing and collapsed the grid as the pin released, which read as a gap
-     before the next section. There is no height transition because height no
-     longer changes; the focus walk's size morph is owned by motion `layout`
-     on the rows and tiles, not by CSS. On viewports taller than the cap the
-     grid stops growing instead of going cavernous (owner: if the page gets
-     too large the sections below should still come into view). */
+     landing, walk, and release. There is no height transition because height
+     no longer changes.
+     Packing box (v17): the tiles are absolutely positioned rects solved by
+     the squarified treemap in `ModuleGrid` (areas ∝ LOC, no fixed rows), so
+     the container is a plain relative box, not a flex column. Motion eases
+     each tile's left/top/width/height between solves. On viewports taller
+     than the cap the grid stops growing instead of going cavernous (owner:
+     if the page gets too large the sections below should still come into
+     view). */
   width: 100%;
   max-width: calc(var(--frame-w) + 2 * var(--page-pad));
   margin-inline: auto;
   padding-inline: var(--page-pad);
   height: 100%;
   max-height: 64rem;
+  overflow: hidden;
+}
+/* Packed tiles are positioned by inline rects (left/top/width/height from the
+   treemap solve), so they leave normal flow here. Scoped to the mosaic face:
+   the stacked face keeps its flow tiles. The focus walk's size morph eases on
+   the brand curve — the treemap re-solves areas and CSS carries each tile to
+   its new rect. Opacity starts hidden until the first solve lands: the box is
+   measured one effect-tick after mount, and unpositioned tiles must not flash
+   piled at the corner (visibility, not opacity, so rest/focus/hover fading
+   stays untouched). */
+.dg-mosaic--rows .dg-cell {
+  position: absolute;
+  transition:
+    left 0.45s var(--ease),
+    top 0.45s var(--ease),
+    width 0.45s var(--ease),
+    height 0.45s var(--ease),
+    opacity 0.25s var(--ease),
+    background 0.25s var(--ease),
+    box-shadow 0.25s var(--ease);
 }
 /* The mosaic's own stage sits below the pinned top bar — never behind it —
    so the walk plays in the remaining viewport, vertically centred. Scoped
@@ -289,7 +309,7 @@ body {
    the row is `flex: 0 0 auto` inside the column. */
 .dg-mosaic--stack .dg-cell { flex: 1 1 auto; min-width: 0; opacity: 0.72; transition: opacity .25s var(--ease), background .25s var(--ease), box-shadow .25s var(--ease); }
 .dg-mosaic--stack .dg-cell.on { opacity: 1; }
-.dg-mosaic-row { display: flex; flex: 1 1 0; min-height: 0; gap: 0.5rem; /* No size transition here: the walk's growth is motion `layout` on the row/tiles (owner: smooth proportions at every size — the LOC weights never change, only the box). CSS keeps only the paint transitions below. */ }
+.dg-mosaic-row { display: flex; flex: 1 1 0; min-height: 0; gap: 0.5rem; /* Stacked face only: the mosaic face has no rows since v17 (treemap). No size transition here in either face — the mosaic morph is motion `animate` on the tiles, the stack is content-driven. CSS keeps only the paint transitions below. */ }
 
 .dg-cell { position: relative; display: flex; flex-direction: column; gap: 0.5rem; flex: 1 1 0; min-width: 0; min-height: 0; padding: 0.85rem 0.95rem; margin: 0; background: var(--surface); border: 1px solid var(--hair); border-radius: 0; text-align: left; cursor: pointer; overflow: hidden; opacity: 0.55; transition: opacity .25s var(--ease), background .25s var(--ease), box-shadow .25s var(--ease); }
 .dg-cell:hover { opacity: 0.85; }
@@ -426,12 +446,14 @@ button.dg-docker.is-copied { color: var(--accent); }
 }
 .dg-cell.on .dg-loc { color: var(--ink-soft); }
 
-/* The flex-grow resize is the whole point of the mosaic, so the one place it
+/* The focus morph is the whole point of the mosaic, so the one place it
    must not run is where motion is unwanted: focus then lands on the final
-   layout with no travel. */
+   layout with no travel. The mosaic-face selector keeps the higher
+   specificity of the transition it cancels. */
 @media (prefers-reduced-motion: reduce) {
   .dg-mosaic-row,
-  .dg-cell { transition: none; }
+  .dg-cell,
+  .dg-mosaic--rows .dg-cell { transition: none; }
 }
 
 
