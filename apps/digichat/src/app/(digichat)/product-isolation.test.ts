@@ -77,6 +77,25 @@ describe("product CSS isolation", () => {
     expect(chrome).not.toMatch(/\.aui-thread-viewport-footer[^}]*padding/);
   });
 
+  it("keeps the credit legible through the boot animation", () => {
+    // The boot overlay hides the column; the carve-out re-asserts the
+    // credit visible, lifted above the overlay. Deliberately no
+    // color/size/opacity changes: the credit must read exactly the same
+    // during boot as settled.
+    const chrome = read("../../styles/product-chrome.css");
+    const carveout = chrome.match(
+      /\[data-stock-product\]\[data-boot-active="true"\] \[data-slot="aui_credit"\]\s*\{[^}]*\}/,
+    );
+    expect(carveout?.[0]).toMatch(/visibility:\s*visible/);
+    expect(carveout?.[0]).not.toMatch(/opacity:/);
+    // Sticky footers trap the credit in their stacking context, so its own
+    // z-index can never clear the overlay — the footer itself is lifted.
+    const lift = chrome.match(
+      /\[data-stock-product\]\[data-boot-active="true"\] \.aui-thread-viewport-footer\s*\{[^}]*\}/,
+    );
+    expect(lift?.[0]).toMatch(/z-index:\s*50/);
+  });
+
   it("first-party digichat skin defaults to the expanded composer", () => {
     const skin = read("../../../../../packages/ui/src/components/chat/skins/digichat.tsx");
     expect(skin).toMatch(

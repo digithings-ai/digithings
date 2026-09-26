@@ -39,6 +39,7 @@ export const SkinCredit: FC<{
   return (
     <p
       data-testid="skin-credit"
+      data-slot="aui_credit"
       className={cn(
         "pt-0.5 text-center text-xs leading-4 opacity-60",
         className,

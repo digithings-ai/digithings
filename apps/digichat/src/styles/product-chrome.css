@@ -64,17 +64,33 @@
    ancestor that merely *contains* it un-hid the whole column (the credit is a
    descendant, not a direct child), so the column's content showed through a
    transparent wide overlay. Instead the credit lifts itself above the overlay
-   with its own stacking context (`.dc-attribution` above), which keeps it
-   visible through the animation while the column still hides (m3). */
+   with its own stacking context (the `[data-slot="aui_credit"]` boot rule
+   below), which keeps it visible through the animation while the column
+   still hides (m3). */
 [data-stock-product][data-boot-active="true"] > :not(.dboot-overlay) {
   visibility: hidden;
 }
 
 /* A hidden ancestor still hides the credit (visibility inherits), so the
-   credit re-asserts its own visibility — the stacking context above only
-   handles paint order, not the inherited hide. */
+   credit re-asserts its own visibility. No color/size/opacity changes here
+   on purpose: the credit must read exactly the same during boot as settled,
+   and it sits over the flat overlay background (same canvas token), so the
+   settled styling carries over untouched. */
 [data-stock-product][data-boot-active="true"] [data-slot="aui_credit"] {
   visibility: visible;
+  position: relative;
+  z-index: 60;
+}
+
+/* The credit's own z-index can never escape the sticky viewport footer:
+   sticky forms a stacking context (even with z-index auto), so the footer
+   subtree paints as one unit below the overlay no matter how high the
+   credit's z-index goes. Lift the whole footer above the overlay instead —
+   everything inside stays hidden except the credit, which re-asserts its
+   own visibility above. Static footers ignore z-index, so only the sticky
+   ones move; all of it vanishes with boot-active. */
+[data-stock-product][data-boot-active="true"] .aui-thread-viewport-footer {
+  z-index: 50;
 }
 
 .dc-inline-link {
