@@ -1120,8 +1120,10 @@ authenticated workspace policies. Migration **117** addresses that pile only:
 - Lint **0029** authenticated EXECUTE on `my_access()` — product need; documented above
   (and in SECURITY.md Accepted advisors).
 - Leaked-password protection (HaveIBeenPwned / Hibp) — Auth dashboard toggle, not SQL.
-  Operator: Chris. Still not a migration after 139. Enable under Authentication →
-  Providers → Email → Password → Leaked password protection.
+  **Accepted / plan-gated residual** on core (Pro-only; cannot enable on current plan;
+  confirmed 2026-09-26 via [#4696](https://github.com/digithings-ai/digithings/pull/4696)).
+  Not an open Human Gate. Not a migration after 139. Revisit only if core upgrades to a
+  plan that includes Auth Hibp. See SECURITY.md **"Accepted advisors (core)"**.
   [#3461](https://github.com/digithings-ai/digithings/issues/3461) /
   [#4630](https://github.com/digithings-ai/digithings/issues/4630).
 - **pg_net** (139): `USAGE`/`EXECUTE` revoked from `PUBLIC`/`anon`/`authenticated`; cron
