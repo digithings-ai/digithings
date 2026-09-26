@@ -1,11 +1,19 @@
 ---
 type: "Reference"
 title: "digithings Quickstart"
+description: "Central task-routing map for every digithings component quickstart, plus the stack-wide health verify and references to the dashboard-api Cloudflare Worker and the digichat-ui shared library."
+tags: [quickstart, routing, dashboard-api, digichat-ui, digithings]
 openwiki_generated: true
 verified:
   - by: openwiki/0.5.0
-    at: 2026-09-23T13:25:31.068Z
+    at: 2026-09-26T12:43:34.078Z
 sources:
+  - id: openwiki-source-8037e2358a2c4f9b2c722a11
+    resource: repo://AGENTS.md
+  - id: openwiki-source-37f0168bdd5dcdd9f3c212c3
+    resource: repo://apps/dashboard-api/README.md
+  - id: openwiki-source-6545dc82922fa989bb35b590
+    resource: repo://apps/dashboard-api/src/index.ts
   - id: openwiki-source-4b2266e051b2270b6ec5aa4f
     resource: repo://BRANCHING.md
   - id: openwiki-source-72050835d3541ab62444987d
@@ -32,7 +40,11 @@ sources:
     resource: repo://digivault/AGENTS.md
   - id: openwiki-source-a49bd70bd0f6d776441b838b
     resource: repo://docs/agents/CODE_REVIEW_POLICY.md
-generated: { by: "openwiki/0.5.0", at: "2026-09-23T13:25:31.068Z" }
+  - id: openwiki-source-81acdc975caf6a6f37fb8a3c
+    resource: repo://packages/digichat-ui/ARCHITECTURE.md
+  - id: openwiki-source-13cbba77ac1d52e9c2775224
+    resource: repo://packages/digichat-ui/package.json
+generated: { by: "openwiki/0.5.0", at: "2026-09-26T12:43:34.078Z" }
 ---
 
 
@@ -56,8 +68,9 @@ service, verify with health/status curls, run the unit gates — per its
 | Run the chat UI (assistant-ui skins, multi-backend, deploy-config) | [digichat Quickstart](/openwiki/digichat/quickstart.md) |
 | Heartbeat, audit log, drift check, monitors_tick | [digiclaw Quickstart](/openwiki/digiclaw/quickstart.md) |
 | Shared helpers (errors, metrics, OTel, audit) | [digibase Library Guide](/openwiki/digibase/library-guide.md) |
-| LLM client, fetch engine, skill compiler | [digillm](/openwiki/libraries/digillm.md), [digifetch](/openwiki/libraries/digifetch.md), [digiskills](/openwiki/libraries/digiskills.md) |
+| Shared libraries — LLM client, fetch engine, skill compiler, chat UI helpers | [digillm](/openwiki/libraries/digillm.md), [digifetch](/openwiki/libraries/digifetch.md), [digiskills](/openwiki/libraries/digiskills.md), [digichat-ui](/openwiki/libraries/digichat-ui.md) |
 | Operator dashboard — research, portfolio, tearsheet | [Dashboard Architecture](/openwiki/dashboard/architecture.md) |
+| Read dashboard data through the central read-only API | [dashboard-api Architecture](/openwiki/dashboard-api/architecture.md) |
 | Branches, make targets, review/merge rules | [Repo Workflow](/openwiki/repo/workflow.md) |
 
 ## Stack-wide verify
@@ -69,6 +82,7 @@ curl -s http://localhost:8001/healthz # digiquant
 curl -s http://localhost:8002/health # digisearch
 curl -s http://localhost:8003/healthz # digismith
 curl -s http://localhost:8005/healthz # digikey
+curl -s $DASHBOARD_API_URL/healthz # dashboard-api (Cloudflare Worker)
 pytest tests/ -m unit -k "digigraph or digiquant or digisearch or digismith or digikey" -v
 ```
 

@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "pageVersion": "sha256:197d0d215234f6c8c4d413e354da1c9eca7e7f9bda570784b00888eba39993e0",
+  "pageVersion": "sha256:c8ee2427ec5ca378db9ecd23071cb0f2f74c6afb01d2d28f3900db3a7528e286",
   "claims": [
     {
       "id": "claim_c30fda274d3f4487a822bb42cedbce30",
@@ -87,10 +87,56 @@
           "version": "repo-lines-v1:sha256:e3fd0b3dcbc19396ccfc43c1b18c5635c790da2acc2bd9210bfd44d66b124206:eyJzZWxlY3RlZExpbmVDb3VudCI6MTEsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjBkY2VmMTVmOGMyNWE2YjE0YTBiZjI0ZDY0MzMxM2IyNjUwYTFhYzc3MjEyMTYzOTNiYmEzMjZiMzAyZGIzNGUiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImI0MTdmZGQwYWRhNjM1MzE1YWZhZDIzNDJhNGNhYTUwYjc5M2M0NTE0NjU3ZWUxMTA5NmUwNmExYjdjNzdjYWIiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImViYzQyZDQ4NjFlYzZmYjFhZThjYzQ2YzRkYzg1MTEzZTI0ZjllZmZkMmJlNjE1NTJkN2JlYmI4OThhMjQzNTUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6Ijk0YmRiM2YyZjMxNThkMTc4ZjdiMjFiOWYyNmNjZDA1N2QyZDM3NjIzMWE0NzE1YTc3NjFiNGU1NTUyNGY2OWUifQ"
         }
       ]
+    },
+    {
+      "id": "claim_369deba73d87418da5492879c2b2b31c",
+      "statement": "dashboard-api (`apps/dashboard-api`) is the central read-only Cloudflare Worker API for the dashboard, and its `GET /healthz` route returns `{\"ok\": true, \"service\": \"dashboard-api\"}` as an auth-exempt liveness probe.",
+      "evidence": [
+        {
+          "resource": "repo://apps/dashboard-api/README.md",
+          "version": "repo-file-v1:sha256:280183e25aac3f35ae391825c6604f1657eb302a8d9b91fc278e464cdb8ee042"
+        },
+        {
+          "resource": "repo://apps/dashboard-api/src/index.ts#L138-L140",
+          "version": "repo-lines-v1:sha256:fdfb2d7407be67a40d65bfcc9d29b541a9defcdd339e8dd4a6c2f82a9d538692:eyJzZWxlY3RlZExpbmVDb3VudCI6MywiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiMzVhZDU2NTQ2MTYyZmNkMmQxMmYyN2QyZGQ2OTI4NjcxYmQxYWM1MWNiNjkyODdiMWFjMTViMTU3YjVjMDU4OSIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiNDEyY2EzNDVjY2Y3NWJmOWMwODA2YmNlNjk1YmU4ZGU4MDhiNzk5ODQyNTFhN2E1NGQyMDJjZjYxMDFkZDQ1MSIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiYzdiYzQzMTVmNDM0ZmJkNWNiODZiNjgyMDE1NzYxZTYyNWNhYzY2MTEzMzM5ZGExMWIxZWVmOWU3OWJhZWEwMCIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiNjBmOWYyOGM5ZjQ0MThjNThmN2ExZjdlNmU3YmQwODY5NWQ0NmQ4ZjcyNDAwY2MyMjMxZjdjYzk1YmI0NWUyOCJ9"
+        }
+      ]
+    },
+    {
+      "id": "claim_36644f570f04403880ef0f2ff6b14281",
+      "statement": "The digithings Quickstart routes readers to per-component quickstarts, a dashboard-api Worker reference (/openwiki/dashboard-api/architecture.md), and a digichat-ui library entry (/openwiki/libraries/digichat-ui.md), covering the services listed in AGENTS.md alongside the new worker and shared package.",
+      "evidence": [
+        {
+          "resource": "repo://AGENTS.md",
+          "version": "repo-file-v1:sha256:ad9414aba43a221ac8edd68b8d3b1b22938d541684144ab5a09c334607933ccc"
+        },
+        {
+          "resource": "repo://apps/dashboard-api/README.md",
+          "version": "repo-file-v1:sha256:280183e25aac3f35ae391825c6604f1657eb302a8d9b91fc278e464cdb8ee042"
+        },
+        {
+          "resource": "repo://packages/digichat-ui/package.json",
+          "version": "repo-file-v1:sha256:bf7f056cdd2c5a480492dca77c3e721891409b478bba173ae3a860ad13e37b9f"
+        }
+      ]
+    },
+    {
+      "id": "claim_c93fc491b7c54562a2fb7718a6ebbc57",
+      "statement": "digichat-ui is delivered as the `@digithings/digichat-ui` private npm workspace package that provides shared digichat helpers (brand marks, slash-command palette, transcript-markdown serializers re-exported from `@digithings/ui`, `DocumentPane`, `MiniMarkdown`, and session CSS) and is not a session shell — the 2.0 session renders in `apps/digichat` via assistant-ui's stock `Thread`.",
+      "evidence": [
+        {
+          "resource": "repo://packages/digichat-ui/ARCHITECTURE.md",
+          "version": "repo-file-v1:sha256:5e92668144f646aa30b690679f0f1c60b15d5b7790a8ca64168b06deb7791c82"
+        },
+        {
+          "resource": "repo://packages/digichat-ui/package.json",
+          "version": "repo-file-v1:sha256:bf7f056cdd2c5a480492dca77c3e721891409b478bba173ae3a860ad13e37b9f"
+        }
+      ]
     }
   ],
   "verification": {
     "by": "openwiki/0.5.0",
-    "at": "2026-09-23T13:25:31.068Z"
+    "at": "2026-09-26T12:43:34.078Z"
   }
 }

@@ -6,6 +6,25 @@ generated: { by: "openwiki/0.5.0", at: "2026-09-23T13:25:31.068Z" }
 verified:
   - by: openwiki/0.5.0
     at: 2026-09-23T13:25:31.068Z
+sources:
+  - id: openwiki-source-5dd6032865f6a0da99b5bf34
+    resource: repo://digifetch/ARCHITECTURE.md
+  - id: openwiki-source-baa709f9cdeaf7e467413000
+    resource: repo://digifetch/pyproject.toml
+  - id: openwiki-source-b629d8effd0ca947d2e8078c
+    resource: repo://digifetch/src/digifetch/__init__.py
+  - id: openwiki-source-36222e676452a692ac37e182
+    resource: repo://digifetch/src/digifetch/http.py
+  - id: openwiki-source-da07c4a285964831bd07915c
+    resource: repo://digifetch/src/digifetch/retry.py
+  - id: openwiki-source-3c75cdbe47dbd6047053c8cd
+    resource: repo://digifetch/src/digifetch/ssrf.py
+  - id: openwiki-source-79bea606868602230640f22a
+    resource: repo://digifetch/tests/test_http.py
+  - id: openwiki-source-68e3284f25625eeab141357f
+    resource: repo://digifetch/tests/test_package.py
+  - id: openwiki-source-7b3b7628d391bb6f7aa0a492
+    resource: repo://digifetch/tests/test_ssrf.py
 ---
 
 

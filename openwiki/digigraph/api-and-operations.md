@@ -6,6 +6,15 @@ generated: { by: "openwiki/0.5.0", at: "2026-09-23T13:25:31.068Z" }
 verified:
   - by: openwiki/0.5.0
     at: 2026-09-23T13:25:31.068Z
+sources:
+  - id: openwiki-source-480f9d807ff1b9a39c50e94a
+    resource: repo://digigraph/src/digigraph/mcp_server.py
+  - id: openwiki-source-78c5cfe6ccb60ca994b9d754
+    resource: repo://digigraph/src/digigraph/policy.py
+  - id: openwiki-source-8d34424c48c23b51545587fc
+    resource: repo://digigraph/src/digigraph/rate_limit.py
+  - id: openwiki-source-3854646407c9bc7a61e346db
+    resource: repo://digigraph/src/digigraph/server.py
 ---
 
 

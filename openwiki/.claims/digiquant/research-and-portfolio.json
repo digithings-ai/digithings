@@ -1,22 +1,26 @@
 {
   "schemaVersion": 1,
-  "pageVersion": "sha256:722561e1a161671f49ca06e390a226a2f9be3016060ef85aa365009b37772362",
+  "pageVersion": "sha256:8a330322dcbfe1d27abcbd224eb01c7e20df2f9f7fa842c1af44d134c05e2233",
   "claims": [
     {
       "id": "claim_c305def821d044c4a2ac07f098d86b14",
-      "statement": "The portfolio sub-graph runs H1-H9 thesis-to-allocation phases via build_portfolio_phases_thesis, with H7 emitting a PMDirectionMemo without weights, H8 sizing via size_portfolio as the sole weight owner, and H9 commit_run as the terminal.",
+      "statement": "The portfolio sub-graph runs H1-H9 thesis-to-allocation phases via build_portfolio_phases_thesis. H7 emits a PMDirectionMemo (direction + rank only, no weights) with WP4.5 ForecastReference audit pointers deterministically bound from the effective-forecast map (never LLM-supplied) and WP-G confidence ∈ [0,1] on each roster row. H8 sizing is the sole weight owner; H9 commit_run is the terminal. Optional PortfolioGraphDeps carries evidence_bundle_store and research_state_store into analyst/deliberation phases, and build_direction accepts research_state_store plus an optional resolved_outcomes_memo.",
       "evidence": [
         {
-          "resource": "repo://digiquant/src/digiquant/portfolio/graph.py#L106-L141",
-          "version": "repo-lines-v1:sha256:4964a94de469bdf5b467c7b8d18860ed4d12c76181df8dfb0a90021c2cd89696:eyJzZWxlY3RlZExpbmVDb3VudCI6MzYsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjdlMzEwOTFiNGRlN2NmYTg0NzRiYWMwZjkxZGE1Mzg5YjMzNTQ2MGJhNTM3MDI0NzdiZWE3NGQ0ZGQwZDliNDAiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjViMjZiMTI4ZjNkNDk5NzE4NmI2ODA2NDM0ZTQ0NTZmYjBjMjE4NjVkYzMwMTNiN2ZmNzI0M2I1YzZkYTA1ZmUiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjM2NjcwZjY2NTVjNDdhOTkxODc0ZjE0NmY0M2FiMzU0NWUxN2E3M2E3MTQyYzc3MzZkYjg3MTZkMDY2ZDkwOTEiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjdlNGExNzFiMTg1ZTNmMjFlODU2NWMxZTE5MDVjYjYzZjY5MDgzNDQ0Zjk2OTFiYTdjYWQ1NmUxY2M1ZTVlNDAifQ"
+          "resource": "repo://digiquant/src/digiquant/portfolio/graph.py#L110-L151",
+          "version": "repo-lines-v1:sha256:709378a988e549fddfff231d0a6721a90b1b166c8adb65f94cb7d62901e42ce0:eyJzZWxlY3RlZExpbmVDb3VudCI6NDIsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjdlMzEwOTFiNGRlN2NmYTg0NzRiYWMwZjkxZGE1Mzg5YjMzNTQ2MGJhNTM3MDI0NzdiZWE3NGQ0ZGQwZDliNDAiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjViMjZiMTI4ZjNkNDk5NzE4NmI2ODA2NDM0ZTQ0NTZmYjBjMjE4NjVkYzMwMTNiN2ZmNzI0M2I1YzZkYTA1ZmUiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjM2NjcwZjY2NTVjNDdhOTkxODc0ZjE0NmY0M2FiMzU0NWUxN2E3M2E3MTQyYzc3MzZkYjg3MTZkMDY2ZDkwOTEiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjdlNGExNzFiMTg1ZTNmMjFlODU2NWMxZTE5MDVjYjYzZjY5MDgzNDQ0Zjk2OTFiYTdjYWQ1NmUxY2M1ZTVlNDAifQ"
+        },
+        {
+          "resource": "repo://digiquant/src/digiquant/portfolio/models/pm_direction.py#L1-L197",
+          "version": "repo-lines-v1:sha256:a7bf5b4f75d10c4076cab78042bf191c78761bf470de906e9105a97a7b456097:eyJzZWxlY3RlZExpbmVDb3VudCI6MTk3LCJmaXJzdFNlbGVjdGVkTGluZUhhc2giOiJiN2MxYWZmNGNlYThlOTRiODcwYmNhODdlM2Y4YTY5MmYxYzgwZWEyNjg4ZTdkOTQ2YWMxOWVhYmMwYTc4NzBhIiwibGFzdFNlbGVjdGVkTGluZUhhc2giOiJmOTQxNmUwOWY3OGJhMzE2YzAzMjU2ODIxM2I4NTVlZTc1NmU0MTU2NWQ5MThmMDk1MTljODFmZDYyMGY0MDYwIiwicHJlY2VkaW5nQ29udGV4dExpbmVDb3VudCI6MCwicHJlY2VkaW5nQ29udGV4dEhhc2giOiJlM2IwYzQ0Mjk4ZmMxYzE0OWFmYmY0Yzg5OTZmYjkyNDI3YWU0MWU0NjQ5YjkzNGNhNDk1OTkxYjc4NTJiODU1IiwiZm9sbG93aW5nQ29udGV4dExpbmVDb3VudCI6MCwiZm9sbG93aW5nQ29udGV4dEhhc2giOiJlM2IwYzQ0Mjk4ZmMxYzE0OWFmYmY0Yzg5OTZmYjkyNDI3YWU0MWU0NjQ5YjkzNGNhNDk1OTkxYjc4NTJiODU1In0"
         },
         {
           "resource": "repo://digiquant/src/digiquant/portfolio/phases/commit.py#L1-L55",
           "version": "repo-lines-v1:sha256:d863fea5e3663d78840b42d1b9f2cfb2062f874c5ff513e9155664e309c0c252:eyJzZWxlY3RlZExpbmVDb3VudCI6NTUsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjlmOTNlODMwNGZjMTE0MDkxZDQyZWI2ZjExOTFkMTM3YzE2N2ZiZjQ1Nzc5NDA5YTUwNmRhYjhkOGY5YjM1MDUiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjdmYjgxOWI4MmUwZmNhZGM2OTdmOGZmMzcxNWZlNWY1MzJjYmE5ZTQwZjhjODdlMzg5MjViOGUzNWNlNGU3NzAiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjowLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjUxZGNjZGU4MTQwNzEwNzQ3YTdiMWJmZThhZmYyNGM5ZTNhOTRmYjVlNDJjYjc4ZTExNTY2NjQ0NTk4MTRlMDUifQ"
         },
         {
-          "resource": "repo://digiquant/src/digiquant/portfolio/phases/direction.py#L1-L52",
-          "version": "repo-lines-v1:sha256:13e1b715156610af14523bb75f4d0afe401a9c44c279c365ee1d7e1053993d06:eyJzZWxlY3RlZExpbmVDb3VudCI6NTIsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjU3YWUwMGE2M2U5ZDFhNWYyOGNmZTdjZTYxNDZmMDczNThjNzlkNTBiMDg3MTU0ODc3M2NiNWVjMWMxNTIzY2QiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQ0YmM1ZWZmOGVkZDUzNTFiNDQzNjI2NzM2NzA5MDdkMDdiZTc4Zjg5NDliZDhkYWZhMDNhN2ZmM2JlMDczMDEiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjowLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImM3Yjg3OTZkMzkyZTVlYTA3MmY0YmE5NjNkNzgzZTEyZTM2MjU3N2YxZjE4YWMyNTJlNGE0ZTU2MjY4N2QyNGYifQ"
+          "resource": "repo://digiquant/src/digiquant/portfolio/phases/direction.py#L1-L332",
+          "version": "repo-lines-v1:sha256:43aac095e4c15e4debd7f2fbaaa33582cd3afc180fc7129c39848f0ba18c4f2d:eyJzZWxlY3RlZExpbmVDb3VudCI6MzMyLCJmaXJzdFNlbGVjdGVkTGluZUhhc2giOiI1N2FlMDBhNjNlOWQxYTVmMjhjZmU3Y2U2MTQ2ZjA3MzU4Yzc5ZDUwYjA4NzE1NDg3NzNjYjVlYzFjMTUyM2NkIiwibGFzdFNlbGVjdGVkTGluZUhhc2giOiJmOTQxNmUwOWY3OGJhMzE2YzAzMjU2ODIxM2I4NTVlZTc1NmU0MTU2NWQ5MThmMDk1MTljODFmZDYyMGY0MDYwIiwicHJlY2VkaW5nQ29udGV4dExpbmVDb3VudCI6MCwicHJlY2VkaW5nQ29udGV4dEhhc2giOiJlM2IwYzQ0Mjk4ZmMxYzE0OWFmYmY0Yzg5OTZmYjkyNDI3YWU0MWU0NjQ5YjkzNGNhNDk1OTkxYjc4NTJiODU1IiwiZm9sbG93aW5nQ29udGV4dExpbmVDb3VudCI6MCwiZm9sbG93aW5nQ29udGV4dEhhc2giOiJlM2IwYzQ0Mjk4ZmMxYzE0OWFmYmY0Yzg5OTZmYjkyNDI3YWU0MWU0NjQ5YjkzNGNhNDk1OTkxYjc4NTJiODU1In0"
         },
         {
           "resource": "repo://digiquant/src/digiquant/portfolio/phases/phase7e_risk_sizing.py#L1-L70",
@@ -63,6 +67,6 @@
   ],
   "verification": {
     "by": "openwiki/0.5.0",
-    "at": "2026-09-23T13:25:31.068Z"
+    "at": "2026-09-26T12:43:34.078Z"
   }
 }

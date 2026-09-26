@@ -1,0 +1,186 @@
+{
+  "schemaVersion": 1,
+  "pageVersion": "sha256:8abff70769734fefa53860e13ef6aa336b5bb0a4700164f1972e9d1609457f4d",
+  "claims": [
+    {
+      "id": "claim_c06b5f759db54f928c0f0061fc8b01d2",
+      "statement": "@digithings/digichat-ui is a private npm workspace package that delivers shared digichat helpers (brand marks, slash-command palette, transcript-markdown serializers, DocumentPane, MiniMarkdown, and session CSS). It is not a session shell — the 2.0 session renders in apps/digichat via assistant-ui's stock Thread.",
+      "evidence": [
+        {
+          "resource": "repo://packages/digichat-ui/ARCHITECTURE.md#L1-L6",
+          "version": "repo-lines-v1:sha256:997d79e4249cd38e7399262a6751a8e4c7d4fa9f211c53f4a1a6968d055c3fb7:eyJzZWxlY3RlZExpbmVDb3VudCI6NiwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiYjY5OWU5NjRjYTg4NjlmZGYzNDJmNGQxYmRlYTE1OWUyMThmMTJmNWNmYTI4MWM4MjNlNmIxMGFkOTFmNmUzZSIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiMDFiYTQ3MTljODBiNmZlOTExYjA5MWE3YzA1MTI0YjY0ZWVlY2U5NjRlMDljMDU4ZWY4Zjk4MDVkYWNhNTQ2YiIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjAsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiZTNiMGM0NDI5OGZjMWMxNDlhZmJmNGM4OTk2ZmI5MjQyN2FlNDFlNDY0OWI5MzRjYTQ5NTk5MWI3ODUyYjg1NSIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiMTYxNzM0YWZjYzdmZThmZjFiMGU0YzM1N2M3NDYzOWQwYTlmNTgwZWNjN2IxYTM5ZDY4NzkyYjY0Mjg3ZjM1ZSJ9"
+        },
+        {
+          "resource": "repo://packages/digichat-ui/package.json",
+          "version": "repo-file-v1:sha256:bf7f056cdd2c5a480492dca77c3e721891409b478bba173ae3a860ad13e37b9f"
+        },
+        {
+          "resource": "repo://packages/digichat-ui/src/index.ts",
+          "version": "repo-file-v1:sha256:9d4fef81b671c774ab67f32fbd262317623e28a61ac60dbf9acfa5f6a38103d9"
+        }
+      ]
+    },
+    {
+      "id": "claim_8d7ed28017f647e69abbe55a4aff9e93",
+      "statement": "Every parent surface (digithings-web, dashboard popup, widget.js) delivers digichat UI by iframing digichat /embed. digichat first-party /chat and /embed both use the stock assistant-ui Thread. The backend (digigraph or foundry) is selected per tenant — the UI does not branch on backend type.",
+      "evidence": [
+        {
+          "resource": "repo://packages/digichat-ui/ARCHITECTURE.md#L38-L47",
+          "version": "repo-lines-v1:sha256:b230e01a807033118cf43c2d46f06e5e69dd15965db2c8622cad85d0a84c676b:eyJzZWxlY3RlZExpbmVDb3VudCI6MTAsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImI1NWYxNDI1YTQ2ZmU3NDczOTMzYzk0ZjhkYzI3OTJkN2I0N2YwMjNjODgwN2U1NDlkMmEyNWZlNTEzYjQzODUiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImNlMjA2ODQxODhmNTBmYTA5YWRlZjJhZjBiOTY4YjlkOGVkZTg1NDk5Y2ExMGYwYTdmZmJiYTVlMTJhYWYyMzIiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjI3YjQ5NzUxZDZjMWFkY2YyYjBlZjg3ZTdhZWJmNmE3MjBlZWI5NTBlYTQ0OWUyZDk2MWMwM2NlYjI4ZDE0OWUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImViNDJlYWI5YmM5YzlkZGVkZDNiYTMzYmExNzljMWM2YzdjMWM5MmJkZWM0NTFlMGViN2I2ZDhjNmE5MDk1NzQifQ"
+        },
+        {
+          "resource": "repo://packages/digichat-ui/ARCHITECTURE.md#L7-L10",
+          "version": "repo-lines-v1:sha256:9447d2b2790e999fb09c013e71a3a157e0ee38928cd1f01fe16e2cd87de24f4a:eyJzZWxlY3RlZExpbmVDb3VudCI6NCwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiMTQ1NGQzMDU2NTRkYjlkZWMzNmVjNTdhMTdmYTRhYzA5MjlhZDYyZWYzYjY2YjMzMjEzOGE1MWZhYWRmYjNjYSIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiNzY4MTA5ZjViY2Y0ZWZlNzFkYTg0Mjk3ZmRkN2M1MTM5MTlkYjM3MmY0NzY4MDVmN2MwYzJkNGU5NmQxNGY4ZCIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiNmM3ZDU1YjkxNTI1ZTBhOTkyMGJkYWMyMjdlMDRlNWJlNTQ3NTYyYTZkMzY3MTU4YjBiZGQyMzhiMzA2YzVmNSIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiMDc1YjRiOGZiY2ViNWI4ZDI0ZDJkYzhiYjQzY2NiNTQyNjM0YzM3MTJjNTM5NGYxNzIyNjIwMTJkYTFjZGUzMyJ9"
+        }
+      ]
+    },
+    {
+      "id": "claim_8ccb0da6cb9a4012906cc1bb02bd8e82",
+      "statement": "CSS class names .dc-* and .dt-*/.dtc-* are the public API contract. Consumers style and target them directly. Styles read canon design tokens (--ink, --accent, --hair, --bg, --ink-soft, --ink-mute, --accent-weak) from the consumer's [data-theme] scope; the package defines no tokens of its own.",
+      "evidence": [
+        {
+          "resource": "repo://packages/digichat-ui/ARCHITECTURE.md#L32-L36",
+          "version": "repo-lines-v1:sha256:178fdc598e72128ed3f9efca3106eb90dd5ad47cc1cef321e0a5ef2fd0cfc9f2:eyJzZWxlY3RlZExpbmVDb3VudCI6NSwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiMzI1MTc0MmQ0MWU0YTQ4N2UwNTU1NmVkYmJjOTMzZWZiMjQ3ZTI3MzQ5MzRiMGE0Y2EzMDUwYTVjZjIxOTFlYSIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiYjMzMzUzODc0NjJmMmIxNDUzODgzMzU4ZTExM2FlNjAyODUxMzlmMDM1NzAzZjkzZmM5NDRlNWRmYTM4MjIzZCIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiYzJjMjAyNThhNzI1NjE3N2JiZmQ4MTNkZDllN2FlZDE2Yzc0NmJiOTQxNGMzZDNmZjIxZTMyYmMyMzI3Zjg4YyIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiYjIyYmM1MmE4ZDY0YzBlMDdlNzEyNTMwNDhhOTUzZmUzYzQxNmE5NjZhY2JhYjBmMjQ3ZjUxMmMxNmJkNTA4MSJ9"
+        },
+        {
+          "resource": "repo://packages/digichat-ui/src/package.test.ts#L9-L26",
+          "version": "repo-lines-v1:sha256:c8405f50bc5057d28983db538305e13d496b7f180a7e3a43ae50505f61d98bf2:eyJzZWxlY3RlZExpbmVDb3VudCI6MTgsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImYzZDg5YTE0YmViYWMxMWRhNGUyMzRiOTIzODk0YzEwZjQxYjkyZWY2N2Y0MjkzYzZmZTM1NTc5OGM1ZDI2OWEiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjNhM2U0NmY5NDI3NmI2ZjZmNGVkMWYwMmFmNzhiZWY2YTJlZTFjNDM5ZGQ1NTg0Yjk3Mzk0ODMxMzIxNGQyYjciLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImM5MWUwMTYzYjYzZGI5Njc1MTkwZWNlY2NhYWE1MmQ0NTJkNDgzMGMyMDYzMzQ4NjU4ZDFhZmIxYmM0YjIzNzciLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjJkMjMwZTc2YzE0Y2ZjM2Q1OWE1ZWExNGNlM2I2Y2ExZmYwNTg3NzIzNDgxMTE5YWY4ZDVlZDFmZGRlNDE0MDAifQ"
+        },
+        {
+          "resource": "repo://packages/digichat-ui/src/styles/cursor.css#L1-L13",
+          "version": "repo-lines-v1:sha256:1474a2fd217478ccce422f5d02649e7a193b6884b3c6b4e67665a2d34ba7de87:eyJzZWxlY3RlZExpbmVDb3VudCI6MTMsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImU1MjVmYmUzM2QyZDIzNGNiNTJjZjg0ZDdkNmU2Yzk5NWY1NDQ5ZGU3N2Q4ZTNkNWNlNDlkZTk3ZDgzYmUyM2IiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQxMmNhMzQ1Y2NmNzViZjljMDgwNmJjZTY5NWJlOGRlODA4Yjc5OTg0MjUxYTdhNTRkMjAyY2Y2MTAxZGQ0NTEiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjowLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjE5MGNiYTUwYWIyYzdiZGE1NDYyZWNkNmUzZmNlYjY4YjU4OGExZTgwMDk0NTU1MWMwYzJiZTAxYjU0NGUzMDEifQ"
+        },
+        {
+          "resource": "repo://packages/digichat-ui/src/styles/session.css#L1-L17",
+          "version": "repo-lines-v1:sha256:a52f7963e3135ba92b0849b28f2d4646270488c4a611f500593243bd88cd25c7:eyJzZWxlY3RlZExpbmVDb3VudCI6MTcsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImNjZmU3ZDY5MTM1MmIwNTc1MDk2NDY2NmU4MzM0NDViZThmZjZlZDllZTYwNGNhOTZiYzcxNjgwNTY4N2ExNjMiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQxMmNhMzQ1Y2NmNzViZjljMDgwNmJjZTY5NWJlOGRlODA4Yjc5OTg0MjUxYTdhNTRkMjAyY2Y2MTAxZGQ0NTEiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjowLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjMxYzRiZjhiMmU4NmVhYTAxNTBhZGJjZmUzOWMyOTQ4MzlkNDJlZGRiZTRkNjNjYzliODU0MWVlYzZjYjJmMGUifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_4f06648d2a914e4a8fa81f03cfffbd7e",
+      "statement": "The slash-command palette (src/slash-commands.ts) defines every public command with three kinds: tool (empty=toggle, remainder=force-send), client (browser-only action), and action (UI affordance). Choice commands (/lang, /effort, /view, /thinking) carry choiceOptions arrays for Up/Down selection. Visibility is controlled per-surface via SlashVisibility — /sessions is hidden in embed by default, webSearch is opt-in.",
+      "evidence": [
+        {
+          "resource": "repo://packages/digichat-ui/src/slash-commands.ts#L1-L11",
+          "version": "repo-lines-v1:sha256:07b273a6a9be3b85e2275625c9c85bd1e1946a6f555023f06eead3cd08dd1484:eyJzZWxlY3RlZExpbmVDb3VudCI6MTEsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImVhZjIyY2YwNzMyNTkyYzI0NzE0MWNiZTYxZWZhMTEwMTI2MTJmNWEzMTIyYjlhZjliYmFmNTJmNTcyNGQxOTQiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImJkMjgwYzJhZGIzYmVhZjllOGUyNTJiYzI0MGQzYTRmYWJiNzI3Mjg3NjJiMDQxNWFmNjk4ZTQxZDc0ZmM5NDciLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjowLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImI1MDI2MjY4N2QwYzQ5OTdhYzI1Zjg5ZjYxNmIzMzkyMDU1NjE2NDQ3NTQ2ZTUxNDE5M2Y4NzVkYjI3ZDk0MjMifQ"
+        },
+        {
+          "resource": "repo://packages/digichat-ui/src/slash-commands.ts#L106-L282",
+          "version": "repo-lines-v1:sha256:a3af3fd3bb0a1c57852270a256b95f0145c165002b79ec032147415605e86e1f:eyJzZWxlY3RlZExpbmVDb3VudCI6MTc3LCJmaXJzdFNlbGVjdGVkTGluZUhhc2giOiJmYWFjYTcyMGIzYmZhZDhhYTQ5MDU4Y2ZiM2U3MjIwNThjODZmNTNjZWU3MmZkYWYwMjE2YmZiNzFjNzRlNmIzIiwibGFzdFNlbGVjdGVkTGluZUhhc2giOiJiMDJkMmMwZDZkYzVlNzRkOTJmYTE0YjkxZGJlYTI2NDA5MGJlYjM1ZmRiOTE4OGQ5YjM0MTE4MWRjZTlmNGNlIiwicHJlY2VkaW5nQ29udGV4dExpbmVDb3VudCI6MywicHJlY2VkaW5nQ29udGV4dEhhc2giOiIwM2QxNzM2MmRjMjk0MTY3YzFhNWQ3OTkzNmNlYjRjMTM2MWMyNjdjZWVkYTA2NzhmZDhiZjM1MGNiN2Y0ZmUwIiwiZm9sbG93aW5nQ29udGV4dExpbmVDb3VudCI6MywiZm9sbG93aW5nQ29udGV4dEhhc2giOiI5ZTBjNzhhYzczZTRjYWQ3NWJkY2MzM2IyMjE1ZDA1ZWJlZjU3YTRiMTkyYmFmZGI5NzhmMTZiZjY3OTBiYzNkIn0"
+        },
+        {
+          "resource": "repo://packages/digichat-ui/src/slash-commands.ts#L284-L296",
+          "version": "repo-lines-v1:sha256:cd95ea2a112ba590daa0eae2761c5e0b7dd8d80aaea229d56e028e33787ece6e:eyJzZWxlY3RlZExpbmVDb3VudCI6MTMsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6Ijc5YjA1MmQwMDQxYzIxYTkyZDQ5NTI1ZDEzYTFlZGY4Nzc2NDQxOTJiOGJmNDE1ZjE3YWJjMTQ4ZGM1MmZhMWUiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImFhMWQxYTYzMzkwMjI5Yzc5ODM0N2U4M2EwNDA1NDQxYzk0MDAwMzUyODRhZDE2OGMxYmY2Y2RmMWQ3MGEzNzAiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjE4YTkxNzU5NzJmZTE1ZTJhOTY0MWFiMTMxZjU3MWU2YzdjYWJjYTA2ODM3NjJlYmE1ZjIzNTNlNDgzYzNkNTYiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImNhZjU0Mjk4NTIwZGZkNDQ3OWY1MmI0OWY2ZmU5ZjA1YjAyZGI1YjRlZGIxMzRlM2RiOGMxMmY2Y2U5YjZiZGQifQ"
+        },
+        {
+          "resource": "repo://packages/digichat-ui/src/slash-commands.ts#L324-L334",
+          "version": "repo-lines-v1:sha256:0170484430f581615bd95758b48004f4e597eeec745ac5217d12f790f01564a1:eyJzZWxlY3RlZExpbmVDb3VudCI6MTEsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjVkYmFmZDJlOWU0OWUzZDcyYzdlMzliNmY2YjI1ZjNlNDI4ZDFkYWFkZjFjOTVhNDhjYzY0Yzg4YmRmMGMyYTQiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQxMmNhMzQ1Y2NmNzViZjljMDgwNmJjZTY5NWJlOGRlODA4Yjc5OTg0MjUxYTdhNTRkMjAyY2Y2MTAxZGQ0NTEiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImNhYzQxZmEzYmM5YWRjNzVlZmFjNzBiZDg5YjUwNmViMzc3NDc1YmY5Y2YwNjdmNWI1NGE1NTVmMGNkNTk1MzMiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjA0YTE3MmVlZmMxZDE5YTk4ZWZjZGY5YjE2MzBlMDcxYzk5MDNiNTRjOTA2NjY1NjQ0NjNjNTEwYjllMDMwZDAifQ"
+        },
+        {
+          "resource": "repo://packages/digichat-ui/src/slash-commands.ts#L337-L350",
+          "version": "repo-lines-v1:sha256:2e05b47c7da5b50ad31cbcd840145b5428867dd4d5fe768d16145c63682eb8b9:eyJzZWxlY3RlZExpbmVDb3VudCI6MTQsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjFkMDBjMGZiYTI4NDQ5Y2I4MjNhY2NkZTEzMTMxOTAxNzBiNzc4OGY5YTVhZTYzZWFkZmVkNzQ5MWZjOTI4ODYiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQxMmNhMzQ1Y2NmNzViZjljMDgwNmJjZTY5NWJlOGRlODA4Yjc5OTg0MjUxYTdhNTRkMjAyY2Y2MTAxZGQ0NTEiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImY1Mzc5NjFmNWU1MTM1MTVhMThhNGJkNmYzMDVlNTA5OTU4MGNhMDg5NjZkYTZhMTE1NWFiZDdiZmVlYWY0YTYiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImQ5ZTlkMTkxYjc0NmNmYjBlMjk2ZTA4MWNjYzg0OWYwMDkyM2Y5MTI5NTlhY2FhZTE4ZGM2OTU0MGY0Y2RjM2EifQ"
+        },
+        {
+          "resource": "repo://packages/digichat-ui/src/slash-commands.ts#L46-L48",
+          "version": "repo-lines-v1:sha256:2671072e695801ef88262e9354864716c4093345346939a468daa8710f9275c1:eyJzZWxlY3RlZExpbmVDb3VudCI6MywiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiZWU3MTEyN2Y3ZjVmMTcxN2I5NmU3ZTk3NjkwYTdkMTgxYTUwNzIzN2ZjYWQxODg0MGJiYjA5MzQwMjJhOTIwYiIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiOTUxNDFhYjczZDQyMzMwOTMyOGIxNTk1MmVkOTFmNDkwNjJlYzBkZTg0ODQ2NjdiNjA1NWY1ZTJmNTliYzQzNCIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiNmY3ODM1NmJhMmQ0NjRiNzExNTE4Yzc4M2JhN2ZhYjRiZDliNDE4MTVhODU0YmEwNjBkOTZhNjg2MjEwMTVmNSIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiZDM5MGMyYjA2ZGI0YWU2MjAzOGYzNzM4ODc5MTI1YzBhOTEwYTI4NTNkYzBiZTJhMDE5OGRiMjJlMDY2YjFmYiJ9"
+        },
+        {
+          "resource": "repo://packages/digichat-ui/src/slash-commands.ts#L99-L104",
+          "version": "repo-lines-v1:sha256:43fe38444a6573b38d3b5534d93e8a0fce7b356df598803c7cc777fbb8fc2a76:eyJzZWxlY3RlZExpbmVDb3VudCI6NiwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiY2QxM2I3NjE1ZDM4MDI3NzE0MTgxODEyMzMxOGU4YmNkYTgyMjk2YjMxODc3YmI3YTIyNWI1ZTYxMDI4NGU5YSIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiYjAyZDJjMGQ2ZGM1ZTc0ZDkyZmExNGI5MWRiZWEyNjQwOTBiZWIzNWZkYjkxODhkOWIzNDExODFkY2U5ZjRjZSIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiYWU2MDE4YzM4ZDlhNmYzNTk4MTZiNGY0YTc5Y2E5ZDY1M2ViZmEzNDAyYzU4ODQ5M2YyYTQyODg3ODY4NTcwNSIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiMTQxYzNkMjBkNzk2MDEzM2U4NThjMTkwNTc0NWM1ZTQ5YTcxMTZhNTMwZGFmNzdmYjFkM2VmNDZhNmE4ZTY4ZCJ9"
+        }
+      ]
+    },
+    {
+      "id": "claim_26e676d1d14340c9bfb4c466f1d94494",
+      "statement": "Markdown serializers (re-exported from @digithings/ui/chat/transcript) produce safe export output with strict safety invariants: no vault body, tool JSON, BYOK keys, or headers ever enter serialized output. Sources blocks contain only title + path. copyMarkdownWithFallback implements a four-stage embed-safe fallback chain: clipboard → .md download → parent postMessage → selectable textarea, and never silently no-ops when document exists.",
+      "evidence": [
+        {
+          "resource": "repo://packages/ui/src/components/chat/transcript/transcript-markdown.ts#L1-L8",
+          "version": "repo-lines-v1:sha256:1f6f9844f3b77280809316692e24ec039adae813367890b56ff02a5921cc9ef8:eyJzZWxlY3RlZExpbmVDb3VudCI6OCwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiZWFmMjJjZjA3MzI1OTJjMjQ3MTQxY2JlNjFlZmExMTAxMjYxMmY1YTMxMjJiOWFmOWJiYWY1MmY1NzI0ZDE5NCIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiOTcyYTQyOTM4MmIyZTE0NzE4ZTBlMzdiMDU3MGE4YTE3MDI5OTFmY2Q4NDk4Y2Q4NDA2MGE4YmY0ZjA1MDE3YiIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjAsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiZTNiMGM0NDI5OGZjMWMxNDlhZmJmNGM4OTk2ZmI5MjQyN2FlNDFlNDY0OWI5MzRjYTQ5NTk5MWI3ODUyYjg1NSIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiZDE3ZTlkZTFhOGM3YzI3N2UzOWE0YjdhY2I0YmQ0MDU4MDFjNGZjYzY4MDExZDNiZDA0MzAxODY0NThhOTM3MCJ9"
+        },
+        {
+          "resource": "repo://packages/ui/src/components/chat/transcript/transcript-markdown.ts#L156-L193",
+          "version": "repo-lines-v1:sha256:eccdd1f49f934f81bdf1a7734711bf05857cdbbc5f5ee9ae4cfc98d7afe04419:eyJzZWxlY3RlZExpbmVDb3VudCI6MzgsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImVhZjIyY2YwNzMyNTkyYzI0NzE0MWNiZTYxZWZhMTEwMTI2MTJmNWEzMTIyYjlhZjliYmFmNTJmNTcyNGQxOTQiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQxMmNhMzQ1Y2NmNzViZjljMDgwNmJjZTY5NWJlOGRlODA4Yjc5OTg0MjUxYTdhNTRkMjAyY2Y2MTAxZGQ0NTEiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjJiZjc3NWMzOTI4MzAyNzExYmI3ZjViY2Q0N2Y5ZmFiMjA3NTYzMjg0MzM5MzQyMTQ0OGYzNmY5M2Y0YzZiYmIiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjFiZDM5NjJkN2M2MTU5OWJiYjk0NWY4ZTQ5YTkzYWYzMTI1NzI0ZGEzMTViMDdhMGYxMDAxOGJkMzY2MTAzZDYifQ"
+        },
+        {
+          "resource": "repo://packages/ui/src/components/chat/transcript/transcript-markdown.ts#L28-L52",
+          "version": "repo-lines-v1:sha256:99b1bff7275aed2920f2cd5950023cc05475c633ea05fe8093aa80963f2d4ec5:eyJzZWxlY3RlZExpbmVDb3VudCI6MjUsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImEzOWUwMzhlYTUwNmU2NzM5NTNhMDZjNGVkMTJlMzkyM2RjYjdiZGI1NmFhOGMwMTVmZjZkMjg2YmE0NzI5M2YiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQxMmNhMzQ1Y2NmNzViZjljMDgwNmJjZTY5NWJlOGRlODA4Yjc5OTg0MjUxYTdhNTRkMjAyY2Y2MTAxZGQ0NTEiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjcyNDI2MjBlZWY2ZTlhOGVjMmFkYzNlNDJmMThjMzNkN2M2M2RjMGYyNmFkMzE5Mzk1MzhhYmNmZjBjZTBkMTYiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjMxZWI4NWU5NjUzZTcxNTVjOWMxMzgzYjBkMTkwM2M2ZDM1ZWY5ZDczNjhkNjVmMzg1ZmM5ZTMyN2UyMGUzZTgifQ"
+        },
+        {
+          "resource": "repo://packages/ui/src/components/chat/transcript/transcript-markdown.ts#L54-L67",
+          "version": "repo-lines-v1:sha256:c988b44f12ecfe823af06eac386b1fd3b48237ab86ef5ee6992f84b04232ac3a:eyJzZWxlY3RlZExpbmVDb3VudCI6MTQsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjRjN2U1MzU0MzZlZWIzMzAzMThiZWMwOWQ1NTdkYTQ4YTNhODYwOThhMTEyZTkzYjE3YWM3ZTEwNGUwNWQ3ZmYiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQxMmNhMzQ1Y2NmNzViZjljMDgwNmJjZTY5NWJlOGRlODA4Yjc5OTg0MjUxYTdhNTRkMjAyY2Y2MTAxZGQ0NTEiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjU2MzgxZmI5MDI3ZmFjZTRiMWQ3MDNmNzAyZjE2MzllODk1Y2ZlODg0NDQ4ZTc4ODI2YjI0YzJiYTRhZWUzNzciLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImJjZTIzMTk4NTNhMjhmZWVkYjBlNjhmZTg1ZjEzZTE1YTk0YzZiYjhkOWNmMWE3MzQyZDZiZjg5MzQ5MTA4ZGIifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_e3f9771cb12b4bddb56777f278f3086b",
+      "statement": "DocumentPane (src/components/DocumentPane.tsx) renders a VaultHitSummary in a side pane. Paths without an http(s) URL never become links — it never invents a URL from a vault path. Vault note bodies render via MiniMarkdown. PDF paths with http(s) URLs render an embedded <object> viewer.",
+      "evidence": [
+        {
+          "resource": "repo://packages/digichat-ui/src/components/DocumentPane.test.tsx#L41-L51",
+          "version": "repo-lines-v1:sha256:d8e100da61fba2db26fffe98257a0f7172543b7e4242bd7a37984f0a8b001229:eyJzZWxlY3RlZExpbmVDb3VudCI6MTEsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImMzNWMzMjU0YmY0NzJiNTZmYWZjNTlmMDljMzJiMmNmZGVkYjVlZjFkYjRhNzI5ZjIyNzEzNzA1MWY4Zjg0MmYiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjNhM2U0NmY5NDI3NmI2ZjZmNGVkMWYwMmFmNzhiZWY2YTJlZTFjNDM5ZGQ1NTg0Yjk3Mzk0ODMxMzIxNGQyYjciLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImQ3NmI2MzU5MzhmOTRmZjUwNTBmNDRiZWQxNDlmMjhkOWM4MGJhMTJhZDZhNGFmNTMyY2ZkYTI4NDFkZDU1MTEiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjEyNWNjZjY4MjEwYWNjOWVjY2NmMWE2Nzk0ZTZhM2UzNWJlY2QwMDJiOTE2ZDIzMTgwZmNmMTRjNGMwOWM2OTEifQ"
+        },
+        {
+          "resource": "repo://packages/digichat-ui/src/components/DocumentPane.test.tsx#L7-L24",
+          "version": "repo-lines-v1:sha256:653d235196269fe35284de9c004984769235e65e340c1d79b838b1df41f1d95b:eyJzZWxlY3RlZExpbmVDb3VudCI6MTgsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6Ijk4M2FhZDRkNmRiMDU4OGYwYmMwNWNhMGM1YWM0N2RkYjA0ZmU3OGQyMGYyMDIzMWMzZWQ5ZjMzODQ1YjI5N2QiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjNhM2U0NmY5NDI3NmI2ZjZmNGVkMWYwMmFmNzhiZWY2YTJlZTFjNDM5ZGQ1NTg0Yjk3Mzk0ODMxMzIxNGQyYjciLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImQzYTBiNGYzZThmY2NhZDIxYmNlNDFhMWI2YTJjZmQwMWUwZGRmMGYyMGM4NGI0MjIyNjYwZmM3MDdlY2IzMTkiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjkxZjIzNTJjYTY4NjU5YzA5ZTFiYjE2ZmY4ZmE4NTRiMGFhMTcxZGVhNmY5MTQ3Y2M4M2QwZWExZDBiZTRjMjEifQ"
+        },
+        {
+          "resource": "repo://packages/digichat-ui/src/components/DocumentPane.tsx#L1-L62",
+          "version": "repo-lines-v1:sha256:2d49c7ecf0736ceebd8496f2cca2b147b253d51e369e9b8ac5e927172fda6398:eyJzZWxlY3RlZExpbmVDb3VudCI6NjIsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQ1ZmYzZTg1ZDY3MTVhN2E5ZDBmNmMxYjMyZjMwY2Q4Y2IxNDRjYzc5YzhhYmFlOTUzZWExMzc4ODlmYWUyZGUiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQxMmNhMzQ1Y2NmNzViZjljMDgwNmJjZTY5NWJlOGRlODA4Yjc5OTg0MjUxYTdhNTRkMjAyY2Y2MTAxZGQ0NTEiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjowLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjowLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_c1ac773e7f9640329de2f4acee582ab8",
+      "statement": "DigiChatController (re-exported from @digithings/ui/chat/transcript/types.ts) is the embed adapter shape describing the imperative surface of useEmbedDigiChat — it is not a mountable React session component. The 2.0 UI consumes it internally via assistant-ui's CliThread.",
+      "evidence": [
+        {
+          "resource": "repo://packages/digichat-ui/ARCHITECTURE.md#L13-L13",
+          "version": "repo-lines-v1:sha256:1112c7f83e8d139b24af74a716b2f8d011e62334065b9e5c9bab7fc27949d494:eyJzZWxlY3RlZExpbmVDb3VudCI6MSwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiMTExMmM3ZjgzZThkMTM5YjI0YWY3NGE3MTZiMmY4ZDAxMWU2MjMzNDA2NWI5ZTVjOWJhYjdmYzI3OTQ5ZDQ5NCIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiMTExMmM3ZjgzZThkMTM5YjI0YWY3NGE3MTZiMmY4ZDAxMWU2MjMzNDA2NWI5ZTVjOWJhYjdmYzI3OTQ5ZDQ5NCIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiMGIwZDViZTYzMGM0NWU4MzQ1ZGNjMDBlYTljOWRmNzY3NThhMWQ1NmE3Y2MwMjQ4ZjI3NTE1NzAxYmEwMmUxZSIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiYzYzNTNhMWJlMjNmMzU5OTdjMzQwYzQ1YzcyY2U2MWY3MGNlMWRkMmU2Zjg3M2E3MzhlYmExYzNhMjhiZGQ2MiJ9"
+        },
+        {
+          "resource": "repo://packages/digichat-ui/ARCHITECTURE.md#L51-L51",
+          "version": "repo-lines-v1:sha256:e82c3051d9f321fa9a0ae2ade808ff179ba0186887d1fd75a992a48a0fc3caa2:eyJzZWxlY3RlZExpbmVDb3VudCI6MSwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiZTgyYzMwNTFkOWYzMjFmYTlhMGFlMmFkZTgwOGZmMTc5YmEwMTg2ODg3ZDFmZDc1YTk5MmE0OGEwZmMzY2FhMiIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiZTgyYzMwNTFkOWYzMjFmYTlhMGFlMmFkZTgwOGZmMTc5YmEwMTg2ODg3ZDFmZDc1YTk5MmE0OGEwZmMzY2FhMiIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiZWI0MmVhYjliYzljOWRkZWRkM2JhMzNiYTE3OWMxYzZjN2MxYzkyYmRlYzQ1MWUwZWI3YjZkOGM2YTkwOTU3NCIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiNWJlNTk1MWJhN2FjNDQzNmVmM2VkZWRhYTdmMmJmNDBjNjZjZTQ5YmI0MjY1MTcxYjZiOTk2YTZlMmY0ZGEzMSJ9"
+        },
+        {
+          "resource": "repo://packages/ui/src/components/chat/transcript/types.ts#L35-L65",
+          "version": "repo-lines-v1:sha256:91a0e0e955276312ce3328d84a30e2a1f4c91cc51256a868be2ce91b8caac61c:eyJzZWxlY3RlZExpbmVDb3VudCI6MzEsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImVhZjIyY2YwNzMyNTkyYzI0NzE0MWNiZTYxZWZhMTEwMTI2MTJmNWEzMTIyYjlhZjliYmFmNTJmNTcyNGQxOTQiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImFhMWQxYTYzMzkwMjI5Yzc5ODM0N2U4M2EwNDA1NDQxYzk0MDAwMzUyODRhZDE2OGMxYmY2Y2RmMWQ3MGEzNzAiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImI1Y2JlYmIzMmMzNjMzYjk2M2FmOTdjYWJlZDliMjIyZmZlNzczZDBkMTk2NTY0ZjFmOWM5N2E3YzQ0ZGVkYTAiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjowLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_92400265bd4c4e8a93d7c2d6212d207c",
+      "statement": "The architecture defines explicit anti-patterns: do not mount a second React session shell here (2.0 session is assistant-ui Thread in apps/digichat), do not put digichat BFF or @/ aliases into this package, do not invent Digi product CamelCase in prose, and do not revive ChatActivities as the session renderer.",
+      "evidence": [
+        {
+          "resource": "repo://packages/digichat-ui/ARCHITECTURE.md#L49-L54",
+          "version": "repo-lines-v1:sha256:97b927e2e7502585be9edbe93324b56e6f34140a5441bf884b76a54ffe4eba4a:eyJzZWxlY3RlZExpbmVDb3VudCI6NiwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiMWUwYjUzNmUwNmNlMGMwYzE5NjZkZTdlNDlkNzcwNzYxYTVjYjk1NzRhNjdlNzQ5MTE4OGJhYzBkNDZiZWRiOSIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiYWJkNTU1NzRiYThjNGRlZGJlOWUwNDFhMGRhZDRhYzhhZGI4NTVmYWY1NjU0N2E2NTY5M2ZhOWQwMWVhYzViYSIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiNWY5ZjQ3NWI0ZDJmNWQyOTlkNzU3N2VmNzZkODk0ZDQyMjU1ZjZkZGEzOTY4N2Q2NTAwM2EyN2YzZTAzYTc4ZSIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjAsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiZTNiMGM0NDI5OGZjMWMxNDlhZmJmNGM4OTk2ZmI5MjQyN2FlNDFlNDY0OWI5MzRjYTQ5NTk5MWI3ODUyYjg1NSJ9"
+        }
+      ]
+    },
+    {
+      "id": "claim_d43c545efbd5407ba53b733eb10a6a08",
+      "statement": "MiniMarkdown (src/components/MiniMarkdown.tsx) is a thin delegate to @digithings/ui's <ChatMarkdown>. Both digichat and digithings-web share a single markdown pipeline: GFM tables, fenced code with copy, Mermaid diagrams, and LaTeX, all styled via .chat-md grammar. Any edit here lands on both surfaces.",
+      "evidence": [
+        {
+          "resource": "repo://packages/digichat-ui/src/components/MiniMarkdown.tsx#L1-L39",
+          "version": "repo-lines-v1:sha256:e4f3b40a7a1f2047a3d1ad709abe1ee6829ac684b7da87ff6bab90b4f11341cb:eyJzZWxlY3RlZExpbmVDb3VudCI6MzksImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImQzMTJkYTg5ZDc1YTNlNWU5ZTZhYzEyZjRiODIzMTliOGYyYTdhZGI1MzY0MmViNjk1OWI5MDMxMzYyZWRhZTgiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQxMmNhMzQ1Y2NmNzViZjljMDgwNmJjZTY5NWJlOGRlODA4Yjc5OTg0MjUxYTdhNTRkMjAyY2Y2MTAxZGQ0NTEiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjowLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjowLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_db881d79f2154df0afb48751704a82bb",
+      "statement": "The package is private, type: module, peer-depends on react/react-dom ^19.2.4, runtime-depends on @digithings/ui (workspace *), and exports session.css and cursor.css as separate stylesheet entrypoints alongside the main barrel. Consumers resolve TypeScript source directly through the workspace with no build step.",
+      "evidence": [
+        {
+          "resource": "repo://packages/digichat-ui/package.json",
+          "version": "repo-file-v1:sha256:bf7f056cdd2c5a480492dca77c3e721891409b478bba173ae3a860ad13e37b9f"
+        }
+      ]
+    }
+  ],
+  "verification": {
+    "by": "openwiki/0.5.0",
+    "at": "2026-09-26T12:43:34.078Z"
+  }
+}

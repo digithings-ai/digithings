@@ -3,9 +3,6 @@ type: frontend-architecture
 title: digichat Architecture
 description: Architecture of digichat 2.0 at apps/digichat/ — Next.js 16 BFF, assistant-ui Thread skins, AI SDK v7, deployment-config YAML, multi-backend adapters (digigraph, Foundry, OpenAI-completions/anthropic/vertex, langgraph, ag-ui, a2a), conversation persistence, quant runs, embed trial support, design-canon theming, and the never-in-browser credential invariant.
 tags: [digichat, bff, nextjs, frontend, ai-sdk, assistant-ui, deploy-config]
-verified:
-  - by: openwiki/0.5.0
-    at: 2026-09-23T13:25:31.068Z
 sources:
   - id: openwiki-source-94be7dc18ad64ed2d1bb5a18
     resource: repo://apps/digichat/AGENTS.md
@@ -21,7 +18,10 @@ sources:
     resource: repo://apps/digichat/src/lib/ecosystem.ts
   - id: openwiki-source-28ab975c76b4ebc9e1ba2df4
     resource: repo://apps/digichat/src/lib/request-auth.ts
-generated: { by: "openwiki/0.5.0", at: "2026-09-23T13:25:31.068Z" }
+generated: { by: "openwiki/0.5.0", at: "2026-09-26T12:43:34.078Z" }
+verified:
+  - by: openwiki/0.5.0
+    at: 2026-09-26T12:43:34.078Z
 ---
 
 # digichat Architecture
@@ -39,7 +39,7 @@ multi-adapter backend registry.
 No digigraph URL, digikey token, or upstream credential may ever reach the browser.
 Route handlers under `src/app/api/` (`auth`, `byok`, `chat`, `conversations`,
 `ecosystem`, `embed`, `health`, `v1`, `plan-proof`, `deploy`, `mcp`) do the upstream
-work; every handler except `GET /api/health` requires `requireDigiChatAuth()`.
+work; every handler requires `requireDigiChatAuth()` except the intentionally public routes (`GET /api/health`, `GET /api/deploy/chrome`, `GET /api/embed/tenant-config`, dev-only `POST /api/baseline-chat`) and the self-authenticating routes (`POST /api/plan-proof`, `/api/ecosystem/config`, `GET /api/mcp/oauth/callback`).
 User-supplied service URLs pass `isAllowedServiceUrl()` (SSRF guard) before any fetch.
 The `X-Digichat-Session` header carries only an opaque UUID, never the session token.
 
@@ -314,7 +314,7 @@ Anonymous `/embed` requests never call conversation persistence — `/api/conver
 ## Security invariants
 
 - **BFF pattern:** no upstream credential reaches the browser
-- **Auth on every route:** every API route except `GET /api/health` requires `requireDigiChatAuth()`
+- **Auth on every route:** every API route requires `requireDigiChatAuth()` except the intentionally public routes (`GET /api/health`, `GET /api/deploy/chrome`, `GET /api/embed/tenant-config`, dev-only `POST /api/baseline-chat`) and the self-authenticating ones (`POST /api/plan-proof`, `/api/ecosystem/config`, `GET /api/mcp/oauth/callback`)
 - **SSRF guard:** `isAllowedServiceUrl()` on ecosystem endpoints; `isAllowedMcpServerUrl()` (inverse polarity) on MCP URLs; `fetchGuarded()` (`redirect: "manual"`) on credential-bearing fetches
 - **Machine key hashing:** `digi_live_…` keys are bcrypt-hashed in Postgres; `timingSafeEqual` for env bootstrap key
 - **Session token isolation:** `X-Digichat-Session` carries only an opaque UUID

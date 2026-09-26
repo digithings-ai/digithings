@@ -6,6 +6,21 @@ generated: { by: "openwiki/0.5.0", at: "2026-09-23T13:25:31.068Z" }
 verified:
   - by: openwiki/0.5.0
     at: 2026-09-23T13:25:31.068Z
+sources:
+  - id: openwiki-source-d16d9586117b95e03b7f1549
+    resource: repo://digisearch/AGENTS.md
+  - id: openwiki-source-a355745b35b360f29c006f68
+    resource: repo://digisearch/src/digisearch/chunking/factory.py
+  - id: openwiki-source-c6b86c2d5bee963efea641a7
+    resource: repo://digisearch/src/digisearch/embedding/batch.py
+  - id: openwiki-source-b230342b440603a7430466cc
+    resource: repo://digisearch/src/digisearch/embedding/cache.py
+  - id: openwiki-source-3619a991bb117a32099a5efc
+    resource: repo://digisearch/src/digisearch/embedding/factory.py
+  - id: openwiki-source-5965732e405a81c18cb06c4a
+    resource: repo://digisearch/src/digisearch/pipeline/url_ingest.py
+  - id: openwiki-source-e6328240b5125d6213ffa41c
+    resource: repo://digisearch/src/digisearch/search/_stub.py
 ---
 
 

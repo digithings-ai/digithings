@@ -1,18 +1,26 @@
 {
   "schemaVersion": 1,
-  "pageVersion": "sha256:1820a880ddf7fe9d9fb541db39dd4206241fa4c2524f2b9bc3256a10816a9938",
+  "pageVersion": "sha256:8139cc6564bd8499da98cf9873f79dc25cb9950b0cbcd81294e9a1b56b3f08ac",
   "claims": [
     {
       "id": "claim_0b7fef078ce14f44b7408295c5c8addd",
-      "statement": "Group A book reads go through houseBook(), which pins the house workspace_id so overlay rows never seed the public book; shared teasers without workspace_id stay date-only.",
+      "statement": "Group A book reads go through apiHouseBook() in lib/api-query.ts, which executes GET /v1/tables/:table against the dashboard-api Worker; the Worker pins the house workspace_id server-side (bundle sends no workspace_id and no Supabase credentials) so overlay rows never seed the public book, and shared teasers without workspace_id stay date-only.",
       "evidence": [
         {
-          "resource": "repo://apps/dashboard/lib/house-workspace.test.ts#L54-L73",
-          "version": "repo-lines-v1:sha256:01bc807a4ef095fc7fa23a7342243ccceeaecd9d43bf6a821d6f66440d04ec62:eyJzZWxlY3RlZExpbmVDb3VudCI6MjAsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImJhZjk3M2MyOTgyMTEyOWNlMjg0YmUzZmUyYWVlOGI2MTQyNzNkN2Y4ZWViMzg2ZTAzOGYzZTY0MDI0NWY4ZDgiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjNhM2U0NmY5NDI3NmI2ZjZmNGVkMWYwMmFmNzhiZWY2YTJlZTFjNDM5ZGQ1NTg0Yjk3Mzk0ODMxMzIxNGQyYjciLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImI3NzlkMTE4ZDZlM2NiZjQ1MDUzOTc0OGRlZTdhNDMwN2FjYmU2NDQ2Y2JhMjk3ZjI3NjBmYTVkMGJiYTFiYzIiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjoxLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImY2ZjViNDBiMTU4NDU3ZDE3ODY0ZjIxNzkwNzg2ZGQ1YTJlY2RiNjRiNjZhNjUxZjc4OGQ0ZTI1Y2QzMzAzZDIifQ"
+          "resource": "repo://apps/dashboard-api/src/tables.ts#L123-L128",
+          "version": "repo-lines-v1:sha256:155fe5b5e2a9ca75b0e466aefd9f4781edd01cf8df42f295a57f0f6739048789:eyJzZWxlY3RlZExpbmVDb3VudCI6NiwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiMDQxNTFmNzUxNDFhMTA5MDFmNDEwMmJlZTMwMzJjYjhmMWM2YTA0ZDgzMjdkMThmYjM5OGNiMjEwY2FhNTBiMCIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiMjdlNTc4OGQ1ZDlkNzNkMjRhODFkYmMwYTVhNzRiZmE4MmM5YzNiM2FmOTllNTJhZjc5NmU5MGI0NjhhOGEzZCIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiMzU2OTdhYjhkOGU3MWI1MzljNWE2NzdiN2ExYzk4YTZhYTgwZDBiOWNjMDg2NmIwYjJkMThhZjEyNzRkNTE3NCIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiZGU5NjhhZDA5ZDY2YmQ0YzFkZDI3YmIzZmYyYmY3ZmUyOTAyNDM4ZjMxNTRhOWU0NzU5ZWU5NTlhNjU2YWZkMyJ9"
         },
         {
-          "resource": "repo://apps/dashboard/lib/house-workspace.ts#L1-L45",
-          "version": "repo-lines-v1:sha256:5f6f13d0bdee465ac2c1dcf22c72ea0229a2d859bd38a223d9de3cfde452532f:eyJzZWxlY3RlZExpbmVDb3VudCI6NDUsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImVhZjIyY2YwNzMyNTkyYzI0NzE0MWNiZTYxZWZhMTEwMTI2MTJmNWEzMTIyYjlhZjliYmFmNTJmNTcyNGQxOTQiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQxMmNhMzQ1Y2NmNzViZjljMDgwNmJjZTY5NWJlOGRlODA4Yjc5OTg0MjUxYTdhNTRkMjAyY2Y2MTAxZGQ0NTEiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjowLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjowLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUifQ"
+          "resource": "repo://apps/dashboard-api/src/tables.ts#L54-L60",
+          "version": "repo-lines-v1:sha256:a34e666c39e1f7201409bac6cee6254f84ca7ba15d117071f34c808f628695dc:eyJzZWxlY3RlZExpbmVDb3VudCI6NywiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiZTQwOWIxOWQ4OWNmMWM5ZGVhY2UyNDMxMTZmMGEzZTg1ZDlkMjUxMDcxYWY2ZjQ0Mzk0NDczYjFmZWRiNDM4ZCIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiY2UyMWRhMmU1MDdjZjZmMTE5Y2I0OTM3OTcxMjI3ZDFlMGUxODA1ZDg0ZThjNDU1N2I2MWQ5YmRjMzZhMjMwZiIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiOTE0N2U2ZTZkYmI0NzY1ZDgxOTZmYzk4NzJiN2E3MDBjNWQ3NjcxNTdjNThkMTU1MTJjYmMwZTE4NzVlYmRhMCIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiOGM1ZjI3MGM2NzM0YWNlMGRlYzI0ZjQ0ZmZmNzk0MmY1MTZiNzQwNDMxNTljMzIyMTFjYTM0ZDQzOGZlMDY1NSJ9"
+        },
+        {
+          "resource": "repo://apps/dashboard/lib/api-query.ts#L159-L168",
+          "version": "repo-lines-v1:sha256:5f229edef2ca1ea4aa197247cbf34c4e026e5a9088a63bab847ebe303d60fc9b:eyJzZWxlY3RlZExpbmVDb3VudCI6MTAsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImVhZjIyY2YwNzMyNTkyYzI0NzE0MWNiZTYxZWZhMTEwMTI2MTJmNWEzMTIyYjlhZjliYmFmNTJmNTcyNGQxOTQiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImUyMTgxOGI1YWYyYzZhZDFhYWFlNjc1N2ZkYjdlMzE5NjA3YTYwNTQxNDIwOTI2OThiN2U3MzQwMGFhMTBjOTQiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImE2YTFmMzY1MjYxYzNmN2U5MDc4ZWI0YjU5MjI0MmIxZjA2ZDkwOGRlOGY1ZTdhM2NhZWQ0YWI3MWYwZDkzZTAiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjoxLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjQxMmNhMzQ1Y2NmNzViZjljMDgwNmJjZTY5NWJlOGRlODA4Yjc5OTg0MjUxYTdhNTRkMjAyY2Y2MTAxZGQ0NTEifQ"
+        },
+        {
+          "resource": "repo://apps/dashboard/lib/house-workspace.test.ts#L54-L78",
+          "version": "repo-lines-v1:sha256:2d8754f52923243e3444a75dce8ecb35405fcc6e9c1168197105cd5c5679d324:eyJzZWxlY3RlZExpbmVDb3VudCI6MjUsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjE5ZGE2ZmYzYzM1MzZmMjYzNmExOTFkNjcyMWQyYjAzMTA2NWNkODU5YzM2MDNhZGE1ZDllZDUzYzE0YWJiN2EiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImY2ZjViNDBiMTU4NDU3ZDE3ODY0ZjIxNzkwNzg2ZGQ1YTJlY2RiNjRiNjZhNjUxZjc4OGQ0ZTI1Y2QzMzAzZDIiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImI3NzlkMTE4ZDZlM2NiZjQ1MDUzOTc0OGRlZTdhNDMwN2FjYmU2NDQ2Y2JhMjk3ZjI3NjBmYTVkMGJiYTFiYzIiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjowLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUifQ"
         }
       ]
     },
@@ -113,10 +121,28 @@
           "version": "repo-lines-v1:sha256:998d11b075221dd0a03166cdf15b7aa0e6251aa38f076f90c10d2fdfbe44d566:eyJzZWxlY3RlZExpbmVDb3VudCI6OSwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiYWFjMjg0YWNmMzFiYWZmZWI5NTJlMTA1ZjYzZjM5ZTc3ZjU3YjY1ZGIwYzNlMjc4Njk5MWNhNjZmYTNlYmNkMSIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiOTcyYTQyOTM4MmIyZTE0NzE4ZTBlMzdiMDU3MGE4YTE3MDI5OTFmY2Q4NDk4Y2Q4NDA2MGE4YmY0ZjA1MDE3YiIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiMjg2Y2RlYzMzMDNkNzk1YTA0YThlNTQ2YTBiZGMwMTk4ZDk5YTNmZjhkZGY0N2FiYzFjMjU3ZjljOTUwMWE3MSIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiMDU2YTM5YjIwMDAxNzcxMmQyMzg0N2ZjMGY5Y2Q1YTY5ZWFlOWUwM2M1YjUzNWM1YzQ0YTVmNGJiZDY2NDRjOCJ9"
         }
       ]
+    },
+    {
+      "id": "claim_f91d81daa7c141a49b47bfb7569587f2",
+      "statement": "Dashboard persisted-data reads go through the central dashboard-api Worker (NEXT_PUBLIC_DASHBOARD_API_URL) rather than direct browser Supabase reads: specific routes via apiGet() and the long tail via GET /v1/tables/:table (apiTable/apiMaybeSingle), with the service-role key held only in the Worker.",
+      "evidence": [
+        {
+          "resource": "repo://apps/dashboard-api/src/tables.ts#L1-L9",
+          "version": "repo-lines-v1:sha256:47000d06d3d25d20d9ec831383ed8cfa20dfc711c5558663de985af2d1df9d6a:eyJzZWxlY3RlZExpbmVDb3VudCI6OSwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiZWFmMjJjZjA3MzI1OTJjMjQ3MTQxY2JlNjFlZmExMTAxMjYxMmY1YTMxMjJiOWFmOWJiYWY1MmY1NzI0ZDE5NCIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiNjIzY2I0YzEzZDY3NzU5ZDU0Zjc2NzFkNDQwMzQ5NzJkMDkwM2EzOWQwOGFmYWU3M2JiOTgxZWI5YWIwZGNmMyIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjAsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiZTNiMGM0NDI5OGZjMWMxNDlhZmJmNGM4OTk2ZmI5MjQyN2FlNDFlNDY0OWI5MzRjYTQ5NTk5MWI3ODUyYjg1NSIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiNjdjMDUxZWU0ZjA5OTYyY2MxNzVmOGY5ZThlZjQ4NTM3ZTFjNGU0ZThiY2ZhMTRmZGQyZGFjNGU0MTA1ZDQxNiJ9"
+        },
+        {
+          "resource": "repo://apps/dashboard/lib/api-client.ts#L1-L17",
+          "version": "repo-lines-v1:sha256:360caafb33c8e38e81f87877f33372a4099e812d8e9e6e445278035cd7fe9f54:eyJzZWxlY3RlZExpbmVDb3VudCI6MTcsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImVhZjIyY2YwNzMyNTkyYzI0NzE0MWNiZTYxZWZhMTEwMTI2MTJmNWEzMTIyYjlhZjliYmFmNTJmNTcyNGQxOTQiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6Ijk3MmE0MjkzODJiMmUxNDcxOGUwZTM3YjA1NzBhOGExNzAyOTkxZmNkODQ5OGNkODQwNjBhOGJmNGYwNTAxN2IiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjowLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjlhMTcxYWYwYjg2ZGI2YzI3Yjc0YjQ3ODc5ZmY4ZDUzZDlkNTFjOWNlMWMyZDY2ZmU4ZDM2ZmZlNmY0ZWNiOTkifQ"
+        },
+        {
+          "resource": "repo://apps/dashboard/lib/api-client.ts#L131-L155",
+          "version": "repo-lines-v1:sha256:65c3ff1989f6b8ad25fd23ccc44d60bdeb6360335497553e44cef88c5f37d18a:eyJzZWxlY3RlZExpbmVDb3VudCI6MjUsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImViMmFmY2Q1OThhMDY4MzA1OTY0ZGE3YjQ2Yzk0Mzk1ZGU5MDcxN2ZhMTkwODMyYTM4NTUzNTRkNjVjNDFlMDIiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQxMmNhMzQ1Y2NmNzViZjljMDgwNmJjZTY5NWJlOGRlODA4Yjc5OTg0MjUxYTdhNTRkMjAyY2Y2MTAxZGQ0NTEiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjI1NWNiZjgwYzg1N2ZmNzJhZGE1YWZlYTlkZGQyYjg2Nzc1MTk4NDQ5MjFmYzJhOGIwYjY0YWY2MDVjZDVjNjMiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjowLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUifQ"
+        }
+      ]
     }
   ],
   "verification": {
     "by": "openwiki/0.5.0",
-    "at": "2026-09-23T13:25:31.068Z"
+    "at": "2026-09-26T12:43:34.078Z"
   }
 }

@@ -6,6 +6,17 @@ generated: { by: "openwiki/0.5.0", at: "2026-09-23T13:25:31.068Z" }
 verified:
   - by: openwiki/0.5.0
     at: 2026-09-23T13:25:31.068Z
+sources:
+  - id: openwiki-source-7f45b1234a1e80c66e4d2b61
+    resource: repo://digiquant/Dockerfile
+  - id: openwiki-source-625fca79ede3d43dd5fce6a3
+    resource: repo://digiquant/Dockerfile.mcp
+  - id: openwiki-source-a9751447740cc08ce33e5fc4
+    resource: repo://digiquant/Dockerfile.sandbox
+  - id: openwiki-source-fe843d7876eed7decd652157
+    resource: repo://digiquant/src/digiquant/mcp_server.py
+  - id: openwiki-source-90b6f9dfa8d57a7f0b61f0be
+    resource: repo://digiquant/src/digiquant/server.py
 ---
 
 

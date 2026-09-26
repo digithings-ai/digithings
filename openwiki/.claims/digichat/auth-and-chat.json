@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "pageVersion": "sha256:2c639c0bfa8354c6e0bd18e9265d2e8f29f03013b4143337911f8f84aa4ce8d8",
+  "pageVersion": "sha256:ada80ff441e2f424bd600c739d0e4611a1d3d1b773e025328d40284cde8f934a",
   "claims": [
     {
       "id": "claim_46ac243de09747f8a6eadd474e3475ff",
@@ -77,7 +77,7 @@
           "version": "repo-lines-v1:sha256:351bb2b1a103a8f59186894b339e1d38b090b7ea40140954ffb712736dd7654e:eyJzZWxlY3RlZExpbmVDb3VudCI6NTgsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjUzMWUzNzAxZGQ0NmQzZGU1MGRiNDU4ZjMwYmY5Yzk2YjE1Mzg5MTU3OTA5ODRlOTFiMjMzOGIwYmExZmUzYzQiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQxMmNhMzQ1Y2NmNzViZjljMDgwNmJjZTY5NWJlOGRlODA4Yjc5OTg0MjUxYTdhNTRkMjAyY2Y2MTAxZGQ0NTEiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImViYzk1ZWJjNTRmNWI2MmVjZDA0MmQyNTNlMTgzMzRjYjJlMDJkN2NjMGVkZDYwMTg3MTdmZTgyOGJlZmZhZWEiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjdjNDJjMzE4NWZkYmM5ZmJjYjNiMjQ3MGFhMTdmODBiMDNiOTFkNDI2OWZhMGRmYzBhNWQyNDNhODY3MmU4NDQifQ"
         },
         {
-          "resource": "repo://packages/digichat-ui/src/transcript-markdown.ts#L162-L193",
+          "resource": "repo://packages/ui/src/components/chat/transcript/transcript-markdown.ts#L162-L193",
           "version": "repo-lines-v1:sha256:d1f4ba11f0f45bfcd38ea1bfdf5504996c5c8073bbe928a70bf193edc2053592:eyJzZWxlY3RlZExpbmVDb3VudCI6MzIsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjkzZjcxYmFhNmFlMTc3NDEzNTEyNjhlMzZkODc2NTIwOTM5MGZiOWQ4Y2U2YjQ0NTNjNjJlN2JjNzc3MWMwY2EiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQxMmNhMzQ1Y2NmNzViZjljMDgwNmJjZTY5NWJlOGRlODA4Yjc5OTg0MjUxYTdhNTRkMjAyY2Y2MTAxZGQ0NTEiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjNjYmMxYjhlZTY1ZDg0ODY4ZWIwNjk4NDgzMDkyZDJjNjAwYzdmNTI1YjE2YzcwNGI3ZTEyZGZkMzJlYjAzMzkiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjFiZDM5NjJkN2M2MTU5OWJiYjk0NWY4ZTQ5YTkzYWYzMTI1NzI0ZGEzMTViMDdhMGYxMDAxOGJkMzY2MTAzZDYifQ"
         }
       ]
@@ -191,6 +191,6 @@
   ],
   "verification": {
     "by": "openwiki/0.5.0",
-    "at": "2026-09-23T13:25:31.068Z"
+    "at": "2026-09-26T12:43:34.078Z"
   }
 }
