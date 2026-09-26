@@ -251,6 +251,9 @@ body {
   margin-inline: auto;
   padding-inline: var(--page-pad);
   height: clamp(20rem, 44vh, 32rem);
+  /* The dock growth eases over scroll (owner: smooth, never aggressive).
+     Slow ease so the grid swells into the dock instead of snapping; the
+     centered-gate + hysteresis decide WHEN, this decides HOW. */
   transition: height 0.45s var(--ease);
 }
 /* The mosaic's own stage sits below the pinned top bar — never behind it —
@@ -264,14 +267,14 @@ body {
      the mosaic stage only; box-sizing keeps the padding inside the height. */
   padding-block: clamp(1rem, 3vh, 2.5rem);
   box-sizing: border-box;
+  /* Landing placement: the resting grid sits right under the hero instead of
+     centering in the full-height stage (which left a ~260px void between the
+     clone command and the grid). When docked the mosaic fills the stage, so
+     justification is irrelevant there. */
+  justify-content: flex-start;
 }
 .dg-mosaic--rows.is-ready {
   height: calc(100% - 2 * clamp(1rem, 3vh, 2.5rem));
-}
-@media (prefers-reduced-motion: reduce) {
-  .dg-mosaic--rows {
-    transition: none;
-  }
 }
 
 /* The stacked face — the same boxes on a phone, one per row.
@@ -288,9 +291,9 @@ body {
    the row is `flex: 0 0 auto` inside the column. */
 .dg-mosaic--stack .dg-cell { flex: 1 1 auto; min-width: 0; opacity: 0.72; transition: opacity .25s var(--ease), background .25s var(--ease), box-shadow .25s var(--ease); }
 .dg-mosaic--stack .dg-cell.on { opacity: 1; }
-.dg-mosaic-row { display: flex; flex: 1 1 0; min-height: 0; gap: 0.5rem; transition: flex-grow .45s var(--ease); }
+.dg-mosaic-row { display: flex; flex: 1 1 0; min-height: 0; gap: 0.5rem; /* The walk's growth eases (owner: smooth proportions at every size — the LOC weights never change, only the box). */ transition: flex-grow 0.35s var(--ease); }
 
-.dg-cell { position: relative; display: flex; flex-direction: column; gap: 0.5rem; flex: 1 1 0; min-width: 0; min-height: 0; padding: 0.85rem 0.95rem; margin: 0; background: var(--surface); border: 1px solid var(--hair); border-radius: 0; text-align: left; cursor: pointer; overflow: hidden; opacity: 0.55; transition: flex-grow .45s var(--ease), opacity .25s var(--ease), background .25s var(--ease), box-shadow .25s var(--ease); }
+.dg-cell { position: relative; display: flex; flex-direction: column; gap: 0.5rem; flex: 1 1 0; min-width: 0; min-height: 0; padding: 0.85rem 0.95rem; margin: 0; background: var(--surface); border: 1px solid var(--hair); border-radius: 0; text-align: left; cursor: pointer; overflow: hidden; opacity: 0.55; transition: opacity .25s var(--ease), background .25s var(--ease), box-shadow .25s var(--ease), flex-grow .35s var(--ease); }
 .dg-cell:hover { opacity: 0.85; }
 .dg-cell.on { opacity: 1; background: var(--surface-2, var(--surface)); box-shadow: inset 0 0 0 1px var(--accent); cursor: default; }
 
@@ -375,6 +378,41 @@ button.dg-docker.is-copied { color: var(--accent); }
    Only on the focused tile — a resting tile is a fraction of a row tall, so it
    carries the name, version, stats box and role and nothing else. */
 .dg-mosaic-serves { color: var(--ink-mute); font-family: var(--font-mono); font-size: 0.94rem; line-height: 1.5; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 5; line-clamp: 5; overflow: hidden; }
+
+/* Card density tiers (owner: a tile shows whatever fits, never clipped).
+   The tile's tier is set from its measured height (see ModuleGrid): full
+   shows everything; medium drops the package row; mini keeps name + version
+   only. Tiers CROSS-FADE (opacity + visibility) instead of flipping display:
+   tiles clip (overflow hidden on .dg-cell) and the hidden content keeps its
+   layout, so a tier change is paint-only — no pop, no reflow. Proportions
+   stay constant at every grid size because all sizing is LOC weights. */
+.dg-cell .dg-mosaic-stack,
+.dg-cell .dg-mosaic-role,
+.dg-cell .dg-mosaic-detail {
+  opacity: 1;
+  visibility: visible;
+  transition: opacity 0.3s var(--ease), visibility 0s;
+}
+.dg-cell[data-tier="medium"] .dg-mosaic-stack,
+.dg-cell[data-tier="mini"] .dg-mosaic-stack,
+.dg-cell[data-tier="mini"] .dg-mosaic-role,
+.dg-cell[data-tier="mini"] .dg-mosaic-detail {
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 0.3s var(--ease), visibility 0s 0.3s;
+}
+/* Reduced motion: every mosaic transition above goes instant — dock,
+   growth, tier fades. State changes still apply, with no animation. */
+@media (prefers-reduced-motion: reduce) {
+  .dg-mosaic--rows,
+  .dg-mosaic-row,
+  .dg-cell,
+  .dg-cell .dg-mosaic-stack,
+  .dg-cell .dg-mosaic-role,
+  .dg-cell .dg-mosaic-detail {
+    transition: none;
+  }
+}
 
 /* The stated figures. They are printed on the cell rather than implied by its
    size, so the sizing is readable rather than felt — a reader can check that
