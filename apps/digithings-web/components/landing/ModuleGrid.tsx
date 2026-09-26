@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import {
+  Reveal,
   StackRow,
   modules,
   useScrollyFeatures,
@@ -357,9 +358,12 @@ export function ModuleGrid() {
 
   /* The stacked face's active tile. The pinned mosaic's focus IS the scroll
      position; the stack has no track to scrub, so the tile whose top sits nearest
-     the focal line is the one that opens, recomputed on scroll. */
+     the focal line is the one that opens, recomputed on scroll. Defaults to the
+     first tile (digiquant): at page top the reader has not scrolled, but the
+     first card must already read open — the old -1 default left every card shut
+     until the reader pushed hard past the top. */
   const stackRefs = useRef<Array<HTMLElement | null>>([]);
-  const [stackActive, setStackActive] = useState(-1);
+  const [stackActive, setStackActive] = useState(0);
 
   /**
    * The mosaic's default state is unselected: nothing carries the focus until
@@ -372,8 +376,9 @@ export function ModuleGrid() {
    * not fullscreen → out of focus, none highlighted"; "zero focus until
    * centered and ready, then focus animation starts"). The old track-top
    * latch fired too early and never released, so tiles grew while arriving
-   * and stayed grown after the table left. `started` below still drives the
-   * mobile stack, which has no centred stage to gate on.
+   * and stayed grown after the table left. The mobile stack needs no such
+   * gate: it opens its first tile by default and tracks the scroll from
+   * mount (see the stack effect below).
    *
    * v16: the gate drives focus ONLY. It used to drive the mosaic's height as
    * well (compact clamp at rest, full stage once centred), which left a dead
@@ -386,7 +391,6 @@ export function ModuleGrid() {
    * mosaic's height WAS the docked state, so gating on it deadlocked —
    * resting centre sat just above the band and ready never fired).
    */
-  const [started, setStarted] = useState(false);
   /* Focus engagement (owner: digiquant lights up only once the grid is fully
      expanded and in view, after a bit more scrolling — not the moment the
      dock engages). The dock is now permanent, so `engaged` adds ~8% of walk
@@ -400,7 +404,6 @@ export function ModuleGrid() {
       const track = trackRef.current;
       if (!track) return;
       const top = track.getBoundingClientRect().top + window.scrollY;
-      if (window.scrollY >= top - 1) setStarted(true);
       const mosaic = track.querySelector(".dg-mosaic");
       if (!mosaic) return;
       /* Gate on the STAGE box, not the mosaic box: the stage is the unit
@@ -448,8 +451,11 @@ export function ModuleGrid() {
     });
   };
 
+  /* The stack tracks the scroll from mount — no arrival gate. The old
+     `started` latch (scroll past the track top) left every card shut at page
+     top, so digiquant only opened after a hard push past it. */
   useEffect(() => {
-    if (!stepper || reduced || !started) return;
+    if (!stepper || reduced) return;
     let raf = 0;
     const pick = () => {
       raf = 0;
@@ -477,7 +483,7 @@ export function ModuleGrid() {
       window.removeEventListener("resize", onScroll);
       if (raf !== 0) window.cancelAnimationFrame(raf);
     };
-  }, [stepper, reduced, started]);
+  }, [stepper, reduced]);
 
   const focus = engaged ? Math.max(activeIndex, 0) : -1;
 
@@ -744,19 +750,28 @@ export function ModuleGrid() {
                 <div key={`row-${row}`} className="dg-mosaic-row">
                   {members.map((i) => {
                     const on = reduced || i === stackActive;
+                    /* Slide-up entrance per card: the kit's Reveal (fade + rise
+                       from below, once, whileInView) — the digiweb card deck's
+                       own entrance vocabulary. The focal ref stays on the tile
+                       itself, which shares the wrapper's top. */
                     return (
-                      <div
+                      <Reveal
                         key={ordered[i].id}
-                        data-mod={ordered[i].id}
-                        ref={(el) => {
-                          stackRefs.current[i] = el;
-                        }}
-                        role="listitem"
-                        className={`dg-cell${on ? " on" : ""}`}
-                        aria-current={on ? "true" : undefined}
+                        className="dg-stack-reveal"
+                        delay={Math.min(i * 0.05, 0.3)}
                       >
-                        {tileContent(i, on, -1)}
-                      </div>
+                        <div
+                          data-mod={ordered[i].id}
+                          ref={(el) => {
+                            stackRefs.current[i] = el;
+                          }}
+                          role="listitem"
+                          className={`dg-cell${on ? " on" : ""}`}
+                          aria-current={on ? "true" : undefined}
+                        >
+                          {tileContent(i, on, -1)}
+                        </div>
+                      </Reveal>
                     );
                   })}
                 </div>
