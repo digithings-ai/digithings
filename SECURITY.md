@@ -225,6 +225,17 @@ Preferred remediation, in order:
 
 This policy covers vulnerabilities only. Third-party **license** obligations — including recorded acceptances of weak-copyleft dependencies — are handled separately in [docs/LICENSING.md](docs/LICENSING.md).
 
+## Accepted advisors (core)
+
+Live Supabase Database/Auth advisors on the **core** project are triaged in [#4630](https://github.com/digithings-ai/digithings/issues/4630). After migration `139_core_advisor_harden.sql`:
+
+- **Accepted SECURITY DEFINER views** (column list is the allowlist; do not flip to `security_invoker` without new anon policies on the base tables): `public_finalized_nav`, `public_daily_realized_attribution`, `public_accounting_nav_history`, `public_accounting_period_status`, `run_health`, `run_event_trace`.
+- **Invoker public tape** (clears definer ERROR): `public_portfolio_positions`, `public_nav_history`.
+- **Accepted authenticated SECURITY DEFINER RPCs**: `ensure_my_workspace`, `my_access` (caller-scoped; anon cannot execute). Do not revoke without a redesign.
+- **Auth — leaked-password protection (Hibp)**: enable in the Supabase Auth dashboard / Management API for **core** (not a SQL migration). Operator: Chris.
+- **twelve-x** Hibp + accepted `fx_hub_has_access` DEFINER WARN: [digithings-ai/twelve-x#211](https://github.com/digithings-ai/twelve-x/issues/211).
+- **pg_net**: remains in `public` (`extrelocatable=false`); migration 139 revokes `USAGE`/`EXECUTE` on schema `net` from `PUBLIC`/`anon`/`authenticated`. Cron `prices-live-*` runs as `postgres`.
+
 ## PR security rubric
 
 Every pull request is expected to pass the `docs/scoring/SECURITY.md` rubric at ≥ 8/10 before merge. Doc-only PRs touching `SECURITY.md` itself are excluded from auto-merge (see [docs/agent-backlog/AUTOMERGE.md](docs/agent-backlog/AUTOMERGE.md)).
