@@ -3,7 +3,10 @@
 **Human gate — infra/network:** this Worker publishes `graph.digithings.ai`
 (digigraph), `key.digithings.ai` (digikey), and `search.digithings.ai`
 (digisearch, new external route #4063 — owner-approved for CI web grounding) on
-the public internet. APIs still require auth: digikey JWT / BFF token exchange;
+the public internet. Since #4687/#4689 this single worker also serves the folded
+`/dashboard-api/*` routes and digichat paths (`/embed*`, `/api/chat*`, …) — the
+standalone dashboard-api and digichat workers stay deployed until cutover.
+APIs still require auth: digikey JWT / BFF token exchange;
 on the search route, APIs need a digikey JWT (`digisearch:query`, or
 `digisearch:ingest` for `/ingest`), e.g. `POST /v1/orchestrator_invoke` for the
 CI pipeline. Auth-exempt on every host is only the shared service allowlist —

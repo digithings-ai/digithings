@@ -56,7 +56,7 @@ def _code_lines(path: Path) -> str:
 
 
 def _env_vars_blocks(source: str) -> list[str]:
-    """Both ``envVars = { ... };`` blocks in index.ts: [stack, mcp]."""
+    """All ``envVars = { ... };`` blocks in index.ts: [stack, mcp, digichat]."""
     return [m.group(1) for m in re.finditer(r"envVars = \{([\s\S]*?)\n {2}\};", source)]
 
 
@@ -142,11 +142,12 @@ def test_worker_routes_mcp_service() -> None:
 def test_stack_container_env_has_no_mcp_duplication() -> None:
     """Finding 6: MCP secrets live on DigiQuantMcpContainer.envVars only."""
     blocks = _env_vars_blocks(WORKER_INDEX.read_text())
-    assert len(blocks) == 2
-    stack_block, mcp_block = blocks
+    assert len(blocks) == 3
+    stack_block, mcp_block, digichat_block = blocks
     for name in MCP_SCOPED_VARS:
         assert f"{name}:" not in stack_block, name
         assert f"{name}:" in mcp_block, name
+        assert f"{name}:" not in digichat_block, name
 
 
 def test_mcp_container_backend_passthrough_matches_library_default() -> None:
