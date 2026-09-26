@@ -18,6 +18,12 @@
  * matching MCP_EDGE_KEY — fail-closed 401 otherwise).
  * mcp.digithings.ai stays reserved and answers only behind its JWT gate.)
  *
+ * /dashboard-api/* → folded dashboard-api routes (#4687: portfolio,
+ * allocations, brief, performance, kpis/live, nav-series, benchmarks, ledger,
+ * /v1/tables/*, POST /mcp with the 8 dashboard MCP tools) served in-worker
+ * behind the dashboard-api isolation group. The standalone dashboard-api
+ * worker stays deployed until cutover; no DNS/Pages changes in this slice.
+ *
  * zammad-mcp / digisearch-mcp / digivault-mcp bind 0.0.0.0 inside the Container
  * for those edge routes; LiteLLM stays loopback-only. digisearch also binds
  * 0.0.0.0:8002 (container/start_digisearch.sh) so the Worker can reach it at the
@@ -285,6 +291,14 @@ export interface Env {
   // Neither is container runtime env -- do not add them to an envVars block.
   MARKET_DATA: R2Bucket;
   MARKET_DATA_ALLOWED_ORIGINS?: string;
+  // Folded dashboard-api (#4687) env passthrough. All optional: unset means
+  // the stub lane (local tests, secretless dev), exactly like the standalone
+  // worker. No values ship in this slice — the standalone worker stays
+  // deployed until cutover; secrets land via `wrangler secret put` later.
+  SUPABASE_URL?: string;
+  SUPABASE_SERVICE_ROLE_KEY?: string;
+  MARKET_DATA_URL?: string;
+  DASHBOARD_API_ALLOWED_ORIGINS?: string;
 }
 
 /** Secret-gated MCP edge paths (`/_stack/mcp/<id>/…`) → in-container ports. */
@@ -402,6 +416,24 @@ export default {
       return runIsolated("market-data", () => import("./market-data"), async ({ handleMarketData }) => {
         return handleMarketData(request, workerEnv, url);
       });
+    }
+
+    // Folded dashboard-api (#4687): same handlers as the standalone worker,
+    // served under the canonical module path. CORS allowlist behavior is the
+    // standalone worker's own code (exact-match origins), so it stays
+    // identical through the fold. A dashboard-api failure degrades only these
+    // paths (503); the /_stack/mcp/* proxy above is untouched.
+    if (url.pathname === "/dashboard-api" || url.pathname.startsWith("/dashboard-api/")) {
+      // Lazy dashboard-api import: the folded route subgraph (portfolio,
+      // allocations, brief, performance, kpis/live, nav-series, benchmarks,
+      // ledger, /v1/tables/*, MCP tools) loads on first use here.
+      return runIsolated(
+        "dashboard-api",
+        () => import("./dashboard-api"),
+        async ({ handleDashboardApi }) => {
+          return handleDashboardApi(request, workerEnv, url);
+        },
+      );
     }
 
     // Dedicated digiquant-mcp container (#3780 Task 8): reachable only via the

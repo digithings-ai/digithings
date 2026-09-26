@@ -2,9 +2,10 @@
  * Per-module fault isolation for the digithings-stack edge Worker (#4685).
  *
  * Skeleton for the single-worker fold: each fetch() route group (key proxy,
- * in-container MCP edge servers, R2 market data, container hostnames) loads
- * its handler module through `runIsolated`, which pairs a lazy `import()` with
- * a per-route try/catch. A failing module returns 503 for its own paths only;
+ * in-container MCP edge servers, R2 market data, folded dashboard-api,
+ * container hostnames) loads its handler module through `runIsolated`,
+ * which pairs a lazy `import()` with a per-route try/catch. A failing
+ * module returns 503 for its own paths only;
  * every other group keeps serving.
  *
  * Health model per group: `unloaded` (no request yet) → `loaded` (last
@@ -35,6 +36,7 @@ export type StackModuleName =
   | "key-proxy"
   | "mcp-edge"
   | "market-data"
+  | "dashboard-api"
   | "container-routes";
 
 export type StackModuleState = "unloaded" | "loaded" | "degraded";
@@ -54,6 +56,7 @@ const MODULE_NAMES: StackModuleName[] = [
   "key-proxy",
   "mcp-edge",
   "market-data",
+  "dashboard-api",
   "container-routes",
 ];
 
@@ -62,6 +65,7 @@ function freshHealth(): Record<StackModuleName, StackModuleHealth> {
     "key-proxy": { state: "unloaded", lastError: null },
     "mcp-edge": { state: "unloaded", lastError: null },
     "market-data": { state: "unloaded", lastError: null },
+    "dashboard-api": { state: "unloaded", lastError: null },
     "container-routes": { state: "unloaded", lastError: null },
   };
 }
@@ -148,6 +152,7 @@ export function getStackStatus(): StackStatus {
       "key-proxy": { ...health["key-proxy"] },
       "mcp-edge": { ...health["mcp-edge"] },
       "market-data": { ...health["market-data"] },
+      "dashboard-api": { ...health["dashboard-api"] },
       "container-routes": { ...health["container-routes"] },
     },
   };

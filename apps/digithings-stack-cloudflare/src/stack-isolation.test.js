@@ -112,6 +112,66 @@ describe("runIsolated", () => {
   });
 });
 
+describe("dashboard-api isolation (#4687)", () => {
+  it("a dashboard-api failure degrades ONLY its own paths with a 503", async () => {
+    const dashRes = await runIsolated(
+      "dashboard-api",
+      async () => {
+        throw new Error("dashboard bundle exploded");
+      },
+      async () => ok(),
+    );
+    expect(dashRes.status).toBe(503);
+    expect(await dashRes.text()).toContain("dashboard-api unavailable");
+
+    // Siblings keep serving: key-proxy, mcp-edge, and market-data are
+    // unaffected by the dashboard-api outage.
+    for (const sibling of ["key-proxy", "mcp-edge", "market-data"]) {
+      const res = await runIsolated(sibling, async () => ({}), async () => ok());
+      expect(res.status).toBe(200);
+    }
+
+    const status = getStackStatus();
+    expect(status.modules["dashboard-api"]).toEqual({
+      state: "degraded",
+      lastError: "dashboard bundle exploded",
+    });
+    expect(status.modules["key-proxy"]).toEqual({ state: "loaded", lastError: null });
+    expect(status.modules["mcp-edge"]).toEqual({ state: "loaded", lastError: null });
+    expect(status.modules["market-data"]).toEqual({ state: "loaded", lastError: null });
+    expect(status.modules["container-routes"]).toEqual({
+      state: "unloaded",
+      lastError: null,
+    });
+  });
+
+  it("a throwing dashboard-api route handler degrades its own group", async () => {
+    const res = await runIsolated("dashboard-api", async () => ({}), async () => {
+      throw new Error("supabase read blew up");
+    });
+    expect(res.status).toBe(503);
+    expect(await res.text()).toContain("dashboard-api unavailable");
+    expect(getStackStatus().modules["dashboard-api"]).toEqual({
+      state: "degraded",
+      lastError: "supabase read blew up",
+    });
+  });
+
+  it("heal-back clears the dashboard-api entry on later success", async () => {
+    await runIsolated("dashboard-api", async () => {
+      throw new Error("transient");
+    }, async () => ok());
+    expect(getStackStatus().modules["dashboard-api"].state).toBe("degraded");
+
+    const res = await runIsolated("dashboard-api", async () => ({}), async () => ok());
+    expect(res.status).toBe(200);
+    expect(getStackStatus().modules["dashboard-api"]).toEqual({
+      state: "loaded",
+      lastError: null,
+    });
+  });
+});
+
 describe("warning sink", () => {
   it("logs a structured JSON warning with module, event, and message only", async () => {
     const spy = vi.spyOn(console, "warn").mockImplementation(() => {});
@@ -152,7 +212,7 @@ describe("warning sink", () => {
 });
 
 describe("getStackStatus", () => {
-  it("reports all four groups as unloaded before any traffic", () => {
+  it("reports all five groups as unloaded before any traffic", () => {
     expect(getStackStatus()).toEqual({
       ok: true,
       service: "digithings-stack",
@@ -160,6 +220,7 @@ describe("getStackStatus", () => {
         "key-proxy": { state: "unloaded", lastError: null },
         "mcp-edge": { state: "unloaded", lastError: null },
         "market-data": { state: "unloaded", lastError: null },
+        "dashboard-api": { state: "unloaded", lastError: null },
         "container-routes": { state: "unloaded", lastError: null },
       },
     });
@@ -197,6 +258,9 @@ describe("index.ts isolation wiring", () => {
     expect(source).toContain(
       'runIsolated("market-data", () => import("./market-data")',
     );
+    expect(source).toContain('"dashboard-api"');
+    expect(source).toContain('() => import("./dashboard-api")');
+    expect(source).toContain("handleDashboardApi(request, workerEnv, url)");
     expect(source).toContain('runIsolated("container-routes", () => import("./ports")');
   });
 
@@ -214,5 +278,19 @@ describe("index.ts isolation wiring", () => {
     const isolated = source.indexOf('runIsolated("mcp-edge"');
     expect(authCheck).toBeGreaterThan(mcpStart);
     expect(isolated).toBeGreaterThan(authCheck);
+  });
+
+  it("mounts the folded dashboard-api under /dashboard-api without shadowing MCP paths", () => {
+    expect(source).toContain('if (url.pathname === "/dashboard-api"');
+    expect(source).toContain('url.pathname.startsWith("/dashboard-api/")');
+    // Exact/prefix match only: the dashboard branch cannot swallow /_stack/*,
+    // /v1/market/*, or any other group's paths.
+    expect(source).not.toContain('startsWith("/dashboard")');
+    // The MCP edge branch still precedes the dashboard branch, so
+    // /_stack/mcp/zammad/* keeps proxying to the in-container server.
+    const mcpBranch = source.indexOf("MCP_EDGE_PREFIX}/`)");
+    const dashBranch = source.indexOf('"/dashboard-api"');
+    expect(mcpBranch).toBeGreaterThan(-1);
+    expect(dashBranch).toBeGreaterThan(mcpBranch);
   });
 });
