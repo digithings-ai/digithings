@@ -20,9 +20,13 @@
  * and both are handed to the same renderer, so the two drawings share a
  * silhouette and diff only in what the boxes are and how they are wired.
  *
- * RULE THIS MODULE OBEYS: the conventional side names NO vendor. Round 9b
- * taught that lesson twice — every box is a CATEGORY an engineer would draw
- * ("their models"), never a brand, and never a digi module name either.
+ * RULE THIS MODULE OBEYS, per side: the conventional side names NO vendor.
+ * Round 9b taught that lesson twice — every rented box is a CATEGORY an
+ * engineer would draw ("their models"), never a brand. The digithings side
+ * is the deliberate exception (round 16, owner direction): every box there
+ * names the module that runs it, so the diagram reads as a parts list you
+ * compose — interface with digichat, models with digillm — instead of a
+ * second set of abstractions.
  *
  * Plain data, therefore server-safe: the band renders it from a server
  * component.
@@ -48,7 +52,7 @@ import type { ArchSpec, TourStep } from "@digithings/ui";
  * two drawings read as one diagram whose box wording flipped.
  */
 export const CONVENTIONAL_ARCH: ArchSpec = {
-  title: "The AI stack you rent",
+  title: "The fixed AI stack",
   description:
     "Container diagram: your product calls one vendor interface, and behind it sit the model, the index, the data store, the monitoring and the machines — every layer rented by the meter, inside a single boundary governed by one account and one release schedule.",
   groups: [
@@ -87,20 +91,22 @@ export const CONVENTIONAL_ARCH: ArchSpec = {
 /* ══════════════════════ B. the same system on digithings ══════════════════════ */
 
 /**
- * The same container diagram — same node ids, same positions, same wiring — with
- * every box flipped from "theirs" to "yours". The comparison is the point: the
- * calls do not change, only who owns the layer and whether the boundary has
- * seams in it. No digi module is named here either; the modules belong in the
- * capability ledger below, not in a diagram a client has to decode.
+ * The digithings side: the same product on top, but every layer behind it is
+ * a NAMED module you compose — nine boxes, one per shipped service, inside a
+ * boundary that says digithings instead of describing your hosts. Deliberately
+ * NOT the rented topology: the asymmetry is the argument (one fixed shape vs
+ * pieces you compose). digibase is the shared library inside every box rather
+ * than a box of its own; digistore and digilink are roadmap and stay out of
+ * the drawing (the mosaic above already labels them roadmap).
  */
 export const DIGITHINGS_ARCH: ArchSpec = {
-  title: "The digithings stack you run",
+  title: "The digithings stack you compose",
   description:
-    "Container diagram: the same product over the same calls, but every layer behind it is a piece you run — the interface, the model, the index, the data, the log, the machines and the keys are all yours, inside your own boundary.",
+    "Container diagram: the same product over the same calls, but every layer behind it is a named digithings module — chat, router, models, index, vault, strategies, scheduler, traces, keys — composed on your hosts, inside your boundary.",
   groups: [
     {
-      id: "hosts",
-      label: "your hosts · your regions · your keys",
+      id: "digithings",
+      label: "digithings · take one module or run them all",
       icon: "server",
       col: 0,
       row: 1,
@@ -109,24 +115,26 @@ export const DIGITHINGS_ARCH: ArchSpec = {
     },
   ],
   services: [
-    { id: "app", label: "your product", icon: "internet", col: 0, row: 0 },
-    { id: "api", label: "your interface", icon: "server", group: "hosts", col: 1, row: 1 },
-    { id: "model", label: "any model you choose", icon: "server", group: "hosts", col: 0, row: 2 },
-    { id: "memory", label: "your index", icon: "database", group: "hosts", col: 1, row: 2 },
-    { id: "record", label: "your data, on your disk", icon: "database", group: "hosts", col: 2, row: 2 },
-    { id: "oversight", label: "your log", icon: "server", group: "hosts", col: 0, row: 3 },
-    { id: "metal", label: "your machines", icon: "cloud", group: "hosts", col: 1, row: 3 },
-    { id: "terms", label: "your keys", icon: "disk", group: "hosts", col: 2, row: 3 },
+    { id: "app", label: "your product", icon: "internet", col: 1, row: 0 },
+    { id: "chat", label: "digichat · chat interface", icon: "server", group: "digithings", col: 0, row: 1 },
+    { id: "graph", label: "digigraph · request router", icon: "server", group: "digithings", col: 1, row: 1 },
+    { id: "models", label: "digillm · model gateway", icon: "server", group: "digithings", col: 2, row: 1 },
+    { id: "memory", label: "digisearch · vector index", icon: "database", group: "digithings", col: 0, row: 2 },
+    { id: "vault", label: "digivault · notes vault", icon: "database", group: "digithings", col: 1, row: 2 },
+    { id: "quant", label: "digiquant · strategy lab", icon: "cloud", group: "digithings", col: 2, row: 2 },
+    { id: "traces", label: "digismith · run traces", icon: "server", group: "digithings", col: 0, row: 3 },
+    { id: "claw", label: "digiclaw · scheduler", icon: "server", group: "digithings", col: 1, row: 3 },
+    { id: "keys", label: "digikey · your keys", icon: "disk", group: "digithings", col: 2, row: 3 },
   ],
   edges: [
-    { from: "app", to: "api", fromSide: "B", toSide: "T", label: "every request" },
-    { from: "api", to: "model", fromSide: "R", toSide: "L", label: "swap it" },
-    { from: "api", to: "memory", fromSide: "L", toSide: "R", label: "you choose" },
-    { from: "api", to: "record", fromSide: "B", toSide: "T", label: "you choose" },
-    { from: "model", to: "oversight", fromSide: "B", toSide: "T", label: "you see it" },
-    { from: "memory", to: "metal", fromSide: "B", toSide: "T", label: "yours" },
-    { from: "record", to: "metal", fromSide: "B", toSide: "L", label: "yours" },
-    { from: "metal", to: "terms", fromSide: "R", toSide: "L", label: "yours" },
+    { from: "app", to: "chat", fromSide: "B", toSide: "T", label: "every request" },
+    { from: "chat", to: "graph", fromSide: "R", toSide: "L", label: "routes" },
+    { from: "graph", to: "models", fromSide: "R", toSide: "L", label: "you choose" },
+    { from: "graph", to: "memory", fromSide: "L", toSide: "R", label: "you choose" },
+    { from: "graph", to: "quant", fromSide: "B", toSide: "T", label: "your strategies" },
+    { from: "models", to: "keys", fromSide: "B", toSide: "T", label: "your rates" },
+    { from: "models", to: "traces", fromSide: "B", toSide: "T", label: "you see it" },
+    { from: "claw", to: "graph", fromSide: "T", toSide: "B", label: "on a schedule" },
   ],
 };
 
@@ -173,50 +181,47 @@ export const RENTED_TOUR_STEPS: TourStep[] = [
 ];
 
 /**
- * The walk, step by step, over `DIGITHINGS_ARCH`. The first step names no boxes
- * on purpose: the tour opens on the whole diagram and then comes in, which is
- * the owner's "at the beginning we show the full diagram and as we go through
- * every step we kind of have this guided view".
- *
- * Every id here must exist in `DIGITHINGS_ARCH` — the tour resolves them against
- * the ids mermaid puts on the rendered groups. Kept to six steps so the phase
- * count stays comparable to the rented four.
+ * The walk over the digithings diagram, step by step. The frame is custom
+ * builds, not ownership: compose vs fixed shape, one layer or all, swap
+ * without migrating, your keys your rates — with owning the stack as one
+ * thread among them, never the headline. Every id here must exist in
+ * `DIGITHINGS_ARCH`. Six steps, comparable to the rented four.
  */
 export const OWNED_TOUR_STEPS: TourStep[] = [
   {
     id: "overview",
-    label: "Same stack. Every box is yours.",
-    line: "Nothing about the shape changes. What changes is that every layer behind your product is a piece you run, on infrastructure you already pay for, behind a boundary only you open.",
+    label: "One fixed shape, or pieces you compose.",
+    line: "The calls don't change — your product still calls an interface. What changes is that every layer behind it is a named module you can take alone or run together, on hosts you already pay for.",
     ids: [],
   },
   {
-    id: "surface",
-    label: "Your product, unchanged.",
-    line: "The top box is exactly the product you had. It calls an interface the same way it always did — the difference is that you publish that interface now.",
-    ids: ["app"],
+    id: "front",
+    label: "Your front door, your router.",
+    line: "digichat is the interface your product talks to; digigraph routes each request — chat, retrieval, or research — to the right module. Swap either without touching your product.",
+    ids: ["chat", "graph"],
   },
   {
-    id: "intelligence",
-    label: "Swap the model, ship nothing.",
-    line: "The interface and the model are separate layers, so a better or cheaper model drops in behind the same call. No migration, no rewrite, no vendor's roadmap dictating yours.",
-    ids: ["api", "model"],
+    id: "models",
+    label: "Any model. Your keys, your rates.",
+    line: "digillm routes to whichever provider wins today — model string, your key, your bill. When a cheaper model drops, you change a string, not a vendor.",
+    ids: ["models"],
   },
   {
-    id: "memory",
-    label: "Your index. Your data. On your disk.",
-    line: "Retrieval points at a store you choose and the records never leave your boundary. The knowledge your product depends on is an asset you hold, not one you rent back.",
-    ids: ["memory", "record"],
+    id: "knowledge",
+    label: "Your index, your vault.",
+    line: "digisearch queries whatever backend you run; digivault keeps your notes addressable. Move stores without rewriting — the calls stay yours.",
+    ids: ["memory", "vault"],
   },
   {
-    id: "operations",
-    label: "The whole run stays visible to you.",
-    line: "The log of what ran and the machines it ran on are both inside your boundary — your regions, your accounts, an audit trail you can read end to end.",
-    ids: ["oversight", "metal"],
+    id: "work",
+    label: "Your strategies, on your schedule.",
+    line: "digiquant researches against a real backtest engine; digiclaw keeps the loop running on an interval. Your book, and an audit trail you can read.",
+    ids: ["quant", "claw"],
   },
   {
-    id: "keys",
-    label: "The keys never leave your hands.",
-    line: "Access is issued and revoked by you and carried on every call. The boundary is not a wall you rent — it is a set of seams you can move whenever you want to. Each seam is a piece you can take alone — adopt one layer or run the whole stack.",
-    ids: ["terms"],
+    id: "trust",
+    label: "Your keys, your traces.",
+    line: "digikey issues and revokes access; digismith traces every hop. Owning the stack is part of it — never being locked in is the point.",
+    ids: ["keys", "traces"],
   },
 ];
