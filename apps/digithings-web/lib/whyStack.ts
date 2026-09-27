@@ -92,17 +92,20 @@ export const CONVENTIONAL_ARCH: ArchSpec = {
 
 /**
  * The digithings side: the same product on top, but every layer behind it is
- * a NAMED module you compose — nine boxes, one per shipped service, inside a
- * boundary that says digithings instead of describing your hosts. Deliberately
- * NOT the rented topology: the asymmetry is the argument (one fixed shape vs
- * pieces you compose). digibase is the shared library inside every box rather
- * than a box of its own; digistore and digilink are roadmap and stay out of
- * the drawing (the mosaic above already labels them roadmap).
+ * a NAMED module you compose — eight boxes, one per infrastructure service,
+ * inside a boundary that says digithings instead of describing your hosts.
+ * Deliberately NOT the rented topology: the asymmetry is the argument (one
+ * fixed shape vs pieces you compose). digibase is the shared library inside
+ * every box rather than a box of its own; digistore and digilink are roadmap
+ * and stay out of the drawing (the mosaic above already labels them roadmap).
+ * digiquant is out by the same honesty rule in reverse: it is a product BUILT
+ * on the infrastructure (finance, portfolio, trade strategies), not a layer
+ * of it — the digiquant band below is where it lives.
  */
 export const DIGITHINGS_ARCH: ArchSpec = {
   title: "The digithings stack you compose",
   description:
-    "Container diagram: the same product over the same calls, but every layer behind it is a named digithings module — chat, router, models, index, vault, strategies, scheduler, traces, keys — composed on your hosts, inside your boundary.",
+    "Container diagram: the same product over the same calls, but every layer behind it is a named digithings module — chat, router, models, index, vault, scheduler, traces, keys — composed on your hosts, inside your boundary.",
   groups: [
     {
       id: "digithings",
@@ -110,8 +113,8 @@ export const DIGITHINGS_ARCH: ArchSpec = {
       icon: "server",
       col: 0,
       row: 1,
-      cols: 3,
-      rows: 3,
+      cols: 4,
+      rows: 2,
     },
   ],
   services: [
@@ -119,19 +122,18 @@ export const DIGITHINGS_ARCH: ArchSpec = {
     { id: "chat", label: "digichat · chat interface", icon: "server", group: "digithings", col: 0, row: 1 },
     { id: "graph", label: "digigraph · request router", icon: "server", group: "digithings", col: 1, row: 1 },
     { id: "models", label: "digillm · model gateway", icon: "server", group: "digithings", col: 2, row: 1 },
-    { id: "memory", label: "digisearch · vector index", icon: "database", group: "digithings", col: 0, row: 2 },
-    { id: "vault", label: "digivault · notes vault", icon: "database", group: "digithings", col: 1, row: 2 },
-    { id: "quant", label: "digiquant · strategy lab", icon: "cloud", group: "digithings", col: 2, row: 2 },
-    { id: "traces", label: "digismith · run traces", icon: "server", group: "digithings", col: 0, row: 3 },
-    { id: "claw", label: "digiclaw · scheduler", icon: "server", group: "digithings", col: 1, row: 3 },
-    { id: "keys", label: "digikey · your keys", icon: "disk", group: "digithings", col: 2, row: 3 },
+    { id: "memory", label: "digisearch · vector index", icon: "database", group: "digithings", col: 3, row: 1 },
+    { id: "vault", label: "digivault · notes vault", icon: "database", group: "digithings", col: 0, row: 2 },
+    { id: "traces", label: "digismith · run traces", icon: "server", group: "digithings", col: 1, row: 2 },
+    { id: "claw", label: "digiclaw · scheduler", icon: "server", group: "digithings", col: 2, row: 2 },
+    { id: "keys", label: "digikey · your keys", icon: "disk", group: "digithings", col: 3, row: 2 },
   ],
   edges: [
     { from: "app", to: "chat", fromSide: "B", toSide: "T", label: "every request" },
     { from: "chat", to: "graph", fromSide: "R", toSide: "L", label: "routes" },
     { from: "graph", to: "models", fromSide: "R", toSide: "L", label: "you choose" },
     { from: "graph", to: "memory", fromSide: "L", toSide: "R", label: "you choose" },
-    { from: "graph", to: "quant", fromSide: "B", toSide: "T", label: "your strategies" },
+    { from: "graph", to: "vault", fromSide: "B", toSide: "T", label: "you keep" },
     { from: "models", to: "keys", fromSide: "B", toSide: "T", label: "your rates" },
     { from: "models", to: "traces", fromSide: "B", toSide: "T", label: "you see it" },
     { from: "claw", to: "graph", fromSide: "T", toSide: "B", label: "on a schedule" },
@@ -185,7 +187,7 @@ export const RENTED_TOUR_STEPS: TourStep[] = [
  * builds, not ownership: compose vs fixed shape, one layer or all, swap
  * without migrating, your keys your rates — with owning the stack as one
  * thread among them, never the headline. Every id here must exist in
- * `DIGITHINGS_ARCH`. Six steps, comparable to the rented four.
+ * `DIGITHINGS_ARCH`. Five steps against the rented four.
  */
 export const OWNED_TOUR_STEPS: TourStep[] = [
   {
@@ -213,15 +215,9 @@ export const OWNED_TOUR_STEPS: TourStep[] = [
     ids: ["memory", "vault"],
   },
   {
-    id: "work",
-    label: "Your strategies, on your schedule.",
-    line: "digiquant researches against a real backtest engine; digiclaw keeps the loop running on an interval. Your book, and an audit trail you can read.",
-    ids: ["quant", "claw"],
-  },
-  {
-    id: "trust",
-    label: "Your keys, your traces.",
-    line: "digikey issues and revokes access; digismith traces every hop. Owning the stack is part of it — never being locked in is the point.",
-    ids: ["keys", "traces"],
+    id: "run",
+    label: "Runs itself. Proves itself.",
+    line: "digiclaw keeps the loop on schedule; digikey issues the keys; digismith traces every hop. Owning the stack is part of it — never being locked in is the point.",
+    ids: ["claw", "keys", "traces"],
   },
 ];
