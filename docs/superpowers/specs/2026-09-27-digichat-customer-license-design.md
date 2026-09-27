@@ -38,8 +38,38 @@ A license is a signed JWT (compact serialization, RS256 — same algorithm as di
 | `max_version` (optional) | highest digichat version this license covers (e.g. `"1.4.x"`); absent means unpinned |
 | `iat` / `exp` | issuance and term end (~90 days) |
 | `kind` | `"digichat-license"` — belt-and-braces discriminator on top of `aud` |
+| `features` (optional) | licensed capability scopes, e.g. `["custom-backends", "custom-catalog", "hosted-extras"]`; absent means all licensed capabilities enabled. Lets a license be scoped down without minting new claim types per feature |
 
 Note on repo convention: a license `exp` is a **validity bound**, not a rate limit, timeout, or tool-call budget. The repo's no-limits rule concerns operational throttling; a commercial term end is out of scope for that rule. This is stated explicitly to avoid confusion.
+
+## License tiers
+
+Unlicensed containers serve a **baseline subset**; a valid license unlocks the full config surface. The split is enforced at existing seams (startup config check + chat-route gates), verified against `apps/digichat/src` — file:line pins below.
+
+| Capability | FREE (no license) | LICENSED | Enforcement seam |
+|---|---|---|---|
+| Serve container | yes, baseline config only | yes, full config | startup license check in `src/instrumentation.ts` `register()` + `src/lib/deploy-config/loader.ts` (fail-closed Zod precedent); unlicensed + non-baseline config → refuse to start |
+| Backend `digigraph` | yes | yes | `src/lib/deploy-config/schema.ts:238` (`DigigraphBackendSchema`); free pins `backend.type` to `digigraph` |
+| Custom backends (`foundry`, `openai-completions`, `openai-responses`, `anthropic`, `google-vertex`, `langgraph`, `ag-ui`, `a2a`) | no | yes (`custom-backends`) | same startup check; union at `schema.ts:391` |
+| Models (`models.default` / `available`, `allowPicker`) | digithings defaults only | custom (`custom-backends` scope) | config check; projection folds legacy `modelPicker` into `allowPicker` (`schema.ts:204`, `route-client-config.ts:126`) |
+| Tool catalog (`tools.catalog` custom entries) | empty/default only | any (`custom-catalog`) | already fail-closed on empty catalog: `deploy-config/force-tool.ts:23` (`catalogAllowsForceTool`), `:39` (`allowedForceTools`); license check only needs to gate the config, the runtime allowlist already denies the rest |
+| digisearch corpus (`digisearchIndex` → `X-Digi-Corpus-Index`) | no | yes (`hosted-extras`) | `src/app/api/chat/route.ts:525`; header only set when configured, so blocking the config blocks the spend |
+| Web search (`gate.webSearch`) | no | yes (`hosted-extras`) | `route.ts:441` — client must ask AND tenant must allow; free pins `gate.webSearch` to false |
+| digivault prefix (`vaultPathPrefix` → `X-Digi-Vault-Prefix`) | no (to confirm — sketch silent, same corpus seam) | yes (`hosted-extras`) | `route.ts:528` |
+| Operator MCP servers (`mcp.servers`) | none | configured | chat-route forwarding; note the foundry adapter already declares `mcp: false` (`backend-adapters.ts:163`), so this only bites on the digigraph path |
+| BYO MCP (`mcp.allowUserServers` / `allowAddForm`) | allowed via explicit opt-in | allowed | already gated per-tenant, defaults deny (`schema.ts:465`, `embed-client-config.ts:120`); free tier sets `allowUserServers: true` in config — no new check. Session URLs merged only when allowed (`route.ts:565`) |
+| UI surface (attachments, dictation, speech, reasoning/sources/branchPicker, skins) | defaults | full | config-level only, no new check (`FeaturesSchema` defaults at `schema.ts:195`; skin at `ChromeSchema`) |
+| `showByok` / `llmAccess` modes | unchanged (operator choice) | unchanged | out of scope — existing SaaS/BYOK knobs, not license-gated |
+| Gate modes (`turn_limited` / `ungated` / `trial_form`), `requiredPlanTier` / plan-proof | unchanged | unchanged | out of scope — Desk+ SaaS gating stays as-is (`route.ts:212`, `embed-tenants.ts:260`) |
+
+Where the table says "config check", that is the one new verification step: after signature/expiry/hosts/version checks pass (or when no license is present), the startup path compares the loaded deployment against the licensed surface and fails closed on mismatch.
+
+### Sketch-vs-code contradictions
+
+1. **`external-relay` is retired — do not write it into the license.** The sketch names `foundry/external-relay` as the licensed backends, but both the YAML schema and the legacy embed-tenant parser reject `external-relay` (and `digivault`-as-backend): `embed-tenants.test.ts:305`. The live non-digigraph set is `foundry` plus seven newer types (`openai-completions`, `openai-responses`, `anthropic`, `google-vertex`, `langgraph`, `ag-ui`, `a2a` — `schema.ts:391`). The `custom-backends` scope must cover the whole union, not the two named in the sketch.
+2. **Hosted extras only bite on the digigraph path.** The foundry adapter already declares `webSearch: false`, `mcp: false`, `corpus: false` (`backend-adapters.ts:146`); the DataTap agent wires its own azure_ai_search. Gating `digisearchIndex` / `gate.webSearch` therefore constrains digigraph-path tenants only — which is exactly the baseline being protected, so the split still works, but the spec should not promise spend-protection on non-digigraph paths where digichat never spent anything.
+3. **BYO MCP defaults deny, so "allowed on baseline" needs an explicit opt-in.** `allowUserServers` / `allowAddForm` default false and the bridge passes them through only on strict `=== true` (`embed-client-config.ts:169`). The free tier does not get BYO servers by doing nothing; the baseline config must set `allowUserServers: true`. No code change, but the baseline config template must say so.
+4. **digisearch cannot be separated from "the digigraph backend" as cleanly as the sketch implies** — it is not a separate backend but a catalog entry + corpus headers forwarded to digigraph (`force-tool.ts:9`, `route.ts:525`). The enforceable split is therefore "free digigraph configs carry no `digisearchIndex` and no `digisearch` catalog entry", enforced at the startup config check; the runtime allowlist already denies unlisted tools.
 
 ## Issuance flow
 
