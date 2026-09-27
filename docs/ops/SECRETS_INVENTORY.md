@@ -178,18 +178,22 @@ The single folded worker (`digithings-stack`) owns the dashboard-api and digicha
 secrets behind the isolation seam (fold slices #4686/#4688/#4690, launch-readiness
 #4693/#4694). Secret values are write-only in Cloudflare (`secret list` shows
 names only) and local `.env` files are unreadable to agents, so maintenance
-splits three ways. Live set is 22 names (verified 2026-09-27 via
-`wrangler secret list -c apps/digithings-stack-cloudflare/wrangler.toml`).
+splits three ways. Live set is 25 names (verified 2026-09-27 via
+`wrangler secret list -c apps/digithings-stack-cloudflare/wrangler.toml`);
+target 23 after the #4700 consolidation ops below (they run only after the
+manual production deploy carrying the fallback chain).
 
 ### Agent-settable (values documented in-repo, plaintext)
 
 ```bash
 CFG=apps/digithings-stack-cloudflare/wrangler.toml
-echo "https://rwagjbkvxkdwqmouagad.supabase.co" | npx wrangler secret put SUPABASE_URL -c $CFG
 echo "https://graph.digithings.ai" | npx wrangler secret put DIGIGRAPH_INTERNAL_URL -c $CFG
 echo "https://key.digithings.ai" | npx wrangler secret put DIGIKEY_URL -c $CFG
-echo "https://rwagjbkvxkdwqmouagad.supabase.co" | npx wrangler secret put DIGICHAT_DASHBOARD_SUPABASE_URL -c $CFG
 ```
+
+`SUPABASE_URL` needs no `put` — it ships as plaintext `[vars]` in the stack
+`wrangler.toml` (#4700; public project-ref, same as the standalone
+dashboard-api worker).
 
 `MARKET_DATA_URL` stays unset (optional; closes resolve honest-empty, same as the
 standalone dashboard-api worker). `DIGIKEY_BFF_TOKEN` is already on the worker
@@ -215,16 +219,32 @@ plan-proof links (`DIGICHAT_PLAN_PROOF_SECRET`) — one-time logout, flag it.
 
 ### Human-only (real values unreachable to agents)
 
-`SUPABASE_SERVICE_ROLE_KEY`, `DIGICHAT_DASHBOARD_SUPABASE_ANON_KEY`, and
+`SUPABASE_SERVICE_ROLE_KEY`, `SUPABASE_ANON_KEY`, and
 `DIGICHAT_EMBED_TENANTS` exist only on the standalone workers (write-only) or in
 the owner's vault. The owner pastes each one:
 
 ```bash
 CFG=apps/digithings-stack-cloudflare/wrangler.toml
 npx wrangler secret put SUPABASE_SERVICE_ROLE_KEY -c $CFG
-npx wrangler secret put DIGICHAT_DASHBOARD_SUPABASE_ANON_KEY -c $CFG
+npx wrangler secret put SUPABASE_ANON_KEY -c $CFG
 npx wrangler secret put DIGICHAT_EMBED_TENANTS -c $CFG
 ```
+
+#4700 consolidation ops (stack worker only, AFTER the manual deploy carrying
+the `index.ts` fallback chain is verified — deleting early breaks the digichat
+container; the standalone digichat worker keeps its own `DIGICHAT_*` names
+until cutover retirement):
+
+```bash
+CFG=apps/digithings-stack-cloudflare/wrangler.toml
+npx wrangler secret delete DIGICHAT_DASHBOARD_SUPABASE_URL -c $CFG
+npx wrangler secret delete DIGICHAT_DASHBOARD_SUPABASE_ANON_KEY -c $CFG
+npx wrangler secret delete SUPABASE_URL -c $CFG
+```
+
+(The lingering `SUPABASE_URL` secret would shadow the new `[vars]` value —
+secrets take precedence — so it must be deleted for the demotion to take
+effect. Target live set afterwards: 23 names.)
 
 ### Gotchas
 

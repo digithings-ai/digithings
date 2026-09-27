@@ -240,12 +240,17 @@ new_sqlite_classes = ["DigiChatContainer"]
 #   DIGIKEY_URL=https://key.digithings.ai
 #   DIGIKEY_BFF_TOKEN=<same as stack>
 #   DIGICHAT_PLAN_PROOF_SECRET
-#   DIGICHAT_DASHBOARD_SUPABASE_URL
-#   DIGICHAT_DASHBOARD_SUPABASE_ANON_KEY
+#   (deleted post-#4700: DIGICHAT_DASHBOARD_SUPABASE_URL/_ANON_KEY collapse to
+#   canonical SUPABASE_URL ([vars] above) + SUPABASE_ANON_KEY secret via the
+#   index.ts fallback chain — do not re-add)
 # (DIGICHAT_DATABASE_URL stays intentionally unset: the Cloudflare deployment
 # is DB-less, same as the standalone worker — see apps/digichat-cloudflare/wrangler.toml.)
 
 [vars]
+# Canonical Supabase project ref (#4700): public value, same as the standalone
+# dashboard-api worker's [vars]; doubles as the fallback source for the legacy
+# DIGICHAT_DASHBOARD_SUPABASE_URL forward (post-deploy the old secret is deleted).
+SUPABASE_URL = "https://rwagjbkvxkdwqmouagad.supabase.co"
 DIGIKEY_ISSUER = "https://key.digithings.ai"
 DIGIKEY_AUDIENCE = "digi-ecosystem"
 DIGIKEY_ALLOW_EPHEMERAL_KEY = "0"
