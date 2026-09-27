@@ -70,12 +70,6 @@ function Tour() {
             ]}
             variant="camera"
           />
-          {/* The walk's exit: backward to the mosaic's compose commands, forward
-              to the docs. One line, not a CTA row — this band informs, #contact
-              closes. */}
-          <p className="whyx__foot">
-            Start with one tile&rsquo;s compose command, or <a href="/docs">read the docs</a>.
-          </p>
         </div>
       </div>
     </section>
