@@ -1,191 +1,174 @@
 /**
- * The why-band v2 takes: three DIFFERENT arguments with three DIFFERENT
- * drawings. Review-only — `/variants/why-copy` renders one full band per
- * version so the owner can scroll each and pick. The live band stays
- * untouched until a version freezes and migrates over.
+ * The three why-band copy takes (A/B/C) as data. Review-only: the variants
+ * page renders one full guided walk per version so the owner can scroll each
+ * and pick. The live band (`WhyStack` + `whyStack`) stays untouched until a
+ * version freezes in `why-band-copy.md` and migrates over.
  *
- * - A "One wall, or eight seams": a brand-new monolith diagram (3 boxes)
- *   walked against the exploded 8-module build. Lock-in argument.
- * - B "Start with the layer that hurts": four cumulative stage diagrams,
- *   no scroll-walk. Modularity / land-and-expand argument.
- * - C "The invoice duel": no diagrams — two ledgers, their invoice vs your
- *   rates. Price argument. No figures anywhere: meters are qualitative.
+ * Versions share the specs, tags and captions — they differ in headline,
+ * lede and walks, which is the comparison under review.
  */
 
-import type { ArchSpec, TourStep } from "@digithings/ui";
+import type { TourStep } from "@digithings/ui";
+import { OWNED_TOUR_STEPS, RENTED_TOUR_STEPS } from "@/lib/whyStack";
 
-/* ═══════════ A. the monolith (fresh left diagram) ═══════════ */
+export interface WhyCopyVersion {
+  id: "A" | "B" | "C";
+  name: string;
+  blurb: string;
+  headline: [string, string];
+  lede: string;
+  leftSteps: TourStep[];
+  rightSteps: TourStep[];
+}
 
-export const MONOLITH_ARCH: ArchSpec = {
-  title: "One vendor. One wall.",
-  description:
-    "Your product calls one platform. Everything behind it — models, index, data, log, machines, keys — is one box, one bill, one roadmap.",
-  groups: [
-    {
-      id: "platform",
-      label: "one bill · one roadmap · no seams",
-      icon: "cloud",
-      col: 0,
-      row: 1,
-      cols: 2,
-      rows: 1,
-    },
-  ],
-  services: [
-    { id: "app", label: "your product", icon: "internet", col: 0, row: 0 },
-    { id: "api", label: "their interface", icon: "server", group: "platform", col: 0, row: 1 },
-    { id: "all", label: "8 layers · 0 seams", icon: "server", group: "platform", col: 1, row: 1 },
-  ],
-  edges: [
-    { from: "app", to: "api", fromSide: "B", toSide: "T", label: "HTTPS" },
-    { from: "api", to: "all", fromSide: "R", toSide: "L", label: "metered · opaque" },
-  ],
-};
+const FULL_RENTED = ["app", "api", "model", "memory", "record", "oversight", "metal", "terms", "platform"];
 
-export const MONOLITH_STEPS: TourStep[] = [
+const versionBLeft: TourStep[] = [
   {
-    id: "door",
-    label: "One door, and they hold the key.",
-    line: "Your product calls one interface. Its limits, its version and its price are decided above you.",
+    id: "surface",
+    label: "You own one box. They own the rest.",
+    line: "Your product sits on top. Everything it calls — the models, the index, the data, the machines — is somebody else's, and you reach it only through the shape they publish.",
+    ids: ["app"],
+  },
+  {
+    id: "interface",
+    label: "One door in, and they hold the key.",
+    line: "A single vendor interface is the only way through. Its limits, its version and its price are decided above you, on a schedule you do not set.",
     ids: ["app", "api"],
   },
   {
-    id: "wall",
-    label: "One wall behind it.",
-    line: "Models, index, data, log, machines, keys — a single box you cannot open, swap, or see into.",
-    ids: ["all", "platform"],
+    id: "services",
+    label: "Every layer below is rented by the meter.",
+    line: "The model bills per token, the index per query, the data per gigabyte — three contracts, three meters, and nothing you can reach in to change.",
+    ids: ["app", "api", "model", "memory", "record"],
+  },
+  {
+    id: "no-exit",
+    label: "No exit, only upgrades — theirs.",
+    line: "Monitoring, machines and terms sit behind the same closed boundary — and the only direction is the vendor's next version, on their schedule, at their price.",
+    ids: FULL_RENTED,
+  },
+];
+
+const versionCLeft: TourStep[] = [
+  {
+    id: "surface",
+    label: "You own one box. They own the rest.",
+    line: "Your product sits on top. Everything it calls — the models, the index, the data, the machines — is somebody else's, and you reach it only through the shape they publish.",
+    ids: ["app"],
+  },
+  {
+    id: "interface",
+    label: "One door in, and they hold the key.",
+    line: "A single vendor interface is the only way through. Its limits, its version and its price are decided above you, on a schedule you do not set.",
+    ids: ["app", "api"],
+  },
+  {
+    id: "meters",
+    label: "Every edge has a meter on it.",
+    line: "The model bills per token, the index per query, the data per gigabyte — three contracts, three meters, and the meter runs whether the answer was worth it or not.",
+    ids: ["app", "api", "model", "memory", "record"],
   },
   {
     id: "bill",
     label: "One bill, and you don't set it.",
-    line: "Every layer is priced by someone else, on a roadmap you don't vote on. The only direction is their next version.",
-    ids: ["app", "api", "all", "platform"],
+    line: "Monitoring, machines and terms ride the same invoice. This is not a smaller stack than digithings — it is the same stack with every layer priced by someone else.",
+    ids: FULL_RENTED,
   },
 ];
 
-/* ═══════════ B. the adoption ladder (four cumulative stages) ═══════════ */
-
-export interface LadderStage {
-  id: string;
-  label: string;
-  line: string;
-  spec: ArchSpec;
-}
-
-const LADDER_APP = { id: "app", label: "your product", icon: "internet", col: 1, row: 0 } as const;
-
-export const LADDER_STAGES: LadderStage[] = [
+const versionBRight: TourStep[] = [
   {
-    id: "s1",
-    label: "Step 1 — Talk to your own knowledge.",
-    line: "digichat over digisearch: ask your docs with your key. One module pair, running this week.",
-    spec: {
-      title: "digithings · step 1 of 4",
-      description: "Chat over your index.",
-      groups: [{ id: "digithings", label: "digithings · month one", icon: "server", col: 0, row: 1, cols: 4, rows: 1 }],
-      services: [
-        { ...LADDER_APP },
-        { id: "chat", label: "digichat · chat interface", icon: "server", group: "digithings", col: 0, row: 1 },
-        { id: "memory", label: "digisearch · vector index", icon: "database", group: "digithings", col: 3, row: 1 },
-      ],
-      edges: [{ from: "app", to: "chat", fromSide: "B", toSide: "T", label: "HTTPS" }],
-    },
+    id: "overview",
+    label: "Leave whenever — including piece by piece.",
+    line: "Nothing here is a platform you marry. Every layer is a module you can run alone, so adoption starts with one box and never has to end with ten.",
+    ids: [],
   },
   {
-    id: "s2",
-    label: "Step 2 — Choose your models.",
-    line: "digigraph routes, digillm shops providers. A cheaper model is a string change, not a migration.",
-    spec: {
-      title: "digithings · step 2 of 4",
-      description: "Router plus model gateway.",
-      groups: [{ id: "digithings", label: "digithings · quarter two", icon: "server", col: 0, row: 1, cols: 4, rows: 1 }],
-      services: [
-        { ...LADDER_APP },
-        { id: "chat", label: "digichat · chat interface", icon: "server", group: "digithings", col: 0, row: 1 },
-        { id: "graph", label: "digigraph · request router", icon: "server", group: "digithings", col: 1, row: 1 },
-        { id: "models", label: "digillm · model gateway", icon: "server", group: "digithings", col: 2, row: 1 },
-        { id: "memory", label: "digisearch · vector index", icon: "database", group: "digithings", col: 3, row: 1 },
-      ],
-      edges: [
-        { from: "app", to: "chat", fromSide: "B", toSide: "T", label: "HTTPS" },
-        { from: "chat", to: "graph", fromSide: "R", toSide: "L", label: "SSE" },
-        { from: "graph", to: "models", fromSide: "R", toSide: "L", label: "your key" },
-        { from: "graph", to: "memory", fromSide: "L", toSide: "R", label: "HTTP" },
-      ],
-    },
+    id: "front",
+    label: "Your front door, your router.",
+    line: "digichat is the interface your product talks to; digigraph routes each request — chat, retrieval, or research — to the right module. Swap either without touching your product.",
+    ids: ["chat", "graph"],
   },
   {
-    id: "s3",
-    label: "Step 3 — Keep your data.",
-    line: "digivault holds your notes, digikey holds your keys. Nothing you adopt locks the rest.",
-    spec: {
-      title: "digithings · step 3 of 4",
-      description: "Vault plus keys.",
-      groups: [{ id: "digithings", label: "digithings · half built", icon: "server", col: 0, row: 1, cols: 4, rows: 2 }],
-      services: [
-        { ...LADDER_APP },
-        { id: "chat", label: "digichat · chat interface", icon: "server", group: "digithings", col: 0, row: 1 },
-        { id: "graph", label: "digigraph · request router", icon: "server", group: "digithings", col: 1, row: 1 },
-        { id: "models", label: "digillm · model gateway", icon: "server", group: "digithings", col: 2, row: 1 },
-        { id: "memory", label: "digisearch · vector index", icon: "database", group: "digithings", col: 3, row: 1 },
-        { id: "vault", label: "digivault · notes vault", icon: "database", group: "digithings", col: 0, row: 2 },
-        { id: "keys", label: "digikey · your keys", icon: "disk", group: "digithings", col: 3, row: 2 },
-      ],
-      edges: [
-        { from: "app", to: "chat", fromSide: "B", toSide: "T", label: "HTTPS" },
-        { from: "chat", to: "graph", fromSide: "R", toSide: "L", label: "SSE" },
-        { from: "graph", to: "models", fromSide: "R", toSide: "L", label: "your key" },
-        { from: "graph", to: "memory", fromSide: "L", toSide: "R", label: "HTTP" },
-        { from: "graph", to: "vault", fromSide: "B", toSide: "T", label: "MCP" },
-        { from: "models", to: "keys", fromSide: "B", toSide: "T", label: "your rates" },
-      ],
-    },
+    id: "models",
+    label: "Any model, no migration.",
+    line: "digillm routes to whichever provider wins today. A better or cheaper model drops in behind the same call — no migration, no rewrite, no vendor's roadmap dictating yours.",
+    ids: ["models"],
   },
   {
-    id: "s4",
-    label: "Step 4 — Run it like yours.",
-    line: "digiclaw keeps the loop on schedule, digismith traces every hop. The whole build, still swappable.",
-    spec: {
-      title: "digithings · the whole build",
-      description: "Scheduler plus traces complete it.",
-      groups: [{ id: "digithings", label: "digithings · take one or run them all", icon: "server", col: 0, row: 1, cols: 4, rows: 2 }],
-      services: [
-        { ...LADDER_APP },
-        { id: "chat", label: "digichat · chat interface", icon: "server", group: "digithings", col: 0, row: 1 },
-        { id: "graph", label: "digigraph · request router", icon: "server", group: "digithings", col: 1, row: 1 },
-        { id: "models", label: "digillm · model gateway", icon: "server", group: "digithings", col: 2, row: 1 },
-        { id: "memory", label: "digisearch · vector index", icon: "database", group: "digithings", col: 3, row: 1 },
-        { id: "vault", label: "digivault · notes vault", icon: "database", group: "digithings", col: 0, row: 2 },
-        { id: "traces", label: "digismith · run traces", icon: "server", group: "digithings", col: 1, row: 2 },
-        { id: "claw", label: "digiclaw · scheduler", icon: "server", group: "digithings", col: 2, row: 2 },
-        { id: "keys", label: "digikey · your keys", icon: "disk", group: "digithings", col: 3, row: 2 },
-      ],
-      edges: [
-        { from: "app", to: "chat", fromSide: "B", toSide: "T", label: "HTTPS" },
-        { from: "chat", to: "graph", fromSide: "R", toSide: "L", label: "SSE" },
-        { from: "graph", to: "models", fromSide: "R", toSide: "L", label: "your key" },
-        { from: "graph", to: "memory", fromSide: "L", toSide: "R", label: "HTTP" },
-        { from: "graph", to: "vault", fromSide: "B", toSide: "T", label: "MCP" },
-        { from: "models", to: "keys", fromSide: "B", toSide: "T", label: "your rates" },
-        { from: "models", to: "traces", fromSide: "B", toSide: "T", label: "OTLP" },
-        { from: "claw", to: "graph", fromSide: "T", toSide: "B", label: "interval" },
-      ],
-    },
+    id: "knowledge",
+    label: "Your index, your vault, your stores.",
+    line: "digisearch queries whatever backend you run; digivault keeps your notes addressable. Move stores without rewriting — the calls stay yours.",
+    ids: ["memory", "vault"],
+  },
+  {
+    id: "run",
+    label: "Runs itself. Proves itself.",
+    line: "digiclaw keeps the loop on schedule; digikey issues the keys; digismith traces every hop. Owning the stack is part of it — never being locked in is the point.",
+    ids: ["claw", "keys", "traces"],
   },
 ];
 
-/* ═══════════ C. the invoice duel (ledger rows, no figures) ═══════════ */
+const versionCRight: TourStep[] = [
+  {
+    id: "overview",
+    label: "Same stack. No middleman.",
+    line: "Your product calls an interface the same way it always did. Behind it, your keys call the providers directly and your hosts run the rest — the margin between them is gone.",
+    ids: [],
+  },
+  {
+    id: "models",
+    label: "Any model, your rates.",
+    line: "digillm routes to whichever provider wins today — model string, your key, your bill. When a cheaper model drops, you change a string, not a vendor.",
+    ids: ["models"],
+  },
+  {
+    id: "front",
+    label: "Your front door, your router.",
+    line: "digichat is the interface your product talks to; digigraph routes each request — chat, retrieval, or research — to the right module. Swap either without touching your product.",
+    ids: ["chat", "graph"],
+  },
+  {
+    id: "knowledge",
+    label: "Your index, your vault.",
+    line: "digisearch queries whatever backend you run; digivault keeps your notes addressable. Move stores without rewriting — the calls stay yours.",
+    ids: ["memory", "vault"],
+  },
+  {
+    id: "run",
+    label: "Runs itself. Proves itself.",
+    line: "digiclaw keeps the loop on schedule; digikey issues the keys; digismith traces every hop. Owning the stack is part of it — never being locked in is the point.",
+    ids: ["claw", "keys", "traces"],
+  },
+];
 
-export interface LedgerRow {
-  layer: string;
-  theirs: string;
-  yours: string;
-}
-
-export const LEDGER_ROWS: LedgerRow[] = [
-  { layer: "Models", theirs: "Per-token meter, priced by them", yours: "Your key at the provider rate — a cheaper model is a string change" },
-  { layer: "Index", theirs: "Per-query meter on their backend", yours: "Your backend, no toll per call" },
-  { layer: "Data", theirs: "Per-gigabyte rent", yours: "Your disk, your vault" },
-  { layer: "Interface", theirs: "Versioned on their schedule", yours: "Your interface, your schedule" },
-  { layer: "The bill", theirs: "One invoice you don't set", yours: "Bills you already pay — minus one margin" },
+export const WHY_COPY_VERSIONS: WhyCopyVersion[] = [
+  {
+    id: "A",
+    name: "Compose it yourself",
+    blurb: "Evolution of the live band, sharpened. Balanced across all four themes.",
+    headline: ["Their AI stack,", "or the digithings stack you compose."],
+    lede: "Off-the-shelf AI arrives as one fixed shape — models, index, data and machines behind a single interface, metered and versioned on somebody else's schedule. digithings is the same AI infrastructure as pieces you compose yourself: start with the layer that hurts, swap any piece without migrating, pay your provider's own rates. Owning the stack is part of it — never being locked in is the point.",
+    leftSteps: RENTED_TOUR_STEPS,
+    rightSteps: OWNED_TOUR_STEPS,
+  },
+  {
+    id: "B",
+    name: "Never locked in",
+    blurb: "Freedom-first. The sharpest pain is the roadmap trap, not the bill.",
+    headline: ["One vendor's roadmap,", "or your own stack, layer by layer."],
+    lede: "Every off-the-shelf platform asks the same question: how much of your stack are you willing to rent back? digithings asks a different one: which layer do you want to take back first? Take the chat interface this quarter and the model gateway next — each piece runs on your hosts, your keys, your bill, and nothing you adopt locks the rest.",
+    leftSteps: versionBLeft,
+    rightSteps: versionBRight,
+  },
+  {
+    id: "C",
+    name: "No middleman's meter",
+    blurb: "Price-first. The bill is the wedge for infra buyers.",
+    headline: ["Metered by them,", "or priced by your own providers."],
+    lede: "The managed AI bill is a margin on top of the same models, indexes and machines you could call directly. digithings removes the middleman's meter: your keys call the providers, your hosts run the rest, and every layer stays swappable when a cheaper option appears. Start with one module — each layer you take back is one less margin you pay.",
+    leftSteps: versionCLeft,
+    rightSteps: versionCRight,
+  },
 ];
