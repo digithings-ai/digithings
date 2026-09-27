@@ -324,40 +324,49 @@
   color: var(--accent);
 }
 
-/* Rented vs digithings must read at a glance (#4429 ship list): the
-   off-the-shelf side wears a muted amber, the digithings side the accent.
-   The tag text itself ("rented stack"/"digithings stack") is the
-   discriminator, so the hook is a data attribute, not a second class family. */
+/* Side emphasis is brightness, not hue (#4429 v16): the side being walked
+   reads bright white, the other subdued gray. The hooks are data attributes
+   the tour sets from its scroll state (`data-active` per side,
+   `data-active-side` on the root); the static fallback sets neither, so both
+   sides read full bright there. */
 .arch-tour__tag[data-tag="rented stack"],
-.arch-tour__side-tag[data-tag="rented stack"] {
-  color: #c98a3d;
-  border: 1px solid color-mix(in srgb, #c98a3d 45%, transparent);
-  padding: 0.1rem 0.45rem;
-}
+.arch-tour__side-tag[data-tag="rented stack"],
 .arch-tour__tag[data-tag="digithings stack"],
 .arch-tour__side-tag[data-tag="digithings stack"] {
-  color: var(--accent);
-  border: 1px solid color-mix(in srgb, var(--accent) 45%, transparent);
+  color: var(--ink-mute);
+  border: 1px solid var(--hair);
   padding: 0.1rem 0.45rem;
+  transition: color 0.35s var(--ease), border-color 0.35s var(--ease);
 }
-/* The rented rail walks in amber to match its tag: the first side of a
-   two-side tour carries `side--leaving`, so the hook is the compositional
-   class, not a second tag plumbing. Single-side tours never get the class,
-   so they keep the accent rail. */
-.arch-tour__side--leaving .arch-tour__rail::before {
-  background: #c98a3d;
+.arch-tour__side[data-active="true"] .arch-tour__tag,
+.arch-tour__side[data-active="true"] > .arch-tour__side-tag,
+.arch-tour[data-variant="static"] .arch-tour__tag {
+  color: var(--ink);
+  border-color: color-mix(in srgb, var(--ink) 45%, transparent);
 }
-.arch-tour__side--leaving .arch-tour__step.on {
-  border-inline-start-color: #c98a3d;
+/* The walked rail fills bright; the other rests on the hairline. The step
+   being walked keys off the same hook, both rail orientations. */
+.arch-tour__side[data-active="true"] .arch-tour__rail::before {
+  background: var(--ink);
 }
-.arch-tour__side--leaving[data-rail="end"] .arch-tour__step.on {
-  border-inline-end-color: #c98a3d;
+.arch-tour__side[data-active="true"] .arch-tour__step.on {
+  border-inline-start-color: var(--ink);
 }
-/* The why headline's rent half wears the same muted amber as the rented tag
-   (#4429 ship list). Kit-level class — the canon guard refuses color literals
-   in app files, so the headline reaches the color through this hook. */
-.why-rent {
-  color: #c98a3d;
+.arch-tour__side[data-active="true"][data-rail="end"] .arch-tour__step.on {
+  border-inline-end-color: var(--ink);
+}
+/* The why headline follows the walk: the side being walked reads bright
+   white, the other subdued gray, cross-fading on the swap. No attribute
+   (static fallback) leaves both halves bright. Kit-level hooks — the canon
+   guard refuses color literals in app files. */
+.why-rent,
+.why-own {
+  color: var(--ink);
+  transition: color 0.35s var(--ease);
+}
+.arch-tour[data-active-side="0"] .why-own,
+.arch-tour[data-active-side="1"] .why-rent {
+  color: var(--ink-mute);
 }
 
 /* The side tag prints ONCE per side, on its own row at the TOP, right-aligned
@@ -433,7 +442,9 @@
   inset-block: 0;
   inset-inline-start: 0;
   width: 1px;
-  background: var(--accent);
+  /* Neutral at rest — only the walked side's rail lights (ink), so no color
+     lingers on the subdued side after the swap. */
+  background: var(--hair-2);
   transform-origin: 0 0;
   /* The side-local walk progress, not the whole-walk value: on the rented rail
    * the global value filled only its share and on the owned rail it was already

@@ -637,7 +637,13 @@ export function ArchitectureTour({
   }
 
   return (
-    <div className={`arch-tour${className ? ` ${className}` : ""}`} data-variant={mode}>
+    <div
+      className={`arch-tour${className ? ` ${className}` : ""}`}
+      data-variant={mode}
+      /* The walked side, so CSS can light it bright white and subdue the
+         other (static fallback omits it — both sides read full bright). */
+      data-active-side={activeSide}
+    >
       <div className="arch-tour__track" ref={trackRef}>
         <div className="arch-tour__pin" ref={pinRef}>
           {header ? <div className="arch-tour__head">{header}</div> : null}
@@ -651,7 +657,12 @@ export function ArchitectureTour({
                     : " arch-tour__side--entering"
                   : "";
               return (
-                <div className={`arch-tour__side${mod}`} key={si} data-rail={side.rail ?? "start"}>
+                <div
+                  className={`arch-tour__side${mod}`}
+                  key={si}
+                  data-rail={side.rail ?? "start"}
+                  data-active={si === activeSide}
+                >
                   <div className="arch-tour__frame">
                     <div className="arch-tour__stage" ref={si === 0 ? stageRef : undefined}>
                       <div

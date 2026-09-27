@@ -41,7 +41,7 @@ function Tour() {
               <>
                 <h2 className={HEADLINE} id="whyx-tour">
                   <span className="why-rent">Their AI stack,</span>{" "}
-                  <span className="text-accent">or the digithings stack.</span>
+                  <span className="why-own">or the digithings stack.</span>
                 </h2>
                 <p className={LEDE}>
                   An off-the-shelf AI platform rents you one fixed shape — models, index, data
