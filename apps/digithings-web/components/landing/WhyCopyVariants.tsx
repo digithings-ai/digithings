@@ -14,7 +14,8 @@
 
 import { ArchitectureDiagram, ArchitectureTour, Reveal } from "@digithings/ui";
 
-import { DIGITHINGS_ARCH, OWNED_TOUR_STEPS } from "@/lib/whyStack";
+import { OWNED_TOUR_STEPS } from "@/lib/whyStack";
+import { COMPOSE_ACCOUNTS, COMPOSE_OPEN, RENTED_METERED } from "@/lib/whyDiagrams";
 import { LADDER_STAGES, LEDGER_ROWS, MONOLITH_ARCH, MONOLITH_STEPS } from "@/lib/whyCopyVariants";
 
 const HEADLINE = "m-0 font-mono text-[clamp(1.3rem,2.4vw,1.85rem)] font-medium leading-[1.2] tracking-[-0.02em] text-ink";
@@ -69,11 +70,11 @@ function VersionA() {
                     caption: "One box, one bill, one roadmap",
                   },
                   {
-                    spec: DIGITHINGS_ARCH,
+                    spec: COMPOSE_OPEN,
                     steps: OWNED_TOUR_STEPS,
                     tag: "digithings stack",
                     caption:
-                      "Every box a module — take one or run them all · digibase under all of them",
+                      "Open protocols all the way down · digibase under all of them",
                   },
                 ]}
                 variant="camera"
@@ -145,6 +146,26 @@ function VersionC() {
             the rest. Start with one module — each layer you take back is one
             less margin you pay.
           </p>
+        </div>
+        <div className="grid gap-[1.5rem] min-[960px]:grid-cols-2">
+          <Reveal>
+            <div className="flex flex-col gap-[0.8rem] border border-hair bg-surface p-[1.4rem]">
+              <span className={VERSION_LABEL}>theirs · metered</span>
+              <ArchitectureDiagram
+                spec={RENTED_METERED}
+                caption="Every layer meters into one invoice"
+              />
+            </div>
+          </Reveal>
+          <Reveal delay={0.08}>
+            <div className="flex flex-col gap-[0.8rem] border border-hair bg-surface p-[1.4rem]">
+              <span className={VERSION_LABEL}>yours · direct</span>
+              <ArchitectureDiagram
+                spec={COMPOSE_ACCOUNTS}
+                caption="Your keys pay providers — no vendor between"
+              />
+            </div>
+          </Reveal>
         </div>
         <Reveal>
           <div className="whyx-cap" role="table" aria-label="Their invoice versus your rates">

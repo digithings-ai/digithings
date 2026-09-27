@@ -1,9 +1,8 @@
 # Why-band copy deck (Refs #4429)
 
-Working file for the `#why` landing band. Pick a version, then we iterate on
-it here. UI migration (diagrams, tour, styles) is a secondary step — nothing
-in this file renders. `WhyStack.tsx` + `lib/whyStack.ts` stay live until a
-version freezes.
+Working file for the `#why` landing band. Review the live variants at
+`/variants/why-copy`, pick a direction, iterate HERE first. UI migration
+(diagrams, tour, styles) is a secondary step — nothing in this file renders.
 
 Naming rules: product names always lowercase (digithings, digichat, digillm,
 digisearch, digivault, digigraph, digikey, digismith, digiclaw, digibase,
@@ -15,140 +14,56 @@ builds, modularity (one layer or all), no lock-in, price optimization. Owning
 is part of it, never the headline. digiquant stays OUT — a product built on
 the infrastructure, not a layer of it.
 
-Shared inventory (same in all versions unless noted):
-
-- Left tag: `their stack` · left title: The fixed AI stack · boundary: one
-  vendor's roadmap · one account · one bill you don't set.
-- Left boxes: your product → their interface → their models / their index /
-  their data store → their monitoring / their machines / their terms.
-- Left edges: every request · per-token · per-query · per-gigabyte · per-span
-  · metered. Left caption: Every edge metered — per-token · per-query ·
-  per-gigabyte.
-- Right tag: `digithings stack` · right title: The digithings stack you
-  compose · boundary: digithings · take one module or run them all.
-- Right boxes (8): digichat · chat interface / digigraph · request router /
-  digillm · model gateway / digisearch · vector index / digivault · notes
-  vault / digiclaw · scheduler / digismith · run traces / digikey · your keys.
-- Right caption: Every box a module — take one or run them all · digibase
-  under all of them.
+Diagrams must read like real infrastructure to a developer/architect:
+protocol-labeled wires (HTTPS/SSE/OpenAI API/MCP/OTLP/your key), accurate
+topologies, module names on the digithings side, generic categories on the
+fixed side. No new glyphs (the mermaid doc-export grammar knows five plates).
 
 ---
 
-## Version A — "Compose it yourself" (evolution of the live band)
+## Version A — "One wall, or eight seams" (lock-in, guided walk)
 
-Best if: we want continuity with what's on :3900 now, sharpened.
+- Headline: One wall around everything, / or seams everywhere you need them.
+- Lede: fixed-shape critique → same infra cut along its seams → the
+  difference is whether anything in the drawing can move.
+- Left: 3-box monolith (your product → their interface → 8 layers · 0 seams,
+  wired HTTPS / metered · opaque), boundary "one bill · one roadmap · no
+  seams". 3 walk steps (door / wall / bill).
+- Right: open-hub module map with a "swap any box" hot-path group and
+  protocol wires. 5 walk steps (compose / front door / models / knowledge /
+  runs-proves).
+- Open: does the monolith's single "8 layers" box underplay the fixed shape,
+  or is the condensation the point?
 
-Headline:
+## Version B — "Start with the layer that hurts" (modularity, 4 stages)
 
-> Their AI stack,
-> or the digithings stack you compose.
+- Headline: Start with the layer that hurts, / end with a stack that's yours.
+- Lede: nobody rips out eight layers at once; pain-arrival adoption order.
+- Four cumulative static diagrams, chat+index → +router/gateway →
+  +vault/keys → +scheduler/traces, wires in protocol language
+  (HTTPS/SSE/your key/HTTP/MCP/your rates/OTLP/interval). No scroll-walk.
+- Open: stage 2 jumps two modules at once (router + gateway) — split it?
 
-Lede:
+## Version C — "The invoice duel" (price, graphs + ledger)
 
-> Off-the-shelf AI arrives as one fixed shape — models, index, data and
-> machines behind a single interface, metered and versioned on somebody
-> else's schedule. digithings is the same AI infrastructure as pieces you
-> compose yourself: start with the layer that hurts, swap any piece without
-> migrating, pay your provider's own rates. Owning the stack is part of
-> it — never being locked in is the point.
-
-Left walk (unchanged):
-
-1. You own one box. They own the rest.
-2. One door in, and they hold the key.
-3. Every layer below is rented by the meter.
-4. One wall, and it does not open.
-
-Right walk:
-
-1. One fixed shape, or pieces you compose.
-2. Your front door, your router. — digichat + digigraph
-3. Any model. Your keys, your rates. — digillm
-4. Your index, your vault. — digisearch + digivault
-5. Runs itself. Proves itself. — digiclaw + digikey + digismith
-
----
-
-## Version B — "Never locked in" (freedom-first)
-
-Best if: the sharpest pain we sell against is the roadmap trap, not the bill.
-
-Headline:
-
-> One vendor's roadmap,
-> or your own stack, layer by layer.
-
-Lede:
-
-> Every off-the-shelf platform asks the same question: how much of your
-> stack are you willing to rent back? digithings asks a different one:
-> which layer do you want to take back first? Take the chat interface this
-> quarter and the model gateway next — each piece runs on your hosts, your
-> keys, your bill, and nothing you adopt locks the rest.
-
-Left walk (tilted toward no-exit):
-
-1. You own one box. They own the rest.
-2. One door in, and they hold the key.
-3. Every layer below is rented by the meter.
-4. No exit, only upgrades — theirs.
-
-Right walk:
-
-1. Leave whenever — including piece by piece.
-2. Your front door, your router. — digichat + digigraph
-3. Any model, no migration. — digillm
-4. Your index, your vault, your stores. — digisearch + digivault
-5. Runs itself. Proves itself. — digiclaw + digikey + digismith
-
----
-
-## Version C — "No middleman's meter" (price-first)
-
-Best if: the bill is the wedge — infra buyers feel the margin first.
-
-Headline:
-
-> Metered by them,
-> or priced by your own providers.
-
-Lede:
-
-> The managed AI bill is a margin on top of the same models, indexes and
-> machines you could call directly. digithings removes the middleman's
-> meter: your keys call the providers, your hosts run the rest, and every
-> layer stays swappable when a cheaper option appears. Start with one
-> module — each layer you take back is one less margin you pay.
-
-Left walk (tilted toward the meter):
-
-1. You own one box. They own the rest.
-2. One door in, and they hold the key.
-3. Every edge has a meter on it.
-4. One bill, and you don't set it.
-
-Right walk (price up front):
-
-1. Same stack. No middleman.
-2. Any model, your rates. — digillm
-3. Your front door, your router. — digichat + digigraph
-4. Your index, your vault. — digisearch + digivault
-5. Runs itself. Proves itself. — digiclaw + digikey + digismith
-
----
+- Headline: Metered by them, / or priced by your own providers.
+- Lede: managed bill as margin; your keys, your hosts; one less margin per
+  layer taken back.
+- Graphs: metered fixed stack with a vendor-invoice box collecting every
+  meter vs two-lane direct build (your hosts | your providers, billed to
+  you). Ledger below, meters only, no figures.
+- Open: ledger + two graphs — too much for one version, or belt and braces?
 
 ## Scorecard (fill together after the pick)
 
 - [ ] Pick: A / B / C / hybrid (note: ___________)
-- [ ] Left walk step 4: keep, or soften the renting language further?
-- [ ] Right walk step 5: three boxes in one step — split, or keep?
-- [ ] Price: own step (C), inside the models step (A), or ambient (B)?
+- [ ] Price: own version (C), inside the models step, or ambient?
 - [ ] digibase/digistore/digilink: caption + mosaic enough, or name them?
 
 ## Migration checklist (secondary step, NOT now)
 
-- [ ] Freeze headline + lede here, then port to `WhyStack.tsx`
-- [ ] Freeze box labels, then port to `DIGITHINGS_ARCH` in `lib/whyStack.ts`
-- [ ] Freeze steps, then port to `OWNED_TOUR_STEPS` / `RENTED_TOUR_STEPS`
-- [ ] Freeze tags + captions, then port side props + `diagrams.css` hooks
+- [ ] Freeze headline + lede + walks here, then port to `WhyStack.tsx` /
+  `lib/whyStack.ts`
+- [ ] Freeze specs (`whyDiagrams.ts` / `whyCopyVariants.ts` carry them
+  review-side), then port the winner's pair
 - [ ] Scroll the band on :3900 (desktop walk + static fallback), then commit
