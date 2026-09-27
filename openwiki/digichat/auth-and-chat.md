@@ -3,9 +3,6 @@ type: behavior-guide
 title: digichat Auth and Chat
 description: Complete auth-to-stream flow — Auth.js v5 login, request auth, digikey token exchange, POST /api/chat streaming with turn modes and rate limiting, POST /api/plan-proof HMAC tier gate, conversation persistence, and markdown export.
 tags: [digichat, auth, chat, bff, rate-limit, plan-proof]
-verified:
-  - by: openwiki/0.5.0
-    at: 2026-09-23T13:25:31.068Z
 sources:
   - id: openwiki-source-a37d4bc55fb634d7ed1c18df
     resource: repo://apps/digichat/src/app/api/chat/route.ts

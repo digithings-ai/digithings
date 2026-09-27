@@ -1,0 +1,122 @@
+{
+  "schemaVersion": 1,
+  "pageVersion": "sha256:ee90b09f0407c5a2e17ebf0eb2758a5e50df5512691bd21cebc528fe2f1924a2",
+  "claims": [
+    {
+      "id": "claim_d3ef2d676ea9485f8f2b2b5bc21e849f",
+      "statement": "dashboard-api is a standalone Cloudflare Worker that centralizes read-only dashboard data reads; its canonical serving path is the /dashboard-api/* mount on the digithings-stack worker, with the standalone deploy retained for local development and testing.",
+      "evidence": [
+        {
+          "resource": "repo://apps/dashboard-api/README.md",
+          "version": "repo-file-v1:sha256:9e66f03200bcf902448ea0b43e19815ff22879e27f0e2c7c8648168234b7b17f"
+        },
+        {
+          "resource": "repo://apps/dashboard-api/wrangler.toml",
+          "version": "repo-file-v1:sha256:9dcbd7ea44aec3c77e83d9516c8ec3069528e371b8ff6edef3c20a8798dd2505"
+        }
+      ]
+    },
+    {
+      "id": "claim_9a040202f5694dccb7a1fe326583d8a3",
+      "statement": "The worker builds its route table per request from env: when SUPABASE_SERVICE_ROLE_KEY is present it wires a real Supabase source (createSupabaseSource), otherwise it wires the clearly-marked stub doubles in ./stubs so local dev and Vitest runs need no secrets or network.",
+      "evidence": [
+        {
+          "resource": "repo://apps/dashboard-api/src/index.ts#L164-L186",
+          "version": "repo-lines-v1:sha256:a31962309b968d7aea08dff26967cb73780b726c6c9dc77de3710e6a9c57383e:eyJzZWxlY3RlZExpbmVDb3VudCI6MjMsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImUwODMxMGQyNTUzNTk1MjAyODk0YjlmZGRjMWQwZTNkOGY1NjEwYjRkZjY1NzI0ODYzMjcxOWFkYjlmZThmM2IiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQxMmNhMzQ1Y2NmNzViZjljMDgwNmJjZTY5NWJlOGRlODA4Yjc5OTg0MjUxYTdhNTRkMjAyY2Y2MTAxZGQ0NTEiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjkyMDQwZTA5NWE5NGUyYWRhNzRlNDIxZjM3MTg3NTFhOTFhODEwYmZkNjZmNDhmNGU5MzljN2I3NDgwZWI2NzAiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjU2YjY0MGZjMWY0OTI0NGFlN2Y0MjdlZjJkZGYwMjE4YWRkYjQ1M2ExNDA2MzU4MGI5ZDcyNTE1N2MwMTAxZmYifQ"
+        },
+        {
+          "resource": "repo://apps/dashboard-api/src/supabase.ts#L44-L47",
+          "version": "repo-lines-v1:sha256:6d31aeb33eeb30638c447f861517e4f4b8ef5f2e15098bd8e96bd0b0aff2a478:eyJzZWxlY3RlZExpbmVDb3VudCI6NCwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiMDk3NzA1OTQ0ZTIwMWJlMjIwODE0MGYyZTNmMWU1YmRmNWViMDNhZjE3YTNhYTlmYWM5YjU5M2M2YTExNWRmZCIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiNDEyY2EzNDVjY2Y3NWJmOWMwODA2YmNlNjk1YmU4ZGU4MDhiNzk5ODQyNTFhN2E1NGQyMDJjZjYxMDFkZDQ1MSIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiNDRhN2RiZDU3MzliZDQyNzY2ZWYzN2Q1NmRlZDllZjU4NzM4YWRiZDBmOGI0MDhhMTA5MDljNWNjZWY5NDNiMSIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiYzVjMDRlYjdmYjg4N2RhMTg0NzA0NmNhYzA0NTk0MzUzMjUxZmE2NWEwM2EwMTJmY2Y5ZGYwYmJiMGZlMTI1MyJ9"
+        }
+      ]
+    },
+    {
+      "id": "claim_940d2a2227c54826a1d85f7ba80a0096",
+      "statement": "SUPABASE_SERVICE_ROLE_KEY is a wrangler secret that must never appear in the static bundle; real source reads fail closed to the upstream_empty (502) error envelope via UpstreamError, never silently falling back to stubs.",
+      "evidence": [
+        {
+          "resource": "repo://apps/dashboard-api/README.md",
+          "version": "repo-file-v1:sha256:9e66f03200bcf902448ea0b43e19815ff22879e27f0e2c7c8648168234b7b17f"
+        },
+        {
+          "resource": "repo://apps/dashboard-api/src/index.ts#L149-L162",
+          "version": "repo-lines-v1:sha256:ce3f0342d11f3740a7ae537b9b5474b82b99cbea4517b317acc4f9d44026ec15:eyJzZWxlY3RlZExpbmVDb3VudCI6MTQsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6Ijg1MDU2N2FkNDZiODMxNDdlZmI4NjQ3NWY5Y2M2NDZhOGFmZDY5MTQ5MWM0MjMyZTc0Zjc2MjgwN2M5NzQ2YzIiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQxMmNhMzQ1Y2NmNzViZjljMDgwNmJjZTY5NWJlOGRlODA4Yjc5OTg0MjUxYTdhNTRkMjAyY2Y2MTAxZGQ0NTEiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImRmMzdmMmJhMGM5NjI5YjJlMjI2MGQ1NWU0OWZmYjkyMzBkZjE0NTFiYzk1Nzk2ZGEzZWY4MWExYzZhNDJhZjYiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjJjODM0MDQ0YWNjZmMyZjQxNDdkZDUzM2UzMWE1MjY3YWZmNzI2ODY5OTExYmJhMDJjY2M3N2QzOThlNjU3YTcifQ"
+        },
+        {
+          "resource": "repo://apps/dashboard-api/wrangler.toml#L21-L23",
+          "version": "repo-lines-v1:sha256:c569044bb34ee18bac378bcf74bb9f71610abc273f43b8af3d25b921426a0fd9:eyJzZWxlY3RlZExpbmVDb3VudCI6MywiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiZmM4ODM5MDAxNjFlZDk2OTE0ZWZkZDgwMGI5ZmM3YmNiOGI4MWU2ZGU1NjU3MTMwNmQxYTg5OTRhMDFlMWZjZiIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiMGE2NTgyMGEyYTE1ZGM4MDA3NzA2NmM3ZmMxNjVlZmRjYWNhN2UxMDAyZDU1ZDY4YmQwZmQ5NTI0YTU3MzhiZSIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiMGQ0ZmQ2YjdhYWEzZjNiNTNiZGVkMmM5NTAxZTRjNWVjNTUzNDI5OGJjYTY2OTc4NzlhNTI3ZjMxZWJlYjE3MiIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjAsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiZTNiMGM0NDI5OGZjMWMxNDlhZmJmNGM4OTk2ZmI5MjQyN2FlNDFlNDY0OWI5MzRjYTQ5NTk5MWI3ODUyYjg1NSJ9"
+        }
+      ]
+    },
+    {
+      "id": "claim_337202d533284093834505dde40dcb51",
+      "statement": "Local development and gates are run with npm run dev --workspace dashboard-api, npm run test --workspace dashboard-api, and npm run typecheck --workspace dashboard-api, where test runs Vitest and typecheck runs tsc --noEmit.",
+      "evidence": [
+        {
+          "resource": "repo://apps/dashboard-api/package.json",
+          "version": "repo-file-v1:sha256:213eea70d597ffb1b15aab8f21019a3574087e3e26341aa839817b7f12ecbe45"
+        }
+      ]
+    },
+    {
+      "id": "claim_2d59bebcb61c475cbdf734e5d464640e",
+      "statement": "The eight contracted envelope routes are all GET and read-only, and each returns the contract §1 success envelope (data, as_of, retrieval_pin, provenance); GET /healthz is auth-exempt and always returns {\"ok\": true, \"service\": \"dashboard-api\"}.",
+      "evidence": [
+        {
+          "resource": "repo://apps/dashboard-api/src/index.test.ts#L63-L69",
+          "version": "repo-lines-v1:sha256:fa1c534221a364e6a2ccbe4f46fa3a3b51d9f52c9a9ade404844f4964f38bc4f:eyJzZWxlY3RlZExpbmVDb3VudCI6NywiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiOTNiNTA5ZjYwNGFiN2NkNTc5ZjQ2MDE2ZDU5ZTcwYzc1YmI2YjkyYzNiYTYzMGM4YTUxMTE0OGFiNWZhMGNhNiIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiZjZmNWI0MGIxNTg0NTdkMTc4NjRmMjE3OTA3ODZkZDVhMmVjZGI2NGI2NmE2NTFmNzg4ZDRlMjVjZDMzMDNkMiIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiYjc3OWQxMThkNmUzY2JmNDUwNTM5NzQ4ZGVlN2E0MzA3YWNiZTY0NDZjYmEyOTdmMjc2MGZhNWQwYmJhMWJjMiIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiNGI4YzE5ZDg3NDA3Y2NmMjI5ODQ2NzA1OTI3YjhlZDYzMDFmYjFmMGE4OGQ0YWNhZWYxMjBkNDMyYTBkNWY2YyJ9"
+        },
+        {
+          "resource": "repo://apps/dashboard-api/src/index.ts#L138-L140",
+          "version": "repo-lines-v1:sha256:fdfb2d7407be67a40d65bfcc9d29b541a9defcdd339e8dd4a6c2f82a9d538692:eyJzZWxlY3RlZExpbmVDb3VudCI6MywiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiMzVhZDU2NTQ2MTYyZmNkMmQxMmYyN2QyZGQ2OTI4NjcxYmQxYWM1MWNiNjkyODdiMWFjMTViMTU3YjVjMDU4OSIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiNDEyY2EzNDVjY2Y3NWJmOWMwODA2YmNlNjk1YmU4ZGU4MDhiNzk5ODQyNTFhN2E1NGQyMDJjZjYxMDFkZDQ1MSIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiYzdiYzQzMTVmNDM0ZmJkNWNiODZiNjgyMDE1NzYxZTYyNWNhYzY2MTEzMzM5ZGExMWIxZWVmOWU3OWJhZWEwMCIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiNjBmOWYyOGM5ZjQ0MThjNThmN2ExZjdlNmU3YmQwODY5NWQ0NmQ4ZjcyNDAwY2MyMjMxZjdjYzk1YmI0NWUyOCJ9"
+        },
+        {
+          "resource": "repo://apps/dashboard-api/src/wiring.test.ts#L16-L38",
+          "version": "repo-lines-v1:sha256:b7f9085b7654605e7fe8a75475e2b1b84eb9700f06d2be61899b49802ac7e376:eyJzZWxlY3RlZExpbmVDb3VudCI6MjMsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImFkZjc2MTEwZjY2MDBiNzdkNDMwZjc2YjRjMzdlYTg2MWFiZmY1YWRmNWE3MTFkNjViMDJhYmE2NzgzYjdjODIiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjI3ZTU3ODhkNWQ5ZDczZDI0YTgxZGJjMGE1YTc0YmZhODJjOWMzYjNhZjk5ZTUyYWY3OTZlOTBiNDY4YThhM2QiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImRkY2FjNWRiMjc3ODM5ZWQzNzU2N2YwZmRkMjlkMGJmZjBkZjAzNGRmNTc4M2U3MWY5ZjI5ZjFiMGZhMjQ1NzYiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjI1NzM4NGNjM2IxYzkzY2ZjMjY2MmMyMmUxNjExYzY2MTM2NmVjZWRlMTEwNTI2NjYzOGZjZWM1Nzk2ZmM1ZWEifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_506434472c194bd0b41808a69f866e7a",
+      "statement": "Common query params are validated by parseCommonParams: asOf must be a calendar date YYYY-MM-DD and retrieval_pin must be at most 128 characters, with malformed values rejected as bad_request (400).",
+      "evidence": [
+        {
+          "resource": "repo://apps/dashboard-api/src/index.ts#L108-L131",
+          "version": "repo-lines-v1:sha256:8cddb4eb88a27030e12824d380fa312ecd0b27d6a4670b8a29e4a329262d4f9e:eyJzZWxlY3RlZExpbmVDb3VudCI6MjQsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImE5YTA0NjJhNDU2ZDJmOTI3OTM4OTYzZTEwMWQ2MzZlYWFmMWJiYjVmN2E5MWUxMzY2ZDZiZTkyN2Y2ODM2ODEiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQxMmNhMzQ1Y2NmNzViZjljMDgwNmJjZTY5NWJlOGRlODA4Yjc5OTg0MjUxYTdhNTRkMjAyY2Y2MTAxZGQ0NTEiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImE0ODljZjRjMzg0YTg0OGQ2MzZlYmZhMzlhODgxZjhjYmY5MGJjODJkYTZkZjZhNzRmY2E5YzgyMWUxNTRjZDIiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImMwYjRlYTExMzE2ZDUyYmI0MDgyZTcyZTRmZmUzYzk5NDI4MDMzNzk3M2JjYjJmZjFjMTRlZDRmNGZhZWY3MzEifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_103551cd2cbe44a8907fefa2c02783fc",
+      "statement": "The stub null-book convention is asOf=2020-01-01 (STUB_NULL_AS_OF), which reaches the not_found (404) error-envelope path so failure behavior can be exercised without a database; there is no standalone /book-date route because that gate is folded into /portfolio.",
+      "evidence": [
+        {
+          "resource": "repo://apps/dashboard-api/src/index.test.ts#L108-L116",
+          "version": "repo-lines-v1:sha256:9b6aa02675e026b8a8805e9ab1b7563f18b9b821fe6b1872a3829cd85c9d6b3b:eyJzZWxlY3RlZExpbmVDb3VudCI6OSwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiMDEwMTU2YTVlOWU5OTBlZGFiNWNjMjRmYmUwZTI3MTVjMDJmMGE3ZGU2NjZhYzY2ZDdiMmJiMjhkOTQ3MzJkZCIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiM2EzZTQ2Zjk0Mjc2YjZmNmY0ZWQxZjAyYWY3OGJlZjZhMmVlMWM0MzlkZDU1ODRiOTczOTQ4MzEzMjE0ZDJiNyIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiOTFjNzMxMWFiNjlmOTJhZDQwM2E5NjY0NjI2NDk2ZDEzMWZiNTdiZDI2ODNlOTFiMzIyYWFmODZjN2IyMTNiOCIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiODA0MDMzYjQ4ODgyNjJmZDhhNzY0ZDZhN2NlYWYzYTg0ODE5NzdmZDNjNjg2NmM2YjVkZjE2MjY0NzYwMjYzMyJ9"
+        },
+        {
+          "resource": "repo://apps/dashboard-api/src/index.test.ts#L80-L83",
+          "version": "repo-lines-v1:sha256:efe6912e5093afb3759b3ae001edc5be93faa91a59ea253daf24b6b61ff418a4:eyJzZWxlY3RlZExpbmVDb3VudCI6NCwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiNTY4MjM1YTdjOWY5ZGNkOTQ3MmViZmFiOWNhMjhlZDAxYzU1OGMyZTAyMTJhMDZmOWQ2NzkxNDU1YTRkMmQ0NCIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiM2EzZTQ2Zjk0Mjc2YjZmNmY0ZWQxZjAyYWY3OGJlZjZhMmVlMWM0MzlkZDU1ODRiOTczOTQ4MzEzMjE0ZDJiNyIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiN2JkYjE5NzJjNWI2NmJkYjk3YWY0YmNiNWY1MDRhYjdiNzdhNTg1ZTIzMTg4OGRkMGJjZDFkZDQwYmQyODJiNSIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiZGYwMmExYmJhNTk2ZTg1MDc2YTk3MWU2MmRhMDhkMDRiMDFmZmYzZDFhNGE3ODgwOTIyZDQ4ZDA1YjE2Y2Y1NCJ9"
+        },
+        {
+          "resource": "repo://apps/dashboard-api/src/stubs.ts#L24-L24",
+          "version": "repo-lines-v1:sha256:0ea9e949b80e904608527584d9803e8fd23561a57d8157c2a7ff93edc0a9acc9:eyJzZWxlY3RlZExpbmVDb3VudCI6MSwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiMGVhOWU5NDliODBlOTA0NjA4NTI3NTg0ZDk4MDNlOGZkMjM1NjFhNTdkODE1N2MyYTdmZjkzZWRjMGE5YWNjOSIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiMGVhOWU5NDliODBlOTA0NjA4NTI3NTg0ZDk4MDNlOGZkMjM1NjFhNTdkODE1N2MyYTdmZjkzZWRjMGE5YWNjOSIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiMjdlZjQ1MjRjOGQzMWQwNDUzZTVkNTEwZDgyZDMzYTE0NTNjMGIyYzhjZTUzZWM1OTgzZjNjYmI5Njg4OTVmMSIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiYzM3MjM2Y2MxNTZiYWE2MTgwMzc1ZTU3ODRjYjVlMmNkYTM3NWVjMmE3MzZhNjVlOWMzZDc0ZWIxM2QzNDA1MyJ9"
+        }
+      ]
+    },
+    {
+      "id": "claim_477c3f71c2274035a44b0e519a1c36fa",
+      "statement": "vitest.config.ts aliases @digithings/ui to the dependency-free source module packages/ui/src/components/finance-tearsheet/live-performance-kpis.ts so validation tests can import the real client derivations without pulling React into the Node test environment.",
+      "evidence": [
+        {
+          "resource": "repo://apps/dashboard-api/vitest.config.ts#L4-L25",
+          "version": "repo-lines-v1:sha256:2f1317948e2da8e5ce25b0d2a2376da7cb792c903adaa13f2ed7d7b8ead6c6b0:eyJzZWxlY3RlZExpbmVDb3VudCI6MjIsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImJmNjc3Y2ExYTg1OWZmMDI2YzBhYzdiN2ZkODY1NDg3MDcyMmViNDM1Njc4OTAxZGY2NTY2MWZiOTRhYTcyNTciLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjRkNWNkMmZiNGYzZGY4ODQ1MTUyNTViMzk1MjNmMmY4YjU0NzJiZWVhOWY1NjZmZmNhMjA0ZGI4MDI1NjEwNDEiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjVlZDM1OTE5NjdhNjE4ZDM0OWZmNzMxYTMxM2M1Yjg0NTg1MmZmMjBiYTY4M2YyZDEwMTJlZDljMzA2ODU4NTkiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjoxLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImY2ZjViNDBiMTU4NDU3ZDE3ODY0ZjIxNzkwNzg2ZGQ1YTJlY2RiNjRiNjZhNjUxZjc4OGQ0ZTI1Y2QzMzAzZDIifQ"
+        }
+      ]
+    }
+  ],
+  "verification": {
+    "by": "openwiki/0.5.0",
+    "at": "2026-09-27T13:35:24.399Z"
+  }
+}

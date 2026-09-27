@@ -1,42 +1,9 @@
 ---
-type: frontend-architecture
-title: Dashboard Architecture
-description: Architecture of the digiquant operator dashboard at apps/dashboard/ — a static-exported Next.js 16 app served under /dashboard/ on the shared design system, with Supabase-backed book tables, fail-closed P&L, plan tiers, and a Desk+ digichat popup using HMAC plan-proof.
-tags: [dashboard, digiquant, nextjs, frontend, digichat]
-verified:
-  - by: openwiki/0.5.0
-    at: 2026-09-23T13:25:31.068Z
-sources:
-  - id: openwiki-source-d65e2b283695865a08936976
-    resource: repo://apps/dashboard/app/globals.css
-  - id: openwiki-source-1960110596f3235f3c6824ba
-    resource: repo://apps/dashboard/app/layout.tsx
-  - id: openwiki-source-086120e6b0777c287c242ab6
-    resource: repo://apps/dashboard/components/digichat-popup.tsx
-  - id: openwiki-source-64b835abb41bfa4fd0778c9b
-    resource: repo://apps/dashboard/components/sidebar-settings.tsx
-  - id: openwiki-source-85221aa402153c771b314594
-    resource: repo://apps/dashboard/lib/accounting-views.ts
-  - id: openwiki-source-a3fed80957306210fecd66ec
-    resource: repo://apps/dashboard/lib/book-reconciliation.ts
-  - id: openwiki-source-8a7a17e9a899f3930a5c4c63
-    resource: repo://apps/dashboard/lib/digichat-popup.ts
-  - id: openwiki-source-d8ce04ab2090a2071e89b9e8
-    resource: repo://apps/dashboard/lib/entitlements.ts
-  - id: openwiki-source-45e9d6f1f5a742ec2941a965
-    resource: repo://apps/dashboard/lib/nav.ts
-  - id: openwiki-source-9029098d7034060730c7abbb
-    resource: repo://apps/dashboard/lib/pricing-catalog.ts
-  - id: openwiki-source-a66b508df882c4faf40bb8ba
-    resource: repo://apps/dashboard/next.config.mjs
-  - id: openwiki-source-788fced7c4daed752ccc5482
-    resource: repo://apps/dashboard/package.json
-  - id: openwiki-source-5a929f63280e765f1f3d432a
-    resource: repo://apps/dashboard/README.md
-  - id: openwiki-source-45dfb33a45db0a096f4c3082
-    resource: repo://apps/digichat/src/app/api/plan-proof/route.ts
-generated: { by: "openwiki/0.5.0", at: "2026-09-23T13:25:31.068Z" }
+type: "Reference"
+title: "Dashboard Architecture"
+openwiki_generated: true
 ---
+
 
 # Dashboard Architecture
 
@@ -89,18 +56,73 @@ root layout.
 
 ## Data and auth
 
-The dashboard reads persisted research/portfolio state (Supabase-backed book
-tables) rather than calling the digiquant HTTP service per render. Its
-`lib/` layer owns book reconciliation, benchmark tickers, auth context, an
-auth gate, and accounting views, with fail-closed accounting helpers covered
-by unit tests. Charts use `lightweight-charts` (time-series) and `recharts`
-(categorical); markdown renders via `react-markdown` with GFM + sanitize.
+All book data reads flow through the central **dashboard-api Worker**
+(`apps/dashboard-api`) at `NEXT_PUBLIC_DASHBOARD_API_URL` — the static
+dashboard bundle carries **no Supabase service-role key** (Slice 0008). The
+worker holds the key server-side, enforces the house workspace pin on every
+book table read, and exposes two read-only route families:
+
+**Eight typed envelope routes** (`GET /portfolio`, `/allocations`, `/brief`,
+`/performance`, `/kpis/live`, `/nav-series`, `/benchmarks`, `/ledger`)
+return contract §1 success envelopes with `data`, `as_of`, `retrieval_pin`,
+and `provenance` fields. The dashboard calls these via `apiGet<T>()` from
+`lib/api-client.ts`.
+
+**Allowlisted generic table reads** (`GET /v1/tables/:table`, CONTRACT §7)
+proxy PostgREST `SELECT` queries for the long tail (theses, instruments,
+documents, decision_log, macro_series_observations, attribution tables,
+etc.). The dashboard calls these through two builder abstractions:
+
+- `apiDb` — a PostgREST-flavoured `from().select().eq().order().limit()`
+  chain that executes as `GET /v1/tables/:table` under the hood
+  (`lib/api-query.ts`). It is thenable, so `await apiDb.from('theses')`
+  resolves `{ data, error }` — the same shape as supabase-js.
+- `apiHouseBook(table, columns)` — a house-pinned entry point for Group A
+  book tables (`positions`, `position_events`, `portfolio_metrics`). The
+  workspace pin (`workspace_id = <house>`) is enforced **server-side** by
+  the Worker; the client never sends a workspace filter. This prevents
+  overlay-book rows from leaking into the public Brief / Holdings /
+  Performance surfaces.
+
+```mermaid
+sequenceDiagram
+    participant Component as Dashboard React Component
+    participant Queries as lib/queries.ts
+    participant ApiClient as lib/api-client.ts / api-query.ts
+    participant Worker as dashboard-api Worker (CF)
+    participant Supabase as PostgREST (Supabase)
+    participant Market as Market Data API (R2)
+
+    Component->>Queries: fetchDashboardData(bookDate)
+    Queries->>ApiClient: apiGet('/portfolio', { asOf })
+    Queries->>ApiClient: apiHouseBook('positions')
+    ApiClient->>Worker: GET /portfolio?asOf=...
+    ApiClient->>Worker: GET /v1/tables/positions?
+    Worker->>Supabase: supaGet (service-role key)
+    Worker->>Market: GET /v1/market/closes
+    Market-->>Worker: closes
+    Supabase-->>Worker: rows (workspace-pinned)
+    Worker-->>ApiClient: envelope / row array
+    ApiClient-->>Queries: typed data
+    Queries-->>Component: DashboardData
+```
+
+*Data flow from React components through `lib/queries.ts`, over `NEXT_PUBLIC_DASHBOARD_API_URL` to the Cloudflare Worker, which holds the service-role key and enforces house-workspace scoping server-side. Market data comes from R2; failures resolve to empty maps.*
 
 The `AppFrame` shell (sidebar + mobile app bar + command palette) stays
 mounted even when the backend is down, swapping the page body for a
 `DbUnavailable` card on non-exempt routes. Auth is Supabase Auth (Google +
 GitHub PKCE) behind `NEXT_PUBLIC_DASHBOARD_AUTH=1`; flag off (default) keeps
-the anon read-only client.
+the anon read-only client. The Supabase anon key (`NEXT_PUBLIC_SUPABASE_URL`,
+`NEXT_PUBLIC_SUPABASE_ANON_KEY`) is still used for auth sessions, Realtime
+overlays (`prices_live`, `postgres_changes`), and Edge Function calls
+(billing, Alpaca, profile) — but never for book-table reads. `connect-src`
+in the dashboard CSP (`lib/security-headers.mjs`) permits the dashboard-api
+Worker origin, Supabase REST and WebSocket endpoints, and graph.digithings.ai.
+
+**Out of scope by design** (stay direct, not through the Worker): twelve-x
+reads (separate Supabase project + own session model), Supabase Realtime
+subscriptions, and Supabase Edge Functions.
 
 ## Fail-closed accounting
 
@@ -196,3 +218,9 @@ Vitest (`npm run test` from `apps/dashboard/`): `globals.test.ts`, route
 silently rendering empty), `entitlements`, `pricing-catalog`, and
 `digichat-popup` — pinning the fail-closed P&L contract (missing basis or
 mark renders `—`, never an invented number) and the plan-proof flow.
+`api-client.test.ts` validates the `apiGet`/`apiTable`/`apiMaybeSingle`
+typed client against the configured Worker URL, and `api-query.test.ts`
+exercises the `ApiQueryBuilder` chain against the Worker table-read endpoint.
+`house-workspace.test.ts` asserts that `queries.ts` and
+`observability-queries.ts` use `apiHouseBook()` with no raw Group A
+`.from()` calls — the workspace pin is enforced server-side.

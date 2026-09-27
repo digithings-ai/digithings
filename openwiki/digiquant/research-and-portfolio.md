@@ -3,9 +3,6 @@ type: behavior-guide
 title: digiquant Research and Portfolio
 description: digiquant research and portfolio sub-graphs plus the dashboard backend — phases, edit-mode, attention plans, chain orchestration, and book scope.
 tags: [digiquant, research, portfolio, dashboard]
-verified:
-  - by: openwiki/0.5.0
-    at: 2026-09-23T13:25:31.068Z
 sources:
   - id: openwiki-source-3cca7b16d985d38458390d9a
     resource: repo://digiquant/AGENTS.md

@@ -3,9 +3,6 @@ type: frontend-architecture
 title: digichat Architecture
 description: Architecture of digichat 2.0 at apps/digichat/ — Next.js 16 BFF, assistant-ui Thread skins, AI SDK v7, deployment-config YAML, multi-backend adapters (digigraph, Foundry, OpenAI-completions/anthropic/vertex, langgraph, ag-ui, a2a), conversation persistence, quant runs, embed trial support, design-canon theming, and the never-in-browser credential invariant.
 tags: [digichat, bff, nextjs, frontend, ai-sdk, assistant-ui, deploy-config]
-verified:
-  - by: openwiki/0.5.0
-    at: 2026-09-23T13:25:31.068Z
 sources:
   - id: openwiki-source-94be7dc18ad64ed2d1bb5a18
     resource: repo://apps/digichat/AGENTS.md

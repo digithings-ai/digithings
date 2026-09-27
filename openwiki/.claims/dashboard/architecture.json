@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "pageVersion": "sha256:7fcda273cbb1ffbcab4fae2a0687fc550eb5678210a5724d9304ab41db8e93bb",
+  "pageVersion": "sha256:3648987e734d5577197ec985467bb7389ca328f53963f0fd4e44507203413e06",
   "claims": [
     {
       "id": "claim_9d93f0468d144364aa1d19dd36534c4e",
@@ -133,10 +133,98 @@
           "version": "repo-lines-v1:sha256:cbc08aac3b4c2433a07a941782d08e68ba1ed06c905c9abb341673cdd0b3c0a1:eyJzZWxlY3RlZExpbmVDb3VudCI6MzEsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImVhZjIyY2YwNzMyNTkyYzI0NzE0MWNiZTYxZWZhMTEwMTI2MTJmNWEzMTIyYjlhZjliYmFmNTJmNTcyNGQxOTQiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjExNmE1ZWE4NTUxNmFjMWZkOWI5ZDc3YjcxNDQ5ZDQ5ZTBjNzRmMmU1NGY2MDE2NGRhZDQwMzRhMTFiZTg5MWMiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjowLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjE0YWM2YTk1ODQxYjg1M2IzNzM0NGM3MjQ3Y2I5ZGNiMzlhOTMyMDA4MzRjYzg4OTkzZTBlYWNlZTkxNWRhZjEifQ"
         }
       ]
+    },
+    {
+      "id": "claim_98f161f13201482d9e53116a0f1fc86a",
+      "statement": "All book data reads go through the central dashboard-api Cloudflare Worker at NEXT_PUBLIC_DASHBOARD_API_URL via eight typed envelope routes (GET /portfolio, /allocations, /brief, /performance, /kpis/live, /nav-series, /benchmarks, /ledger) and allowlisted generic table reads (GET /v1/tables/:table); the static dashboard bundle carries no Supabase service-role key (Slice 0008).",
+      "evidence": [
+        {
+          "resource": "repo://apps/dashboard/.env.local.example#L8-L8",
+          "version": "repo-lines-v1:sha256:38bfe74c822aec802bdc59637bb41adaabdde754e7698f784362a6181d7ada1b:eyJzZWxlY3RlZExpbmVDb3VudCI6MSwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiMzhiZmU3NGM4MjJhZWM4MDJiZGM1OTYzN2JiNDFhZGFhYmRkZTc1NGU3Njk4Zjc4NDM2MmE2MTgxZDdhZGExYiIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiMzhiZmU3NGM4MjJhZWM4MDJiZGM1OTYzN2JiNDFhZGFhYmRkZTc1NGU3Njk4Zjc4NDM2MmE2MTgxZDdhZGExYiIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiZmU2MmVkYmQyZjg3NWYzMmUxNmEwMDFhNzhmZjMzYWMwYTZlODk2MjUxMTJmMzU5N2YzYWYyZmQyZjY5ZGUzOSIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiZWZjYWUxZjdlYjUwYWI2MzQ4NDY3YTE0MWViNmQwNmU2N2ZlYTgxZmQ2MzNlMTczZmYxZTMwNGU1YWE2ODAzNyJ9"
+        },
+        {
+          "resource": "repo://apps/dashboard/lib/api-client.ts#L1-L73",
+          "version": "repo-lines-v1:sha256:4c731fe089d0e8ed76c36b4dc7143fd802c9b1454b5f909ac2bfdb0c917df258:eyJzZWxlY3RlZExpbmVDb3VudCI6NzMsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImVhZjIyY2YwNzMyNTkyYzI0NzE0MWNiZTYxZWZhMTEwMTI2MTJmNWEzMTIyYjlhZjliYmFmNTJmNTcyNGQxOTQiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQxMmNhMzQ1Y2NmNzViZjljMDgwNmJjZTY5NWJlOGRlODA4Yjc5OTg0MjUxYTdhNTRkMjAyY2Y2MTAxZGQ0NTEiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjowLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjllNjY5MTMxOTc2YzNkZjdhZmVlN2UyOTViMmRjY2U0OTcwMTIwNGE3ZWM5MzYwNGFlNjhlZTc5ZWRlNjdlYzQifQ"
+        },
+        {
+          "resource": "repo://apps/dashboard/lib/api-client.ts#L131-L155",
+          "version": "repo-lines-v1:sha256:65c3ff1989f6b8ad25fd23ccc44d60bdeb6360335497553e44cef88c5f37d18a:eyJzZWxlY3RlZExpbmVDb3VudCI6MjUsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImViMmFmY2Q1OThhMDY4MzA1OTY0ZGE3YjQ2Yzk0Mzk1ZGU5MDcxN2ZhMTkwODMyYTM4NTUzNTRkNjVjNDFlMDIiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQxMmNhMzQ1Y2NmNzViZjljMDgwNmJjZTY5NWJlOGRlODA4Yjc5OTg0MjUxYTdhNTRkMjAyY2Y2MTAxZGQ0NTEiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjI1NWNiZjgwYzg1N2ZmNzJhZGE1YWZlYTlkZGQyYjg2Nzc1MTk4NDQ5MjFmYzJhOGIwYjY0YWY2MDVjZDVjNjMiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjowLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUifQ"
+        },
+        {
+          "resource": "repo://apps/dashboard/lib/queries.ts#L1-L12",
+          "version": "repo-lines-v1:sha256:c73266dd0933957cdac9688461ffe4b31eb74d063911ebb31127bea23b2afd32:eyJzZWxlY3RlZExpbmVDb3VudCI6MTIsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImVhZjIyY2YwNzMyNTkyYzI0NzE0MWNiZTYxZWZhMTEwMTI2MTJmNWEzMTIyYjlhZjliYmFmNTJmNTcyNGQxOTQiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjA3M2RmNmFhNWI0NzQ5ZDU3OTY0NTZhZTA3NjNhNGJkMDI1MzBkYTcwYzJiMGVhMzRmMzg4ZjhmMjkxZjhhYjIiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjowLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImFhNjdhOWE0MWEyZmU2YmYzYzhhY2JiZDFiZjE4N2VkYWNmMzFiMTRjYzM1ZmJjNGM0MTU1YmMxNDgzMzJmNDkifQ"
+        },
+        {
+          "resource": "repo://apps/dashboard/lib/queries.ts#L102-L110",
+          "version": "repo-lines-v1:sha256:5e0d228a2f1577218271172fe08716ca9b2f671360ef9ad95c7a2f253f03129f:eyJzZWxlY3RlZExpbmVDb3VudCI6OSwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiYjVkZTZiOTM2YWE0ZDc4MDhkNGExNjI2MTkyNzIyMTUwY2QyMzA0OTlmMmYwY2YwMTYzMWIxNmEyNTY3ZDIwZCIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiMjdlNTc4OGQ1ZDlkNzNkMjRhODFkYmMwYTVhNzRiZmE4MmM5YzNiM2FmOTllNTJhZjc5NmU5MGI0NjhhOGEzZCIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiNTFjNTRiMGMzZTVjNjA2MmU0YWYwYjQxYWVlZmE0MDdjZjFiNWZlNGRkOWJiMDYwMTI0NGU0MWI1NDAzYjdkMSIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiNzM3NjQ4NWYyMjUzOTg4OGI5M2VkNmY0OTI1NTVhZDAxZDhmYWQzYzliY2QwYTNhOTI4OGE1YmFmN2UxOWIwMCJ9"
+        }
+      ]
+    },
+    {
+      "id": "claim_e03c885652264b09979a68aae4c8d062",
+      "statement": "Generic table reads use apiDb (a PostgREST-flavoured from().select().eq().order().limit() thenable chain in lib/api-query.ts) and apiHouseBook (a house-pinned entry for positions, position_events, portfolio_metrics); the house workspace_id pin is enforced server-side by the Worker (CONTRACT §7), so overlay-book rows never leak into public surfaces.",
+      "evidence": [
+        {
+          "resource": "repo://apps/dashboard/README.md#L205-L224",
+          "version": "repo-lines-v1:sha256:9fcf4e4d90207a8f4d619be75c2f2d7ecf09ed89d85d20ccc1fabfc43fc25809:eyJzZWxlY3RlZExpbmVDb3VudCI6MjAsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImI5ODcwNjFkZTJlNTBhOGIyZmJlN2EzYzZlNjBiYjE2NjQ5MmE0OTk4M2Q1YmYwNWVlZTZiN2Y5NmRiZDRkNWIiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6Ijc5MzQxMjEwMTQxYWI0Y2Q1MTAyYjg5ZjhlZDc0ZmM0ZjczZjMzMjQ3ZGMwMTk1ODkwNWE1OTM1NGQwZmZiNDYiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjE2ZWFlODI0OTFmZDg3MTkzZDYwZGZiYjA2NjkwMDZiMDE2ZmM2YjFiNGE2ZTZhNTE0M2Q4NWIyYjlhZWUxYjciLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImIzZmNkMDU0OTU0ZWFiNWE3NzkyNWMzNjExM2U2MDJjZTY2MTdhMTBhMTY0YTFmNmFkZGNjNjIwYjVkMjdkOTAifQ"
+        },
+        {
+          "resource": "repo://apps/dashboard/lib/api-query.ts#L1-L14",
+          "version": "repo-lines-v1:sha256:6d42b9b5fa932c8be426a851cc74f9e6b7656f7883f05a10e4db3a53d7fdbc78:eyJzZWxlY3RlZExpbmVDb3VudCI6MTQsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImVhZjIyY2YwNzMyNTkyYzI0NzE0MWNiZTYxZWZhMTEwMTI2MTJmNWEzMTIyYjlhZjliYmFmNTJmNTcyNGQxOTQiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6Ijk3MmE0MjkzODJiMmUxNDcxOGUwZTM3YjA1NzBhOGExNzAyOTkxZmNkODQ5OGNkODQwNjBhOGJmNGYwNTAxN2IiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjowLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6Ijk4YTY1YTU2NzI0NDJmYzA5NmUyMzE0NjQ2NGZmYTE4Y2YyY2YxMTNlZDNmN2RiZjg3MDY0NDg4YTliODMzYTMifQ"
+        },
+        {
+          "resource": "repo://apps/dashboard/lib/api-query.ts#L150-L169",
+          "version": "repo-lines-v1:sha256:7e7b285143c856b25ea0510a2c8ea30b1cee9d4a03fb6555f2bf038c95158942:eyJzZWxlY3RlZExpbmVDb3VudCI6MjAsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImQ4YWNiMmNkMzlkNThlNDk5MTFiYWUyNjlmYzUwOGQ5M2UyOTEzNzgzZGI4MTQ5YTA4M2Q3MjZiOGI5NjUzN2IiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQxMmNhMzQ1Y2NmNzViZjljMDgwNmJjZTY5NWJlOGRlODA4Yjc5OTg0MjUxYTdhNTRkMjAyY2Y2MTAxZGQ0NTEiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImZiNTgwZTk2NGY4M2E0NzNmNDNkNDQzODQ2Mjk0OWQ2OGI1NjAwZmRhNzg3ZjE2Mzc0NWQwMGRlODljYmYzNmEiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjowLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUifQ"
+        },
+        {
+          "resource": "repo://apps/dashboard/lib/api-query.ts#L29-L148",
+          "version": "repo-lines-v1:sha256:ce0d599f83212823aff7bd62413df0c0a2ff73656cfa76acb4037bf62a92f5b5:eyJzZWxlY3RlZExpbmVDb3VudCI6MTIwLCJmaXJzdFNlbGVjdGVkTGluZUhhc2giOiI3ZjdhMDkxMTc2Y2ZkOTgxYjE3NzYwZDg0MTdmNDc2MzlmZGZkYTEzNWE3MzIwYjY5OTAyZGJjNGJiN2M1OTVkIiwibGFzdFNlbGVjdGVkTGluZUhhc2giOiI0MTJjYTM0NWNjZjc1YmY5YzA4MDZiY2U2OTViZThkZTgwOGI3OTk4NDI1MWE3YTU0ZDIwMmNmNjEwMWRkNDUxIiwicHJlY2VkaW5nQ29udGV4dExpbmVDb3VudCI6MywicHJlY2VkaW5nQ29udGV4dEhhc2giOiJhMjBjMzZmZDlkYjVmMTM4YjliZjk1NmIwYjAwOGZiMTQwMTNkMjA3Y2U4ZTdmMjJlZTNhMTQ5MzIwOWVhOGJmIiwiZm9sbG93aW5nQ29udGV4dExpbmVDb3VudCI6MywiZm9sbG93aW5nQ29udGV4dEhhc2giOiI2MzQzZmU1Zjk1MWViZTRhNGVhZDc2MmEzMDY1NDQ3NzEwYjUxNDc5OTBjYTU2YjZjOWE5ZDU3MzMxOTU0ZmQ1In0"
+        },
+        {
+          "resource": "repo://apps/dashboard/lib/house-workspace.test.ts#L54-L77",
+          "version": "repo-lines-v1:sha256:2def564c7a08c06439449bdd873ba5a9a8644fe3151c448865092d8e69151a4c:eyJzZWxlY3RlZExpbmVDb3VudCI6MjQsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjE5ZGE2ZmYzYzM1MzZmMjYzNmExOTFkNjcyMWQyYjAzMTA2NWNkODU5YzM2MDNhZGE1ZDllZDUzYzE0YWJiN2EiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjNhM2U0NmY5NDI3NmI2ZjZmNGVkMWYwMmFmNzhiZWY2YTJlZTFjNDM5ZGQ1NTg0Yjk3Mzk0ODMxMzIxNGQyYjciLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImI3NzlkMTE4ZDZlM2NiZjQ1MDUzOTc0OGRlZTdhNDMwN2FjYmU2NDQ2Y2JhMjk3ZjI3NjBmYTVkMGJiYTFiYzIiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjoxLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImY2ZjViNDBiMTU4NDU3ZDE3ODY0ZjIxNzkwNzg2ZGQ1YTJlY2RiNjRiNjZhNjUxZjc4OGQ0ZTI1Y2QzMzAzZDIifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_ac61c3a38d6a42a7ac604ccbecb6fb94",
+      "statement": "The Supabase anon key (NEXT_PUBLIC_SUPABASE_URL, NEXT_PUBLIC_SUPABASE_ANON_KEY) is still used for auth sessions, Realtime overlays (prices_live, postgres_changes), and Edge Function calls (billing, Alpaca, profile) but never for book-table reads; twelve-x reads, Realtime subscriptions, and Edge Functions stay direct and are out of scope for the Worker.",
+      "evidence": [
+        {
+          "resource": "repo://apps/dashboard/lib/api-client.ts#L13-L17",
+          "version": "repo-lines-v1:sha256:2e7386dedf12855c95a44117d0893e962018fa45f264f2e78d7f418d8f74dc99:eyJzZWxlY3RlZExpbmVDb3VudCI6NSwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiODJhYjI0MjFhYmEwYjEwMDI4MzFmMDYxMzkwMjFkNTYyYmViNzkwNzA5M2RiNDVhZWY4NTE5NTFhYjEyZTM5MiIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiOTcyYTQyOTM4MmIyZTE0NzE4ZTBlMzdiMDU3MGE4YTE3MDI5OTFmY2Q4NDk4Y2Q4NDA2MGE4YmY0ZjA1MDE3YiIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiYmYwYTA2MGQyOTVjZGEyZWNmODBlYWI5MmM0NWNiODE3MTI2NmNmMTJmODU4NTQxYmM2MWNmMDY2YjkzMmEzMiIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiOWExNzFhZjBiODZkYjZjMjdiNzRiNDc4NzlmZjhkNTNkOWQ1MWM5Y2UxYzJkNjZmZThkMzZmZmU2ZjRlY2I5OSJ9"
+        },
+        {
+          "resource": "repo://apps/dashboard/lib/queries.ts#L6-L9",
+          "version": "repo-lines-v1:sha256:5f942cefc167d19ea9e2d29f48504e7d2b187347f3ec12a2f3f71c74c0b57da1:eyJzZWxlY3RlZExpbmVDb3VudCI6NCwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiNTlhYmE4YWNmNGEwMTg5YTE0ZTU1YjE5NGY5MDE1YWI0YmE1NTUwYTM5ODM5Y2U4Yzc0ZGQ5ZjI0ODZiZTNlOCIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiMDkyNDQ3MDM4NjFiMGRlYzk5MDEyNmZiYTJkYjJmMTcxYTUyZjliNGE1ZTY4NjRjODllZmY5NzE1NTA5YmJhNSIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiZjgxYWI5ZDEyZjI0NjFjZmQ2MTFjNjAyMmFjY2E5MDc5ZWIxODBmOTcxMWRhNjdhNGUyYWRlZThjODVmYTI2MiIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiOWYzMjk0NmZhYjA0OTI4MDI5ODhlODZmMTc4YTFjMjBkOTNhNTRjNTQ2Yzk3ODBjNzI2MTJjMGUzODNhNWRhYiJ9"
+        },
+        {
+          "resource": "repo://apps/dashboard/lib/security-headers.mjs#L24-L36",
+          "version": "repo-lines-v1:sha256:3302ee9b48a9b50c735fe14f4abf9422603877215180d7e4870ac7151078a2be:eyJzZWxlY3RlZExpbmVDb3VudCI6MTMsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjhiNzExYWY5MThiYTBlYmQ2YTE3YWNjOWEzZGYzZDU5N2E0ZDE4NTdkZmE4YmM0YjAxNWNjZjM5NDU3ZDVkYmYiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImI3N2IyOWY0ZTcyZmZlMTU5ZThhYmM1YmI0ZGQ2YjM2YjMyMDBiMDNkNThlY2I0NDJhZjRjODY5MTE3OGEwMGYiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImQyYjVmNjk0NmE4MjEyMjRmNWZlMjg5OTA5M2Y3NjIxZjg1MDJkZDVjZWQzZTllMDk1OTc4ODBmNDQzZjYxZTkiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImM0MDM0ODEyZjdlZjZkZWY1ZTQ2ZjgzMTQ3ZWJjNmJkYmM4YzAyMDM5ZGY1ZGE4NGM5OWFlM2YyZTdiNmQ4NmYifQ"
+        },
+        {
+          "resource": "repo://apps/dashboard/lib/supabase.ts#L1-L66",
+          "version": "repo-lines-v1:sha256:982a7b69539c271303c11b1856226c98325f6d9477e88b2c824e59543551864f:eyJzZWxlY3RlZExpbmVDb3VudCI6NjYsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6Ijg0MzIzNDNiNTIxNTQ2MjRhYTlkZjBlNjMwMzlhYTcyMzQ5ODBkNzg3YTBkYjMyNmFmZTA1NTIxMzMyOTNkNzciLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQxMmNhMzQ1Y2NmNzViZjljMDgwNmJjZTY5NWJlOGRlODA4Yjc5OTg0MjUxYTdhNTRkMjAyY2Y2MTAxZGQ0NTEiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjowLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjBmNjFkNWEzODhiYmI2MTM1NGEzOWVlZjBlNDE5NjczN2NmZDM3ZmRhNjUzZDU5MjRhMTE3OWQ0ZGNjMDdmMmUifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_ad4d94921d6349309b06f1e0c58d2a83",
+      "statement": "The dashboard CSP (lib/security-headers.mjs) connect-src permits the dashboard-api Worker origin alongside Supabase REST and WebSocket endpoints and graph.digithings.ai; security headers are copied to the dist root by scripts/build-digiquant.sh because Cloudflare Pages ignores _headers files below the output root.",
+      "evidence": [
+        {
+          "resource": "repo://apps/dashboard/README.md#L240-L249",
+          "version": "repo-lines-v1:sha256:897f6d5229c4aacc502e22f29265799aeb24f1fc36fd54b542f1f5e7f7ba1d74:eyJzZWxlY3RlZExpbmVDb3VudCI6MTAsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjcxZTgwYWYwMDEwY2FjNmI1OTdkZjk2ZGI3NmQxZjdhMzA2ZTY0MThjZGRmZmU0NmY5MTg5YmExOTI0NjFiMmQiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjlhZWMwZDUyY2MxYjYwOWZmYjQxOTQ0YTlmN2QyZGI5YjhiYjdkMjUzMDE2ODYxNDhhZGZhODIxMGIzNzM0ODIiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjBhNWU1Yjc5MjQ2NjFlNGYxN2Q1NDFjYzZmOWI1MWNlM2RlZjgzNzIzYTI4NDdiOTNiYWE0YWI5ZTFlMWVhYjMiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjFhYmExMDdhYzRjZDkwMzE0NGE1NzJjNzRjYzM0YTQyODNiMTQxMzAwNTY3NGZhNzg2NTc5MjczZGFmZmZhM2MifQ"
+        },
+        {
+          "resource": "repo://apps/dashboard/lib/security-headers.mjs#L24-L40",
+          "version": "repo-lines-v1:sha256:6f3ca738d27a2d19e87e50c7ffa88afb644cbea985b51ce7da18550dbc11fdac:eyJzZWxlY3RlZExpbmVDb3VudCI6MTcsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjhiNzExYWY5MThiYTBlYmQ2YTE3YWNjOWEzZGYzZDU5N2E0ZDE4NTdkZmE4YmM0YjAxNWNjZjM5NDU3ZDVkYmYiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjkyN2I0OGM1MDM2MDVlMGYyMDgxMmMyMWE4ZjRmYjQ0ZWI5N2EwZTMxNjc0OTY4YTFkNTY3NzAzNDJhZmM2Y2EiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImQyYjVmNjk0NmE4MjEyMjRmNWZlMjg5OTA5M2Y3NjIxZjg1MDJkZDVjZWQzZTllMDk1OTc4ODBmNDQzZjYxZTkiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjRkMGFlOTY2MjZmYThjMDUzYzFlNTE1ZWFkODY3OGQ3NjNhYjE5ZTI0ZmE0N2Q4NTM5MDY2YjU1ODU0Y2JkMDkifQ"
+        }
+      ]
     }
   ],
   "verification": {
     "by": "openwiki/0.5.0",
-    "at": "2026-09-23T13:25:31.068Z"
+    "at": "2026-09-27T13:35:24.399Z"
   }
 }

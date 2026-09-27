@@ -3,9 +3,6 @@ type: frontend-guide
 title: Dashboard Operator Views
 description: Operator-facing views of the digiquant dashboard — brief/today, portfolio (holdings, performance tearsheet, ledger, attribution, theses, tickers), research, pipeline, settings, system, observability, twelve-x, house, library, strategy, architecture, why — each backed by fail-closed contracts and shared SSOT helpers.
 tags: [dashboard, digiquant, portfolio, tearsheet, ledger, attribution, research, pipeline]
-verified:
-  - by: openwiki/0.5.0
-    at: 2026-09-23T13:25:31.068Z
 sources:
   - id: openwiki-source-85221aa402153c771b314594
     resource: repo://apps/dashboard/lib/accounting-views.ts

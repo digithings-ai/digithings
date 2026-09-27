@@ -1,0 +1,326 @@
+{
+  "schemaVersion": 1,
+  "pageVersion": "sha256:f221965119db448832746e134d8b501908ceae6525b1b5c66e281a718cd966c2",
+  "claims": [
+    {
+      "id": "claim_6005978daf6740829b6fe16c74413b8f",
+      "statement": "dashboard-api is a Cloudflare Worker serving 8 contracted GET envelope routes — /portfolio, /allocations, /brief, /performance, /kpis/live, /nav-series, /benchmarks, /ledger — plus /healthz (liveness) and /v1/tables/:table (generic PostgREST proxy). Two folds eliminate standalone routes: /book-date folds into /portfolio as book_as_of, and /valuations folds into /allocations as per-row mark fields.",
+      "evidence": [
+        {
+          "resource": "repo://apps/dashboard-api/CONTRACT.md#L13-L27",
+          "version": "repo-lines-v1:sha256:ede736cfb851a80dbcafc07cc8d99125111dc7f6a20033040a43af535109df44:eyJzZWxlY3RlZExpbmVDb3VudCI6MTUsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQxMWM5M2IwODUyODA2NDgzNTc5MTVhMGNiZTY2Y2NjZmNmZmJhOGZjMWFhZjhkMzI3OWViMGQ1MGI5NzNlYmIiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjAxYmE0NzE5YzgwYjZmZTkxMWIwOTFhN2MwNTEyNGI2NGVlZWNlOTY0ZTA5YzA1OGVmOGY5ODA1ZGFjYTU0NmIiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImYwZjlmZDY1ZjhiMzU3Yjk4YjhhOWEzOGI3MGY5MGRjNTg5OTI1MWE0ZTljNDVmN2UzMTEyNWU1Mzg2NDA2M2YiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjJkMWI2YmI0M2UwMjU5ZjljMTUxZmEzYWE1Y2RhYmQwZGYyYTNkMjExMTM3NmVhMTg4MGRmMGQyOTA2NTJhMGMifQ"
+        },
+        {
+          "resource": "repo://apps/dashboard-api/src/index.ts#L138-L224",
+          "version": "repo-lines-v1:sha256:952163b8a1f199e0d65f96aae73adb26d9398f28bfeef41a1c8e2f2eb951aab2:eyJzZWxlY3RlZExpbmVDb3VudCI6ODcsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjM1YWQ1NjU0NjE2MmZjZDJkMTJmMjdkMmRkNjkyODY3MWJkMWFjNTFjYjY5Mjg3YjFhYzE1YjE1N2I1YzA1ODkiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImQ1ODBjMDg0OTBjYThiNzRkYTk5MzRkOTBmNmU0MjllZjZkYjljZDJjYTI3ZTMyZjkzZWNlMjJjNTk2ODNjMjMiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImM3YmM0MzE1ZjQzNGZiZDVjYjg2YjY4MjAxNTc2MWU2MjVjYWM2NjExMzMzOWRhMTFiMWVlZjllNzliYWVhMDAiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImM2OTNiZTUwZTkwZjEzZWQ2NGY4ZDA5MDc3NWQ1NWNlNzhiZDI1NDA2M2Y3MTQwYmMwMzcwZjRjNDMyZDEwNWEifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_9c5003b92bcc44dc8d402dbbc688a510",
+      "statement": "Every success response on the eight envelope routes carries top-level data, as_of, retrieval_pin, and provenance. The provenance object has source, tip_date, contract (finalized_accounting | legacy_estimate | null), seam (boolean), and marks (stored | market_api | unavailable).",
+      "evidence": [
+        {
+          "resource": "repo://apps/dashboard-api/CONTRACT.md#L34-L41",
+          "version": "repo-lines-v1:sha256:878649b528acaff8b08360d647f9ee2194cc729f53c80e25e5ba445e8e8d2fa5:eyJzZWxlY3RlZExpbmVDb3VudCI6OCwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiOWE5NTA1MzQyZmY5NjYyYzU4NWJlNmJiMTljOTg4YzJiZDJkYWExZTI5ZjgyM2M2MGE4MjE4OTQwZTYyZTRkMCIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiYjlmMjhmZjY3MTFmNDgxYTMzMjFlNTM5MjYyNGFlNDZmZjY0YTIyOTdhMDQ5ZjUyMTE3ZmVkNDIyNmE3OTFmMiIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiYWRkNWVhYjg0M2JjNGQ1MGViNjcyNWU5N2ZhOTIzYjM4ZDRjMzczNzVlMTU1ZGE0YmQzZTZkMDY2MWY5YWU0MCIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiYjljNThmMWY4NGU0ZmEwOGYwNzBjNDA4ZWI3MjljZDIzNDYzOGNjOGIxYTNhYzYxNGE0MGMwMzA2M2M5MDBjYyJ9"
+        },
+        {
+          "resource": "repo://apps/dashboard-api/src/index.ts#L64-L71",
+          "version": "repo-lines-v1:sha256:a831170aaa2dd72cff0598060128f6759053e320cdd5dd90c8500d998b541593:eyJzZWxlY3RlZExpbmVDb3VudCI6OCwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiNDNmNzEzYmU0YzZkM2RkZDU1YjEyYTYwMDk1ODc4MDA4ZmI4ZmUyMmJmZDQzZDZiYjQzMGZiOGQ4ZTI4ZDMxOCIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiMDFiYTQ3MTljODBiNmZlOTExYjA5MWE3YzA1MTI0YjY0ZWVlY2U5NjRlMDljMDU4ZWY4Zjk4MDVkYWNhNTQ2YiIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiNDU2YmIyNTVjZTE4MzE3ZjI2MGM1NzM5NTU2MjFmNjAxN2I5NDAwYmFiNGIxZTM4YWZkY2JhZTg0ZjU2ZDAxMiIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiMDQ4NjE1ZmJmNThmNGFkMDQ0NDliM2QxMmY4YWRlYTllZDgwNWJhMjczMjFiYTAzYWMxMmZjNDE4MWY2N2U2NCJ9"
+        },
+        {
+          "resource": "repo://apps/dashboard-api/src/index.ts#L92-L101",
+          "version": "repo-lines-v1:sha256:10ef785249b6240f183798461cfa33bed343a2e7e46378f337c05686ba4aca15:eyJzZWxlY3RlZExpbmVDb3VudCI6MTAsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjA3MmVkYjEzZjkxMzNkYmM2MmI0YzAzNjcxOTA3YzYyNzVmYWI5OThmMTVjZTMxNzlkNmQwYWVlYTU1ZjEzMzUiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQxMmNhMzQ1Y2NmNzViZjljMDgwNmJjZTY5NWJlOGRlODA4Yjc5OTg0MjUxYTdhNTRkMjAyY2Y2MTAxZGQ0NTEiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjA5NGZjMGMxNzNkMWVjM2ZjNTAxZDdkZmE5Mjg1NTAxYzUyN2NmYjQ3MTI1ODNkYTNjYzM2MTgwNTY2YjRiZTMiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjA1NzZmOGI2NTBhMjc0MTE0NDE3Y2FhNzBiZWZkZDAwNDAyYTk1ZDMxZWRlODk0NWE4NGM5ZTU2NzUwZjBjNzIifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_a219b26dc9d0475da6af6d2534d31d38",
+      "statement": "The retrieval_pin query param is an opaque caller-supplied string echoed in every success and error response, and forwarded unchanged to upstream market-data fetches. Max length 128 characters; longer values are rejected with bad_request (400).",
+      "evidence": [
+        {
+          "resource": "repo://apps/dashboard-api/CONTRACT.md#L91-L98",
+          "version": "repo-lines-v1:sha256:b124411a660c67d74299bd77a838ed2f5b465932d3c6f2d8d1c7336ffa4e8cfa:eyJzZWxlY3RlZExpbmVDb3VudCI6OCwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiMDFiYTQ3MTljODBiNmZlOTExYjA5MWE3YzA1MTI0YjY0ZWVlY2U5NjRlMDljMDU4ZWY4Zjk4MDVkYWNhNTQ2YiIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiNzg5ZjQzYzczYzE2Zjg3NWRlOWRiNjEyN2Y1NDlhMmU3YTdiOGZiZTMzMWQwY2U0NGY5ZmEzNTY1ODVhODdhOSIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiMmFmODU3Nzc0MjYwM2M1ZjY0MzIxOWVlYmM5MjMyZjNjOWIwN2M5MDRmYTRiZDlmYTQ0NjUwNjUxOGE3MTkxNCIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiMmM5ODI3ODMyYWQxZjM3OGEzNTAwODI0ZmExZjFjYWQ3NmZkZjAxYTRmMTc0OGFmYWZmMmU3NjdiZTI5YTMxNSJ9"
+        },
+        {
+          "resource": "repo://apps/dashboard-api/src/index.ts#L114-L121",
+          "version": "repo-lines-v1:sha256:9f2b9153d4ccb404970a8e698654f4ee001da340f60dd5b80ee353b148450068:eyJzZWxlY3RlZExpbmVDb3VudCI6OCwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiMTFiODJiZjYzM2IxY2YyNTljZjE3OGMxNWE5MDRmMzYyMzIwMzI4M2IzYzFiNmRkYjIzMWFjOTZmNjg4MGViMiIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiNGRlNzQxNDIxMTFlZTUxNzRhY2FkNWViYTYxMGVkOWUxYjE5Njc4MDkwYTM3NGVjYTZjODEyMjllNzBlNGFjYSIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiMGJmNmY3Y2QwNTVhZjY5NmM1NjFhZDYzYThjYmU0MmQ4NjU5MTM5YWY2NzhjNWMzYTRmMjAzNzdlMTI2YmM1NyIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiZTAxMzc1ZTE2MDk5OTFmM2EzMzVhNmIxZTM0MzE1YTE5ZDM0Y2FlMzJhOWRlZWE4NTQzZjc3OThiODIxOGM1ZiJ9"
+        }
+      ]
+    },
+    {
+      "id": "claim_f257f145565a451da92a728c92d5b160",
+      "statement": "Common query params asOf (YYYY-MM-DD calendar date) and retrieval_pin (≤128 chars) are validated by parseCommonParams. Malformed asOf or over-length retrieval_pin both produce the §2 error envelope with bad_request (400).",
+      "evidence": [
+        {
+          "resource": "repo://apps/dashboard-api/src/index.test.ts#L44-L60",
+          "version": "repo-lines-v1:sha256:19e58b0a7766ebffbf47796d6c30f05f87653e1a00d129d834b0b678617dcc46:eyJzZWxlY3RlZExpbmVDb3VudCI6MTcsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjExNzJlNWI2YjU0ZGJiZjYzMTQyZmEyNDkwYWE2ZDAxNzM5ZGU1NTRlNmZmNWY4YWYxNzBlZTRiM2IyODExNTAiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjNhM2U0NmY5NDI3NmI2ZjZmNGVkMWYwMmFmNzhiZWY2YTJlZTFjNDM5ZGQ1NTg0Yjk3Mzk0ODMxMzIxNGQyYjciLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImI3NzlkMTE4ZDZlM2NiZjQ1MDUzOTc0OGRlZTdhNDMwN2FjYmU2NDQ2Y2JhMjk3ZjI3NjBmYTVkMGJiYTFiYzIiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImE2YjkzZjQwNDVkMTA1MWIwM2YyMzg4M2FmMmRjMjJhYmQzNzYzYzdjYWZhMGZiNGY1ZjM0MzZmZjMzZDBkYzIifQ"
+        },
+        {
+          "resource": "repo://apps/dashboard-api/src/index.ts#L108-L131",
+          "version": "repo-lines-v1:sha256:8cddb4eb88a27030e12824d380fa312ecd0b27d6a4670b8a29e4a329262d4f9e:eyJzZWxlY3RlZExpbmVDb3VudCI6MjQsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImE5YTA0NjJhNDU2ZDJmOTI3OTM4OTYzZTEwMWQ2MzZlYWFmMWJiYjVmN2E5MWUxMzY2ZDZiZTkyN2Y2ODM2ODEiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQxMmNhMzQ1Y2NmNzViZjljMDgwNmJjZTY5NWJlOGRlODA4Yjc5OTg0MjUxYTdhNTRkMjAyY2Y2MTAxZGQ0NTEiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImE0ODljZjRjMzg0YTg0OGQ2MzZlYmZhMzlhODgxZjhjYmY5MGJjODJkYTZkZjZhNzRmY2E5YzgyMWUxNTRjZDIiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImMwYjRlYTExMzE2ZDUyYmI0MDgyZTcyZTRmZmUzYzk5NDI4MDMzNzk3M2JjYjJmZjFjMTRlZDRmNGZhZWY3MzEifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_681c471afd3f483fa701fedb3cd68dc4",
+      "statement": "Errors follow a single envelope shape: { error: { code, message, details, retrieval_pin } }. Codes map to HTTP statuses: bad_request → 400, not_found → 404, upstream_empty → 502, internal → 500. Empty sessions are success with empty arrays, never errors.",
+      "evidence": [
+        {
+          "resource": "repo://apps/dashboard-api/CONTRACT.md#L56-L76",
+          "version": "repo-lines-v1:sha256:0f1eb665c59fada74dd2dcc5275f87d9c6e30e760364c883b7f5abb62cb47205:eyJzZWxlY3RlZExpbmVDb3VudCI6MjEsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjAxYmE0NzE5YzgwYjZmZTkxMWIwOTFhN2MwNTEyNGI2NGVlZWNlOTY0ZTA5YzA1OGVmOGY5ODA1ZGFjYTU0NmIiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImFhNzI2MGYyYjE5NTQxYzRmMDAzZTAwNzU0YWVkYmIyMThmYzViOTZkYmJkNDA2MzYyYTUwM2UwODc3N2MzZDgiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImRhYWMzNjM3YTA5NzFlZGFhZmNjN2FkYWIzZDI2ZTJiZTM0Y2I4MzQ2NmZiMGU4OGVjZjFmMjlkYTRjMmIzYmYiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImQzNGJjMWFiMWYxYzExMzdmOWYzNWIzMGNlYmFiNzc4YzExNzNjNjU3MTliZjY2N2M4Y2ZhYmUxNmQ1YmI5OTQifQ"
+        },
+        {
+          "resource": "repo://apps/dashboard-api/src/index.ts#L72-L90",
+          "version": "repo-lines-v1:sha256:76918a8c5e1db1cc9f78f80c8deea0a78cb8b7950e036aff3803eceb15f71bf0:eyJzZWxlY3RlZExpbmVDb3VudCI6MTksImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjUwYzQ3ODU2N2Y1YWNlZWMzMmNmMjc1M2ExMTUyYTQ5OGIyOGVlMWVjZDUxYTNmZThhMDhkM2YxYmNjM2EyNjUiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQxMmNhMzQ1Y2NmNzViZjljMDgwNmJjZTY5NWJlOGRlODA4Yjc5OTg0MjUxYTdhNTRkMjAyY2Y2MTAxZGQ0NTEiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjVlNTRhZjk0ZWM1N2I5MmVhNmE0OTk3N2I0ZDE0ODc2MjVlZTYxZTZiMWVhNGVjZTAxODM4MDc1NTA0NTM4NGQiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImQ4MmZlNDZkMjgxNDBlNmU1NWM1MjI3M2QxZGY1YTBlNWRkMGViMTU1ZDRhY2U5ZGIyYmJmZjViYWNiNWY1MGQifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_f8e7900a35694dee81cbcb3ee78e855f",
+      "statement": "All book-backed routes filter workspace_id to the house UUID 6b753576-ced9-5319-9bfa-c5d0aacd9319 (the public book selector matching houseBook() and the Python house_workspace_id() uuid5). Overlay workspace rows are excluded server-side.",
+      "evidence": [
+        {
+          "resource": "repo://apps/dashboard-api/CONTRACT.md#L78-L88",
+          "version": "repo-lines-v1:sha256:c1b9e9fd5c1e01ada60de66aa90fcdfeb2d9878bb60130558f499745928f1cca:eyJzZWxlY3RlZExpbmVDb3VudCI6MTEsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImY3ZjZmOWM5Y2MyYTgzZDJiYWM5ZTdlNTdiMWViYWZkYTdkODA1ZDdlOGE1MDhlNjk2ZjFhOWI2MDI5NTFhMjUiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImYxMTU1YTYxOWVkOTM2NWY0MmQ1ZGYyNDI5MDkyZjMyMGMzNTBjZjU2ZGViNDkyMmNkMTFhYmUxNjRmNzFiZjQiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjM4M2U1Yjg3ZTcyMTEzYjAzM2I5NTE2YTVmZjMxOWQ3MTk3YzgyYzlkMWY3OTNhYzA1ZjgzMDdjYzUxYmU5MjEiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjliZThhMzIyNTdmNjk0YzEzZGIyZDM1YTA0NTc4YWVmYWM0NjExNDk4YjMyZGQ3YThjY2ZjNWQ0Y2JlNDBkZDIifQ"
+        },
+        {
+          "resource": "repo://apps/dashboard-api/src/index.ts#L50-L50",
+          "version": "repo-lines-v1:sha256:47b1ff2e76664601dd3832ef4900820991b80ea7d7f24246f4e9cc7c957ccd89:eyJzZWxlY3RlZExpbmVDb3VudCI6MSwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiNDdiMWZmMmU3NjY2NDYwMWRkMzgzMmVmNDkwMDgyMDk5MWI4MGVhN2Q3ZjI0MjQ2ZjRlOWNjN2M5NTdjY2Q4OSIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiNDdiMWZmMmU3NjY2NDYwMWRkMzgzMmVmNDkwMDgyMDk5MWI4MGVhN2Q3ZjI0MjQ2ZjRlOWNjN2M5NTdjY2Q4OSIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiNzM5N2FlYTI3ZDJmYzlhZWEzYzBkNzljMDlkMjNjMTczYjJlOThmNjU4ODcxYTVmYWJhYjc1ZTdjZDE1YTBkOSIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiZWIyNjdlNWYzOTM2YzhkNGVmZGNkNDJhYWMzNmRkZWM0ODYwMWE5MzU2ODIwMGFjYzJmYjRjYzcwY2UyMGM4ZiJ9"
+        }
+      ]
+    },
+    {
+      "id": "claim_538cfcc54be24b199cd2d302f22e3f8b",
+      "statement": "The invested-% has a strict precedence: NAV tip invested_pct → non-CASH book-weight sum on the committed book → portfolio_metrics.invested_pct → null (unavailable). The kpi_pct is the raw resolved value (unclamped), while envelope_pct is clamped-100 for row scaling. CASH is always excluded from holding counts.",
+      "evidence": [
+        {
+          "resource": "repo://apps/dashboard-api/CONTRACT.md#L140-L153",
+          "version": "repo-lines-v1:sha256:4f2244d223a9777b4fe224ca86c1f58742f9d2bd62b69604cf9e37ed3ee41403:eyJzZWxlY3RlZExpbmVDb3VudCI6MTQsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjAxYmE0NzE5YzgwYjZmZTkxMWIwOTFhN2MwNTEyNGI2NGVlZWNlOTY0ZTA5YzA1OGVmOGY5ODA1ZGFjYTU0NmIiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImVhMzY4ZTAzYmFlY2I5NWE0ZDA5YjI4YzJkZGM2NWFkYWIzYmI2ZjdlOThlYTVmMDRkNGNkY2EyNjVjNTdmYmIiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImVhZjUxMTBkMThhYWFjMmFlYjk1MmZiYjNkNzE5MDhkMmYzYTFjZDBjYmI5ZDk2MDYzZmJjYzlkNDRhMWMzMmMiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImZiYTA1YjMyM2FlYWY3NzRhNzY2MTJkNDliZWU3YTFiZjNkNWI3ZTlkNzg1NTA4Y2U2MDZjNzlhN2YzMGZhYzYifQ"
+        },
+        {
+          "resource": "repo://apps/dashboard-api/src/invested.ts#L37-L99",
+          "version": "repo-lines-v1:sha256:ad30f9fde8d58db6ca84d77db8d39f995e5af051fdfb18e84003ec38b4fefd89:eyJzZWxlY3RlZExpbmVDb3VudCI6NjMsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImRjOWU2NGZjNTRlMzBkYzFlZjNiMmU2N2NhMTI4MzQyYjNmYTgzMDAwZDcwNGQ0MmFmY2M4MWVlOTdlNWViMzQiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQyYTJjYjI1YTEyMmI0NDIyMWE2MjM0ZWM2NjBhN2I1ZmI3ZjliZGU3YjNiOWUyYjNjNTU5YTBkOTZmYWM3MzkiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImE2NmI5OTc1NjQ4NTUzYzZjNWIyMjNiYWQzYjcyODJhOGQ1MjgwZTc1OWQ4ZWQ2NmVjMjkxYmU2ODRkOGFlM2EiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjoxLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjQxMmNhMzQ1Y2NmNzViZjljMDgwNmJjZTY5NWJlOGRlODA4Yjc5OTg0MjUxYTdhNTRkMjAyY2Y2MTAxZGQ0NTEifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_363be06a448743d4ba7d97a6e8fa2b1e",
+      "statement": "GET /allocations provides per-row valuation with precedence: stored unrealized_pnl_pct / since_entry_return_pct → derived from entry_price vs current_price → market API fill (R2-API-only) → fail closed to null. marks_unstamped is true when any row lacks metrics_as_of.",
+      "evidence": [
+        {
+          "resource": "repo://apps/dashboard-api/CONTRACT.md#L186-L197",
+          "version": "repo-lines-v1:sha256:1e929f74b8f96a853ed8ceb8eb1c6a1a2f4facb3f6bab74d29470a0457b031f5:eyJzZWxlY3RlZExpbmVDb3VudCI6MTIsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImRiYjdkMzU4NTcyZmNmN2U3NmMwMTVjY2E3NDA5YzlmNGE1ZWVhNzA5Y2ViOTJhOTNjNTg0ODRkNzI3NWJhYTQiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQ2NTI2ZmE1ODZkYmY5NmJhNGY3YmViODlmOGNlZWEyN2U0NWM0NTMxMGUzOTg2MzRmNWJiYTUzNWY2YzFlNTciLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6Ijg4MDkxOGFjNjQzMDcwNDAzMDA0MzI3OGFiYjE2NzAwMWM2ODM0M2ZjNWEzYWRmN2Y4MmI2MTY5NTI5Yjg0YWYiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImE4OTM2M2M1ZjM4NjFjODJiOTVlNDJmMDQwYjI3ZmM4N2NkNTk1ZGIwNThhZmEwZTViNTFlMzI5ODBkYzBjNmMifQ"
+        },
+        {
+          "resource": "repo://apps/dashboard-api/src/allocations.ts#L67-L121",
+          "version": "repo-lines-v1:sha256:3c69cea12a91a6bba9d4779a8b3262f182d77798f2b261d65d16686faff5eacb:eyJzZWxlY3RlZExpbmVDb3VudCI6NTUsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjgwMTNmODdiMTZkMjljOWJhZTg0YWY2N2JjZjllYWFlNDRiNGUxYjA1NTQ0YmIwMDkxYTM4MWZjYTMwMmIzMTgiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6Ijk2YTVhY2FmMTY3ZGY1NjE3ZjM1NzNhZDliY2EyMjllMDYxNWQ0ZjE4YzA3MDg5M2FhNDY2NGE2MTU0ZTRjZjMiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjZiZGM2MTU5MzYxMDUyOTIyZjk5MTdkNDU5YWQxMWI3ZmUzZjI0YjU3NDUzOGJiNDhmOGI3MGUxYmFmODBmZmIiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjMyZjg0YjUwY2E2ZjgxMTA1NDg0MGM4ODgxNjc2ZGQ3NDZjYzQzNGE2YjA4NTRkYzE5ZTBjYmFhMjNkMTliNDIifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_6863d3ea3d104b518be546c444aba2b1",
+      "statement": "GET /brief applies overlay logic: persisted path first; live overlay engages only when |liveVsMarkPct| > 0 with badge 'live marks'. Overlay-off output matches the Tearsheet headline within 0.05pp tolerance (PERSISTED_KPI_TOLERANCE_PP). The seam guard nulls day return when crossesNavSeam is true.",
+      "evidence": [
+        {
+          "resource": "repo://apps/dashboard-api/CONTRACT.md#L224-L229",
+          "version": "repo-lines-v1:sha256:f001ce2403be1ef07da514ed6843e7492e94cd51f48012c7015d9315a5528817:eyJzZWxlY3RlZExpbmVDb3VudCI6NiwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiMWYxNDhiMmMwMjViYjA2NDc2NTdiZjZkOWQ2MzViYWQ5ZTM2NTgwYjEzNjY5OTQ3NDU0MGJkYTBjODU1ZThjNiIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiMGY2MTVhYWM4ZTliMTY1ZTc4OTBjZWZiNTUzYTg3NWFlODFmOWI1ZjBhODljN2RmM2JlMDI0Njk3ZGM4NTY3ZCIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiODgwOTE4YWM2NDMwNzA0MDMwMDQzMjc4YWJiMTY3MDAxYzY4MzQzZmM1YTNhZGY3ZjgyYjYxNjk1MjliODRhZiIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiMjg4MTkxMjU5NDM0ZTRlYjMyYjIyZjZlMWY3MmIzODczNzAwOWNlYzE2ODBlN2FlNTM5Y2VmMzI0MGNjMTk1MSJ9"
+        },
+        {
+          "resource": "repo://apps/dashboard-api/src/brief.ts#L101-L150",
+          "version": "repo-lines-v1:sha256:c51f9168327f546db6b72aeb93942556346519f7c3be395f6e1d359be30d594a:eyJzZWxlY3RlZExpbmVDb3VudCI6NTAsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjkyMjczZDc4YTZiZDE5ZWUyNDdkODA1M2Q2NzJkYmIyMWIyZDI0ZTJhZDIxZjliZWE0OGMxZWQ2NjU0MmI2YmMiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQxMmNhMzQ1Y2NmNzViZjljMDgwNmJjZTY5NWJlOGRlODA4Yjc5OTg0MjUxYTdhNTRkMjAyY2Y2MTAxZGQ0NTEiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjdiNGJmNjlhY2Q2NmY4YmVmMjE0OTdmZGU5NjJhYTRiNzllMDk0MDJiMDI2Yjc4Y2Y0ZDMwOGZhNWZlZGIzOGMiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImMyZmRjMzAwODc4NTBiMWExYzE4YTI0NDliOGY4OTZhYzhhZGM0YTYwNWQ3MDQyOTIyZTcwYzY3Mzc2ODc5NjQifQ"
+        },
+        {
+          "resource": "repo://apps/dashboard-api/src/ssot.ts#L15-L16",
+          "version": "repo-lines-v1:sha256:e1d39d93f869e1ef1515138229cc034f09140af3adbdfea2c7f7a6fc56971357:eyJzZWxlY3RlZExpbmVDb3VudCI6MiwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiN2ViYmE3OWVlZjM2NWY5ZDBmNTBhYmFiYzY2ZDE0NTA5MTM3ODRkOWFlZjAzMTMxNDgyOTA3ZDZlMWJiZTViMCIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiMmQyMDE5ODEwOTY1YWE1ZDI0MmExZjQwYjE4OWVlYzEzNzUwOTkxNWE5MWQ4OWY3YzdmYzNiNGRhOTUzNDJhNCIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiNjNkZjBhMGE1OTRmNzUzYzkwNGE4MjM4YTM2YTkyNzI1ZWUzNzJkYzIxMzRlNjFjZWI4ZTZlYjhiNzkyZWZjOSIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiYzBjZGI0OTY3ZGNjY2M0NGFkMmMxM2E2ZDA4MGY3YzA2YTYxYjcxM2Y2M2UwNzdkYzg0YzU2Yjk0YWYyYzlkNiJ9"
+        }
+      ]
+    },
+    {
+      "id": "claim_3b1864e3aeb7472bb542e06880fb5fc3",
+      "statement": "GET /performance computes alpha (Jensen) and IR only with ≥20 overlapping daily return pairs (MIN_OVERLAP_DAYS = 20), null below the floor. Lag is signed UTC calendar days, symmetric (metrics lag / nav lag). metricsAsOf is the metrics stamp, never overwritten with the NAV tip.",
+      "evidence": [
+        {
+          "resource": "repo://apps/dashboard-api/CONTRACT.md#L262-L275",
+          "version": "repo-lines-v1:sha256:ca56747d757c0e6a3c9091ec10b69e759f17a4d2f91f4d2c98418a99127a707e:eyJzZWxlY3RlZExpbmVDb3VudCI6MTQsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6Ijg3YTMxNjQ4N2Y4NThjZTM0MTg4ZDM0NmVjZGE4ZTA0NTcyNWZhYzQ0MzI4ZTVmOGNjNjNjZGE4MzlhOGUyZDAiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImRkNDJiMTlmNzUxZmRlMzI1ZDNhZDhmZjAyM2ZhODNjMTIzYmZkNDlmYTIwMDA5OGYxZmMzZTM5ODZjZDA0Y2EiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjdhMzQzNjgxMmRjZDZiODIwZDMwNjMxOTQ3MWVmNzBhYTVmYTllYTE4OTg5OTY2M2I0YzJhYTUzZDBiZTMxZTMiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImRkNmJjMDY1YmMzN2IwMGQyZmVlY2YyNDM5NjE3NGRiZTI5ZWY3NWE5YTNjNWMxOWRiZjQwYmU0OTVjMGFmZjkifQ"
+        },
+        {
+          "resource": "repo://apps/dashboard-api/src/performance.ts#L160-L176",
+          "version": "repo-lines-v1:sha256:bc1f52dfc84e6532e715c92d42cb9e6dbdf659311a75035521898c0bffb34193:eyJzZWxlY3RlZExpbmVDb3VudCI6MTcsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjljMGUzNWNmODE1NjA5YzY4Nzg5ZjFlNzEyYmIzMTUwNzA1YjRiY2E0Y2IzZjg1OTg5MWFlODRjZjY0YjlmNDAiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjI3ZTU3ODhkNWQ5ZDczZDI0YTgxZGJjMGE1YTc0YmZhODJjOWMzYjNhZjk5ZTUyYWY3OTZlOTBiNDY4YThhM2QiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImFmYWU3MWVkYTM5OTMwMjAzNWZlYTA0NzdjNmIwYjgxMzNkOTJiYzVjOTcwNjNhNGNiOGQzM2NlZmY3NWI4MjIiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjM1YjI3Y2MyZDM1ZTBlMzY4MjY4OWVhODc3ZTIwMDdlZDRmZWI4MDEwMTEzNDVlYjA5NDExMDJiNmU5YjdhNTcifQ"
+        },
+        {
+          "resource": "repo://apps/dashboard-api/src/ssot.ts#L24-L25",
+          "version": "repo-lines-v1:sha256:d5c7e4da9a6e8000dfdc81133cfe8502a91b259ea3db5afb2f4367f9a056e223:eyJzZWxlY3RlZExpbmVDb3VudCI6MiwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiMWNmNzE0ZjM0MGYzMjhjOTdmMDY0N2VkZDUwNjVlMWYwMWUxZWFmOWRkN2M3NTYzNGM0YWU0MmI1ODQ2NmRmMSIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiYjIwZTA4YWUyYzI0ZGY2NmY2NGM1NjY3MWU2ZWU1YjgzY2I1OWY5YzY1NGEzMWI5ZjdlMjAwN2UxZmZmZGI3OSIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiOGVlMzc2NzJiY2Y4MmJmYzI3MTY4YWQwZmIwNjhiMTZkMjY0YTUwYWYxMzdjMzgxZDc0NWFjYTYxZDcwZDY3ZSIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiNjdiZTMzMTdkOGM2ZmVkYTMxMzFhZGQzMzUwYmM2ZDdjYjM5MTIwZWY2NWFmZTU2ZWY4OGRhOTg0YmRlMDhkNiJ9"
+        }
+      ]
+    },
+    {
+      "id": "claim_f09884ebbeda48e9867553ab21a65ce1",
+      "statement": "GET /kpis/live is a point-in-time snapshot only — no WebSocket, SSE, or streaming. Realtime stays client-side via Supabase Realtime postgres_changes on prices_live. overlay_eligible is false when liveVsMarkPct === 0 or book current_price marks are all NULL.",
+      "evidence": [
+        {
+          "resource": "repo://apps/dashboard-api/CONTRACT.md#L100-L109",
+          "version": "repo-lines-v1:sha256:8bcad0a225732a613aaa0306ebc4f9ddae2a5db369c66051da0509614429bc9c:eyJzZWxlY3RlZExpbmVDb3VudCI6MTAsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjNkM2FmY2Y0OTRiNzI2YTllYzdlM2U1NjM4ZjUyYjVmYWEyMWI5NmQzMjVjOWJlZTY1NWMzZTNjMmVlMWFjNDkiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQ5MmQyMDdlNjlhNmI0ODAxZTM3YjI5MDcxZGI2M2Q2N2M3YWMyOWQxYjU2MmYwZjdiODFiOTljYmE0YjVmNWMiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjNjNmZlYzVjMjFhOTQzN2ViYjNmNTE4N2EzNjI0YTZiNWE0YmIwMTgxZTE1ZDNiNmUzOWE5MTMyYzIwNGQwZGMiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjQwNWFmYjQxNmMxYmM5NzEzZmZhYzMxZGMwYTg3ZDA1YWQxMDg5NjMwYzA4YTliNTZlZmVkMGJiNGIxMDYwMzQifQ"
+        },
+        {
+          "resource": "repo://apps/dashboard-api/src/kpis-live.ts#L185-L200",
+          "version": "repo-lines-v1:sha256:90e83a23b498d06b9cd2a1919e931ae6c553f636be6c32ce5770339f01efe811:eyJzZWxlY3RlZExpbmVDb3VudCI6MTYsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImFlNDgxYTE4ODRhY2E0NjkwNTgxNTViNGVlZDE1M2QzOWQ0Y2U0ZDc4NTgxNzgxNDYyYjk4MzAxY2E5MDI0ZmQiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQyYTJjYjI1YTEyMmI0NDIyMWE2MjM0ZWM2NjBhN2I1ZmI3ZjliZGU3YjNiOWUyYjNjNTU5YTBkOTZmYWM3MzkiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6Ijk3ZDg2MzJlNTRlOTI5OGFiYjk1ODcyN2UyZDUxNDA4YWJhZjEzNjYwMzUzNzkxMDE0MGFiZjY1YjMwYWI2MTMiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjViZTFjY2FlYjM2MTQ1YzUzM2U2YzliYzkyZTE0MjhiOTBmZmM4N2M4MGUyMDU4NjhkOGQ4ZmQ1OGI2YzNhNDUifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_4e26137a354640b6882663fe1f4b91d5",
+      "statement": "GET /nav-series provides a continuity-index NAV chain where calendar gaps ≤4 days forward-fill flat, seam basis changes carry flat (never draw a phantom return across two sources), and per-row contract labels are preserved.",
+      "evidence": [
+        {
+          "resource": "repo://apps/dashboard-api/CONTRACT.md#L304-L324",
+          "version": "repo-lines-v1:sha256:a7c729e8c718a959b978a24de5859f9d47b2517f3169a37fb8528ff8d72059d6:eyJzZWxlY3RlZExpbmVDb3VudCI6MjEsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjZjOTgxZDI1NzQxMGRhNjU2ZGE0OWE2Y2E1OTI4ZWZkZDBjNGI0N2VjMmEyMDgyNWIwNzZlNjA4OTk2NWRhZmYiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjY1YzdhNTg2OTI2N2I4ODdjZTg4NzQ5NDM4Yzc5OTJmZGY2ODRmMzczYjU1ZmVlMGY2YWI2OTgwZjc4ZjY1MGIiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjJiZmZjNzhjODcwMDNmOTY3NzcwYmE5YjU1OTgwODI5MjQyNWU4NGQ3NjczMmFiNzYwNGUyODlmZmFjNzkzYWEiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjY5ZDVhMGNiOTMwNmI1NDBjZWZjMzhjYmFhMDk3NDNlMjFmZTI3NmI4ZDhjMDIwZWMyZTE1ZjdhNzVkMWM3NGQifQ"
+        },
+        {
+          "resource": "repo://apps/dashboard-api/src/nav-series.ts#L36-L42",
+          "version": "repo-lines-v1:sha256:53f24f1c569c34d7d5ef49b0d8fa69f9800be27bd8e85bf25e4f4cb89af6ecd1:eyJzZWxlY3RlZExpbmVDb3VudCI6NywiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiY2E4YjVmYWVlNjA5Yzc3NjdkOGZkNGMxZmY5MDk1Y2I5NmNkZjRkMDJlYjI1YmVmNzI3NDIzYmIxZTk2NDk5NCIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiYTA1YTk4NTE5MDJmMDA5OWZiZTA5ZWMxNjJlNTM1MjRiODhiMDRkN2VhYzQ2ZWEzZDdlZjgyYzEyNGQ1ZWY0YiIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiZjYwOGU0MWMyY2FmYzI0MzVhY2E4OGQ3MDZkZTBiYTE0ZDgwMjQ1YTFjZDc0NDJkNzRlODJiZmQwM2U4MmZlZCIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiNjM2NTg4YmU0OTdiZjFhNGVjMmFiZDA2OGQxMmRlNWI0OWVmZjA1NTEyYjg4Y2Y3OTcwMTgwMjc1OWIzMzlkYiJ9"
+        }
+      ]
+    },
+    {
+      "id": "claim_b80714c2809a42d3a96d0aa28b32a168",
+      "statement": "GET /benchmarks resolves the benchmark universe in order: explicit tickers → market-API universe (GET /v1/market/tickers) → dashboard key list (DASHBOARD_BENCHMARK_TICKERS: SPY, QQQ, DIA, IWM, VTI, EEM, TLT, IEF, AGG, HYG, GLD, SLV, USO, UUP, IBIT, BITO, EFA). R2-API-only at every step, no Supabase fallback.",
+      "evidence": [
+        {
+          "resource": "repo://apps/dashboard-api/CONTRACT.md#L345-L349",
+          "version": "repo-lines-v1:sha256:d69cd6f8181b2935029b1614a2c6b86209f7ad4e8925838cec1297522d4ffa18:eyJzZWxlY3RlZExpbmVDb3VudCI6NSwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiZWVlYjNhN2Y0YzBlOThjMGY0MGVlNDIyYmQ4M2NlYTU5NWQ4NzM0NjIwY2YyODdmYjBjZTEwZDE0OTJjYjVhZSIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiOTQ1OWI3ZTlhNmI3MzU2MGQ3Yjc2ODQ4NTUxNWI3ODc1NmVkNDI0ZGY0NjMxMTM2ZGZmOThmNjE0Y2M3YzNjNyIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiODgwOTE4YWM2NDMwNzA0MDMwMDQzMjc4YWJiMTY3MDAxYzY4MzQzZmM1YTNhZGY3ZjgyYjYxNjk1MjliODRhZiIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiMzFkODcyN2RmZWU3YTI1OWVlNTMxYjIzZmZjOGFlNjU3M2ZiNDZlYWEyOTdlZjEyMTBjM2VhZjVlMzEzYmYzMyJ9"
+        },
+        {
+          "resource": "repo://apps/dashboard-api/src/benchmarks.ts#L82-L89",
+          "version": "repo-lines-v1:sha256:da2e022688f6fd49f7884c10bae3ba4a512e457eb0f066416a48ee03b2c66397:eyJzZWxlY3RlZExpbmVDb3VudCI6OCwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiOGQyYmI4YTZjNmIwOTllZGU5N2NiYTBkYTIxNDAwMzc5YTlmY2VhNzg0MDg4MzMyNjgyMDg2ZGRlOGNmZDdmZCIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiNDEyY2EzNDVjY2Y3NWJmOWMwODA2YmNlNjk1YmU4ZGU4MDhiNzk5ODQyNTFhN2E1NGQyMDJjZjYxMDFkZDQ1MSIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiN2ZjYzI0MTVhYjhhY2JmMjAxNTBjOGRlYmZkMzYyYzkyN2M5NGZiNTZhZDUzYTIyOTk3YzFmOWNjZTliMGZjOSIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiZjFmNmY1NDExZTUyZTI5NjY0ZTU0NDU2YmMzMDUyNzU1ZGMyM2VmY2U1MjE4YzgzMmI4Njc1NGJlYzExNzYzOCJ9"
+        },
+        {
+          "resource": "repo://apps/dashboard-api/src/ssot.ts#L38-L57",
+          "version": "repo-lines-v1:sha256:645cca3d4c70814ef6202472c78cee9743d5460c8a979fc3fdd3a84630140f62:eyJzZWxlY3RlZExpbmVDb3VudCI6MjAsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImY3NGJiNjJhZTQ5ODVmM2FkMWMxNTczN2I2Njg5ZTkzM2Y3MjE0MTE0YzQwMTdhOTE3OTJlZTM0NTZiMDkzZjQiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjAxYmE0NzE5YzgwYjZmZTkxMWIwOTFhN2MwNTEyNGI2NGVlZWNlOTY0ZTA5YzA1OGVmOGY5ODA1ZGFjYTU0NmIiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImMxNDk4M2Q2MWNmY2I3ZWI3OTU5ODAzNzQwNThjMTgyMTJiMGQyNTJlZGE0YmJhZWZmNWNmOTEwNzc2MTNhMDYiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjAyNTYxZmI4Njk4OTBmYzRjMGEwMTk5ODBlZTA3MDllN2VjZmVhNWU3Yzc4OTkwMTg4N2ZmZjgzYThlNDY3ZWYifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_2a471db911cd44cf895a6d167107a7a6",
+      "statement": "GET /ledger returns events from house-pinned position_events with types OPEN | ADD | EXIT | TRIM. Realized % for sells is vs average entry (sold weight = prev_weight_pct − weight_pct). Pagination uses opaque base64url cursor encoding offset. Economics logic mirrors apps/dashboard/lib/position-event-economics.ts exactly.",
+      "evidence": [
+        {
+          "resource": "repo://apps/dashboard-api/src/ledger.ts#L145-L167",
+          "version": "repo-lines-v1:sha256:e6216cc4e5b1a184eea81f1b6b37dd4281e59b17b1491840f0f6557cc38bcff1:eyJzZWxlY3RlZExpbmVDb3VudCI6MjMsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImNkNDdmZWJjNjk3NTNkNjE0YTMzNDY1MjJmYTIzMzZhYTliYzA0ZmIyZWIzNDM4NzFkZDdiN2QyZjllZTYyMWYiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQxMmNhMzQ1Y2NmNzViZjljMDgwNmJjZTY5NWJlOGRlODA4Yjc5OTg0MjUxYTdhNTRkMjAyY2Y2MTAxZGQ0NTEiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImZiNTgwZTk2NGY4M2E0NzNmNDNkNDQzODQ2Mjk0OWQ2OGI1NjAwZmRhNzg3ZjE2Mzc0NWQwMGRlODljYmYzNmEiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjMyMDRlMjcxNjUzNGFiNjUzYTI2MDA4OTRiYjdlYzRjNWQ2MzIzNDQzNGUwYzVkMzU4NzllNGM5YzkxNWExMWQifQ"
+        },
+        {
+          "resource": "repo://apps/dashboard-api/src/ledger.ts#L21-L28",
+          "version": "repo-lines-v1:sha256:1d4aedfe385318fc79073c82fe4e3f086b5c79124e018bff2be82824a7f43c35:eyJzZWxlY3RlZExpbmVDb3VudCI6OCwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiNWE1MmVjZjdhNjE3ODM2MTg2Yjk1ZGNjZmJmMjVmZmZmNjRmOGYzN2YzYmZhZjQ4Mjc2YmFlNmQxZGRmZDE4OSIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiZGY0M2UyMWI1ZjhlMzBiOTVlNTljMDM2YTM4NDA0OGNkN2MzOThjZWNhY2Q5YmQ0NjM5MGMzNjc0ODFhNzNiNCIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiNjNkZjBhMGE1OTRmNzUzYzkwNGE4MjM4YTM2YTkyNzI1ZWUzNzJkYzIxMzRlNjFjZWI4ZTZlYjhiNzkyZWZjOSIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiNWVjZjExZDkyZWFmMzdkYjFlM2UzZTg5MjNhYzZkMTZlMjc2YWQxNDIwOTY1NGQ1MGEzZGMxZDVmNTlmY2Y1NyJ9"
+        },
+        {
+          "resource": "repo://apps/dashboard-api/src/ledger.ts#L272-L299",
+          "version": "repo-lines-v1:sha256:27ebd898597e36798cc9995fb87db3edf555f00e64b8e754799553594f06c771:eyJzZWxlY3RlZExpbmVDb3VudCI6MjgsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjAwYjExZjE2M2JjYjMwZWJhZGY5N2I2ZWU4MzQ1NzU0ZjIwODQ0YmM2ZGY2YzA5ZGVmNjg1ZTY1MWNjMDg2N2IiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQxMmNhMzQ1Y2NmNzViZjljMDgwNmJjZTY5NWJlOGRlODA4Yjc5OTg0MjUxYTdhNTRkMjAyY2Y2MTAxZGQ0NTEiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjI5N2Q1YzcwNTRhNzBjZTZmZjc3ZjYxMTg4ZmNmMDdhN2ExNzc3NWFmNGExYzY1ZGU1YTQ2ZjNmMDYyZDkxNDAiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjgwN2QxMzY5ZDAxMDdiMDdlN2Q0Zjg3OTg2NzU1ZmQ0ZDU1MDg4MmYwNmYwYThjYmU0OTA5ZWM3MmQ0NjczN2MifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_1b850ef4b9fc414db411177e8307111b",
+      "statement": "GET /v1/tables/:table proxies PostgREST with the service-role key and returns a bare row array (no envelope). Allowlisted tables include daily_snapshots, positions, instruments, theses, portfolio_metrics, documents, position_events, macro_series_observations, decision_log, run_health, position_attribution, run_event_trace, public_accounting_nav_history, thesis_vehicles, analyst_coverage, public_daily_realized_attribution. House scoping is enforced server-side: positions/position_events/portfolio_metrics get workspace_id = eq.<house>; documents get workspace_id = in.(<house>,<system>).",
+      "evidence": [
+        {
+          "resource": "repo://apps/dashboard-api/CONTRACT.md#L385-L414",
+          "version": "repo-lines-v1:sha256:d6d44709d085d4d160c1926cb405761d872f6f6bb103bed38a6ffec970cfafab:eyJzZWxlY3RlZExpbmVDb3VudCI6MzAsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImE0YTI0OTRjMGY0YmE3NjUwYjI2ZGRlOGY1YmUxYTdmOWFiZDc3YzMzMWQzNzdjMDg5Yjg1NzIwNjk0OGE3NDIiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjI1ZmEwNTA5Y2Q4ZGVjNDg0OTQ3MjZlOTUxMjhlOTM2NTJkN2M0YzFiMTc4ZDUyYzE3NWU0YTcyYjBjMzc4YjIiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjNmNzNiYWQxODQwYzg1MjkxNTExNDcwNjc4ZjJhMjFlOTQ1ODk3YTY3NGI4ZjBlMzk2MGQ3ZmQ5ZGQyZDhiNDMiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjY3OWUwYjAzNWNiNjhlMTQxY2Y2MTUxYjllYzJjMWI4OTExOTczMGZmOGUwNzI1MmRiOWUwZmY0Y2U0OTk1MWQifQ"
+        },
+        {
+          "resource": "repo://apps/dashboard-api/src/tables.ts#L33-L61",
+          "version": "repo-lines-v1:sha256:d6322248af32d3127c35dfbb36ca2b4a62e47dabf3bb72c7879932d50dc928bb:eyJzZWxlY3RlZExpbmVDb3VudCI6MjksImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjY4YzU3ZWNhOWU4NzcyOTQ3NWJlOGU4MDQ1Yjg0YTRkYzk0ZmY5M2ZkNWJkODkxNTI5M2VlZTdlNzVjOGIzOGUiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjAxYmE0NzE5YzgwYjZmZTkxMWIwOTFhN2MwNTEyNGI2NGVlZWNlOTY0ZTA5YzA1OGVmOGY5ODA1ZGFjYTU0NmIiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjJmN2NmZDAyOThjNzA5OGFmOTM4N2E5NjU2NjI2YTI0YzJjYTQzMWIwODA3OWVlMGI0ZmMzMzVlOTJlY2Q4OTgiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImM0YzE4NmE4NTg2MDJmZDRmNGFhYTIzMWE5ZjkyMmE5MWU4ZjUwMjY1NDc0NGFmZGJjMDcyYWVmOGRhZmI1ZTkifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_73e2ee50b28b4835ad4e098bb531fcea",
+      "statement": "POST /mcp exposes all eight envelope routes as JSON-RPC 2.0 tools via tools/list and tools/call. tools/call builds a synthetic GET Request from tool args and runs it through the worker's own routeGet dispatch, making MCP responses byte-identical to HTTP responses from the same builder functions.",
+      "evidence": [
+        {
+          "resource": "repo://apps/dashboard-api/src/mcp.ts#L148-L195",
+          "version": "repo-lines-v1:sha256:1f75fa395cfe4525fb3cf825fc8276591a4e46a5b67c39c7f54b7b953cd83f54:eyJzZWxlY3RlZExpbmVDb3VudCI6NDgsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjAxYmE0NzE5YzgwYjZmZTkxMWIwOTFhN2MwNTEyNGI2NGVlZWNlOTY0ZTA5YzA1OGVmOGY5ODA1ZGFjYTU0NmIiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQxMmNhMzQ1Y2NmNzViZjljMDgwNmJjZTY5NWJlOGRlODA4Yjc5OTg0MjUxYTdhNTRkMjAyY2Y2MTAxZGQ0NTEiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImNjZWE3ZmM0NjUyNzE5YjEzZWIzMDNmN2Y3NzUzZjFiYzk2YzQyZGM4NjkyMzJiYTAxNGRhYzE2ZmJkNmZhN2QiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjQwMTA1YTVjZjk0YzdmMWEwYmRhYzQ2YjE0NmY3YTU2YzZkNzhlM2IzN2EwMjMxM2M1MDIwN2RkYjkxOGE3N2YifQ"
+        },
+        {
+          "resource": "repo://apps/dashboard-api/src/mcp.ts#L36-L114",
+          "version": "repo-lines-v1:sha256:fab12960073500cbbc8d42b571c2599695a546203e8c995df7afadd32de5a6d3:eyJzZWxlY3RlZExpbmVDb3VudCI6NzksImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImJjNDk1ODljZTI5NzgxYmY2NjgyMzEzN2RmOThkMTUzOGYxYWJhMjQxMDk4NzA1OGEwMTUwNzhiY2VhNTM2NDMiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImIwMmQyYzBkNmRjNWU3NGQ5MmZhMTRiOTFkYmVhMjY0MDkwYmViMzVmZGI5MTg4ZDliMzQxMTgxZGNlOWY0Y2UiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjgzZTljYjFjMGZmYmU3MzU4YjY0N2FmYWM5NWNlZjkxZmIyODZjZWEyYzVjNGE3OWJlZjRkZWFlNGQxYmRlZDQiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjE4NzkyMTJiNGQ0ZWI1MTRkZDcyMjcwZDE1M2M5Y2ZkMjdiMmY2MTU1MGNjYjczOGFjOWU2ZjY3NTA0YTQzMjAifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_bc24d49af66c4702a7ed2907dbf2189f",
+      "statement": "MCP access is secret-gated with header x-digi-mcp-key vs env MCP_EDGE_KEY, fail-closed 401 matching the /_stack/mcp precedent. No secret configured → deny all (401); missing header → 401; mismatch → 401. The 401 body is plain text 'dashboard-api: unauthorized' with no envelope.",
+      "evidence": [
+        {
+          "resource": "repo://apps/dashboard-api/src/mcp.test.ts#L24-L46",
+          "version": "repo-lines-v1:sha256:297600b089e8436c57bf525f4dfe77a5eb679d3479f9fc331658127e04bab463:eyJzZWxlY3RlZExpbmVDb3VudCI6MjMsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjkyYzBkN2UxMGZmMmE2Y2EyMTcwMDVmZmNhNDkzZDAwNTcxZGVmOTA3ODU0ZmRhM2NiMTc0MzQ0NDBjMzViMGQiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjNhM2U0NmY5NDI3NmI2ZjZmNGVkMWYwMmFmNzhiZWY2YTJlZTFjNDM5ZGQ1NTg0Yjk3Mzk0ODMxMzIxNGQyYjciLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImNiMjRlNmNjODgzYTA4MTg1ZWFmNGJkZTViNDAxZWEyODE1YjIxMTczZmU4MmZkYWIxMDI3YjMzNjYyYjk0NDUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6Ijg5MTUzMDg1NGFkZjdlNzg1ZmVkZGExZjA3Nzk1MzI5NTI2ZDE3NjU0YTMwNDliNjZiYWMxNTJiMDU5YmIwMzIifQ"
+        },
+        {
+          "resource": "repo://apps/dashboard-api/src/mcp.ts#L118-L126",
+          "version": "repo-lines-v1:sha256:79900eb56d7539bafeda9e4ba4e826e613855284c639473fdce67a3a88f1d4e4:eyJzZWxlY3RlZExpbmVDb3VudCI6OSwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiMTFiYzM4OWZmOGYxZjEzZGM2YmY1ZWRkNjEzOTkwMTRkZDQ1NDYyODM3MzhlYTQzYTdmMWQ3YTNkYzhkNzYxOCIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiNDEyY2EzNDVjY2Y3NWJmOWMwODA2YmNlNjk1YmU4ZGU4MDhiNzk5ODQyNTFhN2E1NGQyMDJjZjYxMDFkZDQ1MSIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiMTg3OTIxMmI0ZDRlYjUxNGRkNzIyNzBkMTUzYzljZmQyN2IyZjYxNTUwY2NiNzM4YWM5ZTZmNjc1MDRhNDMyMCIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiNzcyOWM5MGRhNTQxODFhNGJlOTBlY2JiODgyNGEzNGY1YjkwMTA2OTc5MGE3NGI4YjBjYzJkZDVlZDNiMjU2YyJ9"
+        },
+        {
+          "resource": "repo://apps/dashboard-api/src/mcp.ts#L200-L215",
+          "version": "repo-lines-v1:sha256:2c4f9d348a08a9b78607f6c81bac2d552f530036c8927975b7e5dce841595c49:eyJzZWxlY3RlZExpbmVDb3VudCI6MTYsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6Ijk3MmE0MjkzODJiMmUxNDcxOGUwZTM3YjA1NzBhOGExNzAyOTkxZmNkODQ5OGNkODQwNjBhOGJmNGYwNTAxN2IiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjI3ZTU3ODhkNWQ5ZDczZDI0YTgxZGJjMGE1YTc0YmZhODJjOWMzYjNhZjk5ZTUyYWY3OTZlOTBiNDY4YThhM2QiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjU4ODJkZGYzN2JmYzc4YTUyZjY3ZTE5ODU0MzA1ZTAyNzY4YjFlNjg3MGViN2U0Mjc2ZTMzY2ViY2VlYmFjNDMiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjRhOGRjOGE1ZWRlNDQ1MjY0NjE1ZjM3MDM2ZmRmN2IyMTE0NjY0MDIwMGRkZTlmYzc2YzljZGYzNDFjYmEzMWMifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_d56a95a3080e417bba0b76c4c18541ff",
+      "statement": "The digithings-stack worker folds dashboard-api under the canonical path prefix /dashboard-api/*. The fold uses runIsolated('dashboard-api', ...) for lazy import + per-group fault isolation: import failure or handler failure degrades only /dashboard-api/* paths (503), every other route group keeps serving. The prefix is stripped and the request forwarded to dashboardApi.fetch(), keeping responses byte-identical to the standalone worker.",
+      "evidence": [
+        {
+          "resource": "repo://apps/digithings-stack-cloudflare/src/dashboard-api.ts#L28-L75",
+          "version": "repo-lines-v1:sha256:606adce4d57aadbdb886e5c9d2929de91d5d3de0d85e69619c8c8f8cc6e61e07:eyJzZWxlY3RlZExpbmVDb3VudCI6NDgsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImYxNzM4M2NlY2IyZDY4OTFkNTExMDRlZjBmNGFkNDRkNDBkMjQxMzk3ZjJiNzdhY2ZmMmYxODBhOWQ4YzM5MDAiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQxMmNhMzQ1Y2NmNzViZjljMDgwNmJjZTY5NWJlOGRlODA4Yjc5OTg0MjUxYTdhNTRkMjAyY2Y2MTAxZGQ0NTEiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjllMGQzMDg2ZGFjODUxN2IyZGM1MzJlNzJkZjU4OTM0MGZjYTc4OWU2YmRhOWU3NTllNjBlNjEzMWYzZDYyZWUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjowLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUifQ"
+        },
+        {
+          "resource": "repo://apps/digithings-stack-cloudflare/src/index.ts#L555-L565",
+          "version": "repo-lines-v1:sha256:6b350013802102dbd6ee245dd4e993b1bc9aeba480f3b415d316a5e42b2347ed:eyJzZWxlY3RlZExpbmVDb3VudCI6MTEsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6Ijg5MzQ0MmFjYzRhNzhiODc2NGYxOGU5Zjk1NTEwZGY5ODRjNzE0YmNiYTM4NTcxNmQ1MDMwOGZhYjhhYjU1OTgiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImZlZjY5MDA3YTdlNzVjY2RiMmMxOWVmYTlkOTVjNDNiZjc4N2YzM2EyYjljODI2NWM0YTVjZTY0MmZlNmRiZWEiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImE0Yzc0YzRhNTM5ODkyOTk5MDAxNzAxZTBhOGU4YzAwZDUwYWJjMGE0MGQwMmFkOTE0OGRhOGQwODM1OGMwZmUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImI2YjMyMDNhMzllYTQxNTJhYTU2YTc2Njg2YTk0NWZiYjBkYzRiNGUwNWQxZjAzMjM5ODg0YjE4NWU5NmI3YzEifQ"
+        },
+        {
+          "resource": "repo://apps/digithings-stack-cloudflare/src/route-modules.ts#L107-L147",
+          "version": "repo-lines-v1:sha256:a2f47b794f793bc74ddf6706c1bd87dcfe2e40015bddc80d07c33dff1ac43f03:eyJzZWxlY3RlZExpbmVDb3VudCI6NDEsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImVhZjIyY2YwNzMyNTkyYzI0NzE0MWNiZTYxZWZhMTEwMTI2MTJmNWEzMTIyYjlhZjliYmFmNTJmNTcyNGQxOTQiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQxMmNhMzQ1Y2NmNzViZjljMDgwNmJjZTY5NWJlOGRlODA4Yjc5OTg0MjUxYTdhNTRkMjAyY2Y2MTAxZGQ0NTEiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImZiNTgwZTk2NGY4M2E0NzNmNDNkNDQzODQ2Mjk0OWQ2OGI1NjAwZmRhNzg3ZjE2Mzc0NWQwMGRlODljYmYzNmEiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjI2ODJhMjU2MTU3YmJhOGQ2NWViNDZmNjc3YzljM2M4MGJkNWUwZDI2YTc3MjgwMTk5ZGRkMzZhZGU4MzNmYWMifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_8b949992db02470db46d7b03ddaf1c23",
+      "statement": "The worker requires SUPABASE_SERVICE_ROLE_KEY (wrangler secret only, never in static bundle) for real Supabase reads. Without it, all book endpoints fail closed with upstream_empty (502) using stub doubles in dev/tests. Optional MCP_EDGE_KEY gates POST /mcp. The SUPABASE_URL var is set in wrangler.toml to https://rwagjbkvxkdwqmouagad.supabase.co.",
+      "evidence": [
+        {
+          "resource": "repo://apps/dashboard-api/README.md#L24-L29",
+          "version": "repo-lines-v1:sha256:4558af42875c7146350fe4edd7e2b1c59aab9aa5b04f9a24964205801137ddcd:eyJzZWxlY3RlZExpbmVDb3VudCI6NiwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiMTEwYzQwNjFmNjk4MjIzZTBkMGZlOWQ2MjZiOGY1M2U1YzU1NzY1OTExNzA0ZWMwMDI3MDFmMThkMDEwNzEyMSIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiMWY0ZTQ0Yjg5NDhkMzY0NjRlNDVhYWRhMWFkYTIxZGY1OTg4NjgyOTA1MDQ1ZTljOTFhODBjODRmNmIxY2EzNyIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiMTQwYjg3MDBkZDQ3ZGMzMzMyZjIyYzc4ZGI4NjI2NDhkYzU0YWYzOGUzYWJhZjBkYmM3M2EzNDVkNTY0MzRhZiIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiNGNlZDBlZDhmYWZjMjM1YWVlMzNkM2RkNjlmY2RkZGE2MjA0ZTc2MzgzMDNhYjkyMTc0YTIzODY5NjQ4MWU5NyJ9"
+        },
+        {
+          "resource": "repo://apps/dashboard-api/src/supabase.ts#L38-L47",
+          "version": "repo-lines-v1:sha256:d828e34915dfe201b5e85145b30262004990b98a407b2b855643a659b76eabb8:eyJzZWxlY3RlZExpbmVDb3VudCI6MTAsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6Ijk0ZGI2MjA3ODc0Mzk0MmQ2ZTMyYTA1Nzc1YmNhODliZjcxY2JkMzZhYzkxMjYxNmQyODJmZTdkNjFjYzQ2OTUiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQxMmNhMzQ1Y2NmNzViZjljMDgwNmJjZTY5NWJlOGRlODA4Yjc5OTg0MjUxYTdhNTRkMjAyY2Y2MTAxZGQ0NTEiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjNkZDQwMzg0NTNkNzFjMWMwZDRhOTA2MjUwZTA4NTMwNDIxODljYjczZjVmMTI3NmRhZmUzZDg4YjNkNWM4NDgiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImM1YzA0ZWI3ZmI4ODdkYTE4NDcwNDZjYWMwNDU5NDM1MzI1MWZhNjVhMDNhMDEyZmNmOWRmMGJiYjBmZTEyNTMifQ"
+        },
+        {
+          "resource": "repo://apps/dashboard-api/wrangler.toml#L1-L23",
+          "version": "repo-lines-v1:sha256:9dcbd7ea44aec3c77e83d9516c8ec3069528e371b8ff6edef3c20a8798dd2505:eyJzZWxlY3RlZExpbmVDb3VudCI6MjMsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjdlNmM1Y2M0MDQ5OWU2ZTBlNzVkZmI4MmM2YzliYWE5MmE3NjE3N2NjZmZjZDQwMzQ5YWEwMGNkMTFhZTQ3MmIiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjBhNjU4MjBhMmExNWRjODAwNzcwNjZjN2ZjMTY1ZWZkY2FjYTdlMTAwMmQ1NWQ2OGJkMGZkOTUyNGE1NzM4YmUiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjowLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjowLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_95bd08b6c5d1497f9ed7cd2284d5dee6",
+      "statement": "Deploy is via .github/workflows/deploy-dashboard-api.yml (path-filtered push to develop/main on apps/dashboard-api/** + workflow_dispatch). The workflow runs npm run test + npm run typecheck before wrangler deploy, injecting SUPABASE_SERVICE_ROLE_KEY from GitHub secrets. Dev commands are npm run dev/test/typecheck --workspace dashboard-api.",
+      "evidence": [
+        {
+          "resource": "repo://.github/workflows/deploy-dashboard-api.yml#L1-L52",
+          "version": "repo-lines-v1:sha256:2cdc44e8f07a61bf0a785c811672f124544a5b80bc8f4dea949ab7fd4f25d315:eyJzZWxlY3RlZExpbmVDb3VudCI6NTIsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImRlZGFlNjQ1YjJjYzZmYmI3ZjE3MzNhM2Y3MjEwYzg5OTIzYmM2M2QxYTZmZTRjNTZiYWJkZDdjMTIzNWFjZGEiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6Ijc4NWU0NGM1NTQzYTAyZDgyMDcwOTkxNTA0NTExMWIxMzFkNmZkNjYzN2I0NzVkZDdmZDE1ZmFkMTJlODQyMzciLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjowLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjowLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUifQ"
+        },
+        {
+          "resource": "repo://apps/dashboard-api/README.md#L31-L37",
+          "version": "repo-lines-v1:sha256:500b2aa3ed0ec2890043f76166ee6b9dd090c3b68e8516be0846d51717a4470a:eyJzZWxlY3RlZExpbmVDb3VudCI6NywiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiMzViOTY2ODFiOTNkYjJjZDQwNGJkZGUxOTI5NmVjNjE5OTllNTJmZmZlMzIzYTg1MzJmOTA2ZWM0NGI5NDdiNCIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiNDdjMDZjNTYxZDVjMzI3MzQzNjg1MjY4YTQ2YjMzOTFmMzk5OGVlZTg5MGQyYmU1MWYwZDIxY2M0YTUzYWU2ZCIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiZTZhNWU2MGM1MjFlZDBhOGVmMzQ2ZjljOWMwYmNiODQwN2RjYmVlMmQ2MTIzOWQwOTlmNWRhOTZjYjhlYTg1MSIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiYTI1YTE5ZmQzNzFmYWY5MDNlODdmMThiYTgzNTRlZWIwZjQ0OWVjZTdmODVjNWIyYzE0ODRiZjYyMWY0ZDBjMCJ9"
+        },
+        {
+          "resource": "repo://apps/dashboard-api/package.json#L1-L17",
+          "version": "repo-lines-v1:sha256:213eea70d597ffb1b15aab8f21019a3574087e3e26341aa839817b7f12ecbe45:eyJzZWxlY3RlZExpbmVDb3VudCI6MTcsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImE2ZmIwOGZkYTFhY2I5NTdiNjExNmJkMzc4MTFhMWZlNDFhMDE2MTFjMDYzMWVkYmY3ODZkNjg4OWEyN2E1NWMiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQxMmNhMzQ1Y2NmNzViZjljMDgwNmJjZTY5NWJlOGRlODA4Yjc5OTg0MjUxYTdhNTRkMjAyY2Y2MTAxZGQ0NTEiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjowLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjowLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUifQ"
+        }
+      ]
+    }
+  ],
+  "verification": {
+    "by": "openwiki/0.5.0",
+    "at": "2026-09-27T13:35:24.399Z"
+  }
+}
