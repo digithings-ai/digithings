@@ -294,8 +294,13 @@ export class DigiChatContainer extends Container {
     DIGIKEY_URL: env.DIGIKEY_URL ?? "",
     DIGIKEY_BFF_TOKEN: env.DIGIKEY_BFF_TOKEN ?? "",
     DIGICHAT_PLAN_PROOF_SECRET: env.DIGICHAT_PLAN_PROOF_SECRET ?? "",
-    DIGICHAT_DASHBOARD_SUPABASE_URL: env.DIGICHAT_DASHBOARD_SUPABASE_URL ?? "",
-    DIGICHAT_DASHBOARD_SUPABASE_ANON_KEY: env.DIGICHAT_DASHBOARD_SUPABASE_ANON_KEY ?? "",
+    // Canonical fallbacks (#4700): the DIGICHAT_DASHBOARD names are legacy
+    // duplicates of the canonical SUPABASE names. Old names still win when
+    // set, so this stays backward compatible across the manual deploy lag.
+    DIGICHAT_DASHBOARD_SUPABASE_URL:
+      env.DIGICHAT_DASHBOARD_SUPABASE_URL ?? env.SUPABASE_URL ?? "",
+    DIGICHAT_DASHBOARD_SUPABASE_ANON_KEY:
+      env.DIGICHAT_DASHBOARD_SUPABASE_ANON_KEY ?? env.SUPABASE_ANON_KEY ?? "",
   };
 
   override async fetch(request: Request): Promise<Response> {
@@ -395,6 +400,9 @@ export interface Env {
   // deployed until cutover; secrets land via `wrangler secret put` later.
   SUPABASE_URL?: string;
   SUPABASE_SERVICE_ROLE_KEY?: string;
+  // Canonical dashboard anon key (#4700): fallback source for the legacy
+  // DIGICHAT_DASHBOARD_SUPABASE_ANON_KEY forward above. Worker-scoped.
+  SUPABASE_ANON_KEY?: string;
   MARKET_DATA_URL?: string;
   DASHBOARD_API_ALLOWED_ORIGINS?: string;
   // Folded digichat (#4689) env passthrough. All optional with the standalone

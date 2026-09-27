@@ -99,6 +99,9 @@ const WORKER_SCOPED_VARS = new Set([
   // MARKET_DATA_ALLOWED_ORIGINS above.
   "SUPABASE_URL",
   "SUPABASE_SERVICE_ROLE_KEY",
+  // Canonical anon key (#4700): same-worker fallback source for the legacy
+  // digichat forward; no container reads this name directly.
+  "SUPABASE_ANON_KEY",
   "MARKET_DATA_URL",
   "DASHBOARD_API_ALLOWED_ORIGINS",
   // Folded digichat (#4689): DIGICHAT_LEGACY_EMBED_ENABLED is folded into the
@@ -244,6 +247,24 @@ describe("Env / envVars parity", () => {
       chatMissing,
       `digichat-scoped var(s) missing from DigiChatContainer.envVars: ${chatMissing}`,
     ).toEqual([]);
+  });
+
+  it("falls back to canonical Supabase names for legacy digichat dashboard keys", () => {
+    // #4700: the DIGICHAT_DASHBOARD names are legacy duplicates; the container
+    // must keep working once the old secrets are deleted post-deploy, so both
+    // entries pin the old-name-first, canonical-second chain.
+    const blocks = extractAllEnvVarsBlocks(indexSource);
+    const chatBody = blocks[2];
+    const urlStart = chatBody.indexOf("DIGICHAT_DASHBOARD_SUPABASE_URL:");
+    const anonStart = chatBody.indexOf("DIGICHAT_DASHBOARD_SUPABASE_ANON_KEY:");
+    expect(urlStart).toBeGreaterThan(-1);
+    expect(anonStart).toBeGreaterThan(urlStart);
+    expect(chatBody.slice(urlStart, anonStart)).toMatch(
+      /env\.DIGICHAT_DASHBOARD_SUPABASE_URL \?\? env\.SUPABASE_URL \?\? ""/,
+    );
+    expect(chatBody.slice(anonStart)).toMatch(
+      /env\.DIGICHAT_DASHBOARD_SUPABASE_ANON_KEY \?\? env\.SUPABASE_ANON_KEY \?\? ""/,
+    );
   });
 
   it("declares Env for every env.* var envVars reads", () => {
