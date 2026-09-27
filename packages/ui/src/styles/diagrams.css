@@ -324,21 +324,34 @@
   color: var(--accent);
 }
 
-/* Rented vs owned must read at a glance (#4429 ship list): the conventional
-   off-the-shelf side wears a muted amber, the digithings-owned side the
-   accent. The tag text itself ("rented"/"owned") is the discriminator, so
-   the hook is a data attribute, not a second class family. */
-.arch-tour__tag[data-tag="rented"],
-.arch-tour__side-tag[data-tag="rented"] {
+/* Rented vs digithings must read at a glance (#4429 ship list): the
+   off-the-shelf side wears a muted amber, the digithings side the accent.
+   The tag text itself ("rented stack"/"digithings stack") is the
+   discriminator, so the hook is a data attribute, not a second class family. */
+.arch-tour__tag[data-tag="rented stack"],
+.arch-tour__side-tag[data-tag="rented stack"] {
   color: #c98a3d;
   border: 1px solid color-mix(in srgb, #c98a3d 45%, transparent);
   padding: 0.1rem 0.45rem;
 }
-.arch-tour__tag[data-tag="owned"],
-.arch-tour__side-tag[data-tag="owned"] {
+.arch-tour__tag[data-tag="digithings stack"],
+.arch-tour__side-tag[data-tag="digithings stack"] {
   color: var(--accent);
   border: 1px solid color-mix(in srgb, var(--accent) 45%, transparent);
   padding: 0.1rem 0.45rem;
+}
+/* The rented rail walks in amber to match its tag: the first side of a
+   two-side tour carries `side--leaving`, so the hook is the compositional
+   class, not a second tag plumbing. Single-side tours never get the class,
+   so they keep the accent rail. */
+.arch-tour__side--leaving .arch-tour__rail::before {
+  background: #c98a3d;
+}
+.arch-tour__side--leaving .arch-tour__step.on {
+  border-inline-start-color: #c98a3d;
+}
+.arch-tour__side--leaving[data-rail="end"] .arch-tour__step.on {
+  border-inline-end-color: #c98a3d;
 }
 /* The why headline's rent half wears the same muted amber as the rented tag
    (#4429 ship list). Kit-level class — the canon guard refuses color literals

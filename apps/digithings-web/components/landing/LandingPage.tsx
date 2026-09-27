@@ -122,7 +122,9 @@ export function LandingPage({ embedOrigin }: { embedOrigin: string }) {
           guided walk with the camera, the capability comparison and the cost
           model — rather than the seven-layer drawer. `WhyStack` owns every
           block and their headings; the section keeps only the anchor and the
-          band rules. */}
+          band rules. v16 rebrands the frame around the same walk: "their AI
+          stack" vs "the digithings stack", seam-holding over owning, and the
+          walk resolves on partial adoption. */}
       <section id="why" className="line-b px-[var(--page-pad)] py-[var(--page-step)]">
         <WhyStack />
       </section>
