@@ -329,8 +329,8 @@
    the tour sets from its scroll state (`data-active` per side,
    `data-active-side` on the root); the static fallback sets neither, so both
    sides read full bright there. */
-.arch-tour__tag[data-tag="rented stack"],
-.arch-tour__side-tag[data-tag="rented stack"],
+.arch-tour__tag[data-tag="their stack"],
+.arch-tour__side-tag[data-tag="their stack"],
 .arch-tour__tag[data-tag="digithings stack"],
 .arch-tour__side-tag[data-tag="digithings stack"] {
   color: var(--ink-mute);

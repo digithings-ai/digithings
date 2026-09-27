@@ -44,12 +44,13 @@ function Tour() {
                   <span className="why-own">or the digithings stack.</span>
                 </h2>
                 <p className={LEDE}>
-                  An off-the-shelf AI platform rents you one fixed shape — models, index, data
-                  and machines behind a single interface, on somebody else&rsquo;s release
-                  schedule. digithings is the same AI infrastructure as pieces you run
-                  yourself, on your hosts and keys — starting with whichever layer hurts
-                  most. Scroll to watch one become the other: the stack you rent, then the
-                  digithings stack.
+                  Off-the-shelf AI arrives as one fixed shape — models, index, data
+                  and machines behind a single interface, metered and versioned on
+                  somebody else&rsquo;s release schedule. digithings is the same AI
+                  infrastructure as pieces you compose yourself: start with the layer
+                  that hurts, swap any piece without migrating, pay your
+                  provider&rsquo;s own rates. Owning the stack is part of it — never
+                  being locked in is the point.
                 </p>
               </>
             }
@@ -57,7 +58,7 @@ function Tour() {
               {
                 spec: CONVENTIONAL_ARCH,
                 steps: RENTED_TOUR_STEPS,
-                tag: "rented stack",
+                tag: "their stack",
                 rail: "end",
                 caption: "Every edge metered — per-token · per-query · per-gigabyte",
               },
@@ -65,7 +66,7 @@ function Tour() {
                 spec: DIGITHINGS_ARCH,
                 steps: OWNED_TOUR_STEPS,
                 tag: "digithings stack",
-                caption: "Same calls, your rates — swap it · you choose · yours",
+                caption: "Every box a module — take one or run them all · digibase under all of them",
               },
             ]}
             variant="camera"
