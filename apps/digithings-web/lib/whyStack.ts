@@ -48,7 +48,7 @@ import type { ArchSpec, TourStep } from "@digithings/ui";
  * two drawings read as one diagram whose box wording flipped.
  */
 export const CONVENTIONAL_ARCH: ArchSpec = {
-  title: "The stack you rent",
+  title: "The AI stack you rent",
   description:
     "Container diagram: your product calls one vendor interface, and behind it sit the model, the index, the data store, the monitoring and the machines — every layer rented by the meter, inside a single boundary governed by one account and one release schedule.",
   groups: [
@@ -94,7 +94,7 @@ export const CONVENTIONAL_ARCH: ArchSpec = {
  * capability ledger below, not in a diagram a client has to decode.
  */
 export const DIGITHINGS_ARCH: ArchSpec = {
-  title: "The same stack, owned",
+  title: "The digithings stack you run",
   description:
     "Container diagram: the same product over the same calls, but every layer behind it is a piece you run — the interface, the model, the index, the data, the log, the machines and the keys are all yours, inside your own boundary.",
   groups: [
@@ -216,7 +216,7 @@ export const OWNED_TOUR_STEPS: TourStep[] = [
   {
     id: "keys",
     label: "The keys never leave your hands.",
-    line: "Access is issued and revoked by you and carried on every call. The boundary is not a wall you rent — it is a set of seams you can move whenever you want to.",
+    line: "Access is issued and revoked by you and carried on every call. The boundary is not a wall you rent — it is a set of seams you can move whenever you want to. Each seam is a piece you can take alone — adopt one layer or run the whole stack.",
     ids: ["terms"],
   },
 ];
