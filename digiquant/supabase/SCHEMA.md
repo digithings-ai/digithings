@@ -100,9 +100,11 @@ local alias still `project_id "digiquant-research"`). Migration 046 adds the str
 ### Public portfolio surface — views only, new in migration 050 (#1461/#1462)
 
 The anon-readable read surface for digiquant.io's live portfolio page (user ruling
-2026-07-10, #1462: performance metrics only, never research notes). Curated
-security-definer views — the SELECT list is the privacy allowlist; no new tables.
-They pair with the `functions/prices-live/` edge function (see [`README.md`](README.md)).
+2026-07-10, #1462: performance metrics only, never research notes). Curated views —
+the SELECT list is the privacy allowlist; no new tables. After migration **139**
+(#4630), `public_portfolio_positions` and `public_nav_history` are
+`security_invoker=true` (base tables already grant anon SELECT). They pair with the
+`functions/prices-live/` edge function (see [`README.md`](README.md)).
 
 | View | Backed by | Purpose |
 |------|-----------|---------|
@@ -1077,14 +1079,18 @@ in the same change.
   store must stay erasable, and "we cannot delete your broker credential" is not a
   position this schema should be able to take. Do not "complete" the policy set and do not
   add a DELETE-blocking trigger by analogy with 069/094.
-- **Views (migrations 041, 050, 066):** RLS does not apply to views; the curated public
-  views are intentionally security-DEFINER (`security_invoker = false`) so the column
-  projection — not base-table policy — decides what anon sees. Supabase's advisor flags
-  `security_definer_view`; expected and accepted for this pattern. Migrations **050 and
-  052** pair their `GRANT SELECT` with an explicit `REVOKE ALL`. Migrations 041 and 018
-  shipped no REVOKE at all and so left the platform-default DML grants standing — that
-  omission was #1757, closed by migration 060 (see "Grants" below). Migration 066 starts with
-  explicit `REVOKE ALL` on both its base table and public view, then grants view `SELECT` only.
+- **Views (migrations 041, 050, 066, 139):** RLS does not apply to views. After migration
+  **139** (#4630), the digiquant.io public tape (`public_portfolio_positions`,
+  `public_nav_history`) is `security_invoker=true` — base tables already grant anon SELECT;
+  the SELECT list remains the allowlist. Accounting + `run_*` curated views stay intentional
+  SECURITY DEFINER (`security_invoker = false`) because their base tables lack anon SELECT;
+  Supabase's advisor still flags `security_definer_view` on those — expected and accepted
+  (see root [`SECURITY.md`](../../SECURITY.md) "Accepted advisors (core)"). Migrations
+  **050 and 052** pair their `GRANT SELECT` with an explicit `REVOKE ALL`. Migrations 041
+  and 018 shipped no REVOKE at all and so left the platform-default DML grants standing —
+  that omission was #1757, closed by migration 060 (see "Grants" below). Migration 066
+  starts with explicit `REVOKE ALL` on both its base table and public view, then grants
+  view `SELECT` only.
 
 ### Security / performance advisors — Now pile (#3461 / migration 117)
 
@@ -1099,16 +1105,35 @@ authenticated workspace policies. Migration **117** addresses that pile only:
 - Recreates the 19 authenticated policies with `(SELECT auth.uid())` — same USING
   semantics as 098/105/109.
 
-**Explicitly deferred / accepted (not in 117):**
+**Deferred from 117 — status after migration 139 / #4630:**
 
-- Lint **0010** `security_definer_view` on `public_*` portfolio/price views — powers
-  digiquant.io public tape; invoker cutover is a separate issue.
-- Lint **0029** authenticated EXECUTE on `my_access()` — product need; documented above.
-- Leaked-password protection (HaveIBeenPwned) — Auth dashboard toggle, not SQL. Operator
-  must enable under Authentication → Providers → Email → Password → Leaked password
-  protection. [#3461](https://github.com/digithings-ai/digithings/issues/3461)
+- Lint **0010** `security_definer_view` on public tape — **partially cleared in 139**:
+  - **Invoker public tape DONE:** `public_portfolio_positions`, `public_nav_history`
+    (`security_invoker=true`; base tables already grant anon SELECT; column lists stay the
+    allowlist).
+  - **Remaining accepted DEFINER** (column allowlist; do **not** flip without new anon
+    policies on the base tables): `public_finalized_nav`,
+    `public_daily_realized_attribution`, `public_accounting_nav_history`,
+    `public_accounting_period_status`, `run_health`, `run_event_trace`.
+  - **`atlas_run_health` DROPPED** by 139 (rename-compat alias of `run_health`; live health
+    surfaces are `run_health` / `run_event_trace`).
+- Lint **0029** authenticated EXECUTE on `my_access()` — product need; documented above
+  (and in SECURITY.md Accepted advisors).
+- Leaked-password protection (HaveIBeenPwned / Hibp) — Auth dashboard toggle, not SQL.
+  **Accepted / plan-gated residual** on core (Pro-only; cannot enable on current plan;
+  confirmed 2026-09-26 via [#4696](https://github.com/digithings-ai/digithings/pull/4696)).
+  Not an open Human Gate. Not a migration after 139. Revisit only if core upgrades to a
+  plan that includes Auth Hibp. See SECURITY.md **"Accepted advisors (core)"**.
+  [#3461](https://github.com/digithings-ai/digithings/issues/3461) /
+  [#4630](https://github.com/digithings-ai/digithings/issues/4630).
+- **pg_net** (139): `USAGE`/`EXECUTE` revoked from `PUBLIC`/`anon`/`authenticated`; cron
+  `prices-live-*` runs as `postgres`; extension stays in `public` (`extrelocatable=false`).
 - Unused indexes / unindexed FKs / RLS-enabled-no-policy service-role tables — out of
-  scope for this pass.
+  scope for 117; 139 also drops a duplicate `knowledge_notes` tags GIN.
+
+Canonical triage: root [`SECURITY.md`](../../SECURITY.md) **"Accepted advisors (core)"**,
+[#4630](https://github.com/digithings-ai/digithings/issues/4630), migration
+`139_core_advisor_harden.sql`.
 
 ### knowledge_notes vault namespace — migration 118 (#1142 / #3603)
 

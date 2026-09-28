@@ -69,7 +69,7 @@ deploy`, or the SQL editor.
 | `migrations/050_public_portfolio_views.sql` | Three anon-readable views — the public portfolio read surface (#1461/#1462) |
 | `migrations/063_prices_live_table.sql` | `public.prices_live` — the quote table Realtime streams as `postgres_changes`; RLS on, one SELECT policy, no write policy, `service_role` the sole writer (#1807) |
 | `migrations/064_prices_live_lease.sql` | `public.prices_live_lease` + `claim_prices_live_refresh(integer)` — the single-row lease and the atomic claim that bound the Finnhub refresh **rate**; replaced the #1756 invocation secret |
-| `migrations/065_atlas_run_diagnostics_attempt.sql` | `atlas_run_diagnostics.attempt` + primary key `(run_id, attempt)`, and `attempt` appended to the `atlas_run_health` view — one row per outer-retry **attempt** so the last retry stops overwriting the expensive attempt's cost (#1762). Legacy rows carry the `0` sentinel, never `1` |
+| `migrations/065_atlas_run_diagnostics_attempt.sql` | Historical: `atlas_run_diagnostics.attempt` + primary key `(run_id, attempt)`, and `attempt` appended to the then-live `atlas_run_health` view — one row per outer-retry **attempt** so the last retry stops overwriting the expensive attempt's cost (#1762). Legacy rows carry the `0` sentinel, never `1`. **Current inventory:** migration **139** dropped the `atlas_run_health` compat view — use `run_health` / `run_event_trace`. |
 | `functions/prices-live/` | Deno edge function: polls Finnhub, upserts one row per ticker into `public.prices_live` (#1461, #1807) |
 | `functions/stripe-webhook/` | Deno edge function: Stripe webhooks → `workspaces` billing + Auth `plan_tier` claim sync (T2). `verify_jwt=false`. |
 | `functions/create-checkout-session/` | Deno edge function: Stripe Checkout for logged-in workspace owners (T2). |
@@ -486,10 +486,12 @@ REFERENCES, TRIGGER` schema-wide and narrows `ALTER DEFAULT PRIVILEGES` so new r
 inherit read-only. Two consequences for anyone adding a table or view here:
 
 - Follow the 050/051/052 pattern — pair every `GRANT SELECT` with an explicit `REVOKE`.
-  Migrations 041 and 018 did not, which is how `atlas_run_health` (auto-updatable and
-  `security_invoker = false`, so writes through it run as `postgres` and bypass the base
-  table's RLS) ended up accepting an unauthenticated `DELETE` of the whole
-  `atlas_run_diagnostics` history.
+  Migrations 041 and 018 did not, which is how `run_health` (then also exposed via the
+  `atlas_run_health` compat alias; auto-updatable and `security_invoker = false`, so writes
+  through it run as `postgres` and bypass the base table's RLS) ended up accepting an
+  unauthenticated `DELETE` of the whole `run_diagnostics` history. Migration 060 revoked
+  those DML grants; migration **139** dropped `atlas_run_health` — live health surfaces are
+  `run_health` / `run_event_trace` only.
 - Never widen the revoke to `REVOKE ALL` in the default-privileges statement. It would
   strip `SELECT` from the next curated view, and `safeSelect` in the frontend turns the
   resulting PostgREST 42501 into an empty panel rather than an error — a silent break.
