@@ -28,7 +28,9 @@ from digiquant.strategies.sdca.curve_optimize_feasibility import (
     _capital_deployed_penalty,
     _drawdown_penalty,
     score_shape_on_index_feasibility_aware,
+    score_shape_on_windows_robust,
     search_wide_knee_curve_feasibility_aware,
+    search_wide_knee_curve_multi_window_robust,
 )
 from digiquant.strategies.sdca.curve_shape import SdcaCurveShape
 from digiquant.strategies.sdca.walk_forward import SdcaOptimizeObjective
@@ -379,6 +381,77 @@ class TestSearchWideKneeCurveFeasibilityAwareTiered:
             dates,
             prices,
             risk,
+            initial_cash=1000.0,
+            n_random=20,
+            seed=1,
+            include_grid=False,
+        )
+        assert result.num_evaluations > 0
+        assert result.best.shape.buy_mid_knee_risk is None
+        assert result.best.shape.sell_mid_knee_risk is None
+
+
+class TestScoreShapeOnWindowsRobust:
+    def test_worst_is_min_across_windows(self) -> None:
+        dates, prices, risk = _v_cycle()
+        narrow = (
+            dates.slice(0, 60),
+            prices.slice(0, 60),
+            risk.slice(0, 60),
+        )
+        scored = score_shape_on_windows_robust(
+            [(dates, prices, risk), narrow], _shape(), 1000.0
+        )
+        direct = score_shape_on_index(
+            narrow[0], narrow[1], narrow[2], _shape(), 1000.0
+        )
+        assert scored.worst_vs_flat_dca_pct == pytest.approx(
+            min(scored.base.vs_flat_dca_pct, direct.vs_flat_dca_pct)
+        )
+
+    def test_single_window_worst_equals_primary(self) -> None:
+        dates, prices, risk = _v_cycle()
+        scored = score_shape_on_windows_robust([(dates, prices, risk)], _shape(), 1000.0)
+        assert scored.worst_vs_flat_dca_pct == pytest.approx(
+            scored.base.vs_flat_dca_pct
+        )
+
+
+class TestSearchWideKneeCurveMultiWindowRobustTiered:
+    """Tiered-search plumbing for ``search_wide_knee_curve_multi_window_robust``.
+
+    The periodic cycle driver's curve branch needs the tiered mid-knee space
+    ranked on worst-case vs-flat (not absolute return/dd); without an
+    ``extra_keys`` passthrough the tiered bounds/grid would be sampled but
+    dropped before scoring -- the same no-op class the feasibility-aware
+    tiered regression test above guards against.
+    """
+
+    def _windows(self) -> list[tuple[pl.Series, pl.Series, pl.Series]]:
+        dates, prices, risk = _v_cycle()
+        return [
+            (dates, prices, risk),
+            (dates.slice(0, 60), prices.slice(0, 60), risk.slice(0, 60)),
+        ]
+
+    def test_accepts_tiered_bounds_and_grid(self) -> None:
+        result = search_wide_knee_curve_multi_window_robust(
+            self._windows(),
+            initial_cash=1000.0,
+            n_random=20,
+            seed=1,
+            include_grid=False,
+            bounds=WIDE_KNEE_TIERED_SEARCH_BOUNDS,
+            grid=WIDE_KNEE_TIERED_COARSE_GRID,
+            extra_keys=_MID_TIER_KEYS,
+        )
+        assert result.num_evaluations > 0
+        assert result.best.shape.buy_mid_knee_risk is not None
+        assert result.best.shape.sell_mid_knee_risk is not None
+
+    def test_default_call_unaffected(self) -> None:
+        result = search_wide_knee_curve_multi_window_robust(
+            self._windows(),
             initial_cash=1000.0,
             n_random=20,
             seed=1,

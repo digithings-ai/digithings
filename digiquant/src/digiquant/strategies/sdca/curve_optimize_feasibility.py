@@ -444,6 +444,7 @@ def search_wide_knee_curve_multi_window_robust(
     include_grid: bool = True,
     bounds: dict[str, tuple[float, float]] = WIDE_KNEE_SEARCH_BOUNDS,
     grid: dict[str, tuple[float, ...]] = WIDE_KNEE_COARSE_GRID,
+    extra_keys: tuple[str, ...] = (),
     gates: CurveOptimizeGates | None = None,
 ) -> "RobustCurveSearchResult":
     """Same trial grid as ``search_wide_knee_curve_feasibility_aware``, ranked
@@ -453,10 +454,20 @@ def search_wide_knee_curve_multi_window_robust(
     Additive and opt-in: every other search function in this module and
     ``curve_optimize.py`` is untouched. In-sample only -- a winner here still
     has to clear the walk-forward OOS gate at Stage 4.
+
+    ``extra_keys`` (e.g. ``_MID_TIER_KEYS``, paired with
+    ``bounds=WIDE_KNEE_TIERED_SEARCH_BOUNDS``/``grid=WIDE_KNEE_TIERED_COARSE_GRID``)
+    opts into the tiered mid-knee/curvature search space. Defaults to ``()``,
+    so every existing caller sees byte-identical behavior.
     """
     g = gates or CurveOptimizeGates()
     trials = sample_wide_knee_curve_trials(
-        n_random=n_random, seed=seed, include_grid=include_grid, bounds=bounds, grid=grid
+        n_random=n_random,
+        seed=seed,
+        include_grid=include_grid,
+        bounds=bounds,
+        grid=grid,
+        extra_keys=extra_keys,
     )
     baseline = score_shape_on_windows_robust(
         windows, published_curve_shape(), initial_cash, gates=g
@@ -464,14 +475,19 @@ def search_wide_knee_curve_multi_window_robust(
     scored: list[RobustCurveTrialScore] = []
     for params in trials:
         try:
-            shape = SdcaCurveShape(
-                buy_max_rate=float(params["buy_max_rate"]),
-                buy_knee_risk=float(params["buy_knee_risk"]),
-                sell_knee_risk=float(params["sell_knee_risk"]),
-                sell_max_rate=float(params["sell_max_rate"]),
-                buy_curvature=float(params["buy_curvature"]),
-                sell_curvature=float(params["sell_curvature"]),
-            )
+            kwargs: dict[str, float] = {
+                "buy_max_rate": float(params["buy_max_rate"]),
+                "buy_knee_risk": float(params["buy_knee_risk"]),
+                "sell_knee_risk": float(params["sell_knee_risk"]),
+                "sell_max_rate": float(params["sell_max_rate"]),
+                "buy_curvature": float(params["buy_curvature"]),
+                "sell_curvature": float(params["sell_curvature"]),
+            }
+            for key in _MID_TIER_KEYS:
+                value = params.get(key)
+                if value is not None:
+                    kwargs[key] = float(value)
+            shape = SdcaCurveShape(**kwargs)
         except (KeyError, TypeError, ValueError):
             continue
         scored.append(score_shape_on_windows_robust(windows, shape, initial_cash, gates=g))

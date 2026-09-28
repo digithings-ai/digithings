@@ -56,7 +56,7 @@ from digiquant.strategies.sdca.curve_optimize import (
     published_indicator_weights,
 )
 from digiquant.strategies.sdca.curve_optimize_feasibility import (
-    search_wide_knee_curve_feasibility_aware,
+    search_wide_knee_curve_multi_window_robust,
 )
 from digiquant.strategies.sdca.curve_sim import evaluate_sdca_trial_curve_sim
 from digiquant.strategies.sdca.indicator_catalog import SdcaCompositeWeights
@@ -73,6 +73,7 @@ from digiquant.strategies.sdca.periodic_cycle_state import (
 from digiquant.strategies.sdca.price_oscillators import SdcaOscillatorSpec
 from digiquant.strategies.sdca.stage_a import risk_from_weighted_z
 from digiquant.strategies.sdca.two_stage import freeze_weight_params
+from digiquant.strategies.sdca.walk_forward import make_walk_forward_folds, window_slice
 
 DIGIQUANT_ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_DATA_PATH = DIGIQUANT_ROOT / "data" / "price-history" / "BTC-USD.csv"
@@ -176,8 +177,13 @@ def main() -> None:
             "stop_reason": ablation_result.stop_reason,
         }
     else:
-        # -- Step 4 (curve half): tiered feasibility-aware search --
+        # -- Step 4 (curve half): tiered robust multi-window search --
         # Weights held at best-seen (if one cleared the gate before) else live.
+        # Ranked on worst-case vs_flat_dca across full history + each gate
+        # fold's IS window (cycle-2 finding: the absolute return/dd objective
+        # picks low-deployment shapes that trail flat DCA by ~80pp IS). Fold
+        # geometry mirrors the Step-5 gate defaults (3/0.2/0.25); all windows
+        # are in-sample, so the OOS gate segments stay unseen by the search.
         if state.best_seen is not None:
             candidate_weights = SdcaCompositeWeights(**state.best_seen["weights"])
             print("  curve cycle weights: best_seen (prior gate-clearing candidate)")
@@ -186,10 +192,25 @@ def main() -> None:
             print("  curve cycle weights: live config (no best_seen yet)")
         risk_list = risk_from_weighted_z(dates, power_law_z, extra_z, candidate_weights)
         risk_s = pl.Series("risk", risk_list, dtype=pl.Float64)
-        curve_result = search_wide_knee_curve_feasibility_aware(
-            pl.Series("date", dates, dtype=pl.Date),
-            pl.Series("price", prices, dtype=pl.Float64),
-            risk_s,
+        date_s = pl.Series("date", dates, dtype=pl.Date)
+        price_s = pl.Series("price", prices, dtype=pl.Float64)
+        folds, _holdout = make_walk_forward_folds(
+            dates, n_folds=3, holdout_frac=0.2, oos_frac=0.25
+        )
+        windows = [(date_s, price_s, risk_s)]
+        for fold in folds:
+            i0 = dates.index(fold.is_start)
+            i1 = dates.index(fold.is_end)
+            w_dates, w_prices = window_slice(dates, prices, fold.is_start, fold.is_end)
+            windows.append(
+                (
+                    pl.Series("date", w_dates, dtype=pl.Date),
+                    pl.Series("price", w_prices, dtype=pl.Float64),
+                    risk_s.slice(i0, i1 - i0 + 1),
+                )
+            )
+        curve_result = search_wide_knee_curve_multi_window_robust(
+            windows,
             initial_cash=FULL_INITIAL_CASH,
             bounds=WIDE_KNEE_TIERED_SEARCH_BOUNDS,
             grid=WIDE_KNEE_TIERED_COARSE_GRID,
@@ -198,12 +219,12 @@ def main() -> None:
         candidate_shape = curve_result.best.shape
         print(
             f"  curve search: num_evaluations={curve_result.num_evaluations} "
-            f"feasibility_adjusted_score={curve_result.best.feasibility_adjusted_score:.4f} "
+            f"worst_vs_flat_dca={curve_result.best.worst_vs_flat_dca_pct:.2f}% "
             f"shape={candidate_shape.model_dump()}"
         )
         cycle_notes["curve_search"] = {
             "num_evaluations": curve_result.num_evaluations,
-            "feasibility_adjusted_score": curve_result.best.feasibility_adjusted_score,
+            "worst_vs_flat_dca_pct": curve_result.best.worst_vs_flat_dca_pct,
             "notes": curve_result.notes,
         }
         remaining = tuple(state.ablation_pool_remaining)
