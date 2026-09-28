@@ -6,6 +6,7 @@ import type { DigichatDeployment } from "@/lib/deploy-config/schema";
 import { DevkitPreview } from "./devkit-preview";
 import { DevkitSummary } from "./devkit-summary";
 import { DevkitEditors, type EditorsCommit } from "./devkit-editors";
+import { DevkitExportPane } from "./devkit-export-pane";
 import {
   createDraft,
   createNewFileDraft,
@@ -124,6 +125,7 @@ export function DevkitClient() {
   const [collapsed, setCollapsed] = useState(false);
   const [editNotice, setEditNotice] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const [exportOpen, setExportOpen] = useState(false);
   const [saveNotice, setSaveNotice] = useState<string | null>(null);
   // Persisted width (external store, SSR-safe) + in-session drag override.
   const persistedWidth = useSyncExternalStore(
@@ -367,6 +369,13 @@ export function DevkitClient() {
   const previewDeployment = draft?.parsed ?? selected?.deployment ?? null;
   const previewDirty = draft ? isDirty(draft) : false;
 
+  // Export source: the live draft when one exists, else the saved redacted text.
+  const exportText = draft?.text ?? selected?.redactedText ?? null;
+  const exportSlug =
+    (exportText ? slugFromDraftText(exportText) : null) ?? selected?.label ?? "deployment";
+  const exportHost =
+    draft?.scope[0] === "hosts" && typeof draft.scope[1] === "string" ? draft.scope[1] : null;
+
   // Reloading/navigating away drops a dirty draft silently (entry-switch
   // and +new have confirm guards) — arm the native prompt while dirty (m8).
   useEffect(() => {
@@ -563,6 +572,14 @@ export function DevkitClient() {
                     <div className="flex gap-2">
                       <button
                         type="button"
+                        onClick={() => setExportOpen(true)}
+                        disabled={saving}
+                        className="flex-1 rounded-md border px-2 py-1 text-xs hover:bg-accent disabled:opacity-50"
+                      >
+                        export ⧉
+                      </button>
+                      <button
+                        type="button"
                         onClick={() => copy(draft ? draft.text : (selected?.redactedText ?? ""), "yaml")}
                         className="flex-1 rounded-md border px-2 py-1 text-xs hover:bg-accent"
                       >
@@ -656,6 +673,14 @@ export function DevkitClient() {
               </p>
             )}
           </section>
+          {exportOpen && exportText ? (
+            <DevkitExportPane
+              slug={exportSlug}
+              host={exportHost}
+              draftText={exportText}
+              onClose={() => setExportOpen(false)}
+            />
+          ) : null}
         </>
       )}
     </main>
