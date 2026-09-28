@@ -3,7 +3,6 @@
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { p } from "@/lib/base-path";
 import type { DigichatDeployment } from "@/lib/deploy-config/schema";
-import { DevkitPreview } from "./devkit-preview";
 import { DevkitSummary } from "./devkit-summary";
 import { DevkitEditors, type EditorsCommit } from "./devkit-editors";
 import { DevkitExportPane } from "./devkit-export-pane";
@@ -92,28 +91,13 @@ function slugFromDraftText(text: string): string | null {
 const RESIZE_HANDLE_CLASS =
   "w-1.5 shrink-0 cursor-col-resize border-r outline-none hover:bg-accent focus-visible:bg-accent"; // canon-allow: isolated devkit route without token bridge, no kit resize part, not product chrome
 
-function useCopy(): [string | null, (text: string, which: string) => void] {
-  const [copied, setCopied] = useState<string | null>(null);
-  return [
-    copied,
-    (text, which) => {
-      void navigator.clipboard
-        ?.writeText(text)
-        .then(() => {
-          setCopied(which);
-          window.setTimeout(() => setCopied((c) => (c === which ? null : c)), 1500);
-        })
-        .catch(() => setCopied(`failed:${which}`));
-    },
-  ];
-}
-
 /**
- * P1 devkit shell: categorized deployment picker, draft-driven live preview,
- * collapsible inspector sidebar, full-width chat. The sidebar edits a per-entry
- * draft (created from the served redacted text); the preview renders the
- * draft's last-valid `parsed` deployment. Form editors (Step 4), raw-YAML
- * editing + save UI (Step 5) plug into the same draft.
+ * P1 devkit shell: categorized deployment picker, collapsible inspector
+ * sidebar, full-width editors. The sidebar edits a per-entry draft (created
+ * from the served redacted text); the main area hosts the form editors
+ * (Step 4), raw-YAML editing + save UI (Step 5) on the same draft. The real
+ * chat surface opens via the "open chat view ↗" link (dev-only ?config=
+ * override) — there is no embedded preview.
  */
 export function DevkitClient() {
   const [entries, setEntries] = useState<DevkitEntryWire[] | null>(null);
@@ -139,7 +123,6 @@ export function DevkitClient() {
   );
   const [dragWidth, setDragWidth] = useState<number | null>(null);
   const sidebarWidth = dragWidth ?? persistedWidth;
-  const [copied, copy] = useCopy();
 
   useEffect(() => {
     if (dragWidth === null) return;
@@ -370,7 +353,6 @@ export function DevkitClient() {
       .finally(() => setSaving(false));
   };
 
-  const previewDeployment = draft?.parsed ?? selected?.deployment ?? null;
   const previewDirty = draft ? isDirty(draft) : false;
 
   // Export source: the live draft when one exists, else the saved redacted text.
@@ -379,6 +361,20 @@ export function DevkitClient() {
     (exportText ? slugFromDraftText(exportText) : null) ?? selected?.label ?? "deployment";
   const exportHost =
     draft?.scope[0] === "hosts" && typeof draft.scope[1] === "string" ? draft.scope[1] : null;
+
+  // "open chat view ↗" target: dev-only `?config=` override (see
+  // lib/deploy-config/devkit-active.ts) — bare config-tree filename only.
+  // `p()`-prefixed: raw <a> hrefs don't get Next's basePath treatment.
+  const openChatHref = (() => {
+    const id = draft?.entryId ?? selected?.id ?? null;
+    if (!id || !id.startsWith("file:")) return null; // env tenants: no file
+    const rel = id.slice("file:".length).split("#")[0].replace(/^config\//, "");
+    if (rel.split("/").some((s) => s === ".." || s === ".")) return null;
+    if (!/^[\w.-]+(?:\/[\w.-]+)*\.yaml$/.test(rel)) return null;
+    return exportHost
+      ? p(`/embed?host=${encodeURIComponent(exportHost)}&config=${rel}`)
+      : p(`/?mode=product&config=${rel}`);
+  })();
 
   // Reloading/navigating away drops a dirty draft silently (entry-switch
   // and +new have confirm guards) — arm the native prompt while dirty (m8).
@@ -392,7 +388,7 @@ export function DevkitClient() {
   }, [previewDirty]);
 
   // Step-4 form commits land here: applied edits rewrite the draft text
-  // (debounced validation + preview follow); refusals surface a notice.
+  // (debounced validation follows); refusals surface a notice.
   // Commits are refused while a save is in flight — the post-save refresh
   // rebuilds the draft from disk and would silently drop them (m2).
   const commit: EditorsCommit = (edit: TextEdit) => {
@@ -507,15 +503,6 @@ export function DevkitClient() {
                       write config/&lt;slug&gt;.yaml
                     </p>
                   ) : null}
-                  {(draft ? draft.issues : (selected?.issues ?? [])).length > 0 ? (
-                    <ul className="rounded-lg border border-destructive/50 p-2 font-mono text-xs">
-                      {(draft ? draft.issues : (selected?.issues ?? [])).map((issue) => (
-                        <li key={issue} className="text-destructive">
-                          {issue}
-                        </li>
-                      ))}
-                    </ul>
-                  ) : null}
                   {editNotice ? (
                     <p role="status" className="rounded border px-1.5 py-1 text-[11px] text-muted-foreground">
                       {editNotice}
@@ -553,84 +540,21 @@ export function DevkitClient() {
                       )}
                     </div>
                   ) : null}
-                  {draft ? (
-                    <fieldset
-                      disabled={saving}
-                      className="m-0 min-w-0 border-0 p-0"
-                      aria-label="Deployment editors"
-                    >
-                      <DevkitEditors
-                        key={draft.entryId ?? "new"}
-                        draft={draft}
-                        commit={commit}
-                      />
-                    </fieldset>
-                  ) : selected?.deployment ? (
-                    <DevkitSummary deployment={selected.deployment} />
-                  ) : (
-                    <p className="text-xs text-muted-foreground">
-                      No file text for env tenants — configuration lives in the environment.
-                    </p>
-                  )}
-                  {(draft || selected?.redactedText !== null) && (
-                    <div className="flex gap-2">
-                      <button
-                        type="button"
-                        onClick={() => setExportOpen(true)}
-                        disabled={saving}
-                        className="flex-1 rounded-md border px-2 py-1 text-xs hover:bg-accent disabled:opacity-50"
-                      >
-                        export ⧉
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => copy(draft ? draft.text : (selected?.redactedText ?? ""), "yaml")}
-                        className="flex-1 rounded-md border px-2 py-1 text-xs hover:bg-accent"
-                      >
-                        {copied === "yaml" ? "copied ✓" : "copy YAML"}
-                      </button>
-                      {(draft?.parsed ?? selected?.deployment) ? (
-                        <button
-                          type="button"
-                          onClick={() =>
-                            copy(JSON.stringify(draft?.parsed ?? selected?.deployment, null, 2), "json")
-                          }
-                          className="flex-1 rounded-md border px-2 py-1 text-xs hover:bg-accent"
-                        >
-                          {copied === "json" ? "copied ✓" : "copy JSON"}
-                        </button>
-                      ) : null}
-                    </div>
-                  )}
-                  {draft ? (
-                    <details className="rounded-lg border">
-                      <summary className="px-2 py-1.5 font-mono text-xs text-muted-foreground">
-                        raw YAML{isDirty(draft) ? " ●" : ""}
-                      </summary>
-                      <textarea
-                        aria-label="Raw YAML draft"
-                        value={draft.text}
-                        disabled={saving}
-                        onChange={(e) =>
-                          setDraft((d) => (d ? withText(d, e.target.value) : d))
-                        }
-                        spellCheck={false}
-                        rows={20}
-                        className="max-h-96 min-h-40 w-full resize-y overflow-auto border-t bg-muted/30 p-3 font-mono text-xs outline-none"
-                      />
-                    </details>
-                  ) : selected?.redactedText !== null ? (
-                    <details className="rounded-lg border">
-                      <summary className="px-2 py-1.5 font-mono text-xs text-muted-foreground">
-                        raw YAML
-                      </summary>
-                      <pre className="max-h-96 overflow-auto border-t bg-muted/30 p-3 font-mono text-xs">
-                        {selected?.redactedText}
-                      </pre>
-                    </details>
-                  ) : null}
                 </>
               )}
+              {exportText ? (
+                <div className="mt-auto pt-2">
+                  <button
+                    type="button"
+                    onClick={() => setExportOpen(true)}
+                    disabled={saving}
+                    title="Copy YAML, local compose bundle, or embed snippet"
+                    className="w-full rounded-md border px-2 py-1 text-xs hover:bg-accent disabled:opacity-50"
+                  >
+                    export ⧉
+                  </button>
+                </div>
+              ) : null}
             </div>
           </aside>
           {!collapsed ? (
@@ -663,19 +587,87 @@ export function DevkitClient() {
               </button>
             </div>
           )}
-          <section aria-label="Chat preview" className="min-w-0 flex-1 overflow-hidden">
-            {previewDeployment ? (
-              <DevkitPreview
-                key={`${selected?.id ?? "new"}:${previewDeployment.chrome.skin}:${previewDeployment.chrome.theme}`}
-                entryId={selected?.id ?? "new"}
-                deployment={previewDeployment}
-                dirty={previewDirty}
-              />
-            ) : (
-              <p className="p-4 text-sm text-muted-foreground">
-                {selected || draft ? "This entry has no valid deployment to preview." : "Loading…"}
-              </p>
-            )}
+          <section aria-label="Deployment editors" className="min-w-0 flex-1 overflow-y-auto">
+            <div className="mx-auto flex max-w-3xl flex-col gap-3 p-4">
+              <div className="flex items-center gap-2">
+                <span className="font-mono text-sm font-semibold">{exportSlug}</span>
+                {previewDirty ? (
+                  <span
+                    aria-label="unsaved changes"
+                    title="Unsaved changes"
+                    className="text-xs text-muted-foreground"
+                  >
+                    ● unsaved
+                  </span>
+                ) : null}
+                {openChatHref ? (
+                  <a
+                    href={openChatHref}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    title="Opens the real chat surface with this file active (dev-only ?config= override — last navigation wins process-wide)"
+                    className="ml-auto rounded-md border px-2 py-1 text-xs hover:bg-accent"
+                  >
+                    open chat view ↗
+                  </a>
+                ) : null}
+              </div>
+              {(draft ? draft.issues : (selected?.issues ?? [])).length > 0 ? (
+                <ul className="rounded-lg border border-destructive/50 p-2 font-mono text-xs">
+                  {(draft ? draft.issues : (selected?.issues ?? [])).map((issue) => (
+                    <li key={issue} className="text-destructive">
+                      {issue}
+                    </li>
+                  ))}
+                </ul>
+              ) : null}
+              {draft ? (
+                <fieldset
+                  disabled={saving}
+                  className="m-0 min-w-0 border-0 p-0"
+                  aria-label="Deployment editors"
+                >
+                  <DevkitEditors
+                    key={draft.entryId ?? "new"}
+                    draft={draft}
+                    commit={commit}
+                  />
+                </fieldset>
+              ) : selected?.deployment ? (
+                <DevkitSummary deployment={selected.deployment} />
+              ) : (
+                <p className="text-sm text-muted-foreground">
+                  Environment tenant — configuration lives in the environment (view-only).
+                </p>
+              )}
+              {draft ? (
+                <details className="rounded-lg border">
+                  <summary className="px-2 py-1.5 font-mono text-xs text-muted-foreground">
+                    raw YAML{isDirty(draft) ? " ●" : ""}
+                  </summary>
+                  <textarea
+                    aria-label="Raw YAML draft"
+                    value={draft.text}
+                    disabled={saving}
+                    onChange={(e) =>
+                      setDraft((d) => (d ? withText(d, e.target.value) : d))
+                    }
+                    spellCheck={false}
+                    rows={20}
+                    className="max-h-96 min-h-40 w-full resize-y overflow-auto border-t bg-muted/30 p-3 font-mono text-xs outline-none"
+                  />
+                </details>
+              ) : selected?.redactedText !== null ? (
+                <details className="rounded-lg border">
+                  <summary className="px-2 py-1.5 font-mono text-xs text-muted-foreground">
+                    raw YAML
+                  </summary>
+                  <pre className="max-h-96 overflow-auto border-t bg-muted/30 p-3 font-mono text-xs">
+                    {selected?.redactedText}
+                  </pre>
+                </details>
+              ) : null}
+            </div>
           </section>
           {exportOpen && exportText ? (
             <DevkitExportPane

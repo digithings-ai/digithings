@@ -21,6 +21,10 @@ import {
 import { resolveEmbedSeededTenant } from "@/lib/route-client-config";
 import { headers } from "next/headers";
 import EmbedClient from "./embed/embed-client";
+import {
+  parseDevkitConfigParam,
+  setDevkitActiveConfig,
+} from "@/lib/deploy-config/devkit-active";
 
 /* Pre-paint theme pin for the embed document. Runs after the root layout's
    head scripts so it deliberately wins over them; mirrors [data-theme] onto
@@ -46,6 +50,12 @@ export default async function EmbedRouteShell({
 }: {
   params: Record<string, string | string[] | undefined>;
 }) {
+  // Dev-only active-config override (#4691) — must land before tenant
+  // resolution reads getDigichatConfig(). Same semantics as `/`.
+  if (process.env.NODE_ENV !== "production") {
+    const devkitCfg = parseDevkitConfigParam(params.config);
+    if (devkitCfg !== undefined) setDevkitActiveConfig(devkitCfg);
+  }
   const hdrs = await headers();
   const referer = hdrs.get("referer") ?? hdrs.get("referrer");
   const initialTenantCfg = resolveEmbedClientConfigForPaint(
