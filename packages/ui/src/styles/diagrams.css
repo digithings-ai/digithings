@@ -814,6 +814,22 @@
   }
 }
 
+/* Walk-through text rail (AppFirstSection): remounts per step (key), so a
+ * short rise-and-fade marks each beat of the scroll journey. */
+@keyframes why-rail-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+.why-rail-step {
+  animation: why-rail-in 0.35s ease;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .arch-svg .arch-group__box,
   .arch-svg .arch-edge__line,
@@ -821,5 +837,8 @@
   .arch-svg .arch-node__glyph,
   .arch-svg .arch-node__label {
     transition: none;
+  }
+  .why-rail-step {
+    animation: none;
   }
 }

@@ -271,13 +271,12 @@ export function AppFirstSection() {
               <span className={LABEL}>
                 {morphIdx < 0 ? "their stack" : "digithings stack"} · {stepNo} of {stepTotal}
               </span>
-              <h3
-                key={curStep.id}
-                className="m-0 pt-[0.5rem] font-mono text-[1.05rem] font-medium leading-[1.35] text-ink"
-              >
-                {curStep.label}
-              </h3>
-              <p className="m-0 pt-[0.5rem] text-[0.85rem] leading-[1.7] text-ink-soft">{curStep.line}</p>
+              <div key={curStep.id} className="why-rail-step">
+                <h3 className="m-0 pt-[0.5rem] font-mono text-[1.05rem] font-medium leading-[1.35] text-ink">
+                  {curStep.label}
+                </h3>
+                <p className="m-0 pt-[0.5rem] text-[0.85rem] leading-[1.7] text-ink-soft">{curStep.line}</p>
+              </div>
             </aside>
             <div className="whyx__tours">
               <div className="whyx__tour">
