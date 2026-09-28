@@ -235,3 +235,22 @@ class TestCheckedInTwoStageProvenance:
         assert regularized.stage_b_params["buy_max_rate"] == pytest.approx(
             round(float(aggressive.stage_b_params["buy_max_rate"]) * 0.7, 1)
         )
+
+
+class TestCurveSimPeakDeployed:
+    def test_reports_peak_deployed(self) -> None:
+        dates = _dates(40)
+        prices = [100.0 + 0.5 * i for i in range(len(dates))]
+        shape = SdcaCurveShape(
+            buy_max_rate=10.0,
+            buy_knee_risk=35.0,
+            sell_knee_risk=80.0,
+            sell_max_rate=5.0,
+            buy_curvature=1.0,
+            sell_curvature=2.0,
+        )
+        metrics = evaluate_sdca_trial_curve_sim(
+            dates, prices, _ConstRails(), shape, 1.0, extra_indicators=[]
+        )
+        assert metrics.capital_deployed_peak_pct is not None
+        assert metrics.capital_deployed_peak_pct >= metrics.capital_deployed_pct

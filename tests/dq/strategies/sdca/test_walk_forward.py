@@ -20,6 +20,7 @@ from digiquant.strategies.sdca.walk_forward import (
     objective_score,
     params_are_valid,
     score_trial_on_folds,
+    shape_from_params,
     window_slice,
 )
 
@@ -113,6 +114,78 @@ class TestParamsAndWindow:
     def test_drawdown_magnitude_is_percent_not_fraction(self) -> None:
         # 100 → 80 is a 20% drawdown, not 0.20.
         assert max_drawdown_magnitude_pct([100.0, 90.0, 80.0, 85.0]) == pytest.approx(20.0)
+
+
+_MID_TIER_BASE = {
+    "buy_max_rate": 35.5,
+    "buy_knee_risk": 24.1,
+    "sell_knee_risk": 71.9,
+    "sell_max_rate": 21.0,
+    "buy_curvature": 1.3,
+    "sell_curvature": 4.0,
+}
+
+
+class TestShapeFromParamsMidTier:
+    def test_carries_mid_tier_keys(self) -> None:
+        shape = shape_from_params(
+            {
+                **_MID_TIER_BASE,
+                "buy_mid_knee_risk": 10.0,
+                "buy_mid_curvature": 2.0,
+                "sell_mid_knee_risk": 90.0,
+                "sell_mid_curvature": 1.5,
+            }
+        )
+        assert shape.buy_mid_knee_risk == pytest.approx(10.0)
+        assert shape.buy_mid_curvature == pytest.approx(2.0)
+        assert shape.sell_mid_knee_risk == pytest.approx(90.0)
+        assert shape.sell_mid_curvature == pytest.approx(1.5)
+
+    def test_absent_mid_tier_defaults_to_single_knee(self) -> None:
+        shape = shape_from_params(dict(_MID_TIER_BASE))
+        assert shape.buy_mid_knee_risk is None
+        assert shape.sell_mid_knee_risk is None
+        assert shape.buy_mid_curvature == pytest.approx(1.0)
+        assert shape.sell_mid_curvature == pytest.approx(1.0)
+
+
+class TestFeasibilityPeakDeployed:
+    def test_profitable_exit_passes_floor_on_peak(self) -> None:
+        # Fold 1, round 8: +116% OOS with final net deployed at -506% after
+        # profit-taking. The activity floor must measure peak deployment,
+        # not the ending cash position.
+        obj = SdcaOptimizeObjective()
+        metrics = SdcaTrialMetrics(
+            vs_flat_dca_pct=116.0,
+            vs_lump_pct=0.0,
+            capital_deployed_pct=-506.5,
+            capital_deployed_peak_pct=100.0,
+            max_drawdown_pct=20.0,
+        )
+        assert is_feasible(metrics, obj)
+
+    def test_never_deployed_still_fails_on_peak(self) -> None:
+        obj = SdcaOptimizeObjective()
+        metrics = SdcaTrialMetrics(
+            vs_flat_dca_pct=5.0,
+            vs_lump_pct=0.0,
+            capital_deployed_pct=0.0,
+            capital_deployed_peak_pct=0.0,
+            max_drawdown_pct=10.0,
+        )
+        assert not is_feasible(metrics, obj)
+
+    def test_missing_peak_falls_back_to_final(self) -> None:
+        # Pre-peak serialized results (no peak field) keep the old behavior.
+        obj = SdcaOptimizeObjective()
+        metrics = SdcaTrialMetrics(
+            vs_flat_dca_pct=5.0,
+            vs_lump_pct=0.0,
+            capital_deployed_pct=5.0,
+            max_drawdown_pct=10.0,
+        )
+        assert not is_feasible(metrics, obj)
 
 
 class TestRailsRefitPerFold:

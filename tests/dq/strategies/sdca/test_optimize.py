@@ -541,3 +541,38 @@ class TestLoadSdcaExtraZWindows:
             "load_sdca_extra_z is not threading extra_windows through to "
             "build_extra_indicators"
         )
+
+
+def _knee_dominated_evaluator(
+    dates: list[date],
+    prices: list[float],
+    model: RiskModel,
+    shape: SdcaCurveShape,
+    power_law_weight: float,
+    extra_indicators: object = None,
+) -> SdcaTrialMetrics:
+    """Synthetic evaluator whose OOS depends only on ``buy_knee_risk``."""
+    assert isinstance(model, _ConstRails)
+    return SdcaTrialMetrics(
+        vs_flat_dca_pct=-((shape.buy_knee_risk - 25.0) ** 2),
+        vs_lump_pct=-1.0,
+        capital_deployed_pct=40.0,
+        max_drawdown_pct=12.0,
+    )
+
+
+class TestSensitivityAttribution:
+    def test_worst_neighbor_key_names_dominant_param(self) -> None:
+        dates = _dates()
+        prices = [100.0 + i for i in range(len(dates))]
+        result = run_sdca_walk_forward(
+            dates,
+            prices,
+            [{**SDCA_SHAPE_DEFAULTS, "power_law_weight": 1.0}],
+            rails_fitter=_fitter,
+            evaluator=_knee_dominated_evaluator,
+            evaluator_label="synthetic_fixture",
+        )
+        assert result.sensitivity.worst_neighbor_key == "buy_knee_risk"
+        assert result.sensitivity.worst_neighbor_delta_oos_pct is not None
+        assert result.sensitivity.worst_neighbor_delta_oos_pct > 0.0

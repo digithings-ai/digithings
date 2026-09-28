@@ -93,10 +93,11 @@ def params_for(weights: SdcaCompositeWeights, shape) -> dict:
 
     Unset (None) mid-tier fields are dropped, not passed through:
     ``SdcaWalkForwardResult.best_params`` is a strict
-    ``dict[str, bool | float | int | str]`` that rejects None, and the
-    walk-forward ``shape_from_params`` path only reads the six base shape
-    keys anyway -- a single-knee live shape gates identically with or
-    without its None mid-tier keys present.
+    ``dict[str, bool | float | int | str]`` that rejects None. Set mid-tier
+    fields pass through intact, and the walk-forward ``shape_from_params``
+    path now reads them (cycle-1 finding F1), so a tiered-curve winner gates
+    on its actual searched shape -- a single-knee live shape still gates
+    identically with or without its None mid-tier keys present.
     """
     trial: dict[str, float | int | str] = dict(freeze_weight_params(weights))
     for key, value in shape.model_dump().items():

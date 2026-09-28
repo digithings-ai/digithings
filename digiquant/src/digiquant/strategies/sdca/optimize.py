@@ -98,6 +98,17 @@ class SensitivityReport(BaseModel):
     max_abs_delta_oos_pct: float
     stable: bool
     neighbor_count: int = Field(ge=0)
+    worst_neighbor_key: str | None = Field(
+        default=None,
+        description="Param whose ±frac bump moved mean OOS most. None when no "
+        "neighbor was scored. Names the instability source (knee cliff vs "
+        "discrete crash-override param vs weight) for the next diagnosis.",
+    )
+    worst_neighbor_delta_oos_pct: float | None = Field(
+        default=None,
+        description="Mean-OOS move of worst_neighbor_key's bump, in percentage "
+        "points. None when worst_neighbor_key is None.",
+    )
 
 
 class SdcaWalkForwardResult(BaseModel):
@@ -494,6 +505,8 @@ def _sensitivity_of(
 ) -> SensitivityReport:
     deltas: list[float] = []
     neighbors = sensitivity_neighbors(best_params, frac=frac)
+    worst_key: str | None = None
+    worst_delta: float | None = None
     for neighbor in neighbors:
         if missing_extra_names(composite_weights_from_params(neighbor), extra_z):
             continue
@@ -507,7 +520,14 @@ def _sensitivity_of(
             objective,
             extra_z=extra_z,
         )
-        deltas.append(abs(_mean_oos_for(scores, fold_weighting) - mean_oos))
+        delta = abs(_mean_oos_for(scores, fold_weighting) - mean_oos)
+        deltas.append(delta)
+        if worst_delta is None or delta > worst_delta:
+            changed = sorted(
+                key for key in neighbor if key not in best_params or neighbor[key] != best_params[key]
+            )
+            worst_key = changed[0] if changed else None
+            worst_delta = delta
     max_delta = max(deltas) if deltas else 0.0
     return SensitivityReport(
         frac=frac,
@@ -515,6 +535,8 @@ def _sensitivity_of(
         max_abs_delta_oos_pct=max_delta,
         stable=max_delta <= SENSITIVITY_SPIKE_PCT,
         neighbor_count=len(neighbors),
+        worst_neighbor_key=worst_key,
+        worst_neighbor_delta_oos_pct=worst_delta,
     )
 
 

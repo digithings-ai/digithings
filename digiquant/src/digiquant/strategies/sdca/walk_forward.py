@@ -23,7 +23,7 @@ from typing import Literal, Protocol
 from pydantic import BaseModel, ConfigDict, Field
 
 from digiquant.strategies.sdca.composite_risk import IndicatorWeight
-from digiquant.strategies.sdca.curve_shape import SdcaCurveShape
+from digiquant.strategies.sdca.curve_shape import _MID_TIER_KEYS, SdcaCurveShape
 from digiquant.strategies.sdca.indicator_catalog import (
     composite_weights_from_params,
     extra_indicators_for_window,
@@ -71,6 +71,13 @@ class SdcaTrialMetrics(BaseModel):
     vs_flat_dca_pct: float
     vs_lump_pct: float
     capital_deployed_pct: float
+    capital_deployed_peak_pct: float | None = Field(
+        default=None,
+        description="Max net deployed over the window. The activity floor reads "
+        "this when present: a profitable exit drives final net deployed "
+        "negative (cash above initial), which must not read as inactivity. "
+        "None on pre-peak serialized results, which fall back to the final.",
+    )
     max_drawdown_pct: float = Field(
         ...,
         description="Drawdown as a ×100 percent magnitude (15.0 = 15% peak-to-trough)",
@@ -153,15 +160,26 @@ def make_walk_forward_folds(
 
 
 def shape_from_params(params: dict[str, float | int | str]) -> SdcaCurveShape:
-    """Build ``SdcaCurveShape`` from an optimizer param dict. May raise ValueError."""
-    return SdcaCurveShape(
-        buy_max_rate=float(params["buy_max_rate"]),
-        buy_knee_risk=float(params["buy_knee_risk"]),
-        sell_knee_risk=float(params["sell_knee_risk"]),
-        sell_max_rate=float(params["sell_max_rate"]),
-        buy_curvature=float(params["buy_curvature"]),
-        sell_curvature=float(params["sell_curvature"]),
-    )
+    """Build ``SdcaCurveShape`` from an optimizer param dict. May raise ValueError.
+
+    Optional mid-tier keys (``_MID_TIER_KEYS``) pass through when present and
+    not None, so tiered-curve winners gate on their actual searched shape
+    instead of a single-knee projection. Absent keys keep the single-knee
+    defaults, identical to the previous six-field-only behavior.
+    """
+    kwargs: dict[str, float] = {
+        "buy_max_rate": float(params["buy_max_rate"]),
+        "buy_knee_risk": float(params["buy_knee_risk"]),
+        "sell_knee_risk": float(params["sell_knee_risk"]),
+        "sell_max_rate": float(params["sell_max_rate"]),
+        "buy_curvature": float(params["buy_curvature"]),
+        "sell_curvature": float(params["sell_curvature"]),
+    }
+    for key in _MID_TIER_KEYS:
+        value = params.get(key)
+        if value is not None:
+            kwargs[key] = float(value)
+    return SdcaCurveShape(**kwargs)
 
 
 def params_are_valid(params: dict[str, float | int | str]) -> bool:
@@ -317,8 +335,17 @@ def duration_weighted_mean(
 
 
 def is_feasible(metrics: SdcaTrialMetrics, objective: SdcaOptimizeObjective) -> bool:
-    """Capital-deployed floor and drawdown cap. Drawdown is a positive magnitude."""
-    if metrics.capital_deployed_pct < objective.capital_deployed_floor_pct:
+    """Capital-deployed floor and drawdown cap. Drawdown is a positive magnitude.
+
+    The floor measures *activity* via peak deployment, not the ending cash
+    position: a strategy that deploys then profitably exits ends with
+    negative final net deployed (proceeds above initial cash) and must not
+    be vetoed as inactive. Results predating the peak field fall back to
+    the final value.
+    """
+    peak = metrics.capital_deployed_peak_pct
+    deployed = peak if peak is not None else metrics.capital_deployed_pct
+    if deployed < objective.capital_deployed_floor_pct:
         return False
     if metrics.max_drawdown_pct > objective.max_drawdown_cap_pct:
         return False

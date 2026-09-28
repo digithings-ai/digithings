@@ -29,7 +29,7 @@ from digiquant.data.prices.history_cache import load_cached
 from digiquant.strategies.sdca.backtest import run_backtest
 from digiquant.strategies.sdca.btc_power_law import BtcPowerLawRiskModel, load_coefficients
 from digiquant.strategies.sdca.curve import AccumDistCurve
-from digiquant.strategies.sdca.curve_shape import SdcaCurveShape
+from digiquant.strategies.sdca.curve_shape import _MID_TIER_KEYS, SdcaCurveShape
 from digiquant.strategies.sdca.indicator_catalog import SdcaCompositeWeights, build_extra_indicators
 from digiquant.strategies.sdca.optimize import drop_extras_missing_sources, load_sdca_extra_sources
 from digiquant.strategies.sdca.presets import load_preset
@@ -77,12 +77,8 @@ _SHAPE_KEYS = (
     "sell_curvature",
 )
 
-_MID_TIER_KEYS = (
-    "buy_mid_knee_risk",
-    "buy_mid_curvature",
-    "sell_mid_knee_risk",
-    "sell_mid_curvature",
-)
+# Re-exported from curve_shape (the canonical home) for the scripts and
+# curve_optimize_feasibility that already import it from here.
 
 
 class CurveOptimizeGates(BaseModel):
