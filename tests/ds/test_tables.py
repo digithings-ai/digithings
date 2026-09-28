@@ -41,3 +41,12 @@ def test_enrich_rows_adds_display():
     out = enrich_rows(ROWS, "customer_id", {7: "Acme"}, missing="unknown")
     assert out[0]["customer_id_display"] == "Acme"
     assert out[2]["customer_id_display"] == "unknown"
+
+
+def test_compare_int_float_equality_ignores_bool():
+    from digisearch.core.tables import _compare
+
+    assert _compare("eq", 1, 1.0) is True
+    assert _compare("ne", 1, 1.0) is False
+    assert _compare("eq", True, 1) is False
+    assert _compare("ne", True, 1) is True

@@ -78,7 +78,16 @@ def _in_values(value: Any) -> set[str]:
 
 def _compare(op: str, current: Any, value: Any) -> bool:
     if op == "eq":
-        return bool(current) is value if isinstance(value, bool) else str(current) == str(value)
+        if isinstance(value, bool):
+            return bool(current) is value
+        if (
+            isinstance(current, (int, float))
+            and not isinstance(current, bool)
+            and isinstance(value, (int, float))
+            and not isinstance(value, bool)
+        ):
+            return float(current) == float(value)
+        return str(current) == str(value)
     if op == "ne":
         return not _compare("eq", current, value)
     if op == "in":
