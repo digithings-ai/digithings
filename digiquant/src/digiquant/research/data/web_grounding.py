@@ -108,6 +108,7 @@ def call_web_search_tool(
     bearer_token: str | None = None,
     exclude_domains: list[str] | None = None,
     recency_days: int | None = None,
+    provider: str | None = None,
     timeout_s: float = 120.0,
 ) -> dict[str, Any]:
     """First-party web_search tool via digigraph's orchestrator hub (#3853).
@@ -124,7 +125,11 @@ def call_web_search_tool(
     ``max_results`` pass straight through to the tool — never folded into the
     query text. ``recency_days`` (from the yaml config, #4165) is clamped to
     digisearch's 1-365 window and forwarded; ``None`` leaves digisearch's own
-    default in place. Returns ``{"summary", "sources"}`` in the
+    default in place. ``provider`` (from the yaml config, #4723) names the
+    search engine (auto/internal/exa/tavily/parallel/firecrawl/tinyfish) and
+    is forwarded only when set and not ``auto`` — a pre-#4722 digigraph has no
+    ``provider`` parameter and would TypeError on the unexpected keyword, so
+    the default path must not send it. Returns ``{"summary", "sources"}`` in the
     digigraph-compatible shape, plus ``relaxed_domains: True`` when the
     allowlist had to be relaxed.
     Raises ``RuntimeError`` when the service errors or when both the
@@ -164,7 +169,17 @@ def call_web_search_tool(
         state={"digi_bearer": token} if token else {},
     )
 
+    provider_arg = str(provider or "").strip()
+    forward_provider = provider_arg and provider_arg.lower() != "auto"
+
     def _search(include: list[str]) -> list[Any]:
+        kwargs: dict[str, Any] = {}
+        if forward_provider:
+            # Omitted when unset or auto: a pre-#4722 digigraph has no
+            # ``provider`` parameter and would TypeError on it, so the
+            # default path must stay byte-identical to today. Unknown names
+            # are the hub's call to reject (no digiquant registry).
+            kwargs["provider"] = provider_arg
         tool_out = call_digisearch_web_search(
             query,
             include_domains=include,
@@ -173,6 +188,7 @@ def call_web_search_tool(
             recency_days=recency_days,
             context=context,
             timeout=timeout_s,
+            **kwargs,
         )
         return (tool_out or {}).get("results") or []
 
@@ -232,9 +248,10 @@ def fetch_web_grounding(
 
     Tool-only: a requested search must succeed or raise
     :exc:`DashboardWebSearchError` — never ``None``. Domain scoping, the
-    result count, and the recency window (#4165) default to
-    ``search_domains.yaml`` and pass straight through to the ``web_search``
-    tool. Propagates ``relaxed_domains: True`` when a scoped search had to be
+    result count, the recency window (#4165), and the search engine
+    (``provider``, #4723) default to ``search_domains.yaml`` and pass
+    straight through to the ``web_search`` tool. Propagates
+    ``relaxed_domains: True`` when a scoped search had to be
     relaxed to keep real grounding flowing (#4086).
     ``model`` is accepted for caller compatibility and ignored: grounding
     comes from the tool, not a synthesis model.
@@ -273,6 +290,9 @@ def fetch_web_grounding(
                 "recency_days=%r is not an integer; digisearch's default applies",
                 raw_recency,
             )
+    # Search engine, digisearch vocabulary end-to-end (auto/internal/exa/
+    # tavily/parallel/firecrawl/tinyfish); the hub validates (#4723).
+    provider = cfg.get("provider", "auto")
     as_of = run_date.isoformat() if isinstance(run_date, date) else str(run_date)
     try:
         tool_out = call_web_search_tool(
@@ -281,6 +301,7 @@ def fetch_web_grounding(
             exclude_domains=excluded,
             max_results=max_results,
             recency_days=recency_days,
+            provider=provider,
         )
     except DashboardWebSearchError:
         raise
