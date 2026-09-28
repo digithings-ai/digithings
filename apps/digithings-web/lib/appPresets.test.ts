@@ -57,4 +57,18 @@ describe("app presets", () => {
     const left = providerSpec(finance.providerDefaults, finance.workload, { appLabel: finance.providerApp });
     expect(left.services.find((s) => s.id === "app")?.label).toBe("research agent");
   });
+
+  it("draws the support review lane and finance scattered sources", () => {
+    const support = APP_PRESETS.find((a) => a.id === "support")!;
+    const left = providerSpec(support.providerDefaults, support.workload, {
+      sourcesLabel: support.providerSources,
+      review: support.providerReview,
+    });
+    const ids = left.services.map((s) => s.id);
+    expect(ids).toContain("review");
+    expect(left.services.find((s) => s.id === "sources")?.label).toBe("ticket queue + docs");
+    const rag = APP_PRESETS.find((a) => a.id === "rag")!;
+    const plain = providerSpec(rag.providerDefaults, rag.workload, {});
+    expect(plain.services.map((s) => s.id)).not.toContain("review");
+  });
 });

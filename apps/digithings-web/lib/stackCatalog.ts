@@ -313,7 +313,7 @@ function vendorCount(price: StackPrice): string {
 export function providerSpec(
   pick: StackPick,
   workload: RagWorkload = DEFAULT_WORKLOAD,
-  opts: { appLabel?: string } = {},
+  opts: { appLabel?: string; sourcesLabel?: string; review?: boolean } = {},
 ): ArchSpec {
   const model = lookup(PROVIDER_LAYERS, pick, "models");
   const embed = lookup(PROVIDER_LAYERS, pick, "embeddings");
@@ -321,13 +321,26 @@ export function providerSpec(
   const telemetry = lookup(PROVIDER_LAYERS, pick, "telemetry");
   const hosting = lookup(PROVIDER_LAYERS, pick, "hosting");
   const price = pricePick(PROVIDER_LAYERS, pick, workload);
+  /* Support apps run a human review lane across the top: drafts leave the
+     model for people, approvals re-enter the product. Extra box, stable ids
+     everywhere else, so existing steps keep working. */
+  const reviewService = opts.review
+    ? [{ id: "review", label: "human review lane", icon: "server" as const, col: 1, row: 0 }]
+    : [];
+  const reviewEdges = opts.review
+    ? [
+        { from: "model", to: "review", fromSide: "B" as const, toSide: "L" as const, label: "drafts" },
+        { from: "review", to: "app", fromSide: "L" as const, toSide: "T" as const, label: "approved replies" },
+      ]
+    : [];
   return {
     title: "Your off-the-shelf stack, as picked",
     description: "The traditional stack with the picked providers on every box.",
     groups: [{ id: "platform", label: vendorCount(price), icon: "cloud", col: 0, row: 1, cols: 3, rows: 4 }],
     services: [
       { id: "app", label: opts.appLabel ?? "your product", icon: "internet", col: 0, row: 0 },
-      { id: "sources", label: "your data sources", icon: "database", col: 2, row: 0 },
+      ...reviewService,
+      { id: "sources", label: opts.sourcesLabel ?? "your data sources", icon: "database", col: 2, row: 0 },
       { id: "api", label: MODEL_GATEWAY[model.id], icon: "server", logo: model.logo, group: "platform", col: 1, row: 1 },
       { id: "model", label: MODEL_BOX[model.id], icon: "server", logo: model.logo, group: "platform", col: 0, row: 2 },
       { id: "embed", label: EMBED_BOX[embed.id], icon: "server", logo: embed.logo, group: "platform", col: 1, row: 2 },
@@ -348,6 +361,7 @@ export function providerSpec(
       { from: "model", to: "telemetry", fromSide: "B", toSide: "L", label: "their dashboard" },
       { from: "memory", to: "machines", fromSide: "B", toSide: "T", label: "same roof" },
       { from: "machines", to: "terms", fromSide: "B", toSide: "L", label: "their terms" },
+      ...reviewEdges,
     ],
   };
 }
