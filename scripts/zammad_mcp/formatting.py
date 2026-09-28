@@ -8,6 +8,7 @@ from datetime import datetime, timedelta, timezone
 from html.parser import HTMLParser
 from typing import Any
 
+from scripts.zammad_mcp.aggregate import AUTOMATION_OWNERS
 from scripts.zammad_mcp.client import PAGE_SIZE
 
 MAX_ARTICLE_BODY_CHARS = 4000
@@ -338,4 +339,31 @@ def format_ticket_report(tickets: list[dict[str, Any]], now: datetime | None = N
         _counts_line("By priority", priorities),
         f"Updated in the last {RECENT_WINDOW_DAYS} days: {recent}",
     ]
+    return "\n".join(lines)
+
+
+def format_aggregate(
+    ranked: list[dict[str, Any]],
+    group_by: str,
+    metric: str,
+    total: int,
+    since_days: int | None = None,
+) -> str:
+    """Render a windowed ranking for the model.
+
+    Customer values go through the existing mask path (masked emails only,
+    never raw); owner entries prefer the resolved ``name`` enrichment.
+    """
+    scope = f"created in the last {since_days} day(s)" if since_days is not None else "all visible"
+    if not ranked:
+        return f"No tickets to rank by {group_by} ({metric}, {scope}; {total} ticket(s) scanned)."
+    lines = [f"Top {group_by} by {metric} ({scope}; {total} ticket(s) scanned):"]
+    for index, entry in enumerate(ranked, start=1):
+        name = entry.get("name") or entry.get("value", "?")
+        if group_by == "customer":
+            name = _mask_customer(name)
+        lines.append(f"{index}. {name} — {entry.get('count', 0)}")
+    if group_by == "owner":
+        owners = ", ".join(sorted(AUTOMATION_OWNERS))
+        lines.append(f"Automation accounts ({owners}) are excluded from owner rankings.")
     return "\n".join(lines)

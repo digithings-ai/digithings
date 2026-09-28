@@ -10,11 +10,14 @@ cross-container access); every tool is GET-only.
 import argparse
 import logging
 import os
+from typing import Any
 
 from mcp.server.fastmcp import FastMCP
 
+from scripts.zammad_mcp.aggregate import VALID_GROUP_BYS, VALID_METRICS, aggregate
 from scripts.zammad_mcp.client import ZammadClient, ZammadError, keyword_terms
 from scripts.zammad_mcp.formatting import (
+    format_aggregate,
     format_search_results,
     format_ticket_detail,
     format_ticket_list,
@@ -134,6 +137,86 @@ def ticket_report() -> str:
     except ZammadError as exc:
         return f"zammad error: {exc}"
     return format_ticket_report(tickets)
+
+
+def _owner_display_names(client: ZammadClient, rows: list[dict[str, Any]]) -> dict[str, str]:
+    """Map each distinct raw owner value to a display name (best-effort, read-only).
+
+    Integer-like ids resolve via ``resolve_user`` (automation logins come back
+    as-is for the caller to flag); UUIDs and other raw strings are kept as-is.
+    Unresolvable ids fall back to the raw value so one bad owner never fails
+    the whole ranking.
+    """
+    names: dict[str, str] = {}
+    for row in rows:
+        for field in ("owner_id", "owner"):
+            raw = row.get(field)
+            if isinstance(raw, dict):
+                raw = raw.get("login") or raw.get("name") or raw.get("email")
+            if raw is None:
+                continue
+            text = str(raw).strip()
+            if not text or text in names:
+                continue
+            if text == "-":
+                names[text] = text
+                continue
+            try:
+                resolved = client.resolve_user(int(text))
+            except (ValueError, ZammadError):
+                resolved = text
+            names[text] = resolved
+    return names
+
+
+@mcp.tool()
+def aggregate_tickets(
+    group_by: str = "customer",
+    metric: str = "count",
+    since_days: int | None = None,
+    top_n: int = 5,
+) -> str:
+    """Rank customers/owners/states/groups for a time window (read-only).
+
+    group_by: customer|owner|state|group|priority|title. metric:
+    count|open_count|closed_count (open/closed from state types, never the
+    state named "open"). Window: created_at within since_days (one call,
+    limit=500). Owner logins are UUIDs — names are resolved automatically;
+    automation accounts are excluded and footnoted.
+    """
+    if group_by not in VALID_GROUP_BYS:
+        return f"zammad error: group_by must be one of {sorted(VALID_GROUP_BYS)}"
+    if metric not in VALID_METRICS:
+        return f"zammad error: metric must be one of {sorted(VALID_METRICS)}"
+    try:
+        top = max(1, int(top_n))
+    except (TypeError, ValueError):
+        return "zammad error: top_n must be an integer"
+    window_days: int | None = None
+    if since_days is not None:
+        try:
+            window_days = int(since_days)
+        except (TypeError, ValueError):
+            return "zammad error: since_days must be an integer"
+    client = _client()
+    try:
+        rows = client.fetch_window(since_days=window_days)
+        state_types = client.get_state_types()
+        owner_names = _owner_display_names(client, rows) if group_by == "owner" else None
+    except ZammadError as exc:
+        return f"zammad error: {exc}"
+    try:
+        ranked = aggregate(
+            rows,
+            group_by=group_by,
+            metric=metric,
+            top_n=top,
+            state_types=state_types,
+            owner_names=owner_names,
+        )
+    except ValueError as exc:
+        return f"zammad error: {exc}"
+    return format_aggregate(ranked, group_by, metric, len(rows), since_days=window_days)
 
 
 def run_mcp(

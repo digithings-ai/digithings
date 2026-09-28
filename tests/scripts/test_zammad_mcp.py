@@ -283,8 +283,20 @@ def test_server_registers_read_only_tools():
 
     sync_names = {tool.name for tool in server.mcp._tool_manager.list_tools()}
     async_names = {tool.name for tool in asyncio.run(server.mcp.list_tools())}
-    assert sync_names == {"search_tickets", "list_tickets", "get_ticket", "ticket_report"}
-    assert async_names == {"search_tickets", "list_tickets", "get_ticket", "ticket_report"}
+    assert sync_names == {
+        "search_tickets",
+        "list_tickets",
+        "get_ticket",
+        "ticket_report",
+        "aggregate_tickets",
+    }
+    assert async_names == {
+        "search_tickets",
+        "list_tickets",
+        "get_ticket",
+        "ticket_report",
+        "aggregate_tickets",
+    }
 
 
 class PagedTransport:
@@ -816,3 +828,238 @@ def test_resolve_user_rejects_bad_id_and_payload_without_caching():
     bad, _ = make_client(["not-a-user"])
     with pytest.raises(ZammadError, match="user payload"):
         bad.resolve_user(7)
+
+
+def test_aggregate_open_count_by_customer():
+    from scripts.zammad_mcp.aggregate import aggregate
+
+    rows = [
+        {"id": 1, "customer_id": 7, "owner_id": 5, "state": "closed", "state_type_id": 5},
+        {"id": 2, "customer_id": 7, "owner_id": 5, "state": "open", "state_type_id": 2},
+        {"id": 3, "customer_id": 9, "owner_id": 37, "state": "closed", "state_type_id": 5},
+    ]
+    types = {"closed": 5, "open": 2}
+    out = aggregate(rows, group_by="customer", metric="open_count", top_n=5, state_types=types)
+    assert out == [{"value": "7", "count": 1}]
+
+
+AGG_ROWS = [
+    {"id": 1, "customer_id": 7, "owner_id": 5, "state": "closed", "state_type_id": 5},
+    {"id": 2, "customer_id": 7, "owner_id": 5, "state": "open", "state_type_id": 2},
+    {"id": 3, "customer_id": 9, "owner_id": 37, "state": "closed", "state_type_id": 5},
+    {
+        "id": 4,
+        "customer_id": 9,
+        "owner_id": 6,
+        "state": "geloest von Dev",
+        "state_type_id": 2,
+    },
+]
+AGG_TYPES = {"closed": 5, "merged": 6, "open": 2, "geloest von dev": 2}
+
+
+def test_aggregate_closed_count_by_customer():
+    from scripts.zammad_mcp.aggregate import aggregate
+
+    out = aggregate(
+        AGG_ROWS, group_by="customer", metric="closed_count", top_n=5, state_types=AGG_TYPES
+    )
+    assert out == [{"value": "7", "count": 1}, {"value": "9", "count": 1}]
+
+
+def test_aggregate_custom_open_state_counts_as_open():
+    from scripts.zammad_mcp.aggregate import aggregate
+
+    out = aggregate(
+        AGG_ROWS, group_by="customer", metric="open_count", top_n=5, state_types=AGG_TYPES
+    )
+    assert out == [{"value": "7", "count": 1}, {"value": "9", "count": 1}]
+
+
+def test_aggregate_derives_closed_from_state_name_without_type_id():
+    from scripts.zammad_mcp.aggregate import _is_closed
+
+    assert _is_closed({"state": "merged"}, {}) is True
+    assert _is_closed({"state": "Merged"}, {}) is True
+    assert _is_closed({"state": "open"}, {}) is False
+    assert _is_closed({"state": "geloest von Dev"}, AGG_TYPES) is False
+    assert _is_closed({"state": {"name": "closed"}}, {}) is True
+    assert _is_closed({"state": "warten auf Dev", "state_type_id": 3}, {"closed": 5}) is False
+
+
+def test_aggregate_rejects_bad_group_by_and_metric():
+    from scripts.zammad_mcp.aggregate import aggregate
+
+    with pytest.raises(ValueError, match="group_by"):
+        aggregate(AGG_ROWS, group_by="owner_email")
+    with pytest.raises(ValueError, match="metric"):
+        aggregate(AGG_ROWS, group_by="customer", metric="avg")
+
+
+def test_aggregate_groups_live_shaped_rows_by_display_fields():
+    from scripts.zammad_mcp.aggregate import aggregate
+
+    rows = [
+        {"id": 1, "customer": "a@example.test", "owner": "ada", "state": "open"},
+        {"id": 2, "customer": "a@example.test", "owner": "ada", "state": "open"},
+        {"id": 3, "customer": "b@example.test", "owner": "grace", "state": "closed"},
+    ]
+    assert aggregate(rows, group_by="customer") == [
+        {"value": "a@example.test", "count": 2},
+        {"value": "b@example.test", "count": 1},
+    ]
+    assert aggregate(rows, group_by="owner") == [
+        {"value": "ada", "count": 2},
+        {"value": "grace", "count": 1},
+    ]
+    assert aggregate(rows, group_by="state") == [
+        {"value": "open", "count": 2},
+        {"value": "closed", "count": 1},
+    ]
+
+
+def test_aggregate_excludes_automation_owners_and_enriches_names():
+    from scripts.zammad_mcp.aggregate import aggregate
+
+    rows = [
+        {"id": 1, "owner_id": 5, "owner": "ada", "state": "open"},
+        {"id": 2, "owner_id": 9, "owner": "jirasync@sitaas.de", "state": "open"},
+        {"id": 3, "owner_id": 10, "owner": "-", "state": "open"},
+        {"id": 4, "owner_id": 37, "owner": "x", "state": "open"},
+    ]
+    names = {5: "Ada Lovelace", 37: "jirasync@sitaas.de"}
+    out = aggregate(rows, group_by="owner", owner_names=names)
+    assert out == [{"value": "5", "count": 1, "name": "Ada Lovelace"}]
+
+
+def test_aggregate_empty_rows():
+    from scripts.zammad_mcp.aggregate import aggregate
+
+    assert aggregate([], group_by="customer") == []
+
+
+def test_format_aggregate_renders_ranked_lines_and_masks_customers():
+    rows = [{"value": "jane.doe@example.test", "count": 3}, {"value": "7", "count": 1}]
+    out = formatting.format_aggregate(rows, "customer", "count", 4, since_days=7)
+    assert "Top customer by count (created in the last 7 day(s); 4 ticket(s) scanned):" in out
+    assert "1. j***@example.test — 3" in out
+    assert "2. 7 — 1" in out
+    assert "jane.doe@example.test" not in out
+
+
+def test_format_aggregate_empty_and_owner_footnote():
+    out = formatting.format_aggregate([], "state", "count", 0)
+    assert out == "No tickets to rank by state (count, all visible; 0 ticket(s) scanned)."
+    ranked = [{"value": "5", "count": 2, "name": "Ada Lovelace"}]
+    out = formatting.format_aggregate(ranked, "owner", "open_count", 2)
+    assert "1. Ada Lovelace — 2" in out
+    assert "Automation accounts (" in out and "excluded from owner rankings" in out
+
+
+def test_fallback_group_count_matches_tables_lib():
+    from scripts.zammad_mcp.aggregate import _fallback_group_count
+
+    from digisearch.core.tables import group_count
+
+    rows = [
+        {"customer_id": 7},
+        {"customer_id": 9},
+        {"customer_id": 7},
+        {"other": 1},
+        {"customer_id": None},
+    ]
+    assert _fallback_group_count(rows, by="customer_id", top_n=5) == group_count(
+        rows, by="customer_id", top_n=5
+    )
+    assert _fallback_group_count([], by="customer_id") == group_count([], by="customer_id")
+
+
+def test_fallback_enrich_rows_matches_tables_lib():
+    from scripts.zammad_mcp.aggregate import _fallback_enrich_rows
+
+    from digisearch.core.tables import enrich_rows
+
+    rows = [{"value": "5", "count": 2}, {"value": "9", "count": 1}]
+    lookup = {"5": "Ada Lovelace"}
+    assert _fallback_enrich_rows(
+        rows, "value", lookup, display_field="name", missing="?"
+    ) == enrich_rows(rows, "value", lookup, display_field="name", missing="?")
+
+
+class AggregateTransport:
+    """Route fake Zammad payloads by endpoint for the aggregate_tickets tool."""
+
+    def __init__(self) -> None:
+        self.calls: list[dict[str, Any]] = []
+
+    def __call__(self, url, params=None, headers=None, timeout=None):
+        self.calls.append({"url": url, "params": params})
+        if url.endswith("/api/v1/tickets/search"):
+            return [
+                dict(TICKET, id=1, owner="ada", state="open"),
+                dict(TICKET, id=2, owner="ada", state="closed"),
+                dict(TICKET, id=3, owner="grace", state="open"),
+            ]
+        if url.endswith("/api/v1/ticket_states"):
+            return [
+                {"name": "open", "state_type_id": 2},
+                {"name": "closed", "state_type_id": 5},
+            ]
+        raise AssertionError(f"unexpected url {url}")
+
+
+def test_server_aggregate_tickets_ranks_states(monkeypatch):
+    pytest.importorskip("mcp.server.fastmcp")
+    from scripts.zammad_mcp import server
+
+    transport = AggregateTransport()
+    monkeypatch.setattr(
+        server, "_client", lambda: ZammadClient(base_url=BASE, token=TOKEN, get_json=transport)
+    )
+    out = server.aggregate_tickets(group_by="state", metric="count", top_n=5)
+    assert "1. open — 2" in out
+    assert "2. closed — 1" in out
+    assert "3 ticket(s) scanned" in out
+
+
+def test_server_aggregate_tickets_open_count_uses_state_types(monkeypatch):
+    pytest.importorskip("mcp.server.fastmcp")
+    from scripts.zammad_mcp import server
+
+    transport = AggregateTransport()
+    monkeypatch.setattr(
+        server, "_client", lambda: ZammadClient(base_url=BASE, token=TOKEN, get_json=transport)
+    )
+    out = server.aggregate_tickets(group_by="state", metric="open_count", since_days=7)
+    assert "1. open — 2" in out
+    assert "closed" not in out
+    assert "created in the last 7 day(s)" in out
+
+
+def test_server_aggregate_tickets_rejects_bad_args_without_http(monkeypatch):
+    pytest.importorskip("mcp.server.fastmcp")
+    from scripts.zammad_mcp import server
+
+    transport = AggregateTransport()
+    monkeypatch.setattr(
+        server, "_client", lambda: ZammadClient(base_url=BASE, token=TOKEN, get_json=transport)
+    )
+    assert "group_by" in server.aggregate_tickets(group_by="owner_email")
+    assert "metric" in server.aggregate_tickets(metric="avg")
+    assert "top_n" in server.aggregate_tickets(top_n="many")
+    assert "since_days" in server.aggregate_tickets(since_days="recent")
+    assert transport.calls == []
+
+
+def test_server_aggregate_tickets_fails_closed_on_transport_error(monkeypatch):
+    pytest.importorskip("mcp.server.fastmcp")
+    from scripts.zammad_mcp import server
+
+    def boom(url, params=None, headers=None, timeout=None):
+        raise ZammadError("connection refused")
+
+    monkeypatch.setattr(
+        server, "_client", lambda: ZammadClient(base_url=BASE, token=TOKEN, get_json=boom)
+    )
+    out = server.aggregate_tickets(group_by="customer")
+    assert out.startswith("zammad error:")
