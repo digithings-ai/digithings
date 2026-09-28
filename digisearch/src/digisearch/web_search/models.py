@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Any, Literal
+from typing import Any, Literal  # score:allow untyped any — output extras are open-ended
 from urllib.parse import urlparse
 
 from pydantic import BaseModel, Field

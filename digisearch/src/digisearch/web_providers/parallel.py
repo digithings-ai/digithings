@@ -12,7 +12,7 @@ on the priciest tier — surfaced in ``cost_hint`` so that is a conscious pick.
 
 from __future__ import annotations
 
-from typing import Any, ClassVar
+from typing import Any, ClassVar  # score:allow untyped any — heterogeneous vendor payloads
 
 from digisearch.web_providers.base import (
     BaseWebProvider,

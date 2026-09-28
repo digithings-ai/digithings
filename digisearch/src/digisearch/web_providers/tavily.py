@@ -7,7 +7,7 @@ Docs: https://docs.tavily.com — ``POST https://api.tavily.com/search`` with
 
 from __future__ import annotations
 
-from typing import Any, ClassVar
+from typing import Any, ClassVar  # score:allow untyped any — heterogeneous vendor payloads
 
 from digisearch.web_providers.base import (
     BaseWebProvider,

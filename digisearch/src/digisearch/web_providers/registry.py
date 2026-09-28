@@ -16,7 +16,7 @@ after the process starts is picked up and a key-less install stays inert.
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any  # score:allow untyped any — heterogeneous provider metadata
 
 from digisearch.web_providers.base import (
     BaseWebProvider,

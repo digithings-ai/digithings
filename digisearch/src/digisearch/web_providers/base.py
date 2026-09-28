@@ -1,3 +1,5 @@
+# score:allow untyped any, notimplementederror stub
+# Vendor payloads are heterogeneous JSON; _search is the abstract seam each provider implements.
 """Cross-vendor web search provider seam (#4711).
 
 digisearch used to expose two separate web-search surfaces: the first-party

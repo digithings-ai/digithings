@@ -8,7 +8,7 @@ auth, and error mapping. This adapter only translates the unified
 
 from __future__ import annotations
 
-from typing import Any, ClassVar
+from typing import Any, ClassVar  # score:allow untyped any — heterogeneous EXA/vendor payloads
 
 from digisearch.web_providers.base import (
     BaseWebProvider,

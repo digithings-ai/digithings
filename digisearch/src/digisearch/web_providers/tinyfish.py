@@ -15,7 +15,7 @@ the only one of the five with a ``domain_type`` axis (``web`` / ``news`` /
 
 from __future__ import annotations
 
-from typing import Any, ClassVar
+from typing import Any, ClassVar  # score:allow untyped any — heterogeneous vendor payloads
 
 from digisearch.web_providers.base import (
     BaseWebProvider,
