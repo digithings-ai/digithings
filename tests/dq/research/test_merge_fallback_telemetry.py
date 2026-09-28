@@ -5,7 +5,7 @@ full-mode regeneration. Correct for run health, but the ``PhaseError`` had been 
 thing that ever recorded the event: production run 30636503352 (2026-07-31) logged three
 fallbacks, recorded ``status='ok'``, and listed none of the three in ``err_nodes``. A
 segment that paid for a patch call *and* a full regeneration became byte-identical in
-``atlas_run_diagnostics`` to one that merged cleanly.
+``run_diagnostics`` to one that merged cleanly.
 """
 
 from __future__ import annotations
@@ -69,7 +69,7 @@ class TestSeamRegistration:
         """Importing the module must be enough — nothing else calls the contributor.
 
         ``phases/_node_factory.py`` imports ``telemetry`` for exactly this side effect, so
-        the key reaches ``atlas_run_diagnostics.breakdown`` on a real run.
+        the key reaches ``run_diagnostics.breakdown`` on a real run.
         """
         assert merge_fallback_breakdown in diagnostics._BREAKDOWN_CONTRIBUTORS
 

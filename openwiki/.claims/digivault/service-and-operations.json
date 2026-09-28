@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "pageVersion": "sha256:5e01d1081c8ca3cb6758281cecba8a14ecf1d52417f2adb936c6944864ff4ad0",
+  "pageVersion": "sha256:75a55e3f3e357ddc74774e849d94df6261158b50713af80adaa5755cc2820dcc",
   "claims": [
     {
       "id": "claim_6e962be50cd047299eb8706fff8fea28",
@@ -14,11 +14,19 @@
     },
     {
       "id": "claim_bf5eb6c5c1f3496b8b82774c04cbfbbd",
-      "statement": "Tenant path prefixes bind server-side to the JWT tenant via DIGI_TENANT_CORPUS_MAP, no-op when unset and fail-closed once set, complementing digigraph's model-side prefix overwrite.",
+      "statement": "Tenant path prefixes bind server-side to the JWT tenant via DIGI_TENANT_CORPUS_MAP, no-op when unset and fail-closed once set, with two independent enforcement layers complementing digigraph's model-side prefix overwrite.",
       "evidence": [
         {
-          "resource": "repo://digivault/ARCHITECTURE.md#L39-L40",
-          "version": "repo-lines-v1:sha256:a92aef42de712219d5849ebad8b01c437b0cde87ccaecf016266100fc2895ba1:eyJzZWxlY3RlZExpbmVDb3VudCI6MiwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiOWE3YWRmZDU5MDU3Y2RjZWVlYzQ2OTg3NDUyYjRkZTMxNDVkNGFiMmZjMWQ2MWE2ZDE4ZDc0YzgxMTA5MTIzMCIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiZWM3OGJjOTk5MDYyMGY4NDY1OTI1NTFjOGZiMzYyYTI4Y2YwMzAyMTNjOGVjYzg5YjNkZmRlNGQ2ODc2OWI2MCIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiZmNiNDdiMjUwMDAzZDQ4YTRjZWUxODJjYzlhNzg4ODMwNDgyNTFmYTZhMTgzMTEzMWJlNmMxY2ZiM2NhYWFkYiIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiZGVlZWUyODIxNDIyYTRjMDg0YzIwZTY0ZThiZjQyNGZkM2UwN2U2OTk5NDVmMGY5NTc5Y2MxMGNjMmMwNWUyYiJ9"
+          "resource": "repo://digivault/ARCHITECTURE.md#L209-L256",
+          "version": "repo-lines-v1:sha256:e7c3f719c98d9d023df30e11c30d24a5be0c2ff37341ae9ad3164505b8f02145:eyJzZWxlY3RlZExpbmVDb3VudCI6NDgsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjE4MmY0MWY4ZDcxMWNmYTc5NDUxNmVjOTEzOWQ1MDgwNmY4NWRkODliMGQ2NmYyZmM0NzA3OTdiOWJkOThiOGYiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImY1ZGU5OTQ4MDE2MzdlYWMyNGM4YTUwNjBhOWVlNzhhMjMwMGNkNjc1MmYyMjcxNDY4N2IyYmEyZmQyNmI5MjciLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjhkYmMxYTc5MGYzYTBkMWEyY2U2OWJlNTFiOTczZDIzYzBkY2E3YmNjYmYzYTA5MmRlMmI4MmY1NzFmMDU5ZTkiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImQ3MTM4MTFmNjNlNzU5MWU1NGYyYzdkZWIzNTgyYjEzMzVlZDQ1MDdmYWJmNTBhNDI5NzQyMDk3ZWFmOWY4YmUifQ"
+        },
+        {
+          "resource": "repo://digivault/src/digivault/tenant_scope.py#L1-L71",
+          "version": "repo-lines-v1:sha256:7e11d018123216d42ab7a14ea2f42f90cc0b3bb248eb52f806cdba1effec23e1:eyJzZWxlY3RlZExpbmVDb3VudCI6NzEsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImM5ZGYzZGQ5ZGU1NDczNWNkZDdmMTljOTBkMTY2NzQ2ZTNjZWNjMzc4NjlmYjRiOWQ1ZjlkNDkyYmIyOWNkMjMiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImEzMDNlY2RkNGE0ZDEwZjE5YzczZmQ0MmZkMTI0MzdmZDMzNTRhODI2ODE2MDVkYTUyNTVhOTdhMzkwNjhkYmIiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjowLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjU1YjZlODcwNmI0MzA0N2YyYTZkYjY3ZjEzMjYzODU5NTYwNGU2N2YzNjk2Njg3NmNlMDE1OGYwMDUzZTZiZDEifQ"
+        },
+        {
+          "resource": "repo://digivault/src/digivault/tenant_scope.py#L155-L230",
+          "version": "repo-lines-v1:sha256:21fd63a0b593eede5573cd596290f57d5b09d3f0e13e802839559e2a299cf27f:eyJzZWxlY3RlZExpbmVDb3VudCI6NzYsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQ1YWE0ZWNkYThlOTFiZjAzNDA0Mjk4YmE5ODQ1YTc4NzBlYjZhMzIzMzNiMWEwMjIwNGYyNGNiNTFkYjQ1ZGEiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjU5MDlhNTNhNjE4ZDAyOGUxZDMwMDBjMGE3YWJjZWVjYmU1ZmIzN2Y0ZTUxMWVmZTQ2NjQzZmFkNmU2Njg3MmYiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjBiNDY4YWQwYWJkNWRmODYyMGJiOTRiZGZmZTg1ZjQyMTEwZWNkYThhZjc2NGE0ZDVjM2JhMDZiYWE1Zjc3M2YiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjowLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUifQ"
         }
       ]
     },
@@ -45,6 +53,6 @@
   ],
   "verification": {
     "by": "openwiki/0.5.0",
-    "at": "2026-09-09T14:37:17.158Z"
+    "at": "2026-09-23T13:25:31.068Z"
   }
 }

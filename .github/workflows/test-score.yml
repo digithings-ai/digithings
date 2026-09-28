@@ -32,7 +32,7 @@ jobs:
         run: |
           git fetch origin "${{ github.base_ref }}"
           # Exclusions (beyond docs/reviews + docs/superpowers):
-          #   cloudflare/**            — out of score's scope; the rubric is Python-oriented
+          #   apps/** + packages/**    — out of score's scope; the rubric is Python-oriented
           #                            and misfires on JS/CSS (CLAUDE.md), e.g. `regex.exec()`
           #                            flagged as "bare exec() code injection".
           #   scripts/{claude-,}hooks/** and digidev/*.example.yml — these DEFINE the
@@ -45,14 +45,14 @@ jobs:
           #                            that reads as a hardcoded secret. Both the bare and
           #                            `**/` forms are needed — git's default pathspec uses
           #                            the bare form for repo-root files and `**/` for
-          #                            nested paths. Same rationale as cloudflare/** — score
+          #                            nested paths. Same rationale as apps/** + packages/** — score
           #                            shipped code, not unactionable findings (#3798).
           # These only bite on large mixed diffs (e.g. develop→main promotions); a normal
           # PR rarely touches them. digidev's one .py file is still scored (only the
           # example config is excluded). See #1443.
           git diff "origin/${{ github.base_ref }}...HEAD" -- . \
             ':(exclude)docs/reviews/**' ':(exclude)docs/superpowers/**' \
-            ':(exclude)cloudflare/**' \
+            ':(exclude)apps/**' ':(exclude)packages/**' \
             ':(exclude)tests/**' ':(exclude)**/tests/**' \
             ':(exclude)config/**' ':(exclude)**/config/**' \
             ':(exclude)*.md' ':(exclude)**/*.md' \

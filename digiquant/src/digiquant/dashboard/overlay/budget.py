@@ -63,7 +63,7 @@ def attributed_spend_usd(
     """Sum attributed USD from WP1 in-process telemetry.
 
     ``digigraph.usage.snapshot`` is the cost-attribution reader the house
-    run already uses (reconciled against ``olympus_provider_attempts``).
+    run already uses (reconciled against ``provider_attempts``).
     Overlay must not invent a second ledger.
     """
     payload = usage_snapshot() if snapshot is None else snapshot()

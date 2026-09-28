@@ -123,7 +123,7 @@ class TestPreflightOnchain:
         from digiquant.research.phases.preflight import PreflightDeps, build_preflight_node
 
         overlay = uuid4()
-        monkeypatch.setenv("OLYMPUS_OVERLAY_PERSIST", "1")
+        monkeypatch.setenv("DIGIQUANT_OVERLAY_PERSIST", "1")
         client = FakeSupabaseClient(
             canned_reads={
                 "daily_snapshots": [],

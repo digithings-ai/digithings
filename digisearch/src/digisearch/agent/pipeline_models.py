@@ -21,7 +21,7 @@ class ResearchTurnTraceStep(BaseModel):
 
 
 class ResearchTurnState(BaseModel):
-    """LangGraph state for plan → retrieve → aggregate (SIMP-019)."""
+    """LangGraph state for plan → retrieve → aggregate (SIMP-019) and the web branch."""
 
     model_config = ConfigDict(extra="forbid")
 
@@ -41,6 +41,15 @@ class ResearchTurnState(BaseModel):
     rag_sources: list[dict[str, Any]] = Field(default_factory=list)
     formatted_context: str = ""
     error: str | None = None
+    source: str = "corpus"
+    effort: str = "fast"
+    output_schema: dict[str, Any] | None = None
+    cited_top_n: int | None = None
+    web_hits: list[dict[str, Any]] = Field(default_factory=list)
+    web_pages: list[dict[str, Any]] = Field(default_factory=list)
+    web_output: dict[str, Any] | None = None
+    cost_dollars: dict[str, Any] | None = None
+    usage: dict[str, Any] | None = None
 
 
 class ResearchTurnOutput(BaseModel):
@@ -56,3 +65,6 @@ class ResearchTurnOutput(BaseModel):
     results: list[dict[str, Any]] = Field(default_factory=list)
     rag_sources: list[dict[str, Any]] = Field(default_factory=list)
     formatted_context: str = ""
+    web_output: dict[str, Any] | None = None
+    cost_dollars: dict[str, Any] | None = None
+    usage: dict[str, Any] | None = None

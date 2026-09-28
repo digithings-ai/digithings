@@ -23,7 +23,7 @@ skipping portfolio and leaving no book (`book_materialized=false`); an unset
 `DIGISEARCH_URL` must point at a reachable digisearch. On GitHub Actions that is
 the hosted route `https://search.digithings.ai` (default), declared as a
 custom-domain `[[routes]]` entry in
-`cloudflare/digithings-stack-cloudflare/wrangler.toml` (#4063 — new external
+`apps/digithings-stack-cloudflare/wrangler.toml` (#4063 — new external
 route, owner-approved). `http://digisearch:8002` is compose-only and does not
 resolve from CI. The route is not anonymous: digisearch's `DigiAuthMiddleware`
 requires the `digisearch:query` JWT for `POST /v1/orchestrator_invoke`. The
@@ -87,7 +87,7 @@ still work. That was 2026-09-15 (run 34999170506) — the key was fine, its stor
 was not.
 
 Point digikey at durable Postgres (see the
-[stack README](../../cloudflare/digithings-stack-cloudflare/README.md)), then
+[stack README](../../apps/digithings-stack-cloudflare/README.md)), then
 **re-mint in the same change**: switching databases does not migrate keys out of
 the old SQLite store, so the previous secret stops resolving. The URL is
 required: digikey refuses to start without it rather than falling back to the

@@ -138,7 +138,7 @@ def test_house_config_workspace_id_absent_is_none() -> None:
 def test_overlay_run_writes_carry_overlay_workspace(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setenv("OLYMPUS_OVERLAY_PERSIST", "1")
+    monkeypatch.setenv("DIGIQUANT_OVERLAY_PERSIST", "1")
     seen: dict[str, object] = {}
 
     def chain(*, workspace_id, run_date, requested_version_id):
@@ -171,7 +171,7 @@ def test_overlay_persist_on_documents_only_does_not_succeed(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """Persist=1 without 113 must not prove overlay_daily succeeded."""
-    monkeypatch.setenv("OLYMPUS_OVERLAY_PERSIST", "1")
+    monkeypatch.setenv("DIGIQUANT_OVERLAY_PERSIST", "1")
     called = {"chain": False}
 
     def chain(**_kwargs: object) -> None:
@@ -200,7 +200,7 @@ def test_overlay_persist_on_documents_only_does_not_succeed(
 def test_overlay_failure_does_not_touch_house_job_rows(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setenv("OLYMPUS_OVERLAY_PERSIST", "1")
+    monkeypatch.setenv("DIGIQUANT_OVERLAY_PERSIST", "1")
     house_store = MemoryJobRunStore()
     overlay_store, ws, job = _claimed()
     credential, master = sealed_openai(ws.workspace_id)
@@ -263,7 +263,7 @@ def test_load_commit_manifests_house_uuid_ignores_overlay(
     Overlay-owned ``commit-run/overlay-spoof`` proves the workspace_id pin:
     prefix alone would still return it on a house ``commit-run/%`` like.
     """
-    monkeypatch.setenv("OLYMPUS_OVERLAY_PERSIST", "1")
+    monkeypatch.setenv("DIGIQUANT_OVERLAY_PERSIST", "1")
     overlay = uuid4()
     run_date = date(2026, 8, 30)
     iso = run_date.isoformat()
@@ -322,7 +322,7 @@ def test_overlay_book_refuses_while_legacy_unique_remains(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """Persist=1 must not stamp overlay positions/NAV onto UNIQUE(date) tables."""
-    monkeypatch.setenv("OLYMPUS_OVERLAY_PERSIST", "1")
+    monkeypatch.setenv("DIGIQUANT_OVERLAY_PERSIST", "1")
     overlay_id = uuid4()
     client = FakeSupabaseClient(
         canned_reads={

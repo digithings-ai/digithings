@@ -1,15 +1,35 @@
-# Publishes the digichat image only once a version has actually reached main
-# (passed make score + the promotion PR), decoupled on purpose from when
-# release-please-digichat.yml cuts the tag on develop (see #1343 for why not main;
-# #1948 moved it off module/digichat, which had not moved since digichat-v0.6.0).
+# Publishes the digichat image to GHCR, at two moments for the same version:
+#
+#  1. When release-please-digichat.yml cuts a `digichat-vX.Y.Z` tag on develop.
+#     The tag is the release moment, so the image exists as soon as the release
+#     does — downstream consumers (datatap-web's deploy-digichat-container.yml
+#     imports ghcr.io/digithings-ai/digichat:<version> into ACR) can deploy any
+#     released version. Previously publishing waited for the promotion to main
+#     (#1343), which left released tags without an image (#4346).
+#     The tag's version is checked against apps/digichat/package.json so a
+#     hand-made or mismatched tag cannot publish a wrong image.
+#
+#     NOTE the tag push itself cannot start this workflow: release-please runs
+#     as the built-in GITHUB_TOKEN, and events raised by that token do not create
+#     runs (#4348). release-please-digichat.yml therefore *dispatches* this
+#     workflow after it cuts the tag, and the `tags:` trigger below only serves a
+#     tag pushed by a human with a non-GITHUB_TOKEN credential.
+#
+#  2. On a push to main touching apps/digichat/** (a version can reach main
+#     without its tag push being rerun).
+#
+# Whichever trigger runs second is a no-op: the manifest check below skips
+# already-published versions.
 name: "Publish: digichat image"
 
 on:
   push:
     branches:
       - main
+    tags:
+      - "digichat-v*"
     paths:
-      - "cloudflare/digichat/**"
+      - "apps/digichat/**"
   workflow_dispatch:
 
 concurrency:
@@ -33,9 +53,22 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Read digichat version
+      - name: Resolve digichat version
         id: version
-        run: echo "version=$(jq -r .version cloudflare/digichat/package.json)" >> "$GITHUB_OUTPUT"
+        run: |
+          set -euo pipefail
+          version="$(jq -r .version apps/digichat/package.json)"
+          if [ "${GITHUB_REF_TYPE:-}" = "tag" ]; then
+            tag_version="${GITHUB_REF_NAME#digichat-v}"
+            if [ "$tag_version" != "$version" ]; then
+              echo "::error::$GITHUB_REF_NAME does not match apps/digichat/package.json ($version) — refusing to publish."
+              exit 1
+            fi
+            echo "Publishing release tag $GITHUB_REF_NAME (package.json agrees)."
+          else
+            echo "Publishing $version from ${GITHUB_REF_NAME}."
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
 
       - name: Check if this version is already published
         id: check
@@ -53,7 +86,7 @@ jobs:
         uses: docker/build-push-action@v6
         with:
           context: .
-          file: cloudflare/digichat/Dockerfile
+          file: apps/digichat/Dockerfile
           push: true
           tags: |
             ghcr.io/digithings-ai/digichat:v${{ steps.version.outputs.version }}

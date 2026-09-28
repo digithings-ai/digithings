@@ -39,7 +39,7 @@ _MODULES = {
     "digifetch": "digifetch",
     "digillm": "digillm",
     "digiskills": "digiskills",
-    "digichat": "cloudflare/digichat",
+    "digichat": "apps/digichat",
 }
 
 

@@ -37,7 +37,7 @@ Counts are **distinct findings** aggregated across module reviews (doc-only item
 | digismith | 0 | 1 | 6 | 4 | **11** |
 | digikey | 5 | 6 | 4 | 2 | **17** |
 | digiclaw | 1 | 3 | 4 | 2 | **10** |
-| cloudflare/digichat | 2 | 8 | 14 | 6 | **30** |
+| apps/digichat | 2 | 8 | 14 | 6 | **30** |
 | cloudflare/olympus + design + landings | 0 | 9 | 14 | 8 | **31** |
 | scripts + config + tests + agents | 0 | 4 | 18 | 7 | **29** |
 | github/workflows | 0 | 6 | 8 | 6 | **20** |
@@ -129,7 +129,7 @@ Counts are **distinct findings** aggregated across module reviews (doc-only item
 
 ---
 
-### cloudflare/digichat — `881710b2`
+### apps/digichat — `881710b2`
 
 | Sev | Finding | Location |
 |-----|---------|----------|
@@ -153,7 +153,7 @@ Counts are **distinct findings** aggregated across module reviews (doc-only item
 | **High** | No Olympus workflow in CI; Cloudflare deploys without monorepo gate | `.github/workflows/ci.yml` |
 | **High** | Committed `public/dashboard-data.json` (~284 KB) publicly downloadable | `cloudflare/olympus/public/` |
 | **Medium** | ReactMarkdown without `rehype-sanitize` across 7+ library views | `components/library/*` |
-| **Medium** | `innerHTML` with unescaped data in design package (ticker, typewriter) | `cloudflare/digiweb/design/*.js` |
+| **Medium** | `innerHTML` with unescaped data in design package (ticker, typewriter) | `packages/design/*.js` |
 | **Medium** | Missing `og.png`; relative OG URLs break social previews | `cloudflare/digithings/index.html` |
 | **Medium** | Docs reference missing `deploy-digiquant.yml`; `static.yml` retired | READMEs, ADR-0012 |
 
@@ -289,7 +289,7 @@ Counts are **distinct findings** aggregated across module reviews (doc-only item
 | AUDIT-091 | P2 | agents | `agents/sources/subagents/security-reviewer.md` | Orphan — not in agents.yml | Declare or remove | S |
 | AUDIT-092 | P2 | agents | `agents/sources/skills/ci-triage/SKILL.md` | Orphan skill | Declare or remove | S |
 | AUDIT-093 | P2 | agents | `docs/scoring/README.md:9-14` | Thresholds disagree with agents.yml | Align Block Merge If text | S |
-| AUDIT-094 | P2 | agents | `agents.yml:155` | digichat test_cmd wrong path | Fix to `cloudflare/digichat` workspace | S |
+| AUDIT-094 | P2 | agents | `agents.yml:155` | digichat test_cmd wrong path | Fix to `apps/digichat` workspace | S |
 | AUDIT-095 | P2 | config | `ci.yml:104-105` | Compose validate only — no litellm lint | Run `validate_model_routing.py` | S |
 | AUDIT-096 | P2 | workflows | `static.yml` | RETIRED but cited in CLAUDE.md | Update deploy docs to Cloudflare | S |
 | AUDIT-097 | P2 | workflows | local vs develop | Agent workflow renames unmerged | Merge renames; update EXECUTION_TIERS | M |

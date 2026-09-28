@@ -1,6 +1,7 @@
 # E2e contract tests gate PRs via ci.yml workflow_call.
 # Full compose stack job is develop push / workflow_dispatch only (non-blocking).
-# Requires Docker Compose + E2E_BEARER_TOKEN secret for protected routes.
+# Requires Docker Compose. Protected routes get a JWT minted from the stack this
+# job starts (no stored E2E_BEARER_TOKEN — a stored JWT would expire; #4357).
 name: "Test: e2e stack"
 
 on:
@@ -58,13 +59,47 @@ jobs:
           # (ephemeral=0 + fail-closed). Do not rely on the compose default here.
           DIGIKEY_ALLOW_EPHEMERAL_KEY: "1"
           DIGIKEY_REQUIRE_BLOCKLIST: "0"
+          # The dev_global gate is enforced by the *server* at exchange time
+          # (digikey/src/digikey/server.py:319), so the opt-in has to be in the
+          # service env. Setting it on the mint step's `exec` would only reach
+          # that one CLI process and the exchange would 403.
+          DIGIKEY_ALLOW_DEV_GLOBAL: "1"
+          # The protected-route test `test_test_llm_endpoint` calls digigraph
+          # GET /test_llm, which is opt-in and 404s otherwise
+          # (digigraph/src/digigraph/server.py:276). Compose forwards this to
+          # the digigraph service (docker-compose.yml), so the opt-in must be
+          # here on `docker compose up`, not on the pytest step.
+          DIGI_ENABLE_DEBUG_ENDPOINTS: "1"
         run: |
           cp .env.example .env
           docker compose up -d --wait digigraph digiquant digisearch digikey
 
+      # Protected-route tests need a digikey JWT. Mint one from the stack this job
+      # just started and exchange it at /v1/oauth/token. A stored JWT would expire
+      # and would have to be rotated by hand; the dev_global opt-in lives on the
+      # service env (see Start stack).
+      - name: Mint a digikey JWT for protected routes
+        run: |
+          KEY=$(docker compose exec -T digikey \
+            python -m digikey.cli issue-key \
+            --tenant default --label ci-e2e --scopes '*' --kind dev_global \
+            | sed -n 's/^api_key=//p')
+          if [ -z "$KEY" ]; then
+            echo "issue-key printed no api_key line" >&2
+            exit 1
+          fi
+          TOKEN=$(curl -sf -X POST http://127.0.0.1:8005/v1/oauth/token \
+            -H 'content-type: application/json' \
+            -d "{\"grant_type\":\"api_key\",\"api_key\":\"$KEY\"}" \
+            | python3 -c 'import json,sys; print(json.load(sys.stdin)["access_token"])')
+          if [ -z "$TOKEN" ]; then
+            echo "token exchange returned no access_token" >&2
+            exit 1
+          fi
+          echo "E2E_BEARER_TOKEN=$TOKEN" >> "$GITHUB_ENV"
+          echo "minted a bearer for protected routes (token not logged)"
+
       - name: Run e2e tests
-        env:
-          E2E_BEARER_TOKEN: ${{ secrets.E2E_BEARER_TOKEN }}
         run: |
           uv run --frozen --no-sync pytest tests/test_e2e.py -m e2e -v --tb=short
 

@@ -1,4 +1,4 @@
-"""H1/H3/H5: omitted workspace_id means the house, never every row."""
+"""thesis/vehicle_map/analyst: omitted workspace_id means the house, never every row."""
 
 from __future__ import annotations
 

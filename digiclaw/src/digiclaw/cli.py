@@ -10,6 +10,7 @@ import sys
 from datetime import datetime
 from pathlib import Path
 
+from digiclaw.schedule_schema import AgentDefinition
 from digiclaw.scheduler import (
     Scheduler,
     SchedulerError,
@@ -98,7 +99,19 @@ def _scheduler_from_args(args: argparse.Namespace) -> Scheduler:
 
     agents_dir = args.agents_dir or default_agents_dir()
     state_path = args.state or default_state_path()
-    return Scheduler(agents_dir=agents_dir, state_store=JsonStateStore(state_path))
+    return Scheduler(
+        agents_dir=agents_dir,
+        state_store=JsonStateStore(state_path),
+        runner=_dispatch_agent,
+    )
+
+
+def _dispatch_agent(agent: AgentDefinition) -> None:
+    """Run a known scheduled agent; unknown names keep the scheduler's no-op default."""
+    if agent.name == "web-watch-tick":
+        from digiclaw.monitors_tick import run_due_monitors
+
+        run_due_monitors()
 
 
 def _cmd_heartbeat(_args: argparse.Namespace) -> int:

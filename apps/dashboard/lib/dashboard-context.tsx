@@ -1,0 +1,92 @@
+'use client';
+
+import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import { getFullDashboardData } from './queries';
+import { apiGet, isApiConfigured } from './api-client';
+import type { DashboardData } from './types';
+import type { ApiEnvelope, DashboardApiData } from './api-types';
+
+/**
+ * Reachability of the live data backend, derived from what the provider already
+ * knows — no extra fetch:
+ *   - 'unconfigured': the Workers API base URL is absent (no fetch could be built).
+ *   - 'unreachable':  a dashboard fetch rejected.
+ *   - 'ok':           configured and either still loading or resolved cleanly.
+ * The three values are kept distinct so System/Settings can surface the precise
+ * cause later; the DB-down gate (app-frame) treats unconfigured == unreachable.
+ */
+export type DbStatus = 'ok' | 'unconfigured' | 'unreachable';
+
+interface DashboardContextValue {
+  data: DashboardData | null;
+  /** Specific-route payloads (portfolio/brief/performance) from the Workers API. */
+  api: DashboardApiData | null;
+  loading: boolean;
+  error: string | null;
+  dbStatus: DbStatus;
+}
+
+const DashboardContext = createContext<DashboardContextValue | null>(null);
+
+export function DashboardProvider({ children }: { children: ReactNode }) {
+  const [data, setData] = useState<DashboardData | null>(null);
+  const [api, setApi] = useState<DashboardApiData | null>(null);
+  // The Workers API base URL is static per session, so the unconfigured state
+  // is set lazily here instead of via setState inside the effect below
+  // (react-hooks/set-state-in-effect).
+  const [loading, setLoading] = useState(() => isApiConfigured());
+  const [error, setError] = useState<string | null>(() =>
+    isApiConfigured()
+      ? null
+      : 'Dashboard API is not configured (NEXT_PUBLIC_DASHBOARD_API_URL).',
+  );
+  const [reachable, setReachable] = useState(() => isApiConfigured());
+
+  useEffect(() => {
+    // The Workers API is required: both the long-tail tables (via
+    // getFullDashboardData) and the specific-route payloads come from it.
+    // Unconfigured state is already reflected in the initial values above.
+    if (!isApiConfigured()) return;
+    Promise.all([
+      getFullDashboardData(),
+      apiGet<ApiEnvelope<DashboardApiData['portfolio']>>('/portfolio').then((r) => r.data),
+      apiGet<ApiEnvelope<DashboardApiData['brief']>>('/brief').then((r) => r.data),
+      apiGet<ApiEnvelope<DashboardApiData['performance']>>('/performance').then((r) => r.data),
+    ])
+      .then(([dashboard, portfolio, brief, performance]) => {
+        setData(dashboard);
+        setApi({ portfolio, brief, performance });
+      })
+      .catch((err: unknown) => {
+        setReachable(false);
+        setError(err instanceof Error ? err.message : 'Failed to load data');
+      })
+      .finally(() => setLoading(false));
+  }, []);
+
+  // Unconfigured wins immediately and regardless of loading. Otherwise we stay
+  // 'ok' while loading so the gate never flashes during normal startup, and only
+  // flip to 'unreachable' once the fetch has actually rejected.
+  const dbStatus: DbStatus = !isApiConfigured()
+    ? 'unconfigured'
+    : reachable
+      ? 'ok'
+      : 'unreachable';
+
+  return (
+    <DashboardContext.Provider value={{ data, api, loading, error, dbStatus }}>
+      {children}
+    </DashboardContext.Provider>
+  );
+}
+
+export function useDashboard(): DashboardContextValue {
+  const ctx = useContext(DashboardContext);
+  if (!ctx) throw new Error('useDashboard must be used inside DashboardProvider');
+  return ctx;
+}
+
+/** Convenience selector for surfaces that only care about backend reachability. */
+export function useDbStatus(): DbStatus {
+  return useDashboard().dbStatus;
+}

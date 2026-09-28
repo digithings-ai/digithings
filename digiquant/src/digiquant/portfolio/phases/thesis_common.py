@@ -30,7 +30,7 @@ from digiquant.research.phases._node_factory import (
     apply_web_grounding_to_inputs,
 )
 from digiquant.research.state import PhaseError, refresh_scope_forces_full
-from digiquant.tool_rounds import run_olympus_research_agent as run_research_agent
+from digiquant.tool_rounds import run_digiquant_research_agent as run_research_agent
 
 logger = logging.getLogger(__name__)
 

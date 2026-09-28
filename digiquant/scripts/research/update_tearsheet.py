@@ -58,7 +58,7 @@ if str(_SCRIPTS_DIR) not in sys.path:
     sys.path.insert(0, str(_SCRIPTS_DIR))
 from lib.scratch_paths import AGENT_CACHE_ROOT  # noqa: E402
 
-OUTPUT_JSON = ROOT / "cloudflare" / "public" / "dashboard-data.json"
+OUTPUT_JSON = ROOT / "apps" / "dashboard" / "public" / "dashboard-data.json"
 DAILY_DIR = AGENT_CACHE_ROOT / "daily"
 PORTFOLIO_JSON = ROOT / "config" / "portfolio.json"
 

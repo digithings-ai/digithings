@@ -18,7 +18,7 @@
 | Modules with highest slop density | **digiquant** (tearsheet + atlas scripts), **digigraph** (orchestration + graph), **digisearch** (server + agent pipeline) |
 | Modules with lowest slop density | **digibase**, **digismith**, **digikey**, **digiclaw** |
 
-**Wave recommendation:** Schedule as **Wave 7 — simplify/deslop** in a *new* epic/PR series **after** security/remediation Waves 1–4 from the June full audit complete (or after Wave 5 perf items land on `develop`). **Do not fold** into Wave 5 — Wave 5 is already scoped to REM-099…105 (caching, cron, deps). Merging simplify/deslop with security fixes creates merge hell on `digigraph/server.py`, `digisearch/server.py`, `digikey/`, and `cloudflare/digichat/`.
+**Wave recommendation:** Schedule as **Wave 7 — simplify/deslop** in a *new* epic/PR series **after** security/remediation Waves 1–4 from the June full audit complete (or after Wave 5 perf items land on `develop`). **Do not fold** into Wave 5 — Wave 5 is already scoped to REM-099…105 (caching, cron, deps). Merging simplify/deslop with security fixes creates merge hell on `digigraph/server.py`, `digisearch/server.py`, `digikey/`, and `apps/digichat/`.
 
 **Estimated total cleanup effort:** ~18–28 person-days (mostly M/L in digiquant + digigraph; S sweeps elsewhere).
 
@@ -234,7 +234,7 @@ Heuristic density: **~45 files** `except Exception` (core + scripts); **`tearshe
 | `heartbeat_runner.py:92-93` | Simplify | S | Reoptimize failures only in audit — OK |
 | `audit.py:1` | Simplify | S | Single except — keep fire-and-forget contract |
 
-### cloudflare/digichat/ — effort **M**
+### apps/digichat/ — effort **M**
 
 No `any` / `as any` in TS; **~22** `catch (` sites; slop is **comment density** and **eslint-disable** patterns.
 
@@ -266,7 +266,7 @@ No `any` / `as any` in TS; **~22** `catch (` sites; slop is **comment density** 
 | `components/portfolio/PerformanceTab.tsx:170` | Deslop | S | deps disable — encode comparableKey |
 | `components/app-shell-context.tsx:33` | Reuse | S | Same sidebar width pattern as digichat shell |
 
-### cloudflare/digiweb/design/ + static landings — effort **M**
+### packages/design/ + static landings — effort **M**
 
 | Path:line | Cat | Sev | One-line fix |
 |-----------|-----|-----|--------------|
@@ -333,7 +333,7 @@ No `any` / `as any` in TS; **~22** `catch (` sites; slop is **comment density** 
 | digismith | 2 | 0 | 1 |
 | digikey | 4 | 0 | 1 |
 | digiclaw | 2 | 0 | 0 |
-| cloudflare/digichat | 0 (TS catch ~22 sites) | 0 | 2 |
+| apps/digichat | 0 (TS catch ~22 sites) | 0 | 2 |
 | cloudflare/olympus | 0 | 0 | 12+ eslint-disable |
 | scripts/*.py | 8 | — | 4 |
 

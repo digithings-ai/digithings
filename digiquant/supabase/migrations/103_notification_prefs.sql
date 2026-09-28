@@ -1,6 +1,6 @@
 -- 103_notification_prefs.sql
 --
--- Email notification preferences (K5) + dedupe log for fail-soft Mailgun dispatch.
+-- Email notification preferences (K5) + dedupe log for fail-soft notify dispatch.
 -- `notification_prefs` per spec §3; `notification_log` insert-first dedupe per
 -- (workspace_id, event_key, sent_date) so pipeline retries never double-send.
 --

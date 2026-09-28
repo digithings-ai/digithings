@@ -24,7 +24,7 @@ Respond with a single JSON object validating against **`DocumentPatch`**:
 - `section_index` + `prior_document` (hybrid prompt §5.6)
 - `bias_row` from Phase 6 (today's deterministic regime/bias surface)
 - `subsections` — today's topical markdown (when the subsection agents ran)
-- `prior_digests` — last two full briefing bodies
+- `prior_digests` (from `SHARED_CONTEXT`) — last two full briefing bodies
 - `triage_reason` when present
 
 ## Rules

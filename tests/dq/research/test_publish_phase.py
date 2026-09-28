@@ -97,7 +97,7 @@ class TestPublishNode:
         assert len(result["published"]) == len(doc_rows) + 1  # +1 for daily_snapshots
 
     def test_overlay_workspace_skips_daily_snapshots(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.setenv("OLYMPUS_OVERLAY_PERSIST", "1")
+        monkeypatch.setenv("DIGIQUANT_OVERLAY_PERSIST", "1")
         overlay = uuid4()
         client = FakeSupabaseClient()
         state = _seed_full_state(run_type="baseline")
@@ -116,7 +116,7 @@ class TestPublishNode:
     def test_house_workspace_id_still_writes_daily_snapshots(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        monkeypatch.setenv("OLYMPUS_OVERLAY_PERSIST", "1")
+        monkeypatch.setenv("DIGIQUANT_OVERLAY_PERSIST", "1")
         client = FakeSupabaseClient()
         state = _seed_full_state(run_type="baseline")
         state.config = ResearchConfigBundle(

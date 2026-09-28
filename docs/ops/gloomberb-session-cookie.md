@@ -110,29 +110,26 @@ runbook.
 
 ### Hosted MCP container
 
-**The cookie is not forwarded to the hosted container today.** The gated tools
-advertised on that surface therefore answer the typed `auth_required` until the
-wiring below ships. `DigiQuantMcpContainer.envVars`
-(`cloudflare/digithings-stack-cloudflare/src/index.ts:177-185`) forwards only
+`GLOOMBERB_SESSION_COOKIE` **is forwarded** to the hosted container
+(wiring shipped in #4260): the name is in `DigiQuantMcpContainer.envVars`
+(`apps/digithings-stack-cloudflare/src/index.ts`) beside
 `DIGIQUANT_MCP_SCOPE`, `DIGIQUANT_MARKET_DATA_BACKEND`, `FRED_API_KEY`, and the
-four `R2_*` names; that set is pinned by
-`tests/scripts/test_mcp_container.py:35-42`. The `mcp.digithings.ai` route itself
-is commented out and human-gated pending Worker-edge digikey JWT enforcement
-(`wrangler.toml:63-73`).
+four `R2_*` names; that set is pinned by `tests/scripts/test_mcp_container.py`.
+Until an operator sets the secret the variable is empty, so the gated tools on
+that surface still answer the typed `auth_required`.
 
-The exact tracked wiring (follow-up issue **#4260**) is four edits in one PR:
+Set the secret from `apps/digithings-stack-cloudflare/` with the `$VALUE`
+/ `env -u` convention from `digiquant/ARCHITECTURE.md` (never echoing the
+value):
 
-1. add `GLOOMBERB_SESSION_COOKIE: env.GLOOMBERB_SESSION_COOKIE ?? ""` to
-   `DigiQuantMcpContainer.envVars` in `src/index.ts`;
-2. put the secret with the `$VALUE` / `env -u` convention from
-   `digiquant/ARCHITECTURE.md` (never echoing the value):
-   `printf '%s' "$VALUE" | env -u CLOUDFLARE_API_TOKEN npx wrangler secret put GLOOMBERB_SESSION_COOKIE`;
-3. add the name to `MCP_SCOPED_VARS` in `tests/scripts/test_mcp_container.py`
-   and to `test_wrangler_documents_mcp_secrets`;
-4. add it to the `wrangler.toml` secrets comment (lines 135–164).
+```bash
+printf '%s' "$VALUE" | env -u CLOUDFLARE_API_TOKEN npx wrangler secret put GLOOMBERB_SESSION_COOKIE
+```
 
-Do not enable `mcp.digithings.ai` as part of that work; the route and the
-forwarding are separate, already-tracked decisions.
+The `mcp.digithings.ai` route itself is commented out and human-gated pending
+Worker-edge digikey JWT enforcement (`wrangler.toml`). Enabling the route and
+forwarding this variable are separate decisions — do not enable the route as
+part of setting the cookie.
 
 ### GitHub Actions pipeline
 
@@ -181,8 +178,9 @@ session is valid but not entitled to a Pro route (you called one of the two
   forwarded to a redirect target only when it shares the origin; a hop to
   another host drops them (`digifetch/src/digifetch/http.py:224`).
 - **Rotation is a replacement, not a flush.** To rotate, replace the value in
-  every placement (the local `.env` today, and the hosted secret once #4260 is
-  wired). Because the fingerprint separates sessions, a rotated cookie cannot
+  every placement (the local `.env` and the hosted
+  `GLOOMBERB_SESSION_COOKIE` secret). Because the fingerprint separates
+  sessions, a rotated cookie cannot
   receive a response cached under the old one — no cache flush or restart is
   needed for correctness.
 
@@ -192,4 +190,4 @@ session is valid but not entitled to a Pro route (you called one of the two
 - Family spec: [`docs/superpowers/specs/2026-09-12-digifetch-scoping-design.md`](../superpowers/specs/2026-09-12-digifetch-scoping-design.md)
 - Component map: [`digiquant/ARCHITECTURE.md`](../../digiquant/ARCHITECTURE.md)
 - Origin / tracking issues: [#4069](https://github.com/digithings-ai/digithings/issues/4069), [#4110](https://github.com/digithings-ai/digithings/issues/4110), [#4101](https://github.com/digithings-ai/digithings/issues/4101)
-- Hosted-container forwarding follow-up: [#4260](https://github.com/digithings-ai/digithings/issues/4260)
+- Hosted-container forwarding (shipped): [#4260](https://github.com/digithings-ai/digithings/issues/4260)

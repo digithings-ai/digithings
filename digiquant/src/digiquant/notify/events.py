@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from datetime import date, timedelta
 from typing import Any, Protocol  # score:allow untyped any — Supabase reader Protocol surface
 
-from digiquant.notify.mailgun import MailgunConfig, unsubscribe_url
+from digiquant.notify.cloudflare_email import CloudflareEmailConfig, unsubscribe_url
 
 
 class SupabaseReader(Protocol):
@@ -81,7 +81,7 @@ def detect_holding_changes(
     sb: SupabaseReader,
     workspace_id: str,
     run_date: date,
-    mailgun_config: MailgunConfig,
+    notify_config: CloudflareEmailConfig,
 ) -> list[HoldingChangeEvent]:
     """Compare book weights between run_date and the prior position date."""
     d = run_date.isoformat()
@@ -117,7 +117,7 @@ def detect_holding_changes(
     prior_map = {
         str(r["ticker"]): _numeric(r.get("weight_pct")) for r in prior_rows if r.get("ticker")
     }
-    unsub = unsubscribe_url(workspace_id, mailgun_config)
+    unsub = unsubscribe_url(workspace_id, notify_config)
     events: list[HoldingChangeEvent] = []
     seen: set[str] = set()
     for row in current_rows:
@@ -169,7 +169,7 @@ def detect_execution_alerts(
     sb: SupabaseReader,
     workspace_id: str,
     run_date: date,
-    mailgun_config: MailgunConfig,
+    notify_config: CloudflareEmailConfig,
 ) -> list[ExecutionAlertEvent]:
     """New broker mirror fills recorded on run_date (K4 tables)."""
     d = run_date.isoformat()
@@ -192,7 +192,7 @@ def detect_execution_alerts(
         orders_res = sb.table("broker_orders").select("id,side").in_("id", order_ids).execute()
         for row in getattr(orders_res, "data", None) or []:
             side_map[str(row["id"])] = str(row.get("side") or "buy")
-    unsub = unsubscribe_url(workspace_id, mailgun_config)
+    unsub = unsubscribe_url(workspace_id, notify_config)
     events: list[ExecutionAlertEvent] = []
     for row in fill_rows:
         fill_id = str(row.get("id") or "")

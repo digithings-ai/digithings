@@ -1,10 +1,10 @@
 ## Goal
 
-Add Graphite-inspired motion and layout tokens to `cloudflare/digiweb/design/tokens.css` so all surfaces share section rhythm, product-frame sizing, and glide easing — per [`EVOLUTION.md` §5](../../../../cloudflare/digiweb/design/EVOLUTION.md).
+Add Graphite-inspired motion and layout tokens to `packages/design/tokens.css` so all surfaces share section rhythm, product-frame sizing, and glide easing — per [`EVOLUTION.md` §5](../../../../packages/design/EVOLUTION.md).
 
 ## Component
 
-- [x] cross-cutting (`cloudflare/digiweb/design/`)
+- [x] cross-cutting (`packages/design/`)
 
 ## Acceptance Criteria
 
@@ -17,8 +17,8 @@ Add Graphite-inspired motion and layout tokens to `cloudflare/digiweb/design/tok
   - `--duration-reveal: 0.6s`
   - `--duration-hover: 0.18s`
 - [ ] Existing `--transition-speed` / `--transition-ease` unchanged (no breaking consumers)
-- [ ] `cloudflare/digiweb/design/README.md` documents new tokens in Motion + Spacing sections
-- [ ] `cloudflare/digiweb/design/EVOLUTION.md` Phase A checkbox for tokens marked done
+- [ ] `packages/design/README.md` documents new tokens in Motion + Spacing sections
+- [ ] `packages/design/EVOLUTION.md` Phase A checkbox for tokens marked done
 - [ ] `npm run build` (or workspace equivalent) passes for `digithings-web` and `digiquant-web`
 
 ## Test Requirements
@@ -28,14 +28,14 @@ Add Graphite-inspired motion and layout tokens to `cloudflare/digiweb/design/tok
 
 **Smoke:**
 ```bash
-cd cloudflare/digithings-web && npm run build
-cd cloudflare/digiquant-web && npm run build
+cd apps/digithings-web && npm run build
+cd apps/digiquant-web && npm run build
 ```
 
 ## Documentation to Update
 
-- [ ] `cloudflare/digiweb/design/README.md` — Motion & layout token tables
-- [ ] `cloudflare/digiweb/design/EVOLUTION.md` — Phase A checkbox
+- [ ] `packages/design/README.md` — Motion & layout token tables
+- [ ] `packages/design/EVOLUTION.md` — Phase A checkbox
 
 ## Scoring Targets
 

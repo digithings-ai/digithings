@@ -14,6 +14,7 @@ class FakeQuery:
     _select: str = "*"
     _order: tuple[str, bool] | None = None
     _limit: int | None = None
+    _delete: bool = False
 
     def select(self, cols: str) -> FakeQuery:
         self._select = cols
@@ -59,6 +60,10 @@ class FakeQuery:
             rows.sort(key=lambda r: r.get(col), reverse=desc)
         if self._limit is not None:
             rows = rows[: self._limit]
+        if self._delete:
+            store = self._store.get(self._table, [])
+            for row in rows:
+                store.remove(row)
         return type("R", (), {"data": rows})()
 
 
@@ -84,10 +89,13 @@ class _FakeTable:
         self._pending_insert = row
         return self
 
+    def delete(self) -> FakeQuery:
+        return FakeQuery(self._name, self._sb.tables, _delete=True)
+
     def execute(self) -> Any:
         if self._pending_insert is not None:
             row = dict(self._pending_insert)
-            if self._name == "notification_log":
+            if self._name in ("notification_log", "notification_claim"):
                 for existing in self._sb.tables.get(self._name, []):
                     if (
                         existing.get("workspace_id") == row.get("workspace_id")

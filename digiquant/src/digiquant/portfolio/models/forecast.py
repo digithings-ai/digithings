@@ -1,4 +1,4 @@
-"""Strict typed forecast contracts for portfolio H5+ (#2637 / WP4.2).
+"""Strict typed forecast contracts for portfolio analyst+ (#2637 / WP4.2).
 
 Separates LLM-proposed economics (:class:`ForecastTerms`) from deterministic
 identity and audit metadata (:class:`ForecastAssessment`). Legacy
@@ -71,7 +71,7 @@ class ForecastModel(BaseModel):
 
 
 class ForecastTerms(ForecastModel):
-    """Economic scenario terms owned by H5 (immutable once materialized).
+    """Economic scenario terms owned by analyst (immutable once materialized).
 
     Horizons are **trading sessions**, not calendar days. Scenario returns are
     ordered bear ≤ base ≤ bull; scenario probabilities are non-negative and
@@ -158,7 +158,7 @@ _FORECAST_TERMS_REQUIRED = (
 def unwrap_forecast_terms_payload(value: object) -> object:
     """Unwrap LLM ``{terms | amendment | forecast_amendment: {...}}`` envelopes.
 
-    House GHA 33426508863: SLV/IAU H6 amendments nested economics under ``terms``
+    House GHA 33426508863: SLV/IAU deliberation amendments nested economics under ``terms``
     (extra=forbid then rejected the wrapper and reported every required field
     missing). Cheap models also emit the ``amendment`` / ``forecast_amendment``
     spellings (#3299) — unwrap exactly one level for any of the three.
@@ -185,7 +185,7 @@ def unwrap_forecast_terms_payload(value: object) -> object:
 def fill_forecast_tenor_from_base(
     payload: Mapping[str, object], base_terms: ForecastTerms
 ) -> dict[str, object]:
-    """Copy missing horizon/half-life from the H5 base; never fill economics.
+    """Copy missing horizon/half-life from the analyst base; never fill economics.
 
     House GHA 33426508863 GLD omitted ``horizon_sessions`` / ``half_life_sessions``
     while sending scenario probabilities. Tenor is identity of the existing
@@ -287,7 +287,7 @@ class ForecastAssessment(ForecastModel):
 
 
 class AmendmentOutcome(StrEnum):
-    """How an H6 amendment attempt resolved relative to the immutable base."""
+    """How an deliberation amendment attempt resolved relative to the immutable base."""
 
     ACCEPTED = "accepted"
     REJECTED = "amendment_rejected"
@@ -308,7 +308,7 @@ def forecast_amendment_id(
     source_run_id: str,
     content_hash: str,
 ) -> UUID:
-    """Deterministic UUID5 for an H6 amendment of a base assessment."""
+    """Deterministic UUID5 for an deliberation amendment of a base assessment."""
     if not source_run_id.strip() or not content_hash.strip():
         raise ValueError("source_run_id and content_hash are required for amendment_id")
     return uuid5(
@@ -318,7 +318,7 @@ def forecast_amendment_id(
 
 
 class ForecastAmendment(ForecastModel):
-    """Immutable H6 replacement terms that supersede a base without rewriting it.
+    """Immutable deliberation replacement terms that supersede a base without rewriting it.
 
     ``terms`` is a complete replacement set (never a partial patch). Lineage points
     at the immutable base ``forecast_id`` and optionally a prior amendment that this
@@ -382,7 +382,7 @@ class ForecastAmendment(ForecastModel):
 
 
 class EffectiveForecast(ForecastModel):
-    """Resolved forecast H7/H9 may reference: immutable base ± one accepted amendment."""
+    """Resolved forecast direction/commit may reference: immutable base ± one accepted amendment."""
 
     effective_id: UUID
     ticker: NonEmptyId

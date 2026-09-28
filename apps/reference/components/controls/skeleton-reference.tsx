@@ -1,0 +1,115 @@
+"use client";
+
+import { useState } from "react";
+
+import { Button, Skeleton, SkeletonGroup } from "@digithings/ui/ui";
+
+/**
+ * Skeleton loading states — placeholder shapes with a shimmer sweep that stand
+ * in until content arrives, then swap 1:1 to the real layout. The shimmer is a
+ * translating gradient over ink-tinted shapes (no accent needed — reads under
+ * the monochrome default); money colors only appear in the loaded state where
+ * they mean something. A button replays the load. Reduced motion drops the
+ * shimmer and shows a static placeholder. Consumes the shared <Skeleton/> and
+ * <SkeletonGroup/> primitives from @digithings/ui; the replay control is the
+ * stock kit <Button/> (`@digithings/ui/ui`) and the hand-built `.sk-toggle*`
+ * dress is gone. `Switch` has its single canonical specimen in
+ * `form-fields-reference`.
+ */
+const METRICS = [
+  { k: "CAGR", v: "+44.9%", tone: "up" },
+  { k: "SHARPE", v: "2.31" },
+  { k: "MAX DD", v: "−18.4%", tone: "down" },
+];
+
+export function SkeletonReference() {
+  const [loading, setLoading] = useState(true);
+
+  return (
+    <section className="section-block">
+      <p className="kicker">{"// loading states"}</p>
+      <h2 className="title">Skeletons, then content.</h2>
+      <p className="section-copy">
+        Placeholder shapes with a shimmer hold the layout until data lands, then swap to the real
+        thing with no reflow. The shimmer rides ink tints so it works in any theme; money colors
+        only show once there&apos;s a number to color. Replay the load below.
+      </p>
+
+      <div className="mt-[1.2rem] flex items-center gap-[0.55rem]">
+        <Button
+          variant="outline"
+          size="sm"
+          aria-pressed={loading}
+          onClick={() => setLoading((v) => !v)}
+        >
+          {loading ? "Show loaded" : "Replay load"}
+        </Button>
+        <span className="font-mono text-[0.72rem] text-ink-soft">
+          {loading ? "loading" : "loaded"}
+        </span>
+      </div>
+
+      <SkeletonGroup busy={loading} className="mt-[1.1rem] flex flex-col gap-[1rem]">
+        {/* profile / strategy card */}
+        <article className="flex items-center gap-[0.9rem] rounded-none border border-hair bg-surface px-[1.1rem] py-[1rem]">
+          {loading ? (
+            <>
+              <Skeleton variant="circle" />
+              <div className="flex min-w-0 flex-1 flex-col gap-[0.5rem]">
+                <Skeleton width="55%" />
+                <Skeleton width="38%" />
+              </div>
+              <Skeleton variant="button" />
+            </>
+          ) : (
+            <>
+              <span
+                className="grid size-10 shrink-0 place-items-center rounded-full bg-accent/16 font-mono text-[1rem] text-accent"
+                aria-hidden="true"
+              >
+                t
+              </span>
+              <div className="flex min-w-0 flex-1 flex-col gap-[0.5rem]">
+                <p className="m-0 font-mono text-[0.9rem] text-ink">trend_xsec</p>
+                <p className="m-0 font-mono text-[0.72rem] text-ink-mute">cross-sectional momentum</p>
+              </div>
+              <Button type="button" variant="ghost">
+                View tearsheet
+              </Button>
+            </>
+          )}
+        </article>
+
+        {/* metric tiles */}
+        <div className="grid grid-cols-3 gap-[0.7rem] max-[560px]:grid-cols-1">
+          {METRICS.map((m, i) => (
+            <div
+              className="flex min-h-[4.4rem] flex-col gap-[0.5rem] rounded-none border border-hair bg-surface px-[1rem] py-[0.9rem]"
+              key={m.k}
+            >
+              {loading ? (
+                <>
+                  <Skeleton size="sm" width={`${40 + i * 8}%`} />
+                  <Skeleton variant="block" />
+                </>
+              ) : (
+                <>
+                  <span className="font-mono text-[0.54rem] uppercase tracking-[0.1em] text-ink-mute">
+                    {m.k}
+                  </span>
+                  <span
+                    className={`font-mono text-[1.3rem] tabular-nums ${
+                      m.tone === "up" ? "text-up" : m.tone === "down" ? "text-down" : "text-ink"
+                    }`}
+                  >
+                    {m.v}
+                  </span>
+                </>
+              )}
+            </div>
+          ))}
+        </div>
+      </SkeletonGroup>
+    </section>
+  );
+}

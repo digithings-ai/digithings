@@ -1,0 +1,37 @@
+# Container-only SearXNG botdetection config (#4297).
+#
+# The dev compose sidecar gets its default limiter.toml from the searxng image.
+# In this stack the ONLY caller is the in-container digisearch process (and
+# digisearch-mcp) over loopback, and SearXNG's stock rules break that:
+#   * `botdetection.ip_lists.pass_ip` is empty, so the JSON API is capped at
+#     `API_MAX = 4` requests per hour per network (ip_limit.API_WINDOW), which
+#     aborts a digiquant research segment after four queries; and
+#   * `http_user_agent` 429s a `curl`/`wget`/`Python`-matching UA before any
+#     search runs.
+# Whitelisting loopback in `pass_ip` short-circuits *all* bot methods (the
+# ip_lists check runs first in searx/limiter.py:filter_request), so the
+# in-stack primary is not throttled. `trusted_proxies` is emptied so a stray
+# X-Forwarded-For cannot re-point the client IP out of the passlist; nothing
+# is exposed beyond 127.0.0.1 anyway (GRANIAN_HOST=127.0.0.1).
+[botdetection]
+
+ipv4_prefix = 32
+ipv6_prefix = 48
+
+trusted_proxies = []
+
+[botdetection.ip_limit]
+
+filter_link_local = false
+link_token = false
+
+[botdetection.ip_lists]
+
+block_ip = []
+
+pass_ip = [
+  '127.0.0.0/8',
+  '::1',
+]
+
+pass_searxng_org = true

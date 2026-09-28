@@ -24,8 +24,8 @@ from pine_backtest import run_backtest, summarize, write_trades_csv  # noqa: E40
 DATA_DIR = Path("digiquant/data/validation")
 OUT_DIR = Path("digiquant/results/validation")
 # Published tearsheet JSON consumed by the React strategy-tearsheet library in
-# cloudflare/digiquant-web (the /strategies routes on digiquant.io).
-PUBLISH_DIR = Path("cloudflare/digiquant-web/public/strategies")
+# apps/digiquant-web (the /strategies routes on digiquant.io).
+PUBLISH_DIR = Path("apps/digiquant-web/public/strategies")
 DATA_SOURCE = "Yahoo Finance daily OHLCV CSV snapshots (data/price-history exports)"
 # The Slapper family was optimized on 2018-onward data; earlier bars only warm
 # up the indicators. Gating the traded window here keeps the tearsheet honest.

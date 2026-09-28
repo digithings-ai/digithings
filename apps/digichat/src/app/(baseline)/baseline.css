@@ -1,0 +1,28 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+/* Shared digichat app theme bridge (WS1) — variants, keyframes, dark
+   variant, shadcn @theme, :root, .dark, @layer base. Byte-identical to the
+   blocks this file and (digichat)/globals.css used to duplicate. */
+@import "@digithings/ui/styles/digichat-app-theme.css";
+
+/* Official assistant-ui template CSS (templates/default/app/globals.css). */
+
+@source "./baseline";
+
+/* The first-party `digichat` skin mounts the gallery Thread from the shared UI
+   package, whose source lives in packages/ui. Tailwind only emits utilities it
+   can see, so without this the catalog silently dropped kit-only classes — e.g.
+   the tooltip arrow suppression, which rendered as a diamond under every hover
+   label. Mirrors the package source the digichat app shell scans. */
+@source "../../../../../packages/ui/src/components/chat";
+
+
+
+/* Dark variant, shadcn @theme, :root, .dark, @layer base now live in the
+   shared bridge imported at the top of this file. */
+
+/* Footer bottom air is NOT set here: the thread footer owns its own padding
+   (pb-4 md:pb-6 in the gallery Thread), so catalog, product, and embed all
+   share one source. A host override here would silently fork the footer
+   position per surface — and in `@layer components` it would lose to the
+   pb-4/pb-6 utilities anyway. */

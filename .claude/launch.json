@@ -42,7 +42,7 @@
       "runtimeExecutable": "npm",
       "runtimeArgs": [
         "--workspace",
-        "cloudflare/digichat",
+        "apps/digichat",
         "run",
         "dev"
       ],
@@ -54,7 +54,7 @@
       "runtimeExecutable": "npm",
       "runtimeArgs": [
         "--workspace",
-        "cloudflare/digiquant-web",
+        "apps/digiquant-web",
         "run",
         "dev",
         "--",
@@ -68,7 +68,7 @@
       "runtimeExecutable": "npm",
       "runtimeArgs": [
         "--workspace",
-        "cloudflare/digithings-web",
+        "apps/digithings-web",
         "run",
         "dev",
         "--",
@@ -94,7 +94,7 @@
       "runtimeExecutable": "/bin/bash",
       "runtimeArgs": [
         "-c",
-        "cd \"$(git rev-parse --show-toplevel)\" && .venv/bin/python -m http.server 4020 --directory cloudflare/digiweb/design/demos/digiquant-landing"
+        "cd \"$(git rev-parse --show-toplevel)\" && .venv/bin/python -m http.server 4020 --directory packages/design/demos/digiquant-landing"
       ],
       "port": 4020
     },
@@ -106,7 +106,7 @@
         "http.server",
         "4030",
         "--directory",
-        "cloudflare/digiweb/design"
+        "packages/design"
       ],
       "port": 4030
     },
@@ -115,7 +115,7 @@
       "runtimeExecutable": "npm",
       "runtimeArgs": [
         "--workspace",
-        "cloudflare/dashboard",
+        "apps/dashboard",
         "run",
         "dev",
         "--",

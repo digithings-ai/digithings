@@ -15,7 +15,7 @@ from digiquant.dashboard.research_retrieval.planner import (
     AttentionReason,
     AttentionRolloutMode,
     AttentionTargetKind,
-    H6DecisionFeatures,
+    DeliberationDecisionFeatures,
     PersistedAttentionPlan,
     attention_decision_id,
     default_research_policy_path,
@@ -41,7 +41,7 @@ _STATE = UUID("aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee")
 def _ticker_features(ticker: str = "AAPL", **overrides: object):
     from digiquant.dashboard.research_retrieval.planner import AttentionFeatures
 
-    h6_base: dict[str, object] = {
+    deliberation_base: dict[str, object] = {
         "ticker": ticker,
         "roster_reason": "held",
         "held": True,
@@ -50,17 +50,17 @@ def _ticker_features(ticker: str = "AAPL", **overrides: object):
         "conviction_score": 2,
         "raw_uncertainty": "low",
     }
-    h6_overrides = {k: v for k, v in overrides.items() if k in H6DecisionFeatures.model_fields}
-    h6_base.update(h6_overrides)
+    deliberation_overrides = {k: v for k, v in overrides.items() if k in DeliberationDecisionFeatures.model_fields}
+    deliberation_base.update(deliberation_overrides)
     feature_overrides = {
-        k: v for k, v in overrides.items() if k not in H6DecisionFeatures.model_fields
+        k: v for k, v in overrides.items() if k not in DeliberationDecisionFeatures.model_fields
     }
     return AttentionFeatures(
         target_kind=AttentionTargetKind.TICKER,
         target_key=ticker,
         state_version_id=str(_STATE),
         has_prior=True,
-        h6=H6DecisionFeatures.model_validate(h6_base),
+        deliberation=DeliberationDecisionFeatures.model_validate(deliberation_base),
         **feature_overrides,  # type: ignore[arg-type]
     )
 

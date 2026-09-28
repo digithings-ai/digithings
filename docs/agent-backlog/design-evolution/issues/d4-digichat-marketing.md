@@ -1,10 +1,10 @@
 ## Goal
 
-Align **digichat** marketing/public route with Cursor "product is the hero" model — full chat chrome as pitch + `CodeSampleBand` for BYOK/API ([`EVOLUTION.md` §3 digichat](../../../../cloudflare/digiweb/design/EVOLUTION.md)).
+Align **digichat** marketing/public route with Cursor "product is the hero" model — full chat chrome as pitch + `CodeSampleBand` for BYOK/API ([`EVOLUTION.md` §3 digichat](../../../../packages/design/EVOLUTION.md)).
 
 ## Component
 
-- [x] `cloudflare/digichat/`
+- [x] `apps/digichat/`
 
 ## Acceptance Criteria
 
@@ -18,15 +18,15 @@ Align **digichat** marketing/public route with Cursor "product is the hero" mode
 ## Test Requirements
 
 ```bash
-cd cloudflare/digichat && npm run lint && npm run test
+cd apps/digichat && npm run lint && npm run test
 ```
 
 Manual: `/login`, main chat route, marketing route
 
 ## Documentation to Update
 
-- [ ] `cloudflare/digichat/README.md`
-- [ ] `cloudflare/digiweb/design/EVOLUTION.md`
+- [ ] `apps/digichat/README.md`
+- [ ] `packages/design/EVOLUTION.md`
 
 ## Out of Scope
 

@@ -14,6 +14,7 @@ import { requireBearerHeader } from "../_shared/billing-auth.ts";
 import { corsPreflight, withCors } from "../_shared/cors.ts";
 import {
   createDefaultDeps,
+  getInviteBrand,
   handleSettingsRequest,
 } from "../_shared/settings-handlers.ts";
 import { createAdminClient, jsonError } from "../_shared/supabase-admin.ts";
@@ -24,6 +25,30 @@ Deno.serve(async (req) => {
   }
 
   const authHeader = req.headers.get("Authorization");
+
+  // PUBLIC: invite-card branding for pre-signup visitors (no session yet).
+  // Narrow and display-only — see getInviteBrand. Everything else below
+  // still requires a bearer session.
+  if (req.method === "GET" && new URL(req.url).pathname.endsWith("/access/invite-brand")) {
+    let admin;
+    try {
+      admin = createAdminClient();
+    } catch {
+      return jsonError(500, "ADMIN_NOT_CONFIGURED", "Settings backend not configured");
+    }
+    try {
+      return withCors(
+        await getInviteBrand(req, {
+          admin,
+          inviteHash: Deno.env.get("FX_HUB_INVITE_HASH") ?? null,
+        }),
+      );
+    } catch (err) {
+      console.error("settings error", err instanceof Error ? err.name : "unknown");
+      return jsonError(500, "INTERNAL", "Settings request failed");
+    }
+  }
+
   const missing = requireBearerHeader(authHeader);
   if (missing) return withCors(missing);
 

@@ -72,7 +72,7 @@ def require_overlay_chain(
 
 
 def parse_overlay_profile_pin(row: dict[str, object]) -> UUID | None:
-    """Parse a tip ``olympus_profile_config.id``. Invalid rows skipped."""
+    """Parse a tip ``profile_config.id``. Invalid rows skipped."""
     raw = row.get("id")
     if raw is None:
         return None
@@ -85,7 +85,7 @@ def parse_overlay_profile_pin(row: dict[str, object]) -> UUID | None:
 def load_overlay_profile_version_id(client: object, workspace_id: UUID) -> UUID | None:
     """Latest non-house overlay profile pin for the workspace, or None."""
     result = (
-        client.table("olympus_profile_config")
+        client.table("profile_config")
         .select("id")
         .eq("workspace_id", str(workspace_id))
         .eq("is_house_default", False)

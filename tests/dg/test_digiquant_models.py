@@ -97,7 +97,7 @@ def _cheap_research_pool() -> set[str]:
 def test_portfolio_thesis_and_portfolio_slugs_route_openrouter(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """portfolio H1–H7 slugs must resolve via dashboard_models (CI has OPENROUTER_API_KEY only)."""
+    """portfolio thesis–direction slugs must resolve via dashboard_models (CI has OPENROUTER_API_KEY only)."""
     monkeypatch.setenv("DIGIQUANT_MODEL_TIER", "cheap")
     cfg = model_config._load_digiquant_models()
     cheap = cfg.tiers["cheap"]
@@ -110,7 +110,7 @@ def test_portfolio_thesis_and_portfolio_slugs_route_openrouter(
 def test_deliberation_pinned_to_json_reliable_deepseek_v4_flash(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Regression (dashboard daily, run 28014812240, #1006): H6 deliberation turns must emit
+    """Regression (dashboard daily, run 28014812240, #1006): deliberation turns must emit
     strict JSON (DeliberationPmTurn / DeliberationAnalystTurn). #991 first mapped the phase to
     the ``reasoning`` pool (prose-only deepseek-r1 → json.loads failed at char 0); #998 then
     routed it to the cheap ``research`` pool — but that pool also contains ``llama-4-maverick``,
@@ -159,7 +159,7 @@ def test_master_digest_pinned_to_v4_flash(monkeypatch: pytest.MonkeyPatch) -> No
 def test_asset_analyst_slug_resolves_to_known_good_openrouter_model(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """H5 asset-analyst must resolve from the extraction pool (CI run 27950332738)."""
+    """analyst asset-analyst must resolve from the extraction pool (CI run 27950332738)."""
     monkeypatch.setenv("DIGIQUANT_MODEL_TIER", "cheap")
     model = get_model_for_phase("portfolio/asset-analyst-AAPL")
     assert model is not None
@@ -491,43 +491,21 @@ def test_no_stale_qwen_model_ids_in_dashboard_config() -> None:
 
 @pytest.mark.unit
 def test_default_tier_is_cheap(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.delenv("OLYMPUS_MODEL_TIER", raising=False)
     monkeypatch.delenv("DIGIQUANT_MODEL_TIER", raising=False)
     assert get_digiquant_tier() == "cheap"
 
 
 @pytest.mark.unit
-def test_digiquant_model_tier_wins_over_dashboard_alias(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """#3381: DIGIQUANT_MODEL_TIER is canonical; the retired OLYMPUS_* name is ignored (#3784)."""
-    monkeypatch.setenv("DIGIQUANT_MODEL_TIER", "quality")
-    monkeypatch.setenv("OLYMPUS_MODEL_TIER", "cheap")
-    assert get_digiquant_tier() == "quality"
-
-
-@pytest.mark.unit
 def test_digiquant_model_tier_alone(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.delenv("OLYMPUS_MODEL_TIER", raising=False)
+    monkeypatch.delenv("DIGIQUANT_MODEL_TIER", raising=False)
     monkeypatch.setenv("DIGIQUANT_MODEL_TIER", "balanced")
     assert get_digiquant_tier() == "balanced"
 
 
 @pytest.mark.unit
-def test_olympus_model_tier_alone_is_ignored(monkeypatch: pytest.MonkeyPatch) -> None:
-    """#3784: sole-read — the retired OLYMPUS_MODEL_TIER no longer selects a tier."""
-    monkeypatch.delenv("DIGIQUANT_MODEL_TIER", raising=False)
-    monkeypatch.setenv("OLYMPUS_MODEL_TIER", "quality")
-    assert get_digiquant_tier() == "cheap"
-
-
-@pytest.mark.unit
-def test_empty_digiquant_model_tier_ignores_dashboard_alias(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
+def test_empty_digiquant_model_tier_is_cheap(monkeypatch: pytest.MonkeyPatch) -> None:
     """Canonical key presence (even empty) wins — matches envcompat kill-switch semantics."""
     monkeypatch.setenv("DIGIQUANT_MODEL_TIER", "")
-    monkeypatch.setenv("OLYMPUS_MODEL_TIER", "quality")
     assert get_digiquant_tier() == "cheap"
 
 
@@ -547,7 +525,6 @@ def test_edit_mode_segments_route_to_cheap_open_weight_models(
     monkeypatch: pytest.MonkeyPatch, phase_slug: str
 ) -> None:
     """#926 gate: default cheap tier pools open-weight models for edit-mode segment schemas."""
-    monkeypatch.delenv("OLYMPUS_MODEL_TIER", raising=False)
     monkeypatch.delenv("DIGIQUANT_MODEL_TIER", raising=False)
     assert get_digiquant_tier() == "cheap"
     model = get_model_for_phase(phase_slug)
@@ -609,8 +586,8 @@ def test_no_online_slug_in_any_phase_pool() -> None:
     "slug",
     [
         "portfolio/deliberation-AAPL",  # the regression: was unmapped
-        "h6_pm_challenge-AAPL",
-        "h6_analyst_response-AAPL",
+        "deliberation_pm_challenge-AAPL",
+        "deliberation_analyst_response-AAPL",
         "portfolio/asset-analyst-AAPL",
         "portfolio/pm-direction",
         "sector-technology",
@@ -640,7 +617,7 @@ def test_deliberation_slug_routes_to_research_pool(monkeypatch: pytest.MonkeyPat
     """The deliberation worker slug resolves to an OpenRouter (the #991 401 guard),
     JSON/tool-capable model — research-pool-equivalent capability. It must NOT resolve to a
     reasoning-pool-only model like deepseek-r1, whose prose output broke json.loads for the
-    H6 turns (#993). ``portfolio/deliberation-`` is pinned in ``model_modes.yaml`` (see
+    deliberation turns (#993). ``portfolio/deliberation-`` is pinned in ``model_modes.yaml`` (see
     ``test_deliberation_pinned_to_json_reliable_deepseek_v4_flash``), so the pinned model need
     not also sit in the live ``research`` pool — that pool is cost-tuned independently (#2368).
     """
@@ -701,7 +678,7 @@ def test_unresolved_capability_returns_none_under_a_bound_byok_key(
     ``server._LLM_PROBE_ERRORS``, so ``/test_llm`` would 500 instead of degrading. The
     five production callers
     (``research_agent.py``, ``portfolio_common.py``, ``thesis_common.py``,
-    ``h6_deliberation.py``, ``_node_factory.py``) all chain ``or get_model_for_mode()``
+    ``deliberation.py``, ``_node_factory.py``) all chain ``or get_model_for_mode()``
     and expect a value, not a raise.
     """
     from digigraph.llm_auth import pop_byok, push_byok_header

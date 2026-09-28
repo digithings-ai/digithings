@@ -156,6 +156,20 @@ def _open_supabase_store() -> SupabaseStore:
         raise HTTPException(status_code=503, detail=str(exc)) from exc
 
 
+_LEGACY_WARNED: set[str] = set()
+
+
+def _warn_legacy_env(canonical: str, *legacy: str) -> None:
+    if os.environ.get(canonical, "").strip():
+        return
+    for name in legacy:
+        if os.environ.get(name, "").strip():
+            if name not in _LEGACY_WARNED:
+                _LEGACY_WARNED.add(name)
+                logger.warning("Using deprecated env var %s; set %s instead", name, canonical)
+            return
+
+
 def _d1_credentials() -> tuple[str, str]:
     """Resolve the account id / API token pair D1 (and Vectorize) share.
 
@@ -168,6 +182,8 @@ def _d1_credentials() -> tuple[str, str]:
     keep working the moment this ships, with no coordinated secret-rotation required
     before deploy. Reuses ``supabase_store._first_env``'s multi-name lookup shape.
     """
+    _warn_legacy_env("CLOUDFLARE_ACCOUNT_ID", "VECTORIZE_ACCOUNT_ID", "D1_ACCOUNT_ID")
+    _warn_legacy_env("CLOUDFLARE_API_TOKEN", "VECTORIZE_API_TOKEN", "D1_API_TOKEN")
     account_id = _first_env("CLOUDFLARE_ACCOUNT_ID", "VECTORIZE_ACCOUNT_ID", "D1_ACCOUNT_ID")
     api_token = _first_env("CLOUDFLARE_API_TOKEN", "VECTORIZE_API_TOKEN", "D1_API_TOKEN")
     return account_id, api_token

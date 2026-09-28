@@ -30,14 +30,14 @@ dependencies, and clean disappearance when the payload carries no attribution.
 **In scope**
 
 - digichat's own vendored tool fallback,
-  `cloudflare/digichat/src/app/(baseline)/stock/tool-fallback.aui.tsx` (the only
+  `apps/digichat/src/app/(baseline)/stock/tool-fallback.aui.tsx` (the only
   digichat-owned tool renderer), used by the `base` and `chatgpt` skins and the
   `/baseline` preview.
 - Reuse of the shipped frontend helper
-  `cloudflare/digiweb/web/src/lib/gloomberb.ts` through the existing
-  `@digithings/web` workspace dependency.
+  `packages/ui/src/lib/gloomberb.ts` through the existing
+  `@digithings/ui` workspace dependency.
 - Tests (vitest) and a documented amendment to the vendored-file rules
-  (`cloudflare/digichat/src/app/(baseline)/stock/SOURCE.md`).
+  (`apps/digichat/src/app/(baseline)/stock/SOURCE.md`).
 
 **Not in scope** (see §9): the first-party `digichat` skin (already renders the
 line through #4130), the digigraph clipping behaviour (#4131, separate issue),
@@ -70,59 +70,59 @@ the dashboard (shipped), and catalog skins that never render tool parts.
 ### 2.2 What already renders in digichat
 
 - The shared frontend helper:
-  `cloudflare/digiweb/web/src/lib/gloomberb.ts:10-12` (constants), `:21-23`
+  `packages/ui/src/lib/gloomberb.ts:10-12` (constants), `:21-23`
   (`gloomberbTickerUrl`), `:50-73` (`readGloomberbAttribution` — unwraps a
   `result` envelope and JSON-string results, requires a non-blank `attribution`,
   and only surfaces `source_url` when it `startsWith` `GLOOMBERB_TERMINAL_URL`,
   `:68-70`).
-- Barrel export: `cloudflare/digiweb/web/src/index.ts:482-489`
+- Barrel export: `packages/ui/src/index.ts:482-489`
   (`GLOOMBERB_*`, `gloomberbTickerUrl`, `readGloomberbAttribution`,
   `GloomberbAttribution`).
 - The first-party line: `ToolFallbackAttribution` at
-  `cloudflare/digiweb/web/src/components/chat/gallery-thread/tool-fallback.aui.tsx:315-348`,
+  `packages/ui/src/components/chat/gallery-thread/tool-fallback.aui.tsx:315-348`,
   wired under the Result pane at `:802-806`; tests at
-  `cloudflare/digiweb/web/src/components/chat/digichat-thread.render.test.tsx`
+  `packages/ui/src/components/chat/digichat-thread.render.test.tsx`
   (fixture `:57-77`, positive assertion `:380-401`, negative `:403-418`).
 - That gallery thread *is* the first-party `digichat` skin:
-  `cloudflare/digichat/src/components/assistant-ui/skins/digichat.tsx:21`
-  imports `DigichatThread` from `@digithings/web/chat/thread`; `:289-303`
+  `apps/digichat/src/components/assistant-ui/skins/digichat.tsx:21`
+  imports `DigichatThread` from `@digithings/ui/chat/thread`; `:289-303`
   renders it; the behaviour is documented at
-  `cloudflare/digichat/ARCHITECTURE.md:1327` ("the first-party gallery thread
+  `apps/digichat/ARCHITECTURE.md:1327` ("the first-party gallery thread
   also renders the attribution line … unattributed payloads … render nothing
   extra").
 
 **So "digichat has zero Gloomberb references" is narrower than it reads:**
-`cloudflare/digichat/src` has none (rg, 2026-09-16), but the first-party skin
+`apps/digichat/src` has none (rg, 2026-09-16), but the first-party skin
 inherits the line from the shared package. What is missing is digichat's **own
 vendored fallback**.
 
 ### 2.3 What does not render
 
-- `cloudflare/digichat/src/app/(baseline)/stock/tool-fallback.aui.tsx` is a
+- `apps/digichat/src/app/(baseline)/stock/tool-fallback.aui.tsx` is a
   vendored copy of the public assistant-ui `base` registry (rules in
   `(baseline)/stock/SOURCE.md`: "Do not restyle these files for digichat") that
   already carries a digichat edit (`toolRowTitle`, `:27` / `:744`). Its Result
   pane lives at `:293-316`; `ToolFallbackImpl` wires only `ToolFallbackResult`
   (`:763-765`); the module has no Gloomberb import or reference.
 - Consumers of that fallback:
-  `cloudflare/digichat/src/components/assistant-ui/skins/base/thread.tsx:11,673`
+  `apps/digichat/src/components/assistant-ui/skins/base/thread.tsx:11,673`
   (the `base` skin — the default for non-first-party hosts, per
-  `cloudflare/digichat/src/lib/thread-skins.ts` `DEFAULT_THREAD_SKIN = "base"`),
-  `cloudflare/digichat/src/components/assistant-ui/skins/chatgpt.tsx:39,288-289`,
-  and `cloudflare/digichat/src/app/(baseline)/stock/thread.aui.tsx:19,456` (the
+  `apps/digichat/src/lib/thread-skins.ts` `DEFAULT_THREAD_SKIN = "base"`),
+  `apps/digichat/src/components/assistant-ui/skins/chatgpt.tsx:39,288-289`,
+  and `apps/digichat/src/app/(baseline)/stock/thread.aui.tsx:19,456` (the
   `/baseline` stock thread).
 - The other clone skins (`claude`, `grok`, `gemini`, `perplexity`) render no
   tool parts — only the two files above import a tool fallback — and
-  `cloudflare/digichat/src/components/assistant-ui/tool-fallback.tsx` is a
+  `apps/digichat/src/components/assistant-ui/tool-fallback.tsx` is a
   placeholder with zero non-test importers.
 
 ### 2.4 How a tool result reaches the row
 
 digigraph SSE `tool_result` trace →
-`cloudflare/digichat/src/lib/adapters/digithings/activity/index.ts:102-128`
+`apps/digichat/src/lib/adapters/digithings/activity/index.ts:102-128`
 (maps `payload.result` onto the span's `toolResult`; sanitized at
-`cloudflare/digichat/src/lib/chat-activity.ts:320-322`) →
-`cloudflare/digichat/src/lib/ui-stream-parts.ts:200-223` — `writeToolOutput`
+`apps/digichat/src/lib/chat-activity.ts:320-322`) →
+`apps/digichat/src/lib/ui-stream-parts.ts:200-223` — `writeToolOutput`
 emits `tool-output-available` with
 `output = {...input, result: <MCP JSON string>, durationMs}` (`:213`, `:220`) →
 the assistant-ui tool part's `result` prop → the ToolFallback. The helper's
@@ -157,7 +157,7 @@ Options considered:
 |--------|-------|---------|
 | **(a) Result-card footer line** | one presentational function in the existing fallback; no stream/adapter change | **Chosen.** Smallest delta; per-call provenance next to the data; mirrors the shipped #4130 line (`data-slot="tool-fallback-attribution"`); degrades to `null`. |
 | (b) A `source` part | adapter synthesizes an assistant-ui source part per attributed result | Rejected. Re-plumbs the stream contract (`activity/index.ts` + `ui-stream-parts.ts`), conflates RAG citations with tool provenance, detaches the credit from its row, and would still need #4131 to work at all. |
-| (c) The activity line | extend the branded activity chain | Rejected. digichat retired branded activity parts in favour of standard tool parts (`cloudflare/digichat/ARCHITECTURE.md:1339`: "1.4 `data-digichatActivity` is not written"); extending it would resurrect a retired path. |
+| (c) The activity line | extend the branded activity chain | Rejected. digichat retired branded activity parts in favour of standard tool parts (`apps/digichat/ARCHITECTURE.md:1339`: "1.4 `data-digichatActivity` is not written"); extending it would resurrect a retired path. |
 
 Wiring is a single render branch in `ToolFallbackImpl`
 (`(baseline)/stock/tool-fallback.aui.tsx:763-765`); every consumer of the
@@ -193,10 +193,10 @@ payload's `source_url` verbatim — the renderer performs no URL construction.
 5. **Surface contract.** `data-slot="tool-fallback-attribution"` on the row;
    the anchor carries `target`/`rel`; the row lives inside the collapsible
    content below the Result pane, so collapsed rows are unchanged.
-6. **Dependency contract.** Reuse `@digithings/web`, already a digichat
-   dependency (`cloudflare/digichat/package.json`); the barrel is CSS-free
+6. **Dependency contract.** Reuse `@digithings/ui`, already a digichat
+   dependency (`apps/digichat/package.json`); the barrel is CSS-free
    (verified 2026-09-16: no `.css` imports in
-   `cloudflare/digiweb/web/src/index.ts`). No new package, no fetch, no new
+   `packages/ui/src/index.ts`). No new package, no fetch, no new
    origin.
 7. **Vendoring contract.** The vendored file gains one documented, additive
    divergence (SOURCE.md edit list); no restyle of existing markup or classes.
@@ -237,7 +237,7 @@ per `scripts/project_routing.json`), one PR:
    + a source guard pinning the shared-helper import and banning hardcoded
    strings.
 4. Manual dev verification (digichat dev server) + docs
-   (`(baseline)/stock/SOURCE.md`, `cloudflare/digichat/ARCHITECTURE.md`).
+   (`(baseline)/stock/SOURCE.md`, `apps/digichat/ARCHITECTURE.md`).
 5. Ship — PR into `module/digiquant`, review coverage, merge when ready.
 
 No step touches `digikey/`, `digiquant/brokers/`, dependencies, or network
@@ -254,7 +254,7 @@ egress — no human gate.
   notice, and exactly one anchor whose `href`/`target`/`rel` match;
   unattributed and clipped payloads render zero nodes and no
   `Sourced from Gloomberb` text; a JSON-string envelope resolves the same link.
-- Static: `npx tsc --noEmit` in `cloudflare/digichat`;
+- Static: `npx tsc --noEmit` in `apps/digichat`;
   `npm run lint --workspace digichat`; `python3 scripts/check_frontend_canon.py`
   (no CSS added).
 - Manual: `make digichat-dev` → `/baseline?skin=base`,
@@ -272,7 +272,7 @@ egress — no human gate.
 |------|-----------|
 | Vendored preview fidelity | Additive line renders only on attributable payloads; documented in SOURCE.md; JS-only import (barrel verified CSS-free) keeps the `(baseline)` CSS isolation tests green. |
 | Clipped payloads show values without attribution (#4131) | Accepted, named dependency: the UI degrades to nothing; #4131 owns the upstream fix and needs no UI change on landing. |
-| Payload field drift | Single seam (`readGloomberbAttribution`), pinned by `cloudflare/digiweb/web/src/lib/gloomberb.test.ts`; a rename fails closed (no line), never renders wrong copy. |
+| Payload field drift | Single seam (`readGloomberbAttribution`), pinned by `packages/ui/src/lib/gloomberb.test.ts`; a rename fails closed (no line), never renders wrong copy. |
 | Barrel import weight | Barrel has no CSS side effects; the dashboard and digichat `components/ui/*` already import it. The package declares no `sideEffects: false`, so unused re-exports may not tree-shake; escape hatch: add a `./lib/gloomberb` subpath export (open question Q1). |
 | False credit (Yahoo-backed tools) | The earnings calendar carries no attribution (`attributed=False`, `agent_tools.py:153`); the line keys on presence. |
 | Review/merge discipline | Standard task-PR flow (`/review`, `reviewed:agent`, merge when CI green + mergeable); no human gate applies. |
@@ -282,7 +282,7 @@ egress — no human gate.
 ## 9. Out of scope
 
 - #4131's digigraph clipper fix; any adapter-level attribution lifting.
-- Changes to the first-party gallery line or to `@digithings/web`.
+- Changes to the first-party gallery line or to `@digithings/ui`.
 - Replacing the vendored fallback with the gallery component.
 - Dashboard / twelve-x surfaces (shipped; twelve-x excluded by #4204).
 - New copy, i18n, iframes, per-widget embedding, or share-page (`/s/<id>`) links.
@@ -294,9 +294,9 @@ egress — no human gate.
 ## 10. Open questions
 
 1. **Package entry point.** Barrel import (chosen; precedent in
-   `cloudflare/dashboard/components/sidebar.tsx:7-13` and digichat
+   `apps/dashboard/components/sidebar.tsx:7-13` and digichat
    `components/ui/*`) vs adding a `./lib/gloomberb` subpath export to
-   `@digithings/web`. Switch only if a bundle check flags the barrel.
+   `@digithings/ui`. Switch only if a bundle check flags the barrel.
 2. **Collapsed visibility.** The line is visible only when a row is expanded
    (mirrors #4130). Keep, or show attribution on the collapsed row?
    Recommendation: keep.

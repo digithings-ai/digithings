@@ -1,10 +1,10 @@
 ## Goal
 
-Build shared **`ClosingCtaBand`** primitive — full-width section before footer with headline + literal primary CTA + optional secondary ([Graphite/Cursor pattern](../../../../cloudflare/digiweb/design/references/scans/copy-patterns.md), [COPY_GUIDE.md §6](../../../../cloudflare/digiweb/design/COPY_GUIDE.md)).
+Build shared **`ClosingCtaBand`** primitive — full-width section before footer with headline + literal primary CTA + optional secondary ([Graphite/Cursor pattern](../../../../packages/design/references/scans/copy-patterns.md), [COPY_GUIDE.md §6](../../../../packages/design/COPY_GUIDE.md)).
 
 ## Component
 
-- [x] cross-cutting (`cloudflare/digiweb/design/`)
+- [x] cross-cutting (`packages/design/`)
 
 ## Acceptance Criteria
 
@@ -13,7 +13,7 @@ Build shared **`ClosingCtaBand`** primitive — full-width section before footer
 - [ ] Copy slots documented (headline, primary label+href, secondary label+href)
 - [ ] `reveal-up` enter on scroll (respect reduced motion)
 - [ ] Demo in smoke page with digithings + digiquant copy variants
-- [ ] Document in `cloudflare/digiweb/design/site/README.md`
+- [ ] Document in `packages/design/site/README.md`
 
 ## Test Requirements
 
@@ -22,8 +22,8 @@ Build shared **`ClosingCtaBand`** primitive — full-width section before footer
 
 ## Documentation to Update
 
-- [ ] `cloudflare/digiweb/design/site/README.md`
-- [ ] `cloudflare/digiweb/design/COPY_GUIDE.md` — reference primitive
+- [ ] `packages/design/site/README.md`
+- [ ] `packages/design/COPY_GUIDE.md` — reference primitive
 
 ## Out of Scope
 

@@ -42,7 +42,7 @@ Beyond root `AGENTS.md`:
 - **No production stub**: `DIGISEARCH_ALLOW_STUB=1` is for unit tests only. `_require_real_search_backend()` enforces this at startup — do not bypass it.
 - **Entity naming**: Class and model names drop the `Digi` prefix: `Document`, `Chunk`, `Query`, `Result` — not `DigiDocument`. Follow this for all new models.
 - **Structured filters over raw OData**: New query callers must use `filters: list[dict]` not raw `filter: str`. Raw OData requires `allow_raw_filter` flag and is only safe for trusted internal callers.
-- **Ingest source is a filesystem path**: `POST /ingest` `source` field is a server-side path. Never accept a raw URL in this field without implementing URL fetch + sandboxing first.
+- **Ingest source is a filesystem path**: `POST /ingest` `source` field is a server-side path. Never accept a raw URL in this field. URL ingest is the separate, SSRF-guarded path `POST /ingest/url` / CLI `ingest-url`, implemented in `pipeline/url_ingest.py` (digifetch `validate_fetch_url` + `HttpFetcher`) — do not fetch URLs anywhere else.
 - **Scope enforcement**: All new endpoints require the appropriate `digisearch:query` or `digisearch:ingest` scope via digikey middleware.
 - **No full doc bodies in spans**: digismith trace attributes must not carry raw document text or chunk content.
 - **bulk ingest worker is a stub**: `ingest_worker.py` logs and exits. Do not add a queue consumer there until Phase 2 is scoped.

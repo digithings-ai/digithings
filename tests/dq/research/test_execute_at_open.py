@@ -641,7 +641,7 @@ class _Ledger:
     ) -> "_Ledger":
         """A pending order head plus the approved→requested→decision chain above it.
 
-        ``action`` is H7's vocabulary (`add`/`trim`/`exit`), which is deliberately *not*
+        ``action`` is direction's vocabulary (`add`/`trim`/`exit`), which is deliberately *not*
         the event name: the executor derives direction from it, and the projection derives
         the event from the resulting position. ``mark`` absent means no `price_history.open`
         row, which is how a `data_unavailable` rejection is set up. ``weight`` absent means
@@ -774,10 +774,9 @@ def _ledger_on(monkeypatch: pytest.MonkeyPatch) -> None:
 
     ``ledger_enabled`` reads the process environment and defaults to **on**, so a
     developer with ``DIGIQUANT_PORTFOLIO_LEDGER=0`` (or alias
-    ``OLYMPUS_PORTFOLIO_LEDGER=0``) exported would otherwise see the whole
+    ``DIGIQUANT_PORTFOLIO_LEDGER=0``) exported would otherwise see the whole
     authoritative path silently skipped and the suite still pass.
     """
-    monkeypatch.delenv("OLYMPUS_PORTFOLIO_LEDGER", raising=False)
     monkeypatch.delenv("DIGIQUANT_PORTFOLIO_LEDGER", raising=False)
 
 
@@ -1009,7 +1008,7 @@ class TestBuildEventsFromPaperFills:
     def test_prev_weight_is_the_precommit_book_when_run_date_already_has_targets(
         self,
     ) -> None:
-        """Production shape after H9 books targets on ``run_date`` before the open.
+        """Production shape after commit books targets on ``run_date`` before the open.
 
         ``_prior_book_date(execution_d)`` finds that already-committed new book, so
         ADD/TRIM land at 0.0000pp (or get collapsed to HOLD). The prior used to size
@@ -1072,7 +1071,7 @@ class TestBuildEventsFromPaperFills:
     def test_a_trim_that_closes_the_position_is_an_exit(self) -> None:
         """The #1743 class of mislabelling, from the other direction.
 
-        H7 said `trim`; the sell consumed every share on the record. Naming the event from
+        direction said `trim`; the sell consumed every share on the record. Naming the event from
         the action would write TRIM and leave a phantom position in Activity forever —
         which is how the table accumulated 31 OPENs and zero EXITs.
         """
@@ -1178,7 +1177,7 @@ class TestBuildEventsFromPaperFillsDeclines:
         assert "portfolio_ledger_commits" in declined and _RUN_D in declined
 
     def test_declines_when_the_kill_switch_is_off(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.setenv("OLYMPUS_PORTFOLIO_LEDGER", "0")
+        monkeypatch.setenv("DIGIQUANT_PORTFOLIO_LEDGER", "0")
         events, declined, _ = _mod.build_events_from_paper_fills(
             _day().client(), _RUN_D, _EXEC_D, now=_NOW
         )

@@ -72,8 +72,8 @@ from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
-OUT = REPO_ROOT / "cloudflare" / "digithings-web" / "lib" / "repo-activity.json"
-MODULES_TS = REPO_ROOT / "cloudflare" / "digiweb" / "web" / "src" / "data" / "modules.ts"
+OUT = REPO_ROOT / "apps" / "digithings-web" / "lib" / "repo-activity.json"
+MODULES_TS = REPO_ROOT / "packages" / "ui" / "src" / "data" / "modules.ts"
 SLUG = "digithings-ai/digithings"
 WINDOW_DAYS = 30
 YEAR_DAYS = 371  # 53 weeks, matches RepoHeatmap's default
@@ -133,7 +133,7 @@ def _module_paths() -> dict[str, str]:
     for mid, tier in found:
         if tier == "roadmap":
             continue  # no directory exists yet; a last-commit date would be a lie
-        for cand in (mid, f"cloudflare/{mid}"):
+        for cand in (mid, f"apps/{mid}"):
             if (REPO_ROOT / cand).is_dir():
                 paths[mid] = cand
                 break
@@ -633,7 +633,7 @@ def check(max_age_days: int | None = None) -> int:
         return 1
     # Composition, not just list-ness: a pull request in `openIssues` renders as an
     # issue and is a wrong figure, and the vitest mirror on the homepage
-    # (cloudflare/digithings-web/lib/repoActivity.test.ts) rejects the link. It shipped
+    # (apps/digithings-web/lib/repoActivity.test.ts) rejects the link. It shipped
     # once, from a pre-`is:issue` generator — #4093. `mergedPulls` gets the mirror check.
     #
     # The match is `endswith`, not `in`: review of #4095 showed a substring test accepts

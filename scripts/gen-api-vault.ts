@@ -13,9 +13,9 @@
  */
 import { mkdirSync, writeFileSync, rmSync, existsSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { modules } from "../cloudflare/digiweb/web/src/data/modules";
-import { guides } from "../cloudflare/digithings-web/lib/sharedDocs";
-import { guideToMarkdown, moduleToMarkdown } from "../cloudflare/digithings-web/lib/docsSerializers";
+import { modules } from "../packages/ui/src/data/modules";
+import { guides } from "../apps/digithings-web/lib/sharedDocs";
+import { guideToMarkdown, moduleToMarkdown } from "../apps/digithings-web/lib/docsSerializers";
 
 const ROOT = fileURLToPath(new URL("..", import.meta.url));
 const OUT_DIR = `${ROOT}docs/vision/api`;

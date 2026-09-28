@@ -18,7 +18,7 @@ from digiquant.dashboard.research_retrieval.planner import (
     AttentionMode,
     AttentionRolloutMode,
     AttentionTargetKind,
-    H6DecisionFeatures,
+    DeliberationDecisionFeatures,
     default_research_policy_path,
     load_research_attention_policy,
     plan_research_attention,
@@ -56,7 +56,7 @@ def _plan_bundle(tmp_path: Path) -> tuple[Path, Path, Path]:
         target_key="AAPL",
         state_version_id=str(_STATE),
         has_prior=True,
-        h6=H6DecisionFeatures.model_validate(
+        deliberation=DeliberationDecisionFeatures.model_validate(
             {
                 "ticker": "AAPL",
                 "roster_reason": "held",

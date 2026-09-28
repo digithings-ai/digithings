@@ -1,4 +1,4 @@
-"""Supabase writers for H5 analyst coverage."""
+"""Supabase writers for analyst coverage."""
 
 from __future__ import annotations
 

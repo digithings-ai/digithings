@@ -18,7 +18,6 @@ from typing import (
 
 import polars as pl
 
-from digiquant.dashboard.tenancy import house_workspace_id
 from digiquant.data.prices.breadth import compute_breadth
 from digiquant.data.prices.correlation import pairwise_return_correlations
 from digiquant.data.prices.etf_flows import compute_etf_flows_proxy
@@ -67,14 +66,16 @@ def _r2_manifest() -> dict[str, Any]:
     return _read_manifest()  # type: ignore[no-any-return]
 
 
-def _resolve_r2_as_of(as_of: date | None) -> str:
+def _resolve_r2_as_of(as_of: date | None, manifest: dict[str, Any] | None = None) -> str:
     """ISO ``as_of`` for an R2 read: explicit date, else the manifest watermark.
 
-    The default is the seal — never wall-clock (settled-close semantics).
+    The default is the seal — never wall-clock (settled-close semantics). A
+    pre-read ``manifest`` (batch callers) is reused instead of a second GET.
     """
     if as_of is not None:
         return as_of.isoformat()
-    return str(_r2_manifest()["as_of"])
+    manifest = manifest if manifest is not None else _r2_manifest()
+    return str(manifest["as_of"])
 
 
 class UnknownTickerError(LookupError):
@@ -311,12 +312,67 @@ def get_price_technicals(
     return _r2_price_technicals(ticker=ticker, lookback=lookback, as_of=as_of)
 
 
-def _r2_price_technicals(*, ticker: str, lookback: int, as_of: date | None) -> dict[str, Any]:
-    """The sole :func:`get_price_technicals` read path (#4053; see it for the contract)."""
+def get_price_technicals_batch(
+    *,
+    client: Any,
+    tickers: list[str] | tuple[str, ...],
+    lookback: int = 20,
+    as_of: date | None = None,
+) -> dict[str, dict[str, Any]]:
+    """Batch :func:`get_price_technicals` over many tickers in one manifest read.
+
+    Returns ``{ticker: {"ticker", "latest", "window"}}`` — the exact per-ticker
+    envelope the single-ticker helper returns, keyed by ticker and covering
+    every requested ticker (unknown tickers carry the empty latest/window).
+    Requested tickers are de-duplicated with first-seen order preserved.
+
+    This is the phase entry point (#4600): :func:`get_market_context` and
+    ``portfolio.candidates.select_focus_tickers`` call it once per phase
+    instead of looping the single-ticker helper, so the sealed R2 manifest is
+    read once for the whole basket instead of once per ticker. Values are
+    unchanged — each ticker still reads its own sealed generation through the
+    same :func:`_r2_price_technicals` shaping. ``client`` is kept for
+    caller-signature stability and is never read.
+
+    Fail-soft parity with the pre-#4600 per-ticker loop: a ``LookupError``
+    (``KeyError`` included) resolving the shared manifest yields the empty
+    latest/window envelope for every requested ticker instead of propagating.
+    """
+    ordered = list(dict.fromkeys(tickers))
+    if not ordered:
+        return {}
+    try:
+        manifest = _r2_manifest()
+    except LookupError:
+        return {ticker: {"ticker": ticker, "latest": {}, "window": []} for ticker in ordered}
+    return {
+        ticker: _r2_price_technicals(
+            ticker=ticker, lookback=lookback, as_of=as_of, manifest=manifest
+        )
+        for ticker in ordered
+    }
+
+
+def _r2_price_technicals(
+    *,
+    ticker: str,
+    lookback: int,
+    as_of: date | None,
+    manifest: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """The sole :func:`get_price_technicals` read path (#4053; see it for the contract).
+
+    ``manifest`` lets a batch caller share one manifest read across tickers
+    (:func:`get_price_technicals_batch`); omit it and :func:`_read_r2_window`
+    resolves the seal itself, exactly as before #4600 (so the single-ticker
+    path keeps its manifest read at the window seam). That read sits inside
+    the ``except LookupError`` below, so a ``LookupError``-shaped manifest
+    read stays fail-soft (empty envelope).
+    """
     from digiquant.mcp_server import _read_r2_window
 
     try:
-        rows = _read_r2_window(ticker, _resolve_r2_as_of(as_of))
+        rows = _read_r2_window(ticker, _resolve_r2_as_of(as_of, manifest), manifest)
     except LookupError:
         return {"ticker": ticker, "latest": {}, "window": []}
     shaped = [
@@ -407,9 +463,10 @@ def get_market_context(
     - Technicals: one bulk query over ``tickers`` for the trailing
       ``price_window_days``; the newest row per ticker wins. Tickers absent
       from ``price_technicals`` are simply omitted. Under the R2 backend the
-      same newest-row-per-ticker is read from the sealed generations via
-      :func:`get_price_technicals` (one call per ticker — the helper owns the
-      backend, so the envelope never changes).
+      same newest-row-per-ticker is read from the sealed generations via one
+      :func:`get_price_technicals_batch` call for the whole basket (one shared
+      manifest read, #4600 — the helper owns the backend, so the envelope
+      never changes).
     - Macro: re-uses :func:`get_macro_series` (per-series latest two
       observations — series cadences are mixed, so a bulk newest-first query
       would starve monthly series behind daily ones).
@@ -425,13 +482,13 @@ def get_market_context(
             # whose newest sealed row predates the window is omitted (the
             # preflight basket-gap probe depends on the omission).
             since = (run_date - timedelta(days=price_window_days)).isoformat()
-            for ticker in tickers:
-                tech = get_price_technicals(
-                    client=client,
-                    ticker=ticker,
-                    lookback=price_window_days,
-                    as_of=run_date,
-                )
+            batch = get_price_technicals_batch(
+                client=client,
+                tickers=list(tickers),
+                lookback=price_window_days,
+                as_of=run_date,
+            )
+            for ticker, tech in batch.items():
                 if tech["latest"] and str(tech["latest"].get("date") or "") >= since:
                     out["price_technicals"][ticker] = tech["latest"]
             # Newest-row-per-ticker already holds (lookback window, latest
@@ -849,16 +906,17 @@ def get_return_correlations(
 
 # ── Generic scoped data reader (Pillar 1D) ───────────────────────────────────
 #
-# One read-only, table-whitelisted reader the agents + PM call via the ``query_data``
-# tool — backed by the shared ``digibase`` Supabase connector, so we don't hand-roll
-# a bespoke tool per table or hand the model raw SQL. Scoped to the paper-book
-# tables + the trading calendar; operator-internal telemetry (decision_log,
-# atlas_run_diagnostics) is deliberately NOT readable.
+# The retired generic ``query_data`` reader (#4436) was the table-whitelisted
+# surface the agents + PM called — backed by the shared ``digibase`` Supabase
+# connector. It is superseded by ``dashboard.research_retrieval.search_research``
+# (``query_research``), which owns document + book retrieval with filters, R2
+# read-through and phase-scoped blinding. The constants below are kept for the
+# typed readers (``get_*``) and their house-scope guards.
 #
 # Market history (price_history, price_technicals, macro_series_observations)
 # moved to the versioned R2 cache (#3780, Task 7 cutover): it is served via
 # ``digiquant_get_price_technicals`` / ``digiquant_get_macro_series`` (MCP) and
-# the ``get_*`` readers below (in-process), never via this generic reader.
+# the ``get_*`` readers below (in-process).
 MARKET_TABLES_REMOVED: tuple[str, ...] = (
     "price_history",
     "price_technicals",
@@ -876,144 +934,19 @@ ALLOWED_READ_TABLES: frozenset[str] = frozenset(
     }
 )
 
-# Blinded-analyst scope for ``query_data``: with market tables removed from the
-# generic reader, only the calendar remains here. (Blinded nodes still get
-# market *values* via the injected ``market_context`` + dedicated readers.)
+# Blinded-analyst scope: with market tables removed from the generic reader,
+# only the calendar remains here. (Blinded nodes still get market *values* via
+# the injected ``market_context`` + dedicated readers.)
 MARKET_DATA_TABLES: frozenset[str] = frozenset({"trading_calendar"})
 
 # Group A private books: omitted workspace_id is the house, never an unfiltered
-# date scan. Overlay same-date rows must not seed house research via query_data.
+# date scan. Overlay same-date rows must not seed house research via
+# ``query_research``.
 HOUSE_BOOK_READ_TABLES: frozenset[str] = frozenset(
     {"positions", "nav_history", "position_events", "portfolio_metrics"}
 )
 
-_MAX_QUERY_ROWS = 500
-
-# columns must be "*" or a comma-separated list of bare column names. This blocks
-# PostgREST relationship/embedding syntax (e.g. "*,decision_log(*)") that would
-# otherwise read a NON-whitelisted table through an embedded select.
-_SAFE_COLUMNS_RE = re.compile(r"^(\*|[A-Za-z_][A-Za-z0-9_]*(\s*,\s*[A-Za-z_][A-Za-z0-9_]*)*)$")
-
-# Every column-bearing argument is shape-checked to a bare identifier: ``columns``
-# via :data:`_SAFE_COLUMNS_RE`, and order/filter keys via :data:`_BARE_COLUMN_RE`.
-# Together they keep PostgREST relationship syntax (e.g. "*,decision_log(*)") from
-# reaching a NON-whitelisted table through *any* argument, not just ``columns``.
+# Every column-bearing argument the retired generic reader shape-checked. Kept
+# as documentation of the PostgREST relationship/embedding syntax the typed
+# readers must never accept.
 _BARE_COLUMN_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
-
-
-def _filter_column_names(
-    *,
-    eq: dict[str, Any] | None = None,
-    gte: dict[str, Any] | None = None,
-    lte: dict[str, Any] | None = None,
-    in_: dict[str, list[Any] | tuple[Any, ...]] | None = None,
-    order: str | None = None,
-) -> list[str]:
-    """Central enumeration of the columns ``query_data`` filters/sorts on.
-
-    Each filter arg is coerced through ``dict()`` (mirroring ``_eq_for_query`` and
-    the connector) so mapping-convertible forms such as a list of pairs cannot
-    smuggle a column past the bare-column shape check. Single place to extend when
-    ``query_data`` grows a filter operator (#3959).
-    """
-    names: list[str] = []
-    for filt in (eq, gte, lte, in_):
-        if filt is None:
-            continue
-        try:
-            mapping = dict(filt)
-        except (TypeError, ValueError):
-            # Not mapping-like (e.g. a bare string/int); the connector rejects it.
-            continue
-        names.extend(str(key).strip() for key in mapping)
-    if order is not None:
-        names.append(str(order).strip())
-    return names
-
-
-def _eq_for_query(table: str, eq: dict[str, Any] | None) -> dict[str, Any] | None:
-    """Stamp house ``workspace_id`` on Group A books when the caller omitted it."""
-    filters = dict(eq or {})
-    if table in HOUSE_BOOK_READ_TABLES and "workspace_id" not in filters:
-        filters["workspace_id"] = str(house_workspace_id())
-    return filters or None
-
-
-def query_data(
-    *,
-    client: Any,
-    table: str,
-    columns: str = "*",
-    eq: dict[str, Any] | None = None,
-    gte: dict[str, Any] | None = None,
-    lte: dict[str, Any] | None = None,
-    in_: dict[str, list[Any] | tuple[Any, ...]] | None = None,
-    order: str | None = None,
-    desc: bool = True,
-    limit: int = 50,
-    allowed_tables: frozenset[str] | None = None,
-) -> dict[str, Any]:
-    """Read rows from a whitelisted table via the digibase connector.
-
-    Read-only and table-scoped: a table outside the active whitelist is refused
-    (the error is returned to the model, not raised). Callers may pass a narrower
-    ``allowed_tables`` (e.g. :data:`MARKET_DATA_TABLES` for blinded analyst nodes);
-    it is intersected with :data:`ALLOWED_READ_TABLES`. ``limit`` is capped at
-    :data:`_MAX_QUERY_ROWS` so one tool call can't pull unbounded rows.
-
-    Group A books (``positions``, ``nav_history``, ``position_events``,
-    ``portfolio_metrics``) default to the house ``workspace_id`` when ``eq``
-    omits it, so overlay same-date rows cannot seed house research. Pass
-    ``eq={"workspace_id": ...}`` to read another book.
-
-    Market history (``price_history`` / ``price_technicals`` /
-    ``macro_series_observations``) is not readable here (#3780): the table
-    allowlist refuses it and the dedicated R2-backed tools own those reads.
-    Explicit columns, ``order``, and filter keys are shape-checked to bare column
-    names (:data:`_BARE_COLUMN_RE`) so no argument can smuggle PostgREST
-    relationship syntax.
-    """
-    tables = (allowed_tables & ALLOWED_READ_TABLES) if allowed_tables else ALLOWED_READ_TABLES
-    if table not in tables:
-        return {"error": f"table {table!r} is not readable; choose one of {sorted(tables)}"}
-    safe_columns = (columns or "*").strip()
-    if not _SAFE_COLUMNS_RE.fullmatch(safe_columns):
-        # Block PostgREST relationship/embedding syntax that could reach other tables.
-        return {"error": "columns must be '*' or a comma-separated list of plain column names"}
-    # Filter/order keys are equally column-bearing: reject PostgREST syntax there too.
-    for col_name in _filter_column_names(eq=eq, gte=gte, lte=lte, in_=in_, order=order):
-        if not _BARE_COLUMN_RE.fullmatch(col_name):
-            return {
-                "error": (
-                    f"filter/order column {col_name!r} must be a bare column name "
-                    "(no PostgREST relationship or operator syntax)"
-                )
-            }
-    from digibase.connectors.supabase import SupabaseConnector
-
-    capped = max(1, min(int(limit), _MAX_QUERY_ROWS))
-
-    def _select():  # type: ignore[no-untyped-def]
-        select_result = SupabaseConnector(client).select(
-            table,
-            safe_columns,
-            eq=_eq_for_query(table, eq),
-            gte=gte or None,
-            lte=lte or None,
-            in_=in_ or None,
-            order=order,
-            desc=desc,
-            limit=capped,
-        )
-        # The connector swallows transport faults into success=False — re-raise
-        # retryable ones so transient disconnects / PGRST002 / 502s retry 3×
-        # (#3299). Anything else still lands in the {"error": …} below.
-        if not select_result.success:
-            raise _SupabaseSelectError(select_result.error or "unknown select error")
-        return select_result
-
-    try:
-        result = run_with_supabase_retry(_select, operation=f"query_data {table}")
-    except _SupabaseSelectError as exc:
-        return {"error": exc.detail}
-    return {"table": table, "row_count": len(result.rows), "rows": result.rows}

@@ -1,8 +1,8 @@
 # Wave 2 Unit Specs — portfolio implementation
 
-> **Superseded for implementation:** [#930](https://github.com/digithings-ai/digithings/issues/930) shipped H1–H9.
+> **Superseded for implementation:** [#930](https://github.com/digithings-ai/digithings/issues/930) shipped thesis–commit.
 > **Canonical spec:** [`docs/superpowers/specs/2026-06-20-olympus-daily-thesis-design.md`](../../../../../../docs/superpowers/specs/2026-06-20-olympus-daily-thesis-design.md) §13.2.
-> **Live topology:** [`ARCHITECTURE.md`](ARCHITECTURE.md). H-path name mapping: W2-C/D/E/F/G → H1/H2/H3/H5/H6/H7; H8 = `phase7e_risk_sizing`; H9 = `h9_commit_run`.
+> **Live topology:** [`ARCHITECTURE.md`](ARCHITECTURE.md). H-path name mapping: W2-C/D/E/F/G → thesis/market/vehicle_map/analyst/deliberation/direction; sizing = `phase7e_risk_sizing`; commit = `commit`.
 
 > **Historical note:** This document described the planned Wave 2 portfolio expansion before thesis-first
 > cutover. Retained for forensics and unit-ID cross-reference only.
@@ -61,17 +61,17 @@ W2-H — parallel after W2-A
 
 ---
 
-## W2-B — phase_h1_thesis_review + theses CRUD
+## W2-B — phase_thesis + theses CRUD
 
 **Branch:** `task/w2b-phase-h1-thesis-review`
 **Complexity:** M.
 
 **Files:**
 
-- Create: `digiquant/src/digiquant/research/phases/phase_h1_thesis_review.py` — single-node phase; loads `thesis` + `thesis-tracker` skills; outputs `ThesisReviewOutput`.
+- Create: `digiquant/src/digiquant/research/phases/phase_thesis.py` — single-node phase; loads `thesis` + `thesis-tracker` skills; outputs `ThesisReviewOutput`.
 - Create: `digiquant/src/digiquant/research/templates/schemas/thesis-review.schema.json` — envelope `{schema_version, doc_type="Thesis Review", date, meta, body}` (Title-Case token matching migration 025's extension to `chk_documents_doc_type`; see [PORTFOLIO_SUBGRAPH §5.1](PORTFOLIO_SUBGRAPH.md#51-migration-025--portfolio-doc_type-additions-stub-implemented-in-w2-a)); body per [PORTFOLIO_SUBGRAPH §4.1](PORTFOLIO_SUBGRAPH.md#41-thesisreviewoutput-phase_h1). `body.reviewed_theses[].new_status` is constrained to the seven tokens allowed by `chk_theses_status` (`ACTIVE` / `MONITORING` / `CHALLENGED` / `CLOSED` / `INVALIDATED` / `PAUSED` / `NEW`); `body.reviewed_theses[].resolution` (optional) is `"win" | "loss"`, required iff `new_status == "CLOSED"`. Persistence writes the status to the `theses` row and the evidence list to the document payload — there is no relational `evidence_log` field.
 - Modify: `digiquant/src/digiquant/research/state.py` — add `PhasePortfolioState` scaffold + `RecessRequest` + new reducers `_merge_session_dict`, `_append_list`. Add `phase_portfolio: PhasePortfolioState` field to `ResearchState`.
-- Modify: `digiquant/src/digiquant/research/graph.py` — wire `phase_h1_thesis_review` after `phase6_consolidate`.
+- Modify: `digiquant/src/digiquant/research/graph.py` — wire `phase_thesis` after `phase6_consolidate`.
 
 **Inline Pydantic contract (authoritative for W2-B):**
 
@@ -93,7 +93,7 @@ class ThesisReviewOutput(BaseModel):
 
 **Tests:**
 
-- `tests/phases/test_phase_h1_thesis_review.py` — skill-load + node-run with a stub `run_research_agent` returning a `ThesisReviewOutput`; asserts `state.phase_portfolio.thesis_review` is set and `upsert_theses` writer is called.
+- `tests/phases/test_phase_thesis.py` — skill-load + node-run with a stub `run_research_agent` returning a `ThesisReviewOutput`; asserts `state.phase_portfolio.thesis_review` is set and `upsert_theses` writer is called.
 - State round-trip test for `PhasePortfolioState`.
 - Validation test: `new_status="CLOSED"` without `resolution` raises; `new_status="INVALIDATED"` without `reason` raises.
 
@@ -103,14 +103,14 @@ class ThesisReviewOutput(BaseModel):
 
 ---
 
-## W2-C — phase_h2_market_thesis_exploration
+## W2-C — phase_market
 
 **Branch:** `task/w2c-phase-h2-market-thesis`
 **Complexity:** S.
 
 **Files:**
 
-- Create: `digiquant/src/digiquant/research/phases/phase_h2_market_thesis_exploration.py`.
+- Create: `digiquant/src/digiquant/research/phases/phase_market.py`.
 - Modify: `digiquant/src/digiquant/research/graph.py` — wire after h1.
 - Pydantic model `MarketThesisExploration` in the phase module, validated against existing [`market-thesis-exploration.schema.json`](../../portfolio/templates/schemas/market-thesis-exploration.schema.json).
 
@@ -137,7 +137,7 @@ class MarketThesisExploration(BaseModel):
 
 **Tests:**
 
-- `tests/phases/test_phase_h2_market_thesis.py` — stub `run_research_agent`; assert new thesis rows are inserted into `theses` via W2-A.
+- `tests/phases/test_phase_market.py` — stub `run_research_agent`; assert new thesis rows are inserted into `theses` via W2-A.
 
 **Acceptance:** new `ThesisProposal`s create `theses` rows with `status='ACTIVE'`; `thesis_id` uniqueness enforced within the run.
 
@@ -145,15 +145,15 @@ class MarketThesisExploration(BaseModel):
 
 ---
 
-## W2-D — phase_h3_thesis_vehicle_map + phase_h4_opportunity_screener
+## W2-D — phase_vehicle_map + phase_screener
 
 **Branch:** `task/w2d-phase-h3-h4-vehicle-screener`
 **Complexity:** M — two phases but tightly coupled (h4 reads h3).
 
 **Files:**
 
-- Create: `digiquant/src/digiquant/research/phases/phase_h3_thesis_vehicle_map.py`.
-- Create: `digiquant/src/digiquant/research/phases/phase_h4_opportunity_screener.py`.
+- Create: `digiquant/src/digiquant/research/phases/phase_vehicle_map.py`.
+- Create: `digiquant/src/digiquant/research/phases/phase_screener.py`.
 - Create: `digiquant/src/digiquant/research/templates/schemas/opportunity-screen.schema.json` — envelope `{schema_version, doc_type="Opportunity Screen", date, meta, body}` (Title-Case token; added to `chk_documents_doc_type` by migration 025).
 - Modify: `digiquant/src/digiquant/research/graph.py` — wire h3→h4.
 
@@ -185,8 +185,8 @@ class OpportunityScreen(BaseModel):
 
 **Tests:**
 
-- `tests/phases/test_phase_h3_vehicle_map.py` — asserts `thesis_vehicles` writer called with `candidate_rank` derived from list position.
-- `tests/phases/test_phase_h4_opportunity_screener.py` — asserts `analyst_coverage` upsert called for each `RosterPick`.
+- `tests/phases/test_phase_vehicle_map.py` — asserts `thesis_vehicles` writer called with `candidate_rank` derived from list position.
+- `tests/phases/test_phase_screener.py` — asserts `analyst_coverage` upsert called for each `RosterPick`.
 - Cross-phase: `roster` members must all have a `thesis_vehicles` row covering them.
 
 **Acceptance:** h3 produces mappings; h4 produces non-empty roster when any thesis is ACTIVE/CHALLENGED.
@@ -195,14 +195,14 @@ class OpportunityScreen(BaseModel):
 
 ---
 
-## W2-E — phase_h5_asset_analyst (replaces phase7c)
+## W2-E — phase_analyst (replaces phase7c)
 
 **Branch:** `task/w2e-phase-h5-asset-analyst`
 **Complexity:** M — includes deletion of old phase7c.
 
 **Files:**
 
-- Create: `digiquant/src/digiquant/research/phases/phase_h5_asset_analyst.py` — per-ticker fan-out over `state.phase_portfolio.opportunity_screen.roster`; Pydantic `AssetRecommendation` validated against [`asset-recommendation.schema.json`](../../portfolio/templates/schemas/asset-recommendation.schema.json).
+- Create: `digiquant/src/digiquant/research/phases/phase_analyst.py` — per-ticker fan-out over `state.phase_portfolio.opportunity_screen.roster`; Pydantic `AssetRecommendation` validated against [`asset-recommendation.schema.json`](../../portfolio/templates/schemas/asset-recommendation.schema.json).
 
 **Inline Pydantic contract:**
 
@@ -234,7 +234,7 @@ class AssetRecommendation(BaseModel):
 
 **Tests:**
 
-- `tests/phases/test_phase_h5_asset_analyst.py` — parallel fan-out produces one `AssetRecommendation` per roster ticker; blinded-rule assertion (no `current_weights` key leaks into `phase_inputs`).
+- `tests/phases/test_phase_analyst.py` — parallel fan-out produces one `AssetRecommendation` per roster ticker; blinded-rule assertion (no `current_weights` key leaks into `phase_inputs`).
 - `tests/test_migration_phase7c_removed.py` — imports fail fast (regression guard).
 
 **Acceptance:** no references to `phase7c_analysts` remain in repo; `state.phase_portfolio.asset_recommendations` populated; `analyst_coverage` gets `current_recommendation_key` update.
@@ -243,14 +243,14 @@ class AssetRecommendation(BaseModel):
 
 ---
 
-## W2-F — phase_h6_deliberation (cyclic round loop)
+## W2-F — phase_deliberation (cyclic round loop)
 
 **Branch:** `task/w2f-phase-h6-deliberation`
 **Complexity:** L — the centerpiece.
 
 **Files:**
 
-- Create: `digiquant/src/digiquant/research/phases/phase_h6_deliberation.py` — per-ticker fan-out; each ticker node is a nested `StateGraph` (analyst_present → pm_challenge → converge_check → loop/exit) compiled once at phase-build time.
+- Create: `digiquant/src/digiquant/research/phases/phase_deliberation.py` — per-ticker fan-out; each ticker node is a nested `StateGraph` (analyst_present → pm_challenge → converge_check → loop/exit) compiled once at phase-build time.
 - Create: `digiquant/src/digiquant/research/phases/_deliberation_loop.py` — nested graph builder; isolated for unit-testing the loop independently.
 - Modify: `digiquant/src/digiquant/research/graph.py` — wire h6 after h5.
 - Modify: `digiquant/src/digiquant/research/state.py` — confirm `RecessRequest` + `_append_list` from W2-B are used.
@@ -290,10 +290,10 @@ class DeliberationSession(BaseModel):
 
 **Tests:**
 
-- `tests/phases/test_phase_h6_round_loop.py` — stubbed LLM returns `converged=True` at round 1; assert single round recorded.
-- `tests/phases/test_phase_h6_escalation.py` — stub returns `converged=False` every round; assert cap hit at 6, `meta.escalated=True`, warning in `state.errors`.
-- `tests/phases/test_phase_h6_recess.py` — stub emits `recess_triggered=True` at round 2; assert `RecessRequest` appended to `state.phase_portfolio.recess_requests`, `deep_dive_triggers` row written.
-- `tests/phases/test_phase_h6_fanout.py` — 3 tickers run in parallel, results merged under correct ticker keys.
+- `tests/phases/test_phase_deliberation_round_loop.py` — stubbed LLM returns `converged=True` at round 1; assert single round recorded.
+- `tests/phases/test_phase_deliberation_escalation.py` — stub returns `converged=False` every round; assert cap hit at 6, `meta.escalated=True`, warning in `state.errors`.
+- `tests/phases/test_phase_deliberation_recess.py` — stub emits `recess_triggered=True` at round 2; assert `RecessRequest` appended to `state.phase_portfolio.recess_requests`, `deep_dive_triggers` row written.
+- `tests/phases/test_phase_deliberation_fanout.py` — 3 tickers run in parallel, results merged under correct ticker keys.
 
 **Acceptance:** converged, escalated, and recess paths all write consistent `deliberation_sessions`/`deliberation_rounds`; `deep_dive_triggers` audit log populated.
 
@@ -301,14 +301,14 @@ class DeliberationSession(BaseModel):
 
 ---
 
-## W2-G — phase_h7_pm_allocation_memo + phase7d integration
+## W2-G — phase_direction_pm_allocation_memo + phase7d integration
 
 **Branch:** `task/w2g-phase-h7-pm-memo`
 **Complexity:** M.
 
 **Files:**
 
-- Create: `digiquant/src/digiquant/research/phases/phase_h7_pm_allocation_memo.py` — single node; loads `pm-allocation-memo` skill; Pydantic `PMAllocationMemo` validated against [`pm-allocation-memo.schema.json`](../../portfolio/templates/schemas/pm-allocation-memo.schema.json). Conditional router: skip when no deliberation session ran this run (see PORTFOLIO_SUBGRAPH §6).
+- Create: `digiquant/src/digiquant/research/phases/phase_direction_pm_allocation_memo.py` — single node; loads `pm-allocation-memo` skill; Pydantic `PMAllocationMemo` validated against [`pm-allocation-memo.schema.json`](../../portfolio/templates/schemas/pm-allocation-memo.schema.json). Conditional router: skip when no deliberation session ran this run (see PORTFOLIO_SUBGRAPH §6).
 
 **Inline Pydantic contract:**
 
@@ -332,7 +332,7 @@ class PMAllocationMemo(BaseModel):
 
 **Tests:**
 
-- `tests/phases/test_phase_h7_pm_memo.py` — asserts memo references at least one `deliberation_document_key`; sum of `target_weight_pct` within tolerance.
+- `tests/phases/test_phase_direction_pm_memo.py` — asserts memo references at least one `deliberation_document_key`; sum of `target_weight_pct` within tolerance.
 - `tests/phases/test_phase7d_transform.py` — given fixture `PMAllocationMemo` + current weights, asserts `RebalanceDecision.actions` list is correctly diffed (hold/add/trim/exit/new).
 - `tests/test_phase7d_no_llm.py` — regression guard: `run_research_agent` not called during phase7d.
 

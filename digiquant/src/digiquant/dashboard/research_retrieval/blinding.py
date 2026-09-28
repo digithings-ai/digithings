@@ -9,39 +9,39 @@ from typing import (  # score:allow untyped any — scored-lint: heterogeneous d
 )
 
 from digiquant.dashboard.research_retrieval.planner import (
-    H6_SELECTION_PROMPT_FORBIDDEN_KEYS,
+    DELIBERATION_SELECTION_PROMPT_FORBIDDEN_KEYS,
     assert_no_materiality_in_prompt,
 )
 
 RetrievalPhase = Literal[
     "research_edit",
-    "h1_thesis",
-    "h2_thesis",
-    "h5_analyst",
-    "h6_deliberation",
-    "h7_pm",
-    "h8_sizing",
+    "thesis",
+    "market",
+    "analyst",
+    "deliberation",
+    "direction",
+    "sizing",
 ]
 
-PromptRole = Literal["h5_analyst", "h6_deliberation"]
+PromptRole = Literal["analyst", "deliberation"]
 
 DIGEST_DOCUMENT_KEY = "digest"
 
-_H5_BLOCKED_DOC_PREFIXES = ("analyst/", "deliberation/", "pm-")
-_H5_BLOCKED_DOC_KEYS = frozenset({DIGEST_DOCUMENT_KEY, "beliefs"})
+_ANALYST_BLOCKED_DOC_PREFIXES = ("analyst/", "deliberation/", "pm-", "digest")
+_ANALYST_BLOCKED_DOC_KEYS = frozenset({DIGEST_DOCUMENT_KEY, "beliefs"})
 
 _PORTFOLIO_ALLOWED_PHASES = frozenset(
     {
         "research_edit",
-        "h1_thesis",
-        "h2_thesis",
-        "h7_pm",
-        "h8_sizing",
+        "thesis",
+        "market",
+        "direction",
+        "sizing",
     }
 )
 
-# Portfolio / PM context must not enter H5/H6 provider prompts (WP14.2 blinding).
-_H5_H6_PROMPT_FORBIDDEN_KEYS = frozenset(
+# Portfolio / PM context must not enter analyst/deliberation provider prompts (WP14.2 blinding).
+_ANALYST_DELIBERATION_PROMPT_FORBIDDEN_KEYS = frozenset(
     {
         "prior_book",
         "active_theses",
@@ -56,10 +56,10 @@ _H5_H6_PROMPT_FORBIDDEN_KEYS = frozenset(
     }
 )
 
-_H6_EXTRA_FORBIDDEN_KEYS = frozenset(
+_DELIBERATION_EXTRA_FORBIDDEN_KEYS = frozenset(
     {
         "prior_deliberation",
-        "h6_selection",
+        "deliberation_selection",
     }
 )
 
@@ -71,19 +71,19 @@ def portfolio_tool_allowed(phase: RetrievalPhase) -> bool:
 
 def research_document_allowed(phase: RetrievalPhase, document_key: str) -> bool:
     """Return whether ``query_research`` may fetch *document_key* in *phase*."""
-    if phase != "h5_analyst":
+    if phase != "analyst":
         return True
     key = document_key.strip()
-    if key in _H5_BLOCKED_DOC_KEYS:
+    if key in _ANALYST_BLOCKED_DOC_KEYS:
         return False
-    return not any(key.startswith(prefix) for prefix in _H5_BLOCKED_DOC_PREFIXES)
+    return not any(key.startswith(prefix) for prefix in _ANALYST_BLOCKED_DOC_PREFIXES)
 
 
 def forbidden_prompt_keys(role: PromptRole) -> frozenset[str]:
     """Return keys that must not appear in provider ``phase_inputs`` for *role*."""
-    keys = set(_H5_H6_PROMPT_FORBIDDEN_KEYS) | set(H6_SELECTION_PROMPT_FORBIDDEN_KEYS)
-    if role == "h6_deliberation":
-        keys |= _H6_EXTRA_FORBIDDEN_KEYS
+    keys = set(_ANALYST_DELIBERATION_PROMPT_FORBIDDEN_KEYS) | set(DELIBERATION_SELECTION_PROMPT_FORBIDDEN_KEYS)
+    if role == "deliberation":
+        keys |= _DELIBERATION_EXTRA_FORBIDDEN_KEYS
     return frozenset(keys)
 
 
@@ -97,19 +97,19 @@ def strip_blinded_forbidden_keys(
     return {key: value for key, value in phase_inputs.items() if key not in blocked}
 
 
-def assert_blinded_h5_prompt(phase_inputs: Mapping[str, Any]) -> None:
-    """Hard guard: H5 prompts must not include portfolio/PM/materiality leakage."""
-    leaked = forbidden_prompt_keys("h5_analyst").intersection(phase_inputs)
+def assert_blinded_analyst_prompt(phase_inputs: Mapping[str, Any]) -> None:
+    """Hard guard: analyst prompts must not include portfolio/PM/materiality leakage."""
+    leaked = forbidden_prompt_keys("analyst").intersection(phase_inputs)
     if leaked:
-        raise ValueError(f"H5 prompt must not include blinded keys: {sorted(leaked)}")
+        raise ValueError(f"analyst prompt must not include blinded keys: {sorted(leaked)}")
     assert_no_materiality_in_prompt(phase_inputs)
 
 
-def assert_blinded_h6_prompt(phase_inputs: Mapping[str, Any]) -> None:
-    """Hard guard: H6 prompts must not include portfolio/PM/materiality leakage."""
-    leaked = forbidden_prompt_keys("h6_deliberation").intersection(phase_inputs)
+def assert_blinded_deliberation_prompt(phase_inputs: Mapping[str, Any]) -> None:
+    """Hard guard: deliberation prompts must not include portfolio/PM/materiality leakage."""
+    leaked = forbidden_prompt_keys("deliberation").intersection(phase_inputs)
     if leaked:
-        raise ValueError(f"H6 prompt must not include blinded keys: {sorted(leaked)}")
+        raise ValueError(f"deliberation prompt must not include blinded keys: {sorted(leaked)}")
     assert_no_materiality_in_prompt(phase_inputs)
 
 
@@ -117,8 +117,8 @@ __all__ = [
     "DIGEST_DOCUMENT_KEY",
     "PromptRole",
     "RetrievalPhase",
-    "assert_blinded_h5_prompt",
-    "assert_blinded_h6_prompt",
+    "assert_blinded_analyst_prompt",
+    "assert_blinded_deliberation_prompt",
     "forbidden_prompt_keys",
     "portfolio_tool_allowed",
     "research_document_allowed",

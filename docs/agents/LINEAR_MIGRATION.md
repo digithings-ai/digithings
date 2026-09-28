@@ -35,7 +35,7 @@ record for agent dispatch (labels are the contract — untouched by this move).
 | 11 | maintenance | ~198 | housekeeping rollup |
 
 Board #1 custom fields: Status (Todo/In Progress/Review/Done), Phase
-(Phase 2–6 + Client Pilot), Area (old module names incl. Atlas), Priority
+(Phase 2–6 + Client Pilot), Area (historical module names), Priority
 (P0–P3), Kind (Epic/Feature/Task/Bug/Chore/Research). Module boards carry
 the same field set (spot-checked #2).
 

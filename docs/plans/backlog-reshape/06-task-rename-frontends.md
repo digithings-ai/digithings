@@ -37,7 +37,7 @@ cloudflare/
 - [ ] `docs/adr/0002-domain-unification.md` updated if it mentions old paths.
 - [ ] `AGENTS.md` root updated if it mentions `cloudflare/digithings/` or `cloudflare/digiquant/`.
 - [ ] READMEs inside the renamed dirs updated (title + any self-references).
-- [ ] `cloudflare/digiweb/design/README.md` updated if it lists consumers by old name.
+- [ ] `packages/design/README.md` updated if it lists consumers by old name.
 - [ ] GitHub Pages deploy from `static.yml` still serves digithings.ai after merge (verify on develop push or via workflow_dispatch).
 - [ ] Any documentation of the setup in `docs/` grepped for `cloudflare/digithings` or `cloudflare/digiquant` — all updated.
 
@@ -58,4 +58,4 @@ cloudflare/
 
 - No content changes inside the renamed folders.
 - No deployment target changes — CNAMEs unchanged, Pages still serves digithings.ai from the same artifact.
-- No change to `cloudflare/digichat/` or `cloudflare/digiweb/design/`.
+- No change to `apps/digichat/` or `packages/design/`.

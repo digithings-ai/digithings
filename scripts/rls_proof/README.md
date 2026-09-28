@@ -54,7 +54,7 @@ LOG=/opt/cursor/artifacts/rls_isolation_proof.log ./scripts/rls_proof/run.sh
 | LangGraph `checkpoint*` tables | Created by checkpointer library | Empty stubs so 036/061 can ALTER |
 | `PUBLICATION supabase_realtime` | Realtime platform publication | Empty stub; 063 ADDs `prices_live` |
 | Stub `fx_economic_calendar` | Out-of-repo prod table (031) | Minimal columns so 031 can ENABLE RLS |
-| Stub `olympus_schema_migrations` | Created by `db-migrate.yml` | 057 locks it |
+| Stub `olympus_schema_migrations` + `digithings_schema_migrations` | Created by `db-migrate.yml` | 057 locks the old name; 136 retires it after the copy-forward bootstrap (#4295) |
 | Default privileges ALL → client roles | Supabase bootstrap ACL | Migration 060 then revokes writes from anon/authenticated |
 | `session_replication_role=replica` wrap on **097 only** | Not automatic | 075 append-only trigger rejects 097's `UPDATE olympus_profile_config SET workspace_id…`. Harness wraps that one file; do the same on cutover if applying as superuser. |
 

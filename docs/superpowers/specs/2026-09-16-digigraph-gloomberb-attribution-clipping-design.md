@@ -70,7 +70,7 @@ exactly `attribution`, `delay_notice`, and (when a symbol is addressed)
 ### 2.3 How a digifetch result reaches digigraph
 
 - A digichat deployment registers the digiquant MCP server with id `digiquant`
-  (`cloudflare/digichat/src/lib/deploy-config/mcp-servers.test.ts:240-256`,
+  (`apps/digichat/src/lib/deploy-config/mcp-servers.test.ts:240-256`,
   asserting `dashboard-modal.yaml` declares
   `{id: "digiquant", url: "https://mcp.digithings.ai/mcp", default: true}`).
 - digigraph lists its tools as extra MCP tools named
@@ -119,27 +119,27 @@ covered by §3's fix.
 
 - The digichat trace adapter maps the generic `tool_result` payload's
   `result` value to the activity span's `toolResult`:
-  `cloudflare/digichat/src/lib/adapters/digithings/activity/index.ts:102-128`
+  `apps/digichat/src/lib/adapters/digithings/activity/index.ts:102-128`
   (line 119: `"result" in payload ? toolResultValue(payload.result) : undefined`).
-- `cloudflare/digichat/src/lib/chat-activity.ts` sanitizes the span:
+- `apps/digichat/src/lib/chat-activity.ts` sanitizes the span:
   `MAX_TOOL_RESULT_CHARS = 12_000`, `MAX_TOOL_RESULT_KEYS = 32`,
   `MAX_TOOL_RESULT_ITEMS = 50` (`:39-42`); record string values are capped at
   `MAX_DOC_FIELD_CHARS = 300` (`:30`, applied at `:218-220`); a record whose
   JSON exceeds 12k is replaced by `{truncated, preview}` (`:230-234`).
-- `cloudflare/digichat/src/lib/ui-stream-parts.ts:200-224` writes the
+- `apps/digichat/src/lib/ui-stream-parts.ts:200-224` writes the
   assistant-ui tool output as `output.result = span.toolResult` (`:213`).
 - The digichat thread's tool fallback calls
   `readGloomberbAttribution(result)`
-  (`cloudflare/digiweb/web/src/components/chat/gallery-thread/tool-fallback.aui.tsx:315-343`,
+  (`packages/ui/src/components/chat/gallery-thread/tool-fallback.aui.tsx:315-343`,
   use at `:805`), and the helper
-  (`cloudflare/digiweb/web/src/lib/gloomberb.ts:50-73`) unwraps
+  (`packages/ui/src/lib/gloomberb.ts:50-73`) unwraps
   `payload.result` (`:52-54`) and requires a non-blank string `attribution`
   (`:55-61`). `source_url` is kept only when it starts with the terminal URL
   (`:69`).
 - #4130's own tests pin the expected shape as
   `{ result: { attribution, delay_notice, source_url } }`
-  (`cloudflare/digiweb/web/src/lib/gloomberb.test.ts:36-68`;
-  `cloudflare/digiweb/web/src/components/chat/digichat-thread.render.test.tsx:57-77`,
+  (`packages/ui/src/lib/gloomberb.test.ts:36-68`;
+  `packages/ui/src/components/chat/digichat-thread.render.test.tsx:57-77`,
   `:380-401`).
 
 So the §7 keys must be **top-level keys on the emitted `result` object** to
@@ -363,7 +363,7 @@ All commands run from the repo root of the relevant worktree.
 - `ruff check digigraph/ && ruff format --check digigraph/` — clean.
 
 **digiweb (renderer pin).**
-`npm --workspace @digithings/web run test -- src/components/chat/digichat-thread.render.test.tsx`
+`npm --workspace @digithings/ui run test -- src/components/chat/digichat-thread.render.test.tsx`
 — the new case renders a clipped-but-attributed result and asserts
 "Sourced from Gloomberb", the delay notice, and the
 `https://term.gloom.sh/?ticker=AAPL` anchor.

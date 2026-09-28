@@ -23,14 +23,15 @@ from __future__ import annotations
 from datetime import datetime
 from enum import StrEnum
 from typing import Any  # score:allow untyped any — jsonb config columns round-trip as dict
-from uuid import NAMESPACE_URL, UUID, uuid5
+from uuid import UUID, uuid5
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-# Fixed namespace for every deterministic id this module mints. The URL string is
-# identity, not a package path: migration 096 seeds these UUIDs, so this literal
-# must stay ``digithings.olympus.tenancy`` even after the package rename.
-_TENANCY_NAMESPACE = uuid5(NAMESPACE_URL, "digithings.olympus.tenancy")
+# Fixed namespace for every deterministic id this module mints. This value is a
+# frozen UUID preserved verbatim from the legacy namespace the URL seed already
+# derived: migration 096 seeds these UUIDs, so no derived workspace/profile/
+# corpus id may change. Do not re-key without a matching id migration.
+_TENANCY_NAMESPACE = UUID("f6170a00-e195-5e92-8c41-2178302e37a8")
 
 SYSTEM_WORKSPACE_SLUG = "system"
 HOUSE_WORKSPACE_SLUG = "house"

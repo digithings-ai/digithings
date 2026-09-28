@@ -8,6 +8,8 @@ from datetime import datetime, timedelta, timezone
 from html.parser import HTMLParser
 from typing import Any
 
+from scripts.zammad_mcp.client import PAGE_SIZE
+
 MAX_ARTICLE_BODY_CHARS = 4000
 MAX_ARTICLES_SHOWN = 50
 
@@ -114,7 +116,7 @@ def format_ticket_line(ticket: dict[str, Any]) -> str:
     ticket_id = _field(ticket.get("id")) or "?"
     number = _field(ticket.get("number"))
     state = _field(ticket.get("state")) or "unknown"
-    title = _field(ticket.get("title")) or "(no title)"
+    title = " ".join((_field(ticket.get("title")) or "(no title)").split())
     head = f"- id {ticket_id}"
     if number:
         head += f" #{number}"
@@ -133,12 +135,38 @@ def format_ticket_line(ticket: dict[str, Any]) -> str:
     return f"{head} | {tail}" if tail else head
 
 
-def format_search_results(query: str, tickets: list[dict[str, Any]]) -> str:
+def format_search_results(
+    query: str,
+    tickets: list[dict[str, Any]],
+    fallback_terms: list[str] | None = None,
+) -> str:
     """Render a search response for the model."""
     if not tickets:
+        if fallback_terms:
+            tried = ", ".join(fallback_terms)
+            return f'No tickets matched: "{query}" (also tried keywords: {tried})'
         return f'No tickets matched: "{query}"'
-    lines = [f'Found {len(tickets)} ticket(s) for: "{query}"']
+    header = f'Found {len(tickets)} ticket(s) for: "{query}"'
+    if fallback_terms:
+        header += f" (matched via keywords: {', '.join(fallback_terms)})"
+    lines = [header]
     lines.extend(format_ticket_line(ticket) for ticket in tickets)
+    return "\n".join(lines)
+
+
+def format_ticket_list(tickets: list[dict[str, Any]], page: int = 1, per_page: int = 50) -> str:
+    """Render one page of the visible ticket list for the model."""
+    page_number = max(1, int(page))
+    page_size = max(1, min(int(per_page), PAGE_SIZE))
+    if not tickets:
+        if page_number > 1:
+            return f"No tickets on page {page_number}; try earlier pages."
+        return "No tickets visible to this token."
+    lines = [f"Visible tickets (page {page_number}, {len(tickets)} shown):"]
+    lines.extend(format_ticket_line(ticket) for ticket in tickets)
+    if len(tickets) == page_size:
+        lines.append(f"Page is full; continue with page {page_number + 1}.")
+    lines.append("Read a full conversation with get_ticket(id or #number).")
     return "\n".join(lines)
 
 

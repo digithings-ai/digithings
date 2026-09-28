@@ -41,7 +41,7 @@ logger = logging.getLogger(__name__)
 
 
 def _pm_tools(state: PortfolioState, *, segment: str = "pm-rebalance"):
-    """Full-scope query_data + computed tools for the PM. As the decision-maker it MAY
+    """Full-scope query_research + computed tools for the PM. As the decision-maker it MAY
     read the book (positions/nav_history/theses) for rebalance + sizing context — it is
     not blinded like the analysts/debaters."""
     return build_grounding(
@@ -49,6 +49,8 @@ def _pm_tools(state: PortfolioState, *, segment: str = "pm-rebalance"):
         live_search=True,
         run_date=state.run_date,
         segment=segment,
+        use_research_tools=True,
+        research_phase="direction",
     )
 
 
@@ -126,7 +128,7 @@ def _risk_aggressive_node(state: PortfolioState) -> dict[str, Any]:
     aggressive arm of the debate summary.
     """
     from digiquant.portfolio.skills import load_skill
-    from digiquant.tool_rounds import run_olympus_research_agent as run_research_agent
+    from digiquant.tool_rounds import run_digiquant_research_agent as run_research_agent
 
     skill_text = load_skill("risk-aggressive")
     tools, execute_tool, web_grounding = _risk_tools(state, segment="risk-aggressive")
@@ -189,7 +191,7 @@ def _risk_conservative_node(state: PortfolioState) -> dict[str, Any]:
     ``key_tension`` synthesis.
     """
     from digiquant.portfolio.skills import load_skill
-    from digiquant.tool_rounds import run_olympus_research_agent as run_research_agent
+    from digiquant.tool_rounds import run_digiquant_research_agent as run_research_agent
 
     aggressive = (state.phase7d_risk_debate or {}).get("aggressive_case", "")
     inputs = _build_risk_phase_inputs(state, role="conservative")
@@ -269,7 +271,7 @@ def _pm_node(state: PortfolioState) -> dict[str, Any]:
     to preserve the blinded-analysis semantics at the prompt level.
     """
     from digiquant.portfolio.skills import load_skill
-    from digiquant.tool_rounds import run_olympus_research_agent as run_research_agent
+    from digiquant.tool_rounds import run_digiquant_research_agent as run_research_agent
 
     # Prefer the dedicated pm skill; fall back to portfolio-manager if present.
     skill_text = _load_pm_skill(load_skill)
@@ -331,7 +333,7 @@ def _pm_node(state: PortfolioState) -> dict[str, Any]:
             execute_tool=execute_tool,
         )
     except Exception as exc:  # LLM-output failure degrades legacy PM, never the chain (#1665)
-        # H8 prefers the H7 memo when present; the legacy rebalance is only the
+        # sizing prefers the direction memo when present; the legacy rebalance is only the
         # fallback path, so skipping it on an LLM failure is safe degradation.
         logger.warning(
             "pm-rebalance LLM failed (%s: %s); skipping legacy PM", type(exc).__name__, exc

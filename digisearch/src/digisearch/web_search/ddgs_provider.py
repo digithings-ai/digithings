@@ -33,6 +33,14 @@ class DdgsWebSearchProvider:
         with DDGS() as ddgs:
             # Over-fetch like the searxng provider so post-filtering still
             # leaves up to max_results rows; capped again below.
+            #
+            # Empty-vs-error (#4297): ddgs 9.16 raises
+            # ``DDGSException("No results found.")`` both for a legitimately
+            # empty result set AND when DuckDuckGo throttles/blocks the egress
+            # IP. The library gives no way to tell the two apart, so a zero-row
+            # outcome here is a loud non-retryable failure rather than a
+            # fabricated ``results=[]`` success. searxng is the reliable
+            # primary; this provider is the zero-infra secondary.
             found = ddgs.text(req.query, max_results=req.max_results * 2, timelimit=timelimit) or []
             for row in found:
                 rows.append(

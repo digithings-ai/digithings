@@ -6,7 +6,7 @@
 > [`infra/digichat-digithings/README.md`](../../infra/digichat-digithings/README.md).
 
 **Status:** Sketch (2026-08-09) — Gaps in §5 updated for Pick 3 docs onboard MVP  
-**Related:** [ADR-0018](../adr/0018-digichat-path-routing.md), [`cloudflare/digichat/ARCHITECTURE.md`](../../cloudflare/digichat/ARCHITECTURE.md), picks fit [`digichat-self-host-picks-fit.md`](digichat-self-host-picks-fit.md)  
+**Related:** [ADR-0018](../adr/0018-digichat-path-routing.md), [`apps/digichat/ARCHITECTURE.md`](../../apps/digichat/ARCHITECTURE.md), picks fit [`digichat-self-host-picks-fit.md`](digichat-self-host-picks-fit.md)  
 **Naming:** Digi module names are always lowercase in prose.
 
 ## Implementation plan
@@ -37,8 +37,8 @@ Bite-sized tasks (release packaging → Profile A/B → install guide → gap fi
 
 | Artifact | Status | Notes |
 |---|---|---|
-| **Git tag** `digichat-vX.Y.Z` | Exists | [release-please-digichat.yml](../../.github/workflows/release-please-digichat.yml) on `develop`; changelog in `cloudflare/digichat/CHANGELOG.md`. Current app version: `1.0.0` (`private: true` in package.json). `v0.9.3` remains on GHCR for DataTap / existing clients. |
-| **GHCR image** `ghcr.io/digithings-ai/digichat:vX.Y.Z` (+ `:latest`) | Exists | [publish-digichat-image.yml](../../.github/workflows/publish-digichat-image.yml) on `main` when `cloudflare/digichat/**` changes; skips if that version tag already published. `/embed` CSP `frame-ancestors` is set at **runtime** from `DIGICHAT_EMBED_HOSTS` / `DIGICHAT_EMBED_TENANTS` (not baked at publish). |
+| **Git tag** `digichat-vX.Y.Z` | Exists | [release-please-digichat.yml](../../.github/workflows/release-please-digichat.yml) on `develop`; changelog in `apps/digichat/CHANGELOG.md`. Current app version: `2.3.2` (`private: true` in package.json). `v0.9.3` remains on GHCR for DataTap / existing clients. |
+| **GHCR image** `ghcr.io/digithings-ai/digichat:vX.Y.Z` (+ `:latest`) | Exists | [publish-digichat-image.yml](../../.github/workflows/publish-digichat-image.yml) when release-please cuts the `digichat-vX.Y.Z` tag on `develop` (the release workflow dispatches it at the tag), and re-checked on a push to `main` touching `apps/digichat/**`; skips if that version tag already published. `/embed` CSP `frame-ancestors` is set at **runtime** from `DIGICHAT_EMBED_HOSTS` / `DIGICHAT_EMBED_TENANTS` (not baked at publish). |
 | **npm package for digichat Node** | Does **not** exist | App is `private: true`; clients do not `npm install digichat`. |
 | **`@digithings/digichat-ui`** | Workspace / site embed | Shared React UI for marketing shells and digichat itself — **not** the self-host install unit. |
 | **Compose local image** `digi-digichat:latest` | Dev / operator | Root `docker-compose.yml` **builds** from repo context; does not pull GHCR by default. |
@@ -53,8 +53,8 @@ Bite-sized tasks (release packaging → Profile A/B → install guide → gap fi
 5. **Not an install path:** publishing digichat Node to npm.
 
 ```text
-release-please (develop) → digichat-vX.Y.Z tag + CHANGELOG
-promote to main          → publish-digichat-image → ghcr.io/.../digichat:vX.Y.Z
+release-please (develop) → digichat-vX.Y.Z tag + CHANGELOG → publish-digichat-image → ghcr.io/.../digichat:vX.Y.Z
+promote develop → main   → cut release/vX.Y.Z from main (that version's patch line)
 client / digithings ops  → pull image + set env + choose profile A or B
 ```
 
@@ -117,7 +117,7 @@ No digigraph, digikey, LiteLLM, or digivault required on the client box. digithi
 
 | Variable | Required | Notes |
 |---|---|---|
-| `DIGICHAT_EMBED_HOSTS` | For embed CSP | Comma-separated parent hostnames (no secrets). **Runtime** env on the digichat service — stock GHCR admits new parents without rebuild. Optional if hosts already appear as `DIGICHAT_EMBED_TENANTS` keys and `DIGICHAT_EMBED_HOSTS` is unset. Seed list: `cloudflare/digichat/embed-hosts.txt` (not baked into the image). |
+| `DIGICHAT_EMBED_HOSTS` | For embed CSP | Comma-separated parent hostnames (no secrets). **Runtime** env on the digichat service — stock GHCR admits new parents without rebuild. Optional if hosts already appear as `DIGICHAT_EMBED_TENANTS` keys and `DIGICHAT_EMBED_HOSTS` is unset. Seed list: `apps/digichat/embed-hosts.txt` (not baked into the image). |
 
 ### Runtime — always (both profiles)
 
@@ -230,7 +230,7 @@ Short backlog (file as separate `agent-task` issues; no epic required):
 - **Compose overlay: pull GHCR** — e.g. `compose.digichat-release.yml` with `image:` pin + env file template (no monorepo build context).
 - **Compose overlay: Profile A minimal** — digichat + db + digikey + digigraph + LiteLLM + digivault only; document optional profiles.
 - ~~**CSP / embed hosts for clients**~~ — **Addressed:** runtime `DIGICHAT_EMBED_HOSTS` / tenant host keys via `src/proxy.ts` (stock GHCR, no rebuild).
-- **Makefile target** — `digichat-release-up VERSION=1.0.0` (or similar) wrapping the release overlay.
+- **Makefile target** — `digichat-release-up VERSION=2.3.2` (or similar) wrapping the release overlay.
 - **Profile B snippet** — Minimal digichat-only deploy example (Compose or ACA stub) + Foundry tenant JSON; point at DataTap as reference, keep digithings Azure-free.
 - **Release smoke checklist** — After each `digichat-v*` publish: GHCR pull, `/api/health`, embed smoke for digigraph tenant fixture (and Foundry if credentials available in CI secrets — optional).
 
@@ -244,6 +244,6 @@ Short backlog (file as separate `agent-task` issues; no epic required):
 - Product end-state: [`digichat-modular-frontend.md`](digichat-modular-frontend.md) §5
 - digithings operator host: [`infra/digichat-digithings/README.md`](../../infra/digichat-digithings/README.md)
 - Path routing: [ADR-0018](../adr/0018-digichat-path-routing.md)
-- Env / embed schema: [`cloudflare/digichat/ARCHITECTURE.md`](../../cloudflare/digichat/ARCHITECTURE.md) § Embed tenant registry, § Environment variables
-- Local ops: [`cloudflare/digichat/OPERATIONS.md`](../../cloudflare/digichat/OPERATIONS.md)
+- Env / embed schema: [`apps/digichat/ARCHITECTURE.md`](../../apps/digichat/ARCHITECTURE.md) § Embed tenant registry, § Environment variables
+- Local ops: [`apps/digichat/OPERATIONS.md`](../../apps/digichat/OPERATIONS.md)
 - Release smoke: [`docs/digichat/RELEASE-SMOKE.md`](../digichat/RELEASE-SMOKE.md)

@@ -5,18 +5,18 @@ from __future__ import annotations
 from datetime import date
 
 import pytest
+from digiquant.notify.cloudflare_email import CloudflareEmailConfig
 from digiquant.notify.digest import build_digest_content
 from digiquant.notify.dispatch import _render_daily_digest
 from digiquant.notify.entitlements import PlanTier
-from digiquant.notify.mailgun import MailgunConfig
 
 from tests.dq.notify.conftest import FakeSupabase
 
 pytestmark = pytest.mark.unit
 
-_CONFIG = MailgunConfig(
-    api_key="key",
-    domain="mg.example.com",
+_CONFIG = CloudflareEmailConfig(
+    api_token="key",
+    account_id="acct-123",
     from_address="notify@example.com",
     unsubscribe_base="https://example.com/settings/notifications",
 )
@@ -100,7 +100,7 @@ def test_digest_golden_per_tier(
         workspace_id="ws-1",
         tier=tier,
         run_date=date(2026, 8, 30),
-        mailgun_config=_CONFIG,
+        notify_config=_CONFIG,
         workspace_name="House",
     )
     text, html = _render_daily_digest(content)

@@ -31,7 +31,7 @@ pytestmark = pytest.mark.unit
 
 #: SAME raw map string used in production — verbatim from
 #: ``infra/digichat-release/compose.profile-a-bundle.override.yml:11`` and
-#: ``cloudflare/digithings-stack-cloudflare/wrangler.toml`` ``DIGI_TENANT_CORPUS_MAP``.
+#: ``apps/digithings-stack-cloudflare/wrangler.toml`` ``DIGI_TENANT_CORPUS_MAP``.
 _RAW_MAP = (
     '{"digithings":{"digisearchIndex":"digithings_docs",'
     '"vaultPathPrefix":"clients/digithings"},'

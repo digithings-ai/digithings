@@ -1,4 +1,4 @@
-"""Per-ticker fingerprint for H5/H6 skip/edit (#925 extension)."""
+"""Per-ticker fingerprint for analyst/deliberation skip/edit (#925 extension)."""
 
 from __future__ import annotations
 
@@ -66,7 +66,7 @@ def deliberation_skip_signal(
     *,
     analyst_stance: str,
 ) -> bool:
-    """True when H6 should carry prior deliberation with zero LLM calls."""
+    """True when deliberation should carry prior deliberation with zero LLM calls."""
     prior_analyst = state.prior_context.prior_analyst_by_ticker.get(ticker, {})
     prior_stance = prior_analyst.get("stance")
     prior_news = str(prior_analyst.get("fingerprint_news_hash") or "")

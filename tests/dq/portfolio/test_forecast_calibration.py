@@ -16,6 +16,7 @@ from digiquant.portfolio.models.forecast_calibration import (
     SessionPriceSnapshot,
     calibrated_forecast_content_hash,
     calibrated_forecast_id,
+    canonical_return_fraction,
     forecast_calibration_content_hash,
     forecast_calibration_id,
     forecast_outcome_content_hash,
@@ -87,13 +88,17 @@ def _resolved_outcome(**overrides: object) -> ForecastOutcome:
             "forecast_mean_return": (
                 None
                 if tmp.get("forecast_mean_return") is None
-                else str(tmp["forecast_mean_return"])
+                else canonical_return_fraction(tmp["forecast_mean_return"])
             ),
             "realized_return": (
-                None if tmp.get("realized_return") is None else str(tmp["realized_return"])
+                None
+                if tmp.get("realized_return") is None
+                else canonical_return_fraction(tmp["realized_return"])
             ),
             "signed_residual": (
-                None if tmp.get("signed_residual") is None else str(tmp["signed_residual"])
+                None
+                if tmp.get("signed_residual") is None
+                else canonical_return_fraction(tmp["signed_residual"])
             ),
             "positive_label": tmp.get("positive_label"),
             "status": tmp["status"].value
@@ -310,7 +315,7 @@ class TestForecastOutcome:
             "maturity_session": draft["maturity_session"].isoformat(),
             "reference_snapshot": draft["reference_snapshot"].model_dump(mode="json"),
             "maturity_snapshot": None,
-            "forecast_mean_return": str(draft["forecast_mean_return"]),
+            "forecast_mean_return": canonical_return_fraction(draft["forecast_mean_return"]),
             "realized_return": None,
             "signed_residual": None,
             "positive_label": None,

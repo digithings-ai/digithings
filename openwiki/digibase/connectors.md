@@ -1,19 +1,21 @@
 ---
 type: library-guide
 title: digibase Connectors
-description: digibase outbound clients — bounded httpx factories, connector DTOs, and the Supabase write connector.
+description: digibase outbound clients — bounded httpx factories and the Supabase write connector (upsert, filtered select, guarded delete).
 tags: [digibase, connectors, http-client, supabase]
-verified:
-  - by: openwiki/0.5.0
-    at: 2026-09-09T14:37:17.158Z
 sources:
-  - id: openwiki-source-d8b3f9cb7f77d6aa23c2355e
-    resource: repo://digibase/src/digibase/connectors/base.py
+  - id: openwiki-source-52ed21edd8e11967c0cbfb8d
+    resource: repo://digibase/src/digibase/connectors/__init__.py
   - id: openwiki-source-37e5df3c483ecf56f52f5f87
     resource: repo://digibase/src/digibase/connectors/supabase.py
   - id: openwiki-source-bbac12ef032ec955dbcfa5e8
     resource: repo://digibase/src/digibase/http_client.py
-generated: { by: "opencode", at: "2026-09-07T22:38:58.074Z" }
+  - id: openwiki-source-78a0b1f0b71bfd7778441cd1
+    resource: repo://tests/db/connectors/test_connector_base_removed.py
+generated: { by: "openwiki/0.5.0", at: "2026-09-23T13:25:31.068Z" }
+verified:
+  - by: openwiki/0.5.0
+    at: 2026-09-23T13:25:31.068Z
 ---
 
 # digibase Connectors
@@ -37,21 +39,84 @@ and two factories:
   forwards verbatim. Passing `timeout=None` disables timeouts and is
   discouraged.
 
-## Connector DTOs
+## Connector packages
 
-`digibase.connectors.base` defines the abstract write-action protocol:
-`ConnectorPayload` (`operation` + `data` dict) in, `ConnectorResult`
-(`success`, `external_id`, `error`) out. Connectors are thin adapters over
-these shapes, not frameworks.
+The `digibase.connectors` package (`__init__.py`) is lightweight: it
+defines no abstract base class or protocol interface. Its `__all__` is
+empty. Supabase connector names (`SupabaseConnector`, `SupabaseReadResult`,
+`SupabaseWriteResult`) are exposed through a lazy `__getattr__` so that
+`import digibase.connectors` does not require the `supabase` optional
+dependency. Callers that need the Supabase connector import it directly
+from `digibase.connectors.supabase`.
+
+The former `ConnectorPayload` / `ConnectorResult` abstract protocol and the
+`base.py` module were removed; a regression test asserts they stay gone
+and that `import digibase.connectors` still succeeds.
 
 ## Supabase connector
 
 `digibase.connectors.supabase.SupabaseConnector` (requires the
-`digibase[supabase]` extra) wraps an injected Supabase client with
-`upsert`, filtered `select`, and guarded filtered `delete`, plus audit
-emission on writes. Construction is explicit (`__init__(client)` or
-`from_env(...)`); `SupabaseNotConfiguredError` surfaces missing
-configuration as a `RuntimeError` rather than an implicit `None` client.
+`digibase[supabase]` extra) consolidates hand-rolled Supabase access
+scattered across services (twelve-x node stores, history, calendar_db;
+digiquant research, prices). It wraps an injected client behind a
+`SupabaseClient` Protocol — callers inject a real `supabase.Client` or a
+test fake without pulling the optional dependency.
+
+### Construction
+
+- `SupabaseConnector(client)` — explicit dependency injection, preferred
+  for testing and for callers that already hold a `supabase.Client`.
+- `SupabaseConnector.from_env(url_var=..., key_var=...)` — resolves
+  `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` from the environment,
+  imports the `supabase` package lazily (so the module imports without it),
+  and constructs a live client. Raises `SupabaseNotConfiguredError`
+  (a `RuntimeError`) when either variable is missing or blank.
+
+The `.client` property exposes the underlying client as an escape hatch for
+unwrapped calls.
+
+### Write operations
+
+**Upsert** (`upsert(table, rows, *, on_conflict=None, chunk=500)`):
+
+- Accepts a single `dict` or a list of `dict`s.
+- When `on_conflict` names unique-key columns the upsert is idempotent:
+  replays update in place instead of duplicating rows.
+- Large lists are split into batches of `chunk` rows (default 500, chosen
+  to stay under PostgREST request-size limits).
+- Returns `SupabaseWriteResult(success, table, rows, error)` — callers
+  branch on `success`/`error` without `try`/`except`.
+
+**Delete** (`delete(table, *, eq=None, in_=None)`):
+
+- Requires at least one equality or non-empty membership filter. An
+  unfiltered delete is refused with `success=False` and an error string.
+- Returns `SupabaseWriteResult` with the count of actually deleted rows.
+
+### Read operations
+
+**Select** (`select(table, columns="*", *, eq, gte, lte, in_, order, desc, limit, count)`):
+
+- Accepts column-level equality, range, and membership filters composed
+  as PostgREST logical AND.
+- Optional `count` parameter (`"exact"`, `"planned"`, `"estimated"`)
+  populates `SupabaseReadResult.count` with the server-side total.
+- Returns `SupabaseReadResult(success, rows, count, error)`. The `rows`
+  field is the decoded `response.data` list (or `[]` on failure).
+
+### Error handling
+
+All three operations catch transport/client exceptions internally and
+return a result with `success=False` and the error string, rather than
+raising. Errors are logged at `ERROR` level.
+
+### Audit
+
+Every write emits a redacted audit line via `digibase.audit.redact_mapping`.
+Only non-sensitive metadata — table name, operation, row count,
+`on_conflict` columns — is logged. Row bodies are never audited because
+they may carry PII or licensed data that the shallow key-name redactor
+cannot scrub.
 
 ## Roadmap boundary
 

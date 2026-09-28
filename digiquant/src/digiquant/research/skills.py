@@ -86,6 +86,37 @@ def _is_research_memo_skill(slug: str) -> bool:
     return slug not in _NON_RESEARCH_MEMO_SKILLS
 
 
+# Skills that never bind tools, so TOOL_USE_CONTRACT would assert things that are false
+# for them (#4490 review). Every one of these is called with no ``tools=`` /
+# ``execute_tool=``, so ``digigraph.graph.research_agent`` short-circuits
+# ``tool_grounded = bool(tools) and execute_tool is not None`` and ``run_tools`` is never
+# entered — there is no loop to converge and no ``web_grounding`` block to read:
+#   * ``decision-reflector``  — research/decision_log.py:393; output is one ``reflection``
+#     field, not a document.
+#   * ``beliefs-distillation`` — persisted under the key ``beliefs`` (BELIEFS_DOCUMENT_KEY),
+#     not the slug, so the contract's ``document_key="{slug}"`` would be actively wrong.
+#   * ``digest`` / ``digest-subsection`` — phase7_synthesis.py:609,687,715.
+#   * ``monthly-synthesis`` — phase_monthly.py:42.
+# Telling those calls to "write today's document" and fetch their own prior one is the
+# same class of defect this contract exists to remove, so they are exempt.
+_TOOL_CONTRACT_EXEMPT_SKILLS = _NON_RESEARCH_MEMO_SKILLS
+
+
+def _tool_contract_applies(slug: str) -> bool:
+    return slug not in _TOOL_CONTRACT_EXEMPT_SKILLS
+
+
+def _render_tool_use_contract(slug: str) -> str:
+    """Return :data:`TOOL_USE_CONTRACT` with ``{slug}`` filled in.
+
+    Separate from the constant so the ``{slug}`` placeholders are substituted by
+    ``str.replace`` rather than ``str.format``. Today the constant holds no other braces,
+    so ``format`` would also work — but ``replace`` cannot raise on a future literal brace,
+    at the cost of leaving an unknown ``{name}`` placeholder silently intact.
+    """
+    return TOOL_USE_CONTRACT.replace("{slug}", slug)
+
+
 # Appended to EVERY skill, full and edit alike (#1750). Deliberately at the single load
 # chokepoint rather than copied into 20 heterogeneous SKILL.md files, for the same reason
 # EDIT_SCHEMA_CONSTRAINTS is: it cannot drift between them.
@@ -158,6 +189,65 @@ Every figure you quote in the markdown body must carry the date of the DATA — 
   unverified figure is worse than leaving it unsourced."""
 
 
+# Appended to EVERY skill, full and edit alike (#4490). Same single-load-chokepoint
+# rationale as the blocks above: the fiction it corrects (`defuddle parse`, `WebFetch`,
+# "the MCP Polymarket tools", `./scripts/fetch-market-data.sh`) is duplicated across a
+# dozen SKILL.md files, and none of those names exist in this repo — `defuddle` has zero
+# matches and `scripts/fetch-market-data.sh` is not a path in this tree (#4490).
+#
+# The failure it fixes is not a missing capability, it is a missing boundary: a segment
+# whose wired surface is only the pre-fetched `web_grounding` block plus
+# `query_research`/`fetch_prior_document` reads a skill telling it to go fetch six
+# things itself, so it re-phrases the same query until `run_tools` exhausts its
+# 24-round budget (2621 s for `alt-sentiment-news` on 2026-09-22 — the direct cause of
+# the 230-minute pipeline timeout). Measured locally: 11 calls / 210 s before, 2 calls
+# / 66 s for the segment that does not carry the fiction.
+#
+# Deliberately NOT a time limit or a tool-call cap: the agent stays free to make as many
+# calls as the work genuinely needs. What it gets here is enough information to know
+# when the work is done.
+TOOL_USE_CONTRACT = """## Tools (read this before you plan a single call)
+
+Your toolset is exactly the functions listed in this request's tool schemas — nothing
+else. There is no shell, no URL fetcher, no browser, and no MCP client in this loop. If
+the instructions above name a tool that is not in your schema (`defuddle`, `WebFetch`,
+`curl`, `./scripts/fetch-market-data.sh`, "the MCP Polymarket tools", an X/Twitter or
+Reddit or Google Trends search), that instruction describes a different environment:
+**you cannot run it — do not try, and do not report its absence as a gap in the data.**
+
+- **Today's document does not exist yet — you are writing it.** You are the segment that
+  produces today's `{slug}` document. Querying `query_research` or `fetch_prior_document`
+  for the run date returns nothing *by design*; that is the expected answer, not a
+  failure. Use the PRIOR document (`include_prior=true`, or an earlier `as_of_date`) for
+  continuity, then write today's.
+- **The `web_grounding` block in PHASE_INPUTS is already-fetched, cited evidence.** It is
+  the news/sentiment grounding for this segment. Use it directly: quote it, carry its
+  source URLs into `sources`. Do NOT try to fetch its pages, and do NOT treat its
+  presence as a reason to search for more.
+- **A repeated call returns the same bytes.** `query_research` and `fetch_prior_document`
+  read stored rows; re-issuing the same arguments — or re-phrasing the same question with
+  a different `subject`/`dataset`/`ticker` — cannot surface a row that was not there a
+  moment ago. An empty result is a real answer.
+- **Reading a prior document is one call, not a search.** If you want your own prior
+  document, call `fetch_prior_document(document_key="{slug}")` once and read it.
+- **A path is not a document key.** Entries like `docs/ops/data-sources.md`,
+  `config/watchlist.md` or `config/preferences.md` under `## Inputs` above are provenance
+  for a human reader — files in the repository, not rows in Supabase. Never pass one to a
+  tool.
+- **Data tools are ground truth where they exist.** When `get_price_technicals`,
+  `get_macro_series`, `get_market_breadth`, `get_sector_relative_strength`,
+  `get_vix_term_structure`, `get_etf_flows_proxy` or `get_fed_rate_probabilities` are in
+  your schema, call them for the numbers this segment needs. They return real values at
+  no search cost; one call per ticker/series is usually enough.
+
+Then converge. When you have the prior document and the grounding you were given, and
+your data-tool calls have returned, you have everything this segment is going to get —
+write the research memo. Making more calls does not add evidence, it only delays the
+answer and inflates cost. If a number you wanted genuinely is not in any of it, say so
+plainly in the body and lower your conviction; that is the correct outcome, and it is
+better than another query."""
+
+
 class MalformedFrontmatterError(ValueError):
     """Raised when a SKILL.md starts with ``---`` but has a broken YAML block."""
 
@@ -195,6 +285,7 @@ def load_skill(slug: str) -> str:
 
     :data:`QUANTITATIVE_FINDING_RULES` is appended (#1750). The full path needs it as much as
     the edit path does: the frozen XLV block that opened #1750 was produced by a *baseline* run.
+    :data:`TOOL_USE_CONTRACT` is rendered with the slug and appended to every skill (#4490).
     """
     path = _skill_path(slug)
     if not path.is_file():
@@ -202,6 +293,8 @@ def load_skill(slug: str) -> str:
     raw = path.read_text(encoding="utf-8")
     _, body = _split_frontmatter(raw)
     parts = [body.strip()]
+    if _tool_contract_applies(slug):
+        parts.append(_render_tool_use_contract(slug))
     if _is_research_memo_skill(slug):
         parts.append(RESEARCH_MEMO_RULES)
     if slug in _DIGEST_BRIEFING_SKILLS:
@@ -219,6 +312,7 @@ def load_skill_edit(slug: str) -> str:
 
     :data:`EDIT_SCHEMA_CONSTRAINTS` is appended to every edit skill (#1740), and
     :data:`QUANTITATIVE_FINDING_RULES` to every skill of either kind (#1750).
+    :data:`TOOL_USE_CONTRACT` is rendered with the slug and appended (#4490).
     """
     path = _skill_edit_path(slug)
     if not path.is_file():
@@ -226,6 +320,8 @@ def load_skill_edit(slug: str) -> str:
     raw = path.read_text(encoding="utf-8")
     _, body = _split_frontmatter(raw)
     parts = [body.strip()]
+    if _tool_contract_applies(slug):
+        parts.append(_render_tool_use_contract(slug))
     if _is_research_memo_skill(slug):
         parts.append(RESEARCH_MEMO_RULES)
     if slug in _DIGEST_BRIEFING_SKILLS:

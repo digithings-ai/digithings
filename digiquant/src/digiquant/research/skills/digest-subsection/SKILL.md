@@ -25,8 +25,9 @@ weights, or thesis lifecycle.
   `sources`). Read the prose; do not expect `headline` / `material_findings` /
   `data_quality`. For US equities, the 11 GICS **sector memos** are the
   authority for leadership — there is no scorecard.
-- `prior_digests` — last two **full** digest briefing bodies. Use them so
-  today's subsection can say whether yesterday's call still holds.
+- `prior_digests` (from `SHARED_CONTEXT`) — last two **full** digest briefing
+  bodies. Use them so today's subsection can say whether yesterday's call still
+  holds.
 
 ## Output
 

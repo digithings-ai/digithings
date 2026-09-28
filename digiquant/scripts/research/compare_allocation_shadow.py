@@ -3,7 +3,7 @@
 
 Loads a frozen criteria version first, then two arm request/result JSON pairs,
 and writes an immutable comparison report. Never contacts production I/O,
-brokers, or H8/H9 booking paths.
+brokers, or sizing/commit booking paths.
 """
 
 from __future__ import annotations

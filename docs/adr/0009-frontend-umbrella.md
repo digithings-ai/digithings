@@ -71,7 +71,7 @@ a web frontend. Only its `cloudflare/` subpackage joins the workspace.
 ### Positive
 
 - **Token sync is free.** A single source of truth at
-  `cloudflare/digiweb/design/tokens.css` is consumed by every surface via
+  `packages/design/tokens.css` is consumed by every surface via
   workspace resolution. No HTTPS drift checks, no `npm publish` loop.
 - **Atomic cross-surface changes.** A design edit + its consumers
   update in one PR with one review. Previously this would have required
@@ -81,14 +81,14 @@ a web frontend. Only its `cloudflare/` subpackage joins the workspace.
   pre-push hook, and the PR automation are all single-repo tools. The
   umbrella doesn't require new machinery.
 - **CI alignment.** `digichat-test.yml` finally activates, gated on
-  `cloudflare/digichat/**` + `cloudflare/digiweb/design/**`.
+  `apps/digichat/**` + `packages/design/**`.
 - **History preserved.** All moves used `git mv` where possible; only
   the digichat import is from a fresh working tree (its prior 3-commit
   local history is acceptable loss).
 
 ### Negative
 
-- **Larger repo.** `cloudflare/digichat/` adds ~100 tracked files; root
+- **Larger repo.** `apps/digichat/` adds ~100 tracked files; root
   `package-lock.json` will appear on first `npm install`.
 - **Workflow churn.** Outstanding feature branches need to rebase /
   resolve path changes once this lands. Mitigation: scheduled ahead of
@@ -100,13 +100,13 @@ a web frontend. Only its `cloudflare/` subpackage joins the workspace.
 ### Deferred
 
 - Actual `@import` of design tokens into
-  `cloudflare/digichat/src/app/globals.css`. Tracked by #240. The design
+  `apps/digichat/src/app/globals.css`. Tracked by #240. The design
   `tokens.css` and shadcn both use `--accent` (as distinct semantic tokens);
   resolving that is a substantive design decision that belongs with #240,
   not this structural reorg.
 - digichat `/embed` route. Tracked by #241; the saved reference
   implementation at `/tmp/embed-unit-241/` is reusable as-is against
-  `cloudflare/digichat/src/app/embed/`.
+  `apps/digichat/src/app/embed/`.
 - Atlas adopting the design. Scope only wires the workspace
   reference (`@digithings/design: "*"`); token adoption is a
   follow-up against `apps/digiquant-atlas/cloudflare/`.
@@ -136,9 +136,9 @@ a web frontend. Only its `cloudflare/` subpackage joins the workspace.
 - npm (not pnpm) — matches the pre-existing `digichat/package-lock.json`.
 - Static sites reference the design via `../design/…`
   relative paths. Published via a `dist/` assembly step in `static.yml`
-  that copies both `cloudflare/digithings/` and `cloudflare/digiweb/design/`
+  that copies both `cloudflare/digithings/` and `packages/design/`
   into the Pages artifact.
-- `cloudflare/digichat/package.json` declares `@digithings/design`
+- `apps/digichat/package.json` declares `@digithings/design`
   as a workspace dependency, but `globals.css` does not yet `@import` it
   (see "Deferred").
 - `apps/digiquant-atlas/cloudflare/package.json` same — reference only.

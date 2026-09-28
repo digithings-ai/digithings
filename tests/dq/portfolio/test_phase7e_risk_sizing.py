@@ -211,10 +211,10 @@ def test_effective_conviction_applies_debate_delta() -> None:
 
 
 class TestUnchallengedCarryIsLowConfidence:
-    """#1742 — a position whose H6 debate crashed may not be sized as a won argument.
+    """#1742 — a position whose deliberation debate crashed may not be sized as a won argument.
 
     On 2026-07-31 the three highest-conviction new opens (VGK/FXI/IBIT, 30% of NAV) were
-    all crash-carried: H6 published the analyst's own stance as a converged debate, and
+    all crash-carried: deliberation published the analyst's own stance as a converged debate, and
     sizing had no way to know the PM challenge never ran.
     """
 
@@ -244,14 +244,14 @@ class TestUnchallengedCarryIsLowConfidence:
         )
 
     def test_memo_path_caps_the_crash_carried_name_at_the_bar(self) -> None:
-        # The memo branch is production (H7 writes a memo every run): rank 1 (AAA) would
+        # The memo branch is production (direction writes a memo every run): rank 1 (AAA) would
         # outweigh rank 2 (BBB), but AAA's debate crashed, so it drops to the entry bar.
         rebal = self._sized({"AAA": {"carried": True, "carry_reason": "llm_failure"}})
         w = _weights(rebal)
         assert w["AAA"] == pytest.approx(w["BBB"])
         # Capped, never ejected — the name stays in the book and is named in the note.
         assert "AAA" in w
-        assert "H6 deliberation failed" in rebal["notes"]
+        assert "deliberation failed" in rebal["notes"]
         # #2417 — the crash-carry haircut is reason-coded in the conviction domain, not
         # the weight-pct domain the book itself is asserted in above.
         conviction_events = [
@@ -270,7 +270,7 @@ class TestUnchallengedCarryIsLowConfidence:
         rebal = self._sized({"AAA": {"carried": True, "carry_reason": "fingerprint_skip"}})
         w = _weights(rebal)
         assert w["AAA"] > w["BBB"]
-        assert "H6 deliberation failed" not in rebal["notes"]
+        assert "deliberation failed" not in rebal["notes"]
         # #2417 — a benign fingerprint-skip carry is a real debate, not an unchallenged
         # crash-carry, so it must never emit a conviction-floor event.
         assert not any(a["adjustment_type"] == "conviction_floor" for a in rebal["adjustments"])
@@ -314,7 +314,7 @@ class TestUnchallengedCarryIsLowConfidence:
 
 
 def test_memo_conviction_rank_orders_weights() -> None:
-    # H7 path: rank 1 (AAA) outweighs rank 2 (BBB) with equal analyst conviction.
+    # direction path: rank 1 (AAA) outweighs rank 2 (BBB) with equal analyst conviction.
     state = ResearchState(
         run_type="delta",
         run_date=RUN_DATE,
@@ -342,7 +342,7 @@ def test_memo_conviction_rank_orders_weights() -> None:
     assert w["AAA"] > w["BBB"]
 
 
-def test_memo_path_publishes_h7_narrative_as_action_rationale() -> None:
+def test_memo_path_publishes_direction_narrative_as_action_rationale() -> None:
     roster = [
         TickerDirection(
             ticker="AAA",
@@ -390,7 +390,7 @@ def _memo_state(
     return state
 
 
-def test_gapful_h7_ranks_match_dense_fallback() -> None:
+def test_gapful_direction_ranks_match_dense_fallback() -> None:
     """Gapful ranks [2,7,11] must size like dense [1,2,3] (WP8.1)."""
     tickers = ["AAA", "BBB", "CCC"]
     vols = _tech_rows({t: 20 for t in tickers})
@@ -416,7 +416,7 @@ def test_gapful_h7_ranks_match_dense_fallback() -> None:
         assert dense[ticker] == pytest.approx(gapful[ticker])
 
 
-def test_duplicate_h7_ranks_tie_by_symbol() -> None:
+def test_duplicate_direction_ranks_tie_by_symbol() -> None:
     """Duplicate ranks resolve deterministically by ticker symbol (WP8.1)."""
     roster = [
         TickerDirection(ticker="BBB", direction="long", conviction_rank=1),
@@ -429,8 +429,8 @@ def test_duplicate_h7_ranks_tie_by_symbol() -> None:
     assert w["AAA"] > w["BBB"]
 
 
-def test_h5_sell_cannot_drop_h7_long() -> None:
-    """H5 sell/watch must not remove an H7-authorized long (WP8.1)."""
+def test_analyst_sell_cannot_drop_direction_long() -> None:
+    """analyst sell/watch must not remove an direction-authorized long (WP8.1)."""
     roster = [TickerDirection(ticker="AAA", direction="long", conviction_rank=1)]
     analysts = {"AAA": {"conviction_score": 5, "stance": "sell"}}
     w = _weights(
@@ -443,8 +443,8 @@ def test_h5_sell_cannot_drop_h7_long() -> None:
     assert w["AAA"] > 0
 
 
-def test_h7_flat_not_admitted_via_h5_buy() -> None:
-    """H7 flat roster entry cannot enter sizing through H5 buy alone (WP8.1)."""
+def test_direction_flat_not_admitted_via_analyst_buy() -> None:
+    """direction flat roster entry cannot enter sizing through analyst buy alone (WP8.1)."""
     roster = [
         TickerDirection(ticker="SPY", direction="long", conviction_rank=1),
         TickerDirection(ticker="DBO", direction="flat", conviction_rank=2),
@@ -599,7 +599,7 @@ def test_notes_carry_sizing_explanation() -> None:
         ),
         FakeSupabaseClient(canned_reads={"price_technicals": _tech_rows({"SPY": 15})}),
     )
-    assert "Risk-sizing (H8)" in rebal["notes"]
+    assert "Risk-sizing (sizing)" in rebal["notes"]
     assert rebal["notes"].startswith("PM notes.")  # PM's note preserved
 
 
@@ -753,7 +753,7 @@ def test_correlation_reader_error_falls_back_to_none(monkeypatch: pytest.MonkeyP
 class TestHeldContinuityBackstop:
     """#1649 backstop — the FINAL sized book enforces held ⇒ positive weight or flat.
 
-    The 2026-07-22 22:54 run reached H9 with NINE held names at weight<=0 despite the
+    The 2026-07-22 22:54 run reached commit with NINE held names at weight<=0 despite the
     memo-unaddressed carry being live — the invariant must hold on the final dict
     regardless of which upstream crack fired.
     """
@@ -803,7 +803,7 @@ class TestHeldContinuityBackstop:
             {"SPY": 60.0}, state, events=events
         )
         assert "DBO" not in out, "an explicit flat is an exit — never re-added"
-        # #2417 — H7-flat is FLAT_EXIT, structurally distinct from CONTINUITY_CARRY: a
+        # #2417 — direction-flat is FLAT_EXIT, structurally distinct from CONTINUITY_CARRY: a
         # ticker can never carry both event types out of this one call.
         assert len(events) == 1
         assert events[0].ticker == "DBO"
@@ -816,7 +816,7 @@ class TestHeldContinuityBackstop:
         out = phase7e_risk_sizing._apply_held_continuity_backstop(
             {"SPY": 60.0}, state, events=events
         )
-        assert "DBO" not in out, "no recoverable weight → leave out; H9 fails closed"
+        assert "DBO" not in out, "no recoverable weight → leave out; commit fails closed"
         # #2417 — no recoverable weight means no adjustment was actually made; nothing to
         # reason-code.
         assert events == []
@@ -837,7 +837,7 @@ class TestActionClassificationAndInvestedCap:
     """#1676 — held rebalances classify add/trim/hold (not 'new'); Σ invested ≤ 100%."""
 
     def test_memo_path_actions_classify_against_live_weights(self) -> None:
-        # The H7 memo path passes original_actions=[] — previously EVERYTHING was "new".
+        # The direction memo path passes original_actions=[] — previously EVERYTHING was "new".
         actions = phase7e_risk_sizing._rebuild_actions(
             [],
             pm_targets={"AAA": 1.0, "BBB": 1.0, "CCC": 1.0, "DDD": 1.0},
@@ -960,8 +960,8 @@ class TestCarryLoopEventEmission:
     ``_build_sized_book``'s carry loop (around ``_held_carry_weights``) must emit a
     CONTINUITY_CARRY event only when the carry actually lands in ``sized`` — not
     when the ticker was already sized by the PM/sizer and the carry is a no-op. DBO
-    is H4-gated (``focus_roster_excluded``) in both cases, so it is always in
-    ``carried_held_tickers``; the two cases differ only in whether the H7 memo also
+    is screener-gated (``focus_roster_excluded``) in both cases, so it is always in
+    ``carried_held_tickers``; the two cases differ only in whether the direction memo also
     addresses it as ``long`` (which feeds it into ``size_portfolio`` and pre-fills
     ``sized`` before the carry loop runs).
     """
@@ -1015,7 +1015,7 @@ class TestCarryLoopEventEmission:
         assert not any(a["ticker"] == "DBO" for a in carries)
 
 
-def test_h7_flat_and_omitted_held_never_conflate_on_the_same_ticker() -> None:
+def test_direction_flat_and_omitted_held_never_conflate_on_the_same_ticker() -> None:
     """#2417 — flat (FLAT_EXIT) and omitted/unaddressed (CONTINUITY_CARRY) are structurally
     exclusive: ``memo_addressed_tickers`` already includes flat-tagged tickers, so a held
     ticker can reach exactly one of the two backstop branches, never both.
@@ -1090,7 +1090,7 @@ def test_apply_turnover_minimum_hold_override_emits_event_band_clamp_does_not() 
 class TestValidateSizingLineage:
     """#2417 §6/§7 — the standalone validator, exercised directly.
 
-    The wired production call site (``_validate_h8_lineage``, invoked from
+    The wired production call site (``_validate_sizing_lineage``, invoked from
     ``risk_sizing()`` after ``_build_sized_book`` returns) has its own coverage
     below in ``TestValidateH8LineageCallSite`` — both the golden path (a real,
     materially-capped book that logs nothing) and the regression path (a
@@ -1179,7 +1179,7 @@ class TestValidateH8LineageCallSite:
             "adjustments": [adjustment.model_dump()],
         }
         # must not raise and must not log — nothing here is a failure.
-        phase7e_risk_sizing._validate_h8_lineage({"SPY": 50.0}, sized_book, {})
+        phase7e_risk_sizing._validate_sizing_lineage({"SPY": 50.0}, sized_book, {})
 
     def test_direct_call_logs_but_does_not_raise_on_unexplained_delta(
         self, caplog: pytest.LogCaptureFixture
@@ -1189,8 +1189,8 @@ class TestValidateH8LineageCallSite:
             "adjustments": [],
         }
         with caplog.at_level(logging.ERROR, logger=phase7e_risk_sizing.__name__):
-            phase7e_risk_sizing._validate_h8_lineage({"SPY": 50.0}, sized_book, {})
-        assert "H8 lineage validation failed" in caplog.text
+            phase7e_risk_sizing._validate_sizing_lineage({"SPY": 50.0}, sized_book, {})
+        assert "sizing lineage validation failed" in caplog.text
 
     def test_wired_end_to_end_golden_path_logs_nothing(
         self, caplog: pytest.LogCaptureFixture
@@ -1217,12 +1217,12 @@ class TestValidateH8LineageCallSite:
             out = build_risk_sizing_node(RiskSizingDeps(client=client))(state)
         rebal = out["phase7d_rebalance"]
         assert rebal["recommended_portfolio"][0]["target_pct"] == pytest.approx(30.0)
-        assert "H8 lineage validation failed" not in caplog.text
+        assert "sizing lineage validation failed" not in caplog.text
 
     def test_wired_memo_path_logs_nothing_despite_no_matching_adjustment(
         self, caplog: pytest.LogCaptureFixture
     ) -> None:
-        # #2417 CodeRabbit review on #2434 (Fix #4): the H7 memo path's "targets" are
+        # #2417 CodeRabbit review on #2434 (Fix #4): the direction memo path's "targets" are
         # conviction-weight placeholders (1.0 per long ticker), not pct-scale PM
         # requests — comparing them against the sizer's actual pct output as if they
         # were the same unit produced a spurious "unexplained delta" on every run,
@@ -1239,7 +1239,7 @@ class TestValidateH8LineageCallSite:
             out = build_risk_sizing_node(RiskSizingDeps(client=client))(state)
         rebal = out["phase_portfolio"].sized_book
         assert "SPY" in _weights(rebal)
-        assert "H8 lineage validation failed" not in caplog.text
+        assert "sizing lineage validation failed" not in caplog.text
 
     def test_wired_end_to_end_catches_a_silent_regression_and_stays_fail_soft(
         self, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
@@ -1287,7 +1287,7 @@ class TestValidateH8LineageCallSite:
         # under _RELAXED caps before the monkeypatched halving runs.)
         rebal = out["phase7d_rebalance"]
         assert rebal["recommended_portfolio"][0]["target_pct"] == pytest.approx(50.0)
-        assert "H8 lineage validation failed" in caplog.text
+        assert "sizing lineage validation failed" in caplog.text
 
 
 # --------------------------------------------------------------------------- WP6.1 incumbent golden paths (#2687)
@@ -1296,7 +1296,7 @@ class TestValidateH8LineageCallSite:
 def test_incumbent_memo_and_effective_inputs_match_golden_fixture() -> None:
     """Freeze ``_memo_effective_inputs`` and ``_effective_inputs`` before WP6.2.
 
-    WP8.1: memo-path stances are always ``buy`` — H7 owns eligibility, not H5.
+    WP8.1: memo-path stances are always ``buy`` — direction owns eligibility, not analyst.
     """
     from datetime import date
 
@@ -1338,7 +1338,7 @@ def test_incumbent_memo_and_effective_inputs_match_golden_fixture() -> None:
 
 
 def test_incumbent_default_caps_final_book_matches_golden_fixture() -> None:
-    """Representative H8 end-state under default ``SizingCaps`` stays golden."""
+    """Representative sizing end-state under default ``SizingCaps`` stays golden."""
     from digiquant.portfolio.sizing import TickerRisk, size_portfolio
 
     from tests.dq.portfolio.incumbent_risk_fixtures import (
@@ -1359,7 +1359,7 @@ def test_incumbent_default_caps_final_book_matches_golden_fixture() -> None:
     assert_book_matches_golden(sizing_result_snapshot(result), golden)
 
 
-def test_h8_attaches_risk_snapshots_without_changing_book() -> None:
+def test_sizing_attaches_risk_snapshots_without_changing_book() -> None:
     """WP6.3 (#2698): resolver runs before sizing; incumbent weights unchanged."""
     from digiquant.portfolio.models.risk_policy import PolicyArtifactStatus
 

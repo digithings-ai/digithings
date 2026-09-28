@@ -1,0 +1,68 @@
+/* Controls page — dropdown, search, navigation buttons, form fields. */
+
+/* ── Search ───────────────────────────────────────────────────────────── */
+/* .ctl-search / .sb-input promoted to @digithings/ui's <SearchBar/>
+   (#1548) — dress now lives in styles/controls-core.css. Only the `/`
+   keycap hint stays: it is consumer markup passed through the bar's hint
+   slot. */
+
+/* UNLAYERED BY DESIGN: `.kbd` (globals.css) is unlayered and sets
+   color: ink-soft; unlayered rules beat every layer regardless of
+   specificity, so only another unlayered rule can push the hint back to
+   ink-mute. This is the one exception to the family sheets' `@layer
+   components` rule. */
+.sb-hint {
+  color: var(--ink-mute);
+}
+
+/* Reference family dress, in the `components` layer so kit Tailwind
+   utilities win on a tie — the app-rebuild rule in
+   packages/ui/MIGRATION.md. */
+@layer components {
+  /* ── Dropdown ───────────────────────────────────────────────────────── */
+  /* .dd-* deleted (wave 1) — the specimen is the stock DropdownMenu from
+     @digithings/ui/ui with an inline filter Input; dress and keyboard
+     behavior come from the kit. No CSS here. */
+
+  /* ── Navigation buttons ─────────────────────────────────────────────── */
+  /* nb-* promoted to @digithings/ui's <SegmentedControl/> / <Pager/> /
+     <IconButton/> (#1548) — dress now lives in styles/controls-core.css,
+     selection keyed off aria-pressed / aria-current instead of .on. */
+
+  /* ── Form fields ────────────────────────────────────────────────────── */
+  /* .ff-* deleted (wave 1) — inputs, textarea and labels are the stock
+     Input/Textarea/Label from @digithings/ui/ui; checkbox/radio/switch are the
+     controls-layer selection primitives. Focus, error and disabled states are
+     the primitives' own (aria-invalid / disabled); the label micro-caps is
+     call-site type. No CSS here. */
+
+  /* ── tooltip ────────────────────────────────────────────────────────── */
+  /* .tt-* deleted (wave 1) — the specimen is the stock Tooltip family from
+     @digithings/ui/ui: placement via `side`, the kit arrow, and the stock
+     data-open/data-closed animation. No CSS here. */
+
+  /* ── accordion ──────────────────────────────────────────────────────── */
+  /* .acc-* deleted (wave 1) — the specimen composes the stock Collapsible from
+     @digithings/ui/ui; the panel animates from the primitive's measured
+     --collapsible-panel-height and the chevron turns off the root data-open
+     state. No CSS here. */
+
+  /* ── skeleton loading states ────────────────────────────────────────── */
+  /* .sk-toggle* deleted (wave 1) — the replay control is the kit <Button/>.
+     The shimmer primitives were already promoted to @digithings/ui's
+     <Skeleton/> (#1548) — dress lives in styles/controls-core.css. */
+
+  /* ── range slider ───────────────────────────────────────────────────── */
+  /* Promoted to the kit's Base UI <Slider/> (#4306, batch K1). The old
+     native range mechanic (.sl-input/.sl--disabled) is gone; the specimen
+     composes the kit part directly. */
+
+  /* ── tags / chips input ─────────────────────────────────────────────── */
+  /* tg-* promoted to @digithings/ui's <TagsInput/> (#1548) — dress now lives
+     in styles/controls-core.css (the specimen's baked-in margin-top moved to
+     the thin consumer's mt-[1.2rem]). No CSS here. */
+
+  /* empty / error states — promoted to @digithings/ui's <EmptyState/> (#1548);
+     the specimen's token utilities were translated value-for-value into
+     styles/controls-core.css (ctl-empty*). No CSS here. */
+}

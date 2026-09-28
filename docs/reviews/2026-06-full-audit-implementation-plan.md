@@ -242,7 +242,7 @@ Format per entry: **Title** | Component | Files | Depends | Parallel | Acceptanc
 #### REM-010 → AUDIT-010
 - **Title:** Fix embed → `/api/chat` auth mismatch (token or disable prod embed)
 - **Component:** digichat
-- **Files:** `cloudflare/digichat/src/app/embed/page.tsx`, `cloudflare/digichat/src/app/api/chat/route.ts`, `OPERATIONS.md`
+- **Files:** `apps/digichat/src/app/embed/page.tsx`, `apps/digichat/src/app/api/chat/route.ts`, `OPERATIONS.md`
 - **Depends:** product decision — **HUMAN GATE**
 - **Parallel:** no (touches auth contract)
 - **Acceptance:** Vitest: embed flow returns 401 without token OR 200 with embed token; manual iframe test documented
@@ -444,7 +444,7 @@ Format per entry: **Title** | Component | Files | Depends | Parallel | Acceptanc
 #### REM-032 → AUDIT-032
 - **Title:** Tighten digichat SSRF allowlist (known hosts + env)
 - **Component:** digichat
-- **Files:** `cloudflare/digichat/src/lib/ecosystem.ts`
+- **Files:** `apps/digichat/src/lib/ecosystem.ts`
 - **Depends:** —
 - **Parallel:** yes
 - **Acceptance:** REM-033 tests pass; single-label hostnames rejected
@@ -453,16 +453,16 @@ Format per entry: **Title** | Component | Files | Depends | Parallel | Acceptanc
 #### REM-033 → AUDIT-033
 - **Title:** Add Vitest table-driven SSRF allowlist tests
 - **Component:** digichat
-- **Files:** `cloudflare/digichat/src/lib/ecosystem.test.ts` (new)
+- **Files:** `apps/digichat/src/lib/ecosystem.test.ts` (new)
 - **Depends:** REM-032
 - **Parallel:** no
-- **Acceptance:** `cd cloudflare/digichat && npm run test -- ecosystem`
+- **Acceptance:** `cd apps/digichat && npm run test -- ecosystem`
 - **Effort:** S
 
 #### REM-034 → AUDIT-034
 - **Title:** Wrap `replaceConversationMessages` in DB transaction
 - **Component:** digichat
-- **Files:** `cloudflare/digichat/src/lib/db/conversations-repo.ts`, tests
+- **Files:** `apps/digichat/src/lib/db/conversations-repo.ts`, tests
 - **Depends:** —
 - **Parallel:** yes
 - **Acceptance:** Vitest: simulated failure mid-replace rolls back
@@ -835,7 +835,7 @@ Format per entry: **Title** | Component | Files | Depends | Parallel | Acceptanc
 #### REM-075 → AUDIT-075
 - **Title:** Cache digikey JWT exchange until exp minus skew
 - **Component:** digichat
-- **Files:** `cloudflare/digichat/src/lib/digigraph-upstream.ts`, tests
+- **Files:** `apps/digichat/src/lib/digigraph-upstream.ts`, tests
 - **Depends:** —
 - **Parallel:** yes
 - **Acceptance:** Vitest: second message reuses token within TTL
@@ -844,7 +844,7 @@ Format per entry: **Title** | Component | Files | Depends | Parallel | Acceptanc
 #### REM-076 → AUDIT-076
 - **Title:** Add `rehype-sanitize` to digichat markdown renderer
 - **Component:** digichat
-- **Files:** `cloudflare/digichat/src/components/chat-panel.tsx`, `package.json`
+- **Files:** `apps/digichat/src/components/chat-panel.tsx`, `package.json`
 - **Depends:** —
 - **Parallel:** yes
 - **Acceptance:** Vitest: script tag stripped
@@ -853,7 +853,7 @@ Format per entry: **Title** | Component | Files | Depends | Parallel | Acceptanc
 #### REM-077 → AUDIT-077
 - **Title:** Apply global CSP headers on main digichat app
 - **Component:** digichat
-- **Files:** `cloudflare/digichat/next.config.ts`
+- **Files:** `apps/digichat/next.config.ts`
 - **Depends:** REM-010
 - **Parallel:** no
 - **Acceptance:** build passes; security headers on `/`
@@ -862,7 +862,7 @@ Format per entry: **Title** | Component | Files | Depends | Parallel | Acceptanc
 #### REM-078 → AUDIT-078
 - **Title:** Add Vitest contract tests for API route handlers
 - **Component:** digichat
-- **Files:** `cloudflare/digichat/src/app/api/**/*.test.ts` (new)
+- **Files:** `apps/digichat/src/app/api/**/*.test.ts` (new)
 - **Depends:** REM-010
 - **Parallel:** yes
 - **Acceptance:** `npm run test` covers ≥5 routes
@@ -871,7 +871,7 @@ Format per entry: **Title** | Component | Files | Depends | Parallel | Acceptanc
 #### REM-079 → AUDIT-079
 - **Title:** Unify machine key prefix glossary in digichat ARCHITECTURE
 - **Component:** digichat
-- **Files:** `cloudflare/digichat/ARCHITECTURE.md`, `OPERATIONS.md`, `request-auth.ts` comments
+- **Files:** `apps/digichat/ARCHITECTURE.md`, `OPERATIONS.md`, `request-auth.ts` comments
 - **Depends:** —
 - **Parallel:** yes
 - **Acceptance:** doc-check; single canonical prefix documented
@@ -889,7 +889,7 @@ Format per entry: **Title** | Component | Files | Depends | Parallel | Acceptanc
 #### REM-081 → AUDIT-081
 - **Title:** Replace ticker.js innerHTML with textContent/escape
 - **Component:** design
-- **Files:** `cloudflare/digiweb/design/src/ticker.js` (or path per tree)
+- **Files:** `packages/design/src/ticker.js` (or path per tree)
 - **Depends:** —
 - **Parallel:** yes
 - **Acceptance:** grep no innerHTML in ticker; manual landings check
@@ -898,7 +898,7 @@ Format per entry: **Title** | Component | Files | Depends | Parallel | Acceptanc
 #### REM-082 → AUDIT-082
 - **Title:** Replace typewriter.js innerHTML with textContent
 - **Component:** design
-- **Files:** `cloudflare/digiweb/design/src/typewriter.js`
+- **Files:** `packages/design/src/typewriter.js`
 - **Depends:** —
 - **Parallel:** yes
 - **Acceptance:** grep clean; landings typewriter works
@@ -1109,7 +1109,7 @@ Format per entry: **Title** | Component | Files | Depends | Parallel | Acceptanc
 #### REM-105 → AUDIT-105
 - **Title:** Remove unused `zod` dependency or use for API validation
 - **Component:** digichat
-- **Files:** `cloudflare/digichat/package.json`, route handlers
+- **Files:** `apps/digichat/package.json`, route handlers
 - **Depends:** —
 - **Parallel:** yes
 - **Acceptance:** `npm run build`; dep used or removed
@@ -1138,8 +1138,8 @@ Meta, validation, and **DOC-*** gaps not fully covered by audit rows.
 | REM-118 | DOC-13 | digibase | Refresh digibase file inventory in ARCHITECTURE | `digibase/ARCHITECTURE.md` | — | yes | Lists cors, connectors, otel | S |
 | REM-119 | DOC-14 | tests | Update tests/README.md CI section | `tests/README.md` | REM-046 | yes | Describes ci.yml | S |
 | REM-120 | DOC-16 | docs/agents | Update CI_CONVENTIONS enforce-project status | `docs/agents/CI_CONVENTIONS.md` | REM-006 | yes | Notes fix landed | S |
-| REM-121 | DOC-20 | digichat | Fix README embed auth claims | `cloudflare/digichat/README.md` | REM-010 | yes | Matches route auth | S |
-| REM-122 | DOC-21 | root | Fix AGENTS.md digichat test command | `AGENTS.md` | REM-094 | yes | `npm run test` in cloudflare/digichat | S |
+| REM-121 | DOC-20 | digichat | Fix README embed auth claims | `apps/digichat/README.md` | REM-010 | yes | Matches route auth | S |
+| REM-122 | DOC-21 | root | Fix AGENTS.md digichat test command | `AGENTS.md` | REM-094 | yes | `npm run test` in apps/digichat | S |
 | REM-123 | DOC-22 | agents | Sync agents catalogue with sources | `agents/sources/README.md` | REM-091,092 | yes | Lists finish-task, triage, etc. | S |
 | REM-124 | DOC-23 | docs | Update LOCAL_STACK ingest expectations | `docs/LOCAL_STACK.md` | REM-001 | yes | Notes Chroma round-trip | S |
 | REM-125 | DOC-24 | olympus | Fix `NEXT_PUBLIC_OLYMPUS_VERSION` env name in README | `cloudflare/olympus/README.md` | — | yes | Matches code constant | S |
@@ -1170,7 +1170,7 @@ Sourced from [`2026-06-audit-plan-gap-check.md`](./2026-06-audit-plan-gap-check.
 | **REM-141** | DOC-02 | Update `ROADMAP.md` revocation / Redis opt-in (with REM-016) | 4 | `ROADMAP.md` | REM-016 | doc-check; matches SECURITY.md | S |
 | **REM-142** | DOC-04 | Fix `digiquant/ARCHITECTURE.md` ADDM / drift sections | 4 | `digiquant/ARCHITECTURE.md` | REM-028 | doc-check; ADDM wording matches `addm.py` | S |
 | **REM-143** | DOC-05 | Fix `digiclaw/ARCHITECTURE.md` ADDM + auth-blocked vs logic-blocked | 4 | `digiclaw/ARCHITECTURE.md` | REM-074 | doc-check | S |
-| **REM-144** | G-05 | Wire `cloudflare/digichat` into `make test-unit` or documented aggregate target | 2 | `Makefile`, `docs/agents/COMPONENT_ROUTING.md` | — | `make test-unit` runs digichat vitest OR README documents npm-only gate | S |
+| **REM-144** | G-05 | Wire `apps/digichat` into `make test-unit` or documented aggregate target | 2 | `Makefile`, `docs/agents/COMPONENT_ROUTING.md` | — | `make test-unit` runs digichat vitest OR README documents npm-only gate | S |
 | **REM-145** | G-06 | Document or dedupe double workflow triggers (`ci.yml` vs path filters) | 2 | `.github/workflows/ci.yml`, `docs/agents/CI_CONVENTIONS.md` | — | doc-check; one trigger path per PR event documented | S |
 
 ---
@@ -1185,7 +1185,7 @@ Sourced from [`2026-06-audit-plan-gap-check.md`](./2026-06-audit-plan-gap-check.
 | Per-component unit (local) | `pytest tests/dg/ -m unit -v` (replace `dg`→`dq`,`ds`,`dk`,`db`,`dc`,`dsm`) | no | module unit |
 | Monorepo unit gate | `make test-unit` | no | all `@pytest.mark.unit` |
 | Baseline gate | `make test-baseline` | no | imports/schemas |
-| digichat | `cd cloudflare/digichat && npm run lint && npm run test && npm run build` | no | TS/UI |
+| digichat | `cd apps/digichat && npm run lint && npm run test && npm run build` | no | TS/UI |
 | Olympus | `cd cloudflare/olympus && npm run lint && npm run test && npm run build` | no | after REM-038 |
 | digibase integration | `pytest tests/integration/test_request_id_hops.py -v` | partial | REM-069 |
 | Contracts | `pytest tests/contracts/ -v` | no | REM-088 |
@@ -1246,7 +1246,7 @@ Frontends and optional stack: see §5.4 checklist. Post-merge cron watch: [`POST
 - [ ] `make test-unit` — zero failures, zero unintended deselections (`pytest --collect-only -m unit`)
 - [ ] `make test-baseline`
 - [ ] `make test-e2e` (stack up) OR CI e2e job green on PR
-- [ ] `cd cloudflare/digichat && npm run lint && npm run test && npm run build`
+- [ ] `cd apps/digichat && npm run lint && npm run test && npm run build`
 - [ ] `cd cloudflare/olympus && npm run lint && npm run test && npm run build`
 - [ ] `make doc-check`
 - [ ] `python scripts/agents_init.py --check`
@@ -1278,8 +1278,8 @@ Frontends and optional stack: see §5.4 checklist. Post-merge cron watch: [`POST
 | A5-digiquant | `digiquant/**`, `tests/dq/**` | 009, 028–031, 055–060, 101–102 |
 | A6-digiclaw | `digiclaw/**`, `tests/dc/**` | 004, 072–074 |
 | A7-digibase+smith | `digibase/**`, `digismith/**`, `tests/db/**`, `tests/dsm/**` | 039–040, 066–071 |
-| A8-digichat | `cloudflare/digichat/**` | 010, 032–034, 075–079, 105 |
-| A9-olympus+design | `cloudflare/olympus/**`, `cloudflare/digiweb/design/**`, `cloudflare/digithings/**`, `cloudflare/digiquant/**` | 035–038, 080–083 |
+| A8-digichat | `apps/digichat/**` | 010, 032–034, 075–079, 105 |
+| A9-olympus+design | `cloudflare/olympus/**`, `packages/design/**`, `cloudflare/digithings/**`, `cloudflare/digiquant/**` | 035–038, 080–083 |
 | A10-docs | `**/AGENTS.md`, `**/ARCHITECTURE.md`, `docs/**`, `CLAUDE.md` | 111–126, 096 |
 | A11-agents | `agents.yml`, `agents/sources/**` | 091–094, 123 |
 

@@ -15,10 +15,15 @@ BGE_RERANKER_MODEL = "BAAI/bge-reranker-v2-m3"
 class Reranker:
     """Rerank initial results with cross-encoder."""
 
-    def __init__(self, provider: str = "cohere", top_n: int | None = None) -> None:
+    def __init__(
+        self, provider: str = "cohere", top_n: int | None = None, strict: bool = False
+    ) -> None:
         self.provider = provider
         # None = no silent default cap; callers should pass top_n / use query.top_k.
         self.top_n = top_n
+        # strict=True re-raises rerank failures instead of falling back to the
+        # unranked original order (Phase B web path requires a ranked cited set).
+        self.strict = strict
         self._model: object | None = None
 
     def rerank(self, query: str, results: list[Result], top_n: int | None = None) -> list[Result]:
@@ -70,5 +75,7 @@ class Reranker:
                 for j, i in enumerate(ranked)
             ]
         except Exception as exc:
+            if self.strict:
+                raise
             logger.warning("BGE rerank failed (%s); falling back to original order", exc)
             return results[:n]

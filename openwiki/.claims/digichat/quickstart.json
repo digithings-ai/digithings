@@ -1,24 +1,36 @@
 {
   "schemaVersion": 1,
-  "pageVersion": "sha256:ac0f49dd9cd4bc5b8fc745860cc583c6bab08e1b9cfed9c4ee1a11e5d00ae040",
+  "pageVersion": "sha256:c0f012491cdd4b408fac1dec03bc87cc786f7242aad445ba9d8b6e853c5fced6",
   "claims": [
     {
       "id": "claim_023f86cf79c246d296855d1dab1eb298",
       "statement": "digichat dev pairs make stack-local backends with make digichat-dev on port 3000, requiring .env.local with matching AUTH_URL origin and the identical DIGIKEY_BFF_TOKEN.",
       "evidence": [
         {
-          "resource": "repo://frontend/digichat/OPERATIONS.md#L76-L110",
-          "version": "repo-lines-v1:sha256:20afec39099fa0d0081f8766c4f8271d973dca2cf4cfe633efb4c980c170aee5:eyJzZWxlY3RlZExpbmVDb3VudCI6MzUsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjAxYmE0NzE5YzgwYjZmZTkxMWIwOTFhN2MwNTEyNGI2NGVlZWNlOTY0ZTA5YzA1OGVmOGY5ODA1ZGFjYTU0NmIiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjNkMDg0NzMyMzcxMGJjMmI2NmYzNGMwYTY1YjQxYWU2YzU2OTZkNzE0ZjM4NGYxMzFmZDk3ZDI0YzE4NzhlYWIiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjEwZTc4NDRmNDQ4MzNjMTMwZTlkZDhiNTAwNzQ1MDk1ZGE1ZmMxYjdmNjEwMWY5MjhlNzJjZDM0YmZhMzcyYjAiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjllODlhZWUyNmM5OTUzODIyZTk1MWM0MDcyODNjMWExMmI1ODhhMzQyNDI4MTFhMDZhMDE4ZjNjYjQ0NDBlYjAifQ"
+          "resource": "repo://Makefile#L142-L143",
+          "version": "repo-lines-v1:sha256:cf3d0f3101d373f7ba1dc6abbfc20b224b71aabe703d9d4b4a23542b7860dcfc:eyJzZWxlY3RlZExpbmVDb3VudCI6MiwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiMWJmNmUyYjFjMzM0MTM0N2FjMjIzMDVjN2E1ZGViNmM4Zjg5NTA5OTljZjRkYmFhM2M3NGMyZDc1Y2M3MzRmOSIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiY2NhMjdmNDJlNTc4NWExNmFkMDJkODdlOGZhZmU5ZGUxNDk4MzUyNTJhYjdjOGJhZDExNjI1MTEzZmI1Nzg3YSIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiOGU0ZjdiZjQwYjUxODJmMDAwNTc3YWYyMjAzYTkyZmEyMjA3MjcxM2FkZDk3ZDIyYzc5YzE1N2RlZDFhN2Y4YyIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiM2NmYTEyNzU5ZDRmY2YzMGRkZmFmNGM3YjIzODcxMzRkMWI5MGNlNDU3ZWJkZjU5YjliOGJlOGMzM2E5MDgyYiJ9"
+        },
+        {
+          "resource": "repo://Makefile#L161-L162",
+          "version": "repo-lines-v1:sha256:de223572c8252a01caed1fd996976ed1422163d6589d18d5b0ce09b633466c62:eyJzZWxlY3RlZExpbmVDb3VudCI6MiwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiYzgyYTg5YzJlYmI1Y2VlOGVhYTY0MWNkNTlhNzViNTJiNjZmODI0M2MyZTA1ZmYxNTdhMDE4MDkxZjY3YTY0MiIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiNzI2OWNjMDZhNDNhYTc1ODI4YjEyMmFiMDgyOGI0M2EwMzRkZTVjYTY5MjZhMGE5MzFhNjUzNWJkYzM5YmRjZSIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiMTM2MWRlNzQwYTViZDRiMDllNTJkYzhmNmMyZGQzNDRkMWU5YThiZTI4MmNjMjRjMzUzMDM2MzlkMmMxZTk5NiIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiZTRmMDMxOGVjMmJlOTAzZGRlMTRmMmZmYzE4YzQwNDdiYWMwNjE5OWRlYzBhZDVkZmRmNWJiOGYyN2Q5NDI3NiJ9"
+        },
+        {
+          "resource": "repo://apps/digichat/OPERATIONS.md#L86-L100",
+          "version": "repo-lines-v1:sha256:1fceb6b944a5be7fd67aa404769c6327e10a3f1004df121caf2583392246ea5d:eyJzZWxlY3RlZExpbmVDb3VudCI6MTUsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjFlMzE3OTc1YmRhZjUzYTkwOTNkNzIxNDBmZGNlNGMwMDM0MjI3ZjFiM2JlNWM0MjJmOTE4MWFmMTgyMmY5YjgiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjU1MzhlMGZlZDc2OTY2ZDVlZjlhYjZmMzA5N2M2NWEzZjQ4YmI3YzAzYmIwNDU4OTAwYzNjNGEwMmFmMGNjM2YiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImZjNmU2YTA1Y2RhOTNjNzdlMjVmNDg1MTAwYTQzNTcxZThkNGJkM2YyMmJmYWVhYTUzZGE4MjhiMThjYWFkODMiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImJiYzAyZTI1MGI2ZTU2ZTg5OTNjNmU3YTJlNzI3NTIxMzQ0Y2FlOTgzNGYwN2M5MzVlOGNmZmQwOTZkMjNmZjUifQ"
         }
       ]
     },
     {
       "id": "claim_3a1c3e1e1cbd4f3ba63ece3da068455a",
-      "statement": "Frontend gates run from frontend/digichat/: npm run test (Vitest), npm run lint (ESLint), npm run build (type-check plus production build).",
+      "statement": "Gates run from apps/digichat/: npm run test (Vitest), npm run lint (ESLint), npm run build (type-check plus production build).",
       "evidence": [
         {
-          "resource": "repo://frontend/digichat/AGENTS.md#L60-L80",
-          "version": "repo-lines-v1:sha256:2c70a5cb8f152bad955a00c332942e3c9bf3a63d1d214f81b0b44bf3063026ab:eyJzZWxlY3RlZExpbmVDb3VudCI6MjEsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjAxYmE0NzE5YzgwYjZmZTkxMWIwOTFhN2MwNTEyNGI2NGVlZWNlOTY0ZTA5YzA1OGVmOGY5ODA1ZGFjYTU0NmIiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjFmYjZiOTNmN2E2YjEwNWZkYjdlMzQ4NTY0MWVlNjgxNTdhODM5MWU3ODQ2Y2I1YjM0NTNkNzg2ZTZiMDJmY2QiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjJjNWRjOWY1OTQ3NDk1YWQzNGYxYTAwMWRmM2NhOWRhNjM1MGUxZmM0YTlkODNkNGYzMWQzMzBkYWY3Y2ZjYjAiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjowLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUifQ"
+          "resource": "repo://apps/digichat/AGENTS.md#L57-L60",
+          "version": "repo-lines-v1:sha256:ef924b228b01d66f06d17e5917a99739b109a5d32f749abd0e6535116317e356:eyJzZWxlY3RlZExpbmVDb3VudCI6NCwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiZWJiYjllNGQ3ZTU0NWM1MTU2ZWJkMjU2ZTRmMGIyNzBkNDQ4ZDgxMWZkNDMwZWI3MDU2MDRjMmM4NGI0ZDBhYiIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiYjhiMmFhNTM5NmZjM2ViZGJlYTY3ODNiMWM2ZjA1YzdlZjgwMjc2MGY2OTVhZDg5NjVjOTBjOTZkN2M1NmRkNCIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiOTY5ZDQ4MTM4ODAzNzM1ZGY4MTRmNTQ1MDBiZjRiODM0Y2RkMzE2ODA2ZTA1MmE0MThjMjQwN2M4ZGQzMmRiYiIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiNzEzODI3YWEwMmMwZDRmMTMzZjVjMmEzOTE1MzNhYWQ5MzcyNjYwMjk2MGUzNWIxOGViODNlYTgwOGI0OWZiZSJ9"
+        },
+        {
+          "resource": "repo://apps/digichat/package.json#L7-L10",
+          "version": "repo-lines-v1:sha256:5a61a30e5baac7e611f3e661dd5942e102529962b176049b439de583db0cda66:eyJzZWxlY3RlZExpbmVDb3VudCI6NCwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiZDQ5MmY0ZDYxZWI0NjJjYTcwYjZlYTJmYzg4ZDk3OWFhYWJhNjlmMDdlNzg5OWUyMjRmMDMzN2I3ZTY1MGNhMCIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiMjQxZmMyNDllZmE3MWIwZTdhOTdmN2Y0ZWI4Yjg5NDk0YTU5Y2IzZjg3ZDcxYmU2YWFkNjNhYTNiYTVlM2QzYyIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiZDM4NDMzNzg0MDY1ODhhY2U4NTI3NmE0YTBmODhlOWUzYzY2NjEwMzhhYTJlMzdjOTU1ZWUyMjkzMjU2MTExOSIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiZGE1MGY0MGY5MWYyNzhhMmRjOTRmOTdiZjNhOTdiMzczMDlmZjYxYjRhYmYyOGQwNjNmYWY2NTJlYjlkODVhZCJ9"
         }
       ]
     },
@@ -27,18 +39,32 @@
       "statement": "The browser never holds upstream credentials; all LLM calls, token exchanges, and probes run in server Route Handlers.",
       "evidence": [
         {
-          "resource": "repo://frontend/digichat/AGENTS.md#L13-L15",
-          "version": "repo-lines-v1:sha256:96f9cdd182d6853f1bbdf4b9836516b0cb3f0ad626d7d79a3985b6e0d25a9b12:eyJzZWxlY3RlZExpbmVDb3VudCI6MywiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiZjhjNWZhYmUxYWU5YzJlYTI4MGQyODI3YjEyODM2NjhkNTdlMGJhYTE4OTVkZmFiYjAzNTFkZTU4Y2RhOTNkZSIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiODJlNjRkYjIxYThhNmJiNmU5ODU1ZDVhNThkZDRhYTE3OTZhMjRiZWEyMjQyMGI5YmJlNTEwY2M4MDE4MTUyYiIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiMzllNjY5ZDYzMzk0MGNkNTA0NDNiZDJkYWFkMzFjNDBkNmE2NDc3ZTcxZmEwMjhiODU1MWFiODk5ZDdhODAzNCIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiMzQyNzQwNzdmMWNlZDk3MmUyZTg3NDA3MWRjYzc5NmI2YzRjMGEwYmY3YjRhZjcyYjNlOTc2NzYyMWEyZTRlMyJ9"
+          "resource": "repo://apps/digichat/AGENTS.md#L5-L6",
+          "version": "repo-lines-v1:sha256:0a7e8fbc7916acff2b2f096951d86dd722de931bb84574ea9addab2adff0258a:eyJzZWxlY3RlZExpbmVDb3VudCI6MiwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiYzk2NTIwMDIyODg4MjBhYzBiNDRlZTQ3YzhmYzNlMzQ1YmQyMGRiMTUyNGEzMzY2NWYwNmQ0MzQyZWEyNzQwNyIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiMDFiYTQ3MTljODBiNmZlOTExYjA5MWE3YzA1MTI0YjY0ZWVlY2U5NjRlMDljMDU4ZWY4Zjk4MDVkYWNhNTQ2YiIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiODJmZjEyMDkyZWI0NzU4ZDZiYjk3Y2RlYzBmNGRiYzlmNTZjNTBkNjc2NDNhY2I0ZTc4NzZlNmZhZWI0MjhhNSIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiNWIwNzY1YjhlMjkzODllODFkZjNjZmI2OWI0Mjg2YTgwZGE1NjBiMWRiODFkMTA4ZGUwMjM5ZTI0YmQ5ZWQ2NiJ9"
         },
         {
-          "resource": "repo://frontend/digichat/ARCHITECTURE.md#L17-L22",
-          "version": "repo-lines-v1:sha256:d2c1f1888d508484984308b7feb267de264264a40a6cccdfa363b7646ed39d48:eyJzZWxlY3RlZExpbmVDb3VudCI6NiwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiNzY3YWI4YzU1NmIwMDU1MTliYTQxZTBlZjA1YzliMjBiYjRmZTExNzY1NzNlOTQ0ZThmNmI5MTYyYjAyOTg2YyIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiYTRkZjQ1NTI0YzA2ZDEwYmVhY2I3NDlmN2Y4MWE2NTBmN2JhNzJlZmQ4YjE3OGQ1MDM4NTkyYTVlZWY2NWJkMiIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiYWJiM2UzZWJjMWZkZmY5YjhhZTBiYTkyZDQ1YmY2NjNjMzk3YTZhNmIzYmM4MTI0ZmRlMjllZmQzOTIyY2ZhZSIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiZWM5YjAzMTQ5MjUxYjUyMDFhNGU4OTZkM2NmYWRhMjM1ODQyMTE0MzAwNGZjYWQxYmU0NjM3N2E3ZjEyMDA0MiJ9"
+          "resource": "repo://apps/digichat/ARCHITECTURE.md#L17-L22",
+          "version": "repo-lines-v1:sha256:7a9e4dca55dbf4707841e29221cbf0cb061cf9d5128dc6c71b11f3fa98336e9d:eyJzZWxlY3RlZExpbmVDb3VudCI6NiwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiNzY3YWI4YzU1NmIwMDU1MTliYTQxZTBlZjA1YzliMjBiYjRmZTExNzY1NzNlOTQ0ZThmNmI5MTYyYjAyOTg2YyIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiMWY3OTRjZjVhMzg5YmE0MTIzNzQyNDg0MDY3ZjQ0ZmQzMjlhZmFkZDRlNDJlMjQyMGUwNzA1N2Q5MmI0MTUwOSIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiYWJiM2UzZWJjMWZkZmY5YjhhZTBiYTkyZDQ1YmY2NjNjMzk3YTZhNmIzYmM4MTI0ZmRlMjllZmQzOTIyY2ZhZSIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiYTAwNjczNDdkMGJkZWU0YWZiNzZiZDc5OGI1ZTkxZDZmMjFlMDIwYTJjNTgxYzFmNjlhODU4NmZkYmI3MzI3YSJ9"
+        }
+      ]
+    },
+    {
+      "id": "claim_538d3515bc154907a220a1e96f2e4d7a",
+      "statement": "npm run config:check runs tsx scripts/check-config.ts to validate a digichat deployment config YAML/JSON against the Zod schema and print the resolved config; it fails loudly on a missing file or schema violation so misconfiguration is never invisible.",
+      "evidence": [
+        {
+          "resource": "repo://apps/digichat/package.json#L11-L11",
+          "version": "repo-lines-v1:sha256:c3cc4034c91e4b0e722e372e556c23df9982bb9f80f6a539a178ff096ac7b7d7:eyJzZWxlY3RlZExpbmVDb3VudCI6MSwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiYzNjYzQwMzRjOTFlNGIwZTcyMmUzNzJlNTU2YzIzZGY5OTgyYmI5ZjgwZjZhNTM5YTE3OGZmMDk2YWM3YjdkNyIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiYzNjYzQwMzRjOTFlNGIwZTcyMmUzNzJlNTU2YzIzZGY5OTgyYmI5ZjgwZjZhNTM5YTE3OGZmMDk2YWM3YjdkNyIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiNTIxMTNhNDQxNDQ5MjY4YTdhYWZmYWVkNTJhNWRhOGI5MjNhMTY3YzhlM2JkZmJmMzc5YjdjMGQ1ODAwNjM3YSIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiMDQ0MWE0MGFkNGVjNTUwY2NjOWM2NDQ0NTFlMThkMTVjYjg4YmIzZDcyNjcyYjBlMTc4YzliYjA4ZjM3ZWVkZCJ9"
+        },
+        {
+          "resource": "repo://apps/digichat/scripts/check-config.ts#L1-L23",
+          "version": "repo-lines-v1:sha256:5b2265aa392bc30c5c3e14a7b5f105893de6ec521b1ce19edef591b0eeb80b44:eyJzZWxlY3RlZExpbmVDb3VudCI6MjMsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImVhZjIyY2YwNzMyNTkyYzI0NzE0MWNiZTYxZWZhMTEwMTI2MTJmNWEzMTIyYjlhZjliYmFmNTJmNTcyNGQxOTQiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjUzMzdjYmQwYTA3ZjExYWNiZmFhN2M2NTkxZDA3NzE4YzQyNmQyNjVmZGUzZjBkODc1MmNlODNmMjdmMGFjMTAiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjowLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjA0ZjYwMzA4MWVlNjhiNDY5MjM5MDJkYjM1YzE4ZjY0YzZiYTI0NDA3MmJhZGYzNjZjYWM1OWE4MGIwNzZiZGUifQ"
         }
       ]
     }
   ],
   "verification": {
     "by": "openwiki/0.5.0",
-    "at": "2026-09-09T14:37:17.158Z"
+    "at": "2026-09-23T13:25:31.068Z"
   }
 }

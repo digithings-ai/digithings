@@ -1,4 +1,4 @@
-"""Per-run diagnostics → atlas_run_diagnostics (Pillar 1B).
+"""Per-run diagnostics → run_diagnostics (Pillar 1B).
 
 summarize_run counts fresh/carried/failed segments and derives a status; write_row upserts
 the row (fail-soft); is_degraded gates the CLI exit. A node-failure carry (reason
@@ -304,7 +304,7 @@ def test_retry_signal_still_fires_on_the_legacy_share_rule() -> None:
 
 
 def test_no_book_gate_degrades_research_with_nothing_committed() -> None:
-    # H9 committing nothing at all leaves ``sized_book`` None and raises no PhaseError, so
+    # commit committing nothing at all leaves ``sized_book`` None and raises no PhaseError, so
     # the #1555 commit gate (materialized-but-uncommitted) misses it entirely and the run
     # reported "ok" — the shape behind #1766's 20-day blackout.
     state = _prod_shaped_state(failed=0)
@@ -341,7 +341,7 @@ def test_noop_commit_manifest_satisfies_the_no_book_gate() -> None:
 # ------------------------------------------------- #1742: portfolio deliberation density
 
 
-def _portfolio_deliberations(n: int, *, failed: int, phase: str = "portfolio_h6_deliberation"):
+def _portfolio_deliberations(n: int, *, failed: int, phase: str = "portfolio_deliberation"):
     """A portfolio phase with ``n`` deliberations of which ``failed`` recorded a PhaseError."""
     portfolio = _committed_book(
         deliberation_summaries={f"T{i}": {"ticker": f"T{i}"} for i in range(n)}
@@ -365,7 +365,7 @@ def test_portfolio_deliberation_gate_degrades_a_mostly_dead_portfolio() -> None:
 
 
 def test_portfolio_deliberation_gate_tolerates_routine_cap_noise() -> None:
-    # The 2026-07-26 baseline: 1 of 50 — H6 emits the same (phase, node) for a benign
+    # The 2026-07-26 baseline: 1 of 50 — deliberation emits the same (phase, node) for a benign
     # max_rounds cap as for an LLM crash, so a gate on *any* error would flip every run.
     portfolio, errors = _portfolio_deliberations(50, failed=1)
     state = _prod_shaped_state(failed=0, phase_portfolio=portfolio)
@@ -375,13 +375,13 @@ def test_portfolio_deliberation_gate_tolerates_routine_cap_noise() -> None:
     assert s.status == "ok"
 
 
-def test_h9_commit_error_is_excluded_from_the_deliberation_numerator() -> None:
-    # portfolio_h9_commit_run is already gated by #1555; counting it here would double-count it
+def test_commit_error_is_excluded_from_the_deliberation_numerator() -> None:
+    # portfolio_commit is already gated by #1555; counting it here would double-count it
     # and pollute a metric that is supposed to measure *reasoning* failures.
     portfolio, _ = _portfolio_deliberations(4, failed=0)
     state = _prod_shaped_state(failed=0, phase_portfolio=portfolio)
     state.errors = [
-        PhaseError(phase="portfolio_h9_commit_run", node="portfolio/commit-run", message="conflict")
+        PhaseError(phase="portfolio_commit", node="portfolio/commit-run", message="conflict")
     ]
     s = diagnostics.summarize_run(state)
     assert s.breakdown["portfolio_deliberation"] == {"total": 4, "failed": 0}
@@ -402,8 +402,8 @@ def test_portfolio_deliberation_gate_silent_when_nothing_was_deliberated() -> No
     "phase",
     [
         "phase_portfolio",
-        "portfolio_h6_deliberation",
-        "portfolio_h7_pm_direction",
+        "portfolio_deliberation",
+        "portfolio_direction",
         "phase7d_pm",
         "phase9_evolution",
     ],
@@ -460,7 +460,7 @@ def test_contributors_do_not_run_on_the_mid_run_gating_path(breakdown_contributo
 # --------------------------------------------------------------------------- write_row
 
 
-def test_write_row_upserts_with_usage_and_counts() -> None:
+def test_write_row_writes_events_with_usage_and_counts() -> None:
     client = FakeSupabaseClient()
     state = _state(phase1={"macro": _today("macro")}, phase5={"x": _carried(NODE_FAILED_REASON)})
     started_at = datetime(2026, 6, 12, 10, 0, tzinfo=timezone.utc)
@@ -502,14 +502,14 @@ def test_write_row_upserts_with_usage_and_counts() -> None:
         },
     )
     assert summary is not None
-    rows = client.store["atlas_run_diagnostics"]
+    rows = client.store["run_diagnostics"]
     assert len(rows) == 1
     row = rows[0]
     assert row["run_id"] == "baseline-2026-06-12-local"
     # Per-ATTEMPT since #1762: pipeline-digiquant.yml retries the chain inside one job, so
     # run_id alone let the last retry overwrite the expensive attempt's tokens and cost.
     assert row["_on_conflict"] == "run_id,attempt"
-    assert row["attempt"] == 1  # no OLYMPUS_ATTEMPT in the environment → first attempt
+    assert row["attempt"] == 1  # no DIGIQUANT_ATTEMPT in the environment → first attempt
     assert row["llm_calls"] == 12
     assert row["total_tokens"] == 4200
     assert row["segments_ok"] == 1
@@ -520,13 +520,14 @@ def test_write_row_upserts_with_usage_and_counts() -> None:
     assert row["started_at"] == "2026-06-12T10:00:00+00:00"
     assert row["finished_at"] == "2026-06-12T10:02:03.456000+00:00"
     assert row["duration_s"] == pytest.approx(123.456)
-    events = client.store["olympus_run_events"]
+    events = client.store["run_events"]
     assert len(events) == 1
     assert events[0]["run_id"] == "baseline-2026-06-12-local"
     assert events[0]["attempt"] == 1
     assert events[0]["run_date"] == "2026-06-12"
     assert events[0]["phase"] == "macro"
-    assert events[0]["_on_conflict"] == "run_id,attempt,sequence"
+    # delete-then-insert (no upsert): the explicit event sequence is what keys the row.
+    assert events[0]["sequence"] == 1
 
 
 def test_write_row_surfaces_empty_retries_from_usage_snapshot() -> None:
@@ -543,7 +544,7 @@ def test_write_row_surfaces_empty_retries_from_usage_snapshot() -> None:
             "empty_retries": {"total": 3, "by_model": {"openrouter/auto": 2, "x-ai/grok-4": 1}},
         },
     )
-    row = client.store["atlas_run_diagnostics"][0]
+    row = client.store["run_diagnostics"][0]
     assert row["breakdown"]["empty_retries"] == {
         "total": 3,
         "by_model": {"openrouter/auto": 2, "x-ai/grok-4": 1},
@@ -585,7 +586,7 @@ def test_write_row_removes_stale_higher_event_sequences() -> None:
         usage_snapshot=_usage_events(3),
     )
 
-    events = client.store["olympus_run_events"]
+    events = client.store["run_events"]
     assert {row["sequence"] for row in events} == {1, 2, 3}
 
 
@@ -609,7 +610,7 @@ def test_write_row_clears_prior_events_when_trace_becomes_empty() -> None:
         usage_snapshot={"events": []},
     )
 
-    assert client.store["olympus_run_events"] == []
+    assert client.store["run_events"] == []
 
 
 def test_write_row_without_event_capture_preserves_prior_trace() -> None:
@@ -632,7 +633,7 @@ def test_write_row_without_event_capture_preserves_prior_trace() -> None:
         usage_snapshot={"llm_calls": 2},
     )
 
-    assert {row["sequence"] for row in client.store["olympus_run_events"]} == {1, 2}
+    assert {row["sequence"] for row in client.store["run_events"]} == {1, 2}
 
 
 def test_write_row_preserves_null_usage_and_wp1_join_ids() -> None:
@@ -674,7 +675,7 @@ def test_write_row_preserves_null_usage_and_wp1_join_ids() -> None:
             ]
         },
     )
-    row = client.store["olympus_run_events"][0]
+    row = client.store["run_events"][0]
     assert row["prompt_tokens"] is None
     assert row["completion_tokens"] is None
     assert row["cached_tokens"] is None
@@ -757,5 +758,5 @@ def test_write_row_records_cancelled_status() -> None:
     )
     assert summary is not None
     assert summary.status == "cancelled"
-    rows = client.store["atlas_run_diagnostics"]
+    rows = client.store["run_diagnostics"]
     assert rows[0]["status"] == "cancelled"

@@ -1,4 +1,4 @@
-"""WP5.4 (#2684): attach + persist shadow forecast calibration at H6/H7 boundary."""
+"""WP5.4 (#2684): attach + persist shadow forecast calibration at deliberation/direction boundary."""
 
 from __future__ import annotations
 
@@ -21,10 +21,11 @@ from digiquant.portfolio.models.forecast_calibration import (
     ForecastOutcome,
     OutcomeStatus,
     SessionPriceSnapshot,
+    canonical_return_fraction,
     forecast_outcome_content_hash,
     forecast_outcome_id,
 )
-from digiquant.portfolio.phases.h7_pm_direction import build_h7_pm_direction
+from digiquant.portfolio.phases.direction import build_direction
 from digiquant.research import forecast_registry as fr
 from digiquant.research.state import PhasePortfolioState, PriorContext, ResearchState
 
@@ -143,9 +144,9 @@ def _resolved_outcome(
         "horizon_sessions": horizon_sessions,
         "reference_snapshot": draft["reference_snapshot"].model_dump(mode="json"),  # type: ignore[union-attr]
         "maturity_snapshot": draft["maturity_snapshot"].model_dump(mode="json"),  # type: ignore[union-attr]
-        "forecast_mean_return": str(mean),
-        "realized_return": str(real),
-        "signed_residual": str(residual),
+        "forecast_mean_return": canonical_return_fraction(mean),
+        "realized_return": canonical_return_fraction(real),
+        "signed_residual": canonical_return_fraction(residual),
         "status": OutcomeStatus.RESOLVED.value,
         "event_time": known_at.isoformat(),
         "known_at": known_at.isoformat(),
@@ -372,20 +373,20 @@ class TestPersistShadowCalibrations:
 
 
 class TestH7BoundaryAttach:
-    def test_h7_attaches_shadow_without_feeding_memo_economics(self) -> None:
+    def test_direction_attaches_shadow_without_feeding_memo_economics(self) -> None:
         from unittest.mock import patch
 
         from digiquant.portfolio.models.pm_direction import PMDirectionMemo, TickerDirection
 
         state = _state_with_effective()
-        phase = build_h7_pm_direction(client=None)
+        phase = build_direction(client=None)
         node = phase.nodes[0].run
         memo = PMDirectionMemo(
             date=RUN_DATE,
             roster=[TickerDirection(ticker="AAPL", direction="long", conviction_rank=1)],
         )
         with patch(
-            "digiquant.portfolio.phases.h7_pm_direction.run_research_agent",
+            "digiquant.portfolio.phases.direction.run_research_agent",
             return_value=memo,
         ):
             out = node(state)
@@ -393,10 +394,75 @@ class TestH7BoundaryAttach:
         assert portfolio.pm_direction_memo is not None
         assert portfolio.forecast_calibrations
         assert portfolio.calibrated_forecasts
-        # H7 memo still direction-only — no calibrated economics on the memo.
+        # direction memo still direction-only — no calibrated economics on the memo.
         assert not hasattr(portfolio.pm_direction_memo.roster[0], "expected_gross_return")
         assert "AAPL" in portfolio.calibrated_forecasts
         assert (
             portfolio.calibrated_forecasts["AAPL"]["status"]
             == CalibrationArtifactStatus.UNAVAILABLE.value
         )
+
+
+class TestH7OutcomeIntegrityFailsLoud:
+    """#4298: a stale persisted digest must fail direction, not empty the cohort.
+
+    The reader raises ``ForecastOutcomeIntegrityError``; the direction caller used to
+    catch ``Exception`` twice (inner load + outer attach) and return an empty
+    cohort, neutralizing the fail-loud contract. These exercise the *caller*,
+    not the reader in isolation.
+    """
+
+    def test_stale_row_fails_loud_from_attach(self) -> None:
+        from digiquant.portfolio.phases.direction import _attach_shadow_calibration
+        from digiquant.research import forecast_outcomes as fo
+
+        from tests.dq.research.test_forecast_outcome_hash_ingress import _stale_row
+        from tests.fixtures.fake_supabase import FakeSupabaseClient
+
+        client = FakeSupabaseClient(canned_reads={fo.OUTCOMES: [_stale_row()]})
+
+        with pytest.raises(
+            fo.ForecastOutcomeIntegrityError,
+            match="repair_forecast_outcome_hashes",
+        ):
+            _attach_shadow_calibration(_state_with_effective(), client=client)
+
+    def test_healthy_row_still_builds_shadow_attachment(self) -> None:
+        from digiquant.portfolio.phases.direction import _attach_shadow_calibration
+        from digiquant.research import forecast_outcomes as fo
+
+        from tests.dq.research.test_forecast_outcome_hash_ingress import (
+            _build_outcome,
+            _postgrest_numeric_roundtrip,
+        )
+        from tests.fixtures.fake_supabase import FakeSupabaseClient
+
+        row = _postgrest_numeric_roundtrip(fo._outcome_row(_build_outcome()))
+        client = FakeSupabaseClient(canned_reads={fo.OUTCOMES: [row]})
+
+        attachment = _attach_shadow_calibration(_state_with_effective(), client=client)
+
+        # One resolved outcome is visible, so the cohort is non-empty (AVAILABLE,
+        # not an empty-cohort UNAVAILABLE) — the guard did not empty a healthy load.
+        assert len(attachment.calibrations) == 1
+        assert attachment.calibrations[0].status is CalibrationArtifactStatus.AVAILABLE
+        assert attachment.calibrations[0].sample_count == 1
+
+    def test_transient_load_failure_still_degrades(self) -> None:
+        from digiquant.portfolio.phases.direction import _attach_shadow_calibration
+
+        class _BrokenClient:
+            def table(self, _name: str) -> object:
+                raise RuntimeError("transient backend failure")
+
+        attachment = _attach_shadow_calibration(
+            _state_with_effective(),
+            client=_BrokenClient(),  # type: ignore[arg-type]
+        )
+
+        # A transient load failure keeps the pre-existing fail-soft (typed
+        # empty-cohort unavailable) — the guard only makes the named integrity
+        # error loud.
+        assert len(attachment.calibrations) == 1
+        assert attachment.calibrations[0].status is CalibrationArtifactStatus.UNAVAILABLE
+        assert attachment.calibrations[0].unavailable_reason == "empty_cohort"

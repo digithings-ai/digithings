@@ -101,7 +101,7 @@ def test_not_retry_worthy_when_book_committed() -> None:
 
 
 def test_retry_worthy_when_book_materialized_but_uncommitted() -> None:
-    # #1555: a book H8 materialized but H9 never committed (coherence fail-closed / silent
+    # #1555: a book sizing materialized but commit never committed (coherence fail-closed / silent
     # skip) is NOT durable work — it must retry. This is the exact shape of the 2026-06-26
     # freeze, which the old materialization-only guard wrongly treated as a good book.
     state = _state()

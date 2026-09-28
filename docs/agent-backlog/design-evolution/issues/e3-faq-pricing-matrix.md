@@ -4,7 +4,7 @@ Build shared **`FaqAccordion`** and **`PricingMatrix`** primitives — Graphite/
 
 ## Component
 
-- [x] cross-cutting (`cloudflare/digiweb/design/`)
+- [x] cross-cutting (`packages/design/`)
 
 ## Acceptance Criteria
 
@@ -15,20 +15,20 @@ Build shared **`FaqAccordion`** and **`PricingMatrix`** primitives — Graphite/
 - [ ] JSON content shape documented for FAQ + tiers per site
 - [ ] `prefers-reduced-motion` respected on expand/collapse
 - [ ] Demo in smoke page
-- [ ] Document in `cloudflare/digiweb/design/site/README.md`
+- [ ] Document in `packages/design/site/README.md`
 
 ## Test Requirements
 
 ```bash
-cd cloudflare/digiquant-web && npm run build
+cd apps/digiquant-web && npm run build
 ```
 
 Manual: keyboard expand FAQ; tier cards responsive at mobile.
 
 ## Documentation to Update
 
-- [ ] `cloudflare/digiweb/design/site/README.md`
-- [ ] `cloudflare/digiweb/design/COPY_GUIDE.md` §8 pricing voice
+- [ ] `packages/design/site/README.md`
+- [ ] `packages/design/COPY_GUIDE.md` §8 pricing voice
 
 ## Out of Scope
 

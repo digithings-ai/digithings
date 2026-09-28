@@ -216,6 +216,35 @@ class TestRunTools:
             )
         assert rt.call_args[1]["tool_choice"] == "auto"
 
+    def test_forwards_final_response_format_to_the_wrap_up(self) -> None:
+        # #4556: the tool loop's forced tool-free wrap-up is the one legal
+        # schema-enforced turn; digigraph must forward it to digillm.
+        schema = {"type": "json_schema", "json_schema": {"name": "Answer", "schema": {}}}
+        with (
+            patch.object(llm_client, "resolve_request_model", return_value="m"),
+            patch("digigraph.orchestration.registry.list_tool_names", return_value=[]),
+            patch.object(llm_client, "_digillm_run_tools", return_value="done") as rt,
+        ):
+            llm_client.run_tools(
+                "model",
+                [{"role": "user", "content": "go"}],
+                [],
+                execute_tool=lambda n, a: "ok",
+                final_response_format=schema,  # type: ignore[arg-type]
+            )
+        assert rt.call_args[1]["final_response_format"] is schema
+
+    def test_final_response_format_defaults_to_none(self) -> None:
+        with (
+            patch.object(llm_client, "resolve_request_model", return_value="m"),
+            patch("digigraph.orchestration.registry.list_tool_names", return_value=[]),
+            patch.object(llm_client, "_digillm_run_tools", return_value="done") as rt,
+        ):
+            llm_client.run_tools(
+                "model", [{"role": "user", "content": "go"}], [], execute_tool=lambda n, a: "ok"
+            )
+        assert rt.call_args[1]["final_response_format"] is None
+
 
 @pytest.mark.unit
 def test_llm_client_wires_digillm_usage_observer() -> None:

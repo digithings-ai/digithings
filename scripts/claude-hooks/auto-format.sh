@@ -19,9 +19,9 @@ case "$file" in
     fi
     ;;
   *.ts|*.tsx|*.js|*.jsx)
-    if [[ "$file" == "$PROJECT_ROOT/cloudflare/digichat/"* ]]; then
-      rel="${file#"$PROJECT_ROOT/cloudflare/digichat/"}"
-      cd "$PROJECT_ROOT/cloudflare/digichat"
+    if [[ "$file" == "$PROJECT_ROOT/apps/digichat/"* ]]; then
+      rel="${file#"$PROJECT_ROOT/apps/digichat/"}"
+      cd "$PROJECT_ROOT/apps/digichat"
       npx eslint --fix "$rel" --quiet 2>/dev/null || true
     fi
     ;;

@@ -4,9 +4,9 @@
 
 **Goal:** Render the Gloomberb source line, free-tier delay notice, and `term.gloom.sh/?ticker=` deep link under digichat's own (vendored) tool-result pane, reusing the shipped shared helper — and render nothing when the payload carries no attribution.
 
-**Architecture:** One additive render branch inside the vendored `ToolFallback` at `cloudflare/digichat/src/app/(baseline)/stock/tool-fallback.aui.tsx`: a new `ToolFallbackAttribution` presentational function reads the result envelope through `readGloomberbAttribution` from the existing `@digithings/web` workspace dependency, and renders under `ToolFallbackResult` inside `ToolFallbackContent`. The helper unwraps the digichat tool-output envelope (`{...input, result, durationMs}`), keys on the payload's `attribution` field, and validates the deep link's `term.gloom.sh` prefix. Clipped or unattributed payloads return `null` — no empty line. No stream, adapter, skin, or dependency changes.
+**Architecture:** One additive render branch inside the vendored `ToolFallback` at `apps/digichat/src/app/(baseline)/stock/tool-fallback.aui.tsx`: a new `ToolFallbackAttribution` presentational function reads the result envelope through `readGloomberbAttribution` from the existing `@digithings/ui` workspace dependency, and renders under `ToolFallbackResult` inside `ToolFallbackContent`. The helper unwraps the digichat tool-output envelope (`{...input, result, durationMs}`), keys on the payload's `attribution` field, and validates the deep link's `term.gloom.sh` prefix. Clipped or unattributed payloads return `null` — no empty line. No stream, adapter, skin, or dependency changes.
 
-**Tech Stack:** TypeScript/React 19, Next.js 16, assistant-ui `ToolCallMessagePartProps`, vitest 4 (happy-dom per-file pragma + `@testing-library/react`), `@digithings/web` (workspace package, barrel export of the shared helper).
+**Tech Stack:** TypeScript/React 19, Next.js 16, assistant-ui `ToolCallMessagePartProps`, vitest 4 (happy-dom per-file pragma + `@testing-library/react`), `@digithings/ui` (workspace package, barrel export of the shared helper).
 
 **Spec:** `docs/superpowers/specs/2026-09-16-digichat-gloomberb-surfacing-design.md` — the plan argues from the spec; executors read both.
 
@@ -14,21 +14,21 @@
 
 ## Global Constraints
 
-- **Reuse the shipped copy constants — no new strings.** The line renders the payload's `attribution` / `delay_notice` fields (built from `digiquant/src/digiquant/data/gloomberb/attribution.py:21-23`); the href is the payload's `source_url` (built at `attribution.py:26-28`). The only literal is the shipped anchor label `Open in Gloomberb` (identical to #4130, `cloudflare/digiweb/web/src/components/chat/gallery-thread/tool-fallback.aui.tsx:343`). No i18n, no paraphrase.
+- **Reuse the shipped copy constants — no new strings.** The line renders the payload's `attribution` / `delay_notice` fields (built from `digiquant/src/digiquant/data/gloomberb/attribution.py:21-23`); the href is the payload's `source_url` (built at `attribution.py:26-28`). The only literal is the shipped anchor label `Open in Gloomberb` (identical to #4130, `packages/ui/src/components/chat/gallery-thread/tool-fallback.aui.tsx:343`). No i18n, no paraphrase.
 - **External links only — no iframes.** `target="_blank" rel="noopener noreferrer"`. Iframing `term.gloom.sh` is ruled out (`X-Frame-Options: DENY` + `frame-ancestors 'none'`; `docs/superpowers/specs/2026-09-12-digifetch-scoping-design.md` §7-§8).
 - **No ticker extraction.** digichat never constructs a ticker URL from tool args or result rows; the link exists only when the payload carries `source_url` (single listing addressed). No `source_url` → attribution without a link. No `attribution` → nothing.
 - **Lowercase digi\* naming** in commits, docs, and prose (`digichat`, `digithings`, `digiquant`).
-- **No new dependencies, no new network calls.** `@digithings/web` is already a digichat dependency (`cloudflare/digichat/package.json`); the helper is pure string/object logic; anchors are user-initiated navigation. This is **not** on the human-gate list (`AGENTS.md` § Human gate) — no agent-merge block.
+- **No new dependencies, no new network calls.** `@digithings/ui` is already a digichat dependency (`apps/digichat/package.json`); the helper is pure string/object logic; anchors are user-initiated navigation. This is **not** on the human-gate list (`AGENTS.md` § Human gate) — no agent-merge block.
 - **Branch/issue discipline.** `task/4098-*` cut by `make task ISSUE=4098` from `refs/remotes/origin/module/digiquant` (the PR base is `module/digiquant`; `scripts/project_routing.json` maps `component:digiquant`). PR references #4098; every commit traces to it.
 - **Tests.** vitest from the worktree root; component tests carry `// @vitest-environment happy-dom`. Run `npm run test --workspace digichat`. Do not weaken or skip existing assertions.
 - **Test counts may drift** with unrelated `develop` commits; the gate is exit 0, not a pinned number (2026-09-16 baseline: 125 test files).
 - **Cross-references:** #4130 (shipped gallery-thread attribution line — the design being mirrored), #4131 (digigraph clipping — a named dependency, **not fixed here**; the UI must degrade cleanly), #4193/#4204 (shipped dashboard precedent), #4110 (digifetch epic), #4069 (Gloomberb client).
 
 **Files touched overall:**
-- Modify: `cloudflare/digichat/src/app/(baseline)/stock/tool-fallback.aui.tsx`, `cloudflare/digichat/src/app/(baseline)/stock/tool-fallback.aui.test.tsx`
-- Create: `cloudflare/digichat/src/app/(baseline)/stock/tool-fallback.source.test.ts`
-- Docs: `cloudflare/digichat/src/app/(baseline)/stock/SOURCE.md`, `cloudflare/digichat/ARCHITECTURE.md`
-- No changes to `@digithings/web`, the first-party gallery thread, stream parts, the adapters, or any skin file.
+- Modify: `apps/digichat/src/app/(baseline)/stock/tool-fallback.aui.tsx`, `apps/digichat/src/app/(baseline)/stock/tool-fallback.aui.test.tsx`
+- Create: `apps/digichat/src/app/(baseline)/stock/tool-fallback.source.test.ts`
+- Docs: `apps/digichat/src/app/(baseline)/stock/SOURCE.md`, `apps/digichat/ARCHITECTURE.md`
+- No changes to `@digithings/ui`, the first-party gallery thread, stream parts, the adapters, or any skin file.
 
 ---
 
@@ -39,7 +39,7 @@
 
 **Interfaces:**
 - Consumes: issue #4098 labels; `scripts/project_routing.json`.
-- Produces: a `task/4098-*` worktree based on `refs/remotes/origin/module/digiquant`; verified import seam `readGloomberbAttribution` from `@digithings/web`.
+- Produces: a `task/4098-*` worktree based on `refs/remotes/origin/module/digiquant`; verified import seam `readGloomberbAttribution` from `@digithings/ui`.
 
 - [ ] **Step 1: Cut the task branch and worktree**
 
@@ -69,26 +69,26 @@ All later commands run from the **task worktree root**.
 - [ ] **Step 2: Verify the dependency and the export seam**
 
 ```bash
-rg -n '"@digithings/web"' cloudflare/digichat/package.json
+rg -n '"@digithings/ui"' apps/digichat/package.json
 ```
-Expected: `    "@digithings/web": "*",` (digichat already depends on the package).
+Expected: `    "@digithings/ui": "*",` (digichat already depends on the package).
 
 ```bash
-rg -n "readGloomberbAttribution|GLOOMBERB_ATTRIBUTION|gloomberbTickerUrl" cloudflare/digiweb/web/src/index.ts
+rg -n "readGloomberbAttribution|GLOOMBERB_ATTRIBUTION|gloomberbTickerUrl" packages/ui/src/index.ts
 ```
 Expected: hits inside the barrel block at lines 482-489 — the helper, its
-constants, and `gloomberbTickerUrl` are importable from `@digithings/web`. There
+constants, and `gloomberbTickerUrl` are importable from `@digithings/ui`. There
 is no `./lib/gloomberb` subpath in the package `exports` map, so the barrel is
 the import path.
 
 ```bash
-rg -n '^import .*\.css' cloudflare/digiweb/web/src/index.ts
+rg -n '^import .*\.css' packages/ui/src/index.ts
 ```
 Expected: **no output** — the barrel is CSS-free, so importing it from a
 component cannot leak styles into the isolated `/baseline` preview.
 
 ```bash
-rg -n 'from "@digithings/web"' cloudflare/digichat/src --glob '!*.test.*' | head -5
+rg -n 'from "@digithings/ui"' apps/digichat/src --glob '!*.test.*' | head -5
 ```
 Expected: existing consumers (e.g. `src/components/ui/button.tsx`) — the import
 pattern is established in this app.
@@ -98,7 +98,7 @@ pattern is established in this app.
 ```bash
 npm ci
 ```
-Expected: exit 0; `cloudflare/digichat` and `cloudflare/digiweb/web` resolved
+Expected: exit 0; `apps/digichat` and `packages/ui` resolved
 from the root lockfile.
 
 - [ ] **Step 4: No commit**
@@ -110,16 +110,16 @@ This task produces no file changes; the first commit is Task 2's.
 ### Task 2: `ToolFallbackAttribution` component + unit tests
 
 **Files:**
-- Modify: `cloudflare/digichat/src/app/(baseline)/stock/tool-fallback.aui.tsx` (import after line 29; new function after `ToolFallbackResult`, which ends at line 316; export list at lines 792-801)
-- Test: `cloudflare/digichat/src/app/(baseline)/stock/tool-fallback.aui.test.tsx` (import at line 10; append a describe block at end of file)
+- Modify: `apps/digichat/src/app/(baseline)/stock/tool-fallback.aui.tsx` (import after line 29; new function after `ToolFallbackResult`, which ends at line 316; export list at lines 792-801)
+- Test: `apps/digichat/src/app/(baseline)/stock/tool-fallback.aui.test.tsx` (import at line 10; append a describe block at end of file)
 
 **Interfaces:**
-- Consumes: `readGloomberbAttribution(result: unknown): GloomberbAttribution | null` from `@digithings/web` (`cloudflare/digiweb/web/src/lib/gloomberb.ts:50-73`). It unwraps the `result` key of the tool-output envelope and JSON-string results, requires a non-blank `attribution` string, and returns `{ attribution, delayNotice?, sourceUrl? }` with `sourceUrl` only for `term.gloom.sh` links.
+- Consumes: `readGloomberbAttribution(result: unknown): GloomberbAttribution | null` from `@digithings/ui` (`packages/ui/src/lib/gloomberb.ts:50-73`). It unwraps the `result` key of the tool-output envelope and JSON-string results, requires a non-blank `attribution` string, and returns `{ attribution, delayNotice?, sourceUrl? }` with `sourceUrl` only for `term.gloom.sh` links.
 - Produces: `ToolFallbackAttribution` — props `React.ComponentProps<"div"> & { result?: unknown }`; renders a `[data-slot="tool-fallback-attribution"]` row or `null`. Consumed by Task 3's wiring and by the unit tests below.
 
 - [ ] **Step 1: Write the failing tests**
 
-In `cloudflare/digichat/src/app/(baseline)/stock/tool-fallback.aui.test.tsx`,
+In `apps/digichat/src/app/(baseline)/stock/tool-fallback.aui.test.tsx`,
 change line 10 to import the new component:
 
 ```tsx
@@ -225,11 +225,11 @@ and the five new cases cannot run. The five existing tests still pass.
 
 - [ ] **Step 3: Add the import**
 
-In `cloudflare/digichat/src/app/(baseline)/stock/tool-fallback.aui.tsx`, append
+In `apps/digichat/src/app/(baseline)/stock/tool-fallback.aui.tsx`, append
 after the last import (line 29, `import { Textarea } from "./ui/textarea";`):
 
 ```tsx
-import { readGloomberbAttribution } from "@digithings/web";
+import { readGloomberbAttribution } from "@digithings/ui";
 ```
 
 - [ ] **Step 4: Add the component**
@@ -304,8 +304,8 @@ Expected: PASS — 10 tests (5 existing + 5 new).
 - [ ] **Step 7: Commit**
 
 ```bash
-git add cloudflare/digichat/src/app/(baseline)/stock/tool-fallback.aui.tsx \
-        cloudflare/digichat/src/app/(baseline)/stock/tool-fallback.aui.test.tsx
+git add apps/digichat/src/app/(baseline)/stock/tool-fallback.aui.tsx \
+        apps/digichat/src/app/(baseline)/stock/tool-fallback.aui.test.tsx
 git commit -m "feat(digichat): Gloomberb attribution line for tool results (#4098)"
 ```
 
@@ -314,17 +314,17 @@ git commit -m "feat(digichat): Gloomberb attribution line for tool results (#409
 ### Task 3: Wire the line into `ToolFallback` + integration tests + source guard
 
 **Files:**
-- Modify: `cloudflare/digichat/src/app/(baseline)/stock/tool-fallback.aui.tsx` (`ToolFallbackImpl` result branch, lines 763-765)
-- Modify: `cloudflare/digichat/src/app/(baseline)/stock/tool-fallback.aui.test.tsx` (testing-library import at line 3; append a wiring describe block)
-- Test: `cloudflare/digichat/src/app/(baseline)/stock/tool-fallback.source.test.ts` (new; source guard)
+- Modify: `apps/digichat/src/app/(baseline)/stock/tool-fallback.aui.tsx` (`ToolFallbackImpl` result branch, lines 763-765)
+- Modify: `apps/digichat/src/app/(baseline)/stock/tool-fallback.aui.test.tsx` (testing-library import at line 3; append a wiring describe block)
+- Test: `apps/digichat/src/app/(baseline)/stock/tool-fallback.source.test.ts` (new; source guard)
 
 **Interfaces:**
-- Consumes: `ToolFallbackAttribution` (Task 2); the tool part's `result` prop shape written by `cloudflare/digichat/src/lib/ui-stream-parts.ts:200-223` (`{...input, result, durationMs}`).
+- Consumes: `ToolFallbackAttribution` (Task 2); the tool part's `result` prop shape written by `apps/digichat/src/lib/ui-stream-parts.ts:200-223` (`{...input, result, durationMs}`).
 - Produces: expanded tool rows in the `base`/`chatgpt` skins and the `/baseline` preview render the attribution footer; collapsed rows and unattributed/clipped payloads are unchanged.
 
 - [ ] **Step 1: Write the failing wiring tests**
 
-In `cloudflare/digichat/src/app/(baseline)/stock/tool-fallback.aui.test.tsx`,
+In `apps/digichat/src/app/(baseline)/stock/tool-fallback.aui.test.tsx`,
 add `fireEvent` to the testing-library import (line 3):
 
 ```tsx
@@ -398,7 +398,7 @@ is already a devDependency of this app) — the assertions do not change.
 
 - [ ] **Step 2: Write the source guard test**
 
-Create `cloudflare/digichat/src/app/(baseline)/stock/tool-fallback.source.test.ts`:
+Create `apps/digichat/src/app/(baseline)/stock/tool-fallback.source.test.ts`:
 
 ```ts
 import { readFileSync } from "node:fs";
@@ -410,7 +410,7 @@ const here = dirname(fileURLToPath(import.meta.url));
 const source = readFileSync(join(here, "tool-fallback.aui.tsx"), "utf8");
 
 describe("stock ToolFallback source guard", () => {
-  it("reads attribution through the shared @digithings/web helper", () => {
+  it("reads attribution through the shared @digithings/ui helper", () => {
     expect(source).toMatch(
       /import\s*\{\s*readGloomberbAttribution\s*\}\s*from\s*["']@digithings\/web["']/,
     );
@@ -475,9 +475,9 @@ source guard.
 - [ ] **Step 6: Commit**
 
 ```bash
-git add cloudflare/digichat/src/app/(baseline)/stock/tool-fallback.aui.tsx \
-        cloudflare/digichat/src/app/(baseline)/stock/tool-fallback.aui.test.tsx \
-        cloudflare/digichat/src/app/(baseline)/stock/tool-fallback.source.test.ts
+git add apps/digichat/src/app/(baseline)/stock/tool-fallback.aui.tsx \
+        apps/digichat/src/app/(baseline)/stock/tool-fallback.aui.test.tsx \
+        apps/digichat/src/app/(baseline)/stock/tool-fallback.source.test.ts
 git commit -m "feat(digichat): wire Gloomberb attribution into the stock tool fallback (#4098)"
 ```
 
@@ -486,8 +486,8 @@ git commit -m "feat(digichat): wire Gloomberb attribution into the stock tool fa
 ### Task 4: Docs + manual dev verification
 
 **Files:**
-- Modify: `cloudflare/digichat/src/app/(baseline)/stock/SOURCE.md`
-- Modify: `cloudflare/digichat/ARCHITECTURE.md:1327` (the §9 digigraph paragraph)
+- Modify: `apps/digichat/src/app/(baseline)/stock/SOURCE.md`
+- Modify: `apps/digichat/ARCHITECTURE.md:1327` (the §9 digigraph paragraph)
 
 **Interfaces:**
 - Consumes: Tasks 2-3 as shipped on the branch.
@@ -495,13 +495,13 @@ git commit -m "feat(digichat): wire Gloomberb attribution into the stock tool fa
 
 - [ ] **Step 1: Amend the vendored-file rules**
 
-In `cloudflare/digichat/src/app/(baseline)/stock/SOURCE.md`, extend the "The
+In `apps/digichat/src/app/(baseline)/stock/SOURCE.md`, extend the "The
 only edits here are:" list (after the `dialog.tsx` bullet) with:
 
 ```md
 - `tool-fallback.aui.tsx` adds the Gloomberb attribution footer
   (`ToolFallbackAttribution`, reading `readGloomberbAttribution` from
-  `@digithings/web`) under the Result pane — the same line the first-party
+  `@digithings/ui`) under the Result pane — the same line the first-party
   gallery thread renders (#4098). No other styling changes.
 ```
 
@@ -510,7 +510,7 @@ mounts this Thread with no extra chrome.") unchanged.
 
 - [ ] **Step 2: Update the digichat architecture note**
 
-In `cloudflare/digichat/ARCHITECTURE.md`, in the §9 digigraph (primary)
+In `apps/digichat/ARCHITECTURE.md`, in the §9 digigraph (primary)
 paragraph (line 1327), find the sentence:
 
 ```
@@ -533,7 +533,7 @@ From the task worktree root:
 npm run test --workspace digichat
 npm run lint --workspace digichat
 python3 scripts/check_frontend_canon.py
-(cd cloudflare/digichat && npx tsc --noEmit)
+(cd apps/digichat && npx tsc --noEmit)
 ```
 
 Expected: digichat suite green (2026-09-16 baseline 125 files; 126 after the
@@ -571,7 +571,7 @@ fabricate screenshots.
 - [ ] **Step 5: Commit**
 
 ```bash
-git add cloudflare/digichat/src/app/(baseline)/stock/SOURCE.md cloudflare/digichat/ARCHITECTURE.md
+git add apps/digichat/src/app/(baseline)/stock/SOURCE.md apps/digichat/ARCHITECTURE.md
 git commit -m "docs(digichat): record the Gloomberb attribution line in SOURCE/ARCHITECTURE (#4098)"
 ```
 
@@ -599,7 +599,7 @@ Adds the Gloomberb source line, delay notice, and `term.gloom.sh/?ticker=`
 deep link under digichat's vendored tool-result pane
 (`(baseline)/stock/tool-fallback.aui.tsx`, used by the `base`/`chatgpt` skins
 and the `/baseline` preview), reusing `readGloomberbAttribution` from
-`@digithings/web`. The first-party `digichat` skin already renders this line
+`@digithings/ui`. The first-party `digichat` skin already renders this line
 via #4130; this closes the remaining digichat-owned surface.
 
 - No new strings: payload `attribution`/`delay_notice`/`source_url` plus the

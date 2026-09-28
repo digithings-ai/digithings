@@ -22,9 +22,9 @@ only when a trigger fires.
 - A local `.env` is present for the smoke (see Check 2). Never print, echo, or
   commit its values.
 - The hosted route is still **reserved**, not enabled: `mcp.digithings.ai`
-  (`cloudflare/digithings-stack-cloudflare/src/ports.ts:22`) has its Worker
+  (`apps/digithings-stack-cloudflare/src/ports.ts:22`) has its Worker
   route commented out behind a human gate
-  (`cloudflare/digithings-stack-cloudflare/wrangler.toml:63-73`). Check 3 stays
+  (`apps/digithings-stack-cloudflare/wrangler.toml:63-73`). Check 3 stays
   BLOCKED until a later note enables it.
 
 ## Check 1 — list the served MCP surface tools
@@ -107,9 +107,9 @@ Notes:
 ## Check 3 — hosted-surface row (reserved route)
 
 The reserved hostname `mcp.digithings.ai`
-(`cloudflare/digithings-stack-cloudflare/src/ports.ts:22`) has no live route
+(`apps/digithings-stack-cloudflare/src/ports.ts:22`) has no live route
 today — the Worker route block is commented out at
-`cloudflare/digithings-stack-cloudflare/wrangler.toml:63-73` behind a human
+`apps/digithings-stack-cloudflare/wrangler.toml:63-73` behind a human
 gate.
 
 When that route is enabled, run the Check 1 listing heredoc against it, with the

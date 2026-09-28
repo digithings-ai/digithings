@@ -1,0 +1,355 @@
+/**
+ * Thin product chrome for paywall / BYOK / attribution / embed shell.
+ * Uses stock (baseline) CSS variables — not digichat-ui session.css.
+ */
+
+.dc-brand {
+  display: flex;
+  align-items: baseline;
+  gap: 0.35rem;
+  border-bottom: 1px solid var(--border);
+  padding: 0.55rem 0.75rem;
+  font-size: 0.82rem;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+.dc-brand-by {
+  font-weight: 400;
+  color: var(--muted-foreground);
+}
+
+.dc-brand-link {
+  font-weight: 500;
+  color: var(--primary);
+  text-decoration: none;
+}
+
+.dc-brand-link:hover {
+  text-decoration: underline;
+}
+
+/* The credit sits below the thread, outside its palette scope: mirror the
+   chat canvas at the shell so the strip reads as one surface with the
+   transcript (no band edge, no hairline) and paint the attribution with it. */
+.dc-embed-shell {
+  --term-bg: #08090b;
+}
+
+:root[data-theme="light"] .dc-embed-shell {
+  --term-bg: var(--embed-canvas, #f1f0eb);
+}
+
+.dc-embed-shell [data-thread-skin="digichat"] {
+  --term-bg: #08090b;
+}
+
+:root[data-theme="light"] .dc-embed-shell [data-thread-skin="digichat"] {
+  --term-bg: var(--embed-canvas, #f1f0eb);
+}
+
+
+
+
+/* The boot overlay paints the theme surface while the chain runs; wide/page
+   embeds paint no canvas of their own (the host page shows through), so the
+   overlay stays transparent there. Keyed on :root[data-embed-wide="1"], a
+   pre-paint flag the embed route sets, so it holds before hydration. */
+:root[data-embed-wide="1"] .dboot-overlay {
+  background: transparent;
+}
+
+/* Boot: only the transcript column keeps out of the way while the chain types
+   on top of the hero copy. The credit is NOT exempted here — exempting any
+   ancestor that merely *contains* it un-hid the whole column (the credit is a
+   descendant, not a direct child), so the column's content showed through a
+   transparent wide overlay. Instead the credit lifts itself above the overlay
+   with its own stacking context (`.dc-attribution` above), which keeps it
+   visible through the animation while the column still hides (m3). */
+[data-stock-product][data-boot-active="true"] > :not(.dboot-overlay) {
+  visibility: hidden;
+}
+
+/* A hidden ancestor still hides the credit (visibility inherits), so the
+   credit re-asserts its own visibility — the stacking context above only
+   handles paint order, not the inherited hide. */
+[data-stock-product][data-boot-active="true"] [data-slot="aui_credit"] {
+  visibility: visible;
+}
+
+.dc-inline-link {
+  font: inherit;
+  color: var(--primary);
+  background: none;
+  border: 0;
+  padding: 0;
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  font-weight: 500;
+}
+
+.dc-inline-link:hover {
+  color: var(--foreground);
+}
+
+.dc-grain {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0.04;
+  z-index: 0;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='140' height='140'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>");
+}
+
+.dc-embed-shell {
+  position: relative;
+  z-index: 0;
+}
+
+/* digichat-skin embed: the shell shares the thread canvas so the composer row,
+   turn counter, and attribution have no white band beneath. --embed-canvas is
+   seeded server-side by the embed page from the tenant skin + paint theme; the
+   fallbacks keep every other surface on the same colour. */
+.dc-embed-shell[data-skin-canvas="1"]:not([data-wide="1"]) {
+  background: var(--embed-canvas, #f1f0eb);
+}
+
+:root[data-theme="dark"] .dc-embed-shell[data-skin-canvas="1"]:not([data-wide="1"]) {
+  background: var(--embed-canvas, #121417);
+}
+
+/* Footer bottom air is NOT collapsed here: the thread footer owns its own
+   padding, shared by catalog, product, and embed. (The old 0.25rem collapse
+   existed so the host-level turn counter hugged the composer; the counter
+   keeps its own spacing and the footer stays identical everywhere.) */
+
+/* Terminal block caret: engines that support `caret-shape: block` (Chromium)
+   keep their native block caret; engines that do not get the native caret made
+   transparent and the painted block overlay promoted to the tenant accent
+   while the composer is focused (same metrics as the reference chatbot.css
+   overlay).
+
+   Because the overlay only paints on engines without a native block caret, the
+   caret must be declared on the base rule too — otherwise `caret-color:
+   transparent` removes the only caret the user can see (the reference
+   chatbot.css declares `caret-color` + `caret-shape` unconditionally at
+   chatbot.css:149-150 and only makes the native caret transparent inside
+   `@supports not (caret-shape: block)`). */
+.dc-embed-shell [data-thread-skin] .aui-composer-input {
+  caret-color: var(--tenant-accent, var(--accent, var(--primary)));
+  caret-shape: block;
+}
+
+@supports not (caret-shape: block) {
+  .dc-embed-shell [data-thread-skin] .aui-composer-input {
+    caret-color: transparent;
+  }
+
+  .dc-embed-shell [data-thread-skin] .aui-composer-input:focus + .aui-block-caret,
+  .dc-embed-shell [data-thread-skin] .aui-composer-input-wrap:focus-within .aui-block-caret {
+    display: block;
+  }
+}
+
+.dc-embed-shell [data-thread-skin] .aui-block-caret {
+  --caret-pad-left: 0.375rem;
+  display: none;
+  position: absolute;
+  width: 1ch;
+  height: 1.375rem;
+  left: calc(var(--caret-col, 0) * 1ch + var(--caret-pad-left));
+  top: calc(var(--caret-row, 0) * 1.375rem + var(--caret-pad-top, 0px));
+  background: var(--tenant-accent, var(--accent, var(--primary)));
+  font-family: var(--font-mono);
+  font-size: 0.88rem;
+  pointer-events: none;
+  animation: aui-caret-blink 1.06s steps(1) infinite;
+}
+
+.dc-embed-shell [data-thread-skin] [data-layout="expanded"] .aui-block-caret {
+  --caret-pad-left: 0.625rem;
+  --caret-pad-top: 0.2rem;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dc-embed-shell [data-thread-skin] .aui-block-caret {
+    animation: none;
+  }
+}
+
+.dc-embed-shell[data-wide="1"] {
+  background: transparent;
+}
+
+html:has(.dc-embed-shell[data-wide="1"]),
+body:has(.dc-embed-shell[data-wide="1"]) {
+  background: transparent;
+}
+
+/* Website /chat (`wide=1`) shows the parent grain through the iframe.
+   Composer keeps --composer-bg; only the thread canvas goes transparent. */
+.dc-embed-shell[data-wide="1"] .digichat-thread,
+.dc-embed-shell[data-wide="1"] .digichat-thread__footer,
+.dc-embed-shell[data-wide="1"] .aui-thread-root,
+.dc-embed-shell[data-wide="1"] .aui-thread-viewport-footer {
+  background: transparent;
+}
+
+/* BYOK / paywall — stock-token remapping of former session.css classes */
+.dc-byok-flow,
+.dc-term-row {
+  margin-top: 0.75rem;
+  font-size: 0.875rem;
+  color: var(--foreground);
+}
+
+.dc-term-marker {
+  color: var(--muted-foreground);
+  margin-right: 0.35rem;
+}
+
+.dc-term-body {
+  display: inline;
+}
+
+.dc-byok-prompt {
+  margin: 0 0 0.4rem;
+  font-size: 0.75rem;
+  color: var(--muted-foreground);
+}
+
+.dc-byok-option-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  max-width: 28rem;
+}
+
+.dc-byok-option {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  width: 100%;
+  margin: 0;
+  padding: 0.35rem 0.5rem;
+  border: 0;
+  border-radius: calc(var(--radius) - 2px);
+  background: transparent;
+  color: var(--foreground);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.dc-byok-option:hover,
+.dc-byok-option-active {
+  background: var(--muted);
+}
+
+.dc-byok-option-cursor {
+  display: inline-block;
+  width: 1ch;
+  color: var(--primary);
+}
+
+.dc-byok-star {
+  color: var(--muted-foreground);
+}
+
+.dc-byok-input {
+  display: block;
+  width: 100%;
+  max-width: 28rem;
+  margin-top: 0.25rem;
+  padding: 0.5rem 0.65rem;
+  border: 1px solid var(--border);
+  border-radius: calc(var(--radius) - 2px);
+  background: var(--background);
+  color: var(--foreground);
+  font: inherit;
+  font-size: 0.875rem;
+  outline: none;
+}
+
+.dc-byok-input:focus {
+  border-color: var(--ring);
+  box-shadow: 0 0 0 2px color-mix(in oklch, var(--ring) 25%, transparent);
+}
+
+.dc-byok-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  margin-top: 0.75rem;
+}
+
+.dc-byok-action {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--muted-foreground);
+  font: inherit;
+  font-size: 0.75rem;
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.dc-byok-action:hover {
+  color: var(--foreground);
+}
+
+.dc-byok-action-danger {
+  color: var(--destructive);
+}
+
+.aui-message-error-root {
+  color: var(--destructive);
+  border-color: color-mix(in oklch, var(--destructive) 40%, transparent);
+  background: color-mix(in oklch, var(--destructive) 10%, transparent);
+}
+
+.dc-paywall,
+.dc-gate-card {
+  margin: 1rem auto;
+  max-width: 28rem;
+  padding: 1rem 1.1rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--card);
+  color: var(--card-foreground);
+  box-shadow: 0 1px 2px color-mix(in oklch, var(--foreground) 6%, transparent);
+}
+
+/* chrome.mode: sidebar (#4515). A docked panel beside the host content rather
+   than the bare iframe. The modal mode needs no rules here — the launcher
+   panel already sizes its own body (see digichat-launcher.css). */
+.dc-presentation--sidebar {
+  display: flex;
+  height: 100%;
+  width: 100%;
+  min-height: 0;
+}
+
+/* The host page keeps its own layout; this canvas only reserves the space the
+   panel occupies so the docked chat never covers the content. */
+.dc-presentation__canvas {
+  flex: 1 1 auto;
+  min-width: 0;
+  background: var(--background);
+}
+
+.dc-presentation__panel {
+  display: flex;
+  flex-direction: column;
+  flex: none;
+  width: min(380px, 100vw);
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+  border-inline-start: 1px solid var(--border);
+  background: var(--background);
+  color: var(--foreground);
+}

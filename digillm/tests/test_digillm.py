@@ -2039,3 +2039,85 @@ def test_client_compatibility_facade_reexports_split_helpers() -> None:
     assert client_mod.ToolDefinition is types.ToolDefinition
     assert client_mod.byok is overrides.byok
     assert client_mod._llm_cache_key is cache.llm_cache_key
+
+
+# ── Forced wrap-up schema enforcement (#4556) ────────────────────────────────
+
+
+def _two_tool_rounds_then_wrap_up(tc: Any) -> list[MagicMock]:
+    """Two tool-requesting rounds (max_tool_rounds=2), then the forced wrap-up."""
+    return [
+        _mock_response("", tool_calls=[tc]),
+        _mock_response("", tool_calls=[tc]),
+        _mock_response('{"ok": true}'),
+    ]
+
+
+def test_final_response_format_enforces_the_forced_wrap_up() -> None:
+    """#4556: ``final_response_format`` must reach the forced tool-free wrap-up
+    completion, not just the caller's retry. Without it the cheap model can answer in
+    prose or return an empty body, which is what forced the tool-free retry that could
+    not re-ground (the tool results live only in ``run_tools``' local copy)."""
+    fn = MagicMock()
+    fn.name = "lookup"
+    fn.arguments = "{}"
+    tc = MagicMock()
+    tc.id = "c1"
+    tc.function = fn
+
+    fake_client = MagicMock()
+    fake_client.chat.completions.create.side_effect = _two_tool_rounds_then_wrap_up(tc)
+
+    schema = {
+        "type": "json_schema",
+        "json_schema": {"name": "Answer", "schema": {"type": "object"}},
+    }
+    tools = [{"type": "function", "function": {"name": "lookup", "parameters": {}}}]
+    with patch.object(client_mod, "get_client_for_model", return_value=fake_client):
+        out = digillm.run_tools(
+            "gpt-4o-mini",
+            [{"role": "user", "content": "go"}],
+            tools,
+            lambda name, args: "tool-result",
+            max_tool_rounds=2,
+            final_response_format=schema,
+        )
+
+    assert out == '{"ok": true}'
+    calls = fake_client.chat.completions.create.call_args_list
+    assert len(calls) == 3, "two tool rounds plus the forced wrap-up"
+    # The tool-enabled rounds cannot carry response_format (mutually exclusive with
+    # tools at the provider), and must not have been given one.
+    assert calls[0].kwargs.get("response_format") is None
+    assert calls[1].kwargs.get("response_format") is None
+    # The wrap-up runs with tools=None, so it is the one legal schema-enforced turn.
+    assert calls[2].kwargs["response_format"] is schema
+    assert not calls[2].kwargs.get("tools")
+
+
+def test_forced_wrap_up_stays_unconstrained_without_final_response_format() -> None:
+    """Backwards compatibility: omitting ``final_response_format`` keeps the historical
+    unconstrained wrap-up, so existing callers are unaffected by #4556."""
+    fn = MagicMock()
+    fn.name = "lookup"
+    fn.arguments = "{}"
+    tc = MagicMock()
+    tc.id = "c1"
+    tc.function = fn
+
+    fake_client = MagicMock()
+    fake_client.chat.completions.create.side_effect = _two_tool_rounds_then_wrap_up(tc)
+
+    tools = [{"type": "function", "function": {"name": "lookup", "parameters": {}}}]
+    with patch.object(client_mod, "get_client_for_model", return_value=fake_client):
+        out = digillm.run_tools(
+            "gpt-4o-mini",
+            [{"role": "user", "content": "go"}],
+            tools,
+            lambda name, args: "tool-result",
+            max_tool_rounds=2,
+        )
+
+    assert out == '{"ok": true}'
+    wrap_up = fake_client.chat.completions.create.call_args_list[2].kwargs
+    assert "response_format" not in wrap_up

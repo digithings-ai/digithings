@@ -1,0 +1,360 @@
+"use client";
+
+/**
+ * DigichatLauncher — the reusable corner entry point for embedded digichat.
+ *
+ * Idle is a 30px square carrying the canonical compact terminal mark. Hover or
+ * keyboard focus types `digichat` one character at a time without changing the
+ * control's height or border. Opening replaces that square in place with a chat
+ * panel that expands in two steps from the same corner: first sideways into a
+ * composer-height bar, then upward to full height. The transparent backdrop,
+ * header close button, and Escape key all dismiss it, reversing both steps.
+ *
+ * The launcher portals to document.body by default so a backdrop-filter or
+ * transformed app shell cannot trap its fixed positioning. Reference specimens
+ * can set `portal={false}` to contain it inside a positioned stage.
+ *
+ * Import `@digithings/ui/styles/digichat-launcher.css` once in the app shell.
+ */
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  useSyncExternalStore,
+  type CSSProperties,
+  type ReactNode,
+} from "react";
+import { createPortal } from "react-dom";
+
+import { TerminalMark } from "../symbols/terminal-marks";
+import { DotMatrix } from "./DotMatrix";
+
+const WORDMARK = "digichat";
+const TYPE_MS = 48;
+/** Must match the close animation in styles/digichat-launcher.css. */
+const CLOSE_MS = 340;
+
+const subscribeToClient = () => () => {};
+const getClientSnapshot = () => true;
+const getServerSnapshot = () => false;
+
+/**
+ * Test a keydown against a `mod+k` / `ctrl+shift+d` style hotkey.
+ *
+ * `mod` means "ctrl or meta" so one deployment string works on both macOS and
+ * Windows/Linux; naming `ctrl` or `meta` explicitly pins that one. Every
+ * modifier not named must be absent, so `k` alone never fires on `mod+k`. A
+ * malformed string (empty token, e.g. `k+` or `mod++k`) matches nothing rather
+ * than silently degrading to the bare key.
+ */
+export function matchesHotkey(event: KeyboardEvent, hotkey: string): boolean {
+  const parts = hotkey.split("+");
+  if (parts.some((part) => part.trim() === "")) return false;
+  const tokens = parts.map((token) => token.trim().toLowerCase());
+  if (tokens.length === 0) return false;
+  const key = tokens[tokens.length - 1];
+  const mods = new Set(tokens.slice(0, -1));
+  const needsCtrl = mods.has("ctrl");
+  const needsMeta = mods.has("meta") || mods.has("cmd");
+  const needsMod = mods.has("mod");
+  const needsAlt = mods.has("alt") || mods.has("option");
+  const needsShift = mods.has("shift");
+
+  if (needsCtrl && !event.ctrlKey) return false;
+  if (needsMeta && !event.metaKey) return false;
+  // `mod` is exactly one of ctrl/meta — both held is not the shortcut.
+  if (needsMod && event.ctrlKey === event.metaKey) return false;
+  if (!needsCtrl && !needsMod && event.ctrlKey) return false;
+  if (!needsMeta && !needsMod && event.metaKey) return false;
+  if (needsAlt !== event.altKey) return false;
+  if (needsShift !== event.shiftKey) return false;
+  return event.key.toLowerCase() === key;
+}
+
+export type DigichatLauncherProps = {
+  /** Embedded chat surface, usually the digichat iframe. */
+  children: ReactNode;
+  /** Header label inside the expanded panel. */
+  title?: ReactNode;
+  /** Accessible name for the expanded panel. */
+  ariaLabel?: string;
+  /** Render into document.body (default) or inside the current container. */
+  portal?: boolean;
+  /**
+   * Keyboard shortcut that opens the panel while it is closed, e.g. `mod+k`.
+   * See `matchesHotkey` for the accepted syntax.
+   */
+  hotkey?: string;
+  /** Start open for demos or controlled previews. */
+  defaultOpen?: boolean;
+  /** Called after opening or after the close animation completes. */
+  onOpenChange?: (open: boolean) => void;
+  className?: string;
+  /** Optional CSS custom properties such as panel dimensions or offsets. */
+  style?: CSSProperties;
+  /** Reset the in-process thread. Rendered only when a caller wires it (e.g. the gallery specimen). */
+  onNewChat?: () => void;
+};
+
+export function DigichatLauncher({
+  children,
+  title = "digichat",
+  ariaLabel = "digichat",
+  portal = true,
+  hotkey,
+  defaultOpen = false,
+  onOpenChange,
+  className,
+  style,
+  onNewChat,
+}: DigichatLauncherProps) {
+  /* A portal cannot render on the server. useSyncExternalStore supplies a
+     hydration-safe client signal without a mount effect whose sole purpose is
+     a synchronous state update. */
+  const mounted = useSyncExternalStore(
+    subscribeToClient,
+    getClientSnapshot,
+    getServerSnapshot,
+  );
+  const [open, setOpen] = useState(defaultOpen);
+  const [closing, setClosing] = useState(false);
+  const [hasOpened, setHasOpened] = useState(defaultOpen);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const closeRef = useRef<HTMLButtonElement>(null);
+  const typedRef = useRef<HTMLSpanElement>(null);
+  const typingTimerRef = useRef<number | null>(null);
+  const closeTimerRef = useRef<number | null>(null);
+  /* Focus is restored to the trigger on close for keyboard users, but a
+     pointer-driven close should leave a bare square rather than a typed
+     wordmark — `:focus-visible` is too unreliable here to decide that. */
+  const skipFocusTypeRef = useRef(false);
+  const pendingReturnRef = useRef<{ type: boolean } | null>(null);
+
+  const stopTyping = () => {
+    if (typingTimerRef.current !== null) {
+      window.clearTimeout(typingTimerRef.current);
+      typingTimerRef.current = null;
+    }
+  };
+
+  const resetTrigger = () => {
+    stopTyping();
+    const trigger = triggerRef.current;
+    if (!trigger) return;
+    trigger.removeAttribute("data-typing");
+    if (typedRef.current) typedRef.current.textContent = "d";
+  };
+
+  const typeWordmark = () => {
+    if (open || closing) return;
+    stopTyping();
+    const trigger = triggerRef.current;
+    const typed = typedRef.current;
+    if (!trigger || !typed) return;
+
+    trigger.setAttribute("data-typing", "");
+    typed.textContent = "d";
+    let length = 1;
+
+    const reveal = () => {
+      length += 1;
+      typed.textContent = WORDMARK.slice(0, length);
+      if (length < WORDMARK.length) {
+        typingTimerRef.current = window.setTimeout(reveal, TYPE_MS);
+      } else {
+        typingTimerRef.current = null;
+      }
+    };
+
+    typingTimerRef.current = window.setTimeout(reveal, TYPE_MS);
+  };
+
+  const openPanel = () => {
+    stopTyping();
+    setHasOpened(true);
+    setOpen(true);
+    onOpenChange?.(true);
+  };
+
+  const closePanel = useCallback(
+    (options?: { typeOnReturn?: boolean }) => {
+      if (!open || closing) return;
+      pendingReturnRef.current = { type: options?.typeOnReturn === true };
+      if (window.matchMedia?.("(prefers-reduced-motion: reduce)").matches) {
+        setOpen(false);
+        onOpenChange?.(false);
+        return;
+      }
+      setClosing(true);
+      closeTimerRef.current = window.setTimeout(() => {
+        setOpen(false);
+        setClosing(false);
+        onOpenChange?.(false);
+      }, CLOSE_MS);
+    },
+    [closing, onOpenChange, open],
+  );
+
+  /* Focus restoration rides the trigger's own ref callback: it is the one
+     moment the node is guaranteed to exist, and focusing an already-focused
+     node fires no event, so the typing decision is made here rather than in
+     the focus handler. */
+  const attachTrigger = (node: HTMLButtonElement | null) => {
+    triggerRef.current = node;
+    if (!node) return;
+    const pending = pendingReturnRef.current;
+    if (!pending) return;
+    pendingReturnRef.current = null;
+    skipFocusTypeRef.current = true;
+    node.focus();
+    if (pending.type) {
+      skipFocusTypeRef.current = false;
+      typeWordmark();
+      return;
+    }
+    /* React may dispatch the focus this call produced after the current task,
+       so hold the suppression until that has been delivered, then clear any
+       typing it started. */
+    window.requestAnimationFrame(() => {
+      skipFocusTypeRef.current = false;
+      resetTrigger();
+    });
+  };
+
+  useEffect(() => {
+    if (!open) return;
+    const focusFrame = window.requestAnimationFrame(() => closeRef.current?.focus());
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") closePanel({ typeOnReturn: true });
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => {
+      window.cancelAnimationFrame(focusFrame);
+      window.removeEventListener("keydown", onKeyDown);
+    };
+  }, [closePanel, open]);
+
+  /* The hotkey only opens: once the panel is up, Escape and the backdrop own
+     dismissal, so a shortcut cannot toggle the surface out from under a user
+     mid-message. `openPanelRef` keeps the listener stable across renders. */
+  const openPanelRef = useRef(openPanel);
+  // eslint-disable-next-line react-hooks/refs -- useLatest for the hotkey listener
+  openPanelRef.current = openPanel;
+
+  useEffect(() => {
+    if (!hotkey || open || closing) return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (!matchesHotkey(event, hotkey)) return;
+      event.preventDefault();
+      openPanelRef.current();
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [closing, hotkey, open]);
+
+  useEffect(
+    () => () => {
+      stopTyping();
+      if (closeTimerRef.current !== null) {
+        window.clearTimeout(closeTimerRef.current);
+      }
+    },
+    [],
+  );
+
+  const retainPanel = open || closing || hasOpened;
+  const launcher = (
+    <div
+      className={[
+        "digichat-launcher",
+        portal ? "" : "digichat-launcher--contained",
+        className ?? "",
+      ]
+        .filter(Boolean)
+        .join(" ")}
+      style={style}
+    >
+      {open ? (
+        <button
+          type="button"
+          className="digichat-launcher__backdrop"
+          aria-label="Close digichat"
+          tabIndex={-1}
+          onClick={() => closePanel()}
+        />
+      ) : null}
+      {retainPanel ? (
+        <section
+          className={[
+            "digichat-launcher__panel",
+            closing ? "is-closing" : "",
+            !open && !closing ? "is-hidden" : "",
+          ]
+            .filter(Boolean)
+            .join(" ")}
+          role="dialog"
+          aria-label={ariaLabel}
+        >
+          <header className="digichat-launcher__header">
+            <span>{title}</span>
+            <div className="digichat-launcher__header-actions">
+              {onNewChat ? (
+                <button
+                  type="button"
+                  className="digichat-launcher__new"
+                  aria-label="New chat"
+                  data-tooltip="New chat"
+                  onClick={onNewChat}
+                >
+                  <DotMatrix state="newChat" label="New chat" className="size-3.5" />
+                </button>
+              ) : null}
+              <button
+                ref={closeRef}
+                type="button"
+                className="digichat-launcher__close"
+                aria-label="Close digichat"
+                onClick={() => closePanel()}
+              >
+                <DotMatrix state="remove" label="Close" className="size-3.5" />
+              </button>
+            </div>
+          </header>
+          <div className="digichat-launcher__body">{children}</div>
+        </section>
+      ) : null}
+      {!open && !closing ? (
+        <button
+          ref={attachTrigger}
+          type="button"
+          className="digichat-launcher__trigger"
+          aria-label="Open digichat"
+          aria-expanded="false"
+          onMouseEnter={typeWordmark}
+          onMouseLeave={resetTrigger}
+          onFocus={() => {
+            if (skipFocusTypeRef.current) return;
+            typeWordmark();
+          }}
+          onBlur={resetTrigger}
+          onClick={openPanel}
+        >
+          <TerminalMark
+            variant="compact"
+            size={20}
+            className="digichat-launcher__mark"
+          />
+          <span className="digichat-launcher__word" aria-hidden="true">
+            <span ref={typedRef}>d</span>
+            <span className="digichat-launcher__cursor" />
+          </span>
+        </button>
+      ) : null}
+    </div>
+  );
+
+  if (!portal) return launcher;
+  if (!mounted) return null;
+  return createPortal(launcher, document.body);
+}

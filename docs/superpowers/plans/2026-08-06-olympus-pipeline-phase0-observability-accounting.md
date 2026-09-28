@@ -708,7 +708,7 @@ digiquant.io.
 
 **Files:** migration `<NNN>_olympus_accounting_views.sql`; modify
 `cloudflare/olympus/lib/observability-queries.ts`, `cloudflare/olympus/lib/queries.ts`, generated/local
-DB types, `cloudflare/digiquant-web/lib/live/useLivePortfolio.ts`, and focused frontend tests.
+DB types, `apps/digiquant-web/lib/live/useLivePortfolio.ts`, and focused frontend tests.
 
 **Output/contribution:** Minimal curated views and adapter changes expose correct portfolio state
 without leaking private lineage.

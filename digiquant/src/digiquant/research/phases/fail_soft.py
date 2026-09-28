@@ -15,7 +15,7 @@ thus yields a *more conservative* book (one stale segment), never a crashed run.
 
 This is a **deliberate, observable** degrade boundary, not a silent swallow: every
 failure is logged at WARNING with the exception type and recorded as a structured
-``PhaseError`` that surfaces in ``atlas_run_diagnostics``. ``KeyboardInterrupt`` /
+``PhaseError`` that surfaces in ``run_diagnostics``. ``KeyboardInterrupt`` /
 ``SystemExit`` (``BaseException``) still propagate.
 """
 

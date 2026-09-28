@@ -61,7 +61,7 @@ SCORE_PATH_SUPPRESSIONS: tuple[tuple[str, str], ...] = (
     ("digiquant/scripts/research/preload-history.py", "pd."),
     ("digiquant/scripts/research/update_tearsheet.py", "pandas"),
     # RegExp.exec in terminal highlighter — not Python exec() (DESLOP-027)
-    ("cloudflare/digiweb/design/terminal/highlight-dom.js", "bare exec()"),
+    ("packages/design/terminal/highlight-dom.js", "bare exec()"),
     # projects/ are confidential standalone research scripts, not services
     ("projects/", "blocking sleep"),
     ("projects/", "requests import"),
@@ -82,7 +82,7 @@ SCORE_SKIP_PATH_FRAGMENTS: tuple[str, ...] = (
     # heuristics are Python-oriented and misfire on CSS/JS (eval/exec/TODO scans
     # hit all files). This is the source-of-truth design dir we iterate heavily;
     # secrets are still covered by gitleaks. See #1310.
-    "cloudflare/digiweb/design/",
+    "packages/design/",
     # Lockfile integrity hashes contain XXX substrings that trip TODO/FIXME scan.
     "package-lock.json",
 )

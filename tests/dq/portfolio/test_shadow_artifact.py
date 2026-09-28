@@ -72,7 +72,7 @@ _POLICY_HASH = "a" * 64
 _CAL_HASH_A = "b" * 64
 _CAL_HASH_B = "c" * 64
 _COST_HASH_A = "d" * 64
-_H7_HASH = "e" * 64
+_DIRECTION_HASH = "e" * 64
 _COV_HASH = "f" * 64
 
 
@@ -140,7 +140,7 @@ def _sample_bundle() -> AllocationInputBundle:
     )
     cost = CostLiquidityBinding(entries=(("AAPL", _COST_HASH_A),))
     source = build_source_hashes(
-        h7_memo_hash=_H7_HASH,
+        direction_memo_hash=_DIRECTION_HASH,
         risk_policy_hash=_POLICY_HASH,
         prior_entries=tuple((entry.ticker, entry.weight_pct) for entry in prior.entries),
         calibrated_hashes=(("AAPL", _CAL_HASH_A), ("MSFT", _CAL_HASH_B)),
@@ -415,8 +415,8 @@ def test_export_from_state_and_maybe_export(
     assert built is not None
     assert built.artifact_content_hash == artifact.artifact_content_hash
 
-    monkeypatch.setenv("OLYMPUS_SHADOW_ARTIFACT_MODE", "export")
-    monkeypatch.setenv("OLYMPUS_SHADOW_ARTIFACT_DIR", str(tmp_path))
+    monkeypatch.setenv("DIGIQUANT_SHADOW_ARTIFACT_MODE", "export")
+    monkeypatch.setenv("DIGIQUANT_SHADOW_ARTIFACT_DIR", str(tmp_path))
     digest = maybe_export_shadow_allocation_artifact(state)
     assert digest == artifact.artifact_content_hash
     files = list(tmp_path.glob("shadow-allocation-*.json"))
@@ -438,16 +438,16 @@ def test_export_failure_does_not_raise(
         },
     )
     state = SimpleNamespace(run_id="run-2758", run_date=_SESSION, phase_portfolio=phase)
-    monkeypatch.setenv("OLYMPUS_SHADOW_ARTIFACT_MODE", "export")
+    monkeypatch.setenv("DIGIQUANT_SHADOW_ARTIFACT_MODE", "export")
     # Point at a file path so mkdir/write fails closed without raising to caller.
     blocker = tmp_path / "not-a-dir"
     blocker.write_text("x", encoding="utf-8")
-    monkeypatch.setenv("OLYMPUS_SHADOW_ARTIFACT_DIR", str(blocker))
+    monkeypatch.setenv("DIGIQUANT_SHADOW_ARTIFACT_DIR", str(blocker))
     assert maybe_export_shadow_allocation_artifact(state) is None
 
 
 def test_mode_off_skips_export(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("OLYMPUS_SHADOW_ARTIFACT_MODE", "off")
+    monkeypatch.setenv("DIGIQUANT_SHADOW_ARTIFACT_MODE", "off")
     assert sa.resolve_shadow_artifact_mode() is ShadowArtifactMode.OFF
     assert maybe_export_shadow_allocation_artifact(SimpleNamespace()) is None
 

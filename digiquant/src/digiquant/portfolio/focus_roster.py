@@ -1,4 +1,4 @@
-"""Focus roster helpers shared by H4 and legacy 7C/7CD strangler nodes."""
+"""Focus roster helpers shared by screener and legacy 7C/7CD strangler nodes."""
 
 from __future__ import annotations
 
@@ -6,7 +6,7 @@ from digiquant.portfolio.state import PortfolioState
 
 
 def ticker_in_focus_roster(state: PortfolioState, ticker: str) -> bool:
-    """Return whether *ticker* is on the H4 runtime roster (empty roster → allow all)."""
+    """Return whether *ticker* is on the screener runtime roster (empty roster → allow all)."""
     roster = state.phase_portfolio.focus_roster
     if not roster:
         return True
@@ -15,7 +15,7 @@ def ticker_in_focus_roster(state: PortfolioState, ticker: str) -> bool:
 
 
 def focus_roster_tickers(state: PortfolioState) -> list[str]:
-    """Tickers from H4 ``focus_roster`` in roster order."""
+    """Tickers from screener ``focus_roster`` in roster order."""
     return [entry.ticker for entry in state.phase_portfolio.focus_roster]
 
 
@@ -29,7 +29,7 @@ def fanout_ticker(state: PortfolioState) -> str | None:
 
 
 def with_fanout_ticker(state: PortfolioState, ticker: str) -> PortfolioState:
-    """Return a state copy carrying ``ticker`` as the per-Send fan-out cursor (H5/H6 map).
+    """Return a state copy carrying ``ticker`` as the per-Send fan-out cursor (analyst/deliberation map).
 
     Used as the ``with_item`` hook of a ``FanOutPhase``: each parallel worker receives this
     copy and reads ``state.portfolio_fanout_ticker`` to know which roster ticker it owns.

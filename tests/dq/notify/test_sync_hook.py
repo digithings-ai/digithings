@@ -106,7 +106,7 @@ def test_run_sync_batch_dispatches_execution_alerts_fail_soft(
 
     def _boom(*_a: object, **_k: object) -> None:
         calls.append("dispatch")
-        raise RuntimeError("mailgun down")
+        raise RuntimeError("notify down")
 
     monkeypatch.setattr(
         "digiquant.notify.dispatch.dispatch_execution_alerts",

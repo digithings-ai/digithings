@@ -2,7 +2,7 @@
 
 This module is the **local** end-to-end chain for the epic's composition path. It
 exercises the REAL merged Python seams (T2 seed shape → T4 overlay → K4 router/sync
-→ K5 notify) with fakes only at external boundaries (PostgREST/Supabase, Mailgun,
+→ K5 notify) with fakes only at external boundaries (PostgREST/Supabase, email,
 broker HTTP). It is **not** a substitute for the staging E2E in
 ``docs/agent-backlog/execution-tenancy/DEPLOYMENT.md`` §7 / EPIC.md program acceptance
 (signup → Stripe test Checkout → Alpaca connect → overlay → paper fill → digest).
@@ -79,10 +79,10 @@ from digiquant.execution.sync import (
     broker_execution_id,
     sync_connection,
 )
+from digiquant.notify.cloudflare_email import CloudflareEmailConfig
 from digiquant.notify.dispatch import dispatch_workspace
 from digiquant.notify.entitlements import ArtifactClass, can
 from digiquant.notify.entitlements import PlanTier as NotifyPlanTier
-from digiquant.notify.mailgun import MailgunConfig
 from digiquant.portfolio.models.portfolio_ledger import (
     ApprovedTarget,
     DecisionAction,
@@ -145,7 +145,7 @@ _STRIPE_SUBSCRIPTION_UPDATED: dict[str, Any] = {
 
 
 # ---------------------------------------------------------------------------
-# External-boundary fakes only (PostgREST + Mailgun + BrokerAdapter protocol)
+# External-boundary fakes only (PostgREST + email + BrokerAdapter protocol)
 # ---------------------------------------------------------------------------
 
 
@@ -277,8 +277,8 @@ class ChainFakeSupabase:
         return {n: copy.deepcopy(self.tables.get(n, [])) for n in names}
 
 
-class CapturingMailgun:
-    """Mailgun transport fake — records sends; never opens a socket."""
+class CapturingEmail:
+    """Email transport fake — records sends; never opens a socket."""
 
     def __init__(self) -> None:
         self.sent: list[dict[str, str]] = []
@@ -509,10 +509,10 @@ def sb(custom_ws_id: UUID, free_ws_id: UUID, master_key: MasterKey) -> ChainFake
     return client
 
 
-def _mailgun_config() -> MailgunConfig:
-    return MailgunConfig(
-        api_key="test-key",
-        domain="mg.example.com",
+def _notify_config() -> CloudflareEmailConfig:
+    return CloudflareEmailConfig(
+        api_token="test-token",
+        account_id="acct.example.test",
         from_address="notify@example.com",
         unsubscribe_base="https://example.com/settings",
     )
@@ -609,8 +609,8 @@ def test_entitled_overlay_to_paper_fill_to_alert(
     master_key: MasterKey,
 ) -> None:
     """Happy path + woven negatives: house untouched, live raises, sync idempotent."""
-    monkeypatch.setenv("OLYMPUS_KAIROS_ROUTING", "1")
-    monkeypatch.setenv("OLYMPUS_OVERLAY_PERSIST", "1")
+    monkeypatch.setenv("DIGIQUANT_EXECUTION_ROUTING", "1")
+    monkeypatch.setenv("DIGIQUANT_OVERLAY_PERSIST", "1")
 
     house = str(house_workspace_id())
     house_before = sb.snapshot(
@@ -767,8 +767,8 @@ def test_entitled_overlay_to_paper_fill_to_alert(
     assert len(sb.tables[BROKER_EXECUTIONS]) == 1
 
     # --- 5) K5 notify: CUSTOM execution alert; FREE gets nothing (tier + no fills) ---
-    mailgun = CapturingMailgun()
-    cfg = _mailgun_config()
+    notify = CapturingEmail()
+    cfg = _notify_config()
     # Tier gate vocabulary (T5 matrix): free cannot see broker_status.
     assert can(NotifyPlanTier.STUDIO, ArtifactClass.BROKER_STATUS) is True
     assert can(NotifyPlanTier.FREE, ArtifactClass.BROKER_STATUS) is False
@@ -781,8 +781,8 @@ def test_entitled_overlay_to_paper_fill_to_alert(
     )
 
     # Execution alerts only (hour mismatch skips digest) for a clean alert assertion.
-    dispatch_workspace(sb, mailgun, cfg, custom_pref, _RUN, hour_utc=99)
-    alert_sends = [s for s in mailgun.sent if "Execution alert" in s["subject"]]
+    dispatch_workspace(sb, notify, cfg, custom_pref, _RUN, hour_utc=99)
+    alert_sends = [s for s in notify.sent if "Execution alert" in s["subject"]]
     assert len(alert_sends) == 1
     body = alert_sends[0]["text"] + alert_sends[0]["html"]
     assert _SYMBOL in body
@@ -793,24 +793,24 @@ def test_entitled_overlay_to_paper_fill_to_alert(
     assert byok_cred.fingerprint not in body
     assert "PK_CHAIN" not in body
 
-    mailgun.sent.clear()
-    dispatch_workspace(sb, mailgun, cfg, free_pref, _RUN, hour_utc=99)
-    assert mailgun.sent == []  # free-tier: no fills in-scope + broker_status entitlement false
+    notify.sent.clear()
+    dispatch_workspace(sb, notify, cfg, free_pref, _RUN, hour_utc=99)
+    assert notify.sent == []  # free-tier: no fills in-scope + broker_status entitlement false
 
     # Digest force path (K5 review: hour mismatch still sends when force_digest).
-    mailgun.sent.clear()
-    dispatch_workspace(sb, mailgun, cfg, free_pref, _RUN, hour_utc=99, force_digest=True)
-    free_digests = [s for s in mailgun.sent if "daily digest" in s["subject"]]
+    notify.sent.clear()
+    dispatch_workspace(sb, notify, cfg, free_pref, _RUN, hour_utc=99, force_digest=True)
+    free_digests = [s for s in notify.sent if "daily digest" in s["subject"]]
     assert len(free_digests) == 1
     free_body = free_digests[0]["text"] + free_digests[0]["html"]
     assert "Market Regime" in free_body or "chain-test regime" in free_body
     assert "QQQ" not in free_body  # weights gated out for observer
     assert "weight" not in free_body.lower() or "Pipeline" not in free_body
 
-    mailgun.sent.clear()
+    notify.sent.clear()
     # Re-claim digest for custom (execution already claimed; digest still open).
-    dispatch_workspace(sb, mailgun, cfg, custom_pref, _RUN, hour_utc=99, force_digest=True)
-    custom_digests = [s for s in mailgun.sent if "daily digest" in s["subject"]]
+    dispatch_workspace(sb, notify, cfg, custom_pref, _RUN, hour_utc=99, force_digest=True)
+    custom_digests = [s for s in notify.sent if "daily digest" in s["subject"]]
     assert len(custom_digests) == 1
     custom_body = custom_digests[0]["text"] + custom_digests[0]["html"]
     assert _SYMBOL in custom_body or "Market Regime" in custom_body

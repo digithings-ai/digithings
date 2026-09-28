@@ -8,8 +8,9 @@ search, retrieval, and a status report. No writes, by design.
 
 | Tool | What it does |
 |------|--------------|
-| `search_tickets(query, limit=10)` | Zammad ticket search (e.g. `state.name:open`, `group.name:Sitaas`) |
-| `get_ticket(ticket_id)` | One ticket with its articles; relation names resolved via `expand=true` |
+| `search_tickets(query, limit=10)` | Zammad ticket search. Plain keywords always work; field syntax (`state.name:open`, `group.name:Sitaas`) only works when the instance has Elasticsearch — without it those queries silently match nothing. When the raw query returns no tickets, the tool retries the extracted keywords one by one and the header says `matched via keywords: ...` |
+| `get_ticket(ticket_id)` | One ticket with its articles; takes the internal id (`231`) or the displayed ticket number (`#28312`), and resolves a number through search when the id lookup 404s. Relation names resolved via `expand=true` |
+| `list_tickets(page=1, per_page=50)` | Browse the visible tickets page by page, newest updated first (the Zammad list API is id-ordered; this tool re-sorts by `updated_at`). Use it when keyword search misses: tickets mix German and English and search is a literal substring match, so read titles in their original language and pull threads with `get_ticket`; covers the 500 most recently updated visible tickets |
 | `ticket_report()` | Status report across all visible tickets: unresolved vs closed, by state/group/priority, updated in the last 7 days |
 
 Every request is a GET. The token only ever leaves this process as the
@@ -32,7 +33,7 @@ ZAMMAD_API_TOKEN=... python -m scripts.zammad_mcp.server --stdio
 
 ## Wiring into digichat (local dogfood)
 
-The occ tenant entry lives in `cloudflare/digichat/config/examples/occ-embed.yaml`
+The occ tenant entry lives in `apps/digichat/config/examples/occ-embed.yaml`
 (`mcp.servers`). The URL stays on the BFF and never reaches the browser;
 Zammad's `Token token=<x>` scheme rides as the raw value under `Authorization`
 (the `authHeader` behavior from #3841). `tokenEnv` is resolved from the digichat
@@ -71,7 +72,7 @@ guard treats it as container-internal DNS; loopback URLs are never dialable
 
 In production the server is **not** a separate container: it runs as the
 `zammad-mcp` program inside the `digithings-stack` Cloudflare Container
-(`cloudflare/digithings-stack-cloudflare/container/supervisor/supervisord.conf`),
+(`apps/digithings-stack-cloudflare/container/supervisor/supervisord.conf`),
 bound to `0.0.0.0:8770`. The image ships the package (`COPY scripts/zammad_mcp`
 in `Dockerfile.digithings-stack-cloudflare`) and the entrypoint aliases the
 dotless name `zammad-mcp` to the container's own address in `/etc/hosts`, so

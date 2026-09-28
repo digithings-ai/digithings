@@ -17,7 +17,7 @@ pytestmark = pytest.mark.unit
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 ENTRYPOINT = (
-    REPO_ROOT / "cloudflare" / "digithings-stack-cloudflare" / "container" / "entrypoint.sh"
+    REPO_ROOT / "apps" / "digithings-stack-cloudflare" / "container" / "entrypoint.sh"
 )
 EXEC_LINE = "exec /usr/bin/supervisord"
 

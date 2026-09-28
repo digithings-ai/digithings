@@ -44,6 +44,10 @@ jobs:
       - name: Check internal markdown links
         run: uv run --frozen --no-sync python scripts/check_doc_links.py
 
+      - name: Check ADR numbering
+        # docs/adr/NNNN-*.md must stay zero-padded, unique and gap-free (#3524).
+        run: uv run --frozen --no-sync python scripts/check_adr_numbering.py
+
       - name: Lint the docs/vision digivault vault
         # `uv run make` rather than bare `make`: the Makefile target invokes
         # `python3` directly, and uv run puts the synced venv first on PATH so

@@ -4,7 +4,13 @@ Copy one of these to the container bind-mount (default
 `DIGICHAT_CONFIG_PATH=/app/config/digichat.yaml`). Overlay secrets via env
 (`DIGICHAT_EMBED_TOKEN`, `DIGICHAT_HOST_<SLUG>_TOKEN`).
 
-Canonical copies live in `cloudflare/digichat/config/examples/`:
+`../digichat.yaml.example` is the release starter for exactly that path
+(`cp ../digichat.yaml.example ../digichat.yaml`). Note the release compose
+bind-mounts `./config` over `/app/config`, so the image's baked
+`/app/config/examples/*` is only reachable when running the image without that
+mount — the repo copies below are the source of truth either way.
+
+Canonical copies live in `apps/digichat/config/examples/`:
 
 - `digithings-ai-embed.yaml` — digithings.ai public embed
 - `occ-embed.yaml` — OCC corpus embed

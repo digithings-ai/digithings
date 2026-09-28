@@ -1,10 +1,10 @@
 ## Goal
 
-Build shared **`AnnouncementBar`** primitive — Graphite 48px full-width clickable bar above nav, content-gated via JSON ([COPY_GUIDE.md §11](../../../../cloudflare/digiweb/design/COPY_GUIDE.md)).
+Build shared **`AnnouncementBar`** primitive — Graphite 48px full-width clickable bar above nav, content-gated via JSON ([COPY_GUIDE.md §11](../../../../packages/design/COPY_GUIDE.md)).
 
 ## Component
 
-- [x] cross-cutting (`cloudflare/digiweb/design/`)
+- [x] cross-cutting (`packages/design/`)
 
 ## Acceptance Criteria
 
@@ -14,7 +14,7 @@ Build shared **`AnnouncementBar`** primitive — Graphite 48px full-width clicka
 - [ ] Ship disabled by default in both landings; document enable procedure
 - [ ] Respects `prefers-reduced-motion` (no slide animation required)
 - [ ] Demo in smoke page with sample integration news copy
-- [ ] Document in `cloudflare/digiweb/design/site/README.md`
+- [ ] Document in `packages/design/site/README.md`
 
 ## Test Requirements
 
@@ -23,8 +23,8 @@ Build shared **`AnnouncementBar`** primitive — Graphite 48px full-width clicka
 
 ## Documentation to Update
 
-- [ ] `cloudflare/digiweb/design/site/README.md`
-- [ ] `cloudflare/digiweb/design/COPY_GUIDE.md` §11
+- [ ] `packages/design/site/README.md`
+- [ ] `packages/design/COPY_GUIDE.md` §11
 
 ## Out of Scope
 - Hardcoded per-deploy news copy

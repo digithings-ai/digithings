@@ -42,7 +42,7 @@ automation of any kind.
 repo-level unit test — no `digikey/` auth/JWT/crypto code, no broker or
 live-trading path, no new external service dependency or network exposure. Two
 adjacent actions stay gated and are explicitly untouched: enabling the
-`mcp.digithings.ai` route (`cloudflare/digithings-stack-cloudflare/wrangler.toml`
+`mcp.digithings.ai` route (`apps/digithings-stack-cloudflare/wrangler.toml`
 lines 63–73, "HUMAN GATE — infra/network"), and any future Worker change that
 forwards the cookie to the container (a config follow-up, not a new dependency —
 the container already talks to `api.gloom.sh`).
@@ -126,13 +126,13 @@ pipeline LLMs are never offered a tool that can only error.
   therefore filtered from the agent surface in CI — the documented #4146
   behavior — and there is nothing to rotate there yet.
 - **Hosted MCP container:** `DigiQuantMcpContainer.envVars`
-  (`cloudflare/digithings-stack-cloudflare/src/index.ts` lines 177–185)
+  (`apps/digithings-stack-cloudflare/src/index.ts` lines 177–185)
   forwards only `DIGIQUANT_MCP_SCOPE`, `DIGIQUANT_MARKET_DATA_BACKEND`,
   `FRED_API_KEY`, and the four `R2_*` names. The cookie is **not** forwarded.
   That is pinned by `tests/scripts/test_mcp_container.py`
   (`MCP_SCOPED_VARS`, lines 35–42; `test_stack_container_env_has_no_mcp_duplication`,
   lines 141–149) and by the secrets comment in
-  `cloudflare/digithings-stack-cloudflare/wrangler.toml` lines 135–164.
+  `apps/digithings-stack-cloudflare/wrangler.toml` lines 135–164.
 - The hosted MCP route itself is **not enabled**: the `mcp.digithings.ai`
   `[[routes]]` entry is commented out (`wrangler.toml` lines 63–73) pending
   Worker-edge digikey JWT enforcement (`digiquant/ARCHITECTURE.md`
@@ -158,7 +158,7 @@ pipeline LLMs are never offered a tool that can only error.
 The only verified Gloomberb web surfaces in-tree are the API host
 `https://api.gloom.sh` (client.py line 152) and the terminal app
 `https://term.gloom.sh/` (`digiquant/src/digiquant/data/gloomberb/attribution.py`
-line 23; mirrored in `cloudflare/digiweb/web/src/lib/gloomberb.ts` lines
+line 23; mirrored in `packages/ui/src/lib/gloomberb.ts` lines
 11–13). No signup URL, account flow, or email-verification wording is recorded
 anywhere in the repo. The runbook therefore must not invent UI steps: an
 operator dry-run (§6 step 2) captures the exact wording, and if self-serve

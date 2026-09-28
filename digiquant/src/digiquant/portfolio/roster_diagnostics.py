@@ -1,4 +1,4 @@
-"""Roster-width contributor for the ``atlas_run_diagnostics.breakdown`` jsonb (#1767).
+"""Roster-width contributor for the ``run_diagnostics.breakdown`` jsonb (#1767).
 
 ``DIGIQUANT_MAX_ANALYSTS`` was bypassed for the entire observed lifetime of the pipeline and
 **no column recorded roster width**, so a 1.6× cap breach (39 dispatched analysts against
@@ -18,7 +18,7 @@ This module is a *pure* ``Callable[[ResearchState], dict[str, Any]]`` matching t
     _BREAKDOWN_CONTRIBUTORS.append(roster_breakdown)
 
 — and until that line exists nothing calls this in production, so the width is only in
-H4's log line. That is stated plainly in the #1767 PR body rather than hidden here.
+screener's log line. That is stated plainly in the #1767 PR body rather than hidden here.
 """
 
 from __future__ import annotations
@@ -34,7 +34,7 @@ BREAKDOWN_KEY = "roster"
 
 
 def roster_breakdown(state: ResearchState) -> dict[str, Any]:
-    """``{"roster": {...}}`` — H4 focus-roster width by reason, plus the cap in force.
+    """``{"roster": {...}}`` — screener focus-roster width by reason, plus the cap in force.
 
     ``over_cap`` compares width against the **static** ``DIGIQUANT_MAX_ANALYSTS``, not the
     regime-adaptive budget: a stress-regime budget below the static cap is a deliberate

@@ -20,7 +20,7 @@ from digiquant.dashboard.research_retrieval.planner import (
     AttentionPolicyEvaluation,
     AttentionReason,
     AttentionRolloutMode,
-    H6PlannerModel,
+    DeliberationPlannerModel,
     NonEmptyStr,
 )
 from digiquant.dashboard.research_retrieval.store import (
@@ -32,7 +32,7 @@ from digiquant.dashboard.temporal import require_utc_datetime
 FiniteRate: TypeAlias = Annotated[Decimal, Field(ge=0, le=1, allow_inf_nan=False)]
 
 
-class ShadowProviderAttemptDetail(H6PlannerModel):
+class ShadowProviderAttemptDetail(DeliberationPlannerModel):
     """Exact WP1 attempt usage for shadow evaluation (not aggregate billing)."""
 
     provider_attempt_id: UUID
@@ -63,7 +63,7 @@ class ShadowProviderAttemptDetail(H6PlannerModel):
         return self.cached_prompt_tokens + self.cached_completion_tokens
 
 
-class AttentionDownstreamOutcomes(H6PlannerModel):
+class AttentionDownstreamOutcomes(DeliberationPlannerModel):
     """Downstream artifact linkage for one attention target (run/node/ticker/artifact)."""
 
     target_key: NonEmptyStr
@@ -71,7 +71,7 @@ class AttentionDownstreamOutcomes(H6PlannerModel):
     carried: bool = False
     amendment_id: NonEmptyStr | None = None
     forecast_assessment_id: NonEmptyStr | None = None
-    h7_decision_id: NonEmptyStr | None = None
+    direction_decision_id: NonEmptyStr | None = None
     exploration_slot: bool = False
     artifact_refs: tuple[NonEmptyStr, ...] = Field(default_factory=tuple)
 
@@ -83,7 +83,7 @@ class AttentionDownstreamOutcomes(H6PlannerModel):
         return value
 
 
-class ShadowDecisionEvaluationRow(H6PlannerModel):
+class ShadowDecisionEvaluationRow(DeliberationPlannerModel):
     """One decision with budget reconciliation, telemetry, and downstream linkage."""
 
     reconciliation: AttentionDecisionReconciliation
@@ -101,7 +101,7 @@ class ShadowDecisionEvaluationRow(H6PlannerModel):
         return value
 
 
-class ResearchPolicyShadowEvaluationReport(H6PlannerModel):
+class ResearchPolicyShadowEvaluationReport(DeliberationPlannerModel):
     """Shadow evaluation report for one attention plan (WP13.5 / WP16 input)."""
 
     evaluation: AttentionPolicyEvaluation

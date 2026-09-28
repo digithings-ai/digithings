@@ -1,6 +1,6 @@
 ## Goal
 
-Migrate **Olympus** dashboard from glass morphism to x.ai-style flat surfaces — hairline borders, `--surface` steps, no decorative shadows ([`EVOLUTION.md` §3 Olympus](../../../../cloudflare/digiweb/design/EVOLUTION.md)).
+Migrate **Olympus** dashboard from glass morphism to x.ai-style flat surfaces — hairline borders, `--surface` steps, no decorative shadows ([`EVOLUTION.md` §3 Olympus](../../../../packages/design/EVOLUTION.md)).
 
 ## Component
 
@@ -27,8 +27,8 @@ cd cloudflare/olympus && npm run build
 ## Documentation to Update
 
 - [ ] `cloudflare/olympus/ARCHITECTURE.md` — surface system
-- [ ] `cloudflare/digiweb/design/EVOLUTION.md` Phase D
-- [ ] `cloudflare/digiweb/design/EVOLUTION.md` §10 — glass on new components rejected
+- [ ] `packages/design/EVOLUTION.md` Phase D
+- [ ] `packages/design/EVOLUTION.md` §10 — glass on new components rejected
 
 ## Out of Scope
 

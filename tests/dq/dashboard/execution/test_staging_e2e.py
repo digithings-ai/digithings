@@ -60,8 +60,8 @@ def test_staging_secret_inventory_lists_vendor_blockers() -> None:
     assert "STRIPE_PRICE_BRIEF_MONTHLY" in required
     assert "STRIPE_PRICE_DESK_MONTHLY" in required
     assert "STRIPE_PRICE_STUDIO_MONTHLY" in required
-    assert "MAILGUN_API_KEY" in required
-    assert "MAILGUN_DOMAIN" in required
+    assert "CLOUDFLARE_EMAIL_API_TOKEN" in required
+    assert "CLOUDFLARE_ACCOUNT_ID" in required
     assert "NOTIFY_FROM" in required
     assert "ALPACA_OAUTH_CLIENT_ID" in required
     assert "ALPACA_OAUTH_CLIENT_SECRET" in required
@@ -77,7 +77,7 @@ def test_missing_secrets_reports_names_only(monkeypatch: pytest.MonkeyPatch) -> 
     assert missing == list(STAGING_REQUIRED_SECRETS)
     msg = format_missing_secrets_failure(missing)
     assert "STRIPE_SECRET_KEY" in msg
-    assert "MAILGUN_API_KEY" in msg
+    assert "CLOUDFLARE_EMAIL_API_TOKEN" in msg
     assert "ALPACA_OAUTH_CLIENT_SECRET" in msg
     # Never embed placeholder values.
     assert "sk_test" not in msg
@@ -98,11 +98,11 @@ def test_empty_and_placeholder_values_count_as_missing(
     for name in STAGING_REQUIRED_SECRETS:
         monkeypatch.setenv(name, "placeholder")
     monkeypatch.setenv("STRIPE_SECRET_KEY", "")
-    monkeypatch.setenv("MAILGUN_API_KEY", "EMPTY")
+    monkeypatch.setenv("CLOUDFLARE_EMAIL_API_TOKEN", "EMPTY")
     monkeypatch.setenv("NOTIFY_FROM", "null")
     missing = missing_execution_staging_secrets()
     assert "STRIPE_SECRET_KEY" in missing
-    assert "MAILGUN_API_KEY" in missing
+    assert "CLOUDFLARE_EMAIL_API_TOKEN" in missing
     assert "NOTIFY_FROM" in missing
 
 
@@ -191,7 +191,7 @@ def test_run_staging_e2e_redeem_invite_404_exits_3() -> None:
     logs: list[str] = []
     rc = run_staging_e2e(
         http=_FakeHttp(fakes),
-        environ={"KAIROS_STAGING_USER_JWT": "test-jwt"},
+        environ={"DIGIQUANT_STAGING_USER_JWT": "test-jwt"},
         log=logs.append,
         log_err=logs.append,
     )
@@ -335,7 +335,7 @@ def test_run_staging_e2e_observer_pass_then_missing_secrets_exits_2() -> None:
     logs: list[str] = []
     rc = run_staging_e2e(
         http=_FakeHttp(_observer_ok_fakes()),
-        environ={"KAIROS_STAGING_USER_JWT": "test-jwt"},
+        environ={"DIGIQUANT_STAGING_USER_JWT": "test-jwt"},
         log=logs.append,
         log_err=logs.append,
     )
@@ -359,7 +359,7 @@ def test_run_staging_e2e_observer_regression_exits_3() -> None:
     fakes[("GET", "/settings/profile")] = (401, {"code": "UNAUTHENTICATED"})
     rc = run_staging_e2e(
         http=_FakeHttp(fakes),
-        environ={"KAIROS_STAGING_USER_JWT": "test-jwt"},
+        environ={"DIGIQUANT_STAGING_USER_JWT": "test-jwt"},
         log=lambda _m: None,
         log_err=lambda _m: None,
     )
@@ -370,7 +370,7 @@ def test_run_staging_e2e_observer_regression_exits_3() -> None:
 def test_resolve_staging_jwt_prefers_env_token() -> None:
     resolved = resolve_staging_jwt(
         http=_FakeHttp({}),
-        environ={"KAIROS_STAGING_USER_JWT": "  abc  "},
+        environ={"DIGIQUANT_STAGING_USER_JWT": "  abc  "},
     )
     assert resolved.token == "abc"
     assert resolved.attempted_grant is False
@@ -682,7 +682,7 @@ def test_run_staging_e2e_remaining_hop_surface_503_exits_3() -> None:
     fakes[("GET", "/settings/jobs")] = (503, {"code": "NOT_READY"})
     rc = run_staging_e2e(
         http=_FakeHttp(fakes),
-        environ={"KAIROS_STAGING_USER_JWT": "test-jwt"},
+        environ={"DIGIQUANT_STAGING_USER_JWT": "test-jwt"},
         log=lambda _m: None,
         log_err=lambda _m: None,
     )
@@ -722,8 +722,8 @@ def test_run_staging_e2e_exit_0_when_product_state_proves_remaining_hops() -> No
     rc = run_staging_e2e(
         http=_FakeHttp(fakes),
         environ={
-            "KAIROS_STAGING_USER_JWT": "test-jwt",
-            "KAIROS_STAGING_DIGEST_INBOX_CONFIRMED": "1",
+            "DIGIQUANT_STAGING_USER_JWT": "test-jwt",
+            "DIGIQUANT_STAGING_DIGEST_INBOX_CONFIRMED": "1",
         },
         log=logs.append,
         log_err=logs.append,
@@ -756,7 +756,7 @@ def test_run_staging_e2e_checkout_url_is_not_complete_exits_4(
     )
     fakes[("POST", "/stripe-webhook")] = (wh_http, wh_body)
     environ = {name: f"test-placeholder-{name}" for name in STAGING_REQUIRED_SECRETS}
-    environ["KAIROS_STAGING_USER_JWT"] = "test-jwt"
+    environ["DIGIQUANT_STAGING_USER_JWT"] = "test-jwt"
     logs: list[str] = []
     fake = _FakeHttp(fakes)
     rc = run_staging_e2e(
@@ -793,8 +793,8 @@ def test_run_staging_e2e_password_grant_failure_exits_3() -> None:
             {("POST", "/auth/v1/token?grant_type=password"): (400, {"error": "invalid"})}
         ),
         environ={
-            "KAIROS_STAGING_EMAIL": "user@example.test",
-            "KAIROS_STAGING_PASSWORD": "not-logged",
+            "DIGIQUANT_STAGING_EMAIL": "user@example.test",
+            "DIGIQUANT_STAGING_PASSWORD": "not-logged",
             "CORE_SUPABASE_ANON_KEY": "anon",
         },
         log=lambda _m: None,

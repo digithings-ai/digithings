@@ -4,7 +4,7 @@
 
 > **⚠️ Current routing: house Cheaper Inference, CI-mapped pins per tier.**
 > `config/digiquant_models.yaml` pins a model per capability tier;
-> `OLYMPUS_MODEL_TIER` (`cheap` default / `balanced` / `quality`) selects the
+> `DIGIQUANT_MODEL_TIER` (`cheap` default / `balanced` / `quality`) selects the
 > pinned set, and `apply_digiquant_house_env()` (portfolio chain startup) points
 > the default client at the house upstream. Every LLM call goes through the
 > house key; the web grounding pre-pass is tool-only (first-party digisearch
@@ -212,6 +212,41 @@ fat `market_context` and a 5-snapshot history, a delta phase's shared-context is
 a byte-budget test, not a runtime token meter — measure the live drop on a
 simulator delta run via `atlas_run_diagnostics`.
 
+### phase_inputs diet (#4609)
+
+#935 slimmed the **cached** `SHARED_CONTEXT` block. #4609 trims the **uncached**
+`PHASE_INPUTS` block, where the same content was re-serialized a second (or
+third) time per call:
+
+- **Context-compiler shadow blobs.** `context_wiring`'s `shadow` mode wrote
+  `context_capsule_shadow` / `context_manifest_shadow` (and, for direction,
+  `direction_decision_context_shadow`) into the returned `phase_inputs` — the
+  full serialized capsule/manifest bodies (policy caps 24k / 32k / 48k chars) on
+  **every** analyst (H5) / deliberation (H6) / direction (H7) call. Nothing read
+  them: the `capsule` / `manifest` / `direction_decision_context` objects already
+  ride on `RoleContextWireResult`, and callers consume `.phase_inputs` plus the
+  typed `capsule` / `manifest` fields. #4609
+  stops writing them. Escape hatch:
+  `DIGIQUANT_CONTEXT_SHADOW_IN_PROMPT=1` restores the old in-prompt blobs.
+- **Duplicate `prior_digests`.** The digest subsections + stitcher each carried
+  `prior_digests` (the last two full briefings, ≤24,000 chars each) in
+  `phase_inputs`, while `_digest_shared_context` already carried a copy in the
+  cached block — up to ~48,000 chars re-serialized across the six digest calls.
+  #4609 keeps the cached copy and drops the two uncached copies.
+
+**Measured effect** (`tests/dq/research/test_context_diet.py`,
+`tests/dq/dashboard/test_context_compiler.py`, both pin the exact sizes below).
+The digest stitcher's uncached `phase_inputs` falls **18,643 → 1,587 bytes
+(−17,056, −91%)**; the shadow-blob drop removes the serialized capsule +
+manifest from the deliberation (H6) uncached block (**2,785 → 1,219 bytes,
+−1,566**). The drop scales with the real capsule up to the policy cap (the
+fixture capsule is ~1.3k bytes; the digest fixture's two prior briefings
+serialize to ~17k bytes). The byte drop is real, not already-compacted:
+`compact_messages` tier-1 truncates **only tool results** ("Non-tool messages
+are never truncated by tier 1"), and tier-2 only evicts whole messages past the
+80k-token threshold with `keep_recent=10` — a digest call is a single user turn,
+so neither fires.
+
 ---
 
 ## Tool grounding (#566)
@@ -220,7 +255,7 @@ Research phases run a **tool loop** so the model fetches real data on demand ins
 
 - **digiquant data tools** (`get_price_technicals` / `get_macro_series`): each tool call is a Supabase read + an extra LLM round-trip carrying the tool result. Bounded by `max_tool_rounds` (default 5). Cost scales with how many symbols/series a phase queries; the prompts name a finite set per phase.
 - **Web grounding (completion synthesis)**: a single read-only **pre-pass** per `live_search` phase — a plain digillm completion over in-house retrieval context (no vendor search tooling), one extra call before the phase's normal completion (not per tool-round). Gated to phases that need soft signals (macro + all alt-/inst- + international).
-- **Kill-switch**: set `ATLAS_DATA_TOOLS=0` to disable all tool grounding (falls back to the tool-less structured call) for cost-controlled or offline runs.
+- **Kill-switch**: set `DIGIQUANT_RESEARCH_DATA_TOOLS=0` to disable all tool grounding (falls back to the tool-less structured call) for cost-controlled or offline runs.
 
 ---
 

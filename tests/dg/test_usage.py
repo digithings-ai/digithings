@@ -269,6 +269,46 @@ def test_aggregates_cost_usd():
 
 
 @pytest.mark.unit
+def test_aggregates_per_model_tokens_and_cost():
+    usage.start()
+    # by_model is the per-model split the token-derived cost fallback (#4596) needs; it must
+    # agree with the run totals and keep the ACTUAL cost separate from any estimate.
+    usage.record(
+        kind="chat",
+        model="deepseek/deepseek-v4-flash",
+        prompt_tokens=100,
+        completion_tokens=40,
+        cached_tokens=10,
+        cost=0.0123,
+    )
+    usage.record(
+        kind="chat",
+        model="deepseek/deepseek-v4-flash",
+        prompt_tokens=50,
+        completion_tokens=20,
+        cached_tokens=5,
+        cost=0.0077,
+    )
+    # A search call has no tokens and no reported cost — it still counts as one call.
+    usage.record(kind="web_search", model="openai/gpt-5.6-luna", sources=4, ok=True)
+    snap = usage.snapshot()
+    flash = snap["by_model"]["deepseek/deepseek-v4-flash"]
+    assert flash["calls"] == 2
+    assert flash["prompt_tokens"] == 150
+    assert flash["completion_tokens"] == 60
+    assert flash["cached_tokens"] == 15
+    assert flash["cost"] == pytest.approx(0.02)
+    search = snap["by_model"]["openai/gpt-5.6-luna"]
+    assert search["calls"] == 1
+    assert search["prompt_tokens"] == 0
+    assert search["completion_tokens"] == 0
+    assert search["cost"] == 0.0
+    # Purely additive: cost_usd and the model set are unchanged.
+    assert snap["cost_usd"] == pytest.approx(0.02)
+    assert sorted(snap["by_model"]) == snap["models"]
+
+
+@pytest.mark.unit
 def test_detailed_successful_call_projection_matches_aggregate() -> None:
     response = ChatCompletion(
         id="cmpl-parity",

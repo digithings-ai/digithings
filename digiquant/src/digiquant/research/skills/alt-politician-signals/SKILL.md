@@ -16,9 +16,7 @@ description: Tracks US Congressional STOCK Act trade disclosures, key committee 
 Politicians and regulators move markets — both through what they buy/sell personally and through policy signals. STOCK Act disclosures are legally required to be filed within 45 days of a trade and are public record. Committee chair rhetoric directly moves sector-specific ETFs. Run early in pipeline.
 
 ## Inputs
-- `docs/ops/data-sources.md` (sources for congressional trading + official statements)
-
-> **Web fetch**: use `defuddle parse <url> --md` instead of WebFetch for any Capitol Trades, Quiver Quantitative, EDGAR filing, agency website, or news article URL. Not for API endpoints, `.json`, or `.md` files.
+- `docs/ops/data-sources.md` — repository provenance for a maintainer (sources for congressional trading + official statements); NOT retrievable by a tool.
 
 ---
 

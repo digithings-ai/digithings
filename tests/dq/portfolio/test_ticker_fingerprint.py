@@ -77,7 +77,7 @@ class TestTickerFingerprint:
         assert deliberation_skip_signal(state, "AAPL", analyst_stance="hold") is False
 
     def test_deliberation_skip_fires_with_slim_carry(self) -> None:
-        """#925: a quiet held name with a slim prior-deliberation carry can skip H6."""
+        """#925: a quiet held name with a slim prior-deliberation carry can skip deliberation."""
         news = news_hash_for_ticker(
             ResearchState(
                 run_type="delta",

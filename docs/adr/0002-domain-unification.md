@@ -89,7 +89,7 @@ Each phase is a roadmap milestone (see `ROADMAP.md`) and will break into GitHub 
 - Related: ADR-0001 (Project Spec)
 - Related: `docs/VISION.md`
 - Current static site: `cloudflare/digithings/`
-- Current chat app: `cloudflare/digichat/`
+- Current chat app: `apps/digichat/`
 
 ## Amendment (2026-04-19)
 

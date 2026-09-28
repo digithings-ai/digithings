@@ -109,8 +109,8 @@ def test_the_stack_does_not_synthesize_a_sqlite_url() -> None:
     """
     root = Path(__file__).resolve().parents[2]
     for rel in (
-        "cloudflare/digithings-stack-cloudflare/src/index.ts",
-        "cloudflare/digithings-stack-cloudflare/container/entrypoint.sh",
+        "apps/digithings-stack-cloudflare/src/index.ts",
+        "apps/digithings-stack-cloudflare/container/entrypoint.sh",
     ):
         text = (root / rel).read_text(encoding="utf-8")
         assert "sqlite://" not in text, f"{rel} invents an ephemeral store"

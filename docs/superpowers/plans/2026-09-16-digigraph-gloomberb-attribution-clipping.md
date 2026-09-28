@@ -6,7 +6,7 @@
 
 **Architecture:** A new bounded extractor in `digigraph/src/digigraph/workflow.py` hoists the §7 keys from the **raw** result — structured envelope dicts or the serialized envelope inside the MCP client's opaque `{"ok": true, "text": "<json>"}` wrapper — and a new render helper attaches them as top-level keys on the emitted `result` object, ahead of the existing clip. The truncation preview budget shrinks by the hoisted block's serialized size and is enforced on the re-serialized record (escaped quotes in the preview re-expand on serialization), so the 12,000-char record cap is unchanged. No frontend code changes: the digichat adapter already passes `payload.result` through and the #4130 renderer already reads top-level keys off it. Tasks 3–4 add frontend contract-pin tests only.
 
-**Tech Stack:** Python 3.12 + pytest (`unit` marker, root `pytest.ini`), digigraph trace pipeline (`workflow.py`, `TraceEventV1`), ruff (line length 100); TypeScript + Vitest 4 in `cloudflare/digichat` and `cloudflare/digiweb/web` (`@digithings/web`).
+**Tech Stack:** Python 3.12 + pytest (`unit` marker, root `pytest.ini`), digigraph trace pipeline (`workflow.py`, `TraceEventV1`), ruff (line length 100); TypeScript + Vitest 4 in `apps/digichat` and `packages/ui` (`@digithings/ui`).
 
 **Spec:** `docs/superpowers/specs/2026-09-16-digigraph-gloomberb-attribution-clipping-design.md` (§3 result-level hoist, §4 contracts, §5 normative values)
 
@@ -16,7 +16,7 @@
 
 - **Worktree/branch:** start with `make task ISSUE=4131` (it fetches `origin` and cuts `task/4131-…` from `origin/module/digigraph`; it refuses a stale module branch — sync `module/digigraph` first if it does). Tasks 1–2 run on that branch. Tasks 3 and 4 are **test-only** branches cut separately: `chore/gloomberb-attribution-render-pin` from `origin/develop` and `chore/gloomberb-adapter-attribution-pin` from `origin/module/digichat`. Never mix them into the digigraph branch.
 - **No new dependencies** of any kind (no Python, no npm). Nothing in this plan adds a package.
-- **Result size caps stay unchanged.** `_MAX_TOOL_RESULT_CHARS = 12_000` (`digigraph/src/digigraph/workflow.py:115`), the 2,000-char scalar cap (`workflow.py:121`), and digichat's `12_000` / `32` / `50` / `300` caps (`cloudflare/digichat/src/lib/chat-activity.ts:30,39-42`) all stay exactly as they are. The fix only reorders/preserves keys; the truncated preview budget shrinks when the hoisted block is present.
+- **Result size caps stay unchanged.** `_MAX_TOOL_RESULT_CHARS = 12_000` (`digigraph/src/digigraph/workflow.py:115`), the 2,000-char scalar cap (`workflow.py:121`), and digichat's `12_000` / `32` / `50` / `300` caps (`apps/digichat/src/lib/chat-activity.ts:30,39-42`) all stay exactly as they are. The fix only reorders/preserves keys; the truncated preview budget shrinks when the hoisted block is present.
 - **Polars only** for data paths (this change touches no data path — no pandas anywhere); **Pydantic v2 strict** models only (no new models); **ruff** line length 100, `ruff check digigraph/ && ruff format --check digigraph/` clean.
 - **Lowercase digi\* naming** in prose, docs, commit messages, and PR text (`digigraph`, `digichat`, `digiquant`). "Gloomberb" is an upstream product name and keeps its casing.
 - **Every change traces to #4131:** the `task/4131-…` branch (Tasks 1–2), `Fixes #4131` in the digigraph PR, `Refs #4131` in the two pin PRs.
@@ -28,8 +28,8 @@
 - Modify: `digigraph/src/digigraph/workflow.py:165-167` (insert helpers), `:703-718` (rewire the generic branch)
 - Modify: `digigraph/ARCHITECTURE.md:118-132` (trace-contract note)
 - Create: `tests/dg/test_tool_result_attribution.py`
-- Modify: `cloudflare/digiweb/web/src/components/chat/digichat-thread.render.test.tsx` (fixture + one test)
-- Modify: `cloudflare/digichat/src/lib/adapters/digithings/activity/tool-result.test.ts` (one test)
+- Modify: `packages/ui/src/components/chat/digichat-thread.render.test.tsx` (fixture + one test)
+- Modify: `apps/digichat/src/lib/adapters/digithings/activity/tool-result.test.ts` (one test)
 
 ---
 
@@ -202,7 +202,7 @@ def _render_clipped_tool_result(result_data: dict[str, Any]) -> Any | None:
 
     The §7 keys are hoisted from the raw result before the clip and attached
     ahead of it: the digichat attribution line (#4130) reads them off the
-    emitted result (``cloudflare/digiweb/web/src/lib/gloomberb.ts``), and the
+    emitted result (``packages/ui/src/lib/gloomberb.ts``), and the
     scalar cap leaves no key structure to read once a string is cut.
     """
     attribution = _extract_attribution(result_data)
@@ -422,7 +422,7 @@ git commit -m "test(digigraph): pin §7 attribution survival across clip shapes 
 ### Task 3: digiweb renderer pin — attribution renders on a clipped result
 
 **Files:**
-- Modify: `cloudflare/digiweb/web/src/components/chat/digichat-thread.render.test.tsx:77` (insert the fixture after `GLOOMBERB_MESSAGES`) and `:401` (insert the test after `credits Gloomberb in the expanded tool result pane`)
+- Modify: `packages/ui/src/components/chat/digichat-thread.render.test.tsx:77` (insert the fixture after `GLOOMBERB_MESSAGES`) and `:401` (insert the test after `credits Gloomberb in the expanded tool result pane`)
 
 **Interfaces:**
 - Consumes: the emitted result contract from Task 1/§4 (top-level `attribution` / `delay_notice` / `source_url` on the result object); the existing mount harness and `GLOOMBERB_MESSAGES` fixture conventions in this file (`:57-77`, `:380-401`).
@@ -432,7 +432,7 @@ Branch: `chore/gloomberb-attribution-render-pin` cut from `origin/develop` (`com
 
 - [ ] **Step 1: Insert the clipped-result fixture**
 
-In `cloudflare/digiweb/web/src/components/chat/digichat-thread.render.test.tsx`, after the `GLOOMBERB_MESSAGES` array (ends `:77`), add:
+In `packages/ui/src/components/chat/digichat-thread.render.test.tsx`, after the `GLOOMBERB_MESSAGES` array (ends `:77`), add:
 
 ```tsx
 const GLOOMBERB_CLIPPED_MESSAGES: ThreadMessageLike[] = [
@@ -489,13 +489,13 @@ After the `"credits Gloomberb in the expanded tool result pane"` test (ends `:40
 
 - [ ] **Step 3: Run the test**
 
-Run: `npm --workspace @digithings/web run test -- src/components/chat/digichat-thread.render.test.tsx`
+Run: `npm --workspace @digithings/ui run test -- src/components/chat/digichat-thread.render.test.tsx`
 Expected: PASS — the whole file green including the new case. This is a contract pin; a failure means the digigraph shape drifted from §4 or the renderer regressed.
 
 - [ ] **Step 4: Commit**
 
 ```bash
-git add cloudflare/digiweb/web/src/components/chat/digichat-thread.render.test.tsx
+git add packages/ui/src/components/chat/digichat-thread.render.test.tsx
 git commit -m "test(digiweb): pin Gloomberb attribution rendering for clipped results (#4131)"
 ```
 
@@ -504,7 +504,7 @@ git commit -m "test(digiweb): pin Gloomberb attribution rendering for clipped re
 ### Task 4: digichat adapter pin — §7 keys survive the span sanitizer
 
 **Files:**
-- Modify: `cloudflare/digichat/src/lib/adapters/digithings/activity/tool-result.test.ts` (append one test inside the existing `describe("tool_result trace (generic MCP completion)")` block, after `:51`)
+- Modify: `apps/digichat/src/lib/adapters/digithings/activity/tool-result.test.ts` (append one test inside the existing `describe("tool_result trace (generic MCP completion)")` block, after `:51`)
 
 **Interfaces:**
 - Consumes: `mapDigigraphTraceToSpans` from `./index` (existing import at `:2`), which runs `sanitizeActivitySpan` — the `chat-activity.ts` sanitizer with the 300-char record-value cap (`:30`, applied `:218-220`) and the 12k record cap (`:40`, applied `:230-234`).
@@ -514,7 +514,7 @@ Branch: `chore/gloomberb-adapter-attribution-pin` cut from `origin/module/digich
 
 - [ ] **Step 1: Append the adapter pin**
 
-In `cloudflare/digichat/src/lib/adapters/digithings/activity/tool-result.test.ts`, after the `"keeps args and marks failed status through"` test (ends `:51`), add:
+In `apps/digichat/src/lib/adapters/digithings/activity/tool-result.test.ts`, after the `"keeps args and marks failed status through"` test (ends `:51`), add:
 
 ```ts
   it("keeps the hoisted §7 attribution keys on a clipped digifetch result (#4131)", () => {
@@ -554,7 +554,7 @@ Expected: PASS — `4 passed` in the file. This is a contract pin; a failure mea
 - [ ] **Step 3: Commit**
 
 ```bash
-git add cloudflare/digichat/src/lib/adapters/digithings/activity/tool-result.test.ts
+git add apps/digichat/src/lib/adapters/digithings/activity/tool-result.test.ts
 git commit -m "test(digichat): pin §7 attribution keys through the activity span sanitizer (#4131)"
 ```
 

@@ -24,18 +24,8 @@ class TestCappedTickersAdaptive:
 
 @pytest.mark.unit
 class TestCanonicalCapName:
-    """DIGIQUANT_MAX_ANALYSTS is the canonical cap; ATLAS_MAX_ANALYSTS is a retired alias (#3739)."""
+    """DIGIQUANT_MAX_ANALYSTS is the sole cap name (#4295: no read-aliases remain)."""
 
     def test_canonical_name_is_honoured(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setenv("DIGIQUANT_MAX_ANALYSTS", "2")
-        assert configured_max_analysts() == 2
-
-    def test_canonical_wins_over_alias(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.setenv("DIGIQUANT_MAX_ANALYSTS", "2")
-        monkeypatch.setenv("ATLAS_MAX_ANALYSTS", "100")
-        assert configured_max_analysts() == 2
-
-    def test_retired_alias_still_honoured(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.delenv("DIGIQUANT_MAX_ANALYSTS", raising=False)
-        monkeypatch.setenv("ATLAS_MAX_ANALYSTS", "2")
         assert configured_max_analysts() == 2

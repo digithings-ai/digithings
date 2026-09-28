@@ -1,7 +1,7 @@
 """Integration Task 1.1 — lock Phase 1 forecast/risk/cost contracts (#2713, #2719).
 
 End-to-end composition gate: Phase 1 registries attach observational artifacts
-without forking graph topology. H8 still books once; size follows canned H7
+without forking graph topology. sizing still books once; size follows canned direction
 confidence (simulator default 0.7 → 70% AAPL, leftover stays cash).
 """
 
@@ -25,8 +25,8 @@ from digiquant.portfolio.models.forecast import (
 )
 from digiquant.portfolio.models.forecast_calibration import CalibrationArtifactStatus
 from digiquant.portfolio.models.risk_policy import PolicyArtifactStatus
-from digiquant.portfolio.phases.h6_deliberation import _resolve_from_debate
-from digiquant.portfolio.phases.h9_commit_run import CommitRunDeps, _manifest_payload
+from digiquant.portfolio.phases.commit import CommitRunDeps, _manifest_payload
+from digiquant.portfolio.phases.deliberation import _resolve_from_debate
 from digiquant.portfolio.phases.phase7e_risk_sizing import RiskSizingDeps
 from digiquant.portfolio.phases.portfolio_common import materialize_forecast_assessment
 from digiquant.portfolio.sizing import TickerRisk, size_portfolio
@@ -110,10 +110,10 @@ def test_portfolio_graph_topology_unchanged_by_phase1() -> None:
     assert _PORTFOLIO_COMPILED_NODES.issubset(nodes)
     phase_names = {p.name for p in build_portfolio_phases_thesis(watchlist=["AAPL"], held=set())}
     for expected in (
-        "portfolio_h1_thesis_review",
-        "portfolio_h7_pm_direction",
-        "portfolio_h8_risk_sizing",
-        "portfolio_h9_commit_run",
+        "portfolio_thesis",
+        "portfolio_direction",
+        "portfolio_sizing_risk_sizing",
+        "portfolio_commit",
     ):
         assert expected in phase_names
 
@@ -143,7 +143,7 @@ def test_research_graph_topology_unchanged_by_phase1() -> None:
         assert forbidden not in nodes
 
 
-def test_h9_manifest_carries_phase1_registry_fields() -> None:
+def test_commit_manifest_carries_phase1_registry_fields() -> None:
     manifest = _manifest_payload(
         source_run_id="run-test",
         status="committed",
@@ -243,7 +243,7 @@ def _run_phase1_pipeline(*, canned_extras: dict | None = None, overrides: dict |
 
 
 def test_phase1_composition_e2e_simulated_pipeline() -> None:
-    """Full graph: registries populated, H7 lineage, H8/H9 observational artifacts, book once."""
+    """Full graph: registries populated, direction lineage, sizing/commit observational artifacts, book once."""
     from tests.dq.portfolio.phase1_e2e_fixtures import (
         LATE_KNOWN_AT,
         mature_cohort_outcome_rows,
@@ -253,7 +253,7 @@ def test_phase1_composition_e2e_simulated_pipeline() -> None:
 
     final, run = _run_phase1_pipeline(
         canned_extras={
-            "olympus_forecast_outcomes": [
+            "forecast_outcomes": [
                 *mature_cohort_outcome_rows(count=3),
                 resolved_outcome_row(salt=99, known_at=LATE_KNOWN_AT),
             ],
@@ -298,20 +298,20 @@ def test_phase1_composition_e2e_simulated_pipeline() -> None:
     assert manifest["risk_policy_registry_run_refs_written"] == 1
     assert manifest["cost_liquidity_registry_estimates_written"] >= 1
 
-    assert len(run.client.store.get("olympus_forecast_assessments", [])) >= 1
-    assert len(run.client.store.get("olympus_h8_risk_run_refs", [])) == 1
-    assert len(run.client.store.get("olympus_action_cost_estimates", [])) >= 1
+    assert len(run.client.store.get("forecast_assessments", [])) >= 1
+    assert len(run.client.store.get("sizing_risk_run_refs", [])) == 1
+    assert len(run.client.store.get("action_cost_estimates", [])) >= 1
     assert len(run.client.store.get("positions", [])) >= 1
     assert len(run.client.store.get("portfolio_ledger_commits", [])) == 1
 
-    # Simulator canned H7 memo sets AAPL confidence=0.7; H8 haircuts cash-first.
+    # Simulator canned direction memo sets AAPL confidence=0.7; sizing haircuts cash-first.
     aapl_row = next(row for row in portfolio.pm_direction_memo.roster if row.ticker == "AAPL")
     assert aapl_row.confidence == pytest.approx(0.7)
     assert sized_book_weights(portfolio.sized_book) == {"AAPL": 70.0}
 
     cutoff = final.knowledge_cutoff_at
     assert cutoff is not None
-    assessment_id = UUID(str(run.client.store["olympus_forecast_assessments"][0]["forecast_id"]))
+    assessment_id = UUID(str(run.client.store["forecast_assessments"][0]["forecast_id"]))
     assert (
         fr.get_forecast_assessment(
             client=run.client,
@@ -320,12 +320,12 @@ def test_phase1_composition_e2e_simulated_pipeline() -> None:
         )
         is not None
     )
-    policy_id = UUID(str(run.client.store["olympus_risk_policies"][0]["policy_id"]))
+    policy_id = UUID(str(run.client.store["risk_policies"][0]["policy_id"]))
     assert (
         rpr.get_risk_policy(client=run.client, policy_id=policy_id, knowledge_cutoff_at=cutoff)
         is not None
     )
-    estimate_id = UUID(str(run.client.store["olympus_action_cost_estimates"][0]["estimate_id"]))
+    estimate_id = UUID(str(run.client.store["action_cost_estimates"][0]["estimate_id"]))
     assert (
         clr.get_action_cost_estimate(
             client=run.client,
@@ -349,9 +349,7 @@ def test_phase1_cutoff_excludes_late_known_outcomes_from_calibration() -> None:
     from tests.dq.portfolio.phase1_e2e_fixtures import LATE_KNOWN_AT, resolved_outcome_row
 
     final, _run = _run_phase1_pipeline(
-        canned_extras={
-            "olympus_forecast_outcomes": [resolved_outcome_row(salt=1, known_at=LATE_KNOWN_AT)]
-        },
+        canned_extras={"forecast_outcomes": [resolved_outcome_row(salt=1, known_at=LATE_KNOWN_AT)]},
     )
     cal = next(iter(final.phase_portfolio.forecast_calibrations.values()))
     assert cal["status"] == CalibrationArtifactStatus.UNAVAILABLE.value
@@ -425,7 +423,7 @@ def test_phase1_unpriceable_action_is_typed_not_zero() -> None:
 
 def test_phase1_degraded_risk_registry_keeps_book(monkeypatch: pytest.MonkeyPatch) -> None:
 
-    from digiquant.portfolio.phases import h9_commit_run as h9
+    from digiquant.portfolio.phases import commit as h9
 
     from tests.dq.portfolio.test_commit_run import _run, _state
 
@@ -435,7 +433,7 @@ def test_phase1_degraded_risk_registry_keeps_book(monkeypatch: pytest.MonkeyPatc
     def boom(**_kwargs: object) -> None:
         raise RuntimeError("risk registry down")
 
-    monkeypatch.setattr(h9, "persist_h8_risk_snapshots_from_state", boom)
+    monkeypatch.setattr(h9, "persist_sizing_risk_snapshots_from_state", boom)
     out = _run(client, state)
     manifest = out["phase_portfolio"].commit_manifest or {}
     assert manifest["status"] == "committed"
@@ -443,7 +441,7 @@ def test_phase1_degraded_risk_registry_keeps_book(monkeypatch: pytest.MonkeyPatc
     assert client.store.get("positions", [])
 
 
-def test_phase1_h9_second_commit_with_same_book_is_noop() -> None:
+def test_phase1_commit_second_commit_with_same_book_is_noop() -> None:
     from tests.dq.portfolio.test_commit_run import _ledger_client, _mirror_ledger, _run, _state
 
     client = _ledger_client(SPY=100.0)

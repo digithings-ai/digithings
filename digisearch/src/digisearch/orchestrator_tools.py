@@ -34,6 +34,17 @@ TOOL_DIGISEARCH = "digisearch"
 TOOL_DIGISEARCH_FETCH_ALL = "digisearch_fetch_all"
 TOOL_DIGISEARCH_RESEARCH_DELEGATE = "digisearch_research_delegate"
 TOOL_WEB_SEARCH = "web_search"
+TOOL_DIGISEARCH_WEB_SEARCH = "digisearch_web_search"
+TOOL_DIGISEARCH_MONITORS_TRIGGER = "digisearch_monitors_trigger"
+TOOL_DIGISEARCH_MONITORS_RUNS = "digisearch_monitors_runs"
+# Phase D websets (#4066, R10/R12): the manifest keeps the prefixed names while
+# the MCP surface uses the unprefixed ``websets_*`` tools.
+TOOL_DIGISEARCH_WEBSETS_CREATE = "digisearch_websets_create"
+TOOL_DIGISEARCH_WEBSETS_GET = "digisearch_websets_get"
+TOOL_DIGISEARCH_WEBSETS_ADD_SEARCH = "digisearch_websets_add_search"
+TOOL_DIGISEARCH_WEBSETS_LIST_ITEMS = "digisearch_websets_list_items"
+TOOL_DIGISEARCH_WEBSETS_EVENTS = "digisearch_websets_events"
+TOOL_DIGISEARCH_WEBSETS_EXPORT = "digisearch_websets_export"
 
 ORCHESTRATOR_TOOL_NAMES: frozenset[str] = frozenset(
     {
@@ -41,6 +52,15 @@ ORCHESTRATOR_TOOL_NAMES: frozenset[str] = frozenset(
         TOOL_DIGISEARCH_FETCH_ALL,
         TOOL_DIGISEARCH_RESEARCH_DELEGATE,
         TOOL_WEB_SEARCH,
+        TOOL_DIGISEARCH_WEB_SEARCH,
+        TOOL_DIGISEARCH_MONITORS_TRIGGER,
+        TOOL_DIGISEARCH_MONITORS_RUNS,
+        TOOL_DIGISEARCH_WEBSETS_CREATE,
+        TOOL_DIGISEARCH_WEBSETS_GET,
+        TOOL_DIGISEARCH_WEBSETS_ADD_SEARCH,
+        TOOL_DIGISEARCH_WEBSETS_LIST_ITEMS,
+        TOOL_DIGISEARCH_WEBSETS_EVENTS,
+        TOOL_DIGISEARCH_WEBSETS_EXPORT,
     }
 )
 
@@ -315,6 +335,26 @@ def build_digisearch_research_delegate_tool() -> OpenAIToolDict:
                             "structured filter (multi-tenant isolation)."
                         ),
                     },
+                    "source": {
+                        "type": "string",
+                        "enum": ["corpus", "web", "auto"],
+                        "description": (
+                            "corpus (default) | web | auto. The OSS web branch runs "
+                            "only when web or auto is explicitly requested."
+                        ),
+                    },
+                    "effort": {
+                        "type": "string",
+                        "enum": ["fast", "thorough"],
+                        "description": "Web branch effort preset (default fast).",
+                    },
+                    "output_schema": {
+                        "type": "object",
+                        "description": (
+                            "Optional JSON schema for structured web synthesis; "
+                            "used only by the web branch."
+                        ),
+                    },
                 },
                 "required": ["user_message"],
             },
@@ -322,7 +362,7 @@ def build_digisearch_research_delegate_tool() -> OpenAIToolDict:
     }
 
 
-def build_web_search_tool() -> OpenAIToolDict:
+def build_first_party_web_search_tool() -> OpenAIToolDict:
     """Hub connector: public web search (maps to ``POST /v1/web_search``)."""
     return {
         "type": "function",
@@ -358,18 +398,370 @@ def build_web_search_tool() -> OpenAIToolDict:
     }
 
 
+def build_web_search_tool() -> OpenAIToolDict:
+    """EXA-backed live web search (optional; requires EXA_API_KEY at invoke time)."""
+    return {
+        "type": "function",
+        "function": {
+            "name": TOOL_DIGISEARCH_WEB_SEARCH,
+            "description": (
+                "Live web search via EXA (alternative to the owned corpus). "
+                "Use for current events, competitors, companies/people, papers, "
+                "or anything outside ingested documents. Dormant without EXA_API_KEY. "
+                "Supports search_type instant|fast|auto|deep-lite|deep|deep-reasoning, "
+                "category/company|people|publication|news, outputSchema synthesis, "
+                "and offset paging over one enlarged result window (EXA caps "
+                "numResults at 100; a page past the cap errors explicitly)."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "query": {"type": "string", "description": "Natural-language web query."},
+                    "search_type": {
+                        "type": "string",
+                        "enum": ["instant", "fast", "auto", "deep-lite", "deep", "deep-reasoning"],
+                        "description": "Latency/quality tradeoff (default auto).",
+                    },
+                    "num_results": {
+                        "type": "integer",
+                        "description": "Results to return (1-100, default 8).",
+                    },
+                    "offset": {
+                        "type": "integer",
+                        "description": (
+                            "Page start over one enlarged window (default 0 = unpaged). "
+                            "offset + num_results must stay within the 100-result EXA cap; "
+                            "a page past the cap returns an explicit error, never a "
+                            "silently truncated page."
+                        ),
+                    },
+                    "category": {
+                        "type": "string",
+                        "description": "Optional: company | people | publication | news | personal site | financial report.",
+                    },
+                    "contents_text": {
+                        "type": "boolean",
+                        "description": "Also return full page text.",
+                    },
+                    "include_domains": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "description": "Optional: only return results from these domains.",
+                    },
+                    "exclude_domains": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "description": "Optional: exclude results from these domains.",
+                    },
+                    "output_schema": {
+                        "description": "Optional JSON schema for structured synthesis."
+                    },
+                },
+                "required": ["query"],
+            },
+        },
+    }
+
+
+def build_monitors_trigger_tool() -> OpenAIToolDict:
+    """Hub connector: run one watch turn now (maps to ``POST /v1/monitors/{watch_id}/trigger``)."""
+    return {
+        "type": "function",
+        "function": {
+            "name": TOOL_DIGISEARCH_MONITORS_TRIGGER,
+            "description": (
+                "Run one scheduled web-monitor watch immediately and return its run "
+                "record (status, new results, dedup stats). A turn that fails still "
+                "persists a status='failed' run; check the run status before "
+                "reporting success."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "watch_id": {
+                        "type": "string",
+                        "description": "Watch to run (from the monitor API/MCP create surface).",
+                    },
+                    "mode": {
+                        "type": "string",
+                        "enum": ["manual", "poll"],
+                        "description": "Trigger label recorded on the run (default manual).",
+                    },
+                },
+                "required": ["watch_id"],
+            },
+        },
+    }
+
+
+def build_monitors_runs_tool() -> OpenAIToolDict:
+    """Hub connector: run history for one watch (maps to ``GET /v1/monitors/{watch_id}/runs``)."""
+    return {
+        "type": "function",
+        "function": {
+            "name": TOOL_DIGISEARCH_MONITORS_RUNS,
+            "description": (
+                "List stored run history for one scheduled web-monitor watch, newest "
+                "first, with an optional pagination cursor."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "watch_id": {"type": "string", "description": "Watch whose runs to list."},
+                    "limit": {
+                        "type": "integer",
+                        "description": "Max runs to return (1-100, default 20).",
+                    },
+                    "cursor": {
+                        "type": "string",
+                        "description": "Pagination cursor: the last run_id of the previous page.",
+                    },
+                },
+                "required": ["watch_id"],
+            },
+        },
+    }
+
+
+# --- Phase D websets (#4066, R10/R12) ----------------------------------------
+
+
+def build_websets_create_tool() -> OpenAIToolDict:
+    """Hub connector: create a webset (maps to ``POST /v1/websets``)."""
+    return {
+        "type": "function",
+        "function": {
+            "name": TOOL_DIGISEARCH_WEBSETS_CREATE,
+            "description": (
+                "Create an asynchronous verified + enriched dataset (webset). Returns "
+                "immediately with status=running; poll digisearch_websets_get and read "
+                "digisearch_websets_events until status=idle, then "
+                "digisearch_websets_export. Never blocks on the build."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "query": {
+                        "type": "string",
+                        "description": "Nature-language query describing the target list.",
+                    },
+                    "count": {
+                        "type": "integer",
+                        "description": "Target VERIFIED items (1-100, default 10).",
+                    },
+                    "criteria": {
+                        "type": "array",
+                        "items": {
+                            "type": "object",
+                            "properties": {
+                                "name": {"type": "string"},
+                                "rule": {
+                                    "type": "string",
+                                    "description": "Natural-language admission rule.",
+                                },
+                            },
+                            "required": ["name", "rule"],
+                        },
+                        "description": "1-5 verification rules; every rule must pass.",
+                    },
+                    "enrichments": {
+                        "type": "array",
+                        "items": {
+                            "type": "object",
+                            "properties": {
+                                "name": {"type": "string"},
+                                "type": {
+                                    "type": "string",
+                                    "enum": [
+                                        "text",
+                                        "number",
+                                        "date",
+                                        "url",
+                                        "email",
+                                        "phone",
+                                        "options",
+                                        "company_profile",
+                                    ],
+                                },
+                                "description": {"type": "string"},
+                                "options": {"type": "array", "items": {"type": "string"}},
+                            },
+                            "required": ["name", "type"],
+                        },
+                        "description": "Up to 10 typed enrichment fields (max 10 active).",
+                    },
+                    "verification_mode": {
+                        "type": "string",
+                        "enum": ["llm", "rules"],
+                        "description": "Verification engine (default llm; rules is offline).",
+                    },
+                    "workspace_id": {
+                        "type": "string",
+                        "description": "Optional tenant id; 'datatap' is disabled.",
+                    },
+                },
+                "required": ["query"],
+            },
+        },
+    }
+
+
+def build_websets_get_tool() -> OpenAIToolDict:
+    """Hub connector: read one webset + item counts (maps to ``GET /v1/websets/{id}``)."""
+    return {
+        "type": "function",
+        "function": {
+            "name": TOOL_DIGISEARCH_WEBSETS_GET,
+            "description": (
+                "Read one webset's status, search generations, and verified/pending/"
+                "rejected item counts."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "webset_id": {"type": "string", "description": "Webset id (ws_...)."},
+                },
+                "required": ["webset_id"],
+            },
+        },
+    }
+
+
+def build_websets_add_search_tool() -> OpenAIToolDict:
+    """Hub connector: refresh a webset (maps to ``POST /v1/websets/{id}/searches``)."""
+    return {
+        "type": "function",
+        "function": {
+            "name": TOOL_DIGISEARCH_WEBSETS_ADD_SEARCH,
+            "description": (
+                "Attach a follow-up search generation to a running/idle webset "
+                "(async refresh; poll the webset's new search row + events)."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "webset_id": {"type": "string", "description": "Webset id (ws_...)."},
+                    "query": {"type": "string", "description": "Follow-up search query."},
+                    "count": {
+                        "type": "integer",
+                        "description": "Target VERIFIED items for this search (1-100, default 10).",
+                    },
+                },
+                "required": ["webset_id", "query"],
+            },
+        },
+    }
+
+
+def build_websets_list_items_tool() -> OpenAIToolDict:
+    """Hub connector: page items (maps to ``GET /v1/websets/{id}/items``)."""
+    return {
+        "type": "function",
+        "function": {
+            "name": TOOL_DIGISEARCH_WEBSETS_LIST_ITEMS,
+            "description": (
+                "List a webset's items NEWEST-first, optionally filtered by verification "
+                "state; pass the returned next_cursor to page."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "webset_id": {"type": "string", "description": "Webset id (ws_...)."},
+                    "verification": {
+                        "type": "string",
+                        "enum": ["verified", "rejected", "pending"],
+                        "description": "Optional verification-state filter (default all).",
+                    },
+                    "limit": {"type": "integer", "description": "Page size 1-200 (default 50)."},
+                    "cursor": {
+                        "type": "string",
+                        "description": "Previous page's last item id (newest-first paging).",
+                    },
+                },
+                "required": ["webset_id"],
+            },
+        },
+    }
+
+
+def build_websets_events_tool() -> OpenAIToolDict:
+    """Hub connector: tail events (maps to ``GET /v1/websets/{id}/events``)."""
+    return {
+        "type": "function",
+        "function": {
+            "name": TOOL_DIGISEARCH_WEBSETS_EVENTS,
+            "description": (
+                "Tail a webset's append-only event log OLDEST-first; pass the last seen "
+                "event id as after to poll for strictly newer events."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "webset_id": {"type": "string", "description": "Webset id (ws_...)."},
+                    "after": {
+                        "type": "string",
+                        "description": "Last seen event id; only newer events are returned.",
+                    },
+                    "limit": {"type": "integer", "description": "Page size 1-200 (default 50)."},
+                },
+                "required": ["webset_id"],
+            },
+        },
+    }
+
+
+def build_websets_export_tool() -> OpenAIToolDict:
+    """Hub connector: export verified items (maps to ``GET /v1/websets/{id}/export``)."""
+    return {
+        "type": "function",
+        "function": {
+            "name": TOOL_DIGISEARCH_WEBSETS_EXPORT,
+            "description": (
+                "Export a webset's verified items as CSV or citation-preserving JSON. "
+                "Best after status=idle; rejected audit rows are never exported."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "webset_id": {"type": "string", "description": "Webset id (ws_...)."},
+                    "format": {
+                        "type": "string",
+                        "enum": ["csv", "json"],
+                        "description": "Export format (default json).",
+                    },
+                },
+                "required": ["webset_id"],
+            },
+        },
+    }
+
+
 def build_orchestrator_tool_manifest(
     index_config: dict[str, Any] | None = None,
     *,
     include_research_delegate: bool = False,
+    include_web_search: bool = False,
 ) -> list[OpenAIToolDict]:
     """Return OpenAI tool dicts for the orchestrator surface."""
     ic = index_config or {}
     tools: list[OpenAIToolDict] = [
         build_search_tool(ic),
         build_fetch_all_tool(ic),
-        build_web_search_tool(),
+        build_first_party_web_search_tool(),
     ]
     if include_research_delegate:
         tools.append(build_digisearch_research_delegate_tool())
+    if include_web_search:
+        tools.append(build_web_search_tool())
+    # Phase C monitors (#4065): unconditional — the OSS recall leg needs no key.
+    tools.append(build_monitors_trigger_tool())
+    tools.append(build_monitors_runs_tool())
+    # Phase D websets (#4066): unconditional — the OSS verify/enrich path has no
+    # key gate (only the paid EXA websets shim is key-dependent).
+    tools.append(build_websets_create_tool())
+    tools.append(build_websets_get_tool())
+    tools.append(build_websets_add_search_tool())
+    tools.append(build_websets_list_items_tool())
+    tools.append(build_websets_events_tool())
+    tools.append(build_websets_export_tool())
     return tools

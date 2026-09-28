@@ -7,7 +7,7 @@ retain their own release and safety gates.
 
 Canonical package + deploy docs:
 
--> [`cloudflare/digithings-cron/README.md`](../../cloudflare/digithings-cron/README.md)
+-> [`apps/digithings-cron/README.md`](../../apps/digithings-cron/README.md)
 
 The dispatched pipelines' shared Postgres secret is documented in
 [`core-postgres-uri-secret.md`](core-postgres-uri-secret.md) (#3979).

@@ -1,4 +1,5 @@
-"""Email notifications v0 (K5) — Mailgun digest, holding-change, execution alerts."""
+"""Email notifications v0 (K5) — Cloudflare Email Sending digest, holding-change, execution
+alerts."""
 
 from digiquant.notify.dispatch import dispatch_execution_alerts, dispatch_notifications, main
 from digiquant.notify.entitlements import (

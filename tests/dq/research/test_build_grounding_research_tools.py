@@ -19,7 +19,7 @@ def test_build_grounding_includes_research_tools(monkeypatch: pytest.MonkeyPatch
         live_search=False,
         run_date=date(2026, 6, 20),
         use_research_tools=True,
-        research_phase="h1_thesis",
+        research_phase="thesis",
     )
     assert tools is not None
     names = {t["function"]["name"] for t in tools}
@@ -29,7 +29,7 @@ def test_build_grounding_includes_research_tools(monkeypatch: pytest.MonkeyPatch
 
 
 @pytest.mark.unit
-def test_build_grounding_h5_blinds_portfolio_tool(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_build_grounding_analyst_blinds_portfolio_tool(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("DIGIQUANT_RESEARCH_DATA_TOOLS", "1")
     monkeypatch.setattr(_node_factory, "_research_data_client", lambda: object())
 
@@ -38,7 +38,7 @@ def test_build_grounding_h5_blinds_portfolio_tool(monkeypatch: pytest.MonkeyPatc
         live_search=False,
         run_date=date(2026, 6, 20),
         use_research_tools=True,
-        research_phase="h5_analyst",
+        research_phase="analyst",
     )
     assert tools is not None
     names = {t["function"]["name"] for t in tools}

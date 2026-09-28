@@ -1,4 +1,4 @@
-"""H6 conviction_delta clamp (house GHA 33426508863 ``input_value=-3``)."""
+"""deliberation conviction_delta clamp (house GHA 33426508863 ``input_value=-3``)."""
 
 from __future__ import annotations
 

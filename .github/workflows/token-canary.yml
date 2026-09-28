@@ -1,0 +1,112 @@
+# Token-validity canary for scheduled-workflow credentials (#3522).
+#
+# Scheduled workflows fail *correlated* when a credential expires, and the only
+# signal today is the weekly `pipeline-maintenance.yml` workflow-health digest —
+# up to seven days late. This workflow is the cheap, non-destructive probe that
+# surfaces the same failure in <=24h.
+#
+# What it validates, and the honest limit:
+#   * DIGITHINGS_PROJECT_TOKEN — GitHub PAT, validated read-only with GET /user.
+#   * GH_DISPATCH_TOKEN        — cron dispatch PAT, validated read-only with
+#                                GET /repos/{repo}/actions/runs?per_page=1 (an
+#                                Actions: read-gated endpoint, satisfied by the
+#                                Actions: write grant it is provisioned for; a
+#                                fine-grained PAT may not authenticate /user, so
+#                                probing that would false-alarm).
+#   * CLAUDE_CODE_OAUTH_TOKEN / CURSOR_API_KEY — no quota-free introspection
+#     endpoint exists; proving either valid needs an agent run, which #3522
+#     forbids. These are presence-checked only and reported as
+#     `unvalidated-by-design`; the script never claims they are valid.
+#
+# It spends no quota and writes nothing but the tracker issue on failure.
+#
+# Production clock: Cloudflare Worker digithings-cron (apps/digithings-cron)
+# dispatches this daily; the GHA schedule was removed in #3579.
+name: "Ops: token-validity canary"
+
+on:
+  workflow_dispatch:
+  workflow_call:
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  canary:
+    name: Probe scheduled-workflow credentials
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Probe credential validity
+        id: canary
+        env:
+          # The project token is both the probe credential and the issue filer:
+          # if it has expired, the probe correctly reports it (and filing is
+          # impossible anyway, which is itself the signal in the job log).
+          DIGITHINGS_PROJECT_TOKEN: ${{ secrets.DIGITHINGS_PROJECT_TOKEN }}
+          GH_DISPATCH_TOKEN: ${{ secrets.GH_DISPATCH_TOKEN }}
+          CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          CURSOR_API_KEY: ${{ secrets.CURSOR_API_KEY }}
+          REPO: ${{ github.repository }}
+        run: |
+          set +e
+          OUTPUT=$(python3 scripts/check_workflow_tokens.py 2>&1)
+          EXIT=$?
+          {
+            echo "exit_code=$EXIT"
+            echo "output<<EOF"
+            echo "$OUTPUT"
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
+          echo "$OUTPUT"
+
+      - name: File tracker if a credential is invalid
+        if: steps.canary.outputs.exit_code == '1'
+        env:
+          GH_TOKEN: ${{ secrets.DIGITHINGS_PROJECT_TOKEN }}
+          REPO: ${{ github.repository }}
+          OUTPUT: ${{ steps.canary.outputs.output }}
+          PROJ: ${{ vars.DIGI_MAINTENANCE_PROJECT_NUMBER }}
+        run: |
+          TITLE="[housekeeping] scheduled-workflow credential expired — $(date +%Y-%m-%d)"
+          EXISTING=$(gh issue list --repo "$REPO" --state open \
+            --search "scheduled-workflow credential expired in:title" --json number --jq '.[0].number' 2>/dev/null || echo "")
+          [[ -n "$EXISTING" ]] && { echo "Issue #$EXISTING already open — skipping."; exit 0; }
+
+          URL=$(gh issue create --repo "$REPO" \
+            --title "$TITLE" \
+            --label "agent-task,component:root,priority:high" \
+            --body "## Scheduled-workflow credential expired
+
+          \`scripts/check_workflow_tokens.py\` could not authenticate one of the
+          credentials the scheduled workflows depend on. Correlated scheduled
+          failures are the downstream symptom; this is the earliest signal.
+
+          ## Probe output
+          \`\`\`
+          ${OUTPUT:0:2000}
+          \`\`\`
+
+          ## Task
+          1. Run \`DIGITHINGS_PROJECT_TOKEN=… GH_DISPATCH_TOKEN=… python3 scripts/check_workflow_tokens.py\` locally to confirm
+          2. Rotate the named credential at its source (GitHub repo secret, or the digithings-cron Worker for \`GH_DISPATCH_TOKEN\`)
+          3. Re-run \`python3 scripts/check_workflow_tokens.py\` to confirm green
+
+          ## Acceptance Criteria
+          - [ ] The named credential rotated and the canary green again
+          - [ ] Any scheduler pause caused by the outage cleared
+
+          ## Note
+          \`CLAUDE_CODE_OAUTH_TOKEN\` / \`CURSOR_API_KEY\` are presence-checked only —
+          neither has a quota-free introspection endpoint. This issue is for a
+          *verifiable* credential (\`DIGITHINGS_PROJECT_TOKEN\` / \`GH_DISPATCH_TOKEN\`).")
+          echo "Created: $URL"
+          # Best-effort board placement: never fail the step over it. Written as
+          # if/then rather than `A && B || true`, where the `|| true` covers both
+          # "PROJ unset" and "item-add failed" and reads like an else (SC2015).
+          if [[ -n "${PROJ:-}" ]]; then
+            gh project item-add "$PROJ" --owner digithings-ai --url "$URL" >/dev/null 2>&1 || true
+          fi

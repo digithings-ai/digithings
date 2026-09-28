@@ -1,0 +1,150 @@
+{
+ "issued": "2026-09-16",
+ "issue": 4252,
+ "method": "Re-measured with the Phase B live-eval battery (phase1_search.py: /search types auto|fast|instant|deep + category, /contents, /findSimilar, /answer) plus one /agent/runs deep run, copied from the 2026-09-14 scaffolding session at /tmp/exa-review. This receipt is the durable provenance; the raw response bodies stayed in the throwaway /tmp/exa-review-4252 directory (costDollars extracted verbatim here).",
+ "environment": {
+  "host": "single host (macOS, darwin), Python 3.14 venv",
+  "key": "repo .env EXA_API_KEY (never printed)",
+  "window": "2026-09-16, single session, sequential calls",
+  "backend": "api.exa.ai"
+ },
+ "query_set": {
+  "s1_auto": "latest developments in small modular nuclear reactors (type=auto, numResults=3, highlights)",
+  "s2_fast": "FTSE 100 latest close this week (type=fast, numResults=3)",
+  "s3_instant": "Euro 2028 host stadiums (type=instant, numResults=3)",
+  "s4_deep_structured": "top commercial space launch companies (type=deep, numResults=5, outputSchema)",
+  "s5_category_company": "agtech companies in the US that raised series A (type=auto, category=company)",
+  "c1_contents": "contents for s1 first result (text+highlights+summary)",
+  "f1_similar": "findSimilar for s1 first result",
+  "a1_answer": "What is the current UK base rate?",
+  "g_agent": "Find 3 recent Series A AI infrastructure funding rounds (outputSchema; polled to completed)"
+ },
+ "calls": [
+  {
+   "fixture": "a1_answer.json",
+   "status": null,
+   "costDollars": {
+    "total": 0.005
+   },
+   "requestId": "59aab2c94e02cd2f9529330518ca3387"
+  },
+  {
+   "fixture": "c1_contents.json",
+   "status": null,
+   "costDollars": {
+    "total": 0.003,
+    "contents": {
+     "text": 0.001,
+     "highlights": 0.001,
+     "summary": 0.001
+    }
+   },
+   "requestId": "897fabb0d822f57dc9813f31630ae2e5"
+  },
+  {
+   "fixture": "f1_similar.json",
+   "status": null,
+   "costDollars": {
+    "total": 0.007,
+    "search": {
+     "neural": 0.007
+    }
+   },
+   "requestId": "03b89cff649d6f42ebf6f119874c6810"
+  },
+  {
+   "fixture": "g1_agent_created.json",
+   "status": "running",
+   "costDollars": {
+    "total": 0,
+    "agentCompute": 0,
+    "search": 0,
+    "emails": 0,
+    "phoneNumbers": 0
+   },
+   "requestId": null
+  },
+  {
+   "fixture": "g2_agent_done.json",
+   "status": "completed",
+   "costDollars": {
+    "total": 0.0887,
+    "agentCompute": 0.0647,
+    "search": 0.024,
+    "emails": 0,
+    "phoneNumbers": 0
+   },
+   "requestId": null
+  },
+  {
+   "fixture": "s1_auto.json",
+   "status": null,
+   "costDollars": {
+    "total": 0.007,
+    "search": {
+     "neural": 0.007
+    }
+   },
+   "requestId": "24227987a8ebdd57fc62a8e11ac7949c"
+  },
+  {
+   "fixture": "s2_fast.json",
+   "status": null,
+   "costDollars": {
+    "total": 0.007,
+    "search": {
+     "neural": 0.007
+    }
+   },
+   "requestId": "ca621a654e038be029b8d75b189d58fe"
+  },
+  {
+   "fixture": "s3_instant.json",
+   "status": null,
+   "costDollars": {
+    "total": 0.007,
+    "search": {
+     "neural": 0.007
+    }
+   },
+   "requestId": "45ea7c3cdcf2ced154198b9a346ccd79"
+  },
+  {
+   "fixture": "s4_deep_structured.json",
+   "status": null,
+   "costDollars": {
+    "total": 0.012
+   },
+   "requestId": "6b29df078803647697c5fee9256c8875"
+  },
+  {
+   "fixture": "s5_category_company.json",
+   "status": null,
+   "costDollars": {
+    "total": 0.007,
+    "search": {
+     "neural": 0.007
+    }
+   },
+   "requestId": "79d54a489385929ff72b603aad06ad93"
+  }
+ ],
+ "total_usd_single_session": 0.1437,
+ "prior_anchors_2026_09_14": {
+  "shallow_search_call": 0.007,
+  "deep_structured_search": 0.012,
+  "contents": 0.003,
+  "answer": 0.005,
+  "similar": 0.007,
+  "deep_agent_run": 0.2642
+ },
+ "remeasured_2026_09_16": {
+  "shallow_search_call": 0.007,
+  "deep_structured_search": 0.012,
+  "contents": 0.003,
+  "answer": 0.005,
+  "similar": 0.007,
+  "deep_agent_run": 0.0887,
+  "delta_note": "Shallow per-call prices unchanged; the deep agent-run total dropped 3.0x ($0.2642 -> $0.0887). Whether that is a price change or run-to-run step-count variance is unresolved by two single samples - treat deep as provisional and re-measure per environment before SLOs."
+ }
+}

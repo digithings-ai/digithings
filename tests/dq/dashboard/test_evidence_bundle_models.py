@@ -77,7 +77,7 @@ def _request(bundle: TickerEvidenceBundle, **overrides: object) -> MissingFactRe
         base_bundle_id=bundle.bundle_id,
         ticker=bundle.ticker,
         fact_key="next_earnings_date",
-        rationale="H6 needs dated catalyst for challenge",
+        rationale="deliberation needs dated catalyst for challenge",
         event_time=bundle.event_time,
         effective_as_of=bundle.effective_as_of,
         known_at=bundle.known_at,

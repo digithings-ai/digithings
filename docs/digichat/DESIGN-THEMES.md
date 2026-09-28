@@ -6,7 +6,7 @@ a second message tree.
 
 ## Gallery
 
-Contract: [`cloudflare/digiweb/CHAT_THEME.md`](../../cloudflare/digiweb/CHAT_THEME.md).
+Contract: [`packages/ui/CHAT_THEME.md`](../../packages/ui/CHAT_THEME.md).
 
 Live: design-reference `/chatbot` (port 4013). Source of look: copied
 `thread.aui.tsx` + shadcn token aliases onto `--bg` / `--ink` / `--accent`.
@@ -15,8 +15,8 @@ Live: design-reference `/chatbot` (port 4013). Source of look: copied
 
 `chrome.skin: digichat` is the 12th id next to the 11 official catalog
 templates. It **mounts the gallery `/chatbot` Thread** via the
-`@digithings/web/chat/thread` subpath (same module as isolated `/chatbot`;
-never the `@digithings/web` main barrel). Catalog / third-party default remains
+`@digithings/ui/chat/thread` subpath (same module as isolated `/chatbot`;
+never the `@digithings/ui` main barrel). Catalog / third-party default remains
 `base`. First-party hosts (digithings.ai / OCC) default unset `skin` to
 `digichat`. There is no third custom theme — extra chrome.skin ids are not
 allowed.

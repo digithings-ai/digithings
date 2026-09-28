@@ -1,4 +1,4 @@
-"""Focus-roster cap helpers shared by H4–H6 fan-out (#936, #950, #1767)."""
+"""Focus-roster cap helpers shared by screener–deliberation fan-out (#936, #950, #1767)."""
 
 from __future__ import annotations
 
@@ -16,7 +16,7 @@ def configured_max_analysts() -> int:
     """``DIGIQUANT_MAX_ANALYSTS`` as an int; ``0`` (or unset/malformed) means *no cap*.
 
     Single reader for the env var so the cap in force, the roster telemetry, and the
-    H4 node's static baseline can never disagree — before #1767 three call sites
+    screener node's static baseline can never disagree — before #1767 three call sites
     parsed it independently.
     """
     raw = env_lookup(MAX_ANALYSTS, default="0") or "0"
@@ -34,7 +34,7 @@ def _ranked_candidates(candidates: list[str], candidate_priority: Sequence[str])
 
     Names absent from *candidate_priority* keep their original relative order behind
     them. With an empty *candidate_priority* this is the identity — which is what
-    every caller other than H4 relies on for byte-identical selection.
+    every caller other than screener relies on for byte-identical selection.
     """
     if not candidate_priority:
         return candidates
@@ -66,15 +66,15 @@ def capped_tickers(
     budget. The whole post-held budget already goes to non-held candidates, so the floor
     is met implicitly whenever ``min_new <= max_analysts - len(held)``; a larger value is
     clamped and logged rather than honoured, because honouring it would breach the cap.
-    Before #1767 it *expanded* the cap instead — which, together with H4 passing the
-    whole H3 thesis-vehicle map as ``held``, is why the cap never capped anything.
+    Before #1767 it *expanded* the cap instead — which, together with screener passing the
+    whole vehicle_map thesis-vehicle map as ``held``, is why the cap never capped anything.
 
     ``adaptive_max_analysts`` (optional): when not None, overrides the
     DIGIQUANT_MAX_ANALYSTS environment variable as the analyst cap. When None,
     falls back to the env var.
 
     ``candidate_priority`` (optional, #1767): preferred order for *non-held* candidates
-    when the budget cannot fit them all. H4 passes its thesis-vehicle round-robin here,
+    when the budget cannot fit them all. screener passes its thesis-vehicle round-robin here,
     so thesis coverage is prioritised **within** the cap instead of being exempt from
     it. Output order always follows *tickers*, never this list.
     """

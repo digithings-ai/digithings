@@ -100,7 +100,7 @@ def test_digest_briefing_for_portfolio_is_date_body_regime_only() -> None:
             "body": "# Daily Digest — 2026-08-31\n\n## Market regime\n\nSlowing.\n",
             "regime_label": "Slowing / Cooling",
             "bias": "bearish",
-            "headline": "should not reach H1",
+            "headline": "should not reach thesis",
             "material_findings": [{"label": "x", "summary": "y"}],
         }
     )
@@ -204,9 +204,11 @@ def test_prior_digest_bodies_are_two_full_reports_not_300_char_slims() -> None:
     shared = _digest_shared_context(state)
     latest = shared["prior_context"]["latest_segments"]
     assert set(latest) <= {"digest", "digest-delta"}
+    # #4609: prior_digests lives once, in the cached shared_context block — not
+    # duplicated into the uncached stitcher phase_inputs.
+    assert len(shared["prior_context"]["prior_digests"]) == 2
     stitch_inputs = _digest_phase_inputs(state)
     assert "phase1" not in stitch_inputs
     assert "phase5" not in stitch_inputs
     assert "subsections" in stitch_inputs
-    assert "prior_digests" in stitch_inputs
-    assert len(stitch_inputs["prior_digests"]) == 2
+    assert "prior_digests" not in stitch_inputs

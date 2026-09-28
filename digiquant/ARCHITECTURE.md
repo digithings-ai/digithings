@@ -133,7 +133,7 @@ All three adapters (`IBAdapterStub`, `AlpacaAdapterStub`, `QuantConnectAdapterSt
 | `tearsheet_extract.py` | Equity/fill/drawdown extraction from Nautilus reports (#1185) |
 | `tearsheet_stats.py` | Categorized / full / risk HTML stats tables (#1185) |
 | `tearsheet_page.py` | Tearsheet HTML page layout + CSS/JS (#1185) |
-| `tearsheet_data.py` | Unified `TearsheetData` schema + `from_pine`/`from_nautilus` adapters; emits the JSON consumed by the React strategy-tearsheet library (`cloudflare/digiquant-web` `/strategies` routes on digiquant.io) |
+| `tearsheet_data.py` | Unified `TearsheetData` schema + `from_pine`/`from_nautilus` adapters; emits the JSON consumed by the React strategy-tearsheet library (`apps/digiquant-web` `/strategies` routes on digiquant.io) |
 | `strategy_aliases.py` | Canonical alias → registry-name map + `resolve_param_spec_name` (SDCA `btc_sdca` → `sdca` for optimize specs) (#1185) |
 | `cli/` | `digiquant backtest | optimize | export | strategy | prices | web-search | policy-replay` CLI |
 
@@ -275,7 +275,7 @@ The MCP server (`mcp_server.py`) listens on `127.0.0.1:8767` by default with `st
 
 `create_mcp_server(scope=...)` gates registration: `scope="full"` (default)
 registers all 58 tools; `scope="read"` registers only the 44 dashboard-chat
-reads (strategy list, price/macro reads, causal trade levels, `query_data`,
+reads (strategy list, price/macro reads, causal trade levels, `query_research`,
 policy replay/comparison reads, gate reads + evaluations, the coinmetrics
 catalog, and the 34 `digifetch_*` Gloomberb enrichment reads).
 `--scope` / `DIGIQUANT_MCP_SCOPE` select the scope; `host`/`port` live on the
@@ -294,7 +294,7 @@ Gloomberb family in-process through
 | Surface | What |
 |---|---|
 | `DIGIFETCH_TOOLS` | The OpenAI function schemas, **generated** from `orchestrator_tools.build_orchestrator_tool_manifest()` (filtered to the names declared in `TOOL_ENTITLEMENTS`) so the MCP, manifest, and in-process surfaces cannot drift; each carries the entitlement note + top-level `entitlement` key |
-| `EQUITY_TOOLS` / `MACRO_TOOLS` / `PM_TOOLS` | Curated per-phase subsets (`<= 16` names each — prompt budget, not capability). Equity/sector research phases get company facts + analyst views (`EQUITY_TOOLS`); macro gets rates/credit/long-run valuation (`MACRO_TOOLS`); H5 analyst + H7 PM direction share `PM_TOOLS` (quotes/news/analyst views + macro context) |
+| `EQUITY_TOOLS` / `MACRO_TOOLS` / `PM_TOOLS` | Curated per-phase subsets (`<= 16` names each — prompt budget, not capability). Equity/sector research phases get company facts + analyst views (`EQUITY_TOOLS`); macro gets rates/credit/long-run valuation (`MACRO_TOOLS`); analyst + direction share `PM_TOOLS` (quotes/news/analyst views + macro context) |
 | `available_digifetch_tools(subset)` | Subset → schemas, **filtering rather than advertising**: returns `[]` when `GLOOMBERB_ENABLED` disables the family, and drops `session`/`preview`/`pro` names when `GLOOMBERB_SESSION_COOKIE` is unset. Same zero-HTTP *client* policy as MCP (#4099), but the two surfaces differ in shape: MCP registers gated tools and answers each call with a typed `auth_required`/disabled envelope, while this in-process list never offers a tool that can only error |
 | `build_digifetch_tool_dispatcher(client=None)` | `(name, args) -> json_str`; validates args through each tool's Pydantic input model, calls the `GloomberbClient` method, and returns the §7 attribution envelope (deep link from the tool's symbol/ticker arg; the Yahoo-backed earnings calendar is not attributed). The `/v1/orchestrator_invoke` `digifetch_*` branch (#4097) calls the same dispatcher for hub dispatch |
 | `build_gloomberb_client()` / `gloomberb_envelope_json()` | The shared env-keyed client factory (one pacing/cache/circuit-breaker client per `(GLOOMBERB_ENABLED, GLOOMBERB_SESSION_COOKIE)` pair, lock-guarded for parallel LangGraph nodes) and the envelope serializer; `mcp_server` imports both (moved here in #4146) |
@@ -303,8 +303,8 @@ Wiring: `research/phases/_node_factory.build_grounding(digifetch_tools=...)`
 composes the subset with the Supabase `DATA_TOOLS` / `RESEARCH_TOOLS` executors
 into one name-routing dispatcher; `SegmentNodeSpec.digifetch_tools` carries the
 flag for the equity/sector (`EQUITY_TOOLS`) and macro (`MACRO_TOOLS`) phases, and
-`portfolio/phases/portfolio_common._portfolio_grounding` (H5 + H7) passes
-`PM_TOOLS`. H6 deliberation stays digifetch-free (research-tools-only by policy
+`portfolio/phases/portfolio_common._portfolio_grounding` (analyst + direction) passes
+`PM_TOOLS`. deliberation stays digifetch-free (research-tools-only by policy
 #2908; its evidence path is the bundle + amendment flow) and the legacy Phase 7D
 path is unwired.
 
@@ -320,6 +320,32 @@ rate-limited), the subset attaches **only when a primary grounding executor
 actually built** — a segment with no data/research tools degrades to tool-less
 rather than arming a tool loop on delayed enrichment data alone. The client
 cache/breaker mutations are lock-guarded (`threading.Lock`) for parallel nodes.
+
+Research retrieval (`query_research`, #4436) is the unified search surface over
+research documents + the book, replacing the retired generic `query_data` reader.
+One toolkit at `dashboard/research_retrieval/` backs both the in-pipeline agents
+and MCP: `search_research(...)` in `research_retrieval/queries.py` takes a typed
+`dataset` enum (9 searchable datasets — `documents`, `daily_snapshots`,
+`positions`, `nav_history`, `theses`, `thesis_vehicles`, `position_events`,
+`portfolio_metrics`, `decision_log`) with `run_type`/`run_id`/`date_from`/
+`date_to`/`document_key`/`segment`/`ticker`/`sector`/`subject`/`doc_type`/
+`retrieval_phase`/`include_prior`/`as_of_date`/`limit`/`offset`/`full_content`
+filters. `retrieval_phase` is the retrieval/blinding phase (one of
+`RetrievalPhase`, validated — an unknown name errors instead of falling through
+unblinded); it is not a `documents` column. No
+raw-table or arbitrary-column surface exists. Look-ahead is impossible (the upper
+window date is clamped to the effective `as_of`); the default is a single day
+unless `include_prior` widens it to `date_from`. Every `documents` read is gated
+by `research_document_allowed(retrieval_phase, key)` (phase-scoped blinding), and
+portfolio datasets are gated by `portfolio_tool_allowed`. Archived
+`documents.payload` bodies hydrate read-through from R2 (`_hydrate_archived_rows`);
+`documents.content` is never archived. `content` is preview-truncated to 500
+chars unless `full_content`. In-pipeline wiring:
+`research/phases/_node_factory.SegmentNodeSpec.use_research_tools` /
+`research_phase` (`build_segment_node`, deliberation gets the full toolkit;
+`portfolio/phases/phase7d_pm._pm_tools` passes `direction`). MCP:
+`digiquant_query_research` (read scope) — the `digiquant_query_data` registration
+is removed.
 
 #### MCP vs HTTP-only (#1185)
 
@@ -357,7 +383,7 @@ carries the `[research]`/`[mcp]` extras — never the backtest engine. The hoste
 bind is non-loopback via `DIGIQUANT_MCP_HOST=0.0.0.0` /
 `DIGIQUANT_MCP_PORT=8767` (code defaults stay `127.0.0.1:8767` for local runs).
 
-Cloudflare wiring (`cloudflare/digithings-stack-cloudflare/`): `DigiQuantMcpContainer`
+Cloudflare wiring (`apps/digithings-stack-cloudflare/`): `DigiQuantMcpContainer`
 beside `DigiStackContainer` (own `[[containers]]` image entry, `MCP_STACK`
 binding, `v2` migration), routed by exact hostname (`mcp.digithings.ai`,
 reserved) only — no workers.dev forwarding route ships. Single replica by design (`max_instances = 1`, one pinned
@@ -380,30 +406,35 @@ refresh cron applies); `curl -sI https://api.stlouisfed.org` → HTTP 301 to the
 API docs. Re-run both before first deploy; a 429 storm behind shared egress
 means backing off the overlap window, not widening it.
 
-Warm policy (min-instances-1 equivalent): `sleepAfter = "24h"` on the container
-class, backed by the daily `market-data-refresh` cron health ping against the
-enabled custom-domain route (once live):
+Cold-start policy: `sleepAfter = "15m"` on the container class, so the container
+may sleep after 15 minutes idle. A cold start only pays the FastMCP import,
+never a data load. The daily `market-data-refresh` cron keeps R2 fresh and never
+touches the container; once the custom-domain route is enabled it can be pinged
+manually:
 `curl -sS https://mcp.digithings.ai/mcp -H 'Accept: application/json'`.
-A cold start only pays the FastMCP import, never a data load.
 
-Per-component secrets (`wrangler secret put`, never committed): `FRED_API_KEY`
-plus the four R2 names `R2_ACCOUNT_ID` / `R2_BUCKET` / `R2_ACCESS_KEY_ID` /
+Per-component secrets (`wrangler secret put`, never committed): `FRED_API_KEY`,
+`GLOOMBERB_SESSION_COOKIE` (session-gated digifetch tools, #4260), and the four
+R2 names `R2_ACCOUNT_ID` / `R2_BUCKET` / `R2_ACCESS_KEY_ID` /
 `R2_SECRET_ACCESS_KEY` (same `digithings-archive` bucket as the checkpoint
 archive). The read path is registry-read-only (registry inserts raise) so the
 cron's `CORE_POSTGRES_URI` is deliberately NOT forwarded here.
 `DIGIQUANT_MARKET_DATA_BACKEND` is passed through with no Worker-side default:
 unset/empty keeps the library default (`supabase`); set it to `"r2"`
-explicitly via env for the hosted path. The Gloomberb session cookie is **not**
-forwarded to this container yet (gated digifetch tools answer the typed
-`auth_required`); the operator path and tracked wiring follow-up are in
+explicitly via env for the hosted path. `GLOOMBERB_SESSION_COOKIE` is forwarded
+as container runtime env (#4260), so once the secret is set the gated digifetch
+tools take the session-authenticated path instead of the zero-HTTP typed
+`auth_required`; an unset/empty value preserves that `auth_required` behavior.
+The operator path is in
 [docs/ops/gloomberb-session-cookie.md](../docs/ops/gloomberb-session-cookie.md).
 
-Owner applies the five secrets from `cloudflare/digithings-stack-cloudflare/`
+Owner applies the six secrets from `apps/digithings-stack-cloudflare/`
 (`$VALUE` filled only in the operator's shell history — never in the repo;
 `env -u` per the `CLOUDFLARE_API_TOKEN` trap noted in `wrangler.toml`):
 
 ```bash
 printf '%s' "$VALUE" | env -u CLOUDFLARE_API_TOKEN npx wrangler secret put FRED_API_KEY
+printf '%s' "$VALUE" | env -u CLOUDFLARE_API_TOKEN npx wrangler secret put GLOOMBERB_SESSION_COOKIE
 printf '%s' "$VALUE" | env -u CLOUDFLARE_API_TOKEN npx wrangler secret put R2_ACCOUNT_ID
 printf '%s' "$VALUE" | env -u CLOUDFLARE_API_TOKEN npx wrangler secret put R2_BUCKET
 printf '%s' "$VALUE" | env -u CLOUDFLARE_API_TOKEN npx wrangler secret put R2_ACCESS_KEY_ID
@@ -420,7 +451,10 @@ seam helpers in `research/data/queries.py` — `r2_backend_enabled()`,
 the five ops scripts (`execute_at_open.py`, `fill-entry-prices.py`,
 `refresh_performance_metrics.py`, `verify_nav_replay.py`,
 `finalize_period_accounting.py`) plus the research/portfolio readers that
-previously hit the Supabase market tables. `r2_close_rows` fails loud on a
+previously hit the Supabase market tables. Price-technicals reads are R2-only
+since #4053 and expose `get_price_technicals_batch(*, client, tickers, lookback,
+as_of)` — the phase entry point that reads the sealed manifest once for the
+whole basket instead of once per ticker (#4600). `r2_close_rows` fails loud on a
 ticker with no sealed generation; readers whose documented contract is to read
 a missing ticker as "no signal" (`query_price_deltas`,
 `commit_io._interval_price_returns`, `get_sector_relative_strength`) call
@@ -439,6 +473,34 @@ days — breach keeps the prior objects serving, writes the manifest
 same-day execution (`d > seal` — `execute_at_open` / `fill-entry-prices`
 price opens and fills from `price_history`; D3) and `FEDPROB/*`
 prediction-market odds (`get_fed_rate_probabilities`; no R2 generation; D2).
+
+`scripts/refresh_market_data_r2.py` also exits non-zero when any macro series
+lands in a soft-fail mode (`history-only`/`error`), so the live fetch window has
+to span at least one publication period of the series (#4588). `LIVE_WINDOW_DAYS`
+(45) assumes a daily series; a monthly FRED series (`M2SL`, `UNRATE`, `MANEMP`,
+`CPIAUCSL`, `PCEPI`) legitimately has no new observation inside it — release lag
+plus the pending release puts the newest month up to ~90 days behind the run — so
+the window came back empty, `_fetch_macro` raised `empty live window`, and every
+scheduled refresh was marked stale. Each entry in
+`research/config/macro_series.yaml` may now declare a `cadence`
+(`daily`/`weekly`/`monthly`/`quarterly`), which selects the window
+(`_CADENCE_WINDOW_DAYS`: 45/60/120/240 days; absent = daily). The widened window
+then *contains* the series' seal row, so the live fetch is non-empty and the
+existing benign `up-to-date` path covers it. Note what does **not** change: an
+empty live window still returns `history-only` — `_fetch_macro` raises on empty
+and the `except FetchError` arm maps it to the soft-fail mode — because an empty
+window is genuinely ambiguous (a dead feed looks the same as a very slow one).
+The fix is the window containing the observation, not a new benign-empty branch.
+A series whose seal falls outside the widened window still fails the run, so a
+genuinely dead feed is detected (though at the slower cadence: up to 120 days for
+monthly, versus 45 before; weekly keeps the 45-day default because several weekly
+publications already fit inside it). Contract tests:
+`tests/scripts/test_refresh_market_data_r2_macro.py`. A cadence outside the map
+raises `ValueError` rather than silently defaulting. Second-order effect of the
+wider monthly window: a revision to a monthly print that is 45–120 days old is now
+inside the window and takes the `_restated` path (a full-history re-pull) where it
+used to be invisible; that is the intended sealing behaviour, at the cost of an
+occasional extra re-pull.
 
 #### Market-data R2 read path (#3780 Task 10)
 
@@ -478,7 +540,7 @@ Macro carve-out: migration `124_drop_market_data_tables.sql` is a **no-op**
 because the on-cron Supabase readers were not yet migrated when it was ledgered.
 The real drop ships as **`127_drop_market_data_tables.sql`** (#4053) — a new
 numbered migration, never a re-edit of 124: `db-migrate.yml` records every
-executed file in `olympus_schema_migrations` by name, so a re-edited 124 is
+executed file in `digithings_schema_migrations` by name, so a re-edited 124 is
 silently skipped. 127 drops the two views (`price_history_tickers`,
 `public_price_latest`) before the two tables; every market read is R2/live-only
 (see *Market-data reads: R2* above), and rollback is restore-from-generation +
@@ -488,9 +550,9 @@ post-cutover size gate (`data/cutover_gate.py`, `POST_CUTOVER_SIZE_GATE_MB=320`)
 reads the `pg_database_size` total only: the ~172MB price-table saving lands
 with 127 toward the ≈292MB target.
 
-H9 seal coverage: H9 (`h9_cost_evidence.py`) reads the run-date session
+commit seal coverage: commit (`commit_cost_evidence.py`) reads the run-date session
 bar but R2 seals through the manifest `as_of`; seal < run_date fail-softs
-to the sealed tail. Live-fire checklist asserts seal coverage at H9 time
+to the sealed tail. Live-fire checklist asserts seal coverage at commit time
 (manifest `as_of` vs run_date) before sign-off.
 
 Dispatcher matrix: all six data tools ride `build_data_tool_dispatcher`
@@ -536,7 +598,7 @@ Still open from #160 AC: dedicated `indicator list` / `indicator compute` (close
 The BTC/ETH/SOL Slapper tearsheets published on digiquant.io are produced end-to-end by digiquant's own pipeline:
 
 1. **Price** — `scripts/fetch_coinbase.py` pulls daily Coinbase OHLCV (CCXT) into `digiquant/data/price-history/<TICKER>.csv` (matches TradingView's Coinbase series). `generate_tearsheets.py` and `export_sdca_macro.py` default to the same directory (`DIGIQUANT_ROOT / "data" / "price-history"`). Do not point generate at repo-root `data/price-history` — that is a different tree (#3472).
-2. **Backtest** — `scripts/generate_tearsheets.py` runs each strategy through the NautilusTrader engine, extracts round-trip trades from the positions report, and builds a TradingView-style percent-of-equity compounding equity curve + All/Long/Short stats, emitting `TearsheetData` JSON (`tearsheet_data.from_nautilus_run`) into `cloudflare/digiquant-web/public/strategies/`. Each strategy's backtest runs in its **own spawned process** (#1389): NautilusTrader's Rust logging can only initialize once per process (`log::set_boxed_logger`), so a second in-process `BacktestEngine` aborts the interpreter with a logger re-init panic (SIGABRT). Isolation also contains any engine crash to its strategy — the script collects per-strategy success/failure, prints an OK/FAILED summary line per strategy, and exits non-zero if **any** strategy failed. On a partial failure, `index.json` keeps the prior entry for each failed strategy (so digiquant.io does not lose a live strategy card); a fully successful full run rewrites `index.json` as before.
+2. **Backtest** — `scripts/generate_tearsheets.py` runs each strategy through the NautilusTrader engine, extracts round-trip trades from the positions report, and builds a TradingView-style percent-of-equity compounding equity curve + All/Long/Short stats, emitting `TearsheetData` JSON (`tearsheet_data.from_nautilus_run`) into `apps/digiquant-web/public/strategies/`. Each strategy's backtest runs in its **own spawned process** (#1389): NautilusTrader's Rust logging can only initialize once per process (`log::set_boxed_logger`), so a second in-process `BacktestEngine` aborts the interpreter with a logger re-init panic (SIGABRT). Isolation also contains any engine crash to its strategy — the script collects per-strategy success/failure, prints an OK/FAILED summary line per strategy, and exits non-zero if **any** strategy failed. On a partial failure, `index.json` keeps the prior entry for each failed strategy (so digiquant.io does not lose a live strategy card); a fully successful full run rewrites `index.json` as before.
 3. **Validation** — `scripts/validation/pine_backtest.py` is a Pine-faithful replica of TradingView's fill model used as a parity oracle; `scripts/validation/compare_tv.py` matches our entries to a TradingView export (entry date + direction, broken down by signal family).
 
 Structural settings (symbol, capital, sizing, 2018 trade window, precision) live in the **public** `strategies/settings.json`; proprietary indicator calibrations live in the **gitignored** `strategies/calibrations.json` (shape shown in `calibrations.example.json`). The `SlapperConfig.trade_start` gate mirrors Pine's `in_date_range` so warmup uses earlier bars while reported trades match the TradingView window.
@@ -597,7 +659,7 @@ Existing published fixtures stay at older schema versions (no `ohlc_bars`, blank
 
 **Public signal delay (#1462).** The public tearsheets lag reality by **3 calendar days** ("backtested strategies running live — signals delayed 3 days") to protect strategy IP: on a single-asset long/flat strategy a current equity curve trivially leaks the live position. The mechanism is an **end-date shift, not redaction** — `generate_tearsheets.py --signal-delay-days N` truncates the OHLCV frame (`apply_signal_delay`, cutoff = newest cached bar minus N calendar days) *before* the backtest, so the entire tearsheet is generated as if run N days ago. Every artifact (equity curve, drawdown, trade log, open-position state, headline metrics, `period_end`) is self-consistent by construction; there is no per-field redaction logic to get wrong. The lag is declared honestly: the static JSON, the `index.json` entry, and the `strategy_tearsheets` metrics all carry `signal_delay_days`, and a payload note states the as-of date. `generated_at` stays the true generation timestamp (the delay is marketed openly, not hidden). Default is `0` (exact no-op) for internal/undelayed runs; the scheduled pipeline (`pipeline-digiquant-tearsheets.yml`) passes `--signal-delay-days 3`. Side effect: the `_PUBLISHED_BASELINE` drift warning compares exact trade counts, so a trade opened within the delay window can transiently warn — informational only. Tests: `tests/dq/test_tearsheet_signal_delay.py`.
 
-**digiquant.io consumption** — the landing page, strategy library (`/strategies`), and tearsheet views read **live from Supabase `strategy_tearsheets`** at runtime (#1069): the client fetches the row via the shared anon browser client (`cloudflare/digiquant-web/lib/live/`), so a fresh nightly upsert updates the site with **no rebuild or redeploy**. The static-JSON artifacts under `public/strategies/` were removed. Build-time still needs the *route list* (`generateStaticParams` in `app/strategies/[id]/page.tsx` hardcodes the three Slapper slugs **plus `btc_sdca`**); `dynamicParams: false` 404s any other id. Homepage `StrategySuite` lists the same four. Public names are **asset then type**: `btc_sdca` is **BTC-SDCA**; the Slapper books are **BTC L/S**, **ETH L/S**, **SOL L/S** (Slapper `enable_short` + net-short + BTC reversal flip — a long/short book, not RS). The library filters by public type (All / SDCA / L/S; RS is reserved on the enum). The Charts **Indicators** tab is SDCA-only (`showsIndicatorsTab` / public type `sdca`) — L/S P/L books never get that tab, even if a payload carried unused series. Public KPIs: total return, max drawdown, vs buy-and-hold (lump), MTM allocated. **vs-flat DCA is not a public comparable** (`flat_dca_mark_to_market` spends remaining cash equally each day and is fully deployed by the last bar; keep the number on the payload). Honesty (`beats_flat_dca_oos` false, backtest only, 3-day delay) lives in notes, not title chips. The primary chart is allocation + sized buy/sell fills, plus today's remaining-book signal. Operator go-live is `generate_tearsheets.py --strategy btc_sdca --signal-delay-days 3 --push-supabase` from a tree whose `settings.json` includes `btc_sdca` (real Nautilus backtest; no hand-inserted metrics). Nightly `pipeline-digiquant-tearsheets.yml` now stages `M2SL.csv` / `DTWEXBGS.csv` beside the Coinbase cache (#3453) so those composite weights are not silently dropped. The job still checks out `main` (#1626) — a family is unpublished until its settings entry is on main. Agents do not push.
+**digiquant.io consumption** — the landing page, strategy library (`/strategies`), and tearsheet views read **live from Supabase `strategy_tearsheets`** at runtime (#1069): the client fetches the row via the shared anon browser client (`apps/digiquant-web/lib/live/`), so a fresh nightly upsert updates the site with **no rebuild or redeploy**. The static-JSON artifacts under `public/strategies/` were removed. Build-time still needs the *route list* (`generateStaticParams` in `app/strategies/[id]/page.tsx` hardcodes the three Slapper slugs **plus `btc_sdca`**); `dynamicParams: false` 404s any other id. Homepage `StrategySuite` lists the same four. Public names are **asset then type**: `btc_sdca` is **BTC-SDCA**; the Slapper books are **BTC L/S**, **ETH L/S**, **SOL L/S** (Slapper `enable_short` + net-short + BTC reversal flip — a long/short book, not RS). The library filters by public type (All / SDCA / L/S; RS is reserved on the enum). The Charts **Indicators** tab is SDCA-only (`showsIndicatorsTab` / public type `sdca`) — L/S P/L books never get that tab, even if a payload carried unused series. Public KPIs: total return, max drawdown, vs buy-and-hold (lump), MTM allocated. **vs-flat DCA is not a public comparable** (`flat_dca_mark_to_market` spends remaining cash equally each day and is fully deployed by the last bar; keep the number on the payload). Honesty (`beats_flat_dca_oos` false, backtest only, 3-day delay) lives in notes, not title chips. The primary chart is allocation + sized buy/sell fills, plus today's remaining-book signal. Operator go-live is `generate_tearsheets.py --strategy btc_sdca --signal-delay-days 3 --push-supabase` from a tree whose `settings.json` includes `btc_sdca` (real Nautilus backtest; no hand-inserted metrics). Nightly `pipeline-digiquant-tearsheets.yml` now stages `M2SL.csv` / `DTWEXBGS.csv` beside the Coinbase cache (#3453) so those composite weights are not silently dropped. The job still checks out `main` (#1626) — a family is unpublished until its settings entry is on main. Agents do not push.
 
 Regenerate only when calibrations are available from **one** of:
 
@@ -1541,7 +1603,7 @@ OpenTelemetry instrumentation is set up via `setup_otel_fastapi(app, service_nam
 
 ### Dashboard digichat popup (#3422)
 
-The operator UI at `/dashboard/` (`cloudflare/dashboard`) mounts a Desk+ digichat
+The operator UI at `/dashboard/` (`apps/dashboard`) mounts a Desk+ digichat
 popup that iframes digichat `/embed` (digigraph backend → digillm). Grounding,
 web search, and model tiers are digichat tenant config (`DIGICHAT_EMBED_TENANTS`
 for `digiquant.io`), not digiquant HTTP. Plan gate: `glassbox_economics` (Desk+).
@@ -1882,7 +1944,7 @@ entry until that cutover. Prompt / structured-output walk for the same pass:
   `research_state_store` unwired (WP12.3 shadow pattern), so dual-write is inactive
   until callers inject the store; not yet an operator-authoritative document surface.
   Never `load_latest`; never parse prose into claims.
-  **Ticker evidence bundles (#2844 / WP11.1 + #2892 / WP11.2).** Immutable H5 base
+  **Ticker evidence bundles (#2844 / WP11.1 + #2892 / WP11.2).** Immutable analyst base
   `TickerEvidenceBundle` plus append-only `MissingFactRequest` /
   `EvidenceBundleAmendment` contracts in `research_retrieval/models.py`.
   Private migration `090_olympus_evidence_bundles.sql` (+ `091` base/request
@@ -1891,46 +1953,46 @@ entry until that cutover. Prompt / structured-output walk for the same pass:
   missing-fact request (zero unlinked amendments), public grants denied, no
   public view. Reuses WP12 UUID5 / `content_digest` / `TypedProvenance`
   conventions — does not invent a parallel hash scheme. WP11.2
-  (`research_retrieval/evidence_bundle.py`) builds one canonical H5 base per
+  (`research_retrieval/evidence_bundle.py`) builds one canonical analyst base per
   ticker (dedupe, temporal span, conflicts/missing fields) **before** the
-  provider call (`portfolio_common` / `h5_asset_analyst`), retains
-  `PhasePortfolioState.ticker_evidence_bundles` even when H5 fails, and cites
+  provider call (`portfolio_common` / `analyst`), retains
+  `PhasePortfolioState.ticker_evidence_bundles` even when analyst fails, and cites
   bundle/evidence IDs on newly materialized `ForecastTerms`. Default portfolio
   graph leaves `EvidenceBundleStore` unwired (same shadow pattern as
   `research_state_store`): typed in-run bundles always materialize; store
-  append runs only when a caller injects the store. `OLYMPUS_EVIDENCE_BUNDLE_WRITER=off`
+  append runs only when a caller injects the store. `DIGIQUANT_EVIDENCE_BUNDLE_WRITER=off`
   then skips that append while retaining the typed bundle. Not
   operator-durable yet — SQL IO adapter still later. WP11.3
-  (`research_retrieval/planner.py`) adds deterministic `H6Selection`
-  (reasons/features/budget) wired into `h6_deliberation`:
-  `OLYMPUS_H6_SELECTION_MODE=off|shadow|enforce` (default `shadow` records
-  selection beside full incumbent H6; `enforce` actuates low-value carry with
-  zero provider calls; planner failure falls back to full incumbent H6, never
+  (`research_retrieval/planner.py`) adds deterministic `DeliberationSelection`
+  (reasons/features/budget) wired into `deliberation`:
+  `DIGIQUANT_H6_SELECTION_MODE=off|shadow|enforce` (default `shadow` records
+  selection beside full incumbent deliberation; `enforce` actuates low-value carry with
+  zero provider calls; planner failure falls back to full incumbent deliberation, never
   an unrecorded skip). Materiality (`weight_pct`) is a selection feature only
-  — never injected into H6 prompts. Selected success still meets the two-round
-  floor. WP11.4 (`research_retrieval/h6_amendment.py`) constrains H6 to at most one
+  — never injected into deliberation prompts. Selected success still meets the two-round
+  floor. WP11.4 (`research_retrieval/deliberation_amendment.py`) constrains deliberation to at most one
   validated missing-fact supplement per base bundle: PM ``MissingFactProposal``
   (claim_id/question/source_kind/reason) → blinded ``query_research`` only (no
   generic ``live_search``) → append-only ``MissingFactRequest`` +
   ``EvidenceBundleAmendment`` with base ``content_hash`` unchanged; invalid,
   exhausted, or failed paths record ``evidence_amendment_outcome`` on
-  ``DeliberationSummary`` and continue on the H5 base. WP11.5
+  ``DeliberationSummary`` and continue on the analyst base. WP11.5
   (`EvidenceBundleStore.dump_snapshot` / `from_snapshot`, simulator
   `evidence_bundle_store` + `invoke_through_h5` / `invoke_portfolio_from_h6`,
   `tests/dq/research/test_pipeline_simulation.py::TestDurableH5H6LineageRoundTrip`)
-  proves H5 bases + H6 amendments survive store serialize/reload across the
-  H5→H6 checkpoint boundary with byte-equivalent lineage, two-round floor,
-  accepted/invalid amendment provenance, and no generic H6 ``live_search``.
+  proves analyst bases + deliberation amendments survive store serialize/reload across the
+  analyst→deliberation checkpoint boundary with byte-equivalent lineage, two-round floor,
+  accepted/invalid amendment provenance, and no generic deliberation ``live_search``.
   WP11 closes on develop when this lands.
   AttentionPlan shadow (#2616 Track B / WP13-class) records typed pre-provider
   decisions + stable `RefreshReasonCode`s via `digiquant.dashboard.attention_plan`
   (`plan_attention_shadow`) beside incumbent `resolve_edit_mode`. Modes are
   `off` \| `shadow` only (no enforce); `actuated` is always false. House
   ProfileConfig is the default pin; overlay pins fail closed when missing. The
-  planner cannot expand H4 roster/cap or carry H7/H8 authority fields.
+  planner cannot expand screener roster/cap or carry direction/sizing authority fields.
   **Research attention policy (#2918 / WP13.1).** Versioned YAML at
   `digiquant/config/research_policy.yaml` (override via
-  `OLYMPUS_RESEARCH_POLICY_PATH`) defines thresholds, session budgets, mode
+  `DIGIQUANT_RESEARCH_POLICY_PATH`) defines thresholds, session budgets, mode
   estimates, and exploration floor — not hard-coded in planner source.
   `research_retrieval/planner.py` exposes `AttentionFeatures`,
   `AttentionDecision`, `AttentionPlan`, `ResearchAttentionPolicy`,
@@ -1938,8 +2000,8 @@ entry until that cutover. Prompt / structured-output walk for the same pass:
   (`carry` \| `metric_patch` \| `section_patch` \| `challenge` \| `deep_refresh`)
   and rollout `off` \| `shadow` \| `enforce`. Identical state/policy/target set
   yields byte-identical plan + resource totals; exploration reservations survive
-  session budget trimming.   `h6_selection_to_attention_decision` bridges WP11.3
-  `H6Selection` without forking ID schemes. API-only in 13.1 — portfolio
+  session budget trimming.   `deliberation_selection_to_attention_decision` bridges WP11.3
+  `DeliberationSelection` without forking ID schemes. API-only in 13.1 — portfolio
   runtime wiring is WP13.4 (landed #2930); persistence is WP13.2; research pre-provider routing is
   WP13.3.
   **Attention persistence (#2922 / WP13.2).** Migration
@@ -1951,7 +2013,7 @@ entry until that cutover. Prompt / structured-output walk for the same pass:
   `recorded_at` as-of reads; `reconcile_plan` joins planned budgets to actual
   attempt usage and sets `complete=False` when telemetry is missing (rollback:
   disable writes/enforcement). Storage only until WP13.3+ callers opt in via
-  `OLYMPUS_RESEARCH_ATTENTION_MODE`.
+  `DIGIQUANT_RESEARCH_ATTENTION_MODE`.
   **research attention routing (#2926 / WP13.3).** After triage,
   `research/research_attention.py` calls `plan_research_attention`, persists reasons
   to `AttentionStore`, and stores the plan on `ResearchState.research_attention_plan`.
@@ -1959,45 +2021,48 @@ entry until that cutover. Prompt / structured-output walk for the same pass:
   the plan before `build_grounding` when mode is `shadow`/`enforce`. `enforce` actuates
   `carry`/`metric_patch` as zero-call paths (deterministic structured patch); `shadow`
   records decisions while the incumbent edit path still runs. Rollback: `off`/`shadow`.
-  Env: `OLYMPUS_RESEARCH_ATTENTION_MODE=off|shadow|enforce` (default `shadow`).
-  **portfolio attention routing (#2930 / WP13.4).** After H4 fixes the focus roster,
+  Env: `DIGIQUANT_RESEARCH_ATTENTION_MODE=off|shadow|enforce` (default `shadow`).
+  **portfolio attention routing (#2930 / WP13.4).** After screener fixes the focus roster,
   `portfolio/research_attention.py` plans per-ticker attention over that roster only
   (cannot add/remove/reorder/expand or consume exploration). Stores
   `ResearchState.portfolio_research_attention_plan` and persists to the shared
-  `AttentionStore`. H5 branches on enforced `carry`/`metric_patch`/`full` before
-  provider work; H6 re-routes with post-H5 features (`challenge` vs `carry`).
-  H4 roster/exclusions are byte-identical across `off`/`shadow`/`enforce`.
-  Rollback: `off`/`shadow` restores incumbent H5/H6 paths.
+  `AttentionStore`. analyst branches on enforced `carry`/`metric_patch`/`full` before
+  provider work; deliberation re-routes with post-analyst features (`challenge` vs `carry`).
+  screener roster/exclusions are byte-identical across `off`/`shadow`/`enforce`.
+  Rollback: `off`/`shadow` restores incumbent analyst/deliberation paths.
   **Attention shadow evaluation (#2934 / WP13.5).** File-only CLI
   `digiquant/scripts/research/evaluate_research_policy_shadow.py` joins `AttentionStore`
   plans/decisions to exact WP1 `provider_attempt_id` usage and per-target
-  downstream outcomes (carries, amendments, forecast, H7, exploration) via
+  downstream outcomes (carries, amendments, forecast, direction, exploration) via
   `research_retrieval/shadow_evaluation.py`. Missing telemetry or downstream
   linkage sets `complete=False`; eligible shadow runs require 100%
   decision-attempt reconciliation before enforcement. Rollback: shadow-only —
   no `enforce` activation.
   **Role context compiler (#2938 / WP14.1).** `research_retrieval/context.py`
   defines frozen `ContextCapsule`, `ContextItem`, `ContextManifest`, and per-role
-  allowlists (`h5_analyst`, `h6_deliberation`, `h7_pm`). `compile_context_capsule`
+  allowlists (`analyst`, `deliberation`, `direction`). `compile_context_capsule`
   / `compile_context_manifest` compile bounded structured JSONL bodies from one
   exact pinned `ResearchStateVersion` plus optional bundle/amendment/attention
   artifacts. Deterministic sort/hash, byte/token budgets, typed omission reasons,
   and reject unpinned bundle/state mismatches at compile time. Models + compiler
-  only — H5/H6/H7 provider wiring is WP14.2–14.4; drill-down manifest pinning is
-  WP14.4. **WP14.2 (#2942)** wires H5/H6 via
-  `research_retrieval/context_wiring.py` (`OLYMPUS_CONTEXT_COMPILER_MODE`
-  `off|shadow|enforce`): shadow records compiled capsule/manifest beside incumbent
-  `phase_inputs`; enforce strips portfolio/PM keys and injects `structured_context`
+  only — analyst/deliberation/direction provider wiring is WP14.2–14.4; drill-down manifest pinning is
+  WP14.4. **WP14.2 (#2942)** wires analyst/deliberation via
+  `research_retrieval/context_wiring.py` (`DIGIQUANT_CONTEXT_COMPILER_MODE`
+  `off|shadow|enforce`): shadow compiles the capsule/manifest and returns them on
+  `RoleContextWireResult` (since #4609 it no longer re-serializes the shadow
+  blobs into the uncached `phase_inputs` by default — set
+  `DIGIQUANT_CONTEXT_SHADOW_IN_PROMPT=1` to restore the old in-prompt blobs);
+  enforce strips portfolio/PM keys and injects `structured_context`
   with manifest linkage fields for WP1 telemetry. Prompt guards live in
-  `research_retrieval/blinding.py` (`assert_blinded_h5_prompt` /
-  `assert_blinded_h6_prompt`). **WP14.3 (#2946)** wires H7 via the same mode knob:
-  `h7_decision_context.py` compiles typed sections (mandate, calibration,
+  `research_retrieval/blinding.py` (`assert_blinded_analyst_prompt` /
+  `assert_blinded_deliberation_prompt`). **WP14.3 (#2946)** wires direction via the same mode knob:
+  `direction_decision_context.py` compiles typed sections (mandate, calibration,
   contribution/cost, pre-trade risk, prior authorization, unresolved/matured
-  forecasts) from pinned research state plus `h7_prerequisite_snapshot` (preflight);
-  `wire_h7_phase_inputs` records shadow beside incumbent PM inputs or enforces
-  `structured_context` without target weights; H7 output schema unchanged.
+  forecasts) from pinned research state plus `direction_prerequisite_snapshot` (preflight);
+  `wire_direction_phase_inputs` records shadow beside incumbent PM inputs or enforces
+  `structured_context` without target weights; direction output schema unchanged.
   **WP14.4 (#2950)** pins drill-down retrieval to compiled manifests via
-  `OLYMPUS_RETRIEVAL_MANIFEST_MODE` (`off|shadow|enforce`, default `shadow`):
+  `DIGIQUANT_RETRIEVAL_MANIFEST_MODE` (`off|shadow|enforce`, default `shadow`):
   `build_retrieval_query_pin` binds document access to pinned state legacy refs;
   `build_research_tool_dispatcher` rejects un-pinned calls and latest-date
   fallbacks in enforce; `RoleRetrievalManifestStore` persists pre-call manifests and
@@ -2009,7 +2074,7 @@ entry until that cutover. Prompt / structured-output walk for the same pass:
   decision → execution → realized outcome → learning eligibility without persistence.
   UTC temporal contract (`OutcomeTemporalContract`), UUID5 version IDs, SHA-256 content
   hashes, and disposition-aware validation: excluded/no-op/rejected forbid fabricated
-  H9 links or realized returns; authorized requires them; unavailable attribution and
+  commit links or realized returns; authorized requires them; unavailable attribution and
   ineligible components require typed reasons; causal sizing/timing P&L requires
   `counterfactual_replay` with `replay_artifact_id`. Legacy `beliefs_distillation` prose
   remains non-authoritative. **Outcome-learning store (#2959 / WP15.2).** Private append-only
@@ -2041,8 +2106,8 @@ entry until that cutover. Prompt / structured-output walk for the same pass:
   order: pinned `knowledge_cutoff_at` → `OutcomeEpisodeAssembler.assemble_pass` +
   `ComponentAttributor.attribute_and_persist` for prior-run matured forecasts →
   `LessonCompiler.compile_and_persist` / `OutcomeLearningStore.select_lesson_as_of` →
-  `outcome_lesson_pin` on `ResearchState` and `H7PrerequisiteSnapshot.outcome_lesson_*`
-  for WP14 H5/H7 context. Structured `outcome_lesson:{id}` replaces `decision_log` prose in
+  `outcome_lesson_pin` on `ResearchState` and `DirectionPrerequisiteSnapshot.outcome_lesson_*`
+  for WP14 analyst/direction context. Structured `outcome_lesson:{id}` replaces `decision_log` prose in
   prior-authorization sections when pinned; consuming-run episodes are excluded. Unwired
   `outcome_maturation_deps` → typed `store_unavailable` (legacy paths continue).
   pin one timezone-aware UTC `ResearchState.knowledge_cutoff_at` before
@@ -2054,30 +2119,48 @@ entry until that cutover. Prompt / structured-output walk for the same pass:
   models in `portfolio/models/forecast.py` (`ForecastTerms`, `ForecastAssessment`,
   `ForecastAmendment`, `EffectiveForecast`, `PriceAnchor`) separate scenario economics
   from UUID5 identity / content hash. Optional `AnalystPayload.forecast` may carry terms;
-  legacy `conviction_score` / `price_targets` never synthesize them. H5 full/edit
+  legacy `conviction_score` / `price_targets` never synthesize them. analyst full/edit
   materializes an immutable `ForecastAssessment` via
   `portfolio/phases/portfolio_common.py` (`materialize_forecast_assessment`,
   serializer includes assessment; legacy priors without typed forecast force
-  full; skip preserves identity; partial nested forecast edits are rejected).
-  H6 appends optional evidence-linked `ForecastAmendment` without rewriting the base;
+  full; skip preserves identity; partial nested forecast edits are rejected, and a
+  stance edit on an evidence-bearing prior must re-itemize `/body/evidence` in the
+  same patch, because `conviction_score` is derived from those counts and would
+  otherwise be re-derived from the prior call's counts (#4583). Those counts are
+  itemized against the analyst's **own call** (its `stance`), not against the market
+  thesis the vehicle is mapped to: an analyst may disagree with the thesis it carries,
+  and the families contradicting that thesis then confirm the call.
+  **Five-family evidence sum (#4585).** Both counts are drawn from one five-family
+  universe — technicals, fundamentals, flows/positioning, macro regime, sentiment/news —
+  and each family is itemized once, on the confirming or the contradicting side.
+  `EvidenceAssessment` enforces `independent_confirming_signals + contradicting_signals
+  <= 5` with a cross-field `model_validator` that **rejects** an overcount (the pre-fix
+  schema bounded each field at `le=5` independently, so `analyst/IBIT` 2026-09-22 stored
+  `4 + 4` — eight families over five). A **persisted/prior** body that violates the sum is
+  repaired on read by `repair_legacy_evidence_counts` (skip/carry, metric-patch, and
+  edit-fallback paths): it preserves the net `confirming - contradicting` — so the derived
+  `conviction_score` is unchanged — while reducing the pair to fit (`4+4 -> 2+2`,
+  `5+2 -> 4+1`, `2+5 -> 1+4`). Fresh LLM output is validated strictly, so an impossible
+  generation is caught and retried rather than silently rewritten.
+  deliberation appends optional evidence-linked `ForecastAmendment` without rewriting the base;
   LLM envelopes that nest economics under `terms` (SLV/IAU in house GHA 33426508863)
   unwrap before validate, and missing `horizon_sessions` / `half_life_sessions` copy
-  from the H5 base tenor (GLD in the same run). Scenario economics are never filled
+  from the analyst base tenor (GLD in the same run). Scenario economics are never filled
   from the base; invalid probability sums still reject.
-  Out-of-range H6 `conviction_delta` (live `-3` on `DeliberationAnalystTurn`) clamps
+  Out-of-range deliberation `conviction_delta` (live `-3` on `DeliberationAnalystTurn`) clamps
   to `[-2, 2]` at the model boundary so the debate is kept.
   `resolve_effective_forecast` selects base or accepted amendment (invalid/failed
   amendments and post-cutoff known_at preserve base). Fingerprint skip and slim prior
   carry retain effective identity/time/hash **and** the accepted `forecast_amendment`
-  dump (`supabase_io._slim_deliberation_summary`, deliberation payloads) so H9 can
-  re-persist after registry fail-soft (#2790). **H7 forecast-reference-only (#2660 / WP4.5):** after the
+  dump (`supabase_io._slim_deliberation_summary`, deliberation payloads) so commit can
+  re-persist after registry fail-soft (#2790). **direction forecast-reference-only (#2660 / WP4.5):** after the
   PM LLM (or fail-soft prior-memo carry), `bind_forecast_references` attaches one
-  typed `ForecastReference` per `TickerDirection` from current H6 lineage IDs
+  typed `ForecastReference` per `TickerDirection` from current deliberation lineage IDs
   (`effective_forecast_id` / nested `effective_forecast`) — identity only, never
   terms/weights; missing lineage is an explicit degraded reference (null IDs +
   `degradation_reason`, no fabricated UUIDs); fail-soft rebinds from the current
-  map and cannot retain prior refs. H8 still reads direction/rank only.
-  **H9 forecast registry (#2663 / WP4.6):** after portfolio booking, H9 fail-soft
+  map and cannot retain prior refs. sizing still reads direction/rank only.
+  **commit forecast registry (#2663 / WP4.6):** after portfolio booking, commit fail-soft
   appends prospective `olympus_forecast_assessments` / `olympus_forecast_amendments`
   via `research/forecast_registry.py` (exact retry / content conflict; exact-ID cutoff
   reads). Registry failure keeps the one committed book and cannot rebook; status
@@ -2099,14 +2182,26 @@ entry until that cutover. Prompt / structured-output walk for the same pass:
   zero-mean prior (`PRIOR_DEFINITION` / `METHOD_VERSION`), reports Brier/log scores via
   Polars aggregation, and emits observational `CalibratedForecast` subjects with
   non-zero uncertainty and sample-bounded reliability. **Shadow persistence (#2684 /
-  WP5.4):** `attach_shadow_calibrations*` runs at the existing H6→H7 boundary (no new
+  WP5.4):** `attach_shadow_calibrations*` runs at the existing deliberation→direction boundary (no new
   node); cutoff-bounded outcomes via `list_resolved_outcomes_as_of`; typed state slots
-  `phase_portfolio.forecast_calibrations` / `calibrated_forecasts`; H9 fail-soft appends
-  via `forecast_registry.persist_shadow_calibrations` after booking. H8 remains
+  `phase_portfolio.forecast_calibrations` / `calibrated_forecasts`; commit fail-soft appends
+  via `forecast_registry.persist_shadow_calibrations` after booking. sizing remains
   untouched. **WP5 Gate-2 follow-up (#2797):** outcomes stamp `horizon_sessions`;
   cohort attach filters residuals to the subject horizon; migration 087 adds
   `UNIQUE (effective_forecast_id, maturity_session)` and refuses wall-clock
-  `as_of` when knowledge cutoff is missing.
+  `as_of` when knowledge cutoff is missing. **Canonical outcome hashing + repair
+  (#4298):** `ForecastOutcome` hashes return fractions at fixed 8dp
+  (`canonical_return_fraction`, shared `forecast_outcome_hash_payload` between
+  writer and validator) so Postgres `numeric` trailing-zero loss cannot change the
+  digest; `list_resolved_outcomes_as_of` fails loud with
+  `ForecastOutcomeIntegrityError` rather than silently skipping a stale row, and
+  `scripts/research/repair_forecast_outcome_hashes.py` rewrites stale
+  `content_hash`/`outcome_id` (privileged direct PG; append-only trigger disabled
+  within one transaction). That rewrite changes `outcome_id` (its UUID5 input), so
+  any `olympus_forecast_calibrations.outcome_ids` entries citing the pre-repair
+  UUID are left stale: the array is not a foreign key and no runtime path joins on
+  it, so this does not break a run, but it is a documented lineage-only decision
+  (see the repair script docstring) rather than a live reference.
   **Risk policy contracts (#2692 / WP6.2, #2803):** frozen models in
   `portfolio/models/risk_policy.py` (`RiskPolicy`, `CovarianceSnapshot`, provenance
   leaves, explicit Phase 1 unavailable factor/stress/tail capabilities) plus pure
@@ -2115,13 +2210,13 @@ entry until that cutover. Prompt / structured-output walk for the same pass:
   correlation snapshot (63-day Pearson). Incomplete Pearson pairs fail closed as
   ``unavailable`` (structural identity placeholder only; ``unavailable_reason`` is
   hashed so distinct failures cannot share ``snapshot_id``). Bridge helpers derive
-  `SizingCaps` / `BreakerConfig` for parity tests only — production H8 still calls
+  `SizingCaps` / `BreakerConfig` for parity tests only — production sizing still calls
   `size_portfolio` directly in Phase 1.
-  **Risk snapshot persistence (#2698 / WP6.3, #2803):** `portfolio/h8_risk_snapshots.resolve_h8_risk_artifacts`
-  runs at the existing H8 entry before incumbent sizing and always returns typed
+  **Risk snapshot persistence (#2698 / WP6.3, #2803):** `portfolio/sizing_risk_snapshots.resolve_sizing_risk_artifacts`
+  runs at the existing sizing entry before incumbent sizing and always returns typed
   artifacts (resolver exceptions become visible ``unavailable`` dumps); typed state
-  slots `phase_portfolio.risk_policy` / `covariance_snapshot`; H9 fail-soft appends via
-  `risk_policy_registry.persist_h8_risk_snapshots_from_state` after booking (manifest
+  slots `phase_portfolio.risk_policy` / `covariance_snapshot`; commit fail-soft appends via
+  `risk_policy_registry.persist_sizing_risk_snapshots_from_state` after booking (manifest
   `schema_version` 1.4). Never feeds resolved objects into `size_portfolio` in Phase 1.
   **Action cost input binding (#2700 / WP7.1):** adapters in
   `portfolio/action_cost_inputs.py` translate authoritative Phase 0 ledger rows
@@ -2129,7 +2224,7 @@ entry until that cutover. Prompt / structured-output walk for the same pass:
   accounting `PeriodFill` into frozen `ActionCostInput` / `RealizedCostInput`
   without inferring notional from NAV/weights. Currency is caller-supplied (Phase 0
   rows carry no currency column); missing fee/slippage on pre-070 executions raises
-  `ActionCostBindingError` rather than defaulting to zero. H9 / preflight resolve
+  `ActionCostBindingError` rather than defaulting to zero. commit / preflight resolve
   currency only via explicit `config.preferences.investor_currency` (or `currency`)
   — never silently invent `USD` (#2808); missing currency fail-softs as
   `currency_missing`.
@@ -2140,26 +2235,26 @@ entry until that cutover. Prompt / structured-output walk for the same pass:
   and `ActionCostOutcome`. Spread uses labeled high-low range fractions (not quotes);
   missing economics map to `unpriceable`/`degraded` with explicit reasons — never
   zero-by-omission. Phase 1 observational only — estimates do not feed turnover.
-  **Cost/liquidity persistence (#2709 / WP7.3):** after H9 mints `order_intent_id`,
-  `portfolio/h9_cost_evidence.py` builds bundles and
+  **Cost/liquidity persistence (#2709 / WP7.3):** after commit mints `order_intent_id`,
+  `portfolio/commit_cost_evidence.py` builds bundles and
   `research/cost_liquidity_registry.py` append-writes to migration `082` tables
   (fail-soft after booking). `preflight_reflect` resolves `ActionCostOutcome` when
   paper executions arrive; typed state slots `liquidity_snapshots` and
   `action_cost_estimates` on `PhasePortfolioState`.
-  **H8 allocation input contracts (#2727 / WP8.2 + #2730 / WP8.3 + #2734 / WP8.4 +
+  **sizing allocation input contracts (#2727 / WP8.2 + #2730 / WP8.3 + #2734 / WP8.4 +
   #2738 / WP8.5):** frozen
   `AllocationInputBundle` models in `portfolio/allocation_contracts.py` with SHA-256
   helpers in `portfolio/allocation_hashes.py`. `portfolio/allocation_inputs.py` assembles
-  one validated bundle at H8 entry from H7 mandate + exact Phase 1 forecast /
+  one validated bundle at sizing entry from direction mandate + exact Phase 1 forecast /
   policy / covariance / cost versions + prior weights; typed state slot
   `phase_portfolio.allocation_input_bundle`. WP8.4 cutover: when
-  `h8_sizing_input_mode=calibrated` (default) and the bundle yields at least one
+  `sizing_input_mode=calibrated` (default) and the bundle yields at least one
   AVAILABLE positive-alpha score, incumbent `size_portfolio` raw weights use
   `reliability × max(0, μ) / σ_ε` — rank→conviction and fixed-premium Kelly are
   absent from that path. Missing/empty coverage falls back to characterized
-  incumbent (`incumbent_fallback`); set `h8_sizing_input_mode=incumbent` to force
+  incumbent (`incumbent_fallback`); set `sizing_input_mode=incumbent` to force
   the legacy path. Every sized book stamps `allocation_input_bundle_hash` +
-  `h8_sizing_input_mode`. H8 then scales each long by H7 `confidence` (cash-first;
+  `sizing_input_mode`. sizing then scales each long by direction `confidence` (cash-first;
   missing → 0.5). Downstream caps/corr/vol/breaker/grid/continuity stay in the
   same order; confidence is a reduce-only haircut after vol-target so leftover
   cash is not redistributed. WP8.5 locks that shell in
@@ -2177,26 +2272,26 @@ entry until that cutover. Prompt / structured-output walk for the same pass:
   compute variance/MRC/CRC (CRC reconciles to σ_p), concentration/effective bets,
   turnover, and cost/liquidity from the exact WP6 correlation snapshot +
   caller-supplied annualized vols and WP7 observational scalars — never
-  re-estimating covariance/cost or fabricating factor/scenario values. H8
+  re-estimating covariance/cost or fabricating factor/scenario values. sizing
   (`phase7e_risk_sizing`) attaches `phase_portfolio.pre_trade_risk_report` after the
   final control shell only; `final_book_weights_fingerprint` must equal the final
   sized-book fingerprint. Typed report failure omits the report without changing
-  the book. H9 (`commit_run`) validates attached report hashes under
-  `OLYMPUS_PRETRADE_RISK_MODE` (`off`|`shadow`|`enforce`; default `shadow`) and
+  the book. commit (`commit_run`) validates attached report hashes under
+  `DIGIQUANT_PRETRADE_RISK_MODE` (`off`|`shadow`|`enforce`; default `shadow`) and
   append-only persists to `olympus_pretrade_risk_reports` (migration `083`) via
   `research/pretrade_risk_registry.py` + `commit_io.validate_pretrade_risk_report` /
   `persist_validated_pretrade_risk_report` (#2754 / WP9.4). Enforce fails closed
   on missing/unknown/fingerprint or bundle-hash mismatch before booking; exact
-  retry skips; H9 never imports report builders. Manifest schema 1.6 carries
+  retry skips; commit never imports report builders. Manifest schema 1.6 carries
   `pretrade_risk_report_id` / `pretrade_risk_report_hash` + write counts.
   **Shadow allocation artifact (#2758 / WP10.1):** frozen
   `ShadowAllocationArtifact` in `portfolio/shadow_artifact.py` binds the exact
   `AllocationInputBundle`, incumbent final book, `PreTradeRiskReport`, and
-  minimal H9 commit metadata under one SHA-256 `artifact_content_hash`. Chain
+  minimal commit metadata under one SHA-256 `artifact_content_hash`. Chain
   exports canonical JSON atomically (temp + replace) after portfolio when
-  `OLYMPUS_SHADOW_ARTIFACT_MODE=export` (default) into
-  `OLYMPUS_SHADOW_ARTIFACT_DIR` (default `artifacts/`). Fail-soft — export
-  failure never reruns or mutates H8/H9. No challenger optimizer, replay, or
+  `DIGIQUANT_SHADOW_ARTIFACT_MODE=export` (default) into
+  `DIGIQUANT_SHADOW_ARTIFACT_DIR` (default `artifacts/`). Fail-soft — export
+  failure never reruns or mutates sizing/commit. No challenger optimizer, replay, or
   broker imports on the production path; `pipeline-digiquant.yml` uploads
   `shadow-allocation-*.json` with run artifacts for WP10.2+ isolation.
   **Write-denied shadow workflow (#2762 / WP10.2):**
@@ -2205,19 +2300,19 @@ entry until that cutover. Prompt / structured-output walk for the same pass:
   artifact-in / file-out isolation (no `secrets: inherit`, no production
   credentials, read-only permissions, trusted producer workflow/branch,
   schema/hash gates). Disable the shadow workflow to roll back without
-  touching production H8/H9.
+  touching production sizing/commit.
   **Solver-free robust challenger (#2770 / WP10.3):**
   `portfolio/shadow_optimizer.py` — deterministic coordinate-search on the robust
   objective (uncertainty + covariance risk + linear cost + L1 turnover) under
   shared feasibility (caps/grid/authorization). Shadow-only; never wired into
-  production H8/H9; no SciPy/CVXPY; abstains on incomplete/invalid inputs.
+  production sizing/commit; no SciPy/CVXPY; abstains on incomplete/invalid inputs.
   **Shared-cash Nautilus portfolio replay (#2784 / WP10.4):**
   `dashboard/replay/` — one `BacktestEngine`, one cash account, all instruments,
   global event ordering, next-bar target deltas, and real engine fills/costs.
   Parent API `run_portfolio_replay_isolated` spawns a fresh worker with JSON
   I/O; crash/timeout → typed inconclusive (never a fabricated book). Must not
   call `nautilus_runner._run_multi_symbol_backtest`. Shadow/challenger only —
-  production H8/H9 must not import `dashboard.replay`.
+  production sizing/commit must not import `dashboard.replay`.
   **Schedule replay, schema 2.0 (#3695):** `models.py` adds
   `ScheduledTargetWeights(effective_date, weights)` + optional
   `PortfolioReplayRequest.weight_schedule` (requires `schema_version="2.0"`,
@@ -2235,10 +2330,10 @@ entry until that cutover. Prompt / structured-output walk for the same pass:
    **Single source of truth (#3695, hardened #3803/#3804):** the engine is the last writer of
    `nav_history` under normal ordering via `verify_nav_replay.py --write`
    (inception-100 normalization; `pipeline-research-metrics.yml` runs it before
-   metrics). The booking path (`portfolio_materialize.py`, H9
+   metrics). The booking path (`portfolio_materialize.py`, commit
    `commit_io.book_portfolio`) still writes provisional house rows at book time,
    but an existing row for the same `(workspace_id, date)` now keeps the stored
-   NAV (refreshing only H9-owned `cash_pct`/`invested_pct`) — a book re-dispatch
+   NAV (refreshing only commit-owned `cash_pct`/`invested_pct`) — a book re-dispatch
     after the engine step keeps the engine NAV instead of clobbering it (#3804). Fetches
     seek by keyset over a deterministic `(date, ticker)` order (never offsets), sized
     under the PostgREST `max_rows` cap (a full page means "more", only a short page
@@ -2251,6 +2346,13 @@ entry until that cutover. Prompt / structured-output walk for the same pass:
     are refused before any widening (#3994). A read-only
    `verify_nav_replay` (no `--write`) step runs after metrics so drift fails
    loudly.
+   **Bookless mark-to-market (#3439):** the scheduled engine step passes
+   `--mark-through <today UTC>`, which extends the replay grid past the last
+   committed book through today. The last book's positions are held (no schedule
+   entry, no fabricated rebalance) and marked at each intervening close, so a
+   failed house run no longer leaves the NAV/PnL series flat. Only the grid is
+   extended — `positions` is never written — so the missing-book signal and the
+   metrics step's exit-3 stale-book alarm are preserved.
   `refresh_performance_metrics.refresh_nav_point` only guards the engine row;
   `pnl_pct` reads the stored engine series (finalized-accounting precedence
   retired — it caused the Sept 2026 scale break); `update_tearsheet.py` no
@@ -2264,7 +2366,7 @@ entry until that cutover. Prompt / structured-output walk for the same pass:
   emits absolute + paired metrics with explicit unavailable/inconclusive leaves;
   hard-constraint breaches stay visible even when challenger return is stronger;
   atomic file-only report output. No auto-promotion, production config write, or
-  H8/H9 wiring.
+  sizing/commit wiring.
   **Policy replay manifests (#2979 / WP16.1):** `dashboard/replay/models.py` adds
   `PolicyVersionRef`, `PolicyBundle`, `SharedInputIdentity`, `WalkForwardFold`,
   `ReplayInputManifest`, `ReplayArmSpec`, and `ReplayPairSpec` — strict frozen
@@ -2289,7 +2391,7 @@ entry until that cutover. Prompt / structured-output walk for the same pass:
   only allowlisted registered policies (`research_plan`, `portfolio_target`,
   `observed_shadow` plus infrastructure refs). All reads filter
   `known_at <= replay_as_of`; missing/unregistered/incomplete state fails closed;
-  unavailable research output is typed — never fabricate H5/H6 counterfactuals.
+  unavailable research output is typed — never fabricate analyst/deliberation counterfactuals.
   Later source mutations cannot change a historical manifest at the same cutoff.
   No network/provider calls. Offline only.
   **Policy portfolio replay (#2991 / WP16.4):** `dashboard/replay/policy_portfolio.py`
@@ -2376,19 +2478,19 @@ entry until that cutover. Prompt / structured-output walk for the same pass:
   activation remains external.
   **Phase 2 lock surface (#2820 / Integration 2.1):**
   `tests/dq/portfolio/test_phase2_allocation_contracts.py` (+
-  `phase2_e2e_fixtures.py`) pins Gate 2 composition across WP8–WP10 — H7/H8/H9
+  `phase2_e2e_fixtures.py`) pins Gate 2 composition across WP8–WP10 — direction/sizing/commit
   ownership, rank-gap independence of calibrated magnitude, final-book report
-  bind, H9 hash validation without report rebuild, byte-stable shadow artifacts,
+  bind, commit hash validation without report rebuild, byte-stable shadow artifacts,
   production import fence vs challenger/replay, write-denied isolation checker,
   and hard-failure visibility on shared-cash replay. Challenger selection and
   live trading remain disabled.
   **Phase 3 lock surface (#3019 / Integration 3.1):**
   `tests/dq/portfolio/test_phase3_research_contracts.py` (+
   `phase3_e2e_fixtures.py`, extended `tests/dq/research/test_pipeline_simulation.py`)
-  pins Gate 3 composition across WP11–WP14 — one A0–A4/H1–H9 graph with no
-  planner node/service, H4 roster preservation under shadow attention routing,
-  immutable H5 bundles + H6 amendments (no broad live search), H6 two-round floor
-  + carry/failure provenance, blinded deterministic H5/H6/H7 contexts from one
+  pins Gate 3 composition across WP11–WP14 — one A0–A4/thesis–commit graph with no
+  planner node/service, screener roster preservation under shadow attention routing,
+  immutable analyst bundles + deliberation amendments (no broad live search), deliberation two-round floor
+  + carry/failure provenance, blinded deterministic analyst/deliberation/direction contexts from one
   pinned research-state version, byte-identical exact-version replay and evidence
   bundle serialize/reload, and pre-call manifest → WP1 token reconciliation.
   Rollout stays `off`/`shadow` only — no runtime policy promotion or second graph.
@@ -2397,14 +2499,14 @@ entry until that cutover. Prompt / structured-output walk for the same pass:
   refresh-reason labels + read-only profile pin. Daily wiring:
   `attention_plan_graph.maybe_publish_attention_plan_shadow` runs inside research
   `publish_phase` (fail-soft) when triage decisions exist and
-  `OLYMPUS_PLANNER_MODE=shadow` (default; `off` skips). Migrations `077` (doc_type)
+  `DIGIQUANT_PLANNER_MODE=shadow` (default; `off` skips). Migrations `077` (doc_type)
   and `078` (category `planner`) register allow-list values. UI must not invent
   rows without a published document.
   Inspectable I/O (pipeline operator review WP-B): `publish_phase` also fail-soft
   publishes `document_key='inputs'` (watchlist, hashed profile identity, market-data
   freshness, prior-context dates, attention-plan pointer) and `document_key='bias-row'`
-  (deterministic `phase6_bias_row` table) via `dashboard.research.inspectable_io`. portfolio H1
-  publishes `thesis/thesis-review`; H4 publishes `opportunity-screener` (`doc_type`
+  (deterministic `phase6_bias_row` table) via `dashboard.research.inspectable_io`. portfolio thesis
+  publishes `thesis/thesis-review`; screener publishes `opportunity-screener` (`doc_type`
   `opportunity_screen`). Overlay uses `portfolio_document_key` for portfolio keys; research
   inspectable keys stay unprefixed with `workspace_id` on the row.
   Per-artifact `resolve_edit_mode` (`skip` \| `edit` \| `full`) controls LLM spend;
@@ -2440,7 +2542,7 @@ entry until that cutover. Prompt / structured-output walk for the same pass:
   * `PriorPublished.content_date` (`None` when the row carries no marker) feeds
     `resolve_edit_mode`, which measures `gap_days` from the content date. Before this, a
     no-op republish wrote a fresh `documents` row and `prior.date` followed it, so the gap was
-    1 on every run of a frozen chain and §5.3.2's `OLYMPUS_STALE_FULL_DAYS` hard cap could
+    1 on every run of a frozen chain and §5.3.2's `DIGIQUANT_STALE_FULL_DAYS` hard cap could
     never fire — `alt-politician-signals` published five rows carrying one body across seven
     days at `gap_days=1` each. **This is not the verbatim guard §5.3.1 rejects** (ADR-0019 Q1,
     *won't do*): the trigger is still purely elapsed days, only its input is corrected. The
@@ -2453,7 +2555,7 @@ entry until that cutover. Prompt / structured-output walk for the same pass:
   * `research.telemetry.content_freeze_breakdown` projects `state.content_freezes` into
     `breakdown` as a non-gating `content_freeze` key. `segments_ok` is deliberately
     **unchanged** — it counts segments that produced a row today, which stays true of a frozen
-    one, and it is read by `atlas_run_health` (041), `run-episodes.ts` and three frontend
+    one, and it is read by `run_health` (041), `run-episodes.ts` and three frontend
     components.
 
   Scoped to segments. The digest's equivalent freeze was fixed by #1559's
@@ -2462,7 +2564,7 @@ entry until that cutover. Prompt / structured-output walk for the same pass:
   optional `sources` / `internal_bias` / `regime_label`; `extra="allow"` for
   historical metric slots). The daily digest is a stitched markdown briefing
   (`DigestSnapshot`: `date`, `body`, `regime_label`; `extra="allow"` for
-  historical bias/headline/summary slots). H1/H2 read
+  historical bias/headline/summary slots). thesis/market read
   `digest_briefing_for_portfolio` (`date` / `body` / `regime_label` only).
   `ResearchMemo` and `SegmentReport` both run `_apply_literal_axis_normalization`:
   an unrecognized value degrades to `None` on an Optional axis and is still
@@ -2473,22 +2575,22 @@ entry until that cutover. Prompt / structured-output walk for the same pass:
   33426508863 `cautious` → `neutral`); unknown `internal_bias` degrades to
   `None`, unknown required `bias` stays rejected.
 - **portfolio** (`digiquant/src/digiquant/portfolio/`) — thesis-aware portfolio loop.
-  **H1–H9:** market thesis review → exploration → vehicle map → opportunity screener →
-  coverage director (H4.5) → unified asset analyst (×N) → PM↔analyst deliberation (×N) →
-  PM direction memo → deterministic risk sizing (H8 / legacy 7E) → `commit_run` terminal booking.
+  **thesis–commit:** market thesis review → exploration → vehicle map → opportunity screener →
+  coverage director (screener.5) → unified asset analyst (×N) → PM↔analyst deliberation (×N) →
+  PM direction memo → deterministic risk sizing (sizing / legacy 7E) → `commit_run` terminal booking.
   Split from research in epic #471 per [ADR-0015](../docs/adr/0015-research-vs-portfolio.md);
   topology canonical in [ADR-0020](../docs/adr/0020-dashboard-mvp-daily-delta.md).
-  **H4 is the sole fan-out cap chokepoint** — `roster_cap.capped_tickers` bounds the
-  H5/H6 roster width to `max(DIGIQUANT_MAX_ANALYSTS, len(prior_book))`; the prior book is
+  **screener is the sole fan-out cap chokepoint** — `roster_cap.capped_tickers` bounds the
+  analyst/deliberation roster width to `max(DIGIQUANT_MAX_ANALYSTS, len(prior_book))`; the prior book is
   the only sanctioned overshoot (#936) and thesis vehicles are prioritised within the
-  cap rather than exempt from it (#1767). The `build_h5_asset_analyst` /
-  `build_h6_deliberation` compile-time builders also call it, but are test-only —
-  `graph.py` wires the runtime `build_h5_from_state` / `build_h6_from_state` fan-outs.
-  Roster width lands in `atlas_run_diagnostics.breakdown` via
-  `portfolio/roster_diagnostics.roster_breakdown`. H4.5 coverage director (#3739) narrows
-  the H4 roster behaviorally (refresh / explore / skip with reasons, reasoning-tier
+  cap rather than exempt from it (#1767). The `build_analyst` /
+  `build_deliberation` compile-time builders also call it, but are test-only —
+  `graph.py` wires the runtime `build_analyst_from_state` / `build_deliberation_from_state` fan-outs.
+  Roster width lands in `run_diagnostics.breakdown` via
+  `portfolio/roster_diagnostics.roster_breakdown`. screener.5 coverage director (#3739) narrows
+  the screener roster behaviorally (refresh / explore / skip with reasons, reasoning-tier
   judgment, `portfolio/coverage/director: reasoning` pin) and can never widen it —
-  H4 remains the sole width ceiling; an LLM failure keeps H4's roster with a
+  screener remains the sole width ceiling; an LLM failure keeps screener's roster with a
   non-retryable PhaseError.
 
 The handoff seam is `digiquant.research.snapshot.DigestPayload` — the only symbol
@@ -2519,42 +2621,42 @@ flowchart TB
     A0 --> A1 --> A2 --> A3 --> A4
   end
 
-  subgraph portfolio["portfolio H1–H9 — thesis-first"]
-    H1["H1 thesis review"]
-    H2["H2 market thesis exploration"]
-    H3["H3 thesis vehicle map"]
-    H4["H4 opportunity screener"]
-    H45["H4.5 coverage director"]
-    H5["H5 asset analyst ×N"]
-    H6["H6 deliberation ×N"]
-    H7["H7 PM direction memo"]
-    H8["H8 risk sizing (7E)"]
-    H9["H9 commit_run"]
-    H1 --> H2 --> H3 --> H4 --> H45 --> H5 --> H6 --> H7 --> H8 --> H9
+  subgraph portfolio["portfolio thesis–commit — thesis-first"]
+    thesis["thesis review"]
+    market["market thesis exploration"]
+    vehicle_map["vehicle_map thesis vehicle map"]
+    screener["opportunity screener"]
+    H45["screener.5 coverage director"]
+    analyst["asset analyst ×N"]
+    deliberation["deliberation ×N"]
+    direction["PM direction memo"]
+    sizing["risk sizing (7E)"]
+    commit["commit_run"]
+    thesis --> market --> vehicle_map --> screener --> H45 --> analyst --> deliberation --> direction --> sizing --> commit
   end
 
-  A4 -->|"DigestPayload"| H1
+  A4 -->|"DigestPayload"| thesis
 ```
 
 **Live graph** (`build_portfolio_graph` → `build_portfolio_phases_thesis`): research A0–A4 →
-portfolio H1–H9 in-graph; chain terminal `publish_phase` flushes research artifacts
+portfolio thesis–commit in-graph; chain terminal `publish_phase` flushes research artifacts
 (`inputs`, `bias-row` when present, segments, digest) — portfolio terminal persist is
-**H9 `commit_run`** (positions, nav, theses sync, portfolio brief, `decision_log` append)
-plus per-phase inspectable documents (H1 `thesis/thesis-review`, H4 `opportunity-screener`).
+**commit `commit_run`** (positions, nav, theses sync, portfolio brief, `decision_log` append)
+plus per-phase inspectable documents (thesis `thesis/thesis-review`, screener `opportunity-screener`).
 Beliefs distillation runs **daily** as a short fold after the house chain
 (`today's unfolded lessons` + prior beliefs body). ``refresh_scope=beliefs`` is the
-full rewrite; an unfolded backlog above ``OLYMPUS_BELIEFS_BACKLOG`` is an additional
+full rewrite; an unfolded backlog above ``DIGIQUANT_BELIEFS_BACKLOG`` is an additional
 full-fold catch-up. Empty-lesson days still publish a same-date `beliefs` document
 that carries the prior body.
 
 #### Day-over-day continuity contract (#859)
 
 Supabase is the system of record. Preflight loads **pointers and slim summaries**;
-phases **fetch** full history on demand via `query_data` / MCP — nothing stuffs
+phases **fetch** full history on demand via `query_research` / MCP — nothing stuffs
 multi-day document dumps into every prompt. Group A books (`positions`,
 `nav_history`, `position_events`, `portfolio_metrics`) default to the house
 `workspace_id` when `eq` omits it, so overlay same-date rows cannot seed house
-research agents or `digiquant_query_data`. Pass `eq.workspace_id` to read
+research agents or `digiquant_query_research`. Pass `eq.workspace_id` to read
 another book. Market-data tables and `theses` are not injected.
 
 ```mermaid
@@ -2580,11 +2682,11 @@ flowchart LR
     A7["7 digest"]
   end
 
-  subgraph portfolio["portfolio H1–H9"]
-    H5["H5 analysts"]
-    H7["H7 PM direction"]
-    H8["H8 risk sizing"]
-    H9["H9 commit_run"]
+  subgraph portfolio["portfolio thesis–commit"]
+    analyst["analysts"]
+    direction["PM direction"]
+    sizing["risk sizing"]
+    commit["commit_run"]
   end
 
   DS --> PC
@@ -2597,22 +2699,22 @@ flowchart LR
   ADOC --> PC
 
   PC --> A1
-  PC --> H5
-  PC --> H7
-  A1 --> A6 --> A7 --> H5 --> H7 --> H8 --> H9
-  H9 --> POS
-  H9 --> TH
-  H9 --> NAV
+  PC --> analyst
+  PC --> direction
+  A1 --> A6 --> A7 --> analyst --> direction --> sizing --> commit
+  commit --> POS
+  commit --> TH
+  commit --> NAV
 ```
 
 | Field | Source table | Loaded in | In prompt | Fetch on demand |
 | --- | --- | --- | --- | --- |
-| `last_snapshots` | `daily_snapshots` | `load_prior_context` | last 2 bias rows (filtered per node) | older snapshots via `query_data` |
+| `last_snapshots` | `daily_snapshots` | `load_prior_context` | last 2 bias rows (filtered per node) | older snapshots via `query_research` |
 | `latest_segments` | `documents` | `load_prior_context` | own segment + declared extras only (#696) | full segment body by `document_key` |
 | `prior_book` / `current_weights` | `positions` | `load_prior_book` | PM + risk: weights + held names | entry prices via `positions` tool |
 | `prior_analyst_by_ticker` | `documents` (`analyst/*`) | `load_prior_analyst_summaries` | slim excerpt for **held** tickers | full analyst payload by key |
-| `prior_deliberation_by_ticker` | `documents` (`deliberation/*`) | `load_prior_deliberation_summaries` | slim carry (net_stance, conviction_delta, conclusion excerpt) for **held** tickers; injected as H6 `prior_deliberation` (#925) | full transcript by `document_key` |
-| `active_theses` | `theses` | `load_active_theses_rows` | H1–H3 + H7 PM | thesis history via `theses` tool |
+| `prior_deliberation_by_ticker` | `documents` (`deliberation/*`) | `load_prior_deliberation_summaries` | slim carry (net_stance, conviction_delta, conclusion excerpt) for **held** tickers; injected as deliberation `prior_deliberation` (#925) | full transcript by `document_key` |
+| `active_theses` | `theses` | `load_active_theses_rows` | thesis–vehicle_map + direction PM | thesis history via `theses` tool |
 | `portfolio_performance` | `nav_history` + `portfolio_metrics` | `load_portfolio_performance_snapshot` | latest NAV + metrics pointer | full NAV series via `nav_history` tool |
 | `decision_lessons` | `decision_log` | `fetch_recent_lessons` | PM `past_context` (bounded) | older lessons via `decision_log` query |
 | `phase7c_analysts` | in-run state (`phase_portfolio.asset_analysts`) | — | today's fan-out only | prior day → `prior_analyst_by_ticker` |
@@ -2630,7 +2732,7 @@ or mixed fallback.
 
 **Dashboard UI SSOT (#3580).** Brief and Tearsheet share one accounting NAV view
 (`public_accounting_nav_history`) and shared pure helpers
-(`cloudflare/dashboard/lib/performance-ssot.ts`). Tearsheet loads via
+(`apps/dashboard/lib/performance-ssot.ts`). Tearsheet loads via
 `getPerformanceBundle`; Brief rebuilds persisted headlines from the same view
 already in `getFullDashboardData` snapshots. Invested % prefers the accounting tip;
 book as-of is `committedBookDate`. Live marks on Brief are explicitly badged and must
@@ -2662,7 +2764,7 @@ the two percent writers could not satisfy: both are gated on `nav_history` reach
 `_MIN_NAV_HISTORY_ROWS = 20`, and the first running drawdown they compute (~-1.31%) raises
 PostgREST `APIError 23514` — permanently, since running max drawdown is monotonically
 non-increasing. New writers of these columns must emit percent; readers may take the stored
-value directly (`cloudflare/dashboard/lib/portfolio-risk-metrics.ts` maps them onto
+value directly (`apps/dashboard/lib/portfolio-risk-metrics.ts` maps them onto
 `annVolPct` / `maxDrawdownPct` unchanged).
 
 Known wart, deliberately not changed here: `computed_from` carries
@@ -2673,16 +2775,16 @@ label also suppresses the `refresh_performance_metrics.py` overwrite guard.
 #### Canonical market-thesis identity (#1615)
 
 `theses.topic_key` identifies one durable market opinion independently of its daily title,
-evidence, criteria, or confidence. H2 receives the full active thesis register and every
+evidence, criteria, or confidence. market receives the full active thesis register and every
 proposal declares `action=create|update`. An update preserves the active row's `thesis_id`
 and `topic_key`; a create uses a topic absent from both the active register and the current
-H2 output. `validate_market_thesis_proposals` rejects ID/topic collisions before
+market output. `validate_market_thesis_proposals` rejects ID/topic collisions before
 persistence, while migration 056's partial unique `(date, topic_key)` index prevents more
 than one nonterminal market thesis for a topic on a date. The migration also consolidates
 the legacy CTA and Advanced Materials duplicate clusters and rewires their relationships.
-Different wording or evidence is an update, never a new opinion. H2 creates start as
-`ACTIVE`; updates preserve H1's same-run lifecycle decision, falling back to the prior
-nonterminal status when H1 emitted no update. A `PAUSED` topic remains the same opinion and
+Different wording or evidence is an update, never a new opinion. market creates start as
+`ACTIVE`; updates preserve thesis's same-run lifecycle decision, falling back to the prior
+nonterminal status when thesis emitted no update. A `PAUSED` topic remains the same opinion and
 cannot be replaced with a new ID.
 
 #### Canonical instrument metadata (#1615)
@@ -2727,6 +2829,13 @@ separately so research nodes never pay the per-ticker decision-artifact token ta
   (`text`/`detail`/…), never from leftover URLs or envelope keys. An `as_of`-only finding
   with no prose is still rejected.
 - Standalone CLI: `python -m digiquant.research.graph` — research-only consumers.
+- **Watchlist parse is the seal's parse (#4301).** `_parse_watchlist_md` delegates to
+  `digiquant.data.prices.fetchers.parse_watchlist` (an absent file still returns `[]`), so the
+  research fan-out excludes the non-sealable macro/header rows `ETF`/`DXY`/`VIX` and keeps
+  hyphenated pairs (`ETH-USD`) exactly as the R2 seal does. `decision_log.resolve_pending`
+  counts due rows whose ticker has no sealed generation and emits **one aggregated WARNING per
+  pass** (a coverage/config gap, not a transient fault) instead of one WARNING per row per run;
+  the transient-IO WARNING path is unchanged. Tolerant-reader contract: #4136/#4139, #4120.
 - Terminal `publish_phase` is wired only when `deps.publish` is provided;
   the chain orchestrator passes `None` so publish runs once at the end (research artifacts).
 - Web grounding pre-pass for `live_search` segments (#3853 / #3859): `fetch_web_grounding`
@@ -2743,7 +2852,7 @@ separately so research nodes never pay the per-ticker decision-artifact token ta
   Tool-only with an unconditional abort: a requested search must succeed or raise
   `DashboardWebSearchError` — the run aborts rather than reasoning ungrounded.
   A scoped search that returns zero rows retries once without `include_domains`
-  (logged; `relaxed_domains: true` on the tool result) before failing (#4086),
+  (logged at debug level; `relaxed_domains: true` on the tool result) before failing (#4086),
   because the hosted `ddgs` provider can only post-filter, not bias, by domain.
   There is no synthesis fallback and no fail-soft flag.
 - Fail-fast web_search pre-flight (#4198): `python -m digiquant web-search healthcheck`
@@ -2759,7 +2868,7 @@ separately so research nodes never pay the per-ticker decision-artifact token ta
 
 - Entry points:
   - `digiquant.portfolio.chain.run_research_then_portfolio(research_input, deps)` —
-    end-to-end: research (no publish) → portfolio H1–H9 → `publish_phase` (research only).
+    end-to-end: research (no publish) → portfolio thesis–commit → `publish_phase` (research only).
     Cron: `python -m digiquant.portfolio.chain --cadence daily`
     (`.github/workflows/pipeline-digiquant.yml`). The entry point installs an INFO stdout
     handler (`DIGIQUANT_LOG_LEVEL`, default INFO) and narrates its stages —
@@ -2773,49 +2882,47 @@ separately so research nodes never pay the per-ticker decision-artifact token ta
   Each LLM node loads `*-full.md` or `*-edit.md` per `resolve_edit_mode`.
 - Schemas under `digiquant/src/digiquant/portfolio/templates/schemas/`. Loaded via
   `digiquant.portfolio.schemas.load_schema`.
-- **H7** emits `PMDirectionMemo` (direction + conviction rank + optional
+- **direction** emits `PMDirectionMemo` (direction + conviction rank + optional
   `confidence` in `[0, 1]` — no weights). Rank is order, not size.
   Each roster row may carry a deterministic `ForecastReference` to the effective
-  forecast H7 saw (`portfolio/models/pm_direction.py`); economics and identifiers are
+  forecast direction saw (`portfolio/models/pm_direction.py`); economics and identifiers are
   never LLM-authored. The dashboard `PmDirectionDocumentView` hides those audit
-  fields. **H8** (`phase7e_risk_sizing`) is the sole weight owner. On the
-  calibrated path (`h8_sizing_input_mode=calibrated`) raw size is
-  `reliability × max(0, μ) / σ_ε`; rank is unused for magnitude. H8 then scales
-  each long by H7 `confidence` (cash-first: leftover stays cash, never renormalized
+  fields. **sizing** (`phase7e_risk_sizing`) is the sole weight owner. On the
+  calibrated path (`sizing_input_mode=calibrated`) raw size is
+  `reliability × max(0, μ) / σ_ε`; rank is unused for magnitude. sizing then scales
+  each long by direction `confidence` (cash-first: leftover stays cash, never renormalized
   into peers). Missing confidence on a mixed roster fail-softs to
-  `H8_MISSING_CONFIDENCE_DEFAULT` (0.5), never 1.0. Pre-WP-G memos that omit
+  `SIZING_MISSING_CONFIDENCE_DEFAULT` (0.5), never 1.0. Pre-WP-G memos that omit
   confidence on every long skip the haircut so replay does not silently shrink.
-  **H9** (`commit_run`) is the portfolio terminal: positions, nav, theses sync, brief
+  **commit** (`commit_run`) is the portfolio terminal: positions, nav, theses sync, brief
   publish, `decision_log` append, the portfolio lineage ledger commit chain (see
   below), and fail-soft prospective forecast-registry persistence (#2663).
 - **Tool-round budget + log hygiene (#3299).** Every research/portfolio
   `run_research_agent(...)` call goes through the thin wrapper
-  `digiquant.tool_rounds.run_olympus_research_agent`, which injects
+  `digiquant.tool_rounds.run_digiquant_research_agent`, which injects
   `DIGIQUANT_MAX_TOOL_ROUNDS` (default **24**, set in
-  `.github/digiquant-pipeline.yml`); `OLYMPUS_MAX_TOOL_ROUNDS` stays readable as a
-  retired alias via `digiquant.dashboard.envcompat`. The cap is high but finite:
+  `.github/digiquant-pipeline.yml`). The cap is high but finite:
   cheap models need room for data-tool grounding before Pydantic validation.
   digigraph chat keeps its own `max_tool_rounds=4` — never reuse this budget there.
   Transient Supabase faults (disconnects, `PGRST002`, 502s) retry 3× with short
   backoff (`digiquant.supabase_retry`) in data tools, retrieval queries, and
   `query_returns_window`; anything else (notably 42703) still fails fast.
-   H6 amendment envelopes unwrap one `{terms|amendment|forecast_amendment}` level,
-   tenor fills from the H5 base, and the registry reason is always the short
-   `h6_challenge_revision` (never `summary.conclusion`, which tripped the 2000-char
+   deliberation amendment envelopes unwrap one `{terms|amendment|forecast_amendment}` level,
+   tenor fills from the analyst base, and the registry reason is always the short
+   `deliberation_challenge_revision` (never `summary.conclusion`, which tripped the 2000-char
    CHECK). Invalid amendment economics **raise at unit level** instead of falling back to a
    REJECTED/base-preserved outcome (#3078) — a structurally invalid amendment is
-   a model-output error that must surface, not be absorbed; the H6 node catches it
-   and degrades that ticker to carried + PhaseError, never killing the chain (#3738). `query_data`
-   no longer serves market history at all (#3780): its table allowlist refuses
+   a model-output error that must surface, not be absorbed; the deliberation node catches it
+   and degrades that ticker to carried + PhaseError, never killing the chain (#3738). The retired
+   `query_data` reader (#4436) no longer serves market history at all (#3780): its table allowlist refused
    `price_history` / `price_technicals` / `macro_series_observations`, so those
    tables are simply not readable here; dedicated R2-backed tools
-   (`digiquant_get_price_technicals`, `get_macro_series`) own those reads, and MCP
-   `digiquant_query_data` shares the same refusal. The #3771 per-table column
+   (`digiquant_get_price_technicals`, `get_macro_series`) own those reads. The #3771 per-table column
    allowlist that once guarded the two price tables was deleted with the cutover
    (it could never run once the tables left the reader, #3959). For the tables
    still readable here, explicit columns/order/filter keys are shape-checked to
    bare column names (`_BARE_COLUMN_RE`) so no argument can smuggle PostgREST
-   relationship syntax. H9 cost
+   relationship syntax. commit cost
    evidence reads `hist_vol_21`/`atr_pct` through the R2 seam (migration 127
    dropped the Supabase `price_technicals` body, #4053; second read joined onto
    the history row) — never from `price_history`.
@@ -2829,8 +2936,8 @@ separately so research nodes never pay the per-ticker decision-artifact token ta
 
 #### Risk-sizing layer (Pillar 2)
 
-Implements the FinPos direction/sizing split: **H7** owns direction + conviction +
-narrative + confidence; **H8** deterministic code owns sizing, caps, and risk. Rank is
+Implements the FinPos direction/sizing split: **direction** owns direction + conviction +
+narrative + confidence; **sizing** deterministic code owns sizing, caps, and risk. Rank is
 order only — it is not a size input on the calibrated path.
 
 - `digiquant.portfolio.sizing.size_portfolio(...)` — pure, I/O-free. Turns per-ticker
@@ -2853,13 +2960,13 @@ order only — it is not a size input on the calibrated path.
   international / equity-broad / cash). `asset_classes.yaml` is authoritative on conflict
   (true risk exposure beats research fan-out — e.g. USO is `commodity`, not Energy equity).
   `sector_bucket(t)` → fine-grained concentration slug; `asset_class(t)` → coarse class.
-- `digiquant.portfolio.phases.phase7e_risk_sizing` — H8 enforcement node. Reads
+- `digiquant.portfolio.phases.phase7e_risk_sizing` — sizing enforcement node. Reads
   `PMDirectionMemo` (direction + ranks + confidence), assembles `AllocationInputBundle`,
   and on the calibrated path feeds bundle scores into `size_portfolio` (rank→conviction
-  unused). H8 then scales each long by H7 `confidence` (`H8_MISSING_CONFIDENCE_DEFAULT=0.5`
+  unused). sizing then scales each long by direction `confidence` (`SIZING_MISSING_CONFIDENCE_DEFAULT=0.5`
   when omitted). Falls back to dense rank→conviction when mode is `incumbent` or
   calibrated coverage is empty. Writes `phase_portfolio.sized_book` with
-  `allocation_input_bundle_hash` + `h8_sizing_input_mode`. After the final control shell
+  `allocation_input_bundle_hash` + `sizing_input_mode`. After the final control shell
   (carry / cadence / backstop / grid / final caps), builds and attaches
   `phase_portfolio.pre_trade_risk_report` via
   `build_pretrade_risk_report_for_final_book` (WP9.3 / #2750) and stamps
@@ -2881,13 +2988,13 @@ order only — it is not a size input on the calibrated path.
   `BreakerConfig.from_preferences` (`breaker_soft_dd_pct` / `breaker_hard_dd_pct` /
   `breaker_max_reduction`; defaults −8% / −20% / 0.5).
 
-#### H8 adjustment-event taxonomy (#2417)
+#### sizing adjustment-event taxonomy (#2417)
 
-Explanation-only at emission time: every place H8 moves a ticker away from its raw
+Explanation-only at emission time: every place sizing moves a ticker away from its raw
 requested value emits an in-memory `digiquant.portfolio.sizing_events.SizingAdjustment`
 (frozen, `extra="forbid"`, `unit: Literal["pct", "conviction"]`) alongside the weight it
 computes — never fed back into the weight math, and never reordering or renaming an
-existing control. Since #2768, H9 persists `unit="pct"` events as durable
+existing control. Since #2768, commit persists `unit="pct"` events as durable
 `TargetAdjustment` rows (migration 095); `unit="conviction"` stays in-memory only.
 `SizingAdjustmentType` enumerates all 12 causes and where each is emitted:
 
@@ -2904,7 +3011,7 @@ existing control. Since #2768, H9 persists `unit="pct"` events as durable
 | `MINIMUM_HOLD_OVERRIDE` | `turnover.apply_turnover_to_sized_book` (`inside_hold` branch) | no — lockup overrides a PM exit |
 | `CONTINUITY_CARRY` | `phases.phase7e_risk_sizing._apply_held_continuity_backstop` | no — restores a dropped held position |
 | `FINAL_GROSS_SCALE` | `sizing.size_portfolio` (gross/pos/sector-cap-binding scale step); `phases.phase7e_risk_sizing._cap_total_invested` (total-invested cap) | no — two sites, two directions: the `size_portfolio` binding-scale step can raise a weight in an under-invested-book edge case (the candidate scale it picks among is not capped at 1 from below), while `_cap_total_invested` only ever fires when total invested exceeds 100% and is therefore strictly reduce-only |
-| `FLAT_EXIT` | `turnover.hold_drifted_book` (off-cadence PM exit); `phases.phase7e_risk_sizing._apply_held_continuity_backstop` (H7-flat branch) | yes (to 0) |
+| `FLAT_EXIT` | `turnover.hold_drifted_book` (off-cadence PM exit); `phases.phase7e_risk_sizing._apply_held_continuity_backstop` (direction-flat branch) | yes (to 0) |
 
 `_held_carry_weights` computes the drifted-weight candidate for a held-but-memo-unaddressed
 ticker but does not itself emit `CONTINUITY_CARRY` — its caller,
@@ -2913,9 +3020,9 @@ sticks (a prior CodeRabbit round on #2434 fixed a double-emission bug where emit
 unconditionally inside `_held_carry_weights` produced a record for carries that never
 happened).
 
-Two notes on `FLAT_EXIT` vs. `CONTINUITY_CARRY`: an H7-flat held name (explicit PM exit) is
+Two notes on `FLAT_EXIT` vs. `CONTINUITY_CARRY`: an direction-flat held name (explicit PM exit) is
 never resurrected and always gets `FLAT_EXIT`; a held name the memo simply omitted
-(memo-unaddressed, or H4-gated out of the roster) is carried at its drifted weight and gets
+(memo-unaddressed, or screener-gated out of the roster) is carried at its drifted weight and gets
 `CONTINUITY_CARRY` instead. The two are mutually exclusive by control flow, not by set
 membership: inside `_apply_held_continuity_backstop`, the `flats` branch `continue`s
 unconditionally for a flat-tagged ticker before the carry-miss branch is ever reached for
@@ -2936,13 +3043,13 @@ try/except around `size_portfolio` — in production it only logs and never rais
 call site, so a lineage failure cannot turn into a dropped rebalance.
 
 **Intended consumers (not yet wired)**: `RebalancePayload.adjustments` (`list[dict[str, Any]]`,
-explanation-only, never persisted) is the wire shape for future in-process readers — H9
+explanation-only, never persisted) is the wire shape for future in-process readers — commit
 narrative/notes, pre-trade risk review, and outcome-episode logging are the anticipated
-consumers, all downstream of H8, which remains the sole weight owner — but no consumer in this
+consumers, all downstream of sizing, which remains the sole weight owner — but no consumer in this
 codebase reads the field yet. It is populated today only on payloads `phases.phase7e_risk_sizing
 ._build_sized_book` produces; the legacy `phase7d_rebalance` payload (`phases.phase7d_pm`) has no
 `adjustments` key at all, so any future consumer must treat the field as absent-safe
-(`.get("adjustments") or []`, the same pattern `_validate_h8_lineage` already uses) rather than
+(`.get("adjustments") or []`, the same pattern `_validate_sizing_lineage` already uses) rather than
 assuming it is always present.
 
 #### Run robustness + telemetry (Pillar 1B)
@@ -2987,9 +3094,9 @@ assuming it is always present.
     wrong), and `unavailable` (unknown). Missing provider usage or cost yields `unavailable` and
     a quantified shortfall — never a fabricated zero, and never an exact-billing claim.
   - **Failure is fail-soft throughout.** A flush failure cannot change the run's return value,
-    its exit code, the portfolio commit, or the `atlas_run_diagnostics` row. No reader is cut
+    its exit code, the portfolio commit, or the `run_diagnostics` row. No reader is cut
     over to these tables; the aggregate remains the active read path (plan Invariant 14).
-- `digiquant.research.diagnostics` — writes one `atlas_run_diagnostics` row per run
+- `digiquant.research.diagnostics` — writes one `run_diagnostics` row per run
   **attempt** (`write_row`, keyed on `(run_id, attempt)`, fail-soft): fresh/carried/failed
   segment counts from
   state + the `digigraph.usage` LLM snapshot (calls/tokens/sources). `summarize_run` derives
@@ -3069,20 +3176,20 @@ assuming it is always present.
 ### Persistence
 
 Per ADR-0009: research writes via `publish_phase` (`documents`, `daily_snapshots`).
-portfolio terminal writes via **H9 `commit_run`** (`positions`, `nav_history`, `theses`,
+portfolio terminal writes via **commit `commit_run`** (`positions`, `nav_history`, `theses`,
 portfolio brief, `decision_log`, plus the append-only `portfolio_ledger_*` commit chain —
 see below). **PostgREST timeout:** `build_client` sets
 `httpx.Timeout(connect=10, read=60, write=30, pool=10)` on the Supabase client.
 Ledger writers, at-open (`execute_at_open.py`), and the opening-snapshot seed
 construct that client through `build_client`. `_insert` / `_execute` call
 `execute()` directly; hung I/O fails via httpx (no thread deadline). The
-research pipeline run step wraps each of 3 attempts in `timeout 70m` so a
+research pipeline run step wraps each of 2 attempts in `timeout 100m` so a
 hung attempt fails and the retry can fire; the step `timeout-minutes` is 230,
 under the 240-minute job cap. `_insert` raises if `workspace_id` is missing
 on a row. No client-level retries on this path (disconnect retries are a
 separate #3299 concern). `preflight_reflect` resolves due `decision_log` rows daily;
 beliefs distillation publishes a same-date document on every house run (short fold;
-full rewrite on `refresh_scope=beliefs` or backlog > `OLYMPUS_BELIEFS_BACKLOG`). Legacy `digiquant/scripts/research/publish_document.py`
+full rewrite on `refresh_scope=beliefs` or backlog > `DIGIQUANT_BELIEFS_BACKLOG`). Legacy `digiquant/scripts/research/publish_document.py`
 and `materialize_snapshot.py` are frozen.
 
 Skills as injected context: each phase loads a `SKILL.md` file and passes
@@ -3154,13 +3261,13 @@ not a row the approval chains through.
   `PaperExecution` quantity/price and `HoldingLot` quantity/open_price are `NOT NULL CHECK
   (... > 0)` — a fill or lot that cannot be priced does not get written at all.
 - **Ownership and scope — read this before wiring a producer.** These tables are private
-  (no `anon`/`authenticated` grant, no RLS policy). portfolio owns the models, and **H9
+  (no `anon`/`authenticated` grant, no RLS policy). portfolio owns the models, and **commit
   `commit_run` is the sole writer** — `writers/commit_io.py` still owns the authoritative
   legacy booking (`positions`, `nav_history`, `theses`, `decision_log`), and
   `writers/ledger_io.py` appends the lineage chain beside it, in the same node, for the same
   `run_date`. As of #2418 the two are **dual-written**: the ledger is the record of *why*,
-  the legacy tables remain what every reader still reads. Nothing here changes H7/H8/H9
-  responsibility — H7 still owns direction, H8 still owns weights, H9 still commits. Chain
+  the legacy tables remain what every reader still reads. Nothing here changes direction/sizing/commit
+  responsibility — direction still owns direction, sizing still owns weights, commit still commits. Chain
   from here: this ledger → a paper executor (#2420) → accounting/learning. No broker or
   live-trading path is touched.
 - **Failure behavior — two enforcement layers, not one.** A self-referencing
@@ -3176,9 +3283,9 @@ not a row the approval chains through.
   failing closed keeps the row out before it can reach an authoritative commit or fill.
   A missing economic value stays absent (`NULL` / no row) rather than silently becoming
   `0`.
-- **Rollback note: the schema is no longer dark.** Since #2418 wired H9, these tables take
-  traffic on every commit run, so reverting migration 069 on its own now breaks H9 — drop the
-  writer first, or set `OLYMPUS_PORTFOLIO_LEDGER=0` (below). Reverting the *writer* alone is
+- **Rollback note: the schema is no longer dark.** Since #2418 wired commit, these tables take
+  traffic on every commit run, so reverting migration 069 on its own now breaks commit — drop the
+  writer first, or set `DIGIQUANT_PORTFOLIO_LEDGER=0` (below). Reverting the *writer* alone is
   still safe in either order, but no longer because nothing reads the chain — since #2420 the
   at-open job does. It is safe because a chain that stops growing makes that read *decline*
   and hand the day back to the prose builders, so the cost is lineage rather than correctness.
@@ -3188,10 +3295,10 @@ not a row the approval chains through.
   idempotency) and `tests/dq/research/test_migration_069.py` (structural: RLS, grants,
   triggers, closed vocab, nullability), mirroring the `test_migration_067.py` pattern.
 
-#### H9 appends the commit chain (#2418)
+#### commit appends the commit chain (#2418)
 
 `digiquant/src/digiquant/portfolio/writers/ledger_io.py` is the only writer into these
-tables. The pipeline caller is `phases/h9_commit_run.py`, after `persist_decision_log`
+tables. The pipeline caller is `phases/commit.py`, after `persist_decision_log`
 and **before `save_commit_manifest`**. That ordering is load-bearing — the manifest is what the
 next attempt reads to decide "already committed", so a partial chain must leave no manifest
 behind. Raising is the honest outcome (invariant 12); a manifest written first would report a
@@ -3241,11 +3348,11 @@ Conventions this writer fixes, each of which is easy to get backwards:
   row references one of its order ids, the symbol is dropped from the append: only fills alter
   realized quantity (invariant 9), and superseding an order that already traded would rewrite
   history.
-- **Requested vs approved.** H8 publishes ``requested_pct`` and pct-unit
-  ``SizingAdjustment`` events on the sized book; H9 writes
+- **Requested vs approved.** sizing publishes ``requested_pct`` and pct-unit
+  ``SizingAdjustment`` events on the sized book; commit writes
   ``requested_weight`` from the pre-cap request when present and appends
   ``TargetAdjustment`` rows keyed to each ``RequestedTarget`` (#2768 / migration
-  095). When H8 emits no request map and no pct adjustments for a symbol,
+  095). When sizing emits no request map and no pct adjustments for a symbol,
   requested equals approved (no durable delta).
 - **Prior weights come from research preflight** (`state.config.preferences["current_weights"]`) and
   are simply absent on a first run, so every delta is measured against 0. A first commit being
@@ -3258,14 +3365,14 @@ switch off, so the three fields are absent-safe for a 1.1 reader rather than a r
 `status` (`"noop"` vs. `"committed"`) stays the discriminator. `ledger_frozen_symbols` is a
 manifest field only — there is no such column on any ledger table.
 
-`OLYMPUS_PORTFOLIO_LEDGER` is the kill switch, and it is **opt-out — default on**: set it to
+`DIGIQUANT_PORTFOLIO_LEDGER` is the kill switch, and it is **opt-out — default on**: set it to
 `0`, `off`, `false`, `no`, or `disabled` to skip the append and leave the legacy projections
-untouched. The polarity is deliberately the inverse of `OLYMPUS_POSITION_RISK_FIELDS` (opt-in) —
+untouched. The polarity is deliberately the inverse of `DIGIQUANT_POSITION_RISK_FIELDS` (opt-in) —
 a dark schema needs opting into, a live writer needs an escape hatch.
 
 - **Tests**: `tests/dq/portfolio/test_commit_run.py::TestCommitChainLedger` — every final ticker
   plus cash appears; inserts are never upserts; `ledger_io` is the only ledger writer
-  (pipeline caller H9, operator recovery caller `recover_ledger`); an identical
+  (pipeline caller commit, operator recovery caller `recover_ledger`); an identical
   same-date rerun appends nothing; a changed pre-fill commit supersedes pending orders; an
   existing fill freezes the symbol; orphan pruning still converges with the ledger on; a partial
   failure does not masquerade as committed; and the kill switch writes no rows.
@@ -3278,7 +3385,7 @@ a dark schema needs opting into, a live writer needs an escape hatch.
 
 #### The at-open fill path — `execution_io` (#2420, Task 2.4)
 
-H9 records what the portfolio *decided*; this is what it *did*.
+commit records what the portfolio *decided*; this is what it *did*.
 `digiquant/src/digiquant/portfolio/writers/execution_io.py` is the only writer into
 `portfolio_ledger_paper_executions` and `portfolio_ledger_holding_lots` on the daily path, and
 `execute_pending_orders(...)` has exactly one caller: `digiquant/scripts/research/execute_at_open.py`,
@@ -3358,16 +3465,16 @@ Two projection details are easy to get wrong. `approved_weight` is a 0..1 fracti
 `position_events.weight_pct` is a percent, so the ×100 happens in `Decimal` and only then
 becomes a float — scaled as a float first, `0.07` lands on `7.000000000000001`. And
 `prev_weight_pct` is the **pre-commit** `positions` book — `_prior_book_date(run_date)`,
-never `_prior_book_date(execution_d)`. H9 writes today's targets onto `run_date` before
+never `_prior_book_date(execution_d)`. commit writes today's targets onto `run_date` before
 the open, so an execution-day lookback finds that already-committed new book and every
 ADD/TRIM looks like +0.0pp (house post-2026-08-27). The same prior *book date*
 sizes `OrderIntent` and HOLD continuity; the displayed pp is book-to-book (undrifted
-pre-commit weights), not the marked-to-market H8 snapshot that sized the fill.
+pre-commit weights), not the marked-to-market sizing snapshot that sized the fill.
 `position_events` must not invent a second labeling system.
 
 - **ADD/TRIM come from that prior→target delta.** Lot residual still names OPEN vs ADD
   and EXIT vs TRIM when the approved weight is missing or when a same-run chain closes
-  a position (#1743). A 0.0pp display move cannot be ADD/TRIM (HOLD). H9 skips
+  a position (#1743). A 0.0pp display move cannot be ADD/TRIM (HOLD). commit skips
   `order_intents` when `_decision` returns `NO_OP` (no-trade band), so sub-threshold
   trades must not exist as intents either.
 
@@ -3448,22 +3555,26 @@ that metrics/attribution job order cannot alter meaning.
   `INSERT` only into `dashboard_accounting_{periods,contributions,holdings}`. Deterministic
   child PKs; exact retry is a no-op (or child repair). Restatement appends a superseding
   period (`supersedes_id`); never in-place correction. `select_final_period` returns only a
-  complete head with `status=final` — provisional H9 `nav_history`/`positions` rows are
+  complete head with `status=final` — provisional commit `nav_history`/`positions` rows are
   continuity data and are never selected as final. A crash after the period INSERT leaves
   an incomplete child set that is not selectable as final until retry repairs it.
 - **Finalizer**: `digiquant/scripts/research/finalize_period_accounting.py` — assembles ledger
-  fills/lots + marks, runs the engine, persists, shadow-reconciles vs provisional H9 nav
+  fills/lots + marks, runs the engine, persists, shadow-reconciles vs provisional commit nav
   day return. Flags: `--date`, `--dry-run` (no INSERT), `--shadow` (default persist +
-  reconcile). Mode also via `OLYMPUS_ACCOUNTING_FINALIZER` / `--mode` (`off` no-op). Cold
-  ledger declines with exit 3 (no partial final). Wired ahead of metrics in
+  reconcile). Mode also via `DIGIQUANT_ACCOUNTING_FINALIZER` / `--mode` (`off` no-op).
+  Declines with exit 3 (no write, no partial final) when the ledger is cold, or when the
+  most recent prior accounting tip closes at a negative `closing_cash` (#4105) — the
+  latter previously fell through to a `nav * cash_pct / 100` cash-only stub (2026-08-26
+  NAV 15.13 vs stitched 101.77), so it now declines instead of fabricating a book. Wired
+  ahead of metrics in
   `pipeline-research-metrics.yml` (`continue-on-error` while shadowing). Holding-lot reads
   page via PostgREST `.range` (`_LOT_PAGE_SIZE=1000`) so closed-lot history cannot silently
   truncate the opening book (#2776).
 - **Metrics cutover (dual-write)**: `refresh_performance_metrics.py` prefers a finalized
   accounting period for `pnl_pct` and indexed `nav_history` compounding when one exists;
-  otherwise falls through to provisional H9 nav only. Never sums
+  otherwise falls through to provisional commit nav only. Never sums
   `current_book_lookback` / legacy `position_attribution` into daily `pnl_pct` (#2598).
-  H9 keeps writing provisional continuity; public curated views are migration
+  commit keeps writing provisional continuity; public curated views are migration
   `074_olympus_accounting_views.sql` (#2599) with follow-ups
   `084_olympus_accounting_day_return_pct.sql` (#2779, equity-delta
   `day_return_pct`) and `085_olympus_accounting_tip_children_complete.sql`
@@ -3474,7 +3585,7 @@ that metrics/attribution job order cannot alter meaning.
   `observability-queries` / `queries` and digiquant.io `useLivePortfolio`.
   Rollback = repoint to `public_nav_history` / `nav_history`. Cutover only after
   approved shadow interval (incl. one rebalance) with zero unexplained
-  reconciliation failures. Do not flip `OLYMPUS_ACCOUNTING_FINALIZER=on`
+  reconciliation failures. Do not flip `DIGIQUANT_ACCOUNTING_FINALIZER=on`
   without that ops evidence.
 - **Lookback vs realized (#2598 / Task 3.3)**: migration `073_olympus_lookback_vs_realized.sql`
   renames the physical diagnostic table to `current_book_lookback` (explicit
@@ -3547,7 +3658,7 @@ SELECT the same public calendar as anon — do not number this `113`, which is
 the staged cutover under `migrations/cutover/`): the twelve-x
 ingest (`fx_calendar/calendar_db.py`) is repointed to write it, and the dashboard
 twelve-x **events tab reads it via the main dashboard client** (`getUpcomingEvents` in
-`cloudflare/dashboard/lib/twelve-x/fetch.ts`) rather than the twelve-x project — the
+`apps/dashboard/lib/twelve-x/fetch.ts`) rather than the twelve-x project — the
 other FX research tables stay on `twelveXSupabase`. Cutover is gated: the frontend
 read goes live only once the repointed ingest has populated `core`.
 
@@ -3604,7 +3715,7 @@ Only the `payload` cell is archived — `content` is untouched.
 **RLS.** Every strategy-store table RLS-enabled. Public reference + tearsheet tables grant
 `anon SELECT USING (true)`; writers use the service role (RLS bypass). `strategy_calibrations`
 has no anon policy — anon reads return an empty set (not a permission error) while the service
-role keeps full access (mirrors the `atlas_run_diagnostics` idiom, migration 033). Run
+role keeps full access (mirrors the `run_diagnostics` idiom, migration 033). Run
 `get_advisors(type="security")` after applying; expect zero `rls_disabled_in_public` findings.
 
 **Grants — RLS is no longer the only write gate (#1757).** Migration
@@ -3614,9 +3725,9 @@ revokes `INSERT, UPDATE, DELETE, TRUNCATE, REFERENCES, TRIGGER` from `PUBLIC`, `
 with the same list, so new relations inherit read-only instead of Supabase's bootstrap
 `GRANT ALL`. Before it, the *published* anon JWT held full DML on all 35 base tables plus
 two views, and RLS-with-no-write-policy was the single layer denying writes — one already
-exploitable: `atlas_run_health` (migration 041) is auto-updatable and deliberately
+exploitable: `run_health` (migration 041) is auto-updatable and deliberately
 `security_invoker = false`, so an unauthenticated `DELETE` through it ran as `postgres` and
-erased every `atlas_run_diagnostics` row. `service_role` is untouched — it is the only
+erased every `run_diagnostics` row. `service_role` is untouched — it is the only
 writer. When adding a public view, pair `GRANT SELECT` with an explicit `REVOKE` (050/052
 do; 041/018 did not) and never use `REVOKE ALL` in the default-privileges statement: it
 would strip `SELECT` and `safeSelect` renders a PostgREST 42501 as an empty panel, not an
@@ -3629,7 +3740,7 @@ adds `olympus_node_runs`, `olympus_provider_calls`, and `olympus_provider_attemp
 service-role-only, RLS-enabled with no policies, and append-only: `service_role` receives only
 `SELECT`/`INSERT`, while database triggers reject `UPDATE` and `DELETE`. The schema stores generic
 artifact references but no provider payload. It is prospective only; no historical attempts or
-costs are inferred from `atlas_run_diagnostics` aggregates. Task #1963 does not write these tables:
+costs are inferred from `run_diagnostics` aggregates. Task #1963 does not write these tables:
 it establishes in-process logical purpose, parentage, cache status, exact observable attempt count,
 and artifact disposition; Task 1.5 owns durable persistence and reconciliation.
 
@@ -3706,13 +3817,13 @@ bypassing the edge function, and whatever gate it carried, entirely.
 [`supabase/migrations/063_prices_live_table.sql`](supabase/migrations/063_prices_live_table.sql)
 moves the transport onto `public.prices_live`: the publisher upserts one row per ticker
 (`functions/prices-live/index.ts`) and the browser subscribes to `postgres_changes` on that
-table (`cloudflare/digiquant-web/lib/live/useLivePrices.ts`). **Neither end passes
+table (`apps/digiquant-web/lib/live/useLivePrices.ts`). **Neither end passes
 `config: { private: true }` any more, deliberately** — that flag routes authorization back
 through RLS on `realtime.messages`, which we can never police.
 
 *Why the textbook fix was withdrawn.* The obvious patch — RLS policies on
 `realtime.messages` plus private channels on both ends — was written as migration `062`, then
-proved **impossible to apply**. It never reached production (no `olympus_schema_migrations`
+proved **impossible to apply**. It never reached production (no migration-ledger
 row; two `db-migrate` runs failed on it), so it was deleted and the number burned. `realtime.messages` is
 owned by `supabase_realtime_admin`, a role with zero members over which zero roles hold
 admin option; our connection is `postgres` (`rolsuper = false`, not a member), and on
@@ -3813,7 +3924,7 @@ either (a) call `ingest_research_document` directly at the end of
 ---
 
 <!-- #1736 -->
-## Run health telemetry — `atlas_run_diagnostics` (#1736)
+## Run health telemetry — `run_diagnostics` (#1736)
 
 `digiquant/src/digiquant/research/diagnostics.py` derives **two** verdicts from a
 finished run's state, and they are deliberately not the same signal:
@@ -3825,7 +3936,7 @@ individual calls, ordering, retries, or timing without fabrication.
 
 | Field | Question | Consumers |
 |---|---|---|
-| `RunSummary.status` | Was the run healthy? | `atlas_run_diagnostics.status`, `cloudflare/dashboard` (`run-episodes.ts` `classify()`, `freshness-banner.tsx` `isOk()`) |
+| `RunSummary.status` | Was the run healthy? | `run_diagnostics.status`, `apps/dashboard` (`run-episodes.ts` `classify()`, `freshness-banner.tsx` `isOk()`) |
 | `RunSummary.retry_signal` | Is re-running worth the money? | `chain._retry_worthy` → the process exit code → CI's outer-retry loop |
 
 `status` stays inside `ok | degraded | failed | cancelled` — there is no CHECK constraint on
@@ -3835,7 +3946,7 @@ returns it, which is why that function's name no longer matches the health verdi
 
 ### One row per retry ATTEMPT, not per workflow run (#1762)
 
-`pipeline-digiquant.yml` retries the chain up to `MAX_OUTER_ATTEMPTS=3` times **inside one job**,
+`pipeline-digiquant.yml` retries the chain up to `MAX_OUTER_ATTEMPTS=2` times **inside one job**,
 so every attempt sees the same `GITHUB_RUN_ID`. That was the entire upsert key, so the last
 attempt — usually the cheap checkpoint-resumed one — replaced the expensive attempt's tokens,
 cost, `status` and `error_summary`. 28 of 54 production rows were affected.
@@ -3845,7 +3956,7 @@ The forensic tell is `created_at`: `_row()` omits it, so `ON CONFLICT DO UPDATE`
 their own `started_at`. **Keep omitting it** — that asymmetry is what made the corruption
 detectable and is the only way a future collision would be visible.
 
-- The attempt number reaches Python through exactly one channel: `OLYMPUS_ATTEMPT`, exported
+- The attempt number reaches Python through exactly one channel: `DIGIQUANT_ATTEMPT`, exported
   per attempt by the workflow's retry loop and read by `chain._outer_attempt()` (defaults to 1,
   tolerant of a malformed value — telemetry must never kill a run). Guarded by
   `tests/scripts/test_pipeline_dashboard_attempt.py`, because dropping the export restores the
@@ -3855,10 +3966,10 @@ detectable and is the only way a future collision would be visible.
   `GITHUB_RUN_ID`. The attempt is a separate column precisely so the telemetry key and the
   resume key cannot drift apart.
 - Migration `065` swaps the primary key to `(run_id, attempt)` and appends `attempt` to the
-  `atlas_run_health` view — appended **last**, since `CREATE OR REPLACE VIEW` can only add
+  `run_health` view — appended **last**, since `CREATE OR REPLACE VIEW` can only add
   columns. Pre-existing rows carry the sentinel `0`, never `1`: backfilling 1 would assert 28
   provably-collapsed rows are first attempts, which is the fabrication the change exists to end.
-- `cloudflare/dashboard/lib/run-episodes.ts` gets fixed for free — `attempts = rows.length` and the
+- `apps/dashboard/lib/run-episodes.ts` gets fixed for free — `attempts = rows.length` and the
   `recovered` outcome were built on the assumption that attempts are distinct rows. It orders by
   `attempt` where usable and falls back to `created_at` for `0`-sentinel rows.
   `RUN_DIAGNOSTICS_LIMIT` rose 30 → 90 because a retried date now consumes several slots.
@@ -3881,6 +3992,24 @@ than a record, since a jsonb key and a log line are both passive.
 `retry_signal`, or the exit code. A mid-run abort would leave a partially-published run, and
 #1749/#1751 established that partial states are where the silent-staleness defects live. There
 are tests pinning the negative property; do not relax them into a ceiling without a new decision.
+
+**Token-derived fallback (#4596).** The house upstream reports no per-call cost, so the raw
+`cost_usd` in the usage snapshot is `0.0` on every run and this alert could never fire. `_row`
+therefore resolves `est_cost_usd` once — the reported cost when it is positive, otherwise
+`pricing.estimate_cost_usd(usage["by_model"])` against the committed per-model table in
+`research/pricing.py` — and feeds the SAME value to both `spend_alert` and the `est_cost_usd`
+column. The estimator returns `None` when no tokens were priced (no priced model, or a priced
+model whose tokens are all zero/junk), so behaviour is unchanged when no price is known (never
+fabricate `$0`).
+
+Each price is taken verbatim from the repo's own committed snapshot,
+`docs/providers/snapshots/<provider>.yaml` (`paid_tier.models[].cost_per_1m_input` /
+`cost_per_1m_output`); `deepseek/deepseek-v4-pro` deliberately uses the snapshot's **peak**
+rate. A price no snapshot corroborates fails
+`tests/dq/research/test_pricing.py::TestThePriceTable::test_every_committed_price_is_corroborated_by_a_committed_snapshot`.
+`google/gemini-3.7-flash` is a house slug with no price: it is absent from the committed
+`gemini.yaml` (the snapshot predates the model), so it is listed in `_UNPRICED_SLUGS` until
+that snapshot is refreshed.
 
 It is computed in `_row` rather than through `register_breakdown_contributor` because **that seam
 is `state -> dict` and spend does not live in state** — it arrives in the `digigraph.usage`
@@ -3922,12 +4051,11 @@ side, quantity, order_type)` call. This work package is **contracts and typing o
 HTTP client, no broker SDK, no database access, and no venue router — a later work package
 (K1 Alpaca, K2 IBKR, K4 router/sync) builds on this surface without changing it.
 
-Operator env names live in `digiquant.dashboard.envcompat`. Canonical names are
-`DIGIQUANT_*` (execution routing, overlay persist, staging JWT, research knobs).
-Retired `DASHBOARD_*` / `EXECUTION_*` / `RESEARCH_*` names remain readable so live empty
-kill-switches stay off. `DIGIQUANT_EXECUTION_ROUTING` defaults **off** — do not
-enable it without an explicit human decision. `pipeline-digiquant.yml` still
-exports `OLYMPUS_ATTEMPT`; readers accept `DIGIQUANT_ATTEMPT` first.
+Operator env names live in `digiquant.dashboard.envcompat` and are all
+`DIGIQUANT_*` (execution routing, overlay persist, staging JWT, research knobs);
+no read-aliases remain. `DIGIQUANT_EXECUTION_ROUTING` defaults **off** — do not
+enable it without an explicit human decision. `pipeline-digiquant.yml` exports
+`DIGIQUANT_ATTEMPT`.
 
 ### Vocabulary and models
 
@@ -4116,7 +4244,7 @@ Tests: `tests/dq/brokers/test_ibkr_adapter.py` (mocked transport only).
 ### execution router + mirror
 
 `digiquant/src/digiquant/execution/` (K4) routes approved portfolio order intents to an
-external paper venue after H9 / `execute_at_open`, and mirrors acks / fills / positions
+external paper venue after commit / `execute_at_open`, and mirrors acks / fills / positions
 append-only (D10). The internal `paper_internal` path is unchanged. Venue-session
 calendar resolution for deferred execution is `execution/market_hours.py` (#3612) —
 pure helpers over `trading_calendar` + `ticker_venues`; import that submodule
@@ -4127,7 +4255,7 @@ Live-venue refusals in `execution/policy.py` are unchanged by the calendar gate.
 performs **no I/O**. House / system — `workspace_id is None` **or** the well-known
 `house_workspace_id()` / `system_workspace_id()` UUIDs → always `PAPER_INTERNAL`
 (hard-coded; those identities can never route externally). Kill switch
-`DIGIQUANT_EXECUTION_ROUTING` (alias `OLYMPUS_KAIROS_ROUTING`) defaults **off** (inverse polarity of `DIGIQUANT_PORTFOLIO_LEDGER` / alias `OLYMPUS_PORTFOLIO_LEDGER`):
+`DIGIQUANT_EXECUTION_ROUTING` defaults **off** (inverse polarity of `DIGIQUANT_PORTFOLIO_LEDGER`):
 off ⇒ only `PAPER_INTERNAL` regardless of connections. With the switch on, a **tenant**
 workspace with exactly one active paper `broker_connections` row maps to `ALPACA_PAPER` /
 `IBKR_PAPER`; zero → `PAPER_INTERNAL`; two or more → `AmbiguousVenueError`. v1 does **not**
@@ -4173,7 +4301,7 @@ paper OAuth only; house/system never; `env=live` refused; IBKR held; Alpaca
 `api_key` held. `--check` logs `routing_enabled=true|false` and exits **2**
 when store env names are missing. `--dry-run` never unseals. `--all` /
 `--connection-id` with `DIGIQUANT_EXECUTION_ROUTING` off exit **3**
-(`KAIROS_ROUTING_DISABLED`) and do not call `submit_order`. Operator
+(`DIGIQUANT_ROUTING_DISABLED`) and do not call `submit_order`. Operator
 `--connection-id` errors use the ``execution route:`` prefix (not ``execution sync:``).
 `--dispatch` / `--apply` exit **4**. Kill switch still defaults **off**. Do not add
 `DIGIQUANT_EXECUTION_ROUTING` to `STAGING_REQUIRED_SECRETS` (that list is
@@ -4188,7 +4316,7 @@ rows are dropped. IBKR paper is counted then held
 Alpaca `auth_kind=api_key` is counted then held
 (`alpaca_api_key_does_not_prove_oauth_hop`) — `--all` must not poll that row,
 and `--connection-id` on it exits **3** with `ALPACA_API_KEY_SYNC_HELD`.
-`--check` exits **2** with `KAIROS_SYNC_NOT_CONFIGURED` listing missing store
+`--check` exits **2** with `DIGIQUANT_SYNC_NOT_CONFIGURED` listing missing store
 env *names*. `--dry-run` prints candidate counts (`ibkr_held`,
 `alpaca_api_key_held`) and does not unseal. Apply requires `--connection-id`
 or `--all` (refuses implicit broker polls). Apply without an injected callback
@@ -4199,37 +4327,44 @@ Observer until an Alpaca paper OAuth connection exists. The fill remaining-hop
 requires a mirrored row with a symbol **and** an Alpaca paper OAuth connection.
 
 **`execute_at_open` seam.** `resolve_execution_venue_for_run` is the only new call site;
-invalid / empty `DIGIQUANT_EXECUTION_WORKSPACE_ID` (alias `OLYMPUS_KAIROS_WORKSPACE_ID`) warns and falls back to house
+invalid / empty `DIGIQUANT_EXECUTION_WORKSPACE_ID` warns and falls back to house
 (`paper_internal`). Default (no workspace / kill switch off) stays on
 `build_events_from_paper_fills`. Migration 102 + `tests/dq/dashboard/execution/`.
 
 ## Notifications (email v0)
 
-K5 Mailgun dispatch for daily digest, holding-change, and execution-alert emails.
-Module: `digiquant/src/digiquant/notify/` (`entitlements.py` mirrors T5
-`cloudflare/dashboard/lib/entitlements.ts` artifact-class matrix).
+K5 Cloudflare Email Sending dispatch for daily digest, holding-change, and
+execution-alert emails. Module: `digiquant/src/digiquant/notify/`
+(`cloudflare_email.py` is the thin stdlib client; `entitlements.py` mirrors T5
+`apps/dashboard/lib/entitlements.ts` artifact-class matrix).
 
-**Env:** `MAILGUN_API_KEY`, `MAILGUN_DOMAIN`, `NOTIFY_FROM` (required to send);
-`NOTIFY_UNSUBSCRIBE_BASE` optional (defaults to digiquant.io settings placeholder).
+**Env:** `CLOUDFLARE_EMAIL_API_TOKEN` (dedicated **Email Sending: Edit** token —
+deliberately not the broad deploy token), `CLOUDFLARE_ACCOUNT_ID`, `NOTIFY_FROM`
+(required to send); `NOTIFY_UNSUBSCRIBE_BASE` optional (defaults to digiquant.io
+settings placeholder). `NOTIFY_FROM` may be a bare address or `Name <addr@domain>`.
 
-**Behavior:** fail-soft for cron/post-run — Mailgun/network errors log a warning and
-return; missing Mailgun env logs `MAILGUN_NOT_CONFIGURED` with named keys and skips
-(never silent as success in agent probes). Dedupe via `notification_log` insert-first
-PK `(workspace_id, event_key, sent_date)`; suppression checked **before** claim
-(skipped sends do not burn dedupe slots); tier gates on digest sections and event
+**Behavior:** fail-soft for cron/post-run — transport/network errors log a warning and
+return; missing notify env logs `NOTIFY_NOT_CONFIGURED` with named keys and skips
+(never silent as success in agent probes). Dedupe via `notification_claim` insert-first
+PK `(workspace_id, event_key, sent_date)`; suppression is enforced by Cloudflare at
+send time (a suppressed recipient is reported on the send response, the client raises
+`EmailSuppressedError` and dispatch releases the claim — a DELETE, which is why the
+claim has its own mutable table while `notification_log` records only what was sent —
+so the send is retried once the address is unsuppressed; there is no pre-send query API);
+tier gates on digest sections and event
 types (`house_weights_nav` for holding-change, `private_book` for execution alerts);
 templates carry unsubscribe link, no broker ids/tokens/keys.
 
-**Loud-fail probe:** `python -m digiquant.notify.dispatch --require-mailgun` (alias
-`--check`) exits **2** with `MAILGUN_NOT_CONFIGURED` listing missing env *names*
+**Loud-fail probe:** `python -m digiquant.notify.dispatch --require-notify` (alias
+`--check`) exits **2** with `NOTIFY_NOT_CONFIGURED` listing missing env *names*
 when vendor keys are empty. `--dry-run` loads `notification_prefs` and prints
 candidate counts (`considered`, `digest_on`, `skipped_prefs_off`,
-`skipped_no_email`, `mailgun_configured`) without sending or claiming
-`notification_log` slots — Mailgun absence is `mailgun_configured=0`, not a
+`skipped_no_email`, `notify_configured`) without sending or claiming
+`notification_log` slots — notify absence is `notify_configured=0`, not a
 skip of the count. `--workspace-id` filters the plan. Missing store env exits
 **2** with `NOTIFY_STORE_NOT_CONFIGURED`. Combined cron probe:
 `python scripts/digiquant_cron_check.py` (overlay `--check` + execution sync `--check` +
-route `--check` + Mailgun names) exits **2** with `EXECUTION_CRON_CHECK` listing
+route `--check` + notify names) exits **2** with `EXECUTION_CRON_CHECK` listing
 which probes failed. Route `--check` logs `routing_enabled=true|false` and
 never calls `submit_order`. The copy-paste GHA spec also runs
 ``python -m digiquant.notify.dispatch --dry-run`` (no send, no
@@ -4260,10 +4395,10 @@ that finishes `failed` with `error=legacy_book_unique` names
 generic `overlay_not_succeeded`; a fill
 fingerprint with a symbol **and** that OAuth paper connection (`api_key` fills
 do not prove the hop); a `digest:`
-log key **and** `KAIROS_STAGING_DIGEST_INBOX_CONFIRMED` after an inbox check
+log key **and** `DIGIQUANT_STAGING_DIGEST_INBOX_CONFIRMED` after an inbox check
 **and** `notification_prefs.daily_digest=true` (dispatch skips prefs that are
 off; Observer PATCH `/settings/notifications` is not Studio-gated).
-Claim-ledger rows are inserted before Mailgun send. Remaining-hop GETs that
+Claim-ledger rows are inserted before notify send. Remaining-hop GETs that
 are not HTTP 200 exit **3**. Unproven hops log a closed-vocabulary
 ``blocker=`` code (never Stripe ids) next to ``proven=False`` so the
 human-owned gate is named. Exit **0** only when all five remaining hops are
@@ -4271,7 +4406,7 @@ proven. Exit **2** when hops are unproven **and** named vendor secrets are
 missing. Checkout URL + unsigned webhook with hops still unproven is **exit 4**.
 Phase C (and the Observer checkout hop) POST `tier=studio` — Brief/Desk would
 leave overlay `TIER_FORBIDDEN` after Stripe lands.
-Recipient for staging digests can be an Agentmail inbox once Mailgun is
+Recipient for staging digests can be an Agentmail inbox once notify is
 configured.
 
 **House pipeline proof:** `python scripts/digiquant_house_pipeline_proof.py` lists
@@ -4299,19 +4434,19 @@ schedule fails. The CLI refuses `--dispatch` / `--apply`.
 |--------|----------|------------------|
 | Cron `python -m digiquant.notify.dispatch` | `dispatch_notifications(hour_utc=now.hour)` | Yes — matches `digest_hour_utc` |
 | House CLI `python -m digiquant.portfolio.chain` (success, not retry) | `dispatch_house_notifications_after_chain` → `force_digest=True` | No — always attempts today's digest; dedupe prevents double-send |
-| Probe `… --require-mailgun` | env presence only (no send) | N/A — exit 2 if incomplete |
-| Preview `… --dry-run` | `plan_digest_dispatch` (prefs counts; no send/claim) | N/A — `mailgun_configured` flag only |
+| Probe `… --require-notify` | env presence only (no send) | N/A — exit 2 if incomplete |
+| Preview `… --dry-run` | `plan_digest_dispatch` (prefs counts; no send/claim) | N/A — `notify_configured` flag only |
 | `run_db_first.py` post-run | `dispatch_notifications(run_date=…, force_digest=True)` | No — always attempts today's digest; dedupe prevents double-send |
 | Overlay `run_research_then_portfolio` | none | N/A — nested overlay must not send house mail |
 | K4 `run_sync_batch` tail | `dispatch_execution_alerts(run_date=…)` | N/A — execution alerts only |
 
-House GHA (`pipeline-digiquant.yml`) does not yet pass `MAILGUN_API_KEY` /
-`MAILGUN_DOMAIN` / `NOTIFY_FROM` into the chain step. Splice
-`docs/agent-backlog/execution-tenancy/pipeline-digiquant-mailgun.env.yml` on a
+House GHA (`pipeline-digiquant.yml`) does not yet pass `CLOUDFLARE_EMAIL_API_TOKEN` /
+`CLOUDFLARE_ACCOUNT_ID` / `NOTIFY_FROM` into the chain step. Splice
+`docs/agent-backlog/execution-tenancy/pipeline-olympus-notify.env.yml` on a
 `chore/` or `feat/` branch (`cursor/*` cannot write workflows). Until then the
 close-out is fail-soft skip.
 
-Migration 103 (`notification_prefs`, `notification_log`) + `tests/dq/notify/`.
+Migration 103 (`notification_prefs`, `notification_log`) and 133 (`notification_claim`) + `tests/dq/notify/`.
 
 ## Billing (T2)
 
@@ -4437,7 +4572,7 @@ The fail-closed GHA spec is
 `--dry-run`). `cursor/*` cannot write `.github/workflows/`; the installed
 job still runs `scripts/execution_cron_check.py` (wrapper) until a `chore/` or
 `feat/` hop copies a renamed spec. Missing
-`CORE_SUPABASE_*` / Mailgun GitHub secrets fail closed (exit 2). That job
+`CORE_SUPABASE_*` / notify GitHub secrets fail closed (exit 2). That job
 must never pass `--execute`, `--all`, or invoke `portfolio.chain`.
 
 **Omitted `workspace_id` means the house.** Scannable developer guide:
@@ -4471,12 +4606,12 @@ the house library), `backfill_research_state` house inventory pages (overlay
 rows must not seed the in-memory research-state store),
 `audit_activity_coverage_api` Group A max-dates) pin via
 `eq_house_workspace()`
-(omitted id = house). House research/MCP `query_data` / `digiquant_query_data`
+(omitted id = house). House MCP `query_research` / `digiquant_query_research`
 stamps house `workspace_id` on those same Group A tables when `eq` omits it
 (`HOUSE_BOOK_READ_TABLES` in `research/data/queries.py`). House preflight
 `load_prior_context` / analyst and deliberation continuity / beliefs /
 institutional-absence documents also pin house so overlay private docs cannot
-seed the house graph. The dashboard Group A readers (`cloudflare/dashboard/lib/queries.ts`, `observability-queries.ts`)
+seed the house graph. The dashboard Group A readers (`apps/dashboard/lib/queries.ts`, `observability-queries.ts`)
 go through `houseBook()` (`lib/house-workspace.ts`) so a signed-in Custom
 member's overlay rows cannot mix into Brief / Holdings / Performance. Accounting NAV still uses
 `public_accounting_nav_history` (security definer; house-only until a later
@@ -4493,7 +4628,7 @@ semantics, not the fake's).
 
 **Runner (`runner.py`).** ProfileConfig pin (`requested_version_id` + `workspace_id`
 at the preflight seam — the pin loader is unchanged) → publish-if-missing into the
-shared corpus under `theme:` / `asset:` / `segment:` keys → private H7–H9 book.
+shared corpus under `theme:` / `asset:` / `segment:` keys → private direction–commit book.
 A write-time assertion rejects any corpus key containing the workspace or user id.
 House callers that omit `workspace_id` keep the T0 house stamp (byte-identical).
 Overlay commit manifests use `overlay-commit/{workspace_id}/…` **only** when
@@ -4501,7 +4636,7 @@ Overlay commit manifests use `overlay-commit/{workspace_id}/…` **only** when
 `workspace_id` keep `commit-run/{run_id}` — a truthy house id must not flip the
 prefix (same rule as `portfolio_document_key`). `load_commit_manifests` pins
 `documents.workspace_id` on the PostgREST path so an overlay same-date row
-cannot satisfy a house `commit-run/%` like. H7/H8 document keys use
+cannot satisfy a house `commit-run/%` like. direction/sizing document keys use
 `overlay/{workspace_id}/pm-direction-memo` (and the same prefix for
 `pm-rebalance`, `analyst/…`, `deliberation/…`) so they cannot collide with house
 keys after the documents unique is `(workspace_id, date, document_key)`.
@@ -4522,7 +4657,7 @@ books) so overlay `documents` rows do not leak through `anon_read`. Overlay
 (`legacy_book_unique`) while migration 097's legacy `UNIQUE(date)` /
 `UNIQUE(date, ticker)` / `PRIMARY KEY (date)` and ledger
 `uq_portfolio_ledger_commits_one_root (run_date)` still sit beside the widened
-keys — H9 `commit_io`, `portfolio_materialize`, and `refresh_performance_metrics`
+keys — commit `commit_io`, `portfolio_materialize`, and `refresh_performance_metrics`
 now upsert the widened `(workspace_id, …)` targets, as do the remaining house
 ops scripts (`update_tearsheet` Group A plus documents
 `on_conflict=workspace_id,date,document_key`, `sync_positions_from_rebalance`,
@@ -4539,13 +4674,13 @@ hotfix #3278; `origin/main` `commit_io` / `portfolio_materialize` still
 `require_overlay_legacy_book_safe`. `daily_snapshots` stays `UNIQUE(date)`
 (house-only). Until 113 is applied, overlay persist-on cannot prove the
 remaining hop: `execute_overlay` refuses succeeded after the chain for a
-private workspace (documents-only / fail-soft H9 used to finish succeeded).
+private workspace (documents-only / fail-soft commit used to finish succeeded).
 Settings About and the staging harness name `overlay_legacy_book_unique`
 when `job_runs.error` is `legacy_book_unique` (persist-disabled still wins).
 `_safe_invoke_graph` re-raises `OverlayLegacyBookBlocked` instead of
 swallowing it. Overlay publish
 **skips** `daily_snapshots` (house-only `UNIQUE(date)` — an overlay upsert would
-overwrite the house Brief). Overlay H1–H5 / Phase 9D **skip** `theses`,
+overwrite the house Brief). Overlay thesis–analyst / Phase 9D **skip** `theses`,
 `analyst_coverage`, and `thesis_vehicles` for a private workspace
 (`skip_overlay_shared_register`): those tables have no `workspace_id` column
 and leftover `UNIQUE(date, …)` keys, so persist-on would last-writer-win the
@@ -4557,12 +4692,12 @@ compact summary still lands in in-memory `market_context` for that overlay run.
 Overlay `run_research_then_portfolio` **skips** `_run_beliefs_fold` for a private
 workspace — distillation reads every unfolded house `decision_log` row and
 stamps `beliefs_folded_at` by id, and the chain still reaches that fold after
-a fail-soft H9 `legacy_book_unique`. Overlay identity is seeded onto
+a fail-soft commit `legacy_book_unique`. Overlay identity is seeded onto
 `initial_state` from the preflight `config_loader` before graph invoke, so an
 research crash that returns last-good state cannot fold as house
 (`workspace_id=None`). Staged cutover 113 does not change that.
 Private overlay remains
-H7–H9 book only (T4). Cutover 900 is still required before dropping
+direction–commit book only (T4). Cutover 900 is still required before dropping
 the house teaser for anon / free JWTs; it is not the persist precondition.
 With the flag off, research/corpus phases still run; private-phase
 persistence refuses and the job row is `persist_disabled`.
@@ -4607,7 +4742,7 @@ for `None` / house / system UUIDs. Overlay tenant routing threads
 
 **Authority note (ledger / paper fills).** Overlay's runner path writes the
 shared corpus (tenant-agnostic keys), the pin-seam `workspace_id` on
-`ResearchConfigBundle`, H9 commit manifests (`overlay-commit/{workspace_id}/…`),
+`ResearchConfigBundle`, commit manifests (`overlay-commit/{workspace_id}/…`),
 the private book / NAV (`commit_io`), and the ledger chain (`ledger_io` models
 receive `workspace_id=` when overlay; house constructors stay on
 `house_workspace_id()`). It does **not** call `execution_io.execute_pending_orders`

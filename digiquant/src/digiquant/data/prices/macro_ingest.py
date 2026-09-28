@@ -44,6 +44,10 @@ class FredSeriesEntry(TypedDict, total=False):
     series_id: str
     unit: str | None
     title: str | None
+    # Native publication cadence ("daily" | "weekly" | "monthly" | "quarterly").
+    # A series with no cadence is treated as daily by the R2 refresh, which is
+    # the pre-#4588 behaviour. See scripts/refresh_market_data_r2.py.
+    cadence: str | None
 
 
 class FredRawObservation(TypedDict, total=False):

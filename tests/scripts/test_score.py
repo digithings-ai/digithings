@@ -162,7 +162,7 @@ def test_scan_exempts_hardcoded_secret_in_test_fixtures() -> None:
 def test_scan_skips_score_py_and_design_fragments() -> None:
     for path in (
         "scripts/score.py",
-        "cloudflare/digiweb/design/terminal/highlight-dom.js",
+        "packages/design/terminal/highlight-dom.js",
         "package-lock.json",
     ):
         # Concatenate so this source line does not contain a call-shaped token.
@@ -294,7 +294,7 @@ def _run_git(repo: Path, *args: str) -> str:
 def test_score_workflow_excludes_non_source_surfaces(tmp_path: Path) -> None:
     """``test-score.yml`` must behaviorally exclude non-source surfaces (#3798).
 
-    ``cloudflare/**`` set the precedent: scoring JS/CSS with a Python-oriented
+    ``apps/**`` / ``packages/**`` set the precedent: scoring JS/CSS with a Python-oriented
     rubric emits findings nobody can act on. Tests, config, prose and Dockerfiles
     misfire the same way on a develop→main promotion — a test asserting a
     ``0.0.0.0`` bind, an EXPOSE directive, an env-var *name* read as a secret — so

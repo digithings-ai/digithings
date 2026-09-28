@@ -32,7 +32,7 @@ from typing import Any  # score:allow untyped any — tool argument maps are arb
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from digivault.models import LintReport, Note
+from digivault.models import Note
 from digivault.vault import Vault, VaultError
 
 # ── canonical tool names ─────────────────────────────────────────────────────
@@ -161,11 +161,10 @@ def _handle_backlinks(vault: Vault, args: Mapping[str, Any]) -> ToolDispatchResu
 
 def _handle_lint(vault: Vault, args: Mapping[str, Any]) -> ToolDispatchResult:
     prefix = resolve_vault_prefix(args.get("path_prefix"))
-    report = vault.lint()
-    if prefix:
-        issues = tuple(issue for issue in report.issues if _path_under_prefix(issue.note, prefix))
-        note_count = sum(1 for n in vault.list_notes() if _note_under_prefix(n, prefix))
-        report = LintReport(ok=not issues, note_count=note_count, issues=issues)
+    # Scope inside ``Vault.lint`` so duplicate-stem detection cannot name a path
+    # outside the prefix — filtering a whole-vault report afterwards leaked the
+    # colliding corpus's path in the issue message (#4256).
+    report = vault.lint(scope=prefix)
     return ToolDispatchResult(ok=True, data=report.model_dump(mode="json"))
 
 
@@ -176,7 +175,11 @@ def _handle_create_note(vault: Vault, args: Mapping[str, Any]) -> ToolDispatchRe
     fm = {"title": args["title"]} if args.get("title") else {}
     try:
         note = vault.create_note(
-            str(args["name"]), frontmatter=fm, body=str(args.get("body") or ""), subdir=prefix
+            str(args["name"]),
+            frontmatter=fm,
+            body=str(args.get("body") or ""),
+            subdir=prefix,
+            scope=prefix,
         )
     except VaultError as exc:
         return ToolDispatchResult(ok=False, error=str(exc))

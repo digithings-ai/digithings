@@ -4,7 +4,7 @@ Agent-runnable probes (``scripts/digiquant_staging_e2e.py``,
 ``tests/dq/dashboard/execution/test_staging_e2e.py``) call
 :func:`missing_execution_staging_secrets` and **fail loudly** with the returned
 names when any required vendor secret is empty. They must never substitute
-fakes for Stripe / Mailgun / Alpaca OAuth and claim staging E2E pass.
+fakes for Stripe / Cloudflare / Alpaca credentials and claim staging E2E pass.
 """
 
 from __future__ import annotations
@@ -15,15 +15,15 @@ from collections.abc import Mapping
 from digiquant.dashboard.envcompat import STAGING_USER_JWT, env_lookup
 
 # Ordered for human/agent checklists — keep in sync with
-# docs/agent-backlog/kairos-tenancy/HUMAN-UNBLOCK.md and WAITING-ON-SECRETS.json.
+# docs/agent-backlog/execution-tenancy/HUMAN-UNBLOCK.md and WAITING-ON-SECRETS.json.
 STAGING_REQUIRED_SECRETS: tuple[str, ...] = (
     "STRIPE_SECRET_KEY",
     "STRIPE_WEBHOOK_SECRET",
     "STRIPE_PRICE_BRIEF_MONTHLY",
     "STRIPE_PRICE_DESK_MONTHLY",
     "STRIPE_PRICE_STUDIO_MONTHLY",
-    "MAILGUN_API_KEY",
-    "MAILGUN_DOMAIN",
+    "CLOUDFLARE_EMAIL_API_TOKEN",
+    "CLOUDFLARE_ACCOUNT_ID",
     "NOTIFY_FROM",
     "ALPACA_OAUTH_CLIENT_ID",
     "ALPACA_OAUTH_CLIENT_SECRET",
@@ -83,7 +83,7 @@ def format_missing_secrets_failure(missing: list[str]) -> str:
     return (
         "digiquant staging E2E blocked — missing required secrets: "
         f"{joined}. Paste into Cursor Cloud env + core EF secrets; "
-        "do not fake Stripe/Mailgun/Alpaca OAuth."
+        "do not fake Stripe/Cloudflare/Alpaca credentials."
     )
 
 

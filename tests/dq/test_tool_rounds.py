@@ -9,8 +9,8 @@ from typing import Any  # score:allow untyped any — captured mock kwargs dict
 import pytest
 from digiquant.dashboard.envcompat import TOOL_ROUNDS_MAX
 from digiquant.tool_rounds import (
-    olympus_max_tool_rounds,
-    run_olympus_research_agent,
+    digiquant_max_tool_rounds,
+    run_digiquant_research_agent,
 )
 from pydantic import BaseModel
 
@@ -23,32 +23,19 @@ class _Out(BaseModel):
 
 def test_default_is_24(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.delenv(TOOL_ROUNDS_MAX, raising=False)
-    monkeypatch.delenv("OLYMPUS_MAX_TOOL_ROUNDS", raising=False)
-    assert olympus_max_tool_rounds() == 24
+    assert digiquant_max_tool_rounds() == 24
 
 
 def test_env_override_and_floor(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv(TOOL_ROUNDS_MAX, "8")
-    assert olympus_max_tool_rounds() == 8
+    assert digiquant_max_tool_rounds() == 8
     monkeypatch.setenv(TOOL_ROUNDS_MAX, "0")
-    assert olympus_max_tool_rounds() == 1
+    assert digiquant_max_tool_rounds() == 1
 
 
 def test_invalid_env_falls_back_to_default(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv(TOOL_ROUNDS_MAX, "lots")
-    assert olympus_max_tool_rounds() == 24
-
-
-def test_canonical_wins_over_retired_alias(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv(TOOL_ROUNDS_MAX, "8")
-    monkeypatch.setenv("OLYMPUS_MAX_TOOL_ROUNDS", "24")
-    assert olympus_max_tool_rounds() == 8
-
-
-def test_retired_alias_still_read(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.delenv(TOOL_ROUNDS_MAX, raising=False)
-    monkeypatch.setenv("OLYMPUS_MAX_TOOL_ROUNDS", "8")
-    assert olympus_max_tool_rounds() == 8
+    assert digiquant_max_tool_rounds() == 24
 
 
 def _install_stub_agent(monkeypatch: pytest.MonkeyPatch) -> dict[str, Any]:
@@ -78,7 +65,7 @@ def _install_stub_agent(monkeypatch: pytest.MonkeyPatch) -> dict[str, Any]:
 
 def test_wrapper_injects_default_rounds(monkeypatch: pytest.MonkeyPatch) -> None:
     seen = _install_stub_agent(monkeypatch)
-    out = run_olympus_research_agent(
+    out = run_digiquant_research_agent(
         skill_text="s",
         phase_inputs={},
         shared_context={},
@@ -90,7 +77,7 @@ def test_wrapper_injects_default_rounds(monkeypatch: pytest.MonkeyPatch) -> None
 
 def test_wrapper_respects_explicit_rounds(monkeypatch: pytest.MonkeyPatch) -> None:
     seen = _install_stub_agent(monkeypatch)
-    run_olympus_research_agent(
+    run_digiquant_research_agent(
         skill_text="s",
         phase_inputs={},
         shared_context={},

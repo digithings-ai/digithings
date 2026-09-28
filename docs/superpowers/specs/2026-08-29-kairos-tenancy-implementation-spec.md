@@ -12,7 +12,7 @@
 
 This spec is written so a smaller model can pick up any single work package (WP) cold. Per WP it gives: goal, exact files, interfaces, behavior rules, edge cases, tests, acceptance, and gates. Global rules that apply to **every** WP:
 
-1. **Read-first, always:** `CLAUDE.md`, `digiquant/AGENTS.md` (for K-track), `cloudflare/dashboard/README.md` (for UI work), plus the WP's own "Read first" list. Never skip a component AGENTS.md.
+1. **Read-first, always:** `CLAUDE.md`, `digiquant/AGENTS.md` (for K-track), `apps/dashboard/README.md` (for UI work), plus the WP's own "Read first" list. Never skip a component AGENTS.md.
 2. **Branching:** K-track WPs are `component:digiquant` → branch from `module/digiquant` via `make task ISSUE=N` (two-hop). Olympus UI WPs and root docs are one-hop to `develop`. Never branch from a stale base — `make task` enforces `origin/<base>`.
 3. **Migration numbers are allocated at execution time** — the next free `digiquant/supabase/migrations/NNN_*.sql` when your PR lands (096+ as of this writing; check, don't assume). Update `digiquant/supabase/SCHEMA.md` in the same PR.
 4. **Human gates (hard):**
@@ -430,7 +430,7 @@ Full sourced detail lives in the research pass attached to the PR; the facts bel
 ## 10. Issue filing plan
 
 **Drafted and ready to file:** the epic + all twelve executor briefings live in
-[`docs/agent-backlog/kairos-tenancy/`](../../agent-backlog/kairos-tenancy/README.md)
+[`docs/agent-backlog/execution-tenancy/`](../../agent-backlog/execution-tenancy/README.md)
 (`EPIC.md`, `K0.md`–`K5.md`, `T0.md`–`T5.md`) with filing commands, label/model table, wave map,
 file-ownership conflict rules, and the cheap-model parallel-dispatch protocol. Each briefing is
 self-contained — dispatch one file per agent session. Suggested execution order and parallelism:

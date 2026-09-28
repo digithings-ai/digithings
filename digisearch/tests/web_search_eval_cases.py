@@ -8,6 +8,12 @@ query verbatim, so distinctive query keywords are the right assertions.
 
 Live mode (opt-in): ``DIGISEARCH_WEB_SEARCH_LIVE=1`` runs one sampled case
 per category against the real backends and asserts p50 fetch+extract < 5s.
+
+The Phase B research-turn additions live in ``RESEARCH_CASES`` (#4064): the
+harness in ``tests/ds/test_web_eval_live.py`` runs ``grounded_answer`` plus one
+``structured_synthesis`` per case offline (retrieval + rerank + digillm mocked),
+and the same ``DIGISEARCH_WEB_SEARCH_LIVE=1`` gate runs the live-sampled leg,
+recording p50 stage ms + citation coverage as scaffolding, never SLOs.
 """
 
 CASES = [
@@ -114,6 +120,89 @@ CASES = [
         "query": "nestle organic growth pricing power",
         "category": "earnings",
         "must_contain": ["nestle", "organic growth"],
+    },
+]
+
+
+#: Phase B research-turn cases (#4064, Task 6). Same four categories as
+#: ``CASES``; ``must_cite`` marks a case whose synthesized answer must carry
+#: ``[n]`` citations (the harness asserts the marker is set explicitly).
+RESEARCH_CASES: list[dict] = [
+    # news — market-moving headlines the synthesis must cite
+    {
+        "query": "semiconductor export controls chip supply chain impact",
+        "category": "news",
+        "must_contain": ["export controls", "chip"],
+        "must_cite": True,
+    },
+    {
+        "query": "red sea shipping rates container freight disruption",
+        "category": "news",
+        "must_contain": ["shipping", "freight"],
+        "must_cite": True,
+    },
+    {
+        "query": "grid storage battery capacity additions record",
+        "category": "news",
+        "must_contain": ["storage", "battery"],
+        "must_cite": True,
+    },
+    # macro — policy and data releases
+    {
+        "query": "treasury yield curve inversion recession signal",
+        "category": "macro",
+        "must_contain": ["yield curve", "recession"],
+        "must_cite": True,
+    },
+    {
+        "query": "china property stimulus credit impulse outlook",
+        "category": "macro",
+        "must_contain": ["property", "stimulus"],
+        "must_cite": True,
+    },
+    {
+        "query": "uk gilts inflation persistence bank of england",
+        "category": "macro",
+        "must_contain": ["gilts", "inflation"],
+        "must_cite": True,
+    },
+    # docs — stack and product knowledge
+    {
+        "query": "digisearch research turn web branch source routing",
+        "category": "docs",
+        "must_contain": ["research turn", "web branch"],
+        "must_cite": True,
+    },
+    {
+        "query": "digisearch synthesis model web grounded citations",
+        "category": "docs",
+        "must_contain": ["synthesis", "citations"],
+        "must_cite": True,
+    },
+    {
+        "query": "digisearch effort preset thorough fetch depth",
+        "category": "docs",
+        "must_contain": ["effort", "preset"],
+        "must_cite": True,
+    },
+    # earnings — company results
+    {
+        "query": "tsmc capex advanced packaging ai demand",
+        "category": "earnings",
+        "must_contain": ["capex", "packaging"],
+        "must_cite": True,
+    },
+    {
+        "query": "meta reality labs operating losses advertising",
+        "category": "earnings",
+        "must_contain": ["reality labs", "advertising"],
+        "must_cite": True,
+    },
+    {
+        "query": "fedex freight demand guidance peak season",
+        "category": "earnings",
+        "must_contain": ["freight", "guidance"],
+        "must_cite": True,
     },
 ]
 

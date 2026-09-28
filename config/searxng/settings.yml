@@ -1,13 +1,72 @@
-# searxng sidecar settings for digisearch proprietary web search (#3853).
+# searxng sidecar settings for digisearch proprietary web search (#3853, #4297).
 # Mounted read-only at /etc/searxng/settings.yml (see docker-compose.yml).
 # JSON output must stay enabled: the searxng provider calls /search?format=json.
-use_default_settings:
-  engines:
-    keep_only:
-      - wikipedia
-      - duckduckgo
-      - bing
-      - mojeek
+#
+# #4297: this used to `use_default_settings.engines.keep_only` four engines
+# (wikipedia, duckduckgo, bing, mojeek). That is brittle: searxng reports a
+# blocked/dead engine as a 200 with an empty result set, so when one or two of
+# the four are unreachable from the container's egress (duckduckgo 403s it)
+# `web_search` returns zero rows and the house-research run fails with
+# `status: web_search_unhealthy` — digisearch's ddgs failover only fires on an
+# exception, not on an empty success. Dropping `keep_only` keeps every
+# default-enabled engine, and the explicit `engines:` override below enables the
+# no-API-key engines that ship `disabled: true` upstream, so no single engine
+# outage can zero the result set.
+#
+# `keep_only` is a pure FILTER (searx/settings_loader.py:update_settings applies
+# a plain `filter`); it does NOT flip an engine's `disabled` flag. An explicit
+# `engines:` entry merges over the default definition (update_settings ->
+# update_dict) and clears it — that is what actually enables an engine.
+#
+# Everything listed below needs NO API key. Engines that ship `inactive: true`
+# upstream (e.g. `marginalia`, which requires an API key, and the braveapi/
+# exaapi/jina/yandex_api family) stay untouched and inactive.
+#
+# `luxxle`, `swisscows` and `tiger` ship `inactive: true` as well as
+# `disabled: true`; load_engines() (searx/engines/__init__.py) drops inactive
+# engines entirely, so clearing only `disabled` would leave them unusable. They
+# are no-API-key engines, so enabling them needs both flags cleared.
+use_default_settings: true
+
+engines:
+  # general/web
+  - name: bing
+    disabled: false
+  - name: mojeek
+    disabled: false
+  - name: qwant
+    disabled: false
+  - name: yep
+    disabled: false
+  - name: wiby
+    disabled: false
+  - name: seznam
+    disabled: false
+  - name: baidu
+    disabled: false
+  - name: swisscows
+    disabled: false
+    inactive: false
+  - name: luxxle
+    disabled: false
+    inactive: false
+  - name: tiger
+    disabled: false
+    inactive: false
+  # news
+  - name: mojeek news
+    disabled: false
+  - name: qwant news
+    disabled: false
+  - name: swisscows news
+    disabled: false
+    inactive: false
+  - name: luxxle news
+    disabled: false
+    inactive: false
+  - name: tiger news
+    disabled: false
+    inactive: false
 
 general:
   instance_name: "digi searxng"
