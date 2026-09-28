@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 import uuid
+from collections.abc import Sequence
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
@@ -97,3 +98,95 @@ def public_jwks(private_key: RSAPrivateKey, kid: str) -> dict[str, Any]:
     data["alg"] = "RS256"
     _ = pem  # keep pem for debugging
     return {"keys": [data]}
+
+
+LICENSE_AUDIENCE = "digichat-license"
+LICENSE_KIND = "digichat-license"
+LICENSE_DEFAULT_TERM_DAYS = 90
+LICENSE_MAX_TERM_DAYS = 180
+LICENSE_TERM_SEC = 86400
+
+
+def build_license_claims(
+    *,
+    customer_slug: str,
+    hosts: Sequence[str],
+    services: Sequence[str] | None = None,
+    term_days: int = LICENSE_DEFAULT_TERM_DAYS,
+) -> tuple[dict[str, Any], str]:
+    """Build customer-license JWT claims without signing.
+
+    Returns ``(claims, license_id)`` where ``license_id`` mirrors the ``jti``.
+    ``services`` is omitted from the claims entirely when not passed (absent
+    means entitled to the hosted services of the commercial term). Raises
+    ``ValueError`` on blank customer/hosts or an out-of-range term.
+    """
+    customer = customer_slug.strip()
+    if not customer:
+        raise ValueError("customer_slug must not be blank")
+    clean_hosts = [h.strip() for h in hosts if h.strip()]
+    if not clean_hosts:
+        raise ValueError("hosts must name at least one hostname")
+    if term_days < 1 or term_days > LICENSE_MAX_TERM_DAYS:
+        raise ValueError(f"term_days must be 1..{LICENSE_MAX_TERM_DAYS}")
+    svc = list(services) if services is not None else None
+    now = datetime.now(timezone.utc)
+    iat = int(now.timestamp())
+    license_id = uuid.uuid4().hex
+    claims: dict[str, Any] = {
+        "sub": customer,
+        "iss": _issuer(),
+        "aud": LICENSE_AUDIENCE,
+        "iat": iat,
+        "exp": iat + term_days * LICENSE_TERM_SEC,
+        "jti": license_id,
+        "license_id": license_id,
+        "tenant_slug": customer,
+        "hosts": clean_hosts,
+        "kind": LICENSE_KIND,
+    }
+    if svc is not None:
+        claims["services"] = svc
+        claims["scope"] = " ".join(svc)
+    return claims, license_id
+
+
+def sign_license_claims(
+    private_key: RSAPrivateKey,
+    *,
+    kid: str,
+    claims: dict[str, Any],
+) -> str:
+    """Sign pre-built license claims (RS256, ``kid`` header)."""
+    token = jwt.encode(
+        claims, private_key_to_pem(private_key), algorithm="RS256", headers={"kid": kid}
+    )
+    return str(token)
+
+
+def issue_license_token(
+    private_key: RSAPrivateKey,
+    *,
+    kid: str,
+    customer_slug: str,
+    hosts: Sequence[str],
+    services: Sequence[str] | None = None,
+    term_days: int = LICENSE_DEFAULT_TERM_DAYS,
+) -> tuple[str, str, int]:
+    """Mint a customer-license JWT with the digikey access-token keypair.
+
+    Returns ``(token, license_id, exp)``. License values (``aud``,
+    ``ttl``) are always passed explicitly here — the access-token defaults
+    (``aud=digi-ecosystem``, 900s TTL) are untouched.
+    """
+    claims, license_id = build_license_claims(
+        customer_slug=customer_slug,
+        hosts=hosts,
+        services=services,
+        term_days=term_days,
+    )
+    return (
+        sign_license_claims(private_key, kid=kid, claims=claims),
+        license_id,
+        int(claims["exp"]),
+    )
