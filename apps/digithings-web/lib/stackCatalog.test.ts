@@ -69,10 +69,10 @@ describe("configurator specs", () => {
     }
     const finance = providerSpec(DEFAULT_PROVIDER_PICK, undefined, { topology: "finance" });
     const financeIds = finance.services.map((s) => s.id);
-    for (const id of ["app", "sources", "api", "model", "launcher", "record", "telemetry", "terms"]) {
+    for (const id of ["app", "feeds", "filings", "api", "model", "launcher", "record", "telemetry", "terms"]) {
       expect(financeIds).toContain(id);
     }
-    for (const id of ["embed", "memory", "machines", "review", "email"]) {
+    for (const id of ["sources", "embed", "memory", "machines", "review", "email"]) {
       expect(financeIds).not.toContain(id);
     }
   });
