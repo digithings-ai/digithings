@@ -369,6 +369,13 @@
   color: var(--ink-mute);
 }
 
+/* App-first dimming: configured boxes rest dimmed unless the walk lights
+   them. One rule per dimmable box — the walk's `on` always wins, so a step
+   about a dimmed box still spotlights it. */
+.arch-tour-dim-vault #arch-service-vault:not(.is-on) {
+  opacity: 0.32;
+}
+
 /* The side tag prints ONCE per side, on its own row at the TOP, right-aligned
  * above the step column — never on every step and never bottom-left. */
 .arch-tour__side > .arch-tour__side-tag {

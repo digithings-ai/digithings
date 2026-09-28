@@ -45,6 +45,8 @@ export const PROVIDER_LAYERS: Layer[] = [
     options: [
       { id: "sol", label: "GPT-5.6 Sol · $5/$30", vendor: "OpenAI", logo: "openai" },
       { id: "luna", label: "GPT-5.6 Luna · $0.20/$1.20", vendor: "OpenAI", logo: "openai" },
+      { id: "o3", label: "o3 reasoning · $2/$8", vendor: "OpenAI", logo: "openai" },
+      { id: "deepseek", label: "DeepSeek V4 · $0.14/$0.28", vendor: "DeepSeek" },
       { id: "commandr", label: "Command R · $0.15/$0.60", vendor: "Cohere" },
       { id: "local", label: "Self-hosted · $0", vendor: "you" },
     ],
@@ -93,6 +95,8 @@ export const DIGI_LAYERS: Layer[] = [
     options: [
       { id: "local", label: "Local · $0", vendor: "you" },
       { id: "luna", label: "Luna · $0.20/$1.20", vendor: "OpenAI", logo: "openai" },
+      { id: "deepseek", label: "DeepSeek V4 · $0.14/$0.28", vendor: "DeepSeek" },
+      { id: "o3", label: "o3 · $2/$8", vendor: "OpenAI", logo: "openai" },
       { id: "sol", label: "Sol · $5/$30", vendor: "OpenAI", logo: "openai" },
     ],
   },
@@ -156,6 +160,8 @@ export const DEFAULT_DIGI_PICK: StackPick = {
 const MODEL_RATES: Record<string, { inPerM: number; outPerM: number }> = {
   sol: { inPerM: RAG_PRICING.chatFlagshipInPerM, outPerM: RAG_PRICING.chatFlagshipOutPerM },
   luna: { inPerM: RAG_PRICING.chatMidInPerM, outPerM: RAG_PRICING.chatMidOutPerM },
+  o3: { inPerM: RAG_PRICING.reasoningInPerM, outPerM: RAG_PRICING.reasoningOutPerM },
+  deepseek: { inPerM: RAG_PRICING.deepseekInPerM, outPerM: RAG_PRICING.deepseekOutPerM },
   commandr: { inPerM: 0.15, outPerM: 0.6 },
   local: { inPerM: 0, outPerM: 0 },
 };
@@ -264,6 +270,8 @@ export function pricePick(
 const MODEL_GATEWAY: Record<string, string> = {
   sol: "OpenAI API",
   luna: "OpenAI API",
+  o3: "OpenAI API",
+  deepseek: "DeepSeek API",
   commandr: "Cohere API",
   local: "your API",
 };
@@ -271,6 +279,8 @@ const MODEL_GATEWAY: Record<string, string> = {
 const MODEL_BOX: Record<string, string> = {
   sol: `Sol · $${RAG_PRICING.chatFlagshipInPerM}/$${RAG_PRICING.chatFlagshipOutPerM}`,
   luna: `Luna · $${RAG_PRICING.chatMidInPerM}/$${RAG_PRICING.chatMidOutPerM}`,
+  o3: `o3 · $${RAG_PRICING.reasoningInPerM}/$${RAG_PRICING.reasoningOutPerM}`,
+  deepseek: `DeepSeek · $${RAG_PRICING.deepseekInPerM}/$${RAG_PRICING.deepseekOutPerM}`,
   commandr: "Command R · $0.15/$0.60",
   local: "local model · $0",
 };
@@ -300,7 +310,11 @@ function vendorCount(price: StackPrice): string {
 }
 
 /** Provider-side drawing: fixed traditional topology, labels from the pick. */
-export function providerSpec(pick: StackPick, workload: RagWorkload = DEFAULT_WORKLOAD): ArchSpec {
+export function providerSpec(
+  pick: StackPick,
+  workload: RagWorkload = DEFAULT_WORKLOAD,
+  opts: { appLabel?: string } = {},
+): ArchSpec {
   const model = lookup(PROVIDER_LAYERS, pick, "models");
   const embed = lookup(PROVIDER_LAYERS, pick, "embeddings");
   const vector = lookup(PROVIDER_LAYERS, pick, "vector");
@@ -312,7 +326,7 @@ export function providerSpec(pick: StackPick, workload: RagWorkload = DEFAULT_WO
     description: "The traditional stack with the picked providers on every box.",
     groups: [{ id: "platform", label: vendorCount(price), icon: "cloud", col: 0, row: 1, cols: 3, rows: 4 }],
     services: [
-      { id: "app", label: "your product", icon: "internet", col: 0, row: 0 },
+      { id: "app", label: opts.appLabel ?? "your product", icon: "internet", col: 0, row: 0 },
       { id: "sources", label: "your data sources", icon: "database", col: 2, row: 0 },
       { id: "api", label: MODEL_GATEWAY[model.id], icon: "server", logo: model.logo, group: "platform", col: 1, row: 1 },
       { id: "model", label: MODEL_BOX[model.id], icon: "server", logo: model.logo, group: "platform", col: 0, row: 2 },
@@ -341,6 +355,8 @@ export function providerSpec(pick: StackPick, workload: RagWorkload = DEFAULT_WO
 const DIGI_MODEL_BOX: Record<string, string> = {
   local: "digillm · local · $0",
   luna: `digillm · Luna $${RAG_PRICING.chatMidInPerM}/$${RAG_PRICING.chatMidOutPerM}`,
+  deepseek: `digillm · DeepSeek $${RAG_PRICING.deepseekInPerM}/$${RAG_PRICING.deepseekOutPerM}`,
+  o3: `digillm · o3 $${RAG_PRICING.reasoningInPerM}/$${RAG_PRICING.reasoningOutPerM}`,
   sol: `digillm · Sol $${RAG_PRICING.chatFlagshipInPerM}/$${RAG_PRICING.chatFlagshipOutPerM}`,
 };
 
@@ -363,7 +379,11 @@ const DIGI_TELEMETRY_BOX: Record<string, string> = {
 };
 
 /** digithings-side drawing: module boxes, per-layer subtitles from the pick. */
-export function digiSpec(pick: StackPick, workload: RagWorkload = DEFAULT_WORKLOAD): ArchSpec {
+export function digiSpec(
+  pick: StackPick,
+  workload: RagWorkload = DEFAULT_WORKLOAD,
+  opts: { appLabel?: string } = {},
+): ArchSpec {
   const model = lookup(DIGI_LAYERS, pick, "models");
   const embed = lookup(DIGI_LAYERS, pick, "embeddings");
   const vector = lookup(DIGI_LAYERS, pick, "vector");
@@ -374,7 +394,7 @@ export function digiSpec(pick: StackPick, workload: RagWorkload = DEFAULT_WORKLO
     description: "The same workload on digithings modules with the picked options.",
     groups: [{ id: "digithings", label: `digithings · ${vendorCount(price)}`, icon: "server", col: 0, row: 1, cols: 4, rows: 2 }],
     services: [
-      { id: "app", label: "your product", icon: "internet", col: 1, row: 0 },
+      { id: "app", label: opts.appLabel ?? "your product", icon: "internet", col: 1, row: 0 },
       { id: "chat", label: "digichat · chat UI", icon: "server", group: "digithings", col: 0, row: 1 },
       { id: "graph", label: "digigraph · router", icon: "server", group: "digithings", col: 1, row: 1 },
       { id: "models", label: DIGI_MODEL_BOX[model.id], icon: "server", logo: model.logo, group: "digithings", col: 2, row: 1 },
