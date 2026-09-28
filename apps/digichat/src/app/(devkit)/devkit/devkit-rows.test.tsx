@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { describe, expect, it, vi } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
 // NOTE: TextRow/BoolRow must be exported from devkit-editors.tsx for this
@@ -151,7 +151,13 @@ describe("ToolCard (kit Card)", () => {
     });
     const commit = vi.fn((edit: TextEdit) => edit.applied);
     render(<DevkitEditors draft={draft} commit={commit} />);
-    const title = screen.getByText("search");
+    // Tools lives in the Advanced group: expand it first (single-open
+    // shell — the trigger is scoped to the group anchor since the sticky
+    // nav carries a same-named button).
+    const advanced = document.getElementById("advanced");
+    expect(advanced).not.toBeNull();
+    await user.click(within(advanced!).getByRole("button", { name: "Advanced" }));
+    const title = await screen.findByText("search");
     expect(title.closest('[data-slot="card"]')).not.toBeNull();
     await user.click(screen.getByRole("button", { name: /remove search/i }));
     expect(commit).toHaveBeenCalled();
