@@ -1056,6 +1056,7 @@ function EmbedChat({
       setThinking: (value) => setChatPrefs((p) => ({ ...p, thinking: value })),
       setModel: (id) => setChatPrefs((p) => ({ ...p, model: id })),
       setEffort: (effort) => setChatPrefs((p) => ({ ...p, effort: effort })),
+      setSearchEngine: (engine) => setChatPrefs((p) => ({ ...p, searchEngine: engine })),
       reset: () =>
         setChatPrefs({
           ...DEFAULT_EMBED_CHAT_PREFS,
@@ -1094,6 +1095,9 @@ function EmbedChat({
       },
       openEffort: () => {
         setComposerMenu("effort");
+      },
+      openSearchEngine: () => {
+        setComposerMenu("search-engine");
       },
       openView: () => {
         setComposerMenu("view");

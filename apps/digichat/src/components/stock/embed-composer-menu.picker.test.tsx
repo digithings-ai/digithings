@@ -26,6 +26,7 @@ function prefs(over: Partial<EmbedChatPrefsApi> = {}): EmbedChatPrefsApi {
     setThinking: vi.fn(),
     setModel: vi.fn(),
     setEffort: vi.fn(),
+    setSearchEngine: vi.fn(),
     reset: vi.fn(),
     tenantAllowsWeb: true,
     showByok: true,
@@ -44,6 +45,7 @@ function prefs(over: Partial<EmbedChatPrefsApi> = {}): EmbedChatPrefsApi {
     openByok: vi.fn(),
     openModels: vi.fn(),
     openEffort: vi.fn(),
+    openSearchEngine: vi.fn(),
     openView: vi.fn(),
     openThinking: vi.fn(),
     openLanguage: vi.fn(),
@@ -135,6 +137,25 @@ describe("EmbedComposerMenu exclusive pickers", () => {
     const dutch = screen.getByRole("menuitemradio", { name: /nl\s+Dutch/i });
     await user.click(dutch);
     expect(api.setLanguage).toHaveBeenCalledWith("nl");
+    expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
+  it("closes search-engine pick on click and marks the current engine with the radio disc", async () => {
+    const user = userEvent.setup();
+    const api = prefs({ prefs: { ...DEFAULT_EMBED_CHAT_PREFS, searchEngine: "auto" } });
+    const onClose = vi.fn();
+    render(
+      <EmbedChatPrefsProvider value={api}>
+        <EmbedComposerMenu kind="search-engine" onClose={onClose} />
+      </EmbedChatPrefsProvider>,
+    );
+
+    const auto = await screen.findByRole("menuitemradio", { name: /search-engine auto/i });
+    expect(auto).toHaveAttribute("aria-checked", "true");
+
+    const exa = screen.getByRole("menuitemradio", { name: /search-engine exa/i });
+    await user.click(exa);
+    expect(api.setSearchEngine).toHaveBeenCalledWith("exa");
     expect(onClose).toHaveBeenCalledTimes(1);
   });
 });

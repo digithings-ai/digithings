@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   extraOffFromCatalog,
+  createDefaultEmbedChatPrefs,
   DEFAULT_EMBED_CHAT_PREFS,
   disabledCatalogIds,
 } from "./embed-chat-prefs";
@@ -31,5 +32,12 @@ describe("disabledCatalogIds", () => {
         extra: { datatap: false },
       }),
     ).toEqual(["digisearch", "digivault", "datatap"]);
+  });
+});
+
+describe("searchEngine pref", () => {
+  it("defaults to auto (in-house engine)", () => {
+    expect(DEFAULT_EMBED_CHAT_PREFS.searchEngine).toBe("auto");
+    expect(createDefaultEmbedChatPrefs().searchEngine).toBe("auto");
   });
 });

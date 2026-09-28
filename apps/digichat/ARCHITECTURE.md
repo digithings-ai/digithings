@@ -860,7 +860,7 @@ send `X-Digi-Enable-Web-Search`, so the turn stays corpus-only.
 Menu pick inserts `/digisearch ` (trailing space) and does not fire immediately.
 Extra YAML/MCP catalog ids (`/datatap`) use the same pattern. Disabled catalog ids travel
 as `X-Digi-Disabled-Tools` (BFF allowlists, digigraph subtracts). `/mcp`, `/models`, `/effort`,
-`/language`, `/provider`, and `/settings` open the same opaque composer-docked menu (`EmbedComposerMenu`);
+`/search-engine`, `/language`, `/provider`, and `/settings` open the same opaque composer-docked menu (`EmbedComposerMenu`);
 `/mcp` starts on the operator/session MCP list (status: Active / Disabled / Needs auth).
 Enter opens JSON + field editors (`/mcp new` adds a session MCP). The **id** field stays a
 text input (custom ids allowed). Focus or typing opens a compact in-menu dropdown just
@@ -877,10 +877,10 @@ Picking a row (click or Enter on a highlight) autofills
 `label` / `url` / `auth` (token kept unless the id changes). Custom ids still type freely;
 operator rows keep id/url locked and hide the catalog. Snapshot only — no live Smithery / PulseMCP / registry
 fetch, and `@assistant-ui/react-mcp` is not installed. `/tools` lists every
-connected tool as On/Off. Exclusive lists (`/models`, `/effort`, `/language`,
+connected tool as On/Off. Exclusive lists (`/models`, `/effort`, `/search-engine`, `/language`,
 and the `/provider` roster) mark the current choice with the same filled disc as
 dropdown radio items (`CircleIcon`) — never the word “on”. Enter or click commits
-the choice and closes the menu. `/models`, `/effort`,
+the choice and closes the menu. `/models`, `/effort`, `/search-engine`,
 and `/language` start on their nested lists. Keyboard: Up/Down, Enter
 to toggle, enter a nested list, or commit an exclusive pick, Left/Right on `/language` to cycle the full ISO map, Escape
 (the `escape` control) to go back or close.
@@ -921,9 +921,12 @@ only when `mcp.allowUserServers` is true (`https://` + SSRF + count/size caps; o
 may still use `http` for docker DNS). Session URLs never echo
 back in the client config projection. `@assistant-ui/react-mcp` is not installed — visitor MCP
 is BFF-proxied, not browser MCP. The model can call `session_*` tools (same trust as slash) to
-mutate language/model/effort/tools/MCP; `session_upsert_mcp` cannot plant a new session URL
+mutate language/model/effort/search-engine/tools/MCP; `session_upsert_mcp` cannot plant a new session URL
 when `allowUserMcp` is false (operator token attach still works). The client applies them to `EmbedChatPrefsApi`.
-`X-Digi-Effort` (low/medium/high) is forwarded to digigraph. digisearch / digivault / web_search
+`X-Digi-Effort` (low/medium/high) is forwarded to digigraph. `X-Digi-Search-Engine`
+(auto/internal/exa/tavily/parallel/firecrawl/tinyfish) is forwarded with it: effective
+engine is the user pref, else the tenant `gate.searchEngine` default; explicit `auto`
+travels by omission down the whole chain (#4724). digisearch / digivault / web_search
 stay orchestrator tools (HTTP to the verticals), not browser MCP. DataTap-style installs add
 extra servers in YAML (see `config/examples/datatap-mcp.yaml`). The trial-tenant
 variant (per-tenant container + dev MCP server + `X-API-Key` static auth) is

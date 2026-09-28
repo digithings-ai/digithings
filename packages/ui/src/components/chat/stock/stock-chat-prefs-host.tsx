@@ -181,6 +181,7 @@ export function useStockChatPrefs({
       setThinking: (value) => setChatPrefs((p) => ({ ...p, thinking: value })),
       setModel: (id) => setChatPrefs((p) => ({ ...p, model: id })),
       setEffort: (effort) => setChatPrefs((p) => ({ ...p, effort })),
+      setSearchEngine: (engine) => setChatPrefs((p) => ({ ...p, searchEngine: engine })),
       reset: () =>
         setChatPrefs({
           ...createDefaultEmbedChatPrefs({ language: deps.defaultLanguageCode }),
@@ -218,6 +219,9 @@ export function useStockChatPrefs({
       },
       openEffort: () => {
         setComposerMenu("effort");
+      },
+      openSearchEngine: () => {
+        setComposerMenu("search-engine");
       },
       openView: () => {
         setComposerMenu("view");
