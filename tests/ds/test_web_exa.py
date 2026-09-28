@@ -1,10 +1,15 @@
-"""Unit tests for the optional EXA web-search wrapper (no network, no key)."""
+"""Unit tests for the EXA web-search shim and its leg of the unified route (#4711).
+
+The shim itself (``digisearch.web_exa``) is unchanged by the provider work;
+what moved is its HTTP surface — ``POST /v1/digisearch_web_search`` is gone and
+``POST /v1/web_search`` with ``provider="exa"`` replaces it. No network, no key.
+"""
 
 import pytest
 from digisearch.orchestrator_tools import (
-    TOOL_DIGISEARCH_WEB_SEARCH,
+    TOOL_WEB_SEARCH,
+    build_first_party_web_search_tool,
     build_orchestrator_tool_manifest,
-    build_web_search_tool,
 )
 from digisearch.server import app
 from fastapi.testclient import TestClient
@@ -38,16 +43,18 @@ def test_search_rejects_bad_type(monkeypatch):
         web_exa.exa_search("hello", search_type="neural")  # type: ignore[arg-type]
 
 
-def test_manifest_excludes_web_by_default():
+def test_manifest_always_includes_the_unified_web_search_tool():
+    """#4711: one tool, always present; `provider` picks the engine."""
     names = [t["function"]["name"] for t in build_orchestrator_tool_manifest()]
-    assert TOOL_DIGISEARCH_WEB_SEARCH not in names
+    assert TOOL_WEB_SEARCH in names
+    assert build_first_party_web_search_tool()["function"]["name"] == TOOL_WEB_SEARCH
 
 
-def test_manifest_includes_web_when_asked():
-    tools = build_orchestrator_tool_manifest(include_web_search=True)
-    names = [t["function"]["name"] for t in tools]
-    assert TOOL_DIGISEARCH_WEB_SEARCH in names
-    assert build_web_search_tool()["function"]["name"] == TOOL_DIGISEARCH_WEB_SEARCH
+def test_manifest_never_offers_the_removed_web_tools():
+    """The Exa-only `digisearch_web_search` is gone; `provider="exa"` replaces it."""
+    names = [t["function"]["name"] for t in build_orchestrator_tool_manifest()]
+    assert "digisearch_web_search" not in names
+    assert "exa_web_search" not in names
 
 
 def test_search_posts_expected_shape(monkeypatch):
@@ -120,8 +127,9 @@ def test_format_empty_results():
 def test_route_dormant_without_key(monkeypatch):
     monkeypatch.delenv("EXA_API_KEY", raising=False)
     client = TestClient(app, headers=auth_headers())
-    resp = client.post("/v1/digisearch_web_search", json={"query": "hello"})
+    resp = client.post("/v1/web_search", json={"query": "hello", "provider": "exa"})
     assert resp.status_code == 503, resp.text
+    assert "EXA_API_KEY" in resp.text
 
 
 def test_route_forwards_domains(monkeypatch):
@@ -136,9 +144,10 @@ def test_route_forwards_domains(monkeypatch):
     monkeypatch.setattr(web_exa, "exa_search", fake_exa_search)
     client = TestClient(app, headers=auth_headers())
     resp = client.post(
-        "/v1/digisearch_web_search",
+        "/v1/web_search",
         json={
             "query": "hello",
+            "provider": "exa",
             "include_domains": ["example.com"],
             "exclude_domains": ["bad.example"],
         },
@@ -263,7 +272,7 @@ def test_search_negative_offset_rejected(monkeypatch):
     assert "payloads" not in seen
 
 
-# --- HTTP route (#4241): offset on POST /v1/digisearch_web_search ---------------
+# --- HTTP route (#4241): offset on POST /v1/web_search with provider="exa" -------
 
 
 def test_route_default_offset_is_byte_identical(monkeypatch):
@@ -272,9 +281,12 @@ def test_route_default_offset_is_byte_identical(monkeypatch):
     seen: dict = {}
     _patch_exa_post(monkeypatch, _page_results(16), seen)
     client = TestClient(app, headers=auth_headers())
-    default = client.post("/v1/digisearch_web_search", json={"query": "q", "num_results": 8})
+    default = client.post(
+        "/v1/web_search", json={"query": "q", "max_results": 8, "provider": "exa"}
+    )
     explicit = client.post(
-        "/v1/digisearch_web_search", json={"query": "q", "num_results": 8, "offset": 0}
+        "/v1/web_search",
+        json={"query": "q", "max_results": 8, "provider": "exa", "offset": 0},
     )
     assert default.status_code == 200, default.text
     assert default.content == explicit.content
@@ -288,9 +300,10 @@ def test_route_page2_is_deterministic_and_non_overlapping(monkeypatch):
     seen: dict = {}
     _patch_exa_post(monkeypatch, _page_results(16), seen)
     client = TestClient(app, headers=auth_headers())
-    page1 = client.post("/v1/digisearch_web_search", json={"query": "q", "num_results": 8})
+    page1 = client.post("/v1/web_search", json={"query": "q", "max_results": 8, "provider": "exa"})
     page2 = client.post(
-        "/v1/digisearch_web_search", json={"query": "q", "num_results": 8, "offset": 8}
+        "/v1/web_search",
+        json={"query": "q", "max_results": 8, "provider": "exa", "offset": 8},
     )
     assert page1.status_code == 200, page1.text
     assert page2.status_code == 200, page2.text
@@ -308,7 +321,8 @@ def test_route_window_past_the_cap_is_400_explicit(monkeypatch):
     _patch_exa_post(monkeypatch, _page_results(100), seen)
     client = TestClient(app, headers=auth_headers())
     resp = client.post(
-        "/v1/digisearch_web_search", json={"query": "q", "num_results": 8, "offset": 95}
+        "/v1/web_search",
+        json={"query": "q", "max_results": 8, "provider": "exa", "offset": 95},
     )
     assert resp.status_code == 400, resp.text
     assert "cap" in resp.text
@@ -322,7 +336,7 @@ def test_route_offset_beyond_the_cap_is_400_explicit(monkeypatch):
     seen: dict = {}
     _patch_exa_post(monkeypatch, _page_results(100), seen)
     client = TestClient(app, headers=auth_headers())
-    resp = client.post("/v1/digisearch_web_search", json={"query": "q", "offset": 100})
+    resp = client.post("/v1/web_search", json={"query": "q", "provider": "exa", "offset": 100})
     assert resp.status_code == 400, resp.text
     assert "100" in resp.text
     assert "payloads" not in seen
@@ -331,7 +345,7 @@ def test_route_offset_beyond_the_cap_is_400_explicit(monkeypatch):
 def test_route_negative_offset_is_422(monkeypatch):
     monkeypatch.setenv("EXA_API_KEY", "test-key")
     client = TestClient(app, headers=auth_headers())
-    resp = client.post("/v1/digisearch_web_search", json={"query": "q", "offset": -1})
+    resp = client.post("/v1/web_search", json={"query": "q", "provider": "exa", "offset": -1})
     assert resp.status_code == 422, resp.text
     error = resp.json()["error"]
     assert error["code"] == "validation_error"
@@ -345,7 +359,8 @@ def test_route_last_page_at_the_cap_is_reachable(monkeypatch):
     _patch_exa_post(monkeypatch, _page_results(100), seen)
     client = TestClient(app, headers=auth_headers())
     resp = client.post(
-        "/v1/digisearch_web_search", json={"query": "q", "num_results": 8, "offset": 92}
+        "/v1/web_search",
+        json={"query": "q", "max_results": 8, "provider": "exa", "offset": 92},
     )
     assert resp.status_code == 200, resp.text
     assert seen["payload"]["numResults"] == 100
@@ -357,9 +372,18 @@ def test_route_last_page_at_the_cap_is_reachable(monkeypatch):
 
 
 def test_manifest_web_search_exposes_offset():
-    tool = build_web_search_tool()
+    tool = build_first_party_web_search_tool()
     props = tool["function"]["parameters"]["properties"]
     assert props["offset"]["type"] == "integer"
-    assert "100" in props["offset"]["description"]
+    # Paging is a per-provider capability: the description says so, and the
+    # provider that lacks it errors instead of silently returning page one.
+    assert "exa" in props["offset"]["description"]
     # required stays query-only: offset is optional and defaults to the unpaged call.
     assert tool["function"]["parameters"]["required"] == ["query"]
+
+
+def test_manifest_web_search_exposes_provider_and_effort():
+    props = build_first_party_web_search_tool()["function"]["parameters"]["properties"]
+    # 'auto' leads the enum (the description sells it); 'internal' always follows.
+    assert props["provider"]["enum"][:2] == ["auto", "internal"]
+    assert props["effort"]["enum"] == ["fast", "thorough"]

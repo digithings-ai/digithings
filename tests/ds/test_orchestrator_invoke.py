@@ -126,8 +126,9 @@ def test_orchestrator_invoke_web_search_forwards_domains(
     r = client.post(
         "/v1/orchestrator_invoke",
         json={
-            "tool": "digisearch_web_search",
+            "tool": "web_search",
             "arguments": {
+                "provider": "exa",
                 "query": "reactors",
                 "include_domains": ["example.com"],
                 "exclude_domains": ["spam.example"],
@@ -167,8 +168,8 @@ def test_orchestrator_invoke_web_search_forwards_offset(
     r = client.post(
         "/v1/orchestrator_invoke",
         json={
-            "tool": "digisearch_web_search",
-            "arguments": {"query": "reactors", "num_results": 8, "offset": 8},
+            "tool": "web_search",
+            "arguments": {"provider": "exa", "query": "reactors", "max_results": 8, "offset": 8},
         },
     )
     assert r.status_code == 200
@@ -198,7 +199,7 @@ def test_orchestrator_invoke_web_search_default_offset_is_unpaged(
     monkeypatch.setattr(web_exa_mod, "exa_search", _fake_search)
     r = client.post(
         "/v1/orchestrator_invoke",
-        json={"tool": "digisearch_web_search", "arguments": {"query": "reactors"}},
+        json={"tool": "web_search", "arguments": {"provider": "exa", "query": "reactors"}},
     )
     assert r.status_code == 200
     assert r.json().get("ok") is True
@@ -222,8 +223,8 @@ def test_orchestrator_invoke_web_search_offset_past_cap_is_ok_false(
     r = client.post(
         "/v1/orchestrator_invoke",
         json={
-            "tool": "digisearch_web_search",
-            "arguments": {"query": "reactors", "num_results": 8, "offset": 95},
+            "tool": "web_search",
+            "arguments": {"provider": "exa", "query": "reactors", "max_results": 8, "offset": 95},
         },
     )
     assert r.status_code == 200
@@ -246,8 +247,8 @@ def test_orchestrator_invoke_web_search_negative_offset_is_ok_false(
     r = client.post(
         "/v1/orchestrator_invoke",
         json={
-            "tool": "digisearch_web_search",
-            "arguments": {"query": "reactors", "offset": -1},
+            "tool": "web_search",
+            "arguments": {"provider": "exa", "query": "reactors", "offset": -1},
         },
     )
     assert r.status_code == 200
@@ -270,8 +271,8 @@ def test_orchestrator_invoke_web_search_bad_offset_type_is_ok_false(
         r = client.post(
             "/v1/orchestrator_invoke",
             json={
-                "tool": "digisearch_web_search",
-                "arguments": {"query": "reactors", "offset": bad},
+                "tool": "web_search",
+                "arguments": {"provider": "exa", "query": "reactors", "offset": bad},
             },
         )
         assert r.status_code == 200, bad
@@ -299,8 +300,8 @@ def test_orchestrator_invoke_web_search_coerces_int_like_offset(
     r = client.post(
         "/v1/orchestrator_invoke",
         json={
-            "tool": "digisearch_web_search",
-            "arguments": {"query": "reactors", "offset": "8"},
+            "tool": "web_search",
+            "arguments": {"provider": "exa", "query": "reactors", "offset": "8"},
         },
     )
     assert r.status_code == 200
