@@ -26,10 +26,14 @@ export interface AppPreset {
   dimmedDigi: string[];
   providerApp: string;
   digiApp: string;
+  /** Top-right box on the provider drawing; defaults to "your data sources". */
+  providerSources?: string;
+  /** Adds the human review lane across the top of the provider drawing. */
+  providerReview?: boolean;
   leftSteps: TourStep[];
 }
 
-const FULL = ["app", "sources", "api", "model", "embed", "memory", "record", "telemetry", "machines", "terms", "platform"];
+const FULL = ["app", "sources", "api", "model", "embed", "memory", "record", "telemetry", "machines", "terms", "platform", "review"];
 
 const supportLeft: TourStep[] = [
   {
@@ -40,9 +44,9 @@ const supportLeft: TourStep[] = [
   },
   {
     id: "door",
-    label: "One door in: the OpenAI API.",
-    line: "A single gateway fronts triage, drafting and audit alike. Its SDK version, limits and prices move on a schedule you don't set — and every layer below is reachable only through it.",
-    ids: ["app", "sources", "api"],
+    label: "One door in, reviewed by humans on the way out.",
+    line: "A single gateway fronts triage, drafting and audit alike — but every draft detours through the review lane before it reaches a customer. Its SDK version, limits and prices move on a schedule you don't set.",
+    ids: ["app", "sources", "api", "review"],
   },
   {
     id: "locked",
@@ -126,6 +130,8 @@ export const APP_PRESETS: AppPreset[] = [
     dimmedDigi: ["vault"],
     providerApp: "support agent",
     digiApp: "support agent · digichat",
+    providerSources: "ticket queue + docs",
+    providerReview: true,
     leftSteps: supportLeft,
   },
   {
@@ -141,6 +147,7 @@ export const APP_PRESETS: AppPreset[] = [
     dimmedDigi: [],
     providerApp: "research agent",
     digiApp: "digiquant pipeline",
+    providerSources: "scattered market endpoints",
     leftSteps: financeLeft,
   },
 ];
