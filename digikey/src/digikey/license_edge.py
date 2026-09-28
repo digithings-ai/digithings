@@ -15,6 +15,11 @@ per-call allowlist read: revocation freshness comes from the heartbeat latch
 plus the ``exp`` backstop. Refusals are 403 ``insufficient_license_scope``
 naming the missing scope; the hosted portion refuses, plain inference stays
 byte-identical with and without a license.
+
+Unwired (slice 3 scope): ``evaluate_hosted_license`` ships tested-but-unwired
+— no digigraph enforcement point calls it yet. The spec §7 wiring
+(corpus_routing / context / chat_resolve / workflow) is a named follow-up
+per spec §0 item 2 (one PR per component: receiver first, edge second).
 """
 
 from __future__ import annotations

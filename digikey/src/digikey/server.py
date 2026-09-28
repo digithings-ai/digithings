@@ -537,6 +537,10 @@ async def license_heartbeat(request: Request) -> JSONResponse:
             status_code=401,
             content={"error": ERROR_UNAUTHORIZED, "message": "Invalid license token"},
         )
+    # Ordering note: telemetry validation (400 below) intentionally runs before
+    # the allowlist read. A malformed body must never latch (400 is an error
+    # outcome the sender rides out), at the cost of delaying a revoked/unknown
+    # latch by one cycle when the body is also bad. Keep this order.
     try:
         payload = await request.json()
     except Exception:
