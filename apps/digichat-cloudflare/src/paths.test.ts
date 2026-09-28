@@ -12,6 +12,7 @@ describe("shouldProxyToDigiChat", () => {
     expect(shouldProxyToDigiChat("/api/plan-proof")).toBe(true);
     expect(shouldProxyToDigiChat("/api/plan-proof/mint")).toBe(true);
     expect(shouldProxyToDigiChat("/api/health")).toBe(true);
+    expect(shouldProxyToDigiChat("/healthz")).toBe(true);
     expect(shouldProxyToDigiChat("/_dtchat/_next/static/x.js")).toBe(true);
   });
 

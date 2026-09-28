@@ -2,12 +2,8 @@ import { sql } from "drizzle-orm";
 import { getDb } from "@/db";
 import { getEcosystemEndpoints } from "@/lib/ecosystem";
 import { isServiceCapabilityEnabled } from "@/lib/capabilities";
-import { version as packageVersion } from "../../../../package.json";
-
-/** Env override wins; otherwise the package version baked at build / in the image. */
-function healthVersion(): string {
-  return process.env.DIGICHAT_VERSION?.trim() || packageVersion;
-}
+import { getLicenseState } from "@/lib/license/state";
+import { resolveDigichatVersion } from "@/lib/license/version";
 
 async function pingHealth(base: string, label: string, checks: Record<string, string>) {
   try {
@@ -67,11 +63,18 @@ export async function GET() {
     digisearchOk &&
     (checks.database === "ok" || checks.database === "skipped");
 
+  // License state is reported honestly but never feeds the `ok`
+  // computation: a revoked/expired license must not read as a downstream
+  // outage and crash-loop the container. Turn-serving probes read
+  // `license_status` instead.
+  const license = getLicenseState();
   return Response.json(
     {
       ok,
       checks,
-      version: healthVersion(),
+      version: resolveDigichatVersion(),
+      license_status: license.state,
+      ...(license.detail ? { license_detail: license.detail } : {}),
     },
     { status: ok ? 200 : 503 }
   );

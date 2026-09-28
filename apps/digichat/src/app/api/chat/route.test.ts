@@ -155,6 +155,30 @@ vi.mocked(createFoundryStreamResponse).mockClear();
     expect(res.status).toBe(401);
   });
 
+  it("returns 503 license_revoked before auth when the license latch is revoked", async () => {
+    const { applyHeartbeatResult, resetLicenseStateForTests } = await import(
+      "@/lib/license/state"
+    );
+    try {
+      resetLicenseStateForTests();
+      applyHeartbeatResult("denied", "heartbeat_deny_revoked");
+      vi.mocked(requireDigiChatAuth).mockClear();
+      const res = await POST(
+        new Request("http://localhost/api/chat", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ messages: [{ id: "1", role: "user", parts: [] }] }),
+        })
+      );
+      expect(res.status).toBe(503);
+      expect(await res.json()).toMatchObject({ error: "license_revoked" });
+      expect(res.headers.get("retry-after")).toBeNull();
+      expect(vi.mocked(requireDigiChatAuth)).not.toHaveBeenCalled();
+    } finally {
+      resetLicenseStateForTests();
+    }
+  });
+
   it("returns 503 when embed gate blocks anonymous embed", async () => {
     vi.mocked(resolveChatTenantContext).mockResolvedValue(
       new Response(JSON.stringify({ error: "embed_disabled" }), { status: 503 })
