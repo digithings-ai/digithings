@@ -913,7 +913,9 @@ describe('getTodayEvents / getUpcomingEvents over the mocked calendar', () => {
       // reason queryEnd is padded forward.
       ev({ id: 7, event_date: '2026-08-15', event_datetime_utc: '2026-08-15T02:00:00Z' }),
       // 12:30Z Aug 15 = 08:30 local Aug 15 — genuinely past the 14-day horizon.
-      ev({ id: 8, event_date: '2026-08-15', event_datetime_utc: '2026-08-15T12:30:00Z' }),
+      // Distinct event_name from id 7: #4739's twin dedup collapses rows sharing one
+      // join key, which would drop this row before the horizon rule could be tested.
+      ev({ id: 8, event_date: '2026-08-15', event_datetime_utc: '2026-08-15T12:30:00Z', event_name: 'UoM Consumer Sentiment' }),
     ];
     expect((await getUpcomingEvents()).map((e) => e.id)).toEqual([7]);
   });
@@ -924,9 +926,61 @@ describe('getTodayEvents / getUpcomingEvents over the mocked calendar', () => {
     useViewer('Pacific/Auckland', '2026-08-01T00:30:00Z');
     calendarDb.rows = [
       ev({ id: 9, event_date: '2026-07-31', event_datetime_utc: '2026-07-31T23:00:00Z' }),
-      ev({ id: 10, event_date: '2026-07-31', event_datetime_utc: '2026-07-31T09:00:00Z' }),
+      // Distinct event_name from id 9 so the pair is not collapsed as twins by #4739's
+      // dedup — this test must still exercise the local-date keying itself.
+      ev({ id: 10, event_date: '2026-07-31', event_datetime_utc: '2026-07-31T09:00:00Z', event_name: 'Retail Sales' }),
     ];
     expect((await getTodayEvents()).map((e) => e.id)).toEqual([9]);
     expect((await getUpcomingEvents()).map((e) => e.id)).toEqual([9]);
+  });
+
+  it('#4739: collapses forexfactory/gloomberb twins of one logical event to a single row', async () => {
+    // Both rows are ONE logical event ingested twice: identical (event_date, country,
+    // event_name), but event_time is ET vs UTC (+4h) and the external_id prefix
+    // differs — the shape that made EventsTab render two identical rows per event.
+    useViewer('America/New_York', '2026-08-01T01:30:00Z');
+    calendarDb.rows = [
+      ev({ id: 1, external_id: 'te-918844', event_date: '2026-07-31', event_time: '8:30am', event_datetime_utc: '2026-07-31T12:30:00Z', event_name: 'Nonfarm Payrolls' }),
+      ev({ id: 2, external_id: 'gb-20260731-nfp', event_date: '2026-07-31', event_time: '12:30', event_datetime_utc: '2026-07-31T12:30:04Z', event_name: 'Nonfarm Payrolls' }),
+    ];
+    expect((await getUpcomingEvents()).map((e) => e.id)).toHaveLength(1);
+  });
+
+  it('#4739: prefers the gloomberb twin whenever it is present, in either position', async () => {
+    useViewer('America/New_York', '2026-08-01T01:30:00Z');
+    const ff = ev({ id: 1, external_id: 'te-918844', event_date: '2026-07-31', event_name: 'Nonfarm Payrolls' });
+    const gb = ev({ id: 2, external_id: 'gb-20260731-nfp', event_date: '2026-07-31', event_name: 'Nonfarm Payrolls' });
+    // gb second: it must displace the incumbent ff row…
+    calendarDb.rows = [ff, gb];
+    expect((await getUpcomingEvents()).map((e) => e.external_id)).toEqual(['gb-20260731-nfp']);
+    // …and gb first: a later ff row must NOT take the slot back.
+    calendarDb.rows = [gb, ff];
+    expect((await getUpcomingEvents()).map((e) => e.external_id)).toEqual(['gb-20260731-nfp']);
+  });
+
+  it('#4739: leaves rows with distinct names or dates untouched', async () => {
+    useViewer('America/New_York', '2026-08-01T01:30:00Z');
+    calendarDb.rows = [
+      // Same day, different name…
+      ev({ id: 1, external_id: 'gb-nfp', event_date: '2026-07-31', event_name: 'Nonfarm Payrolls' }),
+      ev({ id: 2, external_id: 'gb-cpi', event_date: '2026-07-31', event_name: 'CPI m/m' }),
+      // …and the same name on a different day. Neither pair shares a join key.
+      ev({ id: 3, external_id: 'te-nfp', event_date: '2026-08-05', event_name: 'Nonfarm Payrolls' }),
+    ];
+    expect((await getUpcomingEvents()).map((e) => e.id)).toEqual([1, 2, 3]);
+  });
+
+  it('#4739: the winning twin keeps its original position in the query order', async () => {
+    useViewer('America/New_York', '2026-08-01T01:30:00Z');
+    calendarDb.rows = [
+      ev({ id: 1, external_id: 'gb-cpi', event_date: '2026-07-31', event_datetime_utc: '2026-07-31T13:30:00Z', event_name: 'CPI m/m' }),
+      // Twin pair for ONE event — id 2 (ff) is dropped, id 3 (gb) wins…
+      ev({ id: 2, external_id: 'te-918844', event_date: '2026-07-31', event_datetime_utc: '2026-07-31T12:30:00Z', event_name: 'Nonfarm Payrolls' }),
+      ev({ id: 3, external_id: 'gb-20260731-nfp', event_date: '2026-07-31', event_datetime_utc: '2026-07-31T12:30:04Z', event_name: 'Nonfarm Payrolls' }),
+      ev({ id: 4, external_id: 'gb-fomc', event_date: '2026-08-05', event_datetime_utc: '2026-08-05T18:00:00Z', event_name: 'FOMC Minutes' }),
+    ];
+    // …in place, between its original neighbours — not hoisted to the front nor dropped
+    // to the end, so the query's event_datetime_utc ordering downstream is unchanged.
+    expect((await getUpcomingEvents()).map((e) => e.id)).toEqual([1, 3, 4]);
   });
 });
