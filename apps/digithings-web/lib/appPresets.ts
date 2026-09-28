@@ -52,7 +52,7 @@ export interface AppPreset {
   /** One-line caption under the morph drawing. */
   morphCaption: string;
   leftSteps: TourStep[];
-  /** Right-hand walk: same topology, one swap per beat. Four beats each. */
+  /** Right-hand walk: a full-graph preview, then one swap per beat. Five beats each. */
   morphSteps: MorphStep[];
 }
 
@@ -61,6 +61,12 @@ const FULL_SUPPORT = ["app", "sources", "api", "model", "email", "launcher", "te
 const FULL_FINANCE = ["app", "feeds", "filings", "api", "model", "launcher", "record", "telemetry", "terms", "platform"];
 
 const ragLeft: TourStep[] = [
+  {
+    id: "whole",
+    label: "The whole loop, lit at once.",
+    line: "Before any one section takes the spotlight: your product asks, the gateway serves twice, the index recalls, the lake files, traces watch, GPUs run — one fixed shape, and every edge in it metered.",
+    ids: FULL_RAG,
+  },
   {
     id: "yours",
     label: "Your product, your corpus — their everything else.",
@@ -95,6 +101,12 @@ const ragLeft: TourStep[] = [
 
 const supportLeft: TourStep[] = [
   {
+    id: "whole",
+    label: "The whole send pipeline, lit at once.",
+    line: "Before any one section takes the spotlight: tickets queue up, the gateway fronts them, the runner wakes the model, drafts wait for eyes, approved replies send, traces audit — one scheduled loop, and every send in it metered.",
+    ids: FULL_SUPPORT,
+  },
+  {
     id: "yours",
     label: "Your tickets and docs — nothing else.",
     line: "The top row is the only part you hold: the ticket queue and the product docs. Everything below it runs somewhere else.",
@@ -128,6 +140,12 @@ const supportLeft: TourStep[] = [
 
 const financeLeft: TourStep[] = [
   {
+    id: "whole",
+    label: "The whole research machine, lit at once.",
+    line: "Before any one section takes the spotlight: feeds and filings pour in, one gateway fronts them, reasoning synthesizes nightly, the archive files, traces audit — one batch pipeline, and every run in it metered.",
+    ids: FULL_FINANCE,
+  },
+  {
     id: "yours",
     label: "Your question, their universe of data.",
     line: "The only boxes you hold are the research question and the watchlist — every price and filing arrives through scattered third-party endpoints you stitch yourself.",
@@ -160,6 +178,14 @@ const financeLeft: TourStep[] = [
 ];
 
 const ragMorph: MorphStep[] = [
+  {
+    id: "m-whole",
+    label: "Same loop — about to move home.",
+    line: "This is your stack exactly as drawn: every box rented, every edge metered. Scroll on and each swap lands live in the invoice below.",
+    ids: FULL_RAG.filter((id) => id !== "platform"),
+    layers: [],
+    boxes: [],
+  },
   {
     id: "m-models",
     label: "Models move behind your digillm gateway.",
@@ -196,6 +222,14 @@ const ragMorph: MorphStep[] = [
 
 const supportMorph: MorphStep[] = [
   {
+    id: "m-whole",
+    label: "Same pipeline — about to move home.",
+    line: "This is your send pipeline exactly as drawn, review lane included — and the lane stays yours throughout. Scroll on and each swap lands live in the invoice below.",
+    ids: FULL_SUPPORT.filter((id) => id !== "platform"),
+    layers: [],
+    boxes: [],
+  },
+  {
     id: "m-models",
     label: "Your drafts answer behind your own gateway.",
     line: "You point triage and drafting at a local model behind a digillm gateway you hold, so the vendor gateway and its terms drop out. You keep your keys and your routing, and the draft model changes without the workflow changing.",
@@ -231,6 +265,14 @@ const supportMorph: MorphStep[] = [
 ];
 
 const financeMorph: MorphStep[] = [
+  {
+    id: "m-whole",
+    label: "Same machine — about to move home.",
+    line: "This is your research pipeline exactly as drawn: every night rented, every run metered. Scroll on and each swap lands live in the invoice below.",
+    ids: FULL_FINANCE.filter((id) => id !== "platform"),
+    layers: [],
+    boxes: [],
+  },
   {
     id: "m-models",
     label: "Reasoning moves to digillm.",

@@ -75,9 +75,15 @@ describe("app presets", () => {
     }
   });
 
-  it("walks four morph beats per app against drawn boxes", () => {
+  it("walks five morph beats per app against drawn boxes", () => {
     for (const app of APP_PRESETS) {
-      expect(app.morphSteps).toHaveLength(4);
+      expect(app.morphSteps).toHaveLength(5);
+      /* The opener is a full-graph preview: everything lit, nothing swapped,
+         nothing cut on the invoice yet. */
+      expect(app.morphSteps[0].id).toBe("m-whole");
+      expect(app.morphSteps[0].layers).toEqual([]);
+      expect(app.morphSteps[0].boxes).toEqual([]);
+      expect(app.leftSteps[0].id).toBe("whole");
       expect(app.morphCaption.length).toBeGreaterThan(0);
       const drawn = new Set(
         providerSpec(app.providerDefaults, app.workload, {
