@@ -59,6 +59,9 @@ This architecture means digikey sits on the hot path for key exchange but is com
 | `settings.py` | Env-driven constants (`KEY_PREFIX_LEN=16`, `RAW_KEY_PREFIX="dgk_live_"`) |
 | `models.py` | `TokenClaims`, `DigiAuthContext`, `PrincipalKind` Pydantic v2 models |
 | `integrations/service_middleware.py` | `DigiAuthMiddleware`, per-service path-scope tables |
+| `license_verify.py` | Customer-license JWT verification (heartbeat + edge) |
+| `license_heartbeat.py` | Four-state allowlist read, telemetry validation, raw-SQL row lookup |
+| `license_edge.py` | Hosted-capability scope checks over `X-Digi-License` (digigraph edge) |
 | `ratelimit.py` | In-process per-IP token-bucket limiter + FastAPI dependency for auth-path routes |
 | `cli.py` | Bootstrap CLI (`digikey issue-key`) |
 
@@ -93,6 +96,34 @@ Requires `Authorization: Bearer <DIGIKEY_ADMIN_TOKEN>`. Body: `AdminIssueBody`. 
 
 **`POST /v1/admin/keys/{key_id}/revoke`**
 Requires `Authorization: Bearer <DIGIKEY_ADMIN_TOKEN>`. Revokes an API key and blocklists every live JWT issued from it (ADR-0007). Response: `{"revoked": true, "jtis_invalidated": N}`. Returns 503 `auth_backend_unavailable` if the blocklist write fails (fail-closed).
+
+**`POST /v1/licenses/heartbeat`**
+Authenticates *as* a license: `Authorization: Bearer <raw license JWT>` plus a
+telemetry JSON body (`license_id`, `customer`, `license_status`, `version`,
+`hosts_configured`, `started_at`, `seq`). Never passes through the API-key
+exchange path or the admin bearer gate. Reads the `digikey_licenses` allowlist
+(written by slice 1's CLI) with raw SQL and answers the four-state contract:
+
+| State | Row condition | HTTP | Body |
+|-------|---------------|------|------|
+| valid | row live, `expires_at` in future | 200 | `{"license_status": "valid"}` |
+| expired | row live, `expires_at` past | 200 | `{"license_status": "expired"}` (never 401) |
+| revoked | `revoked_at` set (beats expired) | 401 | `{"error": "license_revoked"}` |
+| unknown | no row | 401 | `{"error": "unknown_license"}` |
+
+Crypto failures (bad signature, `none`/symmetric `alg`, wrong `aud`/`iss`,
+missing `kind`/`license_id`) answer generic 401 `{"error": "unauthorized"}` —
+an error outcome, never a latch. Bad telemetry answers 400
+`{"error": "invalid_heartbeat_body"}`. The `error`-key shape is what the
+heartbeat sender matches on; it deliberately differs from the middleware
+`code`-key idiom. Expiry uses a 300s symmetric clock-skew leeway. Logs carry
+only `license_id`, customer slug, state, and `seq` — never the raw JWT.
+
+**`POST /v1/admin/licenses/{license_id}/revoke`**
+Requires `Authorization: Bearer <DIGIKEY_ADMIN_TOKEN>`. Sets `revoked_at` on a
+`digikey_licenses` row. Idempotent (`{"revoked": true}`); unknown ids 404
+distinctly. No blocklist writes — license revocation is allowlist-enforced,
+never jti-blocklisted.
 
 **`POST /v1/admin/bff-sessions/revoke`**
 Requires `Authorization: Bearer <DIGIKEY_ADMIN_TOKEN>`. Body: `{"subject": "<bare BFF subject>"}`. Blocklists every live `bff_session` JWT for that subject (#3917) — BFF sessions have no API-key row, so this is the subject-scoped analogue of the key revoke endpoint. Idempotent, same response shape, same fail-closed 503 behaviour.

@@ -13,16 +13,29 @@ from digibase.errors import register_fastapi_error_handlers
 from digibase.http import install_request_id_logging, install_request_id_middleware
 from digibase.metrics import install_metrics
 from fastapi import Depends, FastAPI, HTTPException, Request
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel, ConfigDict, Field, field_validator
-from sqlalchemy import select
+from sqlalchemy import select, text
 
 from digikey import __version__, blocklist
 from digikey.blocklist_rehydrate import rehydrate_blocklist_from_db
-from digikey.crypto_keys import load_or_create_signing_key
+from digikey.crypto_keys import load_or_create_signing_key, public_key_to_pem
 from digikey.db import init_db, session_factory
 from digikey.db_schema import ApiKeyRow, JtiIssuedRow, utcnow
+from digikey.jwt_issue import _issuer as _jwt_issuer
 from digikey.jwt_issue import issue_access_token, public_jwks
 from digikey.key_crypto import generate_raw_key, hash_secret, verify_secret
+from digikey.license_heartbeat import (
+    ERROR_INVALID_BODY,
+    ERROR_STORE_UNAVAILABLE,
+    ERROR_UNAUTHORIZED,
+    count_heartbeat,
+    get_license_row,
+    heartbeat_status_body,
+    resolve_license_state,
+    validate_heartbeat_body,
+)
+from digikey.license_verify import LicenseVerificationError, verify_license_token
 from digikey.profile_pointer import get_profile_pointer
 from digikey.ratelimit import rate_limit_dependency, register_rate_limit_handler
 from digikey.scopes import DEFAULT_BFF_SESSION_SCOPES, scope_grants_required
@@ -43,6 +56,10 @@ app = FastAPI(
         {"name": "jwks", "description": "Public signing keys for JWT verification."},
         {"name": "oauth", "description": "Token exchange (API key → JWT)."},
         {"name": "admin", "description": "Key issue/revoke (requires DIGIKEY_ADMIN_TOKEN)."},
+        {
+            "name": "licenses",
+            "description": "Customer license heartbeat + license revoke.",
+        },
     ],
 )
 register_rate_limit_handler(app)
@@ -469,6 +486,171 @@ def admin_revoke_bff_subject(body: RevokeSessionBody, request: Request) -> Revok
             r.revoked_at = utcnow()
         session.commit()
     return RevokeResponse(revoked=True, jtis_invalidated=written)
+
+
+class LicenseRevokeResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    revoked: bool = Field(description="True when the row is revoked (idempotent)")
+
+
+@app.post(
+    "/v1/licenses/heartbeat",
+    dependencies=[Depends(rate_limit_dependency)],
+    tags=["licenses"],
+    summary="Customer license heartbeat (four-state allowlist read)",
+)
+async def license_heartbeat(request: Request) -> JSONResponse:
+    """Answer the heartbeat sender with the four-state allowlist read.
+
+    This route authenticates *as* a license: its only credential check is
+    signature + allowlist + expiry, in that order. It never touches the
+    API-key exchange path (prefix lookup + bcrypt) or the admin bearer gate.
+
+    Contract (slice 1 §4.4 / slice 2 §8): live row → 200 ``valid``; live but
+    expired row → 200 ``expired`` (never 401); revoked row → 401
+    ``license_revoked``; no row → 401 ``unknown_license``. Crypto failures
+    answer generic 401 ``unauthorized`` (an error outcome, never a latch);
+    bad telemetry answers 400 (never a deny). The ``error``-key shape is what
+    the sender matches on — do not normalize it to the middleware ``code``
+    idiom. Never logs the raw JWT.
+    """
+    auth = request.headers.get("Authorization") or ""
+    raw = auth[7:].strip() if auth[:7].lower() == "bearer " else ""
+    if not raw or len(raw.split(".")) != 3:
+        count_heartbeat("error")
+        return JSONResponse(
+            status_code=401,
+            content={"error": ERROR_UNAUTHORIZED, "message": "Bearer license token required"},
+        )
+    try:
+        info = verify_license_token(
+            raw,
+            public_key_pem=public_key_to_pem(_private_key.public_key()),
+            issuer=_jwt_issuer(),
+            verify_exp=False,
+        )
+    except LicenseVerificationError as e:
+        logger.warning("license heartbeat verify failed: reason=%s", e.reason)
+        count_heartbeat("error")
+        return JSONResponse(
+            status_code=401,
+            content={"error": ERROR_UNAUTHORIZED, "message": "Invalid license token"},
+        )
+    try:
+        payload = await request.json()
+    except Exception:
+        logger.info("license heartbeat bad body: license_id=%s detail=not-json", info.license_id)
+        count_heartbeat("error")
+        return JSONResponse(
+            status_code=400,
+            content={"error": ERROR_INVALID_BODY, "message": "Heartbeat body must be JSON"},
+        )
+    cleaned, detail = validate_heartbeat_body(payload, jwt_license_id=info.license_id)
+    if detail is not None:
+        logger.info(
+            "license heartbeat bad body: license_id=%s customer=%s detail=%s",
+            info.license_id,
+            info.customer,
+            detail,
+        )
+        count_heartbeat("error")
+        return JSONResponse(
+            status_code=400, content={"error": ERROR_INVALID_BODY, "message": detail}
+        )
+    try:
+        sf = session_factory()
+        with sf() as session:
+            row = get_license_row(session, info.license_id)
+    except Exception as e:
+        logger.error("license heartbeat store read failed: %s", e)
+        count_heartbeat("error")
+        return JSONResponse(
+            status_code=503,
+            content={
+                "error": ERROR_STORE_UNAVAILABLE,
+                "message": "License store temporarily unavailable",
+            },
+        )
+    now = int(time.time())
+    state = resolve_license_state(
+        row_exists=row is not None,
+        revoked=bool(row is not None and row.get("revoked_at") is not None),
+        expires_at=(row.get("expires_at") if row is not None else None),
+        now=now,
+    )
+    status, body = heartbeat_status_body(state)
+    if status == 401:
+        logger.warning(
+            "license heartbeat: license_id=%s customer=%s state=%s seq=%s sender=%s version=%s",
+            info.license_id,
+            info.customer,
+            state,
+            cleaned["seq"],
+            cleaned["license_status"],
+            cleaned["version"],
+        )
+    else:
+        logger.info(
+            "license heartbeat: license_id=%s customer=%s state=%s seq=%s sender=%s version=%s",
+            info.license_id,
+            info.customer,
+            state,
+            cleaned["seq"],
+            cleaned["license_status"],
+            cleaned["version"],
+        )
+    count_heartbeat(state)
+    return JSONResponse(status_code=status, content=body)
+
+
+@app.post(
+    "/v1/admin/licenses/{license_id}/revoke",
+    response_model=LicenseRevokeResponse,
+    dependencies=[Depends(rate_limit_dependency)],
+    tags=["admin"],
+    summary="Revoke customer license",
+)
+def admin_revoke_license(license_id: str, request: Request) -> LicenseRevokeResponse:
+    """Set ``revoked_at`` on a ``digikey_licenses`` row (slice 3 §5).
+
+    Mirrors ``POST /v1/admin/keys/{key_id}/revoke`` minus the blocklist: license
+    revocation is allowlist-enforced, never jti-blocklisted (slice 1 §4.3), so
+    there is no blocklist write and no 503-on-blocklist-failure branch.
+    Idempotent; unknown ids 404 distinctly from revoked ones.
+    """
+    _require_admin(request)
+    lid = (license_id or "").strip()
+    if not lid:
+        raise HTTPException(status_code=404, detail="license not found")
+    sf = session_factory()
+    try:
+        with sf() as session:
+            row = (
+                session.execute(
+                    text(
+                        "SELECT license_id, revoked_at FROM digikey_licenses"
+                        " WHERE license_id = :lid"
+                    ),
+                    {"lid": lid},
+                )
+                .mappings()
+                .first()
+            )
+            if row is None:
+                raise HTTPException(status_code=404, detail="license not found")
+            if row["revoked_at"] is None:
+                session.execute(
+                    text("UPDATE digikey_licenses SET revoked_at = :now WHERE license_id = :lid"),
+                    {"now": utcnow(), "lid": lid},
+                )
+            session.commit()
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error("license revoke store write failed: %s", e)
+        raise HTTPException(status_code=503, detail="license_store_unavailable") from e
+    return LicenseRevokeResponse(revoked=True)
 
 
 register_fastapi_error_handlers(app, service="digikey")
