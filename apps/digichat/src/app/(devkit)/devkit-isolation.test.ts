@@ -38,20 +38,10 @@ describe("devkit route isolation", () => {
     expect(client).toMatch(/Hide inspector sidebar/);
     expect(client).toMatch(/Show inspector sidebar/);
     expect(client).toMatch(/keydown/);
-    // Draft-driven editors: the shell validates drafts (debounced scoped
-    // validation, last-valid parsed seeds the forms) and the main area hosts
-    // the accordion editors + raw YAML at full width. No embedded preview:
-    // the real chat view opens from the devkit via the dev-only `?config=`
-    // override (see lib/deploy-config/devkit-active.ts).
+    // Draft-driven preview: the shell validates drafts and passes the
+    // last-valid deployment down; the preview keeps no draft knowledge.
     expect(client).toMatch(/\/api\/devkit\/validate/);
     expect(client).toMatch(/withValidation/);
-    expect(client).toMatch(/aria-label="Deployment editors"/);
-    expect(client).toMatch(/openChatHref/);
-    expect(client).toMatch(/mode=product&config=/);
-    expect(client).toMatch(/embed\?host=/);
-    expect(client).not.toMatch(/DevkitPreview/);
-    expect(client).not.toMatch(/devkit-preview/);
-    expect(client).not.toMatch(/aria-label="Chat preview"/);
     // Step-4 accordion editors are wired; Step 5 adds the save path.
     expect(client).toMatch(/DevkitEditors/);
     // Step 5: raw YAML is an editable textarea, the save button posts the

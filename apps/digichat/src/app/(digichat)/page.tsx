@@ -15,10 +15,6 @@ import { HomeStockClient } from "./home-stock-client";
 import { BaselineClient } from "../(baseline)/baseline/baseline-client";
 import EmbedRouteShell from "./embed-route-shell";
 import { RouteMenu } from "./route-menu";
-import {
-  parseDevkitConfigParam,
-  setDevkitActiveConfig,
-} from "@/lib/deploy-config/devkit-active";
 
 export const dynamic = "force-dynamic";
 
@@ -55,13 +51,6 @@ export default async function Home({
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
   const params = await searchParams;
-  // Dev-only active-config override (#4691): `?config=<file>.yaml` (or
-  // `clear`) switches which config this process serves; absent → back to
-  // the normal singleton. Never honored in production builds.
-  if (process.env.NODE_ENV !== "production") {
-    const devkitCfg = parseDevkitConfigParam(params.config);
-    if (devkitCfg !== undefined) setDevkitActiveConfig(devkitCfg);
-  }
   const routeMode =
     params.mode === "embed"
       ? "embed"
