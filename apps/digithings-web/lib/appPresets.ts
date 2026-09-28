@@ -10,7 +10,15 @@
 
 import type { TourStep } from "@digithings/ui";
 import type { RagWorkload } from "@/lib/ragCost";
-import type { StackPick } from "@/lib/stackCatalog";
+import type { LayerId, StackPick } from "@/lib/stackCatalog";
+
+/** A morph beat: one swap on the right-hand diagram. `layers` are the
+    invoice rows this beat cuts on the digi column; the send beat carries
+    no priced row (delivery is diagram-only until it becomes a layer). */
+export interface MorphStep extends TourStep {
+  layers: LayerId[];
+  email?: boolean;
+}
 
 export interface AppPreset {
   id: string;
@@ -37,7 +45,11 @@ export interface AppPreset {
   /** Layers forced for pricing where the drawing has no box (support and
       finance run no vector indexing: embeddings local, vectors self). */
   fixedLayers: Partial<StackPick>;
+  /** One-line caption under the morph drawing. */
+  morphCaption: string;
   leftSteps: TourStep[];
+  /** Right-hand walk: same topology, one swap per beat. Four beats each. */
+  morphSteps: MorphStep[];
 }
 
 const FULL_RAG = ["app", "sources", "api", "model", "embed", "memory", "record", "telemetry", "machines", "terms", "platform"];
@@ -143,6 +155,100 @@ const financeLeft: TourStep[] = [
   },
 ];
 
+const ragMorph: MorphStep[] = [
+  {
+    id: "m-models",
+    label: "Models move to digillm.",
+    line: "The same model answers from behind your own gateway on your key — the per-token meter becomes your rates, and their terms become your keys.",
+    ids: ["api", "model", "terms"],
+    layers: ["models"],
+  },
+  {
+    id: "m-recall",
+    label: "Recall moves to digisearch.",
+    line: "The embedder and the index come home in your format — the bundled meter and the per-query lookup fall away.",
+    ids: ["embed", "memory"],
+    layers: ["embeddings", "vector"],
+  },
+  {
+    id: "m-telemetry",
+    label: "Traces move to digismith.",
+    line: "Every answer is still traced — the seats and overages are replaced by your own trace store.",
+    ids: ["telemetry"],
+    layers: ["telemetry"],
+  },
+  {
+    id: "m-hosting",
+    label: "Hosting moves to your hardware.",
+    line: "The lake becomes digivault on your disk and the GPUs your pool — same chunks, no meter.",
+    ids: ["record", "machines"],
+    layers: ["hosting"],
+  },
+];
+
+const supportMorph: MorphStep[] = [
+  {
+    id: "m-models",
+    label: "Drafts move to digillm.",
+    line: "Triage and drafting run behind your own gateway on your key — per-token becomes your rates, their terms become your keys.",
+    ids: ["api", "model", "terms"],
+    layers: ["models"],
+  },
+  {
+    id: "m-email",
+    label: "Send moves into the graph.",
+    line: "Replies go out from a digigraph mail tool instead of a metered vendor — delivery lives where the workflow lives.",
+    ids: ["email"],
+    layers: [],
+    email: true,
+  },
+  {
+    id: "m-telemetry",
+    label: "Draft audit moves to digismith.",
+    line: "Every draft is still traced for review — on your store, not their seats.",
+    ids: ["telemetry"],
+    layers: ["telemetry"],
+  },
+  {
+    id: "m-hosting",
+    label: "The runner moves to digiclaw.",
+    line: "The schedule fires on your hardware — same loop, no hourly meter.",
+    ids: ["launcher"],
+    layers: ["hosting"],
+  },
+];
+
+const financeMorph: MorphStep[] = [
+  {
+    id: "m-models",
+    label: "Reasoning moves to digillm.",
+    line: "Deep synthesis runs behind your own gateway on your key — per-token reasoning becomes your rates, their terms become your keys.",
+    ids: ["api", "model", "terms"],
+    layers: ["models"],
+  },
+  {
+    id: "m-runner",
+    label: "Nights move to digiclaw.",
+    line: "The nightly schedule fires from your own runner — same pipeline, no hourly meter.",
+    ids: ["launcher"],
+    layers: ["hosting"],
+  },
+  {
+    id: "m-archive",
+    label: "The archive moves to digivault.",
+    line: "Past theses file into your vault — the research stays yours either way, the meter doesn't.",
+    ids: ["record"],
+    layers: ["hosting"],
+  },
+  {
+    id: "m-telemetry",
+    label: "Run audit moves to digismith.",
+    line: "Every run is still audited — on your store, not their seats.",
+    ids: ["telemetry"],
+    layers: ["telemetry"],
+  },
+];
+
 export const APP_PRESETS: AppPreset[] = [
   {
     id: "rag",
@@ -160,7 +266,9 @@ export const APP_PRESETS: AppPreset[] = [
     topology: "rag",
     fixedLayers: {},
     leftSteps: ragLeft,
+    morphSteps: ragMorph,
     providerCaption: "Every edge metered — per-token · per-query · per-gigabyte",
+    morphCaption: "Same loop, swapped service by service — each cut lands live below",
   },
   {
     id: "support",
@@ -179,7 +287,9 @@ export const APP_PRESETS: AppPreset[] = [
     topology: "support",
     fixedLayers: { embeddings: "local", vector: "self" },
     leftSteps: supportLeft,
+    morphSteps: supportMorph,
     providerCaption: "Scheduled loop — every draft traced, every send metered",
+    morphCaption: "Same send pipeline — each swap cuts its row below",
   },
   {
     id: "finance",
@@ -198,6 +308,8 @@ export const APP_PRESETS: AppPreset[] = [
     topology: "finance",
     fixedLayers: { embeddings: "local", vector: "self" },
     leftSteps: financeLeft,
+    morphSteps: financeMorph,
     providerCaption: "Nightly runs — per-token reasoning · archive · traces",
+    morphCaption: "Same nightly runs — intelligence home first, meters off one by one",
   },
 ];

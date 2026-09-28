@@ -5,6 +5,7 @@ import {
   DIGI_LAYERS,
   PROVIDER_LAYERS,
   digiSpec,
+  morphSpec,
   pricePick,
   providerSpec,
 } from "@/lib/stackCatalog";
@@ -80,5 +81,66 @@ describe("configurator specs", () => {
   it("moves the digithings drawing with the pick", () => {
     const flagged = digiSpec({ ...DEFAULT_DIGI_PICK, models: "sol" });
     expect(flagged.services.find((s) => s.id === "models")?.label).toContain("Sol");
+  });
+
+  it("tags one-time lines non-recurring so monthly cells stay monthly", () => {
+    const price = pricePick(PROVIDER_LAYERS, DEFAULT_PROVIDER_PICK);
+    const setup = price.lines.filter((l) => !l.recurring);
+    const monthly = price.lines.filter((l) => l.recurring);
+    expect(setup.length).toBeGreaterThan(0);
+    expect(setup.reduce((n, l) => n + l.amount, 0)).toBeCloseTo(price.setup, 4);
+    expect(monthly.reduce((n, l) => n + l.amount, 0)).toBeCloseTo(price.monthly, 4);
+  });
+});
+
+describe("morph specs", () => {
+  it("starts as the provider copy with identical box ids", () => {
+    for (const topology of ["rag", "support", "finance"] as const) {
+      const base = providerSpec(DEFAULT_PROVIDER_PICK, undefined, { topology }).services.map((s) => s.id).sort();
+      const start = morphSpec(DEFAULT_PROVIDER_PICK, DEFAULT_DIGI_PICK, undefined, { topology }).services.map((s) => s.id).sort();
+      expect(start).toEqual(base);
+      const labels = morphSpec(DEFAULT_PROVIDER_PICK, DEFAULT_PROVIDER_PICK, undefined, { topology }).services.map((s) => s.label);
+      expect(labels.some((l) => l.includes("Sol"))).toBe(true);
+    }
+  });
+
+  it("swaps the model boxes and the terms together", () => {
+    const m = morphSpec(DEFAULT_PROVIDER_PICK, DEFAULT_DIGI_PICK, undefined, { replaced: ["models"] });
+    const byId = Object.fromEntries(m.services.map((s) => [s.id, s.label]));
+    expect(byId["api"]).toBe("digillm gateway");
+    expect(byId["model"]).toContain("digillm");
+    expect(byId["terms"]).toBe("your keys");
+    const wire = m.edges.find((e) => e.from === "machines" && e.to === "terms");
+    expect(wire?.label).toBe("your keys");
+    const support = morphSpec(DEFAULT_PROVIDER_PICK, DEFAULT_DIGI_PICK, undefined, {
+      topology: "support",
+      replaced: ["models"],
+    });
+    expect(support.edges.find((e) => e.from === "api" && e.to === "model")?.label).toBe("your rates");
+    expect(m.services.find((s) => s.id === "embed")?.label).toBe("embed-3-large");
+  });
+
+  it("homes recall and hosting on the RAG drawing", () => {
+    const m = morphSpec(DEFAULT_PROVIDER_PICK, DEFAULT_DIGI_PICK, undefined, {
+      replaced: ["embeddings", "vector", "hosting"],
+    });
+    const labels = Object.fromEntries(m.services.map((s) => [s.id, s.label]));
+    expect(labels["memory"]).toContain("index");
+    expect(labels["record"]).toBe("digivault lake");
+    expect(labels["machines"]).toBe("your GPU pool");
+  });
+
+  it("flips send to the in-graph mail tool on email", () => {
+    const m = morphSpec(DEFAULT_PROVIDER_PICK, DEFAULT_DIGI_PICK, undefined, { topology: "support", email: true });
+    expect(m.services.find((s) => s.id === "email")?.label).toBe("digigraph mail");
+    expect(m.edges.find((e) => e.from === "review" && e.to === "email")?.label).toBe("approved send");
+    const plain = morphSpec(DEFAULT_PROVIDER_PICK, DEFAULT_DIGI_PICK, undefined, { topology: "support" });
+    expect(plain.services.find((s) => s.id === "email")?.label).toBe("SendGrid");
+  });
+
+  it("files the finance archive in digivault", () => {
+    const m = morphSpec(DEFAULT_PROVIDER_PICK, DEFAULT_DIGI_PICK, undefined, { topology: "finance", replaced: ["hosting"] });
+    expect(m.services.find((s) => s.id === "record")?.label).toBe("digivault archive");
+    expect(m.services.find((s) => s.id === "launcher")?.label).toBe("digiclaw runner");
   });
 });

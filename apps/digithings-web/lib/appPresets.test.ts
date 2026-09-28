@@ -75,6 +75,36 @@ describe("app presets", () => {
     }
   });
 
+  it("walks four morph beats per app against drawn boxes", () => {
+    for (const app of APP_PRESETS) {
+      expect(app.morphSteps).toHaveLength(4);
+      expect(app.morphCaption.length).toBeGreaterThan(0);
+      const drawn = new Set(
+        providerSpec(app.providerDefaults, app.workload, {
+          appLabel: app.providerApp,
+          sourcesLabel: app.providerSources,
+          topology: app.topology,
+        }).services.map((s) => s.id),
+      );
+      for (const step of app.morphSteps) {
+        for (const id of step.ids) {
+          expect(drawn.has(id)).toBe(true);
+        }
+      }
+    }
+  });
+
+  it("cuts priced rows on every morph beat except send", () => {
+    const layersOf = (id: string) =>
+      new Set(APP_PRESETS.find((a) => a.id === id)!.morphSteps.flatMap((s) => s.layers));
+    expect(layersOf("rag")).toEqual(new Set(["models", "embeddings", "vector", "telemetry", "hosting"]));
+    expect(layersOf("support")).toEqual(new Set(["models", "telemetry", "hosting"]));
+    expect(layersOf("finance")).toEqual(new Set(["models", "hosting", "telemetry"]));
+    const send = APP_PRESETS.find((a) => a.id === "support")!.morphSteps.find((s) => s.email)!;
+    expect(send.layers).toEqual([]);
+    expect(send.ids).toContain("email");
+  });
+
   it("draws the support review gate and finance twin sources", () => {
     const support = APP_PRESETS.find((a) => a.id === "support")!;
     const left = providerSpec(support.providerDefaults, support.workload, {
