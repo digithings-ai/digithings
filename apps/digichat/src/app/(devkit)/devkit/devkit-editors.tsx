@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { THREAD_SKINS } from "@digithings/ui/chat/skins";
+import { Button, Field, Input, Switch, Textarea } from "@digithings/ui/ui";
 import { FEATURED_LANGUAGE_CODES } from "@/lib/languages";
 import type { DigichatDeployment } from "@/lib/deploy-config/schema";
 import {
@@ -46,7 +47,7 @@ function Section({
   );
 }
 
-function TextRow({
+export function TextRow({
   label,
   value,
   placeholder,
@@ -67,14 +68,14 @@ function TextRow({
 }) {
   const current = value ?? "";
   return (
-    <label className={labelCls}>
-      <span className="text-muted-foreground">{label}</span>
-      <span className="flex gap-1">
-        <input
+    <span className="flex gap-1">
+      <Field label={label} hint={hint} className="min-w-0 flex-1">
+        <Input
+          dress="chat"
           defaultValue={current}
           placeholder={placeholder}
           spellCheck={false}
-          className={`${inputCls} min-w-0 flex-1`}
+          className="min-w-0 flex-1"
           onBlur={(e) => {
             const next = e.target.value;
             if (next === current) return;
@@ -90,24 +91,17 @@ function TextRow({
             if (e.key === "Enter") e.currentTarget.blur();
           }}
         />
-        {onClear && current !== "" ? (
-          <button
-            type="button"
-            title={`Clear ${label}`}
-            aria-label={`Clear ${label}`}
-            onClick={onClear}
-            className="shrink-0 rounded-md border px-1.5 text-xs text-muted-foreground hover:bg-accent"
-          >
-            ✕
-          </button>
-        ) : null}
-      </span>
-      {hint ? <span className={hintCls}>{hint}</span> : null}
-    </label>
+      </Field>
+      {onClear && current !== "" ? (
+        <Button type="button" dress="chat" onClick={onClear} aria-label={`Clear ${label}`}>
+          ✕
+        </Button>
+      ) : null}
+    </span>
   );
 }
 
-function BoolRow({
+export function BoolRow({
   label,
   checked,
   hint,
@@ -119,22 +113,17 @@ function BoolRow({
   onCommit: (v: boolean) => boolean;
 }) {
   return (
-    <label className="flex items-center gap-2 text-xs">
-      <input
-        type="checkbox"
-        defaultChecked={checked}
-        onChange={(e) => {
-          if (!onCommit(e.target.checked)) {
-            e.target.checked = checked; // refused — revert, never diverge
+    <Field label={label} hint={hint}>
+      <Switch
+        checked={checked}
+        onCheckedChange={(next) => {
+          if (!onCommit(next)) {
+            // Refused: controlled value prop never changed, so the
+            // primitive snaps back on re-render — no DOM write needed.
           }
         }}
-        className="size-3.5 accent-current"
       />
-      <span>
-        {label}
-        {hint ? <span className={`ml-1 ${hintCls}`}>{hint}</span> : null}
-      </span>
-    </label>
+    </Field>
   );
 }
 
@@ -209,7 +198,7 @@ function TriRow({
   );
 }
 
-function TextListRow({
+export function TextListRow({
   label,
   values,
   hint,
@@ -222,14 +211,12 @@ function TextListRow({
 }) {
   const current = values.join("\n");
   return (
-    <label className={labelCls}>
-      <span className="text-muted-foreground">{label}</span>
-      <textarea
+    <Field label={label} hint={hint}>
+      <Textarea
         rows={3}
         defaultValue={current}
         spellCheck={false}
         placeholder="one per line"
-        className={`${inputCls} resize-y`}
         onBlur={(e) => {
           if (e.target.value === current) return;
           if (
@@ -244,8 +231,7 @@ function TextListRow({
           }
         }}
       />
-      {hint ? <span className={hintCls}>{hint}</span> : null}
-    </label>
+    </Field>
   );
 }
 
