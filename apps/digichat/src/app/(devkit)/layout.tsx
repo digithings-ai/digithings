@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import type { ReactNode } from "react";
 import { Geist_Mono, IBM_Plex_Mono, Inter } from "next/font/google";
 import "../(baseline)/baseline.css";
+import "./devkit-controls.css";
 
 /** assistant-ui default template fonts (mirrors the baseline shell). */
 const inter = Inter({
