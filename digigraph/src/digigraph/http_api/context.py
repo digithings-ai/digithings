@@ -161,6 +161,15 @@ def _with_digi_request_context(http_request: Request, req: WorkflowRequest) -> W
     subject = updates.get("digi_subject")
     if subject:
         updates["session_id"] = workflow_thread_id(subject, req.session_id)
+    if not (req.search_engine or "").strip():
+        # POST /workflow has no chat-resolve step: fall back to the
+        # X-Digi-Search-Engine header here, mirroring _resolve_search_engine_chat
+        # (body wins — a non-blank body value is never overwritten). Chat paths
+        # resolve before this point, so this is a no-op for them (#4722). Capped
+        # to the hub's provider max length; the hub still owns validation.
+        engine = _hget(http_request.headers, "X-Digi-Search-Engine", "x-digi-search-engine").strip()
+        if engine:
+            updates["search_engine"] = engine[:64]
     return req.model_copy(update=updates)
 
 

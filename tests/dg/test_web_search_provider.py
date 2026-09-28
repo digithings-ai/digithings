@@ -170,3 +170,51 @@ def test_resolve_search_engine_none_when_unset() -> None:
     assert _resolve_search_engine_chat(req, SimpleNamespace(headers={})) is None
     blank = _chat_req(search_engine="   ")
     assert _resolve_search_engine_chat(blank, SimpleNamespace(headers={})) is None
+
+
+def test_non_string_provider_is_coerced_not_crashed(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Model tool args are not Pydantic-validated: a non-string provider must
+    reach the hub as a string (its call to reject), never AttributeError (F2)."""
+    for provider, expected in ((123, "123"), (["exa"], "['exa']")):
+        captured = _capture_arguments(monkeypatch)
+        web_search_tools.call_digisearch_web_search(
+            "news",
+            provider=provider,
+            context=_context(),  # type: ignore[arg-type]
+        )
+        assert captured["provider"] == expected, provider
+
+
+def _workflow_http(*, headers: dict[str, str] | None = None) -> SimpleNamespace:
+    state = SimpleNamespace(digi_auth=None, digi_bearer=None)
+    return SimpleNamespace(state=state, headers=headers or {})
+
+
+def test_workflow_context_fills_search_engine_from_header() -> None:
+    """POST /workflow has no chat-resolve step: the X-Digi-Search-Engine header
+    must not be silently dropped when the body is blank (F1)."""
+    from digigraph.server import _with_digi_request_context
+
+    req = WorkflowRequest(prompt="hi")
+    out = _with_digi_request_context(_workflow_http(headers={"X-Digi-Search-Engine": "exa"}), req)
+    assert out.search_engine == "exa"
+
+
+def test_workflow_context_body_search_engine_wins_over_header() -> None:
+    """Body-wins parity with the chat resolver: a non-blank body value is never
+    overwritten by the header (F1)."""
+    from digigraph.server import _with_digi_request_context
+
+    req = WorkflowRequest(prompt="hi", search_engine="tavily")
+    out = _with_digi_request_context(_workflow_http(headers={"X-Digi-Search-Engine": "exa"}), req)
+    assert out.search_engine == "tavily"
+
+
+def test_workflow_context_leaves_search_engine_unset_without_signal() -> None:
+    from digigraph.server import _with_digi_request_context
+
+    req = WorkflowRequest(prompt="hi")
+    out = _with_digi_request_context(_workflow_http(), req)
+    assert out.search_engine is None

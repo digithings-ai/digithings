@@ -164,7 +164,7 @@ def _call_digisearch_web_search(
         # caller that never asked keeps the default window — the hub skips a
         # JSON null rather than forwarding it (#4165).
         arguments["recency_days"] = recency_days
-    provider_arg = (provider or "").strip()
+    provider_arg = str(provider or "").strip()
     if provider_arg and provider_arg.lower() != "auto":
         # Omitted when unset or auto: the hub defaults to the in-house engine,
         # and an explicit in-house name (internal) still forwards (#4722).
