@@ -42,7 +42,11 @@ const tradeIdeasDb = vi.hoisted(() => ({
   selectColumns: '',
   gte: [] as [string, string][],
   lte: [] as [string, string][],
+  eq: [] as [string, string][],
   order: [] as [string, unknown][],
+  limits: [] as number[],
+  /** One entry per query, consumed in order. Exhausted → empty result. */
+  responses: [] as { data: unknown[]; error: unknown }[],
 }));
 
 const ideaEvalDb = vi.hoisted(() => ({
@@ -61,6 +65,7 @@ vi.mock('./supabase', () => {
     gte: (column: string, value: string) => TradeIdeasBuilder;
     lte: (column: string, value: string) => TradeIdeasBuilder;
     order: (column: string, options?: unknown) => TradeIdeasBuilder;
+    limit: (count: number) => TradeIdeasBuilder;
     then: <T>(onFulfilled: (payload: Payload) => T) => Promise<T>;
   }
   const makeBuilder = (): TradeIdeasBuilder => {
@@ -69,7 +74,10 @@ vi.mock('./supabase', () => {
         tradeIdeasDb.selectColumns = columns;
         return builder;
       },
-      eq: () => builder,
+      eq: (column, value) => {
+        tradeIdeasDb.eq.push([column, value]);
+        return builder;
+      },
       gte: (column, value) => {
         tradeIdeasDb.gte.push([column, value]);
         return builder;
@@ -82,7 +90,14 @@ vi.mock('./supabase', () => {
         tradeIdeasDb.order.push([column, options]);
         return builder;
       },
-      then: (onFulfilled) => Promise.resolve(onFulfilled({ data: [], error: null })),
+      limit: (count) => {
+        tradeIdeasDb.limits.push(count);
+        return builder;
+      },
+      then: (onFulfilled) =>
+        Promise.resolve(
+          onFulfilled(tradeIdeasDb.responses.shift() ?? { data: [], error: null }),
+        ),
     };
     return builder;
   };
@@ -199,13 +214,90 @@ vi.mock('../supabase', () => {
  * statement of it — keep it exhaustive.
  */
 describe('getTradeIdeas', () => {
-  it('selects trade_levels and evidence alongside the core trade-idea columns', async () => {
+  beforeEach(() => {
     tradeIdeasDb.selectColumns = '';
+    tradeIdeasDb.eq = [];
+    tradeIdeasDb.gte = [];
+    tradeIdeasDb.lte = [];
+    tradeIdeasDb.order = [];
+    tradeIdeasDb.limits = [];
+    tradeIdeasDb.responses = [];
+  });
+
+  it('selects trade_levels and evidence alongside the core trade-idea columns', async () => {
     await getTradeIdeas('2026-06-24');
     expect(tradeIdeasDb.selectColumns).toContain('trade_levels');
     expect(tradeIdeasDb.selectColumns).toContain('evidence');
     expect(tradeIdeasDb.selectColumns).toContain('citations');
     expect(tradeIdeasDb.selectColumns).toContain('as_of');
+  });
+
+  it('reads the board by exact run_date and does not query further when it has rows', async () => {
+    tradeIdeasDb.responses = [
+      { data: [{ run_date: '2026-09-28', rank: 1, idea_id: 'fresh' }], error: null },
+    ];
+
+    const rows = await getTradeIdeas('2026-09-28');
+
+    expect(rows).toHaveLength(1);
+    expect(tradeIdeasDb.eq).toEqual([['run_date', '2026-09-28']]);
+    // Exactly one query — the fallback never runs when today's board is populated.
+    expect(tradeIdeasDb.lte).toEqual([]);
+  });
+
+  it('falls back to episodes refreshed today but keyed to an earlier board date', async () => {
+    // A continued episode is written back to its ORIGIN run_date, so the exact-date
+    // query for today comes back empty even though today's publish refreshed it.
+    tradeIdeasDb.responses = [
+      { data: [], error: null },
+      {
+        data: [
+          {
+            run_date: '2026-09-24',
+            rank: 1,
+            pair: 'EUR/USD',
+            direction: 'short',
+            idea_id: 'carried-episode',
+            as_of: '2026-09-28T22:26:56+00:00',
+          },
+        ],
+        error: null,
+      },
+    ];
+
+    const rows = await getTradeIdeas('2026-09-28');
+
+    expect(rows).toHaveLength(1);
+    expect(rows[0].idea_id).toBe('carried-episode');
+    // Bounded to boards on/before today AND refreshed by today's publish, so a closed
+    // episode (not republished) can never resurface on the board.
+    expect(tradeIdeasDb.lte).toEqual([['run_date', '2026-09-28']]);
+    expect(tradeIdeasDb.gte).toEqual([['as_of', '2026-09-28T00:00:00.000Z']]);
+    expect(tradeIdeasDb.limits).toEqual([10]);
+  });
+
+  it('keeps only the newest row per episode in the fallback', async () => {
+    tradeIdeasDb.responses = [
+      { data: [], error: null },
+      {
+        data: [
+          { run_date: '2026-09-25', rank: 2, pair: 'EUR/USD', direction: 'short', idea_id: 'ep-1' },
+          { run_date: '2026-09-24', rank: 1, pair: 'EUR/USD', direction: 'short', idea_id: 'ep-1' },
+          { run_date: '2026-09-24', rank: 2, pair: 'USD/JPY', direction: 'long', idea_id: 'ep-2' },
+        ],
+        error: null,
+      },
+    ];
+
+    const rows = await getTradeIdeas('2026-09-28');
+
+    expect(rows.map((r) => r.idea_id)).toEqual(['ep-1', 'ep-2']);
+  });
+
+  it('stays empty when the board date never published', async () => {
+    const rows = await getTradeIdeas('2026-09-28');
+
+    expect(rows).toEqual([]);
   });
 });
 

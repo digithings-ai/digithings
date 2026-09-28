@@ -529,20 +529,63 @@ export function sortTodayBriefs(briefs: FxBriefRow[]): FxBriefRow[] {
   );
 }
 
-/** Curated trade ideas for a run_date (rank 1 = top). `[]` when unconfigured/empty. */
+const TRADE_IDEA_BOARD_COLUMNS =
+  'run_date, rank, pair, direction, title, thesis, catalyst, levels, citations, trade_levels, evidence, as_of, idea_id';
+
+/** Cap on the carried-episode fallback so one broken date can't pull the archive. */
+const CARRIED_BOARD_LIMIT = 10;
+
+/**
+ * Collapse rows that are the same episode published on several board dates.
+ *
+ * Ordered newest-board-first by the caller, so the first sighting wins. Falls back
+ * to the axis when `idea_id` is absent (pre-identity rows).
+ */
+function dedupeEpisodes(rows: FxTradeIdeaRow[]): FxTradeIdeaRow[] {
+  const seen = new Set<string>();
+  const out: FxTradeIdeaRow[] = [];
+  for (const row of rows) {
+    const key = row.idea_id || `${row.pair}|${row.direction}|${row.timeframe ?? ''}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(row);
+  }
+  return out;
+}
+
+/**
+ * Curated trade ideas for a run_date (rank 1 = top). `[]` when unconfigured/empty.
+ *
+ * A CONTINUED episode is written back to its ORIGIN run_date (trade-episodes,
+ * 2026-09-23) so identity and revision update in place — which means an exact-date
+ * match misses an idea that originated earlier and silently empties today's board.
+ * When the exact-date query comes back empty we fall back to the episode rows that
+ * today's publish refreshed (`as_of` on the board date) but keyed to an earlier date:
+ * precisely a carried idea the board would otherwise hide. Rows not republished
+ * today — closed episodes, or a day when nothing ran — stay excluded.
+ */
 export async function getTradeIdeas(runDate: string): Promise<FxTradeIdeaRow[]> {
   if (!isTwelveXConfigured() || !twelveXSupabase) return [];
   if (!runDate) return [];
   const rows = await querySupabase<FxTradeIdeaRow[]>((sb) =>
     sb
       .from('fx_trade_ideas_snapshot')
-      .select(
-        'run_date, rank, pair, direction, title, thesis, catalyst, levels, citations, trade_levels, evidence, as_of'
-      )
+      .select(TRADE_IDEA_BOARD_COLUMNS)
       .eq('run_date', runDate)
       .order('rank', { ascending: true })
   );
-  return rows ?? [];
+  if (rows?.length) return rows;
+  const carried = await querySupabase<FxTradeIdeaRow[]>((sb) =>
+    sb
+      .from('fx_trade_ideas_snapshot')
+      .select(TRADE_IDEA_BOARD_COLUMNS)
+      .lte('run_date', runDate)
+      .gte('as_of', `${runDate}T00:00:00.000Z`)
+      .order('run_date', { ascending: false })
+      .order('rank', { ascending: true })
+      .limit(CARRIED_BOARD_LIMIT)
+  );
+  return dedupeEpisodes(carried ?? []);
 }
 
 /**
