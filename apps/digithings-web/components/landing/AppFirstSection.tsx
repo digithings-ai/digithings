@@ -10,8 +10,8 @@
  * break. The popover is a keyboard-operable listbox (Escape closes, first
  * option autofocuses).
  *
- * Client component (tab + pick + popover state). Lives on
- * `/variants/why-copy` until it wins, then migrates to the live band.
+ * Client component (tab + pick + popover state). Live in the `#why` band
+ * (via `WhyStack`); mirrored on `/variants/why-copy` for testing.
  */
 
 "use client";
@@ -208,7 +208,7 @@ export function AppFirstSection() {
   const popPick = pop ? (pop.side === "provider" ? effProvider : effDigi) : pick.provider;
 
   return (
-    <section aria-label="App-first single variant" className="line-b">
+    <section aria-label="App-first single variant">
       <div className="mx-auto flex max-w-[var(--frame-w)] flex-col gap-[0.5rem] px-[var(--page-pad)] pt-[2.5rem]">
         <span className={LABEL}>single variant · app-first · compose it yourself</span>
         <h2 className={HEADLINE}>
