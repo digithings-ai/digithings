@@ -33,6 +33,10 @@ export interface RagPricing {
   langsmithSeatMonthly: number;
   langsmithIncludedTraces: number;
   langsmithTraceOveragePerK: number;
+  deepseekInPerM: number;
+  deepseekOutPerM: number;
+  reasoningInPerM: number;
+  reasoningOutPerM: number;
 }
 
 export const RAG_PRICING: RagPricing = {
@@ -44,6 +48,8 @@ export const RAG_PRICING: RagPricing = {
     "spendark.com (Qdrant Cloud ~$25/mo entry)",
     "langchain.com/pricing (Plus $39/seat, 10k traces, $2.50/1k overage)",
     "cohere.com via Azure Foundry (Embed v4 $0.12/M)",
+    "api-docs.deepseek.com (V4 Flash $0.14 in / $0.28 out)",
+    "openai.com post-cut guides, multi-source (o3 $2 in / $8 out)",
   ],
   embedLargePerM: 0.13,
   embedSmallPerM: 0.02,
@@ -60,6 +66,10 @@ export const RAG_PRICING: RagPricing = {
   langsmithSeatMonthly: 39,
   langsmithIncludedTraces: 10000,
   langsmithTraceOveragePerK: 2.5,
+  deepseekInPerM: 0.14,
+  deepseekOutPerM: 0.28,
+  reasoningInPerM: 2,
+  reasoningOutPerM: 8,
 };
 
 export interface RagWorkload {
