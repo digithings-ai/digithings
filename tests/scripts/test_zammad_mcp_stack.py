@@ -103,3 +103,34 @@ def test_entrypoint_allowed_tools_fallback_excludes_zammad():
     assert exports, "expected the DIGI_ALLOWED_TOOLS export"
     for line in exports:
         assert "zammad" not in line
+
+
+def test_mcp_registers_aggregate_tool():
+    """The stack's zammad-mcp serves the analytics ranking tool (#4717).
+
+    ``ToolManager.list_tools()`` (public sync API) rather than the private
+    ``_tools`` dict — same names either way, robust across mcp builds.
+    """
+    pytest.importorskip("mcp.server.fastmcp")
+    from scripts.zammad_mcp import server
+
+    names = {tool.name for tool in server.mcp._tool_manager.list_tools()}
+    assert {
+        "search_tickets",
+        "list_tickets",
+        "get_ticket",
+        "ticket_report",
+        "aggregate_tickets",
+    } <= names
+
+
+def test_aggregate_delegates_to_digisearch_tables():
+    """Generalization requirement (#4717): one counting/enrichment implementation.
+
+    ``scripts/zammad_mcp/aggregate.py`` reuses ``digisearch.core.tables``
+    (``group_count``/``enrich_rows``), not a second copy of the same logic.
+    """
+    body = (REPO_ROOT / "scripts" / "zammad_mcp" / "aggregate.py").read_text()
+    assert "from digisearch.core.tables import" in body
+    assert "group_count" in body
+    assert "enrich_rows" in body
