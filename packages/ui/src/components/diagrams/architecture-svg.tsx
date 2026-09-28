@@ -25,6 +25,7 @@
  */
 
 import type { ArchEdge, ArchGroup, ArchIcon, ArchService, ArchSpec } from "./ArchitectureDiagram";
+import { ICONS } from "../logos";
 
 const BOX_W = 176;
 const BOX_H = 58;
@@ -154,8 +155,22 @@ function route(a: Rect, b: Rect): Routed {
   };
 }
 
-/** A 22px monoline kind glyph, drawn in a local 20x20 box. */
-function Glyph({ kind }: { kind?: ArchIcon }) {
+/** A 22px monoline kind glyph, drawn in a local 20x20 box. A named `logo` slug
+ * from the kit registry wins when it resolves (simple-icons paths are 24x24
+ * fill shapes, drawn in currentColor like everything else on the box);
+ * anything else falls through to the kind glyph, so unmarked vendors degrade
+ * to a generic plate instead of an empty one. */
+function Glyph({ kind, logo }: { kind?: ArchIcon; logo?: string }) {
+  const mark = logo ? ICONS[logo] : undefined;
+  if (mark) {
+    /* simple-icons paths live in a 24x24 box; scale into the local 20x20 so
+       a brand mark fills exactly the frame the kind glyphs use. */
+    return (
+      <g transform={`scale(${20 / 24})`}>
+        <path d={mark.path} fill="currentColor" stroke="none" />
+      </g>
+    );
+  }
   const common = { fill: "none", stroke: "currentColor", strokeWidth: 1.4, strokeLinecap: "round" as const };
   switch (kind) {
     case "database":
@@ -289,7 +304,7 @@ export function ArchitectureSvg({ spec, lit, className }: ArchitectureSvgProps) 
           >
             <rect className="arch-node__box" x={r.x} y={r.y} width={r.w} height={r.h} />
             <g className="arch-node__glyph" transform={`translate(${r.x + 14} ${r.y + (BOX_H - GLYPH) / 2}) scale(${GLYPH / 20})`}>
-              <Glyph kind={service.icon} />
+              <Glyph kind={service.icon} logo={service.logo} />
             </g>
             <text className="arch-node__label" x={r.x + LABEL_X} y={r.y + BOX_H / 2} dominantBaseline="middle">
               {(() => {

@@ -77,6 +77,15 @@ export interface ArchService {
   id: string;
   label: string;
   icon?: ArchIcon;
+  /**
+   * Brand mark slug from the kit's logo registry (`ICONS` in
+   * components/logos.ts), drawn in place of the kind glyph. Only slugs the
+   * installed simple-icons set actually ships resolve — anything else falls
+   * back to `icon`, so a spec can name a product (Pinecone, LangSmith) that
+   * has no monochrome mark without breaking. Ignored by the mermaid export,
+   * which only knows the five plates.
+   */
+  logo?: string;
   group?: string;
   col?: number;
   row?: number;
