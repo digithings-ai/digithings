@@ -15,6 +15,7 @@ import { ArchitectureTour } from "@digithings/ui";
 import { CONVENTIONAL_ARCH, DIGITHINGS_ARCH } from "@/lib/whyStack";
 import { WHY_COPY_VERSIONS, type WhyCopyVersion } from "@/lib/whyCopyVariants";
 import { TRADITIONAL_ARCH, TRADITIONAL_STEPS } from "@/lib/whyLeftStudy";
+import { RagCostPanel } from "@/components/landing/RagCostPanel";
 
 const HEADLINE = "m-0 font-mono text-[clamp(1.3rem,2.4vw,1.85rem)] font-medium leading-[1.2] tracking-[-0.02em] text-ink";
 const LEDE = "m-0 max-w-[var(--measure-prose)] text-[0.9rem] leading-[1.7] text-ink-soft";
@@ -116,6 +117,7 @@ export function WhyCopyVariants() {
             </div>
           </div>
         </div>
+        <RagCostPanel />
       </section>
       {WHY_COPY_VERSIONS.map((version) => (
         <VersionBand key={version.id} version={version} />

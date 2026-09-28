@@ -137,6 +137,19 @@ Right walk (price up front):
 
 ---
 
+## Study D cost record (model: `lib/ragCost.ts`, panel under the walk)
+
+Workload: 1GB text (≈250M tokens, 500-token chunks → 500k vectors) at
+1k queries/day (8k in / 1.5k out per answer). List prices researched
+2026-09-28; planning estimates, not quotes.
+
+- Provider (large $0.13 + Pinecone + Sol $5/$30 + LangSmith): setup ~$35,
+  monthly ~$2,697 — answers alone are >90% of the month.
+- digithings self-hosted: $0 marginal on your hardware.
+- digithings cheap managed (small + Qdrant + Luna): setup ~$5, monthly ~$128.
+- digithings flagship routed: same usage as provider, minus the $89 traces.
+- 10× corpus + usage: provider ≈ $26.7k/mo — the explode knob is answers.
+
 ## Scorecard (fill together after the pick)
 
 - [ ] Pick: A / B / C / hybrid (note: ___________)
