@@ -1092,7 +1092,9 @@ def test_ticket_report_window_filters_client_side():
 
     old = dict(TICKET, id=1, updated_at="2026-01-01T00:00:00Z")
     new = dict(TICKET, id=2, updated_at="2026-09-27T00:00:00Z")
-    text = format_ticket_report([old, new], since_days=7)
+    text = format_ticket_report(
+        [old, new], since_days=7, now=datetime(2026, 9, 28, tzinfo=timezone.utc)
+    )
     assert "1 ticket" in text
 
 
