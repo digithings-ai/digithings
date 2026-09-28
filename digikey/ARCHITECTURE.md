@@ -49,12 +49,12 @@ This architecture means digikey sits on the hot path for key exchange but is com
 | File | Responsibility |
 |------|---------------|
 | `server.py` | FastAPI app, all HTTP routes, startup hook |
-| `jwt_issue.py` | JWT construction, JWKS document |
+| `jwt_issue.py` | JWT construction, JWKS document, customer-license minting (`LICENSE_*`, `issue_license_token`) |
 | `jwt_verify.py` | JWT decode + JWKS client (used by consumers) |
 | `crypto_keys.py` | RSA key load/generate, PEM serialization |
 | `key_crypto.py` | API key generation (`secrets`), bcrypt hash/verify |
 | `db.py` | SQLAlchemy engine and session factory |
-| `db_schema.py` | `ApiKeyRow` ORM model, `digikey_api_keys` table |
+| `db_schema.py` | `ApiKeyRow` (`digikey_api_keys`), `LicenseRow` (`digikey_licenses`) |
 | `scopes.py` | Scope matching logic, `DEFAULT_BFF_SESSION_SCOPES` |
 | `settings.py` | Env-driven constants (`KEY_PREFIX_LEN=16`, `RAW_KEY_PREFIX="dgk_live_"`) |
 | `models.py` | `TokenClaims`, `DigiAuthContext`, `PrincipalKind` Pydantic v2 models |
@@ -63,7 +63,8 @@ This architecture means digikey sits on the hot path for key exchange but is com
 | `license_heartbeat.py` | Four-state allowlist read, telemetry validation, raw-SQL row lookup |
 | `license_edge.py` | Hosted-capability scope checks over `X-Digi-License` (digigraph edge) |
 | `ratelimit.py` | In-process per-IP token-bucket limiter + FastAPI dependency for auth-path routes |
-| `cli.py` | Bootstrap CLI (`digikey issue-key`) |
+| `cli.py` | Bootstrap CLI (`digikey issue-key`, `license-mint`, `license-revoke`) |
+| `licenses.py` | Customer-license registry helpers: mint validation, allowlist insert/revoke |
 
 ---
 
@@ -210,6 +211,31 @@ Rules:
 - Updating a profile bumps `profile_version`; the next token exchange embeds the new value. Already-issued JWTs keep the old version until expiry (short TTL).
 - digikey stores only the **pointer** (id + version + subject). Full investment-profile / asset-preferences payload CRUD is [#307](https://github.com/digithings-ai/digithings/issues/307); this table is the interim identity seam until digistore (#172).
 
+### License claims (`digichat-license`)
+
+Customer licenses are RS256 JWTs minted with the existing digikey access-token
+keypair (`issue_license_token()` in `jwt_issue.py`) — the `aud` claim
+discriminates a license from an access token, so no separate issuer or keypair
+is needed. Owner-run CLI only (`digikey license-mint`); there is no minting
+HTTP endpoint.
+
+| Claim | Value |
+|-------|-------|
+| `iss` | Existing digikey issuer (same as access tokens) |
+| `aud` | `digichat-license` (a license never validates as an access token and vice versa) |
+| `sub` / `tenant_slug` | Customer slug (mirrored; keeps the digikey claim vocabulary) |
+| `jti` / `license_id` | Fresh uuid4 hex per issuance (mirrored for heartbeat correlation) |
+| `hosts` | Embed-parent hostnames, non-empty list |
+| `services` | Hosted-service scopes (`digisearch-corpus`, `hosted-web-search`); omitted entirely when not passed — absent means entitled, not unentitled |
+| `kind` | `digichat-license` (discriminator on top of `aud`) |
+| `iat` / `exp` | Now / now + term (`term_days * 86400`; default 90d = 7776000s, max 180d) |
+| `scope` | `" ".join(services)` when services present, else omitted |
+
+Deliberately absent: `scopes`, `key_pub`, `principal_kind`, `project_id`,
+`tenant_id` (access-token vocabulary). License rows are never written to
+`digikey_jti_issued` or the Redis blocklist — revocation is allowlist-enforced
+(see below), never jti-blocklisted.
+
 ### API key storage (`digikey_api_keys` table)
 
 | Column | Type | Notes |
@@ -244,6 +270,31 @@ Durable record of every `jti` issued via token exchange — the source of truth 
 Composite indexes: `(api_key_id, exp)` for key revoke, `(subject, exp)` for BFF revoke. Rows where `exp < now()` are dead and can be purged by a nightly job.
 
 **In-place upgrade:** digikey has no migration framework, and `create_all` does not alter existing tables. `init_db()` calls `digikey.db_migrate.upgrade_jti_issued_table()` (before `create_all`) to add `subject`/`revoked_at` and drop `NOT NULL` on `api_key_id` for a pre-#3917 database. SQLite uses a non-destructive table rebuild; other dialects use `ALTER TABLE`. It is idempotent and recovers interrupted rebuilds. Never delete `digikey.db` to resolve drift — it holds API keys and revocation state.
+
+### License registry (`digikey_licenses` table)
+
+Allowlist of issued customer licenses. `init_db()` picks the table up via
+`create_all` on next startup — no migration module, no backfill.
+
+| Column | Type | Notes |
+|--------|------|-------|
+| `license_id` | `VARCHAR(36)` PK | The JWT `jti`; stable id per issuance |
+| `customer_slug` | `VARCHAR(256)` INDEX NOT NULL | Mirrors `sub`/`tenant_slug` |
+| `hosts` | `JSON` NOT NULL | As minted |
+| `services` | `JSON` nullable | NULL = absent = entitled |
+| `issued_at` | `TIMESTAMPTZ` | Server-generated |
+| `expires_at` | `INT` NOT NULL | Unix `exp`; allowlist reads report expired without parsing the JWT |
+| `revoked_at` | `TIMESTAMPTZ` nullable | NULL = live; set = revoked |
+| `label` | `VARCHAR(256)` nullable | Owner note, never in the JWT |
+
+Allowlist read contract (normative for the heartbeat slice): `valid` = row
+exists, `revoked_at IS NULL`, `expires_at > now`; `expired` = live row with
+`expires_at <= now` (identified-but-lapsed, expiry checked with ~5 minutes of
+clock-skew leeway); `revoked` = `revoked_at IS NOT NULL`; `unknown` = no row.
+Revoked and unknown are distinct answers end to end (CLI, and later the admin
+HTTP revoke). Slice 1 ships the write side (`license-mint` inserts,
+`license-revoke` sets `revoked_at`); the read side ships with the heartbeat
+slice against this contract.
 
 ### User profile pointers (`digikey_user_profile_pointers` table)
 
@@ -389,6 +440,18 @@ When Redis is **unset**, blocklist checks are skipped (legacy dev mode). Product
 ### Historical gap (pre–Wave 1 remediation)
 
 Prior to ADR-0007 implementation, `jti` was included in tokens but not indexed for revocation. See git history for the fail-closed middleware and compose wiring landed in audit Wave 1.
+
+### Customer license issuance guards
+
+`digikey license-mint` refuses to mint when `DIGIKEY_PRIVATE_KEY_PEM` is
+unset — a license signed by an ephemeral key could never verify, so minting
+under one is always a bug (exit non-zero naming the missing var). Mint also
+requires `DIGIKEY_DATABASE_URL`, takes no `dev_global`-style bypass kind
+(licenses are always customer-scoped), and caps `--term-days` at 180. The raw
+license JWT is shown once on stdout (like the raw `dgk_live_` key) and stored
+nowhere retrievable; only `license_id`, customer slug, and `exp` are safe to
+log. Access-token defaults (TTL, `aud`, bcrypt paths, revoke endpoint) are
+untouched by the license path.
 
 ### `dev_global` keys risk
 
