@@ -117,14 +117,11 @@ export function LandingPage({ embedOrigin }: { embedOrigin: string }) {
       <Hero />
       <ModuleGrid />
 
-      {/* Round 15: the band is now the `/variants/why` "guided, rented then
-          owned" composition the owner picked — two container diagrams, the
-          guided walk with the camera, the capability comparison and the cost
-          model — rather than the seven-layer drawer. `WhyStack` owns every
-          block and their headings; the section keeps only the anchor and the
-          band rules. v16 rebrands the frame around the same walk: "their AI
-          stack" vs "the digithings stack", seam-holding over owning, and the
-          walk resolves on partial adoption. */}
+      {/* The app-first variant won the `/variants/why-copy` review and is now
+          the band: three apps with their own provider architectures, a
+          guided walk, a box-by-box morph to the digithings stack, and a
+          sticky live invoice. `WhyStack` is a thin alias for it; the section
+          keeps only the anchor and the band rules. */}
       <section id="why" className="line-b px-[var(--page-pad)] py-[var(--page-step)]">
         <WhyStack />
       </section>
