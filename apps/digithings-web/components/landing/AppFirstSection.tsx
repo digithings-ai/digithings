@@ -161,6 +161,22 @@ export function AppFirstSection() {
           (morphIdx < 0 ? [] : preset.morphSteps.slice(0, morphIdx + 1)).flatMap((b) => b.layers),
         );
 
+  /* Walk position for the text rail: one flat timeline across the provider
+     walk and the morph beats. The rail shows the current step's copy while
+     the diagrams light the matching boxes. */
+  const allSteps = [...preset.leftSteps, ...preset.morphSteps];
+  /* Overlap-safe static check (no "static" literal: the resolved TourVariant
+     union varies between src and the workspace types). */
+  const isStatic = tourMode !== "camera" && tourMode !== "highlight";
+  const inMorph = morphIdx >= 0 && !isStatic;
+  const curStep = allSteps[Math.min(Math.max(tourStep, 0), allSteps.length - 1)];
+  const stepNo = morphIdx < 0 ? tourStep + 1 : morphIdx + 1;
+  const stepTotal = morphIdx < 0 ? preset.leftSteps.length : preset.morphSteps.length;
+  /* Invoice digi-column emphasis: plain until the scroll reaches the morph,
+     then one accent frame so the eye moves from their total to digi's. */
+  const digiHi =
+    inMorph && !isStatic ? " shadow-[inset_0_0_0_1px_var(--accent)]" : "";
+
   /* Boxes already flipped at the current walk position (for click routing:
      a flipped box reconfigures the digi pick, an unflipped one the provider
      pick). Static reads the end state. Box-granular: finance flips the
@@ -208,12 +224,16 @@ export function AppFirstSection() {
   const popPick = pop ? (pop.side === "provider" ? effProvider : effDigi) : pick.provider;
 
   return (
-    <section aria-label="App-first single variant">
-      <div className="mx-auto flex max-w-[var(--frame-w)] flex-col gap-[0.5rem] px-[var(--page-pad)] pt-[2.5rem]">
+    <section aria-label="App-first single variant" className="flex min-h-screen flex-col">
+      <div className="mx-auto flex w-full max-w-[var(--frame-w)] flex-col gap-[0.5rem] px-[var(--page-pad)] pt-[1.25rem]">
         <span className={LABEL}>single variant · app-first · compose it yourself</span>
         <h2 className={HEADLINE}>
-          <span className="why-rent">Their AI stack,</span>{" "}
-          <span className="why-own">or the digithings stack you compose.</span>
+          <span className="why-rent transition-opacity" style={{ opacity: inMorph ? 0.4 : 1 }}>
+            Their AI stack,
+          </span>{" "}
+          <span className="why-own transition-opacity" style={{ opacity: inMorph ? 1 : 0.4 }}>
+            or the digithings stack you compose.
+          </span>
         </h2>
         <p className={LEDE}>
           Pick an app and walk their stack — then watch it swap to digithings box by
@@ -238,11 +258,30 @@ export function AppFirstSection() {
         <p className={LEDE}>{preset.subhead}</p>
       </div>
 
-      <div className="whyx" onClick={onStageClick}>
+      <div className="whyx flex-1" onClick={onStageClick}>
         <div className="whyx__block">
-          <div className="whyx__tours">
-            <div className="whyx__tour">
-              <ArchitectureTour
+          <div className="mx-auto grid w-full max-w-[var(--frame-w)] gap-[1rem] px-[var(--page-pad)] lg:grid-cols-[minmax(15rem,20rem)_minmax(0,1fr)]">
+            {/* Text rail: the walk-through copy, one step at a time, evolving
+                with the scroll-driven tour on every graph. Desktop only; the
+                static/mobile fallback reads the tour's own full step list. */}
+            <aside
+              aria-live="polite"
+              className="hidden self-start border border-hair bg-surface p-[1rem] lg:sticky lg:top-[1rem] lg:block"
+            >
+              <span className={LABEL}>
+                {morphIdx < 0 ? "their stack" : "digithings stack"} · {stepNo} of {stepTotal}
+              </span>
+              <h3
+                key={curStep.id}
+                className="m-0 pt-[0.5rem] font-mono text-[1.05rem] font-medium leading-[1.35] text-ink"
+              >
+                {curStep.label}
+              </h3>
+              <p className="m-0 pt-[0.5rem] text-[0.85rem] leading-[1.7] text-ink-soft">{curStep.line}</p>
+            </aside>
+            <div className="whyx__tours">
+              <div className="whyx__tour">
+                <ArchitectureTour
                 sides={[
                   {
                     spec: providerSpec(effProvider, workload, {
@@ -268,6 +307,7 @@ export function AppFirstSection() {
                 onStepChange={setTourStep}
                 onModeChange={setTourMode}
               />
+              </div>
             </div>
           </div>
         </div>
@@ -332,7 +372,7 @@ export function AppFirstSection() {
               <tr className="text-left text-ink-mute">
                 <th className="py-[0.3rem] pr-[0.6rem] font-normal">Layer</th>
                 <th className="py-[0.3rem] pr-[0.6rem] text-right font-normal">Their $/mo</th>
-                <th className="py-[0.3rem] text-right font-normal">digi $/mo</th>
+                <th className={`py-[0.3rem] text-right font-normal${digiHi}`}>digi $/mo</th>
               </tr>
             </thead>
             <tbody className="font-variant-numeric tabular-nums">
@@ -369,7 +409,7 @@ export function AppFirstSection() {
               <tr className="border-t border-hair">
                 <td className="py-[0.3rem] pr-[0.6rem] text-ink">Monthly total</td>
                 <td className="py-[0.3rem] pr-[0.6rem] text-right text-ink">{usd(providerPrice.monthly)}</td>
-                <td className="py-[0.3rem] text-right text-ink">{usd(sumFor(digiPrice.lines, revealed, true))}</td>
+                <td className={`py-[0.3rem] text-right text-ink${digiHi}`}>{usd(sumFor(digiPrice.lines, revealed, true))}</td>
               </tr>
             </tbody>
           </table>
