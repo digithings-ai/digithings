@@ -23,6 +23,10 @@ describe("dashboard security-headers", () => {
     expect(DASHBOARD_CSP).toContain("https://dashboard-api.chris-stefan.workers.dev");
   });
 
+  it("allows the folded stack host in connect-src (#4693)", () => {
+    expect(DASHBOARD_CSP).toContain("https://graph.digithings.ai");
+  });
+
   it("allows digichat iframe origins for the Desk+ popup (#3422)", () => {
     expect(DASHBOARD_CSP).toContain("frame-src");
     expect(DASHBOARD_CSP).toContain("https://digithings.ai");

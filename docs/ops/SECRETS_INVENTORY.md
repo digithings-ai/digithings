@@ -172,6 +172,88 @@ Six repo secrets that no `.github` YAML read were deleted on 2026-09-17/18: `COP
 - **Secret-manager adoption.** Cloudflare Secrets Store, 1Password, Infisical, and Doppler appear only as aspirational mentions; no repo evidence of use.
 - **`projects/**` and `.local/`** are gitignored and not auditable from this checkout.
 
+## Folded stack worker — secret maintenance (2026-09-27)
+
+The single folded worker (`digithings-stack`) owns the dashboard-api and digichat
+secrets behind the isolation seam (fold slices #4686/#4688/#4690, launch-readiness
+#4693/#4694). Secret values are write-only in Cloudflare (`secret list` shows
+names only) and local `.env` files are unreadable to agents, so maintenance
+splits three ways. Live set is 25 names (verified 2026-09-27 via
+`wrangler secret list -c apps/digithings-stack-cloudflare/wrangler.toml`);
+target 23 after the #4700 consolidation ops below (they run only after the
+manual production deploy carrying the fallback chain).
+
+### Agent-settable (values documented in-repo, plaintext)
+
+```bash
+CFG=apps/digithings-stack-cloudflare/wrangler.toml
+echo "https://graph.digithings.ai" | npx wrangler secret put DIGIGRAPH_INTERNAL_URL -c $CFG
+echo "https://key.digithings.ai" | npx wrangler secret put DIGIKEY_URL -c $CFG
+```
+
+`SUPABASE_URL` needs no `put` — it ships as plaintext `[vars]` in the stack
+`wrangler.toml` (#4700; public project-ref, same as the standalone
+dashboard-api worker).
+
+`MARKET_DATA_URL` stays unset (optional; closes resolve honest-empty, same as the
+standalone dashboard-api worker). `DIGIKEY_BFF_TOKEN` is already on the worker
+and is forwarded to the container by the `envVars` whitelist — nothing to set.
+
+### Agent-generatable (random, must match on both workers until cutover)
+
+`AUTH_SECRET` and `DIGICHAT_PLAN_PROOF_SECRET` must carry the same value on the
+stack worker and the standalone digichat worker until the route cutover, or
+sessions/proof links validate on one worker and fail on the other. Generate once
+per secret, pipe the same temp file into both `put` calls, then delete it (shell
+file redirects must stay inside the workspace; never commit the file):
+
+```bash
+openssl rand -hex 32 > scratch-rot-auth.txt
+npx wrangler secret put AUTH_SECRET -c apps/digithings-stack-cloudflare/wrangler.toml < scratch-rot-auth.txt
+npx wrangler secret put AUTH_SECRET -c apps/digichat-cloudflare/wrangler.toml < scratch-rot-auth.txt
+rm -f scratch-rot-auth.txt
+```
+
+Rotation invalidates outstanding chat sessions (`AUTH_SECRET`) and issued
+plan-proof links (`DIGICHAT_PLAN_PROOF_SECRET`) — one-time logout, flag it.
+
+### Human-only (real values unreachable to agents)
+
+`SUPABASE_SERVICE_ROLE_KEY`, `SUPABASE_ANON_KEY`, and
+`DIGICHAT_EMBED_TENANTS` exist only on the standalone workers (write-only) or in
+the owner's vault. The owner pastes each one:
+
+```bash
+CFG=apps/digithings-stack-cloudflare/wrangler.toml
+npx wrangler secret put SUPABASE_SERVICE_ROLE_KEY -c $CFG
+npx wrangler secret put SUPABASE_ANON_KEY -c $CFG
+npx wrangler secret put DIGICHAT_EMBED_TENANTS -c $CFG
+```
+
+#4700 consolidation ops (stack worker only, AFTER the manual deploy carrying
+the `index.ts` fallback chain is verified — deleting early breaks the digichat
+container; the standalone digichat worker keeps its own `DIGICHAT_*` names
+until cutover retirement):
+
+```bash
+CFG=apps/digithings-stack-cloudflare/wrangler.toml
+npx wrangler secret delete DIGICHAT_DASHBOARD_SUPABASE_URL -c $CFG
+npx wrangler secret delete DIGICHAT_DASHBOARD_SUPABASE_ANON_KEY -c $CFG
+npx wrangler secret delete SUPABASE_URL -c $CFG
+```
+
+(The lingering `SUPABASE_URL` secret would shadow the new `[vars]` value —
+secrets take precedence — so it must be deleted for the demotion to take
+effect. Target live set afterwards: 23 names.)
+
+### Gotchas
+
+- `CLOUDFLARE_API_TOKEN` exported in the shell makes wrangler authenticate as
+  that token and fail with auth error 10000 — run with `env -u CLOUDFLARE_API_TOKEN`.
+- `secret put` needs no redeploy, but containers serve their start-time env
+  until recycled — bump the `SHARED_*_CONTAINER_ID` marker after rotation.
+- Verify by names only; never print values, never write them to repo files.
+
 ## Refreshing this inventory
 
 ```bash

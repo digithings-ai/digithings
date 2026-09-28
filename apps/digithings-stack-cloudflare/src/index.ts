@@ -18,6 +18,20 @@
  * matching MCP_EDGE_KEY — fail-closed 401 otherwise).
  * mcp.digithings.ai stays reserved and answers only behind its JWT gate.)
  *
+ * /dashboard-api/* → folded dashboard-api routes (#4687: portfolio,
+ * allocations, brief, performance, kpis/live, nav-series, benchmarks, ledger,
+ * /v1/tables/*, POST /mcp with the 8 dashboard MCP tools) served in-worker
+ * behind the dashboard-api isolation group. The standalone dashboard-api
+ * worker stays deployed until cutover; no DNS/Pages changes in this slice.
+ *
+ * digichat paths (/embed*, /api/chat*, /api/embed/*, /api/byok/*,
+ * /api/plan-proof*, /api/health, /_dtchat/*) → folded digichat routes (#4689)
+ * proxied to the dedicated digichat Container (Next standalone :3000) behind
+ * the digichat isolation group. Path predicate is the standalone worker's own
+ * `shouldProxyToDigiChat`; auth stays in-container (no edge gating on these
+ * paths). The standalone digichat worker stays deployed until cutover; no
+ * DNS/Pages/route changes in this slice.
+ *
  * zammad-mcp / digisearch-mcp / digivault-mcp bind 0.0.0.0 inside the Container
  * for those edge routes; LiteLLM stays loopback-only. digisearch also binds
  * 0.0.0.0:8002 (container/start_digisearch.sh) so the Worker can reach it at the
@@ -27,7 +41,16 @@
  */
 import { Container, getContainer, switchPort } from "@cloudflare/containers";
 import { env as workerEnvBinding } from "cloudflare:workers";
-import { handleMarketData } from "./market-data";
+import { getStackStatus, runIsolated } from "./route-modules";
+// ports.ts stays a static import: the two Container subclasses below need
+// their ports synchronously at instantiation (class fields cannot await), and
+// the file is dependency-free constants, so it cannot fail independently of
+// the worker bundle. Every fetch() route group additionally lazy-loads it
+// through runIsolated (per-group import() + try/catch, #4685), so a future
+// load failure degrades only its own paths. digichat.ts is static-imported
+// for the same reason: the digichat branch predicate (`shouldProxyToDigiChat`)
+// and `DigiChatContainer.defaultPort` are needed synchronously, and the module
+// is one dependency-free re-export plus constants (see its docstring).
 import {
   DIGIGRAPH_PORT,
   DIGIKEY_PORT,
@@ -38,6 +61,11 @@ import {
   SHARED_STACK_CONTAINER_ID,
   portForHostname,
 } from "./ports";
+import {
+  DIGICHAT_PORT,
+  SHARED_DIGICHAT_CONTAINER_ID,
+  shouldProxyToDigiChat,
+} from "./digichat";
 
 /** Wrangler injects vars/secrets; cast until `wrangler types` is generated in CI. */
 const env = workerEnvBinding as unknown as Env;
@@ -97,7 +125,7 @@ export class DigiStackContainer extends Container {
     DIGISEARCH_INDEX: env.DIGISEARCH_INDEX ?? "digithings_docs",
     DIGI_TENANT_CORPUS_MAP:
       env.DIGI_TENANT_CORPUS_MAP ??
-      '{"digithings":{"digisearchIndex":"digithings_docs","vaultPathPrefix":"clients/digithings"},"occ":{"digisearchIndex":"occ_help","vaultPathPrefix":"clients/online-compliance-center"}}',
+      '{"digithings":{"digisearchIndex":"digithings_docs","vaultPathPrefix":"clients/digithings"},"occ":{"digisearchIndex":"occ_help","vaultPathPrefix":"clients/online-compliance-center","researchSystemPrompt":"You are the Online Compliance Center (OCC) help assistant for digithings.ai/chat/occ.\\nAnswer only from what you retrieve. You get several tool rounds per question.\\n\\nGround every answer in retrieved corpus from digisearch index `occ_help`\\nand/or digivault_search_notes under `clients/online-compliance-center/`.\\nAlways cite help article URLs or PDF source paths from metadata.\\n\\nSearch results are excerpts, not whole documents. A row marked \\"truncated\\": true\\nmeans you have not seen that note \\u2014 call digivault_get_note with its doc_id and read\\nthe whole thing before answering. An unmarked row is not a promise of completeness:\\nevery row is a preview. Always do this when the question involves a\\nprocedure, a list of steps, a table, a count, or the words every, all, or which:\\nhelp PDFs are stored one page per note, and an excerpt routinely stops before the\\nstep that answers the question.\\n\\nNever say a policy, step, or exception does not exist unless you loaded the full note\\nand looked. If all you saw was a truncated excerpt, say what it showed and that the\\nrest was not loaded.\\n\\nAnswer questions about OCC policies, procedures, FAQ topics, and public help\\nPDFs. Do not invent product features, pricing, or portal capabilities not\\npresent in the retrieved sources. E-learning / YouTube videos are out of\\nscope for this corpus \\u2014 say so if asked.\\n\\nDo not cite digithings or digiquant internal architecture docs. If the\\ncorpus has no grounded answer, say so clearly.\\n\\nTicket questions go to the read-only zammad tools (per-request MCP union),\\nnot the document corpus. Classify the question first, then run the recipe:\\n\\n- Ranking / counting (\\"who reports most\\", \\"how many are open\\", \\"who closed most\\"):\\n  aggregate_tickets with group_by=customer|owner|state|group|priority|title and\\n  metric=count|open_count|closed_count over since_days. Open/closed comes from\\n  state types inside the tool \\u2014 never state.name:open. Owner rankings exclude\\n  automation accounts automatically.\\n- Fix / resolution (\\"how was X fixed\\", \\"is X resolved\\"): resolved-first \\u2014 one\\n  title:<term> / article.body:<term> search per question term with\\n  state_category=\\"closed\\", rank hits by coverage then recency, read the top 3-5\\n  with get_ticket, and cross-check the occ_help docs before answering.\\n- History / thread (\\"what did <customer> report\\", \\"what happened in #<n>\\"):\\n  customer.email:<addr> finds the latest ticket, get_ticket reads the thread\\n  (owner name and open|closed|pending category included).\\n- Status (\\"what\\u0027s open, what\\u0027s new\\"): ticket_report, optionally windowed with\\n  since_days and grouped with group_by=state|group|priority.\\n\\nWindows are created_at date ranges (since_days); customer emails stay masked;\\ninternal ticket notes are never shown. If neither corpus nor tickets ground\\nthe answer, say so clearly."}}',
     GROQ_API_KEY: env.GROQ_API_KEY ?? "",
     OPENROUTER_API_KEY: env.OPENROUTER_API_KEY ?? "",
     OPENAI_API_KEY: env.OPENAI_API_KEY ?? "",
@@ -214,6 +242,92 @@ export class DigiQuantMcpContainer extends Container {
   }
 }
 
+/**
+ * Folded digichat container (#4689).
+ *
+ * Same image as the standalone digichat worker
+ * (Dockerfile.digichat-cloudflare: Next standalone on :3000, one shared
+ * instance for digithings + OCC + future tenants via the embed registry) —
+ * NOT part of the Profile A stack container above. Auth stays in-container:
+ * the Worker applies no edge gating on digichat paths; the Next process
+ * enforces its own embed-tenant auth exactly as on the standalone worker.
+ */
+export class DigiChatContainer extends Container {
+  defaultPort = DIGICHAT_PORT;
+  requiredPorts = [DIGICHAT_PORT];
+  /** Short idle tail: each wake bills for the whole sleepAfter window. */
+  sleepAfter = "3m";
+
+  /**
+   * Runtime env for the digichat Next process. Mirrors the standalone
+   * worker's `DigiChatContainer.envVars` 1:1 with the same `??` defaults
+   * (see apps/digichat-cloudflare/src/index.ts). Secrets from
+   * `wrangler secret put`; plain vars from wrangler.toml `[vars]`.
+   *
+   * `DIGICHAT_EMBED_ENABLED` keeps the standalone worker's OR semantics
+   * (either `DIGICHAT_LEGACY_EMBED_ENABLED` or its deprecated alias set to
+   * "1" opts in; stock default "0") inline: the key must read
+   * `env.DIGICHAT_EMBED_ENABLED` first so the envVars key↔ref pin
+   * (src/env-vars-pin.test.js) still pairs it with its own entry. The
+   * canonical helper is `legacyEmbedEnabledValue`
+   * (apps/digichat-cloudflare/src/embed-flag.ts); behavior is pinned equal
+   * by src/digichat-mount.test.js.
+   */
+  envVars = {
+    DIGICHAT_EMBED_ENABLED:
+      env.DIGICHAT_EMBED_ENABLED === "1" || env.DIGICHAT_LEGACY_EMBED_ENABLED === "1"
+        ? "1"
+        : "0",
+    DIGICHAT_REQUIRE_ROOT_AUTH: env.DIGICHAT_REQUIRE_ROOT_AUTH ?? "0",
+    DIGICHAT_EMBED_HOSTS:
+      env.DIGICHAT_EMBED_HOSTS ??
+      "digithings.ai,www.digithings.ai,occ.digithings.ai,digiquant.io,www.digiquant.io",
+    DIGICHAT_AUTO_MIGRATE: env.DIGICHAT_AUTO_MIGRATE ?? "0",
+    DIGICHAT_TRUSTED_PROXIES: env.DIGICHAT_TRUSTED_PROXIES ?? "",
+    // Same profile default as the standalone worker: digisearch/digivault are
+    // loopback inside the stack container; digichat only talks to digigraph
+    // (+ digikey for bff_session).
+    DIGICHAT_ENABLED_SERVICES: env.DIGICHAT_ENABLED_SERVICES ?? "digigraph",
+    AUTH_SECRET: env.AUTH_SECRET ?? "",
+    DIGICHAT_EMBED_TENANTS: env.DIGICHAT_EMBED_TENANTS ?? "",
+    DIGIGRAPH_INTERNAL_URL: env.DIGIGRAPH_INTERNAL_URL ?? "",
+    DIGIKEY_URL: env.DIGIKEY_URL ?? "",
+    DIGIKEY_BFF_TOKEN: env.DIGIKEY_BFF_TOKEN ?? "",
+    DIGICHAT_PLAN_PROOF_SECRET: env.DIGICHAT_PLAN_PROOF_SECRET ?? "",
+    // Canonical fallbacks (#4700): the DIGICHAT_DASHBOARD names are legacy
+    // duplicates of the canonical SUPABASE names. Old names still win when
+    // set, so this stays backward compatible across the manual deploy lag.
+    DIGICHAT_DASHBOARD_SUPABASE_URL:
+      env.DIGICHAT_DASHBOARD_SUPABASE_URL ?? env.SUPABASE_URL ?? "",
+    DIGICHAT_DASHBOARD_SUPABASE_ANON_KEY:
+      env.DIGICHAT_DASHBOARD_SUPABASE_ANON_KEY ?? env.SUPABASE_ANON_KEY ?? "",
+  };
+
+  override async fetch(request: Request): Promise<Response> {
+    // switchPort sets cf-container-target-port; containerFetch(request) alone
+    // ignores that header and always uses defaultPort — the digichat branch in
+    // the Worker fetch() below sets it explicitly to :3000, and this override
+    // honors it the same way DigiStackContainer.fetch does, after waiting for
+    // the Next standalone server to bind.
+    const targetPort = targetPortFromRequest(request);
+    try {
+      await this.startAndWaitForPorts({
+        ports: [DIGICHAT_PORT],
+        cancellationOptions: {
+          portReadyTimeoutMS: 180_000,
+          instanceGetTimeoutMS: 60_000,
+        },
+      });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      return new Response(`digichat container not ready: ${message}`, {
+        status: 503,
+      });
+    }
+    return this.containerFetch(request, targetPort);
+  }
+}
+
 function targetPortFromRequest(request: Request): number {
   const header = request.headers.get("cf-container-target-port");
   if (header) {
@@ -228,6 +342,7 @@ function targetPortFromRequest(request: Request): number {
 export interface Env {
   STACK: DurableObjectNamespace<DigiStackContainer>;
   MCP_STACK: DurableObjectNamespace<DigiQuantMcpContainer>;
+  DIGICHAT: DurableObjectNamespace<DigiChatContainer>;
   DIGIKEY_ISSUER?: string;
   DIGIKEY_AUDIENCE?: string;
   DIGIKEY_ALLOW_EPHEMERAL_KEY?: string;
@@ -279,6 +394,40 @@ export interface Env {
   // Neither is container runtime env -- do not add them to an envVars block.
   MARKET_DATA: R2Bucket;
   MARKET_DATA_ALLOWED_ORIGINS?: string;
+  // Folded dashboard-api (#4687) env passthrough. All optional: unset means
+  // the stub lane (local tests, secretless dev), exactly like the standalone
+  // worker. No values ship in this slice — the standalone worker stays
+  // deployed until cutover; secrets land via `wrangler secret put` later.
+  SUPABASE_URL?: string;
+  SUPABASE_SERVICE_ROLE_KEY?: string;
+  // Canonical dashboard anon key (#4700): fallback source for the legacy
+  // DIGICHAT_DASHBOARD_SUPABASE_ANON_KEY forward above. Worker-scoped.
+  SUPABASE_ANON_KEY?: string;
+  MARKET_DATA_URL?: string;
+  DASHBOARD_API_ALLOWED_ORIGINS?: string;
+  // Folded digichat (#4689) env passthrough. All optional with the standalone
+  // worker's own `??` defaults (see DigiChatContainer.envVars above); unset
+  // secrets mean the container's stock behavior (embed closed, DB-less), never
+  // a silent synthesized fallback beyond what the standalone worker does. No
+  // values ship in this slice — the standalone worker stays deployed until
+  // cutover; secrets land via `wrangler secret put` later. DIGIKEY_BFF_TOKEN
+  // is already declared above (also forwarded to the stack container).
+  /** Documented opt-in for the legacy generic anonymous embed. */
+  DIGICHAT_LEGACY_EMBED_ENABLED?: string;
+  /** @deprecated Use DIGICHAT_LEGACY_EMBED_ENABLED. */
+  DIGICHAT_EMBED_ENABLED?: string;
+  DIGICHAT_REQUIRE_ROOT_AUTH?: string;
+  DIGICHAT_EMBED_HOSTS?: string;
+  DIGICHAT_AUTO_MIGRATE?: string;
+  DIGICHAT_TRUSTED_PROXIES?: string;
+  DIGICHAT_ENABLED_SERVICES?: string;
+  AUTH_SECRET?: string;
+  DIGICHAT_EMBED_TENANTS?: string;
+  DIGIGRAPH_INTERNAL_URL?: string;
+  DIGIKEY_URL?: string;
+  DIGICHAT_PLAN_PROOF_SECRET?: string;
+  DIGICHAT_DASHBOARD_SUPABASE_URL?: string;
+  DIGICHAT_DASHBOARD_SUPABASE_ANON_KEY?: string;
 }
 
 /** Secret-gated MCP edge paths (`/_stack/mcp/<id>/…`) → in-container ports. */
@@ -333,10 +482,21 @@ export default {
       });
     }
 
+    // Per-module health (#4685): served directly, never touches a module
+    // loader, so it stays up even when every route group is degraded.
+    // Payload is state + last error message only — never secrets.
+    if (url.pathname === "/_stack/status") {
+      return Response.json(getStackStatus());
+    }
+
     // workers.dev digikey probe without custom domain: /_stack/key/healthz
     if (url.pathname === "/_stack/key" || url.pathname.startsWith("/_stack/key/")) {
-      const container = getContainer(workerEnv.STACK, SHARED_STACK_CONTAINER_ID);
-      return container.fetch(switchPort(rewriteKeyStackPath(request), DIGIKEY_PORT));
+      // Lazy ports import per route group (#4685): a failing import degrades
+      // only these paths (503); every other group keeps serving.
+      return runIsolated("key-proxy", () => import("./ports"), async ({ SHARED_STACK_CONTAINER_ID, DIGIKEY_PORT }) => {
+        const container = getContainer(workerEnv.STACK, SHARED_STACK_CONTAINER_ID);
+        return container.fetch(switchPort(rewriteKeyStackPath(request), DIGIKEY_PORT));
+      });
     }
 
     // Read-only Zammad MCP for the OCC embed, reached over a secret-gated edge
@@ -356,15 +516,20 @@ export default {
         if (!expected || !provided || provided !== expected) {
           return new Response("digithings-stack: unauthorized", { status: 401 });
         }
-        let stripped = slash === -1 ? "/" : rest.slice(slash);
-        if (!stripped.endsWith("/")) {
-          stripped += "/";
-        }
-        const target = new URL(url.toString());
-        target.pathname = stripped;
-        const forwarded = new Request(target.toString(), request);
-        const container = getContainer(workerEnv.STACK, SHARED_STACK_CONTAINER_ID);
-        return container.fetch(switchPort(forwarded, port));
+        // Lazy ports import per route group (#4685): a failing import
+        // degrades only these paths (503); the fail-closed 401 above stays
+        // synchronous and untouched.
+        return runIsolated("mcp-edge", () => import("./ports"), async ({ SHARED_STACK_CONTAINER_ID }) => {
+          let stripped = slash === -1 ? "/" : rest.slice(slash);
+          if (!stripped.endsWith("/")) {
+            stripped += "/";
+          }
+          const target = new URL(url.toString());
+          target.pathname = stripped;
+          const forwarded = new Request(target.toString(), request);
+          const container = getContainer(workerEnv.STACK, SHARED_STACK_CONTAINER_ID);
+          return container.fetch(switchPort(forwarded, port));
+        });
       }
     }
 
@@ -374,7 +539,51 @@ export default {
     // in migration 127, #4053); no writes, no auth, CORS limited to
     // MARKET_DATA_ALLOWED_ORIGINS.
     if (url.pathname === "/v1/market/tickers" || url.pathname === "/v1/market/closes") {
-      return handleMarketData(request, workerEnv, url);
+      // Lazy market-data import (#4685): hyparquet evaluation is deferred to
+      // the first market-data request, and a failing import degrades only
+      // these paths (503).
+      return runIsolated("market-data", () => import("./market-data"), async ({ handleMarketData }) => {
+        return handleMarketData(request, workerEnv, url);
+      });
+    }
+
+    // Folded dashboard-api (#4687): same handlers as the standalone worker,
+    // served under the canonical module path. CORS allowlist behavior is the
+    // standalone worker's own code (exact-match origins), so it stays
+    // identical through the fold. A dashboard-api failure degrades only these
+    // paths (503); the /_stack/mcp/* proxy above is untouched.
+    if (url.pathname === "/dashboard-api" || url.pathname.startsWith("/dashboard-api/")) {
+      // Lazy dashboard-api import: the folded route subgraph (portfolio,
+      // allocations, brief, performance, kpis/live, nav-series, benchmarks,
+      // ledger, /v1/tables/*, MCP tools) loads on first use here.
+      return runIsolated(
+        "dashboard-api",
+        () => import("./dashboard-api"),
+        async ({ handleDashboardApi }) => {
+          return handleDashboardApi(request, workerEnv, url);
+        },
+      );
+    }
+
+    // Folded digichat (#4689): the standalone worker's own paths
+    // (/embed*, /api/chat*, /api/embed/*, /api/byok/*, /api/plan-proof*,
+    // /api/health, /_dtchat/*) proxied to the dedicated digichat Container
+    // (Next standalone :3000). Path predicate is the standalone worker's own
+    // `shouldProxyToDigiChat`, so folded and standalone routing stay
+    // identical. Auth stays in-container — no edge gating here (no 401, no
+    // JWT check). A digichat failure degrades only these paths (503); the
+    // container-routes catch-all below is untouched.
+    if (shouldProxyToDigiChat(url.pathname)) {
+      // Lazy digichat import: the folded route predicate constants load on
+      // first use here.
+      return runIsolated(
+        "digichat",
+        () => import("./digichat"),
+        async ({ DIGICHAT_PORT, SHARED_DIGICHAT_CONTAINER_ID }) => {
+          const container = getContainer(workerEnv.DIGICHAT, SHARED_DIGICHAT_CONTAINER_ID);
+          return container.fetch(switchPort(request, DIGICHAT_PORT));
+        },
+      );
     }
 
     // Dedicated digiquant-mcp container (#3780 Task 8): reachable only via the
@@ -383,20 +592,27 @@ export default {
     // MCP tools are unauthenticated localhost today). No workers.dev forwarding
     // route ships: an unauthenticated /_stack/mcp/* forwarder must not go live.
     if (isMcpHostname(url.hostname)) {
-      const container = getContainer(workerEnv.MCP_STACK, MCP_CONTAINER_ID);
-      return container.fetch(request);
+      // Lazy ports import per route group (#4685).
+      return runIsolated("container-routes", () => import("./ports"), async ({ MCP_CONTAINER_ID }) => {
+        const container = getContainer(workerEnv.MCP_STACK, MCP_CONTAINER_ID);
+        return container.fetch(request);
+      });
     }
 
-    const port = portForHostname(url.hostname);
-    if (port === null) {
-      return new Response(
-        "digithings-stack: unknown host. Use graph.digithings.ai, " +
-          "key.digithings.ai, search.digithings.ai, or /_stack/key/* on workers.dev. " +
-          "(mcp.digithings.ai is reserved; its route is not yet enabled.)",
-        { status: 404 },
-      );
-    }
-    const container = getContainer(workerEnv.STACK, SHARED_STACK_CONTAINER_ID);
-    return container.fetch(switchPort(request, port));
+    // Lazy ports import per route group (#4685): unknown-host 404 and the
+    // shared-container proxy degrade only under this group on failure.
+    return runIsolated("container-routes", () => import("./ports"), async ({ SHARED_STACK_CONTAINER_ID, portForHostname }) => {
+      const port = portForHostname(url.hostname);
+      if (port === null) {
+        return new Response(
+          "digithings-stack: unknown host. Use graph.digithings.ai, " +
+            "key.digithings.ai, or search.digithings.ai. " +
+            "(mcp.digithings.ai is reserved; its route is not yet enabled.)",
+          { status: 404 },
+        );
+      }
+      const container = getContainer(workerEnv.STACK, SHARED_STACK_CONTAINER_ID);
+      return container.fetch(switchPort(request, port));
+    });
   },
 };

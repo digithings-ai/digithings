@@ -6,6 +6,8 @@ from typing import Any
 
 import polars as pl
 
+from digisearch.core import tables as tables_lib
+
 # Default sample size and categorical top-k for summary
 DEFAULT_SAMPLE_ROWS = 5
 DEFAULT_CATEGORICAL_TOP_K = 10
@@ -79,18 +81,7 @@ def summarize_results(
     datetime_cols = _infer_datetime_cols(df)
     categorical_cols = _infer_categorical_cols(df, numeric_cols, datetime_cols)
 
-    numeric_stats: dict[str, dict[str, Any]] = {}
-    for c in numeric_cols:
-        s = df[c]
-        n = s.drop_nulls()
-        if len(n) == 0:
-            numeric_stats[c] = {"min": None, "max": None, "mean": None}
-        else:
-            numeric_stats[c] = {
-                "min": n.min(),
-                "max": n.max(),
-                "mean": float(n.mean()) if n.dtype in (pl.Float64, pl.Float32) else float(n.mean()),
-            }
+    numeric_stats = tables_lib.numeric_stats(df, numeric_cols)
 
     for c in datetime_cols:
         s = df[c].drop_nulls()
@@ -99,10 +90,7 @@ def summarize_results(
         else:
             numeric_stats[c] = {"min": str(s.min()), "max": str(s.max())}
 
-    categorical_top: dict[str, list[dict[str, Any]]] = {}
-    for c in categorical_cols:
-        top = df[c].value_counts().head(categorical_top_k)
-        categorical_top[c] = [{"value": str(v), "count": int(cnt)} for v, cnt in zip(top[c], top["count"])]
+    categorical_top = tables_lib.categorical_top(df, categorical_cols, categorical_top_k)
 
     data_summary = {
         "total_rows": total,

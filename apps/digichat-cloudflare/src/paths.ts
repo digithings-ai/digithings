@@ -14,6 +14,7 @@ export function shouldProxyToDigiChat(pathname: string): boolean {
     pathname === "/api/plan-proof" ||
     pathname.startsWith("/api/plan-proof/") ||
     pathname === "/api/health" ||
+    pathname === "/healthz" ||
     pathname.startsWith("/_dtchat/")
   );
 }
