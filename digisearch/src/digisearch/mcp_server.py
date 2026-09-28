@@ -120,33 +120,73 @@ def semantic(
 @mcp.tool()
 def web_search(
     query: str,
+    provider: str = "auto",
     include_domains: list[str] | None = None,
     exclude_domains: list[str] | None = None,
     max_results: int = 4,
+    recency_days: int | None = 7,
+    purpose: str | None = None,
+    effort: str | None = None,
+    offset: int = 0,
 ) -> str:
-    """Search the public web (first-party tool). Returns JSON WebSearchResponse."""
-    try:
-        from digisearch.web_search.models import (
-            WebSearchConfigError,
-            WebSearchRequest,
-            summarize_validation_error,
-        )
-        from digisearch.web_search.service import run_web_search
-    except ImportError as e:
-        return f"[web_search unavailable: install digisearch[web-search] for web_search: {e}]"
+    """Search the public web through a swappable provider (#4711).
+
+    Returns JSON ``WebSearchResponse``. ``provider='auto'`` (default) is always
+    the in-house searxng→ddgs engine, even when external API keys are
+    configured; naming a provider uses that provider fail-closed (a missing key
+    returns a disabled message instead of falling back to another provider).
+
+    ``provider``: internal | exa | tavily | parallel | firecrawl | tinyfish
+    (externals appear only once their API key is configured).
+    ``effort``: fast | thorough — a latency/quality tier mapped per provider;
+    the in-house engine has no tiers. ``purpose``: natural-language intent,
+    honoured by tinyfish and parallel. ``offset``: page start (default 0);
+    only providers that can page (exa) accept offset > 0.
+    """
+    from digisearch.web_providers import (
+        UnknownProviderError,
+        WebProviderCapabilityError,
+        WebProviderError,
+        WebProviderNotConfiguredError,
+        WebProviderUnavailableError,
+        get_provider,
+    )
+    from digisearch.web_search.models import (
+        WebSearchConfigError,
+        WebSearchRequest,
+        summarize_validation_error,
+    )
+
     try:
         req = WebSearchRequest(
             query=query,
             include_domains=include_domains or [],
             exclude_domains=exclude_domains or [],
             max_results=max_results,
+            recency_days=recency_days,
+            provider=provider,
+            purpose=purpose,
+            effort=effort,  # type: ignore[arg-type]
+            offset=offset,
         )
     except ValidationError as e:
         return f"[web_search invalid input: {summarize_validation_error(e)}]"
     try:
-        return run_web_search(req).model_dump_json()
-    except WebSearchConfigError as e:
+        engine = get_provider(req.provider)
+    except UnknownProviderError as e:
+        return f"[web_search error: {e}]"
+    try:
+        return engine.search(req).model_dump_json()
+    except WebProviderNotConfiguredError as e:
+        # Fail-closed disabled message, not a raised error (MCP convention).
+        return f"[web_search disabled: {e}]"
+    except (WebProviderUnavailableError, WebSearchConfigError) as e:
         return f"[web_search unavailable: {e}]"
+    except WebProviderCapabilityError as e:
+        return f"[web_search error: {e}]"
+    except WebProviderError as e:
+        logger.error("web_search provider failure: %s", e)
+        return f"[web_search error: {e}]"
 
 
 @mcp.tool()
@@ -221,68 +261,10 @@ except ImportError:
     logger.info("research_turn MCP tool omitted (install digisearch[agent])")
 
 
-@mcp.tool()
-def exa_web_search(
-    query: str,
-    search_type: str = "auto",
-    num_results: int = 8,
-    category: str | None = None,
-    include_domains: list[str] | None = None,
-    exclude_domains: list[str] | None = None,
-    offset: int = 0,
-) -> str:
-    """Live web search via EXA (alternative to the owned corpus).
-
-    Dormant without EXA_API_KEY — returns a disabled message instead of failing.
-    search_type: instant|fast|auto|deep-lite|deep|deep-reasoning.
-    include_domains/exclude_domains restrict or drop hits by domain.
-
-    Paging: EXA ``POST /search`` has no offset parameter and caps ``numResults``
-    at :attr:`digisearch.web_exa.EXA_MAX_RESULTS` (100). ``offset`` returns the
-    client-side page ``results[offset : offset + num_results]`` of one enlarged
-    search window (``numResults = offset + num_results``); call it repeatedly to
-    walk the result set, e.g. ``offset=0, 8, 16, ...`` with the default page size.
-    A page reaching past the cap (``offset + num_results > 100``) returns an
-    explicit error — never a silently truncated page. A page past the query's
-    result count (still within the cap) returns an explicit empty page.
-    ``offset=0`` (the default) is byte-identical to the unpaged call.
-    """
-    from digisearch import web_exa
-
-    if not web_exa.is_exa_configured():
-        return "EXA web search is disabled (EXA_API_KEY is not set)."
-    if search_type not in web_exa.VALID_SEARCH_TYPES:
-        return f"[digisearch web search error: invalid search_type: {search_type!r}]"
-    requested = 0
-    try:
-        requested = max(1, min(int(num_results), web_exa.EXA_MAX_RESULTS))
-        start = int(offset)
-        data = web_exa.exa_search(
-            query,
-            search_type=search_type,  # type: ignore[arg-type]
-            num_results=requested,
-            offset=start,
-            category=category,
-            include_domains=include_domains,
-            exclude_domains=exclude_domains,
-        )
-    except (web_exa.ExaError, ValueError) as e:
-        logger.error("digisearch web search failed: %s", e)
-        return f"[digisearch web search error: {e}]"
-    if start > 0 and not data.results and not data.output:
-        return (
-            f"No EXA results at offset {start} (window [{start}, {start + requested}) is past "
-            f"the query's result count, within the {web_exa.EXA_MAX_RESULTS}-result EXA cap)."
-        )
-    # The landed 10-result render cap stays the default; an explicit page larger
-    # than it must render whole or paging would silently truncate.
-    return web_exa.format_web_results(data, max_items=max(10, requested))
-
-
 # --- Phase C monitors (§4.7, #4065) -------------------------------------------------
 #
 # Four MCP tools over the same store/runner the HTTP routes use. Fail-closed
-# shape of `exa_web_search`: without a reachable store the tools return a
+# shape of `web_search`: without a reachable store the tools return a
 # disabled message instead of raising. Create/update-time validation goes
 # through `watch_config_error` — the same gate the HTTP API applies — because a
 # watch with an unparseable cron would raise inside `is_due` at tick time, where
@@ -420,7 +402,7 @@ def monitors_get_runs(watch_id: str, limit: int = 20) -> str:
 # ``websets_add_search`` return ids while the run is scheduled — the chat surface
 # polls ``websets_get`` / ``websets_events``. Enrichment add/remove, webhook
 # secrets, monitors, and cancel are deliberate HTTP-only v1 operator ops.
-# Fail-closed shape of ``exa_web_search``: without a reachable store the
+# Fail-closed shape of ``web_search``: without a reachable store the
 # tools return a disabled string instead of raising.
 
 _WEBSETS_DISABLED = "digisearch websets are disabled (webset store is unavailable)."

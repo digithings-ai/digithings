@@ -33,21 +33,33 @@ class FetchedPage(BaseModel):
     markdown: str = ""
 
 
-def _live(query: str, top_n: int) -> WebSearchResponse:
-    """Run one query against the Task 0 search wrapper."""
-    from digisearch.web_search.service import search_web
+def _live(query: str, top_n: int, *, effort: str | None = None) -> WebSearchResponse:
+    """Run one query through the provider registry (#4711).
 
-    return search_web(WebSearchRequest(query=query, max_results=min(top_n, _MAX_RESULTS)))
+    ``provider`` stays ``auto`` (in-house, unconditionally) — the research turn
+    has no per-request provider switch, so a configured external key can never
+    reroute it. ``effort`` is forwarded so the same fast|thorough knob the turn
+    already exposes maps onto providers that have tiers.
+    """
+    from digisearch.web_providers import get_provider
+
+    return get_provider("auto").search(
+        WebSearchRequest(
+            query=query,
+            max_results=min(top_n, _MAX_RESULTS),
+            effort=effort if effort in ("fast", "thorough") else None,  # type: ignore[arg-type]
+        )
+    )
 
 
-def live_search(query: str, *, top_n: int) -> list[WebSearchResult]:
+def live_search(query: str, *, top_n: int, effort: str | None = None) -> list[WebSearchResult]:
     """Search the live web and return landed ``WebSearchResult`` rows.
 
     Rows carry the landed ``{url,title,snippet,score,engine}`` shape — never
     a ``highlights`` key. Raises :class:`WebResearchError` on any failure.
     """
     try:
-        return _live(query, top_n).results
+        return _live(query, top_n, effort=effort).results
     except Exception as exc:
         raise WebResearchError(f"web search failed: {exc}") from exc
 

@@ -34,7 +34,6 @@ TOOL_DIGISEARCH = "digisearch"
 TOOL_DIGISEARCH_FETCH_ALL = "digisearch_fetch_all"
 TOOL_DIGISEARCH_RESEARCH_DELEGATE = "digisearch_research_delegate"
 TOOL_WEB_SEARCH = "web_search"
-TOOL_DIGISEARCH_WEB_SEARCH = "digisearch_web_search"
 TOOL_DIGISEARCH_MONITORS_TRIGGER = "digisearch_monitors_trigger"
 TOOL_DIGISEARCH_MONITORS_RUNS = "digisearch_monitors_runs"
 # Phase D websets (#4066, R10/R12): the manifest keeps the prefixed names while
@@ -52,7 +51,6 @@ ORCHESTRATOR_TOOL_NAMES: frozenset[str] = frozenset(
         TOOL_DIGISEARCH_FETCH_ALL,
         TOOL_DIGISEARCH_RESEARCH_DELEGATE,
         TOOL_WEB_SEARCH,
-        TOOL_DIGISEARCH_WEB_SEARCH,
         TOOL_DIGISEARCH_MONITORS_TRIGGER,
         TOOL_DIGISEARCH_MONITORS_RUNS,
         TOOL_DIGISEARCH_WEBSETS_CREATE,
@@ -363,20 +361,56 @@ def build_digisearch_research_delegate_tool() -> OpenAIToolDict:
 
 
 def build_first_party_web_search_tool() -> OpenAIToolDict:
-    """Hub connector: public web search (maps to ``POST /v1/web_search``)."""
+    """Unified web search (maps to ``POST /v1/web_search``).
+
+    One tool with a swappable ``provider`` (#4711) — it replaces both the old
+    first-party ``web_search`` and the separate Exa ``digisearch_web_search``.
+    The provider enum is built from what is configured right now, so an operator
+    is never offered a choice that would fail closed at invoke time.
+    """
+    from digisearch.web_providers import provider_enum_choices
+
     return {
         "type": "function",
         "function": {
             "name": TOOL_WEB_SEARCH,
             "description": (
-                "Search the public web (first-party tool). "
+                "Search the public web (swappable provider). "
+                "provider='auto' (default) always uses the in-house searxng→ddgs engine, "
+                "even when external API keys are configured; naming a provider uses that "
+                "provider fail-closed (missing key is an error, never a silent fallback). "
                 "Returns current web results with fetched content snippets "
-                "for grounding answers in fresh information."
+                "for grounding answers in fresh information. "
+                f"Configured providers: {', '.join(provider_enum_choices())}."
             ),
             "parameters": {
                 "type": "object",
                 "properties": {
                     "query": {"type": "string", "description": "Web search query"},
+                    "provider": {
+                        "type": "string",
+                        "enum": provider_enum_choices(),
+                        "description": (
+                            "Engine to run ('auto' = in-house, unconditionally). "
+                            "External providers need their API key configured."
+                        ),
+                    },
+                    "purpose": {
+                        "type": "string",
+                        "description": (
+                            "Natural-language intent behind the search. Honoured by "
+                            "tinyfish (`purpose`) and parallel (`objective`); a hint "
+                            "the other providers may ignore."
+                        ),
+                    },
+                    "effort": {
+                        "type": "string",
+                        "enum": ["fast", "thorough"],
+                        "description": (
+                            "Latency/quality tier. Mapped per provider (exa fast→fast, "
+                            "thorough→deep); the in-house engine has no tiers."
+                        ),
+                    },
                     "include_domains": {
                         "type": "array",
                         "items": {"type": "string"},
@@ -391,70 +425,17 @@ def build_first_party_web_search_tool() -> OpenAIToolDict:
                         "type": "integer",
                         "description": "Hits to return (default 4, max 10).",
                     },
-                },
-                "required": ["query"],
-            },
-        },
-    }
-
-
-def build_web_search_tool() -> OpenAIToolDict:
-    """EXA-backed live web search (optional; requires EXA_API_KEY at invoke time)."""
-    return {
-        "type": "function",
-        "function": {
-            "name": TOOL_DIGISEARCH_WEB_SEARCH,
-            "description": (
-                "Live web search via EXA (alternative to the owned corpus). "
-                "Use for current events, competitors, companies/people, papers, "
-                "or anything outside ingested documents. Dormant without EXA_API_KEY. "
-                "Supports search_type instant|fast|auto|deep-lite|deep|deep-reasoning, "
-                "category/company|people|publication|news, outputSchema synthesis, "
-                "and offset paging over one enlarged result window (EXA caps "
-                "numResults at 100; a page past the cap errors explicitly)."
-            ),
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "query": {"type": "string", "description": "Natural-language web query."},
-                    "search_type": {
-                        "type": "string",
-                        "enum": ["instant", "fast", "auto", "deep-lite", "deep", "deep-reasoning"],
-                        "description": "Latency/quality tradeoff (default auto).",
-                    },
-                    "num_results": {
+                    "recency_days": {
                         "type": "integer",
-                        "description": "Results to return (1-100, default 8).",
+                        "description": "Freshness window in days (default 7, 1-365).",
                     },
                     "offset": {
                         "type": "integer",
                         "description": (
-                            "Page start over one enlarged window (default 0 = unpaged). "
-                            "offset + num_results must stay within the 100-result EXA cap; "
-                            "a page past the cap returns an explicit error, never a "
-                            "silently truncated page."
+                            "Page start (default 0 = unpaged). Only providers that can "
+                            "page (exa) accept offset > 0; elsewhere it errors instead "
+                            "of silently returning the first page."
                         ),
-                    },
-                    "category": {
-                        "type": "string",
-                        "description": "Optional: company | people | publication | news | personal site | financial report.",
-                    },
-                    "contents_text": {
-                        "type": "boolean",
-                        "description": "Also return full page text.",
-                    },
-                    "include_domains": {
-                        "type": "array",
-                        "items": {"type": "string"},
-                        "description": "Optional: only return results from these domains.",
-                    },
-                    "exclude_domains": {
-                        "type": "array",
-                        "items": {"type": "string"},
-                        "description": "Optional: exclude results from these domains.",
-                    },
-                    "output_schema": {
-                        "description": "Optional JSON schema for structured synthesis."
                     },
                 },
                 "required": ["query"],
@@ -740,7 +721,6 @@ def build_orchestrator_tool_manifest(
     index_config: dict[str, Any] | None = None,
     *,
     include_research_delegate: bool = False,
-    include_web_search: bool = False,
 ) -> list[OpenAIToolDict]:
     """Return OpenAI tool dicts for the orchestrator surface."""
     ic = index_config or {}
@@ -751,8 +731,6 @@ def build_orchestrator_tool_manifest(
     ]
     if include_research_delegate:
         tools.append(build_digisearch_research_delegate_tool())
-    if include_web_search:
-        tools.append(build_web_search_tool())
     # Phase C monitors (#4065): unconditional — the OSS recall leg needs no key.
     tools.append(build_monitors_trigger_tool())
     tools.append(build_monitors_runs_tool())

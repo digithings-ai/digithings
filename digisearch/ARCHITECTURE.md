@@ -294,7 +294,7 @@ Returns the tool manifest (the Phase C monitor and Phase D webset tools are
 unconditional — the OSS legs need no key):
 - `digisearch` — standard search with pagination
 - `digisearch_fetch_all` — auto-paginating fetch of full result sets
-- `web_search` — public web search (searxng→ddgs, fetch + extract enriched; #3853)
+- `web_search` — unified public web search with a swappable `provider` (`auto` = in-house searxng→ddgs, fetch + extract enriched; named externals need their key; #4711)
 - `digisearch_monitors_trigger` — run one watch turn now (`watch_id`, optional `mode`; #4065)
 - `digisearch_monitors_runs` — page one watch's run history (`watch_id`, `limit`, `cursor`; #4065)
 - `digisearch_websets_create` — create a verified + enriched dataset, async (`query`, `count`, `criteria`, `enrichments`, `verification_mode`; #4066)
@@ -304,7 +304,9 @@ unconditional — the OSS legs need no key):
 - `digisearch_websets_events` — tail the append-only event log oldest-first (`webset_id`, `after`, `limit`; #4066)
 - `digisearch_websets_export` — export verified items as CSV/JSON (`webset_id`, `format`; #4066)
 - `digisearch_research_delegate` — composite research turn (only when `digisearch[agent]` is installed)
-- `digisearch_web_search` — EXA live web search (only when `EXA_API_KEY` is set)
+
+The former `digisearch_web_search` (EXA-only) tool is gone (#4711): the unified
+`web_search` covers it via `provider="exa"`.
 
 The webset entries are advertised unconditionally because the OSS verify/enrich
 path has no key gate; `create`/`get`/`items`/`events` are also available over MCP
@@ -364,7 +366,7 @@ web_aggregate   digillm synthesis over the cited pages handed back in
   `(WebSearchData, TurnUsage)` tuples — usage never rides `model_extra`.
 - **`WebSearchData` interchange (EXA stays a drop-in paid alternative):**
 
-| `WebSearchData` field | EXA (`/v1/digisearch_web_search`) | OSS web branch (#4064) |
+| `WebSearchData` field | EXA (`provider="exa"`) | OSS web branch (#4064) |
 |-----------------------|-----------------------------------|------------------------|
 | `results` | EXA hits (`{title,url,highlights[]/text,…}`) | cited web hits `{title,url,snippet,score,engine}` (`snippet`, never `highlights`) |
 | `output` | `{text, structured, grounding}` | markdown: `{text}`; structured: `{content, grounding[{field,citations[{url,title,excerpt}],confidence}], text}` |
@@ -461,15 +463,52 @@ prerequisites absent in this env):
   → 4 passed, 2 skipped (live legs), zero `Traceback`. All 12 research cases
   produce line-cited answers, cited structured fields, and full
   `usage`/`cost_dollars` envelopes.
-- EXA-paid path untouched: `POST /v1/digisearch_web_search` stays EXA-gated
-  (no `EXA_API_KEY` ⇒ 503 / disabled string); `tests/ds/test_web_exa.py`
-  passes on this branch.
+- EXA-paid path folded into the unified route (#4711): `POST /v1/web_search`
+  with `provider="exa"` stays EXA-gated (no `EXA_API_KEY` ⇒ 503 / disabled
+  string) and the standalone `POST /v1/digisearch_web_search` is gone;
+  `tests/ds/test_web_exa.py` passes on this branch.
 
 #### `POST /v1/web_search`
 
 Auth required (`digisearch:query` scope via the default `digisearch_path_scopes` fallthrough). Rate limited: 30 req/min (default bucket).
 
-Proprietary web search (#3853). Request `WebSearchRequest {query, include_domains (max 5), exclude_domains (max 20), max_results (1–10, default 4), recency_days (1–365, default 7; mapped onto provider recency filters — searxng day/month/year with a week mapping to month — omitted when null)}`; response `WebSearchResponse {query, results [{url, title, snippet, score, engine}], provider}`. The orchestrator `web_search` invoke maps its `arguments` onto the same model field-for-field — including `recency_days`, which is omitted when the caller does not set it so the default window stays in force, and rejected as `ok: false` naming the field when out of range (#4165). `run_web_search` selects backends by `DIGISEARCH_WEB_SEARCH_BACKEND=auto|searxng|ddgs` (sidecar URL from `DIGISEARCH_SEARXNG_URL`): `auto` tries the searxng sidecar first and embedded ddgs second, while an explicit `searxng`/`ddgs` runs only that backend and never falls through. When every backend in the order fails, the raised `WebSearchProviderError` names each backend and its actual (credential-scrubbed) error; `retryable` is true when any failure was transient (transport / timeout / retryable HTTP status) and `status_code` is the first upstream status any backend exposed, primary-first (#4297) — a last-error-only message used to hide the primary's transport failure. A provider call that legitimately succeeds with zero rows stays an honest `ok=true, results=[]`; only raised provider failures become the error envelope. ddgs >=9.1 raises `DDGSException("No results found.")` for both a genuinely empty result and a throttled/blocked egress IP, so that outcome is a loud non-retryable failure, not a fabricated empty success (#4297); searxng is the reliable primary and ddgs the zero-infra secondary. `run_web_search` then enriches up to `fetch_max_pages` (default 3) hits by fetching via composed digifetch (`HttpFetcher` + `with_retry` + `RateLimiter`) and extracting markdown (trafilatura primary with `favor_precision` + `deduplicate`, readability fallback). The fetch is SSRF-guarded by digifetch (#3934): http/https only, internal/metadata addresses refused, and every redirect hop re-validated (no auto-follow) with the operator `DIGISEARCH_FETCH_ALLOWED_HOSTS` allowlist as the explicit escape hatch. Fetch/extract failures keep the original search snippet and are logged — enrichment never fails the response. Provider failures (429 / 5xx / connection / timeout) are soft in-envelope errors (#4192): HTTP 200 `WebSearchErrorResponse {ok: false, error, retryable, status_code}` (`status_code` null when the provider exposed none; a ddgs rate limit maps to 429) — never a 500. `retryable`/`status_code` surface throttling distinctly so callers can back off; the orchestrator `web_search` tool mirrors the same hints on `OrchestratorInvokeResponse`. No new port: served by the existing digisearch HTTP app.
+Unified public web search (#3853, #4711). Request `WebSearchRequest {query, include_domains (max 5), exclude_domains (max 20), max_results (1–10, default 4), recency_days (1–365, default 7; mapped onto provider recency filters — searxng day/month/year with a week mapping to month — omitted when null), provider ("auto" default), purpose (NL intent, provider hint), effort (fast|thorough), offset (paged by exa only)}`; response `WebSearchResponse {query, results [{url, title, snippet, score, engine, published_date, author}], provider, cost_dollars, output}`. `provider` routes through `digisearch.web_providers` (§ Web providers below): `auto` is always the in-house engine, and everything below about `run_web_search` describes that internal provider's backend selection and enrichment. The orchestrator `web_search` invoke maps its `arguments` onto the same model field-for-field — including `recency_days`, which is omitted when the caller does not set it so the default window stays in force, and rejected as `ok: false` naming the field when out of range (#4165). `run_web_search` selects backends by `DIGISEARCH_WEB_SEARCH_BACKEND=auto|searxng|ddgs` (sidecar URL from `DIGISEARCH_SEARXNG_URL`): `auto` tries the searxng sidecar first and embedded ddgs second, while an explicit `searxng`/`ddgs` runs only that backend and never falls through. When every backend in the order fails, the raised `WebSearchProviderError` names each backend and its actual (credential-scrubbed) error; `retryable` is true when any failure was transient (transport / timeout / retryable HTTP status) and `status_code` is the first upstream status any backend exposed, primary-first (#4297) — a last-error-only message used to hide the primary's transport failure. A provider call that legitimately succeeds with zero rows stays an honest `ok=true, results=[]`; only raised provider failures become the error envelope. ddgs >=9.1 raises `DDGSException("No results found.")` for both a genuinely empty result and a throttled/blocked egress IP, so that outcome is a loud non-retryable failure, not a fabricated empty success (#4297); searxng is the reliable primary and ddgs the zero-infra secondary. `run_web_search` then enriches up to `fetch_max_pages` (default 3) hits by fetching via composed digifetch (`HttpFetcher` + `with_retry` + `RateLimiter`) and extracting markdown (trafilatura primary with `favor_precision` + `deduplicate`, readability fallback). The fetch is SSRF-guarded by digifetch (#3934): http/https only, internal/metadata addresses refused, and every redirect hop re-validated (no auto-follow) with the operator `DIGISEARCH_FETCH_ALLOWED_HOSTS` allowlist as the explicit escape hatch. Fetch/extract failures keep the original search snippet and are logged — enrichment never fails the response. Provider failures (429 / 5xx / connection / timeout) are soft in-envelope errors (#4192): HTTP 200 `WebSearchErrorResponse {ok: false, error, retryable, status_code}` (`status_code` null when the provider exposed none; a ddgs rate limit maps to 429) — never a 500. `retryable`/`status_code` surface throttling distinctly so callers can back off; the orchestrator `web_search` tool mirrors the same hints on `OrchestratorInvokeResponse`. No new port: served by the existing digisearch HTTP app.
+
+#### Web providers (`digisearch/web_providers/`, #4711)
+
+One tool, one request model, swappable engines: `WebSearchRequest` gained
+`provider` (default `auto`), `purpose`, `effort` (`fast`|`thorough`), `offset`;
+`WebSearchResponse` gained `cost_dollars` / `output`; `WebSearchResult` gained
+`published_date` / `author`.
+
+| `provider` | Key | Notes |
+|-----------|-----|-------|
+| `auto` (default) → `internal` | (none) | in-house searxng→ddgs — **unconditionally**; no external key can reroute it |
+| `exa` | `EXA_API_KEY` | neural search, answer + contents, `offset` paging |
+| `tavily` | `TAVILY_API_KEY` | 1,000 free credits/mo |
+| `parallel` | `PARALLEL_API_KEY` | declarative `objective` (from `purpose`) + excerpts |
+| `firecrawl` | `FIRECRAWL_API_KEY` | search + JS render to markdown |
+| `tinyfish` | `TINYFISH_API_KEY` | free search with a key (tinyfish.ai), NL `purpose` field |
+
+Routing rules (pinned by `tests/ds/test_web_providers_*.py`): unknown name →
+400; a named external without its key → 503 fail-closed (never a silent
+fallback); a missing optional extra → 503; `offset > 0` against a provider
+that cannot page → 400 (capability guard, checked *before* the key check so it
+never surfaces as a misleading 503); a provider outage (429/5xx/transport) →
+HTTP 200 with the #4192 soft `WebSearchErrorResponse` envelope. Keys are read
+at call time, never import time; transport is `httpx` only (no vendor SDKs,
+no new dependencies). The internal provider sets `provider="internal"` and
+moves the searxng/ddgs engine label into `output.backend` — including the
+`searxng(none; unresponsive=…)` diagnostic, so #4297 observability survives the
+rename. `effort` maps per vendor (exa fast→fast/thorough→deep; tavily and
+parallel fast→fast/thorough→advanced; firecrawl/tinyfish/internal ignore it);
+`purpose` reaches tinyfish `purpose` and parallel `objective`.
+
+| Unified surface | Shape |
+|-----------------|-------|
+| `POST /v1/web_search` | `provider` selects the engine (routing table above) |
+| Orchestrator `web_search` | always advertised; the `provider` enum lists only *configured* providers so an operator is never offered a choice that would 503 |
+| MCP `web_search` | JSON `WebSearchResponse`; fail-closed answers are `[web_search disabled: …]` / `[web_search unavailable: …]` / `[web_search error: …]` strings (MCP never raises) |
 
 #### Optional EXA live web search (`digisearch/web_exa.py`)
 
@@ -480,11 +519,16 @@ default:** every entry point fails closed without `EXA_API_KEY` (503 / disabled 
 
 | Surface | Shape |
 |---------|-------|
-| `POST /v1/digisearch_web_search` | `search_type` instant\|fast\|auto\|deep-lite\|deep\|deep-reasoning, `num_results` (1-100), `offset`, `category`, `contents_text`, `output_schema`, `system_prompt` → `WebSearchData{results, output, search_type, cost_dollars}` (mounted here — not `/v1/web_search` — because the first-party search above owns that route); `offset` pages like the MCP row below — a window past `EXA_MAX_RESULTS` is 400 with the explicit `ExaPageOutOfRangeError` message, a negative offset is 422 (#4241) |
+| `web_search(provider="exa")` on `POST /v1/web_search` / orchestrator / MCP | `effort` maps onto Exa's type ladder (fast→fast, thorough→deep, None→auto); `offset` pages the recall set (client-side slice of one enlarged window, `numResults = offset + max_results`, because EXA `POST /search` has no offset); cap `EXA_MAX_RESULTS` = 100 pinned by the monitors 1-100 bound; a window past the cap is an explicit 400 / `[web_search error: …]` (never a silent truncated page) and a page past the query's result count returns an explicit empty page (#4234, #4241) |
 | `POST /v1/web_contents` | Known-URL fetch (`text`/`highlights`/`summary`) |
 | `POST /v1/web_answer` | Grounded answer with citations |
-| Orchestrator `digisearch_web_search` | Advertised in the manifest only when `EXA_API_KEY` is set; dispatched via `POST /v1/orchestrator_invoke`. `offset` is in the manifest schema and forwarded by the invoke branch; an out-of-range page is `ok:false` carrying the explicit cap error, never a truncated page (#4241) |
-| MCP `exa_web_search` | `query`, `search_type`, `num_results`, `category`, `offset` → formatted text. `offset` pages the recall set (client-side slice of one enlarged window, `numResults = offset + num_results`, because EXA `POST /search` has no offset); cap `EXA_MAX_RESULTS` = 100 pinned by the monitors 1-100 bound; a page reaching past the cap errors explicitly (never a silent truncated page) and a page past the query's result count returns an explicit empty page (#4234) |
+
+The Exa-only knobs of the retired `POST /v1/digisearch_web_search` route and
+the retired orchestrator/MCP tools (`search_type`, `category`,
+`contents_text`, `output_schema`, `system_prompt`) are **not** carried onto
+the unified route: the `effort` ladder covers `search_type`, and structured
+synthesis stays the `research_turn` / `web_answer` job. Exa's paging semantics
+above are unchanged from #4234/#4241 — only the surface moved.
 
 Auth: same `digisearch:query` scope via `DigiAuthMiddleware` (default path rule; no digikey change).
 
@@ -910,10 +954,9 @@ MCP server runs on port 8765 via `FastMCP` (`mcp_server.py`). Transport: streama
 | Tool | Description | Optional |
 |------|-------------|----------|
 | `semantic` | Semantic search over documents; returns formatted hits with score and content preview | No |
-| `web_search` | Search the public web; returns JSON `WebSearchResponse` (#3853) | Yes (`digisearch[web-search]`) |
+| `web_search` | Search the public web through a swappable `provider` (`auto` = in-house, unconditionally); returns JSON `WebSearchResponse`; `[web_search disabled: …]` without the named provider's key (#3853, #4711) | Yes (`digisearch[web-search]`; externals need their own key) |
 | `search_strategies` | Filtered semantic search over the research library | No |
 | `research_turn` | Composite research turn (plan → retrieve → aggregate, or the #4064 web branch with `source=web\|auto`) with citations; `source`/`effort` passthrough (`output_schema` deferred, R7) | Yes (`digisearch[agent]`) |
-| `exa_web_search` | Live web search via EXA; disabled message without `EXA_API_KEY` | Yes (`EXA_API_KEY`) |
 | `monitors_create_watch` | Create a scheduled web-search watch (`schedule_cron` or `interval_seconds` ≥ 60; cron wins when both); returns `{watch, delivery_secret}` JSON — the secret appears here only | No |
 | `monitors_list_watches` | List watches newest-updated first as `{"watches": [...]}` JSON | No |
 | `monitors_trigger_watch` | Run one watch turn now (`mode` `manual`\|`poll`); returns the JSON `MonitorRun`, failed turns included | No |
@@ -947,8 +990,10 @@ on the last exit (#4189). See § Phase D websets for the async lifecycle.
 These are the names the MCP server advertises. digigraph prefixes the operator
 server id (`{id}_{tool}`, `mcp_client.prefixed_tool_name`), so the model calls
 `digisearch_semantic`, `digisearch_web_search`, `digisearch_search_strategies`,
-and `digisearch_research_turn` — plus `digisearch_exa_web_search` and the
-`digisearch_monitors_*` / `digisearch_websets_*` families from the Phase C/D surfaces.
+and `digisearch_research_turn` — plus the `digisearch_monitors_*` /
+`digisearch_websets_*` families from the Phase C/D surfaces. (The MCP-prefixed
+`digisearch_web_search` is the unified tool; its predecessor `exa_web_search`
+was folded into it by #4711.)
 
 Tool parameters for `semantic`: `text`, `index_name`, `top_k`, `mode`.
 
@@ -1819,7 +1864,7 @@ The contract is versioned by `{"tools": [...], "version": 1}` in the tools respo
 
 ### digiclaw MCP attachment
 
-digiclaw may attach to the digisearch MCP server at `http://127.0.0.1:8765/mcp` (loopback in standalone/Docker profiles; in the Cloudflare stack the process binds 0.0.0.0 and is reachable only through the key-gated `/_stack/mcp/digisearch/*` edge route). Tools available: `semantic`, `web_search` (when `[web-search]` is installed), `search_strategies`, `research_turn` (when `[agent]` is installed), plus `exa_web_search` (with `EXA_API_KEY`) and the `monitors_*` / `websets_*` chat surfaces (§ MCP Tools). digigraph sees the same tools prefixed as `digisearch_semantic`, `digisearch_web_search`, `digisearch_search_strategies`, and `digisearch_research_turn` — plus `digisearch_exa_web_search` and the `digisearch_monitors_*` / `digisearch_websets_*` families (`{id}_{tool}`).
+digiclaw may attach to the digisearch MCP server at `http://127.0.0.1:8765/mcp` (loopback in standalone/Docker profiles; in the Cloudflare stack the process binds 0.0.0.0 and is reachable only through the key-gated `/_stack/mcp/digisearch/*` edge route). Tools available: `semantic`, `web_search` (swappable `provider`; when `[web-search]` is installed), `search_strategies`, `research_turn` (when `[agent]` is installed), plus the `monitors_*` / `websets_*` chat surfaces (§ MCP Tools). digigraph sees the same tools prefixed as `digisearch_semantic`, `digisearch_web_search`, `digisearch_search_strategies`, and `digisearch_research_turn` — plus the `digisearch_monitors_*` / `digisearch_websets_*` families (`{id}_{tool}`).
 
 MCP clients (Langflow, IDE tools) attach to the same server. There is no per-client auth on the MCP server itself — access control is at network level (loopback binding, or the secret-gated edge route in the stack).
 

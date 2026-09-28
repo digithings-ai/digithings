@@ -67,7 +67,12 @@ class ExaPageOutOfRangeError(ValueError):
 
 
 class WebSearchData(BaseModel):
-    """Orchestrator payload for a ``digisearch_web_search`` invoke."""
+    """Native EXA payload (results/output/search_type/cost_dollars).
+
+    Kept for the EXA-facing helpers (``exa_contents`` callers, monitors recall,
+    ``websets``); the unified ``web_search`` surface normalises into
+    :class:`digisearch.web_search.models.WebSearchResponse` instead.
+    """
 
     model_config = {"extra": "ignore"}
 
@@ -87,7 +92,7 @@ def _api_key(explicit: str | None = None) -> str:
     if not key:
         raise ExaNotConfiguredError(
             f"{EXA_ENV_VAR} is not set — EXA web search is disabled. "
-            f"Set {EXA_ENV_VAR} to enable digisearch_web_search."
+            f"Set {EXA_ENV_VAR} to enable the exa web provider."
         )
     return key
 
