@@ -43,11 +43,16 @@ export const PROVIDER_LAYERS: Layer[] = [
     id: "models",
     label: "Model provider",
     options: [
-      { id: "sol", label: "GPT-5.6 Sol · $5/$30", vendor: "OpenAI", logo: "openai" },
+      { id: "sol", label: "GPT-5.6 Sol · $4/$20", vendor: "OpenAI", logo: "openai" },
+      { id: "opus", label: "Opus 5.5 · $4.50/$20", vendor: "Anthropic" },
+      { id: "gemini", label: "Gemini 3.1 Pro · $2/$12", vendor: "Google" },
+      { id: "grok", label: "Grok 4.7 · ~$1.60/$4.80", vendor: "Grok", estimate: true },
+      { id: "mistral", label: "Mistral Large · $0.50/$1.50", vendor: "Mistral" },
+      { id: "deepseek", label: "DeepSeek V4 · ~$0.78/$1.57", vendor: "DeepSeek", estimate: true },
+      { id: "glm", label: "GLM 5.3 · ~$2.80/$8.80", vendor: "Z.ai", estimate: true },
+      { id: "minimax", label: "MiniMax M1 · ~$0.40/$2.20", vendor: "MiniMax", estimate: true },
       { id: "luna", label: "GPT-5.6 Luna · $0.20/$1.20", vendor: "OpenAI", logo: "openai" },
       { id: "o3", label: "o3 reasoning · $2/$8", vendor: "OpenAI", logo: "openai" },
-      { id: "deepseek", label: "DeepSeek V4 · $0.14/$0.28", vendor: "DeepSeek" },
-      { id: "commandr", label: "Command R · $0.15/$0.60", vendor: "Cohere" },
       { id: "local", label: "Self-hosted · $0", vendor: "you" },
     ],
   },
@@ -95,9 +100,15 @@ export const DIGI_LAYERS: Layer[] = [
     options: [
       { id: "local", label: "Local · $0", vendor: "you" },
       { id: "luna", label: "Luna · $0.20/$1.20", vendor: "OpenAI", logo: "openai" },
-      { id: "deepseek", label: "DeepSeek V4 · $0.14/$0.28", vendor: "DeepSeek" },
+      { id: "mistral", label: "Mistral Large · $0.50/$1.50", vendor: "Mistral" },
+      { id: "deepseek", label: "DeepSeek V4 · ~$0.78/$1.57", vendor: "DeepSeek", estimate: true },
+      { id: "minimax", label: "MiniMax M1 · ~$0.40/$2.20", vendor: "MiniMax", estimate: true },
+      { id: "grok", label: "Grok 4.7 · ~$1.60/$4.80", vendor: "Grok", estimate: true },
       { id: "o3", label: "o3 · $2/$8", vendor: "OpenAI", logo: "openai" },
-      { id: "sol", label: "Sol · $5/$30", vendor: "OpenAI", logo: "openai" },
+      { id: "gemini", label: "Gemini 3.1 Pro · $2/$12", vendor: "Google" },
+      { id: "glm", label: "GLM 5.3 · ~$2.80/$8.80", vendor: "Z.ai", estimate: true },
+      { id: "opus", label: "Opus 5.5 · $4.50/$20", vendor: "Anthropic" },
+      { id: "sol", label: "Sol · $4/$20", vendor: "OpenAI", logo: "openai" },
     ],
   },
   {
@@ -162,7 +173,12 @@ const MODEL_RATES: Record<string, { inPerM: number; outPerM: number }> = {
   luna: { inPerM: RAG_PRICING.chatMidInPerM, outPerM: RAG_PRICING.chatMidOutPerM },
   o3: { inPerM: RAG_PRICING.reasoningInPerM, outPerM: RAG_PRICING.reasoningOutPerM },
   deepseek: { inPerM: RAG_PRICING.deepseekInPerM, outPerM: RAG_PRICING.deepseekOutPerM },
-  commandr: { inPerM: 0.15, outPerM: 0.6 },
+  opus: { inPerM: 4.5, outPerM: 20 },
+  gemini: { inPerM: 2, outPerM: 12 },
+  grok: { inPerM: 1.6, outPerM: 4.8 },
+  mistral: { inPerM: 0.5, outPerM: 1.5 },
+  glm: { inPerM: 2.8, outPerM: 8.8 },
+  minimax: { inPerM: 0.4, outPerM: 2.2 },
   local: { inPerM: 0, outPerM: 0 },
 };
 
@@ -179,6 +195,7 @@ export interface PricedLine {
   label: string;
   amount: number;
   estimate?: boolean;
+  layer: LayerId;
 }
 
 export interface StackPrice {
@@ -195,14 +212,17 @@ function lookup(layers: Layer[], pick: StackPick, layer: LayerId): LayerOption {
 }
 
 /**
- * Setup + monthly for a full five-layer pick. Formulas mirror `ragCost`
+ * Setup + monthly for a five-layer pick. Formulas mirror `ragCost`
  * (same workload, same snapshot); the cross-check test pins the default
  * provider pick to the invoice panel's provider number plus hosting.
+ * Topologies without vector indexing (support, finance) omit the
+ * embeddings + vector lines entirely — no zero-priced filler.
  */
 export function pricePick(
   layers: Layer[],
   pick: StackPick,
   workload: RagWorkload = DEFAULT_WORKLOAD,
+  topology?: "rag" | "support" | "finance",
 ): StackPrice {
   const p = RAG_PRICING;
   const model = lookup(layers, pick, "models");
@@ -213,8 +233,8 @@ export function pricePick(
   const lines: PricedLine[] = [];
   let setup = 0;
   let monthly = 0;
-  const add = (label: string, amount: number, recurring: boolean, estimate?: boolean) => {
-    lines.push({ label, amount, estimate });
+  const add = (label: string, amount: number, recurring: boolean, layer: LayerId, estimate?: boolean) => {
+    lines.push({ label, amount, estimate, layer });
     if (recurring) monthly += amount;
     else setup += amount;
   };
@@ -222,41 +242,44 @@ export function pricePick(
   const corpusTokens = workload.corpusGB * TOKENS_PER_GB;
   const vectors = corpusTokens / workload.chunkTokens;
   const queriesPerMonth = workload.queriesPerDay * 30;
+  const noVectors = topology === "support" || topology === "finance";
 
-  const embedRate = EMBED_RATES[embed.id];
-  add(`Embed corpus · ${embed.label}`, (corpusTokens * embedRate.perM) / 1e6, false, embed.estimate);
+  if (!noVectors) {
+    const embedRate = EMBED_RATES[embed.id];
+    add(`Embed corpus · ${embed.label}`, (corpusTokens * embedRate.perM) / 1e6, false, "embeddings", embed.estimate);
 
-  if (vector.id === "pinecone") {
-    const gb = (vectors * embedRate.dims * 4) / 1e9;
-    add("Pinecone writes", ((vectors * p.pineconeWritePerM) / 1e6), false);
-    const ruPerQuery = Math.max(0.25, gb);
-    const usage = gb * p.pineconeStoragePerGB + ((queriesPerMonth * ruPerQuery * p.pineconeReadPerM) / 1e6);
-    add("Pinecone store + reads", Math.max(p.pineconeMinMonthly, usage), true);
-  } else if (vector.id === "qdrant") {
-    add("Qdrant Cloud", p.qdrantEntryMonthly, true, true);
-  } else {
-    add("Self-hosted vectors", 0, true);
+    if (vector.id === "pinecone") {
+      const gb = (vectors * embedRate.dims * 4) / 1e9;
+      add("Pinecone writes", ((vectors * p.pineconeWritePerM) / 1e6), false, "vector");
+      const ruPerQuery = Math.max(0.25, gb);
+      const usage = gb * p.pineconeStoragePerGB + ((queriesPerMonth * ruPerQuery * p.pineconeReadPerM) / 1e6);
+      add("Pinecone store + reads", Math.max(p.pineconeMinMonthly, usage), true, "vector");
+    } else if (vector.id === "qdrant") {
+      add("Qdrant Cloud", p.qdrantEntryMonthly, true, "vector", true);
+    } else {
+      add("Self-hosted vectors", 0, true, "vector");
+    }
+
+    const queryEmbedTokens = queriesPerMonth * workload.queryEmbedTokens;
+    add(`Query embeddings · ${embed.label}`, (queryEmbedTokens * embedRate.perM) / 1e6, true, "embeddings", embed.estimate);
   }
-
-  const queryEmbedTokens = queriesPerMonth * workload.queryEmbedTokens;
-  add(`Query embeddings · ${embed.label}`, (queryEmbedTokens * embedRate.perM) / 1e6, true, embed.estimate);
 
   const chatIn = queriesPerMonth * workload.chatInTokensPerQuery;
   const chatOut = queriesPerMonth * workload.chatOutTokensPerQuery;
   const rates = MODEL_RATES[model.id];
-  add(`Model answers · ${model.label}`, (chatIn * rates.inPerM + chatOut * rates.outPerM) / 1e6, true, model.estimate);
+  add(`Model answers · ${model.label}`, (chatIn * rates.inPerM + chatOut * rates.outPerM) / 1e6, true, "models", model.estimate);
 
   if (telemetry.id === "langsmith") {
     const over = Math.max(0, queriesPerMonth - p.langsmithIncludedTraces);
-    add("LangSmith", p.langsmithSeatMonthly + (over * p.langsmithTraceOveragePerK) / 1000, true);
+    add("LangSmith", p.langsmithSeatMonthly + (over * p.langsmithTraceOveragePerK) / 1000, true, "telemetry");
   } else {
-    add(telemetry.vendor === "digithings" ? "digismith traces" : "Self-hosted traces", 0, true);
+    add(telemetry.vendor === "digithings" ? "digismith traces" : "Self-hosted traces", 0, true, "telemetry");
   }
 
   if (hosting.id === "azure") {
-    add("Azure hosting", AZURE_HOSTING_ESTIMATE, true, true);
+    add("Azure hosting", AZURE_HOSTING_ESTIMATE, true, "hosting", true);
   } else {
-    add("Own hardware", 0, true);
+    add("Own hardware", 0, true, "hosting");
   }
 
   const vendors = [...new Set([model, embed, vector, telemetry, hosting].map((o) => o.vendor))].filter(
@@ -272,36 +295,46 @@ const MODEL_GATEWAY: Record<string, string> = {
   luna: "OpenAI API",
   o3: "OpenAI API",
   deepseek: "DeepSeek API",
-  commandr: "Cohere API",
+  opus: "Anthropic API",
+  gemini: "Google API",
+  grok: "Grok API",
+  mistral: "Mistral API",
+  glm: "Z.ai API",
+  minimax: "MiniMax API",
   local: "your API",
 };
 
 const MODEL_BOX: Record<string, string> = {
-  sol: `Sol · $${RAG_PRICING.chatFlagshipInPerM}/$${RAG_PRICING.chatFlagshipOutPerM}`,
-  luna: `Luna · $${RAG_PRICING.chatMidInPerM}/$${RAG_PRICING.chatMidOutPerM}`,
-  o3: `o3 · $${RAG_PRICING.reasoningInPerM}/$${RAG_PRICING.reasoningOutPerM}`,
-  deepseek: `DeepSeek · $${RAG_PRICING.deepseekInPerM}/$${RAG_PRICING.deepseekOutPerM}`,
-  commandr: "Command R · $0.15/$0.60",
-  local: "local model · $0",
+  sol: "Sol",
+  luna: "Luna",
+  o3: "o3 reasoning",
+  deepseek: "DeepSeek V4",
+  opus: "Opus 5.5",
+  gemini: "Gemini 3.1 Pro",
+  grok: "Grok 4.7",
+  mistral: "Mistral Large",
+  glm: "GLM 5.3",
+  minimax: "MiniMax M1",
+  local: "local model",
 };
 
 const EMBED_BOX: Record<string, string> = {
-  large: `embed-3-large · $${RAG_PRICING.embedLargePerM}/M`,
-  small: `embed-3-small · $${RAG_PRICING.embedSmallPerM}/M`,
-  cohere: `Cohere v4 · $${RAG_PRICING.embedCoherePerM}/M`,
-  local: "local embed · $0",
+  large: "embed-3-large",
+  small: "embed-3-small",
+  cohere: "Cohere v4",
+  local: "local embed",
 };
 
 const VECTOR_BOX: Record<string, string> = {
-  pinecone: `Pinecone · $${RAG_PRICING.pineconeMinMonthly} floor`,
-  qdrant: "Qdrant · ~$25",
-  self: "pgvector · $0",
+  pinecone: "Pinecone",
+  qdrant: "Qdrant",
+  self: "pgvector",
 };
 
 const TELEMETRY_BOX: Record<string, string> = {
-  langsmith: `LangSmith · $${RAG_PRICING.langsmithSeatMonthly}/seat`,
-  self: "own traces · $0",
-  digismith: "digismith · $0",
+  langsmith: "LangSmith",
+  self: "own traces",
+  digismith: "digismith",
 };
 
 function vendorCount(price: StackPrice): string {
@@ -324,8 +357,8 @@ export function providerSpec(
   const vector = lookup(PROVIDER_LAYERS, pick, "vector");
   const telemetry = lookup(PROVIDER_LAYERS, pick, "telemetry");
   const hosting = lookup(PROVIDER_LAYERS, pick, "hosting");
-  const price = pricePick(PROVIDER_LAYERS, pick, workload);
   const topology = opts.topology ?? "rag";
+  const price = pricePick(PROVIDER_LAYERS, pick, workload, topology);
   const head = [
     { id: "app", label: opts.appLabel ?? "your product", icon: "internet" as const, col: 0, row: 0 },
     ...(topology === "support"
@@ -411,29 +444,35 @@ export function providerSpec(
 }
 
 const DIGI_MODEL_BOX: Record<string, string> = {
-  local: "digillm · local · $0",
-  luna: `digillm · Luna $${RAG_PRICING.chatMidInPerM}/$${RAG_PRICING.chatMidOutPerM}`,
-  deepseek: `digillm · DeepSeek $${RAG_PRICING.deepseekInPerM}/$${RAG_PRICING.deepseekOutPerM}`,
-  o3: `digillm · o3 $${RAG_PRICING.reasoningInPerM}/$${RAG_PRICING.reasoningOutPerM}`,
-  sol: `digillm · Sol $${RAG_PRICING.chatFlagshipInPerM}/$${RAG_PRICING.chatFlagshipOutPerM}`,
+  local: "digillm · local",
+  luna: "digillm · Luna",
+  mistral: "digillm · Mistral Large",
+  deepseek: "digillm · DeepSeek",
+  minimax: "digillm · MiniMax",
+  grok: "digillm · Grok",
+  o3: "digillm · o3",
+  gemini: "digillm · Gemini",
+  glm: "digillm · GLM",
+  opus: "digillm · Opus",
+  sol: "digillm · Sol",
 };
 
 const DIGI_EMBED_SHORT: Record<string, string> = {
-  local: "local $0",
-  small: `small $${RAG_PRICING.embedSmallPerM}`,
-  cohere: `cohere $${RAG_PRICING.embedCoherePerM}`,
-  large: `large $${RAG_PRICING.embedLargePerM}`,
+  local: "local",
+  small: "small",
+  cohere: "cohere",
+  large: "large",
 };
 
 const DIGI_VECTOR_BOX: Record<string, string> = {
   self: "self-hosted",
-  qdrant: "Qdrant ~$25",
-  pinecone: "Pinecone metered",
+  qdrant: "Qdrant",
+  pinecone: "Pinecone",
 };
 
 const DIGI_TELEMETRY_BOX: Record<string, string> = {
-  digismith: "digismith · $0",
-  langsmith: "LangSmith · metered",
+  digismith: "digismith",
+  langsmith: "LangSmith",
 };
 
 /** digithings-side drawing: module boxes, per-layer subtitles from the pick. */

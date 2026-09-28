@@ -37,25 +37,66 @@ export interface RagPricing {
   deepseekOutPerM: number;
   reasoningInPerM: number;
   reasoningOutPerM: number;
+  /** $/GB-mo object storage. */
+  s3StoragePerGB: number;
+  /** Azure Blob Hot $/GB-mo (secondary-source estimate). */
+  azureBlobPerGB: number;
+  /** Serverless runner planning figure (covers the free grant). */
+  runnerMonthly: number;
 }
+
+/**
+ * One flagship row per model provider (Refs #4429).
+ *
+ * `source: "list"` = vendor list price; `source: "catalog"` = OpenRouter
+ * live-catalog pass-through (renders with ~). Recognizable names clients
+ * already buy — the point is replacement, not exhaustiveness. Refine after
+ * the design lands.
+ */
+export interface ModelProvider {
+  id: string;
+  provider: string;
+  model: string;
+  inPerM: number;
+  outPerM: number;
+  source: "list" | "catalog";
+  note: string;
+}
+
+export const MODEL_PROVIDERS: ModelProvider[] = [
+  { id: "sol", provider: "OpenAI", model: "GPT-5.6 Sol", inPerM: 4, outPerM: 20, source: "list", note: "short-ctx list; long-ctx $8/$30; promo thru 2026-11-21" },
+  { id: "opus", provider: "Anthropic", model: "Opus 5.5", inPerM: 4.5, outPerM: 20, source: "list", note: "vendor $4-5/$20-25 range midpoint" },
+  { id: "gemini", provider: "Google", model: "Gemini 3.1 Pro", inPerM: 2, outPerM: 12, source: "list", note: "Vertex list; >200K ctx doubles input" },
+  { id: "grok", provider: "Grok", model: "Grok 4.7", inPerM: 1.6, outPerM: 4.8, source: "catalog", note: "OpenRouter pass-through" },
+  { id: "mistral", provider: "Mistral", model: "Mistral Large", inPerM: 0.5, outPerM: 1.5, source: "list", note: "vendor FAQ" },
+  { id: "deepseek", provider: "DeepSeek", model: "DeepSeek V4 Pro", inPerM: 0.78, outPerM: 1.57, source: "catalog", note: "OpenRouter pass-through" },
+  { id: "glm", provider: "Z.ai", model: "GLM 5.3 Prime", inPerM: 2.8, outPerM: 8.8, source: "catalog", note: "OpenRouter pass-through (z-ai prefix)" },
+  { id: "minimax", provider: "MiniMax", model: "MiniMax M1", inPerM: 0.4, outPerM: 2.2, source: "catalog", note: "OpenRouter pass-through" },
+  { id: "luna", provider: "OpenAI", model: "GPT-5.6 Luna", inPerM: 0.2, outPerM: 1.2, source: "list", note: "short-ctx list; cheap-managed default" },
+  { id: "o3", provider: "OpenAI", model: "o3 reasoning", inPerM: 2, outPerM: 8, source: "list", note: "reasoning slot; o3-pro is 10x" },
+  { id: "local", provider: "you", model: "local model", inPerM: 0, outPerM: 0, source: "list", note: "$0 marginal on your hardware" },
+];
 
 export const RAG_PRICING: RagPricing = {
   researchedAt: "2026-09-28",
   sources: [
-    "developers.openai.com (embed $0.13/M large, $0.02/M small)",
-    "usagepricing.com (GPT-5.6 Sol $5 in / $30 out; Luna $0.20 / $1.20)",
+    "platform.openai.com/docs/pricing (GPT-5.6 Sol $4/$20 short-ctx, $8/$30 long-ctx, promo thru 2026-11-21; Luna $0.20/$1.20; o3 $2/$8; embed $0.13/M large, $0.02/M small)",
+    "platform.claude.com/docs (Opus 5.5 $4-5/$20-25; Sonnet 5 $2/$10)",
+    "cloud.google.com Vertex pricing (Gemini 3.1 Pro $2/$12)",
+    "mistral.ai/pricing FAQ (Mistral Large $0.50/$1.50)",
+    "OpenRouter live catalog 2026-09-28 — Grok 4.7 $1.6/$4.8, DeepSeek V4 Pro $0.78/$1.57, GLM 5.3 Prime $2.8/$8.8, MiniMax M1 $0.4/$2.2 (pass-through, ~)",
     "pinecone.io/pricing (Standard $50 min, $0.33/GB, $4/M writes, $16/M reads)",
     "spendark.com (Qdrant Cloud ~$25/mo entry)",
     "langchain.com/pricing (Plus $39/seat, 10k traces, $2.50/1k overage)",
     "cohere.com via Azure Foundry (Embed v4 $0.12/M)",
-    "api-docs.deepseek.com (V4 Flash $0.14 in / $0.28 out)",
-    "openai.com post-cut guides, multi-source (o3 $2 in / $8 out)",
+    "aws.amazon.com/s3/pricing (S3 Standard $0.023/GB)",
+    "azure.microsoft.com/pricing (Blob Hot ~$0.018/GB estimate; runner ~$75/mo planning figure)",
   ],
   embedLargePerM: 0.13,
   embedSmallPerM: 0.02,
   embedCoherePerM: 0.12,
-  chatFlagshipInPerM: 5,
-  chatFlagshipOutPerM: 30,
+  chatFlagshipInPerM: 4,
+  chatFlagshipOutPerM: 20,
   chatMidInPerM: 0.2,
   chatMidOutPerM: 1.2,
   pineconeMinMonthly: 50,
@@ -66,10 +107,13 @@ export const RAG_PRICING: RagPricing = {
   langsmithSeatMonthly: 39,
   langsmithIncludedTraces: 10000,
   langsmithTraceOveragePerK: 2.5,
-  deepseekInPerM: 0.14,
-  deepseekOutPerM: 0.28,
+  deepseekInPerM: 0.78,
+  deepseekOutPerM: 1.57,
   reasoningInPerM: 2,
   reasoningOutPerM: 8,
+  s3StoragePerGB: 0.023,
+  azureBlobPerGB: 0.018,
+  runnerMonthly: 75,
 };
 
 export interface RagWorkload {
