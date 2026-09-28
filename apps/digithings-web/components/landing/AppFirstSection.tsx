@@ -147,6 +147,7 @@ export function AppFirstSection() {
       sourcesLabel: preset.providerSources,
       topology: preset.topology,
       replaced: [...new Set(done.flatMap((b) => b.layers))],
+      boxes: [...new Set(done.flatMap((b) => b.boxes))],
       email: done.some((b) => b.email),
     });
   });
@@ -160,13 +161,15 @@ export function AppFirstSection() {
           (morphIdx < 0 ? [] : preset.morphSteps.slice(0, morphIdx + 1)).flatMap((b) => b.layers),
         );
 
-  /* Layers already swapped at the current walk position (for click routing:
-     a swapped box reconfigures the digi pick, an unswapped one the provider
-     pick). Static reads the end state. */
-  const swappedNow = (): Set<LayerId> => {
-    if (tourMode === "static") return ALL_LAYERS;
+  /* Boxes already flipped at the current walk position (for click routing:
+     a flipped box reconfigures the digi pick, an unflipped one the provider
+     pick). Static reads the end state. Box-granular: finance flips the
+     runner a beat before the archive even though both cut hosting. */
+  const swappedNow = (): Set<string> => {
+    if (tourMode === "static")
+      return new Set(preset.morphSteps.flatMap((b) => b.boxes));
     if (morphIdx < 0) return new Set();
-    return new Set(preset.morphSteps.slice(0, morphIdx + 1).flatMap((b) => b.layers));
+    return new Set(preset.morphSteps.slice(0, morphIdx + 1).flatMap((b) => b.boxes));
   };
 
   /* Click a drawn box -> open its layer's options anchored at the click.
@@ -182,7 +185,7 @@ export function AppFirstSection() {
     if (!sideEl?.classList.contains("arch-tour__side--leaving")) {
       const layer = PROVIDER_LAYER_BY_BOX[boxId];
       if (!layer) return;
-      const side = swappedNow().has(layer) ? "digi" : "provider";
+      const side = swappedNow().has(boxId) ? "digi" : "provider";
       setPop({
         side,
         layer,
