@@ -58,11 +58,28 @@ describe("app presets", () => {
     expect(left.services.find((s) => s.id === "app")?.label).toBe("research agent");
   });
 
+  it("lights only boxes the app actually draws", () => {
+    for (const app of APP_PRESETS) {
+      const drawn = new Set(
+        providerSpec(app.providerDefaults, app.workload, {
+          appLabel: app.providerApp,
+          sourcesLabel: app.providerSources,
+          topology: app.topology,
+        }).services.map((s) => s.id),
+      );
+      for (const step of app.leftSteps) {
+        for (const id of step.ids) {
+          expect(drawn.has(id) || id === "platform").toBe(true);
+        }
+      }
+    }
+  });
+
   it("draws the support review lane and finance scattered sources", () => {
     const support = APP_PRESETS.find((a) => a.id === "support")!;
     const left = providerSpec(support.providerDefaults, support.workload, {
       sourcesLabel: support.providerSources,
-      review: support.providerReview,
+      topology: support.topology,
     });
     const ids = left.services.map((s) => s.id);
     expect(ids).toContain("review");

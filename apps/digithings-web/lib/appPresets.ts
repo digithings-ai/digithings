@@ -28,12 +28,18 @@ export interface AppPreset {
   digiApp: string;
   /** Top-right box on the provider drawing; defaults to "your data sources". */
   providerSources?: string;
-  /** Adds the human review lane across the top of the provider drawing. */
-  providerReview?: boolean;
+  /** Provider topology: rag is the full traditional stack; support swaps in
+      the review lane, email service and runner with no vector boxes; finance
+      swaps in the runner and research archive with no embedding boxes. */
+  topology: "rag" | "support" | "finance";
+  /** Layers forced for pricing where the drawing has no box (support and
+      finance run no vector indexing: embeddings local, vectors self). */
+  fixedLayers: Partial<StackPick>;
   leftSteps: TourStep[];
 }
 
-const FULL = ["app", "sources", "api", "model", "embed", "memory", "record", "telemetry", "machines", "terms", "platform", "review"];
+const FULL_SUPPORT = ["app", "sources", "api", "model", "email", "launcher", "telemetry", "terms", "platform", "review"];
+const FULL_FINANCE = ["app", "sources", "api", "model", "launcher", "record", "telemetry", "terms", "platform"];
 
 const supportLeft: TourStep[] = [
   {
@@ -50,21 +56,21 @@ const supportLeft: TourStep[] = [
   },
   {
     id: "locked",
-    label: "Locked in at the embedding layer.",
-    line: "Ticket history lives in Pinecone, but the pipeline only speaks embed-3-large — switching models means re-embedding years of tickets. That is the lock-in that actually bites, long before the contract does.",
-    ids: ["api", "model", "embed", "memory"],
+    label: "The loop is the lock-in.",
+    line: "No vectors to take with you — triage rules, draft history and reviewer habits all live in their automation. Leaving means rebuilding the workflow, not exporting an index.",
+    ids: ["api", "model", "email", "launcher"],
   },
   {
     id: "metered",
     label: "LangSmith watches at $39 a seat; Azure bills the rest.",
-    line: "Every draft is a trace at $2.50 per thousand past the allowance, Pinecone holds its $50 floor, and Azure meters the GPUs by the hour. Nothing here is modular: no layer can be swapped without leaving the wall.",
-    ids: ["record", "telemetry", "machines"],
+    line: "Every draft is a trace at $2.50 per thousand past the allowance, every send is a meter, and the runner bills by the hour. Nothing here is modular: no layer can be swapped without leaving the wall.",
+    ids: ["email", "telemetry", "launcher"],
   },
   {
     id: "taller",
     label: "And the wall gets taller, not shorter.",
     line: "Model companies keep buying the layers above and below their models — apps at the top, chips at the bottom. The industry trend is toward more lock-in per stack, not less. That is the shape digithings is drawn against.",
-    ids: FULL,
+    ids: FULL_SUPPORT,
   },
 ];
 
@@ -84,20 +90,20 @@ const financeLeft: TourStep[] = [
   {
     id: "locked",
     label: "Locked in at the reasoning layer.",
-    line: "The workflow only speaks one vendor's reasoning dialect, and the embeddings on your filings only fit their index. Switching either means rebuilding the pipeline and re-embedding the archive.",
-    ids: ["api", "model", "embed", "memory"],
+    line: "The workflow only speaks one vendor's reasoning dialect and runs on their runner. Switching means rebuilding the pipeline — the archive ports, the intelligence doesn't.",
+    ids: ["api", "model", "launcher"],
   },
   {
     id: "metered",
-    label: "Traces, GPUs and lake — all inside the wall.",
-    line: "Each deep run burns a hundred thousand input tokens before it writes a word; telemetry, compute and storage meter separately behind the same boundary. Nothing here is modular.",
-    ids: ["record", "telemetry", "machines"],
+    label: "Archive, traces, runner — all inside the wall.",
+    line: "Each deep run burns a hundred thousand input tokens before it writes a word; the runner, the archive and the telemetry meter separately behind the same boundary. Nothing here is modular.",
+    ids: ["record", "telemetry", "launcher"],
   },
   {
     id: "taller",
     label: "And the wall gets taller, not shorter.",
     line: "Model companies keep buying the layers above and below their models — apps at the top, chips at the bottom. The industry trend is toward more lock-in per stack, not less. That is the shape digithings is drawn against.",
-    ids: FULL,
+    ids: FULL_FINANCE,
   },
 ];
 
@@ -115,6 +121,8 @@ export const APP_PRESETS: AppPreset[] = [
     dimmedDigi: [],
     providerApp: "your product",
     digiApp: "your product",
+    topology: "rag",
+    fixedLayers: {},
     leftSteps: TRADITIONAL_STEPS,
   },
   {
@@ -127,11 +135,12 @@ export const APP_PRESETS: AppPreset[] = [
     recommended: { models: "luna", embeddings: "small", vector: "self", telemetry: "digismith", hosting: "own" },
     recommendedNote: "Mid-tier drafting, small embeddings, self-hosted ticket index, audit-grade traces.",
     dimmedProvider: [],
-    dimmedDigi: ["vault"],
+    dimmedDigi: ["vault", "memory"],
     providerApp: "support agent",
     digiApp: "support agent · digichat",
     providerSources: "ticket queue + docs",
-    providerReview: true,
+    topology: "support",
+    fixedLayers: { embeddings: "local", vector: "self" },
     leftSteps: supportLeft,
   },
   {
@@ -148,6 +157,8 @@ export const APP_PRESETS: AppPreset[] = [
     providerApp: "research agent",
     digiApp: "digiquant pipeline",
     providerSources: "scattered market endpoints",
+    topology: "finance",
+    fixedLayers: { embeddings: "local", vector: "self" },
     leftSteps: financeLeft,
   },
 ];
