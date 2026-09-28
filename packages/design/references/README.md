@@ -25,7 +25,16 @@ navigation, layout rhythm, typography roles, motion, and product framing.
 
 **The design mine (extracted specimens + convergence blends, static page):** [`mine/index.html`](mine/index.html) — serve `packages/design/` and open `/references/mine/index.html`
 
+**Inspiration hub / tools dictionary:** [`designeer.xyz.md`](designeer.xyz.md) — [Designeer](https://designeer.xyz) curated galleries, kits, reading (Mobbin, Land-book, navbar.design, SaaSFrame, Figma/Framer, Refactoring UI, Animations.dev, Shape of AI, …). Use when hunting patterns for digiquant dashboard, FX Hub / twelve-x, and other digiweb UI — not a visual north star.
+
 ---
+
+## Inspiration hubs (living dictionary)
+
+| Hub | URL | Role |
+|-----|-----|------|
+| [Designeer](designeer.xyz.md) | https://designeer.xyz | Curated design galleries, component libraries, tools, reading — seed list for digiweb exploration |
+
 
 ## How to use these docs
 
