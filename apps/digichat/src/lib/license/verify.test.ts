@@ -162,7 +162,13 @@ describe("verifyLicenseJwt", () => {
       keys.privateKeyPem,
       validLicensePayload({ exp: now - 360 }),
     );
-    expect(verify(stale)).toEqual({ ok: false, detail: "expired" });
+    expect(verify(stale)).toMatchObject({
+      ok: false,
+      detail: "expired",
+      licenseId: "lic-test-001",
+      sub: "datatap",
+    });
+    expect(verify(stale)).toMatchObject({ exp: now - 360 });
     // iat 4 min in the future accepted; far-future iat rejected.
     const early = mintLicenseJwt(
       keys.privateKeyPem,
@@ -173,6 +179,6 @@ describe("verifyLicenseJwt", () => {
       keys.privateKeyPem,
       validLicensePayload({ iat: now + 3600 }),
     );
-    expect(verify(future).ok).toBe(false);
+    expect(verify(future)).toEqual({ ok: false, detail: "iat_future" });
   });
 });

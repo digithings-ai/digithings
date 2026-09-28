@@ -118,6 +118,8 @@ const nodeScheduler: HeartbeatScheduler = {
 };
 
 let runtime: HeartbeatRuntime | null = null;
+/** Set once the missing-base warning has been logged (reset by stop). */
+let missingBaseWarned = false;
 let runtimeScheduler: HeartbeatScheduler = nodeScheduler;
 let runtimeFetch: typeof fetch | null = null;
 let runtimeJitter: () => number = () => Math.random() * 0.2 - 0.1;
@@ -159,6 +161,7 @@ export function stopLicenseHeartbeat(): void {
   }
   runtime = null;
   reattempt = null;
+  missingBaseWarned = false;
 }
 
 /**
@@ -170,6 +173,16 @@ export function startLicenseHeartbeat(deps: HeartbeatDeps = {}): void {
   if (runtime) return;
   const ctx = getHeartbeatContext();
   if (ctx.licenseStatus === "unlicensed" || !ctx.rawJwt) return;
+  if (!digikeyBase()) {
+    // No destination configured: keep serving, never schedule, log once.
+    // (An empty DIGIKEY_URL would otherwise build a relative heartbeat URL
+    // that self-fetches a 404 and generates backoff noise.)
+    if (!missingBaseWarned) {
+      missingBaseWarned = true;
+      logWarn("[license] heartbeat disabled detail=missing_digikey_url");
+    }
+    return;
+  }
 
   runtimeScheduler = deps.scheduler ?? nodeScheduler;
   runtimeFetch = deps.fetchFn ?? globalThis.fetch.bind(globalThis);
@@ -223,6 +236,7 @@ async function sendOnce(rt: HeartbeatRuntime): Promise<void> {
   if (!fetchFn) return;
   const ctx = getHeartbeatContext();
   if (!ctx.rawJwt || !ctx.licenseId || !ctx.sub) return;
+  if (!digikeyBase()) return;
   rt.seq += 1;
   const seq = rt.seq;
   const snapshot = getLicenseState();

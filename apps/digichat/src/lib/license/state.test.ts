@@ -136,6 +136,20 @@ describe("initLicenseStateAtStartup", () => {
     expect(snap).toMatchObject({ state: "expired", detail: "expired" });
   });
 
+  it("keeps licenseId/sub/exp on the expired-at-boot path so heartbeats report", () => {
+    const token = mintLicenseJwt(
+      keys.privateKeyPem,
+      validLicensePayload({ exp: now - 3600 }),
+    );
+    const snap = initLicenseStateAtStartup({ env: envFor(token), nowSec: now });
+    expect(snap).toMatchObject({
+      state: "expired",
+      licenseId: "lic-test-001",
+      sub: "datatap",
+      exp: now - 3600,
+    });
+  });
+
   it("never logs the raw JWT", () => {
     const token = mintLicenseJwt(keys.privateKeyPem);
     initLicenseStateAtStartup({ env: envFor(token), nowSec: now });
@@ -192,6 +206,16 @@ describe("state machine transitions", () => {
     expect(getLicenseState().state).toBe("revoked");
     applyHeartbeatResult("expired");
     expect(getLicenseState().state).toBe("revoked");
+  });
+
+  it("never un-latches a remotely-latched expired on a later valid", () => {
+    applyHeartbeatResult("expired");
+    expect(getLicenseState(now).state).toBe("expired");
+    applyHeartbeatResult("valid");
+    expect(getLicenseState(now)).toMatchObject({
+      state: "expired",
+      detail: "heartbeat_expired",
+    });
   });
 
   it("records unknown_license denies distinctly but still refuses", () => {

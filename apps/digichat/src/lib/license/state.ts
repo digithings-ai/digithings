@@ -132,6 +132,35 @@ export interface VerifySuccess {
 export interface VerifyFailure {
   ok: false;
   detail: string;
+  /**
+   * Present on the `expired` path: identity claims from the authentic
+   * (signature-verified) payload, so an expired-at-boot container keeps
+   * reporting via the heartbeat (§4) instead of no-op'ing on the sender's
+   * licenseId/sub guard.
+   */
+  licenseId?: string;
+  sub?: string;
+  exp?: number;
+}
+
+/** Identity claims with the `tenant_slug` / `jti` mirrors applied. */
+function extractIdentity(p: Record<string, unknown>): {
+  sub: string;
+  licenseId: string;
+} {
+  const sub =
+    typeof p.sub === "string" && p.sub
+      ? p.sub
+      : typeof p.tenant_slug === "string"
+        ? p.tenant_slug
+        : "";
+  const licenseId =
+    typeof p.license_id === "string" && p.license_id
+      ? p.license_id
+      : typeof p.jti === "string" && p.jti
+        ? p.jti
+        : "";
+  return { sub, licenseId };
 }
 
 function fail(detail: string): VerifyFailure {
@@ -206,13 +235,22 @@ export function verifyLicenseJwt(
 
   // 3. Claims, in order: exp/iat, aud, iss, kind, hosts, sub/license_id.
   if (typeof p.exp !== "number" || !Number.isFinite(p.exp)) return fail("exp_missing");
-  if (nowSec > p.exp + LICENSE_CLOCK_SKEW_LEEWAY_SEC) return fail("expired");
+  if (nowSec > p.exp + LICENSE_CLOCK_SKEW_LEEWAY_SEC) {
+    const { sub, licenseId } = extractIdentity(p);
+    return {
+      ok: false,
+      detail: "expired",
+      ...(licenseId ? { licenseId } : {}),
+      ...(sub ? { sub } : {}),
+      exp: p.exp,
+    };
+  }
   if (
     typeof p.iat === "number" &&
     Number.isFinite(p.iat) &&
     p.iat > nowSec + LICENSE_CLOCK_SKEW_LEEWAY_SEC
   ) {
-    return fail("claims_missing");
+    return fail("iat_future");
   }
   if (p.aud !== LICENSE_AUDIENCE) return fail("aud_mismatch");
   const expectedIssuer = (opts.expectedIssuer ?? LICENSE_DEFAULT_ISSUER).trim();
@@ -226,18 +264,7 @@ export function verifyLicenseJwt(
   ) {
     return fail("hosts_invalid");
   }
-  const sub =
-    typeof p.sub === "string" && p.sub
-      ? p.sub
-      : typeof p.tenant_slug === "string"
-        ? p.tenant_slug
-        : "";
-  const licenseId =
-    typeof p.license_id === "string" && p.license_id
-      ? p.license_id
-      : typeof p.jti === "string" && p.jti
-        ? p.jti
-        : "";
+  const { sub, licenseId } = extractIdentity(p);
   if (!sub || !licenseId) return fail("claims_missing");
 
   return { ok: true, licenseId, sub, exp: p.exp, hosts: p.hosts as string[] };
@@ -311,13 +338,22 @@ export function initLicenseStateAtStartup(
     if (!result.ok) {
       if (result.detail === "expired") {
         // Authentic but lapsed: refuse-at-expiry, still never blocks boot.
+        // Persist the identity claims so the heartbeat sender keeps
+        // reporting (§4) instead of no-op'ing on its licenseId/sub guard.
         store().record = {
           ...store().record,
           state: "expired",
           detail: "expired",
+          licenseId: result.licenseId,
+          sub: result.sub,
+          exp: result.exp,
           rawJwt: token,
         };
-        console.warn("[license] status=expired detail=expired");
+        console.warn(
+          `[license] status=expired detail=expired ` +
+            `license_id=${result.licenseId ?? "?"} customer=${result.sub ?? "?"} ` +
+            `exp=${result.exp ?? "?"}`,
+        );
         return getLicenseState(opts.nowSec);
       }
       store().record = {
@@ -408,8 +444,11 @@ export function applyHeartbeatResult(
     }
     return getLicenseState(nowSec);
   }
-  // "valid": never un-latches `revoked` or a locally-lapsed `exp`.
-  if (record.state === "revoked") return getLicenseState(nowSec);
+  // "valid": never un-latches `revoked` or `expired` — both are terminal
+  // within a process (§4.2); recovery is a re-licensed deploy or a restart.
+  if (record.state === "revoked" || record.state === "expired") {
+    return getLicenseState(nowSec);
+  }
   const now = nowSec ?? Math.floor(Date.now() / 1000);
   if (
     typeof record.exp === "number" &&

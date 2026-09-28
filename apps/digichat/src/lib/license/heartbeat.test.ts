@@ -34,6 +34,7 @@ import {
 import {
   generateTestKeypair,
   mintLicenseJwt,
+  validLicensePayload,
 } from "./jwt-fixtures";
 
 const ISSUER = "http://127.0.0.1:8005";
@@ -176,6 +177,61 @@ describe("startLicenseHeartbeat scheduling", () => {
     startLicenseHeartbeat({ scheduler, fetchFn: vi.fn() as unknown as typeof fetch });
     expect(intervals).toHaveLength(0);
     expect(getHeartbeatRuntimeForTests().running).toBe(false);
+  });
+
+  it("does not schedule when DIGIKEY_URL is missing (log once, keep serving)", () => {
+    seedValid();
+    vi.stubEnv("DIGIKEY_URL", "");
+    const { scheduler, intervals } = fakeScheduler();
+    const fetchFn = vi.fn() as unknown as typeof fetch;
+    startLicenseHeartbeat({ scheduler, fetchFn });
+    startLicenseHeartbeat({ scheduler, fetchFn });
+    expect(intervals).toHaveLength(0);
+    expect(getHeartbeatRuntimeForTests().running).toBe(false);
+    expect(getLicenseState(now).state).toBe("valid");
+    const warns = warnSpy.mock.calls.map((c) => c.map(String).join(" "));
+    expect(warns.filter((l) => l.includes("missing_digikey_url"))).toHaveLength(1);
+  });
+
+  it("still reports when expired at boot (identity claims persist)", async () => {
+    resetLicenseStateForTests();
+    const expired = mintLicenseJwt(
+      keys.privateKeyPem,
+      validLicensePayload({ exp: Math.floor(Date.now() / 1000) - 3600 }),
+    );
+    initLicenseStateAtStartup({
+      env: {
+        DIGICHAT_LICENSE_JWT: expired,
+        DIGIKEY_PUBLIC_KEY_PEM: keys.publicKeyPem,
+        DIGIKEY_ISSUER: ISSUER,
+      } as unknown as NodeJS.ProcessEnv,
+    });
+    expect(getLicenseState().state).toBe("expired");
+    const { scheduler } = fakeScheduler();
+    const seen: Array<{ url: string; init: RequestInit }> = [];
+    const fetchFn = vi.fn(async (url: string, init: RequestInit) => {
+      seen.push({ url, init });
+      return new Response(JSON.stringify({ license_status: "expired" }), {
+        status: 200,
+      });
+    });
+    startLicenseHeartbeat({
+      scheduler,
+      fetchFn: fetchFn as unknown as typeof fetch,
+      jitterRatio: () => 0,
+    });
+    await vi.waitFor(() => expect(fetchFn).toHaveBeenCalledTimes(1));
+    expect(seen[0].url).toBe("http://127.0.0.1:8005/v1/licenses/heartbeat");
+    const headers = new Headers(seen[0].init.headers);
+    expect(headers.get("authorization")).toBe(`Bearer ${expired}`);
+    const body = JSON.parse(String(seen[0].init.body)) as HeartbeatBody;
+    expect(body).toMatchObject({
+      license_id: "lic-test-001",
+      customer: "datatap",
+      license_status: "expired",
+      seq: 1,
+    });
+    expect(getLicenseState().state).toBe("expired");
   });
 
   it("schedules a 24h unref'd interval and fires the first attempt immediately", async () => {
