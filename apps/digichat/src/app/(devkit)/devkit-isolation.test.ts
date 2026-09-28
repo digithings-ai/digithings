@@ -49,9 +49,7 @@ describe("devkit route isolation", () => {
   it("menu reads from the devkit configs API and saves through the save API", () => {
     const client = read("devkit/devkit-client.tsx");
     expect(client).toMatch(/\/api\/devkit\/configs/);
-    // Grouped picker + collapsible inspector sidebar (chat-shell pattern).
-    expect(client).toMatch(/<select/);
-    expect(client).toMatch(/<optgroup/);
+    // Collapsible inspector sidebar (chat-shell pattern).
     expect(client).toMatch(/Hide inspector sidebar/);
     expect(client).toMatch(/Show inspector sidebar/);
     expect(client).toMatch(/keydown/);
@@ -59,6 +57,20 @@ describe("devkit route isolation", () => {
     // last-valid deployment down; the preview keeps no draft knowledge.
     expect(client).toMatch(/\/api\/devkit\/validate/);
     expect(client).toMatch(/withValidation/);
+    // Grouped kit deployment picker (select-reference pattern): kit Select
+    // with grouped popup, never a native dropdown.
+    expect(client).toMatch(/DevkitDeploymentSelect|SelectValue/);
+    expect(client).toMatch(/SelectGroup/);
+    expect(client).toMatch(/SelectLabel/);
+    expect(client).toMatch(/SelectSeparator/);
+    expect(client).toMatch(/Select a deployment/);
+    expect(client).toMatch(/onValueChange/);
+    expect(client).not.toMatch(/<select/);
+    expect(client).not.toMatch(/<optgroup/);
+    // Sidebar scroll container ref feeds the editors scroll-spy observer.
+    expect(client).toMatch(/scrollRoot/);
+    // Canon tokens resolve inside the devkit subtree only (never layout).
+    expect(client).toMatch(/data-theme="light"/);
     // Step-4 accordion editors are wired; Step 5 adds the save path.
     expect(client).toMatch(/DevkitEditors/);
     // Step 5: raw YAML is an editable textarea, the save button posts the
@@ -87,7 +99,7 @@ describe("devkit route isolation", () => {
 
   it("editors cover every config area without touching the save API", () => {
     const editors = read("devkit/devkit-editors.tsx");
-    for (const section of [
+    const sections = [
       "Identity",
       "Backend",
       "Appearance",
@@ -96,9 +108,43 @@ describe("devkit route isolation", () => {
       "Tools",
       "MCP servers",
       "Gate",
-    ]) {
-      expect(editors).toContain(`title="${section}"`);
+    ];
+    for (const section of sections) {
+      expect(editors).toContain(section);
     }
+    // Spec §2 regrouping map: all 8 titles each under exactly one group
+    // (Basics: Identity/Features/Models; Appearance: Appearance;
+    // Advanced: Backend/Tools/MCP servers/Gate).
+    const groupsAt = editors.indexOf("const GROUPS");
+    expect(groupsAt).toBeGreaterThan(-1);
+    const groupsEnd = editors.indexOf("] as const", groupsAt);
+    expect(groupsEnd).toBeGreaterThan(groupsAt);
+    const groupsBlock = editors.slice(groupsAt, groupsEnd);
+    // Each title lives in exactly one group's sections array (the
+    // "Appearance" group label shares its name with its section, so scope
+    // the count to sections arrays, not the whole GROUPS literal).
+    const sectionsArrays = [...groupsBlock.matchAll(/sections: \[([^\]]*)\]/g)].map(
+      (m) => m[1],
+    );
+    expect(sectionsArrays).toHaveLength(3);
+    for (const section of sections) {
+      const hits = sectionsArrays.filter((body) => body.includes(`"${section}"`)).length;
+      expect(hits).toBe(1);
+    }
+    // Single-open kit disclosure shell with scroll-spy (spec §1): kit
+    // Collapsible per group, one openGroup, one IntersectionObserver over
+    // the group anchors that opens but never closes. No native dropdowns
+    // and no native selects anywhere in the editors or picker rows.
+    expect(editors).toMatch(/Collapsible/);
+    expect(editors).toMatch(/openGroup/);
+    expect(editors).toMatch(/IntersectionObserver/);
+    expect(editors).toMatch(/visibleGroupFromEntries/);
+    expect(editors).toMatch(/-20% 0px -65% 0px/);
+    expect(editors).toMatch(/scrollRoot/);
+    expect(editors).not.toMatch(/<details/);
+    expect(editors).not.toMatch(/<summary/);
+    expect(editors).not.toMatch(/<select/);
+    expect(editors).not.toMatch(/<optgroup/);
     // Form edits go through the tested draft helpers, never raw string ops.
     expect(editors).toMatch(/setScalar|setBoolean|setStringList/);
     expect(editors).toMatch(/secretState/);

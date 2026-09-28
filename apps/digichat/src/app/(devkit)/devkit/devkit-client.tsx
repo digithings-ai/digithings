@@ -3,6 +3,16 @@
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { p } from "@/lib/base-path";
 import type { DigichatDeployment } from "@/lib/deploy-config/schema";
+import {
+  Select,
+  SelectContent,
+  SelectGroup,
+  SelectItem,
+  SelectLabel,
+  SelectSeparator,
+  SelectTrigger,
+  SelectValue,
+} from "@digithings/ui/ui";
 import { DevkitPreview } from "./devkit-preview";
 import { DevkitSummary } from "./devkit-summary";
 import { DevkitEditors, type EditorsCommit } from "./devkit-editors";
@@ -93,6 +103,66 @@ const RESIZE_HANDLE_CLASS =
   "w-1.5 shrink-0 cursor-col-resize border-r outline-none hover:bg-accent focus-visible:bg-accent"; // canon-allow: isolated devkit route without token bridge, no kit resize part, not product chrome
 
 /**
+ * Kit deployment picker (select-reference pattern): grouped popup with
+ * Local files / Environment tenants sections, controlled from the client
+ * selection. An empty value shows the placeholder (nothing selected yet).
+ */
+export function DevkitDeploymentSelect({
+  files,
+  envs,
+  selectedId,
+  onSelect,
+  disabled,
+}: {
+  files: Array<Pick<DevkitEntryWire, "id" | "label" | "ok">>;
+  envs: Array<Pick<DevkitEntryWire, "id" | "label" | "ok">>;
+  selectedId: string | null;
+  onSelect: (id: string | null) => void;
+  disabled?: boolean;
+}) {
+  return (
+    <Select
+      value={selectedId ?? ""}
+      onValueChange={(v) => onSelect(v === "" ? null : v)}
+      disabled={disabled}
+    >
+      <SelectTrigger
+        id="devkit-deployment"
+        aria-label="Deployments"
+        className="w-full font-mono text-xs"
+      >
+        <SelectValue placeholder="Select a deployment…" />
+      </SelectTrigger>
+      <SelectContent>
+        {files.length > 0 ? (
+          <SelectGroup>
+            <SelectLabel>{`Local files (${files.length})`}</SelectLabel>
+            {files.map((e) => (
+              <SelectItem key={e.id} value={e.id}>
+                {e.ok ? "●" : "○"} {e.label}
+                {e.ok ? "" : " (invalid)"}
+              </SelectItem>
+            ))}
+          </SelectGroup>
+        ) : null}
+        {files.length > 0 && envs.length > 0 ? <SelectSeparator /> : null}
+        {envs.length > 0 ? (
+          <SelectGroup>
+            <SelectLabel>{`Environment tenants (${envs.length})`}</SelectLabel>
+            {envs.map((e) => (
+              <SelectItem key={e.id} value={e.id}>
+                {e.ok ? "●" : "○"} {e.label}
+                {e.ok ? "" : " (invalid)"}
+              </SelectItem>
+            ))}
+          </SelectGroup>
+        ) : null}
+      </SelectContent>
+    </Select>
+  );
+}
+
+/**
  * P1 devkit shell: categorized deployment picker, draft-driven live preview,
  * collapsible inspector sidebar, full-width chat. The sidebar edits a per-entry
  * draft (created from the served redacted text); the preview renders the
@@ -123,6 +193,8 @@ export function DevkitClient() {
   );
   const [dragWidth, setDragWidth] = useState<number | null>(null);
   const sidebarWidth = dragWidth ?? persistedWidth;
+  // Sidebar scroll container: the editors scroll-spy observer root.
+  const sidebarRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (dragWidth === null) return;
@@ -393,7 +465,7 @@ export function DevkitClient() {
   };
 
   return (
-    <main aria-label="digichat devkit" className="flex h-full min-h-0">
+    <main aria-label="digichat devkit" data-theme="light" className="flex h-full min-h-0">
       {error ? (
         <p role="alert" className="p-4 text-sm text-destructive">
           Failed to load configs: {error}
@@ -408,6 +480,7 @@ export function DevkitClient() {
             className="shrink-0 overflow-hidden transition-[width] duration-200"
           >
             <div
+              ref={sidebarRef}
               style={{ width: sidebarWidth }}
               className="flex h-full flex-col gap-3 overflow-y-auto p-3"
             >
@@ -443,36 +516,13 @@ export function DevkitClient() {
                     + new
                   </button>
                 </div>
-                <select
-                  id="devkit-deployment"
-                  aria-label="Deployments"
-                  value={selectedId ?? ""}
+                <DevkitDeploymentSelect
+                  files={files}
+                  envs={envs}
+                  selectedId={selectedId}
+                  onSelect={selectEntry}
                   disabled={saving}
-                  onChange={(e) => selectEntry(e.target.value || null)}
-                  className="w-full rounded-md border bg-background px-2 py-1.5 font-mono text-xs"
-                >
-                  {selectedId === null ? <option value="">Select a deployment…</option> : null}
-                  {files.length > 0 ? (
-                    <optgroup label={`Local files (${files.length})`}>
-                      {files.map((e) => (
-                        <option key={e.id} value={e.id}>
-                          {e.ok ? "●" : "○"} {e.label}
-                          {e.ok ? "" : " (invalid)"}
-                        </option>
-                      ))}
-                    </optgroup>
-                  ) : null}
-                  {envs.length > 0 ? (
-                    <optgroup label={`Environment tenants (${envs.length})`}>
-                      {envs.map((e) => (
-                        <option key={e.id} value={e.id}>
-                          {e.ok ? "●" : "○"} {e.label}
-                          {e.ok ? "" : " (invalid)"}
-                        </option>
-                      ))}
-                    </optgroup>
-                  ) : null}
-                </select>
+                />
               </div>
 
               {selected === null && !draft ? (
@@ -546,6 +596,7 @@ export function DevkitClient() {
                         key={draft.entryId ?? "new"}
                         draft={draft}
                         commit={commit}
+                        scrollRoot={sidebarRef}
                       />
                     </fieldset>
                   ) : selected?.deployment ? (

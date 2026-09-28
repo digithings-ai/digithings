@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useId, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { THREAD_SKINS } from "@digithings/ui/chat/skins";
 import {
   Button,
@@ -9,6 +9,9 @@ import {
   CardContent,
   CardHeader,
   CardTitle,
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
   Field,
   IconButton,
   Input,
@@ -47,21 +50,44 @@ import {
 /** Commit one text edit into the draft; returns whether it applied. */
 export type EditorsCommit = (edit: TextEdit) => boolean;
 
-function Section({
-  title,
-  children,
-  defaultOpen,
-}: {
-  title: string;
-  children: React.ReactNode;
-  defaultOpen?: boolean;
-}) {
-  return (
-    <details className="rounded-lg border" open={defaultOpen}>
-      <summary className="px-2 py-1.5 text-xs font-semibold">{title}</summary>
-      <div className="flex flex-col gap-2 border-t p-2">{children}</div>
-    </details>
-  );
+/**
+ * Spec §2 regrouping map (titles verbatim): the 3 groups are the only
+ * collapsible level; the 8 sections render inside their group as
+ * always-expanded subgroups, each exactly once.
+ */
+const GROUPS = [
+  { id: "basics", label: "Basics", sections: ["Identity", "Features", "Models"] },
+  { id: "appearance", label: "Appearance", sections: ["Appearance"] },
+  { id: "advanced", label: "Advanced", sections: ["Backend", "Tools", "MCP servers", "Gate"] },
+] as const;
+
+type SectionTitle = (typeof GROUPS)[number]["sections"][number];
+
+/** Stable anchor id per subgroup; nav targets the 3 group ids directly. */
+function sectionAnchorId(title: SectionTitle): string {
+  return `devkit-section-${title.toLowerCase().replace(/[^a-z0-9]+/g, "-")}`;
+}
+
+/**
+ * Scroll-spy pick (spec §1): the foremost anchor at/above the active band
+ * wins — the nearest crossed anchor (greatest top still <= 0). When no
+ * anchor has crossed yet (top of the list), the foremost entry below the
+ * line wins. Empty → null (the observer then keeps the current group).
+ */
+export function visibleGroupFromEntries(
+  entries: Array<{ id: string; top: number }>,
+): string | null {
+  if (entries.length === 0) return null;
+  let above: { id: string; top: number } | null = null;
+  let below: { id: string; top: number } | null = null;
+  for (const entry of entries) {
+    if (entry.top <= 0) {
+      if (above === null || entry.top > above.top) above = entry;
+    } else if (below === null || entry.top < below.top) {
+      below = entry;
+    }
+  }
+  return (above ?? below)?.id ?? null;
 }
 
 export function TextRow({
@@ -473,9 +499,12 @@ const BACKEND_FIELDS: Record<string, Array<{ key: string; label: string }>> = {
 export function DevkitEditors({
   draft,
   commit,
+  scrollRoot,
 }: {
   draft: EntryDraft;
   commit: EditorsCommit;
+  /** Sidebar scroll container: the scroll-spy observer root (fallback null). */
+  scrollRoot?: React.RefObject<HTMLElement | null>;
 }) {
   const scope = draft.scope;
   const dep = draft.parsed;
@@ -580,9 +609,64 @@ export function DevkitEditors({
     return [{ label: "featured", options: featured }];
   })();
 
-  return (
-    <div className="flex flex-col gap-2">
-      <Section title="Identity" defaultOpen>
+  // Group shell (spec §1–§2): single-open disclosure over the three
+  // groups, sticky scroll-spy nav, one observer that opens but never closes.
+  const [openGroup, setOpenGroup] = useState<string | null>("basics");
+  const anchorsRef = useRef(new Map<string, HTMLElement>());
+  const latestTopsRef = useRef(new Map<string, number>());
+
+  useEffect(() => {
+    const targets = GROUPS.map((g) => anchorsRef.current.get(g.id)).filter(
+      (el): el is HTMLElement => el != null,
+    );
+    if (targets.length === 0 || typeof IntersectionObserver === "undefined") return;
+    const rootEl = scrollRoot?.current ?? null;
+    const rootTop = () => rootEl?.getBoundingClientRect().top ?? 0;
+    const observer = new IntersectionObserver(
+      (entries) => {
+        for (const entry of entries) {
+          latestTopsRef.current.set(
+            (entry.target as HTMLElement).id,
+            entry.boundingClientRect.top - rootTop(),
+          );
+        }
+        const visible = visibleGroupFromEntries(
+          GROUPS.map((g) => ({
+            id: g.id,
+            top: latestTopsRef.current.get(g.id) ?? Number.POSITIVE_INFINITY,
+          })),
+        );
+        // The observer may change which single group is open but never
+        // collapses: a manual close persists until scroll crosses into a
+        // different group.
+        if (visible !== null) setOpenGroup(visible);
+      },
+      {
+        root: rootEl,
+        rootMargin: "-20% 0px -65% 0px",
+        threshold: 0,
+      },
+    );
+    targets.forEach((t) => observer.observe(t));
+    return () => observer.disconnect();
+  }, [scrollRoot]);
+
+  const scrollToGroup = (id: string) => {
+    setOpenGroup(id);
+    const reduce =
+      typeof window !== "undefined" &&
+      typeof window.matchMedia === "function" &&
+      window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    anchorsRef.current
+      .get(id)
+      ?.scrollIntoView({ behavior: reduce ? "auto" : "smooth", block: "start" });
+  };
+
+  const sectionBody = (title: SectionTitle): React.ReactNode => {
+    switch (title) {
+      case "Identity":
+        return (
+          <>
         {draft.entryId === null ? (
           <TextRow
             label="slug (lowercase letters, digits, hyphens)"
@@ -617,9 +701,11 @@ export function DevkitEditors({
             )
           }
         />
-      </Section>
-
-      <Section title="Backend">
+          </>
+        );
+      case "Backend":
+        return (
+          <>
         <SelectRow
           label="backend type"
           value={backendType}
@@ -648,9 +734,11 @@ export function DevkitEditors({
           options={["anonymous", "session"]}
           onCommit={(v) => scalar(["auth"], v)}
         />
-      </Section>
-
-      <Section title="Appearance">
+          </>
+        );
+      case "Appearance":
+        return (
+          <>
         <SelectRow
           label="skin"
           value={chrome?.skin ?? "digichat"}
@@ -756,9 +844,11 @@ export function DevkitEditors({
           options={["right", "left"]}
           onCommit={(v) => scalar(["chrome", "transcript", "userAlign"], v)}
         />
-      </Section>
-
-      <Section title="Features">
+          </>
+        );
+      case "Features":
+        return (
+          <>
         <BoolRow label="attachments" checked={features?.attachments ?? true} onCommit={(v) => commit(setBoolean(draft.text, scope, ["features", "attachments"], v))} />
         <BoolRow label="dictation" checked={features?.dictation ?? false} onCommit={(v) => commit(setBoolean(draft.text, scope, ["features", "dictation"], v))} />
         <BoolRow label="speech" checked={features?.speech ?? false} onCommit={(v) => commit(setBoolean(draft.text, scope, ["features", "speech"], v))} />
@@ -787,9 +877,11 @@ export function DevkitEditors({
           options={["off", "silent", "visible"]}
           onCommit={(v) => scalar(["features", "pageContext"], v)}
         />
-      </Section>
-
-      <Section title="Models">
+          </>
+        );
+      case "Models":
+        return (
+          <>
         <TextRow
           label="default model"
           value={dep?.models.default}
@@ -803,9 +895,11 @@ export function DevkitEditors({
           onCommit={(lines) => commit(setStringList(draft.text, scope, ["models", "available"], lines))}
         />
         <TriRow label="model picker" value={dep?.models.allowPicker} onCommit={tri(["models", "allowPicker"])} />
-      </Section>
-
-      <Section title="Tools">
+          </>
+        );
+      case "Tools":
+        return (
+          <>
         <BoolRow
           label="allow user toggle"
           checked={dep?.tools?.allowUserToggle ?? true}
@@ -889,9 +983,11 @@ export function DevkitEditors({
             </Button>
           </span>
         </div>
-      </Section>
-
-      <Section title="MCP servers">
+          </>
+        );
+      case "MCP servers":
+        return (
+          <>
         <BoolRow
           label="allow user servers"
           checked={dep?.mcp?.allowUserServers ?? false}
@@ -1009,9 +1105,11 @@ export function DevkitEditors({
             Add
           </Button>
         </div>
-      </Section>
-
-      <Section title="Gate">
+          </>
+        );
+      case "Gate":
+        return (
+          <>
         <SelectRow
           label="mode"
           value={dep?.gate.mode ?? "ungated"}
@@ -1068,7 +1166,79 @@ export function DevkitEditors({
             )
           }
         />
-      </Section>
+          </>
+        );
+      default:
+        return null;
+    }
+  };
+
+  return (
+    <div className="flex flex-col gap-2">
+      <nav
+        aria-label="Editor groups"
+        className="sticky top-0 z-10 border-b border-hair bg-surface"
+      >
+        {GROUPS.map((group) => {
+          const active = openGroup === group.id;
+          return (
+            <button
+              key={group.id}
+              type="button"
+              onClick={() => scrollToGroup(group.id)}
+              aria-current={active ? "true" : undefined}
+              className={`devkit-navlink w-full border-l-2 px-2 py-1.5 text-left font-mono text-xs transition-colors motion-reduce:transition-none ${
+                active
+                  ? "border-accent bg-accent/10 text-accent"
+                  : "border-transparent text-ink-mute hover:text-ink"
+              }`}
+            >
+              {group.label}
+            </button>
+          );
+        })}
+      </nav>
+      {GROUPS.map((group) => (
+        <section
+          key={group.id}
+          id={group.id}
+          ref={(el) => {
+            if (el) anchorsRef.current.set(group.id, el);
+            else anchorsRef.current.delete(group.id);
+          }}
+          className="scroll-mt-28"
+        >
+          <Collapsible
+            open={openGroup === group.id}
+            onOpenChange={(isOpen) => setOpenGroup(isOpen ? group.id : null)}
+            className="group rounded-lg border"
+          >
+            <CollapsibleTrigger className="flex w-full items-center justify-between gap-2 px-2 py-1.5 font-mono text-xs font-semibold transition-colors hover:text-accent group-data-open:text-accent motion-reduce:transition-none">
+              <span>{group.label}</span>
+              <span
+                aria-hidden="true"
+                className="size-2 shrink-0 rotate-45 border-r-[1.6px] border-b-[1.6px] border-current transition-transform duration-300 group-data-open:-rotate-135 motion-reduce:transition-none"
+              />
+            </CollapsibleTrigger>
+            <CollapsibleContent className="overflow-hidden transition-[height] duration-300 ease-out motion-reduce:transition-none data-open:h-[var(--collapsible-panel-height)] data-starting-style:h-0 data-ending-style:h-0 data-closed:h-0">
+              <div className="flex flex-col gap-2 border-t p-2">
+                {group.sections.map((title) => (
+                  <div
+                    key={title}
+                    id={sectionAnchorId(title)}
+                    className="flex scroll-mt-28 flex-col gap-2"
+                  >
+                    <h4 className="py-0.5 font-mono text-[11px] font-semibold tracking-wide text-muted-foreground uppercase">
+                      {title}
+                    </h4>
+                    {sectionBody(title)}
+                  </div>
+                ))}
+              </div>
+            </CollapsibleContent>
+          </Collapsible>
+        </section>
+      ))}
     </div>
   );
 }
