@@ -31,10 +31,10 @@
  *     over the second;
  *   - the second side's steps then drive the camera as well as the glow.
  *
- * The camera is deliberately only on the LAST side. It can only ever zoom IN
- * (one step is the whole diagram, each later step is a subset of it), so a walk
- * can never zoom in and then have to pull back out — which is what made the
- * earlier version read as empty space and clipping.
+ * The camera follows whichever side is active and can only ever zoom IN on
+ * a step's lit boxes (a step lighting the whole diagram computes ~1 and
+ * switches off), so a walk never zooms in and then has to pull back out —
+ * which is what made the earlier version read as empty space and clipping.
  *
  * HOW IT KNOWS WHERE ANYTHING IS. It does not. mermaid's layout is its own, so
  * the tour measures the rendered SVG after the fact: each service is emitted as
@@ -559,17 +559,17 @@ export function ArchitectureTour({
 
   useEffect(() => {
     const stage = stageRef.current;
-    // The camera is only ever on the LAST side: the first side is walked with the
-    // glow alone, so the swipe is the moment the page starts moving. A camera on
-    // a walk whose sets grow from one box to all of them could only zoom in and
-    // then have to pull back out, which is what read as broken.
-    const camSide = sides.length - 1;
+    // The camera follows the active side, so the provider walk gets the
+    // guided zoom on its focused steps as well as the morph. Steps that
+    // light the whole diagram compute a zoom of ~1 and switch off
+    // (k < 1.02 below), which is what keeps a walk from zooming in and
+    // then having to pull back out.
     cameraRefs.current.forEach((camera, si) => {
       if (!camera) return;
       const off = (): void => {
         camera.style.transform = "";
       };
-      if (mode !== "camera" || si !== camSide || activeSide !== camSide || activeIds.length === 0) {
+      if (mode !== "camera" || si !== activeSide || activeIds.length === 0) {
         off();
         return;
       }
