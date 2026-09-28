@@ -76,18 +76,22 @@ const PREFS_DEPS = {
  * Draft-driven preview: project the given (secret-stripped) deployment through
  * the same pure resolver the product route uses, then render its skin on the
  * dev BFF transport. The caller owns saved/draft knowledge — `deployment` is
- * already the last-valid draft state and `dirty` only toggles the unsaved dot.
- * Mounted with a caller-chosen `key` (entry id + skin/theme) so switching
- * deployments — or changing skin/theme in the draft — remounts cleanly.
+ * already the last-valid draft state, `dirty` only toggles the unsaved dot,
+ * and `issues` mirrors the same array the sidebar list renders (the bar
+ * unmounts while valid). Mounted with a caller-chosen `key` (entry id +
+ * skin/theme) so switching deployments — or changing skin/theme in the
+ * draft — remounts cleanly.
  */
 export function DevkitPreview({
   entryId,
   deployment,
   dirty = false,
+  issues,
 }: {
   entryId: string;
   deployment: DigichatDeployment;
   dirty?: boolean;
+  issues: string[];
 }) {
   const clientConfig = useMemo(
     () =>
@@ -103,9 +107,11 @@ export function DevkitPreview({
   return (
     <DevkitPreviewInner
       key={entryId}
+      slug={deployment.slug}
       skin={skin}
       theme={theme}
       dirty={dirty}
+      issues={issues}
       onToggleTheme={() => setTheme((t) => (t === "dark" ? "light" : "dark"))}
       clientConfig={clientConfig}
       sessionKey={`devkit-${entryId}`}
@@ -114,16 +120,20 @@ export function DevkitPreview({
 }
 
 function DevkitPreviewInner({
+  slug,
   skin,
   theme,
   dirty,
+  issues,
   onToggleTheme,
   clientConfig,
   sessionKey,
 }: {
+  slug: string;
   skin: ThreadSkin;
   theme: "dark" | "light";
   dirty: boolean;
+  issues: string[];
   onToggleTheme: () => void;
   clientConfig: ReturnType<typeof resolveRouteClientConfig>;
   sessionKey: string;
@@ -156,7 +166,7 @@ function DevkitPreviewInner({
 
   return (
     <AssistantRuntimeProvider runtime={runtime}>
-      <div className={cn("flex h-full flex-col", theme === "dark" && "dark")}>
+      <div data-preview-slug={slug} className={cn("flex h-full flex-col", theme === "dark" && "dark")}>
         <div className="flex shrink-0 items-center gap-2 border-b px-3 py-1.5 text-xs text-muted-foreground">
           {dirty ? (
             <span
@@ -166,7 +176,7 @@ function DevkitPreviewInner({
             />
           ) : null}
           <span className="font-mono">
-            {skin} · {theme}
+            {slug} · {skin} · {theme}
             {clientConfig.models.default
               ? ` · ${clientConfig.models.default}`
               : " · no default model"}
@@ -179,6 +189,15 @@ function DevkitPreviewInner({
             {theme === "dark" ? "light" : "dark"}
           </button>
         </div>
+        {issues.length > 0 ? (
+          <div
+            role="alert"
+            data-testid="devkit-preview-invalid-bar"
+            className="shrink-0 border-b border-destructive/50 px-3 py-1.5 font-mono text-[11px] text-destructive"
+          >
+            {issues.join(" ")}
+          </div>
+        ) : null}
         <div className="relative flex min-h-0 flex-1 flex-col bg-background text-foreground">
           <StockChatPrefsHost value={prefsApi} panes={panes}>
             <SkinRuntimeProvider value={SKIN_RUNTIME}>
