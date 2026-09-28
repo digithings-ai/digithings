@@ -206,6 +206,44 @@ Responsive behavior collapses through one shared breakpoint (`760px`) for most m
 
 **The Crop-Never-Break Rule.** Product screenshots inside a `ProductFrame` scale down to fit their container (`Math.min(1, containerWidth / artboardWidth)`) but never scale up past their authored size — an undersized container crops via `overflow: hidden` rather than letting the artwork reflow or blow out its box.
 
+## Document grammar (public pages)
+
+The public sites are documents, not posters: every page is one framed column, a page title, then a stack of hairline-separated sections. This is the opencode-informed language — no eyebrow kickers, no display hero, no alternating bands — and it is assembled from six utility-only parts (they emit no CSS class of their own; every value comes from the tokens).
+
+- **`DocumentFrame`** — the one bordered column. `max-w-[var(--frame-w)]` centred with a hairline `border-x`, and the side borders dropped below `1040px` so narrow viewports fill.
+- **`Section`** — separated by a hairline `border-top` (never a band or a background change), padded `py-[var(--page-step)] px-[var(--page-pad)]`, `first:border-t-0` so the frame's top edge stays clean. Optional `title` (the `--type-section` h2) and `lede`, then children.
+- **`PageTitle`** — the page's single `h1` at `--type-page-title` with an optional lede. No kicker, no `em` accent, no `PageHead` hero.
+- **`Prose`** — body measure capped at `--measure-prose` (72ch) with `--leading-prose` (1.8) and the inline rules (links, `<strong>` → medium ink, `[*]` list markers) applied as arbitrary variants, so a page never styles prose itself.
+- **`GlyphList` / `GlyphRow`** — the row grammar: a muted mono `[*]`, an optional `<strong>Label</strong>` in medium ink, then one unpunctuated clause. Borderless, 1rem rhythm. The ruled family (`RuledList`/`RuledRow`) stays for tabular term/definition content.
+- **`Figure`** — the `Fig N.` caption that numbers a stats block: the `<figure>` content plus a mono caption reading `Fig N — caption`, with `Fig N` in accent.
+
+**The Type Ladder.** `--type-hero` (`clamp(2rem, 4.5vw, 2.75rem)`) is reserved for a landing hero; every other surface uses `--type-page-title` (`clamp(1.5rem, 3vw, 2rem)`), `--type-section` (1.375rem), `--type-sub-label`/`--type-body` (1rem) and `--type-meta` (0.75rem with `--tracking-meta` 0.08em, uppercase for Fig captions and table headers only). The instrument-panel display clamp stays for the reference and dashboard surfaces, not for a public page.
+
+### Changelog rows (ReleaseRail)
+
+A release is one hairline row in a `180px 1fr` grid: the version, date and product pinned in a
+sticky aside (`sm:sticky sm:top-[5rem]`), the shipped title in the wide column, and its
+highlights as `[*]` rows in caller order. No cards, no scroll strip, and no tag chrome beyond
+the release tag itself; static, so a changelog reads without JavaScript.
+
+### Footer cells (FooterCells)
+
+The footer is a hairline table, not a link cloud: one cell per top-level destination at equal
+weight (`sm:grid-cols-2 lg:grid-cols-5`), each separated by the same 1px hairline the sections
+use, and a mono legal strip underneath carrying the copyright, the privacy notice and the
+sibling site. No column headings, no nested groups, no background change.
+
+### Docs frame (DocsLayout + DocsSearch)
+
+The docs shell is the framed column with a spine: the scroll-spied sidebar (a native `<details>`
+disclosure below 860px, so the nav never just vanishes), the content column, and — once the
+viewport clears 1200px — a narrower *on this page* rail, sticky at `--docs-nav-h` and built from
+the same `itemLink` renderer as the sidebar (2px inline-start border, `bg-accent-weak` when
+active). `DocsLayout` takes `nav`, `rail`, `railLabel` (default "on this page") and a `search`
+slot; the search is `DocsSearch` — the stock `SearchBar` wearing a `<Kbd>⌘K</Kbd>` hint — which
+filters the page's own headings on the client (no index, no dependency) and binds `⌘K`/`Ctrl-K`
+to focus. Print hides the sidebar and the rail and collapses back to a single column.
+
 ## Elevation & Depth
 
 **Flat by default; shadow means overlay; glow means alive.** The system does not use ambient elevation shadows on ordinary content. A card, a panel, a form field, a finance dashboard composite — all of them read depth from a single 1px hairline border and a flat surface fill, escalating only to the stronger `hairline-strong` border on hover. The dashboard states this as an explicit house rule: "FLAT — no glass morphism on content."

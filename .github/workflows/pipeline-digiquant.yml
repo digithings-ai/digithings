@@ -122,7 +122,7 @@ jobs:
     needs: [resolve, already-committed]
     if: needs.already-committed.outputs.skip != 'true'
     runs-on: ubuntu-latest
-    # 240 min — full-refresh worst case: 3 outer attempts x in-process LLM retry (#461).
+    # 240 min — full-refresh worst case: 2 outer attempts x in-process LLM retry (#461).
     timeout-minutes: 240
     env:
       REFRESH_SCOPE: ${{ needs.resolve.outputs.refresh_scope }}
@@ -276,7 +276,7 @@ jobs:
 
       - name: Run digiquant research pipeline
         id: run
-        # 3×70m attempts + 20m backoff. Under the 240m job so the outcome step still runs.
+        # 2×100m attempts + 5m backoff. Under the 240m job so the outcome step still runs.
         timeout-minutes: 230
         env:
           CORE_SUPABASE_URL: ${{ secrets.CORE_SUPABASE_URL }}
@@ -311,10 +311,10 @@ jobs:
           mkdir -p artifacts
           set -o pipefail
 
-          MAX_OUTER_ATTEMPTS=3
-          OUTER_BACKOFF=(0 300 900)
-          # Per-attempt cap so a hung attempt fails and attempts 2/3 can still run.
-          ATTEMPT_TIMEOUT=70m
+          MAX_OUTER_ATTEMPTS=2
+          OUTER_BACKOFF=(0 300)
+          # Per-attempt cap so a hung attempt fails and attempt 2 can still run.
+          ATTEMPT_TIMEOUT=100m
           attempt=1
           while : ; do
             sleep "${OUTER_BACKOFF[$((attempt-1))]}"

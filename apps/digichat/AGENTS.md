@@ -30,7 +30,7 @@ Before making any change to `apps/digichat/`:
 - [ ] Confirm browser **never** holds a digigraph JWT or `DIGIKEY_BFF_TOKEN` — all upstream auth is server-side only
 - [ ] Confirm `isAllowedServiceUrl()` is called on any user-supplied endpoint URL before fetching it (SSRF guard)
 - [ ] Confirm `AUTH_SECRET` / `NEXTAUTH_SECRET` never appears in client bundle or API responses
-- [ ] Confirm any new API route requires `requireDigiChatAuth()` unless it is explicitly a public endpoint (only `GET /api/health` is public)
+- [ ] Confirm any new API route requires `requireDigiChatAuth()` unless it is explicitly public or self-authenticating (public: `GET /api/health`, `GET /api/deploy/chrome`, `GET /api/embed/tenant-config`, dev-only `POST /api/baseline-chat`; self-authenticating: `POST /api/plan-proof` embed token, `/api/ecosystem/config` session, `GET /api/mcp/oauth/callback` OAuth state)
 - [ ] Confirm `DIGICHAT_AUTO_MIGRATE=1` behavior in `src/instrumentation.ts` is not bypassed for production
 
 ---
@@ -40,7 +40,7 @@ Before making any change to `apps/digichat/`:
 Beyond root `AGENTS.md`:
 
 - **BFF pattern is non-negotiable**: No digigraph URL, digikey token, or upstream service credential may ever reach the browser. All upstream calls go through Next.js Route Handlers.
-- **Auth on every route except health**: Every `src/app/api/` route handler must call `requireDigiChatAuth()`. `GET /api/health` is the only exception.
+- **Auth on every route except the documented few**: Every `src/app/api/` route handler must call `requireDigiChatAuth()`, except the intentionally public routes (`GET /api/health`, `GET /api/deploy/chrome`, `GET /api/embed/tenant-config`, dev-only `POST /api/baseline-chat`) and the self-authenticating ones (`POST /api/plan-proof` embed token, `/api/ecosystem/config` `auth()` session, `GET /api/mcp/oauth/callback` OAuth state cookie).
 - **SSRF guard on ecosystem endpoints**: Any user-supplied service URL must pass `isAllowedServiceUrl()` before being fetched. Never construct a fetch URL from raw user input.
 - **No raw Next.js version assumptions**: Next.js 16 App Router has breaking changes. Read `node_modules/next/dist/docs/` before writing route handlers, server actions, or middleware.
 - **Machine keys are bcrypt-hashed in Postgres**: `digi_live_…` API keys are stored hashed. Never store or log raw machine key material.

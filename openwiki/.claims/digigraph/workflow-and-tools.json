@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "pageVersion": "sha256:9b46b07efa0f51d366182003de0b0458f6d0242a477e8292100ffa6ea35e2af1",
+  "pageVersion": "sha256:a2b3c3e9c2f4148b71fcafad458c467b5a9614f4dcd7f637124f2029731b4350",
   "claims": [
     {
       "id": "claim_9b31e0592c0e46fea3e1ce1ae3bf988a",
@@ -18,15 +18,27 @@
     },
     {
       "id": "claim_f999e92572924c088d26be33d798c483",
-      "statement": "tool_policy computes the per-workflow allowlist consumed as ToolContext.allowed_tool_names and enforced at registry dispatch.",
+      "statement": "tool_policy computes the per-workflow allowlist via allowed_tool_names_for_workflow using most-specific-wins precedence (request, project, env), passes it through web-search opt-in and disabled-token subtraction, and serializes it to WorkflowState; the allowlist is consumed as ToolContext.allowed_tool_names and enforced at get_tools filtering and execute dispatch.",
       "evidence": [
         {
-          "resource": "repo://digigraph/src/digigraph/orchestration/registry.py#L71-L112",
-          "version": "repo-lines-v1:sha256:dd06d7db98b95da25f418e23bb9a5787e3bf7d46eed59588f7958f441139872c:eyJzZWxlY3RlZExpbmVDb3VudCI6NDIsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjRkZjk4YzAzZDAzNWVjNzIyYzAyNGIyYjVlNDA1YzMwYzg5NmJhZjEwZTMxMTdlOGNmZTcxMjkxNzY3Mjg4NmQiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjVkMjlmNDU4YzM4YTYxNTdhODA2MmEwNzdkYzNiYmQxZjk3Y2M3ZjY2MzZlZjAwZTU5Y2U0NzU2YmQ3Y2VmYWEiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjZjMWYwMmZkN2VjMWQ0NjJjMGNiODE4Yjk0OGZmZTRmNzE1YjJjMmM0MzI2MzBjMjMyZGZlMzRkNDI3NDNmYTkiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjE5MGVmNWNmNGNmYWQ1ODY2MzZhZWE0YmI3MmE4NjQxY2IzZDUwOTJjNGIzNjIxYTliMDc1YzY5YjRlNDVkZjMifQ"
+          "resource": "repo://digigraph/src/digigraph/graph/state.py#L22-L22",
+          "version": "repo-lines-v1:sha256:10796fcb39d784f1bc46f17ff1f8e557777bae3e61475070f94b0a2a73d11a09:eyJzZWxlY3RlZExpbmVDb3VudCI6MSwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiMTA3OTZmY2IzOWQ3ODRmMWJjNDZmMTdmZjFmOGU1NTc3NzdiYWUzZTYxNDc1MDcwZjk0YjBhMmE3M2QxMWEwOSIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiMTA3OTZmY2IzOWQ3ODRmMWJjNDZmMTdmZjFmOGU1NTc3NzdiYWUzZTYxNDc1MDcwZjk0YjBhMmE3M2QxMWEwOSIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiMjBlZWMwMjJhM2U5ZTdjZjJjYTc0NWFiZWM5NGRlNmE4ZDI5OGRiMjdjNjQwZThkNmRkODdkZGMwY2M4ZGVhYiIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiY2UyMjQ5ZTlhNzc1NjI5MTNiMGJmNTFlOTk2MWQ2NmFiZWY3N2JmODA1ZTk4NTE2OTgzNTQzYTFjYTM4NjE1ZiJ9"
         },
         {
-          "resource": "repo://digigraph/src/digigraph/tool_policy.py#L39-L102",
-          "version": "repo-lines-v1:sha256:b59db0297d5b88a0953ea123675657c115c3dae05235aa599a3790ec2120509f:eyJzZWxlY3RlZExpbmVDb3VudCI6NjQsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImNiOGM1MDZhMWE3NGJhYzBmM2FlNjhmYjY2ODAzYzdhNmVkY2ZiMWVmY2U1MjRhODUwOTk5MGJmNjk3MjY5ZTMiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjZiYTg5ZTE3MTM2M2U0OTQyMzkzYjk0NzRhMGEyZTY4ZDA5N2Y2ZDAyYzg1YWIxM2U2NjIzMjkzNmMxNWIwNjQiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjM3NTRhYjU2NGE3YmFhN2Y1ZjNjMmMwOTRiNGMxZTcwN2FiOGZhNzU0YThiOTc2Y2IxNWRhYjM2MzViNGY4ZjgiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImU5MDkwYzc5MzE2ZWIwNDY4Nzc1MGIyOWJmNmRkOGQ4MjdhM2RkN2MyYTgxYjhhYjQwNTUwNmQ5NTNjZTdiODEifQ"
+          "resource": "repo://digigraph/src/digigraph/orchestration/registry.py#L225-L248",
+          "version": "repo-lines-v1:sha256:84350f9e013dce8cd7459fcac3be77fd54b1232b45955437f40aafc65de11ea8:eyJzZWxlY3RlZExpbmVDb3VudCI6MjQsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjhiZTJmYjY4MjE2MjIyNmQyYzlhYjk5N2ExMTAxMGY4NDVmYjk5N2Q5YTBmNGM0YTZhZDBjMTU2NDU4NmI5OGEiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImU2YjA0NDkxNDY5NzIyZTgzNjNhOTRlNDA0NDUzOGUwMTNhMmEyMTdlMzZiMWU1NjhiYTYwYWNiN2I0YzhmMmUiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6Ijk2ZjYzYWRiZDlkYjllZDI5Zjc2YWQxOTczNzkwNzYzMzBiZmE3YzFjNDQ1Zjc3OTIyNWUxYmIxMDQzMTVjOTkiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImE2Mjg5MmFmYWFiOThhY2RjY2Y5YzgzZTIxZWZkYmRmMTNjNmNkNGQ1NThkZDI2YjQ2MTVlOWJiODZlOGRlNTkifQ"
+        },
+        {
+          "resource": "repo://digigraph/src/digigraph/orchestration/registry.py#L71-L112",
+          "version": "repo-lines-v1:sha256:7d76f04a27ab9b112e485d291d45a3965c5d289bc4d3c9336d5f9e0ea48cfb11:eyJzZWxlY3RlZExpbmVDb3VudCI6NDIsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjRkZjk4YzAzZDAzNWVjNzIyYzAyNGIyYjVlNDA1YzMwYzg5NmJhZjEwZTMxMTdlOGNmZTcxMjkxNzY3Mjg4NmQiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjAxYmE0NzE5YzgwYjZmZTkxMWIwOTFhN2MwNTEyNGI2NGVlZWNlOTY0ZTA5YzA1OGVmOGY5ODA1ZGFjYTU0NmIiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjZjMWYwMmZkN2VjMWQ0NjJjMGNiODE4Yjk0OGZmZTRmNzE1YjJjMmM0MzI2MzBjMjMyZGZlMzRkNDI3NDNmYTkiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6Ijc2M2MxNGMxZTU1M2QwNzhiNDAzYTM3MjhiOWUwM2RiMWJjNmY4M2ViNjYxZTRiMmMwOGEyODhhNTM3MzBjYTEifQ"
+        },
+        {
+          "resource": "repo://digigraph/src/digigraph/tool_policy.py#L145-L185",
+          "version": "repo-lines-v1:sha256:7551d6874000a55e9b2760b505036688c4aeda58d0660dc58b3a2fe69c1d987f:eyJzZWxlY3RlZExpbmVDb3VudCI6NDEsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImNiOGM1MDZhMWE3NGJhYzBmM2FlNjhmYjY2ODAzYzdhNmVkY2ZiMWVmY2U1MjRhODUwOTk5MGJmNjk3MjY5ZTMiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImZhMTFjMDU2N2QwYTVmOWU5YjEzNWY2NWNkMjUzNzJkZmQ2Mjg3NzVmN2MxZWQyNTNmOGJhZDQyZGQyZDY2NjkiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImQ3MDE0OWUwNjlhZDY3ZWNjZjQ3MzY0NmZmMWM3NTAwNTBkMzI5ZDExMDAxOGRjNTc2Njg3OGVhZmExZDYwN2QiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjFlYjliNGI4NTQ4YWZiODFkNTkyMmE2NzA0YzRiMWMyMTkwYmIzZjhhNTE0ZDljNTVjNGE1NWU3M2NiZGIzOWYifQ"
+        },
+        {
+          "resource": "repo://digigraph/src/digigraph/workflow.py#L349-L352",
+          "version": "repo-lines-v1:sha256:571dbac34a2ab3c13f42a9e74f03731129f4c21cee2f7a48bd7623256c51a05a:eyJzZWxlY3RlZExpbmVDb3VudCI6NCwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiODQ1N2ZkZmQ4M2EyZjMyMWY2NWRiMzFlYjZhYWViOThmMDZhNmYyYmY5OTM1YmNmZGZkOTY5ZjNiZWVkOWFjYiIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiMmMyNTZiZmI1YjVjY2QzY2QyZjlhYzUxZGNjMTI1YTdkN2Q2NjcxZTZkNWVlMzFiNjEyZjA4ZGIwZjNiOWZhZCIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiY2QwYmI1MTQ3MThkMDk3MDRjM2ZiODg1ZGVhMjRmY2NjYjc0YzQ4ODUzODU3M2ZmODEyYTQwZGVhMGIzYTZkMCIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiYzY5ODg1NzM4N2UyNDI1OTc3OTkxNTMzZDRlNDRlNjFkZDc4ODcyOTBlM2RkMjFiZGY3YTU0OTU1ZmU4MTI2NiJ9"
         }
       ]
     },
@@ -49,10 +61,62 @@
           "version": "repo-lines-v1:sha256:270739bd073b119c84265ac193d80a47bc71eef6301321a4cfe8eea8da2dbee2:eyJzZWxlY3RlZExpbmVDb3VudCI6MTk2LCJmaXJzdFNlbGVjdGVkTGluZUhhc2giOiI0NTVhZjZlOTI4MjNkMGJhYWZhNGRmN2FhNjY2OTRmZmI4ZTVkYTViOTU5MWE2NzIyYWE3ZWZhYjY0ZjViODMwIiwibGFzdFNlbGVjdGVkTGluZUhhc2giOiJlNWEwMDI2ZTc5YTAyZGVhOTg1ZjBkNGJkNDZjNWE5YTQ0ZjU1YTE4NjE3ZmQ4MzFjM2VmYTQzMzZhODY0ZmQ3IiwicHJlY2VkaW5nQ29udGV4dExpbmVDb3VudCI6MywicHJlY2VkaW5nQ29udGV4dEhhc2giOiJlNzViNWYxZGUxZmRiYTBlNjQ0ODQ0ZWM3MmIzNDQzNzgyYzNhMDU0Y2ZhMDAwODI4OGE0NDVmZGY1YTIxOWIxIiwiZm9sbG93aW5nQ29udGV4dExpbmVDb3VudCI6MywiZm9sbG93aW5nQ29udGV4dEhhc2giOiI3ZGJmYWZlMDZkZGI2MzQzMzFjOTAyODliZWYyNmI5Y2Y5ZGNjMjFjZjk5NzcxZjY2YzI0OWI0ZTNkNjBjOTMxIn0"
         }
       ]
+    },
+    {
+      "id": "claim_437c6bcc4e224a31962d6f71517dbfbf",
+      "statement": "Web-search (web_search) is opt-in, matched across the native name and every MCP-proxied {server_id}_web_search form; opt-in can never escalate past the operator/project allowlist, and the default-off path strips both forms so the model cannot reach the public web through either path.",
+      "evidence": [
+        {
+          "resource": "repo://digigraph/src/digigraph/tool_policy.py#L12-L27",
+          "version": "repo-lines-v1:sha256:b72c0d8475c4a93a995399f6d728bb4512afda7e49020b33f6a79a4915d20948:eyJzZWxlY3RlZExpbmVDb3VudCI6MTYsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImFhM2Q2YjNjYWYwZmYwZjkyNmRjNzQ3MTI1Y2UxODc2YTU0ZjUyYTg4ODkyNWY2ZTBjMDg2ZmZjMDMwMDNjNmUiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjAxYmE0NzE5YzgwYjZmZTkxMWIwOTFhN2MwNTEyNGI2NGVlZWNlOTY0ZTA5YzA1OGVmOGY5ODA1ZGFjYTU0NmIiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjYzOGZhYjQ3OTc0NTg1YTVlMTU5OGNkZGY2N2YwMWY0N2FmODFiMjNkNGM0OWNjMjFjMDQ3MDA0MjI1YjEwMTUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjdkYmU5NWNkMTBiNDU5OTNlZTJjOWEwNjM0NTNmOTZmNGQ1Zjg0YjBhZjg1NTRkZDI4NzI4YmJlNGJkY2FhNjYifQ"
+        },
+        {
+          "resource": "repo://digigraph/src/digigraph/tool_policy.py#L81-L103",
+          "version": "repo-lines-v1:sha256:8a95277117c321b26b75a9f24d80dc43c56ef3d8aa64f0bcd76f0de7a65ed5e1:eyJzZWxlY3RlZExpbmVDb3VudCI6MjMsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImY4YTUxNmNiMGI1Njk1OThhZmNhZGM2MDcwMDMxOTEzY2RjMjE5OThjODdlMTIzZDZhMTZiNTFlNmJiYjA2YzYiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjdmZGVhMjEzMGNiYjQzZTY5NmVmOGZhMjgzYmE1ZTgwYTg0ZTI0YzIzNWRkMTRhZmZhMzdmNGY5ZGRiNjAwOGEiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6Ijc4YTBiMDIxZmRmMzM2ZWM5MzVjYWMyMmMyYWNkOWZjZGJjMjUxNjg1NzdhY2ZkM2E5ZmRiZmJjYjRlY2EzNWIiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjAxYWUxMmFhNjA1YmY0M2VkNGMyZmE1NTI0ZDlhOWU5MDI0YWUxNjk4MWNmZjk0MTJjZTcxYmY5ZmI1OTI2MjYifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_9f2591a33e4a415db47d07f9891ab0d6",
+      "statement": "apply_mcp_extra_tools is the single policy point for the MCP-extra allowlist union in research_node; it materializes a concrete allowlist for an otherwise-unrestricted session when a proxied {id}_web_search is discovered with no opt-in, because the MCP proxy has no handler-side availability check.",
+      "evidence": [
+        {
+          "resource": "repo://digigraph/src/digigraph/graph/research.py#L408-L413",
+          "version": "repo-lines-v1:sha256:e748a8b38f29006cf95bb18eaa66a9d641b1fd310892b98cd15599d265e7cb1e:eyJzZWxlY3RlZExpbmVDb3VudCI6NiwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiMWRiNDQ3YmVhNzBhNWVhMzUwZGNmYzUzNGM4OGVkYjgxYWUxNTk5MjY1ZWQyNjRlODdlNTg3ODgyYjhlN2YwZiIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiNTkwOWE1M2E2MThkMDI4ZTFkMzAwMGMwYTdhYmNlZWNiZTVmYjM3ZjRlNTExZWZlNDY2NDNmYWQ2ZTY2ODcyZiIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiN2RhOGFhZjA0OWM4NzE3M2U2MjUyM2QzNWU4MzdhYWZlMDJiOTM3M2Q5YTI1YWQ4NDA3Y2M1MzFlYzI1ZjdhOCIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiMjI1ZDFlZTU3MmZlMjVkOTU4MjJhYzExOGQyMjY4YmY2ZjRiZWE2YjUwYmRlODJkZmFmMGZjNjQ3NGNmMTM0MCJ9"
+        },
+        {
+          "resource": "repo://digigraph/src/digigraph/tool_policy.py#L106-L142",
+          "version": "repo-lines-v1:sha256:b26572f4d3508110f110f0bdc7afab8a4c602d0dffa8b992038aec40af42590c:eyJzZWxlY3RlZExpbmVDb3VudCI6MzcsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImY1YzA1MzQ3NzE0M2IyMjEwNWRmNmNhZjFiYTY5YjAyZmU5ZjNkMzViY2Y1N2VjZTYzYzhlYWM5OTI1M2ZiNGIiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQ4OTYwMGE3M2QyZTAyZjM1MmI5MGZlZjFkOGQ2MzgxMWJhNGE4ZWUwYzFiZWFhN2FlNDY1OGYzNmFhMmUxOTgiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjU3YTJhNjI4ZDVmY2I2MDZmM2U0Y2NjY2ExOWFhMTk0YzhjMDhlZDllZjg5OTE0Mjg3MDg3OGU5ZTUyYWQ5NzciLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjFhNjcwNWVkZWRkNGRlYzE1OTVhNDZlNDgyZjAwZWFiZjliYzRjNGE1ODNlYTZjNTBiMWE1OWYxMWJiOWE2ZTUifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_2add70dcbd4e4899af5a98d7abc7855d",
+      "statement": "require_tool_calls_for_workflow resolves tool_choice='required' as a floor, not an override: project agents.require_tool_calls and env DIGI_REQUIRE_TOOL_CALLS can only add the requirement, never be lowered by a request-level False.",
+      "evidence": [
+        {
+          "resource": "repo://digigraph/src/digigraph/tool_policy.py#L188-L215",
+          "version": "repo-lines-v1:sha256:2b4ad3fab60fe3fc563361239500b695cb22c876e281a95130acf31ea0a43289:eyJzZWxlY3RlZExpbmVDb3VudCI6MjgsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjYzMjI2M2YxYzVmMmRjZjgxMGQ1ZTU1MmViMWMzMjAwOWNlOGQzZjNmOGNmYmExM2NlZDE4YWQxMzBjNjhiNTkiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjVjMDQ0ZTNjNzJjM2YxYjM4ODAxYjg0NmJhOGE0NmU0YzZkMzk4YjBmY2QyYzVkZTY1OTg5ZDcxZDgzY2QwMzYiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImQ3MjIzMTA2ZmQ4NzQyYjcwZWEyMzNmOWRjMzU5ZjRiMDJiYmIwNjliNzI4M2VlZjc2MjQ5OTUxNmJkN2I5YzgiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImFlZjAyMTVhOTQzNWY4OTdmZWQ2ZmNiMTdmNTU1MjA5ZmQ1OGMxMDFkNWM4ZGUwMjEwYmQ1N2Y4NmQ1NWVmZDAifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_c98b0bc34b73454db5601db2bf8a4b95",
+      "statement": "backtest_node prefers digiquant POST /v1/jobs/backtest with status polling, falls back to SSE /backtest/start then synchronous POST /run_backtest, and catches transient client errors internally (returning an error dict rather than raising), so node-level LangGraph RetryPolicy on backtest/optimize is dead code.",
+      "evidence": [
+        {
+          "resource": "repo://digigraph/src/digigraph/graph/graph.py#L60-L72",
+          "version": "repo-lines-v1:sha256:bec6b8e6078502cd92da67afa743051317d07becd57a1cebb68f6dbf0dad9856:eyJzZWxlY3RlZExpbmVDb3VudCI6MTMsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjEyOGRmN2UzOWUwNGQwMzQwNDU1Y2Q4ZjFjZDc5ZGQ5YWQ2M2Y0NGFlODBjOTU4OTBjMWFjYmI3YzgyYWQ1MDciLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjU2NjUzOGM4N2QxOWFjYzBiYjZhY2IxOTY0MGEwYTljYmM3NmFmN2MyMDdkZDVhM2I2YTNmNTE2YmZhMTJiMDkiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImEyMjU3MzFjYjc0ZTlhN2NiNDljNGE5YzU3OTA5Y2Q3OWQ4ZGI0NmMzZTNhOWZmMWMyNGNmMDQ4NWY3N2E0ZDQiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjRiNjU1ZmRkNWQ0MjIzMTE0YTI2ZDcwNDljNzg2ZjFhOThjYTUwOTgwNDAzOGNhM2FlNzVhOWZhMzViMDEwZjMifQ"
+        },
+        {
+          "resource": "repo://digigraph/src/digigraph/graph/nodes.py#L142-L257",
+          "version": "repo-lines-v1:sha256:41b26bab0492369fb12b2db3597b5adf4675d97bd7d011d578710f022bddba19:eyJzZWxlY3RlZExpbmVDb3VudCI6MTE2LCJmaXJzdFNlbGVjdGVkTGluZUhhc2giOiIzZjk4MmY5MjJjOTFjMmFhNjA2NmZiN2FhZDA0YzNlMDRkNzQ1OTQyNjMzODVlOWQ0ZjAwZjgyNzE2NWZiMmYxIiwibGFzdFNlbGVjdGVkTGluZUhhc2giOiIyOGNkYTYzM2YyODg1Y2U2NDA3MDljMzZjZjUxYTYzY2UzZWQyYjI5Nzc5Y2Q0N2JhNzYxNmNjMTA3MzY2YzhjIiwicHJlY2VkaW5nQ29udGV4dExpbmVDb3VudCI6MywicHJlY2VkaW5nQ29udGV4dEhhc2giOiI5YjhjYmY0ZDVlODBiYmU1ZTQ4YzU3ZjRmY2I3MzU2NzNkNjA3NzQwYjQyYTdhYjZjOTIzNmUzNzJhOWY1M2UwIiwiZm9sbG93aW5nQ29udGV4dExpbmVDb3VudCI6MywiZm9sbG93aW5nQ29udGV4dEhhc2giOiI0YmJhZjYxNzIyOTViNWUxYWExNzIwYjUwOWVjNTk2YTBlZTg2YmU1NDYxNTQ2OTE5OGJkZThhMjQ0NWFkNDU1In0"
+        }
+      ]
     }
   ],
   "verification": {
     "by": "openwiki/0.5.0",
-    "at": "2026-09-09T14:37:17.158Z"
+    "at": "2026-09-23T13:25:31.068Z"
   }
 }

@@ -4,6 +4,7 @@ import {
   INVITE_MAX_ATTEMPTS,
   planFloorOutranks,
   redeemProductInvite,
+  resolveInviteBrand,
   sha256Hex,
   timingSafeEqualHex,
   type InviteCodeRow,
@@ -287,4 +288,59 @@ Deno.test("revoked or exhausted table codes do not match", async () => {
     store,
   });
   assertEquals(result.ok, false);
+});
+
+Deno.test("resolveInviteBrand returns marker and line for a branded active code", async () => {
+  const hash = await sha256Hex(PLAIN);
+  const { store } = memStore({
+    codes: [{
+      id: "code-brand",
+      code_hash: hash,
+      max_redemptions: 10,
+      redemption_count: 0,
+      revoked_at: null,
+      plan_floor: null,
+      brand_marker: "12X",
+      brand_line: "Purpose-built for the 12X desk",
+    }],
+  });
+  assertEquals(await resolveInviteBrand({ productKey: "fx_hub", code: PLAIN, store }), {
+    marker: "12X",
+    line: "Purpose-built for the 12X desk",
+  });
+});
+
+Deno.test("resolveInviteBrand returns null for unknown, revoked, and unbranded codes", async () => {
+  const hash = await sha256Hex(PLAIN);
+  const { store } = memStore({
+    codes: [
+      {
+        id: "code-revoked",
+        code_hash: hash,
+        max_redemptions: 10,
+        redemption_count: 0,
+        revoked_at: "2026-09-24T00:00:00Z",
+        plan_floor: null,
+        brand_marker: "12X",
+        brand_line: null,
+      },
+      {
+        id: "code-plain",
+        code_hash: await sha256Hex("unbranded-code-alpha"),
+        max_redemptions: 10,
+        redemption_count: 0,
+        revoked_at: null,
+        plan_floor: null,
+      },
+    ],
+  });
+  assertEquals(
+    await resolveInviteBrand({ productKey: "fx_hub", code: "totally-wrong-invite", store }),
+    null,
+  );
+  assertEquals(await resolveInviteBrand({ productKey: "fx_hub", code: PLAIN, store }), null);
+  assertEquals(
+    await resolveInviteBrand({ productKey: "fx_hub", code: "unbranded-code-alpha", store }),
+    null,
+  );
 });

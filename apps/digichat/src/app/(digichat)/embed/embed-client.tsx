@@ -24,17 +24,18 @@ import { ProductStockShell } from "@/components/stock/product-shell";
 import {
   DEFAULT_EMBED_CHAT_PREFS,
   EmbedChatPrefsProvider,
+  SkinCredit,
   catalogToolsFromClient,
   disabledCatalogIds,
   extraOffFromCatalog,
   type EmbedChatPrefs,
   type EmbedChatPrefsApi,
-} from "@/components/stock/embed-chat-prefs";
+} from "@digithings/ui/chat/stock";
 import { EmbedComposerMenu, type ComposerMenuKind } from "@/components/stock/embed-composer-menu";
 import { replaceMcpConfig, connectedMcpConfigs, mcpSessionOverlayHeaderValue } from "@/components/stock/embed-mcp-flow";
 import { useAui, useAuiEvent } from "@assistant-ui/react";
-import { clientConfigFromEmbedTenant } from "@/lib/deploy-config";
-import { skinOwnsPageChrome } from "@/lib/thread-skins";
+import { resolveRouteClientConfig } from "@/lib/route-client-config";
+import { skinOwnsPageChrome } from "@digithings/ui/chat/skins";
 import {
   useBYOKKey,
   type BYOKProvider,
@@ -366,7 +367,7 @@ function EmbedChat({
   const llmAccess = tenantCfg.llmAccess;
   const uiFlags = resolveEmbedUiFlags(tenantCfg);
   const stockClient = useMemo(
-    () => clientConfigFromEmbedTenant(tenantCfg),
+    () => resolveRouteClientConfig({ mode: "embed", tenant: tenantCfg }),
     [tenantCfg],
   );
   /** Deploy `features.pageContext` — off / silent / visible (default). */
@@ -1148,11 +1149,12 @@ function EmbedChat({
   );
 
 
-  /* At most one credit, and the footer wins — see resolveAttributionPlacement. */
+  /* Header credit parenthetical — see resolveAttributionPlacement. */
   const attributionAt = resolveAttributionPlacement({
     attribution: tenantCfg.attribution,
     headerTitle,
   });
+
   const footerAttribution = attributionAt === "footer";
   const headerAttribution = attributionAt === "header";
 
@@ -1181,16 +1183,13 @@ function EmbedChat({
     </header>
   ) : null;
 
+  /* The settle path (ProductStockShell + the skin's Thread) renders its own
+     credit inside the thread footer, so this slot is only used where there is
+     no Thread at all — the gate / paywall branch below. Passing it through
+     `ProductStockShell` as well double-rendered the credit on /embed (m2502). */
   const footerSlot = footerAttribution ? (
-    <p className="dc-attribution">
-      powered by digichat — a{" "}
-      <a href="https://digithings.ai" target="_blank" rel="noreferrer noopener">
-        digithings
-      </a>{" "}
-      product.
-    </p>
+    <SkinCredit attribution={footerAttribution} />
   ) : null;
-
   const turnCounterSlot = isTrialForm ? (
     <p
       className="dc-turn-counter relative z-10 mx-auto w-full max-w-2xl select-none pb-1 pt-1.5 pr-3 text-right text-xs font-normal leading-none tabular-nums tracking-wide text-muted-foreground"
@@ -1248,8 +1247,7 @@ function EmbedChat({
         runtime={chat.runtime}
         clientConfig={stockClient}
         persistence="none"
-          composerLayout="compact"
-          bootLabVariant={bootLab}
+        bootLabVariant={bootLab}
         sendGate={sendGate}
         sessionKey={gate.host}
         webSearchScope={webSearchScope}
@@ -1280,7 +1278,6 @@ function EmbedChat({
               </div>
             ) : null}
             {turnCounterSlot}
-            {footerSlot}
           </>
         }
       />

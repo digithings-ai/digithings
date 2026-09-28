@@ -76,6 +76,9 @@ CANON_SKIP_PREFIXES = (
     "apps/digichat/src/app/(baseline)/",
     # Catalog Thread skins — vendor livery, not product chrome. Do not restyle.
     "apps/digichat/src/components/assistant-ui/skins/",
+    # Same skins after the WS4 move into the shared package (old path above
+    # is now empty). Vendor livery travels with the files, not the directory.
+    "packages/ui/src/components/chat/skins/",
     # assistant-ui reference chatbot copies (Phase 1–2 stock gallery).
     "apps/reference/components/assistant-ui/",
     "apps/reference/components/chatbot/",

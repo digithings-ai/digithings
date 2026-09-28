@@ -381,6 +381,21 @@ three separate PRs.
 
 ---
 
+## Artifact + worktree placement
+
+- Task worktrees live at `.worktrees/task/N-slug/` — create them with
+  `make task ISSUE=N`, remove with `scripts/worktree_task.sh remove N`
+  after the PR merges. Never leave detached temp worktrees under
+  `/tmp/opencode/wt-*` behind; remove them once their branch is merged
+  or abandoned.
+- Screenshots are throwaway verification artifacts: save ad-hoc captures
+  to `/tmp/` or the session temp dir, never to the repo root, and delete
+  them when done. The only committed PNGs are the tracked fixtures under
+  `frontend/dashboard/fixtures/screenshots/` — do not add new ones without
+  a test that reads them.
+
+---
+
 ## Cursor Cloud specific instructions
 
 ### Runtime prerequisites (one-time on a fresh VM)
@@ -533,6 +548,6 @@ This repository has a generated `openwiki/` evidence index. It is optional just-
 - Treat source code and tests as authoritative. A brief's unknowns and review items are verification gaps, not automatic requirements.
 - Prefer the narrowest quiet validation that proves the changed behavior. Preserve complete failure output.
 
-The scheduled OpenWiki GitHub Actions workflow refreshes the repository wiki. Do not hand-edit generated OpenWiki pages unless explicitly asked; prefer updating source code/docs and letting OpenWiki regenerate.
+The OpenWiki GitHub Actions workflow runs weekly on Mondays at 08:00 UTC and remains workflow_dispatch-capable. Do not hand-edit generated OpenWiki pages unless explicitly asked; prefer updating source code/docs and letting OpenWiki regenerate.
 
 <!-- OPENWIKI:END -->

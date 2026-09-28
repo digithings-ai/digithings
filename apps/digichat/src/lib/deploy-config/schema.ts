@@ -10,7 +10,7 @@ import {
   DEFAULT_LANGUAGE_CODE,
   LANGUAGES,
 } from "@/lib/languages";
-import { THREAD_SKINS, DEFAULT_THREAD_SKIN } from "@/lib/thread-skins";
+import { THREAD_SKINS, DEFAULT_THREAD_SKIN } from "@digithings/ui/chat/skins";
 import {
   DEFAULT_THINKING_MODE,
   DEFAULT_VIEW_MODE,

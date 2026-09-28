@@ -21,7 +21,7 @@ import {
   languageLabel,
   tryResolveLanguageInput,
 } from "@/lib/languages";
-import type { EmbedChatPrefsApi } from "@/components/stock/embed-chat-prefs";
+import type { EmbedChatPrefsApi } from "@digithings/ui/chat/stock";
 import { connectedMcpConfigs } from "@/components/stock/embed-mcp-flow";
 
 export type SlashSubmitAction =

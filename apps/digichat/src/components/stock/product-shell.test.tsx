@@ -11,27 +11,34 @@ import {
   takePendingForceTool,
 } from "@/lib/pending-chat-headers";
 
-vi.mock("@/app/(baseline)/stock/thread.aui", () => ({
+vi.mock("@digithings/ui/chat/stock/thread", () => ({
   Thread: () => <div data-testid="stock-thread">stock thread</div>,
 }));
 
-vi.mock("@/components/assistant-ui/skins", () => ({
-  ThreadSkinView: ({
-    skin,
-    composerLayout,
-  }: {
-    skin: string;
-    composerLayout?: string;
-  }) => (
-    <div
-      data-testid="stock-thread"
-      data-skin={skin}
-      data-composer-layout={composerLayout ?? ""}
-    >
-      stock thread
-    </div>
-  ),
-}));
+vi.mock("@digithings/ui/chat/skins", async (importOriginal) => {
+  // The barrel now carries the registry alongside the dispatch (WS4) — keep
+  // the real registry exports and only stub the dispatch.
+  const actual =
+    await importOriginal<typeof import("@digithings/ui/chat/skins")>();
+  return {
+    ...actual,
+    ThreadSkinView: ({
+      skin,
+      composerLayout,
+    }: {
+      skin: string;
+      composerLayout?: string;
+    }) => (
+      <div
+        data-testid="stock-thread"
+        data-skin={skin}
+        data-composer-layout={composerLayout ?? ""}
+      >
+        stock thread
+      </div>
+    ),
+  };
+});
 
 vi.mock("@assistant-ui/react", async () => {
   const actual = await vi.importActual<typeof import("@assistant-ui/react")>(

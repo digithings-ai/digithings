@@ -1,4 +1,4 @@
-import "./chatbot.css";
+import "@digithings/ui/styles/chat-digichat.css";
 import { ChatbotThreadSpecimen } from "@/components/chatbot/chatbot-thread-specimen";
 import { ChatbotChromeSpecimen } from "@/components/chatbot/chatbot-chrome-specimen";
 import { CubeMatrixLegend } from "@/components/chatbot/cube-matrix-legend";

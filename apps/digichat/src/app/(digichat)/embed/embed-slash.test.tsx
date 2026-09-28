@@ -18,9 +18,14 @@ describe("embed stock chrome wiring", () => {
   });
 
   it("server page paints from the YAML install, not gated embed defaults", () => {
-    const pageSrc = readFileSync(join(__dirname, "page.tsx"), "utf8");
-    expect(pageSrc).toMatch(/resolveEmbedClientConfigForPaint/);
-    expect(pageSrc).not.toMatch(/resolveEmbedClientConfigFromParams/);
+    // Step 3: the paint logic moved to the shared embed route shell so
+    // /embed and /?mode=embed serve byte-identical HTML; pin it there.
+    const shellSrc = readFileSync(
+      join(__dirname, "../embed-route-shell.tsx"),
+      "utf8",
+    );
+    expect(shellSrc).toMatch(/resolveEmbedClientConfigForPaint/);
+    expect(shellSrc).not.toMatch(/resolveEmbedClientConfigFromParams/);
   });
 
   it("does not mount language / help / new-conversation chrome", () => {

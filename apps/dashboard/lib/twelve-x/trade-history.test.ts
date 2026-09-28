@@ -113,7 +113,7 @@ describe('assembleTradeHistory', () => {
     expect(rows[1].hasLevels).toBe(true);
   });
 
-  it('marks missing_rates, unscored, and level-less ideas honestly', () => {
+  it('marks missing_rates as no_data, unscored and level-less ideas honestly', () => {
     const rows: TradeHistoryRow[] = assembleTradeHistory(
       [
         idea({ run_date: '2026-07-20', rank: 1, trade_levels: {} }),
@@ -123,7 +123,9 @@ describe('assembleTradeHistory', () => {
     );
     const missing = rows.find((r) => r.runDate === '2026-07-20');
     const unscored = rows.find((r) => r.runDate === '2026-07-21');
+    // An ungradeable idea (missing_rates) is NOT live: kept out of the live book.
     expect(missing?.lifecycle).toBe('no_data');
+    expect(missing?.evalStatus).toBe('missing_rates');
     expect(missing?.directionalWin).toBeNull();
     expect(unscored?.lifecycle).toBe('unscored');
     expect(unscored?.entryBand).toBeNull();
@@ -132,7 +134,7 @@ describe('assembleTradeHistory', () => {
 });
 
 describe('displayableTradeHistory / tradeResult', () => {
-  it('keeps right/wrong/live and drops no_data and unscored', () => {
+  it('keeps right/wrong/live and drops unscored', () => {
     const rows = assembleTradeHistory(
       [
         idea({ run_date: '2026-07-24', rank: 1 }),
@@ -157,6 +159,7 @@ describe('displayableTradeHistory / tradeResult', () => {
       ],
     );
     const shown = displayableTradeHistory(rows);
+    // missing_rates is no_data, so the un-gradeable board is filtered out.
     expect(shown.map((r) => `${r.runDate}:${tradeResult(r)}`).sort()).toEqual([
       '2026-07-24:right',
       '2026-07-25:live',

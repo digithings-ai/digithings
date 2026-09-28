@@ -2,9 +2,16 @@ import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { beforeEach, describe, it, expect, vi } from 'vitest';
 import type { DashboardData } from '@/lib/types';
+import type { DashboardApiData } from '@/lib/api-types';
 
 const { useDashboardMock } = vi.hoisted(() => ({ useDashboardMock: vi.fn() }));
-const { useLiveBriefKpisMock } = vi.hoisted(() => ({ useLiveBriefKpisMock: vi.fn(() => null) }));
+const { useLiveBriefKpisMock } = vi.hoisted(() => ({
+  // Loosely typed: tests return null (overlay off) or a live-KPI object (overlay on).
+  useLiveBriefKpisMock: vi.fn() as unknown as {
+    (): unknown;
+    mockReturnValue: (v: unknown) => void;
+  },
+}));
 vi.mock('@/lib/dashboard-context', () => ({ useDashboard: () => useDashboardMock() }));
 vi.mock('@/lib/hooks/use-live-brief-kpis', () => ({
   useLiveBriefKpis: () => useLiveBriefKpisMock(),
@@ -76,6 +83,63 @@ function makeData(actions: Action[]): DashboardData {
   } as unknown as DashboardData;
 }
 
+/** Server payloads for the three specific routes the page consumes. */
+function makeApi(): DashboardApiData {
+  return {
+    portfolio: {
+      book_as_of: '2026-06-24',
+      nav_tip: {
+        date: '2026-06-24',
+        nav: 98.64,
+        contract: 'finalized_accounting',
+        invested_pct: 75,
+        cash_pct: 25,
+        day_return_pct: -0.69,
+      },
+      seam: { crosses_nav_seam: false, lag_days: null, lag_direction: null },
+      invested: { kpi_pct: 75, envelope_pct: 75, cash_pct: 25, definition: 'accounting_nav_tip' },
+      positions: [],
+    },
+    brief: {
+      book_as_of: '2026-06-24',
+      nav_tip: { date: '2026-06-24', nav: 98.64, contract: 'finalized_accounting' },
+      day_return_pct: -0.69,
+      since_inception_pct: -1.36,
+      since_inception_start_date: '2026-06-23',
+      overlay: { active: false, live_vs_mark_pct: 0, badge: 'persisted accounting' },
+      invested_pct: 75,
+      session_events: [],
+    },
+    performance: {
+      nav: { tip_date: '2026-06-24', base100_tip: 98.64, points: [] },
+      metrics: {
+        day_return_pct: -0.69,
+        since_inception_pct: -1.36,
+        excess_return_pct: null,
+        alpha_pct: null,
+        information_ratio: null,
+        beta: null,
+        overlap_days: 0,
+      },
+      benchmark: { ticker: 'SPY', aligned_start: null },
+      stale: { lag_days: null, lag_direction: null, metrics_as_of: null },
+      ssot: {
+        navContract: 'finalized_accounting',
+        navAsOf: '2026-06-24',
+        tipDayReturnPct: -0.69,
+        tipInvestedPct: 75,
+        tipCashPct: 25,
+        metricsAsOf: null,
+        metricsLagDays: null,
+        metricsLagging: false,
+        bookAsOf: '2026-06-24',
+        marksUnstamped: false,
+        investedDefinition: 'accounting_nav_tip',
+      },
+    },
+  };
+}
+
 function weekdayOverlap(
   count: number,
   startIso = '2026-05-04'
@@ -126,6 +190,7 @@ describe('Today (Overview) page', () => {
       data: makeData([{ ticker: 'NVDA', current_pct: 8, recommended_pct: 6, action: 'TRIM' }]),
       loading: false,
       error: null,
+      api: makeApi(),
     });
     const html = renderToStaticMarkup(createElement(OverviewPage));
     expect(html).toContain('Your update');
@@ -160,6 +225,7 @@ describe('Today (Overview) page', () => {
       data: makeData([{ ticker: 'SPY', current_pct: 50, recommended_pct: 50, action: 'HOLD' }]),
       loading: false,
       error: null,
+      api: makeApi(),
     });
     const html = renderToStaticMarkup(createElement(OverviewPage));
     expect(html).toContain('Holding the book');
@@ -167,13 +233,13 @@ describe('Today (Overview) page', () => {
   });
 
   it('keeps the localized regime accent, not a full-page wash', () => {
-    useDashboardMock.mockReturnValue({ data: makeData([]), loading: false, error: null });
+    useDashboardMock.mockReturnValue({ data: makeData([]), loading: false, error: null, api: makeApi() });
     const html = renderToStaticMarkup(createElement(OverviewPage));
     expect(html).not.toContain('inset_0_0_140px');
   });
 
   it('renders the populated brief as a section inside the app shell main', () => {
-    useDashboardMock.mockReturnValue({ data: makeData([]), loading: false, error: null });
+    useDashboardMock.mockReturnValue({ data: makeData([]), loading: false, error: null, api: makeApi() });
     const html = renderToStaticMarkup(createElement(OverviewPage));
     expect(html).toContain('data-testid="daily-brief-workspace"');
     expect(html).toContain('aria-label="Daily investment brief"');
@@ -201,6 +267,7 @@ describe('Today (Overview) page', () => {
       data: makeData([]),
       loading: false,
       error: null,
+      api: makeApi(),
     });
     const html = renderToStaticMarkup(createElement(OverviewPage));
     expect(html).toContain('live marks');
@@ -226,12 +293,33 @@ describe('Today (Overview) page', () => {
       invested_pct: 79,
       date: '2026-09-01',
       as_of_date: '2026-09-01',
-    };
+    } as unknown as DashboardData['server_portfolio_metrics'];
     data.position_history = [{ date: '2026-09-04', ticker: 'SPY', weight_pct: 40, category: null, thesis_id: null }];
     data.positions = [
       { ticker: 'SPY', name: 'SPY', weight_actual: 40.5, conviction: 2, metrics_as_of: null },
-    ];
-    useDashboardMock.mockReturnValue({ data, loading: false, error: null });
+    ] as unknown as DashboardData['positions'];
+    // Server-side SSOT chrome now comes from /performance — the lagging-metrics
+    // tip, the unstamped book, and the legacy-estimate contract all badge.
+    const api = makeApi();
+    api.brief.book_as_of = '2026-09-04';
+    api.brief.nav_tip = { date: '2026-09-04', nav: 99.4, contract: 'legacy_estimate' };
+    api.brief.invested_pct = 40.5;
+    api.performance.nav.tip_date = '2026-09-04';
+    api.performance.stale = { lag_days: 3, lag_direction: 'metrics lag', metrics_as_of: '2026-09-01' };
+    api.performance.ssot = {
+      navContract: 'legacy_estimate',
+      navAsOf: '2026-09-04',
+      tipDayReturnPct: null,
+      tipInvestedPct: 40.5,
+      tipCashPct: 59.5,
+      metricsAsOf: '2026-09-01',
+      metricsLagDays: 3,
+      metricsLagging: true,
+      bookAsOf: '2026-09-04',
+      marksUnstamped: true,
+      investedDefinition: 'accounting_nav_tip',
+    };
+    useDashboardMock.mockReturnValue({ data, loading: false, error: null, api });
     const html = renderToStaticMarkup(createElement(OverviewPage));
     expect(html).toContain('metrics lag');
     expect(html).toContain('marks unstamped');
@@ -251,7 +339,7 @@ describe('Today (Overview) page', () => {
       source: 'finalized_accounting',
     }));
     data.benchmarks = {
-      SPY: { history: series.map((p) => ({ date: p.date, price: p.price })) },
+      SPY: { current: series.at(-1)!.price, history: series.map((p) => ({ date: p.date, price: p.price })) },
     };
     useLiveBriefKpisMock.mockReturnValue({
       liveNav: 101.2,
@@ -269,7 +357,32 @@ describe('Today (Overview) page', () => {
       benchmarkTicker: 'SPY',
       bookNavDate: series.at(-1)!.date,
     });
-    useDashboardMock.mockReturnValue({ data, loading: false, error: null });
+    // Persisted scoreboard values now come from /performance — the server's
+    // modest alpha/IR must render (not em-dash) while the live 99.9/9.99 stays off.
+    const api = makeApi();
+    api.brief.nav_tip = {
+      date: series.at(-1)!.date,
+      nav: series.at(-1)!.nav,
+      contract: 'finalized_accounting',
+    };
+    api.brief.since_inception_start_date = series[0]!.date;
+    api.performance.nav.tip_date = series.at(-1)!.date;
+    api.performance.metrics = {
+      day_return_pct: 0.2,
+      since_inception_pct: 1.1,
+      excess_return_pct: 0.4,
+      alpha_pct: 0.1,
+      information_ratio: 0.2,
+      beta: 0.9,
+      overlap_days: MIN_OVERLAP_DAYS + 5,
+    };
+    api.performance.benchmark = { ticker: 'SPY', aligned_start: series[0]!.date };
+    api.performance.ssot = {
+      ...api.performance.ssot,
+      navAsOf: series.at(-1)!.date,
+      bookAsOf: series.at(-1)!.date,
+    };
+    useDashboardMock.mockReturnValue({ data, loading: false, error: null, api });
     const html = renderToStaticMarkup(createElement(OverviewPage));
     expect(html).not.toContain('live marks');
     expect(html).not.toContain('99.9');
@@ -317,7 +430,34 @@ describe('Today (Overview) page', () => {
         history: [...legacy, ...finalized].map((p) => ({ date: p.date, price: p.price })),
       },
     };
-    useDashboardMock.mockReturnValue({ data, loading: false, error: null });
+    // The seam-rebased excess now comes from /performance — the server's flat
+    // rebased day return must render instead of the cross-seam ≈ +22%.
+    const api = makeApi();
+    api.brief.nav_tip = {
+      date: finalized.at(-1)!.date,
+      nav: finalized.at(-1)!.nav,
+      contract: 'finalized_accounting',
+    };
+    api.brief.since_inception_start_date = finalized[0]!.date;
+    api.performance.nav.tip_date = finalized.at(-1)!.date;
+    api.performance.metrics = {
+      day_return_pct: 0.05,
+      since_inception_pct: 0.0,
+      excess_return_pct: 0.08,
+      alpha_pct: null,
+      information_ratio: null,
+      beta: null,
+      overlap_days: MIN_OVERLAP_DAYS + 4,
+    };
+    api.performance.benchmark = { ticker: 'SPY', aligned_start: finalized[0]!.date };
+    api.performance.ssot = {
+      ...api.performance.ssot,
+      navContract: 'finalized_accounting',
+      navAsOf: finalized.at(-1)!.date,
+      tipDayReturnPct: 0.05,
+      bookAsOf: finalized.at(-1)!.date,
+    };
+    useDashboardMock.mockReturnValue({ data, loading: false, error: null, api });
     const html = renderToStaticMarkup(createElement(OverviewPage));
 
     const crossSeamPct = (finalized.at(-1)!.nav / legacy[0]!.nav - 1) * 100;
@@ -367,7 +507,7 @@ describe('Today (Overview) page', () => {
       benchmarkTicker: 'SPY',
       bookNavDate: '2026-06-24',
     });
-    useDashboardMock.mockReturnValue({ data, loading: false, error: null });
+    useDashboardMock.mockReturnValue({ data, loading: false, error: null, api: makeApi() });
     const html = renderToStaticMarkup(createElement(OverviewPage));
     expect(html).toContain('live marks');
     expect(html).not.toContain('finalized accounting');

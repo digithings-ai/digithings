@@ -373,7 +373,10 @@ export type FxLevelProvenance =
   | 'pmt_bank_trade'
   | 'pmt_seasonality_target'
   | 'pmt_position_cluster'
-  | 'computed';
+  | 'pmt_retail_book'
+  | 'computed'
+  | 'technical'
+  | 'llm';
 
 export interface FxTradeLevel {
   value: string;

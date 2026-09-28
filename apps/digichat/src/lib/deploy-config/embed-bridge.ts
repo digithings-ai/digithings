@@ -10,7 +10,7 @@ import {
   toDigichatClientConfig,
   type DigichatClientConfig,
 } from "./client-projection";
-import { defaultThreadSkinForTenant } from "@/lib/thread-skins";
+import { defaultThreadSkinForTenant } from "@digithings/ui/chat/skins";
 
 /** Merge legacy embed client fields into a DigichatClientConfig for ProductStockShell. */
 export function clientConfigFromEmbedTenant(

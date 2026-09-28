@@ -26,7 +26,7 @@ import {
   isThreadSkin,
   threadSkinChoices,
   type ThreadSkin,
-} from "@/lib/thread-skins";
+} from "@digithings/ui/chat/skins";
 
 const PAGE_CONTEXT_MODES: readonly PageContextMode[] = ["off", "silent", "visible"];
 const LANGUAGE_CODES = new Set(LANGUAGES.map((l) => l.code));

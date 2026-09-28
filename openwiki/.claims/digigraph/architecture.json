@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "pageVersion": "sha256:eb0cca1a8c2220aab4477a9733ce15ba0050a24cef8e8145188257729db32b49",
+  "pageVersion": "sha256:a339af1a428531d4fc3a7d9fd771b6c3131fcfafefd510ef81014524e899974c",
   "claims": [
     {
       "id": "claim_11047ca9946043d3b18fc1c4a1cf7e84",
@@ -18,7 +18,7 @@
       "evidence": [
         {
           "resource": "repo://digigraph/src/digigraph/orchestration/registry.py#L97-L190",
-          "version": "repo-lines-v1:sha256:742abff0f037a9638e29b4ddbcf6f35f0e4db41f476d3dae9cb4a06cf1bfa02f:eyJzZWxlY3RlZExpbmVDb3VudCI6OTQsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjM0ZGFkZGM0MmMzY2Y5OWQ2ZWM1YjNjNjhlMTViNTRmM2ZlMTRkM2MzMjljMDk4Yjc5Nzk3ODk0ZDNiZjlmNDEiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjY1ZTZmMTE4MzJkYmVjNmE5NDMxZTJjZjFiODNmYmUxZTNhYWQ5OGJhN2E3YTI0Mzc0N2E5Y2Q0ODk3MDFkYjciLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjEwOGI1YmU1ZDE5MDQ3NDBhZjQ0MGNlYzAwOGE1MzhlNjY3YWY1ZWE3NjFkNWMyOTM2MDQ3NjNlMjQzYmJlMDEiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImIyN2NmZDc3ZmIyMjNmYzg1NzA5YTg4OGZjNDgzYzlkMzQyNzE4YTJmZDM3YzJmZGM1ZTUzNTAyYjljZDg0M2QifQ"
+          "version": "repo-lines-v1:sha256:629f78f896204dc9c439f76e05b77d12d7d7d5a1d35772e6a837039d44fadf5e:eyJzZWxlY3RlZExpbmVDb3VudCI6MTMzLCJmaXJzdFNlbGVjdGVkTGluZUhhc2giOiIzNGRhZGRjNDJjM2NmOTlkNmVjNWIzYzY4ZTE1YjU0ZjNmZTE0ZDNjMzI5YzA5OGI3OTc5Nzg5NGQzYmY5ZjQxIiwibGFzdFNlbGVjdGVkTGluZUhhc2giOiI2NWU2ZjExODMyZGJlYzZhOTQzMWUyY2YxYjgzZmJlMWUzYWFkOThiYTdhN2EyNDM3NDdhOWNkNDg5NzAxZGI3IiwicHJlY2VkaW5nQ29udGV4dExpbmVDb3VudCI6MywicHJlY2VkaW5nQ29udGV4dEhhc2giOiIxMDhiNWJlNWQxOTA0NzQwYWY0NDBjZWMwMDhhNTM4ZTY2N2FmNWVhNzYxZDVjMjkzNjA0NzYzZTI0M2JiZTAxIiwiZm9sbG93aW5nQ29udGV4dExpbmVDb3VudCI6MywiZm9sbG93aW5nQ29udGV4dEhhc2giOiJiMjdjZmQ3N2ZiMjIzZmM4NTcwOWE4ODhmYzQ4M2M5ZDM0MjcxOGEyZmQzN2MyZmRjNWU1MzUwMmI5Y2Q4NDNkIn0"
         }
       ]
     },
@@ -49,10 +49,54 @@
           "version": "repo-lines-v1:sha256:6c03e1c72563bf6b6c3d437f620e9457ed489ea1d3b5ca6e532b98789300d26e:eyJzZWxlY3RlZExpbmVDb3VudCI6MSwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiNmMwM2UxYzcyNTYzYmY2YjZjM2Q0MzdmNjIwZTk0NTdlZDQ4OWVhMWQzYjVjYTZlNTMyYjk4Nzg5MzAwZDI2ZSIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiNmMwM2UxYzcyNTYzYmY2YjZjM2Q0MzdmNjIwZTk0NTdlZDQ4OWVhMWQzYjVjYTZlNTMyYjk4Nzg5MzAwZDI2ZSIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiODI5M2IxZTIzZjJiMmEyMjU0MGE2OTM0YmJmNzU2YWY4MzI0Mzk2NjU1MDA5ZjllODNkYjc1OTIwMGFhY2EzYSIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiODZjMjhhNTliMDkzYmJjYTZmMzg0OGI2YTZmOWNlNmIxMzNmY2YzMjk0MTA3ZjcwZTk3OTMyOTRhZmM2YzllZSJ9"
         }
       ]
+    },
+    {
+      "id": "claim_2017797dd6e2466089d2db1cf767ed84",
+      "statement": "get_checkpointer() selects between MemorySaver, SqliteSaver, and PostgresSaver based on DIGI_CHECKPOINTER, with Postgres connections receiving TCP keepalive bounds via _bounded_conn_string and all durable writes redacted of MCP tokens by McpTokenRedactingCheckpointer.",
+      "evidence": [
+        {
+          "resource": "repo://digigraph/src/digigraph/graph/graph.py#L75-L192",
+          "version": "repo-lines-v1:sha256:9dc00eea113a32e63a542bd81e4ba9a08f4e150583c19dcfbaa2d2c3366efc47:eyJzZWxlY3RlZExpbmVDb3VudCI6MTE4LCJmaXJzdFNlbGVjdGVkTGluZUhhc2giOiI2NDQ3NTUxNjEzYzc1ZDBjZTE2MmNiOGJlZGNjNjZmNDlhYzFlOGU1ZGY1ZjI0NDU4OWQ0MDY5OGU2MzAzNzdjIiwibGFzdFNlbGVjdGVkTGluZUhhc2giOiI3ZDZiYzFkM2MwN2I5MjE5ZmQ3NTkzZGZhYWM3YWQ5MTYyN2I3YjRkMTVkOTQ2ZTUxYmMzMzVkNmQ0YjcxNTk5IiwicHJlY2VkaW5nQ29udGV4dExpbmVDb3VudCI6MywicHJlY2VkaW5nQ29udGV4dEhhc2giOiJmZjE4ZDIwZWNhMzVkMWNhM2UxODlkYjE0NDAzZDQ2NGJlOGQ2MzE0MjE5OTQyMDY2Zjg0NTBjNDdiMjlkYzVhIiwiZm9sbG93aW5nQ29udGV4dExpbmVDb3VudCI6MywiZm9sbG93aW5nQ29udGV4dEhhc2giOiJiOTE3NTRiYmUyZDZmOTA3NmZiN2Y3N2EwZTM3YzRiNWZlNDEzNDM4YjNiMDAyMmFmOWMwMjU3ZTYzMGU4Y2E3In0"
+        }
+      ]
+    },
+    {
+      "id": "claim_9bc4e8552da8473cad2382ad37e1b264",
+      "statement": "Scheduled product graphs in graph/product_graphs.py compile separate StateGraph[ProductGraphRunState] instances that invoke digiquant through the hub client, distinct from the main workflow graph.",
+      "evidence": [
+        {
+          "resource": "repo://digigraph/src/digigraph/graph/product_graphs.py#L1-L98",
+          "version": "repo-lines-v1:sha256:eedebb75622d6c668d4ac071874db2ab3b14e44c0a445a4f19db290c74bbd972:eyJzZWxlY3RlZExpbmVDb3VudCI6OTgsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6Ijg2MTZjZGYwMWE4Mjk1OTNhYThlYzcyZTA2OTg1ZWUxYTliMzk4ZmY1ZTYxMmVmYTk3MjI4MjUxODIxMDM3NDkiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjgzMTMzYTYzYjBjODc2N2JlZDNhZjczZjYzMWI0Nzg4NTA2MTg2OWFmZGM3NjZkYWUzOTE0ZjJlZjlmMzFmY2EiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjowLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjM1N2RiN2M2NTQzYjdkZDVhYzljZWYxOTAyMGY2NjY2Y2RlYmRiZWNjMzk0NjQyZDI5YTE0YjJjZmRhOWI0ZmEifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_3896dfe0c6c443d1bb9265df65026ae2",
+      "statement": "Each vertical hub client carries a per-process CircuitBreaker (failure threshold 5, recovery timeout 30s) that only trips on genuine transport failures (httpx.RequestError), not HTTP 4xx/5xx responses.",
+      "evidence": [
+        {
+          "resource": "repo://digigraph/src/digigraph/vertical_orchestrator/digiquant_hub.py#L12-L85",
+          "version": "repo-lines-v1:sha256:43dd939b38c1be9096f8e8d9eec7413e1643b3e5da50b3f76841e3c85c8d1f58:eyJzZWxlY3RlZExpbmVDb3VudCI6NzQsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjAxYmE0NzE5YzgwYjZmZTkxMWIwOTFhN2MwNTEyNGI2NGVlZWNlOTY0ZTA5YzA1OGVmOGY5ODA1ZGFjYTU0NmIiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImM4YzQxMGVhMjU4Y2MyNzZjY2ZjNGJkYjQwNGYzOWRhMTQ4YjM0NjBhNWNkZjY2NTZmNTUxZjQzYmYxZWE5YWEiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImQ5ZDNhZTcwY2Q5ZTA1ZDI4ODhhZjQwMmE2ZWY5YTRiYTA1Yjk4MGU0Y2EzNmI3Y2JmMzk5YWQ2YThkNDI3OGMiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjljMmE2OTllN2VkY2EwMDE3MjY1MTQzNDc3OGRjNGQyYjAzNzhjY2FkMmY5MGM5ODhiNThhN2JhMDUwODdiNDgifQ"
+        },
+        {
+          "resource": "repo://digigraph/src/digigraph/vertical_orchestrator/digisearch_hub.py#L14-L100",
+          "version": "repo-lines-v1:sha256:53e6fe3ec28dd0e4b3b6a169e2ed0930aabd8dcef543bdce58ee30b20c2597c6:eyJzZWxlY3RlZExpbmVDb3VudCI6ODcsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImFjYjg5NTI0Y2I5YmU0NmY2MzQxMGZkODI2NjZiMzNlYWVhZmM1NGZlYjFmZWJjYjY2N2ZlZjFmMDU5NTY0N2EiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjBmNjMwMDNlOTI3Y2Y4MjJkZDM0ZWViZmI5NGE5MjEyZGMwMDU2ODUzNzFjN2E1MGYwMjE4OWFkZTEzNDVlZmQiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjFlOTUzNjVmYzAyYjY3ODY0N2M2ODgyYzBlYmM2MDdmOWZkY2FjZDU0NGYwNDk2ODFmOGI0MDg1ZGFkOTMzYjIiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjU5Y2E3ZGJjOWI1MjU3ZjdjMWIzM2ZiZjdkMDIyMDcwNmM3MmIwZjUzOTA1M2MxNTRkOWUyZDQ3MWIyNGQyMDQifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_d25b3d696eed4878a87ba94595b8c56e",
+      "statement": "Operator remote MCP servers declared via X-Digi-Mcp-Servers undergo connect-time DNS validation through _SsrfSafeNetworkBackend: the host resolves immediately, every A/AAAA must be globally routable, and validated IPs are pinned without a second lookup, blocking loopback/link-local/metadata/CGNAT addresses.",
+      "evidence": [
+        {
+          "resource": "repo://digigraph/src/digigraph/orchestration/mcp_client.py#L40-L59",
+          "version": "repo-lines-v1:sha256:12f098218ebacaec70d15a9bef7ab114af688c4be92e14484ebc243e8108795f:eyJzZWxlY3RlZExpbmVDb3VudCI6MjAsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjAxYmE0NzE5YzgwYjZmZTkxMWIwOTFhN2MwNTEyNGI2NGVlZWNlOTY0ZTA5YzA1OGVmOGY5ODA1ZGFjYTU0NmIiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjdkZmNjOWUzOTg4ZmYwZTYxZDhiM2QxMTA5NDRmOWNlMWVkMThhZjc4MmFiODY4Y2YyMzUzODYyZmFjNWVlMWIiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjIzYjQ1NTM4ZWRkZTMyNzJhNWEwZDYzMWYyZTU2MmE5YTZjZDNlZmQwMzBhYzUwMmEyZTZiOTU5MTVhYTNjOTMiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImFkYmJjMzZjNTkxNmZiYjUyNDVkNWM0ODU0NzkyZTE4YzFhNDllZGI0ZmY1OGFmODQ4ZjExOWE0NzJiYzM5OGEifQ"
+        }
+      ]
     }
   ],
   "verification": {
     "by": "openwiki/0.5.0",
-    "at": "2026-09-09T14:37:17.158Z"
+    "at": "2026-09-23T13:25:31.068Z"
   }
 }

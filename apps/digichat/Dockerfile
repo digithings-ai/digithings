@@ -23,8 +23,8 @@ ENV NEXT_TELEMETRY_DISABLED=1
 COPY --from=deps /app ./
 COPY packages/design ./packages/design
 COPY packages/ui ./packages/ui
-# Product skin @imports gallery chatbot.css from outside web/ (#3717).
-COPY ["apps/reference/app/(chatbot)/chatbot/chatbot.css", "apps/reference/app/(chatbot)/chatbot/chatbot.css"]
+# Grammar moved into the package (WS1): chat-digichat.css ships with
+# packages/ui, so no gallery COPY is needed anymore (#3717 closed).
 COPY packages/digichat-ui ./packages/digichat-ui
 COPY apps/digichat ./apps/digichat
 # Same bake as Dockerfile.digichat-cloudflare: health version matches package.json.

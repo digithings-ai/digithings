@@ -3,7 +3,8 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@digithings/ui/ui';
 import { SafeMarkdown } from '@/components/SafeMarkdown';
-import { isSupabaseConfigured, supabase } from '@/lib/supabase';
+import { apiDb } from '@/lib/api-query';
+import { isApiConfigured } from '@/lib/api-client';
 import {
   actionForRow,
   buildPmActionContext,
@@ -40,19 +41,19 @@ function rosterFromPayload(payload: unknown): Array<{ ticker: string; direction:
 }
 
 async function fetchPmDirectionActionContext(docDate: string): Promise<PmActionContext> {
-  if (!isSupabaseConfigured() || !supabase || !docDate) {
+  if (!isApiConfigured() || !docDate) {
     return buildPmActionContext({});
   }
 
   const [rebalanceRes, priorRes] = await Promise.all([
-    supabase
+    apiDb
       .from('documents')
       .select('payload')
       .eq('document_key', 'pm-rebalance')
       .eq('date', docDate)
       .order('id', { ascending: false })
       .limit(1),
-    supabase
+    apiDb
       .from('documents')
       .select('payload')
       .eq('document_key', 'pm-direction-memo')

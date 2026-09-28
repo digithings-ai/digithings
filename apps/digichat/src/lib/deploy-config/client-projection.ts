@@ -22,7 +22,10 @@ import {
   BASELINE_EMBED_WELCOME_BODY,
 } from "@/lib/baseline-embed";
 import { DEFAULT_LANGUAGE_CODE } from "@/lib/languages";
-import { DEFAULT_THREAD_SKIN, type ThreadSkin } from "@/lib/thread-skins";
+import {
+  DEFAULT_THREAD_SKIN,
+  type ThreadSkin,
+} from "@digithings/ui/chat/skins";
 
 export type DigichatClientFeatures = {
   attachments: boolean;

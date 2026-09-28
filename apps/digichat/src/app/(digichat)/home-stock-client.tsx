@@ -19,9 +19,10 @@ import { MemoryThreadListSidebar } from "@/components/stock/memory-thread-list-s
 import {
   StockChatPrefsHost,
   useStockChatPrefs,
-} from "@/components/stock/stock-chat-prefs-host";
+} from "@digithings/ui/chat/stock";
 import { p } from "@/lib/base-path";
 import type { DigichatClientConfig } from "@/lib/deploy-config";
+import { toStockChatPrefsConfig } from "@/lib/route-client-config";
 import {
   takePendingForceTool,
   takePendingTurnMode,
@@ -32,8 +33,48 @@ import {
   SessionMemoryThreadListAdapter,
   memoryThreadStorageKey,
 } from "@/lib/session-memory-thread-list";
-import { skinOwnsPageChrome } from "@/lib/thread-skins";
+import { skinOwnsPageChrome } from "@digithings/ui/chat/skins";
 import { PresentationFrame } from "@/components/stock/presentation-frame";
+import { EmbedComposerMenu, type ComposerMenuKind } from "@/components/stock/embed-composer-menu";
+import {
+  connectedMcpConfigs,
+  mcpSessionOverlayHeaderValue,
+  replaceMcpConfig,
+} from "@/components/stock/embed-mcp-flow";
+import {
+  DEFAULT_LANGUAGE_CODE,
+  detectBrowserLanguageCode,
+  tryResolveLanguageInput,
+} from "@/lib/languages";
+
+/** Prefs deps: the same app functions at both call sites below (WS4 Step 3). */
+const PREFS_DEPS = {
+  defaultLanguageCode: DEFAULT_LANGUAGE_CODE,
+  detectLanguage: detectBrowserLanguageCode,
+  resolveLanguage: tryResolveLanguageInput,
+  mcpOps: {
+    replace: replaceMcpConfig,
+    connected: connectedMcpConfigs,
+    headerValue: mcpSessionOverlayHeaderValue,
+  },
+  renderMenuPanes: (menu: {
+    kind: ComposerMenuKind;
+    models: readonly string[];
+    providerSeed?: string;
+    mcpSeed?: string;
+    onClose: () => void;
+  }) => (
+    <EmbedComposerMenu
+      kind={menu.kind}
+      models={menu.models}
+      onClose={menu.onClose}
+      providerSeed={menu.providerSeed}
+      mcpSeed={menu.mcpSeed}
+    />
+  ),
+};
+
+
 
 function useShellThreadRuntime(
   clientConfig: DigichatClientConfig,
@@ -113,7 +154,8 @@ function HomeStockClientSingle({
 }) {
   const sessionKey = userId ? `app:${userId}` : "app:anon";
   const prefs = useStockChatPrefs({
-    clientConfig,
+    config: toStockChatPrefsConfig(clientConfig),
+    deps: PREFS_DEPS,
     sessionKey,
     hasSessions: false,
     newThread: () => {},
@@ -166,7 +208,8 @@ function HomeStockClientMemory({
 }) {
   const sessionKey = userId ? `app:${userId}` : "app:anon";
   const prefs = useStockChatPrefs({
-    clientConfig,
+    config: toStockChatPrefsConfig(clientConfig),
+    deps: PREFS_DEPS,
     sessionKey,
     hasSessions: true,
     newThread: () => {},

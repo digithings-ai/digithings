@@ -30,6 +30,10 @@ on:
       - "apps/digithings-stack-cloudflare/**"
       - "digiquant/Dockerfile.mcp"
       - "digivault/Dockerfile.mcp"
+      - "apps/dashboard-api/**"
+      - "apps/digichat-cloudflare/**"
+      - "Dockerfile.digichat-cloudflare"
+      - "apps/digichat/**"
       - ".github/workflows/deploy-digithings-stack-cloudflare.yml"
   workflow_dispatch:
     inputs:

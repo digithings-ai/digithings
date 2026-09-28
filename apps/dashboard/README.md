@@ -209,16 +209,19 @@ The dashboard reads portfolio and research data from the shared research Supabas
 row-level security. Anon `anon_read` on Group A book tables (`positions`,
 `position_events`, `nav_history`, `portfolio_metrics`) is house-UUID only
 (migration 110). Authenticated members can also SELECT their own overlay book
-(migration 109), so dashboard Group A readers always go through `houseBook()` in
-`lib/house-workspace.ts` — date-only filters would mix overlay weights into the
-public house Brief / Holdings / Performance surfaces. Shared teasers without
-`workspace_id` (`daily_snapshots`, `theses`, `instruments`) stay date-only.
+(migration 109), so dashboard Group A readers always go through the
+dashboard API Worker (`apps/dashboard-api`), which enforces the house
+workspace pin server-side (`GET /v1/tables/:table`, CONTRACT §7) — date-only
+filters would mix overlay weights into the public house Brief / Holdings /
+Performance surfaces. Shared teasers without `workspace_id`
+(`daily_snapshots`, `theses`, `instruments`) stay date-only.
 
 **Threat model:** this is a **public read-only demo** — anyone with the anon key
-(canonical in the client bundle) can `SELECT` published snapshot rows. Write paths
-are not exposed to the browser. A production hardening path is a BFF with
-service-role credentials and restrictive RLS; that is tracked under audit REM-035/036
-and requires human product/security sign-off before changing live policies.
+can `SELECT` published snapshot rows. Write paths are not exposed to the
+browser. The dashboard API Worker holds the service-role key server-side
+(wrangler secret, never in the static bundle) and serves strictly less than
+anon can read: house tables carry the server-side workspace pin and
+`documents` carries the house+system pin, matching anon RLS exactly.
 
 **REM-036 (optional BFF):** set `NEXT_PUBLIC_DASHBOARD_USE_BFF=1` and host the dashboard on a
 Node runtime with `GET /api/snapshots` (service-role read). Static export on

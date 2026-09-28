@@ -56,13 +56,16 @@ describe("gallery Thread is the product digichat skin", () => {
     expect(reasoning).toMatch(/state="expand"/);
   });
 
-  it("container still COPY gallery chatbot.css", () => {
+  it("container no longer COPYs gallery chatbot.css (grammar lives in the package)", () => {
     const root = join(here, "../../../../../");
     const cf = readFileSync(join(root, "Dockerfile.digichat-cloudflare"), "utf8");
     const app = readFileSync(join(root, "apps/digichat/Dockerfile"), "utf8");
     const copy = "apps/reference/app/(chatbot)/chatbot/chatbot.css";
-    expect(cf).toContain(copy);
-    expect(app).toContain(copy);
+    expect(cf).not.toContain(copy);
+    expect(app).not.toContain(copy);
+    expect(existsSync(join(root, "packages/ui/src/styles/chat-digichat.css"))).toBe(
+      true,
+    );
   });
 
   it("portaled More-menu CSS is gated so catalog skins keep their menus", () => {
@@ -71,13 +74,13 @@ describe("gallery Thread is the product digichat skin", () => {
     const popoverGate =
       ':is(html:has(.aui-theme-stage), html:has([data-thread-skin="digichat"])) .aui-composer-trigger-popover';
     const chatbot = read(
-      "../../../../../apps/reference/app/(chatbot)/chatbot/chatbot.css",
+      "../../styles/chat-digichat.css",
     );
     const aui = read("../../styles/chat-aui.css");
     expect(chatbot).toContain(gate);
     expect(chatbot).toContain(popoverGate);
     expect(chatbot).not.toMatch(/^\.aui-action-bar-more-content \{/m);
-    // Single source: the gallery sheet owns the portaled base rules. chat-aui.css
+    // Single source: the package sheet owns the portaled base rules. chat-aui.css
     // loads first and loses every tie, so it must not re-declare them (#3818).
     expect(aui).not.toMatch(/\.aui-action-bar-more-content \{/);
     expect(aui).not.toMatch(/\.aui-composer-trigger-popover \{/);
@@ -86,19 +89,20 @@ describe("gallery Thread is the product digichat skin", () => {
   it("product tooltip suppresses the canonical kit rotated-square arrow", () => {
     const product = read("gallery-thread/ui/tooltip.tsx");
     // The single canonical tooltip is the kit's; the chat adapter opts out of
-    // its arrow via `data-tooltip-arrow="none"` + a descendant hide. The
+    // its arrow via the kit's `hideArrow` prop (no CSS-hack override). The
     // reference canon uses the kit tooltip directly (the old unreferenced
     // `apps/reference/components/ui/tooltip.tsx` radix duplicate was deleted in
     // the #4306 consolidation).
-    expect(product).toContain('data-tooltip-arrow="none"');
-    expect(product).toMatch(/\[&>\[aria-hidden\]\]:hidden/);
+    expect(product).toContain("hideArrow");
+    expect(product).not.toMatch(/\[&>\[aria-hidden\]\]:hidden/);
     const kit = read("../../ui/tooltip.tsx");
     expect(kit).toMatch(/TooltipPrimitive\.Arrow/);
+    expect(kit).toMatch(/hideArrow/);
   });
 
   it("markdown lists keep markers inside padding so a scrollport cannot clip them", () => {
     const chatbot = read(
-      "../../../../../apps/reference/app/(chatbot)/chatbot/chatbot.css",
+      "../../styles/chat-digichat.css",
     );
     const aui = read("../../styles/chat-aui.css");
     const thread = read("gallery-thread/thread.aui.tsx");
@@ -115,7 +119,7 @@ describe("gallery Thread is the product digichat skin", () => {
 
   it("portaled tooltip CSS hides descendant svg, not only a direct child", () => {
     const chatbot = read(
-      "../../../../../apps/reference/app/(chatbot)/chatbot/chatbot.css",
+      "../../styles/chat-digichat.css",
     );
     const aui = read("../../styles/chat-aui.css");
     const hide =

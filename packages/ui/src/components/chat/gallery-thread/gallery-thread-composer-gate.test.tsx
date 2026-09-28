@@ -82,6 +82,16 @@ afterEach(() => {
 });
 
 describe("gallery composer send control", () => {
+  it("pins the send controls right when no attachment adapter is mounted", async () => {
+    // This harness runs adapter-less, so AddAttachment renders null — the
+    // reported product-mode state. justify-between alone would collapse the
+    // lone send controls left; ml-auto keeps them right regardless.
+    const { host, unmount } = await mount(vi.fn());
+    const controls = host.querySelector(".aui-composer-send-controls");
+    expect(controls?.className).toMatch(/(?:^|\s)ml-auto(?:\s|$)/);
+    unmount();
+  });
+
   it("is a real form submit and stays visible but disabled when empty", async () => {
     const { host, unmount } = await mount(vi.fn());
 

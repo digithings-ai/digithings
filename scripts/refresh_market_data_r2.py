@@ -22,9 +22,12 @@ of the universe; outcomes are recorded per ticker and the manifest is still
 written for the datasets that succeeded.
 
 Registry conflicts (same key, different bytes) re-pull and recompute exactly
-once and put ONLY under a new key — a recompute that lands on the same key
-is reported as an ``error`` without a second put, so an existing generation
-is never overwritten. R2 generations are immutable.
+once. A recompute that lands on the same ``as_of`` with different bytes is a
+same-day vendor restatement (#4621): it is sealed under a NEW immutable
+content-hash key (``{as_of}--{sha12}.parquet``) and the ``latest`` pointer
+flips to it, so the existing generation is never overwritten and the cron
+stays green. Only a restatement put that itself conflicts is reported as an
+``error``. R2 generations are immutable.
 
 Dataset ids follow the Task 5 backfill exactly: normalized tickers for
 prices (``SPY``), ``{source}__{series}`` lowercased-source for macro
@@ -46,6 +49,7 @@ refresh mirrors the sealed Yahoo FX R2 generations back into that table
 from __future__ import annotations
 
 import argparse
+import hashlib
 import io
 import json
 import os
@@ -71,9 +75,11 @@ from digiquant.data.prices.r2_history import (  # noqa: E402
     R2HistoryStore,
     build_manifest,
     generation_key,
+    generation_restatement_key,
     latest_pointer_key,
     macro_key,
     macro_latest_pointer_key,
+    macro_restatement_key,
     normalize_ticker,
 )
 from digiquant.data.prices.refresh_gate import staleness_gate  # noqa: E402
@@ -296,6 +302,29 @@ def _put_price(store: Any, ticker: str, frame: pl.DataFrame, as_of: str) -> str:
     return key
 
 
+def _put_price_restatement(store: Any, ticker: str, frame: pl.DataFrame, as_of: str) -> str:
+    """Seal a same-``as_of`` price revision under a NEW key + flip the pointer (#4621).
+
+    The base generation key is immutable, so the revised bytes go under a
+    content-hash key (:func:`generation_restatement_key`); the old generation
+    stays readable under its own registry row. Raises
+    :class:`ArchiveVerifyError` when the derived key itself conflicts — the
+    caller must report that as an ``error``, never as success.
+    """
+    norm = normalize_ticker(ticker)
+    payload = _backfill.to_parquet_bytes(frame.to_dicts(), date_col="date")
+    key = generation_restatement_key(ticker, as_of, hashlib.sha256(payload).hexdigest())
+    store.put_generation(
+        key,
+        payload,
+        SOURCE_TABLE_PRICE,
+        {"ticker": norm, "as_of": as_of},
+        rows=frame.height,
+    )
+    store.swap_latest_pointer(latest_pointer_key(ticker), key)
+    return key
+
+
 def _full_repull(
     ticker: str, store: Any, run: str, sealed: bool, prior: pl.DataFrame | None
 ) -> dict[str, Any]:
@@ -366,23 +395,45 @@ def _full_repull(
                 note=f"registry conflict, re-pull failed: {exc}",
             )
         if top2 == top:
+            # Same-day restatement (#4621): same as_of, different bytes. The
+            # base key is immutable, so seal the revision under a NEW
+            # content-hash key and flip the pointer instead of erroring.
+            try:
+                new_key = _put_price_restatement(store, ticker, fresh, top2)
+            except ArchiveVerifyError as exc:
+                return _outcome(
+                    norm,
+                    MODE_ERROR,
+                    as_of=prior_as_of,
+                    rows=prior.height if prior is not None else 0,
+                    note=f"registry conflict persists: {exc}",
+                )
             return _outcome(
                 norm,
-                MODE_ERROR,
-                as_of=prior_as_of,
-                rows=prior.height if prior is not None else 0,
-                note=f"registry conflict for {generation_key(ticker, top)};"
-                " kept existing generation",
+                MODE_FULL_REPULL,
+                as_of=top2,
+                rows=fresh.height,
+                note=f"sealed overlap restated (same-day revision {new_key})",
             )
         try:
             _put_price(store, ticker, fresh, top2)
-        except ArchiveVerifyError as exc:
+        except ArchiveVerifyError:
+            try:
+                new_key = _put_price_restatement(store, ticker, fresh, top2)
+            except ArchiveVerifyError as exc:
+                return _outcome(
+                    norm,
+                    MODE_ERROR,
+                    as_of=prior_as_of,
+                    rows=prior.height if prior is not None else 0,
+                    note=f"registry conflict persists: {exc}",
+                )
             return _outcome(
                 norm,
-                MODE_ERROR,
-                as_of=prior_as_of,
-                rows=prior.height if prior is not None else 0,
-                note=f"registry conflict persists: {exc}",
+                MODE_FULL_REPULL,
+                as_of=top2,
+                rows=fresh.height,
+                note=f"sealed overlap restated (same-day revision {new_key})",
             )
         top, full = top2, fresh
     return _outcome(
@@ -472,7 +523,7 @@ def refresh_ticker(
                 rows=hist.height,
                 note=f"registry conflict, re-pull failed: {exc}",
             )
-        if not top2 or top2 == top:
+        if not top2:
             return _outcome(
                 norm,
                 MODE_ERROR,
@@ -481,15 +532,45 @@ def refresh_ticker(
                 note=f"registry conflict for {generation_key(ticker, top)};"
                 " kept existing generation",
             )
-        try:
-            _put_price(store, ticker, merged2, top2)
-        except ArchiveVerifyError as exc:
+        if top2 == top:
+            # Same-day restatement on the incremental path (#4621): seal the
+            # revised bytes under a NEW content-hash key, flip the pointer.
+            try:
+                new_key = _put_price_restatement(store, ticker, merged2, top2)
+            except ArchiveVerifyError as exc:
+                return _outcome(
+                    norm,
+                    MODE_ERROR,
+                    as_of=seal,
+                    rows=hist.height,
+                    note=f"registry conflict persists: {exc}",
+                )
             return _outcome(
                 norm,
-                MODE_ERROR,
-                as_of=seal,
-                rows=hist.height,
-                note=f"registry conflict persists: {exc}",
+                MODE_INCREMENTAL,
+                as_of=top2,
+                rows=merged2.height,
+                note=f"seal {seal} -> {top2} (same-day revision {new_key})",
+            )
+        try:
+            _put_price(store, ticker, merged2, top2)
+        except ArchiveVerifyError:
+            try:
+                new_key = _put_price_restatement(store, ticker, merged2, top2)
+            except ArchiveVerifyError as exc:
+                return _outcome(
+                    norm,
+                    MODE_ERROR,
+                    as_of=seal,
+                    rows=hist.height,
+                    note=f"registry conflict persists: {exc}",
+                )
+            return _outcome(
+                norm,
+                MODE_INCREMENTAL,
+                as_of=top2,
+                rows=merged2.height,
+                note=f"seal {seal} -> {top2} (same-day revision {new_key})",
             )
         top, merged = top2, merged2
     return _outcome(
@@ -562,6 +643,29 @@ def _normalize_macro_rows(rows: list[dict[str, Any]]) -> pl.DataFrame:
 def _put_macro(store: Any, source: str, series: str, frame: pl.DataFrame, as_of: str) -> str:
     key = macro_key(source, series, as_of)
     payload = _backfill.to_parquet_bytes(frame.to_dicts(), date_col="obs_date")
+    store.put_generation(
+        key,
+        payload,
+        SOURCE_TABLE_MACRO,
+        {"source": source, "series": series, "as_of": as_of},
+        rows=frame.height,
+    )
+    store.swap_latest_pointer(macro_latest_pointer_key(source, series), key)
+    return key
+
+
+def _put_macro_restatement(
+    store: Any, source: str, series: str, frame: pl.DataFrame, as_of: str
+) -> str:
+    """Seal a same-``as_of`` macro revision under a NEW key + flip the pointer (#4621).
+
+    Macro mirror of :func:`_put_price_restatement`: the base generation key is
+    immutable, so revised bytes go under :func:`macro_restatement_key` and the
+    old generation stays readable. A conflicting derived key still raises
+    :class:`ArchiveVerifyError` for the caller to report as an ``error``.
+    """
+    payload = _backfill.to_parquet_bytes(frame.to_dicts(), date_col="obs_date")
+    key = macro_restatement_key(source, series, as_of, hashlib.sha256(payload).hexdigest())
     store.put_generation(
         key,
         payload,
@@ -696,6 +800,22 @@ def mirror_macro_to_core(
     return summary
 
 
+#: Cadences whose empty-window ``history-only`` is benign (#4621). A slow FRED
+#: series legitimately publishes nothing for weeks, so an empty fetch window
+#: means "nothing to do", not feed death. Daily price tickers — and any
+#: ``error`` outcome at any cadence — still fail loud.
+SLOW_CADENCES = frozenset({"monthly", "quarterly"})
+
+
+def _slow_macro_exempt_ids(macro_specs: list[tuple[str, str, str | None]]) -> set[str]:
+    """Dataset ids whose ``history-only`` must not mark the run stale (#4621)."""
+    return {
+        f"{source}__{series}"
+        for source, series, cadence in macro_specs
+        if str(cadence or "").strip().lower() in SLOW_CADENCES
+    }
+
+
 def _live_window_days(cadence: str | None) -> int:
     """Live fetch window for a series' declared cadence (default: daily, 45d)."""
     if not cadence:
@@ -819,7 +939,7 @@ def refresh_macro_series(
                     note=f"registry conflict, re-pull failed: {exc}",
                 )
             top2 = _max_date(fresh, "obs_date")
-            if not top2 or top2 == top:
+            if not top2:
                 return _outcome(
                     name,
                     MODE_ERROR,
@@ -828,15 +948,45 @@ def refresh_macro_series(
                     note=f"registry conflict for {macro_key(source, series, top)};"
                     " kept existing generation",
                 )
-            try:
-                _put_macro(store, source, series, fresh, top2)
-            except ArchiveVerifyError as exc:
+            if top2 == top:
+                # Same-day macro restatement (#4621): seal under a NEW
+                # content-hash key and flip the pointer instead of erroring.
+                try:
+                    new_key = _put_macro_restatement(store, source, series, fresh, top2)
+                except ArchiveVerifyError as exc:
+                    return _outcome(
+                        name,
+                        MODE_ERROR,
+                        as_of=seal,
+                        rows=hist.height,
+                        note=f"registry conflict persists: {exc}",
+                    )
                 return _outcome(
                     name,
-                    MODE_ERROR,
-                    as_of=seal,
-                    rows=hist.height,
-                    note=f"registry conflict persists: {exc}",
+                    MODE_FULL_REPULL,
+                    as_of=top2,
+                    rows=fresh.height,
+                    note=f"sealed overlap restated (same-day revision {new_key})",
+                )
+            try:
+                _put_macro(store, source, series, fresh, top2)
+            except ArchiveVerifyError:
+                try:
+                    new_key = _put_macro_restatement(store, source, series, fresh, top2)
+                except ArchiveVerifyError as exc:
+                    return _outcome(
+                        name,
+                        MODE_ERROR,
+                        as_of=seal,
+                        rows=hist.height,
+                        note=f"registry conflict persists: {exc}",
+                    )
+                return _outcome(
+                    name,
+                    MODE_FULL_REPULL,
+                    as_of=top2,
+                    rows=fresh.height,
+                    note=f"sealed overlap restated (same-day revision {new_key})",
                 )
             top, full = top2, fresh
         return _outcome(
@@ -852,13 +1002,26 @@ def refresh_macro_series(
     top = _max_date(merged, "obs_date")
     try:
         _put_macro(store, source, series, merged, top)
-    except ArchiveVerifyError as exc:
+    except ArchiveVerifyError:
+        # Same-day macro restatement on the incremental path (#4621): seal the
+        # revised bytes under a NEW content-hash key, flip the pointer. A
+        # conflicting derived key stays a loud error, never silent success.
+        try:
+            new_key = _put_macro_restatement(store, source, series, merged, top)
+        except ArchiveVerifyError as exc:
+            return _outcome(
+                name,
+                MODE_ERROR,
+                as_of=seal,
+                rows=hist.height,
+                note=f"registry conflict, kept existing: {exc}",
+            )
         return _outcome(
             name,
-            MODE_ERROR,
-            as_of=seal,
-            rows=hist.height,
-            note=f"registry conflict, kept existing: {exc}",
+            MODE_INCREMENTAL,
+            as_of=top,
+            rows=merged.height,
+            note=f"seal {seal} -> {top} (same-day revision {new_key})",
         )
     return _outcome(
         name, MODE_INCREMENTAL, as_of=top, rows=merged.height, note=f"seal {seal} -> {top}"
@@ -1162,7 +1325,16 @@ def main(argv: list[str] | None = None) -> int:
         + [str(manifest.get("as_of") or run)],
     )
     gate = staleness_gate(new_as_of, run)
-    failed = [o for o in outcomes if o["mode"] in _SOFT_FAIL_MODES]
+    # Cadence-aware stale gate (#4621): a slow series sitting out its release
+    # cycle is expected quiet, not an outage. Real feed death — daily price
+    # errors/history-only, or any macro error — still fails loud.
+    exempt = _slow_macro_exempt_ids(macro_specs)
+    failed = [
+        o
+        for o in outcomes
+        if o["mode"] in _SOFT_FAIL_MODES
+        and not (o["ticker"] in exempt and o["mode"] == MODE_HISTORY_ONLY)
+    ]
     stale = (not gate["ok"]) or bool(failed)
     manifest.update(build_manifest(new_as_of, datasets, stale=stale))
     digest = store.write_manifest(manifest)

@@ -194,6 +194,7 @@ jobs:
               - '.github/workflows/ci.yml'
               - 'scripts/ci_paths.yaml'
               - 'apps/digithings-cron/**'
+              - 'apps/dashboard-api/**'
               - 'config/**'
               - '.release-please-manifest.json'
               - 'release-please-config.json'
