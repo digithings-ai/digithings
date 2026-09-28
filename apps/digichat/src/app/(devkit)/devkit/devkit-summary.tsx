@@ -24,10 +24,12 @@ function Section({ title, children }: { title: string; children: React.ReactNode
 }
 
 function Pill({ on, label }: { on: boolean; label: string }) {
+  // Dev-only status pills (isolated route, no token bridge).
+  const onClass = "border-green-500/50 text-green-600 dark:text-green-400"; // canon-allow: not product chrome
   return (
     <span
       className={`mr-1 mb-1 inline-block rounded-full border px-1.5 py-px font-mono text-[10px] ${
-        on ? "border-green-500/50 text-green-600 dark:text-green-400" : "text-muted-foreground"
+        on ? onClass : "text-muted-foreground"
       }`}
     >
       {on ? "●" : "○"} {label}

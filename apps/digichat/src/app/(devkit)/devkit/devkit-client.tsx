@@ -88,6 +88,10 @@ function slugFromDraftText(text: string): string | null {
   return raw;
 }
 
+// Dev-only sidebar drag handle: the col-resize cursor is the drag affordance.
+const RESIZE_HANDLE_CLASS =
+  "w-1.5 shrink-0 cursor-col-resize border-r outline-none hover:bg-accent focus-visible:bg-accent"; // canon-allow: isolated devkit route without token bridge, no kit resize part, not product chrome
+
 function useCopy(): [string | null, (text: string, which: string) => void] {
   const [copied, setCopied] = useState<string | null>(null);
   return [
@@ -536,7 +540,7 @@ export function DevkitClient() {
                               ? "Write the draft to its YAML file"
                               : "No unsaved changes"
                         }
-                        className="flex-1 rounded-md border px-2 py-1 text-xs hover:bg-accent disabled:cursor-not-allowed disabled:opacity-50"
+                        className="flex-1 rounded-md border px-2 py-1 text-xs hover:bg-accent disabled:opacity-50"
                       >
                         {saving ? "saving…" : "save"}
                       </button>
@@ -600,7 +604,7 @@ export function DevkitClient() {
                   )}
                   {draft ? (
                     <details className="rounded-lg border">
-                      <summary className="cursor-pointer px-2 py-1.5 font-mono text-xs text-muted-foreground">
+                      <summary className="px-2 py-1.5 font-mono text-xs text-muted-foreground">
                         raw YAML{isDirty(draft) ? " ●" : ""}
                       </summary>
                       <textarea
@@ -617,7 +621,7 @@ export function DevkitClient() {
                     </details>
                   ) : selected?.redactedText !== null ? (
                     <details className="rounded-lg border">
-                      <summary className="cursor-pointer px-2 py-1.5 font-mono text-xs text-muted-foreground">
+                      <summary className="px-2 py-1.5 font-mono text-xs text-muted-foreground">
                         raw YAML
                       </summary>
                       <pre className="max-h-96 overflow-auto border-t bg-muted/30 p-3 font-mono text-xs">
@@ -643,7 +647,7 @@ export function DevkitClient() {
                 if (e.key === "ArrowLeft") setDragWidth(clampWidth(sidebarWidth - 16));
                 if (e.key === "ArrowRight") setDragWidth(clampWidth(sidebarWidth + 16));
               }}
-              className="w-1.5 shrink-0 cursor-col-resize border-r outline-none hover:bg-accent focus-visible:bg-accent"
+              className={RESIZE_HANDLE_CLASS}
             />
           ) : (
             <div className="flex w-10 shrink-0 flex-col items-center border-r py-3">
