@@ -117,6 +117,14 @@ def test_claims_with_services_mirror_scope(lic_env):
     assert claims["scope"] == "digisearch-corpus hosted-web-search"
 
 
+def test_claims_empty_services_omitted(lic_env):
+    from digikey.jwt_issue import build_license_claims
+
+    claims, _ = build_license_claims(customer_slug="c", hosts=["h"], services=[])
+    assert "services" not in claims
+    assert "scope" not in claims
+
+
 def test_audience_discrimination(lic_env):
     import jwt
     from digikey.crypto_keys import public_key_to_pem

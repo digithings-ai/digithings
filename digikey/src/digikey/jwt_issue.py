@@ -117,9 +117,9 @@ def build_license_claims(
     """Build customer-license JWT claims without signing.
 
     Returns ``(claims, license_id)`` where ``license_id`` mirrors the ``jti``.
-    ``services`` is omitted from the claims entirely when not passed (absent
-    means entitled to the hosted services of the commercial term). Raises
-    ``ValueError`` on blank customer/hosts or an out-of-range term.
+    ``services`` is omitted from the claims entirely when not passed or empty
+    (absent means entitled to the hosted services of the commercial term).
+    Raises ``ValueError`` on blank customer/hosts or an out-of-range term.
     """
     customer = customer_slug.strip()
     if not customer:
@@ -129,7 +129,7 @@ def build_license_claims(
         raise ValueError("hosts must name at least one hostname")
     if term_days < 1 or term_days > LICENSE_MAX_TERM_DAYS:
         raise ValueError(f"term_days must be 1..{LICENSE_MAX_TERM_DAYS}")
-    svc = list(services) if services is not None else None
+    svc = list(services) if services else None  # [] behaves like absent (pairwise-omit)
     now = datetime.now(timezone.utc)
     iat = int(now.timestamp())
     license_id = uuid.uuid4().hex
