@@ -12,6 +12,8 @@ except ImportError:  # Slim zammad-mcp image ships only mcp+httpx (no polars/dig
     enrich_rows = None  # type: ignore[assignment]
     group_count = None  # type: ignore[assignment]
 
+from scripts.zammad_mcp.client import PENDING_STATE_TYPE_IDS
+
 AUTOMATION_OWNERS = frozenset({"jirasync@sitaas.de", "-", "auto"})
 CLOSED_TYPE_NAMES = frozenset({"closed", "merged"})
 
@@ -85,6 +87,28 @@ def _is_closed(row: dict[str, Any], state_types: dict[str, int]) -> bool:
     closed_ids = {state_types.get(name) for name in CLOSED_TYPE_NAMES}
     closed_ids.discard(None)
     return type_id in closed_ids
+
+
+def state_category(state: Any, state_types: dict[str, int] | None = None) -> str:
+    """Classify one state value as ``open`` | ``closed`` | ``pending``.
+
+    Closed/pending derive from state-type ids (never the state *named*
+    ``open``); without type info only the ``closed``/``merged`` names count
+    as closed, everything else as open.
+    """
+    mapping = state_types or {}
+    name = state.get("name") if isinstance(state, dict) else state
+    lowered = str(name or "").strip().lower()
+    type_id = mapping.get(lowered)
+    if not isinstance(type_id, int):
+        return "closed" if lowered in CLOSED_TYPE_NAMES else "open"
+    closed_ids = {mapping.get(closed_name) for closed_name in CLOSED_TYPE_NAMES}
+    closed_ids.discard(None)
+    if type_id in closed_ids:
+        return "closed"
+    if type_id in PENDING_STATE_TYPE_IDS:
+        return "pending"
+    return "open"
 
 
 def aggregate(

@@ -472,12 +472,17 @@ def test_keyword_terms_extracts_field_values_and_strips_noise():
 def test_keyword_terms_drops_short_stopword_and_duplicate_terms():
     assert keyword_terms("invoice ~INVOICE* and to or") == ["invoice"]
     assert keyword_terms("a I ?") == []
-    assert keyword_terms("one two three four five six seven") == [
+    assert keyword_terms("one two three four five six seven eight nine ten eleven") == [
         "one",
         "two",
         "three",
         "four",
         "five",
+        "six",
+        "seven",
+        "eight",
+        "nine",
+        "ten",
     ]
 
 
@@ -488,16 +493,19 @@ def test_search_tickets_accepts_records_and_objects_envelopes():
     assert client.search_tickets("x") == [TICKET]
 
 
-def test_search_tickets_by_terms_merges_dedupes_and_limits():
+def test_search_tickets_by_terms_tries_all_terms_and_first():
     oldest = dict(TICKET, id=1, updated_at="2026-09-12T00:00:00.000Z")
     newest = dict(TICKET, id=2, updated_at="2026-09-16T00:00:00.000Z")
     middle = dict(TICKET, id=3, updated_at="2026-09-14T00:00:00.000Z")
-    transport = PagedTransport([[oldest, newest], [dict(TICKET, id=2), middle]])
+    transport = PagedTransport([[middle], [oldest], [dict(TICKET, id=2), newest]])
     client = ZammadClient(base_url=BASE, token=TOKEN, get_json=transport)
     rows = client.search_tickets_by_terms(["rechnung", "zahlung"], limit=2)
+    assert [call["params"]["query"] for call in transport.calls] == [
+        "rechnung AND zahlung",
+        "rechnung",
+        "zahlung",
+    ]
     assert [row["id"] for row in rows] == [2, 3]
-    assert transport.calls[0]["params"] == {"query": "rechnung", "limit": 2, "expand": "true"}
-    assert transport.calls[1]["params"] == {"query": "zahlung", "limit": 2, "expand": "true"}
 
 
 def test_search_tickets_by_terms_sorts_rows_without_timestamp_last():
@@ -573,6 +581,9 @@ def test_server_search_falls_back_to_keywords(monkeypatch):
         def __init__(self) -> None:
             self.calls: list[tuple[str, Any]] = []
 
+        def build_query(self, extra_query: str = "", **kwargs: Any) -> str:
+            return extra_query
+
         def search_tickets(self, query: str, limit: int = 10) -> list[dict[str, Any]]:
             self.calls.append(("query", query))
             return []
@@ -595,6 +606,9 @@ def test_server_search_skips_fallback_for_single_keyword(monkeypatch):
     from scripts.zammad_mcp import server
 
     class StubClient:
+        def build_query(self, extra_query: str = "", **kwargs: Any) -> str:
+            return extra_query
+
         def search_tickets(self, query: str, limit: int = 10) -> list[dict[str, Any]]:
             return [TICKET]
 
@@ -1063,3 +1077,208 @@ def test_server_aggregate_tickets_fails_closed_on_transport_error(monkeypatch):
     )
     out = server.aggregate_tickets(group_by="customer")
     assert out.startswith("zammad error:")
+
+
+def test_search_upgrades_state_category_and_window(monkeypatch):
+    monkeypatch.setattr(client_module, "_state_types_cache", None)
+    client, transport = make_client([TICKET])
+    # state_category=open expands to the six non-closed state names joined by OR
+    query = client.build_query(state_category="open")
+    assert "gelöst von Dev" in query and "state.name:closed" not in query
+
+
+def test_ticket_report_window_filters_client_side():
+    from scripts.zammad_mcp.formatting import format_ticket_report
+
+    old = dict(TICKET, id=1, updated_at="2026-01-01T00:00:00Z")
+    new = dict(TICKET, id=2, updated_at="2026-09-27T00:00:00Z")
+    text = format_ticket_report([old, new], since_days=7)
+    assert "1 ticket" in text
+
+
+def test_build_query_open_matches_known_states(monkeypatch):
+    monkeypatch.setattr(client_module, "_state_types_cache", None)
+    client, _ = make_client([TICKET])
+    assert client.build_query(state_category="open") == (
+        '(state.name:new OR state.name:open OR state.name:"in Bearbeitung" '
+        'OR state.name:"gelöst von Dev" OR state.name:"warten auf Kunden" '
+        'OR state.name:"warten auf Dev")'
+    )
+
+
+def test_build_query_open_derives_from_live_state_cache(monkeypatch):
+    monkeypatch.setattr(client_module, "_state_types_cache", None)
+    states = [
+        {"name": "open", "state_type_id": 2},
+        {"name": "Custom Review", "state_type_id": 2},
+        {"name": "closed", "state_type_id": 5},
+        {"name": "merged", "state_type_id": 6},
+    ]
+    client, _ = make_client(states)
+    query = client.build_query(state_category="open")
+    # Live cache keys are lower-cased by get_state_types; custom states join
+    # the clause in that form while known states keep canonical casing.
+    assert 'state.name:"custom review"' in query
+    assert "state.name:closed" not in query and "state.name:merged" not in query
+
+
+def test_build_query_closed_pending_and_rejections(monkeypatch):
+    monkeypatch.setattr(client_module, "_state_types_cache", None)
+    client, _ = make_client([TICKET])
+    assert (
+        client.build_query(state_category="closed") == "(state.name:closed OR state.name:merged)"
+    )
+    pending = client.build_query(state_category="pending")
+    assert "warten auf Kunden" in pending and "state.name:closed" not in pending
+    with pytest.raises(ZammadError, match="state_category"):
+        client.build_query(state_category="bogus")
+    with pytest.raises(ZammadError, match="integers"):
+        client.build_query(since_days="recent")
+
+
+def test_build_query_window_and_combined(monkeypatch):
+    monkeypatch.setattr(client_module, "_state_types_cache", None)
+    client, _ = make_client([TICKET])
+    window = client.build_query(since_days=7)
+    assert "created_at:>=" in window and "T" not in window
+    both = client.build_query(since_days=30, until_days=7, extra_query="state.name:open")
+    assert "created_at:>=" in both and "created_at:<" in both
+    assert "(state.name:open)" in both and "T" not in both
+    assert client.build_query(extra_query="  rechnung  ") == "rechnung"
+    assert client.build_query() == "*"
+    full = client.build_query(state_category="closed", since_days=7, extra_query="rechnung")
+    assert full.startswith("(state.name:closed OR state.name:merged) AND created_at:>=")
+    assert full.endswith("(rechnung)")
+
+
+def test_search_tickets_by_terms_single_term_skips_and():
+    transport = PagedTransport([[TICKET]])
+    client = ZammadClient(base_url=BASE, token=TOKEN, get_json=transport)
+    assert client.search_tickets_by_terms(["rechnung"], limit=5) == [TICKET]
+    assert [call["params"]["query"] for call in transport.calls] == ["rechnung"]
+    assert client.search_tickets_by_terms([], limit=5) == []
+
+
+def test_state_category_helper():
+    from scripts.zammad_mcp.aggregate import state_category
+
+    types = {
+        "open": 2,
+        "gelöst von dev": 2,
+        "warten auf kunden": 3,
+        "closed": 5,
+        "merged": 6,
+    }
+    assert state_category("open", types) == "open"
+    assert state_category("gelöst von Dev", types) == "open"
+    assert state_category("warten auf Kunden", types) == "pending"
+    assert state_category("closed", types) == "closed"
+    assert state_category({"name": "merged"}, types) == "closed"
+    assert state_category("closed", {}) == "closed"
+    assert state_category("open", {}) == "open"
+    assert state_category("warten auf Kunden", {}) == "open"
+
+
+def test_format_ticket_detail_enrichment():
+    out = formatting.format_ticket_detail(
+        dict(TICKET, owner="11111111-1111-1111-1111-111111111111"),
+        [],
+        owner_name="Ada Lovelace",
+        category="open",
+    )
+    assert "Owner: Ada Lovelace" in out
+    assert "11111111" not in out
+    assert "Category: open" in out
+    plain = formatting.format_ticket_detail(TICKET, [])
+    assert "Category" not in plain
+
+
+def test_server_get_ticket_enriches_owner_and_category(monkeypatch):
+    pytest.importorskip("mcp.server.fastmcp")
+    from scripts.zammad_mcp import server
+
+    monkeypatch.setattr(client_module, "_state_types_cache", None)
+
+    def route(url, params=None, headers=None, timeout=None):
+        if url.endswith("/api/v1/tickets/231"):
+            return dict(TICKET, id=231, owner=5, state="open")
+        if url.endswith("/api/v1/ticket_articles/by_ticket/231"):
+            return [{"id": 1, "sender": "Customer", "type": "web", "body": "<p>hi</p>"}]
+        if url.endswith("/api/v1/users/5"):
+            return {"id": 5, "firstname": "Ada", "lastname": "Lovelace"}
+        if url.endswith("/api/v1/ticket_states"):
+            return [
+                {"name": "open", "state_type_id": 2},
+                {"name": "closed", "state_type_id": 5},
+            ]
+        raise AssertionError(f"unexpected url {url}")
+
+    monkeypatch.setattr(
+        server, "_client", lambda: ZammadClient(base_url=BASE, token=TOKEN, get_json=route)
+    )
+    out = server.get_ticket(231)
+    assert "Owner: Ada Lovelace" in out
+    assert "Category: open" in out
+    assert "hi" in out
+
+
+def test_ticket_report_group_by_section():
+    now = datetime(2026, 9, 28, 12, 0, tzinfo=timezone.utc)
+    rows = [
+        dict(TICKET, id=1, group="Sitaas", updated_at="2026-09-27T00:00:00Z"),
+        dict(TICKET, id=2, group="Sitaas", updated_at="2026-09-27T00:00:00Z"),
+        dict(TICKET, id=3, group="OCC Devs", updated_at="2026-09-27T00:00:00Z"),
+    ]
+    out = formatting.format_ticket_report(rows, now=now, since_days=7, group_by="group")
+    assert "Zammad ticket report (3 ticket(s) visible)" in out
+    assert "Top group: Sitaas 2, OCC Devs 1" in out
+
+
+def test_server_ticket_report_window_and_validation(monkeypatch):
+    pytest.importorskip("mcp.server.fastmcp")
+    from scripts.zammad_mcp import server
+
+    now = datetime.now(timezone.utc)
+
+    class StubClient:
+        def list_tickets(self, max_tickets: int = 500):
+            return [
+                dict(TICKET, id=1, updated_at="2026-01-01T00:00:00Z"),
+                dict(TICKET, id=2, updated_at=now.isoformat()),
+            ]
+
+    monkeypatch.setattr(server, "_client", lambda: StubClient())
+    assert "1 ticket(s) visible" in server.ticket_report(since_days=7)
+    assert "2 ticket(s) visible" in server.ticket_report()
+    assert "Top group" in server.ticket_report(group_by="group")
+    assert "since_days" in server.ticket_report(since_days="recent")
+    assert "group_by" in server.ticket_report(group_by="owner_email")
+
+
+def test_server_search_passes_category_and_window(monkeypatch):
+    pytest.importorskip("mcp.server.fastmcp")
+    from scripts.zammad_mcp import server
+
+    monkeypatch.setattr(client_module, "_state_types_cache", None)
+    transport = FakeTransport([TICKET])
+    monkeypatch.setattr(
+        server, "_client", lambda: ZammadClient(base_url=BASE, token=TOKEN, get_json=transport)
+    )
+    out = server.search_tickets("", state_category="closed")
+    assert out.splitlines()[0] == 'Found 1 ticket(s) for: "(state.name:closed OR state.name:merged)"'
+    search_call = next(
+        call for call in transport.calls if call["url"].endswith("/tickets/search")
+    )
+    assert search_call["params"]["query"] == "(state.name:closed OR state.name:merged)"
+    assert "state_category" in server.search_tickets("", state_category="bogus")
+    assert "non-empty" in server.search_tickets("")
+    assert "since_days" in server.search_tickets("x", since_days="recent")
+
+
+def test_search_tickets_docstring_has_ranking_recipe():
+    pytest.importorskip("mcp.server.fastmcp")
+    from scripts.zammad_mcp import server
+
+    doc = server.search_tickets.__doc__ or ""
+    for token in ("coverage_score", "order_rows", "state_category", "get_ticket", "occ_help"):
+        assert token in doc

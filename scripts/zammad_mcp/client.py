@@ -21,10 +21,32 @@ DEFAULT_BASE_URL = "https://ticket.sitaas.de"
 MAX_SEARCH_LIMIT = 500
 MAX_REPORT_TICKETS = 500
 PAGE_SIZE = 100
-MAX_KEYWORD_TERMS = 5
+MAX_KEYWORD_TERMS = 10
 MIN_KEYWORD_LENGTH = 2
 
 SORT_FIELDS = frozenset({"created_at", "updated_at", "close_at", "id", "number"})
+
+VALID_STATE_CATEGORIES = frozenset({"open", "closed", "pending"})
+PENDING_STATE_TYPE_IDS = frozenset({3, 4})
+
+# Canonical display name -> Zammad state_type_id for the known states.
+# Zammad seeds new(1)/open(2)/pending-reminder(3)/pending-close(4)/
+# closed(5)/merged(6)/removed(7); the German states are this instance's
+# custom open/pending states. ``build_query`` merges the live
+# ``get_state_types()`` cache over this table (live wins), so custom states
+# added later are picked up while casing stays stable for the known ones.
+_KNOWN_STATE_TYPES: tuple[tuple[str, int], ...] = (
+    ("new", 1),
+    ("open", 2),
+    ("in Bearbeitung", 2),
+    ("gelöst von Dev", 2),
+    ("warten auf Kunden", 3),
+    ("warten auf Dev", 4),
+    ("closed", 5),
+    ("merged", 6),
+)
+
+_STATE_NAME_BARE_RE = re.compile(r"^[A-Za-z0-9_-]+$")
 
 _state_types_cache: dict[str, int] | None = None
 
@@ -106,6 +128,29 @@ def _updated_sort_key(ticket: dict[str, Any]) -> str:
     """Sort key for merged keyword results: newest first, unknown last."""
     value = ticket.get("updated_at")
     return str(value) if value else ""
+
+
+def _state_term(name: str) -> str:
+    """One ``state.name:`` clause; quote anything beyond a bare word."""
+    if _STATE_NAME_BARE_RE.match(name):
+        return f"state.name:{name}"
+    return f'state.name:"{name}"'
+
+
+def _window_clauses(since_days: int | None, until_days: int | None) -> list[str]:
+    """Validate day offsets and render ``created_at`` date-only clauses."""
+    try:
+        since = None if since_days is None else int(since_days)
+        until = None if until_days is None else int(until_days)
+    except (TypeError, ValueError) as exc:
+        raise ZammadError("since_days and until_days must be integers") from exc
+    ref = datetime.now(timezone.utc).date()
+    clauses = []
+    if since is not None:
+        clauses.append(f"created_at:>={(ref - timedelta(days=since)).isoformat()}")
+    if until is not None:
+        clauses.append(f"created_at:<{(ref - timedelta(days=until)).isoformat()}")
+    return clauses
 
 
 def _http_get_json(
@@ -239,15 +284,73 @@ class ZammadClient:
         extra_query: str = "",
     ) -> list[dict[str, Any]]:
         """One call fetching a whole time window (limit=500; date-only literals)."""
-        ref = datetime.now(timezone.utc).date()
-        clauses = []
-        if since_days is not None:
-            clauses.append(f"created_at:>={(ref - timedelta(days=since_days)).isoformat()}")
-        if until_days is not None:
-            clauses.append(f"created_at:<{(ref - timedelta(days=until_days)).isoformat()}")
+        clauses = _window_clauses(since_days, until_days)
         if (extra_query or "").strip():
             clauses.append(f"({extra_query.strip()})")
         return self.search_tickets(" AND ".join(clauses) or "*", limit=MAX_SEARCH_LIMIT)
+
+    def _state_category_clause(self, state_category: str) -> str:
+        """OR-clause for one state category, derived from state types.
+
+        ``open`` is every state whose type is not a closed type — never the
+        bare ``state.name:open`` trap (that matches only the one state
+        *named* open). The live ``get_state_types()`` cache is merged over
+        the known-state table (live wins); when states are unreachable the
+        known table is the fail-closed fallback.
+        """
+        try:
+            live = self.get_state_types()
+        except ZammadError:
+            live = {}
+        merged = {name.lower(): type_id for name, type_id in _KNOWN_STATE_TYPES}
+        merged.update(live)
+        display = {name.lower(): name for name, _ in _KNOWN_STATE_TYPES}
+        for lower in live:
+            display.setdefault(lower, lower)
+        closed_ids = {merged.get("closed"), merged.get("merged")}
+        closed_ids.discard(None)
+        if state_category == "closed":
+            names = [name for name in ("closed", "merged") if name in merged]
+        elif state_category == "pending":
+            names = [
+                display[lower]
+                for lower, type_id in merged.items()
+                if type_id in PENDING_STATE_TYPE_IDS
+            ]
+        else:
+            names = [
+                display[lower] for lower, type_id in merged.items() if type_id not in closed_ids
+            ]
+        if not names:
+            raise ZammadError(f"no states known for category {state_category!r}")
+        return "(" + " OR ".join(_state_term(name) for name in names) + ")"
+
+    def build_query(
+        self,
+        state_category: str | None = None,
+        since_days: int | None = None,
+        until_days: int | None = None,
+        extra_query: str = "",
+    ) -> str:
+        """Compose a Zammad search query from a category, window, and extra query.
+
+        A lone extra query is returned as-is; combined clauses join with AND
+        (the extra wrapped in parens, same as ``fetch_window``). No clauses
+        at all yields ``*``. Read-only (one state-types lookup at most).
+        """
+        if state_category is not None and state_category not in VALID_STATE_CATEGORIES:
+            raise ZammadError(f"state_category must be one of {sorted(VALID_STATE_CATEGORIES)}")
+        clauses = _window_clauses(since_days, until_days)
+        extra = (extra_query or "").strip()
+        if state_category is not None:
+            # Category first so the OR-group reads before the AND-window.
+            clauses.insert(0, self._state_category_clause(state_category))
+        if extra:
+            if clauses:
+                clauses.append(f"({extra})")
+            else:
+                return extra
+        return " AND ".join(clauses) or "*"
 
     def get_state_types(self) -> dict[str, int]:
         """Map lower-cased state names to their state_type_id (cached, read-only).
@@ -307,20 +410,29 @@ class ZammadClient:
         return name
 
     def search_tickets_by_terms(self, terms: list[str], limit: int = 10) -> list[dict[str, Any]]:
-        """Search each keyword separately and merge the matches. Read-only.
+        """Search keywords and merge the matches. Read-only.
 
         Search semantics differ by instance: multi-word queries and field
-        syntax only work with Elasticsearch. Term-by-term search is the
-        fallback for instances that only do a substring match.
+        syntax only work with Elasticsearch. The all-terms-AND query runs
+        first (exact on ES instances, usually empty on substring ones),
+        then each term separately; matches merge by id, newest
+        ``updated_at`` first (unknown timestamps last).
         """
         capped = self._coerce_limit(limit)
+        totals = list(terms or [])[:MAX_KEYWORD_TERMS]
         merged: dict[Any, dict[str, Any]] = {}
-        for term in terms[:MAX_KEYWORD_TERMS]:
-            for row in self.search_tickets(term, limit=capped):
+
+        def _merge(rows: list[dict[str, Any]]) -> None:
+            for row in rows:
                 key = row.get("id")
                 if key is None or key in merged:
                     continue
                 merged[key] = row
+
+        if len(totals) > 1:
+            _merge(self.search_tickets(" AND ".join(totals), limit=capped))
+        for term in totals:
+            _merge(self.search_tickets(term, limit=capped))
         ordered = sorted(merged.values(), key=_updated_sort_key, reverse=True)
         return ordered[:capped]
 

@@ -14,9 +14,15 @@ from typing import Any
 
 from mcp.server.fastmcp import FastMCP
 
-from scripts.zammad_mcp.aggregate import VALID_GROUP_BYS, VALID_METRICS, aggregate
+from scripts.zammad_mcp.aggregate import (
+    VALID_GROUP_BYS,
+    VALID_METRICS,
+    aggregate,
+    state_category,
+)
 from scripts.zammad_mcp.client import ZammadClient, ZammadError, keyword_terms
 from scripts.zammad_mcp.formatting import (
+    REPORT_GROUP_BYS,
     format_aggregate,
     format_search_results,
     format_ticket_detail,
@@ -54,7 +60,13 @@ def _client() -> ZammadClient:
 
 
 @mcp.tool()
-def search_tickets(query: str, limit: int = 10) -> str:
+def search_tickets(
+    query: str = "",
+    limit: int = 10,
+    state_category: str | None = None,
+    since_days: int | None = None,
+    until_days: int | None = None,
+) -> str:
     """Search Zammad tickets (read-only).
 
     Plain words always work: a query matches ticket title, number, and
@@ -67,24 +79,51 @@ def search_tickets(query: str, limit: int = 10) -> str:
     Elasticsearch; otherwise it silently matches nothing. For "what's open
     or closed", prefer ticket_report.
 
+    ``state_category`` (open|closed|pending) expands to the states of that
+    category from the cached state types — never the bare
+    ``state.name:open`` trap (that matches only the one state *named*
+    open). ``since_days``/``until_days`` restrict ``created_at`` to a
+    date-only window. The query, category, and window combine with AND.
+
     Tickets here are written in German and English; a keyword only matches
     the words actually stored in a ticket, so English terms never find
     German text. When a search comes back empty, retry with German wording
     or browse with list_tickets and read the tickets directly.
+
+    Workflows (compose these read-only tools; no extra endpoint needed):
+
+    - Customer history: ``customer.email:<addr>`` with
+      ``sort_by=created_at&order_by=desc&limit=1`` finds the latest ticket,
+      then ``get_ticket`` reads the customer and its articles.
+    - Resolution search: tokenize the question, run one
+      ``title:<term>`` / ``article.body:<term>`` search per term restricted
+      to resolved states (``state_category="closed"``).
+    - Ranking: score each hit with ``coverage_score(title + " " + snippet,
+      terms)`` from ``digisearch.core.tables``, rank with ``order_rows``
+      by (coverage desc, updated_at desc), read the top 3-5 with
+      ``get_ticket``, and cross-check the occ_help docs before answering.
     """
     client = _client()
     try:
-        tickets = client.search_tickets(query, limit=limit)
-        fallback_terms: list[str] = []
         cleaned = (query or "").strip()
-        if not tickets and cleaned:
-            terms = keyword_terms(cleaned)
-            if terms and terms != [cleaned]:
+        if not cleaned and state_category is None and since_days is None and until_days is None:
+            raise ZammadError("search requires a non-empty query")
+        built = client.build_query(
+            state_category=state_category,
+            since_days=since_days,
+            until_days=until_days,
+            extra_query=cleaned,
+        )
+        tickets = client.search_tickets(built, limit=limit)
+        fallback_terms: list[str] = []
+        if not tickets and built:
+            terms = keyword_terms(built)
+            if terms and terms != [built]:
                 fallback_terms = terms
                 tickets = client.search_tickets_by_terms(terms, limit=limit)
     except ZammadError as exc:
         return f"zammad error: {exc}"
-    return format_search_results(query, tickets, fallback_terms=fallback_terms)
+    return format_search_results(built, tickets, fallback_terms=fallback_terms)
 
 
 @mcp.tool()
@@ -112,31 +151,69 @@ def get_ticket(ticket_id: int | str) -> str:
 
     Accepts the internal id (``231``) or the ticket number shown as
     ``#28312``; a number is resolved to its internal id automatically.
+    The owner id resolves to a display name and the state to its
+    open|closed|pending category (best-effort; raw values on failure).
     """
     client = _client()
     try:
         ticket = client.get_ticket(ticket_id)
         resolved_id = ticket.get("id") or ticket_id
         articles = client.get_articles(resolved_id)
+        owner_name = _resolve_owner_name(client, ticket.get("owner"))
+        category = _ticket_category(client, ticket)
     except ZammadError as exc:
         return f"zammad error: {exc}"
-    return format_ticket_detail(ticket, articles)
+    return format_ticket_detail(ticket, articles, owner_name=owner_name, category=category)
+
+
+def _resolve_owner_name(client: ZammadClient, raw: Any) -> str | None:
+    """Best-effort owner display name; None (raw value shown) on failure."""
+    if isinstance(raw, dict):
+        raw = raw.get("login") or raw.get("name") or raw.get("email")
+    if raw is None:
+        return None
+    text = str(raw).strip()
+    if not text:
+        return None
+    try:
+        return client.resolve_user(int(text))
+    except (ValueError, ZammadError):
+        return None
+
+
+def _ticket_category(client: ZammadClient, ticket: dict[str, Any]) -> str | None:
+    """Best-effort open|closed|pending category; None (omitted) on failure."""
+    try:
+        types = client.get_state_types()
+    except ZammadError:
+        return None
+    return state_category(ticket.get("state"), types)
 
 
 @mcp.tool()
-def ticket_report() -> str:
+def ticket_report(since_days: int | None = None, group_by: str | None = None) -> str:
     """Status report of all visible Zammad tickets (read-only).
 
     Counts tickets by state, group, and priority plus recent activity —
     "what's open, what's closed". Scans up to 500 tickets via the read-only
     ticket list; "closed" means the state is named closed/merged, any other
-    state counts as unresolved.
+    state counts as unresolved. ``since_days`` keeps only tickets updated
+    in the window (client-side); ``group_by`` (state|group|priority)
+    appends a top-values section.
     """
+    window_days: int | None = None
+    if since_days is not None:
+        try:
+            window_days = int(since_days)
+        except (TypeError, ValueError):
+            return "zammad error: since_days must be an integer"
+    if group_by is not None and group_by not in REPORT_GROUP_BYS:
+        return f"zammad error: group_by must be one of {sorted(REPORT_GROUP_BYS)}"
     try:
         tickets = _client().list_tickets()
     except ZammadError as exc:
         return f"zammad error: {exc}"
-    return format_ticket_report(tickets)
+    return format_ticket_report(tickets, since_days=window_days, group_by=group_by)
 
 
 def _owner_display_names(client: ZammadClient, rows: list[dict[str, Any]]) -> dict[str, str]:
