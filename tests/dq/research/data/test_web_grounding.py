@@ -510,6 +510,80 @@ def test_out_of_range_recency_days_is_clamped_not_sent(
         assert "recency_days" in caplog.text
 
 
+@pytest.mark.unit
+def test_fetch_web_grounding_passes_config_provider(monkeypatch: pytest.MonkeyPatch) -> None:
+    """``search_domains.yaml``'s ``provider`` must reach the tool call (#4723)."""
+    seen: dict[str, Any] = {}
+
+    def _fake(**kwargs: Any) -> dict[str, Any]:
+        seen.update(kwargs)
+        return {"summary": "s", "sources": ["https://u"]}
+
+    monkeypatch.setattr(
+        web_grounding,
+        "_config",
+        lambda: {"web_allowed_websites": ["reuters.com"], "provider": "exa"},
+    )
+    monkeypatch.setattr(web_grounding, "call_web_search_tool", _fake)
+    web_grounding.fetch_web_grounding(model="cheap", segment="macro", run_date=date(2026, 6, 9))
+    assert seen["provider"] == "exa"
+
+
+@pytest.mark.unit
+def test_provider_reaches_the_digigraph_call(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The plumbing seam: ``call_web_search_tool`` -> ``call_digisearch_web_search`` (#4723).
+
+    Patches the public digigraph entry point (looked up at call time by
+    ``call_web_search_tool``'s lazy import), so this pins what digiquant sends
+    regardless of which digigraph version is installed.
+    """
+    import digibase.service_auth as sa_mod
+    import digigraph.orchestration.web_search_tools as ws_mod
+
+    monkeypatch.setattr(sa_mod, "get_service_jwt", lambda **k: "svc-jwt")
+    seen: dict[str, Any] = {}
+
+    def _fake_hub_entry(query: str, **kw: Any) -> dict[str, Any]:
+        seen.update(kw)
+        return {
+            "content": "- [t](https://a.com/1): s",
+            "results": [{"doc_id": "https://a.com/1", "content": "s"}],
+        }
+
+    monkeypatch.setattr(ws_mod, "call_digisearch_web_search", _fake_hub_entry)
+    _real_call_web_search_tool(
+        query="etf flows", include_domains=[], max_results=4, provider="tavily"
+    )
+    assert seen["provider"] == "tavily"
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize("provider", [None, "auto", "AUTO", "  auto  ", "", "   "])
+def test_provider_kwarg_omitted_when_unset_or_auto(
+    monkeypatch: pytest.MonkeyPatch, provider: Any
+) -> None:
+    """Unset/auto must not ship the kwarg at all: a pre-#4722 digigraph has no
+    ``provider`` parameter and would TypeError on an unexpected keyword (#4723)."""
+    import digibase.service_auth as sa_mod
+    import digigraph.orchestration.web_search_tools as ws_mod
+
+    monkeypatch.setattr(sa_mod, "get_service_jwt", lambda **k: "svc-jwt")
+    seen: dict[str, Any] = {}
+
+    def _fake_hub_entry(query: str, **kw: Any) -> dict[str, Any]:
+        seen.update(kw)
+        return {
+            "content": "- [t](https://a.com/1): s",
+            "results": [{"doc_id": "https://a.com/1", "content": "s"}],
+        }
+
+    monkeypatch.setattr(ws_mod, "call_digisearch_web_search", _fake_hub_entry)
+    _real_call_web_search_tool(
+        query="etf flows", include_domains=[], max_results=4, provider=provider
+    )
+    assert "provider" not in seen, provider
+
+
 def _digisearch_bound(field_name: str, attr: str) -> Any:
     """Read a bound straight from digisearch's request model (drift alarm only)."""
     from digisearch.web_search.models import WebSearchRequest
