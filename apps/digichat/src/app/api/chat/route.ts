@@ -30,6 +30,7 @@ import { createAiSdkStreamResponse } from "@/lib/adapters/ai-sdk/stream";
 import { createNonAiSdkStreamResponse } from "@/lib/adapters/non-ai-sdk";
 import { resolveLanguageCode } from "@/lib/languages";
 import { requireDigiChatAuth } from "@/lib/request-auth";
+import { licenseRefusal } from "@/lib/license/state";
 import { getEcosystemEndpoints } from "@/lib/ecosystem";
 import { checkBffRateLimit } from "@/lib/bff-rate-limit";
 import {
@@ -87,6 +88,10 @@ function jsonError(
 }
 
 export async function POST(req: Request) {
+  // Revoked/expired license refuses before auth: a revoked deployment
+  // refuses even an authenticated caller, and the check is cheaper.
+  const refusal = licenseRefusal();
+  if (refusal) return refusal;
   const authResult = await requireDigiChatAuth(req);
   const tenantCtx =
     authResult instanceof Response && isEmbedChatRequest(req)
