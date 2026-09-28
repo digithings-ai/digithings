@@ -80,4 +80,60 @@ describe("POST /api/devkit/validate", () => {
     expect(res.status).toBe(400);
     vi.unstubAllEnvs();
   });
+
+  it("returns the scoped deployment when scope is provided", async () => {
+    vi.stubEnv("NODE_ENV", "development");
+    const res = await post("http://127.0.0.1:3005/api/devkit/validate", {
+      text: VALID_TEXT,
+      scope: ["deployment"],
+    });
+    const body = (await res.json()) as {
+      ok: boolean;
+      issues: string[];
+      deployment: { slug: string } | null;
+    };
+    expect(res.status).toBe(200);
+    expect(body.ok).toBe(true);
+    expect(body.issues).toEqual([]);
+    expect(body.deployment?.slug).toBe("devkit-fixture");
+    vi.unstubAllEnvs();
+  });
+
+  it("strips secrets from the scoped deployment", async () => {
+    vi.stubEnv("NODE_ENV", "development");
+    const res = await post("http://127.0.0.1:3005/api/devkit/validate", {
+      text: `version: 1\ndeployment:\n  slug: secret-fixture\n  backend:\n    type: digigraph\n  token: disk-secret\n`,
+      scope: ["deployment"],
+    });
+    const body = (await res.json()) as {
+      ok: boolean;
+      deployment: Record<string, unknown> | null;
+    };
+    expect(body.ok).toBe(true);
+    expect(body.deployment).not.toHaveProperty("token");
+    vi.unstubAllEnvs();
+  });
+
+  it("reports a missing hosts key for hosts scopes", async () => {
+    vi.stubEnv("NODE_ENV", "development");
+    const res = await post("http://127.0.0.1:3005/api/devkit/validate", {
+      text: VALID_TEXT,
+      scope: ["hosts", "nope.example"],
+    });
+    const body = (await res.json()) as { ok: boolean; issues: string[]; deployment: null };
+    expect(body.ok).toBe(false);
+    expect(body.deployment).toBeNull();
+    expect(body.issues.join("\n")).toMatch(/hosts\/nope\.example/);
+    vi.unstubAllEnvs();
+  });
+
+  it("400s on a non-string-array scope", async () => {
+    vi.stubEnv("NODE_ENV", "development");
+    const res = await post("http://127.0.0.1:3005/api/devkit/validate", {
+      text: VALID_TEXT,
+      scope: "deployment",
+    });
+    expect(res.status).toBe(400);
+    vi.unstubAllEnvs();
+  });
 });

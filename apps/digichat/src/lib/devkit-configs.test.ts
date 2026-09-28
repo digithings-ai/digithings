@@ -7,6 +7,7 @@ import {
   listDevkitEntries,
   redactSecretLines,
   stripDeploymentSecrets,
+  validateDevkitDraftText,
   type DigichatDeployment,
 } from "./devkit-configs";
 
@@ -207,5 +208,71 @@ describe("listDevkitEntries", () => {
     expect(envEntries[0].readOnly).toBe(true);
     expect(envEntries[0].redactedText).toBeNull();
     expect(JSON.stringify(envEntries[0])).not.toContain("env-token-secret");
+  });
+});
+
+describe("validateDevkitDraftText", () => {
+  const HOSTS_TEXT = `version: 1
+hosts:
+  alpha.example:
+    slug: alpha
+    backend:
+      type: digigraph
+  beta.example:
+    slug: beta
+    backend:
+      type: digigraph
+`;
+
+  it("returns the scoped deployment for a top-level scope", () => {
+    const result = validateDevkitDraftText(VALID_SINGLE, ["deployment"]);
+    expect(result.ok).toBe(true);
+    expect(result.issues).toEqual([]);
+    expect(result.deployment?.slug).toBe("local-dev");
+    // Secret-stripped: no token, consumeUrl, or mcp setup reaches the client.
+    expect(JSON.stringify(result)).not.toContain("super-secret-token");
+    expect(JSON.stringify(result)).not.toContain("quota.example.com");
+    expect(JSON.stringify(result)).not.toContain("mcp-secret");
+  });
+
+  it("returns the scoped deployment for a hosts scope", () => {
+    const result = validateDevkitDraftText(HOSTS_TEXT, ["hosts", "beta.example"]);
+    expect(result.ok).toBe(true);
+    expect(result.deployment?.slug).toBe("beta");
+  });
+
+  it("reports invalid YAML without a deployment", () => {
+    const result = validateDevkitDraftText("version: [1,\n", ["deployment"]);
+    expect(result.ok).toBe(false);
+    expect(result.deployment).toBeNull();
+    expect(result.issues[0]).toMatch(/^\(yaml\):/);
+  });
+
+  it("reports schema violations without a deployment", () => {
+    const result = validateDevkitDraftText("version: 1\nbogus: true\n", ["deployment"]);
+    expect(result.ok).toBe(false);
+    expect(result.deployment).toBeNull();
+    expect(result.issues.length).toBeGreaterThan(0);
+  });
+
+  it("reports a vanished deployment scope", () => {
+    const result = validateDevkitDraftText(HOSTS_TEXT, ["deployment"]);
+    expect(result.ok).toBe(false);
+    expect(result.deployment).toBeNull();
+    expect(result.issues.join("\n")).toMatch(/deployment missing/);
+  });
+
+  it("reports a vanished hosts key", () => {
+    const result = validateDevkitDraftText(HOSTS_TEXT, ["hosts", "ghost.example"]);
+    expect(result.ok).toBe(false);
+    expect(result.deployment).toBeNull();
+    expect(result.issues.join("\n")).toMatch(/ghost\.example/);
+  });
+
+  it("rejects unsupported scopes", () => {
+    const result = validateDevkitDraftText(VALID_SINGLE, ["env", "x.example"]);
+    expect(result.ok).toBe(false);
+    expect(result.deployment).toBeNull();
+    expect(result.issues.join("\n")).toMatch(/unsupported scope/);
   });
 });
