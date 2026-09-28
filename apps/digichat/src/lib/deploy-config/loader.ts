@@ -10,6 +10,7 @@
  */
 
 import { readFileSync, existsSync } from "node:fs";
+import { join } from "node:path";
 import { load as loadYaml } from "js-yaml";
 // js-yaml v4 — default safe schema via load() with no schema override.
 import {
@@ -28,6 +29,7 @@ import {
   BASELINE_EMBED_WELCOME_BODY,
 } from "@/lib/baseline-embed";
 import { parseEmbedTenants, type EmbedTenantConfig } from "@/lib/embed-tenants";
+import { getDevkitActiveConfig } from "./devkit-active";
 import { DEFAULT_THINKING_MODE, DEFAULT_VIEW_MODE } from "@/lib/view-modes";
 import {
   isThreadSkin,
@@ -404,9 +406,39 @@ export function loadDigichatConfig(opts: LoadDigichatConfigOptions = {}): Digich
 
 let cached: DigichatConfig | null = null;
 let loadError: Error | null = null;
+/** Devkit preview override cache (dev-only; see devkit-active.ts). */
+let devkitCached: { rel: string; cfg: DigichatConfig } | null = null;
 
 /** Process-wide singleton. Fail closed: first load error sticks until reset. */
 export function getDigichatConfig(): DigichatConfig {
+  // Dev-only active-config override (#4691): a navigation carrying
+  // `?config=<file>.yaml` switches which config this process serves.
+  // Production never reads the state (and callers never set it).
+  if (process.env.NODE_ENV !== "production") {
+    const rel = getDevkitActiveConfig();
+    if (rel) {
+      try {
+        if (!devkitCached || devkitCached.rel !== rel) {
+          devkitCached = {
+            rel,
+            cfg: loadDigichatConfig({
+              env: {
+                ...process.env,
+                DIGICHAT_CONFIG_PATH: join(process.cwd(), "config", rel),
+              },
+              allowMissingFile: false,
+            }),
+          };
+        }
+        return devkitCached.cfg;
+      } catch (e) {
+        console.warn(
+          `[digichat-config] devkit override "${rel}" failed; serving singleton: ${e instanceof Error ? e.message : String(e)}`,
+        );
+        // fall through — the normal singleton decides (fail-closed)
+      }
+    }
+  }
   if (loadError) throw loadError;
   if (!cached) {
     try {
@@ -432,6 +464,7 @@ export function initDigichatConfigAtStartup(): DigichatConfig {
 export function resetDigichatConfigForTests(): void {
   cached = null;
   loadError = null;
+  devkitCached = null;
 }
 
 /** Test hook — inject a parsed config without touching disk. */
