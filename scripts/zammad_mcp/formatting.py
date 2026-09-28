@@ -399,8 +399,9 @@ def format_aggregate(
 ) -> str:
     """Render a windowed ranking for the model.
 
-    Customer values go through the existing mask path (masked emails only,
-    never raw); owner entries prefer the resolved ``name`` enrichment.
+    Customer entries prefer the server-enriched masked-email + id ``name``
+    (raw values mask here, never raw); owner entries prefer the resolved
+    ``name`` enrichment.
     """
     scope = f"created in the last {since_days} day(s)" if since_days is not None else "all visible"
     if not ranked:
@@ -409,9 +410,11 @@ def format_aggregate(
     for index, entry in enumerate(ranked, start=1):
         name = entry.get("name") or entry.get("value", "?")
         if group_by == "customer":
+            # Server-enriched names already carry the masked-email + id
+            # display and pass through unchanged; raw values mask here.
             name = _mask_customer(name)
         lines.append(f"{index}. {name} — {entry.get('count', 0)}")
-    if group_by == "owner":
+    if group_by in ("owner", "customer"):
         owners = ", ".join(sorted(AUTOMATION_OWNERS))
-        lines.append(f"Automation accounts ({owners}) are excluded from owner rankings.")
+        lines.append(f"Automation accounts ({owners}) are excluded from {group_by} rankings.")
     return "\n".join(lines)

@@ -15,6 +15,7 @@ except ImportError:  # Slim zammad-mcp image ships only mcp+httpx (no polars/dig
 from scripts.zammad_mcp.client import PENDING_STATE_TYPE_IDS
 
 AUTOMATION_OWNERS = frozenset({"jirasync@sitaas.de", "-", "auto"})
+AUTOMATION_LOGIN_PREFIXES = ("auto-",)
 CLOSED_TYPE_NAMES = frozenset({"closed", "merged"})
 
 GROUP_KEYS = {"customer": "customer_id", "owner": "owner_id"}
@@ -69,6 +70,19 @@ if enrich_rows is None or group_count is None:  # pragma: no cover - slim image 
     group_count = _fallback_group_count  # type: ignore[no-redef]
 
 
+def is_automation_login(login: Any) -> bool:
+    """True when *login* is an automation/service account.
+
+    Matches the exact ``-`` placeholder, the ``jirasync@sitaas.de`` sync
+    account (plus the legacy bare ``auto`` in ``AUTOMATION_OWNERS``), and
+    anything starting with the ``auto-`` prefixes.
+    """
+    text = str(login or "").strip() if login is not None else ""
+    if text in AUTOMATION_OWNERS:
+        return True
+    return text.startswith(AUTOMATION_LOGIN_PREFIXES)
+
+
 def _is_closed(row: dict[str, Any], state_types: dict[str, int]) -> bool:
     """True when the row's state type is a closed type (closed/merged ids).
 
@@ -119,6 +133,7 @@ def aggregate(
     top_n: int = 5,
     state_types: dict[str, int] | None = None,
     owner_names: Mapping[Any, str] | None = None,
+    customer_names: Mapping[Any, str] | None = None,
 ) -> list[dict[str, Any]]:
     """Group rows and count; metric filters open/closed via state types."""
     if group_by not in VALID_GROUP_BYS:
@@ -136,14 +151,20 @@ def aggregate(
         # than *_id keys — group by those instead of bucketing as "unknown".
         key = group_by
     if group_by == "owner":
-        rows = [row for row in rows if str(row.get("owner") or "") not in AUTOMATION_OWNERS]
+        rows = [row for row in rows if not is_automation_login(row.get("owner"))]
+    if group_by == "customer":
+        rows = [row for row in rows if not is_automation_login(row.get("customer"))]
     ranked = group_count(rows, by=key, top_n=top_n)
     if group_by == "owner" and owner_names:
         # Ranked values are strings (group_count str()-ifies); normalize lookup
         # keys so integer ids still resolve instead of degrading to "?".
         names = {str(raw): display for raw, display in owner_names.items()}
         ranked = enrich_rows(ranked, "value", names, display_field="name", missing="?")
-        ranked = [
-            entry for entry in ranked if str(entry.get("name") or "") not in AUTOMATION_OWNERS
-        ]
+        ranked = [entry for entry in ranked if not is_automation_login(entry.get("name"))]
+    if group_by == "customer" and customer_names:
+        # Same shape as the owner branch: enrich with the masked display,
+        # then drop automation customers (mapped as-is) post-rank.
+        names = {str(raw): display for raw, display in customer_names.items()}
+        ranked = enrich_rows(ranked, "value", names, display_field="name", missing="?")
+        ranked = [entry for entry in ranked if not is_automation_login(entry.get("name"))]
     return ranked

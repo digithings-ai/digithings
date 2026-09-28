@@ -18,6 +18,7 @@ from scripts.zammad_mcp.aggregate import (
     VALID_GROUP_BYS,
     VALID_METRICS,
     aggregate,
+    is_automation_login,
     state_category,
 )
 from scripts.zammad_mcp.client import ZammadClient, ZammadError, keyword_terms
@@ -235,7 +236,9 @@ def _owner_display_names(client: ZammadClient, rows: list[dict[str, Any]]) -> di
             text = str(raw).strip()
             if not text or text in names:
                 continue
-            if text == "-":
+            if is_automation_login(text):
+                # Automation accounts resolve to themselves; aggregate()
+                # drops them pre/post-rank so they never reach the ranking.
                 names[text] = text
                 continue
             try:
@@ -243,6 +246,61 @@ def _owner_display_names(client: ZammadClient, rows: list[dict[str, Any]]) -> di
             except (ValueError, ZammadError):
                 resolved = text
             names[text] = resolved
+    return names
+
+
+def _mask_customer(email: Any, cid: Any) -> str:
+    """Masked customer display for rankings: ``m***@domain (id 98)``.
+
+    Customers are external PII on an anonymous embed — NEVER emit real
+    customer names or full emails, masked email + id only. Missing or
+    odd (non-email) input falls back to ``(id N)``.
+    """
+    text = str(email or "").strip() if email is not None else ""
+    local, sep, domain = text.partition("@")
+    if sep and text.count("@") == 1 and local and "." in domain and " " not in text:
+        return f"{local[0]}***@{domain} (id {cid})"
+    return f"(id {cid})"
+
+
+def _customer_display_names(client: ZammadClient, rows: list[dict[str, Any]]) -> dict[str, str]:
+    """Map each distinct raw customer value to a masked display (best-effort).
+
+    Mirrors ``_owner_display_names``: integer-like ids resolve via the cached
+    ``resolve_user``; automation logins come back as-is for the caller to
+    flag (dropped pre/post-rank, never rendered). Every other value maps to
+    the masked display — real customer names and full emails are never
+    emitted (external PII on an anonymous embed). Unresolvable ids fall back
+    to ``(id N)`` so one bad customer never fails the whole ranking.
+    """
+    names: dict[str, str] = {}
+    for row in rows:
+        cid = row.get("customer_id")
+        for field in ("customer_id", "customer"):
+            raw = row.get(field)
+            if isinstance(raw, dict):
+                raw = raw.get("email") or raw.get("login") or raw.get("name")
+            if raw is None:
+                continue
+            text = str(raw).strip()
+            if not text or text in names:
+                continue
+            try:
+                uid = int(text)
+            except (TypeError, ValueError):
+                if is_automation_login(text):
+                    names[text] = text
+                else:
+                    names[text] = _mask_customer(text, cid if cid is not None else "?")
+                continue
+            try:
+                resolved = client.resolve_user(uid)
+            except ZammadError:
+                resolved = text
+            if is_automation_login(resolved):
+                names[text] = resolved
+            else:
+                names[text] = _mask_customer(resolved, uid)
     return names
 
 
@@ -259,7 +317,11 @@ def aggregate_tickets(
     count|open_count|closed_count (open/closed from state types, never the
     state named "open"). Window: created_at within since_days (one call,
     limit=500). Owner logins are UUIDs — names are resolved automatically;
-    automation accounts are excluded and footnoted.
+    automation accounts are excluded and footnoted. Customer rankings show
+    masked emails with ids only (never real names or full emails).
+    Drill-down: feed a resulting ``customer_id:<N>`` into the
+    customer-history tools (latest-ticket search + full-thread get_ticket
+    flow) to read that customer's conversation.
     """
     if group_by not in VALID_GROUP_BYS:
         return f"zammad error: group_by must be one of {sorted(VALID_GROUP_BYS)}"
@@ -280,6 +342,7 @@ def aggregate_tickets(
         rows = client.fetch_window(since_days=window_days)
         state_types = client.get_state_types()
         owner_names = _owner_display_names(client, rows) if group_by == "owner" else None
+        customer_names = _customer_display_names(client, rows) if group_by == "customer" else None
     except ZammadError as exc:
         return f"zammad error: {exc}"
     try:
@@ -290,6 +353,7 @@ def aggregate_tickets(
             top_n=top,
             state_types=state_types,
             owner_names=owner_names,
+            customer_names=customer_names,
         )
     except ValueError as exc:
         return f"zammad error: {exc}"

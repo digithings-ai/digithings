@@ -1284,3 +1284,129 @@ def test_search_tickets_docstring_has_ranking_recipe():
     doc = server.search_tickets.__doc__ or ""
     for token in ("coverage_score", "order_rows", "state_category", "get_ticket", "occ_help"):
         assert token in doc
+
+
+def test_is_automation_login_flags_service_accounts():
+    from scripts.zammad_mcp.aggregate import AUTOMATION_LOGIN_PREFIXES, is_automation_login
+
+    assert AUTOMATION_LOGIN_PREFIXES == ("auto-",)
+    assert is_automation_login("-") is True
+    assert is_automation_login("auto-x") is True
+    assert is_automation_login("auto-close") is True
+    assert is_automation_login("jirasync@sitaas.de") is True
+    assert is_automation_login("ada") is False
+    assert is_automation_login("jane.doe@example.test") is False
+    assert is_automation_login(None) is False
+    assert is_automation_login("") is False
+
+
+def test_mask_customer_format_and_fallback():
+    pytest.importorskip("mcp.server.fastmcp")
+    from scripts.zammad_mcp import server
+
+    assert server._mask_customer("max@example.test", 98) == "m***@example.test (id 98)"
+    assert server._mask_customer("jane.doe@example.test", 7) == "j***@example.test (id 7)"
+    assert "jane.doe" not in server._mask_customer("jane.doe@example.test", 7)
+    assert server._mask_customer(None, 7) == "(id 7)"
+    assert server._mask_customer("", 7) == "(id 7)"
+    assert server._mask_customer("Ada Lovelace", 5) == "(id 5)"
+    assert server._mask_customer("not-an-email", 5) == "(id 5)"
+
+
+def test_aggregate_customer_branch_drops_automation_pre_and_post_rank():
+    from scripts.zammad_mcp.aggregate import aggregate
+
+    rows = [
+        {"id": 1, "customer_id": 7, "customer": "jane.doe@example.test", "state": "open"},
+        {"id": 2, "customer_id": 7, "customer": "jane.doe@example.test", "state": "open"},
+        {"id": 3, "customer_id": 9, "customer": "jirasync@sitaas.de", "state": "open"},
+        {"id": 4, "customer_id": 10, "customer": "-", "state": "open"},
+        {"id": 5, "customer_id": 11, "customer": "auto-x", "state": "open"},
+        {"id": 6, "customer_id": 12, "customer": "auto-close", "state": "open"},
+    ]
+    names = {
+        "7": "j***@example.test (id 7)",
+        "jane.doe@example.test": "j***@example.test (id 7)",
+        "9": "jirasync@sitaas.de",
+        "10": "-",
+        "11": "auto-x",
+        "12": "auto-close",
+    }
+    out = aggregate(rows, group_by="customer", customer_names=names)
+    assert out == [{"value": "7", "count": 2, "name": "j***@example.test (id 7)"}]
+
+
+def test_aggregate_customer_post_rank_drops_resolved_automation():
+    from scripts.zammad_mcp.aggregate import aggregate
+
+    rows = [
+        {"id": 1, "customer_id": 7, "state": "open"},
+        {"id": 2, "customer_id": 9, "state": "open"},
+    ]
+    names = {"7": "j***@example.test (id 7)", "9": "jirasync@sitaas.de"}
+    out = aggregate(rows, group_by="customer", customer_names=names)
+    assert out == [{"value": "7", "count": 1, "name": "j***@example.test (id 7)"}]
+
+
+def test_format_aggregate_customer_renders_masked_id_display():
+    ranked = [
+        {"value": "7", "count": 2, "name": "j***@example.test (id 7)"},
+        {"value": "9", "count": 1, "name": "(id 9)"},
+    ]
+    out = formatting.format_aggregate(ranked, "customer", "count", 3)
+    assert "1. j***@example.test (id 7) — 2" in out
+    assert "2. (id 9) — 1" in out
+    assert "excluded from customer rankings" in out
+
+
+class CustomerAggregateTransport:
+    """Serve search rows plus per-user payloads for the customer ranking tool."""
+
+    def __init__(self) -> None:
+        self.calls: list[dict[str, Any]] = []
+
+    def __call__(self, url, params=None, headers=None, timeout=None):
+        self.calls.append({"url": url, "params": params})
+        if url.endswith("/api/v1/tickets/search"):
+            return [
+                dict(TICKET, id=1, customer_id=7, customer="jane.doe@example.test", state="open"),
+                dict(TICKET, id=2, customer_id=7, customer="jane.doe@example.test", state="open"),
+                dict(TICKET, id=3, customer_id=9, customer="jirasync@sitaas.de", state="open"),
+            ]
+        if url.endswith("/api/v1/ticket_states"):
+            return [
+                {"name": "open", "state_type_id": 2},
+                {"name": "closed", "state_type_id": 5},
+            ]
+        if url.endswith("/api/v1/users/7"):
+            return {"id": 7, "firstname": "", "lastname": "", "login": "jane.doe@example.test"}
+        if url.endswith("/api/v1/users/9"):
+            return {"id": 9, "firstname": "", "lastname": "", "login": "jirasync@sitaas.de"}
+        raise AssertionError(f"unexpected url {url}")
+
+
+def test_server_aggregate_customer_masks_names_and_bounds_user_lookups(monkeypatch):
+    pytest.importorskip("mcp.server.fastmcp")
+    from scripts.zammad_mcp import server
+
+    monkeypatch.setattr(client_module, "_state_types_cache", None)
+    transport = CustomerAggregateTransport()
+    monkeypatch.setattr(
+        server, "_client", lambda: ZammadClient(base_url=BASE, token=TOKEN, get_json=transport)
+    )
+    out = server.aggregate_tickets(group_by="customer", metric="count", top_n=5)
+    assert "1. j***@example.test (id 7) — 2" in out
+    assert "jane.doe@example.test" not in out
+    assert " (id 9)" not in out
+    assert "excluded from customer rankings" in out
+    user_calls = [call for call in transport.calls if "/api/v1/users/" in call["url"]]
+    assert sorted(call["url"].rsplit("/", 1)[-1] for call in user_calls) == ["7", "9"]
+
+
+def test_aggregate_tickets_docstring_chains_to_customer_history():
+    pytest.importorskip("mcp.server.fastmcp")
+    from scripts.zammad_mcp import server
+
+    doc = server.aggregate_tickets.__doc__ or ""
+    assert "customer_id:<N>" in doc
+    assert "latest-ticket" in doc and "full-thread" in doc
