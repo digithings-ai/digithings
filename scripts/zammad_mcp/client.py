@@ -12,16 +12,21 @@ from __future__ import annotations
 
 import os
 import re
+from datetime import datetime, timedelta, timezone
 from typing import Any, Callable
 
 import httpx
 
 DEFAULT_BASE_URL = "https://ticket.sitaas.de"
-MAX_SEARCH_LIMIT = 50
+MAX_SEARCH_LIMIT = 500
 MAX_REPORT_TICKETS = 500
 PAGE_SIZE = 100
 MAX_KEYWORD_TERMS = 5
 MIN_KEYWORD_LENGTH = 2
+
+SORT_FIELDS = frozenset({"created_at", "updated_at", "close_at", "id", "number"})
+
+_state_types_cache: dict[str, int] | None = None
 
 JsonGetter = Callable[..., Any]
 
@@ -143,6 +148,7 @@ class ZammadClient:
         ).strip()
         self.timeout = timeout
         self._get_json = get_json or _http_get_json
+        self._user_cache: dict[int, str] = {}
 
     @property
     def configured(self) -> bool:
@@ -196,17 +202,109 @@ class ZammadClient:
             raise ZammadError("unexpected Zammad search payload")
         return [row for row in rows if isinstance(row, dict)]
 
-    def search_tickets(self, query: str, limit: int = 10) -> list[dict[str, Any]]:
+    def search_tickets(
+        self, query: str, limit: int = 10, sort_by: str | None = None, order_by: str | None = None
+    ) -> list[dict[str, Any]]:
         """Search tickets (Zammad ticket search syntax). Read-only."""
         cleaned = (query or "").strip()
         if not cleaned:
             raise ZammadError("search requires a non-empty query")
         capped = self._coerce_limit(limit)
+        params: dict[str, Any] = {"query": cleaned, "limit": capped, "expand": "true"}
+        if sort_by is not None:
+            if sort_by not in SORT_FIELDS:
+                raise ZammadError(f"sort_by must be one of {sorted(SORT_FIELDS)}")
+            params["sort_by"] = sort_by
+            params["order_by"] = "desc" if order_by is None else order_by
+        payload = self._get("/api/v1/tickets/search", params)
+        return self._search_rows(payload)
+
+    def count_tickets(self, query: str) -> int:
+        """Cheap server-side count via only_total_count (no rows fetched)."""
+        cleaned = (query or "").strip()
+        if not cleaned:
+            raise ZammadError("search requires a non-empty query")
         payload = self._get(
             "/api/v1/tickets/search",
-            {"query": cleaned, "limit": capped, "expand": "true"},
+            {"query": cleaned, "limit": 1, "expand": "true", "only_total_count": "true"},
         )
-        return self._search_rows(payload)
+        if isinstance(payload, dict) and isinstance(payload.get("total_count"), int):
+            return int(payload["total_count"])
+        raise ZammadError("unexpected Zammad count payload")
+
+    def fetch_window(
+        self,
+        since_days: int | None = None,
+        until_days: int | None = None,
+        extra_query: str = "",
+    ) -> list[dict[str, Any]]:
+        """One call fetching a whole time window (limit=500; date-only literals)."""
+        ref = datetime.now(timezone.utc).date()
+        clauses = []
+        if since_days is not None:
+            clauses.append(f"created_at:>={(ref - timedelta(days=since_days)).isoformat()}")
+        if until_days is not None:
+            clauses.append(f"created_at:<{(ref - timedelta(days=until_days)).isoformat()}")
+        if (extra_query or "").strip():
+            clauses.append(f"({extra_query.strip()})")
+        return self.search_tickets(" AND ".join(clauses) or "*", limit=MAX_SEARCH_LIMIT)
+
+    def get_state_types(self) -> dict[str, int]:
+        """Map lower-cased state names to their state_type_id (cached, read-only).
+
+        Open/closed/pending categories derive from these ids downstream —
+        never from the bare ``state.name:open`` trap (that matches only the
+        one state *named* open, not the open category).
+        """
+        global _state_types_cache
+        if _state_types_cache is not None:
+            return _state_types_cache
+        payload = self._get("/api/v1/ticket_states")
+        if isinstance(payload, dict):
+            rows = payload.get("states")
+        elif isinstance(payload, list):
+            rows = payload
+        else:
+            rows = None
+        if not isinstance(rows, list):
+            raise ZammadError("unexpected Zammad state payload")
+        mapping: dict[str, int] = {}
+        for row in rows:
+            if not isinstance(row, dict):
+                continue
+            name = row.get("name")
+            type_id = row.get("state_type_id")
+            if isinstance(name, str) and name.strip() and isinstance(type_id, int):
+                mapping[name.strip().lower()] = type_id
+        if not mapping:
+            raise ZammadError("unexpected Zammad state payload")
+        _state_types_cache = mapping
+        return mapping
+
+    def resolve_user(self, user_id: int | str) -> str:
+        """Resolve a Zammad user id to a display name (cached, read-only).
+
+        Returns ``firstname lastname`` (fallback: ``login``). Automation
+        logins (``jirasync@…``, ``-``, ``auto-*``) are returned as-is for
+        the caller to flag.
+        """
+        try:
+            uid = int(user_id)
+        except (TypeError, ValueError) as exc:
+            raise ZammadError("user id must be a positive integer") from exc
+        if uid < 1:
+            raise ZammadError("user id must be a positive integer")
+        cached = self._user_cache.get(uid)
+        if cached is not None:
+            return cached
+        payload = self._get(f"/api/v1/users/{uid}")
+        if not isinstance(payload, dict):
+            raise ZammadError("unexpected Zammad user payload")
+        first = str(payload.get("firstname") or "").strip()
+        last = str(payload.get("lastname") or "").strip()
+        name = f"{first} {last}".strip() or str(payload.get("login") or "").strip() or str(uid)
+        self._user_cache[uid] = name
+        return name
 
     def search_tickets_by_terms(self, terms: list[str], limit: int = 10) -> list[dict[str, Any]]:
         """Search each keyword separately and merge the matches. Read-only.

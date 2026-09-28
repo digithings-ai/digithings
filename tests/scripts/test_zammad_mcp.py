@@ -10,6 +10,7 @@ import httpx
 import pytest
 
 from scripts.zammad_mcp import formatting
+from scripts.zammad_mcp import client as client_module
 from scripts.zammad_mcp.client import ZammadClient, ZammadError, keyword_terms
 
 pytestmark = pytest.mark.unit
@@ -66,9 +67,9 @@ def test_token_may_hold_the_full_prefixed_header_value():
 
 def test_search_tickets_caps_limit():
     client, transport = make_client([TICKET])
-    client.search_tickets("x", limit=500)
+    client.search_tickets("x", limit=5000)
     client.search_tickets("x", limit=0)
-    assert transport.calls[0]["params"]["limit"] == 50
+    assert transport.calls[0]["params"]["limit"] == 500
     assert transport.calls[1]["params"]["limit"] == 1
 
 
@@ -502,7 +503,7 @@ def test_get_ticket_hash_number_resolves_through_search_first():
     client = ZammadClient(base_url=BASE, token=TOKEN, get_json=transport)
     assert client.get_ticket("#231") == searched
     assert transport.calls[0]["url"].endswith("/api/v1/tickets/search")
-    assert transport.calls[0]["params"] == {"query": "231", "limit": 50, "expand": "true"}
+    assert transport.calls[0]["params"] == {"query": "231", "limit": 500, "expand": "true"}
     assert [call["url"].rsplit("/", 1)[-1] for call in transport.calls] == ["search", "999"]
 
 
@@ -684,3 +685,134 @@ def test_list_tickets_page_unknown_updated_at_last():
     transport = PagedTransport([[known, unknown]])
     client = ZammadClient(base_url=BASE, token=TOKEN, get_json=transport)
     assert [t["id"] for t in client.list_tickets_page(page=1, per_page=10)] == [1, 2]
+
+
+def test_search_tickets_passes_sort_params():
+    client, transport = make_client([TICKET])
+    client.search_tickets("x", limit=5, sort_by="created_at", order_by="desc")
+    assert transport.calls[0]["params"] == {
+        "query": "x",
+        "limit": 5,
+        "expand": "true",
+        "sort_by": "created_at",
+        "order_by": "desc",
+    }
+
+
+def test_search_tickets_rejects_unsafe_sort():
+    client, _ = make_client([TICKET])
+    with pytest.raises(ZammadError, match="sort_by"):
+        client.search_tickets("x", sort_by="priority")
+
+
+def test_count_tickets_uses_only_total_count():
+    client, transport = make_client({"total_count": 42, "tickets": []})
+    assert client.count_tickets("state.name:closed") == 42
+    assert transport.calls[0]["params"]["only_total_count"] == "true"
+
+
+def test_fetch_window_sends_date_only_query():
+    client, transport = make_client([TICKET])
+    client.fetch_window(since_days=7)
+    sent = transport.calls[0]["params"]
+    assert sent["limit"] == 500
+    assert "created_at" in sent["query"] and "T" not in sent["query"]
+
+
+def test_search_tickets_defaults_order_desc_and_skips_sort_by_default():
+    client, transport = make_client([TICKET])
+    client.search_tickets("x", sort_by="updated_at")
+    assert transport.calls[0]["params"]["order_by"] == "desc"
+    plain, transport2 = make_client([TICKET])
+    plain.search_tickets("x")
+    assert "sort_by" not in transport2.calls[0]["params"]
+
+
+def test_search_tickets_unsafe_sort_makes_no_call():
+    client, transport = make_client([TICKET])
+    with pytest.raises(ZammadError, match="sort_by"):
+        client.search_tickets("x", sort_by="state")
+    assert transport.calls == []
+
+
+def test_count_tickets_rejects_empty_query_and_bad_payload():
+    client, transport = make_client([TICKET])
+    with pytest.raises(ZammadError, match="non-empty"):
+        client.count_tickets("   ")
+    assert transport.calls == []
+    bad, _ = make_client({"tickets": [TICKET]})
+    with pytest.raises(ZammadError, match="count payload"):
+        bad.count_tickets("x")
+
+
+def test_fetch_window_combines_until_and_extra_query():
+    client, transport = make_client([TICKET])
+    rows = client.fetch_window(since_days=30, until_days=7, extra_query="state.name:open")
+    assert rows == [TICKET]
+    query = transport.calls[0]["params"]["query"]
+    assert "created_at:>=" in query and "created_at:<" in query
+    assert "(state.name:open)" in query
+    assert "T" not in query
+
+
+def test_get_state_types_caches_and_lowercases(monkeypatch):
+    monkeypatch.setattr(client_module, "_state_types_cache", None)
+    states = [
+        {"name": "open", "state_type_id": 2},
+        {"name": "gelöst von Dev", "state_type_id": 2},
+        {"name": "closed", "state_type_id": 5},
+        "junk",
+    ]
+    client, transport = make_client(states)
+    expected = {"open": 2, "gelöst von dev": 2, "closed": 5}
+    assert client.get_state_types() == expected
+    assert transport.calls[0]["url"].endswith("/api/v1/ticket_states")
+    assert client.get_state_types() == expected
+    assert len(transport.calls) == 1
+
+
+def test_get_state_types_accepts_states_envelope(monkeypatch):
+    monkeypatch.setattr(client_module, "_state_types_cache", None)
+    client, _ = make_client({"states": [{"name": "merged", "state_type_id": 6}]})
+    assert client.get_state_types() == {"merged": 6}
+
+
+def test_get_state_types_rejects_unexpected_payload(monkeypatch):
+    monkeypatch.setattr(client_module, "_state_types_cache", None)
+    client, transport = make_client({"total_count": 0})
+    with pytest.raises(ZammadError, match="state payload"):
+        client.get_state_types()
+    assert client_module._state_types_cache is None
+    assert len(transport.calls) == 1
+
+
+def test_resolve_user_returns_full_name_and_caches():
+    user = {"id": 5, "firstname": "Ada", "lastname": "Lovelace", "login": "ada@example.test"}
+    client, transport = make_client(user)
+    assert client.resolve_user(5) == "Ada Lovelace"
+    assert transport.calls[0]["url"].endswith("/api/v1/users/5")
+    assert client.resolve_user(5) == "Ada Lovelace"
+    assert len(transport.calls) == 1
+
+
+def test_resolve_user_falls_back_to_login_for_automation_accounts():
+    cases = [
+        ({"id": 9, "firstname": "", "lastname": "", "login": "jirasync@sitaas.de"}, "jirasync@sitaas.de"),
+        ({"id": 10, "login": "-"}, "-"),
+        ({"id": 11, "login": "auto-close"}, "auto-close"),
+    ]
+    for payload, expected in cases:
+        client, _ = make_client(payload)
+        assert client.resolve_user(payload["id"]) == expected
+
+
+def test_resolve_user_rejects_bad_id_and_payload_without_caching():
+    client, transport = make_client([TICKET])
+    with pytest.raises(ZammadError, match="positive integer"):
+        client.resolve_user(0)
+    with pytest.raises(ZammadError, match="positive integer"):
+        client.resolve_user("nope")
+    assert transport.calls == []
+    bad, _ = make_client(["not-a-user"])
+    with pytest.raises(ZammadError, match="user payload"):
+        bad.resolve_user(7)
