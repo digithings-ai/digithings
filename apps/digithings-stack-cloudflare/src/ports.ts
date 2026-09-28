@@ -34,7 +34,7 @@ export const MCP_CONTAINER_ID = "mcp-v1";
  * to pick up the rotated DIGIKEY_ADMIN_TOKEN, since the container reads
  * worker env only when the instance starts.
  */
-export const SHARED_STACK_CONTAINER_ID = "shared-v15";
+export const SHARED_STACK_CONTAINER_ID = "shared-v16";
 
 /**
  * Map public hostname → container port.
