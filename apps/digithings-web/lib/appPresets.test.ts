@@ -75,7 +75,7 @@ describe("app presets", () => {
     }
   });
 
-  it("draws the support review lane and finance scattered sources", () => {
+  it("draws the support review gate and finance twin sources", () => {
     const support = APP_PRESETS.find((a) => a.id === "support")!;
     const left = providerSpec(support.providerDefaults, support.workload, {
       sourcesLabel: support.providerSources,
@@ -83,7 +83,14 @@ describe("app presets", () => {
     });
     const ids = left.services.map((s) => s.id);
     expect(ids).toContain("review");
-    expect(left.services.find((s) => s.id === "sources")?.label).toBe("ticket queue + docs");
+    expect(left.services.find((s) => s.id === "sources")?.label).toBe("tickets + docs");
+    expect(left.services.find((s) => s.id === "email")?.label).toBe("SendGrid");
+    const finance = APP_PRESETS.find((a) => a.id === "finance")!;
+    const fin = providerSpec(finance.providerDefaults, finance.workload, { topology: finance.topology });
+    const finIds = fin.services.map((s) => s.id);
+    expect(finIds).toContain("feeds");
+    expect(finIds).toContain("filings");
+    expect(finIds).not.toContain("sources");
     const rag = APP_PRESETS.find((a) => a.id === "rag")!;
     const plain = providerSpec(rag.providerDefaults, rag.workload, {});
     expect(plain.services.map((s) => s.id)).not.toContain("review");

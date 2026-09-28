@@ -54,6 +54,7 @@ const PROVIDER_LAYER_BY_BOX: Record<string, LayerId | undefined> = {
   record: "hosting",
   telemetry: "telemetry",
   machines: "hosting",
+  launcher: "hosting",
 };
 
 const LAYERS_BY_SIDE: Record<"provider" | "digi", Layer[]> = {
@@ -196,7 +197,7 @@ export function AppFirstSection() {
                     steps: preset.leftSteps,
                     tag: "their stack",
                     rail: "end",
-                    caption: "Every edge metered — per-token · per-query · per-gigabyte",
+                    caption: preset.providerCaption,
                   },
                   {
                     spec: digiSpec(effDigi, workload, { appLabel: preset.digiApp }),
@@ -260,9 +261,12 @@ export function AppFirstSection() {
         </button>
       </div>
 
-      <div className="mx-auto max-w-[var(--frame-w)] px-[var(--page-pad)] pb-[2.5rem]">
-        <div className="border border-hair bg-surface p-[1.2rem]">
-          <span className={LABEL}>invoice · monthly by layer · follows the app above</span>
+      {/* Sticky within the section: the invoice stays pinned to the viewport
+          bottom while the walk scrolls, and swaps live with the app and
+          every pick. Opaque card so scrolled content slides underneath. */}
+      <div className="sticky bottom-0 z-30 mx-auto max-w-[var(--frame-w)] px-[var(--page-pad)] pb-[1rem]">
+        <div className="border border-hair bg-surface p-[1.2rem] shadow-[0_-18px_50px_-20px_rgba(0,0,0,0.6)]">
+          <span className={LABEL}>invoice · always live · follows the app and every pick</span>
           <table className="mt-[0.6rem] w-full border-collapse font-mono text-[0.8rem]">
             <thead>
               <tr className="text-left text-ink-mute">

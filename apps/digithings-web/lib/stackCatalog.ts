@@ -359,85 +359,106 @@ export function providerSpec(
   const hosting = lookup(PROVIDER_LAYERS, pick, "hosting");
   const topology = opts.topology ?? "rag";
   const price = pricePick(PROVIDER_LAYERS, pick, workload, topology);
-  const head = [
-    { id: "app", label: opts.appLabel ?? "your product", icon: "internet" as const, col: 0, row: 0 },
-    ...(topology === "support"
-      ? [{ id: "review", label: "human review lane", icon: "server" as const, col: 1, row: 0 }]
-      : []),
-    { id: "sources", label: opts.sourcesLabel ?? "your data sources", icon: "database" as const, col: 2, row: 0 },
-    { id: "api", label: MODEL_GATEWAY[model.id], icon: "server" as const, logo: model.logo, group: "platform", col: 1, row: 1 },
-  ];
+  const head =
+    topology === "finance"
+      ? [
+          { id: "app", label: opts.appLabel ?? "research agent", icon: "internet" as const, col: 0, row: 0 },
+          /* Twin scattered endpoints, one empty column between agent and
+             feeds so the scatter is drawn. opts.sourcesLabel is ignored
+             here: the fan-in signature needs two static boxes. */
+          { id: "feeds", label: "price feeds", icon: "database" as const, col: 2, row: 0 },
+          { id: "filings", label: "filings + news", icon: "database" as const, col: 3, row: 0 },
+          { id: "api", label: MODEL_GATEWAY[model.id], icon: "server" as const, logo: model.logo, group: "platform", col: 1, row: 1 },
+        ]
+      : [
+          { id: "app", label: opts.appLabel ?? "your product", icon: "internet" as const, col: 0, row: 0 },
+          { id: "sources", label: opts.sourcesLabel ?? "your data sources", icon: "database" as const, col: 2, row: 0 },
+          { id: "api", label: MODEL_GATEWAY[model.id], icon: "server" as const, logo: model.logo, group: "platform", col: 1, row: 1 },
+        ];
   const tail =
     topology === "support"
       ? {
+          /* Send pipeline: model -> review gate -> delivery, all on row 2.
+             The review box sits ON the send path (eyes before send), not
+             parked in the top row. No vector boxes by design. */
           rows: 3 as const,
           services: [
             { id: "model", label: MODEL_BOX[model.id], icon: "server" as const, logo: model.logo, group: "platform", col: 0, row: 2 },
-            { id: "email", label: "email service", icon: "server" as const, group: "platform", col: 1, row: 2 },
-            { id: "launcher", label: hosting.id === "azure" ? "Azure runner" : "your runner", icon: "cloud" as const, group: "platform", col: 2, row: 2 },
-            { id: "telemetry", label: TELEMETRY_BOX[telemetry.id], icon: "server" as const, group: "platform", col: 0, row: 3 },
-            { id: "terms", label: "their terms", icon: "disk" as const, group: "platform", col: 1, row: 3 },
+            { id: "review", label: "human review", icon: "server" as const, group: "platform", col: 1, row: 2 },
+            { id: "email", label: "SendGrid", icon: "server" as const, group: "platform", col: 2, row: 2 },
+            { id: "launcher", label: hosting.id === "azure" ? "Azure runner" : "your runner", icon: "cloud" as const, group: "platform", col: 0, row: 3 },
+            { id: "telemetry", label: TELEMETRY_BOX[telemetry.id], icon: "server" as const, group: "platform", col: 1, row: 3 },
+            { id: "terms", label: "their terms", icon: "disk" as const, group: "platform", col: 2, row: 3 },
           ],
           edges: [
             { from: "app", to: "api", fromSide: "B" as const, toSide: "T" as const, label: "one SDK" },
             { from: "sources", to: "api", fromSide: "B" as const, toSide: "T" as const, label: "their connectors" },
             { from: "api", to: "model", fromSide: "L" as const, toSide: "R" as const, label: "per-token" },
-            { from: "model", to: "email", fromSide: "R" as const, toSide: "L" as const, label: "drafts" },
-            { from: "launcher", to: "model", fromSide: "L" as const, toSide: "R" as const, label: "scheduled" },
-            { from: "model", to: "telemetry", fromSide: "B" as const, toSide: "L" as const, label: "every draft" },
-            { from: "model", to: "review", fromSide: "T" as const, toSide: "L" as const, label: "needs eyes" },
-            { from: "review", to: "app", fromSide: "L" as const, toSide: "T" as const, label: "approved replies" },
-            { from: "api", to: "terms", fromSide: "L" as const, toSide: "T" as const, label: "their terms" },
+            { from: "launcher", to: "model", fromSide: "T" as const, toSide: "B" as const, label: "scheduled" },
+            { from: "model", to: "review", fromSide: "R" as const, toSide: "L" as const, label: "needs eyes" },
+            { from: "review", to: "email", fromSide: "R" as const, toSide: "L" as const, label: "approved send" },
+            { from: "model", to: "telemetry", fromSide: "B" as const, toSide: "T" as const, label: "every draft" },
+            { from: "email", to: "terms", fromSide: "B" as const, toSide: "T" as const, label: "their terms" },
           ],
         }
       : topology === "finance"
         ? {
+            /* Batch pipeline, 4 wide: the clock fires left-to-right
+               (launcher -> model -> dead-end archive) while twin sources
+               fan into one gateway. No embedding boxes by design; the
+               empty centre lane is the contrast with RAG. */
             rows: 3 as const,
             services: [
-              { id: "model", label: MODEL_BOX[model.id], icon: "server" as const, logo: model.logo, group: "platform", col: 0, row: 2 },
-              { id: "launcher", label: "nightly runner", icon: "cloud" as const, group: "platform", col: 1, row: 2 },
-              { id: "record", label: "research archive", icon: "database" as const, group: "platform", col: 2, row: 2 },
-              { id: "telemetry", label: TELEMETRY_BOX[telemetry.id], icon: "server" as const, group: "platform", col: 0, row: 3 },
-              { id: "terms", label: "their terms", icon: "disk" as const, group: "platform", col: 1, row: 3 },
+              { id: "launcher", label: "nightly runner", icon: "cloud" as const, group: "platform", col: 0, row: 2 },
+              { id: "model", label: MODEL_BOX[model.id], icon: "server" as const, logo: model.logo, group: "platform", col: 1, row: 2 },
+              { id: "record", label: "research archive", icon: "database" as const, group: "platform", col: 3, row: 2 },
+              { id: "telemetry", label: TELEMETRY_BOX[telemetry.id], icon: "server" as const, group: "platform", col: 1, row: 3 },
+              { id: "terms", label: "their terms", icon: "disk" as const, group: "platform", col: 3, row: 3 },
             ],
             edges: [
               { from: "app", to: "api", fromSide: "B" as const, toSide: "T" as const, label: "one SDK" },
-              { from: "sources", to: "api", fromSide: "B" as const, toSide: "T" as const, label: "many meters" },
-              { from: "api", to: "model", fromSide: "L" as const, toSide: "R" as const, label: "per-token reasoning" },
-              { from: "launcher", to: "model", fromSide: "L" as const, toSide: "R" as const, label: "nightly runs" },
-              { from: "model", to: "record", fromSide: "R" as const, toSide: "L" as const, label: "synthesis archive" },
-              { from: "model", to: "telemetry", fromSide: "B" as const, toSide: "L" as const, label: "every run" },
-              { from: "api", to: "terms", fromSide: "L" as const, toSide: "T" as const, label: "their terms" },
+              { from: "feeds", to: "api", fromSide: "B" as const, toSide: "T" as const, label: "many formats" },
+              { from: "filings", to: "api", fromSide: "B" as const, toSide: "T" as const, label: "many meters" },
+              { from: "api", to: "model", fromSide: "B" as const, toSide: "T" as const, label: "per-token reasoning" },
+              { from: "launcher", to: "model", fromSide: "R" as const, toSide: "L" as const, label: "nightly runs" },
+              { from: "model", to: "record", fromSide: "R" as const, toSide: "L" as const, label: "archive write" },
+              { from: "model", to: "telemetry", fromSide: "B" as const, toSide: "T" as const, label: "every run" },
+              { from: "api", to: "terms", fromSide: "R" as const, toSide: "L" as const, label: "their terms" },
             ],
           }
         : {
+            /* Two-phase fork/join: embed -> memory -> model read left to
+               right on row 2 (ingest, retrieve, generate) while the lake,
+               GPU pool and traces each take a straight vertical drop on
+               row 3. Role suffixes stay inline in this branch so the
+               shared maps (and parallel topologies) are untouched. */
             rows: 4 as const,
             services: [
-              { id: "model", label: MODEL_BOX[model.id], icon: "server" as const, logo: model.logo, group: "platform", col: 0, row: 2 },
-              { id: "embed", label: EMBED_BOX[embed.id], icon: "server" as const, logo: embed.logo, group: "platform", col: 1, row: 2 },
-              { id: "memory", label: VECTOR_BOX[vector.id], icon: "database" as const, group: "platform", col: 2, row: 2 },
-              { id: "record", label: hosting.id === "azure" ? "Azure Blob" : "your disk", icon: "database" as const, group: "platform", col: 0, row: 3 },
-              { id: "telemetry", label: TELEMETRY_BOX[telemetry.id], icon: "server" as const, group: "platform", col: 1, row: 3 },
-              { id: "machines", label: hosting.id === "azure" ? "Azure GPUs" : "your machines", icon: "cloud" as const, group: "platform", col: 2, row: 3 },
+              { id: "embed", label: EMBED_BOX[embed.id], icon: "server" as const, logo: embed.logo, group: "platform", col: 0, row: 2 },
+              { id: "memory", label: `${VECTOR_BOX[vector.id]} index`, icon: "database" as const, group: "platform", col: 1, row: 2 },
+              { id: "model", label: `${MODEL_BOX[model.id]} chat`, icon: "server" as const, logo: model.logo, group: "platform", col: 2, row: 2 },
+              { id: "record", label: hosting.id === "azure" ? "Azure Blob lake" : "your disk lake", icon: "database" as const, group: "platform", col: 0, row: 3 },
+              { id: "machines", label: hosting.id === "azure" ? "Azure GPU pool" : "your GPU pool", icon: "cloud" as const, group: "platform", col: 1, row: 3 },
+              { id: "telemetry", label: telemetry.id === "langsmith" ? "LangSmith traces" : "own traces", icon: "server" as const, group: "platform", col: 2, row: 3 },
               { id: "terms", label: "their terms", icon: "disk" as const, group: "platform", col: 1, row: 4 },
             ],
             edges: [
               { from: "app", to: "api", fromSide: "B" as const, toSide: "T" as const, label: "one SDK" },
               { from: "sources", to: "api", fromSide: "B" as const, toSide: "T" as const, label: "their connectors" },
-              { from: "api", to: "model", fromSide: "L" as const, toSide: "R" as const, label: "per-token" },
-              { from: "api", to: "memory", fromSide: "R" as const, toSide: "L" as const, label: "per-query" },
-              { from: "api", to: "embed", fromSide: "B" as const, toSide: "T" as const, label: "bundled in" },
+              { from: "api", to: "embed", fromSide: "L" as const, toSide: "T" as const, label: "embed query" },
+              { from: "api", to: "memory", fromSide: "B" as const, toSide: "T" as const, label: "top-k lookup" },
               { from: "embed", to: "memory", fromSide: "R" as const, toSide: "L" as const, label: "their format" },
-              { from: "api", to: "record", fromSide: "L" as const, toSide: "T" as const, label: "per-GB" },
-              { from: "model", to: "telemetry", fromSide: "B" as const, toSide: "L" as const, label: "their dashboard" },
+              { from: "memory", to: "model", fromSide: "R" as const, toSide: "L" as const, label: "chunks" },
+              { from: "record", to: "embed", fromSide: "T" as const, toSide: "B" as const, label: "raw chunks" },
+              { from: "model", to: "telemetry", fromSide: "B" as const, toSide: "T" as const, label: "every answer" },
               { from: "memory", to: "machines", fromSide: "B" as const, toSide: "T" as const, label: "same roof" },
-              { from: "machines", to: "terms", fromSide: "B" as const, toSide: "L" as const, label: "their terms" },
+              { from: "machines", to: "terms", fromSide: "B" as const, toSide: "T" as const, label: "their terms" },
             ],
           };
   return {
     title: "Your off-the-shelf stack, as picked",
     description: "The traditional stack with the picked providers on every box.",
-    groups: [{ id: "platform", label: vendorCount(price), icon: "cloud", col: 0, row: 1, cols: 3, rows: tail.rows }],
+    groups: [{ id: "platform", label: vendorCount(price), icon: "cloud", col: 0, row: 1, cols: topology === "finance" ? 4 : 3, rows: tail.rows }],
     services: [...head, ...tail.services],
     edges: tail.edges,
   };
