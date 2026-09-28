@@ -196,6 +196,8 @@ export interface PricedLine {
   amount: number;
   estimate?: boolean;
   layer: LayerId;
+  /** False for one-time lines (corpus embedding); true for monthly meters. */
+  recurring: boolean;
 }
 
 export interface StackPrice {
@@ -234,7 +236,7 @@ export function pricePick(
   let setup = 0;
   let monthly = 0;
   const add = (label: string, amount: number, recurring: boolean, layer: LayerId, estimate?: boolean) => {
-    lines.push({ label, amount, estimate, layer });
+    lines.push({ label, amount, estimate, layer, recurring });
     if (recurring) monthly += amount;
     else setup += amount;
   };
@@ -463,6 +465,130 @@ export function providerSpec(
     edges: tail.edges,
   };
 }
+
+/* ── morph: the same provider topology, swapped service by service ──── */
+
+export interface MorphState {
+  replaced: LayerId[];
+  /** Support send box flips to the in-graph mail tool (unpriced, diagram-only). */
+  email?: boolean;
+}
+
+/** Edge-label rewrites applied when their layer has been swapped. Old meter
+    verbs become owned verbs; untouched edges (sources, review, SDK) stay. */
+const MORPH_EDGE_OVERRIDES: Record<LayerId, Record<string, string>> = {
+  models: {
+    "per-token": "your rates",
+    "per-token reasoning": "your rates",
+    "their terms": "your keys",
+  },
+  embeddings: { "embed query": "your query" },
+  vector: { "top-k lookup": "local recall", "their format": "open format" },
+  telemetry: { "every answer": "you see it", "every draft": "you see it", "every run": "you see it" },
+  hosting: {
+    "raw chunks": "your chunks",
+    "same roof": "your roof",
+    scheduled: "interval",
+    "nightly runs": "interval",
+  },
+};
+
+/* The send beat flips only the delivery box: review→email keeps its
+   approved-send edge, because approval still happens. */
+
+/**
+ * The morph drawing: provider topology with swapped labels for replaced
+ * layers. Box ids never move, so the walk, spotlight and camera keep working;
+ * the group boundary keeps the provider vendor count (it names the stack
+ * being left). Unreplaced layers render exactly their provider labels.
+ */
+export function morphSpec(
+  providerPick: StackPick,
+  digiPick: StackPick,
+  workload: RagWorkload = DEFAULT_WORKLOAD,
+  opts: {
+    appLabel?: string;
+    sourcesLabel?: string;
+    topology?: "rag" | "support" | "finance";
+    replaced?: LayerId[];
+    email?: boolean;
+  } = {},
+): ArchSpec {
+  const topology = opts.topology ?? "rag";
+  const replaced = new Set(opts.replaced ?? []);
+  const base = providerSpec(providerPick, workload, {
+    appLabel: opts.appLabel,
+    sourcesLabel: opts.sourcesLabel,
+    topology,
+  });
+  const dModel = lookup(DIGI_LAYERS, digiPick, "models");
+  const dEmbed = lookup(DIGI_LAYERS, digiPick, "embeddings");
+  const dVector = lookup(DIGI_LAYERS, digiPick, "vector");
+  const dTelemetry = lookup(DIGI_LAYERS, digiPick, "telemetry");
+  const dHosting = lookup(DIGI_LAYERS, digiPick, "hosting");
+
+  const labelFor = (id: string): { label: string; logo?: string } | null => {
+    switch (id) {
+      case "api":
+        return replaced.has("models") ? { label: "digillm gateway" } : null;
+      case "model":
+        return replaced.has("models")
+          ? { label: DIGI_MODEL_BOX[dModel.id], logo: dModel.logo }
+          : null;
+      case "embed":
+        return replaced.has("embeddings")
+          ? { label: `${DIGI_EMBED_SHORT[dEmbed.id]} embed`, logo: dEmbed.logo }
+          : null;
+      case "memory":
+        return replaced.has("vector") ? { label: `${DIGI_VECTOR_BOX[dVector.id]} index` } : null;
+      case "record":
+        if (!replaced.has("hosting")) return null;
+        if (dHosting.id === "azure") return null;
+        return { label: topology === "finance" ? "digivault archive" : "digivault lake" };
+      case "machines":
+        if (!replaced.has("hosting") || dHosting.id === "azure") return null;
+        return { label: "your GPU pool" };
+      case "launcher":
+        if (!replaced.has("hosting") || dHosting.id === "azure") return null;
+        return { label: "digiclaw runner" };
+      case "telemetry":
+        return replaced.has("telemetry") ? { label: DIGI_TELEMETRY_BOX[dTelemetry.id] } : null;
+      case "email":
+        return opts.email ? { label: "digigraph mail" } : null;
+      case "terms":
+        return replaced.has("models") ? { label: "your keys" } : null;
+      default:
+        return null;
+    }
+  };
+
+  const services = base.services.map((s) => {
+    const swap = labelFor(s.id);
+    if (!swap) return s;
+    const next = { ...s, label: swap.label };
+    if (swap.logo) next.logo = swap.logo;
+    else delete next.logo;
+    return next;
+  });
+
+  const tables = [...replaced].map((l) => MORPH_EDGE_OVERRIDES[l]);
+  const edges = base.edges.map((e) => {
+    if (!("label" in e) || typeof e.label !== "string") return e;
+    for (const table of tables) {
+      const next = table[e.label];
+      if (next) return { ...e, label: next };
+    }
+    return e;
+  });
+
+  return {
+    ...base,
+    title: "The same stack, swapped service by service",
+    description: "Each replacement moves a box — and its invoice row — to digithings.",
+    services,
+    edges,
+  };
+};
 
 const DIGI_MODEL_BOX: Record<string, string> = {
   local: "digillm · local",

@@ -768,6 +768,52 @@
   overflow: visible;
 }
 
+/* ── morph variant (app-first why band) ────────────────────────────────────
+ * Two diagrams share the frame: the provider stack rests full-lit on one
+ * side while the other redraws box by box. No swipe — both transforms are
+ * neutralised and the grid runs two columns. Boxes that have not swapped
+ * yet rest dimmed (the walk's `on` always wins); boxes that never swap
+ * (your product, sources, review) stay bright.
+ */
+.arch-tour.arch-tour-morph:not([data-variant="static"]) .arch-tour__grid {
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 0 2.4rem;
+  overflow: visible;
+}
+.arch-tour.arch-tour-morph:not([data-variant="static"]) .arch-tour__side {
+  grid-area: auto;
+  grid-template-columns: minmax(0, 1fr);
+  transform: none;
+}
+.arch-tour.arch-tour-morph .arch-tour__side--leaving,
+.arch-tour.arch-tour-morph .arch-tour__side--entering {
+  transform: none;
+}
+.arch-tour.arch-tour-morph:not([data-variant="static"]) .arch-tour__side--entering {
+  grid-template-columns: minmax(0, 1fr);
+}
+.arch-tour.arch-tour-morph:not([data-variant="static"]) .arch-tour__side > .arch-tour__side-tag {
+  grid-column: 1;
+  justify-self: start;
+  text-align: start;
+}
+.arch-tour.arch-tour-morph:not([data-variant="static"]) .arch-tour__side .arch-tour__frame,
+.arch-tour.arch-tour-morph:not([data-variant="static"]) .arch-tour__side .arch-tour__rail {
+  grid-row: auto;
+}
+.arch-tour.arch-tour-morph:not([data-variant="static"]) .arch-tour__side--entering .arch-tour__frame,
+.arch-tour.arch-tour-morph:not([data-variant="static"]) .arch-tour__side--entering .arch-tour__rail {
+  grid-column: auto;
+}
+.arch-tour.arch-tour-morph .arch-tour__side--entering [id^="arch-service-"]:not(.is-on):not(#arch-service-app):not(#arch-service-review):not(#arch-service-feeds):not(#arch-service-filings):not(#arch-service-sources) {
+  opacity: 0.32;
+}
+@media (max-width: 1023px) {
+  .arch-tour.arch-tour-morph:not([data-variant="static"]) .arch-tour__grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .arch-svg .arch-group__box,
   .arch-svg .arch-edge__line,

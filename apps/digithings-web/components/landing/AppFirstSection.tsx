@@ -17,20 +17,20 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { ArchitectureTour } from "@digithings/ui";
+import { ArchitectureTour, type TourVariant } from "@digithings/ui";
 
 import { APP_PRESETS } from "@/lib/appPresets";
 import {
   DIGI_LAYERS,
   PROVIDER_LAYERS,
-  digiSpec,
+  morphSpec,
   pricePick,
   providerSpec,
   type Layer,
   type LayerId,
+  type PricedLine,
   type StackPick,
 } from "@/lib/stackCatalog";
-import { OWNED_TOUR_STEPS } from "@/lib/whyStack";
 
 const HEADLINE = "m-0 font-mono text-[clamp(1.3rem,2.4vw,1.85rem)] font-medium leading-[1.2] tracking-[-0.02em] text-ink";
 const LEDE = "m-0 max-w-[var(--measure-prose)] text-[0.9rem] leading-[1.7] text-ink-soft";
@@ -38,14 +38,9 @@ const LABEL = "font-mono text-[0.68rem] uppercase tracking-[0.08em] text-ink-mut
 const TAB = "border border-hair bg-surface px-[1rem] py-[0.6rem] font-mono text-[0.82rem] text-ink-soft";
 const TAB_ON = "border border-hair bg-surface px-[1rem] py-[0.6rem] font-mono text-[0.82rem] text-ink shadow-[inset_0_0_0_1px_var(--accent)]";
 
-/** Drawn box id -> its layer, per side. Boxes without a layer are not configurable. */
-const DIGI_LAYER_BY_BOX: Record<string, LayerId | undefined> = {
-  models: "models",
-  memory: "vector",
-  traces: "telemetry",
-  claw: "hosting",
-};
-
+/** Drawn box id -> its layer on the provider topology. The morph drawing
+    reuses provider box ids, so one map covers both diagrams; boxes without
+    a layer (product, sources, review, terms, delivery) are not clickable. */
 const PROVIDER_LAYER_BY_BOX: Record<string, LayerId | undefined> = {
   api: "models",
   model: "models",
@@ -74,21 +69,32 @@ const TABLE_LAYERS: { id: LayerId; label: string }[] = [
   { id: "hosting", label: "Hosting" },
 ];
 
-/** Monthly sum for one layer; null when the app prices no lines there. */
-function layerSum(lines: { amount: number; layer: LayerId; estimate?: boolean }[], layer: LayerId): number | null {
-  const hits = lines.filter((l) => l.layer === layer);
-  if (hits.length === 0) return null;
-  return hits.reduce((n, l) => n + l.amount, 0);
+/** True when the app prices any line on the layer (setup or monthly). */
+function layerHas(lines: PricedLine[], layer: LayerId): boolean {
+  return lines.some((l) => l.layer === layer);
 }
 
-function layerEst(lines: { layer: LayerId; estimate?: boolean }[], layer: LayerId): boolean {
+/** Monthly meters for one layer; 0 when the layer prices nothing monthly. */
+function layerMonthly(lines: PricedLine[], layer: LayerId): number {
+  return lines.filter((l) => l.layer === layer && l.recurring).reduce((n, l) => n + l.amount, 0);
+}
+
+/** Setup or monthly total across a set of layers. */
+function sumFor(lines: PricedLine[], layers: Set<LayerId>, recurring: boolean): number {
+  return lines
+    .filter((l) => layers.has(l.layer) && l.recurring === recurring)
+    .reduce((n, l) => n + l.amount, 0);
+}
+
+function layerEst(lines: PricedLine[], layer: LayerId): boolean {
   return lines.some((l) => l.layer === layer && l.estimate);
 }
 
-function cell(n: number | null, est: boolean): string {
-  if (n === null) return "$0 — not in this app";
+function cell(n: number, est: boolean): string {
   return `${est ? "~" : ""}${usd(n)}`;
 }
+
+const ALL_LAYERS: Set<LayerId> = new Set(["models", "embeddings", "vector", "telemetry", "hosting"]);
 
 interface Popover {
   side: "provider" | "digi";
@@ -106,6 +112,10 @@ export function AppFirstSection() {
     ),
   );
   const [pop, setPop] = useState<Popover | null>(null);
+  /* Controlled walk position: the invoice's digi column cuts one row per
+     morph beat off this. Tab switches keep it (every app walks 5 + 4). */
+  const [tourStep, setTourStep] = useState(0);
+  const [tourMode, setTourMode] = useState<TourVariant>("camera");
   const pick = picks[preset.id];
 
   useEffect(() => {
@@ -126,21 +136,65 @@ export function AppFirstSection() {
   const providerPrice = pricePick(PROVIDER_LAYERS, effProvider, workload, preset.topology);
   const digiPrice = pricePick(DIGI_LAYERS, effDigi, workload, preset.topology);
 
+  /* Morph frames: cumulative swaps through each beat. Frame 0 is the
+     provider copy (it waits, dimmed, while their stack is walked). */
+  const swapAt = preset.leftSteps.length;
+  const morphIdx = tourStep - swapAt;
+  const morphSpecs = preset.morphSteps.map((_, i) => {
+    const done = preset.morphSteps.slice(0, i + 1);
+    return morphSpec(effProvider, effDigi, workload, {
+      appLabel: preset.providerApp,
+      sourcesLabel: preset.providerSources,
+      topology: preset.topology,
+      replaced: [...new Set(done.flatMap((b) => b.layers))],
+      email: done.some((b) => b.email),
+    });
+  });
+
+  /* Invoice rows the digi column has cut so far. Static fallback (no scroll
+     drive) reads the end state, matching its fully-morphed diagram. */
+  const revealed: Set<LayerId> =
+    tourMode === "static"
+      ? ALL_LAYERS
+      : new Set(
+          (morphIdx < 0 ? [] : preset.morphSteps.slice(0, morphIdx + 1)).flatMap((b) => b.layers),
+        );
+
+  /* Layers already swapped at the current walk position (for click routing:
+     a swapped box reconfigures the digi pick, an unswapped one the provider
+     pick). Static reads the end state. */
+  const swappedNow = (): Set<LayerId> => {
+    if (tourMode === "static") return ALL_LAYERS;
+    if (morphIdx < 0) return new Set();
+    return new Set(preset.morphSteps.slice(0, morphIdx + 1).flatMap((b) => b.layers));
+  };
+
   /* Click a drawn box -> open its layer's options anchored at the click.
-     Side resolves through the tour's own compositional classes (leaving is
-     the first side). Dimmed boxes are drawn but dead: no popover. */
+     The provider diagram always reconfigures the provider pick. On the
+     morph diagram an unswapped box does the same; a swapped one
+     reconfigures the digi pick, so either end stays interchangeable. */
   const onStageClick = (event: React.MouseEvent<HTMLDivElement>) => {
     const target = event.target as Element;
     const node = target.closest?.('[id^="arch-service-"]');
     if (!node) return;
     const boxId = node.id.replace("arch-service-", "");
     const sideEl = node.closest?.(".arch-tour__side");
-    const side = sideEl?.classList.contains("arch-tour__side--leaving") ? "provider" : "digi";
-    if (side === "digi" && preset.dimmedDigi.includes(boxId)) return;
-    const layer = (side === "provider" ? PROVIDER_LAYER_BY_BOX : DIGI_LAYER_BY_BOX)[boxId];
+    if (!sideEl?.classList.contains("arch-tour__side--leaving")) {
+      const layer = PROVIDER_LAYER_BY_BOX[boxId];
+      if (!layer) return;
+      const side = swappedNow().has(layer) ? "digi" : "provider";
+      setPop({
+        side,
+        layer,
+        x: Math.min(event.clientX, window.innerWidth - 280),
+        y: Math.min(event.clientY + 12, window.innerHeight - 320),
+      });
+      return;
+    }
+    const layer = PROVIDER_LAYER_BY_BOX[boxId];
     if (!layer) return;
     setPop({
-      side,
+      side: "provider",
       layer,
       x: Math.min(event.clientX, window.innerWidth - 280),
       y: Math.min(event.clientY + 12, window.innerHeight - 320),
@@ -149,7 +203,6 @@ export function AppFirstSection() {
 
   const popLayer = pop ? LAYERS_BY_SIDE[pop.side].find((l) => l.id === pop.layer) : undefined;
   const popPick = pop ? (pop.side === "provider" ? effProvider : effDigi) : pick.provider;
-  const dimClass = preset.dimmedDigi.map((id) => ` arch-tour-dim-${id}`).join("");
 
   return (
     <section aria-label="App-first single variant" className="line-b">
@@ -160,8 +213,8 @@ export function AppFirstSection() {
           <span className="why-own">or the digithings stack you compose.</span>
         </h2>
         <p className={LEDE}>
-          Pick an app, then click any box in either diagram to reconfigure its layer. The
-          walk and the invoice move together.
+          Pick an app and walk their stack — then watch it swap to digithings box by
+          box while the invoice cuts live. Click any box to reconfigure its layer.
         </p>
         <div className="flex flex-wrap gap-[0.5rem] pt-[0.5rem]" role="tablist" aria-label="Application">
           {APP_PRESETS.map((a) => (
@@ -182,7 +235,7 @@ export function AppFirstSection() {
         <p className={LEDE}>{preset.subhead}</p>
       </div>
 
-      <div className={`whyx${dimClass}`} onClick={onStageClick}>
+      <div className="whyx" onClick={onStageClick}>
         <div className="whyx__block">
           <div className="whyx__tours">
             <div className="whyx__tour">
@@ -196,17 +249,21 @@ export function AppFirstSection() {
                     }),
                     steps: preset.leftSteps,
                     tag: "their stack",
-                    rail: "end",
                     caption: preset.providerCaption,
                   },
                   {
-                    spec: digiSpec(effDigi, workload, { appLabel: preset.digiApp }),
-                    steps: OWNED_TOUR_STEPS,
+                    spec: morphSpecs[morphSpecs.length - 1],
+                    specs: morphSpecs,
+                    steps: preset.morphSteps,
                     tag: "digithings stack",
-                    caption: "Every box a module — take one or run them all · digibase under all of them",
+                    caption: preset.morphCaption,
                   },
                 ]}
                 variant="camera"
+                className="arch-tour-morph"
+                step={tourStep}
+                onStepChange={setTourStep}
+                onModeChange={setTourMode}
               />
             </div>
           </div>
@@ -266,7 +323,7 @@ export function AppFirstSection() {
           every pick. Opaque card so scrolled content slides underneath. */}
       <div className="sticky bottom-0 z-30 mx-auto max-w-[var(--frame-w)] px-[var(--page-pad)] pb-[1rem]">
         <div className="border border-hair bg-surface p-[1.2rem] shadow-[0_-18px_50px_-20px_rgba(0,0,0,0.6)]">
-          <span className={LABEL}>invoice · always live · follows the app and every pick</span>
+          <span className={LABEL}>invoice · always live · digi column cuts as boxes swap</span>
           <table className="mt-[0.6rem] w-full border-collapse font-mono text-[0.8rem]">
             <thead>
               <tr className="text-left text-ink-mute">
@@ -277,16 +334,26 @@ export function AppFirstSection() {
             </thead>
             <tbody className="font-variant-numeric tabular-nums">
               {TABLE_LAYERS.map((row) => {
-                const their = layerSum(providerPrice.lines, row.id);
-                const digi = layerSum(digiPrice.lines, row.id);
+                const theirOn = layerHas(providerPrice.lines, row.id);
+                const digiOn = layerHas(digiPrice.lines, row.id);
+                const cut = revealed.has(row.id);
+                const digiCell = !digiOn ? (
+                  <span>$0 — not in this app</span>
+                ) : !cut ? (
+                  <span>—</span>
+                ) : (
+                  <span>{cell(layerMonthly(digiPrice.lines, row.id), layerEst(digiPrice.lines, row.id))}</span>
+                );
                 return (
                   <tr key={row.id} className="border-t border-hair">
                     <td className="py-[0.3rem] pr-[0.6rem] text-ink-soft">{row.label}</td>
-                    <td className={`py-[0.3rem] pr-[0.6rem] text-right ${their === null ? "text-ink-mute" : "text-ink"}`}>
-                      {cell(their, layerEst(providerPrice.lines, row.id))}
+                    <td className={`py-[0.3rem] pr-[0.6rem] text-right ${theirOn ? "text-ink" : "text-ink-mute"}`}>
+                      {theirOn
+                        ? cell(layerMonthly(providerPrice.lines, row.id), layerEst(providerPrice.lines, row.id))
+                        : "$0 — not in this app"}
                     </td>
-                    <td className={`py-[0.3rem] text-right ${digi === null ? "text-ink-mute" : "text-ink"}`}>
-                      {cell(digi, layerEst(digiPrice.lines, row.id))}
+                    <td className={`py-[0.3rem] text-right ${digiOn && cut ? "text-ink" : "text-ink-mute"}`}>
+                      {digiCell}
                     </td>
                   </tr>
                 );
@@ -294,17 +361,18 @@ export function AppFirstSection() {
               <tr className="border-t border-hair">
                 <td className="py-[0.3rem] pr-[0.6rem] text-ink-soft">Setup · one-time</td>
                 <td className="py-[0.3rem] pr-[0.6rem] text-right text-ink">{usd(providerPrice.setup)}</td>
-                <td className="py-[0.3rem] text-right text-ink">{usd(digiPrice.setup)}</td>
+                <td className="py-[0.3rem] text-right text-ink">{usd(sumFor(digiPrice.lines, revealed, false))}</td>
               </tr>
               <tr className="border-t border-hair">
                 <td className="py-[0.3rem] pr-[0.6rem] text-ink">Monthly total</td>
                 <td className="py-[0.3rem] pr-[0.6rem] text-right text-ink">{usd(providerPrice.monthly)}</td>
-                <td className="py-[0.3rem] text-right text-ink">{usd(digiPrice.monthly)}</td>
+                <td className="py-[0.3rem] text-right text-ink">{usd(sumFor(digiPrice.lines, revealed, true))}</td>
               </tr>
             </tbody>
           </table>
           <p className="m-0 mt-[0.6rem] font-mono text-[0.72rem] text-ink-mute">
             ~ marks an estimate; the rest are researched list prices at this app&apos;s preset workload.
+            The digi column cuts one row per swap as you scroll.
           </p>
         </div>
       </div>

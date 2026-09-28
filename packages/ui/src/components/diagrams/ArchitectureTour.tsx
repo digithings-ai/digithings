@@ -65,6 +65,14 @@ export interface TourStep {
 
 export interface TourSide {
   spec: ArchSpec;
+  /**
+   * Per-step specs for a side that redraws as it is walked (the morph: the
+   * same topology with labels swapped step by step). Entry i renders at that
+   * side's local step i; missing entries and the static fallback use `spec`,
+   * which should be the side's end state. Box ids must be stable across
+   * entries so measurement, glow and camera keep working.
+   */
+  specs?: ArchSpec[];
   steps: TourStep[];
   /** Short marker for the rail, e.g. "rented" / "owned". */
   tag?: string;
@@ -86,6 +94,17 @@ export interface ArchitectureTourProps {
   variant?: TourVariant;
   /** Scroll spent per step, in viewport heights. */
   vhPerStep?: number;
+  /**
+   * Controlled step index into the flattened walk. When omitted the tour
+   * owns its step internally. Either way every step change is reported
+   * through `onStepChange`, so a parent can key side content (an invoice,
+   * a caption) off the walk without reaching into the tour.
+   */
+  step?: number;
+  onStepChange?: (index: number) => void;
+  /** Reports the resolved treatment ("static" under reduced motion or narrow
+      viewports); a parent uses it to pick the matching fallback content. */
+  onModeChange?: (mode: TourVariant) => void;
   /**
    * Held inside the pin, above the diagram, so a title/lede stays on screen for
    * the whole walk instead of scrolling away when the walk begins.
@@ -159,6 +178,9 @@ export function ArchitectureTour({
   vhPerStep = 1.6,
   header,
   className,
+  step: controlledStep,
+  onStepChange,
+  onModeChange,
 }: ArchitectureTourProps) {
   const reduced = usePrefersReducedMotion();
   const wide = usePinned();
@@ -176,7 +198,19 @@ export function ArchitectureTour({
   const remeasureRef = useRef<() => void>(() => {});
 
   const [measures, setMeasures] = useState<SideMeasure[]>([]);
-  const [step, setStep] = useState(0);
+  const [internalStep, setInternalStep] = useState(0);
+  const step = controlledStep ?? internalStep;
+
+  /* Report the walk outward: the flattened step (fires on mount too, so a
+     parent keying content off the walk starts in sync) and the resolved
+     treatment (so the parent can match the static fallback). Both are
+     parent-owned setters or undefined — no feedback loop either way. */
+  useEffect(() => {
+    onStepChange?.(step);
+  }, [step, onStepChange]);
+  useEffect(() => {
+    onModeChange?.(mode);
+  }, [mode, onModeChange]);
 
   const flat = useMemo(
     () => sides.flatMap((side, si) => side.steps.map((entry) => ({ ...entry, side: si }))),
@@ -420,7 +454,7 @@ export function ArchitectureTour({
         grid.style.setProperty("--arch-in", clamp01(swap * 2 - 1).toFixed(4));
       }
 
-      setStep((current) => (current === index ? current : index));
+      setInternalStep((current) => (current === index ? current : index));
     };
 
     const onScroll = () => {
@@ -650,6 +684,11 @@ export function ArchitectureTour({
           <div className="arch-tour__grid" ref={gridRef}>
             {sides.map((side, si) => {
               const base = sides.slice(0, si).reduce((n, s) => n + s.steps.length, 0);
+              /* The side's local step, clamped: ahead of its range it rests on
+                 its first frame (the morph waits as the provider copy), past
+                 it on its last (the provider rests full-lit for comparison). */
+              const local = Math.max(0, Math.min(side.steps.length - 1, step - base));
+              const effSpec = side.specs?.[local] ?? side.spec;
               const mod =
                 sides.length > 1
                   ? si === 0
@@ -677,7 +716,7 @@ export function ArchitectureTour({
                             cameraRefs.current[si] = el;
                           }}
                         >
-                          <ArchitectureDiagram spec={side.spec} lit={si === activeSide ? activeIds : undefined} />
+                          <ArchitectureDiagram spec={effSpec} lit={si === activeSide ? activeIds : undefined} />
                           {si === activeSide ? (() => {
                             // ONE spotlight over the union of the lit boxes, never
                             // one per box: each `.arch-tour__spot` carries a 9999px
