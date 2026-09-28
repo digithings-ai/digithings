@@ -114,11 +114,27 @@ def _start_published_date(recency_days: int | None) -> str | None:
 
 
 def _translate(exc: Exception) -> WebProviderError:
-    """Turn an Exa-layer error into the shared provider error taxonomy."""
+    """Turn an Exa-layer error into the shared provider error taxonomy.
+
+    Mirrors ``base.request_json``: 401/403 are never retryable, 429/5xx are,
+    and malformed 200 payloads (no status) are not — only transport errors
+    are retryable with no status attached (#4711 review, MAJOR).
+    """
     if isinstance(exc, ValueError):
         # Bad caller input (empty query, unknown type, page out of range).
         return WebProviderBadRequestError(str(exc))
-    return WebProviderError(f"exa: {exc}", retryable=True)
+    status = getattr(exc, "status_code", None)
+    if status is not None:
+        return WebProviderError(
+            f"exa: {exc}",
+            retryable=status == 429 or status >= 500,
+            status_code=status,
+        )
+    message = str(exc)
+    if "non-JSON" in message or "unexpected shape" in message:
+        # A malformed 200 body — same treatment as base.require_dict.
+        return WebProviderError(f"exa: {message}", retryable=False)
+    return WebProviderError(f"exa: {exc}", retryable=True)  # transport error
 
 
 def _to_result(row: dict[str, Any], position: int) -> WebSearchResult:

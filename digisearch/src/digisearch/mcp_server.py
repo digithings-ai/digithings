@@ -145,6 +145,7 @@ def web_search(
     """
     from digisearch.web_providers import (
         UnknownProviderError,
+        WebProviderBadRequestError,
         WebProviderCapabilityError,
         WebProviderError,
         WebProviderNotConfiguredError,
@@ -183,6 +184,11 @@ def web_search(
     except (WebProviderUnavailableError, WebSearchConfigError) as e:
         return f"[web_search unavailable: {e}]"
     except WebProviderCapabilityError as e:
+        return f"[web_search error: {e}]"
+    except WebProviderBadRequestError as e:
+        # Caller error, not an outage: info-level so it does not read as a
+        # provider outage in operator logs (#4711 review).
+        logger.info("web_search rejected input: %s", e)
         return f"[web_search error: {e}]"
     except WebProviderError as e:
         logger.error("web_search provider failure: %s", e)

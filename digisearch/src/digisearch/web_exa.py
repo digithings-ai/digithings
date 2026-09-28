@@ -55,7 +55,17 @@ class ExaNotConfiguredError(RuntimeError):
 
 
 class ExaError(RuntimeError):
-    """Raised on EXA transport / API errors (status, payload)."""
+    """Raised on EXA transport / API errors (status, payload).
+
+    ``status_code`` carries the HTTP status when one exists (None for
+    transport errors and malformed payloads), so callers can apply the same
+    retry taxonomy as ``web_providers.base.request_json``: 401/403 never
+    retryable, 429/5xx retryable (#4711 review).
+    """
+
+    def __init__(self, message: str, *, status_code: int | None = None) -> None:
+        super().__init__(message)
+        self.status_code = status_code
 
 
 class ExaPageOutOfRangeError(ValueError):
@@ -109,11 +119,20 @@ def _post(path: str, payload: dict[str, Any], *, api_key: str) -> dict[str, Any]
     except httpx.HTTPError as e:
         raise ExaError(f"EXA request failed: {e}") from e
     if resp.status_code in (401, 403):
-        raise ExaError("EXA rejected the API key (401/403) — check EXA_API_KEY.")
+        raise ExaError(
+            "EXA rejected the API key (401/403) — check EXA_API_KEY.",
+            status_code=resp.status_code,
+        )
     if resp.status_code == 429:
-        raise ExaError("EXA rate limited this key (429) — back off and retry.")
+        raise ExaError(
+            "EXA rate limited this key (429) — back off and retry.",
+            status_code=429,
+        )
     if resp.status_code >= 400:
-        raise ExaError(f"EXA {path} failed ({resp.status_code}): {resp.text[:500]}")
+        raise ExaError(
+            f"EXA {path} failed ({resp.status_code}): {resp.text[:500]}",
+            status_code=resp.status_code,
+        )
     try:
         data = resp.json()
     except ValueError as e:

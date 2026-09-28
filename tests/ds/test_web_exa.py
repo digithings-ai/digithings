@@ -384,5 +384,6 @@ def test_manifest_web_search_exposes_offset():
 
 def test_manifest_web_search_exposes_provider_and_effort():
     props = build_first_party_web_search_tool()["function"]["parameters"]["properties"]
-    assert props["provider"]["enum"][0] == "internal"
+    # 'auto' leads the enum (the description sells it); 'internal' always follows.
+    assert props["provider"]["enum"][:2] == ["auto", "internal"]
     assert props["effort"]["enum"] == ["fast", "thorough"]

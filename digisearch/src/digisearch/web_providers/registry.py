@@ -106,10 +106,13 @@ def configured_providers() -> list[str]:
 def provider_enum_choices(name: str | None = None) -> list[str]:
     """Enum values for the tool manifest.
 
-    ``internal`` is always offered; an external provider only appears once its
-    key exists, so an operator is never shown a choice that would 503.
+    ``auto`` (the unconditional default) and ``internal`` are always offered;
+    an external provider only appears once its key exists, so an operator is
+    never shown a choice that would 503.
     """
-    return configured_providers() if name is None else [resolve_provider_name(name)]
+    if name is not None:
+        return [resolve_provider_name(name)]
+    return [AUTO_PROVIDER, *configured_providers()]
 
 
 def available_providers() -> dict[str, dict[str, Any]]:

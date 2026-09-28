@@ -1213,6 +1213,7 @@ def api_orchestrator_invoke(req: OrchestratorInvokeRequest) -> OrchestratorInvok
     if tool == TOOL_WEB_SEARCH:
         from digisearch.web_providers import (
             UnknownProviderError,
+            WebProviderBadRequestError,
             WebProviderCapabilityError,
             WebProviderError,
             WebProviderNotConfiguredError,
@@ -1279,6 +1280,16 @@ def api_orchestrator_invoke(req: OrchestratorInvokeRequest) -> OrchestratorInvok
             return OrchestratorInvokeResponse(ok=False, error=str(e))
         except WebSearchConfigError as e:
             return OrchestratorInvokeResponse(ok=False, error=f"invalid web_search config: {e}")
+        except WebProviderBadRequestError as e:
+            # Caller error, not an outage: info-level so it does not page
+            # operators as a "provider failure" (#4711 review).
+            logger.info("web_search rejected input: %s", e)
+            return OrchestratorInvokeResponse(
+                ok=False,
+                error=str(e),
+                retryable=e.retryable,
+                status_code=e.status_code,
+            )
         except (WebProviderError, WebSearchProviderError) as e:
             # Provider failures are soft in-envelope errors, never a 500 that
             # can cancel a caller's run (#4192). The envelope is HTTP-ok, so

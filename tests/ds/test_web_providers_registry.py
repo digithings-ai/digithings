@@ -118,14 +118,14 @@ def test_only_exa_pages():
 # --- manifest introspection ---------------------------------------------------
 
 
-def test_enum_choices_always_offer_internal():
-    assert provider_enum_choices()[0] == "internal"
-    assert provider_enum_choices() == ["internal"]  # key-less install
+def test_enum_choices_always_offer_auto_and_internal():
+    assert provider_enum_choices()[0] == "auto"
+    assert provider_enum_choices() == ["auto", "internal"]  # key-less install
 
 
 def test_enum_choices_add_keyed_externals(monkeypatch):
     monkeypatch.setenv("TAVILY_API_KEY", "tvly-key")
-    assert provider_enum_choices() == ["internal", "tavily"]
+    assert provider_enum_choices() == ["auto", "internal", "tavily"]
 
 
 def test_available_providers_describes_every_provider():
@@ -189,3 +189,22 @@ def test_route_auto_with_every_key_set_still_runs_the_in_house_tool(monkeypatch)
     body = resp.json()
     assert body["provider"] == "internal"
     assert body["output"] == {"backend": "searxng"}
+
+
+# --- retired surfaces stay gone (hard-break convergence, #4711) ---------------
+
+
+def test_retired_digisearch_web_search_route_is_404():
+    client = TestClient(app, headers=auth_headers())
+    resp = client.post(
+        "/v1/digisearch_web_search",
+        json={"query": "q", "search_type": "auto", "num_results": 3},
+    )
+    assert resp.status_code == 404, resp.text
+
+
+def test_mcp_no_longer_advertises_exa_web_search():
+    import digisearch.mcp_server as mcp_mod
+
+    assert hasattr(mcp_mod, "web_search")
+    assert not hasattr(mcp_mod, "exa_web_search")

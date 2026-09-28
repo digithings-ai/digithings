@@ -341,6 +341,116 @@ def test_require_dict_rejects_non_object_payloads():
     assert excinfo.value.retryable is False
 
 
+def test_firecrawl_soft_failure_raises_not_empty_page(monkeypatch):
+    """200 + {"success": false} must surface, never masquerade as zero hits."""
+    monkeypatch.setenv("FIRECRAWL_API_KEY", "fc-key")
+    seen: dict = {}
+    _patch_request(monkeypatch, {"success": False, "error": "quota exceeded"}, seen)
+    with pytest.raises(WebProviderError) as excinfo:
+        get_provider("firecrawl").search(WebSearchRequest(query="q"))
+    assert "quota exceeded" in str(excinfo.value)
+    assert excinfo.value.retryable is False
+
+
+# --- exa: unified request mapping + error taxonomy ----------------------------
+
+
+def test_exa_recency_maps_to_start_published_date(monkeypatch):
+    """wire pin: recency_days reaches exa as startPublishedDate (behaviour
+    change vs the retired route, which applied no publish window — kept, per
+    the unified 'recency maps onto provider filters' contract)."""
+    from types import SimpleNamespace
+
+    from digisearch.web_providers.base import date_days_ago
+
+    from digisearch import web_exa
+
+    monkeypatch.setenv("EXA_API_KEY", "exa-key")
+    seen: dict = {}
+
+    def fake_exa_search(query, **kwargs):
+        seen.update(kwargs)
+        return SimpleNamespace(
+            results=[{"url": "https://a.com/1", "title": "A"}],
+            search_type="auto",
+            output=None,
+            cost_dollars=None,
+        )
+
+    monkeypatch.setattr(web_exa, "exa_search", fake_exa_search)
+
+    get_provider("exa").search(WebSearchRequest(query="q", recency_days=7))
+    assert seen["start_published_date"] == date_days_ago(7)
+    assert seen["search_type"] == "auto" and seen["num_results"] == 4
+
+    get_provider("exa").search(WebSearchRequest(query="q", recency_days=None))
+    assert seen["start_published_date"] is None
+
+
+@pytest.mark.parametrize(
+    ("http_status", "retryable"),
+    [(401, False), (403, False), (429, True), (500, True)],
+)
+def test_route_exa_status_taxonomy_matches_other_providers(monkeypatch, http_status, retryable):
+    """MAJOR (review): exa 401/403 must be non-retryable with status carried,
+    same taxonomy as base.request_json (tavily's 401 already behaves this way)."""
+    from digisearch import web_exa
+
+    monkeypatch.setenv("EXA_API_KEY", "exa-key")
+
+    def _raise(*args, **kwargs):
+        raise web_exa.ExaError(f"EXA boom ({http_status})", status_code=http_status)
+
+    monkeypatch.setattr(web_exa, "exa_search", _raise)
+    client = TestClient(app, headers=auth_headers())
+    resp = client.post("/v1/web_search", json={"query": "q", "provider": "exa"})
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+    assert body["ok"] is False
+    assert body["retryable"] is retryable
+    assert body["status_code"] == http_status
+
+
+def test_exa_statusless_errors_use_payload_taxonomy():
+    """Transport errors stay retryable; malformed 200 payloads do not."""
+    from digisearch.web_providers.exa import _translate
+
+    from digisearch import web_exa
+
+    transport = _translate(web_exa.ExaError("EXA request failed: connect timeout"))
+    assert transport.retryable is True and transport.status_code is None
+
+    bad_json = _translate(web_exa.ExaError("EXA /search returned non-JSON"))
+    assert bad_json.retryable is False and bad_json.status_code is None
+
+
+def test_web_exa_post_attaches_status_to_http_errors(monkeypatch):
+    """Root of the taxonomy: _post must carry the HTTP status on ExaError so
+    _translate can classify it (regression guard for MAJOR #4711-review)."""
+    from digisearch import web_exa
+
+    class _Resp:
+        status_code = 403
+        text = "forbidden"
+
+    monkeypatch.setattr(web_exa.httpx, "post", lambda *args, **kwargs: _Resp())
+    with pytest.raises(web_exa.ExaError) as excinfo:
+        web_exa._post("/search", {"query": "q"}, api_key="bad-key")
+    assert excinfo.value.status_code == 403
+
+    class _Ok:
+        status_code = 200
+
+        @staticmethod
+        def json():
+            raise ValueError("not json")
+
+    monkeypatch.setattr(web_exa.httpx, "post", lambda *args, **kwargs: _Ok())
+    with pytest.raises(web_exa.ExaError) as malformed:
+        web_exa._post("/search", {"query": "q"}, api_key="k")
+    assert malformed.value.status_code is None
+
+
 # --- route: provider failures stay the #4192 soft envelope --------------------
 
 

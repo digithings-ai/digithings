@@ -14,6 +14,7 @@ from typing import Any, ClassVar
 
 from digisearch.web_providers.base import (
     BaseWebProvider,
+    WebProviderError,
     rank_score,
     request_json,
     require_dict,
@@ -53,6 +54,13 @@ class FirecrawlWebProvider(BaseWebProvider):
                 json_body=body,
             ),
         )
+        if data.get("success") is False:
+            # 200 + {"success": false} is firecrawl's soft-failure envelope;
+            # treating it as an empty page would silently hide outages.
+            raise WebProviderError(
+                f"firecrawl: {data.get('error') or 'search failed'}",
+                retryable=False,
+            )
         results = _normalise(data.get("data"))[: req.max_results]
         return WebSearchResponse(
             query=req.query,
