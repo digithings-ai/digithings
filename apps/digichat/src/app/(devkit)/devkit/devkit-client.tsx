@@ -427,6 +427,9 @@ export function DevkitClient() {
 
   const previewDeployment = draft?.parsed ?? selected?.deployment ?? null;
   const previewDirty = draft ? isDirty(draft) : false;
+  // Same array the sidebar list renders: the preview bar mirrors it while
+  // the last-valid `parsed` deployment holds the chat surface.
+  const previewIssues = draft ? draft.issues : (selected?.issues ?? []);
 
   // Export source: the live draft when one exists, else the saved redacted text.
   const exportText = draft?.text ?? selected?.redactedText ?? null;
@@ -686,6 +689,7 @@ export function DevkitClient() {
                 entryId={selected?.id ?? "new"}
                 deployment={previewDeployment}
                 dirty={previewDirty}
+                issues={previewIssues}
               />
             ) : (
               <p className="p-4 text-sm text-muted-foreground">
