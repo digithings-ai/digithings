@@ -1,0 +1,39 @@
+@import "@digithings/design/tokens.css";
+@import "@digithings/ui/styles/web-theme.css";
+@import "@digithings/ui/styles/controls-core.css";
+@import "@digithings/ui/styles/controls-overlay.css";
+
+@source "../../../../../packages/ui/src/ui";
+
+/* Sidebar width floor: the inline sidebarWidth style stays source of truth. */
+.devkit-side {
+  min-width: 16rem;
+  max-width: 32rem;
+}
+
+/* Scroll-spy active nav link (canon tokens only). */
+.devkit-navlink[aria-current="true"] {
+  color: var(--ink);
+  background: color-mix(in oklab, var(--accent) 12%, transparent);
+}
+
+/* Swatch preset grid: 5 columns x 2 rows of 2rem cells. */
+.devkit-swatches {
+  display: grid;
+  grid-template-columns: repeat(5, 2rem);
+  gap: 0.5rem;
+}
+.devkit-swatch {
+  width: 2rem;
+  height: 2rem;
+  border: 1px solid var(--hair);
+}
+.devkit-swatch[aria-pressed="true"] {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* Density: halve editor row gaps inside compact groups. */
+.devkit-compact {
+  gap: 0.5rem;
+}

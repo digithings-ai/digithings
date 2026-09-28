@@ -20,6 +20,23 @@ describe("devkit route isolation", () => {
     // Shares the baseline assistant-ui template sheet, never app chrome.
     expect(layout).toMatch(/\(baseline\)\/baseline\.css/);
     expect(layout).toMatch(/variable:\s*"--font-geist-mono"/);
+    // Kit-native rebuild: layout pulls the devkit-scoped controls sheet,
+    // which imports the token bridge + kit sheets (order pinned there).
+    expect(layout).toMatch(/devkit-controls\.css/);
+    const css = read("devkit-controls.css");
+    expect(css).toMatch(/@digithings\/design\/tokens\.css/);
+    expect(css).toMatch(/styles\/web-theme\.css/);
+    expect(css).toMatch(/styles\/controls-core\.css/);
+    expect(css).toMatch(/styles\/controls-overlay\.css/);
+    // No selector may leak outside devkit scope: every rule opens .devkit-,
+    // @import, or @source.
+    for (const line of css.split("\n")) {
+      const t = line.trim();
+      if (t === "" || t.startsWith("@") || t.startsWith("/*") || t.startsWith("*") || t === "}") continue;
+      if (t.startsWith(".devkit-") || t.startsWith(".")) {
+        expect(t.startsWith(".devkit-")).toBe(true);
+      }
+    }
   });
 
   it("is dev-only at the page boundary", () => {
