@@ -40,6 +40,8 @@ system instead.
 **Deep audits:** [`references/scans/`](references/scans/INDEX.md) — page-by-page,
 components, mobile nav (Playwright), copy patterns.
 
+**Inspiration hub:** [`references/designeer.xyz.md`](references/designeer.xyz.md) — living dictionary of galleries/tools/reading to pull from for digiweb work.
+
 **Implementation backlog:** [GitHub epic #1200](https://github.com/digithings-ai/digithings/issues/1200) · [`docs/agent-backlog/design-evolution/INDEX.md`](../../docs/agent-backlog/design-evolution/INDEX.md)
 
 **Copy & IA:** [`COPY_GUIDE.md`](COPY_GUIDE.md) — voice, literal CTAs, per-surface section maps.
