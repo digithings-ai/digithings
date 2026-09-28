@@ -4,7 +4,13 @@ import { useEffect, useId, useState } from "react";
 import { THREAD_SKINS } from "@digithings/ui/chat/skins";
 import {
   Button,
+  Card,
+  CardAction,
+  CardContent,
+  CardHeader,
+  CardTitle,
   Field,
+  IconButton,
   Input,
   SegmentedControl,
   Select,
@@ -40,10 +46,6 @@ import {
 
 /** Commit one text edit into the draft; returns whether it applied. */
 export type EditorsCommit = (edit: TextEdit) => boolean;
-
-const inputCls = "w-full rounded-md border bg-background px-2 py-1 font-mono text-xs";
-const labelCls = "flex flex-col gap-1 text-xs";
-const hintCls = "text-[11px] text-muted-foreground";
 
 function Section({
   title,
@@ -108,9 +110,9 @@ export function TextRow({
         />
       </Field>
       {onClear && current !== "" ? (
-        <Button type="button" dress="chat" onClick={onClear} aria-label={`Clear ${label}`}>
+        <IconButton onClick={onClear} aria-label={`Clear ${label}`}>
           ✕
-        </Button>
+        </IconButton>
       ) : null}
     </span>
   );
@@ -318,7 +320,7 @@ export function TextListRow({
 }
 
 /** Masked secret row: the value is never displayed, only preserved/replaced. */
-function SecretRow({
+export function SecretRow({
   label,
   state,
   hint,
@@ -339,79 +341,66 @@ function SecretRow({
       : state === "sentinel"
         ? "•••••• (preserved from file)"
         : "•••••• (custom value — never shown)";
-  return (
-    <div className={labelCls}>
-      <span className="text-muted-foreground">{label}</span>
-      {replacing ? (
-        <span className="flex gap-1">
-          <input
+  const trySet = () => {
+    if (val === "") return;
+    if (!onReplace(val)) return; // refused — stay open, keep value
+    setVal("");
+    setReplacing(false);
+  };
+  const cancel = () => {
+    setVal("");
+    setReplacing(false);
+  };
+  if (replacing) {
+    return (
+      <span className="flex gap-1">
+        <Field label={label} hint={hint} className="min-w-0 flex-1">
+          <Input
+            dress="chat"
             type="password"
             value={val}
             autoFocus
             placeholder="new secret value"
+            aria-label="New secret value"
+            spellCheck={false}
+            className="min-w-0 flex-1"
             onChange={(e) => setVal(e.target.value)}
             onKeyDown={(e) => {
-              if (e.key === "Enter" && val !== "") {
-                if (!onReplace(val)) return; // refused — stay open, keep value
-                setVal("");
-                setReplacing(false);
-              }
-              if (e.key === "Escape") {
-                setVal("");
-                setReplacing(false);
-              }
+              if (e.key === "Enter") trySet();
+              if (e.key === "Escape") cancel();
             }}
-            className={`${inputCls} min-w-0 flex-1`}
           />
-          <button
-            type="button"
-            disabled={val === ""}
-            onClick={() => {
-              if (!onReplace(val)) return; // refused — stay open, keep value
-              setVal("");
-              setReplacing(false);
-            }}
-            className="shrink-0 rounded-md border px-2 py-1 text-xs hover:bg-accent disabled:opacity-50"
-          >
-            Set
-          </button>
-          <button
-            type="button"
-            onClick={() => {
-              setVal("");
-              setReplacing(false);
-            }}
-            className="shrink-0 rounded-md border px-2 py-1 text-xs text-muted-foreground hover:bg-accent"
-          >
-            Cancel
-          </button>
+        </Field>
+        <Button type="button" dress="chat" disabled={val === ""} onClick={trySet}>
+          Set
+        </Button>
+        <Button type="button" dress="chat" onClick={cancel}>
+          Cancel
+        </Button>
+      </span>
+    );
+  }
+  return (
+    <div className="grid min-w-0 gap-[0.35rem]">
+      <span className="font-mono text-[0.6rem] uppercase tracking-[0.1em] text-ink-mute">
+        {label}
+      </span>
+      <span className="flex items-center gap-1">
+        <span className="min-w-0 flex-1 truncate font-mono text-xs text-muted-foreground">
+          {masked}
         </span>
-      ) : (
-        <span className="flex items-center gap-1">
-          <span className="min-w-0 flex-1 truncate font-mono text-xs text-muted-foreground">
-            {masked}
-          </span>
-          <button
-            type="button"
-            onClick={() => setReplacing(true)}
-            className="shrink-0 rounded-md border px-2 py-1 text-xs hover:bg-accent"
-          >
-            {state === "absent" ? "Add" : "Replace"}
-          </button>
-          {onClear && state !== "absent" ? (
-            <button
-              type="button"
-              title={`Clear ${label}`}
-              aria-label={`Clear ${label}`}
-              onClick={onClear}
-              className="shrink-0 rounded-md border px-1.5 py-1 text-xs text-muted-foreground hover:bg-accent"
-            >
-              ✕
-            </button>
-          ) : null}
-        </span>
-      )}
-      {hint ? <span className={hintCls}>{hint}</span> : null}
+        <Button type="button" dress="chat" onClick={() => setReplacing(true)}>
+          {state === "absent" ? "Add" : "Replace"}
+        </Button>
+        {onClear && state !== "absent" ? (
+          <IconButton title={`Clear ${label}`} aria-label={`Clear ${label}`} onClick={onClear}>
+            ✕
+          </IconButton>
+        ) : null}
+      </span>
+      {hint ? (
+        <span className="font-mono text-[0.6rem] text-ink-mute">{hint}</span>
+      ) : null}
     </div>
   );
 }
@@ -823,66 +812,68 @@ export function DevkitEditors({
           onCommit={(v) => commit(setBoolean(draft.text, scope, ["tools", "allowUserToggle"], v))}
         />
         {tools.map((t: ToolEntry, i: number) => (
-          <div key={`${t.id}-${i}`} className="flex flex-col gap-1 rounded border p-1.5">
-            <div className="flex items-center gap-1">
-              <span className="min-w-0 flex-1 truncate font-mono text-xs">{t.id}</span>
-              <button
-                type="button"
-                title={`Remove ${t.id}`}
-                aria-label={`Remove ${t.id}`}
-                onClick={() => commit(removeListItem(draft.text, scope, ["tools", "catalog"], i))}
-                className="shrink-0 rounded-md border px-1.5 py-0.5 text-xs text-muted-foreground hover:bg-accent"
-              >
-                ✕
-              </button>
-            </div>
-            <TextRow
-              label="id"
-              value={t.id}
-              required
-              onCommit={(v) => commit(setListItemScalar(draft.text, scope, ["tools", "catalog"], i, "id", v))}
-            />
-            <TextRow
-              label="label"
-              value={t.label}
-              onCommit={(v) => clearingItem(["tools", "catalog"], i, "label", v)}
-              onClear={() => commit(deleteListItemField(draft.text, scope, ["tools", "catalog"], i, "label"))}
-            />
-            <BoolRow
-              label="default on"
-              checked={t.default ?? false}
-              onCommit={(v) => commit(setListItemScalar(draft.text, scope, ["tools", "catalog"], i, "default", v))}
-            />
-          </div>
+          <Card key={`${t.id}-${i}`} dress="chat">
+            <CardHeader>
+              <CardTitle className="min-w-0 truncate">{t.id}</CardTitle>
+              <CardAction>
+                <IconButton
+                  title={`Remove ${t.id}`}
+                  aria-label={`Remove ${t.id}`}
+                  onClick={() => commit(removeListItem(draft.text, scope, ["tools", "catalog"], i))}
+                >
+                  ✕
+                </IconButton>
+              </CardAction>
+            </CardHeader>
+            <CardContent className="flex flex-col gap-1">
+              <TextRow
+                label="id"
+                value={t.id}
+                required
+                onCommit={(v) => commit(setListItemScalar(draft.text, scope, ["tools", "catalog"], i, "id", v))}
+              />
+              <TextRow
+                label="label"
+                value={t.label}
+                onCommit={(v) => clearingItem(["tools", "catalog"], i, "label", v)}
+                onClear={() => commit(deleteListItemField(draft.text, scope, ["tools", "catalog"], i, "label"))}
+              />
+              <BoolRow
+                label="default on"
+                checked={t.default ?? false}
+                onCommit={(v) => commit(setListItemScalar(draft.text, scope, ["tools", "catalog"], i, "default", v))}
+              />
+            </CardContent>
+          </Card>
         ))}
         <div className="flex flex-col gap-1 rounded border border-dashed p-1.5">
           <span className="text-[11px] text-muted-foreground">Add tool</span>
-          <input
+          <Input
+            dress="chat"
             value={newTool.id}
             placeholder="id"
+            aria-label="New tool id"
             spellCheck={false}
             onChange={(e) => setNewTool((s) => ({ ...s, id: e.target.value }))}
-            className={inputCls}
           />
-          <input
+          <Input
+            dress="chat"
             value={newTool.label}
             placeholder="label (optional)"
+            aria-label="New tool label"
             spellCheck={false}
             onChange={(e) => setNewTool((s) => ({ ...s, label: e.target.value }))}
-            className={inputCls}
           />
           <span className="flex items-center gap-2">
-            <label className="flex items-center gap-1 text-xs">
-              <input
-                type="checkbox"
-                checked={newTool.def}
-                onChange={(e) => setNewTool((s) => ({ ...s, def: e.target.checked }))}
-                className="size-3.5 accent-current"
-              />
-              default on
-            </label>
-            <button
+            <Switch
+              checked={newTool.def}
+              onCheckedChange={(v) => setNewTool((s) => ({ ...s, def: v }))}
+              aria-label="New tool default on"
+            />
+            <span className="text-xs">default on</span>
+            <Button
               type="button"
+              dress="chat"
               disabled={newTool.id.trim() === ""}
               onClick={() => {
                 const item: Record<string, string | boolean> = { id: newTool.id.trim() };
@@ -892,10 +883,10 @@ export function DevkitEditors({
                   setNewTool({ id: "", label: "", def: false });
                 }
               }}
-              className="ml-auto rounded-md border px-2 py-1 text-xs hover:bg-accent disabled:opacity-50"
+              className="ml-auto"
             >
               Add
-            </button>
+            </Button>
           </span>
         </div>
       </Section>
@@ -913,89 +904,95 @@ export function DevkitEditors({
           onCommit={(v) => commit(setBoolean(draft.text, scope, ["mcp", "allowAddForm"], v))}
         />
         {servers.map((s: McpServer, i: number) => (
-          <div key={`${s.id}-${i}`} className="flex flex-col gap-1 rounded border p-1.5">
-            <div className="flex items-center gap-1">
-              <span className="min-w-0 flex-1 truncate font-mono text-xs">{s.id}</span>
-              <button
-                type="button"
-                title={`Remove ${s.id}`}
-                aria-label={`Remove ${s.id}`}
-                onClick={() => commit(removeListItem(draft.text, scope, ["mcp", "servers"], i))}
-                className="shrink-0 rounded-md border px-1.5 py-0.5 text-xs text-muted-foreground hover:bg-accent"
-              >
-                ✕
-              </button>
-            </div>
-            <TextRow
-              label="id (lowercase slug)"
-              value={s.id}
-              required
-              onCommit={(v) => commit(setListItemScalar(draft.text, scope, ["mcp", "servers"], i, "id", v))}
-            />
-            <TextRow
-              label="URL (BFF-only, never projected)"
-              value={s.url}
-              required
-              onCommit={(v) => commit(setListItemScalar(draft.text, scope, ["mcp", "servers"], i, "url", v))}
-            />
-            <TextRow
-              label="label"
-              value={s.label}
-              onCommit={(v) => clearingItem(["mcp", "servers"], i, "label", v)}
-              onClear={() => commit(deleteListItemField(draft.text, scope, ["mcp", "servers"], i, "label"))}
-            />
-            <BoolRow
-              label="default on"
-              checked={s.default ?? false}
-              onCommit={(v) => commit(setListItemScalar(draft.text, scope, ["mcp", "servers"], i, "default", v))}
-            />
-            <SecretRow
-              label="token (operator secret)"
-              state={secretStateInList(draft.text, scope, ["mcp", "servers"], i, "token")}
-              hint="Prefer tokenEnv. Untouched rows restore from disk on save."
-              onReplace={(v) => commit(setListItemScalar(draft.text, scope, ["mcp", "servers"], i, "token", v))}
-              onClear={() => commit(deleteListItemField(draft.text, scope, ["mcp", "servers"], i, "token"))}
-            />
-            <TextRow
-              label="token env var"
-              value={s.tokenEnv}
-              placeholder="MY_MCP_TOKEN"
-              onCommit={(v) => clearingItem(["mcp", "servers"], i, "tokenEnv", v)}
-              onClear={() => commit(deleteListItemField(draft.text, scope, ["mcp", "servers"], i, "tokenEnv"))}
-            />
-            <TextRow
-              label="auth header (e.g. X-API-Key)"
-              value={s.authHeader}
-              onCommit={(v) => clearingItem(["mcp", "servers"], i, "authHeader", v)}
-              onClear={() => commit(deleteListItemField(draft.text, scope, ["mcp", "servers"], i, "authHeader"))}
-            />
-          </div>
+          <Card key={`${s.id}-${i}`} dress="chat">
+            <CardHeader>
+              <CardTitle className="min-w-0 truncate">{s.id}</CardTitle>
+              <CardAction>
+                <IconButton
+                  title={`Remove ${s.id}`}
+                  aria-label={`Remove ${s.id}`}
+                  onClick={() => commit(removeListItem(draft.text, scope, ["mcp", "servers"], i))}
+                >
+                  ✕
+                </IconButton>
+              </CardAction>
+            </CardHeader>
+            <CardContent className="flex flex-col gap-1">
+              <TextRow
+                label="id (lowercase slug)"
+                value={s.id}
+                required
+                onCommit={(v) => commit(setListItemScalar(draft.text, scope, ["mcp", "servers"], i, "id", v))}
+              />
+              <TextRow
+                label="URL (BFF-only, never projected)"
+                value={s.url}
+                required
+                onCommit={(v) => commit(setListItemScalar(draft.text, scope, ["mcp", "servers"], i, "url", v))}
+              />
+              <TextRow
+                label="label"
+                value={s.label}
+                onCommit={(v) => clearingItem(["mcp", "servers"], i, "label", v)}
+                onClear={() => commit(deleteListItemField(draft.text, scope, ["mcp", "servers"], i, "label"))}
+              />
+              <BoolRow
+                label="default on"
+                checked={s.default ?? false}
+                onCommit={(v) => commit(setListItemScalar(draft.text, scope, ["mcp", "servers"], i, "default", v))}
+              />
+              <SecretRow
+                label="token (operator secret)"
+                state={secretStateInList(draft.text, scope, ["mcp", "servers"], i, "token")}
+                hint="Prefer tokenEnv. Untouched rows restore from disk on save."
+                onReplace={(v) => commit(setListItemScalar(draft.text, scope, ["mcp", "servers"], i, "token", v))}
+                onClear={() => commit(deleteListItemField(draft.text, scope, ["mcp", "servers"], i, "token"))}
+              />
+              <TextRow
+                label="token env var"
+                value={s.tokenEnv}
+                placeholder="MY_MCP_TOKEN"
+                onCommit={(v) => clearingItem(["mcp", "servers"], i, "tokenEnv", v)}
+                onClear={() => commit(deleteListItemField(draft.text, scope, ["mcp", "servers"], i, "tokenEnv"))}
+              />
+              <TextRow
+                label="auth header (e.g. X-API-Key)"
+                value={s.authHeader}
+                onCommit={(v) => clearingItem(["mcp", "servers"], i, "authHeader", v)}
+                onClear={() => commit(deleteListItemField(draft.text, scope, ["mcp", "servers"], i, "authHeader"))}
+              />
+            </CardContent>
+          </Card>
         ))}
         <div className="flex flex-col gap-1 rounded border border-dashed p-1.5">
           <span className="text-[11px] text-muted-foreground">Add server</span>
-          <input
+          <Input
+            dress="chat"
             value={newServer.id}
             placeholder="id (lowercase slug)"
+            aria-label="New server id"
             spellCheck={false}
             onChange={(e) => setNewServer((s) => ({ ...s, id: e.target.value }))}
-            className={inputCls}
           />
-          <input
+          <Input
+            dress="chat"
             value={newServer.url}
             placeholder="https://…/mcp"
+            aria-label="New server URL"
             spellCheck={false}
             onChange={(e) => setNewServer((s) => ({ ...s, url: e.target.value }))}
-            className={inputCls}
           />
-          <input
+          <Input
+            dress="chat"
             value={newServer.label}
             placeholder="label (optional)"
+            aria-label="New server label"
             spellCheck={false}
             onChange={(e) => setNewServer((s) => ({ ...s, label: e.target.value }))}
-            className={inputCls}
           />
-          <button
+          <Button
             type="button"
+            dress="chat"
             disabled={newServer.id.trim() === "" || newServer.url.trim() === ""}
             onClick={() => {
               const item: Record<string, string | boolean> = {
@@ -1007,10 +1004,10 @@ export function DevkitEditors({
                 setNewServer({ id: "", url: "", label: "" });
               }
             }}
-            className="ml-auto rounded-md border px-2 py-1 text-xs hover:bg-accent disabled:opacity-50"
+            className="ml-auto"
           >
             Add
-          </button>
+          </Button>
         </div>
       </Section>
 
