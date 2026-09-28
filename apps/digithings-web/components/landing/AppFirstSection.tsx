@@ -65,6 +65,30 @@ function usd(n: number): string {
   return `$${n.toLocaleString("en-US", { maximumFractionDigits: 0 })}`;
 }
 
+const TABLE_LAYERS: { id: LayerId; label: string }[] = [
+  { id: "models", label: "Models" },
+  { id: "embeddings", label: "Embeddings" },
+  { id: "vector", label: "Vector store" },
+  { id: "telemetry", label: "Telemetry" },
+  { id: "hosting", label: "Hosting" },
+];
+
+/** Monthly sum for one layer; null when the app prices no lines there. */
+function layerSum(lines: { amount: number; layer: LayerId; estimate?: boolean }[], layer: LayerId): number | null {
+  const hits = lines.filter((l) => l.layer === layer);
+  if (hits.length === 0) return null;
+  return hits.reduce((n, l) => n + l.amount, 0);
+}
+
+function layerEst(lines: { layer: LayerId; estimate?: boolean }[], layer: LayerId): boolean {
+  return lines.some((l) => l.layer === layer && l.estimate);
+}
+
+function cell(n: number | null, est: boolean): string {
+  if (n === null) return "$0 — not in this app";
+  return `${est ? "~" : ""}${usd(n)}`;
+}
+
 interface Popover {
   side: "provider" | "digi";
   layer: LayerId;
@@ -98,8 +122,8 @@ export function AppFirstSection() {
   const workload = preset.workload;
   const effProvider = { ...pick.provider, ...preset.fixedLayers };
   const effDigi = { ...pick.digi, ...preset.fixedLayers };
-  const providerPrice = pricePick(PROVIDER_LAYERS, effProvider, workload);
-  const digiPrice = pricePick(DIGI_LAYERS, effDigi, workload);
+  const providerPrice = pricePick(PROVIDER_LAYERS, effProvider, workload, preset.topology);
+  const digiPrice = pricePick(DIGI_LAYERS, effDigi, workload, preset.topology);
 
   /* Click a drawn box -> open its layer's options anchored at the click.
      Side resolves through the tour's own compositional classes (leaving is
@@ -236,20 +260,48 @@ export function AppFirstSection() {
         </button>
       </div>
 
-      <div className="mx-auto grid max-w-[var(--frame-w)] gap-[1rem] px-[var(--page-pad)] pb-[2.5rem] min-[960px]:grid-cols-2">
+      <div className="mx-auto max-w-[var(--frame-w)] px-[var(--page-pad)] pb-[2.5rem]">
         <div className="border border-hair bg-surface p-[1.2rem]">
-          <span className={LABEL}>their invoice · monthly</span>
-          <p className="m-0 font-mono text-[clamp(1.4rem,2.6vw,2rem)] font-medium text-ink font-variant-numeric tabular-nums">
-            {usd(providerPrice.monthly)}
+          <span className={LABEL}>invoice · monthly by layer · follows the app above</span>
+          <table className="mt-[0.6rem] w-full border-collapse font-mono text-[0.8rem]">
+            <thead>
+              <tr className="text-left text-ink-mute">
+                <th className="py-[0.3rem] pr-[0.6rem] font-normal">Layer</th>
+                <th className="py-[0.3rem] pr-[0.6rem] text-right font-normal">Their $/mo</th>
+                <th className="py-[0.3rem] text-right font-normal">digi $/mo</th>
+              </tr>
+            </thead>
+            <tbody className="font-variant-numeric tabular-nums">
+              {TABLE_LAYERS.map((row) => {
+                const their = layerSum(providerPrice.lines, row.id);
+                const digi = layerSum(digiPrice.lines, row.id);
+                return (
+                  <tr key={row.id} className="border-t border-hair">
+                    <td className="py-[0.3rem] pr-[0.6rem] text-ink-soft">{row.label}</td>
+                    <td className={`py-[0.3rem] pr-[0.6rem] text-right ${their === null ? "text-ink-mute" : "text-ink"}`}>
+                      {cell(their, layerEst(providerPrice.lines, row.id))}
+                    </td>
+                    <td className={`py-[0.3rem] text-right ${digi === null ? "text-ink-mute" : "text-ink"}`}>
+                      {cell(digi, layerEst(digiPrice.lines, row.id))}
+                    </td>
+                  </tr>
+                );
+              })}
+              <tr className="border-t border-hair">
+                <td className="py-[0.3rem] pr-[0.6rem] text-ink-soft">Setup · one-time</td>
+                <td className="py-[0.3rem] pr-[0.6rem] text-right text-ink">{usd(providerPrice.setup)}</td>
+                <td className="py-[0.3rem] text-right text-ink">{usd(digiPrice.setup)}</td>
+              </tr>
+              <tr className="border-t border-hair">
+                <td className="py-[0.3rem] pr-[0.6rem] text-ink">Monthly total</td>
+                <td className="py-[0.3rem] pr-[0.6rem] text-right text-ink">{usd(providerPrice.monthly)}</td>
+                <td className="py-[0.3rem] text-right text-ink">{usd(digiPrice.monthly)}</td>
+              </tr>
+            </tbody>
+          </table>
+          <p className="m-0 mt-[0.6rem] font-mono text-[0.72rem] text-ink-mute">
+            ~ marks an estimate; the rest are researched list prices at this app&apos;s preset workload.
           </p>
-          <p className="m-0 font-mono text-[0.78rem] text-ink-mute">setup {usd(providerPrice.setup)}</p>
-        </div>
-        <div className="border border-hair bg-surface p-[1.2rem]">
-          <span className={LABEL}>digithings invoice · monthly</span>
-          <p className="m-0 font-mono text-[clamp(1.4rem,2.6vw,2rem)] font-medium text-ink font-variant-numeric tabular-nums">
-            {usd(digiPrice.monthly)}
-          </p>
-          <p className="m-0 font-mono text-[0.78rem] text-ink-mute">setup {usd(digiPrice.setup)}</p>
         </div>
       </div>
     </section>

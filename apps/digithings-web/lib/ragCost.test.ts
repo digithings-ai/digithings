@@ -22,10 +22,10 @@ describe("ragCost", () => {
   it("prices the provider month with chat dominating store, queries and traces", () => {
     // Store 6.144GB x $0.33 = $2.03, reads 30k x 6.144 RU x $16/M = $2.95:
     // under the $50 floor, so $50. Query embeddings 60M x $0.13 = $7.80.
-    // Sol answers 240M x $5 + 45M x $30 = $2,550. LangSmith $39 + 20k x
-    // $2.50/1k = $89. Total $2,696.80.
+    // Sol answers 240M x $4 + 45M x $20 = $1,860. LangSmith $39 + 20k x
+    // $2.50/1k = $89. Total $2,006.80.
     const { monthly, lines } = ragCost("provider");
-    expect(monthly).toBeCloseTo(2696.8, 4);
+    expect(monthly).toBeCloseTo(2006.8, 4);
     const answers = lines.find((l) => l.label === "Model answers");
     expect(answers!.amount / monthly).toBeGreaterThan(0.9);
   });
