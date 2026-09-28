@@ -53,6 +53,17 @@ describe("devkit route isolation", () => {
     expect(client).toMatch(/aria-label="New deployment"/);
     expect(client).toMatch(/createNewFileDraft/);
     expect(client).toMatch(/slugFromDraftText/);
+    // P2 export pane builds deploy artifacts from the live draft,
+    // client-side only — no export API exists.
+    expect(client).toMatch(/DevkitExportPane/);
+    expect(client).toMatch(/setExportOpen/);
+    expect(client).not.toMatch(/\/api\/devkit\/export/);
+    const pane = read("devkit/devkit-export-pane.tsx");
+    expect(pane).toMatch(/aria-label="Export deployment"/);
+    expect(pane).toMatch(/role="tab"/);
+    expect(pane).toMatch(/buildComposeBundle/);
+    expect(pane).toMatch(/buildEmbedBundle/);
+    expect(pane).not.toMatch(/\/api\//);
     expect(client).toContain("read-only");
     expect(client).toMatch(/aria-label="Deployments"/);
   });
