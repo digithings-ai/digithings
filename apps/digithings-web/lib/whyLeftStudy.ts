@@ -4,30 +4,39 @@
  * Renders on `/variants/why-copy` as a single-side guided walk. The live
  * band is untouched; this migrates over only when the drawing freezes.
  *
- * What's accurate here, box by box: the client's own data sources sit
- * OUTSIDE the wall (they're yours — the hook is that the only way in is
- * their connectors); models, embeddings, vectors, lake, telemetry, GPUs
- * and terms sit inside one provider boundary labeled app-to-silicon (the
- * vertical-integration trend: model companies buying the layers above and
- * below their models). Vectors live with the provider and only their
- * embedding models fit — switching models means re-embedding everything,
- * which is the working lock-in, not an abstraction.
+ * Familiar, not generic: every box names the product a team would actually
+ * buy — OpenAI for the gateway, flagship and embeddings (real marks: the
+ * kit ships the OpenAI glyph), Pinecone for vectors, Azure for blob and
+ * GPUs, LangSmith for traces (names with generic plates: those vendors
+ * publish no monochrome mark, and a fake logo would be worse than none).
+ * Prices on the boxes come out of `RAG_PRICING`, so the drawing and the
+ * invoice panel below it can never disagree.
  *
- * The walk runs the three beats in order — locked in, not modular, more
- * expensive — then lands the trend: the wall gets taller, not shorter.
- * No vendor is named anywhere (repo rule); no figures, only meters.
+ * What's accurate: the client's own data sources sit OUTSIDE the wall; the
+ * boundary counts its vendors ("four vendors · four meters"); vectors live
+ * in Pinecone while only OpenAI's embeddings fit the workflow — switching
+ * models means re-embedding ~250M tokens, which is the working lock-in.
+ *
+ * The walk runs the three beats — locked in, not modular, more expensive —
+ * then lands the vertical-integration trend. No figures beyond researched
+ * list prices; vendor names appear here because the owner directed this
+ * study at familiarity (repo-wide no-vendor rule still holds everywhere
+ * else, including the live band).
  */
 
 import type { ArchSpec, TourStep } from "@digithings/ui";
+import { RAG_PRICING } from "@/lib/ragCost";
+
+const P = RAG_PRICING;
 
 export const TRADITIONAL_ARCH: ArchSpec = {
   title: "The traditional AI stack",
   description:
-    "Layered diagram: your product and data sources on top, everything else — gateway, models, embeddings, vectors, lake, telemetry, GPUs, terms — inside one provider boundary.",
+    "Layered diagram: your product and data sources on top; OpenAI gateway, flagship and embeddings, Pinecone vectors, Azure blob and GPUs, and LangSmith traces inside a four-vendor wall.",
   groups: [
     {
       id: "platform",
-      label: "one provider · app to silicon",
+      label: "four vendors · four meters",
       icon: "cloud",
       col: 0,
       row: 1,
@@ -38,13 +47,43 @@ export const TRADITIONAL_ARCH: ArchSpec = {
   services: [
     { id: "app", label: "your product", icon: "internet", col: 0, row: 0 },
     { id: "sources", label: "your data sources", icon: "database", col: 2, row: 0 },
-    { id: "api", label: "their API gateway", icon: "server", group: "platform", col: 1, row: 1 },
-    { id: "model", label: "their models", icon: "server", group: "platform", col: 0, row: 2 },
-    { id: "embed", label: "their embeddings", icon: "server", group: "platform", col: 1, row: 2 },
-    { id: "memory", label: "their vector DB", icon: "database", group: "platform", col: 2, row: 2 },
-    { id: "record", label: "their data lake", icon: "database", group: "platform", col: 0, row: 3 },
-    { id: "telemetry", label: "their telemetry", icon: "server", group: "platform", col: 1, row: 3 },
-    { id: "machines", label: "their GPUs", icon: "cloud", group: "platform", col: 2, row: 3 },
+    { id: "api", label: "OpenAI API", icon: "server", logo: "openai", group: "platform", col: 1, row: 1 },
+    {
+      id: "model",
+      label: `GPT-5.6 Sol · $${P.chatFlagshipInPerM}/$${P.chatFlagshipOutPerM}`,
+      icon: "server",
+      logo: "openai",
+      group: "platform",
+      col: 0,
+      row: 2,
+    },
+    {
+      id: "embed",
+      label: `embed-3-large · $${P.embedLargePerM}/M`,
+      icon: "server",
+      logo: "openai",
+      group: "platform",
+      col: 1,
+      row: 2,
+    },
+    {
+      id: "memory",
+      label: `Pinecone · $${P.pineconeMinMonthly} floor`,
+      icon: "database",
+      group: "platform",
+      col: 2,
+      row: 2,
+    },
+    { id: "record", label: "Azure Blob", icon: "database", group: "platform", col: 0, row: 3 },
+    {
+      id: "telemetry",
+      label: `LangSmith · $${P.langsmithSeatMonthly}/seat`,
+      icon: "server",
+      group: "platform",
+      col: 1,
+      row: 3,
+    },
+    { id: "machines", label: "Azure GPUs", icon: "cloud", group: "platform", col: 2, row: 3 },
     { id: "terms", label: "their terms", icon: "disk", group: "platform", col: 1, row: 4 },
   ],
   edges: [
@@ -70,20 +109,20 @@ export const TRADITIONAL_STEPS: TourStep[] = [
   },
   {
     id: "door",
-    label: "One door in, and they hold the key.",
+    label: "One door in: the OpenAI API.",
     line: "A single gateway fronts the whole stack. Its SDK version, its limits and its prices move on a schedule you don't set — and every layer below is reachable only through it.",
     ids: ["app", "sources", "api"],
   },
   {
     id: "locked",
     label: "Locked in at the embedding layer.",
-    line: "Vectors live with the provider, and only their embedding models fit the index. Switching models means re-embedding everything you own — that is the lock-in that actually bites, long before the contract does.",
+    line: "Pinecone holds your vectors, but the pipeline only speaks embed-3-large — switching models means re-embedding some 250M tokens. That is the lock-in that actually bites, long before the contract does.",
     ids: ["api", "model", "embed", "memory"],
   },
   {
     id: "metered",
-    label: "Watched, metered, and minted below.",
-    line: "The lake, the telemetry and the GPUs all bill inside the same wall — per token, per query, per gigabyte. Nothing here is modular: no layer can be swapped without leaving the wall.",
+    label: "LangSmith watches at $39 a seat; Azure bills the rest.",
+    line: "Traces run $2.50 per thousand past the included allowance, Pinecone holds its $50 floor, and Azure meters the GPUs by the hour and the Blob by the gigabyte. Nothing here is modular: no layer can be swapped without leaving the wall.",
     ids: ["record", "telemetry", "machines"],
   },
   {
