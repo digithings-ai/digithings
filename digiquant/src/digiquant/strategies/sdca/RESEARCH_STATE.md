@@ -1054,6 +1054,9 @@ explicit that they're still blocked on Stage 2's OHLC plumbing.)
      together. No `src/` library changes; `tests/dq/strategies/sdca/`
      unaffected (diagnostic scripts only, no production code touched).
 
+11. **Periodic self-optimization cycle log** (Task 8 driver, `scripts/run_periodic_self_optimization_cycle.py` — alternating ablation / tiered-curve cycles gated vs flat DCA and the live `settings.json` config; diagnostic only, never writes `settings.json` or the validated-candidate section):
+- **2026-09-28 — periodic cycle 1 (ablation)**: candidate duration-weighted OOS=-43.59% vs live -38.47% (beats_live_oos=False), beats_flat_dca_oos=False, per-fold pass=[]/[0, 1, 2], sensitivity_stable=False, full_parity_gate=False (detail: `.scratch/periodic_cycle_1.json`).
+
 ## North-star ceiling (benchmark only — NEVER a trading candidate)
 
 Chris's 2026-09-11 direction, after pausing new-indicator work to sanity-check
