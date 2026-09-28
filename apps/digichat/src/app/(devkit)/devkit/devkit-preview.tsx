@@ -33,6 +33,10 @@ import type { DigichatDeployment } from "@/lib/deploy-config/schema";
 /** Stable no-ops: the preview has no persisted session to reset or redo. */
 const noop = () => {};
 
+// Unsaved-changes dot in the preview header.
+const DIRTY_DOT_CLASS =
+  "inline-block size-2 shrink-0 rounded-full bg-amber-500"; // canon-allow: dev-only status dot in the isolated devkit route (no token bridge), not product chrome
+
 /** Same error copy as the product shell (mirrors baseline-client). */
 const SKIN_RUNTIME = {
   errorParsers: {
@@ -158,7 +162,7 @@ function DevkitPreviewInner({
             <span
               aria-label="unsaved changes"
               title="unsaved changes"
-              className="inline-block size-2 shrink-0 rounded-full bg-amber-500"
+              className={DIRTY_DOT_CLASS}
             />
           ) : null}
           <span className="font-mono">

@@ -1,5 +1,9 @@
 "use client";
 
+// Sentinel callout shared by the compose + yaml tabs below.
+const SENTINEL_NOTE_CLASS =
+  "rounded-md border border-amber-500/50 p-2 text-xs text-amber-600 dark:text-amber-400"; // canon-allow: dev-only warning callout in the isolated devkit route (no token bridge), not product chrome
+
 import { useState } from "react";
 import { buildComposeBundle, buildEmbedBundle } from "./devkit-export";
 
@@ -115,7 +119,7 @@ export function DevkitExportPane({
                 </ol>
               </div>
               {bundle.hasSentinel ? (
-                <p className="rounded-md border border-amber-500/50 p-2 text-xs text-amber-600 dark:text-amber-400">
+                <p className={SENTINEL_NOTE_CLASS}>
                   Draft still holds redacted sentinels — set the real secret
                   values in env; placeholders above already point at the right vars.
                 </p>
@@ -139,7 +143,7 @@ export function DevkitExportPane({
           ) : null}
           {tab === "yaml" ? (
             bundle.hasSentinel ? (
-              <p className="rounded-md border border-amber-500/50 p-2 text-xs text-amber-600 dark:text-amber-400">
+              <p className={SENTINEL_NOTE_CLASS}>
                 Blocked: this draft still holds redacted sentinels, so a raw
                 copy would not run elsewhere. Save first (restores secrets
                 server-side), or use the local compose tab — its placeholders

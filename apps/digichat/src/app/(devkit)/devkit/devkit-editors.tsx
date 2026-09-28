@@ -40,7 +40,7 @@ function Section({
 }) {
   return (
     <details className="rounded-lg border" open={defaultOpen}>
-      <summary className="cursor-pointer px-2 py-1.5 text-xs font-semibold">{title}</summary>
+      <summary className="px-2 py-1.5 text-xs font-semibold">{title}</summary>
       <div className="flex flex-col gap-2 border-t p-2">{children}</div>
     </details>
   );
