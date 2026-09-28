@@ -6,7 +6,9 @@ import userEvent from "@testing-library/user-event";
 // NOTE: TextRow/BoolRow must be exported from devkit-editors.tsx for this
 // test (export the row primitives; the default export surface is unchanged).
 import { useState } from "react";
-import { BoolRow, SelectRow, TextRow, TriRow } from "./devkit-editors";
+import { BoolRow, DevkitEditors, SecretRow, SelectRow, TextRow, TriRow } from "./devkit-editors";
+import { createDraft, type TextEdit } from "./draft";
+import type { DigichatDeployment } from "@/lib/deploy-config/schema";
 
 describe("TextRow (kit)", () => {
   it("commits a changed value and returns true", async () => {
@@ -106,5 +108,55 @@ describe("TriRow (kit SegmentedControl, group pattern)", () => {
     expect(onButton.getAttribute("aria-pressed")).toBe("true");
     await user.click(screen.getByRole("button", { name: "off" }));
     expect(onButton.getAttribute("aria-pressed")).toBe("true");
+  });
+});
+
+describe("SecretRow (kit)", () => {
+  it("stays open and keeps the typed value when replace is refused", async () => {
+    const user = userEvent.setup();
+    render(<SecretRow label="token" state="sentinel" onReplace={() => false} />);
+    await user.click(screen.getByRole("button", { name: /replace/i }));
+    await user.type(screen.getByLabelText(/new secret/i), "typed");
+    await user.click(screen.getByRole("button", { name: /set/i }));
+    expect(screen.getByLabelText(/new secret/i)).toHaveDisplayValue("typed");
+  });
+
+  it("closes and clears on successful replace", async () => {
+    const user = userEvent.setup();
+    render(<SecretRow label="token" state="sentinel" onReplace={() => true} />);
+    await user.click(screen.getByRole("button", { name: /replace/i }));
+    await user.type(screen.getByLabelText(/new secret/i), "typed");
+    await user.click(screen.getByRole("button", { name: /set/i }));
+    expect(screen.queryByLabelText(/new secret/i)).toBeNull();
+  });
+});
+
+describe("ToolCard (kit Card)", () => {
+  it("renders a kit Card with title + remove IconButton committing removeListItem", async () => {
+    const user = userEvent.setup();
+    const text = ["deployment:", "  slug: probe", "  tools:", "    catalog:", "      - id: search"].join(
+      "\n",
+    );
+    const draft = createDraft({
+      entryId: "probe",
+      scope: ["deployment"],
+      savedText: text,
+      parsed: {
+        slug: "probe",
+        backend: { type: "digigraph" },
+        models: {},
+        gate: {},
+        tools: { catalog: [{ id: "search" }] },
+      } as unknown as DigichatDeployment,
+    });
+    const commit = vi.fn((edit: TextEdit) => edit.applied);
+    render(<DevkitEditors draft={draft} commit={commit} />);
+    const title = screen.getByText("search");
+    expect(title.closest('[data-slot="card"]')).not.toBeNull();
+    await user.click(screen.getByRole("button", { name: /remove search/i }));
+    expect(commit).toHaveBeenCalled();
+    const edit = commit.mock.calls[0][0];
+    expect(edit.applied).toBe(true);
+    expect(edit.text).toMatch(/catalog: \[\]/);
   });
 });
