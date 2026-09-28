@@ -1,8 +1,23 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useId, useState } from "react";
 import { THREAD_SKINS } from "@digithings/ui/chat/skins";
-import { Button, Field, Input, Switch, Textarea } from "@digithings/ui/ui";
+import {
+  Button,
+  Field,
+  Input,
+  SegmentedControl,
+  Select,
+  SelectContent,
+  SelectGroup,
+  SelectItem,
+  SelectLabel,
+  SelectSeparator,
+  SelectTrigger,
+  SelectValue,
+  Switch,
+  Textarea,
+} from "@digithings/ui/ui";
 import { FEATURED_LANGUAGE_CODES } from "@/lib/languages";
 import type { DigichatDeployment } from "@/lib/deploy-config/schema";
 import {
@@ -127,7 +142,69 @@ export function BoolRow({
   );
 }
 
-function SelectRow({
+/** One labeled option group inside a SelectRow popup (specimen GROUPS map shape). */
+export type SelectOptionGroup = {
+  label: string;
+  options: readonly string[];
+};
+
+export function SelectRow({
+  label,
+  value,
+  options,
+  groups,
+  hint,
+  onCommit,
+}: {
+  label: string;
+  value: string;
+  hint?: string;
+  onCommit: (v: string) => boolean;
+} & (
+  | { options: readonly string[]; groups?: undefined }
+  | { options?: undefined; groups: readonly SelectOptionGroup[] }
+)) {
+  return (
+    <Field label={label} hint={hint}>
+      <Select
+        value={value}
+        onValueChange={(v) => {
+          if (v != null) onCommit(v);
+        }}
+      >
+        <SelectTrigger aria-label={label}>
+          <SelectValue placeholder={`Choose ${label}`} />
+        </SelectTrigger>
+        <SelectContent>
+          {groups
+            ? groups.map((g, i) => (
+                <SelectGroup key={g.label}>
+                  {i > 0 ? <SelectSeparator /> : null}
+                  <SelectLabel>{g.label}</SelectLabel>
+                  {g.options.map((o) => (
+                    <SelectItem key={o} value={o}>
+                      {o}
+                    </SelectItem>
+                  ))}
+                </SelectGroup>
+              ))
+            : (
+                <SelectGroup>
+                  {options.map((o) => (
+                    <SelectItem key={o} value={o}>
+                      {o}
+                    </SelectItem>
+                  ))}
+                </SelectGroup>
+              )}
+        </SelectContent>
+      </Select>
+    </Field>
+  );
+}
+
+/** Short static single-token sets: segmented group pattern, never nested in Field. */
+export function SegRow({
   label,
   value,
   options,
@@ -140,31 +217,33 @@ function SelectRow({
   hint?: string;
   onCommit: (v: string) => boolean;
 }) {
+  const labelId = useId();
+  const hintId = useId();
   return (
-    <label className={labelCls}>
-      <span className="text-muted-foreground">{label}</span>
-      <select
-        defaultValue={value}
-        onChange={(e) => {
-          if (!onCommit(e.target.value)) {
-            e.target.value = value; // refused — revert, never diverge
-          }
+    <div className="grid min-w-0 gap-[0.35rem]">
+      <span id={labelId} className="font-mono text-[0.6rem] uppercase tracking-[0.1em] text-ink-mute">
+        {label}
+      </span>
+      <SegmentedControl
+        options={options}
+        aria-labelledby={labelId}
+        aria-describedby={hint ? hintId : undefined}
+        value={value}
+        onChange={(v) => {
+          onCommit(v);
         }}
-        className={inputCls}
-      >
-        {options.map((o) => (
-          <option key={o} value={o}>
-            {o}
-          </option>
-        ))}
-      </select>
-      {hint ? <span className={hintCls}>{hint}</span> : null}
-    </label>
+      />
+      {hint ? (
+        <span id={hintId} className="font-mono text-[0.6rem] text-ink-mute">
+          {hint}
+        </span>
+      ) : null}
+    </div>
   );
 }
 
 /** Optional boolean: inherit (key absent) / on / off. */
-function TriRow({
+export function TriRow({
   label,
   value,
   hint,
@@ -176,25 +255,28 @@ function TriRow({
   onCommit: (v: boolean | undefined) => boolean;
 }) {
   const current = value === undefined ? "inherit" : value ? "on" : "off";
+  const labelId = useId();
+  const hintId = useId();
   return (
-    <label className={labelCls}>
-      <span className="text-muted-foreground">{label}</span>
-      <select
-        defaultValue={current}
-        onChange={(e) => {
-          const v = e.target.value;
-          if (!onCommit(v === "inherit" ? undefined : v === "on")) {
-            e.target.value = current; // refused — revert, never diverge
-          }
+    <div className="grid min-w-0 gap-[0.35rem]">
+      <span id={labelId} className="font-mono text-[0.6rem] uppercase tracking-[0.1em] text-ink-mute">
+        {label}
+      </span>
+      <SegmentedControl
+        options={["inherit", "on", "off"]}
+        aria-labelledby={labelId}
+        aria-describedby={hint ? hintId : undefined}
+        value={current}
+        onChange={(v) => {
+          onCommit(v === "inherit" ? undefined : v === "on");
         }}
-        className={inputCls}
-      >
-        <option value="inherit">inherit (unset)</option>
-        <option value="on">on</option>
-        <option value="off">off</option>
-      </select>
-      {hint ? <span className={hintCls}>{hint}</span> : null}
-    </label>
+      />
+      {hint ? (
+        <span id={hintId} className="font-mono text-[0.6rem] text-ink-mute">
+          {hint}
+        </span>
+      ) : null}
+    </div>
   );
 }
 
@@ -497,11 +579,16 @@ export function DevkitEditors({
   const tools = dep?.tools?.catalog ?? [];
   const servers = dep?.mcp?.servers ?? [];
 
-  const languageOptions = (() => {
+  const languageGroups: SelectOptionGroup[] = (() => {
     const current = chrome?.defaultLanguage;
-    const base: string[] = [...FEATURED_LANGUAGE_CODES];
-    if (current && !base.includes(current)) base.push(current);
-    return base;
+    const featured: string[] = [...FEATURED_LANGUAGE_CODES];
+    if (current && !featured.includes(current)) {
+      return [
+        { label: "featured", options: featured },
+        { label: "current", options: [current] },
+      ];
+    }
+    return [{ label: "featured", options: featured }];
   })();
 
   return (
@@ -560,13 +647,13 @@ export function DevkitEditors({
             onClear={() => commit(deleteKey(draft.text, scope, ["backend", key]))}
           />
         ))}
-        <SelectRow
+        <SegRow
           label="persistence"
           value={dep?.persistence ?? "none"}
           options={["none", "memory", "server"]}
           onCommit={(v) => scalar(["persistence"], v)}
         />
-        <SelectRow
+        <SegRow
           label="auth"
           value={dep?.auth ?? "anonymous"}
           options={["anonymous", "session"]}
@@ -578,27 +665,15 @@ export function DevkitEditors({
         <SelectRow
           label="skin"
           value={chrome?.skin ?? "digichat"}
-          options={THREAD_SKINS}
+          groups={[{ label: "skins", options: THREAD_SKINS }]}
           onCommit={(v) => scalar(["chrome", "skin"], v)}
         />
-        <div className={labelCls}>
-          <span className="text-muted-foreground">theme</span>
-          <span className="flex gap-1" role="group" aria-label="theme">
-            {(["dark", "light"] as const).map((t) => (
-              <button
-                key={t}
-                type="button"
-                aria-pressed={(chrome?.theme ?? "light") === t}
-                onClick={() => scalar(["chrome", "theme"], t)}
-                className={`flex-1 rounded-md border px-2 py-1 font-mono text-xs hover:bg-accent ${
-                  (chrome?.theme ?? "light") === t ? "bg-accent" : ""
-                }`}
-              >
-                {t}
-              </button>
-            ))}
-          </span>
-        </div>
+        <SegRow
+          label="theme"
+          value={chrome?.theme ?? "light"}
+          options={["dark", "light"]}
+          onCommit={(v) => scalar(["chrome", "theme"], v)}
+        />
         <SelectRow
           label="mode"
           value={chrome?.mode ?? "embed"}
@@ -656,7 +731,7 @@ export function DevkitEditors({
           hint="Inherit (unset) shows the credit."
           onCommit={tri(["chrome", "attribution"])}
         />
-        <SelectRow
+        <SegRow
           label="launcher mode"
           value={chrome?.launcher?.mode ?? "inherit"}
           options={["inherit", "dot", "bar"]}
@@ -683,10 +758,10 @@ export function DevkitEditors({
         <SelectRow
           label="reply language default"
           value={chrome?.defaultLanguage ?? "en"}
-          options={languageOptions}
+          groups={languageGroups}
           onCommit={(v) => scalar(["chrome", "defaultLanguage"], v)}
         />
-        <SelectRow
+        <SegRow
           label="user bubble alignment"
           value={chrome?.transcript?.userAlign ?? "right"}
           options={["right", "left"]}
@@ -711,13 +786,13 @@ export function DevkitEditors({
           options={["hidden", "compact", "balanced", "detailed"]}
           onCommit={(v) => scalar(["features", "view"], v)}
         />
-        <SelectRow
+        <SegRow
           label="reasoning override"
           value={features?.thinking ?? "auto"}
           options={["auto", "collapsed", "open"]}
           onCommit={(v) => scalar(["features", "thinking"], v)}
         />
-        <SelectRow
+        <SegRow
           label="page context"
           value={features?.pageContext ?? "visible"}
           options={["off", "silent", "visible"]}
