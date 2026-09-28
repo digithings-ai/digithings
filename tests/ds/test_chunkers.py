@@ -306,13 +306,15 @@ def test_real_markdown_file_chunking_matches_recorded_fingerprint() -> None:
     the #4306 `apps/` + `packages/` path renames blend into the merged ARCHITECTURE.md,
     so three chunk hashes differ while the count and the `<= 2000` invariant hold —
     fixture prose only; RecursiveChunker unchanged.
+    Re-recorded at count 117 for #4717 (generic Polars table-ops section in
+    ARCHITECTURE.md) — fixture prose only; RecursiveChunker unchanged.
     """
     arch_path = Path(__file__).resolve().parents[2] / "digisearch" / "ARCHITECTURE.md"
     content = arch_path.read_text(encoding="utf-8")
     doc = Document(id="arch", content=content, source=str(arch_path), doc_type="md")
     chunks = RecursiveChunker().chunk(doc)
 
-    assert len(chunks) == 116
+    assert len(chunks) == 117
     assert all(len(c.content) <= 2000 for c in chunks)
     hashes = [hashlib.sha256(c.content.encode()).hexdigest()[:16] for c in chunks]
     assert hashes == [
@@ -320,8 +322,9 @@ def test_real_markdown_file_chunking_matches_recorded_fingerprint() -> None:
         "a5e3d5fc972070ef",
         "7e6b7b2044358888",
         "cea76b9e90df056e",
-        "6f61da3b9ed54d44",
-        "5c87a98eae4b4c24",
+        "a08e55912a60920e",
+        "bea0bf0dc35372d3",
+        "0a3a7b984057149d",
         "27f0ca91eb93d7e1",
         "5fc146dcd98ed469",
         "6bb725ee96409565",
@@ -376,11 +379,11 @@ def test_real_markdown_file_chunking_matches_recorded_fingerprint() -> None:
         "5c929ad2654944ce",
         "80578aa2dbbb641d",
         "1f9fe54a7f6c6f25",
-        "20b66fa9abe4d235",
-        "28bb2eddea9813a5",
-        "0f38ad6f707a76af",
-        "c64d3417a2a5f62c",
-        "a1105ad47fefbf1b",
+        "7cd2ab2a02a644ad",
+        "0f3f0cd274843600",
+        "088e1f78f0807cf2",
+        "3b33ce80895ebd06",
+        "0cc6a533a3ec0447",
         "819ebadc3320ecc2",
         "10832c167583db90",
         "3442051d624d3623",

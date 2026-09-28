@@ -9,8 +9,8 @@ from typing import Any
 import httpx
 import pytest
 
-from scripts.zammad_mcp import formatting
 from scripts.zammad_mcp import client as client_module
+from scripts.zammad_mcp import formatting
 from scripts.zammad_mcp.client import ZammadClient, ZammadError, keyword_terms
 
 pytestmark = pytest.mark.unit
@@ -971,9 +971,9 @@ def test_format_aggregate_empty_and_owner_footnote():
 
 
 def test_fallback_group_count_matches_tables_lib():
-    from scripts.zammad_mcp.aggregate import _fallback_group_count
-
     from digisearch.core.tables import group_count
+
+    from scripts.zammad_mcp.aggregate import _fallback_group_count
 
     rows = [
         {"customer_id": 7},
@@ -989,9 +989,9 @@ def test_fallback_group_count_matches_tables_lib():
 
 
 def test_fallback_enrich_rows_matches_tables_lib():
-    from scripts.zammad_mcp.aggregate import _fallback_enrich_rows
-
     from digisearch.core.tables import enrich_rows
+
+    from scripts.zammad_mcp.aggregate import _fallback_enrich_rows
 
     rows = [{"value": "5", "count": 2}, {"value": "9", "count": 1}]
     lookup = {"5": "Ada Lovelace"}
