@@ -21,6 +21,7 @@
  */
 
 import { NextResponse } from "next/server";
+import { getLicenseRefusal } from "@/lib/license/state";
 import { resolveVerifiedEmbedTenant } from "@/lib/embed-chat-tenant";
 import {
   signPlanProof,
@@ -38,6 +39,14 @@ function bearerToken(req: Request): string | null {
 }
 
 export async function POST(req: Request): Promise<NextResponse> {
+  // Revoked/expired license refuses before any embed-tenant/token work.
+  const licenseBlock = getLicenseRefusal();
+  if (licenseBlock) {
+    return NextResponse.json(
+      { error: licenseBlock.error, message: licenseBlock.message },
+      { status: licenseBlock.status },
+    );
+  }
   // Authenticate the embed caller via tenant registry + X-Embed-Token.
   const tenant = resolveVerifiedEmbedTenant(req);
   if (!tenant) {
