@@ -6,7 +6,7 @@ import userEvent from "@testing-library/user-event";
 // NOTE: TextRow/BoolRow must be exported from devkit-editors.tsx for this
 // test (export the row primitives; the default export surface is unchanged).
 import { useState } from "react";
-import { BoolRow, DevkitEditors, SecretRow, SelectRow, TextRow, TriRow } from "./devkit-editors";
+import { AccentContrastReadout, BoolRow, DevkitEditors, SecretRow, SelectRow, SwatchRow, TextRow, TriRow } from "./devkit-editors";
 import { createDraft, type TextEdit } from "./draft";
 import type { DigichatDeployment } from "@/lib/deploy-config/schema";
 
@@ -164,5 +164,60 @@ describe("ToolCard (kit Card)", () => {
     const edit = commit.mock.calls[0][0];
     expect(edit.applied).toBe(true);
     expect(edit.text).toMatch(/catalog: \[\]/);
+  });
+});
+
+describe("SwatchRow (presets + custom)", () => {
+  it("commits the preset hex when a swatch is clicked", async () => {
+    const user = userEvent.setup();
+    const onCommit = vi.fn().mockReturnValue(true);
+    render(<SwatchRow label="accent color" value="#e2708a" onCommit={onCommit} />);
+    await user.click(screen.getByRole("button", { name: "digigraph" }));
+    expect(onCommit).toHaveBeenCalledWith("#e5b765");
+  });
+
+  it("keeps the previous highlight when the commit is refused", async () => {
+    const user = userEvent.setup();
+    render(<SwatchRow label="accent color" value="#e2708a" onCommit={() => false} />);
+    expect(
+      screen.getByRole("button", { name: "digichat" }).getAttribute("aria-pressed"),
+    ).toBe("true");
+    await user.click(screen.getByRole("button", { name: "digigraph" }));
+    expect(
+      screen.getByRole("button", { name: "digichat" }).getAttribute("aria-pressed"),
+    ).toBe("true");
+    expect(
+      screen.getByRole("button", { name: "digigraph" }).getAttribute("aria-pressed"),
+    ).toBe("false");
+  });
+});
+
+describe("AccentContrastReadout", () => {
+  it("warns for a low-contrast pair and hides for a passing pair", () => {
+    const { rerender } = render(
+      <AccentContrastReadout color="#e5b765" foreground="#e5b765" />,
+    );
+    expect(
+      screen.queryByText(/below the 4\.5:1 \(WCAG AA\) minimum/),
+    ).not.toBeNull();
+    rerender(<AccentContrastReadout color="#000000" foreground="#ffffff" />);
+    expect(
+      screen.queryByText(/below the 4\.5:1 \(WCAG AA\) minimum/),
+    ).toBeNull();
+  });
+
+  it("dismisses the warning and re-arms it on value change", async () => {
+    const user = userEvent.setup();
+    const { rerender } = render(
+      <AccentContrastReadout color="#e5b765" foreground="#e5b765" />,
+    );
+    await user.click(screen.getByRole("button", { name: /dismiss/i }));
+    expect(
+      screen.queryByText(/below the 4\.5:1 \(WCAG AA\) minimum/),
+    ).toBeNull();
+    rerender(<AccentContrastReadout color="#e2708a" foreground="#e2708a" />);
+    expect(
+      screen.queryByText(/below the 4\.5:1 \(WCAG AA\) minimum/),
+    ).not.toBeNull();
   });
 });

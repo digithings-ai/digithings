@@ -29,6 +29,7 @@ import {
 } from "@digithings/ui/ui";
 import { FEATURED_LANGUAGE_CODES } from "@/lib/languages";
 import type { DigichatDeployment } from "@/lib/deploy-config/schema";
+import { CONTRAST_MINIMUM, contrast } from "./devkit-contrast";
 import {
   appendListItem,
   applyAll,
@@ -449,6 +450,142 @@ export function SecretRow({
   );
 }
 
+export const ACCENT_SWATCH_PRESETS = [
+  { name: "digigraph", hex: "#e5b765" }, // canon-allow: pins canon --accent-digigraph hex (packages/design/tokens.css)
+  { name: "digiquant", hex: "#3dd6c4" }, // canon-allow: pins canon --accent-digiquant hex (packages/design/tokens.css)
+  { name: "digisearch", hex: "#5aa3c4" }, // canon-allow: pins canon --accent-digisearch hex (packages/design/tokens.css)
+  { name: "digichat", hex: "#e2708a" }, // canon-allow: pins canon --accent-digichat hex (packages/design/tokens.css)
+  { name: "digikey", hex: "#d97a5a" }, // canon-allow: pins canon --accent-digikey hex (packages/design/tokens.css)
+  { name: "digismith", hex: "#6fa3a3" }, // canon-allow: pins canon --accent-digismith hex (packages/design/tokens.css)
+  { name: "digiclaw", hex: "#b87840" }, // canon-allow: pins canon --accent-digiclaw hex (packages/design/tokens.css)
+  { name: "digibase", hex: "#9ea0a5" }, // canon-allow: pins canon --accent-digibase hex (packages/design/tokens.css)
+  { name: "digistore", hex: "#7b7fc7" }, // canon-allow: pins canon --accent-digistore hex (packages/design/tokens.css)
+  { name: "digivault", hex: "#9d8fc9" }, // canon-allow: pins canon --accent-digivault hex (packages/design/tokens.css)
+] as const;
+
+/**
+ * Preset + custom swatch picker for an accent hex. Uses the TriRow
+ * span-label + aria-labelledby group pattern (NOT Field: Field
+ * clone-injects id/aria into its direct child, and the swatch grid is a
+ * group of buttons rather than a single control). Every pick commits
+ * through `onCommit` under the same `#rrggbb` gate the text rows used; a
+ * refused commit leaves the `value` prop unchanged, so the highlight
+ * (`aria-pressed` on the committed value) reverts on its own.
+ */
+export function SwatchRow({
+  label,
+  value,
+  hint,
+  onCommit,
+  onClear,
+}: {
+  label: string;
+  value: string | undefined;
+  hint?: string;
+  /** Returns whether the commit applied; the highlight reverts on false. */
+  onCommit: (v: string) => boolean;
+  onClear?: () => void;
+}) {
+  const labelId = useId();
+  const hintId = useId();
+  const current = (value ?? "").toLowerCase();
+  const colorValue =
+    value !== undefined && /^#[0-9a-fA-F]{6}$/.test(value) ? value : "#000000";
+  const tryCommit = (hex: string) => {
+    if (!/^#[0-9a-fA-F]{6}$/.test(hex)) return false;
+    return onCommit(hex.toLowerCase());
+  };
+  return (
+    <div className="grid min-w-0 gap-[0.35rem]">
+      <span id={labelId} className="font-mono text-[0.6rem] uppercase tracking-[0.1em] text-ink-mute">
+        {label}
+      </span>
+      <div
+        role="group"
+        aria-labelledby={labelId}
+        aria-describedby={hint ? hintId : undefined}
+        className="grid min-w-0 gap-1"
+      >
+        <div className="devkit-swatches">
+          {ACCENT_SWATCH_PRESETS.map((preset) => (
+            <button
+              key={preset.name}
+              type="button"
+              className="devkit-swatch"
+              aria-pressed={current === preset.hex}
+              aria-label={preset.name}
+              title={`${preset.name} ${preset.hex}`}
+              style={{ backgroundColor: preset.hex }}
+              onClick={() => {
+                tryCommit(preset.hex);
+              }}
+            />
+          ))}
+        </div>
+        <span className="flex items-center gap-1">
+          <span className="font-mono text-[0.6rem] text-ink-mute">Custom…</span>
+          <input
+            type="color"
+            aria-label={`Custom ${label}`}
+            value={colorValue}
+            onChange={(e) => {
+              tryCommit(e.target.value);
+            }}
+          />
+          <span className="min-w-0 flex-1 truncate font-mono text-xs text-muted-foreground">
+            {value ?? "not set"}
+          </span>
+          {onClear && value ? (
+            <IconButton title={`Clear ${label}`} aria-label={`Clear ${label}`} onClick={onClear}>
+              ✕
+            </IconButton>
+          ) : null}
+        </span>
+      </div>
+      {hint ? (
+        <span id={hintId} className="font-mono text-[0.6rem] text-ink-mute">{hint}</span>
+      ) : null}
+    </div>
+  );
+}
+
+/**
+ * Live WCAG contrast readout for the accent pair. The below-minimum
+ * warning is dismissible; the dismissal is keyed to the current pair so
+ * any value change re-arms it. Dismissal never blocks the commit itself.
+ */
+export function AccentContrastReadout({
+  color,
+  foreground,
+}: {
+  color: string | undefined;
+  foreground: string | undefined;
+}) {
+  const [dismissedPair, setDismissedPair] = useState<string | null>(null);
+  if (color === undefined || foreground === undefined) return null;
+  if (!/^#[0-9a-fA-F]{6}$/.test(color) || !/^#[0-9a-fA-F]{6}$/.test(foreground)) {
+    return null;
+  }
+  const ratio = contrast(color, foreground);
+  const text = `Contrast ${ratio.toFixed(2)}:1`;
+  if (ratio >= CONTRAST_MINIMUM) {
+    return <p className="font-mono text-[0.6rem] text-ink-mute">{text}</p>;
+  }
+  const pair = `${color.toLowerCase()} on ${foreground.toLowerCase()}`;
+  if (dismissedPair === pair) {
+    return <p className="font-mono text-[0.6rem] text-ink-mute">{text}</p>;
+  }
+  return (
+    <p className="font-mono text-[0.6rem] text-ink-mute">
+      {text} is below the 4.5:1 (WCAG AA) minimum — text on this accent may be
+      hard to read.{" "}
+      <button type="button" onClick={() => setDismissedPair(pair)}>
+        Dismiss
+      </button>
+    </p>
+  );
+}
+
 type McpServer = NonNullable<NonNullable<DigichatDeployment["mcp"]>["servers"]>[number];
 type ToolEntry = NonNullable<NonNullable<DigichatDeployment["tools"]>["catalog"]>[number];
 
@@ -822,25 +959,29 @@ export function DevkitEditors({
           values={chrome?.suggestions ?? []}
           onCommit={(lines) => commit(setStringList(draft.text, scope, ["chrome", "suggestions"], lines))}
         />
-        <TextRow
-          label="accent color"
-          value={chrome?.accent?.color}
-          placeholder="#rrggbb"
-          onCommit={(v) => {
-            if (!/^#[0-9a-fA-F]{6}$/.test(v)) return false; // revert on invalid hex
-            return scalar(["chrome", "accent", "color"], v);
-          }}
-          onClear={() => commit(deleteKey(draft.text, scope, ["chrome", "accent"]))}
-          hint="Hex only (#rrggbb); clearing removes the accent override."
-        />
-        <TextRow
-          label="accent foreground"
-          value={chrome?.accent?.foreground}
-          placeholder="#rrggbb"
-          onCommit={(v) => {
-            if (!/^#[0-9a-fA-F]{6}$/.test(v)) return false;
-            return scalar(["chrome", "accent", "foreground"], v);
-          }}
+        <div className="grid min-w-0 grid-cols-2 gap-2">
+          <SwatchRow
+            label="accent color"
+            value={chrome?.accent?.color}
+            onCommit={(v) => {
+              if (!/^#[0-9a-fA-F]{6}$/.test(v)) return false; // revert on invalid hex
+              return scalar(["chrome", "accent", "color"], v);
+            }}
+            onClear={() => commit(deleteKey(draft.text, scope, ["chrome", "accent"]))}
+            hint="Hex only (#rrggbb); clearing removes the accent override."
+          />
+          <SwatchRow
+            label="accent foreground"
+            value={chrome?.accent?.foreground}
+            onCommit={(v) => {
+              if (!/^#[0-9a-fA-F]{6}$/.test(v)) return false;
+              return scalar(["chrome", "accent", "foreground"], v);
+            }}
+          />
+        </div>
+        <AccentContrastReadout
+          color={chrome?.accent?.color}
+          foreground={chrome?.accent?.foreground}
         />
         <TriRow
           label="attribution credit"
