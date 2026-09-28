@@ -8,7 +8,7 @@
 
 ## 0. How to execute this spec (read this first, executor)
 
-1. **Read first:** `digikey/AGENTS.md` (pre-flight checklist), `digikey/ARCHITECTURE.md` §3 (API surface) and §5 (security analysis), then the bound design spec above. Never skip the component `AGENTS.md`.
+1. **Read first:** `digikey/AGENTS.md` (pre-flight checklist), `digikey/ARCHITECTURE.md` §3 (API surface) and §6 (security analysis), then the bound design spec above. Never skip the component `AGENTS.md`.
 2. **Branching:** the implementing change touches `digikey/` code, so it is `component:digikey` and goes through the module tier per `scripts/project_routing.json` — cut with `make task ISSUE=N`, never from a stale base.
 3. **Spec file ≠ code file:** this document prescribes interfaces, behavior, and acceptance. Exact function names below are recommendations; what is binding is the CLI contract (§2), the claims table (§3), the registry shape (§4), and the acceptance checklist (§9).
 4. **Conventions:** Pydantic v2, strict typing, ruff line length 100, lowercase digi names in prose. Raw key/license material is never logged — only `license_id` and customer slug are safe to log (same rule as `key_id`/prefix in `digikey/AGENTS.md`).
@@ -114,7 +114,7 @@ Recommended columns:
 
 ### 4.3 What is NOT recorded
 
-License jtis are NOT written to `JtiIssuedRow` and NOT pushed to the Redis blocklist. The blocklist is a short-TTL mechanism for short-lived access JWTs (default 900s, `ARCHITECTURE.md` §5); a 90-day blocklist entry per license would be pure weight with no reader — revocation for licenses is enforced at the heartbeat and at our edge via the allowlist (§5), never via jti blocklist. If a future slice wants belt-and-braces blocklisting, that is a new spec, not an drive-by.
+License jtis are NOT written to `JtiIssuedRow` and NOT pushed to the Redis blocklist. The blocklist is a short-TTL mechanism for short-lived access JWTs (default 900s, `ARCHITECTURE.md` §6); a 90-day blocklist entry per license would be pure weight with no reader — revocation for licenses is enforced at the heartbeat and at our edge via the allowlist (§5), never via jti blocklist. If a future slice wants belt-and-braces blocklisting, that is a new spec, not an drive-by.
 
 ### 4.4 Allowlist read contract (for the heartbeat slice — normative here)
 
@@ -193,7 +193,7 @@ Selectors: `pytest tests/ -m unit -k "digikey" -v`; `ruff check digikey/ && ruff
 ## Verification (this spec — docs-only)
 
 - No code changed by this spec.
-- Every file:line claim grounded against `origin/develop`: `jwt_issue.py:23-85` (issue function, aud/TTL overrides, profile pairwise-omit `:76-79`, `scope` mirror `:80`, single-key JWKS `:88-99`), `cli.py:10-32` (subparser/args), `:32-39` (tenant guard, DB-url guard), `:51-75` (keygen/hash/insert/print), `server.py:54` (module-level signing-key load), `:116-135` (admin bearer, tenant guard), `:160-194` (admin issue endpoint), `:309-318` (prefix lookup, bcrypt verify, unknown-401 vs revoked-401), `:366-403` (revoke endpoint, 404, blocklist write, 503-on-failure), `key_crypto.py:12-28` (generate/hash/verify), `db_schema.py:23-40` (`ApiKeyRow`, `revoked_at`), `db_migrate.py` header (`create_all` + in-place upgrade pattern), `crypto_keys.py` (`load_or_create_signing_key`, ephemeral-key gate), `ARCHITECTURE.md:153` (exp convention) and §5 (blocklist semantics).
+- Every file:line claim grounded against `origin/develop`: `jwt_issue.py:23-85` (issue function, aud/TTL overrides, profile pairwise-omit `:76-79`, `scope` mirror `:80`, single-key JWKS `:88-99`), `cli.py:10-32` (subparser/args), `:32-39` (tenant guard, DB-url guard), `:51-75` (keygen/hash/insert/print), `server.py:54` (module-level signing-key load), `:116-135` (admin bearer, tenant guard), `:160-194` (admin issue endpoint), `:309-318` (prefix lookup, bcrypt verify, unknown-401 vs revoked-401), `:366-403` (revoke endpoint, 404, blocklist write, 503-on-failure), `key_crypto.py:12-28` (generate/hash/verify), `db_schema.py:23-40` (`ApiKeyRow`, `revoked_at`), `db_migrate.py` header (`create_all` + in-place upgrade pattern), `crypto_keys.py` (`load_or_create_signing_key`, ephemeral-key gate), `ARCHITECTURE.md:153` (exp convention) and §6 (blocklist semantics — `## 6. Security Analysis` → `### JWT revocation`).
 - No license code exists yet in `digikey/src` (grep for `license` returns nothing) — slice 1 is greenfield on the reuse seams above.
 - Internal links: design spec linked by filename in the same directory.
 - `make doc-check` run to confirm internal links resolve (see task report).
