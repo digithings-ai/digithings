@@ -29,14 +29,51 @@ describe("devkit route isolation", () => {
     expect(page).toMatch(/force-dynamic/);
   });
 
-  it("menu reads from the devkit configs API and stays read-only in P0", () => {
+  it("menu reads from the devkit configs API and saves through the save API", () => {
     const client = read("devkit/devkit-client.tsx");
     expect(client).toMatch(/\/api\/devkit\/configs/);
-    expect(client).toMatch(/<pre/);
-    // No editing affordances yet — textarea/inputs/buttons-that-save land in P1+.
-    expect(client).not.toMatch(/<textarea/);
-    expect(client).not.toMatch(/\/api\/devkit\/save/);
+    // Grouped picker + collapsible inspector sidebar (chat-shell pattern).
+    expect(client).toMatch(/<select/);
+    expect(client).toMatch(/<optgroup/);
+    expect(client).toMatch(/Hide inspector sidebar/);
+    expect(client).toMatch(/Show inspector sidebar/);
+    expect(client).toMatch(/keydown/);
+    // Draft-driven preview: the shell validates drafts and passes the
+    // last-valid deployment down; the preview keeps no draft knowledge.
+    expect(client).toMatch(/\/api\/devkit\/validate/);
+    expect(client).toMatch(/withValidation/);
+    // Step-4 accordion editors are wired; Step 5 adds the save path.
+    expect(client).toMatch(/DevkitEditors/);
+    // Step 5: raw YAML is an editable textarea, the save button posts the
+    // draft (dirty-gated, invalid-blocked), and "+ new" starts a blank draft
+    // whose save id derives from its slug.
+    expect(client).toMatch(/<textarea/);
+    expect(client).toMatch(/\/api\/devkit\/save/);
+    expect(client).toMatch(/aria-label="Save draft"/);
+    expect(client).toMatch(/aria-label="New deployment"/);
+    expect(client).toMatch(/createNewFileDraft/);
+    expect(client).toMatch(/slugFromDraftText/);
     expect(client).toContain("read-only");
     expect(client).toMatch(/aria-label="Deployments"/);
+  });
+
+  it("editors cover every config area without touching the save API", () => {
+    const editors = read("devkit/devkit-editors.tsx");
+    for (const section of [
+      "Identity",
+      "Backend",
+      "Appearance",
+      "Features",
+      "Models",
+      "Tools",
+      "MCP servers",
+      "Gate",
+    ]) {
+      expect(editors).toContain(`title="${section}"`);
+    }
+    // Form edits go through the tested draft helpers, never raw string ops.
+    expect(editors).toMatch(/setScalar|setBoolean|setStringList/);
+    expect(editors).toMatch(/secretState/);
+    expect(editors).not.toMatch(/\/api\/devkit\/save/);
   });
 });

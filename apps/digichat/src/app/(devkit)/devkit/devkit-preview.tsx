@@ -69,17 +69,21 @@ const PREFS_DEPS = {
 };
 
 /**
- * P0 saved-file preview: project the selected entry's (secret-stripped)
- * deployment through the same pure resolver the product route uses, then
- * render its skin on the dev BFF transport. Mounted with `key={entry.id}`
- * so switching deployments remounts the runtime cleanly.
+ * Draft-driven preview: project the given (secret-stripped) deployment through
+ * the same pure resolver the product route uses, then render its skin on the
+ * dev BFF transport. The caller owns saved/draft knowledge — `deployment` is
+ * already the last-valid draft state and `dirty` only toggles the unsaved dot.
+ * Mounted with a caller-chosen `key` (entry id + skin/theme) so switching
+ * deployments — or changing skin/theme in the draft — remounts cleanly.
  */
 export function DevkitPreview({
   entryId,
   deployment,
+  dirty = false,
 }: {
   entryId: string;
   deployment: DigichatDeployment;
+  dirty?: boolean;
 }) {
   const clientConfig = useMemo(
     () =>
@@ -97,6 +101,7 @@ export function DevkitPreview({
       key={entryId}
       skin={skin}
       theme={theme}
+      dirty={dirty}
       onToggleTheme={() => setTheme((t) => (t === "dark" ? "light" : "dark"))}
       clientConfig={clientConfig}
       sessionKey={`devkit-${entryId}`}
@@ -107,12 +112,14 @@ export function DevkitPreview({
 function DevkitPreviewInner({
   skin,
   theme,
+  dirty,
   onToggleTheme,
   clientConfig,
   sessionKey,
 }: {
   skin: ThreadSkin;
   theme: "dark" | "light";
+  dirty: boolean;
   onToggleTheme: () => void;
   clientConfig: ReturnType<typeof resolveRouteClientConfig>;
   sessionKey: string;
@@ -147,6 +154,13 @@ function DevkitPreviewInner({
     <AssistantRuntimeProvider runtime={runtime}>
       <div className={cn("flex h-full flex-col", theme === "dark" && "dark")}>
         <div className="flex shrink-0 items-center gap-2 border-b px-3 py-1.5 text-xs text-muted-foreground">
+          {dirty ? (
+            <span
+              aria-label="unsaved changes"
+              title="unsaved changes"
+              className="inline-block size-2 shrink-0 rounded-full bg-amber-500"
+            />
+          ) : null}
           <span className="font-mono">
             {skin} · {theme}
             {clientConfig.models.default

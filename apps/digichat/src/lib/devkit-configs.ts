@@ -48,13 +48,13 @@ export type DevkitEntry = {
 /**
  * Replace secret scalar lines (`token:`, `consumeUrl:`, quoted-key variants)
  * with the sentinel. Line-based so served text stays byte-identical to disk
- * except the redaction (raw save writes submitted text verbatim; save restores
- * sentinels from disk at schema-known paths). Block scalars (`token: |`)
- * mask the header plus every more-indented continuation line. Limitations:
- * a non-secret `token:` scalar nested somewhere unexpected (e.g. inside an
- * MCP `setup` map) is also masked — the save path restores only schema-known
- * secret paths, so such files must be edited knowing the masked line
- * round-trips through disk restore; multi-line flow scalars are not tracked.
+ * except the redaction (raw save writes submitted text verbatim; save
+ * restores sentinels textually from the disk file's own redacted view).
+ * Block scalars (`token: |`) mask the header plus every more-indented
+ * continuation line. Limitations: a non-secret `token:` scalar nested
+ * somewhere unexpected (e.g. inside an MCP `setup` map) is also masked —
+ * it round-trips through the textual disk restore, so only touch such lines
+ * knowing they must byte-match disk; multi-line flow scalars are not tracked.
  */
 export function redactSecretLines(text: string): string {
   const lines = text.split("\n");
@@ -132,6 +132,48 @@ export function validateDevkitText(text: string): DevkitValidation {
     return { ok: false, issues: [`(yaml): invalid YAML: ${(e as Error).message}`] };
   }
   return validateDevkitObject(parsed);
+}
+
+export type DevkitDraftValidation = {
+  ok: boolean;
+  issues: string[];
+  /** Secret-stripped scoped deployment; null unless the draft is fully valid. */
+  deployment: DigichatDeployment | null;
+};
+
+/**
+ * Validate a draft text for one entry scope and return the scoped
+ * secret-stripped deployment for the live preview. `scope` is `["deployment"]`
+ * for top-level entries or `["hosts", key]` for hosts sub-entries (mirrors
+ * `parseDevkitSaveId`). Anything else is rejected — the caller validates the
+ * wire shape, this enforces the semantic shape.
+ */
+export function validateDevkitDraftText(text: string, scope: string[]): DevkitDraftValidation {
+  let parsed: unknown;
+  try {
+    parsed = loadYaml(text);
+  } catch (e) {
+    return { ok: false, issues: [`(yaml): invalid YAML: ${(e as Error).message}`], deployment: null };
+  }
+  const result = DigichatConfigSchema.safeParse(parsed);
+  if (!result.success) {
+    return { ok: false, issues: formatDevkitIssues(result.error), deployment: null };
+  }
+  const config: DigichatConfig = result.data;
+  if (scope.length === 1 && scope[0] === "deployment") {
+    if (!config.deployment) {
+      return { ok: false, issues: ["(scope): deployment missing after edit"], deployment: null };
+    }
+    return { ok: true, issues: [], deployment: stripDeploymentSecrets(config.deployment) };
+  }
+  if (scope.length === 2 && scope[0] === "hosts" && scope[1]) {
+    const dep = config.hosts?.[scope[1]];
+    if (!dep) {
+      return { ok: false, issues: [`(scope): hosts/${scope[1]} missing after edit`], deployment: null };
+    }
+    return { ok: true, issues: [], deployment: stripDeploymentSecrets(dep) };
+  }
+  return { ok: false, issues: ["(scope): unsupported scope"], deployment: null };
 }
 
 function fileEntriesForConfig(

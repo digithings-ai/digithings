@@ -1,5 +1,9 @@
 import { isLocalBaselinePreview } from "@/lib/baseline-preview";
-import { validateDevkitObject, validateDevkitText } from "@/lib/devkit-configs";
+import {
+  validateDevkitDraftText,
+  validateDevkitObject,
+  validateDevkitText,
+} from "@/lib/devkit-configs";
 
 export const dynamic = "force-dynamic";
 
@@ -12,6 +16,9 @@ export const dynamic = "force-dynamic";
  * passes plain-string fields but fails url-refined ones (`gate.consumeUrl`
  * must be https), so an untouched redacted draft can report issues there;
  * P1 save restores sentinels from disk before its final validation.
+ * An optional `scope` (string[], e.g. `["deployment"]` or `["hosts", key]`)
+ * additionally returns the scoped secret-stripped `deployment` for the live
+ * preview; without it the response stays `{ ok, issues }`.
  */
 export async function POST(req: Request) {
   if (!isLocalBaselinePreview(req)) {
@@ -23,9 +30,15 @@ export async function POST(req: Request) {
   } catch {
     return Response.json({ ok: false, issues: ["(body): expected JSON"] }, { status: 400 });
   }
-  const input = body as { text?: unknown; object?: unknown };
+  const input = body as { text?: unknown; object?: unknown; scope?: unknown };
   if (typeof input.text === "string") {
-    return Response.json(validateDevkitText(input.text));
+    if (input.scope === undefined) {
+      return Response.json(validateDevkitText(input.text));
+    }
+    if (!Array.isArray(input.scope) || !input.scope.every((s) => typeof s === "string")) {
+      return Response.json({ ok: false, issues: ["(scope): expected string[]"] }, { status: 400 });
+    }
+    return Response.json(validateDevkitDraftText(input.text, input.scope));
   }
   if (input.object !== undefined) {
     return Response.json(validateDevkitObject(input.object));
