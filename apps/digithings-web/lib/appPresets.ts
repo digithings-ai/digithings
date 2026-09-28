@@ -13,10 +13,14 @@ import type { RagWorkload } from "@/lib/ragCost";
 import type { LayerId, StackPick } from "@/lib/stackCatalog";
 
 /** A morph beat: one swap on the right-hand diagram. `layers` are the
-    invoice rows this beat cuts on the digi column; the send beat carries
-    no priced row (delivery is diagram-only until it becomes a layer). */
+    invoice rows this beat cuts on the digi column; `boxes` are the box ids
+    whose labels flip this beat (finer than layers — finance flips the
+    runner and the archive on separate beats sharing the hosting row).
+    The send beat carries no priced row (delivery is diagram-only until
+    it becomes a layer). */
 export interface MorphStep extends TourStep {
   layers: LayerId[];
+  boxes: string[];
   email?: boolean;
 }
 
@@ -158,63 +162,71 @@ const financeLeft: TourStep[] = [
 const ragMorph: MorphStep[] = [
   {
     id: "m-models",
-    label: "Models move to digillm.",
-    line: "The same model answers from behind your own gateway on your key — the per-token meter becomes your rates, and their terms become your keys.",
+    label: "Models move behind your digillm gateway.",
+    line: "Your questions stop going to their API on their key and go through your digillm gateway on keys you hold — Sol chat becomes a local model behind digillm that you choose. The answers read the same; the control point is yours.",
     ids: ["api", "model", "terms"],
     layers: ["models"],
+    boxes: ["api", "model", "terms"],
   },
   {
     id: "m-recall",
-    label: "Recall moves to digisearch.",
-    line: "The embedder and the index come home in your format — the bundled meter and the per-query lookup fall away.",
+    label: "Recall moves to digisearch in your format.",
+    line: "Your embedder becomes a local embed and the Pinecone index becomes a self-hosted index you own, so lookups run as local recall in an open format. You keep the chunks; the bundled meter and the per-query lookup fall away, and recall runs at zero marginal cost on your hardware.",
     ids: ["embed", "memory"],
     layers: ["embeddings", "vector"],
+    boxes: ["embed", "memory"],
   },
   {
     id: "m-telemetry",
-    label: "Traces move to digismith.",
-    line: "Every answer is still traced — the seats and overages are replaced by your own trace store.",
+    label: "Traces move to digismith on your store.",
+    line: "Every answer is still traced, but LangSmith traces become digismith traces on a store you control — you see each lookup and answer yourself. Your audit trail stays queryable at zero marginal cost on your hardware.",
     ids: ["telemetry"],
     layers: ["telemetry"],
+    boxes: ["telemetry"],
   },
   {
     id: "m-hosting",
-    label: "Hosting moves to your hardware.",
-    line: "The lake becomes digivault on your disk and the GPUs your pool — same chunks, no meter.",
+    label: "Hosting moves to your disk and your GPUs.",
+    line: "Your Azure Blob lake becomes a digivault lake on your disk and the Azure GPU pool becomes your GPU pool — same chunks, same roof, yours. Both run at zero marginal cost on your hardware once it exists.",
     ids: ["record", "machines"],
     layers: ["hosting"],
+    boxes: ["record", "machines"],
   },
 ];
 
 const supportMorph: MorphStep[] = [
   {
     id: "m-models",
-    label: "Drafts move to digillm.",
-    line: "Triage and drafting run behind your own gateway on your key — per-token becomes your rates, their terms become your keys.",
+    label: "Your drafts answer behind your own gateway.",
+    line: "You point triage and drafting at a local model behind a digillm gateway you hold, so the vendor gateway and its terms drop out. You keep your keys and your routing, and the draft model changes without the workflow changing.",
     ids: ["api", "model", "terms"],
     layers: ["models"],
+    boxes: ["api", "model", "terms"],
   },
   {
     id: "m-email",
-    label: "Send moves into the graph.",
-    line: "Replies go out from a digigraph mail tool instead of a metered vendor — delivery lives where the workflow lives.",
+    label: "Your approved replies send from inside the workflow.",
+    line: "You keep the human review lane exactly where it is — every draft still waits for your eyes before it sends. Once you approve, the reply leaves through a digigraph mail tool, so delivery lives in the same graph that drafted it.",
     ids: ["email"],
     layers: [],
+    boxes: ["email"],
     email: true,
   },
   {
     id: "m-telemetry",
-    label: "Draft audit moves to digismith.",
-    line: "Every draft is still traced for review — on your store, not their seats.",
+    label: "Your draft audit lives in your own trace store.",
+    line: "You still trace every draft for review, but the trail lands in digismith on your side instead of their dashboard. You see what the model saw, and the audit stays with the tickets it explains.",
     ids: ["telemetry"],
     layers: ["telemetry"],
+    boxes: ["telemetry"],
   },
   {
     id: "m-hosting",
-    label: "The runner moves to digiclaw.",
-    line: "The schedule fires on your hardware — same loop, no hourly meter.",
+    label: "Your schedule fires from your own runner.",
+    line: "You move the loop onto a digiclaw runner on hardware you already own, so the same interval fires under your control. You keep the cadence and the triage history, and the runner answers to you.",
     ids: ["launcher"],
     layers: ["hosting"],
+    boxes: ["launcher"],
   },
 ];
 
@@ -222,30 +234,34 @@ const financeMorph: MorphStep[] = [
   {
     id: "m-models",
     label: "Reasoning moves to digillm.",
-    line: "Deep synthesis runs behind your own gateway on your key — per-token reasoning becomes your rates, their terms become your keys.",
+    line: "You route the same nightly synthesis through your digillm gateway onto your local model, so each run answers behind your key. Their terms become your keys and the per-token reasoning edge becomes your rates.",
     ids: ["api", "model", "terms"],
     layers: ["models"],
+    boxes: ["api", "model", "terms"],
   },
   {
     id: "m-runner",
     label: "Nights move to digiclaw.",
-    line: "The nightly schedule fires from your own runner — same pipeline, no hourly meter.",
+    line: "You fire the same pipeline from your digiclaw runner on your hardware, so nights run on your interval instead of their schedule. The hosting row starts cutting live below, at marginal cost on hardware you own.",
     ids: ["launcher"],
     layers: ["hosting"],
+    boxes: ["launcher"],
   },
   {
     id: "m-archive",
     label: "The archive moves to digivault.",
-    line: "Past theses file into your vault — the research stays yours either way, the meter doesn't.",
+    line: "You file every thesis into your digivault archive, so past research stays yours on your disk either way. This finishes the hosting row the runner already started, at marginal cost on hardware you own.",
     ids: ["record"],
     layers: ["hosting"],
+    boxes: ["record"],
   },
   {
     id: "m-telemetry",
     label: "Run audit moves to digismith.",
-    line: "Every run is still audited — on your store, not their seats.",
+    line: "You keep an audit on every run, but traces land in your digismith store instead of their dashboard. You still see each run end to end, without the seats following it home.",
     ids: ["telemetry"],
     layers: ["telemetry"],
+    boxes: ["telemetry"],
   },
 ];
 
@@ -268,7 +284,7 @@ export const APP_PRESETS: AppPreset[] = [
     leftSteps: ragLeft,
     morphSteps: ragMorph,
     providerCaption: "Every edge metered — per-token · per-query · per-gigabyte",
-    morphCaption: "Same loop, swapped service by service — each cut lands live below",
+    morphCaption: "Same loop, rehomed box by box — each swap lands live in the invoice below",
   },
   {
     id: "support",
@@ -289,7 +305,7 @@ export const APP_PRESETS: AppPreset[] = [
     leftSteps: supportLeft,
     morphSteps: supportMorph,
     providerCaption: "Scheduled loop — every draft traced, every send metered",
-    morphCaption: "Same send pipeline — each swap cuts its row below",
+    morphCaption: "Same send pipeline, moved home box by box — you keep the review lane throughout",
   },
   {
     id: "finance",

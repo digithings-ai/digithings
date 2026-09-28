@@ -90,6 +90,9 @@ describe("app presets", () => {
         for (const id of step.ids) {
           expect(drawn.has(id)).toBe(true);
         }
+        for (const id of step.boxes) {
+          expect(drawn.has(id)).toBe(true);
+        }
       }
     }
   });

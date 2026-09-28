@@ -9,6 +9,7 @@ import {
   pricePick,
   providerSpec,
 } from "@/lib/stackCatalog";
+import type { LayerId } from "@/lib/stackCatalog";
 import { ragCost } from "@/lib/ragCost";
 
 describe("pricePick", () => {
@@ -105,7 +106,10 @@ describe("morph specs", () => {
   });
 
   it("swaps the model boxes and the terms together", () => {
-    const m = morphSpec(DEFAULT_PROVIDER_PICK, DEFAULT_DIGI_PICK, undefined, { replaced: ["models"] });
+    const m = morphSpec(DEFAULT_PROVIDER_PICK, DEFAULT_DIGI_PICK, undefined, {
+      replaced: ["models"],
+      boxes: ["api", "model", "terms"],
+    });
     const byId = Object.fromEntries(m.services.map((s) => [s.id, s.label]));
     expect(byId["api"]).toBe("digillm gateway");
     expect(byId["model"]).toContain("digillm");
@@ -115,6 +119,7 @@ describe("morph specs", () => {
     const support = morphSpec(DEFAULT_PROVIDER_PICK, DEFAULT_DIGI_PICK, undefined, {
       topology: "support",
       replaced: ["models"],
+      boxes: ["api", "model", "terms"],
     });
     expect(support.edges.find((e) => e.from === "api" && e.to === "model")?.label).toBe("your rates");
     expect(m.services.find((s) => s.id === "embed")?.label).toBe("embed-3-large");
@@ -123,6 +128,7 @@ describe("morph specs", () => {
   it("homes recall and hosting on the RAG drawing", () => {
     const m = morphSpec(DEFAULT_PROVIDER_PICK, DEFAULT_DIGI_PICK, undefined, {
       replaced: ["embeddings", "vector", "hosting"],
+      boxes: ["embed", "memory", "record", "machines"],
     });
     const labels = Object.fromEntries(m.services.map((s) => [s.id, s.label]));
     expect(labels["memory"]).toContain("index");
@@ -139,8 +145,22 @@ describe("morph specs", () => {
   });
 
   it("files the finance archive in digivault", () => {
-    const m = morphSpec(DEFAULT_PROVIDER_PICK, DEFAULT_DIGI_PICK, undefined, { topology: "finance", replaced: ["hosting"] });
+    const m = morphSpec(DEFAULT_PROVIDER_PICK, DEFAULT_DIGI_PICK, undefined, {
+      topology: "finance",
+      replaced: ["hosting"],
+      boxes: ["record"],
+    });
     expect(m.services.find((s) => s.id === "record")?.label).toBe("digivault archive");
-    expect(m.services.find((s) => s.id === "launcher")?.label).toBe("digiclaw runner");
+    expect(m.services.find((s) => s.id === "launcher")?.label).toBe("nightly runner");
+  });
+
+  it("flips the finance runner a beat before the archive", () => {
+    const opts = { topology: "finance" as const, replaced: ["hosting"] as LayerId[] };
+    const runner = morphSpec(DEFAULT_PROVIDER_PICK, DEFAULT_DIGI_PICK, undefined, {
+      ...opts,
+      boxes: ["launcher"],
+    });
+    expect(runner.services.find((s) => s.id === "launcher")?.label).toBe("digiclaw runner");
+    expect(runner.services.find((s) => s.id === "record")?.label).toBe("research archive");
   });
 });

@@ -469,7 +469,11 @@ export function providerSpec(
 /* ── morph: the same provider topology, swapped service by service ──── */
 
 export interface MorphState {
+  /** Layers whose edge rewrites have fired (invoice rows cut on the same beat). */
   replaced: LayerId[];
+  /** Box ids whose labels have flipped. Finer than layers: finance flips the
+      runner and the archive on separate beats sharing the hosting row. */
+  boxes: string[];
   /** Support send box flips to the in-graph mail tool (unpriced, diagram-only). */
   email?: boolean;
 }
@@ -497,10 +501,11 @@ const MORPH_EDGE_OVERRIDES: Record<LayerId, Record<string, string>> = {
    approved-send edge, because approval still happens. */
 
 /**
- * The morph drawing: provider topology with swapped labels for replaced
- * layers. Box ids never move, so the walk, spotlight and camera keep working;
+ * The morph drawing: provider topology with swapped labels for the flipped
+ * boxes. Box ids never move, so the walk, spotlight and camera keep working;
  * the group boundary keeps the provider vendor count (it names the stack
- * being left). Unreplaced layers render exactly their provider labels.
+ * being left). Unflipped boxes render exactly their provider labels; edge
+ * rewrites still follow replaced layers.
  */
 export function morphSpec(
   providerPick: StackPick,
@@ -511,11 +516,13 @@ export function morphSpec(
     sourcesLabel?: string;
     topology?: "rag" | "support" | "finance";
     replaced?: LayerId[];
+    boxes?: string[];
     email?: boolean;
   } = {},
 ): ArchSpec {
   const topology = opts.topology ?? "rag";
   const replaced = new Set(opts.replaced ?? []);
+  const swapped = new Set(opts.boxes ?? []);
   const base = providerSpec(providerPick, workload, {
     appLabel: opts.appLabel,
     sourcesLabel: opts.sourcesLabel,
@@ -530,33 +537,33 @@ export function morphSpec(
   const labelFor = (id: string): { label: string; logo?: string } | null => {
     switch (id) {
       case "api":
-        return replaced.has("models") ? { label: "digillm gateway" } : null;
+        return swapped.has("api") ? { label: "digillm gateway" } : null;
       case "model":
-        return replaced.has("models")
+        return swapped.has("model")
           ? { label: DIGI_MODEL_BOX[dModel.id], logo: dModel.logo }
           : null;
       case "embed":
-        return replaced.has("embeddings")
+        return swapped.has("embed")
           ? { label: `${DIGI_EMBED_SHORT[dEmbed.id]} embed`, logo: dEmbed.logo }
           : null;
       case "memory":
-        return replaced.has("vector") ? { label: `${DIGI_VECTOR_BOX[dVector.id]} index` } : null;
+        return swapped.has("memory") ? { label: `${DIGI_VECTOR_BOX[dVector.id]} index` } : null;
       case "record":
-        if (!replaced.has("hosting")) return null;
+        if (!swapped.has("record")) return null;
         if (dHosting.id === "azure") return null;
         return { label: topology === "finance" ? "digivault archive" : "digivault lake" };
       case "machines":
-        if (!replaced.has("hosting") || dHosting.id === "azure") return null;
+        if (!swapped.has("machines") || dHosting.id === "azure") return null;
         return { label: "your GPU pool" };
       case "launcher":
-        if (!replaced.has("hosting") || dHosting.id === "azure") return null;
+        if (!swapped.has("launcher") || dHosting.id === "azure") return null;
         return { label: "digiclaw runner" };
       case "telemetry":
-        return replaced.has("telemetry") ? { label: DIGI_TELEMETRY_BOX[dTelemetry.id] } : null;
+        return swapped.has("telemetry") ? { label: DIGI_TELEMETRY_BOX[dTelemetry.id] } : null;
       case "email":
         return opts.email ? { label: "digigraph mail" } : null;
       case "terms":
-        return replaced.has("models") ? { label: "your keys" } : null;
+        return swapped.has("terms") ? { label: "your keys" } : null;
       default:
         return null;
     }
