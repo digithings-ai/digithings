@@ -2,7 +2,8 @@
 
 - **Date:** 2026-09-28
 - **Status:** Implementation spec — authorizes one implementing task PR; runtime changes land through that PR
-- **Binds to:** [digichat customer license design](2026-09-27-digichat-customer-license-design.md) (rev 4, eight owner decisions — this spec implements the container half: § Container verification, § Heartbeat, § Stop-serving mechanics) and [digichat license-mint CLI (slice 1)](2026-09-28-digichat-license-mint-impl.md) (the `digikey_licenses` allowlist + its §4.4 four-state read contract, which the heartbeat receiver reads in slice 3)
+- **Revision note (2026-09-28):** five owner decisions recorded (§1.2) — expiry → refuse (`503 license_expired`), add `GET /healthz`, refusal scope chat + plan-proof only, env names confirmed, canonical hosts source = embed tenant host keys. §12 now leaves only question 4 open, reframed as a pre-rotation verification check rather than a blocker.
+- **Binds to:** [digichat customer license design](2026-09-27-digichat-customer-license-design.md) (rev 5, eight owner decisions plus the rev-5 expiry-refusal resolution — this spec implements the container half: § Container verification, § Heartbeat, § Stop-serving mechanics) and [digichat license-mint CLI (slice 1)](2026-09-28-digichat-license-mint-impl.md) (the `digikey_licenses` allowlist + its §4.4 four-state read contract, which the heartbeat receiver reads in slice 3)
 - **Scope:** local startup verification, the revoke latch state machine, the heartbeat **sender**, the `503 license_revoked` refusal on product traffic, and health surfacing. Nothing else.
 - **Slice boundary:** the digikey HTTP receiver and the edge scope checks are **slice 3**. Slice 2 ships against the request/response contract in §8 and must behave correctly (fail open, keep serving) when that endpoint does not exist yet.
 - **Human gate:** slice 2 changes **no `digikey/` code**, so the auth/crypto gate is not triggered by this spec. It does add a recurring outbound call from the container to digikey carrying the license credential — digichat already egresses to digikey (`DIGIKEY_URL`, `apps/digichat/src/lib/digigraph-upstream.ts:93`), so this is a new *cadence*, not a new destination. Per root `AGENTS.md` the implementing PR should still get owner review, because this slice defines the stop-serving behavior. This spec itself is docs-only.
@@ -14,9 +15,11 @@
 3. **Spec file ≠ code file:** this document prescribes interfaces, behavior, and acceptance. Exact file/function names below are recommendations; what is binding is the verification sequence (§3), the state machine (§4), the heartbeat contract (§5, §8), the refusal shape (§6), and the acceptance checklist (§10).
 4. **Conventions:** TypeScript strict, ESLint clean, Vitest, line length per repo config, lowercase digi names in prose (code identifiers keep their casing). **The raw license JWT and any key material are never logged, never returned in a response, and never written to a file** — `license_id`, customer slug, and `exp` are safe to log (slice 1 §2.3).
 5. **Tests / commands:** `npm run test`, `npm run lint`, `npm run build` from `apps/digichat/`. No stack required for the slice-2 suite (§9).
-6. **Docs duties in the implementing PR:** `apps/digichat/ARCHITECTURE.md` (§3 Health, §5 instrumentation/startup, §11 env-var table) and `.env.example` — this spec names the env vars (§2) but ships no code and no env entries.
+6. **Docs duties in the implementing PR:** `apps/digichat/ARCHITECTURE.md` (§3 Health — including the new `GET /healthz` route, §7.2 — §5 instrumentation/startup, §11 env-var table) and `.env.example` — this spec names the env vars (§2) but ships no code and no env entries.
 
-## 1. Locked decisions (inherited — not re-decided here)
+## 1. Decisions
+
+### 1.1 Locked (inherited — not re-decided here)
 
 | # | Decision (source) | Slice-2 consequence |
 |---|---|---|
@@ -29,9 +32,21 @@
 | D7 | Four-state contract: `valid` / `expired` / `revoked` / `unknown` (slice 1 §4.4, normative) | The container mirrors the same vocabulary locally; the receiver maps it in slice 3 |
 | D8 | `max_version` unpinned; heartbeat reports version truthfully (design decision 2) | Version comes from the existing resolver chain (§5.4), no semver compare |
 
+### 1.2 Owner decisions (recorded 2026-09-28)
+
+Five decisions the owner closed after this draft. Each replaces an open question in §12 and is applied inline where its topic is covered; nothing else in the spec changes.
+
+| # | Decision | Closes | Applied in |
+|---|---|---|---|
+| OD1 | **Expiry → refuse.** Once the license JWT's `exp` passes (plus the §3.2 skew leeway), the container refuses product traffic with `503 license_expired` — matching slice 1 §4.4's four-state contract. The bound design contradicted itself on this point; design rev 5 (owner-confirmed 2026-09-28) resolves the contradiction in favor of refuse-at-expiry | §12.1 | §4.1, §10; design rev 5 |
+| OD2 | **Add `GET /healthz`** — an auth-exempt liveness route always answering `{"ok": true}` (root `AGENTS.md` § Liveness vs status), separate from `/api/health`, which reports license state | §12.2 | §0, §7.2, §9, §10 |
+| OD3 | **Refusal scope: chat + plan-proof only.** `POST /api/chat` (and the `/api/v1/chat` re-export) plus `POST /api/plan-proof` refuse with `503 license_revoked` / `503 license_expired`; auth, config, embed-tenant, health, and all other routes keep answering so the state stays diagnosable | §12.3 | §6.2, §6.3, §9, §10 |
+| OD4 | **Env names confirmed:** `DIGICHAT_LICENSE_JWT` (inline) and `DIGICHAT_LICENSE_FILE` (mounted file), the file winning when both are set | §12.6 | §2 |
+| OD5 | **Canonical hosts source: embed tenant host keys.** Startup verify derives the deployment's hosts from the same tenant-config keys that route embed traffic, not from a separate `DIGICHAT_EMBED_HOSTS` list | §12.5 | §2, §3.5 |
+
 ## 2. Env / credential provisioning
 
-The customer container carries exactly one credential (the license JWT) plus the public verification key. Slice 1 §7 defers the *name* of the license env var to this slice; it is fixed here.
+The customer container carries exactly one credential (the license JWT) plus the public verification key. Slice 1 §7 defers the *name* of the license env var to this slice; it is fixed here and owner-confirmed (OD4, 2026-09-28).
 
 | Env var | Required | Meaning |
 |---|---|---|
@@ -40,7 +55,7 @@ The customer container carries exactly one credential (the license JWT) plus the
 | `DIGIKEY_PUBLIC_KEY_PEM` | yes for licensed verify | One **or more** concatenated `-----BEGIN PUBLIC KEY-----` SPKI PEMs (rotation list, current + previous — design § Container verification) |
 | `DIGIKEY_ISSUER` | recommended | Expected `iss`. Defaults to `http://127.0.0.1:8005` exactly as `_issuer()` does (`digikey/src/digikey/jwt_issue.py:19-20`); must equal the issuer in force at mint time or every license fails the `iss` check |
 | `DIGIKEY_URL` | yes for heartbeat | Heartbeat base URL. Existing digichat env (`digigraph-upstream.ts:93`, documented in `apps/digichat/ARCHITECTURE.md` §11) — no new destination var |
-| `DIGICHAT_EMBED_HOSTS` / deploy-config `hosts` / `DIGICHAT_EMBED_TENANTS` | optional | Read-only inputs for the advisory `hosts` comparison (§3.5) — never written by this slice |
+| deploy-config `hosts` / `DIGICHAT_EMBED_TENANTS` | optional | Read-only inputs for the advisory `hosts` comparison (§3.5) — canonical source is the embed tenant host keys (OD5); `DIGICHAT_EMBED_HOSTS` is **not** an input. Never written by this slice |
 
 Rules:
 
@@ -99,11 +114,12 @@ Verification runs from scratch on every boot. A latched `revoked` state does **n
 
 ### 3.5 Hosts comparison (advisory only)
 
-The `hosts` claim is descriptive binding for status display, not an authorization gate (design § License claims). Compare it against the union of the container's configured embed parents:
+The `hosts` claim is descriptive binding for status display, not an authorization gate (design § License claims). Compare it against the deployment's **canonical host keys — the same tenant-config keys that route embed traffic** (OD5): the merged embed-tenant host registry, resolved exactly as embed routing resolves it:
 
-- deploy-config `hosts` record keys (`apps/digichat/src/lib/deploy-config/schema.ts:542`);
-- `DIGICHAT_EMBED_TENANTS` keys + `aliases` (`apps/digichat/src/lib/embed-tenants.ts:774`);
-- `DIGICHAT_EMBED_HOSTS` entries (`apps/digichat/src/proxy.ts:7` runtime CSP feed).
+- the deploy-config `hosts` record keys (`apps/digichat/src/lib/deploy-config/schema.ts:542`) **after** the `DIGICHAT_EMBED_TENANTS` overlay merge (`mergeEmbedTenantsOverlay`, `apps/digichat/src/lib/deploy-config/loader.ts:276`, which folds tenant keys + `aliases` in), looked up with `matchHostDeployment` (`loader.ts:490-498`);
+- the `DIGICHAT_EMBED_TENANTS` registry keys + `aliases` (`apps/digichat/src/lib/embed-tenants.ts:774`) via `resolveEmbedTenantByHost` (`embed-tenants.ts:818`).
+
+Those two are one chain, not two lists: `resolveVerifiedEmbedTenantFromHostToken` tries the merged hosts first and the raw registry second (`apps/digichat/src/lib/embed-chat-tenant.ts:153`), so together they name the **registered** hosts this container routes embed traffic for (an unregistered parent may still be served anonymously on a single-install container — that is embed auth, not host inventory, and not this comparison's concern). `DIGICHAT_EMBED_HOSTS` (`apps/digichat/src/proxy.ts:7`, the runtime CSP feed) is **not** an input — it feeds CSP, not routing, so it is not evidence of which hosts this deployment serves (this replaces the earlier three-source union, OD5).
 
 Normalize both sides with the existing host normalization rules (`normalizeEmbedHost`, `embed-tenants.ts:266-280`) — lowercase, strip trailing dot, drop port — before comparing.
 
@@ -123,6 +139,8 @@ Normalize both sides with the existing host normalization rules (`normalizeEmbed
 | `revoked` | learned: explicit deny from our side (§5.3) | **refuse** (`503 license_revoked`) | continues (reporting) |
 
 `unknown` from the server (no allowlist row) maps to `revoked` locally: both are explicit denies by design (design § Heartbeat, decision 8; slice 1 §4.4). The distinction is preserved in `license_detail` for the log/health surface, not in the serving behavior.
+
+**Owner-confirmed 2026-09-28 (OD1): `expired` refuses.** The bound design contradicted itself — its container-verification failure mode read "expired … keep serving every feature" while its expiry backstop read "the container serves at most until `exp`" — and design rev 5 resolves the contradiction in favor of refuse-at-expiry. This table stands as written: both `expired` and `revoked` refuse, `unlicensed` never does (§3.3).
 
 ### 4.2 Transitions
 
@@ -243,13 +261,14 @@ Content-Type: application/json
 
 ### 6.2 Required hook points (normative)
 
+Refusal scope is **chat + plan-proof only** (OD3, 2026-09-28): these two handlers, covering three routes — nothing else is guarded.
+
 | Route | Site | Why |
 |---|---|---|
 | `POST /api/chat` | first statement of `POST`, **before** `requireDigiChatAuth(req)` (`route.ts:89-90`) | the product-traffic choke point; also covers `POST /api/v1/chat`, which re-exports this handler (`apps/digichat/src/app/api/v1/chat/route.ts:1`). Auth order matters: a revoked deployment must refuse even an authenticated caller, and refusing first is also the cheaper check |
 | `POST /api/plan-proof` | `route.ts:40`, before any embed-tenant/token work | mints chat-eligible tier proofs — product traffic by another name (design § Stop-serving mechanics) |
-| `GET /api/embed/tenant-config` | `route.ts:13` | the public embed-config route the design lists alongside `/api/embed/*` |
 
-Coverage note: these three are exactly the routes the design names (`POST /api/chat` and "the embed routes (`/api/embed/*`, `/api/plan-proof`, all proxied per `apps/digichat-cloudflare/src/paths.ts:6-19`)"). `paths.ts` routes traffic to the container but is edge-side config in a different package — it is **not** a guard and is untouched by this slice.
+Coverage note: the design's stop-serving mechanics names `POST /api/chat` and "the embed routes (`/api/embed/*`, `/api/plan-proof`, all proxied per `apps/digichat-cloudflare/src/paths.ts:6-19`)". The owner narrowed slice 2 (OD3) to chat + plan-proof, so `/api/embed/*` — including `GET /api/embed/tenant-config` — keeps answering (§6.3): diagnosability wins over a perfectly coherent stop, because auth, config, embed-tenant, and health are how an operator learns *why* they are being refused. `paths.ts` routes traffic to the container but is edge-side config in a different package — it is **not** a guard and is untouched by this slice.
 
 ### 6.3 Deliberately not hooked (this slice)
 
@@ -257,7 +276,8 @@ Coverage note: these three are exactly the routes the design names (`POST /api/c
 - `/api/auth/*` — session sign-in/out must keep working so an operator or customer can still see what state they are in; blocking auth turns a status problem into a lockout.
 - `/api/deploy/chrome` (public chrome), `/api/baseline-chat` (dev-only), `/api/mcp/oauth/*`.
 - **HTML page routes and `/embed`** — the page shell still renders; slice 2 refuses product *traffic* (turn-taking, embed config, tier proofs), not document loads. Extending the refusal into `src/proxy.ts` is explicitly out of scope: its `matcher` (`proxy.ts:40-42`) does not cover `/api/*` anyway, and reading a Node-process latch from the proxy bundle is exactly the cross-bundle hazard §4.3 exists to avoid.
-- `/api/conversations*`, `/api/ecosystem/config`, `/api/byok/*` — see open question 3.
+- `GET /api/embed/tenant-config` — **OD3 (2026-09-28):** refusal is chat + plan-proof only; the embed-tenant config route keeps answering so a refused deployment can still be diagnosed. (It was a hook point in the first draft of §6.2, matching the design's embed-route list; the owner narrowed the scope.)
+- `/api/conversations*`, `/api/ecosystem/config`, `/api/byok/*` — outside the chat + plan-proof scope (OD3), so question 3 resolves as "refuse exactly these two handlers".
 
 ## 7. Health, logging, and metrics surfacing
 
@@ -284,7 +304,7 @@ There is a real tension the implementation must not paper over: `ok` stays `true
 
 - `/api/health` is a **status** endpoint: it reports `license_status` honestly and keeps its downstream `ok` semantics. A probe that must decide "restart the container?" keeps keying on `ok` (unchanged behavior, no crash loops).
 - A probe that must decide "is this deployment allowed to serve turns?" reads `license_status`.
-- Whether to add an auth-exempt, always-`{"ok":true}` `GET /healthz` (the stack convention in root `AGENTS.md` § Liveness vs status — digichat has no such route today) is open question 2. It is cheap and would give operators a clean liveness probe with zero ambiguity, but it is a new route and therefore a decision, not a default.
+- **Add `GET /healthz` (OD2, owner-confirmed 2026-09-28).** An auth-exempt liveness route that always answers `{"ok": true}` — the stack convention in root `AGENTS.md` § Liveness vs status — separate from `/api/health`, which reports license state (§7.1). It answers `{"ok":true}` in **all four** states, `revoked` and `expired` included: the orchestrator's restart decision never depends on license state, and no product-traffic probe is fooled, because a probe that must decide "may this deployment serve turns?" reads `license_status` off `/api/health` (§7.1). digichat has no such route today; it must also reach the container through the edge proxy, since `shouldProxyToDigiChat` (`apps/digichat-cloudflare/src/paths.ts:6-19`) routes `/api/health` but not `/healthz` — that is edge *routing*, not a guard, so it does not conflict with the §6.2 note about `paths.ts`. This closes open question 2.
 
 ### 7.3 Logs
 
@@ -340,12 +360,12 @@ Vitest, node environment, no stack — `npm run test` in `apps/digichat/` (confi
 | Clock skew | `exp` 4 min in the past still `valid`; `exp` 6 min in the past → `expired`; `iat` 4 min in the future accepted; `iat` far future rejected. Use injected clock, not `vi.setSystemTime` alone, if the module reads time through a seam |
 | Hosts | exact match; subset (license ⊇ configured) not a mismatch; disjoint sets → `hosts_mismatch` **and state stays `valid`**; no configured hosts → skipped; trailing-dot/case/port normalization matches |
 | State machine | boot with valid token → `valid`; lazy expiry flips to `expired` without a heartbeat; `401 license_revoked` from `valid` → `revoked`; `401 unknown_license` → `revoked` with `detail=heartbeat_deny_unknown`; **bare 401 `{error:"unauthorized"}` → state unchanged**; 404/500/timeout → state unchanged; `revoked` is terminal (a later 200 `valid` does not clear it); `resetLicenseStateForTests` clears `globalThis` |
-| Guard | `revoked` → 503 body `{"error":"license_revoked",…}`, content-type JSON, no `Retry-After`; `expired` → 503 `license_expired`; `valid`/`unlicensed` → `null` (request proceeds); guard runs before auth in `POST /api/chat` (spy on `requireDigiChatAuth` not being called when refused); `/api/v1/chat` refuses too (re-export) |
+| Guard | `revoked` → 503 body `{"error":"license_revoked",…}`, content-type JSON, no `Retry-After`; `expired` → 503 `license_expired`; `valid`/`unlicensed` → `null` (request proceeds); guard runs before auth in `POST /api/chat` (spy on `requireDigiChatAuth` not being called when refused); `/api/v1/chat` refuses too (re-export); `GET /api/embed/tenant-config` still answers while `revoked` (OD3) |
 | Heartbeat scheduling | interval constant is 24h; `.unref()` called on the interval and on every retry timer; first attempt fires without awaiting; only one in-flight attempt (tick during flight is dropped); `stopLicenseHeartbeat()` clears everything |
 | Backoff | 5m → 10m → 20m … capped 6h; never > 24h; reset on 200; jitter within ±10%; error body never throws out of the timer callback |
 | Response handling | 200 `valid` / 200 `expired` / 401 deny / 404 / 500 / aborted timeout → mapped per §5.5; malformed 200 body → error |
 | Heartbeat body | exact key set `{license_id, customer, license_status, version, hosts_configured, started_at, seq}`; `seq` starts at 1 and increments; `Authorization: Bearer` carries the raw JWT and **never** appears in logs (assert on `console.log`/`warn` spy args) |
-| Health | `license_status` present in all four states; `ok` and HTTP status identical to pre-change behavior for the same `checks` fixture (regression guard on `route.ts:63-77`); `version` equals the shared helper's value |
+| Health | `license_status` present in all four states; `ok` and HTTP status identical to pre-change behavior for the same `checks` fixture (regression guard on `route.ts:63-77`); `version` equals the shared helper's value; `GET /healthz` answers `{"ok":true}` with 200 in all four states and never consults license state (OD2) |
 | Startup | `register()` completes with a broken license (no throw, migrate still reachable); license step runs before the `DIGICHAT_AUTO_MIGRATE` early-return (assert via a unit test of the extracted ordering or a comment-plus-review note — a full `register()` integration test is not required) |
 
 Commands: `npm run test`, `npm run lint`, `npm run build` (type check) — all from `apps/digichat/`.
@@ -354,11 +374,13 @@ Commands: `npm run test`, `npm run lint`, `npm run build` (type check) — all f
 
 - [ ] A container with `DIGICHAT_LICENSE_JWT` + `DIGIKEY_PUBLIC_KEY_PEM` verifies locally at startup through the §3 order and reports `license_status=valid` in `GET /api/health`; no network call occurs during verification (prove it: run the verify unit with `fetch`/`net` stubbed to throw and assert success)
 - [ ] Absent/broken/expired-license-at-boot never blocks boot or the first request; `register()` does not throw; `runMigrate()` still runs (fail-open, §3.3)
+- [ ] The advisory `hosts` comparison derives configured hosts from the embed tenant host keys only — `DIGICHAT_EMBED_HOSTS` contributes nothing, and a disjoint set still leaves the state `valid` (§3.5, OD5)
 - [ ] `startLicenseHeartbeat()` is called from `register()`, guarded by `NEXT_RUNTIME === "nodejs"`, uses a 24h constant interval, and every timer is `unref`'d (design decision 7 verifiable by grep)
 - [ ] The first heartbeat attempt fires immediately and unawaited; a failing first attempt does not delay serving (§5.2)
-- [ ] On `401` + `license_revoked`/`unknown_license`, product traffic is refused **at that heartbeat** with `503 {"error":"license_revoked"}` from `POST /api/chat`, `POST /api/plan-proof`, and `GET /api/embed/tenant-config`, and `/api/health` reports `license_status=revoked` with `ok` unchanged (§6, §7.1)
+- [ ] On `401` + `license_revoked`/`unknown_license`, product traffic is refused **at that heartbeat** with `503 {"error":"license_revoked"}` from `POST /api/chat` and `POST /api/plan-proof` (plus `/api/v1/chat`, which re-exports the chat handler), while `GET /api/embed/tenant-config`, `/api/auth/*`, config routes, and `GET /healthz` keep answering — and `/api/health` reports `license_status=revoked` with `ok` unchanged (§6, §7.1; scope per OD3)
+- [ ] `GET /healthz` exists, is auth-exempt, and answers `{"ok": true}` in all four license states, distinct from `/api/health`, which reports license state (§7.2, OD2)
 - [ ] Every other non-200 outcome — including a digikey with **no heartbeat route at all** — leaves serving untouched and schedules a bounded backoff (§5.5, §5.6): slice 2 ships safely before slice 3
-- [ ] Local `exp` + 5 min leeway flips `valid → expired` without any heartbeat and refuses with `503 license_expired`, so the fail-open window is bounded by the 90-day term (design § Expiry backstop)
+- [ ] Local `exp` + 5 min leeway flips `valid → expired` without any heartbeat and refuses with `503 license_expired`, so the fail-open window is bounded by the 90-day term (design § Expiry backstop; owner-confirmed OD1, design rev 5)
 - [ ] A restart clears the in-memory latch, and the immediate first heartbeat re-learns `revoked` (§3.4) — revocation drill: mint → heartbeat ok → `digikey license-revoke` (slice 1 §5) → next heartbeat → container refuses → re-mint → restart → container serves again
 - [ ] No raw JWT, PEM, or `Authorization` header value appears in any log line, health response, or error body (test assertion in §9)
 - [ ] No new npm dependency for JWT verification (§3.1)
@@ -382,17 +404,19 @@ Commands: `npm run test`, `npm run lint`, `npm run build` (type check) — all f
 
 ## 12. Open questions
 
-1. **Does an expired license refuse product traffic, or keep serving?** The design says both. § Container verification failure mode: "Missing/invalid/expired license locally → log clearly … and keep serving every feature." § Expiry backstop: "the container serves at most until `exp`." Slice 1 §4.4 (newer, normative) resolves it the same way as the backstop: `expired` → "refuse hosted-service **and product-traffic** authorization on expiry grounds." **This spec follows slice 1** (§4: `expired` refuses with `503 license_expired`) because it is the later statement, it is what makes `exp` a real backstop against hostile firewalling, and it is what the brief's "errors → serve + backoff bounded by 90d exp" requires. Needs owner confirmation, and the design's failure-mode bullet needs a rev-5 amendment either way. If the owner instead wants expired-but-serving, §4/§6 change in one place: `expired` moves to the serve column and only `revoked` refuses.
-2. **`GET /healthz`?** Adding an auth-exempt always-`{"ok":true}` liveness route would close the §7.2 tension cleanly and matches the stack convention in root `AGENTS.md` § Liveness vs status. It is a new route (and must be added to the container's reachability story, since `shouldProxyToDigiChat` at `apps/digichat-cloudflare/src/paths.ts:6-19` does not route it), so it is a decision rather than a default.
-3. **How wide is "product traffic"?** This slice refuses the three design-named routes (§6.2). `/api/conversations*`, `/api/ecosystem/config`, and `/api/byok/*` still answer a refused deployment — a customer could read history but not chat. Extending the guard to `/api/conversations*` is a one-line-per-route change and arguably a harder, more coherent stop; extending it to config/auth routes risks locking an operator out of the surface that reports the problem. Recommendation: refuse `/api/conversations*` in the same PR if the owner wants the harder stop; leave auth/config alone either way.
-4. **Multi-PEM `DIGIKEY_PUBLIC_KEY_PEM` outside the container.** The list format is defined here for TypeScript (§2), but the same env var is consumed by Python (`digikey/src/digikey/jwt_verify.py:61` → `jwt.decode(token, pem, …)` at `:78`) in other services — `compose.profile-a.yml:92,158` passes it to digivault and digigraph. A two-PEM value in a shared `.env` may fail Python's single-key load. Before the rotation procedure (slice 1 §6) is run with a list, verify Python's behavior with concatenated PEMs, or scope the list to the digichat container's env only. Out of scope for slice 2's code, but it is a rotation-day footgun.
-5. **Hosts source of truth.** §3.5 takes the union of three sources; for a single-install client container the deploy-config `hosts` record is probably the only meaningful one. If the owner prefers a single canonical source (e.g. deploy-config only), §3.5 narrows without touching anything else.
-6. **Env var names.** `DIGICHAT_LICENSE_JWT` / `DIGICHAT_LICENSE_FILE` are fixed here because slice 1 §7 deferred the name to this slice. Renaming before implementation is free; renaming after customers provision is not — confirm now.
+Owner decisions recorded 2026-09-28 (§1.2) close five of these six; only question 4 remains open, and it is framed as a pre-rotation-run verification check, not a spec blocker.
+
+1. **Resolved (2026-09-28, OD1) — the expired license refuses product traffic.** The design contradicted itself: § Container verification failure mode said "expired … keep serving every feature", § Expiry backstop said "the container serves at most until `exp`". Design **rev 5** (owner-confirmed 2026-09-28) resolves the contradiction in favor of the backstop, matching slice 1 §4.4 (`expired` → refuse product traffic on expiry grounds) and the brief's "errors → serve + backoff bounded by 90d exp". §4's `expired → 503 license_expired` stands and is now confirmed rather than provisional; the design's failure-mode bullet points at the rev-5 resolution. Rejected: expired-but-serving, which would move `expired` to the serve column, leave only `revoked` refusing, and make `exp` unenforceable against an operator who firewalls us.
+2. **Resolved (2026-09-28, OD2) — add `GET /healthz`.** An auth-exempt liveness route always answering `{"ok": true}`, separate from `/api/health` (which reports license state), per the stack convention in root `AGENTS.md` § Liveness vs status. Applied in §7.2, including the edge-reachability consequence (`shouldProxyToDigiChat` does not route it today).
+3. **Resolved (2026-09-28, OD3) — refusal scope is chat + plan-proof only.** `POST /api/chat` (and the `/api/v1/chat` re-export) plus `POST /api/plan-proof` refuse with `503 license_revoked` / `503 license_expired`; auth, config, embed-tenant, health — and `/api/conversations*`, `/api/ecosystem/config`, `/api/byok/*` — keep answering so a refused deployment stays diagnosable. The alternatives from the original question are both out: extending to `/api/conversations*` buys coherence but not enforcement, and extending to config/auth risks locking an operator out of the surface that reports the problem. Applied in §6.2, §6.3.
+4. **Open — multi-PEM `DIGIKEY_PUBLIC_KEY_PEM` outside the container (verification check before a rotation run, not a slice-2 blocker).** The list format is defined here for TypeScript (§2), but the same env var is consumed by Python (`digikey/src/digikey/jwt_verify.py:61` → `jwt.decode(token, pem, …)` at `:78`) in other services — `compose.profile-a.yml:92,158` passes it to digivault and digigraph, and a two-PEM value in a shared `.env` may fail Python's single-key load. Slice 2 is unaffected: it ships no rotation and reads the list only in digichat. What stays open is the **check to run before slice 1 §6's rotation procedure is executed with a list** — verify Python's behavior with concatenated PEMs, or scope the list to the digichat container's env — so the footgun is defused on rotation day rather than decided now.
+5. **Resolved (2026-09-28, OD5) — the canonical hosts source is the embed tenant host keys.** §3.5 now compares against the same tenant-config keys that route embed traffic (deploy-config `hosts` after the `DIGICHAT_EMBED_TENANTS` overlay, plus the registry fallback) instead of a three-way union; `DIGICHAT_EMBED_HOSTS` (the CSP feed) is no longer an input. Applied in §2, §3.5.
+6. **Resolved (2026-09-28, OD4) — env names confirmed:** `DIGICHAT_LICENSE_JWT` (inline) and `DIGICHAT_LICENSE_FILE` (mounted file), the file winning when both are set (§2). Renaming after customers provision is not free, which is why this was closed now.
 
 ## Verification (this spec — docs-only)
 
-- No code changed by this spec; branch `docs/spec-license-heartbeat` off `origin/develop` at `0a9199c28`.
-- Every file:line claim above re-read against `origin/develop`: `apps/digichat/src/instrumentation.ts:1-11` (11-line `register()`, `NEXT_RUNTIME` guard `:2`, config init `:4-7`, migrate early-return `:8-10`), `apps/digichat/src/app/api/health/route.ts:8-10` (`healthVersion`), `:13-21` (4s `AbortController` probe), `:63-68` (`ok` computation), `:70-77` (`{ok, checks, version}` + 200/503), `apps/digichat/src/app/api/chat/route.ts:77-87` (`jsonError`), `:89-90` (`POST` + `requireDigiChatAuth`), `apps/digichat/src/app/api/v1/chat/route.ts:1` (re-export of the chat `POST`), `apps/digichat/src/app/api/plan-proof/route.ts:40`, `apps/digichat/src/app/api/embed/tenant-config/route.ts:13` (public `GET`), `apps/digichat-cloudflare/src/paths.ts:6-19` (proxied paths), `Dockerfile.digichat-cloudflare:4-5` (no-bake rule), `:41-44` + `:57` (version bake → `/etc/digichat-version`), `:69` (CMD `trusted-proxy-server.mjs`), `apps/digichat/scripts/trusted-proxy-server.mjs:48-67` (`resolveDigichatVersion`) + `:102-113` (`start()` spawns `server.js` with the resolved env), `apps/digichat/src/lib/deploy-config/loader.ts:405-430` (config singleton + fail-closed `initDigichatConfigAtStartup`), `apps/digichat/src/lib/deploy-config/schema.ts:542` (`hosts` record), `apps/digichat/src/lib/embed-tenants.ts:266-280` (`normalizeEmbedHost`) + `:774` (key + aliases), `apps/digichat/src/lib/digigraph-upstream.ts:93` (`DIGIKEY_URL`), `apps/digichat/src/proxy.ts:7` (`DIGICHAT_EMBED_HOSTS`) + `:40-42` (matcher), `apps/digichat/vitest.config.ts` (node env, `src/**/*.test.ts`), `digikey/src/digikey/jwt_issue.py:19-20` (`_issuer()`), `:23` (`issue_access_token`), `:80` (`scope` mirror), `:88` (`public_jwks`), `digikey/src/digikey/jwt_verify.py:61` + `:78` (Python single-PEM path), `scripts/project_routing.json` (`component:digichat` → `module/digichat`).
+- No code changed by this spec; branch `docs/spec-license-heartbeat` off `origin/develop` at `0a9199c28`. Owner decisions recorded 2026-09-28 in §1.2; §12 keeps only question 4 open.
+- Every file:line claim above re-read against `origin/develop`: `apps/digichat/src/instrumentation.ts:1-11` (11-line `register()`, `NEXT_RUNTIME` guard `:2`, config init `:4-7`, migrate early-return `:8-10`), `apps/digichat/src/app/api/health/route.ts:8-10` (`healthVersion`), `:13-21` (4s `AbortController` probe), `:63-68` (`ok` computation), `:70-77` (`{ok, checks, version}` + 200/503), `apps/digichat/src/app/api/chat/route.ts:77-87` (`jsonError`), `:89-90` (`POST` + `requireDigiChatAuth`), `apps/digichat/src/app/api/v1/chat/route.ts:1` (re-export of the chat `POST`), `apps/digichat/src/app/api/plan-proof/route.ts:40`, `apps/digichat/src/app/api/embed/tenant-config/route.ts:13` (public `GET`), `apps/digichat-cloudflare/src/paths.ts:6-19` (proxied paths), `Dockerfile.digichat-cloudflare:4-5` (no-bake rule), `:41-44` + `:57` (version bake → `/etc/digichat-version`), `:69` (CMD `trusted-proxy-server.mjs`), `apps/digichat/scripts/trusted-proxy-server.mjs:48-67` (`resolveDigichatVersion`) + `:102-113` (`start()` spawns `server.js` with the resolved env), `apps/digichat/src/lib/deploy-config/loader.ts:405-430` (config singleton + fail-closed `initDigichatConfigAtStartup`), `apps/digichat/src/lib/deploy-config/schema.ts:542` (`hosts` record), `apps/digichat/src/lib/deploy-config/loader.ts:276` (`mergeEmbedTenantsOverlay` folds `DIGICHAT_EMBED_TENANTS` into `hosts`) + `:490-498` (`matchHostDeployment`), `apps/digichat/src/lib/embed-tenants.ts:266-280` (`normalizeEmbedHost`) + `:774` (key + aliases) + `:818` (`resolveEmbedTenantByHost`), `apps/digichat/src/lib/embed-chat-tenant.ts:153` (merged-hosts → registry fallback chain), `apps/digichat/src/lib/digigraph-upstream.ts:93` (`DIGIKEY_URL`), `apps/digichat/src/proxy.ts:7` (`DIGICHAT_EMBED_HOSTS`) + `:40-42` (matcher), `apps/digichat/vitest.config.ts` (node env, `src/**/*.test.ts`), `digikey/src/digikey/jwt_issue.py:19-20` (`_issuer()`), `:23` (`issue_access_token`), `:80` (`scope` mirror), `:88` (`public_jwks`), `digikey/src/digikey/jwt_verify.py:61` + `:78` (Python single-PEM path), `scripts/project_routing.json` (`component:digichat` → `module/digichat`).
 - Staleness measured, not assumed: `git rev-list --count origin/module/digichat..origin/develop` = 37 at spec time.
 - Greenfield confirmed: `grep -rni license apps/digichat/src apps/digichat/scripts` → 0 hits; no `jose`/`jsonwebtoken` in `apps/digichat/package.json`.
 - Consistency with slice 1: the §4 state vocabulary and the §8 response mapping are exactly slice 1 §4.4's four states; slice 1 §10 lists "container verification and heartbeat scheduler" as this slice's scope, and this spec's §11 lists slice 1's CLI revoke / allowlist as already landed.
