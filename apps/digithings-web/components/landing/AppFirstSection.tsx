@@ -113,7 +113,7 @@ export function AppFirstSection() {
   );
   const [pop, setPop] = useState<Popover | null>(null);
   /* Controlled walk position: the invoice's digi column cuts one row per
-     morph beat off this. Tab switches keep it (every app walks 5 + 4). */
+     morph beat off this. Tab switches keep it (every app walks 6 + 5). */
   const [tourStep, setTourStep] = useState(0);
   const [tourMode, setTourMode] = useState<TourVariant>("camera");
   const pick = picks[preset.id];
