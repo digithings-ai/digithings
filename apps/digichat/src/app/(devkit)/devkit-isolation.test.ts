@@ -139,6 +139,8 @@ describe("devkit route isolation", () => {
     expect(editors).toMatch(/openGroup/);
     expect(editors).toMatch(/IntersectionObserver/);
     expect(editors).toMatch(/visibleGroupFromEntries/);
+    expect(editors).toMatch(/applyScrollSpyVote/);
+    expect(editors).toMatch(/manualClosed/);
     expect(editors).toMatch(/-20% 0px -65% 0px/);
     expect(editors).toMatch(/scrollRoot/);
     expect(editors).not.toMatch(/<details/);

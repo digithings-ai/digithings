@@ -90,6 +90,24 @@ export function visibleGroupFromEntries(
   return (above ?? below)?.id ?? null;
 }
 
+/**
+ * Scroll-spy state step (spec §1): given the open group, the manually-closed
+ * group (if any), and the newly elected visible group, returns the next
+ * open/suppressed pair. The observer may change which single group is open
+ * but never collapses: a null vote keeps everything, and a same-id
+ * re-election after a manual close is suppressed until a different group
+ * becomes visible (which releases the suppression).
+ */
+export function applyScrollSpyVote(
+  open: string | null,
+  manualClosed: string | null,
+  visible: string | null,
+): { open: string | null; manualClosed: string | null } {
+  if (visible === null) return { open, manualClosed };
+  if (manualClosed !== null && visible === manualClosed) return { open, manualClosed };
+  return { open: visible, manualClosed: null };
+}
+
 export function TextRow({
   label,
   value,
@@ -614,6 +632,14 @@ export function DevkitEditors({
   const [openGroup, setOpenGroup] = useState<string | null>("basics");
   const anchorsRef = useRef(new Map<string, HTMLElement>());
   const latestTopsRef = useRef(new Map<string, number>());
+  // Manual toggle is the only path that may close: remember which group was
+  // closed so observer refires electing that same group do not reopen it.
+  // Released when a different group becomes visible or a nav click opens one.
+  const manualClosedRef = useRef<string | null>(null);
+  const openGroupRef = useRef<string | null>(openGroup);
+  useEffect(() => {
+    openGroupRef.current = openGroup;
+  }, [openGroup]);
 
   useEffect(() => {
     const targets = GROUPS.map((g) => anchorsRef.current.get(g.id)).filter(
@@ -636,10 +662,13 @@ export function DevkitEditors({
             top: latestTopsRef.current.get(g.id) ?? Number.POSITIVE_INFINITY,
           })),
         );
-        // The observer may change which single group is open but never
-        // collapses: a manual close persists until scroll crosses into a
-        // different group.
-        if (visible !== null) setOpenGroup(visible);
+        const next = applyScrollSpyVote(
+          openGroupRef.current,
+          manualClosedRef.current,
+          visible,
+        );
+        manualClosedRef.current = next.manualClosed;
+        setOpenGroup(next.open);
       },
       {
         root: rootEl,
@@ -651,7 +680,18 @@ export function DevkitEditors({
     return () => observer.disconnect();
   }, [scrollRoot]);
 
+  const setGroupFromTrigger = (groupId: string, isOpen: boolean) => {
+    if (isOpen) {
+      manualClosedRef.current = null;
+      setOpenGroup(groupId);
+    } else {
+      manualClosedRef.current = groupId;
+      setOpenGroup(null);
+    }
+  };
+
   const scrollToGroup = (id: string) => {
+    manualClosedRef.current = null;
     setOpenGroup(id);
     const reduce =
       typeof window !== "undefined" &&
@@ -1210,7 +1250,7 @@ export function DevkitEditors({
         >
           <Collapsible
             open={openGroup === group.id}
-            onOpenChange={(isOpen) => setOpenGroup(isOpen ? group.id : null)}
+            onOpenChange={(isOpen) => setGroupFromTrigger(group.id, isOpen)}
             className="group rounded-lg border"
           >
             <CollapsibleTrigger className="flex w-full items-center justify-between gap-2 px-2 py-1.5 font-mono text-xs font-semibold transition-colors hover:text-accent group-data-open:text-accent motion-reduce:transition-none">
