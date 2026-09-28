@@ -1,15 +1,15 @@
 import type { Metadata } from "next";
 import { AppFirstSection } from "@/components/landing/AppFirstSection";
-import { WhyCopyVariants } from "@/components/landing/WhyCopyVariants";
 import { GROUPED_LABEL } from "@/components/landing/label";
 
 /**
  * A throwaway comparison page for the why band, not part of the site.
  *
- * Leads with the single app-first variant (three apps, clickable boxes,
- * live invoice) — the consolidation target. The older takes (Study D,
- * Study E, A/B/C) stay stacked below until the single variant wins, then
- * everything else and this page go away.
+ * A single variant: three apps with distinct architectures per app, one
+ * consistent digithings shape, clickable boxes, and the invoice always
+ * below reflecting the selected app. The older studies are gone (see git
+ * history); when this wins it migrates to the live band and this page
+ * goes away with it.
  *
  * Deliberately not linked from the nav or the footer, and marked noindex.
  */
@@ -26,17 +26,15 @@ export default function WhyCopyVariantsPage() {
         <div className="mx-auto flex max-w-[var(--frame-w)] flex-col gap-[0.5rem]">
           <span className={GROUPED_LABEL}>internal · not linked · not indexed</span>
           <h1 className="m-0 font-mono text-[clamp(1.6rem,3.4vw,2.4rem)] font-medium leading-[1.15] tracking-[-0.02em] text-ink">
-            The why band, app-first
+            Which stack runs your app?
           </h1>
           <p className="m-0 max-w-[var(--measure-prose)] text-[0.9rem] leading-[1.7] text-ink-soft">
-            One variant: pick an app, configure either stack by clicking its boxes,
-            watch the walk and the invoice move together. Older studies stay stacked
-            below until this one wins.
+            Pick an app. Each draws its own architecture — click any box to reconfigure
+            its layer, and the invoice below follows the selected app.
           </p>
         </div>
       </div>
       <AppFirstSection />
-      <WhyCopyVariants />
     </main>
   );
 }

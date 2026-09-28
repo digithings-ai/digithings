@@ -58,6 +58,25 @@ describe("configurator specs", () => {
     }
   });
 
+  it("draws one topology per app on the provider side", () => {
+    const support = providerSpec(DEFAULT_PROVIDER_PICK, undefined, { topology: "support" });
+    const supportIds = support.services.map((s) => s.id);
+    for (const id of ["app", "review", "sources", "api", "model", "email", "launcher", "telemetry", "terms"]) {
+      expect(supportIds).toContain(id);
+    }
+    for (const id of ["embed", "memory", "record", "machines"]) {
+      expect(supportIds).not.toContain(id);
+    }
+    const finance = providerSpec(DEFAULT_PROVIDER_PICK, undefined, { topology: "finance" });
+    const financeIds = finance.services.map((s) => s.id);
+    for (const id of ["app", "sources", "api", "model", "launcher", "record", "telemetry", "terms"]) {
+      expect(financeIds).toContain(id);
+    }
+    for (const id of ["embed", "memory", "machines", "review", "email"]) {
+      expect(financeIds).not.toContain(id);
+    }
+  });
+
   it("moves the digithings drawing with the pick", () => {
     const flagged = digiSpec({ ...DEFAULT_DIGI_PICK, models: "sol" });
     expect(flagged.services.find((s) => s.id === "models")?.label).toContain("Sol");

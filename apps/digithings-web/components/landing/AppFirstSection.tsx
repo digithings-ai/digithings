@@ -39,17 +39,21 @@ const TAB = "border border-hair bg-surface px-[1rem] py-[0.6rem] font-mono text-
 const TAB_ON = "border border-hair bg-surface px-[1rem] py-[0.6rem] font-mono text-[0.82rem] text-ink shadow-[inset_0_0_0_1px_var(--accent)]";
 
 /** Drawn box id -> its layer, per side. Boxes without a layer are not configurable. */
-const LAYER_BY_BOX: Record<"provider" | "digi", Record<string, LayerId | undefined>> = {
-  provider: {
-    api: "models",
-    model: "models",
-    embed: "embeddings",
-    memory: "vector",
-    record: "hosting",
-    telemetry: "telemetry",
-    machines: "hosting",
-  },
-  digi: { models: "models", memory: "vector", traces: "telemetry", claw: "hosting" },
+const DIGI_LAYER_BY_BOX: Record<string, LayerId | undefined> = {
+  models: "models",
+  memory: "vector",
+  traces: "telemetry",
+  claw: "hosting",
+};
+
+const PROVIDER_LAYER_BY_BOX: Record<string, LayerId | undefined> = {
+  api: "models",
+  model: "models",
+  embed: "embeddings",
+  memory: "vector",
+  record: "hosting",
+  telemetry: "telemetry",
+  machines: "hosting",
 };
 
 const LAYERS_BY_SIDE: Record<"provider" | "digi", Layer[]> = {
@@ -92,12 +96,14 @@ export function AppFirstSection() {
     setPicks((prev) => ({ ...prev, [preset.id]: { ...prev[preset.id], [side]: { ...prev[preset.id][side], [layer]: option } } }));
 
   const workload = preset.workload;
-  const providerPrice = pricePick(PROVIDER_LAYERS, pick.provider, workload);
-  const digiPrice = pricePick(DIGI_LAYERS, pick.digi, workload);
+  const effProvider = { ...pick.provider, ...preset.fixedLayers };
+  const effDigi = { ...pick.digi, ...preset.fixedLayers };
+  const providerPrice = pricePick(PROVIDER_LAYERS, effProvider, workload);
+  const digiPrice = pricePick(DIGI_LAYERS, effDigi, workload);
 
   /* Click a drawn box -> open its layer's options anchored at the click.
      Side resolves through the tour's own compositional classes (leaving is
-     the first side). */
+     the first side). Dimmed boxes are drawn but dead: no popover. */
   const onStageClick = (event: React.MouseEvent<HTMLDivElement>) => {
     const target = event.target as Element;
     const node = target.closest?.('[id^="arch-service-"]');
@@ -105,7 +111,8 @@ export function AppFirstSection() {
     const boxId = node.id.replace("arch-service-", "");
     const sideEl = node.closest?.(".arch-tour__side");
     const side = sideEl?.classList.contains("arch-tour__side--leaving") ? "provider" : "digi";
-    const layer = LAYER_BY_BOX[side][boxId];
+    if (side === "digi" && preset.dimmedDigi.includes(boxId)) return;
+    const layer = (side === "provider" ? PROVIDER_LAYER_BY_BOX : DIGI_LAYER_BY_BOX)[boxId];
     if (!layer) return;
     setPop({
       side,
@@ -116,7 +123,8 @@ export function AppFirstSection() {
   };
 
   const popLayer = pop ? LAYERS_BY_SIDE[pop.side].find((l) => l.id === pop.layer) : undefined;
-  const dimClass = preset.dimmedDigi.includes("vault") ? " arch-tour-dim-vault" : "";
+  const popPick = pop ? (pop.side === "provider" ? effProvider : effDigi) : pick.provider;
+  const dimClass = preset.dimmedDigi.map((id) => ` arch-tour-dim-${id}`).join("");
 
   return (
     <section aria-label="App-first single variant" className="line-b">
@@ -156,10 +164,10 @@ export function AppFirstSection() {
               <ArchitectureTour
                 sides={[
                   {
-                    spec: providerSpec(pick.provider, workload, {
+                    spec: providerSpec(effProvider, workload, {
                       appLabel: preset.providerApp,
                       sourcesLabel: preset.providerSources,
-                      review: preset.providerReview,
+                      topology: preset.topology,
                     }),
                     steps: preset.leftSteps,
                     tag: "their stack",
@@ -167,7 +175,7 @@ export function AppFirstSection() {
                     caption: "Every edge metered — per-token · per-query · per-gigabyte",
                   },
                   {
-                    spec: digiSpec(pick.digi, workload, { appLabel: preset.digiApp }),
+                    spec: digiSpec(effDigi, workload, { appLabel: preset.digiApp }),
                     steps: OWNED_TOUR_STEPS,
                     tag: "digithings stack",
                     caption: "Every box a module — take one or run them all · digibase under all of them",
@@ -198,10 +206,10 @@ export function AppFirstSection() {
               <button
                 key={option.id}
                 role="option"
-                aria-selected={pick[pop.side][pop.layer] === option.id}
+                aria-selected={popPick[pop.layer] === option.id}
                 autoFocus={i === 0}
                 className={`px-[0.6rem] py-[0.5rem] text-left font-mono text-[0.8rem] ${
-                  pick[pop.side][pop.layer] === option.id
+                  popPick[pop.layer] === option.id
                     ? "text-ink shadow-[inset_0_0_0_1px_var(--accent)]"
                     : "text-ink-soft hover:text-ink"
                 }`}

@@ -309,11 +309,15 @@ function vendorCount(price: StackPrice): string {
   return n === 0 ? "no vendors · no meters" : `${n} vendor${n === 1 ? "" : "s"} · ${n} meter${n === 1 ? "" : "s"}`;
 }
 
-/** Provider-side drawing: fixed traditional topology, labels from the pick. */
+/** Provider-side drawing: one topology per app, labels from the pick. */
 export function providerSpec(
   pick: StackPick,
   workload: RagWorkload = DEFAULT_WORKLOAD,
-  opts: { appLabel?: string; sourcesLabel?: string; review?: boolean } = {},
+  opts: {
+    appLabel?: string;
+    sourcesLabel?: string;
+    topology?: "rag" | "support" | "finance";
+  } = {},
 ): ArchSpec {
   const model = lookup(PROVIDER_LAYERS, pick, "models");
   const embed = lookup(PROVIDER_LAYERS, pick, "embeddings");
@@ -321,48 +325,88 @@ export function providerSpec(
   const telemetry = lookup(PROVIDER_LAYERS, pick, "telemetry");
   const hosting = lookup(PROVIDER_LAYERS, pick, "hosting");
   const price = pricePick(PROVIDER_LAYERS, pick, workload);
-  /* Support apps run a human review lane across the top: drafts leave the
-     model for people, approvals re-enter the product. Extra box, stable ids
-     everywhere else, so existing steps keep working. */
-  const reviewService = opts.review
-    ? [{ id: "review", label: "human review lane", icon: "server" as const, col: 1, row: 0 }]
-    : [];
-  const reviewEdges = opts.review
-    ? [
-        { from: "model", to: "review", fromSide: "B" as const, toSide: "L" as const, label: "drafts" },
-        { from: "review", to: "app", fromSide: "L" as const, toSide: "T" as const, label: "approved replies" },
-      ]
-    : [];
+  const topology = opts.topology ?? "rag";
+  const head = [
+    { id: "app", label: opts.appLabel ?? "your product", icon: "internet" as const, col: 0, row: 0 },
+    ...(topology === "support"
+      ? [{ id: "review", label: "human review lane", icon: "server" as const, col: 1, row: 0 }]
+      : []),
+    { id: "sources", label: opts.sourcesLabel ?? "your data sources", icon: "database" as const, col: 2, row: 0 },
+    { id: "api", label: MODEL_GATEWAY[model.id], icon: "server" as const, logo: model.logo, group: "platform", col: 1, row: 1 },
+  ];
+  const tail =
+    topology === "support"
+      ? {
+          rows: 3 as const,
+          services: [
+            { id: "model", label: MODEL_BOX[model.id], icon: "server" as const, logo: model.logo, group: "platform", col: 0, row: 2 },
+            { id: "email", label: "email service", icon: "server" as const, group: "platform", col: 1, row: 2 },
+            { id: "launcher", label: hosting.id === "azure" ? "Azure runner" : "your runner", icon: "cloud" as const, group: "platform", col: 2, row: 2 },
+            { id: "telemetry", label: TELEMETRY_BOX[telemetry.id], icon: "server" as const, group: "platform", col: 0, row: 3 },
+            { id: "terms", label: "their terms", icon: "disk" as const, group: "platform", col: 1, row: 3 },
+          ],
+          edges: [
+            { from: "app", to: "api", fromSide: "B" as const, toSide: "T" as const, label: "one SDK" },
+            { from: "sources", to: "api", fromSide: "B" as const, toSide: "T" as const, label: "their connectors" },
+            { from: "api", to: "model", fromSide: "L" as const, toSide: "R" as const, label: "per-token" },
+            { from: "model", to: "email", fromSide: "R" as const, toSide: "L" as const, label: "drafts" },
+            { from: "launcher", to: "model", fromSide: "L" as const, toSide: "R" as const, label: "scheduled" },
+            { from: "model", to: "telemetry", fromSide: "B" as const, toSide: "L" as const, label: "every draft" },
+            { from: "model", to: "review", fromSide: "T" as const, toSide: "L" as const, label: "needs eyes" },
+            { from: "review", to: "app", fromSide: "L" as const, toSide: "T" as const, label: "approved replies" },
+            { from: "api", to: "terms", fromSide: "L" as const, toSide: "T" as const, label: "their terms" },
+          ],
+        }
+      : topology === "finance"
+        ? {
+            rows: 3 as const,
+            services: [
+              { id: "model", label: MODEL_BOX[model.id], icon: "server" as const, logo: model.logo, group: "platform", col: 0, row: 2 },
+              { id: "launcher", label: "nightly runner", icon: "cloud" as const, group: "platform", col: 1, row: 2 },
+              { id: "record", label: "research archive", icon: "database" as const, group: "platform", col: 2, row: 2 },
+              { id: "telemetry", label: TELEMETRY_BOX[telemetry.id], icon: "server" as const, group: "platform", col: 0, row: 3 },
+              { id: "terms", label: "their terms", icon: "disk" as const, group: "platform", col: 1, row: 3 },
+            ],
+            edges: [
+              { from: "app", to: "api", fromSide: "B" as const, toSide: "T" as const, label: "one SDK" },
+              { from: "sources", to: "api", fromSide: "B" as const, toSide: "T" as const, label: "many meters" },
+              { from: "api", to: "model", fromSide: "L" as const, toSide: "R" as const, label: "per-token reasoning" },
+              { from: "launcher", to: "model", fromSide: "L" as const, toSide: "R" as const, label: "nightly runs" },
+              { from: "model", to: "record", fromSide: "R" as const, toSide: "L" as const, label: "synthesis archive" },
+              { from: "model", to: "telemetry", fromSide: "B" as const, toSide: "L" as const, label: "every run" },
+              { from: "api", to: "terms", fromSide: "L" as const, toSide: "T" as const, label: "their terms" },
+            ],
+          }
+        : {
+            rows: 4 as const,
+            services: [
+              { id: "model", label: MODEL_BOX[model.id], icon: "server" as const, logo: model.logo, group: "platform", col: 0, row: 2 },
+              { id: "embed", label: EMBED_BOX[embed.id], icon: "server" as const, logo: embed.logo, group: "platform", col: 1, row: 2 },
+              { id: "memory", label: VECTOR_BOX[vector.id], icon: "database" as const, group: "platform", col: 2, row: 2 },
+              { id: "record", label: hosting.id === "azure" ? "Azure Blob" : "your disk", icon: "database" as const, group: "platform", col: 0, row: 3 },
+              { id: "telemetry", label: TELEMETRY_BOX[telemetry.id], icon: "server" as const, group: "platform", col: 1, row: 3 },
+              { id: "machines", label: hosting.id === "azure" ? "Azure GPUs" : "your machines", icon: "cloud" as const, group: "platform", col: 2, row: 3 },
+              { id: "terms", label: "their terms", icon: "disk" as const, group: "platform", col: 1, row: 4 },
+            ],
+            edges: [
+              { from: "app", to: "api", fromSide: "B" as const, toSide: "T" as const, label: "one SDK" },
+              { from: "sources", to: "api", fromSide: "B" as const, toSide: "T" as const, label: "their connectors" },
+              { from: "api", to: "model", fromSide: "L" as const, toSide: "R" as const, label: "per-token" },
+              { from: "api", to: "memory", fromSide: "R" as const, toSide: "L" as const, label: "per-query" },
+              { from: "api", to: "embed", fromSide: "B" as const, toSide: "T" as const, label: "bundled in" },
+              { from: "embed", to: "memory", fromSide: "R" as const, toSide: "L" as const, label: "their format" },
+              { from: "api", to: "record", fromSide: "L" as const, toSide: "T" as const, label: "per-GB" },
+              { from: "model", to: "telemetry", fromSide: "B" as const, toSide: "L" as const, label: "their dashboard" },
+              { from: "memory", to: "machines", fromSide: "B" as const, toSide: "T" as const, label: "same roof" },
+              { from: "machines", to: "terms", fromSide: "B" as const, toSide: "L" as const, label: "their terms" },
+            ],
+          };
   return {
     title: "Your off-the-shelf stack, as picked",
     description: "The traditional stack with the picked providers on every box.",
-    groups: [{ id: "platform", label: vendorCount(price), icon: "cloud", col: 0, row: 1, cols: 3, rows: 4 }],
-    services: [
-      { id: "app", label: opts.appLabel ?? "your product", icon: "internet", col: 0, row: 0 },
-      ...reviewService,
-      { id: "sources", label: opts.sourcesLabel ?? "your data sources", icon: "database", col: 2, row: 0 },
-      { id: "api", label: MODEL_GATEWAY[model.id], icon: "server", logo: model.logo, group: "platform", col: 1, row: 1 },
-      { id: "model", label: MODEL_BOX[model.id], icon: "server", logo: model.logo, group: "platform", col: 0, row: 2 },
-      { id: "embed", label: EMBED_BOX[embed.id], icon: "server", logo: embed.logo, group: "platform", col: 1, row: 2 },
-      { id: "memory", label: VECTOR_BOX[vector.id], icon: "database", group: "platform", col: 2, row: 2 },
-      { id: "record", label: hosting.id === "azure" ? "Azure Blob" : "your disk", icon: "database", group: "platform", col: 0, row: 3 },
-      { id: "telemetry", label: TELEMETRY_BOX[telemetry.id], icon: "server", group: "platform", col: 1, row: 3 },
-      { id: "machines", label: hosting.id === "azure" ? "Azure GPUs" : "your machines", icon: "cloud", group: "platform", col: 2, row: 3 },
-      { id: "terms", label: "their terms", icon: "disk", group: "platform", col: 1, row: 4 },
-    ],
-    edges: [
-      { from: "app", to: "api", fromSide: "B", toSide: "T", label: "one SDK" },
-      { from: "sources", to: "api", fromSide: "B", toSide: "T", label: "their connectors" },
-      { from: "api", to: "model", fromSide: "L", toSide: "R", label: "per-token" },
-      { from: "api", to: "memory", fromSide: "R", toSide: "L", label: "per-query" },
-      { from: "api", to: "embed", fromSide: "B", toSide: "T", label: "bundled in" },
-      { from: "embed", to: "memory", fromSide: "R", toSide: "L", label: "their format" },
-      { from: "api", to: "record", fromSide: "L", toSide: "T", label: "per-GB" },
-      { from: "model", to: "telemetry", fromSide: "B", toSide: "L", label: "their dashboard" },
-      { from: "memory", to: "machines", fromSide: "B", toSide: "T", label: "same roof" },
-      { from: "machines", to: "terms", fromSide: "B", toSide: "L", label: "their terms" },
-      ...reviewEdges,
-    ],
+    groups: [{ id: "platform", label: vendorCount(price), icon: "cloud", col: 0, row: 1, cols: 3, rows: tail.rows }],
+    services: [...head, ...tail.services],
+    edges: tail.edges,
   };
 }
 

@@ -375,6 +375,9 @@
 .arch-tour-dim-vault #arch-service-vault:not(.is-on) {
   opacity: 0.32;
 }
+.arch-tour-dim-memory #arch-service-memory:not(.is-on) {
+  opacity: 0.32;
+}
 
 /* The side tag prints ONCE per side, on its own row at the TOP, right-aligned
  * above the step column — never on every step and never bottom-left. */
