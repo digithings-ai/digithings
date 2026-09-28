@@ -86,7 +86,7 @@ def _compare(op: str, current: Any, value: Any) -> bool:
             and isinstance(value, (int, float))
             and not isinstance(value, bool)
         ):
-            return float(current) == float(value)
+            return current == value
         return str(current) == str(value)
     if op == "ne":
         return not _compare("eq", current, value)

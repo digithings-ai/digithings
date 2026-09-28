@@ -50,3 +50,5 @@ def test_compare_int_float_equality_ignores_bool():
     assert _compare("ne", 1, 1.0) is False
     assert _compare("eq", True, 1) is False
     assert _compare("ne", True, 1) is True
+    assert _compare("eq", 2**53 + 1, 2**53) is False
+    assert _compare("ne", 2**53 + 1, 2**53) is True
