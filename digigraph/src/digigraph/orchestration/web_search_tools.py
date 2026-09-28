@@ -46,6 +46,13 @@ WEB_SEARCH_TOOL: dict[str, Any] = {
                     "type": "integer",
                     "description": "Max rows to return (default 4).",
                 },
+                "provider": {
+                    "type": "string",
+                    "description": (
+                        "Search engine to use: auto (default, in-house), internal, "
+                        "exa, tavily, parallel, firecrawl, or tinyfish. Omit for auto."
+                    ),
+                },
             },
             "required": ["query"],
         },
@@ -96,6 +103,7 @@ def call_digisearch_web_search(
     exclude_domains: list[str] | None = None,
     max_results: int = 4,
     recency_days: int | None = None,
+    provider: str | None = None,
     context: ToolContext | None = None,
     timeout: float = 120.0,
 ) -> dict[str, Any]:
@@ -105,6 +113,8 @@ def call_digisearch_web_search(
     (digiquant pipeline grounding) import this, never the private name.
     ``timeout`` bounds the single hub HTTP call. ``recency_days`` is forwarded
     only when set, so ``None`` keeps digisearch's own default window (#4165).
+    ``provider`` names the search engine (auto/internal/exa/tavily/parallel/
+    firecrawl/tinyfish) and is likewise omitted when unset or ``auto`` (#4722).
     """
     return _call_digisearch_web_search(
         query,
@@ -112,6 +122,7 @@ def call_digisearch_web_search(
         exclude_domains=exclude_domains,
         max_results=max_results,
         recency_days=recency_days,
+        provider=provider,
         context=context,
         timeout=timeout,
     )
@@ -123,6 +134,7 @@ def _call_digisearch_web_search(
     exclude_domains: list[str] | None = None,
     max_results: int = 4,
     recency_days: int | None = None,
+    provider: str | None = None,
     context: ToolContext | None = None,
     timeout: float = 120.0,
 ) -> dict[str, Any]:
@@ -152,6 +164,12 @@ def _call_digisearch_web_search(
         # caller that never asked keeps the default window — the hub skips a
         # JSON null rather than forwarding it (#4165).
         arguments["recency_days"] = recency_days
+    provider_arg = (provider or "").strip()
+    if provider_arg and provider_arg.lower() != "auto":
+        # Omitted when unset or auto: the hub defaults to the in-house engine,
+        # and an explicit in-house name (internal) still forwards (#4722).
+        # Unknown names are the hub's call to reject (no digigraph registry).
+        arguments["provider"] = provider_arg
     inv = invoke_digisearch_tool(
         _digisearch_service_base(),
         "web_search",
@@ -224,12 +242,15 @@ def _handle_web_search(args: dict[str, Any], context: ToolContext) -> str | dict
     from digigraph.llm_client import digifetch_web_search
 
     # Tool path needs no model — "" keeps the (model, query) shape for callers.
+    # The model's per-call engine wins; the session default covers silence (#4722).
+    provider = args.get("provider") or context.state.get("web_search_provider")
     summary, urls = digifetch_web_search(
         "",
         query,
         include_domains=args.get("include_domains"),
         exclude_domains=args.get("exclude_domains"),
         max_results=int(args.get("max_results", 4)),
+        provider=provider,
         context=context,
     )
     results: list[dict[str, Any]] = []
