@@ -1,0 +1,39 @@
+# digiquant-runner — private batch container for live digiquant cadence (issue #4761).
+# Not the Profile A stack. Not the market MCP. No public hostname.
+# digithings-cron reaches this Worker through a service binding only.
+#
+# Secrets (wrangler secret put; never commit values). Unset CLOUDFLARE_API_TOKEN
+# in the shell first — it is also wrangler's own auth var (see
+# apps/digithings-stack-cloudflare/wrangler.toml):
+#   printf '%s' "$VALUE" | env -u CLOUDFLARE_API_TOKEN npx wrangler secret put NAME
+#
+#   RUNNER_AUTH_TOKEN          — Bearer on POST /v1/jobs (also set on digithings-cron)
+#   GH_ISSUE_TOKEN             — failure issues; Worker only, not injected into the container
+#   R2_ACCOUNT_ID, R2_BUCKET, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY
+#   FRED_API_KEY, CORE_POSTGRES_URI, CORE_SUPABASE_URL, CORE_SUPABASE_SERVICE_KEY
+#
+# Not on this Worker in Phase 1: broker credentials, Alpaca keys, provider keys.
+name = "digiquant-runner"
+account_id = "ae2ea3eb4ce5f7cc9bec1478f6e60e15"
+main = "src/index.ts"
+compatibility_date = "2026-09-04"
+compatibility_flags = ["nodejs_compat"]
+workers_dev = false
+
+[observability]
+enabled = true
+
+[[containers]]
+class_name = "DigiQuantRunnerContainer"
+image = "../../Dockerfile.digiquant-runner"
+image_build_context = "../.."
+instance_type = "standard-2"
+max_instances = 1
+
+[[durable_objects.bindings]]
+name = "RUNNER_CONTAINER"
+class_name = "DigiQuantRunnerContainer"
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["DigiQuantRunnerContainer"]
