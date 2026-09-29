@@ -39,6 +39,7 @@ const LAYER_ORDER: LayerId[] = ["models", "embeddings", "vector", "telemetry", "
 interface Cell {
   amount: number;
   estimate: boolean;
+  unpriced: boolean;
 }
 
 function sumLayer(lines: PricedLine[], layer: LayerId, recurring: boolean): Cell | null {
@@ -47,10 +48,12 @@ function sumLayer(lines: PricedLine[], layer: LayerId, recurring: boolean): Cell
   return {
     amount: hits.reduce((n, line) => n + line.amount, 0),
     estimate: hits.some((line) => line.estimate),
+    unpriced: hits.every((line) => line.unpriced),
   };
 }
 
-function money({ amount, estimate }: Cell): string {
+function money({ amount, estimate, unpriced }: Cell): string {
+  if (unpriced) return "—";
   const tilde = estimate ? "~" : "";
   if (amount === 0) return "$0";
   if (amount < 1) return `${tilde}<$1`;
@@ -166,10 +169,10 @@ export function WhyPriceTable({
             <TableRow className="border-0 hover:bg-transparent">
               <TableRowHeader className={`${CELL} font-normal text-ink-soft`}>one-time setup</TableRowHeader>
               <TableCell numeric className={CELL}>
-                {money({ amount: theirs.setup, estimate: setupEstimate(theirs.lines) })}
+                {money({ amount: theirs.setup, estimate: setupEstimate(theirs.lines), unpriced: false })}
               </TableCell>
               <TableCell numeric className={CELL}>
-                {money({ amount: ours.setup, estimate: setupEstimate(ours.lines) })}
+                {money({ amount: ours.setup, estimate: setupEstimate(ours.lines), unpriced: false })}
               </TableCell>
             </TableRow>
           ) : null}
@@ -178,16 +181,16 @@ export function WhyPriceTable({
           <TableRow className="border-0 hover:bg-transparent">
             <TableRowHeader className={`${CELL} font-normal`}>total / mo</TableRowHeader>
             <TableCell numeric className={CELL}>
-              {money({ amount: theirs.monthly, estimate: est(theirs.lines) })}
+              {money({ amount: theirs.monthly, estimate: est(theirs.lines), unpriced: false })}
             </TableCell>
             <TableCell numeric className={`${CELL} ${ACCENT_TEXT}`}>
-              {money({ amount: ours.monthly, estimate: est(ours.lines) })}
+              {money({ amount: ours.monthly, estimate: est(ours.lines), unpriced: false })}
             </TableCell>
           </TableRow>
         </TableFooter>
       </Table>
       <p className="m-0 truncate border-t border-hair px-[0.7rem] py-[0.3rem] text-[0.62rem] text-ink-mute">
-        list prices · ~ estimate · $0 marginal on your hardware
+        list prices · ~ estimate · — no sourced rate · $0 on your hardware
       </p>
     </div>
   );

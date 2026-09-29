@@ -37,7 +37,7 @@ export interface AppPreset {
   dimmedDigi: string[];
   providerApp: string;
   digiApp: string;
-  /** Top-right box on the provider drawing; defaults to "your data sources".
+  /** Top-right box on the provider drawing; defaults to "your sources".
       Ignored by the finance topology (twin feeds/filings boxes). */
   providerSources?: string;
   /** One-line caption under the provider drawing; per-app meter language. */

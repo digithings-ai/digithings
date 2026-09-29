@@ -8,9 +8,10 @@
  *
  * Rate honesty: researched Sep-2026 list prices come from `RAG_PRICING`;
  * the two entries marked `estimate: true` (Azure hosting, Qdrant entry)
- * are single-source planning figures and render with a ~ prefix. Anything
- * without a defensible number is not an option (no OpenRouter row until its
- * pass-through rate is sourced).
+ * are single-source planning figures and render with a ~ prefix in the
+ * price table. Hosts, tracers and mail vendors without a sourced rate are
+ * still choosable — the table shows them as unpriced, never as $0.
+ * Dropdown labels carry no prices; the table owns that.
  */
 
 import type { ArchSpec } from "@digithings/ui";
@@ -25,6 +26,7 @@ export type LayerId = "models" | "embeddings" | "vector" | "telemetry" | "hostin
 
 export interface LayerOption {
   id: string;
+  /** Menu name. Prices stay in the price table, never here. */
   label: string;
   vendor: string;
   /** Kit logo slug; absent renders the generic plate. */
@@ -43,107 +45,141 @@ export const PROVIDER_LAYERS: Layer[] = [
     id: "models",
     label: "Model provider",
     options: [
-      { id: "sol", label: "GPT-5.6 Sol · $4/$20", vendor: "OpenAI", logo: "openai" },
-      { id: "opus", label: "Opus 5.5 · $4.50/$20", vendor: "Anthropic" },
-      { id: "gemini", label: "Gemini 3.1 Pro · $2/$12", vendor: "Google" },
-      { id: "grok", label: "Grok 4.7 · ~$1.60/$4.80", vendor: "Grok", estimate: true },
-      { id: "mistral", label: "Mistral Large · $0.50/$1.50", vendor: "Mistral" },
-      { id: "deepseek", label: "DeepSeek V4 · ~$0.78/$1.57", vendor: "DeepSeek", estimate: true },
-      { id: "glm", label: "GLM 5.3 · ~$2.80/$8.80", vendor: "Z.ai", estimate: true },
-      { id: "minimax", label: "MiniMax M1 · ~$0.40/$2.20", vendor: "MiniMax", estimate: true },
-      { id: "luna", label: "GPT-5.6 Luna · $0.20/$1.20", vendor: "OpenAI", logo: "openai" },
-      { id: "o3", label: "o3 reasoning · $2/$8", vendor: "OpenAI", logo: "openai" },
-      { id: "local", label: "Self-hosted · $0", vendor: "you" },
+      { id: "sol", label: "GPT-5.6 Sol", vendor: "OpenAI", logo: "openai" },
+      { id: "opus", label: "Opus 5.5", vendor: "Anthropic" },
+      { id: "gemini", label: "Gemini 3.1 Pro", vendor: "Google" },
+      { id: "grok", label: "Grok 4.7", vendor: "Grok", estimate: true },
+      { id: "mistral", label: "Mistral Large", vendor: "Mistral" },
+      { id: "deepseek", label: "DeepSeek V4", vendor: "DeepSeek", estimate: true },
+      { id: "glm", label: "GLM 5.3", vendor: "Z.ai", estimate: true },
+      { id: "minimax", label: "MiniMax M1", vendor: "MiniMax", estimate: true },
+      { id: "luna", label: "GPT-5.6 Luna", vendor: "OpenAI", logo: "openai" },
+      { id: "o3", label: "o3 reasoning", vendor: "OpenAI", logo: "openai" },
+      { id: "local", label: "Self-hosted", vendor: "you" },
     ],
   },
   {
     id: "embeddings",
     label: "Embeddings",
     options: [
-      { id: "large", label: "embed-3-large · $0.13/M", vendor: "OpenAI", logo: "openai" },
-      { id: "small", label: "embed-3-small · $0.02/M", vendor: "OpenAI", logo: "openai" },
-      { id: "cohere", label: "Cohere v4 · $0.12/M", vendor: "Cohere" },
-      { id: "local", label: "Self-hosted · $0", vendor: "you" },
+      { id: "large", label: "embed-3-large", vendor: "OpenAI", logo: "openai" },
+      { id: "small", label: "embed-3-small", vendor: "OpenAI", logo: "openai" },
+      { id: "cohere", label: "Cohere v4", vendor: "Cohere" },
+      { id: "local", label: "Self-hosted", vendor: "you" },
     ],
   },
   {
     id: "vector",
     label: "Vector store",
     options: [
-      { id: "pinecone", label: "Pinecone · $50 floor", vendor: "Pinecone" },
-      { id: "qdrant", label: "Qdrant Cloud · ~$25", vendor: "Qdrant", estimate: true },
-      { id: "self", label: "Self-hosted pgvector · $0", vendor: "you" },
+      { id: "pinecone", label: "Pinecone", vendor: "Pinecone" },
+      { id: "qdrant", label: "Qdrant Cloud", vendor: "Qdrant", estimate: true },
+      { id: "self", label: "Self-hosted pgvector", vendor: "you" },
     ],
   },
   {
     id: "telemetry",
     label: "Telemetry",
     options: [
-      { id: "langsmith", label: "LangSmith · $39 + traces", vendor: "LangSmith" },
-      { id: "self", label: "Self-hosted traces · $0", vendor: "you" },
+      { id: "langsmith", label: "LangSmith", vendor: "LangSmith" },
+      { id: "langfuse", label: "Langfuse", vendor: "Langfuse" },
+      { id: "helicone", label: "Helicone", vendor: "Helicone" },
+      { id: "braintrust", label: "Braintrust", vendor: "Braintrust" },
+      { id: "arize", label: "Arize Phoenix", vendor: "Arize" },
+      { id: "datadog", label: "Datadog", vendor: "Datadog" },
+      { id: "self", label: "Self-hosted traces", vendor: "you" },
     ],
   },
   {
     id: "hosting",
     label: "Hosting",
     options: [
-      { id: "azure", label: "Azure · ~$75 est.", vendor: "Azure", estimate: true },
-      { id: "own", label: "Own hardware · $0", vendor: "you" },
+      { id: "azure", label: "Azure", vendor: "Azure", estimate: true },
+      { id: "aws", label: "AWS", vendor: "AWS" },
+      { id: "gcp", label: "Google Cloud", vendor: "Google" },
+      { id: "cloudflare", label: "Cloudflare", vendor: "Cloudflare" },
+      { id: "fly", label: "Fly.io", vendor: "Fly.io" },
+      { id: "railway", label: "Railway", vendor: "Railway" },
+      { id: "own", label: "Own hardware", vendor: "you" },
     ],
   },
 ];
+
+/** Delivery vendors on the support graph. Unpriced: no sourced send rate. */
+export const EMAIL_OPTIONS: LayerOption[] = [
+  { id: "sendgrid", label: "SendGrid", vendor: "Twilio" },
+  { id: "postmark", label: "Postmark", vendor: "Postmark" },
+  { id: "resend", label: "Resend", vendor: "Resend" },
+  { id: "mailgun", label: "Mailgun", vendor: "Mailgun" },
+  { id: "ses", label: "Amazon SES", vendor: "Amazon" },
+  { id: "smtp", label: "Your SMTP", vendor: "you" },
+];
+
+export function emailBoxLabel(id: string): string {
+  return EMAIL_OPTIONS.find((option) => option.id === id)?.label ?? "SendGrid";
+}
 
 export const DIGI_LAYERS: Layer[] = [
   {
     id: "models",
     label: "Models via digillm",
     options: [
-      { id: "local", label: "Local · $0", vendor: "you" },
-      { id: "luna", label: "Luna · $0.20/$1.20", vendor: "OpenAI", logo: "openai" },
-      { id: "mistral", label: "Mistral Large · $0.50/$1.50", vendor: "Mistral" },
-      { id: "deepseek", label: "DeepSeek V4 · ~$0.78/$1.57", vendor: "DeepSeek", estimate: true },
-      { id: "minimax", label: "MiniMax M1 · ~$0.40/$2.20", vendor: "MiniMax", estimate: true },
-      { id: "grok", label: "Grok 4.7 · ~$1.60/$4.80", vendor: "Grok", estimate: true },
-      { id: "o3", label: "o3 · $2/$8", vendor: "OpenAI", logo: "openai" },
-      { id: "gemini", label: "Gemini 3.1 Pro · $2/$12", vendor: "Google" },
-      { id: "glm", label: "GLM 5.3 · ~$2.80/$8.80", vendor: "Z.ai", estimate: true },
-      { id: "opus", label: "Opus 5.5 · $4.50/$20", vendor: "Anthropic" },
-      { id: "sol", label: "Sol · $4/$20", vendor: "OpenAI", logo: "openai" },
+      { id: "local", label: "Local", vendor: "you" },
+      { id: "luna", label: "Luna", vendor: "OpenAI", logo: "openai" },
+      { id: "mistral", label: "Mistral Large", vendor: "Mistral" },
+      { id: "deepseek", label: "DeepSeek V4", vendor: "DeepSeek", estimate: true },
+      { id: "minimax", label: "MiniMax M1", vendor: "MiniMax", estimate: true },
+      { id: "grok", label: "Grok 4.7", vendor: "Grok", estimate: true },
+      { id: "o3", label: "o3", vendor: "OpenAI", logo: "openai" },
+      { id: "gemini", label: "Gemini 3.1 Pro", vendor: "Google" },
+      { id: "glm", label: "GLM 5.3", vendor: "Z.ai", estimate: true },
+      { id: "opus", label: "Opus 5.5", vendor: "Anthropic" },
+      { id: "sol", label: "Sol", vendor: "OpenAI", logo: "openai" },
     ],
   },
   {
     id: "embeddings",
     label: "Embeddings",
     options: [
-      { id: "local", label: "Local · $0", vendor: "you" },
-      { id: "small", label: "small · $0.02/M", vendor: "OpenAI", logo: "openai" },
-      { id: "cohere", label: "Cohere v4 · $0.12/M", vendor: "Cohere" },
-      { id: "large", label: "large · $0.13/M", vendor: "OpenAI", logo: "openai" },
+      { id: "local", label: "Local", vendor: "you" },
+      { id: "small", label: "small", vendor: "OpenAI", logo: "openai" },
+      { id: "cohere", label: "Cohere v4", vendor: "Cohere" },
+      { id: "large", label: "large", vendor: "OpenAI", logo: "openai" },
     ],
   },
   {
     id: "vector",
     label: "Vector store",
     options: [
-      { id: "self", label: "Self-hosted · $0", vendor: "you" },
-      { id: "qdrant", label: "Qdrant Cloud · ~$25", vendor: "Qdrant", estimate: true },
-      { id: "pinecone", label: "Pinecone · metered", vendor: "Pinecone" },
+      { id: "self", label: "Self-hosted", vendor: "you" },
+      { id: "qdrant", label: "Qdrant Cloud", vendor: "Qdrant", estimate: true },
+      { id: "pinecone", label: "Pinecone", vendor: "Pinecone" },
     ],
   },
   {
     id: "telemetry",
     label: "Telemetry",
     options: [
-      { id: "digismith", label: "digismith · $0", vendor: "digithings" },
-      { id: "langsmith", label: "LangSmith · metered", vendor: "LangSmith" },
+      { id: "digismith", label: "digismith", vendor: "digithings" },
+      { id: "langsmith", label: "LangSmith", vendor: "LangSmith" },
+      { id: "langfuse", label: "Langfuse", vendor: "Langfuse" },
+      { id: "helicone", label: "Helicone", vendor: "Helicone" },
+      { id: "braintrust", label: "Braintrust", vendor: "Braintrust" },
+      { id: "arize", label: "Arize Phoenix", vendor: "Arize" },
+      { id: "datadog", label: "Datadog", vendor: "Datadog" },
     ],
   },
   {
     id: "hosting",
     label: "Hosting",
     options: [
-      { id: "own", label: "Own hardware · $0", vendor: "you" },
-      { id: "azure", label: "Azure · ~$75 est.", vendor: "Azure", estimate: true },
+      { id: "own", label: "Own hardware", vendor: "you" },
+      { id: "azure", label: "Azure", vendor: "Azure", estimate: true },
+      { id: "aws", label: "AWS", vendor: "AWS" },
+      { id: "gcp", label: "Google Cloud", vendor: "Google" },
+      { id: "cloudflare", label: "Cloudflare", vendor: "Cloudflare" },
+      { id: "fly", label: "Fly.io", vendor: "Fly.io" },
+      { id: "railway", label: "Railway", vendor: "Railway" },
     ],
   },
 ];
@@ -198,6 +234,8 @@ export interface PricedLine {
   layer: LayerId;
   /** False for one-time lines (corpus embedding); true for monthly meters. */
   recurring: boolean;
+  /** No sourced rate. Excluded from totals; the table renders an em dash. */
+  unpriced?: boolean;
 }
 
 export interface StackPrice {
@@ -235,8 +273,16 @@ export function pricePick(
   const lines: PricedLine[] = [];
   let setup = 0;
   let monthly = 0;
-  const add = (label: string, amount: number, recurring: boolean, layer: LayerId, estimate?: boolean) => {
-    lines.push({ label, amount, estimate, layer, recurring });
+  const add = (
+    label: string,
+    amount: number,
+    recurring: boolean,
+    layer: LayerId,
+    estimate?: boolean,
+    unpriced?: boolean,
+  ) => {
+    lines.push({ label, amount: unpriced ? 0 : amount, estimate, layer, recurring, unpriced });
+    if (unpriced) return;
     if (recurring) monthly += amount;
     else setup += amount;
   };
@@ -274,14 +320,18 @@ export function pricePick(
   if (telemetry.id === "langsmith") {
     const over = Math.max(0, queriesPerMonth - p.langsmithIncludedTraces);
     add("LangSmith", p.langsmithSeatMonthly + (over * p.langsmithTraceOveragePerK) / 1000, true, "telemetry");
-  } else {
+  } else if (telemetry.id === "self" || telemetry.id === "digismith") {
     add(telemetry.vendor === "digithings" ? "digismith traces" : "Self-hosted traces", 0, true, "telemetry");
+  } else {
+    add(telemetry.label, 0, true, "telemetry", false, true);
   }
 
   if (hosting.id === "azure") {
     add("Azure hosting", AZURE_HOSTING_ESTIMATE, true, "hosting", true);
-  } else {
+  } else if (hosting.id === "own") {
     add("Own hardware", 0, true, "hosting");
+  } else {
+    add(hosting.label, 0, true, "hosting", false, true);
   }
 
   const vendors = [...new Set([model, embed, vector, telemetry, hosting].map((o) => o.vendor))].filter(
@@ -335,9 +385,61 @@ const VECTOR_BOX: Record<string, string> = {
 
 const TELEMETRY_BOX: Record<string, string> = {
   langsmith: "LangSmith",
+  langfuse: "Langfuse",
+  helicone: "Helicone",
+  braintrust: "Braintrust",
+  arize: "Arize",
+  datadog: "Datadog",
   self: "own traces",
   digismith: "digismith",
 };
+
+/** Short box names. Menu labels can be longer; a box has about 14 characters. */
+const HOST_LAKE: Record<string, string> = {
+  azure: "Azure lake",
+  aws: "S3 lake",
+  gcp: "GCS lake",
+  cloudflare: "R2 lake",
+  fly: "Fly volume",
+  railway: "Railway disk",
+  own: "your lake",
+};
+const HOST_GPU: Record<string, string> = {
+  azure: "Azure GPUs",
+  aws: "AWS GPUs",
+  gcp: "GCP GPUs",
+  cloudflare: "CF Workers",
+  fly: "Fly machines",
+  railway: "Railway",
+  own: "your GPUs",
+};
+const HOST_RUNNER: Record<string, string> = {
+  azure: "Azure runner",
+  aws: "AWS runner",
+  gcp: "GCP runner",
+  cloudflare: "CF Workers",
+  fly: "Fly runner",
+  railway: "Railway",
+  own: "your runner",
+};
+const HOST_ARCHIVE: Record<string, string> = {
+  azure: "Azure archive",
+  aws: "S3 archive",
+  gcp: "GCS archive",
+  cloudflare: "R2 archive",
+  fly: "Fly archive",
+  railway: "Railway",
+  own: "your archive",
+};
+
+function hostBox(map: Record<string, string>, id: string): string {
+  return map[id] ?? id;
+}
+
+/** A box fits about 14 monospace characters before the label wraps onto the glyph. */
+function fitBox(preferred: string, fallback: string): string {
+  return preferred.length <= 14 ? preferred : fallback;
+}
 
 function vendorCount(price: StackPrice): string {
   const n = price.vendors.length;
@@ -352,6 +454,8 @@ export function providerSpec(
     appLabel?: string;
     sourcesLabel?: string;
     topology?: "rag" | "support" | "finance";
+    /** Support delivery box. Defaults to SendGrid. */
+    emailId?: string;
   } = {},
 ): ArchSpec {
   const model = lookup(PROVIDER_LAYERS, pick, "models");
@@ -374,7 +478,7 @@ export function providerSpec(
         ]
       : [
           { id: "app", label: opts.appLabel ?? "your product", icon: "internet" as const, col: 0, row: 0 },
-          { id: "sources", label: opts.sourcesLabel ?? "your data sources", icon: "database" as const, col: 2, row: 0 },
+          { id: "sources", label: opts.sourcesLabel ?? "your sources", icon: "database" as const, col: 2, row: 0 },
           { id: "api", label: MODEL_GATEWAY[model.id], icon: "server" as const, logo: model.logo, group: "platform", col: 1, row: 1 },
         ];
   const tail =
@@ -387,9 +491,9 @@ export function providerSpec(
           services: [
             { id: "model", label: MODEL_BOX[model.id], icon: "server" as const, logo: model.logo, group: "platform", col: 0, row: 2 },
             { id: "review", label: "human review", icon: "server" as const, group: "platform", col: 1, row: 2 },
-            { id: "email", label: "SendGrid", icon: "server" as const, group: "platform", col: 2, row: 2 },
-            { id: "launcher", label: hosting.id === "azure" ? "Azure runner" : "your runner", icon: "cloud" as const, group: "platform", col: 0, row: 3 },
-            { id: "telemetry", label: TELEMETRY_BOX[telemetry.id], icon: "server" as const, group: "platform", col: 1, row: 3 },
+            { id: "email", label: emailBoxLabel(opts.emailId ?? "sendgrid"), icon: "server" as const, group: "platform", col: 2, row: 2 },
+            { id: "launcher", label: hostBox(HOST_RUNNER, hosting.id), icon: "cloud" as const, group: "platform", col: 0, row: 3 },
+            { id: "telemetry", label: TELEMETRY_BOX[telemetry.id] ?? telemetry.label, icon: "server" as const, group: "platform", col: 1, row: 3 },
             { id: "terms", label: "their terms", icon: "disk" as const, group: "platform", col: 2, row: 3 },
           ],
           edges: [
@@ -411,10 +515,10 @@ export function providerSpec(
                empty centre lane is the contrast with RAG. */
             rows: 3 as const,
             services: [
-              { id: "launcher", label: "nightly runner", icon: "cloud" as const, group: "platform", col: 0, row: 2 },
+              { id: "launcher", label: hostBox(HOST_RUNNER, hosting.id), icon: "cloud" as const, group: "platform", col: 0, row: 2 },
               { id: "model", label: MODEL_BOX[model.id], icon: "server" as const, logo: model.logo, group: "platform", col: 1, row: 2 },
-              { id: "record", label: "research archive", icon: "database" as const, group: "platform", col: 3, row: 2 },
-              { id: "telemetry", label: TELEMETRY_BOX[telemetry.id], icon: "server" as const, group: "platform", col: 1, row: 3 },
+              { id: "record", label: hostBox(HOST_ARCHIVE, hosting.id), icon: "database" as const, group: "platform", col: 3, row: 2 },
+              { id: "telemetry", label: TELEMETRY_BOX[telemetry.id] ?? telemetry.label, icon: "server" as const, group: "platform", col: 1, row: 3 },
               { id: "terms", label: "their terms", icon: "disk" as const, group: "platform", col: 3, row: 3 },
             ],
             edges: [
@@ -438,10 +542,10 @@ export function providerSpec(
             services: [
               { id: "embed", label: EMBED_BOX[embed.id], icon: "server" as const, logo: embed.logo, group: "platform", col: 0, row: 2 },
               { id: "memory", label: `${VECTOR_BOX[vector.id]} index`, icon: "database" as const, group: "platform", col: 1, row: 2 },
-              { id: "model", label: `${MODEL_BOX[model.id]} chat`, icon: "server" as const, logo: model.logo, group: "platform", col: 2, row: 2 },
-              { id: "record", label: hosting.id === "azure" ? "Azure Blob lake" : "your disk lake", icon: "database" as const, group: "platform", col: 0, row: 3 },
-              { id: "machines", label: hosting.id === "azure" ? "Azure GPU pool" : "your GPU pool", icon: "cloud" as const, group: "platform", col: 1, row: 3 },
-              { id: "telemetry", label: telemetry.id === "langsmith" ? "LangSmith traces" : "own traces", icon: "server" as const, group: "platform", col: 2, row: 3 },
+              { id: "model", label: fitBox(`${MODEL_BOX[model.id]} chat`, MODEL_BOX[model.id]), icon: "server" as const, logo: model.logo, group: "platform", col: 2, row: 2 },
+              { id: "record", label: hostBox(HOST_LAKE, hosting.id), icon: "database" as const, group: "platform", col: 0, row: 3 },
+              { id: "machines", label: hostBox(HOST_GPU, hosting.id), icon: "cloud" as const, group: "platform", col: 1, row: 3 },
+              { id: "telemetry", label: TELEMETRY_BOX[telemetry.id] ?? telemetry.label, icon: "server" as const, group: "platform", col: 2, row: 3 },
               { id: "terms", label: "their terms", icon: "disk" as const, group: "platform", col: 1, row: 4 },
             ],
             edges: [
@@ -518,6 +622,7 @@ export function morphSpec(
     replaced?: LayerId[];
     boxes?: string[];
     email?: boolean;
+    emailId?: string;
     /** The finished drawing: the group names the digithings picks and the
         sources edge is yours, not the boundary being left. */
     owned?: boolean;
@@ -530,6 +635,7 @@ export function morphSpec(
     appLabel: opts.appLabel,
     sourcesLabel: opts.sourcesLabel,
     topology,
+    emailId: opts.emailId,
   });
   const dModel = lookup(DIGI_LAYERS, digiPick, "models");
   const dEmbed = lookup(DIGI_LAYERS, digiPick, "embeddings");
@@ -553,16 +659,20 @@ export function morphSpec(
         return swapped.has("memory") ? { label: `${DIGI_VECTOR_BOX[dVector.id]} index` } : null;
       case "record":
         if (!swapped.has("record")) return null;
-        if (dHosting.id === "azure") return null;
-        return { label: topology === "finance" ? "digivault archive" : "digivault lake" };
+        if (dHosting.id === "own") {
+          return { label: topology === "finance" ? "digivault archive" : "digivault lake" };
+        }
+        return { label: topology === "finance" ? hostBox(HOST_ARCHIVE, dHosting.id) : hostBox(HOST_LAKE, dHosting.id) };
       case "machines":
-        if (!swapped.has("machines") || dHosting.id === "azure") return null;
-        return { label: "your GPU pool" };
+        if (!swapped.has("machines")) return null;
+        return { label: dHosting.id === "own" ? "your GPUs" : hostBox(HOST_GPU, dHosting.id) };
       case "launcher":
-        if (!swapped.has("launcher") || dHosting.id === "azure") return null;
-        return { label: "digiclaw runner" };
+        if (!swapped.has("launcher")) return null;
+        return { label: dHosting.id === "own" ? "digiclaw runner" : hostBox(HOST_RUNNER, dHosting.id) };
       case "telemetry":
-        return swapped.has("telemetry") ? { label: DIGI_TELEMETRY_BOX[dTelemetry.id] } : null;
+        return swapped.has("telemetry")
+          ? { label: TELEMETRY_BOX[dTelemetry.id] ?? dTelemetry.label }
+          : null;
       case "email":
         return opts.email ? { label: "digigraph mail" } : null;
       case "terms":
@@ -636,11 +746,6 @@ const DIGI_VECTOR_BOX: Record<string, string> = {
   pinecone: "Pinecone",
 };
 
-const DIGI_TELEMETRY_BOX: Record<string, string> = {
-  digismith: "digismith",
-  langsmith: "LangSmith",
-};
-
 /** digithings-side drawing: module boxes, per-layer subtitles from the pick. */
 export function digiSpec(
   pick: StackPick,
@@ -663,7 +768,7 @@ export function digiSpec(
       { id: "models", label: DIGI_MODEL_BOX[model.id], icon: "server", logo: model.logo, group: "digithings", col: 2, row: 1 },
       { id: "memory", label: `digisearch · ${DIGI_VECTOR_BOX[vector.id]} · ${DIGI_EMBED_SHORT[embed.id]}`, icon: "database", group: "digithings", col: 3, row: 1 },
       { id: "vault", label: "digivault · notes vault", icon: "database", group: "digithings", col: 0, row: 2 },
-      { id: "traces", label: DIGI_TELEMETRY_BOX[telemetry.id], icon: "server", group: "digithings", col: 1, row: 2 },
+      { id: "traces", label: TELEMETRY_BOX[telemetry.id] ?? telemetry.label, icon: "server", group: "digithings", col: 1, row: 2 },
       { id: "claw", label: "digiclaw · scheduler", icon: "server", group: "digithings", col: 2, row: 2 },
       { id: "keys", label: "digikey · your keys", icon: "disk", group: "digithings", col: 3, row: 2 },
     ],

@@ -3,6 +3,7 @@ import {
   DEFAULT_DIGI_PICK,
   DEFAULT_PROVIDER_PICK,
   DIGI_LAYERS,
+  EMAIL_OPTIONS,
   PROVIDER_LAYERS,
   digiSpec,
   morphSpec,
@@ -11,6 +12,19 @@ import {
 } from "@/lib/stackCatalog";
 import type { LayerId } from "@/lib/stackCatalog";
 import { ragCost } from "@/lib/ragCost";
+
+describe("menu labels", () => {
+  it("keeps prices out of every dropdown name", () => {
+    for (const layer of [...PROVIDER_LAYERS, ...DIGI_LAYERS]) {
+      for (const option of layer.options) {
+        expect(option.label, `${layer.id}:${option.id}`).not.toMatch(/\$/);
+      }
+    }
+    for (const option of EMAIL_OPTIONS) {
+      expect(option.label).not.toMatch(/\$/);
+    }
+  });
+});
 
 describe("pricePick", () => {
   it("matches the invoice panel for the default provider stack, plus hosting", () => {
@@ -27,6 +41,24 @@ describe("pricePick", () => {
     expect(price.setup).toBe(0);
     expect(price.monthly).toBe(0);
     expect(price.vendors).toEqual([]);
+  });
+
+  it("omits unresearched hosts and tracers from the total", () => {
+    const base = pricePick(PROVIDER_LAYERS, DEFAULT_PROVIDER_PICK);
+    const aws = pricePick(PROVIDER_LAYERS, { ...DEFAULT_PROVIDER_PICK, hosting: "aws" });
+    const langfuse = pricePick(PROVIDER_LAYERS, { ...DEFAULT_PROVIDER_PICK, telemetry: "langfuse" });
+    expect(aws.monthly).toBeCloseTo(base.monthly - 75, 4);
+    expect(aws.lines.find((line) => line.layer === "hosting")?.unpriced).toBe(true);
+    expect(langfuse.lines.find((line) => line.layer === "telemetry")?.unpriced).toBe(true);
+    expect(langfuse.monthly).toBeLessThan(base.monthly);
+  });
+
+  it("names the picked mail vendor on the support box", () => {
+    const spec = providerSpec(DEFAULT_PROVIDER_PICK, undefined, {
+      topology: "support",
+      emailId: "postmark",
+    });
+    expect(spec.services.find((service) => service.id === "email")?.label).toBe("Postmark");
   });
 
   it("rejects unknown picks loudly", () => {
@@ -133,7 +165,7 @@ describe("morph specs", () => {
     const labels = Object.fromEntries(m.services.map((s) => [s.id, s.label]));
     expect(labels["memory"]).toContain("index");
     expect(labels["record"]).toBe("digivault lake");
-    expect(labels["machines"]).toBe("your GPU pool");
+    expect(labels["machines"]).toBe("your GPUs");
   });
 
   it("flips send to the in-graph mail tool on email", () => {
@@ -159,7 +191,7 @@ describe("morph specs", () => {
       boxes: ["record"],
     });
     expect(m.services.find((s) => s.id === "record")?.label).toBe("digivault archive");
-    expect(m.services.find((s) => s.id === "launcher")?.label).toBe("nightly runner");
+    expect(m.services.find((s) => s.id === "launcher")?.label).toBe("Azure runner");
   });
 
   it("flips the finance runner a beat before the archive", () => {
@@ -169,6 +201,6 @@ describe("morph specs", () => {
       boxes: ["launcher"],
     });
     expect(runner.services.find((s) => s.id === "launcher")?.label).toBe("digiclaw runner");
-    expect(runner.services.find((s) => s.id === "record")?.label).toBe("research archive");
+    expect(runner.services.find((s) => s.id === "record")?.label).toBe("Azure archive");
   });
 });
