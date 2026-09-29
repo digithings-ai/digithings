@@ -522,25 +522,15 @@ html {
   margin-inline: auto;
 }
 
-/* An app switch is a crossfade: the outgoing graph and rail fade out
-   (whyx--leaving, LEAVE_MS in AppFirstSection), the new app mounts unseen and
-   fades in. Animations, not transitions: the entrance is itself an animation
-   and would win over a transition on the same property. */
-@keyframes whyx-app-in {
-  from {
-    opacity: 0;
-  }
-}
-@keyframes whyx-app-out {
-  to {
-    opacity: 0;
-  }
-}
+/* An app switch fades only the graph. The tour stays mounted, so the header
+   never repaints through the static fallback, and the grid keeps its box
+   while the next app's drawing is swapped in underneath. */
 .whyx .arch-tour__grid {
-  animation: whyx-app-in 0.4s var(--ease) both;
+  opacity: 1;
+  transition: opacity 0.22s var(--ease);
 }
 .whyx.whyx--leaving .arch-tour__grid {
-  animation: whyx-app-out 0.2s var(--ease) forwards;
+  opacity: 0;
 }
 
 /* The pinned walk fills the viewport under the nav, and the diagram

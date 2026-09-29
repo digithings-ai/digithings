@@ -40,8 +40,8 @@ const TAB = `${TAB_BASE} bg-bg text-ink-soft hover:bg-surface hover:text-ink`;
 const TAB_ON = `${TAB_BASE} relative z-10 border-b-transparent bg-surface text-ink shadow-[inset_0_2px_0_var(--accent)]`;
 /** How long the graph's build entrance runs before the class is dropped. */
 const BUILD_MS = 2600;
-/** The outgoing app's fade before the new one mounts (matches globals.css). */
-const LEAVE_MS = 200;
+/** Hold the outgoing graph at rest before the next one fades in. */
+const LEAVE_MS = 220;
 
 const PROVIDER_LAYER_BY_BOX: Record<string, LayerId | undefined> = {
   api: "models",
@@ -195,41 +195,26 @@ export function AppFirstSection() {
     return () => window.clearTimeout(t);
   }, [build.state, build.run]);
 
-  /* A switch is a crossfade, not a rebuild: the old app fades out, the new
-     one mounts (and the walk rewinds) while nothing is visible, then fades
-     in whole. The box-by-box build is kept for the graph's first entrance. */
+  /* A switch keeps the tour mounted and the walk where it is. Remounting
+     paints one static frame, and rewinding the walk slides the tab strip
+     out from under the header. The grid fades out, the specs swap while it
+     is invisible, then the same grid fades back in on the same beat. */
   const selectApp = (id: string) => {
     if (id === shownId) return;
     setPop(null);
     if (leaveTimer.current !== null) window.clearTimeout(leaveTimer.current);
     const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
     if (reduced) {
-      swapApp(id);
+      setAppId(id);
+      setNextId(null);
       return;
     }
     setNextId(id);
     leaveTimer.current = window.setTimeout(() => {
       leaveTimer.current = null;
-      swapApp(id);
+      setAppId(id);
+      window.requestAnimationFrame(() => setNextId(null));
     }, LEAVE_MS);
-  };
-
-  const swapApp = (id: string) => {
-    const track = sectionRef.current?.querySelector<HTMLElement>(".arch-tour__track");
-    const pin = track?.querySelector<HTMLElement>(".arch-tour__pin");
-    setAppId(id);
-    setNextId(null);
-    setTourStep(0);
-    setBuild((b) => ({ state: "done", run: b.run }));
-    if (!track || !pin) {
-      document.getElementById("why")?.scrollIntoView({ behavior: "auto", block: "start" });
-      return;
-    }
-    /* Back to the new app's opening beat with the pin still held, rather than
-       parking above the band where the graph runs off the viewport. */
-    const start =
-      track.getBoundingClientRect().top + window.scrollY - Number.parseFloat(getComputedStyle(pin).top);
-    if (window.scrollY > start) window.scrollTo({ top: Math.round(start), behavior: "auto" });
   };
 
   const setPick = (side: "provider" | "digi", layer: LayerId, option: string) =>
@@ -299,7 +284,6 @@ export function AppFirstSection() {
       onClick={onStageClick}
     >
       <ArchitectureTour
-        key={preset.id}
         variant="camera"
         cameraFill={0.55}
         cameraMaxScale={1.65}
@@ -332,6 +316,9 @@ export function AppFirstSection() {
                     role="tab"
                     aria-selected={app.id === shownId}
                     className={app.id === shownId ? TAB_ON : TAB}
+                    /* Mouse focus scrolls the sticky pin and the tab strip jumps.
+                       Keyboard focus still lands here. */
+                    onMouseDown={(event) => event.preventDefault()}
                     onClick={() => selectApp(app.id)}
                   >
                     <span
