@@ -6,22 +6,30 @@ import {
   EMAIL_OPTIONS,
   PROVIDER_LAYERS,
   digiSpec,
+  emailBill,
+  hostBill,
+  menuRate,
   morphSpec,
   pricePick,
   providerSpec,
+  traceBill,
 } from "@/lib/stackCatalog";
 import type { LayerId } from "@/lib/stackCatalog";
 import { ragCost } from "@/lib/ragCost";
 
 describe("menu labels", () => {
-  it("keeps prices out of every dropdown name", () => {
+  it("keeps the dollar figure out of the name", () => {
     for (const layer of [...PROVIDER_LAYERS, ...DIGI_LAYERS]) {
       for (const option of layer.options) {
         expect(option.label, `${layer.id}:${option.id}`).not.toMatch(/\$/);
+        const rate = menuRate(layer.id, option.id);
+        expect(Number.isFinite(rate.amount), option.id).toBe(true);
+        expect(rate.amount).toBeGreaterThanOrEqual(0);
       }
     }
     for (const option of EMAIL_OPTIONS) {
       expect(option.label).not.toMatch(/\$/);
+      expect(menuRate("email", option.id).amount).toBeGreaterThanOrEqual(0);
     }
   });
 });
@@ -31,8 +39,8 @@ describe("pricePick", () => {
     const price = pricePick(PROVIDER_LAYERS, DEFAULT_PROVIDER_PICK);
     const invoice = ragCost("provider");
     expect(price.setup).toBeCloseTo(invoice.setup, 4);
-    // Same usage math, plus the Azure hosting estimate.
-    expect(price.monthly).toBeCloseTo(invoice.monthly + 75, 4);
+    // Same usage math, plus Azure B2s + 1GB Blob Hot.
+    expect(price.monthly).toBeCloseTo(invoice.monthly + hostBill("azure").amount, 4);
     expect(price.vendors).toEqual(["OpenAI", "Pinecone", "LangSmith", "Azure"]);
   });
 
@@ -43,14 +51,26 @@ describe("pricePick", () => {
     expect(price.vendors).toEqual([]);
   });
 
-  it("omits unresearched hosts and tracers from the total", () => {
+  it("bills sourced hosts, tracers and mail instead of a dash", () => {
     const base = pricePick(PROVIDER_LAYERS, DEFAULT_PROVIDER_PICK);
     const aws = pricePick(PROVIDER_LAYERS, { ...DEFAULT_PROVIDER_PICK, hosting: "aws" });
     const langfuse = pricePick(PROVIDER_LAYERS, { ...DEFAULT_PROVIDER_PICK, telemetry: "langfuse" });
-    expect(aws.monthly).toBeCloseTo(base.monthly - 75, 4);
-    expect(aws.lines.find((line) => line.layer === "hosting")?.unpriced).toBe(true);
-    expect(langfuse.lines.find((line) => line.layer === "telemetry")?.unpriced).toBe(true);
-    expect(langfuse.monthly).toBeLessThan(base.monthly);
+    expect(aws.lines.find((line) => line.layer === "hosting")?.amount).toBeCloseTo(hostBill("aws").amount, 4);
+    expect(aws.lines.find((line) => line.layer === "hosting")?.unpriced).toBeUndefined();
+    expect(langfuse.lines.find((line) => line.layer === "telemetry")?.amount).toBe(traceBill("langfuse").amount);
+    expect(langfuse.monthly).toBeCloseTo(base.monthly - traceBill("langsmith").amount + 29, 4);
+    expect(traceBill("helicone").estimate).toBe(true);
+    expect(traceBill("braintrust").amount).toBe(249);
+    expect(traceBill("arize").amount).toBe(50);
+    expect(traceBill("datadog")).toEqual({ amount: 200, estimate: true });
+    expect(hostBill("cloudflare").amount).toBe(5);
+    expect(hostBill("fly").amount).toBe(2.19);
+    expect(hostBill("own").amount).toBe(0);
+    const support = pricePick(PROVIDER_LAYERS, DEFAULT_PROVIDER_PICK, undefined, "support", "postmark");
+    expect(support.lines.find((line) => line.layer === "email")?.amount).toBe(emailBill("postmark").amount);
+    expect(emailBill("ses").amount).toBeCloseTo(4.8, 4);
+    expect(emailBill("smtp").amount).toBe(0);
+    expect(support.vendors).toContain("Postmark");
   });
 
   it("names the picked mail vendor on the support box", () => {

@@ -6,12 +6,13 @@
  * of researched options. The diagrams and the invoice both render from the
  * pick, so the graph and the bill can never disagree.
  *
- * Rate honesty: researched Sep-2026 list prices come from `RAG_PRICING`;
- * the two entries marked `estimate: true` (Azure hosting, Qdrant entry)
- * are single-source planning figures and render with a ~ prefix in the
- * price table. Hosts, tracers and mail vendors without a sourced rate are
- * still choosable — the table shows them as unpriced, never as $0.
- * Dropdown labels carry no prices; the table owns that.
+ * Rate honesty: model, embed, Pinecone and LangSmith rates come from
+ * `RAG_PRICING`. Host, tracer and mail rates below are list prices checked
+ * 2026-09-30 (plan fee or named SKU × 730h). `estimate: true` means the
+ * monthly is a planning figure — an hourly SKU stretched to a month, or a
+ * plan floor whose overage the vendor does not publish — and renders with
+ * a ~. $0 is only your own hardware or an in-graph tool. One trace, span
+ * or score per query; one approved send per query on support.
  */
 
 import type { ArchSpec } from "@digithings/ui";
@@ -26,7 +27,7 @@ export type LayerId = "models" | "embeddings" | "vector" | "telemetry" | "hostin
 
 export interface LayerOption {
   id: string;
-  /** Menu name. Prices stay in the price table, never here. */
+  /** Menu name. The monthly figure is rendered beside it, not inside it. */
   label: string;
   vendor: string;
   /** Kit logo slug; absent renders the generic plate. */
@@ -85,7 +86,7 @@ export const PROVIDER_LAYERS: Layer[] = [
       { id: "langfuse", label: "Langfuse", vendor: "Langfuse" },
       { id: "helicone", label: "Helicone", vendor: "Helicone" },
       { id: "braintrust", label: "Braintrust", vendor: "Braintrust" },
-      { id: "arize", label: "Arize Phoenix", vendor: "Arize" },
+      { id: "arize", label: "Arize AX", vendor: "Arize" },
       { id: "datadog", label: "Datadog", vendor: "Datadog" },
       { id: "self", label: "Self-hosted traces", vendor: "you" },
     ],
@@ -105,7 +106,7 @@ export const PROVIDER_LAYERS: Layer[] = [
   },
 ];
 
-/** Delivery vendors on the support graph. Unpriced: no sourced send rate. */
+/** Delivery vendors on the support graph. One approved send per query. */
 export const EMAIL_OPTIONS: LayerOption[] = [
   { id: "sendgrid", label: "SendGrid", vendor: "Twilio" },
   { id: "postmark", label: "Postmark", vendor: "Postmark" },
@@ -165,7 +166,7 @@ export const DIGI_LAYERS: Layer[] = [
       { id: "langfuse", label: "Langfuse", vendor: "Langfuse" },
       { id: "helicone", label: "Helicone", vendor: "Helicone" },
       { id: "braintrust", label: "Braintrust", vendor: "Braintrust" },
-      { id: "arize", label: "Arize Phoenix", vendor: "Arize" },
+      { id: "arize", label: "Arize AX", vendor: "Arize" },
       { id: "datadog", label: "Datadog", vendor: "Datadog" },
     ],
   },
@@ -225,13 +226,55 @@ const EMBED_RATES: Record<string, { perM: number; dims: number }> = {
   local: { perM: 0, dims: 1536 },
 };
 
-const AZURE_HOSTING_ESTIMATE = 75;
+export function embedDims(id: string): number {
+  return EMBED_RATES[id]?.dims ?? EMBED_RATES.large.dims;
+}
+
+const HOURS_PER_MONTH = 730;
+
+/**
+ * Hosting, traces and mail. Each number is a published plan or a named
+ * on-demand SKU, not a guessed peer of the old Azure lump.
+ *
+ * Hosts (always-on compute + this corpus in their object store):
+ * - Azure Standard_B2s Linux, East US, $0.0416/h + Blob Hot $/GB
+ * - AWS t4g.small, us-east-1, $0.0168/h + S3 Standard $/GB
+ * - GCP e2-small, us-central1, $0.0168/h + regional Standard $0.020/GB
+ * - Cloudflare Workers Paid, $5/mo (1GB sits inside the R2 free 10GB)
+ * - Fly shared-cpu-1x · 256MB, $2.19/mo (fly.io/pricing-update, Oct 2026)
+ * - Railway Hobby usage: 1 vCPU × $20 + 1GB RAM × $10, volume $0.15/GB
+ *   (the $5 credit does not cover that footprint; bill is the usage)
+ *
+ * Traces, first paid plan that covers one event per query:
+ * - Langfuse Core $29, 100k units (langfuse.com/pricing)
+ * - Helicone Pro $79 floor; requests above the included 10k are
+ *   usage-priced and the per-request rate is not published (helicone.ai/pricing)
+ * - Braintrust Pro $249, 50k scores and 5GB included (braintrust.dev/pricing)
+ * - Arize AX Pro $50, 50k spans (arize.com/pricing). Phoenix OSS stays the
+ *   self-hosted traces row.
+ * - Datadog Agent Observability Pro $200 month-to-month for the first 100k
+ *   LLM spans (public list, via langfuse.com/compare/datadog, Sep 2026)
+ *
+ * Mail, cheapest published tier that includes the month's sends:
+ * - SendGrid Essentials $19.95 / 50k, $34.95 / 100k; extra $0.00133
+ * - Postmark Basic $15 / 10k, $1.80 per extra 1k, else the $55 / 50k tier
+ * - Resend Pro $20 / 50k, $0.90 per extra 1k, else $35 / 100k
+ * - Mailgun Basic $15 / 10k, Foundation $35 / 50k, Scale $90 / 100k
+ *   (overage is "from" $1.80, so the including tier is the bill)
+ * - SES Essentials $0.16 / 1,000, no base fee (aws.amazon.com/ses/pricing)
+ */
+const GCS_STANDARD_PER_GB = 0.02;
+const FLY_SHARED_1X_MONTHLY = 2.19;
+const RAILWAY_VCPU_MONTHLY = 20;
+const RAILWAY_GB_MONTHLY = 10;
+const RAILWAY_VOLUME_PER_GB = 0.15;
+const WORKERS_PAID_MONTHLY = 5;
 
 export interface PricedLine {
   label: string;
   amount: number;
   estimate?: boolean;
-  layer: LayerId;
+  layer: LayerId | "email";
   /** False for one-time lines (corpus embedding); true for monthly meters. */
   recurring: boolean;
   /** No sourced rate. Excluded from totals; the table renders an em dash. */
@@ -251,18 +294,174 @@ function lookup(layers: Layer[], pick: StackPick, layer: LayerId): LayerOption {
   return found;
 }
 
+export interface MenuRate {
+  amount: number;
+  estimate: boolean;
+}
+
+function queriesPerMonth(workload: RagWorkload): number {
+  return workload.queriesPerDay * 30;
+}
+
+function modelBill(id: string, workload: RagWorkload): MenuRate {
+  const rates = MODEL_RATES[id];
+  const queries = queriesPerMonth(workload);
+  const chatIn = queries * workload.chatInTokensPerQuery;
+  const chatOut = queries * workload.chatOutTokensPerQuery;
+  return {
+    amount: (chatIn * rates.inPerM + chatOut * rates.outPerM) / 1e6,
+    estimate: false,
+  };
+}
+
+function embedQueryBill(id: string, workload: RagWorkload): MenuRate {
+  const rate = EMBED_RATES[id];
+  const tokens = queriesPerMonth(workload) * workload.queryEmbedTokens;
+  return { amount: (tokens * rate.perM) / 1e6, estimate: false };
+}
+
+function vectorBill(id: string, workload: RagWorkload, dims: number): MenuRate {
+  const p = RAG_PRICING;
+  if (id === "self") return { amount: 0, estimate: false };
+  if (id === "qdrant") return { amount: p.qdrantEntryMonthly, estimate: true };
+  const queries = queriesPerMonth(workload);
+  const vectors = (workload.corpusGB * TOKENS_PER_GB) / workload.chunkTokens;
+  const gb = (vectors * dims * 4) / 1e9;
+  const ruPerQuery = Math.max(0.25, gb);
+  const usage = gb * p.pineconeStoragePerGB + (queries * ruPerQuery * p.pineconeReadPerM) / 1e6;
+  return { amount: Math.max(p.pineconeMinMonthly, usage), estimate: false };
+}
+
+/** Always-on runner plus this corpus in that vendor's object store. */
+export function hostBill(id: string, workload: RagWorkload = DEFAULT_WORKLOAD): MenuRate {
+  const gb = workload.corpusGB;
+  const p = RAG_PRICING;
+  if (id === "own") return { amount: 0, estimate: false };
+  if (id === "azure") return { amount: 0.0416 * HOURS_PER_MONTH + gb * p.azureBlobPerGB, estimate: true };
+  if (id === "aws") return { amount: 0.0168 * HOURS_PER_MONTH + gb * p.s3StoragePerGB, estimate: true };
+  if (id === "gcp") return { amount: 0.0168 * HOURS_PER_MONTH + gb * GCS_STANDARD_PER_GB, estimate: true };
+  if (id === "cloudflare") return { amount: WORKERS_PAID_MONTHLY, estimate: false };
+  if (id === "fly") return { amount: FLY_SHARED_1X_MONTHLY, estimate: false };
+  if (id === "railway") {
+    return { amount: RAILWAY_VCPU_MONTHLY + RAILWAY_GB_MONTHLY + gb * RAILWAY_VOLUME_PER_GB, estimate: true };
+  }
+  throw new Error(`unknown host ${id}`);
+}
+
+/** One trace, unit, span or score per query, on the first paid plan that covers it. */
+export function traceBill(id: string, workload: RagWorkload = DEFAULT_WORKLOAD): MenuRate {
+  const queries = queriesPerMonth(workload);
+  const p = RAG_PRICING;
+  if (id === "self" || id === "digismith") return { amount: 0, estimate: false };
+  if (id === "langsmith") {
+    const over = Math.max(0, queries - p.langsmithIncludedTraces);
+    return { amount: p.langsmithSeatMonthly + (over * p.langsmithTraceOveragePerK) / 1000, estimate: false };
+  }
+  if (id === "langfuse") {
+    const included = 100_000;
+    const extra = Math.max(0, queries - included);
+    return { amount: 29 + (extra / 100_000) * 8, estimate: false };
+  }
+  if (id === "helicone") return { amount: 79, estimate: true };
+  if (id === "braintrust") return { amount: 249, estimate: false };
+  if (id === "arize") {
+    return { amount: 50, estimate: queries > 50_000 };
+  }
+  if (id === "datadog") {
+    const extra = Math.max(0, queries - 100_000);
+    return { amount: 200 + (extra / 10_000) * 5, estimate: true };
+  }
+  throw new Error(`unknown tracer ${id}`);
+}
+
+/** Cheapest published mail tier that includes one send per query. */
+export function emailBill(id: string, workload: RagWorkload = DEFAULT_WORKLOAD): MenuRate {
+  if (id === "smtp" || id === "digigraph") return { amount: 0, estimate: false };
+  const n = queriesPerMonth(workload);
+  const perDay = workload.queriesPerDay;
+  if (id === "sendgrid") {
+    if (n <= 50_000) return { amount: 19.95, estimate: false };
+    if (n <= 100_000) return { amount: Math.min(19.95 + (n - 50_000) * 0.00133, 34.95), estimate: false };
+    return { amount: 89.95, estimate: true };
+  }
+  if (id === "postmark") {
+    if (n <= 100) return { amount: 0, estimate: false };
+    if (n <= 10_000) return { amount: 15, estimate: false };
+    const over10 = Math.ceil((n - 10_000) / 1000) * 1.8;
+    if (n <= 50_000) return { amount: Math.min(15 + over10, 55), estimate: false };
+    const over50 = Math.ceil((n - 50_000) / 1000) * 1.8;
+    if (n <= 125_000) return { amount: Math.min(55 + over50, 115), estimate: false };
+    return { amount: 115, estimate: true };
+  }
+  if (id === "resend") {
+    if (n <= 3_000 && perDay <= 100) return { amount: 0, estimate: false };
+    if (n <= 50_000) return { amount: 20, estimate: false };
+    const over = Math.ceil((n - 50_000) / 1000) * 0.9;
+    if (n <= 100_000) return { amount: Math.min(20 + over, 35), estimate: false };
+    return { amount: 90, estimate: true };
+  }
+  if (id === "mailgun") {
+    if (n <= 3_000 && perDay <= 100) return { amount: 0, estimate: false };
+    if (n <= 10_000) return { amount: 15, estimate: false };
+    if (n <= 50_000) return { amount: 35, estimate: false };
+    if (n <= 100_000) return { amount: 90, estimate: false };
+    return { amount: 90, estimate: true };
+  }
+  if (id === "ses") return { amount: (n * 0.16) / 1000, estimate: false };
+  throw new Error(`unknown mail vendor ${id}`);
+}
+
+function flagged(rate: MenuRate, optionEstimate: boolean | undefined): MenuRate {
+  return { amount: rate.amount, estimate: rate.estimate || Boolean(optionEstimate) };
+}
+
+/** Monthly figure shown on a menu row. Same math as that layer's table cell. */
+export function menuRate(
+  layer: LayerId | "email",
+  optionId: string,
+  workload: RagWorkload = DEFAULT_WORKLOAD,
+  vectorDims = EMBED_RATES.large.dims,
+): MenuRate {
+  if (layer === "email") return emailBill(optionId, workload);
+  if (layer === "models") {
+    const estimate = [PROVIDER_LAYERS, DIGI_LAYERS].some((group) =>
+      group.find((item) => item.id === "models")?.options.find((option) => option.id === optionId)?.estimate,
+    );
+    return flagged(modelBill(optionId, workload), estimate);
+  }
+  if (layer === "embeddings") return embedQueryBill(optionId, workload);
+  if (layer === "vector") return vectorBill(optionId, workload, vectorDims);
+  if (layer === "telemetry") return traceBill(optionId, workload);
+  return hostBill(optionId, workload);
+}
+
+/** "$1,860" / "~$30" / "$19.95" / "$0". List prices under $100 keep cents. */
+export function formatBill(amount: number, estimate = false): string {
+  const tilde = estimate ? "~" : "";
+  if (amount === 0) return "$0";
+  if (amount < 1) return `${tilde}<$1`;
+  if (!estimate && amount < 100) {
+    const cents = Math.round(amount * 100) / 100;
+    const text = Number.isInteger(cents) ? String(cents) : cents.toFixed(2);
+    return `$${text}`;
+  }
+  return `${tilde}$${Math.round(amount).toLocaleString("en-US")}`;
+}
+
 /**
  * Setup + monthly for a five-layer pick. Formulas mirror `ragCost`
  * (same workload, same snapshot); the cross-check test pins the default
  * provider pick to the invoice panel's provider number plus hosting.
  * Topologies without vector indexing (support, finance) omit the
  * embeddings + vector lines entirely — no zero-priced filler.
+ * Support adds one mail line (one approved send per query).
  */
 export function pricePick(
   layers: Layer[],
   pick: StackPick,
   workload: RagWorkload = DEFAULT_WORKLOAD,
   topology?: "rag" | "support" | "finance",
+  emailId?: string,
 ): StackPrice {
   const p = RAG_PRICING;
   const model = lookup(layers, pick, "models");
@@ -312,31 +511,29 @@ export function pricePick(
     add(`Query embeddings · ${embed.label}`, (queryEmbedTokens * embedRate.perM) / 1e6, true, "embeddings", embed.estimate);
   }
 
-  const chatIn = queriesPerMonth * workload.chatInTokensPerQuery;
-  const chatOut = queriesPerMonth * workload.chatOutTokensPerQuery;
-  const rates = MODEL_RATES[model.id];
-  add(`Model answers · ${model.label}`, (chatIn * rates.inPerM + chatOut * rates.outPerM) / 1e6, true, "models", model.estimate);
+  const answers = flagged(modelBill(model.id, workload), model.estimate);
+  add(`Model answers · ${model.label}`, answers.amount, true, "models", answers.estimate);
 
-  if (telemetry.id === "langsmith") {
-    const over = Math.max(0, queriesPerMonth - p.langsmithIncludedTraces);
-    add("LangSmith", p.langsmithSeatMonthly + (over * p.langsmithTraceOveragePerK) / 1000, true, "telemetry");
-  } else if (telemetry.id === "self" || telemetry.id === "digismith") {
-    add(telemetry.vendor === "digithings" ? "digismith traces" : "Self-hosted traces", 0, true, "telemetry");
-  } else {
-    add(telemetry.label, 0, true, "telemetry", false, true);
+  const traces = traceBill(telemetry.id, workload);
+  const traceLabel =
+    telemetry.id === "digismith" ? "digismith traces" : telemetry.id === "self" ? "Self-hosted traces" : telemetry.label;
+  add(traceLabel, traces.amount, true, "telemetry", traces.estimate);
+
+  const host = hostBill(hosting.id, workload);
+  const hostLabel = hosting.id === "own" ? "Own hardware" : `${hosting.label} hosting`;
+  add(hostLabel, host.amount, true, "hosting", host.estimate);
+
+  const named = [model, embed, vector, telemetry, hosting].map((option) => option.vendor);
+  if (topology === "support") {
+    const mailId = emailId ?? "sendgrid";
+    const mail = emailBill(mailId, workload);
+    const mailName = mailId === "digigraph" ? "digigraph mail" : emailBoxLabel(mailId);
+    add(mailName, mail.amount, true, "email", mail.estimate);
+    const mailVendor = EMAIL_OPTIONS.find((option) => option.id === mailId)?.vendor;
+    if (mailVendor) named.push(mailVendor);
   }
 
-  if (hosting.id === "azure") {
-    add("Azure hosting", AZURE_HOSTING_ESTIMATE, true, "hosting", true);
-  } else if (hosting.id === "own") {
-    add("Own hardware", 0, true, "hosting");
-  } else {
-    add(hosting.label, 0, true, "hosting", false, true);
-  }
-
-  const vendors = [...new Set([model, embed, vector, telemetry, hosting].map((o) => o.vendor))].filter(
-    (v) => v !== "you" && v !== "digithings",
-  );
+  const vendors = [...new Set(named)].filter((vendor) => vendor !== "you" && vendor !== "digithings");
   return { setup, monthly, lines, vendors };
 }
 
@@ -388,7 +585,7 @@ const TELEMETRY_BOX: Record<string, string> = {
   langfuse: "Langfuse",
   helicone: "Helicone",
   braintrust: "Braintrust",
-  arize: "Arize",
+  arize: "Arize AX",
   datadog: "Datadog",
   self: "own traces",
   digismith: "digismith",
@@ -464,7 +661,13 @@ export function providerSpec(
   const telemetry = lookup(PROVIDER_LAYERS, pick, "telemetry");
   const hosting = lookup(PROVIDER_LAYERS, pick, "hosting");
   const topology = opts.topology ?? "rag";
-  const price = pricePick(PROVIDER_LAYERS, pick, workload, topology);
+  const price = pricePick(
+    PROVIDER_LAYERS,
+    pick,
+    workload,
+    topology,
+    topology === "support" ? (opts.emailId ?? "sendgrid") : undefined,
+  );
   const head =
     topology === "finance"
       ? [
@@ -710,7 +913,7 @@ export function morphSpec(
       ? {
           groups: base.groups?.map((g) => ({
             ...g,
-            label: `digithings · ${vendorCount(pricePick(DIGI_LAYERS, digiPick, workload, topology))}`,
+            label: `digithings · ${vendorCount(pricePick(DIGI_LAYERS, digiPick, workload, topology, topology === "support" ? "digigraph" : undefined))}`,
           })),
         }
       : {}),

@@ -21,20 +21,22 @@ import type { RagWorkload } from "@/lib/ragCost";
 import {
   DIGI_LAYERS,
   PROVIDER_LAYERS,
+  formatBill,
   pricePick,
   type LayerId,
   type PricedLine,
   type StackPick,
 } from "@/lib/stackCatalog";
 
-const LAYER_NAME: Record<LayerId, string> = {
+const LAYER_NAME: Record<LayerId | "email", string> = {
   models: "models",
   embeddings: "embeddings",
   vector: "vector store",
   telemetry: "traces",
   hosting: "hosting",
+  email: "email",
 };
-const LAYER_ORDER: LayerId[] = ["models", "embeddings", "vector", "telemetry", "hosting"];
+const LAYER_ORDER: (LayerId | "email")[] = ["models", "embeddings", "vector", "telemetry", "hosting", "email"];
 
 interface Cell {
   amount: number;
@@ -42,7 +44,7 @@ interface Cell {
   unpriced: boolean;
 }
 
-function sumLayer(lines: PricedLine[], layer: LayerId, recurring: boolean): Cell | null {
+function sumLayer(lines: PricedLine[], layer: LayerId | "email", recurring: boolean): Cell | null {
   const hits = lines.filter((line) => line.layer === layer && line.recurring === recurring);
   if (hits.length === 0) return null;
   return {
@@ -54,10 +56,7 @@ function sumLayer(lines: PricedLine[], layer: LayerId, recurring: boolean): Cell
 
 function money({ amount, estimate, unpriced }: Cell): string {
   if (unpriced) return "—";
-  const tilde = estimate ? "~" : "";
-  if (amount === 0) return "$0";
-  if (amount < 1) return `${tilde}<$1`;
-  return `${tilde}$${Math.round(amount).toLocaleString("en-US")}`;
+  return formatBill(amount, estimate);
 }
 
 /* Accent as small text uses the kit recipe (MIGRATION.md): mixed toward ink so
@@ -72,6 +71,7 @@ export function WhyPriceTable({
   workload,
   topology,
   replaced,
+  emailId = "sendgrid",
 }: {
   provider: StackPick;
   digi: StackPick;
@@ -79,9 +79,12 @@ export function WhyPriceTable({
   topology: "rag" | "support" | "finance";
   /** Layers the walk has already handed to digithings. */
   replaced: LayerId[];
+  /** Support delivery vendor. Ignored on the other apps. */
+  emailId?: string;
 }) {
-  const theirs = pricePick(PROVIDER_LAYERS, provider, workload, topology);
-  const ours = pricePick(DIGI_LAYERS, digi, workload, topology);
+  const mail = topology === "support" ? emailId : undefined;
+  const theirs = pricePick(PROVIDER_LAYERS, provider, workload, topology, mail);
+  const ours = pricePick(DIGI_LAYERS, digi, workload, topology, topology === "support" ? "digigraph" : undefined);
   const rows = LAYER_ORDER.flatMap((layer) => {
     const a = sumLayer(theirs.lines, layer, true);
     const b = sumLayer(ours.lines, layer, true);
@@ -150,7 +153,7 @@ export function WhyPriceTable({
         </TableHeader>
         <TableBody ref={detailRef} hidden={compact}>
           {rows.map(({ layer, a, b }) => {
-            const on = replaced.includes(layer);
+            const on = layer !== "email" && replaced.includes(layer);
             return (
               <TableRow key={layer} className="border-0 hover:bg-transparent">
                 <TableRowHeader className={`${CELL} font-normal ${on ? "text-ink" : "text-ink-soft"}`}>
@@ -190,7 +193,7 @@ export function WhyPriceTable({
         </TableFooter>
       </Table>
       <p className="m-0 truncate border-t border-hair px-[0.7rem] py-[0.3rem] text-[0.62rem] text-ink-mute">
-        list prices · ~ estimate · — no sourced rate · $0 on your hardware
+        list prices · ~ estimate · $0 on your hardware
       </p>
     </div>
   );
