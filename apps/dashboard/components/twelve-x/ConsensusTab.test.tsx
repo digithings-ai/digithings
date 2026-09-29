@@ -150,6 +150,47 @@ describe('ConsensusTab sub-nav', () => {
 });
 
 /* ----------------------------------------------------------------------- */
+/* Confluence reads (moved off Today)                                      */
+/* ----------------------------------------------------------------------- */
+
+describe('ConsensusTab confluence reads', () => {
+  it('renders the confluence reads list when rows are present', () => {
+    const html = render({
+      confluence: [
+        {
+          run_date: '2026-06-22',
+          rank: 1,
+          currency: 'EUR',
+          direction: 'bullish',
+          score: 0.8,
+          components: {},
+          as_of: '2026-06-22T12:00:00Z',
+        },
+        {
+          run_date: '2026-06-22',
+          rank: 2,
+          currency: 'JPY',
+          direction: 'bearish',
+          score: 0.6,
+          components: {},
+          as_of: '2026-06-22T12:00:00Z',
+        },
+      ] as never,
+    });
+    expect(html).toContain('Confluence reads');
+    expect(html).toContain('EUR');
+    expect(html).toContain('bullish');
+    expect(html).toContain('JPY');
+    expect(html).toContain('bearish');
+  });
+
+  it('omits the confluence reads section when there are no rows', () => {
+    const html = render();
+    expect(html).not.toContain('Confluence reads');
+  });
+});
+
+/* ----------------------------------------------------------------------- */
 /* Table view = exactly one ConsensusDataTable                             */
 /* ----------------------------------------------------------------------- */
 

@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { DEFAULT_EMBED_CHAT_PREFS, type EmbedChatPrefsApi } from "./embed-chat-prefs";
+import { DEFAULT_EMBED_CHAT_PREFS, type EmbedChatPrefsApi } from "@digithings/ui/chat/stock";
 import {
   applySessionTool,
   sessionToolCallsFromMessages,

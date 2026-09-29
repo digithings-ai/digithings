@@ -27,6 +27,7 @@ from digiquant.data.prices.r2_history import (  # noqa: E402
 from digiquant.ops.checkpoint_archive import ArchiveVerifyError  # noqa: E402
 
 from scripts.refresh_market_data_r2 import (  # noqa: E402
+    _SOFT_FAIL_MODES,
     FetchError,
     refresh_macro_series,
     refresh_ticker,
@@ -110,6 +111,7 @@ class FakeStore:
         self.pointers: dict[str, str] = {}
         self.full_calls: dict[str, int] = {}
         self.macro_full_calls: dict[tuple[str, str], int] = {}
+        self.macro_windows: list[tuple[str, str, str, str]] = []
         if live_rewritten_history is not None:
             base = {r["date"]: dict(r) for r in price_rows(HIST_DEFAULT)}
             for row in live_rewritten_history:
@@ -161,6 +163,7 @@ class FakeStore:
             raise LookupError(f"unknown macro {source}/{series}") from None
 
     def fetch_macro(self, source: str, series: str, start: str, end: str) -> list[dict[str, Any]]:
+        self.macro_windows.append((source, series, start, end))
         return list(self.macro_live_rows(source, series, start, end))
 
     def fetch_macro_full(self, source: str, series: str, end: str) -> list[dict[str, Any]]:
@@ -373,6 +376,42 @@ def test_macro_registry_conflict_retries_once_then_errors() -> None:
     assert store.pointers == {}
 
 
+def test_macro_window_follows_declared_cadence() -> None:
+    """#4588: a slow series fetches a window spanning more than one release.
+
+    A 45-day window cannot see a monthly observation, so the fetch came back
+    empty and the whole run was marked stale — every scheduled refresh exited 1.
+    """
+    hist = [{"source": "fred", "series_id": "PCEPI", "obs_date": "2026-07-01", "value": 84.0}]
+    store = FakeStore(
+        macros={("fred", "PCEPI"): hist},
+        # FRED re-serves the July print inside the widened window; it is not
+        # newer than the seal, so the series resolves up-to-date — not a fail.
+        macro_lives={("fred", "PCEPI"): hist},
+    )
+    result = refresh_macro_series(
+        "fred", "PCEPI", store, manifest(), as_of="2026-09-23", cadence="monthly"
+    )
+    assert store.macro_windows == [("fred", "PCEPI", "2026-05-26", "2026-09-24")]
+    assert result["mode"] == "up-to-date"
+    assert result["as_of"] == "2026-07-01"
+    assert result["mode"] not in _SOFT_FAIL_MODES
+
+
+def test_macro_window_defaults_to_daily_without_a_cadence() -> None:
+    hist = [{"source": "fred", "series_id": "DGS10", "obs_date": "2026-01-02", "value": 4.1}]
+    store = FakeStore(macros={("fred", "DGS10"): hist})
+    refresh_macro_series("fred", "DGS10", store, manifest(), as_of="2026-01-06")
+    assert store.macro_windows == [("fred", "DGS10", "2025-11-22", "2026-01-07")]
+
+
+def test_macro_unknown_cadence_is_loud() -> None:
+    hist = [{"source": "fred", "series_id": "PCEPI", "obs_date": "2026-07-01", "value": 84.0}]
+    store = FakeStore(macros={("fred", "PCEPI"): hist})
+    with pytest.raises(ValueError, match="unknown cadence"):
+        refresh_macro_series("fred", "PCEPI", store, manifest(), as_of="2026-09-23", cadence="60d")
+
+
 def test_macro_refresh_matches_backfill_schema_without_meta() -> None:
     import io
 
@@ -474,7 +513,10 @@ def test_core_mirror_writes_only_mirrored_sources() -> None:
     )
     client = FakeCoreClient()
     summary = mirror_macro_to_core(
-        store, [("yahoo", "FX/EUR"), ("fred", "DGS10")], run="2026-09-16", client=client
+        store,
+        [("yahoo", "FX/EUR", None), ("fred", "DGS10", None)],
+        run="2026-09-16",
+        client=client,
     )
     assert summary == {"rows": 2, "series": 1, "skipped": []}
     assert len(client.calls) == 1
@@ -513,7 +555,9 @@ def test_core_mirror_window_drops_out_of_range_rows() -> None:
         }
     )
     client = FakeCoreClient()
-    summary = mirror_macro_to_core(store, [("yahoo", "FX/JPY")], run="2026-09-16", client=client)
+    summary = mirror_macro_to_core(
+        store, [("yahoo", "FX/JPY", None)], run="2026-09-16", client=client
+    )
     assert summary["rows"] == 1
     assert [r["obs_date"] for r in client.calls[0]["rows"]] == ["2026-09-11"]
 
@@ -534,7 +578,9 @@ def test_core_mirror_fail_soft_without_client() -> None:
             ]
         }
     )
-    summary = mirror_macro_to_core(store, [("yahoo", "FX/GBP")], run="2026-09-16", client=None)
+    summary = mirror_macro_to_core(
+        store, [("yahoo", "FX/GBP", None)], run="2026-09-16", client=None
+    )
     assert summary["rows"] == 0
     assert summary["series"] == 0
     assert summary["skipped"] == ["yahoo__FX/GBP: no core client"]
@@ -545,7 +591,9 @@ def test_core_mirror_skips_unreadable_generation() -> None:
 
     store = FakeStore()
     client = FakeCoreClient()
-    summary = mirror_macro_to_core(store, [("yahoo", "FX/NZD")], run="2026-09-16", client=client)
+    summary = mirror_macro_to_core(
+        store, [("yahoo", "FX/NZD", None)], run="2026-09-16", client=client
+    )
     assert summary["rows"] == 0
     assert summary["skipped"] == ["yahoo__FX/NZD: LookupError"]
     assert client.calls == []

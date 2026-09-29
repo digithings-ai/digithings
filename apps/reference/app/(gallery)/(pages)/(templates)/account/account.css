@@ -126,6 +126,37 @@
   border-bottom: 0;
 }
 
+/* ---------- invite recognition banner ---------- */
+/* Mirrors the dashboard login surface (apps/dashboard/app/account-surfaces.css):
+   banner above the default signup card, marker the only per-invite variable. */
+
+.acct-invite-banner {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  width: 100%;
+  max-width: 380px;
+  margin-bottom: 0.75rem;
+  border: 1px solid var(--hair);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+  padding: 0.8rem 1rem;
+}
+
+.acct-invite-banner-marker {
+  font-family: var(--font-mono);
+  font-size: 0.78rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  color: var(--ink);
+}
+
+.acct-invite-banner-line {
+  font-size: 0.82rem;
+  line-height: 1.4;
+  color: var(--ink-soft);
+}
+
 /* ---------- responsive ---------- */
 
 @media (max-width: 900px) {

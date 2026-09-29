@@ -512,7 +512,7 @@ function isPmAnalystChatTurnRow(row: unknown): boolean {
   return role === 'pm' || role === 'analyst';
 }
 
-/** Collect H6 PM↔analyst turns from `transcript` or chat-shaped `rounds`. */
+/** Collect deliberation PM↔analyst turns from `transcript` or chat-shaped `rounds`. */
 export function chatTurnsFromDebatePayload(payload: unknown): Record<string, unknown>[] {
   const p = asObj(payload);
   if (!p) return [];
@@ -529,13 +529,13 @@ export function isDebateSummaryPayload(payload: unknown): boolean {
   const p = asObj(payload);
   if (!p) return false;
   if (typeof p.net_stance !== 'string') return false;
-  // H6 chat shape may leave bull/bear empty once publish stops mirroring conclusion.
+  // deliberation chat shape may leave bull/bear empty once publish stops mirroring conclusion.
   if (chatTurnsFromDebatePayload(p).length > 0) return true;
   if (typeof p.conclusion === 'string' && p.conclusion.trim() !== '') return true;
   return typeof p.bull_thesis === 'string' && typeof p.bear_thesis === 'string';
 }
 
-/** Markdown for a bull/bear debate summary or H6 PM↔analyst deliberation. */
+/** Markdown for a bull/bear debate summary or deliberation PM↔analyst. */
 export function renderDebateSummaryMarkdown(payload: unknown): string {
   const p = asObj(payload) ?? {};
   const ticker = s(p.ticker).trim();
@@ -663,11 +663,11 @@ export function renderAttentionPlanMarkdown(payload: unknown): string {
   );
 
   const plan = asObj(p.plan) || {};
-  const roster = Array.isArray(plan.h4_roster)
-    ? plan.h4_roster.map((x) => s(x).trim()).filter(Boolean)
+  const roster = Array.isArray(plan.screener_roster)
+    ? plan.screener_roster.map((x) => s(x).trim()).filter(Boolean)
     : [];
   if (roster.length) {
-    out.push('## H4 roster (read-only)', '', roster.map((t) => `- ${t}`).join('\n'), '');
+    out.push('## screener roster (read-only)', '', roster.map((t) => `- ${t}`).join('\n'), '');
   }
 
   const decisions = Array.isArray(plan.decisions) ? plan.decisions : [];

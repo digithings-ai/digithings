@@ -1,4 +1,4 @@
-"""Golden fixture loader for incumbent H8 risk policy characterization (WP6.1 / #2687).
+"""Golden fixture loader for incumbent sizing risk policy characterization (WP6.1 / #2687).
 
 Freezes current production defaults and representative sizing outcomes before
 ``RiskPolicy`` / ``CovarianceSnapshot`` modeling in WP6.2. Tests import this
@@ -14,7 +14,7 @@ from typing import Any  # score:allow untyped any — scored-lint: heterogeneous
 
 from digiquant.portfolio.sizing import SizingResult
 
-FIXTURE_PATH = Path(__file__).resolve().parent / "fixtures" / "incumbent_h8_risk_policy.json"
+FIXTURE_PATH = Path(__file__).resolve().parent / "fixtures" / "incumbent_sizing_risk_policy.json"
 
 
 def load_incumbent_risk_fixture() -> dict[str, Any]:

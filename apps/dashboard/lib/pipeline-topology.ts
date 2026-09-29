@@ -42,7 +42,7 @@ export interface PipelineNodeExplanation {
 }
 
 // Mirrors the real backend graph: research phases (preflight → research fan-outs →
-// consolidate → digest) then portfolio H1–H9 (thesis framing → screener → analysts →
+// consolidate → digest) then portfolio thesis–commit (thesis framing → screener → analysts →
 // deliberation → PM direction → risk sizing → commit) then the daily beliefs
 // fold (learning/beliefs_distillation.py, runs after the terminal publish).
 export const PIPELINE_TOPOLOGY: StageDef[] = [
@@ -125,7 +125,7 @@ export const PIPELINE_TOPOLOGY: StageDef[] = [
     label: 'Selection',
     description: 'Turns the synthesized view into challenged, screened, and risk-sized portfolio candidates.',
     subSteps: [
-    // H1 publishes `thesis/thesis-review`; H4 publishes `opportunity-screener`.
+    // thesis publishes `thesis/thesis-review`; screener publishes `opportunity-screener`.
     {
       id: 'thesis',
       label: 'Thesis framing',

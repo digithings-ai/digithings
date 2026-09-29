@@ -10,7 +10,7 @@ The tool call goes through digigraph's orchestrator hub (``POST
 /v1/orchestrator_invoke``) — never ``import digisearch``. There is no
 synthesis fallback: a requested search must succeed or raise
 :exc:`DashboardWebSearchError` unconditionally. A scoped search that returns no
-rows retries once without the ``include_domains`` allowlist (logged) before
+rows retries once without the ``include_domains`` allowlist (logged at debug level) before
 failing (#4086) — every row still comes from the tool, so the invariant holds.
 Skipped-by-design segments (fresh ingested FRED layer, ``live_search=False``)
 never reach this module.
@@ -183,7 +183,7 @@ def call_web_search_tool(
     if not rows and scoped:
         # The hosted ddgs provider post-filters by domain (it cannot bias), so a
         # narrow allowlist can zero out an otherwise fine result set (#4086).
-        logger.warning(
+        logger.debug(
             "digisearch web_search returned no rows for include_domains=%s; "
             "retrying unscoped (max_results=%s)",
             scoped,

@@ -22,14 +22,16 @@ probabilities that sum exactly to 1, thesis_valid_probability, raw_uncertainty
 (low|medium|high), evidence_ids / counter_evidence_ids, assumptions,
 invalidation_rules. Never derive these from conviction_score or price_targets.
 
-``evidence`` block: independent_confirming_signals (0–5 signal FAMILIES with concrete
-cited evidence: technicals / fundamentals / flows / macro / sentiment),
+``evidence`` block — both counts are measured against **your own call** (the ``stance``
+you declare), never against the market thesis you are mapped to:
+independent_confirming_signals (0–5 signal FAMILIES with concrete cited evidence
+confirming your call: technicals / fundamentals / flows / macro / sentiment),
 contradicting_signals (0–5 — be critical, a mixed tape has contradictions),
 catalyst_within_horizon (true only for a dated/window-bound catalyst named in the
 thesis), trend_alignment (with|against|mixed), evidence_quality (high|medium|low —
 thin/stale inputs are low). The system derives conviction from these counts; high
 conviction requires the full bar (≥4 confirming, ≤1 contradicting, dated catalyst,
-high quality, with-trend) and is expected to be RARE.
+high quality, with-trend) and is expected to be RARE. A balanced call derives 0.
 
 When ``roster_reason`` is not ``thesis_mapped``, author a vehicle-local investment
 thesis in your output.

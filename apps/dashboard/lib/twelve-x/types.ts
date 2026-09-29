@@ -373,7 +373,10 @@ export type FxLevelProvenance =
   | 'pmt_bank_trade'
   | 'pmt_seasonality_target'
   | 'pmt_position_cluster'
-  | 'computed';
+  | 'pmt_retail_book'
+  | 'computed'
+  | 'technical'
+  | 'llm';
 
 export interface FxTradeLevel {
   value: string;
@@ -416,6 +419,10 @@ export interface FxTradeIdeaRow {
   as_of: string; // timestamptz (ISO)
   trade_levels?: FxTradeLevels | Record<string, unknown> | null;
   evidence?: FxMarketEvidence[] | unknown[] | null;
+  /** Episode identity — rows sharing an idea_id are the same trade across boards. */
+  idea_id?: string | null;
+  /** Rows published before the identity rollout have no timeframe. */
+  timeframe?: string | null;
 }
 
 /**

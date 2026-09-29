@@ -13,12 +13,12 @@ from uuid import UUID
 
 import pytest
 from digiquant.dashboard.learning.outcome_models import (
+    CommitExecutionLinks,
     EpisodeDisposition,
-    H8TargetLineage,
-    H9ExecutionLinks,
     OutcomeEpisode,
     OutcomeTemporalContract,
     RealizedReturnObservation,
+    SizingTargetLineage,
     episode_content_hash,
     episode_version_id,
 )
@@ -108,10 +108,10 @@ def _episode(
         source_run_id="run-2024",
         disposition=EpisodeDisposition.AUTHORIZED,
         temporal=temporal,
-        h8_lineage=H8TargetLineage(
+        sizing_lineage=SizingTargetLineage(
             requested_weight=Decimal("0.05"), approved_weight=Decimal("0.04")
         ),
-        h9_links=H9ExecutionLinks(action_id=UUID("66666666-6666-4666-8666-666666666666")),
+        commit_links=CommitExecutionLinks(action_id=UUID("66666666-6666-4666-8666-666666666666")),
         realized=_realized(),
     )
     content_hash = episode_content_hash(
@@ -125,8 +125,8 @@ def _episode(
         disposition=fields["disposition"],  # type: ignore[arg-type]
         temporal=temporal,
         realized=fields["realized"],  # type: ignore[arg-type]
-        h8_lineage=fields["h8_lineage"],  # type: ignore[arg-type]
-        h9_links=fields["h9_links"],  # type: ignore[arg-type]
+        sizing_lineage=fields["sizing_lineage"],  # type: ignore[arg-type]
+        commit_links=fields["commit_links"],  # type: ignore[arg-type]
         evidence_bundle_id=None,
         research_state_version_id=None,
         context_manifest_id=None,

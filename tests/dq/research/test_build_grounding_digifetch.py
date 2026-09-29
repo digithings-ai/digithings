@@ -19,6 +19,14 @@ from digiquant.research.phases import _node_factory
 
 from digifetch import HttpFetcher, RateLimiter, RetryPolicy
 
+
+def _content(result: str | dict[str, Any]) -> str:
+    """Unwrap a digifetch dispatcher result: ``{"content": <json str>, "ok": bool}`` (#4556)."""
+    if isinstance(result, str):
+        return result
+    return str(result["content"])
+
+
 AAPL_QUOTE = {
     "symbol": "AAPL",
     "currency": "USD",
@@ -81,7 +89,7 @@ def test_build_grounding_adds_the_flagged_subset_and_routes_a_call(
     # Session-gated names drop out without GLOOMBERB_SESSION_COOKIE.
     assert "digifetch_analyst_research" not in names
 
-    payload = json.loads(execute_tool("digifetch_quote", {"symbol": "AAPL"}))
+    payload = json.loads(_content(execute_tool("digifetch_quote", {"symbol": "AAPL"})))
     assert payload["data"]["quote"]["price"] == 200.0
     assert payload["attribution"] == GLOOMBERB_ATTRIBUTION
 
@@ -140,11 +148,13 @@ def test_build_grounding_composes_data_and_digifetch_executors(
     )
     assert tools is not None and execute_tool is not None
     names = {t["function"]["name"] for t in tools}
-    assert {"query_data", "digifetch_quote"}.issubset(names)
+    # query_data was retired in #4436; the typed macro reader is the data-family
+    # marker that proves the data executor composed alongside digifetch.
+    assert {"get_macro_series", "digifetch_quote"}.issubset(names)
     # The combined dispatcher routes by family and rejects unknown names.
-    payload = json.loads(execute_tool("digifetch_quote", {"symbol": "AAPL"}))
+    payload = json.loads(_content(execute_tool("digifetch_quote", {"symbol": "AAPL"})))
     assert payload["data"]["quote"]["price"] == 200.0
-    assert execute_tool("definitely_not_a_tool", {}).startswith("Error:")
+    assert _content(execute_tool("definitely_not_a_tool", {})).startswith("Error:")
 
 
 @pytest.mark.unit

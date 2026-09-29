@@ -86,9 +86,12 @@
   font-family: var(--font-geist-mono, var(--font-mono), ui-monospace, monospace);
   background: var(--term-bg);
   color: var(--term-ink);
-  max-width: var(--thread-max-width);
+  /* Full-bleed canvas like the other skins: the root fills its container so
+     the background reaches the edges, and the inner column in
+     `thread.aui.tsx` (`mx-auto max-w-(--thread-max-width)`) keeps the actual
+     messages and composer at 44rem. Constraining the root instead left the
+     page background showing through in the gutters. */
   width: 100%;
-  margin-inline: auto;
 }
 
 :root[data-theme="light"] .digichat-thread,
@@ -297,6 +300,13 @@
   scrollbar-width: thin;
 }
 
+/* Keep the top-anchored (trailing) user message off the top edge. The library
+   pins the anchor's border-box top to the viewport top, so padding shows as a
+   gap while the previous message stays hidden one message-gap above. */
+.digichat-thread__viewport [data-aui-top-anchor-user] {
+  padding-top: 1.5rem;
+}
+
 .digichat-thread-list {
   --accent: var(--accent-digichat, #e2708a);
   --term-bg: #08090b;
@@ -486,8 +496,10 @@
    no twin for: the unwrapped-mount code-header hover, catalog-skin popover
    items, tooltip/dialog accent tokens, and the hidden tooltip arrows (#3818). */
 
-/* No twin: /baseline mounts the gallery Thread without .aui-theme-stage or
-   [data-thread-skin], so chatbot.css's gated fence-copy hover never applies. */
+/* Belt and braces: the scope marker now matches on every mount (the Thread
+   declares `data-thread-skin="digichat"`), so chatbot.css's fence-copy hover
+   applies too — this keeps the flattened header identical for any mount that
+   somehow renders `.digichat-thread` without the marker. */
 .digichat-thread .aui-code-header-root button:hover,
 .digichat-thread .aui-code-header-root button:focus-visible {
   background: transparent;

@@ -49,7 +49,7 @@ const LEGACY_BULL_BEAR = {
   ],
 };
 
-describe('DeliberationDocumentView H6 chat mapping', () => {
+describe('DeliberationDocumentView deliberation chat mapping', () => {
   it('extracts PM↔analyst turns from rounds when transcript is absent', () => {
     const turns = extractPmAnalystTranscript(DBO_H6_PAYLOAD);
     expect(turns).toHaveLength(2);
@@ -84,7 +84,7 @@ describe('DeliberationDocumentView H6 chat mapping', () => {
     expect(html).not.toContain('Bear thesis');
   });
 
-  it('opens with the H5 analyst report, then role-labeled bubbles without Round N titles', () => {
+  it('opens with the analyst report, then role-labeled bubbles without Round N titles', () => {
     const html = renderToStaticMarkup(
       createElement(DeliberationDocumentView, {
         payload: DBO_H6_PAYLOAD,

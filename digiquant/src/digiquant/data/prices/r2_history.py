@@ -1,4 +1,4 @@
-"""Immutable versioned market-data generations in R2 (#3780).
+"""Immutable versioned market-data generations in R2 (#3780, #4621).
 
 Mirrors the checkpoint archiver ordering, with the registry conflict check
 ahead of the write: registry lookup -> put -> SHA-256 read-back verify ->
@@ -6,6 +6,15 @@ registry insert -> swap pointer. Never overwrites a generation in place:
 each refresh writes a NEW object keyed by generation
 (``price/{TICKER}/{as_of}.parquet``); the prior generation stays readable
 until the next successful refresh swaps the ``latest`` pointer.
+
+Same-day vendor restatements (#4621) re-fetch the same ``as_of`` with
+different bytes, so the base key is already registered with another digest.
+That conflict must NOT overwrite the sealed generation and must NOT fail
+the run: the revision is written under a NEW immutable key carrying a short
+content-hash suffix (``{as_of}--{sha12}.parquet``) via
+:func:`generation_restatement_key` / :func:`macro_restatement_key` (or the
+base-key generic :func:`restatement_key_for_base`), then the ``latest``
+pointer flips to it. The old key stays readable under its own registry row.
 
 Market-data pointers live in ``archive_objects`` with namespaced
 ``source_table`` values (``market-data/price`` etc.) carrying the same
@@ -57,6 +66,41 @@ def macro_key(source: str, series: str, as_of: str) -> str:
 def macro_latest_pointer_key(source: str, series: str) -> str:
     """Pointer object naming the newest sealed macro generation."""
     return f"market-data/macro/{source}__{series}/latest"
+
+
+#: Hex chars of the payload digest embedded in a restatement key (#4621).
+#: 48 bits: short enough to keep keys listable, long enough that an
+#: accidental collision between two revisions of one ``as_of`` is negligible.
+#: A collision that does occur stays loud: the derived key's registry insert
+#: still raises on a different full digest.
+RESTATEMENT_SHORT_LEN = 12
+
+
+def _short_digest(digest: str) -> str:
+    return digest[:RESTATEMENT_SHORT_LEN]
+
+
+def restatement_key_for_base(base_key: str, digest: str) -> str:
+    """Derive the immutable restatement key for *base_key* + payload *digest*.
+
+    Inserts ``--{sha12}`` before a trailing ``.parquet`` suffix (appended when
+    the base key carries no such suffix), so revisions of one ``as_of`` sort
+    beside their base key and never overwrite it.
+    """
+    suffix = f"--{_short_digest(digest)}"
+    if base_key.endswith(".parquet"):
+        return f"{base_key[: -len('.parquet')]}{suffix}.parquet"
+    return f"{base_key}{suffix}"
+
+
+def generation_restatement_key(ticker: str, as_of: str, digest: str) -> str:
+    """R2 key for a same-day price revision: base key + content-hash suffix."""
+    return restatement_key_for_base(generation_key(ticker, as_of), digest)
+
+
+def macro_restatement_key(source: str, series: str, as_of: str, digest: str) -> str:
+    """R2 key for a same-day macro revision: base key + content-hash suffix."""
+    return restatement_key_for_base(macro_key(source, series, as_of), digest)
 
 
 #: S3/R2 error codes that mean "this object key does not exist".
@@ -175,6 +219,38 @@ class R2HistoryStore:
         self._registry_insert(source_table, key_source, key, digest, len(payload))
         return Generation(key=key, sha256=digest, rows=rows, as_of=str(key_source.get("as_of", "")))
 
+    def put_restatement(
+        self,
+        base_key: str,
+        payload: bytes,
+        source_table: str = SOURCE_TABLE_PRICE,
+        source_key: dict[str, Any] | None = None,
+        rows: int = -1,
+    ) -> Generation:
+        """Store a same-day revision of *base_key* without overwriting it (#4621).
+
+        Same bytes as registered under *base_key* (or no registration at all)
+        take the plain :meth:`put_generation` path, so idempotent re-runs keep
+        converging on the base key. Different bytes — the evening-cron
+        restatement — are written under a NEW content-hash key
+        (:func:`restatement_key_for_base`) with its own registry row; the old
+        generation stays readable. The caller flips the ``latest`` pointer to
+        the returned key. A derived-key conflict (same suffix, different full
+        digest) still raises :class:`ArchiveVerifyError`.
+        """
+        digest = hashlib.sha256(payload).hexdigest()
+        if self._registry_lookup is not None:
+            existing = self._registry_lookup(base_key)
+            if existing is None or existing == digest:
+                return self.put_generation(base_key, payload, source_table, source_key, rows=rows)
+        return self.put_generation(
+            restatement_key_for_base(base_key, digest),
+            payload,
+            source_table,
+            source_key,
+            rows=rows,
+        )
+
     def get_generation(self, key: str, sha256: str) -> bytes:
         """Read one generation, SHA-verified against the registry digest."""
         raw = self._backend.get(key)
@@ -229,11 +305,15 @@ __all__ = [
     "R2HistoryStore",
     "RegistryInsert",
     "RegistryLookup",
+    "RESTATEMENT_SHORT_LEN",
     "build_manifest",
     "generation_key",
+    "generation_restatement_key",
     "is_missing_object_error",
     "latest_pointer_key",
     "macro_key",
     "macro_latest_pointer_key",
+    "macro_restatement_key",
     "normalize_ticker",
+    "restatement_key_for_base",
 ]

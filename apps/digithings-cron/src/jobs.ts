@@ -126,6 +126,7 @@ export const JOBS: readonly Job[] = [
   ),
   wd("smoke-stack", "27 7 * * *", DIGITHINGS, "smoke-stack.yml"),
   wd("security-pip-audit", "33 6 * * MON", DIGITHINGS, "security-pip-audit.yml"),
+  wd("security-npm-audit", "37 6 * * MON", DIGITHINGS, "security-npm-audit.yml"),
   // Daily, not weekly: an expired credential should surface in <=24h, which is
   // the point of the canary (#3522).
   wd("token-canary", "41 6 * * *", DIGITHINGS, "token-canary.yml"),

@@ -1,4 +1,4 @@
-"""Single overlay run: pin → publish-if-missing corpus → private H7–H9 book.
+"""Single overlay run: pin → publish-if-missing corpus → private direction–commit book.
 
 One graph — wires ``requested_version_id`` + ``workspace_id`` at preflight.
 Corpus keys stay tenant-agnostic; private writers read ``config.workspace_id``.

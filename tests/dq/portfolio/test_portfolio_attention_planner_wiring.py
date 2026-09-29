@@ -14,14 +14,14 @@ from digiquant.dashboard.research_retrieval.planner import (
     AttentionRolloutMode,
 )
 from digiquant.portfolio.models.analyst import AnalystPayload
-from digiquant.portfolio.phases.h4_opportunity_screener import build_h4_opportunity_screener
 from digiquant.portfolio.phases.portfolio_common import run_asset_analyst_llm
+from digiquant.portfolio.phases.screener import build_screener
 from digiquant.portfolio.research_attention import (
-    h4_phase_attention_update,
     plan_portfolio_research_attention,
-    research_attention_h5_enforce_path,
-    research_attention_h6_enforce_path,
-    resolve_h6_attention_decision,
+    research_attention_analyst_enforce_path,
+    research_attention_deliberation_enforce_path,
+    resolve_deliberation_attention_decision,
+    screener_phase_attention_update,
 )
 from digiquant.research.research_attention import (
     DIGIQUANT_RESEARCH_ATTENTION_MODE_ENV,
@@ -95,13 +95,13 @@ def _clean_attention_stores() -> None:
     reset_attention_stores()
 
 
-def test_h4_builds_plan_after_roster_without_mutating_roster(
+def test_screener_builds_plan_after_roster_without_mutating_roster(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setenv(DIGIQUANT_RESEARCH_ATTENTION_MODE_ENV, "shadow")
     state = _state_with_roster(price_deltas={"SPY": 0.001})
     roster_before = [e.model_dump(mode="json") for e in state.phase_portfolio.focus_roster]
-    update = h4_phase_attention_update(state)
+    update = screener_phase_attention_update(state)
     assert update.get("portfolio_research_attention_plan") is not None
     plan = AttentionPlan.model_validate(update["portfolio_research_attention_plan"])
     assert plan.rollout_mode is AttentionRolloutMode.SHADOW
@@ -113,7 +113,7 @@ def test_h4_builds_plan_after_roster_without_mutating_roster(
 def test_plan_persists_to_attention_store(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv(DIGIQUANT_RESEARCH_ATTENTION_MODE_ENV, "shadow")
     state = _state_with_roster()
-    update = h4_phase_attention_update(state)
+    update = screener_phase_attention_update(state)
     plan = AttentionPlan.model_validate(update["portfolio_research_attention_plan"])
     store = attention_store_for_run(str(state.run_id))
     persisted = store.load_plan(plan.plan_id)
@@ -124,13 +124,13 @@ def test_off_mode_skips_plan(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv(DIGIQUANT_RESEARCH_ATTENTION_MODE_ENV, "off")
     state = _state_with_roster()
     assert plan_portfolio_research_attention(state) is None
-    assert h4_phase_attention_update(state) == {}
+    assert screener_phase_attention_update(state) == {}
 
 
-def test_h6_resolves_after_h5_features(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_deliberation_resolves_after_analyst_features(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv(DIGIQUANT_RESEARCH_ATTENTION_MODE_ENV, "enforce")
     state = _state_with_roster(price_deltas={"SPY": 0.05})
-    update = h4_phase_attention_update(state)
+    update = screener_phase_attention_update(state)
     state = state.model_copy(update=update)
     analyst = {
         "ticker": "SPY",
@@ -145,13 +145,13 @@ def test_h6_resolves_after_h5_features(monkeypatch: pytest.MonkeyPatch) -> None:
             "price_anchors": [],
         },
     }
-    decision = resolve_h6_attention_decision(state, "SPY", analyst)
+    decision = resolve_deliberation_attention_decision(state, "SPY", analyst)
     assert decision is not None
     assert decision.mode is AttentionMode.CHALLENGE
-    assert research_attention_h6_enforce_path(state, "SPY", analyst) == "challenge"
+    assert research_attention_deliberation_enforce_path(state, "SPY", analyst) == "challenge"
 
 
-def test_enforce_h5_carry_skips_provider(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_enforce_analyst_carry_skips_provider(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv(DIGIQUANT_RESEARCH_ATTENTION_MODE_ENV, "enforce")
     roster = [
         FocusRosterEntry(
@@ -167,9 +167,9 @@ def test_enforce_h5_carry_skips_provider(monkeypatch: pytest.MonkeyPatch) -> Non
         prior_context=PriorContext(prior_analyst_by_ticker={"XYZ": _prior_analyst("XYZ")}),
         phase_portfolio=PhasePortfolioState(focus_roster=roster),
     )
-    update = h4_phase_attention_update(state)
+    update = screener_phase_attention_update(state)
     state = state.model_copy(update=update)
-    assert research_attention_h5_enforce_path(state, ticker="XYZ") == "carry"
+    assert research_attention_analyst_enforce_path(state, ticker="XYZ") == "carry"
 
     agent_calls: list[str] = []
 
@@ -200,14 +200,12 @@ def test_graph_node_order_unchanged() -> None:
 
     phases = build_portfolio_phases_thesis(watchlist=["SPY"], held={"SPY"})
     names = [p.name for p in phases]
-    assert names.index("portfolio_h4_opportunity_screener") < names.index(
-        "portfolio_h5_asset_analyst"
-    )
-    assert names.index("portfolio_h5_asset_analyst") < names.index("portfolio_h6_deliberation")
+    assert names.index("portfolio_screener") < names.index("portfolio_analyst")
+    assert names.index("portfolio_analyst") < names.index("portfolio_deliberation")
     assert len(names) == len(set(names))
 
 
-def test_h4_node_plans_without_changing_roster(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_screener_node_plans_without_changing_roster(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv(DIGIQUANT_RESEARCH_ATTENTION_MODE_ENV, "shadow")
     monkeypatch.setenv("PORTFOLIO_HELD_GATE", "off")
     state = ResearchState(
@@ -216,7 +214,7 @@ def test_h4_node_plans_without_changing_roster(monkeypatch: pytest.MonkeyPatch) 
         config=ResearchConfigBundle(watchlist=["SPY", "QQQ", "IWM"]),
         prior_context=PriorContext(prior_book=[{"ticker": "SPY", "weight_pct": 5.0}]),
     )
-    node = build_h4_opportunity_screener().nodes[0].run
+    node = build_screener().nodes[0].run
     off_env = "off"
     monkeypatch.setenv(DIGIQUANT_RESEARCH_ATTENTION_MODE_ENV, off_env)
     reset_attention_stores()

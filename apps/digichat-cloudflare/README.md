@@ -47,6 +47,8 @@ Mac Compose remains **dev-only** — see
 
 ## Deploy
 
+Canonical deploy is the digithings-stack worker ([`deploy-digithings-stack-cloudflare.yml`](../../.github/workflows/deploy-digithings-stack-cloudflare.yml)) — the standalone below stays until cutover.
+
 From **repo root** (Dockerfile context is monorepo root):
 
 ```bash
@@ -97,7 +99,7 @@ Domains & Routes) for `/embed*`, `/api/chat*`, `/api/embed*`, `/api/byok*`, `/ap
     "activityDetail": "full",
     "title": "OCC help assistant",
     "welcome": "Ask about Online Compliance Center policies, procedures, and help articles.",
-    "attribution": false,
+    "attribution": true,
     "token": "unused-for-first-party",
     "backend": {
       "type": "digigraph",

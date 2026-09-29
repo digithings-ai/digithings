@@ -79,6 +79,13 @@ def _envelope(data: Any, status: str = "success", **extra: Any) -> httpx.Respons
     return httpx.Response(200, json={"status": status, "data": data, **extra})
 
 
+def _content(result: str | dict[str, Any]) -> str:
+    """Unwrap the #4556 dispatcher result: ``{"content": <json str>, "ok": bool}``."""
+    if isinstance(result, str):
+        return result
+    return str(result["content"])
+
+
 def _sweep_handler(request: httpx.Request) -> httpx.Response:
     path = request.url.path
     if path == "/market/quote":
@@ -234,7 +241,7 @@ def test_available_digifetch_tools_respects_the_family_kill_switch(
 
 def test_dispatcher_routes_and_returns_the_attributed_envelope() -> None:
     execute = build_digifetch_tool_dispatcher(client=make_client(_sweep_handler))
-    payload = json.loads(execute("digifetch_quote", {"symbol": "AAPL"}))
+    payload = json.loads(_content(execute("digifetch_quote", {"symbol": "AAPL"})))
     assert payload["data"]["quote"]["price"] == 200.0
     assert payload["attribution"] == GLOOMBERB_ATTRIBUTION
     assert payload["delay_notice"] == GLOOMBERB_DELAY_NOTICE
@@ -247,15 +254,15 @@ def test_dispatcher_defaults_to_the_shared_env_client(
     client = make_client(_sweep_handler)
     monkeypatch.setattr(agent_tools, "build_gloomberb_client", lambda: client)
     execute = build_digifetch_tool_dispatcher()
-    payload = json.loads(execute("digifetch_quote", {"symbol": "AAPL"}))
+    payload = json.loads(_content(execute("digifetch_quote", {"symbol": "AAPL"})))
     assert payload["data"]["quote"]["price"] == 200.0
 
 
 def test_dispatcher_uses_the_ticker_field_for_the_deep_link() -> None:
     execute = build_digifetch_tool_dispatcher(client=make_client(_sweep_handler))
-    news = json.loads(execute("digifetch_news", {"ticker": "AAPL"}))
+    news = json.loads(_content(execute("digifetch_news", {"ticker": "AAPL"})))
     assert news["source_url"] == "https://term.gloom.sh/?ticker=AAPL"
-    filings = json.loads(execute("digifetch_sec_filings", {"ticker": "AAPL"}))
+    filings = json.loads(_content(execute("digifetch_sec_filings", {"ticker": "AAPL"})))
     assert filings["source_url"] == "https://term.gloom.sh/?ticker=AAPL"
 
 
@@ -272,9 +279,11 @@ def test_dispatcher_routes_a_price_history_date_window() -> None:
 
     execute = build_digifetch_tool_dispatcher(client=make_client(handler))
     payload = json.loads(
-        execute(
-            "digifetch_price_history",
-            {"symbol": "AAPL", "resolution": "1wk", "start_date": "2015-01-01"},
+        _content(
+            execute(
+                "digifetch_price_history",
+                {"symbol": "AAPL", "resolution": "1wk", "start_date": "2015-01-01"},
+            )
         )
     )
     assert "interval=1week" in seen["url"]
@@ -288,7 +297,7 @@ def test_dispatcher_routes_a_price_history_date_window() -> None:
 def test_dispatcher_does_not_attribute_the_yahoo_earnings_calendar() -> None:
     client = make_client(_sweep_handler, earnings_provider=lambda symbol: [])
     execute = build_digifetch_tool_dispatcher(client=client)
-    payload = json.loads(execute("digifetch_earnings_calendar", {"symbols": ["AAPL"]}))
+    payload = json.loads(_content(execute("digifetch_earnings_calendar", {"symbols": ["AAPL"]})))
     assert "data" in payload
     assert "attribution" not in payload
     assert "source_url" not in payload
@@ -300,7 +309,7 @@ def test_dispatcher_maps_invalid_args_to_a_typed_error_without_a_request() -> No
 
     execute = build_digifetch_tool_dispatcher(client=make_client(_fail))
     # resolution is required for price_history — the Pydantic model rejects it.
-    payload = json.loads(execute("digifetch_price_history", {"symbol": "AAPL"}))
+    payload = json.loads(_content(execute("digifetch_price_history", {"symbol": "AAPL"})))
     assert payload["data"]["code"] == "invalid_input"
     assert payload["data"]["retryable"] is False
     # The raw payload still supplies the deep link the MCP wrapper emits (#4146
@@ -313,7 +322,7 @@ def test_dispatcher_non_mapping_args_return_typed_invalid_input() -> None:
         raise AssertionError("non-mapping args must not reach the wire")
 
     execute = build_digifetch_tool_dispatcher(client=make_client(_fail))
-    payload = json.loads(execute("digifetch_quote", ["AAPL"]))  # type: ignore[arg-type]
+    payload = json.loads(_content(execute("digifetch_quote", ["AAPL"])))  # type: ignore[arg-type]
     assert payload["data"]["code"] == "invalid_input"
     assert payload["data"]["retryable"] is False
     assert payload["attribution"] == GLOOMBERB_ATTRIBUTION
@@ -324,7 +333,7 @@ def test_session_gated_tool_without_a_cookie_is_auth_required_without_a_request(
         raise AssertionError("a missing cookie must gate before any request")
 
     execute = build_digifetch_tool_dispatcher(client=make_client(_fail))
-    payload = json.loads(execute("digifetch_holders", {"symbol": "AAPL"}))
+    payload = json.loads(_content(execute("digifetch_holders", {"symbol": "AAPL"})))
     assert payload["data"]["code"] == "auth_required"
     # The MCP wrapper deep-links even the typed error; the dispatcher matches.
     assert payload["source_url"] == "https://term.gloom.sh/?ticker=AAPL"
@@ -335,13 +344,18 @@ def test_dispatcher_never_raises_on_a_client_fault() -> None:
         def quote(self, request: Any) -> Any:
             raise RuntimeError("nope")
 
-    payload = json.loads(build_digifetch_tool_dispatcher(client=_Boom())("digifetch_quote", {}))
-    assert "RuntimeError" in payload["error"]
+    result = build_digifetch_tool_dispatcher(client=_Boom())("digifetch_quote", {})
+    assert isinstance(result, dict)
+    # #4556: the dispatcher never raises, but it must not claim success either.
+    assert result["ok"] is False
+    assert "RuntimeError" in json.loads(_content(result))["error"]
 
 
 def test_dispatcher_reports_unknown_tool_names() -> None:
     result = build_digifetch_tool_dispatcher(client=make_client(_sweep_handler))("nope", {})
-    assert result.startswith("Error: unknown digifetch tool")
+    assert isinstance(result, dict)
+    assert result["ok"] is False
+    assert _content(result).startswith("Error: unknown digifetch tool")
 
 
 # ── the shared client's parallel-node locks (#4146) ───────────────────────────
@@ -364,3 +378,28 @@ def test_client_cache_stays_bounded_under_parallel_reads() -> None:
     with ThreadPoolExecutor(max_workers=8) as pool:
         list(pool.map(lambda i: client.quote({"symbol": f"S{i}"}), range(16)))
     assert client.cache_size <= 4
+
+
+def test_dispatcher_success_reports_ok_true() -> None:
+    execute = build_digifetch_tool_dispatcher(client=make_client(_sweep_handler))
+
+    result = execute("digifetch_quote", {"symbol": "AAPL"})
+
+    assert isinstance(result, dict)
+    assert result["ok"] is True
+    assert json.loads(_content(result))["data"]["quote"]["price"] == 200.0
+
+
+def test_dispatcher_upstream_fault_reports_ok_false() -> None:
+    # A live-read 5xx that survives the client's own retries is a *failed* tool
+    # call and must not be recorded as success (#4556).
+    def _boom(request: httpx.Request) -> httpx.Response:
+        raise RuntimeError("gloom upstream exploded")
+
+    execute = build_digifetch_tool_dispatcher(client=make_client(_boom))
+
+    result = execute("digifetch_quote", {"symbol": "AAPL"})
+
+    assert isinstance(result, dict)
+    assert result["ok"] is False
+    assert "RuntimeError" in json.loads(_content(result))["error"]

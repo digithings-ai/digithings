@@ -478,6 +478,7 @@ export default function TwelveXClient() {
             focusCcy={consensusFocusCcy}
             intelligenceWhy={data?.intelligenceWhy ?? { runDate: null, items: [] }}
             researchBriefs={data?.researchBriefs ?? []}
+            confluence={data?.intelligence ?? []}
           />
         );
       case 'trades':
@@ -529,7 +530,6 @@ export default function TwelveXClient() {
             digest={data?.digest ?? null}
             tradeIdeas={data?.tradeIdeas ?? []}
             tradeIdeaHistory={data?.tradeIdeaHistory ?? []}
-            confluence={data?.intelligence ?? []}
             briefs={data?.todayBriefs ?? []}
             events={data?.todayEvents ?? []}
             series={data?.consensusSeries ?? []}

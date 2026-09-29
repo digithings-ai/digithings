@@ -191,3 +191,67 @@ def test_real_repo_blobs_agree(ccm: Any) -> None:
         ]
     )
     assert report["ok"] is True, f"repo blobs drifted: {report['problems']}"
+
+
+def _load_raw_corpus_maps(ccm: Any) -> dict[str, dict[str, Any]]:
+    """Parse the three real ``DIGI_TENANT_CORPUS_MAP`` blobs WITHOUT field reduction.
+
+    The drift gate deliberately compares only ``digisearchIndex``/``vaultPathPrefix``
+    (sibling keys such as the OCC ``researchSystemPrompt`` are out of its scope),
+    so prompt parity is pinned here instead: the compose override's stack-service
+    value, the wrangler ``[vars]`` value, and the ``index.ts`` ``??`` fallback
+    (TS-decoded first — the runtime TS-evaluates the literal before parsing it).
+    """
+    import tomllib
+
+    compose_doc = yaml.safe_load(ccm.default_compose_file().read_text(encoding="utf-8"))
+    compose_raw = compose_doc["services"]["digithings-stack"]["environment"][
+        "DIGI_TENANT_CORPUS_MAP"
+    ]
+    with open(ccm.default_wrangler_file(), "rb") as fh:
+        wrangler_doc = tomllib.load(fh)
+    wrangler_raw = wrangler_doc["vars"]["DIGI_TENANT_CORPUS_MAP"]
+    index_src = ccm.default_index_ts_file().read_text(encoding="utf-8")
+    match = ccm._FALLBACK_RE.search(index_src)
+    assert match, "DIGI_TENANT_CORPUS_MAP fallback literal not found in index.ts"
+    return {
+        "compose": json.loads(compose_raw),
+        "wrangler": json.loads(wrangler_raw),
+        "index.ts": json.loads(ccm.decode_ts_string_literal(match.group(1))),
+    }
+
+
+def test_decode_ts_string_literal_doubled_escapes(ccm: Any) -> None:
+    """The fallback's doubled escapes decode to the JSON the runtime parses."""
+    assert ccm.decode_ts_string_literal("a\\\\nb") == "a\\nb"
+    assert ccm.decode_ts_string_literal('\\\\"q\\\\"') == '\\"q\\"'
+    assert ccm.decode_ts_string_literal("\\\\u0027") == "\\u0027"
+    assert ccm.decode_ts_string_literal("\\\\u2014") == "\\u2014"
+    assert ccm.decode_ts_string_literal("plain") == "plain"
+    with pytest.raises(ValueError, match="unsupported TS escape"):
+        ccm.decode_ts_string_literal("\\q")
+
+
+def test_real_blobs_occ_prompt_parity(ccm: Any) -> None:
+    """Each map's occ entry carries the same researchSystemPrompt (#4717 follow-up 2).
+
+    Task 6 wired the OCC prompt into the deployed wrangler map only; the two
+    dev-path maps (index.ts fallback, local compose) must carry byte-identical
+    prompt text — decoded comparison, so per-file escaping may differ.
+    """
+    raw = _load_raw_corpus_maps(ccm)
+    prompts = {name: blob["occ"].get("researchSystemPrompt") for name, blob in raw.items()}
+    assert all(isinstance(p, str) and p.strip() for p in prompts.values()), (
+        f"occ researchSystemPrompt missing/empty in: "
+        f"{sorted(n for n, p in prompts.items() if not (isinstance(p, str) and p.strip()))}"
+    )
+    assert len(set(prompts.values())) == 1, "occ researchSystemPrompt drifted across maps"
+
+
+def test_real_blobs_digithings_carries_no_prompt(ccm: Any) -> None:
+    """digithings entries stay prompt-free in all three maps (generic project prompt)."""
+    raw = _load_raw_corpus_maps(ccm)
+    for name, blob in raw.items():
+        entry = blob["digithings"]
+        assert "researchSystemPrompt" not in entry, f"{name}[digithings] carries a prompt"
+        assert "research_system_prompt" not in entry, f"{name}[digithings] carries a prompt"

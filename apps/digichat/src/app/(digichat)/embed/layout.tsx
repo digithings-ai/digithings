@@ -31,9 +31,8 @@ export const metadata: Metadata = {
 };
 
 export default function EmbedLayout({ children }: { children: ReactNode }) {
-  return (
-    <div className="dc-embed-shell flex h-dvh w-full flex-col overflow-hidden bg-background text-foreground">
-      {children}
-    </div>
-  );
+  // Shell div + transparent first-paint style moved into EmbedRouteShell
+  // (single-route rewrite serves /embed through the / page now). This layout
+  // keeps metadata only until Step 6 deletes the route.
+  return <>{children}</>;
 }

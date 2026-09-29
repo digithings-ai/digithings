@@ -42,7 +42,11 @@ const tradeIdeasDb = vi.hoisted(() => ({
   selectColumns: '',
   gte: [] as [string, string][],
   lte: [] as [string, string][],
+  eq: [] as [string, string][],
   order: [] as [string, unknown][],
+  limits: [] as number[],
+  /** One entry per query, consumed in order. Exhausted → empty result. */
+  responses: [] as { data: unknown[]; error: unknown }[],
 }));
 
 const ideaEvalDb = vi.hoisted(() => ({
@@ -61,6 +65,7 @@ vi.mock('./supabase', () => {
     gte: (column: string, value: string) => TradeIdeasBuilder;
     lte: (column: string, value: string) => TradeIdeasBuilder;
     order: (column: string, options?: unknown) => TradeIdeasBuilder;
+    limit: (count: number) => TradeIdeasBuilder;
     then: <T>(onFulfilled: (payload: Payload) => T) => Promise<T>;
   }
   const makeBuilder = (): TradeIdeasBuilder => {
@@ -69,7 +74,10 @@ vi.mock('./supabase', () => {
         tradeIdeasDb.selectColumns = columns;
         return builder;
       },
-      eq: () => builder,
+      eq: (column, value) => {
+        tradeIdeasDb.eq.push([column, value]);
+        return builder;
+      },
       gte: (column, value) => {
         tradeIdeasDb.gte.push([column, value]);
         return builder;
@@ -82,7 +90,14 @@ vi.mock('./supabase', () => {
         tradeIdeasDb.order.push([column, options]);
         return builder;
       },
-      then: (onFulfilled) => Promise.resolve(onFulfilled({ data: [], error: null })),
+      limit: (count) => {
+        tradeIdeasDb.limits.push(count);
+        return builder;
+      },
+      then: (onFulfilled) =>
+        Promise.resolve(
+          onFulfilled(tradeIdeasDb.responses.shift() ?? { data: [], error: null }),
+        ),
     };
     return builder;
   };
@@ -199,13 +214,158 @@ vi.mock('../supabase', () => {
  * statement of it — keep it exhaustive.
  */
 describe('getTradeIdeas', () => {
-  it('selects trade_levels and evidence alongside the core trade-idea columns', async () => {
+  beforeEach(() => {
     tradeIdeasDb.selectColumns = '';
+    tradeIdeasDb.eq = [];
+    tradeIdeasDb.gte = [];
+    tradeIdeasDb.lte = [];
+    tradeIdeasDb.order = [];
+    tradeIdeasDb.limits = [];
+    tradeIdeasDb.responses = [];
+  });
+
+  it('selects trade_levels and evidence alongside the core trade-idea columns', async () => {
     await getTradeIdeas('2026-06-24');
     expect(tradeIdeasDb.selectColumns).toContain('trade_levels');
     expect(tradeIdeasDb.selectColumns).toContain('evidence');
     expect(tradeIdeasDb.selectColumns).toContain('citations');
     expect(tradeIdeasDb.selectColumns).toContain('as_of');
+    expect(tradeIdeasDb.selectColumns).toContain('timeframe');
+    expect(tradeIdeasDb.selectColumns).toContain('idea_id');
+  });
+
+  it('reads the board by exact run_date and does not query further when it has rows', async () => {
+    tradeIdeasDb.responses = [
+      { data: [{ run_date: '2026-09-28', rank: 1, idea_id: 'fresh' }], error: null },
+    ];
+
+    const rows = await getTradeIdeas('2026-09-28');
+
+    expect(rows).toHaveLength(1);
+    expect(tradeIdeasDb.eq).toEqual([['run_date', '2026-09-28']]);
+    // Exactly one query — the fallback never runs when today's board is populated.
+    expect(tradeIdeasDb.lte).toEqual([]);
+  });
+
+  it('falls back to episodes refreshed today but keyed to an earlier board date', async () => {
+    // A continued episode is written back to its ORIGIN run_date, so the exact-date
+    // query for today comes back empty even though today's publish refreshed it.
+    tradeIdeasDb.responses = [
+      { data: [], error: null },
+      {
+        data: [
+          {
+            run_date: '2026-09-24',
+            rank: 1,
+            pair: 'EUR/USD',
+            direction: 'short',
+            idea_id: 'carried-episode',
+            as_of: '2026-09-28T22:26:56+00:00',
+          },
+        ],
+        error: null,
+      },
+    ];
+
+    const rows = await getTradeIdeas('2026-09-28');
+
+    expect(rows).toHaveLength(1);
+    expect(rows[0].idea_id).toBe('carried-episode');
+    // Bounded to boards on/before today, newest-refresh-first with headroom past
+    // the board cap (the limit applies pre-dedupe), and NO clock-midnight bound —
+    // "today's publish" is anchored to the last-publish instant in code, not SQL.
+    expect(tradeIdeasDb.lte).toEqual([['run_date', '2026-09-28']]);
+    expect(tradeIdeasDb.gte).toEqual([]);
+    expect(tradeIdeasDb.order).toContainEqual(['as_of', { ascending: false }]);
+    expect(tradeIdeasDb.limits).toEqual([50]);
+  });
+
+  it('keeps only the newest row per episode in the fallback', async () => {
+    tradeIdeasDb.responses = [
+      { data: [], error: null },
+      {
+        // Newest-refresh-first, as the fallback query orders them.
+        data: [
+          { run_date: '2026-09-25', rank: 2, pair: 'EUR/USD', direction: 'short', idea_id: 'ep-1', as_of: '2026-09-28T22:26:00+00:00' },
+          { run_date: '2026-09-24', rank: 1, pair: 'EUR/USD', direction: 'short', idea_id: 'ep-1', as_of: '2026-09-28T22:25:00+00:00' },
+          { run_date: '2026-09-24', rank: 2, pair: 'USD/JPY', direction: 'long', idea_id: 'ep-2', as_of: '2026-09-28T22:24:00+00:00' },
+        ],
+        error: null,
+      },
+    ];
+
+    const rows = await getTradeIdeas('2026-09-28');
+
+    expect(rows.map((r) => r.idea_id)).toEqual(['ep-1', 'ep-2']);
+  });
+
+  it('stays empty when nothing published since the board date began', async () => {
+    // The latest publish is yesterday's — a closed-episode day must never
+    // resurface stale rows, even though boards on/before today exist.
+    tradeIdeasDb.responses = [
+      { data: [], error: null },
+      {
+        data: [
+          { run_date: '2026-09-24', rank: 1, pair: 'EUR/USD', direction: 'short', idea_id: 'stale', as_of: '2026-09-27T22:26:00+00:00' },
+        ],
+        error: null,
+      },
+    ];
+
+    expect(await getTradeIdeas('2026-09-28')).toEqual([]);
+  });
+
+  it('counts a publish that crossed UTC midnight as the run it belongs to', async () => {
+    // Late run for the 28th published at 00:10Z on the 29th: the rows satisfy a
+    // next-day clock bound, but the last-publish anchor keeps them on the 28th's
+    // board — and off the 29th's until the 29th publishes for real.
+    tradeIdeasDb.responses = [
+      { data: [], error: null },
+      {
+        data: [
+          { run_date: '2026-09-24', rank: 1, pair: 'EUR/USD', direction: 'short', idea_id: 'late', as_of: '2026-09-29T00:10:00+00:00' },
+        ],
+        error: null,
+      },
+    ];
+
+    const rows = await getTradeIdeas('2026-09-28');
+
+    expect(rows.map((r) => r.idea_id)).toEqual(['late']);
+  });
+
+  it('keeps only the latest publish batch, then caps the board', async () => {
+    const batch = Array.from({ length: 11 }, (_, i) => ({
+      run_date: '2026-09-24',
+      rank: i + 1,
+      pair: `PAIR${i}`,
+      direction: 'long',
+      idea_id: `batch-${i}`,
+      as_of: '2026-09-28T22:26:00+00:00',
+    }));
+    tradeIdeasDb.responses = [
+      { data: [], error: null },
+      {
+        data: [
+          ...batch,
+          // An older publish's row inside the over-fetch window: outside the
+          // batch grace, so it must not displace (or join) today's board.
+          { run_date: '2026-09-23', rank: 1, pair: 'OLD', direction: 'short', idea_id: 'old-batch', as_of: '2026-09-28T21:00:00+00:00' },
+        ],
+        error: null,
+      },
+    ];
+
+    const rows = await getTradeIdeas('2026-09-28');
+
+    expect(rows).toHaveLength(10);
+    expect(rows.map((r) => r.idea_id)).not.toContain('old-batch');
+  });
+
+  it('stays empty when the board date never published', async () => {
+    const rows = await getTradeIdeas('2026-09-28');
+
+    expect(rows).toEqual([]);
   });
 });
 
@@ -220,6 +380,10 @@ describe('getTradeIdeaArchive', () => {
     expect(tradeIdeasDb.selectColumns).toContain('trade_levels');
     expect(tradeIdeasDb.selectColumns).toContain('thesis');
     expect(tradeIdeasDb.selectColumns).toContain('catalyst');
+    // Same board columns as getTradeIdeas (idea identity included) so
+    // archive↔board joins on episode identity never miss.
+    expect(tradeIdeasDb.selectColumns).toContain('idea_id');
+    expect(tradeIdeasDb.selectColumns).toContain('timeframe');
     expect(tradeIdeasDb.order[0]).toEqual(['run_date', { ascending: false }]);
     expect(tradeIdeasDb.order[1]).toEqual(['rank', { ascending: true }]);
   });
@@ -913,7 +1077,9 @@ describe('getTodayEvents / getUpcomingEvents over the mocked calendar', () => {
       // reason queryEnd is padded forward.
       ev({ id: 7, event_date: '2026-08-15', event_datetime_utc: '2026-08-15T02:00:00Z' }),
       // 12:30Z Aug 15 = 08:30 local Aug 15 — genuinely past the 14-day horizon.
-      ev({ id: 8, event_date: '2026-08-15', event_datetime_utc: '2026-08-15T12:30:00Z' }),
+      // Distinct event_name from id 7: #4739's twin dedup collapses rows sharing one
+      // join key, which would drop this row before the horizon rule could be tested.
+      ev({ id: 8, event_date: '2026-08-15', event_datetime_utc: '2026-08-15T12:30:00Z', event_name: 'UoM Consumer Sentiment' }),
     ];
     expect((await getUpcomingEvents()).map((e) => e.id)).toEqual([7]);
   });
@@ -924,9 +1090,61 @@ describe('getTodayEvents / getUpcomingEvents over the mocked calendar', () => {
     useViewer('Pacific/Auckland', '2026-08-01T00:30:00Z');
     calendarDb.rows = [
       ev({ id: 9, event_date: '2026-07-31', event_datetime_utc: '2026-07-31T23:00:00Z' }),
-      ev({ id: 10, event_date: '2026-07-31', event_datetime_utc: '2026-07-31T09:00:00Z' }),
+      // Distinct event_name from id 9 so the pair is not collapsed as twins by #4739's
+      // dedup — this test must still exercise the local-date keying itself.
+      ev({ id: 10, event_date: '2026-07-31', event_datetime_utc: '2026-07-31T09:00:00Z', event_name: 'Retail Sales' }),
     ];
     expect((await getTodayEvents()).map((e) => e.id)).toEqual([9]);
     expect((await getUpcomingEvents()).map((e) => e.id)).toEqual([9]);
+  });
+
+  it('#4739: collapses forexfactory/gloomberb twins of one logical event to a single row', async () => {
+    // Both rows are ONE logical event ingested twice: identical (event_date, country,
+    // event_name), but event_time is ET vs UTC (+4h) and the external_id prefix
+    // differs — the shape that made EventsTab render two identical rows per event.
+    useViewer('America/New_York', '2026-08-01T01:30:00Z');
+    calendarDb.rows = [
+      ev({ id: 1, external_id: 'te-918844', event_date: '2026-07-31', event_time: '8:30am', event_datetime_utc: '2026-07-31T12:30:00Z', event_name: 'Nonfarm Payrolls' }),
+      ev({ id: 2, external_id: 'gb-20260731-nfp', event_date: '2026-07-31', event_time: '12:30', event_datetime_utc: '2026-07-31T12:30:04Z', event_name: 'Nonfarm Payrolls' }),
+    ];
+    expect((await getUpcomingEvents()).map((e) => e.id)).toHaveLength(1);
+  });
+
+  it('#4739: prefers the gloomberb twin whenever it is present, in either position', async () => {
+    useViewer('America/New_York', '2026-08-01T01:30:00Z');
+    const ff = ev({ id: 1, external_id: 'te-918844', event_date: '2026-07-31', event_name: 'Nonfarm Payrolls' });
+    const gb = ev({ id: 2, external_id: 'gb-20260731-nfp', event_date: '2026-07-31', event_name: 'Nonfarm Payrolls' });
+    // gb second: it must displace the incumbent ff row…
+    calendarDb.rows = [ff, gb];
+    expect((await getUpcomingEvents()).map((e) => e.external_id)).toEqual(['gb-20260731-nfp']);
+    // …and gb first: a later ff row must NOT take the slot back.
+    calendarDb.rows = [gb, ff];
+    expect((await getUpcomingEvents()).map((e) => e.external_id)).toEqual(['gb-20260731-nfp']);
+  });
+
+  it('#4739: leaves rows with distinct names or dates untouched', async () => {
+    useViewer('America/New_York', '2026-08-01T01:30:00Z');
+    calendarDb.rows = [
+      // Same day, different name…
+      ev({ id: 1, external_id: 'gb-nfp', event_date: '2026-07-31', event_name: 'Nonfarm Payrolls' }),
+      ev({ id: 2, external_id: 'gb-cpi', event_date: '2026-07-31', event_name: 'CPI m/m' }),
+      // …and the same name on a different day. Neither pair shares a join key.
+      ev({ id: 3, external_id: 'te-nfp', event_date: '2026-08-05', event_name: 'Nonfarm Payrolls' }),
+    ];
+    expect((await getUpcomingEvents()).map((e) => e.id)).toEqual([1, 2, 3]);
+  });
+
+  it('#4739: the winning twin keeps its original position in the query order', async () => {
+    useViewer('America/New_York', '2026-08-01T01:30:00Z');
+    calendarDb.rows = [
+      ev({ id: 1, external_id: 'gb-cpi', event_date: '2026-07-31', event_datetime_utc: '2026-07-31T13:30:00Z', event_name: 'CPI m/m' }),
+      // Twin pair for ONE event — id 2 (ff) is dropped, id 3 (gb) wins…
+      ev({ id: 2, external_id: 'te-918844', event_date: '2026-07-31', event_datetime_utc: '2026-07-31T12:30:00Z', event_name: 'Nonfarm Payrolls' }),
+      ev({ id: 3, external_id: 'gb-20260731-nfp', event_date: '2026-07-31', event_datetime_utc: '2026-07-31T12:30:04Z', event_name: 'Nonfarm Payrolls' }),
+      ev({ id: 4, external_id: 'gb-fomc', event_date: '2026-08-05', event_datetime_utc: '2026-08-05T18:00:00Z', event_name: 'FOMC Minutes' }),
+    ];
+    // …in place, between its original neighbours — not hoisted to the front nor dropped
+    // to the end, so the query's event_datetime_utc ordering downstream is unchanged.
+    expect((await getUpcomingEvents()).map((e) => e.id)).toEqual([1, 3, 4]);
   });
 });

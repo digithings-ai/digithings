@@ -1,8 +1,8 @@
 """WP10.1 — immutable shadow allocation artifact (#2758).
 
-One-way data boundary from a completed H9 state to an isolated challenger
+One-way data boundary from a completed commit state to an isolated challenger
 workflow. Production commits once; export failure must never rerun or modify
-H8/H9. This module must not import challenger optimizer, portfolio replay,
+sizing/commit. This module must not import challenger optimizer, portfolio replay,
 broker, or live-trading surfaces.
 """
 
@@ -75,7 +75,7 @@ _DEFAULT_ARTIFACT_DIR = "artifacts"
 
 
 class ShadowArtifactMode(StrEnum):
-    """Rollout knob for post-H9 shadow artifact export (#2758 / WP10.1).
+    """Rollout knob for post-commit shadow artifact export (#2758 / WP10.1).
 
     ``off`` — skip export entirely.
     ``export`` — write one verifiable artifact when eligible (default).
@@ -92,7 +92,7 @@ class ShadowContractModel(BaseModel):
 
 
 class ShadowCommitMetadata(ShadowContractModel):
-    """Minimal H9 commit identity — no clients, secrets, or prose."""
+    """Minimal commit identity — no clients, secrets, or prose."""
 
     commit_id: NonEmptyId | None = None
     commit_status: NonEmptyId
@@ -101,7 +101,7 @@ class ShadowCommitMetadata(ShadowContractModel):
 
 
 class ShadowAllocationArtifact(ShadowContractModel):
-    """Exact H8/H9 allocation inputs, incumbent book, and risk report for shadow.
+    """Exact sizing/commit allocation inputs, incumbent book, and risk report for shadow.
 
     Nested bundle/report remain fully validated. Artifact identity is the SHA-256
     of metadata + nested content hashes — never Python ``hash()``.
@@ -311,7 +311,7 @@ def build_shadow_artifact_from_state(state: Any) -> ShadowAllocationArtifact | N
 
 
 def maybe_export_shadow_allocation_artifact(state: Any) -> str | None:
-    """Fail-soft export after H9. Never reruns or mutates production booking.
+    """Fail-soft export after commit. Never reruns or mutates production booking.
 
     Returns the artifact content hash when written, else ``None``.
     """

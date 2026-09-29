@@ -12,10 +12,11 @@ In this order, before writing any code:
 
 1. [`ARCHITECTURE.md`](ARCHITECTURE.md) — full capability matrix, module map, API surface (all route handlers), auth flow, DB schema, streaming behavior
 2. [`../../docs/architecture/digichat-modular-frontend.md`](../../docs/architecture/digichat-modular-frontend.md) — modular frontend; digigraph digithings path; Foundry client adapter
-3. `node_modules/next/dist/docs/` — **required** before writing any Next.js code; this version has breaking changes from prior releases (path inside installed dependencies, not a committed file)
-4. [`../../AGENTS.md`](../../AGENTS.md) — non-negotiable stack-wide rules
-5. `../../ROADMAP.md` — OpenClaw integration and RAG ingestion UI are Phase 2; do not build them now (see `docs/VISION.md` for the current plan)
-6. `../../docs/agent-backlog/` — current task queue lives on GitHub Project #1; see `docs/agents/AGENT_WORKFLOW.md`
+3. **[`../../docs/digichat/SKIN-GALLERY.md`](../../docs/digichat/SKIN-GALLERY.md) — for any UI work.** The single centralized surface: every skin on one backend, with the skin registry, the selector chrome, the feature/prefs wiring, how to add a skin, and the gotchas that make a skin render wrong. Start here before touching a skin.
+4. `node_modules/next/dist/docs/` — **required** before writing any Next.js code; this version has breaking changes from prior releases (path inside installed dependencies, not a committed file)
+5. [`../../AGENTS.md`](../../AGENTS.md) — non-negotiable stack-wide rules
+6. `../../ROADMAP.md` — OpenClaw integration and RAG ingestion UI are Phase 2; do not build them now (see `docs/VISION.md` for the current plan)
+7. `../../docs/agent-backlog/` — current task queue lives on GitHub Project #1; see `docs/agents/AGENT_WORKFLOW.md`
 
 ---
 
@@ -29,7 +30,7 @@ Before making any change to `apps/digichat/`:
 - [ ] Confirm browser **never** holds a digigraph JWT or `DIGIKEY_BFF_TOKEN` — all upstream auth is server-side only
 - [ ] Confirm `isAllowedServiceUrl()` is called on any user-supplied endpoint URL before fetching it (SSRF guard)
 - [ ] Confirm `AUTH_SECRET` / `NEXTAUTH_SECRET` never appears in client bundle or API responses
-- [ ] Confirm any new API route requires `requireDigiChatAuth()` unless it is explicitly a public endpoint (only `GET /api/health` is public)
+- [ ] Confirm any new API route requires `requireDigiChatAuth()` unless it is explicitly public or self-authenticating (public: `GET /api/health`, `GET /api/deploy/chrome`, `GET /api/embed/tenant-config`, dev-only `POST /api/baseline-chat`; self-authenticating: `POST /api/plan-proof` embed token, `/api/ecosystem/config` session, `GET /api/mcp/oauth/callback` OAuth state)
 - [ ] Confirm `DIGICHAT_AUTO_MIGRATE=1` behavior in `src/instrumentation.ts` is not bypassed for production
 
 ---
@@ -39,7 +40,7 @@ Before making any change to `apps/digichat/`:
 Beyond root `AGENTS.md`:
 
 - **BFF pattern is non-negotiable**: No digigraph URL, digikey token, or upstream service credential may ever reach the browser. All upstream calls go through Next.js Route Handlers.
-- **Auth on every route except health**: Every `src/app/api/` route handler must call `requireDigiChatAuth()`. `GET /api/health` is the only exception.
+- **Auth on every route except the documented few**: Every `src/app/api/` route handler must call `requireDigiChatAuth()`, except the intentionally public routes (`GET /api/health`, `GET /api/deploy/chrome`, `GET /api/embed/tenant-config`, dev-only `POST /api/baseline-chat`) and the self-authenticating ones (`POST /api/plan-proof` embed token, `/api/ecosystem/config` `auth()` session, `GET /api/mcp/oauth/callback` OAuth state cookie).
 - **SSRF guard on ecosystem endpoints**: Any user-supplied service URL must pass `isAllowedServiceUrl()` before being fetched. Never construct a fetch URL from raw user input.
 - **No raw Next.js version assumptions**: Next.js 16 App Router has breaking changes. Read `node_modules/next/dist/docs/` before writing route handlers, server actions, or middleware.
 - **Machine keys are bcrypt-hashed in Postgres**: `digi_live_…` API keys are stored hashed. Never store or log raw machine key material.

@@ -5,6 +5,10 @@
  * action that moves the user forward. Monochrome by default; the error reserves
  * the down colour. Static display templates. Consumes the shared <EmptyState/>
  * primitive from @digithings/ui (each variant carries its default glyph).
+ *
+ * Also shows the `glass-display` cut — the dashboard's full-page DB gate. That
+ * dress is fluid (`w-full`) and wrap-safe (`break-words`) so the gate cannot
+ * clip its own message at phone width (#4452).
  */
 import { EmptyState, type EmptyStateVariant } from "@digithings/ui/ui";
 import { Button } from "@digithings/ui/ui";
@@ -59,6 +63,20 @@ export function EmptyStatesReference() {
           />
         ))}
       </div>
+
+      {/* The dashboard's full-page gate cut (`dress="glass-display"`). Rendered
+          here because it is the honesty surface an operator sees when live data
+          is unreachable — and it must stay fluid and wrap-safe at phone widths
+          (#4452), so the reference shows the real copy at its call-site cap. */}
+      <p className="kicker mt-[2rem]">{"// glass-display — the full-page gate"}</p>
+      <EmptyState
+        variant="error"
+        dress="glass-display"
+        className="mx-auto max-w-md"
+        title="Live data is not connected in this build"
+        body="This deployment has no live data backend configured, so live figures cannot load. Static surfaces — Pipeline and Settings — stay available."
+        action={<Button variant="outline">Retry</Button>}
+      />
     </section>
   );
 }

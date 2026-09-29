@@ -1,10 +1,10 @@
-"""portfolio phase nodes — thesis-first H1–H9 graph.
+"""portfolio phase nodes — thesis-first thesis→commit graph.
 
 Phases:
-    - ``h1``–``h4`` — thesis track (market review → exploration → vehicle map → screener)
-    - ``h5``–``h6`` — portfolio track (unified analyst → PM↔analyst deliberation)
-    - ``h7_pm_direction`` — PM direction memo (no weights)
-    - ``phase7e_risk_sizing`` — H8 deterministic sizing (sole weight owner)
+    - ``thesis``–``screener`` — thesis track (market review → exploration → vehicle map → screener)
+    - ``analyst``–``deliberation`` — portfolio track (unified analyst → PM↔analyst deliberation)
+    - ``direction`` — PM direction memo (no weights)
+    - ``phase7e_risk_sizing`` — deterministic sizing (sole weight owner)
 """
 
 from __future__ import annotations

@@ -44,6 +44,7 @@ jobs:
       workflows: ${{ steps.filter.outputs.workflows }}
       compose: ${{ steps.filter.outputs.compose }}
       pip_audit: ${{ steps.filter.outputs.pip_audit }}
+      npm_audit: ${{ steps.filter.outputs.npm_audit }}
     steps:
       - uses: actions/checkout@v4
       - uses: dorny/paths-filter@v3
@@ -111,6 +112,7 @@ jobs:
             web:
               - 'apps/digithings-web/**'
               - 'apps/digiquant-web/**'
+              - 'digiquant/src/digiquant/portfolio/graph.py'
               - 'apps/digithings-cron/**'
               - 'packages/digichat-ui/**'
               - 'packages/ui/**'
@@ -192,6 +194,7 @@ jobs:
               - '.github/workflows/ci.yml'
               - 'scripts/ci_paths.yaml'
               - 'apps/digithings-cron/**'
+              - 'apps/dashboard-api/**'
               - 'config/**'
               - '.release-please-manifest.json'
               - 'release-please-config.json'
@@ -216,6 +219,14 @@ jobs:
               - '**/pyproject.toml'
               - 'pip-audit-ignore.txt'
               - '.github/workflows/security-pip-audit.yml'
+            npm_audit:
+              - 'package.json'
+              - 'package-lock.json'
+              - 'apps/*/package.json'
+              - 'packages/*/package.json'
+              - 'npm-audit-ignore.txt'
+              - 'scripts/classify_npm_audit.py'
+              - '.github/workflows/security-npm-audit.yml'
             # CI_PATH_FILTERS_END
 
   # ── Frontend canon guard (#1404, #1434) — UNCONDITIONAL ─────────────────────
@@ -341,6 +352,12 @@ jobs:
     needs: changes
     if: needs.changes.outputs.pip_audit == 'true'
     uses: ./.github/workflows/security-pip-audit.yml
+
+  # ── Dependency CVE audit (npm / GHSA) — root JS workspaces (#3523) ──────────
+  npm-audit:
+    needs: changes
+    if: needs.changes.outputs.npm_audit == 'true'
+    uses: ./.github/workflows/security-npm-audit.yml
 
   # ── Root-level ruff + scripts unit tests ────────────────────────────────────
   ruff-and-scripts:
@@ -632,6 +649,7 @@ jobs:
       - nautilus-smoke
       - research-graph
       - pip-audit
+      - npm-audit
       - ruff-and-scripts
       - actionlint
       - compose-validate

@@ -620,24 +620,34 @@ export function BootLabOverlay({
   onSettled,
   accent,
   facts,
+  readyEdge,
 }: {
   variant: BootLabVariant;
   ready: boolean;
   onSettled: () => void;
   accent?: string;
   facts?: BootFacts;
+  /**
+   * The real ready edge when the app runs in another document (an iframe
+   * host): this document's ready event never fires there and the standalone
+   * self-settle would flip the backend row on its cap instead of the honest
+   * beat, so the host passes its own signal (the embed's postMessage) here.
+   */
+  readyEdge?: boolean;
 }) {
   const reduced = useReducedMotion();
   const isToolchain = TOOLCHAIN_VARIANTS.has(variant);
   const [chainDone, setChainDone] = useState(!isToolchain);
   const [bootDelayMs] = useState(resolveBootDelayMs);
   const [failAfterMs] = useState(resolveBootFailMs);
+  const hostOwnsReady = readyEdge !== undefined;
   // `?bootfail` forces the failure demo: ignore the real ready signal so the
   // boot cannot settle before the forced failure lands.
-  const app = useAppReady(isToolchain && failAfterMs === 0);
-  const appReady = useDelayedTrue(app.ready, bootDelayMs);
-  const appFailed = useAppFailure(isToolchain, failAfterMs);
-  const failed = isToolchain && (appFailed || app.timedOut);
+  const app = useAppReady(isToolchain && failAfterMs === 0 && !hostOwnsReady);
+  const delayedReady = useDelayedTrue(app.ready, bootDelayMs);
+  const appReady = hostOwnsReady ? (readyEdge as boolean) : delayedReady;
+  const appFailed = useAppFailure(isToolchain && !hostOwnsReady, failAfterMs);
+  const failed = isToolchain && !hostOwnsReady && (appFailed || app.timedOut);
   // The tool chain runs to completion and then waits for the real ready
   // signal, so long cold starts keep a live row instead of looking done.
   // A failed boot never settles: the overlay keeps the error + retry up.

@@ -22,6 +22,8 @@ export type DigichatThreadProps = {
   welcome?: string;
   /** Subparagraphs under the headline. Deploy `chrome.welcome.body`. */
   welcomeBody?: readonly string[];
+  /** Welcome-state example prompts. Deploy `chrome.suggestions`. */
+  suggestions?: readonly string[];
   placeholder?: string;
   className?: string;
   /** Embed send-gate / system page-context attach. Form onSubmit. */
@@ -43,6 +45,7 @@ export type DigichatThreadProps = {
 export function DigichatThread({
   welcome = "What should we inspect?",
   welcomeBody = [],
+  suggestions,
   placeholder = "Ask digichat…",
   className,
   onComposerSubmit,
@@ -58,6 +61,7 @@ export function DigichatThread({
     <Thread
       welcome={welcome}
       welcomeBody={welcomeBody}
+      suggestions={suggestions}
       placeholder={placeholder}
       className={className}
       onComposerSubmit={onComposerSubmit}

@@ -6,7 +6,7 @@ reproduces the same primary keys and is a no-op once the full child set exists.
 A mid-chain crash leaves an incomplete period that
 :func:`select_final_period` refuses; the next retry repairs missing children.
 
-Provisional H9 NAV (``nav_history`` / ``positions``) is continuity data only — it
+Provisional commit NAV (``nav_history`` / ``positions``) is continuity data only — it
 never appears in these tables and cannot be selected as a final accounting period.
 """
 
@@ -191,7 +191,7 @@ def period_children_complete(
 def select_final_period(*, client: SupabaseClient, period_date: date) -> dict[str, Any] | None:
     """Authoritative finalized period for ``period_date``, or None.
 
-    Only a complete head with ``status=final`` qualifies. Provisional H9 NAV rows
+    Only a complete head with ``status=final`` qualifies. Provisional commit NAV rows
     live elsewhere and are never returned here. Incomplete / estimated / failed
     heads remain visible via :func:`period_head` but are not authoritative.
     """

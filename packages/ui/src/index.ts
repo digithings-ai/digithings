@@ -30,6 +30,7 @@ export {
 export {
   AuthCard,
   passwordStrength,
+  type AuthCardBrand,
   type AuthCardLayout,
   type AuthCardMode,
   type AuthCardProps,
@@ -40,14 +41,22 @@ export {
   Footer,
   Colophon,
   ModuleCard,
+  SkipLink,
+  CtaLink,
+  IconLink,
+  hrefIsCurrent,
   isNavGroup,
   type NavLink,
   type NavGroup,
   type NavItem,
+  type CtaLinkProps,
+  type IconLinkProps,
 } from "./components/chrome";
 export { NavShell, type NavShellProps } from "./components/NavShell";
 export { DocsLayout, type DocsNavGroup, type DocsNavItem, type DocsHero } from "./components/docs/DocsLayout";
+export { DocsSearch, filterDocsItems, type DocsSearchProps } from "./components/docs/DocsSearch";
 export { CodeTabs, DocsCodeBlock, type CodeSample } from "./components/docs/CodeTabs";
+export { CopyCommand, type CopyCommandProps, type CopyCommandSample } from "./components/docs/CopyCommand";
 export { EndpointDoc, MethodBadge, type DocsEndpoint, type DocsField, type DocsMethod } from "./components/docs/Endpoint";
 export { HashScrollManager } from "./navigation/HashScrollManager";
 export {
@@ -300,6 +309,11 @@ export {
   type AllocationStepChartProps,
   type AllocationFillMarker,
   type OverlayTone,
+  type ReferenceTone,
+  type ReferenceLineSpec,
+  type ReferenceBandSpec,
+  type ReferenceMarkerSpec,
+  type ChartReferences,
   type ChartLegendKind,
   type SignedBarsProps,
   type ContributionReturnChartProps,
@@ -398,3 +412,54 @@ export {
   MODULE_SUFFIXES,
   type AnimatedLockupProps,
 } from "./components/symbols/terminal-lockup";
+
+// prose family (D1, #4429) — the shared long-form company/legal grammar
+// (PageHead / RuledList / RuledRow / Mono), promoted from digithings-web's
+// app-local `_company/prose.tsx`. Utilities only; no site/app CSS class.
+export {
+  Mono,
+  PageHead,
+  RuledList,
+  RuledRow,
+  type MonoProps,
+  type PageHeadProps,
+  type RuledListProps,
+  type RuledRowProps,
+} from "./components/prose";
+// figure family (D1, #4429) — the numbered `Fig N` figure caption.
+export { Figure, type FigureProps } from "./components/figure";
+// document family (D1, #4429) — the framed-column marketing grammar
+// (DocumentFrame / Section / PageTitle / Prose / GlyphList / GlyphRow): one
+// bordered column, hairline section separators, a small document-scale type
+// ladder, and the `[*]` + `<strong>Label</strong>` row. Utilities only; no
+// site/app CSS class, so no census entry and nothing to add to styles/.
+export {
+  DocumentFrame,
+  Section,
+  PageTitle,
+  Prose,
+  GlyphList,
+  GlyphRow,
+  type DocumentFrameProps,
+  type SectionProps,
+  type PageTitleProps,
+  type ProseProps,
+  type GlyphListProps,
+  type GlyphRowProps,
+} from "./components/document";
+
+// changelog family (D1, #4429) — the release rail: one row per release with a
+// sticky version/date aside and the shipped title in the wide column.
+export {
+  ReleaseRail,
+  type ReleaseRailItem,
+  type ReleaseRailProps,
+} from "./components/changelog";
+
+// footer family (D1, #4429) — the footer as a hairline table: one cell per
+// destination, the legal strip underneath.
+export {
+  FooterCells,
+  type FooterCell,
+  type FooterCellsProps,
+} from "./components/footer";

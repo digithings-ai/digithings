@@ -196,7 +196,15 @@ Every Python component is scanned on every PR, every push to `main`/`develop`, a
 
 - **Blocks merge:** any finding with OSV severity **HIGH** or **CRITICAL** (CVSS ≥ 7.0).
 - **Warn-only:** findings at **MEDIUM** or **LOW** severity, and findings with unknown severity — surfaced via `::warning::` annotations on the PR, not gated.
-- **Scope:** `digibase`, `digigraph`, `digiquant`, `digisearch`, `digismith`, `digikey`, `digiclaw`. Each component is installed with its `[dev]` extras and audited against the resolved transitive closure. `digiquant[nautilus]` is excluded (tracked in #42). `digichat/` (Node) is audited by a sibling `npm audit --omit=dev` job (follow-up).
+- **Scope:** `digibase`, `digigraph`, `digiquant`, `digisearch`, `digismith`, `digikey`, `digiclaw`. Each component is installed with its `[dev]` extras and audited against the resolved transitive closure. `digiquant[nautilus]` is excluded (tracked in #42).
+
+The JS workspaces are covered by the sibling [`npm audit` workflow](.github/workflows/security-npm-audit.yml) on the same cadence, auditing the whole `apps/*` + `packages/*` closure from the single root `package-lock.json`.
+
+- **Blocks merge:** any advisory npm reports as **HIGH** or **CRITICAL**.
+- **Warn-only:** **MODERATE**, **LOW** and unknown severities.
+- **Per-advisory acceptance:** the classifier matches the ignore list against each advisory individually, not against the package — a *new* advisory on a package that already has accepted ones still blocks.
+- **Fails closed:** an npm audit that could not reach the registry (error body, or no `vulnerabilities` key) fails the lane rather than reporting clean.
+- **Scope note:** accepted npm advisories live in [`npm-audit-ignore.txt`](npm-audit-ignore.txt) and follow the same justification requirement as the Python list below.
 
 ### Accepting a CVE
 
@@ -216,6 +224,17 @@ Preferred remediation, in order:
 3. Only then: add to `pip-audit-ignore.txt` with justification.
 
 This policy covers vulnerabilities only. Third-party **license** obligations — including recorded acceptances of weak-copyleft dependencies — are handled separately in [docs/LICENSING.md](docs/LICENSING.md).
+
+## Accepted advisors (core)
+
+Live Supabase Database/Auth advisors on the **core** project are triaged in [#4630](https://github.com/digithings-ai/digithings/issues/4630). After migration `139_core_advisor_harden.sql`:
+
+- **Accepted SECURITY DEFINER views** (column list is the allowlist; do not flip to `security_invoker` without new anon policies on the base tables): `public_finalized_nav`, `public_daily_realized_attribution`, `public_accounting_nav_history`, `public_accounting_period_status`, `run_health`, `run_event_trace`.
+- **Invoker public tape** (clears definer ERROR): `public_portfolio_positions`, `public_nav_history`.
+- **Accepted authenticated SECURITY DEFINER RPCs**: `ensure_my_workspace`, `my_access` (caller-scoped; anon cannot execute). Do not revoke without a redesign.
+- **Auth — leaked-password protection (Hibp)**: **accepted / plan-gated residual** on **core** (`rwagjbkvxkdwqmouagad`). Supabase leaked-password protection is Pro-only; confirmed 2026-09-26 that it cannot be enabled on the current plan. Not an open Human Gate. Revisit if core upgrades to a plan that includes Auth Hibp (not a SQL migration).
+- **twelve-x** Hibp + accepted `fx_hub_has_access` DEFINER WARN: [digithings-ai/twelve-x#211](https://github.com/digithings-ai/twelve-x/issues/211) (Hibp there is likely the same Pro-only residual).
+- **pg_net**: remains in `public` (`extrelocatable=false`); migration 139 revokes `USAGE`/`EXECUTE` on schema `net` from `PUBLIC`/`anon`/`authenticated`. Cron `prices-live-*` runs as `postgres`.
 
 ## PR security rubric
 

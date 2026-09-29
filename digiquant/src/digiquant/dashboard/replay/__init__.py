@@ -1,7 +1,7 @@
 """WP10.4/WP10.5 — shared-cash Nautilus replay + paired shadow comparison.
 
 Isolated challenger/shadow path only. Must never be imported by production
-H8/H9 booking, commit writers, or live-trading surfaces.
+sizing/commit booking, commit writers, or live-trading surfaces.
 """
 
 from __future__ import annotations

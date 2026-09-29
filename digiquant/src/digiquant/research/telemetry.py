@@ -104,7 +104,7 @@ def content_freeze_breakdown(state: ResearchState) -> dict[str, Any]:
     ``sector-healthcare`` byte-identical to 07-28 inside the 18.
 
     ``segments_ok`` is deliberately NOT adjusted. It counts the segments that produced a row
-    today, which stays true of a frozen one, and it is read by ``atlas_run_health`` (migration
+    today, which stays true of a frozen one, and it is read by ``run_health`` (migration
     041), ``run-episodes.ts`` and three frontend components — redefining it is a separate
     change with its own consumers to migrate. The honest fix for the *public* surface is the
     freshness marker on the segment itself (``phase7_synthesis._segment_freshness``), which

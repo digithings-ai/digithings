@@ -14,12 +14,12 @@ description: Run crypto market analysis as part of the daily digest. Covers BTC,
   computed indicators (sma/rsi/macd/adx/atr/zscore), newest first — use those
   values; **never invent a number** — every quantitative claim must cite a value you fetched.
   If a call returns no rows for a symbol, say so and lower conviction. Market history is not
-  readable through `query_data` (#3780) — never use it to fetch prices or technicals.
+  readable through `query_research` (#3780) — never use it to fetch prices or technicals.
 - Cover the crypto proxies in scope; use the pre-fetched **`web_grounding`** block (when present) for 24/7 spot moves not in the daily series.
 
 ## Inputs
-- `config/watchlist.md` (crypto section)
-- `config/preferences.md`
+- `config/watchlist.md` — repository provenance for a maintainer (crypto section); NOT retrievable by a tool.
+- `config/preferences.md` — repository provenance for a maintainer; NOT retrievable by a tool.
 - Macro regime output (risk-on/off affects crypto)
 - Institutional flows output (IBIT/FBTC daily flow data)
 
@@ -27,14 +27,13 @@ description: Run crypto market analysis as part of the daily digest. Covers BTC,
 
 > DB-first: read crypto levels from Supabase (`daily_snapshots.market_data` / `documents.payload`).
 
-For richer crypto data use MCP tools:
-- **Market data / altcoins / DeFi**: `mcp_coingecko_execute` — call CoinGecko API:
-  - Prices: `GET /simple/price?ids=bitcoin,ethereum,solana&vs_currencies=usd&include_24hr_change=true&include_market_cap=true`
-  - Market overview: `GET /coins/markets?vs_currency=usd&order=market_cap_desc&per_page=20`
-  - Trending: `GET /search/trending`
-- **Fear & Greed Index**: not ingested daily anymore (per issue #328 — single-integer signal didn't justify a dedicated pipeline). When the FNG matters for the day's read, retrieve the current value via web search ("crypto fear and greed index today") or fetch `https://alternative.me/crypto/fear-and-greed-index/` with `defuddle parse`.
+There is no MCP client and no CoinGecko tool in this loop. Read crypto levels from the
+ingested layer (`daily_snapshots.market_data`) with your data tools
+(`get_price_technicals(ticker="BTC-USD")`, `get_macro_series`) and from the
+`web_grounding` block when one is provided.
 
-> **Web fetch**: use `defuddle parse <url> --md` instead of WebFetch for any crypto news article, narrative piece, on-chain data page, or regulatory filing URL. Not for API endpoints, `.json`, or `.md` files.
+- **Fear & Greed Index**: not ingested daily (issue #328). Only report it if the
+  `web_grounding` block states it; otherwise omit it. Do not search for it.
 
 ---
 
@@ -49,7 +48,7 @@ For richer crypto data use MCP tools:
 ### 2. Market Structure
 - Total crypto market cap and 24h change
 - Bitcoin dominance (BTC.D) — rising or falling? (implication for alt season)
-- Fear & Greed Index level and trend (not in DB anymore — pull on demand via web search if it materially affects today's read; otherwise omit)
+- Fear & Greed Index level and trend — only if the `web_grounding` block states it; otherwise omit
 - Is the market in a bull/bear/consolidation phase structurally?
 
 ### 3. Watchlist Alts

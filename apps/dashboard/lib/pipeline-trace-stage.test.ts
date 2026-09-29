@@ -42,7 +42,7 @@ function buildScaleFixture(count: number): PipelineRunEvent[] {
     if (band === 0) {
       return event({
         sequence,
-        phase: 'h5_analyst-QQQ',
+        phase: 'analyst-QQQ',
         operation: 'AssetAnalyst',
         document_key: 'analyst/QQQ',
         event_kind: sequence % 2 === 0 ? 'tool_call' : 'model_call',
@@ -68,7 +68,7 @@ function buildScaleFixture(count: number): PipelineRunEvent[] {
     if (band === 3) {
       return event({
         sequence,
-        phase: 'portfolio_h9_commit_run',
+        phase: 'portfolio_commit',
         operation: 'Commit',
         document_key: `commit-run/${1000 + sequence}`,
       });
@@ -90,7 +90,7 @@ describe('pipeline-trace-stage', () => {
     expect(stageForTraceEvent(event({ document_key: 'analyst/IJR', phase: null }))).toBe(
       'selection',
     );
-    expect(stageForTraceEvent(event({ document_key: null, phase: 'h6_pm_challenge-EWT' }))).toBe(
+    expect(stageForTraceEvent(event({ document_key: null, phase: 'deliberation_pm_challenge-EWT' }))).toBe(
       'selection',
     );
     expect(stageForTracePhase('beliefs-distillation')).toBe('learning');

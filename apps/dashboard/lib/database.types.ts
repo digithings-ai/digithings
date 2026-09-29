@@ -257,7 +257,7 @@ export interface Database {
       };
       thesis_vehicles: {
         // Analyst vehicle-selection map: ticker → MARKET thesis_id, with rationale +
-        // candidate_rank (many-to-many). Written reliably by portfolio H3
+        // candidate_rank (many-to-many). Written reliably by portfolio vehicle_map
         // (persist_thesis_vehicle_map). This is the RELIABLE ticker→market-thesis join
         // used by the Theses story spine (#1562) — `theses.linked_market_thesis_id` is
         // self-referential/dead. NB: `thesis_id` is co-generated per `date` with the
@@ -308,7 +308,7 @@ export interface Database {
         Insert: Database['public']['Tables']['position_attribution']['Insert'];
         Update: Database['public']['Tables']['position_attribution']['Update'];
       };
-      atlas_run_diagnostics: {
+      run_diagnostics: {
         Row: {
           run_id: string;
           // Outer-retry attempt within one workflow run, 1-based; part of the primary key with
@@ -339,8 +339,8 @@ export interface Database {
           breakdown: Json | null;
           created_at: string | null;
         };
-        Insert: Database['public']['Tables']['atlas_run_diagnostics']['Row'];
-        Update: Partial<Database['public']['Tables']['atlas_run_diagnostics']['Row']>;
+        Insert: Database['public']['Tables']['run_diagnostics']['Row'];
+        Update: Partial<Database['public']['Tables']['run_diagnostics']['Row']>;
       };
       analyst_coverage: {
         // Pointer/index row per (date, ticker): which market thesis_ids the coverage
@@ -366,7 +366,7 @@ export interface Database {
       // timing / retry attempt ONLY — spend telemetry (cost, tokens, error_summary, breakdown)
       // is excluded. ONE ROW PER RETRY ATTEMPT since 065 (#1762): a date that took three
       // attempts has three rows, which is what groupRunEpisodes was built to read.
-      atlas_run_health: {
+      run_health: {
         Row: {
           run_id: string;
           run_date: string | null;

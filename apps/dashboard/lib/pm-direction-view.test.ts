@@ -83,7 +83,7 @@ describe('sortPmRoster', () => {
 });
 
 describe('derivePmAction', () => {
-  it('uses prior vs H8 target when rebalance weights are present', () => {
+  it('uses prior vs sizing target when rebalance weights are present', () => {
     expect(
       derivePmAction({ direction: 'long', priorWeightPct: 0, targetWeightPct: 8 }),
     ).toBe('buy');

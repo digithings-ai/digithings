@@ -11,7 +11,7 @@ import {
   ThreadListPrimitive,
 } from "@assistant-ui/react";
 import { DigichatThreadList } from "@digithings/ui/chat/thread-list";
-import { useSkinChrome } from "@/components/stock/skin-chrome";
+import { useSkinChrome } from "@digithings/ui/chat/stock";
 
 export function MemoryThreadListSidebar() {
   const { skin } = useSkinChrome();

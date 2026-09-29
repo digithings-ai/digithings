@@ -134,7 +134,8 @@ jobs:
             # when the house run committed no book, so a failed house run cannot
             # leave a hole in the NAV series (#3439). It only extends the replay
             # grid — `positions` is never written, so the missing book stays
-            # detectable and the metrics step below still exits 3 on a stale book.
+            # detectable and the metrics step below marks the carried book
+            # through (computed_from='refresh_script_mark_through').
             uv run --frozen --no-sync python digiquant/scripts/research/verify_nav_replay.py --write --mark-through "$(date -u +%F)"
           fi
 
@@ -156,7 +157,12 @@ jobs:
           if [ -n "$RUN_DATE" ]; then
             uv run --frozen --no-sync python digiquant/scripts/research/refresh_performance_metrics.py --supabase --date "$RUN_DATE"
           else
-            uv run --frozen --no-sync python digiquant/scripts/research/refresh_performance_metrics.py --supabase
+            # --mark-through-book: when the house run committed no book today,
+            # carry the last book forward and stamp carried marks (last-close
+            # carry, metrics_as_of = close date, NULL day-change) instead of
+            # exiting 3 with zero writes. Vendor-gap tickers stay NULL/NULL and
+            # position_events is never written from this path (#4642).
+            uv run --frozen --no-sync python digiquant/scripts/research/refresh_performance_metrics.py --supabase --mark-through-book
           fi
 
       # Read-only (no --write): replays the full engine path and fails non-zero

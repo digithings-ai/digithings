@@ -1,0 +1,52 @@
+# Deploys the dashboard-api Worker (central read-only dashboard API).
+# No Containers. Service-role key syncs via wrangler-action secrets input —
+# it lives ONLY in worker secrets, never in the static bundle.
+name: "Deploy: dashboard-api"
+
+on:
+  push:
+    branches:
+      - develop
+      - main
+    paths:
+      - "apps/dashboard-api/**"
+      - ".github/workflows/deploy-dashboard-api.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-dashboard-api
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Install package dependencies
+        run: npm ci --no-audit --no-fund
+
+      - name: Test + typecheck
+        run: |
+          npm run test --workspace dashboard-api
+          npm run typecheck --workspace dashboard-api
+
+      - name: Deploy
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          workingDirectory: apps/dashboard-api
+          command: deploy
+          wranglerVersion: "4.28.0"
+          secrets: |
+            SUPABASE_SERVICE_ROLE_KEY
+        env:
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}

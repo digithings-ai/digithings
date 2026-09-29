@@ -581,7 +581,7 @@ def compose_legacy_digest_body(data: Mapping[str, Any]) -> str:
 
 
 def digest_briefing_for_portfolio(digest: Mapping[str, Any] | None) -> dict[str, str]:
-    """Thin H1/H2 envelope: ``date`` / ``body`` / ``regime_label`` only."""
+    """Thin thesis/market envelope: ``date`` / ``body`` / ``regime_label`` only."""
     if not isinstance(digest, Mapping) or not digest:
         return {}
     raw_body = str(digest.get("body") or "")
@@ -622,7 +622,7 @@ class ResearchMemo(BaseModel):
     )
     sources: list[Source] = Field(
         default_factory=list,
-        description="Optional grounding sources for digest/H1 — not a user appendix.",
+        description="Optional grounding sources for digest/thesis — not a user appendix.",
     )
     internal_bias: Bias | None = Field(
         default=None,

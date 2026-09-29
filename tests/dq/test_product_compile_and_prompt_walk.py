@@ -51,9 +51,9 @@ def test_orchestrator_manifest_includes_compile_tool() -> None:
 
 
 @pytest.mark.unit
-def test_prompt_walk_inventory_covers_h6_and_h7() -> None:
+def test_prompt_walk_inventory_covers_deliberation_and_h7() -> None:
     inv = prompt_walk_inventory()
     by_id = {n.node_id: n for n in inv.nodes}
-    assert by_id["portfolio/h6-deliberation"].structured_output == "prose_preferred"
-    assert by_id["portfolio/h7-pm-direction"].structured_output == "keep"
+    assert by_id["portfolio/deliberation"].structured_output == "prose_preferred"
+    assert by_id["portfolio/pm-direction"].structured_output == "keep"
     assert inv.issue == "3424"

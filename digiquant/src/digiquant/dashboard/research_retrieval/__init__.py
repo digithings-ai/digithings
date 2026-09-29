@@ -10,17 +10,17 @@ WP12.5 compiled prose views:
 :mod:`digiquant.dashboard.research_retrieval.views`.
 WP11.1 ticker evidence bundles + amendments:
 :class:`~digiquant.dashboard.research_retrieval.store.EvidenceBundleStore`
-(models in the same ``models`` module; H6 selection cutover is WP11.3+;
+(models in the same ``models`` module; deliberation selection cutover is WP11.3+;
 WP13.1 research attention policy extends ``research_retrieval/planner.py``).
-WP11.2 H5 publish:
+WP11.2 analyst publish:
 :mod:`digiquant.dashboard.research_retrieval.evidence_bundle`
-(one base bundle per H5-attempted ticker before the provider call).
-WP11.3 deterministic H6 selection:
+(one base bundle per analyst-attempted ticker before the provider call).
+WP11.3 deterministic deliberation selection:
 :mod:`digiquant.dashboard.research_retrieval.planner`
-(``H6Selection`` reasons/features/budget; ``DIGIQUANT_H6_SELECTION_MODE``).
-WP11.4 bounded H6 missing-fact amendment:
-:mod:`digiquant.dashboard.research_retrieval.h6_amendment`
-(one validated proposal → targeted retrieval → append-only amendment; no generic H6 search).
+(``DeliberationSelection`` reasons/features/budget; ``DIGIQUANT_H6_SELECTION_MODE``).
+WP11.4 bounded deliberation missing-fact amendment:
+:mod:`digiquant.dashboard.research_retrieval.deliberation_amendment`
+(one validated proposal → targeted retrieval → append-only amendment; no generic deliberation search).
 WP13.2 attention persistence:
 :class:`~digiquant.dashboard.research_retrieval.store.AttentionStore`
 (plans/decisions/context manifests/policy evaluations; migration
@@ -31,13 +31,13 @@ WP13.5 shadow evaluation:
 WP14.1 role context compiler:
 :mod:`digiquant.dashboard.research_retrieval.context`
 (``ContextCapsule`` / ``ContextManifest`` / role allowlists; models + compiler only — WP14.2+ wiring).
-WP14.2 blinded H5/H6 context wiring:
+WP14.2 blinded analyst/deliberation context wiring:
 :mod:`digiquant.dashboard.research_retrieval.context_wiring`
 (``DIGIQUANT_CONTEXT_COMPILER_MODE`` off|shadow|enforce beside incumbent provider inputs).
-WP14.3 H7 decision context wiring:
-:mod:`digiquant.dashboard.research_retrieval.h7_decision_context`
+WP14.3 direction decision context wiring:
+:mod:`digiquant.dashboard.research_retrieval.direction_decision_context`
 (typed mandate/calibration/contribution/risk/authorization/forecast sections;
-:mod:`digiquant.dashboard.research_retrieval.h7_prerequisites` preflight snapshot).
+:mod:`digiquant.dashboard.research_retrieval.direction_prerequisites` preflight snapshot).
 WP14.4 drill-down manifest pinning:
 :mod:`digiquant.dashboard.research_retrieval.tools`
 (``DIGIQUANT_RETRIEVAL_MANIFEST_MODE`` off|shadow|enforce; pre-call manifest persist +
@@ -50,8 +50,8 @@ from digiquant.dashboard.research_retrieval.blinding import (
     DIGEST_DOCUMENT_KEY,
     PromptRole,
     RetrievalPhase,
-    assert_blinded_h5_prompt,
-    assert_blinded_h6_prompt,
+    assert_blinded_analyst_prompt,
+    assert_blinded_deliberation_prompt,
     forbidden_prompt_keys,
     portfolio_tool_allowed,
     research_document_allowed,
@@ -79,49 +79,51 @@ from digiquant.dashboard.research_retrieval.context_wiring import (
     ContextCompilerMode,
     RoleContextWireResult,
     changed_evidence_ids_from_bundle,
-    compile_h5_role_context,
-    compile_h6_role_context,
-    compile_h7_role_context,
+    compile_analyst_role_context,
+    compile_deliberation_role_context,
+    compile_direction_role_context,
     resolve_context_compiler_mode,
     try_load_pinned_research_state,
-    wire_h5_phase_inputs,
-    wire_h6_phase_inputs,
-    wire_h7_phase_inputs,
+    wire_analyst_phase_inputs,
+    wire_deliberation_phase_inputs,
+    wire_direction_phase_inputs,
 )
-from digiquant.dashboard.research_retrieval.evidence_bundle import (
-    DIGIQUANT_EVIDENCE_BUNDLE_WRITER_ENV,
-    EvidenceConflict,
-    H5EvidenceBundleBuild,
-    H5EvidenceFact,
-    MissingEvidenceField,
-    build_h5_evidence_bundle,
-    cite_evidence_bundle_on_forecast,
-    evidence_bundle_writer_enabled,
-    facts_from_phase_inputs,
-    publish_h5_evidence_bundle,
-    resolve_h5_state_version_id,
-)
-from digiquant.dashboard.research_retrieval.h6_amendment import (
-    H6_AMENDMENT_POLICY_MAX_PER_BASE,
-    H6AmendmentOutcome,
-    H6AmendmentResult,
-    attempt_h6_evidence_amendment,
+from digiquant.dashboard.research_retrieval.deliberation_amendment import (
+    DELIBERATION_AMENDMENT_POLICY_MAX_PER_BASE,
+    DeliberationAmendmentOutcome,
+    DeliberationAmendmentResult,
+    attempt_deliberation_evidence_amendment,
     document_key_for_source_kind,
     retrieve_missing_fact_evidence,
     validate_missing_fact_proposal,
 )
-from digiquant.dashboard.research_retrieval.h7_decision_context import (
-    H7ContextSection,
-    H7DecisionContext,
-    H7DecisionContextCompileInput,
-    H7PrerequisiteSnapshot,
-    H7SectionAvailability,
-    H7SectionKind,
-    assert_h7_no_target_weights,
-    compile_h7_decision_context,
-    strip_h7_weight_keys,
+from digiquant.dashboard.research_retrieval.direction_decision_context import (
+    DirectionContextSection,
+    DirectionDecisionContext,
+    DirectionDecisionContextCompileInput,
+    DirectionPrerequisiteSnapshot,
+    DirectionSectionAvailability,
+    DirectionSectionKind,
+    assert_direction_no_target_weights,
+    compile_direction_decision_context,
+    strip_direction_weight_keys,
 )
-from digiquant.dashboard.research_retrieval.h7_prerequisites import build_h7_prerequisite_snapshot
+from digiquant.dashboard.research_retrieval.direction_prerequisites import (
+    build_direction_prerequisite_snapshot,
+)
+from digiquant.dashboard.research_retrieval.evidence_bundle import (
+    DIGIQUANT_EVIDENCE_BUNDLE_WRITER_ENV,
+    AnalystEvidenceBundleBuild,
+    AnalystEvidenceFact,
+    EvidenceConflict,
+    MissingEvidenceField,
+    build_analyst_evidence_bundle,
+    cite_evidence_bundle_on_forecast,
+    evidence_bundle_writer_enabled,
+    facts_from_phase_inputs,
+    publish_analyst_evidence_bundle,
+    resolve_analyst_state_version_id,
+)
 from digiquant.dashboard.research_retrieval.legacy_backfill import (
     BackfillCounts,
     LegacySourceDocument,
@@ -155,8 +157,8 @@ from digiquant.dashboard.research_retrieval.pin import (
     require_research_state_pin,
 )
 from digiquant.dashboard.research_retrieval.planner import (
+    DELIBERATION_SELECTION_PROMPT_FORBIDDEN_KEYS,
     DIGIQUANT_H6_SELECTION_MODE_ENV,
-    H6_SELECTION_PROMPT_FORBIDDEN_KEYS,
     AttentionBudgetEstimate,
     AttentionContextManifest,
     AttentionDecision,
@@ -168,19 +170,19 @@ from digiquant.dashboard.research_retrieval.planner import (
     AttentionReason,
     AttentionRolloutMode,
     AttentionTargetKind,
-    H6Action,
-    H6Budget,
-    H6DecisionFeatures,
-    H6Selection,
-    H6SelectionMode,
-    H6SelectionReason,
+    DeliberationAction,
+    DeliberationBudget,
+    DeliberationDecisionFeatures,
+    DeliberationSelection,
+    DeliberationSelectionMode,
+    DeliberationSelectionReason,
     PersistedAttentionDecision,
     PersistedAttentionPlan,
     assert_no_materiality_in_prompt,
     attention_decision_id,
-    build_h6_decision_features,
+    build_deliberation_decision_features,
     incumbent_fallback_selection,
-    resolve_h6_selection_mode,
+    resolve_deliberation_selection_mode,
     select_h6,
 )
 from digiquant.dashboard.research_retrieval.queries import (
@@ -192,6 +194,7 @@ from digiquant.dashboard.research_retrieval.queries import (
     extract_section,
     query_portfolio,
     query_research,
+    search_research,
 )
 from digiquant.dashboard.research_retrieval.retriever import ResearchRetriever
 from digiquant.dashboard.research_retrieval.shadow_evaluation import (
@@ -295,24 +298,24 @@ __all__ = [
     "EvidenceRecord",
     "ExpectedEventStatus",
     "ExpectedEventVersion",
-    "H5EvidenceBundleBuild",
-    "H5EvidenceFact",
-    "H6Action",
-    "H6Budget",
-    "H6DecisionFeatures",
-    "H6Selection",
-    "H6SelectionMode",
-    "H6SelectionReason",
-    "H7DecisionContext",
-    "H7DecisionContextCompileInput",
-    "H7ContextSection",
-    "H7PrerequisiteSnapshot",
-    "H7SectionAvailability",
-    "H7SectionKind",
-    "H6_AMENDMENT_POLICY_MAX_PER_BASE",
-    "H6AmendmentOutcome",
-    "H6AmendmentResult",
-    "H6_SELECTION_PROMPT_FORBIDDEN_KEYS",
+    "AnalystEvidenceBundleBuild",
+    "AnalystEvidenceFact",
+    "DeliberationAction",
+    "DeliberationBudget",
+    "DeliberationDecisionFeatures",
+    "DeliberationSelection",
+    "DeliberationSelectionMode",
+    "DeliberationSelectionReason",
+    "DirectionDecisionContext",
+    "DirectionDecisionContextCompileInput",
+    "DirectionContextSection",
+    "DirectionPrerequisiteSnapshot",
+    "DirectionSectionAvailability",
+    "DirectionSectionKind",
+    "DELIBERATION_AMENDMENT_POLICY_MAX_PER_BASE",
+    "DeliberationAmendmentOutcome",
+    "DeliberationAmendmentResult",
+    "DELIBERATION_SELECTION_PROMPT_FORBIDDEN_KEYS",
     "LegacyDocumentRef",
     "LegacySourceDocument",
     "LoadedResearchState",
@@ -362,26 +365,26 @@ __all__ = [
     "TypedProvenance",
     "VIEW_SCHEMA_VERSION",
     "apply_retrieval_pin_to_result",
-    "assert_blinded_h5_prompt",
-    "assert_blinded_h6_prompt",
-    "assert_h7_no_target_weights",
+    "assert_blinded_analyst_prompt",
+    "assert_blinded_deliberation_prompt",
+    "assert_direction_no_target_weights",
     "assert_no_materiality_in_prompt",
-    "attempt_h6_evidence_amendment",
+    "attempt_deliberation_evidence_amendment",
     "attention_decision_id",
     "backfill_legacy_manifests",
-    "build_h5_evidence_bundle",
-    "build_h6_decision_features",
-    "build_h7_prerequisite_snapshot",
+    "build_analyst_evidence_bundle",
+    "build_deliberation_decision_features",
+    "build_direction_prerequisite_snapshot",
     "build_legacy_document_ref",
     "build_research_tool_dispatcher",
     "build_retrieval_query_pin",
     "changed_evidence_ids_from_bundle",
     "child_version_must_name_parent",
     "cite_evidence_bundle_on_forecast",
-    "compile_h5_role_context",
-    "compile_h6_role_context",
-    "compile_h7_decision_context",
-    "compile_h7_role_context",
+    "compile_analyst_role_context",
+    "compile_deliberation_role_context",
+    "compile_direction_decision_context",
+    "compile_direction_role_context",
     "compile_context_capsule",
     "compile_context_manifest",
     "compile_research_brief",
@@ -403,7 +406,7 @@ __all__ = [
     "portfolio_tool_allowed",
     "provider_attempt_token_link_id",
     "publish_compiled_views",
-    "publish_h5_evidence_bundle",
+    "publish_analyst_evidence_bundle",
     "query_portfolio",
     "query_research",
     "require_research_state_pin",
@@ -413,17 +416,18 @@ __all__ = [
     "role_context_policy_content_hash",
     "resolve_context_compiler_mode",
     "resolve_retrieval_manifest_mode",
-    "resolve_h5_state_version_id",
-    "resolve_h6_selection_mode",
+    "resolve_analyst_state_version_id",
+    "resolve_deliberation_selection_mode",
     "retrieval_pin_from_wire_result",
     "retrieve_missing_fact_evidence",
+    "search_research",
     "select_h6",
     "strip_blinded_forbidden_keys",
-    "strip_h7_weight_keys",
+    "strip_direction_weight_keys",
     "try_load_pinned_research_state",
     "validate_missing_fact_proposal",
-    "wire_h5_phase_inputs",
-    "wire_h6_phase_inputs",
-    "wire_h7_phase_inputs",
+    "wire_analyst_phase_inputs",
+    "wire_deliberation_phase_inputs",
+    "wire_direction_phase_inputs",
     "write_shadow_evaluation_report",
 ]

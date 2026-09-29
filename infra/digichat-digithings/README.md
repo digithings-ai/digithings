@@ -45,7 +45,7 @@ and [`docs/digichat/INSTALL.md`](../../docs/digichat/INSTALL.md) (Profile A or B
 Dogfood and default installs keep root Auth.js **OFF**:
 
 ```bash
-DIGICHAT_REQUIRE_ROOT_AUTH=0   # default; `/` → `/embed`
+DIGICHAT_REQUIRE_ROOT_AUTH=0   # default; bare `/` renders the mode menu
 ```
 
 Public chat is the ungated embed iframe (`gateMode: ungated`). Do not enable

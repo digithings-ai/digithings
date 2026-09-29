@@ -279,7 +279,7 @@ def start(*, run_id: str | None = None) -> None:
     """Activate capture and clear any prior calls.
 
     ``run_id`` is the durable identifier every record in this run is keyed by — the
-    ``GITHUB_RUN_ID`` that ``atlas_run_diagnostics`` already uses, so detailed telemetry and
+    ``GITHUB_RUN_ID`` that ``run_diagnostics`` already uses, so detailed telemetry and
     the diagnostics row join on one value. It is stored verbatim and never truncated, because
     it is a join key. A blank or absent value leaves the run without node identity rather than
     inventing one: nodes then keep the existing no-identity behaviour of emitting physical
@@ -842,6 +842,26 @@ def _aggregate_snapshot(
         b["cached_tokens"] += c.get("cached_tokens", 0)
         b["cost"] += c.get("cost", 0.0)
         b["sources"] += c["sources"]
+    # Per-model split (#4596): the token counts a token-derived cost estimate needs. Additive
+    # to by_kind, which answers "which kind of call"; this answers "which model". ``cost`` stays
+    # the ACTUAL figure — a caller that wants an estimate prices the tokens itself.
+    by_model: dict[str, dict[str, float]] = {}
+    for c in calls:
+        m = by_model.setdefault(
+            c["model"],
+            {
+                "calls": 0,
+                "prompt_tokens": 0,
+                "completion_tokens": 0,
+                "cached_tokens": 0,
+                "cost": 0.0,
+            },
+        )
+        m["calls"] += 1
+        m["prompt_tokens"] += c["prompt_tokens"]
+        m["completion_tokens"] += c["completion_tokens"]
+        m["cached_tokens"] += c.get("cached_tokens", 0)
+        m["cost"] += c.get("cost", 0.0)
     return {
         "llm_calls": len(chat),
         "prompt_tokens": prompt,
@@ -857,6 +877,7 @@ def _aggregate_snapshot(
         "grounding_failed": sum(1 for c in search if not c["ok"]),
         "models": sorted({c["model"] for c in calls}),
         "by_kind": by_kind,
+        "by_model": by_model,
         "empty_retries": {"total": sum(empty_retries.values()), "by_model": empty_retries},
         "events": event_dumps,
     }

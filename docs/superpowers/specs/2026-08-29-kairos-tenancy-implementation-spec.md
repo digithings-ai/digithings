@@ -430,7 +430,7 @@ Full sourced detail lives in the research pass attached to the PR; the facts bel
 ## 10. Issue filing plan
 
 **Drafted and ready to file:** the epic + all twelve executor briefings live in
-[`docs/agent-backlog/kairos-tenancy/`](../../agent-backlog/kairos-tenancy/README.md)
+[`docs/agent-backlog/execution-tenancy/`](../../agent-backlog/execution-tenancy/README.md)
 (`EPIC.md`, `K0.md`–`K5.md`, `T0.md`–`T5.md`) with filing commands, label/model table, wave map,
 file-ownership conflict rules, and the cheap-model parallel-dispatch protocol. Each briefing is
 self-contained — dispatch one file per agent session. Suggested execution order and parallelism:

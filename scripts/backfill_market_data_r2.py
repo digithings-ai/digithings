@@ -231,14 +231,32 @@ class R2StoreAdapter:
 
 
 def _pg_connect(uri: str) -> Any:
-    """Open a direct Postgres connection; deferred import keeps unit installs lean."""
+    """Open a direct Postgres connection; deferred import keeps unit installs lean.
+
+    Disables server-side prepared statements (``prepare_threshold=None``): the
+    registry seam re-issues the same SELECT/INSERT shapes per dataset, and a
+    named prepared statement left behind by an errored transaction surfaces as
+    ``DuplicatePreparedStatement`` (``_pg3_0``) on the next dataset, poisoning
+    the whole run. Falls back to a plain connect on drivers without the kwarg.
+    """
     try:
         import psycopg
     except ImportError as exc:
         raise RuntimeError(
             "psycopg is required for direct Postgres reads (install the digiquant research extra)"
         ) from exc
-    return psycopg.connect(uri)
+    try:
+        return psycopg.connect(uri, prepare_threshold=None)
+    except TypeError:
+        return psycopg.connect(uri)
+
+
+def _pg_rollback(conn: Any) -> None:
+    """Best-effort rollback so one dataset's error never poisons the next (#4621)."""
+    try:
+        conn.rollback()
+    except Exception:
+        pass
 
 
 def _dict_rows(conn: Any, sql: str, params: tuple[Any, ...]) -> list[dict[str, Any]]:
@@ -306,19 +324,29 @@ def _pg_registry_insert(uri: str, connect: Any = None) -> Any:
         if holder.get("conn") is None:
             holder["conn"] = connector(uri)
         conn = holder["conn"]
-        cur = conn.cursor()
-        cur.execute("SELECT sha256 FROM archive_objects WHERE r2_key = %s", (r2_key,))
-        found = cur.fetchall()
-        for (existing_sha,) in found:
-            if existing_sha == sha256:
-                return
-            raise ArchiveVerifyError(f"archive pointer conflict for {r2_key}: existing row kept")
-        cur.execute(
-            "INSERT INTO archive_objects (source_table, source_key, r2_key, sha256, size)"
-            " VALUES (%s, %s::jsonb, %s, %s, %s)",
-            (source_table, json.dumps(source_key), r2_key, sha256, size),
-        )
-        conn.commit()
+        try:
+            cur = conn.cursor()
+            cur.execute("SELECT sha256 FROM archive_objects WHERE r2_key = %s", (r2_key,))
+            found = cur.fetchall()
+            for (existing_sha,) in found:
+                if existing_sha == sha256:
+                    return
+                raise ArchiveVerifyError(
+                    f"archive pointer conflict for {r2_key}: existing row kept"
+                )
+            cur.execute(
+                "INSERT INTO archive_objects (source_table, source_key, r2_key, sha256, size)"
+                " VALUES (%s, %s::jsonb, %s, %s, %s)",
+                (source_table, json.dumps(source_key), r2_key, sha256, size),
+            )
+            conn.commit()
+        except Exception:
+            # A failed statement aborts the transaction; without a rollback
+            # every later dataset raises InFailedSqlTransaction for a fault it
+            # did not cause. Roll back, then re-raise so THIS dataset still
+            # reports its own error loudly (#4621).
+            _pg_rollback(conn)
+            raise
 
     return insert
 
@@ -331,9 +359,14 @@ def _pg_registry_lookup(uri: str, connect: Any = None) -> Any:
     def lookup(r2_key: str) -> str | None:
         if holder.get("conn") is None:
             holder["conn"] = connector(uri)
-        cur = holder["conn"].cursor()
-        cur.execute("SELECT sha256 FROM archive_objects WHERE r2_key = %s", (r2_key,))
-        found = cur.fetchall()
+        conn = holder["conn"]
+        try:
+            cur = conn.cursor()
+            cur.execute("SELECT sha256 FROM archive_objects WHERE r2_key = %s", (r2_key,))
+            found = cur.fetchall()
+        except Exception:
+            _pg_rollback(conn)
+            raise
         if not found:
             return None
         return str(found[0][0])

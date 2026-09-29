@@ -2,7 +2,7 @@
 title: "digisearch — API reference"
 type: reference
 status: generated
-created: 2026-08-10
+created: 2026-09-22
 tags:
   - api
   - core
@@ -16,7 +16,7 @@ relevance:
 **Role:** Vector retrieval · multi-backend · **Tier:** core
 
 ## Overview
-One client over Chroma or Azure AI Search, with backend-neutral entities so you swap engines without touching business code.
+One client over Cloudflare Vectorize, Azure AI Search, or Chroma, with backend-neutral entities so you swap engines without touching business code.
 
 Dense, sparse, and hybrid retrieval are first-class; BeautifulSoup and pdfplumber handle ingest, Polars throughout.
 
@@ -38,6 +38,8 @@ uvicorn digisearch.server:app
 MCP: `digisearch mcp   (FastMCP streamable-http: semantic, research_turn)`
 
 ## Configuration
+- `CLOUDFLARE_ACCOUNT_ID`: Cloudflare account (activates the Vectorize backend).
+- `CLOUDFLARE_API_TOKEN`: Cloudflare API token for Vectorize.
 - `CHROMA_PATH`: Persistent Chroma directory (activates the Chroma backend).
 - `AZURE_SEARCH_ENDPOINT`: Azure AI Search endpoint (alternative backend).
 - `AZURE_SEARCH_API_KEY`: Azure AI Search key.
@@ -63,7 +65,7 @@ Request:
 Response:
 - `results` (object[]): Normalized hits (chunk_id, doc_id, score, content, metadata).
 - `total` (integer): Total matches.
-- `backend` (string): "chroma" | "azure_ai_search" | "stub".
+- `backend` (string): "vectorize" | "chroma" | "azure_ai_search" | "stub".
 
 ```bash
 curl -X POST $DIGISEARCH_URL/query \
@@ -107,7 +109,7 @@ auth: digisearch:query · rate: 10/min/IP · requires the digisearch[agent] extr
 - `research_turn` — Composite research turn with citations (needs digisearch[agent]).
 
 ## Stack
-Chroma, Azure AI Search, OpenAI, BeautifulSoup, pdfplumber, LangGraph, FastAPI
+Cloudflare Vectorize, Chroma, Azure AI Search, OpenAI, BeautifulSoup, pdfplumber, LangGraph, FastAPI
 
 ## Related
 digigraph, digistore, digibase

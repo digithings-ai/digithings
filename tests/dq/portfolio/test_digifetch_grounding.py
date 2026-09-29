@@ -1,4 +1,4 @@
-"""Portfolio grounding wires the PM digifetch subset — H5 + H7, not H6 (#4146)."""
+"""Portfolio grounding wires the PM digifetch subset — analyst + direction, not deliberation (#4146)."""
 
 from __future__ import annotations
 
@@ -15,8 +15,8 @@ from digiquant.data.gloomberb import (
     GloomberbClient,
     agent_tools,
 )
-from digiquant.portfolio.phases import h7_pm_direction, portfolio_common
-from digiquant.portfolio.phases.h6_deliberation import _h6_grounding
+from digiquant.portfolio.phases import direction, portfolio_common
+from digiquant.portfolio.phases.deliberation import _deliberation_grounding
 from digiquant.portfolio.phases.portfolio_common import _portfolio_grounding
 from digiquant.research.phases import _node_factory
 from digiquant.research.state import (
@@ -27,6 +27,14 @@ from digiquant.research.state import (
 )
 
 from digifetch import HttpFetcher, RateLimiter, RetryPolicy
+
+
+def _content(result: str | dict[str, Any]) -> str:
+    """Unwrap a digifetch dispatcher result: ``{"content": <json str>, "ok": bool}`` (#4556)."""
+    if isinstance(result, str):
+        return result
+    return str(result["content"])
+
 
 AAPL_QUOTE = {
     "symbol": "AAPL",
@@ -98,7 +106,7 @@ def _grounding_env(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 @pytest.mark.unit
-@pytest.mark.parametrize("phase", ["h5_analyst", "h7_pm"])
+@pytest.mark.parametrize("phase", ["analyst", "direction"])
 def test_portfolio_grounding_equips_the_free_pm_subset(
     monkeypatch: pytest.MonkeyPatch, phase: str
 ) -> None:
@@ -112,13 +120,13 @@ def test_portfolio_grounding_equips_the_free_pm_subset(
     # Session-gated names are absent without a cookie.
     assert names.isdisjoint(gated_pm)
 
-    payload = json.loads(execute_tool("digifetch_quote", {"symbol": "AAPL"}))
+    payload = json.loads(_content(execute_tool("digifetch_quote", {"symbol": "AAPL"})))
     assert payload["data"]["quote"]["price"] == 200.0
 
 
 @pytest.mark.unit
-def test_h5_call_site_grounds_with_the_pm_subset(monkeypatch: pytest.MonkeyPatch) -> None:
-    # Drive the real H5 entry point (not the helper directly) so dropping the
+def test_analyst_call_site_grounds_with_the_pm_subset(monkeypatch: pytest.MonkeyPatch) -> None:
+    # Drive the real analyst entry point (not the helper directly) so dropping the
     # grounding call from the node path fails here (#4146 review F6).
     recorded: list[dict[str, Any]] = []
     _record_grounding_calls(monkeypatch, recorded)
@@ -132,29 +140,29 @@ def test_h5_call_site_grounds_with_the_pm_subset(monkeypatch: pytest.MonkeyPatch
         phase_slug="portfolio/asset-analyst-AAPL",
     )
     assert payload is None and document is None and errors
-    assert recorded, "H5 must ground through portfolio_common.build_grounding"
-    assert recorded[-1]["research_phase"] == "h5_analyst"
+    assert recorded, "analyst must ground through portfolio_common.build_grounding"
+    assert recorded[-1]["research_phase"] == "analyst"
     assert recorded[-1]["digifetch_tools"] == PM_TOOLS
 
 
 @pytest.mark.unit
-def test_h7_call_site_grounds_with_the_pm_subset(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_direction_call_site_grounds_with_the_pm_subset(monkeypatch: pytest.MonkeyPatch) -> None:
     recorded: list[dict[str, Any]] = []
     _record_grounding_calls(monkeypatch, recorded)
     monkeypatch.setattr(agent_tools, "build_gloomberb_client", lambda: _client(_sweep_handler))
-    monkeypatch.setattr(h7_pm_direction, "run_research_agent", _raise)
+    monkeypatch.setattr(direction, "run_research_agent", _raise)
 
-    out = h7_pm_direction._h7_node(_state())
+    out = direction._direction_node(_state())
     assert out.get("errors"), "the stubbed LLM failure must fail soft"
-    assert recorded, "H7 must ground through portfolio_common.build_grounding"
-    assert recorded[-1]["research_phase"] == "h7_pm"
+    assert recorded, "direction must ground through portfolio_common.build_grounding"
+    assert recorded[-1]["research_phase"] == "direction"
     assert recorded[-1]["digifetch_tools"] == PM_TOOLS
 
 
 @pytest.mark.unit
-def test_h6_grounding_stays_digifetch_free() -> None:
-    # Decision recorded in #4146: H6 is research-tools-only by policy (#2908);
+def test_deliberation_grounding_stays_digifetch_free() -> None:
+    # Decision recorded in #4146: deliberation is research-tools-only by policy (#2908);
     # its evidence path is the bundle + amendment flow, not a new data family.
-    tools, _execute_tool, _ = _h6_grounding(_state())
+    tools, _execute_tool, _ = _deliberation_grounding(_state())
     assert tools is not None
     assert not any(t["function"]["name"].startswith("digifetch_") for t in tools)

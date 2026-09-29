@@ -38,7 +38,7 @@ assert_no_match() {
   fi
 }
 
-assert_match "fix(digiquant): preserve H8 requested targets" "digiquant"
+assert_match "fix(digiquant): preserve sizing requested targets" "digiquant"
 assert_match "feat(digigraph): add tool gate" "digigraph"
 assert_match "test(digichat): cover BYOK basePath" "digichat"
 assert_match "chore(root): something" "root"

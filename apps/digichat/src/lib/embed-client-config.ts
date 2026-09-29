@@ -27,7 +27,10 @@ import {
   BASELINE_EMBED_WELCOME,
   BASELINE_EMBED_WELCOME_BODY,
 } from "@/lib/baseline-embed";
-import { defaultThreadSkinForTenant, type ThreadSkin } from "@/lib/thread-skins";
+import {
+  defaultThreadSkinForTenant,
+  type ThreadSkin,
+} from "@digithings/ui/chat/skins";
 
 export type EmbedTenantClientConfig = {
   slug: string;
@@ -44,6 +47,16 @@ export type EmbedTenantClientConfig = {
   placeholder?: string;
   /** User file picker. JSON omit / unresolved-tenant omit stays off except DEFAULT. */
   attachments?: boolean;
+  /**
+   * Feature parity with the YAML `features:` block (#4532). Omit keeps the
+   * client default: `dictation`/`speech` off, `sources`/`branchPicker` on.
+   */
+  dictation?: boolean;
+  speech?: boolean;
+  sources?: boolean;
+  branchPicker?: boolean;
+  /** Seed language for the embed session. Omit = client default (English). */
+  defaultLanguage?: string;
   /**
    * Popup page-context mode (see schema.ts). Omit = "visible" (legacy chip).
    * `off` stops the embed from listening for `digichat:page-context`; `silent`
@@ -75,7 +88,7 @@ export type EmbedTenantClientConfig = {
    * CliThread uses this to enable regenerate/edit when the BFF turn
    * mutation API is available (#3475).
    */
-  backendType?: "digigraph" | "foundry";
+  backendType?: EmbedTenantConfig["backend"]["type"];
 };
 
 /**
@@ -126,6 +139,11 @@ export function toEmbedClientConfig(cfg: EmbedTenantConfig): EmbedTenantClientCo
     placeholder: cfg.placeholder,
     lockedContact: cfg.lockedContact,
     attachments: cfg.attachments === true,
+    dictation: cfg.dictation === true ? true : undefined,
+    speech: cfg.speech === true ? true : undefined,
+    sources: typeof cfg.sources === "boolean" ? cfg.sources : undefined,
+    branchPicker: typeof cfg.branchPicker === "boolean" ? cfg.branchPicker : undefined,
+    defaultLanguage: cfg.defaultLanguage,
     pageContext: cfg.pageContext ?? "visible",
     showByok: cfg.showByok ?? false,
     layout: cfg.layout ?? "embed",

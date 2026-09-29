@@ -2,7 +2,7 @@
 
 /**
  * Reveal-field hero graph — the cursor-following node web from the digithings.ai
- * and digiquant.io landing heroes. A fixed field of nodes is scattered across
+ * landing hero (retired from the digiquant.io hero in #4430). A fixed field of nodes is scattered across
  * the frame; the cursor is a lens that lights up and webs together nearby nodes
  * while the trailing side dissolves. A faint ghost keeps a latent trace
  * everywhere. Reads the live --accent token (re-dresses per livery + theme);

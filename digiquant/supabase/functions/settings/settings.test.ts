@@ -14,6 +14,7 @@ import {
 import type { AdminClient, WorkspaceRow } from "../_shared/supabase-admin.ts";
 import {
   handleSettingsRequest,
+  getInviteBrand,
   pinnedAlpacaRedirectUri,
 } from "../_shared/settings-handlers.ts";
 import {
@@ -1701,8 +1702,7 @@ Deno.test("POST /access/redeem-invite: wrong code is 403 without a grant", async
   assertEquals(inviteStore.grants.size, 0);
 });
 
-Deno.test("POST /access/redeem-invite: missing email is 400", async () => {
-  const { status, json } = await call(
+Deno.test("POST /access/redeem-invite: missing email is 400", async () => {  const { status, json } = await call(
     freshStore(),
     "POST",
     "/access/redeem-invite",
@@ -1715,4 +1715,37 @@ Deno.test("POST /access/redeem-invite: missing email is 400", async () => {
   );
   assertEquals(status, 400);
   assertEquals(json.code, "EMAIL_REQUIRED");
+});
+
+Deno.test("GET /access/invite-brand: branded code returns marker and line", async () => {
+  const plain = "12x-brand-invite-alpha";
+  const store = memInviteStore();
+  store.listActiveCodes = async () => [{
+    id: "code-brand",
+    code_hash: await sha256Hex(plain),
+    max_redemptions: 10,
+    redemption_count: 0,
+    revoked_at: null,
+    plan_floor: null,
+    brand_marker: "12X",
+    brand_line: "Purpose-built for the 12X desk",
+  }];
+  const req = new Request(
+    `http://localhost/functions/v1/settings/access/invite-brand?code=${plain}&product_key=fx_hub`,
+  );
+  const res = await getInviteBrand(req, { inviteStore: store });
+  assertEquals(res.status, 200);
+  assertEquals(await res.json(), {
+    marker: "12X",
+    line: "Purpose-built for the 12X desk",
+  });
+});
+
+Deno.test("GET /access/invite-brand: unknown code returns null brand with 200", async () => {
+  const req = new Request(
+    "http://localhost/functions/v1/settings/access/invite-brand?code=totally-wrong-invite&product_key=fx_hub",
+  );
+  const res = await getInviteBrand(req, { inviteStore: memInviteStore() });
+  assertEquals(res.status, 200);
+  assertEquals(await res.json(), { marker: null, line: null });
 });

@@ -14,7 +14,7 @@ description: Run US equity market overview analysis. In the orchestrator pipelin
   computed indicators (sma/rsi/macd/adx/atr/zscore), newest first — use those
   values; **never invent a number** — every quantitative claim must cite a value you fetched.
   If a call returns no rows for a symbol, say so and lower conviction. Market history is not
-  readable through `query_data` (#3780) — never use it to fetch prices or technicals.
+  readable through `query_research` (#3780) — never use it to fetch prices or technicals.
 - Cover the broad-market proxies in scope (e.g. SPY/QQQ/IWM/DIA) for breadth and trend.
 - **AI-portfolio proxy** — `phase1_signals` includes `alt-ai-portfolios` (what other AI
   systems are picking). Use its `sector_tilt` / `consensus_longs` as a **weighted, subordinate**
@@ -22,8 +22,8 @@ description: Run US equity market overview analysis. In the orchestrator pipelin
   flag it as a soft proxy.
 
 ## Inputs
-- `config/watchlist.md` (equity section)
-- `config/preferences.md`
+- `config/watchlist.md` — repository provenance for a maintainer (equity section); NOT retrievable by a tool.
+- `config/preferences.md` — repository provenance for a maintainer; NOT retrievable by a tool.
 - Macro regime output (anchors all analysis)
 - CTA positioning output (systematic equity direction)
 - Institutional flows output (ETF in/outflows)
@@ -47,16 +47,15 @@ description: Run US equity market overview analysis. In the orchestrator pipelin
 2. In the **Technicals** step, quote numbers directly from the data file.
    No need to search for SPY/QQQ/IWM levels — they are in the table.
 
-3. **Web search for** (not in the data files):
+3. **From the `web_grounding` block** (the cited news summary supplied in PHASE_INPUTS):
    - Earnings reactions, guidance, analyst actions
    - News catalysts behind notable movers
-   - Market breadth indicators (A/D line, 52W H/L, % above 200DMA) — check Finviz/Barchart
+   - Market breadth colour (A/D line, 52W H/L, % above 200DMA)
    - McClellan Oscillator, breadth divergences
-   - Sector ETF flows (not price — ETF.com for flow data)
+   - Sector ETF flow colour (price-and-volume proxy via `get_etf_flows_proxy`)
+   If an item is not in the grounding, state that it is unavailable — do not search for it.
 
-> DB-first: do not require `data/agent-cache/daily`. If you need refreshed numbers, run `./scripts/fetch-market-data.sh` (writes legacy archive summaries) or use MCP sources.
-> If that fails (sandbox), use the data tools directly (`get_price_technicals`, `get_macro_series`, etc.).
-> **Web fetch**: use `defuddle parse <url> --md` instead of WebFetch for any news article, breadth site, earnings page, or analyst note URL. Not for API endpoints, `.json`, or `.md` files.
+> Use the data tools directly for numbers (`get_price_technicals`, `get_macro_series`, `get_market_breadth`, `get_sector_relative_strength`, `get_vix_term_structure`, `get_etf_flows_proxy`).
 
 ## Research Steps
 

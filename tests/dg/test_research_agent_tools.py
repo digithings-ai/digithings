@@ -31,8 +31,11 @@ def test_tool_path_uses_run_tools_and_validates():
         temperature=0.2,
         max_tool_rounds=5,
         on_tool_step=None,
+        final_response_format=None,
     ):
         calls["tools"] = tools
+        # #4556: the tool loop's forced wrap-up is schema-enforced.
+        calls["final_response_format"] = final_response_format
         # Simulate the model grounding then emitting valid JSON.
         execute_tool("get_macro_series", {"series_ids": ["DFF"]})
         return json.dumps({"regime": "risk_on", "note": "grounded"})
@@ -51,6 +54,9 @@ def test_tool_path_uses_run_tools_and_validates():
     assert result.regime == "risk_on"
     assert calls["tools"][0]["function"]["name"] == "get_macro_series"
     assert executed == ["get_macro_series"]
+    # #4556: the agent hands its output schema to the tool loop's wrap-up so the
+    # final tool-free turn is schema-enforced instead of free prose.
+    assert calls["final_response_format"] is not None
 
 
 @pytest.mark.unit
@@ -215,3 +221,43 @@ class TestEnforcedToolFreeRetry:
                 model="openrouter/deepseek/deepseek-chat",
                 max_retries=1,
             )
+
+
+@pytest.mark.unit
+def test_tool_result_ok_false_records_an_error_telemetry_event():
+    """#4556: a dispatcher that marks a failed upstream read with ``ok: False``
+    must record the tool call as an error, not a success.
+
+    The digifetch family answers a failed upstream call with a string instead of
+    raising, so ``traced_execute_tool`` has to honour the ``ok`` key on a dict
+    result to keep ``run_events`` honest.
+    """
+
+    def fake_run_tools(model, messages, tools, execute_tool, **kwargs):
+        execute_tool("digifetch_quote", {"symbol": "XLF"})
+        return json.dumps({"regime": "risk_on", "note": "n"})
+
+    def _tool_events(dispatcher):
+        usage.start(run_id="test-4556")
+        try:
+            with patch.object(research_agent, "run_tools", side_effect=fake_run_tools):
+                research_agent.run_research_agent(
+                    skill_text="s",
+                    phase_inputs={},
+                    shared_context={},
+                    output_model=_Out,
+                    model="xai/grok-4.3",
+                    tools=[{"type": "function", "function": {"name": "digifetch_quote"}}],
+                    execute_tool=dispatcher,
+                )
+            return [e for e in usage.events_snapshot() if e.get("kind") == "tool_call"]
+        finally:
+            usage.reset()
+
+    failing = _tool_events(lambda n, a: {"content": '{"error": "boom"}', "ok": False})
+    assert failing, "expected a recorded tool-call event"
+    assert failing[0]["status"] == "error"
+
+    healthy = _tool_events(lambda n, a: {"content": "{}", "ok": True})
+    assert healthy, "expected a recorded tool-call event"
+    assert healthy[0]["status"] == "ok"

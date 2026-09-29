@@ -14,6 +14,7 @@ export * from "./field";
 export * from "./form";
 export * from "./icon-button";
 export * from "./input";
+export * from "./kbd";
 export * from "./label";
 export * from "./pagination";
 export * from "./pager";

@@ -1,5 +1,53 @@
 [
   {
+    "date": "2026-09-20",
+    "version": "digichat v2.3.1",
+    "title": "The embed paints one canvas token from the first byte",
+    "href": "https://github.com/digithings-ai/digithings/releases/tag/digichat-v2.3.1",
+    "tag": "fix",
+    "product": "digichat"
+  },
+  {
+    "date": "2026-09-19",
+    "version": "digichat v2.3.0",
+    "title": "Config-driven welcome copy, pre-painted theme frame, kit promotions for the sites rebuild",
+    "href": "https://github.com/digithings-ai/digithings/releases/tag/digichat-v2.3.0",
+    "tag": "release",
+    "product": "digichat"
+  },
+  {
+    "date": "2026-09-16",
+    "version": "digichat v2.2.0",
+    "title": "Retryable upstream-failure card, configurable view modes, Gloomberb attribution, hosted MCP servers",
+    "href": "https://github.com/digithings-ai/digithings/releases/tag/digichat-v2.2.0",
+    "tag": "release",
+    "product": "digichat"
+  },
+  {
+    "date": "2026-09-16",
+    "version": "digichat v2.1.0",
+    "title": "Assistant-ui parity, DataTap trial embed, painted block caret, read-only ticket MCP",
+    "href": "https://github.com/digithings-ai/digithings/releases/tag/digichat-v2.1.0",
+    "tag": "release",
+    "product": "digichat"
+  },
+  {
+    "date": "2026-09-05",
+    "version": "digichat v1.5.0",
+    "title": "Sidebar search, markdown copy, regen and edit, opt-in web search, popup widget embed, slash palette",
+    "href": "https://github.com/digithings-ai/digithings/releases/tag/digichat-v1.5.0",
+    "tag": "release",
+    "product": "digichat"
+  },
+  {
+    "date": "2026-09-02",
+    "version": "digichat v1.4.0",
+    "title": "Utilitarian-terminal composer chrome and BYOK hardening follow-ups",
+    "href": "https://github.com/digithings-ai/digithings/releases/tag/digichat-v1.4.0",
+    "tag": "release",
+    "product": "digichat"
+  },
+  {
     "date": "2026-08-21",
     "version": "digichat v1.3.2",
     "title": "Kill a dead BYOK auth argument and a refusal that named the wrong model",

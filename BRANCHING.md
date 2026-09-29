@@ -46,6 +46,7 @@ git rev-list --count origin/module/<component>..origin/develop   # 0 = current; 
 | `main` | What is actually deployed / released. | PR required (**0** approvals), no force-push, no deletion. One required status check: `Every commit reaching main was reviewed`. Linear history is **not** enforced. |
 | `develop` | Integration branch — merge target for module sprints and cross-cutting work. Also the repo's **default branch**. | No force-push, no deletion. **No PR gate** — `required_pull_request_reviews` is `null`, so unlike `main` a pull request is not required server-side. Three required checks, `strict: true` — so a PR that *is* opened must be up to date with `develop` before it can merge. |
 | `module/<component>` | Per-module integration branch. One per digithings module. PRs into develop. | No force-push, no deletion, PR required (0 approvals) — the `module-branch-protection` ruleset on `refs/heads/module/**`. |
+| `release/vX.Y.Z` | One per **released** version, cut from `main` at the release commit and tagged there. The maintenance line for that exact version — features accumulate on `develop`, not here, and the branch is never deleted. | No protection rule yet — force-push and deletion are *possible*; see [Enforcement gaps](#enforcement-gaps-verified-2026-08-19). Treat them as append-only regardless. |
 
 Local pushes to `main` require `ALLOW_MAIN_PUSH=1` as an environment variable
 (belt-and-suspenders on top of the PR gate).
@@ -82,7 +83,6 @@ module branch being force-pushed also stops it being quietly dropped.
 
 | Pattern | Use | Example |
 |---------|-----|---------|
-| `release/vX.Y.Z` | A versioned release candidate cut from `develop` for final testing, then merged to `main` and tagged. | `release/v0.1.0` |
 | `module/<component>` | Per-module integration branch — accumulates task PRs for a sprint, then PRs to develop. `make module-switch MODULE=<x>`. | `module/digiquant` |
 | `task/<N>-<slug>` | A backlog task tied to GitHub Issue #N. `make task ISSUE=N` auto-creates this branch from the correct module branch. | `task/42-latency-metric` |
 | `claude/<slug>` | Work driven by Claude Code outside the task system. | `claude/guardrail-hooks` |
@@ -121,22 +121,73 @@ has no branch-naming ruleset to edit.
 
 ## Cutting a release
 
-```
+`develop` accumulates features; `main` is production. A release is **promoted to
+`main` first**, and only then gets its own branch — one per version, cut from
+`main` at the released commit:
+
+```bash
 git checkout develop
 git pull
-git checkout -b release/v0.1.0
-# freeze: bug-fix commits only on this branch
-# when ready:
+# the version bump lands on develop first: merge the release-please PR (or, for
+# a hand bump, commit it on develop together with the tag — see RELEASES.md).
+# Merging it is what makes release-please cut `digichat-v2.3.2` on develop.
+gh pr create --base main --head develop --title "chore: promote develop to main"
+gh pr merge --merge                              # PR into main: human on the cutover
 git checkout main
-git merge --no-ff release/v0.1.0
-git tag v0.1.0
-git push origin main v0.1.0
-git checkout develop
-git merge --no-ff release/v0.1.0                # bring fixes back
-git push origin develop
-git branch -d release/v0.1.0
-git push origin --delete release/v0.1.0
+git pull
+git checkout -b release/v2.3.2                   # this version's maintenance line
+git push -u origin release/v2.3.2
 ```
+
+The tag already exists by this point — release-please cuts `digichat-vX.Y.Z` on
+`develop` when the bump lands there, and that is the release moment (it is also
+what dispatches the digichat image publish). Promoting `develop` brings the
+tagged commit into `main`'s history, so the release branch is cut from `main`
+while being tree-identical to the tag.
+
+The branch is **not** where the release is stabilised: by the time it exists,
+that version is already on `main` and deployed. Its job is to keep carrying
+fixes for *that* version after `main` has moved on — pinned clients (self-host
+stacks, DataTap on `ghcr.io/digithings-ai/digichat:v0.9.3`) keep consuming it.
+
+Do not delete the branch when the next release ships. There is one branch per
+released version, and the older ones are the reason you can still patch them.
+
+## Patching a release
+
+A patch release continues the chain of its version — a new branch off the
+previous one, so the branch name always equals the version it carries:
+
+```bash
+git checkout -b release/v2.3.3 release/v2.3.2
+# apply the fix, bump the version to 2.3.3, commit
+git tag digichat-v2.3.3
+git push origin release/v2.3.3 digichat-v2.3.3   # a human-pushed digichat tag publishes the image
+```
+
+The fix then has to reach `develop`, in every case — release-please reads
+`develop`, so a fix that only lives on the release branch is clobbered by the
+next promotion:
+
+```bash
+git checkout develop
+git cherry-pick <fix-sha>                        # the fix, never the version bump
+```
+
+Never merge the release branch into `main`: its version bump would take
+production backwards (or fork the version line). Production picks the fix up the
+normal way, through the next `develop` → `main` promotion, which now carries the
+cherry-pick.
+
+If production has to be patched before that promotion — only meaningful while
+`main` is still on the same line, `2.3.x` — cherry-pick the *fix* into a
+`fix/<slug>` branch off `main`, PR it into `main` (human on the cutover), and
+cherry-pick the same fix onto `develop`. Still never the version bump.
+
+A caveat on images: a human-pushed `digichat-vX.Y.Z` tag publishes the digichat
+image, but the Python service images publish only on a push to `main`
+(`publish-service-images.yml`), so a patch that is never promoted ships no
+service image.
 
 ## Deleting a stale branch
 
@@ -147,8 +198,10 @@ git push origin --delete <branch>
 git branch -d <branch>                          # local
 ```
 
-`main` and `develop` are protected server-side against deletion. `release/v*` is
-**not** — see the gap note below.
+`main` and `develop` are protected server-side against deletion. Release
+branches are policy-protected — one per released version, and an old one is the
+only way to patch a client still pinned to it — but that is not yet enforced
+server-side; see the gap note below.
 
 **Deletions are exempt from the name check.** The hook validates the branch name
 on the way in, not on the way out: a ref that predates a tightening of the
@@ -193,7 +246,12 @@ change, not a docs change:
 
 - **`release/v*` has no protection rule.** Only the `main` and `develop`
   patterns exist, so a release branch can be force-pushed or deleted by anyone
-  with write access.
+  with write access — and that now matters more than it used to: since a
+  release branch is a shipped version's only maintenance line, losing one means
+  a pinned client can no longer be patched at all. Protecting `release/**`
+  (no force-push, no deletion) is intended, and the payload already exists in
+  `scripts/github-rulesets/04-protect-releases.json`; applying it is a
+  repo-settings change, so it needs a human, not this document.
 - **`main` requires no *approval*.** `required_approving_review_count` is `0`, so
   a PR into `main` can be merged by whoever opened it. Its one required status
   check is `Every commit reaching main was reviewed` — the review-coverage gate in

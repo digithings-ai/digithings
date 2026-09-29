@@ -3,7 +3,7 @@ import { parseSlashInput, slashHelpText } from "@digithings/digichat-ui";
 import {
   DEFAULT_EMBED_CHAT_PREFS,
   type EmbedChatPrefsApi,
-} from "@/components/stock/embed-chat-prefs";
+} from "@digithings/ui/chat/stock";
 import { emptyMcpConfig } from "@/components/stock/embed-mcp-flow";
 import {
   buildProductSlashCommands,

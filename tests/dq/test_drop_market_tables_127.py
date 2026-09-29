@@ -94,7 +94,7 @@ ACCOUNTED: dict[str, tuple[int, str]] = {
         10,
         "writer module body; cannot succeed post-127, kept flag-off (header retired)",
     ),
-    "digiquant/src/digiquant/portfolio/h9_cost_evidence.py": (2, "gated body constants (_PRICE_*)"),
+    "digiquant/src/digiquant/portfolio/commit_cost_evidence.py": (2, "gated body constants (_PRICE_*)"),
     "digiquant/src/digiquant/portfolio/phases/phase7e_risk_sizing.py": (1, "gated body"),
     "digiquant/src/digiquant/portfolio/portfolio_materialize.py": (
         3,
@@ -135,7 +135,7 @@ ACCOUNTED: dict[str, tuple[int, str]] = {
 TABLE_CALLS: dict[str, int] = {
     "digiquant/src/digiquant/data/prices/refresh.py": 1,
     "digiquant/src/digiquant/data/prices/supabase_writer.py": 2,
-    "digiquant/src/digiquant/portfolio/h9_cost_evidence.py": 3,
+    "digiquant/src/digiquant/portfolio/commit_cost_evidence.py": 3,
     "digiquant/src/digiquant/portfolio/phases/phase7e_risk_sizing.py": 1,
     "digiquant/src/digiquant/portfolio/portfolio_materialize.py": 1,
     "digiquant/src/digiquant/portfolio/writers/commit_io.py": 1,

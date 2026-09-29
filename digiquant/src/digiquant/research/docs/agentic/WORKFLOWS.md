@@ -33,7 +33,7 @@ Step-by-step procedures for every recurring workflow.
 ```
 
 ```bash
-# 2. Run the unified daily chain (research A0–A4 → portfolio H1–H9 → commit_run)
+# 2. Run the unified daily chain (research A0–A4 → portfolio thesis–commit → commit_run)
 python -m digiquant.portfolio.chain --cadence daily
 #    Operator full refresh: --refresh-scope all (manual dispatch/CLI only)
 #    Beliefs only: --refresh-scope beliefs
@@ -47,7 +47,7 @@ Today is YYYY-MM-DD.
 Run `python -m digiquant.portfolio.chain --cadence daily` (add `--refresh-scope all` for operator full refresh).
 Read config/watchlist.md; for portfolio work also preferences + investment-profile.
 Load prior context from Supabase daily_snapshots and documents for recent dates.
-DB-first: in-graph publish + H9 commit_run; close with run_db_first.py.
+DB-first: in-graph publish + commit commit_run; close with run_db_first.py.
 ```
 
 ```bash

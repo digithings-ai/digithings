@@ -41,6 +41,37 @@
   color: var(--ink);
 }
 
+/* Invite branding — client marker top-right of the card plus an optional
+   line, so an invitee knows the product was built for their team. */
+.acct-auth-invite-marker {
+  margin-left: auto;
+  font-family: var(--font-mono);
+  font-size: 0.78rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  color: var(--ink);
+  border: 1px solid var(--hair);
+  padding: 0.15rem 0.5rem;
+  white-space: nowrap;
+}
+
+.acct-auth-invite {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: 0.85rem;
+}
+
+.acct-auth-invite .acct-auth-invite-marker {
+  margin-left: 0;
+}
+
+.acct-auth-invite-line {
+  margin: -0.35rem 0 0.85rem;
+  font-size: 0.82rem;
+  line-height: 1.4;
+  color: var(--ink-soft);
+}
+
 .acct-auth-kicker {
   font-family: var(--font-mono);
   font-size: 0.72rem;

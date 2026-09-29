@@ -9,12 +9,15 @@ import type {
   FxTradeLevels,
 } from './types';
 
-const PROVENANCES: readonly FxLevelProvenance[] = [
+export const PROVENANCES: readonly FxLevelProvenance[] = [
   'broker_quoted',
   'pmt_bank_trade',
   'pmt_seasonality_target',
   'pmt_position_cluster',
+  'pmt_retail_book',
   'computed',
+  'technical',
+  'llm',
 ];
 
 const STATUSES: readonly FxTradeLevels['status'][] = ['complete', 'partial', 'incomplete'];
@@ -65,6 +68,9 @@ const PRESENTED_PRECISION: ReadonlySet<FxLevelProvenance> = new Set([
   'pmt_bank_trade',
   'pmt_seasonality_target',
   'pmt_position_cluster',
+  'pmt_retail_book',
+  'technical',
+  'llm',
 ]);
 
 function isProvenance(value: unknown): value is FxLevelProvenance {
@@ -219,6 +225,12 @@ export function provenanceChipLabel(level: FxTradeLevel): string {
       return 'seasonality';
     case 'pmt_position_cluster':
       return 'position book';
+    case 'pmt_retail_book':
+      return 'retail book';
+    case 'technical':
+      return 'technical';
+    case 'llm':
+      return 'model';
     default: {
       const _exhaustive: never = level.provenance;
       return _exhaustive;
@@ -389,19 +401,19 @@ function buildLadderRows(
       }
     : null;
 
-  // Multi-target ladder: price-descending for display (labels follow display order).
-  const targetsByPriceDesc = [...tradeLevels.targets].sort((a, b) => {
-    const na = Number(a.value);
-    const nb = Number(b.value);
-    if (Number.isFinite(na) && Number.isFinite(nb)) return nb - na;
-    return 0;
-  });
-  const targetRows: IdeaDetailLevelRow[] = targetsByPriceDesc.map((target, index) => ({
-    label: index === 0 ? 'Target' : `Target ${index + 1}`,
-    value: formatLevelValue(target.value, pair, target.provenance),
-    chip: provenanceChipLabel(target),
-    role: 'target',
-  }));
+  // Single primary target: the pipeline caps ideas to one target (LEVELS_MAX_TARGETS),
+  // so publish only the primary rung — never a "Target 2/3…" ladder.
+  const primaryTarget = tradeLevels.targets[0];
+  const targetRows: IdeaDetailLevelRow[] = primaryTarget
+    ? [
+        {
+          label: 'Target',
+          value: formatLevelValue(primaryTarget.value, pair, primaryTarget.provenance),
+          chip: provenanceChipLabel(primaryTarget),
+          role: 'target',
+        },
+      ]
+    : [];
 
   const long = isLongDirection(direction);
   const rows: IdeaDetailLevelRow[] = [];

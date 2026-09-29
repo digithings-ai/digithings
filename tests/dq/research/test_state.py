@@ -37,18 +37,18 @@ from pydantic import ValidationError
 
 @pytest.mark.unit
 class TestMergePhasePortfolio:
-    """Reducer for nested ``phase_portfolio`` writes across H4–H9 (#1030)."""
+    """Reducer for nested ``phase_portfolio`` writes across screener–commit (#1030)."""
 
     def test_preserves_focus_roster_excluded_from_right(self) -> None:
-        """H4 writes the excluded ledger as the *right* operand; the reducer must
+        """screener writes the excluded ledger as the *right* operand; the reducer must
         carry it forward, not drop it to ``left``'s empty default (#1030).
 
         Before the fix, ``focus_roster_excluded`` was absent from the reducer's
-        field list, so the ledger H4 produced was silently lost before H9
+        field list, so the ledger screener produced was silently lost before commit
         commit-run read it — orphaning gated-out held positions.
         """
         left = PhasePortfolioState()  # prior state, no ledger yet
-        right = PhasePortfolioState(  # H4's write
+        right = PhasePortfolioState(  # screener's write
             focus_roster=[FocusRosterEntry(ticker="SPY", roster_reason="held")],
             focus_roster_excluded=[ExcludedTicker(ticker="AAPL", reason="held, quiet")],
         )
@@ -56,7 +56,7 @@ class TestMergePhasePortfolio:
         assert [e.ticker for e in merged.focus_roster_excluded] == ["AAPL"]
 
     def test_later_phase_does_not_clobber_existing_ledger(self) -> None:
-        """A downstream phase (right) with no ledger must not wipe H4's ledger (left)."""
+        """A downstream phase (right) with no ledger must not wipe screener's ledger (left)."""
         left = PhasePortfolioState(
             focus_roster_excluded=[ExcludedTicker(ticker="AAPL", reason="held, quiet")],
         )

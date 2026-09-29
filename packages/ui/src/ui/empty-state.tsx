@@ -12,6 +12,13 @@
  * The `glass` / `glass-display` dresses restyle type/spacing/slots ONLY — the
  * surface class stays call-site (dashboard's `.glass-card`) so the app's
  * motion-reveal hook keeps firing.
+ *
+ * #4452: `glass-display` is the full-page gate card (dashboard's DB gate) and
+ * must survive phone widths. It is declared `w-full` (fluid: fills its
+ * container up to a consumer cap, never content-sized) and its title/body
+ * `break-words` (a long unbreakable token breaks rather than overflowing).
+ * The dress is text-first, so it may never ellipsise its own message:
+ * `truncate` / `whitespace-nowrap` / `line-clamp` are banned here.
  */
 
 import type { HTMLAttributes, ReactNode } from "react"
@@ -86,8 +93,11 @@ export function EmptyState({
         "flex flex-col items-center border border-hair bg-surface/55 p-[1.8rem_1.3rem] text-center",
         // glass: justify-center gap-2 p-8 (observability quiet card)
         glass && "justify-center gap-2 p-8",
-        // glass-display: justify-center gap-0 px-6 py-8 (full-page gate card)
-        glassDisplay && "justify-center gap-0 px-6 py-8",
+        // glass-display: w-full justify-center gap-0 px-6 py-8 (full-page gate
+        // card). #4452: `w-full` states the fluid contract explicitly — the card
+        // fills its container up to any consumer `max-w-*`, so it can never be
+        // content-sized past the viewport.
+        glassDisplay && "w-full justify-center gap-0 px-6 py-8",
         !glass && !glassDisplay && "gap-[0.55rem]",
         className,
       )}
@@ -121,7 +131,7 @@ export function EmptyState({
         className={cn(
           "m-0 font-mono text-[0.86rem] font-normal text-ink",
           glass && "font-sans text-sm leading-[1.4286] font-medium text-ink-soft",
-          glassDisplay && "font-display text-2xl leading-[1.3333] tracking-tight font-normal text-ink",
+          glassDisplay && "font-display break-words text-2xl leading-[1.3333] tracking-tight font-normal text-ink",
         )}
       >
         {title}
@@ -132,7 +142,7 @@ export function EmptyState({
             "max-w-[24ch] text-[0.8rem] leading-[1.5] text-ink-mute",
             !glass && !glassDisplay && "mt-0 mb-[0.4rem]",
             glass && "m-0 max-w-md text-xs leading-[1.3333]",
-            glassDisplay && "mt-2 mb-0 max-w-none text-sm leading-[1.625]",
+            glassDisplay && "mt-2 mb-0 max-w-none break-words text-sm leading-[1.625]",
           )}
         >
           {body}

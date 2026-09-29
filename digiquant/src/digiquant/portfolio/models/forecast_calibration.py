@@ -2,9 +2,9 @@
 
 Defines immutable prospective labels and versioned calibration artifacts for
 dashboard Phase 1. Schema + strict Pydantic only — the deterministic calibrator
-and H6→H7 attach helpers live in
+and deliberation→direction attach helpers live in
 :mod:`digiquant.portfolio.forecast_calibration` (WP5.3/5.4); table writers
-in :mod:`digiquant.research.forecast_registry` (WP5.4). No H8 consumption.
+in :mod:`digiquant.research.forecast_registry` (WP5.4). No sizing consumption.
 
 Style mirrors :mod:`digiquant.portfolio.models.forecast`: frozen,
 ``extra="forbid"``, UTC-only aware datetimes, Decimal economics, UUID5
@@ -527,10 +527,10 @@ class ForecastCalibration(ForecastCalibrationModel):
 
 
 class CalibratedForecast(ForecastCalibrationModel):
-    """Versioned calibrated subject forecast for the H8 allocation bundle (WP8.4).
+    """Versioned calibrated subject forecast for the sizing allocation bundle (WP8.4).
 
     Unavailable subjects retain typed reasons and low reliability rather than
-    inventing zeros. H8 consumes AVAILABLE slices via ``AllocationInputBundle``;
+    inventing zeros. sizing consumes AVAILABLE slices via ``AllocationInputBundle``;
     degraded/unavailable slices receive no new risk.
     """
 
