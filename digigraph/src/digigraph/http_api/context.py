@@ -103,6 +103,17 @@ def _digi_fields_from_request(http_request: Request) -> dict[str, Any]:
     # must never become it — an unmapped tenant (or the map-unset single-tenant path)
     # clears to None rather than letting a caller inject its own system prompt.
     updates["research_system_prompt_override"] = corpus.research_system_prompt
+    # Hosted license gate (spec §7): corpus/vault headers request the hosted
+    # corpus capability, which requires the ``digisearch-corpus`` license scope
+    # (403 ``insufficient_license_scope`` when lacking). The gate sits after map
+    # resolution — the map stays authoritative (a set-but-broken map already
+    # 503'd above; a usable map ignores client headers, so the gate does not
+    # fire there either). It can only narrow header-driven selection, never
+    # widen or disturb mapped selection. Requests without corpus headers never
+    # touch license code (plain open).
+    from digigraph.http_api.license_gate import enforce_corpus_license
+
+    enforce_corpus_license(http_request.headers, headers_effective=not corpus_map)
     if corpus_map:
         updates["digisearch_index"] = corpus.digisearch_index
         updates["vault_path_prefix"] = corpus.vault_path_prefix
