@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useId, useRef, useState } from "react";
+import { useEffect, useId, useState } from "react";
 import { THREAD_SKINS } from "@digithings/ui/chat/skins";
 import {
   Button,
@@ -9,9 +9,6 @@ import {
   CardContent,
   CardHeader,
   CardTitle,
-  Collapsible,
-  CollapsibleContent,
-  CollapsibleTrigger,
   Field,
   IconButton,
   Input,
@@ -52,9 +49,9 @@ import {
 export type EditorsCommit = (edit: TextEdit) => boolean;
 
 /**
- * Spec §2 regrouping map (titles verbatim): the 3 groups are the only
- * collapsible level; the 8 sections render inside their group as
- * always-expanded subgroups, each exactly once.
+ * Spec §2 regrouping map (titles verbatim): the 3 groups are switched by a
+ * sticky tab bar (one group visible at a time); the 8 sections render inside
+ * the active group as always-expanded subgroups, each exactly once.
  */
 const GROUPS = [
   { id: "basics", label: "Basics", sections: ["Identity", "Features", "Models"] },
@@ -64,59 +61,9 @@ const GROUPS = [
 
 type SectionTitle = (typeof GROUPS)[number]["sections"][number];
 
-/** Stable anchor id per subgroup; nav targets the 3 group ids directly. */
+/** Stable anchor id per subgroup (kept addressable for tests/exports). */
 function sectionAnchorId(title: SectionTitle): string {
   return `devkit-section-${title.toLowerCase().replace(/[^a-z0-9]+/g, "-")}`;
-}
-
-/**
- * Scroll-spy pick (spec §1): the foremost anchor at/above the active band
- * wins — the nearest crossed anchor (greatest top still <= 0). When no
- * anchor has crossed yet (top of the list), the foremost entry below the
- * line wins. Empty → null (the observer then keeps the current group).
- */
-export function visibleGroupFromEntries(
-  entries: Array<{ id: string; top: number }>,
-): string | null {
-  if (entries.length === 0) return null;
-  let above: { id: string; top: number } | null = null;
-  let below: { id: string; top: number } | null = null;
-  for (const entry of entries) {
-    if (entry.top <= 0) {
-      if (above === null || entry.top > above.top) above = entry;
-    } else if (below === null || entry.top < below.top) {
-      below = entry;
-    }
-  }
-  return (above ?? below)?.id ?? null;
-}
-
-/**
- * Scroll-spy state step (spec §1): given the open group, the manually-closed
- * group (if any), and the newly elected visible group, returns the next
- * open/suppressed pair. The observer may change which single group is open
- * but never collapses: a null vote keeps everything, and a same-id
- * re-election after a manual close is suppressed until a different group
- * becomes visible (which releases the suppression).
- *
- * `navTarget` arms the settle hold for a nav click: while armed, a vote for
- * any other group is stale mid-scroll geometry (the clicked anchor cannot
- * cross root-top when max-scroll clamps it below the band) and must not yank
- * the clicked group away. A vote for the target itself releases the hold.
- */
-export function applyScrollSpyVote(
-  open: string | null,
-  manualClosed: string | null,
-  visible: string | null,
-  navTarget?: string | null,
-): { open: string | null; manualClosed: string | null } {
-  if (navTarget) {
-    if (visible === navTarget) return { open: navTarget, manualClosed: null };
-    return { open: navTarget, manualClosed };
-  }
-  if (visible === null) return { open, manualClosed };
-  if (manualClosed !== null && visible === manualClosed) return { open, manualClosed };
-  return { open: visible, manualClosed: null };
 }
 
 export function TextRow({
@@ -674,12 +621,9 @@ const BACKEND_FIELDS: Record<string, Array<{ key: string; label: string }>> = {
 export function DevkitEditors({
   draft,
   commit,
-  scrollRoot,
 }: {
   draft: EntryDraft;
   commit: EditorsCommit;
-  /** Sidebar scroll container: the scroll-spy observer root (fallback null). */
-  scrollRoot?: React.RefObject<HTMLElement | null>;
 }) {
   const scope = draft.scope;
   const dep = draft.parsed;
@@ -784,123 +728,12 @@ export function DevkitEditors({
     return [{ label: "featured", options: featured }];
   })();
 
-  // Group shell (spec §1–§2): single-open disclosure over the three
-  // groups, sticky scroll-spy nav, one observer that opens but never closes.
-  const [openGroup, setOpenGroup] = useState<string | null>("basics");
-  const anchorsRef = useRef(new Map<string, HTMLElement>());
-  const latestTopsRef = useRef(new Map<string, number>());
-  // Manual toggle is the only path that may close: remember which group was
-  // closed so observer refires electing that same group do not reopen it.
-  // Released when a different group becomes visible or a nav click opens one.
-  const manualClosedRef = useRef<string | null>(null);
-  // Nav-click settle hold: after scrollToGroup arms this, observer votes for
-  // any OTHER group are stale mid-scroll geometry (the clicked anchor settles
-  // below root-top under max-scroll clamp, so the election keeps favoring an
-  // earlier group) and must not yank the clicked group away. Released on
-  // arrival (vote elects the target), user scroll takeover, manual toggle, or
-  // a settle timeout backstop.
-  const navTargetRef = useRef<string | null>(null);
-  const navTimerRef = useRef<number | null>(null);
-  const disarmNavTarget = () => {
-    navTargetRef.current = null;
-    if (navTimerRef.current !== null) {
-      window.clearTimeout(navTimerRef.current);
-      navTimerRef.current = null;
-    }
-  };
-  const openGroupRef = useRef<string | null>(openGroup);
-  useEffect(() => {
-    openGroupRef.current = openGroup;
-  }, [openGroup]);
-
-  useEffect(() => {
-    const targets = GROUPS.map((g) => anchorsRef.current.get(g.id)).filter(
-      (el): el is HTMLElement => el != null,
-    );
-    if (targets.length === 0 || typeof IntersectionObserver === "undefined") return;
-    const rootEl = scrollRoot?.current ?? null;
-    const rootTop = () => rootEl?.getBoundingClientRect().top ?? 0;
-    const observer = new IntersectionObserver(
-      (entries) => {
-        for (const entry of entries) {
-          latestTopsRef.current.set(
-            (entry.target as HTMLElement).id,
-            entry.boundingClientRect.top - rootTop(),
-          );
-        }
-        const visible = visibleGroupFromEntries(
-          GROUPS.map((g) => ({
-            id: g.id,
-            top: latestTopsRef.current.get(g.id) ?? Number.POSITIVE_INFINITY,
-          })),
-        );
-        // Arrival releases the nav-click hold (timer no longer needed); the
-        // vote below then applies with the hold cleared.
-        if (navTargetRef.current !== null && visible === navTargetRef.current) {
-          disarmNavTarget();
-        }
-        const next = applyScrollSpyVote(
-          openGroupRef.current,
-          manualClosedRef.current,
-          visible,
-          navTargetRef.current,
-        );
-        manualClosedRef.current = next.manualClosed;
-        setOpenGroup(next.open);
-      },
-      {
-        root: rootEl,
-        rootMargin: "-20% 0px -65% 0px",
-        threshold: 0,
-      },
-    );
-    targets.forEach((t) => observer.observe(t));
-    // User scroll takeover ends a nav-click settle: wheel/touch input means
-    // the user grabbed the scroll, so votes apply normally again at once
-    // instead of waiting for the settle timeout.
-    const disarmOnUserScroll = () => {
-      if (navTargetRef.current !== null) disarmNavTarget();
-    };
-    rootEl?.addEventListener("wheel", disarmOnUserScroll, { passive: true });
-    rootEl?.addEventListener("touchmove", disarmOnUserScroll, { passive: true });
-    return () => {
-      observer.disconnect();
-      rootEl?.removeEventListener("wheel", disarmOnUserScroll);
-      rootEl?.removeEventListener("touchmove", disarmOnUserScroll);
-      disarmNavTarget();
-    };
-  }, [scrollRoot]);
-
-  const setGroupFromTrigger = (groupId: string, isOpen: boolean) => {
-    disarmNavTarget(); // manual toggle takes over from any nav-click settle
-    if (isOpen) {
-      manualClosedRef.current = null;
-      setOpenGroup(groupId);
-    } else {
-      manualClosedRef.current = groupId;
-      setOpenGroup(null);
-    }
-  };
-
-  const scrollToGroup = (id: string) => {
-    manualClosedRef.current = null;
-    disarmNavTarget();
-    navTargetRef.current = id;
-    setOpenGroup(id);
-    const reduce =
-      typeof window !== "undefined" &&
-      typeof window.matchMedia === "function" &&
-      window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-    anchorsRef.current
-      .get(id)
-      ?.scrollIntoView({ behavior: reduce ? "auto" : "smooth", block: "start" });
-    // Settle backstop: if the clicked anchor can never become foremost (short
-    // content clamps the scroll with the anchor still below root-top), no
-    // arrival vote ever fires — release the hold so later user scrolls apply
-    // normally. No vote can fire after geometry goes static, so the timeout
-    // itself never changes which group is open.
-    navTimerRef.current = window.setTimeout(disarmNavTarget, 1200);
-  };
+  // Group tabs: one sticky tab bar switches the visible group; the active
+  // group's sections render always-expanded below it. No accordions, no
+  // scroll observer — a tab switch is a pure state change.
+  const [activeGroup, setActiveGroup] = useState<string>("basics");
+  const active = GROUPS.find((g) => g.id === activeGroup) ?? GROUPS[0];
+  const tabLabelId = useId();
 
   const sectionBody = (title: SectionTitle): React.ReactNode => {
     switch (title) {
@@ -1419,70 +1252,34 @@ export function DevkitEditors({
 
   return (
     <div className="flex flex-col gap-2">
-      <nav
-        aria-label="Editor groups"
-        className="sticky top-0 z-10 flex flex-col gap-[0.1rem] border-b border-hair bg-surface py-1"
-      >
-        {GROUPS.map((group) => {
-          const active = openGroup === group.id;
-          return (
-            <button
-              key={group.id}
-              type="button"
-              onClick={() => scrollToGroup(group.id)}
-              aria-current={active ? "true" : undefined}
-              className={`devkit-navlink w-full rounded-none border-s-2 px-[0.6rem] py-[0.28rem] text-left font-mono text-[0.82rem] no-underline transition-colors duration-150 ease-brand motion-reduce:transition-none ${
-                active
-                  ? "border-s-accent bg-accent-weak text-ink"
-                  : "border-s-transparent text-ink-soft hover:bg-accent-weak hover:text-ink"
-              }`}
-            >
-              {group.label}
-            </button>
-          );
-        })}
-      </nav>
-      {GROUPS.map((group) => (
-        <section
-          key={group.id}
-          id={group.id}
-          ref={(el) => {
-            if (el) anchorsRef.current.set(group.id, el);
-            else anchorsRef.current.delete(group.id);
+      <div className="sticky top-0 z-10 flex flex-col gap-[0.35rem] border-b border-hair bg-surface py-1">
+        <span id={tabLabelId} className="font-mono text-[0.6rem] uppercase tracking-[0.1em] text-ink-mute">
+          Editor groups
+        </span>
+        <SegmentedControl
+          options={GROUPS.map((g) => g.label)}
+          aria-labelledby={tabLabelId}
+          value={active.label}
+          onChange={(label) => {
+            const next = GROUPS.find((g) => g.label === label);
+            if (next) setActiveGroup(next.id);
           }}
-          className="scroll-mt-28"
-        >
-          <Collapsible
-            open={openGroup === group.id}
-            onOpenChange={(isOpen) => setGroupFromTrigger(group.id, isOpen)}
-            className="group rounded-none border border-hair"
+        />
+      </div>
+      <div className="flex flex-col gap-2">
+        {active.sections.map((title) => (
+          <div
+            key={title}
+            id={sectionAnchorId(title)}
+            className="flex scroll-mt-28 flex-col gap-2"
           >
-            <CollapsibleTrigger className="flex w-full items-center justify-between gap-2 px-2 py-1.5 font-mono text-xs font-semibold transition-colors hover:text-ink group-data-open:text-ink motion-reduce:transition-none">
-              <span>{group.label}</span>
-              <span
-                aria-hidden="true"
-                className="size-2 shrink-0 rotate-45 border-r-[1.6px] border-b-[1.6px] border-current transition-transform duration-300 group-data-open:-rotate-135 motion-reduce:transition-none"
-              />
-            </CollapsibleTrigger>
-            <CollapsibleContent className="overflow-hidden transition-[height] duration-300 ease-out motion-reduce:transition-none data-open:h-[var(--collapsible-panel-height)] data-starting-style:h-0 data-ending-style:h-0 data-closed:h-0">
-              <div className="flex flex-col gap-2 border-t border-hair p-2">
-                {group.sections.map((title) => (
-                  <div
-                    key={title}
-                    id={sectionAnchorId(title)}
-                    className="flex scroll-mt-28 flex-col gap-2"
-                  >
-                    <h4 className="px-[0.6rem] py-0.5 font-mono text-[0.68rem] font-medium tracking-[0.12em] text-ink-mute uppercase">
-                      {title}
-                    </h4>
-                    {sectionBody(title)}
-                  </div>
-                ))}
-              </div>
-            </CollapsibleContent>
-          </Collapsible>
-        </section>
-      ))}
+            <h4 className="px-[0.6rem] py-0.5 font-mono text-[0.68rem] font-medium tracking-[0.12em] text-ink-mute uppercase">
+              {title}
+            </h4>
+            {sectionBody(title)}
+          </div>
+        ))}
+      </div>
     </div>
   );
 }
