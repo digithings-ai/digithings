@@ -380,7 +380,9 @@ export function calendarWindow(now: Date, timeZone?: string): CalendarWindow {
  * {@link dedupeCalendarTwins} for why.
  */
 function calendarEventKey(row: FxEconomicCalendarRow): string {
-  return `${row.event_date}|${row.country}|${row.event_name.trim()
+  // Country is case/space-normalized: feeds disagree on casing in principle
+  // (`US` vs `us`), and the key must not let a twin through on that basis.
+  return `${row.event_date}|${(row.country ?? '').trim().toUpperCase()}|${row.event_name.trim()
     .toLowerCase()
     .replace(/\s+/g, ' ')}`;
 }
