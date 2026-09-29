@@ -3,6 +3,8 @@
 Status: **approved, in execution** · re-baselined 2026-09-20 against `origin/develop` @ `cf5627b10`.
 
 > **digiquant Q1–Q3 execution re-baselined 2026-09-30; naming corrected the same day.** Kit parts, sequencing, and dashboard contracts for digiquant.io and the dashboard follow [`2026-09-30-digiquant-gloomberg-ui.md`](2026-09-30-digiquant-gloomberg-ui.md). The visual model is still **Gloomberg (gloom.sh)** — the reference in §1 and §6 below. Squash `705a029bb` (PR #4801) wrote "Bloomberg" by mistake; that name is not the target. digithings.ai stays on the opencode language in §1 and on PR #4791.
+>
+> **Ground-up lock (2026-09-30).** Q1 (`apps/digiquant-web`) and Q2/Q3 (`apps/dashboard`) are greenfield rebuilds from the kit, not in-place restyles. Four references (content from the current site or dashboard, feel from gloom.sh, kit from `packages/ui` + `apps/reference`, method from #4791) and the discard-vs-port table live in that plan's Owner lock. Sequence for this work: **#4791 → R1 → Q1 → dashboard**. Where the execution order below still says Q2/Q3 can run in parallel with R1, the 2026-09-30 plan wins: behavior tests may sit beside R1; the dashboard visual rebuild waits until Q1 is accepted.
 
 Original draft: 2026-09-18, branch `feat/rebuild-sites-from-reference`, cut from `origin/develop` @ `44ff6d109`.
 
@@ -65,7 +67,9 @@ AA contrast, reference nav/404/chatbot/slider). So the canonical layer is comple
 sites sit on the kit — they were simply never rebuilt, which is precisely the gap §1 describes.
 
 Execution order, by dependency: **R1 → (D1 ∥ Q1) → C1 → C2**, with **Q2/Q3** runnable in
-parallel with R1 since the dashboard has its own chrome.
+parallel with R1 since the dashboard has its own chrome. **Superseded for digiquant by the
+2026-09-30 Gloomberg plan:** #4791 → R1 → Q1 greenfield → Q2/Q3 greenfield. See the banner
+above this file.
 
 **The canonical-layer rule is enforced, not aspirational.** `scripts/check_frontend_canon.py`
 scans `apps/` + `packages/` and fails on raw palette utilities, pre-canon vocabulary, colour
