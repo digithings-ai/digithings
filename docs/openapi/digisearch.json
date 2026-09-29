@@ -335,108 +335,6 @@
         "title": "EnrichmentDef",
         "type": "object"
       },
-      "ExaWebSearchRequest": {
-        "description": "Request for POST /v1/digisearch_web_search (EXA live web search, optional provider).",
-        "properties": {
-          "category": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Category"
-          },
-          "contents_text": {
-            "default": false,
-            "title": "Contents Text",
-            "type": "boolean"
-          },
-          "exclude_domains": {
-            "anyOf": [
-              {
-                "items": {
-                  "type": "string"
-                },
-                "type": "array"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Exclude Domains"
-          },
-          "include_domains": {
-            "anyOf": [
-              {
-                "items": {
-                  "type": "string"
-                },
-                "type": "array"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Include Domains"
-          },
-          "num_results": {
-            "default": 8,
-            "maximum": 100.0,
-            "minimum": 1.0,
-            "title": "Num Results",
-            "type": "integer"
-          },
-          "offset": {
-            "default": 0,
-            "description": "Page start over one enlarged EXA window (EXA POST /search has no offset), so `results[offset : offset + num_results]` come from a single window fetched with `numResults = offset + num_results`. `offset + num_results` must stay within EXA_MAX_RESULTS (100): a page past the cap is rejected 400, never silently truncated. `offset=0` (default) is the unpaged call.",
-            "minimum": 0.0,
-            "title": "Offset",
-            "type": "integer"
-          },
-          "output_schema": {
-            "anyOf": [
-              {
-                "additionalProperties": true,
-                "type": "object"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Output Schema"
-          },
-          "query": {
-            "description": "Natural-language web query.",
-            "title": "Query",
-            "type": "string"
-          },
-          "search_type": {
-            "default": "auto",
-            "description": "instant|fast|auto|deep-lite|deep|deep-reasoning.",
-            "title": "Search Type",
-            "type": "string"
-          },
-          "system_prompt": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "System Prompt"
-          }
-        },
-        "required": [
-          "query"
-        ],
-        "title": "ExaWebSearchRequest",
-        "type": "object"
-      },
       "FunctionParametersSchema": {
         "properties": {
           "properties": {
@@ -904,7 +802,7 @@
             "title": "Default Index Name"
           },
           "tool": {
-            "description": "digisearch | digisearch_fetch_all | digisearch_research_delegate | web_search | digisearch_web_search",
+            "description": "digisearch | digisearch_fetch_all | digisearch_research_delegate | web_search",
             "title": "Tool",
             "type": "string"
           }
@@ -931,9 +829,6 @@
               },
               {
                 "$ref": "#/components/schemas/WebSearchResponse"
-              },
-              {
-                "$ref": "#/components/schemas/WebSearchData"
               },
               {
                 "$ref": "#/components/schemas/MonitorRun"
@@ -2021,8 +1916,15 @@
         "type": "object"
       },
       "WebAnswerRequest": {
-        "description": "Request for POST /v1/web_answer (EXA grounded answer).",
+        "description": "Request for POST /v1/web_answer (grounded live-web answer).",
         "properties": {
+          "provider": {
+            "default": "exa",
+            "description": "Provider that answers; only `exa` implements it today.",
+            "maxLength": 64,
+            "title": "Provider",
+            "type": "string"
+          },
           "question": {
             "description": "Question to answer from the live web.",
             "title": "Question",
@@ -2036,7 +1938,7 @@
         "type": "object"
       },
       "WebContentsRequest": {
-        "description": "Request for POST /v1/web_contents (EXA page fetch for known URLs).",
+        "description": "Request for POST /v1/web_contents (page fetch for known URLs).",
         "properties": {
           "highlight_query": {
             "anyOf": [
@@ -2053,6 +1955,13 @@
             "default": false,
             "title": "Highlights",
             "type": "boolean"
+          },
+          "provider": {
+            "default": "exa",
+            "description": "Provider that fetches the pages; only `exa` implements it today.",
+            "maxLength": 64,
+            "title": "Provider",
+            "type": "string"
           },
           "summary": {
             "default": false,
@@ -2079,56 +1988,6 @@
           "urls"
         ],
         "title": "WebContentsRequest",
-        "type": "object"
-      },
-      "WebSearchData": {
-        "description": "Orchestrator payload for a ``digisearch_web_search`` invoke.",
-        "properties": {
-          "cost_dollars": {
-            "anyOf": [
-              {
-                "additionalProperties": true,
-                "type": "object"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Cost Dollars"
-          },
-          "output": {
-            "anyOf": [
-              {
-                "additionalProperties": true,
-                "type": "object"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Output"
-          },
-          "results": {
-            "items": {
-              "additionalProperties": true,
-              "type": "object"
-            },
-            "title": "Results",
-            "type": "array"
-          },
-          "search_type": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Search Type"
-          }
-        },
-        "title": "WebSearchData",
         "type": "object"
       },
       "WebSearchErrorResponse": {
@@ -2169,6 +2028,21 @@
       },
       "WebSearchRequest": {
         "properties": {
+          "effort": {
+            "anyOf": [
+              {
+                "enum": [
+                  "fast",
+                  "thorough"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Effort"
+          },
           "exclude_domains": {
             "items": {
               "type": "string"
@@ -2191,6 +2065,30 @@
             "minimum": 1.0,
             "title": "Max Results",
             "type": "integer"
+          },
+          "offset": {
+            "default": 0,
+            "minimum": 0.0,
+            "title": "Offset",
+            "type": "integer"
+          },
+          "provider": {
+            "default": "auto",
+            "maxLength": 64,
+            "title": "Provider",
+            "type": "string"
+          },
+          "purpose": {
+            "anyOf": [
+              {
+                "maxLength": 2000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Purpose"
           },
           "query": {
             "maxLength": 500,
@@ -2221,6 +2119,30 @@
       },
       "WebSearchResponse": {
         "properties": {
+          "cost_dollars": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cost Dollars"
+          },
+          "output": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Output"
+          },
           "provider": {
             "default": "",
             "title": "Provider",
@@ -2246,9 +2168,19 @@
       },
       "WebSearchResult": {
         "properties": {
+          "author": {
+            "default": "",
+            "title": "Author",
+            "type": "string"
+          },
           "engine": {
             "default": "",
             "title": "Engine",
+            "type": "string"
+          },
+          "published_date": {
+            "default": "",
+            "title": "Published Date",
             "type": "string"
           },
           "score": {
@@ -3244,45 +3176,6 @@
         "summary": "Api Query"
       }
     },
-    "/v1/digisearch_web_search": {
-      "post": {
-        "description": "Live web search via EXA (dormant without EXA_API_KEY; not the owned corpus).\n\nMounted at ``/v1/digisearch_web_search`` (not ``/v1/web_search``): the first-party\nsearxng\u2192ddgs web search owns ``/v1/web_search`` on develop.\n\n``offset`` pages the recall set (client-side slice of one enlarged window \u2014\nEXA ``POST /search`` has no offset). A window reaching past the\n``web_exa.EXA_MAX_RESULTS`` (100) cap is 400 with the explicit\n:class:`digisearch.web_exa.ExaPageOutOfRangeError` message; a negative\noffset is 422 (``ge=0``). ``offset=0`` (default) is byte-identical to the\nunpaged call (#4234, #4241).",
-        "operationId": "api_web_search_v1_digisearch_web_search_post",
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/ExaWebSearchRequest"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/WebSearchData"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "summary": "Api Web Search"
-      }
-    },
     "/v1/monitors": {
       "get": {
         "description": "List watches newest-updated first, optionally scoped by workspace.",
@@ -3805,7 +3698,7 @@
     },
     "/v1/web_answer": {
       "post": {
-        "description": "Grounded answer from the live web via EXA (dormant without EXA_API_KEY).",
+        "description": "Grounded answer from the live web via the named provider (exa by default).",
         "operationId": "api_web_answer_v1_web_answer_post",
         "requestBody": {
           "content": {
@@ -3846,7 +3739,7 @@
     },
     "/v1/web_contents": {
       "post": {
-        "description": "Fetch known URLs via EXA contents (dormant without EXA_API_KEY).",
+        "description": "Fetch known URLs via the named provider (exa by default).",
         "operationId": "api_web_contents_v1_web_contents_post",
         "requestBody": {
           "content": {
@@ -3887,7 +3780,7 @@
     },
     "/v1/web_search": {
       "post": {
-        "description": "Search the public web (searxng with ddgs fallback, fetch + extract enrichment).\n\nProvider failures (429 / 5xx / connection / timeout) return HTTP 200 with\nthe soft ``{\"ok\": false, ...}`` envelope instead of a 500 (#4192).",
+        "description": "Search the public web through a swappable provider (#4711).\n\n``provider=\"auto\"`` (the default) is always the in-house searxng\u2192ddgs\npath \u2014 no external API key can reroute it. Naming a provider selects that\nprovider fail-closed: unknown name -> 400, key missing -> 503, capability\nthe provider lacks -> 400.\n\nProvider failures (429 / 5xx / connection / timeout) return HTTP 200 with\nthe soft ``{\"ok\": false, ...}`` envelope instead of a 500 (#4192).",
         "operationId": "v1_web_search_v1_web_search_post",
         "requestBody": {
           "content": {
