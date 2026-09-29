@@ -2,7 +2,7 @@
 
 Status: **approved, in execution** · re-baselined 2026-09-20 against `origin/develop` @ `cf5627b10`.
 
-> **digiquant visual target superseded 2026-09-30.** Q1–Q3 for digiquant.io and the dashboard now follow [`2026-09-30-digiquant-bloomberg-ui.md`](2026-09-30-digiquant-bloomberg-ui.md). Bloomberg / terminal-finance replaces gloom.sh as the digiquant model. digithings.ai stays on the opencode language in §1 and on PR #4791. Do not start Q1 from the gloom mapping in §1 and §6.
+> **digiquant Q1–Q3 execution re-baselined 2026-09-30; naming corrected the same day.** Kit parts, sequencing, and dashboard contracts for digiquant.io and the dashboard follow [`2026-09-30-digiquant-gloomberg-ui.md`](2026-09-30-digiquant-gloomberg-ui.md). The visual model is still **Gloomberg (gloom.sh)** — the reference in §1 and §6 below. Squash `705a029bb` (PR #4801) wrote "Bloomberg" by mistake; that name is not the target. digithings.ai stays on the opencode language in §1 and on PR #4791.
 
 Original draft: 2026-09-18, branch `feat/rebuild-sites-from-reference`, cut from `origin/develop` @ `44ff6d109`.
 
@@ -221,7 +221,7 @@ docs are corrected; lint + typecheck + `next build --webpack` (18+ routes) green
 
 Nav/footer rebuilt once as a shared chrome module (no duplicated nav data between sites).
 
-### digiquant.io (`apps/digiquant-web`) — gloom-informed language
+### digiquant.io (`apps/digiquant-web`) — Gloomberg (gloom.sh) language
 
 | Page | What it must become |
 |---|---|
