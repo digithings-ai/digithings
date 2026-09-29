@@ -45,4 +45,25 @@ describe("applyScrollSpyVote", () => {
       manualClosed: null,
     });
   });
+  it("holds the nav-clicked group over a stale vote during settle", () => {
+    // Nav click opened appearance; the smooth scroll has not settled yet and
+    // the observer still elects basics from pre-scroll geometry. The stale
+    // vote must not yank the clicked group away.
+    expect(applyScrollSpyVote("appearance", null, "basics", "appearance")).toEqual({
+      open: "appearance",
+      manualClosed: null,
+    });
+  });
+  it("holds the nav-clicked group on a null vote during settle", () => {
+    expect(applyScrollSpyVote("appearance", null, null, "appearance")).toEqual({
+      open: "appearance",
+      manualClosed: null,
+    });
+  });
+  it("releases the nav hold when the clicked group becomes foremost", () => {
+    expect(applyScrollSpyVote("appearance", null, "appearance", "appearance")).toEqual({
+      open: "appearance",
+      manualClosed: null,
+    });
+  });
 });

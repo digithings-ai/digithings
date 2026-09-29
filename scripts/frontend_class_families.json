@@ -41,11 +41,13 @@
     "ts"
   ],
   "_digichat_2_0": "digichat 2.0 assistant-ui product CSS: .aui-* (stock Thread chrome) and .dark-* (theme variants). Added with the 2.0.0 cut (#3629); not a new app-local family.",
+  "_devkit": "dev-only devkit workbench chrome (sidebar width, scroll-spy nav, swatch grid): .devkit-* in apps/digichat/src/app/(devkit)/, token-backed declarations only, never product chrome. Added with the devkit design overhaul (#4691).",
   "digichat": [
     "app",
     "aui",
     "dark",
-    "dc"
+    "dc",
+    "devkit"
   ],
   "digichat-ui": [
     "dark",

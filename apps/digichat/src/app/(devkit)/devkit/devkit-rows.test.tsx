@@ -32,6 +32,16 @@ describe("TextRow (kit)", () => {
     await user.tab();
     expect(input.value).toBe("old");
   });
+
+  it("displays the committed value after the parent re-renders with it", async () => {
+    // Uncontrolled inputs ignore later defaultValue props, so without a
+    // remount the row would keep showing the stale value (and Base UI logs
+    // an uncontrolled-FieldControl error on the default change in the
+    // browser). Re-rendering with the folded value must update the display.
+    const { rerender } = render(<TextRow label="slug" value="old" onCommit={() => true} />);
+    rerender(<TextRow label="slug" value="brand-new" onCommit={() => true} />);
+    expect((screen.getByLabelText(/slug/i) as HTMLInputElement).value).toBe("brand-new");
+  });
 });
 
 describe("BoolRow (kit Switch)", () => {

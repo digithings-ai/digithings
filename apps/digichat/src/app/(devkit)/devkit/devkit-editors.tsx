@@ -98,12 +98,22 @@ export function visibleGroupFromEntries(
  * but never collapses: a null vote keeps everything, and a same-id
  * re-election after a manual close is suppressed until a different group
  * becomes visible (which releases the suppression).
+ *
+ * `navTarget` arms the settle hold for a nav click: while armed, a vote for
+ * any other group is stale mid-scroll geometry (the clicked anchor cannot
+ * cross root-top when max-scroll clamps it below the band) and must not yank
+ * the clicked group away. A vote for the target itself releases the hold.
  */
 export function applyScrollSpyVote(
   open: string | null,
   manualClosed: string | null,
   visible: string | null,
+  navTarget?: string | null,
 ): { open: string | null; manualClosed: string | null } {
+  if (navTarget) {
+    if (visible === navTarget) return { open: navTarget, manualClosed: null };
+    return { open: navTarget, manualClosed };
+  }
   if (visible === null) return { open, manualClosed };
   if (manualClosed !== null && visible === manualClosed) return { open, manualClosed };
   return { open: visible, manualClosed: null };
@@ -134,6 +144,13 @@ export function TextRow({
       <Field label={label} hint={hint} className="min-w-0 flex-1">
         <Input
           dress="chat"
+          // Remount on committed-value change: uncontrolled inputs ignore
+          // later defaultValue props, which both leaves stale text on screen
+          // and trips Base UI's uncontrolled-FieldControl default-change
+          // error. Commits land on blur/Enter (unfocused), so the remount
+          // never steals focus; refused commits keep `current` and the
+          // revert path below still applies.
+          key={current}
           defaultValue={current}
           placeholder={placeholder}
           spellCheck={false}
@@ -343,6 +360,9 @@ export function TextListRow({
     <Field label={label} hint={hint}>
       <Textarea
         rows={3}
+        // Same remount contract as TextRow: uncontrolled defaultValue must be
+        // fresh at mount, never changed on a mounted instance.
+        key={current}
         defaultValue={current}
         spellCheck={false}
         placeholder="one per line"
@@ -773,6 +793,21 @@ export function DevkitEditors({
   // closed so observer refires electing that same group do not reopen it.
   // Released when a different group becomes visible or a nav click opens one.
   const manualClosedRef = useRef<string | null>(null);
+  // Nav-click settle hold: after scrollToGroup arms this, observer votes for
+  // any OTHER group are stale mid-scroll geometry (the clicked anchor settles
+  // below root-top under max-scroll clamp, so the election keeps favoring an
+  // earlier group) and must not yank the clicked group away. Released on
+  // arrival (vote elects the target), user scroll takeover, manual toggle, or
+  // a settle timeout backstop.
+  const navTargetRef = useRef<string | null>(null);
+  const navTimerRef = useRef<number | null>(null);
+  const disarmNavTarget = () => {
+    navTargetRef.current = null;
+    if (navTimerRef.current !== null) {
+      window.clearTimeout(navTimerRef.current);
+      navTimerRef.current = null;
+    }
+  };
   const openGroupRef = useRef<string | null>(openGroup);
   useEffect(() => {
     openGroupRef.current = openGroup;
@@ -799,10 +834,16 @@ export function DevkitEditors({
             top: latestTopsRef.current.get(g.id) ?? Number.POSITIVE_INFINITY,
           })),
         );
+        // Arrival releases the nav-click hold (timer no longer needed); the
+        // vote below then applies with the hold cleared.
+        if (navTargetRef.current !== null && visible === navTargetRef.current) {
+          disarmNavTarget();
+        }
         const next = applyScrollSpyVote(
           openGroupRef.current,
           manualClosedRef.current,
           visible,
+          navTargetRef.current,
         );
         manualClosedRef.current = next.manualClosed;
         setOpenGroup(next.open);
@@ -814,10 +855,24 @@ export function DevkitEditors({
       },
     );
     targets.forEach((t) => observer.observe(t));
-    return () => observer.disconnect();
+    // User scroll takeover ends a nav-click settle: wheel/touch input means
+    // the user grabbed the scroll, so votes apply normally again at once
+    // instead of waiting for the settle timeout.
+    const disarmOnUserScroll = () => {
+      if (navTargetRef.current !== null) disarmNavTarget();
+    };
+    rootEl?.addEventListener("wheel", disarmOnUserScroll, { passive: true });
+    rootEl?.addEventListener("touchmove", disarmOnUserScroll, { passive: true });
+    return () => {
+      observer.disconnect();
+      rootEl?.removeEventListener("wheel", disarmOnUserScroll);
+      rootEl?.removeEventListener("touchmove", disarmOnUserScroll);
+      disarmNavTarget();
+    };
   }, [scrollRoot]);
 
   const setGroupFromTrigger = (groupId: string, isOpen: boolean) => {
+    disarmNavTarget(); // manual toggle takes over from any nav-click settle
     if (isOpen) {
       manualClosedRef.current = null;
       setOpenGroup(groupId);
@@ -829,6 +884,8 @@ export function DevkitEditors({
 
   const scrollToGroup = (id: string) => {
     manualClosedRef.current = null;
+    disarmNavTarget();
+    navTargetRef.current = id;
     setOpenGroup(id);
     const reduce =
       typeof window !== "undefined" &&
@@ -837,6 +894,12 @@ export function DevkitEditors({
     anchorsRef.current
       .get(id)
       ?.scrollIntoView({ behavior: reduce ? "auto" : "smooth", block: "start" });
+    // Settle backstop: if the clicked anchor can never become foremost (short
+    // content clamps the scroll with the anchor still below root-top), no
+    // arrival vote ever fires — release the hold so later user scrolls apply
+    // normally. No vote can fire after geometry goes static, so the timeout
+    // itself never changes which group is open.
+    navTimerRef.current = window.setTimeout(disarmNavTarget, 1200);
   };
 
   const sectionBody = (title: SectionTitle): React.ReactNode => {
