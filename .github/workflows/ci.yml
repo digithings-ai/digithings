@@ -114,6 +114,8 @@ jobs:
               - 'apps/digiquant-web/**'
               - 'digiquant/src/digiquant/portfolio/graph.py'
               - 'apps/digithings-cron/**'
+              - 'apps/digiquant-runner/**'
+              - 'Dockerfile.digiquant-runner'
               - 'packages/digichat-ui/**'
               - 'packages/ui/**'
               - 'packages/design/**'

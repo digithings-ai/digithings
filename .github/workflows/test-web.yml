@@ -76,6 +76,18 @@ jobs:
       - name: Typecheck digithings-cron
         run: npm run typecheck --workspace digithings-cron
 
+      # digiquant-runner is the private container behind digithings-cron
+      # kind: container (#4761). Same lane as the cron Worker: root npm ci
+      # already installed the workspace.
+      - name: Test digiquant-runner
+        run: npm run test --workspace digiquant-runner
+
+      - name: Typecheck digiquant-runner
+        run: npm run typecheck --workspace digiquant-runner
+
+      - name: Test digiquant-runner allowlist
+        run: python3 apps/digiquant-runner/container/exec_job_test.py
+
       - name: Lint digiquant-web
         run: npm run lint --workspace digiquant-web
 

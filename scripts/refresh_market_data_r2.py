@@ -1,7 +1,9 @@
 """Daily R2 refresh: vendor live overlap -> new immutable generations (#3780).
 
-Cron entry point (``pipeline-market-data-refresh.yml``, 13:00 UTC): fetch the
-latest bars (yfinance for prices, FRED/Yahoo-FX for macro), compare each
+Production clock is digithings-cron → digiquant-runner (``market-data-refresh``,
+13:00 and 21:30 UTC, #4761). ``pipeline-market-data-refresh.yml`` is manual
+override only. Fetch the latest bars (yfinance for prices, FRED/Yahoo-FX
+for macro), compare each
 dataset's sealed overlap against its R2 generation via
 :func:`overlap_hash`, and write a NEW generation only when data moved:
 

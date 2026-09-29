@@ -691,11 +691,12 @@ def _workflow() -> dict[str, Any]:
     return yaml.safe_load(WORKFLOW.read_text(encoding="utf-8"))
 
 
-def test_workflow_schedule_and_dispatch() -> None:
+def test_workflow_is_manual_dispatch_only() -> None:
+    """The clock is digithings-cron → digiquant-runner (#4761 Phase 1)."""
     spec = _workflow()
     on = spec[True]  # YAML 1.1 parses the `on:` key as boolean True
     assert "workflow_dispatch" in on
-    assert {entry["cron"] for entry in on["schedule"]} == {"0 13 * * *", "30 21 * * *"}
+    assert "schedule" not in on
 
 
 def test_workflow_concurrency_and_timeout() -> None:
