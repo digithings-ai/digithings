@@ -2,6 +2,8 @@
 
 Status: **approved, in execution** · re-baselined 2026-09-20 against `origin/develop` @ `cf5627b10`.
 
+> **digiquant visual target superseded 2026-09-30.** Q1–Q3 for digiquant.io and the dashboard now follow [`2026-09-30-digiquant-bloomberg-ui.md`](2026-09-30-digiquant-bloomberg-ui.md). Bloomberg / terminal-finance replaces gloom.sh as the digiquant model. digithings.ai stays on the opencode language in §1 and on PR #4791. Do not start Q1 from the gloom mapping in §1 and §6.
+
 Original draft: 2026-09-18, branch `feat/rebuild-sites-from-reference`, cut from `origin/develop` @ `44ff6d109`.
 
 ## 0. Owner direction (2026-09-20) — READ THIS BEFORE §6
