@@ -1,7 +1,8 @@
 # ADR-0030 — Swappable digiquant stage modules; twelve-x is a composition
 
-**Status:** Proposed — Chris Accepts later via Human Gate. Do not treat this file as Accepted.
+**Status:** Accepted (2026-09-29)
 **Date:** 2026-09-29
+**Accept:** Human Gate via One / Chris on [#4763](https://github.com/digithings-ai/digithings/pull/4763).
 **Related epic:** [#4762](https://github.com/digithings-ai/digithings/issues/4762)
 **Amends (reading only; historical bodies stay):** [ADR-0015](0015-atlas-vs-hermes.md), [ADR-0026](0026-retire-olympus-atlas-hermes-kairos.md)
 **Extends:** [ADR-0014](0014-atlas-in-digiquant.md) (finance graphs live in `digiquant/`), [docs/VISION.md](../VISION.md) (research / portfolio / execution under digiquant)
