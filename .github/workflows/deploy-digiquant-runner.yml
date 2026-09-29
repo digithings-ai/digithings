@@ -16,7 +16,12 @@ on:
   workflow_dispatch:
 
 concurrency:
-  group: deploy-digiquant-runner
+  # Per-run group. environment: production can hold a run at the approval
+  # gate; a shared group with cancel-in-progress: false queues every later
+  # deploy behind that wait (#2541). A newer image is not always a superset
+  # of an in-flight workflow_dispatch ref, so this does not cancel it.
+  # Same pattern as deploy-digithings-stack-cloudflare.yml.
+  group: deploy-digiquant-runner-${{ github.run_id }}
   cancel-in-progress: false
 
 permissions:
