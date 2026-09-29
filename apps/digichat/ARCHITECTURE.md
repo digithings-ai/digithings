@@ -925,8 +925,9 @@ mutate language/model/effort/search-engine/tools/MCP; `session_upsert_mcp` canno
 when `allowUserMcp` is false (operator token attach still works). The client applies them to `EmbedChatPrefsApi`.
 `X-Digi-Effort` (low/medium/high) is forwarded to digigraph. `X-Digi-Search-Engine`
 (auto/internal/exa/tavily/parallel/firecrawl/tinyfish) is forwarded with it: effective
-engine is the user pref, else the tenant `gate.searchEngine` default; explicit `auto`
-travels by omission down the whole chain (#4724). digisearch / digivault / web_search
+engine is the user pref, else the tenant `gate.searchEngine` default. An unset pref
+sends nothing (follow-tenant); an explicit `auto` is sent literally by the browser
+but omitted by the BFF, so it still beats a tenant default (#4724). digisearch / digivault / web_search
 stay orchestrator tools (HTTP to the verticals), not browser MCP. DataTap-style installs add
 extra servers in YAML (see `config/examples/datatap-mcp.yaml`). The trial-tenant
 variant (per-tenant container + dev MCP server + `X-API-Key` static auth) is

@@ -36,8 +36,8 @@ describe("disabledCatalogIds", () => {
 });
 
 describe("searchEngine pref", () => {
-  it("defaults to auto (in-house engine)", () => {
-    expect(DEFAULT_EMBED_CHAT_PREFS.searchEngine).toBe("auto");
-    expect(createDefaultEmbedChatPrefs().searchEngine).toBe("auto");
+  it("defaults to unset (follow-tenant) rather than a literal engine", () => {
+    expect(DEFAULT_EMBED_CHAT_PREFS.searchEngine).toBe("");
+    expect(createDefaultEmbedChatPrefs().searchEngine).toBe("");
   });
 });

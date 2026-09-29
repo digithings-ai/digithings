@@ -613,6 +613,25 @@ describe("useEmbedDigiChat prepareSendMessagesRequest — MCP session overlay an
     expect(new Headers(dropped.headers).has("X-Digi-Search-Engine")).toBe(false);
     unmount();
   });
+
+  it("stays silent for empty-unset and sends an explicit auto literally", async () => {
+    let engine = "";
+    const { unmount } = renderHookLocally(() =>
+      useEmbedDigiChat(
+        baseEmbedOptions({
+          getSearchEngine: () => engine,
+        }),
+      ),
+    );
+    const config = readCapturedTransportConfig();
+    if (!config) throw new Error("AssistantChatTransport was never constructed");
+    const unset = await config.prepareSendMessagesRequest({ messages: [], body: undefined });
+    expect(new Headers(unset.headers).has("X-Digi-Search-Engine")).toBe(false);
+    engine = "auto";
+    const explicit = await config.prepareSendMessagesRequest({ messages: [], body: undefined });
+    expect(new Headers(explicit.headers).get("X-Digi-Search-Engine")).toBe("auto");
+    unmount();
+  });
 });
 
 describe("useEmbedDigiChat reset (/new)", () => {

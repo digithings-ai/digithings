@@ -139,6 +139,7 @@ export function useStockChatPrefs({
     [],
   );
   const getEffort = useCallback(() => chatPrefsRef.current.effort, []);
+  const getSearchEngine = useCallback(() => chatPrefsRef.current.searchEngine, []);
   const getMcpSession = useCallback(
     () =>
       deps.mcpOps.headerValue(
@@ -300,6 +301,7 @@ export function useStockChatPrefs({
     getEnableWebSearch,
     getMcpSession,
     getEffort,
+    getSearchEngine,
     setWebSearch: (on: boolean) => setChatPrefs((p) => ({ ...p, webSearch: on })),
   };
 }

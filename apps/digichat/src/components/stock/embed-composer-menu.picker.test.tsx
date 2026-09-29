@@ -158,4 +158,26 @@ describe("EmbedComposerMenu exclusive pickers", () => {
     expect(api.setSearchEngine).toHaveBeenCalledWith("exa");
     expect(onClose).toHaveBeenCalledTimes(1);
   });
+
+  it("hides the search-engine row on the main menu when the tenant disallows web", async () => {
+    const onClose = vi.fn();
+    const { unmount } = render(
+      <EmbedChatPrefsProvider value={prefs({ tenantAllowsWeb: false })}>
+        <EmbedComposerMenu kind="settings" onClose={onClose} />
+      </EmbedChatPrefsProvider>,
+    );
+    expect(screen.queryByText("/search-engine")).toBeNull();
+    unmount();
+  });
+
+  it("shows the search-engine row on the main menu when the tenant allows web", async () => {
+    const onClose = vi.fn();
+    const { unmount } = render(
+      <EmbedChatPrefsProvider value={prefs({ tenantAllowsWeb: true })}>
+        <EmbedComposerMenu kind="settings" onClose={onClose} />
+      </EmbedChatPrefsProvider>,
+    );
+    expect(await screen.findByText("/search-engine")).not.toBeNull();
+    unmount();
+  });
 });

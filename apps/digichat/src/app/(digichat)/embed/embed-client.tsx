@@ -422,6 +422,7 @@ function EmbedChat({
     [],
   );
   const getEffort = useCallback(() => chatPrefsRef.current.effort, []);
+  const getSearchEngine = useCallback(() => chatPrefsRef.current.searchEngine, []);
   const getMcpSession = useCallback(
     () =>
       mcpSessionOverlayHeaderValue(
@@ -574,6 +575,7 @@ function EmbedChat({
     getSelectedModel,
     getMcpSession,
     getEffort,
+    getSearchEngine,
     getPlanProof,
     // Foundry is append-only until #3475 — never expose truncate-and-resend chrome.
     // Digigraph and Foundry both support turn mutation via X-Digi-Turn-Mode (#3475).

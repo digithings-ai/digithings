@@ -395,10 +395,12 @@ export function EmbedComposerMenu({
           setView("effort");
         },
       });
+    }
+    if (api.tenantAllowsWeb) {
       rows.push({
         id: "search-engine",
         label: slashName("search-engine"),
-        value: SEARCH_ENGINE_LABELS[api.prefs.searchEngine] ?? api.prefs.searchEngine,
+        value: SEARCH_ENGINE_LABELS[api.prefs.searchEngine || "auto"] ?? api.prefs.searchEngine,
         activate: () => {
           setCursor(
             Math.max(0, SEARCH_ENGINES.indexOf(api.prefs.searchEngine as (typeof SEARCH_ENGINES)[number])),
@@ -496,7 +498,7 @@ export function EmbedComposerMenu({
         id,
         label: slashName(`search-engine ${id}`),
         value: SEARCH_ENGINE_LABELS[id] ?? "",
-        checked: api.prefs.searchEngine === id,
+        checked: (api.prefs.searchEngine || "auto") === id,
         exclusive: true,
         activate: () => {
           api.setSearchEngine(id);
@@ -968,7 +970,7 @@ export function EmbedComposerMenu({
         if (view === "main" && row?.id === "search-engine") {
           event.preventDefault();
           event.stopPropagation();
-          api.setSearchEngine(cycle(SEARCH_ENGINES, api.prefs.searchEngine, delta));
+          api.setSearchEngine(cycle(SEARCH_ENGINES, api.prefs.searchEngine || "auto", delta));
           return;
         }
         if (view === "main" && row?.id === "view") {

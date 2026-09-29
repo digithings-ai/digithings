@@ -46,7 +46,7 @@ export const DEFAULT_EMBED_CHAT_PREFS: EmbedChatPrefs = {
   thinking: "auto",
   model: "",
   effort: "medium",
-  searchEngine: "auto",
+  searchEngine: "",
 };
 
 /**
