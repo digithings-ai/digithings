@@ -1,16 +1,16 @@
-# digiquant Bloomberg UI Implementation Plan
+# digiquant Gloomberg UI Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Rebuild digiquant.io (`apps/digiquant-web`) and the digiquant dashboard (`apps/dashboard`) on the canonical kit with a Bloomberg-style terminal-finance presentation, after digithings.ai lands.
+**Goal:** Rebuild digiquant.io (`apps/digiquant-web`) and the digiquant dashboard (`apps/dashboard`) on the canonical kit in the Gloomberg (gloom.sh) presentation, after digithings.ai lands.
 
-**Architecture:** Pages assemble kit parts from `packages/ui` and specimens from `apps/reference`. Shared chrome (nav, footer, vertical section rail) is promoted once, then dressed per surface. digiquant marketing is a wide, data-first document. The dashboard is a dense multi-pane terminal whose sidebar stays in the flex row and whose database gate never replaces a static route with a blank card. Visual slices stop for Chris to check locally in Cursor. Mechanical slices are OpenCode packages with a failing test first.
+**Architecture:** Pages assemble kit parts from `packages/ui` and specimens from `apps/reference`. Shared chrome (nav, footer, vertical section rail) is promoted once, then dressed per surface. digiquant marketing follows the gloom.sh document (1024px, flat, dense). The dashboard is a dense multi-pane working surface whose sidebar stays in the flex row and whose database gate never replaces a static route with a blank card. Visual slices stop for Chris to check locally in Cursor. Mechanical slices are OpenCode packages with a failing test first.
 
 **Tech Stack:** Next.js static export (`next build --webpack`), `@digithings/ui`, design tokens in `packages/design/tokens.css`, Vitest, `scripts/check_frontend_canon.py`.
 
-**Status:** plan only. Written 2026-09-30 against `origin/develop` @ `83ec167c7`. No page in `apps/digiquant-web` or `apps/dashboard` is rebuilt by this document.
+**Status:** plan only. Written 2026-09-30 against `origin/develop` @ `83ec167c7`. Naming corrected the same day after squash `705a029bb` (PR #4801) wrote "Bloomberg" throughout. That word was a mishearing of **Gloomberg** (gloom.sh), the partner reference site. No page in `apps/digiquant-web` or `apps/dashboard` is rebuilt by this document.
 
-**Supersedes, for digiquant only:** the gloom.sh visual target in [`2026-09-18-sites-rebuild-from-reference.md`](2026-09-18-sites-rebuild-from-reference.md) §1 and §6. That plan remains the source for digithings.ai (opencode) and for R0, which is done. Epic [#4424](https://github.com/digithings-ai/digithings/issues/4424) stays open.
+**Visual target:** Gloomberg, the site at gloom.sh, already specified in [`2026-09-18-sites-rebuild-from-reference.md`](2026-09-18-sites-rebuild-from-reference.md) §1 and §6. This file is the Q1–Q3 execution re-baseline (kit parts, sequencing, dashboard contracts, honesty). It does not replace gloom.sh. digithings.ai stays on the opencode language in that plan. Epic [#4424](https://github.com/digithings-ai/digithings/issues/4424) stays open. Gloomberb (`term.gloom.sh`, `api.gloom.sh`) is a different surface and is not this reference.
 
 ## Global Constraints
 
@@ -21,7 +21,7 @@
 - No live-trading claim. Performance figures that remain say in-sample or backtest. `Backtest only` and `Not OOS vs flat DCA` chips in `apps/digiquant-web/components/tearsheet/honesty.tsx` stay.
 - Do not edit `apps/digichat`, `packages/digichat-ui`, `digikey/`, or `digiquant/brokers/`. Do not change the dashboard broker OAuth callback behavior in `apps/dashboard/app/settings/brokers/callback/page.tsx`.
 - Print layouts on strategy tearsheets survive. `trailingSlash`, `basePath` `/dashboard`, `_redirects`, and the deploy scripts keep their current behavior.
-- This plan does not invent Bloomberg screenshots or a sampled palette. Principles below are public terminal-UI patterns. New hex values are a Chris gate, added as tokens, never as component literals.
+- This plan does not clone gloom.sh assets and does not sample a new palette. Type, measure, rhythm, and devices below are the 2026-09-18 gloom.sh mapping. New hex values are a Chris gate, added as tokens, never as component literals. Do not introduce Bloomberg L.P. or Bloomberg Terminal chrome, copy, or an amber function-key palette.
 
 ---
 
@@ -37,7 +37,7 @@
 | Q3 dashboard surfaces | **Not started** | 24 `page.tsx` files. Several are redirects. Two still nest `<main>`. |
 | C1 / C2 | **Not started** | Claim list in the 2026-09-18 plan §7 is the starting inventory, re-dated at audit time. |
 
-Owner sequence (2026-09-30): **digithings first, then digiquant marketing, then the dashboard.** Bloomberg replaces gloom.sh as the digiquant visual target. digithings stays opencode.
+Owner sequence (2026-09-30): **digithings first, then digiquant marketing, then the dashboard.** The digiquant visual target stays Gloomberg (gloom.sh). digithings stays opencode.
 
 ---
 
@@ -45,17 +45,18 @@ Owner sequence (2026-09-30): **digithings first, then digiquant marketing, then 
 
 Three languages. They share the kit and the canon guard. They do not share a mood.
 
-### 1.1 Bloomberg / terminal-finance (digiquant.io and the dashboard)
+### 1.1 Gloomberg / gloom.sh (digiquant.io and the dashboard)
 
-Public terminal-UI patterns this plan is allowed to use. No screenshot, no cloned asset, no "official Bloomberg hex."
+The visual reference is gloom.sh (Gloomberg), the partner site named in the 2026-09-18 plan §1. It is flat, high-density, terminal-native, and animation-light — a utilitarian finance site. No cloned asset. Not Bloomberg Terminal and not Bloomberg L.P.
 
-- The page is a working surface. Information is the interface: figures, labels, hairline panels, a command or ticker strip. Decoration that does not carry a number or a wayfinding label comes out.
-- Panels tile. Rules are 1px (`--hair`, `--term-hair`). Radius on data panels is 0, matching `.term` in `packages/design/site/site.css`. Gaps inside a panel are 8–12px. Section padding on the marketing site is 32–48px, not the gloom 96px rhythm.
-- Type is small and mono for anything numeric. Dashboard panel titles sit at 13px mono. Marketing h1 is one line, mono, weight 600, at most 28px. Body copy on the marketing site may stay the kit sans at 15–16px for paragraphs only. Figures use `font-variant-numeric: tabular-nums`.
-- Color is semantic. `--up` and `--down` are P&L only (already the house rule in `packages/design/tokens.css`). `--warn` is attention (pending, function highlight, stale). `--danger` is a fault, distinct from `--down`. Identity stays `--accent-digiquant` (the phosphor already ruled for digiquant). A classic amber-on-black function-key palette is **not** introduced in this plan. If Chris wants amber to replace the phosphor on digiquant surfaces, that is a token change in its own reviewed slice (open question 1).
-- Chrome is a pinned top strip plus an optional left function rail. The top strip does not hide on scroll. `NavShell` today only allows `autoHide: "scroll" | "hover"` (`packages/ui/src/components/NavShell.tsx`). Q1 needs a third value, `"none"`, so the bar stays put.
-- Dark is the working default for the dashboard (already `data-theme`). Light must still meet the AA pairs already pinned in `tokens.css`. The marketing site keeps both themes; it does not ship a mesh, a grain hero, or a scrolly word reveal.
-- Motion is CSS-only and honor `prefers-reduced-motion`. No canvas mesh, no 480vh track, no ambient background.
+- Marketing measure and type, from that mapping: shadcn/zinc, Geist + Geist Mono, 1024px content width, 96px section rhythm, 10px cards. The h1 is one line, mono, 36px, weight 600, −0.9px tracking. Body paragraphs may stay the kit sans at 15–16px. Figures use `font-variant-numeric: tabular-nums`.
+- The hero artefact is a product screenshot (a real capture with a caption). A live ticker strip sits with it. The pipeline is a keycap-style mono shortcut-chip gallery. Footer groups are bracketed mono.
+- The page stays a working surface. Decoration that does not carry a number, a label, or a wayfinding chip comes out. No canvas mesh, no grain hero, no 480vh scrolly track.
+- Dashboard surfaces stay dense in the same character: hairline panels (`--hair`, `--term-hair`), mono labels, tabular figures. That density is the gloom.sh look on a working app. It is not a function-key terminal skin. Dashboard panel titles stay the existing 13px mono.
+- Color is semantic, matching gloom.sh positive / negative / pending. `--up` and `--down` are P&L only (already the house rule in `packages/design/tokens.css`). `--warn` is attention (pending, stale). `--danger` is a fault, distinct from `--down`. Identity stays `--accent-digiquant` (the phosphor already ruled for digiquant). An amber-on-black function-key palette is not part of gloom.sh and is not introduced.
+- Chrome is a flat top strip that does not hide on scroll. `NavShell` today only allows `autoHide: "scroll" | "hover"` (`packages/ui/src/components/NavShell.tsx`). Q1 needs a third value, `"none"`, so the bar stays put. A section rail, if used, is the digithings kit part (R1), not a function-key rail.
+- Dark is the working default for the dashboard (already `data-theme`). Light must still meet the AA pairs already pinned in `tokens.css`. The marketing site keeps both themes.
+- Motion is CSS-only and honors `prefers-reduced-motion`.
 
 Density tokens to consume, not reinvent:
 
@@ -65,30 +66,30 @@ Density tokens to consume, not reinvent:
 | Hairline | `--hair`, `--term-hair` | Panel rules |
 | Figures | `--term-ink`, `--font-mono` (Geist Mono on the dashboard) | Numbers and labels |
 | P&L | `--up`, `--down` | Signed returns only |
-| Attention | `--warn` | Stale, pending, function highlight |
+| Attention | `--warn` | Stale, pending |
 | Identity | `--accent-digiquant` | Wordmark and focus, not P&L |
 
 ### 1.2 digithings (opencode) — leave it
 
 digithings.ai stays the opencode language from the 2026-09-18 plan §1: small mono type, flat nav, install command, dense module list, `Fig N` captions. PR #4791 is that work. This plan does not restyle it.
 
-### 1.3 gloom.sh — what still applies
+### 1.3 gloom.sh mapping — in force
 
-gloom.sh is no longer the model for digiquant. Keep only the overlaps that are already canon:
+These are the 2026-09-18 notes. The #4801 text that dropped the measure, the screenshot, and the keycap chips did that because it treated "Bloomberg" as a different target. That disposition is withdrawn.
 
 | gloom.sh note (2026-09-18) | Disposition |
 |---|---|
-| Geist + Geist Mono | Keep. Dashboard already loads Geist Mono in `apps/dashboard/app/layout.tsx`. |
-| Semantic positive / negative / pending | Keep as `--up` / `--down` / `--warn`. |
-| Flat, animation-light, bracketed mono labels | Keep. |
-| 1024px measure, 36px/600 h1, −0.9px tracking, 96px section rhythm, 10px cards | Drop for digiquant. Too much marketing air. |
-| Product screenshot as the hero | Drop. The hero artefact is a live ticker plus one claim line. A desk capture is allowed later only as a real `Figure` with a caption, after Chris asks for it. |
-| Keycap chips as the organizing device for the pipeline | Drop on the marketing homepage. Keyboard hints stay inside the dashboard command palette, which already exists. |
-| Install-channel triad (web / desktop / TUI) | Drop. digiquant's honest install remains the self-host clone, not a three-channel product launcher. |
+| Geist + Geist Mono | Use. Dashboard already loads Geist Mono in `apps/dashboard/app/layout.tsx`. |
+| Semantic positive / negative / pending | Use as `--up` / `--down` / `--warn`. |
+| Flat, animation-light, bracketed mono labels | Use. |
+| 1024px measure, 36px/600 h1, −0.9px tracking, 96px section rhythm, 10px cards | Use on digiquant marketing. |
+| Product screenshot as the hero | Use. A real capture with a caption. The ticker accompanies it. |
+| Keycap chips as the organizing device for the pipeline | Use on the marketing homepage. |
+| Install-channel triad (web / desktop / TUI) | Do not copy the product shape. That triad is gloom.sh's own install story. digiquant's honest install remains the self-host clone. |
 
 ### 1.4 What digiquant must not look like
 
-digiquant must not inherit the opencode homepage: install tabs as the hero, the why-band three-app invoice, the mosaic, `~/digithings/...` path chrome, or a manifesto headline. The finance app on digithings is a product built on the stack. The digiquant site is the desk.
+digiquant must not inherit the opencode homepage: install tabs as the hero, the why-band three-app invoice, the mosaic, `~/digithings/...` path chrome, or a manifesto headline. The finance app on digithings is a product built on the stack. The digiquant site is the Gloomberg (gloom.sh) surface: dense, flat, utilitarian.
 
 ---
 
@@ -111,7 +112,7 @@ Read from branch `claude/digithings-web-ui-refactor` (PR #4791), not from memory
 
 - The why band (`AppFirstSection`, three architectures, sticky invoice, mosaic, pipeline-on-tile). That is the digithings homepage argument.
 - `SectionRail`'s hardcoded `SECTIONS` and the `~/digithings` prefix. Those are content, not the component.
-- Opencode install chrome, FAQ morph, and `WordReveal` as a pinned claim. `WordReveal` may remain in the kit for digithings. digiquant home does not mount it.
+- Opencode install chrome and the why-band. `WordReveal` may remain in the kit. On digiquant home it is only the single claim the 2026-09-18 gloom page already lists, not an opencode pinned manifesto.
 - App-local landing components as the implementation style. `HeroMesh`, `HeroGraph`, `AmbientMesh`, `PipelineScene`, and `DashboardScene` are the "over the top" the 2026-09-20 direction already withdrew. Q1 deletes their use. Deleting the files is part of the home slice once nothing imports them.
 - digichat embed, popup, or `/embed` protocol. The dashboard `DigichatPopup` stays mounted and unchanged.
 
@@ -128,19 +129,20 @@ Package: `apps/digiquant-web`. Public origin `https://digiquant.io`. Plumbing th
 Home sections, in order, after the rebuild:
 
 1. Pinned `NavShell` (`autoHide="none"`), brand from `_nav.tsx` (`TerminalMark` compact + wordmark `digiquant`).
-2. One-line h1. Keep the factual claim already on the page: a quant research desk, open-source, self-hosted. Drop the three-line mesh hero and the "Scroll to explore" cue.
-3. `StockTicker` via the existing `LiveTickerRow` (Coinbase plus equity majors). This is the hero artefact.
+2. One-line h1 at the gloom.sh spec (mono, 36px, weight 600, −0.9px tracking). Keep the factual claim already on the page: a quant research desk, open-source, self-hosted. Drop the three-line mesh hero and the "Scroll to explore" cue.
+3. Hero artefact: a product screenshot, a real desk capture with a caption. `StockTicker` via the existing `LiveTickerRow` (Coinbase plus equity majors) sits with it.
 4. Four figures, single-sourced, as `Figure` + `StatCounter` / the existing `MetricsOdometer` data: subsystem count from `subsystems.length`, pipeline stage count from the `FLOW` array (7), published tearsheet trade count from the live index, live orders = 0. Caption states why live is zero: routing is off, venue tokens are refused.
-5. Pipeline as a ruled list of those 7 stages (Research, Indicators, Strategy, Signals, Optimize, Backtest, Export). Export copy keeps "Live trading is not on yet." No keycap gallery. No scrolly scene.
+5. Pipeline as a keycap-chip gallery of those 7 stages (Research, Indicators, Strategy, Signals, Optimize, Backtest, Export). Export copy keeps "Live trading is not on yet." No scrolly scene.
 6. Live book panel, existing `LivePortfolioPanel`, restyled as a hairline panel. Unavailable env renders the current "connects on deploy" empty state, not a fake book.
 7. Strategy suite linking into `/strategies` and `/strategies/[id]`.
-8. Pricing: the three tiers in `app/_pricing.ts` unchanged in facts (Self-hosted Free, Managed Coming soon, Enterprise Contact) rendered with `PricingTierCard`. FAQ accordion from `PRICING_FAQ`.
-9. `ContactMailto` to `contact@digiquant.io`. `Footer` + `Colophon` with `DQ_FOOTER`.
-10. `SectionRail` only if the page still has four or more bands after the cut. Short pages omit it.
+8. One `WordReveal` claim, as the 2026-09-18 gloom page lists it. Not an opencode manifesto and not a scrolly track.
+9. Pricing: the three tiers in `app/_pricing.ts` unchanged in facts (Self-hosted Free, Managed Coming soon, Enterprise Contact) rendered with `PricingTierCard`. FAQ accordion from `PRICING_FAQ`.
+10. `ContactMailto` to `contact@digiquant.io`. `Footer` + `Colophon` with `DQ_FOOTER`, bracketed mono groups.
+11. `SectionRail` only if the page still has four or more bands after the cut. Short pages omit it.
 
 | Route | Kit parts | Acceptance |
 |---|---|---|
-| `/` | `NavShell`, `StockTicker` (through `LiveTickerRow`), `Figure`, `StatCounter` or `MetricsOdometer`, `PricingTierCard`, `ContactMailto`, `Footer`, `Colophon`, optional `SectionRail`, `HashScrollManager` | No `HeroMesh`, `PipelineScene`, `AmbientMesh`, or `WordReveal`. h1 is one line. `FLOW` stage 07 still says live trading is not on. `python3 scripts/check_frontend_canon.py` exits 0. `next build --webpack` in `apps/digiquant-web` exits 0. |
+| `/` | `NavShell`, product screenshot `Figure`, `StockTicker` (through `LiveTickerRow`), `StatCounter` or `MetricsOdometer`, keycap chips for `FLOW`, one `WordReveal`, `PricingTierCard`, `ContactMailto`, `Footer`, `Colophon`, optional `SectionRail`, `HashScrollManager` | No `HeroMesh`, `PipelineScene`, or `AmbientMesh`. h1 is one line at the gloom.sh type spec. Hero is a real screenshot, with the ticker beside it. `FLOW` stage 07 still says live trading is not on. `python3 scripts/check_frontend_canon.py` exits 0. `next build --webpack` in `apps/digiquant-web` exits 0. |
 | `/strategies` | `NavShell`, `Footer`, strategy cards already backed by `components/tearsheet/strategy-library.tsx` | Filter toggles keep working. Grid is a hairline table or card row, not a bento. |
 | `/strategies/[id]` | `TearsheetView` and the finance family (`KpiStrip`, `ReturnsMatrix`, `LiveBadge`, print helpers in `packages/ui/src/components/finance-tearsheet`) | Print stylesheet still prints. `BacktestOnlyChip` and `OosHonestyChip` still render with the titles in `honesty.tsx`. "illustrative, in-sample" footer text stays. |
 | `/subsystems/[id]` | `NavShell`, `Footer`, `StackRow`, `subsystems` from `@digithings/ui` | One poster per id `research`, `portfolio`, `execution`. Related links are chips to the other two. No Atlas / Hermes / Kairos strings in the rendered HTML. Redirects in `_redirects` still resolve. |
@@ -149,7 +151,7 @@ Home sections, in order, after the rebuild:
 | `/pipeline` | unchanged redirect to `/#pipeline` | `public/_redirects` and the client fallback in `app/pipeline/page.tsx` both land on `/#pipeline`. |
 | `not-found` | `NavShell`, `Footer`, two links (home, dashboard) | No orphaned mesh styles. |
 
-Content width: data bands may run to 1200px. Prose blocks cap at 72ch. Do not introduce a new CSS file in the app for this; use kit utilities and, if a density wrapper is missing, add it under `packages/ui` and a specimen under `apps/reference/app/(gallery)/(finance)/`.
+Content width: 1024px, the gloom.sh measure. Prose blocks cap at 72ch inside that. Do not introduce a new CSS file in the app for this; use kit utilities and, if a density wrapper is missing, add it under `packages/ui` and a specimen under `apps/reference/app/(gallery)/(finance)/`.
 
 ---
 
@@ -167,7 +169,7 @@ The wave-3/4 critical regression was page content painting under that fixed side
 - Below `md`, the aside is off-canvas until `mobileNavOpen`. Main is full width. The open sidebar overlays; it does not push content.
 - `AppFrame` owns the only `<main>` landmark for the shell. Page bodies do not add another.
 
-Bloomberg dress of this shell (panel rules, mono labels, pinned command strip) is the visual slice V-Q2. The contract above is mechanical and lands first so the restyle cannot reintroduce the overlap.
+gloom.sh dress of this shell (hairline panels, mono labels, flat chrome) is the visual slice V-Q2. The contract above is mechanical and lands first so the restyle cannot reintroduce the overlap.
 
 ### 4.2 Honest unavailable panel
 
@@ -228,7 +230,7 @@ Expected before the prefix edit: the new pipeline test fails. Expected after: al
 
 Route inventory under `apps/dashboard/app`. Paths are app-relative; the browser path prefixes `/dashboard`.
 
-### 5.1 Live surfaces (Bloomberg density, behavior unchanged)
+### 5.1 Live surfaces (gloom.sh density, behavior unchanged)
 
 | Route | What it is | Q3 note |
 |---|---|---|
@@ -263,7 +265,7 @@ The minor regression "nav destinations silently collapsing to `/pipeline`" is ch
 
 ### 5.3 twelve-x
 
-`/twelve-x` (sidebar label FX Hub) stays DB-exempt because it reads its own research feed (`isTwelveXConfigured`), per the comment in `nav.ts` (#1664). This epic does not restyle it. A later slice can apply the terminal dress after Q3. Product gate copy and invite behavior stay.
+`/twelve-x` (sidebar label FX Hub) stays DB-exempt because it reads its own research feed (`isTwelveXConfigured`), per the comment in `nav.ts` (#1664). This epic does not restyle it. A later slice can apply the gloom.sh dress after Q3. Product gate copy and invite behavior stay.
 
 ### 5.4 Regressions every Q3 slice re-checks
 
@@ -288,7 +290,7 @@ From the 2026-09-18 plan §8, still in force:
         └─ M-shell   Q2 layout + /pipeline exempt tests    ─┴─ may run once #4791
                                                               has merged, beside R1
 Q1 Chris sign-off
-        └─ V-Q2 dashboard terminal dress (needs M-shell)
+        └─ V-Q2 dashboard gloom.sh dress (needs M-shell)
               └─ Q3 live surfaces
                     └─ C1 audit on the rebuilt pages, then C2 export certification
 ```
@@ -378,19 +380,19 @@ C1 re-checks the 2026-09-18 §7 numbers that appear on digiquant pages (strategy
 - **digichat product.** `apps/digichat`, `packages/digichat-ui`, embed protocol, dashboard `DigichatPopup` behavior. Untouched.
 - **twelve-x / FX Hub visual.** Route stays. Restyle is a later epic slice.
 - **digithings.ai page tree.** Owned by #4791 and the 2026-09-18 plan's D1. This plan consumes its chrome lessons after merge.
-- **Amber-for-phosphor token swap.** Not in R1. Open question 1.
-- **Hero product screenshot.** Not in V-home.
+- **Amber-on-black function-key palette.** Withdrawn with the naming correction. That palette was a Bloomberg reading. Phosphor (`--accent-digiquant`) stays.
+- **Fake or mesh hero.** V-home uses a real product screenshot, the gloom.sh hero device. No canvas stand-in.
 - **Broker OAuth and `digiquant/brokers/`.** Human gate. Not in any slice here.
 - **`digikey/`.** Human gate.
 - **New external host, font CDN, or analytics.** No. Geist Mono stays self-hosted via `next/font`.
-- **Gloomberb attribution in chat.** Separate plans. Do not fold `term.gloom.sh` into this UI epic.
+- **Gloomberb attribution in chat.** Separate plans. Gloomberg (gloom.sh) is the visual reference for this epic. Gloomberb (`term.gloom.sh`, `api.gloom.sh`) is the data vendor. Do not fold it into this UI epic.
 - **Release-please.** Not this work.
 
 ---
 
 ## 10. Open questions for Chris
 
-1. **Accent.** Keep `--accent-digiquant` (phosphor) as the digiquant identity and `--warn` as the function/attention amber, or replace the phosphor with a terminal amber in `tokens.css` for digiquant-scoped surfaces only? This plan keeps the phosphor until you say otherwise.
+1. **Accent.** Withdrawn. The amber-versus-phosphor choice assumed a Bloomberg terminal palette. Keep `--accent-digiquant` (phosphor). `--warn` stays pending and stale, which is the gloom.sh "pending" token, not a function-key amber.
 2. **Marketing theme default.** Dashboard stays dark-first. Should digiquant.io open in dark as well, or keep "follow the OS" the way the dashboard theme script does?
 3. **`/why` on the dashboard.** It is still a real page, and the sidebar highlights Pipeline when you are on it. Leave the route (this plan) or fold it into `/pipeline` in a later issue?
 4. **M-shell before Q1.** The plan lets the sidebar contract and the `/pipeline` exemption land beside R1, before the marketing visual gate, because they are bug contracts. Say if you want every dashboard diff to wait until Q1 is accepted.
