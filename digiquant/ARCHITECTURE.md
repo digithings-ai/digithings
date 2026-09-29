@@ -2843,8 +2843,10 @@ separately so research nodes never pay the per-ticker decision-artifact token ta
   tool (`call_web_search_tool` via digigraph's orchestrator hub over HTTP —
   never `import digisearch`), with enforced `include_domains` from
   `research/config/search_domains.yaml` (per-segment allowlists, capped at 5),
-  plus that config's `recency_days` (clamped to digisearch's 1–365, #4165) and
-  `max_search_results`. The query is a keyword search, not a prompt — the
+  plus that config's `recency_days` (clamped to digisearch's 1–365, #4165),
+  `max_search_results`, and `provider` (search engine in digisearch vocabulary,
+  default `auto`; forwarded to the tool only when set and not `auto` so a
+  pre-#4722 digigraph never sees the unknown keyword, #4723). The query is a keyword search, not a prompt — the
   request params carry the scoping and the caller formats the returned rows.
   The cited summary is injected into `phase_inputs` before the normal
   structured-output research call. `live_search_is_fallback` segments (e.g. macro)

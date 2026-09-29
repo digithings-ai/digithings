@@ -129,6 +129,82 @@ function retryDelayMs(attempt: number): number {
   return UPSTREAM_RETRY_DELAYS_MS[index] ?? 0;
 }
 
+/**
+ * Machine-readable boot code the stack worker puts on container-not-ready
+ * 503s (#4753). ONLY a 503 carrying this code gets the extended boot budget
+ * below — every other 503 (real outage, digigraph overload, old plain-text
+ * worker body) keeps the ~15s budget above.
+ */
+export const UPSTREAM_BOOT_RETRY_CODE = "container_booting";
+
+/**
+ * Extended retry budget for a booting upstream (#4753). The stack allows
+ * portReady 180s + instanceGet 60s, so the budget covers the full ~240s boot
+ * window plus margin. Bounded two ways: total elapsed time AND attempt count
+ * (Retry-After: 5 polls ~50 times over the window; the attempt cap is the
+ * backstop for clock weirdness).
+ */
+export const UPSTREAM_BOOT_MAX_ELAPSED_MS = 250_000;
+export const UPSTREAM_BOOT_MAX_ATTEMPTS = 64;
+
+/** Server-sent Retry-After is honored inside this window (flood/hang guard). */
+const BOOT_RETRY_AFTER_MIN_MS = 1_000;
+const BOOT_RETRY_AFTER_MAX_MS = 30_000;
+
+/** Fallback boot backoff when the 503 carries no usable Retry-After. */
+const BOOT_RETRY_BASE_DELAY_MS = 2_000;
+
+/** True when the 503 body carries the boot code (flat or nested envelope). */
+export function isUpstreamBootRetry(bodyText: string): boolean {
+  if (!bodyText.length) return false;
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(bodyText);
+  } catch {
+    return false;
+  }
+  if (typeof parsed !== "object" || parsed === null) return false;
+  const outer = parsed as { error?: unknown; code?: unknown };
+  const code =
+    typeof outer.error === "string"
+      ? outer.error
+      : typeof outer.error === "object" && outer.error !== null
+        ? (outer.error as { code?: unknown }).code
+        : outer.code;
+  return code === UPSTREAM_BOOT_RETRY_CODE;
+}
+
+/**
+ * Parse a Retry-After header (delta-seconds or HTTP-date) into a clamped
+ * delay. Returns null when the header is missing or unusable — the caller
+ * falls back to exponential backoff. The server hint is honored exactly
+ * (clamped): no jitter, so a booting container is re-polled on its schedule.
+ */
+export function parseRetryAfterMs(raw: string | null): number | null {
+  if (raw === null) return null;
+  const value = raw.trim();
+  if (!value.length) return null;
+  if (/^\d+$/.test(value)) {
+    const seconds = Number.parseInt(value, 10);
+    if (!Number.isSafeInteger(seconds)) return null;
+    return Math.min(Math.max(seconds * 1000, BOOT_RETRY_AFTER_MIN_MS), BOOT_RETRY_AFTER_MAX_MS);
+  }
+  const at = Date.parse(value);
+  if (Number.isNaN(at)) return null;
+  const delta = at - Date.now();
+  if (delta <= 0) return BOOT_RETRY_AFTER_MIN_MS;
+  return Math.min(delta, BOOT_RETRY_AFTER_MAX_MS);
+}
+
+/** Exponential fallback with jitter for a boot 503 without Retry-After. */
+function bootRetryFallbackDelayMs(bootAttempt: number): number {
+  const backoff = Math.min(
+    BOOT_RETRY_BASE_DELAY_MS * 2 ** Math.max(bootAttempt - 1, 0),
+    BOOT_RETRY_AFTER_MAX_MS,
+  );
+  return backoff * (0.8 + Math.random() * 0.4);
+}
+
 /** Abort-aware sleep so Stop stays responsive between cold-start retries. */
 function abortableSleep(ms: number, signal?: AbortSignal): Promise<void> {
   return new Promise((resolve) => {
@@ -246,7 +322,14 @@ export async function createDigigraphTraceStreamResponse(opts: {
       // #2572: never follow cross-origin redirects while carrying BYOK /
       // LiteLLM / digikey credentials (Node forwards X-* across origins).
       let res: Response;
-      for (let attempt = 1; ; attempt += 1) {
+      // Normal-path attempts (fetch errors + non-boot 503s) keep the ~15s
+      // budget (UPSTREAM_MAX_ATTEMPTS + UPSTREAM_RETRY_DELAYS_MS). Boot-coded
+      // 503s count separately against UPSTREAM_BOOT_MAX_* (#4753).
+      let attempt = 0;
+      let bootAttempts = 0;
+      let warmingReported = false;
+      const loopStartedAtMs = Date.now();
+      for (;;) {
         if (opts.signal?.aborted) {
           throw new DOMException("The operation was aborted.", "AbortError");
         }
@@ -281,15 +364,49 @@ export async function createDigigraphTraceStreamResponse(opts: {
             closeText();
             throw new DigigraphStreamContractError(DIGIGRAPH_UNAVAILABLE_MESSAGE);
           }
+          attempt += 1;
           if (attempt >= UPSTREAM_MAX_ATTEMPTS || opts.signal?.aborted) {
             throw err;
           }
           await abortableSleep(retryDelayMs(attempt), opts.signal);
           continue;
         }
-        if (res.status === 503 && attempt < UPSTREAM_MAX_ATTEMPTS) {
-          if (res.body) {
-            await res.body.cancel().catch(() => {});
+        if (res.status === 503) {
+          // Read (don't just cancel) the body: the boot code lives in it, and
+          // a consumed body is equivalent to a cancelled one for the error
+          // path below (`res.text()` on it resolves "" via the catch).
+          const bodyText = (await res.text().catch(() => "")).slice(0, 4000);
+          if (isUpstreamBootRetry(bodyText) && !opts.signal?.aborted) {
+            bootAttempts += 1;
+            const remainingMs = UPSTREAM_BOOT_MAX_ELAPSED_MS - (Date.now() - loopStartedAtMs);
+            if (bootAttempts < UPSTREAM_BOOT_MAX_ATTEMPTS && remainingMs > 0) {
+              if (!warmingReported) {
+                warmingReported = true;
+                // One line per turn (not per retry): a full boot polls ~50
+                // times, and the warming_up stream part is the client signal.
+                console.error(
+                  `[digigraph] upstream booting (${UPSTREAM_BOOT_RETRY_CODE}); ` +
+                    `extended retry budget ${UPSTREAM_BOOT_MAX_ELAPSED_MS}ms`,
+                );
+                writer.write({
+                  type: "data-connection",
+                  id: "digigraph-connection",
+                  data: { state: "warming_up" },
+                });
+              }
+              const serverDelayMs = parseRetryAfterMs(res.headers.get("retry-after"));
+              const delayMs = Math.min(
+                serverDelayMs ?? bootRetryFallbackDelayMs(bootAttempts),
+                remainingMs,
+              );
+              await abortableSleep(delayMs, opts.signal);
+              continue;
+            }
+            break;
+          }
+          attempt += 1;
+          if (attempt >= UPSTREAM_MAX_ATTEMPTS) {
+            break;
           }
           await abortableSleep(retryDelayMs(attempt), opts.signal);
           continue;

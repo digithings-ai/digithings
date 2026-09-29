@@ -170,12 +170,20 @@ def test_oss_seam_pins_recency_and_clamp(monkeypatch):
     assert req.max_results == 10
     assert req.include_domains == ["a.com"]
     assert req.exclude_domains == ["b.com"]
+    # The OSS seam never selects a provider by key: `auto` stays the in-house
+    # engine and no purpose/effort/offset knob is set (#4711).
+    assert req.provider == "auto"
+    assert req.purpose is None and req.effort is None and req.offset == 0
     assert set(req.model_dump()) == {
         "query",
         "include_domains",
         "exclude_domains",
         "max_results",
         "recency_days",
+        "provider",
+        "purpose",
+        "effort",
+        "offset",
     }
     assert data.results == [
         WebSearchResult(url="https://a.com/1", title="A", snippet="alpha").model_dump()
@@ -590,8 +598,9 @@ def _bridge_stub(monkeypatch, *, created: bool = True) -> list[tuple[str, str, s
     monkeypatch.setattr(
         mod,
         "_invoke_handoff",
-        lambda webset_id, *, watch_id, run_id: calls.append((webset_id, watch_id, run_id))
-        or (_BridgeSearch(), created),
+        lambda webset_id, *, watch_id, run_id: (
+            calls.append((webset_id, watch_id, run_id)) or (_BridgeSearch(), created)
+        ),
     )
     return calls
 
@@ -716,10 +725,10 @@ def _research_turn_stub(monkeypatch, **overrides) -> list[tuple[str, str, str]]:
     monkeypatch.setattr(
         agent_mod,
         "run_research_turn",
-        lambda payload: calls.append(
-            (payload["user_message"], payload["effort"], payload["session_id"])
-        )
-        or turn,
+        lambda payload: (
+            calls.append((payload["user_message"], payload["effort"], payload["session_id"]))
+            or turn
+        ),
     )
     return calls
 

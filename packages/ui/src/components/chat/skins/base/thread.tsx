@@ -612,6 +612,16 @@ const ComposerAction: FC = () => {
 
 const AssistantWorkingIndicator: FC = () => {
   const isEmpty = useAuiState((s) => s.message.content.length === 0);
+  // Boot retries (#4753): the BFF replaces `connecting` with `warming_up`
+  // while it waits out a booting upstream — say so instead of "Connecting".
+  const warmingUp = useAuiState((s) =>
+    s.message.parts.some(
+      (part) =>
+        part.type === "data" &&
+        part.name === "connection" &&
+        (part.data as { state?: string } | undefined)?.state === "warming_up",
+    ),
+  );
   if (isEmpty) {
     return (
       <span
@@ -619,7 +629,7 @@ const AssistantWorkingIndicator: FC = () => {
         className="text-muted-foreground inline-flex items-center gap-2 align-middle"
       >
         <DotMatrix state="connecting" aria-hidden />
-        <span className="text-sm">Connecting</span>
+        <span className="text-sm">{warmingUp ? "Warming up…" : "Connecting"}</span>
       </span>
     );
   }

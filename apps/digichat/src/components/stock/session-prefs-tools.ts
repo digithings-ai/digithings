@@ -5,6 +5,7 @@
 
 import {
   isEffortCode,
+  isSearchEngine,
 } from "@digithings/digichat-ui";
 import type { EmbedChatPrefsApi } from "@digithings/ui/chat/stock";
 import {
@@ -21,6 +22,7 @@ export const SESSION_TOOL_NAMES = [
   "session_set_language",
   "session_set_model",
   "session_set_effort",
+  "session_set_search_engine",
   "session_set_view",
   "session_set_thinking",
   "session_toggle_tool",
@@ -85,6 +87,14 @@ export function applySessionTool(
     if (!isEffortCode(effort)) return { ok: false, message: "Effort must be low, medium, or high." };
     api.setEffort(effort);
     return { ok: true, message: `Effort set to ${effort}.` };
+  }
+  if (name === "session_set_search_engine") {
+    const engine = str(args, "engine", "search_engine", "provider").toLowerCase();
+    if (!isSearchEngine(engine)) {
+      return { ok: false, message: "Search engine must be auto, internal, exa, tavily, parallel, firecrawl, or tinyfish." };
+    }
+    api.setSearchEngine(engine);
+    return { ok: true, message: `Search engine set to ${engine}.` };
   }
   if (name === "session_set_view") {
     const mode = str(args, "mode", "view").toLowerCase();
