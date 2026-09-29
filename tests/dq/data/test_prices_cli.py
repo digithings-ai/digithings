@@ -335,6 +335,93 @@ def test_supabase_writers_refuse_under_r2_backend(
         assert "writes are stopped" in result.output, (cmd.name, result.output)
 
 
+def test_fetch_macro_skips_fred_when_api_key_unset(
+    monkeypatch: pytest.MonkeyPatch, tmp_path
+) -> None:
+    """Phase 1 smoke (#4795): no FRED key must not fail the job.
+
+    Yahoo still runs. ``fred__*`` stays stale until the Gloomberb migrate
+    (#4794).
+    """
+    monkeypatch.delenv("FRED_API_KEY", raising=False)
+    monkeypatch.delenv("DIGIQUANT_MARKET_DATA_BACKEND", raising=False)
+    manifest = tmp_path / "macro_series.yaml"
+    manifest.write_text("fred:\n  series:\n    - id: DGS10\n")
+    with (
+        patch(
+            "digiquant.data.prices.macro_ingest.fetch_fred",
+            side_effect=AssertionError("fred fetch must be skipped"),
+        ),
+        patch(
+            "digiquant.data.prices.macro_ingest.fetch_fx_yahoo",
+            return_value=[
+                {
+                    "source": "yahoo",
+                    "series_id": "FX/EUR",
+                    "obs_date": "2026-01-05",
+                    "value": 1.1,
+                }
+            ],
+        ) as yahoo,
+    ):
+        result = CliRunner().invoke(
+            fetch_macro_cmd,
+            ["--manifest", str(manifest), "--sources", "fred,yahoo"],
+        )
+    assert result.exit_code == 0, result.output
+    assert "FRED_API_KEY unset" in result.output
+    assert "#4794" in result.output
+    assert yahoo.called
+    assert '"FX/EUR": 1' in result.output
+
+
+def test_fetch_macro_fred_only_exits_zero_without_api_key(
+    monkeypatch: pytest.MonkeyPatch, tmp_path
+) -> None:
+    """A fred-only kick with no key is a skip, not ClickException."""
+    monkeypatch.delenv("FRED_API_KEY", raising=False)
+    monkeypatch.delenv("DIGIQUANT_MARKET_DATA_BACKEND", raising=False)
+    manifest = tmp_path / "macro_series.yaml"
+    manifest.write_text("fred:\n  series:\n    - id: DGS10\n")
+    with patch(
+        "digiquant.data.prices.macro_ingest.fetch_fred",
+        side_effect=AssertionError("fred fetch must be skipped"),
+    ):
+        result = CliRunner().invoke(
+            fetch_macro_cmd,
+            ["--manifest", str(manifest), "--sources", "fred"],
+        )
+    assert result.exit_code == 0, result.output
+    assert "fred ingest skipped" in result.output
+    assert "macro ingest: 0 rows" in result.output
+
+
+def test_fetch_macro_still_calls_fred_when_api_key_is_set(
+    monkeypatch: pytest.MonkeyPatch, tmp_path
+) -> None:
+    monkeypatch.setenv("FRED_API_KEY", "test-key")
+    monkeypatch.delenv("DIGIQUANT_MARKET_DATA_BACKEND", raising=False)
+    manifest = tmp_path / "macro_series.yaml"
+    manifest.write_text("fred:\n  series:\n    - id: DGS10\n")
+    row = {
+        "source": "fred",
+        "series_id": "DGS10",
+        "obs_date": "2026-01-05",
+        "value": 4.2,
+    }
+    with patch(
+        "digiquant.data.prices.macro_ingest.fetch_fred",
+        return_value=[row],
+    ) as fred:
+        result = CliRunner().invoke(
+            fetch_macro_cmd,
+            ["--manifest", str(manifest), "--sources", "fred"],
+        )
+    assert result.exit_code == 0, result.output
+    assert "FRED_API_KEY unset" not in result.output
+    fred.assert_called_once()
+
+
 def test_fetch_macro_fedprob_only_proceeds_under_r2_backend(
     monkeypatch: pytest.MonkeyPatch, tmp_path
 ) -> None:

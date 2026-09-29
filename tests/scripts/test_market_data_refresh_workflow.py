@@ -768,6 +768,136 @@ def test_main_exit_zero_and_manifest_fresh(monkeypatch: pytest.MonkeyPatch, tmp_
     assert artifact["gate"] == {"ok": True, "stale_days": 0}
 
 
+def _macro_row(source: str, series: str, day: str, value: float) -> dict[str, Any]:
+    return {"source": source, "series_id": series, "obs_date": day, "value": value}
+
+
+def test_main_skips_fred_without_api_key_and_exits_zero(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """#4795: unset FRED_API_KEY skips fred__* and still exits 0.
+
+    Yahoo FX and the price universe keep refreshing. Skipped series are
+    recorded, not counted as stale, until the Gloomberb migrate (#4794).
+    """
+    import scripts.refresh_market_data_r2 as refresh_mod
+
+    live = price_rows(HIST_DEFAULT) + price_rows([("2026-01-05", 105.0)])
+    yahoo_hist = [_macro_row("yahoo", "FX/EUR", "2026-01-02", 1.1)]
+    store = FakeStore(
+        histories={"SPY": price_rows(HIST_DEFAULT)},
+        lives={"SPY": live},
+        macros={("yahoo", "FX/EUR"): yahoo_hist},
+        macro_lives={("yahoo", "FX/EUR"): yahoo_hist},
+    )
+    manifest_doc = {"version": 1, "as_of": "2026-01-02", "datasets": {}}
+    store.manifest = manifest_doc
+    monkeypatch.setenv("FRED_API_KEY", "   ")
+    monkeypatch.setattr(refresh_mod, "build_store", lambda uri: (store, manifest_doc))
+    out = tmp_path / "refresh.json"
+    rc = refresh_mod.main(
+        [
+            "--tickers",
+            "SPY",
+            "--macro-series",
+            "fred:DGS10",
+            "--macro-series",
+            "yahoo:FX/EUR",
+            "--postgres-uri",
+            "postgresql://fake",
+            "--as-of",
+            "2026-01-06",
+            "--no-core-macro-mirror",
+            "--manifest-out",
+            str(out),
+        ]
+    )
+    assert rc == 0
+    artifact = json.loads(out.read_text())
+    assert artifact["stale"] is False
+    assert artifact["fred_skipped"] == ["fred__DGS10"]
+    assert "fred__DGS10" not in artifact["failed"]
+    sources = {window[0] for window in store.macro_windows}
+    assert "fred" not in sources
+    assert "yahoo" in sources
+    by_ticker = {o["ticker"]: o for o in artifact["outcomes"]}
+    assert by_ticker["SPY"]["mode"] == "incremental"
+    assert by_ticker["yahoo__FX/EUR"]["mode"] == "up-to-date"
+    assert "fred__DGS10" not in by_ticker
+
+
+def test_main_still_refreshes_fred_when_api_key_is_set(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    import scripts.refresh_market_data_r2 as refresh_mod
+
+    hist = [_macro_row("fred", "DGS10", "2026-01-02", 4.1)]
+    store = FakeStore(
+        histories={"SPY": price_rows(HIST_DEFAULT)},
+        lives={"SPY": price_rows(HIST_DEFAULT) + price_rows([("2026-01-05", 105.0)])},
+        macros={("fred", "DGS10"): hist},
+        macro_lives={("fred", "DGS10"): hist},
+    )
+    manifest_doc = {"version": 1, "as_of": "2026-01-02", "datasets": {}}
+    store.manifest = manifest_doc
+    monkeypatch.setenv("FRED_API_KEY", "test-key")
+    monkeypatch.setattr(refresh_mod, "build_store", lambda uri: (store, manifest_doc))
+    rc = refresh_mod.main(
+        [
+            "--tickers",
+            "SPY",
+            "--macro-series",
+            "fred:DGS10",
+            "--postgres-uri",
+            "postgresql://fake",
+            "--as-of",
+            "2026-01-06",
+            "--no-core-macro-mirror",
+            "--manifest-out",
+            str(tmp_path / "refresh.json"),
+        ]
+    )
+    assert rc == 0
+    artifact = json.loads((tmp_path / "refresh.json").read_text())
+    assert artifact["fred_skipped"] == []
+    assert ("fred", "DGS10") == (store.macro_windows[0][0], store.macro_windows[0][1])
+
+
+def test_main_price_failure_still_exits_nonzero_when_fred_is_skipped(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    import scripts.refresh_market_data_r2 as refresh_mod
+
+    store = FakeStore(
+        histories={"SPY": price_rows(HIST_DEFAULT)},
+        lives={"SPY": price_rows(HIST_DEFAULT)},
+        fetch_errors={"SPY": "no_data"},
+    )
+    manifest_doc = {"version": 1, "as_of": "2026-01-02", "datasets": {}}
+    store.manifest = manifest_doc
+    monkeypatch.delenv("FRED_API_KEY", raising=False)
+    monkeypatch.setattr(refresh_mod, "build_store", lambda uri: (store, manifest_doc))
+    rc = refresh_mod.main(
+        [
+            "--tickers",
+            "SPY",
+            "--macro-series",
+            "fred:DGS10",
+            "--postgres-uri",
+            "postgresql://fake",
+            "--as-of",
+            "2026-01-06",
+            "--no-core-macro-mirror",
+            "--manifest-out",
+            str(tmp_path / "refresh.json"),
+        ]
+    )
+    assert rc == 1
+    artifact = json.loads((tmp_path / "refresh.json").read_text())
+    assert artifact["fred_skipped"] == ["fred__DGS10"]
+    assert artifact["failed"] == ["SPY"]
+
+
 def test_main_marks_stale_and_exits_nonzero_on_ticker_failure(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:

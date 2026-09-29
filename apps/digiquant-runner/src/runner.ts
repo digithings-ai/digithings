@@ -5,9 +5,8 @@
  * reap a running job.
  */
 import { Container } from "@cloudflare/containers";
-import { fileFailureIssue } from "./failure-issue";
 import { dataPlaneEnv, type Env } from "./env";
-import { COMMANDS, RunnerSession, type ContainerPort, type RunnerKv } from "./runner-session";
+import { RunnerSession, type ContainerPort, type RunnerKv } from "./runner-session";
 
 export const RUNNER_CONTAINER_ID = "runner-v1";
 
@@ -50,11 +49,6 @@ export class DigiQuantRunnerContainer extends Container<Env> {
       scheduleAlarm: (delayMs: number) => {
         const seconds = Math.max(1, Math.round(delayMs / 1000));
         void this.schedule(seconds, "heartbeat");
-      },
-      fileIssue: async (run) => {
-        const spec = COMMANDS[run.command]?.failure_issue;
-        if (!spec) return;
-        await fileFailureIssue(this.env, spec, run);
       },
     });
   }

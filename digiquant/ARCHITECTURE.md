@@ -476,7 +476,13 @@ prediction-market odds (`get_fed_rate_probabilities`; no R2 generation; D2).
 
 `scripts/refresh_market_data_r2.py` also exits non-zero when any macro series
 lands in a soft-fail mode (`history-only`/`error`), so the live fetch window has
-to span at least one publication period of the series (#4588). `LIVE_WINDOW_DAYS`
+to span at least one publication period of the series (#4588). Exception
+(#4795): when `FRED_API_KEY` is unset, FRED series are omitted before that
+gate and listed on the refresh artifact as `fred_skipped`. They do not mark
+the run stale, so Yahoo FX and the price universe can still exit 0.
+`digiquant prices fetch-macro` skips the `fred` source the same way instead
+of raising when the key is missing. Those `fred__*` R2 generations stay at
+the last seal until the Gloomberb migrate (#4794). A set key still fetches. `LIVE_WINDOW_DAYS`
 (45) assumes a daily series; a monthly FRED series (`M2SL`, `UNRATE`, `MANEMP`,
 `CPIAUCSL`, `PCEPI`) legitimately has no new observation inside it — release lag
 plus the pending release puts the newest month up to ~90 days behind the run — so

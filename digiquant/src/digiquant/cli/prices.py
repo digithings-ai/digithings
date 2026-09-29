@@ -512,13 +512,18 @@ def fetch_macro_cmd(
         # generation (get_fed_rate_probabilities stays Supabase-backed).
     mani = MacroManifest.from_yaml(manifest)
 
-    # Validate FRED creds up-front so --dry-run'd FRED fails fast before the
-    # ThreadPoolExecutor spins up.
+    # FRED is optional (#4795). A missing key skips that source instead of
+    # failing the command, so prices-eod-macro with run_writers=true stays
+    # green for Phase 1 smoke. fred__* stays stale until the Gloomberb
+    # migrate (#4794). A set key still fetches.
     fred_api_key: str | None = None
     if "fred" in sources_set:
         fred_api_key = os.environ.get("FRED_API_KEY", "").strip() or None
         if fred_api_key is None and not dry_run:
-            raise click.ClickException("FRED_API_KEY required unless --dry-run")
+            click.echo(
+                "skip: FRED_API_KEY unset; fred ingest skipped (fred__* stays stale until #4794)"
+            )
+            sources_set.discard("fred")
 
     # Run the independent upstream fetchers in parallel. Each call is a
     # network-bound HTTP loop, so threads (not processes) are the right tool.

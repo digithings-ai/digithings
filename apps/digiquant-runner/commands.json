@@ -8,12 +8,7 @@
     "steps": [
       ["uv", "run", "--frozen", "--no-sync", "python", "scripts/refresh_market_data_r2.py", "--manifest-out", "/tmp/market-data-refresh.json"]
     ],
-    "publish": ["/tmp/market-data-refresh.json"],
-    "failure_issue": {
-      "marker": "<!-- market-data-refresh-tracker -->",
-      "title": "market-data-refresh — recurring failures",
-      "labels": ["ci-failure", "component:digiquant", "agent-task", "priority:medium"]
-    }
+    "publish": ["/tmp/market-data-refresh.json"]
   },
   "prices-fx-candles": {
     "timeout_seconds": 600,
@@ -24,12 +19,7 @@
     "steps": [
       ["uv", "run", "--frozen", "--no-sync", "python", "-m", "digiquant", "prices", "fetch-fx-intraday", "--supabase"],
       ["uv", "run", "--frozen", "--no-sync", "python", "-m", "digiquant", "prices", "fetch-fx-intraday", "--interval", "5m", "--period", "60d", "--supabase"]
-    ],
-    "failure_issue": {
-      "marker": "<!-- digiquant-prices-fx-candles-tracker -->",
-      "title": "digiquant-prices fx-candles — recurring failures",
-      "labels": ["ci-failure", "component:digiquant", "agent-task", "priority:medium"]
-    }
+    ]
   },
   "prices-at-open": {
     "timeout_seconds": 900,
@@ -40,12 +30,7 @@
     "env": ["CORE_SUPABASE_URL", "CORE_SUPABASE_SERVICE_KEY", "R2_ACCOUNT_ID", "R2_BUCKET", "R2_ACCESS_KEY_ID", "R2_SECRET_ACCESS_KEY"],
     "steps": [
       ["uv", "run", "--frozen", "--no-sync", "python", "digiquant/scripts/research/execute_at_open.py", "--prior-trading-day-rebalance", "--require-ledger"]
-    ],
-    "failure_issue": {
-      "marker": "<!-- digiquant-prices-at-open-tracker -->",
-      "title": "digiquant-prices at-open — recurring failures",
-      "labels": ["ci-failure", "component:digiquant", "agent-task", "priority:medium"]
-    }
+    ]
   },
   "prices-eod-macro": {
     "timeout_seconds": 1200,
@@ -56,12 +41,7 @@
     "steps": [
       {"argv": ["uv", "run", "--frozen", "--no-sync", "python", "-m", "digiquant", "prices", "sync-calendar", "--venues", "NYSE,NASDAQ,CRYPTO,FX", "--start", "1950-01-01", "--end", "+5y", "--supabase"]},
       {"argv": ["uv", "run", "--frozen", "--no-sync", "python", "-m", "digiquant", "prices", "fetch-macro", "--manifest", "digiquant/src/digiquant/research/config/macro_series.yaml", "--supabase"], "when_arg": "run_writers", "equals": "true"}
-    ],
-    "failure_issue": {
-      "marker": "<!-- digiquant-prices-eod-macro-tracker -->",
-      "title": "digiquant-prices EOD macro — recurring failures",
-      "labels": ["ci-failure", "component:digiquant", "agent-task", "priority:medium"]
-    }
+    ]
   },
   "prices-fx-refresh-writers": {
     "timeout_seconds": 600,
