@@ -21,11 +21,12 @@ from digiquant.strategies.sdca.curve import RISK_NODES
 _RATE_EPS = 1e-12
 _MID_TIER_RATE_FRAC = 0.5
 
-# Optional second-knee fields shared by the tiered search (curve_optimize),
-# the walk-forward gate (walk_forward.shape_from_params), and the periodic
-# cycle driver. Defined here (next to SdcaCurveShape) so walk_forward can
-# import it without creating a curve_optimize -> optimize -> walk_forward
-# import cycle. curve_optimize re-exports it for its existing importers.
+# Optional second-knee fields shared by the tiered search, the
+# walk-forward gate (walk_forward.shape_from_params), and the periodic cycle
+# driver. Defined here (next to SdcaCurveShape) so walk_forward can import it
+# without creating a curve_optimize -> optimize -> walk_forward import cycle.
+# (On the research branch curve_optimize re-exports this for its existing
+# importers; this slice keeps the single definition here.)
 _MID_TIER_KEYS = (
     "buy_mid_knee_risk",
     "buy_mid_curvature",

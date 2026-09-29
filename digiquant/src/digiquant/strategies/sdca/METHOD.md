@@ -9,6 +9,14 @@ BTC-hardcoded (see seams below).
 
 ## Reusable core (src, no per-asset changes needed)
 
+> Scope note: the search/gate/ablation modules below
+> (`curve_optimize_feasibility.py`, `baseline_evaluator.py`, `ablation.py`)
+> and the seven `scripts/` entries live on the research branch
+> (`claude/sdca-full-recalibration`) and arrive on `develop` via follow-up
+> ports — a develop reader hitting an ImportError should pull that branch,
+> not assume the module was deleted. Everything else named here is already
+> on `develop`.
+
 - Trade mechanics: `AccumDistCurve` + `size_trade` + `run_backtest`
   (`strategies/sdca/backtest.py`, `curve.py`) — identical semantics to the
   production signals app.
@@ -17,8 +25,8 @@ BTC-hardcoded (see seams below).
   (`risk_index.py`); `risk_from_weighted_z` (`stage_a.py`).
 - Search: `search_wide_knee_curve_multi_window_robust`
   (`curve_optimize_feasibility.py`) + tiered bounds/grid
-  (`WIDE_KNEE_TIERED_SEARCH_BOUNDS`, `WIDE_KNEE_TIERED_COARSE_GRID`,
-  `_MID_TIER_KEYS` in `curve_optimize.py`) — bounds suit any
+  (`WIDE_KNEE_TIERED_SEARCH_BOUNDS`, `WIDE_KNEE_TIERED_COARSE_GRID` on the
+  research branch; `_MID_TIER_KEYS` in `curve_shape.py`) — bounds suit any
   crypto-like risk series; revisit only for structurally different assets.
 - Gate: `run_sdca_walk_forward` / `score_trial_on_folds` / `is_feasible` /
   sensitivity (`walk_forward.py`, `optimize.py`),
@@ -49,8 +57,9 @@ BTC-hardcoded (see seams below).
    extras zeroed via `drop_extras_missing_sources`.
 4. **Seed weights**: BTC's live 5-weights came from the Task-7 reweight
    search. A new asset seeds from the Stage-A weight search
-   (`optimize_stage_a_weights_combined`) or an educated prior, then enters
-   the same loop.
+   (`optimize_stage_a_weights` in `stage_a.py` on develop;
+   `optimize_stage_a_weights_combined` on the research branch) or an
+   educated prior, then enters the same loop.
 5. **Frozen index**: each asset gets its own `load_inputs()`-equivalent
    (full-history rails + `extra_z` with per-feed windows). Never reuse one
    asset's frozen index for another.
