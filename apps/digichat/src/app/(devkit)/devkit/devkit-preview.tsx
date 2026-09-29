@@ -15,7 +15,7 @@ import {
 } from "@/lib/route-client-config";
 import { p } from "@/lib/base-path";
 import { cn } from "@/lib/utils";
-import { SkinRuntimeProvider } from "@digithings/ui/chat/stock";
+import { SkinRuntimeProvider, SkinChromeProvider, type SkinChromeValue } from "@digithings/ui/chat/stock";
 import { parseEmbedChatError, formatEmbedChatError } from "@/lib/embed-chat-error";
 import { EmbedComposerMenu, type ComposerMenuKind } from "@/components/stock/embed-composer-menu";
 import {
@@ -164,6 +164,30 @@ function DevkitPreviewInner({
     redo: noop,
   });
 
+  // Live chrome copy: the same provider value the product shell builds from
+  // its client config (mirrors product-shell), minus the embed URL-override
+  // layer which doesn't exist in devkit. Every valid draft keystroke flows
+  // text → validate → last-valid parsed → clientConfig → skins, with no
+  // remount, so the chat transcript survives edits.
+  const skinChrome = useMemo<SkinChromeValue>(
+    () => ({
+      skin,
+      theme,
+      mode: clientConfig.chrome.mode,
+      title: clientConfig.chrome.title,
+      welcome: clientConfig.chrome.welcome,
+      welcomeBody: clientConfig.chrome.welcomeBody ?? [],
+      placeholder: clientConfig.chrome.placeholder,
+      suggestions: clientConfig.chrome.suggestions ?? [],
+      accent: clientConfig.chrome.accent,
+      modelPicker:
+        toStockChatPrefsConfig(clientConfig).allowModelPicker ?? false,
+      pageContext: clientConfig.features.pageContext,
+      attribution: clientConfig.chrome.attribution,
+    }),
+    [skin, theme, clientConfig],
+  );
+
   return (
     <AssistantRuntimeProvider runtime={runtime}>
       <div data-preview-slug={slug} className={cn("flex h-full flex-col", theme === "dark" && "dark")}>
@@ -201,7 +225,9 @@ function DevkitPreviewInner({
         <div className="relative flex min-h-0 flex-1 flex-col bg-background text-foreground">
           <StockChatPrefsHost value={prefsApi} panes={panes}>
             <SkinRuntimeProvider value={SKIN_RUNTIME}>
-              <ThreadSkinView skin={skin} digichat={DIGICHAT_SKIN_OPTIONS} />
+              <SkinChromeProvider value={skinChrome}>
+                <ThreadSkinView skin={skin} digichat={DIGICHAT_SKIN_OPTIONS} />
+              </SkinChromeProvider>
             </SkinRuntimeProvider>
           </StockChatPrefsHost>
         </div>

@@ -748,6 +748,21 @@ export function setBoolean(
   return setScalar(text, scope, keyPath, value);
 }
 
+/**
+ * Set the welcome title. The schema surfaces a scalar `welcome:` string as
+ * the title, but the text layer cannot descend into a scalar — so when the
+ * direct nested set refuses, replace the scalar with a title map
+ * (delete + set, all-or-nothing via `applyAll`).
+ */
+export function setWelcomeTitle(text: string, scope: DraftScope, title: string): TextEdit {
+  const direct = setScalar(text, scope, ["chrome", "welcome", "title"], title);
+  if (direct.applied) return direct;
+  return applyAll(text, [
+    (t) => deleteKey(t, scope, ["chrome", "welcome"]),
+    (t) => setScalar(t, scope, ["chrome", "welcome", "title"], title),
+  ]);
+}
+
 function isListItem(line: string, indent: number): boolean {
   return indentOf(line) === indent && /^\s*-\s/.test(line);
 }
