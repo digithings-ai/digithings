@@ -67,8 +67,6 @@ describe("devkit route isolation", () => {
     expect(client).toMatch(/onValueChange/);
     expect(client).not.toMatch(/<select/);
     expect(client).not.toMatch(/<optgroup/);
-    // Sidebar scroll container ref feeds the editors scroll-spy observer.
-    expect(client).toMatch(/scrollRoot/);
     // Canon tokens resolve inside the devkit subtree only (never layout).
     expect(client).toMatch(/data-theme="light"/);
     // Step-4 accordion editors are wired; Step 5 adds the save path.
@@ -131,18 +129,18 @@ describe("devkit route isolation", () => {
       const hits = sectionsArrays.filter((body) => body.includes(`"${section}"`)).length;
       expect(hits).toBe(1);
     }
-    // Single-open kit disclosure shell with scroll-spy (spec §1): kit
-    // Collapsible per group, one openGroup, one IntersectionObserver over
-    // the group anchors that opens but never closes. No native dropdowns
-    // and no native selects anywhere in the editors or picker rows.
-    expect(editors).toMatch(/Collapsible/);
-    expect(editors).toMatch(/openGroup/);
-    expect(editors).toMatch(/IntersectionObserver/);
-    expect(editors).toMatch(/visibleGroupFromEntries/);
-    expect(editors).toMatch(/applyScrollSpyVote/);
-    expect(editors).toMatch(/manualClosed/);
-    expect(editors).toMatch(/-20% 0px -65% 0px/);
-    expect(editors).toMatch(/scrollRoot/);
+    // Sticky tab bar over the groups (one group visible at a time): kit
+    // SegmentedControl tabs, active-group state, no accordions and no
+    // scroll observer. No native dropdowns and no native selects anywhere
+    // in the editors or picker rows.
+    expect(editors).toMatch(/activeGroup/);
+    expect(editors).toMatch(/SegmentedControl/);
+    expect(editors).not.toMatch(/Collapsible/);
+    expect(editors).not.toMatch(/IntersectionObserver/);
+    expect(editors).not.toMatch(/visibleGroupFromEntries/);
+    expect(editors).not.toMatch(/applyScrollSpyVote/);
+    expect(editors).not.toMatch(/manualClosed/);
+    expect(editors).not.toMatch(/scrollRoot/);
     expect(editors).not.toMatch(/<details/);
     expect(editors).not.toMatch(/<summary/);
     expect(editors).not.toMatch(/<select/);

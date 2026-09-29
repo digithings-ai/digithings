@@ -193,8 +193,6 @@ export function DevkitClient() {
   );
   const [dragWidth, setDragWidth] = useState<number | null>(null);
   const sidebarWidth = dragWidth ?? persistedWidth;
-  // Sidebar scroll container: the editors scroll-spy observer root.
-  const sidebarRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (dragWidth === null) return;
@@ -483,7 +481,6 @@ export function DevkitClient() {
             className="shrink-0 overflow-hidden transition-[width] duration-200"
           >
             <div
-              ref={sidebarRef}
               style={{ width: sidebarWidth }}
               className="flex h-full flex-col gap-3 overflow-y-auto p-3"
             >
@@ -599,7 +596,6 @@ export function DevkitClient() {
                         key={draft.entryId ?? "new"}
                         draft={draft}
                         commit={commit}
-                        scrollRoot={sidebarRef}
                       />
                     </fieldset>
                   ) : selected?.deployment ? (
