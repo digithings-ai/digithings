@@ -16,8 +16,7 @@ import type { LayerId, StackPick } from "@/lib/stackCatalog";
     invoice rows this beat cuts on the digi column; `boxes` are the box ids
     whose labels flip this beat (finer than layers — finance flips the
     runner and the archive on separate beats sharing the hosting row).
-    The send beat carries no priced row (delivery is diagram-only until
-    it becomes a layer). */
+    The send beat carries the mail row (one approved send per query). */
 export interface MorphStep extends TourStep {
   layers: LayerId[];
   boxes: string[];

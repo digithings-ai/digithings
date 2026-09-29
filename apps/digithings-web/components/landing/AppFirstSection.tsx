@@ -18,6 +18,9 @@ import {
   DIGI_LAYERS,
   EMAIL_OPTIONS,
   PROVIDER_LAYERS,
+  embedDims,
+  formatBill,
+  menuRate,
   morphSpec,
   providerSpec,
   type Layer,
@@ -71,7 +74,7 @@ interface Popover {
   maxH: number;
 }
 
-const MENU_W = 248;
+const MENU_W = 300;
 
 export function AppFirstSection() {
   const [appId, setAppId] = useState(APP_PRESETS[0].id);
@@ -139,6 +142,7 @@ export function AppFirstSection() {
         workload={workload}
         topology={preset.topology}
         replaced={revealedLayers(preset, tourStep)}
+        emailId={emailId}
       />
     );
 
@@ -374,7 +378,7 @@ export function AppFirstSection() {
           ref={menuRef}
           role="listbox"
           aria-label={`${popTitle} options`}
-          className="absolute z-30 flex w-[15.5rem] flex-col overflow-y-auto border border-hair bg-surface py-[0.35rem] shadow-[0_12px_32px_-20px_rgba(0,0,0,0.45)]"
+          className="absolute z-30 flex w-[18.75rem] flex-col overflow-y-auto border border-hair bg-surface p-[0.35rem] shadow-[0_12px_32px_-20px_rgba(0,0,0,0.45)]"
           style={{
             left: pop.left,
             top: pop.top,
@@ -383,27 +387,44 @@ export function AppFirstSection() {
           }}
           onClick={(event) => event.stopPropagation()}
         >
-          <span className={`${LABEL} px-[0.95rem] pt-[0.4rem] pb-[0.45rem]`}>{popTitle}</span>
-          {popOptions.map((option) => (
-            <button
-              key={option.id}
-              type="button"
-              role="option"
-              aria-selected={popSelected === option.id}
-              className={`mx-[0.4rem] px-[0.75rem] py-[0.55rem] text-start font-mono text-[0.84rem] leading-[1.35] ${
-                popSelected === option.id
-                  ? "bg-bg text-ink shadow-[inset_0_0_0_1px_var(--accent)]"
-                  : "text-ink-soft hover:bg-bg hover:text-ink"
-              }`}
-              onClick={() => {
-                if (pop.layer === "email") setEmailId(option.id);
-                else setPick(pop.side, pop.layer, option.id);
-                setPop(null);
-              }}
-            >
-              {option.label}
-            </button>
-          ))}
+          <div className="sticky top-0 z-10 bg-surface px-[0.7rem] pt-[0.4rem] pb-[0.45rem]">
+            <span className={LABEL}>{popTitle}</span>
+            <span className="mt-[0.15rem] block font-mono text-[0.62rem] leading-[1.3] tracking-normal text-ink-mute normal-case">
+              per month, this workload
+            </span>
+          </div>
+          {popOptions.map((option) => {
+            const rate = menuRate(
+              pop.layer,
+              option.id,
+              workload,
+              embedDims((pop.side === "provider" ? effProvider : effDigi).embeddings),
+            );
+            const selected = popSelected === option.id;
+            return (
+              <button
+                key={option.id}
+                type="button"
+                role="option"
+                aria-selected={selected}
+                className={`flex w-full items-baseline justify-between gap-[0.75rem] px-[0.7rem] py-[0.5rem] text-start font-mono text-[0.82rem] leading-[1.35] ${
+                  selected
+                    ? "bg-bg text-ink shadow-[inset_0_0_0_1px_var(--accent)]"
+                    : "text-ink-soft hover:bg-bg hover:text-ink"
+                }`}
+                onClick={() => {
+                  if (pop.layer === "email") setEmailId(option.id);
+                  else setPick(pop.side, pop.layer, option.id);
+                  setPop(null);
+                }}
+              >
+                <span className="min-w-0 truncate">{option.label}</span>
+                <span className={`shrink-0 tabular-nums ${selected ? "text-ink" : "text-ink-mute"}`}>
+                  {formatBill(rate.amount, rate.estimate)}
+                </span>
+              </button>
+            );
+          })}
         </div>
       ) : null}
     </section>
