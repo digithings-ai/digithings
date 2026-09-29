@@ -114,6 +114,33 @@ describe("parseEmbedChatError / isFreeQuotaOrRateLimitError", () => {
     expect(isFreeQuotaOrRateLimitError("rate_limit")).toBe(true);
     expect(isFreeQuotaOrRateLimitError("trial_gate")).toBe(false);
   });
+
+  // #4777: the adapter relays a 429 as {error: rate_limit_exceeded, message}
+  // with server-composed retry copy. The client renders message verbatim, so
+  // the visitor sees when to retry — no client change, pinned here. The
+  // payload shape is written inline (not imported from the adapter) so this
+  // suite pins the contract, not the implementation.
+  it("renders a relayed 429 retry payload verbatim", () => {
+    const relayed = JSON.stringify({
+      error: "rate_limit_exceeded",
+      message: "Rate limit reached, retry in 60 seconds.",
+    });
+    const parsed = parseEmbedChatError(new Error(relayed));
+    expect(parsed?.code).toBe("rate_limit_exceeded");
+    expect(formatEmbedChatError(new Error(relayed))).toBe(
+      "Rate limit reached, retry in 60 seconds.",
+    );
+  });
+
+  it("renders the 429 fallback payload without a number", () => {
+    const relayed = JSON.stringify({
+      error: "rate_limit_exceeded",
+      message: "Rate limit reached, please try again shortly.",
+    });
+    expect(formatEmbedChatError(new Error(relayed))).toBe(
+      "Rate limit reached, please try again shortly.",
+    );
+  });
 });
 
 describe("shouldSuggestByokOnEmbedError", () => {

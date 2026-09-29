@@ -2,6 +2,7 @@ import { it, expect, vi, afterEach } from "vitest";
 import type { UIMessage } from "ai";
 import {
   DIGIGRAPH_UNAVAILABLE_MESSAGE,
+  RATE_LIMIT_RETRY_CODE,
   UPSTREAM_BOOT_MAX_ATTEMPTS,
   UPSTREAM_BOOT_MAX_ELAPSED_MS,
   UPSTREAM_BOOT_RETRY_CODE,
@@ -9,6 +10,8 @@ import {
   digigraphErrorToEmbedPayload,
   isUpstreamBootRetry,
   parseRetryAfterMs,
+  rateLimitRetryPayload,
+  retryAfterSeconds,
 } from "./stream";
 import {
   BYOK_MODEL_REMEDIABLE_MESSAGE,
@@ -1183,6 +1186,108 @@ it("surfaces a non-JSON upstream body as a stream error without leaking the body
   expect(body).not.toContain("nginx");
   expect(errorTextFrom(body)).toBe(DIGIGRAPH_UNAVAILABLE_MESSAGE);
   expect(body).not.toContain('"type":"text-delta"');
+});
+
+const streamFor429 = async (upstreamBody: string, retryAfter: string | null) => {
+  vi.spyOn(globalThis, "fetch").mockResolvedValue(
+    new Response(upstreamBody, {
+      status: 429,
+      statusText: "Too Many Requests",
+      headers: retryAfter === null ? {} : { "retry-after": retryAfter },
+    }),
+  );
+  const errorLog = vi.spyOn(console, "error").mockImplementation(() => {});
+  const res = await createDigigraphTraceStreamResponse({
+    messages: [userMessage("hi")],
+    digigraphBaseUrl: "https://digigraph.internal",
+    upstreamHeaders: {},
+    responseHeaders: {},
+    activityDetail: "off",
+  });
+  return { body: await new Response(res.body).text(), errorLog };
+};
+
+// #4777: a digigraph 429 is rate-limited, not down — the turn must say when to
+// retry instead of falling through to the generic unavailable-message.
+it("surfaces a digigraph 429 as retry-in-N-seconds from Retry-After", async () => {
+  const { body, errorLog } = await streamFor429(
+    JSON.stringify({
+      error: {
+        code: "rate_limit_exceeded",
+        message: "Rate limit exceeded for 203.0.113.7 on db.internal:5432",
+        request_id: "req-429",
+        service: "digigraph",
+      },
+    }),
+    "60",
+  );
+
+  expect(errorTextFrom(body)).toContain(RATE_LIMIT_RETRY_CODE);
+  const errorText = errorTextFrom(body)!;
+  const parsed = parseEmbedChatError(new Error(errorText));
+  expect(parsed?.code).toBe(RATE_LIMIT_RETRY_CODE);
+  expect(formatEmbedChatError(new Error(errorText))).toBe(
+    "Rate limit reached, retry in 60 seconds.",
+  );
+  // The relayed code keeps the rate-limit BYOK policy: free_then_byok tenants
+  // open the sequence instead of dead-ending on the 429.
+  expect(
+    shouldSuggestByokOnEmbedError({
+      llmAccess: "free_then_byok",
+      showByok: true,
+      gateMode: "ungated",
+      errorCode: parsed?.code,
+    }),
+  ).toBe(true);
+  // Server-composed copy only: no upstream text crosses to the visitor.
+  expect(body).not.toContain("203.0.113.7");
+  expect(body).not.toContain("db.internal");
+  expect(body).not.toContain("req-429");
+  expect(body).not.toContain("Rate limit exceeded for");
+  expect(body).not.toContain(DIGIGRAPH_UNAVAILABLE_MESSAGE);
+  expect(body).not.toContain('"type":"text-delta"');
+  expect(errorLog).toHaveBeenCalled();
+});
+
+// Status-gated, never body-parsed: a bare proxy 429 with no usable body or
+// header still renders retry copy, not UNAVAILABLE.
+it("falls back to copy without a number when Retry-After is absent", async () => {
+  const { body } = await streamFor429("", null);
+
+  const errorText = errorTextFrom(body)!;
+  expect(formatEmbedChatError(new Error(errorText))).toBe(
+    "Rate limit reached, please try again shortly.",
+  );
+  const parsed = parseEmbedChatError(new Error(errorText));
+  expect(parsed?.code).toBe(RATE_LIMIT_RETRY_CODE);
+  expect(body).not.toContain(DIGIGRAPH_UNAVAILABLE_MESSAGE);
+  expect(body).not.toContain('"type":"text-delta"');
+});
+
+it("parses Retry-After for display unclamped, rejects garbage", () => {
+  expect(retryAfterSeconds("60")).toBe(60);
+  expect(retryAfterSeconds("3600")).toBe(3600);
+  expect(retryAfterSeconds(null)).toBeNull();
+  expect(retryAfterSeconds("")).toBeNull();
+  expect(retryAfterSeconds("soon")).toBeNull();
+  expect(retryAfterSeconds("0")).toBeNull();
+  expect(retryAfterSeconds("-5")).toBeNull();
+  // HTTP-date has 1s resolution, so assert a window, not an exact delta.
+  const httpDate = retryAfterSeconds(new Date(Date.now() + 90000).toUTCString());
+  expect(httpDate).toBeGreaterThan(80000 / 1000);
+  expect(httpDate).toBeLessThanOrEqual(90);
+  expect(retryAfterSeconds(new Date(Date.now() - 7000).toUTCString())).toBeNull();
+});
+
+it("builds the relayed 429 payload with singular and fallback copy", () => {
+  expect(JSON.parse(rateLimitRetryPayload("1"))).toEqual({
+    error: RATE_LIMIT_RETRY_CODE,
+    message: "Rate limit reached, retry in 1 second.",
+  });
+  expect(JSON.parse(rateLimitRetryPayload(null))).toEqual({
+    error: RATE_LIMIT_RETRY_CODE,
+    message: "Rate limit reached, please try again shortly.",
+  });
 });
 
 // #4323: a sleeping stack container answers 503 while it boots. The turn must
