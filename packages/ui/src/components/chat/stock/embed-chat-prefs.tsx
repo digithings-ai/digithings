@@ -28,6 +28,8 @@ export type EmbedChatPrefs = {
   thinking: ThinkingMode;
   model: string;
   effort: string;
+  /** Web-search engine id (auto/internal/exa/tavily/parallel/firecrawl/tinyfish). */
+  searchEngine: string;
 };
 
 export const DEFAULT_EMBED_CHAT_PREFS: EmbedChatPrefs = {
@@ -44,6 +46,7 @@ export const DEFAULT_EMBED_CHAT_PREFS: EmbedChatPrefs = {
   thinking: "auto",
   model: "",
   effort: "medium",
+  searchEngine: "",
 };
 
 /**
@@ -79,6 +82,7 @@ export type EmbedChatPrefsApi = {
   setThinking: (value: ThinkingMode) => void;
   setModel: (id: string) => void;
   setEffort: (effort: string) => void;
+  setSearchEngine: (engine: string) => void;
   reset: () => void;
   tenantAllowsWeb: boolean;
   showByok: boolean;
@@ -98,6 +102,7 @@ export type EmbedChatPrefsApi = {
   openByok: (seed?: string) => void;
   openModels: () => void;
   openEffort: () => void;
+  openSearchEngine: () => void;
   openView: () => void;
   openThinking: () => void;
   openLanguage: () => void;

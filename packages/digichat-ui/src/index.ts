@@ -51,6 +51,9 @@ export {
   EFFORT_CODES,
   EFFORT_CHOICES,
   isEffortCode,
+  SEARCH_ENGINE_CODES,
+  SEARCH_ENGINE_CHOICES,
+  isSearchEngine,
   VIEW_CODES,
   VIEW_CHOICES,
   isViewCode,
@@ -63,6 +66,7 @@ export {
   type SlashVisibility,
   type CliSettingRow,
   type LangCode,
+  type SearchEngineCode,
   type ViewCode,
   type ThinkingCode,
 } from "./slash-commands";

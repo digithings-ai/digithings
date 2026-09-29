@@ -20,6 +20,7 @@ function api(over: Partial<EmbedChatPrefsApi> = {}): EmbedChatPrefsApi {
     setThinking: vi.fn(),
     setModel: vi.fn(),
     setEffort: vi.fn(),
+    setSearchEngine: vi.fn(),
     reset: vi.fn(),
     tenantAllowsWeb: true,
     showByok: true,
@@ -38,6 +39,7 @@ function api(over: Partial<EmbedChatPrefsApi> = {}): EmbedChatPrefsApi {
     openByok: vi.fn(),
     openModels: vi.fn(),
     openEffort: vi.fn(),
+    openSearchEngine: vi.fn(),
     openView: vi.fn(),
     openThinking: vi.fn(),
     openLanguage: vi.fn(),
@@ -59,6 +61,11 @@ describe("applySessionTool", () => {
     expect(a.setModel).toHaveBeenCalled();
     applySessionTool("session_set_effort", { effort: "high" }, a);
     expect(a.setEffort).toHaveBeenCalledWith("high");
+    applySessionTool("session_set_search_engine", { engine: "exa" }, a);
+    expect(a.setSearchEngine).toHaveBeenCalledWith("exa");
+    expect(applySessionTool("session_set_search_engine", { engine: "bogus" }, a).ok).toBe(
+      false,
+    );
     applySessionTool("session_set_view", { mode: "balanced" }, a);
     expect(a.setView).toHaveBeenCalledWith("balanced");
     // Boolean-era contract still maps onto the 3-mode thinking pref.
