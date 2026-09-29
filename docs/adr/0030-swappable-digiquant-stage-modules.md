@@ -294,6 +294,7 @@ This file amends the **reading** of prior ADRs. It does not edit their bodies.
 
 ## Links
 
+- Implementation plan (Proposed, not an amendment of this decision): [docs/plans/adr-0030/README.md](../plans/adr-0030/README.md)
 - Epic: [#4762](https://github.com/digithings-ai/digithings/issues/4762)
 - Orthogonal infra: [#4761](https://github.com/digithings-ai/digithings/issues/4761)
 - Predecessor split: [ADR-0015](0015-atlas-vs-hermes.md)
