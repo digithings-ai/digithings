@@ -64,6 +64,53 @@ export function digigraphErrorToEmbedPayload(err: DigigraphErrorPayload): string
 }
 
 /**
+ * Machine-readable code relayed on a digigraph 429 (#4777). digigraph
+ * rate-limits `/v1/chat/completions` per IP with `Retry-After` +
+ * `error.code rate_limit_exceeded` (#4776). The code is accurate for any 429
+ * by status alone, so the branch never parses the body — a proxy-generated
+ * 429 with an empty body still renders retry copy instead of UNAVAILABLE.
+ */
+export const RATE_LIMIT_RETRY_CODE = "rate_limit_exceeded";
+
+/**
+ * Parse a Retry-After header into display seconds. Unlike parseRetryAfterMs
+ * (a sleep duration, clamped to the boot window) this is display-only: the
+ * real number is shown, unclamped. Returns null when the header is missing or
+ * unusable — the caller falls back to copy without a number.
+ */
+export function retryAfterSeconds(raw: string | null): number | null {
+  if (raw === null) return null;
+  const value = raw.trim();
+  if (!value.length) return null;
+  if (/^\d+$/.test(value)) {
+    const seconds = Number.parseInt(value, 10);
+    if (!Number.isSafeInteger(seconds) || seconds <= 0) return null;
+    return seconds;
+  }
+  const at = Date.parse(value);
+  if (Number.isNaN(at)) return null;
+  const seconds = Math.ceil((at - Date.now()) / 1000);
+  return seconds > 0 ? seconds : null;
+}
+
+/**
+ * Build the relayed 429 payload: the rate-limit code plus server-composed
+ * copy carrying the Retry-After seconds. Composed here — never relayed from
+ * the upstream body — so anonymous embed visitors see no upstream text; only
+ * the parsed integer crosses the trust boundary. The client renders
+ * `message` verbatim (formatEmbedChatError) and the code keeps the
+ * rate-limit BYOK policy (shouldSuggestByokOnEmbedError).
+ */
+export function rateLimitRetryPayload(retryAfter: string | null): string {
+  const seconds = retryAfterSeconds(retryAfter);
+  const message =
+    seconds === null
+      ? "Rate limit reached, please try again shortly."
+      : `Rate limit reached, retry in ${seconds} second${seconds === 1 ? "" : "s"}.`;
+  return digigraphErrorToEmbedPayload({ code: RATE_LIMIT_RETRY_CODE, message });
+}
+
+/**
  * The one upstream-body field an embed visitor is allowed to see: a refusal code
  * the frontend already knows how to act on.
  *
@@ -423,6 +470,18 @@ export async function createDigigraphTraceStreamResponse(opts: {
           detail.length > 1500 ? `${detail.slice(0, 1500)}…` : detail
         );
         const relayable = relayableUpstreamCode(detail);
+        if (res.status === 429) {
+          // #4777: rate-limited, not down — say when to retry instead of the
+          // generic unavailable-message. Status-gated (never body-parsed):
+          // digigraph sends Retry-After + error.code rate_limit_exceeded
+          // (#4776), but a bare proxy 429 takes the same path. Ahead of the
+          // relayable check so the Retry-After seconds survive — that path
+          // relays the code alone and would drop the number.
+          closeText();
+          throw new DigigraphStreamContractError(
+            rateLimitRetryPayload(res.headers.get("retry-after")),
+          );
+        }
         if (relayable) {
           // Actionable refusal: hand the code (never the body) to the client so
           // it can say what to do instead of a dead end. Same mechanism as the
