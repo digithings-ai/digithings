@@ -751,20 +751,15 @@ class TestSearchAndPersist:
     def test_persist_requires_return_and_concentration(self, tmp_path: Path) -> None:
         dates, prices, risk = _v_cycle()
         baseline = _published_shape()
+        # Full shape dump (including set mid-tier keys): the trial must be
+        # byte-identical to the baseline, otherwise a single-knee projection
+        # of a tiered baseline is a *different* shape and may legitimately win.
+        trial = {k: v for k, v in baseline.model_dump().items() if v is not None}
         result = search_curve(
             dates,
             prices,
             risk,
-            trials=[
-                {
-                    "buy_max_rate": baseline.buy_max_rate,
-                    "buy_knee_risk": baseline.buy_knee_risk,
-                    "sell_knee_risk": baseline.sell_knee_risk,
-                    "sell_max_rate": baseline.sell_max_rate,
-                    "buy_curvature": baseline.buy_curvature,
-                    "sell_curvature": baseline.sell_curvature,
-                }
-            ],
+            trials=[trial],
             initial_cash=1000.0,
             baseline=baseline,
             frozen_weights=published_indicator_weights(),

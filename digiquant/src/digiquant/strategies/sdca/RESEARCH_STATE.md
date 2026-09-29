@@ -12,37 +12,32 @@ by itself mean it ships).
 
 ## Current best validated candidate
 
-- **Weights:** `power_law=1.0, m2=0.5, dxy=0.5` (all other indicators — `rs_eth`,
-  `weekly_rsi`, `weekly_macd`, `sma_band` — at `0.0`)
-- **Curve:** published `btc_optimized` shape (buy knee 24.1, sell knee 71.9)
-- **Validated:** +84.90% OOS (`curve_simulator`), +84.78% OOS (`nautilus`,
-  `evaluate_sdca_trial_nautilus`) — same 3-fold walk-forward split, both
-  evaluators agree to within 0.1pp once both are run fresh under current code.
-- **Date:** 2026-09-03
+- **Weights:** live 5-weight config `power_law=1.0, m2=0.5, dxy=0.5, weekly_rsi=0.25, weekly_macd=0.5`
+  (from `settings.json`'s `btc_sdca` block via `published_indicator_weights()`)
+- **Curve:** published `btc_optimized` shape = periodic cycle-4 candidate (buy
+  35/45, sell 50/30, curvatures 1.5/2.5, mid-knees buy 15 / sell 85)
+- **Validated:** +43.21% duration-weighted OOS vs flat DCA (`curve_simulator`,
+  3-fold walk-forward, per-fold rail refit); beats live (-38.47%) and
+  risk50-linear (+36.57pp); folds 0 (+27.00%) and 2 (+8.27%) pass. Detail:
+  `.scratch/periodic_cycle_4.json` (byte-reproduced by cycle 6).
+- **Gate status:** full parity gate NOT cleared — fold 1 (+94.35% OOS) vetoed
+  on max_dd 51.84 vs 50 cap; sensitivity unstable 5.62 (worst_neighbor
+  buy_knee_risk, the knee cliff). Both bars overridden on record by owner
+  accept 2026-09-29 (promotion commit completing the `9cef6d5b8` WIP).
+- **Supersedes:** the 2026-09-03 3-weight entry (+84.90% OOS pre-band-fix;
+  +21.73% on post-fix rescore) — lower than +43.21% under the current
+  protocol, and on an index that is no longer live.
+- **Date:** 2026-09-29
 
-## Known discrepancy: this is NOT what's live in settings.json
+## Known discrepancy: resolved by this promotion
 
-`digiquant/src/digiquant/strategies/settings.json`'s `btc_sdca` block currently
-has `weekly_rsi=0.25, weekly_macd=0.5` turned on in addition to the three
-weights above (set by commit `82cd1ddcc`, an unrelated "Cursor Agent" commit
-that itself documents `beats_flat_dca_oos: false`). That 5-weight live config
-has been walk-forward-validated twice this session and loses both times:
-
-- `btc_5member_curve_walkforward_provenance.json`: mean OOS vs-flat-DCA =
-  **-16.21%** (curve re-fit to match the live 5-weight index, still loses OOS)
-- Ad-hoc fresh 7-indicator Stage-A search scoring the exact live weight set:
-  **-46.23% to -51.28%** OOS (varies with rolling-composite window; see
-  git log on `composite_rolling_window` work, commit `b38c89440`)
-
-No provenance file currently has `beats_flat_dca_oos: true`. The 3-weight
-baseline above is the best validated result, not a strategy that reliably
-beats flat DCA — "current best candidate" and "beats the public benchmark"
-are different claims; don't conflate them in a trial report.
-
-**Open question for Chris:** is the "Cursor Agent" process still actively
-changing this composite? Reverting `settings.json` to the validated 3-weight
-baseline is only safe to propose once that's confirmed — see immediate
-backlog item 3 below.
+`settings.json`'s `btc_sdca` block references `preset: btc_optimized` and
+carries the live 5-weights — the exact weight set the cycle-4 shape was fit
+on. No `settings.json` change was needed: the preset-name reference picks up
+the promoted shape automatically. The old 3-weight baseline above is no
+longer live anywhere and no longer the comparison entry — trial reports
+compare against the cycle-4 entry, with its two overridden bars stated, not
+hidden.
 
 ## Standard trial protocol
 

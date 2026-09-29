@@ -204,3 +204,67 @@ class TestSdcaPresetModel:
         )
         with pytest.raises(ValueError):
             preset.long_only = False
+
+
+class TestBtcOptimizedPromotion:
+    """Pin the promoted live preset (periodic cycle-4 candidate, owner accept 2026-09-29).
+
+    Expected shape params are hardcoded from `.scratch/periodic_cycle_4.json`'s
+    `candidate_curve_shape` (frozen sidecar, not read here -- .scratch is
+    untracked and must never be a test dependency). If the live preset is
+    ever re-tuned, update these expectations deliberately in the same commit.
+    """
+
+    EXPECTED_CYCLE4_SHAPE = {
+        "buy_max_rate": 35.0,
+        "buy_knee_risk": 45.0,
+        "sell_knee_risk": 50.0,
+        "sell_max_rate": 30.0,
+        "buy_curvature": 1.5,
+        "sell_curvature": 2.5,
+        "buy_mid_knee_risk": 15.0,
+        "buy_mid_curvature": 1.0,
+        "sell_mid_knee_risk": 85.0,
+        "sell_mid_curvature": 1.0,
+    }
+
+    def test_btc_optimized_shape_is_cycle4_candidate(self) -> None:
+        from digiquant.strategies.sdca.presets import load_preset
+
+        preset = load_preset("btc_optimized")
+        assert preset.shape is not None
+        assert preset.shape.model_dump() == self.EXPECTED_CYCLE4_SHAPE
+
+    def test_btc_optimized_nodes_match_promoted_shape(self) -> None:
+        from digiquant.strategies.sdca.curve import AccumDistCurve
+        from digiquant.strategies.sdca.presets import load_preset
+
+        preset = load_preset("btc_optimized")
+        assert preset.curve_nodes == preset.shape.to_nodes()
+        AccumDistCurve(preset.curve_nodes)
+
+    def test_btc_optimized_description_records_gate_override(self) -> None:
+        """The description must keep stating the uncleared bars + owner accept.
+
+        Guards against a silent sanitization that would make the preset look
+        fully gate-cleared.
+        """
+        from digiquant.strategies.sdca.presets import load_preset
+
+        description = load_preset("btc_optimized").description
+        assert "cycle-4" in description
+        assert "+43.21%" in description
+        assert "NOT cleared" in description
+        assert "owner accept" in description
+
+    def test_btc_optimized_provenance_marks_prior_fit_superseded(self) -> None:
+        """The old fit's provenance file must keep pointing at the cycle-4 record."""
+        import json
+        from pathlib import Path
+
+        import digiquant.strategies.sdca.presets as presets_module
+
+        provenance_path = Path(presets_module.__file__).parent / "btc_optimized_provenance.json"
+        provenance = json.loads(provenance_path.read_text())
+        assert "SUPERSEDED" in provenance["notes"]
+        assert "periodic_cycle_4" in provenance["notes"]
