@@ -565,7 +565,15 @@ in `lib/adapters/digithings/stream.ts` passes through the *code* alone, and only
 for codes in `BYOK_MODEL_REMEDIABLE_CODES`, so the BYOK sequence opens instead
 of the turn dead-ending. The upstream `message` is never relayed on that path:
 digigraph's text for `byok_default_model_provider_mismatch` reflects the
-caller's own `X-BYOK-Provider` header back at them.
+caller's own `X-BYOK-Provider` header back at them. A digigraph 429 is the
+second exception (#4777): the adapter relays code `rate_limit_exceeded` with
+server-composed copy `Rate limit reached, retry in N seconds.` (N from the
+`Retry-After` header; `Rate limit reached, please try again shortly.` when the
+header is absent), so the visitor sees when to retry instead of the generic
+unavailable-message. The message is composed server-side — only the parsed
+integer crosses the trust boundary — never relayed from the upstream body, and
+the branch is status-gated (never body-parsed) so a bare proxy 429 takes the
+same path.
 
 Upstream 503s retry on two budgets (#4753). A 503 carrying the stack worker's
 `container_booting` code (JSON body + `Retry-After` header) means the container
