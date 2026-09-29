@@ -1,5 +1,5 @@
 /**
- * Squarified treemap partition (the module mosaic's packing, v17).
+ * Squarified treemap partition — the packing behind `ModuleGrid`.
  *
  * Splits a W×H box into one rectangle per weight, in order, with areas ∝
  * weights and a worst-aspect-first row choice so tiles stay squarish as they

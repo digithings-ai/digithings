@@ -8,3 +8,11 @@ export { BentoGrid, BentoCell, type BentoSpan } from "./BentoGrid";
 export { ProductFrame, type ProductFrameProps } from "./ProductFrame";
 export { FeatureCell, type FeatureCellProps } from "./FeatureCell";
 export { TestimonialWall, type TestimonialQuote, type TestimonialWallProps } from "./TestimonialWall";
+export { ModuleGrid, type ModuleGridItem, type ModuleGridProps } from "./ModuleGrid";
+export {
+  treemapAreas,
+  treemapAreasConstrained,
+  treemapAnchored,
+  type TreemapRect,
+  type TreemapMins,
+} from "./treemap";

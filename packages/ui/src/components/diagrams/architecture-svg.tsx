@@ -73,25 +73,32 @@ export function hasLayout(spec: ArchSpec): spec is ArchSpec & { services: Placed
   return spec.services.length > 0 && spec.services.every((s) => s.col != null && s.row != null);
 }
 
-const gx = (col: number): number => col * (BOX_W + GAP_X);
+/** The grid's gutters. Boxes keep their size; only the space between them flexes. */
+type Gaps = { x: number; y: number };
+const DEFAULT_GAPS: Gaps = { x: GAP_X, y: GAP_Y };
+/** How far a gutter may stretch to fill its frame before the drawing letterboxes instead. */
+const MAX_GAP_STRETCH = 3;
+
+const gx = (col: number, g: Gaps): number => col * (BOX_W + g.x);
 /** Extra lane so a box above a boundary sits clear of its caption rule. */
 const ROW_LANE_EXTRA = 34;
-const gy = (row: number): number => row * (BOX_H + GAP_Y) + (row >= 1 ? ROW_LANE_EXTRA : 0);
+const gy = (row: number, g: Gaps): number =>
+  row * (BOX_H + g.y) + (row >= 1 ? ROW_LANE_EXTRA : 0);
 
-function boxRect(service: PlacedService): Rect {
-  return { x: gx(service.col), y: gy(service.row), w: BOX_W, h: BOX_H };
+function boxRect(service: PlacedService, g: Gaps): Rect {
+  return { x: gx(service.col, g), y: gy(service.row, g), w: BOX_W, h: BOX_H };
 }
 
-function groupRect(group: ArchGroup, services: PlacedService[]): Rect | null {
+function groupRect(group: ArchGroup, services: PlacedService[], g: Gaps): Rect | null {
   if (group.col != null && group.row != null && group.cols != null && group.rows != null) {
     return {
-      x: gx(group.col) - GROUP_PAD,
-      y: gy(group.row) - GROUP_PAD - (GROUP_HEAD - GROUP_PAD),
-      w: (group.cols - 1) * (BOX_W + GAP_X) + BOX_W + GROUP_PAD * 2,
-      h: (group.rows - 1) * (BOX_H + GAP_Y) + BOX_H + GROUP_PAD * 2,
+      x: gx(group.col, g) - GROUP_PAD,
+      y: gy(group.row, g) - GROUP_PAD - (GROUP_HEAD - GROUP_PAD),
+      w: (group.cols - 1) * (BOX_W + g.x) + BOX_W + GROUP_PAD * 2,
+      h: (group.rows - 1) * (BOX_H + g.y) + BOX_H + GROUP_PAD * 2,
     };
   }
-  const members = services.filter((s) => s.group === group.id).map(boxRect);
+  const members = services.filter((s) => s.group === group.id).map((s) => boxRect(s, g));
   if (members.length === 0) return null;
   const xs = members.map((r) => r.x);
   const ys = members.map((r) => r.y);
@@ -217,18 +224,62 @@ export type ArchitectureSvgProps = {
   spec: ArchSpec;
   /** Service and group ids to mark as the current step. */
   lit?: readonly string[];
+  /** Frame width / height to stretch the gutters toward; unset keeps the default grid. */
+  aspect?: number;
   className?: string;
 };
 
-export function ArchitectureSvg({ spec, lit, className }: ArchitectureSvgProps) {
+const VIEW_PAD = 26;
+
+function layout(spec: ArchSpec, services: PlacedService[], g: Gaps) {
+  const rects = new Map(services.map((s) => [s.id, boxRect(s, g)]));
+  const groups = (spec.groups ?? [])
+    .map((group) => ({ group, rect: groupRect(group, services, g) }))
+    .filter((x): x is { group: ArchGroup; rect: Rect } => x.rect !== null);
+  const boxes = [...rects.values()];
+  const minX = Math.min(...boxes.map((r) => r.x), ...groups.map((x) => x.rect.x));
+  const maxX = Math.max(...boxes.map((r) => r.x + r.w), ...groups.map((x) => x.rect.x + x.rect.w));
+  const minY = Math.min(...boxes.map((r) => r.y), ...groups.map((x) => x.rect.y - 24));
+  const maxY = Math.max(...boxes.map((r) => r.y + r.h), ...groups.map((x) => x.rect.y + x.rect.h));
+  const view = {
+    x: minX - VIEW_PAD,
+    y: minY - VIEW_PAD,
+    w: maxX - minX + VIEW_PAD * 2,
+    h: maxY - minY + VIEW_PAD * 2,
+  };
+  return { rects, groups, view };
+}
+
+/**
+ * Gutters that bring the drawing to `aspect` (width / height), so a frame of
+ * that shape is filled rather than letterboxed. Only the short axis stretches,
+ * up to `MAX_GAP_STRETCH`; box size, and so label size, never changes. The
+ * extent is linear in each gutter, so one probe layout per axis gives the
+ * exact slope.
+ */
+function fitGaps(spec: ArchSpec, services: PlacedService[], aspect: number): Gaps {
+  const base = layout(spec, services, DEFAULT_GAPS).view;
+  const current = base.w / base.h;
+  if (Math.abs(current - aspect) < 0.01) return DEFAULT_GAPS;
+  if (current < aspect) {
+    const slope = layout(spec, services, { ...DEFAULT_GAPS, x: GAP_X + 1 }).view.w - base.w;
+    if (slope <= 0) return DEFAULT_GAPS;
+    const x = GAP_X + (aspect * base.h - base.w) / slope;
+    return { ...DEFAULT_GAPS, x: Math.min(x, GAP_X * MAX_GAP_STRETCH) };
+  }
+  const slope = layout(spec, services, { ...DEFAULT_GAPS, y: GAP_Y + 1 }).view.h - base.h;
+  if (slope <= 0) return DEFAULT_GAPS;
+  const y = GAP_Y + (base.w / aspect - base.h) / slope;
+  return { ...DEFAULT_GAPS, y: Math.min(y, GAP_Y * MAX_GAP_STRETCH) };
+}
+
+export function ArchitectureSvg({ spec, lit, aspect, className }: ArchitectureSvgProps) {
   if (!hasLayout(spec)) return null;
   const services: PlacedService[] = spec.services;
   const on = new Set(lit ?? []);
   const byId = new Map(services.map((s) => [s.id, s]));
-  const rects = new Map(services.map((s) => [s.id, boxRect(s)]));
-  const groups = (spec.groups ?? [])
-    .map((g) => ({ group: g, rect: groupRect(g, services) }))
-    .filter((g): g is { group: ArchGroup; rect: Rect } => g.rect !== null);
+  const gaps = aspect && aspect > 0 ? fitGaps(spec, services, aspect) : DEFAULT_GAPS;
+  const { rects, groups, view } = layout(spec, services, gaps);
   const edges: Array<{ edge: ArchEdge; routed: Routed }> = [];
   for (const edge of spec.edges) {
     const a = rects.get(edge.from);
@@ -238,18 +289,19 @@ export function ArchitectureSvg({ spec, lit, className }: ArchitectureSvgProps) 
     }
   }
 
-  const boxes = services.map(boxRect);
-  const minX = Math.min(...boxes.map((r) => r.x), ...groups.map((g) => g.rect.x));
-  const maxX = Math.max(...boxes.map((r) => r.x + r.w), ...groups.map((g) => g.rect.x + g.rect.w));
-  const minY = Math.min(...boxes.map((r) => r.y), ...groups.map((g) => g.rect.y - 24));
-  const maxY = Math.max(...boxes.map((r) => r.y + r.h), ...groups.map((g) => g.rect.y + g.rect.h));
-  const pad = 26;
-  const viewBox = `${minX - pad} ${minY - pad} ${maxX - minX + pad * 2} ${maxY - minY + pad * 2}`;
+  const viewBox = `${view.x} ${view.y} ${view.w} ${view.h}`;
 
   const uid = spec.title.replace(/[^a-zA-Z0-9]/g, "");
   const markerId = `arch-arrow-${uid}`;
-  // Keep a label off the target box: sit it a quarter of the way along the run.
 
+  /* Build order for the `.arch-build` entrance: boxes in reading order (row,
+     then column), each connector only once both of its ends are drawn. */
+  const order = new Map(
+    [...services]
+      .sort((a, b) => a.row - b.row || a.col - b.col)
+      .map((s, i) => [s.id, i] as const),
+  );
+  const buildVar = (i: number) => ({ ["--arch-i" as string]: i });
 
   return (
     <svg
@@ -265,11 +317,12 @@ export function ArchitectureSvg({ spec, lit, className }: ArchitectureSvgProps) 
         </marker>
       </defs>
 
-      {groups.map(({ group, rect }) => (
+      {groups.map(({ group, rect }, gi) => (
         <g
           key={group.id}
           id={`arch-group-${group.id}`}
           className={`arch-group${on.has(group.id) ? " is-on" : ""}`}
+          style={buildVar(gi)}
         >
           <rect className="arch-group__box" x={rect.x} y={rect.y} width={rect.w} height={rect.h} />
           <text className="arch-group__label" x={rect.x} y={rect.y + 24}>
@@ -279,10 +332,15 @@ export function ArchitectureSvg({ spec, lit, className }: ArchitectureSvgProps) 
       ))}
 
       {edges.map(({ edge, routed }) => (
-        <g key={`${edge.from}-${edge.to}`} className={`arch-edge${on.has(edge.from) && on.has(edge.to) ? " is-on" : ""}`}>
+        <g
+          key={`${edge.from}-${edge.to}`}
+          className={`arch-edge${on.has(edge.from) && on.has(edge.to) ? " is-on" : ""}`}
+          style={buildVar(Math.max(order.get(edge.from) ?? 0, order.get(edge.to) ?? 0))}
+        >
           <path
             className="arch-edge__line"
             d={routed.d}
+            pathLength={1}
             markerEnd={edge.arrow === "from" || edge.arrow === "none" ? undefined : `url(#${markerId})`}
             markerStart={edge.arrow === "from" ? `url(#${markerId})` : undefined}
           />
@@ -301,8 +359,9 @@ export function ArchitectureSvg({ spec, lit, className }: ArchitectureSvgProps) 
             key={service.id}
             id={`arch-service-${service.id}`}
             className={`arch-node${on.has(service.id) ? " is-on" : ""}`}
+            style={buildVar(order.get(service.id) ?? 0)}
           >
-            <rect className="arch-node__box" x={r.x} y={r.y} width={r.w} height={r.h} />
+            <rect className="arch-node__box" x={r.x} y={r.y} width={r.w} height={r.h} pathLength={1} />
             <g className="arch-node__glyph" transform={`translate(${r.x + 14} ${r.y + (BOX_H - GLYPH) / 2}) scale(${GLYPH / 20})`}>
               <Glyph kind={service.icon} logo={service.logo} />
             </g>

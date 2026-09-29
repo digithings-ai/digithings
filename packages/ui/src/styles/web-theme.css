@@ -247,7 +247,7 @@ body {
      Packing box (v17): the tiles are absolutely positioned rects solved by
      the squarified treemap in `ModuleGrid` (areas ∝ LOC, no fixed rows), so
      the container is a plain relative box, not a flex column. Motion eases
-     each tile's left/top/width/height between solves. On viewports taller
+     each tile's translate/width/height between solves. On viewports taller
      than the cap the grid stops growing instead of going cavernous (owner:
      if the page gets too large the sections below should still come into
      view). */
@@ -269,11 +269,29 @@ body {
    stays untouched). */
 .dg-mosaic--rows .dg-cell {
   position: absolute;
+  inset-block-start: 0;
+  left: 0; /* physical: the tile's translate is the treemap's physical x */
   transition:
-    left 0.45s var(--ease),
-    top 0.45s var(--ease),
-    width 0.45s var(--ease),
-    height 0.45s var(--ease),
+    transform 0.5s var(--ease),
+    width 0.5s var(--ease),
+    height 0.5s var(--ease),
+    opacity 0.25s var(--ease),
+    background 0.25s var(--ease),
+    box-shadow 0.25s var(--ease);
+}
+/* Load and resize are layout, not motion (ModuleGrid sets both hooks): the
+   mosaic is unseen until its box has settled once, then fades in whole, and a
+   box change places tiles without easing them. Opacity on the container,
+   because visibility on a tile does not hide descendants that set their own. */
+.dg-mosaic--rows {
+  transition: opacity 0.4s var(--ease);
+}
+.dg-mosaic--rows:not([data-settled]) {
+  opacity: 0;
+}
+.dg-mosaic--rows:not([data-settled]) .dg-cell,
+.dg-mosaic--rows[data-resizing] .dg-cell {
+  transition:
     opacity 0.25s var(--ease),
     background 0.25s var(--ease),
     box-shadow 0.25s var(--ease);
@@ -297,8 +315,9 @@ body {
 
 /* The stacked face — the same boxes on a phone, one per row.
    There is no pinned track here, so the column is in normal flow and grows with
-   its content; only the active tile is open (`.dg-cell.on`), which is what makes
-   the boxes open in turn as the reader scrolls. The wrap carries the page's own
+   its content. Every tile is open: the tile under the reader's eye only lights
+   (`.dg-cell.on`, paint only), because opening one in flow would push the rest
+   of the page down under a moving thumb. The wrap carries the page's own
    gutter because there is no stage to centre it. */
 .dg-stack-wrap {
   padding-inline: var(--page-pad);
@@ -442,11 +461,12 @@ button.dg-docker.is-copied { color: var(--accent); }
   visibility: hidden;
   transition: opacity 0.3s var(--ease), visibility 0s 0.3s;
 }
-/* Tile bodies crossfade on every reflow: the body re-mounts per focus step
-   (keyed in ModuleGrid) and fades/slides in while rects morph, so mid-flight
-   widths never catch text half-fitting. Transform/opacity only, per the
-   kit's motion vocabulary. */
-.dg-cell-body { animation: dg-cell-in 0.28s var(--ease); }
+/* The tiles whose content changes (gaining or losing focus) re-mount their
+   body (keyed in ModuleGrid) and fade in a beat into the rect morph, so the
+   new text lands in a box that has mostly grown instead of catching it
+   half-fitting. Resting tiles keep their body and never blink.
+   Transform/opacity only, per the kit's motion vocabulary. */
+.dg-cell-body { animation: dg-cell-in 0.3s var(--ease) 0.12s both; }
 @keyframes dg-cell-in {
   from { opacity: 0; transform: translateY(6px); }
 }

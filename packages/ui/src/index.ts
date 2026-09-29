@@ -59,6 +59,7 @@ export {
   type TourStep,
   type TourVariant,
 } from "./components/diagrams";
+export { camTransform, fitCamera, type CamFrame } from "./components/diagrams";
 export {
   Footer,
   Colophon,
@@ -235,6 +236,14 @@ export {
   ProductFrame,
   FeatureCell,
   TestimonialWall,
+  ModuleGrid,
+  treemapAreas,
+  treemapAreasConstrained,
+  treemapAnchored,
+  type ModuleGridItem,
+  type ModuleGridProps,
+  type TreemapRect,
+  type TreemapMins,
   type CardRailProps,
   type OdometerStat,
   type DotMatrixStatProps,

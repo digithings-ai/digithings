@@ -518,6 +518,9 @@ export function morphSpec(
     replaced?: LayerId[];
     boxes?: string[];
     email?: boolean;
+    /** The finished drawing: the group names the digithings picks and the
+        sources edge is yours, not the boundary being left. */
+    owned?: boolean;
   } = {},
 ): ArchSpec {
   const topology = opts.topology ?? "rag";
@@ -579,6 +582,7 @@ export function morphSpec(
   });
 
   const tables = [...replaced].map((l) => MORPH_EDGE_OVERRIDES[l]);
+  if (opts.owned) tables.push({ "their connectors": "your connectors" });
   const edges = base.edges.map((e) => {
     if (!("label" in e) || typeof e.label !== "string") return e;
     for (const table of tables) {
@@ -592,6 +596,14 @@ export function morphSpec(
     ...base,
     title: "The same stack, swapped service by service",
     description: "Each replacement moves a box — and its invoice row — to digithings.",
+    ...(opts.owned
+      ? {
+          groups: base.groups?.map((g) => ({
+            ...g,
+            label: `digithings · ${vendorCount(pricePick(DIGI_LAYERS, digiPick, workload, topology))}`,
+          })),
+        }
+      : {}),
     services,
     edges,
   };

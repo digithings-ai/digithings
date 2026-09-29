@@ -180,8 +180,8 @@ const financeLeft: TourStep[] = [
 const ragMorph: MorphStep[] = [
   {
     id: "m-whole",
-    label: "Same loop — about to move home.",
-    line: "This is your stack exactly as drawn: every box rented, every edge metered. Scroll on and each swap lands live in the invoice below.",
+    label: "Same loop, on your stack.",
+    line: "The same chat loop, every box now yours: your gateway, your index, your traces, your hardware. Scroll on to see what each box replaced, and watch its row in the price table.",
     ids: FULL_RAG.filter((id) => id !== "platform"),
     layers: [],
     boxes: [],
@@ -223,8 +223,8 @@ const ragMorph: MorphStep[] = [
 const supportMorph: MorphStep[] = [
   {
     id: "m-whole",
-    label: "Same pipeline — about to move home.",
-    line: "This is your send pipeline exactly as drawn, review lane included — and the lane stays yours throughout. Scroll on and each swap lands live in the invoice below.",
+    label: "Same pipeline, on your stack.",
+    line: "The same send pipeline, review lane included, every box now yours. Scroll on to see what each box replaced, and watch its row in the price table.",
     ids: FULL_SUPPORT.filter((id) => id !== "platform"),
     layers: [],
     boxes: [],
@@ -267,8 +267,8 @@ const supportMorph: MorphStep[] = [
 const financeMorph: MorphStep[] = [
   {
     id: "m-whole",
-    label: "Same machine — about to move home.",
-    line: "This is your research pipeline exactly as drawn: every night rented, every run metered. Scroll on and each swap lands live in the invoice below.",
+    label: "Same machine, on your stack.",
+    line: "The same nightly research pipeline, every box now yours: your model, your runner, your archive, your traces. Scroll on to see what each box replaced, and watch its row in the price table.",
     ids: FULL_FINANCE.filter((id) => id !== "platform"),
     layers: [],
     boxes: [],
@@ -284,7 +284,7 @@ const financeMorph: MorphStep[] = [
   {
     id: "m-runner",
     label: "Nights move to digiclaw.",
-    line: "You fire the same pipeline from your digiclaw runner on your hardware, so nights run on your interval instead of their schedule. The hosting row starts cutting live below, at marginal cost on hardware you own.",
+    line: "You fire the same pipeline from your digiclaw runner on your hardware, so nights run on your interval instead of their schedule. The hosting row drops to $0 marginal on your hardware.",
     ids: ["launcher"],
     layers: ["hosting"],
     boxes: ["launcher"],
@@ -292,7 +292,7 @@ const financeMorph: MorphStep[] = [
   {
     id: "m-archive",
     label: "The archive moves to digivault.",
-    line: "You file every thesis into your digivault archive, so past research stays yours on your disk either way. This finishes the hosting row the runner already started, at marginal cost on hardware you own.",
+    line: "You file every thesis into your digivault archive, so past research stays yours on your disk either way. Past research stays in the same hosting row, at $0 marginal on your hardware.",
     ids: ["record"],
     layers: ["hosting"],
     boxes: ["record"],
@@ -326,7 +326,7 @@ export const APP_PRESETS: AppPreset[] = [
     leftSteps: ragLeft,
     morphSteps: ragMorph,
     providerCaption: "Every edge metered — per-token · per-query · per-gigabyte",
-    morphCaption: "Same loop, rehomed box by box — each swap lands live in the invoice below",
+    morphCaption: "Same loop, every box on your stack",
   },
   {
     id: "support",
@@ -347,7 +347,7 @@ export const APP_PRESETS: AppPreset[] = [
     leftSteps: supportLeft,
     morphSteps: supportMorph,
     providerCaption: "Scheduled loop — every draft traced, every send metered",
-    morphCaption: "Same send pipeline, moved home box by box — you keep the review lane throughout",
+    morphCaption: "Same send pipeline, every box on your stack — review lane included",
   },
   {
     id: "finance",
@@ -368,6 +368,6 @@ export const APP_PRESETS: AppPreset[] = [
     leftSteps: financeLeft,
     morphSteps: financeMorph,
     providerCaption: "Nightly runs — per-token reasoning · archive · traces",
-    morphCaption: "Same nightly runs — intelligence home first, meters off one by one",
+    morphCaption: "Same nightly runs, every box on your stack",
   },
 ];

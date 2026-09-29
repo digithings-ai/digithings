@@ -20,12 +20,12 @@ export default function NotFound() {
       <main id="main" tabIndex={-1} className="pt-[var(--dq-nav-h)]">
         <DocumentFrame>
           <div className="px-[var(--page-pad)] py-[var(--page-step)]">
-            <PageTitle title="No such page.">
-              The address does not match anything on this site. The docs index is the fastest way
-              back.
+            <PageTitle path="404" title="No such page.">
+              That address does not match anything on this site. Head back to the home page, or
+              start from the docs index.
             </PageTitle>
             <div className="mt-[1.4rem] flex flex-wrap items-center gap-[0.8rem]">
-              <CtaLink href="/">Back to top</CtaLink>
+              <CtaLink href="/">Home page</CtaLink>
               <CtaLink href="/docs" variant="ghost">
                 Browse the docs
               </CtaLink>

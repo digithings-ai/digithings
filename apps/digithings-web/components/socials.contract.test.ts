@@ -13,7 +13,7 @@ describe("digithings.ai socials import", () => {
     const home = load("../components/landing/LandingPage.tsx");
     expect(home).toContain("SocialRow");
     // The contact band's anchor, not its marketing copy: #contact is the stable
-    // contract (the nav and footer link to /#contact), and the prose there is
+    // contract (the pricing CTAs and the section rail link to it), and the prose there is
     // free to be rewritten. The sentence this used to pin was replaced in the
     // document-grammar rebuild (D1, #4429).
     expect(home).toContain('id="contact"');

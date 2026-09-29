@@ -19,13 +19,31 @@ import { NavShell, GitHubGlyph, IconLink, CtaLink } from "@digithings/ui";
 import { Brand, DT_NAV_PRIMARY } from "@/app/_nav";
 import { DigiChatMark } from "@digithings/digichat-ui";
 
+const NAV_HREFS = DT_NAV_PRIMARY.flatMap((item) =>
+  "items" in item ? item.items.map((i) => i.href) : [item.href],
+).filter((href) => href.startsWith("/"));
+
+/** The nav entry whose section holds `pathname`: the longest nav href that is
+ *  the path or one of its parents, so /docs/api/digiquant/ lights "API" and
+ *  not "Docs". NavShell itself marks exact routes only. */
+function navSection(pathname: string | null): string | undefined {
+  if (!pathname) return undefined;
+  const path = pathname.replace(/\/+$/, "") || "/";
+  let best: string | undefined;
+  for (const href of NAV_HREFS) {
+    const within = href === "/" ? path === "/" : path === href || path.startsWith(`${href}/`);
+    if (within && (best === undefined || href.length > best.length)) best = href;
+  }
+  return best ?? pathname;
+}
+
 export function DtNav({ autoHide = "pinned" }: { autoHide?: "scroll" | "hover" | "pinned" }) {
   const pathname = usePathname();
   return (
     <NavShell
       brand={<Brand />}
       links={DT_NAV_PRIMARY}
-      currentPath={pathname ?? undefined}
+      currentPath={navSection(pathname)}
       skipTo="#main"
       homeLabel="digithings home"
       autoHide={autoHide}

@@ -15,6 +15,12 @@ export interface DocsNavItem {
   /** id of the section element this entry links to (`#id`) and scroll-spies. */
   id: string;
   label: ReactNode;
+  /**
+   * A page link instead of an in-page section: the entry is not spied and is
+   * lit only when `current`. Lets one sidebar span a docs site's pages.
+   */
+  href?: string;
+  current?: boolean;
 }
 
 export interface DocsNavGroup {
@@ -29,6 +35,42 @@ export interface DocsHero {
   actions?: ReactNode;
 }
 
+/**
+ * Scroll-spy: the last of `ids` whose element's top has passed a line a
+ * quarter down the viewport. Position rather than intersection, so a section
+ * taller than the viewport stays active the whole way through it.
+ */
+function useSpy(ids: string[], fallback: string): string {
+  const [active, setActive] = useState(fallback);
+  const key = ids.join("\n");
+  useEffect(() => {
+    const list = key ? key.split("\n") : [];
+    let frame = 0;
+    const read = () => {
+      frame = 0;
+      const line = window.innerHeight * 0.25;
+      let next = list[0] ?? "";
+      for (const id of list) {
+        const el = document.getElementById(id);
+        if (el && el.getBoundingClientRect().top <= line) next = id;
+      }
+      setActive(next);
+    };
+    const onScroll = () => {
+      if (frame === 0) frame = requestAnimationFrame(read);
+    };
+    read();
+    window.addEventListener("scroll", onScroll, { passive: true });
+    window.addEventListener("resize", onScroll);
+    return () => {
+      cancelAnimationFrame(frame);
+      window.removeEventListener("scroll", onScroll);
+      window.removeEventListener("resize", onScroll);
+    };
+  }, [key]);
+  return active;
+}
+
 export function DocsLayout({
   nav,
   hero,
@@ -38,12 +80,17 @@ export function DocsLayout({
   search,
   contentsLabel = "contents",
   ariaLabel = "docs",
+  className,
 }: {
   nav: DocsNavGroup[];
   hero?: DocsHero;
   children: ReactNode;
-  /** On-this-page entries: a second, narrower rail on wide viewports. */
-  rail?: DocsNavItem[];
+  /**
+   * On-this-page entries: a second, narrower rail on wide viewports. Either
+   * one list for the whole page, or a list per nav entry (keyed by nav item
+   * id) so the rail follows the section being read.
+   */
+  rail?: DocsNavItem[] | Record<string, DocsNavItem[]>;
   /** Heading above the on-this-page rail. */
   railLabel?: ReactNode;
   /** Search affordance, rendered above the hero. */
@@ -52,47 +99,35 @@ export function DocsLayout({
   contentsLabel?: string;
   /** aria-label shared by both renderings of the nav. */
   ariaLabel?: string;
+  /** Extra classes on the shell (e.g. a wider max-width). */
+  className?: string;
 }) {
-  const [active, setActive] = useState(nav[0]?.items[0]?.id ?? rail?.[0]?.id ?? "");
+  // Two spies: the sidebar tracks its entries, the rail tracks its own, so a
+  // lit sub-section never un-lights the entry it belongs to.
+  const navIds = nav.flatMap((g) => g.items.filter((i) => i.href == null).map((i) => i.id));
+  const navActive = useSpy(navIds, navIds[0] ?? "");
+  const railItems = Array.isArray(rail) ? rail : rail?.[navActive];
+  const railIds = (railItems ?? []).map((i) => i.id);
+  const railActive = useSpy(railIds, railIds[0] ?? "");
 
-  // Scroll-spy over every nav-item id. Keyed on the joined id list, not the
-  // nav array identity, so inline props don't re-subscribe every render.
-  const idsKey = [
-    ...nav.flatMap((g) => g.items.map((i) => i.id)),
-    ...(rail ?? []).map((i) => i.id),
-  ].join("\n");
-  useEffect(() => {
-    const els = idsKey
-      .split("\n")
-      .map((id) => document.getElementById(id))
-      .filter((e): e is HTMLElement => !!e);
-    const obs = new IntersectionObserver(
-      (entries) => {
-        const visible = entries
-          .filter((e) => e.isIntersecting)
-          .sort((a, b) => a.boundingClientRect.top - b.boundingClientRect.top);
-        if (visible[0]) setActive(visible[0].target.id);
-      },
-      { rootMargin: "-20% 0px -70% 0px", threshold: 0 },
+  const itemLink = (it: DocsNavItem, active: string) => {
+    const on = it.href != null ? it.current === true : active === it.id;
+    const current = it.href != null ? "page" : "true";
+    return (
+      <a
+        key={it.id}
+        href={it.href ?? `#${it.id}`}
+        aria-current={on ? current : undefined}
+        className={`rounded-none border-s-2 px-[0.6rem] py-[0.28rem] font-mono text-[0.82rem] no-underline transition-colors duration-150 ease-brand ${
+          on
+            ? "border-s-accent bg-accent-weak text-ink"
+            : "border-s-transparent text-ink-soft hover:bg-accent-weak hover:text-ink"
+        }`}
+      >
+        {it.label}
+      </a>
     );
-    els.forEach((el) => obs.observe(el));
-    return () => obs.disconnect();
-  }, [idsKey]);
-
-  const itemLink = (it: DocsNavItem) => (
-    <a
-      key={it.id}
-      href={`#${it.id}`}
-      aria-current={active === it.id ? "true" : undefined}
-      className={`rounded-none border-s-2 px-[0.6rem] py-[0.28rem] font-mono text-[0.82rem] no-underline transition-colors duration-150 ease-brand ${
-        active === it.id
-          ? "border-s-accent bg-accent-weak text-ink"
-          : "border-s-transparent text-ink-soft hover:bg-accent-weak hover:text-ink"
-      }`}
-    >
-      {it.label}
-    </a>
-  );
+  };
 
   const sideNav = (
     <nav aria-label={ariaLabel} className="flex flex-col gap-[0.1rem]">
@@ -101,14 +136,14 @@ export function DocsLayout({
           <span className="mb-[0.2rem] px-[0.6rem] font-mono text-[0.68rem] uppercase tracking-[0.12em] text-ink-mute">
             {g.label}
           </span>
-          {g.items.map(itemLink)}
+          {g.items.map((it) => itemLink(it, navActive))}
         </div>
       ))}
     </nav>
   );
 
   const railNav =
-    rail && rail.length > 0 ? (
+    railItems && railItems.length > 0 ? (
       <nav
         aria-label={typeof railLabel === "string" ? railLabel : "on this page"}
         className="flex flex-col gap-[0.1rem]"
@@ -116,12 +151,12 @@ export function DocsLayout({
         <span className="mb-[0.2rem] px-[0.6rem] font-mono text-[0.68rem] uppercase tracking-[0.12em] text-ink-mute">
           {railLabel}
         </span>
-        {rail.map(itemLink)}
+        {railItems.map((it) => itemLink(it, railActive))}
       </nav>
     ) : null;
 
   return (
-    <div className="docs-shell">
+    <div className={className ? `docs-shell ${className}` : "docs-shell"}>
       <aside className="docs-side">{sideNav}</aside>
 
       <div className="docs-content flex min-w-0 flex-col gap-[clamp(1.6rem,3.5vw,2.6rem)]">
@@ -154,7 +189,9 @@ export function DocsLayout({
         {children}
       </div>
 
-      {railNav && <aside className="docs-rail">{railNav}</aside>}
+      {/* The column stays whenever a rail is given, so an entry with no
+          sub-sections empties it instead of reflowing the page. */}
+      {rail != null && <aside className="docs-rail">{railNav}</aside>}
     </div>
   );
 }

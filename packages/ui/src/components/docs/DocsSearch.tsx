@@ -54,8 +54,16 @@ export function DocsSearch({
 
   const matches = filterDocsItems(items, query);
 
+  /* Results float over the page, anchored under the field: an in-flow list
+     would push the hero down with every keystroke. */
   return (
-    <div ref={wrapRef} className={cn("flex flex-col items-start gap-[0.5rem]", className)}>
+    <div
+      ref={wrapRef}
+      className={cn("relative flex flex-col items-start", className)}
+      onKeyDown={(event) => {
+        if (event.key === "Escape") setQuery("");
+      }}
+    >
       <SearchBar
         value={query}
         onChange={setQuery}
@@ -64,12 +72,13 @@ export function DocsSearch({
         hint={<Kbd>⌘K</Kbd>}
       />
       {query.trim() !== "" && (
-        <ul className="m-0 grid w-[min(100%,26rem)] list-none gap-0 border border-hair p-0">
+        <ul className="absolute end-0 top-full z-20 m-0 mt-[0.4rem] grid max-h-[min(60vh,24rem)] w-[min(100vw_-_2rem,26rem)] list-none gap-0 overflow-y-auto border border-hair bg-popover p-0 shadow-lg">
           {matches.length > 0 ? (
             matches.map((item) => (
               <li key={item.id}>
                 <a
                   href={`#${item.id}`}
+                  onClick={() => setQuery("")}
                   className="block px-[0.7rem] py-[0.45rem] font-mono text-[0.82rem] text-ink-soft no-underline transition-colors duration-150 ease-brand hover:bg-accent-weak hover:text-ink"
                 >
                   {item.label}

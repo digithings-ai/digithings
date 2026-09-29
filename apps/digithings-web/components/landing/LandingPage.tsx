@@ -1,6 +1,6 @@
 "use client";
 
-import { ContactMailto, CopyCommand, CtaLink, SocialRow } from "@digithings/ui";
+import { ContactMailto, CopyCommand, CtaLink, Reveal, SocialRow } from "@digithings/ui";
 import { buttonVariants } from "@digithings/ui/ui";
 import { DT_CONTACT_EMAIL } from "@/app/_nav";
 import { ContactForm } from "@/components/landing/ContactForm";
@@ -8,6 +8,7 @@ import { FaqMorph } from "@/components/landing/FaqMorph";
 import { ModuleGrid } from "@/components/landing/ModuleGrid";
 import { Pricing } from "@/components/landing/Pricing";
 import { QuantSection } from "@/components/landing/QuantSection";
+import { SectionRail } from "@/components/landing/SectionRail";
 import { OpenSource } from "@/components/landing/Sections";
 import { WhyStack } from "@/components/landing/WhyStack";
 import { REPO_CLONE } from "@/lib/repoActivity";
@@ -39,23 +40,34 @@ function Hero() {
   return (
     <section className="px-[var(--page-pad)] pb-[clamp(0.75rem,2vw,1.5rem)] pt-[clamp(3rem,6vw,5rem)]">
       <div className="mx-auto flex max-w-[var(--frame-w)] flex-col gap-[1.4rem]">
-        <h1 className="animate-appear relative z-10 m-0 font-mono text-[clamp(1.45rem,3.1vw,2.6rem)] font-medium leading-[1.15] tracking-[-0.03em] text-ink opacity-0">
+        <p className="animate-appear m-0 font-mono text-[0.75rem] tracking-[0.04em] text-ink-mute opacity-0">
+          ~/digithings · open core · MIT
+        </p>
+        <h1 className="animate-appear relative z-10 m-0 font-mono text-[clamp(1.45rem,3.1vw,2.6rem)] font-medium leading-[1.15] tracking-[-0.03em] text-ink opacity-0 [animation-delay:90ms]">
           <span className="block">AI infrastructure,</span>
-          <span className="block text-accent">in a glass box you own.</span>
+          <span className="block text-accent">
+            in a glass box you own.
+            <span
+              className="ms-[0.25em] inline-block h-[0.82em] w-[0.5em] bg-accent align-[-0.08em] [animation:chat-cursor-blink_1.1s_steps(1)_infinite] motion-reduce:[animation:none]"
+              aria-hidden="true"
+            />
+          </span>
         </h1>
-        <p className="m-0 max-w-[var(--measure-prose)] text-[length:var(--type-body)] leading-[var(--leading-prose)] text-ink-soft">
-          digithings is open-core AI infrastructure you run yourself — chat,
-          research, and quant modules on your own keys and hardware. The
-          software is free; the integration is the work.
+        <p className="animate-appear m-0 max-w-[var(--measure-prose)] text-[length:var(--type-body)] leading-[var(--leading-prose)] text-ink-soft opacity-0 [animation-delay:200ms]">
+          digithings is open-core AI infrastructure you run yourself: chat,
+          research and quant modules on your own keys and hardware. The code
+          is MIT-licensed. What we sell is the work of fitting it to your stack.
         </p>
         {/* Natural width (owner direction): the box is only as wide as the
             command text inside it. `CopyCommand` caps itself at the prose
             measure on its own — no width override. */}
-        <CopyCommand
-          samples={[{ label: "clone", protocol: "git clone", code: REPO_CLONE }]}
-          ariaLabel="Clone command"
-          inline
-        />
+        <div className="animate-appear opacity-0 [animation-delay:320ms]">
+          <CopyCommand
+            samples={[{ label: "clone", protocol: "git clone", code: REPO_CLONE }]}
+            ariaLabel="Clone command"
+            inline
+          />
+        </div>
       </div>
     </section>
   );
@@ -74,16 +86,16 @@ function Contact() {
   return (
     <section id="contact" className="px-[var(--page-pad)] py-[var(--page-step)]">
       <div className="mx-auto grid max-w-[var(--frame-w)] gap-[2.4rem] min-[960px]:grid-cols-[minmax(0,1.05fr)_minmax(0,1fr)]">
-        <div className="border border-hair bg-surface p-[1.6rem]">
+        <Reveal className="border border-hair bg-surface p-[1.6rem]">
           <ContactForm />
-        </div>
-        <div className="flex flex-col gap-[1.4rem]">
+        </Reveal>
+        <Reveal delay={0.08} className="flex flex-col gap-[1.4rem]">
           <h2 className="m-0 max-w-[24ch] font-mono text-[length:var(--type-page-title)] font-medium leading-[1.2] tracking-[-0.02em] text-balance text-ink">
             You own the stack and the keys.
           </h2>
           <p className="m-0 max-w-[var(--measure-prose)] text-[length:var(--type-body)] leading-[var(--leading-prose)] text-ink-soft">
-            The whole monorepo is MIT-licensed and public. What we sell
-            is the integration work: fitting these modules to the stack you already have.
+            The monorepo is MIT-licensed and public. What we sell is the
+            integration work: fitting these modules to the systems you already run.
           </p>
           <div className="flex flex-wrap items-center gap-[0.8rem]">
             <ContactMailto
@@ -105,7 +117,7 @@ function Contact() {
           <div>
             <SocialRow />
           </div>
-        </div>
+        </Reveal>
       </div>
     </section>
   );
@@ -114,11 +126,11 @@ function Contact() {
 export function LandingPage({ embedOrigin }: { embedOrigin: string }) {
   return (
     <>
+      <SectionRail />
       <Hero />
       <ModuleGrid />
 
-      {/* The app-first variant won the `/variants/why-copy` review and is now
-          the band: three apps with their own provider architectures, a
+      {/* The app-first band: three apps with their own provider architectures, a
           guided walk, a box-by-box morph to the digithings stack, and a
           sticky live invoice. `WhyStack` is a thin alias for it; the section
           keeps only the anchor and the band rules. */}
@@ -128,10 +140,12 @@ export function LandingPage({ embedOrigin }: { embedOrigin: string }) {
 
       <section id="open-source" className="line-b px-[var(--page-pad)] py-[var(--page-step)]">
         <div className="mx-auto flex max-w-[var(--frame-w)] flex-col gap-[2rem]">
-          <h2 className="m-0 font-mono text-[length:var(--type-section-stand)] font-medium leading-[1.2] tracking-[-0.025em] text-ink">
+          <Reveal as="h2" className="m-0 font-mono text-[length:var(--type-section-stand)] font-medium leading-[1.2] tracking-[-0.025em] text-ink">
             Open source, and still shipping
-          </h2>
-          <OpenSource />
+          </Reveal>
+          <Reveal delay={0.08}>
+            <OpenSource />
+          </Reveal>
         </div>
       </section>
 
@@ -147,9 +161,9 @@ export function LandingPage({ embedOrigin }: { embedOrigin: string }) {
       {/* No section title here by owner direction (#4429 ship list): the
           comparison table suffices on its own. */}
       <section id="pricing" className="line-b px-[var(--page-pad)] py-[var(--page-step)]">
-        <div className="mx-auto flex max-w-[var(--frame-w)] flex-col gap-[2rem]">
+        <Reveal className="mx-auto flex max-w-[var(--frame-w)] flex-col gap-[2rem]">
           <Pricing />
-        </div>
+        </Reveal>
       </section>
 
       <section id="faq" className="line-b px-[var(--page-pad)] py-[var(--page-step)]">

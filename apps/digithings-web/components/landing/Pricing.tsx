@@ -148,7 +148,7 @@ const GROUPS: PricingMatrixGroup[] = [
 
 export function Pricing() {
   return (
-    <div className="mx-auto max-w-[56rem]">
+    <div className="w-full">
       <PricingMatrix
         tiers={TIERS}
         groups={GROUPS}

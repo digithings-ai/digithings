@@ -36,21 +36,21 @@ import { OpenSourceLive } from "./OpenSourceLive";
 
 // ═══ FAQ ════════════════════════════════════════════════════════════════════
 
-// Answers are drawn from /security, /quality and /legal/privacy — the same
+// Answers are drawn from /security and /legal/privacy — the same
 // facts those pages state, in the landing page's shorter voice. No new claim
 // originates here. These are also the questions the ask box below the list can
 // answer from cache, so the two never disagree.
 const FAQ: { q: string; a: string }[] = [
   {
-    q: "Is it really free?",
-    a: "Yes. The whole monorepo is MIT-licensed and readable without an account. We charge for integration work, not for the software, and there is no hosted tier or usage bill.",
+    q: "What does it cost?",
+    a: "There is no license fee. The monorepo is MIT-licensed, readable without an account, and runs at $0 marginal on your hardware; model usage is billed by your own provider, on your own key. We charge for integration work only, with no hosted tier or usage bill.",
   },
   {
     q: "Where does my provider key live?",
     a: "In the page's memory for the current tab, and nowhere else. The stack writes your provider and model choice to local storage and never persists the key; it is forwarded per request and gone when the tab closes.",
   },
   {
-    q: "Do I have to run all nine modules?",
+    q: "Do I have to run every module?",
     a: "No. Each runs standalone or composes with the rest. The vector store and the LLM provider both sit behind interfaces, so taking one module and leaving the others is a supported path, not a fork.",
   },
   {

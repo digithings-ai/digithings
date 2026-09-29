@@ -63,7 +63,8 @@ const TOGETHER: { label: string; body: string }[] = [
   {
     label: "Get help",
     body:
-      "You can contribute there, or contact us for help integrating the stack and building on it",
+      "Contribute in the repository, or contact us for help integrating the stack and building " +
+      "on it",
   },
 ];
 
@@ -75,9 +76,9 @@ export default function TeamPage() {
       <main id="main" tabIndex={-1} className="pt-[var(--dq-nav-h)]">
         <DocumentFrame>
           <div className="px-[var(--page-pad)] py-[var(--page-step)]">
-            <PageTitle title="Meet the maintainer.">
-              digithings is currently maintained by Chris. The project is developed in public, so
-              its code, decisions and progress can be reviewed directly.
+            <PageTitle path="team" title="Meet the maintainer.">
+              digithings is maintained by Chris and developed in public, so you can review its
+              code, decisions and progress directly.
             </PageTitle>
           </div>
 

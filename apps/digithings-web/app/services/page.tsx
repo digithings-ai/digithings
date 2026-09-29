@@ -24,32 +24,32 @@ export const metadata: Metadata = {
 // /services — rebuilt on the document grammar (D1, #4429): one framed column,
 // hairline-separated sections, the `[*]` row grammar. Three sections — what we
 // do, how an engagement starts, and the contact. The honesty framing leads: the
-// code is MIT and free to self-host, and what is sold is the integration work.
+// code is MIT with no license fee, and what is sold is the integration work.
 
 const WORK: { label: string; body: string }[] = [
   {
     label: "Deploy the stack",
     body:
-      "Set up the modules you need in your environment and document how they run, connect and " +
-      "recover",
+      "We set up the modules you need in your environment and document how they run, connect " +
+      "and recover",
   },
   {
     label: "Connect your systems",
     body:
-      "Integrate your model providers, identity layer, data sources, retrieval backends and " +
+      "We integrate your model providers, identity layer, data sources, retrieval backends and " +
       "existing services",
   },
   {
     label: "Build on digithings",
     body:
-      "Develop agent workflows, MCP tools, retrieval pipelines or a customer-facing application " +
+      "We develop agent workflows, MCP tools, retrieval pipelines or a customer-facing application " +
       "on the same modules and engineering standards as the core stack",
   },
   {
     label: "Hand over the work",
     body:
-      "Deliver source code, tests, operating documentation and CI checks in infrastructure your " +
-      "team controls",
+      "You get the source code, tests, operating documentation and CI checks, in infrastructure " +
+      "your team controls",
   },
 ];
 
@@ -71,9 +71,10 @@ export default function ServicesPage() {
       <main id="main" tabIndex={-1} className="pt-[var(--dq-nav-h)]">
         <DocumentFrame>
           <div className="px-[var(--page-pad)] py-[var(--page-step)]">
-            <PageTitle title="Build on digithings, in your environment.">
-              The software is MIT-licensed and free to self-host. What we sell is the integration
-              work — fitting these modules to the systems you already run.
+            <PageTitle path="services" title="Build on digithings, in your environment.">
+              The software is MIT-licensed and runs on your own hardware with no license fee. What
+              we offer is the integration work: fitting these modules to the systems you already
+              run.
             </PageTitle>
           </div>
 
@@ -94,13 +95,13 @@ export default function ServicesPage() {
           <Section
             id="engagement"
             title="How an engagement starts"
-            lede="Tell us what you run today, what you want to build and which constraints matter. We will determine whether digithings fits and define the deliverables, dependencies, responsibilities, timing and price in writing before work begins."
+            lede="Tell us what you run today, what you want to build and which constraints matter. We will tell you plainly whether digithings fits, then put the deliverables, dependencies, responsibilities, timing and price in writing before work begins."
           >
             <Prose>
               <p>
-                There are no public package prices or service-level commitments because the work is
-                scoped for each environment. The repository remains available whether or not you
-                engage us.
+                There are no fixed packages or published service levels, because every engagement is
+                scoped to its environment. The repository stays open to you whether or not you
+                work with us.
               </p>
             </Prose>
             <div className="mt-[1.6rem]">
