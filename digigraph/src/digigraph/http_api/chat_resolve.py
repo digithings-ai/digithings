@@ -109,6 +109,24 @@ def _resolve_enable_web_search_chat(req: ChatCompletionRequest, request: Request
     return h in ("1", "true", "yes")
 
 
+def enforce_web_search_license_scope(req: ChatCompletionRequest, request: Request) -> None:
+    """Refuse web-search-gated chat turns without the ``hosted-web-search`` scope.
+
+    Spec §7: the chat path resolves opt-in from body-or-header
+    (``_resolve_enable_web_search_chat``); when opted in, the caller's
+    ``X-Digi-License`` must entitle ``hosted-web-search`` or the turn is
+    refused with 403 ``insufficient_license_scope`` naming the missing scope.
+    Plain turns (not opted in) never touch license code. Callers:
+    ``server.chat_completions`` runs this before streaming and non-streaming
+    diverge, so both modes are gated.
+    """
+    from digigraph.http_api.license_gate import enforce_web_search_license
+
+    enforce_web_search_license(
+        request.headers, enabled=_resolve_enable_web_search_chat(req, request)
+    )
+
+
 def _resolve_session_id(req: ChatCompletionRequest, request: Request) -> str | None:
     """Session id from body, then X-Session-Id, then X-Thread-Id. Ensures digistore/checkpoint are per-conversation when client sends it."""
     sid = getattr(req, "session_id", None)

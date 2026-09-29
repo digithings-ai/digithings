@@ -38,9 +38,9 @@ on:
   workflow_dispatch:
     inputs:
       ref:
-        description: "Git ref to deploy (default: develop tip)"
+        description: "Git ref to deploy (default: main tip — promote to main first)"
         required: false
-        default: ""
+        default: "main"
 
 permissions:
   contents: read
@@ -85,7 +85,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          # Empty input falls back to the dispatched branch tip.
+          # Default input is main: a no-input dispatch ships the promoted tip.
           ref: ${{ inputs.ref }}
 
       - uses: actions/setup-node@v4
