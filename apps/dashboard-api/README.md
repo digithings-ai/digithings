@@ -36,5 +36,7 @@ npm run typecheck --workspace dashboard-api
 npm run dev --workspace dashboard-api
 ```
 
+Canonical serving path is the `/dashboard-api/*` mount on the digithings-stack
+worker (#4687) — the standalone deploy below stays until cutover.
 Deploy is via [`.github/workflows/deploy-dashboard-api.yml`](../../.github/workflows/deploy-dashboard-api.yml)
 (path-filtered push to `develop`/`main` + `workflow_dispatch`).

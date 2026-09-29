@@ -12,7 +12,7 @@ import {
   registerPerformanceRoutes,
   type PerformanceBook,
 } from './performance';
-import { persistedHeadlinesAgree } from './ssot';
+import { buildPerformanceSsotMeta, persistedHeadlinesAgree } from './ssot';
 
 const NAV6 = [
   { date: '2026-08-20', nav: 100, source: 'legacy_nav_history', contract: 'legacy_estimate' },
@@ -203,6 +203,38 @@ describe('getPerformanceBundle', () => {
   });
 });
 
+describe('getPerformanceBundle ssot', () => {
+  const legs = {
+    snapshotDate: '2026-08-28',
+    positionDates: ['2026-08-28'],
+    positionMetricsAsOf: ['2026-08-27'],
+    bookWeightInvestedPct: 35.13,
+    metricsInvestedPct: 80,
+  };
+  it('serves the full SSOT chrome from the book legs', () => {
+    const data = getPerformanceBundle(
+      { navRows: NAV6, metricsAsOf: '2026-08-27', benchmarkHistory: SPY6, ...legs },
+      'SPY',
+      'inception',
+    );
+    expect(data.ssot).toEqual(
+      buildPerformanceSsotMeta({ navRows: NAV6, metricsAsOf: '2026-08-27', ...legs }),
+    );
+    expect(data.ssot.navAsOf).toBe('2026-08-28');
+    expect(data.ssot.bookAsOf).toBe('2026-08-28');
+    expect(data.ssot.marksUnstamped).toBe(false);
+    expect(data.ssot.investedDefinition).toBe('book_weights');
+  });
+  it('degrades honestly when the ssot legs are absent', () => {
+    const data = getPerformanceBundle(
+      { navRows: NAV6, metricsAsOf: '2026-08-27', benchmarkHistory: SPY6 },
+      'SPY',
+      'inception',
+    );
+    expect(data.ssot.bookAsOf).toBeNull();
+    expect(data.ssot.marksUnstamped).toBe(true);
+  });
+});
 describe('buildPerformanceProvenance', () => {
   it('badges the tip without implying finalized history', () => {
     expect(

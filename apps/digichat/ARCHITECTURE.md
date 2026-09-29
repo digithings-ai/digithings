@@ -231,7 +231,11 @@ browser-QA deltas: [`CONTROLS.md`](CONTROLS.md).
 | `src/lib/tenant.ts` | OIDC subject → tenant slug lookup |
 | `src/lib/api-key.ts` | Machine key validation (env bootstrap + bcrypt Postgres) |
 | `src/lib/migrate.ts` | Programmatic Drizzle migration runner |
-| `src/instrumentation.ts` | Next.js instrumentation hook: `DIGICHAT_AUTO_MIGRATE=1` |
+| `src/instrumentation.ts` | Next.js instrumentation hook: `DIGICHAT_AUTO_MIGRATE=1` + license verify/heartbeat startup |
+| `src/app/healthz/route.ts` | Auth-exempt liveness probe (`GET /healthz`) |
+| `src/lib/license/state.ts` | Customer-license verify + revoke latch (`globalThis`, fail-open) |
+| `src/lib/license/heartbeat.ts` | 24h license heartbeat sender (Bearer raw JWT, fail-open backoff) |
+| `src/lib/license/version.ts` | Shared version resolver (health + heartbeat) |
 | `src/components/chat-shell.tsx` | Sidebar + thread state manager |
 | `src/components/chat-panel.tsx` | `useChat` + message list + composer |
 | `src/components/connections-sheet.tsx` | Ecosystem side sheet |
@@ -244,8 +248,8 @@ browser-QA deltas: [`CONTROLS.md`](CONTROLS.md).
 ## 3. API Surface
 
 All route handlers live under `src/app/api/`. Authentication is required on every
-endpoint except `GET /api/health` (which is unauthenticated to serve as a liveness
-probe).
+endpoint except `GET /api/health` (unauthenticated status probe) and
+`GET /healthz` (auth-exempt liveness probe, always `{"ok": true}`).
 
 ### Chat
 
@@ -284,7 +288,9 @@ probe).
 
 ### Health
 
-**`GET /api/health`** — unauthenticated. Probes `{base}/health` for all enabled services (4 s AbortController timeout per service). Probes Postgres with `SELECT 1`. Returns `{ ok, checks, version }`. `version` is `DIGICHAT_VERSION` when set and non-empty; otherwise `apps/digichat/package.json` `version` (Cloudflare Container and GHCR images also bake that value into `/etc/digichat-version` and `ENV DIGICHAT_VERSION`). HTTP 200 when healthy, 503 when any required service is unreachable.
+**`GET /api/health`** — unauthenticated. Probes `{base}/health` for all enabled services (4 s AbortController timeout per service). Probes Postgres with `SELECT 1`. Returns `{ ok, checks, version, license_status, license_detail? }`. `version` is `DIGICHAT_VERSION` when set and non-empty; otherwise `apps/digichat/package.json` `version` (Cloudflare Container and GHCR images also bake that value into `/etc/digichat-version` and `ENV DIGICHAT_VERSION`). HTTP 200 when healthy, 503 when any required service is unreachable. `license_status` is always present (`unlicensed` | `valid` | `expired` | `revoked`); `license_detail` is a short reason enum. The license state never feeds the `ok` computation, so a revoked/expired license cannot crash-loop the container — turn-serving probes read `license_status` instead.
+
+**`GET /healthz`** — auth-exempt liveness probe (stack convention: root `AGENTS.md` § Liveness vs status). Always answers `{"ok": true}` with HTTP 200 in every license state; it never consults license state. Load balancers and orchestrator restart policy key on this route.
 
 ### Auth
 
@@ -1587,6 +1593,10 @@ Healthcheck: `curl -sf http://127.0.0.1:3000/api/health`.
 | `DIGIGRAPH_UPSTREAM_API_KEY` | Static Bearer to digigraph (fallback auth) | If not using digikey |
 | `DIGIKEY_URL` | digikey base URL | If using digikey |
 | `DIGIKEY_BFF_TOKEN` | BFF credential for digikey `bff_session` grant | If using digikey |
+| `DIGICHAT_LICENSE_JWT` | Customer license JWT, inline (file var wins when both set). Never logged/returned | Licensed deploys |
+| `DIGICHAT_LICENSE_FILE` | Path to a file containing only the license JWT (mounted secret). Wins over inline | Licensed deploys |
+| `DIGIKEY_PUBLIC_KEY_PEM` | One or more concatenated SPKI PEMs for offline license verify (rotation list) | Licensed deploys |
+| `DIGIKEY_ISSUER` | Expected license `iss` (default `http://127.0.0.1:8005`) | Licensed deploys |
 | `DIGIQUANT_INTERNAL_URL` | digiquant base URL (health probe) | Recommended |
 | `DIGISMITH_INTERNAL_URL` | digismith base URL (health probe) | Recommended |
 | `DIGISEARCH_INTERNAL_URL` | digisearch base URL (health probe) | Optional |
@@ -1627,9 +1637,19 @@ dependencies. Image size is significantly smaller than a non-standalone build.
 ### Auto-migration
 
 `src/instrumentation.ts` is a Next.js instrumentation module. When `NEXT_RUNTIME=nodejs`
-(Node.js runtime, not edge) and `DIGICHAT_AUTO_MIGRATE=1`, it calls `runMigrate()`
+(Node.js runtime, not edge) it runs, in order: `initDigichatConfigAtStartup()`,
+`initLicenseStateAtStartup()` (pure local RS256 license verification — never touches
+the network, never throws, fail-open), and `startLicenseHeartbeat()` (24h sender plus
+one immediate fire-and-forget attempt; unlicensed containers never start a timer).
+The license step runs before the `DIGICHAT_AUTO_MIGRATE` early-return so it is not
+skipped in the common case. When `DIGICHAT_AUTO_MIGRATE=1`, it then calls `runMigrate()`
 which opens a single dedicated connection, runs all pending Drizzle migrations, and
 closes. This runs once per process start, before the server accepts requests.
+
+A `revoked` (heartbeat-learned) or `expired` (local `exp` + 5 min leeway) license
+refuses product traffic with `503 license_revoked` / `503 license_expired` on
+`POST /api/chat` (and the `POST /api/v1/chat` re-export) plus `POST /api/plan-proof`
+only; auth, config, embed-tenant, health, and all other routes keep answering.
 
 ---
 

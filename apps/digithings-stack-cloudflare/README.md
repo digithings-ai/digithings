@@ -3,14 +3,20 @@
 **Human gate — infra/network:** this Worker publishes `graph.digithings.ai`
 (digigraph), `key.digithings.ai` (digikey), and `search.digithings.ai`
 (digisearch, new external route #4063 — owner-approved for CI web grounding) on
-the public internet. APIs still require auth: digikey JWT / BFF token exchange;
+the public internet. Since #4687/#4689 this single worker also serves the folded
+`/dashboard-api/*` routes and digichat paths (`/embed*`, `/api/chat*`, …) — the
+standalone dashboard-api and digichat workers stay deployed until cutover.
+APIs still require auth: digikey JWT / BFF token exchange;
 on the search route, APIs need a digikey JWT (`digisearch:query`, or
 `digisearch:ingest` for `/ingest`), e.g. `POST /v1/orchestrator_invoke` for the
 CI pipeline. Auth-exempt on every host is only the shared service allowlist —
 `/health`, `/healthz`, `/metrics`, `/docs`, `/redoc`, `/openapi.json`, plus
 OPTIONS preflights (CORS is enforced separately) — and the Worker-served paths
 `/_stack/meta`, `/v1/market/tickers|closes`, `/_stack/key/*` (proxied to
-digikey). `/_stack/mcp/zammad/*` (the read-only OCC Zammad MCP, proxied to
+digikey). `/_stack/status` reports per-module health (`loaded` / `degraded` +
+last error, never secrets) for the fault-isolated route groups (#4685); like
+`/_stack/meta` it never touches a module loader, so it stays up when groups
+degrade. `/_stack/mcp/zammad/*` (the read-only OCC Zammad MCP, proxied to
 the stack container's :8770) is **not** auth-exempt: it requires `x-digi-mcp-key`
 matching the `MCP_EDGE_KEY` secret or returns a fail-closed 401.
 Secrets only via `npx wrangler secret put` — never commit values. Operator

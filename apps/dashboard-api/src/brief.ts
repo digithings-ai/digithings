@@ -62,6 +62,8 @@ export interface BriefData {
   nav_tip: { date: string | null; nav: number | null; contract: string };
   day_return_pct: number | null;
   since_inception_pct: number | null;
+  /** First date of the chained NAV series the since-% is measured from. */
+  since_inception_start_date: string | null;
   overlay: { active: boolean; live_vs_mark_pct: number; badge: string };
   invested_pct: number | null;
   session_events: BookEventInput[];
@@ -136,6 +138,7 @@ export function buildBriefData(book: BriefBook, overlay: OverlayMode): BriefData
     },
     day_return_pct: dailyRet,
     since_inception_pct: sincePct,
+    since_inception_start_date: persisted.sinceInceptionStartDate,
     overlay: {
       active: liveOverlay,
       live_vs_mark_pct: live?.liveVsMarkPct ?? 0,

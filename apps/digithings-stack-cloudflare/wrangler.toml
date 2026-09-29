@@ -118,6 +118,25 @@ max_instances = 1
 # p50 <50ms / p99 <200ms per 500-bar indicator window was budgeted on standard-2.
 instance_type = "standard-2"
 
+# Folded digichat (#4689). Same image as the standalone digichat worker
+# (Next standalone on :3000, one shared instance for digithings + OCC + future
+# tenants via the embed registry) — NOT part of the Profile A image above.
+# Auth stays in-container: the Worker applies no edge gating on digichat
+# paths. The standalone digichat worker stays deployed until cutover; no
+# DNS/Pages/route changes in this slice.
+[[containers]]
+class_name = "DigiChatContainer"
+# Build context MUST be the monorepo root (same #4046 lesson as above):
+# Dockerfile.digichat-cloudflare COPYs package.json, apps/digichat and
+# packages/* with repo-root-relative paths. Resolved relative to this config
+# file: ../.. is the repo root.
+image = "../../Dockerfile.digichat-cloudflare"
+image_build_context = "../.."
+max_instances = 5
+# Next standalone needs real RAM/disk (lite = 256MiB is far too small);
+# explicit instance_type required — matches the two entries above.
+instance_type = "standard-2"
+
 # Ops SSH (wrangler containers ssh) — ed25519 debug key (private key not in repo).
 [[containers.authorized_keys]]
 name = "stack-debug"
@@ -131,6 +150,10 @@ class_name = "DigiStackContainer"
 name = "MCP_STACK"
 class_name = "DigiQuantMcpContainer"
 
+[[durable_objects.bindings]]
+name = "DIGICHAT"
+class_name = "DigiChatContainer"
+
 [[migrations]]
 tag = "v1"
 new_sqlite_classes = ["DigiStackContainer"]
@@ -138,6 +161,10 @@ new_sqlite_classes = ["DigiStackContainer"]
 [[migrations]]
 tag = "v2"
 new_sqlite_classes = ["DigiQuantMcpContainer"]
+
+[[migrations]]
+tag = "v3"
+new_sqlite_classes = ["DigiChatContainer"]
 
 # Secrets (wrangler secret put) — never commit values:
 #   DIGIKEY_BFF_TOKEN
@@ -204,8 +231,26 @@ new_sqlite_classes = ["DigiQuantMcpContainer"]
 #   DIGIGRAPH_INTERNAL_URL=https://graph.digithings.ai
 #   DIGIKEY_URL=https://key.digithings.ai
 #   DIGIKEY_BFF_TOKEN=<same as stack>
+# Folded digichat (#4689): the stack worker's own DIGICHAT binding needs the
+# same secrets (wrangler secret put on THIS worker) — the standalone worker
+# stays deployed until cutover, so set both until then:
+#   AUTH_SECRET                    # same value as the standalone digichat worker
+#   DIGICHAT_EMBED_TENANTS         # digithings + occ JSON — see apps/digichat-cloudflare/README
+#   DIGIGRAPH_INTERNAL_URL=https://graph.digithings.ai
+#   DIGIKEY_URL=https://key.digithings.ai
+#   DIGIKEY_BFF_TOKEN=<same as stack>
+#   DIGICHAT_PLAN_PROOF_SECRET
+#   (deleted post-#4700: DIGICHAT_DASHBOARD_SUPABASE_URL/_ANON_KEY collapse to
+#   canonical SUPABASE_URL ([vars] above) + SUPABASE_ANON_KEY secret via the
+#   index.ts fallback chain — do not re-add)
+# (DIGICHAT_DATABASE_URL stays intentionally unset: the Cloudflare deployment
+# is DB-less, same as the standalone worker — see apps/digichat-cloudflare/wrangler.toml.)
 
 [vars]
+# Canonical Supabase project ref (#4700): public value, same as the standalone
+# dashboard-api worker's [vars]; doubles as the fallback source for the legacy
+# DIGICHAT_DASHBOARD_SUPABASE_URL forward (post-deploy the old secret is deleted).
+SUPABASE_URL = "https://rwagjbkvxkdwqmouagad.supabase.co"
 DIGIKEY_ISSUER = "https://key.digithings.ai"
 DIGIKEY_AUDIENCE = "digi-ecosystem"
 DIGIKEY_ALLOW_EPHEMERAL_KEY = "0"
@@ -232,5 +277,13 @@ DIGIVAULT_ROOT = "/data/vault"
 # `npx wrangler secret put DIGIKEY_DATABASE_URL` (see the secrets list above), or
 # digikey refuses to start.
 DIGISEARCH_INDEX = "digithings_docs"
+# Folded digichat (#4689) non-secret defaults — same values as the standalone
+# digichat worker's [vars] (apps/digichat-cloudflare/wrangler.toml). Secrets
+# (above) land via `wrangler secret put`; nothing secret ships here.
+DIGICHAT_REQUIRE_ROOT_AUTH = "0"
+DIGICHAT_EMBED_HOSTS = "digithings.ai,www.digithings.ai,occ.digithings.ai,digiquant.io,www.digiquant.io"
+# Profile A: digisearch/digivault are loopback inside the stack container;
+# digichat only talks to digigraph (+ digikey for bff_session).
+DIGICHAT_ENABLED_SERVICES = "digigraph"
 # Defense-in-depth corpus map (headers from digichat still win).
-DIGI_TENANT_CORPUS_MAP = "{\"digithings\":{\"digisearchIndex\":\"digithings_docs\",\"vaultPathPrefix\":\"clients/digithings\"},\"occ\":{\"digisearchIndex\":\"occ_help\",\"vaultPathPrefix\":\"clients/online-compliance-center\"}}"
+DIGI_TENANT_CORPUS_MAP = "{\"digithings\": {\"digisearchIndex\": \"digithings_docs\", \"vaultPathPrefix\": \"clients/digithings\"}, \"occ\": {\"digisearchIndex\": \"occ_help\", \"vaultPathPrefix\": \"clients/online-compliance-center\", \"researchSystemPrompt\": \"You are the Online Compliance Center (OCC) help assistant for digithings.ai/chat/occ.\\nAnswer only from what you retrieve. You get several tool rounds per question.\\n\\nGround every answer in retrieved corpus from digisearch index `occ_help`\\nand/or digivault_search_notes under `clients/online-compliance-center/`.\\nAlways cite help article URLs or PDF source paths from metadata.\\n\\nSearch results are excerpts, not whole documents. A row marked \\\"truncated\\\": true\\nmeans you have not seen that note \\u2014 call digivault_get_note with its doc_id and read\\nthe whole thing before answering. An unmarked row is not a promise of completeness:\\nevery row is a preview. Always do this when the question involves a\\nprocedure, a list of steps, a table, a count, or the words every, all, or which:\\nhelp PDFs are stored one page per note, and an excerpt routinely stops before the\\nstep that answers the question.\\n\\nNever say a policy, step, or exception does not exist unless you loaded the full note\\nand looked. If all you saw was a truncated excerpt, say what it showed and that the\\nrest was not loaded.\\n\\nAnswer questions about OCC policies, procedures, FAQ topics, and public help\\nPDFs. Do not invent product features, pricing, or portal capabilities not\\npresent in the retrieved sources. E-learning / YouTube videos are out of\\nscope for this corpus \\u2014 say so if asked.\\n\\nDo not cite digithings or digiquant internal architecture docs. If the\\ncorpus has no grounded answer, say so clearly.\\n\\nTicket questions go to the read-only zammad tools (per-request MCP union; exposed as zammad_<name> -- always use the full prefixed name),\\nnot the document corpus. Classify the question first, then run the recipe:\\n\\n- Ranking / counting (\\\"who reports most\\\", \\\"how many are open\\\", \\\"who closed most\\\"):\\n  zammad_aggregate_tickets with group_by=customer|owner|state|group|priority|title and\\n  metric=count|open_count|closed_count over since_days. Open/closed comes from\\n  state types inside the tool \\u2014 never state.name:open. Owner rankings exclude\\n  automation accounts automatically.\\n- Fix / resolution (\\\"how was X fixed\\\", \\\"is X resolved\\\"): resolved-first \\u2014 one\\n  zammad_search_tickets call per question term (title:<term> / article.body:<term> queries) with\\n  state_category=\\\"closed\\\", rank hits by coverage then recency, read the top 3-5\\n  with zammad_get_ticket, and cross-check the occ_help docs before answering.\\n- History / thread (\\\"what did <customer> report\\\", \\\"what happened in #<n>\\\"):\\n  zammad_search_tickets with customer.email:<addr> finds the latest ticket; zammad_get_ticket reads the thread\\n  (owner name and open|closed|pending category included).\\n- Status (\\\"what's open, what's new\\\"): zammad_ticket_report, optionally windowed with\\n  since_days and grouped with group_by=state|group|priority.\\n\\nWindows are created_at date ranges (since_days); customer emails stay masked;\\ninternal ticket notes are never shown. If neither corpus nor tickets ground\\nthe answer, say so clearly.\"}}"

@@ -1,4 +1,5 @@
-import { isSupabaseConfigured, supabase } from './supabase';
+import { apiDb } from './api-query';
+import { isApiConfigured } from './api-client';
 import type { ViewRow } from './database.types';
 
 // Canonical view name after the Phase B/C olympus rename (#4295). Migration 135 drops
@@ -24,14 +25,14 @@ export function classifyPipelineTrace(
 
 /** Read every body-free call event for one run date from the curated public view. */
 export async function fetchPipelineTrace(runDate: string): Promise<PipelineTraceResult> {
-  if (!isSupabaseConfigured() || !supabase) {
+  if (!isApiConfigured()) {
     return { state: 'unavailable', events: [] };
   }
 
   const events: PipelineRunEvent[] = [];
   try {
     for (let offset = 0; offset < TRACE_MAX_ROWS; offset += TRACE_PAGE_SIZE) {
-      const { data, error } = await supabase
+      const { data, error } = await apiDb
         .from('run_event_trace')
         .select('*')
         .eq('run_date', runDate)

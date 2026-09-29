@@ -373,10 +373,84 @@ export function calendarWindow(now: Date, timeZone?: string): CalendarWindow {
 }
 
 /**
+ * Logical-event join key for one `economic_calendar` row: the feed date, the country,
+ * and the whitespace-normalized lowercase event name. Mirrors the twelve-x pipeline's
+ * own join key so the dashboard groups rows exactly the way the pipeline defines "the
+ * same event". `event_time` is deliberately NOT part of the key — see
+ * {@link dedupeCalendarTwins} for why.
+ */
+function calendarEventKey(row: FxEconomicCalendarRow): string {
+  // Country is case/space-normalized: feeds disagree on casing in principle
+  // (`US` vs `us`), and the key must not let a twin through on that basis.
+  return `${row.event_date}|${(row.country ?? '').trim().toUpperCase()}|${row.event_name.trim()
+    .toLowerCase()
+    .replace(/\s+/g, ' ')}`;
+}
+
+/** True for a row ingested from gloomberb, the pipeline's primary calendar source. */
+function isGloomberbRow(row: FxEconomicCalendarRow): boolean {
+  return (row.external_id ?? '').startsWith('gb-');
+}
+
+/**
+ * PURE — collapse cross-source twin rows from a raw `economic_calendar` read.
+ *
+ * ROOT CAUSE: the shared core `economic_calendar` table is append-only and receives
+ * the same logical event from TWO ingest sources — `forexfactory` (external_id `te-…`
+ * or a feed id) and `gloomberb` (`gb-` prefix). Each twin pair carries an identical
+ * `(event_date, country, event_name)` but disagrees on `event_time` (one source records
+ * the feed's ET wall clock, the other UTC — a +4h offset) while `event_datetime_utc`
+ * is nearly identical. The table currently holds 123 such twin pairs, so a raw-row
+ * read surfaces every affected event twice, as two visually identical rows in
+ * `EventsTab`.
+ *
+ * WHY THE DASHBOARD SEES RAW ROWS: `fetchCalendarWindow` reads the SHARED table
+ * through the main dashboard client with no server-side dedup (the table is not owned
+ * by this app, and `external_id` differs between sources so an id-based dedup cannot
+ * work), while the twelve-x pipeline's own read path dedups by join key upstream. A
+ * write-side fix is landing in the pipeline in parallel; this read-model defense hides
+ * the already-written twins immediately and keeps the dashboard correct while the
+ * backfill runs.
+ *
+ * GROUPING deliberately IGNORES `event_time`: the two sources record that wall clock
+ * in different zones (ET vs UTC), so including it would classify every twin as
+ * distinct. `event_datetime_utc` is not keyed either — it can drift by seconds between
+ * ingest runs — and `id`/`external_id` differ by construction.
+ *
+ * PREFERENCE: when rows share a key, the gloomberb row wins (`external_id` starting
+ * `gb-`) because gloomberb is the pipeline's primary source and its rows were written
+ * most recently; when neither side is gloomberb the incumbent is kept (first wins), so
+ * the outcome is deterministic regardless of which source sorted first.
+ *
+ * ORDER/PAGINATION SEMANTICS ARE UNCHANGED: winners are collected into a `Map` and the
+ * ORIGINAL array is then filtered against it, so every surviving row keeps its original
+ * position in the query's `event_datetime_utc` ordering — nothing is reordered, merged,
+ * or synthesised. Only duplicate rows are dropped, and only downstream local narrowing
+ * (`getUpcomingEvents` / `getTodayEvents`) ever sees the result.
+ */
+function dedupeCalendarTwins(rows: FxEconomicCalendarRow[]): FxEconomicCalendarRow[] {
+  const winners = new Map<string, FxEconomicCalendarRow>();
+  for (const row of rows) {
+    const key = calendarEventKey(row);
+    const incumbent = winners.get(key);
+    if (!incumbent || (isGloomberbRow(row) && !isGloomberbRow(incumbent))) {
+      winners.set(key, row);
+    }
+  }
+  // Filter (not map over winners): the winner must render at ITS original index so the
+  // query's ordering — and therefore pagination/grouping downstream — is preserved.
+  return rows.filter((row) => winners.get(calendarEventKey(row)) === row);
+}
+
+/**
  * The raw `economic_calendar` rows over the PADDED window, ordered by the absolute UTC
  * release instant (NULL release times — all-day rows — sort last, then by event_date).
  * Shared by `getUpcomingEvents` and `getTodayEvents` so both see the same row set and
  * only their LOCAL narrowing differs. `[]` when unconfigured or empty.
+ *
+ * Cross-source twin rows (forexfactory/gloomberb pairs for one logical event) are
+ * collapsed by {@link dedupeCalendarTwins} BEFORE either caller narrows locally, so
+ * both callers see one row per logical event while keeping the original order.
  */
 async function fetchCalendarWindow({
   queryStart,
@@ -396,7 +470,7 @@ async function fetchCalendarWindow({
       .order('event_datetime_utc', { ascending: true, nullsFirst: false })
       .order('event_date', { ascending: true })
   );
-  return rows ?? [];
+  return dedupeCalendarTwins(rows ?? []);
 }
 
 /**
@@ -529,20 +603,91 @@ export function sortTodayBriefs(briefs: FxBriefRow[]): FxBriefRow[] {
   );
 }
 
-/** Curated trade ideas for a run_date (rank 1 = top). `[]` when unconfigured/empty. */
+const TRADE_IDEA_BOARD_COLUMNS =
+  'run_date, rank, pair, direction, timeframe, title, thesis, catalyst, levels, citations, trade_levels, evidence, as_of, idea_id';
+
+/** Cap on the carried-episode fallback so one broken date can't pull the archive. */
+const CARRIED_BOARD_LIMIT = 10;
+
+/**
+ * Over-fetch the fallback so twins can't eat the board's slots: the query limit
+ * applies pre-dedupe, so without headroom distinct carried episodes past the
+ * limit would be silently dropped. Sliced back to {@link CARRIED_BOARD_LIMIT}
+ * after {@link dedupeEpisodes}.
+ */
+const CARRIED_BOARD_OVERFETCH = 50;
+
+/**
+ * Rows refreshed within this window of the latest publish count as one publish
+ * batch (a publish writes its rows within seconds; the grace covers retries).
+ */
+const CARRIED_BATCH_WINDOW_MS = 15 * 60 * 1000;
+
+/**
+ * Collapse rows that are the same episode published on several board dates.
+ *
+ * Ordered newest-refresh-first by the caller, so the first sighting wins. Falls
+ * back to the axis when `idea_id` is absent (pre-identity rows).
+ */
+function dedupeEpisodes(rows: FxTradeIdeaRow[]): FxTradeIdeaRow[] {
+  const seen = new Set<string>();
+  const out: FxTradeIdeaRow[] = [];
+  for (const row of rows) {
+    const key = row.idea_id || `${row.pair}|${row.direction}|${row.timeframe ?? ''}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(row);
+  }
+  return out;
+}
+
+/**
+ * Curated trade ideas for a run_date (rank 1 = top). `[]` when unconfigured/empty.
+ *
+ * A CONTINUED episode is written back to its ORIGIN run_date (trade-episodes,
+ * 2026-09-23) so identity and revision update in place — which means an exact-date
+ * match misses an idea that originated earlier and silently empties today's board.
+ * When the exact-date query comes back empty we fall back to the latest publish's
+ * batch: the freshest `as_of` over boards on/before today, plus rows refreshed
+ * within {@link CARRIED_BATCH_WINDOW_MS} of it (one publish), deduped to one row
+ * per episode. That is precisely a carried idea the board would otherwise hide.
+ *
+ * "Today's publish" is anchored to the last-publish instant, NOT to UTC midnight:
+ * a publish that crosses midnight (late run, retry, ET-evening schedule) still
+ * counts as the run it belongs to, so yesterday's rows can never satisfy today's
+ * board by clock accident. Conversely, when nothing has published since the board
+ * date began — closed episodes, or a day when nothing ran — the guard returns `[]`
+ * instead of resurfacing stale rows.
+ */
 export async function getTradeIdeas(runDate: string): Promise<FxTradeIdeaRow[]> {
   if (!isTwelveXConfigured() || !twelveXSupabase) return [];
   if (!runDate) return [];
   const rows = await querySupabase<FxTradeIdeaRow[]>((sb) =>
     sb
       .from('fx_trade_ideas_snapshot')
-      .select(
-        'run_date, rank, pair, direction, title, thesis, catalyst, levels, citations, trade_levels, evidence, as_of'
-      )
+      .select(TRADE_IDEA_BOARD_COLUMNS)
       .eq('run_date', runDate)
       .order('rank', { ascending: true })
   );
-  return rows ?? [];
+  if (rows?.length) return rows;
+  // Newest-refresh-first so the freshest rows win the over-fetch window (the
+  // query limit applies pre-dedupe; see CARRIED_BOARD_OVERFETCH).
+  const recent = await querySupabase<FxTradeIdeaRow[]>((sb) =>
+    sb
+      .from('fx_trade_ideas_snapshot')
+      .select(TRADE_IDEA_BOARD_COLUMNS)
+      .lte('run_date', runDate)
+      .order('as_of', { ascending: false })
+      .limit(CARRIED_BOARD_OVERFETCH)
+  );
+  const latest = recent && recent.length ? recent[0].as_of : undefined;
+  const latestMs = latest ? Date.parse(latest) : NaN;
+  if (!Number.isFinite(latestMs) || latestMs < Date.parse(`${runDate}T00:00:00.000Z`)) return [];
+  const batch = (recent ?? []).filter((r) => {
+    const t = Date.parse(r.as_of || '');
+    return Number.isFinite(t) && t >= latestMs - CARRIED_BATCH_WINDOW_MS;
+  });
+  return dedupeEpisodes(batch).slice(0, CARRIED_BOARD_LIMIT);
 }
 
 /**
@@ -589,9 +734,7 @@ export async function getTradeIdeaArchive(): Promise<FxTradeIdeaRow[]> {
   const rows = await querySupabase<FxTradeIdeaRow[]>((sb) =>
     sb
       .from('fx_trade_ideas_snapshot')
-      .select(
-        'run_date, rank, pair, direction, title, thesis, catalyst, levels, citations, trade_levels, evidence, as_of',
-      )
+      .select(TRADE_IDEA_BOARD_COLUMNS)
       .order('run_date', { ascending: false })
       .order('rank', { ascending: true }),
   );

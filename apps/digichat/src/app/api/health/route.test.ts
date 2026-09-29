@@ -97,4 +97,28 @@ describe("GET /api/health", () => {
     expect(body.version).toBe(packageVersion);
     expect(body.version).not.toBe("0.1.0");
   });
+
+  it("always reports license_status and never feeds it into ok", async () => {
+    const { applyHeartbeatResult, resetLicenseStateForTests } = await import(
+      "@/lib/license/state"
+    );
+    try {
+      resetLicenseStateForTests();
+      const unlicensed = await (await GET()).json();
+      expect(unlicensed.license_status).toBe("unlicensed");
+      expect(unlicensed.ok).toBe(true);
+
+      // Revoked must not read as a downstream outage: ok stays true,
+      // HTTP stays 200, license_status tells the truth.
+      applyHeartbeatResult("denied", "heartbeat_deny_revoked");
+      const revokedRes = await GET();
+      const revoked = await revokedRes.json();
+      expect(revoked.license_status).toBe("revoked");
+      expect(revoked.license_detail).toBe("heartbeat_deny_revoked");
+      expect(revoked.ok).toBe(true);
+      expect(revokedRes.status).toBe(200);
+    } finally {
+      resetLicenseStateForTests();
+    }
+  });
 });
