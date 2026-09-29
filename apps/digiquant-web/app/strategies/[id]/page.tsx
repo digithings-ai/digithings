@@ -53,6 +53,13 @@ const PUBLISHED: Record<string, { label: string; symbol: string }> = {
   // Supabase, data comes from the static-JSON fallback in
   // lib/live/strategies.ts. Not a published/validated strategy.
   btc_sdca_cycle4_candidate: { label: "BTC-SDCA (Cycle 4 candidate diagnostic)", symbol: "BTC-USD" },
+  // Local-only research diagnostics: top-3 gated calibrations (all cycle-4
+  // tiered shape; drop_rsi +44.10%, drop_macd +43.28%, live +43.21% OOS --
+  // spreads <=1pp, established as in-sample noise). Never pushed to
+  // Supabase, static-JSON fallback only. Not published/validated strategies.
+  btc_sdca_top1_drop_rsi: { label: "BTC-SDCA (Top-1 gated: drop weekly_rsi)", symbol: "BTC-USD" },
+  btc_sdca_top2_drop_macd: { label: "BTC-SDCA (Top-2 gated: drop weekly_macd)", symbol: "BTC-USD" },
+  btc_sdca_top3_live: { label: "BTC-SDCA (Top-3 gated: live weights)", symbol: "BTC-USD" },
 };
 
 export const dynamicParams = false;
