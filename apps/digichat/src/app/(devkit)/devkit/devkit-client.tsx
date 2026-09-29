@@ -100,7 +100,7 @@ function slugFromDraftText(text: string): string | null {
 
 // Dev-only sidebar drag handle: the col-resize cursor is the drag affordance.
 const RESIZE_HANDLE_CLASS =
-  "w-1.5 shrink-0 cursor-col-resize border-r outline-none hover:bg-accent focus-visible:bg-accent"; // canon-allow: isolated devkit route without token bridge, no kit resize part, not product chrome
+  "w-1.5 shrink-0 cursor-col-resize border-r border-hair outline-none hover:bg-accent-weak focus-visible:bg-accent-weak"; // canon-allow: isolated devkit route without token bridge, no kit resize part, not product chrome
 
 /**
  * Kit deployment picker (select-reference pattern): grouped popup with
@@ -470,11 +470,11 @@ export function DevkitClient() {
   return (
     <main aria-label="digichat devkit" data-theme="light" className="flex h-full min-h-0">
       {error ? (
-        <p role="alert" className="p-4 text-sm text-destructive">
+        <p role="alert" className="p-4 font-mono text-sm text-danger">
           Failed to load configs: {error}
         </p>
       ) : entries === null ? (
-        <p className="p-4 text-sm text-muted-foreground">Loading configs…</p>
+        <p className="p-4 font-mono text-sm text-ink-soft">Loading configs…</p>
       ) : (
         <>
           <aside
@@ -488,14 +488,14 @@ export function DevkitClient() {
               className="flex h-full flex-col gap-3 overflow-y-auto p-3"
             >
               <div className="flex items-center gap-2">
-                <span className="text-sm font-semibold">digichat devkit</span>
+                <span className="font-mono text-[0.82rem] font-medium text-ink">digichat devkit</span>
                 <button
                   type="button"
                   onClick={() => setCollapsed(true)}
                   aria-expanded={!collapsed}
                   aria-label="Hide inspector sidebar"
                   title="Hide inspector sidebar (⌘/)"
-                  className="ml-auto rounded-md border px-2 py-1 text-xs text-muted-foreground hover:bg-accent"
+                  className="ml-auto rounded-none border border-hair bg-surface px-2 py-1 font-mono text-xs text-ink hover:bg-accent-weak"
                 >
                   ⟨
                 </button>
@@ -504,7 +504,7 @@ export function DevkitClient() {
                 <div className="mb-1 flex items-center justify-between">
                   <label
                     htmlFor="devkit-deployment"
-                    className="block text-[11px] font-semibold tracking-wide text-muted-foreground uppercase"
+                    className="mb-1 block font-mono text-[0.68rem] tracking-[0.12em] text-ink-mute uppercase"
                   >
                     Deployments
                   </label>
@@ -514,7 +514,7 @@ export function DevkitClient() {
                     disabled={saving}
                     aria-label="New deployment"
                     title="Start a blank draft — saving writes config/<slug>.yaml"
-                    className="rounded-md border px-2 py-0.5 text-xs text-muted-foreground hover:bg-accent"
+                    className="rounded-none border border-hair bg-surface px-2 py-0.5 font-mono text-xs text-ink hover:bg-accent-weak"
                   >
                     + new
                   </button>
@@ -529,36 +529,36 @@ export function DevkitClient() {
               </div>
 
               {selected === null && !draft ? (
-                <p className="text-xs text-muted-foreground">Select a deployment to inspect it.</p>
+                <p className="font-mono text-xs text-ink-soft">Select a deployment to inspect it.</p>
               ) : (
                 <>
                   {selected?.readOnly ? (
-                    <p className="rounded border px-1.5 py-1 text-[11px] text-muted-foreground">
+                    <p className="rounded-none border border-hair px-1.5 py-1 font-mono text-[11px] text-ink-soft">
                       read-only env tenant — never written
                     </p>
                   ) : null}
                   {isNewFile ? (
-                    <p className="rounded border px-1.5 py-1 text-[11px] text-muted-foreground">
+                    <p className="rounded-none border border-hair px-1.5 py-1 font-mono text-[11px] text-ink-soft">
                       new deployment — set the slug in Identity, then save to
                       write config/&lt;slug&gt;.yaml
                     </p>
                   ) : null}
                   {(draft ? draft.issues : (selected?.issues ?? [])).length > 0 ? (
-                    <ul className="rounded-lg border border-destructive/50 p-2 font-mono text-xs">
+                    <ul className="rounded-none border border-danger/50 p-2 font-mono text-xs">
                       {(draft ? draft.issues : (selected?.issues ?? [])).map((issue) => (
-                        <li key={issue} className="text-destructive">
+                        <li key={issue} className="text-danger">
                           {issue}
                         </li>
                       ))}
                     </ul>
                   ) : null}
                   {editNotice ? (
-                    <p role="status" className="rounded border px-1.5 py-1 text-[11px] text-muted-foreground">
+                    <p role="status" className="rounded-none border border-hair px-1.5 py-1 font-mono text-[11px] text-ink-soft">
                       {editNotice}
                     </p>
                   ) : null}
                   {saveNotice ? (
-                    <p role="alert" className="rounded border border-destructive/50 px-1.5 py-1 font-mono text-[11px] whitespace-pre-wrap text-destructive">
+                    <p role="alert" className="rounded-none border border-danger/50 px-1.5 py-1 font-mono text-[11px] whitespace-pre-wrap text-danger">
                       {saveNotice}
                     </p>
                   ) : null}
@@ -576,16 +576,16 @@ export function DevkitClient() {
                               ? "Write the draft to its YAML file"
                               : "No unsaved changes"
                         }
-                        className="flex-1 rounded-md border px-2 py-1 text-xs hover:bg-accent disabled:opacity-50"
+                        className="flex-1 rounded-none border border-hair bg-surface px-2 py-1 font-mono text-xs text-ink hover:bg-accent-weak disabled:opacity-50"
                       >
                         {saving ? "saving…" : "save"}
                       </button>
                       {isDirty(draft) ? (
-                        <span aria-label="unsaved changes" title="Unsaved changes" className="text-xs text-muted-foreground">
+                        <span aria-label="unsaved changes" title="Unsaved changes" className="font-mono text-[11px] text-ink-mute">
                           ● unsaved
                         </span>
                       ) : (
-                        <span className="text-xs text-muted-foreground">saved ✓</span>
+                        <span className="font-mono text-[11px] text-ink-mute">saved ✓</span>
                       )}
                     </div>
                   ) : null}
@@ -605,13 +605,13 @@ export function DevkitClient() {
                   ) : selected?.deployment ? (
                     <DevkitSummary deployment={selected.deployment} />
                   ) : (
-                    <p className="text-xs text-muted-foreground">
+                    <p className="font-mono text-xs text-ink-soft">
                       No file text for env tenants — configuration lives in the environment.
                     </p>
                   )}
                   {draft ? (
-                    <details className="rounded-lg border">
-                      <summary className="px-2 py-1.5 font-mono text-xs text-muted-foreground">
+                    <details className="devkit-raw rounded-none border border-hair">
+                      <summary className="px-[0.6rem] py-1.5 font-mono text-[0.68rem] tracking-[0.12em] text-ink-mute uppercase">
                         raw YAML{isDirty(draft) ? " ●" : ""}
                       </summary>
                       <textarea
@@ -623,15 +623,15 @@ export function DevkitClient() {
                         }
                         spellCheck={false}
                         rows={20}
-                        className="max-h-96 min-h-40 w-full resize-y overflow-auto border-t bg-muted/30 p-3 font-mono text-xs outline-none"
+                        className="max-h-96 min-h-40 w-full resize-y overflow-auto border-t border-hair bg-surface p-3 font-mono text-xs outline-none"
                       />
                     </details>
                   ) : selected?.redactedText !== null ? (
-                    <details className="rounded-lg border">
-                      <summary className="px-2 py-1.5 font-mono text-xs text-muted-foreground">
+                    <details className="devkit-raw rounded-none border border-hair">
+                      <summary className="px-[0.6rem] py-1.5 font-mono text-[0.68rem] tracking-[0.12em] text-ink-mute uppercase">
                         raw YAML
                       </summary>
-                      <pre className="max-h-96 overflow-auto border-t bg-muted/30 p-3 font-mono text-xs">
+                      <pre className="max-h-96 overflow-auto border-t border-hair bg-surface p-3 font-mono text-xs">
                         {selected?.redactedText}
                       </pre>
                     </details>
@@ -642,7 +642,7 @@ export function DevkitClient() {
                         type="button"
                         onClick={() => setExportOpen(true)}
                         disabled={saving}
-                        className="w-full rounded-md border px-2 py-1 text-xs hover:bg-accent disabled:opacity-50"
+                        className="w-full rounded-none border border-hair bg-surface px-2 py-1 font-mono text-xs text-ink hover:bg-accent-weak disabled:opacity-50"
                       >
                         export ⧉
                       </button>
@@ -676,7 +676,7 @@ export function DevkitClient() {
                 aria-expanded={false}
                 aria-label="Show inspector sidebar"
                 title="Show inspector sidebar (⌘/)"
-                className="rounded-md border px-2 py-1 text-xs text-muted-foreground hover:bg-accent"
+                className="rounded-none border border-hair bg-surface px-2 py-1 font-mono text-xs text-ink hover:bg-accent-weak"
               >
                 ⟩
               </button>
@@ -692,7 +692,7 @@ export function DevkitClient() {
                 issues={previewIssues}
               />
             ) : (
-              <p className="p-4 text-sm text-muted-foreground">
+              <p className="p-4 font-mono text-sm text-ink-soft">
                 {selected || draft ? "This entry has no valid deployment to preview." : "Loading…"}
               </p>
             )}
