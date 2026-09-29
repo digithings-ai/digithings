@@ -212,6 +212,8 @@ type UseEmbedDigiChatOptions = {
   getMcpSession?: () => string | undefined;
   /** Send-time effort: low | medium | high. */
   getEffort?: () => string | undefined;
+  /** Send-time web-search engine: auto | internal | exa | tavily | parallel | firecrawl | tinyfish. */
+  getSearchEngine?: () => string | undefined;
   /**
    * When false, omit regenerate/editLastUser so assistant-ui hides the
    * chrome. Digigraph and Foundry both support turn mutation once the BFF
@@ -237,6 +239,7 @@ export function useEmbedDigiChat({
   getSelectedModel,
   getMcpSession,
   getEffort,
+  getSearchEngine,
   planProof,
   getPlanProof,
   allowClientTurnMutation = true,
@@ -321,6 +324,18 @@ export function useEmbedDigiChat({
           if (effort === "low" || effort === "medium" || effort === "high") {
             headers["X-Digi-Effort"] = effort;
           }
+          const searchEngine = getSearchEngine?.()?.trim().toLowerCase();
+          if (
+            searchEngine === "auto" ||
+            searchEngine === "internal" ||
+            searchEngine === "exa" ||
+            searchEngine === "tavily" ||
+            searchEngine === "parallel" ||
+            searchEngine === "firecrawl" ||
+            searchEngine === "tinyfish"
+          ) {
+            headers["X-Digi-Search-Engine"] = searchEngine;
+          }
           const turnMode = takePendingTurnMode(embedHost);
           if (turnMode) {
             headers["X-Digi-Turn-Mode"] = turnMode;
@@ -386,6 +401,7 @@ export function useEmbedDigiChat({
         getSelectedModel,
         getMcpSession,
         getEffort,
+        getSearchEngine,
         getPlanProof,
         allowClientTurnMutation,
       ],

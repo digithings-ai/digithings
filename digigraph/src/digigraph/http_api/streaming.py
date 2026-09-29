@@ -105,6 +105,7 @@ def _stream_completions_progressive(
     suppress_tool_stream: bool = False,
     force_tool: str | None = None,
     enable_web_search: bool = False,
+    search_engine: str | None = None,
 ):
     """
     Generator: run workflow in thread, consume queue, yield SSE deltas.
@@ -121,6 +122,7 @@ def _stream_completions_progressive(
         "require_tool_calls": require_tool_calls,
         "request_id": request_id,
         "enable_web_search": enable_web_search,
+        "search_engine": search_engine,
     }
     if workflow_extras:
         wf_kw.update(workflow_extras)

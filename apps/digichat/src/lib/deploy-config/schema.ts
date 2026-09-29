@@ -484,6 +484,12 @@ export const GateSchema = z
     showLanguageSelector: z.boolean().optional(),
     /** Legacy embed field — also implies tools.catalog web_search when true */
     webSearch: z.boolean().optional(),
+    /** Default web_search engine for this tenant (projected to the browser as
+     * a fallback when the user picks nothing). Engine NAME only — never keys.
+     * Unknown values fail closed at deploy-config load (#4724). */
+    searchEngine: z
+      .enum(["auto", "internal", "exa", "tavily", "parallel", "firecrawl", "tinyfish"])
+      .optional(),
     /**
      * Minimum Desk+ plan for this embed. Server-only (#3662 HMAC X-Embed-Plan-Proof).
      * Never projected to the browser.

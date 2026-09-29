@@ -85,6 +85,7 @@ function useShellThreadRuntime(
   getEnableWebSearch: () => boolean,
   getMcpSession: () => string | undefined,
   getEffort: () => string | undefined,
+  getSearchEngine: () => string | undefined,
 ) {
   const transport = useMemo(
     () =>
@@ -124,6 +125,18 @@ function useShellThreadRuntime(
           if (effort === "low" || effort === "medium" || effort === "high") {
             h.set("X-Digi-Effort", effort);
           }
+          const searchEngine = getSearchEngine()?.trim().toLowerCase();
+          if (
+            searchEngine === "auto" ||
+            searchEngine === "internal" ||
+            searchEngine === "exa" ||
+            searchEngine === "tavily" ||
+            searchEngine === "parallel" ||
+            searchEngine === "firecrawl" ||
+            searchEngine === "tinyfish"
+          ) {
+            h.set("X-Digi-Search-Engine", searchEngine);
+          }
           return {
             body: {
               ...(typeof body === "object" && body !== null ? body : {}),
@@ -134,7 +147,7 @@ function useShellThreadRuntime(
           };
         },
       }),
-    [sessionKey, getLanguage, getModel, getDisabledTools, getEnableWebSearch, getMcpSession, getEffort],
+    [sessionKey, getLanguage, getModel, getDisabledTools, getEnableWebSearch, getMcpSession, getEffort, getSearchEngine],
   );
 
   const chat = useChat<UIMessage>({ transport });
@@ -170,6 +183,7 @@ function HomeStockClientSingle({
     prefs.getEnableWebSearch,
     prefs.getMcpSession,
     prefs.getEffort,
+    prefs.getSearchEngine,
   );
 
   const mode = clientConfig.chrome.mode;
@@ -243,6 +257,9 @@ function HomeStockClientMemory({
   const getEffortRef = useRef(prefs.getEffort);
   // eslint-disable-next-line react-hooks/refs -- useLatest
   getEffortRef.current = prefs.getEffort;
+  const getSearchEngineRef = useRef(prefs.getSearchEngine);
+  // eslint-disable-next-line react-hooks/refs -- useLatest
+  getSearchEngineRef.current = prefs.getSearchEngine;
 
   const runtimeHook = useMemo(() => {
     return function useMemoryThreadRuntime() {
@@ -255,6 +272,7 @@ function HomeStockClientMemory({
         () => getWebRef.current(),
         () => getMcpRef.current(),
         () => getEffortRef.current(),
+        () => getSearchEngineRef.current(),
       );
     };
   }, []);
