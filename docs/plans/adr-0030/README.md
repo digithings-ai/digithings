@@ -151,19 +151,21 @@ W5 is documented here and inside P0.1. It is not a twelfth coding issue.
 
 ## Agent work packages
 
-| ID | Issue title to file | Spec | Lane | Blocked by | Unblocks |
-|----|---------------------|------|------|------------|----------|
-| P0.1 | digiquant: add stage handoff models for research digest and trade ideas | [P01](packages/P01-stage-handoff-models.md) | OpenCode free implement. Stronger review on `refuse_order_intent` | none | P0.3, P0.4, P1.2, P2.1 |
-| P1.1 | digiquant: freeze the research portfolio execution import allowlist | [P11](packages/P11-import-allowlist.md) | OpenCode free implement | none | later boundary refactors, not this epic's other packages |
-| P0.3 | digiquant: map fx daily digest rows into ResearchDigest | [P03](packages/P03-fx-digest-adapter.md) | OpenCode free implement | P0.1 | P4.2 |
-| P0.4 | digiquant: map fx trade idea rows without building OrderIntent | [P04](packages/P04-trade-idea-adapter.md) | OpenCode free implement. Stronger review | P0.1 | P3.1 |
-| P1.2 | digiquant: build the portfolio briefing dict from ResearchDigest | [P12](packages/P12-portfolio-briefing.md) | OpenCode free implement | P0.1 | P4.2 |
-| P2.1 | digiquant: validate a twelve-x research board from hub rows | [P21](packages/P21-research-board.md) | OpenCode free implement | P0.1, P0.3 | P4.1, P4.2, P2.2 |
-| P3.1 | digiquant: classify trade idea timeframe and levels without repairing them | [P31](packages/P31-trade-idea-contract-report.md) | OpenCode free implement | P0.4 | P4.1, P3.2 |
-| P4.2 | digiquant: portfolio briefing from a twelve-x research board | [P42](packages/P42-board-to-portfolio-briefing.md) | OpenCode free implement | P0.3, P1.2, P2.1 | none in this epic |
-| P4.1 | digiquant: wrap ResearchDigest as trade generation input | [P41](packages/P41-research-to-trade-generation-input.md) | OpenCode free implement | P2.1, P3.1 | none in this epic |
-| P2.2 | twelve-x: confirm research publish matches the stage-1 board | [P22](packages/P22-twelve-x-research-producer.md) | Needs twelve-x read access and stronger review | P2.1, and HTTP 200 on the twelve-x repo | none until access exists |
-| P3.2 | twelve-x: confirm new trade ideas use medium or long | [P32](packages/P32-twelve-x-trade-generation-producer.md) | Needs twelve-x read access and stronger review | P3.1, and HTTP 200 on the twelve-x repo | none until access exists |
+Child issues are filed. Epic #4762 body edit and comments returned HTTP 403 (`Resource not accessible by integration`), so this table is the index.
+
+| ID | Issue | Spec | Lane | Blocked by | Unblocks |
+|----|-------|------|------|------------|----------|
+| P0.1 | [#4764](https://github.com/digithings-ai/digithings/issues/4764) | [P01](packages/P01-stage-handoff-models.md) | OpenCode free implement. Stronger review on `refuse_order_intent` | none | P0.3, P0.4, P1.2 |
+| P1.1 | [#4765](https://github.com/digithings-ai/digithings/issues/4765) | [P11](packages/P11-import-allowlist.md) | OpenCode free implement | none | later boundary refactors, not this epic's other packages |
+| P0.3 | [#4766](https://github.com/digithings-ai/digithings/issues/4766) | [P03](packages/P03-fx-digest-adapter.md) | OpenCode free implement | P0.1 | P2.1, P4.2 |
+| P0.4 | [#4768](https://github.com/digithings-ai/digithings/issues/4768) | [P04](packages/P04-trade-idea-adapter.md) | OpenCode free implement. Stronger review | P0.1 | P3.1 |
+| P1.2 | [#4769](https://github.com/digithings-ai/digithings/issues/4769) | [P12](packages/P12-portfolio-briefing.md) | OpenCode free implement | P0.1 | P4.2 |
+| P2.1 | [#4770](https://github.com/digithings-ai/digithings/issues/4770) | [P21](packages/P21-research-board.md) | OpenCode free implement | P0.1, P0.3 | P4.1, P4.2, P2.2 |
+| P3.1 | [#4771](https://github.com/digithings-ai/digithings/issues/4771) | [P31](packages/P31-trade-idea-contract-report.md) | OpenCode free implement | P0.4 | P4.1, P3.2 |
+| P4.2 | [#4772](https://github.com/digithings-ai/digithings/issues/4772) | [P42](packages/P42-board-to-portfolio-briefing.md) | OpenCode free implement | P0.3, P1.2, P2.1 | none in this epic |
+| P4.1 | [#4773](https://github.com/digithings-ai/digithings/issues/4773) | [P41](packages/P41-research-to-trade-generation-input.md) | OpenCode free implement | P2.1, P3.1 | none in this epic |
+| P2.2 | [#4774](https://github.com/digithings-ai/digithings/issues/4774) | [P22](packages/P22-twelve-x-research-producer.md) | Needs twelve-x read access and stronger review | P2.1, and HTTP 200 on the twelve-x repo | none until access exists |
+| P3.2 | [#4775](https://github.com/digithings-ai/digithings/issues/4775) | [P32](packages/P32-twelve-x-trade-generation-producer.md) | Needs twelve-x read access and stronger review | P3.1, and HTTP 200 on the twelve-x repo | none until access exists |
 
 Label every child `agent-task` and `component:digiquant`. Body starts with `Parent: #4762`. Do not use `Fixes #4762`.
 
@@ -211,9 +213,10 @@ This is the whole execution interface for this epic:
 
 ## Coordinator dispatch
 
-1. File the 11 issues from the package files. Paste each file into the issue body.
-2. Start **P0.1** and **P1.1** immediately, two agents.
-3. When P0.1 is merged to its base, start **P0.3**, **P0.4**, and **P1.2** together. Start **P2.1** when P0.3 has merged.
-4. Then **P3.1** and **P4.2** together.
-5. Then **P4.1**.
-6. **P2.2** and **P3.2** only after a human token can `gh api repos/digithings-ai/twelve-x` and get 200. If the agent sees 404, it comments and stops. It does not write producer files from memory.
+Issues are already filed. Epic #4762 could not be edited (HTTP 403 on `updateIssue` and `addComment`).
+
+1. Start **P0.1** (#4764) and **P1.1** (#4765) immediately, two agents.
+2. When #4764 is merged to its base, start **P0.3** (#4766), **P0.4** (#4768), and **P1.2** (#4769) together. Start **P2.1** (#4770) when #4766 has merged.
+3. Then **P3.1** (#4771) and **P4.2** (#4772) together.
+4. Then **P4.1** (#4773).
+5. **P2.2** (#4774) and **P3.2** (#4775) only after a human token can `gh api repos/digithings-ai/twelve-x` and get 200. If the agent sees 404, it comments and stops. It does not write producer files from memory.
